@@ -1,0 +1,39 @@
+Description: Local Resource Scheduler
+
+C library: libphobos_lrs
+
+Interfaces :
+    - Receive local client requests (from the network layer).
+      (v00: direct call from object store)
+    - Receive local admin requests (from the network layer)
+      (v00: 'phobos' command line directly access the DB).
+    - Call LDM primitives for device control.
+    - Call DRS to get/set persistent reservation info.
+    - (not in v00) Send signals to local processes (admin purpose)
+
+Client calls :
+    - write-intent(size, layout)
+        returns when the required resources are ready for local writing
+        returns locations to write the objects
+    - read-intent(layout & extents)
+        returns when required resources are ready for local access
+        returns a pointer to a location ready for reading
+    - done(res_info_update)
+        notifies the resource is no longer in use
+        updates resource information (free space...)
+
+Admin calls (online):
+    - (not in v00) release(resource, flags)
+        ask to release a resource (prior to admin locking)
+        example of flags: kill processes currently accessing the resource
+    - (not in v00) dump-status[resource]
+        return the current usage information for a given resource (queue, usage,
+        locking, ...)
+
+Internals:
+    - Phobos "brain"
+    - (not in v00) Update resource status on startup + recover previous reservations
+      (v00) load drive status
+    - Manage concurrent access to resources (v00: 1 big lock)
+    - (not in v00) Maintains queues per resource 
+    - (not in v00) Schedule requests
