@@ -1,2 +1,5 @@
-To install git hooks for ChangeId and checkpatch, run:
+* To install git hooks for ChangeId and checkpatch, run:
     ./scripts/install_hooks.sh
+
+* To setup autotools stuff the first time you check out the repo, run:
+    ./autogen.sh
