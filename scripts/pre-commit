@@ -1,0 +1,3 @@
+#!/bin/bash
+dir=$(dirname $(readlink -m $0))
+exec git diff --cached | $dir/checkpatch.pl --no-signoff -q -

@@ -1,0 +1,2 @@
+To install git hooks for ChangeId and checkpatch, run:
+    ./scripts/install_hooks.sh
