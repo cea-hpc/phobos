@@ -8,11 +8,12 @@ object: oid, user_md, st_md (pk: oid)
 		user_md: blob de metadonnees utilisateur (json)
 		st_md: bloc de metadonnees de stockage (json), incluant une description de layout (ex. RAID0,<stripe_count>,<stripe_size>)
 
-extent: oid, layout_idx, media, address (pk: oid, layout_idx; indexed: media)
+extent: oid, layout_idx, media, address, size (pk: oid, layout_idx; indexed: media)
 		oid: identifiant de l'objet
 		layout_info: index de l'element dans le layout (ex. stripe index)
 		media: media contenant la donnee
 		address: localisation sur le media contenant la donnee (ex. identifiant, ou hash, ou chemin...)
+		size: taille de donnees contenues dans l'extent
 
 Storage resources metadata
 ==========================
