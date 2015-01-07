@@ -1,0 +1,39 @@
+/* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+ * vim:expandtab:shiftwidth=4:tabstop=4:
+ */
+/*
+ * Copyright 2014-2015 CEA/DAM. All Rights Reserved.
+ */
+/**
+ * \brief  Common tools.
+ */
+#ifndef _PHO_COMMON_H
+#define _PHO_COMMON_H
+
+/* Avoid including it everywhere...
+ * Didn't you plan to check error codes?! */
+#include <errno.h>
+/* for size_t */
+#include <stdlib.h>
+
+/* enlight the code by allowing to set rc and goto a label
+ * in a single line of code */
+#define GOTO(_label, _rc) \
+do {                      \
+    (void)(_rc);          \
+    goto _label;          \
+} while (0)
+
+/** Callback function to parse command output.
+ * The function can freely modify line contents
+ * without impacting program working.
+ * \param cb_arg argument passed to command_call
+ * \param line the line to be parsed
+ * \param size size of the line buffer
+ */
+typedef int (*parse_cb_t)(void *cb_arg, char *line, size_t size);
+
+/** call a command and call cb_func for each output line. */
+int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg);
+
+#endif

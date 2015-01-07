@@ -16,4 +16,4 @@ Calls:
 Internals:
     - (not in v0) I/O layer to split data with the specified layout
     - Backend adapters (object-POSIX, object-object...) to locate objects on storage media.
-    - Manage PUT transactions (all or nothing).
+    - Manage PUT transactions (all or nothing?).
