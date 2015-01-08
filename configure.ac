@@ -46,8 +46,7 @@ AC_C_INLINE
 AC_SYS_LARGEFILE
 
 # gcc options
-#CC_OPT="-Wall -Werror"
-CC_OPT="-Wall -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -std=gnu99 -Wno-variadic-macros"
+CC_OPT="-Wall -Werror -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -std=gnu99 -Wno-variadic-macros"
 AC_SUBST(CC_OPT)
 
 AC_CHECK_SIZEOF([size_t])
@@ -57,7 +56,10 @@ PKG_CHECK_MODULES(GTHREAD2, [gthread-2.0])
 CFLAGS="$CFLAGS $GLIB2_CFLAGS $GTHREAD2_CFLAGS"
 LDFLAGS="$LDFLAGS $GLIB2_LIBS $GTHREAD2_LIBS"
 
+AC_CHECK_FUNC([g_list_free_full], AC_DEFINE(HAVE_GLIB_FREE_FULL, 1, [g_list_free_full is available since glib 2.28]))
+
 CFLAGS="$CFLAGS -I\$(top_srcdir)/src/include"
+
 
 # Checks for header files.
 AC_HEADER_STDC
@@ -74,5 +76,6 @@ AC_SUBST(ac_configure_args)
 AC_CONFIG_FILES([Makefile
          src/Makefile
          src/include/Makefile
+         src/tests/Makefile
 ])
 AC_OUTPUT

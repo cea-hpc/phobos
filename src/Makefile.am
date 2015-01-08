@@ -1,5 +1,3 @@
-SUBDIRS=include
+AM_CFLAGS= $(CC_OPT)
 
-check_PROGRAMS=test_common
-
-test_common_SOURCES=test_common.c common.c
+SUBDIRS=include tests
