@@ -1,0 +1,83 @@
+= Adapters purpose =
+
+Phobos core addresses objects using a unique identifier which is an arbitrary
+string.
+Objects can be stored as multiple parts called extents.
+
+Extents of a given file are identified on storage backends using the identifier
+of the object + an optional tag to identify the extent of the object (e.g. "p2"
+for part 2).
+
+An adapter is a software layer to access a given type of storage backend
+(POSIX filesystem, tar file, object store, ...). It abstracts the way
+entries are addressed, organized, and accessed in this backend.
+
+= Requirements =
+
+== General requirements ==
+
+- An adapter must be able to locate an extent by its phobos identifier + its
+  extent tag. In other world, for a given media, it must ensure the following
+  association is a bijection: id + tag <-> extent
+
+- This association must be persistent and compatible between increasing versions,
+  i.e. every software version > N must be able to locate an object by its id and tag
+  stored with version N.
+
+- The adapter can possibly turn an id and tag to an internal representation
+  called 'address' (e.g. a POSIX path).
+
+- For sysadmin convenience, the adapter should keep a human-readable
+  representation of the object_id and extent tag in the object address, if
+  possible. It can however complete it with other internal representations
+  (eg. a hash).  These addressing components can however be modified for
+  technical reasons or performance considerations.  For instance, the object id
+  can be truncated, '/' characters can be changed to another delimiter,
+  non_printable character can be replaced, etc...
+
+- Adapters should provide a way to attach an arbitrary set of metadata to extents
+  (e.g. as extended attributes, or a metadata_blob). This information is critical
+  to rebuild phobos database in case of accidental loss.
+
+- Adapater should provide an interface like open/close/read/write...
+
+- If possible, it must provide a feature to manage media transactions, like fsync,
+  that could be performed after writing an extent (e.g. as a close argument),
+  or after writing a set of files.
+
+- Adapater interface to other layers must be available as a vector of functions.
+
+== POSIX requirements ==
+
+- To ensure maximum compatibility with all components of current and future
+  software stacks (OS, filesystems, drivers, firmware, tools, ...), paths in a
+  storage backend should not exceed 255 meaningful characters[1].
+
+- The number of extents in a directory should be limited to a "reasonnable"
+  value, to avoid:
+  * reaching limitations on directory size
+  * performance impact on object lookup and access
+  * locking contentions on namespace access
+  * too long readdir() operations
+
+- However, the number of levels of sub-directories to traverse to access an
+  extent should be maintained as low as possible, in particular when the number
+  of stored object is low.
+
+Example implementation in a POSIX namespace:
+	storing 2 objects ("foo1/id1", p1) and ("foo2_id2", s3):
+		5BC7/foo-id1.p1
+		AB6C/foo_id2.s3
+	storing 10000 objects:
+		5B/C7/foo-id1.p1
+		AB/6C/foo_id2.s3
+		2E/5F/foo_id3.p3
+		8A/23/foo_id4.r2
+		...
+
+= Design and implementation =
+
+
+
+= References =
+[1] http://msdn.microsoft.com/en-us/library/windows/desktop/aa365247%28v=vs.85%29.aspx
