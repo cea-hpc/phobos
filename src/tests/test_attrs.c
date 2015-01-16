@@ -12,6 +12,8 @@
 #endif
 
 #include "pho_attrs.h"
+#include "pho_common.h"
+#include "pho_test_utils.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -20,69 +22,183 @@ struct key_value {
     char *value;
 };
 
-static const struct key_value kvs[] = {
+#define TEST_ATTR_COUNT 5
+
+static const struct key_value kvs[TEST_ATTR_COUNT+1] = {
     {"foo", "bar"},
     {"size", "1024"},
     {"owner", "toto"},
-    {"class", "test"},
+    {"class", "trash\"\n;\\"},
+    {"misc", "\\\\\\\\"},
     {NULL, NULL}
 };
 
+static const struct key_value kvs2[TEST_ATTR_COUNT+1] = {
+    {"foo", "xxxx"},
+    {"size", "2382094829048"},
+    {"owner", "phobos"},
+    {"class", "blabla"},
+    {"misc", "//////////"},
+    {NULL, NULL}
+};
 
-static void dump_hash(GHashTable *h)
+/** \return the number of listed items */
+static int dump_hash(GHashTable *h)
 {
     GHashTableIter iter;
     gpointer key, value;
+    int c = 0;
 
     if (h == NULL)
-        return;
+        return 0;
 
     g_hash_table_iter_init(&iter, h);
-    while (g_hash_table_iter_next(&iter, &key, &value))
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
         printf("%s='%s'\n", (char *)key, (char *)value);
+        c++;
+    }
+    return c;
+}
+
+
+static int test1a(void *arg)
+{
+    struct pho_attrs *attrs = (struct pho_attrs *)arg;
+    const struct key_value *kv;
+    const char *val;
+    int rc;
+
+    /* set attributes in an attribute set */
+    for (kv = &kvs[0]; kv->key != NULL; kv++) {
+        rc = pho_attr_set(attrs, kv->key, kv->value);
+        if (rc)
+            LOG_RETURN(rc, "pho_attr_set failed");
+    }
+
+    /* get attributes */
+    for (kv = &kvs[0]; kv->key != NULL; kv++) {
+        val = pho_attr_get(attrs, kv->key);
+        if (val == NULL)
+            LOG_RETURN(-EINVAL, "pho_attr_get(%s) returned no attr", kv->key);
+        if (strcmp(val, kv->value) != 0)
+            LOG_RETURN(-EINVAL, "pho_attr_get(%s) returned wrong attr value: "
+                       "'%s' != '%s'", kv->key, val, kv->value);
+    }
+
+    return 0;
+}
+
+static int test1b(void *arg)
+{
+    struct pho_attrs *attrs = (struct pho_attrs *)arg;
+    const struct key_value *kv;
+    const char *val;
+    int rc;
+
+    /* set attributes again (values from kvs2) */
+    for (kv = &kvs2[0]; kv->key != NULL; kv++) {
+        rc = pho_attr_set(attrs, kv->key, kv->value);
+        if (rc)
+            LOG_RETURN(rc, "pho_attr_set failed");
+    }
+
+    /* check attributes */
+    for (kv = &kvs2[0]; kv->key != NULL; kv++) {
+        val = pho_attr_get(attrs, kv->key);
+        if (val == NULL)
+            LOG_RETURN(-EINVAL, "pho_attr_get(%s) returned no attr", kv->key);
+        if (strcmp(val, kv->value) != 0)
+            LOG_RETURN(-EINVAL, "pho_attr_get(%s) returned wrong attr value: "
+                       "'%s' != '%s'", kv->key, val, kv->value);
+    }
+
+    return 0;
+}
+
+static int test1c(void *arg)
+{
+    struct pho_attrs *attrs = (struct pho_attrs *)arg;
+
+    return !(dump_hash(attrs->attr_set) == TEST_ATTR_COUNT);
+}
+
+static int test1d(void *arg)
+{
+    struct pho_attrs       *attrs = (struct pho_attrs *)arg;
+    const struct key_value *kv;
+    GString                *str = g_string_new("");
+    int                     expected_min = 0;
+    int                     rc;
+
+    rc = pho_attrs_to_json(attrs, str, JSON_COMPACT | JSON_SORT_KEYS);
+    if (gstring_empty(str))
+        LOG_RETURN(-EINVAL, "Empty or NULL JSON dump");
+
+    printf("%s\n", str->str);
+
+    /* length should be at least the sum of all keys and values lengths
+     * +1 ':' separator for each. */
+    for (kv = &kvs2[0]; kv->key != NULL; kv++)
+        expected_min += strlen(kv->key) + strlen(kv->value) + 1;
+
+    if (str->len < expected_min)
+        LOG_RETURN(-EINVAL, "Unexpected length for JSON dump %zd < %d",
+                   str->len, expected_min);
+
+    return 0;
+}
+
+static int test1e(void *arg)
+{
+    struct pho_attrs *attrs = (struct pho_attrs *)arg;
+
+    return (pho_attr_get(attrs, "don't exist") == NULL);
+}
+
+static int test1f(void *arg)
+{
+    struct pho_attrs *attrs = (struct pho_attrs *)arg;
+
+    pho_attrs_free(attrs);
+    return (attrs != NULL && attrs->attr_set != NULL);
+}
+
+static int testget(void *arg)
+{
+    struct pho_attrs *attrs = (struct pho_attrs *)arg;
+
+    return (pho_attr_get(attrs, "foo") == NULL);
 }
 
 int main(int argc, char **argv)
 {
     struct pho_attrs attrs = {0};
-    const struct key_value *kv;
 
-    int rc;
+    run_test("Test 1a: Set and get key values",
+             test1a, &attrs, PHO_TEST_SUCCESS);
 
-    /* set attributes in an attribute set */
-    for (kv = &kvs[0]; kv->key != NULL; kv++) {
-        rc = pho_attr_set(&attrs, kv->key, kv->value);
+    run_test("Test 1b: Overwrite attrs",
+             test1b, &attrs, PHO_TEST_SUCCESS);
 
-        if (rc)
-            fprintf(stderr, "pho_attr_set failed with code %d\n", rc);
-        else
-            printf("%s set to '%s'\n", kv->key,
-                   pho_attr_get(&attrs, kv->key));
-    }
-    printf("----------------\n");
+    run_test("Test 1c: List attrs",
+             test1c, &attrs, PHO_TEST_SUCCESS);
 
-    /* set attributes again */
-    for (kv = &kvs[0]; kv->key != NULL; kv++) {
-        rc = pho_attr_set(&attrs, kv->key, kv->value);
+    run_test("Test 1d: Dump attrs (JSON)",
+             test1d, &attrs, PHO_TEST_SUCCESS);
 
-        if (rc)
-            fprintf(stderr, "pho_attr_set failed with code %d\n", rc);
-        else
-            printf("%s reset to '%s'\n", kv->key,
-                   pho_attr_get(&attrs, kv->key));
-    }
-    printf("----------------\n");
+    run_test("Test 1e: Get missing attribute",
+             test1e, NULL, PHO_TEST_FAILURE);
 
-    /* get them back (lookup by key) */
-    for (kv = &kvs[0]; kv->key != NULL; kv++)
-        printf("%s = '%s'\n", kv->key, pho_attr_get(&attrs, kv->key));
+    run_test("Test 1f: Release attrs struct",
+             test1f, &attrs, PHO_TEST_SUCCESS);
 
-    printf("----------------\n");
-    /* get them back (iterate on keys) */
-    dump_hash(attrs.attr_set);
+    run_test("Test 2: Get attribute from NULL struct",
+             testget, NULL, PHO_TEST_FAILURE);
 
-    printf("----------------\n");
-    pho_attrs_free(&attrs);
+    memset(&attrs, 0, sizeof(attrs));
+    run_test("Test 3: Get attribute from zero-ed struct",
+             testget, &attrs, PHO_TEST_FAILURE);
 
-    exit(0);
+    printf("ATTRS: All tests succeeded\n");
+    return 0;
 }
