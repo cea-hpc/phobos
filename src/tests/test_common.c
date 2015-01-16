@@ -48,7 +48,7 @@ static void print_lines(GList *lines)
     /* print the list */
     for (l = lines; l != NULL; l = l->next) {
         i++;
-        printf("%d: <%s>\n", i, (char *)l->data);
+        log("%d: <%s>", i, (char *)l->data);
     }
 }
 
@@ -57,6 +57,11 @@ int main(int argc, char **argv)
 {
     int    rc = 0;
     GList *lines = NULL;
+
+    if (argc != 2) {
+        fprintf(stderr, "usage: %s <cmd>\n", argv[0]);
+        exit(1);
+    }
 
     /** call a command and call cb_func for each output line */
     rc = command_call(argv[1], parse_line, &lines);

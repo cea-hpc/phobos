@@ -10,19 +10,51 @@
 #ifndef _PHO_COMMON_H
 #define _PHO_COMMON_H
 
-/* Avoid including it everywhere...
- * Didn't you plan to check error codes?! */
 #include <errno.h>
-/* for size_t */
+#include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <glib.h>
+#include <stdio.h>
 
-/* enlight the code by allowing to set rc and goto a label
+/* lighten the code by allowing to set rc and goto a label
  * in a single line of code */
 #define GOTO(_label, _rc) \
 do {                      \
     (void)(_rc);          \
     goto _label;          \
 } while (0)
+
+#define log(_fmt...) do {              \
+    fprintf(stderr, "%s:%d: ", __func__, __LINE__); \
+    fprintf(stderr, _fmt);             \
+    fprintf(stderr, "\n");             \
+} while (0)
+
+#define LOG_GOTO(_label, _rc, _fmt...) \
+do {                      \
+    int code = (_rc);     \
+    fprintf(stderr, "%s:%d: ", __func__, __LINE__); \
+    fprintf(stderr, _fmt);    \
+    fprintf(stderr, ": error %d: %s\n", code, \
+            strerror(-code));   \
+    goto _label;          \
+} while (0)
+
+#define LOG_RETURN(_rc, _fmt...)    \
+    do {                            \
+        int code = (_rc);           \
+        fprintf(stderr, "%s:%d: ", __func__, __LINE__); \
+        fprintf(stderr, _fmt);       \
+        fprintf(stderr, ": error %d: %s\n", code, \
+                strerror(-code));   \
+        return code;                \
+    } while (0)
+
+static inline bool gstring_empty(const GString *s)
+{
+    return (s == NULL) || (s->len == 0) || (s->str == NULL);
+}
 
 #define min(_a, _b)   ((_a) < (_b) ? (_a) : (_b))
 #define max(_a, _b)   ((_a) > (_b) ? (_a) : (_b))
