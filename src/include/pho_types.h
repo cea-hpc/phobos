@@ -14,17 +14,19 @@
 #include <glib.h>
 /* for PATH_MAX */
 #include <limits.h>
+#include <stdint.h>
 
 /** max length of a tape label, FS label... */
-#define PHOBOS_LABEL_MAX_LEN 32
+#define PHO_LABEL_MAX_LEN 32
 /** max length of a hash-based address in hexadecimal form.
  * A SHA-1 value is always 160 bit long, hexa representation uses 4 bit per
  * character so the string length is 160/4 + null character.
  */
-#define HASH_STR_MAX 41
+/** max layout tag length */
+#define PHO_LAYOUT_TAG_MAX 8 /* "xxnnnnn" */
 
 enum media_type {
-    MT_TAPE = 1,
+    PHO_MED_TAPE = 1,
     /* future: disk, file... */
 };
 
@@ -35,12 +37,12 @@ struct media_id {
      * could be addressed in multiple ways (FS label, FS UUID, device WWID...).
      * So, an id_type enum may be required here in a later version. */
     union {
-        char label[PHOBOS_LABEL_MAX_LEN];
+        char label[PHO_LABEL_MAX_LEN];
     } id_u;
 };
 
 enum layout_type {
-    LT_SIMPLE = 1, /* simple contiguous block of data */
+    PHO_LYT_SIMPLE = 1, /* simple contiguous block of data */
     /* future: SPLIT, RAID0, RAID1, ... */
 };
 
@@ -50,16 +52,33 @@ struct layout_descr {
     /* v00: no other information needed for simple layout */
 };
 
+enum fs_type {
+    PHO_FS_POSIX, /* any POSIX filesystem (no specific feature) */
+    PHO_FS_LTFS,
+};
+
+/* selected address type for a media */
+enum address_type {
+    PHO_ADDR_PATH,   /* id is entry path (e.g. for imported tapes) */
+    PHO_ADDR_HASH1,  /* id hashing, implementation 1 */
+    PHO_ADDR_OPAQUE, /* opaque identifier provided by the backend */
+};
+
+struct pho_buff {
+    int   size;
+    char *buff;
+};
+
+static const struct pho_buff PHO_BUFF_NULL = { .size = 0, .buff = NULL };
+
 /** describe a piece of data in a layout */
 struct extent {
-    unsigned int       layout_idx; /* always 0 for simple layouts */
+    unsigned int       layout_idx; /**< always 0 for simple layouts */
+    uint64_t           size;       /**< size of the extent */
     struct media_id    media;
-    enum address_type  addr_type; /**< type of address to access this media */
-    union {
-        char path[PATH_MAX];   /**< for POSIX backends */
-        char hash[HASH_STR_MAX]; /**< for hash-addressed backends */
-    } address_u;
-    uint64_t size;
+    enum fs_type       fs_type;    /**< type of filesystem on this media */
+    enum address_type  addr_type;  /**< way to address this media */
+    struct pho_buff    address;    /**< address on the media */
 };
 
 /** Address to read/write data.
@@ -67,7 +86,7 @@ struct extent {
  */
 struct data_loc {
     /** mount-point to access the media referenced in the extent */
-    char          root_path[PATH_MAX];
+    GString      *root_path;
     /** the data extent itself */
     struct extent extent;
 };
