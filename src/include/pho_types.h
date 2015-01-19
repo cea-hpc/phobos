@@ -22,8 +22,13 @@
  * A SHA-1 value is always 160 bit long, hexa representation uses 4 bit per
  * character so the string length is 160/4 + null character.
  */
-/** max layout tag length */
-#define PHO_LAYOUT_TAG_MAX 8 /* "xxnnnnn" */
+
+/**
+ * Max layout tag length.
+ * Make sure to keep it below NAME_MAX (which is like 255 chars)
+ */
+#define PHO_LAYOUT_TAG_MAX  8
+
 
 enum media_type {
     PHO_MED_TAPE = 1,

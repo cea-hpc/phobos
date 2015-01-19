@@ -24,6 +24,9 @@ do {                      \
     goto _label;          \
 } while (0)
 
+#define min(_a, _b)   ((_a) < (_b) ? (_a) : (_b))
+#define max(_a, _b)   ((_a) > (_b) ? (_a) : (_b))
+
 /** Callback function to parse command output.
  * The function can freely modify line contents
  * without impacting program working.
