@@ -11,6 +11,7 @@
 #define _PHO_IO_H
 
 #include "pho_types.h"
+#include <errno.h>
 #include <sys/stat.h>
 #include <stdbool.h>
 #include <unistd.h>

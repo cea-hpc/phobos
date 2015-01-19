@@ -27,7 +27,7 @@ int lrs_write_intent(size_t size, const struct layout_descr *layout,
  * Query to read from a given set of media.
  * @param(in) layout data layout description
  * @param(in, out) loc  Location to read the data. Extent must be set as input.
-                        loc->root_path is set by the function.
+ *                      loc->root_path is set by the function.
  *  (future: several locations if the file is splitted, striped...
  *   Moreover, the object may have several locations and layouts if it is
  *   duplicated).
