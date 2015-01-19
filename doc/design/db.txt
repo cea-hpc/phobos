@@ -77,3 +77,6 @@ Storage resources:
         flags: create, update... Indique si le media doit etre créé, mis à jour...
     media_ls(criteria)
         liste les media selon un ou plusieurs criteres (type, status, ...)
+
+    Exemple de recherche avec critere:
+    liste des bandes ayant (vol_free >= 10G) triée par vol_free croissant.
