@@ -1,0 +1,15 @@
+*.o
+Makefile.in
+config.h
+config.h.in
+*~
+.deps/
+config.log
+Makefile
+configure
+libtool
+src/include/stamp-h1
+config.status
+aclocal.m4
+autom4te.cache/
+autotools/
