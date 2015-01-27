@@ -304,6 +304,8 @@ our @typeList = (
 	qr{${Ident}_t},
 	qr{${Ident}_handler},
 	qr{${Ident}_handler_fn},
+    qr{G[A-Z][a-z]+}, # match glib types such as (GString, GHash, ...)
+    qr{g[a-z]+}, # match glib types such as (gchar, gpointer, ...)
 );
 our @modifierList = (
 	qr{fastcall},
