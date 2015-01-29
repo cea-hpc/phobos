@@ -22,6 +22,7 @@
 #include <attr/xattr.h>
 #include <ctype.h> /* FIXME drop when all mapping functions are implemented */
 
+
 /** build the full posix path from a data_loc structure */
 static GString *pho_posix_path(const struct data_loc *loc)
 {
@@ -352,15 +353,38 @@ static int pho_set_hash1(const char *id, const char *tag, struct pho_buff *addr)
 
 /** POSIX adapter */
 static const struct io_adapter posix_adapter = {
-    .open       = pho_posix_open,
-    .close      = pho_posix_close,
-    .sync       = pho_posix_sync,
-    .sendfile_r = pho_posix_sendfile_r,
-    .sendfile_w = pho_posix_sendfile_w,
-    .fsetxattr  = pho_posix_fsetxattr,
-    .fstat      = pho_posix_fstat,
-    .remove     = pho_posix_remove
+    .ioa_open       = pho_posix_open,
+    .ioa_close      = pho_posix_close,
+    .ioa_sync       = pho_posix_sync,
+    .ioa_sendfile_r = pho_posix_sendfile_r,
+    .ioa_sendfile_w = pho_posix_sendfile_w,
+    .ioa_fsetxattr  = pho_posix_fsetxattr,
+    .ioa_fstat      = pho_posix_fstat,
+    .ioa_remove     = pho_posix_remove
 };
+
+
+bool io_adapter_is_valid(const struct io_adapter *ioa)
+{
+    if (ioa == NULL)
+        return false;
+
+    /* Does the IOA exposes the mandatory calls? */
+    if (ioa->ioa_id2addr == NULL ||
+        ioa->ioa_open == NULL    ||
+        ioa->ioa_close == NULL   ||
+        ioa->ioa_fstat == NULL   ||
+        ioa->ioa_remove == NULL)
+        return false;
+
+    /* Does it expose a consistent way to do I/Os? */
+    if ((ioa->ioa_sendfile_r == NULL || ioa->ioa_sendfile_w == NULL) &&
+        (ioa->ioa_pread == NULL || ioa->ioa_pwrite == NULL) &&
+        (ioa->ioa_read == NULL || ioa->ioa_write == NULL))
+        return false;
+
+    return true;
+}
 
 /** retrieve IO functions for the given filesystem and addressing type */
 int get_io_adapter(enum fs_type fstype, enum address_type addrtype,
@@ -369,7 +393,7 @@ int get_io_adapter(enum fs_type fstype, enum address_type addrtype,
     switch (fstype) {
     case PHO_FS_LTFS:
         *ioa = posix_adapter;
-        ioa->sync = pho_ltfs_sync;
+        ioa->ioa_sync = pho_ltfs_sync;
         break;
     case PHO_FS_POSIX:
         *ioa = posix_adapter;
@@ -380,10 +404,10 @@ int get_io_adapter(enum fs_type fstype, enum address_type addrtype,
 
     switch (addrtype) {
     case PHO_ADDR_PATH:
-        ioa->id2addr = pho_set_path;
+        ioa->ioa_id2addr = pho_set_path;
         break;
     case PHO_ADDR_HASH1:
-        ioa->id2addr = pho_set_hash1;
+        ioa->ioa_id2addr = pho_set_hash1;
         break;
     default:
         return -EINVAL;
