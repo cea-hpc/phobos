@@ -1,4 +1,4 @@
-AM_CFLAGS= $(CC_OPT)
+AM_CFLAGS= $(CC_OPT) -D_TEST
 
 # autotools automatically generate a 'make check' target that:
 # 1) build check_PROGRAMS
