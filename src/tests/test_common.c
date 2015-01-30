@@ -48,7 +48,7 @@ static void print_lines(GList *lines)
     /* print the list */
     for (l = lines; l != NULL; l = l->next) {
         i++;
-        log("%d: <%s>", i, (char *)l->data);
+        pho_nfo("%d: <%s>", i, (char *)l->data);
     }
 }
 
