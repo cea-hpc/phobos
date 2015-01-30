@@ -117,7 +117,7 @@ static int copy_standard_w(const struct src_info *src, void *tgt_hdl,
                 rc = ioa_pwrite(ioa, tgt_hdl, io_buff + w, r - w,
                                        done + w);
             else
-                rc = -EOPNOTSUPP;
+                rc = -ENOTSUP;
 
             if (rc < 0)
                 LOG_GOTO(out_free, rc = -errno, "write failed");
@@ -236,7 +236,7 @@ static int write_extents(const struct src_info *src, const char *obj_id,
      * write if not available. ioa_is_valid() has already checked
      * that at least one method is available. */
     rc = ioa_sendfile_w(&ioa, hdl, src->fd, &offset, src->st.st_size);
-    if (rc == -EOPNOTSUPP)
+    if (rc == -ENOTSUP)
         rc = copy_standard_w(src, hdl, &ioa, src->st.st_size);
 
     if (rc)
@@ -310,7 +310,7 @@ static int read_extents(int fd, const char *obj_id,
      * read if not available. ioa_is_valid() has already checked
      * that at least one method is available. */
     rc = ioa_sendfile_r(&ioa, fd, hdl, &offset, loc->extent.size);
-    if (rc == -EOPNOTSUPP)
+    if (rc == -ENOTSUP)
         rc = copy_standard_r(hdl, fd, &ioa, loc->extent.size);
 
     if (rc)

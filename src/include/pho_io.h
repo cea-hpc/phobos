@@ -28,7 +28,7 @@
  *
  * Some calls are strictly mandatory, and assertion failures may happen if they
  * are found to be missing. Others aren't for which the wrappers will return
- * -EOPNOTSUPP if they are not implemented in an IOA.
+ * -ENOTSUP if they are not implemented in an IOA.
  *
  * Refer to the documentation of wrappers for what exactly is expected, done and
  * returned by the functions.
@@ -140,7 +140,7 @@ static inline int ioa_close(const struct io_adapter *ioa, void *hdl,
  * \param[in]   loc     Object location identifier
  * \param[in]   flags   PHO_IO_SYNC_* flag
  *
- * \retval -EOPNOTSUPP the I/O adapter does not provide this function
+ * \retval -ENOTSUP the I/O adapter does not provide this function
  * \return 0 on success, negative error code on failure
  */
 static inline int ioa_sync(const struct io_adapter *ioa,
@@ -148,7 +148,7 @@ static inline int ioa_sync(const struct io_adapter *ioa,
 {
     assert(ioa != NULL);
     if (ioa->ioa_sync == NULL)
-        return -EOPNOTSUPP;
+        return -ENOTSUP;
 
     return ioa->ioa_sync(loc, io_flags);
 }
@@ -163,7 +163,7 @@ static inline int ioa_sync(const struct io_adapter *ioa,
  * \param[in,out] src_offset  File offset as interpreted by sendfile(2)
  * \param[in]     count       Bytes to transfer
  *
- * \retval -EOPNOTSUPP the I/O adapter does not provide this function
+ * \retval -ENOTSUP the I/O adapter does not provide this function
  * \return number of read bytes, negative error code on failure
  */
 static inline ssize_t ioa_sendfile_r(const struct io_adapter *ioa, int tgt_fd,
@@ -172,7 +172,7 @@ static inline ssize_t ioa_sendfile_r(const struct io_adapter *ioa, int tgt_fd,
 {
     assert(ioa != NULL);
     if (ioa->ioa_sendfile_r == NULL)
-        return -EOPNOTSUPP;
+        return -ENOTSUP;
 
     return ioa->ioa_sendfile_r(tgt_fd, src_hdl, src_offset, count);
 }
@@ -188,7 +188,7 @@ static inline ssize_t ioa_sendfile_r(const struct io_adapter *ioa, int tgt_fd,
  * \param[in,out] src_offset  File offset as interpreted by sendfile(2)
  * \param[in]     count       Bytes to transfer
  *
- * \retval -EOPNOTSUPP the I/O adapter does not provide this function
+ * \retval -ENOTSUP the I/O adapter does not provide this function
  * \return number of written bytes, negative error code on failure
  */
 static inline ssize_t ioa_sendfile_w(const struct io_adapter *ioa,
@@ -197,7 +197,7 @@ static inline ssize_t ioa_sendfile_w(const struct io_adapter *ioa,
 {
     assert(ioa != NULL);
     if (ioa->ioa_sendfile_w == NULL)
-        return -EOPNOTSUPP;
+        return -ENOTSUP;
 
     return ioa->ioa_sendfile_w(tgt_hdl, src_fd, src_offset, count);
 }
@@ -212,7 +212,7 @@ static inline ssize_t ioa_sendfile_w(const struct io_adapter *ioa,
  * \param[in]       count   Maximum number of bytes to read
  * \param[in]       offset  Read start offset
  *
- * \retval -EOPNOTSUPP the I/O adapter does not provide this function
+ * \retval -ENOTSUP the I/O adapter does not provide this function
  * \return number of read bytes, negative error code on failure
  */
 static inline ssize_t ioa_pread(const struct io_adapter *ioa, void *hdl,
@@ -220,7 +220,7 @@ static inline ssize_t ioa_pread(const struct io_adapter *ioa, void *hdl,
 {
     assert(ioa != NULL);
     if (ioa->ioa_pread == NULL)
-        return -EOPNOTSUPP;
+        return -ENOTSUP;
 
     return ioa->ioa_pread(hdl, buf, count, offset);
 }
@@ -235,7 +235,7 @@ static inline ssize_t ioa_pread(const struct io_adapter *ioa, void *hdl,
  * \param[in]       count   Maximum number of bytes to write
  * \param[in]       offset  Write start offset
  *
- * \retval -EOPNOTSUPP the I/O adapter does not provide this function
+ * \retval -ENOTSUP the I/O adapter does not provide this function
  * \return number of written bytes, negative error code on failure
  */
 static inline ssize_t ioa_pwrite(const struct io_adapter *ioa, void *hdl,
@@ -243,7 +243,7 @@ static inline ssize_t ioa_pwrite(const struct io_adapter *ioa, void *hdl,
 {
     assert(ioa != NULL);
     if (ioa->ioa_pwrite == NULL)
-        return -EOPNOTSUPP;
+        return -ENOTSUP;
 
     return ioa->ioa_pwrite(hdl, buf, count, offset);
 }
@@ -258,7 +258,7 @@ static inline ssize_t ioa_pwrite(const struct io_adapter *ioa, void *hdl,
  * \param[out]      buf     Destination buffer
  * \param[in]       count   Maximum number of bytes to read
  *
- * \retval -EOPNOTSUPP the I/O adapter does not provide this function
+ * \retval -ENOTSUP the I/O adapter does not provide this function
  * \return number of read bytes, negative error code on failure
  */
 static inline ssize_t ioa_read(const struct io_adapter *ioa, void *hdl,
@@ -266,7 +266,7 @@ static inline ssize_t ioa_read(const struct io_adapter *ioa, void *hdl,
 {
     assert(ioa != NULL);
     if (ioa->ioa_read == NULL)
-        return -EOPNOTSUPP;
+        return -ENOTSUP;
 
     return ioa->ioa_read(hdl, buf, count);
 }
@@ -280,7 +280,7 @@ static inline ssize_t ioa_read(const struct io_adapter *ioa, void *hdl,
  * \param[out]      buf     Source buffer
  * \param[in]       count   Maximum number of bytes to write
  *
- * \retval -EOPNOTSUPP the I/O adapter does not provide this function
+ * \retval -ENOTSUP the I/O adapter does not provide this function
  * \return number of written bytes, negative error code on failure
  */
 static inline ssize_t ioa_write(const struct io_adapter *ioa, void *hdl,
@@ -288,7 +288,7 @@ static inline ssize_t ioa_write(const struct io_adapter *ioa, void *hdl,
 {
     assert(ioa != NULL);
     if (ioa->ioa_write == NULL)
-        return -EOPNOTSUPP;
+        return -ENOTSUP;
 
     return ioa->ioa_write(hdl, buf, count);
 }
@@ -305,7 +305,7 @@ static inline ssize_t ioa_write(const struct io_adapter *ioa, void *hdl,
  * \param[in]       size    EA value length
  * \param[in]       flags   Standard fsetxattr(2) flags
  *
- * \retval -EOPNOTSUPP the I/O adapter does not provide this function
+ * \retval -ENOTSUP the I/O adapter does not provide this function
  * \return 0 on success, negative error code on failure
  */
 static inline int ioa_fsetxattr(const struct io_adapter *ioa, void *hdl,
@@ -314,7 +314,7 @@ static inline int ioa_fsetxattr(const struct io_adapter *ioa, void *hdl,
 {
     assert(ioa != NULL);
     if (ioa->ioa_fsetxattr == NULL)
-        return -EOPNOTSUPP;
+        return -ENOTSUP;
 
     return ioa->ioa_fsetxattr(hdl, name, value, size, flags);
 }
