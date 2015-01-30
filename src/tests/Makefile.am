@@ -1,4 +1,7 @@
-AM_CFLAGS= $(CC_OPT) -D_TEST
+AM_CFLAGS= $(CC_OPT)
+
+# activated by ./configure --enable-tests
+if TESTS_ENABLED
 
 # autotools automatically generate a 'make check' target that:
 # 1) build check_PROGRAMS
@@ -6,13 +9,19 @@ AM_CFLAGS= $(CC_OPT) -D_TEST
 check_PROGRAMS=test_common test_attrs test_mapper test_log test_store
 TESTS=test_attrs test_mapper test_log test_store.sh
 
-test_log_SOURCES=../log.c test_log.c
-test_common_SOURCES=../common.c ../log.c test_common.c
-test_attrs_SOURCES=../attrs.c ../log.c test_attrs.c
-test_mapper_SOURCES=../mapper.c ../log.c test_mapper.c
+test_log_SOURCES=test_log.c
+test_log_LDADD=../common/libpho_common.la
 
-test_mapper_LDADD=-lcrypto
-test_attrs_LDADD=-ljansson
+test_common_SOURCES=test_common.c
+test_common_LDADD=../common/libpho_common.la
 
-test_store_SOURCES=../extent_utils.c ../store.c ../lrs.c ../attrs.c ../io.c ../mapper.c ../log.c test_store.c
-test_store_LDADD=-ljansson -lcrypto
+test_attrs_SOURCES=test_attrs.c
+test_attrs_LDADD=../common/libpho_common.la
+
+test_mapper_SOURCES=test_mapper.c
+test_mapper_LDADD=../store/libphobos_store.la
+
+test_store_SOURCES=test_store.c
+test_store_LDADD=../store/libphobos_store.la
+
+endif
