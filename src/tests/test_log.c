@@ -20,19 +20,21 @@
 static bool recv_dbg;
 static bool recv_vrb;
 static bool recv_nfo;
+static bool recv_warn;
 static bool recv_err;
-
 
 static int test1(void *hint)
 {
     enum pho_log_level i;
 
     for (i = PHO_LOG_DISABLED; i <= PHO_LOG_DEBUG; i++) {
+        printf("current level=%s (%d)\n", pho_log_level2str(i), i);
         pho_log_level_set(i);
-        pho_dbg("TEST DEBUG");
-        pho_vrb("TEST VERBOSE");
-        pho_nfo("TEST INFO");
-        pho_err(-EINVAL, "TEST ERROR");
+        pho_debug("TEST %s", pho_log_level2str(PHO_LOG_DEBUG));
+        pho_verb("TEST %s", pho_log_level2str(PHO_LOG_VERB));
+        pho_info("TEST %s", pho_log_level2str(PHO_LOG_INFO));
+        pho_warn("TEST %s", pho_log_level2str(PHO_LOG_WARN));
+        pho_error(-EINVAL, "TEST %s", pho_log_level2str(PHO_LOG_ERROR));
     }
     return 0;
 }
@@ -49,35 +51,41 @@ static void test2_cb(const struct pho_logrec *rec)
     case PHO_LOG_INFO:
         recv_nfo = true;
         break;
+    case PHO_LOG_WARN:
+        recv_warn = true;
+        break;
     case PHO_LOG_ERROR:
         recv_err = true;
         break;
     case PHO_LOG_DISABLED:
         /* Make sure they notice we got something */
-        recv_dbg = recv_vrb = recv_nfo = recv_err = true;
+        recv_dbg = recv_vrb = recv_nfo = recv_warn = recv_err = true;
         break;
     }
 }
 
 static void pretest_flags_reset(void)
 {
-    recv_dbg = recv_vrb = recv_nfo = recv_err = false;
+    recv_dbg = recv_vrb = recv_nfo = recv_warn = recv_err = false;
 }
 
 static bool posttest_flags_test(enum pho_log_level level)
 {
     switch (level) {
     case PHO_LOG_DEBUG:
-        return recv_dbg && recv_vrb && recv_nfo && recv_err;
+        return recv_dbg && recv_vrb && recv_nfo && recv_warn && recv_err;
     case PHO_LOG_VERB:
-        return !recv_dbg && recv_vrb && recv_nfo && recv_err;
+        return !recv_dbg && recv_vrb && recv_nfo && recv_warn && recv_err;
     case PHO_LOG_INFO:
-        return !recv_dbg && !recv_vrb && recv_nfo && recv_err;
+        return !recv_dbg && !recv_vrb && recv_nfo && recv_warn && recv_err;
+    case PHO_LOG_WARN:
+        return !recv_dbg && !recv_vrb && !recv_nfo && recv_warn && recv_err;
     case PHO_LOG_ERROR:
-        return !recv_dbg && !recv_vrb && !recv_nfo && recv_err;
+        return !recv_dbg && !recv_vrb && !recv_nfo && !recv_warn && recv_err;
     case PHO_LOG_DISABLED:
-        return !recv_dbg && !recv_vrb && !recv_nfo && !recv_err;
+        return !recv_dbg && !recv_vrb && !recv_nfo && !recv_warn && !recv_err;
     default:
+        fprintf(stderr, "Unexpected log level %d\n", level);
         return false;
     }
 }
@@ -89,12 +97,14 @@ static int test2(void *hint)
 
     pho_log_callback_set(test2_cb);
     for (i = PHO_LOG_DISABLED; i <= PHO_LOG_DEBUG; i++) {
+        printf("current level=%s (%d)\n", pho_log_level2str(i), i);
         pretest_flags_reset();
         pho_log_level_set(i);
-        pho_dbg("TEST DEBUG");
-        pho_vrb("TEST VERBOSE");
-        pho_nfo("TEST INFO");
-        pho_err(-EINVAL, "TEST ERROR");
+        pho_debug("TEST DEBUG");
+        pho_verb("TEST VERBOSE");
+        pho_info("TEST INFO");
+        pho_warn("TEST WARN");
+        pho_error(-EINVAL, "TEST ERROR");
         is_valid = posttest_flags_test(i);
         if (!is_valid)
             return -EINVAL;
@@ -107,13 +117,13 @@ static int test3(void *hint)
     pho_log_level_set(PHO_LOG_INFO);
 
     errno = ESHUTDOWN;
-    pho_nfo("test");
+    pho_info("test");
     if (errno != ESHUTDOWN)
         return -EINVAL;
 
     /* Works with zero too? */
     errno = 0;
-    pho_nfo("test");
+    pho_info("test");
     if (errno != 0)
         return -EINVAL;
 

@@ -196,7 +196,7 @@ static ssize_t pho_posix_sendfile(int tgt_fd, int src_fd, off_t *src_offset,
     if (rw < 0)
         return -errno;
     else if (rw < count) {
-        log("Warning: incomplete sendfile %llu %s out of %llu",
+        pho_warn("Warning: incomplete sendfile %llu %s out of %llu",
             (unsigned long long)rw, way, (unsigned long long)count);
         if (src_offset != NULL) {
             /* check offset value */

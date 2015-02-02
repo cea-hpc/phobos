@@ -41,6 +41,7 @@ void pho_log_level_set(enum pho_log_level level)
     case PHO_LOG_DEBUG:
     case PHO_LOG_VERB:
     case PHO_LOG_INFO:
+    case PHO_LOG_WARN:
     case PHO_LOG_ERROR:
     case PHO_LOG_DISABLED:
         phobos_log_level = level;

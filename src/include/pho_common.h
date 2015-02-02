@@ -23,9 +23,10 @@
 enum pho_log_level {
     PHO_LOG_DISABLED = 0,
     PHO_LOG_ERROR    = 1,
-    PHO_LOG_INFO     = 2,
-    PHO_LOG_VERB     = 3,
-    PHO_LOG_DEBUG    = 4,
+    PHO_LOG_WARN     = 2,
+    PHO_LOG_INFO     = 3,
+    PHO_LOG_VERB     = 4,
+    PHO_LOG_DEBUG    = 5,
     PHO_LOG_DEFAULT  = PHO_LOG_INFO
 };
 
@@ -88,20 +89,22 @@ do {                                                                    \
  * Actually exposed logging API for use by the rest of the code. They preserve
  * errno.
  */
-#define pho_dbg(_fmt...)        _PHO_LOG_INTERNAL(PHO_LOG_DEBUG, 0, _fmt)
-#define pho_vrb(_fmt...)        _PHO_LOG_INTERNAL(PHO_LOG_VERB, 0, _fmt)
-#define pho_nfo(_fmt...)        _PHO_LOG_INTERNAL(PHO_LOG_INFO, 0, _fmt)
-#define pho_err(_rc, _fmt...)   _PHO_LOG_INTERNAL(PHO_LOG_ERROR, (_rc), _fmt)
+#define pho_error(_rc, _fmt...) _PHO_LOG_INTERNAL(PHO_LOG_ERROR, (_rc), _fmt)
+#define pho_warn(_fmt...)       _PHO_LOG_INTERNAL(PHO_LOG_WARN, 0, _fmt)
+#define pho_info(_fmt...)       _PHO_LOG_INTERNAL(PHO_LOG_INFO, 0, _fmt)
+#define pho_verb(_fmt...)       _PHO_LOG_INTERNAL(PHO_LOG_VERB, 0, _fmt)
+#define pho_debug(_fmt...)      _PHO_LOG_INTERNAL(PHO_LOG_DEBUG, 0, _fmt)
 
 
 static inline const char *pho_log_level2str(enum pho_log_level level)
 {
     switch (level) {
-    case PHO_LOG_DEBUG: return "DEBUG";
-    case PHO_LOG_VERB:  return "VERBOSE";
-    case PHO_LOG_INFO:  return "INFO";
-    case PHO_LOG_ERROR: return "ERROR";
     case PHO_LOG_DISABLED:  return "DISABLED";
+    case PHO_LOG_ERROR:     return "ERROR";
+    case PHO_LOG_WARN:      return "WARNING";
+    case PHO_LOG_INFO:      return "INFO";
+    case PHO_LOG_VERB:      return "VERBOSE";
+    case PHO_LOG_DEBUG:     return "DEBUG";
     default: return "???";
     }
 }
@@ -118,16 +121,16 @@ do {                      \
 
 
 #define LOG_GOTO(_label, _rc, _fmt...) \
-do {                      \
-    int _code = (_rc);    \
-    pho_err(_code, _fmt); \
-    goto _label;          \
+do {                        \
+    int _code = (_rc);      \
+    pho_error(_code, _fmt); \
+    goto _label;            \
 } while (0)
 
 #define LOG_RETURN(_rc, _fmt...)   \
     do {                           \
         int _code = (_rc);         \
-        pho_err(_code, _fmt);      \
+        pho_error(_code, _fmt);    \
         return _code;              \
     } while (0)
 
