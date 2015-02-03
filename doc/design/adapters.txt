@@ -39,11 +39,11 @@ entries are addressed, organized, and accessed in this backend.
   (e.g. as extended attributes, or a metadata_blob). This information is critical
   to rebuild phobos database in case of accidental loss.
 
-- Adapater should provide an interface like open/close/read/write...
+- Adapater should provide an object-base interface: put/get/del
 
-- If possible, it must provide a feature to manage media transactions, like fsync,
-  that could be performed after writing an extent (e.g. as a close argument),
-  or after writing a set of files.
+- If possible, it must provide a feature to manage media transactions,
+  that could be performed after writing an extent or after writing a set of
+  files.
 
 - Adapater interface to other layers must be available as a vector of functions.
 

@@ -7,8 +7,7 @@ TEST_RECOV_DIR=/tmp/phobos_recov.$$
 TEST_FILES="/etc/redhat-release /etc/passwd /etc/group /etc/hosts $TEST_RAND"
 
 test_bin_dir=$(dirname $(readlink -m $0))
-test_put="$test_bin_dir/test_store put"
-test_get="$test_bin_dir/test_store get"
+test_bin="$test_bin_dir/test_store"
 
 # interpreted in phobos core (if built with _TEST flag)
 export PHO_TEST_MNT=$TEST_MNT
@@ -17,6 +16,7 @@ export PHO_TEST_ADDR_TYPE="hash"
 function error
 {
     echo "ERROR: $*" >&2
+    clean_test
     exit 1
 }
 
@@ -32,10 +32,21 @@ trap clean_test ERR
 
 function test_check_put
 {
-    local src_file=$(readlink -m $1)
+    local src_file=$(readlink -m $2)
     local name=$(echo $src_file | tr './!<>{}#"''' '_')
+    # non empty if a failure is expected
+    local fail=$3
 
-    $test_put $src_file || error "Put failure"
+    $test_bin $1 $src_file
+    if [[ $? != 0 ]]; then
+        if [[ -z $fail ]]; then
+            error "$1 failure"
+        else
+            echo "OK: $1 failed as expected"
+            return 1
+        fi
+    fi
+
     out=$(find $TEST_MNT -type f -name "*$name*")
     echo -e " \textent: $out"
     [ -z "$out" ] && error "*$name* not found in backend"
@@ -62,7 +73,7 @@ function test_check_get
     tgt="$TEST_RECOV_DIR/$id"
     mkdir -p $(dirname "$tgt")
 
-    $test_get "$id" "$tgt"
+    $test_bin get "$id" "$tgt"
 
     diff -q "$arch" "$tgt"
 }
@@ -79,7 +90,9 @@ echo
 echo "**** TESTS: PUT ****"
 
 for f in $TEST_FILES; do
-    test_check_put "$f"
+    test_check_put "post" "$f"
+    test_check_put "post" "$f" "yes" && error "second POST should fail"
+    test_check_put "put" "$f"
 done
 
 echo

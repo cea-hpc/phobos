@@ -134,6 +134,8 @@ do {                        \
         return _code;              \
     } while (0)
 
+#define ENTRY   pho_debug("ENTERING %s()", __func__)
+
 
 static inline bool gstring_empty(const GString *s)
 {

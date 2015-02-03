@@ -30,31 +30,37 @@
 #define PHO_EA_UMD_NAME     "user_md"
 #define PHO_EA_EXT_NAME     "ext_info"
 
-/** attach metadata information to an extent */
-static int extent_store_md(void *hdl, const struct io_adapter *ioa,
-                           const char *id, const struct pho_attrs *md,
-                           const struct layout_descr *lay,
-                           struct data_loc *loc)
+#define PHO_EA_COUNT_MAX    3
+
+/** fill an array with metadata blobs to be stored on the media */
+static int build_extent_md(const char *id, const struct pho_attrs *md,
+                           const struct layout_descr *lay, struct data_loc *loc,
+                           char **attr_keys, char **attr_values,
+                           int *attr_count)
 {
-    int rc;
-    GString *str = g_string_new("");
+    int rc, i;
+    GString *str;
+    int shift = 0;
 
-    /* store entry id */
-    rc = ioa_fsetxattr(ioa, hdl, PHO_EA_ID_NAME, id, strlen(id) + 1,
-                       XATTR_CREATE);
-    if (rc)
-        goto out_free;
+    if (*attr_count < PHO_EA_COUNT_MAX)
+        return -EINVAL;
 
+    memset(attr_keys, 0, PHO_EA_COUNT_MAX * sizeof(char *));
+    memset(attr_values, 0, PHO_EA_COUNT_MAX * sizeof(char *));
+
+    attr_keys[shift] = PHO_EA_ID_NAME;
+    attr_values[shift] = strdup(id);
+    shift++;
+
+    str = g_string_new("");
     rc = pho_attrs_to_json(md, str, PHO_ATTR_BACKUP_JSON_FLAGS);
     if (rc)
-        goto out_free;
+        goto free_values;
 
     if (!gstring_empty(str)) {
-        /* @TODO take flags into account */
-        rc = ioa_fsetxattr(ioa, hdl, PHO_EA_UMD_NAME, str->str,
-                           str->len + 1, XATTR_CREATE);
-        if (rc)
-            goto out_free;
+        attr_keys[shift] = PHO_EA_UMD_NAME;
+        attr_values[shift] = strdup(str->str);
+        shift++;
     }
 
     /* v00: the file has a single extent so we don't have to link it to
@@ -63,17 +69,19 @@ static int extent_store_md(void *hdl, const struct io_adapter *ioa,
     rc = storage_info_to_json(lay, &loc->extent, str,
                               PHO_ATTR_BACKUP_JSON_FLAGS);
     if (rc)
-        goto out_free;
-
-    if (!gstring_empty(str)) {
-        rc = ioa_fsetxattr(ioa, hdl, PHO_EA_EXT_NAME, str, str->len + 1,
-                                  XATTR_CREATE);
-        if (rc)
-            goto out_free;
-    }
+        goto free_values;
 #endif
-    rc = 0;
 
+    *attr_count = shift;
+    rc = 0;
+    goto out_free;
+
+free_values:
+    *attr_count = 0;
+    for (i = 0; i < PHO_EA_COUNT_MAX; i++) {
+        free(attr_values[i]);
+        attr_values[i] = NULL;
+    }
 out_free:
     g_string_free(str, TRUE);
     return rc;
@@ -84,112 +92,16 @@ struct src_info {
     struct stat st;
 };
 
-static int copy_standard_w(const struct src_info *src, void *tgt_hdl,
-                           const struct io_adapter *ioa, size_t size)
+static inline int obj2io_flags(int flags)
 {
-    ssize_t      r, w, done;
-    char        *io_buff = NULL;
-    size_t       io_size;
-    int          rc;
-    struct stat  st;
-
-    /* compute the optimal IO size */
-    rc = ioa_fstat(ioa, tgt_hdl, &st);
-    if (rc)
-        LOG_RETURN(rc, "Failed to stat target file");
-
-    io_size = max(src->st.st_blksize, st.st_blksize);
-
-    if (size < io_size)
-        io_size = size;
-
-    rc = posix_memalign((void **)&io_buff, getpagesize(), io_size);
-    if (rc)
-        return -rc;
-
-    done = 0;
-    while ((r = read(src->fd, io_buff, io_size)) > 0) {
-        w = 0;
-        while (w < r) {
-            if (ioa->ioa_write != NULL)
-                rc = ioa_write(ioa, tgt_hdl, io_buff + w, r - w);
-            else if (ioa->ioa_pwrite != NULL)
-                rc = ioa_pwrite(ioa, tgt_hdl, io_buff + w, r - w,
-                                       done + w);
-            else
-                rc = -ENOTSUP;
-
-            if (rc < 0)
-                LOG_GOTO(out_free, rc = -errno, "write failed");
-
-            w += rc;
-        }
-        done += w;
-    }
-    if (r < 0)
-        rc = -errno;
+    if (flags & PHO_OBJ_REPLACE)
+        return PHO_IO_REPLACE;
     else
-        rc = 0;
-
-out_free:
-    free(io_buff);
-    return rc;
+        return 0;
 }
 
-static int copy_standard_r(void *src, int tgt_fd, const struct io_adapter *ioa,
-                           size_t size)
-{
-    ssize_t r, w, done;
-    char   *io_buff = NULL;
-    size_t  io_size;
-    struct  stat st;
-    int     rc;
 
-    /* compute the optimal IO size */
-    if (fstat(tgt_fd, &st) != 0)
-        LOG_RETURN(rc = -errno, "Failed to stat target file");
-    io_size = st.st_blksize;
-
-    if (size < io_size)
-        io_size = size;
-
-    rc = posix_memalign((void **)&io_buff, getpagesize(), io_size);
-    if (rc)
-        return -rc;
-
-    done = 0;
-    do {
-        if (ioa->ioa_read != NULL)
-            r = ioa_read(ioa, src, io_buff, io_size);
-        else if (ioa->ioa_pread)
-            r = ioa_pread(ioa, src, io_buff, io_size, done);
-        else
-            LOG_GOTO(out_free, rc = -EINVAL, "No I/O function available");
-
-        if (r <= 0)
-            break;
-
-        w = 0;
-        while (w < r) {
-            rc = write(tgt_fd, io_buff + w, r - w);
-            if (rc < 0)
-                LOG_GOTO(out_free, rc = -errno, "write failed");
-            w += rc;
-        }
-        done += w;
-    } while (1);
-
-    if (r < 0)
-        rc = -errno;
-    else
-        rc = 0;
-
-out_free:
-    free(io_buff);
-    return rc;
-}
-
-/** copy data from the src_fd to the given extent */
+/** copy data from the source fd to the extent identified by loc */
 static int write_extents(const struct src_info *src, const char *obj_id,
                          const struct pho_attrs *md,
                          const struct layout_descr *lay,
@@ -197,12 +109,14 @@ static int write_extents(const struct src_info *src, const char *obj_id,
 {
     struct io_adapter    ioa;
     char                 tag[PHO_LAYOUT_TAG_MAX] = "";
-    void                *hdl = NULL;
-    off_t                offset = 0;
     int                  rc;
+    char                *attr_keys[PHO_EA_COUNT_MAX];
+    char                *attr_values[PHO_EA_COUNT_MAX];
+    int                  attr_count = PHO_EA_COUNT_MAX;
+    int                  io_flags = 0;
 
     /* get vector of functions to access the media */
-    rc = get_io_adapter(loc->extent.fs_type, loc->extent.addr_type, &ioa);
+    rc = get_io_adapter(loc->extent.fs_type, &ioa);
     if (rc)
         return rc;
 
@@ -214,46 +128,22 @@ static int write_extents(const struct src_info *src, const char *obj_id,
     if (rc)
         return rc;
 
-    /* fill address field in extent info */
-    rc = ioa_id2addr(&ioa, obj_id, tag[0] ? tag : NULL,
-                     &loc->extent.address);
+    /* Prepare the attributes to be saved */
+    rc = build_extent_md(obj_id, md, lay, loc, attr_keys, attr_values,
+                         &attr_count);
     if (rc)
         return rc;
 
-    /* open the extent for writing */
-    /* TODO take flags into account */
-    rc = ioa_open(&ioa, loc, O_CREAT|O_WRONLY|O_EXCL, &hdl);
+    /* single PUT: flush the data to disk */
+    io_flags = obj2io_flags(flags) | PHO_IO_SYNC_FILE | PHO_IO_NO_REUSE;
+
+    /* write the extent */
+    rc = ioa_put(&ioa, obj_id, tag[0] ? tag : NULL, src->fd, 0, src->st.st_size,
+                 loc, (const char **)attr_keys, (const char **)attr_values,
+                 attr_count, io_flags, NULL, NULL);
     if (rc)
-        LOG_RETURN(rc, "failed to open target extent");
+        pho_error(rc, "PUT failed");
 
-    /* store metadata in the extent, to be able to rebuild the database
-     * if it is accidentally lost */
-    rc = extent_store_md(hdl, &ioa, obj_id, md, lay, loc);
-    if (rc)
-        LOG_GOTO(clean_ext, rc, "failed to attach MD to the extent");
-
-    /* First try using sendfile to copy the data and fall back to regular
-     * write if not available. ioa_is_valid() has already checked
-     * that at least one method is available. */
-    rc = ioa_sendfile_w(&ioa, hdl, src->fd, &offset, src->st.st_size);
-    if (rc == -ENOTSUP)
-        rc = copy_standard_w(src, hdl, &ioa, src->st.st_size);
-
-    if (rc)
-        LOG_GOTO(clean_ext, rc, "I/O failed");
-
-    /* flush the data after single put */
-    rc = ioa_close(&ioa, hdl, PHO_IO_SYNC_FILE);
-    if (rc)
-        pho_error(rc, "failed to sync extent data");
-
-    return rc;
-
-clean_ext:
-    /* close & cleanup the extent on error */
-    ioa_close(&ioa, hdl, 0);
-    ioa_remove(&ioa, loc);
-    ioa_sync(&ioa, loc, PHO_IO_SYNC_FS);
     return rc;
 }
 
@@ -263,69 +153,49 @@ static int read_extents(int fd, const char *obj_id,
                         struct data_loc *loc, int flags)
 {
     struct io_adapter    ioa;
+    char                 tag[PHO_LAYOUT_TAG_MAX] = "";
     int                  rc;
-    void                *hdl = NULL;
-    struct               stat st;
-    off_t                offset = 0;
+    char                *attr_keys[1] = { PHO_EA_ID_NAME };
+    char                *attr_values[1] = {NULL};
+    int                  attr_count = 1;
+    int                  io_flags = 0;
 
     /* get vector of functions to access the media */
-    rc = get_io_adapter(loc->extent.fs_type, loc->extent.addr_type, &ioa);
+    rc = get_io_adapter(loc->extent.fs_type, &ioa);
     if (rc)
         return rc;
 
-    if (loc->extent.address.buff == NULL) {
-        char tag[PHO_LAYOUT_TAG_MAX] = "";
+    /* build extent tag from layout description */
+    rc = layout2tag(layout, loc->extent.layout_idx, tag);
+    if (rc)
+        return rc;
 
-        pho_warn("Warning: object has no address stored in database"
-                 " (generating it from object id)");
+    io_flags = obj2io_flags(flags) | PHO_IO_NO_REUSE;
 
-        /* build extent tag from layout description */
-        rc = layout2tag(layout, loc->extent.layout_idx, tag);
-        if (rc)
-            return rc;
-
-        rc = ioa_id2addr(&ioa, obj_id, tag[0] ? tag : NULL,
-                         &loc->extent.address);
-        if (rc)
-            return rc;
+    /* read the extent */
+    rc = ioa_get(&ioa, obj_id, tag[0] ? tag : NULL, fd, loc->extent.size,
+                 loc, (const char **)attr_keys, attr_values, attr_count,
+                 io_flags, NULL, NULL);
+    if (rc) {
+        pho_error(rc, "GET failed");
+        return rc;
     }
 
-    /* open the extent for reading */
-    rc = ioa_open(&ioa, loc, O_RDONLY, &hdl);
-    if (rc)
-        LOG_RETURN(rc, "failed to open source extent");
-
-
-    /* TEST ONLY (retrieve object size as it is not stored in DB) */
-    if (ioa_fstat(&ioa, hdl, &st) != 0)
-        LOG_RETURN(rc = -errno, "failed to fstat source extent");
-    loc->extent.size = st.st_size;
-
-    /* check extent md (id, layout...) */
-    /** @TODO rc = extent_check_md(hdl, &ioa, obj_id, layout, loc); */
-    if (rc)
-        LOG_GOTO(close_ext, rc, "extent check failed");
-
-    /* First try using sendfile to copy the data and fall back to regular
-     * read if not available. ioa_is_valid() has already checked
-     * that at least one method is available. */
-    rc = ioa_sendfile_r(&ioa, fd, hdl, &offset, loc->extent.size);
-    if (rc == -ENOTSUP)
-        rc = copy_standard_r(hdl, fd, &ioa, loc->extent.size);
-
-    if (rc)
-        LOG_GOTO(close_ext, rc, "I/O failed");
+    /* check ID from media */
+    if (attr_values[0] == NULL)
+        LOG_RETURN(rc = -EIO, "Couldn't find 'id' metadata on media");
+    if (strcmp(obj_id, attr_values[0]))
+        LOG_GOTO(free_values, rc = -EIO, "Inconsistent 'id' stored on media: "
+                 "'%s'", attr_values[0]);
 
     if (fsync(fd) != 0)
-        LOG_GOTO(close_ext, rc = -errno, "fsync failed on target");
+        LOG_GOTO(free_values, rc = -errno, "fsync failed on target");
 
-close_ext:
-    /* release buffer cache */
-    if (ioa_close(&ioa, hdl, PHO_IO_NO_REUSE) != 0)
-        pho_warn("Warning: failed to close source file");
-
+free_values:
+    free(attr_values[0]);
     return rc;
 }
+
 
 /** try to open a file with O_NOATIME flag.
  * Perform a standard open if it doesn't succeed.
@@ -404,7 +274,7 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
      */
     /** @TODO release write_loc structure memory */
 
-    pho_info("put complete: %s -> %s", src_file, obj_id);
+    pho_info("put complete: '%s' -> obj_id:%s", src_file, obj_id);
     return 0;
 
     /* cleaning after error cases */
@@ -466,8 +336,8 @@ int phobos_get(const char *obj_id, const char *tgt_file, int flags)
     if (rc)
         LOG_RETURN(rc, "Failed to get information about object '%s'", obj_id);
 
-    open_flags = PHO_OBJ_REPLACE ? O_CREAT|O_WRONLY|O_TRUNC
-                                 : O_CREAT|O_WRONLY|O_EXCL;
+    open_flags = (flags & PHO_OBJ_REPLACE) ? O_CREAT|O_WRONLY|O_TRUNC
+                                           : O_CREAT|O_WRONLY|O_EXCL;
 
     /* make sure we can write to the target file */
     fd = open(tgt_file, open_flags, 0640);
@@ -495,9 +365,9 @@ out_lrs_end:
 close_tgt:
     close(fd);
     if (rc == 0)
-        pho_info("get complete: %s -> %s", obj_id, tgt_file);
+        pho_info("get complete: obj_id:%s -> '%s'", obj_id, tgt_file);
     else if (unlink(tgt_file) != 0 && errno != ENOENT)
-        pho_warn("Warning: failed to clean %s: %s", tgt_file, strerror(errno));
+        pho_warn("failed to clean '%s': %s", tgt_file, strerror(errno));
 
     return rc;
 }
