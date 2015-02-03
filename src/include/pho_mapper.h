@@ -22,11 +22,16 @@
 
 
 /**
- * Build extent path into dst_path, according to obj_id and ext_tag.
+ * Build extent path as a cleaned and truncated version of obj_id + ext_tag.
+ */
+int pho_mapper_clean_path(const char *obj_id, const char *ext_tag,
+                          char *dst_path, size_t dst_size);
+/**
+ * Build extent path using a hash, according to obj_id and ext_tag.
  * See mapper.c for more explanations about how the path is generated.
  */
-int pho_mapper_extent_resolve(const char *obj_id, const char *ext_tag,
-                              char *dst_path, size_t dst_size);
+int pho_mapper_hash1(const char *obj_id, const char *ext_tag, char *dst_path,
+                     size_t dst_size);
 
 /**
  * Check for valid characters of phobos mapped path components

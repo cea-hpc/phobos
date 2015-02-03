@@ -57,7 +57,7 @@ static inline int is_prefix_chr_valid(int c)
     return 0;
 }
 
-static int is_path_valid(const char *path)
+static int is_hash1_path_valid(const char *path)
 {
     size_t  path_len = strlen(path);
     int     dots = 0;
@@ -85,6 +85,28 @@ static int is_path_valid(const char *path)
     return 1;
 }
 
+static int is_clean_path_valid(const char *path)
+{
+    size_t  path_len = strlen(path);
+    int     dots = 0;
+    int     i;
+
+    if (path_len < 1 || path_len > NAME_MAX)
+        return 0;
+
+    for (i = 0; i < path_len; i++) {
+        /* hackish check, no more that one '.' is allowed */
+        if (path[i] == '.' && dots++)
+            return 0;
+
+        if (path[i] != '.' && !pho_mapper_chr_valid(path[i]))
+            return 0;
+    }
+
+    return 1;
+}
+
+
 #define SAFE_STR(o) ((o) != NULL ? (o) : "null")
 
 static int test_build_path(const char *obj, const char *tag)
@@ -93,36 +115,42 @@ static int test_build_path(const char *obj, const char *tag)
     size_t  buff_len = sizeof(buff);
     int     rc;
 
-    rc = pho_mapper_extent_resolve(obj, tag, buff, buff_len);
+    /* poison it */
+    memset(buff, '?', sizeof(buff));
+
+    rc = pho_mapper_hash1(obj, tag, buff, buff_len);
     if (rc)
         return rc;
 
-    printf("MAPPER: o='%s' t='%s': '%s'\n", SAFE_STR(obj), SAFE_STR(tag), buff);
+    printf("HASH1 MAPPER: o='%s', t='%s': '%s'\n", SAFE_STR(obj), SAFE_STR(tag),
+           buff);
 
-    if (!is_path_valid(buff)) {
-        fprintf(stderr, "[ERROR] Invalid path crafted: '%s'\n", buff);
+    if (!is_hash1_path_valid(buff)) {
+        fprintf(stderr, "[ERROR] Invalid hash1 path crafted: '%s'\n", buff);
+        return -EINVAL;
+    }
+
+    /* poison it */
+    memset(buff, '?', sizeof(buff));
+
+    rc = pho_mapper_clean_path(obj, tag, buff, buff_len);
+    if (rc)
+        return rc;
+
+    printf("PATH MAPPER: o='%s' t='%s': '%s'\n", SAFE_STR(obj), SAFE_STR(tag),
+           buff);
+
+    if (!is_clean_path_valid(buff)) {
+        fprintf(stderr, "[ERROR] Invalid clean path crafted: '%s'\n", buff);
         return -EINVAL;
     }
 
     return 0;
 }
 
-static int test14(void *hint)
-{
-    return pho_mapper_extent_resolve("a", "b", NULL, 0);
-}
 
-static int test15(void *hint)
-{
-    return pho_mapper_extent_resolve("a", "b", NULL, NAME_MAX + 1);
-}
-
-static int test16(void *hint)
-{
-    char    buff[2];
-
-    return pho_mapper_extent_resolve("a", "b", buff, sizeof(buff));
-}
+typedef int (*pho_hash_func_t)(const char *obj_id, const char *ext_tag,
+                               char *dst_path, size_t dst_size);
 
 static int test0(void *hint)
 {
@@ -239,18 +267,77 @@ static int test13(void *hint)
     char    buff1[NAME_MAX + 1];
     char    buff2[NAME_MAX + 1];
     int     rc;
+    pho_hash_func_t func = (pho_hash_func_t)hint;
 
-    rc = pho_mapper_extent_resolve("a", "bc", buff1, sizeof(buff1));
+    rc = func("a", "bc", buff1, sizeof(buff1));
     if (rc)
         return rc;
 
-    rc = pho_mapper_extent_resolve("ab", "c", buff2, sizeof(buff2));
+    rc = func("ab", "c", buff2, sizeof(buff2));
     if (rc)
         return rc;
 
     if (strcmp(buff1, buff2) == 0)
         return -EINVAL;
 
+    return 0;
+}
+
+static int test14(void *hint)
+{
+    pho_hash_func_t func = (pho_hash_func_t)hint;
+
+    return func("a", "b", NULL, 0);
+}
+
+static int test15(void *hint)
+{
+    pho_hash_func_t func = (pho_hash_func_t)hint;
+
+    return func("a", "b", NULL, NAME_MAX + 1);
+}
+
+static int test16(void *hint)
+{
+    char    buff[2];
+    pho_hash_func_t func = (pho_hash_func_t)hint;
+
+    return func("a", "b", buff, sizeof(buff));
+}
+
+static void string_of_char(char *s, int len, int max)
+{
+    int i;
+
+    assert(len < max);
+
+    for (i = 0; i < len; i++)
+        /* use a pattern to make truncation visible */
+        s[i] = 'a' + (i % 26);
+    s[len] = '\0';
+
+    /* add garbage afterward */
+    if (len + 1 < max)
+        s[len + 1] = 'Z';
+}
+
+/** test corner cases around NAME_MAX: 253 to 257 + various tags */
+static int test17(void *hint)
+{
+    int   i, j, rc;
+    char  buff[NAME_MAX+3];
+    char *tag[] = {NULL, "a", "aa", "aaa"};
+
+    for (i = NAME_MAX - 3; i <= NAME_MAX + 2; i++) {
+        for (j = 0; j < sizeof(tag)/sizeof(*tag); j++) {
+            string_of_char(buff, i, sizeof(buff));
+            printf("strlen(obj_id)=%zu, tag=%s\n", strlen(buff),
+                   SAFE_STR(tag[j]));
+            rc = test_build_path(buff, tag[j]);
+            if (rc)
+                return rc;
+        }
+    }
     return 0;
 }
 
@@ -322,17 +409,31 @@ int main(int argc, char **argv)
     run_test("Test 12: long (truncated) name, long (invalid tag)",
              test12, NULL, PHO_TEST_FAILURE);
 
-    run_test("Test 13: make sure fields do not collide unexpectedly",
-             test13, NULL, PHO_TEST_SUCCESS);
+    run_test("Test 13a: make sure fields do not collide unexpectedly (hash1)",
+             test13, pho_mapper_hash1, PHO_TEST_SUCCESS);
+    run_test("Test 13b: make sure fields do not collide unexpectedly (path)",
+             test13, pho_mapper_clean_path, PHO_TEST_SUCCESS);
 
-    run_test("Test 14: pass in NULL/0 destination buffer",
-             test14, NULL, PHO_TEST_FAILURE);
+    run_test("Test 14a: pass in NULL/0 destination buffer (hash1)",
+             test14, pho_mapper_hash1, PHO_TEST_FAILURE);
+    run_test("Test 14b: pass in NULL/0 destination buffer (path)",
+             test14, pho_mapper_clean_path, PHO_TEST_FAILURE);
 
-    run_test("Test 15: pass in NULL/<length> destination buffer",
-             test15, NULL, PHO_TEST_FAILURE);
+    run_test("Test 15a: pass in NULL/<length> destination buffer (hash1)",
+             test15, pho_mapper_hash1, PHO_TEST_FAILURE);
+    run_test("Test 15b: pass in NULL/<length> destination buffer (path)",
+             test15, pho_mapper_clean_path, PHO_TEST_FAILURE);
 
-    run_test("Test 16: pass in small destination buffer",
-             test16, NULL, PHO_TEST_FAILURE);
+    run_test("Test 16a: pass in small destination buffer (hash1)",
+             test16, pho_mapper_hash1, PHO_TEST_FAILURE);
+    run_test("Test 16b: pass in small destination buffer (path)",
+             test16, pho_mapper_clean_path, PHO_TEST_FAILURE);
+
+    run_test("Test 17a: corner cases around NAME_MAX (hash1)",
+             test17, pho_mapper_hash1, PHO_TEST_SUCCESS);
+    run_test("Test 17b: orner cases around NAME_MAX (path)",
+             test17, pho_mapper_clean_path, PHO_TEST_SUCCESS);
+
 
     printf("MAPPER: All tests succeeded\n");
     return 0;

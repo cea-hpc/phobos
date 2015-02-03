@@ -73,6 +73,58 @@ static void clean_path(char *path, size_t path_len)
 }
 
 /**
+ * Build a clean path given the object ID and extent tag.
+ *
+ * The object ID is mandatory (must be non-empty)
+ *
+ * The extent tag is optional (either NULL or empty). Must be smaller than
+ * PHO_LAYOUT_TAG_MAX bytes.
+ *
+ * The function outputs the path in dst_path and returns 0 on success
+ * and a negative error code on failure. Expect nothing in dst_path on
+ * failure.
+ */
+int pho_mapper_clean_path(const char *obj_id, const char *ext_tag,
+                          char *dst_path, size_t dst_size)
+{
+    size_t          tag_len;
+    size_t          avail_size;
+    int             rc;
+
+    if (obj_id == NULL || dst_path == NULL)
+        return -EINVAL;
+
+    tag_len = ext_tag ? strlen(ext_tag) : 0;
+    if (tag_len > PHO_LAYOUT_TAG_MAX)
+        return -ENAMETOOLONG;
+
+    /* dst_path must at least store <delim> + tag + '\0' */
+    if (dst_size < tag_len + 2)
+        return -EINVAL;
+
+    /* Keep space for delimiter + tag, if present */
+    avail_size = dst_size - (tag_len ? tag_len + 1 : 0);
+    strncpy(dst_path, obj_id, avail_size);
+
+    /* min of <just written bytes> and <avail_size - 1> */
+    rc = min(strnlen(obj_id, avail_size), avail_size - 1);
+
+    clean_path(dst_path, avail_size);
+
+    if (tag_len > 0) {
+        dst_path += rc;
+        dst_size -= rc;
+        snprintf(dst_path, dst_size, ".%s", ext_tag);
+        clean_path(dst_path + 1, dst_size - 1); /* preserve delimiter */
+    } else {
+        /* ensure null-termination */
+        dst_path[rc] = '\0';
+    }
+
+    return 0;
+}
+
+/**
  * Craft path given the object ID and extent tag.
  *
  * The object ID is mandatory (must be non-empty)
@@ -80,26 +132,20 @@ static void clean_path(char *path, size_t path_len)
  * The extent tag is optional (either NULL or empty). Must be smaller than
  * PHO_LAYOUT_TAG_MAX bytes.
  *
- * The destination buffer must be at least NAME_MAX + 1 bytes
- *
  * The function outputs the path in dst_path and returns 0 on success
  * and a negative error code on failure. Expect nothing in dst_path on
  * failure.
  */
-int pho_mapper_extent_resolve(const char *obj_id, const char *ext_tag,
-                              char *dst_path, size_t dst_size)
+int pho_mapper_hash1(const char *obj_id, const char *ext_tag, char *dst_path,
+                     size_t dst_size)
 {
     unsigned char   hash[SHA_DIGEST_LENGTH];
     size_t          obj_len;
     size_t          tag_len;
     SHA_CTX         ctx;
-    size_t          avail_size;
     int             rc;
 
     if (obj_id == NULL || dst_path == NULL)
-        return -EINVAL;
-
-    if (dst_size < NAME_MAX + 1)
         return -EINVAL;
 
     obj_len = strlen(obj_id);
@@ -110,28 +156,20 @@ int pho_mapper_extent_resolve(const char *obj_id, const char *ext_tag,
     if (tag_len > PHO_LAYOUT_TAG_MAX)
         return -ENAMETOOLONG;
 
+    /* dst_path must at least store the hash part + <delim> + tag + '\0' */
+    if (dst_size < PHO_MAPPER_PREFIX_LENGTH + tag_len + 2)
+        return -EINVAL;
+
     SHA1_Init(&ctx);
     SHA1_Update(&ctx, obj_id, obj_len);
     SHA1_Update(&ctx, "", 1);   /* Hash a null byte to separate ID/Tag */
     SHA1_Update(&ctx, ext_tag, tag_len);
     SHA1_Final(hash, &ctx);
 
-    /* Keep space for delimiter + tag, if present */
-    avail_size = dst_size - (tag_len ? tag_len + 1 : 0);
-    rc = snprintf(dst_path, avail_size, "%02x/%02x/%02x%02x%02x%02x_%s",
-                  hash[0], hash[1], hash[0], hash[1], hash[2], hash[3], obj_id);
+    rc = snprintf(dst_path, dst_size, "%02x/%02x/%02x%02x%02x%02x_",
+                  hash[0], hash[1], hash[0], hash[1], hash[2], hash[3]);
 
-    rc = min(rc, avail_size - 1);
-
-    clean_path(dst_path + PHO_MAPPER_PREFIX_LENGTH,
-               avail_size - PHO_MAPPER_PREFIX_LENGTH);
-
-    if (tag_len > 0) {
-        dst_path += rc;
-        dst_size -= rc;
-        snprintf(dst_path, dst_size, ".%s", ext_tag);
-        clean_path(dst_path + 1, dst_size - 1); /* preserve delimiter */
-    }
-
-    return 0;
+    /* the end of the path is the same as "clean_path" mapping. */
+    return pho_mapper_clean_path(obj_id, ext_tag, dst_path + rc,
+                                 dst_size - rc);
 }

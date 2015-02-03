@@ -287,27 +287,6 @@ static int pho_posix_remove(const struct data_loc *loc)
     return rc;
 }
 
-/** FIXME (test only) replace by real call */
-static int pho_mapper_clean_path(const char *obj_id, const char *ext_tag,
-                                 char *dst_path, size_t dst_size)
-{
-    char *c;
-
-    strncpy(dst_path, obj_id, dst_size);
-
-    for (c = dst_path; *c != '\0'; c++)
-        if (*c == '.' || !isprint(*c) || isspace(*c))
-            *c = '_';
-
-    if (ext_tag != NULL) {
-        dst_path += strlen(obj_id);
-        dst_size -= strlen(obj_id);
-        snprintf(dst_path, dst_size, ".%s", ext_tag);
-    }
-
-    return 0;
-}
-
 /** allocate the desired path length, and call the path mapper */
 static int pho_set_path(const char *id, const char *tag, struct pho_buff *addr)
 {
@@ -342,7 +321,7 @@ static int pho_set_hash1(const char *id, const char *tag, struct pho_buff *addr)
     if (addr->buff == NULL)
         return -ENOMEM;
 
-    rc = pho_mapper_extent_resolve(id, tag, addr->buff, addr->size);
+    rc = pho_mapper_hash1(id, tag, addr->buff, addr->size);
     if (rc) {
         free(addr->buff);
         addr->buff = NULL;
