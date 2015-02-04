@@ -150,9 +150,9 @@ static int pho_posix_set_addr(const char *id, const char *tag,
     }
 }
 
-/** sendile wrapper */
+/** sendfile wrapper */
 static int pho_posix_sendfile(int tgt_fd, int src_fd, off_t *src_offset,
-                              size_t count, const char *way)
+                              size_t count)
 {
     ssize_t rw;
     off_t offsave = *src_offset;
@@ -165,8 +165,8 @@ static int pho_posix_sendfile(int tgt_fd, int src_fd, off_t *src_offset,
     if (rw < 0)
         return -errno;
     else if (rw < count) {
-        pho_warn("Incomplete sendfile %llu %s out of %llu",
-                 (unsigned long long)rw, way, (unsigned long long)count);
+        pho_verb("sendfile returned after copying %llu bytes. %llu bytes left.",
+                 (unsigned long long)rw, (unsigned long long)(count - rw));
         /* check offset value */
         if (*src_offset != offsave + rw)
             LOG_RETURN(-EIO, "inconsistent src_offset value "
@@ -176,10 +176,9 @@ static int pho_posix_sendfile(int tgt_fd, int src_fd, off_t *src_offset,
                        (unsigned long long)rw);
         else
             /* copy missing data */
-            return pho_posix_sendfile(tgt_fd, src_fd, src_offset,
-                                      count - rw, way);
+            return pho_posix_sendfile(tgt_fd, src_fd, src_offset, count - rw);
     } else if (rw != count)
-        LOG_RETURN(-EIO, "inconsistent %s count %llu > %llu", way,
+        LOG_RETURN(-EIO, "inconsistent byte count %llu > %llu",
                    (unsigned long long)rw, (unsigned long long)count);
     /* rw == count */
     return 0; /* all data read/written */
@@ -418,8 +417,7 @@ static int pho_posix_put(const char *id, const char *tag,
         goto close_tgt;
 
     /* write data */
-    rc = pho_posix_sendfile(tgt_fd, src_fd, &src_off,
-                            size, "write");
+    rc = pho_posix_sendfile(tgt_fd, src_fd, &src_off, size);
     if (rc)
         goto close_tgt;
 
@@ -501,8 +499,7 @@ static int pho_posix_get(const char *id, const char *tag,
     }
 
     /* read the extent */
-    rc = pho_posix_sendfile(tgt_fd, src_fd, &src_off,
-                            size, "read");
+    rc = pho_posix_sendfile(tgt_fd, src_fd, &src_off, size);
     if (rc)
         goto close_src;
 

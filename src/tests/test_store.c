@@ -40,6 +40,7 @@ int main(int argc, char **argv)
 {
     int rc;
 
+    pho_log_level_set(PHO_LOG_VERB);
     pho_log_callback_set(log_callback);
 
     if (argc != 3 && argc != 4) {
