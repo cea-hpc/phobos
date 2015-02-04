@@ -437,10 +437,13 @@ static int pho_posix_put(const char *id, const char *tag,
     }
 
 close_tgt:
-    /** FIXME delete the file too */
-
     if (close(tgt_fd) && rc == 0) /* keep the first reported error */
         rc = -errno;
+    /* clean the extent on failure */
+    if (rc != 0 && unlink(fpath->str) != 0)
+        pho_warn("failed to clean extent '%s': %s",
+                 fpath, strerror(errno));
+
 free_path:
     g_string_free(fpath, TRUE);
     return rc;
