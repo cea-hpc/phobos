@@ -15,6 +15,7 @@
 /* for PATH_MAX */
 #include <limits.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 /** max length of a tape label, FS label... */
 #define PHO_LABEL_MAX_LEN 32
@@ -95,5 +96,10 @@ struct data_loc {
     /** the data extent itself */
     struct extent extent;
 };
+
+static inline bool is_data_loc_valid(const struct data_loc *loc)
+{
+    return loc->extent.address.buff != NULL;
+}
 
 #endif

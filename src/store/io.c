@@ -12,6 +12,7 @@
 #endif
 
 #include "pho_io.h"
+#include "pho_attrs.h"
 #include "pho_common.h"
 #include "pho_mapper.h"
 #include <stdlib.h>
@@ -45,8 +46,8 @@ static GString *pho_posix_fullpath(const struct data_loc *loc)
 static int pho_posix_make_parent_of(const GString *root,
                                     const GString *fullpath)
 {
-    char *c, *tmp, *last;
-    int rc;
+    char    *c, *tmp, *last;
+    int      rc;
     ENTRY;
 
     if (strncmp(root->str, fullpath->str, root->len) != 0)
@@ -150,46 +151,43 @@ static int pho_posix_set_addr(const char *id, const char *tag,
     }
 }
 
-/** sendfile wrapper */
+/**
+ * Sendfile wrapper
+ * @TODO fallback to (p)read/(p)write */
 static int pho_posix_sendfile(int tgt_fd, int src_fd, off_t *src_offset,
                               size_t count)
 {
-    ssize_t rw;
-    off_t offsave = *src_offset;
+    ssize_t rw = 0;
+    off_t   offsave = *src_offset;
     ENTRY;
 
-    rw = sendfile(tgt_fd, src_fd, src_offset, count);
+    while (count > 0) {
+        rw = sendfile(tgt_fd, src_fd, src_offset, count);
+        if (rw < 0)
+            LOG_RETURN(-errno, "sendfile failure");
 
-    /* @TODO fallback to read/write */
+        pho_debug("sendfile returned after copying %zd bytes. %zd bytes left",
+                  rw, count - rw);
 
-    if (rw < 0)
-        return -errno;
-    else if (rw < count) {
-        pho_verb("sendfile returned after copying %llu bytes. %llu bytes left.",
-                 (unsigned long long)rw, (unsigned long long)(count - rw));
         /* check offset value */
         if (*src_offset != offsave + rw)
-            LOG_RETURN(-EIO, "inconsistent src_offset value "
-                       "(%llu != %llu + %llu)",
-                       (unsigned long long)*src_offset,
-                       (unsigned long long)offsave,
-                       (unsigned long long)rw);
-        else
-            /* copy missing data */
-            return pho_posix_sendfile(tgt_fd, src_fd, src_offset, count - rw);
-    } else if (rw != count)
-        LOG_RETURN(-EIO, "inconsistent byte count %llu > %llu",
-                   (unsigned long long)rw, (unsigned long long)count);
-    /* rw == count */
-    return 0; /* all data read/written */
+            LOG_RETURN(-EIO, "inconsistent src_offset value (%jd != %jd + %zd",
+                       (intmax_t)*src_offset, (intmax_t)offsave, rw);
+        count -= rw;
+    }
+
+    return 0;
 }
 
 static int pho_flags2open(int pho_io_flags)
 {
+    int flags = 0;
+
     /* no replace => O_EXCL */
     if (!(pho_io_flags & PHO_IO_REPLACE))
-        return O_EXCL;
-    return 0;
+        flags |= O_EXCL;
+
+    return flags;
 }
 
 /* let the backend select the xattr namespace */
@@ -204,13 +202,10 @@ static char *full_xattr_name(const char *name)
     int   len;
     char *tmp_name;
 
-    len = strlen(POSIX_XATTR_PREFIX) + strlen(name);
-
-    tmp_name = calloc(1, len + 1);
-    if (tmp_name == NULL)
+    len = asprintf(&tmp_name, "%s%s", POSIX_XATTR_PREFIX, name);
+    if (len == -1)
         return NULL;
 
-    snprintf(tmp_name, len + 1, "%s%s", POSIX_XATTR_PREFIX, name);
     return tmp_name;
 }
 
@@ -219,15 +214,12 @@ static char *full_xattr_name(const char *name)
 static int pho_setxattr(const char *path, int fd, const char *name,
                         const char *value, int flags)
 {
-    char *tmp_name;
-    int   rc = 0,
-          len;
+    char    *tmp_name;
+    int      rc = 0;
     ENTRY;
 
     if (name == NULL || name[0] == '\0')
         return -EINVAL;
-
-    len = strlen(POSIX_XATTR_PREFIX) + strlen(name);
 
     tmp_name = full_xattr_name(name);
     if (tmp_name == NULL)
@@ -235,9 +227,9 @@ static int pho_setxattr(const char *path, int fd, const char *name,
 
     if (value != NULL) {
         if (fd != -1)
-            rc = fsetxattr(fd, tmp_name, value, strlen(value)+1, flags);
+            rc = fsetxattr(fd, tmp_name, value, strlen(value) + 1, flags);
         else
-            rc = setxattr(path, tmp_name, value, strlen(value)+1, flags);
+            rc = setxattr(path, tmp_name, value, strlen(value) + 1, flags);
 
         if (rc != 0)
             LOG_GOTO(free_tmp, rc = -errno, "setxattr failed");
@@ -278,6 +270,7 @@ static int pho_getxattr(const char *path, const char *name, char **value)
 
     if (value == NULL)
         return -EINVAL;
+
     *value = NULL;
 
     if (name == NULL || name[0] == '\0')
@@ -295,8 +288,8 @@ static int pho_getxattr(const char *path, const char *name, char **value)
     if (rc <= 0) {
         if (errno == ENOATTR || rc == 0)
             GOTO(free_buff, rc = 0);
-        else
-            LOG_GOTO(free_buff, rc = -errno, "getxattr failed");
+
+        LOG_GOTO(free_buff, rc = -errno, "getxattr failed");
     }
     pho_debug("%s=%s", tmp_name, buff);
 
@@ -310,123 +303,153 @@ free_tmp:
     return rc;
 }
 
+struct md_iter_sx {
+    const char  *mis_path;
+    int          mis_fd;
+    int          mis_flags;
+};
 
-
-/** Set entry metadata as extended attributes.
- * fd or path must be specified.
- */
-static int _pho_posix_set_md(const char *path, int fd, const char **md_keys,
-                            const char **md_values, int md_count,
-                            int pho_io_flags)
+static int setxattr_cb(const char *key, const char *value, void *udata)
 {
-    int i, rc, flags = 0;
+    struct md_iter_sx  *arg = (struct md_iter_sx *)udata;
+
+    return pho_setxattr(arg->mis_path, arg->mis_fd, key, value,
+                        arg->mis_flags);
+}
+
+/**
+ * Set entry metadata as extended attributes.
+ * Either fd or path must be specified.
+ */
+static int _pho_posix_md_set(const char *path, int fd,
+                             const struct pho_attrs *attrs, int pho_io_flags)
+{
+    struct md_iter_sx  args;
     ENTRY;
 
-    if (pho_io_flags & PHO_IO_REPLACE)
-        flags = 0;
-    else /* pure create: fails if the attribute already exists */
-        flags |= XATTR_CREATE;
+    /* Specify one and only one of path or fd */
+    assert((path == NULL) != (fd == -1));
 
-    for (i = 0; i < md_count; i++) {
-        rc = pho_setxattr(path, fd, md_keys[i], md_values[i], flags);
-        if (rc)
-            return rc;
-    }
+    args.mis_path  = path;
+    args.mis_fd    = fd;
+    /* pure create: fails if the attribute already exists */
+    args.mis_flags = (pho_io_flags & PHO_IO_REPLACE) ? 0 : XATTR_CREATE;
+
+    return pho_attrs_foreach(attrs, setxattr_cb, &args);
+}
+
+static inline int pho_posix_md_fset(int fd, const struct pho_attrs *attrs,
+                                    int flags)
+{
+    return _pho_posix_md_set(NULL, fd, attrs, flags);
+}
+
+static inline int pho_posix_md_set(const char *path,
+                                   const struct pho_attrs *attrs, int flags)
+{
+    return _pho_posix_md_set(path, -1, attrs, flags);
+}
+
+
+struct md_iter_gx {
+    const char          *mig_path;
+    struct pho_attrs    *mig_attrs;
+};
+
+static int getxattr_cb(const char *key, const char *value, void *udata)
+{
+    struct md_iter_gx   *arg = (struct md_iter_gx *)udata;
+    char                *tmp_val;
+    int                  rc;
+
+    rc = pho_getxattr(arg->mig_path, key, &tmp_val);
+    if (rc != 0)
+        return rc;
+
+    rc = pho_attr_set(arg->mig_attrs, key, tmp_val);
+    if (rc != 0)
+        return rc;
+
     return 0;
 }
 
-#define pho_posix_set_md_by_fd(_fd, args...) \
-            _pho_posix_set_md(NULL, (_fd), args)
-#define pho_posix_set_md_by_path(_p, args...) \
-            _pho_posix_set_md((_p), -1, args)
-
-static int pho_posix_get_md(const char *path, const char **md_keys,
-                            char **md_values, int md_count)
+static int pho_posix_md_get(const char *path, struct pho_attrs *attrs)
 {
-    int i, rc;
+    struct md_iter_gx   args;
+    int                 rc;
     ENTRY;
 
-    for (i = 0; i < md_count; i++) {
-        rc = pho_getxattr(path, md_keys[i], &md_values[i]);
-        if (rc != 0) {
-            int j;
+    args.mig_path  = path;
+    args.mig_attrs = attrs;
 
-            /* free previously allocated values */
-            for (j = 0; j < i; j++) {
-                free(md_values[j]);
-                md_values[j] = NULL;
-            }
-            return rc;
-        }
-    }
-    return 0;
+    rc = pho_attrs_foreach(attrs, getxattr_cb, &args);
+    if (rc != 0)
+        pho_attrs_free(attrs);
+
+    return rc;
 }
 
 static int pho_posix_put(const char *id, const char *tag,
-                   int src_fd, off_t src_off, size_t size, struct data_loc *loc,
-                   const char **md_keys, const char **md_values,
-                   int md_count, int pho_io_flags,
-                   io_callback_t io_cb, void *user_data)
+                         struct pho_io_descr *iod,
+                         io_callback_t io_cb, void *user_data)
 {
-    int      rc, tgt_fd, flags;
+    int      rc;
+    int      tgt_fd;
+    int      flags;
     GString *fpath;
     ENTRY;
 
-    /* XXX asynchronous PUT is not supported for now */
     if (io_cb != NULL)
-        return -ENOTSUP;
+        LOG_RETURN(-ENOTSUP, "Asynchronous PUT operations not supported yet");
 
     /* generate entry address, if it is not already set */
-    if (loc->extent.address.buff == NULL) {
-        rc = pho_posix_set_addr(id, tag, loc->extent.addr_type,
-                                &loc->extent.address);
+    if (!is_data_loc_valid(iod->iod_loc)) {
+        rc = pho_posix_set_addr(id, tag, iod->iod_loc->extent.addr_type,
+                                &iod->iod_loc->extent.address);
         if (rc)
             return rc;
     }
 
-    fpath = pho_posix_fullpath(loc);
+    fpath = pho_posix_fullpath(iod->iod_loc);
     if (fpath == NULL)
         return -EINVAL;
 
-    /* if the call is MD_ONLY, it is expected the entry exists. */
-    if (pho_io_flags & PHO_IO_MD_ONLY) {
-        rc = pho_posix_set_md_by_path(fpath->str, md_keys, md_values, md_count,
-                                      /* propagate SYNC options */
-                                      pho_io_flags);
+    /* if the call is MD_ONLY, it is expected that the entry exists. */
+    if (iod->iod_flags & PHO_IO_MD_ONLY) {
+        /* pho_io_flags are passed in to propagate SYNC options */
+        rc = pho_posix_md_set(fpath->str, &iod->iod_attrs, iod->iod_flags);
         goto free_path;
     }
 
     /* mkdir -p */
-    rc = pho_posix_make_parent_of(loc->root_path, fpath);
+    rc = pho_posix_make_parent_of(iod->iod_loc->root_path, fpath);
     if (rc)
         goto free_path;
 
-    flags = pho_flags2open(pho_io_flags);
-
+    flags = pho_flags2open(iod->iod_flags);
     tgt_fd = open(fpath->str, flags | O_CREAT | O_WRONLY, 0640);
     if (tgt_fd < 0)
         LOG_GOTO(free_path, rc = -errno, "open(%s) for write failed",
                  fpath->str);
 
     /* set metadata */
-    rc = pho_posix_set_md_by_fd(tgt_fd, md_keys, md_values, md_count,
-                                /* don't propagate SYNC options,
-                                 * just replace option */
-                                pho_io_flags & PHO_IO_REPLACE);
+    /* Only propagate REPLACE option, if specified */
+    rc = pho_posix_md_fset(tgt_fd, &iod->iod_attrs,
+                           iod->iod_flags & PHO_IO_REPLACE);
     if (rc)
         goto close_tgt;
 
     /* write data */
-    rc = pho_posix_sendfile(tgt_fd, src_fd, &src_off, size);
+    rc = pho_posix_sendfile(tgt_fd, iod->iod_fd, &iod->iod_off, iod->iod_size);
     if (rc)
         goto close_tgt;
 
     /* flush data */
-    if (pho_io_flags & PHO_IO_SYNC_FILE)
+    if (iod->iod_flags & PHO_IO_SYNC_FILE)
         if (fsync(tgt_fd) != 0)
             LOG_GOTO(close_tgt, rc = -errno, "fsync failed");
 
-    if (pho_io_flags & PHO_IO_NO_REUSE) {
+    if (iod->iod_flags & PHO_IO_NO_REUSE) {
         rc = -posix_fadvise(tgt_fd, 0, 0,
                             POSIX_FADV_DONTNEED | POSIX_FADV_NOREUSE);
         if (rc != 0) {
@@ -450,37 +473,42 @@ free_path:
 }
 
 static int pho_posix_get(const char *id, const char *tag,
-                   int tgt_fd, size_t size, struct data_loc *loc,
-                   const char **md_keys, char **md_values,
-                   int md_count, int pho_io_flags,
-                   io_callback_t io_cb, void *user_data)
+                         struct pho_io_descr *iod,
+                         io_callback_t io_cb, void *user_data)
 {
-    int      rc, src_fd, i;
+    int      rc;
+    int      src_fd;
     GString *fpath;
-    off_t src_off = 0; /* always read the whole extent */
     ENTRY;
 
     /* XXX asynchronous PUT is not supported for now */
     if (io_cb != NULL)
         return -ENOTSUP;
 
+    /* Always read the whole extent */
+    if (iod->iod_off != 0) {
+        pho_warn("Partial get not supported, reading whole extent instead of"
+                 " seeking to offset %lu", (unsigned int)iod->iod_off);
+        iod->iod_off = 0;
+    }
+
     /* generate entry address, if it is not already set */
-    if (loc->extent.address.buff == NULL) {
+    if (!is_data_loc_valid(iod->iod_loc)) {
         pho_warn("Object has no address stored in database"
                  " (generating it from object id)");
-        rc = pho_posix_set_addr(id, tag, loc->extent.addr_type,
-                                &loc->extent.address);
-        if (rc)
+        rc = pho_posix_set_addr(id, tag, iod->iod_loc->extent.addr_type,
+                                &iod->iod_loc->extent.address);
+        if (rc != 0)
             return rc;
     }
 
-    fpath = pho_posix_fullpath(loc);
+    fpath = pho_posix_fullpath(iod->iod_loc);
     if (fpath == NULL)
         return -EINVAL;
 
     /* get entry MD, if requested */
-    rc = pho_posix_get_md(fpath->str, md_keys, md_values, md_count);
-    if (rc != 0 || (pho_io_flags & PHO_IO_MD_ONLY))
+    rc = pho_posix_md_get(fpath->str, &iod->iod_attrs);
+    if (rc != 0 || (iod->iod_flags & PHO_IO_MD_ONLY))
         goto free_path;
 
     /* open the extent */
@@ -490,7 +518,7 @@ static int pho_posix_get(const char *id, const char *tag,
                  fpath->str);
 
     /** If size is not stored in the DB, use the extent size */
-    if (size == 0) {
+    if (iod->iod_size == 0) {
         struct stat st;
 
         if (fstat(src_fd, &st) != 0)
@@ -498,18 +526,19 @@ static int pho_posix_get(const char *id, const char *tag,
 
         pho_warn("Extent size is not set in DB: using physical extent size: "
                  "%llu bytes", st.st_size);
-        size = st.st_size;
+        iod->iod_size = st.st_size;
     }
 
     /* read the extent */
-    rc = pho_posix_sendfile(tgt_fd, src_fd, &src_off, size);
+    rc = pho_posix_sendfile(iod->iod_fd, src_fd, &iod->iod_off, iod->iod_size);
     if (rc)
         goto close_src;
 
-    if (pho_io_flags & PHO_IO_NO_REUSE) {
+    if (iod->iod_flags & PHO_IO_NO_REUSE) {
         /*  release source file from system cache */
-        rc = -posix_fadvise(src_fd, 0, 0,
+        rc = posix_fadvise(src_fd, 0, 0,
                             POSIX_FADV_DONTNEED | POSIX_FADV_NOREUSE);
+        rc *= -1;   /* the function above returns errno-like codes */
         if (rc != 0) {
             pho_warn("posix_fadvise failed: %s (%d)", strerror(-rc), rc);
             /* ignore */
@@ -524,10 +553,8 @@ close_src:
                  errno);
 free_attrs:
     if (rc != 0)
-        for (i = 0; i < md_count; i++) {
-            free(md_values[i]);
-            md_values[i] = NULL;
-        }
+        pho_attrs_free(&iod->iod_attrs);
+
 free_path:
     g_string_free(fpath, TRUE);
     return rc;

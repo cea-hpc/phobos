@@ -30,37 +30,27 @@
 #define PHO_EA_UMD_NAME     "user_md"
 #define PHO_EA_EXT_NAME     "ext_info"
 
-#define PHO_EA_COUNT_MAX    3
-
 /** fill an array with metadata blobs to be stored on the media */
 static int build_extent_md(const char *id, const struct pho_attrs *md,
                            const struct layout_descr *lay, struct data_loc *loc,
-                           char **attr_keys, char **attr_values,
-                           int *attr_count)
+                           struct pho_attrs *dst_md)
 {
-    int rc, i;
     GString *str;
-    int shift = 0;
+    int      rc;
 
-    if (*attr_count < PHO_EA_COUNT_MAX)
-        return -EINVAL;
-
-    memset(attr_keys, 0, PHO_EA_COUNT_MAX * sizeof(char *));
-    memset(attr_values, 0, PHO_EA_COUNT_MAX * sizeof(char *));
-
-    attr_keys[shift] = PHO_EA_ID_NAME;
-    attr_values[shift] = strdup(id);
-    shift++;
+    rc = pho_attr_set(dst_md, PHO_EA_ID_NAME, id);
+    if (rc)
+        return rc;
 
     str = g_string_new("");
     rc = pho_attrs_to_json(md, str, PHO_ATTR_BACKUP_JSON_FLAGS);
-    if (rc)
+    if (rc != 0)
         goto free_values;
 
     if (!gstring_empty(str)) {
-        attr_keys[shift] = PHO_EA_UMD_NAME;
-        attr_values[shift] = strdup(str->str);
-        shift++;
+        rc = pho_attr_set(dst_md, PHO_EA_UMD_NAME, str->str);
+        if (rc != 0)
+            goto free_values;
     }
 
     /* v00: the file has a single extent so we don't have to link it to
@@ -68,21 +58,14 @@ static int build_extent_md(const char *id, const struct pho_attrs *md,
 #if 0
     rc = storage_info_to_json(lay, &loc->extent, str,
                               PHO_ATTR_BACKUP_JSON_FLAGS);
-    if (rc)
+    if (rc != 0)
         goto free_values;
 #endif
 
-    *attr_count = shift;
-    rc = 0;
-    goto out_free;
-
 free_values:
-    *attr_count = 0;
-    for (i = 0; i < PHO_EA_COUNT_MAX; i++) {
-        free(attr_values[i]);
-        attr_values[i] = NULL;
-    }
-out_free:
+    if (rc != 0)
+        pho_attrs_free(dst_md);
+
     g_string_free(str, TRUE);
     return rc;
 }
@@ -107,13 +90,13 @@ static int write_extents(const struct src_info *src, const char *obj_id,
                          const struct layout_descr *lay,
                          struct data_loc *loc, int flags)
 {
-    struct io_adapter    ioa;
-    char                 tag[PHO_LAYOUT_TAG_MAX] = "";
-    int                  rc;
-    char                *attr_keys[PHO_EA_COUNT_MAX];
-    char                *attr_values[PHO_EA_COUNT_MAX];
-    int                  attr_count = PHO_EA_COUNT_MAX;
-    int                  io_flags = 0;
+    char                tag[PHO_LAYOUT_TAG_MAX] = "";
+    struct io_adapter   ioa;
+    struct pho_io_descr iod;
+    int                 rc;
+
+    /* Get ready for upcoming NULL checks */
+    memset(&iod, 0, sizeof(iod));
 
     /* get vector of functions to access the media */
     rc = get_io_adapter(loc->extent.fs_type, &ioa);
@@ -128,22 +111,24 @@ static int write_extents(const struct src_info *src, const char *obj_id,
     if (rc)
         return rc;
 
+    /* single PUT: flush the data to disk */
+    iod.iod_flags = obj2io_flags(flags) | PHO_IO_SYNC_FILE | PHO_IO_NO_REUSE;
+    iod.iod_fd    = src->fd;
+    iod.iod_off   = 0;
+    iod.iod_size  = src->st.st_size;
+    iod.iod_loc   = loc;
+
     /* Prepare the attributes to be saved */
-    rc = build_extent_md(obj_id, md, lay, loc, attr_keys, attr_values,
-                         &attr_count);
+    rc = build_extent_md(obj_id, md, lay, loc, &iod.iod_attrs);
     if (rc)
         return rc;
 
-    /* single PUT: flush the data to disk */
-    io_flags = obj2io_flags(flags) | PHO_IO_SYNC_FILE | PHO_IO_NO_REUSE;
-
     /* write the extent */
-    rc = ioa_put(&ioa, obj_id, tag[0] ? tag : NULL, src->fd, 0, src->st.st_size,
-                 loc, (const char **)attr_keys, (const char **)attr_values,
-                 attr_count, io_flags, NULL, NULL);
+    rc = ioa_put(&ioa, obj_id, tag[0] ? tag : NULL, &iod, NULL, NULL);
     if (rc)
         pho_error(rc, "PUT failed");
 
+    pho_attrs_free(&iod.iod_attrs);
     return rc;
 }
 
@@ -152,13 +137,13 @@ static int read_extents(int fd, const char *obj_id,
                         const struct layout_descr *layout,
                         struct data_loc *loc, int flags)
 {
-    struct io_adapter    ioa;
     char                 tag[PHO_LAYOUT_TAG_MAX] = "";
+    struct io_adapter    ioa;
+    struct pho_io_descr  iod;
+    const char          *name;
     int                  rc;
-    char                *attr_keys[1] = { PHO_EA_ID_NAME };
-    char                *attr_values[1] = {NULL};
-    int                  attr_count = 1;
-    int                  io_flags = 0;
+
+    memset(&iod, 0, sizeof(iod));
 
     /* get vector of functions to access the media */
     rc = get_io_adapter(loc->extent.fs_type, &ioa);
@@ -170,29 +155,37 @@ static int read_extents(int fd, const char *obj_id,
     if (rc)
         return rc;
 
-    io_flags = obj2io_flags(flags) | PHO_IO_NO_REUSE;
+    iod.iod_flags = obj2io_flags(flags) | PHO_IO_NO_REUSE;
+    iod.iod_fd    = fd;
+    iod.iod_off   = 0;
+    iod.iod_size  = loc->extent.size;
+    iod.iod_loc   = loc;
+
+    rc = pho_attr_set(&iod.iod_attrs, PHO_EA_ID_NAME, "");
+    if (rc)
+        return rc;
 
     /* read the extent */
-    rc = ioa_get(&ioa, obj_id, tag[0] ? tag : NULL, fd, loc->extent.size,
-                 loc, (const char **)attr_keys, attr_values, attr_count,
-                 io_flags, NULL, NULL);
+    rc = ioa_get(&ioa, obj_id, tag[0] ? tag : NULL, &iod, NULL, NULL);
     if (rc) {
         pho_error(rc, "GET failed");
         return rc;
     }
 
     /* check ID from media */
-    if (attr_values[0] == NULL)
+    name = pho_attr_get(&iod.iod_attrs, PHO_EA_ID_NAME);
+    if (name == NULL)
         LOG_RETURN(rc = -EIO, "Couldn't find 'id' metadata on media");
-    if (strcmp(obj_id, attr_values[0]))
+
+    if (strcmp(obj_id, name))
         LOG_GOTO(free_values, rc = -EIO, "Inconsistent 'id' stored on media: "
-                 "'%s'", attr_values[0]);
+                 "'%s'", name);
 
     if (fsync(fd) != 0)
         LOG_GOTO(free_values, rc = -errno, "fsync failed on target");
 
 free_values:
-    free(attr_values[0]);
+    pho_attrs_free(&iod.iod_attrs);
     return rc;
 }
 

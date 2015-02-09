@@ -11,6 +11,7 @@
 #define _PHO_IO_H
 
 #include "pho_types.h"
+#include "pho_attrs.h"
 #include <errno.h>
 #include <sys/stat.h>
 #include <stdbool.h>
@@ -32,6 +33,23 @@ typedef int (*io_callback_t)(const struct io_cb_data *cb_data, void *user_data);
 
 
 /**
+ * Describe an I/O operation. This can be either or both data and metadata
+ * request.
+ * For MD GET request, the metadata buffer is expected to contain the requested
+ * keys. The associated values will be ignored and replaced by the retrieved
+ * ones.
+ */
+struct pho_io_descr {
+    int                iod_flags;    /**< PHO_IO_* flags */
+    int                iod_fd;       /**< Local FD */
+    off_t              iod_off;      /**< Operation offset */
+    size_t             iod_size;     /**< Operation size */
+    struct data_loc   *iod_loc;      /**< Extent location */
+    struct pho_attrs   iod_attrs;    /**< In/Out metadata operations buffer */
+};
+
+
+/**
  * An I/O adapter (IOA) is a vector of functions that provide access to a media.
  * They should be invoked via their corresponding wrappers below. Refer to
  * them for more precise explanation about each call.
@@ -44,14 +62,10 @@ typedef int (*io_callback_t)(const struct io_cb_data *cb_data, void *user_data);
  * returned by the functions.
  */
 struct io_adapter {
-    int (*ioa_put)(const char *id, const char *tag, int src_fd, off_t src_off,
-                   size_t size, struct data_loc *loc, const char **md_keys,
-                   const char **md_values, int md_count, int pho_io_flags,
+    int (*ioa_put)(const char *id, const char *tag, struct pho_io_descr *iod,
                    io_callback_t io_cb, void *user_data);
 
-    int (*ioa_get)(const char *id, const char *tag, int tgt_fd,
-                   size_t size, struct data_loc *loc, const char **md_keys,
-                   char **md_values, int md_count, int pho_io_flags,
+    int (*ioa_get)(const char *id, const char *tag, struct pho_io_descr *iod,
                    io_callback_t io_cb, void *user_data);
 
     int (*ioa_del)(const char *id, const char *tag, struct data_loc *loc);
@@ -77,80 +91,72 @@ bool io_adapter_is_valid(const struct io_adapter *ioa);
  * Put an object to a media.
  * All I/O adapters must implement this call.
  *
- * \param[in]  ioa           Suitable I/O adapter for the media
- * \param[in]  id            Null-terminated object ID
- * \param[in]  tag           Null-terminated extent tag (may be NULL)
- * \param[in]  src_fd        Source data stream file descriptor
- * \param[in]  src_off       Start offset in source fd.
- * \param[in]  size          Amount of data to be written.
- * \param[in,out] loc        Extent location identifier. The call must set
- *                           loc->extent.address to indicate where the extent
- *                           has been written.
- * \param[in]  md_keys       List of metadata blob names to set for the extent
- * \param[in]  md_values     List of metadata values associated to md_keys.
- *                           If a value is NULL, previous value of the attribute
- *                           is removed.
- * \param[in]  md_count      Number of items in md_keys and md_values.
- * \param[in]  pho_io_flags  Bitmask of PHO_IO_* flags.
+ * The I/O descriptor must be filled as follow:
+ * iod_fd       Source data stream file descriptor
+ * iod_off      Start offset in source fd.
+ * iod_size     Amount of data to be written.
+ * iod_loc      Extent location identifier. The call must set
+ *              loc->extent.address to indicate where the extent has been
+ *              written.
+ * iod_attrs    List of metadata blob k/v to set for the extent. If a value is
+ *              NULL, previous value of the attribute is removed.
+ * iod_flags    Bitmask of PHO_IO_* flags.
  *
- * \param[in]  io_cb         Callback for asynchronous put operation.
- *                           If io_cb is NULL the put operation is performed
-                             synchronously.
- * \param[in]  cb_data       User data to be passed to the callback function.
+ *
+ * \param[in]       ioa     Suitable I/O adapter for the media
+ * \param[in]       id      Null-terminated object ID
+ * \param[in]       tag     Null-terminated extent tag (may be NULL)
+ *
+ * \param[in,out]   iod     I/O descriptor (see above)
+ * \param[in]       io_cb   Callback for asynchronous put operation
+ *                          If io_cb is NULL the put operation is performed
+                            synchronously
+ * \param[in,out]   cb_data User data to be passed to the callback function
  *
  * \return 0 on success, negative error code on failure
  */
 static inline int ioa_put(const struct io_adapter *ioa, const char *id,
-                          const char *tag, int src_fd, off_t src_off,
-                          size_t size, struct data_loc *loc,
-                          const char **md_keys, const char **md_values,
-                          int md_count,
-                          int pho_io_flags, io_callback_t io_cb,
-                          void *cb_data)
+                          const char *tag, struct pho_io_descr *iod,
+                          io_callback_t io_cb, void *cb_data)
 {
     assert(ioa != NULL);
     assert(ioa->ioa_put != NULL);
-    return ioa->ioa_put(id, tag, src_fd, src_off, size, loc, md_keys, md_values,
-                        md_count, pho_io_flags, io_cb, cb_data);
+    return ioa->ioa_put(id, tag, iod, io_cb, cb_data);
 }
 
 /**
  * Get an object from a media.
  * All I/O adapters must implement this call.
  *
- * \param[in]  ioa           Suitable I/O adapter for the media
- * \param[in]  id            Null-terminated object ID
- * \param[in]  tag           Null-terminated extent tag (may be NULL)
- * \param[in]  tgt_fd        Destination data stream file descriptor
- *                           (must be positionned at desired write offset).
- * \param[in]  size          Amount of data to be read.
- * \param[in]  loc           Extent location identifier.
- * \param[in,out] loc        Extent location identifier. The call may set
- *                           loc->extent.address if it is missing.
- * \param[in]  md_keys       List of metadata blob names to be retrieved.
- * \param[in,out] md_values  Allocated list of char*. The function fills the
-                             list with the retrieved values. The caller must
-                             free the list contents after use.
- * \param[in]  md_count      Number of items in md_keys and md_values.
- * \param[in]  pho_io_flags  Bitmask of PHO_IO_* flags.
+ * The I/O descriptor must be filled as follow:
+ * iod_fd       Destination data stream file descriptor
+ *              (must be positionned at desired write offset)
+ * iod_size     Amount of data to be read.
+ * iod_loc      Extent location identifier. The call may set
+ *              loc->extent.address if it is missing
+ * iod_attrs    List of metadata blob names to be retrieved. The function fills
+ *              the value fields with the retrieved values.
+ * iod_flags    Bitmask of PHO_IO_* flags
  *
- * \param[in]  io_cb         Callback for asynchronous get operation.
- *                           If io_cb is NULL the get operation is performed
-                             synchronously.
- * \param[in]  cb_data       User data to be passed to the callback function.
+ *
+ * \param[in]       ioa     Suitable I/O adapter for the media
+ * \param[in]       id      Null-terminated object ID
+ * \param[in]       tag     Null-terminated extent tag (may be NULL)
+ * \param[in,out]   iod     I/O descriptor (see above)
+ * \param[in]       io_cb   Callback for asynchronous get operation.
+ *                          If io_cb is NULL the operation is performed
+                            synchronously
+ * \param[in,out]   cb_data User data to be passed to the callback function
  *
  * \return 0 on success, negative error code on failure
  */
 static inline int ioa_get(const struct io_adapter *ioa, const char *id,
-                          const char *tag, int tgt_fd, size_t size,
-                          struct data_loc *loc, const char **md_keys,
-                          char **md_values, int md_count,
-                          int pho_io_flags, io_callback_t io_cb, void *cb_data)
+                          const char *tag, struct pho_io_descr *iod,
+                          io_callback_t io_cb, void *cb_data)
 {
     assert(ioa != NULL);
     assert(ioa->ioa_get != NULL);
-    return ioa->ioa_get(id, tag, tgt_fd, size, loc, md_keys, md_values,
-                        md_count, pho_io_flags, io_cb, cb_data);
+    return ioa->ioa_get(id, tag, iod, io_cb, cb_data);
 }
 
 /**
