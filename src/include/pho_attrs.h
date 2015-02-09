@@ -17,6 +17,9 @@ struct pho_attrs {
     GHashTable *attr_set;
 };
 
+typedef int (*pho_attrs_iter_t)(const char *key, const char *val, void *udata);
+
+
 /** create or update a key-value item in the attribute set */
 int pho_attr_set(struct pho_attrs *md, const char *key,
                  const char *value);
@@ -33,5 +36,19 @@ void pho_attrs_free(struct pho_attrs *md);
  * @param flags JSON_* flags (from jansson).
  */
 int pho_attrs_to_json(const struct pho_attrs *md, GString *str, int json_flags);
+
+/**
+ * Invoke a callback on all items of the attribute set.
+ * Iteration stops if the callback returns a non-null value,
+ * which is then propagated back to the caller.
+ *
+ * @param[in]       md      The attribute set to iterate over.
+ * @param[in]       cb      The processing callback.
+ * @param[in,out]   udata   User data to be passed in to the callback.
+ *
+ * @return 0 on success or first non-zero value returned by the callback.
+ */
+int pho_attrs_foreach(const struct pho_attrs *md, pho_attrs_iter_t cb,
+                      void *udata);
 
 #endif

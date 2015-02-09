@@ -64,13 +64,16 @@ static int dump_to_gstring(const char *buffer, size_t size, void *data)
     return 0;
 }
 
+static int attr_json_dump_cb(const char *key, const char *value, void *udata)
+{
+    return json_object_set_new((json_t *)udata, key, json_string(value));
+}
+
 /** Serialize an attribute set by converting it to JSON. */
 int pho_attrs_to_json(const struct pho_attrs *md, GString *str, int flags)
 {
-    GHashTableIter iter;
-    gpointer       key, value;
-    json_t        *jdata;
-    int            rc;
+    json_t  *jdata;
+    int      rc;
 
     if (str == NULL)
         return -EINVAL;
@@ -86,13 +89,9 @@ int pho_attrs_to_json(const struct pho_attrs *md, GString *str, int flags)
     if (jdata == NULL)
         return -ENOMEM;
 
-    g_hash_table_iter_init(&iter, md->attr_set);
-    while (g_hash_table_iter_next(&iter, &key, &value)) {
-        rc = json_object_set_new(jdata, (char *)key,
-                                 json_string((char *)value));
-        if (rc)
-            GOTO(out_free, rc);
-    }
+    rc = pho_attrs_foreach(md, attr_json_dump_cb, jdata);
+    if (rc != 0)
+        GOTO(out_free, rc);
 
     rc = json_dump_callback(jdata, dump_to_gstring, str, flags);
 
@@ -102,3 +101,20 @@ out_free:
     return (rc != 0) ? -EINVAL : 0;
 }
 
+int pho_attrs_foreach(const struct pho_attrs *md, pho_attrs_iter_t cb,
+                      void *udata)
+{
+    GHashTableIter  iter;
+    gpointer        key;
+    gpointer        value;
+    int             rc = 0;
+
+    g_hash_table_iter_init(&iter, md->attr_set);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        rc = cb((const char *)key, (const char *)value, udata);
+        if (rc != 0)
+            break;
+    }
+
+    return rc;
+}
