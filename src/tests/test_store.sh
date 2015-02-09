@@ -13,13 +13,6 @@ test_bin="$test_bin_dir/test_store"
 export PHO_TEST_MNT=$TEST_MNT
 export PHO_TEST_ADDR_TYPE="hash"
 
-function error
-{
-    echo "ERROR: $*" >&2
-    clean_test
-    exit 1
-}
-
 function clean_test
 {
     echo "cleaning..."
@@ -28,7 +21,14 @@ function clean_test
     rm -rf "$TEST_RECOV_DIR"
 }
 
-trap clean_test ERR
+function error
+{
+    echo "ERROR: $*" >&2
+    clean_test
+    exit 1
+}
+
+trap clean_test ERR EXIT
 
 function test_check_put
 {
@@ -103,4 +103,6 @@ find $TEST_MNT -type f | while read f; do
     test_check_get "$f"
 done
 
+# exit normally, clean TRAP
+trap - EXIT ERR
 clean_test || true
