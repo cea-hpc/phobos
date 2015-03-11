@@ -131,6 +131,8 @@ static int test1d(void *arg)
     int                     rc;
 
     rc = pho_attrs_to_json(attrs, str, JSON_COMPACT | JSON_SORT_KEYS);
+    if (rc)
+        LOG_RETURN(rc, "pho_attrs_to_json failed");
     if (gstring_empty(str))
         LOG_RETURN(-EINVAL, "Empty or NULL JSON dump");
 
