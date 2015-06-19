@@ -99,12 +99,19 @@ void dss_fini(void *handle);
  *  @param[in]  type      type of items to query.
  *  @param[in]  crit      list of criteria to select items.
  *  @param[in]  crit_cnt  count of criteria in crit list.
- *  @param[out] item_list list of retrieved items (the list and its contents
- *                        must be freed by the caller).
+ *  @param[out] item_list list of retrieved items (the caller must call
+ *                        dss_res_free() later)
  *  @param[out] item_cnt  number of items in item_list.
  */
 int dss_get(void *dss_handle, enum dss_type type, struct dss_crit *crit,
             int crit_cnt, void **item_list, int *item_cnt);
+
+/**
+ *  Generic function, frees item_list that was allocated in get
+ *  @param[in]  item_list list of items to free
+ *  @param[in]  item_cnt  number of items in item_list
+ */
+void dss_res_free(void *item_list, int item_cnt);
 
 /** wrapper to get devices from DSS */
 static inline int dss_device_get(void *dss_handle, struct dss_crit *crit,

@@ -16,6 +16,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <sys/time.h>
+#include <stddef.h>
 
 #include <glib.h>
 
@@ -158,5 +159,9 @@ typedef int (*parse_cb_t)(void *cb_arg, char *line, size_t size);
 
 /** call a command and call cb_func for each output line. */
 int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg);
+
+#define container_of(addr, type, member) ({         \
+    const typeof(((type *) 0)->member) * __mptr = (addr);   \
+    (type *)((char *) __mptr - offsetof(type, member)); })
 
 #endif

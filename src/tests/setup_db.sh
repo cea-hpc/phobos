@@ -14,6 +14,7 @@ PSQL="psql phobos"
 
 setup_tables() {
 	$PSQL << EOF
+CREATE TYPE dev_family AS ENUM ('disk', 'tape');
 CREATE TYPE techno AS ENUM ('LTO6', 'LTO5', 'T10KB');
 CREATE TYPE adm_status AS ENUM ('locked', 'unlocked');
 CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used', 'full');
@@ -23,8 +24,8 @@ CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used', 'full');
 
 --  id UNIQUE ? pk (type, id) ?
 --  host json because host array
-CREATE TABLE device(type techno, id varchar(32) UNIQUE, host jsonb,
-                    adm_status adm_status, PRIMARY KEY (id));
+CREATE TABLE device(family dev_family, type techno, id varchar(32) UNIQUE,
+                    host jsonb, adm_status adm_status, PRIMARY KEY (id));
 --  CREATE INDEX ON device(type, id);
 CREATE INDEX ON device USING gin(host);
 

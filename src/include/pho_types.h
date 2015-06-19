@@ -106,22 +106,73 @@ static inline bool is_data_loc_valid(const struct data_loc *loc)
  * Family of device
  */
 enum dev_family {
-    PHO_DEV_DISK,
-    PHO_DEV_TAPE
+    PHO_DEV_INVAL = -1,
+    PHO_DEV_DISK  = 0,
+    PHO_DEV_TAPE  = 1,
+    PHO_DEV_COUNT
 };
+
+static const char * const dev_family_names[] = {
+    [PHO_DEV_DISK] = "disk",
+    [PHO_DEV_TAPE] = "tape",
+    [PHO_DEV_COUNT] = NULL
+};
+
+static inline const char *dev_family2str(enum dev_family family)
+{
+    if (family > PHO_DEV_COUNT || family < 0)
+        return NULL;
+    return dev_family_names[family];
+}
+
+static inline enum dev_family str2dev_family(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_DEV_COUNT; i++)
+        if (!strcmp(str, dev_family_names[i]))
+            return i;
+    return PHO_DEV_INVAL;
+}
 
 /**
  * Device Administrative state
  */
 enum dev_adm_status {
-    PHO_DEV_ADM_ST_LOCKED,
-    PHO_DEV_ADM_ST_UNLOCKED
+    PHO_DEV_ADM_ST_INVAL    = -1,
+    PHO_DEV_ADM_ST_LOCKED   = 0,
+    PHO_DEV_ADM_ST_UNLOCKED = 1,
+    PHO_DEV_ADM_ST_COUNT
 };
+
+static const char * const dev_adm_st_names[] = {
+    [PHO_DEV_ADM_ST_LOCKED] = "locked",
+    [PHO_DEV_ADM_ST_UNLOCKED] = "unlocked",
+    [PHO_DEV_ADM_ST_COUNT] = NULL
+};
+
+static inline const char *adm_status2str(enum dev_adm_status adm_st)
+{
+    if (adm_st > PHO_DEV_ADM_ST_COUNT || adm_st < 0)
+        return NULL;
+    return dev_adm_st_names[adm_st];
+}
+
+static inline enum dev_adm_status str2adm_status(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_DEV_ADM_ST_COUNT; i++)
+        if (!strcmp(str, dev_adm_st_names[i]))
+            return i;
+    return PHO_DEV_ADM_ST_INVAL;
+}
 
 /**
  * Device operational state
  */
 enum dev_op_status {
+    PHO_DEV_OP_ST_INVAL   = -1,
     PHO_DEV_OP_ST_FAILED  = 0,
     PHO_DEV_OP_ST_EMPTY   = 1,
     PHO_DEV_OP_ST_LOADED  = 2,
@@ -141,7 +192,7 @@ static const char * const dev_op_st_names[] = {
 
 static inline const char *op_status2str(enum dev_op_status op_st)
 {
-    if (op_st > PHO_DEV_OP_ST_BUSY)
+    if (op_st > PHO_DEV_OP_ST_BUSY || op_st < 0)
         return NULL;
     return dev_op_st_names[op_st];
 }
@@ -150,10 +201,10 @@ static inline enum dev_op_status str2op_status(const char *str)
 {
     int i;
 
-    for (i = PHO_DEV_OP_ST_FAILED; i < PHO_DEV_OP_ST_COUNT; i++)
+    for (i = 0; i < PHO_DEV_OP_ST_COUNT; i++)
         if (!strcmp(str, dev_op_st_names[i]))
             return i;
-    return (enum dev_op_status)-1;
+    return PHO_DEV_OP_ST_INVAL;
 }
 
 /** Persistent device information (from DB) */
