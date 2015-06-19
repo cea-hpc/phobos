@@ -15,6 +15,14 @@ extent: oid, layout_idx, media, address, size (pk: oid, layout_idx; indexed: med
         address: localisation sur le media contenant la donnee (ex. identifiant, ou hash, ou chemin...)
         size: taille de donnees contenues dans l'extent
 
+-> une seule table object
+  oid, user_md, st_md
+   st_md json type { 'layout_type': 'raid0', 'layout_desc': [ { 'media': 'G0042', 'layout_idx': 1, 'addr': 4212, 'size': 1234, 'state': 'sync' }, { . . .} ] }
+    state = pending, sync, todelete (hmm si ça bouge beaucoup faudrait presque mieux une table à part au final)
+   index sur les media via une fonction d'extraction http://www.postgresql.org/message-id/CAONrwUFOtnR909gs+7UOdQQB12+pXsGUYu5YHPtbQk5vaE9Gaw@mail.gmail.com
+   -> manque encore la notion de multiple copies (rajouter un niveau de tableau ? :/) (+ éventuellement version, si on veut garder les vieilles copies)
+
+
 Storage resources metadata
 ==========================
 

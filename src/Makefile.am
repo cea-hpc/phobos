@@ -1,3 +1,3 @@
 AM_CFLAGS= $(CC_OPT)
 
-SUBDIRS=include common lrs store tests
+SUBDIRS=include common dss lrs store tests

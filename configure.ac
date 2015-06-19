@@ -68,6 +68,7 @@ AC_CHECK_HEADERS([string.h sys/param.h limits.h])
 AC_CHECK_HEADERS([jansson.h], [], [AC_MSG_ERROR(missing jansson header files)])
 AC_CHECK_HEADERS([openssl/sha.h], [], [AC_MSG_ERROR(missing openssl libcrypt header files)])
 AC_CHECK_HEADERS([attr/xattr.h], [], [AC_MSG_ERROR(missing libattr header files)])
+AC_CHECK_HEADERS([libpq-fe.h], [], [AC_MSG_ERROR(missing postgresql-devel)])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
@@ -83,6 +84,7 @@ AC_CONFIG_FILES([Makefile
          src/Makefile
          src/include/Makefile
          src/common/Makefile
+         src/dss/Makefile
          src/lrs/Makefile
          src/store/Makefile
          src/tests/Makefile
