@@ -14,6 +14,7 @@
 #include "pho_common.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #define PHO_LINE_MAX 4096
 
@@ -46,4 +47,20 @@ free_buff:
 close_stream:
     pclose(stream);
     return rc;
+}
+
+void upperstr(char *str)
+{
+    int i = 0;
+
+    for (i = 0; str[i]; i++)
+       str[i] = toupper(str[i]);
+}
+
+void lowerstr(char *str)
+{
+    int i = 0;
+
+    for (i = 0; str[i]; i++)
+       str[i] = tolower(str[i]);
 }

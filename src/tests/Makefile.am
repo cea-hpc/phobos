@@ -6,8 +6,10 @@ if TESTS_ENABLED
 # autotools automatically generate a 'make check' target that:
 # 1) build check_PROGRAMS
 # 2) run TESTS and generate a summary
-check_PROGRAMS=test_common test_attrs test_mapper test_log test_store test_dss
-TESTS=test_attrs test_mapper test_log test_store.sh test_dss.sh
+check_PROGRAMS=test_common test_attrs test_mapper test_log test_store test_dss test_cfg
+TESTS=test_attrs test_mapper test_log test_cfg test_dss.sh test_store.sh
+
+noinst_PROGRAMS=$(check_PROGRAMS)
 
 test_log_SOURCES=test_log.c
 test_log_LDADD=../common/libpho_common.la
@@ -26,4 +28,7 @@ test_store_LDADD=../store/libphobos_store.la
 
 test_dss_SOURCES=test_dss.c
 test_dss_LDADD=../dss/libpho_dss.la
+
+test_cfg_SOURCES=test_cfg.c
+test_cfg_LDADD=../cfg/libpho_cfg.la ../common/libpho_common.la
 endif

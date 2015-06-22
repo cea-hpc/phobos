@@ -10,7 +10,7 @@ On distinguera plusieurs niveaux de configuration:
 La configuration specifique d'un processus est prioritaire sur la configuration locale, qui est elle meme prioritaire sur la configuration globale.
 
 * Les parametres globaux sont stockes dans le DSS, et peuvent etre accedes via des appels 'dss_cfg_{get|set}()'.
-* Les parametres locaux sont stockes dans un fichier "ini" local aux noeuds (ex: syntaxe de .git/config), que l'on pourra parser en utilisant la bibliotheque C "libinit_config" et la bibliotheque pyhton "python-iniparse" disponibles dans distribution CentOS de base.
+* Les parametres locaux sont stockes dans un fichier "ini" local aux noeuds (ex: syntaxe de .git/config), que l'on pourra parser en utilisant la bibliotheque C "libini_config" et la bibliotheque pyhton "python-iniparse" disponibles dans distribution CentOS de base.
 * Les parametres d'un processus peuvent etre specifies par variable d'environnement.
 
 # example de specification sous forme de "ini"

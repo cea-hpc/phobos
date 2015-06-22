@@ -20,7 +20,6 @@
 
 #include <glib.h>
 
-
 enum pho_log_level {
     PHO_LOG_DISABLED = 0,
     PHO_LOG_ERROR    = 1,
@@ -166,5 +165,18 @@ int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg);
 #define container_of(addr, type, member) ({         \
     const typeof(((type *) 0)->member) * __mptr = (addr);   \
     (type *)((char *) __mptr - offsetof(type, member)); })
+
+/** convert to upper case (in place) */
+void upperstr(char *str);
+
+/** convert to lower case (in place) */
+void lowerstr(char *str);
+
+/** Return a pointer to the final '\0' character of a string */
+static inline char *end_of_string(char *str)
+{
+    return str + strlen(str);
+}
+
 
 #endif
