@@ -450,12 +450,11 @@ static int pho_posix_put(const char *id, const char *tag,
             LOG_GOTO(close_tgt, rc = -errno, "fsync failed");
 
     if (iod->iod_flags & PHO_IO_NO_REUSE) {
-        rc = -posix_fadvise(tgt_fd, 0, 0,
-                            POSIX_FADV_DONTNEED | POSIX_FADV_NOREUSE);
-        if (rc != 0) {
-            pho_warn("posix_fadvise failed: %s (%d)", strerror(-rc), rc);
-            /* ignore */
-            rc = 0;
+        rc = posix_fadvise(tgt_fd, 0, 0,
+                           POSIX_FADV_DONTNEED | POSIX_FADV_NOREUSE);
+        if (rc) {
+            pho_warn("posix_fadvise failed: %s (%d)", strerror(rc), rc);
+            rc = 0; /* ignore error */
         }
     }
 
@@ -538,11 +537,9 @@ static int pho_posix_get(const char *id, const char *tag,
         /*  release source file from system cache */
         rc = posix_fadvise(src_fd, 0, 0,
                             POSIX_FADV_DONTNEED | POSIX_FADV_NOREUSE);
-        rc *= -1;   /* the function above returns errno-like codes */
-        if (rc != 0) {
-            pho_warn("posix_fadvise failed: %s (%d)", strerror(-rc), rc);
-            /* ignore */
-            rc = 0;
+        if (rc) {
+            pho_warn("posix_fadvise failed: %s (%d)", strerror(rc), rc);
+            rc = 0; /* ignore error */
         }
     }
 
