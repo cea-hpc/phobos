@@ -35,15 +35,18 @@ enum pho_log_level {
  * Log record description, as passed to the log handlers. It contains several
  * indications about where and when the message was generated. Note that the
  * plr_message will be free'd after the callback returns.
+ *
+ * The internal log framework will make sure that positive error codes are
+ * delivered in plr_err.
  */
 struct pho_logrec {
-    enum pho_log_level   plr_level;
-    const char          *plr_file;
-    const char          *plr_func;
-    int                  plr_line;
-    int                  plr_err;
-    struct timeval       plr_time;
-    char                *plr_msg;
+    enum pho_log_level   plr_level; /**< Level of the log record */
+    const char          *plr_file;  /**< Source file where this was emitted */
+    const char          *plr_func;  /**< Function name where this was emitted */
+    int                  plr_line;  /**< Line number in source code */
+    int                  plr_err;   /**< Positive errno code */
+    struct timeval       plr_time;  /**< Timestamp */
+    char                *plr_msg;   /**< Null terminated log message */
 };
 
 /**

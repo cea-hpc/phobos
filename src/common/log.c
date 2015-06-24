@@ -26,7 +26,7 @@ static void phobos_log_callback_default(const struct pho_logrec *rec)
            time.tm_hour, time.tm_min, time.tm_sec, rec->plr_time.tv_usec * 1000,
            pho_log_level2str(rec->plr_level), rec->plr_msg);
     if (rec->plr_err != 0)
-        printf(": %s (%d)\n", strerror(abs(rec->plr_err)), rec->plr_err);
+        printf(": %s (%d)\n", strerror(rec->plr_err), rec->plr_err);
     putchar('\n');
 }
 
@@ -80,7 +80,7 @@ void _log_emit(enum pho_log_level level, const char *file, int line,
     rec.plr_file  = file;
     rec.plr_func  = func;
     rec.plr_line  = line;
-    rec.plr_err   = errcode;
+    rec.plr_err   = abs(errcode);
     gettimeofday(&rec.plr_time, NULL);
 
     rc = vasprintf(&rec.plr_msg, fmt, args);
