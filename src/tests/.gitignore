@@ -4,3 +4,4 @@ test_common
 test_log
 test_mapper
 test_store
+test_dss

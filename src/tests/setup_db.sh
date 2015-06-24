@@ -1,43 +1,57 @@
 #!/bin/bash
 
-# as user 'postgres' first:
-# createuser -P phobos
-# createdb phobos
-# then either:
-#   createuser root
-#   in psql -- GRANT phobos TO root;
-# or
-#   in pg_hba.conf: local phobos phobos   md5
-
-
 PSQL="psql phobos"
+
+setup_db() {
+	su postgres -c "createuser phobos"
+	su postgres -c "createdb phobos"
+	su postgres -c "createuser root"
+	# instead of creating user root, it's possible to change pg_hba.conf
+	# and configure login as phobos directly
+	su postgres -c "$PSQL" << EOF
+GRANT ALL ON DATABASE phobos TO phobos;
+ALTER SCHEMA public OWNER TO phobos;
+GRANT phobos TO root;
+EOF
+}
+
+drop_db() {
+	su postgres -c "dropdb phobos"
+	su postgres -c "dropuser phobos"
+	su postgres -c "dropuser root"
+}
 
 setup_tables() {
 	$PSQL << EOF
 CREATE TYPE dev_family AS ENUM ('disk', 'tape');
-CREATE TYPE techno AS ENUM ('LTO6', 'LTO5', 'T10KB');
+CREATE TYPE dev_model AS ENUM ('ULTRIUM-TD6', 'ULTRIUM-TD5');
+CREATE TYPE tape_model AS ENUM ('LTO6', 'LTO5', 'T10KB');
 CREATE TYPE adm_status AS ENUM ('locked', 'unlocked');
-CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used', 'full');
+CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS');
+CREATE TYPE address_type AS ENUM ('PATH', 'HASH1', 'OPAQUE');
 
 -- enums extensibles: ALTER TYPE type ADD VALUE 'value'
 
 
 --  id UNIQUE ? pk (type, id) ?
 --  host json because host array
-CREATE TABLE device(family dev_family, type techno, id varchar(32) UNIQUE,
-                    host jsonb, adm_status adm_status, PRIMARY KEY (id));
+CREATE TABLE device(family dev_family, model dev_model,
+                    id varchar(32) UNIQUE, host jsonb, adm_status adm_status,
+                    PRIMARY KEY (id));
 --  CREATE INDEX ON device(type, id);
 CREATE INDEX ON device USING gin(host);
 
-CREATE TABLE media(type techno, id varchar(32) UNIQUE, adm_status adm_status,
-                   fs_status fs_status, vol_used bigint, vol_free bigint,
-                   PRIMARY KEY (id));
+CREATE TABLE media(model tape_model, id varchar(32) UNIQUE,
+                   adm_status adm_status, fs_type fs_type,
+                   address_type address_type, nb_obj int,
+                   logc_spc_used bigint, phys_spc_used bigint,
+                   phys_spc_free bigint, PRIMARY KEY (id));
 
 
-CREATE TABLE object(oid varchar(32), user_md jsonb, st_md json,
+CREATE TABLE object(oid varchar(1024), user_md jsonb, st_md json,
                     PRIMARY KEY (oid));
 
-CREATE TABLE extent(oid varchar(32), layout_idx int, media varchar(32),
+CREATE TABLE extent(oid varchar(1024), layout_idx int, media varchar(32),
                     address varchar(256), size bigint, PRIMARY KEY (oid));
 CREATE INDEX ON extent(media);
 
@@ -49,16 +63,24 @@ EOF
 
 }
 
-drop_all() {
+drop_tables() {
 	$PSQL << EOF
 DROP SCHEMA public CASCADE;
 CREATE SCHEMA public;
 EOF
 }
 
-insert_example() {
+insert_examples() {
 	$PSQL << EOF
-insert into device values ('LTO6', '4212', '["foo1"]', 'locked');
+insert into device (family, model, id, host, adm_status)
+    values ('tape', 'ULTRIUM-TD6', '1013005381', '["phobos1"]', 'locked'),
+           ('tape', 'ULTRIUM-TD6', '1014005381', '["phobos1"]', 'unlocked');
+insert into media (model, id, adm_status, fs_type, address_type, nb_obj,
+                   logc_spc_used, phys_spc_used, phys_spc_free)
+    values ('LTO6', '073220L6', 'unlocked', 'LTFS', 'HASH1', 2,
+               6291456000, 42469425152, 2365618913280),
+           ('LTO6', '073221L6', 'unlocked', 'LTFS', 'HASH1', 2,
+               6291456000, 42469425152, 2365618913280);
 EOF
 }
 
@@ -70,3 +92,41 @@ EOF
 
 }
 
+# if we're being sourced, don't parse arguments
+[[ $(caller | cut -d' ' -f1) != "0" ]] && return 0
+
+usage() {
+	echo "Usage: . $0"
+	echo "  OR   $0 ACTION [ACTION [ACTION...]]"
+	echo "where  ACTION := { setup_db | drop_db | setup_tables |"
+	echo "                   drop_tables | insert_examples }"
+	exit -1
+}
+
+if [[ $# -eq 0 ]]; then
+	usage
+fi
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	setup_db)
+		setup_db
+		;;
+	drop_db)
+		drop_db
+		;;
+	setup_tables)
+		setup_tables
+		;;
+	drop_tables)
+		drop_tables
+		;;
+	insert_examples)
+		insert_examples
+		;;
+	*)
+		usage
+		;;
+	esac
+	shift
+done
