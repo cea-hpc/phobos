@@ -229,16 +229,27 @@ struct dev_state {
     struct media_id      media;    /**< media, if loaded or mounted */
 };
 
+/** media statistics */
+struct media_stats {
+    uint64_t           nb_obj;    /**< number of objects stored on media */
+    size_t             logc_spc_used;  /**< space used (logical)  */
+    size_t             phys_spc_used;  /**< space used (physical) */
+    size_t             phys_spc_free;  /**< free space (physical) */
+
+    int32_t            nb_load; /**< number of times the tape was loaded
+                                     into a drive */
+    int32_t            nb_errors; /**< number of errors encountered
+                                     while accessing this tape */
+    time_t             last_load; /**< last time the tape was mounted into a
+                                       drive */
+};
+
 /** persistent media and filesystem information */
 struct media_info {
     struct media_id      media;
     enum fs_type         fs_type;    /**< type of filesystem on this media */
     enum address_type    addr_type;  /**< way to address this media */
-
-    int                  nb_obj;     /**< number of objects stored on media */
-    size_t               logc_spc_used;  /**< space used (logical)  */
-    size_t               phys_spc_used;  /**< space used (physical) */
-    size_t               phys_spc_free;  /**< free space (physical) */
+    struct media_stats   stats;      /**< metrics */
 };
 
 struct object_info {

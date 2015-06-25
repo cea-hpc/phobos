@@ -43,10 +43,8 @@ CREATE INDEX ON device USING gin(host);
 
 CREATE TABLE media(model tape_model, id varchar(32) UNIQUE,
                    adm_status adm_status, fs_type fs_type,
-                   address_type address_type, nb_obj int,
-                   logc_spc_used bigint, phys_spc_used bigint,
-                   phys_spc_free bigint, PRIMARY KEY (id));
-
+                   address_type address_type, stats jsonb,
+                   PRIMARY KEY (id));
 
 CREATE TABLE object(oid varchar(1024), user_md jsonb, st_md json,
                     PRIMARY KEY (oid));
@@ -75,12 +73,13 @@ insert_examples() {
 insert into device (family, model, id, host, adm_status)
     values ('tape', 'ULTRIUM-TD6', '1013005381', '["phobos1"]', 'locked'),
            ('tape', 'ULTRIUM-TD6', '1014005381', '["phobos1"]', 'unlocked');
-insert into media (model, id, adm_status, fs_type, address_type, nb_obj,
-                   logc_spc_used, phys_spc_used, phys_spc_free)
-    values ('LTO6', '073220L6', 'unlocked', 'LTFS', 'HASH1', 2,
-               6291456000, 42469425152, 2365618913280),
-           ('LTO6', '073221L6', 'unlocked', 'LTFS', 'HASH1', 2,
-               6291456000, 42469425152, 2365618913280);
+insert into media (model, id, adm_status, fs_type, address_type, stats)
+    values ('LTO6', '073220L6', 'unlocked', 'LTFS', 'HASH1',
+            '{"nb_obj":"2","logc_spc_used":"6291456000",\
+	      "phys_spc_used":"42469425152","phys_spc_free":"2365618913280"}'),
+           ('LTO6', '073221L6', 'unlocked', 'LTFS', 'HASH1',
+            '{"nb_obj":"2","logc_spc_used":"15033434112",\
+	      "phys_spc_used":"15033434112","phys_spc_free":"2393054904320"}');
 EOF
 }
 
