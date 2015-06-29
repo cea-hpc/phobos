@@ -136,6 +136,39 @@ static inline enum dev_family str2dev_family(const char *str)
 }
 
 /**
+ * Device model
+ *  */
+enum dev_model {
+    PHO_DEV_MODEL_INVAL = -1,
+    PHO_DEV_MODEL_ULTRIUM_TD5  = 0,
+    PHO_DEV_MODEL_ULTRIUM_TD6  = 1,
+    PHO_DEV_MODEL_COUNT
+};
+
+static const char * const dev_model_names[] = {
+    [PHO_DEV_MODEL_ULTRIUM_TD5] = "ULTRIUM-TD5",
+    [PHO_DEV_MODEL_ULTRIUM_TD6] = "ULTRIUM-TD6",
+    [PHO_DEV_MODEL_COUNT] = NULL
+};
+
+static inline const char *dev_model2str(enum dev_model model)
+{
+    if (model > PHO_DEV_MODEL_COUNT || model < 0)
+        return NULL;
+    return dev_model_names[model];
+}
+
+static inline enum dev_model str2dev_model(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_DEV_MODEL_COUNT; i++)
+        if (!strcmp(str, dev_model_names[i]))
+            return i;
+    return PHO_DEV_MODEL_INVAL;
+}
+
+/**
  * Device Administrative state
  */
 enum dev_adm_status {

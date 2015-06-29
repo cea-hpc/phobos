@@ -35,9 +35,16 @@ setup_tables
 insert_examples
 
 echo
-echo "**** TESTS: DSS_GET ****"
+echo "**** TESTS: DSS_GET ALL ****"
 
-test_check_get "dev" "ALL"
+test_check_get "dev" "all"
+
+echo "**** TESTS: DSS_GET DEV TAPE ****"
+test_check_get "dev" "tape"
+echo "**** TESTS: DSS_GET DEV DISK ****"
+test_check_get "dev" "disk"
+echo "**** TESTS: DSS_GET MEDIA USED_SPACE > 16000000000 ****"
+test_check_get "media" "used_space"
 
 # Uncomment if you want the db to persist after test
 # trap - EXIT ERR

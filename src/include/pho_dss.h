@@ -23,13 +23,30 @@ enum dss_type {
 
 /** comparators */
 enum dss_cmp {
-    DSS_CMP_EQ, /**< equal (==) */
+    DSS_CMP_EQ, /**< equal (=) */
     DSS_CMP_NE, /**< not equal (!=) */
     DSS_CMP_GT, /**< greater than (>) */
     DSS_CMP_GE, /**< greater or equal (>=) */
     DSS_CMP_LT, /**< less than (<) */
     DSS_CMP_LE, /**< less or equal (<=) */
+    DSS_CMP_LAST
 };
+
+static const char * const dss_cmp_names[] = {
+    [DSS_CMP_EQ] = "=",
+    [DSS_CMP_NE] = "!=",
+    [DSS_CMP_GT] = ">",
+    [DSS_CMP_GE] = ">=",
+    [DSS_CMP_LT] = "<",
+    [DSS_CMP_LE] = "<="
+};
+
+static inline const char *dss_cmp2str(enum dss_cmp cmp)
+{
+    if (cmp >= DSS_CMP_LAST || cmp < 0)
+        return NULL;
+    return dss_cmp_names[cmp];
+}
 
 /** fields of all item types */
 enum dss_fields {
@@ -37,6 +54,7 @@ enum dss_fields {
     DSS_OBJ_oid,     /**< object id */
     DSS_OBJ_status,  /**< status: stable, pending, removed... */
     DSS_OBJ_user_md, /**< JSON blob of arbitrary user MD */
+    DSS_OBJ_st_md, /**< JSON blob of arbitrary st. MD */
     DSS_OBJ_info,    /**< JSON blob with object statistics, lifecycle info... */
 
     /* extent related fields */
@@ -49,13 +67,126 @@ enum dss_fields {
                                                   size}, ... ] */
     DSS_EXT_info,     /* extent info (statistics, lifecycle info...) */
 
-    DSS_DEV_type,
+    /* Media @ v0 */
+    DSS_MDA_model, /* type of media */
+    DSS_MDA_id,
+    DSS_MDA_adm_status, /* ready, failed, ... */
+    DSS_MDA_fs_status, /* blank, empty, ...  */
+    DSS_MDA_format, /* fs type */
+    DSS_MDA_stats,
+    DSS_MDA_nb_obj, /* ->>stats  */
+    DSS_MDA_vol_used, /* ->>stats phys. used */
+    DSS_MDA_vol_free, /* ->>stats phys. free */
+
+    /* Device @ v0 */
     DSS_DEV_id,
+    DSS_DEV_family,
     DSS_DEV_host, /* FUTURE: hosts (indexed JSON array) */
     DSS_DEV_adm_status, /* locked/unlocked */
+    DSS_DEV_model, /* Device type */
 
-    /** @TODO to be continued (media...) */
+    DSS_FIELDS_LAST,
 };
+
+static const char * const dss_fields_names[] = {
+    [DSS_OBJ_oid] = "oid",
+    [DSS_OBJ_status] = "status",
+    [DSS_OBJ_user_md] = "user_md",
+    [DSS_OBJ_st_md] = "st_md",
+    [DSS_OBJ_info] = "info",
+    [DSS_EXT_oid] = "oid",
+    [DSS_EXT_copy_num] = "copy_num",
+    [DSS_EXT_status] = "status",
+    [DSS_EXT_layout_descr] = "layout_descr",
+    [DSS_EXT_layout_info] = "layout_info",
+    [DSS_EXT_info] = "info",
+    [DSS_MDA_model] = "model",
+    [DSS_MDA_id] = "id",
+    [DSS_MDA_adm_status] = "adm_status",
+    [DSS_MDA_fs_status] = "fs_status",
+    [DSS_MDA_format] = "fs_type",
+    [DSS_MDA_stats] = "stats",
+    [DSS_MDA_nb_obj] = "stats::json->>'nb_obj'",
+    [DSS_MDA_vol_used] = "stats::json->>'phys_spc_used'",
+    [DSS_MDA_vol_free] = "stats::json->>'phys_spc_free'",
+    [DSS_DEV_family] = "family",
+    [DSS_DEV_id] = "id",
+    [DSS_DEV_host] = "host",
+    [DSS_DEV_adm_status] = "adm_status",
+    [DSS_DEV_model] = "model",
+};
+
+static inline const char *dss_fields2str(enum dss_fields fields)
+{
+    if (fields >= DSS_FIELDS_LAST || fields < 0)
+        return NULL;
+    return dss_fields_names[fields];
+}
+
+
+/** types */
+enum dss_valtype {
+    DSS_VAL_UNKNOWN = -1,
+    DSS_VAL_BIGINT   = 0,
+    DSS_VAL_INT      = 1,
+    DSS_VAL_BIGUINT  = 2,
+    DSS_VAL_UINT     = 3,
+    DSS_VAL_STR      = 4,
+    DSS_VAL_ENUM     = 5,
+    DSS_VAL_JSON     = 6
+};
+
+static const int const dss_fields_type[] = {
+    [DSS_OBJ_oid] = DSS_VAL_STR,
+    [DSS_OBJ_status] = DSS_VAL_ENUM,
+    [DSS_OBJ_user_md] = DSS_VAL_JSON,
+    [DSS_OBJ_st_md] = DSS_VAL_JSON,
+    [DSS_OBJ_info] = DSS_VAL_JSON,
+    [DSS_EXT_oid] = DSS_VAL_STR,
+    [DSS_EXT_copy_num] = DSS_VAL_UNKNOWN,
+    [DSS_EXT_status] = DSS_VAL_ENUM,
+    [DSS_EXT_layout_descr] = DSS_VAL_UNKNOWN,
+    [DSS_EXT_layout_info] = DSS_VAL_UNKNOWN,
+    [DSS_EXT_info] = DSS_VAL_JSON,
+    [DSS_MDA_model] = DSS_VAL_ENUM,
+    [DSS_MDA_id] = DSS_VAL_STR,
+    [DSS_MDA_adm_status] = DSS_VAL_ENUM,
+    [DSS_MDA_fs_status] = DSS_VAL_ENUM,
+    [DSS_MDA_format] = DSS_VAL_ENUM,
+    [DSS_MDA_stats] = DSS_VAL_JSON,
+    [DSS_MDA_nb_obj] = DSS_VAL_INT,
+    [DSS_MDA_vol_used] = DSS_VAL_BIGINT,
+    [DSS_MDA_vol_free] = DSS_VAL_BIGINT,
+    [DSS_DEV_family] = DSS_VAL_ENUM,
+    [DSS_DEV_id] = DSS_VAL_STR,
+    [DSS_DEV_host] = DSS_VAL_STR,
+    [DSS_DEV_adm_status] = DSS_VAL_ENUM,
+    [DSS_DEV_model] = DSS_VAL_ENUM,
+    /** @TODO to be fixed (real types, ...) */
+};
+
+static inline const int dss_fields2type(enum dss_fields fields)
+{
+    if (fields >= DSS_FIELDS_LAST || fields < 0)
+        return DSS_VAL_UNKNOWN;
+    return dss_fields_type[fields];
+}
+
+static inline const char *dss_fields_enum2str(enum dss_fields fields, int val)
+{
+    switch (fields) {
+    case DSS_DEV_family:
+        return dev_family2str((enum dev_family) val);
+    case DSS_DEV_adm_status:
+        return adm_status2str((enum dev_adm_status) val);
+    case DSS_DEV_model:
+        return dev_model2str((enum dev_model) val);
+    default:
+        return NULL;
+    }
+    return NULL;
+}
+
 
 union dss_val {
     int64_t      val_bigint;
@@ -78,7 +209,6 @@ struct dss_crit {
         (_pcrit)[*(_pctr)].crit_val._field = (_value);        \
         (*(_pctr))++;                                         \
     } while (0)
-
 
 /**
  *  Initialize a connection handle
@@ -130,6 +260,5 @@ static inline int dss_media_get(void *dss_handle, struct dss_crit *crit,
     return dss_get(dss_handle, DSS_MEDIA, crit, crit_cnt, (void **)med_ls,
                    med_cnt);
 }
-
 
 #endif
