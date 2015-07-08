@@ -118,6 +118,19 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
 
 }
 
+/**
+ * helper arrays to build SQL query
+ */
+static const char * const base_query[] = {
+    [DSS_DEVICE] = "SELECT family, model, id, adm_status FROM device",
+    [DSS_MEDIA]  = "SELECT id, adm_status FROM media",
+};
+
+static const size_t const res_size[] = {
+    [DSS_DEVICE] = sizeof(struct dev_info),
+    [DSS_MEDIA]  = sizeof(struct media_info),
+};
+
 int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
             int crit_cnt, void **item_list, int *item_cnt)
 {
@@ -127,60 +140,66 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     char *buf;
     struct dss_result *dss_res;
     int i, rc;
-    size_t res_size;
+    size_t dss_res_size;
 
 
     *item_list = NULL;
     *item_cnt = 0;
 
     if (handle == NULL || item_list == NULL || item_cnt == NULL) {
-        pho_error(EINVAL, "handle: %p, item_list: %p, item_cnt: %p",
+        rc = -EINVAL;
+        pho_error(rc, "handle: %p, item_list: %p, item_cnt: %p",
                   handle, item_list, item_cnt);
-        return -EINVAL;
+        return rc;
     }
 
-    switch (type) {
-    case DSS_DEVICE:
-        /* get everything if no criteria */
-        clause =
-            g_string_new("SELECT family, model, id, adm_status FROM device");
-        if (crit_cnt > 0)
-            g_string_append(clause, " WHERE ");
+    if (type != DSS_DEVICE && type != DSS_MEDIA) {
+        rc = -EINVAL;
+        pho_error(rc, "invalid type %d", type);
+        return rc;
+    }
 
-        while (crit_cnt > 0) {
-            rc = dss_crit_to_pattern(conn, crit, clause);
-            if (rc) {
-                pho_error(rc, "failed to append crit %d to clause %s",
-                          crit->crit_name, clause->str);
-                g_string_free(clause, true);
-                return rc;
-            }
-            crit++;
-            crit_cnt--;
-            if (crit_cnt > 0)
-                g_string_append(clause, " AND ");
-        }
+    /* get everything if no criteria */
+    clause = g_string_new(base_query[type]);
+    if (crit_cnt > 0)
+        g_string_append(clause, " WHERE ");
 
-        pho_debug("Executing request: %s", clause->str);
-        res = PQexec(conn, clause->str);
-        if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-            rc = -ECOMM;
-            pho_error(rc, "Query (%s) failed: %s", clause->str,
-                      PQerrorMessage(conn));
-            PQclear(res);
+    while (crit_cnt > 0) {
+        rc = dss_crit_to_pattern(conn, crit, clause);
+        if (rc) {
+            pho_error(rc, "failed to append crit %d to clause %s",
+                      crit->crit_name, clause->str);
             g_string_free(clause, true);
             return rc;
         }
+        crit++;
+        crit_cnt--;
+        if (crit_cnt > 0)
+            g_string_append(clause, " AND ");
+    }
+
+    pho_debug("Executing request: %s", clause->str);
+    res = PQexec(conn, clause->str);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        rc = -ECOMM;
+        pho_error(rc, "Query (%s) failed: %s", clause->str,
+                  PQerrorMessage(conn));
+        PQclear(res);
         g_string_free(clause, true);
+        return rc;
+    }
+    g_string_free(clause, true);
 
-        res_size = sizeof(struct dss_result) +
-                   PQntuples(res) * sizeof(struct dev_info);
-        dss_res = malloc(res_size);
-        if (dss_res == NULL) {
-            pho_error(ENOMEM, "dss_res allocation failed (size %z)", res_size);
-            return -ENOMEM;
-        }
+    dss_res_size = sizeof(struct dss_result) + PQntuples(res) * res_size[type];
+    dss_res = malloc(dss_res_size);
+    if (dss_res == NULL) {
+        pho_error(ENOMEM, "dss_res allocation failed (size %z)", dss_res_size);
+        return -ENOMEM;
+    }
 
+
+    switch (type) {
+    case DSS_DEVICE:
         dss_res->pg_res = res;
         for (i = 0; i < PQntuples(res); i++) {
             dss_res->u.dev[i].family = str2dev_family(PQgetvalue(res, i, 0));
@@ -198,46 +217,6 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
         break;
 
     case DSS_MEDIA:
-        /* get everything if no criteria */
-        clause =
-            g_string_new("SELECT id, adm_status FROM media");
-        if (crit_cnt > 0)
-            g_string_append(clause, " WHERE ");
-
-        while (crit_cnt > 0) {
-            rc = dss_crit_to_pattern(conn, crit, clause);
-            if (rc) {
-                pho_error(rc, "failed to append crit %d to clause %s",
-                          crit->crit_name, clause->str);
-                g_string_free(clause, true);
-                return rc;
-            }
-            crit++;
-            crit_cnt--;
-            if (crit_cnt > 0)
-                g_string_append(clause, " AND ");
-        }
-
-        pho_debug("Executing request: %s", clause->str);
-        res = PQexec(conn, clause->str);
-        if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-            rc = -ECOMM;
-            pho_error(rc, "Query (%s) failed: %s", clause->str,
-                      PQerrorMessage(conn));
-            PQclear(res);
-            g_string_free(clause, true);
-            return rc;
-        }
-        g_string_free(clause, true);
-
-        res_size = sizeof(struct dss_result) +
-                   PQntuples(res) * sizeof(struct media_info);
-        dss_res = malloc(res_size);
-        if (dss_res == NULL) {
-            pho_error(ENOMEM, "dss_res allocation failed (size %z)", res_size);
-            return -ENOMEM;
-        }
-
         dss_res->pg_res = res;
         for (i = 0; i < PQntuples(res); i++) {
             buf = PQgetvalue(res, i, 0);
@@ -253,9 +232,7 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
 
         *item_list = dss_res->u.media;
         *item_cnt = PQntuples(res);
-
         break;
-
 
     default:
         return -EINVAL;
