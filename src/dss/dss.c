@@ -122,8 +122,9 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
  * helper arrays to build SQL query
  */
 static const char * const base_query[] = {
-    [DSS_DEVICE] = "SELECT family, model, id, adm_status FROM device",
-    [DSS_MEDIA]  = "SELECT id, adm_status FROM media",
+    [DSS_DEVICE] = "SELECT family, model, id, adm_status,"
+                   " host, path, changer_idx FROM device",
+    [DSS_MEDIA]  = "SELECT id, adm_status, model FROM media",
 };
 
 static const size_t const res_size[] = {
@@ -203,11 +204,12 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
         dss_res->pg_res = res;
         for (i = 0; i < PQntuples(res); i++) {
             dss_res->u.dev[i].family = str2dev_family(PQgetvalue(res, i, 0));
-            dss_res->u.dev[i].type   = PQgetvalue(res, i, 1);
-            dss_res->u.dev[i].path   = "";
-            dss_res->u.dev[i].model  = "";
+            dss_res->u.dev[i].host   = PQgetvalue(res, i, 4);
+            dss_res->u.dev[i].path   = PQgetvalue(res, i, 5);
+            dss_res->u.dev[i].model  = PQgetvalue(res, i, 1);
             dss_res->u.dev[i].serial = PQgetvalue(res, i, 2);
-            dss_res->u.dev[i].changer_idx = -1;
+            /** @todo replace atoi by proper pq function */
+            dss_res->u.dev[i].changer_idx = atoi(PQgetvalue(res, i, 6));
             dss_res->u.dev[i].adm_status =
                 str2adm_status(PQgetvalue(res, i, 3));
         }
@@ -222,6 +224,9 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
             buf = PQgetvalue(res, i, 0);
             strncpy(dss_res->u.media[i].media.id_u.label, buf,
                     sizeof(dss_res->u.media[i].media.id_u.label));
+            dss_res->u.media[i].adm_status =
+                media_str2adm_status(PQgetvalue(res, i, 1));
+            dss_res->u.media[i].model = PQgetvalue(res, i, 2);
             /** @todo
                 dss_res->u.dev[i].fs_fype = PQgetvalue(res, i, 1);
                 dss_res->u.dev[i].address_type   = PQgetvalue(res, i, 1);

@@ -29,6 +29,9 @@ enum dss_cmp {
     DSS_CMP_GE, /**< greater or equal (>=) */
     DSS_CMP_LT, /**< less than (<) */
     DSS_CMP_LE, /**< less or equal (<=) */
+    DSS_CMP_LIKE, /**< LIKE (LIKE) */
+    DSS_CMP_JSON_CTN, /**< Json contain=>subset (@>) */
+    DSS_CMP_JSON_EXIST, /**< Json test key/array at top level (?) */
     DSS_CMP_LAST
 };
 
@@ -38,7 +41,10 @@ static const char * const dss_cmp_names[] = {
     [DSS_CMP_GT] = ">",
     [DSS_CMP_GE] = ">=",
     [DSS_CMP_LT] = "<",
-    [DSS_CMP_LE] = "<="
+    [DSS_CMP_LE] = "<=",
+    [DSS_CMP_LE] = "LIKE",
+    [DSS_CMP_JSON_CTN] = "@>",
+    [DSS_CMP_JSON_EXIST] = "?"
 };
 
 static inline const char *dss_cmp2str(enum dss_cmp cmp)
@@ -84,6 +90,8 @@ enum dss_fields {
     DSS_DEV_host, /* FUTURE: hosts (indexed JSON array) */
     DSS_DEV_adm_status, /* locked/unlocked */
     DSS_DEV_model, /* Device type */
+    DSS_DEV_path, /* Device path */
+
 
     DSS_FIELDS_LAST,
 };
@@ -114,6 +122,7 @@ static const char * const dss_fields_names[] = {
     [DSS_DEV_host] = "host",
     [DSS_DEV_adm_status] = "adm_status",
     [DSS_DEV_model] = "model",
+    [DSS_DEV_path] = "path",
 };
 
 static inline const char *dss_fields2str(enum dss_fields fields)
@@ -161,8 +170,8 @@ static const int const dss_fields_type[] = {
     [DSS_DEV_id] = DSS_VAL_STR,
     [DSS_DEV_host] = DSS_VAL_STR,
     [DSS_DEV_adm_status] = DSS_VAL_ENUM,
-    [DSS_DEV_model] = DSS_VAL_ENUM,
-    /** @TODO to be fixed (real types, ...) */
+    [DSS_DEV_model] = DSS_VAL_STR,
+    [DSS_DEV_path] = DSS_VAL_STR,
 };
 
 static inline const int dss_fields2type(enum dss_fields fields)
@@ -179,8 +188,6 @@ static inline const char *dss_fields_enum2str(enum dss_fields fields, int val)
         return dev_family2str((enum dev_family) val);
     case DSS_DEV_adm_status:
         return adm_status2str((enum dev_adm_status) val);
-    case DSS_DEV_model:
-        return dev_model2str((enum dev_model) val);
     default:
         return NULL;
     }

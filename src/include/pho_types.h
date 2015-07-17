@@ -136,39 +136,6 @@ static inline enum dev_family str2dev_family(const char *str)
 }
 
 /**
- * Device model
- *  */
-enum dev_model {
-    PHO_DEV_MODEL_INVAL = -1,
-    PHO_DEV_MODEL_ULTRIUM_TD5  = 0,
-    PHO_DEV_MODEL_ULTRIUM_TD6  = 1,
-    PHO_DEV_MODEL_COUNT
-};
-
-static const char * const dev_model_names[] = {
-    [PHO_DEV_MODEL_ULTRIUM_TD5] = "ULTRIUM-TD5",
-    [PHO_DEV_MODEL_ULTRIUM_TD6] = "ULTRIUM-TD6",
-    [PHO_DEV_MODEL_COUNT] = NULL
-};
-
-static inline const char *dev_model2str(enum dev_model model)
-{
-    if (model > PHO_DEV_MODEL_COUNT || model < 0)
-        return NULL;
-    return dev_model_names[model];
-}
-
-static inline enum dev_model str2dev_model(const char *str)
-{
-    int i;
-
-    for (i = 0; i < PHO_DEV_MODEL_COUNT; i++)
-        if (!strcmp(str, dev_model_names[i]))
-            return i;
-    return PHO_DEV_MODEL_INVAL;
-}
-
-/**
  * Device Administrative state
  */
 enum dev_adm_status {
@@ -245,9 +212,9 @@ struct dev_info {
     enum dev_family      family;
     /* Device types and their compatibility rules are configurable
      * So, use string instead of enum. */
-    char                *type;
     char                *model;
     char                *path;
+    char                *host;
     char                *serial;
     int                  changer_idx; /**< drive index in mtx */
     enum dev_adm_status  adm_status;
@@ -277,12 +244,48 @@ struct media_stats {
                                        drive */
 };
 
+/**
+ *  * Media Administrative state
+ *   */
+enum media_adm_status {
+    PHO_MDA_ADM_ST_INVAL    = -1,
+    PHO_MDA_ADM_ST_LOCKED   = 0,
+    PHO_MDA_ADM_ST_UNLOCKED = 1,
+    PHO_MDA_ADM_ST_COUNT
+};
+
+static const char * const media_adm_st_names[] = {
+    [PHO_MDA_ADM_ST_LOCKED] = "locked",
+    [PHO_MDA_ADM_ST_UNLOCKED] = "unlocked",
+    [PHO_MDA_ADM_ST_COUNT] = NULL
+};
+
+static inline const char *media_adm_status2str(enum media_adm_status adm_st)
+{
+    if (adm_st > PHO_MDA_ADM_ST_COUNT || adm_st < 0)
+        return NULL;
+    return media_adm_st_names[adm_st];
+}
+
+static inline enum media_adm_status media_str2adm_status(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_MDA_ADM_ST_COUNT; i++)
+        if (!strcmp(str, media_adm_st_names[i]))
+            return i;
+    return PHO_MDA_ADM_ST_INVAL;
+}
+
+
 /** persistent media and filesystem information */
 struct media_info {
-    struct media_id      media;
-    enum fs_type         fs_type;    /**< type of filesystem on this media */
-    enum address_type    addr_type;  /**< way to address this media */
-    struct media_stats   stats;      /**< metrics */
+    struct media_id        media;
+    enum fs_type           fs_type;    /**< type of filesystem on this media */
+    enum address_type      addr_type;  /**< way to address this media */
+    char                  *model;
+    enum media_adm_status  adm_status;
+    struct media_stats     stats;      /**< metrics */
 };
 
 struct object_info {

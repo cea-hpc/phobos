@@ -10,6 +10,7 @@ setup_db() {
 GRANT ALL ON DATABASE phobos TO phobos;
 ALTER SCHEMA public OWNER TO phobos;
 ALTER USER phobos WITH PASSWORD 'phobos';
+CREATE EXTENSION IF NOT EXISTS btree_gin SCHEMA public;
 EOF
 	# You WILL need to configure your pg_hba.conf with either 'trust'
 	# or 'md5' for the IP you connect from.
@@ -37,8 +38,9 @@ CREATE TYPE address_type AS ENUM ('PATH', 'HASH1', 'OPAQUE');
 --  id UNIQUE ? pk (type, id) ?
 --  host json because host array
 CREATE TABLE device(family dev_family, model dev_model,
-                    id varchar(32) UNIQUE, host jsonb, adm_status adm_status,
-                    PRIMARY KEY (id));
+                    id varchar(32) UNIQUE, host varchar(32),
+	            adm_status adm_status, path varchar(256),
+		    changer_idx int, PRIMARY KEY (id));
 --  CREATE INDEX ON device(type, id);
 CREATE INDEX ON device USING gin(host);
 
@@ -63,17 +65,21 @@ EOF
 }
 
 drop_tables() {
-	$PSQL << EOF
-DROP SCHEMA public CASCADE;
-CREATE SCHEMA public;
+# Don't drop the schema, it drops the extension
+        $PSQL << EOF
+DROP TABLE IF EXISTS device, media, object, extent CASCADE;
+DROP TYPE IF EXISTS dev_family, dev_model, tape_model,
+		    adm_status, fs_type, address_type CASCADE;
 EOF
 }
 
 insert_examples() {
 	$PSQL << EOF
-insert into device (family, model, id, host, adm_status)
-    values ('tape', 'ULTRIUM-TD6', '1013005381', '["phobos1"]', 'locked'),
-           ('tape', 'ULTRIUM-TD6', '1014005381', '["phobos1"]', 'unlocked');
+insert into device (family, model, id, host, adm_status, path, changer_idx)
+    values ('tape', 'ULTRIUM-TD6', '1013005381', 'phobos1',
+	    'locked', '/dev/IBMtape1', 3),
+           ('tape', 'ULTRIUM-TD6', '1014005381', 'phobos1',
+	    'unlocked', '/dev/IBMtape0', 4);
 insert into media (model, id, adm_status, fs_type, address_type, stats)
     values ('LTO6', '073220L6', 'unlocked', 'LTFS', 'HASH1',
             '{"nb_obj":"2","logc_spc_used":"6291456000",\

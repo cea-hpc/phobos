@@ -74,7 +74,13 @@ int main(int argc, char **argv)
                 crit->crit_cmp  = DSS_CMP_GT;
                 crit->crit_val.val_bigint = 16000000000;
                 crit_cnt = 1;
-
+            } else if (!strcmp(argv[3], "charset")) {
+                crit = malloc(sizeof(struct dss_crit));
+                crit->crit_name = DSS_MDA_id;
+                crit->crit_cmp  = DSS_CMP_EQ;
+                crit->crit_val.val_str = malloc(sizeof(char)*32);
+                crit->crit_val.val_str = "&\"'\\$^,.=+-|{}():;!?@><#יטפ";
+                crit_cnt = 1;
             } else if (!strcmp(argv[3], "all")) {
                 crit = NULL;
                 crit_cnt = 0;
@@ -104,16 +110,20 @@ int main(int argc, char **argv)
         switch (type) {
         case DSS_DEVICE:
             for (i = 0, dev = item_list; i < item_cnt; i++, dev++) {
-                printf("Got device: %s %s %s %s %s %s\n",
-                       dev_family2str(dev->family), dev->type,
-                       dev->model, dev->path, dev->serial,
-                       adm_status2str(dev->adm_status));
+                printf("Got device: family:%s host:%s model:%s path:%s "
+                       "serial:%s adm_st:%s changer_idx:%d\n",
+                       dev_family2str(dev->family),
+                       dev->host, dev->model, dev->path, dev->serial,
+                       adm_status2str(dev->adm_status),
+                       dev->changer_idx);
             }
             break;
         case DSS_MEDIA:
             for (i = 0, media = item_list; i < item_cnt; i++, media++) {
-                printf("Got Media: %s\n",
-                       media->media.id_u.label);
+                printf("Got Media: label:%s model:%s adm_st:%s\n",
+                       media->media.id_u.label,
+                       media->model,
+                       media_adm_status2str(media->adm_status));
             }
             break;
         default:

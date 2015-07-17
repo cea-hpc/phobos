@@ -45,6 +45,7 @@ echo "**** TESTS: DSS_GET DEV DISK ****"
 test_check_get "dev" "disk"
 echo "**** TESTS: DSS_GET MEDIA USED_SPACE > 16000000000 ****"
 test_check_get "media" "used_space"
-
+echo "**** TESTS: DSS_GET MEDIA CHARSET ****"
+test_check_get "media" "charset"
 # Uncomment if you want the db to persist after test
 # trap - EXIT ERR

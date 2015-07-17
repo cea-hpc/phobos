@@ -26,23 +26,22 @@ extent: oid, layout_idx, media, address, size (pk: oid, layout_idx; indexed: med
 Storage resources metadata
 ==========================
 
-device: type, id, host, adm_status (pk: <type, id>)
-        type: type de device (ex. LTO6)
+device: family, model, id, host, adm_status (pk: <type, id>)
+	family: disk/tape
+        model: type de device (ex. LTO6)
         id: identifiant unique de device (ex: serial number)
         host: machine sur lequel le device est accessible
         adm_status: locked/unlocked
-
-        v0+:
+        path: chemin par lequel le device est actuellement accessible (persistent)
+      	changer_idx: index designant le device dans mtx (persistent)
+ v0+:
         state: free/loaded/mounted
         state_info: media_id s'il est loaded, fs_path si le FS est monté...
         resv_info: informations de reservation du device (pour la gestion des cas de crash)
             - date de prise/mise a jour de reservation
             - identifiant du processus ayant effectue la reservation (/!\ fork de commandes)
-            ...
-
+	host/path: json avec les machineS : {host: 'toto', path: 'path'}, {..}, ...
     informations geree en memoire en v00, et récupérée à chaque opération: path, scsi_idx, state, state_info
-        path: chemin par lequel le device est actuellement accessible (non persistent)
-        scsi_id: index designant le device dans mtx (non persistent)
         state: free/loaded (media)/mounted (media)
 
 media: type, id, adm_status, fs_status, format, vol_used, vol_free (pk: <type, id>)
