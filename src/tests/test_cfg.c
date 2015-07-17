@@ -79,18 +79,19 @@ static int test(void *hint)
     for (item = (struct test_item *)hint; item->variable != NULL; item++) {
         const char *val = NULL;
 
-        rc = pho_cfg_get(item->section, item->variable, &val);
+        rc = pho_cfg_get_val(item->section, item->variable, &val);
 
         /* if value is NULL: -ENOATTR is expected */
         if (item->value == NULL) {
             if (rc != -ENOATTR) {
-                fprintf(stderr, "pho_cfg_get(%s, %s, ...): -ENOATTR expected"
-                        " (got %d)\n", item->section, item->variable, rc);
+                fprintf(stderr, "pho_cfg_get_val(%s, %s, ...): -ENOATTR "
+                        "expected (got %d)\n", item->section, item->variable,
+                        rc);
                 return rc ? rc : -EINVAL;
             }
             /* else: OK */
         } else if (rc) {
-            fprintf(stderr, "pho_cfg_get(%s, %s, ...) returned error %d\n",
+            fprintf(stderr, "pho_cfg_get_val(%s, %s, ...) returned error %d\n",
                     item->section, item->variable, rc);
             return rc;
         } else {

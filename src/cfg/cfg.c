@@ -19,7 +19,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ini_config.h>
-#include <attr/xattr.h>
 
 /** thread-wide handle to DSS */
 static __thread void *thr_dss_hdl;
@@ -197,7 +196,7 @@ static int pho_cfg_get_global(const char *section, const char *name,
     return -ENOTSUP;
 }
 
-int pho_cfg_get(const char *section, const char *name, const char **value)
+int pho_cfg_get_val(const char *section, const char *name, const char **value)
 {
     int   rc;
 

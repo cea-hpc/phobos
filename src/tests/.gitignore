@@ -5,3 +5,4 @@ test_log
 test_mapper
 test_store
 test_dss
+test_cfg

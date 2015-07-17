@@ -12,11 +12,48 @@
 #ifndef _PHO_CFG_H
 #define _PHO_CFG_H
 
+#include <sys/types.h>
+#include <attr/xattr.h>
+
 /** prefix string for environment variables */
 #define PHO_ENV_PREFIX "PHOBOS"
 
 /** default path to local config file */
 #define PHO_DEFAULT_CFG "/etc/phobos.conf"
+
+/** List of phobos configuration parameters */
+enum pho_cfg_params {
+    /* dss parameters */
+    PHO_CFG_DSS_connect_string,
+
+    /* lrs parameters */
+    PHO_CFG_LRS_mount_prefix,
+    PHO_CFG_LRS_cmd_drive_query,
+    PHO_CFG_LRS_cmd_mount,
+    PHO_CFG_LRS_policy,
+
+    PHO_CFG_LAST
+};
+
+struct pho_config_item {
+    const char *section;
+    const char *name;
+    const char *value;
+};
+
+/** Name and default of configuration parameters.
+ *  Value contains default.
+ */
+static const struct pho_config_item pho_cfg_descr[] = {
+    [PHO_CFG_DSS_connect_string] = {"dss", "connect_string",
+                                    "dbname=phobos host=localhost"},
+    [PHO_CFG_LRS_mount_prefix]   = {"lrs", "mount_prefix", "/mnt/phobos-"},
+    [PHO_CFG_LRS_cmd_drive_query] = {"lrs", "cmd_drive_query",
+                                  "phobos drive query --details --json \"%s\""},
+    [PHO_CFG_LRS_cmd_mount]      = {"lrs", "cmd_mount",
+                                  "phobos mount --device \"%s\" --path \"%s\""},
+    [PHO_CFG_LRS_policy]         = {"lrs", "policy", "best_fit"},
+};
 
 /**
  * Initialize access to local config parameters (process-wide and host-wide).
@@ -49,13 +86,32 @@ int pho_cfg_set_thread_conn(void *dss_handle);
  * @retval  0           The parameter is returned successfully.
  * @retval  -ENOATTR    The parameter is not found.
  */
-int pho_cfg_get(const char *section, const char *name, const char **value);
+int pho_cfg_get_val(const char *section, const char *name,
+                    const char **value);
 
-struct pho_config_item {
-    const char *section;
-    const char *name;
-    const char *value;
-};
+/** This function gets the value of a configuration item
+ *  and return default value if it is not found.
+ *  @return 0 on success, or a negative value on error.
+ */
+static inline int pho_cfg_get(enum pho_cfg_params param,
+                              const char **value)
+{
+    int rc;
+    const struct pho_config_item *item;
+
+    if (param >= PHO_CFG_LAST)
+        return -EINVAL;
+
+    item = &pho_cfg_descr[param];
+
+    rc = pho_cfg_get_val(item->section, item->name, value);
+    if (rc == -ENOATTR) {
+        *value = item->value;
+        rc = 0;
+    }
+    return rc;
+}
+
 /**
  * This function gets the value of multiple configuration items
  * that match the given section_pattern and/or name_pattern.
@@ -99,4 +155,3 @@ int pho_cfg_set(const char *section, const char *name, const char *value,
                 enum pho_cfg_flags flags);
 
 #endif
-
