@@ -32,7 +32,7 @@ static void log_callback(const struct pho_logrec *rec)
            rec->plr_file, rec->plr_func, rec->plr_line,
            pho_log_level2str(rec->plr_level), rec->plr_msg);
     if (rec->plr_err != 0)
-        printf(": %s (%d)\n", strerror(abs(rec->plr_err)), rec->plr_err);
+        printf(": %s (%d)", strerror(abs(rec->plr_err)), rec->plr_err);
     putchar('\n');
 }
 
@@ -40,7 +40,7 @@ int main(int argc, char **argv)
 {
     int rc;
 
-    pho_log_level_set(PHO_LOG_VERB);
+    pho_log_level_set(PHO_LOG_DEBUG);
     pho_log_callback_set(log_callback);
 
     if (argc != 3 && argc != 4) {
@@ -66,7 +66,7 @@ int main(int argc, char **argv)
     } else if (!strcmp(argv[1], "get")) {
         rc = phobos_get(argv[2], argv[3], 0);
     } else {
-        fprintf(stderr, "verb put|get expected at '%s'\n", argv[1]);
+        fprintf(stderr, "verb put|post|get expected at '%s'\n", argv[1]);
         rc = -EINVAL;
     }
     return rc;

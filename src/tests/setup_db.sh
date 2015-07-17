@@ -35,14 +35,10 @@ CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used');
 
 -- enums extensibles: ALTER TYPE type ADD VALUE 'value'
 
-
---  id UNIQUE ? pk (type, id) ?
---  host json because host array
 CREATE TABLE device(family dev_family, model dev_model,
-                    id varchar(32) UNIQUE, host varchar(32),
+                    id varchar(32) UNIQUE, host varchar(128),
 	            adm_status adm_status, path varchar(256),
-		    changer_idx int, PRIMARY KEY (id));
---  CREATE INDEX ON device(type, id);
+		    changer_idx int, PRIMARY KEY (family, id));
 CREATE INDEX ON device USING gin(host);
 
 CREATE TABLE media(family dev_family, model tape_model, id varchar(32) UNIQUE,

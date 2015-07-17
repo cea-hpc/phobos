@@ -15,9 +15,12 @@
 #include "pho_common.h"
 #include "pho_types.h"
 #include "pho_attrs.h"
-#include "pho_extents.h"
+#include "pho_type_utils.h"
 #include "pho_lrs.h"
+#include "pho_dss.h"
 #include "pho_io.h"
+#include "pho_cfg.h"
+
 #include <sys/types.h>
 #include <attr/xattr.h>
 #include <fcntl.h>
@@ -205,6 +208,24 @@ static int open_noatime(const char *path, int flags)
     return fd;
 }
 
+static int store_init(void **dss_hdl)
+{
+    int         rc;
+    const char *str;
+
+    rc = pho_cfg_init_local(NULL);
+    if (rc)
+        return rc;
+
+    rc = pho_cfg_get(PHO_CFG_DSS_connect_string, &str);
+    if (rc)
+        return rc;
+
+    return dss_init(str, dss_hdl);
+
+    /* FUTURE: return pho_cfg_set_thread_conn(dss_hdl); */
+}
+
 /** Put a file to the object store
  * \param obj_id    unique arbitrary string to identify the object
  * \param src_file  file to put to the store
@@ -219,14 +240,20 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
     struct data_loc     write_loc = {0};
     struct src_info     info = {0};
     int                 rc;
+    void               *dss = NULL;
+
+    /* load configuration and get dss handle */
+    rc = store_init(&dss);
+    if (rc)
+        LOG_RETURN(rc, "initialization failed");
 
     /* get the size of the source file and check its availability */
     info.fd = open_noatime(src_file, O_RDONLY);
     if (info.fd < 0)
-        LOG_RETURN(rc = -errno, "open(%s) failed", src_file);
+        LOG_GOTO(disconn, rc = -errno, "open(%s) failed", src_file);
 
     if (fstat(info.fd, &info.st) != 0)
-        LOG_RETURN(rc = -errno, "fstat(%s) failed", src_file);
+        LOG_GOTO(disconn, rc = -errno, "fstat(%s) failed", src_file);
 
     /* store object info in the DB (transient state) + check if it already
      * exists */
@@ -236,7 +263,7 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
         LOG_GOTO(close_src, rc, "obj_put_start(%s) failed", obj_id);
 
     /* get storage resource to write the object */
-    rc = lrs_write_intent(info.st.st_size, &simple_layout, &write_loc);
+    rc = lrs_write_intent(dss, info.st.st_size, &simple_layout, &write_loc);
     if (rc)
         LOG_GOTO(out_clean_obj, rc, "failed to get storage resource to write "
                  "%zu bytes", info.st.st_size);
@@ -261,7 +288,7 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
         LOG_GOTO(out_clean_ext, rc, "obj_put_done(%s) failed", obj_id);
 
     /* release storage resources + update device/media info */
-    lrs_done(&write_loc);
+    lrs_done(dss, &write_loc);
     /* don't care about the error here, the object has been saved successfully
      * and the LRS error should have been logged by lower layers.
      */
@@ -279,37 +306,47 @@ out_clean_db_ext:
     ;
 out_lrs_end:
     /* release resource reservations */
-    lrs_done(&write_loc);
+    lrs_done(dss, &write_loc);
 out_clean_obj:
     /** @TODO    obj_put_abort(obj_id); */
     ;
 close_src:
     close(info.fd);
+disconn:
+    if (dss)
+        dss_fini(dss);
     return rc;
 }
 
-/** FIXME TEST ONLY */
-static const struct layout_descr simple_layout = {.type = PHO_LYT_SIMPLE};
-/** FIXME TEST ONLY */
-static void set_test_extent(struct extent *ext)
-{
-    ext->layout_idx = 0;
-    ext->size = 0; /* FIXME */
-    ext->media.type = PHO_DEV_TAPE;
-    strncpy(ext->media.id_u.label, "L00001",
-            sizeof(ext->media.id_u.label));
-    ext->fs_type = PHO_FS_POSIX;
-    ext->addr_type = PHO_ADDR_HASH1;
-    /* not stored in the DB (test), generate it later */
-    ext->address = PHO_BUFF_NULL;
-}
-/** FIXME TEST ONLY */
-static int obj_get_location(const char *obj_id, struct layout_descr *layout,
+/** retrieve the location of a given object from DSS */
+static int obj_get_location(void *dss, const char *obj_id,
+                            struct layout_descr *layout,
                             struct extent *ext)
 {
+#ifdef _TEST
+    struct dss_crit crit[1]; /* criteria on obj_id */
+    int             crit_cnt = 0;
+    struct extent  *ext_ls = NULL;
+    int             rc, cnt = 0;
+
+    /** FIXME TEST ONLY */
+    static const struct layout_descr simple_layout = {.type = PHO_LYT_SIMPLE};
+
+    dss_crit_add(crit, &crit_cnt, DSS_EXT_oid, DSS_CMP_EQ, val_str, obj_id);
+
+    rc = dss_extent_get(dss, crit, crit_cnt, &ext_ls, &cnt);
+    if (rc != 0)
+        return rc;
+    if (cnt == 0)
+        return -ENOENT;
+
+    *ext = ext_ls[0];
     *layout = simple_layout;
-    set_test_extent(ext);
+
     return 0;
+#else
+    return -ENOTSUP;
+#endif
 }
 
 /** Retrieve a file from the object store
@@ -323,11 +360,18 @@ int phobos_get(const char *obj_id, const char *tgt_file, int flags)
     struct data_loc read_loc = {0};
     int rc = 0;
     int fd, open_flags;
+    void *dss = NULL;
+
+    /* load configuration and get dss handle */
+    rc = store_init(&dss);
+    if (rc)
+        LOG_RETURN(rc, "initialization failed");
 
     /* retrieve saved object location */
-    rc = obj_get_location(obj_id, &layout, &read_loc.extent);
+    rc = obj_get_location(dss, obj_id, &layout, &read_loc.extent);
     if (rc)
-        LOG_RETURN(rc, "Failed to get information about object '%s'", obj_id);
+        LOG_GOTO(disconn, rc, "Failed to get information about object '%s'",
+                 obj_id);
 
     open_flags = (flags & PHO_OBJ_REPLACE) ? O_CREAT|O_WRONLY|O_TRUNC
                                            : O_CREAT|O_WRONLY|O_EXCL;
@@ -335,10 +379,11 @@ int phobos_get(const char *obj_id, const char *tgt_file, int flags)
     /* make sure we can write to the target file */
     fd = open(tgt_file, open_flags, 0640);
     if (fd < 0)
-        LOG_RETURN(rc = -errno, "Failed to open %s for writing", tgt_file);
+        LOG_GOTO(disconn, rc = -errno, "Failed to open %s for writing",
+                 tgt_file);
 
     /* prepare storage resource to read the object */
-    rc = lrs_read_intent(&layout, &read_loc);
+    rc = lrs_read_intent(dss, &layout, &read_loc);
     if (rc)
         LOG_GOTO(close_tgt, rc, "failed to prepare resources to read '%s'",
                  obj_id);
@@ -350,7 +395,7 @@ int phobos_get(const char *obj_id, const char *tgt_file, int flags)
 
 out_lrs_end:
     /* release storage resources */
-    lrs_done(&read_loc);
+    lrs_done(dss, &read_loc);
     /* don't care about the error here, the object has been read successfully
      * and the LRS error should have been logged by lower layers.
      */
@@ -361,6 +406,10 @@ close_tgt:
         pho_info("get complete: obj_id:%s -> '%s'", obj_id, tgt_file);
     else if (unlink(tgt_file) != 0 && errno != ENOENT)
         pho_warn("failed to clean '%s': %s", tgt_file, strerror(errno));
+
+disconn:
+    if (dss)
+        dss_fini(dss);
 
     return rc;
 }

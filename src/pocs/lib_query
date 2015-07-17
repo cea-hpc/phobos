@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# mtx status output:
+# Data Transfer Element 1:Empty
+# Data Transfer Element 2:Full (Storage Element 82 Loaded):VolumeTag = 073220L6
+# Data Transfer Element 3:Full (Storage Element 81 Loaded):VolumeTag = 073221L6
+#       Storage Element 1:Full :VolumeTag=073200L6
+#       Storage Element 2:Full :VolumeTag=073201L6
+
+verb=$1
+id=$2
+
+if [[ "$verb" == "drive" ]]; then
+
+	found=$(mtx status | grep "Data Transfer Element $id:")
+	[ -z "$found" ] && exit 2
+
+	status="unknown"
+	echo "$found" | grep -q ":Full" && status="loaded"
+	echo "$found" | grep -q ":Empty" && status="empty"
+
+	media=""
+	if [[ "$status" == "loaded" ]]; then
+		media=$(echo "$found" | awk '{print $(NF)}')
+	fi
+
+	[ -z "$media" ] && echo "{\"status\":\"$status\"}"
+	[ -n "$media" ] && echo "{\"status\":\"$status\",\"media\":\"$media\"}"
+	exit 0
+elif [[ "$verb" == "tape" ]]; then
+	found=$(mtx status | egrep -e "[ =]$2 ")
+	[ -z "$found" ] && exit 2
+	status="unknown"
+	if echo "$found" | grep -v "Data Transfer Element" | grep -q "Storage Element "; then
+		status="home"
+		slot=$(echo "$found" | sed -s "s#.*Storage Element \([0-9]*\):.*#\1#")
+		echo "{\"status\":\"$status\",\"slot\":$slot}"
+	elif echo "$found" | grep -q "Data Transfer Element "; then
+		drv=$(echo "$found" | sed -s "s#.*Data Transfer Element \([0-9]*\):.*#\1#")
+		status="loaded"
+		echo "{\"status\":\"$status\",\"drv_idx\":$drv}"
+	fi
+fi

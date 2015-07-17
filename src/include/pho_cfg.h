@@ -33,6 +33,7 @@ enum pho_cfg_params {
     PHO_CFG_LRS_cmd_drive_query,
     PHO_CFG_LRS_cmd_mount,
     PHO_CFG_LRS_policy,
+    PHO_CFG_LRS_default_family,
 
     PHO_CFG_LAST
 };
@@ -55,6 +56,7 @@ static const struct pho_config_item pho_cfg_descr[] = {
     [PHO_CFG_LRS_cmd_mount]      = {"lrs", "cmd_mount",
                                   "phobos mount --device \"%s\" --path \"%s\""},
     [PHO_CFG_LRS_policy]         = {"lrs", "policy", "best_fit"},
+    [PHO_CFG_LRS_default_family] = {"lrs", "default_family", "tape"},
 };
 
 /**

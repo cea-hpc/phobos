@@ -1,23 +1,59 @@
 #!/bin/bash
+
+# ENV:
+#	NO_TAPE=1 force executing tests in POSIX FS
+
 set -e
 
-TEST_MNT=/tmp/tape0 # warning hardcoded in LRS
 TEST_RAND=/tmp/RAND_$$
 TEST_RECOV_DIR=/tmp/phobos_recov.$$
 TEST_FILES="/etc/redhat-release /etc/passwd /etc/group /etc/hosts $TEST_RAND"
 
-test_bin_dir=$(dirname $(readlink -m $0))
+test_bin_dir=$(dirname $(readlink -e $0))
 test_bin="$test_bin_dir/test_store"
+export PHOBOS_CFG_FILE="$test_bin_dir/phobos.conf"
 
-# interpreted in phobos core (if built with _TEST flag)
-export PHO_TEST_MNT=$TEST_MNT
-export PHO_TEST_ADDR_TYPE="hash"
+
+. $test_bin_dir/setup_db.sh
+drop_tables
+setup_tables
+insert_examples
+
+# testing with real tapes requires tape devices + access to /dev/changer device
+nb_tapes=$(ls -d /dev/IBMtape* 2>/dev/null | wc -l)
+if  [[ -z "$NO_TAPE" ]] && [[ -w /dev/changer ]] && (( $nb_tapes > 0 )); then
+	echo "**** TAPE TEST MODE ****"
+	echo "changer:"
+	ls -ld /dev/changer
+	echo "drives:"
+	ls -ld /dev/IBMtape*
+	TEST_MNT=/mnt/phobos* # must match mount prefix (default: /mnt/phobos-*)
+	TEST_FS="ltfs"
+
+	# make sure no LTFS filesystem is mounted, so the test must mount it
+	service ltfs stop
+
+	export PHOBOS_LRS_default_family="tape"
+else
+	echo "**** POSIX TEST MODE ****"
+	TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2" # must match mount prefix
+	TEST_FS="posix"
+
+	export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
+	export PHOBOS_LRS_default_family="dir"
+fi
+
+poc_dir=$(readlink -e $test_bin_dir/../pocs/)
+export PHOBOS_LRS_cmd_drive_query="$poc_dir/drive_status '%s'"
+export PHOBOS_LRS_cmd_mount="$poc_dir/ltfs_mount '%s' '%s'"
 
 function clean_test
 {
     echo "cleaning..."
     rm -f "$TEST_RAND"
-    rm -rf "$TEST_MNT"
+    for d in $TEST_MNT; do
+	rm -rf $d/*
+    done
     rm -rf "$TEST_RECOV_DIR"
 }
 
@@ -78,9 +114,19 @@ function test_check_get
     diff -q "$arch" "$tgt"
 }
 
-[ ! -d $TEST_MNT ] && mkdir -p "$TEST_MNT"
+if [[ $TEST_FS == "posix" ]]; then
+	for dir in $TEST_MNT; do
+		# clean and re-create
+		rm -rf $dir/*
+		[ ! -d $dir ] && mkdir -p "$dir"
+	done
+else
+	# clean the contents
+	for dir in $TEST_MNT; do
+		rm -rf  $dir/*
+	done
+fi
 [ ! -d $TEST_RECOV_DIR ] && mkdir -p "$TEST_RECOV_DIR"
-rm -rf "$TEST_MNT/"*
 rm -rf "$TEST_RECOV_DIR/"*
 
 # create test file in /tmp
@@ -96,12 +142,14 @@ for f in $TEST_FILES; do
 done
 
 echo
+#FIXME Deactivated until DSS implements 'extents' queries
 echo "**** TESTS: GET ****"
+echo "SKIPPED: Deactivated until DSS implements requests on extents"
 
 # retrieve all files from the backend, get and check them
-find $TEST_MNT -type f | while read f; do
-    test_check_get "$f"
-done
+#find $TEST_MNT -type f | while read f; do
+#    test_check_get "$f"
+#done
 
 # exit normally, clean TRAP
 trap - EXIT ERR

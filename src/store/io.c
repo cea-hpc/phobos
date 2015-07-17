@@ -25,17 +25,17 @@
 
 
 /** build the full posix path from a data_loc structure */
-static GString *pho_posix_fullpath(const struct data_loc *loc)
+static char *pho_posix_fullpath(const struct data_loc *loc)
 {
-    GString *p = NULL;
+    char *p;
 
     switch (loc->extent.addr_type) {
     case PHO_ADDR_PATH:
     case PHO_ADDR_HASH1:
         if (loc->extent.address.buff == NULL)
             return NULL;
-        p = g_string_new(loc->root_path->str);
-        g_string_append_printf(p, "/%s", loc->extent.address.buff);
+        if (asprintf(&p, "%s/%s", loc->root_path, loc->extent.address.buff) < 0)
+            return NULL;
         return p;
     default:
         return NULL;
@@ -43,31 +43,34 @@ static GString *pho_posix_fullpath(const struct data_loc *loc)
 }
 
 /** create directory levels from <root>/<lvl1> to dirname(fullpath) */
-static int pho_posix_make_parent_of(const GString *root,
-                                    const GString *fullpath)
+static int pho_posix_make_parent_of(const char *root,
+                                    const char *fullpath)
 {
-    char    *c, *tmp, *last;
-    int      rc;
+    const char *c;
+    char       *tmp, *last;
+    int         rc;
+    int         root_len;
     ENTRY;
 
-    if (strncmp(root->str, fullpath->str, root->len) != 0)
-        LOG_RETURN(-EINVAL, "error: path '%s' is not under '%s'", fullpath->str,
-                   root->str);
-    c = fullpath->str + root->len;
+    root_len = strlen(root);
+    if (strncmp(root, fullpath, root_len) != 0)
+        LOG_RETURN(-EINVAL, "error: path '%s' is not under '%s'", fullpath,
+                   root);
+    c = fullpath + root_len;
     /* in fullpath, '/' is expected after root path */
     if (*c == '/')
         c++;
     /* ...unless root path is already slash-terminated */
-    else if (root->str[root->len - 1] != '/')
-        LOG_RETURN(-EINVAL, "error: path '%s' is not under '%s'", fullpath->str,
-                   root->str);
+    else if (root[root_len - 1] != '/')
+        LOG_RETURN(-EINVAL, "error: path '%s' is not under '%s'", fullpath,
+                   root);
 
     /* copy to tokenize */
-    tmp = strdup(fullpath->str);
+    tmp = strdup(fullpath);
     if (tmp == NULL)
         return -ENOMEM;
     /* report c offset in fullpath to tmp */
-    c = tmp + (c - fullpath->str);
+    c = tmp + (c - fullpath);
 
     /* remove final part of the path (filename) */
     last = strrchr(c, '/');
@@ -396,7 +399,7 @@ static int pho_posix_put(const char *id, const char *tag,
     int      rc;
     int      tgt_fd;
     int      flags;
-    GString *fpath;
+    char    *fpath;
     ENTRY;
 
     if (io_cb != NULL)
@@ -413,11 +416,12 @@ static int pho_posix_put(const char *id, const char *tag,
     fpath = pho_posix_fullpath(iod->iod_loc);
     if (fpath == NULL)
         return -EINVAL;
+    pho_verb("extent location: '%s'", fpath);
 
     /* if the call is MD_ONLY, it is expected that the entry exists. */
     if (iod->iod_flags & PHO_IO_MD_ONLY) {
         /* pho_io_flags are passed in to propagate SYNC options */
-        rc = pho_posix_md_set(fpath->str, &iod->iod_attrs, iod->iod_flags);
+        rc = pho_posix_md_set(fpath, &iod->iod_attrs, iod->iod_flags);
         goto free_path;
     }
 
@@ -427,10 +431,9 @@ static int pho_posix_put(const char *id, const char *tag,
         goto free_path;
 
     flags = pho_flags2open(iod->iod_flags);
-    tgt_fd = open(fpath->str, flags | O_CREAT | O_WRONLY, 0640);
+    tgt_fd = open(fpath, flags | O_CREAT | O_WRONLY, 0640);
     if (tgt_fd < 0)
-        LOG_GOTO(free_path, rc = -errno, "open(%s) for write failed",
-                 fpath->str);
+        LOG_GOTO(free_path, rc = -errno, "open(%s) for write failed", fpath);
 
     /* set metadata */
     /* Only propagate REPLACE option, if specified */
@@ -462,12 +465,12 @@ close_tgt:
     if (close(tgt_fd) && rc == 0) /* keep the first reported error */
         rc = -errno;
     /* clean the extent on failure */
-    if (rc != 0 && unlink(fpath->str) != 0)
+    if (rc != 0 && unlink(fpath) != 0)
         pho_warn("failed to clean extent '%s': %s",
                  fpath, strerror(errno));
 
 free_path:
-    g_string_free(fpath, TRUE);
+    free(fpath);
     return rc;
 }
 
@@ -477,7 +480,7 @@ static int pho_posix_get(const char *id, const char *tag,
 {
     int      rc;
     int      src_fd;
-    GString *fpath;
+    char    *fpath;
     ENTRY;
 
     /* XXX asynchronous PUT is not supported for now */
@@ -505,23 +508,24 @@ static int pho_posix_get(const char *id, const char *tag,
     if (fpath == NULL)
         return -EINVAL;
 
+    pho_verb("extent location: '%s'", fpath);
+
     /* get entry MD, if requested */
-    rc = pho_posix_md_get(fpath->str, &iod->iod_attrs);
+    rc = pho_posix_md_get(fpath, &iod->iod_attrs);
     if (rc != 0 || (iod->iod_flags & PHO_IO_MD_ONLY))
         goto free_path;
 
     /* open the extent */
-    src_fd = open(fpath->str, O_RDONLY);
+    src_fd = open(fpath, O_RDONLY);
     if (src_fd < 0)
-        LOG_GOTO(free_attrs, rc = -errno, "open(%s) for read failed",
-                 fpath->str);
+        LOG_GOTO(free_attrs, rc = -errno, "open(%s) for read failed", fpath);
 
     /** If size is not stored in the DB, use the extent size */
     if (iod->iod_size == 0) {
         struct stat st;
 
         if (fstat(src_fd, &st) != 0)
-            LOG_GOTO(free_attrs, rc = -errno, "failed to stat %s", fpath->str);
+            LOG_GOTO(free_attrs, rc = -errno, "failed to stat %s", fpath);
 
         pho_warn("Extent size is not set in DB: using physical extent size: "
                  "%llu bytes", st.st_size);
@@ -553,7 +557,7 @@ free_attrs:
         pho_attrs_free(&iod->iod_attrs);
 
 free_path:
-    g_string_free(fpath, TRUE);
+    free(fpath);
     return rc;
 }
 
@@ -575,8 +579,8 @@ static int pho_ltfs_sync(const struct data_loc *loc)
     ENTRY;
 
     /* flush the LTFS partition to tape */
-    if (setxattr(loc->root_path->str, LTFS_SYNC_ATTR_NAME,
-                 (void *)&one, sizeof(one), 0) != 0)
+    if (setxattr(loc->root_path, LTFS_SYNC_ATTR_NAME, (void *)&one,
+                 sizeof(one), 0) != 0)
         LOG_RETURN(-errno, "failed to set LTFS special xattr "
                    LTFS_SYNC_ATTR_NAME);
 
@@ -586,8 +590,8 @@ static int pho_ltfs_sync(const struct data_loc *loc)
 
 static int pho_posix_del(const char *id, const char *tag, struct data_loc *loc)
 {
-    int rc = 0;
-    GString *path;
+    int   rc = 0;
+    char *path;
     ENTRY;
 
     if (loc->extent.address.buff == NULL) {
@@ -603,11 +607,10 @@ static int pho_posix_del(const char *id, const char *tag, struct data_loc *loc)
     if (path == NULL)
         return -EINVAL;
 
-    if (!gstring_empty(path)
-        && (unlink(path->str) != 0))
+    if (unlink(path) != 0)
         rc = -errno;
 
-    g_string_free(path, TRUE);
+    free(path);
     return rc;
 }
 

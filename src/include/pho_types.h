@@ -239,7 +239,7 @@ struct extent {
  */
 struct data_loc {
     /** mount-point to access the media referenced in the extent */
-    GString      *root_path;
+    char         *root_path;
     /** the data extent itself */
     struct extent extent;
 };

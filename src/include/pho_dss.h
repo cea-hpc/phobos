@@ -274,4 +274,12 @@ static inline int dss_media_get(void *dss_handle, struct dss_crit *crit,
                    med_cnt);
 }
 
+/** wrapper to get extent from DSS */
+static inline int dss_extent_get(void *dss_handle, struct dss_crit *crit,
+                                 int crit_cnt, struct extent **ext_ls,
+                                 int *ext_cnt)
+{
+    return dss_get(dss_handle, DSS_EXTENT, crit, crit_cnt, (void **)ext_ls,
+                   ext_cnt);
+}
 #endif

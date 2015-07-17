@@ -1,0 +1,55 @@
+#!/bin/bash
+
+MTX="/root/mtx-1.3.12/mtx"
+
+set -e
+dev=$(readlink -m "$1") # convert link to /dev/IBMtape*
+
+function tape_device_info
+{
+	# check the device matches /dev/IBMtape*
+	local dev=$1
+
+	# check the device matches /dev/IBMtape*
+	echo $dev | egrep -q -e "^/dev/IBMtape"
+	num=$(echo $dev | sed -e 's#/dev/IBMtape##')
+	values=($(cat /proc/scsi/IBMtape | egrep -e "^$num "))
+	extra=""
+
+	mnt=$(cat /etc/mtab | egrep -e "ltfs:$dev " | awk '{print $2}')
+	if [ -n "$mnt" ]; then
+		st="mounted"
+		extra=",\"mnt_path\":\"$mnt\""
+	else
+		st="empty"
+		mt -f ${dev}n status | grep -q "ONLINE" && st="loaded"
+		if [[ $st != "loaded" ]]; then
+			mt -f ${dev}n status > /dev/null 2> /dev/null || st="failed"
+		fi
+	fi
+
+	lib_info=""
+	serial=${values[2]}
+	# Data Transfer Element 2 (1013005381):Full (Storage Element 82 Loaded):VolumeTag = 0732206
+	line=($($MTX status | grep "Data Transfer Element" | grep "($serial)"))
+	mtx_idx=${line[3]}
+	lib_info="\"mtx_idx\":\"$mtx_idx\","
+	[[ $st != "empty" ]] && volume=${line[10]} && lib_info="${lib_info}\"media\":\"$volume\","
+
+	echo "{\"family\":\"tape\",\"model\":\"${values[1]}\",\"serial\":\"${values[2]}\",$lib_info\"status\":\"$st\"$extra}"
+}
+
+function dir_device_info
+{
+	host=$(hostname -s)
+	echo "{\"family\":\"dir\",\"model\":\"\",\"serial\":\"$host:$1\",\"status\":\"mounted\",\"media\":\"$host:$1\",\"mnt_path\":\"$1\"}"
+}
+
+if [[ -d $dev ]]; then
+	# dir: dev=mnt_path
+	dir_device_info $dev
+else
+	tape_device_info $dev
+fi
+
+exit 0
