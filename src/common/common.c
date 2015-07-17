@@ -25,13 +25,15 @@ int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg)
     char *buff = NULL;
     int   rc = 0;
 
+    pho_debug("executing cmd: %s", cmd_line);
+
     stream = popen(cmd_line, "r");
     if (stream == NULL)
         return -errno;
 
     buff = malloc(PHO_LINE_MAX);
     if (buff == NULL)
-        GOTO(close_stream, rc = -errno);
+        GOTO(out_free, rc = -ENOMEM);
 
     /* read the next line */
     while (fgets(buff, PHO_LINE_MAX, stream) != NULL) {
@@ -39,13 +41,14 @@ int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg)
             continue;
         rc = cb_func(cb_arg, buff, PHO_LINE_MAX);
         if (rc)
-            goto free_buff;
+            goto out_free;
     }
 
-free_buff:
+out_free:
     free(buff);
-close_stream:
-    pclose(stream);
+    if (pclose(stream) != 0 && rc == 0)
+        rc = (errno ? -errno : -ECHILD);
+
     return rc;
 }
 
