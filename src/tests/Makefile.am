@@ -27,7 +27,7 @@ test_store_SOURCES=test_store.c
 test_store_LDADD=../store/libphobos_store.la
 
 test_dss_SOURCES=test_dss.c
-test_dss_LDADD=../dss/libpho_dss.la
+test_dss_LDADD=../dss/libpho_dss.la ../common/libpho_common.la
 
 test_cfg_SOURCES=test_cfg.c
 test_cfg_LDADD=../cfg/libpho_cfg.la ../common/libpho_common.la

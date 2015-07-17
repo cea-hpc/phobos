@@ -4,4 +4,4 @@ noinst_LTLIBRARIES=libpho_dss.la
 
 libpho_dss_la_SOURCES=dss.c
 libpho_dss_la_CFLAGS=${LIBPQ_CFLAGS}
-libpho_dss_la_LIBADD=../common/libpho_common.la ${LIBPQ_LIBS}
+libpho_dss_la_LIBADD=${LIBPQ_LIBS}
