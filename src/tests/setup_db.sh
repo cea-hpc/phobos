@@ -1,24 +1,25 @@
 #!/bin/bash
 
-PSQL="psql phobos"
+export PGPASSWORD="phobos"
+PSQL="psql -U phobos -h localhost phobos"
 
 setup_db() {
 	su postgres -c "createuser phobos"
 	su postgres -c "createdb phobos"
-	su postgres -c "createuser root"
-	# instead of creating user root, it's possible to change pg_hba.conf
-	# and configure login as phobos directly
-	su postgres -c "$PSQL" << EOF
+	su postgres -c "psql phobos" << EOF
 GRANT ALL ON DATABASE phobos TO phobos;
 ALTER SCHEMA public OWNER TO phobos;
-GRANT phobos TO root;
+ALTER USER phobos WITH PASSWORD 'phobos';
 EOF
+	# You WILL need to configure your pg_hba.conf with either 'trust'
+	# or 'md5' for the IP you connect from.
+	# PSQL command is configured for password over TCP, if you would
+	# like to use trust just remove -h localhost and use the socket.
 }
 
 drop_db() {
 	su postgres -c "dropdb phobos"
 	su postgres -c "dropuser phobos"
-	su postgres -c "dropuser root"
 }
 
 setup_tables() {
