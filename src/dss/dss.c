@@ -124,7 +124,7 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
 static const char * const base_query[] = {
     [DSS_DEVICE] = "SELECT family, model, id, adm_status,"
                    " host, path, changer_idx FROM device",
-    [DSS_MEDIA]  = "SELECT id, adm_status, model FROM media",
+    [DSS_MEDIA]  = "SELECT family, model, id, adm_status FROM media",
 };
 
 static const size_t const res_size[] = {
@@ -138,7 +138,6 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     PGconn *conn = handle;
     PGresult *res;
     GString *clause;
-    char *buf;
     struct dss_result *dss_res;
     int i, rc;
     size_t dss_res_size;
@@ -155,8 +154,8 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     }
 
     if (type != DSS_DEVICE && type != DSS_MEDIA) {
-        rc = -EINVAL;
-        pho_error(rc, "invalid type %d", type);
+        rc = -ENOTSUP;
+        pho_error(rc, "unsupported DSS request type %#x", type);
         return rc;
     }
 
@@ -203,15 +202,17 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     case DSS_DEVICE:
         dss_res->pg_res = res;
         for (i = 0; i < PQntuples(res); i++) {
-            dss_res->u.dev[i].family = str2dev_family(PQgetvalue(res, i, 0));
-            dss_res->u.dev[i].host   = PQgetvalue(res, i, 4);
-            dss_res->u.dev[i].path   = PQgetvalue(res, i, 5);
-            dss_res->u.dev[i].model  = PQgetvalue(res, i, 1);
-            dss_res->u.dev[i].serial = PQgetvalue(res, i, 2);
-            /** @todo replace atoi by proper pq function */
-            dss_res->u.dev[i].changer_idx = atoi(PQgetvalue(res, i, 6));
-            dss_res->u.dev[i].adm_status =
+            struct dev_info *p_dev = &dss_res->u.dev[i];
+
+            p_dev->family = str2dev_family(PQgetvalue(res, i, 0));
+            p_dev->model  = PQgetvalue(res, i, 1);
+            p_dev->serial = PQgetvalue(res, i, 2);
+            p_dev->adm_status =
                 str2adm_status(PQgetvalue(res, i, 3));
+            p_dev->host   = PQgetvalue(res, i, 4);
+            p_dev->path   = PQgetvalue(res, i, 5);
+            /** @todo replace atoi by proper pq function */
+            p_dev->changer_idx = atoi(PQgetvalue(res, i, 6));
         }
 
         *item_list = dss_res->u.dev;
@@ -221,17 +222,15 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     case DSS_MEDIA:
         dss_res->pg_res = res;
         for (i = 0; i < PQntuples(res); i++) {
-            buf = PQgetvalue(res, i, 0);
-            strncpy(dss_res->u.media[i].media.id_u.label, buf,
-                    sizeof(dss_res->u.media[i].media.id_u.label));
-            dss_res->u.media[i].adm_status =
-                media_str2adm_status(PQgetvalue(res, i, 1));
-            dss_res->u.media[i].model = PQgetvalue(res, i, 2);
+            struct media_info *p_media = &dss_res->u.media[i];
+
+            p_media->id.type = str2dev_family(PQgetvalue(res, i, 0));
+            p_media->model = PQgetvalue(res, i, 1);
+            media_id_set(&p_media->id, PQgetvalue(res, i, 2));
+            p_media->adm_status = media_str2adm_status(PQgetvalue(res, i, 3));
             /** @todo
-                dss_res->u.dev[i].fs_fype = PQgetvalue(res, i, 1);
-                dss_res->u.dev[i].address_type   = PQgetvalue(res, i, 1);
-                dss_res->u.media[i].adm_status =
-                str2adm_status(PQgetvalue(res, i, 1));
+                p_media->fs_fype = PQgetvalue(res, i, 1);
+                p_media->address_type   = PQgetvalue(res, i, 1);
             */
         }
 

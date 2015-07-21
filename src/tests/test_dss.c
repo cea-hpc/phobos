@@ -121,7 +121,7 @@ int main(int argc, char **argv)
         case DSS_MEDIA:
             for (i = 0, media = item_list; i < item_cnt; i++, media++) {
                 printf("Got Media: label:%s model:%s adm_st:%s\n",
-                       media->media.id_u.label,
+                       media->id.id_u.label,
                        media->model,
                        media_adm_status2str(media->adm_status));
             }

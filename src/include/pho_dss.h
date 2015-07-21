@@ -74,6 +74,7 @@ enum dss_fields {
     DSS_EXT_info,     /* extent info (statistics, lifecycle info...) */
 
     /* Media @ v0 */
+    DSS_MDA_family, /* family of media */
     DSS_MDA_model, /* type of media */
     DSS_MDA_id,
     DSS_MDA_adm_status, /* ready, failed, ... */
@@ -108,6 +109,7 @@ static const char * const dss_fields_names[] = {
     [DSS_EXT_layout_descr] = "layout_descr",
     [DSS_EXT_layout_info] = "layout_info",
     [DSS_EXT_info] = "info",
+    [DSS_MDA_family] = "family",
     [DSS_MDA_model] = "model",
     [DSS_MDA_id] = "id",
     [DSS_MDA_adm_status] = "adm_status",
@@ -157,6 +159,7 @@ static const int const dss_fields_type[] = {
     [DSS_EXT_layout_descr] = DSS_VAL_UNKNOWN,
     [DSS_EXT_layout_info] = DSS_VAL_UNKNOWN,
     [DSS_EXT_info] = DSS_VAL_JSON,
+    [DSS_MDA_family] = DSS_VAL_ENUM,
     [DSS_MDA_model] = DSS_VAL_ENUM,
     [DSS_MDA_id] = DSS_VAL_STR,
     [DSS_MDA_adm_status] = DSS_VAL_ENUM,
@@ -185,6 +188,7 @@ static inline const char *dss_fields_enum2str(enum dss_fields fields, int val)
 {
     switch (fields) {
     case DSS_DEV_family:
+    case DSS_MDA_family:
         return dev_family2str((enum dev_family) val);
     case DSS_DEV_adm_status:
         return adm_status2str((enum dev_adm_status) val);

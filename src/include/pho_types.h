@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <errno.h>
 
 /** max length of a tape label, FS label... */
 #define PHO_LABEL_MAX_LEN 32
@@ -29,23 +30,6 @@
  * Make sure to keep it below NAME_MAX (which is like 255 chars)
  */
 #define PHO_LAYOUT_TAG_MAX  8
-
-
-enum media_type {
-    PHO_MED_TAPE = 1,
-    /* future: disk, file... */
-};
-
-/** media identifier */
-struct media_id {
-    enum media_type type;
-    /** XXX type -> id type may not be straightforward as given media type
-     * could be addressed in multiple ways (FS label, FS UUID, device WWID...).
-     * So, an id_type enum may be required here in a later version. */
-    union {
-        char label[PHO_LABEL_MAX_LEN];
-    } id_u;
-};
 
 enum layout_type {
     PHO_LYT_SIMPLE = 1, /* simple contiguous block of data */
@@ -77,6 +61,90 @@ struct pho_buff {
 
 static const struct pho_buff PHO_BUFF_NULL = { .size = 0, .buff = NULL };
 
+/**
+ * Family of device opr media
+ */
+enum dev_family {
+    PHO_DEV_INVAL = -1,
+    PHO_DEV_DISK  = 0,
+    PHO_DEV_TAPE  = 1,
+    PHO_DEV_DIR   = 2,
+    PHO_DEV_COUNT
+};
+
+static const char * const dev_family_names[] = {
+    [PHO_DEV_DISK] = "disk",
+    [PHO_DEV_TAPE] = "tape",
+    [PHO_DEV_DIR]  = "dir",
+    [PHO_DEV_COUNT] = NULL
+};
+
+static inline const char *dev_family2str(enum dev_family family)
+{
+    if (family > PHO_DEV_COUNT || family < 0)
+        return NULL;
+    return dev_family_names[family];
+}
+
+static inline enum dev_family str2dev_family(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_DEV_COUNT; i++)
+        if (!strcmp(str, dev_family_names[i]))
+            return i;
+    return PHO_DEV_INVAL;
+}
+
+/** media identifier */
+struct media_id {
+    enum dev_family type;
+    /** XXX type -> id type may not be straightforward as given media type
+     * could be addressed in multiple ways (FS label, FS UUID, device WWID...).
+     * So, an id_type enum may be required here in a later version. */
+    union {
+        char label[PHO_LABEL_MAX_LEN];
+        char path[NAME_MAX];
+    } id_u;
+};
+
+/**
+ * Get media identifier string, depending of media type.
+ */
+static inline const char *media_id_get(const struct media_id *mid)
+{
+    switch (mid->type) {
+    case PHO_DEV_TAPE:
+        return mid->id_u.label;
+    case PHO_DEV_DIR:
+        return mid->id_u.path;
+    default:
+        return NULL;
+    }
+}
+
+/**
+ * Set the appropiate media identifier.
+ * type field must be set in media_id.
+ */
+static inline int media_id_set(struct media_id *mid, const char *id)
+{
+    switch (mid->type) {
+    case PHO_DEV_TAPE:
+        if (strlen(id) >= PHO_LABEL_MAX_LEN)
+            return -EINVAL;
+        strncpy(mid->id_u.label, id, PHO_LABEL_MAX_LEN);
+        return 0;
+    case PHO_DEV_DIR:
+        if (strlen(id) >= NAME_MAX)
+            return -EINVAL;
+        strncpy(mid->id_u.path, id, NAME_MAX);
+        return 0;
+    default:
+        return -EINVAL;
+    }
+}
+
 /** describe a piece of data in a layout */
 struct extent {
     unsigned int       layout_idx; /**< always 0 for simple layouts */
@@ -100,39 +168,6 @@ struct data_loc {
 static inline bool is_data_loc_valid(const struct data_loc *loc)
 {
     return loc->extent.address.buff != NULL;
-}
-
-/**
- * Family of device
- */
-enum dev_family {
-    PHO_DEV_INVAL = -1,
-    PHO_DEV_DISK  = 0,
-    PHO_DEV_TAPE  = 1,
-    PHO_DEV_COUNT
-};
-
-static const char * const dev_family_names[] = {
-    [PHO_DEV_DISK] = "disk",
-    [PHO_DEV_TAPE] = "tape",
-    [PHO_DEV_COUNT] = NULL
-};
-
-static inline const char *dev_family2str(enum dev_family family)
-{
-    if (family > PHO_DEV_COUNT || family < 0)
-        return NULL;
-    return dev_family_names[family];
-}
-
-static inline enum dev_family str2dev_family(const char *str)
-{
-    int i;
-
-    for (i = 0; i < PHO_DEV_COUNT; i++)
-        if (!strcmp(str, dev_family_names[i]))
-            return i;
-    return PHO_DEV_INVAL;
 }
 
 /**
@@ -223,10 +258,11 @@ struct dev_info {
 /** Live device information (from system) */
 struct dev_state {
     enum dev_op_status   op_status;
+    enum dev_family      family;
     char                *model;
     char                *serial;
     char                *mnt_path; /**< FS path, if mounted */
-    struct media_id      media;    /**< media, if loaded or mounted */
+    struct media_id      media_id; /**< media, if loaded or mounted */
 };
 
 /** media statistics */
@@ -280,7 +316,7 @@ static inline enum media_adm_status media_str2adm_status(const char *str)
 
 /** persistent media and filesystem information */
 struct media_info {
-    struct media_id        media;
+    struct media_id        id;
     enum fs_type           fs_type;    /**< type of filesystem on this media */
     enum address_type      addr_type;  /**< way to address this media */
     char                  *model;

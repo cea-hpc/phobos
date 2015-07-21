@@ -41,7 +41,7 @@ static void set_test_loc(struct data_loc *loc, size_t size)
 
     loc->extent.layout_idx = 0;
     loc->extent.size = size;
-    loc->extent.media.type = PHO_MED_TAPE;
+    loc->extent.media.type = PHO_DEV_TAPE;
     strncpy(loc->extent.media.id_u.label, "L00001",
             sizeof(loc->extent.media.id_u.label));
     loc->extent.fs_type = PHO_FS_POSIX;

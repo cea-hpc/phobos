@@ -295,7 +295,7 @@ static void set_test_extent(struct extent *ext)
 {
     ext->layout_idx = 0;
     ext->size = 0; /* FIXME */
-    ext->media.type = PHO_MED_TAPE;
+    ext->media.type = PHO_DEV_TAPE;
     strncpy(ext->media.id_u.label, "L00001",
             sizeof(ext->media.id_u.label));
     ext->fs_type = PHO_FS_POSIX;

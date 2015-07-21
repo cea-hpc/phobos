@@ -25,7 +25,7 @@ drop_db() {
 
 setup_tables() {
 	$PSQL << EOF
-CREATE TYPE dev_family AS ENUM ('disk', 'tape');
+CREATE TYPE dev_family AS ENUM ('disk', 'tape', 'dir');
 CREATE TYPE dev_model AS ENUM ('ULTRIUM-TD6', 'ULTRIUM-TD5');
 CREATE TYPE tape_model AS ENUM ('LTO6', 'LTO5', 'T10KB');
 CREATE TYPE adm_status AS ENUM ('locked', 'unlocked');
@@ -44,10 +44,10 @@ CREATE TABLE device(family dev_family, model dev_model,
 --  CREATE INDEX ON device(type, id);
 CREATE INDEX ON device USING gin(host);
 
-CREATE TABLE media(model tape_model, id varchar(32) UNIQUE,
+CREATE TABLE media(family dev_family, model tape_model, id varchar(32) UNIQUE,
                    adm_status adm_status, fs_type fs_type,
                    address_type address_type, stats jsonb,
-                   PRIMARY KEY (id));
+                   PRIMARY KEY (family, id));
 
 CREATE TABLE object(oid varchar(1024), user_md jsonb, st_md json,
                     PRIMARY KEY (oid));
@@ -79,14 +79,24 @@ insert into device (family, model, id, host, adm_status, path, changer_idx)
     values ('tape', 'ULTRIUM-TD6', '1013005381', 'phobos1',
 	    'locked', '/dev/IBMtape1', 3),
            ('tape', 'ULTRIUM-TD6', '1014005381', 'phobos1',
-	    'unlocked', '/dev/IBMtape0', 4);
-insert into media (model, id, adm_status, fs_type, address_type, stats)
-    values ('LTO6', '073220L6', 'unlocked', 'LTFS', 'HASH1',
+	    'unlocked', '/dev/IBMtape0', 4),
+           ('dir', NULL, 'phobos1:/tmp/pho_testdir1', 'phobos1',
+	    'unlocked', '/tmp/pho_testdir1', NULL),
+           ('dir', NULL, 'phobos1:/tmp/pho_testdir2', 'phobos1',
+	    'unlocked', '/tmp/pho_testdir2', NULL);
+insert into media (family, model, id, adm_status, fs_type, address_type, stats)
+    values ('tape', 'LTO6', '073220L6', 'unlocked', 'LTFS', 'HASH1',
             '{"nb_obj":"2","logc_spc_used":"6291456000",\
 	      "phys_spc_used":"42469425152","phys_spc_free":"2365618913280"}'),
-           ('LTO6', '073221L6', 'unlocked', 'LTFS', 'HASH1',
+           ('tape', 'LTO6', '073221L6', 'unlocked', 'LTFS', 'HASH1',
             '{"nb_obj":"2","logc_spc_used":"15033434112",\
-	      "phys_spc_used":"15033434112","phys_spc_free":"2393054904320"}');
+	      "phys_spc_used":"15033434112","phys_spc_free":"2393054904320"}'),
+           ('dir', NULL, 'phobos1:/tmp/pho_testdir1', 'unlocked', 'POSIX',
+	    'HASH1', '{"nb_obj":"5","logc_spc_used":"3668841456",\
+	      "phys_spc_used":"3668841456","phys_spc_free":"12857675776"}'),
+           ('dir', NULL, 'phobos1:/tmp/pho_testdir2', 'unlocked', 'POSIX',
+	    'HASH1', '{"nb_obj":"6","logc_spc_used":"4868841472",\
+	      "phys_spc_used":"4868841472","phys_spc_free":"12857675776"}');
 EOF
 }
 
