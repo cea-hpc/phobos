@@ -646,6 +646,7 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa)
         *ioa = posix_adapter;
         break;
     default:
+        pho_error(-EINVAL, "Invalid FS type %#x", fstype);
         return -EINVAL;
     }
 
