@@ -23,8 +23,10 @@
 
 /** List of phobos configuration parameters */
 enum pho_cfg_params {
+    PHO_CFG_FIRST,
+
     /* dss parameters */
-    PHO_CFG_DSS_connect_string,
+    PHO_CFG_DSS_connect_string = PHO_CFG_FIRST,
 
     /* lrs parameters */
     PHO_CFG_LRS_mount_prefix,
@@ -99,10 +101,14 @@ static inline int pho_cfg_get(enum pho_cfg_params param,
     int rc;
     const struct pho_config_item *item;
 
-    if (param >= PHO_CFG_LAST)
+    if (param >= PHO_CFG_LAST || param < PHO_CFG_FIRST)
         return -EINVAL;
 
     item = &pho_cfg_descr[param];
+
+    /* sanity check (in case of sparse pho_config_descr array) */
+    if (!item->name)
+        return -EINVAL;
 
     rc = pho_cfg_get_val(item->section, item->name, value);
     if (rc == -ENOATTR) {
