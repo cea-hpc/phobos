@@ -120,10 +120,13 @@ int main(int argc, char **argv)
             break;
         case DSS_MEDIA:
             for (i = 0, media = item_list; i < item_cnt; i++, media++) {
-                printf("Got Media: label:%s model:%s adm_st:%s\n",
-                       media->id.id_u.label,
+                printf("Got Media: label:%s model:%s adm_st:%s address_type:%s"
+                       " fs_type:%s\n",
+                       media_id_get(&media->id),
                        media->model,
-                       media_adm_status2str(media->adm_status));
+                       media_adm_status2str(media->adm_status),
+                       address_type2str(media->addr_type),
+                       fs_type2str(media->fs_type));
             }
             break;
         default:

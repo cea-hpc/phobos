@@ -124,7 +124,8 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
 static const char * const base_query[] = {
     [DSS_DEVICE] = "SELECT family, model, id, adm_status,"
                    " host, path, changer_idx FROM device",
-    [DSS_MEDIA]  = "SELECT family, model, id, adm_status FROM media",
+    [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
+                   " address_type, fs_type FROM media",
 };
 
 static const size_t const res_size[] = {
@@ -222,16 +223,15 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     case DSS_MEDIA:
         dss_res->pg_res = res;
         for (i = 0; i < PQntuples(res); i++) {
+
             struct media_info *p_media = &dss_res->u.media[i];
 
             p_media->id.type = str2dev_family(PQgetvalue(res, i, 0));
             p_media->model = PQgetvalue(res, i, 1);
             media_id_set(&p_media->id, PQgetvalue(res, i, 2));
             p_media->adm_status = media_str2adm_status(PQgetvalue(res, i, 3));
-            /** @todo
-                p_media->fs_fype = PQgetvalue(res, i, 1);
-                p_media->address_type   = PQgetvalue(res, i, 1);
-            */
+            p_media->addr_type = str2address_type(PQgetvalue(res, i, 4));
+            p_media->fs_type = str2fs_type(PQgetvalue(res, i, 5));
         }
 
         *item_list = dss_res->u.media;

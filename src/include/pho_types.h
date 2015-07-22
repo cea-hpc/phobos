@@ -43,16 +43,65 @@ struct layout_descr {
 };
 
 enum fs_type {
-    PHO_FS_POSIX, /* any POSIX filesystem (no specific feature) */
+    PHO_FS_INVAL = -1,
+    PHO_FS_POSIX = 0, /* any POSIX filesystem (no specific feature) */
     PHO_FS_LTFS,
+    PHO_FS_LAST,
 };
+
+static const char * const fs_type_names[] = {
+    [PHO_FS_POSIX] = "POSIX",
+    [PHO_FS_LTFS]  = "LTFS",
+};
+
+static inline const char *fs_type2str(enum fs_type type)
+{
+    if (type >= PHO_FS_LAST || type < 0)
+        return NULL;
+    return fs_type_names[type];
+}
+
+static inline enum fs_type str2fs_type(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_FS_LAST; i++)
+        if (!strcmp(str, fs_type_names[i]))
+            return i;
+    return PHO_FS_INVAL;
+}
 
 /* selected address type for a media */
 enum address_type {
-    PHO_ADDR_PATH,   /* id is entry path (e.g. for imported tapes) */
+    PHO_ADDR_INVAL = -1,
+    PHO_ADDR_PATH  =  0,   /* id is entry path (e.g. for imported tapes) */
     PHO_ADDR_HASH1,  /* id hashing, implementation 1 */
     PHO_ADDR_OPAQUE, /* opaque identifier provided by the backend */
+    PHO_ADDR_LAST,
 };
+
+static const char * const address_type_names[] = {
+    [PHO_ADDR_PATH] = "PATH",
+    [PHO_ADDR_HASH1] = "HASH1",
+    [PHO_ADDR_OPAQUE] = "OPAQUE",
+};
+
+static inline const char *address_type2str(enum address_type type)
+{
+    if (type >= PHO_ADDR_LAST || type < 0)
+        return NULL;
+    return address_type_names[type];
+}
+
+static inline enum address_type str2address_type(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_ADDR_LAST; i++)
+        if (!strcmp(str, address_type_names[i]))
+            return i;
+    return PHO_ADDR_INVAL;
+}
 
 struct pho_buff {
     int   size;
@@ -69,19 +118,18 @@ enum dev_family {
     PHO_DEV_DISK  = 0,
     PHO_DEV_TAPE  = 1,
     PHO_DEV_DIR   = 2,
-    PHO_DEV_COUNT
+    PHO_DEV_LAST
 };
 
 static const char * const dev_family_names[] = {
     [PHO_DEV_DISK] = "disk",
     [PHO_DEV_TAPE] = "tape",
     [PHO_DEV_DIR]  = "dir",
-    [PHO_DEV_COUNT] = NULL
 };
 
 static inline const char *dev_family2str(enum dev_family family)
 {
-    if (family > PHO_DEV_COUNT || family < 0)
+    if (family >= PHO_DEV_LAST || family < 0)
         return NULL;
     return dev_family_names[family];
 }
@@ -90,7 +138,7 @@ static inline enum dev_family str2dev_family(const char *str)
 {
     int i;
 
-    for (i = 0; i < PHO_DEV_COUNT; i++)
+    for (i = 0; i < PHO_DEV_LAST; i++)
         if (!strcmp(str, dev_family_names[i]))
             return i;
     return PHO_DEV_INVAL;
@@ -177,18 +225,17 @@ enum dev_adm_status {
     PHO_DEV_ADM_ST_INVAL    = -1,
     PHO_DEV_ADM_ST_LOCKED   = 0,
     PHO_DEV_ADM_ST_UNLOCKED = 1,
-    PHO_DEV_ADM_ST_COUNT
+    PHO_DEV_ADM_ST_LAST
 };
 
 static const char * const dev_adm_st_names[] = {
     [PHO_DEV_ADM_ST_LOCKED] = "locked",
     [PHO_DEV_ADM_ST_UNLOCKED] = "unlocked",
-    [PHO_DEV_ADM_ST_COUNT] = NULL
 };
 
 static inline const char *adm_status2str(enum dev_adm_status adm_st)
 {
-    if (adm_st > PHO_DEV_ADM_ST_COUNT || adm_st < 0)
+    if (adm_st >= PHO_DEV_ADM_ST_LAST || adm_st < 0)
         return NULL;
     return dev_adm_st_names[adm_st];
 }
@@ -197,7 +244,7 @@ static inline enum dev_adm_status str2adm_status(const char *str)
 {
     int i;
 
-    for (i = 0; i < PHO_DEV_ADM_ST_COUNT; i++)
+    for (i = 0; i < PHO_DEV_ADM_ST_LAST; i++)
         if (!strcmp(str, dev_adm_st_names[i]))
             return i;
     return PHO_DEV_ADM_ST_INVAL;
@@ -213,7 +260,7 @@ enum dev_op_status {
     PHO_DEV_OP_ST_LOADED  = 2,
     PHO_DEV_OP_ST_MOUNTED = 3,
     PHO_DEV_OP_ST_BUSY    = 4,
-    PHO_DEV_OP_ST_COUNT
+    PHO_DEV_OP_ST_LAST
 };
 
 static const char * const dev_op_st_names[] = {
@@ -222,7 +269,6 @@ static const char * const dev_op_st_names[] = {
     [PHO_DEV_OP_ST_LOADED]  = "loaded",
     [PHO_DEV_OP_ST_MOUNTED] = "mounted",
     [PHO_DEV_OP_ST_BUSY]    = "busy",
-    [PHO_DEV_OP_ST_COUNT]   = NULL
 };
 
 static inline const char *op_status2str(enum dev_op_status op_st)
@@ -236,7 +282,7 @@ static inline enum dev_op_status str2op_status(const char *str)
 {
     int i;
 
-    for (i = 0; i < PHO_DEV_OP_ST_COUNT; i++)
+    for (i = 0; i < PHO_DEV_OP_ST_LAST; i++)
         if (!strcmp(str, dev_op_st_names[i]))
             return i;
     return PHO_DEV_OP_ST_INVAL;
@@ -287,18 +333,17 @@ enum media_adm_status {
     PHO_MDA_ADM_ST_INVAL    = -1,
     PHO_MDA_ADM_ST_LOCKED   = 0,
     PHO_MDA_ADM_ST_UNLOCKED = 1,
-    PHO_MDA_ADM_ST_COUNT
+    PHO_MDA_ADM_ST_LAST
 };
 
 static const char * const media_adm_st_names[] = {
     [PHO_MDA_ADM_ST_LOCKED] = "locked",
     [PHO_MDA_ADM_ST_UNLOCKED] = "unlocked",
-    [PHO_MDA_ADM_ST_COUNT] = NULL
 };
 
 static inline const char *media_adm_status2str(enum media_adm_status adm_st)
 {
-    if (adm_st > PHO_MDA_ADM_ST_COUNT || adm_st < 0)
+    if (adm_st >= PHO_MDA_ADM_ST_LAST || adm_st < 0)
         return NULL;
     return media_adm_st_names[adm_st];
 }
@@ -307,7 +352,7 @@ static inline enum media_adm_status media_str2adm_status(const char *str)
 {
     int i;
 
-    for (i = 0; i < PHO_MDA_ADM_ST_COUNT; i++)
+    for (i = 0; i < PHO_MDA_ADM_ST_LAST; i++)
         if (!strcmp(str, media_adm_st_names[i]))
             return i;
     return PHO_MDA_ADM_ST_INVAL;
