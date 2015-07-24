@@ -117,8 +117,8 @@ static const char * const dss_fields_names[] = {
     [DSS_MDA_format] = "fs_type",
     [DSS_MDA_stats] = "stats",
     [DSS_MDA_nb_obj] = "stats::json->>'nb_obj'",
-    [DSS_MDA_vol_used] = "stats::json->>'phys_spc_used'",
-    [DSS_MDA_vol_free] = "stats::json->>'phys_spc_free'",
+    [DSS_MDA_vol_used] = "CAST(stats::json->>'phys_spc_used' AS BIGINT)",
+    [DSS_MDA_vol_free] = "CAST(stats::json->>'phys_spc_free' AS BIGINT)",
     [DSS_DEV_family] = "family",
     [DSS_DEV_id] = "id",
     [DSS_DEV_host] = "host",
@@ -192,6 +192,8 @@ static inline const char *dss_fields_enum2str(enum dss_fields fields, int val)
         return dev_family2str((enum dev_family) val);
     case DSS_DEV_adm_status:
         return adm_status2str((enum dev_adm_status) val);
+    case DSS_MDA_fs_status:
+        return fs_status2str((enum fs_status) val);
     default:
         return NULL;
     }

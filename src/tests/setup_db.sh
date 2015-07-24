@@ -28,9 +28,10 @@ setup_tables() {
 CREATE TYPE dev_family AS ENUM ('disk', 'tape', 'dir');
 CREATE TYPE dev_model AS ENUM ('ULTRIUM-TD6', 'ULTRIUM-TD5');
 CREATE TYPE tape_model AS ENUM ('LTO6', 'LTO5', 'T10KB');
-CREATE TYPE adm_status AS ENUM ('locked', 'unlocked');
+CREATE TYPE adm_status AS ENUM ('locked', 'unlocked', 'failed');
 CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS');
 CREATE TYPE address_type AS ENUM ('PATH', 'HASH1', 'OPAQUE');
+CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used');
 
 -- enums extensibles: ALTER TYPE type ADD VALUE 'value'
 
@@ -46,8 +47,9 @@ CREATE INDEX ON device USING gin(host);
 
 CREATE TABLE media(family dev_family, model tape_model, id varchar(32) UNIQUE,
                    adm_status adm_status, fs_type fs_type,
-                   address_type address_type, stats jsonb,
-                   PRIMARY KEY (family, id));
+                   address_type address_type, fs_status fs_status,
+		   stats jsonb, PRIMARY KEY (family, id));
+CREATE INDEX ON media((stats->>'phys_spc_free'));
 
 CREATE TABLE object(oid varchar(1024), user_md jsonb, st_md json,
                     PRIMARY KEY (oid));
@@ -68,7 +70,7 @@ drop_tables() {
 # Don't drop the schema, it drops the extension
         $PSQL << EOF
 DROP TABLE IF EXISTS device, media, object, extent CASCADE;
-DROP TYPE IF EXISTS dev_family, dev_model, tape_model,
+DROP TYPE IF EXISTS dev_family, dev_model, tape_model, fs_status,
 		    adm_status, fs_type, address_type CASCADE;
 EOF
 }
@@ -84,18 +86,19 @@ insert into device (family, model, id, host, adm_status, path, changer_idx)
 	    'unlocked', '/tmp/pho_testdir1', NULL),
            ('dir', NULL, 'phobos1:/tmp/pho_testdir2', 'phobos1',
 	    'unlocked', '/tmp/pho_testdir2', NULL);
-insert into media (family, model, id, adm_status, fs_type, address_type, stats)
-    values ('tape', 'LTO6', '073220L6', 'unlocked', 'LTFS', 'HASH1',
+insert into media (family, model, id, adm_status, fs_type, address_type,
+		   fs_status, stats)
+    values ('tape', 'LTO6', '073220L6', 'unlocked', 'LTFS', 'HASH1', 'blank',
             '{"nb_obj":"2","logc_spc_used":"6291456000",\
 	      "phys_spc_used":"42469425152","phys_spc_free":"2365618913280"}'),
-           ('tape', 'LTO6', '073221L6', 'unlocked', 'LTFS', 'HASH1',
+           ('tape', 'LTO6', '073221L6', 'unlocked', 'LTFS', 'HASH1', 'blank',
             '{"nb_obj":"2","logc_spc_used":"15033434112",\
 	      "phys_spc_used":"15033434112","phys_spc_free":"2393054904320"}'),
            ('dir', NULL, 'phobos1:/tmp/pho_testdir1', 'unlocked', 'POSIX',
-	    'HASH1', '{"nb_obj":"5","logc_spc_used":"3668841456",\
+	    'HASH1', 'blank', '{"nb_obj":"5","logc_spc_used":"3668841456",\
 	      "phys_spc_used":"3668841456","phys_spc_free":"12857675776"}'),
            ('dir', NULL, 'phobos1:/tmp/pho_testdir2', 'unlocked', 'POSIX',
-	    'HASH1', '{"nb_obj":"6","logc_spc_used":"4868841472",\
+	    'HASH1', 'blank', '{"nb_obj":"6","logc_spc_used":"4868841472",\
 	      "phys_spc_used":"4868841472","phys_spc_free":"12857675776"}');
 EOF
 }

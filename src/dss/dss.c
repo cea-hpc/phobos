@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <glib.h>
 #include <libpq-fe.h>
+#include <jansson.h>
 
 struct dss_result {
     PGresult *pg_res;
@@ -125,13 +126,55 @@ static const char * const base_query[] = {
     [DSS_DEVICE] = "SELECT family, model, id, adm_status,"
                    " host, path, changer_idx FROM device",
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
-                   " address_type, fs_type FROM media",
+                   " address_type, fs_type, fs_status, stats FROM media",
 };
 
 static const size_t const res_size[] = {
     [DSS_DEVICE] = sizeof(struct dev_info),
     [DSS_MEDIA]  = sizeof(struct media_info),
 };
+
+/**
+ * Extract media statistics from json
+ *
+ * \param[in]  stats  media stats to be filled with stats
+ * \param[in]  json   String with json media stats
+ *
+ * \return 0 on success, negative error code on failure.
+ */
+static int dss_media_stats_decode(struct media_stats *stats, const char *json)
+{
+    json_t *root;
+    json_error_t json_error;
+    int parse_error;
+    size_t jflags = JSON_REJECT_DUPLICATES;
+
+    root = json_loads(json, jflags, &json_error);
+    if (!root)
+        LOG_RETURN(-EINVAL, "Failed to parse json data: %s",
+                  json_error.text);
+
+    if (!json_is_object(root))
+        return -EINVAL;
+
+    parse_error = 0;
+    stats->nb_obj =
+       json_dict2uint64(root, "nb_obj", &parse_error);
+    stats->logc_spc_used =
+       json_dict2uint64(root, "logc_spc_used", &parse_error);
+    stats->phys_spc_used =
+       json_dict2uint64(root, "phys_spc_used", &parse_error);
+    stats->phys_spc_free =
+       json_dict2uint64(root, "phys_spc_free", &parse_error);
+    json_decref(root);
+
+    if (parse_error > 0)
+        LOG_RETURN(EINVAL, "Json parser: missing mandatory fields"
+                          " in media stats, count: %d", parse_error);
+
+    return 0;
+}
+
 
 int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
             int crit_cnt, void **item_list, int *item_cnt)
@@ -142,7 +185,6 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     struct dss_result *dss_res;
     int i, rc;
     size_t dss_res_size;
-
 
     *item_list = NULL;
     *item_cnt = 0;
@@ -223,7 +265,6 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     case DSS_MEDIA:
         dss_res->pg_res = res;
         for (i = 0; i < PQntuples(res); i++) {
-
             struct media_info *p_media = &dss_res->u.media[i];
 
             p_media->id.type = str2dev_family(PQgetvalue(res, i, 0));
@@ -232,6 +273,11 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
             p_media->adm_status = media_str2adm_status(PQgetvalue(res, i, 3));
             p_media->addr_type = str2address_type(PQgetvalue(res, i, 4));
             p_media->fs_type = str2fs_type(PQgetvalue(res, i, 5));
+            p_media->fs_status = str2fs_status(PQgetvalue(res, i, 6));
+            rc = dss_media_stats_decode(&p_media->stats, PQgetvalue(res, i, 7));
+            if (rc)
+                return rc;
+
         }
 
         *item_list = dss_res->u.media;

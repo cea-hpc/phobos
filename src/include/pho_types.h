@@ -71,6 +71,37 @@ static inline enum fs_type str2fs_type(const char *str)
     return PHO_FS_INVAL;
 }
 
+enum fs_status {
+    PHO_FS_STATUS_INVAL = -1,
+    PHO_FS_STATUS_blank = 0, /* any POSIX filesystem (no specific feature) */
+    PHO_FS_STATUS_empty,
+    PHO_FS_STATUS_used,
+    PHO_FS_STATUS_LAST,
+};
+
+static const char * const fs_status_names[] = {
+    [PHO_FS_STATUS_blank] = "blank",
+    [PHO_FS_STATUS_empty]  = "empty",
+    [PHO_FS_STATUS_used]  = "used",
+};
+
+static inline const char *fs_status2str(enum fs_status status)
+{
+    if (status >= PHO_FS_STATUS_LAST || status < 0)
+        return NULL;
+    return fs_status_names[status];
+}
+
+static inline enum fs_status str2fs_status(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_FS_STATUS_LAST; i++)
+        if (!strcmp(str, fs_status_names[i]))
+            return i;
+    return PHO_FS_STATUS_INVAL;
+}
+
 /* selected address type for a media */
 enum address_type {
     PHO_ADDR_INVAL = -1,
@@ -225,12 +256,14 @@ enum dev_adm_status {
     PHO_DEV_ADM_ST_INVAL    = -1,
     PHO_DEV_ADM_ST_LOCKED   = 0,
     PHO_DEV_ADM_ST_UNLOCKED = 1,
+    PHO_DEV_ADM_ST_FAILED   = 2,
     PHO_DEV_ADM_ST_LAST
 };
 
 static const char * const dev_adm_st_names[] = {
     [PHO_DEV_ADM_ST_LOCKED] = "locked",
     [PHO_DEV_ADM_ST_UNLOCKED] = "unlocked",
+    [PHO_DEV_ADM_ST_FAILED] = "failed",
 };
 
 static inline const char *adm_status2str(enum dev_adm_status adm_st)
@@ -366,6 +399,7 @@ struct media_info {
     enum address_type      addr_type;  /**< way to address this media */
     char                  *model;
     enum media_adm_status  adm_status;
+    enum fs_status         fs_status;
     struct media_stats     stats;      /**< metrics */
 };
 

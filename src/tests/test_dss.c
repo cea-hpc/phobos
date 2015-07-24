@@ -21,6 +21,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 int main(int argc, char **argv)
 {
@@ -121,12 +122,20 @@ int main(int argc, char **argv)
         case DSS_MEDIA:
             for (i = 0, media = item_list; i < item_cnt; i++, media++) {
                 printf("Got Media: label:%s model:%s adm_st:%s address_type:%s"
-                       " fs_type:%s\n",
+                       " fs_type:%s fs_status:%s\n",
                        media_id_get(&media->id),
                        media->model,
                        media_adm_status2str(media->adm_status),
                        address_type2str(media->addr_type),
-                       fs_type2str(media->fs_type));
+                       fs_type2str(media->fs_type),
+                       fs_status2str(media->fs_status));
+                printf("Got Media Stats: nb_obj:%" PRIu64 " logc_spc_used:%zu"
+                       " phys_spc_used:%zu phys_spc_free:%zu\n",
+                       media->stats.nb_obj,
+                       media->stats.logc_spc_used,
+                       media->stats.phys_spc_used,
+                       media->stats.phys_spc_free
+                      );
             }
             break;
         default:
