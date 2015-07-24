@@ -33,3 +33,4 @@ autotools/test-driver
 *.lo
 cscope.*
 .libs
+*.pyc

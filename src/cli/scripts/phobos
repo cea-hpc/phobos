@@ -1,0 +1,16 @@
+#!/usr/bin/python
+
+# Copyright CEA/DAM 2015
+# Author: Henri Doreau <henri.doreau@cea.fr>
+#
+# This file is part of the Phobos project
+
+"""
+phobos control and administration command-line tool.
+"""
+
+from phobos.cli import phobos_main
+
+
+if __name__ == '__main__':
+    phobos_main()
