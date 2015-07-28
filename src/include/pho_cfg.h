@@ -30,10 +30,12 @@ enum pho_cfg_params {
 
     /* lrs parameters */
     PHO_CFG_LRS_mount_prefix,
-    PHO_CFG_LRS_cmd_drive_query,
-    PHO_CFG_LRS_cmd_mount,
     PHO_CFG_LRS_policy,
     PHO_CFG_LRS_default_family,
+
+    /* ldm parameters */
+    PHO_CFG_LDM_cmd_drive_query,
+    PHO_CFG_LDM_cmd_mount_ltfs,
 
     PHO_CFG_LAST
 };
@@ -44,6 +46,8 @@ struct pho_config_item {
     const char *value;
 };
 
+#define PHO_LDM_HELPER "/usr/sbin/pho_ldm_helper"
+
 /** Name and default of configuration parameters.
  *  Value contains default.
  */
@@ -51,12 +55,14 @@ static const struct pho_config_item pho_cfg_descr[] = {
     [PHO_CFG_DSS_connect_string] = {"dss", "connect_string",
                                     "dbname=phobos host=localhost"},
     [PHO_CFG_LRS_mount_prefix]   = {"lrs", "mount_prefix", "/mnt/phobos-"},
-    [PHO_CFG_LRS_cmd_drive_query] = {"lrs", "cmd_drive_query",
-                                  "phobos drive query --details --json \"%s\""},
-    [PHO_CFG_LRS_cmd_mount]      = {"lrs", "cmd_mount",
-                                  "phobos mount --device \"%s\" --path \"%s\""},
     [PHO_CFG_LRS_policy]         = {"lrs", "policy", "best_fit"},
     [PHO_CFG_LRS_default_family] = {"lrs", "default_family", "tape"},
+
+    [PHO_CFG_LDM_cmd_drive_query] = {"ldm", "cmd_drive_query",
+                                  PHO_LDM_HELPER" query_drive --json \"%s\""},
+    [PHO_CFG_LDM_cmd_mount_ltfs]  = {"ldm", "cmd_mount_ltfs",
+                                  PHO_LDM_HELPER" mount_ltfs --device \"%s\""
+                                    "--path \"%s\""},
 };
 
 /**

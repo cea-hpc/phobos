@@ -16,6 +16,7 @@
 #include "pho_dss.h"
 #include "pho_type_utils.h"
 #include "pho_cfg.h"
+#include "pho_ldm.h"
 
 #include <string.h>
 #include <unistd.h>
@@ -24,42 +25,6 @@
 #include <sys/types.h>
 #include <assert.h>
 #include <sys/utsname.h>
-
-/**
- * Build a command to query drive info.
- * The result must be released by the caller using free(3).
- */
-static char *drive_query_cmd(const char *device)
-{
-    const char *cmd_cfg = NULL;
-    char *cmd_out;
-
-    if (pho_cfg_get(PHO_CFG_LRS_cmd_drive_query, &cmd_cfg))
-        return NULL;
-
-    if (asprintf(&cmd_out, cmd_cfg, device) < 0)
-        return NULL;
-
-    return cmd_out;
-}
-
-/**
- * Build a command to mount a filesystem at a given path.
- * The result must be released by the caller using free(3).
- */
-static char *mount_cmd(const char *device, const char *path)
-{
-    const char *cmd_cfg = NULL;
-    char *cmd_out;
-
-    if (pho_cfg_get(PHO_CFG_LRS_cmd_mount, &cmd_cfg))
-        return NULL;
-
-    if (asprintf(&cmd_out, cmd_cfg, device, path) < 0)
-        return NULL;
-
-    return cmd_out;
-}
 
 /**
  * Build a mount path with the given index.
@@ -156,13 +121,6 @@ static int check_dev_info(const struct dev_descr *dev)
     return 0;
 };
 
-/** concatenate a command output */
-static int collect_output(void *cb_arg, char *line, size_t size)
-{
-    g_string_append_len((GString *)cb_arg, line, size);
-    return 0;
-}
-
 /**
  * Retrieve media info from DSS for the given label.
  * @param pmedia[out] returned pointer to a media_info structure
@@ -218,36 +176,21 @@ static int lrs_fill_media_info(void *dss_hdl, struct media_info **pmedia,
 static int lrs_fill_dev_info(void *dss_hdl, struct dev_descr *devd,
                              const struct dev_info *devi)
 {
-    char    *cmd = NULL;
-    GString *cmd_out = NULL;
-    int      rc;
+    int rc;
 
     if (devi == NULL || devd == NULL)
         return -EINVAL;
 
     devd->device = *devi;
 
-    cmd = drive_query_cmd(devi->path);
-    if (!cmd)
-        LOG_GOTO(out, rc = -ENOMEM, "failed to build drive info command");
-
-    cmd_out = g_string_new("");
-
-    /* @TODO skip a step by reading JSON directly from a stream */
-
-    /* retrieve physical device state */
-    rc = command_call(cmd, collect_output, cmd_out);
+    rc = ldm_device_query(devi->family, devi->path, &devd->state);
     if (rc)
-        LOG_GOTO(out, rc, "command failed: '%s'", cmd);
-
-    /* parse command output */
-    rc = device_state_from_json(cmd_out->str, &devd->state);
-    if (rc != 0)
-        GOTO(out, rc = -EINVAL);
+        return rc;
 
     /* compared returned info with info from DB */
-    if (check_dev_info(devd) != 0)
-        GOTO(out, rc = -EINVAL);
+    rc = check_dev_info(devd);
+    if (rc)
+        return rc;
 
     pho_debug("Drive '%s' is '%s'", devi->path,
               op_status2str(devd->state.op_status));
@@ -257,10 +200,6 @@ static int lrs_fill_dev_info(void *dss_hdl, struct dev_descr *devd,
        || (devd->state.op_status == PHO_DEV_OP_ST_MOUNTED))
         rc = lrs_fill_media_info(dss_hdl, &devd->media, &devd->state.media_id);
 
-out:
-    free(cmd);
-    if (cmd_out != NULL)
-        g_string_free(cmd_out, TRUE);
     return rc;
 }
 
@@ -422,9 +361,7 @@ static int select_any(size_t required_size,
 /** Mount the filesystem of a ready device */
 static int lrs_mount(struct dev_descr *dev)
 {
-    char    *cmd      = NULL;
     char    *mnt_root = NULL;
-    GString *cmd_out  = NULL;
     int      rc;
 
     /* mount the device as PHO_MNT_PREFIX<changer_idx> */
@@ -432,23 +369,12 @@ static int lrs_mount(struct dev_descr *dev)
     if (!mnt_root)
         return -ENOMEM;
 
-    if (mkdir(mnt_root, 640) != 0 && errno != EEXIST)
-        LOG_GOTO(out_free, rc = -errno, "Failed to create mount point %s",
-                 mnt_root);
-
     pho_verb("mounting device '%s' as '%s'",
              dev->device.path, mnt_root);
 
-    cmd = mount_cmd(dev->device.path, mnt_root);
-    if (!cmd)
-        LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build mount command");
-
-    cmd_out = g_string_new("");
-
-    /* mount the filesystem */
-    rc = command_call(cmd, collect_output, cmd_out);
+    rc = ldm_fs_mount(dev->device.family, dev->device.path, mnt_root);
     if (rc)
-        LOG_GOTO(out_free, rc, "command failed: '%s'", cmd);
+        LOG_GOTO(out_free, rc, "Failed to mount device '%s'", dev->device.path);
 
     /* update device state and set mount point */
     dev->state.op_status = PHO_DEV_OP_ST_MOUNTED;
@@ -458,10 +384,6 @@ out_free:
     if (rc != 0)
         free(mnt_root);
     /* else: the memory is now owned by dev->state */
-
-    free(cmd);
-    if (cmd_out != NULL)
-        g_string_free(cmd_out, TRUE);
     return rc;
 }
 

@@ -44,8 +44,8 @@ else
 fi
 
 poc_dir=$(readlink -e $test_bin_dir/../pocs/)
-export PHOBOS_LRS_cmd_drive_query="$poc_dir/drive_status '%s'"
-export PHOBOS_LRS_cmd_mount="$poc_dir/ltfs_mount '%s' '%s'"
+export PHOBOS_LDM_cmd_drive_query="$poc_dir/drive_status '%s'"
+export PHOBOS_LDM_cmd_mount_ltfs="$poc_dir/ltfs_mount '%s' '%s'"
 
 function clean_test
 {

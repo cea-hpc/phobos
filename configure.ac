@@ -84,6 +84,7 @@ AC_CONFIG_FILES([Makefile
          src/Makefile
          src/include/Makefile
          src/common/Makefile
+         src/ldm/Makefile
          src/dss/Makefile
          src/cfg/Makefile
          src/lrs/Makefile
