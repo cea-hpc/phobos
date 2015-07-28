@@ -1,0 +1,58 @@
+Phobos admin interface in Python
+
+Command name: phobos
+
+=== Directories ===
+Directories are considered as both device and media.
+Their support is useful for testing, so they should be implemented first.
+
+phobos dir add [--unlock] <dirs(s)>
+	- query directory information through ldm_device_query()
+	- insert a 'dir' device in locked state using dss_device_set()
+	- query directory information through ldm_media_query()
+	- insert a 'dir' media in locked state using dss_device_set()
+	- if --unlock is specified, unlock the device and media using dss_{device,media}_set()
+
+phobos dir {list|ls}
+	- list directores using dss_{device,media}_get()
+phobos dir show <dir(s)>
+	- show device/media information using dss_{device,media}_get()
+
+phobos dir lock/unlock
+	- set device and media locking status using dss_{device,media}_set().
+
+=== Drive ===
+phobos drive add </dev/foo> [--unlock]
+	- get device information using ldm_device_query()
+	- insert it to device table in locked state (unless --unlock is specified), using dss_device_set()
+
+phobos drive {list|ls} [-t type]
+	- use dss_device_get()
+phobos drive show <devpath|drv_id>
+	- use dss_device_get()
+phobos drive lock|unlock <devpath|drv_id>
+	- use dss_device_set()
+
+=== Tape ===
+phobos tape add -t ltoX [-f <fstype>] <label(s)> [--format [-n <nb_streams> [--unlock]]]
+	- add tapes to DSS in locked mode using dss_media_set()
+		* labels syntax relies on 'nodeset'
+		* -t|--type parameter is mandatory
+		* if fstype is not specified, use default returned by pho_cfg_get()
+	- if --format is specified, format tapes to the given fstype:
+		* call lrs_format() -> load the tape in a drive and format the tape
+		* if specified, multiple format operations can be started in parallel (up to <nb_streams>)
+		* if --unlock is specified, unlock the tape once it is ready to be written
+
+phobos tape format <label(s)> [-n <nb_streams>] --unlock
+	- format blank tapes using lrs_format(), up to <nb_streams> (see
+	  above)
+	-  if --unlock is specified, unlock the tape once it is ready to be
+	   written
+
+phobos tape show <label(s)>
+	- use dss_media_get()
+phobos tape {list|ls} [-t type]
+	- use dss_media_get()
+phobos tape {lock|unlock}
+	- use dss_media_set()

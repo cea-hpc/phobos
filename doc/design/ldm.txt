@@ -1,6 +1,6 @@
 Description: Local Device Manager
 
-Python library: phobos_ldm
+C library: libpho_ldm
 
 Interfaces:
     - Receives orders from LRS (local resource scheduler)

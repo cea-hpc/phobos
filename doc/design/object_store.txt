@@ -1,4 +1,4 @@
-C library: libphobos_object
+C library: libphobos_store
 
 Interfaces :
     - Put/get calls from transfer tool or end-user (library or command line).

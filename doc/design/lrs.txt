@@ -1,6 +1,6 @@
 Description: Local Resource Scheduler
 
-C library: libphobos_lrs
+C library: libpho_lrs
 
 Interfaces :
     - Receive local client requests (from the network layer).
