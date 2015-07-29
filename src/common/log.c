@@ -20,7 +20,7 @@ static void phobos_log_callback_default(const struct pho_logrec *rec)
 {
     struct tm   time;
 
-    gmtime_r(&rec->plr_time.tv_sec, &time);
+    localtime_r(&rec->plr_time.tv_sec, &time);
     printf("%04d.%02d.%02d %02d:%02d:%02d.%06ld <%s> %s",
            time.tm_year + 1900, time.tm_mon + 1, time.tm_mday,
            time.tm_hour, time.tm_min, time.tm_sec, rec->plr_time.tv_usec * 1000,
