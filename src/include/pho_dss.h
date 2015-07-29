@@ -11,7 +11,9 @@
 #define _PHO_DSS_H
 
 #include "pho_types.h"
+
 #include <stdint.h>
+#include <stdlib.h>
 
 /** item types */
 enum dss_type {
@@ -192,12 +194,13 @@ static inline const char *dss_fields_enum2str(enum dss_fields fields, int val)
         return dev_family2str((enum dev_family) val);
     case DSS_DEV_adm_status:
         return adm_status2str((enum dev_adm_status) val);
+    case DSS_MDA_adm_status:
+        return media_adm_status2str((enum media_adm_status) val);
     case DSS_MDA_fs_status:
         return fs_status2str((enum fs_status) val);
     default:
-        return NULL;
+        abort();
     }
-    return NULL;
 }
 
 
