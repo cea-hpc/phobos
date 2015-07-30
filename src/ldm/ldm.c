@@ -41,6 +41,25 @@ static char *drive_query_cmd(enum dev_family type, const char *device)
 }
 
 /**
+ * Build a command to unload a drive.
+ * The result must be released by the caller using free(3).
+ */
+static char *drive_unload_cmd(enum dev_family type, const char *device,
+                              const char *media_id)
+{
+    const char *cmd_cfg = NULL;
+    char *cmd_out;
+
+    if (pho_cfg_get(PHO_CFG_LDM_cmd_drive_unload, &cmd_cfg))
+        return NULL;
+
+    if (asprintf(&cmd_out, cmd_cfg, device, media_id) < 0)
+        return NULL;
+
+    return cmd_out;
+}
+
+/**
  * Build a command to mount a filesystem at a given path.
  * The result must be released by the caller using free(3).
  */
@@ -52,6 +71,31 @@ static char *mount_cmd(enum fs_type fs, const char *device, const char *path)
 
     if (fs == PHO_FS_LTFS)
         param = PHO_CFG_LDM_cmd_mount_ltfs;
+    else
+        /* not supported */
+        return NULL;
+
+    if (pho_cfg_get(param, &cmd_cfg))
+        return NULL;
+
+    if (asprintf(&cmd_out, cmd_cfg, device, path) < 0)
+        return NULL;
+
+    return cmd_out;
+}
+
+/**
+ * Build a command to unmount a filesystem at a given path.
+ * The result must be released by the caller using free(3).
+ */
+static char *umount_cmd(enum fs_type fs, const char *device, const char *path)
+{
+    const char *cmd_cfg = NULL;
+    char *cmd_out;
+    enum pho_cfg_params param;
+
+    if (fs == PHO_FS_LTFS)
+        param = PHO_CFG_LDM_cmd_umount_ltfs;
     else
         /* not supported */
         return NULL;
@@ -88,7 +132,7 @@ int ldm_device_query(enum dev_family dev_type, const char *dev_path,
     int      rc;
 
     if (dev_path == NULL || dev_st == NULL)
-        return -EINVAL;
+        LOG_RETURN(-EINVAL, "Unexpected NULL argument");
 
     if (dev_type == PHO_DEV_INVAL) {
         rc = guess_dev_type(dev_path, &dev_type);
@@ -98,7 +142,7 @@ int ldm_device_query(enum dev_family dev_type, const char *dev_path,
 
     cmd = drive_query_cmd(dev_type, dev_path);
     if (!cmd)
-        LOG_GOTO(out, rc = -ENOMEM, "failed to build drive info command");
+        LOG_GOTO(out, rc = -ENOMEM, "Failed to build drive info command");
 
     cmd_out = g_string_new("");
 
@@ -107,7 +151,7 @@ int ldm_device_query(enum dev_family dev_type, const char *dev_path,
     /* retrieve physical device state */
     rc = command_call(cmd, collect_output, cmd_out);
     if (rc)
-        LOG_GOTO(out, rc, "command failed: '%s'", cmd);
+        LOG_GOTO(out, rc, "Query command failed: '%s'", cmd);
 
     /* parse command output */
     rc = device_state_from_json(cmd_out->str, dev_st);
@@ -119,6 +163,42 @@ out:
     return rc;
 }
 
+int ldm_device_unload(enum dev_family dev_type, const char *dev_path,
+                      const struct media_id *media_id)
+{
+    char    *cmd = NULL;
+    GString *cmd_out = NULL;
+    int      rc;
+
+    if (dev_path == NULL || media_id == NULL)
+        LOG_RETURN(-EINVAL, "Unexpected NULL argument");
+
+    if (dev_type == PHO_DEV_INVAL) {
+        rc = guess_dev_type(dev_path, &dev_type);
+        if (rc)
+            return rc;
+    }
+
+    if (dev_type != PHO_DEV_TAPE)
+        LOG_RETURN(-ENOTSUP, "Cannot unload device of type '%s'",
+                   dev_family2str(dev_type));
+
+    /* get unload command for the given device type */
+    cmd = drive_unload_cmd(dev_type, dev_path, media_id_get(media_id));
+    if (!cmd)
+        LOG_RETURN(-ENOMEM, "Failed to build drive unload command");
+
+    cmd_out = g_string_new("");
+
+    rc = command_call(cmd, collect_output, cmd_out);
+    if (rc)
+        pho_error(rc, "Unload command failed: '%s'", cmd);
+
+    free(cmd);
+    if (cmd_out != NULL)
+        g_string_free(cmd_out, TRUE);
+    return rc;
+}
 
 int ldm_fs_mount(enum fs_type fs, const char *dev_path, const char *mnt_point)
 {
@@ -145,7 +225,7 @@ int ldm_fs_mount(enum fs_type fs, const char *dev_path, const char *mnt_point)
     /* mount the filesystem */
     rc = command_call(cmd, collect_output, cmd_out);
     if (rc)
-        LOG_GOTO(out_free, rc, "command failed: '%s'", cmd);
+        LOG_GOTO(out_free, rc, "Mount command failed: '%s'", cmd);
 
 out_free:
     free(cmd);
@@ -154,3 +234,32 @@ out_free:
     return rc;
 }
 
+
+int ldm_fs_umount(enum fs_type fs, const char *dev_path, const char *mnt_point)
+{
+    char    *cmd = NULL;
+    GString *cmd_out = NULL;
+    int      rc;
+
+    if (fs == PHO_FS_POSIX)
+        /* it is always accessible and can't be unmounted
+         * (e.g. directory) */
+        return 0;
+
+    cmd = umount_cmd(fs, dev_path, mnt_point);
+    if (!cmd)
+        LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build umount command");
+
+    cmd_out = g_string_new("");
+
+    /* unmount the filesystem */
+    rc = command_call(cmd, collect_output, cmd_out);
+    if (rc)
+        LOG_GOTO(out_free, rc, "Unmount command failed: '%s'", cmd);
+
+out_free:
+    free(cmd);
+    if (cmd_out != NULL)
+        g_string_free(cmd_out, TRUE);
+    return rc;
+}

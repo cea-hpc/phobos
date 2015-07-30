@@ -1,5 +1,0 @@
-#!/bin/bash
-
-dev=$1
-mnt=$2
-ltfs -o devname=$dev $mnt -o sync_type=close

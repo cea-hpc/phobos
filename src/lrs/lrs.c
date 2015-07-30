@@ -67,7 +67,7 @@ static const char *get_hostname(void)
         char *dot;
 
         if (uname(&host_info) != 0) {
-            pho_error(errno, "failed to get host name");
+            pho_error(errno, "Failed to get host name");
             return NULL;
         }
         dot = strchr(host_info.nodename, '.');
@@ -154,8 +154,11 @@ static int lrs_fill_media_info(void *dss_hdl, struct media_info **pmedia,
     if (mcnt == 0) {
         pho_info("No media found matching %s '%s'", dev_family2str(id->type),
                  media_id_get(id));
-        GOTO(out_free, rc = -ENOENT);
-    }
+        GOTO(out_free, rc = -ENOSPC);
+    } else if (mcnt > 1)
+        LOG_GOTO(out_free, rc = -EINVAL,
+                 "Too many media found matching id '%s'",
+                 media_id_get(id));
 
     *pmedia = media_info_dup(media_res);
 
@@ -278,6 +281,10 @@ typedef int (*device_select_func_t)(size_t required_size,
 
 /**
  * Select a device according to a given status and policy function.
+ * @param op_st   Filter devices by the given operational status.
+ *                No filtering is op_st is PHO_DEV_OP_ST_UNSPEC.
+ * @param select_func    Drive selection function.
+ * @param required_size  Required size for the operation.
  */
 static struct dev_descr *dev_picker(enum dev_op_status op_st,
                                     device_select_func_t select_func,
@@ -290,7 +297,8 @@ static struct dev_descr *dev_picker(enum dev_op_status op_st,
         return NULL;
 
     for (i = 0; i < dev_count; i++) {
-        if (devices[i].state.op_status != op_st)
+        if (op_st != PHO_DEV_OP_ST_UNSPEC
+            && devices[i].state.op_status != op_st)
             continue;
 
         rc = select_func(required_size, &devices[i], &selected);
@@ -364,6 +372,36 @@ static int select_any(size_t required_size,
     return 1;
 }
 
+/* Get the device with the least space available on the loaded media.
+ * If a tape is loaded, it just needs to be unloaded.
+ * If the filesystem is mounted, umount is needed before unloading.
+ * @return 1 (always check all devices).
+ */
+static int select_drive_to_free(size_t required_size,
+                                struct dev_descr *dev_curr,
+                                struct dev_descr **dev_selected)
+{
+    /* skip failed and busy drives */
+    if (dev_curr->state.op_status == PHO_DEV_OP_ST_FAILED
+        || dev_curr->state.op_status == PHO_DEV_OP_ST_BUSY)
+        return 1;
+
+    /* if this function is called, no drive should be empty */
+    if (dev_curr->state.op_status == PHO_DEV_OP_ST_EMPTY) {
+        pho_warn("Unexpected drive status for '%s': '%s'",
+                 dev_curr->device->path,
+                 op_status2str(dev_curr->state.op_status));
+        return 1;
+    }
+
+    /* less space available on this device than the previous ones? */
+    if (*dev_selected == NULL || (dev_curr->media->stats.phys_spc_free
+                              < (*dev_selected)->media->stats.phys_spc_free)) {
+        *dev_selected = dev_curr;
+    }
+    return 1;
+}
+
 /** Mount the filesystem of a ready device */
 static int lrs_mount(struct dev_descr *dev)
 {
@@ -375,10 +413,10 @@ static int lrs_mount(struct dev_descr *dev)
     if (!mnt_root)
         return -ENOMEM;
 
-    pho_verb("mounting device '%s' as '%s'",
+    pho_verb("Mounting device '%s' as '%s'",
              dev->device->path, mnt_root);
 
-    rc = ldm_fs_mount(dev->device->family, dev->device->path, mnt_root);
+    rc = ldm_fs_mount(dev->media->fs_type, dev->device->path, mnt_root);
     if (rc)
         LOG_GOTO(out_free, rc, "Failed to mount device '%s'",
                  dev->device->path);
@@ -392,6 +430,72 @@ out_free:
         free(mnt_root);
     /* else: the memory is now owned by dev->state */
     return rc;
+}
+
+/** Unmount the filesystem of a 'mounted' device */
+static int lrs_umount(struct dev_descr *dev)
+{
+    int      rc;
+
+    if (dev->state.op_status != PHO_DEV_OP_ST_MOUNTED)
+        LOG_RETURN(-EINVAL, "Unexpected drive status for '%s': '%s'",
+                   dev->device->path, op_status2str(dev->state.op_status));
+
+    if (dev->state.mnt_path == NULL)
+        LOG_RETURN(-EINVAL, "No mount point for mounted device '%s'?!",
+                   dev->device->path);
+
+    if (dev->media == NULL)
+        LOG_RETURN(-EINVAL, "No media in mounted device '%s'?!",
+                   dev->device->path);
+
+    pho_verb("Unmounting device '%s' mounted as '%s'",
+             dev->device->path, dev->state.mnt_path);
+
+    rc = ldm_fs_umount(dev->media->fs_type, dev->device->path,
+                        dev->state.mnt_path);
+    if (rc)
+        LOG_RETURN(rc, "Failed to umount device '%s' mounted as '%s'",
+                   dev->device->path, dev->state.mnt_path);
+
+    /* update device state and unset mount path */
+    dev->state.op_status = PHO_DEV_OP_ST_LOADED;
+    free(dev->state.mnt_path);
+    dev->state.mnt_path = NULL;
+
+    return 0;
+}
+
+/**
+ * Unload a media from a drive.
+ */
+static int lrs_unload(struct dev_descr *dev)
+{
+    int rc;
+
+    if (dev->state.op_status != PHO_DEV_OP_ST_LOADED)
+        LOG_RETURN(-EINVAL, "Unexpected drive status for '%s': '%s'",
+                   dev->device->path, op_status2str(dev->state.op_status));
+
+    if (dev->media == NULL)
+        LOG_RETURN(-EINVAL, "No media in loaded device '%s'?!",
+                   dev->device->path);
+
+    pho_verb("Unloading '%s' from '%s'", media_id_get(&dev->media->id),
+             dev->device->path);
+
+    rc = ldm_device_unload(dev->device->family, dev->device->path,
+                           &dev->media->id);
+    if (rc)
+        return rc;
+
+    /* update device status */
+    dev->state.op_status = PHO_DEV_OP_ST_EMPTY;
+
+    /* free media resources */
+    media_info_free(dev->media);
+    dev->media = NULL;
+    return 0;
 }
 
 /** return the device policy function depending on configuration */
@@ -410,6 +514,52 @@ static device_select_func_t get_dev_policy(void)
     pho_error(EINVAL, "Invalid LRS policy name '%s' "
               "(expected: 'best_fit' or 'first_fit')", policy_str);
     return NULL;
+}
+
+/**
+ * Free one of the devices to allow mounting a new media.
+ * @param(in)  dss_hdl      Handle to DSS.
+ * @param(out) dev_descr    Pointer to an empty drive.
+ */
+static int lrs_free_one_device(void *dss_hdl, struct dev_descr **devp)
+{
+    int rc;
+
+    /* retry loop */
+    while (1) {
+        /* get a drive to free (PHO_DEV_OP_ST_UNSPEC for any state) */
+        *devp = dev_picker(PHO_DEV_OP_ST_UNSPEC, select_drive_to_free, 0);
+        if (*devp == NULL)
+            /* no drive to free */
+            return -EAGAIN;
+
+        if ((*devp)->state.op_status == PHO_DEV_OP_ST_MOUNTED) {
+            /* unmount it */
+            rc = lrs_umount(*devp);
+            if (rc) {
+                /* set it failed and get another device */
+                (*devp)->state.op_status = PHO_DEV_OP_ST_FAILED;
+                continue;
+            }
+        }
+
+        if ((*devp)->state.op_status == PHO_DEV_OP_ST_LOADED) {
+            /* unload the media */
+            rc = lrs_unload(*devp);
+            if (rc) {
+                /* set it failed and get another device */
+                (*devp)->state.op_status = PHO_DEV_OP_ST_FAILED;
+                continue;
+            }
+        }
+        if ((*devp)->state.op_status != PHO_DEV_OP_ST_EMPTY)
+            LOG_RETURN(rc = -EINVAL, "Unexpected device status '%s' for '%s': "
+                       "should be empty",
+                       op_status2str((*devp)->state.op_status),
+                       (*devp)->device->path);
+        /* success: we've got an empty device */
+        return 0;
+    }
 }
 
 /**
@@ -434,15 +584,23 @@ static int lrs_get_write_res(void *dss_hdl, size_t size,
     /* 1a) is there a mounted filesystem with enough room? */
     *devp = dev_picker(PHO_DEV_OP_ST_MOUNTED, dev_select_policy, size);
     if (*devp != NULL) {
+        /* drive is now in use */
+        (*devp)->state.op_status = PHO_DEV_OP_ST_BUSY;
         /* drive is ready */
         return 0;
     }
 
-    /* 1b) is there a loaded tape with enough room? */
+    /* 1b) is there a loaded media with enough room? */
     *devp = dev_picker(PHO_DEV_OP_ST_LOADED, dev_select_policy, size);
-    if (*devp != NULL)
+    if (*devp != NULL) {
         /* mount the filesystem and return */
-        return lrs_mount(*devp);
+        rc = lrs_mount(*devp);
+        if (rc == 0)
+            (*devp)->state.op_status = PHO_DEV_OP_ST_BUSY;
+        else
+            (*devp)->state.op_status = PHO_DEV_OP_ST_FAILED;
+        return rc;
+    }
 
     /* 2) For the next steps, we need a media to write on.
      * It will be loaded to a free drive. */
@@ -451,8 +609,10 @@ static int lrs_get_write_res(void *dss_hdl, size_t size,
     /* 3) is there a free drive? */
     *devp = dev_picker(PHO_DEV_OP_ST_EMPTY, select_any, 0);
     if (*devp == NULL) {
-        /* @TODO no free drive: must unload one */
         pho_verb("No free drive: must unload one");
+        rc = lrs_free_one_device(dss_hdl, devp);
+        if (rc)
+            return rc;
     }
 
     /* at this point we have a free drive, now load the selected media */
@@ -500,7 +660,7 @@ int lrs_write_intent(void *dss_hdl, size_t size,
         return rc;
 
     if (dev != NULL)
-        pho_verb("writing to media '%s' using device '%s'",
+        pho_verb("Writing to media '%s' using device '%s'",
                  media_id_get(&dev->media->id),
                  dev->device->path);
 
@@ -556,8 +716,11 @@ int lrs_read_intent(void *dss_hdl, const struct layout_descr *layout,
     /* mount the FS if it is not mounted */
     if (dev->state.op_status != PHO_DEV_OP_ST_MOUNTED) {
         rc = lrs_mount(dev);
-        if (rc)
-            return rc;
+        if (rc == 0)
+            dev->state.op_status = PHO_DEV_OP_ST_BUSY;
+        else
+            dev->state.op_status = PHO_DEV_OP_ST_FAILED;
+        return rc;
     }
     loc->root_path = strdup(dev->state.mnt_path);
 

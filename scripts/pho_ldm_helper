@@ -1,0 +1,215 @@
+#!/bin/bash
+
+MTX="/root/mtx-1.3.12/mtx"
+
+function tape_device_info
+{
+	set -e
+
+	local dev=$(readlink -m "$1") # convert link to /dev/IBMtape*
+
+	# check the device matches /dev/IBMtape*
+	echo $dev | egrep -q -e "^/dev/IBMtape"
+	num=$(echo $dev | sed -e 's#/dev/IBMtape##')
+	values=($(cat /proc/scsi/IBMtape | egrep -e "^$num "))
+	extra=""
+
+	mnt=$(cat /etc/mtab | egrep -e "ltfs:$dev " | awk '{print $2}')
+	if [ -n "$mnt" ]; then
+		st="mounted"
+		extra=",\"mnt_path\":\"$mnt\""
+	else
+		st="empty"
+		mt -f ${dev}n status | grep -q "ONLINE" && st="loaded"
+		if [[ $st != "loaded" ]]; then
+			mt -f ${dev}n status > /dev/null 2> /dev/null || st="failed"
+		fi
+	fi
+
+	lib_info=""
+	serial=${values[2]}
+	# Data Transfer Element 2 (1013005381):Full (Storage Element 82 Loaded):VolumeTag = 0732206
+	line=($($MTX status | grep "Data Transfer Element" | grep "($serial)"))
+	mtx_idx=${line[3]}
+	lib_info="\"mtx_idx\":\"$mtx_idx\","
+	[[ $st != "empty" ]] && volume=${line[10]} && lib_info="${lib_info}\"media\":\"$volume\","
+
+	echo "{\"family\":\"tape\",\"model\":\"${values[1]}\",\"serial\":\"${values[2]}\",$lib_info\"status\":\"$st\"$extra}"
+}
+
+function dir_device_info
+{
+	host=$(hostname -s)
+	echo "{\"family\":\"dir\",\"model\":\"\",\"serial\":\"$host:$1\",\"status\":\"mounted\",\"media\":\"$host:$1\",\"mnt_path\":\"$1\"}"
+}
+
+function load_drive
+{
+	set -e
+
+	local dev=$(readlink -m "$1") # convert link to /dev/IBMtape*
+	local media=$2
+
+	# check the device matches /dev/IBMtape*
+	echo $dev | egrep -q -e "^/dev/IBMtape"
+	num=$(echo $dev | sed -e 's#/dev/IBMtape##')
+	values=($(cat /proc/scsi/IBMtape | egrep -e "^$num "))
+	serial=${values[2]}
+	line=($($MTX status | grep "Data Transfer Element" | grep "($serial)"))
+	mtx_idx=${line[3]}
+	if [ -z "$mtx_idx" ]; then
+		echo "Drive serial '$serial' not found in mtx output" >&2
+	fi
+
+	volume=${line[10]}
+
+	if [ -n "$volume" ]; then
+		echo "drive already has a loaded volume '$volume'" >&2
+		exit 1
+	fi
+
+	line=($($MTX status | grep "Storage Element" | egrep "VolumeTag=$media "))
+
+	slot=$(echo ${line[2]} | cut -d ':' -f 1)
+	if [ -z "$slot" ]; then
+		echo "Tape '$media' not found in mtx output" >&2
+		exit 1
+	fi
+
+	echo "$MTX load $slot $mtx_idx">&2
+	$MTX load $slot $mtx_idx
+}
+
+function unload_drive
+{
+	set -e
+
+	local dev=$(readlink -m "$1") # convert link to /dev/IBMtape*
+	local media=$2
+
+	# check the device matches /dev/IBMtape*
+	echo $dev | egrep -q -e "^/dev/IBMtape"
+	num=$(echo $dev | sed -e 's#/dev/IBMtape##')
+	values=($(cat /proc/scsi/IBMtape | egrep -e "^$num "))
+	serial=${values[2]}
+	line=($($MTX status | grep "Data Transfer Element" | grep "($serial)"))
+	mtx_idx=${line[3]}
+	volume=${line[10]}
+
+	if [ "$media" != "$volume" ]; then
+		echo "loaded volume '$volume' doesn't match command argument '$media'" >&2
+		exit 1
+	fi
+	slot="${line[7]}"
+	echo "$MTX unload $slot $mtx_idx">&2
+	$MTX unload $slot $mtx_idx
+}
+
+function mount_ltfs
+{
+	local dev=$(readlink -m "$1") # convert link to /dev/IBMtape*
+	local mnt=$2
+	if [[ -n $FAST_LTFS_SYNC ]]; then
+		# don't sync for each file to speed up tests
+		ltfs -o devname=$dev "$mnt" -o sync_type=unmount
+	else
+		ltfs -o devname=$dev "$mnt" -o sync_type=close
+	fi
+}
+
+function umount_ltfs
+{
+	local dev=$(readlink -m "$1") # convert link to /dev/IBMtape*
+	local mnt=$2
+
+	local ltfs_process=""
+	shutdown_timeout=300
+
+	# get the pid of the related LTFS process
+	for pid in $(pgrep ltfs); do
+		ls -l /proc/$pid/fd | egrep "$dev$" || continue
+		echo "$dev is accessed by ltfs process $pid" >&2
+		ltfs_process=$pid
+	done
+
+	if [ -z "$ltfs_process" ]; then
+		echo "LTFS process not found" >&2
+		exit 2
+	fi
+
+	umount "$mnt" || exit 1
+
+	kill -TERM $ltfs_process
+
+	# Wait for ltfs processes to exit
+	counter=0
+	while [ "$counter" -lt "$shutdown_timeout" ]; do
+		[ ! -d /proc/$ltfs_process ] && break
+		counter=$(( $counter + 1 ))
+		sleep 1
+	done
+}
+
+
+function usage
+{
+	bin=$(basename $0)
+
+	echo "usage: "
+	echo "	$bin query_drive  <drive>"
+	echo "	$bin load_drive   <drive> <label>"
+	echo "	$bin unload_drive <drive> <label>"
+	echo "	$bin mount_ltfs   <drive> <path>"
+	echo "	$bin umount_ltfs <drive> <path>"
+	exit 1
+}
+
+#### MAIN ####
+
+verb=$1
+
+if [ -z $verb ]; then
+	usage
+fi
+
+case $verb in
+	query_drive)
+		drive=$2
+		[ -z "$drive" ] && usage
+		if [[ -d $drive ]]; then
+			dir_device_info $drive
+		else
+			tape_device_info $drive
+		fi
+		;;
+	load_drive)
+		drive=$2
+		media=$3
+		[ -e "$drive" ] || usage
+		[ -n "$media" ] || usage
+		load_drive "$drive" "$media"
+		;;
+	unload_drive)
+		drive=$2
+		media=$3
+		[ -e "$drive" ] || usage
+		[ -n "$media" ] || usage
+		unload_drive "$drive" "$media"
+		;;
+	mount_ltfs)
+		drive=$2
+		path=$3
+		[ -e "$drive" ] || usage
+		[ -d "$path" ] || usage
+		mount_ltfs "$drive" "$path"
+		;;
+	umount_ltfs)
+		drive=$2
+		path=$3
+		[ -e "$drive" ] || usage
+		[ -d "$path" ] || usage
+		umount_ltfs "$drive" "$path"
+		;;
+	*)
+		usage
+esac

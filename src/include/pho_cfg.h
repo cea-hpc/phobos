@@ -35,7 +35,10 @@ enum pho_cfg_params {
 
     /* ldm parameters */
     PHO_CFG_LDM_cmd_drive_query,
+    PHO_CFG_LDM_cmd_drive_load,
+    PHO_CFG_LDM_cmd_drive_unload,
     PHO_CFG_LDM_cmd_mount_ltfs,
+    PHO_CFG_LDM_cmd_umount_ltfs,
 
     PHO_CFG_LAST
 };
@@ -60,8 +63,17 @@ static const struct pho_config_item pho_cfg_descr[] = {
 
     [PHO_CFG_LDM_cmd_drive_query] = {"ldm", "cmd_drive_query",
                                   PHO_LDM_HELPER" query_drive --json \"%s\""},
+    [PHO_CFG_LDM_cmd_drive_load] = {"ldm", "cmd_drive_load",
+                                  PHO_LDM_HELPER" load_drive --device \"%s\""
+                                    " --media \"%s\""},
+    [PHO_CFG_LDM_cmd_drive_unload] = {"ldm", "cmd_drive_unload",
+                                  PHO_LDM_HELPER" unload_drive --device \"%s\""
+                                    " --media \"%s\""},
     [PHO_CFG_LDM_cmd_mount_ltfs]  = {"ldm", "cmd_mount_ltfs",
                                   PHO_LDM_HELPER" mount_ltfs --device \"%s\""
+                                    "--path \"%s\""},
+    [PHO_CFG_LDM_cmd_umount_ltfs]  = {"ldm", "cmd_umount_ltfs",
+                                  PHO_LDM_HELPER" umount_ltfs --device \"%s\""
                                     "--path \"%s\""},
 };
 

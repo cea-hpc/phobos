@@ -293,7 +293,8 @@ enum dev_op_status {
     PHO_DEV_OP_ST_LOADED  = 2,
     PHO_DEV_OP_ST_MOUNTED = 3,
     PHO_DEV_OP_ST_BUSY    = 4,
-    PHO_DEV_OP_ST_LAST
+    PHO_DEV_OP_ST_LAST,
+    PHO_DEV_OP_ST_UNSPEC = PHO_DEV_OP_ST_LAST,
 };
 
 static const char * const dev_op_st_names[] = {

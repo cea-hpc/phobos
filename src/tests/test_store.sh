@@ -34,6 +34,7 @@ if  [[ -z "$NO_TAPE" ]] && [[ -w /dev/changer ]] && (( $nb_tapes > 0 )); then
 	service ltfs stop
 
 	export PHOBOS_LRS_default_family="tape"
+	export FAST_LTFS_SYNC=1
 else
 	echo "**** POSIX TEST MODE ****"
 	TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2" # must match mount prefix
@@ -43,9 +44,12 @@ else
 	export PHOBOS_LRS_default_family="dir"
 fi
 
-poc_dir=$(readlink -e $test_bin_dir/../pocs/)
-export PHOBOS_LDM_cmd_drive_query="$poc_dir/drive_status '%s'"
-export PHOBOS_LDM_cmd_mount_ltfs="$poc_dir/ltfs_mount '%s' '%s'"
+ldm_helper=$(readlink -e $test_bin_dir/../../scripts/)/pho_ldm_helper
+export PHOBOS_LDM_cmd_drive_query="$ldm_helper query_drive '%s'"
+export PHOBOS_LDM_cmd_drive_load="$ldm_helper load_drive '%s' '%s'"
+export PHOBOS_LDM_cmd_drive_unload="$ldm_helper unload_drive '%s' '%s'"
+export PHOBOS_LDM_cmd_mount_ltfs="$ldm_helper mount_ltfs '%s' '%s'"
+export PHOBOS_LDM_cmd_umount_ltfs="$ldm_helper umount_ltfs '%s' '%s'"
 
 function clean_test
 {
