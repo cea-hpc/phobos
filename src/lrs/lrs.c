@@ -267,6 +267,66 @@ static int lrs_load_dev_state(void *dss_hdl)
 }
 
 /**
+ * Get a suitable media for a write operation, and compatible
+ * with the given drive model.
+ */
+static int lrs_select_media(void *dss_hdl, struct media_info **p_media,
+                            size_t required_size, enum dev_family family,
+                            const char *device_model)
+{
+    int                mcnt = 0;
+    int                rc, i;
+    /* criteria: family, (model,) adm_status, available size (, fs_status) */
+    struct dss_crit    crit[3];
+    int                crit_cnt = 0;
+    int                best_idx = -1;
+    struct media_info *pmedia_res = NULL;
+
+    dss_crit_add(crit, &crit_cnt, DSS_MDA_family, DSS_CMP_EQ, val_int,
+                 family);
+    dss_crit_add(crit, &crit_cnt, DSS_MDA_adm_status, DSS_CMP_EQ, val_int,
+                 PHO_MDA_ADM_ST_UNLOCKED);
+    dss_crit_add(crit, &crit_cnt, DSS_MDA_vol_free, DSS_CMP_GE, val_biguint,
+                 required_size);
+    /** @TODO use configurable compatility rules to determine writable
+     * media models from device_model */
+
+    rc = dss_media_get(dss_hdl, crit, crit_cnt, &pmedia_res, &mcnt);
+    if (rc)
+        return rc;
+
+    /* get the best fit */
+    for (i = 0; i < mcnt; i++) {
+        if (pmedia_res[i].stats.phys_spc_free < required_size)
+            continue;
+        if (best_idx == -1 ||
+            pmedia_res[i].stats.phys_spc_free
+                < pmedia_res[best_idx].stats.phys_spc_free)
+            best_idx = i;
+    }
+
+    if (best_idx == -1) {
+        pho_info("No compatible media found to write %zu bytes", required_size);
+        GOTO(free_res, rc = -ENOSPC);
+    }
+
+    pho_verb("selected %s '%s': %zu bytes free", dev_family2str(family),
+             media_id_get(&pmedia_res[best_idx].id),
+             pmedia_res[best_idx].stats.phys_spc_free);
+
+    *p_media = media_info_dup(&pmedia_res[best_idx]);
+    if (*p_media == NULL)
+        GOTO(free_res, rc = -ENOMEM);
+
+    rc = 0;
+
+free_res:
+    dss_res_free(pmedia_res, mcnt);
+    return rc;
+}
+
+
+/**
  * Device selection policy prototype.
  * @param[in]     required_size required space to perform the write operation.
  * @param[in]     dev_curr      the current device to consider.
@@ -571,6 +631,7 @@ static int lrs_get_write_res(void *dss_hdl, size_t size,
                              struct dev_descr **devp)
 {
     device_select_func_t dev_select_policy;
+    struct media_info *pmedia = NULL;
     int rc = 0;
 
     rc = lrs_load_dev_state(dss_hdl);
@@ -604,18 +665,23 @@ static int lrs_get_write_res(void *dss_hdl, size_t size,
 
     /* 2) For the next steps, we need a media to write on.
      * It will be loaded to a free drive. */
-    /* @TODO get a writable media from DSS */
+    pho_verb("no loaded media with enough space: selecting another media");
+    rc = lrs_select_media(dss_hdl, &pmedia, size, default_family(), NULL);
+    if (rc)
+        return rc;
 
     /* 3) is there a free drive? */
     *devp = dev_picker(PHO_DEV_OP_ST_EMPTY, select_any, 0);
     if (*devp == NULL) {
-        pho_verb("No free drive: must unload one");
+        pho_verb("no free drive: need to unload one");
         rc = lrs_free_one_device(dss_hdl, devp);
         if (rc)
-            return rc;
+            goto out_free;
     }
 
-    /* at this point we have a free drive, now load the selected media */
+    /* at this point we have a free drive and a media: load it */
+    /* 4) load the selected media into the free drive */
+
 
     /* V00: 3) release a drive and load a tape with enough room */
 
@@ -623,11 +689,12 @@ static int lrs_get_write_res(void *dss_hdl, size_t size,
     /* 3) is there an idle drive, to eject the loaded tape? */
     /* 4) is there an operation that will end soon? */
 
-    /* load the device, mount the filesystem... */
-
-    /* no free resources */
     *devp = NULL;
-    return -EAGAIN;
+    rc = -EAGAIN;
+
+out_free:
+    media_info_free(pmedia);
+    return rc;
 }
 
 /** set location structure from device information */
