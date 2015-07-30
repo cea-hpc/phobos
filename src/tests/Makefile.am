@@ -11,6 +11,12 @@ TESTS=test_attrs test_mapper test_log test_cfg test_dss.sh test_store.sh
 
 noinst_PROGRAMS=$(check_PROGRAMS)
 
+pre-check-local:
+	./test_lock.sh
+
+check: pre-check-local check-am
+	rm -f /tmp/phobos_test.lock
+
 test_log_SOURCES=test_log.c
 test_log_LDADD=../common/libpho_common.la
 
