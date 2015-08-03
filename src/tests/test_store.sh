@@ -7,7 +7,15 @@ set -e
 
 TEST_RAND=/tmp/RAND_$$
 TEST_RECOV_DIR=/tmp/phobos_recov.$$
-TEST_FILES="/etc/redhat-release /etc/passwd /etc/group /etc/hosts $TEST_RAND"
+
+TEST_IN="/etc/redhat-release /etc/passwd /etc/group /etc/hosts"
+TEST_FILES=""
+for f in $TEST_IN; do
+	new=/tmp/$(basename $f).$$
+	/bin/cp -p $f $new
+	TEST_FILES="$TEST_FILES $new"
+done
+TEST_FILES="$TEST_FILES $TEST_RAND"
 
 test_bin_dir=$(dirname $(readlink -e $0))
 test_bin="$test_bin_dir/test_store"
@@ -18,6 +26,13 @@ export PHOBOS_CFG_FILE="$test_bin_dir/phobos.conf"
 drop_tables
 setup_tables
 insert_examples
+
+ldm_helper=$(readlink -e $test_bin_dir/../../scripts/)/pho_ldm_helper
+export PHOBOS_LDM_cmd_drive_query="$ldm_helper query_drive '%s'"
+export PHOBOS_LDM_cmd_drive_load="$ldm_helper load_drive '%s' '%s'"
+export PHOBOS_LDM_cmd_drive_unload="$ldm_helper unload_drive '%s' '%s'"
+export PHOBOS_LDM_cmd_mount_ltfs="$ldm_helper mount_ltfs '%s' '%s'"
+export PHOBOS_LDM_cmd_umount_ltfs="$ldm_helper umount_ltfs '%s' '%s'"
 
 # testing with real tapes requires tape devices + access to /dev/changer device
 nb_tapes=$(ls -d /dev/IBMtape* 2>/dev/null | wc -l)
@@ -30,11 +45,21 @@ if  [[ -z "$NO_TAPE" ]] && [[ -w /dev/changer ]] && (( $nb_tapes > 0 )); then
 	TEST_MNT=/mnt/phobos* # must match mount prefix (default: /mnt/phobos-*)
 	TEST_FS="ltfs"
 
+	export PHOBOS_LRS_default_family="tape"
+	export FAST_LTFS_SYNC=1
+
 	# make sure no LTFS filesystem is mounted, so the test must mount it
 	service ltfs stop
 
-	export PHOBOS_LRS_default_family="tape"
-	export FAST_LTFS_SYNC=1
+	# put the "low capacity" tape '073220L6' into the unlocked drive
+	# to force phobos performing umount/unload/load/mount
+	# to write the big RAND file
+	$ldm_helper unload_drive /dev/IBMtape0 073221L6 \
+		|| true # ignore if not mounted
+	$ldm_helper unload_drive /dev/IBMtape0 073222L6 \
+		|| true # ignore if not mounted
+	$ldm_helper load_drive /dev/IBMtape0 073220L6
+
 else
 	echo "**** POSIX TEST MODE ****"
 	TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2" # must match mount prefix
@@ -43,13 +68,6 @@ else
 	export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
 	export PHOBOS_LRS_default_family="dir"
 fi
-
-ldm_helper=$(readlink -e $test_bin_dir/../../scripts/)/pho_ldm_helper
-export PHOBOS_LDM_cmd_drive_query="$ldm_helper query_drive '%s'"
-export PHOBOS_LDM_cmd_drive_load="$ldm_helper load_drive '%s' '%s'"
-export PHOBOS_LDM_cmd_drive_unload="$ldm_helper unload_drive '%s' '%s'"
-export PHOBOS_LDM_cmd_mount_ltfs="$ldm_helper mount_ltfs '%s' '%s'"
-export PHOBOS_LDM_cmd_umount_ltfs="$ldm_helper umount_ltfs '%s' '%s'"
 
 function clean_test
 {

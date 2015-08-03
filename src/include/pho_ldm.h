@@ -17,7 +17,7 @@
 /**
  * Retrieve device information from system.
  * @param(in) dev_type family of device to query.
- *                 Caller can pass PHO_DEV_INVAL if it doesn't know.
+ *                 Caller can pass PHO_DEV_UNSPEC if it doesn't know.
  *                 The function will then try to guess the type of device,
  *                 but the call is more expensive.
  * @param(in)  dev_path path to the device.
@@ -29,9 +29,22 @@ int ldm_device_query(enum dev_family dev_type, const char *dev_path,
                      struct dev_state *dev_st);
 
 /**
+ * Load a media into a device.
+ * @param(in)  dev_type     Family of device.
+ *                 Caller can pass PHO_DEV_UNSPEC if it doesn't know.
+ *                 The function will then try to guess the type of device,
+ *                 but the call is more expensive.
+ * @param(in)  dev_path     Path to the device.
+ * @param(in)  media_id     Id of the media to be loaded.
+ *
+ * @return 0 on success, -errno on failure.
+ */
+int ldm_device_load(enum dev_family dev_type, const char *dev_path,
+                    const struct media_id *media_id);
+/**
  * Unload a media from a device.
  * @param(in)  dev_type     Family of device.
- *                 Caller can pass PHO_DEV_INVAL if it doesn't know.
+ *                 Caller can pass PHO_DEV_UNSPEC if it doesn't know.
  *                 The function will then try to guess the type of device,
  *                 but the call is more expensive.
  * @param(in)  dev_path     Path to the device.

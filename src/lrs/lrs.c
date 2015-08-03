@@ -310,7 +310,7 @@ static int lrs_select_media(void *dss_hdl, struct media_info **p_media,
         GOTO(free_res, rc = -ENOSPC);
     }
 
-    pho_verb("selected %s '%s': %zu bytes free", dev_family2str(family),
+    pho_verb("Selected %s '%s': %zu bytes free", dev_family2str(family),
              media_id_get(&pmedia_res[best_idx].id),
              pmedia_res[best_idx].stats.phys_spc_free);
 
@@ -525,6 +525,36 @@ static int lrs_umount(struct dev_descr *dev)
 
     return 0;
 }
+/**
+ * Load a media into a drive.
+ */
+static int lrs_load(struct dev_descr *dev, struct media_info *media)
+{
+    int rc;
+
+    if (dev->state.op_status != PHO_DEV_OP_ST_EMPTY)
+        LOG_RETURN(-EINVAL, "%s: unexpected drive status: status='%s'",
+                   dev->device->path, op_status2str(dev->state.op_status));
+
+    if (dev->media != NULL)
+        LOG_RETURN(-EINVAL, "No media expected in device '%s' (found '%s')",
+                   dev->device->path, media_id_get(&dev->media->id));
+
+    pho_verb("Loading '%s' into '%s'", media_id_get(&media->id),
+             dev->device->path);
+
+    rc = ldm_device_load(dev->device->family, dev->device->path,
+                         &media->id);
+    if (rc)
+        return rc;
+
+    /* update device status */
+    dev->state.op_status = PHO_DEV_OP_ST_LOADED;
+    /* associate media to this device */
+    dev->media = media;
+
+    return 0;
+}
 
 /**
  * Unload a media from a drive.
@@ -624,8 +654,8 @@ static int lrs_free_one_device(void *dss_hdl, struct dev_descr **devp)
 
 /**
  * Get a prepared device to perform a write operation.
- * @param[in]  size size of the extent to write.
- * @param[out] devp the selected device
+ * @param[in]  size  Size of the extent to be written.
+ * @param[out] devp  The selected device to write with.
  */
 static int lrs_get_write_res(void *dss_hdl, size_t size,
                              struct dev_descr **devp)
@@ -663,9 +693,15 @@ static int lrs_get_write_res(void *dss_hdl, size_t size,
         return rc;
     }
 
+    /* V00: release a drive and load a tape with enough room.
+     * later versions:
+     * 2a) is there an idle drive, to eject the loaded tape?
+     * 2b) is there an operation that will end soon?
+     */
+
     /* 2) For the next steps, we need a media to write on.
-     * It will be loaded to a free drive. */
-    pho_verb("no loaded media with enough space: selecting another media");
+     * It will be loaded into a free drive. */
+    pho_verb("No loaded media with enough space: selecting another media");
     rc = lrs_select_media(dss_hdl, &pmedia, size, default_family(), NULL);
     if (rc)
         return rc;
@@ -673,24 +709,22 @@ static int lrs_get_write_res(void *dss_hdl, size_t size,
     /* 3) is there a free drive? */
     *devp = dev_picker(PHO_DEV_OP_ST_EMPTY, select_any, 0);
     if (*devp == NULL) {
-        pho_verb("no free drive: need to unload one");
+        pho_verb("No free drive: need to unload one");
         rc = lrs_free_one_device(dss_hdl, devp);
         if (rc)
             goto out_free;
     }
 
-    /* at this point we have a free drive and a media: load it */
-    /* 4) load the selected media into the free drive */
+    /* 4) load the selected media into the selected drive */
+    /* On success, target device becomes the owner of pmedia
+     * so pmedia must not be released after that. */
+    rc = lrs_load(*devp, pmedia);
+    if (rc)
+        goto out_free;
 
-
-    /* V00: 3) release a drive and load a tape with enough room */
-
-    /* later versions: */
-    /* 3) is there an idle drive, to eject the loaded tape? */
-    /* 4) is there an operation that will end soon? */
-
-    *devp = NULL;
-    rc = -EAGAIN;
+    /* 5) mount the filesystem */
+    /* Don't release media on failure (it is still associated to the drive). */
+    return lrs_mount(*devp);
 
 out_free:
     media_info_free(pmedia);

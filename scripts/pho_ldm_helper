@@ -65,7 +65,11 @@ function load_drive
 
 	if [ -n "$volume" ]; then
 		echo "drive already has a loaded volume '$volume'" >&2
-		exit 1
+		if [[ "$volume" == "$media" ]]; then
+			exit 0
+		else
+			exit 1
+		fi
 	fi
 
 	line=($($MTX status | grep "Storage Element" | egrep "VolumeTag=$media "))

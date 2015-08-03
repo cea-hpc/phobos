@@ -72,6 +72,7 @@ EOF
 }
 
 insert_examples() {
+#  initially mounted tapes don't have enough room to store a big file
 	$PSQL << EOF
 insert into device (family, model, id, host, adm_status, path, changer_idx)
     values ('tape', 'ULTRIUM-TD6', '1013005381', 'phobos1',
@@ -86,13 +87,13 @@ insert into media (family, model, id, adm_status, fs_type, address_type,
 		   fs_status, stats)
     values ('tape', 'LTO6', '073220L6', 'unlocked', 'LTFS', 'HASH1', 'blank',
             '{"nb_obj":"2","logc_spc_used":"6291456000",\
-	      "phys_spc_used":"42469425152","phys_spc_free":"2365618913280"}'),
+	      "phys_spc_used":"42469425152","phys_spc_free":"2048"}'),
            ('tape', 'LTO6', '073221L6', 'unlocked', 'LTFS', 'HASH1', 'blank',
             '{"nb_obj":"2","logc_spc_used":"15033434112",\
-	      "phys_spc_used":"15033434112","phys_spc_free":"2393054904320"}'),
+	      "phys_spc_used":"15033434112","phys_spc_free":"1024"}'),
            ('tape', 'LTO6', '073222L6', 'unlocked', 'LTFS', 'HASH1', 'blank',
             '{"nb_obj":"1","logc_spc_used":"10480512",\
-             "phys_spc_used":"10480512","phys_spc_free":"2393054904320"}'),
+	      "phys_spc_used":"10480512","phys_spc_free":"2393054904320"}'),
            ('dir', NULL, 'phobos1:/tmp/pho_testdir1', 'unlocked', 'POSIX',
 	    'HASH1', 'blank', '{"nb_obj":"5","logc_spc_used":"3668841456",\
 	      "phys_spc_used":"3668841456","phys_spc_free":"12857675776"}'),

@@ -149,7 +149,8 @@ enum dev_family {
     PHO_DEV_DISK  = 0,
     PHO_DEV_TAPE  = 1,
     PHO_DEV_DIR   = 2,
-    PHO_DEV_LAST
+    PHO_DEV_LAST,
+    PHO_DEV_UNSPEC = PHO_DEV_LAST,
 };
 
 static const char * const dev_family_names[] = {
