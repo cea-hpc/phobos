@@ -26,4 +26,16 @@ int device_state_from_json(const char *str, struct dev_state *dev_st);
 int layout2tag(const struct layout_descr *layout,
                unsigned int layout_idx, char *tag);
 
+/** duplicate a dev_info structure */
+struct dev_info *dev_info_dup(const struct dev_info *dev);
+
+/** free a dev_info structure */
+void dev_info_free(struct dev_info *dev);
+
+/** duplicate a media_info structure */
+struct media_info *media_info_dup(const struct media_info *mda);
+
+/** free a media_info structure */
+void media_info_free(struct media_info *mda);
+
 #endif

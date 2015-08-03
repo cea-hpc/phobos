@@ -79,7 +79,7 @@ static const char *get_hostname(void)
 
 /** all needed information to select devices */
 struct dev_descr {
-    struct dev_info     device; /**< device description (from DSS) */
+    struct dev_info    *device; /**< device description (from DSS) */
     struct dev_state    state;  /**< device state (from system) */
     struct media_info  *media;  /**< loaded media, if any */
 };
@@ -89,33 +89,33 @@ struct dev_descr {
 static struct dev_descr *devices;
 static int               dev_count;
 
-/** check than device info from DB is consistent with actual status */
+/** check that device info from DB is consistent with actual status */
 static int check_dev_info(const struct dev_descr *dev)
 {
-    if (dev->device.model == NULL || dev->state.model == NULL) {
-        if (dev->device.model != dev->state.model)
+    if (dev->device->model == NULL || dev->state.model == NULL) {
+        if (dev->device->model != dev->state.model)
             LOG_RETURN(-EINVAL, "%s: missing or unexpected device model",
-                       dev->device.path);
+                       dev->device->path);
         else
-            pho_debug("%s: no device model is set", dev->device.path);
+            pho_debug("%s: no device model is set", dev->device->path);
 
-    } else if (strcmp(dev->device.model, dev->state.model) != 0) {
+    } else if (strcmp(dev->device->model, dev->state.model) != 0) {
         /* @TODO ignore blanks at the end of the model */
         LOG_RETURN(-EINVAL, "%s: configured device model '%s' differs from "
-                   "actual device model '%s'", dev->device.path,
-                   dev->device.model, dev->state.model);
+                   "actual device model '%s'", dev->device->path,
+                   dev->device->model, dev->state.model);
     }
 
-    if (dev->device.serial == NULL || dev->state.serial == NULL) {
-        if (dev->device.serial != dev->state.serial)
+    if (dev->device->serial == NULL || dev->state.serial == NULL) {
+        if (dev->device->serial != dev->state.serial)
             LOG_RETURN(-EINVAL, "%s: missing or unexpected device serial",
-                       dev->device.path);
+                       dev->device->path);
         else
-            pho_debug("%s: no device serial is set", dev->device.path);
-    } else if (strcmp(dev->device.serial, dev->state.serial) != 0) {
+            pho_debug("%s: no device serial is set", dev->device->path);
+    } else if (strcmp(dev->device->serial, dev->state.serial) != 0) {
         LOG_RETURN(-EINVAL, "%s: configured device serial '%s' differs from "
-                   "actual device serial '%s'", dev->device.path,
-                   dev->device.serial, dev->state.serial);
+                   "actual device serial '%s'", dev->device->path,
+                   dev->device->serial, dev->state.serial);
     }
 
     return 0;
@@ -134,6 +134,7 @@ static int lrs_fill_media_info(void *dss_hdl, struct media_info **pmedia,
     int             med_crit_cnt = 0;
     int             mcnt = 0;
     int             rc;
+    struct media_info *media_res = NULL;
 
     if (id == NULL || pmedia == NULL)
         return -EINVAL;
@@ -146,20 +147,25 @@ static int lrs_fill_media_info(void *dss_hdl, struct media_info **pmedia,
                  media_id_get(id));
 
     /* get media info from DB */
-    rc = dss_media_get(dss_hdl, med_crit, med_crit_cnt, pmedia, &mcnt);
+    rc = dss_media_get(dss_hdl, med_crit, med_crit_cnt, &media_res, &mcnt);
     if (rc)
         return rc;
 
     if (mcnt == 0) {
         pho_info("No media found matching %s '%s'", dev_family2str(id->type),
                  media_id_get(id));
-        dss_res_free(pmedia, mcnt);
-        return -ENOENT;
+        GOTO(out_free, rc = -ENOENT);
     }
+
+    *pmedia = media_info_dup(media_res);
 
     pho_debug("%s: spc_free=%zu", media_id_get(&(*pmedia)->id),
               (*pmedia)->stats.phys_spc_free);
-    return 0;
+    rc = 0;
+
+out_free:
+    dss_res_free(media_res, mcnt);
+    return rc;
 }
 
 /**
@@ -181,7 +187,7 @@ static int lrs_fill_dev_info(void *dss_hdl, struct dev_descr *devd,
     if (devi == NULL || devd == NULL)
         return -EINVAL;
 
-    devd->device = *devi;
+    devd->device = dev_info_dup(devi);
 
     rc = ldm_device_query(devi->family, devi->path, &devd->state);
     if (rc)
@@ -365,16 +371,17 @@ static int lrs_mount(struct dev_descr *dev)
     int      rc;
 
     /* mount the device as PHO_MNT_PREFIX<changer_idx> */
-    mnt_root = mount_point(dev->device.changer_idx);
+    mnt_root = mount_point(dev->device->changer_idx);
     if (!mnt_root)
         return -ENOMEM;
 
     pho_verb("mounting device '%s' as '%s'",
-             dev->device.path, mnt_root);
+             dev->device->path, mnt_root);
 
-    rc = ldm_fs_mount(dev->device.family, dev->device.path, mnt_root);
+    rc = ldm_fs_mount(dev->device->family, dev->device->path, mnt_root);
     if (rc)
-        LOG_GOTO(out_free, rc, "Failed to mount device '%s'", dev->device.path);
+        LOG_GOTO(out_free, rc, "Failed to mount device '%s'",
+                 dev->device->path);
 
     /* update device state and set mount point */
     dev->state.op_status = PHO_DEV_OP_ST_MOUNTED;
@@ -495,7 +502,7 @@ int lrs_write_intent(void *dss_hdl, size_t size,
     if (dev != NULL)
         pho_verb("writing to media '%s' using device '%s'",
                  media_id_get(&dev->media->id),
-                 dev->device.path);
+                 dev->device->path);
 
     rc = set_loc_from_dev(loc, dev);
     if (rc)
