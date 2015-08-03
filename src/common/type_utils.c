@@ -179,21 +179,21 @@ int device_state_from_json(const char *str, struct dev_state *dev_st)
     /* parse values that are always in json */
     rc = items_foreach(json, base_items, NULL);
     if (rc)
-        GOTO(out, rc);
+        goto out;
 
     /* only if there is a media in the device */
     if (dev_st->op_status != PHO_DEV_OP_ST_EMPTY
         && dev_st->op_status != PHO_DEV_OP_ST_FAILED) {
         rc = items_foreach(json, media_items, &dev_st->family);
         if (rc)
-            GOTO(out, rc);
+            goto out;
     }
 
     /* only if the filesystem is mounted */
     if (dev_st->op_status == PHO_DEV_OP_ST_MOUNTED) {
         rc = items_foreach(json, fs_items, &dev_st->family);
         if (rc)
-            GOTO(out, rc);
+            goto out;
     }
 
 out:

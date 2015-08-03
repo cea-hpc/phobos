@@ -91,7 +91,7 @@ int pho_attrs_to_json(const struct pho_attrs *md, GString *str, int flags)
 
     rc = pho_attrs_foreach(md, attr_json_dump_cb, jdata);
     if (rc != 0)
-        GOTO(out_free, rc);
+        goto out_free;
 
     rc = json_dump_callback(jdata, dump_to_gstring, str, flags);
 
