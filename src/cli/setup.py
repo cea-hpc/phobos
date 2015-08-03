@@ -5,11 +5,20 @@
 #
 # This file is part of the Phobos project
 
-from distutils.core import setup
+from distutils.core import setup, Extension
+
+cdss_module = Extension('cdss',
+                        sources=['phobos/cdss_module.c'],
+                        include_dirs = ['../include',
+                                        '/usr/include/glib-2.0',
+                                        '/usr/lib64/glib-2.0/include'],
+                        libraries = ['phobos_store'],
+                        library_dirs = ['../store/.libs'])
 
 setup(
     name = 'phobos',
     packages = ['phobos'],
+    ext_modules = [cdss_module],
     scripts = ['scripts/phobos'],
     version = '0.0.1',
     description = 'Phobos control scripts and libraries',
