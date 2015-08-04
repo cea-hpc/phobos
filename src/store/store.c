@@ -35,7 +35,7 @@
 
 /** fill an array with metadata blobs to be stored on the media */
 static int build_extent_md(const char *id, const struct pho_attrs *md,
-                           const struct layout_descr *lay, struct data_loc *loc,
+                           const struct layout_info *lay, struct data_loc *loc,
                            struct pho_attrs *dst_md)
 {
     GString *str;
@@ -59,7 +59,7 @@ static int build_extent_md(const char *id, const struct pho_attrs *md,
     /* v00: the file has a single extent so we don't have to link it to
      * other extents. Just save basic layout and extent information. */
 #if 0
-    rc = storage_info_to_json(lay, &loc->extent, str,
+    rc = storage_info_to_json(lay, str,
                               PHO_ATTR_BACKUP_JSON_FLAGS);
     if (rc != 0)
         goto free_values;
@@ -90,7 +90,7 @@ static inline int obj2io_flags(int flags)
 /** copy data from the source fd to the extent identified by loc */
 static int write_extents(const struct src_info *src, const char *obj_id,
                          const struct pho_attrs *md,
-                         const struct layout_descr *lay,
+                         const struct layout_info *lay,
                          struct data_loc *loc, int flags)
 {
     char                tag[PHO_LAYOUT_TAG_MAX] = "";
@@ -137,7 +137,7 @@ static int write_extents(const struct src_info *src, const char *obj_id,
 
 /** copy data from the extent to the given fd */
 static int read_extents(int fd, const char *obj_id,
-                        const struct layout_descr *layout,
+                        const struct layout_info *layout,
                         struct data_loc *loc, int flags)
 {
     char                 tag[PHO_LAYOUT_TAG_MAX] = "";
@@ -236,7 +236,7 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
                const struct pho_attrs *md)
 {
     /* the only layout type we can handle for now */
-    struct layout_descr simple_layout = {.type = PHO_LYT_SIMPLE};
+    struct layout_info  simple_layout = {.type = PHO_LYT_SIMPLE};
     struct data_loc     write_loc = {0};
     struct src_info     info = {0};
     int                 rc;
@@ -320,17 +320,18 @@ disconn:
 
 /** retrieve the location of a given object from DSS */
 static int obj_get_location(void *dss, const char *obj_id,
-                            struct layout_descr *layout,
+                            struct layout_info *layout,
                             struct extent *ext)
 {
 #ifdef _TEST
+#ifdef _THOMAS_IS_GOING_TO_FIX_THAT
     struct dss_crit crit[1]; /* criteria on obj_id */
     int             crit_cnt = 0;
     struct extent  *ext_ls = NULL;
     int             rc, cnt = 0;
 
     /** FIXME TEST ONLY */
-    static const struct layout_descr simple_layout = {.type = PHO_LYT_SIMPLE};
+    static const struct layout_info simple_layout = {.type = PHO_LYT_SIMPLE};
 
     dss_crit_add(crit, &crit_cnt, DSS_EXT_oid, DSS_CMP_EQ, val_str, obj_id);
 
@@ -342,7 +343,7 @@ static int obj_get_location(void *dss, const char *obj_id,
 
     *ext = ext_ls[0];
     *layout = simple_layout;
-
+#endif
     return 0;
 #else
     return -ENOTSUP;
@@ -356,7 +357,7 @@ static int obj_get_location(void *dss, const char *obj_id,
  */
 int phobos_get(const char *obj_id, const char *tgt_file, int flags)
 {
-    struct layout_descr layout = {0};
+    struct layout_info layout = {0};
     struct data_loc read_loc = {0};
     int rc = 0;
     int fd, open_flags;

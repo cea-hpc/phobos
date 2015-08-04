@@ -32,13 +32,74 @@
 #define PHO_LAYOUT_TAG_MAX  8
 
 enum layout_type {
-    PHO_LYT_SIMPLE = 1, /* simple contiguous block of data */
+    PHO_LYT_INVAL = -1,
+    PHO_LYT_SIMPLE = 0, /* simple contiguous block of data */
+    PHO_LYT_LAST,
     /* future: SPLIT, RAID0, RAID1, ... */
 };
 
+static const char * const layout_type_names[] = {
+    [PHO_LYT_SIMPLE]  = "simple",
+};
+
+static inline const char *layout_type2str(enum layout_type type)
+{
+    if (type >= PHO_LYT_LAST || type < 0)
+        return NULL;
+    return layout_type_names[type];
+}
+
+static inline enum layout_type str2layout_type(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_LYT_LAST; i++)
+        if (!strcmp(str, layout_type_names[i]))
+            return i;
+    return PHO_LYT_INVAL;
+}
+
+
+enum extent_state {
+    PHO_EXT_ST_INVAL = -1,
+    PHO_EXT_ST_PENDING = 0,
+    PHO_EXT_ST_SYNC = 1,
+    PHO_EXT_ST_ORPHAN = 2,
+    PHO_EXT_ST_LAST = 3,
+};
+
+static const char * const extent_state_names[] = {
+    [PHO_EXT_ST_PENDING] = "pending",
+    [PHO_EXT_ST_SYNC]  = "sync",
+    [PHO_EXT_ST_ORPHAN] = "orphan",
+};
+
+static inline const char *extent_state2str(enum extent_state state)
+{
+    if (state >= PHO_EXT_ST_LAST || state < 0)
+        return NULL;
+    return extent_state_names[state];
+}
+
+static inline enum extent_state str2extent_state(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_EXT_ST_LAST; i++)
+        if (!strcmp(str, extent_state_names[i]))
+            return i;
+    return PHO_EXT_ST_INVAL;
+}
+
 /** describe data layout */
-struct layout_descr {
-    enum layout_type    type;
+struct layout_info {
+    char              *oid;
+    unsigned int       copy_num;
+    enum layout_type   type;
+    /* v00: no layout info */
+    enum extent_state  state;
+    struct extent     *extents;
+    unsigned int       ext_count;
     /* v00: no other information needed for simple layout */
 };
 
@@ -383,7 +444,7 @@ static inline const char *media_adm_status2str(enum media_adm_status adm_st)
     return media_adm_st_names[adm_st];
 }
 
-static inline enum media_adm_status media_str2adm_status(const char *str)
+static inline enum media_adm_status str2media_adm_status(const char *str)
 {
     int i;
 
@@ -408,8 +469,6 @@ struct media_info {
 struct object_info {
     char                *oid;
     char                *user_md;
-    struct layout_descr  layout_descr;
-    struct extent       *extent;  /* use data_loc instead? */
 };
 
 #endif

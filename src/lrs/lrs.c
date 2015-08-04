@@ -750,7 +750,7 @@ static int set_loc_from_dev(struct data_loc *loc,
 
 /* see "pho_lrs.h" for function help */
 int lrs_write_intent(void *dss_hdl, size_t size,
-                     const struct layout_descr *layout,
+                     const struct layout_info *layout,
                      struct data_loc *loc)
 {
     struct dev_descr *dev = NULL;
@@ -797,7 +797,7 @@ static struct dev_descr *search_loaded_media(const struct media_id *id)
 }
 
 
-int lrs_read_intent(void *dss_hdl, const struct layout_descr *layout,
+int lrs_read_intent(void *dss_hdl, const struct layout_info *layout,
                     struct data_loc *loc)
 {
     int               rc = 0;

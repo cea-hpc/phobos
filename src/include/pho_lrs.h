@@ -22,7 +22,7 @@
  * @return 0 on success, -1 * posix error code on failure
  */
 int lrs_write_intent(void *dss_hdl, size_t size,
-                     const struct layout_descr *layout, struct data_loc *loc);
+                     const struct layout_info *layout, struct data_loc *loc);
 
 /**
  * Query to read from a given set of media.
@@ -35,7 +35,7 @@ int lrs_write_intent(void *dss_hdl, size_t size,
  *   duplicated).
  * @return 0 on success, -1 * posix error code on failure
  */
-int lrs_read_intent(void *dss_hdl, const struct layout_descr *layout,
+int lrs_read_intent(void *dss_hdl, const struct layout_info *layout,
                     struct data_loc *loc);
 
 /**

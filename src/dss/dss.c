@@ -22,8 +22,10 @@
 struct dss_result {
     PGresult *pg_res;
     union {
-        struct media_info media[0];
-        struct dev_info   dev[0];
+        struct media_info   media[0];
+        struct dev_info     dev[0];
+        struct object_info  object[0];
+        struct layout_info  layout[0];
     } u;
 };
 
@@ -95,6 +97,7 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
         /* You need to filter on a key, not the whole json set*/
         return -EINVAL;
 
+    case DSS_VAL_ARRAY:
     case DSS_VAL_STR:
         /**
          *  According to libpq #1.3.2
@@ -107,7 +110,10 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
         /** @todo: check error in case of encoding issue ? */
         PQescapeStringConn(conn, escape_string, crit->crit_val.val_str,
                            escape_len, NULL);
-        g_string_append_printf(clause, "'%s'", escape_string);
+        if (dss_fields2type(crit->crit_name) == DSS_VAL_ARRAY)
+            g_string_append_printf(clause, "array['%s']", escape_string);
+        else
+            g_string_append_printf(clause, "'%s'", escape_string);
         free(escape_string);
         break;
     case DSS_VAL_UNKNOWN:
@@ -127,11 +133,16 @@ static const char * const base_query[] = {
                    " host, path, changer_idx FROM device",
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
                    " address_type, fs_type, fs_status, stats FROM media",
+    [DSS_EXTENT] = "SELECT oid, copy_num, state, lyt_type, lyt_info,"
+                   "extents FROM extent",
+    [DSS_OBJECT] = "SELECT oid, user_md FROM object",
 };
 
 static const size_t const res_size[] = {
-    [DSS_DEVICE] = sizeof(struct dev_info),
-    [DSS_MEDIA]  = sizeof(struct media_info),
+    [DSS_DEVICE]  = sizeof(struct dev_info),
+    [DSS_MEDIA]   = sizeof(struct media_info),
+    [DSS_EXTENT]  = sizeof(struct extent),
+    [DSS_OBJECT]  = sizeof(struct object_info),
 };
 
 /**
@@ -181,6 +192,75 @@ out_decref:
     return rc;
 }
 
+static int dss_layout_extents_decode(struct extent **extents,
+                                     unsigned int *count, const char *json)
+{
+    json_t *root, *child;
+    json_error_t json_error;
+    int parse_error, rc;
+    struct extent *result = NULL;
+    size_t extents_res_size, i;
+    size_t jflags = JSON_REJECT_DUPLICATES;
+
+    root = json_loads(json, jflags, &json_error);
+    if (!root)
+        LOG_RETURN(-EINVAL, "Failed to parse json data: %s",
+                   json_error.text);
+
+    if (!json_is_array(root))
+        LOG_GOTO(out_decref, rc = -EINVAL, "Invalid extents description");
+
+    *count  = json_array_size(root);
+    if (!(*count)) {
+        extents = NULL;
+        LOG_GOTO(out_decref, rc = -EINVAL,
+                 "Json parser: extents array is empty");
+    }
+
+    extents_res_size = sizeof(struct extent) * (*count);
+    result = malloc(extents_res_size);
+    if (result == NULL)
+        LOG_GOTO(out_decref, -ENOMEM,
+                 "dss extents_ allocation failed (size %zu)",
+                 extents_res_size);
+
+    parse_error = 0;
+    for (i = 0; i < *count; i++) {
+        child = json_array_get(root, i);
+        result[i].layout_idx = i;
+        result[i].size = json_dict2uint64(child, "sz", &parse_error);
+        result[i].address.buff = json_dict2char(child, "addr", &parse_error);
+        result[i].address.size = strlen(result[i].address.buff)+1; /* ... */
+        result[i].media.type = str2dev_family(json_dict2char(child,
+                                              "fam", &parse_error));
+
+        /*XXX fs_type & address_type retrieved from media info */
+        if (result[i].media.type == PHO_DEV_INVAL)
+            LOG_GOTO(out_decref, rc = -EINVAL,
+                    "dss_layout_extents_decode media type invalid");
+
+        rc = media_id_set(&result[i].media,
+                     json_dict2char(child, "media", &parse_error));
+
+        if (rc)
+            LOG_GOTO(out_decref, rc = -EINVAL,
+                     "dss_layout_extents_decode media set error");
+    }
+
+    if (parse_error > 0)
+        LOG_GOTO(out_decref, rc = -EINVAL,
+                 "Json parser: %d missing mandatory fields in extents",
+                 parse_error);
+    *extents = result;
+    rc = 0;
+
+
+out_decref:
+    if (rc)
+        free(result);
+    json_decref(root);
+    return rc;
+}
 
 int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
             int crit_cnt, void **item_list, int *item_cnt)
@@ -189,11 +269,12 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     PGresult *res;
     GString *clause;
     struct dss_result *dss_res;
-    int i, rc;
+    int i, rc, count;
     size_t dss_res_size;
 
     *item_list = NULL;
-    *item_cnt = 0;
+    *item_cnt  = 0;
+    rc         = 0;
 
     if (handle == NULL || item_list == NULL || item_cnt == NULL) {
         rc = -EINVAL;
@@ -202,7 +283,8 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
         return rc;
     }
 
-    if (type != DSS_DEVICE && type != DSS_MEDIA) {
+    if (type != DSS_DEVICE && type != DSS_MEDIA &&
+        type != DSS_OBJECT && type != DSS_EXTENT) {
         rc = -ENOTSUP;
         pho_error(rc, "unsupported DSS request type %#x", type);
         return rc;
@@ -276,13 +358,16 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
             p_media->id.type = str2dev_family(PQgetvalue(res, i, 0));
             p_media->model = PQgetvalue(res, i, 1);
             media_id_set(&p_media->id, PQgetvalue(res, i, 2));
-            p_media->adm_status = media_str2adm_status(PQgetvalue(res, i, 3));
+            p_media->adm_status = str2media_adm_status(PQgetvalue(res, i, 3));
             p_media->addr_type = str2address_type(PQgetvalue(res, i, 4));
             p_media->fs_type = str2fs_type(PQgetvalue(res, i, 5));
             p_media->fs_status = str2fs_status(PQgetvalue(res, i, 6));
             rc = dss_media_stats_decode(&p_media->stats, PQgetvalue(res, i, 7));
-            if (rc)
-                return rc;
+            if (rc) {
+                PQclear(res);
+                LOG_GOTO(out, rc, "dss_get dss_media stats decode error");
+            }
+
 
         }
 
@@ -290,11 +375,45 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
         *item_cnt = PQntuples(res);
         break;
 
+    case DSS_EXTENT:
+        dss_res->pg_res = res;
+        for (i = 0; i < PQntuples(res); i++) {
+            struct layout_info *p_layout = &dss_res->u.layout[i];
+            p_layout->oid =  PQgetvalue(res, i, 0);
+            p_layout->copy_num = atoi(PQgetvalue(res, i, 1));
+            p_layout->state = str2extent_state(PQgetvalue(res, i, 2));
+            p_layout->type = str2layout_type(PQgetvalue(res, i, 3));
+            /*@todo info */
+            rc = dss_layout_extents_decode(&p_layout->extents,
+                                           &p_layout->ext_count,
+                                           PQgetvalue(res, i, 5));
+            if (rc) {
+                PQclear(res);
+                LOG_GOTO(out, rc, "dss_get dss_extent decode error");
+            }
+        }
+
+        *item_list = dss_res->u.layout;
+        *item_cnt = PQntuples(res);
+        break;
+
+    case DSS_OBJECT:
+        dss_res->pg_res = res;
+        for (i = 0; i < PQntuples(res); i++) {
+            struct object_info *p_object = &dss_res->u.object[i];
+            p_object->oid =  PQgetvalue(res, i, 0);
+        }
+
+        *item_list = dss_res->u.object;
+        *item_cnt = PQntuples(res);
+        break;
+
     default:
         return -EINVAL;
     }
 
-    return 0;
+out:
+    return rc;
 }
 
 void dss_res_free(void *item_list, int item_cnt)

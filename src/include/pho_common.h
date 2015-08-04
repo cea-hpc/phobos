@@ -191,15 +191,35 @@ static inline uint64_t json_dict2uint64(const struct json_t *obj,
 
     current_obj = json_object_get(obj, key);
     if (!current_obj) {
-        error++;
+        (*error)++;
         return 0;
     }
     val = json_string_value(current_obj);
     if (!val) {
-        error++;
+        (*error)++;
         return 0;
     }
     return strtoull(val, NULL, 10);
 }
+
+static inline char *json_dict2char(const struct json_t *obj,
+                                        const char *key, int *error)
+{
+    struct json_t *current_obj;
+    char    *val;
+
+    current_obj = json_object_get(obj, key);
+    if (!current_obj) {
+        (*error)++;
+        return 0;
+    }
+    val = strdup(json_string_value(current_obj));
+    if (!val) {
+        (*error)++;
+        return 0;
+    }
+    return val;
+}
+
 
 #endif

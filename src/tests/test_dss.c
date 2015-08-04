@@ -25,23 +25,28 @@
 
 int main(int argc, char **argv)
 {
-    int rc;
-    void *dss_handle;
-    enum dss_type type;
-    void *item_list;
-    struct dev_info   *dev;
-    struct media_info *media;
-    int item_cnt;
-    struct dss_crit *crit;
-    int crit_cnt;
-    int i;
+    int     rc;
+    void   *dss_handle;
+    enum    dss_type type;
+    void   *item_list;
+    struct  dev_info    *dev;
+    struct  media_info  *media;
+    struct  object_info *object;
+    struct  layout_info *layout;
+    struct  extent *extents;
+    int     item_cnt;
+    struct  dss_crit *crit;
+    int     crit_cnt;
+    int     i, j;
+    char   *parser;
 
     pho_log_level_set(PHO_LOG_VERB);
 
     if (argc < 3 || argc > 4) {
-        fprintf(stderr, "Usage: %s ACTION TYPE [ CRIT ]\n", argv[0]);
+        fprintf(stderr, "Usage: %s ACTION TYPE [ \"CRIT\" ]\n", argv[0]);
         fprintf(stderr, "where  ACTION := { get }\n");
-        fprintf(stderr, "       TYPE := { dev | media }\n");
+        fprintf(stderr, "       TYPE := { dev | media | object | extent }\n");
+        fprintf(stderr, "       [ \"CRIT\" ] := \"field cmp value\"\n");
         exit(1);
     }
 
@@ -50,46 +55,37 @@ int main(int argc, char **argv)
             type = DSS_DEVICE;
         } else if (!strcmp(argv[2], "media")) {
             type = DSS_MEDIA;
+        } else if (!strcmp(argv[2], "object")) {
+            type = DSS_OBJECT;
+        } else if (!strcmp(argv[2], "extent")) {
+            type = DSS_EXTENT;
         } else {
-            fprintf(stderr, "verb dev|media expected at '%s'\n", argv[2]);
+            fprintf(stderr, "verb dev|media|object|extend "
+                            "expected at '%s'\n", argv[2]);
             exit(EINVAL);
         }
         if (argc == 4) {
-            /** Arbitrary, just for testing purpose */
-            /** @todo: parse & use template & free */
-            if (!strcmp(argv[3], "disk")) {
-                crit = malloc(sizeof(struct dss_crit));
-                crit->crit_name = DSS_DEV_family;
-                crit->crit_cmp  = DSS_CMP_EQ;
-                crit->crit_val.val_int = (int)PHO_DEV_DISK;
-                crit_cnt = 1;
-            } else if (!strcmp(argv[3], "tape")) {
-                crit = malloc(sizeof(struct dss_crit));
-                crit->crit_name = DSS_DEV_family;
-                crit->crit_cmp  = DSS_CMP_EQ;
-                crit->crit_val.val_int = (int)PHO_DEV_TAPE;
-                crit_cnt = 1;
-            } else if (!strcmp(argv[3], "used_space")) {
-                crit = malloc(sizeof(struct dss_crit));
-                crit->crit_name = DSS_MDA_vol_used;
-                crit->crit_cmp  = DSS_CMP_GT;
-                crit->crit_val.val_bigint = 16000000000;
-                crit_cnt = 1;
-            } else if (!strcmp(argv[3], "charset")) {
-                crit = malloc(sizeof(struct dss_crit));
-                crit->crit_name = DSS_MDA_id;
-                crit->crit_cmp  = DSS_CMP_EQ;
-                crit->crit_val.val_str = malloc(sizeof(char)*32);
-                crit->crit_val.val_str = "&\"'\\$^,.=+-|{}():;!?@><#יטפ";
-                crit_cnt = 1;
-            } else if (!strcmp(argv[3], "all")) {
-                crit = NULL;
-                crit_cnt = 0;
-            } else {
-                fprintf(stderr, "verb disk/tape expected at '%s'\n", argv[3]);
-                exit(EINVAL);
-            }
+            printf("Crit Filter: %s\n", argv[3]);
+            parser = strtok(argv[3], " ");
+            if (!parser)
+                return -EINVAL;
 
+            if (!strcmp(parser, "all")) {
+                crit_cnt = 0;
+                crit = NULL;
+            } else {
+                crit = malloc(sizeof(struct dss_crit));
+                crit->crit_name = str2dss_fields(parser);
+                parser = strtok(NULL, " ");
+                if (!parser)
+                    return -EINVAL;
+                crit->crit_cmp = str2dss_cmp(parser);
+                parser = strtok(NULL, " ");
+                if (!parser)
+                    return -EINVAL;
+                str2dss_val_fill(crit->crit_name, parser, &crit->crit_val);
+                crit_cnt = 1;
+            }
         } else {
             crit = NULL;
             crit_cnt = 0;
@@ -138,8 +134,33 @@ int main(int argc, char **argv)
                       );
             }
             break;
+        case DSS_OBJECT:
+            for (i = 0, object = item_list; i < item_cnt; i++, object++) {
+                printf("Got object: oid:%s\n",
+                       object->oid);
+            }
+            break;
+        case DSS_EXTENT:
+            for (i = 0,  layout = item_list; i < item_cnt; i++, layout++) {
+                printf("Got layout: oid:%s ext_count:%u"
+                       " state:%s type:%s\n",
+                       layout->oid, layout->ext_count,
+                       extent_state2str(layout->state),
+                       layout_type2str(layout->type));
+                extents = layout->extents;
+                for (j = 0; j < layout->ext_count; j++) {
+                    printf("->Got extent: layout_idx:%d, size:%zu,"
+                           " address:%s,media type:%s, media:%s\n",
+                            extents->layout_idx, extents->size,
+                            extents->address.buff,
+                            dev_family2str(extents->media.type),
+                            media_id_get(&extents->media));
+                    extents++;
+                }
+            }
+            break;
         default:
-            assert(false);
+            abort();
         }
 
         dss_res_free(item_list, item_cnt);

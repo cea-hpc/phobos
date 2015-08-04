@@ -32,6 +32,8 @@ CREATE TYPE adm_status AS ENUM ('locked', 'unlocked', 'failed');
 CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS');
 CREATE TYPE address_type AS ENUM ('PATH', 'HASH1', 'OPAQUE');
 CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used');
+CREATE TYPE extent_state AS ENUM('pending','sync','orphan');
+CREATE TYPE extent_lyt_type AS ENUM('simple','raid0','raid1');
 
 -- enums extensibles: ALTER TYPE type ADD VALUE 'value'
 
@@ -47,12 +49,18 @@ CREATE TABLE media(family dev_family, model tape_model, id varchar(32) UNIQUE,
 		   stats jsonb, PRIMARY KEY (family, id));
 CREATE INDEX ON media((stats->>'phys_spc_free'));
 
-CREATE TABLE object(oid varchar(1024), user_md jsonb, st_md json,
-                    PRIMARY KEY (oid));
+CREATE TABLE object(oid varchar(1024), user_md jsonb, PRIMARY KEY (oid));
 
-CREATE TABLE extent(oid varchar(1024), layout_idx int, media varchar(32),
-                    address varchar(256), size bigint, PRIMARY KEY (oid));
-CREATE INDEX ON extent(media);
+CREATE TABLE extent(oid varchar(1024), copy_num int, state extent_state,
+                    lyt_type extent_lyt_type, lyt_info jsonb,
+                    extents jsonb, PRIMARY KEY (oid, copy_num));
+
+CREATE OR REPLACE FUNCTION extents_mda_idx(extents jsonb) RETURNS text[] AS
+\$\$
+select array_agg(value#>>'{media}')::text[] from jsonb_array_elements(extents);
+\$\$ LANGUAGE SQL IMMUTABLE;
+CREATE INDEX extents_mda_id_idx ON extent
+             USING GIN (extents_mda_idx((extent.extents)));
 
 -- that or put all layouts for a single object in a json array?
 -- But not sure we can index/query on any elemetns of an array...
@@ -67,7 +75,9 @@ drop_tables() {
         $PSQL << EOF
 DROP TABLE IF EXISTS device, media, object, extent CASCADE;
 DROP TYPE IF EXISTS dev_family, dev_model, tape_model, fs_status,
-		    adm_status, fs_type, address_type CASCADE;
+		    adm_status, fs_type, address_type, extent_lyt_type,
+            extent_state CASCADE;
+DROP FUNCTION IF EXISTS extents_mda_idx(jsonb) CASCADE;
 EOF
 }
 
@@ -100,6 +110,21 @@ insert into media (family, model, id, adm_status, fs_type, address_type,
            ('dir', NULL, 'phobos1:/tmp/pho_testdir2', 'unlocked', 'POSIX',
 	    'HASH1', 'blank', '{"nb_obj":"6","logc_spc_used":"4868841472",\
 	      "phys_spc_used":"4868841472","phys_spc_free":"12857675776"}');
+
+insert into object (oid, user_md)
+    values ('01230123ABC', '{}');
+
+insert into extent (oid, copy_num, state, lyt_type, lyt_info, extents)
+    values ('456ASQDSQD', 0, 'pending', 'simple','{}',
+	   '[{"media":"073220L6","addr":"test1","sz":"123456","fam":"tape"},\
+	    {"media":"073221L6","addr":"test2","sz":"5452555","fam":"tape"}]'),
+           ('QQQ6ASQDSQD', 0, 'pending', 'simple','{}',
+           '[{"media":"phobos1:/tmp/pho_testdir1","addr":"test3",
+	   "sz":"21123456","fam":"dir"},\
+            {"media":"phobos1:/tmp/pho_testdir2","addr":"test4",
+	   "sz":"2112555","fam":"dir"}]');
+
+
 EOF
 }
 

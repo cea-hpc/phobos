@@ -30,7 +30,7 @@
  * - mirrors: need tags to identify multiple copies?
 */
 
-int layout2tag(const struct layout_descr *layout,
+int layout2tag(const struct layout_info *layout,
                unsigned int layout_idx, char *tag)
 {
     switch (layout->type) {
