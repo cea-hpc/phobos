@@ -148,16 +148,18 @@ static int dss_media_stats_decode(struct media_stats *stats, const char *json)
     json_error_t json_error;
     int parse_error;
     size_t jflags = JSON_REJECT_DUPLICATES;
+    int rc;
 
     root = json_loads(json, jflags, &json_error);
     if (!root)
         LOG_RETURN(-EINVAL, "Failed to parse json data: %s",
-                  json_error.text);
+                   json_error.text);
 
     if (!json_is_object(root))
-        return -EINVAL;
+        LOG_GOTO(out_decref, rc = -EINVAL, "Invalid stats description");
 
     parse_error = 0;
+
     stats->nb_obj =
        json_dict2uint64(root, "nb_obj", &parse_error);
     stats->logc_spc_used =
@@ -166,13 +168,17 @@ static int dss_media_stats_decode(struct media_stats *stats, const char *json)
        json_dict2uint64(root, "phys_spc_used", &parse_error);
     stats->phys_spc_free =
        json_dict2uint64(root, "phys_spc_free", &parse_error);
-    json_decref(root);
 
     if (parse_error > 0)
-        LOG_RETURN(EINVAL, "Json parser: missing mandatory fields"
-                          " in media stats, count: %d", parse_error);
+        LOG_GOTO(out_decref, rc = -EINVAL,
+                 "Json parser: %d missing mandatory fields in media stats",
+                 parse_error);
 
-    return 0;
+    rc = 0;
+
+out_decref:
+    json_decref(root);
+    return rc;
 }
 
 
