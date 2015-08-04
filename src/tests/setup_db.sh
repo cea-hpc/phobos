@@ -90,6 +90,9 @@ insert into media (family, model, id, adm_status, fs_type, address_type,
            ('tape', 'LTO6', '073221L6', 'unlocked', 'LTFS', 'HASH1', 'blank',
             '{"nb_obj":"2","logc_spc_used":"15033434112",\
 	      "phys_spc_used":"15033434112","phys_spc_free":"2393054904320"}'),
+           ('tape', 'LTO6', '073222L6', 'unlocked', 'LTFS', 'HASH1', 'blank',
+            '{"nb_obj":"1","logc_spc_used":"10480512",\
+             "phys_spc_used":"10480512","phys_spc_free":"2393054904320"}'),
            ('dir', NULL, 'phobos1:/tmp/pho_testdir1', 'unlocked', 'POSIX',
 	    'HASH1', 'blank', '{"nb_obj":"5","logc_spc_used":"3668841456",\
 	      "phys_spc_used":"3668841456","phys_spc_free":"12857675776"}'),
