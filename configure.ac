@@ -75,8 +75,6 @@ AC_C_CONST
 AC_TYPE_UID_T
 AC_TYPE_SIZE_T
 
-AX_ENABLE_FLAG_COND([tests], [enable tests (developers only)], [-D_TEST], TESTS_ENABLED)
-
 # for exporting to spec file
 AC_SUBST(ac_configure_args)
 

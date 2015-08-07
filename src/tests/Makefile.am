@@ -1,8 +1,5 @@
 AM_CFLAGS= $(CC_OPT)
 
-# activated by ./configure --enable-tests
-if TESTS_ENABLED
-
 # autotools automatically generate a 'make check' target that:
 # 1) build check_PROGRAMS
 # 2) run TESTS and generate a summary
@@ -37,4 +34,3 @@ test_dss_LDADD=../dss/libpho_dss.la ../common/libpho_common.la
 
 test_cfg_SOURCES=test_cfg.c
 test_cfg_LDADD=../cfg/libpho_cfg.la ../common/libpho_common.la
-endif
