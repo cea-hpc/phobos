@@ -86,6 +86,7 @@ static inline int obj2io_flags(int flags)
         return 0;
 }
 
+static const struct layout_info simple_layout = {.type = PHO_LYT_SIMPLE};
 
 /** copy data from the source fd to the extent identified by loc */
 static int write_extents(const struct src_info *src, const char *obj_id,
@@ -236,7 +237,7 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
                const struct pho_attrs *md)
 {
     /* the only layout type we can handle for now */
-    struct layout_info  simple_layout = {.type = PHO_LYT_SIMPLE};
+    struct layout_info  layout = simple_layout;
     struct data_loc     write_loc = {0};
     struct src_info     info = {0};
     int                 rc;
@@ -263,19 +264,19 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
         LOG_GOTO(close_src, rc, "obj_put_start(%s) failed", obj_id);
 
     /* get storage resource to write the object */
-    rc = lrs_write_intent(dss, info.st.st_size, &simple_layout, &write_loc);
+    rc = lrs_write_intent(dss, info.st.st_size, &layout, &write_loc);
     if (rc)
         LOG_GOTO(out_clean_obj, rc, "failed to get storage resource to write "
                  "%zu bytes", info.st.st_size);
 
     /* set extent info in DB (transient state) */
-    /** @TODO    rc = extent_put_start(obj_id, &simple_layout, &write_loc,
+    /** @TODO    rc = extent_put_start(obj_id, &layout, &write_loc,
                              flags_obj2md(flags)); */
     if (rc)
         LOG_GOTO(out_lrs_end, rc, "couln't save extents info");
 
     /* write data to the media */
-    rc = write_extents(&info, obj_id, md, &simple_layout, &write_loc,
+    rc = write_extents(&info, obj_id, md, &layout, &write_loc,
                        flags);
     if (rc)
         LOG_GOTO(out_clean_db_ext, rc, "failed to write extents");
@@ -283,12 +284,12 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
     close(info.fd);
 
     /* complete DB info (object status & extents) */
-    /** @TODO   rc = obj_put_done(obj_id, &simple_layout, &write_loc); */
+    /** @TODO   rc = obj_put_done(obj_id, &layout, &write_loc); */
     if (rc)
         LOG_GOTO(out_clean_ext, rc, "obj_put_done(%s) failed", obj_id);
 
     /* release storage resources + update device/media info */
-    lrs_done(dss, &write_loc);
+    lrs_done(dss, &write_loc, 0);
     /* don't care about the error here, the object has been saved successfully
      * and the LRS error should have been logged by lower layers.
      */
@@ -299,14 +300,14 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
 
     /* cleaning after error cases */
 out_clean_ext:
-/** @TODO    clean_extents(obj_id, &simple_layout, &write_loc); */
+/** @TODO    clean_extents(obj_id, &layout, &write_loc); */
     ;
 out_clean_db_ext:
-/** @TODO    extent_put_abort(obj_id, &simple_layout, &write_loc); */
+/** @TODO    extent_put_abort(obj_id, &layout, &write_loc); */
     ;
 out_lrs_end:
     /* release resource reservations */
-    lrs_done(dss, &write_loc);
+    lrs_done(dss, &write_loc, rc);
 out_clean_obj:
     /** @TODO    obj_put_abort(obj_id); */
     ;
@@ -320,34 +321,32 @@ disconn:
 
 /** retrieve the location of a given object from DSS */
 static int obj_get_location(void *dss, const char *obj_id,
-                            struct layout_info *layout,
-                            struct extent *ext)
+                            struct layout_info **layout)
 {
-#ifdef _TEST
-#ifdef _THOMAS_IS_GOING_TO_FIX_THAT
-    struct dss_crit crit[1]; /* criteria on obj_id */
-    int             crit_cnt = 0;
-    struct extent  *ext_ls = NULL;
-    int             rc, cnt = 0;
-
-    /** FIXME TEST ONLY */
-    static const struct layout_info simple_layout = {.type = PHO_LYT_SIMPLE};
+    struct dss_crit crit[2]; /* criteria on obj_id and copynum */
+    int                 crit_cnt = 0;
+    int                 rc, cnt = 0;
 
     dss_crit_add(crit, &crit_cnt, DSS_EXT_oid, DSS_CMP_EQ, val_str, obj_id);
+    /* v00: object have a single copy */
+    dss_crit_add(crit, &crit_cnt, DSS_EXT_copy_num, DSS_CMP_EQ, val_uint, 0);
 
-    rc = dss_extent_get(dss, crit, crit_cnt, &ext_ls, &cnt);
+    /** @TODO check if there is a pending copy of the object */
+
+    rc = dss_extent_get(dss, crit, crit_cnt, layout, &cnt);
     if (rc != 0)
         return rc;
     if (cnt == 0)
-        return -ENOENT;
+        GOTO(err, rc = -ENOENT);
+    else if (cnt > 1)
+        LOG_GOTO(err, rc = -EINVAL, "Too many layouts found matching oid '%s'",
+                 obj_id);
 
-    *ext = ext_ls[0];
-    *layout = simple_layout;
-#endif
     return 0;
-#else
-    return -ENOTSUP;
-#endif
+err:
+    dss_res_free(*layout, cnt);
+    *layout = NULL;
+    return rc;
 }
 
 /** Retrieve a file from the object store
@@ -357,8 +356,8 @@ static int obj_get_location(void *dss, const char *obj_id,
  */
 int phobos_get(const char *obj_id, const char *tgt_file, int flags)
 {
-    struct layout_info layout = {0};
-    struct data_loc read_loc = {0};
+    struct layout_info *layout = NULL;
+    struct data_loc   read_loc = {0};
     int rc = 0;
     int fd, open_flags;
     void *dss = NULL;
@@ -369,10 +368,12 @@ int phobos_get(const char *obj_id, const char *tgt_file, int flags)
         LOG_RETURN(rc, "initialization failed");
 
     /* retrieve saved object location */
-    rc = obj_get_location(dss, obj_id, &layout, &read_loc.extent);
+    rc = obj_get_location(dss, obj_id, &layout);
     if (rc)
         LOG_GOTO(disconn, rc, "Failed to get information about object '%s'",
                  obj_id);
+
+    assert(layout != NULL);
 
     open_flags = (flags & PHO_OBJ_REPLACE) ? O_CREAT|O_WRONLY|O_TRUNC
                                            : O_CREAT|O_WRONLY|O_EXCL;
@@ -380,33 +381,35 @@ int phobos_get(const char *obj_id, const char *tgt_file, int flags)
     /* make sure we can write to the target file */
     fd = open(tgt_file, open_flags, 0640);
     if (fd < 0)
-        LOG_GOTO(disconn, rc = -errno, "Failed to open %s for writing",
+        LOG_GOTO(free_res, rc = -errno, "Failed to open %s for writing",
                  tgt_file);
 
     /* prepare storage resource to read the object */
-    rc = lrs_read_intent(dss, &layout, &read_loc);
+    rc = lrs_read_intent(dss, layout, &read_loc);
     if (rc)
         LOG_GOTO(close_tgt, rc, "failed to prepare resources to read '%s'",
                  obj_id);
 
     /* read data from the media */
-    rc = read_extents(fd, obj_id, &layout, &read_loc, flags);
+    rc = read_extents(fd, obj_id, layout, &read_loc, flags);
     if (rc)
         LOG_GOTO(out_lrs_end, rc, "failed to read extents");
 
 out_lrs_end:
     /* release storage resources */
-    lrs_done(dss, &read_loc);
+    lrs_done(dss, &read_loc, rc);
     /* don't care about the error here, the object has been read successfully
      * and the LRS error should have been logged by lower layers.
      */
-    /** @TODO release read_loc structure memory */
 close_tgt:
     close(fd);
     if (rc == 0)
         pho_info("get complete: obj_id:%s -> '%s'", obj_id, tgt_file);
     else if (unlink(tgt_file) != 0 && errno != ENOENT)
         pho_warn("failed to clean '%s': %s", tgt_file, strerror(errno));
+
+free_res:
+    dss_res_free(layout, 1);
 
 disconn:
     if (dss)

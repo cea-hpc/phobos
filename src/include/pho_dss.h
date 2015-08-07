@@ -159,7 +159,7 @@ static inline const char *dss_fields2str(enum dss_fields fields)
  *  Get dss_field from string
  *  Test use only, no guarantees
  *  @param[in]   dss_field name as string
- *  @retval dss_field enum
+ *  @return dss_field enum
  *  @retval DSS_FIELDS_INVAL on failure
  */
 static inline enum dss_fields str2dss_fields(const char *str)
@@ -305,8 +305,8 @@ struct dss_crit {
  *  @param[in]   dss_fields enum
  *  @param[in]   value as string
  *  @param[in]   pointer to dss_val
- *  @return  status
- *  @return  -EINVAL if not supported type
+ *  @retval 0 on success
+ *  @retval -EINVAL if dss field type is not supported
  */
 static inline const int str2dss_val_fill(enum dss_fields fields, char *str,
                                          union dss_val *val)

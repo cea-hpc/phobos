@@ -88,7 +88,8 @@ function error
 
 trap clean_test ERR EXIT
 
-function test_check_put
+# put a file into phobos object store
+function test_check_put # verb, source_file, expect_failure
 {
     local src_file=$(readlink -m $2)
     local name=$(echo $src_file | tr './!<>{}#"''' '_')
@@ -105,28 +106,59 @@ function test_check_put
         fi
     fi
 
+    # check that the extent is found into the storage backend
     out=$(find $TEST_MNT -type f -name "*$name*")
     echo -e " \textent: $out"
     [ -z "$out" ] && error "*$name* not found in backend"
     diff -q $src_file $out && echo "$src_file: contents OK"
 
+    # check the 'id' xattr attached to this extent
     id=$(getfattr --only-values --absolute-names -n "user.id" $out)
     [ -z "$id" ] && error "saved file has no 'id' xattr"
     [ $id != $src_file ] && error "unexpected id value in xattr"
 
+    # check user_md xattr attached to this extent
     umd=$(getfattr --only-values --absolute-names -n "user.user_md" $out)
     [ -z "$umd" ] && error "saved file has no 'user_md' xattr"
 
     true
 }
 
-function test_check_get
+# retrieve the given extent using phobos_get()
+function test_check_get # extent_path
 {
     local arch=$1
 
-    # get the id from the archive
+    # get the id from the extent
     id=$(getfattr --only-values --absolute-names -n "user.id" $arch)
     [ -z "$id" ] && error "saved file has no 'id' xattr"
+
+    # split the path into <mount_point> / <relative_path>
+    # however, the mount_point may not be real in the case of
+    # a "directory device" (e.g. subdirectory of an existing filesystem)
+    # XXXX the following code relies on the fact mount points have depth 2...
+    dir=$(echo "$arch" | cut -d '/' -f 1-3)
+    addr=$(echo "$arch" | cut -d '/' -f 4-)
+    size=$(stat -c '%s' "$arch")
+    echo "address=$addr,size=$size"
+
+    # As extents are not saved in the DB for now,
+    # insert an extent that matches the objet we want to read
+    if [[ $TEST_FS == "ltfs" ]]; then
+        # (PSQL is defined in setup_db.sh)
+        $PSQL << EOF
+        insert into extent (oid, copy_num, state, lyt_type, lyt_info, extents)
+        values ('$id', 0, 'sync', 'simple','{}',
+            '[{"media":"073222L6","addr":"$addr","sz":"$size","fam":"tape"}]');
+EOF
+    else
+        host=$(hostname --short)
+        $PSQL << EOF
+        insert into extent (oid, copy_num, state, lyt_type, lyt_info, extents)
+        values ('$id', 0, 'sync', 'simple','{}',
+            '[{"media":"$host:$dir","addr":"$addr","sz":"$size","fam":"dir"}]');
+EOF
+    fi
 
     tgt="$TEST_RECOV_DIR/$id"
     mkdir -p $(dirname "$tgt")
@@ -137,16 +169,18 @@ function test_check_get
 }
 
 if [[ $TEST_FS == "posix" ]]; then
-	for dir in $TEST_MNT; do
-		# clean and re-create
-		rm -rf $dir/*
-		[ ! -d $dir ] && mkdir -p "$dir"
-	done
+    for dir in $TEST_MNT; do
+        # clean and re-create
+        rm -rf $dir/*
+        # allow later cleaning by other users
+        umask 000
+        [ ! -d $dir ] && mkdir -p "$dir"
+    done
 else
-	# clean the contents
-	for dir in $TEST_MNT; do
-		rm -rf  $dir/*
-	done
+    # clean the contents
+    for dir in $TEST_MNT; do
+        rm -rf  $dir/*
+    done
 fi
 [ ! -d $TEST_RECOV_DIR ] && mkdir -p "$TEST_RECOV_DIR"
 rm -rf "$TEST_RECOV_DIR/"*
@@ -164,15 +198,16 @@ for f in $TEST_FILES; do
 done
 
 echo
-#FIXME Deactivated until DSS implements 'extents' queries
 echo "**** TESTS: GET ****"
-echo "SKIPPED: Deactivated until DSS implements requests on extents"
 
 # retrieve all files from the backend, get and check them
-#find $TEST_MNT -type f | while read f; do
-#    test_check_get "$f"
-#done
+find $TEST_MNT -type f | while read f; do
+    test_check_get "$f"
+done
 
 # exit normally, clean TRAP
 trap - EXIT ERR
 clean_test || true
+
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:

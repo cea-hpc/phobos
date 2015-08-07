@@ -26,7 +26,10 @@ int main(int argc, char **argv)
 {
     int rc;
 
-    pho_log_level_set(PHO_LOG_DEBUG);
+    if (getenv("DEBUG") != NULL)
+        pho_log_level_set(PHO_LOG_DEBUG);
+    else
+        pho_log_level_set(PHO_LOG_VERB);
 
     if (argc != 3 && argc != 4) {
         fprintf(stderr, "usage: %s post|put <file>\n", argv[0]);

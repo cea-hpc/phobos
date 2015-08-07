@@ -40,10 +40,11 @@ int lrs_read_intent(void *dss_hdl, const struct layout_info *layout,
 
 /**
  * Declare the current operation (read/write) as finished.
- * @param(in) dss_hdl handle to initialized DSS.
- * @param(in) loc the location where the operation was done.
+ * @param(in) dss_hdl   handle to initialized DSS.
+ * @param(in) loc the   location where the operation was done.
+ * @param(in) err_code  status of the copy (errno value).
  * @return 0 on success, -1 * posix error code on failure
  */
-int lrs_done(void *dss_hdl, struct data_loc *loc);
+int lrs_done(void *dss_hdl, struct data_loc *loc, int err_code);
 
 #endif

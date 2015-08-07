@@ -290,10 +290,12 @@ static inline int media_id_set(struct media_id *mid, const char *id)
 struct extent {
     unsigned int       layout_idx; /**< always 0 for simple layouts */
     uint64_t           size;       /**< size of the extent */
-    struct media_id    media;
+    struct media_id    media;      /**< identifier of the media */
+    struct pho_buff    address;    /**< address on the media */
+
+    /* XXX this is more media related (should be moved somewhere else?) */
     enum fs_type       fs_type;    /**< type of filesystem on this media */
     enum address_type  addr_type;  /**< way to address this media */
-    struct pho_buff    address;    /**< address on the media */
 };
 
 /** Address to read/write data.

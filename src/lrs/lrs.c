@@ -701,7 +701,8 @@ static int lrs_get_write_res(void *dss_hdl, size_t size,
 
     /* 2) For the next steps, we need a media to write on.
      * It will be loaded into a free drive. */
-    pho_verb("No loaded media with enough space: selecting another media");
+    pho_verb("Not enough available space on loaded media: "
+             "selecting another media");
     rc = lrs_select_media(dss_hdl, &pmedia, size, default_family(), NULL);
     if (rc)
         return rc;
@@ -803,36 +804,67 @@ int lrs_read_intent(void *dss_hdl, const struct layout_info *layout,
     int               rc = 0;
     struct dev_descr *dev = NULL;
 
+    if (layout->type != PHO_LYT_SIMPLE || layout->ext_count != 1)
+        LOG_RETURN(-EINVAL, "Unexpected layout type '%s' or extent count %u",
+                   layout_type2str(layout->type), layout->ext_count);
+
     rc = lrs_load_dev_state(dss_hdl);
     if (rc != 0)
         return rc;
 
-    /* check if the media is in already in a drive */
+    loc->extent = layout->extents[0];
+
+    /* check if the media is already in a drive */
     dev = search_loaded_media(&loc->extent.media);
 
-    /** @TODO find a free or idle drive */
-    if (dev == NULL)
-        return -ENOTSUP;
+    if (dev == NULL) {
+        pho_verb("Media '%s' is not in a drive",
+                 media_id_get(&loc->extent.media));
+
+        /* @TODO retrieve media information from DSS */
+
+        /* is there a free drive? */
+        dev = dev_picker(PHO_DEV_OP_ST_EMPTY, select_any, 0);
+        if (dev == NULL) {
+            pho_verb("No free drive: need to unload one");
+            rc = lrs_free_one_device(dss_hdl, &dev);
+            if (rc)
+                return rc;
+        }
+
+        /* @TODO load the media in the selected drive */
+    }
 
     /* mount the FS if it is not mounted */
     if (dev->state.op_status != PHO_DEV_OP_ST_MOUNTED) {
         rc = lrs_mount(dev);
-        if (rc == 0)
+        if (rc == 0) {
             dev->state.op_status = PHO_DEV_OP_ST_BUSY;
-        else
+        } else {
             dev->state.op_status = PHO_DEV_OP_ST_FAILED;
-        return rc;
+            return rc;
+        }
     }
+
+    if (dev->media == NULL)
+        LOG_RETURN(rc = -EINVAL, "Invalid device state");
+
+    /* set fs_type and addr_type according to media description. */
+    loc->extent.fs_type = dev->media->fs_type;
+    loc->extent.addr_type = dev->media->addr_type;
     loc->root_path = strdup(dev->state.mnt_path);
 
     return 0;
 }
 
-int lrs_done(void *dss_hdl, struct data_loc *loc)
+int lrs_done(void *dss_hdl, struct data_loc *loc, int err_code)
 {
-#ifdef _TEST
+    if (loc)
+        free(loc->root_path);
+
+    /** @TODO tag tape media as full if err_code = ENOSPC.
+     * (trigger umount in this case?).
+     */
+
     return 0;
-#else
-    return -ENOTSUP;
-#endif
 }
