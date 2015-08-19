@@ -91,8 +91,10 @@ int main(int argc, char **argv)
             crit_cnt = 0;
         }
 
-        rc = dss_init("dbname=phobos host=localhost user=phobos password=phobos",
-                      &dss_handle);
+        rc = dss_init("dbname=phobos"
+                      " host=localhost"
+                      " user=phobos"
+                      " password=phobos", &dss_handle);
         if (rc) {
             fprintf(stderr, "dss_init failed: %s (%d)\n", strerror(-rc), -rc);
             exit(-rc);

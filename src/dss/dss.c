@@ -105,8 +105,11 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
          *  one more byte than twice the value of length,
          *  otherwise the behavior is undefined.
          */
-        escape_len = sizeof(char)*strlen(crit->crit_val.val_str)*2+1;
+        escape_len = strlen(crit->crit_val.val_str) * 2 + 1;
         escape_string = malloc(escape_len);
+        if (!escape_string)
+            return -ENOMEM;
+
         /** @todo: check error in case of encoding issue ? */
         PQescapeStringConn(conn, escape_string, crit->crit_val.val_str,
                            escape_len, NULL);
@@ -116,6 +119,7 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
             g_string_append_printf(clause, "'%s'", escape_string);
         free(escape_string);
         break;
+
     case DSS_VAL_UNKNOWN:
     default:
         return -EINVAL;
@@ -210,8 +214,8 @@ static int dss_layout_extents_decode(struct extent **extents,
     if (!json_is_array(root))
         LOG_GOTO(out_decref, rc = -EINVAL, "Invalid extents description");
 
-    *count  = json_array_size(root);
-    if (!(*count)) {
+    *count = json_array_size(root);
+    if (*count == 0) {
         extents = NULL;
         LOG_GOTO(out_decref, rc = -EINVAL,
                  "Json parser: extents array is empty");
@@ -220,8 +224,7 @@ static int dss_layout_extents_decode(struct extent **extents,
     extents_res_size = sizeof(struct extent) * (*count);
     result = malloc(extents_res_size);
     if (result == NULL)
-        LOG_GOTO(out_decref, -ENOMEM,
-                 "dss extents_ allocation failed (size %zu)",
+        LOG_GOTO(out_decref, -ENOMEM, "memory allocation failed for size %zu)",
                  extents_res_size);
 
     parse_error = 0;
@@ -251,6 +254,7 @@ static int dss_layout_extents_decode(struct extent **extents,
         LOG_GOTO(out_decref, rc = -EINVAL,
                  "Json parser: %d missing mandatory fields in extents",
                  parse_error);
+
     *extents = result;
     rc = 0;
 
@@ -262,6 +266,20 @@ out_decref:
     return rc;
 }
 
+static inline bool is_type_supported(enum dss_type type)
+{
+    switch (type) {
+    case DSS_OBJECT:
+    case DSS_EXTENT:
+    case DSS_DEVICE:
+    case DSS_MEDIA:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
 int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
             int crit_cnt, void **item_list, int *item_cnt)
 {
@@ -269,12 +287,9 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     PGresult *res;
     GString *clause;
     struct dss_result *dss_res;
-    int i, rc, count;
+    int i, count;
+    int rc = 0;
     size_t dss_res_size;
-
-    *item_list = NULL;
-    *item_cnt  = 0;
-    rc         = 0;
 
     if (handle == NULL || item_list == NULL || item_cnt == NULL) {
         rc = -EINVAL;
@@ -283,8 +298,10 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
         return rc;
     }
 
-    if (type != DSS_DEVICE && type != DSS_MEDIA &&
-        type != DSS_OBJECT && type != DSS_EXTENT) {
+    *item_list = NULL;
+    *item_cnt  = 0;
+
+    if (!is_type_supported(type)) {
         rc = -ENOTSUP;
         pho_error(rc, "unsupported DSS request type %#x", type);
         return rc;
@@ -292,6 +309,7 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
 
     /* get everything if no criteria */
     clause = g_string_new(base_query[type]);
+
     if (crit_cnt > 0)
         g_string_append(clause, " WHERE ");
 
@@ -310,6 +328,7 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     }
 
     pho_debug("Executing request: %s", clause->str);
+
     res = PQexec(conn, clause->str);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         rc = -ECOMM;
@@ -319,12 +338,13 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
         g_string_free(clause, true);
         return rc;
     }
+
     g_string_free(clause, true);
 
     dss_res_size = sizeof(struct dss_result) + PQntuples(res) * res_size[type];
     dss_res = malloc(dss_res_size);
     if (dss_res == NULL) {
-        pho_error(ENOMEM, "dss_res allocation failed (size %z)", dss_res_size);
+        pho_error(ENOMEM, "memory allocation failed for size %z", dss_res_size);
         return -ENOMEM;
     }
 
@@ -367,8 +387,6 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
                 PQclear(res);
                 LOG_GOTO(out, rc, "dss_get dss_media stats decode error");
             }
-
-
         }
 
         *item_list = dss_res->u.media;
@@ -379,6 +397,7 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
         dss_res->pg_res = res;
         for (i = 0; i < PQntuples(res); i++) {
             struct layout_info *p_layout = &dss_res->u.layout[i];
+
             p_layout->oid =  PQgetvalue(res, i, 0);
             p_layout->copy_num = atoi(PQgetvalue(res, i, 1));
             p_layout->state = str2extent_state(PQgetvalue(res, i, 2));
@@ -401,6 +420,7 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
         dss_res->pg_res = res;
         for (i = 0; i < PQntuples(res); i++) {
             struct object_info *p_object = &dss_res->u.object[i];
+
             p_object->oid =  PQgetvalue(res, i, 0);
         }
 
