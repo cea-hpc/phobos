@@ -21,27 +21,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void log_callback(const struct pho_logrec *rec)
-{
-    struct tm   time;
-
-    localtime_r(&rec->plr_time.tv_sec, &time);
-    printf("%04d.%02d.%02d %02d:%02d:%02d.%06ld %s:%s():%d <%s> %s",
-           time.tm_year + 1900, time.tm_mon + 1, time.tm_mday,
-           time.tm_hour, time.tm_min, time.tm_sec, rec->plr_time.tv_usec * 1000,
-           rec->plr_file, rec->plr_func, rec->plr_line,
-           pho_log_level2str(rec->plr_level), rec->plr_msg);
-    if (rec->plr_err != 0)
-        printf(": %s (%d)", strerror(abs(rec->plr_err)), rec->plr_err);
-    putchar('\n');
-}
 
 int main(int argc, char **argv)
 {
     int rc;
 
     pho_log_level_set(PHO_LOG_DEBUG);
-    pho_log_callback_set(log_callback);
 
     if (argc != 3 && argc != 4) {
         fprintf(stderr, "usage: %s post|put <file>\n", argv[0]);
