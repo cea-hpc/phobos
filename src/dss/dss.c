@@ -149,6 +149,51 @@ static const size_t const res_size[] = {
     [DSS_OBJECT]  = sizeof(struct object_info),
 };
 
+static const char * const insert_query[] = {
+    [DSS_DEVICE] = "INSERT INTO device (family, model, id, host, adm_status,"
+                   " path, changer_idx) VALUES ",
+    [DSS_MEDIA]  = "INSERT INTO media (family, model, id, adm_status,"
+                   " fs_type, address_type, fs_status, stats) VALUES ",
+    [DSS_EXTENT] = "INSERT INTO extent (oid, copy_num, state, lyt_type,"
+                   " lyt_info, extents) VALUES ",
+    [DSS_OBJECT] = "INSERT INTO object (oid, user_md) VALUES ",
+
+};
+
+static const char * const update_query[] = {
+    [DSS_DEVICE] = "UPDATE device SET (family, model, host, adm_status,"
+                   " path, changer_idx) ="
+                   " ('%s', %s, '%s', '%s', '%s', '%d')"
+                   " WHERE id = '%s';",
+    [DSS_MEDIA]  = "UPDATE media SET (family, model, adm_status,"
+                   " fs_type, address_type, fs_status, stats) ="
+                   " ('%s', %s, '%s', '%s', '%s', '%s', '%s')"
+                   " WHERE id = '%s';",
+    [DSS_EXTENT] = "UPDATE extent SET (copy_num, state, lyt_type,"
+                   " lyt_info, extents) ="
+                   " ('%d', '%s', '%s', '%s', '%s')"
+                   " WHERE oid = '%s';",
+    [DSS_OBJECT] = "UPDATE object SET user_md = '%s' "
+                   " WHERE oid = '%s';",
+
+};
+
+static const char * const delete_query[] = {
+    [DSS_DEVICE] = "DELETE FROM device WHERE id = '%s'; ",
+    [DSS_MEDIA]  = "DELETE FROM media WHERE id = '%s'; ",
+    [DSS_EXTENT] = "DELETE FROM extent WHERE oid = '%s'; ",
+    [DSS_OBJECT] = "DELETE FROM object WHERE oid = '%s'; ",
+
+};
+
+/** @todo We do need Postgresl 9.5 for clean update (upsert) */
+static const char * const insert_query_values[] = {
+    [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '%d')%s",
+    [DSS_MEDIA]  = "('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s')%s",
+    [DSS_EXTENT] = "('%s', '%d', '%s', '%s', '%s', '%s')%s",
+    [DSS_OBJECT] = "('%s', '%s')%s",
+};
+
 /**
  * Extract media statistics from json
  *
@@ -194,6 +239,54 @@ static int dss_media_stats_decode(struct media_stats *stats, const char *json)
 out_decref:
     json_decref(root);
     return rc;
+}
+
+static char *dss_media_stats_encode(struct media_stats stats, int *error)
+{
+    json_t *root;
+    json_error_t json_error;
+    char *s  = NULL;
+    char buffer[32];
+    int rc;
+    int err_cnt = 0;
+
+    (*error) = 0;
+    root = json_object();
+
+    if (!root) {
+        pho_error(-ENOMEM, "Failed to create json object");
+        return NULL;
+    }
+
+    snprintf(buffer, sizeof(buffer), "%llu", stats.nb_obj);
+    rc = json_object_set_new(root, "nb_obj", json_string(buffer));
+    if (rc)
+        err_cnt++;
+
+    snprintf(buffer, sizeof(buffer), "%llu", stats.logc_spc_used);
+    rc = json_object_set_new(root, "logc_spc_used", json_string(buffer));
+    if (rc)
+        err_cnt++;
+
+    snprintf(buffer, sizeof(buffer), "%llu", stats.phys_spc_used);
+    rc = json_object_set_new(root, "phys_spc_used", json_string(buffer));
+    if (rc)
+        err_cnt++;
+
+    snprintf(buffer, sizeof(buffer), "%llu", stats.phys_spc_free);
+    rc = json_object_set_new(root, "phys_spc_free", json_string(buffer));
+    if (rc)
+        err_cnt++;
+
+    *error = err_cnt;
+
+    s = json_dumps(root, 0);
+    json_decref(root);
+    if (!s) {
+        pho_error(-EINVAL, "Failed to dump json to char");
+        return NULL;
+    }
+    return s;
 }
 
 static int dss_layout_extents_decode(struct extent **extents,
@@ -264,6 +357,217 @@ out_decref:
         free(result);
     json_decref(root);
     return rc;
+}
+
+static char *dss_layout_extents_encode(struct extent *extents,
+                                       unsigned int count, int *error)
+{
+    json_t *root, *child;
+    char *s;
+    json_error_t json_error;
+    int rc;
+    int err_cnt = 0;
+    struct extent *result = NULL;
+    size_t extents_res_size, i;
+    char buffer[32];
+
+    root = json_array();
+    if (!root) {
+        pho_error(-ENOMEM, "Failed to create json object");
+        return NULL;
+    }
+
+
+    for (i = 0; i < count; i++) {
+        child = json_object();
+        if (!child)
+            err_cnt++;
+        snprintf(buffer, sizeof(buffer), "%llu", extents[i].size);
+        rc = json_object_set_new(child, "sz", json_string(buffer));
+        if (rc)
+            err_cnt++;
+
+        rc = json_object_set_new(child, "addr",
+                         json_string(extents[i].address.buff));
+        if (rc)
+            err_cnt++;
+
+        rc = json_object_set_new(child, "fam",
+                         json_string(dev_family2str(extents[i].media.type)));
+        if (rc)
+            err_cnt++;
+
+        rc = json_object_set_new(child, "media",
+                         json_string(media_id_get(&extents[i].media)));
+        if (rc)
+            err_cnt++;
+
+        rc = json_array_append(root, child);
+        if (rc)
+            err_cnt++;
+
+    }
+
+    *error = err_cnt;
+
+    s = json_dumps(root, 0);
+    json_decref(root);
+    if (!s) {
+        pho_error(-EINVAL, "Failed to dump json to char");
+        return NULL;
+    }
+    return s;
+}
+
+static int get_object_setrequest(void *item_list, int item_cnt,
+                                  enum dss_set_action action,
+                                  GString *request)
+{
+    int i;
+    for (i = 0; i < item_cnt; i++) {
+        struct object_info *p_object = (struct object_info *)item_list;
+
+        if (action == DSS_SET_DELETE) {
+            g_string_append_printf(request, delete_query[DSS_OBJECT],
+                                   p_object[i].oid);
+        } else if (action == DSS_SET_INSERT) {
+            g_string_append_printf(request, insert_query_values[DSS_OBJECT],
+                                   p_object[i].oid, "[]",
+                                   i < item_cnt-1 ? "," : ";");
+        } else if (action == DSS_SET_UPDATE) {
+            g_string_append_printf(request, update_query[DSS_OBJECT],
+                                   "[]", p_object[i].oid);
+        }
+    }
+    return 0;
+}
+
+static int get_extent_setrequest(void *item_list, int item_cnt,
+                                  enum dss_set_action action,
+                                  GString *request, int *error)
+{
+    int i;
+    char *layout;
+    for (i = 0; i < item_cnt; i++) {
+        struct layout_info *p_layout = (struct layout_info *)item_list;
+
+        if (action == DSS_SET_DELETE) {
+            g_string_append_printf(request, delete_query[DSS_EXTENT],
+                                   p_layout[i].oid);
+        } else if (action == DSS_SET_INSERT) {
+            layout = dss_layout_extents_encode(p_layout[i].extents,
+                                               p_layout[i].ext_count, error);
+            if (!layout)
+                LOG_RETURN(-EINVAL, "JSON error");
+            g_string_append_printf(request, insert_query_values[DSS_EXTENT],
+                                   p_layout[i].oid, p_layout[i].copy_num,
+                                   extent_state2str(p_layout[i].state),
+                                   layout_type2str(p_layout[i].type), "[]",
+                                   layout, i < item_cnt-1 ? "," : ";");
+            free(layout);
+        } else if (action == DSS_SET_UPDATE) {
+            layout = dss_layout_extents_encode(p_layout[i].extents,
+                                               p_layout[i].ext_count, error);
+            if (!layout)
+                LOG_RETURN(-EINVAL, "JSON error");
+            g_string_append_printf(request, update_query[DSS_EXTENT],
+                                   p_layout[i].copy_num,
+                                   extent_state2str(p_layout[i].state),
+                                   layout_type2str(p_layout[i].type), "[]",
+                                   layout, p_layout[i].oid);
+            free(layout);
+        }
+    }
+    return 0;
+}
+
+static int get_media_setrequest(void *item_list, int item_cnt,
+                                  enum dss_set_action action,
+                                  GString *request, int *error)
+{
+    int   i;
+    char *model;
+
+    for (i = 0; i < item_cnt; i++) {
+        struct media_info *p_media = (struct media_info *)item_list;
+
+        if (action == DSS_SET_DELETE) {
+            g_string_append_printf(request, delete_query[DSS_MEDIA],
+                                   media_id_get(&p_media[i].id));
+        } else if (action == DSS_SET_INSERT) {
+            model = dss_char4sql(p_media[i].model);
+            if (!model)
+                LOG_RETURN(-ENOMEM, "memory allocation failed");
+            g_string_append_printf(request, insert_query_values[DSS_MEDIA],
+                                   dev_family2str(p_media[i].id.type),
+                                   model, media_id_get(&p_media[i].id),
+                                   media_adm_status2str(p_media[i].adm_status),
+                                   fs_type2str(p_media[i].fs_type),
+                                   address_type2str(p_media[i].addr_type),
+                                   fs_status2str(p_media[i].fs_status),
+                                   dss_media_stats_encode(p_media[i].stats,
+                                                          error),
+                                   i < item_cnt-1 ? "," : ";");
+            free(model);
+        } else if (action == DSS_SET_UPDATE) {
+            model = dss_char4sql(p_media[i].model);
+            if (!model)
+                LOG_RETURN(-ENOMEM, "memory allocation failed");
+            g_string_append_printf(request, update_query[DSS_MEDIA],
+                                   dev_family2str(p_media[i].id.type), model,
+                                   media_adm_status2str(p_media[i].adm_status),
+                                   fs_type2str(p_media[i].fs_type),
+                                   address_type2str(p_media[i].addr_type),
+                                   fs_status2str(p_media[i].fs_status),
+                                   dss_media_stats_encode(p_media[i].stats,
+                                                          error),
+                                   media_id_get(&p_media[i].id));
+            free(model);
+        }
+    }
+
+    return 0;
+}
+
+static int get_device_setrequest(void *item_list, int item_cnt,
+                                  enum dss_set_action action,
+                                  GString *request)
+{
+    int i;
+    char *model;
+    for (i = 0; i < item_cnt; i++) {
+        struct dev_info *p_dev = (struct dev_info *)item_list;
+
+        if (action == DSS_SET_DELETE) {
+            g_string_append_printf(request, delete_query[DSS_DEVICE],
+                                   p_dev[i].serial);
+
+        } else if (action == DSS_SET_INSERT) {
+            model = dss_char4sql(p_dev[i].model);
+            if (!model)
+                LOG_RETURN(-ENOMEM, "memory allocation failed");
+            g_string_append_printf(request, insert_query_values[DSS_DEVICE],
+                                   dev_family2str(p_dev[i].family), model,
+                                   p_dev[i].serial, p_dev[i].host,
+                                   media_adm_status2str(p_dev[i].adm_status),
+                                   p_dev[i].path, p_dev[i].changer_idx,
+                                   i < item_cnt-1 ? "," : ";");
+            free(model);
+        } else if (action == DSS_SET_UPDATE) {
+            model = dss_char4sql(p_dev[i].model);
+            if (!model)
+                LOG_RETURN(-ENOMEM, "memory allocation failed");
+            g_string_append_printf(request, update_query[DSS_DEVICE],
+                                   dev_family2str(p_dev[i].family),
+                                   model, p_dev[i].host,
+                                   media_adm_status2str(p_dev[i].adm_status),
+                                       p_dev[i].path, p_dev[i].changer_idx,
+                                       p_dev[i].serial);
+            free(model);
+        }
+    }
+
+    return 0;
 }
 
 static inline bool is_type_supported(enum dss_type type)
@@ -425,6 +729,86 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     }
 
 out:
+    return rc;
+}
+
+int dss_set(void *handle, enum dss_type type, void *item_list,
+            int item_cnt, enum dss_set_action action)
+{
+    GString *request;
+
+    PGresult *res = NULL;
+    PGconn *conn = handle;
+    int rc = 0;
+    int error = 0;
+    int i;
+
+    if (handle == NULL || item_list == NULL || item_cnt == 0)
+        LOG_RETURN(-EINVAL, "handle: %p, item_list: %p, item_cnt: %d",
+                   handle, item_list, item_cnt);
+
+    request = g_string_new("BEGIN;");
+
+    if (action == DSS_SET_INSERT)
+        g_string_append(request, insert_query[type]);
+
+    switch (type) {
+
+    case DSS_DEVICE:
+        rc = get_device_setrequest(item_list, item_cnt, action, request);
+        if (rc)
+            LOG_GOTO(out_cleanup, rc, "SQL device request failed");
+        break;
+    case DSS_MEDIA:
+        rc = get_media_setrequest(item_list, item_cnt, action, request, &error);
+        if (rc)
+            LOG_GOTO(out_cleanup, rc, "SQL media request failed");
+        break;
+    case DSS_EXTENT:
+        rc = get_extent_setrequest(item_list, item_cnt, action, request,
+                                   &error);
+        if (rc)
+            LOG_GOTO(out_cleanup, rc, "SQL extent request failed");
+        break;
+    case DSS_OBJECT:
+        rc = get_object_setrequest(item_list, item_cnt, action, request);
+        if (rc)
+            LOG_GOTO(out_cleanup, rc, "SQL object request failed");
+        break;
+
+    default:
+        LOG_RETURN(-ENOTSUP, "unsupported DSS request type %#x", type);
+
+    }
+
+    if (error)
+        LOG_GOTO(out_cleanup, -EINVAL, "JSON Parsing failed: %d errors found",
+                 error);
+
+    pho_debug("Executing request: %s", request->str);
+    res = PQexec(conn, request->str);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        rc = -ECOMM;
+        pho_error(rc, "Query (%s) failed: %s", request->str,
+                  PQerrorMessage(conn));
+        PQclear(res);
+
+        res = PQexec(conn, "ROLLBACK; ");
+        if (PQresultStatus(res) != PGRES_COMMAND_OK)
+            pho_error(rc, "Rollback failed");
+
+        goto out_cleanup;
+    }
+
+    res = PQexec(conn, "COMMIT; ");
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        rc = -ECOMM;
+        pho_error(rc, "Commit failed");
+    }
+
+out_cleanup:
+    PQclear(res);
+    g_string_free(request, true);
     return rc;
 }
 

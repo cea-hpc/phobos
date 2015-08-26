@@ -28,6 +28,16 @@ function test_check_get
     $test_bin get "$type" "$crit"
 }
 
+function test_check_set
+{
+    local type=$1
+    local crit=$2
+    local action=$3
+
+
+    $test_bin set "$type" "$crit" "$action"
+}
+
 trap clean_test ERR EXIT
 
 clean_test
@@ -37,15 +47,15 @@ insert_examples
 echo
 
 echo "**** TESTS: DSS_GET DEV ****"
-test_check_get "dev" "all"
-test_check_get "dev" "path LIKE /dev%"
-test_check_get "dev" "family = tape"
-test_check_get "dev" "family = dir"
-test_check_get "dev" "id != foo"
-test_check_get "dev" "host != foo"
-test_check_get "dev" "adm_status = unlocked"
-test_check_get "dev" "changer_idx > 0"
-test_check_get "dev" "model = ULTRIUM-TD6"
+test_check_get "device" "all"
+test_check_get "device" "path LIKE /dev%"
+test_check_get "device" "family = tape"
+test_check_get "device" "family = dir"
+test_check_get "device" "id != foo"
+test_check_get "device" "host != foo"
+test_check_get "device" "adm_status = unlocked"
+test_check_get "device" "changer_idx > 0"
+test_check_get "device" "model = ULTRIUM-TD6"
 
 
 echo "**** TESTS: DSS_GET MEDIA ****"
@@ -81,5 +91,33 @@ test_check_get "extent" "copy_num = 0"
 test_check_get "extent" "state = pending"
 test_check_get "extent" "lyt_type = simple"
 
+echo "**** TEST: DSS_SET DEVICE ****"
+test_check_set "device" "insert"
+test_check_get "device" "id LIKE %COPY%"
+test_check_set "device" "update"
+test_check_get "device" "host LIKE %UPDATE%"
+test_check_set "device" "delete"
+test_check_get "device" "id LIKE %COPY%"
+echo "**** TEST: DSS_SET MEDIA  ****"
+test_check_set "media" "insert"
+test_check_get "media" "id LIKE %COPY%"
+test_check_set "media" "update"
+test_check_get "media" "stats::json->>'nb_obj' > 1002"
+test_check_set "media" "delete"
+test_check_get "media" "id LIKE %COPY%"
+echo "**** TEST: DSS_SET OBJECT  ****"
+test_check_set "object" "insert"
+test_check_get "object" "oid LIKE %COPY%"
+#test_check_set "object" "update"
+test_check_set "object" "delete"
+test_check_get "object" "oid LIKE %COPY%"
+echo "**** TEST: DSS_SET EXTENT  ****"
+test_check_set "extent" "insert"
+test_check_get "extent" "oid LIKE %COPY%"
+test_check_set "extent" "update"
+test_check_get "extent" "oid LIKE %COPY%"
+test_check_set "extent" "delete"
+test_check_get "extent" "oid LIKE %COPY%"
+
 # Uncomment if you want the db to persist after test
-# trap - EXIT ERR
+#  trap - EXIT ERR

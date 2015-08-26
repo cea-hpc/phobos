@@ -23,44 +23,40 @@
 #include <string.h>
 #include <inttypes.h>
 
+
 int main(int argc, char **argv)
 {
     int     rc;
-    void   *dss_handle;
-    enum    dss_type type;
-    void   *item_list;
+    void                *dss_handle;
+    enum dss_type        type;
+    enum dss_set_action  action;
     struct  dev_info    *dev;
     struct  media_info  *media;
     struct  object_info *object;
     struct  layout_info *layout;
-    struct  extent *extents;
-    int     item_cnt;
-    struct  dss_crit *crit;
-    int     crit_cnt;
-    int     i, j;
-    char   *parser;
+    struct  extent      *extents;
+    void                *item_list;
+    int                  item_cnt;
+    struct  dss_crit    *crit;
+    int                  crit_cnt;
+    int                  i, j;
+    char                *parser;
+
 
     pho_log_level_set(PHO_LOG_VERB);
 
-    if (argc < 3 || argc > 4) {
+    if (argc < 3 || argc > 5) {
         fprintf(stderr, "Usage: %s ACTION TYPE [ \"CRIT\" ]\n", argv[0]);
-        fprintf(stderr, "where  ACTION := { get }\n");
-        fprintf(stderr, "       TYPE := { dev | media | object | extent }\n");
+        fprintf(stderr, "where  ACTION := { get | set }\n");
+        fprintf(stderr, "       TYPE := "
+                        "{ device | media | object | extent }\n");
         fprintf(stderr, "       [ \"CRIT\" ] := \"field cmp value\"\n");
         exit(1);
     }
-
     if (!strcmp(argv[1], "get")) {
-        if (!strcmp(argv[2], "dev")) {
-            type = DSS_DEVICE;
-        } else if (!strcmp(argv[2], "media")) {
-            type = DSS_MEDIA;
-        } else if (!strcmp(argv[2], "object")) {
-            type = DSS_OBJECT;
-        } else if (!strcmp(argv[2], "extent")) {
-            type = DSS_EXTENT;
-        } else {
-            fprintf(stderr, "verb dev|media|object|extend "
+        type = str2dss_type(argv[2]);
+        if (type == DSS_INVAL) {
+            fprintf(stderr, "verb device|media|object|extend "
                             "expected at '%s'\n", argv[2]);
             exit(EINVAL);
         }
@@ -153,10 +149,10 @@ int main(int argc, char **argv)
                 for (j = 0; j < layout->ext_count; j++) {
                     printf("->Got extent: layout_idx:%d, size:%zu,"
                            " address:%s,media type:%s, media:%s\n",
-                            extents->layout_idx, extents->size,
-                            extents->address.buff,
-                            dev_family2str(extents->media.type),
-                            media_id_get(&extents->media));
+                           extents->layout_idx, extents->size,
+                           extents->address.buff,
+                           dev_family2str(extents->media.type),
+                           media_id_get(&extents->media));
                     extents++;
                 }
             }
@@ -166,8 +162,87 @@ int main(int argc, char **argv)
         }
 
         dss_res_free(item_list, item_cnt);
+
+    } else if (!strcmp(argv[1], "set")) {
+        type = str2dss_type(argv[2]);
+
+        if (type == DSS_INVAL) {
+            fprintf(stderr, "verb dev|media|object|extent"
+                            "expected at '%s'\n", argv[2]);
+            exit(EINVAL);
+        }
+        action = str2dss_set_action(argv[3]);
+
+        rc = dss_init("dbname=phobos"
+                      " host=localhost"
+                      " user=phobos"
+                      " password=phobos", &dss_handle);
+        if (rc) {
+            fprintf(stderr, "dss_init failed: %s (%d)\n",
+                    strerror(-rc), -rc);
+            exit(-rc);
+         }
+        crit_cnt = 0;
+        crit = NULL;
+
+        rc = dss_get(dss_handle, type, crit, crit_cnt, &item_list, &item_cnt);
+        if (rc) {
+            fprintf(stderr, "dss_get failed: %s (%d)\n", strerror(-rc), -rc);
+            exit(-rc);
+        }
+
+        switch (type) {
+        case DSS_DEVICE:
+            for (i = 0, dev = item_list; i < item_cnt; i++, dev++) {
+                if (action == DSS_SET_INSERT)
+                    asprintf(&dev->serial, "%sCOPY", dev->serial);
+                if (action == DSS_SET_UPDATE)
+                    asprintf(&dev->host, "%sUPDATE", dev->host);
+            }
+            break;
+        case DSS_MEDIA:
+            for (i = 0, media = item_list; i < item_cnt; i++, media++) {
+                const char *id;
+                char *s;
+                if (action == DSS_SET_INSERT) {
+                    id = media_id_get(&media->id);
+                    asprintf(&s, "%sCOPY", id);
+                    media_id_set(&media->id, s);
+                } else if (action == DSS_SET_UPDATE) {
+                    media->stats.nb_obj += 1000;
+                }
+            }
+            break;
+        case DSS_OBJECT:
+            for (i = 0, object = item_list; i < item_cnt; i++, object++) {
+                char *s = object->oid;
+
+                if (action == DSS_SET_INSERT)
+                    asprintf(&object->oid, "%sCOPY", s);
+            }
+            break;
+        case DSS_EXTENT:
+            for (i = 0,  layout = item_list; i < item_cnt; i++, layout++) {
+                char *s = layout->oid;
+
+                if (action == DSS_SET_INSERT)
+                    asprintf(&layout->oid, "%sCOPY", s);
+                else if (action == DSS_SET_UPDATE)
+                    layout->extents[0].size = 0;
+            }
+            break;
+        default:
+            abort();
+        }
+
+        rc = dss_set(dss_handle, type, item_list, item_cnt, action);
+        if (rc) {
+            fprintf(stderr, "dss_set failed: %s (%d)\n", strerror(-rc), -rc);
+            exit(-rc);
+        }
+
     } else {
-        fprintf(stderr, "verb get expected at '%s'\n", argv[1]);
+        fprintf(stderr, "verb get | set expected at '%s'\n", argv[1]);
         rc = -EINVAL;
     }
     return rc;

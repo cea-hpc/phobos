@@ -18,11 +18,66 @@
 
 /** item types */
 enum dss_type {
-    DSS_OBJECT,
+    DSS_INVAL  = -1,
+    DSS_OBJECT =  0,
     DSS_EXTENT,
     DSS_DEVICE,
-    DSS_MEDIA
+    DSS_MEDIA,
+    DSS_LAST,
 };
+
+static const char * const dss_type_names[] = {
+    [DSS_OBJECT] = "object",
+    [DSS_EXTENT] = "extent",
+    [DSS_DEVICE] = "device",
+    [DSS_MEDIA]  = "media",
+};
+
+/**
+ *  get dss_type enum from string
+ *  @param[in]   dss_type as str
+ *  @result  dss_type  as enum
+*/
+static inline enum dss_type str2dss_type(const char *str)
+{
+    int i;
+
+    for (i = 0; i < DSS_LAST; i++)
+        if (!strcmp(str, dss_type_names[i]))
+            return i;
+    return DSS_INVAL;
+}
+
+/** dss_set action type */
+enum dss_set_action {
+    DSS_SET_INVAL  = -1,
+    DSS_SET_INSERT =  0,
+    DSS_SET_UPDATE,
+    DSS_SET_DELETE,
+    DSS_SET_LAST,
+};
+
+static const char * const dss_set_actions_names[] = {
+    [DSS_SET_INSERT] = "insert",
+    [DSS_SET_UPDATE] = "update",
+    [DSS_SET_DELETE] = "delete",
+};
+
+/**
+ *  get dss_type enum from string for reg. test
+ *  @param[in]   dss_set_action as str
+ *  @result  dss_set_action  as enum
+ */
+static inline enum dss_set_action str2dss_set_action(const char *str)
+{
+    int i;
+
+    for (i = 0; i < DSS_SET_LAST; i++)
+        if (!strcmp(str, dss_set_actions_names[i]))
+            return i;
+    return DSS_SET_INVAL;
+}
+
 
 /** comparators */
 enum dss_cmp {
@@ -340,6 +395,19 @@ static inline const int str2dss_val_fill(enum dss_fields fields, char *str,
     return 0;
 }
 
+static inline char *dss_char4sql(const char *s)
+{
+    char *ns;
+
+    if (s != NULL && s[0] != '\0') {
+        if (asprintf(&ns, "'%s'", s) == -1)
+            return NULL;
+    } else {
+        ns = strdup("NULL");
+    }
+
+    return ns;
+}
 /** helper to add a criteria to a criteria array */
 #define dss_crit_add(_pcrit, _pctr, _n, _cmp, _field, _value) do { \
         (_pcrit)[*(_pctr)].crit_name = (_n);                  \
@@ -407,4 +475,28 @@ static inline int dss_extent_get(void *dss_handle, struct dss_crit *crit,
     return dss_get(dss_handle, DSS_EXTENT, crit, crit_cnt, (void **)lyt_ls,
                    lyt_cnt);
 }
+
+/**
+ *  Generic function to set a list of items in DSS.
+ *  @param[in]  type      type of items to set.
+ *  @param[out] item_list list of items
+ *  @param[out] item_cnt  number of items in item_list.
+ */
+int dss_set(void *handle, enum dss_type type, void *item_list, int item_cnt,
+            enum dss_set_action action);
+
+
+static inline int dss_device_set(void *dss_handle, struct dev_info *dev_ls,
+                                 int dev_cnt, enum dss_set_action action)
+{
+    return dss_set(dss_handle, DSS_DEVICE, (void *)dev_ls, dev_cnt, action);
+}
+
+static inline int dss_media_set(void *dss_handle, struct media_info *media_ls,
+                                 int media_cnt, enum dss_set_action action)
+{
+    return dss_set(dss_handle, DSS_MEDIA, (void *)media_ls, media_cnt, action);
+}
+
+
 #endif
