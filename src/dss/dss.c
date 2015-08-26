@@ -224,7 +224,7 @@ static int dss_layout_extents_decode(struct extent **extents,
     extents_res_size = sizeof(struct extent) * (*count);
     result = malloc(extents_res_size);
     if (result == NULL)
-        LOG_GOTO(out_decref, -ENOMEM, "memory allocation failed for size %zu)",
+        LOG_GOTO(out_decref, -ENOMEM, "Memory allocation of size %zu failed",
                  extents_res_size);
 
     parse_error = 0;
@@ -291,21 +291,15 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     int rc = 0;
     size_t dss_res_size;
 
-    if (handle == NULL || item_list == NULL || item_cnt == NULL) {
-        rc = -EINVAL;
-        pho_error(rc, "handle: %p, item_list: %p, item_cnt: %p",
-                  handle, item_list, item_cnt);
-        return rc;
-    }
+    if (handle == NULL || item_list == NULL || item_cnt == NULL)
+        LOG_RETURN(-EINVAL, "Handle: %p, item_list: %p, item_cnt: %p",
+                   handle, item_list, item_cnt);
 
     *item_list = NULL;
     *item_cnt  = 0;
 
-    if (!is_type_supported(type)) {
-        rc = -ENOTSUP;
-        pho_error(rc, "unsupported DSS request type %#x", type);
-        return rc;
-    }
+    if (!is_type_supported(type))
+        LOG_RETURN(-ENOTSUP, "Unsupported DSS request type %#x", type);
 
     /* get everything if no criteria */
     clause = g_string_new(base_query[type]);
@@ -343,11 +337,9 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
 
     dss_res_size = sizeof(struct dss_result) + PQntuples(res) * res_size[type];
     dss_res = malloc(dss_res_size);
-    if (dss_res == NULL) {
-        pho_error(ENOMEM, "memory allocation failed for size %z", dss_res_size);
-        return -ENOMEM;
-    }
-
+    if (dss_res == NULL)
+        LOG_RETURN(-ENOMEM, "Memory allocation of size %zu failed",
+                   dss_res_size);
 
     switch (type) {
     case DSS_DEVICE:
@@ -385,7 +377,7 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
             rc = dss_media_stats_decode(&p_media->stats, PQgetvalue(res, i, 7));
             if (rc) {
                 PQclear(res);
-                LOG_GOTO(out, rc, "dss_get dss_media stats decode error");
+                LOG_GOTO(out, rc, "dss_media stats decode error");
             }
         }
 
@@ -408,7 +400,7 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
                                            PQgetvalue(res, i, 5));
             if (rc) {
                 PQclear(res);
-                LOG_GOTO(out, rc, "dss_get dss_extent decode error");
+                LOG_GOTO(out, rc, "dss_extent decode error");
             }
         }
 
