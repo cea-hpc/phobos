@@ -13,6 +13,7 @@
 #endif
 
 #include "pho_common.h"
+#include <ctype.h>
 #include <stdarg.h>
 
 
@@ -25,26 +26,32 @@ static pho_log_callback_t   phobos_log_callback = phobos_log_callback_default;
 static bool                 phobos_dev_output;
 
 
+static char *rstrip(char *msg)
+{
+    int i;
+
+    for (i = strlen(msg) - 1; i >= 0 && isspace(msg[i]); i++)
+        msg[i] = '\0';
+
+    return msg;
+}
+
 void phobos_log_callback_default(const struct pho_logrec *rec)
 {
     struct tm   time;
 
     localtime_r(&rec->plr_time.tv_sec, &time);
 
+    printf("%04d.%02d.%02d %02d:%02d:%02d.%06ld <%s>",
+           time.tm_year + 1900, time.tm_mon + 1, time.tm_mday,
+           time.tm_hour, time.tm_min, time.tm_sec,
+           rec->plr_time.tv_usec * 1000, pho_log_level2str(rec->plr_level));
+
     /* Running with dev mode adds filename and line number to the output */
-    if (phobos_dev_output) {
-        printf("%04d.%02d.%02d %02d:%02d:%02d.%06ld <%s> [%s:%s:%d] %s",
-               time.tm_year + 1900, time.tm_mon + 1, time.tm_mday,
-               time.tm_hour, time.tm_min, time.tm_sec,
-               rec->plr_time.tv_usec * 1000, pho_log_level2str(rec->plr_level),
-               rec->plr_func, rec->plr_file, rec->plr_line, rec->plr_msg);
-    } else {
-        printf("%04d.%02d.%02d %02d:%02d:%02d.%06ld <%s> %s",
-               time.tm_year + 1900, time.tm_mon + 1, time.tm_mday,
-               time.tm_hour, time.tm_min, time.tm_sec,
-               rec->plr_time.tv_usec * 1000, pho_log_level2str(rec->plr_level),
-               rec->plr_msg);
-    }
+    if (phobos_dev_output)
+        printf(" [%s:%s:%d]", rec->plr_func, rec->plr_file, rec->plr_line);
+
+    printf(" %s", rstrip(rec->plr_msg));
 
     if (rec->plr_err != 0)
         printf(": %s (%d)", strerror(rec->plr_err), rec->plr_err);
