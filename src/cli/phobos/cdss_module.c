@@ -552,9 +552,9 @@ static PyMethodDef CDSSMethods[] = {
  */
 static void module_exception_register(PyObject *mod)
 {
-    CDSSError = PyErr_NewException("cdss.error", NULL, NULL);
+    CDSSError = PyErr_NewException("cdss.GenericError", NULL, NULL);
     Py_INCREF(CDSSError);
-    PyModule_AddObject(mod, "error", CDSSError);
+    PyModule_AddObject(mod, "GenericError", CDSSError);
 }
 
 #define EXPOSE_INT_CONST(_mod, _c)    PyModule_AddIntConstant((_mod), #_c, _c)
