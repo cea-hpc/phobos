@@ -607,6 +607,16 @@ static void module_num_const_register(PyObject *mod)
     EXPOSE_INT_CONST(mod, DSS_DEV_model);
     EXPOSE_INT_CONST(mod, DSS_DEV_path);
     EXPOSE_INT_CONST(mod, DSS_DEV_changer_idx);
+
+    /* enum dev_family */
+    EXPOSE_INT_CONST(mod, PHO_DEV_DISK);
+    EXPOSE_INT_CONST(mod, PHO_DEV_TAPE);
+    EXPOSE_INT_CONST(mod, PHO_DEV_DIR);
+
+    /* enum dev_adm_status */
+    EXPOSE_INT_CONST(mod, PHO_DEV_ADM_ST_UNLOCKED);
+    EXPOSE_INT_CONST(mod, PHO_DEV_ADM_ST_LOCKED);
+    EXPOSE_INT_CONST(mod, PHO_DEV_ADM_ST_FAILED);
 }
 
 
