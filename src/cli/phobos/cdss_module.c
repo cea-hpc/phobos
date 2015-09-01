@@ -600,7 +600,7 @@ static void module_num_const_register(PyObject *mod)
     EXPOSE_INT_CONST(mod, DSS_MDA_vol_used);
     EXPOSE_INT_CONST(mod, DSS_MDA_vol_free);
 
-    EXPOSE_INT_CONST(mod, DSS_DEV_id);
+    EXPOSE_INT_CONST(mod, DSS_DEV_serial);
     EXPOSE_INT_CONST(mod, DSS_DEV_family);
     EXPOSE_INT_CONST(mod, DSS_DEV_host);
     EXPOSE_INT_CONST(mod, DSS_DEV_adm_status);

@@ -106,7 +106,7 @@ enum dss_fields {
     DSS_MDA_vol_free,   /* ->>stats phys. free */
 
     /* Device @ v0 */
-    DSS_DEV_id,
+    DSS_DEV_serial,
     DSS_DEV_family,
     DSS_DEV_host, /* FUTURE: hosts (indexed JSON array) */
     DSS_DEV_adm_status, /* locked/unlocked */
@@ -140,7 +140,7 @@ static const char * const dss_fields_names[] = {
     [DSS_MDA_vol_used] = "(stats->>'phys_spc_used')::bigint",
     [DSS_MDA_vol_free] = "(stats->>'phys_spc_free')::bigint",
     [DSS_DEV_family] = "family",
-    [DSS_DEV_id] = "id",
+    [DSS_DEV_serial] = "id",
     [DSS_DEV_host] = "host",
     [DSS_DEV_adm_status] = "adm_status",
     [DSS_DEV_model] = "model",
@@ -208,7 +208,7 @@ static const int const dss_fields_type[] = {
     [DSS_MDA_vol_used] = DSS_VAL_BIGINT,
     [DSS_MDA_vol_free] = DSS_VAL_BIGINT,
     [DSS_DEV_family] = DSS_VAL_ENUM,
-    [DSS_DEV_id] = DSS_VAL_STR,
+    [DSS_DEV_serial] = DSS_VAL_STR,
     [DSS_DEV_host] = DSS_VAL_STR,
     [DSS_DEV_adm_status] = DSS_VAL_ENUM,
     [DSS_DEV_model] = DSS_VAL_STR,
