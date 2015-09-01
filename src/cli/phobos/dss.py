@@ -81,12 +81,20 @@ class Client(object):
         self.handle = None
 
     def connect(self, **kwargs):
-        """Establish a fresh connection or renew a stalled one if needed."""
+        """
+        Establish a fresh connection or renew a stalled one if needed.
+
+        A special '_connect' keyword is supported, that overrides everything
+        and whose value is used as is to initialize connection. If not present,
+        a connection string is crafted: 'k0=v0 k1=v1...'
+        """
         if self.handle is not None:
             self.disconnect()
 
         # Build a string of the type 'dbname=phobos user=blah password=foobar'
-        conn_info = ' '.join(['%s=%s' % (k, v) for k, v in kwargs.iteritems()])
+        conn_info = kwargs.get('_connect')
+        if conn_info is None:
+            conn_info = ' '.join(['%s=%s' % (k, v) for k, v in kwargs.items()])
         self.handle = cdss.connection_open(conn_info)
 
     def disconnect(self):

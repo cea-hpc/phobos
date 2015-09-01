@@ -15,7 +15,11 @@ actions.
 """
 
 import sys
+import errno
 import argparse
+import ConfigParser as configparser
+
+from phobos.dss import Client
 
 
 class BaseOptHandler(object):
@@ -28,22 +32,35 @@ class BaseOptHandler(object):
     descr = '(undef)'
     verbs = []
 
-    def __init__(self, params, **kwargs):
+    def __init__(self, params, config, **kwargs):
         """
         Initialize action handler with command line parameters. These are to be
         re-checked later by the specialized chk_* methods.
         """
         super(BaseOptHandler, self).__init__(**kwargs)
         self.params = params
-        self.mgr = None
+        self.config = config
+        self.client = None
 
-    def get_manager(self):
-        """Return an object manager for the desired kind of object."""
-        if self.mgr is None:
-            config = self.params.get('config') # alternative configuration file
-            # TODO
-            #self.mgr = DSSContext(cfg_path=config).get_manager(self.label)
-        return self.mgr
+    def dss_connect(self):
+        """Initialize a DSS Client."""
+        dss_params = self.params.get('dss', {})
+        if dss_params:
+            # pass options as is, except pwdfile which we override
+            pwd_file = dss_params.get('pwdfile')
+            if pwd_file is not None:
+                del dss_params['pwdfile']
+                with pwd_file.open(pwd_file) as fin:
+                    dss_params['password'] = fin.read()
+
+        self.client = Client()
+        # XXX Connection info is currently expressed as an opaque string.
+        #     Thus use the special _connect keyword to not rebuild it.
+        self.client.connect(_connect=self.config['dss']['connect_string'])
+
+    def dss_disconnect(self):
+        """Release resources associated to a DSS handle."""
+        self.client.disconnect()
 
     @classmethod
     def add_options(cls, parser):
@@ -249,10 +266,17 @@ class TapeOptHandler(BaseOptHandler):
         print 'TAPE FORMAT'
 
     def exec_show(self):
-        print 'TAPE SHOW'
+        """Show tape details."""
+        for serial in self.params.get('res'):
+            tape = self.client.device_get(family='tape', serial=serial)
+            assert len(tape) == 1
+            desc_iter = sorted(tape[0]._asdict().iteritems())
+            print ' '.join(["%s:'%s'" % (k, v) for k, v in desc_iter])
 
     def exec_list(self):
-        print 'TAPE LIST'
+        """List all tapes."""
+        for tape in self.client.device_get(family='tape'):
+            print tape.serial
 
     def exec_lock(self):
         print 'TAPE LOCK'
@@ -273,10 +297,12 @@ class PhobosActionContext(object):
         """Initialize a PAC instance."""
         super(PhobosActionContext, self).__init__(**kwargs)
         self.parser = None
+        self.defaults = None
         self.parameters = None
 
         self.install_arg_parser()
         self.parameters = vars(self.parser.parse_args(args))
+        self.load_config()
 
     def install_arg_parser(self):
         """Initialize hierarchical command line parser."""
@@ -299,6 +325,25 @@ class PhobosActionContext(object):
         for obj in self.supported_objects:
             obj.subparser_register(sub)
 
+    def load_config(self):
+        """Load configuration file."""
+        cpath = self.parameters.get('config')
+        # Try to open configuration file
+        try:
+            cfile = open(cpath)
+        except IOError, exc:
+            if exc.errno == errno.ENOENT:
+                return
+            raise
+
+        config = configparser.ConfigParser()
+        config.readfp(cfile)
+        cfile.close()
+
+        self.defaults = {}
+        for section in config.sections():
+            self.defaults[section] = dict(config.items(section))
+
     def run(self):
         """
         Invoke the desired method on the selected media handler.
@@ -314,14 +359,16 @@ class PhobosActionContext(object):
         target_inst = None
         for obj in self.supported_objects:
             if obj.label == target:
-                target_inst = obj(self.parameters)
+                target_inst = obj(self.parameters, self.defaults)
                 break
 
         # The command line parser must catch such mistakes
         assert target_inst is not None
 
         # Invoke target::exec_{action}()
+        target_inst.dss_connect()
         getattr(target_inst, 'exec_%s' % action)()
+        target_inst.dss_disconnect()
 
 def phobos_main(args=sys.argv[1::]):
     """
