@@ -206,10 +206,19 @@ class DirOptHandler(BaseOptHandler):
         print 'DIR ADD'
 
     def exec_list(self):
-        print 'DIR LIST'
+        """List directories as devices."""
+        for obj in self.client.device_get(family='dir'):
+            print obj.serial
 
     def exec_show(self):
-        print 'DIR SHOW'
+        """Show directory details."""
+        for serial in self.params.get('res'):
+            obj = self.client.device_get(family='dir', serial=serial)
+            if not obj:
+                continue
+            assert len(obj) == 1
+            desc_iter = sorted(obj[0]._asdict().iteritems())
+            print ' '.join(["%s:'%s'" % (k, v) for k, v in desc_iter])
 
     def exec_lock(self):
         print 'DIR LOCK'
@@ -269,6 +278,8 @@ class TapeOptHandler(BaseOptHandler):
         """Show tape details."""
         for serial in self.params.get('res'):
             tape = self.client.device_get(family='tape', serial=serial)
+            if not tape:
+                continue
             assert len(tape) == 1
             desc_iter = sorted(tape[0]._asdict().iteritems())
             print ' '.join(["%s:'%s'" % (k, v) for k, v in desc_iter])
