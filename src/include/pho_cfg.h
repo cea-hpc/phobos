@@ -54,28 +54,7 @@ struct pho_config_item {
 /** Name and default of configuration parameters.
  *  Value contains default.
  */
-static const struct pho_config_item pho_cfg_descr[] = {
-    [PHO_CFG_DSS_connect_string] = {"dss", "connect_string",
-                                    "dbname=phobos host=localhost"},
-    [PHO_CFG_LRS_mount_prefix]   = {"lrs", "mount_prefix", "/mnt/phobos-"},
-    [PHO_CFG_LRS_policy]         = {"lrs", "policy", "best_fit"},
-    [PHO_CFG_LRS_default_family] = {"lrs", "default_family", "tape"},
-
-    [PHO_CFG_LDM_cmd_drive_query] = {"ldm", "cmd_drive_query",
-                                  PHO_LDM_HELPER" query_drive --json \"%s\""},
-    [PHO_CFG_LDM_cmd_drive_load] = {"ldm", "cmd_drive_load",
-                                  PHO_LDM_HELPER" load_drive --device \"%s\""
-                                    " --media \"%s\""},
-    [PHO_CFG_LDM_cmd_drive_unload] = {"ldm", "cmd_drive_unload",
-                                  PHO_LDM_HELPER" unload_drive --device \"%s\""
-                                    " --media \"%s\""},
-    [PHO_CFG_LDM_cmd_mount_ltfs]  = {"ldm", "cmd_mount_ltfs",
-                                  PHO_LDM_HELPER" mount_ltfs --device \"%s\""
-                                    "--path \"%s\""},
-    [PHO_CFG_LDM_cmd_umount_ltfs]  = {"ldm", "cmd_umount_ltfs",
-                                  PHO_LDM_HELPER" umount_ltfs --device \"%s\""
-                                    "--path \"%s\""},
-};
+extern const struct pho_config_item pho_cfg_descr[];
 
 /**
  * Initialize access to local config parameters (process-wide and host-wide).

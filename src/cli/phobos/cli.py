@@ -17,8 +17,8 @@ actions.
 import sys
 import errno
 import argparse
-import ConfigParser as configparser
 
+from phobos.ccfg import cfg_load_file, cfg_get_val
 from phobos.dss import Client
 
 
@@ -32,31 +32,24 @@ class BaseOptHandler(object):
     descr = '(undef)'
     verbs = []
 
-    def __init__(self, params, config, **kwargs):
+    def __init__(self, params, **kwargs):
         """
         Initialize action handler with command line parameters. These are to be
         re-checked later by the specialized chk_* methods.
         """
         super(BaseOptHandler, self).__init__(**kwargs)
         self.params = params
-        self.config = config
         self.client = None
 
     def dss_connect(self):
         """Initialize a DSS Client."""
-        dss_params = self.params.get('dss', {})
-        if dss_params:
-            # pass options as is, except pwdfile which we override
-            pwd_file = dss_params.get('pwdfile')
-            if pwd_file is not None:
-                del dss_params['pwdfile']
-                with pwd_file.open(pwd_file) as fin:
-                    dss_params['password'] = fin.read()
-
-        self.client = Client()
         # XXX Connection info is currently expressed as an opaque string.
         #     Thus use the special _connect keyword to not rebuild it.
-        self.client.connect(_connect=self.config['dss']['connect_string'])
+        self.client = Client()
+        conn_info = cfg_get_val('dss', 'connect_string')
+        if conn_info is None:
+            conn_info = ''
+        self.client.connect(_connect=conn_info)
 
     def dss_disconnect(self):
         """Release resources associated to a DSS handle."""
@@ -308,12 +301,12 @@ class PhobosActionContext(object):
         """Initialize a PAC instance."""
         super(PhobosActionContext, self).__init__(**kwargs)
         self.parser = None
-        self.defaults = None
         self.parameters = None
 
         self.install_arg_parser()
         self.parameters = vars(self.parser.parse_args(args))
-        self.load_config()
+
+        self.load_config() # After this, code can use cfg_get_val()
 
     def install_arg_parser(self):
         """Initialize hierarchical command line parser."""
@@ -341,19 +334,11 @@ class PhobosActionContext(object):
         cpath = self.parameters.get('config')
         # Try to open configuration file
         try:
-            cfile = open(cpath)
-        except IOError, exc:
+            cfg_load_file(cpath)
+        except IOError as exc:
             if exc.errno == errno.ENOENT:
                 return
             raise
-
-        config = configparser.ConfigParser()
-        config.readfp(cfile)
-        cfile.close()
-
-        self.defaults = {}
-        for section in config.sections():
-            self.defaults[section] = dict(config.items(section))
 
     def run(self):
         """
@@ -370,7 +355,7 @@ class PhobosActionContext(object):
         target_inst = None
         for obj in self.supported_objects:
             if obj.label == target:
-                target_inst = obj(self.parameters, self.defaults)
+                target_inst = obj(self.parameters)
                 break
 
         # The command line parser must catch such mistakes

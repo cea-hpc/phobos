@@ -29,6 +29,56 @@ static const char *cfg_file;
 /** pointer to the loaded configuration structure */
 static struct collection_item *cfg_items;
 
+
+const struct pho_config_item pho_cfg_descr[] = {
+    [PHO_CFG_DSS_connect_string] = {
+        .section = "dss",
+        .name    = "connect_string",
+        .value   = "dbname=phobos host=localhost"
+    },
+    [PHO_CFG_LRS_mount_prefix] = {
+        .section = "lrs",
+        .name    = "mount_prefix",
+        .value   = "/mnt/phobos-"
+    },
+    [PHO_CFG_LRS_policy] = {
+        .section = "lrs",
+        .name    = "policy",
+        .value   = "best_fit"
+    },
+    [PHO_CFG_LRS_default_family] = {
+        .section = "lrs",
+        .name    = "default_family",
+        .value   = "tape"
+    },
+    [PHO_CFG_LDM_cmd_drive_query] = {
+        .section = "ldm",
+        .name    = "cmd_drive_query",
+        .value   = PHO_LDM_HELPER" query_drive --json \"%s\""
+    },
+    [PHO_CFG_LDM_cmd_drive_load] = {
+        .section = "ldm",
+        .name    = "cmd_drive_load",
+        .value   = PHO_LDM_HELPER" load_drive --device \"%s\" --media \"%s\""
+    },
+    [PHO_CFG_LDM_cmd_drive_unload] = {
+        .section = "ldm",
+        .name    = "cmd_drive_unload",
+        .value   = PHO_LDM_HELPER" unload_drive --device \"%s\" --media \"%s\""
+    },
+    [PHO_CFG_LDM_cmd_mount_ltfs] = {
+        .section = "ldm",
+        .name    = "cmd_mount_ltfs",
+        .value   = PHO_LDM_HELPER" mount_ltfs --device \"%s\" --path \"%s\""
+    },
+    [PHO_CFG_LDM_cmd_umount_ltfs] = {
+        .section = "ldm",
+        .name    = "cmd_umount_ltfs",
+        .value   = PHO_LDM_HELPER" umount_ltfs --device \"%s\" --path \"%s\""
+    },
+};
+
+
 /** load a local config file */
 static int pho_cfg_load_file(const char *cfg)
 {
