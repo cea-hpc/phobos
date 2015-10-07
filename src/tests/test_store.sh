@@ -151,24 +151,6 @@ function test_check_get # extent_path
     size=$(stat -c '%s' "$arch")
     echo "address=$addr,size=$size"
 
-    # As extents are not saved in the DB for now,
-    # insert an extent that matches the objet we want to read
-    if [[ $TEST_FS == "ltfs" ]]; then
-        # (PSQL is defined in setup_db.sh)
-        $PSQL << EOF
-        insert into extent (oid, copy_num, state, lyt_type, lyt_info, extents)
-        values ('$id', 0, 'sync', 'simple','{}',
-            '[{"media":"073222L6","addr":"$addr","sz":"$size","fam":"tape"}]');
-EOF
-    else
-        host=$(hostname --short)
-        $PSQL << EOF
-        insert into extent (oid, copy_num, state, lyt_type, lyt_info, extents)
-        values ('$id', 0, 'sync', 'simple','{}',
-            '[{"media":"$host:$dir","addr":"$addr","sz":"$size","fam":"dir"}]');
-EOF
-    fi
-
     tgt="$TEST_RECOV_DIR/$id"
     mkdir -p $(dirname "$tgt")
 

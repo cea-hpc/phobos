@@ -498,5 +498,16 @@ static inline int dss_media_set(void *dss_handle, struct media_info *media_ls,
     return dss_set(dss_handle, DSS_MEDIA, (void *)media_ls, media_cnt, action);
 }
 
+static inline int dss_extent_set(void *dss_handle, struct layout_info *lyt_ls,
+                                 int lyt_cnt, enum dss_set_action action)
+{
+    return dss_set(dss_handle, DSS_EXTENT, (void *)lyt_ls, lyt_cnt, action);
+}
+
+static inline int dss_object_set(void *dss_handle, struct object_info *obj_ls,
+                                 int object_cnt, enum dss_set_action action)
+{
+    return dss_set(dss_handle, DSS_OBJECT, (void *)obj_ls, object_cnt, action);
+}
 
 #endif

@@ -204,6 +204,7 @@ int main(int argc, char **argv)
             for (i = 0, media = item_list; i < item_cnt; i++, media++) {
                 const char *id;
                 char *s;
+
                 if (action == DSS_SET_INSERT) {
                     id = media_id_get(&media->id);
                     asprintf(&s, "%sCOPY", id);
@@ -215,18 +216,22 @@ int main(int argc, char **argv)
             break;
         case DSS_OBJECT:
             for (i = 0, object = item_list; i < item_cnt; i++, object++) {
-                char *s = object->oid;
+                if (action == DSS_SET_INSERT) {
+                    char *s;
 
-                if (action == DSS_SET_INSERT)
-                    asprintf(&object->oid, "%sCOPY", s);
+                    asprintf(&s, "%sCOPY", object->oid);
+                    object->oid = s;
+                }
             }
             break;
         case DSS_EXTENT:
             for (i = 0,  layout = item_list; i < item_cnt; i++, layout++) {
-                char *s = layout->oid;
+                if (action == DSS_SET_INSERT) {
+                    char *s;
 
-                if (action == DSS_SET_INSERT)
-                    asprintf(&layout->oid, "%sCOPY", s);
+                    asprintf(&s, "%sCOPY", layout->oid);
+                    layout->oid = s;
+                }
                 else if (action == DSS_SET_UPDATE)
                     layout->extents[0].size = 0;
             }

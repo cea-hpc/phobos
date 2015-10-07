@@ -468,12 +468,15 @@ static char *dss_layout_extents_encode(struct extent *extents,
             err_cnt++;
         }
 
-        rc = json_object_set_new(child, "addr",
-                         json_string(extents[i].address.buff));
-        if (rc) {
-            pho_error(EINVAL, "Failed to encode 'addr' (%s)",
-                      extents[i].address.buff);
-            err_cnt++;
+        /* We may have no address yet. */
+        if (extents[i].address.buff != NULL) {
+            rc = json_object_set_new(child, "addr",
+                                     json_string(extents[i].address.buff));
+            if (rc) {
+                pho_error(EINVAL, "Failed to encode 'addr' (%s)",
+                          extents[i].address.buff);
+                err_cnt++;
+            }
         }
 
         rc = json_object_set_new(child, "fam",
@@ -498,7 +501,6 @@ static char *dss_layout_extents_encode(struct extent *extents,
             pho_error(EINVAL, "Failed to attach child to root object");
             err_cnt++;
         }
-
     }
 
     *error = err_cnt;

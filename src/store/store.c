@@ -46,6 +46,9 @@ static int build_extent_md(const char *id, const struct pho_attrs *md,
         return rc;
 
     str = g_string_new("");
+
+    /* TODO This conversion is done at several place. Consider caching the
+     * result and pass it to the functions that need it. */
     rc = pho_attrs_to_json(md, str, PHO_ATTR_BACKUP_JSON_FLAGS);
     if (rc != 0)
         goto free_values;
@@ -227,6 +230,105 @@ static int store_init(void **dss_hdl)
     /* FUTURE: return pho_cfg_set_thread_conn(dss_hdl); */
 }
 
+static int obj_put_start(void *dss, const char *obj_id,
+                         const struct pho_attrs *md, int flags)
+{
+    enum dss_set_action  action;
+    struct object_info   obj;
+    GString             *md_repr = g_string_new(NULL);
+    int                  rc;
+
+    rc = pho_attrs_to_json(md, md_repr, 0);
+    if (rc)
+        LOG_GOTO(out_free, rc, "Cannot convert attributes into JSON");
+
+    obj.oid = obj_id;
+    obj.user_md = md_repr->str;
+
+    action = (flags & PHO_OBJ_REPLACE) ? DSS_SET_UPDATE : DSS_SET_INSERT;
+
+    pho_debug("Storing object %s (transient) with attributes: %s",
+              obj_id, md_repr->str);
+
+    rc = dss_object_set(dss, &obj, 1, action);
+    if (rc)
+        LOG_GOTO(out_free, rc, "dss_object_set failed");
+
+out_free:
+    g_string_free(md_repr, true);
+    return rc;
+}
+
+static int extent_put_start(void *dss, const char *obj_id,
+                            struct layout_info *layout,
+                            struct data_loc *write_loc, int flags)
+{
+    enum dss_set_action action;
+    int                 rc;
+
+    layout->oid = obj_id;
+    layout->copy_num = 0;
+    layout->state = PHO_EXT_ST_PENDING;
+    layout->extents = &write_loc->extent;
+    layout->ext_count = 1;
+
+    action = (flags & PHO_OBJ_REPLACE) ? DSS_SET_UPDATE : DSS_SET_INSERT;
+
+    rc = dss_extent_set(dss, layout, 1, action);
+    if (rc)
+        LOG_RETURN(rc, "dss_extent_set failed");
+
+    return 0;
+}
+
+static int obj_put_done(void *dss, const char *obj_id,
+                        struct layout_info *layout, struct data_loc *write_loc)
+{
+    layout->state = PHO_EXT_ST_SYNC;
+    return dss_extent_set(dss, layout, 1, DSS_SET_UPDATE);
+}
+
+static int clean_extents(void *dss, const char *obj_id,
+                         struct layout_info *layout, struct data_loc *write_loc)
+{
+    int rc;
+
+    assert(strcmp(obj_id, layout->oid) == 0);
+    assert(layout->extents == &write_loc->extent);
+
+    rc = dss_extent_set(dss, layout, 1, DSS_SET_DELETE);
+    if (rc)
+        LOG_RETURN(rc, "dss_extent_set failed");
+
+    return 0;
+}
+
+static int extent_put_abort(void *dss, const char *obj_id,
+                            struct layout_info *layout,
+                            struct data_loc *write_loc)
+{
+    int rc;
+
+    assert(strcmp(obj_id, layout->oid) == 0);
+    assert(layout->extents == &write_loc->extent);
+
+    rc = dss_extent_set(dss, layout, 1, DSS_SET_DELETE);
+    if (rc)
+        LOG_RETURN(rc, "dss_extent_set failed");
+
+    return 0;
+}
+
+static int obj_put_abort(void *dss, const char *obj_id)
+{
+    struct object_info  obj;
+
+    obj.oid = obj_id;
+    obj.user_md = NULL;
+
+    return dss_object_set(dss, &obj, 1, DSS_SET_DELETE);
+}
+
 /** Put a file to the object store
  * \param obj_id    unique arbitrary string to identify the object
  * \param src_file  file to put to the store
@@ -254,12 +356,10 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
         LOG_GOTO(disconn, rc = -errno, "open(%s) failed", src_file);
 
     if (fstat(info.fd, &info.st) != 0)
-        LOG_GOTO(disconn, rc = -errno, "fstat(%s) failed", src_file);
+        LOG_GOTO(close_src, rc = -errno, "fstat(%s) failed", src_file);
 
-    /* store object info in the DB (transient state) + check if it already
-     * exists */
-    /** @TODO   rc = obj_put_start(obj_id, md, flags_obj2md(flags)); */
-    rc = 0;
+    /* store object info in the DB (transient state) with pre-existence check */
+    rc = obj_put_start(dss, obj_id, md, flags);
     if (rc)
         LOG_GOTO(close_src, rc, "obj_put_start(%s) failed", obj_id);
 
@@ -270,52 +370,51 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
                  "%zu bytes", info.st.st_size);
 
     /* set extent info in DB (transient state) */
-    /** @TODO    rc = extent_put_start(obj_id, &layout, &write_loc,
-                             flags_obj2md(flags)); */
+    rc = extent_put_start(dss, obj_id, &layout, &write_loc, flags);
     if (rc)
         LOG_GOTO(out_lrs_end, rc, "couln't save extents info");
 
     /* write data to the media */
-    rc = write_extents(&info, obj_id, md, &layout, &write_loc,
-                       flags);
+    rc = write_extents(&info, obj_id, md, &layout, &write_loc, flags);
     if (rc)
         LOG_GOTO(out_clean_db_ext, rc, "failed to write extents");
 
     close(info.fd);
 
     /* complete DB info (object status & extents) */
-    /** @TODO   rc = obj_put_done(obj_id, &layout, &write_loc); */
+    rc = obj_put_done(dss, obj_id, &layout, &write_loc);
     if (rc)
         LOG_GOTO(out_clean_ext, rc, "obj_put_done(%s) failed", obj_id);
 
-    /* release storage resources + update device/media info */
-    lrs_done(dss, &write_loc, 0);
-    /* don't care about the error here, the object has been saved successfully
-     * and the LRS error should have been logged by lower layers.
-     */
-    /** @TODO release write_loc structure memory */
+    /* release storage resources + update device/media info
+     * XXX Note that we do not care about the error here, the object has been
+     * saved successfully and the LRS error should have been logged by lower
+     * layers. */
+    (void)lrs_done(dss, &write_loc, 0);
 
     pho_info("put complete: '%s' -> obj_id:'%s'", src_file, obj_id);
     return 0;
 
     /* cleaning after error cases */
 out_clean_ext:
-/** @TODO    clean_extents(obj_id, &layout, &write_loc); */
-    ;
+    clean_extents(dss, obj_id, &layout, &write_loc);
+
 out_clean_db_ext:
-/** @TODO    extent_put_abort(obj_id, &layout, &write_loc); */
-    ;
+    extent_put_abort(dss, obj_id, &layout, &write_loc);
+
 out_lrs_end:
     /* release resource reservations */
     lrs_done(dss, &write_loc, rc);
+
 out_clean_obj:
-    /** @TODO    obj_put_abort(obj_id); */
-    ;
+    obj_put_abort(dss, obj_id);
+
 close_src:
     close(info.fd);
+
 disconn:
-    if (dss)
-        dss_fini(dss);
+    dss_fini(dss);
+
     return rc;
 }
 
@@ -324,8 +423,9 @@ static int obj_get_location(void *dss, const char *obj_id,
                             struct layout_info **layout)
 {
     struct dss_crit crit[2]; /* criteria on obj_id and copynum */
-    int                 crit_cnt = 0;
-    int                 rc, cnt = 0;
+    int             crit_cnt = 0;
+    int             cnt = 0;
+    int             rc;
 
     dss_crit_add(crit, &crit_cnt, DSS_EXT_oid, DSS_CMP_EQ, val_str, obj_id);
     /* v00: object have a single copy */
@@ -336,13 +436,16 @@ static int obj_get_location(void *dss, const char *obj_id,
     rc = dss_extent_get(dss, crit, crit_cnt, layout, &cnt);
     if (rc != 0)
         return rc;
+
     if (cnt == 0)
         GOTO(err, rc = -ENOENT);
-    else if (cnt > 1)
+
+    if (cnt > 1)
         LOG_GOTO(err, rc = -EINVAL, "Too many layouts found matching oid '%s'",
                  obj_id);
 
     return 0;
+
 err:
     dss_res_free(*layout, cnt);
     *layout = NULL;

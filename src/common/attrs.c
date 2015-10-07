@@ -73,7 +73,7 @@ static int attr_json_dump_cb(const char *key, const char *value, void *udata)
 int pho_attrs_to_json(const struct pho_attrs *md, GString *str, int flags)
 {
     json_t  *jdata;
-    int      rc;
+    int      rc = 0;
 
     if (str == NULL)
         return -EINVAL;
@@ -81,9 +81,11 @@ int pho_attrs_to_json(const struct pho_attrs *md, GString *str, int flags)
     /* make sure the target string is empty */
     g_string_assign(str, "");
 
-    /* return empty string if attr list is empty */
-    if (md == NULL)
-        return 0;
+    /* return empty JSON object if attr list is empty */
+    if (md == NULL || md->attr_set == NULL) {
+        g_string_append(str, "{}");
+        goto out_nojson;
+    }
 
     jdata = json_object();
     if (jdata == NULL)
@@ -97,6 +99,8 @@ int pho_attrs_to_json(const struct pho_attrs *md, GString *str, int flags)
 
 out_free:
     json_decref(jdata);
+
+out_nojson:
     /* jansson does not return a meaningful error code, assume EINVAL */
     return (rc != 0) ? -EINVAL : 0;
 }
