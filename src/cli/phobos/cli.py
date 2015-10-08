@@ -17,10 +17,44 @@ actions.
 import sys
 import errno
 import argparse
+import logging
+
+import phobos.clogging as pho_logging
 
 from phobos.ccfg import cfg_load_file, cfg_get_val
 from phobos.dss import Client
 
+
+def phobos_log_handler(rec):
+    """
+    Receive log records emitted from lower layers and inject them into the
+    currently configured logger.
+    """
+    full_msg = rec[6]
+
+    # Append ': <errmsg>' to the original message if err_code was set
+    if rec[4] != 0:
+        full_msg += ": %s"
+        args = (os.strerror(rec[4]), )
+    else:
+        args = tuple()
+
+    attrs = {
+        'name': 'internals',
+        'levelno': rec[0],
+        'levelname': logging.getLevelName(rec[0]),
+        'filename': rec[1],
+        'funcName': rec[2],
+        'lineno': rec[3],
+        'exc_info': None,
+        'msg': full_msg,
+        'args': args,
+        'created': rec[5],
+    }
+
+    record = logging.makeLogRecord(attrs)
+    logger = logging.getLogger(__name__)
+    logger.handle(record)
 
 class BaseOptHandler(object):
     """
@@ -294,6 +328,10 @@ class PhobosActionContext(object):
     Find, initialize and operate an appropriate action execution context for the
     specified command line.
     """
+    CLI_LOG_FORMAT_REG = "%(asctime)s <%(levelname)s> %(message)s"
+    CLI_LOG_FORMAT_DEV = "%(asctime)s <%(levelname)s> " \
+                         "[%(funcName)s:%(filename)s:%(lineno)d] %(message)s"
+
     default_conf_file = '/etc/phobos.conf'
     supported_objects = [ DirOptHandler, DriveOptHandler, TapeOptHandler ]
 
@@ -315,7 +353,10 @@ class PhobosActionContext(object):
                                               description= \
                                               'phobos command line interface')
 
-        self.parser.add_argument('-v', '--verbose', help='Increase verbosity',
+        verb_grp = self.parser.add_mutually_exclusive_group()
+        verb_grp.add_argument('-v', '--verbose', help='Increase verbosity',
+                                 action='count', default=0)
+        verb_grp.add_argument('-q', '--quiet', help='Decrease verbosity',
                                  action='count', default=0)
 
         self.parser.add_argument('-c', '--config',
@@ -340,12 +381,47 @@ class PhobosActionContext(object):
                 return
             raise
 
+    def configure_app_logging(self):
+        """
+        Configure a multilayer logger according to command line specifications.
+        """
+        fmt = self.CLI_LOG_FORMAT_REG # default
+
+        # Both are mutually exclusive
+        lvl = self.parameters.get('verbose')
+        lvl -= self.parameters.get('quiet')
+
+        if lvl >= 2:
+            # -vv
+            pylvl = logging.DEBUG
+            fmt = self.CLI_LOG_FORMAT_DEV
+        elif lvl == 1:
+            # -v
+            pylvl = logging.INFO
+        elif lvl == 0:
+            # default
+            pylvl = logging.WARNING
+        elif lvl == -1:
+            # -q
+            pylvl = logging.ERROR
+        elif lvl <= -2:
+            # -qq
+            pylvl = logging.NOTSET
+
+        pho_logging.set_callback(phobos_log_handler)
+        pho_logging.set_level(pylvl)
+
+        logger = logging.getLogger(__name__)
+        logging.basicConfig(level=pylvl, format=fmt)
+
     def run(self):
         """
         Invoke the desired method on the selected media handler.
         It is assumed that all checks have happened already to make sure that
         the execution order refers to a valid method of the target object.
         """
+        self.configure_app_logging()
+
         target = self.parameters.get('media')
         action = self.parameters.get('verb')
 

@@ -12,6 +12,10 @@
 #include <Python.h>
 
 /* Project internals */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <pho_dss.h>
 
 #include <stdio.h>
