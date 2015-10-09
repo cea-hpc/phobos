@@ -317,8 +317,8 @@ static int dss_layout_extents_decode(struct extent **extents,
     extents_res_size = sizeof(struct extent) * (*count);
     result = malloc(extents_res_size);
     if (result == NULL)
-        LOG_GOTO(out_decref, -ENOMEM, "Memory allocation of size %zu failed",
-                 extents_res_size);
+        LOG_GOTO(out_decref, rc = -ENOMEM,
+                 "Memory allocation of size %zu failed", extents_res_size);
 
     parse_error = 0;
     for (i = 0; i < *count; i++) {
@@ -782,8 +782,8 @@ int dss_set(void *handle, enum dss_type type, void *item_list,
     }
 
     if (error)
-        LOG_GOTO(out_cleanup, -EINVAL, "JSON Parsing failed: %d errors found",
-                 error);
+        LOG_GOTO(out_cleanup, rc = -EINVAL,
+                 "JSON Parsing failed: %d errors found", error);
 
     pho_debug("Executing request: %s", request->str);
     res = PQexec(conn, request->str);
