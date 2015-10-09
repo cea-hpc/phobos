@@ -295,7 +295,7 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
      */
     /** @TODO release write_loc structure memory */
 
-    pho_info("put complete: '%s' -> obj_id:%s", src_file, obj_id);
+    pho_info("put complete: '%s' -> obj_id:'%s'", src_file, obj_id);
     return 0;
 
     /* cleaning after error cases */

@@ -33,6 +33,20 @@ struct dss_result {
     container_of((_list), struct dss_result, u.media)
 
 
+/**
+ * Handle notices from PostgreSQL. Strip the trailing newline and re-emit them
+ * through phobos log API.
+ */
+static void dss_pq_logger(void *arg, const char *message)
+{
+    size_t mlen = strlen(message);
+
+    if (message[mlen - 1] == '\n')
+        mlen -= 1;
+
+    pho_info("%*s", mlen, message);
+}
+
 int dss_init(const char *conninfo, void **handle)
 {
     PGconn *conn;
@@ -44,9 +58,11 @@ int dss_init(const char *conninfo, void **handle)
     if (PQstatus(conn) != CONNECTION_OK) {
         /** @todo: figure how to get an errno-like value out of it */
         pho_error(ENOTCONN, "Connection to database failed: %s",
-                PQerrorMessage(conn));
+                  PQerrorMessage(conn));
         return -ENOTCONN;
     }
+
+    (void)PQsetNoticeProcessor(conn, dss_pq_logger, NULL);
 
     *handle = conn;
     return 0;
@@ -56,6 +72,55 @@ void dss_fini(void *handle)
 {
     PQfinish(handle);
 }
+
+/**
+ * Helper for parsing json, due to missing function to manage uint64 in jansson.
+ */
+static uint64_t json_dict2uint64(const struct json_t *obj, const char *key,
+                                 int *err)
+{
+    struct json_t *current_obj;
+    const char    *val;
+
+    current_obj = json_object_get(obj, key);
+    if (current_obj == NULL) {
+        pho_debug("Cannot retrieve object '%s'", key);
+        (*err)++;
+        return 0;
+    }
+
+    val = json_string_value(current_obj);
+    if (val == NULL) {
+        pho_debug("Cannot retrieve value of '%s'", key);
+        (*err)++;
+        return 0;
+    }
+
+    return strtoull(val, NULL, 10);
+}
+
+static char *json_dict2char(const struct json_t *obj, const char *key, int *err)
+{
+    struct json_t   *current_obj;
+    char            *val;
+
+    current_obj = json_object_get(obj, key);
+    if (!current_obj) {
+        pho_debug("Cannot retrieve object '%s'", key);
+        (*err)++;
+        return NULL;
+    }
+
+    val = strdup(json_string_value(current_obj));
+    if (!val) {
+        pho_debug("Cannot retrieve value of '%s'", key);
+        (*err)++;
+        return NULL;
+    }
+
+    return val;
+}
+
 
 /**
  * Converts one criteria to a psql WHERE clause
@@ -94,8 +159,7 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
         break;
 
     case DSS_VAL_JSON:
-        /* You need to filter on a key, not the whole json set*/
-        return -EINVAL;
+        LOG_RETURN(-EINVAL, "Filters apply on keys, not entire JSON objects");
 
     case DSS_VAL_ARRAY:
     case DSS_VAL_STR:
@@ -122,11 +186,10 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
 
     case DSS_VAL_UNKNOWN:
     default:
-        return -EINVAL;
+        LOG_RETURN(-EINVAL, "Attempt to filter on unknown type");
     }
 
     return 0;
-
 }
 
 /**
@@ -204,26 +267,23 @@ static const char * const insert_query_values[] = {
  */
 static int dss_media_stats_decode(struct media_stats *stats, const char *json)
 {
-    json_t *root;
-    json_error_t json_error;
-    int parse_error;
-    size_t jflags = JSON_REJECT_DUPLICATES;
-    int rc;
+    json_t          *root;
+    json_error_t     json_error;
+    int              parse_error = 0;
+    int              rc = 0;
+    ENTRY;
 
-    root = json_loads(json, jflags, &json_error);
+    root = json_loads(json, JSON_REJECT_DUPLICATES, &json_error);
     if (!root)
-        LOG_RETURN(-EINVAL, "Failed to parse json data: %s",
-                   json_error.text);
+        LOG_RETURN(-EINVAL, "Failed to parse json data: %s", json_error.text);
 
     if (!json_is_object(root))
         LOG_GOTO(out_decref, rc = -EINVAL, "Invalid stats description");
 
-    parse_error = 0;
-
     stats->nb_obj =
-       json_dict2uint64(root, "nb_obj", &parse_error);
+        json_dict2uint64(root, "nb_obj", &parse_error);
     stats->logc_spc_used =
-       json_dict2uint64(root, "logc_spc_used", &parse_error);
+        json_dict2uint64(root, "logc_spc_used", &parse_error);
     stats->phys_spc_used =
        json_dict2uint64(root, "phys_spc_used", &parse_error);
     stats->phys_spc_free =
@@ -234,8 +294,6 @@ static int dss_media_stats_decode(struct media_stats *stats, const char *json)
                  "Json parser: %d missing mandatory fields in media stats",
                  parse_error);
 
-    rc = 0;
-
 out_decref:
     json_decref(root);
     return rc;
@@ -243,66 +301,85 @@ out_decref:
 
 static char *dss_media_stats_encode(struct media_stats stats, int *error)
 {
-    json_t *root;
-    json_error_t json_error;
-    char *s  = NULL;
-    char buffer[32];
-    int rc;
-    int err_cnt = 0;
+    json_t          *root;
+    json_error_t     json_error;
+    char            *s = NULL;
+    char             buffer[32];
+    int              err_cnt = 0;
+    int              rc;
+    ENTRY;
 
-    (*error) = 0;
+    *error = 0;
+
     root = json_object();
-
     if (!root) {
         pho_error(-ENOMEM, "Failed to create json object");
         return NULL;
     }
 
+    /* XXX This hack is needed because jansson lacks support for uint64 */
     snprintf(buffer, sizeof(buffer), "%llu", stats.nb_obj);
     rc = json_object_set_new(root, "nb_obj", json_string(buffer));
-    if (rc)
+    if (rc) {
+        pho_error(EINVAL, "Failed to encode 'nb_obj' (%llu)", stats.nb_obj);
         err_cnt++;
+    }
 
     snprintf(buffer, sizeof(buffer), "%llu", stats.logc_spc_used);
     rc = json_object_set_new(root, "logc_spc_used", json_string(buffer));
-    if (rc)
+    if (rc) {
+        pho_error(EINVAL, "Failed to encode 'logc_spc_used' (%llu)",
+                  stats.logc_spc_used);
         err_cnt++;
+    }
 
     snprintf(buffer, sizeof(buffer), "%llu", stats.phys_spc_used);
     rc = json_object_set_new(root, "phys_spc_used", json_string(buffer));
-    if (rc)
+    if (rc) {
+        pho_error(EINVAL, "Failed to encode 'phys_spc_used' (%llu)",
+                  stats.phys_spc_used);
         err_cnt++;
+    }
 
     snprintf(buffer, sizeof(buffer), "%llu", stats.phys_spc_free);
     rc = json_object_set_new(root, "phys_spc_free", json_string(buffer));
-    if (rc)
+    if (rc) {
+        pho_error(EINVAL, "Failed to encode 'phys_spc_free' (%llu)",
+                  stats.phys_spc_free);
         err_cnt++;
+    }
 
     *error = err_cnt;
 
     s = json_dumps(root, 0);
     json_decref(root);
     if (!s) {
-        pho_error(-EINVAL, "Failed to dump json to char");
+        pho_error(EINVAL, "Failed to dump JSON to ASCIIZ");
         return NULL;
     }
+
+    pho_debug("Created JSON representation for stats: '%s'", s);
     return s;
 }
 
 static int dss_layout_extents_decode(struct extent **extents,
                                      unsigned int *count, const char *json)
 {
-    json_t *root, *child;
-    json_error_t json_error;
-    int parse_error, rc;
-    struct extent *result = NULL;
-    size_t extents_res_size, i;
-    size_t jflags = JSON_REJECT_DUPLICATES;
+    json_t          *root;
+    json_t          *child;
+    json_error_t     json_error;
+    int              parse_error = 0;
+    struct extent   *result = NULL;
+    size_t           extents_res_size;
+    int              rc;
+    int              i;
+    ENTRY;
 
-    root = json_loads(json, jflags, &json_error);
+    pho_debug("Decoding JSON representation for extents: '%s'", json);
+
+    root = json_loads(json, JSON_REJECT_DUPLICATES, &json_error);
     if (!root)
-        LOG_RETURN(-EINVAL, "Failed to parse json data: %s",
-                   json_error.text);
+        LOG_RETURN(-EINVAL, "Failed to parse json data: %s", json_error.text);
 
     if (!json_is_array(root))
         LOG_GOTO(out_decref, rc = -EINVAL, "Invalid extents description");
@@ -311,7 +388,7 @@ static int dss_layout_extents_decode(struct extent **extents,
     if (*count == 0) {
         extents = NULL;
         LOG_GOTO(out_decref, rc = -EINVAL,
-                 "Json parser: extents array is empty");
+                 "json parser: extents array is empty");
     }
 
     extents_res_size = sizeof(struct extent) * (*count);
@@ -320,37 +397,33 @@ static int dss_layout_extents_decode(struct extent **extents,
         LOG_GOTO(out_decref, rc = -ENOMEM,
                  "Memory allocation of size %zu failed", extents_res_size);
 
-    parse_error = 0;
     for (i = 0; i < *count; i++) {
         child = json_array_get(root, i);
         result[i].layout_idx = i;
         result[i].size = json_dict2uint64(child, "sz", &parse_error);
         result[i].address.buff = json_dict2char(child, "addr", &parse_error);
-        result[i].address.size = strlen(result[i].address.buff)+1; /* ... */
-        result[i].media.type = str2dev_family(json_dict2char(child,
-                                              "fam", &parse_error));
+        result[i].address.size = strlen(result[i].address.buff) + 1;
+        result[i].media.type = str2dev_family(json_dict2char(child, "fam",
+                                                             &parse_error));
 
         /*XXX fs_type & address_type retrieved from media info */
         if (result[i].media.type == PHO_DEV_INVAL)
-            LOG_GOTO(out_decref, rc = -EINVAL,
-                    "dss_layout_extents_decode media type invalid");
+            LOG_GOTO(out_decref, rc = -EINVAL, "Invalid media type");
 
-        rc = media_id_set(&result[i].media,
-                     json_dict2char(child, "media", &parse_error));
-
+        rc = media_id_set(&result[i].media, json_dict2char(child, "media",
+                                                           &parse_error));
         if (rc)
             LOG_GOTO(out_decref, rc = -EINVAL,
-                     "dss_layout_extents_decode media set error");
+                     "Failed to set media id");
     }
 
     if (parse_error > 0)
         LOG_GOTO(out_decref, rc = -EINVAL,
-                 "Json parser: %d missing mandatory fields in extents",
+                 "json parser: %d missing mandatory fields in extents",
                  parse_error);
 
     *extents = result;
     rc = 0;
-
 
 out_decref:
     if (rc)
@@ -362,49 +435,69 @@ out_decref:
 static char *dss_layout_extents_encode(struct extent *extents,
                                        unsigned int count, int *error)
 {
-    json_t *root, *child;
-    char *s;
-    json_error_t json_error;
-    int rc;
-    int err_cnt = 0;
-    struct extent *result = NULL;
-    size_t extents_res_size, i;
-    char buffer[32];
+    json_t          *root;
+    json_t          *child;
+    json_error_t     json_error;
+    char            *s;
+    int              err_cnt = 0;
+    struct extent   *result = NULL;
+    size_t           extents_res_size;
+    char             buffer[32];
+    int              rc;
+    int              i;
+    ENTRY;
 
     root = json_array();
     if (!root) {
-        pho_error(-ENOMEM, "Failed to create json object");
+        pho_error(ENOMEM, "Failed to create json root object");
         return NULL;
     }
 
-
     for (i = 0; i < count; i++) {
         child = json_object();
-        if (!child)
+        if (!child) {
+            pho_error(ENOMEM, "Failed to create json child object");
             err_cnt++;
+            continue;
+        }
+
         snprintf(buffer, sizeof(buffer), "%llu", extents[i].size);
         rc = json_object_set_new(child, "sz", json_string(buffer));
-        if (rc)
+        if (rc) {
+            pho_error(EINVAL, "Failed to encode 'sz' (%llu)", extents[i].size);
             err_cnt++;
+        }
 
         rc = json_object_set_new(child, "addr",
                          json_string(extents[i].address.buff));
-        if (rc)
+        if (rc) {
+            pho_error(EINVAL, "Failed to encode 'addr' (%s)",
+                      extents[i].address.buff);
             err_cnt++;
+        }
 
         rc = json_object_set_new(child, "fam",
                          json_string(dev_family2str(extents[i].media.type)));
-        if (rc)
+        if (rc) {
+            pho_error(EINVAL, "Failed to encode 'fam' (%d:%s)",
+                      extents[i].media.type,
+                      dev_family2str(extents[i].media.type));
             err_cnt++;
+        }
 
         rc = json_object_set_new(child, "media",
                          json_string(media_id_get(&extents[i].media)));
-        if (rc)
+        if (rc) {
+            pho_error(EINVAL, "Failed to encode 'media' (%s)",
+                      media_id_get(&extents[i].media));
             err_cnt++;
+        }
 
         rc = json_array_append(root, child);
-        if (rc)
+        if (rc) {
+            pho_error(EINVAL, "Failed to attach child to root object");
             err_cnt++;
+        }
 
     }
 
@@ -413,9 +506,11 @@ static char *dss_layout_extents_encode(struct extent *extents,
     s = json_dumps(root, 0);
     json_decref(root);
     if (!s) {
-        pho_error(-EINVAL, "Failed to dump json to char");
+        pho_error(EINVAL, "Failed to dump JSON to ASCIIZ");
         return NULL;
     }
+
+    pho_debug("Created JSON representation for extents: '%s'", s);
     return s;
 }
 
@@ -424,6 +519,8 @@ static int get_object_setrequest(void *item_list, int item_cnt,
                                   GString *request)
 {
     int i;
+    ENTRY;
+
     for (i = 0; i < item_cnt; i++) {
         struct object_info *p_object = (struct object_info *)item_list;
 
@@ -447,9 +544,11 @@ static int get_extent_setrequest(void *item_list, int item_cnt,
                                   GString *request, int *error)
 {
     int i;
-    char *layout;
+    ENTRY;
+
     for (i = 0; i < item_cnt; i++) {
-        struct layout_info *p_layout = (struct layout_info *)item_list;
+        struct layout_info  *p_layout = (struct layout_info *)item_list;
+        char                *layout;
 
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_EXTENT],
@@ -458,7 +557,8 @@ static int get_extent_setrequest(void *item_list, int item_cnt,
             layout = dss_layout_extents_encode(p_layout[i].extents,
                                                p_layout[i].ext_count, error);
             if (!layout)
-                LOG_RETURN(-EINVAL, "JSON error");
+                LOG_RETURN(-EINVAL, "JSON encoding error");
+
             g_string_append_printf(request, insert_query_values[DSS_EXTENT],
                                    p_layout[i].oid, p_layout[i].copy_num,
                                    extent_state2str(p_layout[i].state),
@@ -469,7 +569,8 @@ static int get_extent_setrequest(void *item_list, int item_cnt,
             layout = dss_layout_extents_encode(p_layout[i].extents,
                                                p_layout[i].ext_count, error);
             if (!layout)
-                LOG_RETURN(-EINVAL, "JSON error");
+                LOG_RETURN(-EINVAL, "JSON encoding error");
+
             g_string_append_printf(request, update_query[DSS_EXTENT],
                                    p_layout[i].copy_num,
                                    extent_state2str(p_layout[i].state),
@@ -485,11 +586,12 @@ static int get_media_setrequest(void *item_list, int item_cnt,
                                   enum dss_set_action action,
                                   GString *request, int *error)
 {
-    int   i;
-    char *model;
+    int i;
+    ENTRY;
 
     for (i = 0; i < item_cnt; i++) {
-        struct media_info *p_media = (struct media_info *)item_list;
+        struct media_info   *p_media = (struct media_info *)item_list;
+        char                *model;
 
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_MEDIA],
@@ -498,6 +600,7 @@ static int get_media_setrequest(void *item_list, int item_cnt,
             model = dss_char4sql(p_media[i].model);
             if (!model)
                 LOG_RETURN(-ENOMEM, "memory allocation failed");
+
             g_string_append_printf(request, insert_query_values[DSS_MEDIA],
                                    dev_family2str(p_media[i].id.type),
                                    model, media_id_get(&p_media[i].id),
@@ -513,6 +616,7 @@ static int get_media_setrequest(void *item_list, int item_cnt,
             model = dss_char4sql(p_media[i].model);
             if (!model)
                 LOG_RETURN(-ENOMEM, "memory allocation failed");
+
             g_string_append_printf(request, update_query[DSS_MEDIA],
                                    dev_family2str(p_media[i].id.type), model,
                                    media_adm_status2str(p_media[i].adm_status),
@@ -534,9 +638,11 @@ static int get_device_setrequest(void *item_list, int item_cnt,
                                   GString *request)
 {
     int i;
-    char *model;
+    ENTRY;
+
     for (i = 0; i < item_cnt; i++) {
         struct dev_info *p_dev = (struct dev_info *)item_list;
+        char            *model;
 
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_DEVICE],
@@ -561,8 +667,8 @@ static int get_device_setrequest(void *item_list, int item_cnt,
                                    dev_family2str(p_dev[i].family),
                                    model, p_dev[i].host,
                                    media_adm_status2str(p_dev[i].adm_status),
-                                       p_dev[i].path, p_dev[i].changer_idx,
-                                       p_dev[i].serial);
+                                   p_dev[i].path, p_dev[i].changer_idx,
+                                   p_dev[i].serial);
             free(model);
         }
     }
@@ -587,13 +693,15 @@ static inline bool is_type_supported(enum dss_type type)
 int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
             int crit_cnt, void **item_list, int *item_cnt)
 {
-    PGconn *conn = handle;
-    PGresult *res;
-    GString *clause;
-    struct dss_result *dss_res;
-    int i, count;
-    int rc = 0;
-    size_t dss_res_size;
+    PGconn              *conn = handle;
+    PGresult            *res;
+    GString             *clause;
+    struct dss_result   *dss_res;
+    size_t               dss_res_size;
+    int                  rc = 0;
+    int                  count;
+    int                  i;
+    ENTRY;
 
     if (handle == NULL || item_list == NULL || item_cnt == NULL)
         LOG_RETURN(-EINVAL, "Handle: %p, item_list: %p, item_cnt: %p",
@@ -625,12 +733,12 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
             g_string_append(clause, " AND ");
     }
 
-    pho_debug("Executing request: %s", clause->str);
+    pho_debug("Executing request: '%s'", clause->str);
 
     res = PQexec(conn, clause->str);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         rc = -ECOMM;
-        pho_error(rc, "Query (%s) failed: %s", clause->str,
+        pho_error(rc, "Query '%s' failed: %s", clause->str,
                   PQerrorMessage(conn));
         PQclear(res);
         g_string_free(clause, true);
@@ -642,8 +750,7 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     dss_res_size = sizeof(struct dss_result) + PQntuples(res) * res_size[type];
     dss_res = malloc(dss_res_size);
     if (dss_res == NULL)
-        LOG_RETURN(-ENOMEM, "Memory allocation of size %zu failed",
-                   dss_res_size);
+        LOG_RETURN(-ENOMEM, "malloc of size %zu failed", dss_res_size);
 
     switch (type) {
     case DSS_DEVICE:
@@ -717,7 +824,7 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
         for (i = 0; i < PQntuples(res); i++) {
             struct object_info *p_object = &dss_res->u.object[i];
 
-            p_object->oid =  PQgetvalue(res, i, 0);
+            p_object->oid = PQgetvalue(res, i, 0);
         }
 
         *item_list = dss_res->u.object;
@@ -735,13 +842,13 @@ out:
 int dss_set(void *handle, enum dss_type type, void *item_list,
             int item_cnt, enum dss_set_action action)
 {
-    GString *request;
-
-    PGresult *res = NULL;
-    PGconn *conn = handle;
-    int rc = 0;
-    int error = 0;
-    int i;
+    PGconn      *conn = handle;
+    GString     *request;
+    PGresult    *res = NULL;
+    int          error = 0;
+    int          rc = 0;
+    int          i;
+    ENTRY;
 
     if (handle == NULL || item_list == NULL || item_cnt == 0)
         LOG_RETURN(-EINVAL, "handle: %p, item_list: %p, item_cnt: %d",
@@ -783,15 +890,18 @@ int dss_set(void *handle, enum dss_type type, void *item_list,
 
     if (error)
         LOG_GOTO(out_cleanup, rc = -EINVAL,
-                 "JSON Parsing failed: %d errors found", error);
+                 "JSON parsing failed: %d errors found", error);
 
-    pho_debug("Executing request: %s", request->str);
+    pho_debug("Executing request: '%s'", request->str);
+
     res = PQexec(conn, request->str);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
         rc = -ECOMM;
-        pho_error(rc, "Query (%s) failed: %s", request->str,
+        pho_error(rc, "Query '%s' failed: %s", request->str,
                   PQerrorMessage(conn));
         PQclear(res);
+
+        pho_info("Attempting to rollback after transaction failure");
 
         res = PQexec(conn, "ROLLBACK; ");
         if (PQresultStatus(res) != PGRES_COMMAND_OK)
