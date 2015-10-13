@@ -212,7 +212,7 @@ static int open_noatime(const char *path, int flags)
     return fd;
 }
 
-static int store_init(void **dss_hdl)
+static int store_init(struct dss_handle *hdl)
 {
     int         rc;
     const char *str;
@@ -225,12 +225,12 @@ static int store_init(void **dss_hdl)
     if (str == NULL)
         return -EINVAL;
 
-    return dss_init(str, dss_hdl);
+    return dss_init(str, hdl);
 
     /* FUTURE: return pho_cfg_set_thread_conn(dss_hdl); */
 }
 
-static int obj_put_start(void *dss, const char *obj_id,
+static int obj_put_start(struct dss_handle *dss, const char *obj_id,
                          const struct pho_attrs *md, int flags)
 {
     enum dss_set_action  action;
@@ -259,7 +259,7 @@ out_free:
     return rc;
 }
 
-static int extent_put_start(void *dss, const char *obj_id,
+static int extent_put_start(struct dss_handle *dss, const char *obj_id,
                             struct layout_info *layout,
                             struct data_loc *write_loc, int flags)
 {
@@ -281,14 +281,14 @@ static int extent_put_start(void *dss, const char *obj_id,
     return 0;
 }
 
-static int obj_put_done(void *dss, const char *obj_id,
+static int obj_put_done(struct dss_handle *dss, const char *obj_id,
                         struct layout_info *layout, struct data_loc *write_loc)
 {
     layout->state = PHO_EXT_ST_SYNC;
     return dss_extent_set(dss, layout, 1, DSS_SET_UPDATE);
 }
 
-static int clean_extents(void *dss, const char *obj_id,
+static int clean_extents(struct dss_handle *dss, const char *obj_id,
                          struct layout_info *layout, struct data_loc *write_loc)
 {
     int rc;
@@ -303,7 +303,7 @@ static int clean_extents(void *dss, const char *obj_id,
     return 0;
 }
 
-static int extent_put_abort(void *dss, const char *obj_id,
+static int extent_put_abort(struct dss_handle *dss, const char *obj_id,
                             struct layout_info *layout,
                             struct data_loc *write_loc)
 {
@@ -319,7 +319,7 @@ static int extent_put_abort(void *dss, const char *obj_id,
     return 0;
 }
 
-static int obj_put_abort(void *dss, const char *obj_id)
+static int obj_put_abort(struct dss_handle *dss, const char *obj_id)
 {
     struct object_info  obj;
 
@@ -343,7 +343,7 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
     struct data_loc     write_loc = {0};
     struct src_info     info = {0};
     int                 rc;
-    void               *dss = NULL;
+    struct dss_handle   dss;
 
     /* load configuration and get dss handle */
     rc = store_init(&dss);
@@ -359,18 +359,18 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
         LOG_GOTO(close_src, rc = -errno, "fstat(%s) failed", src_file);
 
     /* store object info in the DB (transient state) with pre-existence check */
-    rc = obj_put_start(dss, obj_id, md, flags);
+    rc = obj_put_start(&dss, obj_id, md, flags);
     if (rc)
         LOG_GOTO(close_src, rc, "obj_put_start(%s) failed", obj_id);
 
     /* get storage resource to write the object */
-    rc = lrs_write_intent(dss, info.st.st_size, &layout, &write_loc);
+    rc = lrs_write_intent(&dss, info.st.st_size, &layout, &write_loc);
     if (rc)
         LOG_GOTO(out_clean_obj, rc, "failed to get storage resource to write "
                  "%zu bytes", info.st.st_size);
 
     /* set extent info in DB (transient state) */
-    rc = extent_put_start(dss, obj_id, &layout, &write_loc, flags);
+    rc = extent_put_start(&dss, obj_id, &layout, &write_loc, flags);
     if (rc)
         LOG_GOTO(out_lrs_end, rc, "couln't save extents info");
 
@@ -382,7 +382,7 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
     close(info.fd);
 
     /* complete DB info (object status & extents) */
-    rc = obj_put_done(dss, obj_id, &layout, &write_loc);
+    rc = obj_put_done(&dss, obj_id, &layout, &write_loc);
     if (rc)
         LOG_GOTO(out_clean_ext, rc, "obj_put_done(%s) failed", obj_id);
 
@@ -390,36 +390,36 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
      * XXX Note that we do not care about the error here, the object has been
      * saved successfully and the LRS error should have been logged by lower
      * layers. */
-    (void)lrs_done(dss, &write_loc, 0);
+    (void)lrs_done(&dss, &write_loc, 0);
 
     pho_info("put complete: '%s' -> obj_id:'%s'", src_file, obj_id);
     return 0;
 
     /* cleaning after error cases */
 out_clean_ext:
-    clean_extents(dss, obj_id, &layout, &write_loc);
+    clean_extents(&dss, obj_id, &layout, &write_loc);
 
 out_clean_db_ext:
-    extent_put_abort(dss, obj_id, &layout, &write_loc);
+    extent_put_abort(&dss, obj_id, &layout, &write_loc);
 
 out_lrs_end:
     /* release resource reservations */
-    lrs_done(dss, &write_loc, rc);
+    lrs_done(&dss, &write_loc, rc);
 
 out_clean_obj:
-    obj_put_abort(dss, obj_id);
+    obj_put_abort(&dss, obj_id);
 
 close_src:
     close(info.fd);
 
 disconn:
-    dss_fini(dss);
+    dss_fini(&dss);
 
     return rc;
 }
 
 /** retrieve the location of a given object from DSS */
-static int obj_get_location(void *dss, const char *obj_id,
+static int obj_get_location(struct dss_handle *dss, const char *obj_id,
                             struct layout_info **layout)
 {
     struct dss_crit crit[2]; /* criteria on obj_id and copynum */
@@ -459,11 +459,12 @@ err:
  */
 int phobos_get(const char *obj_id, const char *tgt_file, int flags)
 {
-    struct layout_info *layout = NULL;
-    struct data_loc   read_loc = {0};
-    int rc = 0;
-    int fd, open_flags;
-    void *dss = NULL;
+    struct layout_info  *layout = NULL;
+    struct data_loc      read_loc = {0};
+    int                  rc = 0;
+    int                  fd;
+    int                  open_flags;
+    struct dss_handle    dss;
 
     /* load configuration and get dss handle */
     rc = store_init(&dss);
@@ -471,7 +472,7 @@ int phobos_get(const char *obj_id, const char *tgt_file, int flags)
         LOG_RETURN(rc, "initialization failed");
 
     /* retrieve saved object location */
-    rc = obj_get_location(dss, obj_id, &layout);
+    rc = obj_get_location(&dss, obj_id, &layout);
     if (rc)
         LOG_GOTO(disconn, rc, "Failed to get information about object '%s'",
                  obj_id);
@@ -488,7 +489,7 @@ int phobos_get(const char *obj_id, const char *tgt_file, int flags)
                  tgt_file);
 
     /* prepare storage resource to read the object */
-    rc = lrs_read_intent(dss, layout, &read_loc);
+    rc = lrs_read_intent(&dss, layout, &read_loc);
     if (rc)
         LOG_GOTO(close_tgt, rc, "failed to prepare resources to read '%s'",
                  obj_id);
@@ -500,7 +501,7 @@ int phobos_get(const char *obj_id, const char *tgt_file, int flags)
 
 out_lrs_end:
     /* release storage resources */
-    lrs_done(dss, &read_loc, rc);
+    lrs_done(&dss, &read_loc, rc);
     /* don't care about the error here, the object has been read successfully
      * and the LRS error should have been logged by lower layers.
      */
@@ -515,8 +516,6 @@ free_res:
     dss_res_free(layout, 1);
 
 disconn:
-    if (dss)
-        dss_fini(dss);
-
+    dss_fini(&dss);
     return rc;
 }

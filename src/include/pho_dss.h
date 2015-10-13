@@ -416,19 +416,25 @@ static inline char *dss_char4sql(const char *s)
         (*(_pctr))++;                                         \
     } while (0)
 
+
+/* Exposed externally for python bindings generation (SWIG) */
+struct dss_handle {
+    void  *dh_conn;
+};
+
 /**
  *  Initialize a connection handle
  *  @param[in]  conninfo    Connection information e.g. "dbname = phobos"
  *
  *  @param[out] handle      Connection handle
  */
-int dss_init(const char *conninfo, void **handle);
+int dss_init(const char *conninfo, struct dss_handle *handle);
 
 /**
  *  Closes a connection
  *  @param[in]  handle      Connection handle
  */
-void dss_fini(void *handle);
+void dss_fini(struct dss_handle *handle);
 
 /**
  *  Generic function to get/list items from DSS.
@@ -439,7 +445,7 @@ void dss_fini(void *handle);
  *                        dss_res_free() later)
  *  @param[out] item_cnt  number of items in item_list.
  */
-int dss_get(void *dss_handle, enum dss_type type, struct dss_crit *crit,
+int dss_get(struct dss_handle *hdl, enum dss_type type, struct dss_crit *crit,
             int crit_cnt, void **item_list, int *item_cnt);
 
 /**
@@ -450,30 +456,27 @@ int dss_get(void *dss_handle, enum dss_type type, struct dss_crit *crit,
 void dss_res_free(void *item_list, int item_cnt);
 
 /** wrapper to get devices from DSS */
-static inline int dss_device_get(void *dss_handle, struct dss_crit *crit,
+static inline int dss_device_get(struct dss_handle *hdl, struct dss_crit *crit,
                                  int crit_cnt, struct dev_info **dev_ls,
                                  int *dev_cnt)
 {
-    return dss_get(dss_handle, DSS_DEVICE, crit, crit_cnt, (void **)dev_ls,
-                   dev_cnt);
+    return dss_get(hdl, DSS_DEVICE, crit, crit_cnt, (void **)dev_ls, dev_cnt);
 }
 
 /** wrapper to get devices from DSS */
-static inline int dss_media_get(void *dss_handle, struct dss_crit *crit,
+static inline int dss_media_get(struct dss_handle *hdl, struct dss_crit *crit,
                                 int crit_cnt, struct media_info **med_ls,
                                 int *med_cnt)
 {
-    return dss_get(dss_handle, DSS_MEDIA, crit, crit_cnt, (void **)med_ls,
-                   med_cnt);
+    return dss_get(hdl, DSS_MEDIA, crit, crit_cnt, (void **)med_ls, med_cnt);
 }
 
 /** wrapper to get extent from DSS */
-static inline int dss_extent_get(void *dss_handle, struct dss_crit *crit,
+static inline int dss_extent_get(struct dss_handle *hdl, struct dss_crit *crit,
                                  int crit_cnt, struct layout_info **lyt_ls,
                                  int *lyt_cnt)
 {
-    return dss_get(dss_handle, DSS_EXTENT, crit, crit_cnt, (void **)lyt_ls,
-                   lyt_cnt);
+    return dss_get(hdl, DSS_EXTENT, crit, crit_cnt, (void **)lyt_ls, lyt_cnt);
 }
 
 /**
@@ -482,32 +485,36 @@ static inline int dss_extent_get(void *dss_handle, struct dss_crit *crit,
  *  @param[out] item_list list of items
  *  @param[out] item_cnt  number of items in item_list.
  */
-int dss_set(void *handle, enum dss_type type, void *item_list, int item_cnt,
-            enum dss_set_action action);
+int dss_set(struct dss_handle *hdl, enum dss_type type, void *item_list,
+            int item_cnt, enum dss_set_action action);
 
 
-static inline int dss_device_set(void *dss_handle, struct dev_info *dev_ls,
-                                 int dev_cnt, enum dss_set_action action)
+static inline int dss_device_set(struct dss_handle *hdl,
+                                 struct dev_info *dev_ls, int dev_cnt,
+                                 enum dss_set_action action)
 {
-    return dss_set(dss_handle, DSS_DEVICE, (void *)dev_ls, dev_cnt, action);
+    return dss_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt, action);
 }
 
-static inline int dss_media_set(void *dss_handle, struct media_info *media_ls,
-                                 int media_cnt, enum dss_set_action action)
+static inline int dss_media_set(struct dss_handle *hdl,
+                                struct media_info *media_ls, int media_cnt,
+                                enum dss_set_action action)
 {
-    return dss_set(dss_handle, DSS_MEDIA, (void *)media_ls, media_cnt, action);
+    return dss_set(hdl, DSS_MEDIA, (void *)media_ls, media_cnt, action);
 }
 
-static inline int dss_extent_set(void *dss_handle, struct layout_info *lyt_ls,
-                                 int lyt_cnt, enum dss_set_action action)
+static inline int dss_extent_set(struct dss_handle *hdl,
+                                 struct layout_info *lyt_ls, int lyt_cnt,
+                                 enum dss_set_action action)
 {
-    return dss_set(dss_handle, DSS_EXTENT, (void *)lyt_ls, lyt_cnt, action);
+    return dss_set(hdl, DSS_EXTENT, (void *)lyt_ls, lyt_cnt, action);
 }
 
-static inline int dss_object_set(void *dss_handle, struct object_info *obj_ls,
-                                 int object_cnt, enum dss_set_action action)
+static inline int dss_object_set(struct dss_handle *hdl,
+                                 struct object_info *obj_ls, int object_cnt,
+                                 enum dss_set_action action)
 {
-    return dss_set(dss_handle, DSS_OBJECT, (void *)obj_ls, object_cnt, action);
+    return dss_set(hdl, DSS_OBJECT, (void *)obj_ls, object_cnt, action);
 }
 
 #endif

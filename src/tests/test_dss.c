@@ -27,7 +27,7 @@
 int main(int argc, char **argv)
 {
     int     rc;
-    void                *dss_handle;
+    struct dss_handle    dss_handle;
     enum dss_type        type;
     enum dss_set_action  action;
     struct  dev_info    *dev;
@@ -96,7 +96,7 @@ int main(int argc, char **argv)
             exit(-rc);
         }
 
-        rc = dss_get(dss_handle, type, crit, crit_cnt, &item_list, &item_cnt);
+        rc = dss_get(&dss_handle, type, crit, crit_cnt, &item_list, &item_cnt);
         if (rc) {
             fprintf(stderr, "dss_get failed: %s (%d)\n", strerror(-rc), -rc);
             exit(-rc);
@@ -185,7 +185,7 @@ int main(int argc, char **argv)
         crit_cnt = 0;
         crit = NULL;
 
-        rc = dss_get(dss_handle, type, crit, crit_cnt, &item_list, &item_cnt);
+        rc = dss_get(&dss_handle, type, crit, crit_cnt, &item_list, &item_cnt);
         if (rc) {
             fprintf(stderr, "dss_get failed: %s (%d)\n", strerror(-rc), -rc);
             exit(-rc);
@@ -240,7 +240,7 @@ int main(int argc, char **argv)
             abort();
         }
 
-        rc = dss_set(dss_handle, type, item_list, item_cnt, action);
+        rc = dss_set(&dss_handle, type, item_list, item_cnt, action);
         if (rc) {
             fprintf(stderr, "dss_set failed: %s (%d)\n", strerror(-rc), -rc);
             exit(-rc);

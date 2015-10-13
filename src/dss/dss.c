@@ -47,30 +47,22 @@ static void dss_pq_logger(void *arg, const char *message)
     pho_info("%*s", mlen, message);
 }
 
-int dss_init(const char *conninfo, void **handle)
+int dss_init(const char *conninfo, struct dss_handle *handle)
 {
-    PGconn *conn;
+    handle->dh_conn = PQconnectdb(conninfo);
 
-    *handle = NULL;
+    if (PQstatus(handle->dh_conn) != CONNECTION_OK)
+        LOG_RETURN(-ENOTCONN, "Connection to database failed: %s",
+                   PQerrorMessage(handle->dh_conn));
 
-    conn = PQconnectdb(conninfo);
+    (void)PQsetNoticeProcessor(handle->dh_conn, dss_pq_logger, NULL);
 
-    if (PQstatus(conn) != CONNECTION_OK) {
-        /** @todo: figure how to get an errno-like value out of it */
-        pho_error(ENOTCONN, "Connection to database failed: %s",
-                  PQerrorMessage(conn));
-        return -ENOTCONN;
-    }
-
-    (void)PQsetNoticeProcessor(conn, dss_pq_logger, NULL);
-
-    *handle = conn;
     return 0;
 }
 
-void dss_fini(void *handle)
+void dss_fini(struct dss_handle *handle)
 {
-    PQfinish(handle);
+    PQfinish(handle->dh_conn);
 }
 
 /**
@@ -692,10 +684,11 @@ static inline bool is_type_supported(enum dss_type type)
     }
 }
 
-int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
-            int crit_cnt, void **item_list, int *item_cnt)
+int dss_get(struct dss_handle *handle, enum dss_type type,
+            struct dss_crit *crit, int crit_cnt, void **item_list,
+            int *item_cnt)
 {
-    PGconn              *conn = handle;
+    PGconn              *conn = handle->dh_conn;
     PGresult            *res;
     GString             *clause;
     struct dss_result   *dss_res;
@@ -705,9 +698,9 @@ int dss_get(void *handle, enum dss_type type, struct dss_crit *crit,
     int                  i;
     ENTRY;
 
-    if (handle == NULL || item_list == NULL || item_cnt == NULL)
-        LOG_RETURN(-EINVAL, "Handle: %p, item_list: %p, item_cnt: %p",
-                   handle, item_list, item_cnt);
+    if (conn == NULL || item_list == NULL || item_cnt == NULL)
+        LOG_RETURN(-EINVAL, "conn: %p, item_list: %p, item_cnt: %p",
+                   conn, item_list, item_cnt);
 
     *item_list = NULL;
     *item_cnt  = 0;
@@ -841,10 +834,10 @@ out:
     return rc;
 }
 
-int dss_set(void *handle, enum dss_type type, void *item_list,
+int dss_set(struct dss_handle *handle, enum dss_type type, void *item_list,
             int item_cnt, enum dss_set_action action)
 {
-    PGconn      *conn = handle;
+    PGconn      *conn = handle->dh_conn;
     GString     *request;
     PGresult    *res = NULL;
     int          error = 0;
@@ -852,9 +845,9 @@ int dss_set(void *handle, enum dss_type type, void *item_list,
     int          i;
     ENTRY;
 
-    if (handle == NULL || item_list == NULL || item_cnt == 0)
-        LOG_RETURN(-EINVAL, "handle: %p, item_list: %p, item_cnt: %d",
-                   handle, item_list, item_cnt);
+    if (conn == NULL || item_list == NULL || item_cnt == 0)
+        LOG_RETURN(-EINVAL, "conn: %p, item_list: %p, item_cnt: %d",
+                   conn, item_list, item_cnt);
 
     request = g_string_new("BEGIN;");
 

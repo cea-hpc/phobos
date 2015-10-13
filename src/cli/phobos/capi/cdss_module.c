@@ -57,9 +57,9 @@ static void set_error(const char *fmt, ...)
  */
 static PyObject *cdss_conn_open(PyObject *self, PyObject *args)
 {
-    const char  *conn_info;
-    void        *dss;
-    int          rc;
+    const char          *conn_info;
+    struct dss_handle   *dss;
+    int                  rc;
 
     if (!PyArg_ParseTuple(args, "s", &conn_info))
         return NULL;
