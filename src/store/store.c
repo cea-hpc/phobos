@@ -221,9 +221,9 @@ static int store_init(void **dss_hdl)
     if (rc)
         return rc;
 
-    rc = pho_cfg_get(PHO_CFG_DSS_connect_string, &str);
-    if (rc)
-        return rc;
+    str = pho_cfg_get(PHO_CFG_DSS_connect_string);
+    if (str == NULL)
+        return -EINVAL;
 
     return dss_init(str, dss_hdl);
 

@@ -32,12 +32,13 @@
  */
 static char *mount_point(int idx)
 {
+    const char  *mnt_cfg;
+    char        *mnt_out;
+
     assert(idx >= 0);
 
-    const char *mnt_cfg = NULL;
-    char *mnt_out;
-
-    if (pho_cfg_get(PHO_CFG_LRS_mount_prefix, &mnt_cfg))
+    mnt_cfg = pho_cfg_get(PHO_CFG_LRS_mount_prefix);
+    if (mnt_cfg == NULL)
         return NULL;
 
     /* mount the device as PHO_MNT_PREFIX<changer_idx> */
@@ -50,9 +51,10 @@ static char *mount_point(int idx)
 /** return the default device family to write data */
 static enum dev_family default_family(void)
 {
-    const char *fam_str = NULL;
+    const char *fam_str;
 
-    if (pho_cfg_get(PHO_CFG_LRS_default_family, &fam_str) || (fam_str == NULL))
+    fam_str = pho_cfg_get(PHO_CFG_LRS_default_family);
+    if (fam_str == NULL)
         return PHO_DEV_INVAL;
 
     return str2dev_family(fam_str);
@@ -593,16 +595,20 @@ static device_select_func_t get_dev_policy(void)
 {
     const char *policy_str;
 
-    if (pho_cfg_get(PHO_CFG_LRS_policy, &policy_str))
+
+    policy_str = pho_cfg_get(PHO_CFG_LRS_policy);
+    if (policy_str == NULL)
         return NULL;
 
     if (!strcmp(policy_str, "best_fit"))
         return select_best_fit;
+
     if (!strcmp(policy_str, "first_fit"))
         return select_first_fit;
 
     pho_error(EINVAL, "Invalid LRS policy name '%s' "
               "(expected: 'best_fit' or 'first_fit')", policy_str);
+
     return NULL;
 }
 

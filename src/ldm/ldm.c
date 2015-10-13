@@ -28,10 +28,11 @@
  */
 static char *drive_query_cmd(enum dev_family type, const char *device)
 {
-    const char *cmd_cfg = NULL;
-    char *cmd_out;
+    const char  *cmd_cfg;
+    char        *cmd_out;
 
-    if (pho_cfg_get(PHO_CFG_LDM_cmd_drive_query, &cmd_cfg))
+    cmd_cfg = pho_cfg_get(PHO_CFG_LDM_cmd_drive_query);
+    if (cmd_cfg == NULL)
         return NULL;
 
     if (asprintf(&cmd_out, cmd_cfg, device) < 0)
@@ -47,10 +48,11 @@ static char *drive_query_cmd(enum dev_family type, const char *device)
 static char *drive_load_cmd(enum dev_family type, const char *device,
                             const char *media_id)
 {
-    const char *cmd_cfg = NULL;
-    char *cmd_out;
+    const char  *cmd_cfg;
+    char        *cmd_out;
 
-    if (pho_cfg_get(PHO_CFG_LDM_cmd_drive_load, &cmd_cfg))
+    cmd_cfg = pho_cfg_get(PHO_CFG_LDM_cmd_drive_load);
+    if (cmd_cfg == NULL)
         return NULL;
 
     if (asprintf(&cmd_out, cmd_cfg, device, media_id) < 0)
@@ -66,10 +68,11 @@ static char *drive_load_cmd(enum dev_family type, const char *device,
 static char *drive_unload_cmd(enum dev_family type, const char *device,
                               const char *media_id)
 {
-    const char *cmd_cfg = NULL;
-    char *cmd_out;
+    const char  *cmd_cfg;
+    char        *cmd_out;
 
-    if (pho_cfg_get(PHO_CFG_LDM_cmd_drive_unload, &cmd_cfg))
+    cmd_cfg = pho_cfg_get(PHO_CFG_LDM_cmd_drive_unload);
+    if (cmd_cfg == NULL)
         return NULL;
 
     if (asprintf(&cmd_out, cmd_cfg, device, media_id) < 0)
@@ -84,9 +87,9 @@ static char *drive_unload_cmd(enum dev_family type, const char *device,
  */
 static char *mount_cmd(enum fs_type fs, const char *device, const char *path)
 {
-    const char *cmd_cfg = NULL;
-    char *cmd_out;
-    enum pho_cfg_params param;
+    const char          *cmd_cfg;
+    char                *cmd_out;
+    enum pho_cfg_params  param;
 
     if (fs == PHO_FS_LTFS)
         param = PHO_CFG_LDM_cmd_mount_ltfs;
@@ -94,7 +97,8 @@ static char *mount_cmd(enum fs_type fs, const char *device, const char *path)
         /* not supported */
         return NULL;
 
-    if (pho_cfg_get(param, &cmd_cfg))
+    cmd_cfg = pho_cfg_get(param);
+    if (cmd_cfg == NULL)
         return NULL;
 
     if (asprintf(&cmd_out, cmd_cfg, device, path) < 0)
@@ -109,9 +113,9 @@ static char *mount_cmd(enum fs_type fs, const char *device, const char *path)
  */
 static char *umount_cmd(enum fs_type fs, const char *device, const char *path)
 {
-    const char *cmd_cfg = NULL;
-    char *cmd_out;
-    enum pho_cfg_params param;
+    const char          *cmd_cfg;
+    char                *cmd_out;
+    enum pho_cfg_params  param;
 
     if (fs == PHO_FS_LTFS)
         param = PHO_CFG_LDM_cmd_umount_ltfs;
@@ -119,7 +123,8 @@ static char *umount_cmd(enum fs_type fs, const char *device, const char *path)
         /* not supported */
         return NULL;
 
-    if (pho_cfg_get(param, &cmd_cfg))
+    cmd_cfg = pho_cfg_get(param);
+    if (cmd_cfg == NULL)
         return NULL;
 
     if (asprintf(&cmd_out, cmd_cfg, device, path) < 0)

@@ -70,8 +70,8 @@ static PyObject *ccfg_get_val(PyObject *self, PyObject *args)
         Py_RETURN_NONE;
 
     num_desc = (enum pho_cfg_params)PyInt_AS_LONG(param_value);
-    rc = pho_cfg_get(num_desc, &res);
-    if (rc < 0)
+    res = pho_cfg_get(num_desc);
+    if (res == NULL)
         Py_RETURN_NONE;
 
     return Py_BuildValue("s", res);

@@ -269,6 +269,28 @@ int pho_cfg_get_val(const char *section, const char *name, const char **value)
     return -ENOATTR;
 }
 
+const char *pho_cfg_get(enum pho_cfg_params param)
+{
+    const struct pho_config_item    *item;
+    const char                      *res;
+    int                              rc;
+
+    if (param >= PHO_CFG_LAST || param < PHO_CFG_FIRST)
+        return NULL;
+
+    item = &pho_cfg_descr[param];
+
+    /* sanity check (in case of sparse pho_config_descr array) */
+    if (!item->name)
+        return NULL;
+
+    rc = pho_cfg_get_val(item->section, item->name, &res);
+    if (rc == -ENOATTR)
+        res = item->value;
+
+    return res;
+}
+
 /** @TODO to be implemented
 int pho_cfg_match(const char *section_pattern, const char *name_pattern,
                   struct pho_config_item *items, int *count);

@@ -69,6 +69,12 @@ extern const struct pho_config_item pho_cfg_descr[];
  */
 int pho_cfg_init_local(const char *config_file);
 
+/** This function gets the value of a configuration item
+ *  and return default value if it is not found.
+ *  @return A the value on success and NULL on error.
+ */
+const char *pho_cfg_get(enum pho_cfg_params param);
+
 /**
  * Allow access to global config parameters for the current thread.
  * This can only be called after the DSS is initialized.
@@ -89,33 +95,6 @@ int pho_cfg_set_thread_conn(void *dss_handle);
  */
 int pho_cfg_get_val(const char *section, const char *name,
                     const char **value);
-
-/** This function gets the value of a configuration item
- *  and return default value if it is not found.
- *  @return 0 on success, or a negative value on error.
- */
-static inline int pho_cfg_get(enum pho_cfg_params param,
-                              const char **value)
-{
-    int rc;
-    const struct pho_config_item *item;
-
-    if (param >= PHO_CFG_LAST || param < PHO_CFG_FIRST)
-        return -EINVAL;
-
-    item = &pho_cfg_descr[param];
-
-    /* sanity check (in case of sparse pho_config_descr array) */
-    if (!item->name)
-        return -EINVAL;
-
-    rc = pho_cfg_get_val(item->section, item->name, value);
-    if (rc == -ENOATTR) {
-        *value = item->value;
-        rc = 0;
-    }
-    return rc;
-}
 
 /**
  * This function gets the value of multiple configuration items
