@@ -12,7 +12,7 @@ from distutils.core import setup, Extension
 GLOBAL_MACROS = [('HAVE_CONFIG_H', 1)]
 
 cdss_module = Extension('cdss',
-                        sources=['phobos/cdss_module.c'],
+                        sources=['phobos/capi/cdss_module.c'],
                         include_dirs = ['../include',
                                         '/usr/include/glib-2.0',
                                         '/usr/lib64/glib-2.0/include'],
@@ -20,17 +20,17 @@ cdss_module = Extension('cdss',
                         library_dirs = ['../store/.libs'],
                         define_macros = GLOBAL_MACROS)
 
-ccfg_module = Extension('ccfg',
-                        sources=['phobos/ccfg_module.c'],
-                        include_dirs = ['../include',
-                                        '/usr/include/glib-2.0',
-                                        '/usr/lib64/glib-2.0/include'],
-                        libraries = ['phobos_store'],
-                        library_dirs = ['../store/.libs'],
-                        define_macros = GLOBAL_MACROS)
+config_module = Extension('_config',
+                          sources=['phobos/capi/config_wrap.c'],
+                          include_dirs = ['../include',
+                                          '/usr/include/glib-2.0',
+                                          '/usr/lib64/glib-2.0/include'],
+                          libraries = ['phobos_store'],
+                          library_dirs = ['../store/.libs'],
+                          define_macros = GLOBAL_MACROS)
 
 clogging_module = Extension('clogging',
-                            sources=['phobos/clogging_module.c'],
+                            sources=['phobos/capi/clogging_module.c'],
                             include_dirs = ['../include',
                                             '/usr/include/glib-2.0',
                                             '/usr/lib64/glib-2.0/include'],
@@ -40,9 +40,10 @@ clogging_module = Extension('clogging',
 
 setup(
     name = 'phobos',
-    packages = ['phobos'],
-    ext_package = 'phobos',
-    ext_modules = [cdss_module, ccfg_module, clogging_module],
+    packages = ['phobos', 'phobos.capi'],
+    ext_package = 'phobos.capi',
+    ext_modules = [cdss_module, config_module, clogging_module],
+    py_modules = ['config'],
     scripts = ['scripts/phobos'],
     version = '0.0.1',
     description = 'Phobos control scripts and libraries',

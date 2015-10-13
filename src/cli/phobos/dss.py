@@ -11,7 +11,7 @@ to interact with phobos DSS layer, as it provides a safe, expressive and
 clean API to access it.
 """
 
-import phobos.cdss as cdss
+import phobos.capi.cdss as cdss
 
 from collections import namedtuple
 

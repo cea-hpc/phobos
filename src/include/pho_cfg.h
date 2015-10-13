@@ -75,6 +75,7 @@ int pho_cfg_init_local(const char *config_file);
  */
 const char *pho_cfg_get(enum pho_cfg_params param);
 
+# ifndef SWIG
 /**
  * Allow access to global config parameters for the current thread.
  * This can only be called after the DSS is initialized.
@@ -138,4 +139,5 @@ enum pho_cfg_flags {
 int pho_cfg_set(const char *section, const char *name, const char *value,
                 enum pho_cfg_flags flags);
 
+# endif
 #endif

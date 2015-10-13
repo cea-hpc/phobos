@@ -19,9 +19,9 @@ import errno
 import argparse
 import logging
 
-import phobos.clogging as pho_logging
+import phobos.capi.clogging as pho_logging
 
-from phobos.ccfg import cfg_load_file, cfg_get_val
+from phobos.config import load_config_file, get_config_value
 from phobos.dss import Client
 
 
@@ -80,7 +80,7 @@ class BaseOptHandler(object):
         # XXX Connection info is currently expressed as an opaque string.
         #     Thus use the special _connect keyword to not rebuild it.
         self.client = Client()
-        conn_info = cfg_get_val('dss', 'connect_string')
+        conn_info = get_config_value('dss', 'connect_string')
         if conn_info is None:
             conn_info = ''
         self.client.connect(_connect=conn_info)
@@ -344,7 +344,7 @@ class PhobosActionContext(object):
         self.install_arg_parser()
         self.parameters = vars(self.parser.parse_args(args))
 
-        self.load_config() # After this, code can use cfg_get_val()
+        self.load_config() # After this, code can use get_config_value()
 
     def install_arg_parser(self):
         """Initialize hierarchical command line parser."""
@@ -375,7 +375,7 @@ class PhobosActionContext(object):
         cpath = self.parameters.get('config')
         # Try to open configuration file
         try:
-            cfg_load_file(cpath)
+            load_config_file(cpath)
         except IOError as exc:
             if exc.errno == errno.ENOENT:
                 return
