@@ -8,8 +8,11 @@
 import sys
 import unittest
 
-from phobos.dss import Client, GenericError as DSSError
+from phobos.dss import Client
+from phobos.dss import dev_family2str
+from phobos.dss import GenericError as DSSError
 
+from phobos.capi.dss import layout_info, media_info
 
 class DSSClientTest(unittest.TestCase):
     """
@@ -35,7 +38,23 @@ class DSSClientTest(unittest.TestCase):
         cli.connect(dbname='phobos', user='phobos', password='phobos')
         for fam in ('tape', 'disk', 'dir'):
             for x in cli.device_get(family=fam):
-                self.assertEqual(x.family, fam)
+                self.assertEqual(dev_family2str(x.family), fam)
+        cli.disconnect()
+
+    def test_list_media(self):
+        """List media."""
+        cli = Client()
+        cli.connect(dbname='phobos', user='phobos', password='phobos')
+        for x in cli.media_get():
+            self.assertTrue(isinstance(x, media_info))
+        cli.disconnect()
+
+    def test_list_extents(self):
+        """List extents."""
+        cli = Client()
+        cli.connect(dbname='phobos', user='phobos', password='phobos')
+        for x in cli.extent_get():
+            self.assertTrue(isinstance(x, layout_info))
         cli.disconnect()
 
 if __name__ == '__main__':

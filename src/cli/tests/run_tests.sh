@@ -2,16 +2,15 @@
 
 PY=$(which python)
 
-# binary modules
-PYBUILD_PATH=../build/lib.linux-x86_64-2.6
 # pure-python modules
-PYMODULES_PATH=../
+PHO_PYTHON_PATH=../
+
 # toplevel phobos library
-PHOLIB_PATH=../../store/.libs/
+PHO_STORELIB_PATH=../../store/.libs/
 
 
-export LD_LIBRARY_PATH=$PHOLIB_PATH
-export PYTHONPATH="$PYBUILD_PATH:$PYMODULES_PATH"
+export LD_LIBRARY_PATH=$PHO_STORELIB_PATH:$PHO_PYTHON_PATH
+export PYTHONPATH="$PHO_PYTHON_PATH"
 
 
 for test_case in $(ls *Test.py)

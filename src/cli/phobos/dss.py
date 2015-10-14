@@ -11,9 +11,8 @@ to interact with phobos DSS layer, as it provides a safe, expressive and
 clean API to access it.
 """
 
-import phobos.capi.cdss as cdss
+import phobos.capi.dss as cdss
 
-from collections import namedtuple
 
 # Valid filter suffix and associated operators.
 # No suffix means DSS_CMP_EQ.
@@ -35,9 +34,13 @@ OBJECT_PREFIXES = {
 }
 
 
+class GenericError(BaseException):
+    """Base error to described DSS failures."""
+
 def key_convert(obj_type, key):
     """Split key, return actual name and associated DSS_CMP_* operator."""
-    kname, comp = key, cdss.DSS_CMP_EQ # default
+    kname = key
+    comp = cdss.DSS_CMP_EQ # default
     kname_prefx = OBJECT_PREFIXES[obj_type] # KeyError on unsupported obj_type
     for sufx, comp_enum in FILTER_OPERATORS:
         if key.endswith(sufx):
@@ -46,32 +49,18 @@ def key_convert(obj_type, key):
     return getattr(cdss, '%s_%s' % (kname_prefx, kname)), comp
 
 
-def filter_convert(obj_type, **kwargs):
+def dss_filter(obj_type, **kwargs):
     """Convert a k/v filter into a CDSS-compatible list of criteria."""
     filt = []
     for k, v in kwargs.iteritems():
         k, comp = key_convert(obj_type, k)
-        filt.append((k, comp, v))
+        crit = cdss.dss_crit()
+        crit.crit_name = k;
+        crit.crit_cmp  = comp
+        crit.crit_val  = cdss.dss_val()
+        cdss.str2dss_val_fill(k, str(v), crit.crit_val)
+        filt.append(crit)
     return filt
-
-
-# Synonym to hide cdss to upper layers.
-GenericError = cdss.GenericError
-
-
-# DSS Device: see struct dev_info in pho_types.h
-Device = namedtuple('Device', ['family', 'model', 'path', 'host', 'serial',
-                               'changer_idx', 'adm_status'])
-
-def mkdevice(val):
-    """Return a new device object from raw data."""
-    newvals = (
-        cdss.device_family2str(val[0]),
-        val[1], val[2], val[3], val[4], val[5],
-        cdss.device_adm_status2str(val[6])
-    )
-    return Device._make(newvals)
-
 
 class Client(object):
     """Main class: issue requests to the DSS and format replies."""
@@ -95,56 +84,28 @@ class Client(object):
         conn_info = kwargs.get('_connect')
         if conn_info is None:
             conn_info = ' '.join(['%s=%s' % (k, v) for k, v in kwargs.items()])
-        self.handle = cdss.connection_open(conn_info)
+
+        self.handle = cdss.dss_handle()
+        rc = cdss.dss_init(conn_info, self.handle)
+        if rc != 0:
+            raise GenericError('DSS initialization failed')
 
     def disconnect(self):
         """Disconnect from DSS and reset handle."""
         if self.handle is not None:
-            cdss.connection_close(self.handle)
+            cdss.dss_fini(self.handle)
             self.handle = None
 
     def device_get(self, **kwargs):
         """Retrieve device objects from DSS."""
-        # Remap fields that are expressed as strings externally and enums
-        # internally.
-        dev_filter_remap = {
-            'family': {
-                'disk': cdss.PHO_DEV_DISK,
-                'tape': cdss.PHO_DEV_TAPE,
-                'dir': cdss.PHO_DEV_DIR,
-            },
-            'adm_status': {
-                'unlocked': cdss.PHO_DEV_ADM_ST_UNLOCKED,
-                'locked': cdss.PHO_DEV_ADM_ST_LOCKED,
-                'failed': cdss.PHO_DEV_ADM_ST_FAILED,
-            }
-        }
-        for k, v in kwargs.iteritems():
-            repl_map = dev_filter_remap.get(k)
-            if repl_map is not None:
-                try:
-                    kwargs[k] = repl_map[v]
-                except KeyError:
-                    raise GenericError("Invalid filter value '%s'" % v)
-
-        return [mkdevice(x) for x in self._get('device', **kwargs)]
+        return cdss.dss_device_get(self.handle, dss_filter('device', **kwargs))
 
     def extent_get(self, **kwargs):
         """Retrieve extent objects from DSS."""
-        raise NotImplementedError("Not available in this version")
+        return cdss.dss_extent_get(self.handle, dss_filter('extent', **kwargs))
 
     def media_get(self, **kwargs):
         """Retrieve media objects from DSS."""
-        raise NotImplementedError("Not available in this version")
+        return cdss.dss_media_get(self.handle, dss_filter('media', **kwargs))
 
-    def _get(self, obj_type, **kwargs):
-        """Generic code to retrieve objects from DSS."""
-        if self.handle is None:
-            raise DSSBaseException('Connection not established')
-
-        getter = '%s_get' % obj_type
-        if not hasattr(cdss, getter):
-            raise DSSBaseException("Unknown item type: '%s'" % obj_type)
-
-        filt = filter_convert(obj_type, **kwargs)
-        return getattr(cdss, getter)(self.handle, filt)
+dev_family2str = cdss.dev_family2str
