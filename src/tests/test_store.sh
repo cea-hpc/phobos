@@ -52,13 +52,22 @@ if  [[ -z "$NO_TAPE" ]] && [[ -w /dev/changer ]] && (( $nb_tapes > 0 )); then
 	service ltfs stop
 
 	# put the "low capacity" tape '073220L6' into the unlocked drive
+    # (SN 1014005381)
 	# to force phobos performing umount/unload/load/mount
 	# to write the big RAND file
-	$ldm_helper unload_drive /dev/IBMtape0 073221L6 \
+	SN=1014005381
+	id=$(cat /proc/scsi/IBMtape | grep $SN | awk '{print $1}')
+	drv=/dev/IBMtape${id}
+
+	echo "eject 073221L6 from $drv if present"
+	$ldm_helper unload_drive $drv 073221L6 \
 		|| true # ignore if not mounted
-	$ldm_helper unload_drive /dev/IBMtape0 073222L6 \
+	echo "eject 073222L6 from $drv if present"
+	$ldm_helper unload_drive $drv 073222L6 \
 		|| true # ignore if not mounted
-	$ldm_helper load_drive /dev/IBMtape0 073220L6
+
+	echo "mount 073220L6 to $drv if absent"
+	$ldm_helper load_drive $drv 073220L6
 
 else
 	echo "**** POSIX TEST MODE ****"

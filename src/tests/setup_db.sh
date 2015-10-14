@@ -82,13 +82,25 @@ EOF
 }
 
 insert_examples() {
+# default drive/id mapping
+SN1=1013005381
+DRV1=/dev/IBMtape0
+SN2=1014005381
+DRV2=/dev/IBMtape1
+# make sure to insert the right dev<->serial mapping
+# FIXME replace with actual "phobos drive add" command once available
+if [ -f /proc/scsi/IBMtape ]; then
+	id1=$(cat /proc/scsi/IBMtape | grep $SN1 | awk '{print $1}')
+	id2=$(cat /proc/scsi/IBMtape | grep $SN2 | awk '{print $1}')
+	[ -n $id1 ] && DRV1=/dev/IBMtape${id1}
+	[ -n $id2 ] && DRV2=/dev/IBMtape${id2}
+fi
+
 #  initially mounted tapes don't have enough room to store a big file
 	$PSQL << EOF
 insert into device (family, model, id, host, adm_status, path, changer_idx)
-    values ('tape', 'ULTRIUM-TD6', '1013005381', 'phobos1',
-	    'locked', '/dev/IBMtape1', 3),
-           ('tape', 'ULTRIUM-TD6', '1014005381', 'phobos1',
-	    'unlocked', '/dev/IBMtape0', 4),
+    values ('tape', 'ULTRIUM-TD6', '$SN1', 'phobos1', 'locked', '$DRV1', 3),
+           ('tape', 'ULTRIUM-TD6', '$SN2', 'phobos1', 'unlocked', '$DRV2', 4),
            ('dir', NULL, 'phobos1:/tmp/pho_testdir1', 'phobos1',
 	    'unlocked', '/tmp/pho_testdir1', NULL),
            ('dir', NULL, 'phobos1:/tmp/pho_testdir2', 'phobos1',
