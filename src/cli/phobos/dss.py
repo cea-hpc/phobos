@@ -62,12 +62,41 @@ def dss_filter(obj_type, **kwargs):
         filt.append(crit)
     return filt
 
+class ObjectManager(object):
+    """Proxy to manipulate (CRUD) objects in DSS."""
+    def __init__(self, obj_type, client, **kwargs):
+        """Initialize new instance."""
+        super(ObjectManager, self).__init__(**kwargs)
+        self.obj_type = obj_type
+        self.client = client
+
+    def get(self, **kwargs):
+        """Retrieve objects from DSS."""
+        method = getattr(cdss, 'dss_%s_get' % self.obj_type)
+        return method(self.client.handle, dss_filter(self.obj_type, **kwargs))
+
+    def insert(self, objects):
+        method = getattr(cdss, 'dss_%s_set' % self.obj_type)
+        return method(self.client.handle, objects, cdss.DSS_SET_INSERT)
+
+    def update(self, objects):
+        method = getattr(cdss, 'dss_%s_set' % self.obj_type)
+        return method(self.client.handle, objects, cdss.DSS_SET_UPDATE)
+
+    def delete(self, objects):
+        method = getattr(cdss, 'dss_%s_set' % self.obj_type)
+        return method(self.client.handle, objects, cdss.DSS_SET_DELETE)
+
 class Client(object):
     """Main class: issue requests to the DSS and format replies."""
     def __init__(self, **kwargs):
         """Initialize a new DSS context."""
         super(Client, self).__init__(**kwargs)
         self.handle = None
+        self.devices = ObjectManager('device', self)
+        self.extents = ObjectManager('extent', self)
+        self.objects = ObjectManager('object', self)
+        self.media = ObjectManager('media', self)
 
     def connect(self, **kwargs):
         """
@@ -96,16 +125,7 @@ class Client(object):
             cdss.dss_fini(self.handle)
             self.handle = None
 
-    def device_get(self, **kwargs):
-        """Retrieve device objects from DSS."""
-        return cdss.dss_device_get(self.handle, dss_filter('device', **kwargs))
 
-    def extent_get(self, **kwargs):
-        """Retrieve extent objects from DSS."""
-        return cdss.dss_extent_get(self.handle, dss_filter('extent', **kwargs))
-
-    def media_get(self, **kwargs):
-        """Retrieve media objects from DSS."""
-        return cdss.dss_media_get(self.handle, dss_filter('media', **kwargs))
-
+# Expose low-level converters to upper layers.
+# XXX add new ones as need grows
 dev_family2str = cdss.dev_family2str

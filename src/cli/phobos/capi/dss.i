@@ -175,4 +175,148 @@
 }
 
 
+/* --- DEVICE SET --- */
+/**
+ * typemap(in): python -> c
+ * allow device lists to be passed in as Python Lists of dev_info() objects.
+ */
+%typemap(in) (struct dev_info *dev_ls, int dev_cnt) {
+    int i;
+    if (!PyList_Check($input)) {
+        PyErr_SetString(PyExc_TypeError, "must be a string");
+        return NULL;
+    }
+    $2 = PyList_Size($input);
+    if ($2 > 0) {
+        $1 = malloc($2 * sizeof(struct dev_info));
+        for (i = 0; i < $2; i++) {
+            struct dev_info *t;
+
+            SWIG_ConvertPtr(PyList_GET_ITEM($input, i),
+                            (void **)&t,
+                            $descriptor(struct dev_info *),
+                            SWIG_POINTER_EXCEPTION);
+            $1[i] = *t;
+        }
+    } else {
+        $1 = NULL;
+        $2 = 0;
+    }
+}
+/**
+ * typemap(freearg): free resources allocated in the corresponding typemap(in)
+ */
+%typemap(freearg) (struct dev_info *dev_ls, int dev_cnt) {
+    free($1);
+}
+
+
+/* --- MEDIA SET --- */
+/**
+ * typemap(in): python -> c
+ * allow device lists to be passed in as Python Lists of dev_info() objects.
+ */
+%typemap(in) (struct media_info *med_ls, int med_cnt) {
+    int i;
+    if (!PyList_Check($input)) {
+        PyErr_SetString(PyExc_TypeError, "must be a string");
+        return NULL;
+    }
+    $2 = PyList_Size($input);
+    if ($2 > 0) {
+        $1 = malloc($2 * sizeof(struct media_info));
+        for (i = 0; i < $2; i++) {
+            struct media_info *t;
+
+            SWIG_ConvertPtr(PyList_GET_ITEM($input, i),
+                            (void **)&t,
+                            $descriptor(struct media_info *),
+                            SWIG_POINTER_EXCEPTION);
+            $1[i] = *t;
+        }
+    } else {
+        $1 = NULL;
+        $2 = 0;
+    }
+}
+/**
+ * typemap(freearg): free resources allocated in the corresponding typemap(in)
+ */
+%typemap(freearg) (struct media_info *med_ls, int med_cnt) {
+    free($1);
+}
+
+
+/* --- EXTENT SET --- */
+/**
+ * typemap(in): python -> c
+ * allow device lists to be passed in as Python Lists of dev_info() objects.
+ */
+%typemap(in) (struct layout_info *lyt_ls, int lyt_cnt) {
+    int i;
+    if (!PyList_Check($input)) {
+        PyErr_SetString(PyExc_TypeError, "must be a string");
+        return NULL;
+    }
+    $2 = PyList_Size($input);
+    if ($2 > 0) {
+        $1 = malloc($2 * sizeof(struct layout_info));
+        for (i = 0; i < $2; i++) {
+            struct layout_info *t;
+
+            SWIG_ConvertPtr(PyList_GET_ITEM($input, i),
+                            (void **)&t,
+                            $descriptor(struct layout_info *),
+                            SWIG_POINTER_EXCEPTION);
+            $1[i] = *t;
+        }
+    } else {
+        $1 = NULL;
+        $2 = 0;
+    }
+}
+/**
+ * typemap(freearg): free resources allocated in the corresponding typemap(in)
+ */
+%typemap(freearg) (struct layout_info *lyt_ls, int lyt_cnt) {
+    free($1);
+}
+
+
+/* --- OBJECT SET --- */
+/**
+ * typemap(in): python -> c
+ * allow device lists to be passed in as Python Lists of dev_info() objects.
+ */
+%typemap(in) (struct object_info *obj_ls, int obj_cnt) {
+    int i;
+    if (!PyList_Check($input)) {
+        PyErr_SetString(PyExc_TypeError, "must be a string");
+        return NULL;
+    }
+    $2 = PyList_Size($input);
+    if ($2 > 0) {
+        $1 = malloc($2 * sizeof(struct object_info));
+        for (i = 0; i < $2; i++) {
+            struct object_info *t;
+
+            SWIG_ConvertPtr(PyList_GET_ITEM($input, i),
+                            (void **)&t,
+                            $descriptor(struct object_info *),
+                            SWIG_POINTER_EXCEPTION);
+            $1[i] = *t;
+        }
+    } else {
+        $1 = NULL;
+        $2 = 0;
+    }
+}
+/**
+ * typemap(freearg): free resources allocated in the corresponding typemap(in)
+ */
+%typemap(freearg) (struct object_info *obj_ls, int obj_cnt) {
+    free($1);
+}
+
+
 %include <pho_dss.h>

@@ -8,11 +8,13 @@
 import sys
 import unittest
 
+from random import randint
+
 from phobos.dss import Client
 from phobos.dss import dev_family2str
 from phobos.dss import GenericError as DSSError
 
-from phobos.capi.dss import layout_info, media_info
+from phobos.capi.dss import layout_info, media_info, dev_info, PHO_DEV_DIR
 
 class DSSClientTest(unittest.TestCase):
     """
@@ -37,7 +39,7 @@ class DSSClientTest(unittest.TestCase):
         cli = Client()
         cli.connect(dbname='phobos', user='phobos', password='phobos')
         for fam in ('tape', 'disk', 'dir'):
-            for x in cli.device_get(family=fam):
+            for x in cli.devices.get(family=fam):
                 self.assertEqual(dev_family2str(x.family), fam)
         cli.disconnect()
 
@@ -45,7 +47,7 @@ class DSSClientTest(unittest.TestCase):
         """List media."""
         cli = Client()
         cli.connect(dbname='phobos', user='phobos', password='phobos')
-        for x in cli.media_get():
+        for x in cli.media.get():
             self.assertTrue(isinstance(x, media_info))
         cli.disconnect()
 
@@ -53,8 +55,33 @@ class DSSClientTest(unittest.TestCase):
         """List extents."""
         cli = Client()
         cli.connect(dbname='phobos', user='phobos', password='phobos')
-        for x in cli.extent_get():
+        for x in cli.extents.get():
             self.assertTrue(isinstance(x, layout_info))
+        cli.disconnect()
+
+    def test_getset(self):
+        """GET / SET an object to validate the whole chain."""
+        cli = Client()
+        cli.connect(dbname='phobos', user='phobos', password='phobos')
+
+        dev = dev_info()
+        dev.family = PHO_DEV_DIR
+        dev.model = ''
+        dev.path = '/tmp/test_%d' % randint(0, 1000000)
+        dev.host = 'localhost'
+        dev.serial = '__TEST_MAGIC_%d' % randint(0, 1000000)
+
+        rc = cli.devices.insert([dev])
+        self.assertEqual(rc, 0)
+
+        res = cli.devices.get(serial=dev.serial)
+        for x in res:
+            self.assertTrue(isinstance(x, dev_info))
+            self.assertEqual(x.serial, dev.serial)
+
+        rc = cli.devices.delete(res)
+        self.assertEqual(rc, 0)
+
         cli.disconnect()
 
 if __name__ == '__main__':
