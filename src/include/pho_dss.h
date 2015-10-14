@@ -479,6 +479,14 @@ static inline int dss_extent_get(struct dss_handle *hdl, struct dss_crit *crit,
     return dss_get(hdl, DSS_EXTENT, crit, crit_cnt, (void **)lyt_ls, lyt_cnt);
 }
 
+/** wrapper to get object from DSS */
+static inline int dss_object_get(struct dss_handle *hdl, struct dss_crit *crit,
+                                 int crit_cnt, struct object_info **obj_ls,
+                                 int *obj_cnt)
+{
+    return dss_get(hdl, DSS_OBJECT, crit, crit_cnt, (void **)obj_ls, obj_cnt);
+}
+
 /**
  *  Generic function to set a list of items in DSS.
  *  @param[in]  type      type of items to set.
@@ -497,10 +505,10 @@ static inline int dss_device_set(struct dss_handle *hdl,
 }
 
 static inline int dss_media_set(struct dss_handle *hdl,
-                                struct media_info *media_ls, int media_cnt,
+                                struct media_info *med_ls, int med_cnt,
                                 enum dss_set_action action)
 {
-    return dss_set(hdl, DSS_MEDIA, (void *)media_ls, media_cnt, action);
+    return dss_set(hdl, DSS_MEDIA, (void *)med_ls, med_cnt, action);
 }
 
 static inline int dss_extent_set(struct dss_handle *hdl,
@@ -511,10 +519,10 @@ static inline int dss_extent_set(struct dss_handle *hdl,
 }
 
 static inline int dss_object_set(struct dss_handle *hdl,
-                                 struct object_info *obj_ls, int object_cnt,
+                                 struct object_info *obj_ls, int obj_cnt,
                                  enum dss_set_action action)
 {
-    return dss_set(hdl, DSS_OBJECT, (void *)obj_ls, object_cnt, action);
+    return dss_set(hdl, DSS_OBJECT, (void *)obj_ls, obj_cnt, action);
 }
 
 #endif
