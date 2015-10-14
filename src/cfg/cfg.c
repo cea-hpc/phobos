@@ -82,17 +82,23 @@ const struct pho_config_item pho_cfg_descr[] = {
 /** load a local config file */
 static int pho_cfg_load_file(const char *cfg)
 {
-    int rc;
-    struct collection_item *errors = NULL;
+    struct collection_item  *errors = NULL;
+    int                      rc;
 
     rc = config_from_file("phobos", cfg, &cfg_items, INI_STOP_ON_ERROR,
                           &errors);
+
+    /* libinit returns positive errno-like error codes */
     if (rc != 0) {
-        pho_error(rc, "failed to read configuration file '%s'", cfg);
-        print_file_parsing_errors(stderr, errors);
-        fprintf(stderr, "\n");
+        if (rc == ENOENT && strcmp(cfg, PHO_DEFAULT_CFG) == 0) {
+            pho_warn("no configuration file at default location: %s", cfg);
+            rc = 0;
+        } else {
+            pho_error(rc, "failed to read configuration file '%s'", cfg);
+            print_file_parsing_errors(stderr, errors);
+            fprintf(stderr, "\n");
+        }
         free_ini_config_errors(errors);
-        /* libinit returns errno-like error codes > 0 */
         return -rc;
     }
 
