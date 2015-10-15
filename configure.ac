@@ -32,7 +32,6 @@ m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
 AC_PROG_LIBTOOL
 AC_PROG_CC
-AC_PROG_CXX
 LT_INIT
 
 AC_PROG_LN_S
@@ -61,6 +60,15 @@ AC_CHECK_FUNC([g_list_free_full], AC_DEFINE(HAVE_GLIB_FREE_FULL, 1, [g_list_free
 CFLAGS="$CFLAGS -I\$(top_srcdir)/src/include"
 
 
+AC_ARG_ENABLE( [cli], AS_HELP_STRING([--disable-cli],
+               [Do not generate python cli and modules]),
+               [enable_cli="$enableval"],[enable_cli="yes"] )
+AS_IF( [test "x$enable_cli" != "xno"], [
+    # Enable python bindings
+    AX_PKG_SWIG(1.3.0, [], [ AC_MSG_ERROR([SWIG is required to build the CLI]) ])
+    AX_PYTHON_DEVEL([>='2.6'])
+])
+
 # Checks for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADERS([string.h sys/param.h limits.h])
@@ -88,5 +96,6 @@ AC_CONFIG_FILES([Makefile
          src/lrs/Makefile
          src/store/Makefile
          src/tests/Makefile
+         src/cli/Makefile
 ])
 AC_OUTPUT

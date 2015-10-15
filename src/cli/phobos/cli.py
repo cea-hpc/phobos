@@ -401,7 +401,7 @@ class PhobosActionContext(object):
         try:
             load_config_file(cpath)
         except IOError as exc:
-            if exc.errno == errno.ENOENT:
+            if exc.errno == errno.ENOENT or exc.errno == errno.EALREADY:
                 return
             raise
 
