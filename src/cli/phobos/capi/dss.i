@@ -153,7 +153,7 @@
  * variable instead.
  */
 %typemap(in, numinputs=0) (struct object_info **obj_ls, int *obj_cnt) {
-    struct layout_info *temp = NULL;
+    struct object_info *temp = NULL;
     int sz = 0;
     $1 = &temp;
     $2 = &sz;
