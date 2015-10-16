@@ -135,6 +135,10 @@ if ($#ARGV < 0) {
 }
 
 @ignore = split(/,/, join(',',@ignore));
+
+# __packed if for kernel land
+push @ignore, 'PREFER_PACKED';
+
 foreach my $word (@ignore) {
 	$word =~ s/\s*\n?$//g;
 	$word =~ s/^\s*//g;
