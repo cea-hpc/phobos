@@ -38,21 +38,33 @@ int main(int argc, char **argv)
     }
 
     if (!strcmp(argv[1], "post") || !strcmp(argv[1], "put")) {
-        struct pho_attrs attrs = {0};
-        char fullp[PATH_MAX];
-        int flags = 0;
+        struct pho_xfer_desc    xfer = {0};
+        struct pho_attrs        attrs = {0};
+        enum pho_xfer_flags     flags = 0;
+        char                    fullp[PATH_MAX];
 
         if (!strcmp(argv[1], "put"))
-            flags |= PHO_OBJ_REPLACE;
+            flags |= PHO_XFER_OBJ_REPLACE;
 
         rc = pho_attr_set(&attrs, "program", argv[0]);
         if (rc)
             return rc;
-        rc = phobos_put(realpath(argv[2], fullp), argv[2], flags, &attrs);
+
+        xfer.pxd_objid = realpath(argv[2], fullp);
+        xfer.pxd_fpath = argv[2];
+        xfer.pxd_attrs = &attrs;
+        xfer.pxd_flags = flags;
+
+        rc = phobos_put(&xfer);
 
         pho_attrs_free(&attrs);
     } else if (!strcmp(argv[1], "get")) {
-        rc = phobos_get(argv[2], argv[3], 0);
+        struct pho_xfer_desc    xfer = {0};
+
+        xfer.pxd_objid = argv[2];
+        xfer.pxd_fpath = argv[3];
+
+        rc = phobos_get(&xfer);
     } else {
         fprintf(stderr, "verb put|post|get expected at '%s'\n", argv[1]);
         rc = -EINVAL;

@@ -81,9 +81,9 @@ struct src_info {
     struct stat st;
 };
 
-static inline int obj2io_flags(int flags)
+static inline int obj2io_flags(enum pho_xfer_flags flags)
 {
-    if (flags & PHO_OBJ_REPLACE)
+    if (flags & PHO_XFER_OBJ_REPLACE)
         return PHO_IO_REPLACE;
     else
         return 0;
@@ -95,7 +95,7 @@ static const struct layout_info simple_layout = {.type = PHO_LYT_SIMPLE};
 static int write_extents(const struct src_info *src, const char *obj_id,
                          const struct pho_attrs *md,
                          const struct layout_info *lay,
-                         struct data_loc *loc, int flags)
+                         struct data_loc *loc, enum pho_xfer_flags flags)
 {
     char                tag[PHO_LAYOUT_TAG_MAX] = "";
     struct io_adapter   ioa;
@@ -142,7 +142,7 @@ static int write_extents(const struct src_info *src, const char *obj_id,
 /** copy data from the extent to the given fd */
 static int read_extents(int fd, const char *obj_id,
                         const struct layout_info *layout,
-                        struct data_loc *loc, int flags)
+                        struct data_loc *loc, enum pho_xfer_flags flags)
 {
     char                 tag[PHO_LAYOUT_TAG_MAX] = "";
     struct io_adapter    ioa;
@@ -231,7 +231,7 @@ static int store_init(struct dss_handle *hdl)
 }
 
 static int obj_put_start(struct dss_handle *dss, const char *obj_id,
-                         const struct pho_attrs *md, int flags)
+                         const struct pho_attrs *md, enum pho_xfer_flags flags)
 {
     enum dss_set_action  action;
     struct object_info   obj;
@@ -245,7 +245,7 @@ static int obj_put_start(struct dss_handle *dss, const char *obj_id,
     obj.oid = obj_id;
     obj.user_md = md_repr->str;
 
-    action = (flags & PHO_OBJ_REPLACE) ? DSS_SET_UPDATE : DSS_SET_INSERT;
+    action = (flags & PHO_XFER_OBJ_REPLACE) ? DSS_SET_UPDATE : DSS_SET_INSERT;
 
     pho_debug("Storing object %s (transient) with attributes: %s",
               obj_id, md_repr->str);
@@ -261,7 +261,8 @@ out_free:
 
 static int extent_put_start(struct dss_handle *dss, const char *obj_id,
                             struct layout_info *layout,
-                            struct data_loc *write_loc, int flags)
+                            struct data_loc *write_loc,
+                            enum pho_xfer_flags flags)
 {
     enum dss_set_action action;
     int                 rc;
@@ -272,7 +273,7 @@ static int extent_put_start(struct dss_handle *dss, const char *obj_id,
     layout->extents = &write_loc->extent;
     layout->ext_count = 1;
 
-    action = (flags & PHO_OBJ_REPLACE) ? DSS_SET_UPDATE : DSS_SET_INSERT;
+    action = (flags & PHO_XFER_OBJ_REPLACE) ? DSS_SET_UPDATE : DSS_SET_INSERT;
 
     rc = dss_extent_set(dss, layout, 1, action);
     if (rc)
@@ -329,14 +330,21 @@ static int obj_put_abort(struct dss_handle *dss, const char *obj_id)
     return dss_object_set(dss, &obj, 1, DSS_SET_DELETE);
 }
 
-/** Put a file to the object store
- * \param obj_id    unique arbitrary string to identify the object
- * \param src_file  file to put to the store
- * \param flags     behavior flags
- * \param md        user attribute set
- */
-int phobos_put(const char *obj_id, const char *src_file, int flags,
-               const struct pho_attrs *md)
+static inline void desc_compl_notify(const struct pho_xfer_desc *desc, int rc)
+{
+    if (desc->pxd_callback != NULL) {
+        pho_debug("Notifying xfer completion on objid:'%s' (rc = %d)",
+                  desc->pxd_objid, rc);
+        desc->pxd_callback(desc, rc);
+    }
+}
+
+int phobos_mput(const struct pho_xfer_desc *desc, size_t n)
+{
+    LOG_RETURN(-ENOTSUP, "MPUT not implemented yet");
+}
+
+int phobos_put(const struct pho_xfer_desc *desc)
 {
     /* the only layout type we can handle for now */
     struct layout_info  layout = simple_layout;
@@ -351,17 +359,17 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
         LOG_RETURN(rc, "initialization failed");
 
     /* get the size of the source file and check its availability */
-    info.fd = open_noatime(src_file, O_RDONLY);
+    info.fd = open_noatime(desc->pxd_fpath, O_RDONLY);
     if (info.fd < 0)
-        LOG_GOTO(disconn, rc = -errno, "open(%s) failed", src_file);
+        LOG_GOTO(disconn, rc = -errno, "open(%s) failed", desc->pxd_fpath);
 
     if (fstat(info.fd, &info.st) != 0)
-        LOG_GOTO(close_src, rc = -errno, "fstat(%s) failed", src_file);
+        LOG_GOTO(close_src, rc = -errno, "fstat(%s) failed", desc->pxd_fpath);
 
     /* store object info in the DB (transient state) with pre-existence check */
-    rc = obj_put_start(&dss, obj_id, md, flags);
+    rc = obj_put_start(&dss, desc->pxd_objid, desc->pxd_attrs, desc->pxd_flags);
     if (rc)
-        LOG_GOTO(close_src, rc, "obj_put_start(%s) failed", obj_id);
+        LOG_GOTO(close_src, rc, "obj_put_start(%s) failed", desc->pxd_objid);
 
     /* get storage resource to write the object */
     rc = lrs_write_intent(&dss, info.st.st_size, &layout, &write_loc);
@@ -370,21 +378,23 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
                  "%zu bytes", info.st.st_size);
 
     /* set extent info in DB (transient state) */
-    rc = extent_put_start(&dss, obj_id, &layout, &write_loc, flags);
+    rc = extent_put_start(&dss, desc->pxd_objid, &layout, &write_loc,
+                          desc->pxd_flags);
     if (rc)
         LOG_GOTO(out_lrs_end, rc, "couln't save extents info");
 
     /* write data to the media */
-    rc = write_extents(&info, obj_id, md, &layout, &write_loc, flags);
+    rc = write_extents(&info, desc->pxd_objid, desc->pxd_attrs, &layout,
+                       &write_loc, desc->pxd_flags);
     if (rc)
         LOG_GOTO(out_clean_db_ext, rc, "failed to write extents");
 
     close(info.fd);
 
     /* complete DB info (object status & extents) */
-    rc = obj_put_done(&dss, obj_id, &layout, &write_loc);
+    rc = obj_put_done(&dss, desc->pxd_objid, &layout, &write_loc);
     if (rc)
-        LOG_GOTO(out_clean_ext, rc, "obj_put_done(%s) failed", obj_id);
+        LOG_GOTO(out_clean_ext, rc, "obj_put_done(%s) failed", desc->pxd_objid);
 
     /* release storage resources + update device/media info
      * XXX Note that we do not care about the error here, the object has been
@@ -392,29 +402,30 @@ int phobos_put(const char *obj_id, const char *src_file, int flags,
      * layers. */
     (void)lrs_done(&dss, &write_loc, 0);
 
-    pho_info("put complete: '%s' -> obj_id:'%s'", src_file, obj_id);
-    return 0;
+    pho_info("put complete: '%s' -> '%s'", desc->pxd_fpath, desc->pxd_objid);
+    rc = 0;
+    goto disconn;
 
     /* cleaning after error cases */
 out_clean_ext:
-    clean_extents(&dss, obj_id, &layout, &write_loc);
+    clean_extents(&dss, desc->pxd_objid, &layout, &write_loc);
 
 out_clean_db_ext:
-    extent_put_abort(&dss, obj_id, &layout, &write_loc);
+    extent_put_abort(&dss, desc->pxd_objid, &layout, &write_loc);
 
 out_lrs_end:
     /* release resource reservations */
     lrs_done(&dss, &write_loc, rc);
 
 out_clean_obj:
-    obj_put_abort(&dss, obj_id);
+    obj_put_abort(&dss, desc->pxd_objid);
 
 close_src:
     close(info.fd);
 
 disconn:
+    desc_compl_notify(desc, rc);
     dss_fini(&dss);
-
     return rc;
 }
 
@@ -452,13 +463,9 @@ err:
     return rc;
 }
 
-/** Retrieve a file from the object store
- * \param obj_id    unique arbitrary string to identify the object
- * \param tgt_file  target file
- * \param flags     behavior flags
- */
-int phobos_get(const char *obj_id, const char *tgt_file, int flags)
+int phobos_get(const struct pho_xfer_desc *desc)
 {
+    enum pho_xfer_flags  flags = desc->pxd_flags;
     struct layout_info  *layout = NULL;
     struct data_loc      read_loc = {0};
     int                  rc = 0;
@@ -472,30 +479,30 @@ int phobos_get(const char *obj_id, const char *tgt_file, int flags)
         LOG_RETURN(rc, "initialization failed");
 
     /* retrieve saved object location */
-    rc = obj_get_location(&dss, obj_id, &layout);
+    rc = obj_get_location(&dss, desc->pxd_objid, &layout);
     if (rc)
         LOG_GOTO(disconn, rc, "Failed to get information about object '%s'",
-                 obj_id);
+                 desc->pxd_objid);
 
     assert(layout != NULL);
 
-    open_flags = (flags & PHO_OBJ_REPLACE) ? O_CREAT|O_WRONLY|O_TRUNC
-                                           : O_CREAT|O_WRONLY|O_EXCL;
+    open_flags = (flags & PHO_XFER_OBJ_REPLACE) ? O_CREAT|O_WRONLY|O_TRUNC
+                                                : O_CREAT|O_WRONLY|O_EXCL;
 
     /* make sure we can write to the target file */
-    fd = open(tgt_file, open_flags, 0640);
+    fd = open(desc->pxd_fpath, open_flags, 0640);
     if (fd < 0)
         LOG_GOTO(free_res, rc = -errno, "Failed to open %s for writing",
-                 tgt_file);
+                 desc->pxd_fpath);
 
     /* prepare storage resource to read the object */
     rc = lrs_read_intent(&dss, layout, &read_loc);
     if (rc)
         LOG_GOTO(close_tgt, rc, "failed to prepare resources to read '%s'",
-                 obj_id);
+                 desc->pxd_objid);
 
     /* read data from the media */
-    rc = read_extents(fd, obj_id, layout, &read_loc, flags);
+    rc = read_extents(fd, desc->pxd_objid, layout, &read_loc, flags);
     if (rc)
         LOG_GOTO(out_lrs_end, rc, "failed to read extents");
 
@@ -508,14 +515,16 @@ out_lrs_end:
 close_tgt:
     close(fd);
     if (rc == 0)
-        pho_info("get complete: obj_id:%s -> '%s'", obj_id, tgt_file);
-    else if (unlink(tgt_file) != 0 && errno != ENOENT)
-        pho_warn("failed to clean '%s': %s", tgt_file, strerror(errno));
+        pho_info("get complete: objid:%s -> '%s'", desc->pxd_objid,
+                 desc->pxd_fpath);
+    else if (unlink(desc->pxd_fpath) != 0 && errno != ENOENT)
+        pho_warn("failed to clean '%s': %s", desc->pxd_fpath, strerror(errno));
 
 free_res:
     dss_res_free(layout, 1);
 
 disconn:
+    desc_compl_notify(desc, rc);
     dss_fini(&dss);
     return rc;
 }
