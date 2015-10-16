@@ -43,6 +43,10 @@ struct scsi_req_sense {
 /*--------------------------------------
  *     MODE SENSE TYPES
  *--------------------------------------*/
+#define PAGECODE_ALL_PAGES       0x3F
+#define PAGECODE_ELEMENT_ADDRESS 0x1D
+#define PAGECODE_TRANSPORT_GEOM  0x1E
+#define PAGECODE_CAPABILITIES    0x1F
 
 /** Mode Sense CDB */
 struct mode_sense_cdb {
@@ -95,7 +99,6 @@ struct mode_sense_result_EAAP {
 /*--------------------------------------
  *     ELEMENT STATUS TYPES
  *--------------------------------------*/
-
 /** Read Element Status CDB */
 struct read_status_cdb {
     unsigned char opcode;
