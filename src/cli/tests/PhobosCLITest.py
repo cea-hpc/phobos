@@ -7,11 +7,17 @@
 
 import sys
 import unittest
+import errno
 
 from contextlib import contextmanager
 from StringIO import StringIO
+from random import randint
 
 from phobos.cli import PhobosActionContext
+from phobos.dss import Client
+from phobos.dss import GenericError as DSSError
+
+from phobos.capi.dss import dev_info, PHO_DEV_DIR
 
 
 @contextmanager
@@ -73,5 +79,29 @@ class CLIParametersTest(unittest.TestCase):
                              '-t', 'LTO6', '-f', 'LTFS', 'TE[000-666]st']).run()
         PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'add',
                              '-t', 'LTO6', '-f', 'LTFS', 'ABC,DEF,XZE,AQW']).run()
+
+    def test_cli_log(self):
+        """
+        Due to the way C and python layers are sandwitched when handling error
+        messages we have see very obscure crashes. Make sure that error codes
+        from lower layers get properly propagated up to the python callers.
+        """
+        cli = Client()
+        cli.connect(dbname='phobos', user='phobos', password='phobos')
+
+        dev = dev_info()
+        dev.family = PHO_DEV_DIR
+        dev.model = ''
+        dev.path = '/tmp/test_%d' % randint(0, 1000000)
+        dev.host = 'localhost'
+        dev.serial = '__TEST_MAGIC_%d' % randint(0, 1000000)
+
+        cli.devices.insert([dev])
+        rc = cli.devices.insert([dev])
+
+        self.assertEqual(rc, -errno.ECOMM)
+
+        cli.disconnect()
+
 if __name__ == '__main__':
     unittest.main()

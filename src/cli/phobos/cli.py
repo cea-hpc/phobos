@@ -14,6 +14,7 @@ specific command line parameters and the API entry points for phobos to trigger
 actions.
 """
 
+import os
 import sys
 import errno
 import argparse
