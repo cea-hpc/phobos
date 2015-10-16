@@ -183,7 +183,7 @@
 %typemap(in) (struct dev_info *dev_ls, int dev_cnt) {
     int i;
     if (!PyList_Check($input)) {
-        PyErr_SetString(PyExc_TypeError, "must be a string");
+        PyErr_SetString(PyExc_TypeError, "must be a list");
         return NULL;
     }
     $2 = PyList_Size($input);
@@ -219,7 +219,7 @@
 %typemap(in) (struct media_info *med_ls, int med_cnt) {
     int i;
     if (!PyList_Check($input)) {
-        PyErr_SetString(PyExc_TypeError, "must be a string");
+        PyErr_SetString(PyExc_TypeError, "must be a list");
         return NULL;
     }
     $2 = PyList_Size($input);
@@ -255,7 +255,7 @@
 %typemap(in) (struct layout_info *lyt_ls, int lyt_cnt) {
     int i;
     if (!PyList_Check($input)) {
-        PyErr_SetString(PyExc_TypeError, "must be a string");
+        PyErr_SetString(PyExc_TypeError, "must be a list");
         return NULL;
     }
     $2 = PyList_Size($input);
@@ -291,7 +291,7 @@
 %typemap(in) (struct object_info *obj_ls, int obj_cnt) {
     int i;
     if (!PyList_Check($input)) {
-        PyErr_SetString(PyExc_TypeError, "must be a string");
+        PyErr_SetString(PyExc_TypeError, "must be a list");
         return NULL;
     }
     $2 = PyList_Size($input);
