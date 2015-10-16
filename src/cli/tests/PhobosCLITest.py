@@ -64,5 +64,14 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['voynichauthor', 'show'], code=2)
         self.check_cmdline_exit(['dir', 'teleport'], code=2)
 
+    def test_cli_tape(self):
+        """ test tape add commands"""
+        #Test differents types of tape name format
+        PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'add',
+                             '-t', 'LTO6', '-f', 'LTFS', 'STANDARD[0000-1000]']).run()
+        PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'add',
+                             '-t', 'LTO6', '-f', 'LTFS', 'TE[000-666]st']).run()
+        PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'add',
+                             '-t', 'LTO6', '-f', 'LTFS', 'ABC,DEF,XZE,AQW']).run()
 if __name__ == '__main__':
     unittest.main()

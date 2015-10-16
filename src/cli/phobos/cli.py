@@ -20,10 +20,11 @@ import argparse
 import logging
 
 import phobos.capi.clogging as pho_logging
+import phobos.capi.dss as cdss
 
 from phobos.config import load_config_file, get_config_value
 from phobos.dss import Client
-
+from ClusterShell.NodeSet import NodeSet
 
 def phobos_log_handler(rec):
     """
@@ -296,7 +297,29 @@ class TapeOptHandler(BaseOptHandler):
     ]
 
     def exec_add(self):
-        print 'TAPE ADD'
+        """Add new tapes"""
+        media_list = []
+        tapes = NodeSet.fromlist(self.params.get('res'))
+
+        for tape in tapes:
+            media = cdss.media_info()
+            media.fs_type = cdss.str2fs_type(self.params.get('fs_type'))
+            media.model = self.params.get('type')
+            media.addr_type = cdss.PHO_ADDR_PATH
+            media.id.type = cdss.PHO_DEV_TAPE
+            if self.params.get('unlock'):
+                media.adm_status = cdss.PHO_DEV_ADM_ST_UNLOCKED
+            else:
+                media.adm_status = cdss.PHO_DEV_ADM_ST_LOCKED
+            media.stats =  cdss.media_stats()
+            cdss.media_id_set(media.id, tape)
+            media_list.append(media)
+
+        rc = self.client.media.insert(media_list)
+        if not rc:
+            print "%d tape(s) added" % len(media_list)
+        else:
+            print "Failed to add tape(s), error: %s" % os.strerror(abs(rc))
 
     def exec_format(self):
         print 'TAPE FORMAT'
