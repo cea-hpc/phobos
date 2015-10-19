@@ -17,6 +17,7 @@
 #include "pho_type_utils.h"
 #include "pho_cfg.h"
 #include "pho_ldm.h"
+#include "pho_io.h"
 
 #include <string.h>
 #include <unistd.h>
@@ -129,7 +130,8 @@ static int check_dev_info(const struct dev_descr *dev)
  *                    allocated by this function.
  * @param label[in]   label of the media.
  */
-static int lrs_fill_media_info(void *dss_hdl, struct media_info **pmedia,
+static int lrs_fill_media_info(struct dss_handle *dss,
+                               struct media_info **pmedia,
                                const struct media_id *id)
 {
     struct dss_crit med_crit[2]; /* criteria on family+id */
@@ -149,7 +151,7 @@ static int lrs_fill_media_info(void *dss_hdl, struct media_info **pmedia,
                  media_id_get(id));
 
     /* get media info from DB */
-    rc = dss_media_get(dss_hdl, med_crit, med_crit_cnt, &media_res, &mcnt);
+    rc = dss_media_get(dss, med_crit, med_crit_cnt, &media_res, &mcnt);
     if (rc)
         return rc;
 
@@ -180,11 +182,11 @@ out_free:
  * - for loaded drives, the mounted volume + LTFS mount point, if mounted.
  * - get media information from DB for loaded drives.
  *
- * @param[in]  dss_hdl handle to dss connection
+ * @param[in]  dss  handle to dss connection
  * @param[in]  devi device_info from DB
  * @param[out] devd dev_descr structure filled with all needed information.
  */
-static int lrs_fill_dev_info(void *dss_hdl, struct dev_descr *devd,
+static int lrs_fill_dev_info(struct dss_handle *dss, struct dev_descr *devd,
                              const struct dev_info *devi)
 {
     int rc;
@@ -209,7 +211,7 @@ static int lrs_fill_dev_info(void *dss_hdl, struct dev_descr *devd,
     /* get media info for loaded drives */
     if ((devd->state.op_status == PHO_DEV_OP_ST_LOADED)
        || (devd->state.op_status == PHO_DEV_OP_ST_MOUNTED))
-        rc = lrs_fill_media_info(dss_hdl, &devd->media, &devd->state.media_id);
+        rc = lrs_fill_media_info(dss, &devd->media, &devd->state.media_id);
 
     return rc;
 }
@@ -218,7 +220,7 @@ static int lrs_fill_dev_info(void *dss_hdl, struct dev_descr *devd,
  * Load device states into memory.
  * Do nothing if device status is already loaded.
  */
-static int lrs_load_dev_state(void *dss_hdl)
+static int lrs_load_dev_state(struct dss_handle *dss)
 {
     struct dev_info *devs = NULL;
     int              dcnt = 0;
@@ -244,7 +246,7 @@ static int lrs_load_dev_state(void *dss_hdl)
                  family);
 
     /* get all unlocked devices from DB for the given family */
-    rc = dss_device_get(dss_hdl, crit, crit_cnt, &devs, &dcnt);
+    rc = dss_device_get(dss, crit, crit_cnt, &devs, &dcnt);
     if (rc)
         return rc;
     else if (dcnt == 0) {
@@ -259,7 +261,7 @@ static int lrs_load_dev_state(void *dss_hdl)
         return -ENOMEM;
 
     for (i = 0 ; i < dcnt; i++) {
-        if (lrs_fill_dev_info(dss_hdl, &devices[i], &devs[i]) != 0)
+        if (lrs_fill_dev_info(dss, &devices[i], &devs[i]) != 0)
             devices[i].state.op_status = PHO_DEV_OP_ST_FAILED;
     }
 
@@ -272,7 +274,7 @@ static int lrs_load_dev_state(void *dss_hdl)
  * Get a suitable media for a write operation, and compatible
  * with the given drive model.
  */
-static int lrs_select_media(void *dss_hdl, struct media_info **p_media,
+static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
                             size_t required_size, enum dev_family family,
                             const char *device_model)
 {
@@ -293,7 +295,7 @@ static int lrs_select_media(void *dss_hdl, struct media_info **p_media,
     /** @TODO use configurable compatility rules to determine writable
      * media models from device_model */
 
-    rc = dss_media_get(dss_hdl, crit, crit_cnt, &pmedia_res, &mcnt);
+    rc = dss_media_get(dss, crit, crit_cnt, &pmedia_res, &mcnt);
     if (rc)
         return rc;
 
@@ -614,10 +616,10 @@ static device_select_func_t get_dev_policy(void)
 
 /**
  * Free one of the devices to allow mounting a new media.
- * @param(in)  dss_hdl      Handle to DSS.
- * @param(out) dev_descr    Pointer to an empty drive.
+ * @param(in)  dss       Handle to DSS.
+ * @param(out) dev_descr Pointer to an empty drive.
  */
-static int lrs_free_one_device(void *dss_hdl, struct dev_descr **devp)
+static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp)
 {
     int rc;
 
@@ -663,14 +665,14 @@ static int lrs_free_one_device(void *dss_hdl, struct dev_descr **devp)
  * @param[in]  size  Size of the extent to be written.
  * @param[out] devp  The selected device to write with.
  */
-static int lrs_get_write_res(void *dss_hdl, size_t size,
+static int lrs_get_write_res(struct dss_handle *dss, size_t size,
                              struct dev_descr **devp)
 {
     device_select_func_t dev_select_policy;
     struct media_info *pmedia = NULL;
     int rc = 0;
 
-    rc = lrs_load_dev_state(dss_hdl);
+    rc = lrs_load_dev_state(dss);
     if (rc != 0)
         return rc;
 
@@ -709,7 +711,7 @@ static int lrs_get_write_res(void *dss_hdl, size_t size,
      * It will be loaded into a free drive. */
     pho_verb("Not enough available space on loaded media: "
              "selecting another media");
-    rc = lrs_select_media(dss_hdl, &pmedia, size, default_family(), NULL);
+    rc = lrs_select_media(dss, &pmedia, size, default_family(), NULL);
     if (rc)
         return rc;
 
@@ -717,7 +719,7 @@ static int lrs_get_write_res(void *dss_hdl, size_t size,
     *devp = dev_picker(PHO_DEV_OP_ST_EMPTY, select_any, 0);
     if (*devp == NULL) {
         pho_verb("No free drive: need to unload one");
-        rc = lrs_free_one_device(dss_hdl, devp);
+        rc = lrs_free_one_device(dss, devp);
         if (rc)
             goto out_free;
     }
@@ -739,48 +741,54 @@ out_free:
 }
 
 /** set location structure from device information */
-static int set_loc_from_dev(struct data_loc *loc,
-                            const struct dev_descr *dev)
+static int set_loc_from_dev(const struct dev_descr *dev,
+                            struct lrs_intent *intent)
 {
     if (dev == NULL || dev->state.mnt_path == NULL)
         return -EINVAL;
 
-    /* fill data_loc structure with mount point and media info */
-    loc->root_path = strdup(dev->state.mnt_path);
-    loc->extent.media = dev->media->id;
-    loc->extent.fs_type = dev->media->fs_type;
-    loc->extent.addr_type = dev->media->addr_type;
-    loc->extent.address = PHO_BUFF_NULL;
-
+    /* fill intent descriptor with mount point and media info */
+    intent->li_location.root_path = strdup(dev->state.mnt_path);
+    intent->li_location.extent.media     = dev->media->id;
+    intent->li_location.extent.fs_type   = dev->media->fs_type;
+    intent->li_location.extent.addr_type = dev->media->addr_type;
+    intent->li_location.extent.address   = PHO_BUFF_NULL;
     return 0;
 }
 
 /* see "pho_lrs.h" for function help */
-int lrs_write_intent(void *dss_hdl, size_t size,
-                     const struct layout_info *layout,
-                     struct data_loc *loc)
+int lrs_write_prepare(struct dss_handle *dss, size_t size,
+                      const struct layout_info *layout,
+                      struct lrs_intent *intent)
 {
-    struct dev_descr *dev = NULL;
-    int rc;
+    struct dev_descr    *dev = NULL;
+    int                  rc;
 
-    rc = lrs_get_write_res(dss_hdl, size, &dev);
+    intent->li_operation = LRS_OP_WRITE;
+
+    rc = lrs_get_write_res(dss, size, &dev);
     if (rc != 0)
         return rc;
 
     if (dev != NULL)
         pho_verb("Writing to media '%s' using device '%s'",
-                 media_id_get(&dev->media->id),
-                 dev->device->path);
+                 media_id_get(&dev->media->id), dev->device->path);
 
-    rc = set_loc_from_dev(loc, dev);
-    if (rc)
-        return rc; /* FIXME release resources? */
+    rc = set_loc_from_dev(dev, intent);
+    if (rc != 0)
+        LOG_GOTO(err_cleanup, rc, "Cannot set write location");
 
     /* a single part with the given size */
-    loc->extent.layout_idx = 0;
-    loc->extent.size = size;
+    intent->li_location.extent.layout_idx = 0;
+    intent->li_location.extent.size = size;
 
-    return 0;
+err_cleanup:
+    if (rc != 0) {
+        free(intent->li_location.root_path);
+        memset(intent, 0, sizeof(*intent));
+    }
+
+    return rc;
 }
 
 static struct dev_descr *search_loaded_media(const struct media_id *id)
@@ -804,28 +812,28 @@ static struct dev_descr *search_loaded_media(const struct media_id *id)
 }
 
 
-int lrs_read_intent(void *dss_hdl, const struct layout_info *layout,
-                    struct data_loc *loc)
+int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
+                     struct lrs_intent *intent)
 {
-    int               rc = 0;
     struct dev_descr *dev = NULL;
+    int               rc = 0;
 
     if (layout->type != PHO_LYT_SIMPLE || layout->ext_count != 1)
         LOG_RETURN(-EINVAL, "Unexpected layout type '%s' or extent count %u",
                    layout_type2str(layout->type), layout->ext_count);
 
-    rc = lrs_load_dev_state(dss_hdl);
+    intent->li_operation = LRS_OP_READ;
+    intent->li_location.extent = layout->extents[0];
+
+    rc = lrs_load_dev_state(dss);
     if (rc != 0)
         return rc;
 
-    loc->extent = layout->extents[0];
-
     /* check if the media is already in a drive */
-    dev = search_loaded_media(&loc->extent.media);
-
+    dev = search_loaded_media(&intent->li_location.extent.media);
     if (dev == NULL) {
         pho_verb("Media '%s' is not in a drive",
-                 media_id_get(&loc->extent.media));
+                 media_id_get(&intent->li_location.extent.media));
 
         /* @TODO retrieve media information from DSS */
 
@@ -833,7 +841,7 @@ int lrs_read_intent(void *dss_hdl, const struct layout_info *layout,
         dev = dev_picker(PHO_DEV_OP_ST_EMPTY, select_any, 0);
         if (dev == NULL) {
             pho_verb("No free drive: need to unload one");
-            rc = lrs_free_one_device(dss_hdl, &dev);
+            rc = lrs_free_one_device(dss, &dev);
             if (rc)
                 return rc;
         }
@@ -856,21 +864,42 @@ int lrs_read_intent(void *dss_hdl, const struct layout_info *layout,
         LOG_RETURN(rc = -EINVAL, "Invalid device state");
 
     /* set fs_type and addr_type according to media description. */
-    loc->extent.fs_type = dev->media->fs_type;
-    loc->extent.addr_type = dev->media->addr_type;
-    loc->root_path = strdup(dev->state.mnt_path);
+    intent->li_location.root_path = strdup(dev->state.mnt_path);
+    intent->li_location.extent.fs_type   = dev->media->fs_type;
+    intent->li_location.extent.addr_type = dev->media->addr_type;
 
     return 0;
 }
 
-int lrs_done(void *dss_hdl, struct data_loc *loc, int err_code)
+int lrs_done(struct lrs_intent *intent, int err_code)
 {
-    if (loc)
-        free(loc->root_path);
+    struct io_adapter   ioa;
+    int                 rc = 0;
+    ENTRY;
 
-    /** @TODO tag tape media as full if err_code = ENOSPC.
+    if (intent->li_operation != LRS_OP_WRITE)
+        goto out_free;
+
+    rc = get_io_adapter(intent->li_location.extent.fs_type, &ioa);
+    if (rc != 0)
+        LOG_GOTO(out_free, rc,
+                 "No suitable I/O adapter for filesystem type '%s'",
+                 fs_type2str(intent->li_location.extent.fs_type));
+
+    /* The same IOA must have been used to perform the actual data transfer */
+    assert(io_adapter_is_valid(&ioa));
+
+    rc = ioa_flush(&ioa, &intent->li_location);
+    if (rc != 0)
+        LOG_GOTO(out_free, rc, "Cannot flush media at: %s",
+                 intent->li_location.root_path);
+
+    /**
+     * @TODO tag tape media as full if err_code = ENOSPC.
      * (trigger umount in this case?).
      */
 
-    return 0;
+out_free:
+    free(intent->li_location.root_path);
+    return rc;
 }

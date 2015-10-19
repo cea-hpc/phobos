@@ -12,39 +12,55 @@
 
 #include "pho_types.h"
 
+struct dss_handle;
+
+
+enum lrs_operation {
+    LRS_OP_NONE = 0,
+    LRS_OP_READ,
+    LRS_OP_WRITE
+};
+
+struct lrs_intent {
+    enum lrs_operation   li_operation;
+    struct pho_ext_loc   li_location;
+};
+
+
 /**
  * Query to write a given amount of data with a given layout.
- * @param(in) dss_hdl handle to initialized DSS.
- * @param(in) size   size of the object to be written.
- * @param(in) layout the requested layout
- * @param(out) loc   data locations (for write)
- *  (future: several extents if the file is splitted, striped...)
+ * (future: several extents if the file is splitted, striped...)
+ *
+ * @param(in)  dss     Initialized DSS handle.
+ * @param(in)  size    Size of the object to be written.
+ * @param(in)  layout  The requested layout.
+ * @param(out) intent  The intent descriptor to fill.
  * @return 0 on success, -1 * posix error code on failure
  */
-int lrs_write_intent(void *dss_hdl, size_t size,
-                     const struct layout_info *layout, struct data_loc *loc);
+int lrs_write_prepare(struct dss_handle *dss, size_t intent_size,
+                      const struct layout_info *layout,
+                      struct lrs_intent *intent);
 
 /**
  * Query to read from a given set of media.
- * @param(in) dss_hdl handle to initialized DSS.
- * @param(in) layout data layout description
- * @param(in, out) loc  Location to read the data. Extent must be set as input.
- *                      loc->root_path is set by the function.
- *  (future: several locations if the file is splitted, striped...
- *   Moreover, the object may have several locations and layouts if it is
- *   duplicated).
+ * (future: several locations if the file is splitted, striped...
+ *  Moreover, the object may have several locations and layouts if it is
+ *  duplicated).
+ *
+ * @param(in)  dss     Initialized DSS handle.
+ * @param(in)  layout  Data layout description.
+ * @param(out) intent  The intent descriptor to fill.
  * @return 0 on success, -1 * posix error code on failure
  */
-int lrs_read_intent(void *dss_hdl, const struct layout_info *layout,
-                    struct data_loc *loc);
+int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
+                     struct lrs_intent *intent);
 
 /**
- * Declare the current operation (read/write) as finished.
- * @param(in) dss_hdl   handle to initialized DSS.
- * @param(in) loc the   location where the operation was done.
+ * Declare the current operation (read/write) as finished and flush data.
+ * @param(in) intent    the intent descriptor filled by lrs_intent_{read,write}.
  * @param(in) err_code  status of the copy (errno value).
  * @return 0 on success, -1 * posix error code on failure
  */
-int lrs_done(void *dss_hdl, struct data_loc *loc, int err_code);
+int lrs_done(struct lrs_intent *intent, int err_code);
 
 #endif

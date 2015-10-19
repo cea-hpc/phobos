@@ -35,8 +35,8 @@
 
 /** fill an array with metadata blobs to be stored on the media */
 static int build_extent_md(const char *id, const struct pho_attrs *md,
-                           const struct layout_info *lay, struct data_loc *loc,
-                           struct pho_attrs *dst_md)
+                           const struct layout_info *lay,
+                           struct pho_ext_loc *loc, struct pho_attrs *dst_md)
 {
     GString *str;
     int      rc;
@@ -95,12 +95,13 @@ static const struct layout_info simple_layout = {.type = PHO_LYT_SIMPLE};
 static int write_extents(const struct src_info *src, const char *obj_id,
                          const struct pho_attrs *md,
                          const struct layout_info *lay,
-                         struct data_loc *loc, enum pho_xfer_flags flags)
+                         struct lrs_intent *intent, enum pho_xfer_flags flags)
 {
-    char                tag[PHO_LAYOUT_TAG_MAX] = "";
-    struct io_adapter   ioa;
-    struct pho_io_descr iod;
-    int                 rc;
+    char                 tag[PHO_LAYOUT_TAG_MAX] = "";
+    struct pho_ext_loc  *loc = &intent->li_location;
+    struct io_adapter    ioa;
+    struct pho_io_descr  iod;
+    int                  rc;
 
     /* Get ready for upcoming NULL checks */
     memset(&iod, 0, sizeof(iod));
@@ -118,8 +119,7 @@ static int write_extents(const struct src_info *src, const char *obj_id,
     if (rc)
         return rc;
 
-    /* single PUT: flush the data to disk */
-    iod.iod_flags = obj2io_flags(flags) | PHO_IO_SYNC_FILE | PHO_IO_NO_REUSE;
+    iod.iod_flags = obj2io_flags(flags) | PHO_IO_NO_REUSE;
     iod.iod_fd    = src->fd;
     iod.iod_off   = 0;
     iod.iod_size  = src->st.st_size;
@@ -142,9 +142,10 @@ static int write_extents(const struct src_info *src, const char *obj_id,
 /** copy data from the extent to the given fd */
 static int read_extents(int fd, const char *obj_id,
                         const struct layout_info *layout,
-                        struct data_loc *loc, enum pho_xfer_flags flags)
+                        struct lrs_intent *intent, enum pho_xfer_flags flags)
 {
     char                 tag[PHO_LAYOUT_TAG_MAX] = "";
+    struct pho_ext_loc  *loc = &intent->li_location;
     struct io_adapter    ioa;
     struct pho_io_descr  iod;
     const char          *name;
@@ -212,7 +213,7 @@ static int open_noatime(const char *path, int flags)
     return fd;
 }
 
-static int store_init(struct dss_handle *hdl)
+static int store_init(struct dss_handle *dss)
 {
     int         rc;
     const char *str;
@@ -225,9 +226,12 @@ static int store_init(struct dss_handle *hdl)
     if (str == NULL)
         return -EINVAL;
 
-    return dss_init(str, hdl);
+    rc = dss_init(str, dss);
+    if (rc != 0)
+        return rc;
 
     /* FUTURE: return pho_cfg_set_thread_conn(dss_hdl); */
+    return 0;
 }
 
 static int obj_put_start(struct dss_handle *dss, const char *obj_id,
@@ -261,7 +265,7 @@ out_free:
 
 static int extent_put_start(struct dss_handle *dss, const char *obj_id,
                             struct layout_info *layout,
-                            struct data_loc *write_loc,
+                            struct lrs_intent *intent,
                             enum pho_xfer_flags flags)
 {
     enum dss_set_action action;
@@ -270,7 +274,7 @@ static int extent_put_start(struct dss_handle *dss, const char *obj_id,
     layout->oid = obj_id;
     layout->copy_num = 0;
     layout->state = PHO_EXT_ST_PENDING;
-    layout->extents = &write_loc->extent;
+    layout->extents = &intent->li_location.extent;
     layout->ext_count = 1;
 
     action = (flags & PHO_XFER_OBJ_REPLACE) ? DSS_SET_UPDATE : DSS_SET_INSERT;
@@ -283,19 +287,19 @@ static int extent_put_start(struct dss_handle *dss, const char *obj_id,
 }
 
 static int obj_put_done(struct dss_handle *dss, const char *obj_id,
-                        struct layout_info *layout, struct data_loc *write_loc)
+                        struct layout_info *layout, struct lrs_intent *intent)
 {
     layout->state = PHO_EXT_ST_SYNC;
     return dss_extent_set(dss, layout, 1, DSS_SET_UPDATE);
 }
 
 static int clean_extents(struct dss_handle *dss, const char *obj_id,
-                         struct layout_info *layout, struct data_loc *write_loc)
+                         struct layout_info *layout, struct lrs_intent *intent)
 {
     int rc;
 
     assert(strcmp(obj_id, layout->oid) == 0);
-    assert(layout->extents == &write_loc->extent);
+    assert(layout->extents == &intent->li_location.extent);
 
     rc = dss_extent_set(dss, layout, 1, DSS_SET_DELETE);
     if (rc)
@@ -306,12 +310,12 @@ static int clean_extents(struct dss_handle *dss, const char *obj_id,
 
 static int extent_put_abort(struct dss_handle *dss, const char *obj_id,
                             struct layout_info *layout,
-                            struct data_loc *write_loc)
+                            struct lrs_intent *intent)
 {
     int rc;
 
     assert(strcmp(obj_id, layout->oid) == 0);
-    assert(layout->extents == &write_loc->extent);
+    assert(layout->extents == &intent->li_location.extent);
 
     rc = dss_extent_set(dss, layout, 1, DSS_SET_DELETE);
     if (rc)
@@ -348,10 +352,10 @@ int phobos_put(const struct pho_xfer_desc *desc)
 {
     /* the only layout type we can handle for now */
     struct layout_info  layout = simple_layout;
-    struct data_loc     write_loc = {0};
     struct src_info     info = {0};
-    int                 rc;
+    struct lrs_intent   intent;
     struct dss_handle   dss;
+    int                 rc;
 
     /* load configuration and get dss handle */
     rc = store_init(&dss);
@@ -372,27 +376,27 @@ int phobos_put(const struct pho_xfer_desc *desc)
         LOG_GOTO(close_src, rc, "obj_put_start(%s) failed", desc->pxd_objid);
 
     /* get storage resource to write the object */
-    rc = lrs_write_intent(&dss, info.st.st_size, &layout, &write_loc);
+    rc = lrs_write_prepare(&dss, info.st.st_size, &layout, &intent);
     if (rc)
         LOG_GOTO(out_clean_obj, rc, "failed to get storage resource to write "
                  "%zu bytes", info.st.st_size);
 
     /* set extent info in DB (transient state) */
-    rc = extent_put_start(&dss, desc->pxd_objid, &layout, &write_loc,
+    rc = extent_put_start(&dss, desc->pxd_objid, &layout, &intent,
                           desc->pxd_flags);
     if (rc)
         LOG_GOTO(out_lrs_end, rc, "couln't save extents info");
 
     /* write data to the media */
     rc = write_extents(&info, desc->pxd_objid, desc->pxd_attrs, &layout,
-                       &write_loc, desc->pxd_flags);
+                       &intent, desc->pxd_flags);
     if (rc)
         LOG_GOTO(out_clean_db_ext, rc, "failed to write extents");
 
     close(info.fd);
 
     /* complete DB info (object status & extents) */
-    rc = obj_put_done(&dss, desc->pxd_objid, &layout, &write_loc);
+    rc = obj_put_done(&dss, desc->pxd_objid, &layout, &intent);
     if (rc)
         LOG_GOTO(out_clean_ext, rc, "obj_put_done(%s) failed", desc->pxd_objid);
 
@@ -400,7 +404,7 @@ int phobos_put(const struct pho_xfer_desc *desc)
      * XXX Note that we do not care about the error here, the object has been
      * saved successfully and the LRS error should have been logged by lower
      * layers. */
-    (void)lrs_done(&dss, &write_loc, 0);
+    (void)lrs_done(&intent, 0);
 
     pho_info("put complete: '%s' -> '%s'", desc->pxd_fpath, desc->pxd_objid);
     rc = 0;
@@ -408,14 +412,14 @@ int phobos_put(const struct pho_xfer_desc *desc)
 
     /* cleaning after error cases */
 out_clean_ext:
-    clean_extents(&dss, desc->pxd_objid, &layout, &write_loc);
+    clean_extents(&dss, desc->pxd_objid, &layout, &intent);
 
 out_clean_db_ext:
-    extent_put_abort(&dss, desc->pxd_objid, &layout, &write_loc);
+    extent_put_abort(&dss, desc->pxd_objid, &layout, &intent);
 
 out_lrs_end:
     /* release resource reservations */
-    lrs_done(&dss, &write_loc, rc);
+    lrs_done(&intent, rc);
 
 out_clean_obj:
     obj_put_abort(&dss, desc->pxd_objid);
@@ -467,7 +471,7 @@ int phobos_get(const struct pho_xfer_desc *desc)
 {
     enum pho_xfer_flags  flags = desc->pxd_flags;
     struct layout_info  *layout = NULL;
-    struct data_loc      read_loc = {0};
+    struct lrs_intent    intent;
     int                  rc = 0;
     int                  fd;
     int                  open_flags;
@@ -496,19 +500,19 @@ int phobos_get(const struct pho_xfer_desc *desc)
                  desc->pxd_fpath);
 
     /* prepare storage resource to read the object */
-    rc = lrs_read_intent(&dss, layout, &read_loc);
+    rc = lrs_read_prepare(&dss, layout, &intent);
     if (rc)
         LOG_GOTO(close_tgt, rc, "failed to prepare resources to read '%s'",
                  desc->pxd_objid);
 
     /* read data from the media */
-    rc = read_extents(fd, desc->pxd_objid, layout, &read_loc, flags);
+    rc = read_extents(fd, desc->pxd_objid, layout, &intent, flags);
     if (rc)
         LOG_GOTO(out_lrs_end, rc, "failed to read extents");
 
 out_lrs_end:
     /* release storage resources */
-    lrs_done(&dss, &read_loc, rc);
+    lrs_done(&intent, rc);
     /* don't care about the error here, the object has been read successfully
      * and the LRS error should have been logged by lower layers.
      */

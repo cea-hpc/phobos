@@ -298,20 +298,19 @@ struct extent {
     enum address_type  addr_type;  /**< way to address this media */
 };
 
-/** Address to read/write data.
- * Also holds resource information to be cleaned after the access.
+/**
+ * Phobos extent location descriptor.
  */
-struct data_loc {
-    /** mount-point to access the media referenced in the extent */
-    char         *root_path;
-    /** the data extent itself */
-    struct extent extent;
+struct pho_ext_loc {
+    char            *root_path;
+    struct extent    extent;
 };
 
-static inline bool is_data_loc_valid(const struct data_loc *loc)
+static inline bool is_ext_addr_set(const struct pho_ext_loc *loc)
 {
     return loc->extent.address.buff != NULL;
 }
+
 
 /**
  * Device Administrative state

@@ -40,12 +40,12 @@ typedef int (*io_callback_t)(const struct io_cb_data *cb_data, void *user_data);
  * ones.
  */
 struct pho_io_descr {
-    int                iod_flags;    /**< PHO_IO_* flags */
-    int                iod_fd;       /**< Local FD */
-    off_t              iod_off;      /**< Operation offset */
-    size_t             iod_size;     /**< Operation size */
-    struct data_loc   *iod_loc;      /**< Extent location */
-    struct pho_attrs   iod_attrs;    /**< In/Out metadata operations buffer */
+    int                  iod_flags;    /**< PHO_IO_* flags */
+    int                  iod_fd;       /**< Local FD */
+    off_t                iod_off;      /**< Operation offset */
+    size_t               iod_size;     /**< Operation size */
+    struct pho_ext_loc  *iod_loc;      /**< Extent location */
+    struct pho_attrs     iod_attrs;    /**< In/Out metadata operations buffer */
 };
 
 
@@ -68,9 +68,9 @@ struct io_adapter {
     int (*ioa_get)(const char *id, const char *tag, struct pho_io_descr *iod,
                    io_callback_t io_cb, void *user_data);
 
-    int (*ioa_del)(const char *id, const char *tag, struct data_loc *loc);
+    int (*ioa_del)(const char *id, const char *tag, struct pho_ext_loc *loc);
 
-    int (*ioa_flush)(const struct data_loc *loc);
+    int (*ioa_flush)(const struct pho_ext_loc *loc);
 };
 
 /**
@@ -172,7 +172,7 @@ static inline int ioa_get(const struct io_adapter *ioa, const char *id,
  * \return 0 on success, negative error code on failure.
  */
 static inline int ioa_del(const struct io_adapter *ioa, const char *id,
-                          const char *tag, struct data_loc *loc)
+                          const char *tag, struct pho_ext_loc *loc)
 {
     assert(ioa != NULL);
     assert(ioa->ioa_del != NULL);
@@ -191,7 +191,7 @@ static inline int ioa_del(const struct io_adapter *ioa, const char *id,
  */
 
 static inline int ioa_flush(const struct io_adapter *ioa,
-                            const struct data_loc *loc)
+                            const struct pho_ext_loc *loc)
 {
     assert(ioa != NULL);
     if (ioa->ioa_flush == NULL)

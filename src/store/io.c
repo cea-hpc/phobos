@@ -24,8 +24,8 @@
 #include <attr/attributes.h>
 
 
-/** build the full posix path from a data_loc structure */
-static char *pho_posix_fullpath(const struct data_loc *loc)
+/** build the full posix path from a pho_ext_loc structure */
+static char *pho_posix_fullpath(const struct pho_ext_loc *loc)
 {
     char *p;
 
@@ -406,7 +406,7 @@ static int pho_posix_put(const char *id, const char *tag,
         LOG_RETURN(-ENOTSUP, "Asynchronous PUT operations not supported yet");
 
     /* generate entry address, if it is not already set */
-    if (!is_data_loc_valid(iod->iod_loc)) {
+    if (!is_ext_addr_set(iod->iod_loc)) {
         rc = pho_posix_set_addr(id, tag, iod->iod_loc->extent.addr_type,
                                 &iod->iod_loc->extent.address);
         if (rc)
@@ -495,7 +495,7 @@ static int pho_posix_get(const char *id, const char *tag,
     }
 
     /* generate entry address, if it is not already set */
-    if (!is_data_loc_valid(iod->iod_loc)) {
+    if (!is_ext_addr_set(iod->iod_loc)) {
         pho_warn("Object has no address stored in database"
                  " (generating it from object id)");
         rc = pho_posix_set_addr(id, tag, iod->iod_loc->extent.addr_type,
@@ -563,7 +563,7 @@ free_path:
 
 
 
-static int pho_posix_sync(const struct data_loc *loc)
+static int pho_posix_sync(const struct pho_ext_loc *loc)
 {
     ENTRY;
     sync();
@@ -573,7 +573,7 @@ static int pho_posix_sync(const struct data_loc *loc)
 
 #define LTFS_SYNC_ATTR_NAME "user.ltfs.sync"
 
-static int pho_ltfs_sync(const struct data_loc *loc)
+static int pho_ltfs_sync(const struct pho_ext_loc *loc)
 {
     int one = 1;
     ENTRY;
@@ -588,7 +588,8 @@ static int pho_ltfs_sync(const struct data_loc *loc)
 }
 
 
-static int pho_posix_del(const char *id, const char *tag, struct data_loc *loc)
+static int pho_posix_del(const char *id, const char *tag,
+                         struct pho_ext_loc *loc)
 {
     int   rc = 0;
     char *path;
@@ -629,8 +630,8 @@ bool io_adapter_is_valid(const struct io_adapter *ioa)
         return false;
 
     /* Does the IOA exposes the mandatory calls? */
-    if (ioa->ioa_put == NULL    ||
-        ioa->ioa_get == NULL   ||
+    if (ioa->ioa_put == NULL ||
+        ioa->ioa_get == NULL ||
         ioa->ioa_del == NULL)
         return false;
 
