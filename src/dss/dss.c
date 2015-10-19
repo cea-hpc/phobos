@@ -733,8 +733,9 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
     res = PQexec(conn, clause->str);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         rc = -ECOMM;
-        pho_error(rc, "Query '%s' failed: %s", clause->str,
-                  PQerrorMessage(conn));
+        pho_error(rc, "Query '%s' failed: %s (SQLErrno: %s)", clause->str,
+                  PQerrorMessage(conn),
+                  PQresultErrorField(res, PG_DIAG_SQLSTATE));
         PQclear(res);
         g_string_free(clause, true);
         return rc;
@@ -892,15 +893,17 @@ int dss_set(struct dss_handle *handle, enum dss_type type, void *item_list,
     res = PQexec(conn, request->str);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
         rc = -ECOMM;
-        pho_error(rc, "Query '%s' failed: %s", request->str,
-                  PQerrorMessage(conn));
+        pho_error(rc, "Query '%s' failed: %s (SQLErrno: %s)", request->str,
+                  PQerrorMessage(conn),
+                  PQresultErrorField(res, PG_DIAG_SQLSTATE));
         PQclear(res);
 
         pho_info("Attempting to rollback after transaction failure");
 
         res = PQexec(conn, "ROLLBACK; ");
         if (PQresultStatus(res) != PGRES_COMMAND_OK)
-            pho_error(rc, "Rollback failed");
+            pho_error(rc, "Rollback failed: (SQLErrno: %s)",
+                      PQresultErrorField(res, PG_DIAG_SQLSTATE));
 
         goto out_cleanup;
     }
@@ -908,7 +911,8 @@ int dss_set(struct dss_handle *handle, enum dss_type type, void *item_list,
     res = PQexec(conn, "COMMIT; ");
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
         rc = -ECOMM;
-        pho_error(rc, "Commit failed");
+        pho_error(rc, "Commit failed: (SQLErrno: %s)",
+                  PQresultErrorField(res, PG_DIAG_SQLSTATE));
     }
 
 out_cleanup:
