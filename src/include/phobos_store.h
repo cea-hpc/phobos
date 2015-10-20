@@ -44,12 +44,12 @@ typedef void (*pho_completion_cb_t)(const struct pho_xfer_desc *, int);
  *  - phobos_put()
  */
 struct pho_xfer_desc {
-    char                *pxd_objid;
-    char                *pxd_fpath;
-    struct pho_attrs    *pxd_attrs;
-    enum pho_xfer_flags  pxd_flags;
-    void                *pxd_udata;
-    pho_completion_cb_t  pxd_callback;
+    char                *xd_objid;
+    char                *xd_fpath;
+    struct pho_attrs    *xd_attrs;
+    enum pho_xfer_flags  xd_flags;
+    void                *xd_udata;
+    pho_completion_cb_t  xd_callback;
 };
 
 
@@ -67,7 +67,7 @@ int phobos_put(const struct pho_xfer_desc *desc);
  * Put N files to the object store with minimal overhead.
  * See phobos_put() for how to fill the desc items.
  * This function returns the first encountered error, or 0 if all sub-operations
- * have succeeded. Individual notifications are issued via pxd_callback.
+ * have succeeded. Individual notifications are issued via xd_callback.
  */
 int phobos_mput(const struct pho_xfer_desc *desc, size_t n);
 

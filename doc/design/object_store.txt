@@ -22,18 +22,18 @@ Internals:
 API:
     - Transfer operations are described by the following structure:
     struct pho_xfer_desc {
-        char                *pxd_objid;
-        char                *pxd_fpath;
-        struct pho_attrs    *pxd_attrs;     /**< For PUT operations only */
-        enum pho_xfer_flags  pxd_flags;
-        pho_completion_cb_t  pxd_callback;  /**< No notification if NULL */
-        void                *pxd_udata;     /**< User pointer, untouched */
+        char                *xd_objid;
+        char                *xd_fpath;
+        struct pho_attrs    *xd_attrs;     /**< For PUT operations only */
+        enum pho_xfer_flags  xd_flags;
+        pho_completion_cb_t  xd_callback;  /**< No notification if NULL */
+        void                *xd_udata;     /**< User pointer, untouched */
     };
 
     Bulk operations (mput only for now) take an array of struct pho_xfer_desc.
     The mput() call aims at allowing optimizations like deferred media sync by
     LRS. Sub-operations can fail individually. Results are reported by
-    invoking pxd_callback() for each transfer, with the corresponding error
+    invoking xd_callback() for each transfer, with the corresponding error
     code.
 
 Bulk put (mput):

@@ -20,10 +20,12 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 
 int main(int argc, char **argv)
 {
+    int i;
     int rc;
 
     if (getenv("DEBUG") != NULL)
@@ -31,8 +33,9 @@ int main(int argc, char **argv)
     else
         pho_log_level_set(PHO_LOG_VERB);
 
-    if (argc != 3 && argc != 4) {
-        fprintf(stderr, "usage: %s post|put <file>\n", argv[0]);
+    if (argc < 3) {
+        fprintf(stderr, "usage: %s post|put <file> <...>\n", argv[0]);
+        fprintf(stderr, "usage: %s mpost|mput <file> <...>\n", argv[0]);
         fprintf(stderr, "       %s get <id> <dest>\n", argv[0]);
         exit(1);
     }
@@ -50,19 +53,54 @@ int main(int argc, char **argv)
         if (rc)
             return rc;
 
-        xfer.pxd_objid = realpath(argv[2], fullp);
-        xfer.pxd_fpath = argv[2];
-        xfer.pxd_attrs = &attrs;
-        xfer.pxd_flags = flags;
+        for (i = 2; i < argc; i++) {
+            xfer.xd_objid = realpath(argv[i], fullp);
+            xfer.xd_fpath = argv[i];
+            xfer.xd_attrs = &attrs;
+            xfer.xd_flags = flags;
 
-        rc = phobos_put(&xfer);
+            rc = phobos_put(&xfer);
+            if (rc)
+                fprintf(stderr, "PUT %s failed\n", argv[i]);
+        }
+
+        pho_attrs_free(&attrs);
+    } else if (!strcmp(argv[1], "mpost") || !strcmp(argv[1], "mput")) {
+        struct pho_xfer_desc     *xfer;
+        struct pho_attrs          attrs = {0};
+        enum pho_xfer_flags       flags = 0;
+        int                       xfer_cnt = argc - 2;
+
+        if (!strcmp(argv[1], "mput"))
+            flags |= PHO_XFER_OBJ_REPLACE;
+
+        xfer = calloc(xfer_cnt, sizeof(*xfer));
+        assert(xfer != NULL);
+
+        rc = pho_attr_set(&attrs, "program", argv[0]);
+        if (rc)
+            return rc;
+
+        argv += 2;
+        argc -= 2;
+
+        for (i = 0; i < argc; i++) {
+            xfer[i].xd_objid = realpath(argv[i], NULL);
+            xfer[i].xd_fpath = argv[i];
+            xfer[i].xd_attrs = &attrs;
+            xfer[i].xd_flags = flags;
+        }
+
+        rc = phobos_mput(xfer, xfer_cnt);
+        if (rc)
+            fprintf(stderr, "MPUT failed\n");
 
         pho_attrs_free(&attrs);
     } else if (!strcmp(argv[1], "get")) {
         struct pho_xfer_desc    xfer = {0};
 
-        xfer.pxd_objid = argv[2];
-        xfer.pxd_fpath = argv[3];
+        xfer.xd_objid = argv[2];
+        xfer.xd_fpath = argv[3];
 
         rc = phobos_get(&xfer);
     } else {

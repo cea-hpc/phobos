@@ -100,35 +100,49 @@ trap clean_test ERR EXIT
 # put a file into phobos object store
 function test_check_put # verb, source_file, expect_failure
 {
-    local src_file=$(readlink -m $2)
-    local name=$(echo $src_file | tr './!<>{}#"''' '_')
-    # non empty if a failure is expected
-    local fail=$3
+    local verb=$1
+    # Is the test expected to fail?
+    local fail=$2
 
-    $test_bin $1 $src_file
+    local src_files=()
+    local i=0
+    for f in "${@:3}"
+    do
+        src_files[$i]=$(readlink -m $f)
+        i=$(($i+1))
+    done
+
+    echo $test_bin $verb "${src_files[@]}"
+    $test_bin $verb "${src_files[@]}"
     if [[ $? != 0 ]]; then
-        if [[ -z $fail ]]; then
-            error "$1 failure"
+        if [ "$fail" != "yes" ]; then
+            error "$verb failure"
         else
-            echo "OK: $1 failed as expected"
+            echo "OK: $verb failed as expected"
             return 1
         fi
     fi
 
-    # check that the extent is found into the storage backend
-    out=$(find $TEST_MNT -type f -name "*$name*")
-    echo -e " \textent: $out"
-    [ -z "$out" ] && error "*$name* not found in backend"
-    diff -q $src_file $out && echo "$src_file: contents OK"
+    for f in ${src_files[@]}
+    do
+        local name=$(echo $f | tr './!<>{}#"''' '_')
 
-    # check the 'id' xattr attached to this extent
-    id=$(getfattr --only-values --absolute-names -n "user.id" $out)
-    [ -z "$id" ] && error "saved file has no 'id' xattr"
-    [ $id != $src_file ] && error "unexpected id value in xattr"
+        # check that the extent is found into the storage backend
+        local out=$(find $TEST_MNT -type f -name "*$name*")
+        echo -e " \textent: $out"
+        [ -z "$out" ] && error "*$name* not found in backend"
+        diff -q $f $out && echo "$f: contents OK"
 
-    # check user_md xattr attached to this extent
-    umd=$(getfattr --only-values --absolute-names -n "user.user_md" $out)
-    [ -z "$umd" ] && error "saved file has no 'user_md' xattr"
+        # check the 'id' xattr attached to this extent
+        local id=$(getfattr --only-values --absolute-names -n "user.id" $out)
+        [ -z "$id" ] && error "saved file has no 'id' xattr"
+        [ $id != $f ] && error "unexpected id value in xattr"
+
+        # check user_md xattr attached to this extent
+        local umd=$(getfattr --only-values --absolute-names \
+                    -n "user.user_md" $out)
+        [ -z "$umd" ] && error "saved file has no 'user_md' xattr"
+    done
 
     true
 }
@@ -179,22 +193,36 @@ rm -rf "$TEST_RECOV_DIR/"*
 # create test file in /tmp
 dd if=/dev/urandom of=$TEST_RAND bs=1M count=10
 
+
 echo
 echo "**** TESTS: PUT ****"
-
 for f in $TEST_FILES; do
-    test_check_put "post" "$f"
-    test_check_put "post" "$f" "yes" && error "second POST should fail"
-    test_check_put "put" "$f"
+    test_check_put "post" "no" "$f"
+    test_check_put "post" "yes" "$f" && error "second POST should fail"
+    test_check_put "put" "no" "$f"
 done
+
 
 echo
 echo "**** TESTS: GET ****"
-
 # retrieve all files from the backend, get and check them
 find $TEST_MNT -type f | while read f; do
     test_check_get "$f"
 done
+
+rm -rf "$TEST_RECOV_DIR/"*
+
+echo
+echo "**** TESTS: MPUT ****"
+test_check_put "mput" "no" $TEST_FILES
+
+echo
+echo "**** TESTS: GET ****"
+# retrieve all files from the backend, get and check them
+find $TEST_MNT -type f | while read f; do
+    test_check_get "$f"
+done
+
 
 # exit normally, clean TRAP
 trap - EXIT ERR
