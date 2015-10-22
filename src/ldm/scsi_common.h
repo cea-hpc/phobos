@@ -11,32 +11,34 @@
 #ifndef _SCSI_COMMANDS_H
 #define _SCSI_COMMANDS_H
 
+#include <stdint.h>
+
 /** Request sense description */
 struct scsi_req_sense {
-    unsigned char error_code:7;                           /* Byte 0 Bits 0-6 */
-    unsigned char valid:1;                                /* Byte 0 Bit 7 */
+    uint8_t error_code:7;                           /* Byte 0 Bits 0-6 */
+    uint8_t valid:1;                                /* Byte 0 Bit 7 */
 
-    unsigned char segment_number;                         /* Byte 1 */
+    uint8_t segment_number;                         /* Byte 1 */
 
-    unsigned char sense_key:4;                            /* Byte 2 Bits 0-3 */
-    unsigned char reserved1:1;                            /* Byte 2 Bit 4 */
-    unsigned char ILI:1;                                  /* Byte 2 Bit 5 */
-    unsigned char EOM:1;                                  /* Byte 2 Bit 6 */
-    unsigned char filemark:1;                             /* Byte 2 Bit 7 */
+    uint8_t sense_key:4;                            /* Byte 2 Bits 0-3 */
+    uint8_t reserved1:1;                            /* Byte 2 Bit 4 */
+    uint8_t ILI:1;                                  /* Byte 2 Bit 5 */
+    uint8_t EOM:1;                                  /* Byte 2 Bit 6 */
+    uint8_t filemark:1;                             /* Byte 2 Bit 7 */
 
-    unsigned char information[4];                         /* Bytes 3-6 */
-    unsigned char additional_sense_length;                /* Byte 7 */
-    unsigned char command_specific_information[4];        /* Bytes 8-11 */
-    unsigned char additional_sense_code;                  /* Byte 12 */
-    unsigned char additional_sense_code_qualifier;        /* Byte 13 */
-    unsigned char field_replaceable_unit_code;            /* Byte 14 */
-    unsigned char bit_pointer:3;                          /* Byte 15 */
-    unsigned char BPV:1;
-    unsigned char reserved3:2;
-    unsigned char command_data:1;
-    unsigned char SKSV:1;
-    unsigned char field_data[2];                          /* Byte 16,17 */
-    unsigned char acsii_data[34];                         /* Bytes 18-51 */
+    uint8_t information[4];                         /* Bytes 3-6 */
+    uint8_t additional_sense_length;                /* Byte 7 */
+    uint8_t command_specific_information[4];        /* Bytes 8-11 */
+    uint8_t additional_sense_code;                  /* Byte 12 */
+    uint8_t additional_sense_code_qualifier;        /* Byte 13 */
+    uint8_t field_replaceable_unit_code;            /* Byte 14 */
+    uint8_t bit_pointer:3;                          /* Byte 15 */
+    uint8_t BPV:1;
+    uint8_t reserved2:2;
+    uint8_t command_data:1;
+    uint8_t SKSV:1;
+    uint8_t field_data[2];                          /* Byte 16,17 */
+    uint8_t acsii_data[34];                         /* Bytes 18-51 */
 } __attribute__((packed));
 
 
@@ -50,47 +52,47 @@ struct scsi_req_sense {
 
 /** Mode Sense CDB */
 struct mode_sense_cdb {
-    unsigned char opcode;       /* 1Ah */
+    uint8_t opcode;       /* 1Ah */
 
-    unsigned char reserved2:3;
-    unsigned char dbd:1;        /* disable block descriptors */
-    unsigned char reserved1:1;
-    unsigned char obsolete:3;
+    uint8_t reserved1:3;
+    uint8_t dbd:1;        /* disable block descriptors */
+    uint8_t reserved2:1;
+    uint8_t obsolete:3;
 
-    unsigned char page_code:6;  /* 3Fh: all pages
+    uint8_t page_code:6;        /* 3Fh: all pages
                                  * 1Dh: element address assignment
                                  * 1Eh: transport geometry
                                  * 1Fh: capabilities */
-    unsigned char page_control:2; /* 00b: last/current, 01b: changeable,
+    uint8_t page_control:2;     /* 00b: last/current, 01b: changeable,
                                    * 10b: default, 11b: saved */
 
-    unsigned char reserved3;
-    unsigned char allocation_length; /* spectra: 48, mtx: 136 */
-    unsigned char reserved4;
+    uint8_t reserved3;
+    uint8_t allocation_length;  /* spectra: 48, mtx: 136 */
+    uint8_t reserved4;
 } __attribute__((packed));
 
 /** Response header for Mode Sense */
 struct mode_sense_result_header {
-    unsigned char mode_data_length; /* result length, including this header */
-    unsigned char reserved[3];
+    uint8_t mode_data_length; /* result length, including this header */
+    uint8_t reserved[3];
 } __attribute__((packed));
 
 /** Element Address Assignment Page */
 struct mode_sense_result_EAAP {
-        unsigned char page_code:6; /* 1Dh */
-        unsigned char reserved1:1;
-        unsigned char ps:1; /* pages saveable: 1 */
+        uint8_t page_code:6; /* 1Dh */
+        uint8_t reserved1:1;
+        uint8_t ps:1; /* pages saveable: 1 */
 
-        unsigned char parameter_length; /* bytes after this one */
-        unsigned short int first_medium_transport_elt_addr;
-        unsigned short int medium_transport_elt_nb;
-        unsigned short int first_storage_elt_addr;
-        unsigned short int storage_elt_nb;
-        unsigned short int first_ie_elt_addr;
-        unsigned short int ie_elt_nb;
-        unsigned short int first_data_transfer_elt_addr;
-        unsigned short int data_transfer_elt_nb;
-        unsigned short reserved2;
+        uint8_t parameter_length; /* bytes after this one */
+        uint16_t first_medium_transport_elt_addr;
+        uint16_t medium_transport_elt_nb;
+        uint16_t first_storage_elt_addr;
+        uint16_t storage_elt_nb;
+        uint16_t first_ie_elt_addr;
+        uint16_t ie_elt_nb;
+        uint16_t first_data_transfer_elt_addr;
+        uint16_t data_transfer_elt_nb;
+        uint16_t reserved2;
 } __attribute__((packed));
 
 #define MODE_SENSE_BUFF_LEN 136
@@ -101,51 +103,51 @@ struct mode_sense_result_EAAP {
  *--------------------------------------*/
 /** Read Element Status CDB */
 struct read_status_cdb {
-    unsigned char opcode;
+    uint8_t opcode;
 
-    unsigned char element_type_code:4;
-    unsigned char voltag:1;
-    unsigned char obs1:3;
+    uint8_t element_type_code:4;
+    uint8_t voltag:1;
+    uint8_t obs1:3;
 
-    unsigned short int starting_address;
+    uint16_t starting_address;
 
-    unsigned short int elements_nb;
+    uint16_t elements_nb;
 
-    unsigned char dvcid:1;
-    unsigned char curdata:1;
-    unsigned char reserved1:6;
+    uint8_t dvcid:1;
+    uint8_t curdata:1;
+    uint8_t reserved1:6;
 
-    unsigned char alloc_length[3];
+    uint8_t alloc_length[3];
 
-    unsigned char reserved2;
-    unsigned char reserved3;
+    uint8_t reserved2;
+    uint8_t reserved3;
 } __attribute__((packed));
 
 
 /** Element Status Header */
 struct element_status_header {
-    unsigned short int first_address;
+    uint16_t first_address;
 
-    unsigned short int elements_nb;
+    uint16_t elements_nb;
 
-    unsigned char reserved[1];
-    unsigned char byte_count[3];
+    uint8_t reserved[1];
+    uint8_t byte_count[3];
 
 } __attribute__((packed));
 
 
 /** Element Status Page */
 struct element_status_page {
-    unsigned char type_code;
+    uint8_t type_code;
 
-    unsigned char reserved1:6;
-    unsigned char avoltag:1;
-    unsigned char pvoltag:1;
+    uint8_t reserved1:6;
+    uint8_t avoltag:1;
+    uint8_t pvoltag:1;
 
-    unsigned short int ed_len;
+    uint16_t ed_len;
 
-    unsigned char reserved[1];
-    unsigned char byte_count[3];
+    uint8_t reserved2[1];
+    uint8_t byte_count[3];
 
 } __attribute__((packed));
 
@@ -157,43 +159,43 @@ struct element_status_page {
  * Data Transfer Element descriptor, import/export element descriptor.
  */
 struct element_descriptor {
-    unsigned short int address; /* bytes 0-1 */
+    uint16_t address; /* bytes 0-1 */
 
-    unsigned char full:1;       /* byte 2 (LSB) */
-    unsigned char impexp:1;
-    unsigned char except:1;
-    unsigned char access:1;
-    unsigned char exp_enabled:1;
-    unsigned char imp_enabled:1;
-    unsigned char reserved1:2; /*  byte 2 (MSB) */
+    uint8_t full:1;       /* byte 2 (LSB) */
+    uint8_t impexp:1;
+    uint8_t except:1;
+    uint8_t access:1;
+    uint8_t exp_enabled:1;
+    uint8_t imp_enabled:1;
+    uint8_t reserved1:2; /*  byte 2 (MSB) */
 
-    unsigned char reserved2;    /* byte 3 */
+    uint8_t reserved2;    /* byte 3 */
 
-    unsigned char asc;          /* byte 4 */
+    uint8_t asc;          /* byte 4 */
 
-    unsigned char ascq;         /* byte 5 */
+    uint8_t ascq;         /* byte 5 */
 
-    unsigned char reserved3[3]; /* bytes 6-8 */
+    uint8_t reserved3[3]; /* bytes 6-8 */
 
-    unsigned char reserved4:6;  /* byte 9 (LSB) */
-    unsigned char invert:1;
-    unsigned char svalid:1;     /* byte 9 (MSB) */
+    uint8_t reserved4:6;  /* byte 9 (LSB) */
+    uint8_t invert:1;
+    uint8_t svalid:1;     /* byte 9 (MSB) */
 
-    unsigned short int ssea; /* Source Storage Element Address (bytes 10-11) */
+    uint16_t ssea; /* Source Storage Element Address (bytes 10-11) */
 
     char pvti[36];           /* Physical Volume Tag (bytes 12-47) */
 
     union {
     struct dev_i {
-        unsigned char code_set:4;   /* byte 48 (LSB) */
-        unsigned char reserved6:4;  /* byte 48 (MSB) */
+        uint8_t code_set:4;   /* byte 48 (LSB) */
+        uint8_t reserved5:4;  /* byte 48 (MSB) */
 
-        unsigned char id_type:4;    /* byte 49 (LSB) */
-        unsigned char reserved7:4;  /* byte 49 (MSB) */
+        uint8_t id_type:4;    /* byte 49 (LSB) */
+        uint8_t reserved6:4;  /* byte 49 (MSB) */
 
-        unsigned char reserved8;    /* byte 50 */
+        uint8_t reserved7;    /* byte 50 */
 
-        unsigned char id_len;       /* byte 51 */
+        uint8_t id_len;       /* byte 51 */
 
         char devid[32]; /* 36 minus 4 */
     } dev;  /* Device identifier information */
@@ -224,7 +226,7 @@ enum scsi_direction {
  * @param dxferp transfer buffer.
  */
 int scsi_execute(int fd, enum scsi_direction direction,
-                 unsigned char *cdb, int cdb_len,
+                 uint8_t *cdb, int cdb_len,
                  struct scsi_req_sense *sbp, int sb_len,
                  void *dxferp, int dxfer_len);
 

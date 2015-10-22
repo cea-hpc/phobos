@@ -78,22 +78,22 @@ int mode_sense(int fd, struct mode_sense_info *info)
     return 0;
 }
 
-/** convert an array of 3 unsigned chars (big endian 24 bits)
+/** convert an array of 3 bytes (big endian 24 bits)
  * to a 32bits little endian */
-static inline unsigned int be24toh(unsigned char *a)
+static inline uint32_t be24toh(uint8_t *a)
 {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-        return ((unsigned int)(a[0]) << 16) + ((unsigned int)(a[1]) << 8)
-               + (unsigned int)a[2];
+        return ((uint32_t)(a[0]) << 16) + ((uint32_t)(a[1]) << 8)
+               + (uint32_t)a[2];
 #else
     #error  "Only little endian architectures are currently supported"
 #endif
 }
 
-/** convert a 32bits little endian to an array of 3 unsigned chars
+/** convert a 32bits little endian to an array of 3 bytes
  * (big endian 24 bits).
  */
-static inline void htobe24(unsigned int h, unsigned char *be)
+static inline void htobe24(uint32_t h, uint8_t *be)
 {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
         be[0] = (h >> 16) & 0xFF;
@@ -168,8 +168,7 @@ static int read_next_element_status(const struct element_descriptor *elmt,
 }
 
 int element_status(int fd, enum element_type_code type,
-                   unsigned short start_addr,
-                   unsigned short nb, bool allow_motion,
+                   uint16_t start_addr, uint16_t nb, bool allow_motion,
                    struct element_status **elmt_list, int *elmt_count)
 {
     struct read_status_cdb        req = {0};

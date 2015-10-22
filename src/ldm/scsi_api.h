@@ -19,8 +19,8 @@
 
 /** element descriptor information for each type (host endianess) */
 struct scsi_elt_descr {
-    unsigned short int first_addr; /**< first element address */
-    unsigned short int nb;         /**< number of elements */
+    uint16_t first_addr; /**< first element address */
+    uint16_t nb;         /**< number of elements */
 };
 
 /** useful information from MODE SENSE (host endianess) */
@@ -57,7 +57,7 @@ struct element_status {
     enum element_type_code type;
 
     /** address of the element */
-    unsigned short address;
+    uint16_t address;
 
     bool full;            /**< true if the arm/slot/drive holds a media */
     bool impexp;          /**< (imp/exp only) true for import, false for export */
@@ -69,11 +69,11 @@ struct element_status {
     bool invert; /**< 2-side media inverted during the transport operation */
 
     /** Error codes if exception bit is set */
-    unsigned char error_code;
-    unsigned char error_code_qualifier;
+    uint8_t error_code;
+    uint8_t error_code_qualifier;
 
     bool src_addr_is_set; /**< true if src_addr is set */
-    unsigned short src_addr; /**< source slot address of the media, previous
+    uint16_t src_addr; /**< source slot address of the media, previous
                               *   location */
 
     char vol[VOL_ID_LEN];    /**< volume id */
@@ -94,8 +94,7 @@ struct element_status {
  * @return 0 on success, error code < 0 on failure.
  * */
 int element_status(int fd, enum element_type_code type,
-                   unsigned short start_addr,
-                   unsigned short nb, bool allow_motion,
+                   uint16_t start_addr, uint16_t nb, bool allow_motion,
                    struct element_status **elmt_list, int *elmt_count);
 
 #endif
