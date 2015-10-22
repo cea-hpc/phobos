@@ -87,8 +87,9 @@ struct element_status {
  * @param[in] start_addr    Address of first element to query (host endianess).
  * @param[in] nb            Number of elements to get.
  * @param[in] allow_motion  Allow a move of physical arm to perform the query.
- * @param[out] elmt_list    List of elements information (must be freed by the
- *                          caller).
+ * @param[out] elmt_list    List of elements information
+ *                          (must be released by the caller using
+ *                           element_status_list_free()).
  * @param[out] elmt_count   Number of elements in elmt_list.
  *
  * @return 0 on success, error code < 0 on failure.
@@ -96,6 +97,15 @@ struct element_status {
 int element_status(int fd, enum element_type_code type,
                    uint16_t start_addr, uint16_t nb, bool allow_motion,
                    struct element_status **elmt_list, int *elmt_count);
+
+
+/**
+ * Free a list allocated by element_status().
+ * Calling element_status_list_free(NULL) is safe.
+ * @param[in] elmt_list list to be released.
+ */
+void element_status_list_free(struct element_status *elmt_list);
+
 
 /** Call MOVE MEDIUM on the given device.
  * @param[in] fd            File descriptor of device changer.

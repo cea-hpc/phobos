@@ -268,6 +268,11 @@ free_buff:
     return rc;
 }
 
+void element_status_list_free(struct element_status *elmt_list)
+{
+    free(elmt_list);
+}
+
 int move_medium(int fd, uint16_t arm_addr, uint16_t src_addr, uint16_t tgt_addr)
 {
     struct move_medium_cdb req = {0};
