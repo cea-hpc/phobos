@@ -42,7 +42,7 @@ int mode_sense(int fd, struct mode_sense_info *info)
     /* all other fields are zeroed */
 
     rc = scsi_execute(fd, SCSI_GET, (unsigned char *)&req, sizeof(req), &error,
-                      sizeof(error), buffer, sizeof(buffer));
+                      sizeof(error), buffer, sizeof(buffer), QUERY_TIMEOUT_MS);
     if (rc)
         return rc;
 
@@ -202,7 +202,7 @@ int element_status(int fd, enum element_type_code type,
     htobe24(len, req.alloc_length);
 
     rc = scsi_execute(fd, SCSI_GET, (unsigned char *)&req, sizeof(req), &error,
-                      sizeof(error), buffer, len);
+                      sizeof(error), buffer, len, QUERY_TIMEOUT_MS);
     if (rc)
         goto free_buff;
 
@@ -282,5 +282,5 @@ int move_medium(int fd, uint16_t arm_addr, uint16_t src_addr, uint16_t tgt_addr)
     req.destination_address = htobe16(tgt_addr);
 
     return scsi_execute(fd, SCSI_GET, (unsigned char *)&req, sizeof(req),
-                        &error, sizeof(error), NULL, 0);
+                        &error, sizeof(error), NULL, 0, MOVE_TIMEOUT_MS);
 }

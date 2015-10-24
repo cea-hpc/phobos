@@ -13,6 +13,9 @@
 
 #include <stdint.h>
 
+#define MOVE_TIMEOUT_MS    300000 /* 5min */
+#define QUERY_TIMEOUT_MS     1000 /* 1sec */
+
 /** Request sense description */
 struct scsi_req_sense {
     uint8_t error_code:7;                           /* Byte 0 Bits 0-6 */
@@ -242,14 +245,16 @@ enum scsi_direction {
 
 /**
  * Execute a SCSI command.
- * @param fd     file descriptor to the device.
- * @param cdb    command buffer.
- * @param sdb    sense data buffer.
- * @param dxferp transfer buffer.
+ * @param fd           File descriptor to the device.
+ * @param cdb          Command buffer.
+ * @param sdb          Sense data buffer.
+ * @param dxferp       Transfer buffer.
+ * @param timeout_msec Timeout in milliseconds (MAX_UINT: no timeout).
  */
 int scsi_execute(int fd, enum scsi_direction direction,
                  uint8_t *cdb, int cdb_len,
                  struct scsi_req_sense *sbp, int sb_len,
-                 void *dxferp, int dxfer_len);
+                 void *dxferp, int dxfer_len,
+                 unsigned int timeout_msec);
 
 #endif
