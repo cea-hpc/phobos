@@ -97,7 +97,6 @@ struct mode_sense_result_EAAP {
 
 #define MODE_SENSE_BUFF_LEN 136
 
-
 /*--------------------------------------
  *     ELEMENT STATUS TYPES
  *--------------------------------------*/
@@ -206,6 +205,29 @@ struct element_descriptor {
 
 /** library dependant. larger ever seen are 84 bytes length... */
 #define READ_STATUS_MAX_ELT_LEN 128
+
+/*--------------------------------------
+ *     MOVE MEDIUM TYPES
+ *--------------------------------------*/
+/** Move Medium CDB */
+struct move_medium_cdb {
+    uint8_t opcode;
+
+    uint8_t reserved1;
+
+    uint16_t transport_element_address;
+    uint16_t source_address;
+    uint16_t destination_address;
+
+    uint16_t reserved2;
+
+    uint8_t invert:1;
+    uint8_t reserved3:7;
+
+    uint8_t control;
+
+} __attribute__((packed));
+
 
 /*--------------------------------------
  *     SCSI command helper

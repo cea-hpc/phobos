@@ -97,4 +97,15 @@ int element_status(int fd, enum element_type_code type,
                    uint16_t start_addr, uint16_t nb, bool allow_motion,
                    struct element_status **elmt_list, int *elmt_count);
 
+/** Call MOVE MEDIUM on the given device.
+ * @param[in] fd            File descriptor of device changer.
+ * @param[in] arm_addr      Address of arm to use for the move.
+ * @param[in] src_addr      Source address in library (drive, slot, ...)
+ * @param[in] tgt_addr      Target address in library (drive, slot, ...)
+ *
+ * @return 0 on success, error code < 0 on failure.
+ */
+int move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
+                uint16_t tgt_addr);
+
 #endif

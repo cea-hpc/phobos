@@ -267,3 +267,20 @@ free_buff:
 
     return rc;
 }
+
+int move_medium(int fd, uint16_t arm_addr, uint16_t src_addr, uint16_t tgt_addr)
+{
+    struct move_medium_cdb req = {0};
+    struct scsi_req_sense  error = {0};
+
+    pho_debug("scsi_execute: MOVE_MEDIUM, arm_addr=%#hx, src_addr=%#hx, "
+              "tgt_addr=%#hx", arm_addr, src_addr, tgt_addr);
+
+    req.opcode = MOVE_MEDIUM;
+    req.transport_element_address = htobe16(arm_addr);
+    req.source_address = htobe16(src_addr);
+    req.destination_address = htobe16(tgt_addr);
+
+    return scsi_execute(fd, SCSI_GET, (unsigned char *)&req, sizeof(req),
+                        &error, sizeof(error), NULL, 0);
+}
