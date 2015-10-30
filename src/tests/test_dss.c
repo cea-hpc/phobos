@@ -43,16 +43,27 @@ int main(int argc, char **argv)
     char                *parser;
 
 
-    pho_log_level_set(PHO_LOG_VERB);
+    pho_log_level_set(PHO_LOG_INFO);
 
     if (argc < 3 || argc > 5) {
         fprintf(stderr, "Usage: %s ACTION TYPE [ \"CRIT\" ]\n", argv[0]);
-        fprintf(stderr, "where  ACTION := { get | set }\n");
+        fprintf(stderr, "where  ACTION := { get | set | lock | unlock }\n");
         fprintf(stderr, "       TYPE := "
                         "{ device | media | object | extent }\n");
         fprintf(stderr, "       [ \"CRIT\" ] := \"field cmp value\"\n");
         exit(1);
     }
+
+    rc = dss_init("dbname=phobos"
+                  " host=localhost"
+                  " user=phobos"
+                  " password=phobos", &dss_handle);
+
+    if (rc) {
+        fprintf(stderr, "dss_init failed: %s (%d)\n", strerror(-rc), -rc);
+        exit(-rc);
+    }
+
     if (!strcmp(argv[1], "get")) {
         type = str2dss_type(argv[2]);
         if (type == DSS_INVAL) {
@@ -85,15 +96,6 @@ int main(int argc, char **argv)
         } else {
             crit = NULL;
             crit_cnt = 0;
-        }
-
-        rc = dss_init("dbname=phobos"
-                      " host=localhost"
-                      " user=phobos"
-                      " password=phobos", &dss_handle);
-        if (rc) {
-            fprintf(stderr, "dss_init failed: %s (%d)\n", strerror(-rc), -rc);
-            exit(-rc);
         }
 
         rc = dss_get(&dss_handle, type, crit, crit_cnt, &item_list, &item_cnt);
@@ -172,16 +174,6 @@ int main(int argc, char **argv)
             exit(EINVAL);
         }
         action = str2dss_set_action(argv[3]);
-
-        rc = dss_init("dbname=phobos"
-                      " host=localhost"
-                      " user=phobos"
-                      " password=phobos", &dss_handle);
-        if (rc) {
-            fprintf(stderr, "dss_init failed: %s (%d)\n",
-                    strerror(-rc), -rc);
-            exit(-rc);
-         }
         crit_cnt = 0;
         crit = NULL;
 
@@ -245,6 +237,40 @@ int main(int argc, char **argv)
             fprintf(stderr, "dss_set failed: %s (%d)\n", strerror(-rc), -rc);
             exit(-rc);
         }
+
+
+    } else if (!strcmp(argv[1], "lock")) {
+        type = str2dss_type(argv[2]);
+
+        if (type != DSS_DEVICE && type != DSS_MEDIA) {
+            fprintf(stderr, "verb dev"
+                            "expected at '%s'\n", argv[2]);
+            exit(EINVAL);
+        }
+
+        rc = dss_get(&dss_handle, type, NULL, 0, &item_list, &item_cnt);
+        if (rc) {
+            fprintf(stderr, "dss_get failed: %s (%d)\n", strerror(-rc), -rc);
+            exit(-rc);
+        }
+        rc = dss_lock(&dss_handle, item_list, item_cnt, type);
+
+    } else if (!strcmp(argv[1], "unlock")) {
+        type = str2dss_type(argv[2]);
+
+        if (type != DSS_DEVICE && type != DSS_MEDIA) {
+            fprintf(stderr, "verb dev"
+                            "expected at '%s'\n", argv[2]);
+            exit(EINVAL);
+        }
+
+        rc = dss_get(&dss_handle, type, NULL, 0, &item_list, &item_cnt);
+        if (rc) {
+            fprintf(stderr, "dss_get failed: %s (%d)\n", strerror(-rc), -rc);
+            exit(-rc);
+        }
+
+        rc = dss_unlock(&dss_handle, item_list, item_cnt, type);
 
     } else {
         fprintf(stderr, "verb get | set expected at '%s'\n", argv[1]);

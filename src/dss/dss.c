@@ -15,6 +15,7 @@
 #include "pho_dss.h"
 #include <errno.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <glib.h>
 #include <libpq-fe.h>
 #include <jansson.h>
@@ -67,6 +68,10 @@ void dss_fini(struct dss_handle *handle)
 
 /**
  * Helper for parsing json, due to missing function to manage uint64 in jansson.
+ * @param[in]   obj    a jansson json object which contains a key/val dict.
+ * @param[in]   key    key
+ * @param[out]  err    error counter
+ * @return      val    val as uint64
  */
 static uint64_t json_dict2uint64(const struct json_t *obj, const char *key,
                                  int *err)
@@ -91,6 +96,13 @@ static uint64_t json_dict2uint64(const struct json_t *obj, const char *key,
     return strtoull(val, NULL, 10);
 }
 
+/**
+ * Helper for parsing json, get val from dict with error checking
+ * @param[in]   obj    a jansson json object which contains a key/val dict.
+ * @param[in]   key    key
+ * @param[out]  err    error counter
+ * @return      val    val as char*
+ */
 static char *json_dict2char(const struct json_t *obj, const char *key, int *err)
 {
     struct json_t   *current_obj;
@@ -189,9 +201,10 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
  */
 static const char * const base_query[] = {
     [DSS_DEVICE] = "SELECT family, model, id, adm_status,"
-                   " host, path, changer_idx FROM device",
+                   " host, path, changer_idx, lock, lock_ts FROM device",
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
-                   " address_type, fs_type, fs_status, stats FROM media",
+                   " address_type, fs_type, fs_status, stats, lock,"
+                   " lock_ts FROM media",
     [DSS_EXTENT] = "SELECT oid, copy_num, state, lyt_type, lyt_info,"
                    "extents FROM extent",
     [DSS_OBJECT] = "SELECT oid, user_md FROM object",
@@ -241,7 +254,6 @@ static const char * const delete_query[] = {
 
 };
 
-/** @todo We do need Postgresl 9.5 for clean update (upsert) */
 static const char * const insert_query_values[] = {
     [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '%d')%s",
     [DSS_MEDIA]  = "('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s')%s",
@@ -249,10 +261,33 @@ static const char * const insert_query_values[] = {
     [DSS_OBJECT] = "('%s', '%s')%s",
 };
 
+enum dss_lock_queries {
+    DSS_LOCK_QUERY =  0,
+    DSS_UNLOCK_QUERY,
+};
+
+/**
+ * In order to avoid partials lock we check if all the items are ready
+ * to be locked
+ * "%d IN (SELECT count(*) FROM .." allow to compare the count of item pass
+ * to the (un)lock function to the current lockable item count.
+ * "IN" is used as we can't do a subquery with ==
+ */
+static const char * const lock_query[] = {
+    [DSS_UNLOCK_QUERY] = "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s AND "
+                         "%d IN (SELECT count(*) FROM %s WHERE id IN %s AND "
+                         "lock!='')",
+    [DSS_LOCK_QUERY] =   "UPDATE %s SET lock='%s:%u', "
+                         "lock_ts=extract(epoch from NOW()) "
+                         "WHERE lock='' AND id IN %s AND "
+                         "%d IN (SELECT count(*) FROM %s WHERE id IN %s AND "
+                         "lock='')",
+};
+
 /**
  * Extract media statistics from json
  *
- * \param[in]  stats  media stats to be filled with stats
+ * \param[out]  stats  media stats to be filled with stats
  * \param[in]  json   String with json media stats
  *
  * \return 0 on success, negative error code on failure.
@@ -291,6 +326,14 @@ out_decref:
     return rc;
 }
 
+/**
+ * Encode media statistics to json
+ *
+ * \param[in]  stats  media stats to be filled with stats
+ * \param[out] error  error counter
+ *
+ * \return Return a string json object
+ */
 static char *dss_media_stats_encode(struct media_stats stats, int *error)
 {
     json_t          *root;
@@ -354,6 +397,15 @@ static char *dss_media_stats_encode(struct media_stats stats, int *error)
     return s;
 }
 
+/**
+ * Extract extents from json
+ *
+ * \param[out] extents extent list
+ * \param[out] count  number of extents decoded
+ * \param[in]  json   String with json media stats
+ *
+ * \return 0 on success, negative error code on failure.
+ */
 static int dss_layout_extents_decode(struct extent **extents,
                                      unsigned int *count, const char *json)
 {
@@ -426,6 +478,16 @@ out_decref:
     json_decref(root);
     return rc;
 }
+
+/**
+ * Encode extents to json
+ *
+ * \param[in]   extents extent list
+ * \param[in]   count   number of extents
+ * \param[out]  error   error count
+ *
+ * \return json as string
+ */
 
 static char *dss_layout_extents_encode(struct extent *extents,
                                        unsigned int count, int *error)
@@ -673,6 +735,58 @@ static int get_device_setrequest(void *item_list, int item_cnt,
     return 0;
 }
 
+static int dss_build_uid_list(PGconn *conn, void *item_list, int item_cnt,
+                              enum dss_type type, GString *ids)
+{
+    char         *escape_string;
+    unsigned int  escape_len;
+    int           i;
+
+    switch (type) {
+    case DSS_DEVICE:
+        for (i = 0; i < item_cnt; i++) {
+            struct dev_info *dev_ls = item_list;
+
+            escape_len = strlen(dev_ls[i].serial) * 2 + 1;
+            escape_string = malloc(escape_len);
+            if (!escape_string)
+                LOG_RETURN(-ENOMEM, "Memory allocation failed");
+
+            PQescapeStringConn(conn, escape_string, dev_ls[i].serial,
+                               escape_len, NULL);
+            g_string_append_printf(ids, "%s'%s' %s",
+                                   i ? "" : "(",
+                                   escape_string,
+                                   i < item_cnt-1 ? "," : ")");
+            free(escape_string);
+        }
+        break;
+    case DSS_MEDIA:
+        for (i = 0; i < item_cnt; i++) {
+            struct media_info *media_ls = item_list;
+
+            escape_len = strlen(media_id_get(&media_ls[i].id)) * 2 + 1;
+            escape_string = malloc(escape_len);
+            if (!escape_string)
+                LOG_RETURN(-ENOMEM, "Memory allocation failed");
+
+            PQescapeStringConn(conn, escape_string,
+                               media_id_get(&media_ls[i].id),
+                               escape_len, NULL);
+            g_string_append_printf(ids, "%s'%s' %s",
+                                   i ? "" : "(",
+                                   escape_string,
+                                   i < item_cnt-1 ? "," : ")");
+            free(escape_string);
+        }
+        break;
+
+    default:
+        return -EINVAL;
+    }
+    return 0;
+}
+
 static inline bool is_type_supported(enum dss_type type)
 {
     switch (type) {
@@ -702,7 +816,7 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
     ENTRY;
 
     if (conn == NULL || item_list == NULL || item_cnt == NULL)
-        LOG_RETURN(-EINVAL, "conn: %p, item_list: %p, item_cnt: %p",
+        LOG_RETURN(-EINVAL, "dss - conn: %p, item_list: %p, item_cnt: %p",
                    conn, item_list, item_cnt);
 
     *item_list = NULL;
@@ -766,6 +880,8 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
             p_dev->path   = PQgetvalue(res, i, 5);
             /** @todo replace atoi by proper pq function */
             p_dev->changer_idx = atoi(PQgetvalue(res, i, 6));
+            p_dev->lock.lock = PQgetvalue(res, i, 7);
+            p_dev->lock.lock_ts = strtoul(PQgetvalue(res, i, 8), NULL, 10);
         }
 
         *item_list = dss_res->u.dev;
@@ -785,6 +901,8 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
             p_media->fs_type = str2fs_type(PQgetvalue(res, i, 5));
             p_media->fs_status = str2fs_status(PQgetvalue(res, i, 6));
             rc = dss_media_stats_decode(&p_media->stats, PQgetvalue(res, i, 7));
+            p_media->lock.lock = PQgetvalue(res, i, 8);
+            p_media->lock.lock_ts = strtoul(PQgetvalue(res, i, 9), NULL, 10);
             if (rc) {
                 PQclear(res);
                 LOG_GOTO(out, rc, "dss_media stats decode error");
@@ -914,13 +1032,101 @@ int dss_set(struct dss_handle *handle, enum dss_type type, void *item_list,
     res = PQexec(conn, "COMMIT; ");
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
         rc = -ECOMM;
-        pho_error(rc, "Commit failed: (SQLErrno: %s)",
+        pho_error(rc, "Request failed: (SQLErrno: %s)",
                   PQresultErrorField(res, PG_DIAG_SQLSTATE));
     }
 
 out_cleanup:
     PQclear(res);
     g_string_free(request, true);
+    return rc;
+}
+
+int dss_lock(struct dss_handle *handle, void *item_list, int item_cnt,
+             enum dss_type type)
+{
+    PGconn      *conn = handle->dh_conn;
+    GString     *ids;
+    GString     *request;
+    PGresult    *res = NULL;
+    char        *escape_string;
+    unsigned int escape_len;
+    char         hostname[HOST_NAME_MAX+1];
+    int          rc = 0;
+    int          lock_status;
+    int          i;
+    ENTRY;
+
+    if (conn == NULL || item_list == NULL || item_cnt == 0)
+        LOG_RETURN(-EINVAL, "conn: %p, item_list: %p,item_cnt: %d",
+                   conn, item_list, item_cnt);
+
+    ids = g_string_new("");
+    request = g_string_new("");
+
+    rc = dss_build_uid_list(conn, item_list, item_cnt, type, ids);
+    if (rc)
+        LOG_GOTO(out_cleanup, rc, "Ids list build failed");
+
+    if (gethostname(hostname, HOST_NAME_MAX))
+        LOG_GOTO(out_cleanup, rc = -errno, "Cannot get hostname");
+    g_string_printf(request, lock_query[DSS_LOCK_QUERY], dss_type2str(type),
+                    hostname, getpid(), ids->str, item_cnt,
+                    dss_type2str(type),  ids->str);
+
+    pho_debug("Executing request: '%s'", request->str);
+    res = PQexec(conn, request->str);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+            LOG_GOTO(out_cleanup, rc = -ECOMM, "Request failed: (SQLErrno: %s)",
+                     PQresultErrorField(res, PG_DIAG_SQLSTATE));
+    if (atoi(PQcmdTuples(res)) != item_cnt)
+        rc = -EEXIST;
+
+out_cleanup:
+    g_string_free(request, true);
+    g_string_free(ids, true);
+    return rc;
+}
+
+int dss_unlock(struct dss_handle *handle, void *item_list, int item_cnt,
+               enum dss_type type)
+{
+    PGconn      *conn = handle->dh_conn;
+    GString     *ids;
+    GString     *request;
+    PGresult    *res = NULL;
+    char        *escape_string;
+    unsigned int escape_len;
+    int          lock_status;
+    int          rc = 0;
+    int          i;
+    ENTRY;
+
+    if (conn == NULL || item_list == NULL || item_cnt == 0)
+        LOG_RETURN(-EINVAL, "dss - conn: %p, item_list: %p,item_cnt: %d",
+                   conn, item_list, item_cnt);
+
+    ids = g_string_new("");
+    request = g_string_new("");
+
+    rc = dss_build_uid_list(conn, item_list, item_cnt, type, ids);
+    if (rc)
+        LOG_GOTO(out_cleanup, rc, "Ids list build failed");
+
+    g_string_printf(request, lock_query[DSS_UNLOCK_QUERY], dss_type2str(type),
+                    ids->str, item_cnt, dss_type2str(type), ids->str);
+
+    pho_debug("Executing request: '%s'", request->str);
+    res = PQexec(conn, request->str);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+            LOG_GOTO(out_cleanup, rc = -ECOMM, "Request failed: (SQLErrno: %s)",
+                     PQresultErrorField(res, PG_DIAG_SQLSTATE));
+    if (atoi(PQcmdTuples(res)) != item_cnt)
+        rc = -EEXIST;
+
+out_cleanup:
+    g_string_free(request, true);
+    g_string_free(ids, true);
     return rc;
 }
 

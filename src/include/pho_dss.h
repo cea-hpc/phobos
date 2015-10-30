@@ -48,6 +48,13 @@ static inline enum dss_type str2dss_type(const char *str)
     return DSS_INVAL;
 }
 
+static inline const char *dss_type2str(enum dss_type type)
+{
+    if (type >= DSS_LAST || type < 0)
+        return NULL;
+    return dss_type_names[type];
+}
+
 /** dss_set action type */
 enum dss_set_action {
     DSS_SET_INVAL  = -1,
@@ -78,7 +85,6 @@ static inline enum dss_set_action str2dss_set_action(const char *str)
     return DSS_SET_INVAL;
 }
 
-
 /** comparators */
 enum dss_cmp {
     DSS_CMP_INVAL = -1,
@@ -89,6 +95,7 @@ enum dss_cmp {
     DSS_CMP_LT,          /**< less than (<) */
     DSS_CMP_LE,          /**< less or equal (<=) */
     DSS_CMP_LIKE,        /**< LIKE (LIKE) */
+    DSS_CMP_IN,          /**< IN list */
     DSS_CMP_JSON_CTN,    /**< Json contain=>subset (@>) */
     DSS_CMP_JSON_EXIST,  /**< Json test key/array at top level (?) */
     DSS_CMP_LAST
@@ -102,6 +109,7 @@ static const char * const dss_cmp_names[] = {
     [DSS_CMP_LT]         = "<",
     [DSS_CMP_LE]         = "<=",
     [DSS_CMP_LIKE]       = "LIKE",
+    [DSS_CMP_IN]         = "IN",
     [DSS_CMP_JSON_CTN]   = "@>",
     [DSS_CMP_JSON_EXIST] = "?"
 };
@@ -159,6 +167,7 @@ enum dss_fields {
     DSS_MDA_nb_obj,     /* ->>stats  */
     DSS_MDA_vol_used,   /* ->>stats phys. used */
     DSS_MDA_vol_free,   /* ->>stats phys. free */
+    DSS_MDA_lock,
 
     /* Device @ v0 */
     DSS_DEV_serial,
@@ -168,7 +177,7 @@ enum dss_fields {
     DSS_DEV_model, /* Device type */
     DSS_DEV_path, /* Device path */
     DSS_DEV_changer_idx,
-
+    DSS_DEV_lock,
 
     DSS_FIELDS_LAST,
 };
@@ -194,6 +203,7 @@ static const char * const dss_fields_names[] = {
     [DSS_MDA_nb_obj] = "stats::json->>'nb_obj'",
     [DSS_MDA_vol_used] = "(stats->>'phys_spc_used')::bigint",
     [DSS_MDA_vol_free] = "(stats->>'phys_spc_free')::bigint",
+    [DSS_MDA_lock] = "lock",
     [DSS_DEV_family] = "family",
     [DSS_DEV_serial] = "id",
     [DSS_DEV_host] = "host",
@@ -201,6 +211,7 @@ static const char * const dss_fields_names[] = {
     [DSS_DEV_model] = "model",
     [DSS_DEV_path] = "path",
     [DSS_DEV_changer_idx] = "changer_idx",
+    [DSS_DEV_lock] = "lock",
 };
 
 static inline const char *dss_fields2str(enum dss_fields fields)
@@ -262,6 +273,7 @@ static const int const dss_fields_type[] = {
     [DSS_MDA_nb_obj] = DSS_VAL_INT,
     [DSS_MDA_vol_used] = DSS_VAL_BIGINT,
     [DSS_MDA_vol_free] = DSS_VAL_BIGINT,
+    [DSS_MDA_lock] = DSS_VAL_STR,
     [DSS_DEV_family] = DSS_VAL_ENUM,
     [DSS_DEV_serial] = DSS_VAL_STR,
     [DSS_DEV_host] = DSS_VAL_STR,
@@ -269,6 +281,7 @@ static const int const dss_fields_type[] = {
     [DSS_DEV_model] = DSS_VAL_STR,
     [DSS_DEV_path] = DSS_VAL_STR,
     [DSS_DEV_changer_idx] = DSS_VAL_INT,
+    [DSS_DEV_lock] = DSS_VAL_STR,
 };
 
 static inline const int dss_fields2type(enum dss_fields fields)
@@ -524,5 +537,63 @@ static inline int dss_object_set(struct dss_handle *hdl,
 {
     return dss_set(hdl, DSS_OBJECT, (void *)obj_ls, obj_cnt, action);
 }
+
+int dss_lock(struct dss_handle *handle, void *item_list, int item_cnt,
+             enum dss_type type);
+int dss_unlock(struct dss_handle *handle, void *item_list, int item_cnt,
+             enum dss_type type);
+
+
+/**
+ *  Lock a device for concurrent accesses
+ *  @param[in] item_list list of items
+ *  @param[in] item_cnt  number of items in item_list.
+ *  @retval 0 on success
+ *  @retval -EEXIST on lock failure (device(s) already locked)
+ */
+static inline int dss_device_lock(struct dss_handle *handle,
+                                  struct dev_info *dev_ls, int dev_cnt)
+{
+    return dss_lock(handle, dev_ls, dev_cnt, DSS_DEVICE);
+}
+
+/**
+ *  Unlock a device
+ *  @param[in] item_list list of items
+ *  @param[in] item_cnt  number of items in item_list.
+ *  @retval 0 on success
+ */
+static inline int dss_device_unlock(struct dss_handle *handle,
+                                    struct dev_info *dev_ls, int dev_cnt)
+{
+    return dss_unlock(handle, dev_ls, dev_cnt, DSS_DEVICE);
+}
+
+/**
+ *  Lock a media for concurrent accesses
+ *  @param[in] item_list list of items
+ *  @param[in] item_cnt  number of items in item_list.
+ *  @retval 0 on success
+ *  @retval -EEXIST on lock failure (device(s) already locked)
+ */
+static inline int dss_media_lock(struct dss_handle *handle,
+                                 struct media_info *media_ls, int media_cnt)
+{
+    return dss_lock(handle, media_ls, media_cnt, DSS_MEDIA);
+}
+
+/**
+ *  Unlock a media
+ *  @param[in] item_list list of items
+ *  @param[in] item_cnt  number of items in item_list.
+ *  @retval 0 on success
+ */
+static inline int dss_media_unlock(struct dss_handle *handle,
+                                   struct media_info *media_ls, int media_cnt)
+{
+    return dss_unlock(handle, media_ls, media_cnt, DSS_MEDIA);
+}
+
+
 
 #endif

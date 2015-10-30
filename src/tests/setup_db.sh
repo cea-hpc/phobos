@@ -39,14 +39,16 @@ CREATE TYPE extent_lyt_type AS ENUM('simple','raid0','raid1');
 
 CREATE TABLE device(family dev_family, model dev_model,
                     id varchar(32) UNIQUE, host varchar(128),
-	            adm_status adm_status, path varchar(256),
-		    changer_idx int, PRIMARY KEY (family, id));
+	                adm_status adm_status, path varchar(256),
+		            changer_idx int, lock varchar(256), lock_ts bigint,
+                    PRIMARY KEY (family, id));
 CREATE INDEX ON device USING gin(host);
 
 CREATE TABLE media(family dev_family, model tape_model, id varchar(32) UNIQUE,
                    adm_status adm_status, fs_type fs_type,
                    address_type address_type, fs_status fs_status,
-		   stats jsonb, PRIMARY KEY (family, id));
+                   lock varchar(256), lock_ts bigint,
+        		   stats jsonb, PRIMARY KEY (family, id));
 CREATE INDEX ON media((stats->>'phys_spc_free'));
 
 CREATE TABLE object(oid varchar(1024), user_md jsonb, PRIMARY KEY (oid));
@@ -98,30 +100,33 @@ fi
 
 #  initially mounted tapes don't have enough room to store a big file
 	$PSQL << EOF
-insert into device (family, model, id, host, adm_status, path, changer_idx)
-    values ('tape', 'ULTRIUM-TD6', '$SN1', 'phobos1', 'locked', '$DRV1', 3),
-           ('tape', 'ULTRIUM-TD6', '$SN2', 'phobos1', 'unlocked', '$DRV2', 4),
+insert into device (family, model, id, host, adm_status, path, changer_idx,
+                    lock)
+    values ('tape', 'ULTRIUM-TD6', '$SN1', 'phobos1', 'locked', '$DRV1',
+            3, ''),
+           ('tape', 'ULTRIUM-TD6', '$SN2', 'phobos1', 'unlocked', '$DRV2',
+            4, ''),
            ('dir', NULL, 'phobos1:/tmp/pho_testdir1', 'phobos1',
-	    'unlocked', '/tmp/pho_testdir1', NULL),
+	    'unlocked', '/tmp/pho_testdir1', NULL, ''),
            ('dir', NULL, 'phobos1:/tmp/pho_testdir2', 'phobos1',
-	    'unlocked', '/tmp/pho_testdir2', NULL);
+	    'unlocked', '/tmp/pho_testdir2', NULL, '');
 insert into media (family, model, id, adm_status, fs_type, address_type,
-		   fs_status, stats)
-    values ('tape', 'LTO6', '073220L6', 'unlocked', 'LTFS', 'HASH1', 'used',
+		   fs_status, stats, lock)
+    values ('tape', 'LTO6', '073220L6', 'unlocked', 'LTFS', 'HASH1', 'blank',
             '{"nb_obj":"2","logc_spc_used":"6291456000",\
-	      "phys_spc_used":"42469425152","phys_spc_free":"2048"}'),
-           ('tape', 'LTO6', '073221L6', 'unlocked', 'LTFS', 'HASH1', 'used',
+	      "phys_spc_used":"42469425152","phys_spc_free":"2048"}', ''),
+           ('tape', 'LTO6', '073221L6', 'unlocked', 'LTFS', 'HASH1', 'empty',
             '{"nb_obj":"2","logc_spc_used":"15033434112",\
-	      "phys_spc_used":"15033434112","phys_spc_free":"1024"}'),
+	      "phys_spc_used":"15033434112","phys_spc_free":"1024"}', ''),
            ('tape', 'LTO6', '073222L6', 'unlocked', 'LTFS', 'HASH1', 'used',
             '{"nb_obj":"1","logc_spc_used":"10480512",\
-	      "phys_spc_used":"10480512","phys_spc_free":"2393054904320"}'),
+	      "phys_spc_used":"10480512","phys_spc_free":"2393054904320"}', ''),
            ('dir', NULL, 'phobos1:/tmp/pho_testdir1', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":"5","logc_spc_used":"3668841456",\
-	      "phys_spc_used":"3668841456","phys_spc_free":"12857675776"}'),
+	      "phys_spc_used":"3668841456","phys_spc_free":"12857675776"}', ''),
            ('dir', NULL, 'phobos1:/tmp/pho_testdir2', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":"6","logc_spc_used":"4868841472",\
-	      "phys_spc_used":"4868841472","phys_spc_free":"12857675776"}');
+	      "phys_spc_used":"4868841472","phys_spc_free":"12857675776"}', '');
 
 insert into object (oid, user_md)
     values ('01230123ABC', '{}');

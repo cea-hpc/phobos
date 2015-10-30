@@ -79,6 +79,12 @@ class CLIParametersTest(unittest.TestCase):
                              '-t', 'LTO6', '-f', 'LTFS', 'TE[000-666]st']).run()
         PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'add',
                              '-t', 'LTO6', '-f', 'LTFS', 'ABC,DEF,XZE,AQW']).run()
+        PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'lock',
+                             'STANDARD[0000-0200]']).run()
+        PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'unlock',
+                             'STANDARD[0000-0100]']).run()
+        PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'unlock',
+                             '--force', 'STANDARD[0000-0200]']).run()
 
     def test_cli_log(self):
         """

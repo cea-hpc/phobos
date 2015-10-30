@@ -76,6 +76,7 @@ class BaseOptHandler(object):
         super(BaseOptHandler, self).__init__(**kwargs)
         self.params = params
         self.client = None
+        self.logger = logging.getLogger(__name__)
 
     def dss_connect(self):
         """Initialize a DSS Client."""
@@ -154,7 +155,8 @@ class LockOptHandler(BaseOptHandler):
         """Add resource-specific options."""
         super(LockOptHandler, cls).add_options(parser)
         parser.add_argument('res', nargs='+', help='Resource(s) to lock')
-
+        parser.add_argument('--force', action='store_true',
+                            help='Do not check the current lock state')
 
 class UnlockOptHandler(BaseOptHandler):
     """Unlock resource."""
@@ -166,7 +168,8 @@ class UnlockOptHandler(BaseOptHandler):
         """Add resource-specific options."""
         super(UnlockOptHandler, cls).add_options(parser)
         parser.add_argument('res', nargs='+', help='Resource(s) to unlock')
-
+        parser.add_argument('--force', action='store_true',
+                            help='Do not check the current lock state')
 
 class ShowOptHandler(BaseOptHandler):
     """Show resource details."""
@@ -278,11 +281,58 @@ class DriveOptHandler(BaseOptHandler):
         print 'DRIVE SHOW'
 
     def exec_lock(self):
-        print 'DRIVE LOCK'
+        """Drive lock"""
+        drives = []
+        serials = self.params.get('res')
+        for serial in serials:
+            drive = self.client.devices.get(serial=serial)
+            if drive[0].lock.lock != "":
+                if self.params.get('force'):
+                    self.logger.warn("Drive %s is in use. Administrative" \
+                            " locking will not be effective immediately" % serial)
+                else:
+                    self.logger.error("Drive %s is in use by %s." % \
+                                       (serial, drive[0].lock.lock));
+                    continue
+            drive[0].adm_status = cdss.PHO_DEV_ADM_ST_LOCKED
+            drives.append(drive[0])
+        if len(drives) == len(serials):
+            rc = self.client.devices.update(drives)
+        else:
+            rc = errno.EPERM
+            self.logger.error("One or more drives are in use, use --force")
+
+        if not rc:
+            print "%d drive(s) locked" % len(drives)
+        else:
+            self.logger.error("Failed to lock one or more drive(s), error: %s" %
+                             os.strerror(abs(rc)))
 
     def exec_unlock(self):
-        print 'DRIVE UNLOCK'
+        """Drive unlock"""
+        drives = []
+        serials = self.params.get('res')
+        for serial in serials:
+            drive = self.client.devices.get(serial=serial)
+            if drive[0].lock.lock != "" and not self.params.get('force'):
+                self.logger.error("Drive %s is in use by %s." % \
+                                  (serial, drive[0].lock.lock));
+                continue
+            if drive[0].adm_status == cdss.PHO_DEV_ADM_ST_UNLOCKED:
+                self.logger.warn("Drive %s is already unlocked" % serial)
+            drive[0].adm_status = cdss.PHO_DEV_ADM_ST_UNLOCKED
+            drives.append(drive[0])
+        if len(drives) == len(serials):
+            rc = self.client.devices.update(drives)
+        else:
+            rc = errno.EPERM
+            self.logger.error("One or more drives are in use, use --force")
 
+        if not rc:
+            print "%d drive(s) unlocked" % len(drives)
+        else:
+            self.logger.error("Failed to unlock one or more drive(s), error: %s" %
+                             os.strerror(abs(rc)))
 
 class TapeOptHandler(BaseOptHandler):
     """Magnetic tape options and actions."""
@@ -320,7 +370,7 @@ class TapeOptHandler(BaseOptHandler):
         if not rc:
             print "%d tape(s) added" % len(media_list)
         else:
-            print "Failed to add tape(s), error: %s" % os.strerror(abs(rc))
+            self.logger.error("Failed to add tape(s), error: %s" % os.strerror(abs(rc)))
 
     def exec_format(self):
         print 'TAPE FORMAT'
@@ -337,15 +387,69 @@ class TapeOptHandler(BaseOptHandler):
 
     def exec_list(self):
         """List all tapes."""
-        for tape in self.client.device_get(family='tape'):
-            print tape.serial
+        for tape in self.client.media.get(family='tape'):
+            print cdss.media_id_get(tape.id)
 
     def exec_lock(self):
-        print 'TAPE LOCK'
+        print 'Tape lock'
+        tapes = []
+        uids = NodeSet.fromlist(self.params.get('res'))
+        for uid in uids:
+            tape = self.client.media.get(id=uid)
+
+            if tape[0].lock.lock != "":
+                if self.params.get('force'):
+                    self.logger.warn("Tape %s is in use. Administrative" \
+                            " locking will not be effective immediately" % uid)
+                else:
+                    self.logger.error("Tape %s is in use by %s." % \
+                                     (uid, tape[0].lock.lock));
+                    continue
+
+            tape[0].adm_status = cdss.PHO_MDA_ADM_ST_LOCKED
+            tapes.append(tape[0])
+
+        if len(tapes) == len(uids):
+            rc = self.client.media.update(tapes)
+        else:
+            rc = errno.EPERM
+            self.logger.error("One or more tapes are in use, use --force")
+
+        if not rc:
+            print "%d tape(s) locked" % len(tapes)
+        else:
+            self.logger.error("Failed to lock one or more tape(s), error: %s" %
+                             os.strerror(abs(rc)))
 
     def exec_unlock(self):
-        print 'TAPE UNLOCK'
+        print 'Tape unlock'
+        tapes = []
+        uids = NodeSet.fromlist(self.params.get('res'))
+        for uid in uids:
+            tape = self.client.media.get(id=uid)
 
+            if tape[0].lock.lock != "" and not self.params.get('force'):
+                self.logger.error("Tape %s is in use by %s." % \
+                                  (uid, tape[0].lock.lock));
+                continue
+
+            if tape[0].adm_status == cdss.PHO_MDA_ADM_ST_UNLOCKED:
+                self.logger.warn("Tape %s is already unlocked" % uid)
+
+            tape[0].adm_status = cdss.PHO_MDA_ADM_ST_UNLOCKED
+            tapes.append(tape[0])
+
+        if len(tapes) == len(uids):
+            rc = self.client.media.update(tapes)
+        else:
+            rc = errno.EPERM
+            self.logger.error("One or more tapes are not locked, use --force")
+
+        if not rc:
+            print "%d tape(s) unlocked" % len(tapes)
+        else:
+            self.logger.error("Failed to unlock one or more tape(s), error: %s" %
+                             os.strerror(abs(rc)))
 
 class PhobosActionContext(object):
     """

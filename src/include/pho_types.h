@@ -198,9 +198,15 @@ static inline enum address_type str2address_type(const char *str)
 }
 
 struct pho_buff {
-    int   size;
-    char *buff;
+    int     size;
+    char   *buff;
 };
+
+struct pho_lock {
+    time_t   lock_ts;
+    char    *lock;
+};
+
 
 static const struct pho_buff PHO_BUFF_NULL = { .size = 0, .buff = NULL };
 
@@ -398,6 +404,8 @@ struct dev_info {
     char                *serial;
     int                  changer_idx; /**< drive index in mtx */
     enum dev_adm_status  adm_status;
+    struct pho_lock      lock;
+
 };
 
 /** Live device information (from system) */
@@ -467,6 +475,7 @@ struct media_info {
     enum media_adm_status  adm_status;
     enum fs_status         fs_status;
     struct media_stats     stats;      /**< metrics */
+    struct pho_lock        lock;
 };
 
 struct object_info {

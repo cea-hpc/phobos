@@ -9,7 +9,7 @@ test_bin="$test_bin_dir/test_dss"
 function clean_test
 {
     echo "cleaning..."
-    drop_tables
+    #drop_tables
 }
 
 function error
@@ -37,6 +37,23 @@ function test_check_set
 
     $test_bin set "$type" "$crit" "$action"
 }
+
+function test_check_lock
+{
+    local type=$1
+    local action=$2
+    local returncode=$3
+    local rc=0
+
+    $test_bin $action $type || rc=$?
+    if [ $rc -ne $returncode ]
+    then
+        echo "$test_bin return $rc != $returncode"
+        return 1
+    fi
+    return 0
+}
+
 
 trap clean_test ERR EXIT
 
@@ -119,5 +136,29 @@ test_check_get "extent" "oid LIKE %COPY%"
 test_check_set "extent" "delete"
 test_check_get "extent" "oid LIKE %COPY%"
 
+insert_examples
+
+echo "**** TESTS: DSS_DEVICE LOCK/UNLOCK  ****"
+echo "*** TEST LOCK ***"
+test_check_lock "device" "lock" "0"
+echo "*** TEST DOUBLE LOCK (EEXIST expected) ***"
+test_check_lock "device" "lock" 239
+echo "*** TEST UNLOCK ***"
+test_check_lock "device" "unlock" 0
+echo "*** TEST RELOCK ***"
+test_check_lock "device" "lock" 0
+
+echo "**** TESTS: DSS_MEDIA LOCK/UNLOCK  ****"
+echo "*** TEST LOCK ***"
+test_check_lock "media" "lock" "0"
+echo "*** TEST DOUBLE LOCK (EEXIST expected) ***"
+test_check_lock "media" "lock" 239
+echo "*** TEST UNLOCK ***"
+test_check_lock "media" "unlock" 0
+echo "*** TEST DOUBLE UNLOCK (EEXIST expected) ***"
+test_check_lock "media" "unlock" 239
+echo "*** TEST RELOCK ***"
+test_check_lock "media" "lock" 0
+
 # Uncomment if you want the db to persist after test
-#  trap - EXIT ERR
+# trap - EXIT ERR
