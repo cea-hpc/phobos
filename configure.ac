@@ -74,6 +74,7 @@ AC_HEADER_STDC
 AC_CHECK_HEADERS([string.h sys/param.h limits.h])
 
 AC_CHECK_HEADERS([jansson.h], [], [AC_MSG_ERROR(missing jansson header files)])
+AC_CHECK_HEADERS([ini_config.h], [], [AC_MSG_ERROR(missing libini_config header files)])
 AC_CHECK_HEADERS([openssl/sha.h], [], [AC_MSG_ERROR(missing openssl libcrypt header files)])
 AC_CHECK_HEADERS([attr/xattr.h], [], [AC_MSG_ERROR(missing libattr header files)])
 PKG_CHECK_MODULES(LIBPQ, [libpq >= 9.4])
