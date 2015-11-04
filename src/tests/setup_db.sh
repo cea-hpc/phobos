@@ -31,7 +31,7 @@ CREATE TYPE tape_model AS ENUM ('LTO6', 'LTO5', 'T10KB');
 CREATE TYPE adm_status AS ENUM ('locked', 'unlocked', 'failed');
 CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS');
 CREATE TYPE address_type AS ENUM ('PATH', 'HASH1', 'OPAQUE');
-CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used');
+CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used', 'full');
 CREATE TYPE extent_state AS ENUM('pending','sync','orphan');
 CREATE TYPE extent_lyt_type AS ENUM('simple','raid0','raid1');
 
