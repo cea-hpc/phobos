@@ -1,0 +1,35 @@
+Administrative locking consists in tagging a resource (device, media...) to
+ensure no operation is done on this resource. This is basically used in case
+of a resource failure, if handling of a media represent a risk of loosing
+data on it, or if a media has been moved out of the system (e.g. tape on
+shelf). Administrative locking is different from resource locking that is
+used to manage concurrent access to resources.
+
+Locking is implemented as an 'adm_status' enum field in 'device' and 'media'
+tables. This enum can take the following values:
+* unlocked: the resource can be used.
+* locked: the resource has been locked by an administrator.
+* failed: the resource has been automatically locked by the system because of
+  too many failures.
+
+A 'locked' or 'failed' resource is never used for put/get operations.
+
+A 'locked' or 'failed' resource is not used for administrative operations
+(like format), unless the administrator explicitly force using it.
+
+Example: drive 'E143DB0006' (named 'l5-dr0') is locked
+
+    # this command gets another drive to format the tapes
+    > phobos tape format 'T000[01-15]L5'
+
+    # this command returns an error
+    >  phobos tape format 'T000[01-15]L5' -d 'l5-dr0'
+    Error: Drive 'l5-dr0' (S/N 'E143DB0006') is locked by admin.
+
+    # this command force using the specified drive
+    >  phobos tape format 'T0000[01-15]L5' -d 'l5-dr0' --force
+    Warning: Using locked drive 'l5-dr0' (S/N 'E143DB0006').
+
+Admin commands allow locking/unlocking resources:
+> phobos drive {lock|unlock} 'l5-dr0'
+> phobos tape {lock|unlock}  'T00001L5'
