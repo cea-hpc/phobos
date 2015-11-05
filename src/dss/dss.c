@@ -390,11 +390,14 @@ static int dss_layout_extents_decode(struct extent **extents,
                  "Memory allocation of size %zu failed", extents_res_size);
 
     for (i = 0; i < *count; i++) {
+        char    *addr_buffer;
+
         child = json_array_get(root, i);
         result[i].layout_idx = i;
         result[i].size = json_dict2uint64(child, "sz", &parse_error);
-        result[i].address.buff = json_dict2char(child, "addr", &parse_error);
-        result[i].address.size = strlen(result[i].address.buff) + 1;
+        addr_buffer = json_dict2char(child, "addr", &parse_error);
+        result[i].address.size = addr_buffer ? strlen(addr_buffer) + 1 : 0;
+        result[i].address.buff = addr_buffer;
         result[i].media.type = str2dev_family(json_dict2char(child, "fam",
                                                              &parse_error));
 
