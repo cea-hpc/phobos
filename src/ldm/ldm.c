@@ -196,8 +196,7 @@ int ldm_device_query(enum dev_family dev_type, const char *dev_path,
 
 out:
     free(cmd);
-    if (cmd_out != NULL)
-        g_string_free(cmd_out, TRUE);
+    g_string_free(cmd_out, TRUE);
     return rc;
 }
 
@@ -233,8 +232,7 @@ int ldm_device_load(enum dev_family dev_type, const char *dev_path,
         pho_error(rc, "Load command failed: '%s'", cmd);
 
     free(cmd);
-    if (cmd_out != NULL)
-        g_string_free(cmd_out, TRUE);
+    g_string_free(cmd_out, TRUE);
     return rc;
 }
 
@@ -270,8 +268,7 @@ int ldm_device_unload(enum dev_family dev_type, const char *dev_path,
         pho_error(rc, "Unload command failed: '%s'", cmd);
 
     free(cmd);
-    if (cmd_out != NULL)
-        g_string_free(cmd_out, TRUE);
+    g_string_free(cmd_out, TRUE);
     return rc;
 }
 
@@ -304,8 +301,7 @@ int ldm_fs_mount(enum fs_type fs, const char *dev_path, const char *mnt_point)
 
 out_free:
     free(cmd);
-    if (cmd_out != NULL)
-        g_string_free(cmd_out, TRUE);
+    g_string_free(cmd_out, TRUE);
     return rc;
 }
 
@@ -334,8 +330,7 @@ int ldm_fs_umount(enum fs_type fs, const char *dev_path, const char *mnt_point)
 
 out_free:
     free(cmd);
-    if (cmd_out != NULL)
-        g_string_free(cmd_out, TRUE);
+    g_string_free(cmd_out, TRUE);
     return rc;
 }
 
@@ -364,8 +359,6 @@ int ldm_fs_format(enum fs_type fs, const char *dev_path, const char *label)
 
 out_free:
     free(cmd);
-    if (cmd_out != NULL)
-        g_string_free(cmd_out, true);
-
+    g_string_free(cmd_out, true);
     return rc;
 }
