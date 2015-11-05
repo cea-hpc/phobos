@@ -1,12 +1,17 @@
 Administrative locking consists in tagging a resource (device, media...) to
-ensure no operation is done on this resource. This is basically used in case
+ensure no operation is started on this resource. This is basically used in case
 of a resource failure, if handling of a media represent a risk of loosing
 data on it, or if a media has been moved out of the system (e.g. tape on
-shelf). Administrative locking is different from resource locking that is
-used to manage concurrent access to resources.
+shelf). ADMINISTRATIVE LOCKING IS DIFFERENT FROM RESOURCE LOCKING THAT IS
+USED TO MANAGE CONCURRENT ACCESS TO RESOURCES.
 
-Locking is implemented as an 'adm_status' enum field in 'device' and 'media'
-tables. This enum can take the following values:
+Administrative locking is lazy. It only ensures that the resource will
+not be selected to perform new I/O operations but it does not cancel
+current operations (only the concurrent locking system ensures an exclusive
+access to the resources).
+
+Administrative locking is implemented as an 'adm_status' enum field in
+'device' and 'media' tables. This enum can take the following values:
 * unlocked: the resource can be used.
 * locked: the resource has been locked by an administrator.
 * failed: the resource has been automatically locked by the system because of
