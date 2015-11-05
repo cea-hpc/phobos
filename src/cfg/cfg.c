@@ -54,27 +54,27 @@ const struct pho_config_item pho_cfg_descr[] = {
     [PHO_CFG_LDM_cmd_drive_query] = {
         .section = "ldm",
         .name    = "cmd_drive_query",
-        .value   = PHO_LDM_HELPER" query_drive --json \"%s\""
+        .value   = PHO_LDM_HELPER" query_drive \"%s\""
     },
     [PHO_CFG_LDM_cmd_drive_load] = {
         .section = "ldm",
         .name    = "cmd_drive_load",
-        .value   = PHO_LDM_HELPER" load_drive --device \"%s\" --media \"%s\""
+        .value   = PHO_LDM_HELPER" load_drive \"%s\" \"%s\""
     },
     [PHO_CFG_LDM_cmd_drive_unload] = {
         .section = "ldm",
         .name    = "cmd_drive_unload",
-        .value   = PHO_LDM_HELPER" unload_drive --device \"%s\" --media \"%s\""
+        .value   = PHO_LDM_HELPER" unload_drive \"%s\" \"%s\""
     },
     [PHO_CFG_LDM_cmd_mount_ltfs] = {
         .section = "ldm",
         .name    = "cmd_mount_ltfs",
-        .value   = PHO_LDM_HELPER" mount_ltfs --device \"%s\" --path \"%s\""
+        .value   = PHO_LDM_HELPER" mount_ltfs \"%s\" \"%s\""
     },
     [PHO_CFG_LDM_cmd_umount_ltfs] = {
         .section = "ldm",
         .name    = "cmd_umount_ltfs",
-        .value   = PHO_LDM_HELPER" umount_ltfs --device \"%s\" --path \"%s\""
+        .value   = PHO_LDM_HELPER" umount_ltfs \"%s\" \"%s\""
     },
 };
 
