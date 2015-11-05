@@ -19,7 +19,11 @@ all-local:
 clean-local:
 	rm -f $(SWIG_MODULES) $(HAND_MODULES)
 
-check-local: all-local
+pre-check-local:
+	../tests/test_lock.sh
+
+check-local: all-local pre-check-local
 	(cd tests; ./run_tests.sh)
+	rm -f /tmp/phobos_test.lock
 
 .PHONY: all-local
