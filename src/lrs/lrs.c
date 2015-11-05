@@ -280,20 +280,30 @@ static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
 {
     int                mcnt = 0;
     int                rc, i;
-    /* criteria: family, (model,) adm_status, available size (, fs_status) */
-    struct dss_crit    crit[3];
+    struct dss_crit    crit[5];
     int                crit_cnt = 0;
     int                best_idx = -1;
     struct media_info *pmedia_res = NULL;
 
+    /* criteria: family, (model,) adm_status, available size, fs_status */
     dss_crit_add(crit, &crit_cnt, DSS_MDA_family, DSS_CMP_EQ, val_int,
                  family);
     dss_crit_add(crit, &crit_cnt, DSS_MDA_adm_status, DSS_CMP_EQ, val_int,
                  PHO_MDA_ADM_ST_UNLOCKED);
     dss_crit_add(crit, &crit_cnt, DSS_MDA_vol_free, DSS_CMP_GE, val_biguint,
                  required_size);
-    /** @TODO use configurable compatility rules to determine writable
-     * media models from device_model */
+    /* Exclude non-formatted media */
+    dss_crit_add(crit, &crit_cnt, DSS_MDA_fs_status, DSS_CMP_NE, val_int,
+                 PHO_FS_STATUS_BLANK);
+    /* Exclude full-media */
+    dss_crit_add(crit, &crit_cnt, DSS_MDA_fs_status, DSS_CMP_NE, val_int,
+                 PHO_FS_STATUS_FULL);
+
+    /**
+     * @TODO
+     * Use configurable compatility rules to determine writable
+     * media models from device_model
+     */
 
     rc = dss_media_get(dss, crit, crit_cnt, &pmedia_res, &mcnt);
     if (rc)
