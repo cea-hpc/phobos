@@ -86,6 +86,12 @@ function clean_test
 	rm -rf $d/*
     done
     rm -rf "$TEST_RECOV_DIR"
+
+    # Make sure we don't leave LTFS mounted
+    # which may fail other tests about pure SCSI testing
+    # (e.g. unloading a drive fails if the tape in it
+    # is mounted as an LTFS).
+    [[ $TEST_FS == "ltfs" ]] && service ltfs stop
 }
 
 function error
