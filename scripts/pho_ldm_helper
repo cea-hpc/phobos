@@ -154,6 +154,13 @@ function umount_ltfs
 	done
 }
 
+function format_ltfs
+{
+	local drive=$(readlink -m "$1") # convert link to /dev/IBMtape*
+	local label=$2
+
+	mkltfs -n "$drive" -n "$label" || exit 1
+}
 
 function usage
 {
@@ -165,6 +172,7 @@ function usage
 	echo "	$bin unload_drive <drive> <label>"
 	echo "	$bin mount_ltfs   <drive> <path>"
 	echo "	$bin umount_ltfs <drive> <path>"
+	echo "	$bin format_ltfs <drive> <label>"
 	exit 1
 }
 
@@ -213,6 +221,13 @@ case $verb in
 		[ -e "$drive" ] || usage
 		[ -d "$path" ] || usage
 		umount_ltfs "$drive" "$path"
+		;;
+	format_ltfs)
+		drive=$2
+		label=$3
+		[ -e "$drive" ] || usage
+		[ -d "$label" ] || usage
+                format_ltfs "$drive" "$label"
 		;;
 	*)
 		usage

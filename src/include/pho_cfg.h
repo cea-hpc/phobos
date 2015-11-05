@@ -39,6 +39,7 @@ enum pho_cfg_params {
     PHO_CFG_LDM_cmd_drive_unload,
     PHO_CFG_LDM_cmd_mount_ltfs,
     PHO_CFG_LDM_cmd_umount_ltfs,
+    PHO_CFG_LDM_cmd_format_ltfs,
 
     PHO_CFG_LAST
 };

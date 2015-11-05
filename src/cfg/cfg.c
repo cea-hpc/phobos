@@ -76,6 +76,11 @@ const struct pho_config_item pho_cfg_descr[] = {
         .name    = "cmd_umount_ltfs",
         .value   = PHO_LDM_HELPER" umount_ltfs \"%s\" \"%s\""
     },
+    [PHO_CFG_LDM_cmd_format_ltfs] = {
+        .section = "ldm",
+        .name    = "cmd_format_ltfs",
+        .value   = PHO_LDM_HELPER" format_ltfs \"%s\" \"%s\""
+    },
 };
 
 

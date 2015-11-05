@@ -76,4 +76,14 @@ int ldm_fs_mount(enum fs_type fs, const char *dev_path, const char *mnt_point);
 int ldm_fs_umount(enum fs_type fs, const char *dev_path,
                    const char *mnt_point);
 
+/**
+ * Format a media to the desired filesystem type.
+ * @param(in) dev_path  Path to the device where the desired media is loaded.
+ * @param(in) label     Media label to apply.
+ * @param(in) fs        Type of filesystem.
+ *
+ * @return 0 on success, -errno on failure.
+ */
+int ldm_fs_format(enum fs_type fs, const char *dev_path, const char *label);
+
 #endif

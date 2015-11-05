@@ -115,19 +115,33 @@ static char *umount_cmd(enum fs_type fs, const char *device, const char *path)
 {
     const char          *cmd_cfg;
     char                *cmd_out;
-    enum pho_cfg_params  param;
 
-    if (fs == PHO_FS_LTFS)
-        param = PHO_CFG_LDM_cmd_umount_ltfs;
-    else
-        /* not supported */
-        return NULL;
+    if (fs != PHO_FS_LTFS)
+        return NULL; /* not supported */
 
-    cmd_cfg = pho_cfg_get(param);
+    cmd_cfg = pho_cfg_get(PHO_CFG_LDM_cmd_umount_ltfs);
     if (cmd_cfg == NULL)
         return NULL;
 
     if (asprintf(&cmd_out, cmd_cfg, device, path) < 0)
+        return NULL;
+
+    return cmd_out;
+}
+
+static char *format_cmd(enum fs_type fs, const char *device, const char *label)
+{
+    const char          *cmd_cfg;
+    char                *cmd_out;
+
+    if (fs != PHO_FS_LTFS)
+        return NULL; /* not supported */
+
+    cmd_cfg = pho_cfg_get(PHO_CFG_LDM_cmd_format_ltfs);
+    if (cmd_cfg == NULL)
+        return NULL;
+
+    if (asprintf(&cmd_out, cmd_cfg, device, label) < 0)
         return NULL;
 
     return cmd_out;
@@ -322,5 +336,36 @@ out_free:
     free(cmd);
     if (cmd_out != NULL)
         g_string_free(cmd_out, TRUE);
+    return rc;
+}
+
+int ldm_fs_format(enum fs_type fs, const char *dev_path, const char *label)
+{
+    char    *cmd = NULL;
+    GString *cmd_out = NULL;
+    int      rc;
+
+    if (fs == PHO_FS_POSIX)
+        return 0;
+
+    if (fs != PHO_FS_LTFS)
+        LOG_RETURN(-EINVAL, "Unsupported filesystem type");
+
+    cmd = format_cmd(fs, dev_path, label);
+    if (!cmd)
+        LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build format_ltfs command");
+
+    cmd_out = g_string_new("");
+
+    /* Format the media */
+    rc = command_call(cmd, collect_output, cmd_out);
+    if (rc)
+        LOG_GOTO(out_free, rc, "format_ltfs command failed: '%s'", cmd);
+
+out_free:
+    free(cmd);
+    if (cmd_out != NULL)
+        g_string_free(cmd_out, true);
+
     return rc;
 }

@@ -11,7 +11,7 @@ Interfaces:
 Calls:
     - load(media, device)
     - unload(media, device)
-    - format(device, type)
+    - format(type, device, label)
     - mount(device, type, path)
     - umount(device|path)
     - status(resource)
