@@ -19,6 +19,12 @@ import sys
 import errno
 import argparse
 import logging
+import json
+import yaml
+import csv
+import StringIO
+import xml.etree.ElementTree
+import xml.dom.minidom
 
 import phobos.capi.clogging as pho_logging
 import phobos.capi.dss as cdss
@@ -26,6 +32,88 @@ import phobos.capi.dss as cdss
 from phobos.config import load_config_file, get_config_value
 from phobos.dss import Client
 from ClusterShell.NodeSet import NodeSet
+
+
+def csv_dump(data):
+    outbuf = StringIO.StringIO()
+    writer = csv.DictWriter(outbuf, data[0].keys())
+    if sys.version_info >= (2, 7):
+        writer.writeheader()
+    else:
+        writer.writerow(dict((i, i) for i in data[0].keys()))
+    writer.writerows(data)
+    out = outbuf.getvalue()
+    outbuf.close()
+    return out
+
+def xml_dump(data, item_type='item'):
+    top = xml.etree.ElementTree.Element('phobos')
+    for item in data:
+        children = xml.etree.ElementTree.Element(item_type, **item)
+        top.append(children)
+    rough_string = xml.etree.ElementTree.tostring(top)
+    reparsed = xml.dom.minidom.parseString(rough_string)
+    return reparsed.toprettyxml(indent="  ")
+
+def human_dump(data, item_type='item'):
+    title = " %s " % (item_type)
+    out = " {0:_^50}\n".format(str(title))
+    for item in data:
+        vals = []
+        for k in item:
+            vals.append(" |{0:<20}|{1:<27}|".format(k,item[k]))
+        out = out+ "\n".join(vals) + "\n {0:_^50}\n".format("")
+    return out
+
+def dump_object_list(objs, fmt="human", numeric=False):
+    """
+    Helper for user friendly object display.
+    """
+    display = {
+    cdss.dev_info:('serial', ['adm_status', 'changer_idx', 'family',
+                   'host', 'model', 'path', 'serial']),
+    cdss.media_info:('model',['adm_status', 'fs_status', 'fs_type'])
+    }
+
+    formats = {
+    'json' : json.dumps,
+    'yaml' : yaml.dump,
+    'xml'  : xml_dump,
+    'csv'  : csv_dump,
+    'human': human_dump,
+    }
+
+    formatter = formats.get(fmt)
+    if formatter is None:
+        logger = logging.getLogger(__name__)
+        logger.error("Unkown output format:", format)
+        return
+
+    #Is an instance of a known class ?
+    dclass = None
+    for k in display:
+        if isinstance(objs[0], k):
+            dclass = k
+
+    if not dclass:
+        logger = logging.getLogger(__name__)
+        logger.error("No model found to display this class:", objs[0].__class__.__name__)
+        return
+
+    objlist=[]
+    #Build a dict with attributs to export/output
+    for obj in objs:
+        objext={}
+        for k in display[dclass][1]:
+            if not numeric and hasattr(cdss, '%s2str' % k):
+                method = getattr(cdss, '%s2str' % k )
+                objext[k] = method(getattr(obj,k))
+            else:
+                objext[k] = str(getattr(obj,k))
+        objlist.append(objext)
+
+    #Print formatted objects
+    print formatter(objlist)
 
 def phobos_log_handler(rec):
     """
@@ -181,7 +269,11 @@ class ShowOptHandler(BaseOptHandler):
         """Add resource-specific options."""
         super(ShowOptHandler, cls).add_options(parser)
         parser.add_argument('res', nargs='+', help='Resource(s) to show')
-
+        parser.add_argument('--numeric', action='store_true',
+                            help='Output numeric values')
+        parser.add_argument('--format', default='human',
+                            help="Output format human/xml/json/csv/yaml " \
+                                 "(default: human)")
 
 class DriveListOptHandler(ListOptHandler):
     """
@@ -239,18 +331,22 @@ class DirOptHandler(BaseOptHandler):
 
     def exec_list(self):
         """List directories as devices."""
-        for obj in self.client.device_get(family='dir'):
+        for obj in self.client.devices.get(family='dir'):
             print obj.serial
 
     def exec_show(self):
         """Show directory details."""
+        dirs=[]
         for serial in self.params.get('res'):
-            obj = self.client.device_get(family='dir', serial=serial)
-            if not obj:
+            wdir = self.client.devices.get(family='dir', serial=serial)
+            if not wdir:
+                self.logger.warning("Serial %s not found" % serial)
                 continue
-            assert len(obj) == 1
-            desc_iter = sorted(obj[0]._asdict().iteritems())
-            print ' '.join(["%s:'%s'" % (k, v) for k, v in desc_iter])
+            assert len(wdir) == 1
+            dirs.append(wdir[0])
+        dump_object_list(dirs, self.params.get('format'), \
+                         self.params.get('numeric'))
+
 
     def exec_lock(self):
         print 'DIR LOCK'
@@ -275,10 +371,23 @@ class DriveOptHandler(BaseOptHandler):
         print 'DRIVE ADD'
 
     def exec_list(self):
-        print 'DRIVE LIST'
+        """List all drives."""
+        # Clarification: Tape is a kind of drive
+        for drive in self.client.devices.get(family='tape'):
+            print drive.serial
 
     def exec_show(self):
-        print 'DRIVE SHOW'
+        """Show drive details."""
+        drives = []
+        for serial in self.params.get('res'):
+            drive = self.client.devices.get(family='tape', serial=serial)
+            if not drive:
+                self.logger.warning("Serial %s not found" % serial)
+                continue
+            assert len(drive) == 1
+            drives.append(drive[0])
+        dump_object_list(drives, self.params.get('format'),\
+                         self.params.get('numeric'))
 
     def exec_lock(self):
         """Drive lock"""
@@ -377,13 +486,17 @@ class TapeOptHandler(BaseOptHandler):
 
     def exec_show(self):
         """Show tape details."""
-        for serial in self.params.get('res'):
-            tape = self.client.device_get(family='tape', serial=serial)
+        tapes = []
+        uids = NodeSet.fromlist(self.params.get('res'))
+        for uid in uids:
+            tape = self.client.media.get(family='tape', id=uid)
             if not tape:
+                self.logger.warning("Tape id %s not found" % uid)
                 continue
             assert len(tape) == 1
-            desc_iter = sorted(tape[0]._asdict().iteritems())
-            print ' '.join(["%s:'%s'" % (k, v) for k, v in desc_iter])
+            tapes.append(tape[0])
+        dump_object_list(tapes, self.params.get('format'), \
+                         self.params.get('numeric'))
 
     def exec_list(self):
         """List all tapes."""
