@@ -500,8 +500,10 @@ static int lrs_mount(struct dev_descr *dev)
     dev->state.mnt_path = mnt_root;
 
 out_free:
-    if (rc != 0)
+    if (rc != 0) {
+        dev->state.op_status = PHO_DEV_OP_ST_FAILED;
         free(mnt_root);
+    }
     /* else: the memory is now owned by dev->state */
     return rc;
 }
@@ -539,6 +541,7 @@ static int lrs_umount(struct dev_descr *dev)
 
     return 0;
 }
+
 /**
  * Load a media into a drive.
  */
@@ -559,8 +562,15 @@ static int lrs_load(struct dev_descr *dev, struct media_info *media)
 
     rc = ldm_device_load(dev->device->family, dev->device->path,
                          &media->id);
-    if (rc)
+    if (rc != 0) {
+        /* Set operationnal failure state on this drive. It is incomplete since
+         * the error can originate from a defect tape too...
+         *  - consider marking both as failed.
+         *  - consider maintaining lists of errors to diagnose and decide who to
+         *    exclude from the cool game. */
+        dev->state.op_status = PHO_DEV_OP_ST_FAILED;
         return rc;
+    }
 
     /* update device status */
     dev->state.op_status = PHO_DEV_OP_ST_LOADED;
@@ -706,8 +716,6 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
         rc = lrs_mount(*devp);
         if (rc == 0)
             (*devp)->state.op_status = PHO_DEV_OP_ST_BUSY;
-        else
-            (*devp)->state.op_status = PHO_DEV_OP_ST_FAILED;
         return rc;
     }
 
@@ -743,7 +751,10 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
 
     /* 5) mount the filesystem */
     /* Don't release media on failure (it is still associated to the drive). */
-    return lrs_mount(*devp);
+    rc = lrs_mount(*devp);
+    if (rc == 0)
+        (*devp)->state.op_status = PHO_DEV_OP_ST_BUSY;
+    return rc;
 
 out_free:
     media_info_free(pmedia);
@@ -766,7 +777,138 @@ static int set_loc_from_dev(const struct dev_descr *dev,
     return 0;
 }
 
+static struct dev_descr *search_loaded_media(const struct media_id *id)
+{
+    int         i;
+    const char *name;
+
+    if (id == NULL)
+        return NULL;
+
+    name = media_id_get(id);
+
+    for (i = 0; i < dev_count; i++) {
+        if ((devices[i].state.op_status == PHO_DEV_OP_ST_MOUNTED ||
+             devices[i].state.op_status == PHO_DEV_OP_ST_LOADED)
+            && (devices[i].media != NULL)
+            && !strcmp(name, media_id_get(&devices[i].media->id)))
+            return &devices[i];
+    }
+    return NULL;
+}
+
+static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
+                             enum lrs_operation op, struct dev_descr **pdev,
+                             struct media_info **pmedia)
+{
+    const char          *label = media_id_get(id);
+    struct dev_descr    *dev;
+    struct media_info   *med;
+    bool                 post_fs_mount;
+    int                  rc;
+
+    *pdev = NULL;
+    *pmedia = NULL;
+
+    rc = lrs_fill_media_info(dss, &med, id);
+    if (rc != 0)
+        return rc;
+
+    switch (op) {
+    case LRS_OP_READ:
+    case LRS_OP_WRITE:
+        if (med->fs_status == PHO_FS_STATUS_BLANK)
+            LOG_RETURN(-EINVAL, "Cannot do I/O on unformatted media '%s'",
+                       label);
+        post_fs_mount = true;
+        break;
+    case LRS_OP_FORMAT:
+        if (med->fs_status != PHO_FS_STATUS_BLANK)
+            LOG_RETURN(-EINVAL, "Cannot format non-blank media '%s'", label);
+        post_fs_mount = false;
+        break;
+    default:
+        LOG_RETURN(-ENOSYS, "Unknown operation %x", (int)op);
+    }
+
+    /* check if the media is already in a drive */
+    dev = search_loaded_media(id);
+    if (dev == NULL) {
+        pho_verb("Media '%s' is not in a drive", media_id_get(id));
+
+        /* Is there a free drive? */
+        dev = dev_picker(PHO_DEV_OP_ST_EMPTY, select_any, 0);
+        if (dev == NULL) {
+            pho_verb("No free drive: need to unload one");
+            rc = lrs_free_one_device(dss, &dev);
+            if (rc != 0)
+                LOG_GOTO(out, rc, "No device available");
+        }
+
+        rc = lrs_load(dev, med);
+        if (rc != 0)
+            goto out;
+    }
+
+    /* Mount only for READ/WRITE and if not already mounted */
+    if (post_fs_mount && dev->state.op_status != PHO_DEV_OP_ST_MOUNTED) {
+        rc = lrs_mount(dev);
+        if (rc == 0)
+            dev->state.op_status = PHO_DEV_OP_ST_BUSY;
+    }
+
+out:
+    *pmedia = med;
+    *pdev = dev;
+    return rc;
+}
+
+
 /* see "pho_lrs.h" for function help */
+
+int lrs_format(struct dss_handle *dss, const struct media_id *id,
+               enum fs_type fs, bool unlock)
+{
+    const char          *label = media_id_get(id);
+    struct dev_descr    *dev = NULL;
+    struct media_info   *media_info;
+    int                  rc;
+
+    if (fs != PHO_FS_LTFS)
+        LOG_RETURN(-EINVAL, "Unsupported filesystem type");
+
+    rc = lrs_load_dev_state(dss);
+    if (rc != 0)
+        return rc;
+
+    rc = lrs_media_prepare(dss, id, LRS_OP_FORMAT, &dev, &media_info);
+    if (rc != 0)
+        return rc;
+
+    if (dev->media == NULL)
+        LOG_RETURN(rc = -EINVAL, "Invalid device state");
+
+    pho_verb("Format media '%s' as %s", label, fs_type2str(fs));
+
+    rc = ldm_fs_format(fs, dev->device->path, label);
+    if (rc != 0)
+        LOG_RETURN(rc, "Cannot format media '%s'", label);
+
+    /* Post operation: update media information in DSS */
+    media_info->fs_status = PHO_FS_STATUS_EMPTY;
+
+    if (unlock) {
+        pho_verb("Unlocking media '%s'", label);
+        media_info->adm_status = PHO_MDA_ADM_ST_UNLOCKED;
+    }
+
+    rc = dss_media_set(dss, media_info, 1, DSS_SET_UPDATE);
+    if (rc != 0)
+        LOG_RETURN(rc, "Failed to update state of media '%s'", label);
+
+    return 0;
+}
+
 int lrs_write_prepare(struct dss_handle *dss, size_t size,
                       const struct layout_info *layout,
                       struct lrs_intent *intent)
@@ -801,32 +943,13 @@ err_cleanup:
     return rc;
 }
 
-static struct dev_descr *search_loaded_media(const struct media_id *id)
-{
-    int         i;
-    const char *name;
-
-    if (id == NULL)
-        return NULL;
-
-    name = media_id_get(id);
-
-    for (i = 0; i < dev_count; i++) {
-        if ((devices[i].state.op_status == PHO_DEV_OP_ST_MOUNTED ||
-             devices[i].state.op_status == PHO_DEV_OP_ST_LOADED)
-            && (devices[i].media != NULL)
-            && !strcmp(name, media_id_get(&devices[i].media->id)))
-            return &devices[i];
-    }
-    return NULL;
-}
-
-
 int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
                      struct lrs_intent *intent)
 {
-    struct dev_descr *dev = NULL;
-    int               rc = 0;
+    struct dev_descr    *dev = NULL;
+    struct media_info   *media_info;
+    struct media_id     *id;
+    int                  rc = 0;
 
     if (layout->type != PHO_LYT_SIMPLE || layout->ext_count != 1)
         LOG_RETURN(-EINVAL, "Unexpected layout type '%s' or extent count %u",
@@ -839,39 +962,16 @@ int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
     if (rc != 0)
         return rc;
 
-    /* check if the media is already in a drive */
-    dev = search_loaded_media(&intent->li_location.extent.media);
-    if (dev == NULL) {
-        pho_verb("Media '%s' is not in a drive",
-                 media_id_get(&intent->li_location.extent.media));
+    id = &intent->li_location.extent.media;
 
-        /* @TODO retrieve media information from DSS */
-
-        /* is there a free drive? */
-        dev = dev_picker(PHO_DEV_OP_ST_EMPTY, select_any, 0);
-        if (dev == NULL) {
-            pho_verb("No free drive: need to unload one");
-            rc = lrs_free_one_device(dss, &dev);
-            if (rc)
-                return rc;
-        }
-
-        /* @TODO load the media in the selected drive */
-    }
-
-    /* mount the FS if it is not mounted */
-    if (dev->state.op_status != PHO_DEV_OP_ST_MOUNTED) {
-        rc = lrs_mount(dev);
-        if (rc == 0) {
-            dev->state.op_status = PHO_DEV_OP_ST_BUSY;
-        } else {
-            dev->state.op_status = PHO_DEV_OP_ST_FAILED;
-            return rc;
-        }
-    }
+    /* Fill in information about media and mount it if needed */
+    rc = lrs_media_prepare(dss, id, LRS_OP_READ, &dev, &media_info);
+    if (rc)
+        return rc;
 
     if (dev->media == NULL)
-        LOG_RETURN(rc = -EINVAL, "Invalid device state");
+        LOG_RETURN(rc = -EINVAL, "Invalid device state, expected media %s",
+                   media_id_get(id));
 
     /* set fs_type and addr_type according to media description. */
     intent->li_location.root_path = strdup(dev->state.mnt_path);

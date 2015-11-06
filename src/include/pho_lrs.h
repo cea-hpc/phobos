@@ -12,20 +12,21 @@
 
 #include "pho_types.h"
 
+
 struct dss_handle;
 
-
+#ifndef SWIG
 enum lrs_operation {
     LRS_OP_NONE = 0,
     LRS_OP_READ,
-    LRS_OP_WRITE
+    LRS_OP_WRITE,
+    LRS_OP_FORMAT,
 };
 
 struct lrs_intent {
     enum lrs_operation   li_operation;
     struct pho_ext_loc   li_location;
 };
-
 
 /**
  * Query to write a given amount of data with a given layout.
@@ -62,5 +63,17 @@ int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
  * @return 0 on success, -1 * posix error code on failure
  */
 int lrs_done(struct lrs_intent *intent, int err_code);
+#endif /* ^SWIG */
 
+/**
+ * Load and format a media to the given fs type.
+ *
+ * @param(in)   dss     Initialized DSS handle.
+ * @param(in)   id      Media ID for the media to format.
+ * @param(in)   fs      Filesystem type (only PHO_FS_LTFS for now).
+ * @param(in)   unlock  Unlock tape if successfully formated.
+ * @return 0 on success, negative error code on failure.
+ */
+int lrs_format(struct dss_handle *dss, const struct media_id *id,
+               enum fs_type fs, bool unlock);
 #endif

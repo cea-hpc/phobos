@@ -7,6 +7,9 @@ SWIG_MODULES=phobos/capi/config.py \
 	     phobos/capi/dss.py \
 	     phobos/capi/_dss.so \
 	     phobos/capi/dss_wrap.c
+	     phobos/capi/lrs.py \
+	     phobos/capi/_lrs.so \
+	     phobos/capi/lrs_wrap.c
 
 HAND_MODULES=phobos/capi/clogging.so
 
@@ -14,6 +17,7 @@ HAND_MODULES=phobos/capi/clogging.so
 all-local:
 	swig -python -I../include phobos/capi/config.i
 	swig -python -I../include phobos/capi/dss.i
+	swig -python -I../include phobos/capi/lrs.i
 	python setup.py build_ext --inplace --verbose
 
 clean-local:
