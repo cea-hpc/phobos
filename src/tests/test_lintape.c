@@ -78,6 +78,8 @@ int main(int argc, char **argv)
     char dev_name[IFNAMSIZ];
     int  i;
 
+    test_env_initialize();
+
     for (i = 0; i < TEST_MAX_DRIVES; i++) {
         if (!device_exists(i))
             break;
@@ -111,6 +113,6 @@ int main(int argc, char **argv)
     }
 
 
-    printf("LINTAPE MAPPER: All tests succeeded\n");
-    return 0;
+    pho_info("LINTAPE MAPPER: All tests succeeded");
+    exit(EXIT_SUCCESS);
 }

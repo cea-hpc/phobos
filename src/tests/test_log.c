@@ -132,6 +132,8 @@ static int test3(void *hint)
 
 int main(int ac, char **av)
 {
+    test_env_initialize();
+
     run_test("Test 1: exercise default callback on all log levels",
              test1, NULL, PHO_TEST_SUCCESS);
 
@@ -141,6 +143,6 @@ int main(int ac, char **av)
     run_test("Test 3: emitting logs should not alter errno",
              test3, NULL, PHO_TEST_SUCCESS);
 
-    printf("MAPPER: All tests succeeded\n");
-    return 0;
+    pho_info("MAPPER: All tests succeeded\n");
+    exit(EXIT_SUCCESS);
 }

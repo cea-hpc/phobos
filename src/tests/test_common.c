@@ -11,6 +11,7 @@
 #include "config.h"
 #endif
 
+#include "pho_test_utils.h"
 #include "pho_common.h"
 #include <glib.h>
 #include <stdio.h>
@@ -58,18 +59,20 @@ int main(int argc, char **argv)
     int    rc = 0;
     GList *lines = NULL;
 
+    test_env_initialize();
+
     if (argc != 2) {
         fprintf(stderr, "usage: %s <cmd>\n", argv[0]);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     /** call a command and call cb_func for each output line */
     rc = command_call(argv[1], parse_line, &lines);
     if (rc) {
         fprintf(stderr, "command '%s' return with status %d\n", argv[1], rc);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     print_lines(lines);
-    exit(0);
+    exit(EXIT_SUCCESS);
 }

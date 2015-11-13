@@ -54,7 +54,7 @@ static int dump_hash(GHashTable *h)
 
     g_hash_table_iter_init(&iter, h);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-        printf("%s='%s'\n", (char *)key, (char *)value);
+        pho_info("%s='%s'", (char *)key, (char *)value);
         c++;
     }
     return c;
@@ -136,7 +136,7 @@ static int test1d(void *arg)
     if (gstring_empty(str))
         LOG_RETURN(-EINVAL, "Empty or NULL JSON dump");
 
-    printf("%s\n", str->str);
+    pho_info("Attributes: %s", str->str);
 
     /* length should be at least the sum of all keys and values lengths
      * +1 ':' separator for each. */
@@ -176,6 +176,8 @@ int main(int argc, char **argv)
 {
     struct pho_attrs attrs = {0};
 
+    test_env_initialize();
+
     run_test("Test 1a: Set and get key values",
              test1a, &attrs, PHO_TEST_SUCCESS);
 
@@ -201,6 +203,6 @@ int main(int argc, char **argv)
     run_test("Test 3: Get attribute from zero-ed struct",
              testget, &attrs, PHO_TEST_FAILURE);
 
-    printf("ATTRS: All tests succeeded\n");
-    return 0;
+    pho_info("ATTRS: All tests succeeded");
+    exit(EXIT_SUCCESS);
 }

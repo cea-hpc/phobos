@@ -27,30 +27,31 @@ enum pho_test_result {
     PHO_TEST_FAILURE,
 };
 
-static inline int run_test(const char *descr, pho_unit_test_t test, void *hint,
-                           enum pho_test_result xres)
+static inline void run_test(const char *descr, pho_unit_test_t test, void *hint,
+                            enum pho_test_result xres)
 {
     int rc;
-
-    if (getenv("DEBUG"))
-        pho_log_level_set(PHO_LOG_DEBUG);
-    else
-        pho_log_level_set(PHO_LOG_VERB);
 
     assert(descr != NULL);
     assert(test != NULL);
 
-    printf("%s\n", descr);
-    fflush(stdout);
+    pho_info("Starting %s...", descr);
 
     rc = test(hint);
     if ((xres == PHO_TEST_SUCCESS) != (rc == 0)) {
-        printf("FAILED (%d: %s)\n", rc, strerror(-rc));
+        pho_error(rc, "%s FAILED", descr);
         exit(EXIT_FAILURE);
     }
 
-    printf("OK\n");
-    return 0;
+    pho_info("%s OK", descr);
+}
+
+static inline void test_env_initialize(void)
+{
+    if (getenv("DEBUG"))
+        pho_log_level_set(PHO_LOG_DEBUG);
+    else
+        pho_log_level_set(PHO_LOG_VERB);
 }
 
 #endif

@@ -1,6 +1,7 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
+#include "pho_test_utils.h"
 #include "../ldm/scsi_api.h"
 
 #include <sys/types.h>
@@ -60,55 +61,57 @@ static void save_test_elements(const struct element_status *element)
 
 static void print_element(const struct element_status *element)
 {
-    bool first;
+    GString *gstr = g_string_new("");
+    bool     first = true;
 
     save_test_elements(element);
 
-    printf("type: %s; ", type2str(element->type));
-    printf("address: %#hX; ", element->address);
+    g_string_append_printf(gstr, "type: %s; ", type2str(element->type));
+    g_string_append_printf(gstr, "address: %#hX; ", element->address);
+    g_string_append_printf(gstr, "status: %s; ",
+                           element->full ? "full" : "empty");
 
-    printf("status: %s; ", element->full ? "full" : "empty");
     if (element->full && element->vol[0])
-        printf("volume=%s; ", element->vol);
+        g_string_append_printf(gstr, "volume=%s; ", element->vol);
 
     if (element->src_addr_is_set)
-        printf("source_addr: %#hX; ", element->src_addr);
+        g_string_append_printf(gstr, "source_addr: %#hX; ", element->src_addr);
 
     if (element->except) {
-        printf("error: code=%hhu, qualifier=%hhu; ", element->error_code,
-               element->error_code_qualifier);
+        g_string_append_printf(gstr, "error: code=%hhu, qualifier=%hhu; ",
+                               element->error_code,
+                               element->error_code_qualifier);
     }
 
     if (element->dev_id[0])
-        printf("device_id: '%s'; ", element->dev_id);
+        g_string_append_printf(gstr, "device_id: '%s'; ", element->dev_id);
 
-    printf("flags: ");
-
-    first = true;
+    g_string_append_printf(gstr, "flags: ");
 
     if (element->type == SCSI_TYPE_IMPEXP) {
-        printf("%s%s", first ? "" : ",",
-               element->impexp ? "import" : "export");
+        g_string_append_printf(gstr, "%s%s", first ? "" : ",",
+                               element->impexp ? "import" : "export");
         first = false;
     }
     if (element->accessible) {
-        printf("%saccess", first ? "" : ",");
+        g_string_append_printf(gstr, "%saccess", first ? "" : ",");
         first = false;
     }
     if (element->exp_enabled) {
-        printf("%sexp_enab", first ? "" : ",");
+        g_string_append_printf(gstr, "%sexp_enab", first ? "" : ",");
         first = false;
     }
     if (element->imp_enabled) {
-        printf("%simp_enab", first ? "" : ",");
+        g_string_append_printf(gstr, "%simp_enab", first ? "" : ",");
         first = false;
     }
     if (element->invert) {
-        printf("%sinvert", first ? "" : ",");
+        g_string_append_printf(gstr, "%sinvert", first ? "" : ",");
         first = false;
     }
 
-    printf("\n");
+    pho_info("%s", gstr->str);
+    g_string_free(gstr, TRUE);
 }
 
 static void print_elements(const struct element_status *list, int nb)
@@ -127,10 +130,9 @@ static int single_element_status(int fd, uint16_t addr)
     int lcount = 0;
 
     rc = element_status(fd, SCSI_TYPE_ALL, addr, 1, false, &list, &lcount);
-    if (rc) {
-        fprintf(stderr, "status ERROR %d\n", rc);
-        return rc;
-    }
+    if (rc)
+        LOG_RETURN(rc, "status ERROR %d", rc);
+
     print_elements(list, lcount);
     free(list);
     return 0;
@@ -143,111 +145,111 @@ int main(int argc, char **argv)
     struct element_status *list = NULL;
     int lcount = 0;
 
+    test_env_initialize();
+
     fd = open("/dev/changer", O_RDWR | O_NONBLOCK);
     if (fd < 0) {
-        fprintf(stderr, "ERROR %d\n", errno);
-        exit(1);
+        pho_error(errno, "Cannot open /dev/changer");
+        exit(EXIT_FAILURE);
     }
 
     rc = mode_sense(fd, &msi);
     if (rc) {
-        fprintf(stderr, "mode_sense ERROR %d\n", rc);
-        exit(rc);
+        pho_error(rc, "mode_sense error");
+        exit(EXIT_FAILURE);
     }
 
-    printf("arms: first=%#hX, nb=%d\n",
-        msi.arms.first_addr,
-        msi.arms.nb);
+    pho_info("arms: first=%#hX, nb=%d", msi.arms.first_addr, msi.arms.nb);
+
     rc = element_status(fd, SCSI_TYPE_ARM, msi.arms.first_addr, msi.arms.nb,
                 false, &list, &lcount);
     if (rc) {
-        fprintf(stderr, "element_status ERROR %d\n", rc);
-        exit(rc);
+        pho_error(rc, "element_status error");
+        exit(EXIT_FAILURE);
     }
     print_elements(list, lcount);
     free(list);
 
-    printf("slots: first=%#hX, nb=%d\n",
-        msi.slots.first_addr,
-        msi.slots.nb);
+    pho_info("slots: first=%#hX, nb=%d", msi.slots.first_addr, msi.slots.nb);
+
     rc = element_status(fd, SCSI_TYPE_SLOT, msi.slots.first_addr,  msi.slots.nb,
                 false, &list, &lcount);
     if (rc) {
-        fprintf(stderr, "element_status ERROR %d\n", rc);
-        exit(rc);
+        pho_error(rc, "element_status error");
+        exit(EXIT_FAILURE);
     }
+
     print_elements(list, lcount);
     free(list);
 
-    printf("imp/exp: first=%#hX, nb=%d\n",
-        msi.impexp.first_addr,
-        msi.impexp.nb);
+    pho_info("imp/exp: first=%#hX, nb=%d",
+             msi.impexp.first_addr, msi.impexp.nb);
+
     rc = element_status(fd, SCSI_TYPE_IMPEXP, msi.impexp.first_addr,
                         msi.impexp.nb, false, &list, &lcount);
     if (rc) {
-        fprintf(stderr, "element_status ERROR %d\n", rc);
-        exit(rc);
+        pho_error(rc, "element_status ERROR %d");
+        exit(EXIT_FAILURE);
     }
     print_elements(list, lcount);
     free(list);
 
-    printf("drives: first=%#hX, nb=%d\n",
-        msi.drives.first_addr,
-        msi.drives.nb);
+    pho_info("drives: first=%#hX, nb=%d", msi.drives.first_addr, msi.drives.nb);
+
     rc = element_status(fd, SCSI_TYPE_DRIVE, msi.drives.first_addr,
                         msi.drives.nb, false, &list, &lcount);
     if (rc) {
-        fprintf(stderr, "element_status ERROR %d\n", rc);
-        exit(rc);
+        pho_error(rc, "element_status error");
+        exit(EXIT_FAILURE);
     }
+
     print_elements(list, lcount);
     free(list);
 
     if (full_drive != UNSET && free_slot != UNSET) {
-            printf("-------------------\n");
-            single_element_status(fd, full_drive);
-            single_element_status(fd, free_slot);
+        single_element_status(fd, full_drive);
+        single_element_status(fd, free_slot);
 
-            printf("unloading drive %#x to slot %#x...\n", full_drive,
-                   free_slot);
-            rc = move_medium(fd, arm_addr, full_drive, free_slot);
-            if (rc) {
-                    fprintf(stderr, "move_medium ERROR %d\n", rc);
-                    exit(rc);
-            }
-            single_element_status(fd, full_drive);
-            single_element_status(fd, free_slot);
+        pho_info("Unloading drive %#x to slot %#x", full_drive, free_slot);
+
+        rc = move_medium(fd, arm_addr, full_drive, free_slot);
+        if (rc) {
+            pho_error(rc, "move_medium error");
+            exit(EXIT_FAILURE);
+        }
+        single_element_status(fd, full_drive);
+        single_element_status(fd, free_slot);
     }
+
     if (empty_drive != UNSET && full_slot != UNSET) {
-            printf("-------------------\n");
-            single_element_status(fd, full_slot);
-            single_element_status(fd, empty_drive);
+        single_element_status(fd, full_slot);
+        single_element_status(fd, empty_drive);
 
-            printf("loading tape from slot %#x to drive %#x...\n", full_slot,
-                   empty_drive);
-            rc = move_medium(fd, arm_addr, full_slot, empty_drive);
-            if (rc) {
-                    fprintf(stderr, "move_medium ERROR %d\n", rc);
-                    exit(rc);
-            }
+        pho_info("Loading tape from slot %#x to drive %#x",
+                 full_slot, empty_drive);
 
-            single_element_status(fd, full_slot);
-            single_element_status(fd, empty_drive);
+        rc = move_medium(fd, arm_addr, full_slot, empty_drive);
+        if (rc) {
+            pho_error(rc, "move_medium error");
+            exit(EXIT_FAILURE);
+        }
+        single_element_status(fd, full_slot);
+        single_element_status(fd, empty_drive);
     } else {
-            printf("-------------------\n");
-            single_element_status(fd, full_drive);
-            single_element_status(fd, free_slot);
+        single_element_status(fd, full_drive);
+        single_element_status(fd, free_slot);
 
-            printf("loading back tape from slot %#x to drive %#x...\n",
-                   free_slot, full_drive);
-            rc = move_medium(fd, arm_addr, free_slot, full_drive);
-            if (rc) {
-                    fprintf(stderr, "move_medium ERROR %d\n", rc);
-                    exit(rc);
-            }
-            single_element_status(fd, full_drive);
-            single_element_status(fd, free_slot);
+        pho_info("Loading back tape from slot %#x to drive %#x",
+                 free_slot, full_drive);
+
+        rc = move_medium(fd, arm_addr, free_slot, full_drive);
+        if (rc) {
+            pho_error(rc, "move_medium error");
+            exit(EXIT_FAILURE);
+        }
+        single_element_status(fd, full_drive);
+        single_element_status(fd, free_slot);
     }
 
-    return 0;
+    exit(EXIT_SUCCESS);
 }

@@ -122,11 +122,11 @@ static int test_build_path(const char *obj, const char *tag)
     if (rc)
         return rc;
 
-    printf("HASH1 MAPPER: o='%s', t='%s': '%s'\n", SAFE_STR(obj), SAFE_STR(tag),
-           buff);
+    pho_info("HASH1 MAPPER: o='%s', t='%s': '%s'",
+             SAFE_STR(obj), SAFE_STR(tag), buff);
 
     if (!is_hash1_path_valid(buff)) {
-        fprintf(stderr, "[ERROR] Invalid hash1 path crafted: '%s'\n", buff);
+        pho_error(EINVAL, "Invalid hash1 path crafted: '%s'", buff);
         return -EINVAL;
     }
 
@@ -137,11 +137,11 @@ static int test_build_path(const char *obj, const char *tag)
     if (rc)
         return rc;
 
-    printf("PATH MAPPER: o='%s' t='%s': '%s'\n", SAFE_STR(obj), SAFE_STR(tag),
-           buff);
+    pho_info("PATH MAPPER: o='%s' t='%s': '%s'",
+             SAFE_STR(obj), SAFE_STR(tag), buff);
 
     if (!is_clean_path_valid(buff)) {
-        fprintf(stderr, "[ERROR] Invalid clean path crafted: '%s'\n", buff);
+        pho_error(EINVAL, "Invalid clean path crafted: '%s'", buff);
         return -EINVAL;
     }
 
@@ -331,8 +331,8 @@ static int test17(void *hint)
     for (i = NAME_MAX - 3; i <= NAME_MAX + 2; i++) {
         for (j = 0; j < sizeof(tag)/sizeof(*tag); j++) {
             string_of_char(buff, i, sizeof(buff));
-            printf("strlen(obj_id)=%zu, tag=%s\n", strlen(buff),
-                   SAFE_STR(tag[j]));
+            pho_info("strlen(obj_id)=%zu, tag=%s",
+                     strlen(buff), SAFE_STR(tag[j]));
             rc = test_build_path(buff, tag[j]);
             if (rc)
                 return rc;
@@ -343,6 +343,8 @@ static int test17(void *hint)
 
 int main(int argc, char **argv)
 {
+    test_env_initialize();
+
     run_test("Test 0: Simple name crafting",
              test0, NULL, PHO_TEST_SUCCESS);
 
@@ -435,6 +437,6 @@ int main(int argc, char **argv)
              test17, pho_mapper_clean_path, PHO_TEST_SUCCESS);
 
 
-    printf("MAPPER: All tests succeeded\n");
-    return 0;
+    pho_info("MAPPER: All tests succeeded");
+    exit(EXIT_SUCCESS);
 }

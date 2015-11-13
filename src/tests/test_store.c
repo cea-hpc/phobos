@@ -11,6 +11,7 @@
 #include "config.h"
 #endif
 
+#include "pho_test_utils.h"
 #include "phobos_store.h"
 #include "pho_common.h"
 #include <errno.h>
@@ -28,10 +29,7 @@ int main(int argc, char **argv)
     int i;
     int rc;
 
-    if (getenv("DEBUG") != NULL)
-        pho_log_level_set(PHO_LOG_DEBUG);
-    else
-        pho_log_level_set(PHO_LOG_VERB);
+    test_env_initialize();
 
     if (argc < 3) {
         fprintf(stderr, "usage: %s post|put <file> <...>\n", argv[0]);
@@ -51,7 +49,7 @@ int main(int argc, char **argv)
 
         rc = pho_attr_set(&attrs, "program", argv[0]);
         if (rc)
-            return rc;
+            exit(EXIT_FAILURE);
 
         for (i = 2; i < argc; i++) {
             xfer.xd_objid = realpath(argv[i], fullp);
@@ -61,7 +59,7 @@ int main(int argc, char **argv)
 
             rc = phobos_put(&xfer);
             if (rc)
-                fprintf(stderr, "PUT %s failed\n", argv[i]);
+                pho_error(rc, "PUT '%s' failed", argv[i]);
         }
 
         pho_attrs_free(&attrs);
@@ -79,7 +77,7 @@ int main(int argc, char **argv)
 
         rc = pho_attr_set(&attrs, "program", argv[0]);
         if (rc)
-            return rc;
+            exit(EXIT_FAILURE);
 
         argv += 2;
         argc -= 2;
@@ -93,7 +91,7 @@ int main(int argc, char **argv)
 
         rc = phobos_mput(xfer, xfer_cnt);
         if (rc)
-            fprintf(stderr, "MPUT failed\n");
+            pho_error(rc, "MPUT failed");
 
         pho_attrs_free(&attrs);
     } else if (!strcmp(argv[1], "get")) {
@@ -104,8 +102,9 @@ int main(int argc, char **argv)
 
         rc = phobos_get(&xfer);
     } else {
-        fprintf(stderr, "verb put|post|get expected at '%s'\n", argv[1]);
         rc = -EINVAL;
+        pho_error(rc, "verb put|post|get expected at '%s'\n", argv[1]);
     }
-    return rc;
+
+    exit(rc ? EXIT_FAILURE : EXIT_SUCCESS);
 }

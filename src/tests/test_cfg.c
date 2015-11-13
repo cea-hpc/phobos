@@ -84,22 +84,22 @@ static int test(void *hint)
         /* if value is NULL: -ENOATTR is expected */
         if (item->value == NULL) {
             if (rc != -ENOATTR) {
-                fprintf(stderr, "pho_cfg_get_val(%s, %s, ...): -ENOATTR "
-                        "expected (got %d)\n", item->section, item->variable,
-                        rc);
-                return rc ? rc : -EINVAL;
+                int rc2 = rc ? rc : -EINVAL;
+                pho_error(rc2, "pho_cfg_get_val(%s, %s, ...): -ENOATTR expected"
+                          " (got %d)", item->section, item->variable, rc);
+                return rc2;
             }
             /* else: OK */
         } else if (rc) {
-            fprintf(stderr, "pho_cfg_get_val(%s, %s, ...) returned error %d\n",
+            pho_error(rc, "pho_cfg_get_val(%s, %s, ...) returned error %d",
                     item->section, item->variable, rc);
             return rc;
         } else {
             if (strcmp(val, item->value)) {
-                fprintf(stderr, "unexpected value for '%s'::'%s':"
-                        " '%s' != '%s'\n", item->section, item->variable, val,
-                        item->value);
-                return -EINVAL;
+                rc = -EINVAL;
+                pho_error(rc, "unexpected value for '%s'::'%s': '%s' != '%s'",
+                          item->section, item->variable, val, item->value);
+                return rc;
             }
         }
     }
@@ -111,7 +111,7 @@ int main(int argc, char **argv)
     int rc;
     char *test_bin, *test_dir, *test_file;
 
-    pho_log_level_set(PHO_LOG_DEBUG);
+    test_env_initialize();
 
     run_test("Test 1: get variables before anything is set",
              test, test_env_items, PHO_TEST_FAILURE);
@@ -119,8 +119,10 @@ int main(int argc, char **argv)
              test, test_file_items, PHO_TEST_FAILURE);
 
     rc = populate_env();
-    if (rc)
-        return rc;
+    if (rc) {
+        pho_error(rc, "populate_env failed");
+        exit(EXIT_FAILURE);
+    }
 
     run_test("Test 3: get variables from env", test, test_env_items,
              PHO_TEST_SUCCESS);
@@ -149,6 +151,6 @@ int main(int argc, char **argv)
     run_test("Test 8: get variables from env (after loading file)",
              test, test_env_items, PHO_TEST_SUCCESS);
 
-    printf("CFG: All tests succeeded\n");
-    return 0;
+    pho_info("CFG: All tests succeeded");
+    exit(EXIT_SUCCESS);
 }
