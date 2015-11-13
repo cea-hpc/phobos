@@ -152,7 +152,7 @@ static int read_next_element_status(const struct element_descriptor *elmt,
         trim_spaces(elem_out->vol);
     }
 
-    if (elem_out->type == TYPE_DRIVE) {
+    if (elem_out->type == SCSI_TYPE_DRIVE) {
         /* id length (host endianess) */
         int id_len = elmt->alt_info.dev.id_len;
 

@@ -13,10 +13,10 @@
 static const char *type2str(enum element_type_code code)
 {
     switch (code) {
-    case TYPE_ARM:  return "arm";
-    case TYPE_SLOT: return "slot";
-    case TYPE_IMPEXP: return "import/export";
-    case TYPE_DRIVE: return "drive";
+    case SCSI_TYPE_ARM:  return "arm";
+    case SCSI_TYPE_SLOT: return "slot";
+    case SCSI_TYPE_IMPEXP: return "import/export";
+    case SCSI_TYPE_DRIVE: return "drive";
     default:    return "?";
     }
 }
@@ -33,21 +33,21 @@ static int16_t arm_addr = UNSET;
 static void save_test_elements(const struct element_status *element)
 {
     switch (element->type) {
-    case TYPE_DRIVE:
+    case SCSI_TYPE_DRIVE:
         if (full_drive == UNSET && element->full)
             full_drive = element->address;
         else if (empty_drive == UNSET && !element->full)
             empty_drive = element->address;
         break;
 
-    case TYPE_SLOT:
+    case SCSI_TYPE_SLOT:
         if (free_slot == UNSET && !element->full)
             free_slot = element->address;
         else if (full_slot == UNSET && element->full)
             full_slot = element->address;
         break;
 
-    case TYPE_ARM:
+    case SCSI_TYPE_ARM:
         if (arm_addr == UNSET)
             arm_addr = element->address;
         break;
@@ -86,7 +86,7 @@ static void print_element(const struct element_status *element)
 
     first = true;
 
-    if (element->type == TYPE_IMPEXP) {
+    if (element->type == SCSI_TYPE_IMPEXP) {
         printf("%s%s", first ? "" : ",",
                element->impexp ? "import" : "export");
         first = false;
@@ -126,7 +126,7 @@ static int single_element_status(int fd, uint16_t addr)
     struct element_status *list = NULL;
     int lcount = 0;
 
-    rc = element_status(fd, TYPE_ALL, addr, 1, false, &list, &lcount);
+    rc = element_status(fd, SCSI_TYPE_ALL, addr, 1, false, &list, &lcount);
     if (rc) {
         fprintf(stderr, "status ERROR %d\n", rc);
         return rc;
@@ -158,7 +158,7 @@ int main(int argc, char **argv)
     printf("arms: first=%#hX, nb=%d\n",
         msi.arms.first_addr,
         msi.arms.nb);
-    rc = element_status(fd, TYPE_ARM, msi.arms.first_addr, msi.arms.nb,
+    rc = element_status(fd, SCSI_TYPE_ARM, msi.arms.first_addr, msi.arms.nb,
                 false, &list, &lcount);
     if (rc) {
         fprintf(stderr, "element_status ERROR %d\n", rc);
@@ -170,7 +170,7 @@ int main(int argc, char **argv)
     printf("slots: first=%#hX, nb=%d\n",
         msi.slots.first_addr,
         msi.slots.nb);
-    rc = element_status(fd, TYPE_SLOT, msi.slots.first_addr,  msi.slots.nb,
+    rc = element_status(fd, SCSI_TYPE_SLOT, msi.slots.first_addr,  msi.slots.nb,
                 false, &list, &lcount);
     if (rc) {
         fprintf(stderr, "element_status ERROR %d\n", rc);
@@ -182,8 +182,8 @@ int main(int argc, char **argv)
     printf("imp/exp: first=%#hX, nb=%d\n",
         msi.impexp.first_addr,
         msi.impexp.nb);
-    rc = element_status(fd, TYPE_IMPEXP, msi.impexp.first_addr,  msi.impexp.nb,
-                false, &list, &lcount);
+    rc = element_status(fd, SCSI_TYPE_IMPEXP, msi.impexp.first_addr,
+                        msi.impexp.nb, false, &list, &lcount);
     if (rc) {
         fprintf(stderr, "element_status ERROR %d\n", rc);
         exit(rc);
@@ -194,8 +194,8 @@ int main(int argc, char **argv)
     printf("drives: first=%#hX, nb=%d\n",
         msi.drives.first_addr,
         msi.drives.nb);
-    rc = element_status(fd, TYPE_DRIVE, msi.drives.first_addr,  msi.drives.nb,
-                false, &list, &lcount);
+    rc = element_status(fd, SCSI_TYPE_DRIVE, msi.drives.first_addr,
+                        msi.drives.nb, false, &list, &lcount);
     if (rc) {
         fprintf(stderr, "element_status ERROR %d\n", rc);
         exit(rc);

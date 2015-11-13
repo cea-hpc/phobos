@@ -46,11 +46,11 @@ int mode_sense(int fd, struct mode_sense_info *info);
 
 /** type of elements to retrieve with element_status() */
 enum element_type_code {
-    TYPE_ALL    = 0,
-    TYPE_ARM    = 1, /**< medium transport element (arm) */
-    TYPE_SLOT   = 2, /**< storage element (slot) */
-    TYPE_IMPEXP = 3, /**< import/export element (impexp)*/
-    TYPE_DRIVE  = 4  /**< data transport element (drive) */
+    SCSI_TYPE_ALL    = 0,
+    SCSI_TYPE_ARM    = 1, /**< medium transport element (arm) */
+    SCSI_TYPE_SLOT   = 2, /**< storage element (slot) */
+    SCSI_TYPE_IMPEXP = 3, /**< import/export element (impexp)*/
+    SCSI_TYPE_DRIVE  = 4  /**< data transport element (drive) */
 };
 
 struct element_status {
