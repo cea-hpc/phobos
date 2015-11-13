@@ -86,4 +86,41 @@ int ldm_fs_umount(enum fs_type fs, const char *dev_path,
  */
 int ldm_fs_format(enum fs_type fs, const char *dev_path, const char *label);
 
+
+/**
+ * Populate drive serial / name cache in memory.
+ */
+int lintape_map_load(void);
+
+/**
+ * Free the device serial cache.
+ */
+void lintape_map_free(void);
+
+/**
+ * Retrieve device path like "/dev/IBMtape0" for a given lin_tape drive.
+ * This will trigger ldm_serial_cache_load() if the cache was not
+ * previously initialized.
+ *
+ * @param(in)   serial     Device serial, like "1234567".
+ * @param(out)  path       Destination buffer for device path.
+ * @param(in)   path_size  Destination buffer size.
+ *
+ * @return 0 on success, -errno on failure.
+ */
+int lintape_dev_lookup(const char *serial, char *path, size_t path_size);
+
+/**
+ * Retrieve device serial for a given lin_tape device name.
+ * This will trigger ldm_serial_cache_load() if the cache was not
+ * previously initialized.
+ *
+ * @param(in)   name         Device nale, like "IBMtape0".
+ * @param(out)  serial       Destination buffer for serial.
+ * @param(in)   serial_size  Destination buffer size.
+ *
+ * @return 0 on success, -errno on failure.
+ */
+int lintape_dev_rlookup(const char *name, char *serial, size_t serial_size);
+
 #endif

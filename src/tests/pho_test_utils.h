@@ -18,6 +18,7 @@
 #include <string.h>
 #include <assert.h>
 
+#include "pho_common.h"
 
 typedef int (*pho_unit_test_t)(void *);
 
@@ -30,6 +31,11 @@ static inline int run_test(const char *descr, pho_unit_test_t test, void *hint,
                            enum pho_test_result xres)
 {
     int rc;
+
+    if (getenv("DEBUG"))
+        pho_log_level_set(PHO_LOG_DEBUG);
+    else
+        pho_log_level_set(PHO_LOG_VERB);
 
     assert(descr != NULL);
     assert(test != NULL);
