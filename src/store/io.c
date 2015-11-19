@@ -623,6 +623,14 @@ static const struct io_adapter posix_adapter = {
     .ioa_flush     = pho_posix_sync,
 };
 
+/** LTFS adapter with specialized flush function */
+static const struct io_adapter ltfs_adapter = {
+    .ioa_put       = pho_posix_put,
+    .ioa_get       = pho_posix_get,
+    .ioa_del       = pho_posix_del,
+    .ioa_flush     = pho_ltfs_sync,
+};
+
 
 bool io_adapter_is_valid(const struct io_adapter *ioa)
 {
@@ -643,8 +651,7 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa)
 {
     switch (fstype) {
     case PHO_FS_LTFS:
-        *ioa = posix_adapter;
-        ioa->ioa_flush = pho_ltfs_sync;
+        *ioa = ltfs_adapter;
         break;
     case PHO_FS_POSIX:
         *ioa = posix_adapter;
@@ -653,6 +660,9 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa)
         pho_error(-EINVAL, "Invalid FS type %#x", fstype);
         return -EINVAL;
     }
+
+    /* Man, that would be so bad... */
+    assert(io_adapter_is_valid(ioa));
 
     return 0;
 }
