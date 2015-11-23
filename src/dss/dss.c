@@ -284,6 +284,12 @@ static const char * const lock_query[] = {
                          "lock='')",
 };
 
+static const char * const simple_lock_query[] = {
+    [DSS_UNLOCK_QUERY] = "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s;",
+    [DSS_LOCK_QUERY] =   "UPDATE %s SET lock='%s:%u', "
+                         "lock_ts=extract(epoch from NOW()) "
+                         "WHERE lock='' AND IN %s;",
+};
 /**
  * Extract media statistics from json
  *
@@ -1070,9 +1076,15 @@ int dss_lock(struct dss_handle *handle, void *item_list, int item_cnt,
 
     if (gethostname(hostname, HOST_NAME_MAX))
         LOG_GOTO(out_cleanup, rc = -errno, "Cannot get hostname");
-    g_string_printf(request, lock_query[DSS_LOCK_QUERY], dss_type2str(type),
-                    hostname, getpid(), ids->str, item_cnt,
-                    dss_type2str(type),  ids->str);
+
+    if (item_cnt == 1)
+        g_string_printf(request, simple_lock_query[DSS_LOCK_QUERY],
+                        dss_type2str(type), hostname, getpid(),
+                        ids->str);
+    else
+        g_string_printf(request, lock_query[DSS_LOCK_QUERY], dss_type2str(type),
+                        hostname, getpid(), ids->str, item_cnt,
+                        dss_type2str(type),  ids->str);
 
     pho_debug("Executing request: '%s'", request->str);
     res = PQexec(conn, request->str);
@@ -1113,8 +1125,13 @@ int dss_unlock(struct dss_handle *handle, void *item_list, int item_cnt,
     if (rc)
         LOG_GOTO(out_cleanup, rc, "Ids list build failed");
 
-    g_string_printf(request, lock_query[DSS_UNLOCK_QUERY], dss_type2str(type),
-                    ids->str, item_cnt, dss_type2str(type), ids->str);
+    if (item_cnt == 1)
+        g_string_printf(request, simple_lock_query[DSS_UNLOCK_QUERY],
+                        dss_type2str(type), ids->str);
+    else
+        g_string_printf(request, lock_query[DSS_UNLOCK_QUERY],
+                        dss_type2str(type), ids->str, item_cnt,
+                        dss_type2str(type), ids->str);
 
     pho_debug("Executing request: '%s'", request->str);
     res = PQexec(conn, request->str);
