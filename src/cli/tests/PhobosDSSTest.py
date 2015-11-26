@@ -11,15 +11,17 @@ import unittest
 from random import randint
 
 from phobos.dss import Client
-from phobos.dss import dev_family2str
 from phobos.dss import GenericError as DSSError
 
 from phobos.capi.dss import layout_info, media_info, dev_info, PHO_DEV_DIR
+from phobos.capi.dss import dev_family2str
+
 
 class DSSClientTest(unittest.TestCase):
     """
     This test case issue requests to the DSS to stress the python bindings.
     """
+
     def test_client_connect(self):
         """Connect to backend with valid parameters."""
         cli = Client()
@@ -39,24 +41,24 @@ class DSSClientTest(unittest.TestCase):
         cli = Client()
         cli.connect(dbname='phobos', user='phobos', password='phobos')
         for fam in ('tape', 'disk', 'dir'):
-            for x in cli.devices.get(family=fam):
-                self.assertEqual(dev_family2str(x.family), fam)
+            for dev in cli.devices.get(family=fam):
+                self.assertEqual(dev_family2str(dev.family), fam)
         cli.disconnect()
 
     def test_list_media(self):
         """List media."""
         cli = Client()
         cli.connect(dbname='phobos', user='phobos', password='phobos')
-        for x in cli.media.get():
-            self.assertTrue(isinstance(x, media_info))
+        for mda in cli.media.get():
+            self.assertTrue(isinstance(mda, media_info))
         cli.disconnect()
 
     def test_list_extents(self):
         """List extents."""
         cli = Client()
         cli.connect(dbname='phobos', user='phobos', password='phobos')
-        for x in cli.extents.get():
-            self.assertTrue(isinstance(x, layout_info))
+        for ext in cli.extents.get():
+            self.assertTrue(isinstance(ext, layout_info))
         cli.disconnect()
 
     def test_getset(self):
@@ -75,9 +77,9 @@ class DSSClientTest(unittest.TestCase):
         self.assertEqual(rc, 0)
 
         res = cli.devices.get(serial=dev.serial)
-        for x in res:
-            self.assertTrue(isinstance(x, dev_info))
-            self.assertEqual(x.serial, dev.serial)
+        for devt in res:
+            self.assertTrue(isinstance(devt, dev_info))
+            self.assertEqual(devt.serial, dev.serial)
 
         rc = cli.devices.delete(res)
         self.assertEqual(rc, 0)

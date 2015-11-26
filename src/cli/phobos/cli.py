@@ -36,18 +36,23 @@ from ClusterShell.NodeSet import NodeSet
 
 
 def csv_dump(data):
+    """Convert a list of dictionaries to a csv string"""
+
     outbuf = StringIO.StringIO()
     writer = csv.DictWriter(outbuf, data[0].keys())
-    if sys.version_info >= (2, 7):
+    if hasattr(writer, 'writeheader'):
+        #pylint: disable=no-member
         writer.writeheader()
     else:
-        writer.writerow(dict((i, i) for i in data[0].keys()))
+        writer.writerow(dict((item, item) for item in data[0]))
     writer.writerows(data)
     out = outbuf.getvalue()
     outbuf.close()
     return out
 
 def xml_dump(data, item_type='item'):
+    """Convert a list of dictionaries to xml"""
+
     top = xml.etree.ElementTree.Element('phobos')
     for item in data:
         children = xml.etree.ElementTree.Element(item_type, **item)
@@ -57,12 +62,13 @@ def xml_dump(data, item_type='item'):
     return reparsed.toprettyxml(indent="  ")
 
 def human_dump(data, item_type='item'):
+    """Convert a list of dictionaries to human readable text"""
     title = " %s " % (item_type)
     out = " {0:_^50}\n".format(str(title))
     for item in data:
         vals = []
-        for k in item:
-            vals.append(" |{0:<20}|{1:<27}|".format(k,item[k]))
+        for key in item:
+            vals.append(" |{0:<20}|{1:<27}|".format(key, item[key]))
         out = out+ "\n".join(vals) + "\n {0:_^50}\n".format("")
     return out
 
@@ -71,46 +77,47 @@ def dump_object_list(objs, fmt="human", numeric=False):
     Helper for user friendly object display.
     """
     display = {
-    cdss.dev_info:('serial', ['adm_status', 'changer_idx', 'family',
-                   'host', 'model', 'path', 'serial']),
-    cdss.media_info:('model',['adm_status', 'fs_status', 'fs_type'])
+        cdss.dev_info:('serial', ['adm_status', 'changer_idx', 'family',
+                                  'host', 'model', 'path', 'serial']),
+        cdss.media_info:('model', ['adm_status', 'fs_status', 'fs_type'])
     }
 
     formats = {
-    'json' : json.dumps,
-    'yaml' : yaml.dump,
-    'xml'  : xml_dump,
-    'csv'  : csv_dump,
-    'human': human_dump,
+        'json' : json.dumps,
+        'yaml' : yaml.dump,
+        'xml'  : xml_dump,
+        'csv'  : csv_dump,
+        'human': human_dump,
     }
 
     formatter = formats.get(fmt)
     if formatter is None:
         logger = logging.getLogger(__name__)
-        logger.error("Unkown output format:", format)
+        logger.error("Unknown output format: %s", fmt)
         return
 
     #Is an instance of a known class ?
     dclass = None
-    for k in display:
-        if isinstance(objs[0], k):
-            dclass = k
+    for key in display:
+        if isinstance(objs[0], key):
+            dclass = key
 
     if not dclass:
         logger = logging.getLogger(__name__)
-        logger.error("No model found to display this class:", objs[0].__class__.__name__)
+        logger.error("No model found to display this class: %s",
+                     objs[0].__class__.__name__)
         return
 
-    objlist=[]
+    objlist = []
     #Build a dict with attributs to export/output
     for obj in objs:
-        objext={}
-        for k in display[dclass][1]:
-            if not numeric and hasattr(cdss, '%s2str' % k):
-                method = getattr(cdss, '%s2str' % k )
-                objext[k] = method(getattr(obj,k))
+        objext = {}
+        for key in display[dclass][1]:
+            if not numeric and hasattr(cdss, '%s2str' % key):
+                method = getattr(cdss, '%s2str' % key)
+                objext[key] = method(getattr(obj, key))
             else:
-                objext[k] = str(getattr(obj,k))
+                objext[key] = str(getattr(obj, key))
         objlist.append(objext)
 
     #Print formatted objects
@@ -328,7 +335,8 @@ class DirOptHandler(BaseOptHandler):
     ]
 
     def exec_add(self):
-        print 'DIR ADD'
+        """Add a new directory"""
+        self.logger.error("Dir add is not implemented")
 
     def exec_list(self):
         """List directories as devices."""
@@ -337,24 +345,25 @@ class DirOptHandler(BaseOptHandler):
 
     def exec_show(self):
         """Show directory details."""
-        dirs=[]
+        dirs = []
         for serial in self.params.get('res'):
             wdir = self.client.devices.get(family='dir', serial=serial)
             if not wdir:
-                self.logger.warning("Serial %s not found" % serial)
+                self.logger.warning("Serial %s not found", serial)
                 continue
             assert len(wdir) == 1
             dirs.append(wdir[0])
-        dump_object_list(dirs, self.params.get('format'), \
+        dump_object_list(dirs, self.params.get('format'),
                          self.params.get('numeric'))
 
 
     def exec_lock(self):
-        print 'DIR LOCK'
+        """Lock a directory"""
+        self.logger.error("Dir lock is not implemented")
 
     def exec_unlock(self):
-        print 'DIR UNLOCK'
-
+        """Unlock a directory"""
+        self.logger.error("Dir unlock is not implemented")
 
 class DriveOptHandler(BaseOptHandler):
     """Tape Drive options and actions."""
@@ -369,7 +378,8 @@ class DriveOptHandler(BaseOptHandler):
     ]
 
     def exec_add(self):
-        print 'DRIVE ADD'
+        """Add a new drive"""
+        self.logger.error("Drive add is not implemented")
 
     def exec_list(self):
         """List all drives."""
@@ -383,26 +393,28 @@ class DriveOptHandler(BaseOptHandler):
         for serial in self.params.get('res'):
             drive = self.client.devices.get(family='tape', serial=serial)
             if not drive:
-                self.logger.warning("Serial %s not found" % serial)
+                self.logger.warning("Serial %s not found", serial)
                 continue
             assert len(drive) == 1
             drives.append(drive[0])
-        dump_object_list(drives, self.params.get('format'),\
+        dump_object_list(drives, self.params.get('format'),
                          self.params.get('numeric'))
 
     def exec_lock(self):
         """Drive lock"""
         drives = []
         serials = self.params.get('res')
+
         for serial in serials:
             drive = self.client.devices.get(serial=serial)
             if drive[0].lock.lock != "":
                 if self.params.get('force'):
-                    self.logger.warn("Drive %s is in use. Administrative" \
-                            " locking will not be effective immediately" % serial)
+                    self.logger.warn("Drive %s is in use. Administrative "
+                                     "locking will not be effective "
+                                     "immediately", serial)
                 else:
-                    self.logger.error("Drive %s is in use by %s." % \
-                                       (serial, drive[0].lock.lock));
+                    self.logger.error("Drive %s is in use by %s.",
+                                      serial, drive[0].lock.lock)
                     continue
             drive[0].adm_status = cdss.PHO_DEV_ADM_ST_LOCKED
             drives.append(drive[0])
@@ -410,39 +422,40 @@ class DriveOptHandler(BaseOptHandler):
             rc = self.client.devices.update(drives)
         else:
             rc = errno.EPERM
-            self.logger.error("One or more drives are in use, use --force")
+            self.logger.error("At least one drive is in use, use --force")
 
         if not rc:
             print "%d drive(s) locked" % len(drives)
         else:
-            self.logger.error("Failed to lock one or more drive(s), error: %s" %
-                             os.strerror(abs(rc)))
+            self.logger.error("Failed to lock one or more drive(s), error: %s",
+                              os.strerror(abs(rc)))
 
     def exec_unlock(self):
         """Drive unlock"""
         drives = []
         serials = self.params.get('res')
+
         for serial in serials:
             drive = self.client.devices.get(serial=serial)
             if drive[0].lock.lock != "" and not self.params.get('force'):
-                self.logger.error("Drive %s is in use by %s." % \
-                                  (serial, drive[0].lock.lock));
+                self.logger.error("Drive %s is in use by %s.",
+                                  serial, drive[0].lock.lock)
                 continue
             if drive[0].adm_status == cdss.PHO_DEV_ADM_ST_UNLOCKED:
-                self.logger.warn("Drive %s is already unlocked" % serial)
+                self.logger.warn("Drive %s is already unlocked", serial)
             drive[0].adm_status = cdss.PHO_DEV_ADM_ST_UNLOCKED
             drives.append(drive[0])
         if len(drives) == len(serials):
             rc = self.client.devices.update(drives)
         else:
             rc = errno.EPERM
-            self.logger.error("One or more drives are in use, use --force")
+            self.logger.error("At least one drive is in use, use --force")
 
         if not rc:
             print "%d drive(s) unlocked" % len(drives)
         else:
-            self.logger.error("Failed to unlock one or more drive(s), error: %s" %
-                             os.strerror(abs(rc)))
+            self.logger.error("Failed to unlock one or more drive(s)"
+                              ", error: %s", os.strerror(abs(rc)))
 
 class TapeOptHandler(BaseOptHandler):
     """Magnetic tape options and actions."""
@@ -472,7 +485,7 @@ class TapeOptHandler(BaseOptHandler):
                 media.adm_status = cdss.PHO_DEV_ADM_ST_UNLOCKED
             else:
                 media.adm_status = cdss.PHO_DEV_ADM_ST_LOCKED
-            media.stats =  cdss.media_stats()
+            media.stats = cdss.media_stats()
             cdss.media_id_set(media.id, tape)
             media_list.append(media)
 
@@ -480,7 +493,8 @@ class TapeOptHandler(BaseOptHandler):
         if not rc:
             print "%d tape(s) added" % len(media_list)
         else:
-            self.logger.error("Failed to add tape(s), error: %s" % os.strerror(abs(rc)))
+            self.logger.error("Failed to add tape(s), error: %s",
+                              os.strerror(abs(rc)))
 
     def exec_format(self):
         """Format tape to LTFS. No Alternative."""
@@ -504,11 +518,11 @@ class TapeOptHandler(BaseOptHandler):
         for uid in uids:
             tape = self.client.media.get(family='tape', id=uid)
             if not tape:
-                self.logger.warning("Tape id %s not found" % uid)
+                self.logger.warning("Tape id %s not found", uid)
                 continue
             assert len(tape) == 1
             tapes.append(tape[0])
-        dump_object_list(tapes, self.params.get('format'), \
+        dump_object_list(tapes, self.params.get('format'),
                          self.params.get('numeric'))
 
     def exec_list(self):
@@ -517,6 +531,7 @@ class TapeOptHandler(BaseOptHandler):
             print cdss.media_id_get(tape.id)
 
     def exec_lock(self):
+        """Lock tapes"""
         print 'Tape lock'
         tapes = []
         uids = NodeSet.fromlist(self.params.get('res'))
@@ -525,11 +540,12 @@ class TapeOptHandler(BaseOptHandler):
 
             if tape[0].lock.lock != "":
                 if self.params.get('force'):
-                    self.logger.warn("Tape %s is in use. Administrative" \
-                            " locking will not be effective immediately" % uid)
+                    self.logger.warn("Tape %s is in use. Administrative "
+                                     "locking will not be effective "
+                                     "immediately", uid)
                 else:
-                    self.logger.error("Tape %s is in use by %s." % \
-                                     (uid, tape[0].lock.lock));
+                    self.logger.error("Tape %s is in use by %s.",
+                                      uid, tape[0].lock.lock)
                     continue
 
             tape[0].adm_status = cdss.PHO_MDA_ADM_ST_LOCKED
@@ -539,27 +555,28 @@ class TapeOptHandler(BaseOptHandler):
             rc = self.client.media.update(tapes)
         else:
             rc = errno.EPERM
-            self.logger.error("One or more tapes are in use, use --force")
+            self.logger.error("At least one tape is in use, use --force")
 
         if not rc:
             print "%d tape(s) locked" % len(tapes)
         else:
-            self.logger.error("Failed to lock one or more tape(s), error: %s" %
-                             os.strerror(abs(rc)))
+            self.logger.error("Failed to lock one or more tape(s), error: %s",
+                              os.strerror(abs(rc)))
 
     def exec_unlock(self):
+        """Unlock tapes"""
         print 'Tape unlock'
         tapes = []
         uids = NodeSet.fromlist(self.params.get('res'))
         for uid in uids:
             tape = self.client.media.get(id=uid)
             if tape[0].lock.lock != "" and not self.params.get('force'):
-                self.logger.error("Tape %s is in use by %s." % \
-                                  (uid, tape[0].lock.lock));
+                self.logger.error("Tape %s is in use by %s",
+                                  uid, tape[0].lock.lock)
                 continue
 
             if tape[0].adm_status == cdss.PHO_MDA_ADM_ST_UNLOCKED:
-                self.logger.warn("Tape %s is already unlocked" % uid)
+                self.logger.warn("Tape %s is already unlocked", uid)
 
             tape[0].adm_status = cdss.PHO_MDA_ADM_ST_UNLOCKED
             tapes.append(tape[0])
@@ -568,13 +585,13 @@ class TapeOptHandler(BaseOptHandler):
             rc = self.client.media.update(tapes)
         else:
             rc = errno.EPERM
-            self.logger.error("One or more tapes are not locked, use --force")
+            self.logger.error("At least one tape is not locked, use --force")
 
         if not rc:
             print "%d tape(s) unlocked" % len(tapes)
         else:
-            self.logger.error("Failed to unlock one or more tape(s), error: %s" %
-                             os.strerror(abs(rc)))
+            self.logger.error("Failed to unlock one or more tape(s), "
+                              "error: %s", os.strerror(abs(rc)))
 
 class PhobosActionContext(object):
     """
@@ -586,7 +603,7 @@ class PhobosActionContext(object):
                          "[%(funcName)s:%(filename)s:%(lineno)d] %(message)s"
 
     default_conf_file = '/etc/phobos.conf'
-    supported_objects = [ DirOptHandler, DriveOptHandler, TapeOptHandler ]
+    supported_objects = [DirOptHandler, DriveOptHandler, TapeOptHandler]
 
     def __init__(self, args, **kwargs):
         """Initialize a PAC instance."""
@@ -608,9 +625,9 @@ class PhobosActionContext(object):
 
         verb_grp = self.parser.add_mutually_exclusive_group()
         verb_grp.add_argument('-v', '--verbose', help='Increase verbosity',
-                                 action='count', default=0)
+                              action='count', default=0)
         verb_grp.add_argument('-q', '--quiet', help='Decrease verbosity',
-                                 action='count', default=0)
+                              action='count', default=0)
 
         self.parser.add_argument('-c', '--config',
                                  default=self.default_conf_file,
@@ -664,7 +681,6 @@ class PhobosActionContext(object):
         pho_logging.set_callback(phobos_log_handler)
         pho_logging.set_level(pylvl)
 
-        logger = logging.getLogger(__name__)
         logging.basicConfig(level=pylvl, format=fmt)
 
     def run(self):

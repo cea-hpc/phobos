@@ -1,3 +1,5 @@
 #!/bin/bash
+
 dir=$(dirname $(readlink -m $0))
-exec git diff --cached --format=email | $dir/checkpatch.pl --patch --no-tree -q -
+exec git diff --cached --format=email | $dir/checkpatch.pl --patch --no-tree -q - || exit $?
+exec git diff --cached --name-only | grep "\.py$" | xargs -r pylint --rcfile $dir/../.pylintrc || exit $?

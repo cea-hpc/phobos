@@ -52,13 +52,13 @@ def key_convert(obj_type, key):
 def dss_filter(obj_type, **kwargs):
     """Convert a k/v filter into a CDSS-compatible list of criteria."""
     filt = []
-    for k, v in kwargs.iteritems():
-        k, comp = key_convert(obj_type, k)
+    for key, val in kwargs.iteritems():
+        key, comp = key_convert(obj_type, key)
         crit = cdss.dss_crit()
-        crit.crit_name = k;
-        crit.crit_cmp  = comp
-        crit.crit_val  = cdss.dss_val()
-        cdss.str2dss_val_fill(k, str(v), crit.crit_val)
+        crit.crit_name = key
+        crit.crit_cmp = comp
+        crit.crit_val = cdss.dss_val()
+        cdss.str2dss_val_fill(key, str(val), crit.crit_val)
         filt.append(crit)
     return filt
 
@@ -76,14 +76,17 @@ class ObjectManager(object):
         return method(self.client.handle, dss_filter(self.obj_type, **kwargs))
 
     def insert(self, objects):
+        """Insert objects into DSS"""
         method = getattr(cdss, 'dss_%s_set' % self.obj_type)
         return method(self.client.handle, objects, cdss.DSS_SET_INSERT)
 
     def update(self, objects):
+        """Update objects in DSS"""
         method = getattr(cdss, 'dss_%s_set' % self.obj_type)
         return method(self.client.handle, objects, cdss.DSS_SET_UPDATE)
 
     def delete(self, objects):
+        """Delete objects from DSS"""
         method = getattr(cdss, 'dss_%s_set' % self.obj_type)
         return method(self.client.handle, objects, cdss.DSS_SET_DELETE)
 
@@ -115,8 +118,8 @@ class Client(object):
             conn_info = ' '.join(['%s=%s' % (k, v) for k, v in kwargs.items()])
 
         self.handle = cdss.dss_handle()
-        rc = cdss.dss_init(conn_info, self.handle)
-        if rc != 0:
+        rcode = cdss.dss_init(conn_info, self.handle)
+        if rcode != 0:
             raise GenericError('DSS initialization failed')
 
     def disconnect(self):
@@ -124,8 +127,3 @@ class Client(object):
         if self.handle is not None:
             cdss.dss_fini(self.handle)
             self.handle = None
-
-
-# Expose low-level converters to upper layers.
-# XXX add new ones as need grows
-dev_family2str = cdss.dev_family2str
