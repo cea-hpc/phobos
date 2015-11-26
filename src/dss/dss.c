@@ -135,8 +135,9 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
                                GString *clause)
 {
 
-    char *escape_string;
+    char        *escape_string;
     unsigned int escape_len;
+    int          error;
 
     g_string_append_printf(clause, "%s %s ",
                            dss_fields2str(crit->crit_name),
@@ -178,9 +179,13 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
         if (!escape_string)
             return -ENOMEM;
 
-        /** @todo: check error in case of encoding issue ? */
         PQescapeStringConn(conn, escape_string, crit->crit_val.val_str,
-                           escape_len, NULL);
+                           escape_len, &error);
+        if (error) {
+                free(escape_string);
+                LOG_RETURN(-EINVAL, "Multibyte encoding error");
+        }
+
         if (dss_fields2type(crit->crit_name) == DSS_VAL_ARRAY)
             g_string_append_printf(clause, "array['%s']", escape_string);
         else
@@ -884,8 +889,7 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
                 str2adm_status(PQgetvalue(res, i, 3));
             p_dev->host   = PQgetvalue(res, i, 4);
             p_dev->path   = PQgetvalue(res, i, 5);
-            /** @todo replace atoi by proper pq function */
-            p_dev->changer_idx = atoi(PQgetvalue(res, i, 6));
+            p_dev->changer_idx = (int)strtol(PQgetvalue(res, i, 6), NULL, 10);
             p_dev->lock.lock = PQgetvalue(res, i, 7);
             p_dev->lock.lock_ts = strtoul(PQgetvalue(res, i, 8), NULL, 10);
         }
@@ -925,7 +929,8 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
             struct layout_info *p_layout = &dss_res->u.layout[i];
 
             p_layout->oid =  PQgetvalue(res, i, 0);
-            p_layout->copy_num = atoi(PQgetvalue(res, i, 1));
+            p_layout->copy_num = (unsigned int)strtoul(PQgetvalue(res, i, 1),
+                                                       NULL, 10);
             p_layout->state = str2extent_state(PQgetvalue(res, i, 2));
             p_layout->type = str2layout_type(PQgetvalue(res, i, 3));
             /*@todo info */
