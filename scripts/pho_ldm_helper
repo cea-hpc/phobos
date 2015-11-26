@@ -159,7 +159,7 @@ function format_ltfs
 	local drive=$(readlink -m "$1") # convert link to /dev/IBMtape*
 	local label=$2
 
-	mkltfs -n "$drive" -n "$label" || exit 1
+	mkltfs -f -d "$drive" -n "$label" || exit 1
 }
 
 function usage

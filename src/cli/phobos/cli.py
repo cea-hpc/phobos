@@ -30,7 +30,8 @@ import phobos.capi.clogging as pho_logging
 import phobos.capi.dss as cdss
 
 from phobos.config import load_config_file, get_config_value
-from phobos.dss import Client
+from phobos.dss import Client, GenericError
+from phobos.lrs import fs_format
 from ClusterShell.NodeSet import NodeSet
 
 
@@ -294,7 +295,7 @@ class TapeAddOptHandler(AddOptHandler):
         """Add resource-specific options."""
         super(TapeAddOptHandler, cls).add_options(parser)
         parser.add_argument('-t', '--type', required=True, help='tape technology')
-        parser.add_argument('-f', '--fs-type', help='Filesystem type')
+        parser.add_argument('--fs', help='Filesystem type')
 
 
 class FormatOptHandler(BaseOptHandler):
@@ -306,7 +307,7 @@ class FormatOptHandler(BaseOptHandler):
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(FormatOptHandler, cls).add_options(parser)
-        parser.add_argument('-f', '--fs-type', required=True, help='Filesystem type')
+        parser.add_argument('--fs', default='ltfs', help='Filesystem type')
         parser.add_argument('-n', '--nb-streams', metavar='STREAMS', type=int,
                             help='Max number of parallel formatting operations')
         parser.add_argument('--unlock', action='store_true',
@@ -463,7 +464,7 @@ class TapeOptHandler(BaseOptHandler):
 
         for tape in tapes:
             media = cdss.media_info()
-            media.fs_type = cdss.str2fs_type(self.params.get('fs_type'))
+            media.fs_type = cdss.str2fs_type(self.params.get('fs'))
             media.model = self.params.get('type')
             media.addr_type = cdss.PHO_ADDR_PATH
             media.id.type = cdss.PHO_DEV_TAPE
@@ -482,7 +483,19 @@ class TapeOptHandler(BaseOptHandler):
             self.logger.error("Failed to add tape(s), error: %s" % os.strerror(abs(rc)))
 
     def exec_format(self):
-        print 'TAPE FORMAT'
+        """Format tape to LTFS. No Alternative."""
+        tape_list = self.params.get('res')
+        fs_type = self.params.get('fs')
+        unlock = self.params.get('unlock')
+        if unlock:
+            self.logger.debug("Post-unlock enabled")
+        for label in tape_list:
+            self.logger.debug("Formatting tape '%s'", label)
+            try:
+                fs_format(self.client, label, fs_type, unlock=unlock)
+            except GenericError, exc:
+                # XXX add an option to exit on first error
+                self.logger.error("fs_format: %s", exc)
 
     def exec_show(self):
         """Show tape details."""
@@ -540,7 +553,6 @@ class TapeOptHandler(BaseOptHandler):
         uids = NodeSet.fromlist(self.params.get('res'))
         for uid in uids:
             tape = self.client.media.get(id=uid)
-
             if tape[0].lock.lock != "" and not self.params.get('force'):
                 self.logger.error("Tape %s is in use by %s." % \
                                   (uid, tape[0].lock.lock));
