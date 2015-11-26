@@ -1,8 +1,6 @@
 #!/usr/bin/python
 
 # Copyright CEA/DAM 2015
-# Author: Henri Doreau <henri.doreau@cea.fr>
-#
 # This file is part of the Phobos project
 
 from distutils.core import setup, Extension

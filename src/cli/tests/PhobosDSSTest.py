@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
-# Phobos project - CEA/DAM
-# Henri Doreau <henri.doreau@cea.fr>
+# Copyright CEA/DAM 2015
+# This file is part of the Phobos project
 
 """Unit tests for phobos.dss"""
 

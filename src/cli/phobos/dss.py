@@ -1,8 +1,6 @@
 #!/usr/bin/python
 
 # Copyright CEA/DAM 2015
-# Author: Henri Doreau <henri.doreau@cea.fr>
-#
 # This file is part of the Phobos project
 
 """
@@ -99,7 +97,7 @@ class Client(object):
         self.devices = ObjectManager('device', self)
         self.extents = ObjectManager('extent', self)
         self.objects = ObjectManager('object', self)
-        self.media = ObjectManager('media', self)
+        self.media   = ObjectManager('media', self)
 
     def connect(self, **kwargs):
         """
