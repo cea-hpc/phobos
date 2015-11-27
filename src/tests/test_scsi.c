@@ -110,7 +110,7 @@ static void print_element(const struct element_status *element)
         first = false;
     }
 
-    pho_info("%s", gstr->str);
+    pho_debug("%s", gstr->str);
     g_string_free(gstr, TRUE);
 }
 

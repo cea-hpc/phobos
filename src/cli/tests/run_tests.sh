@@ -21,3 +21,6 @@ for test_case in *Test.py
 do
     $PY $test_case || exit 1
 done
+
+# clean test data
+drop_tables
