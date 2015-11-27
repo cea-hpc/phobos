@@ -32,69 +32,96 @@
 /* Maximum serial size (including trailing zero) */
 #define MAX_SERIAL  48
 
+/* Maximum model size (including trailing zero) */
+#define MAX_MODEL  17
+
 /* Maximum number of drives supported */
 #define LDM_MAX_DRIVES  256
+
+/* name of serial number attribute in /sys/class */
+#define SYS_SERIAL_NUMBER   "serial_num"
+/* name of device model attribute in /sys/class */
+#define SYS_DEV_MODEL "device/model"
 
 
 /* In-memory map to associate drive serial and device name */
 struct drive_map_entry {
     char    dme_serial[MAX_SERIAL];  /* 1013005381 - as a string */
+    char    dme_model[MAX_MODEL];    /* ULT3580-TD6 */
     char    dme_devname[IFNAMSIZ];   /* IBMTape0 */
 };
 
 /* Singly-linked list of structures that describe available drives */
 static GSList *drive_cache;
 
-
-static void build_sys_serial_path(const char *name, char *dst_path, size_t n)
+static void build_sys_path(const char *name, const char *attr, char *dst_path,
+                           size_t n)
 {
-    snprintf(dst_path, n, "/sys/class/%s/%s/serial_num", DRIVER_NAME, name);
+    snprintf(dst_path, n, "/sys/class/%s/%s/%s", DRIVER_NAME, name, attr);
     dst_path[n - 1] = '\0';
 }
 
+/** Read the given attribute for the given device name */
+static int read_device_attr(const char *devname, const char *attrname,
+                            char *info, size_t info_size)
+{
+    char    spath[PATH_MAX];
+    ssize_t nread;
+    int     fd;
+    int     rc = 0;
+
+    build_sys_path(devname, attrname, spath, sizeof(spath));
+
+    fd = open(spath, O_RDONLY);
+    if (fd < 0)
+        LOG_RETURN(rc = -errno, "Cannot open '%s'", spath);
+
+    memset(info, 0, info_size);
+    nread = read(fd, info, info_size - 1);
+    if (nread <= 0)
+        LOG_GOTO(out_close, rc = -errno, "Cannot read %s in '%s'", attrname,
+                 spath);
+
+    /* rstrip stupid '\n' and spaces */
+    rstrip(info);
+
+    pho_debug("Device '%s': %s='%s'\n", devname, attrname, info);
+
+out_close:
+    close(fd);
+    return rc;
+}
 
 static int cache_load_from_name(const char *devname)
 {
     struct drive_map_entry   *dinfo;
-    char                      spath[PATH_MAX];
-    char                      serial[MAX_SERIAL];
     size_t                    namelen = strlen(devname);
-    ssize_t                   nread;
-    int                       fd;
     int                       rc = 0;
 
     assert(namelen < IFNAMSIZ);
-    build_sys_serial_path(devname, spath, sizeof(spath));
-
-    fd = open(spath, O_RDONLY);
-    if (fd < 0) {
-        /* Ignore ENOENT (see lintape_map_load) */
-        if (errno == ENOENT)
-            return 0;
-        LOG_RETURN(rc = -errno, "Cannot open '%s'", spath);
-    }
-
-    memset(serial, 0, sizeof(serial));
-    nread = read(fd, serial, sizeof(serial) - 1);
-    if (nread <= 0)
-        LOG_GOTO(out_close, rc = -errno, "Cannot read serial at '%s'", spath);
-
-    /* rstrip stupid \n */
-    if (serial[nread - 1] == '\n')
-        serial[nread - 1] = '\0';
 
     dinfo = calloc(1, sizeof(*dinfo));
     if (dinfo == NULL)
-        LOG_GOTO(out_close, rc = -ENOMEM, "Cannot allocate cache node for '%s'",
-                 spath);
+        LOG_RETURN(-ENOMEM, "Cannot allocate cache node for '%s'", devname);
 
-    memcpy(dinfo->dme_serial, serial, nread);
     memcpy(dinfo->dme_devname, devname, namelen);
+
+    rc = read_device_attr(devname, SYS_SERIAL_NUMBER, dinfo->dme_serial,
+                          sizeof(dinfo->dme_serial));
+    if (rc)
+        goto err_free;
+
+    rc = read_device_attr(devname, SYS_DEV_MODEL, dinfo->dme_model,
+                          sizeof(dinfo->dme_model));
+    if (rc)
+        goto err_free;
 
     drive_cache = g_slist_prepend(drive_cache, dinfo);
 
-out_close:
-    close(fd);
+    return 0;
+
+err_free:
+    free(dinfo);
     return rc;
 }
 
@@ -120,13 +147,15 @@ static gint _find_by_serial_cb(gconstpointer a, gconstpointer b)
     return strcmp(drive->dme_serial, serial);
 }
 
-int lintape_dev_rlookup(const char *name, char *serial, size_t serial_size)
+static const struct drive_map_entry *lintape_dev_info(const char *name)
 {
     GSList  *element;
 
-    if (strlen(name) >= IFNAMSIZ)
-        LOG_RETURN(-ENAMETOOLONG, "Device name '%s' > %d char long",
+    if (strlen(name) >= IFNAMSIZ) {
+        pho_error(-ENAMETOOLONG, "Device name '%s' > %d char long",
                    name, IFNAMSIZ - 1);
+        return NULL;
+    }
 
     if (drive_cache == NULL) {
         pho_debug("No information available in cache: loading...");
@@ -137,12 +166,25 @@ int lintape_dev_rlookup(const char *name, char *serial, size_t serial_size)
     if (element != NULL) {
         struct drive_map_entry  *dme = element->data;
 
-        pho_debug("Found serial '%s' for device %s", dme->dme_serial, name);
-        snprintf(serial, serial_size, "%s", dme->dme_serial);
-        return 0;
+        pho_debug("Found device '%s': serial='%s', model='%s',",
+                  name, dme->dme_serial, dme->dme_model);
+        return dme;
     }
 
-    return -ENOENT;
+    pho_info("Device '%s' not found in lintape device cache", name);
+    return NULL;
+}
+
+int lintape_dev_rlookup(const char *name, char *serial, size_t serial_size)
+{
+    const struct drive_map_entry  *dme;
+
+    dme = lintape_dev_info(name);
+    if (!dme)
+        return -ENOENT;
+
+    snprintf(serial, serial_size, "%s", dme->dme_serial);
+    return 0;
 }
 
 int lintape_dev_lookup(const char *serial, char *path, size_t path_size)
