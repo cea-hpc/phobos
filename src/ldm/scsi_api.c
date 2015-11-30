@@ -104,18 +104,6 @@ static inline void htobe24(uint32_t h, uint8_t *be)
 #endif
 }
 
-/** remove superfluous spaces at the end of a string */
-static void trim_spaces(char *str)
-{
-    char *last;
-
-    last = str + strlen(str) - 1;
-    while (*last == ' ' && last > str) {
-        *last = '\0';
-        last--;
-    }
-}
-
 /**
  * Read the next element from READ_ELEMENT_STATUS reply.
  * @param[in]     elmt          Pointer to the next element status.
@@ -149,7 +137,7 @@ static int read_next_element_status(const struct element_descriptor *elmt,
     if (page->pvoltag) {
         strncpy(elem_out->vol, elmt->pvti, VOL_ID_LEN);
         elem_out->vol[VOL_ID_LEN - 1] = '\0';
-        trim_spaces(elem_out->vol);
+        rstrip(elem_out->vol);
     }
 
     if (elem_out->type == SCSI_TYPE_DRIVE) {
@@ -160,7 +148,7 @@ static int read_next_element_status(const struct element_descriptor *elmt,
             strncpy(elem_out->dev_id, elmt->alt_info.dev.devid,
                     id_len);
             elem_out->dev_id[id_len] = '\0';
-            trim_spaces(elem_out->dev_id);
+            rstrip(elem_out->dev_id);
         }
     }
 

@@ -26,11 +26,11 @@ static pho_log_callback_t   phobos_log_callback = phobos_log_callback_default;
 static bool                 phobos_dev_output;
 
 
-static char *rstrip(char *msg)
+char *rstrip(char *msg)
 {
     int i;
 
-    for (i = strlen(msg) - 1; i >= 0 && isspace(msg[i]); i++)
+    for (i = strlen(msg) - 1; i >= 0 && isspace(msg[i]); i--)
         msg[i] = '\0';
 
     return msg;

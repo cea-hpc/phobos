@@ -180,4 +180,7 @@ static inline char *end_of_string(char *str)
     return str + strlen(str);
 }
 
+/** remove spaces at end of string */
+char *rstrip(char *msg);
+
 #endif
