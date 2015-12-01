@@ -3,10 +3,11 @@ AM_CFLAGS= $(CC_OPT)
 # autotools automatically generate a 'make check' target that:
 # 1) build check_PROGRAMS
 # 2) run TESTS and generate a summary
-check_PROGRAMS=test_common test_attrs test_mapper test_log test_store test_dss test_cfg test_scsi test_lintape
+check_PROGRAMS=test_common test_attrs test_mapper test_log test_store \
+	       test_dss test_cfg test_scsi test_lintape test_ldm
 
 # 1st step: low level tests
-UNIT_TESTS=test_attrs test_mapper test_log test_cfg test_lintape
+UNIT_TESTS=test_attrs test_mapper test_log test_cfg test_lintape test_ldm
 # 2nd step: integration tests
 INTEG_TESTS=test_dss.sh test_scsi.sh test_store.sh
 
@@ -46,3 +47,6 @@ test_scsi_LDADD=../ldm/libpho_scsi.la ../common/libpho_common.la
 
 test_lintape_SOURCES=test_lintape.c
 test_lintape_LDADD=../ldm/libpho_ldm.la ../common/libpho_common.la
+
+test_ldm_SOURCES=test_ldm.c
+test_ldm_LDADD=../ldm/libpho_ldm.la ../common/libpho_common.la
