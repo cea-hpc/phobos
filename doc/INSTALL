@@ -1,0 +1,31 @@
+# if accessing tapes, install:
+yum install lin_tape
+modprobe lin_tape
+ls -l /dev/IBMtape*
+yum install ltfssde
+
+# install phobos and requirements
+yum install phobos
+
+service postgresql-9.4 initdb
+service postgresql-9.4 start
+
+# Edit '/var/lib/pgsql/9.4/data/pg_hba.conf'
+# to authorize access to localhost:
+
+	# "local" is for Unix domain socket connections only
+	local   all             all                                     trust
+	# IPv4 local connections:
+	host    all             all             127.0.0.1/32            md5
+	# IPv6 local connections:
+	host    all             all             ::1/128                 md5
+
+# and restart DB
+service postgresql-9.4 restart
+
+# create phobos DB and tables
+# TODO:
+# 	pho-cfg setup_db
+# 	pho-cfg setup_tables
+./src/tests/setup_db.sh setup_db
+./src/tests/setup_db.sh setup_tables
