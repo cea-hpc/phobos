@@ -4,7 +4,7 @@
 
 AC_PREREQ(2.59)
 
-AC_INIT([phobos], [0.0], [st-tgcc@cea.fr])
+AC_INIT([phobos], [0.1], [st-tgcc@cea.fr])
 RELEASE="1"
 
 AC_DEFINE_UNQUOTED(RELEASE, "$RELEASE", [release info])
@@ -72,11 +72,11 @@ AS_IF( [test "x$enable_cli" != "xno"], [
 # Checks for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADERS([string.h sys/param.h limits.h])
-
 AC_CHECK_HEADERS([jansson.h], [], [AC_MSG_ERROR(missing jansson header files)])
 AC_CHECK_HEADERS([ini_config.h], [], [AC_MSG_ERROR(missing libini_config header files)])
 AC_CHECK_HEADERS([openssl/sha.h], [], [AC_MSG_ERROR(missing openssl libcrypt header files)])
 AC_CHECK_HEADERS([attr/xattr.h], [], [AC_MSG_ERROR(missing libattr header files)])
+AC_CHECK_HEADERS([scsi/sg_io_linux.h], [], [AC_MSG_ERROR(missing sg3_utils header files)])
 PKG_CHECK_MODULES(LIBPQ, [libpq >= 9.4])
 
 # Checks for typedefs, structures, and compiler characteristics.
@@ -98,5 +98,6 @@ AC_CONFIG_FILES([Makefile
          src/store/Makefile
          src/tests/Makefile
          src/cli/Makefile
+         phobos.spec
 ])
 AC_OUTPUT

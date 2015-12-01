@@ -37,3 +37,8 @@ libtool
 src/cli/phobos/capi/*.py
 src/cli/phobos/capi/*_wrap.c
 src/include/stamp-h1
+rpms/
+phobos-*.tar.gz
+phobos.spec
+*.orig
+*.rej

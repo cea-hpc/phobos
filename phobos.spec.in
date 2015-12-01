@@ -1,0 +1,54 @@
+Name:		@PACKAGE@
+Version:	@VERSION@
+Release:	@RELEASE@%{?dist}
+Summary:	Parallel Heterogeneous OBject-Oriented Storage
+
+Group:		Applications/System
+License: 	All rights reserved CEA/DAM, 2014-2015
+URL:		http://www-hpc.cea.fr
+Source0: %{name}-%{version}.tar.gz
+
+BuildRequires: postgresql94-devel
+BuildRequires: glib2-devel >= 2.28
+BuildRequires: swig
+BuildRequires: jansson-devel
+BuildRequires: libref_array-devel
+BuildRequires: libini_config-devel
+BuildRequires: openssl-devel
+BuildRequires: libattr-devel
+BuildRequires: sg3_utils-devel
+
+Requires: postgresql94-server, postgresql94-contrib
+Requires: glib2 >= 2.28
+Requires: jansson
+Requires: libini_config
+Requires: openssl
+Requires: libattr
+Requires: python-argparse
+
+%description
+Phobos aims to implement high performance distributed object storage on a wide
+variety of media including tapes, disks, other object stores...
+This initial version is however limited to a single host. It can manage tapes
+in a SCSI library and local directories.
+
+%prep
+%setup -q
+
+
+%build
+%configure
+make %{?_smp_mflags}
+
+
+%install
+%make_install
+
+
+%files
+%doc
+
+
+
+%changelog
+
