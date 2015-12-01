@@ -102,7 +102,7 @@ test_check_get "media" "fs_status != blank"
 echo "**** TESTS: DSS_GET OBJECT ****"
 test_check_get "object" "all"
 test_check_get "object" "oid LIKE 012%"
-test_check_get "object" "oid LIKE koéèê^!$£}[<>à@\\\"~²§ok"
+test_check_get "object" "oid LIKE koÃ©Ã¨Ãª^!$Â£}[<>Ã @\\\"~Â²Â§ok"
 
 echo "**** TESTS: DSS_GET EXTENT ****"
 test_check_get "extent" "all"
