@@ -83,6 +83,9 @@ DROP FUNCTION IF EXISTS extents_mda_idx(jsonb) CASCADE;
 EOF
 }
 
+# host name to insert in DB
+host=$(hostname -s)
+
 insert_examples() {
 # default drive/id mapping
 SN1=1013005381
@@ -102,13 +105,13 @@ fi
 	$PSQL << EOF
 insert into device (family, model, id, host, adm_status, path, changer_idx,
                     lock)
-    values ('tape', 'ULTRIUM-TD6', '$SN1', 'phobos1', 'locked', '$DRV1',
+    values ('tape', 'ULTRIUM-TD6', '$SN1', '$host', 'locked', '$DRV1',
             3, ''),
-           ('tape', 'ULTRIUM-TD6', '$SN2', 'phobos1', 'unlocked', '$DRV2',
+           ('tape', 'ULTRIUM-TD6', '$SN2', '$host', 'unlocked', '$DRV2',
             4, ''),
-           ('dir', NULL, 'phobos1:/tmp/pho_testdir1', 'phobos1',
+           ('dir', NULL, '$host:/tmp/pho_testdir1', '$host',
 	    'unlocked', '/tmp/pho_testdir1', NULL, ''),
-           ('dir', NULL, 'phobos1:/tmp/pho_testdir2', 'phobos1',
+           ('dir', NULL, '$host:/tmp/pho_testdir2', '$host',
 	    'unlocked', '/tmp/pho_testdir2', NULL, '');
 insert into media (family, model, id, adm_status, fs_type, address_type,
 		   fs_status, stats, lock)
@@ -121,10 +124,10 @@ insert into media (family, model, id, adm_status, fs_type, address_type,
            ('tape', 'LTO6', '073222L6', 'unlocked', 'LTFS', 'HASH1', 'used',
             '{"nb_obj":"1","logc_spc_used":"10480512",\
 	      "phys_spc_used":"10480512","phys_spc_free":"2393054904320"}', ''),
-           ('dir', NULL, 'phobos1:/tmp/pho_testdir1', 'unlocked', 'POSIX',
+           ('dir', NULL, '$host:/tmp/pho_testdir1', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":"5","logc_spc_used":"3668841456",\
 	      "phys_spc_used":"3668841456","phys_spc_free":"12857675776"}', ''),
-           ('dir', NULL, 'phobos1:/tmp/pho_testdir2', 'unlocked', 'POSIX',
+           ('dir', NULL, '$host:/tmp/pho_testdir2', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":"6","logc_spc_used":"4868841472",\
 	      "phys_spc_used":"4868841472","phys_spc_free":"12857675776"}', '');
 
@@ -136,9 +139,9 @@ insert into extent (oid, copy_num, state, lyt_type, lyt_info, extents)
 	   '[{"media":"073220L6","addr":"test1","sz":"123456","fam":"tape"},\
 	    {"media":"073221L6","addr":"test2","sz":"5452555","fam":"tape"}]'),
            ('QQQ6ASQDSQD', 0, 'pending', 'simple','{}',
-           '[{"media":"phobos1:/tmp/pho_testdir1","addr":"test3",
+           '[{"media":"$host:/tmp/pho_testdir1","addr":"test3",
 	   "sz":"21123456","fam":"dir"},\
-            {"media":"phobos1:/tmp/pho_testdir2","addr":"test4",
+            {"media":"$host:/tmp/pho_testdir2","addr":"test4",
 	   "sz":"2112555","fam":"dir"}]');
 
 
