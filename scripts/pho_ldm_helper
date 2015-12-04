@@ -40,7 +40,7 @@ function tape_device_info
 function dir_device_info
 {
 	host=$(hostname -s)
-	echo "{\"family\":\"dir\",\"model\":\"\",\"serial\":\"$host:$1\",\"status\":\"mounted\",\"media\":\"$host:$1\",\"mnt_path\":\"$1\"}"
+	echo "{\"family\":\"dir\",\"serial\":\"$host:$1\",\"status\":\"mounted\",\"media\":\"$host:$1\",\"mnt_path\":\"$1\"}"
 }
 
 function load_drive

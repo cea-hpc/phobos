@@ -812,6 +812,19 @@ static inline bool is_type_supported(enum dss_type type)
     }
 }
 
+/**
+ * Unlike PQgetvalue that returns '' for NULL fields,
+ * this function returns NULL for NULL fields.
+ */
+static inline char *get_str_value(PGresult *res, int row_number,
+                                  int column_number)
+{
+    if (PQgetisnull(res, row_number, column_number))
+        return NULL;
+
+    return PQgetvalue(res, row_number, column_number);
+}
+
 int dss_get(struct dss_handle *handle, enum dss_type type,
             struct dss_crit *crit, int crit_cnt, void **item_list,
             int *item_cnt)
@@ -883,14 +896,14 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
             struct dev_info *p_dev = &dss_res->u.dev[i];
 
             p_dev->family = str2dev_family(PQgetvalue(res, i, 0));
-            p_dev->model  = PQgetvalue(res, i, 1);
-            p_dev->serial = PQgetvalue(res, i, 2);
+            p_dev->model  = get_str_value(res, i, 1);
+            p_dev->serial = get_str_value(res, i, 2);
             p_dev->adm_status =
                 str2adm_status(PQgetvalue(res, i, 3));
-            p_dev->host   = PQgetvalue(res, i, 4);
-            p_dev->path   = PQgetvalue(res, i, 5);
+            p_dev->host   = get_str_value(res, i, 4);
+            p_dev->path   = get_str_value(res, i, 5);
             p_dev->changer_idx = (int)strtol(PQgetvalue(res, i, 6), NULL, 10);
-            p_dev->lock.lock = PQgetvalue(res, i, 7);
+            p_dev->lock.lock = get_str_value(res, i, 7);
             p_dev->lock.lock_ts = strtoul(PQgetvalue(res, i, 8), NULL, 10);
         }
 
@@ -904,14 +917,14 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
             struct media_info *p_media = &dss_res->u.media[i];
 
             p_media->id.type = str2dev_family(PQgetvalue(res, i, 0));
-            p_media->model = PQgetvalue(res, i, 1);
+            p_media->model = get_str_value(res, i, 1);
             media_id_set(&p_media->id, PQgetvalue(res, i, 2));
             p_media->adm_status = str2media_adm_status(PQgetvalue(res, i, 3));
             p_media->addr_type = str2address_type(PQgetvalue(res, i, 4));
             p_media->fs_type = str2fs_type(PQgetvalue(res, i, 5));
             p_media->fs_status = str2fs_status(PQgetvalue(res, i, 6));
             rc = dss_media_stats_decode(&p_media->stats, PQgetvalue(res, i, 7));
-            p_media->lock.lock = PQgetvalue(res, i, 8);
+            p_media->lock.lock = get_str_value(res, i, 8);
             p_media->lock.lock_ts = strtoul(PQgetvalue(res, i, 9), NULL, 10);
             if (rc) {
                 PQclear(res);
@@ -952,7 +965,7 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
         for (i = 0; i < PQntuples(res); i++) {
             struct object_info *p_object = &dss_res->u.object[i];
 
-            p_object->oid = PQgetvalue(res, i, 0);
+            p_object->oid = get_str_value(res, i, 0);
         }
 
         *item_list = dss_res->u.object;

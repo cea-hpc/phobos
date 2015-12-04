@@ -52,7 +52,7 @@ static const char *get_json_string(json_t *json, const char *name)
 
     val = json_object_get(json, name);
     if (val == NULL) {
-        pho_error(EINVAL, "key '%s' not found in JSON object", name);
+        pho_warn("key '%s' not found in JSON object", name);
         return NULL;
     }
     return json_string_value(val);
@@ -131,7 +131,7 @@ static int items_foreach(json_t *json, const struct parse_item *items,
     for (item = items; item->name != NULL; item++) {
         tmp_str = get_json_string(json, item->name);
         if (tmp_str == NULL)
-            return -EINVAL;
+            continue;
 
         rc = item->val_cb(tmp_str, item->ptr, arg);
         if (rc)
@@ -175,6 +175,9 @@ int device_state_from_json(const char *str, struct dev_state *dev_st)
                   err.position, str);
         return -EINVAL;
     }
+
+    /* leave zero value for unset fields */
+    memset(dev_st, 0, sizeof(*dev_st));
 
     /* parse values that are always in json */
     rc = items_foreach(json, base_items, NULL);
