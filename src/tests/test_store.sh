@@ -81,7 +81,7 @@ fi
 function clean_test
 {
     echo "cleaning..."
-    rm -f "$TEST_RAND"
+    rm -f $TEST_FILES
     for d in $TEST_MNT; do
 	rm -rf $d/*
     done
