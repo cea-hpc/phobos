@@ -147,13 +147,6 @@ static char *format_cmd(enum fs_type fs, const char *device, const char *label)
     return cmd_out;
 }
 
-/** concatenate a command output */
-static int collect_output(void *cb_arg, char *line, size_t size)
-{
-    g_string_append_len((GString *)cb_arg, line, size);
-    return 0;
-}
-
 /**
  * Try to determine the type of device.
  */
@@ -400,6 +393,29 @@ int get_dev_adapter(enum dev_family dev_type, struct dev_adapter *dev)
         break;
     case PHO_DEV_TAPE:
         *dev = dev_adapter_lintape;
+        break;
+    default:
+        return -ENOTSUP;
+    }
+    return 0;
+}
+
+/*
+ * Use external references for now.
+ * They can easily be replaced ilater by dlopen'ed symbols.
+ */
+
+extern const struct fs_adapter fs_adapter_posix;
+extern const struct fs_adapter fs_adapter_ltfs;
+
+int get_fs_adapter(enum fs_type fs_type, struct fs_adapter *fsa)
+{
+    switch (fs_type) {
+    case PHO_FS_POSIX:
+        *fsa = fs_adapter_posix;
+        break;
+    case PHO_FS_LTFS:
+        *fsa = fs_adapter_ltfs;
         break;
     default:
         return -ENOTSUP;

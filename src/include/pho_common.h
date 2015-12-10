@@ -161,6 +161,9 @@ static inline bool gstring_empty(const GString *s)
  */
 typedef int (*parse_cb_t)(void *cb_arg, char *line, size_t size);
 
+/** Common callback for command_call: concatenate a command output. */
+int collect_output(void *cb_arg, char *line, size_t size);
+
 /** call a command and call cb_func for each output line. */
 int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg);
 

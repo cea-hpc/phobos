@@ -52,6 +52,12 @@ out_free:
     return rc;
 }
 
+int collect_output(void *cb_arg, char *line, size_t size)
+{
+    g_string_append_len((GString *)cb_arg, line, size);
+    return 0;
+}
+
 void upperstr(char *str)
 {
     int i = 0;
