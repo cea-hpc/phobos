@@ -28,22 +28,21 @@
 #include <sys/utsname.h>
 
 /**
- * Build a mount path with the given index.
+ * Build a mount path for the given identifier.
+ * @param[in] id    Unique drive identified on the host.
  * The result must be released by the caller using free(3).
  */
-static char *mount_point(int idx)
+static char *mount_point(const char *id)
 {
     const char  *mnt_cfg;
     char        *mnt_out;
-
-    assert(idx >= 0);
 
     mnt_cfg = pho_cfg_get(PHO_CFG_LRS_mount_prefix);
     if (mnt_cfg == NULL)
         return NULL;
 
-    /* mount the device as PHO_MNT_PREFIX<changer_idx> */
-    if (asprintf(&mnt_out, "%s%d", mnt_cfg, idx) < 0)
+    /* mount the device as PHO_MNT_PREFIX<id> */
+    if (asprintf(&mnt_out, "%s%s", mnt_cfg, id) < 0)
         return NULL;
 
     return mnt_out;
@@ -82,9 +81,16 @@ static const char *get_hostname(void)
 
 /** all needed information to select devices */
 struct dev_descr {
-    struct dev_info    *device; /**< device description (from DSS) */
-    struct dev_state    state;  /**< device state (from system) */
-    struct media_info  *media;  /**< loaded media, if any */
+    struct dev_info     *dss_dev_info; /**< device info from DSS */
+    struct lib_drv_info  lib_dev_info; /**< device info from library
+                                            (for tape drives) */
+    struct ldm_dev_state sys_dev_state; /**< device info from system */
+
+    enum dev_op_status   op_status; /**< operational status of the device */
+    char                 dev_path[PATH_MAX]; /**< path to the device */
+    struct media_id      media_id; /**< id of the media (if loaded) */
+    struct media_info   *dss_media_info;  /**< loaded media info from DSS, if any */
+    char                 mnt_path[PATH_MAX]; /**< mount path of the filesystem */
 };
 
 /** global structure of available devices and media information
@@ -95,30 +101,34 @@ static int               dev_count;
 /** check that device info from DB is consistent with actual status */
 static int check_dev_info(const struct dev_descr *dev)
 {
-    if (dev->device->model == NULL || dev->state.model == NULL) {
-        if (dev->device->model != dev->state.model)
+    if (dev->dss_dev_info->model == NULL
+        || dev->sys_dev_state.lds_model == NULL) {
+        if (dev->dss_dev_info->model != dev->sys_dev_state.lds_model)
             LOG_RETURN(-EINVAL, "%s: missing or unexpected device model",
-                       dev->device->path);
+                       dev->dev_path);
         else
-            pho_debug("%s: no device model is set", dev->device->path);
+            pho_debug("%s: no device model is set", dev->dev_path);
 
-    } else if (strcmp(dev->device->model, dev->state.model) != 0) {
+    } else if (strcmp(dev->dss_dev_info->model,
+                      dev->sys_dev_state.lds_model) != 0) {
         /* @TODO ignore blanks at the end of the model */
         LOG_RETURN(-EINVAL, "%s: configured device model '%s' differs from "
-                   "actual device model '%s'", dev->device->path,
-                   dev->device->model, dev->state.model);
+                   "actual device model '%s'", dev->dev_path,
+                   dev->dss_dev_info->model, dev->sys_dev_state.lds_model);
     }
 
-    if (dev->device->serial == NULL || dev->state.serial == NULL) {
-        if (dev->device->serial != dev->state.serial)
+    if (dev->dss_dev_info->serial == NULL
+        || dev->sys_dev_state.lds_serial == NULL) {
+        if (dev->dss_dev_info->serial != dev->sys_dev_state.lds_serial)
             LOG_RETURN(-EINVAL, "%s: missing or unexpected device serial",
-                       dev->device->path);
+                       dev->dss_dev_info->path);
         else
-            pho_debug("%s: no device serial is set", dev->device->path);
-    } else if (strcmp(dev->device->serial, dev->state.serial) != 0) {
+            pho_debug("%s: no device serial is set", dev->dev_path);
+    } else if (strcmp(dev->dss_dev_info->serial,
+                      dev->sys_dev_state.lds_serial) != 0) {
         LOG_RETURN(-EINVAL, "%s: configured device serial '%s' differs from "
-                   "actual device serial '%s'", dev->device->path,
-                   dev->device->serial, dev->state.serial);
+                   "actual device serial '%s'", dev->dev_path,
+                   dev->dss_dev_info->serial, dev->sys_dev_state.lds_serial);
     }
 
     return 0;
@@ -182,38 +192,114 @@ out_free:
  * - for loaded drives, the mounted volume + LTFS mount point, if mounted.
  * - get media information from DB for loaded drives.
  *
- * @param[in]  dss  handle to dss connection
+ * @param[in]  dss  handle to dss connection.
+ * @param[in]  lib  library handler for tape devices.
  * @param[in]  devi device_info from DB
  * @param[out] devd dev_descr structure filled with all needed information.
  */
-static int lrs_fill_dev_info(struct dss_handle *dss, struct dev_descr *devd,
+static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
+                             struct dev_descr *devd,
                              const struct dev_info *devi)
 {
-    int rc;
+    int                rc;
+    struct dev_adapter deva;
 
     if (devi == NULL || devd == NULL)
         return -EINVAL;
 
-    devd->device = dev_info_dup(devi);
+    devd->dss_dev_info = dev_info_dup(devi);
 
-    rc = ldm_device_query(devi->family, devi->path, &devd->state);
+    rc = get_dev_adapter(devi->family, &deva);
     if (rc)
         return rc;
 
-    /* compared returned info with info from DB */
+    /* get path for the given serial */
+    rc = ldm_dev_lookup(&deva, devi->serial, devd->dev_path,
+                        sizeof(devd->dev_path));
+    if (rc)
+        return rc;
+
+    /* now query device by path */
+    rc = ldm_dev_query(&deva, devi->path, &devd->sys_dev_state);
+    if (rc)
+        return rc;
+
+    /* compare returned device info with info from DB */
     rc = check_dev_info(devd);
     if (rc)
         return rc;
 
-    pho_debug("Drive '%s' is '%s'", devi->path,
-              op_status2str(devd->state.op_status));
+    /* Query the library about the drive location and whether it contains
+     * a media. */
+    rc = ldm_lib_drive_lookup(lib, devi->serial, &devd->lib_dev_info);
+    if (rc)
+        return rc;
 
-    /* get media info for loaded drives */
-    if ((devd->state.op_status == PHO_DEV_OP_ST_LOADED)
-       || (devd->state.op_status == PHO_DEV_OP_ST_MOUNTED))
-        rc = lrs_fill_media_info(dss, &devd->media, &devd->state.media_id);
+    if (devd->lib_dev_info.ldi_full) {
+        devd->op_status = PHO_DEV_OP_ST_LOADED;
+        devd->media_id = devd->lib_dev_info.ldi_media_id;
+
+        /* get media info for loaded drives */
+        rc = lrs_fill_media_info(dss, &devd->dss_media_info, &devd->media_id);
+        if (rc)
+            return rc;
+    } else {
+        devd->op_status = PHO_DEV_OP_ST_EMPTY;
+    }
+
+    /* If device has been previously marked as loaded, check if it is mounted
+     * as a filesystem */
+    if (devd->op_status == PHO_DEV_OP_ST_LOADED) {
+        struct fs_adapter fsa;
+
+        rc = get_fs_adapter(devd->dss_media_info->fs_type, &fsa);
+        if (rc)
+            return rc;
+
+        rc = ldm_fs_mounted(&fsa, devd->dev_path, devd->mnt_path,
+                            sizeof(devd->mnt_path));
+
+        if (rc == 0)
+            devd->op_status = PHO_DEV_OP_ST_MOUNTED;
+        else if (rc == -ENOENT)
+            /* not mounted, not an error */
+            rc = 0;
+        else
+            LOG_RETURN(rc, "Cannot determine if device '%s' is mounted",
+                       devd->dev_path);
+    }
+
+    pho_debug("Drive '%s' is '%s'", devd->dev_path,
+              op_status2str(devd->op_status));
 
     return rc;
+}
+
+/** Wrap library open operations
+ * @param[out] lib  Library handler.
+ */
+static int wrap_lib_open(enum dev_family dev_type, struct lib_adapter *lib)
+{
+    int         rc;
+    const char *lib_dev;
+
+    /* non-tape cases: dummy lib adapter (no open required) */
+    if (dev_type != PHO_DEV_TAPE)
+        return get_lib_adapter(PHO_LIB_DUMMY, lib);
+
+    /* tape case */
+    rc = get_lib_adapter(PHO_LIB_SCSI, lib);
+    if (rc)
+        LOG_RETURN(rc, "Failed to get library adapter");
+
+    /* For now, one single configurable path to library device.
+     * This will have to be changed to manage multiple libraries.
+     */
+    lib_dev = pho_cfg_get(PHO_CFG_LRS_lib_device);
+    if (!lib_dev)
+        LOG_RETURN(rc, "Failed to get default library device from config");
+
+    return ldm_lib_open(lib, lib_dev);
 }
 
 /**
@@ -222,13 +308,14 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct dev_descr *devd,
  */
 static int lrs_load_dev_state(struct dss_handle *dss)
 {
-    struct dev_info *devs = NULL;
-    int              dcnt = 0;
-    int              i, rc;
+    struct dev_info    *devs = NULL;
+    int                 dcnt = 0;
+    int                 i, rc;
     /* criteria: host, tape device, device adm_status */
-    struct dss_crit  crit[3];
-    int              crit_cnt = 0;
-    enum dev_family  family;
+    struct dss_crit     crit[3];
+    int                 crit_cnt = 0;
+    enum dev_family     family;
+    struct lib_adapter  lib;
 
     if (devices != NULL && dev_count != 0)
         /* already loaded */
@@ -260,10 +347,18 @@ static int lrs_load_dev_state(struct dss_handle *dss)
     if (devices == NULL)
         return -ENOMEM;
 
+    /* get a handle to the library to query it */
+    rc = wrap_lib_open(family, &lib);
+    if (rc)
+        return rc;
+
     for (i = 0 ; i < dcnt; i++) {
-        if (lrs_fill_dev_info(dss, &devices[i], &devs[i]) != 0)
-            devices[i].state.op_status = PHO_DEV_OP_ST_FAILED;
+        if (lrs_fill_dev_info(dss, &lib, &devices[i], &devs[i]) != 0)
+            devices[i].op_status = PHO_DEV_OP_ST_FAILED;
     }
+
+    /* close handle to the library */
+    ldm_lib_close(&lib);
 
     /* free devs array, as they have been copied to devices[].device */
     dss_res_free(devs, dcnt);
@@ -372,7 +467,7 @@ static struct dev_descr *dev_picker(enum dev_op_status op_st,
 
     for (i = 0; i < dev_count; i++) {
         if (op_st != PHO_DEV_OP_ST_UNSPEC
-            && devices[i].state.op_status != op_st)
+            && devices[i].op_status != op_st)
             continue;
 
         rc = select_func(required_size, &devices[i], &selected);
@@ -393,10 +488,10 @@ static int select_first_fit(size_t required_size,
                             struct dev_descr *dev_curr,
                             struct dev_descr **dev_selected)
 {
-    if (dev_curr->media == NULL)
+    if (dev_curr->dss_media_info == NULL)
         return 1;
 
-    if (dev_curr->media->stats.phys_spc_free >= required_size) {
+    if (dev_curr->dss_media_info->stats.phys_spc_free >= required_size) {
         *dev_selected = dev_curr;
         return 0;
     }
@@ -411,19 +506,19 @@ static int select_best_fit(size_t required_size,
                            struct dev_descr *dev_curr,
                            struct dev_descr **dev_selected)
 {
-    if (dev_curr->media == NULL)
+    if (dev_curr->dss_media_info == NULL)
         return 1;
 
     /* does it fit? */
-    if (dev_curr->media->stats.phys_spc_free < required_size)
+    if (dev_curr->dss_media_info->stats.phys_spc_free < required_size)
         return 1;
 
     /* no previous fit, or better fit */
-    if (*dev_selected == NULL || (dev_curr->media->stats.phys_spc_free
-                              < (*dev_selected)->media->stats.phys_spc_free)) {
+    if (*dev_selected == NULL || (dev_curr->dss_media_info->stats.phys_spc_free
+                      < (*dev_selected)->dss_media_info->stats.phys_spc_free)) {
         *dev_selected = dev_curr;
 
-        if (required_size == dev_curr->media->stats.phys_spc_free)
+        if (required_size == dev_curr->dss_media_info->stats.phys_spc_free)
             /* exact match, stop searching */
             return 0;
     }
@@ -456,21 +551,21 @@ static int select_drive_to_free(size_t required_size,
                                 struct dev_descr **dev_selected)
 {
     /* skip failed and busy drives */
-    if (dev_curr->state.op_status == PHO_DEV_OP_ST_FAILED
-        || dev_curr->state.op_status == PHO_DEV_OP_ST_BUSY)
+    if (dev_curr->op_status == PHO_DEV_OP_ST_FAILED
+        || dev_curr->op_status == PHO_DEV_OP_ST_BUSY)
         return 1;
 
     /* if this function is called, no drive should be empty */
-    if (dev_curr->state.op_status == PHO_DEV_OP_ST_EMPTY) {
+    if (dev_curr->op_status == PHO_DEV_OP_ST_EMPTY) {
         pho_warn("Unexpected drive status for '%s': '%s'",
-                 dev_curr->device->path,
-                 op_status2str(dev_curr->state.op_status));
+                 dev_curr->dev_path,
+                 op_status2str(dev_curr->op_status));
         return 1;
     }
 
     /* less space available on this device than the previous ones? */
-    if (*dev_selected == NULL || (dev_curr->media->stats.phys_spc_free
-                              < (*dev_selected)->media->stats.phys_spc_free)) {
+    if (*dev_selected == NULL || (dev_curr->dss_media_info->stats.phys_spc_free
+                      < (*dev_selected)->dss_media_info->stats.phys_spc_free)) {
         *dev_selected = dev_curr;
     }
     return 1;
@@ -479,65 +574,90 @@ static int select_drive_to_free(size_t required_size,
 /** Mount the filesystem of a ready device */
 static int lrs_mount(struct dev_descr *dev)
 {
-    char    *mnt_root = NULL;
-    int      rc;
+    char                *mnt_root;
+    int                  rc;
+    const char          *id;
+    struct fs_adapter    fsa;
 
-    /* mount the device as PHO_MNT_PREFIX<changer_idx> */
-    mnt_root = mount_point(dev->device->changer_idx);
+#if 0
+    /**
+     * @TODO If library indicates a media is in the drive but the drive
+     * doesn't, we need to query the drive to load the tape.
+     */
+    if (devd->lib_dev_info->ldi_full && !devd->lds_loaded) {
+        pho_info("Tape '%s' is located in drive '%s' but is not online: "
+                 "querying the drive to load it...",
+                 media_id_get(&devd->ldi_media_id), devi->serial);
+        rc = ldm_dev_load(&deva, devi->path);
+        if (rc)
+            LOG_RETURN(rc, "Failed to load tape in drive '%s'",
+                       devi->serial);
+#endif
+
+    id = basename(dev->dev_path);
+    if (id == NULL)
+        return -EINVAL;
+
+    /* mount the device as PHO_MNT_PREFIX<id> */
+    mnt_root = mount_point(id);
     if (!mnt_root)
         return -ENOMEM;
 
-    pho_verb("Mounting device '%s' as '%s'",
-             dev->device->path, mnt_root);
+    pho_verb("Mounting device '%s' as '%s'", dev->dev_path, mnt_root);
 
-    rc = ldm_fs_mount(dev->media->fs_type, dev->device->path, mnt_root);
+    rc = get_fs_adapter(dev->dss_media_info->fs_type, &fsa);
+    if (rc)
+        goto out_free;
+
+    rc = ldm_fs_mount(&fsa, dev->dev_path, mnt_root);
     if (rc)
         LOG_GOTO(out_free, rc, "Failed to mount device '%s'",
-                 dev->device->path);
+                 dev->dev_path);
 
     /* update device state and set mount point */
-    dev->state.op_status = PHO_DEV_OP_ST_MOUNTED;
-    dev->state.mnt_path = mnt_root;
+    dev->op_status = PHO_DEV_OP_ST_MOUNTED;
+    strncpy(dev->mnt_path,  mnt_root, sizeof(dev->mnt_path));
 
 out_free:
-    if (rc != 0) {
-        dev->state.op_status = PHO_DEV_OP_ST_FAILED;
-        free(mnt_root);
-    }
-    /* else: the memory is now owned by dev->state */
+    free(mnt_root);
+    if (rc != 0)
+        dev->op_status = PHO_DEV_OP_ST_FAILED;
     return rc;
 }
 
 /** Unmount the filesystem of a 'mounted' device */
 static int lrs_umount(struct dev_descr *dev)
 {
-    int      rc;
+    int                rc;
+    struct fs_adapter  fsa;
 
-    if (dev->state.op_status != PHO_DEV_OP_ST_MOUNTED)
+    if (dev->op_status != PHO_DEV_OP_ST_MOUNTED)
         LOG_RETURN(-EINVAL, "Unexpected drive status for '%s': '%s'",
-                   dev->device->path, op_status2str(dev->state.op_status));
+                   dev->dev_path, op_status2str(dev->op_status));
 
-    if (dev->state.mnt_path == NULL)
+    if (dev->mnt_path[0] == '\0')
         LOG_RETURN(-EINVAL, "No mount point for mounted device '%s'?!",
-                   dev->device->path);
+                   dev->dev_path);
 
-    if (dev->media == NULL)
+    if (dev->dss_media_info == NULL)
         LOG_RETURN(-EINVAL, "No media in mounted device '%s'?!",
-                   dev->device->path);
+                   dev->dev_path);
 
     pho_verb("Unmounting device '%s' mounted as '%s'",
-             dev->device->path, dev->state.mnt_path);
+             dev->dev_path, dev->mnt_path);
 
-    rc = ldm_fs_umount(dev->media->fs_type, dev->device->path,
-                        dev->state.mnt_path);
+    rc = get_fs_adapter(dev->dss_media_info->fs_type, &fsa);
+    if (rc)
+        return rc;
+
+    rc = ldm_fs_umount(&fsa, dev->dev_path, dev->mnt_path);
     if (rc)
         LOG_RETURN(rc, "Failed to umount device '%s' mounted as '%s'",
-                   dev->device->path, dev->state.mnt_path);
+                   dev->dev_path, dev->mnt_path);
 
     /* update device state and unset mount path */
-    dev->state.op_status = PHO_DEV_OP_ST_LOADED;
-    free(dev->state.mnt_path);
-    dev->state.mnt_path = NULL;
+    dev->op_status = PHO_DEV_OP_ST_LOADED;
+    dev->mnt_path[0] = '\0';
 
     return 0;
 }
@@ -547,37 +667,52 @@ static int lrs_umount(struct dev_descr *dev)
  */
 static int lrs_load(struct dev_descr *dev, struct media_info *media)
 {
-    int rc;
+    int                  rc, rc2;
+    struct lib_adapter   lib;
+    struct lib_item_addr media_addr;
 
-    if (dev->state.op_status != PHO_DEV_OP_ST_EMPTY)
+    if (dev->op_status != PHO_DEV_OP_ST_EMPTY)
         LOG_RETURN(-EINVAL, "%s: unexpected drive status: status='%s'",
-                   dev->device->path, op_status2str(dev->state.op_status));
+                   dev->dev_path, op_status2str(dev->op_status));
 
-    if (dev->media != NULL)
+    if (dev->dss_media_info != NULL)
         LOG_RETURN(-EINVAL, "No media expected in device '%s' (found '%s')",
-                   dev->device->path, media_id_get(&dev->media->id));
+                   dev->dev_path, media_id_get(&dev->dss_media_info->id));
 
     pho_verb("Loading '%s' into '%s'", media_id_get(&media->id),
-             dev->device->path);
+             dev->dev_path);
 
-    rc = ldm_device_load(dev->device->family, dev->device->path,
-                         &media->id);
+    /* get handle to the library depending on device type */
+    rc = wrap_lib_open(dev->dss_dev_info->family, &lib);
+    if (rc)
+        return rc;
+
+    /* lookup the requested media */
+    rc = ldm_lib_media_lookup(&lib, media_id_get(&media->id),
+                              &media_addr);
+    if (rc)
+        LOG_GOTO(out_close, rc, "Media lookup failed");
+
+    rc = ldm_lib_media_move(&lib, &media_addr, &dev->lib_dev_info.ldi_addr);
     if (rc != 0) {
         /* Set operationnal failure state on this drive. It is incomplete since
          * the error can originate from a defect tape too...
          *  - consider marking both as failed.
          *  - consider maintaining lists of errors to diagnose and decide who to
          *    exclude from the cool game. */
-        dev->state.op_status = PHO_DEV_OP_ST_FAILED;
-        return rc;
+        dev->op_status = PHO_DEV_OP_ST_FAILED;
+        LOG_GOTO(out_close, rc, "Media move failed");
     }
 
     /* update device status */
-    dev->state.op_status = PHO_DEV_OP_ST_LOADED;
+    dev->op_status = PHO_DEV_OP_ST_LOADED;
     /* associate media to this device */
-    dev->media = media;
+    dev->dss_media_info = media;
+    rc = 0;
 
-    return 0;
+out_close:
+    rc2 = ldm_lib_close(&lib);
+    return rc ? rc : rc2;
 }
 
 /**
@@ -585,31 +720,52 @@ static int lrs_load(struct dev_descr *dev, struct media_info *media)
  */
 static int lrs_unload(struct dev_descr *dev)
 {
-    int rc;
+    int                 rc, rc2;
+    struct lib_adapter  lib;
+    /* let the library select the target location */
+    struct lib_item_addr free_slot = {
+        .lia_type = MED_LOC_UNKNOWN,
+        .lia_addr = 0
+    };
 
-    if (dev->state.op_status != PHO_DEV_OP_ST_LOADED)
+    if (dev->op_status != PHO_DEV_OP_ST_LOADED)
         LOG_RETURN(-EINVAL, "Unexpected drive status for '%s': '%s'",
-                   dev->device->path, op_status2str(dev->state.op_status));
+                   dev->dev_path, op_status2str(dev->op_status));
 
-    if (dev->media == NULL)
+    if (dev->dss_media_info == NULL)
         LOG_RETURN(-EINVAL, "No media in loaded device '%s'?!",
-                   dev->device->path);
+                   dev->dev_path);
 
-    pho_verb("Unloading '%s' from '%s'", media_id_get(&dev->media->id),
-             dev->device->path);
+    pho_verb("Unloading '%s' from '%s'", media_id_get(&dev->dss_media_info->id),
+             dev->dev_path);
 
-    rc = ldm_device_unload(dev->device->family, dev->device->path,
-                           &dev->media->id);
+    /* get handle to the library, depending on device type */
+    rc = wrap_lib_open(dev->dss_dev_info->family, &lib);
     if (rc)
         return rc;
 
+    rc = ldm_lib_media_move(&lib, &dev->lib_dev_info.ldi_addr, &free_slot);
+    if (rc != 0) {
+        /* Set operationnal failure state on this drive. It is incomplete since
+         * the error can originate from a defect tape too...
+         *  - consider marking both as failed.
+         *  - consider maintaining lists of errors to diagnose and decide who to
+         *    exclude from the cool game. */
+        dev->op_status = PHO_DEV_OP_ST_FAILED;
+        LOG_GOTO(out_close, rc, "Media move failed");
+    }
+
     /* update device status */
-    dev->state.op_status = PHO_DEV_OP_ST_EMPTY;
+    dev->op_status = PHO_DEV_OP_ST_EMPTY;
 
     /* free media resources */
-    media_info_free(dev->media);
-    dev->media = NULL;
-    return 0;
+    media_info_free(dev->dss_media_info);
+    dev->dss_media_info = NULL;
+    rc = 0;
+
+out_close:
+    rc2 = ldm_lib_close(&lib);
+    return rc ? rc : rc2;
 }
 
 /** return the device policy function depending on configuration */
@@ -651,30 +807,30 @@ static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp)
             /* no drive to free */
             return -EAGAIN;
 
-        if ((*devp)->state.op_status == PHO_DEV_OP_ST_MOUNTED) {
+        if ((*devp)->op_status == PHO_DEV_OP_ST_MOUNTED) {
             /* unmount it */
             rc = lrs_umount(*devp);
             if (rc) {
                 /* set it failed and get another device */
-                (*devp)->state.op_status = PHO_DEV_OP_ST_FAILED;
+                (*devp)->op_status = PHO_DEV_OP_ST_FAILED;
                 continue;
             }
         }
 
-        if ((*devp)->state.op_status == PHO_DEV_OP_ST_LOADED) {
+        if ((*devp)->op_status == PHO_DEV_OP_ST_LOADED) {
             /* unload the media */
             rc = lrs_unload(*devp);
             if (rc) {
                 /* set it failed and get another device */
-                (*devp)->state.op_status = PHO_DEV_OP_ST_FAILED;
+                (*devp)->op_status = PHO_DEV_OP_ST_FAILED;
                 continue;
             }
         }
-        if ((*devp)->state.op_status != PHO_DEV_OP_ST_EMPTY)
+        if ((*devp)->op_status != PHO_DEV_OP_ST_EMPTY)
             LOG_RETURN(rc = -EINVAL, "Unexpected device status '%s' for '%s': "
                        "should be empty",
-                       op_status2str((*devp)->state.op_status),
-                       (*devp)->device->path);
+                       op_status2str((*devp)->op_status),
+                       (*devp)->dev_path);
         /* success: we've got an empty device */
         return 0;
     }
@@ -704,7 +860,7 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
     *devp = dev_picker(PHO_DEV_OP_ST_MOUNTED, dev_select_policy, size);
     if (*devp != NULL) {
         /* drive is now in use */
-        (*devp)->state.op_status = PHO_DEV_OP_ST_BUSY;
+        (*devp)->op_status = PHO_DEV_OP_ST_BUSY;
         /* drive is ready */
         return 0;
     }
@@ -715,7 +871,7 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
         /* mount the filesystem and return */
         rc = lrs_mount(*devp);
         if (rc == 0)
-            (*devp)->state.op_status = PHO_DEV_OP_ST_BUSY;
+            (*devp)->op_status = PHO_DEV_OP_ST_BUSY;
         return rc;
     }
 
@@ -753,7 +909,7 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
     /* Don't release media on failure (it is still associated to the drive). */
     rc = lrs_mount(*devp);
     if (rc == 0)
-        (*devp)->state.op_status = PHO_DEV_OP_ST_BUSY;
+        (*devp)->op_status = PHO_DEV_OP_ST_BUSY;
     return rc;
 
 out_free:
@@ -765,14 +921,14 @@ out_free:
 static int set_loc_from_dev(const struct dev_descr *dev,
                             struct lrs_intent *intent)
 {
-    if (dev == NULL || dev->state.mnt_path == NULL)
+    if (dev == NULL || dev->mnt_path == NULL)
         return -EINVAL;
 
     /* fill intent descriptor with mount point and media info */
-    intent->li_location.root_path = strdup(dev->state.mnt_path);
-    intent->li_location.extent.media     = dev->media->id;
-    intent->li_location.extent.fs_type   = dev->media->fs_type;
-    intent->li_location.extent.addr_type = dev->media->addr_type;
+    intent->li_location.root_path = strdup(dev->mnt_path);
+    intent->li_location.extent.media     = dev->dss_media_info->id;
+    intent->li_location.extent.fs_type   = dev->dss_media_info->fs_type;
+    intent->li_location.extent.addr_type = dev->dss_media_info->addr_type;
     intent->li_location.extent.address   = PHO_BUFF_NULL;
     return 0;
 }
@@ -788,10 +944,9 @@ static struct dev_descr *search_loaded_media(const struct media_id *id)
     name = media_id_get(id);
 
     for (i = 0; i < dev_count; i++) {
-        if ((devices[i].state.op_status == PHO_DEV_OP_ST_MOUNTED ||
-             devices[i].state.op_status == PHO_DEV_OP_ST_LOADED)
-            && (devices[i].media != NULL)
-            && !strcmp(name, media_id_get(&devices[i].media->id)))
+        if ((devices[i].op_status == PHO_DEV_OP_ST_MOUNTED ||
+             devices[i].op_status == PHO_DEV_OP_ST_LOADED)
+            && !strcmp(name, media_id_get(&devices[i].media_id)))
             return &devices[i];
     }
     return NULL;
@@ -851,10 +1006,10 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
     }
 
     /* Mount only for READ/WRITE and if not already mounted */
-    if (post_fs_mount && dev->state.op_status != PHO_DEV_OP_ST_MOUNTED) {
+    if (post_fs_mount && dev->op_status != PHO_DEV_OP_ST_MOUNTED) {
         rc = lrs_mount(dev);
         if (rc == 0)
-            dev->state.op_status = PHO_DEV_OP_ST_BUSY;
+            dev->op_status = PHO_DEV_OP_ST_BUSY;
     }
 
 out:
@@ -873,6 +1028,7 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     struct dev_descr    *dev = NULL;
     struct media_info   *media_info;
     int                  rc;
+    struct fs_adapter    fsa;
 
     if (fs != PHO_FS_LTFS)
         LOG_RETURN(-EINVAL, "Unsupported filesystem type");
@@ -885,12 +1041,16 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     if (rc != 0)
         return rc;
 
-    if (dev->media == NULL)
+    if (dev->dss_media_info == NULL)
         LOG_RETURN(rc = -EINVAL, "Invalid device state");
 
     pho_verb("Format media '%s' as %s", label, fs_type2str(fs));
 
-    rc = ldm_fs_format(fs, dev->device->path, label);
+    rc = get_fs_adapter(fs, &fsa);
+    if (rc)
+        LOG_RETURN(rc, "Failed to get FS adapter");
+
+    rc = ldm_fs_format(&fsa, dev->dev_path, label);
     if (rc != 0)
         LOG_RETURN(rc, "Cannot format media '%s'", label);
 
@@ -924,7 +1084,7 @@ int lrs_write_prepare(struct dss_handle *dss, size_t size,
 
     if (dev != NULL)
         pho_verb("Writing to media '%s' using device '%s'",
-                 media_id_get(&dev->media->id), dev->device->path);
+                 media_id_get(&dev->dss_media_info->id), dev->dev_path);
 
     rc = set_loc_from_dev(dev, intent);
     if (rc != 0)
@@ -969,14 +1129,14 @@ int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
     if (rc)
         return rc;
 
-    if (dev->media == NULL)
+    if (dev->dss_media_info == NULL)
         LOG_RETURN(rc = -EINVAL, "Invalid device state, expected media %s",
                    media_id_get(id));
 
     /* set fs_type and addr_type according to media description. */
-    intent->li_location.root_path = strdup(dev->state.mnt_path);
-    intent->li_location.extent.fs_type   = dev->media->fs_type;
-    intent->li_location.extent.addr_type = dev->media->addr_type;
+    intent->li_location.root_path = strdup(dev->mnt_path);
+    intent->li_location.extent.fs_type   = dev->dss_media_info->fs_type;
+    intent->li_location.extent.addr_type = dev->dss_media_info->addr_type;
 
     return 0;
 }

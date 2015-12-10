@@ -28,11 +28,21 @@ setup_tables
 insert_examples
 
 ldm_helper=$(readlink -e $test_bin_dir/../../scripts/)/pho_ldm_helper
-export PHOBOS_LDM_cmd_drive_query="$ldm_helper query_drive '%s'"
-export PHOBOS_LDM_cmd_drive_load="$ldm_helper load_drive '%s' '%s'"
-export PHOBOS_LDM_cmd_drive_unload="$ldm_helper unload_drive '%s' '%s'"
 export PHOBOS_LDM_cmd_mount_ltfs="$ldm_helper mount_ltfs '%s' '%s'"
 export PHOBOS_LDM_cmd_umount_ltfs="$ldm_helper umount_ltfs '%s' '%s'"
+
+# make sure all drives are empty
+function empty_drives
+{
+    mtx status | grep "Data Transfer Element" | grep "Full" |
+        while read line; do
+            echo "full drive: $line"
+            drive=$(echo $line | awk '{print $4}' | cut -d ':' -f 1)
+            slot=$(echo $line | awk '{print $7}')
+            echo "Unloading drive $drive in slot $slot"
+            mtx unload $slot $drive || echo "mtx failure"
+        done
+}
 
 # testing with real tapes requires tape devices + access to /dev/changer device
 nb_tapes=$(ls -d /dev/IBMtape* 2>/dev/null | wc -l)
@@ -50,24 +60,8 @@ if  [[ -z "$NO_TAPE" ]] && [[ -w /dev/changer ]] && (( $nb_tapes > 0 )); then
 	# make sure no LTFS filesystem is mounted, so the test must mount it
 	service ltfs stop
 
-	# put the "low capacity" tape '073220L6' into the unlocked drive
-    # (SN 1014005381)
-	# to force phobos performing umount/unload/load/mount
-	# to write the big RAND file
-	SN=1014005381
-	id=$(cat /proc/scsi/IBMtape | grep $SN | awk '{print $1}')
-	drv=/dev/IBMtape${id}
-
-	echo "eject 073221L6 from $drv if present"
-	$ldm_helper unload_drive $drv 073221L6 \
-		|| true # ignore if not mounted
-	echo "eject 073222L6 from $drv if present"
-	$ldm_helper unload_drive $drv 073222L6 \
-		|| true # ignore if not mounted
-
-	echo "mount 073220L6 to $drv if absent"
-	$ldm_helper load_drive $drv 073220L6
-
+    # make sure all drives are initially empty
+    empty_drives
 else
 	echo "**** POSIX TEST MODE ****"
 	TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2" # must match mount prefix

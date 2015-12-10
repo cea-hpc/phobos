@@ -51,20 +51,10 @@ const struct pho_config_item pho_cfg_descr[] = {
         .name    = "default_family",
         .value   = "tape"
     },
-    [PHO_CFG_LDM_cmd_drive_query] = {
-        .section = "ldm",
-        .name    = "cmd_drive_query",
-        .value   = PHO_LDM_HELPER" query_drive \"%s\""
-    },
-    [PHO_CFG_LDM_cmd_drive_load] = {
-        .section = "ldm",
-        .name    = "cmd_drive_load",
-        .value   = PHO_LDM_HELPER" load_drive \"%s\" \"%s\""
-    },
-    [PHO_CFG_LDM_cmd_drive_unload] = {
-        .section = "ldm",
-        .name    = "cmd_drive_unload",
-        .value   = PHO_LDM_HELPER" unload_drive \"%s\" \"%s\""
+    [PHO_CFG_LRS_lib_device] = {
+        .section = "lrs",
+        .name    = "lib_device",
+        .value   = "/dev/changer"
     },
     [PHO_CFG_LDM_cmd_mount_ltfs] = {
         .section = "ldm",

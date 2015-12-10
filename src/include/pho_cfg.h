@@ -32,11 +32,9 @@ enum pho_cfg_params {
     PHO_CFG_LRS_mount_prefix,
     PHO_CFG_LRS_policy,
     PHO_CFG_LRS_default_family,
+    PHO_CFG_LRS_lib_device,
 
     /* ldm parameters */
-    PHO_CFG_LDM_cmd_drive_query,
-    PHO_CFG_LDM_cmd_drive_load,
-    PHO_CFG_LDM_cmd_drive_unload,
     PHO_CFG_LDM_cmd_mount_ltfs,
     PHO_CFG_LDM_cmd_umount_ltfs,
     PHO_CFG_LDM_cmd_format_ltfs,

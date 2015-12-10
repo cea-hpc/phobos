@@ -16,84 +16,6 @@
 #include <assert.h>
 
 /**
- * Retrieve device information from system.
- * @param(in) dev_type family of device to query.
- *                 Caller can pass PHO_DEV_UNSPEC if it doesn't know.
- *                 The function will then try to guess the type of device,
- *                 but the call is more expensive.
- * @param(in)  dev_path path to the device.
- * @param(out) dev_st   information about the device.
- *
- * @return 0 on success, -errno on failure.
- */
-int ldm_device_query(enum dev_family dev_type, const char *dev_path,
-                     struct dev_state *dev_st);
-
-/**
- * Load a media into a device.
- * @param(in)  dev_type     Family of device.
- *                 Caller can pass PHO_DEV_UNSPEC if it doesn't know.
- *                 The function will then try to guess the type of device,
- *                 but the call is more expensive.
- * @param(in)  dev_path     Path to the device.
- * @param(in)  media_id     Id of the media to be loaded.
- *
- * @return 0 on success, -errno on failure.
- */
-int ldm_device_load(enum dev_family dev_type, const char *dev_path,
-                    const struct media_id *media_id);
-/**
- * Unload a media from a device.
- * @param(in)  dev_type     Family of device.
- *                 Caller can pass PHO_DEV_UNSPEC if it doesn't know.
- *                 The function will then try to guess the type of device,
- *                 but the call is more expensive.
- * @param(in)  dev_path     Path to the device.
- * @param(in)  media_id     Id of the media to be unloaded.
- *
- * @return 0 on success, -errno on failure.
- */
-int ldm_device_unload(enum dev_family dev_type, const char *dev_path,
-                      const struct media_id *media_id);
-
-/**
- * Mount a device as a given filesystem type.
- * @param(in) fs        type of filesystem.
- * @param(in) dev_path  path to the device.
- * @param(in) mnt_point mount point of the filesystem.
- *
- * @return 0 on success, -errno on failure.
- */
-int ldm_fs_mount(enum fs_type fs, const char *dev_path, const char *mnt_point);
-
-/**
- * Unmount a filesystem.
- * @param(in) fs        type of filesystem.
- * @param(in) dev_path  path to the device.
- * @param(in) mnt_point mount point of the filesystem.
- *
- * @return 0 on success, -errno on failure.
- */
-int ldm_fs_umount(enum fs_type fs, const char *dev_path,
-                   const char *mnt_point);
-
-/**
- * Format a media to the desired filesystem type.
- * @param(in) dev_path  Path to the device where the desired media is loaded.
- * @param(in) label     Media label to apply.
- * @param(in) fs        Type of filesystem.
- *
- * @return 0 on success, -errno on failure.
- */
-int ldm_fs_format(enum fs_type fs, const char *dev_path, const char *label);
-
-/* --------------------------------------------------------------
- * New LDM interface based on adapters
- * @TODO drop previous code when all related patches have landed
- * --------------------------------------------------------------
- */
-
-/**
  * \defgroup dev_adapter (Device Adapter API)
  * @{
  */
@@ -403,10 +325,7 @@ int get_fs_adapter(enum fs_type fs_type, struct fs_adapter *fsa);
  *
  * @return 0 on success, negative error code on failure.
  */
-/* NEW CODE: conflicts with old prototypes.
- * @TODO Rename it when needed patches are landed.
- */
-static inline int NEW_ldm_fs_mount(const struct fs_adapter *fsa,
+static inline int ldm_fs_mount(const struct fs_adapter *fsa,
                                const char *dev_path, const char *mnt_point)
 {
     assert(fsa != NULL);
@@ -422,10 +341,7 @@ static inline int NEW_ldm_fs_mount(const struct fs_adapter *fsa,
  *
  * @return 0 on success, negative error code on failure.
  */
-/* NEW CODE: conflicts with old prototypes.
- * @TODO Rename it when needed patches are landed.
- */
-static inline int NEW_ldm_fs_umount(const struct fs_adapter *fsa,
+static inline int ldm_fs_umount(const struct fs_adapter *fsa,
                                 const char *dev_path, const char *mnt_point)
 {
     assert(fsa != NULL);
@@ -441,10 +357,7 @@ static inline int NEW_ldm_fs_umount(const struct fs_adapter *fsa,
  *
  * @return 0 on success, negative error code on failure.
  */
-/* NEW CODE: conflicts with old prototypes.
- * @TODO Rename it when needed patches are landed.
- */
-static inline int NEW_ldm_fs_format(const struct fs_adapter *fsa,
+static inline int ldm_fs_format(const struct fs_adapter *fsa,
                                 const char *dev_path, const char *label)
 {
     assert(fsa != NULL);
@@ -475,6 +388,4 @@ static inline int ldm_fs_mounted(const struct fs_adapter *fsa,
 }
 
 /** @}*/
-
-
 #endif

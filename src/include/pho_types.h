@@ -417,16 +417,6 @@ struct dev_info {
 
 };
 
-/** Live device information (from system) */
-struct dev_state {
-    enum dev_op_status   op_status;
-    enum dev_family      family;
-    char                *model;
-    char                *serial;
-    char                *mnt_path; /**< FS path, if mounted */
-    struct media_id      media_id; /**< media, if loaded or mounted */
-};
-
 /** media statistics */
 struct media_stats {
     uint64_t           nb_obj;    /**< number of objects stored on media */
