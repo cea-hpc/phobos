@@ -55,6 +55,38 @@ static int scsi_host_status2errno(uint16_t host_status)
     }
 }
 
+/** Convert Sense Key to -errno code */
+static int scsi_sense_key2errno(uint8_t sense_key)
+{
+    switch (sense_key) {
+    case  SPC_SK_NO_SENSE:
+        return 0;
+
+    case  SPC_SK_RECOVERED_ERROR:
+    case  SPC_SK_UNIT_ATTENTION:
+        return -EAGAIN;
+
+    case  SPC_SK_NOT_READY:
+        return -EBUSY;
+
+    case  SPC_SK_ILLEGAL_REQUEST:
+        return -EINVAL;
+
+    case  SPC_SK_DATA_PROTECT:
+        return -EPERM;
+
+    case  SPC_SK_BLANK_CHECK:
+    case  SPC_SK_COPY_ABORTED:
+    case  SPC_SK_ABORTED_COMMAND:
+    case  SPC_SK_VOLUME_OVERFLOW:
+    case  SPC_SK_MISCOMPARE:
+    case  SPC_SK_MEDIUM_ERROR:
+    case  SPC_SK_HARDWARE_ERROR:
+    default:
+        return -EIO;
+    }
+}
+
 /** Convert SCSI masked_status to -errno code */
 static int scsi_masked_status2errno(uint8_t masked_status)
 {
@@ -107,10 +139,18 @@ int scsi_execute(int fd, enum scsi_direction direction,
                  "sense_key=%#hhx", hdr.masked_status, hdr.host_status,
                  hdr.driver_status, sbp->error_code, sbp->sense_key);
 
-    rc = scsi_masked_status2errno(hdr.masked_status);
-    if (rc)
-        LOG_RETURN(rc, "SCSI error %#hhx (converted to %d)", hdr.masked_status,
-                   rc);
+    if (hdr.masked_status == CHECK_CONDITION) {
+        /* check sense_key value */
+        rc = scsi_sense_key2errno(sbp->sense_key);
+        if (rc)
+            LOG_RETURN(rc, "Sense key %#hhx (converted to %d)", sbp->sense_key,
+                       rc);
+    } else {
+        rc = scsi_masked_status2errno(hdr.masked_status);
+        if (rc)
+            LOG_RETURN(rc, "SCSI error %#hhx (converted to %d)",
+                       hdr.masked_status, rc);
+    }
 
     rc = scsi_host_status2errno(hdr.host_status);
     if (rc)

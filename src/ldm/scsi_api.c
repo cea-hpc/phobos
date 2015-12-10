@@ -152,6 +152,9 @@ static int read_next_element_status(const struct element_descriptor *elmt,
         }
     }
 
+    pho_debug("scsi_type: %d, addr: %#hx, %s", elem_out->type,
+              elem_out->address, elem_out->full ? "full" : "empty");
+
     return be16toh(page->ed_len);
 }
 
