@@ -362,3 +362,25 @@ out_free:
     g_string_free(cmd_out, true);
     return rc;
 }
+
+/*
+ * Use external references for now.
+ * They can easily be replaced later by dlopen'ed symbols.
+ */
+extern const struct lib_adapter lib_adapter_dummy;
+extern const struct lib_adapter lib_adapter_scsi;
+
+int get_lib_adapter(enum lib_type lib_type, struct lib_adapter *lib)
+{
+    switch (lib_type) {
+    case PHO_LIB_DUMMY:
+        *lib = lib_adapter_dummy;
+        break;
+    case PHO_LIB_SCSI:
+        *lib = lib_adapter_scsi;
+        break;
+    default:
+        return -ENOTSUP;
+    }
+    return 0;
+}

@@ -13,7 +13,7 @@
 #include "config.h"
 #endif
 
-#include "ldm_lib_scsi.h"
+#include "pho_ldm.h"
 #include "scsi_api.h"
 #include "pho_common.h"
 
@@ -110,7 +110,7 @@ static int lib_status_load(struct lib_descriptor *lib,
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_SLOT)
         && !lib->slots.loaded) {
         rc = element_status(lib->fd, SCSI_TYPE_SLOT, lib->msi.slots.first_addr,
-                            lib->msi.slots.nb, false, &lib->arms.items,
+                            lib->msi.slots.nb, false, &lib->slots.items,
                             &lib->slots.count);
         if (rc)
             LOG_RETURN(rc, "element_status failed for type 'slots'");
@@ -122,7 +122,7 @@ static int lib_status_load(struct lib_descriptor *lib,
         && !lib->impexp.loaded) {
         rc = element_status(lib->fd, SCSI_TYPE_IMPEXP,
                             lib->msi.impexp.first_addr, lib->msi.impexp.nb,
-                            false, &lib->arms.items, &lib->impexp.count);
+                            false, &lib->impexp.items, &lib->impexp.count);
         if (rc)
             LOG_RETURN(rc, "element_status failed for type 'impexp'");
 
@@ -133,7 +133,7 @@ static int lib_status_load(struct lib_descriptor *lib,
         && !lib->drives.loaded) {
         rc = element_status(lib->fd, SCSI_TYPE_DRIVE,
                             lib->msi.drives.first_addr, lib->msi.drives.nb,
-                            false, &lib->arms.items, &lib->drives.count);
+                            false, &lib->drives.items, &lib->drives.count);
         if (rc)
             LOG_RETURN(rc, "element_status failed for type 'drives'");
 
@@ -143,10 +143,11 @@ static int lib_status_load(struct lib_descriptor *lib,
     return 0;
 }
 
-int ldm_lib_scsi_open(struct ldm_lib_handle *hdl, const char *dev)
+static int lib_scsi_open(struct lib_handle *hdl, const char *dev)
 {
     struct lib_descriptor *lib;
     int                    rc;
+    ENTRY;
 
     lib = calloc(1, sizeof(struct lib_descriptor));
     if (!lib)
@@ -166,9 +167,10 @@ err_clean:
     return rc;
 }
 
-int ldm_lib_scsi_close(struct ldm_lib_handle *hdl)
+static int lib_scsi_close(struct lib_handle *hdl)
 {
     struct lib_descriptor *lib;
+    ENTRY;
 
     if (!hdl)
         return -EINVAL;
@@ -190,9 +192,9 @@ int ldm_lib_scsi_close(struct ldm_lib_handle *hdl)
 
 /**
  * Match a drive serial number vs. the requested S/N.
- * @return 0 on match, <> 0 if it doesn't match.
+ * @return true if serial matches, else false.
  */
-static inline int match_serial(const char *drv_descr, const char *req_sn)
+static inline bool match_serial(const char *drv_descr, const char *req_sn)
 {
     const char *sn;
 
@@ -203,18 +205,18 @@ static inline int match_serial(const char *drv_descr, const char *req_sn)
      * To match both, we match the last part of the serial.
      */
     sn = strrchr(drv_descr, ' ');
-
     if (!sn) /* only contains the SN */
         sn = drv_descr;
     else /* first char after last space */
         sn++;
 
-    return strcmp(sn, req_sn);
+    /* return true on match */
+    return !strcmp(sn, req_sn);
 }
 
 /** get drive info with the given serial number */
 static struct element_status *drive_info_from_serial(struct lib_descriptor *lib,
-                                              const char *serial)
+                                                     const char *serial)
 {
     int i;
 
@@ -223,7 +225,7 @@ static struct element_status *drive_info_from_serial(struct lib_descriptor *lib,
 
         if (match_serial(drv->dev_id, serial)) {
             pho_debug("Found drive matching serial '%s': address=%#hx, id='%s'",
-                      serial, drv->dev_id);
+                      serial, drv->address, drv->dev_id);
             return drv;
         }
     }
@@ -285,6 +287,7 @@ static struct element_status *media_info_from_label(struct lib_descriptor *lib,
     return NULL;
 }
 
+/** Convert SCSI element type to LDM media location type */
 static inline enum med_location scsi2ldm_loc_type(enum element_type_code type)
 {
     switch (type) {
@@ -296,11 +299,14 @@ static inline enum med_location scsi2ldm_loc_type(enum element_type_code type)
     }
 }
 
-int ldm_lib_scsi_drive_info(struct ldm_lib_handle *hdl, const char *drv_serial,
-                            struct lib_dev_info *ldi)
+/** Implements phobos LDM lib device lookup */
+static int lib_scsi_drive_info(struct lib_handle *hdl,
+                                   const char *drv_serial,
+                                   struct lib_drv_info *ldi)
 {
     struct element_status *drv;
-    int                    rc;
+    int rc;
+    ENTRY;
 
     /* load status for drives */
     rc = lib_status_load(hdl->lh_lib, SCSI_TYPE_DRIVE);
@@ -313,20 +319,23 @@ int ldm_lib_scsi_drive_info(struct ldm_lib_handle *hdl, const char *drv_serial,
         return -ENOENT;
 
     memset(ldi, 0, sizeof(*ldi));
-    ldi->address = drv->address;
+    ldi->ldi_addr.lia_type = MED_LOC_DRIVE;
+    ldi->ldi_addr.lia_addr = drv->address;
     if (drv->full) {
-        ldi->is_full = true;
-        ldi->media_id.type = PHO_DEV_TAPE;
-        media_id_set(&ldi->media_id, drv->vol);
+        ldi->ldi_full = true;
+        ldi->ldi_media_id.type = PHO_DEV_TAPE;
+        media_id_set(&ldi->ldi_media_id, drv->vol);
     }
     return 0;
 }
 
-int ldm_lib_scsi_media_info(struct ldm_lib_handle *hdl, const char *med_label,
-                            struct lib_media_info *lmi)
+/** Implements phobos LDM lib media lookup */
+static int lib_scsi_media_info(struct lib_handle *hdl, const char *med_label,
+                               struct lib_item_addr *lia)
 {
     struct element_status *tape;
-    int                    rc;
+    int rc;
+    ENTRY;
 
     /* load all possible tape locations */
     rc = lib_status_load(hdl->lh_lib, SCSI_TYPE_ALL);
@@ -338,9 +347,139 @@ int ldm_lib_scsi_media_info(struct ldm_lib_handle *hdl, const char *med_label,
     if (!tape)
         return -ENOENT;
 
-    memset(lmi, 0, sizeof(*lmi));
-    lmi->loc_type = scsi2ldm_loc_type(tape->type);
-    lmi->address = tape->address;
+    memset(lia, 0, sizeof(*lia));
+    lia->lia_type = scsi2ldm_loc_type(tape->type);
+    lia->lia_addr = tape->address;
+
     return 0;
 }
 
+/** return information about the element at the given address. */
+static const struct element_status *
+    element_from_addr(const struct lib_descriptor *lib,
+                      const struct lib_item_addr *addr)
+{
+    int i;
+
+    if (addr->lia_type == MED_LOC_UNKNOWN
+        || addr->lia_type == MED_LOC_DRIVE) {
+        /* search in drives */
+        for (i = 0; i < lib->drives.count; i++) {
+            pho_debug("looking for %#hx: drive #%d (addr=%#hx)",
+                      addr->lia_addr, i, lib->drives.items[i].address);
+            if (lib->drives.items[i].address == addr->lia_addr)
+                return &lib->drives.items[i];
+        }
+    }
+
+    if (addr->lia_type == MED_LOC_UNKNOWN
+        || addr->lia_type == MED_LOC_SLOT) {
+        /* search in slots */
+        for (i = 0; i < lib->slots.count; i++) {
+            pho_debug("looking for %#hx: slot #%d (addr=%#hx)",
+                      addr->lia_addr, i, lib->slots.items[i].address);
+            if (lib->slots.items[i].address == addr->lia_addr)
+                return &lib->slots.items[i];
+        }
+    }
+
+    if (addr->lia_type == MED_LOC_UNKNOWN
+        || addr->lia_type == MED_LOC_IMPEXP) {
+        /* search in import/export slots */
+        for (i = 0; i < lib->impexp.count; i++) {
+            pho_debug("looking for %#hx: impexp #%d (addr=%#hx)",
+                      addr->lia_addr, i, lib->impexp.items[i].address);
+            if (lib->impexp.items[i].address == addr->lia_addr)
+                return &lib->impexp.items[i];
+        }
+    }
+
+    if (addr->lia_type == MED_LOC_UNKNOWN
+        || addr->lia_type == MED_LOC_ARM) {
+        /* search in arms */
+        for (i = 0; i < lib->arms.count; i++) {
+            pho_debug("looking for %#hx: arm #%d (addr=%#hx)",
+                      addr->lia_addr, i, lib->arms.items[i].address);
+            if (lib->arms.items[i].address == addr->lia_addr)
+                return &lib->arms.items[i];
+        }
+    }
+
+    /* not found */
+    return NULL;
+}
+
+/**
+ * Select a target slot for move operation.
+ * @param[in,out] lib       Library handler.
+ * @param[in]     src_lia   Pointer to lib_item_addr of the source element.
+ * @param[out]    tgt_addr  Pointer to the address of the selected target.
+ *
+ * @return 0 on success, -errno on failure.
+ */
+static int select_target_addr(struct lib_descriptor *lib,
+                              const struct lib_item_addr *src_lia,
+                              uint16_t *tgt_addr)
+{
+    const struct element_status *element;
+    int rc;
+
+    /* load all info */
+    rc = lib_status_load(lib, SCSI_TYPE_ALL);
+    if (rc)
+        return rc;
+
+    element = element_from_addr(lib, src_lia);
+    if (!element)
+        LOG_RETURN(-EINVAL, "No element at address %#hx",
+                   src_lia->lia_addr);
+
+    /* if there is a source addr, use it */
+    if (element->src_addr_is_set) {
+        *tgt_addr = element->src_addr;
+        pho_debug("No target address specified. "
+                  "Using element source address %#hx.", *tgt_addr);
+        return 0;
+    } else {
+        /* @TODO else, select a free slot */
+        LOG_RETURN(-EINVAL, "No target address specified and element "
+                   "has no source address.");
+    }
+}
+
+/** Implements phobos LDM lib media move */
+static int lib_scsi_move(struct lib_handle *hdl,
+                         const struct lib_item_addr *src_addr,
+                         const struct lib_item_addr *tgt_addr)
+{
+    struct lib_descriptor *lib;
+    uint16_t tgt;
+    int rc;
+    ENTRY;
+
+    lib = hdl->lh_lib;
+    if (!lib) /* already closed */
+        return -EBADF;
+
+    if (tgt_addr->lia_type == MED_LOC_UNKNOWN
+        && tgt_addr->lia_addr == 0) {
+        rc = select_target_addr(lib, src_addr, &tgt);
+        if (rc)
+            return rc;
+    } else {
+        tgt = tgt_addr->lia_addr;
+    }
+
+    /* arm = 0 for default transport element */
+    return move_medium(lib->fd, 0, src_addr->lia_addr, tgt);
+}
+
+/** lib_scsi_adapter exported to upper layers */
+struct lib_adapter lib_adapter_scsi = {
+    .lib_open         = lib_scsi_open,
+    .lib_close        = lib_scsi_close,
+    .lib_drive_lookup = lib_scsi_drive_info,
+    .lib_media_lookup = lib_scsi_media_info,
+    .lib_media_move   = lib_scsi_move,
+    .lib_hdl          = {NULL},
+};

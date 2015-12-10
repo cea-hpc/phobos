@@ -2,9 +2,10 @@ AM_CFLAGS= $(CC_OPT)
 
 noinst_LTLIBRARIES=libpho_ldm.la libpho_scsi.la
 
-noinst_HEADERS=scsi_common.h ldm_common.h
+noinst_HEADERS=scsi_common.h ldm_common.h scsi_api.h
 
-libpho_scsi_la_SOURCES=scsi_common.c scsi_api.h scsi_api.c
+libpho_scsi_la_SOURCES=scsi_common.c scsi_api.c
 
-libpho_ldm_la_SOURCES=ldm.c lintape_lookup.c ldm_common.c ldm_lib_scsi.h ldm_lib_scsi.c
+libpho_ldm_la_SOURCES=ldm.c lintape_lookup.c ldm_common.c ldm_lib_dummy.c \
+		      ldm_lib_scsi.c
 libpho_ldm_la_LIBADD=libpho_scsi.la
