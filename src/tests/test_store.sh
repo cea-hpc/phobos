@@ -46,7 +46,6 @@ if  [[ -z "$NO_TAPE" ]] && [[ -w /dev/changer ]] && (( $nb_tapes > 0 )); then
 	TEST_FS="ltfs"
 
 	export PHOBOS_LRS_default_family="tape"
-	export FAST_LTFS_SYNC=1
 
 	# make sure no LTFS filesystem is mounted, so the test must mount it
 	service ltfs stop

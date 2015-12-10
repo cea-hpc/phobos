@@ -113,12 +113,8 @@ function mount_ltfs
 {
 	local dev=$(readlink -m "$1") # convert link to /dev/IBMtape*
 	local mnt=$2
-	if [[ -n $FAST_LTFS_SYNC ]]; then
-		# don't sync for each file to speed up tests
-		ltfs -o devname=$dev "$mnt" -o sync_type=unmount
-	else
-		ltfs -o devname=$dev "$mnt" -o sync_type=close
-	fi
+	# store layer now manages flush of individual files with LTFS
+	ltfs -o devname=$dev "$mnt" -o sync_type=unmount
 }
 
 function umount_ltfs
