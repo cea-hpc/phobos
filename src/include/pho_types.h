@@ -59,7 +59,6 @@ static inline enum layout_type str2layout_type(const char *str)
     return PHO_LYT_INVAL;
 }
 
-
 enum extent_state {
     PHO_EXT_ST_INVAL = -1,
     PHO_EXT_ST_PENDING = 0,
@@ -101,6 +100,16 @@ struct layout_info {
     struct extent     *extents;
     unsigned int       ext_count;
     /* v00: no other information needed for simple layout */
+};
+
+/**
+ * Library type.
+ */
+enum lib_type {
+    PHO_LIB_INVAL = -1,
+    PHO_LIB_DUMMY = 0, /**< fake library, all media are always online. */
+    PHO_LIB_SCSI  = 1, /**< SCSI library */
+    PHO_LIB_LAST
 };
 
 enum fs_type {
