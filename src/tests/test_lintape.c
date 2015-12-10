@@ -30,13 +30,19 @@
 
 static int test_unit(void *hint)
 {
-    char  *dev_name = hint;
-    char   serial[128];
-    int    rc;
+    struct ldm_dev_state lds;
+    struct dev_adapter deva;
+    char *dev_name = hint;
+    int rc;
 
-    rc = lintape_dev_rlookup(dev_name, serial, sizeof(serial));
+    rc = get_dev_adapter(PHO_DEV_TAPE, &deva);
+    if (rc)
+        return rc;
+
+    rc = ldm_dev_query(&deva, dev_name, &lds);
     if (rc == 0)
-        pho_info("Mapped '%s' to '%s'", dev_name, serial);
+        pho_info("Mapped '%s' to '%s' (model: '%s')", dev_name, lds.lds_serial,
+                 lds.lds_model);
 
     return rc;
 }
@@ -44,19 +50,24 @@ static int test_unit(void *hint)
 static int test_name_serial_match(void *hint)
 {
     char  *name_ref = hint;
+    struct dev_adapter deva;
+    struct ldm_dev_state lds;
     char   path[128];
-    char   serial[128];
     int    rc;
 
-    rc = lintape_dev_rlookup(name_ref, serial, sizeof(serial));
+    rc = get_dev_adapter(PHO_DEV_TAPE, &deva);
     if (rc)
         return rc;
 
-    rc = lintape_dev_lookup(serial, path, sizeof(path));
+    rc = ldm_dev_query(&deva, name_ref, &lds);
     if (rc)
         return rc;
 
-    pho_debug("Reverse mapped serial '%s' to '%s'", serial, path);
+    rc = ldm_dev_lookup(&deva, lds.lds_serial, path, sizeof(path));
+    if (rc)
+        return rc;
+
+    pho_debug("Reverse mapped serial '%s' to '%s'", lds.lds_serial, path);
     return strcmp(path + DEV_PREFIX_SZ, name_ref) == 0 ? 0 : -EINVAL;
 }
 
@@ -89,20 +100,6 @@ int main(int argc, char **argv)
         run_test(test_name, test_unit, dev_name, PHO_TEST_SUCCESS);
     }
 
-    lintape_map_free();
-
-    for (i = 0; i < TEST_MAX_DRIVES; i++) {
-        if (!device_exists(i))
-            break;
-        snprintf(dev_name, sizeof(dev_name) - 1, "IBMtape%d", i);
-        snprintf(test_name, sizeof(test_name) - 1,
-                 "Test %db: get serial for drive %s", i, dev_name);
-        run_test(test_name, test_unit, dev_name, PHO_TEST_SUCCESS);
-    }
-
-    lintape_map_free();
-    lintape_map_load();
-
     for (i = 0; i < TEST_MAX_DRIVES; i++) {
         if (!device_exists(i))
             break;
@@ -111,7 +108,6 @@ int main(int argc, char **argv)
                  "Test %dc: match name/serial for drive %s", i, dev_name);
         run_test(test_name, test_name_serial_match, dev_name, PHO_TEST_SUCCESS);
     }
-
 
     pho_info("LINTAPE MAPPER: All tests succeeded");
     exit(EXIT_SUCCESS);

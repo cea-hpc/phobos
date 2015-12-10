@@ -384,3 +384,25 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter *lib)
     }
     return 0;
 }
+
+/*
+ * Use external references for now.
+ * They can easily be replaced later by dlopen'ed symbols.
+ */
+extern const struct dev_adapter dev_adapter_dir;
+extern const struct dev_adapter dev_adapter_lintape;
+
+int get_dev_adapter(enum dev_family dev_type, struct dev_adapter *dev)
+{
+    switch (dev_type) {
+    case PHO_DEV_DIR:
+        *dev = dev_adapter_dir;
+        break;
+    case PHO_DEV_TAPE:
+        *dev = dev_adapter_lintape;
+        break;
+    default:
+        return -ENOTSUP;
+    }
+    return 0;
+}

@@ -147,71 +147,6 @@ static gint _find_by_serial_cb(gconstpointer a, gconstpointer b)
     return strcmp(drive->dme_serial, serial);
 }
 
-static const struct drive_map_entry *lintape_dev_info(const char *name)
-{
-    GSList  *element;
-
-    if (strlen(name) >= IFNAMSIZ) {
-        pho_error(-ENAMETOOLONG, "Device name '%s' > %d char long",
-                   name, IFNAMSIZ - 1);
-        return NULL;
-    }
-
-    if (drive_cache == NULL) {
-        pho_debug("No information available in cache: loading...");
-        lintape_map_load();
-    }
-
-    element = g_slist_find_custom(drive_cache, name, _find_by_name_cb);
-    if (element != NULL) {
-        struct drive_map_entry  *dme = element->data;
-
-        pho_debug("Found device '%s': serial='%s', model='%s',",
-                  name, dme->dme_serial, dme->dme_model);
-        return dme;
-    }
-
-    pho_info("Device '%s' not found in lintape device cache", name);
-    return NULL;
-}
-
-int lintape_dev_rlookup(const char *name, char *serial, size_t serial_size)
-{
-    const struct drive_map_entry  *dme;
-
-    dme = lintape_dev_info(name);
-    if (!dme)
-        return -ENOENT;
-
-    snprintf(serial, serial_size, "%s", dme->dme_serial);
-    return 0;
-}
-
-int lintape_dev_lookup(const char *serial, char *path, size_t path_size)
-{
-    GSList  *element;
-
-    if (strlen(serial) >= MAX_SERIAL)
-        LOG_RETURN(-ENAMETOOLONG, "Device name '%s' > %d char long",
-                   serial, MAX_SERIAL - 1);
-
-    if (drive_cache == NULL) {
-        pho_debug("No information available in cache: loading...");
-        lintape_map_load();
-    }
-
-    element = g_slist_find_custom(drive_cache, serial, _find_by_serial_cb);
-    if (element != NULL) {
-        struct drive_map_entry  *dme = element->data;
-
-        pho_debug("Found device at /dev/%s for '%s'", dme->dme_devname, serial);
-        snprintf(path, path_size, "/dev/%s", dme->dme_devname);
-        return 0;
-    }
-
-    return -ENOENT;
-}
-
 static void build_sys_class_path(char *path, size_t path_size, const char *name)
 {
     snprintf(path, path_size, "/sys/class/%s", name);
@@ -229,7 +164,14 @@ static inline bool is_device_valid(const char *dev_name)
     return res == 1;
 }
 
-int lintape_map_load(void)
+static void lintape_map_free(void)
+{
+    pho_debug("Freeing device serial cache");
+    g_slist_free_full(drive_cache, free);
+    drive_cache = NULL;
+}
+
+static int lintape_map_load(void)
 {
     char             sys_path[PATH_MAX];
     DIR             *dir;
@@ -282,9 +224,93 @@ out_close:
     return rc;
 }
 
-void lintape_map_free(void)
+static const struct drive_map_entry *lintape_dev_info(const char *name)
 {
-    pho_debug("Freeing device serial cache");
-    g_slist_free_full(drive_cache, free);
-    drive_cache = NULL;
+    GSList  *element;
+
+    if (strlen(name) >= IFNAMSIZ) {
+        pho_error(-ENAMETOOLONG, "Device name '%s' > %d char long",
+                  name, IFNAMSIZ - 1);
+        return NULL;
+    }
+
+    if (drive_cache == NULL) {
+        pho_debug("No information available in cache: loading...");
+        lintape_map_load();
+    }
+
+    element = g_slist_find_custom(drive_cache, name, _find_by_name_cb);
+    if (element != NULL) {
+        struct drive_map_entry  *dme = element->data;
+
+        pho_debug("Found device '%s': serial='%s', model='%s',",
+                  name, dme->dme_serial, dme->dme_model);
+        return dme;
+    }
+
+    pho_info("Device '%s' not found in lintape device cache", name);
+    return NULL;
 }
+
+static int lintape_dev_lookup(const char *serial, char *path,
+                              size_t path_size)
+{
+    GSList  *element;
+    ENTRY;
+
+    if (strlen(serial) >= MAX_SERIAL)
+        LOG_RETURN(-ENAMETOOLONG, "Device name '%s' > %d char long",
+                   serial, MAX_SERIAL - 1);
+
+    if (drive_cache == NULL) {
+        pho_debug("No information available in cache: loading...");
+        lintape_map_load();
+    }
+
+    element = g_slist_find_custom(drive_cache, serial, _find_by_serial_cb);
+    if (element != NULL) {
+        struct drive_map_entry  *dme = element->data;
+
+        pho_debug("Found device at /dev/%s for '%s'", dme->dme_devname, serial);
+        snprintf(path, path_size, "/dev/%s", dme->dme_devname);
+        return 0;
+    }
+
+    return -ENOENT;
+}
+
+static int lintape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
+{
+    const struct drive_map_entry  *dme;
+    const char *dev_short;
+    ENTRY;
+
+    /* extract basename(device)*/
+    dev_short = strrchr(dev_path, '/');
+    if (dev_short == NULL)
+        dev_short = dev_path;
+    else
+        dev_short++;
+
+    /* get serial and model from driver mapping */
+    dme = lintape_dev_info(dev_short);
+    if (!dme)
+        return -ENOENT;
+
+    memset(lds, 0, sizeof(*lds));
+    lds->lds_family = PHO_DEV_TAPE;
+    lds->lds_model = strdup(dme->dme_model);
+    lds->lds_serial = strdup(dme->dme_serial);
+
+    /** TODO query drive for actual state */
+    return 0;
+}
+
+struct dev_adapter dev_adapter_lintape = {
+    .dev_lookup = lintape_dev_lookup,
+    .dev_query  = lintape_dev_query,
+    .dev_load   = NULL, /** @TODO to be implemented */
+    .dev_eject  = NULL, /** @TODO to be implemented */
+};
+
+
