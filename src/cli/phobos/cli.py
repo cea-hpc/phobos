@@ -302,8 +302,8 @@ class TapeAddOptHandler(AddOptHandler):
         """Add resource-specific options."""
         super(TapeAddOptHandler, cls).add_options(parser)
         parser.add_argument('-t', '--type', required=True, help='tape technology')
-        parser.add_argument('--fs', help='Filesystem type')
-
+        parser.add_argument('--fs', default="LTFS",
+                            help='Filesystem type (default: LTFS)')
 
 class FormatOptHandler(BaseOptHandler):
     """Format a resource."""
