@@ -5,7 +5,7 @@ PSQL="psql -U phobos -h localhost phobos"
 
 setup_db() {
 	su postgres -c "createuser phobos"
-	su postgres -c "createdb phobos"
+	su postgres -c "createdb -E UTF8 phobos"
 	su postgres -c "psql phobos" << EOF
 GRANT ALL ON DATABASE phobos TO phobos;
 ALTER SCHEMA public OWNER TO phobos;
