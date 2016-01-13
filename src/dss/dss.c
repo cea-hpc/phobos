@@ -584,118 +584,117 @@ static char *dss_layout_extents_encode(struct extent *extents,
     return s;
 }
 
-static int get_object_setrequest(void *item_list, int item_cnt,
-                                  enum dss_set_action action,
-                                  GString *request)
+static int get_object_setrequest(struct object_info *item_list, int item_cnt,
+                                 enum dss_set_action action, GString *request)
 {
     int i;
     ENTRY;
 
     for (i = 0; i < item_cnt; i++) {
-        struct object_info *p_object = (struct object_info *)item_list;
+        struct object_info *p_object = &item_list[i];
 
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_OBJECT],
-                                   p_object[i].oid);
+                                   p_object->oid);
         } else if (action == DSS_SET_INSERT) {
             g_string_append_printf(request, insert_query_values[DSS_OBJECT],
-                                   p_object[i].oid, "[]",
+                                   p_object->oid, "[]",
                                    i < item_cnt-1 ? "," : ";");
         } else if (action == DSS_SET_UPDATE) {
             g_string_append_printf(request, update_query[DSS_OBJECT],
-                                   "[]", p_object[i].oid);
+                                   "[]", p_object->oid);
         }
     }
     return 0;
 }
 
-static int get_extent_setrequest(void *item_list, int item_cnt,
-                                  enum dss_set_action action,
-                                  GString *request, int *error)
+static int get_extent_setrequest(struct layout_info *item_list, int item_cnt,
+                                 enum dss_set_action action, GString *request,
+                                 int *error)
 {
     int i;
     ENTRY;
 
     for (i = 0; i < item_cnt; i++) {
-        struct layout_info  *p_layout = (struct layout_info *)item_list;
+        struct layout_info  *p_layout = &item_list[i];
         char                *layout;
 
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_EXTENT],
-                                   p_layout[i].oid);
+                                   p_layout->oid);
         } else if (action == DSS_SET_INSERT) {
-            layout = dss_layout_extents_encode(p_layout[i].extents,
-                                               p_layout[i].ext_count, error);
+            layout = dss_layout_extents_encode(p_layout->extents,
+                                               p_layout->ext_count, error);
             if (!layout)
                 LOG_RETURN(-EINVAL, "JSON encoding error");
 
             g_string_append_printf(request, insert_query_values[DSS_EXTENT],
-                                   p_layout[i].oid, p_layout[i].copy_num,
-                                   extent_state2str(p_layout[i].state),
-                                   layout_type2str(p_layout[i].type), "[]",
+                                   p_layout->oid, p_layout->copy_num,
+                                   extent_state2str(p_layout->state),
+                                   layout_type2str(p_layout->type), "[]",
                                    layout, i < item_cnt-1 ? "," : ";");
             free(layout);
         } else if (action == DSS_SET_UPDATE) {
-            layout = dss_layout_extents_encode(p_layout[i].extents,
-                                               p_layout[i].ext_count, error);
+            layout = dss_layout_extents_encode(p_layout->extents,
+                                               p_layout->ext_count, error);
             if (!layout)
                 LOG_RETURN(-EINVAL, "JSON encoding error");
 
             g_string_append_printf(request, update_query[DSS_EXTENT],
-                                   p_layout[i].copy_num,
-                                   extent_state2str(p_layout[i].state),
-                                   layout_type2str(p_layout[i].type), "[]",
-                                   layout, p_layout[i].oid);
+                                   p_layout->copy_num,
+                                   extent_state2str(p_layout->state),
+                                   layout_type2str(p_layout->type), "[]",
+                                   layout, p_layout->oid);
             free(layout);
         }
     }
     return 0;
 }
 
-static int get_media_setrequest(void *item_list, int item_cnt,
-                                  enum dss_set_action action,
-                                  GString *request, int *error)
+static int get_media_setrequest(struct media_info *item_list, int item_cnt,
+                                enum dss_set_action action, GString *request,
+                                int *error)
 {
     int i;
     ENTRY;
 
     for (i = 0; i < item_cnt; i++) {
-        struct media_info   *p_media = (struct media_info *)item_list;
+        struct media_info   *p_media = &item_list[i];
         char                *model;
 
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_MEDIA],
-                                   media_id_get(&p_media[i].id));
+                                   media_id_get(&p_media->id));
         } else if (action == DSS_SET_INSERT) {
-            model = dss_char4sql(p_media[i].model);
+            model = dss_char4sql(p_media->model);
             if (!model)
                 LOG_RETURN(-ENOMEM, "memory allocation failed");
 
             g_string_append_printf(request, insert_query_values[DSS_MEDIA],
-                                   dev_family2str(p_media[i].id.type),
-                                   model, media_id_get(&p_media[i].id),
-                                   media_adm_status2str(p_media[i].adm_status),
-                                   fs_type2str(p_media[i].fs_type),
-                                   address_type2str(p_media[i].addr_type),
-                                   fs_status2str(p_media[i].fs_status),
-                                   dss_media_stats_encode(p_media[i].stats,
+                                   dev_family2str(p_media->id.type),
+                                   model, media_id_get(&p_media->id),
+                                   media_adm_status2str(p_media->adm_status),
+                                   fs_type2str(p_media->fs_type),
+                                   address_type2str(p_media->addr_type),
+                                   fs_status2str(p_media->fs_status),
+                                   dss_media_stats_encode(p_media->stats,
                                                           error),
                                    i < item_cnt-1 ? "," : ";");
             free(model);
         } else if (action == DSS_SET_UPDATE) {
-            model = dss_char4sql(p_media[i].model);
+            model = dss_char4sql(p_media->model);
             if (!model)
                 LOG_RETURN(-ENOMEM, "memory allocation failed");
 
             g_string_append_printf(request, update_query[DSS_MEDIA],
-                                   dev_family2str(p_media[i].id.type), model,
-                                   media_adm_status2str(p_media[i].adm_status),
-                                   fs_type2str(p_media[i].fs_type),
-                                   address_type2str(p_media[i].addr_type),
-                                   fs_status2str(p_media[i].fs_status),
-                                   dss_media_stats_encode(p_media[i].stats,
+                                   dev_family2str(p_media->id.type), model,
+                                   media_adm_status2str(p_media->adm_status),
+                                   fs_type2str(p_media->fs_type),
+                                   address_type2str(p_media->addr_type),
+                                   fs_status2str(p_media->fs_status),
+                                   dss_media_stats_encode(p_media->stats,
                                                           error),
-                                   media_id_get(&p_media[i].id));
+                                   media_id_get(&p_media->id));
             free(model);
         }
     }
@@ -703,42 +702,42 @@ static int get_media_setrequest(void *item_list, int item_cnt,
     return 0;
 }
 
-static int get_device_setrequest(void *item_list, int item_cnt,
-                                  enum dss_set_action action,
-                                  GString *request)
+static int get_device_setrequest(struct dev_info *item_list, int item_cnt,
+                                 enum dss_set_action action, GString *request)
 {
     int i;
     ENTRY;
 
     for (i = 0; i < item_cnt; i++) {
-        struct dev_info *p_dev = (struct dev_info *)item_list;
+        struct dev_info *p_dev = &item_list[i];
         char            *model;
 
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_DEVICE],
-                                   p_dev[i].serial);
-
+                                   p_dev->serial);
         } else if (action == DSS_SET_INSERT) {
-            model = dss_char4sql(p_dev[i].model);
+            model = dss_char4sql(p_dev->model);
             if (!model)
                 LOG_RETURN(-ENOMEM, "memory allocation failed");
+
             g_string_append_printf(request, insert_query_values[DSS_DEVICE],
-                                   dev_family2str(p_dev[i].family), model,
-                                   p_dev[i].serial, p_dev[i].host,
-                                   media_adm_status2str(p_dev[i].adm_status),
-                                   p_dev[i].path, p_dev[i].changer_idx,
+                                   dev_family2str(p_dev->family), model,
+                                   p_dev->serial, p_dev->host,
+                                   media_adm_status2str(p_dev->adm_status),
+                                   p_dev->path, p_dev->changer_idx,
                                    i < item_cnt-1 ? "," : ";");
             free(model);
         } else if (action == DSS_SET_UPDATE) {
-            model = dss_char4sql(p_dev[i].model);
+            model = dss_char4sql(p_dev->model);
             if (!model)
                 LOG_RETURN(-ENOMEM, "memory allocation failed");
+
             g_string_append_printf(request, update_query[DSS_DEVICE],
-                                   dev_family2str(p_dev[i].family),
-                                   model, p_dev[i].host,
-                                   media_adm_status2str(p_dev[i].adm_status),
-                                   p_dev[i].path, p_dev[i].changer_idx,
-                                   p_dev[i].serial);
+                                   dev_family2str(p_dev->family),
+                                   model, p_dev->host,
+                                   media_adm_status2str(p_dev->adm_status),
+                                   p_dev->path, p_dev->changer_idx,
+                                   p_dev->serial);
             free(model);
         }
     }
