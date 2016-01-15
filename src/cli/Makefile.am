@@ -1,9 +1,9 @@
 AM_CFLAGS= $(CC_OPT)
 
 
-SWIG_MODULES=phobos/capi/config.py \
-	     phobos/capi/_config.so \
-	     phobos/capi/config_wrap.c \
+SWIG_MODULES=phobos/capi/cfg.py \
+	     phobos/capi/_cfg.so \
+	     phobos/capi/cfg_wrap.c \
 	     phobos/capi/dss.py \
 	     phobos/capi/_dss.so \
 	     phobos/capi/dss_wrap.c
@@ -14,11 +14,11 @@ SWIG_MODULES=phobos/capi/config.py \
 	     phobos/capi/_ldm.so \
 	     phobos/capi/ldm_wrap.c
 
-HAND_MODULES=phobos/capi/clogging.so
+HAND_MODULES=phobos/capi/log.so
 
 
 all-local:
-	swig -python -I../include phobos/capi/config.i
+	swig -python -I../include phobos/capi/cfg.i
 	swig -python -I../include phobos/capi/dss.i
 	swig -python -I../include phobos/capi/lrs.i
 	swig -python -I../include phobos/capi/ldm.i

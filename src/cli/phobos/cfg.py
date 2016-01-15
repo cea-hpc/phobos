@@ -8,7 +8,7 @@ High level interface over system-level configuration.
 """
 
 import os
-import phobos.capi.config as ccfg
+import phobos.capi.cfg as ccfg
 
 
 def load_config_file(path):

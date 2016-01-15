@@ -24,10 +24,10 @@ import StringIO
 import xml.etree.ElementTree
 import xml.dom.minidom
 
-import phobos.capi.clogging as pho_logging
+import phobos.capi.log as clog
 import phobos.capi.dss as cdss
 
-from phobos.config import load_config_file, get_config_value
+from phobos.cfg import load_config_file, get_config_value
 from phobos.dss import Client, GenericError
 from phobos.lrs import fs_format
 from ClusterShell.NodeSet import NodeSet
@@ -303,7 +303,8 @@ class TapeAddOptHandler(AddOptHandler):
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(TapeAddOptHandler, cls).add_options(parser)
-        parser.add_argument('-t', '--type', required=True, help='tape technology')
+        parser.add_argument('-t', '--type', required=True,
+                            help='tape technology')
         parser.add_argument('--fs', default="LTFS",
                             help='Filesystem type (default: LTFS)')
 
@@ -685,8 +686,8 @@ class PhobosActionContext(object):
             # -qq
             pylvl = logging.NOTSET
 
-        pho_logging.set_callback(phobos_log_handler)
-        pho_logging.set_level(pylvl)
+        clog.set_callback(phobos_log_handler)
+        clog.set_level(pylvl)
 
         logging.basicConfig(level=pylvl, format=fmt)
 

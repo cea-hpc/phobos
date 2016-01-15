@@ -8,7 +8,7 @@
  * \brief  Phobos configuration management interface file for SWIG.
  */
 
-%module config
+%module cfg
 
 %{
 #define SWIG_FILE_WITH_INIT

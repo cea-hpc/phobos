@@ -185,18 +185,18 @@ static PyObject *logger_set_level(PyObject *self, PyObject *args)
 /**
  * Exposed methods, with little docstring descriptors.
  */
-static PyMethodDef CLoggingMethods[] = {
+static PyMethodDef LogMethods[] = {
     {"set_level", logger_set_level, METH_VARARGS, "Set log level."},
     {"set_callback", logger_set_callback, METH_VARARGS, "Register log cb."},
     {NULL, NULL, 0, NULL}
 };
 
 
-PyMODINIT_FUNC initclogging(void)
+PyMODINIT_FUNC initlog(void)
 {
     PyObject *mod;
 
-    mod = Py_InitModule("clogging", CLoggingMethods);
+    mod = Py_InitModule("log", LogMethods);
     if (mod == NULL)
         return;
 }
