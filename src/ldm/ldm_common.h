@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- * Copyright 2015 CEA/DAM. All Rights Reserved.
+ * Copyright 2015-2016 CEA/DAM. All Rights Reserved.
  */
 /**
  * \brief  Common functions for LDM adapters.
@@ -31,3 +31,8 @@ typedef int (*mntent_cb_t)(const struct mntent *mntent, void *cb_data);
  * @retval != 0 if any cb_func return != 0 (iteration was stopped).
  */
 int mnttab_foreach(mntent_cb_t cb_func, void *cb_data);
+
+/**
+ * Standard implementation of 'df' using statfs().
+ */
+int common_statfs(const char *path, size_t *spc_used, size_t *spc_free);

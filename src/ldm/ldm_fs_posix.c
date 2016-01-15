@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- * Copyright 2015 CEA/DAM. All Rights Reserved.
+ * Copyright 2015-2016 CEA/DAM. All Rights Reserved.
  */
 /**
  * \brief  Phobos Local Device Manager: FS calls for inplace directories.
@@ -15,6 +15,7 @@
 
 #include "pho_ldm.h"
 #include "pho_common.h"
+#include "ldm_common.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -40,8 +41,9 @@ static int dir_present(const char *dev_path, char *mnt_path,
 }
 
 struct fs_adapter fs_adapter_posix = {
-    .fs_mount  = NULL,
-    .fs_umount = NULL,
-    .fs_format = NULL,
+    .fs_mount   = NULL,
+    .fs_umount  = NULL,
+    .fs_format  = NULL,
     .fs_mounted = dir_present,
+    .fs_df      = common_statfs,
 };

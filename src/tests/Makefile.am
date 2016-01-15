@@ -49,4 +49,4 @@ test_lintape_SOURCES=test_lintape.c
 test_lintape_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la
 
 test_ldm_SOURCES=test_ldm.c
-test_ldm_LDADD=../ldm/libpho_ldm.la ../common/libpho_common.la
+test_ldm_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la

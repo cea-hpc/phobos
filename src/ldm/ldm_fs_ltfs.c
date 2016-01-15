@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- * Copyright 2015 CEA/DAM. All Rights Reserved.
+ * Copyright 2015-2016 CEA/DAM. All Rights Reserved.
  */
 /**
  * \brief  Phobos Local Device Manager: LTFS management.
@@ -237,4 +237,5 @@ struct fs_adapter fs_adapter_ltfs = {
     .fs_umount  = ltfs_umount,
     .fs_format  = ltfs_format,
     .fs_mounted = ltfs_mounted,
+    .fs_df      = common_statfs,
 };

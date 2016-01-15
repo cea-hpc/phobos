@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- * Copyright 2014-2015 CEA/DAM. All Rights Reserved.
+ * Copyright 2014-2016 CEA/DAM. All Rights Reserved.
  */
 /**
  * \brief  Phobos Local Device Manager.
@@ -311,6 +311,7 @@ struct fs_adapter {
     int (*fs_format)(const char *dev_path, const char *label);
     int (*fs_mounted)(const char *dev_path, char *mnt_path,
                       size_t mnt_path_size);
+    int (*fs_df)(const char *mnt_path, size_t *spc_used, size_t *spc_free);
 };
 
 /**
@@ -388,6 +389,23 @@ static inline int ldm_fs_mounted(const struct fs_adapter *fsa,
     assert(fsa != NULL);
     assert(fsa->fs_mounted != NULL);
     return fsa->fs_mounted(dev_path, mnt_path, mnt_path_size);
+}
+
+/**
+ * Get used and available space in a filesystem.
+ * @param[in] fsa        File system adapter.
+ * @param[in] mnt_path   Moint point of the filesystem.
+ * @param[out] spc_used  Used space in the filesystem (physical).
+ * @param[out] spc_free  Available space in the filesystem.
+ *
+ * @return 0 on success, negative error code on failure.
+ */
+static inline int ldm_fs_df(const struct fs_adapter *fsa, const char *mnt_path,
+                            size_t *spc_used, size_t *spc_free)
+{
+    assert(fsa != NULL);
+    assert(fsa->fs_df != NULL);
+    return fsa->fs_df(mnt_path, spc_used, spc_free);
 }
 
 #endif /* ^SWIG */

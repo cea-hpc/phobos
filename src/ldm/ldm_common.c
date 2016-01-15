@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- * Copyright 2015 CEA/DAM. All Rights Reserved.
+ * Copyright 2015-2016 CEA/DAM. All Rights Reserved.
  */
 /**
  * \brief  Common functions for LDM adapters.
@@ -16,6 +16,8 @@
 
 #include <sys/user.h>
 #include <assert.h>
+#include <sys/statfs.h>
+#include <inttypes.h>
 
 int mnttab_foreach(mntent_cb_t cb_func, void *cb_data)
 {
@@ -44,4 +46,34 @@ int mnttab_foreach(mntent_cb_t cb_func, void *cb_data)
 out_close:
     endmntent(fp);
     return rc;
+}
+
+int common_statfs(const char *path, size_t *spc_used, size_t *spc_free)
+{
+    struct statfs  stfs;
+    ENTRY;
+
+    if (spc_used == NULL || spc_free == NULL)
+        return -EINVAL;
+
+    if (statfs(path, &stfs) != 0)
+        LOG_RETURN(-errno, "statfs(%s) failed", path);
+
+    /* check df consistency:
+     * used = total - free = f_blocks - f_bfree
+     * if used + available < 0, there's something wrong
+     */
+    if (stfs.f_blocks + stfs.f_bavail - stfs.f_bfree < 0)
+        LOG_RETURN(-EIO, "statfs() returned inconsistent values: "
+                   "blocks=%"PRIu64", avail=%"PRIu64, ", free=%"PRIu64,
+                   stfs.f_blocks, stfs.f_bavail, stfs.f_bfree);
+
+    /* used = total - free */
+    *spc_used = (stfs.f_blocks - stfs.f_bfree) * stfs.f_bsize;
+    /* actually, only available blocks can be written */
+    *spc_free = stfs.f_bavail * stfs.f_bsize;
+
+    pho_debug("%s: used=%zu, free=%zu", path, *spc_used, *spc_free);
+
+    return 0;
 }
