@@ -9,7 +9,11 @@ to interact with phobos DSS layer, as it provides a safe, expressive and
 clean API to access it.
 """
 
+import os.path
+from socket import gethostname
+
 import phobos.capi.dss as cdss
+import phobos.capi.ldm as cldm
 
 
 # Valid filter suffix and associated operators.
@@ -88,16 +92,49 @@ class ObjectManager(object):
         method = getattr(cdss, 'dss_%s_set' % self.obj_type)
         return method(self.client.handle, objects, cdss.DSS_SET_DELETE)
 
+class DeviceManager(ObjectManager):
+    """Proxy to manipulate devices."""
+    def add(self, device_type, device_path, locked=False):
+        """Query device and insert information into DSS."""
+        real_path = os.path.realpath(device_path)
+
+        # We could use swig typemaps tricks to return a dev_adapter directly
+        # from cldm.get_dev_adapter() but this is simpler and only done here.
+        dev_adapter = cldm.dev_adapter()
+        rc = cldm.get_dev_adapter(device_type, dev_adapter)
+        if rc:
+            raise GenericError("Cannot get device adpater")
+
+        # Idem typemaps.
+        dev_state = cldm.ldm_dev_state()
+        rc = cldm.ldm_dev_query(dev_adapter, real_path, dev_state)
+        if rc:
+            raise GenericError("Cannot query device '%s'" % device_path)
+
+        dev_info = cdss.dev_info()
+        dev_info.family = dev_state.lds_family
+        dev_info.model = dev_state.lds_model
+        dev_info.path = device_path
+        dev_info.host = gethostname().split('.')[0]
+        dev_info.serial = dev_state.lds_serial
+        if locked:
+            dev_info.adm_status = cdss.PHO_DEV_ADM_ST_LOCKED
+        else:
+            dev_info.adm_status = cdss.PHO_DEV_ADM_ST_UNLOCKED
+
+        return self.insert([dev_info])
+
 class Client(object):
     """Main class: issue requests to the DSS and format replies."""
     def __init__(self, **kwargs):
         """Initialize a new DSS context."""
         super(Client, self).__init__(**kwargs)
         self.handle = None
-        self.devices = ObjectManager('device', self)
+        self.devices = DeviceManager('device', self)
         self.extents = ObjectManager('extent', self)
         self.objects = ObjectManager('object', self)
-        self.media   = ObjectManager('media', self)
+        # TODO consider adding a MediaManager with an add() method as well
+        self.media = ObjectManager('media', self)
 
     def connect(self, **kwargs):
         """

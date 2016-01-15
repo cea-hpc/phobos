@@ -124,6 +124,9 @@ static inline int ldm_dev_eject(const struct dev_adapter *dev,
 
 /** @}*/
 
+/* No python bindings for the following methods unless we need them. */
+#ifndef SWIG
+
 /**
  * \defgroup lib_adapter (Library Adapter API)
  * @{
@@ -386,6 +389,8 @@ static inline int ldm_fs_mounted(const struct fs_adapter *fsa,
     assert(fsa->fs_mounted != NULL);
     return fsa->fs_mounted(dev_path, mnt_path, mnt_path_size);
 }
+
+#endif /* ^SWIG */
 
 /** @}*/
 #endif

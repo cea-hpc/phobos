@@ -33,6 +33,10 @@ from phobos.lrs import fs_format
 from ClusterShell.NodeSet import NodeSet
 
 
+def strerror(rc):
+    """Basic wrapper to convert return code into corresponding errno string."""
+    return os.strerror(abs(rc))
+
 def csv_dump(data):
     """Convert a list of dictionaries to a csv string"""
 
@@ -131,7 +135,7 @@ def phobos_log_handler(rec):
     # Append ': <errmsg>' to the original message if err_code was set
     if rec[4] != 0:
         full_msg += ": %s"
-        args = (os.strerror(rec[4]), )
+        args = (strerror(rec[4]), )
     else:
         args = tuple()
 
@@ -334,7 +338,10 @@ class DirOptHandler(BaseOptHandler):
 
     def exec_add(self):
         """Add a new directory"""
-        self.logger.error("Dir add is not implemented")
+        for path in self.params.get('res'):
+            rc = self.client.devices.add(cdss.PHO_DEV_DIR, path)
+            if rc:
+                self.logger.error("Cannot add directory: %s", strerror(rc))
 
     def exec_list(self):
         """List directories as devices."""
@@ -353,7 +360,6 @@ class DirOptHandler(BaseOptHandler):
             dirs.append(wdir[0])
         dump_object_list(dirs, self.params.get('format'),
                          self.params.get('numeric'))
-
 
     def exec_lock(self):
         """Lock a directory"""
@@ -377,7 +383,10 @@ class DriveOptHandler(BaseOptHandler):
 
     def exec_add(self):
         """Add a new drive"""
-        self.logger.error("Drive add is not implemented")
+        for path in self.params.get('res'):
+            rc = self.client.devices.add(cdss.PHO_DEV_TAPE, path)
+            if rc:
+                self.logger.error("Cannot add drive: %s", strerror(rc))
 
     def exec_list(self):
         """List all drives."""
@@ -426,7 +435,7 @@ class DriveOptHandler(BaseOptHandler):
             print "%d drive(s) locked" % len(drives)
         else:
             self.logger.error("Failed to lock one or more drive(s), error: %s",
-                              os.strerror(abs(rc)))
+                              strerror(rc))
 
     def exec_unlock(self):
         """Drive unlock"""
@@ -453,7 +462,7 @@ class DriveOptHandler(BaseOptHandler):
             print "%d drive(s) unlocked" % len(drives)
         else:
             self.logger.error("Failed to unlock one or more drive(s)"
-                              ", error: %s", os.strerror(abs(rc)))
+                              ", error: %s", strerror(rc))
 
 class TapeOptHandler(BaseOptHandler):
     """Magnetic tape options and actions."""
@@ -492,7 +501,7 @@ class TapeOptHandler(BaseOptHandler):
             print "%d tape(s) added" % len(media_list)
         else:
             self.logger.error("Failed to add tape(s), error: %s",
-                              os.strerror(abs(rc)))
+                              strerror(rc))
 
     def exec_format(self):
         """Format tape to LTFS. No Alternative."""
@@ -559,7 +568,7 @@ class TapeOptHandler(BaseOptHandler):
             print "%d tape(s) locked" % len(tapes)
         else:
             self.logger.error("Failed to lock one or more tape(s), error: %s",
-                              os.strerror(abs(rc)))
+                              strerror(rc))
 
     def exec_unlock(self):
         """Unlock tapes"""
@@ -589,7 +598,7 @@ class TapeOptHandler(BaseOptHandler):
             print "%d tape(s) unlocked" % len(tapes)
         else:
             self.logger.error("Failed to unlock one or more tape(s), "
-                              "error: %s", os.strerror(abs(rc)))
+                              "error: %s", strerror(rc))
 
 class PhobosActionContext(object):
     """

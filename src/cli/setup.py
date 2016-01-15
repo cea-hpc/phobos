@@ -27,6 +27,15 @@ lrs_module = Extension('_lrs',
                        library_dirs = ['../store/.libs'],
                        define_macros = GLOBAL_MACROS)
 
+ldm_module = Extension('_ldm',
+                       sources=['phobos/capi/ldm_wrap.c'],
+                       include_dirs = ['../include',
+                                       '/usr/include/glib-2.0',
+                                       '/usr/lib64/glib-2.0/include'],
+                       libraries = ['phobos_store'],
+                       library_dirs = ['../store/.libs'],
+                       define_macros = GLOBAL_MACROS)
+
 config_module = Extension('_config',
                           sources=['phobos/capi/config_wrap.c'],
                           include_dirs = ['../include',
@@ -49,7 +58,13 @@ setup(
     name = 'phobos',
     packages = ['phobos', 'phobos.capi'],
     ext_package = 'phobos.capi',
-    ext_modules = [dss_module, lrs_module, config_module, clogging_module],
+    ext_modules = [
+        dss_module,
+        lrs_module,
+        ldm_module,
+        config_module,
+        clogging_module
+    ],
     py_modules = ['config'],
     scripts = ['scripts/phobos'],
     version = '0.0.1',
