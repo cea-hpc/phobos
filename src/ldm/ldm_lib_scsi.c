@@ -365,7 +365,7 @@ static const struct element_status *
         || addr->lia_type == MED_LOC_DRIVE) {
         /* search in drives */
         for (i = 0; i < lib->drives.count; i++) {
-            pho_debug("looking for %#hx: drive #%d (addr=%#hx)",
+            pho_debug("looking for %#lx: drive #%d (addr=%#hx)",
                       addr->lia_addr, i, lib->drives.items[i].address);
             if (lib->drives.items[i].address == addr->lia_addr)
                 return &lib->drives.items[i];
@@ -376,7 +376,7 @@ static const struct element_status *
         || addr->lia_type == MED_LOC_SLOT) {
         /* search in slots */
         for (i = 0; i < lib->slots.count; i++) {
-            pho_debug("looking for %#hx: slot #%d (addr=%#hx)",
+            pho_debug("looking for %#lx: slot #%d (addr=%#hx)",
                       addr->lia_addr, i, lib->slots.items[i].address);
             if (lib->slots.items[i].address == addr->lia_addr)
                 return &lib->slots.items[i];
@@ -387,7 +387,7 @@ static const struct element_status *
         || addr->lia_type == MED_LOC_IMPEXP) {
         /* search in import/export slots */
         for (i = 0; i < lib->impexp.count; i++) {
-            pho_debug("looking for %#hx: impexp #%d (addr=%#hx)",
+            pho_debug("looking for %#lx: impexp #%d (addr=%#hx)",
                       addr->lia_addr, i, lib->impexp.items[i].address);
             if (lib->impexp.items[i].address == addr->lia_addr)
                 return &lib->impexp.items[i];
@@ -398,7 +398,7 @@ static const struct element_status *
         || addr->lia_type == MED_LOC_ARM) {
         /* search in arms */
         for (i = 0; i < lib->arms.count; i++) {
-            pho_debug("looking for %#hx: arm #%d (addr=%#hx)",
+            pho_debug("looking for %#lx: arm #%d (addr=%#hx)",
                       addr->lia_addr, i, lib->arms.items[i].address);
             if (lib->arms.items[i].address == addr->lia_addr)
                 return &lib->arms.items[i];
@@ -431,7 +431,7 @@ static int select_target_addr(struct lib_descriptor *lib,
 
     element = element_from_addr(lib, src_lia);
     if (!element)
-        LOG_RETURN(-EINVAL, "No element at address %#hx",
+        LOG_RETURN(-EINVAL, "No element at address %#lx",
                    src_lia->lia_addr);
 
     /* if there is a source addr, use it */

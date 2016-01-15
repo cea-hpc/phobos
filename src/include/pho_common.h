@@ -81,7 +81,8 @@ void pho_log_callback_set(pho_log_callback_t cb);
  * registered logging callback.
  */
 void _log_emit(enum pho_log_level level, const char *file, int line,
-               const char *func, int errcode, const char *fmt, ...);
+               const char *func, int errcode, const char *fmt, ...)
+               __attribute__((format(printf, 6, 7)));
 
 
 #define _PHO_LOG_INTERNAL(_level, _rc, _fmt...)  \

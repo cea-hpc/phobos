@@ -490,7 +490,7 @@ static int pho_posix_get(const char *id, const char *tag,
     /* Always read the whole extent */
     if (iod->iod_off != 0) {
         pho_warn("Partial get not supported, reading whole extent instead of"
-                 " seeking to offset %lu", (unsigned int)iod->iod_off);
+                 " seeking to offset %ju", iod->iod_off);
         iod->iod_off = 0;
     }
 
@@ -528,7 +528,7 @@ static int pho_posix_get(const char *id, const char *tag,
             LOG_GOTO(free_attrs, rc = -errno, "failed to stat %s", fpath);
 
         pho_warn("Extent size is not set in DB: using physical extent size: "
-                 "%llu bytes", st.st_size);
+                 "%ju bytes", st.st_size);
         iod->iod_size = st.st_size;
     }
 

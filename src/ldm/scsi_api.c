@@ -49,7 +49,7 @@ int mode_sense(int fd, struct mode_sense_info *info)
     res_hdr = (struct mode_sense_result_header *)buffer;
     if (res_hdr->mode_data_length < sizeof(struct mode_sense_result_header) +
                                     sizeof(struct mode_sense_result_EAAP) - 1)
-        LOG_RETURN(-EIO, "Unexpected result size %u < %u",
+        LOG_RETURN(-EIO, "Unexpected result size %u < %lu",
                    res_hdr->mode_data_length,
                    sizeof(struct mode_sense_result_header) +
                    sizeof(struct mode_sense_result_EAAP) - 1);
@@ -186,7 +186,7 @@ int element_status(int fd, enum element_type_code type,
         return -ENOMEM;
 
     pho_debug("scsi_execute: READ_ELEMENT_STATUS, type=%#x, start_addr=%#hx, "
-              "count=%#hu, buffer_len=%u", type, start_addr, nb, len);
+              "count=%hu, buffer_len=%u", type, start_addr, nb, len);
 
     req.opcode = READ_ELEMENT_STATUS;
     req.voltag = 1; /* return volume bar-code */

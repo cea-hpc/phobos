@@ -64,9 +64,9 @@ int common_statfs(const char *path, size_t *spc_used, size_t *spc_free)
      * if used + available < 0, there's something wrong
      */
     if (stfs.f_blocks + stfs.f_bavail - stfs.f_bfree < 0)
-        LOG_RETURN(-EIO, "statfs() returned inconsistent values: "
-                   "blocks=%"PRIu64", avail=%"PRIu64, ", free=%"PRIu64,
-                   stfs.f_blocks, stfs.f_bavail, stfs.f_bfree);
+        LOG_RETURN(-EIO, "statfs(%s) returned inconsistent values: "
+                   "blocks=%ld, avail=%ld, free=%ld",
+                   path, stfs.f_blocks, stfs.f_bavail, stfs.f_bfree);
 
     /* used = total - free */
     *spc_used = (stfs.f_blocks - stfs.f_bfree) * stfs.f_bsize;

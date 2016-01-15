@@ -188,7 +188,7 @@ int main(int argc, char **argv)
     rc = element_status(fd, SCSI_TYPE_IMPEXP, msi.impexp.first_addr,
                         msi.impexp.nb, false, &list, &lcount);
     if (rc) {
-        pho_error(rc, "element_status ERROR %d");
+        pho_error(rc, "element_status error");
         exit(EXIT_FAILURE);
     }
     print_elements(list, lcount);
