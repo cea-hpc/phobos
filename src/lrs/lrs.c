@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- * Copyright 2014-2015 CEA/DAM. All Rights Reserved.
+ * Copyright 2014-2016 CEA/DAM. All Rights Reserved.
  */
 /**
  * \brief  Phobos Local Resource Scheduler (LRS)
@@ -220,7 +220,7 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
         return rc;
 
     /* now query device by path */
-    rc = ldm_dev_query(&deva, devi->path, &devd->sys_dev_state);
+    rc = ldm_dev_query(&deva, devd->dev_path, &devd->sys_dev_state);
     if (rc)
         return rc;
 
@@ -588,7 +588,7 @@ static int lrs_mount(struct dev_descr *dev)
         pho_info("Tape '%s' is located in drive '%s' but is not online: "
                  "querying the drive to load it...",
                  media_id_get(&devd->ldi_media_id), devi->serial);
-        rc = ldm_dev_load(&deva, devi->path);
+        rc = ldm_dev_load(&deva, devd->dev_path);
         if (rc)
             LOG_RETURN(rc, "Failed to load tape in drive '%s'",
                        devi->serial);
