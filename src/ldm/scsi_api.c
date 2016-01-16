@@ -144,16 +144,21 @@ static int read_next_element_status(const struct element_descriptor *elmt,
         /* id length (host endianess) */
         int id_len = elmt->alt_info.dev.id_len;
 
+        /* ensure room for final '\0' */
+        if (id_len >= DEV_ID_LEN)
+                id_len = DEV_ID_LEN - 1;
+
         if (id_len > 0) {
             strncpy(elem_out->dev_id, elmt->alt_info.dev.devid,
                     id_len);
-            elem_out->dev_id[id_len] = '\0';
+            elem_out->dev_id[id_len + 1] = '\0';
             rstrip(elem_out->dev_id);
         }
     }
 
-    pho_debug("scsi_type: %d, addr: %#hx, %s", elem_out->type,
-              elem_out->address, elem_out->full ? "full" : "empty");
+    pho_debug("scsi_type: %d, addr: %#hx, %s, id='%s'", elem_out->type,
+              elem_out->address, elem_out->full ? "full" : "empty",
+              elem_out->dev_id[0] ? elem_out->dev_id : "");
 
     return be16toh(page->ed_len);
 }

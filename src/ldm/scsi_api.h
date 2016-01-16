@@ -42,7 +42,7 @@ int mode_sense(int fd, struct mode_sense_info *info);
 /* --------------- ELEMENT STATUS API ------------------ */
 
 #define VOL_ID_LEN 37 /* standard: 36 + add 1 to ensure final '\0' */
-#define DEV_ID_LEN 33 /* standard: 32 + add 1 to ensure final '\0' */
+#define DEV_ID_LEN 37 /* standard: 36 + add 1 to ensure final '\0' */
 
 /** type of elements to retrieve with element_status() */
 enum element_type_code {
