@@ -87,7 +87,6 @@ case $verb in
 		drive=$2
 		label=$3
 		[ -e "$drive" ] || usage
-		[ -d "$label" ] || usage
                 format_ltfs "$drive" "$label"
 		;;
 	*)
