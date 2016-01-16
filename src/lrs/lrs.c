@@ -1054,6 +1054,19 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     if (rc != 0)
         LOG_RETURN(rc, "Cannot format media '%s'", label);
 
+    /* mount the filesystem to get space information */
+    rc = lrs_mount(dev);
+    if (rc != 0)
+        LOG_RETURN(rc, "Failed to mount newly formatted media '%s'", label);
+
+    rc = ldm_fs_df(&fsa, dev->mnt_path, &media_info->stats.phys_spc_used,
+                   &media_info->stats.phys_spc_free);
+    if (rc != 0)
+        LOG_RETURN(rc, "Failed to get usage for media '%s'", label);
+
+    /* now unmount it (ignore unmount error) */
+    (void)lrs_umount(dev);
+
     /* Post operation: update media information in DSS */
     media_info->fs_status = PHO_FS_STATUS_EMPTY;
 
