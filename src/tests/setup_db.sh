@@ -26,7 +26,8 @@ drop_db() {
 setup_tables() {
 	$PSQL << EOF
 CREATE TYPE dev_family AS ENUM ('disk', 'tape', 'dir');
-CREATE TYPE dev_model AS ENUM ('ULTRIUM-TD6', 'ULTRIUM-TD5');
+CREATE TYPE dev_model AS ENUM ('ULTRIUM-TD5', 'ULTRIUM-TD6',
+                               'ULT3580-TD5', 'ULT3580-TD6');
 CREATE TYPE tape_model AS ENUM ('LTO6', 'LTO5', 'T10KB');
 CREATE TYPE adm_status AS ENUM ('locked', 'unlocked', 'failed');
 CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS');
