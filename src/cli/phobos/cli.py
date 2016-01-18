@@ -186,7 +186,7 @@ class ShowOptHandler(BaseOptHandler):
         """Add resource-specific options."""
         super(ShowOptHandler, cls).add_options(parser)
         parser.add_argument('res', nargs='+', help='Resource(s) to show')
-        parser.add_argument('--numeric', action='store_true',
+        parser.add_argument('--numeric', action='store_true', default=False,
                             help='Output numeric values')
         parser.add_argument('--format', default='human',
                             help="Output format human/xml/json/csv/yaml " \
@@ -250,6 +250,7 @@ class DirOptHandler(BaseOptHandler):
             rc = self.client.devices.add(cdss.PHO_DEV_DIR, path)
             if rc:
                 self.logger.error("Cannot add directory: %s", strerror(rc))
+                sys.exit(os.EX_DATAERR)
 
     def exec_list(self):
         """List directories as devices."""
@@ -266,8 +267,9 @@ class DirOptHandler(BaseOptHandler):
                 continue
             assert len(wdir) == 1
             dirs.append(wdir[0])
-        dump_object_list(dirs, self.params.get('format'),
-                         self.params.get('numeric'))
+        if len(dirs) > 0:
+            dump_object_list(dirs, self.params.get('format'),
+                             self.params.get('numeric'))
 
     def exec_lock(self):
         """Lock a directory"""
@@ -295,6 +297,7 @@ class DriveOptHandler(BaseOptHandler):
             rc = self.client.devices.add(cdss.PHO_DEV_TAPE, path)
             if rc:
                 self.logger.error("Cannot add drive: %s", strerror(rc))
+                sys.exit(os.EX_DATAERR)
 
     def exec_list(self):
         """List all drives."""
@@ -312,8 +315,9 @@ class DriveOptHandler(BaseOptHandler):
                 continue
             assert len(drive) == 1
             drives.append(drive[0])
-        dump_object_list(drives, self.params.get('format'),
-                         self.params.get('numeric'))
+        if len(drives) > 0:
+            dump_object_list(drives, self.params.get('format'),
+                             self.params.get('numeric'))
 
     def exec_lock(self):
         """Drive lock"""

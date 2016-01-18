@@ -5,20 +5,26 @@
 
 """Unit tests for phobos.cli"""
 
+import os
 import sys
-import unittest
 import errno
+import unittest
+import tempfile
 
 from contextlib import contextmanager
 from StringIO import StringIO
 from random import randint
+from socket import gethostname
 
 from phobos.cli import PhobosActionContext
 from phobos.dss import Client
 from phobos.dss import GenericError as DSSError
 
-from phobos.capi.dss import dev_info, PHO_DEV_DIR
+from phobos.capi.dss import dev_info, PHO_DEV_DIR, PHO_DEV_TAPE
 
+def gethostname_short():
+    """Return short hostname"""
+    return gethostname().split('.')[0]
 
 @contextmanager
 def output_intercept():
@@ -30,17 +36,20 @@ def output_intercept():
     finally:
         sys.stdout, sys.stderr = old_out, old_err
 
+
 class CLIParametersTest(unittest.TestCase):
     """
     This test exerts phobos command line parser with valid and invalid
     combinations.
     """
+    """Base class to execute CLI and check return codes."""
     def check_cmdline_valid(self, args):
         """Make sure a command line is seen as valid."""
         PhobosActionContext(args)
 
     def check_cmdline_exit(self, args, code=0):
         """Make sure a command line exits with a given error code."""
+        print ' '.join(args)
         with output_intercept() as (stdout, stderr):
             try:
                 # 2.7+ required to use assertRaises as a context manager
@@ -70,22 +79,9 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['voynichauthor', 'show'], code=2)
         self.check_cmdline_exit(['dir', 'teleport'], code=2)
 
-    def test_cli_tape(self):
-        """ test tape add commands"""
-        #Test differents types of tape name format
-        PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'add',
-                             '-t', 'LTO6', '--fs', 'LTFS', 'STANDARD[0000-1000]']).run()
-        PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'add',
-                             '-t', 'LTO6', '--fs', 'LTFS', 'TE[000-666]st']).run()
-        PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'add',
-                             '-t', 'LTO6', '--fs', 'LTFS', 'ABC,DEF,XZE,AQW']).run()
-        PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'lock',
-                             'STANDARD[0000-0200]']).run()
-        PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'unlock',
-                             'STANDARD[0000-0100]']).run()
-        PhobosActionContext(['-c', '../../tests/phobos.conf', 'tape', 'unlock',
-                             '--force', 'STANDARD[0000-0200]']).run()
 
+class LogTest(unittest.TestCase):
+    """Exercise the interleaved log layers."""
     def test_cli_log(self):
         """
         Due to the way C and python layers are sandwitched when handling error
@@ -108,6 +104,70 @@ class CLIParametersTest(unittest.TestCase):
         self.assertEqual(rc, -errno.ECOMM)
 
         cli.disconnect()
+
+
+class BasicExecutionTest(unittest.TestCase):
+    """Ease execution of the CLI."""
+    # Reuse configuration file from global tests
+    TEST_CFG_FILE = "../../tests/phobos.conf"
+    def pho_execute(self, params, auto_cfg=True, code=0):
+        """Instanciate and execute a PhobosActionContext."""
+        if auto_cfg:
+            params = ['-c', self.TEST_CFG_FILE] + params
+
+        try:
+            PhobosActionContext(params).run()
+        except SystemExit as exc:
+            self.assertEqual(exc.code, code)
+        else:
+            if code:
+                self.fail("SystemExit with code %d expected" % code)
+
+
+class MediaAddTest(BasicExecutionTest):
+    """Register tapes into database."""
+    def test_cli_tape(self):
+        """ test tape add commands"""
+        #Test differents types of tape name format
+        self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                          'STANDARD[0000-1000]'])
+        self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                          'TE[000-666]st'])
+        self.pho_execute(['tape', 'add',
+                          '-t', 'LTO6', '--fs', 'LTFS', 'ABC,DEF,XZE,AQW'])
+        self.pho_execute(['tape', 'lock', 'STANDARD[0000-0200]'])
+        self.pho_execute(['tape', 'unlock', 'STANDARD[0000-0100]'])
+        self.pho_execute(['tape', 'unlock', '--force', 'STANDARD[0000-0200]'])
+
+
+class DeviceAddTest(BasicExecutionTest):
+    """
+    This sub-test suite adds devices (drives and directories) and makes sure
+    that both regular and abnormal cases are handled properly.
+    """
+    def test_dir_add(self):
+        """test adding directories. Simple case."""
+        flist = []
+        for i in range(5):
+            file = tempfile.NamedTemporaryFile()
+            self.pho_execute(['-v', 'dir', 'add', file.name])
+            flist.append(file)
+
+        for file in flist:
+            path = "%s:%s" % (gethostname_short(), file.name)
+            self.pho_execute(['-v', 'dir', 'show', path])
+
+    def test_dir_add_missing(self):
+        """Add a non-existent directory should raise an error."""
+        self.pho_execute(['-v', 'dir', 'add', '/tmp/nonexistentfileAA'],
+                         code=os.EX_DATAERR)
+
+    def test_dir_add_double(self):
+        """Add a directory twice should raise an error."""
+        file = tempfile.NamedTemporaryFile()
+        self.pho_execute(['-v', 'dir', 'add', file.name])
+        self.pho_execute(['-v', 'dir', 'add', file.name], code=os.EX_DATAERR)
+
 
 if __name__ == '__main__':
     unittest.main()

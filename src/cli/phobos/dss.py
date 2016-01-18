@@ -9,6 +9,7 @@ to interact with phobos DSS layer, as it provides a safe, expressive and
 clean API to access it.
 """
 
+import logging
 import os.path
 from socket import gethostname
 
@@ -64,11 +65,13 @@ def dss_filter(obj_type, **kwargs):
         filt.append(crit)
     return filt
 
+
 class ObjectManager(object):
     """Proxy to manipulate (CRUD) objects in DSS."""
     def __init__(self, obj_type, client, **kwargs):
         """Initialize new instance."""
         super(ObjectManager, self).__init__(**kwargs)
+        self.logger = logging.getLogger(__name__)
         self.obj_type = obj_type
         self.client = client
 
@@ -92,6 +95,7 @@ class ObjectManager(object):
         method = getattr(cdss, 'dss_%s_set' % self.obj_type)
         return method(self.client.handle, objects, cdss.DSS_SET_DELETE)
 
+
 class DeviceManager(ObjectManager):
     """Proxy to manipulate devices."""
     def add(self, device_type, device_path, locked=False):
@@ -103,13 +107,15 @@ class DeviceManager(ObjectManager):
         dev_adapter = cldm.dev_adapter()
         rc = cldm.get_dev_adapter(device_type, dev_adapter)
         if rc:
-            raise GenericError("Cannot get device adpater")
+            self.logger.error('Cannot get device adapter')
+            return rc
 
         # Idem typemaps.
         dev_state = cldm.ldm_dev_state()
         rc = cldm.ldm_dev_query(dev_adapter, real_path, dev_state)
         if rc:
-            raise GenericError("Cannot query device '%s'" % device_path)
+            self.logger.error("Cannot query device '%s'" % device_path)
+            return rc
 
         dev_info = cdss.dev_info()
         dev_info.family = dev_state.lds_family
@@ -122,7 +128,12 @@ class DeviceManager(ObjectManager):
         else:
             dev_info.adm_status = cdss.PHO_DEV_ADM_ST_UNLOCKED
 
-        return self.insert([dev_info])
+        rc = self.insert([dev_info])
+        if rc != 0:
+            self.logger.error("Cannot insert dev info for '%s'" % device_path)
+            return rc
+
+        return 0
 
 class Client(object):
     """Main class: issue requests to the DSS and format replies."""
