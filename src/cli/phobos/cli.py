@@ -246,11 +246,16 @@ class DirOptHandler(BaseOptHandler):
 
     def exec_add(self):
         """Add a new directory"""
+        count = 0
         for path in self.params.get('res'):
             rc = self.client.devices.add(cdss.PHO_DEV_DIR, path)
             if rc:
                 self.logger.error("Cannot add directory: %s", strerror(rc))
                 sys.exit(os.EX_DATAERR)
+            count += 1
+            self.logger.debug("Added directory '%s'", path)
+
+        self.logger.info("Added %d dir successfully", count)
 
     def exec_list(self):
         """List directories as devices."""
@@ -293,11 +298,16 @@ class DriveOptHandler(BaseOptHandler):
 
     def exec_add(self):
         """Add a new drive"""
+        count = 0
         for path in self.params.get('res'):
             rc = self.client.devices.add(cdss.PHO_DEV_TAPE, path)
             if rc:
                 self.logger.error("Cannot add drive: %s", strerror(rc))
                 sys.exit(os.EX_DATAERR)
+            count += 1
+            self.logger.debug("Added drive '%s'", path)
+
+        self.logger.info("Added %d drive(s) successfully", count)
 
     def exec_list(self):
         """List all drives."""

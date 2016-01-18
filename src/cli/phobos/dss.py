@@ -133,6 +133,11 @@ class DeviceManager(ObjectManager):
             self.logger.error("Cannot insert dev info for '%s'" % device_path)
             return rc
 
+        self.logger.debug("Device '%s:%s' successfully added: " \
+                          "model=%s serial=%s (%s)" % \
+                          (dev_info.host, device_path, dev_info.model,
+                           dev_info.serial, locked and "locked" or "unlocked"))
+
         return 0
 
 class Client(object):
