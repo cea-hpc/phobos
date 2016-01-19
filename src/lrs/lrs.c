@@ -132,7 +132,7 @@ static int check_dev_info(const struct dev_descr *dev)
     }
 
     return 0;
-};
+}
 
 /**
  * Retrieve media info from DSS for the given label.
