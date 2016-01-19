@@ -48,12 +48,22 @@ out_close:
     return rc;
 }
 
+static inline size_t statfs_spc_used(const struct statfs *stfs)
+{
+    return (stfs->f_blocks - stfs->f_bfree) * stfs->f_bsize;
+}
+
+static inline size_t statfs_spc_free(const struct statfs *stfs)
+{
+    return stfs->f_bavail * stfs->f_bsize;
+}
+
 int common_statfs(const char *path, size_t *spc_used, size_t *spc_free)
 {
     struct statfs  stfs;
     ENTRY;
 
-    if (spc_used == NULL || spc_free == NULL)
+    if (path == NULL)
         return -EINVAL;
 
     if (statfs(path, &stfs) != 0)
@@ -69,11 +79,15 @@ int common_statfs(const char *path, size_t *spc_used, size_t *spc_free)
                    path, stfs.f_blocks, stfs.f_bavail, stfs.f_bfree);
 
     /* used = total - free */
-    *spc_used = (stfs.f_blocks - stfs.f_bfree) * stfs.f_bsize;
-    /* actually, only available blocks can be written */
-    *spc_free = stfs.f_bavail * stfs.f_bsize;
+    if (spc_used != NULL)
+        *spc_used = statfs_spc_used(&stfs);
 
-    pho_debug("%s: used=%zu, free=%zu", path, *spc_used, *spc_free);
+    /* actually, only available blocks can be written */
+    if (spc_free != NULL)
+        *spc_free = statfs_spc_free(&stfs);
+
+    pho_debug("%s: used=%zu, free=%zu",
+              path, statfs_spc_used(&stfs), statfs_spc_free(&stfs));
 
     return 0;
 }

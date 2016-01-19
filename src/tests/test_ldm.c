@@ -34,14 +34,14 @@ static int test_mnttab(void *arg)
     return -1;
 }
 
-static int test_df(void *arg)
+static int test_df_0(void *arg)
 {
     size_t spc_used, spc_free;
 
     return common_statfs("/tmp", &spc_used, &spc_free);
 }
 
-static int test_df_2(void *arg)
+static int test_df_1(void *arg)
 {
     size_t spc_used, spc_free;
     struct fs_adapter fsa;
@@ -54,13 +54,40 @@ static int test_df_2(void *arg)
     return ldm_fs_df(&fsa, "/tmp", &spc_used, &spc_free);
 }
 
+static int test_df_2(void *arg)
+{
+    size_t spc_used, spc_free;
+
+    return common_statfs(NULL, &spc_used, &spc_free);
+}
+
+static int test_df_3(void *arg)
+{
+    size_t spc_used, spc_free;
+    int rc;
+
+    rc = common_statfs("/tmp", &spc_used, NULL);
+    if (rc)
+        return rc;
+
+    rc = common_statfs("/tmp", NULL, &spc_free);
+    if (rc)
+        return rc;
+
+    return 0;
+}
+
+
 int main(int argc, char **argv)
 {
     test_env_initialize();
 
     run_test("test mnttab", test_mnttab, NULL, PHO_TEST_SUCCESS);
-    run_test("test df (direct call)", test_df, NULL, PHO_TEST_SUCCESS);
-    run_test("test df (via fs_adapter)", test_df_2, NULL, PHO_TEST_SUCCESS);
+
+    run_test("test df (direct call)", test_df_0, NULL, PHO_TEST_SUCCESS);
+    run_test("test df (via fs_adapter)", test_df_1, NULL, PHO_TEST_SUCCESS);
+    run_test("test df (NULL path)", test_df_2, NULL, PHO_TEST_FAILURE);
+    run_test("test df (partial)", test_df_3, NULL, PHO_TEST_SUCCESS);
 
     pho_info("ldm_common: All tests succeeded");
     exit(EXIT_SUCCESS);
