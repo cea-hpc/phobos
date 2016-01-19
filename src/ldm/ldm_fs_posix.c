@@ -28,7 +28,7 @@ static int dir_present(const char *dev_path, char *mnt_path,
     ENTRY;
 
     if (stat(dev_path, &st) != 0)
-        LOG_RETURN(-errno, "lstat() failed on '%s'", dev_path);
+        LOG_RETURN(-errno, "stat() failed on '%s'", dev_path);
 
     if (!S_ISDIR(st.st_mode))
         LOG_RETURN(-ENOTDIR, "'%s' is not a directory", dev_path);
