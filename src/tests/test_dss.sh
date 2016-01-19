@@ -33,9 +33,26 @@ function test_check_set
     local type=$1
     local crit=$2
     local action=$3
+    local expect_fail=$4
+    local rc=0
 
+    $test_bin set "$type" "$crit" "$action" || rc=$?
 
-    $test_bin set "$type" "$crit" "$action"
+    if [ -z "$expect_fail" ]
+    then
+        if [ $rc -ne 0 ]
+        then
+            echo "$test_bin failed with $rc"
+            return 1
+        fi
+    else
+        if [ $rc -eq 0 ]
+        then
+            echo "$test_bin succeeded against expectations"
+            return 1
+        fi
+    fi
+    return 0
 }
 
 function test_check_lock
@@ -143,6 +160,7 @@ test_check_set "extent" "insert"
 test_check_get "extent" "oid LIKE %COPY%"
 test_check_set "extent" "update"
 test_check_get "extent" "oid LIKE %COPY%"
+test_check_set "extent" "delete" "oidtest" "FAIL"
 test_check_set "extent" "delete"
 test_check_get "extent" "oid LIKE %COPY%"
 
@@ -170,5 +188,6 @@ test_check_lock "media" "unlock" "FAIL"
 echo "*** TEST RELOCK ***"
 test_check_lock "media" "lock"
 
+echo "*** TEST END ***"
 # Uncomment if you want the db to persist after test
 # trap - EXIT ERR

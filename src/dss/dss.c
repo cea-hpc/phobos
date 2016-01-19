@@ -593,6 +593,9 @@ static int get_object_setrequest(struct object_info *item_list, int item_cnt,
     for (i = 0; i < item_cnt; i++) {
         struct object_info *p_object = &item_list[i];
 
+        if (p_object->oid == NULL)
+            LOG_RETURN(-EINVAL, "Object oid cannot be NULL");
+
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_OBJECT],
                                    p_object->oid);
@@ -618,6 +621,9 @@ static int get_extent_setrequest(struct layout_info *item_list, int item_cnt,
     for (i = 0; i < item_cnt; i++) {
         struct layout_info  *p_layout = &item_list[i];
         char                *layout;
+
+        if (p_layout->oid == NULL)
+            LOG_RETURN(-EINVAL, "Extent oid cannot be NULL");
 
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_EXTENT],
@@ -661,6 +667,9 @@ static int get_media_setrequest(struct media_info *item_list, int item_cnt,
     for (i = 0; i < item_cnt; i++) {
         struct media_info   *p_media = &item_list[i];
         char                *model;
+
+        if (media_id_get(&p_media->id) == NULL)
+            LOG_RETURN(-EINVAL, "Media id cannot be NULL");
 
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_MEDIA],
@@ -711,6 +720,9 @@ static int get_device_setrequest(struct dev_info *item_list, int item_cnt,
     for (i = 0; i < item_cnt; i++) {
         struct dev_info *p_dev = &item_list[i];
         char            *model;
+
+        if (p_dev->serial == NULL)
+            LOG_RETURN(-EINVAL, "Device serial cannot be NULL");
 
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_DEVICE],

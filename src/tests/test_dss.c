@@ -42,6 +42,7 @@ int main(int argc, char **argv)
     int                  crit_cnt;
     int                  i, j;
     char                *parser;
+    bool                 oidtest = false;
 
     test_env_initialize();
 
@@ -51,6 +52,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "       TYPE := "
                         "{ device | media | object | extent }\n");
         fprintf(stderr, "       [ \"CRIT\" ] := \"field cmp value\"\n");
+        fprintf(stderr, "Optional for set:\n");
+        fprintf(stderr, "       oidtest set oid to NULL");
         exit(1);
     }
 
@@ -180,6 +183,11 @@ int main(int argc, char **argv)
         }
 
         action = str2dss_set_action(argv[3]);
+        if (argc == 5)
+                if (strcmp(argv[4], "oidtest") == 0) {
+                        oidtest = true;
+                        pho_debug("Switch to oidtest mode (test null oid)");
+                }
         crit_cnt = 0;
         crit = NULL;
 
@@ -220,6 +228,8 @@ int main(int argc, char **argv)
                     asprintf(&s, "%sCOPY", object->oid);
                     object->oid = s;
                 }
+                if (oidtest)
+                    object->oid = NULL;
             }
             break;
         case DSS_EXTENT:
@@ -232,6 +242,8 @@ int main(int argc, char **argv)
                 }
                 else if (action == DSS_SET_UPDATE)
                     layout->extents[0].size = 0;
+                if (oidtest)
+                    layout->oid = NULL;
             }
             break;
         default:
