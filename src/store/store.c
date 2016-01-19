@@ -676,8 +676,10 @@ int phobos_mput(const struct pho_xfer_desc *desc, size_t n)
                  "Failed to get resources to write %zu bytes", mput->sum_sizes);
 
     rc = mput_slices_progress(mput, MPUT_STEP_EXT_WRITE);
-    if (rc)
+    if (rc) {
+        lrs_done(&mput->intent, rc);
         LOG_GOTO(out_finalize, rc, "All slices failed");
+    }
 
     /* Release storage resources and update device/media info */
     rc = lrs_done(&mput->intent, rc);

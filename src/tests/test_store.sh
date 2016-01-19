@@ -141,6 +141,8 @@ function test_check_put # verb, source_file, expect_failure
         local umd=$(getfattr --only-values --absolute-names \
                     -n "user.user_md" $out)
         [ -z "$umd" ] && error "saved file has no 'user_md' xattr"
+
+        rm -f $out # prevents strange side effects
     done
 
     true

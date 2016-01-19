@@ -14,6 +14,7 @@
 
 
 struct dss_handle;
+struct device_descr;
 
 #ifndef SWIG
 enum lrs_operation {
@@ -24,6 +25,8 @@ enum lrs_operation {
 };
 
 struct lrs_intent {
+    struct dss_handle   *li_dss;
+    struct dev_descr    *li_device;
     enum lrs_operation   li_operation;
     struct pho_ext_loc   li_location;
 };
