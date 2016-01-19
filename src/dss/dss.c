@@ -293,7 +293,7 @@ static const char * const simple_lock_query[] = {
     [DSS_UNLOCK_QUERY] = "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s;",
     [DSS_LOCK_QUERY] =   "UPDATE %s SET lock='%s:%u', "
                          "lock_ts=extract(epoch from NOW()) "
-                         "WHERE lock='' AND IN %s;",
+                         "WHERE lock='' AND id IN %s;",
 };
 /**
  * Extract media statistics from json
