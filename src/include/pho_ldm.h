@@ -333,7 +333,8 @@ static inline int ldm_fs_mount(const struct fs_adapter *fsa,
                                const char *dev_path, const char *mnt_point)
 {
     assert(fsa != NULL);
-    assert(fsa->fs_mount != NULL);
+    if (fsa->fs_mount == NULL)
+        return 0;
     return fsa->fs_mount(dev_path, mnt_point);
 }
 
@@ -349,7 +350,8 @@ static inline int ldm_fs_umount(const struct fs_adapter *fsa,
                                 const char *dev_path, const char *mnt_point)
 {
     assert(fsa != NULL);
-    assert(fsa->fs_umount != NULL);
+    if (fsa->fs_umount == NULL)
+        return 0;
     return fsa->fs_umount(dev_path, mnt_point);
 }
 
