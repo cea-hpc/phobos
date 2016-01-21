@@ -424,7 +424,7 @@ out_free:
 
 out_close:
     close(slice->fd);
-    return 0;
+    return rc;
 }
 
 int _obj_done_cb(struct mput_desc *mput, struct mput_slice *slice)
