@@ -41,15 +41,18 @@ CREATE TYPE extent_lyt_type AS ENUM('simple','raid0','raid1');
 CREATE TABLE device(family dev_family, model dev_model,
                     id varchar(32) UNIQUE, host varchar(128),
 	                adm_status adm_status, path varchar(256),
-		            changer_idx int, lock varchar(256), lock_ts bigint,
+		            changer_idx int,
+                            lock varchar(256) DEFAULT '' NOT NULL,
+                            lock_ts bigint,
                     PRIMARY KEY (family, id));
 CREATE INDEX ON device USING gin(host);
 
 CREATE TABLE media(family dev_family, model tape_model, id varchar(32) UNIQUE,
                    adm_status adm_status, fs_type fs_type,
                    address_type address_type, fs_status fs_status,
-                   lock varchar(256), lock_ts bigint,
-        		   stats jsonb, PRIMARY KEY (family, id));
+                   lock varchar(256) DEFAULT '' NOT NULL, lock_ts bigint,
+                   stats jsonb,
+                   PRIMARY KEY (family, id));
 CREATE INDEX ON media((stats->>'phys_spc_free'));
 
 CREATE TABLE object(oid varchar(1024), user_md jsonb, PRIMARY KEY (oid));

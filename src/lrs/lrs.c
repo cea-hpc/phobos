@@ -197,7 +197,7 @@ static int lrs_fill_media_info(struct dss_handle *dss,
                                struct media_info **pmedia,
                                const struct media_id *id)
 {
-    struct dss_crit med_crit[2]; /* criteria on family+id */
+    struct dss_crit med_crit[3]; /* criteria on family+id */
     int             med_crit_cnt = 0;
     int             mcnt = 0;
     int             rc;
@@ -212,6 +212,8 @@ static int lrs_fill_media_info(struct dss_handle *dss,
                  id->type);
     dss_crit_add(med_crit, &med_crit_cnt, DSS_MDA_id, DSS_CMP_EQ, val_str,
                  media_id_get(id));
+
+    /* TODO check for locks */
 
     /* get media info from DB */
     rc = dss_media_get(dss, med_crit, med_crit_cnt, &media_res, &mcnt);
@@ -430,7 +432,7 @@ static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
 {
     int                mcnt = 0;
     int                rc, i;
-    struct dss_crit    crit[5];
+    struct dss_crit    crit[6];
     int                crit_cnt = 0;
     int                best_idx = -1;
     struct media_info *pmedia_res = NULL;
@@ -446,9 +448,11 @@ static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
     /* Exclude non-formatted media */
     dss_crit_add(crit, &crit_cnt, DSS_MDA_fs_status, DSS_CMP_NE, val_int,
                  PHO_FS_STATUS_BLANK);
-    /* Exclude full-media */
+    /* Exclude full media */
     dss_crit_add(crit, &crit_cnt, DSS_MDA_fs_status, DSS_CMP_NE, val_int,
                  PHO_FS_STATUS_FULL);
+    /* Exclude locked media */
+    dss_crit_add(crit, &crit_cnt, DSS_MDA_lock, DSS_CMP_EQ, val_str, "");
 
     /**
      * @TODO

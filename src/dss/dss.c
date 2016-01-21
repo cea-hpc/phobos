@@ -224,9 +224,9 @@ static const size_t const res_size[] = {
 
 static const char * const insert_query[] = {
     [DSS_DEVICE] = "INSERT INTO device (family, model, id, host, adm_status,"
-                   " path, changer_idx) VALUES ",
+                   " path, changer_idx, lock) VALUES ",
     [DSS_MEDIA]  = "INSERT INTO media (family, model, id, adm_status,"
-                   " fs_type, address_type, fs_status, stats) VALUES ",
+                   " fs_type, address_type, fs_status, stats, lock) VALUES ",
     [DSS_EXTENT] = "INSERT INTO extent (oid, copy_num, state, lyt_type,"
                    " lyt_info, extents) VALUES ",
     [DSS_OBJECT] = "INSERT INTO object (oid, user_md) VALUES ",
@@ -260,8 +260,8 @@ static const char * const delete_query[] = {
 };
 
 static const char * const insert_query_values[] = {
-    [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '%d')%s",
-    [DSS_MEDIA]  = "('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s')%s",
+    [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '%d', '')%s",
+    [DSS_MEDIA]  = "('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s', '')%s",
     [DSS_EXTENT] = "('%s', '%d', '%s', '%s', '%s', '%s')%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
 };
@@ -281,12 +281,12 @@ enum dss_lock_queries {
 static const char * const lock_query[] = {
     [DSS_UNLOCK_QUERY] = "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s AND "
                          "%d IN (SELECT count(*) FROM %s WHERE id IN %s AND "
-                         "lock!='')",
+                         "       lock!='');",
     [DSS_LOCK_QUERY] =   "UPDATE %s SET lock='%s:%u', "
                          "lock_ts=extract(epoch from NOW()) "
                          "WHERE lock='' AND id IN %s AND "
                          "%d IN (SELECT count(*) FROM %s WHERE id IN %s AND "
-                         "lock='')",
+                         "       lock='');",
 };
 
 static const char * const simple_lock_query[] = {
