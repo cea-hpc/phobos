@@ -425,7 +425,7 @@ class TapeOptHandler(BaseOptHandler):
 
     def exec_format(self):
         """Format tape to LTFS. No Alternative."""
-        tape_list = self.params.get('res')
+        tape_list = NodeSet.fromlist(self.params.get('res'))
         fs_type = self.params.get('fs')
         unlock = self.params.get('unlock')
         if unlock:
