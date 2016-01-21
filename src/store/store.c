@@ -134,11 +134,15 @@ static const struct layout_info simple_layout = {.type = PHO_LYT_SIMPLE};
  * @param(in,out)   mput     Global bulk operation descriptor.
  * @param(in)       barrier  Step to progress to.
  *
- * @return 0 on success (even partial), -EIO if everything failed.
+ * @return 0 on success (even partial), min(error) if everything failed.
+ *
+ * XXX Note that errors being coded on negative numbers, the return value
+ *     corresponds to max(abs(rc)).
  */
 static int mput_slices_progress(struct mput_desc *mput, enum mput_step barrier)
 {
     bool    all_failed = true;
+    int     min_err = 0;
     int     i;
 
     if (barrier >= MPUT_STEP_COUNT)
@@ -159,6 +163,8 @@ static int mput_slices_progress(struct mput_desc *mput, enum mput_step barrier)
             if (rc != 0) {
                 pho_warn("Failing slice '%s'", slice->xfer->xd_objid);
                 slice->rc = rc;
+                if (rc < min_err)
+                    min_err = rc;
             } else {
                 all_failed = false;
                 slice->step = step;
@@ -166,7 +172,7 @@ static int mput_slices_progress(struct mput_desc *mput, enum mput_step barrier)
         }
     }
 
-    return all_failed ? -EIO : 0;
+    return all_failed ? min_err : 0;
 }
 
 /**
