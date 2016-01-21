@@ -224,13 +224,13 @@ static int lrs_fill_media_info(struct dss_handle *dss,
         GOTO(out_free, rc = -ENOSPC);
     } else if (mcnt > 1)
         LOG_GOTO(out_free, rc = -EINVAL,
-                 "Too many media found matching id '%s'",
-                 media_id_get(id));
+                 "Too many media found matching id '%s'", media_id_get(id));
 
     *pmedia = media_info_dup(media_res);
 
-    pho_debug("%s: spc_free=%zu", media_id_get(&(*pmedia)->id),
-              (*pmedia)->stats.phys_spc_free);
+    pho_debug("%s: spc_free=%zu",
+              media_id_get(&(*pmedia)->id), (*pmedia)->stats.phys_spc_free);
+
     rc = 0;
 
 out_free:
@@ -256,6 +256,7 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
 {
     int                rc;
     struct dev_adapter deva;
+    ENTRY;
 
     if (devi == NULL || devd == NULL)
         return -EINVAL;
@@ -433,6 +434,7 @@ static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
     int                crit_cnt = 0;
     int                best_idx = -1;
     struct media_info *pmedia_res = NULL;
+    ENTRY;
 
     /* criteria: family, (model,) adm_status, available size, fs_status */
     dss_crit_add(crit, &crit_cnt, DSS_MDA_family, DSS_CMP_EQ, val_int,
@@ -515,6 +517,7 @@ static struct dev_descr *dev_picker(enum dev_op_status op_st,
 {
     struct dev_descr *selected = NULL;
     int  i, rc;
+    ENTRY;
 
     if (devices == NULL)
         return NULL;
@@ -542,6 +545,8 @@ static int select_first_fit(size_t required_size,
                             struct dev_descr *dev_curr,
                             struct dev_descr **dev_selected)
 {
+    ENTRY;
+
     if (dev_curr->dss_media_info == NULL)
         return 1;
 
@@ -560,6 +565,8 @@ static int select_best_fit(size_t required_size,
                            struct dev_descr *dev_curr,
                            struct dev_descr **dev_selected)
 {
+    ENTRY;
+
     if (dev_curr->dss_media_info == NULL)
         return 1;
 
@@ -587,6 +594,8 @@ static int select_any(size_t required_size,
                       struct dev_descr *dev_curr,
                       struct dev_descr **dev_selected)
 {
+    ENTRY;
+
     if (*dev_selected == NULL) {
         *dev_selected = dev_curr;
         /* found an item, stop searching */
@@ -604,24 +613,30 @@ static int select_drive_to_free(size_t required_size,
                                 struct dev_descr *dev_curr,
                                 struct dev_descr **dev_selected)
 {
+    ENTRY;
+
     /* skip failed and busy drives */
     if (dev_curr->op_status == PHO_DEV_OP_ST_FAILED
-        || dev_curr->op_status == PHO_DEV_OP_ST_BUSY)
+        || dev_curr->op_status == PHO_DEV_OP_ST_BUSY) {
+        pho_debug("Skipping drive '%s' with status %s",
+                  dev_curr->dev_path, op_status2str(dev_curr->op_status));
         return 1;
+    }
 
     /* if this function is called, no drive should be empty */
     if (dev_curr->op_status == PHO_DEV_OP_ST_EMPTY) {
         pho_warn("Unexpected drive status for '%s': '%s'",
-                 dev_curr->dev_path,
-                 op_status2str(dev_curr->op_status));
+                 dev_curr->dev_path, op_status2str(dev_curr->op_status));
         return 1;
     }
 
     /* less space available on this device than the previous ones? */
-    if (*dev_selected == NULL || (dev_curr->dss_media_info->stats.phys_spc_free
-                      < (*dev_selected)->dss_media_info->stats.phys_spc_free)) {
+    if (*dev_selected == NULL || dev_curr->dss_media_info->stats.phys_spc_free
+                    < (*dev_selected)->dss_media_info->stats.phys_spc_free) {
         *dev_selected = dev_curr;
+        return 1;
     }
+
     return 1;
 }
 
@@ -632,6 +647,7 @@ static int lrs_mount(struct dev_descr *dev)
     int                  rc;
     const char          *id;
     struct fs_adapter    fsa;
+    ENTRY;
 
 #if 0
     /**
@@ -684,6 +700,7 @@ static int lrs_umount(struct dev_descr *dev)
 {
     int                rc;
     struct fs_adapter  fsa;
+    ENTRY;
 
     if (dev->op_status != PHO_DEV_OP_ST_MOUNTED)
         LOG_RETURN(-EINVAL, "Unexpected drive status for '%s': '%s'",
@@ -724,6 +741,7 @@ static int lrs_load(struct dev_descr *dev, struct media_info *media)
     int                  rc, rc2;
     struct lib_adapter   lib;
     struct lib_item_addr media_addr;
+    ENTRY;
 
     if (dev->op_status != PHO_DEV_OP_ST_EMPTY)
         LOG_RETURN(-EINVAL, "%s: unexpected drive status: status='%s'",
@@ -781,6 +799,7 @@ static int lrs_unload(struct dev_descr *dev)
         .lia_type = MED_LOC_UNKNOWN,
         .lia_addr = 0
     };
+    ENTRY;
 
     if (dev->op_status != PHO_DEV_OP_ST_LOADED)
         LOG_RETURN(-EINVAL, "Unexpected drive status for '%s': '%s'",
@@ -826,7 +845,7 @@ out_close:
 static device_select_func_t get_dev_policy(void)
 {
     const char *policy_str;
-
+    ENTRY;
 
     policy_str = pho_cfg_get(PHO_CFG_LRS_policy);
     if (policy_str == NULL)
@@ -854,14 +873,14 @@ static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp)
 {
     struct dev_descr *tmp_dev;
     int               rc;
+    ENTRY;
 
     while (1) {
 
         /* get a drive to free (PHO_DEV_OP_ST_UNSPEC for any state) */
         tmp_dev = dev_picker(PHO_DEV_OP_ST_UNSPEC, select_drive_to_free, 0);
         if (tmp_dev == NULL)
-            /* no drive to free */
-            return -EAGAIN;
+            LOG_RETURN(-EAGAIN, "No suitable device to free");
 
         /* attempt to lock it */
         rc = lrs_dev_acquire(dss, tmp_dev);
@@ -889,7 +908,7 @@ static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp)
         }
 
         if (tmp_dev->op_status != PHO_DEV_OP_ST_EMPTY)
-            LOG_RETURN(rc = -EINVAL,
+            LOG_RETURN(-EINVAL,
                        "Unexpected dev status '%s' for '%s': should be empty",
                        op_status2str(tmp_dev->op_status), tmp_dev->dev_path);
 
@@ -913,6 +932,7 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
     device_select_func_t dev_select_policy;
     struct media_info *pmedia = NULL;
     int rc = 0;
+    ENTRY;
 
     rc = lrs_load_dev_state(dss);
     if (rc != 0)
@@ -1003,6 +1023,8 @@ out_release:
 static int set_loc_from_dev(const struct dev_descr *dev,
                             struct lrs_intent *intent)
 {
+    ENTRY;
+
     if (dev == NULL || dev->mnt_path == NULL)
         return -EINVAL;
 
@@ -1019,6 +1041,7 @@ static struct dev_descr *search_loaded_media(const struct media_id *id)
 {
     int         i;
     const char *name;
+    ENTRY;
 
     if (id == NULL)
         return NULL;
@@ -1042,7 +1065,9 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
     struct dev_descr    *dev;
     struct media_info   *med;
     bool                 post_fs_mount;
+    bool                 needs_loading = false;
     int                  rc;
+    ENTRY;
 
     *pdev = NULL;
     *pmedia = NULL;
@@ -1082,15 +1107,15 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
                 LOG_GOTO(out, rc, "No device available");
         }
 
-        rc = lrs_dev_acquire(dss, dev);
-        if (rc != 0)
-            goto out;
+        needs_loading = true;
+    }
 
+    rc = lrs_dev_acquire(dss, dev);
+    if (rc != 0)
+        goto out;
+
+    if (needs_loading) {
         rc = lrs_load(dev, med);
-        if (rc != 0)
-            goto out;
-    } else {
-        rc = lrs_dev_acquire(dss, dev);
         if (rc != 0)
             goto out;
     }
@@ -1119,6 +1144,7 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     struct media_info   *media_info;
     int                  rc;
     struct fs_adapter    fsa;
+    ENTRY;
 
     if (fs != PHO_FS_LTFS)
         LOG_RETURN(-EINVAL, "Unsupported filesystem type");
@@ -1190,6 +1216,7 @@ int lrs_write_prepare(struct dss_handle *dss, size_t size,
 {
     struct dev_descr    *dev = NULL;
     int                  rc;
+    ENTRY;
 
     intent->li_operation = LRS_OP_WRITE;
 
@@ -1228,6 +1255,7 @@ int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
     struct media_info   *media_info;
     struct media_id     *id;
     int                  rc = 0;
+    ENTRY;
 
     if (layout->type != PHO_LYT_SIMPLE || layout->ext_count != 1)
         LOG_RETURN(-EINVAL, "Unexpected layout type '%s' or extent count %u",
