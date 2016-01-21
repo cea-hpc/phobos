@@ -54,28 +54,29 @@ static int pho_posix_make_parent_of(const char *root,
 
     root_len = strlen(root);
     if (strncmp(root, fullpath, root_len) != 0)
-        LOG_RETURN(-EINVAL, "error: path '%s' is not under '%s'", fullpath,
-                   root);
+        LOG_RETURN(-EINVAL, "Path '%s' is not under '%s'", fullpath, root);
+
     c = fullpath + root_len;
     /* in fullpath, '/' is expected after root path */
     if (*c == '/')
         c++;
     /* ...unless root path is already slash-terminated */
     else if (root[root_len - 1] != '/')
-        LOG_RETURN(-EINVAL, "error: path '%s' is not under '%s'", fullpath,
-                   root);
+        LOG_RETURN(-EINVAL, "Path '%s' is not under '%s'", fullpath, root);
 
     /* copy to tokenize */
     tmp = strdup(fullpath);
     if (tmp == NULL)
         return -ENOMEM;
+
     /* report c offset in fullpath to tmp */
     c = tmp + (c - fullpath);
 
     /* remove final part of the path (filename) */
     last = strrchr(c, '/');
     if (last == NULL)
-        GOTO(free_str, rc = -EINVAL);
+        GOTO(free_str, rc = 0); /* Ok, nothing to do */
+
     *last = '\0';
 
     while ((last = strchr(c, '/')) != NULL) {
@@ -85,8 +86,10 @@ static int pho_posix_make_parent_of(const char *root,
         *last = '/';
         c = last+1;
     }
+
     if (mkdir(tmp, 0750) != 0 && errno != EEXIST)
         LOG_GOTO(free_str, rc = -errno, "mkdir(%s) failed", tmp);
+
     rc = 0;
 
 free_str:
@@ -416,6 +419,7 @@ static int pho_posix_put(const char *id, const char *tag,
     fpath = pho_posix_fullpath(iod->iod_loc);
     if (fpath == NULL)
         return -EINVAL;
+
     pho_verb("extent location: '%s'", fpath);
 
     /* if the call is MD_ONLY, it is expected that the entry exists. */
