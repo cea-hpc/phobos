@@ -125,19 +125,38 @@ class BasicExecutionTest(unittest.TestCase):
 
 
 class MediaAddTest(BasicExecutionTest):
-    """Register tapes into database."""
-    def test_cli_tape(self):
-        """ test tape add commands"""
+    """
+    This sub-test suite adds tapesand makes sure that both regular and abnormal
+    cases are handled properly.
+
+    Note that what we are in the CLI tests and therefore try to specifically
+    exercise the upper layers (command line parsing etc.)
+    """
+    def test_tape_add(self):
+        """test adding tapes. Simple case."""
         #Test differents types of tape name format
         self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
-                          'STANDARD[0000-1000]'])
+                          'STANDARD0[000-100]'])
         self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
                           'TE[000-666]st'])
         self.pho_execute(['tape', 'add',
                           '-t', 'LTO6', '--fs', 'LTFS', 'ABC,DEF,XZE,AQW'])
-        self.pho_execute(['tape', 'lock', 'STANDARD[0000-0200]'])
-        self.pho_execute(['tape', 'unlock', 'STANDARD[0000-0100]'])
-        self.pho_execute(['tape', 'unlock', '--force', 'STANDARD[0000-0200]'])
+        self.pho_execute(['tape', 'lock', 'STANDARD0[000-100]'])
+        self.pho_execute(['tape', 'unlock', 'STANDARD0[000-050]'])
+        self.pho_execute(['tape', 'unlock', '--force', 'STANDARD0[000-100]'])
+
+    def test_tape_add_lowercase(self):
+        """Express tape technology in lowercase in the command line (PHO-67)."""
+        self.pho_execute(['tape', 'add', 'B0000[5-9]L5', '-t', 'lto5'])
+        self.pho_execute(['tape', 'add', 'C0000[5-9]L5', '-t', 'lto5',
+                          '--fs', 'ltfs'])
+
+    def test_tape_invalid_const(self):
+        """Unknown FS type should raise an error."""
+        self.pho_execute(['tape', 'add', 'D000[10-15]', '-t', 'LTO5',
+                          '--fs', 'FooBarFS'], code=os.EX_DATAERR)
+        self.pho_execute(['tape', 'add', 'E000[10-15]', '-t', 'BLAH'],
+                         code=os.EX_DATAERR)
 
 
 class DeviceAddTest(BasicExecutionTest):

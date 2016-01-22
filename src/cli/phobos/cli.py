@@ -303,7 +303,6 @@ class DriveOptHandler(BaseOptHandler):
             if rc:
                 self.logger.error("Cannot add drive: %s", strerror(rc))
                 sys.exit(os.EX_DATAERR)
-            self.logger.debug("Added drive '%s'", path)
 
         self.logger.info("Added %d drive(s) successfully", len(resources))
 
@@ -399,29 +398,19 @@ class TapeOptHandler(BaseOptHandler):
 
     def exec_add(self):
         """Add new tapes"""
-        media_list = []
-        tapes = NodeSet.fromlist(self.params.get('res'))
+        labels = NodeSet.fromlist(self.params.get('res'))
+        fstype = self.params.get('fs').upper()
+        techno = self.params.get('type').upper()
+        keep_locked = not self.params.get('unlock')
 
-        for tape in tapes:
-            media = cdss.media_info()
-            media.fs_type = cdss.str2fs_type(self.params.get('fs'))
-            media.model = self.params.get('type')
-            media.addr_type = cdss.PHO_ADDR_PATH
-            media.id.type = cdss.PHO_DEV_TAPE
-            if self.params.get('unlock'):
-                media.adm_status = cdss.PHO_DEV_ADM_ST_UNLOCKED
-            else:
-                media.adm_status = cdss.PHO_DEV_ADM_ST_LOCKED
-            media.stats = cdss.media_stats()
-            cdss.media_id_set(media.id, tape)
-            media_list.append(media)
+        for tape in labels:
+            rc = self.client.media.add(cdss.PHO_DEV_TAPE, fstype, techno, tape,
+                                       locked=keep_locked)
+            if rc:
+                self.logger.error("Cannot add tape %s: %s", tape, strerror(rc))
+                sys.exit(os.EX_DATAERR)
 
-        rc = self.client.media.insert(media_list)
-        if not rc:
-            print "%d tape(s) added" % len(media_list)
-        else:
-            self.logger.error("Failed to add tape(s), error: %s",
-                              strerror(rc))
+        self.logger.info("Added %d tape(s) successfully", len(labels))
 
     def exec_format(self):
         """Format tape to LTFS. No Alternative."""
@@ -459,7 +448,6 @@ class TapeOptHandler(BaseOptHandler):
 
     def exec_lock(self):
         """Lock tapes"""
-        print 'Tape lock'
         tapes = []
         uids = NodeSet.fromlist(self.params.get('res'))
         for uid in uids:
@@ -492,7 +480,6 @@ class TapeOptHandler(BaseOptHandler):
 
     def exec_unlock(self):
         """Unlock tapes"""
-        print 'Tape unlock'
         tapes = []
         uids = NodeSet.fromlist(self.params.get('res'))
         for uid in uids:

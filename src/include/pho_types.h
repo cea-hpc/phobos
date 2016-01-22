@@ -220,7 +220,7 @@ struct pho_lock {
 static const struct pho_buff PHO_BUFF_NULL = { .size = 0, .buff = NULL };
 
 /**
- * Family of device opr media
+ * Family of device or media
  */
 enum dev_family {
     PHO_DEV_INVAL = -1,

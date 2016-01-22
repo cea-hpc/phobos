@@ -134,11 +134,39 @@ class DeviceManager(ObjectManager):
             return rc
 
         self.logger.info("Device '%s:%s' successfully added: " \
-                         "model=%s serial=%s (%s)" % \
-                         (dev_info.host, device_path, dev_info.model,
-                          dev_info.serial, locked and "locked" or "unlocked"))
-
+                         "model=%s serial=%s (%s)",
+                         dev_info.host, device_path, dev_info.model,
+                         dev_info.serial, locked and "locked" or "unlocked")
         return 0
+
+
+class MediaManager(ObjectManager):
+    """Proxy to manipulate media."""
+    def add(self, mtype, fstype, model, label, locked=False):
+        """Insert media into DSS."""
+        media = cdss.media_info()
+        media.id.type = mtype
+        media.fs_type = cdss.str2fs_type(fstype)
+        media.model = model
+        media.addr_type = cdss.PHO_ADDR_HASH1
+        if locked:
+            media.adm_status = cdss.PHO_MDA_ADM_ST_LOCKED
+        else:
+            media.adm_status = cdss.PHO_MDA_ADM_ST_UNLOCKED
+        media.stats = cdss.media_stats()
+        cdss.media_id_set(media.id, label)
+
+        rc = self.insert([media])
+        if rc != 0:
+            self.logger.error("Cannot insert media info for '%s'" % label)
+            return rc
+
+        self.logger.debug("Media '%s' successfully added: "\
+                          "model=%s fs=%s (%s)",
+                          label, model, fstype,
+                          locked and "locked" or "unlocked")
+        return 0
+
 
 class Client(object):
     """Main class: issue requests to the DSS and format replies."""
@@ -146,11 +174,10 @@ class Client(object):
         """Initialize a new DSS context."""
         super(Client, self).__init__(**kwargs)
         self.handle = None
+        self.media = MediaManager('media', self)
         self.devices = DeviceManager('device', self)
         self.extents = ObjectManager('extent', self)
         self.objects = ObjectManager('object', self)
-        # TODO consider adding a MediaManager with an add() method as well
-        self.media = ObjectManager('media', self)
 
     def connect(self, **kwargs):
         """
