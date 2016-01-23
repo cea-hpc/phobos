@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ENV:
-#	NO_TAPE=1 force executing tests in POSIX FS
+#    NO_TAPE=1 force executing tests in POSIX FS
 
 set -e
 
@@ -11,9 +11,9 @@ TEST_RECOV_DIR=/tmp/phobos_recov.$$
 TEST_IN="/etc/redhat-release /etc/passwd /etc/group /etc/hosts"
 TEST_FILES=""
 for f in $TEST_IN; do
-	new=/tmp/$(basename $f).$$
-	/bin/cp -p $f $new
-	TEST_FILES="$TEST_FILES $new"
+    new=/tmp/$(basename $f).$$
+    /bin/cp -p $f $new
+    TEST_FILES="$TEST_FILES $new"
 done
 TEST_FILES="$TEST_FILES $TEST_RAND"
 
@@ -47,28 +47,33 @@ function empty_drives
 # testing with real tapes requires tape devices + access to /dev/changer device
 nb_tapes=$(ls -d /dev/IBMtape* 2>/dev/null | wc -l)
 if  [[ -z "$NO_TAPE" ]] && [[ -w /dev/changer ]] && (( $nb_tapes > 0 )); then
-	echo "**** TAPE TEST MODE ****"
-	echo "changer:"
-	ls -ld /dev/changer
-	echo "drives:"
-	ls -ld /dev/IBMtape*
-	TEST_MNT=/mnt/phobos* # must match mount prefix (default: /mnt/phobos-*)
-	TEST_FS="ltfs"
 
-	export PHOBOS_LRS_default_family="tape"
+    # skip this test, run acceptance instead.
+    echo "Skipping test"
+    exit 77
 
-	# make sure no LTFS filesystem is mounted, so the test must mount it
-	service ltfs stop
+    echo "**** TAPE TEST MODE ****"
+    echo "changer:"
+    ls -ld /dev/changer
+    echo "drives:"
+    ls -ld /dev/IBMtape*
+    TEST_MNT=/mnt/phobos* # must match mount prefix (default: /mnt/phobos-*)
+    TEST_FS="ltfs"
+
+    export PHOBOS_LRS_default_family="tape"
+
+    # make sure no LTFS filesystem is mounted, so the test must mount it
+    service ltfs stop
 
     # make sure all drives are initially empty
     empty_drives
 else
-	echo "**** POSIX TEST MODE ****"
-	TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2" # must match mount prefix
-	TEST_FS="posix"
+    echo "**** POSIX TEST MODE ****"
+    TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2" # must match mount prefix
+    TEST_FS="posix"
 
-	export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
-	export PHOBOS_LRS_default_family="dir"
+    export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
+    export PHOBOS_LRS_default_family="dir"
 fi
 
 function clean_test
@@ -76,7 +81,7 @@ function clean_test
     echo "cleaning..."
     rm -f $TEST_FILES
     for d in $TEST_MNT; do
-	rm -rf $d/*
+    rm -rf $d/*
     done
     rm -rf "$TEST_RECOV_DIR"
 
