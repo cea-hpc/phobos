@@ -141,7 +141,6 @@ static const struct layout_info simple_layout = {.type = PHO_LYT_SIMPLE};
  */
 static int mput_slices_progress(struct mput_desc *mput, enum mput_step barrier)
 {
-    bool    all_failed = true;
     int     min_err = 0;
     int     i;
 
@@ -163,16 +162,22 @@ static int mput_slices_progress(struct mput_desc *mput, enum mput_step barrier)
             if (rc != 0) {
                 pho_warn("Failing slice '%s'", slice->xfer->xd_objid);
                 slice->rc = rc;
-                if (rc < min_err)
-                    min_err = rc;
             } else {
-                all_failed = false;
                 slice->step = step;
             }
         }
     }
 
-    return all_failed ? min_err : 0;
+    for (i = 0; i < mput->slice_cnt; i++) {
+        struct mput_slice *slice = &mput->slices[i];
+
+        if (slice->rc < min_err)
+            min_err = slice->rc;
+        else
+            return 0; /* At least one slice succeeded */
+    }
+
+    return min_err;
 }
 
 /**
