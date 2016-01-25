@@ -1121,7 +1121,7 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
     if (needs_loading) {
         rc = lrs_load(dev, med);
         if (rc != 0)
-            goto out;
+            goto out_dev_unlock;
     }
 
     /* Mount only for READ/WRITE and if not already mounted */
@@ -1130,6 +1130,10 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
         if (rc == 0)
             dev->op_status = PHO_DEV_OP_ST_BUSY;
     }
+
+out_dev_unlock:
+    if (rc)
+        lrs_dev_release(dss, dev);
 
 out:
     *pmedia = med;
