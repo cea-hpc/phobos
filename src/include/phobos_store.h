@@ -30,10 +30,11 @@ enum pho_xfer_flags {
 /**
  * Multiop completion notification callback.
  * Invoked with:
+ *  - user-data pointer
  *  - the operation descriptor
  *  - the return code for this operation: 0 on success, neg. errno on failure
  */
-typedef void (*pho_completion_cb_t)(const struct pho_xfer_desc *, int);
+typedef void (*pho_completion_cb_t)(void *u, const struct pho_xfer_desc *, int);
 
 /**
  * GET / PUT parameter.
@@ -48,11 +49,10 @@ struct pho_xfer_desc {
     char                *xd_fpath;
     struct pho_attrs    *xd_attrs;
     enum pho_xfer_flags  xd_flags;
-    void                *xd_udata;
-    pho_completion_cb_t  xd_callback;
 };
 
 
+#ifndef SWIG
 /**
  * Put a file to the object store
  * desc contains:
@@ -61,7 +61,9 @@ struct pho_xfer_desc {
  *  attrs: The metadata (optional)
  *  flags: Behavior flags
  */
-int phobos_put(const struct pho_xfer_desc *desc);
+int phobos_put(const struct pho_xfer_desc *desc, pho_completion_cb_t cb,
+               void *udata);
+#endif
 
 /**
  * Put N files to the object store with minimal overhead.
@@ -69,7 +71,8 @@ int phobos_put(const struct pho_xfer_desc *desc);
  * This function returns the first encountered error, or 0 if all sub-operations
  * have succeeded. Individual notifications are issued via xd_callback.
  */
-int phobos_mput(const struct pho_xfer_desc *desc, size_t n);
+int phobos_mput(const struct pho_xfer_desc *desc, size_t n,
+                pho_completion_cb_t cb, void *udata);
 
 /**
  * Retrieve a file from the object store
@@ -79,7 +82,8 @@ int phobos_mput(const struct pho_xfer_desc *desc, size_t n);
  *  attrs: Unused (can be NULL)
  *  flags: Behavior flags
  */
-int phobos_get(const struct pho_xfer_desc *desc);
+int phobos_get(const struct pho_xfer_desc *desc, pho_completion_cb_t cb,
+               void *udata);
 
 /** query metadata of the object store */
 /* TODO int phobos_query(criteria, &obj_list); */

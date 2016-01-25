@@ -12,17 +12,21 @@ specific command line parameters and the API entry points for phobos to trigger
 actions.
 """
 
+import re
 import os
 import sys
+import shlex
 import errno
 import argparse
 import logging
+import os.path
 
 import phobos.capi.log as clog
 import phobos.capi.dss as cdss
 
 from phobos.cfg import load_config_file, get_config_value
-from phobos.dss import Client, GenericError
+from phobos.dss import Client as DSSClient, GenericError
+from phobos.store import Client as XferClient
 from phobos.lrs import fs_format
 from phobos.output import dump_object_list
 from ClusterShell.NodeSet import NodeSet
@@ -31,6 +35,7 @@ from ClusterShell.NodeSet import NodeSet
 def strerror(rc):
     """Basic wrapper to convert return code into corresponding errno string."""
     return os.strerror(abs(rc))
+
 
 def phobos_log_handler(rec):
     """
@@ -63,6 +68,18 @@ def phobos_log_handler(rec):
     logger = logging.getLogger(__name__)
     logger.handle(record)
 
+
+def attr_convert(usr_attr):
+    """Convert k/v pairs as expressed by the user into a dictionnary."""
+    tkn_iter = shlex.shlex(usr_attr, posix=True)
+    tkn_iter.whitespace = '=,'
+    tkn_iter.whitespace_split = True
+
+    kv_pairs = list(tkn_iter) # [k0, v0, k1, v1...]
+
+    return dict(zip(kv_pairs[0::2], kv_pairs[1::2]))
+
+
 class BaseOptHandler(object):
     """
     Skeleton for action handlers. It can register a corresponding argument
@@ -80,22 +97,20 @@ class BaseOptHandler(object):
         """
         super(BaseOptHandler, self).__init__(**kwargs)
         self.params = params
-        self.client = None
         self.logger = logging.getLogger(__name__)
 
-    def dss_connect(self):
-        """Initialize a DSS Client."""
-        # XXX Connection info is currently expressed as an opaque string.
-        #     Thus use the special _connect keyword to not rebuild it.
-        self.client = Client()
-        conn_info = get_config_value('dss', 'connect_string')
-        if conn_info is None:
-            conn_info = ''
-        self.client.connect(_connect=conn_info)
+    def initialize(self):
+        """
+        Optional method handlers can implement to prepare execution context.
+        """
+        pass
 
-    def dss_disconnect(self):
-        """Release resources associated to a DSS handle."""
-        self.client.disconnect()
+    def teardown(self):
+        """
+        Optional method handlers can implement to release resources after
+        execution.
+        """
+        pass
 
     @classmethod
     def add_options(cls, parser):
@@ -119,7 +134,165 @@ class BaseOptHandler(object):
         return subparser
 
 
-class AddOptHandler(BaseOptHandler):
+class DSSInteractHandler(BaseOptHandler):
+    """Option handler for actions that interact with the DSS."""
+    def __init__(self, params, **kwargs):
+        """Initialize a new instance."""
+        super(DSSInteractHandler, self).__init__(params, **kwargs)
+        self.client = None
+
+    def initialize(self):
+        """Initialize a DSS Client."""
+        # XXX Connection info is currently expressed as an opaque string.
+        #     Thus use the special _connect keyword to not rebuild it.
+        self.client = DSSClient()
+        conn_info = get_config_value('dss', 'connect_string')
+        if conn_info is None:
+            conn_info = ''
+        self.client.connect(_connect=conn_info)
+
+    def teardown(self):
+        """Release resources associated to a DSS handle."""
+        self.client.disconnect()
+
+
+class XferOptHandler(BaseOptHandler):
+    """Option handler for actions that do data transfers."""
+    def __init__(self, params, **kwargs):
+        """Initialize a store client."""
+        super(XferOptHandler, self).__init__(params, **kwargs)
+        self.client = None
+
+    @classmethod
+    def add_options(cls, parser):
+        """
+        Add options for the given command. We register the class label as the
+        verb for the special case of data xfer commands.
+        """
+        super(XferOptHandler, cls).add_options(parser)
+        parser.set_defaults(verb=cls.label)
+
+    def initialize(self):
+        """Initialize a client for data movements."""
+        self.client = XferClient()
+
+    def teardown(self):
+        """Release resources associated to a XferClient."""
+        self.client.session_clear()
+
+
+class StoreGetHandler(XferOptHandler):
+    """Retrieve object from backend."""
+    label = 'get'
+    descr = 'retrieve object from backend'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add options for the GET command."""
+        super(StoreGetHandler, cls).add_options(parser)
+        parser.add_argument('object_id', help='Object to retrieve')
+        parser.add_argument('dest_file', help='Destination file')
+
+    def exec_get(self):
+        """Retrieve an object from backend."""
+        oid = self.params.get('object_id')
+        dst = self.params.get('dest_file')
+        self.logger.info("Retrieving object 'objid:%s' to '%s'", oid, dst)
+        self.client.xfer_register(oid, dst)
+        rc = self.client.get()
+        if rc:
+            self.logger.error("Cannot GET 'objid:%s' to '%s'", oid, dst)
+            sys.exit(os.EX_DATAERR)
+
+
+class StorePutHandler(XferOptHandler):
+    """Insert objects into backend."""
+    label = 'put'
+    descr = 'insert object into backend'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add options for the PUT command."""
+        super(StorePutHandler, cls).add_options(parser)
+        parser.add_argument('-m', '--metadata',
+                            help='Comma-separated list of key=value')
+        parser.add_argument('src_file', help='File to insert')
+        parser.add_argument('object_id', help='Desired object ID')
+
+    def exec_put(self):
+        """Insert an object into backend."""
+        src = self.params.get('src_file')
+        oid = self.params.get('object_id')
+
+        attrs = self.params.get('metadata')
+        if attrs is not None:
+            attrs = attr_convert(attrs)
+            self.logger.debug("Loaded attributes set '%r'", attrs)
+
+        self.logger.info("Inserting object '%s' to 'objid:%s'", src, oid)
+
+        self.client.xfer_register(oid, src, attrs=attrs)
+        rc = self.client.put()
+        if any(rc):
+            self.logger.error("Cannot issue PUT request")
+            sys.exit(os.EX_DATAERR)
+
+
+class StoreMPutHandler(XferOptHandler):
+    """Insert objects into backend."""
+    label = 'mput'
+    descr = 'insert multiple objects into backend'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add options for the MPUT command."""
+        super(StoreMPutHandler, cls).add_options(parser)
+        parser.add_argument('xfer_list',
+                            help='File containing lines like: '\
+                                 '<src_file>  <object_id>  <metadata|->')
+
+    def exec_mput(self):
+        """Insert objects into backend."""
+        path = self.params.get('xfer_list')
+        if path == '-':
+            fin = sys.stdin
+        else:
+            fin = open(path)
+
+        for i, line in enumerate(fin):
+            # Skip empty lines and comments
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+
+            match = re.match("(\S+)\s+(\S+)\s+(.*)", line)
+            if match is None:
+                self.logger.error("Format error on line %d: %s", i, line)
+                sys.exit(os.EX_DATAERR)
+
+            src = match.group(1)
+            oid = match.group(2)
+            attrs = match.group(3)
+
+            if attrs == '-':
+                attrs = None
+            else:
+                attrs = attr_convert(attrs)
+                self.logger.debug("Loaded attributes set '%r'", attrs)
+
+            self.logger.info("Inserting object '%s' to 'objid:%s'", src, oid)
+            self.client.xfer_register(oid, src, attrs=attrs)
+
+        rc = self.client.put()
+        if any(rc):
+            self.logger.error("Cannot issue MPUT request")
+            sys.exit(os.EX_DATAERR)
+
+        if fin is not sys.stdin:
+            fin.close()
+
+
+class AddOptHandler(DSSInteractHandler):
     """Insert a new resource into the system."""
     label = 'add'
     descr = 'insert new resource(s) to the system'
@@ -132,7 +305,7 @@ class AddOptHandler(BaseOptHandler):
         parser.add_argument('res', nargs='+', help='Resource(s) to add')
 
 
-class CheckOptHandler(BaseOptHandler):
+class CheckOptHandler(DSSInteractHandler):
     """Issue a check command on the designated object(s)."""
     label = 'check'
     descr = 'check state / consistency of the selected resource(s).'
@@ -144,13 +317,13 @@ class CheckOptHandler(BaseOptHandler):
         parser.add_argument('res', nargs='+', help='Resource(s) to check')
 
 
-class ListOptHandler(BaseOptHandler):
+class ListOptHandler(DSSInteractHandler):
     """List items of a specific type."""
     label = 'list'
     descr = 'list all entries of the kind'
 
 
-class LockOptHandler(BaseOptHandler):
+class LockOptHandler(DSSInteractHandler):
     """Lock resource."""
     label = 'lock'
     descr = 'lock resource(s)'
@@ -163,7 +336,7 @@ class LockOptHandler(BaseOptHandler):
         parser.add_argument('--force', action='store_true',
                             help='Do not check the current lock state')
 
-class UnlockOptHandler(BaseOptHandler):
+class UnlockOptHandler(DSSInteractHandler):
     """Unlock resource."""
     label = 'unlock'
     descr = 'unlock resource(s)'
@@ -176,7 +349,7 @@ class UnlockOptHandler(BaseOptHandler):
         parser.add_argument('--force', action='store_true',
                             help='Do not check the current lock state')
 
-class ShowOptHandler(BaseOptHandler):
+class ShowOptHandler(DSSInteractHandler):
     """Show resource details."""
     label = 'show'
     descr = 'show resource details'
@@ -215,7 +388,7 @@ class TapeAddOptHandler(AddOptHandler):
         parser.add_argument('--fs', default="LTFS",
                             help='Filesystem type (default: LTFS)')
 
-class FormatOptHandler(BaseOptHandler):
+class FormatOptHandler(DSSInteractHandler):
     """Format a resource."""
     label = 'format'
     descr = 'format a tape'
@@ -232,7 +405,7 @@ class FormatOptHandler(BaseOptHandler):
         parser.add_argument('res', nargs='+', help='Resource(s) to format')
 
 
-class DirOptHandler(BaseOptHandler):
+class DirOptHandler(DSSInteractHandler):
     """Directory-related options and actions."""
     label = 'dir'
     descr = 'handle directories'
@@ -283,7 +456,7 @@ class DirOptHandler(BaseOptHandler):
         """Unlock a directory"""
         self.logger.error("Dir unlock is not implemented")
 
-class DriveOptHandler(BaseOptHandler):
+class DriveOptHandler(DSSInteractHandler):
     """Tape Drive options and actions."""
     label = 'drive'
     descr = 'handle tape drives (use ID or device path to identify resource)'
@@ -383,7 +556,7 @@ class DriveOptHandler(BaseOptHandler):
             self.logger.error("Failed to unlock one or more drive(s)"
                               ", error: %s", strerror(rc))
 
-class TapeOptHandler(BaseOptHandler):
+class TapeOptHandler(DSSInteractHandler):
     """Magnetic tape options and actions."""
     label = 'tape'
     descr = 'handle magnetic tape (use tape label to identify resource)'
@@ -517,7 +690,18 @@ class PhobosActionContext(object):
                          "[%(funcName)s:%(filename)s:%(lineno)d] %(message)s"
 
     default_conf_file = '/etc/phobos.conf'
-    supported_objects = [DirOptHandler, DriveOptHandler, TapeOptHandler]
+
+    supported_handlers = [
+        # Object interfaces
+        DirOptHandler,
+        TapeOptHandler,
+        DriveOptHandler,
+
+        # Xfer interfaces
+        StoreGetHandler,
+        StorePutHandler,
+        StoreMPutHandler
+    ]
 
     def __init__(self, args, **kwargs):
         """Initialize a PAC instance."""
@@ -526,7 +710,9 @@ class PhobosActionContext(object):
         self.parameters = None
 
         self.install_arg_parser()
-        self.parameters = vars(self.parser.parse_args(args))
+
+        self.args = self.parser.parse_args(args)
+        self.parameters = vars(self.args)
 
         self.load_config() # After this, code can use get_config_value()
 
@@ -547,11 +733,10 @@ class PhobosActionContext(object):
                                  default=self.default_conf_file,
                                  help='Alternative configuration file')
 
-        # Initialize specialized (objects) argument parsers
-        sub = self.parser.add_subparsers(dest='media',
-                                         help="Select target object type")
+        sub = self.parser.add_subparsers(dest='goal')
 
-        for obj in self.supported_objects:
+        # Register misc actions handlers
+        for obj in self.supported_handlers:
             obj.subparser_register(sub)
 
     def load_config(self):
@@ -605,14 +790,14 @@ class PhobosActionContext(object):
         """
         self.configure_app_logging()
 
-        target = self.parameters.get('media')
+        target = self.parameters.get('goal')
         action = self.parameters.get('verb')
 
         assert target is not None
         assert action is not None
 
         target_inst = None
-        for obj in self.supported_objects:
+        for obj in self.supported_handlers:
             if obj.label == target:
                 target_inst = obj(self.parameters)
                 break
@@ -621,9 +806,9 @@ class PhobosActionContext(object):
         assert target_inst is not None
 
         # Invoke target::exec_{action}()
-        target_inst.dss_connect()
+        target_inst.initialize()
         getattr(target_inst, 'exec_%s' % action)()
-        target_inst.dss_disconnect()
+        target_inst.teardown()
 
 def phobos_main(args=sys.argv[1::]):
     """

@@ -59,3 +59,25 @@ phobos tape {list|ls} [-t type]
 
 phobos tape {lock|unlock}
 	- use dss_media_set()
+
+=== Object store ===
+phobos get <object_id> <dest_file>
+        - Retrieve an item from the object store
+                * no bulk operation supported yet
+
+phobos put [-m|--metadata=k=v,...] <orig_file> <object_id>
+        - Insert an item into the object store
+                * if specified, attributes are parsed as a comma-separated
+                  list of key=value pairs. Quotes can be used to encapsulate
+                  separators within the keys or values.
+
+                  eg: owner=bob,layout="ost0,ost1,ost2",attr_scheme="k=v"
+
+phobos mput <input_file>
+        - Bulk insert multiple items into the object store.
+                * file can be "-" to make phobos read from stdin.
+                * the input format is expected to be:
+                    # optional comments
+                    <orig_file>   <object_id>  <metadata|->
+                * use "-" for empty metadata.  See 'phobos put' section of
+                  this document for metadata formatting.

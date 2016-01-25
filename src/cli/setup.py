@@ -57,6 +57,15 @@ log_module = Extension('log',
                        library_dirs=['../store/.libs'],
                        define_macros=GLOBAL_MACROS)
 
+store_module = Extension('_store',
+                         sources=['phobos/capi/store_wrap.c'],
+                         include_dirs=['../include',
+                                       '/usr/include/glib-2.0',
+                                       '/usr/lib64/glib-2.0/include'],
+                         libraries=['phobos_store'],
+                         library_dirs=['../store/.libs'],
+                         define_macros=GLOBAL_MACROS)
+
 setup(
     name='phobos',
     packages=['phobos', 'phobos.capi'],
@@ -66,7 +75,8 @@ setup(
         lrs_module,
         ldm_module,
         cfg_module,
-        log_module
+        log_module,
+        store_module
     ],
     py_modules=['cfg'],
     scripts=['scripts/phobos'],

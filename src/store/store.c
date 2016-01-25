@@ -622,25 +622,28 @@ static void store_mput_fini(struct mput_desc *mput)
     }
 }
 
-static void xfer_get_notify(const struct pho_xfer_desc *desc, int rc)
+static void xfer_get_notify(pho_completion_cb_t cb, void *udata,
+                            const struct pho_xfer_desc *desc, int rc)
 {
-    if (desc->xd_callback != NULL)
-        desc->xd_callback(desc, rc);
+    if (cb != NULL)
+        cb(udata, desc, rc);
 
     pho_info("GET operation objid:'%s' -> '%s' %s",
              desc->xd_objid, desc->xd_fpath, rc ? "failed" : "succeeded");
 }
 
-static void xfer_put_notify(const struct pho_xfer_desc *desc, int rc)
+static void xfer_put_notify(pho_completion_cb_t cb, void *udata,
+                            const struct pho_xfer_desc *desc, int rc)
 {
-    if (desc->xd_callback != NULL)
-        desc->xd_callback(desc, rc);
+    if (cb != NULL)
+        cb(udata, desc, rc);
 
     pho_info("PUT operation '%s' -> objid:'%s' %s",
              desc->xd_fpath, desc->xd_objid, rc ? "failed" : "succeeded");
 }
 
-static int xfer_notify_all(const struct mput_desc *mput)
+static int xfer_notify_all(pho_completion_cb_t cb, void *udata,
+                           const struct mput_desc *mput)
 {
     int first_rc = 0;
     int i;
@@ -652,13 +655,14 @@ static int xfer_notify_all(const struct mput_desc *mput)
         if (!first_rc && mput->slices[i].rc)
             first_rc = mput->slices[i].rc;
 
-        xfer_put_notify(mput->slices[i].xfer, mput->slices[i].rc);
+        xfer_put_notify(cb, udata, mput->slices[i].xfer, mput->slices[i].rc);
     }
 
     return first_rc;
 }
 
-int phobos_mput(const struct pho_xfer_desc *desc, size_t n)
+int phobos_mput(const struct pho_xfer_desc *desc, size_t n,
+                pho_completion_cb_t cb, void *udata)
 {
     struct mput_desc    *mput = NULL;
     int                  i;
@@ -671,7 +675,7 @@ int phobos_mput(const struct pho_xfer_desc *desc, size_t n)
         /* We have no context here, thus we cannot use xfer_notify_all().
          * Deliver rc to all components directly. */
         for (i = 0; i < n; i++)
-            xfer_put_notify(&desc[i], rc);
+            xfer_put_notify(cb, udata, &desc[i], rc);
         LOG_GOTO(disconn, rc, "Initialization failed");
     }
 
@@ -705,7 +709,7 @@ int phobos_mput(const struct pho_xfer_desc *desc, size_t n)
 out_finalize:
     mput_slices_cleanup(mput, rc);
 
-    rc2 = xfer_notify_all(mput);
+    rc2 = xfer_notify_all(cb, udata, mput);
     if (rc == 0)
         rc = rc2;
 
@@ -714,9 +718,10 @@ disconn:
     return rc;
 }
 
-int phobos_put(const struct pho_xfer_desc *desc)
+int phobos_put(const struct pho_xfer_desc *desc, pho_completion_cb_t cb,
+               void *udata)
 {
-    return phobos_mput(desc, 1);
+    return phobos_mput(desc, 1, cb, udata);
 }
 
 /** retrieve the location of a given object from DSS */
@@ -759,7 +764,8 @@ static inline int xfer2open_flags(enum pho_xfer_flags flags)
                                           : O_CREAT|O_WRONLY|O_EXCL;
 }
 
-int phobos_get(const struct pho_xfer_desc *desc)
+int phobos_get(const struct pho_xfer_desc *desc, pho_completion_cb_t cb,
+               void *udata)
 {
     struct layout_info  *layout = NULL;
     struct lrs_intent    intent;
@@ -812,7 +818,7 @@ free_res:
     dss_res_free(layout, 1);
 
 disconn:
-    xfer_get_notify(desc, rc);
+    xfer_get_notify(cb, udata, desc, rc);
     dss_fini(&dss);
     return rc;
 }

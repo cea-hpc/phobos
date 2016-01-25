@@ -12,7 +12,10 @@ SWIG_MODULES=phobos/capi/cfg.py \
 	     phobos/capi/lrs_wrap.c \
 	     phobos/capi/ldm.py \
 	     phobos/capi/_ldm.so \
-	     phobos/capi/ldm_wrap.c
+	     phobos/capi/ldm_wrap.c \
+	     phobos/capi/store.py \
+	     phobos/capi/_store.so \
+	     phobos/capi/store_wrap.c
 
 HAND_MODULES=phobos/capi/log.so
 
@@ -22,6 +25,7 @@ all-local:
 	swig -python -I../include phobos/capi/dss.i
 	swig -python -I../include phobos/capi/lrs.i
 	swig -python -I../include phobos/capi/ldm.i
+	swig -python -I../include phobos/capi/store.i
 	python setup.py build_ext --inplace --verbose
 
 clean-local:
