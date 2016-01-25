@@ -1053,9 +1053,20 @@ static struct dev_descr *search_loaded_media(const struct media_id *id)
     name = media_id_get(id);
 
     for (i = 0; i < dev_count; i++) {
-        if ((devices[i].op_status == PHO_DEV_OP_ST_MOUNTED ||
-             devices[i].op_status == PHO_DEV_OP_ST_LOADED)
-            && !strcmp(name, media_id_get(&devices[i].media_id)))
+        const char          *media_id;
+        enum dev_op_status   op_st = devices[i].op_status;
+
+        if (op_st != PHO_DEV_OP_ST_MOUNTED && op_st != PHO_DEV_OP_ST_LOADED)
+            continue;
+
+        media_id = media_id_get(&devices[i].media_id);
+        if (media_id == NULL) {
+            pho_warn("Cannot retrieve media ID from device '%s'",
+                     devices[i].dev_path);
+            continue;
+        }
+
+        if (!strcmp(name, media_id))
             return &devices[i];
     }
     return NULL;
