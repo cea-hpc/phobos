@@ -111,16 +111,16 @@ static const mput_operation_t mput_state_machine_ops[MPUT_STEP_COUNT] = {
 
 static int _ext_clean_cb(struct mput_desc *mput, struct mput_slice *slice);
 static int _ext_abort_cb(struct mput_desc *mput, struct mput_slice *slice);
-static int _obj_abort_cb(struct mput_desc *mput, struct mput_slice *slice);
+static int _obj_clean_cb(struct mput_desc *mput, struct mput_slice *slice);
 
 /**
  * Cleanup actions to do for each failed slice.
  * Return values are ignored.
  */
 static const mput_operation_t mput_state_machine_clean_ops[MPUT_STEP_COUNT] = {
-    [MPUT_STEP_OBJ_PUT_START] = _ext_clean_cb,
-    [MPUT_STEP_EXT_PUT_START] = _ext_abort_cb,
-    [MPUT_STEP_EXT_WRITE]     = _obj_abort_cb,
+    [MPUT_STEP_OBJ_PUT_START] = _obj_clean_cb,
+    [MPUT_STEP_EXT_PUT_START] = _ext_clean_cb,
+    [MPUT_STEP_EXT_WRITE]     = _ext_abort_cb,
 };
 
 
@@ -487,7 +487,7 @@ int _ext_abort_cb(struct mput_desc *mput, struct mput_slice *slice)
     return 0;
 }
 
-int _obj_abort_cb(struct mput_desc *mput, struct mput_slice *slice)
+int _obj_clean_cb(struct mput_desc *mput, struct mput_slice *slice)
 {
     struct object_info  obj = {
         .oid     = slice->xfer->xd_objid,
