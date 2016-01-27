@@ -223,7 +223,8 @@ static int lrs_fill_media_info(struct dss_handle *dss,
     if (mcnt == 0) {
         pho_info("No media found matching %s '%s'", dev_family2str(id->type),
                  media_id_get(id));
-        GOTO(out_free, rc = -ENOSPC);
+        /* no such device or address */
+        GOTO(out_free, rc = -ENXIO);
     } else if (mcnt > 1)
         LOG_GOTO(out_free, rc = -EINVAL,
                  "Too many media found matching id '%s'", media_id_get(id));
