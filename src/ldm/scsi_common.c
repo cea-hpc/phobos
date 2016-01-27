@@ -136,8 +136,10 @@ int scsi_execute(int fd, enum scsi_direction direction,
         || hdr.driver_status != 0)
         pho_warn("scsi_masked_status=%#hhx, adapter_status=%#hx, "
                  "driver_status=%#hx, req_sense_error=%#hhx, "
-                 "sense_key=%#hhx", hdr.masked_status, hdr.host_status,
-                 hdr.driver_status, sbp->error_code, sbp->sense_key);
+                 "sense_key=%#hhx, asc=%#hhx, ascq=%#hhx", hdr.masked_status,
+                 hdr.host_status, hdr.driver_status, sbp->error_code,
+                 sbp->sense_key, sbp->additional_sense_code,
+                 sbp->additional_sense_code_qualifier);
 
     if (hdr.masked_status == CHECK_CONDITION) {
         /* check sense_key value */
