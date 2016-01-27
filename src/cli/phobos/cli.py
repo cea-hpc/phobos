@@ -689,8 +689,6 @@ class PhobosActionContext(object):
     CLI_LOG_FORMAT_DEV = "%(asctime)s <%(levelname)s> " \
                          "[%(funcName)s:%(filename)s:%(lineno)d] %(message)s"
 
-    default_conf_file = '/etc/phobos.conf'
-
     supported_handlers = [
         # Object interfaces
         DirOptHandler,
@@ -730,7 +728,6 @@ class PhobosActionContext(object):
                               action='count', default=0)
 
         self.parser.add_argument('-c', '--config',
-                                 default=self.default_conf_file,
                                  help='Alternative configuration file')
 
         sub = self.parser.add_subparsers(dest='goal')
