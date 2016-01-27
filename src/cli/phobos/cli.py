@@ -621,7 +621,7 @@ class TapeOptHandler(DSSInteractHandler):
     def exec_list(self):
         """List all tapes."""
         for tape in self.client.media.get(family='tape'):
-            print cdss.media_id_get(tape.id)
+            print tape.tid
 
     def exec_lock(self):
         """Lock tapes"""
@@ -629,7 +629,6 @@ class TapeOptHandler(DSSInteractHandler):
         uids = NodeSet.fromlist(self.params.get('res'))
         for uid in uids:
             tape = self.client.media.get(id=uid)
-
             if tape[0].lock.lock != "":
                 if self.params.get('force'):
                     self.logger.warn("Tape %s is in use. Administrative "

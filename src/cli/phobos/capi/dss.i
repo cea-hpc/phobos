@@ -24,6 +24,10 @@
 
 %include <pho_types.h>
 
+typedef long time_t;
+typedef int  int32_t;
+typedef unsigned long long uint64_t;
+
 /**
  * typemap(in): python -> c
  * allow crit lists to be passed in as Python Lists of crit() objects.

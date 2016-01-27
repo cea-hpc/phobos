@@ -16,7 +16,7 @@ import xml.etree.ElementTree
 import xml.dom.minidom
 
 import phobos.capi.dss as cdss
-
+from dss import *
 
 def csv_dump(data):
     """Convert a list of dictionaries to a csv string"""
@@ -50,7 +50,7 @@ def human_dump(data, item_type='item'):
     out = " {0:_^50}\n".format(str(title))
     for item in data:
         vals = []
-        for key in item:
+        for key in sorted(item.keys()):
             vals.append(" |{0:<20}|{1:<27}|".format(key, item[key]))
         out = out+ "\n".join(vals) + "\n {0:_^50}\n".format("")
     return out
@@ -61,12 +61,6 @@ def dump_object_list(objs, fmt="human", numeric=False):
     """
     if not objs:
         return
-
-    display = {
-        cdss.dev_info:('serial', ['adm_status', 'changer_idx', 'family',
-                                  'host', 'model', 'path', 'serial']),
-        cdss.media_info:('model', ['adm_status', 'fs_status', 'fs_type'])
-    }
 
     formats = {
         'json' : json.dumps,
@@ -82,29 +76,8 @@ def dump_object_list(objs, fmt="human", numeric=False):
         logger.error("Unknown output format: %s", fmt)
         return
 
-    #Is an instance of a known class ?
-    dclass = None
-    for key in display:
-        if isinstance(objs[0], key):
-            dclass = key
-
-    if not dclass:
-        logger = logging.getLogger(__name__)
-        logger.error("No model found to display this class: %s",
-                     objs[0].__class__.__name__)
-        return
-
-    objlist = []
-    #Build a dict with attributs to export/output
-    for obj in objs:
-        objext = {}
-        for key in display[dclass][1]:
-            if not numeric and hasattr(cdss, '%s2str' % key):
-                method = getattr(cdss, '%s2str' % key)
-                objext[key] = method(getattr(obj, key))
-            else:
-                objext[key] = str(getattr(obj, key))
-        objlist.append(objext)
+    #Build a list of dict with attributs to export/output
+    objlist = [x.todict(numeric) for x in objs]
 
     #Print formatted objects
     print formatter(objlist)
