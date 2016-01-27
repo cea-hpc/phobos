@@ -14,6 +14,7 @@ INTEG_TESTS=test_dss.sh test_scsi.sh test_store.sh
 TESTS=$(UNIT_TESTS) $(INTEG_TESTS)
 
 noinst_PROGRAMS=$(check_PROGRAMS)
+noinst_HEADERS=pho_test_utils.h
 
 pre-check-local:
 	./test_lock.sh

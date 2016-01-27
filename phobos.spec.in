@@ -36,6 +36,12 @@ variety of media including tapes, disks, other object stores...
 This initial version is however limited to a single host. It can manage tapes
 in a SCSI library and local directories.
 
+%package devel
+Summary: C API for Phobos Object Store.
+%description devel
+This package contains header files and required libraries to access Phobos
+object store from a C program.
+
 %prep
 %setup -q
 
@@ -48,12 +54,24 @@ make %{?_smp_mflags}
 
 %install
 %make_install
+cd %{_builddir}/%{name}-%{version}/src/cli/
+%{__python} setup.py install --skip-build --root %{buildroot}
+
 
 
 %files
-%doc
 
+%{_libdir}/libphobos_store.so.*
+%{_sbindir}/pho_ldm_helper
+%{python_sitearch}/phobos/*
+%{python_sitearch}/phobos-*-py?.?.egg-info
+%{_bindir}/phobos
 
+%files devel
+
+%{_includedir}/pho_attrs.h
+%{_includedir}/phobos_store.h
+%{_libdir}/libphobos_store.so
+%{_libdir}/libphobos_store.la
 
 %changelog
-

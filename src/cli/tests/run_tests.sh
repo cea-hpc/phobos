@@ -1,9 +1,12 @@
 #!/bin/sh
 
 PY=$(which python)
+ARCH=$(uname -m)
+PY_VERSION=$($PY -c 'import sys; print "%d.%d" % (sys.version_info[0],\
+                                                  sys.version_info[1])')
 
 # pure-python modules
-PHO_PYTHON_PATH=../
+PHO_PYTHON_PATH=../build/lib.linux-$ARCH-$PY_VERSION/
 
 # toplevel phobos library
 PHO_STORELIB_PATH=../../store/.libs/

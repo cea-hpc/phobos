@@ -78,7 +78,6 @@ setup(
         log_module,
         store_module
     ],
-    py_modules=['cfg'],
     scripts=['scripts/phobos'],
     version='0.0.1',
     description='Phobos control scripts and libraries',

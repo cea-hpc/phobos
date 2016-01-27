@@ -19,6 +19,22 @@ SWIG_MODULES=phobos/capi/cfg.py \
 
 HAND_MODULES=phobos/capi/log.so
 
+EXTRA_DIST=phobos/capi/cfg.i \
+	   phobos/capi/dss.i \
+	   phobos/capi/lrs.i \
+	   phobos/capi/ldm.i \
+	   phobos/capi/store.i \
+	   phobos/capi/__init__.py \
+	   phobos/capi/log_module.c \
+	   phobos/__init__.py \
+	   phobos/cfg.py \
+	   phobos/cli.py \
+	   phobos/dss.py \
+	   phobos/lrs.py \
+	   phobos/output.py \
+	   phobos/store.py \
+	   scripts/phobos \
+	   setup.py
 
 all-local:
 	swig -python -I../include phobos/capi/cfg.i
@@ -26,7 +42,7 @@ all-local:
 	swig -python -I../include phobos/capi/lrs.i
 	swig -python -I../include phobos/capi/ldm.i
 	swig -python -I../include phobos/capi/store.i
-	python setup.py build_ext --inplace --verbose
+	python setup.py build --verbose
 
 clean-local:
 	rm -f $(SWIG_MODULES) $(HAND_MODULES)

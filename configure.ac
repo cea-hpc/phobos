@@ -4,7 +4,7 @@
 
 AC_PREREQ(2.59)
 
-AC_INIT([phobos], [0.1], [st-tgcc@cea.fr])
+AC_INIT([phobos], [0.90], [st-tgcc@cea.fr])
 RELEASE="1"
 
 AC_DEFINE_UNQUOTED(RELEASE, "$RELEASE", [release info])
