@@ -12,6 +12,7 @@ from random import randint
 
 from phobos.dss import Client
 from phobos.dss import GenericError as DSSError
+from phobos.dss import CliMedia, CliDevice
 
 from phobos.capi.dss import layout_info, media_info, dev_info, PHO_DEV_DIR
 from phobos.capi.dss import dev_family2str
@@ -50,7 +51,7 @@ class DSSClientTest(unittest.TestCase):
         cli = Client()
         cli.connect(dbname='phobos', user='phobos', password='phobos')
         for mda in cli.media.get():
-            self.assertTrue(isinstance(mda, media_info))
+            self.assertTrue(isinstance(mda, CliMedia))
         cli.disconnect()
 
     def test_list_extents(self):
@@ -78,7 +79,7 @@ class DSSClientTest(unittest.TestCase):
 
         res = cli.devices.get(serial=dev.serial)
         for devt in res:
-            self.assertTrue(isinstance(devt, dev_info))
+            self.assertTrue(isinstance(devt, CliDevice))
             self.assertEqual(devt.serial, dev.serial)
 
         rc = cli.devices.delete(res)

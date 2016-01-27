@@ -74,6 +74,9 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['dir', 'list'])
         self.check_cmdline_valid(['dir', 'add', '--unlock', 'toto'])
         self.check_cmdline_valid(['dir', 'add', 'A', 'B', 'C'])
+        self.check_cmdline_valid(['dir', 'show', 'A,B,C'])
+        self.check_cmdline_valid(['tape', 'add', '-t', 'LTO5', 'I,J,K'])
+        self.check_cmdline_valid(['tape', 'show', 'I,J,K'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['voynichauthor', 'show'], code=2)
