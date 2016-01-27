@@ -661,6 +661,19 @@ static int xfer_notify_all(pho_completion_cb_t cb, void *udata,
     return first_rc;
 }
 
+static int mput_valid_slices_count(const struct mput_desc *mput)
+{
+    int count = 0;
+    int i;
+
+    for (i = 0; i < mput->slice_cnt; i++) {
+        if (mput->slices[i].rc == 0)
+            count += 1;
+    }
+
+    return count;
+}
+
 int phobos_mput(const struct pho_xfer_desc *desc, size_t n,
                 pho_completion_cb_t cb, void *udata)
 {
@@ -692,12 +705,12 @@ int phobos_mput(const struct pho_xfer_desc *desc, size_t n,
 
     rc = mput_slices_progress(mput, MPUT_STEP_EXT_WRITE);
     if (rc) {
-        lrs_done(&mput->intent, rc);
+        lrs_done(&mput->intent, 0, rc);
         LOG_GOTO(out_finalize, rc, "All slices failed");
     }
 
     /* Release storage resources and update device/media info */
-    rc = lrs_done(&mput->intent, rc);
+    rc = lrs_done(&mput->intent, mput_valid_slices_count(mput), rc);
     if (rc)
         LOG_GOTO(out_finalize, rc, "Failed to flush data");
 
@@ -805,7 +818,7 @@ int phobos_get(const struct pho_xfer_desc *desc, pho_completion_cb_t cb,
 
 out_lrs_end:
     /* release storage resources */
-    lrs_done(&intent, rc);
+    lrs_done(&intent, 0, rc);
     /* don't care about the error here, the object has been read successfully
      * and the LRS error should have been logged by lower layers.
      */

@@ -62,10 +62,11 @@ int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
 /**
  * Declare the current operation (read/write) as finished and flush data.
  * @param(in) intent    the intent descriptor filled by lrs_intent_{read,write}.
+ * @param(in) fragments the number of successfully written fragments.
  * @param(in) err_code  status of the copy (errno value).
  * @return 0 on success, -1 * posix error code on failure
  */
-int lrs_done(struct lrs_intent *intent, int err_code);
+int lrs_done(struct lrs_intent *intent, int fragments, int err_code);
 #endif /* ^SWIG */
 
 /**

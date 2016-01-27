@@ -1310,7 +1310,45 @@ int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
     return 0;
 }
 
-int lrs_done(struct lrs_intent *intent, int err_code)
+static int lrs_media_update(struct lrs_intent *intent, int fragments,
+                            bool mark_full)
+{
+    struct dss_handle   *dss = intent->li_dss;
+    struct media_info   *media = intent->li_device->dss_media_info;
+    const char          *fsroot = intent->li_location.root_path;
+    size_t               spc_used;
+    size_t               spc_free;
+    struct fs_adapter    fsa;
+    int                  rc;
+
+    rc = get_fs_adapter(intent->li_location.extent.fs_type, &fsa);
+    if (rc)
+        LOG_RETURN(rc, "No FS adapter found for '%s' (type %s)",
+                   fsroot, fs_type2str(intent->li_location.extent.fs_type));
+
+    rc = ldm_fs_df(&fsa, intent->li_location.root_path, &spc_used, &spc_free);
+    if (rc)
+        LOG_RETURN(rc, "Cannot retrieve media usage information");
+
+    media->stats.nb_obj += fragments;
+    media->stats.phys_spc_used = spc_used;
+    media->stats.phys_spc_free = spc_free;
+    media->stats.logc_spc_used += intent->li_location.extent.size;
+
+    if (media->fs_status == PHO_FS_STATUS_EMPTY)
+        media->fs_status = PHO_FS_STATUS_USED;
+
+    if (mark_full)
+        media->fs_status = PHO_FS_STATUS_FULL;
+
+    rc = dss_media_set(dss, media, 1, DSS_SET_UPDATE);
+    if (rc)
+        LOG_RETURN(rc, "Cannot update media information");
+
+    return 0;
+}
+
+int lrs_done(struct lrs_intent *intent, int fragments, int err_code)
 {
     struct io_adapter   ioa;
     int                 rc = 0;
@@ -1333,10 +1371,17 @@ int lrs_done(struct lrs_intent *intent, int err_code)
         LOG_GOTO(out_free, rc, "Cannot flush media at: %s",
                  intent->li_location.root_path);
 
-    /**
-     * @TODO tag tape media as full if err_code = ENOSPC.
-     * (trigger umount in this case?).
-     */
+    switch (err_code) {
+    case 0:
+        rc = lrs_media_update(intent, fragments, false);
+        break;
+    case -ENOSPC:
+        rc = lrs_media_update(intent, fragments, true);
+        break;
+    default:
+        rc = 0;
+        goto out_free;
+    }
 
 out_free:
     lrs_dev_release(intent->li_dss, intent->li_device);
