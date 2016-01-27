@@ -1,0 +1,23 @@
+LTFS behavior on tape full
+==========================
+
+total: 2257 GB written
+dd: writing `/mnt/test_ltfs/file.1156': No space left on device
+1032+0 records in
+1031+0 records out
+1081081856 bytes (1.1 GB) copied, 5.74185 s, 188 MB/s
+Failed to write file 1156: error=1
+
+last written files (before unmounting)
+...
+-rwxrwxrwx. 1 root root 2097152000 Jan 23 20:56 file.1155
+-rwxrwxrwx. 1 root root 1062731776 Jan 23 20:56 file.1156
+
+After remounting:
+...
+-rwxrwxrwx. 1 root root 2097152000 Jan 23 20:56 file.1155
+-rwxrwxrwx. 1 root root 1062731776 Jan 23 20:56 file.1156
+
+truncate: cannot open `/mnt/test_ltfs/file.1156' for writing: Read-only file system
+
+ltfs:/dev/IBMtape0n on /mnt/test_ltfs type fuse (ro,nosuid,nodev,default_permissions,allow_other)
