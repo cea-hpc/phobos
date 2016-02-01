@@ -85,7 +85,7 @@ static int read_device_attr(const char *devname, const char *attrname,
     /* rstrip stupid '\n' and spaces */
     rstrip(info);
 
-    pho_debug("Device '%s': %s='%s'\n", devname, attrname, info);
+    pho_debug("Device '%s': %s='%s'", devname, attrname, info);
 
 out_close:
     close(fd);
