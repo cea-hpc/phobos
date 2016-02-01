@@ -601,11 +601,11 @@ static int get_object_setrequest(struct object_info *item_list, int item_cnt,
                                    p_object->oid);
         } else if (action == DSS_SET_INSERT) {
             g_string_append_printf(request, insert_query_values[DSS_OBJECT],
-                                   p_object->oid, "[]",
+                                   p_object->oid, p_object->user_md,
                                    i < item_cnt-1 ? "," : ";");
         } else if (action == DSS_SET_UPDATE) {
             g_string_append_printf(request, update_query[DSS_OBJECT],
-                                   "[]", p_object->oid);
+                                   p_object->user_md, p_object->oid);
         }
     }
     return 0;
@@ -976,7 +976,8 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
         for (i = 0; i < PQntuples(res); i++) {
             struct object_info *p_object = &dss_res->u.object[i];
 
-            p_object->oid = get_str_value(res, i, 0);
+            p_object->oid     = get_str_value(res, i, 0);
+            p_object->user_md = get_str_value(res, i, 1);
         }
 
         *item_list = dss_res->u.object;
