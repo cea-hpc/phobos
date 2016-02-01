@@ -27,6 +27,10 @@
 #include <assert.h>
 #include <sys/utsname.h>
 
+
+/** Used to indicate that a lock is held by an external process */
+#define LRS_MEDIA_LOCKED_EXTERNAL   ((void *)0x19880429)
+
 /**
  * Build a mount path for the given identifier.
  * @param[in] id    Unique drive identified on the host.
@@ -188,6 +192,55 @@ static int lrs_dev_release(struct dss_handle *dss, struct dev_descr *pdev)
 }
 
 /**
+ * Lock a media at DSS level to prevent concurrent access.
+ */
+static int lrs_media_acquire(struct dss_handle *dss, struct media_info *pmedia)
+{
+    const char  *media_id;
+    int          rc;
+    ENTRY;
+
+    if (!dss || !pmedia)
+        return -EINVAL;
+
+    media_id = media_id_get(&pmedia->id);
+
+    rc = dss_media_lock(dss, pmedia, 1);
+    if (rc)
+        LOG_RETURN(rc, "Cannot lock media '%s'", media_id);
+
+    pho_debug("Acquired ownership on media '%s'", media_id);
+    return 0;
+}
+
+/**
+ * Unlock a media at DSS level.
+ */
+static int lrs_media_release(struct dss_handle *dss, struct media_info *pmedia)
+{
+    const char  *media_id;
+    int          rc;
+    ENTRY;
+
+    if (!dss || !pmedia)
+        return -EINVAL;
+
+    media_id = media_id_get(&pmedia->id);
+
+    rc = dss_media_unlock(dss, pmedia, 1);
+    if (rc)
+        LOG_RETURN(rc, "Cannot unlock media '%s'", media_id);
+
+    pho_debug("Released ownership on media '%s'", media_id);
+    return 0;
+}
+
+static inline bool lock_empty(const struct pho_lock *lock)
+{
+    return lock->lock == NULL || lock->lock[0] == '\0';
+}
+
+/**
  * Retrieve media info from DSS for the given label.
  * @param pmedia[out] returned pointer to a media_info structure
  *                    allocated by this function.
@@ -197,23 +250,25 @@ static int lrs_fill_media_info(struct dss_handle *dss,
                                struct media_info **pmedia,
                                const struct media_id *id)
 {
-    struct dss_crit med_crit[3]; /* criteria on family+id */
-    int             med_crit_cnt = 0;
-    int             mcnt = 0;
-    int             rc;
-    struct media_info *media_res = NULL;
+    struct media_info   *media_res = NULL;
+    struct dss_crit      med_crit[3]; /* criteria on family+id */
+    int                  med_crit_cnt = 0;
+    const char          *id_str;
+    int                  mcnt = 0;
+    int                  rc;
 
     if (id == NULL || pmedia == NULL)
         return -EINVAL;
 
-    pho_debug("Retrieving media info for %s '%s'", dev_family2str(id->type),
-              media_id_get(id));
+    id_str = media_id_get(id);
+
+    pho_debug("Retrieving media info for %s '%s'",
+              dev_family2str(id->type), id_str);
+
     dss_crit_add(med_crit, &med_crit_cnt, DSS_MDA_family, DSS_CMP_EQ, val_int,
                  id->type);
     dss_crit_add(med_crit, &med_crit_cnt, DSS_MDA_id, DSS_CMP_EQ, val_str,
                  media_id_get(id));
-
-    /* TODO check for locks */
 
     /* get media info from DB */
     rc = dss_media_get(dss, med_crit, med_crit_cnt, &media_res, &mcnt);
@@ -221,13 +276,18 @@ static int lrs_fill_media_info(struct dss_handle *dss,
         return rc;
 
     if (mcnt == 0) {
-        pho_info("No media found matching %s '%s'", dev_family2str(id->type),
-                 media_id_get(id));
+        pho_info("No media found matching %s '%s'",
+                 dev_family2str(id->type), id_str);
         /* no such device or address */
         GOTO(out_free, rc = -ENXIO);
     } else if (mcnt > 1)
         LOG_GOTO(out_free, rc = -EINVAL,
-                 "Too many media found matching id '%s'", media_id_get(id));
+                 "Too many media found matching id '%s'", id_str);
+
+    if (!lock_empty(&media_res->lock)) {
+        pho_info("Media '%s' is locked (%s)", id_str, media_res->lock.lock);
+        GOTO(out_free, rc = -ENOLCK);
+    }
 
     *pmedia = media_info_dup(media_res);
 
@@ -298,7 +358,9 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
 
         /* get media info for loaded drives */
         rc = lrs_fill_media_info(dss, &devd->dss_media_info, &devd->media_id);
-        if (rc)
+        if (rc == -ENOLCK)
+            devd->op_status = PHO_DEV_OP_ST_BUSY;
+        else if (rc)
             return rc;
     } else {
         devd->op_status = PHO_DEV_OP_ST_EMPTY;
@@ -435,7 +497,7 @@ static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
     int                rc, i;
     struct dss_crit    crit[6];
     int                crit_cnt = 0;
-    int                best_idx = -1;
+    struct media_info *media_best;
     struct media_info *pmedia_res = NULL;
     ENTRY;
 
@@ -465,32 +527,51 @@ static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
     if (rc)
         return rc;
 
+lock_race_retry:
+    media_best = NULL;
+
     /* get the best fit */
     for (i = 0; i < mcnt; i++) {
-        if (pmedia_res[i].stats.phys_spc_free < required_size)
+        struct media_info *curr = &pmedia_res[i];
+
+        /* reuse locked flag to signify that it was locked by someone else */
+        if (curr->lock.lock == LRS_MEDIA_LOCKED_EXTERNAL)
             continue;
-        if (best_idx == -1 ||
-            pmedia_res[i].stats.phys_spc_free
-                < pmedia_res[best_idx].stats.phys_spc_free)
-            best_idx = i;
+
+        if (curr->stats.phys_spc_free < required_size)
+            continue;
+
+        if (media_best == NULL ||
+            curr->stats.phys_spc_free < media_best->stats.phys_spc_free)
+            media_best = curr;
     }
 
-    if (best_idx == -1) {
+    if (media_best == NULL) {
         pho_info("No compatible media found to write %zu bytes", required_size);
         GOTO(free_res, rc = -ENOSPC);
     }
 
-    pho_verb("Selected %s '%s': %zu bytes free", dev_family2str(family),
-             media_id_get(&pmedia_res[best_idx].id),
-             pmedia_res[best_idx].stats.phys_spc_free);
+    rc = lrs_media_acquire(dss, media_best);
+    if (rc) {
+        pho_debug("Failed to lock media %s, looking for another one",
+                  media_id_get(&media_best->id));
+        media_best->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
+        goto lock_race_retry;
+    }
 
-    *p_media = media_info_dup(&pmedia_res[best_idx]);
+    pho_verb("Selected %s '%s': %zu bytes free", dev_family2str(family),
+             media_id_get(&media_best->id), media_best->stats.phys_spc_free);
+
+    *p_media = media_info_dup(media_best);
     if (*p_media == NULL)
         GOTO(free_res, rc = -ENOMEM);
 
     rc = 0;
 
 free_res:
+    if (rc != 0)
+        lrs_media_release(dss, media_best);
+
     dss_res_free(pmedia_res, mcnt);
     return rc;
 }
@@ -1017,6 +1098,7 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
     return rc;
 
 out_free:
+    lrs_media_release(dss, pmedia);
     media_info_free(pmedia);
 
 out_release:
@@ -1089,6 +1171,10 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
     *pmedia = NULL;
 
     rc = lrs_fill_media_info(dss, &med, id);
+    if (rc != 0)
+        return rc;
+
+    rc = lrs_media_acquire(dss, med);
     if (rc != 0)
         return rc;
 
@@ -1261,6 +1347,7 @@ int lrs_write_prepare(struct dss_handle *dss, size_t size,
 
 err_cleanup:
     if (rc != 0) {
+        lrs_media_release(dss, dev->dss_media_info);
         free(intent->li_location.root_path);
         memset(intent, 0, sizeof(*intent));
     }
@@ -1344,6 +1431,10 @@ static int lrs_media_update(struct lrs_intent *intent, int fragments,
     rc = dss_media_set(dss, media, 1, DSS_SET_UPDATE);
     if (rc)
         LOG_RETURN(rc, "Cannot update media information");
+
+    rc = lrs_media_release(dss, media);
+    if (rc)
+        LOG_RETURN(rc, "Cannot unlock media");
 
     return 0;
 }
