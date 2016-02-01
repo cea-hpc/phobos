@@ -285,6 +285,9 @@ static int lintape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
     const char *dev_short;
     ENTRY;
 
+    if (access(dev_path, R_OK))
+        LOG_RETURN(-errno, "Cannot access '%s'", dev_path);
+
     /* extract basename(device)*/
     dev_short = strrchr(dev_path, '/');
     if (dev_short == NULL)

@@ -26,7 +26,6 @@
 
 #define TEST_MAX_DRIVES 32
 
-#define DEV_PREFIX_SZ   strlen("/dev/")
 
 static int test_unit(void *hint)
 {
@@ -68,7 +67,7 @@ static int test_name_serial_match(void *hint)
         return rc;
 
     pho_debug("Reverse mapped serial '%s' to '%s'", lds.lds_serial, path);
-    return strcmp(path + DEV_PREFIX_SZ, name_ref) == 0 ? 0 : -EINVAL;
+    return strcmp(path, name_ref) == 0 ? 0 : -EINVAL;
 }
 
 static bool device_exists(int dev_index)
@@ -94,7 +93,7 @@ int main(int argc, char **argv)
     for (i = 0; i < TEST_MAX_DRIVES; i++) {
         if (!device_exists(i))
             break;
-        snprintf(dev_name, sizeof(dev_name) - 1, "IBMtape%d", i);
+        snprintf(dev_name, sizeof(dev_name) - 1, "/dev/IBMtape%d", i);
         snprintf(test_name, sizeof(test_name) - 1,
                  "Test %da: get serial for drive %s", i, dev_name);
         run_test(test_name, test_unit, dev_name, PHO_TEST_SUCCESS);
@@ -103,7 +102,7 @@ int main(int argc, char **argv)
     for (i = 0; i < TEST_MAX_DRIVES; i++) {
         if (!device_exists(i))
             break;
-        snprintf(dev_name, sizeof(dev_name) - 1, "IBMtape%d", i);
+        snprintf(dev_name, sizeof(dev_name) - 1, "/dev/IBMtape%d", i);
         snprintf(test_name, sizeof(test_name) - 1,
                  "Test %dc: match name/serial for drive %s", i, dev_name);
         run_test(test_name, test_name_serial_match, dev_name, PHO_TEST_SUCCESS);

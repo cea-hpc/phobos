@@ -180,6 +180,8 @@ class DeviceAddTest(BasicExecutionTest):
         """Add a non-existent directory should raise an error."""
         self.pho_execute(['-v', 'dir', 'add', '/tmp/nonexistentfileAA'],
                          code=os.EX_DATAERR)
+        self.pho_execute(['-v', 'drive', 'add', '/dev/IMBtape0 /dev/IBMtape1'],
+                         code=os.EX_DATAERR)
 
     def test_dir_add_double(self):
         """Add a directory twice should raise an error."""
