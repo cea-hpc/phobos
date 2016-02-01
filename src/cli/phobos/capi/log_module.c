@@ -48,6 +48,7 @@ enum py_log_level {
     PY_LOG_ERROR    = 40,
     PY_LOG_WARNING  = 30,
     PY_LOG_INFO     = 20,
+    PY_LOG_VERB     = 15, /* Custom level */
     PY_LOG_DEBUG    = 10,
     PY_LOG_NOTSET   = 0,
     PY_LOG_DEFAULT  = PY_LOG_ERROR
@@ -73,6 +74,8 @@ static inline enum pho_log_level level_py2pho(enum py_log_level lvl)
         return PHO_LOG_WARN;
     case PY_LOG_INFO:
         return PHO_LOG_INFO;
+    case PY_LOG_VERB:
+        return PHO_LOG_VERB;
     case PY_LOG_DEBUG:
         return PHO_LOG_DEBUG;
     case PY_LOG_NOTSET:
@@ -96,8 +99,9 @@ static inline enum py_log_level level_pho2py(enum pho_log_level lvl)
     case PHO_LOG_WARN:
         return PY_LOG_WARNING;
     case PHO_LOG_INFO:
-    case PHO_LOG_VERB:
         return PY_LOG_INFO;
+    case PHO_LOG_VERB:
+        return PY_LOG_VERB;
     case PHO_LOG_DEBUG:
         return PY_LOG_DEBUG;
     default:

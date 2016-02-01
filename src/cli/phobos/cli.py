@@ -757,19 +757,23 @@ class PhobosActionContext(object):
         lvl = self.parameters.get('verbose')
         lvl -= self.parameters.get('quiet')
 
+        # Insert a custom level between info and debug to map phobos VERBOSE */
+        lvl_verbose = (logging.DEBUG + logging.INFO) / 2
+        logging.addLevelName(lvl_verbose, "VERB")
+
         if lvl >= 2:
             # -vv
             pylvl = logging.DEBUG
             fmt = self.CLI_LOG_FORMAT_DEV
         elif lvl == 1:
             # -v
-            pylvl = logging.INFO
+            pylvl = lvl_verbose
         elif lvl == 0:
             # default
-            pylvl = logging.WARNING
+            pylvl = logging.INFO
         elif lvl == -1:
             # -q
-            pylvl = logging.ERROR
+            pylvl = logging.WARNING
         elif lvl <= -2:
             # -qq
             pylvl = logging.NOTSET
