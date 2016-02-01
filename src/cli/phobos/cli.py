@@ -440,8 +440,10 @@ class DirOptHandler(DSSInteractHandler):
         for serial in self.params.get('res'):
             wdir = self.client.devices.get(family='dir', serial=serial)
             if not wdir:
-                self.logger.warning("Serial %s not found", serial)
-                continue
+                wdir = self.client.devices.get(family='dir', path=serial)
+            if not wdir:
+                self.logger.error("Directory %s not found", serial)
+                sys.exit(os.EX_DATAERR)
             assert len(wdir) == 1
             dirs.append(wdir[0])
         if len(dirs) > 0:
@@ -491,8 +493,10 @@ class DriveOptHandler(DSSInteractHandler):
         for serial in self.params.get('res'):
             drive = self.client.devices.get(family='tape', serial=serial)
             if not drive:
-                self.logger.warning("Serial %s not found", serial)
-                continue
+                drive = self.client.devices.get(family='tape', path=serial)
+            if not drive:
+                self.logger.error("Drive %s not found", serial)
+                sys.exit(os.EX_DATAERR)
             assert len(drive) == 1
             drives.append(drive[0])
         if len(drives) > 0:
