@@ -1085,12 +1085,8 @@ int dss_lock(struct dss_handle *handle, void *item_list, int item_cnt,
     GString     *ids;
     GString     *request;
     PGresult    *res = NULL;
-    char        *escape_string;
-    unsigned int escape_len;
     char         hostname[HOST_NAME_MAX+1];
     int          rc = 0;
-    int          lock_status;
-    int          i;
     ENTRY;
 
     if (conn == NULL || item_list == NULL || item_cnt == 0)
@@ -1137,11 +1133,7 @@ int dss_unlock(struct dss_handle *handle, void *item_list, int item_cnt,
     GString     *ids;
     GString     *request;
     PGresult    *res = NULL;
-    char        *escape_string;
-    unsigned int escape_len;
-    int          lock_status;
     int          rc = 0;
-    int          i;
     ENTRY;
 
     if (conn == NULL || item_list == NULL || item_cnt == 0)
