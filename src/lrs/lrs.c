@@ -1174,10 +1174,6 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
     if (rc != 0)
         return rc;
 
-    rc = lrs_media_acquire(dss, med);
-    if (rc != 0)
-        return rc;
-
     switch (op) {
     case LRS_OP_READ:
     case LRS_OP_WRITE:
@@ -1195,6 +1191,10 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
         LOG_RETURN(-ENOSYS, "Unknown operation %x", (int)op);
     }
 
+    rc = lrs_media_acquire(dss, med);
+    if (rc != 0)
+        goto out;
+
     /* check if the media is already in a drive */
     dev = search_loaded_media(id);
     if (dev == NULL) {
@@ -1206,7 +1206,7 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
             pho_verb("No free drive: need to unload one");
             rc = lrs_free_one_device(dss, &dev);
             if (rc != 0)
-                LOG_GOTO(out, rc, "No device available");
+                LOG_GOTO(out_mda_unlock, rc, "No device available");
         }
 
         needs_loading = true;
@@ -1214,7 +1214,7 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
 
     rc = lrs_dev_acquire(dss, dev);
     if (rc != 0)
-        goto out;
+        goto out_mda_unlock;
 
     if (needs_loading) {
         rc = lrs_load(dev, med);
@@ -1232,6 +1232,10 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
 out_dev_unlock:
     if (rc)
         lrs_dev_release(dss, dev);
+
+out_mda_unlock:
+    if (rc)
+        lrs_media_release(dss, med);
 
 out:
     *pmedia = med;
@@ -1292,6 +1296,10 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     /* now unmount it (ignore unmount error) */
     (void)lrs_umount(dev);
 
+    rc = lrs_media_release(dss, media_info);
+    if (rc)
+        pho_error(rc, "Failed to release lock on '%s'", label);
+
     /* Release ownership. Do not fail the whole operation if unlucky here... */
     rc = lrs_dev_release(dss, dev);
     if (rc)
@@ -1312,6 +1320,7 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     return 0;
 
 err_out:
+    lrs_media_release(dss, media_info);
     lrs_dev_release(dss, dev);
     return rc;
 }
@@ -1432,10 +1441,6 @@ static int lrs_media_update(struct lrs_intent *intent, int fragments,
     if (rc)
         LOG_RETURN(rc, "Cannot update media information");
 
-    rc = lrs_media_release(dss, media);
-    if (rc)
-        LOG_RETURN(rc, "Cannot unlock media");
-
     return 0;
 }
 
@@ -1476,6 +1481,7 @@ int lrs_done(struct lrs_intent *intent, int fragments, int err_code)
 
 out_free:
     lrs_dev_release(intent->li_dss, intent->li_device);
+    lrs_media_release(intent->li_dss, intent->li_device->dss_media_info);
     free(intent->li_location.root_path);
     return rc;
 }
