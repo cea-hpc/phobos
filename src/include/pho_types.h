@@ -411,7 +411,6 @@ struct dev_info {
     char                *path;
     char                *host;
     char                *serial;
-    int                  changer_idx; /**< drive index in mtx */
     enum dev_adm_status  adm_status;
     struct pho_lock      lock;
 

@@ -176,7 +176,6 @@ enum dss_fields {
     DSS_DEV_adm_status, /* locked/unlocked */
     DSS_DEV_model, /* Device type */
     DSS_DEV_path, /* Device path */
-    DSS_DEV_changer_idx,
     DSS_DEV_lock,
 
     DSS_FIELDS_LAST,
@@ -210,7 +209,6 @@ static const char * const dss_fields_names[] = {
     [DSS_DEV_adm_status] = "adm_status",
     [DSS_DEV_model] = "model",
     [DSS_DEV_path] = "path",
-    [DSS_DEV_changer_idx] = "changer_idx",
     [DSS_DEV_lock] = "lock",
 };
 
@@ -280,7 +278,6 @@ static const int const dss_fields_type[] = {
     [DSS_DEV_adm_status] = DSS_VAL_ENUM,
     [DSS_DEV_model] = DSS_VAL_STR,
     [DSS_DEV_path] = DSS_VAL_STR,
-    [DSS_DEV_changer_idx] = DSS_VAL_INT,
     [DSS_DEV_lock] = DSS_VAL_STR,
 };
 

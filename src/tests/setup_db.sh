@@ -40,10 +40,9 @@ CREATE TYPE extent_lyt_type AS ENUM('simple','raid0','raid1');
 
 CREATE TABLE device(family dev_family, model dev_model,
                     id varchar(32) UNIQUE, host varchar(128),
-	                adm_status adm_status, path varchar(256),
-		            changer_idx int,
-                            lock varchar(256) DEFAULT '' NOT NULL,
-                            lock_ts bigint,
+                    adm_status adm_status, path varchar(256),
+                    lock varchar(256) DEFAULT '' NOT NULL,
+                    lock_ts bigint,
                     PRIMARY KEY (family, id));
 CREATE INDEX ON device USING gin(host);
 
@@ -107,16 +106,13 @@ fi
 
 #  initially mounted tapes don't have enough room to store a big file
 	$PSQL << EOF
-insert into device (family, model, id, host, adm_status, path, changer_idx,
-                    lock)
-    values ('tape', 'ULTRIUM-TD6', '$SN1', '$host', 'locked', '$DRV1',
-            3, ''),
-           ('tape', 'ULTRIUM-TD6', '$SN2', '$host', 'unlocked', '$DRV2',
-            4, ''),
+insert into device (family, model, id, host, adm_status, path, lock)
+    values ('tape', 'ULTRIUM-TD6', '$SN1', '$host', 'locked', '$DRV1', ''),
+           ('tape', 'ULTRIUM-TD6', '$SN2', '$host', 'unlocked', '$DRV2', ''),
            ('dir', NULL, '$host:/tmp/pho_testdir1', '$host',
-	    'unlocked', '/tmp/pho_testdir1', NULL, ''),
+	    'unlocked', '/tmp/pho_testdir1', ''),
            ('dir', NULL, '$host:/tmp/pho_testdir2', '$host',
-	    'unlocked', '/tmp/pho_testdir2', NULL, '');
+	    'unlocked', '/tmp/pho_testdir2', '');
 insert into media (family, model, id, adm_status, fs_type, address_type,
 		   fs_status, stats, lock)
     values ('tape', 'LTO6', '073220L6', 'unlocked', 'LTFS', 'HASH1', 'blank',

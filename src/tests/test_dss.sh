@@ -98,7 +98,6 @@ test_check_get "device" "family = dir"
 test_check_get "device" "id != foo"
 test_check_get "device" "host != foo"
 test_check_get "device" "adm_status = unlocked"
-test_check_get "device" "changer_idx > 0"
 test_check_get "device" "model = ULTRIUM-TD6"
 
 

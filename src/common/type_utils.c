@@ -64,7 +64,6 @@ struct dev_info *dev_info_dup(const struct dev_info *dev)
     dev_out->path = strdup_safe(dev->path);
     dev_out->host = strdup_safe(dev->host);
     dev_out->serial = strdup_safe(dev->serial);
-    dev_out->changer_idx = dev->changer_idx;
     dev_out->adm_status = dev->adm_status;
 
     return dev_out;

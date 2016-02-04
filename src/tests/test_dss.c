@@ -119,11 +119,10 @@ int main(int argc, char **argv)
         case DSS_DEVICE:
             for (i = 0, dev = item_list; i < item_cnt; i++, dev++) {
                 pho_debug("Got device: family:%s host:%s model:%s path:%s "
-                          "serial:%s adm_st:%s changer_idx:%d",
+                          "serial:%s adm_st:%s",
                           dev_family2str(dev->family),
                           dev->host, dev->model, dev->path, dev->serial,
-                          adm_status2str(dev->adm_status),
-                          dev->changer_idx);
+                          adm_status2str(dev->adm_status));
             }
             break;
         case DSS_MEDIA:

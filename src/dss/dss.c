@@ -206,7 +206,7 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
  */
 static const char * const base_query[] = {
     [DSS_DEVICE] = "SELECT family, model, id, adm_status,"
-                   " host, path, changer_idx, lock, lock_ts FROM device",
+                   " host, path, lock, lock_ts FROM device",
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
                    " address_type, fs_type, fs_status, stats, lock,"
                    " lock_ts FROM media",
@@ -224,7 +224,7 @@ static const size_t const res_size[] = {
 
 static const char * const insert_query[] = {
     [DSS_DEVICE] = "INSERT INTO device (family, model, id, host, adm_status,"
-                   " path, changer_idx, lock) VALUES ",
+                   " path, lock) VALUES ",
     [DSS_MEDIA]  = "INSERT INTO media (family, model, id, adm_status,"
                    " fs_type, address_type, fs_status, stats, lock) VALUES ",
     [DSS_EXTENT] = "INSERT INTO extent (oid, copy_num, state, lyt_type,"
@@ -235,8 +235,8 @@ static const char * const insert_query[] = {
 
 static const char * const update_query[] = {
     [DSS_DEVICE] = "UPDATE device SET (family, model, host, adm_status,"
-                   " path, changer_idx) ="
-                   " ('%s', %s, '%s', '%s', '%s', '%d')"
+                   " path) ="
+                   " ('%s', %s, '%s', '%s', '%s')"
                    " WHERE id = '%s';",
     [DSS_MEDIA]  = "UPDATE media SET (family, model, adm_status,"
                    " fs_type, address_type, fs_status, stats) ="
@@ -260,7 +260,7 @@ static const char * const delete_query[] = {
 };
 
 static const char * const insert_query_values[] = {
-    [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '%d', '')%s",
+    [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '')%s",
     [DSS_MEDIA]  = "('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s', '')%s",
     [DSS_EXTENT] = "('%s', '%d', '%s', '%s', '%s', '%s')%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
@@ -736,8 +736,7 @@ static int get_device_setrequest(struct dev_info *item_list, int item_cnt,
                                    dev_family2str(p_dev->family), model,
                                    p_dev->serial, p_dev->host,
                                    media_adm_status2str(p_dev->adm_status),
-                                   p_dev->path, p_dev->changer_idx,
-                                   i < item_cnt-1 ? "," : ";");
+                                   p_dev->path, i < item_cnt-1 ? "," : ";");
             free(model);
         } else if (action == DSS_SET_UPDATE) {
             model = dss_char4sql(p_dev->model);
@@ -748,8 +747,7 @@ static int get_device_setrequest(struct dev_info *item_list, int item_cnt,
                                    dev_family2str(p_dev->family),
                                    model, p_dev->host,
                                    media_adm_status2str(p_dev->adm_status),
-                                   p_dev->path, p_dev->changer_idx,
-                                   p_dev->serial);
+                                   p_dev->path, p_dev->serial);
             free(model);
         }
     }
@@ -913,9 +911,8 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
                 str2adm_status(PQgetvalue(res, i, 3));
             p_dev->host   = get_str_value(res, i, 4);
             p_dev->path   = get_str_value(res, i, 5);
-            p_dev->changer_idx = (int)strtol(PQgetvalue(res, i, 6), NULL, 10);
-            p_dev->lock.lock = get_str_value(res, i, 7);
-            p_dev->lock.lock_ts = strtoul(PQgetvalue(res, i, 8), NULL, 10);
+            p_dev->lock.lock = get_str_value(res, i, 6);
+            p_dev->lock.lock_ts = strtoul(PQgetvalue(res, i, 7), NULL, 10);
         }
 
         *item_list = dss_res->u.dev;
