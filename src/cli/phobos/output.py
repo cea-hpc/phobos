@@ -59,6 +59,9 @@ def dump_object_list(objs, fmt="human", numeric=False):
     """
     Helper for user friendly object display.
     """
+    if not objs:
+        return
+
     display = {
         cdss.dev_info:('serial', ['adm_status', 'changer_idx', 'family',
                                   'host', 'model', 'path', 'serial']),
