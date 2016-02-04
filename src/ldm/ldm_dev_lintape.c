@@ -281,11 +281,13 @@ static int lintape_dev_lookup(const char *serial, char *path,
 
 static int lintape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
 {
-    const struct drive_map_entry  *dme;
-    const char *dev_short;
+    const struct drive_map_entry    *dme;
+    const char                      *dev_short;
     ENTRY;
 
-    if (access(dev_path, R_OK))
+    /* Make sure the device exists before we do any string manipulation
+     * on its path. */
+    if (access(dev_path, F_OK))
         LOG_RETURN(-errno, "Cannot access '%s'", dev_path);
 
     /* extract basename(device)*/
