@@ -229,7 +229,7 @@ class StorePutHandler(XferOptHandler):
             attrs = attr_convert(attrs)
             self.logger.debug("Loaded attributes set '%r'", attrs)
 
-        self.logger.info("Inserting object '%s' to 'objid:%s'", src, oid)
+        self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
 
         self.client.xfer_register(oid, src, attrs=attrs)
         rc = self.client.put()
