@@ -21,6 +21,9 @@
 #include <scsi/sg.h>
 #include <scsi/sg_io_linux.h>
 #include <scsi/scsi.h>
+#include <assert.h>
+
+#define SCSI_MSG_LEN    256
 
 /** Convert internal direction to SG equivalent */
 static inline int scsi_dir2sg(enum scsi_direction direction)
@@ -107,6 +110,40 @@ static int scsi_masked_status2errno(uint8_t masked_status)
     }
 }
 
+/** check if the SCSI request was errorneous */
+static inline bool scsi_error_check(const struct sg_io_hdr *hdr)
+{
+    assert(hdr != NULL);
+
+    return (hdr->masked_status != 0 || hdr->host_status != 0
+        || hdr->driver_status != 0);
+}
+
+static void scsi_error_trace(const struct sg_io_hdr *hdr)
+{
+    const struct scsi_req_sense *sbp;
+    char msg[SCSI_MSG_LEN];
+
+    assert(hdr != NULL);
+
+    pho_warn("SCSI ERROR: scsi_masked_status=%#hhx, adapter_status=%#hx, "
+             "driver_status=%#hx", hdr->masked_status,
+             hdr->host_status, hdr->driver_status);
+
+    sbp = (const struct scsi_req_sense *)hdr->sbp;
+    if (sbp == NULL) {
+        pho_warn("sbp=NULL");
+        return;
+    }
+    pho_warn("    req_sense_error=%#hhx, sense_key=%#hhx (%s)",
+             sbp->error_code, sbp->sense_key,
+             sg_get_sense_key_str(sbp->sense_key, sizeof(msg), msg));
+    pho_warn("    asc=%#hhx, ascq=%#hhx (%s)", sbp->additional_sense_code,
+             sbp->additional_sense_code_qualifier,
+             sg_get_asc_ascq_str(sbp->additional_sense_code,
+                sbp->additional_sense_code_qualifier, sizeof(msg), msg));
+}
+
 int scsi_execute(int fd, enum scsi_direction direction,
                  unsigned char *cdb, int cdb_len,
                  struct scsi_req_sense *sbp, int sb_len,
@@ -132,14 +169,8 @@ int scsi_execute(int fd, enum scsi_direction direction,
     if (rc)
         LOG_RETURN(rc = -errno, "ioctl() failed");
 
-    if (hdr.masked_status != 0 || hdr.host_status != 0
-        || hdr.driver_status != 0)
-        pho_warn("scsi_masked_status=%#hhx, adapter_status=%#hx, "
-                 "driver_status=%#hx, req_sense_error=%#hhx, "
-                 "sense_key=%#hhx, asc=%#hhx, ascq=%#hhx", hdr.masked_status,
-                 hdr.host_status, hdr.driver_status, sbp->error_code,
-                 sbp->sense_key, sbp->additional_sense_code,
-                 sbp->additional_sense_code_qualifier);
+    if (scsi_error_check(&hdr))
+        scsi_error_trace(&hdr);
 
     if (hdr.masked_status == CHECK_CONDITION) {
         /* check sense_key value */
