@@ -191,26 +191,6 @@ out_err_free:
     return rc;
 }
 
-int collect_output(void *cb_arg, char *line, size_t size, int stream)
-{
-    GString **output = cb_arg;
-    int       rc = 0;
-
-    switch (stream) {
-    case STDIN_FILENO:
-        g_string_append_len(output[0], line, size);
-        break;
-    case STDERR_FILENO:
-        g_string_append_len(output[1], line, size);
-        break;
-    default:
-        rc = -EINVAL;
-        pho_error(rc, "Non-supported stream index %d", stream);
-    }
-
-    return rc;
-}
-
 void upperstr(char *str)
 {
     int i = 0;
