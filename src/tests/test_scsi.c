@@ -129,7 +129,7 @@ static int single_element_status(int fd, uint16_t addr)
     struct element_status *list = NULL;
     int lcount = 0;
 
-    rc = element_status(fd, SCSI_TYPE_ALL, addr, 1, false, &list, &lcount);
+    rc = scsi_element_status(fd, SCSI_TYPE_ALL, addr, 1, false, &list, &lcount);
     if (rc)
         LOG_RETURN(rc, "status ERROR %d", rc);
 
@@ -153,7 +153,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    rc = mode_sense(fd, &msi);
+    rc = scsi_mode_sense(fd, &msi);
     if (rc) {
         pho_error(rc, "mode_sense error");
         exit(EXIT_FAILURE);
@@ -161,8 +161,8 @@ int main(int argc, char **argv)
 
     pho_info("arms: first=%#hX, nb=%d", msi.arms.first_addr, msi.arms.nb);
 
-    rc = element_status(fd, SCSI_TYPE_ARM, msi.arms.first_addr, msi.arms.nb,
-                false, &list, &lcount);
+    rc = scsi_element_status(fd, SCSI_TYPE_ARM, msi.arms.first_addr,
+                             msi.arms.nb, false, &list, &lcount);
     if (rc) {
         pho_error(rc, "element_status error");
         exit(EXIT_FAILURE);
@@ -172,8 +172,8 @@ int main(int argc, char **argv)
 
     pho_info("slots: first=%#hX, nb=%d", msi.slots.first_addr, msi.slots.nb);
 
-    rc = element_status(fd, SCSI_TYPE_SLOT, msi.slots.first_addr,  msi.slots.nb,
-                false, &list, &lcount);
+    rc = scsi_element_status(fd, SCSI_TYPE_SLOT, msi.slots.first_addr,
+                             msi.slots.nb, false, &list, &lcount);
     if (rc) {
         pho_error(rc, "element_status error");
         exit(EXIT_FAILURE);
@@ -185,8 +185,8 @@ int main(int argc, char **argv)
     pho_info("imp/exp: first=%#hX, nb=%d",
              msi.impexp.first_addr, msi.impexp.nb);
 
-    rc = element_status(fd, SCSI_TYPE_IMPEXP, msi.impexp.first_addr,
-                        msi.impexp.nb, false, &list, &lcount);
+    rc = scsi_element_status(fd, SCSI_TYPE_IMPEXP, msi.impexp.first_addr,
+                             msi.impexp.nb, false, &list, &lcount);
     if (rc) {
         pho_error(rc, "element_status error");
         exit(EXIT_FAILURE);
@@ -196,8 +196,8 @@ int main(int argc, char **argv)
 
     pho_info("drives: first=%#hX, nb=%d", msi.drives.first_addr, msi.drives.nb);
 
-    rc = element_status(fd, SCSI_TYPE_DRIVE, msi.drives.first_addr,
-                        msi.drives.nb, false, &list, &lcount);
+    rc = scsi_element_status(fd, SCSI_TYPE_DRIVE, msi.drives.first_addr,
+                             msi.drives.nb, false, &list, &lcount);
     if (rc) {
         pho_error(rc, "element_status error");
         exit(EXIT_FAILURE);
@@ -212,7 +212,7 @@ int main(int argc, char **argv)
 
         pho_info("Unloading drive %#x to slot %#x", full_drive, free_slot);
 
-        rc = move_medium(fd, arm_addr, full_drive, free_slot);
+        rc = scsi_move_medium(fd, arm_addr, full_drive, free_slot);
         if (rc) {
             pho_error(rc, "move_medium error");
             exit(EXIT_FAILURE);
@@ -228,7 +228,7 @@ int main(int argc, char **argv)
         pho_info("Loading tape from slot %#x to drive %#x",
                  full_slot, empty_drive);
 
-        rc = move_medium(fd, arm_addr, full_slot, empty_drive);
+        rc = scsi_move_medium(fd, arm_addr, full_slot, empty_drive);
         if (rc) {
             pho_error(rc, "move_medium error");
             exit(EXIT_FAILURE);
@@ -242,7 +242,7 @@ int main(int argc, char **argv)
         pho_info("Loading back tape from slot %#x to drive %#x",
                  free_slot, full_drive);
 
-        rc = move_medium(fd, arm_addr, free_slot, full_drive);
+        rc = scsi_move_medium(fd, arm_addr, free_slot, full_drive);
         if (rc) {
             pho_error(rc, "move_medium error");
             exit(EXIT_FAILURE);

@@ -18,7 +18,7 @@
 
 /* #define DEBUG 1 */
 
-int mode_sense(int fd, struct mode_sense_info *info)
+int scsi_mode_sense(int fd, struct mode_sense_info *info)
 {
     struct mode_sense_cdb req = {0};
     struct mode_sense_result_header *res_hdr;
@@ -163,9 +163,9 @@ static int read_next_element_status(const struct element_descriptor *elmt,
     return be16toh(page->ed_len);
 }
 
-int element_status(int fd, enum element_type_code type,
-                   uint16_t start_addr, uint16_t nb, bool allow_motion,
-                   struct element_status **elmt_list, int *elmt_count)
+int scsi_element_status(int fd, enum element_type_code type,
+                        uint16_t start_addr, uint16_t nb, bool allow_motion,
+                        struct element_status **elmt_list, int *elmt_count)
 {
     struct read_status_cdb        req = {0};
     struct element_status_header *res_hdr;
@@ -269,7 +269,8 @@ void element_status_list_free(struct element_status *elmt_list)
     free(elmt_list);
 }
 
-int move_medium(int fd, uint16_t arm_addr, uint16_t src_addr, uint16_t tgt_addr)
+int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
+                     uint16_t tgt_addr)
 {
     struct move_medium_cdb req = {0};
     struct scsi_req_sense  error = {0};

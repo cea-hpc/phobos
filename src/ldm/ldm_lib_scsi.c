@@ -65,7 +65,7 @@ static int lib_addrs_load(struct lib_descriptor *lib)
     if (lib->fd < 0)
         return -EBADF;
 
-    rc = mode_sense(lib->fd, &lib->msi);
+    rc = scsi_mode_sense(lib->fd, &lib->msi);
     if (rc)
         LOG_RETURN(rc, "MODE_SENSE failed");
 
@@ -98,9 +98,9 @@ static int lib_status_load(struct lib_descriptor *lib,
         return rc;
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_ARM) && !lib->arms.loaded) {
-        rc = element_status(lib->fd, SCSI_TYPE_ARM, lib->msi.arms.first_addr,
-                            lib->msi.arms.nb, false, &lib->arms.items,
-                            &lib->arms.count);
+        rc = scsi_element_status(lib->fd, SCSI_TYPE_ARM,
+                                 lib->msi.arms.first_addr, lib->msi.arms.nb,
+                                 false, &lib->arms.items, &lib->arms.count);
         if (rc)
             LOG_RETURN(rc, "element_status failed for type 'arms'");
 
@@ -109,9 +109,9 @@ static int lib_status_load(struct lib_descriptor *lib,
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_SLOT)
         && !lib->slots.loaded) {
-        rc = element_status(lib->fd, SCSI_TYPE_SLOT, lib->msi.slots.first_addr,
-                            lib->msi.slots.nb, false, &lib->slots.items,
-                            &lib->slots.count);
+        rc = scsi_element_status(lib->fd, SCSI_TYPE_SLOT,
+                                 lib->msi.slots.first_addr, lib->msi.slots.nb,
+                                 false, &lib->slots.items, &lib->slots.count);
         if (rc)
             LOG_RETURN(rc, "element_status failed for type 'slots'");
 
@@ -120,9 +120,9 @@ static int lib_status_load(struct lib_descriptor *lib,
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_IMPEXP)
         && !lib->impexp.loaded) {
-        rc = element_status(lib->fd, SCSI_TYPE_IMPEXP,
-                            lib->msi.impexp.first_addr, lib->msi.impexp.nb,
-                            false, &lib->impexp.items, &lib->impexp.count);
+        rc = scsi_element_status(lib->fd, SCSI_TYPE_IMPEXP,
+                                 lib->msi.impexp.first_addr, lib->msi.impexp.nb,
+                                 false, &lib->impexp.items, &lib->impexp.count);
         if (rc)
             LOG_RETURN(rc, "element_status failed for type 'impexp'");
 
@@ -131,9 +131,9 @@ static int lib_status_load(struct lib_descriptor *lib,
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_DRIVE)
         && !lib->drives.loaded) {
-        rc = element_status(lib->fd, SCSI_TYPE_DRIVE,
-                            lib->msi.drives.first_addr, lib->msi.drives.nb,
-                            false, &lib->drives.items, &lib->drives.count);
+        rc = scsi_element_status(lib->fd, SCSI_TYPE_DRIVE,
+                                 lib->msi.drives.first_addr, lib->msi.drives.nb,
+                                 false, &lib->drives.items, &lib->drives.count);
         if (rc)
             LOG_RETURN(rc, "element_status failed for type 'drives'");
 
@@ -471,7 +471,7 @@ static int lib_scsi_move(struct lib_handle *hdl,
     }
 
     /* arm = 0 for default transport element */
-    return move_medium(lib->fd, 0, src_addr->lia_addr, tgt);
+    return scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt);
 }
 
 /** lib_scsi_adapter exported to upper layers */

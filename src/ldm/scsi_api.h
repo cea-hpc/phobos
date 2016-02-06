@@ -36,7 +36,7 @@ struct mode_sense_info {
  * @param[out] info Allocated structure filled by the call.
  * @return 0 on success, error code < 0 on failure.
  */
-int mode_sense(int fd, struct mode_sense_info *info);
+int scsi_mode_sense(int fd, struct mode_sense_info *info);
 
 
 /* --------------- ELEMENT STATUS API ------------------ */
@@ -94,9 +94,9 @@ struct element_status {
  *
  * @return 0 on success, error code < 0 on failure.
  * */
-int element_status(int fd, enum element_type_code type,
-                   uint16_t start_addr, uint16_t nb, bool allow_motion,
-                   struct element_status **elmt_list, int *elmt_count);
+int scsi_element_status(int fd, enum element_type_code type,
+                        uint16_t start_addr, uint16_t nb, bool allow_motion,
+                        struct element_status **elmt_list, int *elmt_count);
 
 
 /**
@@ -115,7 +115,7 @@ void element_status_list_free(struct element_status *elmt_list);
  *
  * @return 0 on success, error code < 0 on failure.
  */
-int move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
-                uint16_t tgt_addr);
+int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
+                     uint16_t tgt_addr);
 
 #endif
