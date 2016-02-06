@@ -5,9 +5,12 @@
 #
 
 if  [[ -w /dev/changer ]]; then
-	echo "library is accessible"
-	echo "changer:"
-	ls -ld /dev/changer
+    echo "library is accessible"
+    echo "changer:"
+    ls -ld /dev/changer
+
+    # make sure no process use the drive
+    service ltfs stop
 
     ./test_scsi
 else
