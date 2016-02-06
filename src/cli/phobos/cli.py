@@ -420,8 +420,11 @@ class DirOptHandler(DSSInteractHandler):
     def exec_add(self):
         """Add a new directory"""
         resources = self.params.get('res')
+        keep_locked = not self.params.get('unlock')
+
         for path in resources:
-            rc = self.client.devices.add(cdss.PHO_DEV_DIR, path)
+            rc = self.client.devices.add(cdss.PHO_DEV_DIR, path,
+                                         locked=keep_locked)
             if rc:
                 self.logger.error("Cannot add directory: %s", strerror(rc))
                 sys.exit(os.EX_DATAERR)
@@ -473,8 +476,11 @@ class DriveOptHandler(DSSInteractHandler):
     def exec_add(self):
         """Add a new drive"""
         resources = self.params.get('res')
+        keep_locked = not self.params.get('unlock')
+
         for path in resources:
-            rc = self.client.devices.add(cdss.PHO_DEV_TAPE, path)
+            rc = self.client.devices.add(cdss.PHO_DEV_TAPE, path,
+                                         locked=keep_locked)
             if rc:
                 self.logger.error("Cannot add drive: %s", strerror(rc))
                 sys.exit(os.EX_DATAERR)

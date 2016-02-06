@@ -18,6 +18,12 @@ test_dir=$(dirname $(readlink -e $0))
 drop_tables
 setup_tables
 
+# display error message and exits
+function error {
+    echo "$*"
+    exit 1
+}
+
 # list <count> tapes matching the given pattern
 # returns nodeset range
 function get_tapes {
@@ -70,6 +76,7 @@ $phobos tape add -t $type "$tapes"
 $phobos tape list | sort | xargs > /tmp/pho_tape.1
 echo "$tapes" | nodeset -e | sort > /tmp/pho_tape.2
 diff /tmp/pho_tape.1 /tmp/pho_tape.2
+rm -f /tmp/pho_tape.1 /tmp/pho_tape.2
 
 # show a tape info
 tp1=$(echo $tapes | nodeset -e | awk '{print $1}')
@@ -88,7 +95,9 @@ $phobos drive add $drives
 # show a drive info
 dr1=$(echo $drives | awk '{print $1}')
 echo "$dr1"
-$phobos drive show $dr1
+# check drive status
+$phobos drive show $dr1 --format=csv | grep ",locked" ||
+    error "Drive should be added with locked state"
 
 # unlock all drives but one
 serials=$($phobos drive list | head -n $(($N_DRIVES - 1)))
@@ -96,6 +105,19 @@ for d in $serials; do
     echo $d
     $phobos drive unlock $d
 done
+
+# add 2 dirs: 1 locked, 1 unlocked
+# make sure they are inserted with the right status.
+dir_prefix=/tmp/dir.$$
+mkdir $dir_prefix.1
+mkdir $dir_prefix.2
+$phobos dir add $dir_prefix.1
+$phobos dir show $dir_prefix.1 --format=csv | grep ",locked" ||
+    error "Directory should be added with locked state"
+$phobos dir add $dir_prefix.2 --unlock
+$phobos dir show $dir_prefix.2 --format=csv | grep ",unlocked" ||
+    error "Directory should be added with unlocked state"
+rmdir $dir_prefix.*
 
 # format a single tape (make test shorter)
 tp=$(echo $tapes | nodeset -e | awk '{print $1}')
@@ -109,7 +131,6 @@ $phobos put /etc/hosts $id
 out_file=/tmp/out
 rm -f $out_file
 $phobos get $id $out_file
-
 $phobos tape show "$tapes"
-
 diff /etc/hosts $out_file
+rm -f $out_file

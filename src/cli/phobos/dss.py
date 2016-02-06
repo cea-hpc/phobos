@@ -98,7 +98,7 @@ class ObjectManager(object):
 
 class DeviceManager(ObjectManager):
     """Proxy to manipulate devices."""
-    def add(self, device_type, device_path, locked=False):
+    def add(self, device_type, device_path, locked=True):
         """Query device and insert information into DSS."""
         real_path = os.path.realpath(device_path)
 
