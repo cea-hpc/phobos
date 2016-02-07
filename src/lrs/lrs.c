@@ -156,8 +156,10 @@ static int lrs_dev_acquire(struct dss_handle *dss, struct dev_descr *pdev)
     }
 
     rc = dss_device_lock(dss, pdev->dss_dev_info, 1);
-    if (rc)
+    if (rc) {
+        pdev->op_status = PHO_DEV_OP_ST_BUSY;
         LOG_RETURN(rc, "Cannot lock device '%s'", pdev->dev_path);
+    }
 
     pho_debug("Acquired ownership on device '%s'", pdev->dev_path);
     pdev->locked = true;
@@ -1028,6 +1030,7 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
     if (!dev_select_policy)
         return -EINVAL;
 
+retry:
     /* 1a) is there a mounted filesystem with enough room? */
     *devp = dev_picker(PHO_DEV_OP_ST_MOUNTED, dev_select_policy, size);
     if (*devp != NULL) {
@@ -1037,6 +1040,8 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
             (*devp)->op_status = PHO_DEV_OP_ST_BUSY;
             /* drive is ready */
             return 0;
+        } else {
+            goto retry;
         }
     }
 
@@ -1051,6 +1056,8 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
                 goto out_release;
             (*devp)->op_status = PHO_DEV_OP_ST_BUSY;
             return 0;
+        } else {
+            goto retry;
         }
     }
 
@@ -1078,7 +1085,7 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
 
     rc = lrs_dev_acquire(dss, *devp);
     if (rc)
-        goto out_free;
+        goto retry;
 
     /* 4) load the selected media into the selected drive */
     /* On success, target device becomes the owner of pmedia
