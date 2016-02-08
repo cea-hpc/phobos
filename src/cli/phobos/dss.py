@@ -65,97 +65,6 @@ def dss_filter(obj_type, **kwargs):
         filt.append(crit)
     return filt
 
-class PhobosHook(object):
-    """High level interface for C structures exposed by SWIG."""
-    #pylint: disable=not-callable
-    src_cls = None
-    display_fields = []
-
-    def __init__(self, inst=None, **kwargs):
-        """Initialize new instance of Phobos object wrapper."""
-        super(PhobosHook, self).__init__(**kwargs)
-        if inst is not None:
-            self._inst = inst
-        else:
-            self._inst = self.src_cls()
-
-    def __getattr__(self, item):
-        """Transparently fetch attributes of either the proxified
-        object (in priority) or the wrapping instance (fallback)."""
-        if not item.startswith("_"):
-            rc = getattr(self._inst, item, None)
-            if rc is not None:
-                return rc
-        return super(PhobosHook, self).__getattr__(item)
-
-    def __setattr__(self, item, value):
-        """Transparently set attributes of either the proxified
-        object (in priority) or the wrapping instance (fallback)."""
-        if hasattr(self, "_inst") and hasattr(self._inst, item):
-            self._inst.__setattr__(item, value)
-        else:
-            super(PhobosHook, self).__setattr__(item, value)
-
-    def todict(self, numeric=False):
-        """export object attributs as dict"""
-        export = {}
-        for key in self.display_fields:
-            if not numeric and hasattr(cdss, '%s2str' % key):
-                method = getattr(cdss, '%s2str' % key)
-                export[key] = method(getattr(self._inst, key))
-            elif hasattr(self._inst, key):
-                export[key] = str(getattr(self._inst, key))
-            else:
-                export[key] = str(getattr(self, key))
-        return export
-
-class CliDevice(PhobosHook):
-    """Device python object"""
-    src_cls = cdss.dev_info
-    display_fields = ['adm_status', 'changer_idx', 'family', 'host', 'model',
-                      'path', 'serial']
-
-class CliMedia(PhobosHook):
-    """Media python object"""
-    src_cls = cdss.media_info
-    display_fields = ['adm_status', 'fs_status', 'fs_type', 'addr_type',
-                      'model', 'ident', 'lock_status', 'lock_ts']
-
-    def todict(self, numeric=False):
-        """export media attribts as dict"""
-        export = super(CliMedia, self).todict()
-        export.update(self.stats)
-        return export
-
-    @property
-    def ident(self):
-        """ Wrapper to get media id  """
-        return cdss.media_id_get(self._inst.id)
-
-    @property
-    def lock_status(self):
-        """ Wrapper to get lock status"""
-        return self.lock.lock
-
-    @property
-    def lock_ts(self):
-        """ Wrapper to get lock status"""
-        return self.lock.lock_ts
-
-
-    @property
-    def stats(self):
-        """ Wrapper to get media stats as dict """
-        stats = {
-            'stats.nb_ojb': self._inst.stats.nb_obj,
-            'stats.logc_spc_used': self._inst.stats.logc_spc_used,
-            'stats.phys_spc_used': self._inst.stats.phys_spc_used,
-            'stats.phys_spc_free': self._inst.stats.phys_spc_free,
-            'stats.nb_load': self._inst.stats.nb_load,
-            'stats.nb_errors': self._inst.stats.nb_errors,
-            'stats.last_load': self._inst.stats.nb_errors,
-        }
-        return stats
 
 class ObjectManager(object):
     """Proxy to manipulate (CRUD) objects in DSS."""
@@ -230,18 +139,6 @@ class DeviceManager(ObjectManager):
                          dev_info.serial, locked and "locked" or "unlocked")
         return 0
 
-    def get(self, **kwargs):
-        """Retrieve objects from DSS."""
-        method = getattr(cdss, 'dss_%s_get' % self.obj_type)
-        devices = method(self.client.handle,
-                         dss_filter(self.obj_type, **kwargs))
-        return [CliDevice(x) for x in devices]
-
-    def update(self, objects):
-        """Update objects in DSS"""
-        method = getattr(cdss, 'dss_%s_set' % self.obj_type)
-        devices = [x._inst for x in objects]
-        return method(self.client.handle, devices, cdss.DSS_SET_UPDATE)
 
 class MediaManager(ObjectManager):
     """Proxy to manipulate media."""
@@ -270,17 +167,6 @@ class MediaManager(ObjectManager):
                           locked and "locked" or "unlocked")
         return 0
 
-    def get(self, **kwargs):
-        """Retrieve objects from DSS."""
-        method = getattr(cdss, 'dss_%s_get' % self.obj_type)
-        media = method(self.client.handle, dss_filter(self.obj_type, **kwargs))
-        return [CliMedia(x) for x in media]
-
-    def update(self, objects):
-        """Update objects in DSS"""
-        method = getattr(cdss, 'dss_%s_set' % self.obj_type)
-        media = [x._inst for x in objects]
-        return method(self.client.handle, media, cdss.DSS_SET_UPDATE)
 
 class Client(object):
     """Main class: issue requests to the DSS and format replies."""
