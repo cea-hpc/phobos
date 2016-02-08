@@ -33,3 +33,6 @@ export PHOBOS_LDM_cmd_umount_ltfs="$ldm_helper umount_ltfs '%s' '%s'"
 
 # 'phobos' command
 phobos="$cli_dir/scripts/phobos"
+[ x$DEBUG = x1 ] && phobos="$phobos -vvv"
+
+true
