@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# ENV:
-#    NO_TAPE=1 force executing tests in POSIX FS
+# test posix mode
 
 set -e
 
@@ -27,54 +26,12 @@ drop_tables
 setup_tables
 insert_examples
 
-ldm_helper=$(readlink -e $test_bin_dir/../../scripts/)/pho_ldm_helper
-export PHOBOS_LDM_cmd_mount_ltfs="$ldm_helper mount_ltfs '%s' '%s'"
-export PHOBOS_LDM_cmd_umount_ltfs="$ldm_helper umount_ltfs '%s' '%s'"
+echo "**** POSIX TEST MODE ****"
+TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2" # must match mount prefix
+TEST_FS="posix"
 
-# make sure all drives are empty
-function empty_drives
-{
-    mtx status | grep "Data Transfer Element" | grep "Full" |
-        while read line; do
-            echo "full drive: $line"
-            drive=$(echo $line | awk '{print $4}' | cut -d ':' -f 1)
-            slot=$(echo $line | awk '{print $7}')
-            echo "Unloading drive $drive in slot $slot"
-            mtx unload $slot $drive || echo "mtx failure"
-        done
-}
-
-# testing with real tapes requires tape devices + access to /dev/changer device
-nb_tapes=$(ls -d /dev/IBMtape* 2>/dev/null | wc -l)
-if  [[ -z "$NO_TAPE" ]] && [[ -w /dev/changer ]] && (( $nb_tapes > 0 )); then
-
-    # skip this test, run acceptance instead.
-    echo "Skipping test"
-    exit 77
-
-    echo "**** TAPE TEST MODE ****"
-    echo "changer:"
-    ls -ld /dev/changer
-    echo "drives:"
-    ls -ld /dev/IBMtape*
-    TEST_MNT=/mnt/phobos* # must match mount prefix (default: /mnt/phobos-*)
-    TEST_FS="ltfs"
-
-    export PHOBOS_LRS_default_family="tape"
-
-    # make sure no LTFS filesystem is mounted, so the test must mount it
-    service ltfs stop
-
-    # make sure all drives are initially empty
-    empty_drives
-else
-    echo "**** POSIX TEST MODE ****"
-    TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2" # must match mount prefix
-    TEST_FS="posix"
-
-    export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
-    export PHOBOS_LRS_default_family="dir"
-fi
+export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
+export PHOBOS_LRS_default_family="dir"
 
 function clean_test
 {
@@ -84,12 +41,6 @@ function clean_test
     rm -rf $d/*
     done
     rm -rf "$TEST_RECOV_DIR"
-
-    # Make sure we don't leave LTFS mounted
-    # which may fail other tests about pure SCSI testing
-    # (e.g. unloading a drive fails if the tape in it
-    # is mounted as an LTFS).
-    [[ $TEST_FS == "ltfs" ]] && service ltfs stop
 }
 
 function error

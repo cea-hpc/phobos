@@ -19,10 +19,10 @@ insert into device (family, model, id, host, adm_status, path, lock)
 	    'unlocked', '/tmp/pho_testdir2', '');
 insert into media (family, model, id, adm_status, fs_type, address_type,
 		   fs_status, stats, lock)
-    values ('dir', NULL, '$host:/tmp/pho_testdir1', 'unlocked', 'POSIX',
+    values ('dir', NULL, '/tmp/pho_testdir1', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":"5","logc_spc_used":"3668841456",\
 	      "phys_spc_used":"3668841456","phys_spc_free":"12857675776"}', ''),
-           ('dir', NULL, '$host:/tmp/pho_testdir2', 'unlocked', 'POSIX',
+           ('dir', NULL, '/tmp/pho_testdir2', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":"6","logc_spc_used":"4868841472",\
 	      "phys_spc_used":"4868841472","phys_spc_free":"12857675776"}', '');
 
@@ -31,9 +31,9 @@ insert into object (oid, user_md)
 
 insert into extent (oid, copy_num, state, lyt_type, lyt_info, extents)
     values ('QQQ6ASQDSQD', 0, 'pending', 'simple','{}',
-           '[{"media":"$host:/tmp/pho_testdir1","addr":"test3",
+           '[{"media":"/tmp/pho_testdir1","addr":"test3",
 	   "sz":"21123456","fam":"dir"},\
-            {"media":"$host:/tmp/pho_testdir2","addr":"test4",
+            {"media":"/tmp/pho_testdir2","addr":"test4",
 	   "sz":"2112555","fam":"dir"}]');
 
 EOF
