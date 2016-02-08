@@ -417,6 +417,18 @@ class DirOptHandler(DSSInteractHandler):
         UnlockOptHandler
     ]
 
+    def filter(self, ident):
+        """
+        Return a list of dirs that match the identifier for either serial
+        or path.  You may call it a bug but this is a feature so that
+        administrators can transparently address directories by path or serial.
+        """
+        directory = self.client.devices.get(family='dir', serial=ident)
+        if not directory:
+            # 2nd attempt, by path...
+            directory = self.client.devices.get(family='dir', path=ident)
+        return directory
+
     def exec_add(self):
         """Add a new directory"""
         resources = self.params.get('res')
@@ -441,9 +453,7 @@ class DirOptHandler(DSSInteractHandler):
         """Show directory details."""
         dirs = []
         for serial in self.params.get('res'):
-            wdir = self.client.devices.get(family='dir', serial=serial)
-            if not wdir:
-                wdir = self.client.devices.get(family='dir', path=serial)
+            wdir = self.filter(serial)
             if not wdir:
                 self.logger.error("Directory %s not found", serial)
                 sys.exit(os.EX_DATAERR)
@@ -473,6 +483,18 @@ class DriveOptHandler(DSSInteractHandler):
         UnlockOptHandler
     ]
 
+    def filter(self, ident):
+        """
+        Return a list of drives that match the identifier for either serial
+        or path.  You may call it a bug but this is a feature so that
+        administrators can transparently address devices by path or serial.
+        """
+        drive = self.client.devices.get(family='tape', serial=ident)
+        if not drive:
+            # 2nd attempt, by path...
+            drive = self.client.devices.get(family='tape', path=ident)
+        return drive
+
     def exec_add(self):
         """Add a new drive"""
         resources = self.params.get('res')
@@ -497,9 +519,7 @@ class DriveOptHandler(DSSInteractHandler):
         """Show drive details."""
         drives = []
         for serial in self.params.get('res'):
-            drive = self.client.devices.get(family='tape', serial=serial)
-            if not drive:
-                drive = self.client.devices.get(family='tape', path=serial)
+            drive = self.filter(serial)
             if not drive:
                 self.logger.error("Drive %s not found", serial)
                 sys.exit(os.EX_DATAERR)
@@ -515,7 +535,11 @@ class DriveOptHandler(DSSInteractHandler):
         serials = self.params.get('res')
 
         for serial in serials:
-            drive = self.client.devices.get(serial=serial)
+            drive = self.filter(serial)
+            if not drive:
+                self.logger.error("Drive %s not found", serial)
+                sys.exit(os.EX_DATAERR)
+            assert len(drive) == 1
             if drive[0].lock.lock != "":
                 if self.params.get('force'):
                     self.logger.warn("Drive %s is in use. Administrative "
@@ -545,7 +569,10 @@ class DriveOptHandler(DSSInteractHandler):
         serials = self.params.get('res')
 
         for serial in serials:
-            drive = self.client.devices.get(serial=serial)
+            drive = self.filter(serial)
+            if not drive:
+                self.logger.error("No such drive: %s", serial)
+                sys.exit(os.EX_DATAERR)
             if drive[0].lock.lock != "" and not self.params.get('force'):
                 self.logger.error("Drive %s is in use by %s.",
                                   serial, drive[0].lock.lock)
