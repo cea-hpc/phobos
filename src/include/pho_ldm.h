@@ -308,7 +308,7 @@ static inline int ldm_lib_media_move(struct lib_adapter *lib,
 struct fs_adapter {
     int (*fs_mount)(const char *dev_path, const char *mnt_path);
     int (*fs_umount)(const char *dev_path, const char *mnt_path);
-    int (*fs_format)(const char *dev_path, const char *label);
+    int (*fs_format)(const char *dev_path, const char *label, size_t *spc_free);
     int (*fs_mounted)(const char *dev_path, char *mnt_path,
                       size_t mnt_path_size);
     int (*fs_df)(const char *mnt_path, size_t *spc_used, size_t *spc_free);
@@ -357,19 +357,24 @@ static inline int ldm_fs_umount(const struct fs_adapter *fsa,
 
 /**
  * Format a media to the desired filesystem type.
- * @param[in] fsa       File system adapter.
- * @param[in] dev_path  Path to the device.
- * @param[in] label     Media label to apply.
+ * @param[in]  fsa       File system adapter.
+ * @param[in]  dev_path  Path to the device.
+ * @param[in]  label     Media label to apply.
+ * @param[out] spc_free  Bytes available on media after formatting.
+ *                       Set to zero if fs provides no such operation.
  *
  * @return 0 on success, negative error code on failure.
  */
 static inline int ldm_fs_format(const struct fs_adapter *fsa,
-                                const char *dev_path, const char *label)
+                                const char *dev_path, const char *label,
+                                size_t *spc_free)
 {
     assert(fsa != NULL);
-    if (fsa->fs_format == NULL)
+    if (fsa->fs_format == NULL) {
+        *spc_free = 0;
         return 0;
-    return fsa->fs_format(dev_path, label);
+    }
+    return fsa->fs_format(dev_path, label, spc_free);
 }
 
 /**

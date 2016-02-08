@@ -1260,6 +1260,7 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     struct dev_descr    *dev = NULL;
     struct media_info   *media_info;
     int                  rc;
+    size_t               spc_free;
     struct fs_adapter    fsa;
     ENTRY;
 
@@ -1285,23 +1286,12 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     if (rc)
         LOG_GOTO(err_out, rc, "Failed to get FS adapter");
 
-    rc = ldm_fs_format(&fsa, dev->dev_path, label);
+    rc = ldm_fs_format(&fsa, dev->dev_path, label, &spc_free);
     if (rc != 0)
         LOG_GOTO(err_out, rc, "Cannot format media '%s'", label);
 
-    /* mount the filesystem to get space information */
-    rc = lrs_mount(dev);
-    if (rc != 0)
-        LOG_GOTO(err_out, rc, "Failed to mount newly formatted media '%s'",
-                 label);
-
-    rc = ldm_fs_df(&fsa, dev->mnt_path, &media_info->stats.phys_spc_used,
-                   &media_info->stats.phys_spc_free);
-    if (rc != 0)
-        LOG_GOTO(err_out, rc, "Failed to get usage for media '%s'", label);
-
-    /* now unmount it (ignore unmount error) */
-    (void)lrs_umount(dev);
+    media_info->stats.phys_spc_used = 0;
+    media_info->stats.phys_spc_free = spc_free;
 
     rc = lrs_media_release(dss, media_info);
     if (rc)

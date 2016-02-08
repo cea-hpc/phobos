@@ -90,6 +90,23 @@ static int ltfs_collect_output(void *arg, char *line, size_t size, int stream)
     return 0;
 }
 
+static int ltfs_format_filter(void *arg, char *line, size_t size, int stream)
+{
+    size_t  *available_space = arg;
+    int      rc;
+
+    rc = ltfs_collect_output(arg, line, size, stream);
+    if (rc)
+        return rc;
+
+    rc = sscanf(line, "LTFS%*uI Volume capacity is %zu GB", available_space);
+    if (rc == 1) {
+        pho_verb("Formatted media, available space: %zu GB", *available_space);
+        *available_space *= 1024*1024*1024;  /* convert to bytes */
+    }
+
+    return 0;
+}
 
 static int ltfs_mount(const char *dev_path, const char *mnt_path)
 {
@@ -136,7 +153,7 @@ out_free:
     return rc;
 }
 
-static int ltfs_format(const char *dev_path, const char *label)
+static int ltfs_format(const char *dev_path, const char *label, size_t *vol)
 {
     char    *cmd = NULL;
     int      rc;
@@ -146,8 +163,10 @@ static int ltfs_format(const char *dev_path, const char *label)
     if (!cmd)
         LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build ltfs_format command");
 
+    *vol = 0;
+
     /* Format the media */
-    rc = command_call(cmd, ltfs_collect_output, NULL);
+    rc = command_call(cmd, ltfs_format_filter, vol);
     if (rc)
         LOG_GOTO(out_free, rc, "ltfs_format command failed: '%s'", cmd);
 
