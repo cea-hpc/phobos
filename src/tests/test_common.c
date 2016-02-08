@@ -19,10 +19,10 @@
 #include <string.h>
 
 /* callback function for parsing */
-static int parse_line(void *arg, char *line, size_t size)
+static int parse_line(void *arg, char *line, size_t size, int stream)
 {
-    GList **ctx = (GList **)arg;
-    int len;
+    GList   **ctx = (GList **)arg;
+    int       len;
 
     if (line == NULL)
         return -EINVAL;
@@ -30,14 +30,13 @@ static int parse_line(void *arg, char *line, size_t size)
     len = strnlen(line, size);
     /* terminate the string */
     if (len >= size)
-        line[len-1] = '\0';
+        line[len - 1] = '\0';
 
     /* remove '\n' */
-    if ((len > 0) && (line[len-1] == '\n'))
-        line[len-1] = '\0';
+    if ((len > 0) && (line[len - 1] == '\n'))
+        line[len - 1] = '\0';
 
     *ctx = g_list_append(*ctx, strdup(line));
-
     return 0;
 }
 
@@ -56,8 +55,8 @@ static void print_lines(GList *lines)
 
 int main(int argc, char **argv)
 {
-    int    rc = 0;
-    GList *lines = NULL;
+    GList   *lines = NULL;
+    int      rc = 0;
 
     test_env_initialize();
 

@@ -153,17 +153,24 @@ static inline bool gstring_empty(const GString *s)
 
 #define abs(_a)     ((_a) < 0 ? -(_a) : (_a))
 
-/** Callback function to parse command output.
+/**
+ * Callback function to parse command output.
  * The function can freely modify line contents
  * without impacting program working.
- * \param cb_arg argument passed to command_call
- * \param line the line to be parsed
- * \param size size of the line buffer
+ *
+ * \param[in,out] cb_arg    argument passed to command_call
+ * \param[in]     line      the line to be parsed
+ * \param[in]     size      size of the line buffer
+ * \param[in]     stream    fileno of the stream the line comes from
  */
-typedef int (*parse_cb_t)(void *cb_arg, char *line, size_t size);
+typedef int (*parse_cb_t)(void *cb_arg, char *line, size_t size, int stream);
 
-/** Common callback for command_call: concatenate a command output. */
-int collect_output(void *cb_arg, char *line, size_t size);
+/**
+ * Common callback for command_call: concatenate a command output.
+ * cb_arg must be an array of two GString representing stdout (at index 0)
+ * and stderr (index 1).
+ */
+int collect_output(void *cb_arg, char *line, size_t size, int stream);
 
 /** call a command and call cb_func for each output line. */
 int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg);

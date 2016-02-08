@@ -83,7 +83,7 @@ static char *ltfs_format_cmd(const char *device, const char *label)
 static int ltfs_mount(const char *dev_path, const char *mnt_path)
 {
     char    *cmd = NULL;
-    GString *cmd_out = NULL;
+    GString *cmd_out[2] = { NULL, NULL };
     int      rc;
     ENTRY;
 
@@ -91,7 +91,8 @@ static int ltfs_mount(const char *dev_path, const char *mnt_path)
     if (!cmd)
         LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build LTFS mount command");
 
-    cmd_out = g_string_new("");
+    cmd_out[0] = g_string_new("");
+    cmd_out[1] = g_string_new("");
 
     /* create the mount point */
     if (mkdir(mnt_path, 0750) != 0 && errno != EEXIST)
@@ -105,14 +106,15 @@ static int ltfs_mount(const char *dev_path, const char *mnt_path)
 
 out_free:
     free(cmd);
-    g_string_free(cmd_out, TRUE);
+    g_string_free(cmd_out[0], TRUE);
+    g_string_free(cmd_out[1], TRUE);
     return rc;
 }
 
 static int ltfs_umount(const char *dev_path, const char *mnt_path)
 {
     char    *cmd = NULL;
-    GString *cmd_out = NULL;
+    GString *cmd_out[2] = { NULL, NULL };
     int      rc;
     ENTRY;
 
@@ -120,7 +122,8 @@ static int ltfs_umount(const char *dev_path, const char *mnt_path)
     if (!cmd)
         LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build LTFS umount command");
 
-    cmd_out = g_string_new("");
+    cmd_out[0] = g_string_new("");
+    cmd_out[1] = g_string_new("");
 
     /* unmount the filesystem */
     rc = command_call(cmd, collect_output, cmd_out);
@@ -129,14 +132,15 @@ static int ltfs_umount(const char *dev_path, const char *mnt_path)
 
 out_free:
     free(cmd);
-    g_string_free(cmd_out, TRUE);
+    g_string_free(cmd_out[0], TRUE);
+    g_string_free(cmd_out[1], TRUE);
     return rc;
 }
 
 static int ltfs_format(const char *dev_path, const char *label)
 {
     char    *cmd = NULL;
-    GString *cmd_out = NULL;
+    GString *cmd_out[2] = { NULL, NULL };
     int      rc;
     ENTRY;
 
@@ -144,7 +148,8 @@ static int ltfs_format(const char *dev_path, const char *label)
     if (!cmd)
         LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build ltfs_format command");
 
-    cmd_out = g_string_new("");
+    cmd_out[0] = g_string_new("");
+    cmd_out[1] = g_string_new("");
 
     /* Format the media */
     rc = command_call(cmd, collect_output, cmd_out);
@@ -153,7 +158,8 @@ static int ltfs_format(const char *dev_path, const char *label)
 
 out_free:
     free(cmd);
-    g_string_free(cmd_out, true);
+    g_string_free(cmd_out[0], true);
+    g_string_free(cmd_out[1], true);
     return rc;
 }
 
