@@ -7,9 +7,14 @@
 /**
  * \brief  Common functions for LDM adapters.
  */
+#ifndef _LDM_COMMON_H
+#define _LDM_COMMON_H
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+
+#include "pho_ldm.h"
 
 #include <mntent.h>
 
@@ -35,4 +40,6 @@ int mnttab_foreach(mntent_cb_t cb_func, void *cb_data);
 /**
  * Standard implementation of 'df' using statfs().
  */
-int common_statfs(const char *path, size_t *spc_used, size_t *spc_free);
+int common_statfs(const char *path, struct ldm_fs_space *fs_spc);
+
+#endif

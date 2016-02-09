@@ -58,7 +58,7 @@ static inline size_t statfs_spc_free(const struct statfs *stfs)
     return stfs->f_bavail * stfs->f_bsize;
 }
 
-int common_statfs(const char *path, size_t *spc_used, size_t *spc_free)
+int common_statfs(const char *path, struct ldm_fs_space *fs_spc)
 {
     struct statfs  stfs;
     ENTRY;
@@ -78,13 +78,13 @@ int common_statfs(const char *path, size_t *spc_used, size_t *spc_free)
                    "blocks=%ld, avail=%ld, free=%ld",
                    path, stfs.f_blocks, stfs.f_bavail, stfs.f_bfree);
 
-    /* used = total - free */
-    if (spc_used != NULL)
-        *spc_used = statfs_spc_used(&stfs);
+    if (fs_spc != NULL) {
+        /* used = total - free */
+        fs_spc->spc_used = statfs_spc_used(&stfs);
 
-    /* actually, only available blocks can be written */
-    if (spc_free != NULL)
-        *spc_free = statfs_spc_free(&stfs);
+        /* actually, only available blocks can be written */
+        fs_spc->spc_avail = statfs_spc_free(&stfs);
+    }
 
     pho_debug("%s: used=%zu, free=%zu",
               path, statfs_spc_used(&stfs), statfs_spc_free(&stfs));

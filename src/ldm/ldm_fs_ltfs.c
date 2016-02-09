@@ -92,17 +92,17 @@ static int ltfs_collect_output(void *arg, char *line, size_t size, int stream)
 
 static int ltfs_format_filter(void *arg, char *line, size_t size, int stream)
 {
-    size_t  *available_space = arg;
-    int      rc;
+    struct ldm_fs_space *fs_spc = arg;
+    int                  rc;
 
     rc = ltfs_collect_output(arg, line, size, stream);
     if (rc)
         return rc;
 
-    rc = sscanf(line, "LTFS%*uI Volume capacity is %zu GB", available_space);
+    rc = sscanf(line, "LTFS%*uI Volume capacity is %zu GB", &fs_spc->spc_avail);
     if (rc == 1) {
-        pho_verb("Formatted media, available space: %zu GB", *available_space);
-        *available_space *= 1024*1024*1024;  /* convert to bytes */
+        pho_verb("Formatted media, available space: %zu GB", fs_spc->spc_avail);
+        fs_spc->spc_avail *= 1024*1024*1024;  /* convert to bytes */
     }
 
     return 0;
@@ -153,7 +153,8 @@ out_free:
     return rc;
 }
 
-static int ltfs_format(const char *dev_path, const char *label, size_t *vol)
+static int ltfs_format(const char *dev_path, const char *label,
+                       struct ldm_fs_space *fs_spc)
 {
     char    *cmd = NULL;
     int      rc;
@@ -163,10 +164,11 @@ static int ltfs_format(const char *dev_path, const char *label, size_t *vol)
     if (!cmd)
         LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build ltfs_format command");
 
-    *vol = 0;
+    if (fs_spc != NULL)
+        memset(fs_spc, 0, sizeof(*fs_spc));
 
     /* Format the media */
-    rc = command_call(cmd, ltfs_format_filter, vol);
+    rc = command_call(cmd, ltfs_format_filter, fs_spc);
     if (rc)
         LOG_GOTO(out_free, rc, "ltfs_format command failed: '%s'", cmd);
 

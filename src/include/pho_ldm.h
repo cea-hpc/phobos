@@ -29,6 +29,12 @@ struct ldm_dev_state {
                                           device */
 };
 
+/** information about used and available space on a media */
+struct ldm_fs_space {
+    size_t spc_used;
+    size_t spc_avail;
+};
+
 /**
  * A device adapter is a vector of functions to operate on a device.
  * They should be invoked via their corresponding wrappers. Refer to
@@ -308,10 +314,11 @@ static inline int ldm_lib_media_move(struct lib_adapter *lib,
 struct fs_adapter {
     int (*fs_mount)(const char *dev_path, const char *mnt_path);
     int (*fs_umount)(const char *dev_path, const char *mnt_path);
-    int (*fs_format)(const char *dev_path, const char *label, size_t *spc_free);
+    int (*fs_format)(const char *dev_path, const char *label,
+                     struct ldm_fs_space *fs_spc);
     int (*fs_mounted)(const char *dev_path, char *mnt_path,
                       size_t mnt_path_size);
-    int (*fs_df)(const char *mnt_path, size_t *spc_used, size_t *spc_free);
+    int (*fs_df)(const char *mnt_path, struct ldm_fs_space *fs_spc);
 };
 
 /**
@@ -360,21 +367,21 @@ static inline int ldm_fs_umount(const struct fs_adapter *fsa,
  * @param[in]  fsa       File system adapter.
  * @param[in]  dev_path  Path to the device.
  * @param[in]  label     Media label to apply.
- * @param[out] spc_free  Bytes available on media after formatting.
+ * @param[out] fs_spc    Filesystem space information.
  *                       Set to zero if fs provides no such operation.
  *
  * @return 0 on success, negative error code on failure.
  */
 static inline int ldm_fs_format(const struct fs_adapter *fsa,
                                 const char *dev_path, const char *label,
-                                size_t *spc_free)
+                                struct ldm_fs_space *fs_spc)
 {
     assert(fsa != NULL);
     if (fsa->fs_format == NULL) {
-        *spc_free = 0;
+        memset(fs_spc, 0, sizeof(*fs_spc));
         return 0;
     }
-    return fsa->fs_format(dev_path, label, spc_free);
+    return fsa->fs_format(dev_path, label, fs_spc);
 }
 
 /**
@@ -402,17 +409,16 @@ static inline int ldm_fs_mounted(const struct fs_adapter *fsa,
  * Get used and available space in a filesystem.
  * @param[in] fsa        File system adapter.
  * @param[in] mnt_path   Moint point of the filesystem.
- * @param[out] spc_used  Used space in the filesystem (physical).
- * @param[out] spc_free  Available space in the filesystem.
+ * @param[out] fs_spc    Filesystem space information.
  *
  * @return 0 on success, negative error code on failure.
  */
 static inline int ldm_fs_df(const struct fs_adapter *fsa, const char *mnt_path,
-                            size_t *spc_used, size_t *spc_free)
+                            struct ldm_fs_space *fs_spc)
 {
     assert(fsa != NULL);
     assert(fsa->fs_df != NULL);
-    return fsa->fs_df(mnt_path, spc_used, spc_free);
+    return fsa->fs_df(mnt_path, fs_spc);
 }
 
 #endif /* ^SWIG */

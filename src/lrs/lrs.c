@@ -1260,7 +1260,7 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     struct dev_descr    *dev = NULL;
     struct media_info   *media_info;
     int                  rc;
-    size_t               spc_free;
+    struct ldm_fs_space  spc = {0};
     struct fs_adapter    fsa;
     ENTRY;
 
@@ -1286,12 +1286,12 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     if (rc)
         LOG_GOTO(err_out, rc, "Failed to get FS adapter");
 
-    rc = ldm_fs_format(&fsa, dev->dev_path, label, &spc_free);
+    rc = ldm_fs_format(&fsa, dev->dev_path, label, &spc);
     if (rc != 0)
         LOG_GOTO(err_out, rc, "Cannot format media '%s'", label);
 
-    media_info->stats.phys_spc_used = 0;
-    media_info->stats.phys_spc_free = spc_free;
+    media_info->stats.phys_spc_used = spc.spc_used;
+    media_info->stats.phys_spc_free = spc.spc_avail;
 
     rc = lrs_media_release(dss, media_info);
     if (rc)
@@ -1409,8 +1409,7 @@ static int lrs_media_update(struct lrs_intent *intent, int fragments,
     struct dss_handle   *dss = intent->li_dss;
     struct media_info   *media = intent->li_device->dss_media_info;
     const char          *fsroot = intent->li_location.root_path;
-    size_t               spc_used;
-    size_t               spc_free;
+    struct ldm_fs_space  spc = {0};
     struct fs_adapter    fsa;
     int                  rc;
 
@@ -1419,13 +1418,13 @@ static int lrs_media_update(struct lrs_intent *intent, int fragments,
         LOG_RETURN(rc, "No FS adapter found for '%s' (type %s)",
                    fsroot, fs_type2str(intent->li_location.extent.fs_type));
 
-    rc = ldm_fs_df(&fsa, intent->li_location.root_path, &spc_used, &spc_free);
+    rc = ldm_fs_df(&fsa, intent->li_location.root_path, &spc);
     if (rc)
         LOG_RETURN(rc, "Cannot retrieve media usage information");
 
     media->stats.nb_obj += fragments;
-    media->stats.phys_spc_used = spc_used;
-    media->stats.phys_spc_free = spc_free;
+    media->stats.phys_spc_used = spc.spc_used;
+    media->stats.phys_spc_free = spc.spc_avail;
     media->stats.logc_spc_used += intent->li_location.extent.size;
 
     if (media->fs_status == PHO_FS_STATUS_EMPTY)
