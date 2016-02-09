@@ -24,6 +24,15 @@
 #include <assert.h>
 
 
+static void dump_md(void *udata, const struct pho_xfer_desc *desc, int rc)
+{
+    GString *str = g_string_new("");
+
+    pho_attrs_to_json(desc->xd_attrs, str, 0);
+    printf("%s\n", str->str);
+    g_string_free(str, TRUE);
+}
+
 int main(int argc, char **argv)
 {
     int i;
@@ -35,6 +44,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: %s post|put <file> <...>\n", argv[0]);
         fprintf(stderr, "usage: %s mpost|mput <file> <...>\n", argv[0]);
         fprintf(stderr, "       %s get <id> <dest>\n", argv[0]);
+        fprintf(stderr, "       %s getmd <id>\n", argv[0]);
         exit(1);
     }
 
@@ -101,9 +111,16 @@ int main(int argc, char **argv)
         xfer.xd_fpath = argv[3];
 
         rc = phobos_get(&xfer, NULL, NULL);
+    } else if (!strcmp(argv[1], "getmd")) {
+        struct pho_xfer_desc    xfer = {0};
+
+        xfer.xd_objid = argv[2];
+        xfer.xd_flags = PHO_XFER_OBJ_GETATTR;
+
+        rc = phobos_get(&xfer, dump_md, NULL);
     } else {
         rc = -EINVAL;
-        pho_error(rc, "verb put|post|get expected at '%s'\n", argv[1]);
+        pho_error(rc, "verb put|post|get|getmd expected at '%s'\n", argv[1]);
     }
 
     exit(rc ? EXIT_FAILURE : EXIT_SUCCESS);

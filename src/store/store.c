@@ -777,25 +777,20 @@ static inline int xfer2open_flags(enum pho_xfer_flags flags)
                                           : O_CREAT|O_WRONLY|O_EXCL;
 }
 
-int phobos_get(const struct pho_xfer_desc *desc, pho_completion_cb_t cb,
-               void *udata)
+static int store_data_get(struct dss_handle *dss,
+                          const struct pho_xfer_desc *desc)
 {
     struct layout_info  *layout = NULL;
     struct lrs_intent    intent;
-    int                  rc = 0;
     int                  fd;
-    struct dss_handle    dss;
-
-    /* load configuration and get dss handle */
-    rc = store_init(&dss);
-    if (rc)
-        LOG_RETURN(rc, "Initialization failed");
+    int                  rc;
+    ENTRY;
 
     /* retrieve saved object location */
-    rc = obj_get_location(&dss, desc->xd_objid, &layout);
+    rc = obj_get_location(dss, desc->xd_objid, &layout);
     if (rc)
-        LOG_GOTO(disconn, rc, "Failed to get information about object '%s'",
-                 desc->xd_objid);
+        LOG_RETURN(rc, "Failed to get information about object '%s'",
+                   desc->xd_objid);
 
     assert(layout != NULL);
 
@@ -806,7 +801,7 @@ int phobos_get(const struct pho_xfer_desc *desc, pho_completion_cb_t cb,
                  desc->xd_fpath);
 
     /* prepare storage resource to read the object */
-    rc = lrs_read_prepare(&dss, layout, &intent);
+    rc = lrs_read_prepare(dss, layout, &intent);
     if (rc)
         LOG_GOTO(close_tgt, rc, "Failed to prepare resources to read '%s'",
                  desc->xd_objid);
@@ -819,9 +814,10 @@ int phobos_get(const struct pho_xfer_desc *desc, pho_completion_cb_t cb,
 out_lrs_end:
     /* release storage resources */
     lrs_done(&intent, 0, rc);
-    /* don't care about the error here, the object has been read successfully
-     * and the LRS error should have been logged by lower layers.
-     */
+
+    /* -- don't care about the error here, the object has been read successfully
+     * and the LRS error should have been logged by lower layers. -- */
+
 close_tgt:
     close(fd);
     if (rc != 0 && unlink(desc->xd_fpath) != 0 && errno != ENOENT)
@@ -829,9 +825,70 @@ close_tgt:
 
 free_res:
     dss_res_free(layout, 1);
+    return rc;
+}
 
-disconn:
-    xfer_get_notify(cb, udata, desc, rc);
+static int store_attr_get(struct dss_handle *dss, struct pho_xfer_desc *desc)
+{
+    struct object_info  *obj;
+    struct dss_crit      crit[1];
+    int                  crit_cnt = 0;
+    int                  obj_cnt;
+    int                  rc;
+    ENTRY;
+
+    dss_crit_add(crit, &crit_cnt, DSS_OBJ_oid, DSS_CMP_EQ, val_str,
+                 desc->xd_objid);
+
+    rc = dss_object_get(dss, crit, crit_cnt, &obj, &obj_cnt);
+    if (rc)
+        LOG_RETURN(rc, "Cannot fetch objid:'%s'", desc->xd_objid);
+
+    assert(obj_cnt <= 1);
+
+    if (obj_cnt == 0)
+        LOG_GOTO(out_free, rc = -ENOENT, "No such object objid:'%s'",
+                 desc->xd_objid);
+
+    rc = pho_json_to_attrs(desc->xd_attrs, obj[0].user_md);
+    if (rc)
+        LOG_GOTO(out_free, rc, "Cannot convert attributes of objid:'%s'",
+                 desc->xd_objid);
+
+out_free:
+    dss_res_free(obj, obj_cnt);
+    return rc;
+}
+
+int phobos_get(const struct pho_xfer_desc *desc, pho_completion_cb_t cb,
+               void *udata)
+{
+    struct pho_xfer_desc     desc_res = *desc; /* internal r/w copy */
+    struct pho_attrs         attrs = {0};
+    struct dss_handle        dss;
+    int                      rc;
+
+    /* load configuration and get dss handle */
+    rc = store_init(&dss);
+    if (rc)
+        LOG_RETURN(rc, "Initialization failed");
+
+    desc_res.xd_attrs = &attrs;
+    rc = store_attr_get(&dss, &desc_res);
+    if (rc)
+        LOG_GOTO(out_notify, rc, "Cannot retrieve object attributes");
+
+    /* Attributes only requested, skip actual object retrieval */
+    if (desc->xd_flags & PHO_XFER_OBJ_GETATTR)
+        GOTO(out_notify, rc = 0);
+
+    rc = store_data_get(&dss, &desc_res);
+    if (rc)
+        LOG_GOTO(out_notify, rc, "Cannot retrieve object data");
+
+out_notify:
+    xfer_get_notify(cb, udata, &desc_res, rc);
+    pho_attrs_free(&attrs);
     dss_fini(&dss);
     return rc;
 }

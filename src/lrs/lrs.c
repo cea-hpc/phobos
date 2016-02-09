@@ -458,7 +458,8 @@ static int lrs_load_dev_state(struct dss_handle *dss)
     rc = dss_device_get(dss, crit, crit_cnt, &devs, &dcnt);
     if (rc)
         return rc;
-    else if (dcnt == 0) {
+
+    if (dcnt == 0) {
         pho_info("No usable device found (%s): check devices status",
                  dev_family2str(family));
         return -EAGAIN;
@@ -475,8 +476,11 @@ static int lrs_load_dev_state(struct dss_handle *dss)
         return rc;
 
     for (i = 0 ; i < dcnt; i++) {
-        if (lrs_fill_dev_info(dss, &lib, &devices[i], &devs[i]) != 0)
+        rc = lrs_fill_dev_info(dss, &lib, &devices[i], &devs[i]);
+        if (rc) {
+            pho_debug("Marking device %s as failed", devices[i].dev_path);
             devices[i].op_status = PHO_DEV_OP_ST_FAILED;
+        }
     }
 
     /* close handle to the library */

@@ -123,14 +123,19 @@ rmdir $dir_prefix.*
 tp=$(echo $tapes | nodeset -e | awk '{print $1}')
 $phobos tape format $tp --unlock
 
+md="a=1,b=2,c=3"
 id=test/hosts.$$
 # phobos put
-$phobos put /etc/hosts $id
+$phobos put -m $md /etc/hosts $id
 
 # phobos get
 out_file=/tmp/out
 rm -f $out_file
 $phobos get $id $out_file
+md_check=$($phobos -qq getmd $id)
+
+[ $md = $md_check ] || error "Object attributes to not match expectations"
+
 $phobos tape show "$tapes"
 diff /etc/hosts $out_file
 rm -f $out_file

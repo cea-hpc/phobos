@@ -181,6 +181,43 @@ class XferOptHandler(BaseOptHandler):
         self.client.session_clear()
 
 
+class StoreGetMDHandler(XferOptHandler):
+    """Retrieve object from backend."""
+    label = 'getmd'
+    descr = 'retrieve object metadata from backend'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add options for the GETMD command."""
+        super(StoreGetMDHandler, cls).add_options(parser)
+        parser.add_argument('object_id', help='Object to target')
+
+    def _compl_notify(self, *args, **kwargs):
+        """Custom completion handler to display metadata."""
+        oid, _, attrs, rc = args
+        if rc != 0:
+            return
+
+        if not attrs:
+            print '<empty attribute set>'
+
+        res = []
+        for k, v in sorted(attrs.items()):
+            res.append('%s=%s' % (k, v))
+
+        print ','.join(res)
+
+    def exec_getmd(self):
+        """Retrieve an object attributes from backend."""
+        oid = self.params.get('object_id')
+        self.logger.info("Retrieving attrs for 'objid:%s'", oid)
+        self.client.get_register(oid, None, md_only=True)
+        rc = self.client.run(compl_cb=self._compl_notify)
+        if rc:
+            self.logger.error("Cannot GETMD for 'objid:%s'", oid)
+            sys.exit(os.EX_DATAERR)
+
+
 class StoreGetHandler(XferOptHandler):
     """Retrieve object from backend."""
     label = 'get'
@@ -198,8 +235,8 @@ class StoreGetHandler(XferOptHandler):
         oid = self.params.get('object_id')
         dst = self.params.get('dest_file')
         self.logger.info("Retrieving object 'objid:%s' to '%s'", oid, dst)
-        self.client.xfer_register(oid, dst)
-        rc = self.client.get()
+        self.client.get_register(oid, dst)
+        rc = self.client.run()
         if rc:
             self.logger.error("Cannot GET 'objid:%s' to '%s'", oid, dst)
             sys.exit(os.EX_DATAERR)
@@ -231,9 +268,9 @@ class StorePutHandler(XferOptHandler):
 
         self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
 
-        self.client.xfer_register(oid, src, attrs=attrs)
-        rc = self.client.put()
-        if any(rc):
+        self.client.put_register(oid, src, attrs=attrs)
+        rc = self.client.run()
+        if rc:
             self.logger.error("Cannot issue PUT request")
             sys.exit(os.EX_DATAERR)
 
@@ -281,10 +318,10 @@ class StoreMPutHandler(XferOptHandler):
                 self.logger.debug("Loaded attributes set '%r'", attrs)
 
             self.logger.info("Inserting object '%s' to 'objid:%s'", src, oid)
-            self.client.xfer_register(oid, src, attrs=attrs)
+            self.client.put_register(oid, src, attrs=attrs)
 
-        rc = self.client.put()
-        if any(rc):
+        rc = self.client.run()
+        if rc:
             self.logger.error("Cannot issue MPUT request")
             sys.exit(os.EX_DATAERR)
 
@@ -762,7 +799,8 @@ class PhobosActionContext(object):
         # Xfer interfaces
         StoreGetHandler,
         StorePutHandler,
-        StoreMPutHandler
+        StoreMPutHandler,
+        StoreGetMDHandler,
     ]
 
     def __init__(self, args, **kwargs):

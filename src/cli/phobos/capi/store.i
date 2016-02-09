@@ -24,22 +24,41 @@
 #include <pho_common.h>
 
 
-static void _xfer_report_cb(void *uptr, const struct pho_xfer_desc *xd, int ret)
+static int _attr_dict_build(const char *key, const char *value, void *udata)
 {
-    PyObject *results = uptr;
+    PyObject *dict = udata;
 
-    PyDict_SetItemString(results, xd->xd_objid, PyInt_FromLong((long)ret));
+    PyDict_SetItem(dict, PyString_FromString(key), PyString_FromString(value));
+    return 0;
+}
+
+static void python_cb_forwarder(void *uptr, const struct pho_xfer_desc *xd, int ret)
+{
+    PyObject    *attr = PyDict_New();
+    PyObject    *func = uptr;
+    PyObject    *args;
+    PyObject    *res;
+
+    if (xd->xd_attrs != NULL)
+        pho_attrs_foreach(xd->xd_attrs, _attr_dict_build, attr);
+
+    args = Py_BuildValue("(ssOi)", xd->xd_objid, xd->xd_fpath, attr, ret);
+
+    pho_debug("Calling handler for objid:'%s' with rc=%d", xd->xd_objid, ret);
+    res = PyEval_CallObject(func, args);
+
+    Py_DECREF(args);
+    Py_DECREF(attr);
+    Py_XDECREF(res);
 }
 %}
 
-
-%typemap(in, numinputs=0) (pho_completion_cb_t cb, void *udata) {
-    $1 = _xfer_report_cb;
-    $2 = PyDict_New();
+%typemap(in, numinputs=0) (pho_completion_cb_t cb) {
+    $1 = python_cb_forwarder;
 }
 
-%typemap(freearg) (pho_completion_cb_t cb, void *udata) {
-    Py_CLEAR($2);
+%typemap(in) (void *udata) {
+    $1 = (void *)$input;
 }
 
 %typemap(in) (const struct pho_xfer_desc *desc, size_t n) {
@@ -70,26 +89,6 @@ static void _xfer_report_cb(void *uptr, const struct pho_xfer_desc *xd, int ret)
 
 %typemap(freearg) (const struct pho_xfer_desc *desc, size_t n) {
     free($1);
-}
-
-%typemap(argout) (const struct pho_xfer_desc *desc, size_t n,
-                  pho_completion_cb_t cb, void *udata) {
-    PyObject *out_list = PyList_New($2);
-    int i;
-
-    for (i = 0; i < $2; i++) {
-        const char  *objid = $1[i].xd_objid;
-        PyObject    *res = PyDict_GetItemString($4, objid);
-
-        if (!PyInt_Check(res)) {
-            pho_warn("Missing return value for '%s', assuming EIO", objid);
-            res = PyInt_FromLong(-EIO);
-        }
-
-        PyList_SetItem(out_list, i, res);
-    }
-
-    $result = out_list;
 }
 
 %include <phobos_store.h>

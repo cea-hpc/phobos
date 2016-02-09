@@ -25,6 +25,9 @@ enum pho_xfer_flags {
     /* put: replace the object if it already exists
      * get: replace the target file if it already exists */
     PHO_XFER_OBJ_REPLACE    = (1 << 0),
+    /* put: ignored
+     * get: retrieve object metadata only (no data movement) */
+    PHO_XFER_OBJ_GETATTR    = (1 << 1),
 };
 
 /**

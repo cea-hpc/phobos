@@ -30,12 +30,20 @@ const char *pho_attr_get(struct pho_attrs *md, const char *key);
 /** empty the attribute list and release memory */
 void pho_attrs_free(struct pho_attrs *md);
 
-/** Serialize an attribute set by converting it to JSON.
+/**
+ * Serialize an attribute set by converting it to JSON.
  * @param md key-value set.
  * @param str GString that must be allocated by the caller.
  * @param flags JSON_* flags (from jansson).
  */
 int pho_attrs_to_json(const struct pho_attrs *md, GString *str, int json_flags);
+
+/**
+ * Deserialize an attribute set from JSON string representation.
+ * @param md  key-value set to fill.
+ * @param str json string to decode.
+ */
+int pho_json_to_attrs(struct pho_attrs *md, const char *str);
 
 /**
  * Invoke a callback on all items of the attribute set.
