@@ -1,0 +1,126 @@
+#!/bin/bash
+
+export PGPASSWORD="phobos"
+PSQL="psql -U phobos -h localhost phobos"
+
+setup_db() {
+	su postgres -c "createuser phobos"
+	su postgres -c "createdb -E UTF8 phobos"
+	su postgres -c "psql phobos" << EOF
+GRANT ALL ON DATABASE phobos TO phobos;
+ALTER SCHEMA public OWNER TO phobos;
+ALTER USER phobos WITH PASSWORD 'phobos';
+CREATE EXTENSION IF NOT EXISTS btree_gin SCHEMA public;
+EOF
+	# You WILL need to configure your pg_hba.conf with either 'trust'
+	# or 'md5' for the IP you connect from.
+	# PSQL command is configured for password over TCP, if you would
+	# like to use trust just remove -h localhost and use the socket.
+}
+
+drop_db() {
+	su postgres -c "dropdb phobos"
+	su postgres -c "dropuser phobos"
+}
+
+setup_tables() {
+	$PSQL << EOF
+CREATE TYPE dev_family AS ENUM ('disk', 'tape', 'dir');
+CREATE TYPE dev_model AS ENUM ('ULTRIUM-TD5', 'ULTRIUM-TD6',
+                               'ULT3580-TD5', 'ULT3580-TD6');
+CREATE TYPE tape_model AS ENUM ('LTO6', 'LTO5', 'T10KB');
+CREATE TYPE adm_status AS ENUM ('locked', 'unlocked', 'failed');
+CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS');
+CREATE TYPE address_type AS ENUM ('PATH', 'HASH1', 'OPAQUE');
+CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used', 'full');
+CREATE TYPE extent_state AS ENUM('pending','sync','orphan');
+CREATE TYPE extent_lyt_type AS ENUM('simple','raid0','raid1');
+
+-- enums extensibles: ALTER TYPE type ADD VALUE 'value'
+
+CREATE TABLE device(family dev_family, model dev_model,
+                    id varchar(32) UNIQUE, host varchar(128),
+                    adm_status adm_status, path varchar(256),
+                    lock varchar(256) DEFAULT '' NOT NULL,
+                    lock_ts bigint,
+                    PRIMARY KEY (family, id));
+CREATE INDEX ON device USING gin(host);
+
+CREATE TABLE media(family dev_family, model tape_model, id varchar(32) UNIQUE,
+                   adm_status adm_status, fs_type fs_type,
+                   address_type address_type, fs_status fs_status,
+                   lock varchar(256) DEFAULT '' NOT NULL, lock_ts bigint,
+                   stats jsonb,
+                   PRIMARY KEY (family, id));
+CREATE INDEX ON media((stats->>'phys_spc_free'));
+
+CREATE TABLE object(oid varchar(1024), user_md jsonb, PRIMARY KEY (oid));
+
+CREATE TABLE extent(oid varchar(1024), copy_num int, state extent_state,
+                    lyt_type extent_lyt_type, lyt_info jsonb,
+                    extents jsonb, PRIMARY KEY (oid, copy_num));
+
+CREATE OR REPLACE FUNCTION extents_mda_idx(extents jsonb) RETURNS text[] AS
+\$\$
+select array_agg(value#>>'{media}')::text[] from jsonb_array_elements(extents);
+\$\$ LANGUAGE SQL IMMUTABLE;
+CREATE INDEX extents_mda_id_idx ON extent
+             USING GIN (extents_mda_idx((extent.extents)));
+
+-- that or put all layouts for a single object in a json array?
+-- But not sure we can index/query on any elemetns of an array...
+
+
+EOF
+
+}
+
+drop_tables() {
+# Don't drop the schema, it drops the extension
+        $PSQL << EOF
+DROP TABLE IF EXISTS device, media, object, extent CASCADE;
+DROP TYPE IF EXISTS dev_family, dev_model, tape_model, fs_status,
+		    adm_status, fs_type, address_type, extent_lyt_type,
+            extent_state CASCADE;
+DROP FUNCTION IF EXISTS extents_mda_idx(jsonb) CASCADE;
+EOF
+}
+
+# host name to insert in DB
+host=$(hostname -s)
+
+# if we're being sourced, don't parse arguments
+[[ $(caller | cut -d' ' -f1) != "0" ]] && return 0
+
+usage() {
+	echo "Usage: . $0"
+	echo "  OR   $0 ACTION [ACTION [ACTION...]]"
+	echo "where  ACTION := { setup_db | drop_db | setup_tables |"
+	echo "                   drop_tables }"
+	exit -1
+}
+
+if [[ $# -eq 0 ]]; then
+	usage
+fi
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	setup_db)
+		setup_db
+		;;
+	drop_db)
+		drop_db
+		;;
+	setup_tables)
+		setup_tables
+		;;
+	drop_tables)
+		drop_tables
+		;;
+	*)
+		usage
+		;;
+	esac
+	shift
+done

@@ -8,6 +8,6 @@ rpm: dist phobos.spec
 	mkdir -p $(rpm_dir)/BUILD $(rpm_dir)/SPECS $(rpm_dir)/SRPMS $(rpm_dir)/RPMS
 	rpmbuild --define="_topdir $(rpm_dir)" -tb $(distdir).tar.gz
 
-EXTRA_DIST= phobos.spec phobos.spec.in scripts/pho_ldm_helper doc/INSTALL
+EXTRA_DIST= phobos.spec phobos.spec.in scripts/pho_ldm_helper scripts/pho_dss_helper doc/INSTALL
 
-sbin_SCRIPTS=scripts/pho_ldm_helper
+sbin_SCRIPTS=scripts/pho_ldm_helper scripts/pho_dss_helper

@@ -15,8 +15,8 @@ PHO_STORELIB_PATH=../../store/.libs/
 export LD_LIBRARY_PATH=$PHO_STORELIB_PATH:$PHO_PYTHON_PATH
 export PYTHONPATH="$PHO_PYTHON_PATH"
 
-
-. ../../tests/setup_db.sh
+cur_dir=$(dirname $(readlink -m $0))
+. $cur_dir/../../../scripts/pho_dss_helper
 drop_tables
 setup_tables
 
