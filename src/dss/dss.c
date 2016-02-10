@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <glib.h>
 #include <libpq-fe.h>
 #include <jansson.h>
@@ -45,7 +46,7 @@ static void dss_pq_logger(void *arg, const char *message)
     if (message[mlen - 1] == '\n')
         mlen -= 1;
 
-    pho_info("%*s", mlen, message);
+    pho_info("%*s", (int)mlen, message);
 }
 
 int dss_init(const char *conninfo, struct dss_handle *handle)
@@ -144,18 +145,21 @@ static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
                            dss_cmp2str(crit->crit_cmp));
 
     switch (dss_fields2type(crit->crit_name)) {
-    /** @todo: Use macro from inttypes.h PRIu64, ... ? */
     case DSS_VAL_BIGINT:
-        g_string_append_printf(clause, "'%lld'", crit->crit_val.val_bigint);
+        g_string_append_printf(clause, "'%" PRId64 "'",
+                               crit->crit_val.val_bigint);
         break;
     case DSS_VAL_INT:
-        g_string_append_printf(clause, "'%ld'", crit->crit_val.val_int);
+        g_string_append_printf(clause, "'%" PRId32 "'",
+                               crit->crit_val.val_int);
         break;
     case DSS_VAL_BIGUINT:
-        g_string_append_printf(clause, "'%llu'", crit->crit_val.val_biguint);
+        g_string_append_printf(clause, "'%" PRIu64 "'",
+                               crit->crit_val.val_biguint);
         break;
     case DSS_VAL_UINT:
-        g_string_append_printf(clause, "'%lu'", crit->crit_val.val_uint);
+        g_string_append_printf(clause, "'%" PRIu32 "'",
+                               crit->crit_val.val_uint);
         break;
     case DSS_VAL_ENUM:
         g_string_append_printf(clause, "'%s'",
@@ -348,7 +352,6 @@ out_decref:
 static char *dss_media_stats_encode(struct media_stats stats, int *error)
 {
     json_t          *root;
-    json_error_t     json_error;
     char            *s = NULL;
     char             buffer[32];
     int              err_cnt = 0;
@@ -364,33 +367,34 @@ static char *dss_media_stats_encode(struct media_stats stats, int *error)
     }
 
     /* XXX This hack is needed because jansson lacks support for uint64 */
-    snprintf(buffer, sizeof(buffer), "%llu", stats.nb_obj);
+    snprintf(buffer, sizeof(buffer), "%zu", stats.nb_obj);
     rc = json_object_set_new(root, "nb_obj", json_string(buffer));
     if (rc) {
-        pho_error(EINVAL, "Failed to encode 'nb_obj' (%llu)", stats.nb_obj);
+        pho_error(EINVAL, "Failed to encode 'nb_obj' (%zu)",
+                  stats.nb_obj);
         err_cnt++;
     }
 
-    snprintf(buffer, sizeof(buffer), "%llu", stats.logc_spc_used);
+    snprintf(buffer, sizeof(buffer), "%zu", stats.logc_spc_used);
     rc = json_object_set_new(root, "logc_spc_used", json_string(buffer));
     if (rc) {
-        pho_error(EINVAL, "Failed to encode 'logc_spc_used' (%llu)",
+        pho_error(EINVAL, "Failed to encode 'logc_spc_used' (%zu)",
                   stats.logc_spc_used);
         err_cnt++;
     }
 
-    snprintf(buffer, sizeof(buffer), "%llu", stats.phys_spc_used);
+    snprintf(buffer, sizeof(buffer), "%zu", stats.phys_spc_used);
     rc = json_object_set_new(root, "phys_spc_used", json_string(buffer));
     if (rc) {
-        pho_error(EINVAL, "Failed to encode 'phys_spc_used' (%llu)",
+        pho_error(EINVAL, "Failed to encode 'phys_spc_used' (%zu)",
                   stats.phys_spc_used);
         err_cnt++;
     }
 
-    snprintf(buffer, sizeof(buffer), "%llu", stats.phys_spc_free);
+    snprintf(buffer, sizeof(buffer), "%zu", stats.phys_spc_free);
     rc = json_object_set_new(root, "phys_spc_free", json_string(buffer));
     if (rc) {
-        pho_error(EINVAL, "Failed to encode 'phys_spc_free' (%llu)",
+        pho_error(EINVAL, "Failed to encode 'phys_spc_free' (%zu)",
                   stats.phys_spc_free);
         err_cnt++;
     }
@@ -505,11 +509,8 @@ static char *dss_layout_extents_encode(struct extent *extents,
 {
     json_t          *root;
     json_t          *child;
-    json_error_t     json_error;
     char            *s;
     int              err_cnt = 0;
-    struct extent   *result = NULL;
-    size_t           extents_res_size;
     char             buffer[32];
     int              rc;
     int              i;
@@ -529,10 +530,11 @@ static char *dss_layout_extents_encode(struct extent *extents,
             continue;
         }
 
-        snprintf(buffer, sizeof(buffer), "%llu", extents[i].size);
+        snprintf(buffer, sizeof(buffer), "%" PRIu64 "", extents[i].size);
         rc = json_object_set_new(child, "sz", json_string(buffer));
         if (rc) {
-            pho_error(EINVAL, "Failed to encode 'sz' (%llu)", extents[i].size);
+            pho_error(EINVAL, "Failed to encode 'sz' (%" PRIu64 ")",
+                      extents[i].size);
             err_cnt++;
         }
 
@@ -844,7 +846,6 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
     struct dss_result   *dss_res;
     size_t               dss_res_size;
     int                  rc = 0;
-    int                  count;
     int                  i;
     ENTRY;
 
@@ -997,7 +998,6 @@ int dss_set(struct dss_handle *handle, enum dss_type type, void *item_list,
     PGresult    *res = NULL;
     int          error = 0;
     int          rc = 0;
-    int          i;
     ENTRY;
 
     if (conn == NULL || item_list == NULL || item_cnt == 0)
