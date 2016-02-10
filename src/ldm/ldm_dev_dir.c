@@ -30,7 +30,6 @@ static int dir_lookup(const char *dev_id, char *dev_path, size_t path_size)
         return -EINVAL;
 
     strncpy(dev_path, sep + 1, path_size);
-
     return 0;
 }
 

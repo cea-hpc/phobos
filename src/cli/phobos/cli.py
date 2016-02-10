@@ -411,6 +411,7 @@ class DirOptHandler(DSSInteractHandler):
     descr = 'handle directories'
     verbs = [
         AddOptHandler,
+        FormatOptHandler,
         ListOptHandler,
         ShowOptHandler,
         LockOptHandler,
@@ -430,19 +431,44 @@ class DirOptHandler(DSSInteractHandler):
         return directory
 
     def exec_add(self):
-        """Add a new directory"""
+        """
+        Add a new directory.
+        Note that this is a special case where we add both a media (storage) and
+        a device (mean to access it).
+        """
         resources = self.params.get('res')
         keep_locked = not self.params.get('unlock')
 
         for path in resources:
-            rc = self.client.devices.add(cdss.PHO_DEV_DIR, path,
+            rc_m = self.client.media.add(cdss.PHO_DEV_DIR, 'POSIX', None, path,
                                          locked=keep_locked)
-            if rc:
-                self.logger.error("Cannot add directory: %s", strerror(rc))
+            rc_d = self.client.devices.add(cdss.PHO_DEV_DIR, path,
+                                           locked=keep_locked)
+            if rc_m or rc_d:
+                self.logger.error("Cannot add directory: %s",
+                                  strerror(rc_m or rc_d))
                 sys.exit(os.EX_DATAERR)
+
             self.logger.debug("Added directory '%s'", path)
 
         self.logger.info("Added %d dir(s) successfully", len(resources))
+
+    def exec_format(self):
+        """Format directory as POSIX. This is almost a noop internally."""
+        dir_list = NodeSet.fromlist(self.params.get('res'))
+        fs_type = self.params.get('fs')
+        unlock = self.params.get('unlock')
+        if fs_type.lower() != 'posix':
+            raise GenericError('Operation not supported')
+        if unlock:
+            self.logger.debug("Post-unlock enabled")
+        for path in dir_list:
+            self.logger.debug("Formatting dir '%s'", path)
+            try:
+                fs_format(self.client, path, fs_type, unlock=unlock)
+            except GenericError, exc:
+                # XXX add an option to exit on first error
+                self.logger.error("fs_format: %s", exc)
 
     def exec_list(self):
         """List directories as devices."""
@@ -627,6 +653,8 @@ class TapeOptHandler(DSSInteractHandler):
         tape_list = NodeSet.fromlist(self.params.get('res'))
         fs_type = self.params.get('fs')
         unlock = self.params.get('unlock')
+        if fs_type.lower() != 'ltfs':
+            raise GenericError('Operation not supported')
         if unlock:
             self.logger.debug("Post-unlock enabled")
         for label in tape_list:

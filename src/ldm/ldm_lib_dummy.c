@@ -22,15 +22,18 @@
 static int dummy_drive_lookup(struct lib_handle *lib, const char *drive_serial,
                             struct lib_drv_info *drv_info)
 {
+    const char  *sep = strchr(drive_serial, ':');
     ENTRY;
+
+    if (sep == NULL)
+        return -EINVAL;
 
     drv_info->ldi_addr.lia_type = MED_LOC_DRIVE;
     drv_info->ldi_addr.lia_addr = 0;
     drv_info->ldi_full = true;
     drv_info->ldi_media_id.type = PHO_DEV_DIR; /** FIXME we don't care.
                                                    Could be disk or other... */
-    media_id_set(&drv_info->ldi_media_id, drive_serial);
-
+    media_id_set(&drv_info->ldi_media_id, sep + 1);
     return 0;
 }
 
@@ -45,7 +48,6 @@ static int dummy_media_lookup(struct lib_handle *lib, const char *media_label,
 
     med_addr->lia_type = MED_LOC_DRIVE; /* always in drive */
     med_addr->lia_addr = 0;
-
     return 0;
 }
 

@@ -1264,9 +1264,6 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     struct fs_adapter    fsa;
     ENTRY;
 
-    if (fs != PHO_FS_LTFS)
-        LOG_RETURN(-EINVAL, "Unsupported filesystem type");
-
     rc = lrs_load_dev_state(dss);
     if (rc != 0)
         return rc;

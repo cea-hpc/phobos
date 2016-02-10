@@ -40,10 +40,27 @@ static int dir_present(const char *dev_path, char *mnt_path,
     return 0;
 }
 
+/**
+ * Note that we don't actually format the directory in the mkltfs sense.
+ * This operation is exposed for consistency with other media types.
+ * It also fills the available space structure.
+ */
+static int dir_format(const char *dev_path, const char *label,
+                      struct ldm_fs_space *fs_spc)
+{
+    ENTRY;
+
+    if (fs_spc == NULL)
+        return 0;
+
+    memset(fs_spc, 0, sizeof(*fs_spc));
+    return common_statfs(dev_path, fs_spc);
+}
+
 struct fs_adapter fs_adapter_posix = {
     .fs_mount   = NULL,
     .fs_umount  = NULL,
-    .fs_format  = NULL,
+    .fs_format  = dir_format,
     .fs_mounted = dir_present,
     .fs_df      = common_statfs,
 };
