@@ -39,10 +39,15 @@ struct io_chan_arg {
  * reference counting for this purpose.
  */
 struct exec_ctx {
-    GMainLoop   *loop;
-    int          ref;
+    GMainLoop   *loop;  /* GMainLoop for the current context */
+    int          ref;   /* Pending operations in the loop */
+    int          rc;    /* Subprocess termination code (as an errno) */
 };
 
+
+/**
+ * Increment reference count (in term of pending operations on the loop)
+ */
 static inline void ctx_incref(struct exec_ctx *ctx)
 {
     ENTRY;
@@ -51,6 +56,11 @@ static inline void ctx_incref(struct exec_ctx *ctx)
     ctx->ref++;
 }
 
+/**
+ * Decrement reference count (in term of pending operations on the loop).
+ * Quit the loop but without freeing it if count reaches zero.
+ * Allocated will be released by the caller.
+ */
 static inline void ctx_decref(struct exec_ctx *ctx)
 {
     ENTRY;
@@ -61,14 +71,57 @@ static inline void ctx_decref(struct exec_ctx *ctx)
 }
 
 /**
+ * Convert a subprocess return value into a human-readable message and a
+ * meaningful errno code for proper error logging and escalation to upper
+ * layers.
+ */
+static int child_status2errno(int status, const char **msg)
+{
+    if (WIFEXITED(status)) {
+        switch (WEXITSTATUS(status)) {
+        case 0:
+            *msg = "no error";
+            return 0;
+        case 126:
+            *msg = "permissions problem or command is not an executable";
+            return -EPERM;
+        case 127:
+            *msg = "command not found";
+            return -ENOENT;
+        case 128:
+            *msg = "invalid argument to exit";
+            return -EINVAL;
+        default:
+            *msg = "external command exited";
+            return -ECHILD;
+        }
+    }
+
+    if (WIFSIGNALED(status)) {
+        *msg = "command terminated by signal";
+        return -EINTR;
+    }
+
+    *msg = "unexpected error";
+    return -EIO;
+}
+
+/**
  * External process termination handler.
  */
 static void watch_child_cb(GPid pid, gint status, gpointer data)
 {
     struct exec_ctx *ctx = data;
+    const char      *err = "";
     ENTRY;
 
     pho_debug("Child %d terminated with %d", pid, status);
+
+    if (status != 0) {
+        ctx->rc = child_status2errno(status, &err);
+        pho_error(ctx->rc, "Command failed: %s", err);
+    }
+
     g_spawn_close_pid(pid);
     ctx_decref(ctx);
 }
@@ -81,10 +134,11 @@ static void watch_child_cb(GPid pid, gint status, gpointer data)
  */
 static gboolean readline_cb(GIOChannel *channel, GIOCondition cond, gpointer ud)
 {
-    struct io_chan_arg  *args = ud;
+    struct io_chan_arg  *args  = ud;
     GError              *error = NULL;
     gchar               *line;
     gsize                size;
+    GIOStatus            res;
     ENTRY;
 
     /* The channel is closed, no more data to read */
@@ -94,9 +148,9 @@ static gboolean readline_cb(GIOChannel *channel, GIOCondition cond, gpointer ud)
         return false;
     }
 
-    g_io_channel_read_line(channel, &line, &size, NULL, &error);
-    if (error != NULL) {
-        pho_error(error->code, "Cannot read from child: %s", error->message);
+    res = g_io_channel_read_line(channel, &line, &size, NULL, &error);
+    if (res != G_IO_STATUS_NORMAL) {
+        pho_error(EIO, "Cannot read from child: %s", error->message);
         g_error_free(error);
     } else {
         args->cb(args->udata, line, size, args->ident);
@@ -126,11 +180,12 @@ int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg)
 
     success = g_shell_parse_argv(cmd_line, &ac, &av, &err_desc);
     if (!success)
-        LOG_GOTO(out_err_free, rc = -err_desc->code, "Cannot parse '%s': %s",
+        LOG_GOTO(out_err_free, rc = -EINVAL, "Cannot parse '%s': %s",
                  cmd_line, err_desc->message);
 
     ctx.loop = g_main_loop_new(NULL, false);
     ctx.ref  = 0;
+    ctx.rc   = 0;
 
     pho_debug("Spawning external command '%s'", cmd_line);
 
@@ -142,11 +197,11 @@ int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg)
                                        NULL,   /* Child setup arg */
                                        &pid,   /* Child PID */
                                        NULL,      /* STDIN (unused) */
-                                       &p_stdout, /* W STDOUT file desc */
-                                       &p_stderr, /* W STDERR file desc */
+                                       cb_func ? &p_stdout : NULL, /* STDOUT */
+                                       cb_func ? &p_stderr : NULL, /* STDERR */
                                        &err_desc);
     if (!success)
-        LOG_GOTO(out_free, rc = -err_desc->code, "Failed to execute '%s': %s",
+        LOG_GOTO(out_free, rc = -ECHILD, "Failed to execute '%s': %s",
                  cmd_line, err_desc->message);
 
     /* register a watcher in the loop, thus increase refcount of our exec_ctx */
@@ -155,7 +210,7 @@ int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg)
 
     if (cb_func != NULL) {
         struct io_chan_arg  out_args = {
-            .ident    = STDIN_FILENO,
+            .ident    = STDOUT_FILENO,
             .cb       = cb_func,
             .udata    = cb_arg,
             .exec_ctx = &ctx
@@ -169,6 +224,10 @@ int command_call(const char *cmd_line, parse_cb_t cb_func, void *cb_arg)
 
         out_chan = g_io_channel_unix_new(p_stdout);
         err_chan = g_io_channel_unix_new(p_stderr);
+
+        /* instruct the refcount system to close the channels when unused */
+        g_io_channel_set_close_on_unref(out_chan, true);
+        g_io_channel_set_close_on_unref(err_chan, true);
 
         /* update refcount for the two watchers */
         ctx_incref(&ctx);
@@ -188,7 +247,7 @@ out_err_free:
     if (err_desc)
         g_error_free(err_desc);
 
-    return rc;
+    return rc ? rc : ctx.rc;
 }
 
 void upperstr(char *str)
