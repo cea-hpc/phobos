@@ -113,6 +113,9 @@ int pho_attrs_foreach(const struct pho_attrs *md, pho_attrs_iter_t cb,
     gpointer        value;
     int             rc = 0;
 
+    if (md == NULL || md->attr_set == NULL)
+        return 0;
+
     g_hash_table_iter_init(&iter, md->attr_set);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
         rc = cb((const char *)key, (const char *)value, udata);
