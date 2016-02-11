@@ -43,14 +43,14 @@
  * See logger_set_level() below.
  */
 enum py_log_level {
+    PY_LOG_DISABLED = 100, /* Custom level */
     PY_LOG_FATAL    = 50,
     PY_LOG_CRITICAL = 50,
     PY_LOG_ERROR    = 40,
     PY_LOG_WARNING  = 30,
     PY_LOG_INFO     = 20,
-    PY_LOG_VERB     = 15, /* Custom level */
+    PY_LOG_VERB     = 15,  /* Custom level */
     PY_LOG_DEBUG    = 10,
-    PY_LOG_NOTSET   = 0,
     PY_LOG_DEFAULT  = PY_LOG_ERROR
 };
 
@@ -67,6 +67,8 @@ static PyObject *external_log_callback;
 static inline enum pho_log_level level_py2pho(enum py_log_level lvl)
 {
     switch (lvl) {
+    case PY_LOG_DISABLED:
+        return PHO_LOG_DISABLED;
     case PY_LOG_CRITICAL:
     case PY_LOG_ERROR:
         return PHO_LOG_ERROR;
@@ -78,8 +80,6 @@ static inline enum pho_log_level level_py2pho(enum py_log_level lvl)
         return PHO_LOG_VERB;
     case PY_LOG_DEBUG:
         return PHO_LOG_DEBUG;
-    case PY_LOG_NOTSET:
-        return PHO_LOG_DISABLED;
     default:
         return PHO_LOG_DEFAULT;
     }
@@ -93,7 +93,7 @@ static inline enum py_log_level level_pho2py(enum pho_log_level lvl)
 {
     switch (lvl) {
     case PHO_LOG_DISABLED:
-        return PY_LOG_NOTSET;
+        return PY_LOG_DISABLED;
     case PHO_LOG_ERROR:
         return PY_LOG_ERROR;
     case PHO_LOG_WARN:
@@ -203,4 +203,14 @@ PyMODINIT_FUNC initlog(void)
     mod = Py_InitModule("log", LogMethods);
     if (mod == NULL)
         return;
+
+    PyModule_AddIntMacro(mod, PY_LOG_DISABLED);
+    PyModule_AddIntMacro(mod, PY_LOG_FATAL);
+    PyModule_AddIntMacro(mod, PY_LOG_CRITICAL);
+    PyModule_AddIntMacro(mod, PY_LOG_ERROR);
+    PyModule_AddIntMacro(mod, PY_LOG_WARNING);
+    PyModule_AddIntMacro(mod, PY_LOG_INFO);
+    PyModule_AddIntMacro(mod, PY_LOG_VERB);
+    PyModule_AddIntMacro(mod, PY_LOG_DEBUG);
+    PyModule_AddIntMacro(mod, PY_LOG_DEFAULT);
 }

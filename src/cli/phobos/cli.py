@@ -210,7 +210,7 @@ class StoreGetMDHandler(XferOptHandler):
     def exec_getmd(self):
         """Retrieve an object attributes from backend."""
         oid = self.params.get('object_id')
-        self.logger.info("Retrieving attrs for 'objid:%s'", oid)
+        self.logger.debug("Retrieving attrs for 'objid:%s'", oid)
         self.client.get_register(oid, None, md_only=True)
         rc = self.client.run(compl_cb=self._compl_notify)
         if rc:
@@ -234,7 +234,7 @@ class StoreGetHandler(XferOptHandler):
         """Retrieve an object from backend."""
         oid = self.params.get('object_id')
         dst = self.params.get('dest_file')
-        self.logger.info("Retrieving object 'objid:%s' to '%s'", oid, dst)
+        self.logger.debug("Retrieving object 'objid:%s' to '%s'", oid, dst)
         self.client.get_register(oid, dst)
         rc = self.client.run()
         if rc:
@@ -317,7 +317,7 @@ class StoreMPutHandler(XferOptHandler):
                 attrs = attr_convert(attrs)
                 self.logger.debug("Loaded attributes set '%r'", attrs)
 
-            self.logger.info("Inserting object '%s' to 'objid:%s'", src, oid)
+            self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
             self.client.put_register(oid, src, attrs=attrs)
 
         rc = self.client.run()
@@ -859,26 +859,22 @@ class PhobosActionContext(object):
         lvl = self.parameters.get('verbose')
         lvl -= self.parameters.get('quiet')
 
-        # Insert a custom level between info and debug to map phobos VERBOSE */
-        lvl_verbose = (logging.DEBUG + logging.INFO) / 2
-        logging.addLevelName(lvl_verbose, "VERB")
-
         if lvl >= 2:
             # -vv
-            pylvl = logging.DEBUG
+            pylvl = clog.PY_LOG_DEBUG
             fmt = self.CLI_LOG_FORMAT_DEV
         elif lvl == 1:
             # -v
-            pylvl = lvl_verbose
+            pylvl = clog.PY_LOG_VERB
         elif lvl == 0:
             # default
-            pylvl = logging.INFO
+            pylvl = clog.PY_LOG_INFO
         elif lvl == -1:
             # -q
-            pylvl = logging.WARNING
+            pylvl = clog.PY_LOG_WARNING
         elif lvl <= -2:
             # -qq
-            pylvl = logging.NOTSET
+            pylvl = clog.PY_LOG_DISABLED
 
         clog.set_callback(phobos_log_handler)
         clog.set_level(pylvl)
