@@ -23,7 +23,10 @@
 #include <pho_types.h>
 #include <pho_common.h>
 
-
+/**
+ * Callback to fill a python dict from a phobos attribute set.
+ * Invoked on each item of the set a PyDict instance as udata.
+ */
 static int _attr_dict_build(const char *key, const char *value, void *udata)
 {
     PyObject *dict = udata;
@@ -32,6 +35,17 @@ static int _attr_dict_build(const char *key, const char *value, void *udata)
     return 0;
 }
 
+/**
+ * Internal function to use as xfer completion handler. The user data pointer it
+ * takes is a reference to a python function (provided by the CLI) to call in
+ * turn with a result tuple in parameter.
+ *
+ * The python function receives the following arguments:
+ * - the object id (always present)
+ * - the file path (can be null for GETATTR)
+ * - the attribute set, as a flat python dict of strings
+ * - the xfer return code (absolute value)
+ */
 static void python_cb_forwarder(void *uptr, const struct pho_xfer_desc *xd, int ret)
 {
     PyObject    *attr = PyDict_New();
@@ -53,14 +67,27 @@ static void python_cb_forwarder(void *uptr, const struct pho_xfer_desc *xd, int 
 }
 %}
 
+/**
+ * Always use our python_cb_forwarder as a completion callback.
+ * The typemap hides the parameter and set it internally.
+ */
 %typemap(in, numinputs=0) (pho_completion_cb_t cb) {
     $1 = python_cb_forwarder;
 }
 
+/**
+ * We pass in our python completion handler through the udata pointer.
+ * The cast seems useless but is actually needed because SWIG is fascist.
+ */
 %typemap(in) (void *udata) {
     $1 = (void *)$input;
 }
 
+/**
+ * Bulk operations (MPUT) work on a linear array of xfer descriptors.
+ * Allow the python callers to use a list, which is way more convenient
+ * and rebuild an array internally.
+ */
 %typemap(in) (const struct pho_xfer_desc *desc, size_t n) {
     int i;
 
@@ -87,6 +114,9 @@ static void python_cb_forwarder(void *uptr, const struct pho_xfer_desc *xd, int 
     }
 }
 
+/**
+ * Free the array of struct pho_xfer_desc allocated in the typemap above.
+ */
 %typemap(freearg) (const struct pho_xfer_desc *desc, size_t n) {
     free($1);
 }
