@@ -20,7 +20,7 @@
 
 void pho_attrs_free(struct pho_attrs *md)
 {
-    if (md->attr_set == NULL)
+    if (md == NULL || md->attr_set == NULL)
         return;
 
     g_hash_table_destroy(md->attr_set);

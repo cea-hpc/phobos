@@ -674,8 +674,8 @@ static int mput_valid_slices_count(const struct mput_desc *mput)
     return count;
 }
 
-int phobos_mput(const struct pho_xfer_desc *desc, size_t n,
-                pho_completion_cb_t cb, void *udata)
+int phobos_put(const struct pho_xfer_desc *desc, size_t n,
+               pho_completion_cb_t cb, void *udata)
 {
     struct mput_desc    *mput = NULL;
     int                  i;
@@ -729,12 +729,6 @@ out_finalize:
 disconn:
     store_mput_fini(mput);
     return rc;
-}
-
-int phobos_put(const struct pho_xfer_desc *desc, pho_completion_cb_t cb,
-               void *udata)
-{
-    return phobos_mput(desc, 1, cb, udata);
 }
 
 /** retrieve the location of a given object from DSS */
@@ -860,13 +854,18 @@ out_free:
     return rc;
 }
 
-int phobos_get(const struct pho_xfer_desc *desc, pho_completion_cb_t cb,
-               void *udata)
+int phobos_get(const struct pho_xfer_desc *desc, size_t n,
+               pho_completion_cb_t cb, void *udata)
 {
     struct pho_xfer_desc     desc_res = *desc; /* internal r/w copy */
     struct pho_attrs         attrs = {0};
     struct dss_handle        dss;
     int                      rc;
+
+    /* XXX
+     * Although we plan to eventually support it MGET is not yet implemented */
+    if (n > 1)
+        LOG_RETURN(-EINVAL, "Bulk GET not supported in this version");
 
     /* load configuration and get dss handle */
     rc = store_init(&dss);

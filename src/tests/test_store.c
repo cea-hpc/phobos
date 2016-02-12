@@ -67,7 +67,7 @@ int main(int argc, char **argv)
             xfer.xd_attrs = &attrs;
             xfer.xd_flags = flags;
 
-            rc = phobos_put(&xfer, NULL, NULL);
+            rc = phobos_put(&xfer, 1, NULL, NULL);
             if (rc)
                 pho_error(rc, "PUT '%s' failed", argv[i]);
         }
@@ -99,7 +99,7 @@ int main(int argc, char **argv)
             xfer[i].xd_flags = flags;
         }
 
-        rc = phobos_mput(xfer, xfer_cnt, NULL, NULL);
+        rc = phobos_put(xfer, xfer_cnt, NULL, NULL);
         if (rc)
             pho_error(rc, "MPUT failed");
 
@@ -110,14 +110,14 @@ int main(int argc, char **argv)
         xfer.xd_objid = argv[2];
         xfer.xd_fpath = argv[3];
 
-        rc = phobos_get(&xfer, NULL, NULL);
+        rc = phobos_get(&xfer, 1, NULL, NULL);
     } else if (!strcmp(argv[1], "getmd")) {
         struct pho_xfer_desc    xfer = {0};
 
         xfer.xd_objid = argv[2];
         xfer.xd_flags = PHO_XFER_OBJ_GETATTR;
 
-        rc = phobos_get(&xfer, dump_md, NULL);
+        rc = phobos_get(&xfer, 1, dump_md, NULL);
     } else {
         rc = -EINVAL;
         pho_error(rc, "verb put|post|get|getmd expected at '%s'\n", argv[1]);

@@ -55,38 +55,37 @@ struct pho_xfer_desc {
 };
 
 
-#ifndef SWIG
-/**
- * Put a file to the object store
- * desc contains:
- *  objid: The target object identifier
- *  fpath: The source file
- *  attrs: The metadata (optional)
- *  flags: Behavior flags
- */
-int phobos_put(const struct pho_xfer_desc *desc, pho_completion_cb_t cb,
-               void *udata);
-#endif
-
 /**
  * Put N files to the object store with minimal overhead.
- * See phobos_put() for how to fill the desc items.
- * This function returns the first encountered error, or 0 if all sub-operations
- * have succeeded. Individual notifications are issued via xd_callback.
+ * Each desc entry contains:
+ * - objid: The target object identifier
+ * - fpath: The source file
+ * - attrs: The metadata (optional)
+ * - flags: Behavior flags
+ *
+ * Individual completion notifications are issued via xd_callback.
+ * This function returns the first encountered error or 0 if all
+ * sub-operations have succeeded.
  */
-int phobos_mput(const struct pho_xfer_desc *desc, size_t n,
-                pho_completion_cb_t cb, void *udata);
+int phobos_put(const struct pho_xfer_desc *desc, size_t n,
+               pho_completion_cb_t cb, void *udata);
 
 /**
- * Retrieve a file from the object store
+ * Retrieve N files from the object store
  * desc contains:
  *  objid: Unique arbitrary string to identify the object
  *  fpath: Target file to write the object data to
  *  attrs: Unused (can be NULL)
  *  flags: Behavior flags
+ *
+ * Individual completion notifications are issued via xd_callback.
+ * This function returns the first encountered error or 0 if all
+ * sub-operations have succeeded.
+ *
+ * XXX This function does not support n > 1 yet.
  */
-int phobos_get(const struct pho_xfer_desc *desc, pho_completion_cb_t cb,
-               void *udata);
+int phobos_get(const struct pho_xfer_desc *desc, size_t n,
+               pho_completion_cb_t cb, void *udata);
 
 /** query metadata of the object store */
 /* TODO int phobos_query(criteria, &obj_list); */

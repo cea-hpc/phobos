@@ -182,7 +182,7 @@ class XferOptHandler(BaseOptHandler):
 
     def teardown(self):
         """Release resources associated to a XferClient."""
-        self.client.session_clear()
+        self.client.clear()
 
 
 class StoreGetMDHandler(XferOptHandler):
