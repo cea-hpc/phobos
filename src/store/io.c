@@ -180,6 +180,7 @@ static int pho_posix_sendfile(int tgt_fd, int src_fd, off_t *src_offset,
             LOG_RETURN(-EIO, "inconsistent src_offset value (%jd != %jd + %zd",
                        (intmax_t)*src_offset, (intmax_t)offsave, rw);
         count -= rw;
+        offsave = *src_offset;
     }
 
     return 0;
