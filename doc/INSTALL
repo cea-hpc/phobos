@@ -24,8 +24,11 @@ service postgresql-9.4 start
 service postgresql-9.4 restart
 
 # create phobos DB and tables
-# TODO:
-# 	pho-cfg setup_db
-# 	pho-cfg setup_tables
-./src/tests/setup_db.sh setup_db
-./src/tests/setup_db.sh setup_tables
+pho_dss_helper setup_db
+pho_dss_helper setup_tables
+
+# play!
+phobos drive add --unlock /dev/IBMtape0
+phobos tape add -t lto6 [073200-073222]L6
+phobos tape format 073200L6 --unlock
+phobos put <file> <id> -m <k=v,k=v,...>
