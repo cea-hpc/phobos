@@ -481,6 +481,8 @@ class DirOptHandler(DSSInteractHandler):
         keep_locked = not self.params.get('unlock')
 
         for path in resources:
+            # Remove any trailing slash
+            path = path.rstrip('/')
             rc_m = self.client.media.add(cdss.PHO_DEV_DIR, 'POSIX', None, path,
                                          locked=keep_locked)
             rc_d = self.client.devices.add(cdss.PHO_DEV_DIR, path,
