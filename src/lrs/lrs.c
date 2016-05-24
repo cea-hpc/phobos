@@ -335,13 +335,17 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
     /* get path for the given serial */
     rc = ldm_dev_lookup(&deva, devi->serial, devd->dev_path,
                         sizeof(devd->dev_path));
-    if (rc)
+    if (rc) {
+        pho_debug("Device lookup failed: serial '%s'", devi->serial);
         return rc;
+    }
 
     /* now query device by path */
     rc = ldm_dev_query(&deva, devd->dev_path, &devd->sys_dev_state);
-    if (rc)
+    if (rc) {
+        pho_debug("Failed to query device '%s'", devd->dev_path);
         return rc;
+    }
 
     /* compare returned device info with info from DB */
     rc = check_dev_info(devd);
@@ -351,8 +355,11 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
     /* Query the library about the drive location and whether it contains
      * a media. */
     rc = ldm_lib_drive_lookup(lib, devi->serial, &devd->lib_dev_info);
-    if (rc)
+    if (rc) {
+        pho_debug("Failed to query the library about device '%s'",
+                  devi->serial);
         return rc;
+    }
 
     if (devd->lib_dev_info.ldi_full) {
         devd->op_status = PHO_DEV_OP_ST_LOADED;
