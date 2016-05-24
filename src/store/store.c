@@ -628,6 +628,10 @@ static void xfer_get_notify(pho_completion_cb_t cb, void *udata,
     if (cb != NULL)
         cb(udata, desc, rc);
 
+    /* don't display any message for GETATTR operation */
+    if (desc->xd_flags & PHO_XFER_OBJ_GETATTR)
+        return;
+
     pho_info("GET operation objid:'%s' -> '%s' %s",
              desc->xd_objid, desc->xd_fpath, rc ? "failed" : "succeeded");
 }
