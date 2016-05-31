@@ -432,7 +432,7 @@ class TapeAddOptHandler(AddOptHandler):
 class FormatOptHandler(DSSInteractHandler):
     """Format a resource."""
     label = 'format'
-    descr = 'format a tape'
+    descr = 'format a media'
 
     @classmethod
     def add_options(cls, parser):
@@ -442,14 +442,27 @@ class FormatOptHandler(DSSInteractHandler):
         parser.add_argument('-n', '--nb-streams', metavar='STREAMS', type=int,
                             help='Max number of parallel formatting operations')
         parser.add_argument('--unlock', action='store_true',
-                            help='Unlock tape once it is ready to be written')
+                            help='Unlock media once it is ready to be written')
         parser.add_argument('res', nargs='+', help='Resource(s) to format')
 
+class BaseResourceOptHandler(DSSInteractHandler):
+    """Generic interface for resources manipulation."""
+    label = None
+    descr = None
+    cenum = None
+    verbs = []
 
-class DirOptHandler(DSSInteractHandler):
-    """Directory-related options and actions."""
-    label = 'dir'
-    descr = 'handle directories'
+    @property
+    def family(self):
+        """Return family (as a string) for the current instance."""
+        return cdss.dev_family2str(self.cenum)
+
+    def filter(self, ident):
+        """Return a list of objects that match the provided identifier."""
+        raise NotImplementedError("Abstract method subclasses must implement")
+
+class DeviceOptHandler(BaseResourceOptHandler):
+    """Shared interface for devices."""
     verbs = [
         AddOptHandler,
         FormatOptHandler,
@@ -461,15 +474,239 @@ class DirOptHandler(DSSInteractHandler):
 
     def filter(self, ident):
         """
-        Return a list of dirs that match the identifier for either serial
-        or path.  You may call it a bug but this is a feature so that
-        administrators can transparently address directories by path or serial.
+        Return a list of devices that match the identifier for either serial or
+        path. You may call it a bug but this is a feature intended to let admins
+        transparently address devices using one or the other scheme.
         """
-        directory = self.client.devices.get(family='dir', serial=ident)
-        if not directory:
+        dev = self.client.devices.get(family=self.family, serial=ident)
+        if not dev:
             # 2nd attempt, by path...
-            directory = self.client.devices.get(family='dir', path=ident)
-        return directory
+            dev = self.client.devices.get(family=self.family, path=ident)
+        return dev
+
+    def exec_add(self):
+        """Add a new device"""
+        resources = self.params.get('res')
+        keep_locked = not self.params.get('unlock')
+
+        for path in resources:
+            rc = self.client.devices.add(self.cenum, path,
+                                         locked=keep_locked)
+            if rc:
+                self.logger.error("Cannot add device: %s", strerror(rc))
+                sys.exit(os.EX_DATAERR)
+
+        self.logger.info("Added %d device(s) successfully", len(resources))
+
+    def exec_list(self):
+        """List devices and display results."""
+        for obj in self.client.devices.get(family=self.family):
+            print obj.serial
+
+    def exec_show(self):
+        """Show device details."""
+        devs = []
+        for serial in self.params.get('res'):
+            curr = self.filter(serial)
+            if not curr:
+                self.logger.error("'%s' not found", serial)
+                sys.exit(os.EX_DATAERR)
+            assert len(curr) == 1
+            devs.append(curr[0])
+        if len(devs) > 0:
+            dump_object_list(devs, self.params.get('format'),
+                             self.params.get('numeric'))
+
+    def exec_lock(self):
+        """Device lock"""
+        devices = []
+        serials = self.params.get('res')
+
+        for serial in serials:
+            device = self.filter(serial)
+            if not device:
+                self.logger.error("Device %s not found", serial)
+                sys.exit(os.EX_DATAERR)
+            assert len(device) == 1
+            if device[0].lock.lock != "":
+                if self.params.get('force'):
+                    self.logger.warn("Device %s is in use. Administrative "
+                                     "locking will not be effective "
+                                     "immediately", serial)
+                else:
+                    self.logger.error("Device %s is in use by %s.",
+                                      serial, device[0].lock.lock)
+                    continue
+            device[0].adm_status = cdss.PHO_DEV_ADM_ST_LOCKED
+            devices.append(device[0])
+        if len(devices) == len(serials):
+            rc = self.client.devices.update(devices)
+        else:
+            rc = errno.EPERM
+            self.logger.error("At least one device is in use, use --force")
+
+        if not rc:
+            print "%d device(s) locked" % len(devices)
+        else:
+            self.logger.error("Failed to lock one or more device(s), error: %s",
+                              strerror(rc))
+
+    def exec_unlock(self):
+        """Device unlock"""
+        devices = []
+        serials = self.params.get('res')
+
+        for serial in serials:
+            device = self.filter(serial)
+            if not device:
+                self.logger.error("No such device: %s", serial)
+                sys.exit(os.EX_DATAERR)
+            if device[0].lock.lock != "" and not self.params.get('force'):
+                self.logger.error("Device %s is in use by %s.",
+                                  serial, device[0].lock.lock)
+                continue
+            if device[0].adm_status == cdss.PHO_DEV_ADM_ST_UNLOCKED:
+                self.logger.warn("Device %s is already unlocked", serial)
+            device[0].adm_status = cdss.PHO_DEV_ADM_ST_UNLOCKED
+            devices.append(device[0])
+        if len(devices) == len(serials):
+            rc = self.client.devices.update(devices)
+        else:
+            rc = errno.EPERM
+            self.logger.error("At least one device is in use, use --force")
+
+        if not rc:
+            print "%d device(s) unlocked" % len(devices)
+        else:
+            self.logger.error("Failed to unlock one or more device(s): %s",
+                              strerror(rc))
+
+class MediaOptHandler(BaseResourceOptHandler):
+    """Shared interface for media."""
+    verbs = [
+        AddOptHandler,
+        FormatOptHandler,
+        ShowOptHandler,
+        ListOptHandler,
+        LockOptHandler,
+        UnlockOptHandler
+    ]
+
+    def exec_add(self):
+        """Add new media."""
+        labels = NodeSet.fromlist(self.params.get('res'))
+        fstype = self.params.get('fs').upper()
+        techno = self.params.get('type', '').upper()
+        keep_locked = not self.params.get('unlock')
+
+        for med in labels:
+            rc = self.client.media.add(self.cenum, fstype, techno, med,
+                                       locked=keep_locked)
+            if rc:
+                self.logger.error("Cannot add medium %s: %s", med, strerror(rc))
+                sys.exit(os.EX_DATAERR)
+
+        self.logger.info("Added %d media successfully", len(labels))
+
+    def exec_format(self):
+        """Format media however requested."""
+        media_list = NodeSet.fromlist(self.params.get('res'))
+        fs_type = self.params.get('fs')
+        unlock = self.params.get('unlock')
+        if unlock:
+            self.logger.debug("Post-unlock enabled")
+        for label in media_list:
+            self.logger.debug("Formatting media '%s'", label)
+            try:
+                fs_format(self.client, label, fs_type, unlock=unlock)
+            except GenericError, exc:
+                # XXX add an option to exit on first error
+                self.logger.error("fs_format: %s", exc)
+
+    def exec_show(self):
+        """Show media details."""
+        results = []
+        uids = NodeSet.fromlist(self.params.get('res'))
+        for uid in uids:
+            media = self.client.media.get(family=self.family, id=uid)
+            if not media:
+                self.logger.warning("Media id %s not found", uid)
+                continue
+            assert len(media) == 1
+            results.append(media[0])
+        dump_object_list(results, self.params.get('format'),
+                         self.params.get('numeric'))
+
+    def exec_list(self):
+        """List all medias."""
+        for media in self.client.media.get(family=self.family):
+            print media.ident
+
+    def exec_lock(self):
+        """Lock media"""
+        results = []
+        uids = NodeSet.fromlist(self.params.get('res'))
+        for uid in uids:
+            media = self.client.media.get(id=uid)
+            if media[0].lock.lock != "":
+                if self.params.get('force'):
+                    self.logger.warn("Media %s is in use. Administrative "
+                                     "locking will not be effective "
+                                     "immediately", uid)
+                else:
+                    self.logger.error("Media %s is in use by %s.",
+                                      uid, media[0].lock.lock)
+                    continue
+
+            media[0].adm_status = cdss.PHO_MDA_ADM_ST_LOCKED
+            results.append(media[0])
+
+        if len(results) == len(uids):
+            rc = self.client.media.update(results)
+        else:
+            rc = errno.EPERM
+            self.logger.error("At least one media is in use, use --force")
+
+        if not rc:
+            print "%d media(s) locked" % len(results)
+        else:
+            self.logger.error("Failed to lock one or more media(s): %s",
+                              strerror(rc))
+
+    def exec_unlock(self):
+        """Unlock media"""
+        results = []
+        uids = NodeSet.fromlist(self.params.get('res'))
+        for uid in uids:
+            media = self.client.media.get(id=uid)
+            if media[0].lock.lock != "" and not self.params.get('force'):
+                self.logger.error("Media %s is in use by %s",
+                                  uid, media[0].lock.lock)
+                continue
+
+            if media[0].adm_status == cdss.PHO_MDA_ADM_ST_UNLOCKED:
+                self.logger.warn("Media %s is already unlocked", uid)
+
+            media[0].adm_status = cdss.PHO_MDA_ADM_ST_UNLOCKED
+            results.append(media[0])
+
+        if len(results) == len(uids):
+            rc = self.client.media.update(results)
+        else:
+            rc = errno.EPERM
+            self.logger.error("At least one media is not locked, use --force")
+
+        if not rc:
+            print "%d media unlocked" % len(results)
+        else:
+            self.logger.error("Failed to unlock one or more media: %s",
+                              strerror(rc))
+
+class DirOptHandler(MediaOptHandler, DeviceOptHandler):
+    """Directory-related options and actions."""
+    label = 'dir'
+    descr = 'handle directories'
+    cenum = cdss.PHO_DEV_DIR
 
     def exec_add(self):
         """
@@ -483,10 +720,10 @@ class DirOptHandler(DSSInteractHandler):
         for path in resources:
             # Remove any trailing slash
             path = path.rstrip('/')
-            rc_m = self.client.media.add(cdss.PHO_DEV_DIR, 'POSIX', None, path,
+            rc_m = self.client.media.add(self.cenum, 'POSIX', None, path,
                                          locked=keep_locked)
-            rc_d = self.client.devices.add(cdss.PHO_DEV_DIR, path,
-                                           locked=keep_locked)
+            # Add device unlocked and rely on media locking
+            rc_d = self.client.devices.add(self.cenum, path, locked=False)
             if rc_m or rc_d:
                 self.logger.error("Cannot add directory: %s",
                                   strerror(rc_m or rc_d))
@@ -496,176 +733,19 @@ class DirOptHandler(DSSInteractHandler):
 
         self.logger.info("Added %d dir(s) successfully", len(resources))
 
-    def exec_format(self):
-        """Format directory as POSIX. This is almost a noop internally."""
-        dir_list = NodeSet.fromlist(self.params.get('res'))
-        fs_type = self.params.get('fs')
-        unlock = self.params.get('unlock')
-        if fs_type.lower() != 'posix':
-            raise GenericError('Operation not supported')
-        if unlock:
-            self.logger.debug("Post-unlock enabled")
-        for path in dir_list:
-            self.logger.debug("Formatting dir '%s'", path)
-            try:
-                fs_format(self.client, path, fs_type, unlock=unlock)
-            except GenericError, exc:
-                # XXX add an option to exit on first error
-                self.logger.error("fs_format: %s", exc)
 
-    def exec_list(self):
-        """List directories as devices."""
-        for obj in self.client.devices.get(family='dir'):
-            print obj.serial
-
-    def exec_show(self):
-        """Show directory details."""
-        dirs = []
-        for serial in self.params.get('res'):
-            wdir = self.filter(serial)
-            if not wdir:
-                self.logger.error("Directory %s not found", serial)
-                sys.exit(os.EX_DATAERR)
-            assert len(wdir) == 1
-            dirs.append(wdir[0])
-        if len(dirs) > 0:
-            dump_object_list(dirs, self.params.get('format'),
-                             self.params.get('numeric'))
-
-    def exec_lock(self):
-        """Lock a directory"""
-        self.logger.error("Dir lock is not implemented")
-
-    def exec_unlock(self):
-        """Unlock a directory"""
-        self.logger.error("Dir unlock is not implemented")
-
-class DriveOptHandler(DSSInteractHandler):
+class DriveOptHandler(DeviceOptHandler):
     """Tape Drive options and actions."""
     label = 'drive'
     descr = 'handle tape drives (use ID or device path to identify resource)'
-    verbs = [
-        AddOptHandler,
-        DriveListOptHandler,
-        ShowOptHandler,
-        LockOptHandler,
-        UnlockOptHandler
-    ]
+    cenum = cdss.PHO_DEV_TAPE
 
-    def filter(self, ident):
-        """
-        Return a list of drives that match the identifier for either serial
-        or path.  You may call it a bug but this is a feature so that
-        administrators can transparently address devices by path or serial.
-        """
-        drive = self.client.devices.get(family='tape', serial=ident)
-        if not drive:
-            # 2nd attempt, by path...
-            drive = self.client.devices.get(family='tape', path=ident)
-        return drive
 
-    def exec_add(self):
-        """Add a new drive"""
-        resources = self.params.get('res')
-        keep_locked = not self.params.get('unlock')
-
-        for path in resources:
-            rc = self.client.devices.add(cdss.PHO_DEV_TAPE, path,
-                                         locked=keep_locked)
-            if rc:
-                self.logger.error("Cannot add drive: %s", strerror(rc))
-                sys.exit(os.EX_DATAERR)
-
-        self.logger.info("Added %d drive(s) successfully", len(resources))
-
-    def exec_list(self):
-        """List all drives."""
-        # Clarification: Tape is a kind of drive
-        for drive in self.client.devices.get(family='tape'):
-            print drive.serial
-
-    def exec_show(self):
-        """Show drive details."""
-        drives = []
-        for serial in self.params.get('res'):
-            drive = self.filter(serial)
-            if not drive:
-                self.logger.error("Drive %s not found", serial)
-                sys.exit(os.EX_DATAERR)
-            assert len(drive) == 1
-            drives.append(drive[0])
-        if len(drives) > 0:
-            dump_object_list(drives, self.params.get('format'),
-                             self.params.get('numeric'))
-
-    def exec_lock(self):
-        """Drive lock"""
-        drives = []
-        serials = self.params.get('res')
-
-        for serial in serials:
-            drive = self.filter(serial)
-            if not drive:
-                self.logger.error("Drive %s not found", serial)
-                sys.exit(os.EX_DATAERR)
-            assert len(drive) == 1
-            if drive[0].lock.lock != "":
-                if self.params.get('force'):
-                    self.logger.warn("Drive %s is in use. Administrative "
-                                     "locking will not be effective "
-                                     "immediately", serial)
-                else:
-                    self.logger.error("Drive %s is in use by %s.",
-                                      serial, drive[0].lock.lock)
-                    continue
-            drive[0].adm_status = cdss.PHO_DEV_ADM_ST_LOCKED
-            drives.append(drive[0])
-        if len(drives) == len(serials):
-            rc = self.client.devices.update(drives)
-        else:
-            rc = errno.EPERM
-            self.logger.error("At least one drive is in use, use --force")
-
-        if not rc:
-            print "%d drive(s) locked" % len(drives)
-        else:
-            self.logger.error("Failed to lock one or more drive(s), error: %s",
-                              strerror(rc))
-
-    def exec_unlock(self):
-        """Drive unlock"""
-        drives = []
-        serials = self.params.get('res')
-
-        for serial in serials:
-            drive = self.filter(serial)
-            if not drive:
-                self.logger.error("No such drive: %s", serial)
-                sys.exit(os.EX_DATAERR)
-            if drive[0].lock.lock != "" and not self.params.get('force'):
-                self.logger.error("Drive %s is in use by %s.",
-                                  serial, drive[0].lock.lock)
-                continue
-            if drive[0].adm_status == cdss.PHO_DEV_ADM_ST_UNLOCKED:
-                self.logger.warn("Drive %s is already unlocked", serial)
-            drive[0].adm_status = cdss.PHO_DEV_ADM_ST_UNLOCKED
-            drives.append(drive[0])
-        if len(drives) == len(serials):
-            rc = self.client.devices.update(drives)
-        else:
-            rc = errno.EPERM
-            self.logger.error("At least one drive is in use, use --force")
-
-        if not rc:
-            print "%d drive(s) unlocked" % len(drives)
-        else:
-            self.logger.error("Failed to unlock one or more drive(s)"
-                              ", error: %s", strerror(rc))
-
-class TapeOptHandler(DSSInteractHandler):
+class TapeOptHandler(MediaOptHandler):
     """Magnetic tape options and actions."""
     label = 'tape'
     descr = 'handle magnetic tape (use tape label to identify resource)'
+    cenum = cdss.PHO_DEV_TAPE
     verbs = [
         TapeAddOptHandler,
         FormatOptHandler,
@@ -675,117 +755,6 @@ class TapeOptHandler(DSSInteractHandler):
         UnlockOptHandler
     ]
 
-    def exec_add(self):
-        """Add new tapes"""
-        labels = NodeSet.fromlist(self.params.get('res'))
-        fstype = self.params.get('fs').upper()
-        techno = self.params.get('type').upper()
-        keep_locked = not self.params.get('unlock')
-
-        for tape in labels:
-            rc = self.client.media.add(cdss.PHO_DEV_TAPE, fstype, techno, tape,
-                                       locked=keep_locked)
-            if rc:
-                self.logger.error("Cannot add tape %s: %s", tape, strerror(rc))
-                sys.exit(os.EX_DATAERR)
-
-        self.logger.info("Added %d tape(s) successfully", len(labels))
-
-    def exec_format(self):
-        """Format tape to LTFS. No Alternative."""
-        tape_list = NodeSet.fromlist(self.params.get('res'))
-        fs_type = self.params.get('fs')
-        unlock = self.params.get('unlock')
-        if fs_type.lower() != 'ltfs':
-            raise GenericError('Operation not supported')
-        if unlock:
-            self.logger.debug("Post-unlock enabled")
-        for label in tape_list:
-            self.logger.debug("Formatting tape '%s'", label)
-            try:
-                fs_format(self.client, label, fs_type, unlock=unlock)
-            except GenericError, exc:
-                # XXX add an option to exit on first error
-                self.logger.error("fs_format: %s", exc)
-
-    def exec_show(self):
-        """Show tape details."""
-        tapes = []
-        uids = NodeSet.fromlist(self.params.get('res'))
-        for uid in uids:
-            tape = self.client.media.get(family='tape', id=uid)
-            if not tape:
-                self.logger.warning("Tape id %s not found", uid)
-                continue
-            assert len(tape) == 1
-            tapes.append(tape[0])
-        dump_object_list(tapes, self.params.get('format'),
-                         self.params.get('numeric'))
-
-    def exec_list(self):
-        """List all tapes."""
-        for tape in self.client.media.get(family='tape'):
-            print tape.ident
-
-    def exec_lock(self):
-        """Lock tapes"""
-        tapes = []
-        uids = NodeSet.fromlist(self.params.get('res'))
-        for uid in uids:
-            tape = self.client.media.get(id=uid)
-            if tape[0].lock.lock != "":
-                if self.params.get('force'):
-                    self.logger.warn("Tape %s is in use. Administrative "
-                                     "locking will not be effective "
-                                     "immediately", uid)
-                else:
-                    self.logger.error("Tape %s is in use by %s.",
-                                      uid, tape[0].lock.lock)
-                    continue
-
-            tape[0].adm_status = cdss.PHO_MDA_ADM_ST_LOCKED
-            tapes.append(tape[0])
-
-        if len(tapes) == len(uids):
-            rc = self.client.media.update(tapes)
-        else:
-            rc = errno.EPERM
-            self.logger.error("At least one tape is in use, use --force")
-
-        if not rc:
-            print "%d tape(s) locked" % len(tapes)
-        else:
-            self.logger.error("Failed to lock one or more tape(s), error: %s",
-                              strerror(rc))
-
-    def exec_unlock(self):
-        """Unlock tapes"""
-        tapes = []
-        uids = NodeSet.fromlist(self.params.get('res'))
-        for uid in uids:
-            tape = self.client.media.get(id=uid)
-            if tape[0].lock.lock != "" and not self.params.get('force'):
-                self.logger.error("Tape %s is in use by %s",
-                                  uid, tape[0].lock.lock)
-                continue
-
-            if tape[0].adm_status == cdss.PHO_MDA_ADM_ST_UNLOCKED:
-                self.logger.warn("Tape %s is already unlocked", uid)
-
-            tape[0].adm_status = cdss.PHO_MDA_ADM_ST_UNLOCKED
-            tapes.append(tape[0])
-
-        if len(tapes) == len(uids):
-            rc = self.client.media.update(tapes)
-        else:
-            rc = errno.EPERM
-            self.logger.error("At least one tape is not locked, use --force")
-
-        if not rc:
-            print "%d tape(s) unlocked" % len(tapes)
-        else:
-            self.logger.error("Failed to unlock one or more tape(s), "
-                              "error: %s", strerror(rc))
 
 class PhobosActionContext(object):
     """
@@ -797,12 +766,12 @@ class PhobosActionContext(object):
                          "[%(funcName)s:%(filename)s:%(lineno)d] %(message)s"
 
     supported_handlers = [
-        # Object interfaces
+        # Resource interfaces
         DirOptHandler,
         TapeOptHandler,
         DriveOptHandler,
 
-        # Xfer interfaces
+        # Store command interfaces
         StoreGetHandler,
         StorePutHandler,
         StoreMPutHandler,
