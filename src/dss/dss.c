@@ -34,7 +34,6 @@ struct dss_result {
 #define res_of_item_list(_list) \
     container_of((_list), struct dss_result, u.media)
 
-
 /**
  * Handle notices from PostgreSQL. Strip the trailing newline and re-emit them
  * through phobos log API.
@@ -65,6 +64,60 @@ int dss_init(const char *conninfo, struct dss_handle *handle)
 void dss_fini(struct dss_handle *handle)
 {
     PQfinish(handle->dh_conn);
+}
+
+
+struct sqlerr_map_item {
+    const char *smi_prefix;     /**< SQL error code or class (prefix) */
+    int         smi_errcode;    /**< Corresponding negated errno code */
+};
+
+/**
+ * Map errors from SQL to closest errno.
+ * The list is traversed from top to bottom and stops at first match, so make
+ * sure that new items are inserted in most-specific first order.
+ * See: https://www.postgresql.org/docs/9.4/static/errcodes-appendix.html
+ */
+static const struct sqlerr_map_item sqlerr_map[] = {
+    /* Class 00 - Successful completion */
+    {"00000", 0},
+    /* Class 22 - Data exception */
+    {"22", -EINVAL},
+    /* Class 23 - Integrity constraint violation */
+    {"23", -EEXIST},
+    /* Class 42 - Syntax error or access rule violation */
+    {"42", -EINVAL},
+    /* Class 53 - Insufficient resources */
+    {"53100", -ENOSPC},
+    {"53200", -ENOMEM},
+    {"53300", -EUSERS},
+    {"53", -EIO},
+    /* Catch all -- KEEP LAST -- */
+    {"", -ECOMM}
+};
+
+/**
+ * Convert PostgreSQL status codes to meaningful errno values.
+ * @param  res[in]  Failed query result descriptor
+ * @return negated errno value corresponding to the error
+ */
+static int psql_state2errno(const PGresult *res)
+{
+    char *sqlstate = PQresultErrorField(res, PG_DIAG_SQLSTATE);
+    int   i;
+
+    if (sqlstate == NULL)
+        return 0;
+
+    for (i = 0; i < ARRAY_SIZE(sqlerr_map); i++) {
+        const char *pfx = sqlerr_map[i].smi_prefix;
+
+        if (strncmp(pfx, sqlstate, strlen(pfx)) == 0)
+            return sqlerr_map[i].smi_errcode;
+    }
+
+    /* sqlerr_map must contain a catch-all entry */
+    UNREACHED();
 }
 
 /**
@@ -883,10 +936,9 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
 
     res = PQexec(conn, clause->str);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-        rc = -ECOMM;
-        pho_error(rc, "Query '%s' failed: %s (SQLErrno: %s)", clause->str,
-                  PQerrorMessage(conn),
-                  PQresultErrorField(res, PG_DIAG_SQLSTATE));
+        rc = psql_state2errno(res);
+        pho_error(rc, "Query '%s' failed: %s", clause->str,
+                  PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
         PQclear(res);
         g_string_free(clause, true);
         return rc;
@@ -1046,9 +1098,9 @@ int dss_set(struct dss_handle *handle, enum dss_type type, void *item_list,
 
     res = PQexec(conn, request->str);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        rc = -ECOMM;
-        pho_error(rc, "Query '%s' failed: %s (SQLErrno: %s)", request->str,
-                  PQerrorMessage(conn),
+        rc = psql_state2errno(res);
+        pho_error(rc, "Query '%s' failed: %s (%s)", request->str,
+                  PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY),
                   PQresultErrorField(res, PG_DIAG_SQLSTATE));
         PQclear(res);
 
@@ -1056,17 +1108,17 @@ int dss_set(struct dss_handle *handle, enum dss_type type, void *item_list,
 
         res = PQexec(conn, "ROLLBACK; ");
         if (PQresultStatus(res) != PGRES_COMMAND_OK)
-            pho_error(rc, "Rollback failed: (SQLErrno: %s)",
-                      PQresultErrorField(res, PG_DIAG_SQLSTATE));
+            pho_error(rc, "Rollback failed: %s",
+                      PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
 
         goto out_cleanup;
     }
 
     res = PQexec(conn, "COMMIT; ");
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        rc = -ECOMM;
-        pho_error(rc, "Request failed: (SQLErrno: %s)",
-                  PQresultErrorField(res, PG_DIAG_SQLSTATE));
+        rc = psql_state2errno(res);
+        pho_error(rc, "Request failed: %s",
+                  PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
     }
 
 out_cleanup:
@@ -1110,10 +1162,13 @@ int dss_lock(struct dss_handle *handle, void *item_list, int item_cnt,
                         dss_type2str(type),  ids->str);
 
     pho_debug("Executing request: '%s'", request->str);
+
     res = PQexec(conn, request->str);
     if (PQresultStatus(res) != PGRES_COMMAND_OK)
-            LOG_GOTO(out_cleanup, rc = -ECOMM, "Request failed: (SQLErrno: %s)",
-                     PQresultErrorField(res, PG_DIAG_SQLSTATE));
+            LOG_GOTO(out_cleanup, rc = psql_state2errno(res),
+                     "Request failed: %s",
+                     PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
+
     if (atoi(PQcmdTuples(res)) != item_cnt)
         rc = -EEXIST;
 
@@ -1153,10 +1208,13 @@ int dss_unlock(struct dss_handle *handle, void *item_list, int item_cnt,
                         dss_type2str(type), ids->str);
 
     pho_debug("Executing request: '%s'", request->str);
+
     res = PQexec(conn, request->str);
     if (PQresultStatus(res) != PGRES_COMMAND_OK)
-            LOG_GOTO(out_cleanup, rc = -ECOMM, "Request failed: (SQLErrno: %s)",
-                     PQresultErrorField(res, PG_DIAG_SQLSTATE));
+            LOG_GOTO(out_cleanup, rc = psql_state2errno(res),
+                     "Request failed: %s",
+                     PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
+
     if (atoi(PQcmdTuples(res)) != item_cnt)
         rc = -EEXIST;
 

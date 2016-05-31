@@ -187,4 +187,13 @@ static inline char *end_of_string(char *str)
 /** remove spaces at end of string */
 char *rstrip(char *msg);
 
+/* Number of items in a fixed-size array */
+#define ARRAY_SIZE(a)   (sizeof(a) / sizeof((a)[0]))
+
+/**
+ * GCC hint for unreachable code
+ * See: https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
+ */
+#define UNREACHED       __builtin_unreachable
+
 #endif

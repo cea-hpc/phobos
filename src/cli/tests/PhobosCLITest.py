@@ -104,7 +104,7 @@ class LogTest(unittest.TestCase):
         cli.devices.insert([dev])
         rc = cli.devices.insert([dev])
 
-        self.assertEqual(rc, -errno.ECOMM)
+        self.assertEqual(rc, -errno.EEXIST)
 
         cli.disconnect()
 
