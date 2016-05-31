@@ -199,10 +199,14 @@ int main(int argc, char **argv)
         switch (type) {
         case DSS_DEVICE:
             for (i = 0, dev = item_list; i < item_cnt; i++, dev++) {
-                if (action == DSS_SET_INSERT)
-                    asprintf(&dev->serial, "%sCOPY", dev->serial);
-                if (action == DSS_SET_UPDATE)
-                    asprintf(&dev->host, "%sUPDATE", dev->host);
+                if (action == DSS_SET_INSERT) {
+                    rc = asprintf(&dev->serial, "%sCOPY", dev->serial);
+                    assert(rc > 0);
+                }
+                if (action == DSS_SET_UPDATE) {
+                    rc = asprintf(&dev->host, "%sUPDATE", dev->host);
+                    assert(rc > 0);
+                }
             }
             break;
         case DSS_MEDIA:
@@ -212,7 +216,8 @@ int main(int argc, char **argv)
 
                 if (action == DSS_SET_INSERT) {
                     id = media_id_get(&media->id);
-                    asprintf(&s, "%sCOPY", id);
+                    rc = asprintf(&s, "%sCOPY", id);
+                    assert(rc > 0);
                     media_id_set(&media->id, s);
                 } else if (action == DSS_SET_UPDATE) {
                     media->stats.nb_obj += 1000;
@@ -224,7 +229,8 @@ int main(int argc, char **argv)
                 if (action == DSS_SET_INSERT) {
                     char *s;
 
-                    asprintf(&s, "%sCOPY", object->oid);
+                    rc = asprintf(&s, "%sCOPY", object->oid);
+                    assert(rc > 0);
                     object->oid = s;
                 }
                 if (oidtest)
