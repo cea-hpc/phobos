@@ -113,15 +113,15 @@ function dir_setup
     export dirs="/tmp/test.pho.1 /tmp/test.pho.2"
     mkdir -p $dirs
     echo "adding directories $dirs"
-    $phobos dir add --unlock $dirs
+    $phobos dir add $dirs
     $phobos dir format --fs posix $dirs
 
     # comparing with original list
     $phobos dir list | sort > /tmp/pho_dir.1
     :> /tmp/pho_dir.2
-    # directory ids are <hostname>:<path>
+    #directory ids are <hostname>:<path>
     for d in $dirs; do
-        echo "$(hostname -s):$d" >> /tmp/pho_dir.2
+        echo "$d" >> /tmp/pho_dir.2
     done
     diff /tmp/pho_dir.1 /tmp/pho_dir.2
     rm -f /tmp/pho_dir.1 /tmp/pho_dir.2
@@ -130,11 +130,15 @@ function dir_setup
     d1=$(echo $dirs | nodeset -e | awk '{print $1}')
     $phobos dir show $d1
 
-    # FIXME dir unlock is not implemented
     # unlock all directories but one
-    #for t in $(echo $dirs | nodeset -e -S '\n' | head -n 1); do
-    #    $phobos dir unlock $t
-    #done
+    for t in $(echo $dirs | nodeset -e -S '\n' | head -n 1); do
+        $phobos dir unlock $t
+    done
+}
+
+function dir_cleanup
+{
+    rm -rf /tmp/test.pho.1 /tmp/test.pho.2
 }
 
 function lock_test
@@ -189,6 +193,7 @@ if  [[ ! -w /dev/changer ]]; then
     put_get_test
     check_status dir "$dirs"
     lock_test
+    dir_cleanup
 else
     echo "Tape test mode"
     export PHOBOS_LRS_default_family="tape"
