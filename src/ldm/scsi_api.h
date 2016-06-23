@@ -73,12 +73,16 @@ struct element_status {
     uint8_t error_code_qualifier;
 
     bool src_addr_is_set; /**< true if src_addr is set */
-    uint16_t src_addr; /**< source slot address of the media, previous
-                              *   location */
-
-    char vol[VOL_ID_LEN];    /**< volume id */
-
+    uint16_t src_addr;    /**< src slot addr of the media, previous location */
+    char vol[VOL_ID_LEN]; /**< volume id */
     char dev_id[DEV_ID_LEN]; /**< device id */
+};
+
+/** option flags for scsi_element_status() */
+enum elem_status_flags {
+   ESF_ALLOW_MOTION = (1 << 0), /**< allow arm motion */
+   ESF_GET_LABEL    = (1 << 1), /**< get volume label */
+   ESF_GET_DRV_ID   = (1 << 2), /**< get drive identifier */
 };
 
 /** Call READ ELEMENT STATUS on the given device.
@@ -86,7 +90,7 @@ struct element_status {
  * @param[in] type          Type of element to query.
  * @param[in] start_addr    Address of first element to query (host endianess).
  * @param[in] nb            Number of elements to get.
- * @param[in] allow_motion  Allow a move of physical arm to perform the query.
+ * @param[in] flags        Option flags.
  * @param[out] elmt_list    List of elements information
  *                          (must be released by the caller using
  *                           element_status_list_free()).
@@ -95,9 +99,9 @@ struct element_status {
  * @return 0 on success, error code < 0 on failure.
  * */
 int scsi_element_status(int fd, enum element_type_code type,
-                        uint16_t start_addr, uint16_t nb, bool allow_motion,
+                        uint16_t start_addr, uint16_t nb,
+                        enum elem_status_flags flags,
                         struct element_status **elmt_list, int *elmt_count);
-
 
 /**
  * Free a list allocated by element_status().

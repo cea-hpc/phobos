@@ -71,6 +71,16 @@ const struct pho_config_item pho_cfg_descr[] = {
         .name    = "cmd_format_ltfs",
         .value   = PHO_LDM_HELPER" format_ltfs \"%s\" \"%s\""
     },
+    [PHO_CFG_LDM_lib_scsi_sep_sn_query] = {
+        .section = "ldm",
+        .name    = "lib_scsi_sep_sn_query",
+        .value   = "0", /* no */
+    },
+    [PHO_CFG_LDM_lib_scsi_max_element_status] = {
+        .section = "ldm",
+        .name    = "lib_scsi_max_element_status",
+        .value   = "0", /* unlimited */
+    },
 };
 
 

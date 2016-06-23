@@ -16,6 +16,7 @@
 #include "pho_ldm.h"
 #include "scsi_api.h"
 #include "pho_common.h"
+#include "pho_cfg.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -86,6 +87,37 @@ static void lib_status_clear(struct lib_descriptor *lib)
     memset(&lib->drives, 0, sizeof(lib->drives));
 }
 
+/** Retrieve drive serial numbers in a separate ELEMENT_STATUS request. */
+static int query_drive_sn(struct lib_descriptor *lib)
+{
+    struct element_status   *items = NULL;
+    int                      count = 0;
+    int                      i;
+    int                      rc;
+
+    /* query for drive serial number */
+    rc = scsi_element_status(lib->fd, SCSI_TYPE_DRIVE,
+                             lib->msi.drives.first_addr, lib->msi.drives.nb,
+                             ESF_GET_DRV_ID, &items, &count);
+    if (rc)
+        LOG_RETURN(rc, "scsi_element_status() failed to get drive S/N");
+
+    if (count != lib->drives.count) {
+        free(items);
+        LOG_RETURN(rc, "Wrong drive count returned by scsi_element_status()");
+    }
+
+    /* copy serial number to the library array (should be already allocated) */
+    assert(lib->drives.items != NULL);
+
+    for (i = 0; i < count; i++)
+        strncpy(lib->drives.items[i].dev_id, items[i].dev_id,
+                sizeof(lib->drives.items[i].dev_id));
+
+    free(items);
+    return 0;
+}
+
 /** load status of elements of the given type */
 static int lib_status_load(struct lib_descriptor *lib,
                            enum element_type_code type)
@@ -100,7 +132,9 @@ static int lib_status_load(struct lib_descriptor *lib,
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_ARM) && !lib->arms.loaded) {
         rc = scsi_element_status(lib->fd, SCSI_TYPE_ARM,
                                  lib->msi.arms.first_addr, lib->msi.arms.nb,
-                                 false, &lib->arms.items, &lib->arms.count);
+                                 ESF_GET_LABEL, /* to check if the arm holds
+                                                   a tape */
+                                 &lib->arms.items, &lib->arms.count);
         if (rc)
             LOG_RETURN(rc, "element_status failed for type 'arms'");
 
@@ -111,7 +145,8 @@ static int lib_status_load(struct lib_descriptor *lib,
         && !lib->slots.loaded) {
         rc = scsi_element_status(lib->fd, SCSI_TYPE_SLOT,
                                  lib->msi.slots.first_addr, lib->msi.slots.nb,
-                                 false, &lib->slots.items, &lib->slots.count);
+                                 ESF_GET_LABEL,
+                                 &lib->slots.items, &lib->slots.count);
         if (rc)
             LOG_RETURN(rc, "element_status failed for type 'slots'");
 
@@ -122,7 +157,8 @@ static int lib_status_load(struct lib_descriptor *lib,
         && !lib->impexp.loaded) {
         rc = scsi_element_status(lib->fd, SCSI_TYPE_IMPEXP,
                                  lib->msi.impexp.first_addr, lib->msi.impexp.nb,
-                                 false, &lib->impexp.items, &lib->impexp.count);
+                                 ESF_GET_LABEL,
+                                 &lib->impexp.items, &lib->impexp.count);
         if (rc)
             LOG_RETURN(rc, "element_status failed for type 'impexp'");
 
@@ -131,11 +167,35 @@ static int lib_status_load(struct lib_descriptor *lib,
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_DRIVE)
         && !lib->drives.loaded) {
+        enum elem_status_flags   flags;
+        bool                     separate_query_sn;
+        const char              *opt;
+
+        /* separate S/N query? */
+        opt = pho_cfg_get(PHO_CFG_LDM_lib_scsi_sep_sn_query);
+        separate_query_sn = (opt != NULL && atoi(opt) != 0);
+
+        /* IBM TS3500 can't get both volume label and drive in the same request.
+         * So, first get the tape label and 'full' indication, then query
+         * the drive ID.
+         */
+        if (separate_query_sn)
+            flags = ESF_GET_LABEL;
+        else /* default: get both */
+            flags = ESF_GET_LABEL | ESF_GET_DRV_ID;
+
         rc = scsi_element_status(lib->fd, SCSI_TYPE_DRIVE,
                                  lib->msi.drives.first_addr, lib->msi.drives.nb,
-                                 false, &lib->drives.items, &lib->drives.count);
+                                 flags, &lib->drives.items, &lib->drives.count);
         if (rc)
             LOG_RETURN(rc, "element_status failed for type 'drives'");
+
+        if (separate_query_sn) {
+            /* query drive serial separately */
+            rc = query_drive_sn(lib);
+            if (rc)
+                return rc;
+        }
 
         lib->drives.loaded = true;
     }

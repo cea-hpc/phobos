@@ -6,6 +6,7 @@
  */
 #include "scsi_api.h"
 #include "pho_common.h"
+#include "pho_cfg.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -18,19 +19,24 @@
 
 /* #define DEBUG 1 */
 
+/* Some libraries don't support querying too much elements in a single
+ * ELEMENT_STATUS request.
+ * Start with no limit of chunks, and decrease later (starting from 256)
+ * if the SCSI request fails.
+ */
+#define MAX_ELEMENT_STATUS_CHUNK 256
+
 int scsi_mode_sense(int fd, struct mode_sense_info *info)
 {
-    struct mode_sense_cdb req = {0};
     struct mode_sense_result_header *res_hdr;
     struct mode_sense_result_EAAP   *res_element_addr;
-    struct scsi_req_sense error = {0};
-    unsigned char buffer[MODE_SENSE_BUFF_LEN];
-    int rc;
+    struct scsi_req_sense            error = {0};
+    struct mode_sense_cdb            req = {0};
+    unsigned char                    buffer[MODE_SENSE_BUFF_LEN] = "";
+    int                              rc;
 
     if (!info)
         return -EINVAL;
-
-    memset(buffer, 0, sizeof(buffer));
 
     pho_debug("scsi_execute: MODE_SENSE, buffer_len=%u", MODE_SENSE_BUFF_LEN);
 
@@ -141,31 +147,51 @@ static int read_next_element_status(const struct element_descriptor *elmt,
     }
 
     if (elem_out->type == SCSI_TYPE_DRIVE) {
+        const struct dev_i *dev_info = &elmt->alt_info.dev;
+        int id_len;
+
+        if (!page->pvoltag) {
+            /* if pvoltag is not set, response is shifted by 36 bytes */
+            dev_info = (const struct dev_i *)
+                            ((ptrdiff_t)&elmt->alt_info.dev - 36);
+        }
+
         /* id length (host endianess) */
-        int id_len = elmt->alt_info.dev.id_len;
+        id_len = dev_info->id_len;
 
         /* ensure room for final '\0' */
         if (id_len >= DEV_ID_LEN)
-                id_len = DEV_ID_LEN - 1;
+            id_len = DEV_ID_LEN - 1;
 
         if (id_len > 0) {
-            strncpy(elem_out->dev_id, elmt->alt_info.dev.devid,
-                    id_len);
+            strncpy(elem_out->dev_id, dev_info->devid, id_len);
             elem_out->dev_id[id_len + 1] = '\0';
             rstrip(elem_out->dev_id);
         }
     }
 
-    pho_debug("scsi_type: %d, addr: %#hx, %s, id='%s'", elem_out->type,
-              elem_out->address, elem_out->full ? "full" : "empty",
-              elem_out->dev_id[0] ? elem_out->dev_id : "");
+    if (elem_out->type == SCSI_TYPE_DRIVE) {
+        pho_debug("scsi_type: %d, addr: %#hx, %s, id='%s'", elem_out->type,
+                  elem_out->address, elem_out->full ? "full" : "empty",
+                  elem_out->dev_id);
+    } else {
+        pho_debug("scsi_type: %d, addr: %#hx, %s, vol='%s'", elem_out->type,
+                  elem_out->address, elem_out->full ? "full" : "empty",
+                  elem_out->vol);
+    }
 
     return be16toh(page->ed_len);
 }
 
-int scsi_element_status(int fd, enum element_type_code type,
-                        uint16_t start_addr, uint16_t nb, bool allow_motion,
-                        struct element_status **elmt_list, int *elmt_count)
+/**
+ * Perform the SCSI element status request and decode the returned elements.
+ * @param elmt_list     Allocated element list.
+ * @param elmt_count    Updated by this call.
+ */
+static int _scsi_element_status(int fd, enum element_type_code type,
+                        uint16_t start_addr, uint16_t nb,
+           enum elem_status_flags flags,
+                        struct element_status *elmt_list, int *elmt_count)
 {
     struct read_status_cdb        req = {0};
     struct element_status_header *res_hdr;
@@ -173,8 +199,13 @@ int scsi_element_status(int fd, enum element_type_code type,
     unsigned char                *buffer = NULL;
     int                           len = 0;
     int                           rc, i;
+    int                           curr_index;
+    int                           byte_count;
     unsigned char                *curr;
-    int                           count, byte_count;
+    int                           count;
+
+    assert(elmt_list != NULL);
+    assert(elmt_count != NULL);
 
     /* length to be allocated for the result buffer */
     len = sizeof(struct element_status_header)
@@ -189,22 +220,18 @@ int scsi_element_status(int fd, enum element_type_code type,
               "count=%hu, buffer_len=%u", type, start_addr, nb, len);
 
     req.opcode = READ_ELEMENT_STATUS;
-    req.voltag = 1; /* return volume bar-code */
+    req.voltag = !!(flags & ESF_GET_LABEL); /* return volume bar-code */
     req.element_type_code = type;
     req.starting_address = htobe16(start_addr);
     req.elements_nb = htobe16(nb);
-    req.curdata = allow_motion;
-    req.dvcid = 1; /* return device identifier */
+    req.curdata = !!(flags & ESF_ALLOW_MOTION); /* allow moving arms */
+    req.dvcid = !!(flags & ESF_GET_DRV_ID); /* query device identifier */
     htobe24(len, req.alloc_length);
 
     rc = scsi_execute(fd, SCSI_GET, (unsigned char *)&req, sizeof(req), &error,
                       sizeof(error), buffer, len, QUERY_TIMEOUT_MS);
     if (rc)
         goto free_buff;
-
-    *elmt_list = calloc(nb, sizeof(struct element_status));
-    if (!(*elmt_list))
-        GOTO(free_buff, rc = -ENOMEM);
 
     /* pointer to result header */
     res_hdr = (struct element_status_header *)buffer;
@@ -223,7 +250,7 @@ int scsi_element_status(int fd, enum element_type_code type,
     /* number of bytes returned */
     byte_count = be24toh(res_hdr->byte_count);
 
-    *elmt_count = 0;
+    curr_index = 0;
 
     for (i = 0; i < count && byte_count >= sizeof(struct element_status_page);
          i++) {
@@ -242,12 +269,11 @@ int scsi_element_status(int fd, enum element_type_code type,
 
         while (byte_count > 0) {
             rc = read_next_element_status((struct element_descriptor *)curr,
-                                          page, &((*elmt_list)[*elmt_count]));
+                                          page, &(elmt_list[curr_index]));
             if (rc < 0)
                 goto free_buff;
 
-            (*elmt_count)++;
-
+            curr_index++;
             byte_count -= rc;
             curr += rc;
 #ifdef DEBUG
@@ -256,11 +282,93 @@ int scsi_element_status(int fd, enum element_type_code type,
         }
     }
 
+    (*elmt_count) += curr_index;
     rc = 0;
 
 free_buff:
     free(buffer);
 
+    return rc;
+}
+
+int scsi_element_status(int fd, enum element_type_code type,
+                        uint16_t start_addr, uint16_t nb,
+                        enum elem_status_flags flags,
+                        struct element_status **elmt_list, int *elmt_count)
+{
+    static int  max_element_status_chunk = -1;
+    uint16_t    req_size = nb;
+    int         rc;
+
+    *elmt_count = 0;
+
+    /* check if there is a configured limitation */
+    if (max_element_status_chunk == -1) {
+        const char *opt;
+        int         val;
+
+        opt = pho_cfg_get(PHO_CFG_LDM_lib_scsi_max_element_status);
+        if (opt != NULL) {
+            val = atoi(opt);
+            if (val > 0)
+                max_element_status_chunk = val;
+        }
+    }
+
+    if (max_element_status_chunk != -1 && req_size > max_element_status_chunk)
+        req_size = max_element_status_chunk;
+
+    /* allocate the element list according to the requested count */
+    *elmt_list = calloc(nb, sizeof(struct element_status));
+    if (*elmt_list == NULL)
+        return -ENOMEM;
+
+    /* handle limitation of ELEMENT_STATUS request size:
+     * Start with nb, then try with smaller chunks in case of error. */
+    do {
+        rc = _scsi_element_status(fd, type, start_addr, req_size, flags,
+                                  *elmt_list, elmt_count);
+        if (rc == 0) {
+            if (*elmt_count < req_size)
+                /* end reached */
+                return 0;
+            else
+                /* read next chunks */
+                break;
+        }
+
+        if (max_element_status_chunk == -1) {
+            /* try with the power of 2 <= nb */
+            max_element_status_chunk = MAX_ELEMENT_STATUS_CHUNK;
+            while (max_element_status_chunk > req_size)
+                max_element_status_chunk /= 2;
+            pho_debug("Request failed for %u elements, reducing request size to %u",
+                      req_size, max_element_status_chunk);
+            req_size = max_element_status_chunk;
+            continue;
+        }
+
+        if (max_element_status_chunk > 1) {
+            /* try even smaller */
+            max_element_status_chunk /= 2;
+            pho_debug("Request failed for %u elements, reducing request size to %u",
+                      req_size, max_element_status_chunk);
+            req_size = max_element_status_chunk;
+            continue;
+        }
+
+        /* return the error */
+        return rc;
+    } while (1);
+
+    while (*elmt_count < nb) {
+        rc = _scsi_element_status(fd, type, start_addr + *elmt_count, req_size,
+                                  flags, (*elmt_list) + *elmt_count,
+                                  elmt_count);
+        if (rc)
+            return rc;
+    }
+    pho_debug("Read %u elements out of %u", *elmt_count, nb);
     return rc;
 }
 

@@ -129,7 +129,8 @@ static int single_element_status(int fd, uint16_t addr)
     struct element_status *list = NULL;
     int lcount = 0;
 
-    rc = scsi_element_status(fd, SCSI_TYPE_ALL, addr, 1, false, &list, &lcount);
+    rc = scsi_element_status(fd, SCSI_TYPE_ALL, addr, 1, ESF_GET_LABEL,
+                             &list, &lcount);
     if (rc)
         LOG_RETURN(rc, "status ERROR %d", rc);
 
@@ -162,7 +163,7 @@ int main(int argc, char **argv)
     pho_info("arms: first=%#hX, nb=%d", msi.arms.first_addr, msi.arms.nb);
 
     rc = scsi_element_status(fd, SCSI_TYPE_ARM, msi.arms.first_addr,
-                             msi.arms.nb, false, &list, &lcount);
+                             msi.arms.nb, ESF_GET_LABEL, &list, &lcount);
     if (rc) {
         pho_error(rc, "element_status error");
         exit(EXIT_FAILURE);
@@ -173,7 +174,7 @@ int main(int argc, char **argv)
     pho_info("slots: first=%#hX, nb=%d", msi.slots.first_addr, msi.slots.nb);
 
     rc = scsi_element_status(fd, SCSI_TYPE_SLOT, msi.slots.first_addr,
-                             msi.slots.nb, false, &list, &lcount);
+                             msi.slots.nb, ESF_GET_LABEL, &list, &lcount);
     if (rc) {
         pho_error(rc, "element_status error");
         exit(EXIT_FAILURE);
@@ -186,7 +187,7 @@ int main(int argc, char **argv)
              msi.impexp.first_addr, msi.impexp.nb);
 
     rc = scsi_element_status(fd, SCSI_TYPE_IMPEXP, msi.impexp.first_addr,
-                             msi.impexp.nb, false, &list, &lcount);
+                             msi.impexp.nb, ESF_GET_LABEL, &list, &lcount);
     if (rc) {
         pho_error(rc, "element_status error");
         exit(EXIT_FAILURE);
@@ -197,7 +198,7 @@ int main(int argc, char **argv)
     pho_info("drives: first=%#hX, nb=%d", msi.drives.first_addr, msi.drives.nb);
 
     rc = scsi_element_status(fd, SCSI_TYPE_DRIVE, msi.drives.first_addr,
-                             msi.drives.nb, false, &list, &lcount);
+                             msi.drives.nb, ESF_GET_LABEL, &list, &lcount);
     if (rc) {
         pho_error(rc, "element_status error");
         exit(EXIT_FAILURE);
