@@ -380,9 +380,9 @@ static int dss_media_stats_decode(struct media_stats *stats, const char *json)
     stats->logc_spc_used =
         json_dict2uint64(root, "logc_spc_used", &parse_error);
     stats->phys_spc_used =
-       json_dict2uint64(root, "phys_spc_used", &parse_error);
+        json_dict2uint64(root, "phys_spc_used", &parse_error);
     stats->phys_spc_free =
-       json_dict2uint64(root, "phys_spc_free", &parse_error);
+        json_dict2uint64(root, "phys_spc_free", &parse_error);
 
     if (parse_error > 0)
         LOG_GOTO(out_decref, rc = -EINVAL,
@@ -947,7 +947,7 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
     g_string_free(clause, true);
 
     dss_res_size = sizeof(struct dss_result) + PQntuples(res) * res_size[type];
-    dss_res = malloc(dss_res_size);
+    dss_res = calloc(1, dss_res_size);
     if (dss_res == NULL)
         LOG_RETURN(-ENOMEM, "malloc of size %zu failed", dss_res_size);
 
