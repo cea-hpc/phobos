@@ -44,7 +44,7 @@ test_cfg_SOURCES=test_cfg.c
 test_cfg_LDADD=../cfg/libpho_cfg.la ../common/libpho_common.la
 
 test_scsi_SOURCES=test_scsi.c
-test_scsi_LDADD=../ldm/libpho_scsi.la ../cfg/libpho_cfg.la ../common/libpho_common.la
+test_scsi_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la
 
 test_lintape_SOURCES=test_lintape.c
 test_lintape_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la

@@ -1,8 +1,10 @@
 /* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
+#define _GNU_SOURCE
 #include "pho_test_utils.h"
 #include "../ldm/scsi_api.h"
+#include "pho_ldm.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -30,11 +32,21 @@ static int16_t full_slot = UNSET;
 static int16_t free_slot = UNSET;
 static int16_t arm_addr = UNSET;
 
+static char *one_serial;
+static char *one_label;
+
+
 /** Fill the previous variables for next test scenarios */
 static void save_test_elements(const struct element_status *element)
 {
+    if (element->full && one_label == NULL)
+        one_label = strdup(element->vol);
+
     switch (element->type) {
     case SCSI_TYPE_DRIVE:
+        if (one_serial == NULL && element->dev_id[0] != '\0')
+            one_serial = strdup(element->dev_id);
+
         if (full_drive == UNSET && element->full)
             full_drive = element->address;
         else if (empty_drive == UNSET && !element->full)
@@ -139,12 +151,45 @@ static int single_element_status(int fd, uint16_t addr)
     return 0;
 }
 
+/** tests of the lib adapter API */
+static void test_lib_adapter(void)
+{
+    int rc;
+    struct lib_adapter lib = {0};
+    struct lib_drv_info drv_info;
+    struct lib_item_addr med_addr;
+
+
+    rc = get_lib_adapter(PHO_LIB_SCSI, &lib);
+    if (rc)
+        exit(EXIT_FAILURE);
+
+    rc = ldm_lib_open(&lib, "/dev/changer");
+    if (rc)
+        exit(EXIT_FAILURE);
+
+    if (one_serial) {
+        rc = ldm_lib_drive_lookup(&lib, one_serial, &drv_info);
+        if (rc)
+            exit(EXIT_FAILURE);
+    }
+
+    if (one_label) {
+        rc = ldm_lib_media_lookup(&lib, one_label, &med_addr);
+        if (rc)
+            exit(EXIT_FAILURE);
+    }
+
+    ldm_lib_close(&lib);
+}
+
 int main(int argc, char **argv)
 {
     struct mode_sense_info msi = { {0} };
     int fd, rc;
     struct element_status *list = NULL;
     int lcount = 0;
+    char *val = NULL;
 
     test_env_initialize();
 
@@ -181,6 +226,30 @@ int main(int argc, char **argv)
     }
 
     print_elements(list, lcount);
+    free(list);
+
+    /* try with a limited chunk size (force splitting in 4 chunks) */
+    if (asprintf(&val, "%u", msi.slots.nb / 4) == -1 || val == NULL) {
+        pho_error(errno, "asprintf failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (setenv("PHOBOS_LDM_lib_scsi_max_element_status", val, 1)) {
+        pho_error(errno, "setenv failed");
+        exit(EXIT_FAILURE);
+    }
+
+    rc = scsi_element_status(fd, SCSI_TYPE_SLOT, msi.slots.first_addr,
+                             msi.slots.nb, ESF_GET_LABEL, &list, &lcount);
+    if (rc) {
+        pho_error(rc, "element_status error");
+        exit(EXIT_FAILURE);
+    }
+
+    if (lcount != msi.slots.nb) {
+        pho_error(rc, "Invalid count returned: %d != %d", lcount, msi.slots.nb);
+        exit(EXIT_FAILURE);
+    }
     free(list);
 
     pho_info("imp/exp: first=%#hX, nb=%d",
@@ -251,6 +320,16 @@ int main(int argc, char **argv)
         single_element_status(fd, full_drive);
         single_element_status(fd, free_slot);
     }
+
+    /* test of the lib adapter API */
+    test_lib_adapter();
+
+    /* same test with PHO_CFG_LDM_lib_scsi_sep_sn_query=1 */
+    if (setenv("PHOBOS_LDM_lib_scsi_sep_sn_query", "1", 1)) {
+        pho_error(errno, "setenv failed");
+        exit(EXIT_FAILURE);
+    }
+    test_lib_adapter();
 
     exit(EXIT_SUCCESS);
 }
