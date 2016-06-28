@@ -69,7 +69,7 @@ class PhobosHook(object):
     """High level interface for C structures exposed by SWIG."""
     #pylint: disable=not-callable
     src_cls = None
-    display_fields = []
+    display_fields = {}
 
     def __init__(self, inst=None, **kwargs):
         """Initialize new instance of Phobos object wrapper."""
@@ -99,10 +99,10 @@ class PhobosHook(object):
     def todict(self, numeric=False):
         """export object attributs as dict"""
         export = {}
-        for key in self.display_fields:
-            if not numeric and hasattr(cdss, '%s2str' % key):
-                method = getattr(cdss, '%s2str' % key)
-                export[key] = method(getattr(self._inst, key))
+        for key in sorted(self.display_fields.keys()):
+            if not numeric and self.display_fields[key]:
+                reprt = self.display_fields.get(key, lambda x: x)
+                export[key] = reprt(getattr(self._inst, key))
             elif hasattr(self._inst, key):
                 export[key] = str(getattr(self._inst, key))
             else:
@@ -112,14 +112,30 @@ class PhobosHook(object):
 class CliDevice(PhobosHook):
     """Device python object"""
     src_cls = cdss.dev_info
-    display_fields = ['adm_status', 'family', 'host', 'model',
-                      'path', 'serial']
+    shortname = "dev"
+    display_fields = {
+        'adm_status': cdss.adm_status2str,
+        'family': cdss.dev_family2str,
+        'host': None,
+        'model': None,
+        'path': None,
+        'serial': None
+    }
 
 class CliMedia(PhobosHook):
     """Media python object"""
     src_cls = cdss.media_info
-    display_fields = ['adm_status', 'fs_status', 'fs_type', 'addr_type',
-                      'model', 'ident', 'lock_status', 'lock_ts']
+    shortname = "media"
+    display_fields = {
+        'adm_status': cdss.adm_status2str,
+        'fs_status': cdss.fs_status2str,
+        'fs_type': cdss.fs_type2str,
+        'addr_type': None,
+        'model': None,
+        'ident': None,
+        'lock_status': None,
+        'lock_ts': None
+    }
 
     def todict(self, numeric=False):
         """export media attribts as dict"""
