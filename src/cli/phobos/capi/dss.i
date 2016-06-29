@@ -28,41 +28,6 @@ typedef long time_t;
 typedef int  int32_t;
 typedef unsigned long long uint64_t;
 
-/**
- * typemap(in): python -> c
- * allow crit lists to be passed in as Python Lists of crit() objects.
- */
-%typemap(in) (struct dss_crit *crit, int crit_cnt) {
-    int i;
-    if (!PyList_Check($input)) {
-        PyErr_SetString(PyExc_TypeError, "must be a list");
-        return NULL;
-    }
-    $2 = PyList_Size($input);
-    if ($2 > 0) {
-        $1 = malloc($2 * sizeof(struct dss_crit));
-        for (i = 0; i < $2; i++) {
-            struct dss_crit *c;
-
-            SWIG_ConvertPtr(PyList_GET_ITEM($input, i),
-                            (void **)&c,
-                            $descriptor(struct dss_crit *),
-                            SWIG_POINTER_EXCEPTION);
-            $1[i] = *c;
-        }
-    } else {
-        $1 = NULL;
-        $2 = 0;
-    }
-}
-/**
- * typemap(freearg): free resources allocated in the corresponding typemap(in)
- */
-%typemap(freearg) (struct dss_crit *crit, int crit_cnt) {
-    free($1);
-}
-
-
 /* --- DEVICE GET --- */
 /**
  * typemap(in): python -> c

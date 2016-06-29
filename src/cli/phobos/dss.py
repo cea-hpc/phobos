@@ -9,6 +9,7 @@ to interact with phobos DSS layer, as it provides a safe, expressive and
 clean API to access it.
 """
 
+import json
 import logging
 import os.path
 from socket import gethostname
@@ -18,22 +19,21 @@ import phobos.capi.ldm as cldm
 
 
 # Valid filter suffix and associated operators.
-# No suffix means DSS_CMP_EQ.
 FILTER_OPERATORS = (
-    ('__not', cdss.DSS_CMP_NE),
-    ('__gt', cdss.DSS_CMP_GT),
-    ('__ge', cdss.DSS_CMP_GE),
-    ('__lt', cdss.DSS_CMP_LT),
-    ('__le', cdss.DSS_CMP_LE),
-    ('__like', cdss.DSS_CMP_LIKE),
-    ('__jcontain', cdss.DSS_CMP_JSON_CTN),
-    ('__jexist', cdss.DSS_CMP_JSON_EXIST)
+    ('__not', '$NOR'),
+    ('__gt', '$GT'),
+    ('__ge', '$GTE'),
+    ('__lt', '$LT'),
+    ('__le', '$LTE'),
+    ('__like', '$LIKE'),
+    ('__jcontain', '$INJSON'),
+    ('__jexist', '$XJSON')
 )
 
 OBJECT_PREFIXES = {
-    'device': 'DSS_DEV',
-    'extent': 'DSS_EXT',
-    'media':  'DSS_MDA',
+    'device': 'DSS::DEV::',
+    'extent': 'DSS::EXT::',
+    'media':  'DSS::MDA::',
 }
 
 
@@ -41,29 +41,31 @@ class GenericError(BaseException):
     """Base error to described DSS failures."""
 
 def key_convert(obj_type, key):
-    """Split key, return actual name and associated DSS_CMP_* operator."""
+    """Split key, return actual name and associated operator."""
     kname = key
-    comp = cdss.DSS_CMP_EQ # default
+    comp = None # default (equal)
     kname_prefx = OBJECT_PREFIXES[obj_type] # KeyError on unsupported obj_type
     for sufx, comp_enum in FILTER_OPERATORS:
         if key.endswith(sufx):
             kname, comp = key[:len(sufx):], comp_enum
             break
-    return getattr(cdss, '%s_%s' % (kname_prefx, kname)), comp
-
+    return "%s%s" % (kname_prefx, kname), comp
 
 def dss_filter(obj_type, **kwargs):
     """Convert a k/v filter into a CDSS-compatible list of criteria."""
-    filt = []
+    filter = cdss.dss_filter()
+    criteria = []
     for key, val in kwargs.iteritems():
         key, comp = key_convert(obj_type, key)
-        crit = cdss.dss_crit()
-        crit.crit_name = key
-        crit.crit_cmp = comp
-        crit.crit_val = cdss.dss_val()
-        cdss.str2dss_val_fill(key, str(val), crit.crit_val)
-        filt.append(crit)
-    return filt
+        if comp is None:
+            # Implicit equal
+            criteria.append({key: val})
+        else:
+            criteria.append({comp: {key: val}})
+    rc = cdss.dss_filter_build(filter, json.dumps({"$AND": criteria}))
+    if rc:
+        raise "Invalid filter criteria"
+    return filter
 
 class PhobosHook(object):
     """High level interface for C structures exposed by SWIG."""

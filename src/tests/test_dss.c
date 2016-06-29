@@ -27,7 +27,6 @@
 
 int main(int argc, char **argv)
 {
-    int     rc;
     struct dss_handle    dss_handle;
     enum dss_type        type;
     enum dss_set_action  action;
@@ -36,12 +35,11 @@ int main(int argc, char **argv)
     struct  object_info *object;
     struct  layout_info *layout;
     struct  extent      *extents;
+    struct dss_filter   *filter = NULL;
     void                *item_list;
     int                  item_cnt;
-    struct  dss_crit    *crit;
-    int                  crit_cnt;
     int                  i, j;
-    char                *parser;
+    int                  rc;
     bool                 oidtest = false;
 
     test_env_initialize();
@@ -78,38 +76,21 @@ int main(int argc, char **argv)
 
         if (argc == 4) {
             pho_info("Crit Filter: %s", argv[3]);
-            parser = strtok(argv[3], " ");
-            if (!parser) {
-                pho_error(EINVAL, "Command line parsing failed");
-                exit(EXIT_FAILURE);
-            }
-
-            if (!strcmp(parser, "all")) {
-                crit_cnt = 0;
-                crit = NULL;
-            } else {
-                crit = malloc(sizeof(struct dss_crit));
-                crit->crit_name = str2dss_fields(parser);
-                parser = strtok(NULL, " ");
-                if (!parser) {
-                    pho_error(EINVAL, "Command line parsing failed");
+            if (strcmp(argv[3], "all") != 0) {
+                filter = malloc(sizeof(*filter));
+                if (!filter) {
+                    pho_error(ENOMEM, "Cannot allocate DSS filter");
                     exit(EXIT_FAILURE);
                 }
-                crit->crit_cmp = str2dss_cmp(parser);
-                parser = strtok(NULL, " ");
-                if (!parser) {
-                    pho_error(EINVAL, "Command line parsing failed");
+                rc = dss_filter_build(filter, "%s", argv[3]);
+                if (rc) {
+                    pho_error(rc, "Cannot build DSS filter");
                     exit(EXIT_FAILURE);
                 }
-                str2dss_val_fill(crit->crit_name, parser, &crit->crit_val);
-                crit_cnt = 1;
             }
-        } else {
-            crit = NULL;
-            crit_cnt = 0;
         }
 
-        rc = dss_get(&dss_handle, type, crit, crit_cnt, &item_list, &item_cnt);
+        rc = dss_get(&dss_handle, type, filter, &item_list, &item_cnt);
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
@@ -187,10 +168,8 @@ int main(int argc, char **argv)
                         oidtest = true;
                         pho_debug("Switch to oidtest mode (test null oid)");
                 }
-        crit_cnt = 0;
-        crit = NULL;
 
-        rc = dss_get(&dss_handle, type, crit, crit_cnt, &item_list, &item_cnt);
+        rc = dss_get(&dss_handle, type, NULL, &item_list, &item_cnt);
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
@@ -268,7 +247,7 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_get(&dss_handle, type, NULL, 0, &item_list, &item_cnt);
+        rc = dss_get(&dss_handle, type, NULL, &item_list, &item_cnt);
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
@@ -288,7 +267,7 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_get(&dss_handle, type, NULL, 0, &item_list, &item_cnt);
+        rc = dss_get(&dss_handle, type, NULL, &item_list, &item_cnt);
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);

@@ -91,77 +91,78 @@ insert_examples
 echo
 
 echo "**** TESTS: DSS_GET DEV ****"
-test_check_get "device" "all"
-test_check_get "device" "path LIKE /dev%"
-test_check_get "device" "family = tape"
-test_check_get "device" "family = dir"
-test_check_get "device" "id != foo"
-test_check_get "device" "host != foo"
-test_check_get "device" "adm_status = unlocked"
-test_check_get "device" "model = ULTRIUM-TD6"
+test_check_get "device" 'all'
+test_check_get "device" '{"$LIKE": {"DSS:DEV::path": "/dev%"}}'
+test_check_get "device" '{"DSS::DEV::family": "tape"}'
+test_check_get "device" '{"DSS::DEV::family": "dir"}'
+test_check_get "device" '{"$NOR": [{"DSS::DEV::id": "foo"}]}'
+test_check_get "device" '{"$NOR": [{"DSS::DEV::host": "foo"}]}'
+test_check_get "device" '{"DSS::DEV::adm_status": "unlocked"}'
+test_check_get "device" '{"DSS::DEV::model": "ULTRIUM-TD6"}'
 
 
 echo "**** TESTS: DSS_GET MEDIA ****"
 test_check_get "media" "all"
-test_check_get "media" "(stats->>'phys_spc_used')::bigint > 42469425152"
-test_check_get "media" "(stats->>'phys_spc_used')::bigint = 42469425152"
-test_check_get "media" "(stats->>'phys_spc_used')::bigint < 42469425152"
-test_check_get "media" "family = tape"
-test_check_get "media" "family = dir"
-test_check_get "media" "model = LTO6"
-test_check_get "media" "id != foo"
-test_check_get "media" "adm_status != unlocked"
-test_check_get "media" "fs_type != LTFS"
-test_check_get "media" "address_type != HASH1"
-test_check_get "media" "fs_status != blank"
+test_check_get "media" '{"$LT": {"DSS::MDA::vol_used": 42469425152}}'
+test_check_get "media" '{"DSS::MDA::vol_used": 42469425152}'
+test_check_get "media" '{"$GT": {"DSS::MDA::vol_used": 42469425152}}'
+test_check_get "media" '{"DSS::MDA::family": "tape"}'
+test_check_get "media" '{"DSS::MDA::family": "dir"}'
+test_check_get "media" '{"DSS::MDA::model": "LTO6"}'
+test_check_get "media" '{"$NOR": [{"DSS::MDA::id": "foo"}]}'
+test_check_get "media" '{"$NOR": [{"DSS::MDA::adm_status": "unlocked"}]}'
+test_check_get "media" '{"$NOR": [{"DSS::MDA::fs_type": "LTFS"}]}'
+test_check_get "media" '{"$NOR": [{"DSS::MDA::addr_type": "HASH1"}]}'
+test_check_get "media" '{"$NOR": [{"DSS::MDA::fs_status": "blank"}]}'
 
 echo "**** TESTS: DSS_GET OBJECT ****"
-test_check_get "object" "all"
-test_check_get "object" "oid LIKE 012%"
-test_check_get "object" "oid LIKE koéèê^!$£}[<>à@\\\"~²§ok"
+test_check_get "object" 'all'
+test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "012%"}}'
+test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "koéèê^!$£}[<>à@\\"}}'
 
 echo "**** TESTS: DSS_GET EXTENT ****"
-test_check_get "extent" "all"
-test_check_get "extent" "extents_mda_idx(extent.extents) @> 073221L6"
+test_check_get "extent" 'all'
+test_check_get "extent" '{"$INJSON": {"DSS::EXT::media_idx": "073221L6"}}'
 test_check_get "extent" \
-	       "extents_mda_idx(extent.extents) @> phobos1:/tmp/pho_testdir1"
-test_check_get "extent" "extents_mda_idx(extent.extents) @> DONOTEXIST"
-test_check_get "extent" "extents_mda_idx(extent.extents) @> phobos1:/donotexist"
-test_check_get "extent" "oid = QQQ6ASQDSQD"
-test_check_get "extent" "oid != QQQ6ASQDSQD"
-test_check_get "extent" "oid LIKE Q%D"
-test_check_get "extent" "copy_num = 0"
-test_check_get "extent" "state = pending"
-test_check_get "extent" "lyt_type = simple"
+  '{"$INJSON": {"DSS::EXT::media_idx": "phobos1:/tmp/pho_testdir1"}}'
+test_check_get "extent" '{"$INJSON": {"DSS::EXT::media_idx": "DOESNOTEXIST"}}'
+test_check_get "extent" \
+  '{"$INJSON": {"DSS::EXT::media_idx": "phobos1:/tmp/doesnotexist"}}'
+test_check_get "extent" '{"DSS::EXT::oid": "QQQ6ASQDSQD"}'
+test_check_get "extent" '{"$NOR": [{"DSS::EXT::oid": "QQQ6ASQDSQD"}]}'
+test_check_get "extent" '{"$LIKE": {"DSS::EXT::oid": "Q%D"}}'
+test_check_get "extent" '{"DSS::EXT::copy_num": 0}'
+test_check_get "extent" '{"DSS::EXT::state": "pending"}'
+test_check_get "extent" '{"DSS::EXT::lyt_type": "simple"}'
 
 echo "**** TEST: DSS_SET DEVICE ****"
 test_check_set "device" "insert"
-test_check_get "device" "id LIKE %COPY%"
+test_check_get "device" '{"$LIKE": {"DSS::DEV::id": "%COPY%"}}'
 test_check_set "device" "update"
-test_check_get "device" "host LIKE %UPDATE%"
+test_check_get "device" '{"$LIKE": {"DSS::DEV::host": "%UPDATE%"}}'
 test_check_set "device" "delete"
-test_check_get "device" "id LIKE %COPY%"
+test_check_get "device" '{"$LIKE": {"DSS::DEV::id": "%COPY%"}}'
 echo "**** TEST: DSS_SET MEDIA  ****"
 test_check_set "media" "insert"
-test_check_get "media" "id LIKE %COPY%"
+test_check_get "media" '{"$LIKE": {"DSS::MDA::id": "%COPY%"}}'
 test_check_set "media" "update"
-test_check_get "media" "stats::json->>'nb_obj' > 1002"
+test_check_get "media" '{"$GT": {"DSS::MDA::nb_obj": "1002"}}'
 test_check_set "media" "delete"
-test_check_get "media" "id LIKE %COPY%"
+test_check_get "media" '{"$LIKE": {"DSS::MDA::id": "%COPY%"}}'
 echo "**** TEST: DSS_SET OBJECT  ****"
 test_check_set "object" "insert"
-test_check_get "object" "oid LIKE %COPY%"
+test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
 #test_check_set "object" "update"
 test_check_set "object" "delete"
-test_check_get "object" "oid LIKE %COPY%"
+test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
 echo "**** TEST: DSS_SET EXTENT  ****"
 test_check_set "extent" "insert"
-test_check_get "extent" "oid LIKE %COPY%"
+test_check_get "extent" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
 test_check_set "extent" "update"
-test_check_get "extent" "oid LIKE %COPY%"
+test_check_get "extent" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
 test_check_set "extent" "delete" "oidtest" "FAIL"
 test_check_set "extent" "delete"
-test_check_get "extent" "oid LIKE %COPY%"
+test_check_get "extent" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
 
 insert_examples
 

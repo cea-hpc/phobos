@@ -253,9 +253,8 @@ static int lrs_fill_media_info(struct dss_handle *dss,
                                const struct media_id *id)
 {
     struct media_info   *media_res = NULL;
-    struct dss_crit      med_crit[3]; /* criteria on family+id */
-    int                  med_crit_cnt = 0;
     const char          *id_str;
+    struct dss_filter    filter;
     int                  mcnt = 0;
     int                  rc;
 
@@ -267,15 +266,18 @@ static int lrs_fill_media_info(struct dss_handle *dss,
     pho_debug("Retrieving media info for %s '%s'",
               dev_family2str(id->type), id_str);
 
-    dss_crit_add(med_crit, &med_crit_cnt, DSS_MDA_family, DSS_CMP_EQ, val_int,
-                 id->type);
-    dss_crit_add(med_crit, &med_crit_cnt, DSS_MDA_id, DSS_CMP_EQ, val_str,
-                 media_id_get(id));
-
-    /* get media info from DB */
-    rc = dss_media_get(dss, med_crit, med_crit_cnt, &media_res, &mcnt);
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::MDA::family\": \"%s\"},"
+                          "  {\"DSS::MDA::id\": \"%s\"}"
+                          "]}", dev_family2str(id->type), media_id_get(id));
     if (rc)
         return rc;
+
+    /* get media info from DB */
+    rc = dss_media_get(dss, &filter, &media_res, &mcnt);
+    if (rc)
+        GOTO(out_nores, rc);
 
     if (mcnt == 0) {
         pho_info("No media found matching %s '%s'",
@@ -300,6 +302,8 @@ static int lrs_fill_media_info(struct dss_handle *dss,
 
 out_free:
     dss_res_free(media_res, mcnt);
+out_nores:
+    dss_filter_free(&filter);
     return rc;
 }
 
@@ -438,10 +442,9 @@ static int lrs_load_dev_state(struct dss_handle *dss)
 {
     struct dev_info    *devs = NULL;
     int                 dcnt = 0;
-    int                 i, rc;
-    /* criteria: host, tape device, device adm_status */
-    struct dss_crit     crit[4];
-    int                 crit_cnt = 0;
+    struct dss_filter   filter;
+    int                 i;
+    int                 rc;
     enum dev_family     family;
     struct lib_adapter  lib;
 
@@ -453,34 +456,38 @@ static int lrs_load_dev_state(struct dss_handle *dss)
     if (family == PHO_DEV_INVAL)
         return -EINVAL;
 
-    dss_crit_add(crit, &crit_cnt, DSS_DEV_host, DSS_CMP_EQ, val_str,
-                 get_hostname());
-    dss_crit_add(crit, &crit_cnt, DSS_DEV_adm_status, DSS_CMP_EQ, val_int,
-                 PHO_DEV_ADM_ST_UNLOCKED);
-    dss_crit_add(crit, &crit_cnt, DSS_DEV_family, DSS_CMP_EQ, val_int,
-                 family);
-    dss_crit_add(crit, &crit_cnt, DSS_DEV_lock, DSS_CMP_EQ, val_str, "");
-
-    /* get all unlocked devices from DB for the given family */
-    rc = dss_device_get(dss, crit, crit_cnt, &devs, &dcnt);
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::DEV::host\": \"%s\"},"
+                          "  {\"DSS::DEV::adm_status\": \"%s\"},"
+                          "  {\"DSS::DEV::family\": \"%s\"},"
+                          "  {\"DSS::DEV::lock\": \"\"} ]}",
+                          get_hostname(),
+                          adm_status2str(PHO_DEV_ADM_ST_UNLOCKED),
+                          dev_family2str(family));
     if (rc)
         return rc;
+
+    /* get all unlocked devices from DB for the given family */
+    rc = dss_device_get(dss, &filter, &devs, &dcnt);
+    if (rc)
+        GOTO(err_nores, rc);
 
     if (dcnt == 0) {
         pho_info("No usable device found (%s): check devices status",
                  dev_family2str(family));
-        return -EAGAIN;
+        GOTO(err, rc = -EAGAIN);
     }
 
     dev_count = dcnt;
     devices = (struct dev_descr *)calloc(dcnt, sizeof(*devices));
     if (devices == NULL)
-        return -ENOMEM;
+        GOTO(err, rc = -ENOMEM);
 
     /* get a handle to the library to query it */
     rc = wrap_lib_open(family, &lib);
     if (rc)
-        return rc;
+        GOTO(err, rc);
 
     for (i = 0 ; i < dcnt; i++) {
         rc = lrs_fill_dev_info(dss, &lib, &devices[i], &devs[i]);
@@ -493,9 +500,14 @@ static int lrs_load_dev_state(struct dss_handle *dss)
     /* close handle to the library */
     ldm_lib_close(&lib);
 
+    rc = 0;
+
+err:
     /* free devs array, as they have been copied to devices[].device */
     dss_res_free(devs, dcnt);
-    return 0;
+err_nores:
+    dss_filter_free(&filter);
+    return rc;
 }
 
 /**
@@ -506,39 +518,44 @@ static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
                             size_t required_size, enum dev_family family,
                             const char *device_model)
 {
-    int                mcnt = 0;
-    int                rc, i;
-    struct dss_crit    crit[6];
-    int                crit_cnt = 0;
-    struct media_info *media_best;
-    struct media_info *pmedia_res = NULL;
+    struct media_info   *pmedia_res = NULL;
+    struct media_info   *media_best;
+    struct dss_filter    filter;
+    int                  mcnt = 0;
+    int                  rc;
+    int                  i;
     ENTRY;
 
-    /* criteria: family, (model,) adm_status, available size, fs_status */
-    dss_crit_add(crit, &crit_cnt, DSS_MDA_family, DSS_CMP_EQ, val_int,
-                 family);
-    dss_crit_add(crit, &crit_cnt, DSS_MDA_adm_status, DSS_CMP_EQ, val_int,
-                 PHO_MDA_ADM_ST_UNLOCKED);
-    dss_crit_add(crit, &crit_cnt, DSS_MDA_vol_free, DSS_CMP_GE, val_biguint,
-                 required_size);
-    /* Exclude non-formatted media */
-    dss_crit_add(crit, &crit_cnt, DSS_MDA_fs_status, DSS_CMP_NE, val_int,
-                 PHO_FS_STATUS_BLANK);
-    /* Exclude full media */
-    dss_crit_add(crit, &crit_cnt, DSS_MDA_fs_status, DSS_CMP_NE, val_int,
-                 PHO_FS_STATUS_FULL);
-    /* Exclude locked media */
-    dss_crit_add(crit, &crit_cnt, DSS_MDA_lock, DSS_CMP_EQ, val_str, "");
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          /* Basic criteria */
+                          "  {\"DSS::MDA::family\": \"%s\"},"
+                          "  {\"DSS::MDA::adm_status\": \"%s\"},"
+                          "  {\"$GE\": {\"DSS::MDA::vol_free\": %zu}},"
+                          /* Exclude locked media */
+                          "  {\"DSS::MDA::lock\": \"\"},",
+                          "  {\"$NOR\": ["
+                               /* Exclude non-formatted media */
+                          "    {\"DSS::MDA::fs_status\": \"%s\"},"
+                               /* Exclude full media */
+                          "    {\"DSS::MDA::fs_status\": \"%s\"}"
+                          "  ]}"
+                          "]}",
+                          dev_family2str(family),
+                          media_adm_status2str(PHO_MDA_ADM_ST_UNLOCKED),
+                          required_size, fs_status2str(PHO_FS_STATUS_BLANK),
+                          fs_status2str(PHO_FS_STATUS_FULL));
+    if (rc)
+        return rc;
 
     /**
      * @TODO
      * Use configurable compatility rules to determine writable
      * media models from device_model
      */
-
-    rc = dss_media_get(dss, crit, crit_cnt, &pmedia_res, &mcnt);
+    rc = dss_media_get(dss, &filter, &pmedia_res, &mcnt);
     if (rc)
-        return rc;
+        GOTO(err_nores, rc);
 
 lock_race_retry:
     media_best = NULL;
@@ -586,6 +603,9 @@ free_res:
         lrs_media_release(dss, media_best);
 
     dss_res_free(pmedia_res, mcnt);
+
+err_nores:
+    dss_filter_free(&filter);
     return rc;
 }
 

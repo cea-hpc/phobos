@@ -12,6 +12,7 @@
 #endif
 
 #include "pho_common.h"
+#include "pho_type_utils.h"
 #include "pho_dss.h"
 #include <errno.h>
 #include <stdlib.h>
@@ -46,6 +47,20 @@ static void dss_pq_logger(void *arg, const char *message)
         mlen -= 1;
 
     pho_info("%*s", (int)mlen, message);
+}
+
+static inline char *dss_char4sql(const char *s)
+{
+    char *ns;
+
+    if (s != NULL && s[0] != '\0') {
+        if (asprintf(&ns, "'%s'", s) == -1)
+            return NULL;
+    } else {
+        ns = strdup("NULL");
+    }
+
+    return ns;
 }
 
 int dss_init(const char *conninfo, struct dss_handle *handle)
@@ -179,83 +194,40 @@ static char *json_dict2char(const struct json_t *obj, const char *key, int *err)
     return val;
 }
 
-
-/**
- * Converts one criteria to a psql WHERE clause
- * @param[in]   crit    a single criteria to handle
- * @param[out]  clause  clause is appended here
- */
-static int dss_crit_to_pattern(PGconn *conn, const struct dss_crit *crit,
-                               GString *clause)
+void dss_filter_free(struct dss_filter *filter)
 {
+    if (filter && filter->df_json)
+        json_decref(filter->df_json);
+}
 
-    char        *escape_string;
-    unsigned int escape_len;
-    int          error;
+int dss_filter_build(struct dss_filter *filter, const char *fmt, ...)
+{
+    json_error_t    err;
+    va_list         args;
+    char           *query;
+    int             rc;
 
-    g_string_append_printf(clause, "%s %s ",
-                           dss_fields2str(crit->crit_name),
-                           dss_cmp2str(crit->crit_cmp));
+    if (!filter)
+        return -EINVAL;
 
-    switch (dss_fields2type(crit->crit_name)) {
-    case DSS_VAL_BIGINT:
-        g_string_append_printf(clause, "'%" PRId64 "'",
-                               crit->crit_val.val_bigint);
-        break;
-    case DSS_VAL_INT:
-        g_string_append_printf(clause, "'%" PRId32 "'",
-                               crit->crit_val.val_int);
-        break;
-    case DSS_VAL_BIGUINT:
-        g_string_append_printf(clause, "'%" PRIu64 "'",
-                               crit->crit_val.val_biguint);
-        break;
-    case DSS_VAL_UINT:
-        g_string_append_printf(clause, "'%" PRIu32 "'",
-                               crit->crit_val.val_uint);
-        break;
-    case DSS_VAL_ENUM:
-        g_string_append_printf(clause, "'%s'",
-                               dss_fields_enum2str(crit->crit_name,
-                                                   crit->crit_val.val_int));
-        break;
+    memset(filter, 0, sizeof(*filter));
 
-    case DSS_VAL_JSON:
-        LOG_RETURN(-EINVAL, "Filters apply on keys, not entire JSON objects");
+    va_start(args, fmt);
+    rc = vasprintf(&query, fmt, args);
+    va_end(args);
 
-    case DSS_VAL_ARRAY:
-    case DSS_VAL_STR:
-        /**
-         *  According to libpq #1.3.2
-         *  "point to" a buffer that is able to hold at least
-         *  one more byte than twice the value of length,
-         *  otherwise the behavior is undefined.
-         */
-        escape_len = strlen(crit->crit_val.val_str) * 2 + 1;
-        escape_string = malloc(escape_len);
-        if (!escape_string)
-            return -ENOMEM;
+    if (rc < 0)
+        return -ENOMEM;
 
-        PQescapeStringConn(conn, escape_string, crit->crit_val.val_str,
-                           escape_len, &error);
-        if (error) {
-                free(escape_string);
-                LOG_RETURN(-EINVAL, "Multibyte encoding error");
-        }
+    filter->df_json = json_loads(query, JSON_REJECT_DUPLICATES, &err);
+    if (!filter->df_json)
+        LOG_GOTO(out_free, rc = -EINVAL, "Cannot decode filter: %s", err.text);
 
-        if (dss_fields2type(crit->crit_name) == DSS_VAL_ARRAY)
-            g_string_append_printf(clause, "array['%s']", escape_string);
-        else
-            g_string_append_printf(clause, "'%s'", escape_string);
-        free(escape_string);
-        break;
+    rc = 0;
 
-    case DSS_VAL_UNKNOWN:
-    default:
-        LOG_RETURN(-EINVAL, "Attempt to filter on unknown type");
-    }
-
-    return 0;
+out_free:
+    free(query);
+    return rc;
 }
 
 /**
@@ -889,9 +861,187 @@ static inline char *get_str_value(PGresult *res, int row_number,
     return PQgetvalue(res, row_number, column_number);
 }
 
+static inline bool key_is_logical_op(const char *key)
+{
+    return !g_ascii_strcasecmp(key, "$AND") ||
+           !g_ascii_strcasecmp(key, "$NOR") ||
+           !g_ascii_strcasecmp(key, "$OR");
+}
+
+static int insert_string(GString *qry, const char *strval, bool is_idx)
+{
+    size_t   esc_len = strlen(strval) * 2 + 1;
+    char    *esc_str;
+
+    esc_str = malloc(esc_len);
+    if (!esc_str)
+        return -ENOMEM;
+
+    /**
+     * XXX This function has been deprecated in favor of PQescapeStringConn
+     * but it is *safe* in this single-threaded single-DB case and it makes
+     * the code slightly lighter here.
+     */
+    PQescapeString(esc_str, strval, esc_len);
+
+    if (is_idx)
+        g_string_append_printf(qry, "array['%s']", esc_str);
+    else
+        g_string_append_printf(qry, "'%s'", esc_str);
+
+    free(esc_str);
+    return 0;
+}
+
+static int json2sql_object_begin(struct saj_parser *parser, const char *key,
+                                 json_t *value, void *priv)
+{
+    const char  *current_key = saj_parser_key(parser);
+    GString     *str = priv;
+    bool         str_index = false;
+    int          rc;
+
+    /* out-of-context: nothing to do */
+    if (!key)
+        return 0;
+
+    /* operators will be stacked as contextual keys: nothing to do */
+    if (key[0] == '$')
+        return 0;
+
+    /* Not an operator: write the affected field name */
+    g_string_append_printf(str, "%s", dss_fields_pub2implem(key));
+
+    /* -- key is an operator: translate it into SQL -- */
+
+    /* If top-level key is a logical operator, we have an implicit '=' */
+    if (!current_key || key_is_logical_op(current_key)) {
+        g_string_append(str, " = ");
+    } else if (!g_ascii_strcasecmp(current_key, "$GT")) {
+        g_string_append(str, " > ");
+    } else if (!g_ascii_strcasecmp(current_key, "$GTE")) {
+        g_string_append(str, " >= ");
+    } else if (!g_ascii_strcasecmp(current_key, "$LT")) {
+        g_string_append(str, " < ");
+    } else if (!g_ascii_strcasecmp(current_key, "$LTE")) {
+        g_string_append(str, " <= ");
+    } else if (!g_ascii_strcasecmp(current_key, "$LIKE")) {
+        g_string_append(str, " LIKE ");
+    } else if (!g_ascii_strcasecmp(current_key, "$INJSON")) {
+        g_string_append(str, " @> ");
+        str_index = true;
+    } else if (!g_ascii_strcasecmp(current_key, "$XJSON")) {
+        g_string_append(str, " ? ");
+    } else {
+        LOG_RETURN(-EINVAL, "Unexpected operator: '%s'", current_key);
+    }
+
+    switch (json_typeof(value)) {
+    case JSON_STRING:
+        rc = insert_string(str, json_string_value(value), str_index);
+        if (rc)
+            LOG_RETURN(rc, "Cannot insert string into SQL query");
+        break;
+    case JSON_INTEGER:
+        g_string_append_printf(str, "%"JSON_INTEGER_FORMAT,
+                               json_integer_value(value));
+        break;
+    case JSON_REAL:
+        g_string_append_printf(str, "%lf", json_number_value(value));
+        break;
+    case JSON_TRUE:
+        g_string_append(str, "TRUE");
+        break;
+    case JSON_FALSE:
+        g_string_append(str, "FALSE");
+        break;
+    case JSON_NULL:
+        g_string_append(str, "NULL");
+        break;
+    default:
+        /* Complex type (operands) will be handled by the following iteration */
+        break;
+    }
+
+    return 0;
+}
+
+static int json2sql_array_begin(struct saj_parser *parser, void *priv)
+{
+    GString     *str = priv;
+    const char  *current_key = saj_parser_key(parser);
+
+    /* $NOR expanded as "NOT (... OR ...) */
+    if (!g_ascii_strcasecmp(current_key, "$NOR"))
+        g_string_append(str, "NOT ");
+
+    g_string_append(str, "(");
+    return 0;
+}
+
+static int json2sql_array_elt(struct saj_parser *parser, int index, json_t *elt,
+                              void *priv)
+{
+    GString     *str = priv;
+    const char  *current_key = saj_parser_key(parser);
+
+    /* Do not insert operator before the very first item... */
+    if (index == 0)
+        return 0;
+
+    if (!g_ascii_strcasecmp(current_key, "$NOR"))
+        /* NOR is expanded as "NOT ( ... OR ...)" */
+        g_string_append_printf(str, " OR ");
+    else
+        /* All others expanded as-is, skip the '$' prefix though */
+        g_string_append_printf(str, " %s ", current_key + 1);
+
+    return 0;
+}
+
+static int json2sql_array_end(struct saj_parser *parser, void *priv)
+{
+    GString *str = priv;
+
+    g_string_append(str, ")");
+    return 0;
+}
+
+static const struct saj_parser_operations json2sql_ops = {
+    .so_object_begin = json2sql_object_begin,
+    .so_array_begin  = json2sql_array_begin,
+    .so_array_elt    = json2sql_array_elt,
+    .so_array_end    = json2sql_array_end,
+};
+
+static int clause_filter_convert(GString *qry, const struct dss_filter *filter)
+{
+    struct saj_parser   json2sql;
+    int                 rc;
+
+    if (!filter)
+        return 0; /* nothing to do */
+
+    if (!json_is_object(filter->df_json))
+        LOG_RETURN(-EINVAL, "Filter is not a valid JSON object");
+
+    g_string_append(qry, " WHERE ");
+
+    rc = saj_parser_init(&json2sql, &json2sql_ops, qry);
+    if (rc)
+        LOG_RETURN(rc, "Cannot initialize JSON to SQL converter");
+
+    rc = saj_parser_run(&json2sql, filter->df_json);
+    if (rc)
+        LOG_GOTO(out_free, rc, "Cannot convert filter into SQL query");
+
+out_free:
+    saj_parser_free(&json2sql);
+    return rc;
+}
+
 int dss_get(struct dss_handle *handle, enum dss_type type,
-            struct dss_crit *crit, int crit_cnt, void **item_list,
-            int *item_cnt)
+            const struct dss_filter *filter, void **item_list, int *item_cnt)
 {
     PGconn              *conn = handle->dh_conn;
     PGresult            *res;
@@ -915,21 +1065,10 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
     /* get everything if no criteria */
     clause = g_string_new(base_query[type]);
 
-    if (crit_cnt > 0)
-        g_string_append(clause, " WHERE ");
-
-    while (crit_cnt > 0) {
-        rc = dss_crit_to_pattern(conn, crit, clause);
-        if (rc) {
-            pho_error(rc, "failed to append crit %d to clause %s",
-                      crit->crit_name, clause->str);
-            g_string_free(clause, true);
-            return rc;
-        }
-        crit++;
-        crit_cnt--;
-        if (crit_cnt > 0)
-            g_string_append(clause, " AND ");
+    rc = clause_filter_convert(clause, filter);
+    if (rc) {
+        g_string_free(clause, true);
+        return rc;
     }
 
     pho_debug("Executing request: '%s'", clause->str);

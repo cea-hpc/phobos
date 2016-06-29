@@ -739,20 +739,23 @@ disconn:
 static int obj_get_location(struct dss_handle *dss, const char *obj_id,
                             struct layout_info **layout)
 {
-    struct dss_crit crit[2]; /* criteria on obj_id and copynum */
-    int             crit_cnt = 0;
-    int             cnt = 0;
-    int             rc;
+    struct dss_filter   filter;
+    int                 cnt = 0;
+    int                 rc;
 
-    dss_crit_add(crit, &crit_cnt, DSS_EXT_oid, DSS_CMP_EQ, val_str, obj_id);
-    /* v00: object have a single copy */
-    dss_crit_add(crit, &crit_cnt, DSS_EXT_copy_num, DSS_CMP_EQ, val_uint, 0);
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::EXT::oid\": \"%s\"},"
+                          "  {\"DSS::EXT::copy_num\": %u}"
+                          "]}", obj_id, 0);
+    if (rc)
+        return rc;
 
     /** @TODO check if there is a pending copy of the object */
 
-    rc = dss_extent_get(dss, crit, crit_cnt, layout, &cnt);
-    if (rc != 0)
-        return rc;
+    rc = dss_extent_get(dss, &filter, layout, &cnt);
+    if (rc)
+        GOTO(err_nores, rc);
 
     if (cnt == 0)
         GOTO(err, rc = -ENOENT);
@@ -761,11 +764,14 @@ static int obj_get_location(struct dss_handle *dss, const char *obj_id,
         LOG_GOTO(err, rc = -EINVAL, "Too many layouts found matching oid '%s'",
                  obj_id);
 
-    return 0;
-
 err:
-    dss_res_free(*layout, cnt);
-    *layout = NULL;
+    if (rc) {
+        dss_res_free(*layout, cnt);
+        *layout = NULL;
+    }
+
+err_nores:
+    dss_filter_free(&filter);
     return rc;
 }
 
@@ -829,18 +835,19 @@ free_res:
 static int store_attr_get(struct dss_handle *dss, struct pho_xfer_desc *desc)
 {
     struct object_info  *obj;
-    struct dss_crit      crit[1];
-    int                  crit_cnt = 0;
+    struct dss_filter    filter;
     int                  obj_cnt;
     int                  rc;
     ENTRY;
 
-    dss_crit_add(crit, &crit_cnt, DSS_OBJ_oid, DSS_CMP_EQ, val_str,
-                 desc->xd_objid);
-
-    rc = dss_object_get(dss, crit, crit_cnt, &obj, &obj_cnt);
+    rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}",
+                          desc->xd_objid);
     if (rc)
-        LOG_RETURN(rc, "Cannot fetch objid:'%s'", desc->xd_objid);
+        return rc;
+
+    rc = dss_object_get(dss, &filter, &obj, &obj_cnt);
+    if (rc)
+        LOG_GOTO(filt_free, rc, "Cannot fetch objid:'%s'", desc->xd_objid);
 
     assert(obj_cnt <= 1);
 
@@ -855,6 +862,8 @@ static int store_attr_get(struct dss_handle *dss, struct pho_xfer_desc *desc)
 
 out_free:
     dss_res_free(obj, obj_cnt);
+filt_free:
+    dss_filter_free(&filter);
     return rc;
 }
 
