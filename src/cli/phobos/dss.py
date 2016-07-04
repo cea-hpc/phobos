@@ -169,7 +169,7 @@ class CliMedia(PhobosHook):
             'stats.phys_spc_free': self._inst.stats.phys_spc_free,
             'stats.nb_load': self._inst.stats.nb_load,
             'stats.nb_errors': self._inst.stats.nb_errors,
-            'stats.last_load': self._inst.stats.nb_errors,
+            'stats.last_load': self._inst.stats.last_load,
         }
         return stats
 
