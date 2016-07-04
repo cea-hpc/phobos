@@ -117,11 +117,14 @@ int main(int argc, char **argv)
                           fs_type2str(media->fs_type),
                           fs_status2str(media->fs_status));
                 pho_debug("Got Media Stats: nb_obj:%"PRIu64" logc_spc_used:%zu"
-                          " phys_spc_used:%zu phys_spc_free:%zu",
+                          " phys_spc_used:%zu phys_spc_free:%zu:nb_errors:%d:"
+                          "last_load:%ld",
                           media->stats.nb_obj,
                           media->stats.logc_spc_used,
                           media->stats.phys_spc_used,
-                          media->stats.phys_spc_free);
+                          media->stats.phys_spc_free,
+                          media->stats.nb_errors,
+                          (long)media->stats.last_load);
             }
             break;
         case DSS_OBJECT:

@@ -194,6 +194,29 @@ static char *json_dict2char(const struct json_t *obj, const char *key, int *err)
     return val;
 }
 
+/**
+ * Helper for parsing json, get val from dict with error checking
+ * @param[in]   obj    a jansson json object which contains a key/val dict.
+ * @param[in]   key    key
+ * @param[out]  err    error counter
+ * @return      val    val as int_32t
+ */
+static int json_dict2int32(const struct json_t *obj, const char *key,
+                           int *err)
+{
+    struct json_t   *current_obj;
+
+    current_obj = json_object_get(obj, key);
+    if (!current_obj) {
+        pho_debug("Cannot retrieve object '%s'", key);
+        (*err)++;
+        return -EINVAL;
+    }
+
+    return json_integer_value(current_obj);
+}
+
+
 void dss_filter_free(struct dss_filter *filter)
 {
     if (filter && filter->df_json)
@@ -357,6 +380,10 @@ static int dss_media_stats_decode(struct media_stats *stats, const char *json)
         json_dict2uint64(root, "phys_spc_used", &parse_error);
     stats->phys_spc_free =
         json_dict2uint64(root, "phys_spc_free", &parse_error);
+    stats->nb_errors =
+        json_dict2int32(root, "nb_errors", &parse_error);
+    stats->last_load =
+        json_dict2int32(root, "last_load", &parse_error);
 
     if (parse_error > 0)
         LOG_GOTO(out_decref, rc = -EINVAL,
@@ -423,6 +450,20 @@ static char *dss_media_stats_encode(struct media_stats stats, int *error)
     if (rc) {
         pho_error(EINVAL, "Failed to encode 'phys_spc_free' (%zu)",
                   stats.phys_spc_free);
+        err_cnt++;
+    }
+
+    rc = json_object_set_new(root, "nb_errors", json_integer(stats.nb_errors));
+    if (rc) {
+        pho_error(EINVAL, "Failed to encode 'nb_errors' (%d)",
+                  stats.nb_errors);
+        err_cnt++;
+    }
+
+    rc = json_object_set_new(root, "last_load", json_integer(stats.last_load));
+    if (rc) {
+        pho_error(EINVAL, "Failed to encode 'last_load' (%zu)",
+                  stats.last_load);
         err_cnt++;
     }
 
