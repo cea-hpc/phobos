@@ -121,8 +121,20 @@ class CliDevice(PhobosHook):
         'host': None,
         'model': None,
         'path': None,
-        'serial': None
+        'serial': None,
+        'lock_status': None,
+        'lock_ts': None
     }
+
+    @property
+    def lock_status(self):
+        """ Wrapper to get lock status"""
+        return self.lock.lock
+
+    @property
+    def lock_ts(self):
+        """ Wrapper to get lock timestamp"""
+        return self.lock.lock_ts
 
 class CliMedia(PhobosHook):
     """Media python object"""
@@ -157,7 +169,7 @@ class CliMedia(PhobosHook):
 
     @property
     def lock_ts(self):
-        """ Wrapper to get lock status"""
+        """ Wrapper to get lock timestamp"""
         return self.lock.lock_ts
 
 
