@@ -88,7 +88,7 @@ static inline enum dss_set_action str2dss_set_action(const char *str)
     return DSS_SET_INVAL;
 }
 
-
+#if !defined(SWIG)
 struct dss_field_def {
     const char    *df_public;
     const char    *df_implem;
@@ -143,7 +143,7 @@ static inline const char *dss_fields_pub2implem(const char *public_name)
 
     return NULL;
 }
-
+#endif
 
 struct dss_filter {
     json_t  *df_json;

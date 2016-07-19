@@ -49,9 +49,9 @@ enum pho_cfg_params {
 };
 
 struct pho_config_item {
-    const char *section;
-    const char *name;
-    const char *value;
+    char *section;
+    char *name;
+    char *value;
 };
 
 #define PHO_LDM_HELPER "/usr/sbin/pho_ldm_helper"

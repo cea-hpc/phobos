@@ -92,7 +92,7 @@ static inline enum extent_state str2extent_state(const char *str)
 
 /** describe data layout */
 struct layout_info {
-    const char        *oid;
+    char              *oid;
     unsigned int       copy_num;
     enum layout_type   type;
     /* v00: no layout info */
@@ -477,8 +477,8 @@ struct media_info {
 };
 
 struct object_info {
-    const char  *oid;
-    const char  *user_md;
+    char  *oid;
+    char  *user_md;
 };
 
 #endif
