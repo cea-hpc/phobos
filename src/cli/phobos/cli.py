@@ -42,12 +42,12 @@ def phobos_log_handler(rec):
     Receive log records emitted from lower layers and inject them into the
     currently configured logger.
     """
-    full_msg = rec[6]
+    full_msg = rec[7]
 
     # Append ': <errmsg>' to the original message if err_code was set
-    if rec[4] != 0:
+    if rec[5] != 0:
         full_msg += ": %s"
-        args = (strerror(rec[4]), )
+        args = (strerror(rec[5]), )
     else:
         args = tuple()
 
@@ -55,13 +55,14 @@ def phobos_log_handler(rec):
         'name': 'internals',
         'levelno': rec[0],
         'levelname': logging.getLevelName(rec[0]),
-        'filename': rec[1],
-        'funcName': rec[2],
-        'lineno': rec[3],
+        'process': rec[1],
+        'filename': rec[2],
+        'funcName': rec[3],
+        'lineno': rec[4],
         'exc_info': None,
         'msg': full_msg,
         'args': args,
-        'created': rec[5],
+        'created': rec[6],
     }
 
     record = logging.makeLogRecord(attrs)
@@ -762,8 +763,8 @@ class PhobosActionContext(object):
     specified command line.
     """
     CLI_LOG_FORMAT_REG = "%(asctime)s <%(levelname)s> %(message)s"
-    CLI_LOG_FORMAT_DEV = "%(asctime)s <%(levelname)s> " \
-                         "[%(funcName)s:%(filename)s:%(lineno)d] %(message)s"
+    CLI_LOG_FORMAT_DEV = "%(asctime)s <%(levelname)s> [%(process)d/" \
+                         "%(funcName)s:%(filename)s:%(lineno)d] %(message)s"
 
     supported_handlers = [
         # Resource interfaces

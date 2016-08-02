@@ -125,8 +125,9 @@ static void internal_log_forwarder(const struct pho_logrec *rec)
         return;
 
     /* Note the '[]' so that we can directly pass it as *args... */
-    pyrec = Py_BuildValue("((issiiis))",
+    pyrec = Py_BuildValue("((iissiiis))",
                           level_pho2py(rec->plr_level),
+                          rec->plr_pid,
                           rec->plr_file,
                           rec->plr_func,
                           rec->plr_line,

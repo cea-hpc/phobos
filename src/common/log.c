@@ -15,6 +15,7 @@
 #include "pho_common.h"
 #include <ctype.h>
 #include <stdarg.h>
+#include <unistd.h>
 
 
 static void phobos_log_callback_default(const struct pho_logrec *rec);
@@ -49,7 +50,7 @@ void phobos_log_callback_default(const struct pho_logrec *rec)
 
     /* Running with dev mode adds filename and line number to the output */
     if (phobos_dev_output)
-        fprintf(stderr, " [%s:%s:%d]",
+        fprintf(stderr, " [%u/%s:%s:%d]", rec->plr_pid,
                 rec->plr_func, rec->plr_file, rec->plr_line);
 
     fprintf(stderr, " %s", rstrip(rec->plr_msg));
@@ -104,6 +105,7 @@ void _log_emit(enum pho_log_level level, const char *file, int line,
     va_start(args, fmt);
 
     rec.plr_level = level;
+    rec.plr_pid   = getpid();
     rec.plr_file  = file;
     rec.plr_func  = func;
     rec.plr_line  = line;
