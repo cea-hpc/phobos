@@ -103,9 +103,11 @@ function tape_setup
         $phobos drive unlock $d
     done
 
-    # format a single tape (make test shorter)
-    local tp=$(echo $tapes | nodeset -e | awk '{print $1}')
-    $phobos tape format $tp --unlock
+    # need to format 2 tapes for concurrent_put
+    local tp
+    for tp in $tapes; do
+        $phobos tape format $tp --unlock
+    done
 }
 
 function dir_setup
@@ -176,6 +178,52 @@ function put_get_test
     [ $md = $md_check ] || error "Object attributes to not match expectations"
 }
 
+# make sure there are at least N available dir/drives
+function ensure_nb_drives
+{
+    local count=$1
+    local name
+    local d
+
+    if [[ $PHOBOS_LRS_default_family == "tape" ]]; then
+        name=drive
+    else
+        name=dir
+    fi
+
+    local nb=0
+    for d in $($phobos $name list); do
+        if (( $nb < $count )); then
+            $phobos $name unlock $d
+            ((nb++)) || true
+        fi
+    done
+}
+
+function concurrent_put
+{
+    local md="a=1,b=2,c=3"
+    local tmp="/tmp/data.$$"
+    local key=data.$(date +%s).$$
+
+    # this test needs 2 drives
+    ensure_nb_drives 2
+
+    # create input file
+    dd if=/dev/urandom of=$tmp bs=1M count=100
+
+    # 2 simultaneous put
+    $phobos put -m $md $tmp $key.1 &
+    $phobos put -m $md $tmp $key.2 &
+    wait
+
+    rm -f $tmp
+
+    # check they are both in DB
+    $phobos getmd $key.1
+    $phobos getmd $key.2
+}
+
 function check_status
 {
     local type="$1"
@@ -191,6 +239,7 @@ if  [[ ! -w /dev/changer ]]; then
     export PHOBOS_LRS_default_family="dir"
     dir_setup
     put_get_test
+    concurrent_put
     check_status dir "$dirs"
     lock_test
     dir_cleanup
@@ -199,6 +248,7 @@ else
     export PHOBOS_LRS_default_family="tape"
     tape_setup
     put_get_test
+    concurrent_put
     check_status tape "$tapes"
     lock_test
 fi

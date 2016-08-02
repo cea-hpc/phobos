@@ -158,7 +158,9 @@ static int lrs_dev_acquire(struct dss_handle *dss, struct dev_descr *pdev)
     rc = dss_device_lock(dss, pdev->dss_dev_info, 1);
     if (rc) {
         pdev->op_status = PHO_DEV_OP_ST_BUSY;
-        LOG_RETURN(rc, "Cannot lock device '%s'", pdev->dev_path);
+        pho_warn("Cannot lock device '%s': %s", pdev->dev_path,
+                 strerror(-rc));
+        return rc;
     }
 
     pho_debug("Acquired ownership on device '%s'", pdev->dev_path);
@@ -626,12 +628,15 @@ typedef int (*device_select_func_t)(size_t required_size,
 
 /**
  * Select a device according to a given status and policy function.
+ * Returns a device in locked state.
+ * @param dss     DSS handle.
  * @param op_st   Filter devices by the given operational status.
  *                No filtering is op_st is PHO_DEV_OP_ST_UNSPEC.
  * @param select_func    Drive selection function.
  * @param required_size  Required size for the operation.
  */
-static struct dev_descr *dev_picker(enum dev_op_status op_st,
+static struct dev_descr *dev_picker(struct dss_handle *dss,
+                                    enum dev_op_status op_st,
                                     device_select_func_t select_func,
                                     size_t required_size)
 {
@@ -642,6 +647,7 @@ static struct dev_descr *dev_picker(enum dev_op_status op_st,
     if (devices == NULL)
         return NULL;
 
+retry:
     for (i = 0; i < dev_count; i++) {
         if (op_st != PHO_DEV_OP_ST_UNSPEC
             && devices[i].op_status != op_st)
@@ -653,6 +659,16 @@ static struct dev_descr *dev_picker(enum dev_op_status op_st,
         else if (rc == 0) /* stop searching */
             break;
     }
+
+    if (selected != NULL) {
+        rc = lrs_dev_acquire(dss, selected);
+        if (rc != 0) {
+            /* clear previously selected device */
+            selected = NULL;
+            goto retry;
+        }
+    }
+
     return selected;
 }
 
@@ -998,14 +1014,10 @@ static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp)
     while (1) {
 
         /* get a drive to free (PHO_DEV_OP_ST_UNSPEC for any state) */
-        tmp_dev = dev_picker(PHO_DEV_OP_ST_UNSPEC, select_drive_to_free, 0);
+        tmp_dev = dev_picker(dss, PHO_DEV_OP_ST_UNSPEC, select_drive_to_free,
+                             0);
         if (tmp_dev == NULL)
             LOG_RETURN(-EAGAIN, "No suitable device to free");
-
-        /* attempt to lock it */
-        rc = lrs_dev_acquire(dss, tmp_dev);
-        if (rc)
-            continue;
 
         if (tmp_dev->op_status == PHO_DEV_OP_ST_MOUNTED) {
             /* unmount it */
@@ -1050,7 +1062,8 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
                              struct dev_descr **devp)
 {
     device_select_func_t dev_select_policy;
-    struct media_info *pmedia = NULL;
+    struct media_info *pmedia;
+    bool media_owner;
     int rc = 0;
     ENTRY;
 
@@ -1063,84 +1076,97 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
         return -EINVAL;
 
 retry:
+    pmedia = NULL;
+    media_owner = false;
+
     /* 1a) is there a mounted filesystem with enough room? */
-    *devp = dev_picker(PHO_DEV_OP_ST_MOUNTED, dev_select_policy, size);
+    *devp = dev_picker(dss, PHO_DEV_OP_ST_MOUNTED, dev_select_policy, size);
     if (*devp != NULL) {
         /* drive is now in use */
-        rc = lrs_dev_acquire(dss, *devp);
-        if (rc == 0) {
-            (*devp)->op_status = PHO_DEV_OP_ST_BUSY;
-            /* drive is ready */
-            return 0;
-        } else {
+        (*devp)->op_status = PHO_DEV_OP_ST_BUSY;
+
+        /* lock the media in it */
+        pmedia = (*devp)->dss_media_info;
+        rc = lrs_media_acquire(dss, pmedia);
+        if (rc) {
+            /* mark the device and the media as busy, to select others */
+            pmedia->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
+            lrs_dev_release(dss, *devp);
             goto retry;
         }
+        return 0;
     }
 
     /* 1b) is there a loaded media with enough room? */
-    *devp = dev_picker(PHO_DEV_OP_ST_LOADED, dev_select_policy, size);
+    *devp = dev_picker(dss, PHO_DEV_OP_ST_LOADED, dev_select_policy, size);
     if (*devp != NULL) {
-        rc = lrs_dev_acquire(dss, *devp);
-        if (rc == 0) {
-            /* mount the filesystem and return */
-            rc = lrs_mount(*devp);
-            if (rc != 0)
-                goto out_release;
-            (*devp)->op_status = PHO_DEV_OP_ST_BUSY;
-            return 0;
-        } else {
+        /* lock the media in the device */
+        pmedia = (*devp)->dss_media_info;
+        rc = lrs_media_acquire(dss, pmedia);
+        if (rc) {
+            /* mark the device and the media as busy, to select others */
+            pmedia->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
+            lrs_dev_release(dss, *devp);
             goto retry;
         }
+
+        /* mount the filesystem and return */
+        rc = lrs_mount(*devp);
+        if (rc != 0)
+            goto out_release;
+        (*devp)->op_status = PHO_DEV_OP_ST_BUSY;
+        return 0;
     }
 
-    /* V00: release a drive and load a tape with enough room.
+    /* V1: release a drive and load a tape with enough room.
      * later versions:
      * 2a) is there an idle drive, to eject the loaded tape?
      * 2b) is there an operation that will end soon?
      */
 
     /* 2) For the next steps, we need a media to write on.
-     * It will be loaded into a free drive. */
+     * It will be loaded into a free drive.
+     * Note: lrs_select_media locks the media.
+     */
     pho_verb("Not enough space on loaded media: selecting another one");
     rc = lrs_select_media(dss, &pmedia, size, default_family(), NULL);
     if (rc)
         return rc;
+    /* we own the media structure */
+    media_owner = true;
 
     /* 3) is there a free drive? */
-    *devp = dev_picker(PHO_DEV_OP_ST_EMPTY, select_any, 0);
+    *devp = dev_picker(dss, PHO_DEV_OP_ST_EMPTY, select_any, 0);
     if (*devp == NULL) {
         pho_verb("No free drive: need to unload one");
         rc = lrs_free_one_device(dss, devp);
         if (rc)
-            goto out_free;
+            goto out_release;
     }
 
-    rc = lrs_dev_acquire(dss, *devp);
-    if (rc)
-        goto retry;
-
     /* 4) load the selected media into the selected drive */
-    /* On success, target device becomes the owner of pmedia
-     * so pmedia must not be released after that. */
     rc = lrs_load(*devp, pmedia);
     if (rc)
-        goto out_free;
-
-    /* 5) mount the filesystem */
-    /* Don't free media on failure (it is still associated to the drive). */
-    rc = lrs_mount(*devp);
-    if (rc == 0)
-        (*devp)->op_status = PHO_DEV_OP_ST_BUSY;
-    else
         goto out_release;
 
-    return rc;
+    /* On success or lrs_load, target device becomes the owner of pmedia
+     * so pmedia must not be released after that. */
+    media_owner = false;
 
-out_free:
-    lrs_media_release(dss, pmedia);
-    media_info_free(pmedia);
+    /* 5) mount the filesystem */
+    rc = lrs_mount(*devp);
+    if (rc == 0) {
+        (*devp)->op_status = PHO_DEV_OP_ST_BUSY;
+        return 0;
+    }
 
 out_release:
+    if (pmedia != NULL) {
+        lrs_media_release(dss, pmedia);
+        if (media_owner)
+            media_info_free(pmedia);
+    }
+
     lrs_dev_release(dss, *devp);
     return rc;
 }
@@ -1202,7 +1228,6 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
     struct dev_descr    *dev;
     struct media_info   *med;
     bool                 post_fs_mount;
-    bool                 needs_loading = false;
     int                  rc;
     ENTRY;
 
@@ -1236,11 +1261,15 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
 
     /* check if the media is already in a drive */
     dev = search_loaded_media(id);
-    if (dev == NULL) {
+    if (dev != NULL) {
+        rc = lrs_dev_acquire(dss, dev);
+        if (rc != 0)
+            goto out_mda_unlock;
+    } else {
         pho_verb("Media '%s' is not in a drive", media_id_get(id));
 
         /* Is there a free drive? */
-        dev = dev_picker(PHO_DEV_OP_ST_EMPTY, select_any, 0);
+        dev = dev_picker(dss, PHO_DEV_OP_ST_EMPTY, select_any, 0);
         if (dev == NULL) {
             pho_verb("No free drive: need to unload one");
             rc = lrs_free_one_device(dss, &dev);
@@ -1248,14 +1277,7 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
                 LOG_GOTO(out_mda_unlock, rc, "No device available");
         }
 
-        needs_loading = true;
-    }
-
-    rc = lrs_dev_acquire(dss, dev);
-    if (rc != 0)
-        goto out_mda_unlock;
-
-    if (needs_loading) {
+        /* load the media in it */
         rc = lrs_load(dev, med);
         if (rc != 0)
             goto out_dev_unlock;
