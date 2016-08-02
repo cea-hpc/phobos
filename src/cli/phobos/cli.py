@@ -36,6 +36,12 @@ def strerror(rc):
     """Basic wrapper to convert return code into corresponding errno string."""
     return os.strerror(abs(rc))
 
+def levelname(lvl):
+    """Wrapper to get the log level name including custom level names."""
+    if lvl == clog.PY_LOG_VERB:
+        return 'VERBOSE'
+    else:
+        return logging.getLevelName(lvl)
 
 def phobos_log_handler(rec):
     """
@@ -54,7 +60,7 @@ def phobos_log_handler(rec):
     attrs = {
         'name': 'internals',
         'levelno': rec[0],
-        'levelname': logging.getLevelName(rec[0]),
+        'levelname': levelname(rec[0]),
         'process': rec[1],
         'filename': rec[2],
         'funcName': rec[3],
