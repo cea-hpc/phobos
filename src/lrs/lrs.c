@@ -530,10 +530,11 @@ static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
                           "{\"$AND\": ["
                           /* Basic criteria */
                           "  {\"DSS::MDA::family\": \"%s\"},"
+                          /* Exclude media locked by admin */
                           "  {\"DSS::MDA::adm_status\": \"%s\"},"
-                          "  {\"$GE\": {\"DSS::MDA::vol_free\": %zu}},"
+                          "  {\"$GTE\": {\"DSS::MDA::vol_free\": %zu}},"
                           /* Exclude locked media */
-                          "  {\"DSS::MDA::lock\": \"\"},",
+                          "  {\"DSS::MDA::lock\": \"\"},"
                           "  {\"$NOR\": ["
                                /* Exclude non-formatted media */
                           "    {\"DSS::MDA::fs_status\": \"%s\"},"

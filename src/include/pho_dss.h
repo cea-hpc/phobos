@@ -155,7 +155,11 @@ struct dss_filter {
  * @param[in]  fmt     JSON format string representing the query.
  * @return 0 on success; negated errno code on failure.
  */
-int dss_filter_build(struct dss_filter *filter, const char *fmt, ...);
+int dss_filter_build(struct dss_filter *filter, const char *fmt, ...)
+#if !defined(SWIG)
+                     __attribute__((format(printf, 2, 3)))
+#endif
+;
 
 /**
  * Release resources associated to a dss filter built using dss_filter_build().

@@ -220,8 +220,10 @@ int dss_filter_build(struct dss_filter *filter, const char *fmt, ...)
         return -ENOMEM;
 
     filter->df_json = json_loads(query, JSON_REJECT_DUPLICATES, &err);
-    if (!filter->df_json)
+    if (!filter->df_json) {
+        pho_debug("Invalid filter: %s", query);
         LOG_GOTO(out_free, rc = -EINVAL, "Cannot decode filter: %s", err.text);
+    }
 
     rc = 0;
 
