@@ -22,7 +22,7 @@ def csv_dump(data):
     """Convert a list of dictionaries to a csv string"""
 
     outbuf = StringIO.StringIO()
-    writer = csv.DictWriter(outbuf, data[0].keys())
+    writer = csv.DictWriter(outbuf, sorted(data[0].keys()))
     if hasattr(writer, 'writeheader'):
         #pylint: disable=no-member
         writer.writeheader()

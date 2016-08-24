@@ -93,7 +93,7 @@ function tape_setup
     local dr1=$(echo $drives | awk '{print $1}')
     echo "$dr1"
     # check drive status
-    $phobos drive show $dr1 --format=csv | grep ",locked" ||
+    $phobos drive show $dr1 --format=csv | grep "^locked" ||
         error "Drive should be added with locked state"
 
     # unlock all drives but one
