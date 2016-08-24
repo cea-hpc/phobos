@@ -16,8 +16,12 @@
 #include <assert.h>
 #include <scsi/scsi.h>
 #include <endian.h>
+#include <unistd.h>
 
 /* #define DEBUG 1 */
+
+#define PHO_SCSI_SHORT_RETRY 1
+#define PHO_SCSI_LONG_RETRY  5
 
 /* Some libraries don't support querying too much elements in a single
  * ELEMENT_STATUS request.
@@ -393,4 +397,44 @@ int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
 
     return scsi_execute(fd, SCSI_GET, (unsigned char *)&req, sizeof(req),
                         &error, sizeof(error), NULL, 0, MOVE_TIMEOUT_MS);
+}
+
+/** Indicate whether a SCSI error must be retried after a delay */
+static inline bool scsi_delayed_retry(int rc)
+{
+    return rc == -EBUSY || rc == -EIO;
+}
+
+/** Indicate whether a SCSI error can be retried immediatly */
+static inline bool scsi_immediate_retry(int rc)
+{
+    return rc == -EAGAIN;
+}
+
+void scsi_retry_func(const char *fnname, int rc, int *retry_cnt,
+                     void *context)
+{
+    (*retry_cnt)--;
+    if ((*retry_cnt) < 0) {
+        if (rc)
+            pho_error(rc, "%s: all retries failed.", fnname);
+        return;
+    }
+
+    if (scsi_immediate_retry(rc)) {
+        /* short retry */
+        pho_error(rc, "%s failed: retry in %d sec...",
+                  fnname, PHO_SCSI_SHORT_RETRY);
+        sleep(PHO_SCSI_SHORT_RETRY);
+    } else if (scsi_delayed_retry(rc)) {
+        /* longer retry delay */
+        pho_error(rc, "%s failed: retry in %d sec...",
+                  fnname, PHO_SCSI_LONG_RETRY);
+        sleep(PHO_SCSI_LONG_RETRY);
+    } else {
+        if (rc)
+            pho_error(rc, "%s failed.", fnname);
+        /* success or non-retriable error: exit retry loop */
+        *retry_cnt = -1;
+    }
 }

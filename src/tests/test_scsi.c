@@ -183,6 +183,70 @@ static void test_lib_adapter(void)
     ldm_lib_close(&lib);
 }
 
+static int val;
+static int incr_val1(void)
+{
+    switch (val++) {
+    case 0:
+        /* short retry */
+        return -EAGAIN;
+    case 1:
+        /* longer retry */
+        return -EBUSY;
+    case 2:
+        /* no error */
+        return 0;
+    default:
+        /* no later retry */
+        exit(EXIT_FAILURE);
+    }
+}
+
+static int incr_val2(void)
+{
+    /* all retries fail */
+    val++;
+    return -EAGAIN;
+}
+
+static int test1(void *hint)
+{
+    int rc;
+
+    /* test retry loop */
+    val = 0;
+    PHO_RETRY_LOOP(rc, scsi_retry_func, NULL, 5, incr_val1);
+    /* rc should be 0 */
+    if (rc != 0) {
+        fprintf(stderr, "1) rc should be 0\n");
+        return -1;
+    }
+    /* val should be 3 */
+    if (val != 3) {
+        fprintf(stderr, "2) val should be 3\n");
+        return -1;
+    }
+    return 0;
+}
+
+static int test2(void *hint)
+{
+    int rc;
+
+    val = 0;
+    PHO_RETRY_LOOP(rc, scsi_retry_func, NULL, 3, incr_val2);
+    if (rc != -EAGAIN) {
+        fprintf(stderr, "3) rc should be -EAGAIN\n");
+        return -1;
+    }
+    /* val should be 4 (inital call + 3 retries) */
+    if (val != 4) {
+        fprintf(stderr, "4) val should be 4\n");
+        return -1;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     struct mode_sense_info msi = { {0} };
@@ -192,6 +256,10 @@ int main(int argc, char **argv)
     char *val = NULL;
 
     test_env_initialize();
+
+    /* tests of retry loop */
+    run_test("Test1: retry loop with success", test1, NULL, PHO_TEST_SUCCESS);
+    run_test("Test2: retry loop with failure", test2, NULL, PHO_TEST_SUCCESS);
 
     fd = open("/dev/changer", O_RDWR | O_NONBLOCK);
     if (fd < 0) {

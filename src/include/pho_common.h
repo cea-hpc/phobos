@@ -197,4 +197,25 @@ char *rstrip(char *msg);
  */
 #define UNREACHED       __builtin_unreachable
 
+/**
+ * Type of function for handling retry loops.
+ * @param[in]     fnname     Name of the called function.
+ * @param[in]     rc         Call status.
+ * @param[in,out] retry_cnt  Current retry credit.
+ *                           Set to negative value to exit the retry loop.
+ * @param[in,out] context    Custom context for retry function.
+ */
+typedef void(*retry_func_t)(const char *fnname, int rc, int *retry_cnt,
+                            void *context);
+
+/** Manage retry loops */
+#define PHO_RETRY_LOOP(_rc, _retry_func, _udata, _retry_cnt, _call_func, ...) \
+    do {                                         \
+        int retry = (_retry_cnt);                \
+        do {                                     \
+            (_rc) = (_call_func)(__VA_ARGS__);   \
+            (_retry_func)(#_call_func, (_rc), &retry, (_udata)); \
+        } while (retry >= 0);                    \
+    } while (0)
+
 #endif

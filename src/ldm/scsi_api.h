@@ -122,4 +122,8 @@ void element_status_list_free(struct element_status *elmt_list);
 int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
                      uint16_t tgt_addr);
 
+/** function to handle scsi error codes in a PHO_RETRY_LOOP */
+void scsi_retry_func(const char *fnname, int rc, int *retry_cnt,
+                     void *context);
+
 #endif
