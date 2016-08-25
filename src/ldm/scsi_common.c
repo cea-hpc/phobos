@@ -52,8 +52,8 @@ static int scsi_host_status2errno(uint16_t host_status)
     case SG_LIB_DID_BAD_INTR:     return -EINTR;
     case SG_LIB_DID_PASSTHROUGH:  return -EIO; /* ? */
     case SG_LIB_DID_SOFT_ERROR:   return -EAGAIN;
-    case SG_LIB_DID_IMM_RETRY:    return -EAGAIN;
-    case SG_LIB_DID_REQUEUE:      return -EAGAIN;
+    case SG_LIB_DID_IMM_RETRY:    return -EAGAIN; /* retry immediately */
+    case SG_LIB_DID_REQUEUE:      return -EBUSY;  /* need retry after a while */
     default:                      return -EIO;
     }
 }
