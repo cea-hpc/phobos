@@ -81,6 +81,21 @@ const struct pho_config_item pho_cfg_descr[] = {
         .name    = "lib_scsi_max_element_status",
         .value   = "0", /* unlimited */
     },
+    [PHO_CFG_LDM_scsi_retry_count] = {
+        .section = "ldm",
+        .name    = "scsi_retry_count",
+        .value   = "5",
+    },
+    [PHO_CFG_LDM_scsi_retry_short] = {
+        .section = "ldm",
+        .name    = "scsi_retry_short",
+        .value   = "1",
+    },
+    [PHO_CFG_LDM_scsi_retry_long] = {
+        .section = "ldm",
+        .name    = "scsi_retry_long",
+        .value   = "5",
+    },
 };
 
 

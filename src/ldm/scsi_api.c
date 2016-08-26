@@ -20,15 +20,54 @@
 
 /* #define DEBUG 1 */
 
-#define PHO_SCSI_SHORT_RETRY 1
-#define PHO_SCSI_LONG_RETRY  5
-
 /* Some libraries don't support querying too much elements in a single
  * ELEMENT_STATUS request.
  * Start with no limit of chunks, and decrease later (starting from 256)
  * if the SCSI request fails.
  */
 #define MAX_ELEMENT_STATUS_CHUNK 256
+
+/** Return retry count (get it once) */
+static int scsi_retry_count(void)
+{
+    static int retry_count = -1;
+
+    if (retry_count != -1)
+        return retry_count;
+
+    /* fallback to no-retry (0) on failure */
+    retry_count = pho_cfg_get_int(PHO_CFG_LDM_scsi_retry_count, 0);
+
+    return retry_count;
+}
+
+/** Return short retry delay (get it once) */
+static int scsi_retry_short(void)
+{
+    static int short_retry_delay = -1;
+
+    if (short_retry_delay != -1)
+        return short_retry_delay;
+
+    /* fallback to 1s on failure */
+    short_retry_delay = pho_cfg_get_int(PHO_CFG_LDM_scsi_retry_short, 1);
+
+    return short_retry_delay;
+}
+
+/** Return long retry delay (get it once) */
+static int scsi_retry_long(void)
+{
+    static int long_retry_delay = -1;
+
+    if (long_retry_delay != -1)
+        return long_retry_delay;
+
+    /* fallback to 1s on failure */
+    long_retry_delay = pho_cfg_get_int(PHO_CFG_LDM_scsi_retry_long, 1);
+
+    return long_retry_delay;
+}
 
 int scsi_mode_sense(int fd, struct mode_sense_info *info)
 {
@@ -51,8 +90,10 @@ int scsi_mode_sense(int fd, struct mode_sense_info *info)
     req.allocation_length = MODE_SENSE_BUFF_LEN;
     /* all other fields are zeroed */
 
-    rc = scsi_execute(fd, SCSI_GET, (unsigned char *)&req, sizeof(req), &error,
-                      sizeof(error), buffer, sizeof(buffer), QUERY_TIMEOUT_MS);
+    PHO_RETRY_LOOP(rc, scsi_retry_func, NULL, scsi_retry_count(),
+                   scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
+                   sizeof(req), &error, sizeof(error), buffer, sizeof(buffer),
+                   QUERY_TIMEOUT_MS);
     if (rc)
         return rc;
 
@@ -232,8 +273,10 @@ static int _scsi_element_status(int fd, enum element_type_code type,
     req.dvcid = !!(flags & ESF_GET_DRV_ID); /* query device identifier */
     htobe24(len, req.alloc_length);
 
-    rc = scsi_execute(fd, SCSI_GET, (unsigned char *)&req, sizeof(req), &error,
-                      sizeof(error), buffer, len, QUERY_TIMEOUT_MS);
+    PHO_RETRY_LOOP(rc, scsi_retry_func, NULL, scsi_retry_count(),
+                   scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
+                   sizeof(req), &error, sizeof(error), buffer, len,
+                   QUERY_TIMEOUT_MS);
     if (rc)
         goto free_buff;
 
@@ -381,6 +424,7 @@ int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
 {
     struct move_medium_cdb req = {0};
     struct scsi_req_sense  error = {0};
+    int rc;
 
     pho_debug("scsi_execute: MOVE_MEDIUM, arm_addr=%#hx, src_addr=%#hx, "
               "tgt_addr=%#hx", arm_addr, src_addr, tgt_addr);
@@ -390,8 +434,11 @@ int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
     req.source_address = htobe16(src_addr);
     req.destination_address = htobe16(tgt_addr);
 
-    return scsi_execute(fd, SCSI_GET, (unsigned char *)&req, sizeof(req),
-                        &error, sizeof(error), NULL, 0, MOVE_TIMEOUT_MS);
+    PHO_RETRY_LOOP(rc, scsi_retry_func, NULL, scsi_retry_count(),
+                   scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
+                   sizeof(req), &error, sizeof(error), NULL, 0,
+                   MOVE_TIMEOUT_MS);
+    return rc;
 }
 
 /** Indicate whether a SCSI error must be retried after a delay */
@@ -409,6 +456,8 @@ static inline bool scsi_immediate_retry(int rc)
 void scsi_retry_func(const char *fnname, int rc, int *retry_cnt,
                      void *context)
 {
+    int delay;
+
     (*retry_cnt)--;
     if ((*retry_cnt) < 0) {
         if (rc)
@@ -418,14 +467,16 @@ void scsi_retry_func(const char *fnname, int rc, int *retry_cnt,
 
     if (scsi_immediate_retry(rc)) {
         /* short retry */
+        delay = scsi_retry_short();
         pho_error(rc, "%s failed: retry in %d sec...",
-                  fnname, PHO_SCSI_SHORT_RETRY);
-        sleep(PHO_SCSI_SHORT_RETRY);
+                  fnname, delay);
+        sleep(delay);
     } else if (scsi_delayed_retry(rc)) {
+        delay = scsi_retry_long();
         /* longer retry delay */
         pho_error(rc, "%s failed: retry in %d sec...",
-                  fnname, PHO_SCSI_LONG_RETRY);
-        sleep(PHO_SCSI_LONG_RETRY);
+                  fnname, delay);
+        sleep(delay);
     } else {
         if (rc)
             pho_error(rc, "%s failed.", fnname);

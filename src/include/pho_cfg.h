@@ -41,9 +41,11 @@ enum pho_cfg_params {
     PHO_CFG_LDM_lib_scsi_sep_sn_query, /**< Query the S/N of a drive in a
                                             separate ELEMENT_STATUS request
                                             (e.g. for IBM TS3500). */
-
     PHO_CFG_LDM_lib_scsi_max_element_status, /**< Max chunk size for
                                                   ELEMENT_STATUS request. */
+    PHO_CFG_LDM_scsi_retry_count, /**< Retry count for all SCSI requests */
+    PHO_CFG_LDM_scsi_retry_short, /**< Retry delay for EAGAIN */
+    PHO_CFG_LDM_scsi_retry_long, /**<  Retry delay for EBUSY */
 
     PHO_CFG_LAST
 };
