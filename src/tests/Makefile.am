@@ -7,7 +7,8 @@ check_PROGRAMS=test_common test_attrs test_mapper test_log test_store \
 	       test_dss test_cfg test_scsi test_lintape test_ldm
 
 # 1st step: low level tests
-UNIT_TESTS=test_attrs test_mapper test_log test_cfg test_lintape test_ldm
+UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_lintape \
+	   test_ldm
 # 2nd step: integration tests
 INTEG_TESTS=test_dss.sh test_scsi.sh test_store.sh acceptance.sh
 

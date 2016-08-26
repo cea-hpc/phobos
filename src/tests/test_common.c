@@ -48,30 +48,35 @@ static void print_lines(GList *lines)
     /* print the list */
     for (l = lines; l != NULL; l = l->next) {
         i++;
-        pho_info("%d: <%s>", i, (char *)l->data);
+        pho_debug("%d: <%s>", i, (char *)l->data);
     }
 }
 
-
-int main(int argc, char **argv)
+static int test_cmd(void *arg)
 {
     GList   *lines = NULL;
     int      rc = 0;
 
-    test_env_initialize();
-
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s <cmd>\n", argv[0]);
-        exit(EXIT_FAILURE);
-    }
-
     /** call a command and call cb_func for each output line */
-    rc = command_call(argv[1], parse_line, &lines);
+    rc = command_call((char *)arg, parse_line, &lines);
     if (rc) {
-        fprintf(stderr, "command '%s' return with status %d\n", argv[1], rc);
-        exit(EXIT_FAILURE);
+        fprintf(stderr, "command '%s' return with status %d\n", (char *)arg,
+                rc);
+        return rc;
     }
 
     print_lines(lines);
+    return 0;
+}
+
+int main(int argc, char **argv)
+{
+    test_env_initialize();
+
+    run_test("Test1: command calls + output callback", test_cmd,
+             "cat /etc/passwd", PHO_TEST_SUCCESS);
+    run_test("Test2: failing command", test_cmd,
+             "cat /foo/bar", PHO_TEST_FAILURE);
+
     exit(EXIT_SUCCESS);
 }
