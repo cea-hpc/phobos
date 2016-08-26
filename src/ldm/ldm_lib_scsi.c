@@ -169,11 +169,10 @@ static int lib_status_load(struct lib_descriptor *lib,
         && !lib->drives.loaded) {
         enum elem_status_flags   flags;
         bool                     separate_query_sn;
-        const char              *opt;
 
         /* separate S/N query? */
-        opt = pho_cfg_get(PHO_CFG_LDM_lib_scsi_sep_sn_query);
-        separate_query_sn = (opt != NULL && atoi(opt) != 0);
+        separate_query_sn = pho_cfg_get_int(PHO_CFG_LDM_lib_scsi_sep_sn_query,
+                                            0);
 
         /* IBM TS3500 can't get both volume label and drive in the same request.
          * So, first get the tape label and 'full' indication, then query

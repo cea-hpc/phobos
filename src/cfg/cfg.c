@@ -302,6 +302,27 @@ const char *pho_cfg_get(enum pho_cfg_params param)
     return res;
 }
 
+int pho_cfg_get_int(enum pho_cfg_params param, int fail_val)
+{
+    const char *opt;
+    int64_t     val;
+
+    opt = pho_cfg_get(param);
+    if (opt == NULL) {
+        pho_warn("Failed to retrieve config parameter #%d", param);
+        return fail_val;
+    }
+
+    val = str2int64(opt);
+    if (val == LLONG_MIN || val < INT_MIN || val > INT_MAX) {
+        pho_warn("Invalid value for parameter #%d: '%s' (integer expected)",
+                 param, opt);
+        return fail_val;
+    }
+
+    return val;
+}
+
 /** @TODO to be implemented
 int pho_cfg_match(const char *section_pattern, const char *name_pattern,
                   struct pho_config_item *items, int *count);

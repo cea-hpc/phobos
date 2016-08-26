@@ -144,5 +144,14 @@ enum pho_cfg_flags {
 int pho_cfg_set(const char *section, const char *name, const char *value,
                 enum pho_cfg_flags flags);
 
+
+/**
+ * Helper to get a numeric configuration parameter.
+ * @param[in] param       Parameter to be retrieved.
+ * @param[in] fail_value  Returned value if parsing fails.
+ * @return parameter value, or fail_value on error.
+ */
+int pho_cfg_get_int(enum pho_cfg_params param, int fail_val);
+
 # endif
 #endif

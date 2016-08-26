@@ -188,6 +188,12 @@ static inline char *end_of_string(char *str)
 /** remove spaces at end of string */
 char *rstrip(char *msg);
 
+/**
+ * Converts a string to an int64 with error check.
+ * @return value on success, INT64_MIN on error.
+ */
+int64_t str2int64(const char *str);
+
 /* Number of items in a fixed-size array */
 #define ARRAY_SIZE(a)   (sizeof(a) / sizeof((a)[0]))
 

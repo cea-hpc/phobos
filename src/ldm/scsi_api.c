@@ -308,15 +308,10 @@ int scsi_element_status(int fd, enum element_type_code type,
 
     /* check if there is a configured limitation */
     if (max_element_status_chunk == -1) {
-        const char *opt;
-        int         val;
+        int val = pho_cfg_get_int(PHO_CFG_LDM_lib_scsi_max_element_status, 1);
 
-        opt = pho_cfg_get(PHO_CFG_LDM_lib_scsi_max_element_status);
-        if (opt != NULL) {
-            val = atoi(opt);
-            if (val > 0)
-                max_element_status_chunk = val;
-        }
+        if (val > 0)
+            max_element_status_chunk = val;
     }
 
     if (max_element_status_chunk != -1 && req_size > max_element_status_chunk)

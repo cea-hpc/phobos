@@ -106,6 +106,20 @@ static int test(void *hint)
     return 0;
 }
 
+static int test_get_int(void *param)
+{
+    int arg = (intptr_t)param;
+    int val = pho_cfg_get_int(arg, -42);
+
+    if (val == -42) {
+        pho_verb("failed to get param #%d", arg);
+        return -1;
+    }
+
+    pho_verb("param #%d = %d", arg, val);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     int rc;
@@ -150,6 +164,34 @@ int main(int argc, char **argv)
              test, test_file_items, PHO_TEST_SUCCESS);
     run_test("Test 8: get variables from env (after loading file)",
              test, test_env_items, PHO_TEST_SUCCESS);
+
+    /* test pho_cfg_get_int() */
+    run_test("Test 9: get numeric param", test_get_int,
+             (void *)PHO_CFG_LDM_lib_scsi_max_element_status, PHO_TEST_SUCCESS);
+
+    if (setenv("PHOBOS_LDM_lib_scsi_max_element_status", "120", 1)) {
+        pho_error(errno, "setenv failed");
+        exit(EXIT_FAILURE);
+    }
+    run_test("Test 10: get numeric param != 0", test_get_int,
+             (void *)PHO_CFG_LDM_lib_scsi_max_element_status, PHO_TEST_SUCCESS);
+
+    if (setenv("PHOBOS_LDM_lib_scsi_max_element_status", "-210", 1)) {
+        pho_error(errno, "setenv failed");
+        exit(EXIT_FAILURE);
+    }
+    run_test("Test 11: get numeric param < 0", test_get_int,
+             (void *)PHO_CFG_LDM_lib_scsi_max_element_status, PHO_TEST_SUCCESS);
+
+    if (setenv("PHOBOS_LDM_lib_scsi_max_element_status", "5000000000", 1)) {
+        pho_error(errno, "setenv failed");
+        exit(EXIT_FAILURE);
+    }
+    run_test("Test 12: get numeric param over int size", test_get_int,
+             (void *)PHO_CFG_LDM_lib_scsi_max_element_status, PHO_TEST_FAILURE);
+
+    run_test("Test 13: get non-numeric param", test_get_int,
+             (void *)PHO_CFG_LDM_cmd_mount_ltfs, PHO_TEST_FAILURE);
 
     pho_info("CFG: All tests succeeded");
     exit(EXIT_SUCCESS);

@@ -265,3 +265,27 @@ void lowerstr(char *str)
     for (i = 0; str[i]; i++)
        str[i] = tolower(str[i]);
 }
+
+int64_t str2int64(const char *str)
+{
+    char     *endptr;
+    int64_t   val;
+
+    errno = 0; /* to distinguish success/failure after call */
+    val = strtol(str, &endptr, 10);
+
+    /* check various strtoll error cases */
+    if ((errno == ERANGE && (val == LLONG_MAX || val == LLONG_MIN))
+           || (errno != 0 && val == 0))
+        return INT64_MIN;
+
+    if (endptr == str)
+        /* nothing was read */
+        return INT64_MIN;
+
+    if (*endptr != '\0')
+        /* characters after numeric input */
+        return INT64_MIN;
+
+    return val;
+}
