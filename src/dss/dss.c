@@ -210,7 +210,7 @@ static int json_dict2int32(const struct json_t *obj, const char *key,
     if (!current_obj) {
         pho_debug("Cannot retrieve object '%s'", key);
         (*err)++;
-        return -EINVAL;
+        return 0;
     }
 
     return json_integer_value(current_obj);
@@ -385,10 +385,17 @@ static int dss_media_stats_decode(struct media_stats *stats, const char *json)
     stats->last_load =
         json_dict2int32(root, "last_load", &parse_error);
 
+    /* Most of the values above are not used for working, so don't
+     * break the whole dss_get because of missing values in media stats
+     * (from previous phobos version).
+     * The only important field is phys_spc_free, which is used to check if
+     * a media has enough room to write data. In case this field is
+     * invalid, this function set it to 0, so the media won't be selected
+     * (as in the case we would return an error here).
+     */
     if (parse_error > 0)
-        LOG_GOTO(out_decref, rc = -EINVAL,
-                 "Json parser: %d missing mandatory fields in media stats",
-                 parse_error);
+        pho_debug("Json parser: %d missing/invalid fields in media stats",
+                  parse_error);
 
 out_decref:
     json_decref(root);
