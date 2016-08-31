@@ -1405,7 +1405,8 @@ int dss_unlock(struct dss_handle *handle, void *item_list, int item_cnt,
                      PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
 
     if (atoi(PQcmdTuples(res)) != item_cnt)
-        rc = -EEXIST;
+        /* lock is not owned by caller */
+        rc = -ENOLCK;
 
 out_cleanup:
     g_string_free(request, true);
