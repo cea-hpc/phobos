@@ -1476,7 +1476,9 @@ static int lrs_media_update(struct lrs_intent *intent, int fragments,
     media->stats.nb_obj += fragments;
     media->stats.phys_spc_used = spc.spc_used;
     media->stats.phys_spc_free = spc.spc_avail;
-    media->stats.logc_spc_used += intent->li_location.extent.size;
+
+    if (fragments > 0)
+        media->stats.logc_spc_used += intent->li_location.extent.size;
 
     if (media->fs_status == PHO_FS_STATUS_EMPTY)
         media->fs_status = PHO_FS_STATUS_USED;
@@ -1499,6 +1501,13 @@ int lrs_done(struct lrs_intent *intent, int fragments, int err_code)
 
     if (intent->li_operation != LRS_OP_WRITE)
         goto out_free;
+
+    /* Special case: R/O filesystem. Typically happens when LTFS considers that
+     * a tape does not contain enough space to be written */
+    if (err_code == -EROFS) {
+        lrs_media_update(intent, 0, true);
+        goto out_free;
+    }
 
     rc = get_io_adapter(intent->li_location.extent.fs_type, &ioa);
     if (rc != 0)
