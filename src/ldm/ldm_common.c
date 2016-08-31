@@ -84,6 +84,19 @@ int common_statfs(const char *path, struct ldm_fs_space *fs_spc)
 
         /* actually, only available blocks can be written */
         fs_spc->spc_avail = statfs_spc_free(&stfs);
+
+        /* Are we R/O? */
+        fs_spc->spc_flags = 0;
+
+#if HAVE_ST_RDONLY
+        if (stfs.f_flags & ST_RDONLY)
+            fs_spc->spc_flags |= PHO_FS_READONLY;
+#else
+        /* oh RHEL, oh despair, oh age my enemy!
+         * f_flags and ST_RDONLY only available since 2.6.36, ie. RHEL7
+         * Let's not do too much voodoo to figure things out, assume it's
+         * writable for now and catch -EROFS later on... */
+#endif
     }
 
     pho_debug("%s: used=%zu, free=%zu",

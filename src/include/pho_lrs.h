@@ -67,6 +67,17 @@ int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
  * @return 0 on success, -1 * posix error code on failure
  */
 int lrs_done(struct lrs_intent *intent, int fragments, int err_code);
+
+/**
+ * Identify medium-global error codes.
+ * Typically useful to trigger custom procedures when a medium becomes
+ * read-only.
+ */
+static inline bool is_media_global_error(int errcode)
+{
+    return errcode == -ENOSPC || errcode == -EROFS || errcode == -EDQUOT;
+}
+
 #endif /* ^SWIG */
 
 /**

@@ -29,10 +29,15 @@ struct ldm_dev_state {
                                           device */
 };
 
+enum ldm_fs_spc_flag {
+    PHO_FS_READONLY = (1 << 0),
+};
+
 /** information about used and available space on a media */
 struct ldm_fs_space {
-    ssize_t spc_used;
-    ssize_t spc_avail;
+    ssize_t                 spc_used;
+    ssize_t                 spc_avail;
+    enum ldm_fs_spc_flag    spc_flags;
 };
 
 /**

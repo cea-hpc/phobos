@@ -314,6 +314,11 @@ static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc)
     avail = (95 * fs_spc->spc_avail - 5 * fs_spc->spc_used) / 100;
 
     fs_spc->spc_avail = avail > 0 ? avail : 0;
+
+    /* A full tape cannot be written */
+    if (fs_spc->spc_avail == 0)
+        fs_spc->spc_flags |= PHO_FS_READONLY;
+
     return 0;
 }
 

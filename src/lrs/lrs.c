@@ -612,7 +612,6 @@ err_nores:
     return rc;
 }
 
-
 /**
  * Device selection policy prototype.
  * @param[in]     required_size required space to perform the write operation.
@@ -640,8 +639,9 @@ static struct dev_descr *dev_picker(struct dss_handle *dss,
                                     device_select_func_t select_func,
                                     size_t required_size)
 {
-    struct dev_descr *selected = NULL;
-    int  i, rc;
+    struct dev_descr    *selected = NULL;
+    int                  i;
+    int                  rc;
     ENTRY;
 
     if (devices == NULL)
@@ -649,11 +649,19 @@ static struct dev_descr *dev_picker(struct dss_handle *dss,
 
 retry:
     for (i = 0; i < dev_count; i++) {
-        if (op_st != PHO_DEV_OP_ST_UNSPEC
-            && devices[i].op_status != op_st)
+        struct dev_descr    *itr = &devices[i];
+
+        if (op_st != PHO_DEV_OP_ST_UNSPEC && itr->op_status != op_st)
             continue;
 
-        rc = select_func(required_size, &devices[i], &selected);
+        /* The intent is to write: exclude full media */
+        if (required_size > 0) {
+            if (itr->dss_media_info &&
+                itr->dss_media_info->fs_status == PHO_FS_STATUS_FULL)
+                continue;
+        }
+
+        rc = select_func(required_size, itr, &selected);
         if (rc < 0)
             return NULL;
         else if (rc == 0) /* stop searching */
@@ -1114,6 +1122,7 @@ retry:
         rc = lrs_mount(*devp);
         if (rc != 0)
             goto out_release;
+
         (*devp)->op_status = PHO_DEV_OP_ST_BUSY;
         return 0;
     }
@@ -1373,25 +1382,41 @@ err_out:
     return rc;
 }
 
+static bool lrs_mount_is_writable(const struct lrs_intent *intent)
+{
+    const char          *fs_root = intent->li_location.root_path;
+    enum fs_type         fs_type = intent->li_location.extent.fs_type;
+    struct ldm_fs_space  fs_info = {0};
+    struct fs_adapter    fsa;
+    int                  rc;
+
+    rc = get_fs_adapter(fs_type, &fsa);
+    if (rc)
+        LOG_RETURN(rc, "No FS adapter found for '%s' (type %s)",
+                   fs_root, fs_type2str(fs_type));
+
+    rc = ldm_fs_df(&fsa, fs_root, &fs_info);
+    if (rc)
+        LOG_RETURN(rc, "Cannot retrieve media usage information");
+
+    return !(fs_info.spc_flags & PHO_FS_READONLY);
+}
+
 int lrs_write_prepare(struct dss_handle *dss, size_t size,
                       const struct layout_info *layout,
                       struct lrs_intent *intent)
 {
     struct dev_descr    *dev = NULL;
+    struct media_info   *media = NULL;
     int                  rc;
     ENTRY;
 
+retry:
     intent->li_operation = LRS_OP_WRITE;
 
     rc = lrs_get_write_res(dss, size, &dev);
     if (rc != 0)
         return rc;
-
-    if (dev != NULL)
-        pho_verb("Writing to media '%s' using device '%s' "
-                 "(free space: %zd bytes)",
-                 media_id_get(&dev->dss_media_info->id), dev->dev_path,
-                 dev->dss_media_info->stats.phys_spc_free);
 
     intent->li_dss    = dss;
     intent->li_device = dev;
@@ -1404,10 +1429,34 @@ int lrs_write_prepare(struct dss_handle *dss, size_t size,
     intent->li_location.extent.layout_idx = 0;
     intent->li_location.extent.size = size;
 
+    media = dev->dss_media_info;
+
+    /* LTFS can cunningly mount almost-full tapes as read-only, and so would
+     * damaged disks. Mark the media as full and retry when this occurs. */
+    if (!lrs_mount_is_writable(intent)) {
+        pho_warn("Media '%s' OK but mounted R/O, marking full and retrying...",
+                 media_id_get(&media->id));
+
+        media->fs_status = PHO_FS_STATUS_FULL;
+
+        rc = dss_media_set(dss, media, 1, DSS_SET_UPDATE);
+        if (rc)
+            LOG_GOTO(err_cleanup, rc, "Cannot update media information");
+
+        lrs_dev_release(dss, dev);
+        lrs_media_release(dss, media);
+        dev = NULL;
+        media = NULL;
+        goto retry;
+    }
+
+    pho_verb("Writing to media '%s' using device '%s'",
+             media_id_get(&media->id), dev->dev_path);
+
 err_cleanup:
     if (rc != 0) {
         lrs_dev_release(dss, dev);
-        lrs_media_release(dss, dev->dss_media_info);
+        lrs_media_release(dss, media);
         free(intent->li_location.root_path);
         memset(intent, 0, sizeof(*intent));
     }
@@ -1468,7 +1517,7 @@ static int lrs_media_update(struct lrs_intent *intent, int fragments,
         LOG_RETURN(rc, "No FS adapter found for '%s' (type %s)",
                    fsroot, fs_type2str(intent->li_location.extent.fs_type));
 
-    rc = ldm_fs_df(&fsa, intent->li_location.root_path, &spc);
+    rc = ldm_fs_df(&fsa, fsroot, &spc);
     if (rc)
         LOG_RETURN(rc, "Cannot retrieve media usage information");
 
@@ -1494,45 +1543,46 @@ static int lrs_media_update(struct lrs_intent *intent, int fragments,
 
 int lrs_done(struct lrs_intent *intent, int fragments, int err_code)
 {
-    struct io_adapter   ioa;
-    int                 rc = 0;
+    struct pho_ext_loc  *loc = &intent->li_location;
+    struct io_adapter    ioa;
+    bool                 is_full = is_media_global_error(err_code);
+    int                  rc = 0;
+    int                  rc2;
     ENTRY;
 
     if (intent->li_operation != LRS_OP_WRITE)
         goto out_free;
 
-    /* Special case: R/O filesystem. Typically happens when LTFS considers that
-     * a tape does not contain enough space to be written */
-    if (err_code == -EROFS) {
-        lrs_media_update(intent, 0, true);
-        goto out_free;
+    /* At least one slice succeeded: sync data */
+    if (fragments > 0) {
+        rc = get_io_adapter(intent->li_location.extent.fs_type, &ioa);
+        if (rc != 0)
+            LOG_GOTO(out_free, rc,
+                     "No suitable I/O adapter for filesystem type '%s'",
+                     fs_type2str(loc->extent.fs_type));
+
+        /* The same IOA has been used to perform the actual data transfer */
+        assert(io_adapter_is_valid(&ioa));
+
+        rc = ioa_flush(&ioa, &intent->li_location);
+        if (rc) {
+            pho_error(rc, "Cannot flush media at: %s", loc->root_path);
+            if (is_media_global_error(rc))
+                is_full = true;
+
+            if (is_full)
+                /* err_code or rc from ioa_flush is global */
+                goto out_update;
+            else
+                /* other, non-global error */
+                goto out_free;
+        }
     }
 
-    rc = get_io_adapter(intent->li_location.extent.fs_type, &ioa);
-    if (rc != 0)
-        LOG_GOTO(out_free, rc,
-                 "No suitable I/O adapter for filesystem type '%s'",
-                 fs_type2str(intent->li_location.extent.fs_type));
-
-    /* The same IOA must have been used to perform the actual data transfer */
-    assert(io_adapter_is_valid(&ioa));
-
-    rc = ioa_flush(&ioa, &intent->li_location);
-    if (rc != 0)
-        LOG_GOTO(out_free, rc, "Cannot flush media at: %s",
-                 intent->li_location.root_path);
-
-    switch (err_code) {
-    case 0:
-        rc = lrs_media_update(intent, fragments, false);
-        break;
-    case -ENOSPC:
-        rc = lrs_media_update(intent, fragments, true);
-        break;
-    default:
-        rc = 0;
-        goto out_free;
-    }
+out_update:
+    rc2 = lrs_media_update(intent, fragments, is_full);
+    if (rc2 && !rc)
+        rc = rc2;
 
 out_free:
     lrs_dev_release(intent->li_dss, intent->li_device);

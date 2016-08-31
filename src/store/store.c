@@ -135,7 +135,6 @@ static const struct layout_info simple_layout = {
     }
 };
 
-
 /**
  * Make active slices progress from their current step to the given one.
  * Return 0 if at least one step has succeeded and -EIO otherwise.
@@ -180,10 +179,13 @@ static int mput_slices_progress(struct mput_desc *mput, enum mput_step barrier)
     for (i = 0; i < mput->slice_cnt; i++) {
         struct mput_slice *slice = &mput->slices[i];
 
+        if (slice->rc == 0)
+            /* At least one slice succeeded, that happens */
+            return 0;
+
         if (slice->rc < min_err)
+            /* Get the highest error code in absolute value */
             min_err = slice->rc;
-        else
-            return 0; /* At least one slice succeeded */
     }
 
     return min_err;
@@ -663,6 +665,30 @@ static int mput_valid_slices_count(const struct mput_desc *mput)
     return count;
 }
 
+/**
+ * Get a representative return code for the whole batch.
+ * Used to provide other layers with indications about how things ended,
+ * even though we have a per-slice code for proper error management.
+ *
+ * The choice here is to return an media-global error code if any, or zero if at
+ * least one slice succeeded.
+ *
+ * XXX
+ * Note that given the context where this function is used, we can assume that
+ * at least one slice has succeeded.
+ */
+static int mput_rc(const struct mput_desc *mput)
+{
+    int i;
+
+    for (i = 0; i < mput->slice_cnt; i++) {
+        if (is_media_global_error(mput->slices[i].rc))
+            return mput->slices[i].rc;
+    }
+
+    return 0;
+}
+
 int phobos_put(const struct pho_xfer_desc *desc, size_t n,
                pho_completion_cb_t cb, void *udata)
 {
@@ -699,7 +725,7 @@ int phobos_put(const struct pho_xfer_desc *desc, size_t n,
     }
 
     /* Release storage resources and update device/media info */
-    rc = lrs_done(&mput->intent, mput_valid_slices_count(mput), rc);
+    rc = lrs_done(&mput->intent, mput_valid_slices_count(mput), mput_rc(mput));
     if (rc)
         LOG_GOTO(out_finalize, rc, "Failed to flush data");
 
