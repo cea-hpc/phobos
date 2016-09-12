@@ -21,47 +21,11 @@
 /** default path to local config file */
 #define PHO_DEFAULT_CFG "/etc/phobos.conf"
 
-/** List of phobos configuration parameters */
-enum pho_cfg_params {
-    PHO_CFG_FIRST,
-
-    /* dss parameters */
-    PHO_CFG_DSS_connect_string = PHO_CFG_FIRST,
-
-    /* lrs parameters */
-    PHO_CFG_LRS_mount_prefix,
-    PHO_CFG_LRS_policy,
-    PHO_CFG_LRS_default_family,
-    PHO_CFG_LRS_lib_device,
-
-    /* ldm parameters */
-    PHO_CFG_LDM_cmd_mount_ltfs,
-    PHO_CFG_LDM_cmd_umount_ltfs,
-    PHO_CFG_LDM_cmd_format_ltfs,
-    PHO_CFG_LDM_lib_scsi_sep_sn_query, /**< Query the S/N of a drive in a
-                                            separate ELEMENT_STATUS request
-                                            (e.g. for IBM TS3500). */
-    PHO_CFG_LDM_lib_scsi_max_element_status, /**< Max chunk size for
-                                                  ELEMENT_STATUS request. */
-    PHO_CFG_LDM_scsi_retry_count, /**< Retry count for all SCSI requests */
-    PHO_CFG_LDM_scsi_retry_short, /**< Retry delay for EAGAIN */
-    PHO_CFG_LDM_scsi_retry_long, /**<  Retry delay for EBUSY */
-
-    PHO_CFG_LAST
-};
-
 struct pho_config_item {
     char *section;
     char *name;
     char *value;
 };
-
-#define PHO_LDM_HELPER "/usr/sbin/pho_ldm_helper"
-
-/** Name and default of configuration parameters.
- *  Value contains default.
- */
-extern const struct pho_config_item pho_cfg_descr[];
 
 /**
  * Initialize access to local config parameters (process-wide and host-wide).
@@ -77,10 +41,15 @@ extern const struct pho_config_item pho_cfg_descr[];
 int pho_cfg_init_local(const char *config_file);
 
 /** This function gets the value of a configuration item
- *  and return default value if it is not found.
+ *  and return default value (from module_params) if it is not found.
  *  @return A the value on success and NULL on error.
  */
-const char *pho_cfg_get(enum pho_cfg_params param);
+const char *_pho_cfg_get(int first_index, int last_index, int param_index,
+                        const struct pho_config_item *module_params);
+
+#define PHO_CFG_GET(_params_list, _cfg_namespace, _name)                \
+        _pho_cfg_get(_cfg_namespace ## _FIRST, _cfg_namespace ## _LAST, \
+                _cfg_namespace ## _ ##_name, (_params_list))
 
 # ifndef SWIG
 /**
@@ -153,7 +122,13 @@ int pho_cfg_set(const char *section, const char *name, const char *value,
  * @param[in] fail_value  Returned value if parsing fails.
  * @return parameter value, or fail_value on error.
  */
-int pho_cfg_get_int(enum pho_cfg_params param, int fail_val);
+int _pho_cfg_get_int(int first_index, int last_index, int param_index,
+                     const struct pho_config_item *module_params,
+                     int fail_val);
+
+#define PHO_CFG_GET_INT(_params_list, _cfg_namespace, _name, _fail_val)    \
+        _pho_cfg_get_int(_cfg_namespace ## _FIRST, _cfg_namespace ## _LAST, \
+                _cfg_namespace ## _ ##_name, (_params_list), (_fail_val))
 
 # endif
 #endif

@@ -15,9 +15,9 @@
 #include "pho_common.h"
 #include "pho_dss.h"
 #include "pho_type_utils.h"
-#include "pho_cfg.h"
 #include "pho_ldm.h"
 #include "pho_io.h"
+#include "lrs_cfg.h"
 
 #include <string.h>
 #include <unistd.h>
@@ -41,7 +41,7 @@ static char *mount_point(const char *id)
     const char  *mnt_cfg;
     char        *mnt_out;
 
-    mnt_cfg = pho_cfg_get(PHO_CFG_LRS_mount_prefix);
+    mnt_cfg = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, mount_prefix);
     if (mnt_cfg == NULL)
         return NULL;
 
@@ -57,7 +57,7 @@ static enum dev_family default_family(void)
 {
     const char *fam_str;
 
-    fam_str = pho_cfg_get(PHO_CFG_LRS_default_family);
+    fam_str = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, default_family);
     if (fam_str == NULL)
         return PHO_DEV_INVAL;
 
@@ -429,7 +429,7 @@ static int wrap_lib_open(enum dev_family dev_type, struct lib_adapter *lib)
     /* For now, one single configurable path to library device.
      * This will have to be changed to manage multiple libraries.
      */
-    lib_dev = pho_cfg_get(PHO_CFG_LRS_lib_device);
+    lib_dev = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, lib_device);
     if (!lib_dev)
         LOG_RETURN(rc, "Failed to get default library device from config");
 
@@ -983,7 +983,7 @@ static device_select_func_t get_dev_policy(void)
     const char *policy_str;
     ENTRY;
 
-    policy_str = pho_cfg_get(PHO_CFG_LRS_policy);
+    policy_str = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, policy);
     if (policy_str == NULL)
         return NULL;
 

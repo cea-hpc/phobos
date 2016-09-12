@@ -27,6 +27,45 @@
  */
 #define MAX_ELEMENT_STATUS_CHUNK 256
 
+/** List of SCSI configuration parameters */
+enum pho_cfg_params_scsi {
+    /* SCSI common parameters */
+    PHO_CFG_SCSI_retry_count, /**< Retry count for all SCSI requests */
+    PHO_CFG_SCSI_retry_short, /**< Retry delay for EAGAIN */
+    PHO_CFG_SCSI_retry_long,  /**< Retry delay for EBUSY */
+
+    PHO_CFG_SCSI_max_element_status, /**< Max chunk size for
+                                          ELEMENT_STATUS request. */
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_SCSI_FIRST = PHO_CFG_SCSI_retry_count,
+    PHO_CFG_SCSI_LAST  = PHO_CFG_SCSI_max_element_status,
+};
+
+/** Definition and default values of SCSI configuration parameters */
+const struct pho_config_item cfg_scsi[] = {
+    [PHO_CFG_SCSI_retry_count] = {
+        .section = "scsi",
+        .name    = "retry_count",
+        .value   = "5",
+    },
+    [PHO_CFG_SCSI_retry_short] = {
+        .section = "scsi",
+        .name    = "retry_short",
+        .value   = "1",
+    },
+    [PHO_CFG_SCSI_retry_long] = {
+        .section = "scsi",
+        .name    = "retry_long",
+        .value   = "5",
+    },
+    [PHO_CFG_SCSI_max_element_status] = {
+        .section = "scsi",
+        .name    = "max_element_status",
+        .value   = "0", /* unlimited */
+    },
+};
+
 /** Return retry count (get it once) */
 static int scsi_retry_count(void)
 {
@@ -36,7 +75,7 @@ static int scsi_retry_count(void)
         return retry_count;
 
     /* fallback to no-retry (0) on failure */
-    retry_count = pho_cfg_get_int(PHO_CFG_LDM_scsi_retry_count, 0);
+    retry_count = PHO_CFG_GET_INT(cfg_scsi, PHO_CFG_SCSI, retry_count, 0);
 
     return retry_count;
 }
@@ -50,7 +89,7 @@ static int scsi_retry_short(void)
         return short_retry_delay;
 
     /* fallback to 1s on failure */
-    short_retry_delay = pho_cfg_get_int(PHO_CFG_LDM_scsi_retry_short, 1);
+    short_retry_delay = PHO_CFG_GET_INT(cfg_scsi, PHO_CFG_SCSI, retry_short, 1);
 
     return short_retry_delay;
 }
@@ -63,8 +102,8 @@ static int scsi_retry_long(void)
     if (long_retry_delay != -1)
         return long_retry_delay;
 
-    /* fallback to 1s on failure */
-    long_retry_delay = pho_cfg_get_int(PHO_CFG_LDM_scsi_retry_long, 1);
+    /* fallback to 5s on failure */
+    long_retry_delay = PHO_CFG_GET_INT(cfg_scsi, PHO_CFG_SCSI, retry_long, 5);
 
     return long_retry_delay;
 }
@@ -351,8 +390,8 @@ int scsi_element_status(int fd, enum element_type_code type,
 
     /* check if there is a configured limitation */
     if (max_element_status_chunk == -1) {
-        int val = pho_cfg_get_int(PHO_CFG_LDM_lib_scsi_max_element_status, 1);
-
+        int val = PHO_CFG_GET_INT(cfg_scsi, PHO_CFG_SCSI, max_element_status,
+                                  1);
         if (val > 0)
             max_element_status_chunk = val;
     }

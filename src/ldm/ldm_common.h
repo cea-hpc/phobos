@@ -18,6 +18,8 @@
 
 #include <mntent.h>
 
+#define PHO_LDM_HELPER "/usr/sbin/pho_ldm_helper"
+
 /**
  * Callback function for mntent iterator.
  * @param mntent  Current mount entry.

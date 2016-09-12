@@ -22,6 +22,37 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+/** List of LTFS configuration parameters */
+enum pho_cfg_params_ltfs {
+    /* LDM parameters */
+    PHO_CFG_LTFS_cmd_mount,
+    PHO_CFG_LTFS_cmd_umount,
+    PHO_CFG_LTFS_cmd_format,
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_LTFS_FIRST = PHO_CFG_LTFS_cmd_mount,
+    PHO_CFG_LTFS_LAST  = PHO_CFG_LTFS_cmd_format,
+};
+
+/** Definition and default values of LTFS configuration parameters */
+const struct pho_config_item cfg_ltfs[] = {
+    [PHO_CFG_LTFS_cmd_mount] = {
+        .section = "ltfs",
+        .name    = "cmd_mount",
+        .value   = PHO_LDM_HELPER" mount \"%s\" \"%s\""
+    },
+    [PHO_CFG_LTFS_cmd_umount] = {
+        .section = "ltfs",
+        .name    = "cmd_umount",
+        .value   = PHO_LDM_HELPER" umount \"%s\" \"%s\""
+    },
+    [PHO_CFG_LTFS_cmd_format] = {
+        .section = "ltfs",
+        .name    = "cmd_format",
+        .value   = PHO_LDM_HELPER" format \"%s\" \"%s\""
+    },
+};
+
 /**
  * Build a command to mount a LTFS filesystem at a given path.
  * The result must be released by the caller using free(3).
@@ -31,7 +62,7 @@ static char *ltfs_mount_cmd(const char *device, const char *path)
     const char          *cmd_cfg;
     char                *cmd_out;
 
-    cmd_cfg = pho_cfg_get(PHO_CFG_LDM_cmd_mount_ltfs);
+    cmd_cfg = PHO_CFG_GET(cfg_ltfs, PHO_CFG_LTFS, cmd_mount);
     if (cmd_cfg == NULL)
         return NULL;
 
@@ -50,7 +81,7 @@ static char *ltfs_umount_cmd(const char *device, const char *path)
     const char          *cmd_cfg;
     char                *cmd_out;
 
-    cmd_cfg = pho_cfg_get(PHO_CFG_LDM_cmd_umount_ltfs);
+    cmd_cfg = PHO_CFG_GET(cfg_ltfs, PHO_CFG_LTFS, cmd_umount);
     if (cmd_cfg == NULL)
         return NULL;
 
@@ -69,7 +100,7 @@ static char *ltfs_format_cmd(const char *device, const char *label)
     const char          *cmd_cfg;
     char                *cmd_out;
 
-    cmd_cfg = pho_cfg_get(PHO_CFG_LDM_cmd_format_ltfs);
+    cmd_cfg = PHO_CFG_GET(cfg_ltfs, PHO_CFG_LTFS, cmd_format);
     if (cmd_cfg == NULL)
         return NULL;
 

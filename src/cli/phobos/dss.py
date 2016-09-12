@@ -335,23 +335,12 @@ class Client(object):
         self.objects = ObjectManager('object', self)
 
     def connect(self, **kwargs):
-        """
-        Establish a fresh connection or renew a stalled one if needed.
-
-        A special '_connect' keyword is supported, that overrides everything
-        and whose value is used as is to initialize connection. If not present,
-        a connection string is crafted: 'k0=v0 k1=v1...'
-        """
+        """ Establish a fresh connection or renew a stalled one if needed."""
         if self.handle is not None:
             self.disconnect()
 
-        # Build a string of the type 'dbname=phobos user=blah password=foobar'
-        conn_info = kwargs.get('_connect')
-        if conn_info is None:
-            conn_info = ' '.join(['%s=%s' % (k, v) for k, v in kwargs.items()])
-
         self.handle = cdss.dss_handle()
-        rcode = cdss.dss_init(conn_info, self.handle)
+        rcode = cdss.dss_init(self.handle)
         if rcode != 0:
             raise GenericError('DSS initialization failed')
 

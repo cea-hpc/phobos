@@ -23,6 +23,26 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+/** List of SCSI library configuration parameters */
+enum pho_cfg_params_libscsi {
+    /** Query the S/N of a drive in a separate ELEMENT_STATUS request
+     * (e.g. for IBM TS3500). */
+    PHO_CFG_LIB_SCSI_sep_sn_query,
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_LIB_SCSI_FIRST = PHO_CFG_LIB_SCSI_sep_sn_query,
+    PHO_CFG_LIB_SCSI_LAST  = PHO_CFG_LIB_SCSI_sep_sn_query,
+};
+
+/** Definition and default values of SCSI library configuration parameters */
+const struct pho_config_item cfg_lib_scsi[] = {
+    [PHO_CFG_LIB_SCSI_sep_sn_query] = {
+        .section = "lib_scsi",
+        .name    = "sep_sn_query",
+        .value   = "0", /* no */
+    },
+};
+
 struct status_array {
     struct element_status *items;
     int  count;
@@ -171,8 +191,8 @@ static int lib_status_load(struct lib_descriptor *lib,
         bool                     separate_query_sn;
 
         /* separate S/N query? */
-        separate_query_sn = pho_cfg_get_int(PHO_CFG_LDM_lib_scsi_sep_sn_query,
-                                            0);
+        separate_query_sn = PHO_CFG_GET_INT(cfg_lib_scsi, PHO_CFG_LIB_SCSI,
+                                            sep_sn_query, 0);
 
         /* IBM TS3500 can't get both volume label and drive in the same request.
          * So, first get the tape label and 'full' indication, then query

@@ -55,10 +55,9 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    rc = dss_init("dbname=phobos"
-                  " host=localhost"
-                  " user=phobos"
-                  " password=phobos", &dss_handle);
+    setenv("PHOBOS_DSS_connect_string", "dbname=phobos host=localhost "
+                                        "user=phobos password=phobos", 1);
+    rc = dss_init(&dss_handle);
 
     if (rc) {
         pho_error(rc, "dss_init failed");

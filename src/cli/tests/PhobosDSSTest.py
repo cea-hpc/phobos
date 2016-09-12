@@ -7,6 +7,7 @@
 
 import sys
 import unittest
+import os
 
 from random import randint
 
@@ -26,21 +27,22 @@ class DSSClientTest(unittest.TestCase):
     def test_client_connect(self):
         """Connect to backend with valid parameters."""
         cli = Client()
-        cli.connect(dbname='phobos', user='phobos', password='phobos')
+        cli.connect()
         cli.disconnect()
 
     def test_client_connect_refused(self):
         """Connect to backend with invalid parameters."""
         cli = Client()
-        self.assertRaises(DSSError, cli.connect,
-                          dbname='tata', user='titi', password='toto')
-        self.assertRaises(DSSError, cli.connect, inval0=0, inval1=1)
+        environ_save = os.environ['PHOBOS_DSS_connect_string']
+        os.environ['PHOBOS_DSS_connect_string'] = \
+                "dbname='tata', user='titi', password='toto'"
         self.assertRaises(DSSError, cli.connect)
+        os.environ['PHOBOS_DSS_connect_string'] = environ_save
 
     def test_list_devices_by_family(self):
         """List devices family by family."""
         cli = Client()
-        cli.connect(dbname='phobos', user='phobos', password='phobos')
+        cli.connect()
         for fam in ('tape', 'disk', 'dir'):
             for dev in cli.devices.get(family=fam):
                 self.assertEqual(dev_family2str(dev.family), fam)
@@ -49,7 +51,7 @@ class DSSClientTest(unittest.TestCase):
     def test_list_media(self):
         """List media."""
         cli = Client()
-        cli.connect(dbname='phobos', user='phobos', password='phobos')
+        cli.connect()
         for mda in cli.media.get():
             self.assertTrue(isinstance(mda, CliMedia))
         cli.disconnect()
@@ -57,7 +59,7 @@ class DSSClientTest(unittest.TestCase):
     def test_list_extents(self):
         """List extents."""
         cli = Client()
-        cli.connect(dbname='phobos', user='phobos', password='phobos')
+        cli.connect()
         for ext in cli.extents.get():
             self.assertTrue(isinstance(ext, layout_info))
         cli.disconnect()
@@ -65,7 +67,7 @@ class DSSClientTest(unittest.TestCase):
     def test_getset(self):
         """GET / SET an object to validate the whole chain."""
         cli = Client()
-        cli.connect(dbname='phobos', user='phobos', password='phobos')
+        cli.connect()
 
         dev = dev_info()
         dev.family = PHO_DEV_DIR

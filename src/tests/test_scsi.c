@@ -302,7 +302,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    if (setenv("PHOBOS_LDM_lib_scsi_max_element_status", val, 1)) {
+    if (setenv("PHOBOS_SCSI_max_element_status", val, 1)) {
         pho_error(errno, "setenv failed");
         exit(EXIT_FAILURE);
     }
@@ -392,8 +392,8 @@ int main(int argc, char **argv)
     /* test of the lib adapter API */
     test_lib_adapter();
 
-    /* same test with PHO_CFG_LDM_lib_scsi_sep_sn_query=1 */
-    if (setenv("PHOBOS_LDM_lib_scsi_sep_sn_query", "1", 1)) {
+    /* same test with PHO_CFG_LIB_SCSI_sep_sn_query=1 */
+    if (setenv("PHOBOS_LIB_SCSI_sep_sn_query", "1", 1)) {
         pho_error(errno, "setenv failed");
         exit(EXIT_FAILURE);
     }

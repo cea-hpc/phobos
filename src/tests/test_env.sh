@@ -28,9 +28,9 @@ export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$PHO_STORELIB_PATH:$PHO_PYTHON_PATH"
 ldm_helper=$(readlink -e $test_bin_dir/../../scripts/)/pho_ldm_helper
 
 export PHOBOS_CFG_FILE="$test_bin_dir/phobos.conf"
-export PHOBOS_LDM_cmd_format_ltfs="$ldm_helper format_ltfs '%s' '%s'"
-export PHOBOS_LDM_cmd_mount_ltfs="$ldm_helper mount_ltfs '%s' '%s'"
-export PHOBOS_LDM_cmd_umount_ltfs="$ldm_helper umount_ltfs '%s' '%s'"
+export PHOBOS_LTFS_cmd_format="$ldm_helper format_ltfs '%s' '%s'"
+export PHOBOS_LTFS_cmd_mount="$ldm_helper mount_ltfs '%s' '%s'"
+export PHOBOS_LTFS_cmd_umount="$ldm_helper umount_ltfs '%s' '%s'"
 
 phobos="$cli_dir/scripts/phobos"
 [ x$DEBUG = x1 ] && phobos="$phobos -vvv"

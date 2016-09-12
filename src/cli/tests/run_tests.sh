@@ -20,6 +20,8 @@ cur_dir=$(dirname $(readlink -m $0))
 drop_tables
 setup_tables
 
+conn_str="dbname=phobos user=phobos password=phobos"
+export PHOBOS_DSS_connect_string="$conn_str"
 for test_case in *Test.py
 do
     $PY $test_case || exit 1

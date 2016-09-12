@@ -14,6 +14,7 @@
 #include "pho_common.h"
 #include "pho_type_utils.h"
 #include "pho_dss.h"
+#include "pho_cfg.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -21,6 +22,24 @@
 #include <glib.h>
 #include <libpq-fe.h>
 #include <jansson.h>
+
+/** List of configuration parameters for DSS */
+enum pho_cfg_params_dss {
+    /* DSS parameters */
+    PHO_CFG_DSS_connect_string,
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_DSS_FIRST = PHO_CFG_DSS_connect_string,
+    PHO_CFG_DSS_LAST  = PHO_CFG_DSS_connect_string,
+};
+
+const struct pho_config_item cfg_dss[] = {
+    [PHO_CFG_DSS_connect_string] = {
+        .section = "dss",
+        .name    = "connect_string",
+        .value   = "dbname=phobos host=localhost"
+    },
+};
 
 struct dss_result {
     PGresult *pg_res;
@@ -63,9 +82,15 @@ static inline char *dss_char4sql(const char *s)
     return ns;
 }
 
-int dss_init(const char *conninfo, struct dss_handle *handle)
+int dss_init(struct dss_handle *handle)
 {
-    handle->dh_conn = PQconnectdb(conninfo);
+    const char *conn_str;
+
+    conn_str = PHO_CFG_GET(cfg_dss, PHO_CFG_DSS, connect_string);
+    if (conn_str == NULL)
+        return -EINVAL;
+
+    handle->dh_conn = PQconnectdb(conn_str);
 
     if (PQstatus(handle->dh_conn) != CONNECTION_OK)
         LOG_RETURN(-ENOTCONN, "Connection to database failed: %s",

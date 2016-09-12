@@ -24,7 +24,7 @@ import os.path
 import phobos.capi.log as clog
 import phobos.capi.dss as cdss
 
-from phobos.cfg import load_config_file, get_config_value
+from phobos.cfg import load_config_file
 from phobos.dss import Client as DSSClient, GenericError
 from phobos.store import Client as XferClient
 from phobos.lrs import fs_format
@@ -154,13 +154,8 @@ class DSSInteractHandler(BaseOptHandler):
 
     def initialize(self):
         """Initialize a DSS Client."""
-        # XXX Connection info is currently expressed as an opaque string.
-        #     Thus use the special _connect keyword to not rebuild it.
         self.client = DSSClient()
-        conn_info = get_config_value('dss', 'connect_string')
-        if conn_info is None:
-            conn_info = ''
-        self.client.connect(_connect=conn_info)
+        self.client.connect()
 
     def teardown(self):
         """Release resources associated to a DSS handle."""

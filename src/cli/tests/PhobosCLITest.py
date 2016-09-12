@@ -92,7 +92,7 @@ class LogTest(unittest.TestCase):
         from lower layers get properly propagated up to the python callers.
         """
         cli = Client()
-        cli.connect(dbname='phobos', user='phobos', password='phobos')
+        cli.connect()
 
         dev = dev_info()
         dev.family = PHO_DEV_DIR

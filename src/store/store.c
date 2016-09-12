@@ -564,17 +564,12 @@ free_values:
 static int store_init(struct dss_handle *dss)
 {
     int         rc;
-    const char *str;
 
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)
         return rc;
 
-    str = pho_cfg_get(PHO_CFG_DSS_connect_string);
-    if (str == NULL)
-        return -EINVAL;
-
-    rc = dss_init(str, dss);
+    rc = dss_init(dss);
     if (rc != 0)
         return rc;
 

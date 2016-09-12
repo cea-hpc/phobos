@@ -29,76 +29,6 @@ static const char *cfg_file;
 /** pointer to the loaded configuration structure */
 static struct collection_item *cfg_items;
 
-
-const struct pho_config_item pho_cfg_descr[] = {
-    [PHO_CFG_DSS_connect_string] = {
-        .section = "dss",
-        .name    = "connect_string",
-        .value   = "dbname=phobos host=localhost"
-    },
-    [PHO_CFG_LRS_mount_prefix] = {
-        .section = "lrs",
-        .name    = "mount_prefix",
-        .value   = "/mnt/phobos-"
-    },
-    [PHO_CFG_LRS_policy] = {
-        .section = "lrs",
-        .name    = "policy",
-        .value   = "best_fit"
-    },
-    [PHO_CFG_LRS_default_family] = {
-        .section = "lrs",
-        .name    = "default_family",
-        .value   = "tape"
-    },
-    [PHO_CFG_LRS_lib_device] = {
-        .section = "lrs",
-        .name    = "lib_device",
-        .value   = "/dev/changer"
-    },
-    [PHO_CFG_LDM_cmd_mount_ltfs] = {
-        .section = "ldm",
-        .name    = "cmd_mount_ltfs",
-        .value   = PHO_LDM_HELPER" mount_ltfs \"%s\" \"%s\""
-    },
-    [PHO_CFG_LDM_cmd_umount_ltfs] = {
-        .section = "ldm",
-        .name    = "cmd_umount_ltfs",
-        .value   = PHO_LDM_HELPER" umount_ltfs \"%s\" \"%s\""
-    },
-    [PHO_CFG_LDM_cmd_format_ltfs] = {
-        .section = "ldm",
-        .name    = "cmd_format_ltfs",
-        .value   = PHO_LDM_HELPER" format_ltfs \"%s\" \"%s\""
-    },
-    [PHO_CFG_LDM_lib_scsi_sep_sn_query] = {
-        .section = "ldm",
-        .name    = "lib_scsi_sep_sn_query",
-        .value   = "0", /* no */
-    },
-    [PHO_CFG_LDM_lib_scsi_max_element_status] = {
-        .section = "ldm",
-        .name    = "lib_scsi_max_element_status",
-        .value   = "0", /* unlimited */
-    },
-    [PHO_CFG_LDM_scsi_retry_count] = {
-        .section = "ldm",
-        .name    = "scsi_retry_count",
-        .value   = "5",
-    },
-    [PHO_CFG_LDM_scsi_retry_short] = {
-        .section = "ldm",
-        .name    = "scsi_retry_short",
-        .value   = "1",
-    },
-    [PHO_CFG_LDM_scsi_retry_long] = {
-        .section = "ldm",
-        .name    = "scsi_retry_long",
-        .value   = "5",
-    },
-};
-
-
 /** load a local config file */
 static int pho_cfg_load_file(const char *cfg)
 {
@@ -295,16 +225,17 @@ int pho_cfg_get_val(const char *section, const char *name, const char **value)
     return -ENOATTR;
 }
 
-const char *pho_cfg_get(enum pho_cfg_params param)
+const char *_pho_cfg_get(int first_index, int last_index, int param_index,
+                        const struct pho_config_item *module_params)
 {
     const struct pho_config_item    *item;
     const char                      *res;
     int                              rc;
 
-    if (param >= PHO_CFG_LAST || param < PHO_CFG_FIRST)
+    if (param_index > last_index || param_index < first_index)
         return NULL;
 
-    item = &pho_cfg_descr[param];
+    item = &module_params[param_index];
 
     /* sanity check (in case of sparse pho_config_descr array) */
     if (!item->name)
@@ -317,21 +248,23 @@ const char *pho_cfg_get(enum pho_cfg_params param)
     return res;
 }
 
-int pho_cfg_get_int(enum pho_cfg_params param, int fail_val)
+int _pho_cfg_get_int(int first_index, int last_index, int param_index,
+                     const struct pho_config_item *module_params,
+                     int fail_val)
 {
     const char *opt;
     int64_t     val;
 
-    opt = pho_cfg_get(param);
+    opt = _pho_cfg_get(first_index, last_index, param_index, module_params);
     if (opt == NULL) {
-        pho_warn("Failed to retrieve config parameter #%d", param);
+        pho_warn("Failed to retrieve config parameter #%d", param_index);
         return fail_val;
     }
 
     val = str2int64(opt);
     if (val == LLONG_MIN || val < INT_MIN || val > INT_MAX) {
         pho_warn("Invalid value for parameter #%d: '%s' (integer expected)",
-                 param, opt);
+                 param_index, opt);
         return fail_val;
     }
 

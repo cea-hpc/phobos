@@ -175,11 +175,10 @@ struct dss_handle {
 
 /**
  *  Initialize a connection handle
- *  @param[in]  conninfo    Connection information e.g. "dbname = phobos"
  *  @param[out] handle      Connection handle
  *  @return 0 on success, negated errno code on failure.
  */
-int dss_init(const char *conninfo, struct dss_handle *handle);
+int dss_init(struct dss_handle *handle);
 
 /**
  *  Closes a connection
