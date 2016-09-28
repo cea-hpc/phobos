@@ -18,10 +18,10 @@ TEST_FILES="$TEST_FILES $TEST_RAND"
 
 test_bin_dir=$(dirname $(readlink -e $0))
 test_bin="$test_bin_dir/test_store"
-export PHOBOS_CFG_FILE="$test_bin_dir/phobos.conf"
 
-
+. $test_bin_dir/test_env.sh
 . $test_bin_dir/setup_db.sh
+
 drop_tables
 setup_tables
 insert_examples

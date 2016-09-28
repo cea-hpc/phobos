@@ -12,13 +12,16 @@ Build and installation information for phobos CLI.
 # Macros to use for every C extension we build
 GLOBAL_MACROS = [('HAVE_CONFIG_H', 1)]
 
+GLOBAL_LIBS = ['phobos_store']
+GLOBAL_LIBDIRS = ['../store/.libs']
+
 dss_module = Extension('_dss',
                        sources=['phobos/capi/dss_wrap.c'],
                        include_dirs=['../include',
                                      '/usr/include/glib-2.0',
                                      '/usr/lib64/glib-2.0/include'],
-                       libraries=['phobos_store'],
-                       library_dirs=['../store/.libs'],
+                       libraries=GLOBAL_LIBS,
+                       library_dirs=GLOBAL_LIBDIRS,
                        define_macros=GLOBAL_MACROS)
 
 lrs_module = Extension('_lrs',
@@ -26,8 +29,8 @@ lrs_module = Extension('_lrs',
                        include_dirs=['../include',
                                      '/usr/include/glib-2.0',
                                      '/usr/lib64/glib-2.0/include'],
-                       libraries=['phobos_store'],
-                       library_dirs=['../store/.libs'],
+                       libraries=GLOBAL_LIBS,
+                       library_dirs=GLOBAL_LIBDIRS,
                        define_macros=GLOBAL_MACROS)
 
 ldm_module = Extension('_ldm',
@@ -35,8 +38,8 @@ ldm_module = Extension('_ldm',
                        include_dirs=['../include',
                                      '/usr/include/glib-2.0',
                                      '/usr/lib64/glib-2.0/include'],
-                       libraries=['phobos_store'],
-                       library_dirs=['../store/.libs'],
+                       libraries=GLOBAL_LIBS,
+                       library_dirs=GLOBAL_LIBDIRS,
                        define_macros=GLOBAL_MACROS)
 
 cfg_module = Extension('_cfg',
@@ -44,8 +47,8 @@ cfg_module = Extension('_cfg',
                        include_dirs=['../include',
                                      '/usr/include/glib-2.0',
                                      '/usr/lib64/glib-2.0/include'],
-                       libraries=['phobos_store'],
-                       library_dirs=['../store/.libs'],
+                       libraries=GLOBAL_LIBS,
+                       library_dirs=GLOBAL_LIBDIRS,
                        define_macros=GLOBAL_MACROS)
 
 log_module = Extension('log',
@@ -53,8 +56,8 @@ log_module = Extension('log',
                        include_dirs=['../include',
                                      '/usr/include/glib-2.0',
                                      '/usr/lib64/glib-2.0/include'],
-                       libraries=['phobos_store'],
-                       library_dirs=['../store/.libs'],
+                       libraries=GLOBAL_LIBS,
+                       library_dirs=GLOBAL_LIBDIRS,
                        define_macros=GLOBAL_MACROS)
 
 store_module = Extension('_store',
@@ -62,8 +65,8 @@ store_module = Extension('_store',
                          include_dirs=['../include',
                                        '/usr/include/glib-2.0',
                                        '/usr/lib64/glib-2.0/include'],
-                         libraries=['phobos_store'],
-                         library_dirs=['../store/.libs'],
+                         libraries=GLOBAL_LIBS,
+                         library_dirs=GLOBAL_LIBDIRS,
                          define_macros=GLOBAL_MACROS)
 
 setup(

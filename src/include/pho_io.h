@@ -18,10 +18,13 @@
 #include <unistd.h>
 #include <assert.h>
 
-#define PHO_IO_MD_ONLY   (1 << 0) /**< Only operate on object MD */
-#define PHO_IO_REPLACE   (1 << 1) /**< Replace the entry if it exists */
-#define PHO_IO_SYNC_FILE (1 << 2) /**< Sync file data to media on close */
-#define PHO_IO_NO_REUSE  (1 << 3) /**< Drop file contents from system cache */
+enum pho_io_flags {
+    PHO_IO_MD_ONLY    = (1 << 0),   /**< Only operate on object MD */
+    PHO_IO_REPLACE    = (1 << 1),   /**< Replace the entry if it exists */
+    PHO_IO_SYNC_FILE  = (1 << 2),   /**< Sync file data to media on close */
+    PHO_IO_NO_REUSE   = (1 << 3),   /**< Drop file contents from system cache */
+    PHO_IO_DELETE     = (1 << 4),   /**< Delete extent from media */
+};
 
 /** IO information passed to IO completion callback */
 struct io_cb_data {
@@ -40,7 +43,7 @@ typedef int (*io_callback_t)(const struct io_cb_data *cb_data, void *user_data);
  * ones.
  */
 struct pho_io_descr {
-    int                  iod_flags;    /**< PHO_IO_* flags */
+    enum pho_io_flags    iod_flags;    /**< PHO_IO_* flags */
     int                  iod_fd;       /**< Local FD */
     off_t                iod_off;      /**< Operation offset */
     size_t               iod_size;     /**< Operation size */

@@ -58,14 +58,20 @@ install -D -p -m 0640 doc/cfg/template.conf %{buildroot}/%{_sysconfdir}/phobos.c
 cd %{_builddir}/%{name}-%{version}/src/cli/
 %{__python} setup.py install --skip-build --root %{buildroot}
 
+rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.a
+rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
+
+
 %files
 
 %{_libdir}/libphobos_store.so.*
+%{_libdir}/phobos/libpho_layout_*.so*
 %{_sbindir}/pho_*_helper
 %{python_sitearch}/phobos/*
 %{python_sitearch}/phobos-*-py?.?.egg-info
 %{_bindir}/phobos
 %config(noreplace) %{_sysconfdir}/phobos.conf
+
 
 %files devel
 

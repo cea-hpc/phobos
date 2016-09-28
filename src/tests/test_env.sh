@@ -22,7 +22,10 @@ export PYTHONPATH="$PHO_PYTHON_PATH"
 
 # library paths
 PHO_STORELIB_PATH="$(readlink -e $test_bin_dir/../store/.libs/)"
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$PHO_STORELIB_PATH:$PHO_PYTHON_PATH"
+PHO_LAYOUTLIB_PATH="$(readlink -e $test_bin_dir/../layout-modules/.libs/)"
+
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$PHO_STORELIB_PATH:\
+$PHO_PYTHON_PATH:$PHO_LAYOUTLIB_PATH"
 
 # phobos stuff
 ldm_helper=$(readlink -e $test_bin_dir/../../scripts/)/pho_ldm_helper

@@ -1,0 +1,7 @@
+AM_CFLAGS= $(CC_OPT)
+
+pkglib_LTLIBRARIES=libpho_layout_simple.la
+libpho_layout_simple_la_SOURCES=simple.c
+libpho_layout_simple_la_CFLAGS=-fPIC
+libpho_layout_simple_la_LIBADD=../store/libphobos_store.la
+libpho_layout_simple_la_LDFLAGS=-version-info 0:0:0

@@ -95,7 +95,10 @@ AC_CONFIG_FILES([Makefile
          src/dss/Makefile
          src/cfg/Makefile
          src/lrs/Makefile
+         src/io/Makefile
+         src/layout/Makefile
          src/store/Makefile
+         src/layout-modules/Makefile
          src/tests/Makefile
          src/cli/Makefile
          phobos.spec

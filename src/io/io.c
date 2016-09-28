@@ -186,12 +186,12 @@ static int pho_posix_sendfile(int tgt_fd, int src_fd, off_t *src_offset,
     return 0;
 }
 
-static int pho_flags2open(int pho_io_flags)
+static int pho_flags2open(enum pho_io_flags io_flags)
 {
     int flags = 0;
 
     /* no replace => O_EXCL */
-    if (!(pho_io_flags & PHO_IO_REPLACE))
+    if (!(io_flags & PHO_IO_REPLACE))
         flags |= O_EXCL;
 
     return flags;
@@ -329,7 +329,8 @@ static int setxattr_cb(const char *key, const char *value, void *udata)
  * Either fd or path must be specified.
  */
 static int _pho_posix_md_set(const char *path, int fd,
-                             const struct pho_attrs *attrs, int pho_io_flags)
+                             const struct pho_attrs *attrs,
+                             enum pho_io_flags flags)
 {
     struct md_iter_sx  args;
     ENTRY;
@@ -340,19 +341,20 @@ static int _pho_posix_md_set(const char *path, int fd,
     args.mis_path  = path;
     args.mis_fd    = fd;
     /* pure create: fails if the attribute already exists */
-    args.mis_flags = (pho_io_flags & PHO_IO_REPLACE) ? 0 : XATTR_CREATE;
+    args.mis_flags = (flags & PHO_IO_REPLACE) ? 0 : XATTR_CREATE;
 
     return pho_attrs_foreach(attrs, setxattr_cb, &args);
 }
 
 static inline int pho_posix_md_fset(int fd, const struct pho_attrs *attrs,
-                                    int flags)
+                                    enum pho_io_flags flags)
 {
     return _pho_posix_md_set(NULL, fd, attrs, flags);
 }
 
 static inline int pho_posix_md_set(const char *path,
-                                   const struct pho_attrs *attrs, int flags)
+                                   const struct pho_attrs *attrs,
+                                   enum pho_io_flags flags)
 {
     return _pho_posix_md_set(path, -1, attrs, flags);
 }

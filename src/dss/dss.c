@@ -618,8 +618,8 @@ out_free:
  *
  * \return 0 on success, negative error code on failure.
  */
-static int dss_layout_extents_decode(struct extent **extents,
-                                     unsigned int *count, const char *json)
+static int dss_layout_extents_decode(struct extent **extents, int *count,
+                                     const char *json)
 {
     json_t          *root;
     json_t          *child;

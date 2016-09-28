@@ -34,34 +34,6 @@
  */
 #define PHO_LAYOUT_TAG_MAX  8
 
-enum layout_type {
-    PHO_LYT_INVAL = -1,
-    PHO_LYT_SIMPLE = 0, /* simple contiguous block of data */
-    PHO_LYT_LAST,
-    /* future: SPLIT, RAID0, RAID1, ... */
-};
-
-static const char * const layout_type_names[] = {
-    [PHO_LYT_SIMPLE]  = "simple",
-};
-
-static inline const char *layout_type2str(enum layout_type type)
-{
-    if (type >= PHO_LYT_LAST || type < 0)
-        return NULL;
-    return layout_type_names[type];
-}
-
-static inline enum layout_type str2layout_type(const char *str)
-{
-    int i;
-
-    for (i = 0; i < PHO_LYT_LAST; i++)
-        if (!strcmp(str, layout_type_names[i]))
-            return i;
-    return PHO_LYT_INVAL;
-}
-
 enum extent_state {
     PHO_EXT_ST_INVAL = -1,
     PHO_EXT_ST_PENDING = 0,
@@ -114,8 +86,9 @@ struct layout_info {
     char                *oid;           /**< Referenced object */
     enum extent_state    state;         /**< Object stability state */
     struct module_desc   layout_desc;   /**< Layout module used to write it */
+    size_t               wr_size;       /**< Encoding write size */
     struct extent       *extents;       /**< List of data extents */
-    unsigned int         ext_count;     /**< Number of extents in the list */
+    int                  ext_count;     /**< Number of extents in the list */
 };
 
 /**

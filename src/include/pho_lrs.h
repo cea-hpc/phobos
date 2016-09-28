@@ -29,21 +29,18 @@ struct lrs_intent {
     struct dev_descr    *li_device;
     enum lrs_operation   li_operation;
     struct pho_ext_loc   li_location;
+    size_t               li_req_size;
 };
 
 /**
  * Query to write a given amount of data with a given layout.
  * (future: several extents if the file is splitted, striped...)
  *
- * @param(in)  dss     Initialized DSS handle.
- * @param(in)  size    Size of the object to be written.
- * @param(in)  layout  The requested layout.
- * @param(out) intent  The intent descriptor to fill.
+ * @param(in)     dss     Initialized DSS handle.
+ * @param(in,out) intent  The intent descriptor to fill.
  * @return 0 on success, -1 * posix error code on failure
  */
-int lrs_write_prepare(struct dss_handle *dss, size_t intent_size,
-                      const struct layout_info *layout,
-                      struct lrs_intent *intent);
+int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent);
 
 /**
  * Query to read from a given set of media.
@@ -51,13 +48,11 @@ int lrs_write_prepare(struct dss_handle *dss, size_t intent_size,
  *  Moreover, the object may have several locations and layouts if it is
  *  duplicated).
  *
- * @param(in)  dss     Initialized DSS handle.
- * @param(in)  layout  Data layout description.
- * @param(out) intent  The intent descriptor to fill.
+ * @param(in)     dss     Initialized DSS handle.
+ * @param(in,out) intent  The intent descriptor to fill.
  * @return 0 on success, -1 * posix error code on failure
  */
-int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
-                     struct lrs_intent *intent);
+int lrs_read_prepare(struct dss_handle *dss, struct lrs_intent *intent);
 
 /**
  * Declare the current operation (read/write) as finished and flush data.

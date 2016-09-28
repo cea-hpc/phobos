@@ -20,6 +20,7 @@
 #include "pho_dss.h"
 #include "pho_io.h"
 #include "pho_cfg.h"
+#include "pho_layout.h"
 
 #include <sys/types.h>
 #include <attr/xattr.h>
@@ -33,23 +34,41 @@
 #define PHO_EA_UMD_NAME     "user_md"
 #define PHO_EA_EXT_NAME     "ext_info"
 
-#define LAYOUT_SIMPLE_NAME  "simple"
-#define LAYOUT_SIMPLE_MAJOR 0
-#define LAYOUT_SIMPLE_MINOR 1
+
+/**
+ * List of configuration parameters for store
+ */
+enum pho_cfg_params_store {
+    /* Actual parameters */
+    PHO_CFG_STORE_layout,
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_STORE_FIRST = PHO_CFG_STORE_layout,
+    PHO_CFG_STORE_LAST  = PHO_CFG_STORE_layout,
+};
+
+const struct pho_config_item cfg_store[] = {
+    [PHO_CFG_STORE_layout] = {
+        .section = "store",
+        .name    = "layout",
+        .value   = "simple"
+    },
+};
 
 /**
  * The operation step of a slice is updated after the operation has succeeded.
  */
 enum mput_step {
-    MPUT_STEP_INVAL         = -1,
-    MPUT_STEP_INITIAL       = 0,
-    MPUT_STEP_GET_FILE_SIZE = 1,
-    MPUT_STEP_OBJ_PUT_START = 2,
-    MPUT_STEP_EXT_PUT_START = 3,
-    MPUT_STEP_EXT_WRITE     = 4,
-    MPUT_STEP_OBJ_DONE      = 5,
+    MPUT_STEP_INVAL          = -1,
+    MPUT_STEP_INITIAL        = 0,
+    MPUT_STEP_GET_FILE_SIZE  = 1,
+    MPUT_STEP_OBJ_PUT_START  = 2,
+    MPUT_STEP_LAYOUT_DECLARE = 3,
+    MPUT_STEP_EXT_PUT_START  = 4,
+    MPUT_STEP_EXT_WRITE      = 5,
+    MPUT_STEP_OBJ_DONE       = 6,
 
-    MPUT_STEP_COUNT = 6     /* For iterators */
+    MPUT_STEP_COUNT = 7     /* For iterators */
 };
 
 /**
@@ -59,24 +78,21 @@ enum mput_step {
  * address is stored.
  */
 struct mput_slice {
-    int                         rc;     /**< further processing stops if != 0 */
-    int                         fd;     /**< file descriptor to the source */
-    struct stat                 st;     /**< source file inode information */
+    const struct pho_xfer_desc *xfer;   /**< pointer to the corresp. xfer */
+    struct layout_info          layout; /**< this slice data layout */
     enum mput_step              step;   /**< current or first failed step  */
-    struct layout_info          layout; /**< layout description */
-    struct lrs_intent           intent; /**< per-component intent copy */
-    const struct pho_xfer_desc *xfer;   /**< pointer to the given xfer info */
+    int                         rc;     /**< further processing stops if != 0 */
 };
 
 /**
  * Composite MPUT operation
  */
 struct mput_desc {
-    struct dss_handle   dss;        /**< A DSS handle, set by store_mput_init */
-    struct lrs_intent   intent;     /**< The unique intent expressed for MPUT */
-    size_t              sum_sizes;  /**< Total sizes, not updated on failures */
-    int                 slice_cnt;  /**< Count of objects to PUT */
-    struct mput_slice   slices[0];  /**< Objects to insert */
+    struct dss_handle        dss;       /**< A cached DSS handle */
+    struct layout_composer   comp;      /**< Arrange particular layouts */
+    char                    *layout;    /**< Layout name to use */
+    int                      slice_cnt; /**< Count of objects to PUT */
+    struct mput_slice        slices[0]; /**< Objects to write */
 };
 
 /**
@@ -92,6 +108,7 @@ typedef int (*mput_operation_t)(struct mput_desc *, struct mput_slice *);
 
 static int _get_file_size_cb(struct mput_desc *mput, struct mput_slice *slice);
 static int _obj_put_start_cb(struct mput_desc *mput, struct mput_slice *slice);
+static int _layout_declare_cb(struct mput_desc *mput, struct mput_slice *slice);
 static int _ext_put_start_cb(struct mput_desc *mput, struct mput_slice *slice);
 static int _ext_write_cb(struct mput_desc *mput, struct mput_slice *slice);
 static int _obj_done_cb(struct mput_desc *mput, struct mput_slice *slice);
@@ -104,11 +121,12 @@ static int _obj_done_cb(struct mput_desc *mput, struct mput_slice *slice);
  * for proper iteration over the cleanup handlers.
  */
 static const mput_operation_t mput_state_machine_ops[MPUT_STEP_COUNT] = {
-    [MPUT_STEP_GET_FILE_SIZE] = _get_file_size_cb,
-    [MPUT_STEP_OBJ_PUT_START] = _obj_put_start_cb,
-    [MPUT_STEP_EXT_PUT_START] = _ext_put_start_cb,
-    [MPUT_STEP_EXT_WRITE]     = _ext_write_cb,
-    [MPUT_STEP_OBJ_DONE]      = _obj_done_cb,
+    [MPUT_STEP_GET_FILE_SIZE]  = _get_file_size_cb,
+    [MPUT_STEP_OBJ_PUT_START]  = _obj_put_start_cb,
+    [MPUT_STEP_LAYOUT_DECLARE] = _layout_declare_cb,
+    [MPUT_STEP_EXT_PUT_START]  = _ext_put_start_cb,
+    [MPUT_STEP_EXT_WRITE]      = _ext_write_cb,
+    [MPUT_STEP_OBJ_DONE]       = _obj_done_cb,
 };
 
 
@@ -126,15 +144,6 @@ static const mput_operation_t mput_state_machine_clean_ops[MPUT_STEP_COUNT] = {
     [MPUT_STEP_EXT_WRITE]     = _ext_abort_cb,
 };
 
-
-static const struct layout_info simple_layout = {
-    .layout_desc = {
-        .mod_name    = LAYOUT_SIMPLE_NAME,
-        .mod_major   = LAYOUT_SIMPLE_MAJOR,
-        .mod_minor   = LAYOUT_SIMPLE_MINOR,
-    }
-};
-
 /**
  * Make active slices progress from their current step to the given one.
  * Return 0 if at least one step has succeeded and -EIO otherwise.
@@ -144,7 +153,7 @@ static const struct layout_info simple_layout = {
  *
  * @return 0 on success (even partial), min(error) if everything failed.
  *
- * XXX Note that errors being coded on negative numbers, the return value
+ * XXX Note that due to errors being coded on negative numbers, the return value
  *     corresponds to max(abs(rc)).
  */
 static int mput_slices_progress(struct mput_desc *mput, enum mput_step barrier)
@@ -248,14 +257,15 @@ static void mput_slices_cleanup(struct mput_desc *mput, int err)
 
 int _get_file_size_cb(struct mput_desc *mput, struct mput_slice *slice)
 {
-    int rc;
+    struct stat st;
+    int         rc;
     ENTRY;
 
-    rc = stat(slice->xfer->xd_fpath, &slice->st);
+    rc = stat(slice->xfer->xd_fpath, &st);
     if (rc < 0)
-        LOG_RETURN(rc = -errno, "stat(%s) failed", slice->xfer->xd_fpath);
+        LOG_RETURN(-errno, "stat(%s) failed", slice->xfer->xd_fpath);
 
-    mput->sum_sizes += slice->st.st_size;
+    slice->layout.wr_size = st.st_size;
     return 0;
 }
 
@@ -296,27 +306,32 @@ out_free:
     return rc;
 }
 
+/**
+ * Declare the object to the layout management layer.
+ */
+int _layout_declare_cb(struct mput_desc *mput, struct mput_slice *slice)
+{
+    char  *objid = slice->xfer->xd_objid;
+    int    rc;
+    ENTRY;
+
+    slice->layout.oid   = objid;
+    slice->layout.state = PHO_EXT_ST_PENDING;
+
+    slice->layout.layout_desc.mod_name = mput->layout;
+
+    rc = layout_declare(&mput->comp, &slice->layout);
+    if (rc)
+        LOG_RETURN(rc, "layout_declare failed for object '%s'", objid);
+
+    return 0;
+}
+
 int _ext_put_start_cb(struct mput_desc *mput, struct mput_slice *slice)
 {
     enum dss_set_action action;
     int                 rc;
     ENTRY;
-
-    /**
-     * Each slice gets a copy of the global mput intent,
-     * so that they can store their own object address and size in it.
-     */
-    slice->intent = mput->intent;
-    slice->intent.li_location.extent.size = slice->st.st_size;
-
-    slice->layout = simple_layout;
-
-    slice->layout.oid = slice->xfer->xd_objid;
-    slice->layout.state = PHO_EXT_ST_PENDING;
-
-    /* The layout points to the slice's extent and NOT the global one */
-    slice->layout.extents = &slice->intent.li_location.extent;
-    slice->layout.ext_count = 1;
 
     action = (slice->xfer->xd_flags & PHO_XFER_OBJ_REPLACE) ? DSS_SET_UPDATE
                                                             : DSS_SET_INSERT;
@@ -330,8 +345,8 @@ int _ext_put_start_cb(struct mput_desc *mput, struct mput_slice *slice)
 
 /** fill an array with metadata blobs to be stored on the media */
 static int build_extent_md(const char *id, const struct pho_attrs *md,
-                           const struct layout_info *lay,
-                           struct pho_ext_loc *loc, struct pho_attrs *dst_md)
+                           const struct layout_info *layout,
+                           struct pho_attrs *dst_md)
 {
     GString *str;
     int      rc;
@@ -340,27 +355,30 @@ static int build_extent_md(const char *id, const struct pho_attrs *md,
     if (rc)
         return rc;
 
-    str = g_string_new("");
+    str = g_string_new(NULL);
 
     /* TODO This conversion is done at several place. Consider caching the
      * result and pass it to the functions that need it. */
     rc = pho_attrs_to_json(md, str, PHO_ATTR_BACKUP_JSON_FLAGS);
-    if (rc != 0)
+    if (rc)
         goto free_values;
 
     if (!gstring_empty(str)) {
         rc = pho_attr_set(dst_md, PHO_EA_UMD_NAME, str->str);
-        if (rc != 0)
+        if (rc)
             goto free_values;
     }
 
-    /* v00: the file has a single extent so we don't have to link it to
-     * other extents. Just save basic layout and extent information. */
 #if 0
-    rc = storage_info_to_json(lay, str,
-                              PHO_ATTR_BACKUP_JSON_FLAGS);
+    rc = pho_layout_to_json(layout, str, PHO_ATTR_BACKUP_JSON_FLAGS);
     if (rc != 0)
         goto free_values;
+
+    if (!gstring_empty(str)) {
+        rc = pho_attr_set(dst_md, PHO_EA_EXT_NAME, str->str);
+        if (rc)
+            goto free_values;
+    }
 #endif
 
 free_values:
@@ -375,8 +393,7 @@ static inline int obj2io_flags(enum pho_xfer_flags flags)
 {
     if (flags & PHO_XFER_OBJ_REPLACE)
         return PHO_IO_REPLACE;
-    else
-        return 0;
+    return 0;
 }
 
 /**
@@ -397,39 +414,27 @@ static int open_noatime(const char *path, int flags)
 
 int _ext_write_cb(struct mput_desc *mput, struct mput_slice *slice)
 {
-    struct pho_ext_loc          *loc = &slice->intent.li_location;
-    struct io_adapter            ioa;
-    struct pho_io_descr          iod = {0};
     const struct pho_xfer_desc  *xfer = slice->xfer;
+    struct pho_io_descr          iod  = {0};
+    const char                  *objid = xfer->xd_objid;
+    int                          fd;
     int                          rc;
     ENTRY;
 
-    /* get vector of functions to access the media */
-    rc = get_io_adapter(loc->extent.fs_type, &ioa);
-    if (rc)
-        LOG_RETURN(rc, "No suitable I/O adapter found");
-
-    if (!io_adapter_is_valid(&ioa))
-        LOG_RETURN(-EINVAL, "Invalid I/O adapter, check implementation!");
-
-    slice->fd = open_noatime(xfer->xd_fpath, O_RDONLY);
-    if (slice->fd < 0)
+    fd = open_noatime(xfer->xd_fpath, O_RDONLY);
+    if (fd < 0)
         LOG_RETURN(rc = -errno, "open(%s) failed", xfer->xd_fpath);
 
     iod.iod_flags = obj2io_flags(xfer->xd_flags) | PHO_IO_NO_REUSE;
-    iod.iod_fd    = slice->fd;
-    iod.iod_off   = 0;
-    iod.iod_size  = slice->st.st_size;
-    iod.iod_loc   = loc;
+    iod.iod_fd    = fd;
 
     /* Prepare the attributes to be saved */
-    rc = build_extent_md(xfer->xd_objid, xfer->xd_attrs, &slice->layout, loc,
-                         &iod.iod_attrs);
+    rc = build_extent_md(objid, xfer->xd_attrs, &slice->layout, &iod.iod_attrs);
     if (rc)
         LOG_GOTO(out_close, rc, "Cannot build MD representation");
 
     /* write the extent */
-    rc = ioa_put(&ioa, xfer->xd_objid, NULL, &iod, NULL, NULL);
+    rc = layout_io(&mput->comp, objid, &iod);
     if (rc)
         LOG_GOTO(out_free, rc, "PUT failed");
 
@@ -437,7 +442,7 @@ out_free:
     pho_attrs_free(&iod.iod_attrs);
 
 out_close:
-    close(slice->fd);
+    close(fd);
     return rc;
 }
 
@@ -469,18 +474,18 @@ int _ext_clean_cb(struct mput_desc *mput, struct mput_slice *slice)
 
 int _ext_abort_cb(struct mput_desc *mput, struct mput_slice *slice)
 {
-    struct pho_ext_loc  *loc = &slice->intent.li_location;
-    struct io_adapter    ioa;
-    int                  rc;
+    const struct pho_xfer_desc  *xfer = slice->xfer;
+    struct pho_io_descr          iod  = {0};
+    int                          rc;
     ENTRY;
 
-    rc = get_io_adapter(loc->extent.fs_type, &ioa);
-    if (rc)
-        LOG_RETURN(rc, "Cannot get suitable I/O adapter");
+    iod.iod_flags = PHO_IO_DELETE;
+    iod.iod_fd    = -1;
 
-    rc = ioa_del(&ioa, slice->xfer->xd_objid, NULL, loc);
+    /* write the extent */
+    rc = layout_io(&mput->comp, xfer->xd_objid, &iod);
     if (rc)
-        LOG_RETURN(rc, "Cannot delete extent");
+        LOG_RETURN(rc, "Cannot delete extent for '%s'", xfer->xd_objid);
 
     return 0;
 }
@@ -501,59 +506,7 @@ int _obj_clean_cb(struct mput_desc *mput, struct mput_slice *slice)
     return 0;
 }
 
-/** copy data from the extent to the given fd */
-static int read_extents(int fd, const char *obj_id,
-                        const struct layout_info *layout,
-                        struct lrs_intent *intent, enum pho_xfer_flags flags)
-{
-    struct pho_ext_loc  *loc = &intent->li_location;
-    struct io_adapter    ioa;
-    struct pho_io_descr  iod;
-    const char          *name;
-    int                  rc;
-
-    memset(&iod, 0, sizeof(iod));
-
-    /* get vector of functions to access the media */
-    rc = get_io_adapter(loc->extent.fs_type, &ioa);
-    if (rc)
-        return rc;
-
-    iod.iod_flags = obj2io_flags(flags) | PHO_IO_NO_REUSE;
-    iod.iod_fd    = fd;
-    iod.iod_off   = 0;
-    iod.iod_size  = loc->extent.size;
-    iod.iod_loc   = loc;
-
-    rc = pho_attr_set(&iod.iod_attrs, PHO_EA_ID_NAME, "");
-    if (rc)
-        return rc;
-
-    /* read the extent */
-    rc = ioa_get(&ioa, obj_id, NULL, &iod, NULL, NULL);
-    if (rc) {
-        pho_error(rc, "GET failed");
-        return rc;
-    }
-
-    /* check ID from media */
-    name = pho_attr_get(&iod.iod_attrs, PHO_EA_ID_NAME);
-    if (name == NULL)
-        LOG_RETURN(rc = -EIO, "Couldn't find 'id' metadata on media");
-
-    if (strcmp(obj_id, name))
-        LOG_GOTO(free_values, rc = -EIO, "Inconsistent 'id' stored on media: "
-                 "'%s'", name);
-
-    if (fsync(fd) != 0)
-        LOG_GOTO(free_values, rc = -errno, "fsync failed on target");
-
-free_values:
-    pho_attrs_free(&iod.iod_attrs);
-    return rc;
-}
-
-static int store_init(struct dss_handle *dss)
+static int store_dss_init(struct dss_handle *dss)
 {
     int         rc;
 
@@ -573,40 +526,52 @@ static int store_mput_init(struct mput_desc **desc,
                            const struct pho_xfer_desc *xfer, size_t n)
 {
     struct mput_desc    *mput;
+    const char          *layout = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, layout);
     int                  rc;
     int                  i;
+
+    if (layout == NULL)
+        LOG_RETURN(-EINVAL, "Unable to determine layout type to use");
 
     mput = calloc(1, sizeof(*mput) + n * sizeof(struct mput_slice));
     if (mput == NULL)
         LOG_RETURN(-ENOMEM, "Store multiop initialization failed");
 
-    rc = store_init(&mput->dss);
+    rc = store_dss_init(&mput->dss);
     if (rc)
         LOG_GOTO(err_free, rc, "Cannot initialize DSS");
 
+    mput->layout    = strdup(layout);
     mput->slice_cnt = n;
 
     for (i = 0; i < n; i++) {
-        mput->slices[i].fd = -1;
         mput->slices[i].step = MPUT_STEP_INITIAL;
-        mput->slices[i].layout = simple_layout;
         mput->slices[i].xfer = &xfer[i];
     }
 
+    rc = layout_init(&mput->dss, &mput->comp, LA_ENCODE);
+    if (rc)
+        LOG_GOTO(err_free, rc, "Cannot initialize layout composition");
+
     *desc = mput;
-    return 0;
 
 err_free:
-    free(mput);
+    if (rc) {
+        free(mput->layout);
+        free(mput);
+    }
+
     return rc;
 }
 
 static void store_mput_fini(struct mput_desc *mput)
 {
-    if (mput != NULL) {
-        dss_fini(&mput->dss);
-        free(mput);
-    }
+    if (!mput)
+        return;
+
+    free(mput->layout);
+    dss_fini(&mput->dss);
+    free(mput);
 }
 
 static void xfer_get_notify(pho_completion_cb_t cb, void *udata,
@@ -652,19 +617,6 @@ static int xfer_notify_all(pho_completion_cb_t cb, void *udata,
     return first_rc;
 }
 
-static int mput_valid_slices_count(const struct mput_desc *mput)
-{
-    int count = 0;
-    int i;
-
-    for (i = 0; i < mput->slice_cnt; i++) {
-        if (mput->slices[i].rc == 0)
-            count += 1;
-    }
-
-    return count;
-}
-
 /**
  * Get a representative return code for the whole batch.
  * Used to provide other layers with indications about how things ended,
@@ -707,25 +659,24 @@ int phobos_put(const struct pho_xfer_desc *desc, size_t n,
         LOG_GOTO(disconn, rc, "Initialization failed");
     }
 
-    rc = mput_slices_progress(mput, MPUT_STEP_OBJ_PUT_START);
+    rc = mput_slices_progress(mput, MPUT_STEP_LAYOUT_DECLARE);
     if (rc)
         LOG_GOTO(out_finalize, rc, "All slices failed");
 
-    /* get storage resource to write objects / everyone uses simple_layout */
-    rc = lrs_write_prepare(&mput->dss, mput->sum_sizes, &simple_layout,
-                           &mput->intent);
+    /* get storage resource to write objects */
+    rc = layout_acquire(&mput->comp);
     if (rc)
         LOG_GOTO(out_finalize, rc,
-                 "Failed to get resources to write %zu bytes", mput->sum_sizes);
+                 "Failed to get resources to put %d objects", mput->slice_cnt);
 
     rc = mput_slices_progress(mput, MPUT_STEP_EXT_WRITE);
     if (rc) {
-        lrs_done(&mput->intent, 0, rc);
+        layout_fini(&mput->comp);
         LOG_GOTO(out_finalize, rc, "All slices failed");
     }
 
     /* Release storage resources and update device/media info */
-    rc = lrs_done(&mput->intent, mput_valid_slices_count(mput), mput_rc(mput));
+    rc = layout_commit(&mput->comp, mput_rc(mput));
     if (rc)
         LOG_GOTO(out_finalize, rc, "Failed to flush data");
 
@@ -735,6 +686,8 @@ int phobos_put(const struct pho_xfer_desc *desc, size_t n,
         LOG_GOTO(out_finalize, rc, "All slices failed");
 
 out_finalize:
+    layout_fini(&mput->comp);
+
     mput_slices_cleanup(mput, rc);
 
     rc2 = xfer_notify_all(cb, udata, mput);
@@ -746,8 +699,11 @@ disconn:
     return rc;
 }
 
-/** retrieve the location of a given object from DSS */
-static int obj_get_location(struct dss_handle *dss, const char *obj_id,
+/**
+ * Retrieve the location of a given object from DSS, ie. its layout type and
+ * list of extents.
+ */
+static int obj_location_get(struct dss_handle *dss, const char *obj_id,
                             struct layout_info **layout)
 {
     struct dss_filter   filter;
@@ -767,10 +723,6 @@ static int obj_get_location(struct dss_handle *dss, const char *obj_id,
     if (cnt == 0)
         GOTO(err, rc = -ENOENT);
 
-    if (cnt > 1)
-        LOG_GOTO(err, rc = -EINVAL, "Too many layouts found matching oid '%s'",
-                 obj_id);
-
 err:
     if (rc) {
         dss_res_free(*layout, cnt);
@@ -782,6 +734,15 @@ err_nores:
     return rc;
 }
 
+/**
+ * Release object location
+ * \see \a obj_location_get
+ */
+static void obj_location_free(struct layout_info *layout)
+{
+    dss_res_free(layout, 1);
+}
+
 static inline int xfer2open_flags(enum pho_xfer_flags flags)
 {
     return (flags & PHO_XFER_OBJ_REPLACE) ? O_CREAT|O_WRONLY|O_TRUNC
@@ -791,14 +752,15 @@ static inline int xfer2open_flags(enum pho_xfer_flags flags)
 static int store_data_get(struct dss_handle *dss,
                           const struct pho_xfer_desc *desc)
 {
-    struct layout_info  *layout = NULL;
-    struct lrs_intent    intent;
-    int                  fd;
-    int                  rc;
+    struct layout_info      *layout = NULL;
+    struct layout_composer   comp = {0};
+    struct pho_io_descr      iod  = {0};
+    int                      fd;
+    int                      rc;
     ENTRY;
 
     /* retrieve saved object location */
-    rc = obj_get_location(dss, desc->xd_objid, &layout);
+    rc = obj_location_get(dss, desc->xd_objid, &layout);
     if (rc)
         LOG_RETURN(rc, "Failed to get information about object '%s'",
                    desc->xd_objid);
@@ -811,31 +773,45 @@ static int store_data_get(struct dss_handle *dss,
         LOG_GOTO(free_res, rc = -errno, "Failed to open %s for writing",
                  desc->xd_fpath);
 
-    /* prepare storage resource to read the object */
-    rc = lrs_read_prepare(dss, layout, &intent);
+    rc = layout_init(dss, &comp, LA_DECODE);
     if (rc)
-        LOG_GOTO(close_tgt, rc, "Failed to prepare resources to read '%s'",
+        LOG_GOTO(out_close, rc, "Cannot initialize composite layout");
+
+    rc = layout_declare(&comp, layout);
+    if (rc)
+        LOG_GOTO(out_freecomp, rc, "Cannot declare layout to read '%s'",
                  desc->xd_objid);
 
-    /* read data from the media */
-    rc = read_extents(fd, desc->xd_objid, layout, &intent, desc->xd_flags);
+    /* Prepare storage resources to read the object */
+    rc = layout_acquire(&comp);
     if (rc)
-        LOG_GOTO(out_lrs_end, rc, "Failed to read extents");
+        LOG_GOTO(out_freecomp, rc, "Failed to prepare resources to read '%s'",
+                 desc->xd_objid);
 
-out_lrs_end:
-    /* release storage resources */
-    lrs_done(&intent, 0, rc);
+    /* Actually read data from the media */
+    iod.iod_fd = fd;
 
-    /* -- don't care about the error here, the object has been read successfully
-     * and the LRS error should have been logged by lower layers. -- */
+    rc = layout_io(&comp, desc->xd_objid, &iod);
+    if (rc)
+        LOG_GOTO(out_freecomp, rc, "Failed to issue data transfer for '%s'",
+                 desc->xd_objid);
 
-close_tgt:
+    rc = layout_commit(&comp, 0);
+    if (rc)
+        LOG_GOTO(out_freecomp, rc, "Failed to complete operations for '%s'",
+                 desc->xd_objid);
+
+out_freecomp:
+    /* Release storage resources */
+    layout_fini(&comp);
+
+out_close:
     close(fd);
     if (rc != 0 && unlink(desc->xd_fpath) != 0 && errno != ENOENT)
         pho_warn("Failed to clean '%s': %s", desc->xd_fpath, strerror(errno));
 
 free_res:
-    dss_res_free(layout, 1);
+    obj_location_free(layout);
     return rc;
 }
 
@@ -888,7 +864,7 @@ int phobos_get(const struct pho_xfer_desc *desc, size_t n,
         LOG_RETURN(-EINVAL, "Bulk GET not supported in this version");
 
     /* load configuration and get dss handle */
-    rc = store_init(&dss);
+    rc = store_dss_init(&dss);
     if (rc)
         LOG_RETURN(rc, "Initialization failed");
 

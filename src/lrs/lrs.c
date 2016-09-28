@@ -1402,12 +1402,11 @@ static bool lrs_mount_is_writable(const struct lrs_intent *intent)
     return !(fs_info.spc_flags & PHO_FS_READONLY);
 }
 
-int lrs_write_prepare(struct dss_handle *dss, size_t size,
-                      const struct layout_info *layout,
-                      struct lrs_intent *intent)
+int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent)
 {
     struct dev_descr    *dev = NULL;
     struct media_info   *media = NULL;
+    size_t               size = intent->li_req_size;
     int                  rc;
     ENTRY;
 
@@ -1464,8 +1463,7 @@ err_cleanup:
     return rc;
 }
 
-int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
-                     struct lrs_intent *intent)
+int lrs_read_prepare(struct dss_handle *dss, struct lrs_intent *intent)
 {
     struct dev_descr    *dev = NULL;
     struct media_info   *media_info;
@@ -1474,7 +1472,6 @@ int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
     ENTRY;
 
     intent->li_operation = LRS_OP_READ;
-    intent->li_location.extent = layout->extents[0];
 
     rc = lrs_load_dev_state(dss);
     if (rc != 0)
@@ -1495,7 +1492,7 @@ int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
                    media_id_get(id));
 
     /* set fs_type and addr_type according to media description. */
-    intent->li_location.root_path = strdup(dev->mnt_path);
+    intent->li_location.root_path        = strdup(dev->mnt_path);
     intent->li_location.extent.fs_type   = dev->dss_media_info->fs_type;
     intent->li_location.extent.addr_type = dev->dss_media_info->addr_type;
 
