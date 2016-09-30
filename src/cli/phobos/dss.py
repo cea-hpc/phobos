@@ -177,7 +177,7 @@ class CliMedia(PhobosHook):
     def stats(self):
         """ Wrapper to get media stats as dict """
         stats = {
-            'stats.nb_ojb': self._inst.stats.nb_obj,
+            'stats.nb_obj': self._inst.stats.nb_obj,
             'stats.logc_spc_used': self._inst.stats.logc_spc_used,
             'stats.phys_spc_used': self._inst.stats.phys_spc_used,
             'stats.phys_spc_free': self._inst.stats.phys_spc_free,
