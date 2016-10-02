@@ -1483,7 +1483,7 @@ static int lrs_media_update(struct lrs_intent *intent, int fragments,
     if (media->fs_status == PHO_FS_STATUS_EMPTY)
         media->fs_status = PHO_FS_STATUS_USED;
 
-    if (mark_full)
+    if (mark_full || media->stats.phys_spc_free == 0)
         media->fs_status = PHO_FS_STATUS_FULL;
 
     rc = dss_media_set(dss, media, 1, DSS_SET_UPDATE);
