@@ -252,10 +252,44 @@ static int ltfs_mounted(const char *dev_path, char *mnt_path,
     }
 }
 
+static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc)
+{
+    ssize_t  avail;
+    int      rc;
+
+    /* Some LTFS doc says:
+     * When the tape cartridge is almost full, further write operations will be
+     * prevented.  The free space on the tape (e.g.  from the df command) will
+     * indicate that there is still some capacity available, but that is
+     * reserved for updating the index.
+     *
+     * Indeed, we state that LTFS return ENOSPC whereas the previous statfs()
+     * call indicated there was enough space to write...
+     * We found that this early ENOSPC occured 5% before the expected limit.
+     * For now, use an hardcoded value at 5% of the full tape space.
+     * A possible enhancement is to turn it to a configurable value.
+     *
+     * reserved = 5% * total
+     * total = used + free
+     * avail_space = total - reserved - used
+     *             = (used + free) - 5% * (used + free) - used
+     *             = 95% free - 5% * used
+     */
+    rc = common_statfs(path, fs_spc);
+    if (rc)
+        return rc;
+
+    /** TODO make the 5% threshold configurable */
+    avail = (95 * fs_spc->spc_avail - 5 * fs_spc->spc_used) / 100;
+
+    fs_spc->spc_avail = avail > 0 ? avail : 0;
+    return 0;
+}
+
 struct fs_adapter fs_adapter_ltfs = {
     .fs_mount   = ltfs_mount,
     .fs_umount  = ltfs_umount,
     .fs_format  = ltfs_format,
     .fs_mounted = ltfs_mounted,
-    .fs_df      = common_statfs,
+    .fs_df      = ltfs_df,
 };
