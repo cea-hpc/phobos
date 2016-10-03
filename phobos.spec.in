@@ -54,10 +54,9 @@ make %{?_smp_mflags}
 
 %install
 %make_install
+install -D -p -m 0640 doc/cfg/template.conf %{buildroot}/%{_sysconfdir}/phobos.conf
 cd %{_builddir}/%{name}-%{version}/src/cli/
 %{__python} setup.py install --skip-build --root %{buildroot}
-
-
 
 %files
 
@@ -66,6 +65,7 @@ cd %{_builddir}/%{name}-%{version}/src/cli/
 %{python_sitearch}/phobos/*
 %{python_sitearch}/phobos-*-py?.?.egg-info
 %{_bindir}/phobos
+%config(noreplace) %{_sysconfdir}/phobos.conf
 
 %files devel
 
