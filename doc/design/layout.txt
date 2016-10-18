@@ -9,7 +9,7 @@ queries to do clever LRS allocations and to schedule proper data access
 
 Layouts are implemented as vectors of operations which are manipulated by a
 generic code structure (declaration, allocation, scatter/gather I/O,
-finalize). We call this generic interface "Generic Layout Interface" (GLI).
+finalize).
 
 
 = Combining requests =
@@ -51,42 +51,59 @@ demand and requests for missing layouts will fail with -ENOSYS.
 
 
 = Interfaces =
-== Plugins management ==
-- Load/Release a layout implementation
-    layout_register(<in:layout library path>, <out:layout class>)
-    layout_deregister(<in/out:layout class>)
+== Module API ==
+Modules are only required to expose a registration method:
 
-Loaded plugins are accessible by name (libraries need to provide unique
-names) within the processus address space. A layout class implements and
-exposes the layout composition and GLI interfaces.
+  int pho_layout_mod_register(struct layout_module *, enum layout_action);
+
+It is called at registration and its purpose is to initialize the plugin:
+  - setup any internal resources
+  - fills module description in 'self'
+  - fills module operation vector for the desired mode (encode/decode)
+
+
+An optional deregistration function can be provided to release resources if
+need be.
+
+  int pho_layout_mod_deregister(struct layout_module *);
+
+Loaded plugins are identified by their name and mode (eg. 'simple' + ENCODE
+Therefore, libraries need to provide unique module names.
 
 == Layout composition ==
-- Express storage needs. phobos store invokes this method for each object to
-  manipulate, with the appropriate layout to prepare request composition:
-    layout_intent_declare()
+=== Module internals ===
+A module provides a description (name, major, minor) and a set of methods for
+managing a particular layout.
 
-- Resource allocation. Once all layouts have been declared, the compositor is
-  able to issue LRS calls to request the desired resources. It also calls the
-  gli_initialize() method of the declared layout of each object.
-  layout_allocate()
+For a given mode, a layout module provides three methods:
+  - compose: express the combination of requests with the desired layout and
+    and generate the corresponding LRS intents.
+  - io_submit: for a given request, issue the actual data transfer (get/put)
+  - io_commit: finalize all operations and release resources associated to the
+               composer.
 
-- Data operation. Iterates over the gli_{get,put} method of the declared
-  layouts for each object to perform actual data transfer (using the
-  appropriate IO adapters).
-    layout_io_submit()
+=== Phobos internal layout API ===
+Translation between high-level objects and their actual layout is handled by
+composers.
 
-- Commit / release resources. Calls gli_finalize() for each object.
-    layout_finalize()
+A composer is essentialy a context into which requests are aggregated and
+passed to the corresponding layout module for being converted into actual
+storage requirements (LRS intents).
 
-== GLI ==
-- Setup intial structures and private resources:
-    gli_initialize()
+The API to manipulate composers is:
 
-- Retrieve data from media:
-    gli_get()
+- Initialize a new, empty composer:
+  layout_init()
 
-- Push data onto media:
-    gli_put()
+- Express a GET/PUT request for an object
+  layout_declare()
 
-- Commit open transactions and release allocated resources:
-    gli_finalize()
+- Combine all requests and acquire corresponding storage resources via LRS:
+  layout_acquire()
+
+- Issue actual data transfer for a given object in the composer:
+  layout_io()
+
+- Stabilize the layouts by closing all open transactions (commit) and release
+  allocated resources.
+  layout_fini()
