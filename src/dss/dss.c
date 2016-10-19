@@ -161,86 +161,80 @@ static int psql_state2errno(const PGresult *res)
 }
 
 /**
- * Helper for parsing json, due to missing function to manage uint64 in jansson.
- * @param[in]   obj    a jansson json object which contains a key/val dict.
- * @param[in]   key    key
- * @param[out]  err    error counter
- * @return      val    val as uint64
+ * Retrieve a copy of a string contained in a JSON object under a given key.
+ * The caller is responsible for freeing the result after use.
+ *
+ * \return a newly allocated copy of the string on success or NULL on error.
  */
-static uint64_t json_dict2uint64(const struct json_t *obj, const char *key,
-                                 int *err)
-{
-    struct json_t *current_obj;
-    const char    *val;
-
-    current_obj = json_object_get(obj, key);
-    if (current_obj == NULL) {
-        pho_debug("Cannot retrieve object '%s'", key);
-        (*err)++;
-        return 0;
-    }
-
-    val = json_string_value(current_obj);
-    if (val == NULL) {
-        pho_debug("Cannot retrieve value of '%s'", key);
-        (*err)++;
-        return 0;
-    }
-
-    return strtoull(val, NULL, 10);
-}
-
-/**
- * Helper for parsing json, get val from dict with error checking
- * @param[in]   obj    a jansson json object which contains a key/val dict.
- * @param[in]   key    key
- * @param[out]  err    error counter
- * @return      val    val as char*
- */
-static char *json_dict2char(const struct json_t *obj, const char *key, int *err)
+static char *json_dict2str(const struct json_t *obj, const char *key)
 {
     struct json_t   *current_obj;
-    char            *val;
 
     current_obj = json_object_get(obj, key);
     if (!current_obj) {
         pho_debug("Cannot retrieve object '%s'", key);
-        (*err)++;
         return NULL;
     }
 
-    val = strdup(json_string_value(current_obj));
-    if (!val) {
-        pho_debug("Cannot retrieve value of '%s'", key);
-        (*err)++;
-        return NULL;
+    return strdup(json_string_value(current_obj));
+}
+
+/**
+ * Retrieve a signed but positive integer contained in a JSON object under a
+ * given key.
+ * An error is returned if no integer was found at this location.
+ *
+ * \retval the value on success and -1 on error.
+ */
+static int json_dict2int(const struct json_t *obj, const char *key)
+{
+    struct json_t   *current_obj;
+    json_int_t       val;
+
+    current_obj = json_object_get(obj, key);
+    if (!current_obj) {
+        pho_debug("Cannot retrieve object '%s'", key);
+        return -1;
+    }
+
+    if (!json_is_integer(current_obj)) {
+        pho_debug("JSON attribute '%s' not an integer", key);
+        return -1;
+    }
+
+    val = json_integer_value(current_obj);
+    if (val > INT_MAX) {
+        pho_error(EOVERFLOW, "Cannot cast value from DSS for '%s'", key);
+        return -1;
     }
 
     return val;
 }
 
 /**
- * Helper for parsing json, get val from dict with error checking
- * @param[in]   obj    a jansson json object which contains a key/val dict.
- * @param[in]   key    key
- * @param[out]  err    error counter
- * @return      val    val as int_32t
+ * Retrieve a signed but positive long long integer contained in a JSON object
+ * under a given key.
+ * An error is returned if no long long integer was found at this location.
+ *
+ * \retval the value on success and -1LL on error.
  */
-static int json_dict2int32(const struct json_t *obj, const char *key,
-                           int *err)
+static long long json_dict2ll(const struct json_t *obj, const char *key)
 {
     struct json_t   *current_obj;
 
     current_obj = json_object_get(obj, key);
     if (!current_obj) {
         pho_debug("Cannot retrieve object '%s'", key);
-        (*err)++;
-        return 0;
+        return -1LL;
+    }
+
+    if (!json_is_integer(current_obj)) {
+        pho_debug("JSON attribute '%s' is not an integer", key);
+        return -1LL;
     }
 
     return json_integer_value(current_obj);
 }
-
 
 void dss_filter_free(struct dss_filter *filter)
 {
@@ -374,6 +368,43 @@ static const char * const simple_lock_query[] = {
                          "lock_ts=extract(epoch from NOW()) "
                          "WHERE lock='' AND id IN %s;",
 };
+
+/**
+ * Load long long integer value from JSON object and zero-out the field on error
+ * Caller is responsible for using the macro on a compatible type, a signed 64
+ * integer preferrably or anything compatible with the expected range of value
+ * for the given field.
+ */
+#define LOAD_CHECK64(_j, _s, _f)    do {                                    \
+                                        long long _tmp;                     \
+                                        _tmp  = json_dict2ll((_j), #_f);    \
+                                        if (_tmp < 0) {                     \
+                                            (_s)->_f = 0LL;                 \
+                                            rc = -EINVAL;                   \
+                                        } else {                            \
+                                            (_s)->_f = _tmp;                \
+                                            rc = 0;                         \
+                                        }                                   \
+                                    } while (0)
+
+/**
+ * Load integer value from JSON object and zero-out the field on error
+ * Caller is responsible for using the macro on a compatible type, a signed 32
+ * integer preferrably or anything compatible with the expected range of value
+ * for the given field.
+ */
+#define LOAD_CHECK32(_j, _s, _f)    do {                                     \
+                                        int _tmp;                            \
+                                        _tmp = json_dict2int((_j), #_f);     \
+                                        if (_tmp < 0) {                      \
+                                            (_s)->_f = 0;                    \
+                                            rc = -EINVAL;                    \
+                                        } else {                             \
+                                            (_s)->_f = _tmp;                 \
+                                            rc = 0;                          \
+                                        }                                    \
+                                    } while (0)
+
 /**
  * Extract media statistics from json
  *
@@ -386,7 +417,6 @@ static int dss_media_stats_decode(struct media_stats *stats, const char *json)
 {
     json_t          *root;
     json_error_t     json_error;
-    int              parse_error = 0;
     int              rc = 0;
     ENTRY;
 
@@ -397,54 +427,54 @@ static int dss_media_stats_decode(struct media_stats *stats, const char *json)
     if (!json_is_object(root))
         LOG_GOTO(out_decref, rc = -EINVAL, "Invalid stats description");
 
-    stats->nb_obj =
-        json_dict2uint64(root, "nb_obj", &parse_error);
-    stats->logc_spc_used =
-        json_dict2uint64(root, "logc_spc_used", &parse_error);
-    stats->phys_spc_used =
-        json_dict2uint64(root, "phys_spc_used", &parse_error);
-    stats->phys_spc_free =
-        json_dict2uint64(root, "phys_spc_free", &parse_error);
-    stats->nb_errors =
-        json_dict2int32(root, "nb_errors", &parse_error);
-    stats->last_load =
-        json_dict2int32(root, "last_load", &parse_error);
+    pho_debug("STATS: '%s'", json);
 
-    /* Most of the values above are not used for working, so don't
+    LOAD_CHECK64(root, stats, nb_obj);
+    LOAD_CHECK64(root, stats, logc_spc_used);
+    LOAD_CHECK64(root, stats, phys_spc_used);
+    LOAD_CHECK64(root, stats, phys_spc_free);
+    LOAD_CHECK32(root, stats, nb_errors);
+    LOAD_CHECK32(root, stats, last_load);
+
+out_decref:
+    /* Most of the values above are not used to make decisions, so don't
      * break the whole dss_get because of missing values in media stats
      * (from previous phobos version).
+     *
      * The only important field is phys_spc_free, which is used to check if
      * a media has enough room to write data. In case this field is
      * invalid, this function set it to 0, so the media won't be selected
      * (as in the case we would return an error here).
      */
-    if (parse_error > 0)
-        pho_debug("Json parser: %d missing/invalid fields in media stats",
-                  parse_error);
+    if (rc)
+        pho_debug("Json parser: missing/invalid fields in media stats");
 
-out_decref:
     json_decref(root);
     return rc;
 }
+
+#define JSON_INTEGER_SET_NEW(_j, _s, _f)                        \
+    do {                                                        \
+        json_t  *_tmp = json_integer((_s)._f);                  \
+        if (!_tmp)                                              \
+            pho_error(-ENOMEM, "Failed to encode '%s'", #_f);   \
+        else                                                    \
+            json_object_set_new((_j), #_f, _tmp);               \
+    } while (0)
+
 
 /**
  * Encode media statistics to json
  *
  * \param[in]  stats  media stats to be filled with stats
- * \param[out] error  error counter
  *
  * \return Return a string json object
  */
-static char *dss_media_stats_encode(struct media_stats stats, int *error)
+static char *dss_media_stats_encode(struct media_stats stats)
 {
-    json_t          *root;
-    char            *s = NULL;
-    char             buffer[32];
-    int              err_cnt = 0;
-    int              rc;
+    json_t  *root;
+    char    *res = NULL;
     ENTRY;
-
-    *error = 0;
 
     root = json_object();
     if (!root) {
@@ -452,64 +482,21 @@ static char *dss_media_stats_encode(struct media_stats stats, int *error)
         return NULL;
     }
 
-    /* XXX This hack is needed because jansson lacks support for uint64 */
-    snprintf(buffer, sizeof(buffer), "%lld", stats.nb_obj);
-    rc = json_object_set_new(root, "nb_obj", json_string(buffer));
-    if (rc) {
-        pho_error(EINVAL, "Failed to encode 'nb_obj' (%lld)",
-                  stats.nb_obj);
-        err_cnt++;
-    }
+    JSON_INTEGER_SET_NEW(root, stats, nb_obj);
+    JSON_INTEGER_SET_NEW(root, stats, logc_spc_used);
+    JSON_INTEGER_SET_NEW(root, stats, phys_spc_used);
+    JSON_INTEGER_SET_NEW(root, stats, phys_spc_free);
+    JSON_INTEGER_SET_NEW(root, stats, nb_errors);
+    JSON_INTEGER_SET_NEW(root, stats, last_load);
 
-    snprintf(buffer, sizeof(buffer), "%zd", stats.logc_spc_used);
-    rc = json_object_set_new(root, "logc_spc_used", json_string(buffer));
-    if (rc) {
-        pho_error(EINVAL, "Failed to encode 'logc_spc_used' (%zd)",
-                  stats.logc_spc_used);
-        err_cnt++;
-    }
-
-    snprintf(buffer, sizeof(buffer), "%zd", stats.phys_spc_used);
-    rc = json_object_set_new(root, "phys_spc_used", json_string(buffer));
-    if (rc) {
-        pho_error(EINVAL, "Failed to encode 'phys_spc_used' (%zd)",
-                  stats.phys_spc_used);
-        err_cnt++;
-    }
-
-    snprintf(buffer, sizeof(buffer), "%zd", stats.phys_spc_free);
-    rc = json_object_set_new(root, "phys_spc_free", json_string(buffer));
-    if (rc) {
-        pho_error(EINVAL, "Failed to encode 'phys_spc_free' (%zd)",
-                  stats.phys_spc_free);
-        err_cnt++;
-    }
-
-    rc = json_object_set_new(root, "nb_errors", json_integer(stats.nb_errors));
-    if (rc) {
-        pho_error(EINVAL, "Failed to encode 'nb_errors' (%ld)",
-                  stats.nb_errors);
-        err_cnt++;
-    }
-
-    rc = json_object_set_new(root, "last_load", json_integer(stats.last_load));
-    if (rc) {
-        pho_error(EINVAL, "Failed to encode 'last_load' (%lld)",
-                  (long long)stats.last_load);
-        err_cnt++;
-    }
-
-    *error = err_cnt;
-
-    s = json_dumps(root, 0);
-    json_decref(root);
-    if (!s) {
+    res = json_dumps(root, 0);
+    if (!res)
         pho_error(EINVAL, "Failed to dump JSON to ASCIIZ");
-        return NULL;
-    }
 
-    pho_debug("Created JSON representation for stats: '%s'", s);
-    return s;
+    json_decref(root);
+
+    pho_debug("Created JSON representation for stats: '%s'", res);
+    return res;
 }
 
 /**
@@ -527,7 +514,6 @@ static int dss_layout_extents_decode(struct extent **extents,
     json_t          *root;
     json_t          *child;
     json_error_t     json_error;
-    int              parse_error = 0;
     struct extent   *result = NULL;
     size_t           extents_res_size;
     int              rc;
@@ -557,32 +543,39 @@ static int dss_layout_extents_decode(struct extent **extents,
                  "Memory allocation of size %zu failed", extents_res_size);
 
     for (i = 0; i < *count; i++) {
-        char    *addr_buffer;
+        char    *tmp;
 
         child = json_array_get(root, i);
         result[i].layout_idx = i;
-        result[i].size = json_dict2uint64(child, "sz", &parse_error);
-        addr_buffer = json_dict2char(child, "addr", &parse_error);
-        result[i].address.size = addr_buffer ? strlen(addr_buffer) + 1 : 0;
-        result[i].address.buff = addr_buffer;
-        result[i].media.type = str2dev_family(json_dict2char(child, "fam",
-                                                             &parse_error));
+        result[i].size = json_dict2ll(child, "sz");
+        if (result[i].size < 0)
+            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'sz'");
+
+        tmp = json_dict2str(child, "addr");
+        if (!tmp)
+            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'addr'");
+
+        result[i].address.buff = tmp;
+        result[i].address.size = strlen(tmp) + 1;
+
+        tmp = json_dict2str(child, "fam");
+        if (!tmp)
+            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'fam'");
+
+        result[i].media.type = str2dev_family(tmp);
 
         /*XXX fs_type & address_type retrieved from media info */
         if (result[i].media.type == PHO_DEV_INVAL)
             LOG_GOTO(out_decref, rc = -EINVAL, "Invalid media type");
 
-        rc = media_id_set(&result[i].media, json_dict2char(child, "media",
-                                                           &parse_error));
-        if (rc)
-            LOG_GOTO(out_decref, rc = -EINVAL,
-                     "Failed to set media id");
-    }
+        tmp = json_dict2str(child, "media");
+        if (!tmp)
+            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'media'");
 
-    if (parse_error > 0)
-        LOG_GOTO(out_decref, rc = -EINVAL,
-                 "json parser: %d missing mandatory fields in extents",
-                 parse_error);
+        rc = media_id_set(&result[i].media, tmp);
+        if (rc)
+            LOG_GOTO(out_decref, rc = -EINVAL, "Failed to set media id");
+    }
 
     *extents = result;
     rc = 0;
@@ -609,7 +602,6 @@ static char *dss_layout_extents_encode(struct extent *extents,
 {
     json_t  *root;
     json_t  *child;
-    char     buffer[32];
     char    *s;
     int      err_cnt = 0;
     int      rc;
@@ -630,11 +622,9 @@ static char *dss_layout_extents_encode(struct extent *extents,
             continue;
         }
 
-        snprintf(buffer, sizeof(buffer), "%zd", extents[i].size);
-        rc = json_object_set_new(child, "sz", json_string(buffer));
+        rc = json_object_set_new(child, "sz", json_integer(extents[i].size));
         if (rc) {
-            pho_error(EINVAL, "Failed to encode 'sz' (%" PRIu64 ")",
-                      extents[i].size);
+            pho_error(EINVAL, "Failed to encode 'sz' (%zu)", extents[i].size);
             err_cnt++;
         }
 
@@ -788,8 +778,7 @@ static int get_media_setrequest(struct media_info *item_list, int item_cnt,
                                    fs_type2str(p_media->fs_type),
                                    address_type2str(p_media->addr_type),
                                    fs_status2str(p_media->fs_status),
-                                   dss_media_stats_encode(p_media->stats,
-                                                          error),
+                                   dss_media_stats_encode(p_media->stats),
                                    i < item_cnt-1 ? "," : ";");
             free(model);
         } else if (action == DSS_SET_UPDATE) {
@@ -803,8 +792,7 @@ static int get_media_setrequest(struct media_info *item_list, int item_cnt,
                                    fs_type2str(p_media->fs_type),
                                    address_type2str(p_media->addr_type),
                                    fs_status2str(p_media->fs_status),
-                                   dss_media_stats_encode(p_media->stats,
-                                                          error),
+                                   dss_media_stats_encode(p_media->stats),
                                    media_id_get(&p_media->id));
             free(model);
         }
