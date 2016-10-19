@@ -53,6 +53,8 @@ def key_convert(obj_type, key):
 
 def dss_filter(obj_type, **kwargs):
     """Convert a k/v filter into a CDSS-compatible list of criteria."""
+    if len(kwargs) == 0:
+        return None
     filter = cdss.dss_filter()
     criteria = []
     for key, val in kwargs.iteritems():
@@ -62,9 +64,18 @@ def dss_filter(obj_type, **kwargs):
             criteria.append({key: val})
         else:
             criteria.append({comp: {key: val}})
-    rc = cdss.dss_filter_build(filter, json.dumps({"$AND": criteria}))
+
+    assert len(criteria) > 0
+
+    if len(criteria) == 1:
+        filt_str = json.dumps(criteria[0])
+    else:
+        filt_str = json.dumps({'$AND': criteria})
+
+    rc = cdss.dss_filter_build(filter, filt_str)
     if rc:
-        raise "Invalid filter criteria"
+        raise GenericError("Invalid filter criteria")
+
     return filter
 
 class PhobosHook(object):
