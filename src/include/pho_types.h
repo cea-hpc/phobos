@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <sys/types.h>
 #include <errno.h>
 
 /** max length of a tape label, FS label... */
@@ -305,14 +306,14 @@ static inline int media_id_set(struct media_id *mid, const char *id)
 
 /** describe a piece of data in a layout */
 struct extent {
-    unsigned int       layout_idx; /**< always 0 for simple layouts */
-    uint64_t           size;       /**< size of the extent */
-    struct media_id    media;      /**< identifier of the media */
-    struct pho_buff    address;    /**< address on the media */
+    int                 layout_idx; /**< always 0 for simple layouts */
+    ssize_t             size;       /**< size of the extent */
+    struct media_id     media;      /**< identifier of the media */
+    struct pho_buff     address;    /**< address on the media */
 
     /* XXX this is more media related (should be moved somewhere else?) */
-    enum fs_type       fs_type;    /**< type of filesystem on this media */
-    enum address_type  addr_type;  /**< way to address this media */
+    enum fs_type        fs_type;    /**< type of filesystem on this media */
+    enum address_type   addr_type;  /**< way to address this media */
 };
 
 /**
@@ -418,17 +419,13 @@ struct dev_info {
 
 /** media statistics */
 struct media_stats {
-    uint64_t           nb_obj;    /**< number of objects stored on media */
-    size_t             logc_spc_used;  /**< space used (logical)  */
-    size_t             phys_spc_used;  /**< space used (physical) */
-    size_t             phys_spc_free;  /**< free space (physical) */
-
-    int32_t            nb_load; /**< number of times the tape was loaded
-                                     into a drive */
-    int32_t            nb_errors; /**< number of errors encountered
-                                     while accessing this tape */
-    time_t             last_load; /**< last time the tape was mounted into a
-                                       drive */
+    long long   nb_obj;         /**< number of objects stored on media */
+    ssize_t     logc_spc_used;  /**< space used (logical)  */
+    ssize_t     phys_spc_used;  /**< space used (physical) */
+    ssize_t     phys_spc_free;  /**< free space (physical) */
+    long        nb_load;        /**< # the tape was loaded into a drive */
+    long        nb_errors;      /**< # errors encountered while accessing it */
+    time_t      last_load;      /**< last time it was loaded into a drive */
 };
 
 /**

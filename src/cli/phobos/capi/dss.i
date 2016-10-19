@@ -24,6 +24,7 @@
 
 %include <pho_types.h>
 
+typedef long long ssize_t;
 typedef long time_t;
 typedef int  int32_t;
 typedef unsigned long long uint64_t;

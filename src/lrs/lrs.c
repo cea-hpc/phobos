@@ -297,7 +297,7 @@ static int lrs_fill_media_info(struct dss_handle *dss,
 
     *pmedia = media_info_dup(media_res);
 
-    pho_debug("%s: spc_free=%zu",
+    pho_debug("%s: spc_free=%zd",
               media_id_get(&(*pmedia)->id), (*pmedia)->stats.phys_spc_free);
 
     rc = 0;
@@ -592,7 +592,7 @@ lock_race_retry:
         goto lock_race_retry;
     }
 
-    pho_verb("Selected %s '%s': %zu bytes free", dev_family2str(family),
+    pho_verb("Selected %s '%s': %zd bytes free", dev_family2str(family),
              media_id_get(&media_best->id), media_best->stats.phys_spc_free);
 
     *p_media = media_info_dup(media_best);

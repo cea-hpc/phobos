@@ -453,49 +453,49 @@ static char *dss_media_stats_encode(struct media_stats stats, int *error)
     }
 
     /* XXX This hack is needed because jansson lacks support for uint64 */
-    snprintf(buffer, sizeof(buffer), "%zu", stats.nb_obj);
+    snprintf(buffer, sizeof(buffer), "%lld", stats.nb_obj);
     rc = json_object_set_new(root, "nb_obj", json_string(buffer));
     if (rc) {
-        pho_error(EINVAL, "Failed to encode 'nb_obj' (%zu)",
+        pho_error(EINVAL, "Failed to encode 'nb_obj' (%lld)",
                   stats.nb_obj);
         err_cnt++;
     }
 
-    snprintf(buffer, sizeof(buffer), "%zu", stats.logc_spc_used);
+    snprintf(buffer, sizeof(buffer), "%zd", stats.logc_spc_used);
     rc = json_object_set_new(root, "logc_spc_used", json_string(buffer));
     if (rc) {
-        pho_error(EINVAL, "Failed to encode 'logc_spc_used' (%zu)",
+        pho_error(EINVAL, "Failed to encode 'logc_spc_used' (%zd)",
                   stats.logc_spc_used);
         err_cnt++;
     }
 
-    snprintf(buffer, sizeof(buffer), "%zu", stats.phys_spc_used);
+    snprintf(buffer, sizeof(buffer), "%zd", stats.phys_spc_used);
     rc = json_object_set_new(root, "phys_spc_used", json_string(buffer));
     if (rc) {
-        pho_error(EINVAL, "Failed to encode 'phys_spc_used' (%zu)",
+        pho_error(EINVAL, "Failed to encode 'phys_spc_used' (%zd)",
                   stats.phys_spc_used);
         err_cnt++;
     }
 
-    snprintf(buffer, sizeof(buffer), "%zu", stats.phys_spc_free);
+    snprintf(buffer, sizeof(buffer), "%zd", stats.phys_spc_free);
     rc = json_object_set_new(root, "phys_spc_free", json_string(buffer));
     if (rc) {
-        pho_error(EINVAL, "Failed to encode 'phys_spc_free' (%zu)",
+        pho_error(EINVAL, "Failed to encode 'phys_spc_free' (%zd)",
                   stats.phys_spc_free);
         err_cnt++;
     }
 
     rc = json_object_set_new(root, "nb_errors", json_integer(stats.nb_errors));
     if (rc) {
-        pho_error(EINVAL, "Failed to encode 'nb_errors' (%d)",
+        pho_error(EINVAL, "Failed to encode 'nb_errors' (%ld)",
                   stats.nb_errors);
         err_cnt++;
     }
 
     rc = json_object_set_new(root, "last_load", json_integer(stats.last_load));
     if (rc) {
-        pho_error(EINVAL, "Failed to encode 'last_load' (%zu)",
-                  stats.last_load);
+        pho_error(EINVAL, "Failed to encode 'last_load' (%lld)",
+                  (long long)stats.last_load);
         err_cnt++;
     }
 
@@ -607,13 +607,13 @@ out_decref:
 static char *dss_layout_extents_encode(struct extent *extents,
                                        unsigned int count, int *error)
 {
-    json_t          *root;
-    json_t          *child;
-    char            *s;
-    int              err_cnt = 0;
-    char             buffer[32];
-    int              rc;
-    int              i;
+    json_t  *root;
+    json_t  *child;
+    char     buffer[32];
+    char    *s;
+    int      err_cnt = 0;
+    int      rc;
+    int      i;
     ENTRY;
 
     root = json_array();
@@ -630,7 +630,7 @@ static char *dss_layout_extents_encode(struct extent *extents,
             continue;
         }
 
-        snprintf(buffer, sizeof(buffer), "%" PRIu64 "", extents[i].size);
+        snprintf(buffer, sizeof(buffer), "%zd", extents[i].size);
         rc = json_object_set_new(child, "sz", json_string(buffer));
         if (rc) {
             pho_error(EINVAL, "Failed to encode 'sz' (%" PRIu64 ")",
@@ -1276,7 +1276,6 @@ int dss_set(struct dss_handle *handle, enum dss_type type, void *item_list,
         g_string_append(request, insert_query[type]);
 
     switch (type) {
-
     case DSS_DEVICE:
         rc = get_device_setrequest(item_list, item_cnt, action, request);
         if (rc)
