@@ -284,6 +284,12 @@ class DeviceManager(ObjectManager):
         devices = [x._inst for x in objects]
         return method(self.client.handle, devices, cdss.DSS_SET_UPDATE)
 
+    def delete(self, objects):
+        """Delete objects in DSS"""
+        method = getattr(cdss, 'dss_%s_set' % self.obj_type)
+        devices = [x._inst for x in objects]
+        return method(self.client.handle, devices, cdss.DSS_SET_DELETE)
+
 class MediaManager(ObjectManager):
     """Proxy to manipulate media."""
     def add(self, mtype, fstype, model, label, locked=False):
@@ -322,6 +328,12 @@ class MediaManager(ObjectManager):
         method = getattr(cdss, 'dss_%s_set' % self.obj_type)
         media = [x._inst for x in objects]
         return method(self.client.handle, media, cdss.DSS_SET_UPDATE)
+
+    def delete(self, objects):
+        """Delete objects in DSS"""
+        method = getattr(cdss, 'dss_%s_set' % self.obj_type)
+        devices = [x._inst for x in objects]
+        return method(self.client.handle, devices, cdss.DSS_SET_DELETE)
 
 class Client(object):
     """Main class: issue requests to the DSS and format replies."""
