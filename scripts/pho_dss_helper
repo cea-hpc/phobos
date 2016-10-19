@@ -68,8 +68,7 @@ CREATE INDEX extents_mda_id_idx ON extent
              USING GIN (extents_mda_idx((extent.extents)));
 
 -- that or put all layouts for a single object in a json array?
--- But not sure we can index/query on any elemetns of an array...
-
+-- But not sure we can index/query on any elements of an array...
 
 EOF
 
