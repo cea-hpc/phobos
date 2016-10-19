@@ -132,10 +132,13 @@ int main(int argc, char **argv)
             break;
         case DSS_EXTENT:
             for (i = 0,  layout = item_list; i < item_cnt; i++, layout++) {
-                pho_debug("Got layout: oid:%s ext_count:%u state:%s type:%s",
+                pho_debug("Got layout: "
+                          "oid:%s ext_count:%u state:%s desc:%s-%d.%d",
                           layout->oid, layout->ext_count,
                           extent_state2str(layout->state),
-                          layout_type2str(layout->type));
+                          layout->layout_desc.mod_name,
+                          layout->layout_desc.mod_major,
+                          layout->layout_desc.mod_minor);
                 extents = layout->extents;
                 for (j = 0; j < layout->ext_count; j++) {
                     pho_debug("->Got extent: layout_idx:%d, size:%zu,"

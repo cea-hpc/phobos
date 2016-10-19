@@ -19,6 +19,8 @@
 #include <sys/types.h>
 #include <errno.h>
 
+#include "pho_attrs.h"
+
 /** max length of a tape label, FS label... */
 #define PHO_LABEL_MAX_LEN 32
 /** max length of a hash-based address in hexadecimal form.
@@ -91,16 +93,29 @@ static inline enum extent_state str2extent_state(const char *str)
     return PHO_EXT_ST_INVAL;
 }
 
-/** describe data layout */
+/**
+ * Generic module description.
+ */
+#define PHO_MOD_DESC_KEY_NAME   "name"
+#define PHO_MOD_DESC_KEY_MAJOR  "major"
+#define PHO_MOD_DESC_KEY_MINOR  "minor"
+#define PHO_MOD_DESC_KEY_ATTRS  "attrs"
+struct module_desc {
+    char            *mod_name;  /**< Mandatory module name */
+    int              mod_major; /**< Mandatory module major version number */
+    int              mod_minor; /**< Mandatory module minor version number */
+    struct pho_attrs mod_attrs; /**< Optional set of arbitrary attributes  */
+};
+
+/**
+ * Layout of an object.
+ */
 struct layout_info {
-    char              *oid;
-    unsigned int       copy_num;
-    enum layout_type   type;
-    /* v00: no layout info */
-    enum extent_state  state;
-    struct extent     *extents;
-    unsigned int       ext_count;
-    /* v00: no other information needed for simple layout */
+    char                *oid;           /**< Referenced object */
+    enum extent_state    state;         /**< Object stability state */
+    struct module_desc   layout_desc;   /**< Layout module used to write it */
+    struct extent       *extents;       /**< List of data extents */
+    unsigned int         ext_count;     /**< Number of extents in the list */
 };
 
 /**
@@ -417,7 +432,12 @@ struct dev_info {
 
 };
 
-/** media statistics */
+/**
+ * Media statistics.
+ *
+ * Since they are serialized in JSON, the type used here is the type backing
+ * json_int_t.
+ */
 struct media_stats {
     long long   nb_obj;         /**< number of objects stored on media */
     ssize_t     logc_spc_used;  /**< space used (logical)  */

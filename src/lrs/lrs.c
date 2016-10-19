@@ -1421,10 +1421,6 @@ int lrs_read_prepare(struct dss_handle *dss, const struct layout_info *layout,
     int                  rc = 0;
     ENTRY;
 
-    if (layout->type != PHO_LYT_SIMPLE || layout->ext_count != 1)
-        LOG_RETURN(-EINVAL, "Unexpected layout type '%s' or extent count %u",
-                   layout_type2str(layout->type), layout->ext_count);
-
     intent->li_operation = LRS_OP_READ;
     intent->li_location.extent = layout->extents[0];
 

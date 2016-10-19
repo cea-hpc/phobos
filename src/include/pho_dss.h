@@ -100,9 +100,7 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::OBJ::user_md", "user_md"},
     /* Extent related fields */
     {"DSS::EXT::oid", "oid"},
-    {"DSS::EXT::copy_num", "copy_num"},
     {"DSS::EXT::state", "state"},
-    {"DSS::EXT::layout_type", "lyt_type"},
     {"DSS::EXT::layout_info", "lyt_info"},
     {"DSS::EXT::info", "info"},
     {"DSS::EXT::media_idx", "extents_mda_idx(extent.extents)"},

@@ -70,6 +70,11 @@ static int attr_json_dump_cb(const char *key, const char *value, void *udata)
 }
 
 /** Serialize an attribute set by converting it to JSON. */
+int pho_attrs_to_json_raw(const struct pho_attrs *md, json_t *obj)
+{
+    return pho_attrs_foreach(md, attr_json_dump_cb, obj);
+}
+
 int pho_attrs_to_json(const struct pho_attrs *md, GString *str, int flags)
 {
     json_t  *jdata;
@@ -91,7 +96,7 @@ int pho_attrs_to_json(const struct pho_attrs *md, GString *str, int flags)
     if (jdata == NULL)
         return -ENOMEM;
 
-    rc = pho_attrs_foreach(md, attr_json_dump_cb, jdata);
+    rc = pho_attrs_to_json_raw(md, jdata);
     if (rc != 0)
         goto out_free;
 
@@ -105,12 +110,30 @@ out_nojson:
     return (rc != 0) ? -EINVAL : 0;
 }
 
+int pho_json_raw_to_attrs(struct pho_attrs *md, json_t *obj)
+{
+    void    *iter;
+    int      rc = 0;
+
+    for (iter = json_object_iter(obj);
+         iter != NULL;
+         iter = json_object_iter_next(obj, iter)) {
+        const char  *key = json_object_iter_key(iter);
+        json_t      *val = json_object_iter_value(iter);
+
+        rc = pho_attr_set(md, key, json_string_value(val));
+        if (rc)
+            break;
+    }
+
+    return rc;
+}
+
 int pho_json_to_attrs(struct pho_attrs *md, const char *str)
 {
     json_error_t     jerror;
     json_t          *jdata;
-    void            *iter;
-    int              rc = 0;
+    int              rc;
 
     if (str == NULL)
         return -EINVAL;
@@ -120,17 +143,7 @@ int pho_json_to_attrs(struct pho_attrs *md, const char *str)
         LOG_RETURN(-EINVAL, "JSON parsing error: %s at position %d",
                    jerror.text, jerror.position);
 
-    iter = json_object_iter(jdata);
-    while (iter) {
-        const char  *key = json_object_iter_key(iter);
-        json_t      *val = json_object_iter_value(iter);
-
-        rc = pho_attr_set(md, key, json_string_value(val));
-        if (rc)
-            break;
-
-        iter = json_object_iter_next(jdata, iter);
-    }
+    rc = pho_json_raw_to_attrs(md, jdata);
 
     json_decref(jdata);
     return rc;

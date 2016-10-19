@@ -277,14 +277,13 @@ out_free:
 /**
  * helper arrays to build SQL query
  */
-static const char * const base_query[] = {
+static const char * const select_query[] = {
     [DSS_DEVICE] = "SELECT family, model, id, adm_status,"
                    " host, path, lock, lock_ts FROM device",
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
                    " address_type, fs_type, fs_status, stats, lock,"
                    " lock_ts FROM media",
-    [DSS_EXTENT] = "SELECT oid, copy_num, state, lyt_type, lyt_info,"
-                   "extents FROM extent",
+    [DSS_EXTENT] = "SELECT oid, state, lyt_info, extents FROM extent",
     [DSS_OBJECT] = "SELECT oid, user_md FROM object",
 };
 
@@ -300,10 +299,8 @@ static const char * const insert_query[] = {
                    " path, lock) VALUES ",
     [DSS_MEDIA]  = "INSERT INTO media (family, model, id, adm_status,"
                    " fs_type, address_type, fs_status, stats, lock) VALUES ",
-    [DSS_EXTENT] = "INSERT INTO extent (oid, copy_num, state, lyt_type,"
-                   " lyt_info, extents) VALUES ",
+    [DSS_EXTENT] = "INSERT INTO extent (oid, state, lyt_info, extents) VALUES ",
     [DSS_OBJECT] = "INSERT INTO object (oid, user_md) VALUES ",
-
 };
 
 static const char * const update_query[] = {
@@ -315,9 +312,8 @@ static const char * const update_query[] = {
                    " fs_type, address_type, fs_status, stats) ="
                    " ('%s', %s, '%s', '%s', '%s', '%s', '%s')"
                    " WHERE id = '%s';",
-    [DSS_EXTENT] = "UPDATE extent SET (copy_num, state, lyt_type,"
-                   " lyt_info, extents) ="
-                   " ('%d', '%s', '%s', '%s', '%s')"
+    [DSS_EXTENT] = "UPDATE extent SET (state, lyt_info, extents) ="
+                   " ('%s', '%s', '%s')"
                    " WHERE oid = '%s';",
     [DSS_OBJECT] = "UPDATE object SET user_md = '%s' "
                    " WHERE oid = '%s';",
@@ -335,7 +331,7 @@ static const char * const delete_query[] = {
 static const char * const insert_query_values[] = {
     [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '')%s",
     [DSS_MEDIA]  = "('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s', '')%s",
-    [DSS_EXTENT] = "('%s', '%d', '%s', '%s', '%s', '%s')%s",
+    [DSS_EXTENT] = "('%s', '%s', '%s', '%s')%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
 };
 
@@ -497,6 +493,120 @@ static char *dss_media_stats_encode(struct media_stats stats)
 
     pho_debug("Created JSON representation for stats: '%s'", res);
     return res;
+}
+
+/**
+ * Extract layout type and parameters from json
+ *
+ */
+static int dss_layout_desc_decode(struct module_desc *desc, const char *json)
+{
+    json_t          *root;
+    json_t          *attrs;
+    json_error_t     json_error;
+    int              rc;
+    ENTRY;
+
+    pho_debug("Decoding JSON representation for module desc: '%s'", json);
+
+    memset(desc, 0, sizeof(*desc));
+
+    root = json_loads(json, JSON_REJECT_DUPLICATES, &json_error);
+    if (!root)
+        LOG_RETURN(-EINVAL, "Failed to parse json data: %s", json_error.text);
+
+    if (!json_is_object(root))
+        LOG_GOTO(out_free, rc = -EINVAL, "Invalid module description");
+
+    /* Mandatory fields */
+    desc->mod_name  = json_dict2str(root, PHO_MOD_DESC_KEY_NAME);
+    if (!desc->mod_name)
+        LOG_GOTO(out_free, rc = -EINVAL, "Missing attribute %s",
+                 PHO_MOD_DESC_KEY_NAME);
+
+    desc->mod_major = json_dict2int(root, PHO_MOD_DESC_KEY_MAJOR);
+    if (desc->mod_major < 0)
+        LOG_GOTO(out_free, rc = -EINVAL, "Missing attribute %s",
+                 PHO_MOD_DESC_KEY_MAJOR);
+
+    desc->mod_minor = json_dict2int(root, PHO_MOD_DESC_KEY_MINOR);
+    if (desc->mod_minor < 0)
+        LOG_GOTO(out_free, rc = -EINVAL, "Missing attribute %s",
+                 PHO_MOD_DESC_KEY_MINOR);
+
+    /* Optional attributes */
+    attrs = json_object_get(root, PHO_MOD_DESC_KEY_ATTRS);
+    if (!attrs) {
+        rc = 0;
+        goto out_free;  /* no attributes, nothing else to do */
+    }
+
+    if (!json_is_object(attrs))
+        LOG_GOTO(out_free, rc = -EINVAL, "Invalid attributes format");
+
+    rc = pho_json_raw_to_attrs(&desc->mod_attrs, attrs);
+    if (rc)
+        LOG_GOTO(out_free, rc, "Cannot decode module attributes");
+
+out_free:
+    if (rc) {
+        free(desc->mod_name);
+        memset(desc, 0, sizeof(*desc));
+    }
+
+    return rc;
+}
+
+static char *dss_layout_desc_encode(struct module_desc *desc)
+{
+    char    *result = NULL;
+    json_t  *attrs  = NULL;
+    json_t  *root;
+    int      rc;
+    ENTRY;
+
+    root = json_object();
+    if (!root) {
+        pho_error(-ENOMEM, "Failed to create json object");
+        return NULL;
+    }
+
+    rc = json_object_set_new(root, PHO_MOD_DESC_KEY_NAME,
+                             json_string(desc->mod_name));
+    if (rc)
+        LOG_GOTO(out_free, rc = -EINVAL, "Cannot set layout name");
+
+    rc = json_object_set_new(root, PHO_MOD_DESC_KEY_MAJOR,
+                             json_integer(desc->mod_major));
+    if (rc)
+        LOG_GOTO(out_free, rc = -EINVAL, "Cannot set layout major number");
+
+    rc = json_object_set_new(root, PHO_MOD_DESC_KEY_MINOR,
+                             json_integer(desc->mod_minor));
+    if (rc)
+        LOG_GOTO(out_free, rc = -EINVAL, "Cannot set layout minor number");
+
+    if (!pho_attrs_is_empty(&desc->mod_attrs)) {
+        attrs = json_object();
+        if (!attrs)
+            LOG_GOTO(out_free, rc = -ENOMEM, "Cannot set layout attributes");
+
+        rc = pho_attrs_to_json_raw(&desc->mod_attrs, attrs);
+        if (rc)
+            LOG_GOTO(out_free, rc, "Cannot convert layout attributes");
+
+        rc = json_object_set_new(root, PHO_MOD_DESC_KEY_ATTRS, attrs);
+        if (rc)
+            LOG_GOTO(out_free, rc = -EINVAL, "Cannot set layout attributes");
+    }
+
+    result = json_dumps(root, 0);
+    pho_debug("Created json representation for layout type: '%s'", result);
+
+out_free:
+    json_decref(attrs);
+    json_decref(root);
+    return result;
 }
 
 /**
@@ -707,12 +817,14 @@ static int get_extent_setrequest(struct layout_info *item_list, int item_cnt,
                                  enum dss_set_action action, GString *request,
                                  int *error)
 {
+    int rc = 0;
     int i;
     ENTRY;
 
-    for (i = 0; i < item_cnt; i++) {
+    for (i = 0; i < item_cnt && rc == 0; i++) {
         struct layout_info  *p_layout = &item_list[i];
-        char                *layout;
+        char                *layout = NULL;
+        char                *pres = NULL;
 
         if (p_layout->oid == NULL)
             LOG_RETURN(-EINVAL, "Extent oid cannot be NULL");
@@ -720,38 +832,37 @@ static int get_extent_setrequest(struct layout_info *item_list, int item_cnt,
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_EXTENT],
                                    p_layout->oid);
-        } else if (action == DSS_SET_INSERT) {
-            layout = dss_layout_extents_encode(p_layout->extents,
-                                               p_layout->ext_count, error);
-            if (!layout)
-                LOG_RETURN(-EINVAL, "JSON encoding error");
-
-            g_string_append_printf(request, insert_query_values[DSS_EXTENT],
-                                   p_layout->oid, p_layout->copy_num,
-                                   extent_state2str(p_layout->state),
-                                   layout_type2str(p_layout->type), "[]",
-                                   layout, i < item_cnt-1 ? "," : ";");
-            free(layout);
-        } else if (action == DSS_SET_UPDATE) {
-            layout = dss_layout_extents_encode(p_layout->extents,
-                                               p_layout->ext_count, error);
-            if (!layout)
-                LOG_RETURN(-EINVAL, "JSON encoding error");
-
-            g_string_append_printf(request, update_query[DSS_EXTENT],
-                                   p_layout->copy_num,
-                                   extent_state2str(p_layout->state),
-                                   layout_type2str(p_layout->type), "[]",
-                                   layout, p_layout->oid);
-            free(layout);
+            continue;
         }
+
+        layout = dss_layout_extents_encode(p_layout->extents,
+                                           p_layout->ext_count, error);
+        if (!layout)
+            LOG_GOTO(out_free, rc = -EINVAL, "JSON layout encoding error");
+
+        pres = dss_layout_desc_encode(&p_layout->layout_desc);
+        if (!pres)
+            LOG_GOTO(out_free, rc = -EINVAL, "JSON layout desc encoding error");
+
+        if (action == DSS_SET_INSERT)
+            g_string_append_printf(request, insert_query_values[DSS_EXTENT],
+                                   p_layout->oid,
+                                   extent_state2str(p_layout->state),
+                                   pres, layout, i < item_cnt-1 ? "," : ";");
+        else if (action == DSS_SET_UPDATE)
+            g_string_append_printf(request, update_query[DSS_EXTENT],
+                                   extent_state2str(p_layout->state),
+                                   pres, layout, p_layout->oid);
+out_free:
+        free(layout);
+        free(pres);
     }
-    return 0;
+
+    return rc;
 }
 
 static int get_media_setrequest(struct media_info *item_list, int item_cnt,
-                                enum dss_set_action action, GString *request,
-                                int *error)
+                                enum dss_set_action action, GString *request)
 {
     int i;
     ENTRY;
@@ -1126,7 +1237,7 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
         LOG_RETURN(-ENOTSUP, "Unsupported DSS request type %#x", type);
 
     /* get everything if no criteria */
-    clause = g_string_new(base_query[type]);
+    clause = g_string_new(select_query[type]);
 
     rc = clause_filter_convert(clause, filter);
     if (rc) {
@@ -1204,15 +1315,18 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
         for (i = 0; i < PQntuples(res); i++) {
             struct layout_info *p_layout = &dss_res->u.layout[i];
 
-            p_layout->oid =  PQgetvalue(res, i, 0);
-            p_layout->copy_num = (unsigned int)strtoul(PQgetvalue(res, i, 1),
-                                                       NULL, 10);
-            p_layout->state = str2extent_state(PQgetvalue(res, i, 2));
-            p_layout->type = str2layout_type(PQgetvalue(res, i, 3));
-            /*@todo info */
+            p_layout->oid = PQgetvalue(res, i, 0);
+            p_layout->state = str2extent_state(PQgetvalue(res, i, 1));
+            rc = dss_layout_desc_decode(&p_layout->layout_desc,
+                                        PQgetvalue(res, i, 2));
+            if (rc) {
+                PQclear(res);
+                LOG_GOTO(out, rc, "dss_layout_desc_decode error");
+            }
+
             rc = dss_layout_extents_decode(&p_layout->extents,
                                            &p_layout->ext_count,
-                                           PQgetvalue(res, i, 5));
+                                           PQgetvalue(res, i, 3));
             if (rc) {
                 PQclear(res);
                 LOG_GOTO(out, rc, "dss_extent decode error");
@@ -1270,7 +1384,7 @@ int dss_set(struct dss_handle *handle, enum dss_type type, void *item_list,
             LOG_GOTO(out_cleanup, rc, "SQL device request failed");
         break;
     case DSS_MEDIA:
-        rc = get_media_setrequest(item_list, item_cnt, action, request, &error);
+        rc = get_media_setrequest(item_list, item_cnt, action, request);
         if (rc)
             LOG_GOTO(out_cleanup, rc, "SQL media request failed");
         break;

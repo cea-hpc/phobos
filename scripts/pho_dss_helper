@@ -34,7 +34,6 @@ CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS');
 CREATE TYPE address_type AS ENUM ('PATH', 'HASH1', 'OPAQUE');
 CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used', 'full');
 CREATE TYPE extent_state AS ENUM('pending','sync','orphan');
-CREATE TYPE extent_lyt_type AS ENUM('simple','raid0','raid1');
 
 -- enums extensibles: ALTER TYPE type ADD VALUE 'value'
 
@@ -56,9 +55,8 @@ CREATE INDEX ON media((stats->>'phys_spc_free'));
 
 CREATE TABLE object(oid varchar(1024), user_md jsonb, PRIMARY KEY (oid));
 
-CREATE TABLE extent(oid varchar(1024), copy_num int, state extent_state,
-                    lyt_type extent_lyt_type, lyt_info jsonb,
-                    extents jsonb, PRIMARY KEY (oid, copy_num));
+CREATE TABLE extent(oid varchar(1024), state extent_state, lyt_info jsonb,
+                    extents jsonb, PRIMARY KEY (oid));
 
 CREATE OR REPLACE FUNCTION extents_mda_idx(extents jsonb) RETURNS text[] AS
 \$\$
@@ -79,8 +77,7 @@ drop_tables() {
         $PSQL << EOF
 DROP TABLE IF EXISTS device, media, object, extent CASCADE;
 DROP TYPE IF EXISTS dev_family, dev_model, tape_model, fs_status,
-		    adm_status, fs_type, address_type, extent_lyt_type,
-            extent_state CASCADE;
+		    adm_status, fs_type, address_type, extent_state CASCADE;
 DROP FUNCTION IF EXISTS extents_mda_idx(jsonb) CASCADE;
 EOF
 }

@@ -33,6 +33,9 @@
 #define PHO_EA_UMD_NAME     "user_md"
 #define PHO_EA_EXT_NAME     "ext_info"
 
+#define LAYOUT_SIMPLE_NAME  "simple"
+#define LAYOUT_SIMPLE_MAJOR 0
+#define LAYOUT_SIMPLE_MINOR 1
 
 /**
  * The operation step of a slice is updated after the operation has succeeded.
@@ -124,7 +127,13 @@ static const mput_operation_t mput_state_machine_clean_ops[MPUT_STEP_COUNT] = {
 };
 
 
-static const struct layout_info simple_layout = {.type = PHO_LYT_SIMPLE};
+static const struct layout_info simple_layout = {
+    .layout_desc = {
+        .mod_name    = LAYOUT_SIMPLE_NAME,
+        .mod_major   = LAYOUT_SIMPLE_MAJOR,
+        .mod_minor   = LAYOUT_SIMPLE_MINOR,
+    }
+};
 
 
 /**
@@ -291,9 +300,6 @@ int _ext_put_start_cb(struct mput_desc *mput, struct mput_slice *slice)
     int                 rc;
     ENTRY;
 
-    /* XXX no support for other layouts yet */
-    slice->layout = simple_layout;
-
     /**
      * Each slice gets a copy of the global mput intent,
      * so that they can store their own object address and size in it.
@@ -301,8 +307,9 @@ int _ext_put_start_cb(struct mput_desc *mput, struct mput_slice *slice)
     slice->intent = mput->intent;
     slice->intent.li_location.extent.size = slice->st.st_size;
 
+    slice->layout = simple_layout;
+
     slice->layout.oid = slice->xfer->xd_objid;
-    slice->layout.copy_num = 0;
     slice->layout.state = PHO_EXT_ST_PENDING;
 
     /* The layout points to the slice's extent and NOT the global one */
@@ -388,7 +395,6 @@ static int open_noatime(const char *path, int flags)
 
 int _ext_write_cb(struct mput_desc *mput, struct mput_slice *slice)
 {
-    char                         tag[PHO_LAYOUT_TAG_MAX] = "";
     struct pho_ext_loc          *loc = &slice->intent.li_location;
     struct io_adapter            ioa;
     struct pho_io_descr          iod = {0};
@@ -403,11 +409,6 @@ int _ext_write_cb(struct mput_desc *mput, struct mput_slice *slice)
 
     if (!io_adapter_is_valid(&ioa))
         LOG_RETURN(-EINVAL, "Invalid I/O adapter, check implementation!");
-
-    /* build extent tag from layout description */
-    rc = layout2tag(&slice->layout, loc->extent.layout_idx, tag);
-    if (rc)
-        LOG_RETURN(rc, "Cannot infer tags from layout description");
 
     slice->fd = open_noatime(xfer->xd_fpath, O_RDONLY);
     if (slice->fd < 0)
@@ -426,7 +427,7 @@ int _ext_write_cb(struct mput_desc *mput, struct mput_slice *slice)
         LOG_GOTO(out_close, rc, "Cannot build MD representation");
 
     /* write the extent */
-    rc = ioa_put(&ioa, xfer->xd_objid, tag[0] ? tag : NULL, &iod, NULL, NULL);
+    rc = ioa_put(&ioa, xfer->xd_objid, NULL, &iod, NULL, NULL);
     if (rc)
         LOG_GOTO(out_free, rc, "PUT failed");
 
@@ -467,7 +468,6 @@ int _ext_clean_cb(struct mput_desc *mput, struct mput_slice *slice)
 int _ext_abort_cb(struct mput_desc *mput, struct mput_slice *slice)
 {
     struct pho_ext_loc  *loc = &slice->intent.li_location;
-    char                 tag[PHO_LAYOUT_TAG_MAX] = "";
     struct io_adapter    ioa;
     int                  rc;
     ENTRY;
@@ -476,11 +476,7 @@ int _ext_abort_cb(struct mput_desc *mput, struct mput_slice *slice)
     if (rc)
         LOG_RETURN(rc, "Cannot get suitable I/O adapter");
 
-    rc = layout2tag(&slice->layout, loc->extent.layout_idx, tag);
-    if (rc)
-        LOG_RETURN(rc, "Cannot generate tag");
-
-    rc = ioa_del(&ioa, slice->xfer->xd_objid, tag, loc);
+    rc = ioa_del(&ioa, slice->xfer->xd_objid, NULL, loc);
     if (rc)
         LOG_RETURN(rc, "Cannot delete extent");
 
@@ -508,7 +504,6 @@ static int read_extents(int fd, const char *obj_id,
                         const struct layout_info *layout,
                         struct lrs_intent *intent, enum pho_xfer_flags flags)
 {
-    char                 tag[PHO_LAYOUT_TAG_MAX] = "";
     struct pho_ext_loc  *loc = &intent->li_location;
     struct io_adapter    ioa;
     struct pho_io_descr  iod;
@@ -519,11 +514,6 @@ static int read_extents(int fd, const char *obj_id,
 
     /* get vector of functions to access the media */
     rc = get_io_adapter(loc->extent.fs_type, &ioa);
-    if (rc)
-        return rc;
-
-    /* build extent tag from layout description */
-    rc = layout2tag(layout, loc->extent.layout_idx, tag);
     if (rc)
         return rc;
 
@@ -538,7 +528,7 @@ static int read_extents(int fd, const char *obj_id,
         return rc;
 
     /* read the extent */
-    rc = ioa_get(&ioa, obj_id, tag[0] ? tag : NULL, &iod, NULL, NULL);
+    rc = ioa_get(&ioa, obj_id, NULL, &iod, NULL, NULL);
     if (rc) {
         pho_error(rc, "GET failed");
         return rc;
@@ -738,11 +728,7 @@ static int obj_get_location(struct dss_handle *dss, const char *obj_id,
     int                 cnt = 0;
     int                 rc;
 
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                          "  {\"DSS::EXT::oid\": \"%s\"},"
-                          "  {\"DSS::EXT::copy_num\": %u}"
-                          "]}", obj_id, 0);
+    rc = dss_filter_build(&filter, "{\"DSS::EXT::oid\": \"%s\"}", obj_id);
     if (rc)
         return rc;
 

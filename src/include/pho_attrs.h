@@ -12,6 +12,7 @@
 
 #include <glib.h>
 #include <jansson.h> /* for JSON flags */
+#include <stdbool.h>
 
 struct pho_attrs {
     GHashTable *attr_set;
@@ -19,6 +20,11 @@ struct pho_attrs {
 
 typedef int (*pho_attrs_iter_t)(const char *key, const char *val, void *udata);
 
+
+static inline bool pho_attrs_is_empty(const struct pho_attrs *attrs)
+{
+    return attrs->attr_set == NULL;
+}
 
 /** create or update a key-value item in the attribute set */
 int pho_attr_set(struct pho_attrs *md, const char *key,
@@ -39,11 +45,25 @@ void pho_attrs_free(struct pho_attrs *md);
 int pho_attrs_to_json(const struct pho_attrs *md, GString *str, int json_flags);
 
 /**
+ * Serialize an attribute set by converting it to raw JSON.
+ * @param md    key-value set.
+ * @param obj   json object that must be allocated by the caller.
+ */
+int pho_attrs_to_json_raw(const struct pho_attrs *md, json_t *obj);
+
+/**
  * Deserialize an attribute set from JSON string representation.
  * @param md  key-value set to fill.
  * @param str json string to decode.
  */
 int pho_json_to_attrs(struct pho_attrs *md, const char *str);
+
+/**
+ * Deserialize an attribute set from raw JSON object.
+ * @param md  key-value set to fill.
+ * @param str json object to decode.
+ */
+int pho_json_raw_to_attrs(struct pho_attrs *md, json_t *obj);
 
 /**
  * Invoke a callback on all items of the attribute set.
