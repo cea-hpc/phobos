@@ -1,63 +1,66 @@
 #!/bin/bash
 
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:
+
 function mount_ltfs
 {
-	local dev=$(readlink -m "$1") # convert link to /dev/IBMtape*
-	local mnt=$2
-	# store layer now manages flush of individual files with LTFS
-	ltfs -o devname=$dev "$mnt" -o sync_type=unmount
+    local dev=$(readlink -m "$1") # convert link to /dev/IBMtape*
+    local mnt=$2
+    # store layer now manages flush of individual files with LTFS
+    ltfs -o devname=$dev "$mnt" -o sync_type=unmount
 }
 
 function umount_ltfs
 {
-	local dev=$(readlink -m "$1") # convert link to /dev/IBMtape*
-	local mnt=$2
+    local dev=$(readlink -m "$1") # convert link to /dev/IBMtape*
+    local mnt=$2
 
-	local ltfs_process=""
-	shutdown_timeout=300
+    local ltfs_process=""
+    shutdown_timeout=300
 
-	# get the pid of the related LTFS process
-	for pid in $(pgrep ltfs); do
-		ls -l /proc/$pid/fd | egrep "$dev$" || continue
-		echo "$dev is accessed by ltfs process $pid" >&2
-		ltfs_process=$pid
-	done
+    # get the pid of the related LTFS process
+    for pid in $(pgrep ltfs); do
+        ls -l /proc/$pid/fd | egrep "$dev$" || continue
+        echo "$dev is accessed by ltfs process $pid" >&2
+        ltfs_process=$pid
+    done
 
-	if [ -z "$ltfs_process" ]; then
-		echo "LTFS process not found" >&2
-		exit 2
-	fi
+    if [ -z "$ltfs_process" ]; then
+        echo "LTFS process not found" >&2
+        exit 2
+    fi
 
-	umount "$mnt" || exit 1
+    umount "$mnt" || exit 1
 
-	kill -TERM $ltfs_process
+    kill -TERM $ltfs_process
 
-	# Wait for ltfs processes to exit
-	counter=0
-	while [ "$counter" -lt "$shutdown_timeout" ]; do
-		[ ! -d /proc/$ltfs_process ] && break
-		counter=$(( $counter + 1 ))
-		sleep 1
-	done
+    # Wait for ltfs processes to exit
+    counter=0
+    while [ "$counter" -lt "$shutdown_timeout" ]; do
+        [ ! -d /proc/$ltfs_process ] && break
+        counter=$(( $counter + 1 ))
+        sleep 1
+    done
 }
 
 function format_ltfs
 {
-	local drive=$(readlink -m "$1") # convert link to /dev/IBMtape*
-	local label=$2
+    local drive=$(readlink -m "$1") # convert link to /dev/IBMtape*
+    local label=$2
 
-	mkltfs -f -d "$drive" -n "$label" || exit 1
+    mkltfs -f -d "$drive" -n "$label" || exit 1
 }
 
 function usage
 {
-	bin=$(basename $0)
+    bin=$(basename $0)
 
-	echo "usage: "
-	echo "	$bin mount_ltfs   <drive> <path>"
-	echo "	$bin umount_ltfs <drive> <path>"
-	echo "	$bin format_ltfs <drive> <label>"
-	exit 1
+    echo "usage: "
+    echo "    $bin mount_ltfs   <drive> <path>"
+    echo "    $bin umount_ltfs <drive> <path>"
+    echo "    $bin format_ltfs <drive> <label>"
+    exit 1
 }
 
 #### MAIN ####
@@ -65,30 +68,30 @@ function usage
 verb=$1
 
 if [ -z $verb ]; then
-	usage
+    usage
 fi
 
 case $verb in
-	mount_ltfs)
-		drive=$2
-		path=$3
-		[ -e "$drive" ] || usage
-		[ -d "$path" ] || usage
-		mount_ltfs "$drive" "$path"
-		;;
-	umount_ltfs)
-		drive=$2
-		path=$3
-		[ -e "$drive" ] || usage
-		[ -d "$path" ] || usage
-		umount_ltfs "$drive" "$path"
-		;;
-	format_ltfs)
-		drive=$2
-		label=$3
-		[ -e "$drive" ] || usage
+    mount_ltfs)
+        drive=$2
+        path=$3
+        [ -e "$drive" ] || usage
+        [ -d "$path" ] || usage
+        mount_ltfs "$drive" "$path"
+        ;;
+    umount_ltfs)
+        drive=$2
+        path=$3
+        [ -e "$drive" ] || usage
+        [ -d "$path" ] || usage
+        umount_ltfs "$drive" "$path"
+        ;;
+    format_ltfs)
+        drive=$2
+        label=$3
+        [ -e "$drive" ] || usage
                 format_ltfs "$drive" "$label"
-		;;
-	*)
-		usage
+        ;;
+    *)
+        usage
 esac

@@ -1,30 +1,33 @@
 #!/bin/bash
 
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:
+
 export PGPASSWORD="phobos"
 PSQL="psql -U phobos -h localhost phobos"
 
 setup_db() {
-	su postgres -c "createuser phobos"
-	su postgres -c "createdb -E UTF8 phobos"
-	su postgres -c "psql phobos" << EOF
+    su postgres -c "createuser phobos"
+    su postgres -c "createdb -E UTF8 phobos"
+    su postgres -c "psql phobos" << EOF
 GRANT ALL ON DATABASE phobos TO phobos;
 ALTER SCHEMA public OWNER TO phobos;
 ALTER USER phobos WITH PASSWORD 'phobos';
 CREATE EXTENSION IF NOT EXISTS btree_gin SCHEMA public;
 EOF
-	# You WILL need to configure your pg_hba.conf with either 'trust'
-	# or 'md5' for the IP you connect from.
-	# PSQL command is configured for password over TCP, if you would
-	# like to use trust just remove -h localhost and use the socket.
+    # You WILL need to configure your pg_hba.conf with either 'trust'
+    # or 'md5' for the IP you connect from.
+    # PSQL command is configured for password over TCP, if you would
+    # like to use trust just remove -h localhost and use the socket.
 }
 
 drop_db() {
-	su postgres -c "dropdb phobos"
-	su postgres -c "dropuser phobos"
+    su postgres -c "dropdb phobos"
+    su postgres -c "dropuser phobos"
 }
 
 setup_tables() {
-	$PSQL << EOF
+    $PSQL << EOF
 CREATE TYPE dev_family AS ENUM ('disk', 'tape', 'dir');
 CREATE TYPE dev_model AS ENUM ('ULTRIUM-TD5', 'ULTRIUM-TD6',
                                'ULT3580-TD5', 'ULT3580-TD6');
@@ -77,7 +80,7 @@ drop_tables() {
         $PSQL << EOF
 DROP TABLE IF EXISTS device, media, object, extent CASCADE;
 DROP TYPE IF EXISTS dev_family, dev_model, tape_model, fs_status,
-		    adm_status, fs_type, address_type, extent_state CASCADE;
+            adm_status, fs_type, address_type, extent_state CASCADE;
 DROP FUNCTION IF EXISTS extents_mda_idx(jsonb) CASCADE;
 EOF
 }
@@ -89,34 +92,34 @@ host=$(hostname -s)
 [[ $(caller | cut -d' ' -f1) != "0" ]] && return 0
 
 usage() {
-	echo "Usage: . $0"
-	echo "  OR   $0 ACTION [ACTION [ACTION...]]"
-	echo "where  ACTION := { setup_db | drop_db | setup_tables |"
-	echo "                   drop_tables }"
-	exit -1
+    echo "Usage: . $0"
+    echo "  OR   $0 ACTION [ACTION [ACTION...]]"
+    echo "where  ACTION := { setup_db | drop_db | setup_tables |"
+    echo "                   drop_tables }"
+    exit -1
 }
 
 if [[ $# -eq 0 ]]; then
-	usage
+    usage
 fi
 
 while [[ $# -gt 0 ]]; do
-	case "$1" in
-	setup_db)
-		setup_db
-		;;
-	drop_db)
-		drop_db
-		;;
-	setup_tables)
-		setup_tables
-		;;
-	drop_tables)
-		drop_tables
-		;;
-	*)
-		usage
-		;;
-	esac
-	shift
+    case "$1" in
+    setup_db)
+        setup_db
+        ;;
+    drop_db)
+        drop_db
+        ;;
+    setup_tables)
+        setup_tables
+        ;;
+    drop_tables)
+        drop_tables
+        ;;
+    *)
+        usage
+        ;;
+    esac
+    shift
 done
