@@ -491,7 +491,8 @@ static char *dss_media_stats_encode(struct media_stats stats)
 
     json_decref(root);
 
-    pho_debug("Created JSON representation for stats: '%s'", res);
+    pho_debug("Created JSON representation for stats: '%s'",
+              res ? res : "(null)");
     return res;
 }
 
@@ -601,7 +602,9 @@ static char *dss_layout_desc_encode(struct module_desc *desc)
     }
 
     result = json_dumps(root, 0);
-    pho_debug("Created json representation for layout type: '%s'", result);
+
+    pho_debug("Created json representation for layout type: '%s'",
+              result ? result : "(null)");
 
 out_free:
     json_decref(attrs);
