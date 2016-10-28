@@ -488,6 +488,23 @@ static const struct element_status *
     return NULL;
 }
 
+/** Search for a free slot in the library */
+static int get_free_slot(struct lib_descriptor *lib, uint16_t *slot_addr)
+{
+    struct element_status *slot;
+    int                    i;
+
+    for (i = 0; i < lib->slots.count; i++) {
+        slot = &lib->slots.items[i];
+
+        if (!slot->full) {
+            *slot_addr = slot->address;
+            return 0;
+        }
+    }
+    return -ENOENT;
+}
+
 /**
  * Select a target slot for move operation.
  * @param[in,out] lib       Library handler.
@@ -519,11 +536,15 @@ static int select_target_addr(struct lib_descriptor *lib,
         pho_debug("No target address specified. "
                   "Using element source address %#hx.", *tgt_addr);
         return 0;
-    } else {
-        /* @TODO else, select a free slot */
-        LOG_RETURN(-EINVAL, "No target address specified and element "
-                   "has no source address.");
     }
+
+    /* search a free slot to target */
+    rc = get_free_slot(lib, tgt_addr);
+    if (rc)
+        LOG_RETURN(rc, "No Free slot to unload tape");
+
+    pho_debug("Unloading tape to free slot %#hx", *tgt_addr);
+    return 0;
 }
 
 /** Implements phobos LDM lib media move */
@@ -540,8 +561,9 @@ static int lib_scsi_move(struct lib_handle *hdl,
     if (!lib) /* already closed */
         return -EBADF;
 
-    if (tgt_addr->lia_type == MED_LOC_UNKNOWN
-        && tgt_addr->lia_addr == 0) {
+    if (tgt_addr == NULL
+        || (tgt_addr->lia_type == MED_LOC_UNKNOWN
+            && tgt_addr->lia_addr == 0)) {
         rc = select_target_addr(lib, src_addr, &tgt);
         if (rc)
             return rc;

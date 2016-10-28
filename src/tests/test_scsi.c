@@ -35,6 +35,15 @@ static int16_t arm_addr = UNSET;
 static char *one_serial;
 static char *one_label;
 
+static char *dup_serial(const char *id)
+{
+    char *c = strrchr(id, ' ');
+    if (c)
+        return strdup(c + 1);
+
+    return strdup(id);
+}
+
 
 /** Fill the previous variables for next test scenarios */
 static void save_test_elements(const struct element_status *element)
@@ -44,8 +53,10 @@ static void save_test_elements(const struct element_status *element)
 
     switch (element->type) {
     case SCSI_TYPE_DRIVE:
-        if (one_serial == NULL && element->dev_id[0] != '\0')
-            one_serial = strdup(element->dev_id);
+        if (element->dev_id[0] != '\0' && element->full) {
+            free(one_serial);
+            one_serial = dup_serial(element->dev_id);
+        }
 
         if (full_drive == UNSET && element->full)
             full_drive = element->address;
@@ -141,7 +152,8 @@ static int single_element_status(int fd, uint16_t addr, bool expect_full)
     struct element_status *list = NULL;
     int lcount = 0;
 
-    rc = scsi_element_status(fd, SCSI_TYPE_ALL, addr, 1, ESF_GET_LABEL,
+    rc = scsi_element_status(fd, SCSI_TYPE_ALL, addr, 1,
+                             ESF_GET_LABEL | ESF_GET_DRV_ID,
                              &list, &lcount);
     if (rc) {
         pho_error(rc, "status ERROR %d", rc);
@@ -184,6 +196,13 @@ static void test_lib_adapter(void)
 
     if (one_label) {
         rc = ldm_lib_media_lookup(&lib, one_label, &med_addr);
+        if (rc)
+            exit(EXIT_FAILURE);
+    }
+
+    /* unload the drive to any slot if it's full */
+    if (one_serial && drv_info.ldi_full) {
+        rc = ldm_lib_media_move(&lib, &drv_info.ldi_addr, NULL);
         if (rc)
             exit(EXIT_FAILURE);
     }
