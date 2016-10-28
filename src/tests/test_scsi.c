@@ -134,7 +134,7 @@ static void print_elements(const struct element_status *list, int nb)
         print_element(&list[i]);
 }
 
-static int single_element_status(int fd, uint16_t addr)
+static int single_element_status(int fd, uint16_t addr, bool expect_full)
 {
     int rc;
 
@@ -143,8 +143,16 @@ static int single_element_status(int fd, uint16_t addr)
 
     rc = scsi_element_status(fd, SCSI_TYPE_ALL, addr, 1, ESF_GET_LABEL,
                              &list, &lcount);
-    if (rc)
-        LOG_RETURN(rc, "status ERROR %d", rc);
+    if (rc) {
+        pho_error(rc, "status ERROR %d", rc);
+        exit(EXIT_FAILURE);
+    }
+
+    if (lcount > 0 && list->full != expect_full) {
+        pho_warn("Element at addr %#hx is expected to be full",
+                 addr);
+        exit(EXIT_FAILURE);
+    }
 
     print_elements(list, lcount);
     free(list);
@@ -254,6 +262,7 @@ int main(int argc, char **argv)
     struct element_status *list = NULL;
     int lcount = 0;
     char *val = NULL;
+    bool was_loaded = false;
 
     test_env_initialize();
 
@@ -345,8 +354,8 @@ int main(int argc, char **argv)
     free(list);
 
     if (full_drive != UNSET && free_slot != UNSET) {
-        single_element_status(fd, full_drive);
-        single_element_status(fd, free_slot);
+        single_element_status(fd, full_drive, true);
+        single_element_status(fd, free_slot, false);
 
         pho_info("Unloading drive %#x to slot %#x", full_drive, free_slot);
 
@@ -355,13 +364,15 @@ int main(int argc, char **argv)
             pho_error(rc, "move_medium error");
             exit(EXIT_FAILURE);
         }
-        single_element_status(fd, full_drive);
-        single_element_status(fd, free_slot);
+        single_element_status(fd, full_drive, false);
+        single_element_status(fd, free_slot, true);
+
+        was_loaded = true;
     }
 
     if (empty_drive != UNSET && full_slot != UNSET) {
-        single_element_status(fd, full_slot);
-        single_element_status(fd, empty_drive);
+        single_element_status(fd, full_slot, true);
+        single_element_status(fd, empty_drive, false);
 
         pho_info("Loading tape from slot %#x to drive %#x",
                  full_slot, empty_drive);
@@ -371,11 +382,11 @@ int main(int argc, char **argv)
             pho_error(rc, "move_medium error");
             exit(EXIT_FAILURE);
         }
-        single_element_status(fd, full_slot);
-        single_element_status(fd, empty_drive);
-    } else {
-        single_element_status(fd, full_drive);
-        single_element_status(fd, free_slot);
+        single_element_status(fd, full_slot, false);
+        single_element_status(fd, empty_drive, true);
+    } else if (was_loaded) {
+        single_element_status(fd, full_drive, false);
+        single_element_status(fd, free_slot, true);
 
         pho_info("Loading back tape from slot %#x to drive %#x",
                  free_slot, full_drive);
@@ -385,8 +396,8 @@ int main(int argc, char **argv)
             pho_error(rc, "move_medium error");
             exit(EXIT_FAILURE);
         }
-        single_element_status(fd, full_drive);
-        single_element_status(fd, free_slot);
+        single_element_status(fd, full_drive, true);
+        single_element_status(fd, free_slot, false);
     }
 
     /* test of the lib adapter API */
