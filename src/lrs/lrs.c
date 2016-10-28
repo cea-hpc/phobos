@@ -1388,8 +1388,10 @@ int lrs_write_prepare(struct dss_handle *dss, size_t size,
         return rc;
 
     if (dev != NULL)
-        pho_verb("Writing to media '%s' using device '%s'",
-                 media_id_get(&dev->dss_media_info->id), dev->dev_path);
+        pho_verb("Writing to media '%s' using device '%s' "
+                 "(free space: %zd bytes)",
+                 media_id_get(&dev->dss_media_info->id), dev->dev_path,
+                 dev->dss_media_info->stats.phys_spc_free);
 
     intent->li_dss    = dss;
     intent->li_device = dev;
