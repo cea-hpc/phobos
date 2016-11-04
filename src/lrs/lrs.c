@@ -1404,6 +1404,7 @@ int lrs_write_prepare(struct dss_handle *dss, size_t size,
 
 err_cleanup:
     if (rc != 0) {
+        lrs_dev_release(dss, dev);
         lrs_media_release(dss, dev->dss_media_info);
         free(intent->li_location.root_path);
         memset(intent, 0, sizeof(*intent));
