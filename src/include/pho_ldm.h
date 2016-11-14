@@ -31,8 +31,8 @@ struct ldm_dev_state {
 
 /** information about used and available space on a media */
 struct ldm_fs_space {
-    size_t spc_used;
-    size_t spc_avail;
+    ssize_t spc_used;
+    ssize_t spc_avail;
 };
 
 /**
