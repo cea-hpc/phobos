@@ -120,8 +120,30 @@ out_free:
     return rc;
 }
 
+/**
+ * Pseudo mount function. Does not actually mount anything but check the
+ * filesystem label, to comply with the behavior of other backends.
+ */
+static int dir_labelled(const char *dev_path, const char *mnt_path,
+                        const char *fs_label)
+{
+    char    mounted_label[PHO_LABEL_MAX_LEN + 1];
+    int     rc;
+
+    rc = dir_get_label(mnt_path, mounted_label, sizeof(mounted_label));
+    if (rc)
+        LOG_RETURN(rc, "Cannot retrieve label on '%s'", mnt_path);
+
+    rc = strcmp(mounted_label, fs_label);
+    if (rc)
+        LOG_RETURN(-EINVAL, "Label mismatch on '%s': expected:'%s' found:'%s'",
+                    mnt_path, fs_label, mounted_label);
+
+    return 0;
+}
+
 struct fs_adapter fs_adapter_posix = {
-    .fs_mount     = NULL,
+    .fs_mount     = dir_labelled,
     .fs_umount    = NULL,
     .fs_format    = dir_format,
     .fs_mounted   = dir_present,

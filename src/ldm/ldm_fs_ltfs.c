@@ -139,8 +139,30 @@ static int ltfs_format_filter(void *arg, char *line, size_t size, int stream)
     return 0;
 }
 
-static int ltfs_mount(const char *dev_path, const char *mnt_path)
+#define LTFS_VNAME_XATTR    "user.ltfs.volumeName"
+
+static int ltfs_get_label(const char *mnt_path, char *fs_label, size_t llen)
 {
+    ssize_t rc;
+
+    /* labels can (theorically) be as big as PHO_LABEL_MAX_LEN, add one byte */
+    if (llen <= PHO_LABEL_MAX_LEN)
+        return -EINVAL;
+
+    memset(fs_label, 0, llen);
+
+    /* We really want null-termination */
+    rc = getxattr(mnt_path, LTFS_VNAME_XATTR, fs_label, llen - 1);
+    if (rc < 0)
+        return -errno;
+
+    return 0;
+}
+
+static int ltfs_mount(const char *dev_path, const char *mnt_path,
+                      const char *fs_label)
+{
+    char     vol_label[PHO_LABEL_MAX_LEN + 1];
     char    *cmd = NULL;
     int      rc;
     ENTRY;
@@ -158,6 +180,18 @@ static int ltfs_mount(const char *dev_path, const char *mnt_path)
     rc = command_call(cmd, ltfs_collect_output, NULL);
     if (rc)
         LOG_GOTO(out_free, rc, "Mount command failed: '%s'", cmd);
+
+    /* Checking filesystem label is optional, if fs_label is NULL we are done */
+    if (!fs_label || !fs_label[0])
+        goto out_free;
+
+    rc = ltfs_get_label(mnt_path, vol_label, sizeof(vol_label));
+    if (rc)
+        LOG_GOTO(out_free, rc, "Cannot retrieve fs label for '%s'", mnt_path);
+
+    if (strcmp(vol_label, fs_label))
+        LOG_GOTO(out_free, rc, "FS label mismatch found:'%s' / expected:'%s'",
+                 vol_label, fs_label);
 
 out_free:
     free(cmd);
@@ -318,26 +352,6 @@ static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc)
     /* A full tape cannot be written */
     if (fs_spc->spc_avail == 0)
         fs_spc->spc_flags |= PHO_FS_READONLY;
-
-    return 0;
-}
-
-#define LTFS_VNAME_XATTR    "user.ltfs.volumeName"
-
-static int ltfs_get_label(const char *mnt_path, char *fs_label, size_t llen)
-{
-    ssize_t rc;
-
-    /* labels can (theorically) be as big as PHO_LABEL_MAX_LEN, add one byte */
-    if (llen <= PHO_LABEL_MAX_LEN)
-        return -EINVAL;
-
-    memset(fs_label, 0, llen);
-
-    /* We really want null-termination */
-    rc = getxattr(mnt_path, LTFS_VNAME_XATTR, fs_label, llen - 1);
-    if (rc < 0)
-        return -errno;
 
     return 0;
 }

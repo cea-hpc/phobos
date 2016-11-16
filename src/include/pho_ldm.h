@@ -317,7 +317,8 @@ static inline int ldm_lib_media_move(struct lib_adapter *lib,
  * fs_format do noop if NULL.
  */
 struct fs_adapter {
-    int (*fs_mount)(const char *dev_path, const char *mnt_path);
+    int (*fs_mount)(const char *dev_path, const char *mnt_path,
+                    const char *label);
     int (*fs_umount)(const char *dev_path, const char *mnt_path);
     int (*fs_format)(const char *dev_path, const char *label,
                      struct ldm_fs_space *fs_spc);
@@ -339,16 +340,18 @@ int get_fs_adapter(enum fs_type fs_type, struct fs_adapter *fsa);
  * @param[in] fsa       File system adapter.
  * @param[in] dev_path  Path to the device.
  * @param[in] mnt_path  Mount point for the filesystem.
+ * @param[in] fs_label  Validation label.
  *
  * @return 0 on success, negative error code on failure.
  */
 static inline int ldm_fs_mount(const struct fs_adapter *fsa,
-                               const char *dev_path, const char *mnt_point)
+                               const char *dev_path, const char *mnt_point,
+                               const char *fs_label)
 {
     assert(fsa != NULL);
     if (fsa->fs_mount == NULL)
         return 0;
-    return fsa->fs_mount(dev_path, mnt_point);
+    return fsa->fs_mount(dev_path, mnt_point, fs_label);
 }
 
 /**

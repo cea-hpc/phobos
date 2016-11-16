@@ -823,7 +823,8 @@ static int lrs_mount(struct dev_descr *dev)
     if (rc)
         goto out_free;
 
-    rc = ldm_fs_mount(&fsa, dev->dev_path, mnt_root);
+    rc = ldm_fs_mount(&fsa, dev->dev_path, mnt_root,
+                      dev->dss_media_info->fs.label);
     if (rc)
         LOG_GOTO(out_free, rc, "Failed to mount device '%s'",
                  dev->dev_path);
@@ -1347,8 +1348,11 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
         LOG_GOTO(err_out, rc, "Failed to get FS adapter");
 
     rc = ldm_fs_format(&fsa, dev->dev_path, label, &spc);
-    if (rc != 0)
+    if (rc)
         LOG_GOTO(err_out, rc, "Cannot format media '%s'", label);
+
+    /* Systematically use the media ID as filesystem label */
+    strncpy(media_info->fs.label, label, sizeof(media_info->fs.label) - 1);
 
     media_info->stats.phys_spc_used = spc.spc_used;
     media_info->stats.phys_spc_free = spc.spc_avail;
