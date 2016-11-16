@@ -20,6 +20,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 static int dir_present(const char *dev_path, char *mnt_path,
                        size_t mnt_path_size)
@@ -40,27 +41,90 @@ static int dir_present(const char *dev_path, char *mnt_path,
     return 0;
 }
 
+static char *get_label_path(const char *dir_path)
+{
+    char    *res;
+    int      rc;
+
+    rc = asprintf(&res, "%s/.phobos_dir_label", dir_path);
+    if (rc < 0)
+        return NULL;
+
+    return res;
+}
+
 /**
  * Note that we don't actually format the directory in the mkltfs sense.
  * This operation is exposed for consistency with other media types.
- * It also fills the available space structure.
+ * It will perform the following operation:
+ *   - Make sure the filesystem was not previously labelled;
+ *   - Label it;
+ *   - Fill the used/free space structure.
  */
 static int dir_format(const char *dev_path, const char *label,
                       struct ldm_fs_space *fs_spc)
 {
+    char    *label_path = get_label_path(dev_path);
+    int      fd;
+    ssize_t  rc;
     ENTRY;
 
-    if (fs_spc == NULL)
-        return 0;
+    if (!label_path)
+        LOG_RETURN(-ENOMEM, "Cannot create filesystem label at '%s'", dev_path);
 
-    memset(fs_spc, 0, sizeof(*fs_spc));
-    return common_statfs(dev_path, fs_spc);
+    fd = open(label_path, O_CREAT | O_EXCL | O_WRONLY, S_IRUSR | S_IWUSR);
+    if (fd < 0)
+        LOG_GOTO(out_free, rc = -errno, "Cannot create file at '%s'", dev_path);
+
+    rc = write(fd, label, strlen(label));
+    if (rc < 0)
+        LOG_GOTO(out_close, rc = -errno, "Cannot set label at '%s'", dev_path);
+
+    if (fs_spc) {
+        memset(fs_spc, 0, sizeof(*fs_spc));
+        rc = common_statfs(dev_path, fs_spc);
+    }
+
+out_close:
+    close(fd);
+
+out_free:
+    free(label_path);
+    return rc;
+}
+
+static int dir_get_label(const char *mnt_path, char *fs_label, size_t llen)
+{
+    char    *label_path = get_label_path(mnt_path);
+    int      fd;
+    ssize_t  rc;
+
+    if (!label_path)
+        LOG_RETURN(-ENOMEM, "Cannot lookup filesystem label at '%s'", mnt_path);
+
+    fd = open(label_path, O_RDONLY);
+    if (fd < 0)
+        LOG_GOTO(out_free, rc = -errno, "Cannot open label: '%s'", label_path);
+
+    rc = read(fd, fs_label, llen - 1);
+    if (rc < 0)
+        LOG_GOTO(out_close, rc = -errno, "Cannot read label: '%s'", label_path);
+
+    fs_label[rc] = '\0';
+
+out_close:
+    close(fd);
+
+out_free:
+    free(label_path);
+    return rc;
 }
 
 struct fs_adapter fs_adapter_posix = {
-    .fs_mount   = NULL,
-    .fs_umount  = NULL,
-    .fs_format  = dir_format,
-    .fs_mounted = dir_present,
-    .fs_df      = common_statfs,
+    .fs_mount     = NULL,
+    .fs_umount    = NULL,
+    .fs_format    = dir_format,
+    .fs_mounted   = dir_present,
+    .fs_df        = common_statfs,
+    .fs_get_label = dir_get_label,
 };

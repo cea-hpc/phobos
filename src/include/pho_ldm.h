@@ -324,6 +324,7 @@ struct fs_adapter {
     int (*fs_mounted)(const char *dev_path, char *mnt_path,
                       size_t mnt_path_size);
     int (*fs_df)(const char *mnt_path, struct ldm_fs_space *fs_spc);
+    int (*fs_get_label)(const char *mnt_path, char *fs_label, size_t llen);
 };
 
 /**
@@ -413,7 +414,7 @@ static inline int ldm_fs_mounted(const struct fs_adapter *fsa,
 /**
  * Get used and available space in a filesystem.
  * @param[in] fsa        File system adapter.
- * @param[in] mnt_path   Moint point of the filesystem.
+ * @param[in] mnt_path   Mount point of the filesystem.
  * @param[out] fs_spc    Filesystem space information.
  *
  * @return 0 on success, negative error code on failure.
@@ -424,6 +425,24 @@ static inline int ldm_fs_df(const struct fs_adapter *fsa, const char *mnt_path,
     assert(fsa != NULL);
     assert(fsa->fs_df != NULL);
     return fsa->fs_df(mnt_path, fs_spc);
+}
+
+/**
+ * Get filesystem label
+ * @param[in] fsa       File system adapter.
+ * @param[in] mnt_path  Mount point of the filesystem.
+ * @param[out] label    Buffer of at least PHO_LABEL_MAX_LEN + 1 bytes.
+ * @param[in]  llen     Label buffer length in bytes.
+ *
+ * @return 0 on success, negative error code on failure.
+ */
+static inline int ldm_fs_get_label(const struct fs_adapter *fsa,
+                                   const char *mnt_path, char *fs_label,
+                                   size_t llen)
+{
+    assert(fsa != NULL);
+    assert(fsa->fs_get_label != NULL);
+    return fsa->fs_get_label(mnt_path, fs_label, llen);
 }
 
 #endif /* ^SWIG */

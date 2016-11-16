@@ -322,10 +322,31 @@ static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc)
     return 0;
 }
 
+#define LTFS_VNAME_XATTR    "user.ltfs.volumeName"
+
+static int ltfs_get_label(const char *mnt_path, char *fs_label, size_t llen)
+{
+    ssize_t rc;
+
+    /* labels can (theorically) be as big as PHO_LABEL_MAX_LEN, add one byte */
+    if (llen <= PHO_LABEL_MAX_LEN)
+        return -EINVAL;
+
+    memset(fs_label, 0, llen);
+
+    /* We really want null-termination */
+    rc = getxattr(mnt_path, LTFS_VNAME_XATTR, fs_label, llen - 1);
+    if (rc < 0)
+        return -errno;
+
+    return 0;
+}
+
 struct fs_adapter fs_adapter_ltfs = {
-    .fs_mount   = ltfs_mount,
-    .fs_umount  = ltfs_umount,
-    .fs_format  = ltfs_format,
-    .fs_mounted = ltfs_mounted,
-    .fs_df      = ltfs_df,
+    .fs_mount     = ltfs_mount,
+    .fs_umount    = ltfs_umount,
+    .fs_format    = ltfs_format,
+    .fs_mounted   = ltfs_mounted,
+    .fs_df        = ltfs_df,
+    .fs_get_label = ltfs_get_label,
 };
