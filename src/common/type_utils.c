@@ -64,11 +64,10 @@ struct media_info *media_info_dup(const struct media_info *media)
         return NULL;
 
     media_out->id = media->id;
-    media_out->fs_type = media->fs_type;
     media_out->addr_type = media->addr_type;
     media_out->model = strdup_safe(media->model);
     media_out->adm_status = media->adm_status;
-    media_out->fs_status = media->fs_status;
+    media_out->fs = media->fs;
     media_out->stats = media->stats;
 
     return media_out;

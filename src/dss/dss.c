@@ -281,8 +281,8 @@ static const char * const select_query[] = {
     [DSS_DEVICE] = "SELECT family, model, id, adm_status,"
                    " host, path, lock, lock_ts FROM device",
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
-                   " address_type, fs_type, fs_status, stats, lock,"
-                   " lock_ts FROM media",
+                   " address_type, fs_type, fs_status, fs_label, stats,"
+                   " lock, lock_ts FROM media",
     [DSS_EXTENT] = "SELECT oid, state, lyt_info, extents FROM extent",
     [DSS_OBJECT] = "SELECT oid, user_md FROM object",
 };
@@ -298,7 +298,8 @@ static const char * const insert_query[] = {
     [DSS_DEVICE] = "INSERT INTO device (family, model, id, host, adm_status,"
                    " path, lock) VALUES ",
     [DSS_MEDIA]  = "INSERT INTO media (family, model, id, adm_status,"
-                   " fs_type, address_type, fs_status, stats, lock) VALUES ",
+                   " fs_type, address_type, fs_status, fs_label, stats, lock)"
+                   " VALUES ",
     [DSS_EXTENT] = "INSERT INTO extent (oid, state, lyt_info, extents) VALUES ",
     [DSS_OBJECT] = "INSERT INTO object (oid, user_md) VALUES ",
 };
@@ -309,8 +310,8 @@ static const char * const update_query[] = {
                    " ('%s', %s, '%s', '%s', '%s')"
                    " WHERE id = '%s';",
     [DSS_MEDIA]  = "UPDATE media SET (family, model, adm_status,"
-                   " fs_type, address_type, fs_status, stats) ="
-                   " ('%s', %s, '%s', '%s', '%s', '%s', '%s')"
+                   " fs_type, address_type, fs_status, fs_label, stats) ="
+                   " ('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s')"
                    " WHERE id = '%s';",
     [DSS_EXTENT] = "UPDATE extent SET (state, lyt_info, extents) ="
                    " ('%s', '%s', '%s')"
@@ -330,7 +331,7 @@ static const char * const delete_query[] = {
 
 static const char * const insert_query_values[] = {
     [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '')%s",
-    [DSS_MEDIA]  = "('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s', '')%s",
+    [DSS_MEDIA]  = "('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s', '%s', '')%s",
     [DSS_EXTENT] = "('%s', '%s', '%s', '%s')%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
 };
@@ -889,9 +890,10 @@ static int get_media_setrequest(struct media_info *item_list, int item_cnt,
                                    dev_family2str(p_media->id.type),
                                    model, media_id_get(&p_media->id),
                                    media_adm_status2str(p_media->adm_status),
-                                   fs_type2str(p_media->fs_type),
+                                   fs_type2str(p_media->fs.type),
                                    address_type2str(p_media->addr_type),
-                                   fs_status2str(p_media->fs_status),
+                                   fs_status2str(p_media->fs.status),
+                                   p_media->fs.label,
                                    dss_media_stats_encode(p_media->stats),
                                    i < item_cnt-1 ? "," : ";");
             free(model);
@@ -903,9 +905,10 @@ static int get_media_setrequest(struct media_info *item_list, int item_cnt,
             g_string_append_printf(request, update_query[DSS_MEDIA],
                                    dev_family2str(p_media->id.type), model,
                                    media_adm_status2str(p_media->adm_status),
-                                   fs_type2str(p_media->fs_type),
+                                   fs_type2str(p_media->fs.type),
                                    address_type2str(p_media->addr_type),
-                                   fs_status2str(p_media->fs_status),
+                                   fs_status2str(p_media->fs.status),
+                                   p_media->fs.label,
                                    dss_media_stats_encode(p_media->stats),
                                    media_id_get(&p_media->id));
             free(model);
@@ -1298,11 +1301,13 @@ int dss_get(struct dss_handle *handle, enum dss_type type,
             media_id_set(&p_media->id, PQgetvalue(res, i, 2));
             p_media->adm_status = str2media_adm_status(PQgetvalue(res, i, 3));
             p_media->addr_type = str2address_type(PQgetvalue(res, i, 4));
-            p_media->fs_type = str2fs_type(PQgetvalue(res, i, 5));
-            p_media->fs_status = str2fs_status(PQgetvalue(res, i, 6));
-            rc = dss_media_stats_decode(&p_media->stats, PQgetvalue(res, i, 7));
-            p_media->lock.lock = get_str_value(res, i, 8);
-            p_media->lock.lock_ts = strtoul(PQgetvalue(res, i, 9), NULL, 10);
+            p_media->fs.type = str2fs_type(PQgetvalue(res, i, 5));
+            p_media->fs.status = str2fs_status(PQgetvalue(res, i, 6));
+            strncpy(p_media->fs.label, PQgetvalue(res, i, 7),
+                    sizeof(p_media->fs.label));
+            rc = dss_media_stats_decode(&p_media->stats, PQgetvalue(res, i, 8));
+            p_media->lock.lock = get_str_value(res, i, 9);
+            p_media->lock.lock_ts = strtoul(PQgetvalue(res, i, 10), NULL, 10);
             if (rc) {
                 PQclear(res);
                 LOG_GOTO(out, rc, "dss_media stats decode error");

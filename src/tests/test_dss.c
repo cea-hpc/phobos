@@ -113,8 +113,8 @@ int main(int argc, char **argv)
                           media->model,
                           media_adm_status2str(media->adm_status),
                           address_type2str(media->addr_type),
-                          fs_type2str(media->fs_type),
-                          fs_status2str(media->fs_status));
+                          fs_type2str(media->fs.type),
+                          fs_status2str(media->fs.status));
                 pho_debug("Got Media Stats: nb_obj:%lld logc_spc_used:%zd"
                           " phys_spc_used:%zd phys_spc_free:%zd:nb_errors:%ld:"
                           "last_load:%ld",

@@ -153,8 +153,6 @@ class CliMedia(PhobosHook):
     shortname = "media"
     display_fields = {
         'adm_status': cdss.adm_status2str,
-        'fs_status': cdss.fs_status2str,
-        'fs_type': cdss.fs_type2str,
         'addr_type': None,
         'model': None,
         'ident': None,
@@ -166,6 +164,7 @@ class CliMedia(PhobosHook):
         """export media attribts as dict"""
         export = super(CliMedia, self).todict()
         export.update(self.stats)
+        export.update(self.fs_info)
         return export
 
     @property
@@ -183,10 +182,19 @@ class CliMedia(PhobosHook):
         """ Wrapper to get lock timestamp"""
         return self.lock.lock_ts
 
+    @property
+    def fs_info(self):
+        """Wrapper to get media fs info as dict"""
+        fs_info = {
+            'fs.type': cdss.fs_type2str(self._inst.fs.type),
+            'fs.status': cdss.fs_status2str(self._inst.fs.status),
+            'fs.label': self._inst.fs.label,
+        }
+        return fs_info
 
     @property
     def stats(self):
-        """ Wrapper to get media stats as dict """
+        """Wrapper to get media stats as dict"""
         stats = {
             'stats.nb_obj': self._inst.stats.nb_obj,
             'stats.logc_spc_used': self._inst.stats.logc_spc_used,
@@ -296,7 +304,7 @@ class MediaManager(ObjectManager):
         """Insert media into DSS."""
         media = cdss.media_info()
         media.id.type = mtype
-        media.fs_type = cdss.str2fs_type(fstype)
+        media.fs.type = cdss.str2fs_type(fstype)
         media.model = model
         media.addr_type = cdss.PHO_ADDR_HASH1
         if locked:

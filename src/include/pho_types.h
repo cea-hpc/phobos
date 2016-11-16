@@ -422,8 +422,17 @@ struct media_stats {
 };
 
 /**
- *  * Media Administrative state
- *   */
+ * Description of filesystem contained on a media.
+ */
+struct media_fs {
+    enum fs_type    type;
+    enum fs_status  status;
+    char            label[PHO_LABEL_MAX_LEN + 1];
+};
+
+/**
+ * Media Administrative state
+ */
 enum media_adm_status {
     PHO_MDA_ADM_ST_INVAL    = -1,
     PHO_MDA_ADM_ST_LOCKED   = 0,
@@ -453,17 +462,17 @@ static inline enum media_adm_status str2media_adm_status(const char *str)
     return PHO_MDA_ADM_ST_INVAL;
 }
 
-
-/** persistent media and filesystem information */
+/**
+ * Persistent media and filesystem information
+ */
 struct media_info {
-    struct media_id        id;
-    enum fs_type           fs_type;    /**< type of filesystem on this media */
-    enum address_type      addr_type;  /**< way to address this media */
-    char                  *model;
-    enum media_adm_status  adm_status;
-    enum fs_status         fs_status;
-    struct media_stats     stats;      /**< metrics */
-    struct pho_lock        lock;
+    struct media_id          id;            /**< Public media identifier */
+    enum address_type        addr_type;     /**< Way to address this media */
+    char                    *model;         /**< Media model (if applicable) */
+    enum media_adm_status    adm_status;    /**< Administrative status */
+    struct media_fs          fs;            /**< Local filesystem information */
+    struct media_stats       stats;         /**< Usage metrics */
+    struct pho_lock          lock;          /**< Distributed access lock */
 };
 
 struct object_info {

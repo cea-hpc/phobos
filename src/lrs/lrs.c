@@ -386,7 +386,7 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
     if (devd->op_status == PHO_DEV_OP_ST_LOADED) {
         struct fs_adapter fsa;
 
-        rc = get_fs_adapter(devd->dss_media_info->fs_type, &fsa);
+        rc = get_fs_adapter(devd->dss_media_info->fs.type, &fsa);
         if (rc)
             return rc;
 
@@ -657,7 +657,7 @@ retry:
         /* The intent is to write: exclude full media */
         if (required_size > 0) {
             if (itr->dss_media_info &&
-                itr->dss_media_info->fs_status == PHO_FS_STATUS_FULL)
+                itr->dss_media_info->fs.status == PHO_FS_STATUS_FULL)
                 continue;
         }
 
@@ -819,7 +819,7 @@ static int lrs_mount(struct dev_descr *dev)
 
     pho_verb("Mounting device '%s' as '%s'", dev->dev_path, mnt_root);
 
-    rc = get_fs_adapter(dev->dss_media_info->fs_type, &fsa);
+    rc = get_fs_adapter(dev->dss_media_info->fs.type, &fsa);
     if (rc)
         goto out_free;
 
@@ -861,7 +861,7 @@ static int lrs_umount(struct dev_descr *dev)
     pho_verb("Unmounting device '%s' mounted as '%s'",
              dev->dev_path, dev->mnt_path);
 
-    rc = get_fs_adapter(dev->dss_media_info->fs_type, &fsa);
+    rc = get_fs_adapter(dev->dss_media_info->fs.type, &fsa);
     if (rc)
         return rc;
 
@@ -1192,7 +1192,7 @@ static int set_loc_from_dev(const struct dev_descr *dev,
     /* fill intent descriptor with mount point and media info */
     intent->li_location.root_path = strdup(dev->mnt_path);
     intent->li_location.extent.media     = dev->dss_media_info->id;
-    intent->li_location.extent.fs_type   = dev->dss_media_info->fs_type;
+    intent->li_location.extent.fs_type   = dev->dss_media_info->fs.type;
     intent->li_location.extent.addr_type = dev->dss_media_info->addr_type;
     intent->li_location.extent.address   = PHO_BUFF_NULL;
     return 0;
@@ -1250,13 +1250,13 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
     switch (op) {
     case LRS_OP_READ:
     case LRS_OP_WRITE:
-        if (med->fs_status == PHO_FS_STATUS_BLANK)
+        if (med->fs.status == PHO_FS_STATUS_BLANK)
             LOG_RETURN(-EINVAL, "Cannot do I/O on unformatted media '%s'",
                        label);
         post_fs_mount = true;
         break;
     case LRS_OP_FORMAT:
-        if (med->fs_status != PHO_FS_STATUS_BLANK)
+        if (med->fs.status != PHO_FS_STATUS_BLANK)
             LOG_RETURN(-EINVAL, "Cannot format non-blank media '%s'", label);
         post_fs_mount = false;
         break;
@@ -1363,7 +1363,7 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
         pho_error(rc, "Failed to release lock on '%s'", dev->dev_path);
 
     /* Post operation: update media information in DSS */
-    media_info->fs_status = PHO_FS_STATUS_EMPTY;
+    media_info->fs.status = PHO_FS_STATUS_EMPTY;
 
     if (unlock) {
         pho_verb("Unlocking media '%s'", label);
@@ -1436,7 +1436,7 @@ retry:
         pho_warn("Media '%s' OK but mounted R/O, marking full and retrying...",
                  media_id_get(&media->id));
 
-        media->fs_status = PHO_FS_STATUS_FULL;
+        media->fs.status = PHO_FS_STATUS_FULL;
 
         rc = dss_media_set(dss, media, 1, DSS_SET_UPDATE);
         if (rc)
@@ -1493,7 +1493,7 @@ int lrs_read_prepare(struct dss_handle *dss, struct lrs_intent *intent)
 
     /* set fs_type and addr_type according to media description. */
     intent->li_location.root_path        = strdup(dev->mnt_path);
-    intent->li_location.extent.fs_type   = dev->dss_media_info->fs_type;
+    intent->li_location.extent.fs_type   = dev->dss_media_info->fs.type;
     intent->li_location.extent.addr_type = dev->dss_media_info->addr_type;
 
     return 0;
@@ -1525,11 +1525,11 @@ static int lrs_media_update(struct lrs_intent *intent, int fragments,
     if (fragments > 0)
         media->stats.logc_spc_used += intent->li_location.extent.size;
 
-    if (media->fs_status == PHO_FS_STATUS_EMPTY)
-        media->fs_status = PHO_FS_STATUS_USED;
+    if (media->fs.status == PHO_FS_STATUS_EMPTY)
+        media->fs.status = PHO_FS_STATUS_USED;
 
     if (mark_full || media->stats.phys_spc_free == 0)
-        media->fs_status = PHO_FS_STATUS_FULL;
+        media->fs.status = PHO_FS_STATUS_FULL;
 
     rc = dss_media_set(dss, media, 1, DSS_SET_UPDATE);
     if (rc)
