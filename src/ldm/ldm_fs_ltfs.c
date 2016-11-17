@@ -223,8 +223,8 @@ struct mntent_check_info {
 
 /**
  * Check if a mount entry matches a given device.
- * @retval 0            The mnt entry doesn't match the device (continue to iterateo
- *                      over mount entries).
+ * @retval 0            The mnt entry doesn't match the device (continue to
+ *                      iterate over mount entries).
  * @retval 1            The device matched and the FS type is LTFS.
  * @retval -EMEDIUMTYPE The device matches the mount entry but the FS type
  *                      is not LTFS.
