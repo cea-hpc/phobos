@@ -289,3 +289,34 @@ int64_t str2int64(const char *str)
 
     return val;
 }
+
+/**
+ * GLib HashTable iteration methods lack the ability for the callback to return
+ * an error code, to stop the iteration on error and return it to the caller.
+ *
+ * Implement it once for all here to avoid having atrocious workaround
+ * everywhere in the code base.
+ */
+struct pho_ht_data {
+    pho_ht_iter_cb_t     cb;    /**< Callback (supplied by caller) */
+    void                *ud;    /**< Callback user data */
+    int                  rc;    /**< Return code to propagate first error */
+};
+
+static gboolean pho_ht_iter_cb_wrapper(gpointer key, gpointer val, gpointer ud)
+{
+    struct pho_ht_data  *phd = ud;
+
+    phd->rc = phd->cb(key, val, phd->ud);
+
+    /* return true on error to simulate "finding" and stop iteration */
+    return phd->rc ? true : false;
+}
+
+int pho_ht_foreach(GHashTable *ht, pho_ht_iter_cb_t cb, void *data)
+{
+    struct pho_ht_data  phd = {.cb = cb, .ud = data, .rc = 0};
+
+    g_hash_table_find(ht, pho_ht_iter_cb_wrapper, &phd);
+    return phd.rc;
+}

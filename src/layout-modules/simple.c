@@ -54,7 +54,7 @@ static void simple_ctx_del(struct layout_composer *comp)
     free(ctx);
 }
 
-static void decode_intent_alloc_cb(void *key, void *val, void *udata)
+static int decode_intent_alloc_cb(const void *key, void *val, void *udata)
 {
     struct layout_info      *layout = val;
     struct layout_composer  *comp = udata;
@@ -64,15 +64,15 @@ static void decode_intent_alloc_cb(void *key, void *val, void *udata)
 
     /* This is simple layout, layout is corrupt if more that 1 extent */
     if (layout->ext_count != 1)
-        ctx->sc_retcode = -EINVAL;
+        return -EINVAL;
 
-    intent = g_malloc0(sizeof(*intent));
+    intent = calloc(1, sizeof(*intent));
+    if (!intent)
+        return -ENOMEM;
+
     intent->li_location.extent = layout->extents[0];
     g_hash_table_insert(ctx->sc_copy_intents, layout->oid, intent);
-
-    rc = lrs_read_prepare(comp->lc_dss, intent);
-    if (rc && !ctx->sc_retcode)
-        ctx->sc_retcode = rc;
+    return lrs_read_prepare(comp->lc_dss, intent);
 }
 
 /**
@@ -92,20 +92,20 @@ static int simple_compose_dec(struct layout_module *self,
     comp->lc_private      = ctx;
     comp->lc_private_dtor = simple_ctx_del;
 
-    g_hash_table_foreach(comp->lc_layouts, decode_intent_alloc_cb, comp);
-    return ctx->sc_retcode;
+    return pho_ht_foreach(comp->lc_layouts, decode_intent_alloc_cb, comp);
 }
 
-static void sce_sum_sizes_cb(void *key, void *val, void *udata)
+static int sce_sum_sizes_cb(const void *key, void *val, void *udata)
 {
     struct layout_info  *layout = val;
     struct simple_ctx   *ctx = udata;
 
     ctx->sc_main_intent.li_location.extent.size += layout->wr_size;
+    return 0;
 }
 
 #define MEMDUP(_x)  g_memdup((_x), sizeof(*(_x)))
-static void sce_layout_assign_cb(void *key, void *val, void *udata)
+static int sce_layout_assign_cb(const void *key, void *val, void *udata)
 {
     struct layout_info  *layout = val;
     struct simple_ctx   *ctx = udata;
@@ -116,6 +116,7 @@ static void sce_layout_assign_cb(void *key, void *val, void *udata)
     layout->ext_count = 1;
     layout->extents   = &intent->li_location.extent;
     layout->extents->size = layout->wr_size;
+    return 0;
 }
 
 static int simple_compose_enc(struct layout_module *self,
@@ -132,14 +133,14 @@ static int simple_compose_enc(struct layout_module *self,
     comp->lc_private_dtor = simple_ctx_del;
 
     /* Unique intent of size=sum(slices) */
-    g_hash_table_foreach(comp->lc_layouts, sce_sum_sizes_cb, ctx);
+    pho_ht_foreach(comp->lc_layouts, sce_sum_sizes_cb, ctx);
 
     rc = lrs_write_prepare(comp->lc_dss, &ctx->sc_main_intent);
     if (rc)
         return rc;
 
     /* Assign intent layout to the slices' layouts */
-    g_hash_table_foreach(comp->lc_layouts, sce_layout_assign_cb, ctx);
+    pho_ht_foreach(comp->lc_layouts, sce_layout_assign_cb, ctx);
     return rc;
 }
 
@@ -212,15 +213,12 @@ static int simple_commit_enc(struct layout_module *self,
     return lrs_done(intent, ctx->sc_itemcnt, err_code);
 }
 
-static void commit_intent_cb(void *key, void *val, void *udata)
+static int commit_intent_cb(const void *key, void *val, void *udata)
 {
     struct lrs_intent   *intent = val;
     struct simple_ctx   *ctx    = udata;
-    int                  rc;
 
-    rc = lrs_done(intent, 1, ctx->sc_retcode);
-    if (rc && !ctx->sc_retcode)
-        ctx->sc_retcode = rc;
+    return lrs_done(intent, 1, ctx->sc_retcode);
 }
 
 static int simple_commit_dec(struct layout_module *self,
@@ -229,8 +227,7 @@ static int simple_commit_dec(struct layout_module *self,
     struct simple_ctx   *ctx = comp->lc_private;
 
     ctx->sc_retcode = err_code;
-    g_hash_table_foreach(ctx->sc_copy_intents, commit_intent_cb, ctx);
-    return ctx->sc_retcode;
+    return pho_ht_foreach(ctx->sc_copy_intents, commit_intent_cb, ctx);
 }
 
 

@@ -82,6 +82,81 @@ static int test_convert(void *arg)
     return 0;
 }
 
+static GHashTable *test_hash_table_new(void)
+{
+    GHashTable *ht = g_hash_table_new(g_str_hash, g_str_equal);
+
+    g_hash_table_insert(ht, "A", "0");
+    g_hash_table_insert(ht, "B", "1");
+    g_hash_table_insert(ht, "C", "2");
+    g_hash_table_insert(ht, "D", "3");
+    g_hash_table_insert(ht, "E", "4");
+    g_hash_table_insert(ht, "F", "5");
+    return ht;
+}
+
+static int itm_cnt_cb(const void *k, void *v, void *ud)
+{
+    int *views = ud;
+
+    *views += 1;
+    return 0;
+}
+
+static int test_iter(void *arg)
+{
+    GHashTable  *ht = test_hash_table_new();
+    int          views = 0;
+    int          rc = 0;
+
+    rc = pho_ht_foreach(ht, itm_cnt_cb, &views);
+    if (rc)
+        goto out_free;
+
+    if (views != g_hash_table_size(ht)) {
+        rc = -EPROTO;
+        goto out_free;
+    }
+
+out_free:
+    g_hash_table_destroy(ht);
+    return rc;
+}
+
+static int itm_stop_at_2nd_cb(const void *k, void *v, void *ud)
+{
+    int *views = ud;
+
+    *views += 1;
+    if (*views == 2) {
+        /* return anything but zero to stop iteration;
+         * chose EMULTIHOP so that I can use it once in my life */
+        return -EMULTIHOP;
+    }
+
+    return 0;
+}
+
+static int test_iter_err(void *arg)
+{
+    GHashTable  *ht = test_hash_table_new();
+    int          views = 0;
+    int          rc;
+
+    rc = pho_ht_foreach(ht, itm_stop_at_2nd_cb, &views);
+    if (rc == 0 || views != 2) {
+        /* itm_stop_at_2nd_cb is expected to fail */
+        rc = -EPROTO;
+        goto out_free;
+    }
+
+    rc = 0;
+
+out_free:
+    g_hash_table_destroy(ht);
+    return rc;
+}
+
 int main(int argc, char **argv)
 {
     test_env_initialize();
@@ -109,6 +184,11 @@ int main(int argc, char **argv)
              PHO_TEST_FAILURE);
     run_test("Test3g: str2int64 value with suffix", test_convert, "2167s",
              PHO_TEST_FAILURE);
+
+    /* test phobos custom iterators over GHashTable */
+    run_test("Test4: traverse ghashtable", test_iter, NULL, PHO_TEST_SUCCESS);
+    run_test("Test4: error stops ghashtable traversal", test_iter_err, NULL,
+             PHO_TEST_SUCCESS);
 
     fprintf(stderr, "test_common: all tests successful\n");
     exit(EXIT_SUCCESS);

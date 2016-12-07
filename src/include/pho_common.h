@@ -224,4 +224,13 @@ typedef void(*retry_func_t)(const char *fnname, int rc, int *retry_cnt,
         } while (retry >= 0);                    \
     } while (0)
 
+
+/**
+ * Phobos-specific type to iterate over a GLib hashtable and stop on error.
+ * Propagate the error back.
+ */
+typedef int (*pho_ht_iter_cb_t)(const void *, void *, void *);
+
+int pho_ht_foreach(GHashTable *ht, pho_ht_iter_cb_t cb, void *data);
+
 #endif
