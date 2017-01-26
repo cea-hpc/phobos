@@ -35,10 +35,11 @@ static int dir_lookup(const char *dev_id, char *dev_path, size_t path_size)
 
 static int dir_query(const char *dev_path, struct ldm_dev_state *lds)
 {
-    char hostname[HOST_NAME_MAX];
-    char *dot;
-    char *id = NULL;
-    char *real;
+    char     hostname[HOST_NAME_MAX];
+    char    *dot;
+    char    *id = NULL;
+    char    *real;
+    int      rc = 0;
     ENTRY;
 
     lds->lds_family = PHO_DEV_DIR;
@@ -49,7 +50,7 @@ static int dir_query(const char *dev_path, struct ldm_dev_state *lds)
         LOG_RETURN(-errno, "Could not resolve path '%s'", dev_path);
 
     if (gethostname(hostname, HOST_NAME_MAX))
-        LOG_RETURN(-errno, "Failed to get host name");
+        LOG_GOTO(out_free, rc = -EADDRNOTAVAIL, "Failed to get host name");
 
     /* truncate to short host name */
     dot = strchr(hostname, '.');
@@ -57,15 +58,15 @@ static int dir_query(const char *dev_path, struct ldm_dev_state *lds)
         *dot = '\0';
 
     /* dir id is set to <host>:<real-path> */
-    if (asprintf(&id, "%s:%s", hostname, real) == -1 || id == NULL) {
-        free(real);
-        LOG_RETURN(-errno, "String allocation failed");
-    }
+    if (asprintf(&id, "%s:%s", hostname, real) == -1 || id == NULL)
+        LOG_GOTO(out_free, rc = -ENOMEM, "String allocation failed");
 
     lds->lds_serial = id;
     lds->lds_loaded = true; /* always online */
 
-    return 0;
+out_free:
+    free(real);
+    return rc;
 }
 
 struct dev_adapter dev_adapter_dir = {
