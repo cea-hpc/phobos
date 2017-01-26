@@ -115,6 +115,8 @@ static int layout_deregister(struct layout_module *mod)
     if (rc)
         LOG_RETURN(rc = -EINVAL, "Cannot release module handle: %s", dlerror());
 
+    /* In case attributes were set... */
+
     memset(mod, 0, sizeof(*mod));
     return 0;
 }

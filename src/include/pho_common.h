@@ -233,4 +233,9 @@ typedef int (*pho_ht_iter_cb_t)(const void *, void *, void *);
 
 int pho_ht_foreach(GHashTable *ht, pho_ht_iter_cb_t cb, void *data);
 
+/**
+ * Handy macro to quickly replicate a structure
+ */
+#define MEMDUP(_x)  g_memdup((_x), sizeof(*(_x)))
+
 #endif

@@ -10,7 +10,7 @@ check_PROGRAMS=test_common test_attrs test_mapper test_log test_store \
 UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_lintape \
 	   test_ldm
 # 2nd step: integration tests
-INTEG_TESTS=test_dss.sh test_scsi.sh test_store.sh acceptance.sh
+INTEG_TESTS=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh
 
 TESTS=$(UNIT_TESTS) $(INTEG_TESTS)
 

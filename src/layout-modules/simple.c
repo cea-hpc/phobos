@@ -104,7 +104,6 @@ static int sce_sum_sizes_cb(const void *key, void *val, void *udata)
     return 0;
 }
 
-#define MEMDUP(_x)  g_memdup((_x), sizeof(*(_x)))
 static int sce_layout_assign_cb(const void *key, void *val, void *udata)
 {
     struct layout_info  *layout = val;

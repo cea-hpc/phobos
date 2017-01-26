@@ -4,6 +4,8 @@
 
 set -e
 
+USE_LAYOUT=${1:-simple}
+
 TEST_RAND=/tmp/RAND_$$
 TEST_RECOV_DIR=/tmp/phobos_recov.$$
 
@@ -27,11 +29,14 @@ setup_tables
 insert_examples
 
 echo "**** POSIX TEST MODE ****"
-TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2" # must match mount prefix
+# following entries must match mount prefix
+TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2 /tmp/pho_testdir3"
 TEST_FS="posix"
 
 export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
 export PHOBOS_LRS_default_family="dir"
+
+export PHOBOS_STORE_layout=$USE_LAYOUT
 
 function clean_test
 {
@@ -83,7 +88,7 @@ function test_check_put # verb, source_file, expect_failure
         local name=$(echo $f | tr './!<>{}#"' '_')
 
         # check that the extent is found into the storage backend
-        local out=$(find $TEST_MNT -type f -name "*$name*")
+        local out=$(find $TEST_MNT -type f -name "*$name*" | head -n 1)
         echo -e " \textent: $out"
         [ -z "$out" ] && error "*$name* not found in backend"
         diff -q $f $out && echo "$f: contents OK"
@@ -126,6 +131,8 @@ function test_check_get # extent_path
     $test_bin get "$id" "$tgt"
 
     diff -q "$arch" "$tgt"
+
+    rm -f $tgt
 }
 
 if [[ $TEST_FS == "posix" ]]; then
