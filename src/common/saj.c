@@ -7,6 +7,11 @@
 /**
  * \brief  Simple API for JSON with a low memory footprint
  *         and convenient callbacks just like in the good ol' days.
+ *
+ *         Callers can provide hooks for entering/leaving/processing states via
+ *         a struct saj_parser_operations. Any non-zero return code from a
+ *         callback interrupts the processing and is returned back to the top
+ *         function.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -22,7 +27,11 @@
 #include <assert.h>
 
 
-static inline int sp_object_begin(struct saj_parser *parser, const char *key,
+/**
+ * Invoke the appropriate user callback (if any) to signal the beginning of an
+ * object.
+ */
+static int sp_object_begin(struct saj_parser *parser, const char *key,
                                   json_t *value)
 {
     assert(parser);
@@ -35,7 +44,10 @@ static inline int sp_object_begin(struct saj_parser *parser, const char *key,
                                            parser->sp_private);
 }
 
-static inline int sp_object_end(struct saj_parser *parser)
+/**
+ * Invoke the appropriate user callback (if any) to signal the end of an object.
+ */
+static int sp_object_end(struct saj_parser *parser)
 {
     assert(parser);
     assert(parser->sp_ops);
@@ -46,7 +58,11 @@ static inline int sp_object_end(struct saj_parser *parser)
     return parser->sp_ops->so_object_end(parser, parser->sp_private);
 }
 
-static inline int sp_array_begin(struct saj_parser *parser)
+/**
+ * Invoke the appropriate user callback (if any) to signal the beginning of an
+ * array.
+ */
+static int sp_array_begin(struct saj_parser *parser)
 {
     assert(parser);
     assert(parser->sp_ops);
@@ -57,7 +73,10 @@ static inline int sp_array_begin(struct saj_parser *parser)
     return parser->sp_ops->so_array_begin(parser, parser->sp_private);
 }
 
-static inline int sp_array_elt(struct saj_parser *parser, int idx, json_t *val)
+/**
+ * Invoke the appropriate user callback (if any) to process an array element.
+ */
+static int sp_array_elt(struct saj_parser *parser, int idx, json_t *val)
 {
     assert(parser);
     assert(parser->sp_ops);
@@ -68,7 +87,10 @@ static inline int sp_array_elt(struct saj_parser *parser, int idx, json_t *val)
     return parser->sp_ops->so_array_elt(parser, idx, val, parser->sp_private);
 }
 
-static inline int sp_array_end(struct saj_parser *parser)
+/**
+ * Invoke the appropriate user callback (if any) to signal the end of an array.
+ */
+static int sp_array_end(struct saj_parser *parser)
 {
     assert(parser);
     assert(parser->sp_ops);
@@ -82,7 +104,10 @@ static inline int sp_array_end(struct saj_parser *parser)
 
 static int parser_json_next(struct saj_parser *, const char *, json_t *);
 
-
+/**
+ * Process an array of arbitrary elements.
+ * Invoke begin hook, process each item and invoke the end hook.
+ */
 static int parser_json_array_handle(struct saj_parser *parser, const char *key,
                                     json_t *array)
 {
@@ -114,6 +139,10 @@ static int parser_json_array_handle(struct saj_parser *parser, const char *key,
     return 0;
 }
 
+/**
+ * Process a JSON object (multiple key/value mapping).
+ * Invoke begin hook, process each item and invoke the end hook.
+ */
 static int parser_json_object_handle(struct saj_parser *parser, const char *key,
                                      json_t *obj)
 {
@@ -141,10 +170,17 @@ static int parser_json_object_handle(struct saj_parser *parser, const char *key,
     return 0;
 }
 
+/**
+ * Iterate once over the object being parsed.
+ * Call the dedicated handlers for recursive types (object and array) or the
+ * user begin/end callbacks for simple ones (string, number).
+ */
 int parser_json_next(struct saj_parser *parser, const char *key, json_t *next)
 {
     int rc;
 
+    /* Objects whose name start w/ '$' are special context keys that the SAJ
+     * parser puts on a stack and exposes to the user callbacks. */
     if (key && key[0] == '$')
         g_queue_push_head(parser->sp_keys, g_strdup(key));
 
@@ -175,6 +211,9 @@ int parser_json_next(struct saj_parser *parser, const char *key, json_t *next)
     return 0;
 }
 
+/**
+ * Initialize a new parser with user operations and user private data.
+ */
 int saj_parser_init(struct saj_parser *parser,
                     const struct saj_parser_operations *ops, void *priv)
 {
@@ -187,6 +226,9 @@ int saj_parser_init(struct saj_parser *parser,
     return 0;
 }
 
+/**
+ * Release resources associated to a SAJ parser.
+ */
 int saj_parser_free(struct saj_parser *parser)
 {
     while (!g_queue_is_empty(parser->sp_keys))
@@ -196,6 +238,10 @@ int saj_parser_free(struct saj_parser *parser)
     return 0;
 }
 
+/**
+ * Return the currently active key (being processed).
+ * This is the one on top of the stack or NULL if the stack is empty.
+ */
 const char *saj_parser_key(const struct saj_parser *parser)
 {
     if (g_queue_is_empty(parser->sp_keys))
@@ -204,6 +250,9 @@ const char *saj_parser_key(const struct saj_parser *parser)
     return g_queue_peek_head(parser->sp_keys);
 }
 
+/**
+ * Unroll processing recursively over a JSON object.
+ */
 int saj_parser_run(struct saj_parser *parser, json_t *root)
 {
     assert(root != NULL);

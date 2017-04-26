@@ -93,10 +93,18 @@ struct saj_parser_operations {
 };
 
 
+/**
+ * SAJ parser internal states.
+ * This structure should not be accessed by external functions and is only
+ * defined here so as to be useable conveniently w/o requiring a dynamic alloc
+ * by the SAJ initialization code.
+ *
+ * Callers can pass custom data to the callbacks via the `priv' pointer.
+ */
 struct saj_parser {
-    GQueue                              *sp_keys;
-    const struct saj_parser_operations  *sp_ops;
-    void                                *sp_private;
+    GQueue                              *sp_keys;       /**< Internal stack */
+    const struct saj_parser_operations  *sp_ops;        /**< User callbacks */
+    void                                *sp_private;    /**< User priv data */
 };
 
 /**
