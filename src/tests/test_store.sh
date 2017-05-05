@@ -80,7 +80,7 @@ function test_check_put # verb, source_file, expect_failure
 
     for f in ${src_files[@]}
     do
-        local name=$(echo $f | tr './!<>{}#"''' '_')
+        local name=$(echo $f | tr './!<>{}#"' '_')
 
         # check that the extent is found into the storage backend
         local out=$(find $TEST_MNT -type f -name "*$name*")
@@ -97,8 +97,6 @@ function test_check_put # verb, source_file, expect_failure
         local umd=$(getfattr --only-values --absolute-names \
                     -n "user.user_md" $out)
         [ -z "$umd" ] && error "saved file has no 'user_md' xattr"
-
-        rm -f $out # prevents strange side effects
     done
 
     true
@@ -167,7 +165,9 @@ find $TEST_MNT -type f | while read f; do
     test_check_get "$f"
 done
 
-rm -rf "$TEST_RECOV_DIR/"*
+find $TEST_MNT -type f -delete
+rm -rf ${TEST_RECOV_DIR}
+mkdir ${TEST_RECOV_DIR}
 
 echo
 echo "**** TESTS: MPUT ****"
@@ -179,7 +179,6 @@ echo "**** TESTS: GET ****"
 find $TEST_MNT -type f | while read f; do
     test_check_get "$f"
 done
-
 
 # exit normally, clean TRAP
 trap - EXIT ERR
