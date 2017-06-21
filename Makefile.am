@@ -9,6 +9,8 @@ rpm: dist phobos.spec
 	rpmbuild --define="_topdir $(rpm_dir)" -ta $(distdir).tar.gz
 
 EXTRA_DIST= phobos.spec phobos.spec.in scripts/pho_ldm_helper \
-	    scripts/pho_dss_helper doc/INSTALL doc/cfg/template.conf
+	    scripts/pho_dss_helper scripts/pho_convert_db_10to11.sh \
+	    doc/INSTALL doc/cfg/template.conf
 
-sbin_SCRIPTS=scripts/pho_ldm_helper scripts/pho_dss_helper
+sbin_SCRIPTS=scripts/pho_ldm_helper scripts/pho_dss_helper \
+             scripts/pho_convert_db_10to11.sh
