@@ -8,6 +8,8 @@ License: 	All rights reserved CEA/DAM, 2014-2015
 URL:		http://www-hpc.cea.fr
 Source0: %{name}-%{version}.tar.gz
 
+%define phobosdocdir %{_docdir}/%{name}
+
 BuildRequires: postgresql94-devel
 BuildRequires: glib2-devel >= 2.28
 BuildRequires: python-devel
@@ -55,6 +57,10 @@ make %{?_smp_mflags}
 %install
 %make_install
 install -D -p -m 0640 doc/cfg/template.conf %{buildroot}/%{_sysconfdir}/phobos.conf
+# create another copy of configuration in documentation directory
+install -D -p -m 0640 doc/cfg/template.conf %{buildroot}/%{phobosdocdir}/template.conf
+install -p -m 0640 ChangeLog %{buildroot}/%{phobosdocdir}/ChangeLog
+install -p -m 0640 doc/INSTALL %{buildroot}/%{phobosdocdir}/INSTALL
 cd %{_builddir}/%{name}-%{version}/src/cli/
 %{__python} setup.py install --skip-build --root %{buildroot}
 
@@ -72,7 +78,10 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{python_sitearch}/phobos-*-py?.?.egg-info
 %{_bindir}/phobos
 %config(noreplace) %{_sysconfdir}/phobos.conf
-
+%dir %{phobosdocdir}
+%doc %{phobosdocdir}/INSTALL
+%doc %{phobosdocdir}/ChangeLog
+%doc %{phobosdocdir}/template.conf
 
 %files devel
 
@@ -82,3 +91,13 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_store.la
 
 %changelog
+
+* Wed Jun 21 2017 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.1-1
+- Generic Layout management + 2 implementations: 'simple' and 'raid1'.
+- Configuration changes. See installed template (see /etc/phobos.conf.rpmnew).
+- Set filesystem label at format time, and check it at mount time.
+- Improved management of full devices (set R/O, tag full...)
+- SCSI library: when needed, search free slot to unload a tape to.
+- Phobos 1.0 to phobos 1.1 DB conversion script.
+- New DSS filter API (no change in commands or user interface).
+- Miscellaneous bug fixes

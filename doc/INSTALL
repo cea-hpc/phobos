@@ -10,6 +10,11 @@ yum install phobos
 service postgresql-9.4 initdb
 service postgresql-9.4 start
 
+# If you upgrade from phobos 1.0.x, run the DB conversion script
+# (edit it to set the right DB name and password)
+/usr/sbin/pho_convert_db_10to11.sh
+# 'y' to confirm
+
 # Edit '/var/lib/pgsql/9.4/data/pg_hba.conf'
 # to authorize access to localhost:
 

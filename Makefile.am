@@ -10,7 +10,7 @@ rpm: dist phobos.spec
 
 EXTRA_DIST= phobos.spec phobos.spec.in scripts/pho_ldm_helper \
 	    scripts/pho_dss_helper scripts/pho_convert_db_10to11.sh \
-	    doc/INSTALL doc/cfg/template.conf
+	    doc/INSTALL doc/cfg/template.conf ChangeLog
 
 sbin_SCRIPTS=scripts/pho_ldm_helper scripts/pho_dss_helper \
              scripts/pho_convert_db_10to11.sh
