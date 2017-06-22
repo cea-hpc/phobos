@@ -226,7 +226,8 @@ int main(int argc, char **argv)
                 if (action == DSS_SET_INSERT) {
                     char *s;
 
-                    asprintf(&s, "%sCOPY", layout->oid);
+                    rc = asprintf(&s, "%sCOPY", layout->oid);
+                    assert(rc > 0);
                     layout->oid = s;
                 }
                 else if (action == DSS_SET_UPDATE)

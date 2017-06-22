@@ -61,7 +61,8 @@ static int populate_env(void)
             var = strdup(item->variable);
             upperstr(sec);
             lowerstr(var);
-            asprintf(&stmt, "PHOBOS_%s_%s=%s", sec, var, item->value);
+            if (asprintf(&stmt, "PHOBOS_%s_%s=%s", sec, var, item->value) == -1)
+                return -ENOMEM;
 
             rc = putenv(stmt);
             if (rc)
@@ -180,13 +181,15 @@ int main(int argc, char **argv)
     test_dir = dirname(test_bin);
 
     /* try with bad cfg first */
-    asprintf(&test_file, "%s/bad.cfg", test_dir);
+    if (asprintf(&test_file, "%s/bad.cfg", test_dir) == -1)
+        exit(EXIT_FAILURE);
     run_test("Test 5: test config parsing (bad syntax)",
              (pho_unit_test_t)pho_cfg_init_local, test_file, PHO_TEST_FAILURE);
     free(test_file);
 
     /* now the right cfg */
-    asprintf(&test_file, "%s/test.cfg", test_dir);
+    if (asprintf(&test_file, "%s/test.cfg", test_dir) == -1)
+        exit(EXIT_FAILURE);
     run_test("Test 6: test config parsing (right syntax)",
              (pho_unit_test_t)pho_cfg_init_local, test_file, PHO_TEST_SUCCESS);
 
