@@ -60,7 +60,6 @@ static int decode_intent_alloc_cb(const void *key, void *val, void *udata)
     struct layout_composer  *comp = udata;
     struct simple_ctx       *ctx = comp->lc_private;
     struct lrs_intent       *intent;
-    int                      rc;
 
     /* This is simple layout, layout is corrupt if more that 1 extent */
     if (layout->ext_count != 1)
@@ -83,7 +82,6 @@ static int simple_compose_dec(struct layout_module *self,
                               struct layout_composer *comp)
 {
     struct simple_ctx   *ctx;
-    int                  rc;
 
     ctx = simple_ctx_new(self, comp);
     if (!ctx)
@@ -179,7 +177,6 @@ static int simple_decode(struct layout_module *self,
                          struct layout_composer *comp, const char *objid,
                          struct pho_io_descr *io)
 {
-    struct layout_info  *layout = g_hash_table_lookup(comp->lc_layouts, objid);
     struct simple_ctx   *ctx    = comp->lc_private;
     struct lrs_intent   *intent = g_hash_table_lookup(ctx->sc_copy_intents,
                                                       objid);

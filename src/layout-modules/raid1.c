@@ -65,7 +65,6 @@ static struct raid1_ctx *raid1_ctx_new(struct layout_module *self,
                                        struct layout_composer *comp)
 {
     struct raid1_ctx   *ctx;
-    int                 i;
     int                 copy_count = PHO_CFG_GET_INT(cfg_lyt_raid1,
                                                      PHO_CFG_LYT_RAID1,
                                                      repl_count, 0);
@@ -138,7 +137,6 @@ static int raid1_compose_dec(struct layout_module *self,
                              struct layout_composer *comp)
 {
     struct raid1_ctx    *ctx;
-    int                  rc;
 
     ctx = raid1_ctx_new(self, comp);
     if (!ctx)
@@ -242,7 +240,7 @@ static int raid1_encode(struct layout_module *self,
     struct lrs_intent   *intent = g_hash_table_lookup(ctx->intent_copies,
                                                       objid);
     int                  i;
-    int                  rc;
+    int                  rc = 0;
 
     for (i = 0; i < ctx->replicas; i++) {
         struct lrs_intent   *curr = &intent[i];
@@ -280,7 +278,6 @@ static int raid1_decode(struct layout_module *self,
                         struct pho_io_descr *io)
 {
     struct raid1_ctx   *ctx    = comp->lc_private;
-    struct layout_info *layout = g_hash_table_lookup(comp->lc_layouts, objid);
     struct lrs_intent  *intent = g_hash_table_lookup(ctx->intent_copies, objid);
     struct extent      *extent = &intent->li_location.extent;
     struct io_adapter   ioa;
