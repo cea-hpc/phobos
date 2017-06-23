@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# (c) 2017 CEA/DAM
+# Licensed under the terms of the GNU Lesser GPL License version 2.1
+
 script_dir=$(dirname $(readlink -m $0))
 hook_dir=$(readlink -m $script_dir/../.git/hooks)
 

@@ -3,6 +3,9 @@
 # -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
+# (c) 2014-2017 CEA/DAM
+# Licensed under the terms of the GNU Lesser GPL License version 2.1
+
 function mount_ltfs
 {
     local dev=$(readlink -m "$1") # convert link to /dev/IBMtape*

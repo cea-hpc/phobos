@@ -4,7 +4,7 @@ Release:	@RELEASE@%{?dist}
 Summary:	Parallel Heterogeneous OBject-Oriented Storage
 
 Group:		Applications/System
-License: 	All rights reserved CEA/DAM, 2014-2015
+License: 	LGPLv2.1
 URL:		http://www-hpc.cea.fr
 Source0: %{name}-%{version}.tar.gz
 
