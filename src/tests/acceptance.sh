@@ -51,7 +51,7 @@ function empty_drives
 function tape_setup
 {
     # make sure no LTFS filesystem is mounted, so we can unmount it
-    service ltfs stop
+    service ltfs stop || true
     #  make sure all drives are empty
     empty_drives
 
