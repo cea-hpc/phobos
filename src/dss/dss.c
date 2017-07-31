@@ -371,36 +371,38 @@ static const char * const simple_lock_query[] = {
  * Caller is responsible for using the macro on a compatible type, a signed 64
  * integer preferrably or anything compatible with the expected range of value
  * for the given field.
+ * If 'optional' is true and the field is missing, we use 0 as a default value.
  */
-#define LOAD_CHECK64(_j, _s, _f)    do {                                    \
-                                        long long _tmp;                     \
-                                        _tmp  = json_dict2ll((_j), #_f);    \
-                                        if (_tmp < 0) {                     \
-                                            (_s)->_f = 0LL;                 \
-                                            rc = -EINVAL;                   \
-                                        } else {                            \
-                                            (_s)->_f = _tmp;                \
-                                            rc = 0;                         \
-                                        }                                   \
-                                    } while (0)
+#define LOAD_CHECK64(_j, _s, _f, optional)  do {                \
+                            long long _tmp;                     \
+                            _tmp  = json_dict2ll((_j), #_f);    \
+                            if (_tmp < 0) {                     \
+                                (_s)->_f = 0LL;                 \
+                                rc = optional ? 0 : -EINVAL;    \
+                            } else {                            \
+                                (_s)->_f = _tmp;                \
+                                rc = 0;                         \
+                            }                                   \
+                        } while (0)
 
 /**
  * Load integer value from JSON object and zero-out the field on error
  * Caller is responsible for using the macro on a compatible type, a signed 32
  * integer preferrably or anything compatible with the expected range of value
  * for the given field.
+ * If 'optional' is true and the field is missing, we use 0 as a default value.
  */
-#define LOAD_CHECK32(_j, _s, _f)    do {                                     \
-                                        int _tmp;                            \
-                                        _tmp = json_dict2int((_j), #_f);     \
-                                        if (_tmp < 0) {                      \
-                                            (_s)->_f = 0;                    \
-                                            rc = -EINVAL;                    \
-                                        } else {                             \
-                                            (_s)->_f = _tmp;                 \
-                                            rc = 0;                          \
-                                        }                                    \
-                                    } while (0)
+#define LOAD_CHECK32(_j, _s, _f, optional)    do {              \
+                            int _tmp;                           \
+                            _tmp = json_dict2int((_j), #_f);    \
+                            if (_tmp < 0) {                     \
+                                (_s)->_f = 0;                   \
+                                rc = optional ? 0 : -EINVAL;    \
+                            } else {                            \
+                                (_s)->_f = _tmp;                \
+                                rc = 0;                         \
+                            }                                   \
+                        } while (0)
 
 /**
  * Extract media statistics from json
@@ -426,12 +428,12 @@ static int dss_media_stats_decode(struct media_stats *stats, const char *json)
 
     pho_debug("STATS: '%s'", json);
 
-    LOAD_CHECK64(root, stats, nb_obj);
-    LOAD_CHECK64(root, stats, logc_spc_used);
-    LOAD_CHECK64(root, stats, phys_spc_used);
-    LOAD_CHECK64(root, stats, phys_spc_free);
-    LOAD_CHECK32(root, stats, nb_errors);
-    LOAD_CHECK32(root, stats, last_load);
+    LOAD_CHECK64(root, stats, nb_obj, false);
+    LOAD_CHECK64(root, stats, logc_spc_used, false);
+    LOAD_CHECK64(root, stats, phys_spc_used, false);
+    LOAD_CHECK64(root, stats, phys_spc_free, false);
+    LOAD_CHECK32(root, stats, nb_errors, true);
+    LOAD_CHECK32(root, stats, last_load, true);
 
 out_decref:
     /* Most of the values above are not used to make decisions, so don't
