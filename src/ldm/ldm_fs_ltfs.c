@@ -39,17 +39,17 @@ const struct pho_config_item cfg_ltfs[] = {
     [PHO_CFG_LTFS_cmd_mount] = {
         .section = "ltfs",
         .name    = "cmd_mount",
-        .value   = PHO_LDM_HELPER" mount \"%s\" \"%s\""
+        .value   = PHO_LDM_HELPER" mount_ltfs \"%s\" \"%s\""
     },
     [PHO_CFG_LTFS_cmd_umount] = {
         .section = "ltfs",
         .name    = "cmd_umount",
-        .value   = PHO_LDM_HELPER" umount \"%s\" \"%s\""
+        .value   = PHO_LDM_HELPER" umount_ltfs \"%s\" \"%s\""
     },
     [PHO_CFG_LTFS_cmd_format] = {
         .section = "ltfs",
         .name    = "cmd_format",
-        .value   = PHO_LDM_HELPER" format \"%s\" \"%s\""
+        .value   = PHO_LDM_HELPER" format_ltfs \"%s\" \"%s\""
     },
 };
 
