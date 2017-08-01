@@ -200,99 +200,107 @@ int dss_init(struct dss_handle *handle);
 void dss_fini(struct dss_handle *handle);
 
 /**
- *  Generic function to get/list items from DSS.
- *  @param[in]  type      type of items to query.
- *  @param[in]  filter    assembled dss filtering criteria.
- *  @param[out] item_list list of retrieved items (the caller must call
- *                        dss_res_free() later)
- *  @param[out] item_cnt  number of items in item_list.
+ * Retrieve devices information from DSS
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  filter   assembled DSS filtering criteria
+ * @param[out] dev_ls   list of retrieved items to be freed w/ dss_res_free()
+ * @param[out] dev_cnt  number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
  */
-int dss_get(struct dss_handle *hdl, enum dss_type type,
-            const struct dss_filter *filter, void **item_list, int *item_cnt);
+int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct dev_info **dev_ls, int *dev_cnt);
 
 /**
- *  Generic function, frees item_list that was allocated in get
+ * Retrieve media information from DSS
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  filter   assembled DSS filtering criteria
+ * @param[out] med_ls   list of retrieved items to be freed w/ dss_res_free()
+ * @param[out] med_cnt  number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                  struct media_info **med_ls, int *med_cnt);
+
+/**
+ * Retrieve extent information from DSS
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  filter   assembled DSS filtering criteria
+ * @param[out] lyt_ls   list of retrieved items to be freed w/ dss_res_free()
+ * @param[out] lyt_cnt  number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_extent_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct layout_info **lyt_ls, int *lyt_cnt);
+
+/**
+ * Retrieve object information from DSS
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  filter   assembled DSS filtering criteria
+ * @param[out] obj_ls   list of retrieved items to be freed w/ dss_res_free()
+ * @param[out] obj_cnt  number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct object_info **obj_ls, int *obj_cnt);
+
+/**
+ *  Generic function: frees item_list that was allocated in dss_xxx_get()
  *  @param[in]  item_list   list of items to free
  *  @param[in]  item_cnt    number of items in item_list
  */
 void dss_res_free(void *item_list, int item_cnt);
 
-/** wrapper to get devices from DSS */
-static inline int dss_device_get(struct dss_handle *hdl,
-                                 const struct dss_filter *filter,
-                                 struct dev_info **dev_ls, int *dev_cnt)
-{
-    return dss_get(hdl, DSS_DEVICE, filter, (void **)dev_ls, dev_cnt);
-}
-
-/** wrapper to get devices from DSS */
-static inline int dss_media_get(struct dss_handle *hdl,
-                                const struct dss_filter *filter,
-                                struct media_info **med_ls, int *med_cnt)
-{
-    return dss_get(hdl, DSS_MEDIA, filter, (void **)med_ls, med_cnt);
-}
-
-/** wrapper to get extent from DSS */
-static inline int dss_extent_get(struct dss_handle *hdl,
-                                 const struct dss_filter *filter,
-                                 struct layout_info **lyt_ls, int *lyt_cnt)
-{
-    return dss_get(hdl, DSS_EXTENT, filter, (void **)lyt_ls, lyt_cnt);
-}
-
-/** wrapper to get object from DSS */
-static inline int dss_object_get(struct dss_handle *hdl,
-                                 const struct dss_filter *filter,
-                                 struct object_info **obj_ls, int *obj_cnt)
-{
-    return dss_get(hdl, DSS_OBJECT, filter, (void **)obj_ls, obj_cnt);
-}
+/**
+ * Store information for one or many devices in DSS.
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  dev_ls   array of entries to store
+ * @param[in]  dev_cnt  number of items in the list
+ * @param[in]  action   operation code (insert, update, delete)
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_device_set(struct dss_handle *hdl, struct dev_info *dev_ls, int dev_cnt,
+                   enum dss_set_action action);
 
 /**
- *  Generic function to set a list of items in DSS.
- *  @param[in]  type      type of items to set.
- *  @param[out] item_list list of items
- *  @param[out] item_cnt  number of items in item_list.
+ * Store information for one or many media in DSS.
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  med_ls   array of entries to store
+ * @param[in]  med_cnt  number of items in the list
+ * @param[in]  action   operation code (insert, update, delete)
+ *
+ * @return 0 on success, negated errno on failure
  */
-int dss_set(struct dss_handle *hdl, enum dss_type type, void *item_list,
-            int item_cnt, enum dss_set_action action);
+int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
+                  int med_cnt, enum dss_set_action action);
 
+/**
+ * Store information for one or many extents in DSS.
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  lyt_ls   array of entries to store
+ * @param[in]  lyt_cnt  number of items in the list
+ * @param[in]  action   operation code (insert, update, delete)
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_extent_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
+                   int lyt_cnt, enum dss_set_action action);
 
-static inline int dss_device_set(struct dss_handle *hdl,
-                                 struct dev_info *dev_ls, int dev_cnt,
-                                 enum dss_set_action action)
-{
-    return dss_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt, action);
-}
-
-static inline int dss_media_set(struct dss_handle *hdl,
-                                struct media_info *med_ls, int med_cnt,
-                                enum dss_set_action action)
-{
-    return dss_set(hdl, DSS_MEDIA, (void *)med_ls, med_cnt, action);
-}
-
-static inline int dss_extent_set(struct dss_handle *hdl,
-                                 struct layout_info *lyt_ls, int lyt_cnt,
-                                 enum dss_set_action action)
-{
-    return dss_set(hdl, DSS_EXTENT, (void *)lyt_ls, lyt_cnt, action);
-}
-
-static inline int dss_object_set(struct dss_handle *hdl,
-                                 struct object_info *obj_ls, int obj_cnt,
-                                 enum dss_set_action action)
-{
-    return dss_set(hdl, DSS_OBJECT, (void *)obj_ls, obj_cnt, action);
-}
-
-int dss_lock(struct dss_handle *handle, void *item_list, int item_cnt,
-             enum dss_type type);
-
-int dss_unlock(struct dss_handle *handle, void *item_list, int item_cnt,
-             enum dss_type type);
-
+/**
+ * Store information for one or many objects in DSS.
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  obj_ls   array of entries to store
+ * @param[in]  obj_cnt  number of items in the list
+ * @param[in]  action   operation code (insert, update, delete)
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
+                   int obj_cnt, enum dss_set_action action);
 
 /**
  *  Lock a device for concurrent accesses
@@ -301,11 +309,8 @@ int dss_unlock(struct dss_handle *handle, void *item_list, int item_cnt,
  *  @retval 0 on success
  *  @retval -EEXIST on lock failure (device(s) already locked)
  */
-static inline int dss_device_lock(struct dss_handle *handle,
-                                  struct dev_info *dev_ls, int dev_cnt)
-{
-    return dss_lock(handle, dev_ls, dev_cnt, DSS_DEVICE);
-}
+int dss_device_lock(struct dss_handle *handle, struct dev_info *dev_ls,
+                    int dev_cnt);
 
 /**
  *  Unlock a device
@@ -313,11 +318,8 @@ static inline int dss_device_lock(struct dss_handle *handle,
  *  @param[in] item_cnt  number of items in item_list.
  *  @retval 0 on success
  */
-static inline int dss_device_unlock(struct dss_handle *handle,
-                                    struct dev_info *dev_ls, int dev_cnt)
-{
-    return dss_unlock(handle, dev_ls, dev_cnt, DSS_DEVICE);
-}
+int dss_device_unlock(struct dss_handle *handle, struct dev_info *dev_ls,
+                      int dev_cnt);
 
 /**
  *  Lock a media for concurrent accesses
@@ -326,11 +328,8 @@ static inline int dss_device_unlock(struct dss_handle *handle,
  *  @retval 0 on success
  *  @retval -EEXIST on lock failure (device(s) already locked)
  */
-static inline int dss_media_lock(struct dss_handle *handle,
-                                 struct media_info *media_ls, int media_cnt)
-{
-    return dss_lock(handle, media_ls, media_cnt, DSS_MEDIA);
-}
+int dss_media_lock(struct dss_handle *handle, struct media_info *media_ls,
+                   int media_cnt);
 
 /**
  *  Unlock a media
@@ -338,12 +337,7 @@ static inline int dss_media_lock(struct dss_handle *handle,
  *  @param[in] item_cnt  number of items in item_list.
  *  @retval 0 on success
  */
-static inline int dss_media_unlock(struct dss_handle *handle,
-                                   struct media_info *media_ls, int media_cnt)
-{
-    return dss_unlock(handle, media_ls, media_cnt, DSS_MEDIA);
-}
-
-
+int dss_media_unlock(struct dss_handle *handle, struct media_info *media_ls,
+                     int media_cnt);
 
 #endif

@@ -39,6 +39,74 @@
 #include <string.h>
 #include <inttypes.h>
 
+static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
+                           const struct dss_filter *filter, void **item_list,
+                           int *n)
+{
+    switch (type) {
+    case DSS_OBJECT:
+        return dss_object_get(handle, filter,
+                              (struct object_info **)item_list, n);
+    case DSS_EXTENT:
+        return dss_extent_get(handle, filter,
+                              (struct layout_info **)item_list, n);
+    case DSS_DEVICE:
+        return dss_device_get(handle, filter,
+                              (struct dev_info **)item_list, n);
+    case DSS_MEDIA:
+        return dss_media_get(handle, filter,
+                             (struct media_info **)item_list, n);
+    default:
+        return -ENOTSUP;
+    }
+}
+
+static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
+                           void *item_list, int n, enum dss_set_action action)
+{
+    switch (type) {
+    case DSS_OBJECT:
+        return dss_object_set(handle, (struct object_info *)item_list, n,
+                              action);
+    case DSS_EXTENT:
+        return dss_extent_set(handle, (struct layout_info *)item_list, n,
+                              action);
+    case DSS_DEVICE:
+        return dss_device_set(handle, (struct dev_info *)item_list, n,
+                              action);
+    case DSS_MEDIA:
+        return dss_media_set(handle, (struct media_info *)item_list, n,
+                             action);
+    default:
+        return -ENOTSUP;
+    }
+}
+
+static int dss_generic_lock(struct dss_handle *handle, enum dss_type type,
+                            void *item_list, int n)
+{
+    switch (type) {
+    case DSS_DEVICE:
+        return dss_device_lock(handle, (struct dev_info *)item_list, n);
+    case DSS_MEDIA:
+        return dss_media_lock(handle, (struct media_info *)item_list, n);
+    default:
+        return -ENOTSUP;
+    }
+}
+
+static int dss_generic_unlock(struct dss_handle *handle, enum dss_type type,
+                              void *item_list, int n)
+{
+    switch (type) {
+    case DSS_DEVICE:
+        return dss_device_unlock(handle, (struct dev_info *)item_list, n);
+    case DSS_MEDIA:
+        return dss_media_unlock(handle, (struct media_info *)item_list, n);
+    default:
+        return -ENOTSUP;
+    }
+}
 
 int main(int argc, char **argv)
 {
@@ -104,7 +172,7 @@ int main(int argc, char **argv)
             }
         }
 
-        rc = dss_get(&dss_handle, type, filter, &item_list, &item_cnt);
+        rc = dss_generic_get(&dss_handle, type, filter, &item_list, &item_cnt);
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
@@ -189,7 +257,7 @@ int main(int argc, char **argv)
                         pho_debug("Switch to oidtest mode (test null oid)");
                 }
 
-        rc = dss_get(&dss_handle, type, NULL, &item_list, &item_cnt);
+        rc = dss_generic_get(&dss_handle, type, NULL, &item_list, &item_cnt);
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
@@ -255,7 +323,7 @@ int main(int argc, char **argv)
             abort();
         }
 
-        rc = dss_set(&dss_handle, type, item_list, item_cnt, action);
+        rc = dss_generic_set(&dss_handle, type, item_list, item_cnt, action);
         if (rc) {
             pho_error(rc, "dss_set failed");
             exit(EXIT_FAILURE);
@@ -268,13 +336,13 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_get(&dss_handle, type, NULL, &item_list, &item_cnt);
+        rc = dss_generic_get(&dss_handle, type, NULL, &item_list, &item_cnt);
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_lock(&dss_handle, item_list, item_cnt, type);
+        rc = dss_generic_lock(&dss_handle, type, item_list, item_cnt);
         if (rc) {
             pho_error(rc, "dss_lock failed");
             exit(EXIT_FAILURE);
@@ -288,13 +356,13 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_get(&dss_handle, type, NULL, &item_list, &item_cnt);
+        rc = dss_generic_get(&dss_handle, type, NULL, &item_list, &item_cnt);
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_unlock(&dss_handle, item_list, item_cnt, type);
+        rc = dss_generic_unlock(&dss_handle, type, item_list, item_cnt);
         if (rc) {
             pho_error(rc, "dss_unlock failed");
             exit(EXIT_FAILURE);

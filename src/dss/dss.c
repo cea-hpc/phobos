@@ -1237,8 +1237,9 @@ out_free:
     return rc;
 }
 
-int dss_get(struct dss_handle *handle, enum dss_type type,
-            const struct dss_filter *filter, void **item_list, int *item_cnt)
+static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
+                           const struct dss_filter *filter, void **item_list,
+                           int *item_cnt)
 {
     PGconn              *conn = handle->dh_conn;
     PGresult            *res;
@@ -1383,8 +1384,9 @@ out:
     return rc;
 }
 
-int dss_set(struct dss_handle *handle, enum dss_type type, void *item_list,
-            int item_cnt, enum dss_set_action action)
+static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
+                           void *item_list, int item_cnt,
+                           enum dss_set_action action)
 {
     PGconn      *conn = handle->dh_conn;
     GString     *request;
@@ -1467,8 +1469,8 @@ out_cleanup:
     return rc;
 }
 
-int dss_lock(struct dss_handle *handle, void *item_list, int item_cnt,
-             enum dss_type type)
+static int dss_generic_lock(struct dss_handle *handle, enum dss_type type,
+                            void *item_list, int item_cnt)
 {
     PGconn      *conn = handle->dh_conn;
     GString     *ids;
@@ -1518,8 +1520,8 @@ out_cleanup:
     return rc;
 }
 
-int dss_unlock(struct dss_handle *handle, void *item_list, int item_cnt,
-               enum dss_type type)
+static int dss_generic_unlock(struct dss_handle *handle, enum dss_type type,
+                              void *item_list, int item_cnt)
 {
     PGconn      *conn = handle->dh_conn;
     GString     *ids;
@@ -1575,4 +1577,76 @@ void dss_res_free(void *item_list, int item_cnt)
         PQclear(dss_res->pg_res);
         free(dss_res);
     }
+}
+
+int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct dev_info **dev_ls, int *dev_cnt)
+{
+    return dss_generic_get(hdl, DSS_DEVICE, filter, (void **)dev_ls, dev_cnt);
+}
+
+int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                  struct media_info **med_ls, int *med_cnt)
+{
+    return dss_generic_get(hdl, DSS_MEDIA, filter, (void **)med_ls, med_cnt);
+}
+
+int dss_extent_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct layout_info **lyt_ls, int *lyt_cnt)
+{
+    return dss_generic_get(hdl, DSS_EXTENT, filter, (void **)lyt_ls, lyt_cnt);
+}
+
+int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct object_info **obj_ls, int *obj_cnt)
+{
+    return dss_generic_get(hdl, DSS_OBJECT, filter, (void **)obj_ls, obj_cnt);
+}
+
+int dss_device_set(struct dss_handle *hdl, struct dev_info *dev_ls, int dev_cnt,
+                   enum dss_set_action action)
+{
+    return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt, action);
+}
+
+int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
+                  int med_cnt, enum dss_set_action action)
+{
+    return dss_generic_set(hdl, DSS_MEDIA, (void *)med_ls, med_cnt, action);
+}
+
+int dss_extent_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
+                   int lyt_cnt, enum dss_set_action action)
+{
+    return dss_generic_set(hdl, DSS_EXTENT, (void *)lyt_ls, lyt_cnt, action);
+}
+
+int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
+                   int obj_cnt, enum dss_set_action action)
+{
+    return dss_generic_set(hdl, DSS_OBJECT, (void *)obj_ls, obj_cnt, action);
+}
+
+int dss_device_lock(struct dss_handle *handle, struct dev_info *dev_ls,
+                    int dev_cnt)
+{
+    return dss_generic_lock(handle, DSS_DEVICE, dev_ls, dev_cnt);
+}
+
+int dss_device_unlock(struct dss_handle *handle, struct dev_info *dev_ls,
+                      int dev_cnt)
+{
+    return dss_generic_unlock(handle, DSS_DEVICE, dev_ls, dev_cnt);
+}
+
+int dss_media_lock(struct dss_handle *handle, struct media_info *media_ls,
+                   int media_cnt)
+{
+    return dss_generic_lock(handle, DSS_MEDIA, media_ls, media_cnt);
+}
+
+int dss_media_unlock(struct dss_handle *handle, struct media_info *media_ls,
+                     int media_cnt)
+{
+    return dss_generic_unlock(handle, DSS_MEDIA, media_ls, media_cnt);
 }
