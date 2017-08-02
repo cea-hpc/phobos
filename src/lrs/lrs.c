@@ -1446,6 +1446,11 @@ retry:
         if (rc)
             LOG_GOTO(err_cleanup, rc, "Cannot update media information");
 
+        /* We must clear the device busy state so it could be selected to be
+         * unmounted and unloaded, in order to read other media that have
+         * enough available space. Drive is no longer busy, but the filesystem
+         * is still mounted at this point. */
+        dev->op_status = PHO_DEV_OP_ST_MOUNTED;
         lrs_dev_release(dss, dev);
         lrs_media_release(dss, media);
         dev = NULL;
