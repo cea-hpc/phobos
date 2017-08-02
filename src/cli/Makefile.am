@@ -17,7 +17,8 @@ SWIG_MODULES=phobos/capi/cfg.py \
 	     phobos/capi/_store.so \
 	     phobos/capi/store_wrap.c
 
-HAND_MODULES=phobos/capi/log.so
+HAND_MODULES=phobos/capi/log.so \
+	     phobos/capi/const.so
 
 EXTRA_DIST=phobos/capi/cfg.i \
 	   phobos/capi/dss.i \
@@ -26,6 +27,7 @@ EXTRA_DIST=phobos/capi/cfg.i \
 	   phobos/capi/store.i \
 	   phobos/capi/__init__.py \
 	   phobos/capi/log_module.c \
+	   phobos/capi/const_module.c \
 	   phobos/__init__.py \
 	   phobos/cfg.py \
 	   phobos/cli.py \

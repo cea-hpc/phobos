@@ -37,6 +37,10 @@ import argparse
 import logging
 import os.path
 
+from phobos.capi.const import dev_family2str
+from phobos.capi.const import PHO_DEV_DIR, PHO_DEV_TAPE
+from phobos.capi.const import (PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED,
+                               PHO_MDA_ADM_ST_LOCKED, PHO_MDA_ADM_ST_UNLOCKED)
 import phobos.capi.log as clog
 import phobos.capi.dss as cdss
 
@@ -473,7 +477,7 @@ class BaseResourceOptHandler(DSSInteractHandler):
     @property
     def family(self):
         """Return family (as a string) for the current instance."""
-        return cdss.dev_family2str(self.cenum)
+        return dev_family2str(self.cenum)
 
     def filter(self, ident):
         """Return a list of objects that match the provided identifier."""
@@ -555,7 +559,7 @@ class DeviceOptHandler(BaseResourceOptHandler):
                     self.logger.error("Device %s is in use by %s.",
                                       serial, device[0].lock.lock)
                     continue
-            device[0].adm_status = cdss.PHO_DEV_ADM_ST_LOCKED
+            device[0].adm_status = PHO_DEV_ADM_ST_LOCKED
             devices.append(device[0])
         if len(devices) == len(serials):
             rc = self.client.devices.update(devices)
@@ -583,9 +587,9 @@ class DeviceOptHandler(BaseResourceOptHandler):
                 self.logger.error("Device %s is in use by %s.",
                                   serial, device[0].lock.lock)
                 continue
-            if device[0].adm_status == cdss.PHO_DEV_ADM_ST_UNLOCKED:
+            if device[0].adm_status == PHO_DEV_ADM_ST_UNLOCKED:
                 self.logger.warn("Device %s is already unlocked", serial)
-            device[0].adm_status = cdss.PHO_DEV_ADM_ST_UNLOCKED
+            device[0].adm_status = PHO_DEV_ADM_ST_UNLOCKED
             devices.append(device[0])
         if len(devices) == len(serials):
             rc = self.client.devices.update(devices)
@@ -676,7 +680,7 @@ class MediaOptHandler(BaseResourceOptHandler):
                                       uid, media[0].lock.lock)
                     continue
 
-            media[0].adm_status = cdss.PHO_MDA_ADM_ST_LOCKED
+            media[0].adm_status = PHO_MDA_ADM_ST_LOCKED
             results.append(media[0])
 
         if len(results) == len(uids):
@@ -702,10 +706,10 @@ class MediaOptHandler(BaseResourceOptHandler):
                                   uid, media[0].lock.lock)
                 continue
 
-            if media[0].adm_status == cdss.PHO_MDA_ADM_ST_UNLOCKED:
+            if media[0].adm_status == PHO_MDA_ADM_ST_UNLOCKED:
                 self.logger.warn("Media %s is already unlocked", uid)
 
-            media[0].adm_status = cdss.PHO_MDA_ADM_ST_UNLOCKED
+            media[0].adm_status = PHO_MDA_ADM_ST_UNLOCKED
             results.append(media[0])
 
         if len(results) == len(uids):
@@ -724,7 +728,7 @@ class DirOptHandler(MediaOptHandler, DeviceOptHandler):
     """Directory-related options and actions."""
     label = 'dir'
     descr = 'handle directories'
-    cenum = cdss.PHO_DEV_DIR
+    cenum = PHO_DEV_DIR
 
     def exec_add(self):
         """
@@ -756,14 +760,14 @@ class DriveOptHandler(DeviceOptHandler):
     """Tape Drive options and actions."""
     label = 'drive'
     descr = 'handle tape drives (use ID or device path to identify resource)'
-    cenum = cdss.PHO_DEV_TAPE
+    cenum = PHO_DEV_TAPE
 
 
 class TapeOptHandler(MediaOptHandler):
     """Magnetic tape options and actions."""
     label = 'tape'
     descr = 'handle magnetic tape (use tape label to identify resource)'
-    cenum = cdss.PHO_DEV_TAPE
+    cenum = PHO_DEV_TAPE
     verbs = [
         TapeAddOptHandler,
         FormatOptHandler,

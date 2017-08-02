@@ -25,10 +25,9 @@ Provide access to LRS functionnality with the right level (tm) of abstraction.
 
 import os
 
-from phobos.capi.dss import PHO_DEV_TAPE, PHO_DEV_DIR
-from phobos.capi.dss import PHO_FS_LTFS, PHO_FS_POSIX
+from phobos.capi.const import (PHO_DEV_TAPE, PHO_DEV_DIR, PHO_FS_LTFS,
+                               PHO_FS_POSIX)
 from phobos.capi.dss import media_id, media_id_set
-
 from phobos.capi.lrs import lrs_format
 
 from phobos.dss import GenericError

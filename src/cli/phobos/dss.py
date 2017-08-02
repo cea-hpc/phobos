@@ -30,6 +30,10 @@ import logging
 import os.path
 from socket import gethostname
 
+from phobos.capi.const import str2fs_type
+from phobos.capi.const import (PHO_ADDR_HASH1, PHO_MDA_ADM_ST_LOCKED,
+                               PHO_MDA_ADM_ST_UNLOCKED)
+
 import phobos.capi.dss as cdss
 import phobos.capi.ldm as cldm
 
@@ -320,13 +324,13 @@ class MediaManager(ObjectManager):
         """Insert media into DSS."""
         media = cdss.media_info()
         media.id.type = mtype
-        media.fs.type = cdss.str2fs_type(fstype)
+        media.fs.type = str2fs_type(fstype)
         media.model = model
-        media.addr_type = cdss.PHO_ADDR_HASH1
+        media.addr_type = PHO_ADDR_HASH1
         if locked:
-            media.adm_status = cdss.PHO_MDA_ADM_ST_LOCKED
+            media.adm_status = PHO_MDA_ADM_ST_LOCKED
         else:
-            media.adm_status = cdss.PHO_MDA_ADM_ST_UNLOCKED
+            media.adm_status = PHO_MDA_ADM_ST_UNLOCKED
         media.stats = cdss.media_stats()
         cdss.media_id_set(media.id, label)
 
