@@ -4,12 +4,17 @@
 
 set -e
 
+# format and clean all by default
+CLEAN_ALL=${CLEAN_ALL:-1}
+
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
 . $test_dir/setup_db.sh
-drop_tables
-setup_tables
+if [ "$CLEAN_ALL" -eq "1" ]; then
+    drop_tables
+    setup_tables
+fi
 
 # display error message and exits
 function error {
@@ -50,6 +55,9 @@ function empty_drives
 
 function tape_setup
 {
+    # no reformat if CLEAN_ALL == 0
+    [ "$CLEAN_ALL" -eq "0" ] && return 0
+
     # make sure no LTFS filesystem is mounted, so we can unmount it
     service ltfs stop || true
     #  make sure all drives are empty
@@ -86,6 +94,7 @@ function tape_setup
 
     # get drives
     local drives=$(get_drives $N_DRIVES)
+    N_DRIVES=$(echo $drives | wc -w)
     echo "adding drives $drives..."
     $phobos drive add $drives
 
@@ -96,8 +105,12 @@ function tape_setup
     $phobos drive show $dr1 --format=csv | grep "^locked" ||
         error "Drive should be added with locked state"
 
-    # unlock all drives but one
-    local serials=$($phobos drive list | head -n $(($N_DRIVES - 1)))
+    # unlock all drives but one (except if N_DRIVE < 2)
+    if (( $N_DRIVES > 1 )); then
+        local serials=$($phobos drive list | head -n $(($N_DRIVES - 1)))
+    else
+        local serials=$($phobos drive list)
+    fi
     for d in $serials; do
         echo $d
         $phobos drive unlock $d
@@ -106,7 +119,7 @@ function tape_setup
     # need to format 2 tapes for concurrent_put
     local tp
     for tp in $tapes; do
-        $phobos tape format $tp --unlock
+        $phobos -v tape format $tp --unlock
     done
 }
 
@@ -114,6 +127,10 @@ function dir_setup
 {
     export dirs="/tmp/test.pho.1 /tmp/test.pho.2"
     mkdir -p $dirs
+
+    # no new directory registration if CLEAN_ALL == 0
+    [ "$CLEAN_ALL" -eq "0" ] && return 0
+
     echo "adding directories $dirs"
     $phobos dir add $dirs
     $phobos dir format --fs posix $dirs
@@ -198,6 +215,8 @@ function ensure_nb_drives
             ((nb++)) || true
         fi
     done
+
+    ((nb == count))
 }
 
 function concurrent_put
@@ -205,23 +224,46 @@ function concurrent_put
     local md="a=1,b=2,c=3"
     local tmp="/tmp/data.$$"
     local key=data.$(date +%s).$$
+    local single=0
 
     # this test needs 2 drives
-    ensure_nb_drives 2
+    ensure_nb_drives 2 || single=1
 
     # create input file
     dd if=/dev/urandom of=$tmp bs=1M count=100
 
     # 2 simultaneous put
     $phobos put -m $md $tmp $key.1 &
-    $phobos put -m $md $tmp $key.2 &
+    (( single==0 )) && $phobos put -m $md $tmp $key.2 &
+
+    # after 1 sec, make sure 2 devices and 2 media are locked
+    sleep 1
+    nb_lock=$($PSQL -qt -c "select * from media where lock != ''" \
+              | grep -v "^$" | wc -l)
+    echo "$nb_lock media are locked"
+    if (( single==0 )) && (( $nb_lock != 2 )); then
+        error "2 media locks expected (actual: $nb_lock)"
+    elif (( single==1 )) && (( $nb_lock != 1 )); then
+        error "1 media lock expected (actual: $nb_lock)"
+    fi
+    nb_lock=$($PSQL -qt -c "select * from device where lock != ''" \
+              | grep -v "^$" | wc -l)
+    echo "$nb_lock devices are locked"
+    if (( single==0 )) && (( $nb_lock != 2 )); then
+        error "2 media locks expected (actual: $nb_lock)"
+    elif (( single==1 )) && (( $nb_lock != 1 )); then
+        error "1 media lock expected (actual: $nb_lock)"
+    fi
+
     wait
 
     rm -f $tmp
 
     # check they are both in DB
     $phobos getmd $key.1
-    $phobos getmd $key.2
+    if (( single==0 )); then
+	$phobos getmd $key.2
+    fi
 }
 
 function check_status
