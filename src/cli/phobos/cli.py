@@ -45,9 +45,10 @@ import phobos.capi.log as clog
 import phobos.capi.dss as cdss
 
 from phobos.cfg import load_config_file
-from phobos.dss import Client as DSSClient, GenericError
+from phobos.dss import Client as DSSClient
 from phobos.store import Client as XferClient
 from phobos.lrs import fs_format
+from phobos.ffi import GenericError
 from phobos.output import dump_object_list
 from ClusterShell.NodeSet import NodeSet
 

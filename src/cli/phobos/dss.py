@@ -37,6 +37,7 @@ from phobos.capi.const import (PHO_ADDR_HASH1, PHO_MDA_ADM_ST_LOCKED,
 import phobos.capi.dss as cdss
 import phobos.capi.ldm as cldm
 
+from phobos.ffi import GenericError
 
 # Valid filter suffix and associated operators.
 FILTER_OPERATORS = (
@@ -56,9 +57,6 @@ OBJECT_PREFIXES = {
     'media':  'DSS::MDA::',
 }
 
-
-class GenericError(BaseException):
-    """Base error to described DSS failures."""
 
 def key_convert(obj_type, key):
     """Split key, return actual name and associated operator."""

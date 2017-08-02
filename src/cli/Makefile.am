@@ -32,9 +32,11 @@ EXTRA_DIST=phobos/capi/cfg.i \
 	   phobos/cfg.py \
 	   phobos/cli.py \
 	   phobos/dss.py \
+	   phobos/ffi.py \
 	   phobos/lrs.py \
 	   phobos/output.py \
 	   phobos/store.py \
+	   phobos/types.py \
 	   scripts/phobos \
 	   setup.py
 
