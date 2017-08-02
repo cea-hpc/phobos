@@ -99,32 +99,6 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['dir', 'teleport'], code=2)
 
 
-class LogTest(unittest.TestCase):
-    """Exercise the interleaved log layers."""
-    def test_cli_log(self):
-        """
-        Due to the way C and python layers are sandwitched when handling error
-        messages we have see very obscure crashes. Make sure that error codes
-        from lower layers get properly propagated up to the python callers.
-        """
-        cli = Client()
-        cli.connect()
-
-        dev = dev_info()
-        dev.family = PHO_DEV_DIR
-        dev.model = ''
-        dev.path = '/tmp/test_%d' % randint(0, 1000000)
-        dev.host = 'localhost'
-        dev.serial = '__TEST_MAGIC_%d' % randint(0, 1000000)
-
-        cli.devices.insert([dev])
-        rc = cli.devices.insert([dev])
-
-        self.assertEqual(rc, -errno.EEXIST)
-
-        cli.disconnect()
-
-
 class BasicExecutionTest(unittest.TestCase):
     """Ease execution of the CLI."""
     # Reuse configuration file from global tests

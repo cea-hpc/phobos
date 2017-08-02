@@ -14,21 +14,20 @@ SWIG_MODULES=phobos/capi/dss.py \
 	     phobos/capi/_store.so \
 	     phobos/capi/store_wrap.c
 
-HAND_MODULES=phobos/capi/log.so \
-	     phobos/capi/const.so
+HAND_MODULES=phobos/capi/const.so
 
 EXTRA_DIST=phobos/capi/dss.i \
 	   phobos/capi/lrs.i \
 	   phobos/capi/ldm.i \
 	   phobos/capi/store.i \
 	   phobos/capi/__init__.py \
-	   phobos/capi/log_module.c \
 	   phobos/capi/const_module.c \
 	   phobos/__init__.py \
 	   phobos/cfg.py \
 	   phobos/cli.py \
 	   phobos/dss.py \
 	   phobos/ffi.py \
+	   phobos/log.py \
 	   phobos/lrs.py \
 	   phobos/output.py \
 	   phobos/store.py \

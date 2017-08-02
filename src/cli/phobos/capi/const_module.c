@@ -32,6 +32,7 @@
 #endif
 
 #include <pho_types.h>
+#include <pho_common.h>
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -152,4 +153,13 @@ PyMODINIT_FUNC initconst(void)
     PyModule_AddIntMacro(mod, PHO_ADDR_HASH1);
     PyModule_AddIntMacro(mod, PHO_ADDR_OPAQUE);
     PyModule_AddIntMacro(mod, PHO_ADDR_LAST);
+
+    PyModule_AddIntMacro(mod, PHO_LOG_DISABLED);
+    PyModule_AddIntMacro(mod, PHO_LOG_ERROR);
+    PyModule_AddIntMacro(mod, PHO_LOG_WARN);
+    PyModule_AddIntMacro(mod, PHO_LOG_INFO);
+    PyModule_AddIntMacro(mod, PHO_LOG_VERB);
+    PyModule_AddIntMacro(mod, PHO_LOG_DEBUG);
+    PyModule_AddIntMacro(mod, PHO_LOG_DEFAULT);
+
 }

@@ -42,7 +42,10 @@ from phobos.capi.const import dev_family2str
 from phobos.capi.const import PHO_DEV_DIR, PHO_DEV_TAPE
 from phobos.capi.const import (PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED,
                                PHO_MDA_ADM_ST_LOCKED, PHO_MDA_ADM_ST_UNLOCKED)
-import phobos.capi.log as clog
+
+from phobos.log import LogControl
+from phobos.log import DISABLED, WARNING, INFO, VERBOSE, DEBUG
+
 import phobos.capi.dss as cdss
 
 from phobos.cfg import load_file as cfg_load_file
@@ -58,39 +61,35 @@ def strerror(rc):
     """Basic wrapper to convert return code into corresponding errno string."""
     return os.strerror(abs(rc))
 
-def levelname(lvl):
-    """Wrapper to get the log level name including custom level names."""
-    if lvl == clog.PY_LOG_VERB:
-        return 'VERBOSE'
-    else:
-        return logging.getLevelName(lvl)
-
-def phobos_log_handler(rec):
+def phobos_log_handler(log_record):
     """
     Receive log records emitted from lower layers and inject them into the
     currently configured logger.
     """
-    full_msg = rec[7]
+    rec = log_record.contents
+    msg = rec.plr_msg
 
     # Append ': <errmsg>' to the original message if err_code was set
-    if rec[5] != 0:
-        full_msg += ": %s"
-        args = (strerror(rec[5]), )
+    if rec.plr_err != 0:
+        msg += ": %s"
+        args = (strerror(rec.plr_err), )
     else:
         args = tuple()
 
+    level = LogControl.level_pho2py(rec.plr_level)
+
     attrs = {
         'name': 'internals',
-        'levelno': rec[0],
-        'levelname': levelname(rec[0]),
-        'process': rec[1],
-        'filename': rec[2],
-        'funcName': rec[3],
-        'lineno': rec[4],
+        'levelno': level,
+        'levelname': LogControl.level_name(level),
+        'process': rec.plr_pid,
+        'filename': rec.plr_file,
+        'funcName': rec.plr_func,
+        'lineno': rec.plr_line,
         'exc_info': None,
-        'msg': full_msg,
+        'msg': msg,
         'args': args,
-        'created': rec[6],
+        'created': rec.plr_time.tv_sec,
     }
 
     record = logging.makeLogRecord(attrs)
@@ -815,6 +814,8 @@ class PhobosActionContext(object):
 
         self.load_config()
 
+        self.log_ctx = LogControl()
+
     def install_arg_parser(self):
         """Initialize hierarchical command line parser."""
         # Top-level parser for common options
@@ -860,25 +861,25 @@ class PhobosActionContext(object):
 
         if lvl >= 2:
             # -vv
-            pylvl = clog.PY_LOG_DEBUG
+            pylvl = DEBUG
             fmt = self.CLI_LOG_FORMAT_DEV
         elif lvl == 1:
             # -v
-            pylvl = clog.PY_LOG_VERB
+            pylvl = VERBOSE
         elif lvl == 0:
             # default
-            pylvl = clog.PY_LOG_INFO
+            pylvl = INFO
         elif lvl == -1:
             # -q
-            pylvl = clog.PY_LOG_WARNING
+            pylvl = WARNING
         elif lvl <= -2:
             # -qq
-            pylvl = clog.PY_LOG_DISABLED
-
-        clog.set_callback(phobos_log_handler)
-        clog.set_level(pylvl)
+            pylvl = DISABLED
 
         logging.basicConfig(level=pylvl, format=fmt)
+
+        self.log_ctx.set_callback(phobos_log_handler)
+        self.log_ctx.set_level(pylvl)
 
     def run(self):
         """

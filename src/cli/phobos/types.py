@@ -91,5 +91,25 @@ class MediaInfo(Structure):
         ('adm_status', c_int),
         ('fs', MediaFS),
         ('stats', MediaStats),
-        ('lock', Lock),
+        ('lock', Lock)
+    ]
+
+class Timeval(Structure):
+    """standard struct timeval."""
+    _fields_ = [
+        ('tv_sec', c_long),
+        ('tv_usec', c_long)
+    ]
+
+class PhoLogRec(Structure):
+    """Single log record."""
+    _fields_ = [
+        ('plr_level', c_int),
+        ('plr_pid',  c_int),
+        ('plr_file', c_char_p),
+        ('plr_func', c_char_p),
+        ('plr_line', c_int),
+        ('plr_err', c_int),
+        ('plr_time', Timeval),
+        ('plr_msg', c_char_p)
     ]

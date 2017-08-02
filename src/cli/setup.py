@@ -67,15 +67,6 @@ const_module = Extension('const',
                          library_dirs=GLOBAL_LIBDIRS,
                          define_macros=GLOBAL_MACROS)
 
-log_module = Extension('log',
-                       sources=['phobos/capi/log_module.c'],
-                       include_dirs=['../include',
-                                     '/usr/include/glib-2.0',
-                                     '/usr/lib64/glib-2.0/include'],
-                       libraries=GLOBAL_LIBS,
-                       library_dirs=GLOBAL_LIBDIRS,
-                       define_macros=GLOBAL_MACROS)
-
 store_module = Extension('_store',
                          sources=['phobos/capi/store_wrap.c'],
                          include_dirs=['../include',
@@ -94,7 +85,6 @@ setup(
         lrs_module,
         ldm_module,
         const_module,
-        log_module,
         store_module
     ],
     scripts=['scripts/phobos'],
