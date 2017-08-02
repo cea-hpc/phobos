@@ -1,10 +1,7 @@
 AM_CFLAGS= $(CC_OPT)
 
 
-SWIG_MODULES=phobos/capi/cfg.py \
-	     phobos/capi/_cfg.so \
-	     phobos/capi/cfg_wrap.c \
-	     phobos/capi/dss.py \
+SWIG_MODULES=phobos/capi/dss.py \
 	     phobos/capi/_dss.so \
 	     phobos/capi/dss_wrap.c
 	     phobos/capi/lrs.py \
@@ -20,8 +17,7 @@ SWIG_MODULES=phobos/capi/cfg.py \
 HAND_MODULES=phobos/capi/log.so \
 	     phobos/capi/const.so
 
-EXTRA_DIST=phobos/capi/cfg.i \
-	   phobos/capi/dss.i \
+EXTRA_DIST=phobos/capi/dss.i \
 	   phobos/capi/lrs.i \
 	   phobos/capi/ldm.i \
 	   phobos/capi/store.i \
@@ -41,7 +37,6 @@ EXTRA_DIST=phobos/capi/cfg.i \
 	   setup.py
 
 all-local:
-	swig -python -I../include phobos/capi/cfg.i
 	swig -python -I../include phobos/capi/dss.i
 	swig -python -I../include phobos/capi/lrs.i
 	swig -python -I../include phobos/capi/ldm.i

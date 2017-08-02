@@ -29,12 +29,13 @@ actions.
 """
 
 import re
-import os
 import sys
 import shlex
 import errno
 import argparse
 import logging
+
+import os
 import os.path
 
 from phobos.capi.const import dev_family2str
@@ -44,7 +45,7 @@ from phobos.capi.const import (PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED,
 import phobos.capi.log as clog
 import phobos.capi.dss as cdss
 
-from phobos.cfg import load_config_file
+from phobos.cfg import load_file as cfg_load_file
 from phobos.dss import Client as DSSClient
 from phobos.store import Client as XferClient
 from phobos.lrs import fs_format
@@ -812,7 +813,7 @@ class PhobosActionContext(object):
         self.args = self.parser.parse_args(args)
         self.parameters = vars(self.args)
 
-        self.load_config() # After this, code can use get_config_value()
+        self.load_config()
 
     def install_arg_parser(self):
         """Initialize hierarchical command line parser."""
@@ -841,7 +842,7 @@ class PhobosActionContext(object):
         cpath = self.parameters.get('config')
         # Try to open configuration file
         try:
-            load_config_file(cpath)
+            cfg_load_file(cpath)
         except IOError as exc:
             if exc.errno == errno.ENOENT or exc.errno == errno.EALREADY:
                 return

@@ -58,15 +58,6 @@ ldm_module = Extension('_ldm',
                        library_dirs=GLOBAL_LIBDIRS,
                        define_macros=GLOBAL_MACROS)
 
-cfg_module = Extension('_cfg',
-                       sources=['phobos/capi/cfg_wrap.c'],
-                       include_dirs=['../include',
-                                     '/usr/include/glib-2.0',
-                                     '/usr/lib64/glib-2.0/include'],
-                       libraries=GLOBAL_LIBS,
-                       library_dirs=GLOBAL_LIBDIRS,
-                       define_macros=GLOBAL_MACROS)
-
 const_module = Extension('const',
                          sources=['phobos/capi/const_module.c'],
                          include_dirs=['../include',
@@ -102,7 +93,6 @@ setup(
         dss_module,
         lrs_module,
         ldm_module,
-        cfg_module,
         const_module,
         log_module,
         store_module
