@@ -29,7 +29,6 @@ struct lrs_intent {
     struct dev_descr    *li_device;
     enum lrs_operation   li_operation;
     struct pho_ext_loc   li_location;
-    size_t               li_req_size;
 };
 
 /**

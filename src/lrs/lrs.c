@@ -1410,7 +1410,7 @@ int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent)
 {
     struct dev_descr    *dev = NULL;
     struct media_info   *media = NULL;
-    size_t               size = intent->li_req_size;
+    size_t               size = intent->li_location.extent.size;
     int                  rc;
     ENTRY;
 
