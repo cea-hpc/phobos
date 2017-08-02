@@ -1,4 +1,5 @@
 AM_CFLAGS= $(CC_OPT)
+AM_LDFLAGS=-Wl,-rpath=$(libdir) -Wl,-rpath=$(pkglibdir)
 
 # use full phobosd name here, as it is installed
 # and can be used by client apps.
