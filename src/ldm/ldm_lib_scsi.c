@@ -510,12 +510,16 @@ static int get_free_slot(struct lib_descriptor *lib, uint16_t *slot_addr)
  * @param[in,out] lib       Library handler.
  * @param[in]     src_lia   Pointer to lib_item_addr of the source element.
  * @param[out]    tgt_addr  Pointer to the address of the selected target.
+ * @param[in,out] to_origin As input, indicate whether to favor source slot.
+ *                          If false, try to get any free slot.
+ *                          As output, it indicates if the source slot was
+ *                          actually selected.
  *
  * @return 0 on success, -errno on failure.
  */
 static int select_target_addr(struct lib_descriptor *lib,
                               const struct lib_item_addr *src_lia,
-                              uint16_t *tgt_addr)
+                              uint16_t *tgt_addr, bool *to_origin)
 {
     const struct element_status *element;
     int rc;
@@ -531,11 +535,22 @@ static int select_target_addr(struct lib_descriptor *lib,
                    src_lia->lia_addr);
 
     /* if there is a source addr, use it */
-    if (element->src_addr_is_set) {
-        *tgt_addr = element->src_addr;
-        pho_debug("No target address specified. "
-                  "Using element source address %#hx.", *tgt_addr);
-        return 0;
+    if (*to_origin && element->src_addr_is_set) {
+
+        /* check the slot is not already full */
+        struct lib_item_addr slot_lia = {
+            .lia_type = MED_LOC_SLOT,
+            .lia_addr = element->src_addr,
+        };
+        const struct element_status *slot;
+
+        slot = element_from_addr(lib, &slot_lia);
+        if (!slot->full) {
+            *tgt_addr = element->src_addr;
+            pho_debug("No target address specified. "
+                      "Using element source address %#hx.", *tgt_addr);
+            return 0;
+        }
     }
 
     /* search a free slot to target */
@@ -543,7 +558,9 @@ static int select_target_addr(struct lib_descriptor *lib,
     if (rc)
         LOG_RETURN(rc, "No Free slot to unload tape");
 
-    pho_debug("Unloading tape to free slot %#hx", *tgt_addr);
+    *to_origin = (element->src_addr_is_set && (element->src_addr == *tgt_addr));
+
+    pho_verb("Unloading tape to free slot %#hx", *tgt_addr);
     return 0;
 }
 
@@ -554,6 +571,7 @@ static int lib_scsi_move(struct lib_handle *hdl,
 {
     struct lib_descriptor *lib;
     uint16_t tgt;
+    bool origin = false;
     int rc;
     ENTRY;
 
@@ -564,7 +582,9 @@ static int lib_scsi_move(struct lib_handle *hdl,
     if (tgt_addr == NULL
         || (tgt_addr->lia_type == MED_LOC_UNKNOWN
             && tgt_addr->lia_addr == 0)) {
-        rc = select_target_addr(lib, src_addr, &tgt);
+        /* First try source slot. If not valid, try any free slot */
+        origin = true;
+        rc = select_target_addr(lib, src_addr, &tgt, &origin);
         if (rc)
             return rc;
     } else {
@@ -572,7 +592,18 @@ static int lib_scsi_move(struct lib_handle *hdl,
     }
 
     /* arm = 0 for default transport element */
-    return scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt);
+    rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt);
+
+    /* was the source slot invalid? */
+    if (rc == -EINVAL && origin) {
+        pho_warn("Failed to move media to source slot, trying another one...");
+        origin = false;
+        rc = select_target_addr(lib, src_addr, &tgt, &origin);
+        if (rc)
+            return rc;
+        rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt);
+    }
+    return rc;
 }
 
 /** lib_scsi_adapter exported to upper layers */
