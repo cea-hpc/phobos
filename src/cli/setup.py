@@ -31,44 +31,8 @@ GLOBAL_MACROS = [('HAVE_CONFIG_H', 1)]
 GLOBAL_LIBS = ['phobos_store']
 GLOBAL_LIBDIRS = ['../store/.libs']
 
-dss_module = Extension('_dss',
-                       sources=['phobos/capi/dss_wrap.c'],
-                       include_dirs=['../include',
-                                     '/usr/include/glib-2.0',
-                                     '/usr/lib64/glib-2.0/include'],
-                       libraries=GLOBAL_LIBS,
-                       library_dirs=GLOBAL_LIBDIRS,
-                       define_macros=GLOBAL_MACROS)
-
-lrs_module = Extension('_lrs',
-                       sources=['phobos/capi/lrs_wrap.c'],
-                       include_dirs=['../include',
-                                     '/usr/include/glib-2.0',
-                                     '/usr/lib64/glib-2.0/include'],
-                       libraries=GLOBAL_LIBS,
-                       library_dirs=GLOBAL_LIBDIRS,
-                       define_macros=GLOBAL_MACROS)
-
-ldm_module = Extension('_ldm',
-                       sources=['phobos/capi/ldm_wrap.c'],
-                       include_dirs=['../include',
-                                     '/usr/include/glib-2.0',
-                                     '/usr/lib64/glib-2.0/include'],
-                       libraries=GLOBAL_LIBS,
-                       library_dirs=GLOBAL_LIBDIRS,
-                       define_macros=GLOBAL_MACROS)
-
 const_module = Extension('const',
                          sources=['phobos/capi/const_module.c'],
-                         include_dirs=['../include',
-                                       '/usr/include/glib-2.0',
-                                       '/usr/lib64/glib-2.0/include'],
-                         libraries=GLOBAL_LIBS,
-                         library_dirs=GLOBAL_LIBDIRS,
-                         define_macros=GLOBAL_MACROS)
-
-store_module = Extension('_store',
-                         sources=['phobos/capi/store_wrap.c'],
                          include_dirs=['../include',
                                        '/usr/include/glib-2.0',
                                        '/usr/lib64/glib-2.0/include'],
@@ -81,11 +45,7 @@ setup(
     packages=['phobos', 'phobos.capi'],
     ext_package='phobos.capi',
     ext_modules=[
-        dss_module,
-        lrs_module,
-        ldm_module,
         const_module,
-        store_module
     ],
     scripts=['scripts/phobos'],
     version='0.0.1',

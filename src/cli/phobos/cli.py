@@ -38,6 +38,8 @@ import logging
 import os
 import os.path
 
+from abc import ABCMeta, abstractmethod
+
 from phobos.capi.const import dev_family2str
 from phobos.capi.const import PHO_DEV_DIR, PHO_DEV_TAPE
 from phobos.capi.const import (PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED,
@@ -46,12 +48,11 @@ from phobos.capi.const import (PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED,
 from phobos.log import LogControl
 from phobos.log import DISABLED, WARNING, INFO, VERBOSE, DEBUG
 
-import phobos.capi.dss as cdss
-
 from phobos.cfg import load_file as cfg_load_file
 from phobos.dss import Client as DSSClient
 from phobos.store import Client as XferClient
-from phobos.lrs import fs_format
+from phobos.store import attrs_as_dict
+from phobos.lrs import LRS
 from phobos.ffi import GenericError
 from phobos.output import dump_object_list
 from ClusterShell.NodeSet import NodeSet
@@ -122,6 +123,8 @@ class BaseOptHandler(object):
     descr = '(undef)'
     verbs = []
 
+    __metaclass__ = ABCMeta
+
     def __init__(self, params, **kwargs):
         """
         Initialize action handler with command line parameters. These are to be
@@ -131,13 +134,15 @@ class BaseOptHandler(object):
         self.params = params
         self.logger = logging.getLogger(__name__)
 
-    def initialize(self):
+    @abstractmethod
+    def __enter__(self):
         """
         Optional method handlers can implement to prepare execution context.
         """
         pass
 
-    def teardown(self):
+    @abstractmethod
+    def __exit__(self, exc_type, exc_value, traceback):
         """
         Optional method handlers can implement to release resources after
         execution.
@@ -173,12 +178,13 @@ class DSSInteractHandler(BaseOptHandler):
         super(DSSInteractHandler, self).__init__(params, **kwargs)
         self.client = None
 
-    def initialize(self):
+    def __enter__(self):
         """Initialize a DSS Client."""
         self.client = DSSClient()
         self.client.connect()
+        return self
 
-    def teardown(self):
+    def __exit__(self, exc_type, exc_value, traceback):
         """Release resources associated to a DSS handle."""
         self.client.disconnect()
 
@@ -199,11 +205,12 @@ class XferOptHandler(BaseOptHandler):
         super(XferOptHandler, cls).add_options(parser)
         parser.set_defaults(verb=cls.label)
 
-    def initialize(self):
+    def __enter__(self):
         """Initialize a client for data movements."""
         self.client = XferClient()
+        return self
 
-    def teardown(self):
+    def __exit__(self, exc_type, exc_value, traceback):
         """Release resources associated to a XferClient."""
         self.client.clear()
 
@@ -219,17 +226,18 @@ class StoreGetMDHandler(XferOptHandler):
         super(StoreGetMDHandler, cls).add_options(parser)
         parser.add_argument('object_id', help='Object to target')
 
-    def _compl_notify(self, *args, **kwargs):
+    @staticmethod
+    def _compl_notify(data, xfr, err_code):
         """Custom completion handler to display metadata."""
-        oid, _, attrs, rc = args
-        if rc != 0:
+        if err_code != 0:
             return
 
-        if not attrs:
+        if not xfr.contents.xd_attrs:
             print '<empty attribute set>'
 
         res = []
-        for k, v in sorted(attrs.items()):
+        itm = attrs_as_dict(xfr.contents.xd_attrs.contents)
+        for k, v in sorted(itm.items()):
             res.append('%s=%s' % (k, v))
 
         print ','.join(res)
@@ -641,7 +649,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         for label in media_list:
             self.logger.debug("Formatting media '%s'", label)
             try:
-                fs_format(self.client, label, fs_type, unlock=unlock)
+                LRS().fs_format(self.client, label, fs_type, unlock=unlock)
             except GenericError, exc:
                 # XXX add an option to exit on first error
                 self.logger.error("fs_format: %s", exc)
@@ -835,8 +843,8 @@ class PhobosActionContext(object):
         sub = self.parser.add_subparsers(dest='goal')
 
         # Register misc actions handlers
-        for obj in self.supported_handlers:
-            obj.subparser_register(sub)
+        for handler in self.supported_handlers:
+            handler.subparser_register(sub)
 
     def load_config(self):
         """Load configuration file."""
@@ -895,19 +903,17 @@ class PhobosActionContext(object):
         assert target is not None
         assert action is not None
 
-        target_inst = None
-        for obj in self.supported_handlers:
-            if obj.label == target:
-                target_inst = obj(self.parameters)
-                break
+        for handler in self.supported_handlers:
+            if handler.label == target:
+                with handler(self.parameters) as target_inst:
+                    # Invoke target::exec_{action}
+                    getattr(target_inst, 'exec_%s' % action)()
+                return
 
         # The command line parser must catch such mistakes
-        assert target_inst is not None
+        raise NotImplementedError("Unexpected parameters: '%s' '%s'" % (target,
+                                                                        action))
 
-        # Invoke target::exec_{action}()
-        target_inst.initialize()
-        getattr(target_inst, 'exec_%s' % action)()
-        target_inst.teardown()
 
 def phobos_main(args=sys.argv[1::]):
     """

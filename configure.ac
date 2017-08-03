@@ -65,7 +65,6 @@ AC_ARG_ENABLE( [cli], AS_HELP_STRING([--disable-cli],
                [enable_cli="$enableval"],[enable_cli="yes"] )
 AS_IF( [test "x$enable_cli" != "xno"], [
     # Enable python bindings
-    AX_PKG_SWIG(1.3.0, [], [ AC_MSG_ERROR([SWIG is required to build the CLI]) ])
     AX_PYTHON_DEVEL([>='2.6'])
 ])
 

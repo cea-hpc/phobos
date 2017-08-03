@@ -103,7 +103,6 @@ static inline enum dss_set_action str2dss_set_action(const char *str)
     return DSS_SET_INVAL;
 }
 
-#if !defined(SWIG)
 struct dss_field_def {
     const char    *df_public;
     const char    *df_implem;
@@ -156,7 +155,6 @@ static inline const char *dss_fields_pub2implem(const char *public_name)
 
     return NULL;
 }
-#endif
 
 struct dss_filter {
     json_t  *df_json;
@@ -169,10 +167,7 @@ struct dss_filter {
  * @return 0 on success; negated errno code on failure.
  */
 int dss_filter_build(struct dss_filter *filter, const char *fmt, ...)
-#if !defined(SWIG)
-                     __attribute__((format(printf, 2, 3)))
-#endif
-;
+                     __attribute__((format(printf, 2, 3)));
 
 /**
  * Release resources associated to a dss filter built using dss_filter_build().
@@ -181,7 +176,7 @@ int dss_filter_build(struct dss_filter *filter, const char *fmt, ...)
 void dss_filter_free(struct dss_filter *filter);
 
 
-/* Exposed externally for python bindings generation (SWIG) */
+/* Exposed externally for python bindings generation */
 struct dss_handle {
     void  *dh_conn;
 };

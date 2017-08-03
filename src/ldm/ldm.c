@@ -98,3 +98,11 @@ int get_fs_adapter(enum fs_type fs_type, struct fs_adapter *fsa)
     }
     return 0;
 }
+
+int ldm_dev_query(const struct dev_adapter *dev, const char *dev_path,
+                  struct ldm_dev_state *lds)
+{
+    assert(dev != NULL);
+    assert(dev->dev_query != NULL);
+    return dev->dev_query(dev_path, lds);
+}

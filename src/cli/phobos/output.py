@@ -31,7 +31,6 @@ import StringIO
 import xml.etree.ElementTree
 import xml.dom.minidom
 
-import phobos.capi.dss as cdss
 from dss import *
 
 def csv_dump(data):
@@ -93,7 +92,7 @@ def dump_object_list(objs, fmt="human", numeric=False):
         return
 
     #Build a list of dict with attributs to export/output
-    objlist = [x.todict(numeric) for x in objs]
+    objlist = [x.get_display_dict(numeric) for x in objs]
 
     #Print formatted objects
     print formatter(objlist)

@@ -25,28 +25,32 @@ Provide access to LRS functionnality with the right level (tm) of abstraction.
 
 import os
 
-from phobos.capi.const import (PHO_DEV_TAPE, PHO_DEV_DIR, PHO_FS_LTFS,
-                               PHO_FS_POSIX)
-from phobos.capi.dss import media_id, media_id_set
-from phobos.capi.lrs import lrs_format
+from ctypes import byref
+from phobos.ffi import LibPhobos, GenericError
 
-from phobos.dss import GenericError
+from phobos.capi.const import (PHO_FS_LTFS, PHO_FS_POSIX,
+                               PHO_DEV_DIR, PHO_DEV_TAPE)
+
+from phobos.types import UnionId, MediaId
 
 
-def fs_format(dss_client, medium_id, fs_type, unlock=False):
-    """Format a medium though the LRS layer."""
-    mstruct = media_id()
-    if fs_type.lower() == 'ltfs':
-        mstruct.type = PHO_DEV_TAPE
-        fs_type_enum = PHO_FS_LTFS
-    elif fs_type.lower() == 'posix':
-        mstruct.type = PHO_DEV_DIR
-        fs_type_enum = PHO_FS_POSIX
-    else:
-        raise GenericError("Unsupported operation")
-    media_id_set(mstruct, medium_id)
+class LRS(LibPhobos):
+    def fs_format(self, dss_client, medium_id, fs_type, unlock=False):
+        """Format a medium though the LRS layer."""
+        fs_type = fs_type.lower()
+        if fs_type == 'ltfs':
+            dev_type = PHO_DEV_TAPE
+            fs_type_enum = PHO_FS_LTFS
+        elif fs_type == 'posix':
+            dev_type = PHO_DEV_DIR
+            fs_type_enum = PHO_FS_POSIX
+        else:
+            raise GenericError("Unsupported operation")
 
-    res = lrs_format(dss_client.handle, mstruct, fs_type_enum, unlock)
-    if res != 0:
-        raise GenericError("Cannot format medium '%s': %s" % \
-                           (medium_id, os.strerror(abs(res))))
+        mstruct = MediaId(dev_type, UnionId(medium_id))
+
+        res = self.libphobos.lrs_format(byref(dss_client.handle),
+                                        byref(mstruct), fs_type_enum, unlock)
+        if res != 0:
+            raise GenericError("Cannot format medium '%s': %s" % \
+                               (medium_id, os.strerror(abs(res))))

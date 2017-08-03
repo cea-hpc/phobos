@@ -28,22 +28,46 @@ from ctypes import *
 
 from phobos.ffi import LibPhobos
 from phobos.capi.const import PHO_LABEL_MAX_LEN, NAME_MAX
+from phobos.capi.const import fs_type2str, fs_status2str
+from phobos.capi.const import adm_status2str, dev_family2str
+
+
+class CLIManagedResourceMixin(object):
+    """Interface for objects directly exposed/manipulated by the CLI."""
+    def get_display_fields(self):
+        """Return a dict of available fields and optional display formatters."""
+        raise NotImplementedError("Abstract method subclasses must implement.")
+
+    def get_display_dict(self, numeric=False):
+        """
+        Return a dict representing the structure as we want it to be displayed,
+        i.e.: w/ only the desired fields and w/ conversion methods applied.
+        """
+        export = {}
+        disp_fields =  self.get_display_fields()
+        for key in sorted(disp_fields.keys()):
+            if not numeric and disp_fields[key]:
+                conv = disp_fields.get(key, str)
+            else:
+                conv = str
+            export[key] = conv(getattr(self, key))
+        return export
 
 class UnionId(Union):
     """Media ID union type."""
     _fields_ = [
         ('label', c_char * PHO_LABEL_MAX_LEN),
-        ('path', c_char * NAME_MAX),
+        ('path', c_char * NAME_MAX)
     ]
 
-class Lock(Structure):
+class DSSLock(Structure):
     """Resource lock as managed by DSS."""
     _fields_ = [
         ('lock_ts', c_longlong),
         ('lock', c_char_p)
     ]
 
-class DevInfo(Structure):
+class DevInfo(Structure, CLIManagedResourceMixin):
     """DSS device descriptor."""
     _fields_ = [
         ('family', c_int),
@@ -52,8 +76,31 @@ class DevInfo(Structure):
         ('host', c_char_p),
         ('serial', c_char_p),
         ('adm_status', c_int),
-        ('lock', Lock)
+        ('lock', DSSLock)
     ]
+
+    def get_display_fields(self):
+        """Return a dict of available fields and optional display formatters."""
+        return {
+            'adm_status': adm_status2str,
+            'family': dev_family2str,
+            'host': None,
+            'model': None,
+            'path': None,
+            'serial': None,
+            'lock_status': None,
+            'lock_ts': None
+        }
+
+    @property
+    def lock_status(self):
+        """ Wrapper to get lock status"""
+        return self.lock.lock
+
+    @property
+    def lock_ts(self):
+        """ Wrapper to get lock timestamp"""
+        return self.lock.lock_ts
 
 class MediaId(Structure):
     """Generic media identifier."""
@@ -82,7 +129,7 @@ class MediaStats(Structure):
         ('last_load', c_longlong)
     ]
 
-class MediaInfo(Structure):
+class MediaInfo(Structure, CLIManagedResourceMixin):
     """DSS media descriptor."""
     _fields_ = [
         ('id', MediaId),
@@ -91,8 +138,63 @@ class MediaInfo(Structure):
         ('adm_status', c_int),
         ('fs', MediaFS),
         ('stats', MediaStats),
-        ('lock', Lock)
+        ('lock', DSSLock)
     ]
+
+    def get_display_fields(self):
+        """Return a dict of available fields and optional display formatters."""
+        return {
+            'adm_status': adm_status2str,
+            'addr_type': None,
+            'model': None,
+            'ident': None,
+            'lock_status': None,
+            'lock_ts': None
+        }
+
+    def get_display_dict(self, numeric=False):
+        """Update level0 representation with nested structures content."""
+        export = super(MediaInfo, self).get_display_dict()
+        export.update(self.expanded_fs_info)
+        export.update(self.expanded_stats)
+        return export
+
+    @property
+    def lock_status(self):
+        """Wrapper to get lock status"""
+        return self.lock.lock
+
+    @property
+    def lock_ts(self):
+        """Wrappert to get lock timestamp"""
+        return self.lock.lock_ts
+
+    @property
+    def ident(self):
+        return self.id.id_u.label
+
+    @property
+    def expanded_fs_info(self):
+        """Wrapper to get media fs info as dict"""
+        fs_info = {
+            'fs.type': fs_type2str(self.fs.type),
+            'fs.status': fs_status2str(self.fs.status),
+            'fs.label': self.fs.label
+        }
+        return fs_info
+
+    @property
+    def expanded_stats(self):
+        """Wrapper to get media stats as dict"""
+        return {
+            'stats.nb_obj': self.stats.nb_obj,
+            'stats.logc_spc_used': self.stats.logc_spc_used,
+            'stats.phys_spc_used': self.stats.phys_spc_used,
+            'stats.phys_spc_free': self.stats.phys_spc_free,
+            'stats.nb_load': self.stats.nb_load,
+            'stats.nb_errors': self.stats.nb_errors,
+            'stats.last_load': self.stats.last_load
+        }
 
 class Timeval(Structure):
     """standard struct timeval."""

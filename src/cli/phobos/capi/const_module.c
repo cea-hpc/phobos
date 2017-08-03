@@ -31,6 +31,7 @@
 #include "config.h"
 #endif
 
+#include <pho_dss.h>
 #include <pho_types.h>
 #include <pho_common.h>
 
@@ -74,6 +75,45 @@ static PyObject *py_dev_family2str(PyObject *self, PyObject *args)
     return Py_BuildValue("s", str_repr);
 }
 
+static PyObject *py_adm_status2str(PyObject *self, PyObject *args)
+{
+    enum dev_adm_status status;
+    const char *str_repr;
+
+    if (!PyArg_ParseTuple(args, "i", &status))
+        return NULL;
+
+    str_repr = adm_status2str(status);
+
+    return Py_BuildValue("s", str_repr);
+}
+
+static PyObject *py_fs_status2str(PyObject *self, PyObject *args)
+{
+    enum fs_status status;
+    const char *str_repr;
+
+    if (!PyArg_ParseTuple(args, "i", &status))
+        return NULL;
+
+    str_repr = fs_status2str(status);
+
+    return Py_BuildValue("s", str_repr);
+}
+
+static PyObject *py_fs_type2str(PyObject *self, PyObject *args)
+{
+    enum fs_type type;
+    const char *str_repr;
+
+    if (!PyArg_ParseTuple(args, "i", &type))
+        return NULL;
+
+    str_repr = fs_type2str(type);
+
+    return Py_BuildValue("s", str_repr);
+}
+
 static PyObject *py_str2fs_type(PyObject *self, PyObject *args)
 {
     const char *str_fstype;
@@ -92,9 +132,15 @@ static PyObject *py_str2fs_type(PyObject *self, PyObject *args)
  */
 static PyMethodDef ConstMethods[] = {
     {"extent_state2str", py_extent_state2str, METH_VARARGS,
-      "printable extent state name."},
+     "printable extent state name."},
     {"dev_family2str", py_dev_family2str, METH_VARARGS,
-      "printable dev family name."},
+     "printable dev family name."},
+    {"adm_status2str", py_adm_status2str, METH_VARARGS,
+     "printable fs status."},
+    {"fs_status2str", py_fs_status2str, METH_VARARGS,
+     "printable fs status."},
+    {"fs_type2str", py_fs_type2str, METH_VARARGS,
+     "printable fs type."},
     {"str2fs_type", py_str2fs_type, METH_VARARGS,
      "printable dev family name."},
     {NULL, NULL, 0, NULL}
@@ -154,6 +200,7 @@ PyMODINIT_FUNC initconst(void)
     PyModule_AddIntMacro(mod, PHO_ADDR_OPAQUE);
     PyModule_AddIntMacro(mod, PHO_ADDR_LAST);
 
+    /* enum pho_log_level */
     PyModule_AddIntMacro(mod, PHO_LOG_DISABLED);
     PyModule_AddIntMacro(mod, PHO_LOG_ERROR);
     PyModule_AddIntMacro(mod, PHO_LOG_WARN);
@@ -162,4 +209,10 @@ PyMODINIT_FUNC initconst(void)
     PyModule_AddIntMacro(mod, PHO_LOG_DEBUG);
     PyModule_AddIntMacro(mod, PHO_LOG_DEFAULT);
 
+    /* enum dss_set_action */
+    PyModule_AddIntMacro(mod, DSS_SET_INVAL);
+    PyModule_AddIntMacro(mod, DSS_SET_INSERT);
+    PyModule_AddIntMacro(mod, DSS_SET_UPDATE);
+    PyModule_AddIntMacro(mod, DSS_SET_DELETE);
+    PyModule_AddIntMacro(mod, DSS_SET_LAST);
 }

@@ -105,14 +105,8 @@ static inline int ldm_dev_lookup(const struct dev_adapter *dev,
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_dev_query(const struct dev_adapter *dev,
-                                const char *dev_path,
-                                struct ldm_dev_state *lds)
-{
-    assert(dev != NULL);
-    assert(dev->dev_query != NULL);
-    return dev->dev_query(dev_path, lds);
-}
+int ldm_dev_query(const struct dev_adapter *dev, const char *dev_path,
+                  struct ldm_dev_state *lds);
 
 /**
  * Load a device with a medium on front of it.
@@ -149,9 +143,6 @@ static inline int ldm_dev_eject(const struct dev_adapter *dev,
 }
 
 /** @}*/
-
-/* No python bindings for the following methods unless we need them. */
-#ifndef SWIG
 
 /**
  * \defgroup lib_adapter (Library Adapter API)
@@ -462,8 +453,6 @@ static inline int ldm_fs_get_label(const struct fs_adapter *fsa,
     assert(fsa->fs_get_label != NULL);
     return fsa->fs_get_label(mnt_path, fs_label, llen);
 }
-
-#endif /* ^SWIG */
 
 /** @}*/
 #endif

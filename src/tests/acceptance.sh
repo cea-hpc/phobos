@@ -214,7 +214,8 @@ function put_get_test
     rm -f $out_file
 
     local md_check=$($phobos getmd $id)
-    [ $md = $md_check ] || error "Object attributes to not match expectations"
+    [ "x$md" = "x$md_check" ] ||
+        error "Object attributes do not match expectations"
 }
 
 # make sure there are at least N available dir/drives

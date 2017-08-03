@@ -26,6 +26,7 @@ This module wraps calls from the library and expose them under an
 object-oriented API to the rest of the CLI.
 """
 
+import logging
 from ctypes import CDLL
 
 
@@ -39,3 +40,4 @@ class LibPhobos(object):
         """Get a handler over the library"""
         super(LibPhobos, self).__init__(*args, **kwargs)
         self.libphobos = CDLL(self.LIBPHOBOS_NAME)
+        self.logger = logging.getLogger(__name__)

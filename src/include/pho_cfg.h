@@ -66,7 +66,6 @@ const char *_pho_cfg_get(int first_index, int last_index, int param_index,
         _pho_cfg_get(_cfg_namespace ## _FIRST, _cfg_namespace ## _LAST, \
                 _cfg_namespace ## _ ##_name, (_params_list))
 
-# ifndef SWIG
 /**
  * Allow access to global config parameters for the current thread.
  * This can only be called after the DSS is initialized.
@@ -145,5 +144,4 @@ int _pho_cfg_get_int(int first_index, int last_index, int param_index,
         _pho_cfg_get_int(_cfg_namespace ## _FIRST, _cfg_namespace ## _LAST, \
                 _cfg_namespace ## _ ##_name, (_params_list), (_fail_val))
 
-# endif
 #endif

@@ -34,9 +34,8 @@ from socket import gethostname
 
 from phobos.cli import PhobosActionContext
 from phobos.dss import Client
-from phobos.dss import GenericError as DSSError
-
-from phobos.capi.dss import dev_info, PHO_DEV_DIR, PHO_DEV_TAPE
+from phobos.types import DevInfo
+from phobos.capi.const import PHO_DEV_DIR, PHO_DEV_TAPE
 
 def gethostname_short():
     """Return short hostname"""

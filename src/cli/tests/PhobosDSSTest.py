@@ -28,11 +28,9 @@ import os
 from random import randint
 
 from phobos.dss import Client
-from phobos.dss import GenericError as DSSError
-from phobos.dss import CliMedia, CliDevice
-
-from phobos.capi.dss import layout_info, media_info, dev_info, PHO_DEV_DIR
-from phobos.capi.dss import dev_family2str
+from phobos.ffi import GenericError
+from phobos.types import MediaInfo, DevInfo
+from phobos.capi.const import dev_family2str, PHO_DEV_DIR
 
 
 class DSSClientTest(unittest.TestCase):
@@ -52,7 +50,7 @@ class DSSClientTest(unittest.TestCase):
         environ_save = os.environ['PHOBOS_DSS_connect_string']
         os.environ['PHOBOS_DSS_connect_string'] = \
                 "dbname='tata', user='titi', password='toto'"
-        self.assertRaises(DSSError, cli.connect)
+        self.assertRaises(GenericError, cli.connect)
         os.environ['PHOBOS_DSS_connect_string'] = environ_save
 
     def test_list_devices_by_family(self):
@@ -69,15 +67,7 @@ class DSSClientTest(unittest.TestCase):
         cli = Client()
         cli.connect()
         for mda in cli.media.get():
-            self.assertTrue(isinstance(mda, CliMedia))
-        cli.disconnect()
-
-    def test_list_extents(self):
-        """List extents."""
-        cli = Client()
-        cli.connect()
-        for ext in cli.extents.get():
-            self.assertTrue(isinstance(ext, layout_info))
+            self.assertIsInstance(mda, MediaInfo)
         cli.disconnect()
 
     def test_getset(self):
@@ -85,7 +75,7 @@ class DSSClientTest(unittest.TestCase):
         cli = Client()
         cli.connect()
 
-        dev = dev_info()
+        dev = DevInfo()
         dev.family = PHO_DEV_DIR
         dev.model = ''
         dev.path = '/tmp/test_%d' % randint(0, 1000000)
@@ -97,7 +87,7 @@ class DSSClientTest(unittest.TestCase):
 
         res = cli.devices.get(serial=dev.serial)
         for devt in res:
-            self.assertTrue(isinstance(devt, CliDevice))
+            self.assertIsInstance(devt, DevInfo)
             self.assertEqual(devt.serial, dev.serial)
 
         rc = cli.devices.delete(res)

@@ -31,7 +31,6 @@
 struct dss_handle;
 struct device_descr;
 
-#ifndef SWIG
 enum lrs_operation {
     LRS_OP_NONE = 0,
     LRS_OP_READ,
@@ -86,8 +85,6 @@ static inline bool is_media_global_error(int errcode)
 {
     return errcode == -ENOSPC || errcode == -EROFS || errcode == -EDQUOT;
 }
-
-#endif /* ^SWIG */
 
 /**
  * Load and format a media to the given fs type.
