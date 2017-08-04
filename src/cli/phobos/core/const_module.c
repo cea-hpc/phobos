@@ -34,6 +34,7 @@
 #include <pho_dss.h>
 #include <pho_types.h>
 #include <pho_common.h>
+#include <phobos_store.h>
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -215,4 +216,8 @@ PyMODINIT_FUNC initconst(void)
     PyModule_AddIntMacro(mod, DSS_SET_UPDATE);
     PyModule_AddIntMacro(mod, DSS_SET_DELETE);
     PyModule_AddIntMacro(mod, DSS_SET_LAST);
+
+    /* enum pho_xfer_flags */
+    PyModule_AddIntMacro(mod, PHO_XFER_OBJ_REPLACE);
+    PyModule_AddIntMacro(mod, PHO_XFER_OBJ_GETATTR);
 }

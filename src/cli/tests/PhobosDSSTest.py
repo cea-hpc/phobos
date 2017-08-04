@@ -27,10 +27,9 @@ import os
 
 from random import randint
 
-from phobos.dss import Client
-from phobos.ffi import GenericError
-from phobos.types import MediaInfo, DevInfo
-from phobos.capi.const import dev_family2str, PHO_DEV_DIR
+from phobos.core.dss import Client
+from phobos.core.ffi import MediaInfo, DevInfo
+from phobos.core.const import dev_family2str, PHO_DEV_DIR
 
 
 class DSSClientTest(unittest.TestCase):
@@ -50,50 +49,59 @@ class DSSClientTest(unittest.TestCase):
         environ_save = os.environ['PHOBOS_DSS_connect_string']
         os.environ['PHOBOS_DSS_connect_string'] = \
                 "dbname='tata', user='titi', password='toto'"
-        self.assertRaises(GenericError, cli.connect)
+        self.assertRaises(EnvironmentError, cli.connect)
         os.environ['PHOBOS_DSS_connect_string'] = environ_save
 
     def test_list_devices_by_family(self):
         """List devices family by family."""
-        cli = Client()
-        cli.connect()
-        for fam in ('tape', 'disk', 'dir'):
-            for dev in cli.devices.get(family=fam):
-                self.assertEqual(dev_family2str(dev.family), fam)
-        cli.disconnect()
+        with Client() as client:
+            for fam in ('tape', 'disk', 'dir'):
+                for dev in client.devices.get(family=fam):
+                    self.assertEqual(dev_family2str(dev.family), fam)
 
     def test_list_media(self):
         """List media."""
-        cli = Client()
-        cli.connect()
-        for mda in cli.media.get():
-            self.assertIsInstance(mda, MediaInfo)
-        cli.disconnect()
+        with Client() as client:
+            for mda in client.media.get():
+                self.assertIsInstance(mda, MediaInfo)
 
     def test_getset(self):
         """GET / SET an object to validate the whole chain."""
-        cli = Client()
-        cli.connect()
+        with Client() as client:
+            insert_list = []
+            for i in range(10):
+                dev = DevInfo()
+                dev.family = PHO_DEV_DIR
+                dev.model = ''
+                dev.path = '/tmp/test_%d' % randint(0, 1000000)
+                dev.host = 'localhost'
+                dev.serial = '__TEST_MAGIC_%d' % randint(0, 1000000)
 
-        dev = DevInfo()
-        dev.family = PHO_DEV_DIR
-        dev.model = ''
-        dev.path = '/tmp/test_%d' % randint(0, 1000000)
-        dev.host = 'localhost'
-        dev.serial = '__TEST_MAGIC_%d' % randint(0, 1000000)
+                insert_list.append(dev)
 
-        rc = cli.devices.insert([dev])
-        self.assertEqual(rc, 0)
+            client.devices.insert(insert_list)
 
-        res = cli.devices.get(serial=dev.serial)
-        for devt in res:
-            self.assertIsInstance(devt, DevInfo)
-            self.assertEqual(devt.serial, dev.serial)
+            # now retrieve them one by one and check serials
+            for dev in insert_list:
+                res = client.devices.get(serial=dev.serial)
+                for retrieved_dev in res:
+                    self.assertIsInstance(retrieved_dev, dev.__class__)
+                    self.assertEqual(retrieved_dev.serial, dev.serial)
 
-        rc = cli.devices.delete(res)
-        self.assertEqual(rc, 0)
+            client.devices.delete(res)
 
-        cli.disconnect()
+    def test_manipulate_empty(self):
+        """SET/DEL empty and None objects."""
+        with Client() as client:
+            client.devices.insert([])
+            client.devices.insert(None)
+            client.devices.delete([])
+            client.devices.delete(None)
+
+            client.media.insert([])
+            client.media.insert(None)
+            client.media.delete([])
+            client.media.delete(None)
 
 if __name__ == '__main__':
     unittest.main()

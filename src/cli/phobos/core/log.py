@@ -24,15 +24,16 @@ Multi-layer logging system to bind phobos logging abilities to python logging
 module.
 """
 
+import os
+
 from logging import getLevelName
 from logging import CRITICAL, ERROR, WARNING, INFO, DEBUG
 
 from ctypes import CFUNCTYPE, POINTER
 
-from phobos.ffi import LibPhobos
-from phobos.types import PhoLogRec
+from phobos.core.ffi import LibPhobos, PhoLogRec
 
-from phobos.capi.const import (PHO_LOG_DISABLED, PHO_LOG_ERROR, PHO_LOG_WARN,
+from phobos.core.const import (PHO_LOG_DISABLED, PHO_LOG_ERROR, PHO_LOG_WARN,
                                PHO_LOG_INFO, PHO_LOG_VERB, PHO_LOG_DEBUG,
                                PHO_LOG_DEFAULT)
 

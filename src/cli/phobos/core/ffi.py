@@ -20,16 +20,29 @@
 #
 
 """
-Object-oriented wrappers over phobos external types, i.e. the ones shared
-between modules.
+High level interface over libphobos API.
+
+This module wraps calls from the library and expose them under an
+object-oriented API to the rest of the CLI.
 """
+
+import logging
 
 from ctypes import *
 
-from phobos.ffi import LibPhobos
-from phobos.capi.const import PHO_LABEL_MAX_LEN, NAME_MAX
-from phobos.capi.const import fs_type2str, fs_status2str
-from phobos.capi.const import adm_status2str, dev_family2str
+from phobos.core.const import PHO_LABEL_MAX_LEN, NAME_MAX
+from phobos.core.const import fs_type2str, fs_status2str
+from phobos.core.const import adm_status2str, dev_family2str
+
+
+class LibPhobos(object):
+    """Low level phobos API abstraction class to expose calls to CLI"""
+    LIBPHOBOS_NAME = "libphobos_store.so"
+    def __init__(self, *args, **kwargs):
+        """Get a handler over the library"""
+        super(LibPhobos, self).__init__(*args, **kwargs)
+        self.libphobos = CDLL(self.LIBPHOBOS_NAME)
+        self.logger = logging.getLogger(__name__)
 
 
 class CLIManagedResourceMixin(object):
@@ -44,7 +57,7 @@ class CLIManagedResourceMixin(object):
         i.e.: w/ only the desired fields and w/ conversion methods applied.
         """
         export = {}
-        disp_fields =  self.get_display_fields()
+        disp_fields = self.get_display_fields()
         for key in sorted(disp_fields.keys()):
             if not numeric and disp_fields[key]:
                 conv = disp_fields.get(key, str)
@@ -207,7 +220,7 @@ class PhoLogRec(Structure):
     """Single log record."""
     _fields_ = [
         ('plr_level', c_int),
-        ('plr_pid',  c_int),
+        ('plr_pid', c_int),
         ('plr_file', c_char_p),
         ('plr_func', c_char_p),
         ('plr_line', c_int),

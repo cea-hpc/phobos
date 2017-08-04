@@ -20,21 +20,21 @@
 #
 
 """
-Provide access to LDM functionnality with the right level (tm) of abstraction.
+Provide access to LDM functionality with the right level (tm) of abstraction.
 """
 
-import os
+import os.path
 
 from ctypes import *
 
-from phobos.ffi import LibPhobos
+from phobos.core.ffi import LibPhobos
 
 
 class DevState(Structure):
     """Device information as managed by LDM."""
     _fields_ = [
         ('lds_family', c_int),
-        ('lds_model',  c_char_p),
+        ('lds_model', c_char_p),
         ('lds_serial', c_char_p),
         ('lds_loaded', c_bool)
     ]
@@ -43,26 +43,26 @@ class DevAdapter(Structure):
     """Opaque device handle."""
     _fields_ = [
         ('dev_lookup', c_void_p),
-        ('dev_query',  c_void_p),
-        ('dev_load',   c_void_p),
-        ('dev_eject',  c_void_p)
+        ('dev_query', c_void_p),
+        ('dev_load', c_void_p),
+        ('dev_eject', c_void_p)
     ]
 
-class LDM(LibPhobos):
-    def device_query(self, dev_type, dev_path):
-        """Retrieve device information at LDM level."""
-        adapter = DevAdapter()
-        rc = self.libphobos.get_dev_adapter(dev_type, byref(adapter))
-        if rc:
-            self.logger.error("Cannot get device adapter for '%r'" % dev_type)
-            return rc, None
+def ldm_device_query(dev_type, dev_path):
+    """Retrieve device information at LDM level."""
+    adapter = DevAdapter()
+    lib = LibPhobos().libphobos
+    rc = lib.get_dev_adapter(dev_type, byref(adapter))
+    if rc:
+        raise EnvironmentError(rc,
+                               "Cannot get device adapter for '%r'" % dev_type)
 
-        real_path = os.path.realpath(dev_path)
-        state = DevState()
+    real_path = os.path.realpath(dev_path)
 
-        rc = self.libphobos.ldm_dev_query(byref(adapter), real_path, byref(state))
-        if rc:
-            self.logger.error("Cannot retrieve device state for '%r'" % dev_path)
-            return rc, None
+    state = DevState()
 
-        return 0, state
+    rc = lib.ldm_dev_query(byref(adapter), real_path, byref(state))
+    if rc:
+        raise EnvironmentError(rc, "Cannot query device '%r'" % real_path)
+
+    return state

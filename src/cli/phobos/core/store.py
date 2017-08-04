@@ -24,24 +24,14 @@ High level interface to access the object store.
 """
 
 import logging
-import os.path
-import errno
 
-from phobos.ffi import LibPhobos
 from ctypes import *
 
+from phobos.core.ffi import LibPhobos
+from phobos.core.const import PHO_XFER_OBJ_GETATTR
 
-# Enum: must be kept in sync with phobos_store.h
-PHO_XFER_REPLACE     = 1
-PHO_XFER_OBJ_GETATTR = 2
-# ---
 
 AttrsForeachCBType = CFUNCTYPE(c_int, c_char_p, c_char_p, c_void_p)
-
-def attrs_mapper(key, val, c_data):
-    data = cast(c_data, POINTER(py_object)).contents.value
-    data[key] = val
-    return 0
 
 class PhoAttrs(Structure):
     """Embedded hashtable, typically exposed as python dict here."""
@@ -49,24 +39,33 @@ class PhoAttrs(Structure):
         ('attr_set', c_void_p)
     ]
 
-def attrs_from_dict(d):
+def attrs_from_dict(dct):
     """Fill up from a python dictionary"""
     attrs = PhoAttrs()
     dl = LibPhobos()
-    for k, v in d.iteritems():
+    for k, v in dvt.iteritems():
         dl.libphobos.pho_attr_set(byref(attrs), str(k), str(v))
     return attrs
 
 def attrs_as_dict(attrs):
     """Return a python dictionary containing the attributes"""
+    def inner_attrs_mapper(key, val, c_data):
+        """
+        Not for direct use.
+        Add attribute of a PhoAttr structure into a python dict.
+        """
+        data = cast(c_data, POINTER(py_object)).contents.value
+        data[key] = val
+        return 0
     res = {}
     dl = LibPhobos()
-    cb = AttrsForeachCBType(attrs_mapper)
+    cb = AttrsForeachCBType(inner_attrs_mapper)
     c_res = cast(pointer(py_object(res)), c_void_p)
     dl.libphobos.pho_attrs_foreach(byref(attrs), cb, c_res)
     return res
 
 class XferDescriptor(Structure):
+    """phobos struct xfer_descriptor."""
     _fields_ = [
         ("xd_objid", c_char_p),
         ("xd_fpath", c_char_p),
@@ -84,17 +83,6 @@ class Store(LibPhobos):
         # called by the underlying C code, so that they do not get GC'd
         self._get_cb = None
         self._put_cb = None
-
-    def xfer_descriptor_create(self, oid, path, attrs, flags):
-        """Instanciate, initialize and return a new xfer_desc."""
-        xfer = XferDescriptor(oid, path, None, flags)
-        if attrs:
-            xfer.xd_attrs = attrs_from_dict(attrs)
-
-    def xfer_descriptor_delete(self, xd):
-        """Release memory associated to a xfer_descriptor."""
-        if xd.x_attrs:
-            self.libphobos.pho_attrs_free(byref(xd.xd_attrs))
 
     def xfer_desc_convert(self, xfer_descriptors):
         """
@@ -114,6 +102,12 @@ class Store(LibPhobos):
                 xfr[i].xd_attrs = pointer(attrs)
         return xfr
 
+    def xfer_desc_release(self, xfer):
+        """Release memory associated to xfer_descriptors."""
+        for xd in xfer:
+            if xd.xd_attrs:
+                self.libphobos.pho_attrs_free(xd.xd_attrs)
+
     def compl_cb_convert(self, compl_cb):
         """
         Internal conversion method to turn a python callable into a C
@@ -128,13 +122,17 @@ class Store(LibPhobos):
         xfer = self.xfer_desc_convert(xfer_descriptors)
         n = len(xfer_descriptors)
         self._get_cb = self.compl_cb_convert(compl_cb)
-        return self.libphobos.phobos_get(xfer, n, self._get_cb, None)
+        rc = self.libphobos.phobos_get(xfer, n, self._get_cb, None)
+        self.xfer_desc_release(xfer)
+        return rc
 
     def put(self, xfer_descriptors, compl_cb):
         xfer = self.xfer_desc_convert(xfer_descriptors)
         n = len(xfer_descriptors)
         self._put_cb = self.compl_cb_convert(compl_cb)
-        return self.libphobos.phobos_put(xfer, n, self._put_cb, None)
+        rc = self.libphobos.phobos_put(xfer, n, self._put_cb, None)
+        self.xfer_desc_release(xfer)
+        return rc
 
 class Client(object):
     """Main class: issue data transfers with the object store."""
@@ -176,12 +174,11 @@ class Client(object):
         if self.get_session:
             rc = self._store.get(self.get_session, compl_cb)
             if rc:
-                return rc
+                raise IOError(rc, "Cannot retrieve objects")
 
         if self.put_session:
             rc = self._store.put(self.put_session, compl_cb)
             if rc:
-                return rc
+                raise IOError(rc, "Cannot retrieve objects")
 
         self.clear()
-        return rc

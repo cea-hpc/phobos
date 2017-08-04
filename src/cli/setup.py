@@ -32,7 +32,7 @@ GLOBAL_LIBS = ['phobos_store']
 GLOBAL_LIBDIRS = ['../store/.libs']
 
 const_module = Extension('const',
-                         sources=['phobos/capi/const_module.c'],
+                         sources=['phobos/core/const_module.c'],
                          include_dirs=['../include',
                                        '/usr/include/glib-2.0',
                                        '/usr/lib64/glib-2.0/include'],
@@ -42,8 +42,8 @@ const_module = Extension('const',
 
 setup(
     name='phobos',
-    packages=['phobos', 'phobos.capi'],
-    ext_package='phobos.capi',
+    packages=['phobos', 'phobos.core'],
+    ext_package='phobos.core',
     ext_modules=[
         const_module,
     ],

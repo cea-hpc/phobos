@@ -32,16 +32,16 @@ from ctypes import *
 from socket import gethostname
 from abc import ABCMeta, abstractmethod, abstractproperty
 
-from phobos.capi.const import str2fs_type
-from phobos.capi.const import PHO_ADDR_HASH1
-from phobos.capi.const import PHO_MDA_ADM_ST_LOCKED, PHO_MDA_ADM_ST_UNLOCKED
-from phobos.capi.const import PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED
-from phobos.capi.const import DSS_SET_INSERT, DSS_SET_UPDATE, DSS_SET_DELETE
+from phobos.core.const import str2fs_type
+from phobos.core.const import PHO_ADDR_HASH1
+from phobos.core.const import PHO_MDA_ADM_ST_LOCKED, PHO_MDA_ADM_ST_UNLOCKED
+from phobos.core.const import PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED
+from phobos.core.const import DSS_SET_INSERT, DSS_SET_UPDATE, DSS_SET_DELETE
 
-from phobos.types import DevInfo, MediaInfo, MediaId, MediaStats, UnionId
+from phobos.core.ffi import DevInfo, MediaInfo, MediaId, MediaStats, UnionId
+from phobos.core.ffi import LibPhobos
+from phobos.core.ldm import ldm_device_query
 
-from phobos.ffi import LibPhobos, GenericError
-from phobos.ldm import LDM
 
 # Valid filter suffix and associated operators.
 FILTER_OPERATORS = (
@@ -99,10 +99,10 @@ def dss_filter(obj_type, **kwargs):
     else:
         filt_str = json.dumps({'$AND': criteria})
 
-    dl = LibPhobos()
-    rc = dl.libphobos.dss_filter_build(byref(filt), filt_str)
+    lib = LibPhobos()
+    rc = lib.libphobos.dss_filter_build(byref(filt), filt_str)
     if rc:
-        raise GenericError("Invalid filter criteria")
+        raise EnvironmentError(rc, "Invalid filter criteria")
 
     return filt
 
@@ -150,8 +150,7 @@ class BaseObjectManager(LibPhobos):
         rc = self._dss_get(byref(self.client.handle), fref, byref(res),
                            byref(res_cnt))
         if rc:
-            self.logger.error("Cannot issue get request")
-            return None
+            raise EnvironmentError(rc, "Cannot issue get request")
 
         ret_items = []
         for i in range(res_cnt.value):
@@ -160,6 +159,10 @@ class BaseObjectManager(LibPhobos):
         return ret_items
 
     def _generic_set(self, objects, opcode):
+        """Common operation to wrap dss_{device,media,...}_set()"""
+        if not objects:
+            return
+
         obj_cnt = len(objects)
         obj = (self.wrapped_class * obj_cnt)()
         for i, o in enumerate(objects):
@@ -167,22 +170,25 @@ class BaseObjectManager(LibPhobos):
 
         rc = self._dss_set(byref(self.client.handle), obj, obj_cnt, opcode)
         if rc:
-            self.logger.error("Cannot issue set request")
-            return rc
-
-        return 0
+            raise EnvironmentError(rc, "Cannot issue set request")
 
     def insert(self, objects):
         """Insert objects into DSS"""
-        return self._generic_set(objects, DSS_SET_INSERT)
+        rc = self._generic_set(objects, DSS_SET_INSERT)
+        if rc:
+            raise EnvironmentError(rc, "Cannot insert objects")
 
     def update(self, objects):
         """Update objects in DSS"""
-        return self._generic_set(objects, DSS_SET_UPDATE)
+        rc = self._generic_set(objects, DSS_SET_UPDATE)
+        if rc:
+            raise EnvironmentError(rc, "Cannot update objects")
 
     def delete(self, objects):
         """Delete objects from DSS"""
-        return self._generic_set(objects, DSS_SET_DELETE)
+        rc = self._generic_set(objects, DSS_SET_DELETE)
+        if rc:
+            raise EnvironmentError(rc, "Cannot delete objects")
 
 
 class DeviceManager(BaseObjectManager):
@@ -192,10 +198,7 @@ class DeviceManager(BaseObjectManager):
 
     def add(self, device_type, device_path, locked=True):
         """Query device and insert information into DSS."""
-        rc, state = LDM().device_query(device_type, device_path)
-        if rc:
-            return rc
-
+        state = ldm_device_query(device_type, device_path)
         host = gethostname().split('.')[0]
         if locked:
             status = PHO_DEV_ADM_ST_LOCKED
@@ -205,16 +208,12 @@ class DeviceManager(BaseObjectManager):
         dev_info = DevInfo(state.lds_family, state.lds_model, device_path,
                            host, state.lds_serial, status)
 
-        rc = self.insert([dev_info])
-        if rc != 0:
-            self.logger.error("Cannot insert dev info for '%s'" % device_path)
-            return rc
+        self.insert([dev_info])
 
         self.logger.info("Device '%s:%s' successfully added: " \
                          "model=%s serial=%s (%s)",
                          dev_info.host, device_path, dev_info.model,
                          dev_info.serial, locked and "locked" or "unlocked")
-        return 0
 
     def _dss_get(self, hdl, qry_filter, res, res_cnt):
         """Invoke device-specific DSS get method."""
@@ -243,16 +242,12 @@ class MediaManager(BaseObjectManager):
 
         media.stats = MediaStats()
 
-        rc = self.insert([media])
-        if rc != 0:
-            self.logger.error("Cannot insert media info for '%s'" % label)
-            return rc
+        self.insert([media])
 
         self.logger.debug("Media '%s' successfully added: "\
                           "model=%s fs=%s (%s)",
                           label, model, fstype,
                           locked and "locked" or "unlocked")
-        return 0
 
     def _dss_get(self, hdl, qry_filter, res, res_cnt):
         """Invoke media-specific DSS get method."""
@@ -279,15 +274,24 @@ class Client(LibPhobos):
         self.media = MediaManager(self)
         self.devices = DeviceManager(self)
 
+    def __enter__(self):
+        """Enter a runtime context"""
+        self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Exit a runtime context."""
+        pass
+
     def connect(self, **kwargs):
         """ Establish a fresh connection or renew a stalled one if needed."""
         if self.handle is not None:
             self.disconnect()
 
         self.handle = DSSHandle()
-        rcode = self.libphobos.dss_init(byref(self.handle))
-        if rcode != 0:
-            raise GenericError('DSS initialization failed')
+        rc = self.libphobos.dss_init(byref(self.handle))
+        if rc:
+            raise EnvironmentError(rc, 'DSS initialization failed')
 
     def disconnect(self):
         """Disconnect from DSS and reset handle."""

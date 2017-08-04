@@ -33,9 +33,9 @@ from random import randint
 from socket import gethostname
 
 from phobos.cli import PhobosActionContext
-from phobos.dss import Client
-from phobos.types import DevInfo
-from phobos.capi.const import PHO_DEV_DIR, PHO_DEV_TAPE
+from phobos.core.dss import Client
+from phobos.core.ffi import DevInfo
+from phobos.core.const import PHO_DEV_DIR, PHO_DEV_TAPE
 
 def gethostname_short():
     """Return short hostname"""

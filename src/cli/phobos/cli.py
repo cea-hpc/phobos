@@ -40,27 +40,21 @@ import os.path
 
 from abc import ABCMeta, abstractmethod
 
-from phobos.capi.const import dev_family2str
-from phobos.capi.const import PHO_DEV_DIR, PHO_DEV_TAPE
-from phobos.capi.const import (PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED,
+from phobos.core.const import dev_family2str
+from phobos.core.const import PHO_DEV_DIR, PHO_DEV_TAPE
+from phobos.core.const import (PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED,
                                PHO_MDA_ADM_ST_LOCKED, PHO_MDA_ADM_ST_UNLOCKED)
 
-from phobos.log import LogControl
-from phobos.log import DISABLED, WARNING, INFO, VERBOSE, DEBUG
+from phobos.core.log import LogControl
+from phobos.core.log import DISABLED, WARNING, INFO, VERBOSE, DEBUG
 
-from phobos.cfg import load_file as cfg_load_file
-from phobos.dss import Client as DSSClient
-from phobos.store import Client as XferClient
-from phobos.store import attrs_as_dict
-from phobos.lrs import LRS
-from phobos.ffi import GenericError
+from phobos.core.cfg import load_file as cfg_load_file
+from phobos.core.dss import Client as DSSClient
+from phobos.core.store import Client as XferClient, attrs_as_dict
+from phobos.core.lrs import lrs_fs_format
 from phobos.output import dump_object_list
 from ClusterShell.NodeSet import NodeSet
 
-
-def strerror(rc):
-    """Basic wrapper to convert return code into corresponding errno string."""
-    return os.strerror(abs(rc))
 
 def phobos_log_handler(log_record):
     """
@@ -73,7 +67,7 @@ def phobos_log_handler(log_record):
     # Append ': <errmsg>' to the original message if err_code was set
     if rec.plr_err != 0:
         msg += ": %s"
-        args = (strerror(rec.plr_err), )
+        args = (os.strerror(abs(rec.plr_err)), )
     else:
         args = tuple()
 
@@ -97,6 +91,9 @@ def phobos_log_handler(log_record):
     logger = logging.getLogger(__name__)
     logger.handle(record)
 
+def env_error_format(exc):
+    """Return a human readable representation of an environment exception."""
+    return "%s: %s" % (exc.strerror, os.strerror(abs(exc.errno)))
 
 def attr_convert(usr_attr):
     """Convert k/v pairs as expressed by the user into a dictionnary."""
@@ -247,9 +244,11 @@ class StoreGetMDHandler(XferOptHandler):
         oid = self.params.get('object_id')
         self.logger.debug("Retrieving attrs for 'objid:%s'", oid)
         self.client.get_register(oid, None, md_only=True)
-        rc = self.client.run(compl_cb=self._compl_notify)
-        if rc:
-            self.logger.error("Cannot GETMD for 'objid:%s'", oid)
+        try:
+            self.client.run(compl_cb=self._compl_notify)
+        except IOError as err:
+            self.logger.error("Cannot GETMD for 'objid:%s': %s",
+                              oid, env_error_format(err))
             sys.exit(os.EX_DATAERR)
 
 
@@ -271,9 +270,11 @@ class StoreGetHandler(XferOptHandler):
         dst = self.params.get('dest_file')
         self.logger.debug("Retrieving object 'objid:%s' to '%s'", oid, dst)
         self.client.get_register(oid, dst)
-        rc = self.client.run()
-        if rc:
-            self.logger.error("Cannot GET 'objid:%s' to '%s'", oid, dst)
+        try:
+            self.client.run()
+        except IOError as err:
+            self.logger.error("Cannot GET 'objid:%s' to '%s': %s",
+                              oid, dst, env_error_format(err))
             sys.exit(os.EX_DATAERR)
 
 
@@ -304,9 +305,11 @@ class StorePutHandler(XferOptHandler):
         self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
 
         self.client.put_register(oid, src, attrs=attrs)
-        rc = self.client.run()
-        if rc:
-            self.logger.error("Cannot issue PUT request")
+        try:
+            self.client.run()
+        except IOError as err:
+            self.logger.error("Cannot PUT '%s' to 'objid:%s': %s",
+                              src, oid, env_error_format(err))
             sys.exit(os.EX_DATAERR)
 
 
@@ -355,13 +358,15 @@ class StoreMPutHandler(XferOptHandler):
             self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
             self.client.put_register(oid, src, attrs=attrs)
 
-        rc = self.client.run()
-        if rc:
-            self.logger.error("Cannot issue MPUT request")
-            sys.exit(os.EX_DATAERR)
-
         if fin is not sys.stdin:
             fin.close()
+
+        try:
+            self.client.run()
+        except IOError as err:
+            self.logger.error("Cannot MPUT objects, see logs for details: %s",
+                              env_error_format(err))
+            sys.exit(os.EX_DATAERR)
 
 
 class AddOptHandler(DSSInteractHandler):
@@ -521,10 +526,11 @@ class DeviceOptHandler(BaseResourceOptHandler):
         keep_locked = not self.params.get('unlock')
 
         for path in resources:
-            rc = self.client.devices.add(self.cenum, path,
-                                         locked=keep_locked)
-            if rc:
-                self.logger.error("Cannot add device: %s", strerror(rc))
+            try:
+                self.client.devices.add(self.cenum, path, locked=keep_locked)
+            except EnvironmentError as err:
+                self.logger.error("Cannot add device: %s",
+                                  env_error_format(err))
                 sys.exit(os.EX_DATAERR)
 
         self.logger.info("Added %d device(s) successfully", len(resources))
@@ -570,17 +576,19 @@ class DeviceOptHandler(BaseResourceOptHandler):
                     continue
             device[0].adm_status = PHO_DEV_ADM_ST_LOCKED
             devices.append(device[0])
-        if len(devices) == len(serials):
-            rc = self.client.devices.update(devices)
-        else:
-            rc = errno.EPERM
-            self.logger.error("At least one device is in use, use --force")
 
-        if not rc:
-            print "%d device(s) locked" % len(devices)
-        else:
-            self.logger.error("Failed to lock one or more device(s), error: %s",
-                              strerror(rc))
+        if len(devices) != len(serials):
+            self.logger.error("At least one device is in use, use --force")
+            sys.exit(os.EX_DATAERR)
+
+        try:
+            self.client.devices.update(devices)
+        except EnvironmentError as err:
+            self.logger.error("Failed to lock device(s): %s",
+                              env_error_format(err))
+            sys.exit(os.EX_DATAERR)
+
+        self.logger.info("%d device(s) locked", len(devices))
 
     def exec_unlock(self):
         """Device unlock"""
@@ -600,17 +608,19 @@ class DeviceOptHandler(BaseResourceOptHandler):
                 self.logger.warn("Device %s is already unlocked", serial)
             device[0].adm_status = PHO_DEV_ADM_ST_UNLOCKED
             devices.append(device[0])
-        if len(devices) == len(serials):
-            rc = self.client.devices.update(devices)
-        else:
-            rc = errno.EPERM
-            self.logger.error("At least one device is in use, use --force")
 
-        if not rc:
-            print "%d device(s) unlocked" % len(devices)
-        else:
-            self.logger.error("Failed to unlock one or more device(s): %s",
-                              strerror(rc))
+        if len(devices) != len(serials):
+            self.logger.error("At least one device is in use, use --force")
+            sys.exit(os.EX_DATAERR)
+
+        try:
+            self.client.devices.update(devices)
+        except EnvironmentError as err:
+            self.logger.error("Failed to unlock device(s): %s",
+                              env_error_format(err))
+            sys.exit(os.EX_DATAERR)
+
+        self.logger.info("%d device(s) unlocked", len(devices))
 
 class MediaOptHandler(BaseResourceOptHandler):
     """Shared interface for media."""
@@ -631,10 +641,12 @@ class MediaOptHandler(BaseResourceOptHandler):
         keep_locked = not self.params.get('unlock')
 
         for med in labels:
-            rc = self.client.media.add(self.cenum, fstype, techno, med,
-                                       locked=keep_locked)
-            if rc:
-                self.logger.error("Cannot add medium %s: %s", med, strerror(rc))
+            try:
+                self.client.media.add(self.cenum, fstype, techno, med,
+                                      locked=keep_locked)
+            except EnvironmentError as err:
+                self.logger.error("Cannot add medium %s: %s", med,
+                                  env_error_format(err))
                 sys.exit(os.EX_DATAERR)
 
         self.logger.info("Added %d media successfully", len(labels))
@@ -649,10 +661,10 @@ class MediaOptHandler(BaseResourceOptHandler):
         for label in media_list:
             self.logger.debug("Formatting media '%s'", label)
             try:
-                LRS().fs_format(self.client, label, fs_type, unlock=unlock)
-            except GenericError, exc:
+                lrs_fs_format(self.client, label, fs_type, unlock=unlock)
+            except EnvironmentError as err:
                 # XXX add an option to exit on first error
-                self.logger.error("fs_format: %s", exc)
+                self.logger.error("fs_format: %s", env_error_format(err))
 
     def exec_show(self):
         """Show media details."""
@@ -692,17 +704,18 @@ class MediaOptHandler(BaseResourceOptHandler):
             media[0].adm_status = PHO_MDA_ADM_ST_LOCKED
             results.append(media[0])
 
-        if len(results) == len(uids):
-            rc = self.client.media.update(results)
-        else:
-            rc = errno.EPERM
+        if len(results) != len(uids):
             self.logger.error("At least one media is in use, use --force")
+            sys.exit(os.EX_DATAERR)
 
-        if not rc:
-            print "%d media(s) locked" % len(results)
-        else:
+        try:
+            self.client.media.update(results)
+        except EnvironmentError as err:
             self.logger.error("Failed to lock one or more media(s): %s",
-                              strerror(rc))
+                              env_error_format(err))
+            sys.exit(os.EX_DATAERR)
+
+        self.logger.info("%d media(s) locked" % len(results))
 
     def exec_unlock(self):
         """Unlock media"""
@@ -721,17 +734,19 @@ class MediaOptHandler(BaseResourceOptHandler):
             media[0].adm_status = PHO_MDA_ADM_ST_UNLOCKED
             results.append(media[0])
 
-        if len(results) == len(uids):
-            rc = self.client.media.update(results)
-        else:
-            rc = errno.EPERM
-            self.logger.error("At least one media is not locked, use --force")
+        if len(results) != len(uids):
+            self.logger.error("At least one media is in use, use --force")
+            sys.exit(os.EX_DATAERR)
 
-        if not rc:
-            print "%d media unlocked" % len(results)
-        else:
-            self.logger.error("Failed to unlock one or more media: %s",
-                              strerror(rc))
+        try:
+            self.client.media.update(results)
+        except EnvironmentError as err:
+            self.logger.error("Failed to unlock one or more media(s): %s",
+                              env_error_format(err))
+            sys.exit(os.EX_DATAERR)
+
+        self.logger.info("%d media(s) unlocked" % len(results))
+
 
 class DirOptHandler(MediaOptHandler, DeviceOptHandler):
     """Directory-related options and actions."""
@@ -751,13 +766,14 @@ class DirOptHandler(MediaOptHandler, DeviceOptHandler):
         for path in resources:
             # Remove any trailing slash
             path = path.rstrip('/')
-            rc_m = self.client.media.add(self.cenum, 'POSIX', None, path,
-                                         locked=keep_locked)
-            # Add device unlocked and rely on media locking
-            rc_d = self.client.devices.add(self.cenum, path, locked=False)
-            if rc_m or rc_d:
+            try:
+                self.client.media.add(self.cenum, 'POSIX', None, path,
+                                      locked=keep_locked)
+                # Add device unlocked and rely on media locking
+                self.client.devices.add(self.cenum, path, locked=False)
+            except EnvironmentError as err:
                 self.logger.error("Cannot add directory: %s",
-                                  strerror(rc_m or rc_d))
+                                  env_error_format(err))
                 sys.exit(os.EX_DATAERR)
 
             self.logger.debug("Added directory '%s'", path)

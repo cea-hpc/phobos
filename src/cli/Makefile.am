@@ -1,20 +1,19 @@
 AM_CFLAGS= $(CC_OPT)
 
-C_MODULES_SO=phobos/capi/const.so
+C_MODULES_SO=phobos/core/const.so
 
-EXTRA_DIST=phobos/capi/__init__.py \
-	   phobos/capi/const_module.c \
-	   phobos/__init__.py \
-	   phobos/cfg.py \
+EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli.py \
-	   phobos/dss.py \
-	   phobos/ffi.py \
-	   phobos/ldm.py \
-	   phobos/log.py \
-	   phobos/lrs.py \
 	   phobos/output.py \
-	   phobos/store.py \
-	   phobos/types.py \
+	   phobos/core/__init__.py \
+	   phobos/core/cfg.py \
+	   phobos/core/const_module.c \
+	   phobos/core/dss.py \
+	   phobos/core/ffi.py \
+	   phobos/core/ldm.py \
+	   phobos/core/log.py \
+	   phobos/core/lrs.py \
+	   phobos/core/store.py \
 	   scripts/phobos \
 	   setup.py
 

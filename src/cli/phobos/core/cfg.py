@@ -20,24 +20,15 @@
 #
 
 """
-Foreign Function Interface (FFI) over libphobos API.
-
-This module wraps calls from the library and expose them under an
-object-oriented API to the rest of the CLI.
+High level interface for managing configuration from CLI.
 """
 
-import logging
-from ctypes import CDLL
+import os
+from phobos.core.ffi import LibPhobos
 
-
-class GenericError(Exception):
-    """Base error to describe DSS failures."""
-
-class LibPhobos(object):
-    """Low level phobos API abstraction class to expose calls to CLI"""
-    LIBPHOBOS_NAME = "libphobos_store.so"
-    def __init__(self, *args, **kwargs):
-        """Get a handler over the library"""
-        super(LibPhobos, self).__init__(*args, **kwargs)
-        self.libphobos = CDLL(self.LIBPHOBOS_NAME)
-        self.logger = logging.getLogger(__name__)
+def load_file(path):
+    """Load a configuration file from path"""
+    ret = LibPhobos().libphobos.pho_cfg_init_local(path)
+    if ret != 0:
+        ret = abs(ret)
+        raise IOError(ret, path, os.strerror(ret))

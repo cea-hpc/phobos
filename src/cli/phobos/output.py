@@ -25,13 +25,12 @@ Output and formatting utilities.
 
 import logging
 import json
-import yaml
 import csv
 import StringIO
-import xml.etree.ElementTree
 import xml.dom.minidom
+import xml.etree.ElementTree
 
-from dss import *
+import yaml
 
 def csv_dump(data):
     """Convert a list of dictionaries to a csv string"""
@@ -85,14 +84,8 @@ def dump_object_list(objs, fmt="human", numeric=False):
         'human': human_dump,
     }
 
-    formatter = formats.get(fmt)
-    if formatter is None:
-        logger = logging.getLogger(__name__)
-        logger.error("Unknown output format: %s", fmt)
-        return
-
-    #Build a list of dict with attributs to export/output
+    # Build a list of dict with attributs to export/output
     objlist = [x.get_display_dict(numeric) for x in objs]
 
-    #Print formatted objects
-    print formatter(objlist)
+    # Print formatted objects
+    print formats[fmt](objlist)
