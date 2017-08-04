@@ -93,6 +93,16 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 
 %changelog
 
+* Fri Aug 04 2017 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.1-2
+- Change DB conversion script to properly convert JSON integers
+- Make DSS resilient to missing stats fields in JSONs
+- Fix default commands for ltfs mount/umount/format
+- Don't leave a drive busy when its filesystem is full
+- Fix invalid write intent size of 0
+- Set rpath to load layout modules
+- SCSI library: check target slot is empty before move
+- Make tape move resilient to invalid slot
+
 * Wed Jun 21 2017 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.1-1
 - Generic Layout management + 2 implementations: 'simple' and 'raid1'.
 - Configuration changes. See installed template (see /etc/phobos.conf.rpmnew).
