@@ -59,7 +59,10 @@ function tape_setup
     [ "$CLEAN_ALL" -eq "0" ] && return 0
 
     # make sure no LTFS filesystem is mounted, so we can unmount it
-    service ltfs stop || true
+    systemctl stop ltfs || true
+    # make systemctl actually perform "stop" the next time it is done
+    systemctl start ltfs || true
+
     #  make sure all drives are empty
     empty_drives
 
