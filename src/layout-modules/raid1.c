@@ -62,7 +62,6 @@ const struct pho_config_item cfg_lyt_raid1[] = {
 struct raid1_ctx {
     int                  itemcnt;         /**< Number of processed items */
     int                  replicas;        /**< Number of replicas */
-    int                  retcode;         /**< For passing values to cb */
     size_t               intent_size;     /**< Size of each copy  */
     GHashTable          *intent_copies;   /**< Map <oid:intents>  */
     struct lrs_intent    intents[0];      /**< Reference intents  */
@@ -98,7 +97,7 @@ static struct raid1_ctx *raid1_ctx_new(struct layout_module *self,
     return ctx;
 }
 
-static void free_extent_copies(void *key, void *val, void *udata)
+static void extent_free_cb(void *key, void *val, void *udata)
 {
     struct layout_info *layout = val;
 
@@ -110,8 +109,13 @@ static void free_extent_copies(void *key, void *val, void *udata)
 static void raid1_ctx_del(struct layout_composer *comp)
 {
     struct raid1_ctx   *ctx = comp->lc_private;
+    int                 itr = comp->lc_action == LA_ENCODE ? ctx->replicas : 1;
+    int                 i;
 
-    g_hash_table_foreach(comp->lc_layouts, free_extent_copies, NULL);
+    for (i = 0; i < itr; i++)
+        lrs_resource_release(&ctx->intents[i]);
+
+    g_hash_table_foreach(comp->lc_layouts, extent_free_cb, NULL);
     g_hash_table_destroy(ctx->intent_copies);
     free(ctx);
 }
@@ -235,13 +239,11 @@ static int raid1_compose_enc(struct layout_module *self,
     }
 
     /* Assign the reserved extents to the registered layouts */
-    rc = pho_ht_foreach(comp->lc_layouts, layout_assign_extent_cb, ctx);
+    return pho_ht_foreach(comp->lc_layouts, layout_assign_extent_cb, ctx);
 
 err_int_free:
-    if (rc) {
-        for (i = 0; i < expressed_intents; i++)
-            lrs_done(&ctx->intents[i], 0, rc);
-    }
+    for (i = 0; i < expressed_intents; i++)
+        lrs_resource_release(&ctx->intents[i]);
 
     return rc;
 }
@@ -321,43 +323,26 @@ static int raid1_decode(struct layout_module *self,
     return rc;
 }
 
-static int raid1_commit_enc(struct layout_module *self,
-                            struct layout_composer *comp, int err_code)
+static int raid1_commit(struct layout_module *self,
+                        struct layout_composer *comp, int err_code)
 {
     struct raid1_ctx    *ctx = comp->lc_private;
     int                  i;
     int                  rc = 0;
 
-    for (i = 0; i < ctx->replicas; i++) {
-        int tmp;
+    if (comp->lc_action == LA_DECODE)
+        return 0;
 
-        tmp = lrs_done(&ctx->intents[i], ctx->itemcnt, err_code);
-        if (tmp && !rc)
-            rc = tmp;
+    for (i = 0; i < ctx->replicas; i++) {
+        struct lrs_intent   *intent = &ctx->intents[i];
+        int                  rc2;
+
+        rc2 = lrs_io_complete(intent, ctx->itemcnt, err_code);
+        if (rc2 && !rc)
+            rc = rc2;
     }
 
     return rc;
-}
-
-static void commit_intent_cb(void *key, void *val, void *udata)
-{
-    struct lrs_intent   *intent = val;
-    struct raid1_ctx    *ctx    = udata;
-    int                  rc;
-
-    rc = lrs_done(intent, 1, ctx->retcode);
-    if (rc && !ctx->retcode)
-        ctx->retcode = rc;
-}
-
-static int raid1_commit_dec(struct layout_module *self,
-                            struct layout_composer *comp, int err_code)
-{
-    struct raid1_ctx    *ctx = comp->lc_private;
-
-    ctx->retcode = err_code;
-    g_hash_table_foreach(ctx->intent_copies, commit_intent_cb, ctx);
-    return ctx->retcode;
 }
 
 
@@ -365,12 +350,12 @@ static const struct layout_operations ReplicationOps[] = {
     [LA_ENCODE] = {
         .lmo_compose   = raid1_compose_enc,
         .lmo_io_submit = raid1_encode,
-        .lmo_io_commit = raid1_commit_enc,
+        .lmo_io_commit = raid1_commit,
     },
     [LA_DECODE] = {
         .lmo_compose   = raid1_compose_dec,
         .lmo_io_submit = raid1_decode,
-        .lmo_io_commit = raid1_commit_dec,
+        .lmo_io_commit = raid1_commit,
     },
 };
 

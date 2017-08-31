@@ -29,9 +29,9 @@ PHO_PYTHON_PATH=../build/lib.linux-$ARCH-$PY_VERSION/
 
 # toplevel phobos library
 PHO_STORELIB_PATH=../../store/.libs/
+PHO_LAYOUTLIB_PATH=../../layout-modules/.libs/
 
-
-export LD_LIBRARY_PATH=$PHO_STORELIB_PATH:$PHO_PYTHON_PATH
+export LD_LIBRARY_PATH=$PHO_STORELIB_PATH:$PHO_PYTHON_PATH:$PHO_LAYOUTLIB_PATH
 export PYTHONPATH="$PHO_PYTHON_PATH"
 
 cur_dir=$(dirname $(readlink -m $0))

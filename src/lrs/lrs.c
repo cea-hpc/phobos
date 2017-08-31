@@ -1430,8 +1430,6 @@ int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent)
     ENTRY;
 
 retry:
-    intent->li_operation = LRS_OP_WRITE;
-
     rc = lrs_get_write_res(dss, size, &dev);
     if (rc != 0)
         return rc;
@@ -1495,8 +1493,6 @@ int lrs_read_prepare(struct dss_handle *dss, struct lrs_intent *intent)
     int                  rc = 0;
     ENTRY;
 
-    intent->li_operation = LRS_OP_READ;
-
     rc = lrs_load_dev_state(dss);
     if (rc != 0)
         return rc;
@@ -1523,8 +1519,7 @@ int lrs_read_prepare(struct dss_handle *dss, struct lrs_intent *intent)
     return 0;
 }
 
-static int lrs_media_update(struct lrs_intent *intent, int fragments,
-                            bool mark_full)
+static int lrs_media_update(struct lrs_intent *intent, int fragments, bool err)
 {
     struct dss_handle   *dss = intent->li_dss;
     struct media_info   *media = intent->li_device->dss_media_info;
@@ -1552,8 +1547,10 @@ static int lrs_media_update(struct lrs_intent *intent, int fragments,
     if (media->fs.status == PHO_FS_STATUS_EMPTY)
         media->fs.status = PHO_FS_STATUS_USED;
 
-    if (mark_full || media->stats.phys_spc_free == 0)
+    if (err || media->stats.phys_spc_free == 0)
         media->fs.status = PHO_FS_STATUS_FULL;
+
+    /* TODO update nb_load, nb_errors, last_load */
 
     rc = dss_media_set(dss, media, 1, DSS_SET_UPDATE);
     if (rc)
@@ -1562,52 +1559,42 @@ static int lrs_media_update(struct lrs_intent *intent, int fragments,
     return 0;
 }
 
-int lrs_done(struct lrs_intent *intent, int fragments, int err_code)
+int lrs_io_complete(struct lrs_intent *intent, int fragments, int err_code)
 {
     struct pho_ext_loc  *loc = &intent->li_location;
     struct io_adapter    ioa;
-    bool                 is_full = is_media_global_error(err_code);
-    int                  rc = 0;
-    int                  rc2;
+    bool                 is_full = false;
+    int                  rc;
     ENTRY;
 
-    if (intent->li_operation != LRS_OP_WRITE)
-        goto out_free;
+    rc = get_io_adapter(loc->extent.fs_type, &ioa);
+    if (rc)
+        LOG_RETURN(rc, "No suitable I/O adapter for filesystem type: '%s'",
+                   fs_type2str(loc->extent.fs_type));
 
-    /* At least one slice succeeded: sync data */
-    if (fragments > 0) {
-        rc = get_io_adapter(intent->li_location.extent.fs_type, &ioa);
-        if (rc != 0)
-            LOG_GOTO(out_free, rc,
-                     "No suitable I/O adapter for filesystem type '%s'",
-                     fs_type2str(loc->extent.fs_type));
+    /* Come on, this same IOA has just been used to perform the data transfer */
+    assert(io_adapter_is_valid(&ioa));
 
-        /* The same IOA has been used to perform the actual data transfer */
-        assert(io_adapter_is_valid(&ioa));
+    rc = ioa_flush(&ioa, loc);
+    if (rc)
+        LOG_RETURN(rc, "Cannot flush media at: %s", loc->root_path);
 
-        rc = ioa_flush(&ioa, &intent->li_location);
-        if (rc) {
-            pho_error(rc, "Cannot flush media at: %s", loc->root_path);
-            if (is_media_global_error(rc))
-                is_full = true;
+    if (is_media_global_error(err_code) || is_media_global_error(rc))
+        is_full = true;
 
-            if (is_full)
-                /* err_code or rc from ioa_flush is global */
-                goto out_update;
-            else
-                /* other, non-global error */
-                goto out_free;
-        }
-    }
+    rc = lrs_media_update(intent, fragments, is_full);
+    if (rc)
+        LOG_RETURN(rc, "Cannot update media information");
 
-out_update:
-    rc2 = lrs_media_update(intent, fragments, is_full);
-    if (rc2 && !rc)
-        rc = rc2;
+    return 0;
+}
 
-out_free:
+int lrs_resource_release(struct lrs_intent *intent)
+{
+    ENTRY;
+
     lrs_dev_release(intent->li_dss, intent->li_device);
     lrs_media_release(intent->li_dss, intent->li_device->dss_media_info);
     free(intent->li_location.root_path);
-    return rc;
+    return 0;
 }

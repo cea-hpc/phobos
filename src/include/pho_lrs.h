@@ -41,7 +41,6 @@ enum lrs_operation {
 struct lrs_intent {
     struct dss_handle   *li_dss;
     struct dev_descr    *li_device;
-    enum lrs_operation   li_operation;
     struct pho_ext_loc   li_location;
 };
 
@@ -68,13 +67,22 @@ int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent);
 int lrs_read_prepare(struct dss_handle *dss, struct lrs_intent *intent);
 
 /**
- * Declare the current operation (read/write) as finished and flush data.
- * @param(in) intent    the intent descriptor filled by lrs_intent_{read,write}.
- * @param(in) fragments the number of successfully written fragments.
- * @param(in) err_code  status of the copy (errno value).
+ * Notify LRS of the completion of a write, let it flush data and update media
+ * statistics.
+ *
+ * @param(in)   intent     The intent descriptor of the completed I/O.
+ * @param(in)   fragments  The number of successfully written fragments.
+ * @param(in)   err_code   An optional error code to interpret failures.
+ * @return 0 on success, -1 * posix error code on failure.
+ */
+int lrs_io_complete(struct lrs_intent *intent, int fragments, int err_code);
+
+/**
+ * Release resources allocated by a lrs_{r/w}_prepare() call.
+ * @param(in)   intent  the intent descriptor filled by lrs_{r,w}_prepare.
  * @return 0 on success, -1 * posix error code on failure
  */
-int lrs_done(struct lrs_intent *intent, int fragments, int err_code);
+int lrs_resource_release(struct lrs_intent *intent);
 
 /**
  * Identify medium-global error codes.

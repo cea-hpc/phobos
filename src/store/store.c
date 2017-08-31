@@ -701,9 +701,9 @@ int phobos_put(const struct pho_xfer_desc *desc, size_t n,
         LOG_GOTO(out_finalize, rc, "All slices failed");
 
 out_finalize:
-    layout_fini(&mput->comp);
-
     mput_slices_cleanup(mput, rc);
+
+    layout_fini(&mput->comp);
 
     rc2 = xfer_notify_all(cb, udata, mput);
     if (rc == 0)

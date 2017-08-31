@@ -63,7 +63,19 @@ static struct simple_ctx *simple_ctx_new(struct layout_module *self,
 
 static void simple_ctx_del(struct layout_composer *comp)
 {
-    struct simple_ctx   *ctx = comp->lc_private;
+    struct simple_ctx       *ctx = comp->lc_private;
+
+    if (comp->lc_action == LA_DECODE) {
+        GHashTableIter  itr;
+        gpointer        key;
+        gpointer        val;
+
+        g_hash_table_iter_init(&itr, ctx->sc_copy_intents);
+        while (g_hash_table_iter_next(&itr, &key, &val))
+            lrs_resource_release(val);
+    } else {
+        lrs_resource_release(&ctx->sc_main_intent);
+    }
 
     g_hash_table_destroy(ctx->sc_copy_intents);
     free(ctx);
@@ -215,30 +227,16 @@ static int simple_decode(struct layout_module *self,
     return 0;
 }
 
-static int simple_commit_enc(struct layout_module *self,
-                             struct layout_composer *comp, int err_code)
+static int simple_commit(struct layout_module *self,
+                         struct layout_composer *comp, int err_code)
 {
     struct simple_ctx   *ctx = comp->lc_private;
     struct lrs_intent   *intent = &ctx->sc_main_intent;
 
-    return lrs_done(intent, ctx->sc_itemcnt, err_code);
-}
+    if (comp->lc_action == LA_DECODE)
+        return 0;
 
-static int commit_intent_cb(const void *key, void *val, void *udata)
-{
-    struct lrs_intent   *intent = val;
-    struct simple_ctx   *ctx    = udata;
-
-    return lrs_done(intent, 1, ctx->sc_retcode);
-}
-
-static int simple_commit_dec(struct layout_module *self,
-                             struct layout_composer *comp, int err_code)
-{
-    struct simple_ctx   *ctx = comp->lc_private;
-
-    ctx->sc_retcode = err_code;
-    return pho_ht_foreach(ctx->sc_copy_intents, commit_intent_cb, ctx);
+    return lrs_io_complete(intent, ctx->sc_itemcnt, err_code);
 }
 
 
@@ -246,12 +244,12 @@ static const struct layout_operations SimpleOps[] = {
     [LA_ENCODE] = {
         .lmo_compose   = simple_compose_enc,
         .lmo_io_submit = simple_encode,
-        .lmo_io_commit = simple_commit_enc,
+        .lmo_io_commit = simple_commit,
     },
     [LA_DECODE] = {
         .lmo_compose   = simple_compose_dec,
         .lmo_io_submit = simple_decode,
-        .lmo_io_commit = simple_commit_dec,
+        .lmo_io_commit = simple_commit,
     },
 };
 
