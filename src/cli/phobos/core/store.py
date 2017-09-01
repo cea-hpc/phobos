@@ -27,7 +27,7 @@ import logging
 
 from ctypes import *
 
-from phobos.core.ffi import LibPhobos
+from phobos.core.ffi import LIBPHOBOS
 from phobos.core.const import PHO_XFER_OBJ_GETATTR
 
 
@@ -42,9 +42,8 @@ class PhoAttrs(Structure):
 def attrs_from_dict(dct):
     """Fill up from a python dictionary"""
     attrs = PhoAttrs()
-    dl = LibPhobos()
     for k, v in dvt.iteritems():
-        dl.libphobos.pho_attr_set(byref(attrs), str(k), str(v))
+        LIBPHOBOS.pho_attr_set(byref(attrs), str(k), str(v))
     return attrs
 
 def attrs_as_dict(attrs):
@@ -58,10 +57,9 @@ def attrs_as_dict(attrs):
         data[key] = val
         return 0
     res = {}
-    dl = LibPhobos()
     cb = AttrsForeachCBType(inner_attrs_mapper)
     c_res = cast(pointer(py_object(res)), c_void_p)
-    dl.libphobos.pho_attrs_foreach(byref(attrs), cb, c_res)
+    LIBPHOBOS.pho_attrs_foreach(byref(attrs), cb, c_res)
     return res
 
 class XferDescriptor(Structure):
@@ -75,7 +73,7 @@ class XferDescriptor(Structure):
 
 XferCompletionCBType = CFUNCTYPE(None, c_void_p, POINTER(XferDescriptor), c_int)
 
-class Store(LibPhobos):
+class Store(object):
     def __init__(self, *args, **kwargs):
         """Initialize new instance."""
         super(Store, self).__init__(*args, **kwargs)
@@ -98,7 +96,7 @@ class Store(LibPhobos):
             if x[2]:
                 attrs = PhoAttrs()
                 for k, v in x[2].iteritems():
-                    self.libphobos.pho_attr_set(byref(attrs), str(k), str(v))
+                    LIBPHOBOS.pho_attr_set(byref(attrs), str(k), str(v))
                 xfr[i].xd_attrs = pointer(attrs)
         return xfr
 
@@ -106,7 +104,7 @@ class Store(LibPhobos):
         """Release memory associated to xfer_descriptors."""
         for xd in xfer:
             if xd.xd_attrs:
-                self.libphobos.pho_attrs_free(xd.xd_attrs)
+                LIBPHOBOS.pho_attrs_free(xd.xd_attrs)
 
     def compl_cb_convert(self, compl_cb):
         """
@@ -122,7 +120,7 @@ class Store(LibPhobos):
         xfer = self.xfer_desc_convert(xfer_descriptors)
         n = len(xfer_descriptors)
         self._get_cb = self.compl_cb_convert(compl_cb)
-        rc = self.libphobos.phobos_get(xfer, n, self._get_cb, None)
+        rc = LIBPHOBOS.phobos_get(xfer, n, self._get_cb, None)
         self.xfer_desc_release(xfer)
         return rc
 
@@ -130,7 +128,7 @@ class Store(LibPhobos):
         xfer = self.xfer_desc_convert(xfer_descriptors)
         n = len(xfer_descriptors)
         self._put_cb = self.compl_cb_convert(compl_cb)
-        rc = self.libphobos.phobos_put(xfer, n, self._put_cb, None)
+        rc = LIBPHOBOS.phobos_put(xfer, n, self._put_cb, None)
         self.xfer_desc_release(xfer)
         return rc
 

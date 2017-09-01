@@ -34,16 +34,8 @@ from phobos.core.const import PHO_LABEL_MAX_LEN, NAME_MAX
 from phobos.core.const import fs_type2str, fs_status2str
 from phobos.core.const import adm_status2str, dev_family2str
 
-
-class LibPhobos(object):
-    """Low level phobos API abstraction class to expose calls to CLI"""
-    LIBPHOBOS_NAME = "libphobos_store.so"
-    def __init__(self, *args, **kwargs):
-        """Get a handler over the library"""
-        super(LibPhobos, self).__init__(*args, **kwargs)
-        self.libphobos = CDLL(self.LIBPHOBOS_NAME)
-        self.logger = logging.getLogger(__name__)
-
+LIBPHOBOS_NAME = "libphobos_store.so"
+LIBPHOBOS = CDLL(LIBPHOBOS_NAME)
 
 class CLIManagedResourceMixin(object):
     """Interface for objects directly exposed/manipulated by the CLI."""

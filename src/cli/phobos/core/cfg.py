@@ -24,11 +24,11 @@ High level interface for managing configuration from CLI.
 """
 
 import os
-from phobos.core.ffi import LibPhobos
+from phobos.core.ffi import LIBPHOBOS
 
 def load_file(path):
     """Load a configuration file from path"""
-    ret = LibPhobos().libphobos.pho_cfg_init_local(path)
+    ret = LIBPHOBOS.pho_cfg_init_local(path)
     if ret != 0:
         ret = abs(ret)
         raise IOError(ret, path, os.strerror(ret))

@@ -31,7 +31,7 @@ from logging import CRITICAL, ERROR, WARNING, INFO, DEBUG
 
 from ctypes import CFUNCTYPE, POINTER
 
-from phobos.core.ffi import LibPhobos, PhoLogRec
+from phobos.core.ffi import LIBPHOBOS, PhoLogRec
 
 from phobos.core.const import (PHO_LOG_DISABLED, PHO_LOG_ERROR, PHO_LOG_WARN,
                                PHO_LOG_INFO, PHO_LOG_VERB, PHO_LOG_DEBUG,
@@ -42,7 +42,7 @@ DISABLED = CRITICAL + 10
 VERBOSE = (INFO + DEBUG) / 2
 
 
-class LogControl(LibPhobos):
+class LogControl(object):
     """Log controlling class. Wraps phobos low-level logging API."""
     # Log handling callback type for use w/ python callables
     LogCBType = CFUNCTYPE(None, POINTER(PhoLogRec))
@@ -59,13 +59,13 @@ class LogControl(LibPhobos):
         else:
             set_cb = self.LogCBType(callback)
 
-        self.libphobos.pho_log_callback_set(set_cb)
+        LIBPHOBOS.pho_log_callback_set(set_cb)
 
         self._cb_ref = set_cb
 
     def set_level(self, lvl):
         """Set the library logging level."""
-        self.libphobos.pho_log_level_set(self.level_py2pho(lvl))
+        LIBPHOBOS.pho_log_level_set(self.level_py2pho(lvl))
 
     @staticmethod
     def level_pho2py(py_level):

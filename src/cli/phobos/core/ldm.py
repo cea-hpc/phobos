@@ -27,7 +27,7 @@ import os.path
 
 from ctypes import *
 
-from phobos.core.ffi import LibPhobos
+from phobos.core.ffi import LIBPHOBOS
 
 
 class DevState(Structure):
@@ -51,8 +51,7 @@ class DevAdapter(Structure):
 def ldm_device_query(dev_type, dev_path):
     """Retrieve device information at LDM level."""
     adapter = DevAdapter()
-    lib = LibPhobos().libphobos
-    rc = lib.get_dev_adapter(dev_type, byref(adapter))
+    rc = LIBPHOBOS.get_dev_adapter(dev_type, byref(adapter))
     if rc:
         raise EnvironmentError(rc,
                                "Cannot get device adapter for '%r'" % dev_type)
@@ -61,7 +60,7 @@ def ldm_device_query(dev_type, dev_path):
 
     state = DevState()
 
-    rc = lib.ldm_dev_query(byref(adapter), real_path, byref(state))
+    rc = LIBPHOBOS.ldm_dev_query(byref(adapter), real_path, byref(state))
     if rc:
         raise EnvironmentError(rc, "Cannot query device '%r'" % real_path)
 

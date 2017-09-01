@@ -27,7 +27,7 @@ import errno
 
 from ctypes import byref
 
-from phobos.core.ffi import LibPhobos, UnionId, MediaId
+from phobos.core.ffi import LIBPHOBOS, UnionId, MediaId
 from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX,
                                PHO_DEV_DIR, PHO_DEV_TAPE)
 
@@ -47,7 +47,7 @@ def lrs_fs_format(dss, medium_id, fs_type, unlock=False):
 
     mstruct = MediaId(dev_type, UnionId(medium_id))
 
-    lib = LibPhobos().libphobos
-    rc = lib.lrs_format(byref(dss.handle), byref(mstruct), fs_type_enum, unlock)
-    if rc != 0:
+    rc = LIBPHOBOS.lrs_format(byref(dss.handle), byref(mstruct), fs_type_enum,
+                        unlock)
+    if rc:
         raise EnvironmentError(rc, "Cannot format medium '%s'" % medium_id)

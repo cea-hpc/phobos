@@ -39,7 +39,7 @@ from phobos.core.const import PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED
 from phobos.core.const import DSS_SET_INSERT, DSS_SET_UPDATE, DSS_SET_DELETE
 
 from phobos.core.ffi import DevInfo, MediaInfo, MediaId, MediaStats, UnionId
-from phobos.core.ffi import LibPhobos
+from phobos.core.ffi import LIBPHOBOS
 from phobos.core.ldm import ldm_device_query
 
 
@@ -99,14 +99,13 @@ def dss_filter(obj_type, **kwargs):
     else:
         filt_str = json.dumps({'$AND': criteria})
 
-    lib = LibPhobos()
-    rc = lib.libphobos.dss_filter_build(byref(filt), filt_str)
+    rc = LIBPHOBOS.dss_filter_build(byref(filt), filt_str)
     if rc:
         raise EnvironmentError(rc, "Invalid filter criteria")
 
     return filt
 
-class BaseObjectManager(LibPhobos):
+class BaseObjectManager(object):
     """Proxy to manipulate (CRUD) objects in DSS."""
     __metaclass__ = ABCMeta
 
@@ -217,11 +216,11 @@ class DeviceManager(BaseObjectManager):
 
     def _dss_get(self, hdl, qry_filter, res, res_cnt):
         """Invoke device-specific DSS get method."""
-        return self.libphobos.dss_device_get(hdl, qry_filter, res, res_cnt)
+        return LIBPHOBOS.dss_device_get(hdl, qry_filter, res, res_cnt)
 
     def _dss_set(self, hdl, obj, obj_cnt, opcode):
         """Invoke device-specific DSS set method."""
-        return self.libphobos.dss_device_set(hdl, obj, obj_cnt, opcode)
+        return LIBPHOBOS.dss_device_set(hdl, obj, obj_cnt, opcode)
 
 class MediaManager(BaseObjectManager):
     """Proxy to manipulate media."""
@@ -251,11 +250,11 @@ class MediaManager(BaseObjectManager):
 
     def _dss_get(self, hdl, qry_filter, res, res_cnt):
         """Invoke media-specific DSS get method."""
-        return self.libphobos.dss_media_get(hdl, qry_filter, res, res_cnt)
+        return LIBPHOBOS.dss_media_get(hdl, qry_filter, res, res_cnt)
 
     def _dss_set(self, hdl, obj, obj_cnt, opcode):
         """Invoke media-specific DSS set method."""
-        return self.libphobos.dss_media_set(hdl, obj, obj_cnt, opcode)
+        return LIBPHOBOS.dss_media_set(hdl, obj, obj_cnt, opcode)
 
 class DSSHandle(Structure):
     """
@@ -265,7 +264,7 @@ class DSSHandle(Structure):
         ('dh_conn', c_void_p)
     ]
 
-class Client(LibPhobos):
+class Client(object):
     """High-level, object-oriented, double-keyworded DSS wrappers for the CLI"""
     def __init__(self, *args, **kwargs):
         """Initialize a new DSS context."""
@@ -281,7 +280,7 @@ class Client(LibPhobos):
 
     def __exit__(self, exc_type, exc_value, traceback):
         """Exit a runtime context."""
-        pass
+        self.disconnect()
 
     def connect(self, **kwargs):
         """ Establish a fresh connection or renew a stalled one if needed."""
@@ -289,12 +288,13 @@ class Client(LibPhobos):
             self.disconnect()
 
         self.handle = DSSHandle()
-        rc = self.libphobos.dss_init(byref(self.handle))
+
+        rc = LIBPHOBOS.dss_init(byref(self.handle))
         if rc:
             raise EnvironmentError(rc, 'DSS initialization failed')
 
     def disconnect(self):
         """Disconnect from DSS and reset handle."""
         if self.handle is not None:
-            self.libphobos.dss_fini(byref(self.handle))
+            LIBPHOBOS.dss_fini(byref(self.handle))
             self.handle = None
