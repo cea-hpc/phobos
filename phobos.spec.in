@@ -1,11 +1,11 @@
-Name:		@PACKAGE@
-Version:	@VERSION@
-Release:	@RELEASE@%{?dist}
-Summary:	Parallel Heterogeneous OBject-Oriented Storage
+Name:    @PACKAGE@
+Version: @VERSION@
+Release: @RELEASE@%{?dist}
+Summary: Parallel Heterogeneous OBject-Oriented Storage
 
-Group:		Applications/System
-License: 	LGPLv2.1
-URL:		http://www-hpc.cea.fr
+Group:   Applications/System
+License: LGPLv2.1
+URL:     http://www-hpc.cea.fr
 Source0: %{name}-%{version}.tar.gz
 
 %define phobosdocdir %{_docdir}/%{name}
@@ -20,7 +20,8 @@ BuildRequires: openssl-devel
 BuildRequires: libattr-devel
 BuildRequires: sg3_utils-devel
 
-Requires: postgresql94-server, postgresql94-contrib
+Requires: postgresql94-server
+Requires: postgresql94-contrib
 Requires: glib2 >= 2.28
 Requires: jansson
 Requires: libini_config
@@ -91,7 +92,6 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_store.la
 
 %changelog
-
 * Fri Aug 04 2017 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.1-2
 - Change DB conversion script to properly convert JSON integers
 - Make DSS resilient to missing stats fields in JSONs
