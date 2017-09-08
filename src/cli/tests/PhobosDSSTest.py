@@ -63,7 +63,8 @@ class DSSClientTest(unittest.TestCase):
         """List media."""
         with Client() as client:
             for mda in client.media.get():
-                self.assertIsInstance(mda, MediaInfo)
+                # replace with assertIsInstance when we drop pre-2.7 support
+                self.assertTrue(isinstance(mda, MediaInfo))
 
     def test_getset(self):
         """GET / SET an object to validate the whole chain."""
@@ -85,7 +86,8 @@ class DSSClientTest(unittest.TestCase):
             for dev in insert_list:
                 res = client.devices.get(serial=dev.serial)
                 for retrieved_dev in res:
-                    self.assertIsInstance(retrieved_dev, dev.__class__)
+                    # replace with assertIsInstance when we drop pre-2.7 support
+                    self.assertTrue(isinstance(retrieved_dev, dev.__class__))
                     self.assertEqual(retrieved_dev.serial, dev.serial)
 
             client.devices.delete(res)
