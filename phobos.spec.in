@@ -91,6 +91,12 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_store.la
 
 %changelog
+* Fri Sep 08 2017 - Henri Doreau <henri.doreau@cea.fr> - 1.1-3
+- Propery set LGPL headers to the project files
+- Reimplement CLI using ctypes instead of SWIG
+- Fix a bug where errors on flush would trigger an assertion failure
+- Misc packaging improvements to meet ocean quality standards
+
 * Fri Aug 04 2017 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.1-2
 - Change DB conversion script to properly convert JSON integers
 - Make DSS resilient to missing stats fields in JSONs
