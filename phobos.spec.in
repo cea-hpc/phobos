@@ -71,7 +71,7 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 
 %files
 
-%{_libdir}/libphobos_store.so.*
+%{_libdir}/libphobos_store.so*
 %{_libdir}/phobos/libpho_layout_*.so*
 %{_sbindir}/pho_*_helper
 %{_sbindir}/pho_convert_*
@@ -88,7 +88,6 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 
 %{_includedir}/pho_attrs.h
 %{_includedir}/phobos_store.h
-%{_libdir}/libphobos_store.so
 %{_libdir}/libphobos_store.la
 
 %changelog
