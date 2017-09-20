@@ -192,7 +192,7 @@ static int mput_slices_progress(struct mput_desc *mput, enum mput_step barrier)
 
             rc = mput_state_machine_ops[step](mput, slice);
             if (rc != 0) {
-                pho_warn("Failing slice '%s'", slice->xfer->xd_objid);
+                pho_warn("Failing slice objid:'%s'", slice->xfer->xd_objid);
                 slice->rc = rc;
             } else {
                 slice->step = step;
@@ -230,7 +230,7 @@ static void fail_all_slices(struct mput_desc *mput, int err)
 
         if (slice->rc == 0) {
             slice->rc = err;
-            pho_debug("Marking slice '%s' as failed with error %d (%s)",
+            pho_debug("Marking slice objid:'%s' as failed with error %d (%s)",
                       slice->xfer->xd_objid, err, strerror(-err));
         }
     }
@@ -309,12 +309,12 @@ int _obj_put_start_cb(struct mput_desc *mput, struct mput_slice *slice)
     action = (slice->xfer->xd_flags & PHO_XFER_OBJ_REPLACE) ? DSS_SET_UPDATE
                                                             : DSS_SET_INSERT;
 
-    pho_debug("Storing object %s (transient) with attributes: %s",
+    pho_debug("Storing object objid:'%s' (transient) with attributes: %s",
               slice->xfer->xd_objid, md_repr->str);
 
     rc = dss_object_set(&mput->dss, &obj, 1, action);
     if (rc)
-        LOG_GOTO(out_free, rc, "dss_object_set failed");
+        LOG_GOTO(out_free, rc, "dss_object_set failed for objid:'%s'", obj.oid);
 
 out_free:
     g_string_free(md_repr, true);
@@ -337,7 +337,7 @@ int _layout_declare_cb(struct mput_desc *mput, struct mput_slice *slice)
 
     rc = layout_declare(&mput->comp, &slice->layout);
     if (rc)
-        LOG_RETURN(rc, "layout_declare failed for object '%s'", objid);
+        LOG_RETURN(rc, "layout_declare failed for object objid:'%s'", objid);
 
     return 0;
 }
@@ -446,12 +446,13 @@ int _ext_write_cb(struct mput_desc *mput, struct mput_slice *slice)
     /* Prepare the attributes to be saved */
     rc = build_extent_md(objid, xfer->xd_attrs, &slice->layout, &iod.iod_attrs);
     if (rc)
-        LOG_GOTO(out_close, rc, "Cannot build MD representation");
+        LOG_GOTO(out_close, rc, "Cannot build MD representation for objid:'%s'",
+                 objid);
 
     /* write the extent */
     rc = layout_io(&mput->comp, objid, &iod);
     if (rc)
-        LOG_GOTO(out_free, rc, "PUT failed");
+        LOG_GOTO(out_free, rc, "PUT failed for objid:'%s'", objid);
 
 out_free:
     pho_attrs_free(&iod.iod_attrs);
@@ -470,7 +471,8 @@ int _obj_done_cb(struct mput_desc *mput, struct mput_slice *slice)
     layout->state = PHO_EXT_ST_SYNC;
     rc = dss_extent_set(&mput->dss, layout, 1, DSS_SET_UPDATE);
     if (rc)
-        LOG_RETURN(rc, "obj_put_done(%s) failed", slice->xfer->xd_objid);
+        LOG_RETURN(rc, "obj_put_done failed for objid:'%s'",
+                   slice->xfer->xd_objid);
 
     return 0;
 }
@@ -482,7 +484,8 @@ int _ext_clean_cb(struct mput_desc *mput, struct mput_slice *slice)
 
     rc = dss_extent_set(&mput->dss, &slice->layout, 1, DSS_SET_DELETE);
     if (rc)
-        LOG_RETURN(rc, "dss_extent_set(%s) failed", slice->xfer->xd_objid);
+        LOG_RETURN(rc, "dss_extent_set failed for objid:'%s'",
+                   slice->xfer->xd_objid);
 
     return 0;
 }
@@ -500,7 +503,7 @@ int _ext_abort_cb(struct mput_desc *mput, struct mput_slice *slice)
     /* write the extent */
     rc = layout_io(&mput->comp, xfer->xd_objid, &iod);
     if (rc)
-        LOG_RETURN(rc, "Cannot delete extent for '%s'", xfer->xd_objid);
+        LOG_RETURN(rc, "Extent deletion failed for objid:'%s'", xfer->xd_objid);
 
     return 0;
 }
@@ -516,7 +519,8 @@ int _obj_clean_cb(struct mput_desc *mput, struct mput_slice *slice)
 
     rc = dss_object_set(&mput->dss, &obj, 1, DSS_SET_DELETE);
     if (rc)
-        LOG_RETURN(rc, "dss_object_set(%s) failed", slice->xfer->xd_objid);
+        LOG_RETURN(rc, "dss_object_set failed for objid:'%s'",
+                   slice->xfer->xd_objid);
 
     return 0;
 }
@@ -770,6 +774,7 @@ static int store_data_get(struct dss_handle *dss,
     struct layout_info      *layout = NULL;
     struct layout_composer   comp = {0};
     struct pho_io_descr      iod  = {0};
+    const char              *objid = desc->xd_objid;
     int                      fd;
     int                      rc;
     ENTRY;
@@ -777,8 +782,7 @@ static int store_data_get(struct dss_handle *dss,
     /* retrieve saved object location */
     rc = obj_location_get(dss, desc->xd_objid, &layout);
     if (rc)
-        LOG_RETURN(rc, "Failed to get information about object '%s'",
-                   desc->xd_objid);
+        LOG_RETURN(rc, "Failed to get information about objid:'%s'", objid);
 
     assert(layout != NULL);
 
@@ -794,27 +798,27 @@ static int store_data_get(struct dss_handle *dss,
 
     rc = layout_declare(&comp, layout);
     if (rc)
-        LOG_GOTO(out_freecomp, rc, "Cannot declare layout to read '%s'",
-                 desc->xd_objid);
+        LOG_GOTO(out_freecomp, rc,
+                 "Cannot declare layout to read objid:'%s'", objid);
 
     /* Prepare storage resources to read the object */
     rc = layout_acquire(&comp);
     if (rc)
-        LOG_GOTO(out_freecomp, rc, "Failed to prepare resources to read '%s'",
-                 desc->xd_objid);
+        LOG_GOTO(out_freecomp, rc,
+                 "Failed to prepare resources to read objid:'%s'", objid);
 
     /* Actually read data from the media */
     iod.iod_fd = fd;
 
     rc = layout_io(&comp, desc->xd_objid, &iod);
     if (rc)
-        LOG_GOTO(out_freecomp, rc, "Failed to issue data transfer for '%s'",
-                 desc->xd_objid);
+        LOG_GOTO(out_freecomp, rc,
+                 "Failed to issue data transfer for objid:'%s'", objid);
 
     rc = layout_commit(&comp, 0);
     if (rc)
-        LOG_GOTO(out_freecomp, rc, "Failed to complete operations for '%s'",
-                 desc->xd_objid);
+        LOG_GOTO(out_freecomp, rc,
+                 "Failed to complete operations for objid:'%s'", objid);
 
 out_freecomp:
     /* Release storage resources */
