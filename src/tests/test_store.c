@@ -38,7 +38,6 @@
 #include <string.h>
 #include <assert.h>
 
-
 static void dump_md(void *udata, const struct pho_xfer_desc *desc, int rc)
 {
     GString *str = g_string_new("");
@@ -56,31 +55,26 @@ int main(int argc, char **argv)
     test_env_initialize();
 
     if (argc < 3) {
-        fprintf(stderr, "usage: %s post|put <file> <...>\n", argv[0]);
-        fprintf(stderr, "usage: %s mpost|mput <file> <...>\n", argv[0]);
+        fprintf(stderr, "usage: %s put <file> <...>\n", argv[0]);
+        fprintf(stderr, "usage: %s mput <file> <...>\n", argv[0]);
         fprintf(stderr, "       %s get <id> <dest>\n", argv[0]);
         fprintf(stderr, "       %s getmd <id>\n", argv[0]);
         exit(1);
     }
 
-    if (!strcmp(argv[1], "post") || !strcmp(argv[1], "put")) {
+    if (!strcmp(argv[1], "put")) {
         struct pho_xfer_desc    xfer = {0};
         struct pho_attrs        attrs = {0};
-        enum pho_xfer_flags     flags = 0;
-        char                    fullp[PATH_MAX];
-
-        if (!strcmp(argv[1], "put"))
-            flags |= PHO_XFER_OBJ_REPLACE;
 
         rc = pho_attr_set(&attrs, "program", argv[0]);
         if (rc)
             exit(EXIT_FAILURE);
 
         for (i = 2; i < argc; i++) {
-            xfer.xd_objid = realpath(argv[i], fullp);
+            xfer.xd_objid = realpath(argv[i], NULL);
             xfer.xd_fpath = argv[i];
             xfer.xd_attrs = &attrs;
-            xfer.xd_flags = flags;
+            xfer.xd_flags = 0;
 
             rc = phobos_put(&xfer, 1, NULL, NULL);
             if (rc)
@@ -88,18 +82,15 @@ int main(int argc, char **argv)
         }
 
         pho_attrs_free(&attrs);
-    } else if (!strcmp(argv[1], "mpost") || !strcmp(argv[1], "mput")) {
+    } else if (!strcmp(argv[1], "mput")) {
         struct pho_xfer_desc     *xfer;
         struct pho_attrs          attrs = {0};
-        enum pho_xfer_flags       flags = 0;
         int                       xfer_cnt = argc - 2;
-
-        if (!strcmp(argv[1], "mput"))
-            flags |= PHO_XFER_OBJ_REPLACE;
 
         xfer = calloc(xfer_cnt, sizeof(*xfer));
         assert(xfer != NULL);
 
+        /* Oh, let's add a tag for the mput case */
         rc = pho_attr_set(&attrs, "program", argv[0]);
         if (rc)
             exit(EXIT_FAILURE);
@@ -111,7 +102,7 @@ int main(int argc, char **argv)
             xfer[i].xd_objid = realpath(argv[i], NULL);
             xfer[i].xd_fpath = argv[i];
             xfer[i].xd_attrs = &attrs;
-            xfer[i].xd_flags = flags;
+            xfer[i].xd_flags = 0;
         }
 
         rc = phobos_put(xfer, xfer_cnt, NULL, NULL);
@@ -135,7 +126,7 @@ int main(int argc, char **argv)
         rc = phobos_get(&xfer, 1, dump_md, NULL);
     } else {
         rc = -EINVAL;
-        pho_error(rc, "verb put|post|get|getmd expected at '%s'\n", argv[1]);
+        pho_error(rc, "verb put|mput|get|getmd expected at '%s'\n", argv[1]);
     }
 
     exit(rc ? EXIT_FAILURE : EXIT_SUCCESS);

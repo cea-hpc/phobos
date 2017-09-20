@@ -178,9 +178,8 @@ dd if=/dev/urandom of=$TEST_RAND bs=1M count=10
 echo
 echo "**** TESTS: PUT ****"
 for f in $TEST_FILES; do
-    test_check_put "post" "no" "$f"
-    test_check_put "post" "yes" "$f" && error "second POST should fail"
     test_check_put "put" "no" "$f"
+    test_check_put "put" "yes" "$f" && error "second PUT should fail"
 done
 
 
@@ -191,9 +190,13 @@ find $TEST_MNT -type f | while read f; do
     test_check_get "$f"
 done
 
+# Clean inserted files and DSS entries so that we can reinsert them using MPUT
 find $TEST_MNT -type f -delete
 rm -rf ${TEST_RECOV_DIR}
 mkdir ${TEST_RECOV_DIR}
+drop_tables
+setup_tables
+insert_examples
 
 echo
 echo "**** TESTS: MPUT ****"

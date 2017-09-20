@@ -34,10 +34,10 @@ struct pho_xfer_desc;
 
 /**
  * Transfer (GET / PUT / MPUT) flags.
- * Only OBJ_REPLCE for now, valid for all operations.
+ * Exact semantic depends on the operation it is applied on.
  */
 enum pho_xfer_flags {
-    /* put: replace the object if it already exists
+    /* put: replace the object if it already exists (_not supported_)
      * get: replace the target file if it already exists */
     PHO_XFER_OBJ_REPLACE    = (1 << 0),
     /* put: ignored

@@ -293,7 +293,6 @@ int _get_file_size_cb(struct mput_desc *mput, struct mput_slice *slice)
  */
 int _obj_put_start_cb(struct mput_desc *mput, struct mput_slice *slice)
 {
-    enum dss_set_action  action;
     struct object_info   obj;
     GString             *md_repr = g_string_new(NULL);
     int                  rc;
@@ -306,13 +305,10 @@ int _obj_put_start_cb(struct mput_desc *mput, struct mput_slice *slice)
     obj.oid = slice->xfer->xd_objid;
     obj.user_md = md_repr->str;
 
-    action = (slice->xfer->xd_flags & PHO_XFER_OBJ_REPLACE) ? DSS_SET_UPDATE
-                                                            : DSS_SET_INSERT;
-
     pho_debug("Storing object objid:'%s' (transient) with attributes: %s",
               slice->xfer->xd_objid, md_repr->str);
 
-    rc = dss_object_set(&mput->dss, &obj, 1, action);
+    rc = dss_object_set(&mput->dss, &obj, 1, DSS_SET_INSERT);
     if (rc)
         LOG_GOTO(out_free, rc, "dss_object_set failed for objid:'%s'", obj.oid);
 
@@ -326,8 +322,8 @@ out_free:
  */
 int _layout_declare_cb(struct mput_desc *mput, struct mput_slice *slice)
 {
-    char  *objid = slice->xfer->xd_objid;
-    int    rc;
+    char    *objid = slice->xfer->xd_objid;
+    int      rc;
     ENTRY;
 
     slice->layout.oid   = objid;
@@ -344,16 +340,13 @@ int _layout_declare_cb(struct mput_desc *mput, struct mput_slice *slice)
 
 int _ext_put_start_cb(struct mput_desc *mput, struct mput_slice *slice)
 {
-    enum dss_set_action action;
-    int                 rc;
+    char    *objid = slice->xfer->xd_objid;
+    int      rc;
     ENTRY;
 
-    action = (slice->xfer->xd_flags & PHO_XFER_OBJ_REPLACE) ? DSS_SET_UPDATE
-                                                            : DSS_SET_INSERT;
-
-    rc = dss_extent_set(&mput->dss, &slice->layout, 1, action);
+    rc = dss_extent_set(&mput->dss, &slice->layout, 1, DSS_SET_INSERT);
     if (rc)
-        LOG_RETURN(rc, "dss_extent_set failed");
+        LOG_RETURN(rc, "dss_extent_set failed for objid:'%s'", objid);
 
     return 0;
 }
@@ -404,13 +397,6 @@ free_values:
     return rc;
 }
 
-static inline int obj2io_flags(enum pho_xfer_flags flags)
-{
-    if (flags & PHO_XFER_OBJ_REPLACE)
-        return PHO_IO_REPLACE;
-    return 0;
-}
-
 /**
  * Try to open a file with O_NOATIME flag.
  * Perform a standard open if it doesn't succeed.
@@ -440,7 +426,9 @@ int _ext_write_cb(struct mput_desc *mput, struct mput_slice *slice)
     if (fd < 0)
         LOG_RETURN(rc = -errno, "open(%s) failed", xfer->xd_fpath);
 
-    iod.iod_flags = obj2io_flags(xfer->xd_flags) | PHO_IO_NO_REUSE;
+    /* Allow extent overwrite. Duplicated objects have been checked by dss
+     * already at this point, so we are actually overwriting an orphan. */
+    iod.iod_flags = PHO_IO_REPLACE | PHO_IO_NO_REUSE;
     iod.iod_fd    = fd;
 
     /* Prepare the attributes to be saved */
@@ -667,6 +655,9 @@ int phobos_put(const struct pho_xfer_desc *desc, size_t n,
     int                  i;
     int                  rc;
     int                  rc2;
+
+    if (desc->xd_flags & PHO_XFER_OBJ_REPLACE)
+        LOG_RETURN(-ENOTSUP, "OBJ_REPLACE not supported for put");
 
     /* load configuration and get dss handle... */
     rc = store_mput_init(&mput, desc, n);
