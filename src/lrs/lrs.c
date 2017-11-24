@@ -121,6 +121,8 @@ static int               dev_count;
 /** check that device info from DB is consistent with actual status */
 static int check_dev_info(const struct dev_descr *dev)
 {
+    ENTRY;
+
     if (dev->dss_dev_info->model == NULL
         || dev->sys_dev_state.lds_model == NULL) {
         if (dev->dss_dev_info->model != dev->sys_dev_state.lds_model)
@@ -340,8 +342,8 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
                              struct dev_descr *devd,
                              const struct dev_info *devi)
 {
-    int                rc;
     struct dev_adapter deva;
+    int                rc;
     ENTRY;
 
     if (devi == NULL || devd == NULL)
@@ -429,8 +431,8 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
  */
 static int wrap_lib_open(enum dev_family dev_type, struct lib_adapter *lib)
 {
-    int         rc;
     const char *lib_dev;
+    int         rc;
 
     /* non-tape cases: dummy lib adapter (no open required) */
     if (dev_type != PHO_DEV_TAPE)
@@ -460,10 +462,11 @@ static int lrs_load_dev_state(struct dss_handle *dss)
     struct dev_info    *devs = NULL;
     int                 dcnt = 0;
     struct dss_filter   filter;
-    int                 i;
-    int                 rc;
     enum dev_family     family;
     struct lib_adapter  lib;
+    int                 i;
+    int                 rc;
+    ENTRY;
 
     if (devices != NULL && dev_count != 0)
         /* already loaded */
@@ -803,9 +806,9 @@ static int select_drive_to_free(size_t required_size,
 static int lrs_mount(struct dev_descr *dev)
 {
     char                *mnt_root;
-    int                  rc;
-    const char          *id;
     struct fs_adapter    fsa;
+    const char          *id;
+    int                  rc;
     ENTRY;
 
 #if 0
@@ -858,8 +861,8 @@ out_free:
 /** Unmount the filesystem of a 'mounted' device */
 static int lrs_umount(struct dev_descr *dev)
 {
-    int                rc;
     struct fs_adapter  fsa;
+    int                rc;
     ENTRY;
 
     if (dev->op_status != PHO_DEV_OP_ST_MOUNTED)
@@ -898,9 +901,10 @@ static int lrs_umount(struct dev_descr *dev)
  */
 static int lrs_load(struct dev_descr *dev, struct media_info *media)
 {
-    int                  rc, rc2;
-    struct lib_adapter   lib;
     struct lib_item_addr media_addr;
+    struct lib_adapter   lib;
+    int                  rc;
+    int                  rc2;
     ENTRY;
 
     if (dev->op_status != PHO_DEV_OP_ST_EMPTY)
@@ -952,13 +956,11 @@ out_close:
  */
 static int lrs_unload(struct dev_descr *dev)
 {
-    int                 rc, rc2;
-    struct lib_adapter  lib;
     /* let the library select the target location */
-    struct lib_item_addr free_slot = {
-        .lia_type = MED_LOC_UNKNOWN,
-        .lia_addr = 0
-    };
+    struct lib_item_addr    free_slot = { .lia_type = MED_LOC_UNKNOWN };
+    struct lib_adapter      lib;
+    int                     rc;
+    int                     rc2;
     ENTRY;
 
     if (dev->op_status != PHO_DEV_OP_ST_LOADED)
@@ -1088,7 +1090,7 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
     device_select_func_t dev_select_policy;
     struct media_info *pmedia;
     bool media_owner;
-    int rc = 0;
+    int rc;
     ENTRY;
 
     rc = lrs_load_dev_state(dss);
@@ -1216,8 +1218,8 @@ static int set_loc_from_dev(const struct dev_descr *dev,
 
 static struct dev_descr *search_loaded_media(const struct media_id *id)
 {
-    int         i;
     const char *name;
+    int         i;
     ENTRY;
 
     if (id == NULL)
@@ -1490,7 +1492,7 @@ int lrs_read_prepare(struct dss_handle *dss, struct lrs_intent *intent)
     struct dev_descr    *dev = NULL;
     struct media_info   *media_info;
     struct media_id     *id;
-    int                  rc = 0;
+    int                  rc;
     ENTRY;
 
     rc = lrs_load_dev_state(dss);
