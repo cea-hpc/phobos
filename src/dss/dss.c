@@ -58,16 +58,14 @@ const struct pho_config_item cfg_dss[] = {
 
 struct dss_result {
     PGresult *pg_res;
-    union {
-        struct media_info   media[0];
-        struct dev_info     dev[0];
-        struct object_info  object[0];
-        struct layout_info  layout[0];
-    } u;
+    struct media_info   media[0];
+    struct dev_info     dev[0];
+    struct object_info  object[0];
+    struct layout_info  layout[0];
 };
 
 #define res_of_item_list(_list) \
-    container_of((_list), struct dss_result, u.media)
+    container_of((_list), struct dss_result, media)
 
 /**
  * Handle notices from PostgreSQL. Strip the trailing newline and re-emit them
@@ -1292,7 +1290,7 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     case DSS_DEVICE:
         dss_res->pg_res = res;
         for (i = 0; i < PQntuples(res); i++) {
-            struct dev_info *p_dev = &dss_res->u.dev[i];
+            struct dev_info *p_dev = &dss_res->dev[i];
 
             p_dev->family = str2dev_family(PQgetvalue(res, i, 0));
             p_dev->model  = get_str_value(res, i, 1);
@@ -1305,14 +1303,14 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
             p_dev->lock.lock_ts = strtoul(PQgetvalue(res, i, 7), NULL, 10);
         }
 
-        *item_list = dss_res->u.dev;
+        *item_list = dss_res->dev;
         *item_cnt = PQntuples(res);
         break;
 
     case DSS_MEDIA:
         dss_res->pg_res = res;
         for (i = 0; i < PQntuples(res); i++) {
-            struct media_info *p_media = &dss_res->u.media[i];
+            struct media_info *p_media = &dss_res->media[i];
 
             p_media->id.type = str2dev_family(PQgetvalue(res, i, 0));
             p_media->model = get_str_value(res, i, 1);
@@ -1332,14 +1330,14 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
             }
         }
 
-        *item_list = dss_res->u.media;
+        *item_list = dss_res->media;
         *item_cnt = PQntuples(res);
         break;
 
     case DSS_EXTENT:
         dss_res->pg_res = res;
         for (i = 0; i < PQntuples(res); i++) {
-            struct layout_info *p_layout = &dss_res->u.layout[i];
+            struct layout_info *p_layout = &dss_res->layout[i];
 
             p_layout->oid = PQgetvalue(res, i, 0);
             p_layout->state = str2extent_state(PQgetvalue(res, i, 1));
@@ -1359,20 +1357,20 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
             }
         }
 
-        *item_list = dss_res->u.layout;
+        *item_list = dss_res->layout;
         *item_cnt = PQntuples(res);
         break;
 
     case DSS_OBJECT:
         dss_res->pg_res = res;
         for (i = 0; i < PQntuples(res); i++) {
-            struct object_info *p_object = &dss_res->u.object[i];
+            struct object_info *p_object = &dss_res->object[i];
 
             p_object->oid     = get_str_value(res, i, 0);
             p_object->user_md = get_str_value(res, i, 1);
         }
 
-        *item_list = dss_res->u.object;
+        *item_list = dss_res->object;
         *item_cnt = PQntuples(res);
         break;
 
