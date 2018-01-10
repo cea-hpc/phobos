@@ -621,6 +621,247 @@ static int lib_scsi_move(struct lib_handle *hdl,
     return rc;
 }
 
+
+/**
+ *  \defgroup lib scan (those items are related to lib_scan implementation)
+ *  @{
+ */
+
+/**
+ * Convert a scsi element type code to a human readable string
+ * @param [in] code  element type code to be printed
+ *
+ * @return the converted result as a string
+ */
+static const char *type2str(enum element_type_code code)
+{
+    switch (code) {
+    case SCSI_TYPE_ARM:  return "arm";
+    case SCSI_TYPE_SLOT: return "slot";
+    case SCSI_TYPE_IMPEXP: return "import/export";
+    case SCSI_TYPE_DRIVE: return "drive";
+    default:    return "?";
+    }
+}
+
+/**
+ * Prints a scsi element with the print callback
+ * @param [in] element  element to be printed
+ * @param[in] print_cb  print callback
+ * @param[in,out] arg   argument to be passed to print_cb
+ *
+ * @return nothing (void function)
+ */
+static void print_element_with_cb(const struct element_status *element,
+                                  lib_print_cb_t print_cb, void *arg)
+{
+    GString *gstr = g_string_new("");
+    bool     first = true;
+
+    g_string_append_printf(gstr, "type: %s; ", type2str(element->type));
+    g_string_append_printf(gstr, "address: %#hX; ", element->address);
+    g_string_append_printf(gstr, "status: %s; ",
+                           element->full ? "full" : "empty");
+
+    if (element->full && element->vol[0])
+        g_string_append_printf(gstr, "volume=%s; ", element->vol);
+
+    if (element->src_addr_is_set)
+        g_string_append_printf(gstr, "source_addr: %#hX; ", element->src_addr);
+
+    if (element->except) {
+        g_string_append_printf(gstr, "error: code=%hhu, qualifier=%hhu; ",
+                               element->error_code,
+                               element->error_code_qualifier);
+    }
+
+    if (element->dev_id[0])
+        g_string_append_printf(gstr, "device_id: '%s'; ", element->dev_id);
+
+    g_string_append_printf(gstr, "flags: ");
+
+    if (element->type == SCSI_TYPE_IMPEXP) {
+        g_string_append_printf(gstr, "%s%s", first ? "" : ",",
+                               element->impexp ? "import" : "export");
+        first = false;
+    }
+    if (element->accessible) {
+        g_string_append_printf(gstr, "%saccess", first ? "" : ",");
+        first = false;
+    }
+    if (element->exp_enabled) {
+        g_string_append_printf(gstr, "%sexp_enab", first ? "" : ",");
+        first = false;
+    }
+    if (element->imp_enabled) {
+        g_string_append_printf(gstr, "%simp_enab", first ? "" : ",");
+        first = false;
+    }
+    if (element->invert) {
+        g_string_append_printf(gstr, "%sinvert", first ? "" : ",");
+        first = false;
+    }
+
+    print_cb(arg, gstr->str);
+    g_string_free(gstr, TRUE);
+}
+
+/**
+ * Prints a array of scsi element with the print callback
+ * @param [in] list     list to be printed
+ * @param[in] print_cb  print callback
+ * @param[in,out] arg   argument to be passed to print_cb
+ *
+ * @return nothing (void function)
+ */
+static void print_elements_with_cb(const struct element_status *list, int nb,
+                                   lib_print_cb_t print_cb, void *arg)
+{
+    int i;
+
+    for (i = 0; i < nb ; i++)
+        print_element_with_cb(&list[i], print_cb, arg);
+}
+
+/**
+ * Walk through the structure return by scsi_mode_sense
+ * @param[in] lib       Library handler.
+ * @param[in] print_cb  print callback
+ * @param[in,out] arg   argument to be passed to print_cb
+ *
+ * @return 0 on success, -errno on failure.
+ *
+ */
+#define MANAGE_MSI_HDR_SIZE 256
+static int manage_msi(struct lib_handle *hdl,
+                      lib_print_cb_t print_cb,
+                      void *arg)
+{
+    struct lib_descriptor *lib;
+    int rc;
+    struct element_status *list = NULL;
+    int lcount = 0;
+    char *val = NULL;
+    char strbuf[MANAGE_MSI_HDR_SIZE];
+
+    lib = hdl->lh_lib;
+    if (!lib) /* closed or missing init */
+        return -EBADF;
+
+    snprintf(strbuf, MANAGE_MSI_HDR_SIZE, "arms: first=%#hX, nb=%d",
+        lib->msi.arms.first_addr, lib->msi.arms.nb);
+    print_cb(arg, strbuf);
+
+    rc = scsi_element_status(lib->fd, SCSI_TYPE_ARM, lib->msi.arms.first_addr,
+                             lib->msi.arms.nb, ESF_GET_LABEL, &list, &lcount);
+    if (rc) {
+        pho_error(rc, "element_status error");
+        return -EINVAL;
+    }
+    print_elements_with_cb(list, lcount, print_cb, arg);
+    free(list);
+
+    snprintf(strbuf, MANAGE_MSI_HDR_SIZE, "slots: first=%#hX, nb=%d",
+             lib->msi.slots.first_addr, lib->msi.slots.nb);
+    print_cb(arg, strbuf);
+
+    rc = scsi_element_status(lib->fd, SCSI_TYPE_SLOT, lib->msi.slots.first_addr,
+                             lib->msi.slots.nb, ESF_GET_LABEL, &list, &lcount);
+    if (rc) {
+        pho_error(rc, "element_status error");
+        return -EINVAL;
+    }
+
+    print_elements_with_cb(list, lcount, print_cb, arg);
+    free(list);
+
+    /* try with a limited chunk size (force splitting in 4 chunks) */
+    if (asprintf(&val, "%u", lib->msi.slots.nb / 4) == -1 || val == NULL) {
+        pho_error(errno, "asprintf failed");
+        return -EINVAL;
+    }
+
+    rc = scsi_element_status(lib->fd, SCSI_TYPE_SLOT, lib->msi.slots.first_addr,
+                             lib->msi.slots.nb, ESF_GET_LABEL, &list, &lcount);
+    if (rc) {
+        pho_error(rc, "element_status error");
+        return -EINVAL;
+    }
+
+    if (lcount != lib->msi.slots.nb) {
+        pho_error(rc, "Invalid count returned: %d != %d", lcount,
+                  lib->msi.slots.nb);
+        return -EINVAL;
+    }
+    free(list);
+
+    /*@ @todo: is this useful to keep this info message ? */
+    snprintf(strbuf, MANAGE_MSI_HDR_SIZE, "imp/exp: first=%#hX, nb=%d",
+             lib->msi.impexp.first_addr, lib->msi.impexp.nb);
+    print_cb(arg, strbuf);
+
+    rc = scsi_element_status(lib->fd, SCSI_TYPE_IMPEXP,
+                             lib->msi.impexp.first_addr, lib->msi.impexp.nb,
+                              ESF_GET_LABEL, &list, &lcount);
+    if (rc) {
+        pho_error(rc, "element_status error");
+        return -EINVAL;
+    }
+    print_elements_with_cb(list, lcount, print_cb, arg);
+    free(list);
+
+    /*@ @todo: is this useful to keep this info message ? */
+    snprintf(strbuf, MANAGE_MSI_HDR_SIZE, "drives: first=%#hX, nb=%d",
+             lib->msi.drives.first_addr,
+             lib->msi.drives.nb);
+    print_cb(arg, strbuf);
+
+    rc = scsi_element_status(lib->fd, SCSI_TYPE_DRIVE,
+                             lib->msi.drives.first_addr,
+                             lib->msi.drives.nb, ESF_GET_LABEL, &list, &lcount);
+    if (rc) {
+        pho_error(rc, "element_status error");
+        return -EINVAL;
+    }
+
+    print_elements_with_cb(list, lcount, print_cb, arg);
+    free(list);
+    return 0;
+}
+
+
+/** Implements phobos LDM lib scan  */
+static int lib_scsi_scan(struct lib_handle *hdl,
+                    lib_print_cb_t print_cb,
+                    void *arg)
+{
+    struct lib_descriptor *lib;
+    int rc;
+
+    lib = hdl->lh_lib;
+    if (!lib) /* closed or missing init */
+        return -EBADF;
+
+    rc = scsi_mode_sense(lib->fd, &lib->msi);
+    if (rc) {
+        pho_error(rc, "mode_sense error");
+        exit(EXIT_FAILURE);
+    }
+
+    rc = manage_msi(hdl, print_cb, arg);
+    if (rc) {
+        pho_error(rc, "element_status error");
+        exit(EXIT_FAILURE);
+    }
+
+    return 0;
+}
+
+
+
+
+/** @}*/
+
 /** lib_scsi_adapter exported to upper layers */
 struct lib_adapter lib_adapter_scsi = {
     .lib_open         = lib_scsi_open,
@@ -628,5 +869,6 @@ struct lib_adapter lib_adapter_scsi = {
     .lib_drive_lookup = lib_scsi_drive_info,
     .lib_media_lookup = lib_scsi_media_info,
     .lib_media_move   = lib_scsi_move,
+    .lib_scan         = lib_scsi_scan,
     .lib_hdl          = {NULL},
 };

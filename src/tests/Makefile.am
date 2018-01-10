@@ -4,7 +4,8 @@ AM_CFLAGS= $(CC_OPT)
 # 1) build check_PROGRAMS
 # 2) run TESTS and generate a summary
 check_PROGRAMS=test_common test_attrs test_mapper test_log test_store \
-	       test_dss test_cfg test_scsi test_lintape test_ldm
+	       test_dss test_cfg test_scsi test_scsi_scan test_lintape \
+               test_ldm
 
 # 1st step: low level tests
 UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_lintape \
@@ -46,6 +47,9 @@ test_cfg_LDADD=../cfg/libpho_cfg.la ../common/libpho_common.la
 
 test_scsi_SOURCES=test_scsi.c
 test_scsi_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la
+
+test_scsi_scan_SOURCES=test_scsi_scan.c
+test_scsi_scan_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la
 
 test_lintape_SOURCES=test_lintape.c
 test_lintape_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la

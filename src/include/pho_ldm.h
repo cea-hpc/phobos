@@ -189,6 +189,17 @@ struct lib_drv_info {
 };
 
 /**
+ * Type for a print callback function
+ *
+ * This kind of callback to be used as a message has to be printed and/or
+ * stored to some structure (list, Gstring...).
+ * The 1st argument (as void *) is used internally by the callback (it can
+ * refer to the fd of a logfile, to a Gstring, to a header to be prepended)
+ * The 2nd argument is the message to be printed out.
+ */
+typedef int (*lib_print_cb_t)(void *, char *);
+
+/**
  * A library adapter is a vector of functions to control a tape library.
  * They should be invoked via their corresponding wrappers. Refer to
  * them for more precise explanation about each call.
@@ -210,7 +221,9 @@ struct lib_adapter {
     int (*lib_media_move)(struct lib_handle *lib,
                           const struct lib_item_addr *src_addr,
                           const struct lib_item_addr *tgt_addr);
-
+    int (*lib_scan)(struct lib_handle *lib,
+                    lib_print_cb_t print_cb,
+                    void *arg);
     /* adapter private state */
     struct lib_handle lib_hdl;
 };
@@ -304,6 +317,23 @@ static inline int ldm_lib_media_move(struct lib_adapter *lib,
     if (lib->lib_media_move == NULL)
         return 0;
     return lib->lib_media_move(&lib->lib_hdl, src_addr, tgt_addr);
+}
+
+/**
+ * Scan a library and print useful data about it. Output information
+ * may vary, depending on the library.
+ * @param[in,out] lib       Opened library adapter.
+ * @param[in] print_cd      a print callback to be used for displaying data.
+ * @param[in, out] arg      argument to be used (if needed) by print_cb
+ */
+static inline int ldm_lib_scan(struct lib_adapter *lib,
+                               lib_print_cb_t print_cb,
+                               void *arg)
+{
+    assert(lib != NULL);
+    if (lib->lib_scan == NULL)
+        return 0;
+    return lib->lib_scan(&lib->lib_hdl, print_cb, arg);
 }
 
 /** @}*/
