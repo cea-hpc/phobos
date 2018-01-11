@@ -6,3 +6,8 @@ test_mapper
 test_store
 test_dss
 test_cfg
+test_ldm
+test_lintape
+test_scsi
+test_scsi_scan
+
