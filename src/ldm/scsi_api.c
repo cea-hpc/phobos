@@ -501,13 +501,13 @@ int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
 /** Indicate whether a SCSI error must be retried after a delay */
 static inline bool scsi_delayed_retry(int rc)
 {
-    return rc == -EBUSY || rc == -EIO;
+    return rc == -EBUSY || rc == -EIO || rc == -ETIMEDOUT;
 }
 
 /** Indicate whether a SCSI error can be retried immediatly */
 static inline bool scsi_immediate_retry(int rc)
 {
-    return rc == -EAGAIN;
+    return rc == -EAGAIN || rc == -EINTR;
 }
 
 void scsi_retry_func(const char *fnname, int rc, int *retry_cnt,
