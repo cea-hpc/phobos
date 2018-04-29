@@ -7,14 +7,6 @@ yum install ltfssde
 # install phobos and requirements
 yum install phobos
 
-service postgresql-9.4 initdb
-service postgresql-9.4 start
-
-# If you upgrade from phobos 1.0.x, run the DB conversion script
-# (edit it to set the right DB name and password)
-/usr/sbin/pho_convert_db
-# 'y' to confirm
-
 # Edit '/var/lib/pgsql/9.4/data/pg_hba.conf'
 # to authorize access to localhost:
 
@@ -25,8 +17,13 @@ service postgresql-9.4 start
 	# IPv6 local connections:
 	host    all             all             ::1/128                 md5
 
-# and restart DB
-service postgresql-9.4 restart
+/usr/pgsql-9.4/bin/postgresql94-setup initdb
+systemctl start postgresql-9.4.service
+
+# If you upgrade from phobos 1.0.x, run the DB conversion script
+# (edit it to set the right DB name and password)
+/usr/sbin/pho_convert_db
+# 'y' to confirm
 
 # create phobos DB and tables
 pho_dss_helper setup_db
