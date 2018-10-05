@@ -1473,8 +1473,10 @@ retry:
         goto retry;
     }
 
-    pho_verb("Writing to media '%s' using device '%s'",
-             media_id_get(&media->id), dev->dev_path);
+    pho_verb("Writing to media '%s' using device '%s' "
+             "(free space: %zu bytes)",
+             media_id_get(&media->id), dev->dev_path,
+             dev->dss_media_info->stats.phys_spc_free);
 
 err_cleanup:
     if (rc != 0) {
