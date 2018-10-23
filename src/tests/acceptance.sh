@@ -242,6 +242,28 @@ function ensure_nb_drives
     ((nb == count))
 }
 
+# Execute a phobos command but sleep on lrs_dev_release for $1 second
+function phobos_delayed_dev_release
+{
+    sleep_time="$1"
+    shift
+    (
+        tmp_gdb_script=$(mktemp)
+        trap "rm $tmp_gdb_script" EXIT
+        cat <<EOF > "$tmp_gdb_script"
+set breakpoint pending on
+break lrs_dev_release
+commands
+shell sleep $sleep_time
+continue
+end
+run $phobos $*
+EOF
+
+        gdb -batch -x "$tmp_gdb_script" -q python
+    )
+}
+
 function concurrent_put
 {
     local md="a=1,b=2,c=3"
@@ -256,8 +278,8 @@ function concurrent_put
     dd if=/dev/urandom of=$tmp bs=1M count=100
 
     # 2 simultaneous put
-    $phobos put -m $md $tmp $key.1 &
-    (( single==0 )) && $phobos put -m $md $tmp $key.2 &
+    phobos_delayed_dev_release 2 put -m $md $tmp $key.1 &
+    (( single==0 )) && phobos_delayed_dev_release 2 put -m $md $tmp $key.2 &
 
     # after 1 sec, make sure 2 devices and 2 media are locked
     sleep 1
@@ -302,12 +324,12 @@ function check_status
 if  [[ ! -w /dev/changer ]]; then
     echo "Cannot access library: switch to POSIX test"
     export PHOBOS_LRS_default_family="dir"
+    trap dir_cleanup EXIT
     dir_setup
     put_get_test
     concurrent_put
     check_status dir "$dirs"
     lock_test
-    dir_cleanup
 else
     echo "Tape test mode"
     export PHOBOS_LRS_default_family="tape"
