@@ -36,6 +36,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <jansson.h>
 #include <unistd.h>
 
 /** List of SCSI library configuration parameters */
@@ -629,236 +630,144 @@ static int lib_scsi_move(struct lib_handle *hdl,
 
 /**
  * Convert a scsi element type code to a human readable string
- * @param [in] code  element type code to be printed
+ * @param [in] code  element type code
  *
  * @return the converted result as a string
  */
 static const char *type2str(enum element_type_code code)
 {
     switch (code) {
-    case SCSI_TYPE_ARM:  return "arm";
-    case SCSI_TYPE_SLOT: return "slot";
+    case SCSI_TYPE_ARM:    return "arm";
+    case SCSI_TYPE_SLOT:   return "slot";
     case SCSI_TYPE_IMPEXP: return "import/export";
-    case SCSI_TYPE_DRIVE: return "drive";
-    default:    return "?";
+    case SCSI_TYPE_DRIVE:  return "drive";
+    default:               return "(unknown)";
     }
 }
 
 /**
- * Prints a scsi element with the print callback
- * @param [in] element  element to be printed
- * @param[in] print_cb  print callback
- * @param[in,out] arg   argument to be passed to print_cb
+ * Type for a scan callback function.
+ *
+ * The first argument is the private data of the callback, the second a json_t
+ * object representing the lib element that has just been scanned.
+ */
+typedef void (*lib_scan_cb_t)(void *, json_t *);
+
+#define JSON_OBJECT_SET_NEW(_json, _field, _json_type, ...)                  \
+    do {                                                                     \
+        json_t *_json_value = _json_type(__VA_ARGS__);                       \
+        if (!_json_value)                                                    \
+            pho_error(-EINVAL, "Failed to encode " #__VA_ARGS__ " as json"); \
+        if (json_object_set_new(_json, _field, _json_value) != 0)            \
+            pho_error(-ENOMEM, "Failed to set " _field " in json");          \
+    } while (0)
+
+/**
+ * Calls a lib_scan_cb_t callback on a scsi element
+ *
+ * @param[in]     element   element to be scanned
+ * @param[in]     scan_cb   callback to be called on the element
+ * @param[in,out] udata     argument to be passed to scan_cb
  *
  * @return nothing (void function)
  */
-static void print_element_with_cb(const struct element_status *element,
-                                  lib_print_cb_t print_cb, void *arg)
+static void scan_element(const struct element_status *element,
+                         lib_scan_cb_t scan_cb, void *udata)
 {
-    GString *gstr = g_string_new("");
-    bool     first = true;
+    json_t *root = json_object();
+    if (!root) {
+        pho_error(-ENOMEM, "Failed to create json root");
+        return;
+    }
 
-    g_string_append_printf(gstr, "type: %s; ", type2str(element->type));
-    g_string_append_printf(gstr, "address: %#hX; ", element->address);
-    g_string_append_printf(gstr, "status: %s; ",
-                           element->full ? "full" : "empty");
+    JSON_OBJECT_SET_NEW(root, "type", json_string, type2str(element->type));
+    JSON_OBJECT_SET_NEW(root, "address", json_integer, element->address);
+
+    if (element->type & (SCSI_TYPE_ARM | SCSI_TYPE_DRIVE | SCSI_TYPE_SLOT))
+        JSON_OBJECT_SET_NEW(root, "full", json_boolean, element->full);
 
     if (element->full && element->vol[0])
-        g_string_append_printf(gstr, "volume=%s; ", element->vol);
+        JSON_OBJECT_SET_NEW(root, "volume", json_string, element->vol);
 
     if (element->src_addr_is_set)
-        g_string_append_printf(gstr, "source_addr: %#hX; ", element->src_addr);
+        JSON_OBJECT_SET_NEW(root, "source_address",
+                            json_integer, element->src_addr);
 
     if (element->except) {
-        g_string_append_printf(gstr, "error: code=%hhu, qualifier=%hhu; ",
-                               element->error_code,
-                               element->error_code_qualifier);
+        JSON_OBJECT_SET_NEW(root, "error_code",
+                            json_integer, element->error_code);
+        JSON_OBJECT_SET_NEW(root, "error_code_qualifier",
+                            json_integer, element->error_code_qualifier);
     }
 
     if (element->dev_id[0])
-        g_string_append_printf(gstr, "device_id: '%s'; ", element->dev_id);
-
-    g_string_append_printf(gstr, "flags: ");
+        JSON_OBJECT_SET_NEW(root, "device_id", json_string, element->dev_id);
 
     if (element->type == SCSI_TYPE_IMPEXP) {
-        g_string_append_printf(gstr, "%s%s", first ? "" : ",",
-                               element->impexp ? "import" : "export");
-        first = false;
+        JSON_OBJECT_SET_NEW(root, "current_operation",
+                            json_string, element->impexp ? "import" : "export");
+        JSON_OBJECT_SET_NEW(root, "exp_enabled",
+                            json_boolean, element->exp_enabled);
+        JSON_OBJECT_SET_NEW(root, "imp_enabled",
+                            json_boolean, element->imp_enabled);
     }
+
+    /* Make "accessible" appear only when it is true */
     if (element->accessible) {
-        g_string_append_printf(gstr, "%saccess", first ? "" : ",");
-        first = false;
+        JSON_OBJECT_SET_NEW(root, "accessible", json_true);
     }
-    if (element->exp_enabled) {
-        g_string_append_printf(gstr, "%sexp_enab", first ? "" : ",");
-        first = false;
-    }
-    if (element->imp_enabled) {
-        g_string_append_printf(gstr, "%simp_enab", first ? "" : ",");
-        first = false;
-    }
+
+    /* Inverted media is uncommon enough so that it can be omitted if false */
     if (element->invert) {
-        g_string_append_printf(gstr, "%sinvert", first ? "" : ",");
-        first = false;
+        JSON_OBJECT_SET_NEW(root, "invert", json_true);
     }
 
-    print_cb(arg, gstr->str);
-    g_string_free(gstr, TRUE);
+    scan_cb(udata, root);
+    json_decref(root);
 }
-
-/**
- * Prints a array of scsi element with the print callback
- * @param [in] list     list to be printed
- * @param[in] print_cb  print callback
- * @param[in,out] arg   argument to be passed to print_cb
- *
- * @return nothing (void function)
- */
-static void print_elements_with_cb(const struct element_status *list, int nb,
-                                   lib_print_cb_t print_cb, void *arg)
-{
-    int i;
-
-    for (i = 0; i < nb ; i++)
-        print_element_with_cb(&list[i], print_cb, arg);
-}
-
-/**
- * Walk through the structure return by scsi_mode_sense
- * @param[in] lib       Library handler.
- * @param[in] print_cb  print callback
- * @param[in,out] arg   argument to be passed to print_cb
- *
- * @return 0 on success, -errno on failure.
- *
- */
-#define MANAGE_MSI_HDR_SIZE 256
-static int manage_msi(struct lib_handle *hdl,
-                      lib_print_cb_t print_cb,
-                      void *arg)
-{
-    struct lib_descriptor *lib;
-    int rc;
-    struct element_status *list = NULL;
-    int lcount = 0;
-    char *val = NULL;
-    char strbuf[MANAGE_MSI_HDR_SIZE];
-
-    lib = hdl->lh_lib;
-    if (!lib) /* closed or missing init */
-        return -EBADF;
-
-    snprintf(strbuf, MANAGE_MSI_HDR_SIZE, "arms: first=%#hX, nb=%d",
-        lib->msi.arms.first_addr, lib->msi.arms.nb);
-    print_cb(arg, strbuf);
-
-    rc = scsi_element_status(lib->fd, SCSI_TYPE_ARM, lib->msi.arms.first_addr,
-                             lib->msi.arms.nb, ESF_GET_LABEL, &list, &lcount);
-    if (rc) {
-        pho_error(rc, "element_status error");
-        return -EINVAL;
-    }
-    print_elements_with_cb(list, lcount, print_cb, arg);
-    free(list);
-
-    snprintf(strbuf, MANAGE_MSI_HDR_SIZE, "slots: first=%#hX, nb=%d",
-             lib->msi.slots.first_addr, lib->msi.slots.nb);
-    print_cb(arg, strbuf);
-
-    rc = scsi_element_status(lib->fd, SCSI_TYPE_SLOT, lib->msi.slots.first_addr,
-                             lib->msi.slots.nb, ESF_GET_LABEL, &list, &lcount);
-    if (rc) {
-        pho_error(rc, "element_status error");
-        return -EINVAL;
-    }
-
-    print_elements_with_cb(list, lcount, print_cb, arg);
-    free(list);
-
-    /* try with a limited chunk size (force splitting in 4 chunks) */
-    if (asprintf(&val, "%u", lib->msi.slots.nb / 4) == -1 || val == NULL) {
-        pho_error(errno, "asprintf failed");
-        return -EINVAL;
-    }
-
-    rc = scsi_element_status(lib->fd, SCSI_TYPE_SLOT, lib->msi.slots.first_addr,
-                             lib->msi.slots.nb, ESF_GET_LABEL, &list, &lcount);
-    if (rc) {
-        pho_error(rc, "element_status error");
-        return -EINVAL;
-    }
-
-    if (lcount != lib->msi.slots.nb) {
-        pho_error(rc, "Invalid count returned: %d != %d", lcount,
-                  lib->msi.slots.nb);
-        return -EINVAL;
-    }
-    free(list);
-
-    /*@ @todo: is this useful to keep this info message ? */
-    snprintf(strbuf, MANAGE_MSI_HDR_SIZE, "imp/exp: first=%#hX, nb=%d",
-             lib->msi.impexp.first_addr, lib->msi.impexp.nb);
-    print_cb(arg, strbuf);
-
-    rc = scsi_element_status(lib->fd, SCSI_TYPE_IMPEXP,
-                             lib->msi.impexp.first_addr, lib->msi.impexp.nb,
-                              ESF_GET_LABEL, &list, &lcount);
-    if (rc) {
-        pho_error(rc, "element_status error");
-        return -EINVAL;
-    }
-    print_elements_with_cb(list, lcount, print_cb, arg);
-    free(list);
-
-    /*@ @todo: is this useful to keep this info message ? */
-    snprintf(strbuf, MANAGE_MSI_HDR_SIZE, "drives: first=%#hX, nb=%d",
-             lib->msi.drives.first_addr,
-             lib->msi.drives.nb);
-    print_cb(arg, strbuf);
-
-    rc = scsi_element_status(lib->fd, SCSI_TYPE_DRIVE,
-                             lib->msi.drives.first_addr,
-                             lib->msi.drives.nb, ESF_GET_LABEL, &list, &lcount);
-    if (rc) {
-        pho_error(rc, "element_status error");
-        return -EINVAL;
-    }
-
-    print_elements_with_cb(list, lcount, print_cb, arg);
-    free(list);
-    return 0;
-}
-
 
 /** Implements phobos LDM lib scan  */
-static int lib_scsi_scan(struct lib_handle *hdl,
-                    lib_print_cb_t print_cb,
-                    void *arg)
+static int lib_scsi_scan(struct lib_handle *hdl, json_t **lib_data)
 {
     struct lib_descriptor *lib;
-    int rc;
+    lib_scan_cb_t          json_array_append_cb;
+    int                    rc, i = 0;
+
+    json_array_append_cb = (lib_scan_cb_t)json_array_append;
 
     lib = hdl->lh_lib;
     if (!lib) /* closed or missing init */
         return -EBADF;
 
-    rc = scsi_mode_sense(lib->fd, &lib->msi);
-    if (rc) {
-        pho_error(rc, "mode_sense error");
-        exit(EXIT_FAILURE);
-    }
+    *lib_data = json_array();
 
-    rc = manage_msi(hdl, print_cb, arg);
-    if (rc) {
-        pho_error(rc, "element_status error");
-        exit(EXIT_FAILURE);
-    }
+    /* Load everything */
+    rc = lib_status_load(lib, SCSI_TYPE_ALL);
+    if (rc)
+        LOG_RETURN(rc, "Error loading scsi library status");
 
-    return 0;
+    /* scan arms */
+    for (i = 0; i < lib->arms.count ; i++)
+        scan_element(&lib->arms.items[i], json_array_append_cb, *lib_data);
+
+    /* scan slots */
+    for (i = 0; i < lib->slots.count ; i++)
+        scan_element(&lib->slots.items[i], json_array_append_cb, *lib_data);
+
+    /* scan import exports */
+    for (i = 0; i < lib->impexp.count ; i++)
+        scan_element(&lib->impexp.items[i], json_array_append_cb, *lib_data);
+
+    /* scan drives */
+    for (i = 0; i < lib->drives.count ; i++)
+        scan_element(&lib->drives.items[i], json_array_append_cb, *lib_data);
+
+    if (rc) {
+        json_decref(*lib_data);
+        *lib_data = NULL;
+    }
+    return rc;
 }
-
-
-
 
 /** @}*/
 

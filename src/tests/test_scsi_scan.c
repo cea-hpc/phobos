@@ -27,88 +27,56 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <errno.h>
+#include <jansson.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-/** tests of the lib adapter API */
-static int msi_helper_print(void *arg, char *msg)
-{
-    printf("PRINT HELPER: %s | %s\n", (char *)arg, msg);
-    return 0;
-}
-
-static int msi_helper_print_pho(void *arg, char *msg)
-{
-    pho_info("%s", msg);
-    return 0;
-}
-
-static int msi_helper_gstr(void *arg, char *msg)
-{
-    GString *gstr;
-
-    if (!arg)
-        return 0;
-
-    gstr = (GString *)arg;
-
-    g_string_append_printf(gstr, "%s\n", msg);
-    return 0;
-}
+#define ASSERT_RC(stmt)             \
+    do {                            \
+        int rc;                     \
+        rc = stmt;                  \
+        if (rc) {                   \
+            pho_error(rc, #stmt);   \
+            exit(EXIT_FAILURE);     \
+        }                           \
+    } while (0)
 
 static void test_lib_scan(void)
 {
-    int rc;
     struct lib_adapter lib = {0};
-    GString *gstr = g_string_new("");
+    json_t            *lib_data, *data_entry;
+    char              *json_str;
+    size_t             index;
 
-    rc = get_lib_adapter(PHO_LIB_SCSI, &lib);
-    if (rc)
+    ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib));
+    ASSERT_RC(ldm_lib_open(&lib, "/dev/changer"));
+    ASSERT_RC(ldm_lib_scan(&lib, &lib_data));
+
+    if (!json_array_size(lib_data)) {
+        pho_error(-EINVAL, "ldm_lib_scan returned an empty array");
         exit(EXIT_FAILURE);
+    }
 
-    rc = ldm_lib_open(&lib, "/dev/changer");
-    if (rc)
-        exit(EXIT_FAILURE);
+    /* Iterate on lib element and perform basic checks */
+    json_array_foreach(lib_data, index, data_entry) {
+        if (!json_object_get(data_entry, "type")) {
+            pho_error(-EINVAL, "Missing \"type\" key from json in lib_scan_cb");
+            exit(EXIT_FAILURE);
+        }
+    }
 
-    rc = ldm_lib_scan(&lib, msi_helper_print, "test");
-    if (rc)
-        exit(EXIT_FAILURE);
+    json_str = json_dumps(lib_data, JSON_INDENT(2));
+    printf("JSON: %s\n", json_str);
+    free(json_str);
+    json_decref(lib_data);
 
-    rc = ldm_lib_scan(&lib, msi_helper_print_pho, NULL);
-    if (rc)
-        exit(EXIT_FAILURE);
-
-    rc = ldm_lib_scan(&lib, msi_helper_gstr, gstr);
-    if (rc)
-        exit(EXIT_FAILURE);
-    printf("GSTR: %s\n", gstr->str);
-    g_string_free(gstr, TRUE);
-
-    ldm_lib_close(&lib);
+    ASSERT_RC(ldm_lib_close(&lib));
 }
 
 
 int main(int argc, char **argv)
 {
-    int fd;
-
     test_env_initialize();
-
-    /* tests of retry loop */
-
-    fd = open("/dev/changer", O_RDWR | O_NONBLOCK);
-    if (fd < 0) {
-        pho_error(errno, "Cannot open /dev/changer");
-        exit(EXIT_FAILURE);
-    }
-
-    /* same test with PHO_CFG_LIB_SCSI_sep_sn_query=1 */
-    if (setenv("PHOBOS_LIB_SCSI_sep_sn_query", "1", 1)) {
-        pho_error(errno, "setenv failed");
-        exit(EXIT_FAILURE);
-    }
-
     test_lib_scan();
 
     exit(EXIT_SUCCESS);
