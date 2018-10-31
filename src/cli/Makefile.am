@@ -1,6 +1,7 @@
 AM_CFLAGS= $(CC_OPT)
 
-C_MODULES_SO=phobos/core/const.so
+C_MODULES_SO=phobos/core/const.so \
+	     phobos/core/glue.so
 
 EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli.py \
@@ -10,6 +11,7 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/core/const_module.c \
 	   phobos/core/dss.py \
 	   phobos/core/ffi.py \
+	   phobos/core/glue_module.c \
 	   phobos/core/ldm.py \
 	   phobos/core/log.py \
 	   phobos/core/lrs.py \

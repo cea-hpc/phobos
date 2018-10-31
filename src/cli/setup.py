@@ -31,14 +31,29 @@ GLOBAL_MACROS = [('HAVE_CONFIG_H', 1)]
 GLOBAL_LIBS = ['phobos_store']
 GLOBAL_LIBDIRS = ['../store/.libs']
 
-const_module = Extension('const',
-                         sources=['phobos/core/const_module.c'],
-                         include_dirs=['../include',
-                                       '/usr/include/glib-2.0',
-                                       '/usr/lib64/glib-2.0/include'],
-                         libraries=GLOBAL_LIBS,
-                         library_dirs=GLOBAL_LIBDIRS,
-                         define_macros=GLOBAL_MACROS)
+# Common build arguments for C extension modules
+EXTENSION_KWARGS = {
+    "include_dirs": [
+        '../include',
+        '/usr/include/glib-2.0',
+        '/usr/lib64/glib-2.0/include',
+    ],
+    "libraries": GLOBAL_LIBS,
+    "library_dirs": GLOBAL_LIBDIRS,
+    "define_macros": GLOBAL_MACROS,
+}
+
+const_module = Extension(
+    'const',
+     sources=['phobos/core/const_module.c'],
+     **EXTENSION_KWARGS
+)
+
+glue_module = Extension(
+    'glue',
+     sources=['phobos/core/glue_module.c'],
+     **EXTENSION_KWARGS
+)
 
 setup(
     name='phobos',
@@ -46,6 +61,7 @@ setup(
     ext_package='phobos.core',
     ext_modules=[
         const_module,
+        glue_module,
     ],
     scripts=['scripts/phobos'],
     version='0.0.1',

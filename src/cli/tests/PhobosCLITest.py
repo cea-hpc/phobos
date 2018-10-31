@@ -83,6 +83,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['dir', 'add', '-h'])
         self.check_cmdline_exit(['tape', '-h'])
         self.check_cmdline_exit(['drive', '-h'])
+        self.check_cmdline_exit(['lib', '-h'])
 
     def test_cli_basic(self):
         """test simple valid and invalid command lines."""

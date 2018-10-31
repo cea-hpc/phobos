@@ -220,3 +220,41 @@ class PhoLogRec(Structure):
         ('plr_time', Timeval),
         ('plr_msg', c_char_p)
     ]
+
+def pho_rc_check(rc, func, args):
+    """Helper to be set as errcheck for phobos functions returning rc"""
+    if rc:
+        # Work with CFUNCTYPE and lib functions
+        try:
+            name = func.__name__
+        except AttributeError:
+            name = str(func)
+
+        raise EnvironmentError(
+            -rc, "%s(%s) failed" % (func, ", ".join(map(repr, args)))
+        )
+
+    # Convention to signal ctypes to leave the return value untouched
+    return args
+
+def pho_rc_func(name, *args, **kwargs):
+    """Wrapper on CFUNCTYPE that sets the return type to c_int and errcheck
+    attribute to pho_rc_check.
+
+    name is the name of the function (for proper error reporting)
+    *args are only the types of the argument of the function
+    **kwargs are the kwargs accepted by CFUNCTYPE
+    """
+    func_type = CFUNCTYPE(c_int, *args, **kwargs)
+    # Dynamically generate a subclass of func_type, as func_type must both
+    # describe the type of the function and be callable
+    class _PhoRcFunc(func_type):
+        """Overrides __call__ to set pho_rc_check as an errcheck"""
+        # Definition needed by func_type's metaclass
+        _flags_ = func_type._flags_
+        def __call__(self, *args, **kwargs):
+            self.errcheck = pho_rc_check
+            return super(_PhoRcFunc, self).__call__(*args, **kwargs)
+        def __str__(self):
+            return name
+    return _PhoRcFunc

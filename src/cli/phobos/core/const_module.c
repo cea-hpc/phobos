@@ -176,6 +176,12 @@ PyMODINIT_FUNC initconst(void)
     PyModule_AddIntMacro(mod, PHO_DEV_DIR);
     PyModule_AddIntMacro(mod, PHO_DEV_LAST);
 
+    /* enum lib_type */
+    PyModule_AddIntMacro(mod, PHO_LIB_INVAL);
+    PyModule_AddIntMacro(mod, PHO_LIB_DUMMY);
+    PyModule_AddIntMacro(mod, PHO_LIB_SCSI);
+    PyModule_AddIntMacro(mod, PHO_LIB_LAST);
+
     /* enum fs_type */
     PyModule_AddIntMacro(mod, PHO_FS_INVAL);
     PyModule_AddIntMacro(mod, PHO_FS_POSIX);

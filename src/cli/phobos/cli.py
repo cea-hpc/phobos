@@ -41,7 +41,7 @@ import os.path
 from abc import ABCMeta, abstractmethod
 
 from phobos.core.const import dev_family2str
-from phobos.core.const import PHO_DEV_DIR, PHO_DEV_TAPE
+from phobos.core.const import PHO_DEV_DIR, PHO_DEV_TAPE, PHO_LIB_SCSI
 from phobos.core.const import (PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED,
                                PHO_MDA_ADM_ST_LOCKED, PHO_MDA_ADM_ST_UNLOCKED)
 
@@ -51,6 +51,7 @@ from phobos.core.log import DISABLED, WARNING, INFO, VERBOSE, DEBUG
 from phobos.core.cfg import load_file as cfg_load_file
 from phobos.core.dss import Client as DSSClient
 from phobos.core.store import Client as XferClient, attrs_as_dict
+from phobos.core.ldm import LibAdapter
 from phobos.core.lrs import lrs_fs_format
 from phobos.output import dump_object_list
 from ClusterShell.NodeSet import NodeSet
@@ -442,6 +443,18 @@ class ShowOptHandler(DSSInteractHandler):
                             help="Output format human/xml/json/csv/yaml " \
                                  "(default: human)")
 
+class ScanOptHandler(BaseOptHandler):
+    """Scan a physical resource and display retrieved information."""
+    label = 'scan'
+    descr = 'scan a physical resource and display retrieved information'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(ScanOptHandler, cls).add_options(parser)
+        parser.add_argument('res', nargs='+',
+                            help='Resource(s) or device(s) to scan')
+
 class DriveListOptHandler(ListOptHandler):
     """
     Specific version of the 'list' command for tape drives, with a couple
@@ -802,6 +815,48 @@ class TapeOptHandler(MediaOptHandler):
         UnlockOptHandler
     ]
 
+class LibOptHandler(BaseResourceOptHandler):
+    """Tape library options and actions."""
+    label = 'lib'
+    descr = 'handle tape libraries'
+    cenum = PHO_LIB_SCSI
+    verbs = [
+        ScanOptHandler,
+    ]
+
+    def exec_scan(self):
+        """Scan this lib and display the result"""
+        for lib_dev in self.params.get("res"):
+            lib_data = LibAdapter(PHO_LIB_SCSI, lib_dev).scan()
+            # FIXME: can't use dump_object_list yet as it does not play well
+            # with unstructured dict-like data (relies on getattr)
+            self._print_lib_data(lib_data)
+
+    @staticmethod
+    def _print_lib_data(lib_data):
+        """Print library data in a human readable format"""
+        for elt in lib_data:
+            done = set(["type"])
+            line = []
+            flags = []
+            line.append("%s:" % (elt.get("type", "element"),))
+            for key in "address", "source_address":
+                if key in elt:
+                    line.append("%s=%#x" % (key, elt[key]))
+                    done.add(key)
+
+            for key in sorted(elt):
+                value = elt[key]
+                if key in done:
+                    continue
+                if isinstance(value, bool):
+                    if value:
+                        # Flags are printed after the other properties
+                        flags.append(key)
+                else:
+                    line.append("%s=%r" % (key, str(value)))
+            line.extend(flags)
+            print " ".join(line)
 
 class PhobosActionContext(object):
     """
@@ -817,6 +872,7 @@ class PhobosActionContext(object):
         DirOptHandler,
         TapeOptHandler,
         DriveOptHandler,
+        LibOptHandler,
 
         # Store command interfaces
         StoreGetHandler,
