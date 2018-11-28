@@ -32,9 +32,6 @@ drop_db() {
 setup_tables() {
     $PSQL << EOF
 CREATE TYPE dev_family AS ENUM ('disk', 'tape', 'dir');
-CREATE TYPE dev_model AS ENUM ('ULTRIUM-TD5', 'ULTRIUM-TD6',
-                               'ULT3580-TD5', 'ULT3580-TD6');
-CREATE TYPE tape_model AS ENUM ('LTO6', 'LTO5', 'T10KB');
 CREATE TYPE adm_status AS ENUM ('locked', 'unlocked', 'failed');
 CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS');
 CREATE TYPE address_type AS ENUM ('PATH', 'HASH1', 'OPAQUE');
@@ -43,7 +40,7 @@ CREATE TYPE extent_state AS ENUM('pending','sync','orphan');
 
 -- enums extensibles: ALTER TYPE type ADD VALUE 'value'
 
-CREATE TABLE device(family dev_family, model dev_model,
+CREATE TABLE device(family dev_family, model varchar(32),
                     id varchar(32) UNIQUE, host varchar(128),
                     adm_status adm_status, path varchar(256),
                     lock varchar(256) DEFAULT '' NOT NULL,
@@ -51,7 +48,7 @@ CREATE TABLE device(family dev_family, model dev_model,
                     PRIMARY KEY (family, id));
 CREATE INDEX ON device USING gin(host);
 
-CREATE TABLE media(family dev_family, model tape_model, id varchar(32) UNIQUE,
+CREATE TABLE media(family dev_family, model varchar(32), id varchar(32) UNIQUE,
                    adm_status adm_status, fs_type fs_type,
                    fs_label varchar(32) DEFAULT '' NOT NULL,
                    address_type address_type, fs_status fs_status,
@@ -85,8 +82,8 @@ drop_tables() {
 # Don't drop the schema, it drops the extension
         $PSQL << EOF
 DROP TABLE IF EXISTS device, media, object, extent CASCADE;
-DROP TYPE IF EXISTS dev_family, dev_model, tape_model, fs_status,
-            adm_status, fs_type, address_type, extent_state CASCADE;
+DROP TYPE IF EXISTS dev_family, fs_status, adm_status, fs_type, address_type,
+            extent_state CASCADE;
 DROP FUNCTION IF EXISTS extents_mda_idx(jsonb) CASCADE;
 EOF
 }

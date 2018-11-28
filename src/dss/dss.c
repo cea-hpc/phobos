@@ -38,6 +38,91 @@
 #include <glib.h>
 #include <libpq-fe.h>
 #include <jansson.h>
+#include <string.h>
+#include <strings.h>
+#include <assert.h>
+#include <gmodule.h>
+
+/** List of configuration parameters for tape_model */
+enum pho_cfg_params_tape_model {
+    /* DSS parameters */
+    PHO_CFG_TAPE_MODEL_supported_list,
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_TAPE_MODEL_FIRST = PHO_CFG_TAPE_MODEL_supported_list,
+    PHO_CFG_TAPE_MODEL_LAST  = PHO_CFG_TAPE_MODEL_supported_list,
+};
+
+const struct pho_config_item cfg_tape_model[] = {
+    [PHO_CFG_TAPE_MODEL_supported_list] = {
+        .section = "tape_model",
+        .name    = "supported_list",
+        .value   = "LTO5,LTO6,LTO7,LTO8,T10KB,T10KC,T10KD"
+    },
+};
+
+/* init by parse_supported_tape_models function called at config init */
+GPtrArray *supported_tape_models;
+
+/**
+ * Parse config to init supported model for media of tape type
+ *
+ * @return 0 if success, -EALREADY if job already done or a negative error code
+ */
+static int parse_supported_tape_models(void)
+{
+    const char *config_list;
+    char *parsed_config_list;
+    char *saved_ptr;
+    char *conf_model;
+    GPtrArray *built_supported_tape_models;
+
+    if (supported_tape_models)
+        return -EALREADY;
+
+    /* get tape supported model from conf */
+    config_list = PHO_CFG_GET(cfg_tape_model, PHO_CFG_TAPE_MODEL,
+                              supported_list);
+    if (!config_list)
+        LOG_RETURN(-EINVAL, "no supported_list tape model found in config");
+
+    /* duplicate supported model to parse it */
+    parsed_config_list = strdup(config_list);
+    if (!parsed_config_list)
+        LOG_RETURN(-errno, "Error on duplicating list of tape models");
+
+    /* allocate built_supported_tape_models */
+    built_supported_tape_models = g_ptr_array_new_with_free_func(free);
+    if (!built_supported_tape_models) {
+        free(parsed_config_list);
+        LOG_RETURN(-ENOMEM, "Error on allocating built_supported_tape_models");
+    }
+
+    /* parse model list */
+    for (conf_model = strtok_r(parsed_config_list, ",", &saved_ptr);
+         conf_model;
+         conf_model = strtok_r(NULL, ",", &saved_ptr)) {
+        char *new_model;
+
+        /* dup tape model */
+        new_model = strdup(conf_model);
+        if (!new_model) {
+            int rc;
+
+            rc = -errno;
+            g_ptr_array_unref(built_supported_tape_models);
+            free(parsed_config_list);
+            LOG_RETURN(rc, "Error on duplicating parsed tape model");
+        }
+
+        /* store tape model */
+        g_ptr_array_add(built_supported_tape_models, new_model);
+    }
+
+    free(parsed_config_list);
+    supported_tape_models = built_supported_tape_models;
+    return 0;
+}
 
 /** List of configuration parameters for DSS */
 enum pho_cfg_params_dss {
@@ -99,6 +184,12 @@ static inline char *dss_char4sql(const char *s)
 int dss_init(struct dss_handle *handle)
 {
     const char *conn_str;
+    int rc;
+
+    /* init static config parsing */
+    rc = parse_supported_tape_models();
+    if (rc && rc != -EALREADY)
+        return rc;
 
     conn_str = PHO_CFG_GET(cfg_dss, PHO_CFG_DSS, connect_string);
     if (conn_str == NULL)
@@ -980,6 +1071,32 @@ out_free:
     return rc;
 }
 
+/**
+ * Check if tape model is listed in config.
+ * -EINVAL is returned if given model is not listed as supported in the conf.
+ * Match between model and supported conf list is case insensitive.
+ *
+ * @param[in] model
+ *
+ * @return true if model is on supported config list, else return false.
+ */
+static bool dss_tape_model_check(const char *model)
+{
+    int index;
+
+    assert(model);
+    assert(supported_tape_models);
+
+    /* if found return true as success value */
+    for (index = 0; index < supported_tape_models->len; index++)
+        if (strcasecmp(g_ptr_array_index(supported_tape_models, index),
+                       model) == 0)
+            return true;
+
+    /* not found : return false */
+    return false;
+}
+
 static int get_media_setrequest(struct media_info *item_list, int item_cnt,
                                 enum dss_set_action action, GString *request)
 {
@@ -999,6 +1116,11 @@ static int get_media_setrequest(struct media_info *item_list, int item_cnt,
             g_string_append_printf(request, delete_query[DSS_MEDIA],
                                    media_id_get(&p_media->id));
         } else {
+            /* check tape model validity */
+            if (p_media->id.type == PHO_DEV_TAPE &&
+                    !dss_tape_model_check(p_media->model))
+                LOG_RETURN(-EINVAL, "invalid media tape model");
+
             model = dss_char4sql(p_media->model);
             stats = dss_media_stats_encode(p_media->stats);
             tags = dss_tags_encode(&p_media->tags);

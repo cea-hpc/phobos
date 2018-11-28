@@ -24,13 +24,18 @@ import json
 import sys
 
 """
-Convert phobos database from v1.0 to v1.1:
+Convert phobos database
+  * from 0 (phobos v1.0) to 1 (phobos v1.1):
   - update db schema
   - retrieve all entries from extent and media and set the json integer fields
     with the appropriate type.
+  * from 1 (phobos v1.1) to 2 (phobos v1.2):
+  - media and device model are updated from enum type to varchar
 """
 
 CONN_STR = "dbname='phobos' user='phobos' host='localhost' password='phobos'"
+
+DB_V_PHOBOS_V = (("1.0",), ("1.1",), ("1.2",))
 
 class Migrator:
     """StrToInt JSONB conversion engine"""
@@ -115,20 +120,89 @@ DROP TYPE extent_lyt_type;""")
         cur.close()
 
     def convert_0_to_1(self):
-        """Convert DB from model 0 (until phobos v1.0) to 1 (phobos v1.1+)"""
+        """Convert DB from model 0 (until phobos v1.0) to 1 (phobos v1.1)"""
         self.connect()
         self.convert_schema_0_to_1()
         self.convert_extent()
         self.convert_media()
         self.disconnect()
 
+    def convert_schema_1_to_2(self):
+        """
+        DB schema changes:
+        - device.model : from enum to varchar(32)
+        - media.model : from enum top varchar(32)
+        """
+        cur = self.conn.cursor()
+        #Alter model from enum to varchar(32) and drop old enum types
+        cur.execute("""
+            -- device model from enum to varchar(32)
+            ALTER TABLE device ALTER model TYPE varchar(32);
+
+            -- media model from enum to varchar(32)
+            ALTER TABLE media ALTER model TYPE varchar(32);
+
+            -- drop old dev_model type.
+            DROP TYPE dev_model;
+
+            -- drop old media_model type.
+            DROP TYPE tape_model;"""
+        )
+        self.conn.commit()
+        cur.close()
+
+    def convert_1_to_2(self):
+        """Convert DB from model 1 (phobos v1.1) to 2 (phobos v1.2)"""
+        self.connect()
+        self.convert_schema_1_to_2();
+        self.disconnect()
+
+    def convert(self, old_model, new_model):
+        """Convert DB from old_model to new_model"""
+        convert_functions = {(0,1) : self.convert_0_to_1,
+                             (1,2) : self.convert_1_to_2}
+        for current in range(old_model, new_model):
+            if (current, current+1) not in convert_functions:
+                print "Unable to convert from model %s to %s." % \
+                                                        (current, current + 1)
+                sys.exit(1)
+
+        for current in range(old_model, new_model):
+            convert_functions[(old_model, new_model)]()
+
 def main(args=sys.argv):
-    go = raw_input("""You are about to upgrade database from phobos v1.0 to v1.1
-Do you want to continue? [y/N]: """)
+    print "DB MODEL : corresponding Phobos versions"
+    db_v_index=0
+    for phobos_v in DB_V_PHOBOS_V:
+        print str(db_v_index) + " : " + str(phobos_v)
+        db_v_index += 1
+    old_model = int(raw_input("Which is your old existing db model : "))
+    new_model = int(raw_input("Which is the db model you aim at : "))
+    if old_model < 0 or old_model >= len(DB_V_PHOBOS_V):
+        print "Your old existing db model doesn't exist."
+        print str(old_model) + "is not between 0 and " + str(len(DB_V_PHOBOS_V))
+        sys.exit(1)
+
+    if new_model < 0 or new_model >= len(DB_V_PHOBOS_V):
+        print "The aimed db model doesn't exist."
+        print str(new_model) + "is not between 0 and " + str(len(DB_V_PHOBOS_V))
+        sys.exit(1)
+
+    if old_model >= new_model:
+        print "The old_model (%s) is equal or younger than the target one (%s)"\
+                                                        % (old_model, new_model)
+        sys.exit(1)
+
+    print "Your are about to upgrade database from model %s (phobos version "\
+          "%s) to model %s (phobos version %s)." % (
+              old_model, DB_V_PHOBOS_V[old_model], new_model,
+              DB_V_PHOBOS_V[new_model]
+          )
+    go = raw_input("Do you want to continue? [y/N]: ")
     if go != 'y':
         sys.exit(1)
 
-    Migrator().convert_0_to_1()
+    Migrator().convert(old_model, new_model)
 
 if __name__ == '__main__':
     main()

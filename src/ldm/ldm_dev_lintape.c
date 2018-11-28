@@ -48,7 +48,7 @@
 #define MAX_SERIAL  48
 
 /* Maximum model size (including trailing zero) */
-#define MAX_MODEL  17
+#define MAX_MODEL  33
 
 /* Maximum number of drives supported */
 #define LDM_MAX_DRIVES  256

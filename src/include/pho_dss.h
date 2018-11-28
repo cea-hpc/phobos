@@ -336,5 +336,4 @@ int dss_media_lock(struct dss_handle *handle, struct media_info *media_ls,
  */
 int dss_media_unlock(struct dss_handle *handle, struct media_info *media_ls,
                      int media_cnt);
-
 #endif
