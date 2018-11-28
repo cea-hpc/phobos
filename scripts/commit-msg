@@ -177,5 +177,10 @@ _gen_ChangeId() {
 	git hash-object -t commit --stdin
 }
 
+add_SignOffBy() {
+	SOB=$(git var GIT_AUTHOR_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
+	grep -qs "^$SOB" "$MSG" || echo "$SOB" >> "$MSG"
+}
 
 add_ChangeId
+add_SignOffBy
