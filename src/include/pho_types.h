@@ -478,6 +478,14 @@ static inline enum media_adm_status str2media_adm_status(const char *str)
 }
 
 /**
+ * A simple array of tags (strings)
+ */
+struct tags {
+    char   **tags;     /**< The array of tags */
+    size_t   n_tags;   /**< Number of tags */
+};
+
+/**
  * Persistent media and filesystem information
  */
 struct media_info {
@@ -487,6 +495,7 @@ struct media_info {
     enum media_adm_status    adm_status;    /**< Administrative status */
     struct media_fs          fs;            /**< Local filesystem information */
     struct media_stats       stats;         /**< Usage metrics */
+    struct tags              tags;          /**< Tags used for filtering */
     struct pho_lock          lock;          /**< Distributed access lock */
 };
 

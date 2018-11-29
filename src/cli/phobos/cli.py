@@ -383,6 +383,18 @@ class AddOptHandler(DSSInteractHandler):
         parser.add_argument('res', nargs='+', help='Resource(s) to add')
 
 
+class MediaAddOptHandler(AddOptHandler):
+    """Insert a new media into the system."""
+    descr = 'insert new media to the system'
+
+    @classmethod
+    def add_options(cls, parser):
+        super(MediaAddOptHandler, cls).add_options(parser)
+        parser.add_argument('-T', '--tags',
+                            help='tags to associate with this media (comma-'
+                                 'separated: foo,bar)')
+
+
 class CheckOptHandler(DSSInteractHandler):
     """Issue a check command on the designated object(s)."""
     label = 'check'
@@ -467,7 +479,7 @@ class DriveListOptHandler(ListOptHandler):
         parser.add_argument('-t', '--type', help='filter on type')
 
 
-class TapeAddOptHandler(AddOptHandler):
+class TapeAddOptHandler(MediaAddOptHandler):
     """Specific version of the 'add' command for tapes, with extra-options."""
     @classmethod
     def add_options(cls, parser):
@@ -638,7 +650,7 @@ class DeviceOptHandler(BaseResourceOptHandler):
 class MediaOptHandler(BaseResourceOptHandler):
     """Shared interface for media."""
     verbs = [
-        AddOptHandler,
+        MediaAddOptHandler,
         FormatOptHandler,
         ShowOptHandler,
         ListOptHandler,
@@ -651,12 +663,14 @@ class MediaOptHandler(BaseResourceOptHandler):
         labels = NodeSet.fromlist(self.params.get('res'))
         fstype = self.params.get('fs').upper()
         techno = self.params.get('type', '').upper()
+        tags_str = self.params.get('tags')
+        tags = tags_str.split(',') if tags_str is not None else []
         keep_locked = not self.params.get('unlock')
 
         for med in labels:
             try:
                 self.client.media.add(self.cenum, fstype, techno, med,
-                                      locked=keep_locked)
+                                      tags=tags, locked=keep_locked)
             except EnvironmentError as err:
                 self.logger.error("Cannot add medium %s: %s", med,
                                   env_error_format(err))

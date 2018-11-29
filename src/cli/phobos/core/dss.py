@@ -227,13 +227,14 @@ class MediaManager(BaseObjectManager):
     wrapped_class = MediaInfo
     wrapped_ident = 'media'
 
-    def add(self, mtype, fstype, model, label, locked=False):
+    def add(self, mtype, fstype, model, label, tags=None, locked=False):
         """Insert media into DSS."""
         media = MediaInfo()
         media.id = MediaId(mtype, UnionId(label))
         media.fs.type = str2fs_type(fstype)
         media.model = model
         media.addr_type = PHO_ADDR_HASH1
+        media.tags = tags or []
         if locked:
             media.adm_status = PHO_MDA_ADM_ST_LOCKED
         else:

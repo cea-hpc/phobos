@@ -107,6 +107,13 @@ class DevInfo(Structure, CLIManagedResourceMixin):
         """ Wrapper to get lock timestamp"""
         return self.lock.lock_ts
 
+class Tags(Structure):
+    """List of tags"""
+    _fields_ = [
+        ('tags', POINTER(c_char_p)),
+        ('n_tags', c_size_t),
+    ]
+
 class MediaId(Structure):
     """Generic media identifier."""
     _fields_ = [
@@ -143,6 +150,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         ('adm_status', c_int),
         ('fs', MediaFS),
         ('stats', MediaStats),
+        ('_tags', Tags),
         ('lock', DSSLock)
     ]
 
@@ -153,6 +161,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'addr_type': None,
             'model': None,
             'ident': None,
+            'tags': None,
             'lock_status': None,
             'lock_ts': None
         }
@@ -200,6 +209,23 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'stats.nb_errors': self.stats.nb_errors,
             'stats.last_load': self.stats.last_load
         }
+
+    @property
+    def tags(self):
+        return self._tags.tags[:self._tags.n_tags]
+
+    @tags.setter
+    def tags(self, tags):
+        if self._tags.tags:
+            # Avoid having to free existing data
+            raise NotImplementedError("media tags can only be assigned once")
+        if not tags:
+            self._tags.n_tags = 0
+            self._tags.tags = None
+        else:
+            self._tags.n_tags = len(tags)
+            tags_ffi = (c_char_p * self._tags.n_tags)(*tags)
+            self._tags.tags = cast(tags_ffi, POINTER(c_char_p))
 
 class Timeval(Structure):
     """standard struct timeval."""

@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include <string.h>
 #include <glib.h>
 #include <libpq-fe.h>
 #include <jansson.h>
@@ -294,7 +295,7 @@ static const char * const select_query[] = {
     [DSS_DEVICE] = "SELECT family, model, id, adm_status,"
                    " host, path, lock, lock_ts FROM device",
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
-                   " address_type, fs_type, fs_status, fs_label, stats,"
+                   " address_type, fs_type, fs_status, fs_label, stats, tags,"
                    " lock, lock_ts FROM media",
     [DSS_EXTENT] = "SELECT oid, state, lyt_info, extents FROM extent",
     [DSS_OBJECT] = "SELECT oid, user_md FROM object",
@@ -311,7 +312,8 @@ static const char * const insert_query[] = {
     [DSS_DEVICE] = "INSERT INTO device (family, model, id, host, adm_status,"
                    " path, lock) VALUES ",
     [DSS_MEDIA]  = "INSERT INTO media (family, model, id, adm_status,"
-                   " fs_type, address_type, fs_status, fs_label, stats, lock)"
+                   " fs_type, address_type, fs_status, fs_label, stats, tags,"
+                   " lock)"
                    " VALUES ",
     [DSS_EXTENT] = "INSERT INTO extent (oid, state, lyt_info, extents) VALUES ",
     [DSS_OBJECT] = "INSERT INTO object (oid, user_md) VALUES ",
@@ -323,8 +325,8 @@ static const char * const update_query[] = {
                    " ('%s', %s, '%s', '%s', '%s')"
                    " WHERE id = '%s';",
     [DSS_MEDIA]  = "UPDATE media SET (family, model, adm_status,"
-                   " fs_type, address_type, fs_status, fs_label, stats) ="
-                   " ('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s')"
+                   " fs_type, address_type, fs_status, fs_label, stats, tags) ="
+                   " ('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s', '%s')"
                    " WHERE id = '%s';",
     [DSS_EXTENT] = "UPDATE extent SET (state, lyt_info, extents) ="
                    " ('%s', '%s', '%s')"
@@ -344,7 +346,8 @@ static const char * const delete_query[] = {
 
 static const char * const insert_query_values[] = {
     [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '')%s",
-    [DSS_MEDIA]  = "('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s', '%s', '')%s",
+    [DSS_MEDIA]  = "('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s',"
+                   " '')%s",
     [DSS_EXTENT] = "('%s', '%s', '%s', '%s')%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
 };
@@ -480,7 +483,7 @@ out_decref:
 /**
  * Encode media statistics to json
  *
- * \param[in]  stats  media stats to be filled with stats
+ * \param[in]  stats  media stats to be encoded
  *
  * \return Return a string json object
  */
@@ -511,6 +514,100 @@ static char *dss_media_stats_encode(struct media_stats stats)
 
     pho_debug("Created JSON representation for stats: '%s'",
               res ? res : "(null)");
+    return res;
+}
+
+/**
+ * Extract media tags from json
+ *
+ * \param[out] tags   pointer to an array of tags (char**) to allocate in this
+ *                    function
+ * \param[out] n_tags size of tags
+ * \param[in]  json   String with json media tags
+ *
+ * \return 0 on success, negative error code on failure.
+ */
+static int dss_tags_decode(struct tags *tags, const char *json)
+{
+    json_error_t     json_error;
+    json_t          *array_entry;
+    json_t          *tag_array;
+    const char      *tag;
+    size_t           i;
+    int              rc = 0;
+    ENTRY;
+
+    if (!json || json[0] == '\0') {
+        memset(tags, 0, sizeof(*tags));
+        return 0;
+    }
+
+    tag_array = json_loads(json, JSON_REJECT_DUPLICATES, &json_error);
+    if (!tag_array)
+        LOG_RETURN(-EINVAL, "Failed to parse media tags json data '%s': %s",
+                   json, json_error.text);
+
+    if (!(json_is_array(tag_array) || json_is_null(tag_array)))
+        pho_warn("media tags json is not an array");
+
+    /* No tags (not an array or empty array), set table to NULL */
+    tags->n_tags = json_array_size(tag_array);
+    if (tags->n_tags == 0) {
+        tags->tags = NULL;
+        goto out_free;
+    }
+
+    tags->tags = calloc(tags->n_tags, sizeof(*tags->tags));
+    for (i = 0; i < tags->n_tags; i++) {
+        array_entry = json_array_get(tag_array, i);
+        tag = json_string_value(array_entry);
+        if (tag) {
+            tags->tags[i] = strdup(tag);
+        } else {
+            /* Fallback to empty string to avoid unexpected NULL */
+            tags->tags[i] = strdup("");
+            pho_warn("Non string tag in media tags");
+        }
+    }
+
+out_free:
+    json_decref(tag_array);
+    return rc;
+}
+
+/**
+ * Encode media tags to json
+ *
+ * \param[in]  tags    media tags to be encoded
+ * \param[in]  n_tags  size of the tags array
+ *
+ * \return Return a string json object allocated with malloc. The caller must
+ *     free() this string.
+ */
+static char *dss_tags_encode(const struct tags *tags)
+{
+    json_t  *tag_array;
+    size_t   i;
+    char    *res = NULL;
+    ENTRY;
+
+    tag_array = json_array();
+    if (!tag_array) {
+        pho_error(-ENOMEM, "Failed to create json object");
+        return NULL;
+    }
+
+    for (i = 0; i < tags->n_tags; i++) {
+        if (json_array_append_new(tag_array, json_string(tags->tags[i]))) {
+            res = NULL;
+            LOG_GOTO(out_free, -ENOMEM,
+                     "Could not append media tag to json tag array");
+        }
+    }
+    res = json_dumps(tag_array, 0);
+
+out_free:
+    json_decref(tag_array);
     return res;
 }
 
@@ -886,12 +983,14 @@ out_free:
 static int get_media_setrequest(struct media_info *item_list, int item_cnt,
                                 enum dss_set_action action, GString *request)
 {
-    int i;
+    char *model = NULL;
+    char *stats = NULL;
+    char *tags = NULL;
+    int   i;
     ENTRY;
 
     for (i = 0; i < item_cnt; i++) {
         struct media_info   *p_media = &item_list[i];
-        char                *model;
 
         if (media_id_get(&p_media->id) == NULL)
             LOG_RETURN(-EINVAL, "Media id cannot be NULL");
@@ -899,37 +998,53 @@ static int get_media_setrequest(struct media_info *item_list, int item_cnt,
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_MEDIA],
                                    media_id_get(&p_media->id));
-        } else if (action == DSS_SET_INSERT) {
+        } else {
             model = dss_char4sql(p_media->model);
-            if (!model)
+            stats = dss_media_stats_encode(p_media->stats);
+            tags = dss_tags_encode(&p_media->tags);
+            if (!model || !stats || !tags) {
+                free(model);
+                free(stats);
+                free(tags);
                 LOG_RETURN(-ENOMEM, "memory allocation failed");
+            }
 
-            g_string_append_printf(request, insert_query_values[DSS_MEDIA],
-                                   dev_family2str(p_media->id.type),
-                                   model, media_id_get(&p_media->id),
-                                   media_adm_status2str(p_media->adm_status),
-                                   fs_type2str(p_media->fs.type),
-                                   address_type2str(p_media->addr_type),
-                                   fs_status2str(p_media->fs.status),
-                                   p_media->fs.label,
-                                   dss_media_stats_encode(p_media->stats),
-                                   i < item_cnt-1 ? "," : ";");
-            free(model);
-        } else if (action == DSS_SET_UPDATE) {
-            model = dss_char4sql(p_media->model);
-            if (!model)
-                LOG_RETURN(-ENOMEM, "memory allocation failed");
+            if (action == DSS_SET_INSERT) {
+                g_string_append_printf(
+                    request,
+                    insert_query_values[DSS_MEDIA],
+                    dev_family2str(p_media->id.type),
+                    model,
+                    media_id_get(&p_media->id),
+                    media_adm_status2str(p_media->adm_status),
+                    fs_type2str(p_media->fs.type),
+                    address_type2str(p_media->addr_type),
+                    fs_status2str(p_media->fs.status),
+                    p_media->fs.label,
+                    stats,
+                    tags,
+                    i < item_cnt-1 ? "," : ";"
+                );
+            } else if (action == DSS_SET_UPDATE) {
+                g_string_append_printf(
+                    request,
+                    update_query[DSS_MEDIA],
+                    dev_family2str(p_media->id.type),
+                    model,
+                    media_adm_status2str(p_media->adm_status),
+                    fs_type2str(p_media->fs.type),
+                    address_type2str(p_media->addr_type),
+                    fs_status2str(p_media->fs.status),
+                    p_media->fs.label,
+                    stats,
+                    tags,
+                    media_id_get(&p_media->id)
+                );
+            }
 
-            g_string_append_printf(request, update_query[DSS_MEDIA],
-                                   dev_family2str(p_media->id.type), model,
-                                   media_adm_status2str(p_media->adm_status),
-                                   fs_type2str(p_media->fs.type),
-                                   address_type2str(p_media->addr_type),
-                                   fs_status2str(p_media->fs.status),
-                                   p_media->fs.label,
-                                   dss_media_stats_encode(p_media->stats),
-                                   media_id_get(&p_media->id));
             free(model);
+            free(stats);
+            free(tags);
         }
     }
 
@@ -1329,12 +1444,19 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
             strncpy(p_media->fs.label, PQgetvalue(res, i, 7),
                     sizeof(p_media->fs.label));
             rc = dss_media_stats_decode(&p_media->stats, PQgetvalue(res, i, 8));
-            p_media->lock.lock = get_str_value(res, i, 9);
-            p_media->lock.lock_ts = strtoul(PQgetvalue(res, i, 10), NULL, 10);
             if (rc) {
                 PQclear(res);
                 LOG_GOTO(out, rc, "dss_media stats decode error");
             }
+            /* FIXME: this creates (yet another) memory leak, a future patch
+             * will allow to free that properly. See redmine #382. */
+            rc = dss_tags_decode(&p_media->tags, PQgetvalue(res, i, 9));
+            if (rc) {
+                PQclear(res);
+                LOG_GOTO(out, rc, "dss_media tags decode error");
+            }
+            p_media->lock.lock = get_str_value(res, i, 10);
+            p_media->lock.lock_ts = strtoul(PQgetvalue(res, i, 11), NULL, 10);
         }
 
         *item_list = dss_res->media;

@@ -45,6 +45,12 @@ struct media_info *media_info_dup(const struct media_info *mda);
 /** free a media_info structure */
 void media_info_free(struct media_info *mda);
 
+/** duplicate a tags structure */
+void tags_dup(struct tags *tags_dst, const struct tags *tags_src);
+
+/** free a tags structure */
+void tags_free(struct tags *tags);
+
 
 /**
  * Simple on-the-fly JSON parsing engine providing a SAX-like API.

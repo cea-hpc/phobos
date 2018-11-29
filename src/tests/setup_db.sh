@@ -39,19 +39,19 @@ insert into device (family, model, id, host, adm_status, path, lock)
            ('dir', NULL, '$host:/tmp/pho_testdir3', '$host',
 	    'unlocked', '/tmp/pho_testdir3', '');
 insert into media (family, model, id, adm_status, fs_type, address_type,
-		   fs_status, stats, lock)
+		   fs_status, stats, tags, lock)
     values ('dir', NULL, '/tmp/pho_testdir1', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":5, "logc_spc_used":3668841456,\
 	      "phys_spc_used":3668841456,"phys_spc_free":12857675776,\
-          "nb_errors":0,"last_load":0}', ''),
+          "nb_errors":0,"last_load":0}', '[]', ''),
            ('dir', NULL, '/tmp/pho_testdir2', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":6,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
-          "nb_errors":0,"last_load":0}', ''),
+          "nb_errors":0,"last_load":0}', '["mytag"]', ''),
            ('dir', NULL, '/tmp/pho_testdir3', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":0,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
-          "nb_errors":0,"last_load":0}', '');
+          "nb_errors":0,"last_load":0}', '[]', '');
 
 insert into object (oid, user_md)
     values ('01230123ABC', '{}');

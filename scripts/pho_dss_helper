@@ -57,6 +57,8 @@ CREATE TABLE media(family dev_family, model tape_model, id varchar(32) UNIQUE,
                    address_type address_type, fs_status fs_status,
                    lock varchar(256) DEFAULT '' NOT NULL, lock_ts bigint,
                    stats jsonb,
+                   -- json array (optimized for searching)
+                   tags jsonb,
                    PRIMARY KEY (family, id));
 CREATE INDEX ON media((stats->>'phys_spc_free'));
 

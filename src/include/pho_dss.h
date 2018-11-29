@@ -127,6 +127,7 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::MDA::fs_status", "fs_status"},
     {"DSS::MDA::fs_type", "fs_type"},
     {"DSS::MDA::address_type", "address_type"},
+    {"DSS::MDA::tags", "tags"},
     {"DSS::MDA::stats", "stats"},
     {"DSS::MDA::nb_obj", "stats::json->>'nb_obj'"},
     {"DSS::MDA::vol_used", "(stats->>'phys_spc_used')::bigint"},

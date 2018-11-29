@@ -78,12 +78,9 @@ struct media_info *media_info_dup(const struct media_info *media)
     if (!media_out)
         return NULL;
 
-    media_out->id = media->id;
-    media_out->addr_type = media->addr_type;
+    memcpy(media_out, media, sizeof(*media_out));
     media_out->model = strdup_safe(media->model);
-    media_out->adm_status = media->adm_status;
-    media_out->fs = media->fs;
-    media_out->stats = media->stats;
+    tags_dup(&media_out->tags, &media->tags);
 
     return media_out;
 }
@@ -93,5 +90,25 @@ void media_info_free(struct media_info *mda)
     if (!mda)
         return;
     free(mda->model);
+    tags_free(&mda->tags);
     free(mda);
+}
+
+void tags_dup(struct tags *tags_dst, const struct tags *tags_src)
+{
+    size_t i;
+
+    tags_dst->n_tags = tags_src->n_tags;
+    tags_dst->tags = calloc(tags_dst->n_tags, sizeof(*tags_dst->tags));
+    for (i = 0; i < tags_dst->n_tags; i++)
+        tags_dst->tags[i] = strdup_safe(tags_src->tags[i]);
+}
+
+void tags_free(struct tags *tags)
+{
+    size_t i;
+
+    for (i = 0; i < tags->n_tags; i++)
+        free(tags->tags[i]);
+    free(tags->tags);
 }

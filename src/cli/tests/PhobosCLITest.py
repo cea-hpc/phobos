@@ -137,6 +137,19 @@ class MediaAddTest(BasicExecutionTest):
         self.pho_execute(['tape', 'lock', 'STANDARD0[000-100]'])
         self.pho_execute(['tape', 'unlock', 'STANDARD0[000-050]'])
         self.pho_execute(['tape', 'unlock', '--force', 'STANDARD0[000-100]'])
+        self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                          'TAGGED0', '--tags', 'tag-foo'])
+        self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                          'TAGGED1', '--tags', 'tag-foo,tag-bar'])
+        for (tape, foo_count, bar_count) in [
+                ('TAGGED0', 1, 0),
+                ('TAGGED1', 1, 1),
+        ]:
+            with output_intercept() as (stdout, _):
+                self.pho_execute(['tape', 'show', tape])
+            output = stdout.getvalue()
+            self.assertEqual(output.count('tag-foo'), foo_count)
+            self.assertEqual(output.count('tag-bar'), bar_count)
 
     def test_tape_add_lowercase(self):
         """Express tape technology in lowercase in the command line (PHO-67)."""

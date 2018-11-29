@@ -127,6 +127,7 @@ test_check_get "media" '{"$NOR": [{"DSS::MDA::adm_status": "unlocked"}]}'
 test_check_get "media" '{"$NOR": [{"DSS::MDA::fs_type": "LTFS"}]}'
 test_check_get "media" '{"$NOR": [{"DSS::MDA::address_type": "HASH1"}]}'
 test_check_get "media" '{"$NOR": [{"DSS::MDA::fs_status": "blank"}]}'
+test_check_get "media" '{"$XJSON": {"DSS::MDA::tags": "mytag"}}'
 
 echo "**** TESTS: DSS_GET OBJECT ****"
 test_check_get "object" 'all'
