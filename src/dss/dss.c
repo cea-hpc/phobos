@@ -385,16 +385,17 @@ static const char * const simple_lock_query[] = {
  * integer preferrably or anything compatible with the expected range of value
  * for the given field.
  * If 'optional' is true and the field is missing, we use 0 as a default value.
+ * Updates the rc variable (_rc) in case of error.
  */
-#define LOAD_CHECK64(_j, _s, _f, optional)  do {                \
+#define LOAD_CHECK64(_rc, _j, _s, _f, optional)  do {           \
                             long long _tmp;                     \
                             _tmp  = json_dict2ll((_j), #_f);    \
                             if (_tmp < 0) {                     \
                                 (_s)->_f = 0LL;                 \
-                                rc = optional ? 0 : -EINVAL;    \
+                                if (!optional)                  \
+                                    _rc = -EINVAL;              \
                             } else {                            \
                                 (_s)->_f = _tmp;                \
-                                rc = 0;                         \
                             }                                   \
                         } while (0)
 
@@ -404,16 +405,17 @@ static const char * const simple_lock_query[] = {
  * integer preferrably or anything compatible with the expected range of value
  * for the given field.
  * If 'optional' is true and the field is missing, we use 0 as a default value.
+ * Updates the rc variable (_rc) in case of error.
  */
-#define LOAD_CHECK32(_j, _s, _f, optional)    do {              \
+#define LOAD_CHECK32(_rc, _j, _s, _f, optional)    do {         \
                             int _tmp;                           \
                             _tmp = json_dict2int((_j), #_f);    \
                             if (_tmp < 0) {                     \
                                 (_s)->_f = 0;                   \
-                                rc = optional ? 0 : -EINVAL;    \
+                                if (!optional)                  \
+                                    _rc = -EINVAL;              \
                             } else {                            \
                                 (_s)->_f = _tmp;                \
-                                rc = 0;                         \
                             }                                   \
                         } while (0)
 
@@ -441,12 +443,12 @@ static int dss_media_stats_decode(struct media_stats *stats, const char *json)
 
     pho_debug("STATS: '%s'", json);
 
-    LOAD_CHECK64(root, stats, nb_obj, false);
-    LOAD_CHECK64(root, stats, logc_spc_used, false);
-    LOAD_CHECK64(root, stats, phys_spc_used, false);
-    LOAD_CHECK64(root, stats, phys_spc_free, false);
-    LOAD_CHECK32(root, stats, nb_errors, true);
-    LOAD_CHECK32(root, stats, last_load, true);
+    LOAD_CHECK64(rc, root, stats, nb_obj, false);
+    LOAD_CHECK64(rc, root, stats, logc_spc_used, false);
+    LOAD_CHECK64(rc, root, stats, phys_spc_used, false);
+    LOAD_CHECK64(rc, root, stats, phys_spc_free, false);
+    LOAD_CHECK32(rc, root, stats, nb_errors, true);
+    LOAD_CHECK32(rc, root, stats, last_load, true);
 
 out_decref:
     /* Most of the values above are not used to make decisions, so don't
