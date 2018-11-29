@@ -571,6 +571,7 @@ out_free:
         memset(desc, 0, sizeof(*desc));
     }
 
+    json_decref(root);
     return rc;
 }
 
