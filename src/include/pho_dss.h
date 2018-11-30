@@ -116,6 +116,7 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::EXT::oid", "oid"},
     {"DSS::EXT::state", "state"},
     {"DSS::EXT::layout_info", "lyt_info"},
+    {"DSS::EXT::layout_type", "lyt_info->>'name'"},
     {"DSS::EXT::info", "info"},
     {"DSS::EXT::media_idx", "extents_mda_idx(extent.extents)"},
     /* Media related fields */

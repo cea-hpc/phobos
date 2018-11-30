@@ -1093,6 +1093,7 @@ static int json2sql_object_begin(struct saj_parser *parser, const char *key,
                                  json_t *value, void *priv)
 {
     const char  *current_key = saj_parser_key(parser);
+    const char  *field_impl;
     GString     *str = priv;
     bool         str_index = false;
     int          rc;
@@ -1106,7 +1107,10 @@ static int json2sql_object_begin(struct saj_parser *parser, const char *key,
         return 0;
 
     /* Not an operator: write the affected field name */
-    g_string_append_printf(str, "%s", dss_fields_pub2implem(key));
+    field_impl = dss_fields_pub2implem(key);
+    if (!field_impl)
+        LOG_RETURN(-EINVAL, "Unexpected filter field: '%s'", key);
+    g_string_append_printf(str, "%s", field_impl);
 
     /* -- key is an operator: translate it into SQL -- */
 

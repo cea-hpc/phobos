@@ -38,13 +38,37 @@ function error
     exit 1
 }
 
+function check_rc
+{
+    local rc=$1
+    local expect_fail=$2
+
+    if [ -z "$expect_fail" ]
+    then
+        if [ $rc -ne 0 ]
+        then
+            echo "$test_bin failed with $rc"
+            return 1
+        fi
+    else
+        if [ $rc -eq 0 ]
+        then
+            echo "$test_bin succeeded against expectations"
+            return 1
+        fi
+    fi
+    return 0
+}
+
 function test_check_get
 {
     local type=$1
     local crit=$2
+    local expect_fail=$3
+    local rc=0
 
-
-    $test_bin get "$type" "$crit"
+    $test_bin get "$type" "$crit" || rc=$?
+    check_rc $rc $expect_fail
 }
 
 function test_check_set
@@ -56,22 +80,7 @@ function test_check_set
     local rc=0
 
     $test_bin set "$type" "$crit" "$action" || rc=$?
-
-    if [ -z "$expect_fail" ]
-    then
-        if [ $rc -ne 0 ]
-        then
-            echo "$test_bin failed with $rc"
-            return 1
-        fi
-    else
-        if [ $rc -eq 0 ]
-        then
-            echo "$test_bin succeeded against expectations"
-            return 1
-        fi
-    fi
-    return 0
+    check_rc $rc $expect_fail
 }
 
 function test_check_lock
@@ -82,22 +91,7 @@ function test_check_lock
     local rc=0
 
     $test_bin $action $target || rc=$?
-
-    if [ -z "$expect_fail" ]
-    then
-        if [ $rc -ne 0 ]
-        then
-            echo "$test_bin failed with $rc"
-            return 1
-        fi
-    else
-        if [ $rc -eq 0 ]
-        then
-            echo "$test_bin succeeded against expectations"
-            return 1
-        fi
-    fi
-    return 0
+    check_rc $rc $expect_fail
 }
 
 
@@ -111,10 +105,10 @@ echo
 
 echo "**** TESTS: DSS_GET DEV ****"
 test_check_get "device" 'all'
-test_check_get "device" '{"$LIKE": {"DSS:DEV::path": "/dev%"}}'
+test_check_get "device" '{"$LIKE": {"DSS::DEV::path": "/dev%"}}'
 test_check_get "device" '{"DSS::DEV::family": "tape"}'
 test_check_get "device" '{"DSS::DEV::family": "dir"}'
-test_check_get "device" '{"$NOR": [{"DSS::DEV::id": "foo"}]}'
+test_check_get "device" '{"$NOR": [{"DSS::DEV::serial": "foo"}]}'
 test_check_get "device" '{"$NOR": [{"DSS::DEV::host": "foo"}]}'
 test_check_get "device" '{"DSS::DEV::adm_status": "unlocked"}'
 test_check_get "device" '{"DSS::DEV::model": "ULTRIUM-TD6"}'
@@ -131,7 +125,7 @@ test_check_get "media" '{"DSS::MDA::model": "LTO6"}'
 test_check_get "media" '{"$NOR": [{"DSS::MDA::id": "foo"}]}'
 test_check_get "media" '{"$NOR": [{"DSS::MDA::adm_status": "unlocked"}]}'
 test_check_get "media" '{"$NOR": [{"DSS::MDA::fs_type": "LTFS"}]}'
-test_check_get "media" '{"$NOR": [{"DSS::MDA::addr_type": "HASH1"}]}'
+test_check_get "media" '{"$NOR": [{"DSS::MDA::address_type": "HASH1"}]}'
 test_check_get "media" '{"$NOR": [{"DSS::MDA::fs_status": "blank"}]}'
 
 echo "**** TESTS: DSS_GET OBJECT ****"
@@ -150,17 +144,16 @@ test_check_get "extent" \
 test_check_get "extent" '{"DSS::EXT::oid": "QQQ6ASQDSQD"}'
 test_check_get "extent" '{"$NOR": [{"DSS::EXT::oid": "QQQ6ASQDSQD"}]}'
 test_check_get "extent" '{"$LIKE": {"DSS::EXT::oid": "Q%D"}}'
-test_check_get "extent" '{"DSS::EXT::copy_num": 0}'
 test_check_get "extent" '{"DSS::EXT::state": "pending"}'
-test_check_get "extent" '{"DSS::EXT::lyt_type": "simple"}'
+test_check_get "extent" '{"DSS::EXT::layout_type": "simple"}'
 
 echo "**** TEST: DSS_SET DEVICE ****"
 test_check_set "device" "insert"
-test_check_get "device" '{"$LIKE": {"DSS::DEV::id": "%COPY%"}}'
+test_check_get "device" '{"$LIKE": {"DSS::DEV::serial": "%COPY%"}}'
 test_check_set "device" "update"
 test_check_get "device" '{"$LIKE": {"DSS::DEV::host": "%UPDATE%"}}'
 test_check_set "device" "delete"
-test_check_get "device" '{"$LIKE": {"DSS::DEV::id": "%COPY%"}}'
+test_check_get "device" '{"$LIKE": {"DSS::DEV::serial": "%COPY%"}}'
 echo "**** TEST: DSS_SET MEDIA  ****"
 test_check_set "media" "insert"
 test_check_get "media" '{"$LIKE": {"DSS::MDA::id": "%COPY%"}}'
@@ -182,6 +175,9 @@ test_check_get "extent" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
 test_check_set "extent" "delete" "oidtest" "FAIL"
 test_check_set "extent" "delete"
 test_check_get "extent" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
+
+echo "**** TEST: DSS FILTER SYNTAX ERROR ****"
+test_check_get "media" '{"DSS::MDA::idontexist": "foo"}' 'FAIL'
 
 insert_examples
 
