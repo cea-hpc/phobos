@@ -159,7 +159,7 @@ static int simple_compose_enc(struct layout_module *self,
     /* Unique intent of size=sum(slices) */
     pho_ht_foreach(comp->lc_layouts, sce_sum_sizes_cb, ctx);
 
-    rc = lrs_write_prepare(comp->lc_dss, &ctx->sc_main_intent);
+    rc = lrs_write_prepare(comp->lc_dss, &ctx->sc_main_intent, &comp->lc_tags);
     if (rc)
         return rc;
 

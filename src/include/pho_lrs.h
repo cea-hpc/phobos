@@ -50,9 +50,12 @@ struct lrs_intent {
  *
  * @param(in)     dss     Initialized DSS handle.
  * @param(in,out) intent  The intent descriptor to fill.
+ * @param(in)     tags    Tags used to select a media to write on, the selected
+ *                        media must have the specified tags.
  * @return 0 on success, -1 * posix error code on failure
  */
-int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent);
+int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent,
+                      const struct tags *tags);
 
 /**
  * Query to read from a given set of media.

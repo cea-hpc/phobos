@@ -145,6 +145,7 @@ int layout_init(struct dss_handle *dss, struct layout_composer *comp,
     comp->lc_action  = action;
     comp->lc_layouts = g_hash_table_new(g_str_hash, g_str_equal);
     comp->lc_private = NULL;
+    comp->lc_tags    = NO_TAGS;
     return 0;
 }
 
@@ -267,6 +268,7 @@ int layout_fini(struct layout_composer *comp)
     if (comp->lc_private_dtor)
         comp->lc_private_dtor(comp);
 
+    tags_free(&comp->lc_tags);
     g_hash_table_destroy(comp->lc_layouts);
     return layout_deregister(&ActiveLayoutModule);
 }

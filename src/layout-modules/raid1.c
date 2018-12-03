@@ -253,7 +253,7 @@ static int raid1_compose_enc(struct layout_module *self,
         /* Declare replica size as computed above */
         curr->li_location.extent.size = ctx->intent_size;
 
-        rc = lrs_write_prepare(comp->lc_dss, curr);
+        rc = lrs_write_prepare(comp->lc_dss, curr, &comp->lc_tags);
         if (rc)
             LOG_GOTO(err_int_free, rc, "Write intent expression #%d failed", i);
 

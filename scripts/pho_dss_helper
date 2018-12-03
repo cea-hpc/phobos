@@ -58,6 +58,7 @@ CREATE TABLE media(family dev_family, model varchar(32), id varchar(32) UNIQUE,
                    tags jsonb,
                    PRIMARY KEY (family, id));
 CREATE INDEX ON media((stats->>'phys_spc_free'));
+CREATE INDEX ON media USING gin(tags);
 
 CREATE TABLE object(oid varchar(1024), user_md jsonb, PRIMARY KEY (oid));
 

@@ -41,6 +41,8 @@
 #include <sys/types.h>
 #include <assert.h>
 #include <sys/utsname.h>
+#include <jansson.h>
+#include <stdbool.h>
 
 
 /** Used to indicate that a lock is held by an external process */
@@ -531,20 +533,99 @@ err_nores:
 }
 
 /**
+ * Build a filter string fragment to filter on a given tag set. The returned
+ * string is allocated with malloc. NULL is returned when ENOMEM is encountered.
+ *
+ * The returned string looks like the following:
+ * {"$AND": [{"DSS:MDA::tags": "tag1"}]}
+ */
+static char *build_tag_filter(const struct tags *tags)
+{
+    json_t *and_filter = NULL;
+    json_t *tag_filters = NULL;
+    char   *tag_filter_json = NULL;
+    size_t  i;
+
+    /* Build a json array to properly format tag related DSS filter */
+    tag_filters = json_array();
+    if (!tag_filters)
+        return NULL;
+
+    /* Build and append one filter per tag */
+    for (i = 0; i < tags->n_tags; i++) {
+        json_t *tag_flt;
+        json_t *xjson;
+
+        tag_flt = json_object();
+        if (!tag_flt)
+            GOTO(out, -ENOMEM);
+
+        xjson = json_object();
+        if (!xjson) {
+            json_decref(tag_flt);
+            GOTO(out, -ENOMEM);
+        }
+
+        if (json_object_set_new(tag_flt, "DSS::MDA::tags",
+                                json_string(tags->tags[i]))) {
+            json_decref(tag_flt);
+            json_decref(xjson);
+            GOTO(out, -ENOMEM);
+        }
+
+        if (json_object_set_new(xjson, "$XJSON", tag_flt)) {
+            json_decref(xjson);
+            GOTO(out, -ENOMEM);
+        }
+
+        if (json_array_append_new(tag_filters, xjson))
+            GOTO(out, -ENOMEM);
+    }
+
+    and_filter = json_object();
+    if (!and_filter)
+        GOTO(out, -ENOMEM);
+
+    /* Do not use the _new function and decref inconditionnaly later */
+    if (json_object_set(and_filter, "$AND", tag_filters))
+        GOTO(out, -ENOMEM);
+
+    /* Convert to string for formatting */
+    tag_filter_json = json_dumps(tag_filters, 0);
+
+out:
+    json_decref(tag_filters);
+
+    /* json_decref(NULL) is safe but not documented */
+    if (and_filter)
+        json_decref(and_filter);
+
+    return tag_filter_json;
+}
+
+/**
  * Get a suitable media for a write operation, and compatible
  * with the given drive model.
  */
 static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
                             size_t required_size, enum dev_family family,
-                            const char *device_model)
+                            const char *device_model, const struct tags *tags)
 {
     struct media_info   *pmedia_res = NULL;
     struct media_info   *media_best;
     struct dss_filter    filter;
+    char                *tag_filter_json = NULL;
+    bool                 with_tags = tags != NULL && tags->n_tags > 0;
     int                  mcnt = 0;
     int                  rc;
     int                  i;
     ENTRY;
+
+    if (with_tags) {
+        tag_filter_json = build_tag_filter(tags);
+        if (!tag_filter_json)
+            LOG_GOTO(err_nores, rc = -ENOMEM, "while building tags dss filter");
+    }
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
@@ -561,11 +642,16 @@ static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
                                /* Exclude full media */
                           "    {\"DSS::MDA::fs_status\": \"%s\"}"
                           "  ]}"
+                          "  %s%s"
                           "]}",
                           dev_family2str(family),
                           media_adm_status2str(PHO_MDA_ADM_ST_UNLOCKED),
                           required_size, fs_status2str(PHO_FS_STATUS_BLANK),
-                          fs_status2str(PHO_FS_STATUS_FULL));
+                          fs_status2str(PHO_FS_STATUS_FULL),
+                          with_tags ? ", " : "",
+                          with_tags ? tag_filter_json : "");
+
+    free(tag_filter_json);
     if (rc)
         return rc;
 
@@ -651,11 +737,14 @@ typedef int (*device_select_func_t)(size_t required_size,
  *                No filtering is op_st is PHO_DEV_OP_ST_UNSPEC.
  * @param select_func    Drive selection function.
  * @param required_size  Required size for the operation.
+ * @param media_tags     Mandatory tags for the contained media (for write
+ *                       requests only).
  */
 static struct dev_descr *dev_picker(struct dss_handle *dss,
                                     enum dev_op_status op_st,
                                     device_select_func_t select_func,
-                                    size_t required_size)
+                                    size_t required_size,
+                                    const struct tags *media_tags)
 {
     struct dev_descr    *selected = NULL;
     int                  i;
@@ -672,11 +761,19 @@ retry:
         if (op_st != PHO_DEV_OP_ST_UNSPEC && itr->op_status != op_st)
             continue;
 
-        /* The intent is to write: exclude full media */
-        if (required_size > 0) {
-            if (itr->dss_media_info &&
-                itr->dss_media_info->fs.status == PHO_FS_STATUS_FULL)
+        /*
+         * The intent is to write: exclude medias that are full or do not have
+         * the requested tags
+         */
+        if (required_size > 0 && itr->dss_media_info) {
+            if (itr->dss_media_info->fs.status == PHO_FS_STATUS_FULL)
                 continue;
+            if (!tags_in(&itr->dss_media_info->tags, media_tags)) {
+                pho_debug("Media '%s' does not match required tags",
+                          /* id.label and id.path are the same field */
+                          itr->dss_media_info->id.id_u.path);
+                continue;
+            }
         }
 
         rc = select_func(required_size, itr, &selected);
@@ -1041,7 +1138,7 @@ static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp)
 
         /* get a drive to free (PHO_DEV_OP_ST_UNSPEC for any state) */
         tmp_dev = dev_picker(dss, PHO_DEV_OP_ST_UNSPEC, select_drive_to_free,
-                             0);
+                             0, &NO_TAGS);
         if (tmp_dev == NULL)
             LOG_RETURN(-EAGAIN, "No suitable device to free");
 
@@ -1082,10 +1179,12 @@ next:
 /**
  * Get a prepared device to perform a write operation.
  * @param[in]  size  Size of the extent to be written.
+ * @param[in]  tags  Tags used to filter candidate media, the selected media
+ *                   must have all the specified tags.
  * @param[out] devp  The selected device to write with.
  */
 static int lrs_get_write_res(struct dss_handle *dss, size_t size,
-                             struct dev_descr **devp)
+                             const struct tags *tags, struct dev_descr **devp)
 {
     device_select_func_t dev_select_policy;
     struct media_info *pmedia;
@@ -1106,7 +1205,8 @@ retry:
     media_owner = false;
 
     /* 1a) is there a mounted filesystem with enough room? */
-    *devp = dev_picker(dss, PHO_DEV_OP_ST_MOUNTED, dev_select_policy, size);
+    *devp = dev_picker(dss, PHO_DEV_OP_ST_MOUNTED, dev_select_policy, size,
+                       tags);
     if (*devp != NULL) {
         /* drive is now in use */
         (*devp)->op_status = PHO_DEV_OP_ST_BUSY;
@@ -1124,7 +1224,8 @@ retry:
     }
 
     /* 1b) is there a loaded media with enough room? */
-    *devp = dev_picker(dss, PHO_DEV_OP_ST_LOADED, dev_select_policy, size);
+    *devp = dev_picker(dss, PHO_DEV_OP_ST_LOADED, dev_select_policy, size,
+                       tags);
     if (*devp != NULL) {
         /* lock the media in the device */
         pmedia = (*devp)->dss_media_info;
@@ -1156,14 +1257,14 @@ retry:
      * Note: lrs_select_media locks the media.
      */
     pho_verb("Not enough space on loaded media: selecting another one");
-    rc = lrs_select_media(dss, &pmedia, size, default_family(), NULL);
+    rc = lrs_select_media(dss, &pmedia, size, default_family(), NULL, tags);
     if (rc)
         return rc;
     /* we own the media structure */
     media_owner = true;
 
     /* 3) is there a free drive? */
-    *devp = dev_picker(dss, PHO_DEV_OP_ST_EMPTY, select_any, 0);
+    *devp = dev_picker(dss, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS);
     if (*devp == NULL) {
         pho_verb("No free drive: need to unload one");
         rc = lrs_free_one_device(dss, devp);
@@ -1296,7 +1397,7 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
         pho_verb("Media '%s' is not in a drive", media_id_get(id));
 
         /* Is there a free drive? */
-        dev = dev_picker(dss, PHO_DEV_OP_ST_EMPTY, select_any, 0);
+        dev = dev_picker(dss, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS);
         if (dev == NULL) {
             pho_verb("No free drive: need to unload one");
             rc = lrs_free_one_device(dss, &dev);
@@ -1423,7 +1524,8 @@ static bool lrs_mount_is_writable(const struct lrs_intent *intent)
     return !(fs_info.spc_flags & PHO_FS_READONLY);
 }
 
-int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent)
+int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent,
+                      const struct tags *tags)
 {
     struct dev_descr    *dev = NULL;
     struct media_info   *media = NULL;
@@ -1432,7 +1534,7 @@ int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent)
     ENTRY;
 
 retry:
-    rc = lrs_get_write_res(dss, size, &dev);
+    rc = lrs_get_write_res(dss, size, tags, &dev);
     if (rc != 0)
         return rc;
 

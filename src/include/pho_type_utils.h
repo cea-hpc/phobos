@@ -28,6 +28,9 @@
 #include "pho_types.h"
 #include <jansson.h>
 #include <glib.h>
+#include <stdbool.h>
+
+static const struct tags NO_TAGS = {0};
 
 /** dump basic storage information as JSON to be attached to data objects. */
 int storage_info_to_json(const struct layout_info *layout,
@@ -45,11 +48,30 @@ struct media_info *media_info_dup(const struct media_info *mda);
 /** free a media_info structure */
 void media_info_free(struct media_info *mda);
 
-/** duplicate a tags structure */
-void tags_dup(struct tags *tags_dst, const struct tags *tags_src);
+/**
+ * Init tags by strdup'ing tag_values. Return 0 or -ENOMEM.
+ */
+int tags_init(struct tags *tags, char **tag_values, size_t n_tags);
 
-/** free a tags structure */
+/**
+ * Free a tags structure where the tag list and tag strings have been malloc'd
+ */
 void tags_free(struct tags *tags);
+
+/** duplicate a tags structure. Return 0 or -ENOMEM. */
+int tags_dup(struct tags *tags_dst, const struct tags *tags_src);
+
+/**
+ * Return true if the two tags are equal, false otherwise. The order of tags
+ * matters.
+ */
+bool tags_eq(const struct tags *tags1, const struct tags *tags2);
+
+/**
+ * Return true if all tags in needle are in haystack, false otherwise. Always
+ * return true if needle is empty.
+ */
+bool tags_in(const struct tags *haystack, const struct tags *needle);
 
 
 /**

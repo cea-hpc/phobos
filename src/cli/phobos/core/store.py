@@ -27,7 +27,7 @@ import logging
 
 from ctypes import *
 
-from phobos.core.ffi import LIBPHOBOS
+from phobos.core.ffi import LIBPHOBOS, Tags
 from phobos.core.const import PHO_XFER_OBJ_GETATTR
 
 
@@ -68,7 +68,8 @@ class XferDescriptor(Structure):
         ("xd_objid", c_char_p),
         ("xd_fpath", c_char_p),
         ("xd_attrs", POINTER(PhoAttrs)),
-        ("xd_flags", c_int)
+        ("xd_flags", c_int),
+        ("xd_tags", Tags),
     ]
 
 XferCompletionCBType = CFUNCTYPE(None, c_void_p, POINTER(XferDescriptor), c_int)

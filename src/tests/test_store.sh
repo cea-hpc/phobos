@@ -154,6 +154,20 @@ function test_check_get # extent_path
     rm -f $tgt
 }
 
+function assert_fails # program args ...
+{
+    local rc=0
+    # Call program
+    "$*" || rc=$?
+
+    # Check
+    if [[ "$rc" != 0 ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 if [[ $TEST_FS == "posix" ]]; then
     for dir in $TEST_MNT; do
         # clean and re-create
@@ -174,6 +188,19 @@ rm -rf "$TEST_RECOV_DIR/"*
 # create test file in /tmp
 dd if=/dev/urandom of=$TEST_RAND bs=1M count=10
 
+
+echo
+echo "**** TESTS: PUT WITH TAGS ****"
+for f in $TEST_FILES; do
+    assert_fails $test_bin tag-put $f no-such-tag
+    assert_fails $test_bin tag-put $f mytag no-such-tag
+    # Ensure the right directory is chosen for this tag
+    $test_bin tag-put $f mytag |& grep /tmp/pho_testdir2
+done
+
+drop_tables
+setup_tables
+insert_examples
 
 echo
 echo "**** TESTS: PUT ****"

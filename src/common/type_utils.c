@@ -31,6 +31,7 @@
 #include <errno.h>
 #include <jansson.h>
 #include <assert.h>
+#include <stdbool.h>
 
 
 static inline char *strdup_safe(const char *str)
@@ -94,21 +95,87 @@ void media_info_free(struct media_info *mda)
     free(mda);
 }
 
-void tags_dup(struct tags *tags_dst, const struct tags *tags_src)
+int tags_dup(struct tags *tags_dst, const struct tags *tags_src)
 {
-    size_t i;
+    if (!tags_dst)
+        return 0;
 
-    tags_dst->n_tags = tags_src->n_tags;
-    tags_dst->tags = calloc(tags_dst->n_tags, sizeof(*tags_dst->tags));
-    for (i = 0; i < tags_dst->n_tags; i++)
-        tags_dst->tags[i] = strdup_safe(tags_src->tags[i]);
+    if (!tags_src) {
+        *tags_dst = NO_TAGS;
+        return 0;
+    }
+
+    return tags_init(tags_dst, tags_src->tags, tags_src->n_tags);
+}
+
+int tags_init(struct tags *tags, char **tag_values, size_t n_tags)
+{
+    ssize_t i;
+
+    tags->n_tags = n_tags;
+    tags->tags = calloc(n_tags, sizeof(*tags->tags));
+    if (!tags->tags)
+        return -ENOMEM;
+
+    for (i = 0; i < n_tags; i++) {
+        tags->tags[i] = strdup(tag_values[i]);
+        if (!tags->tags[i]) {
+            tags_free(tags);
+            return -ENOMEM;
+        }
+    }
+    return 0;
 }
 
 void tags_free(struct tags *tags)
 {
     size_t i;
 
+    if (!tags)
+        return;
+
     for (i = 0; i < tags->n_tags; i++)
         free(tags->tags[i]);
     free(tags->tags);
+
+    tags->tags = NULL;
+    tags->n_tags = 0;
+}
+
+bool tags_eq(const struct tags *tags1, const struct tags *tags2)
+{
+    size_t i;
+
+    /* Same size? */
+    if (tags1->n_tags != tags2->n_tags)
+        return false;
+
+    /* Same content? (order matters) */
+    for (i = 0; i < tags1->n_tags; i++)
+        if (strcmp(tags1->tags[i], tags2->tags[i]))
+            return false;
+
+    return true;
+}
+
+bool tags_in(const struct tags *haystack, const struct tags *needle)
+{
+    size_t ndl_i, hay_i;
+
+    /* The needle cannot be larger than the haystack */
+    if (needle->n_tags > haystack->n_tags)
+        return false;
+
+    /* Naive n^2 set inclusion check */
+    for (ndl_i = 0; ndl_i < needle->n_tags; ndl_i++) {
+        for (hay_i = 0; hay_i < haystack->n_tags; hay_i++)
+            if (!strcmp(needle->tags[ndl_i], haystack->tags[hay_i]))
+                break;
+
+        /* Needle tag not found in haystack tags */
+        if (hay_i == haystack->n_tags)
+            return false;
+    }
+
+    return true;
 }

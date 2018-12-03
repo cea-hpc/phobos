@@ -26,6 +26,7 @@
 #define _PHO_STORE_H
 
 #include "pho_attrs.h"
+#include "pho_types.h"
 #include <stdlib.h>
 
 
@@ -67,6 +68,7 @@ struct pho_xfer_desc {
     char                *xd_fpath;
     struct pho_attrs    *xd_attrs;
     enum pho_xfer_flags  xd_flags;
+    struct tags          xd_tags;    /**< Tags to select a media to write */
 };
 
 

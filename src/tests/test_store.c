@@ -56,7 +56,8 @@ int main(int argc, char **argv)
 
     if (argc < 3) {
         fprintf(stderr, "usage: %s put <file> <...>\n", argv[0]);
-        fprintf(stderr, "usage: %s mput <file> <...>\n", argv[0]);
+        fprintf(stderr, "       %s mput <file> <...>\n", argv[0]);
+        fprintf(stderr, "       %s tag-put <file> <tag> <...>\n", argv[0]);
         fprintf(stderr, "       %s get <id> <dest>\n", argv[0]);
         fprintf(stderr, "       %s getmd <id>\n", argv[0]);
         exit(1);
@@ -108,6 +109,26 @@ int main(int argc, char **argv)
         rc = phobos_put(xfer, xfer_cnt, NULL, NULL);
         if (rc)
             pho_error(rc, "MPUT failed");
+
+        pho_attrs_free(&attrs);
+    } else if (!strcmp(argv[1], "tag-put")) {
+        struct pho_xfer_desc    xfer = {0};
+        struct pho_attrs        attrs = {0};
+
+        rc = pho_attr_set(&attrs, "program", argv[0]);
+        if (rc)
+            exit(EXIT_FAILURE);
+
+        xfer.xd_objid = realpath(argv[2], NULL);
+        xfer.xd_fpath = argv[2];
+        xfer.xd_attrs = &attrs;
+        xfer.xd_flags = 0;
+        xfer.xd_tags.tags = &argv[3];
+        xfer.xd_tags.n_tags = argc - 3;
+
+        rc = phobos_put(&xfer, 1, NULL, NULL);
+        if (rc)
+            pho_error(rc, "TAG-PUT '%s' failed", argv[2]);
 
         pho_attrs_free(&attrs);
     } else if (!strcmp(argv[1], "get")) {

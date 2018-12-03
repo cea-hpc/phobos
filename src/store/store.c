@@ -659,6 +659,16 @@ int phobos_put(const struct pho_xfer_desc *desc, size_t n,
     if (desc->xd_flags & PHO_XFER_OBJ_REPLACE)
         LOG_RETURN(-ENOTSUP, "OBJ_REPLACE not supported for put");
 
+    /* Check that all tags are the same (temporary limitation) */
+    if (n > 0) {
+        const struct tags *ref_tags = &desc[0].xd_tags;
+
+        for (i = 1; i < n; i++)
+            if (!tags_eq(ref_tags, &desc[i].xd_tags))
+                LOG_GOTO(out_finalize, rc = -EINVAL,
+                         "Tags must be identical for all objects");
+    }
+
     /* load configuration and get dss handle... */
     rc = store_mput_init(&mput, desc, n);
     if (rc) {
@@ -672,6 +682,17 @@ int phobos_put(const struct pho_xfer_desc *desc, size_t n,
     rc = mput_slices_progress(mput, MPUT_STEP_LAYOUT_DECLARE);
     if (rc)
         LOG_GOTO(out_finalize, rc, "All slices failed");
+
+    /*
+     * All tags being the same, initialize the composer tag with the first
+     * transfer descriptor tags
+     */
+    if (n > 0) {
+        /* Freed in layout_fini */
+        rc = tags_dup(&mput->comp.lc_tags, &mput->slices[0].xfer->xd_tags);
+        if (rc)
+            LOG_GOTO(out_finalize, rc, "Tags memory allocation failed");
+    }
 
     /* get storage resource to write objects */
     rc = layout_acquire(&mput->comp);

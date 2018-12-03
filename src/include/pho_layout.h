@@ -58,6 +58,14 @@ struct layout_composer {
     GHashTable          *lc_layouts;    /**< Objid::Layout descr mapping */
     void                *lc_private;    /**< Module private data pointer */
     comp_priv_dtor_t     lc_private_dtor;
+    /*
+     * FIXME: this is used to pass information to lrs_write_prepare in the
+     * layout_module_compose method of layout modules. This is only a temporary
+     * solution until a refactoring of the store/layout/lrs interactions happens
+     * (hopefully soon).
+     * -- FM 2018/11/29
+     */
+    struct tags          lc_tags;       /**< Tags to select a media to write */
 };
 
 
