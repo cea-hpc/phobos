@@ -99,6 +99,8 @@ class Store(object):
                 for k, v in x[2].iteritems():
                     LIBPHOBOS.pho_attr_set(byref(attrs), str(k), str(v))
                 xfr[i].xd_attrs = pointer(attrs)
+            xfr[i].xd_tags = Tags(x[4])
+
         return xfr
 
     def xfer_desc_release(self, xfer):
@@ -106,6 +108,7 @@ class Store(object):
         for xd in xfer:
             if xd.xd_attrs:
                 LIBPHOBOS.pho_attrs_free(xd.xd_attrs)
+            xd.xd_tags.free()
 
     def compl_cb_convert(self, compl_cb):
         """
@@ -152,11 +155,11 @@ class Client(object):
         flags = 0
         if md_only:
             flags |= PHO_XFER_OBJ_GETATTR
-        self.get_session.append((oid, data_path, attrs, flags))
+        self.get_session.append((oid, data_path, attrs, flags, None))
 
-    def put_register(self, oid, data_path, attrs=None):
+    def put_register(self, oid, data_path, attrs=None, tags=None):
         """Enqueue a PUT transfert."""
-        self.put_session.append((oid, data_path, attrs, 0))
+        self.put_session.append((oid, data_path, attrs, 0, tags))
 
     def clear(self):
         """Release resources associated to the current queues."""

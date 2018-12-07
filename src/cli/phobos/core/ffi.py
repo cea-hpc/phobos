@@ -114,6 +114,23 @@ class Tags(Structure):
         ('n_tags', c_size_t),
     ]
 
+    def __init__(self, tag_list):
+        """Allocate C resources to create a native Tags instance from a python
+        list of strings.
+        """
+        if not tag_list:
+            self.tags = None
+            self.n_tags = 0
+        else:
+            tags = (c_char_p * len(tag_list))(*tag_list)
+            LIBPHOBOS.tags_init(byref(self), tags, len(tag_list))
+
+    def free(self):
+        """Free all allocated resources. Only call this if tag values were
+        dynamically allocated (and not borrowed from another structure).
+        """
+        LIBPHOBOS.tags_free(byref(self))
+
 class MediaId(Structure):
     """Generic media identifier."""
     _fields_ = [
@@ -219,13 +236,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         if self._tags.tags:
             # Avoid having to free existing data
             raise NotImplementedError("media tags can only be assigned once")
-        if not tags:
-            self._tags.n_tags = 0
-            self._tags.tags = None
-        else:
-            self._tags.n_tags = len(tags)
-            tags_ffi = (c_char_p * self._tags.n_tags)(*tags)
-            self._tags.tags = cast(tags_ffi, POINTER(c_char_p))
+        self._tags = Tags(tags)
 
 class Timeval(Structure):
     """standard struct timeval."""

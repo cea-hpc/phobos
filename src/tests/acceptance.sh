@@ -25,6 +25,7 @@ set -e
 
 # format and clean all by default
 CLEAN_ALL=${CLEAN_ALL:-1}
+TAGS=foo-tag,bar-tag
 
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
@@ -96,8 +97,8 @@ function tape_setup
         export tapes="$(get_tapes L6 $N_TAPES)"
         type=lto6
     fi
-    echo "adding tapes $tapes..."
-    $phobos tape add -t $type "$tapes"
+    echo "adding tapes $tapes with tags $TAGS..."
+    $phobos tape add -T $TAGS -t $type "$tapes"
 
     # comparing with original list
     $phobos tape list | sort | xargs > /tmp/pho_tape.1
@@ -154,7 +155,7 @@ function dir_setup
     [ "$CLEAN_ALL" -eq "0" ] && return 0
 
     echo "adding directories $dirs"
-    $phobos dir add $dirs
+    $phobos dir add -T $TAGS $dirs
     $phobos dir format --fs posix $dirs
 
     # comparing with original list
@@ -216,6 +217,27 @@ function put_get_test
     local md_check=$($phobos getmd $id)
     [ "x$md" = "x$md_check" ] ||
         error "Object attributes do not match expectations"
+}
+
+# Test tag based media selection
+function put_tags
+{
+    local md="a=1,b=2,c=3"
+    local id=test/hosts2.$$
+    local id2=test/hosts3.$$
+    local first_tag=$(echo $TAGS | cut -d',' -f1)
+
+    # phobos put with bad tags
+    $phobos put -T $TAGS-bad -m $md /etc/hosts $id &&
+        error "Should not be able to put objects with no media matching tags"
+    $phobos put -T $first_tag-bad -m $md /etc/hosts $id &&
+        error "Should not be able to put objects with no media matching tags"
+
+    # phobos put with existing tags
+    $phobos put -T $TAGS -m $md /etc/hosts $id ||
+        error "Put with valid tags should have worked"
+    $phobos put -T $first_tag -m $md /etc/hosts $id2 ||
+        error "Put with one valid tag should have worked"
 }
 
 # make sure there are at least N available dir/drives
@@ -327,6 +349,7 @@ if  [[ ! -w /dev/changer ]]; then
     trap dir_cleanup EXIT
     dir_setup
     put_get_test
+    put_tags
     concurrent_put
     check_status dir "$dirs"
     lock_test
@@ -335,6 +358,7 @@ else
     export PHOBOS_LRS_default_family="tape"
     tape_setup
     put_get_test
+    put_tags
     concurrent_put
     check_status tape "$tapes"
     lock_test

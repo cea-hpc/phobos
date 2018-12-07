@@ -279,7 +279,20 @@ class StoreGetHandler(XferOptHandler):
             sys.exit(os.EX_DATAERR)
 
 
-class StorePutHandler(XferOptHandler):
+class StoreGenericPutHandler(XferOptHandler):
+    """Base class for common options between put and mput"""
+
+    @classmethod
+    def add_options(cls, parser):
+        super(StoreGenericPutHandler, cls).add_options(parser)
+        # The type argument allows to transform 'a,b,c' into ['a', 'b', 'c'] at
+        # parse time rather than post processing it
+        parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
+                            help='Only use media that contain all these tags '
+                                 '(comma-separated: foo,bar)')
+
+
+class StorePutHandler(StoreGenericPutHandler):
     """Insert objects into backend."""
     label = 'put'
     descr = 'insert object into backend'
@@ -302,10 +315,11 @@ class StorePutHandler(XferOptHandler):
         if attrs is not None:
             attrs = attr_convert(attrs)
             self.logger.debug("Loaded attributes set '%r'", attrs)
+        tags = self.params.get('tags', [])
 
         self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
 
-        self.client.put_register(oid, src, attrs=attrs)
+        self.client.put_register(oid, src, attrs=attrs, tags=tags)
         try:
             self.client.run()
         except IOError as err:
@@ -314,7 +328,7 @@ class StorePutHandler(XferOptHandler):
             sys.exit(os.EX_DATAERR)
 
 
-class StoreMPutHandler(XferOptHandler):
+class StoreMPutHandler(StoreGenericPutHandler):
     """Insert objects into backend."""
     label = 'mput'
     descr = 'insert multiple objects into backend'
@@ -334,6 +348,7 @@ class StoreMPutHandler(XferOptHandler):
             fin = sys.stdin
         else:
             fin = open(path)
+        tags = self.params.get('tags', [])
 
         for i, line in enumerate(fin):
             # Skip empty lines and comments
@@ -357,7 +372,7 @@ class StoreMPutHandler(XferOptHandler):
                 self.logger.debug("Loaded attributes set '%r'", attrs)
 
             self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
-            self.client.put_register(oid, src, attrs=attrs)
+            self.client.put_register(oid, src, attrs=attrs, tags=tags)
 
         if fin is not sys.stdin:
             fin.close()
@@ -390,7 +405,9 @@ class MediaAddOptHandler(AddOptHandler):
     @classmethod
     def add_options(cls, parser):
         super(MediaAddOptHandler, cls).add_options(parser)
-        parser.add_argument('-T', '--tags',
+        # The type argument allows to transform 'a,b,c' into ['a', 'b', 'c'] at
+        # parse time rather than post processing it
+        parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
                             help='tags to associate with this media (comma-'
                                  'separated: foo,bar)')
 
@@ -663,8 +680,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         labels = NodeSet.fromlist(self.params.get('res'))
         fstype = self.params.get('fs').upper()
         techno = self.params.get('type', '').upper()
-        tags_str = self.params.get('tags')
-        tags = tags_str.split(',') if tags_str is not None else []
+        tags = self.params.get('tags', [])
         keep_locked = not self.params.get('unlock')
 
         for med in labels:
