@@ -190,6 +190,10 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         export.update(self.expanded_stats)
         return export
 
+    def is_locked(self):
+        """True if this media is locked"""
+        return self.lock_status != ""
+
     @property
     def lock_status(self):
         """Wrapper to get lock status"""

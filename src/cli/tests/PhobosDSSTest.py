@@ -105,5 +105,42 @@ class DSSClientTest(unittest.TestCase):
             client.media.delete([])
             client.media.delete(None)
 
+    def test_media_lock_unlock(self):
+        """Test media lock and unlock wrappers"""
+        with Client() as client:
+            # Create a dummy media in db
+            label = '/some/path_%d' % randint(0, 1000000)
+            client.media.add(PHO_DEV_DIR, 'POSIX', None, label, locked=False)
+
+            # Get the created media from db
+            media = client.media.get(id=label)[0]
+
+            # It should not be locked yet
+            self.assertFalse(media.is_locked())
+
+            # Lock it in db
+            client.media.lock([media])
+
+            # Media cannot be locked twice
+            with self.assertRaises(EnvironmentError):
+                client.media.lock([media])
+
+            # Retrieve an up-to-date version
+            media = client.media.get(id=label)[0]
+
+            # This one should be locked
+            self.assertTrue(media.is_locked())
+
+            # Unlock it
+            client.media.unlock([media])
+
+            # Unlocking twice works
+            client.media.unlock([media])
+
+            # The up-to-date version isn't locked anymore
+            media = client.media.get(id=label)[0]
+            self.assertFalse(media.is_locked())
+
+
 if __name__ == '__main__':
     unittest.main()

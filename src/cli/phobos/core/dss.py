@@ -189,6 +189,16 @@ class BaseObjectManager(object):
         if rc:
             raise EnvironmentError(rc, "Cannot delete objects")
 
+    def _generic_lock_unlock(self, objects, lock_c_func, err_message):
+        """Call a dss_<object>_{un,}lock c function on this list of objects.
+        lock_c_func could for example be dss_media_lock.
+        """
+        obj_count = len(objects)
+        obj_array = (self.wrapped_class * obj_count)(*objects)
+        rc = lock_c_func(byref(self.client.handle), obj_array, obj_count)
+        if rc:
+            raise EnvironmentError(rc, err_message)
+
 
 class DeviceManager(BaseObjectManager):
     """Proxy to manipulate devices."""
@@ -256,6 +266,18 @@ class MediaManager(BaseObjectManager):
     def _dss_set(self, hdl, obj, obj_cnt, opcode):
         """Invoke media-specific DSS set method."""
         return LIBPHOBOS.dss_media_set(hdl, obj, obj_cnt, opcode)
+
+    def lock(self, objects):
+        """Lock all the media associated with a given list of MediaInfo"""
+        self._generic_lock_unlock(
+            objects, LIBPHOBOS.dss_media_lock, "Media locking failed",
+        )
+
+    def unlock(self, objects):
+        """Unlock all the media associated with a given list of MediaInfo"""
+        self._generic_lock_unlock(
+            objects, LIBPHOBOS.dss_media_unlock, "Media unlocking failed",
+        )
 
 class DSSHandle(Structure):
     """
