@@ -268,7 +268,7 @@ def pho_rc_check(rc, func, args):
             name = str(func)
 
         raise EnvironmentError(
-            -rc, "%s(%s) failed" % (func, ", ".join(map(repr, args)))
+            -rc, "%s(%s) failed" % (name, ", ".join(map(repr, args)))
         )
 
     # Convention to signal ctypes to leave the return value untouched
