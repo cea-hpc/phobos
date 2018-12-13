@@ -206,3 +206,6 @@ def main(args=sys.argv):
 
 if __name__ == '__main__':
     main()
+
+# -*- mode: Python; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:ft=python:
