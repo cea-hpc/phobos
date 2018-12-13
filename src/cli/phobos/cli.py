@@ -507,6 +507,21 @@ class TapeAddOptHandler(MediaAddOptHandler):
         parser.add_argument('--fs', default="LTFS",
                             help='Filesystem type (default: LTFS)')
 
+class MediaUpdateOptHandler(DSSInteractHandler):
+    """Update an existing media"""
+    label = 'update'
+    descr = 'update existing media properties'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(MediaUpdateOptHandler, cls).add_options(parser)
+        parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
+                            help='New tags for this media (comma-separated, '
+                                 'e.g. "-T foo,bar"), empty string to clear '
+                                 'tags')
+        parser.add_argument('res', nargs='+', help='Resource(s) to update')
+
 class FormatOptHandler(DSSInteractHandler):
     """Format a resource."""
     label = 'format'
@@ -668,6 +683,7 @@ class MediaOptHandler(BaseResourceOptHandler):
     """Shared interface for media."""
     verbs = [
         MediaAddOptHandler,
+        MediaUpdateOptHandler,
         FormatOptHandler,
         ShowOptHandler,
         ListOptHandler,
@@ -693,6 +709,56 @@ class MediaOptHandler(BaseResourceOptHandler):
                 sys.exit(os.EX_DATAERR)
 
         self.logger.info("Added %d media successfully", len(labels))
+
+    def exec_update(self):
+        """Update an existing media"""
+        uids = NodeSet.fromlist(self.params.get('res'))
+        tags = self.params.get('tags')
+        if tags is None:
+            self.logger.info("No update to be performed")
+            return
+
+        # Empty string clears tag and ''.split(',') == ['']
+        if tags == ['']:
+            tags = []
+
+        failed = []
+        for uid in uids:
+            # Retrieve full media and check that it exists
+            media = self.client.media.get(family=self.family, id=uid)
+            if not media:
+                self.logger.error("No '%s' media found", uid)
+                failed.append(uid)
+                continue
+
+            # Unlikely: means an incoherent db
+            if len(media) > 1:
+                raise RuntimeError("multiple media have the same id: %s" % uid)
+            media = media[0]
+
+            # Attempt to lock the media to avoid concurrent modifications
+            try:
+                self.client.media.lock([media])
+            except EnvironmentError as err:
+                self.logger.error("Failed to lock media '%s': %s",
+                                  uid, env_error_format(err))
+                failed.append(uid)
+                continue
+
+            # Update tags
+            try:
+                media.tags = tags
+                self.client.media.update([media])
+            except EnvironmentError as err:
+                self.logger.error("Failed to update media '%s': %s",
+                                  uid, env_error_format(err))
+                failed.append(uid)
+            finally:
+                self.client.media.unlock([media])
+
+        if failed:
+            self.logger.error("Failed to update: %s", ", ".join(failed))
+            sys.exit(os.EX_DATAERR)
 
     def exec_format(self):
         """Format media however requested."""
@@ -839,6 +905,7 @@ class TapeOptHandler(MediaOptHandler):
     cenum = PHO_DEV_TAPE
     verbs = [
         TapeAddOptHandler,
+        MediaUpdateOptHandler,
         FormatOptHandler,
         ShowOptHandler,
         ListOptHandler,

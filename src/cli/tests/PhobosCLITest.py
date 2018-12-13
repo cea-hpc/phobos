@@ -33,7 +33,7 @@ from random import randint
 from socket import gethostname
 
 from phobos.cli import PhobosActionContext
-from phobos.core.dss import Client
+from phobos.core.dss import Client, MediaManager
 from phobos.core.ffi import DevInfo
 from phobos.core.const import PHO_DEV_DIR, PHO_DEV_TAPE
 
@@ -158,6 +158,63 @@ class MediaAddTest(BasicExecutionTest):
         self.assertItemsEqual(tagged0.tags, ['tag-foo'])
         self.assertItemsEqual(tagged1.tags, ['tag-foo', 'tag-bar'])
 
+    def test_media_update(self):
+        """test updating media."""
+        client = Client()
+        client.connect()
+        self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                          'update0', '--tags', 'tag-foo'])
+        self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
+                          'update1', '--tags', 'tag-foo,tag-bar'])
+
+        # Check inserted media
+        update0, = client.media.get(id="update0")
+        update1, = client.media.get(id="update1")
+        self.assertItemsEqual(update0.tags, ['tag-foo'])
+        self.assertItemsEqual(update1.tags, ['tag-foo', 'tag-bar'])
+
+        # Update media
+        self.pho_execute(['tape', 'update', '-T', 'new-tag1,new-tag2',
+                          'update[0-1]'])
+
+        # Check updated media
+        for med_id in "update0", "update1":
+            media, = client.media.get(id=med_id)
+            self.assertItemsEqual(media.tags, ['new-tag1', 'new-tag2'])
+
+        # No '-T' argument does nothing
+        self.pho_execute(['tape', 'update', 'update0'])
+        update0, = client.media.get(id=med_id)
+        self.assertItemsEqual(update0.tags, ['new-tag1', 'new-tag2'])
+
+        # Test a failed update
+        def failed_update(*args, **kwargs):
+            """Emulates a failed update by raising EnvironmentError"""
+            raise EnvironmentError(errno.ENOENT, "Expected failed")
+
+        old_update = MediaManager.update
+        MediaManager.update = failed_update
+        try:
+            self.pho_execute(['tape', 'update', '-T', '', 'update0'],
+                             code=os.EX_DATAERR)
+        finally:
+            MediaManager.update = old_update
+
+        # Ensure that the tape is unlocked after failure
+        client = Client()
+        client.connect()
+        # Exactly one media should be returned
+        media, = client.media.get(id='update0')
+        self.assertFalse(media.is_locked())
+
+        # Check that locked tapes cannot be updated
+        client.media.lock([media])
+        try:
+            self.pho_execute(['tape', 'update', '-T', '', 'update0'],
+                             code=os.EX_DATAERR)
+        finally:
+            client.media.unlock([media])
+
     def test_tape_add_lowercase(self):
         """Express tape technology in lowercase in the command line (PHO-67)."""
         self.pho_execute(['tape', 'add', 'B0000[5-9]L5', '-t', 'lto5'])
@@ -202,6 +259,25 @@ class DeviceAddTest(BasicExecutionTest):
         self.pho_execute(['dir', 'add', tmp_path, '--tags', 'tag-foo,tag-bar'])
         output, _ = self.pho_execute_capture(['dir', 'show', tmp_path])
         self.assertIn("['tag-foo', 'tag-bar']", output)
+
+    def test_dir_update(self):
+        """Test updating a directory."""
+        tmp_f = tempfile.NamedTemporaryFile()
+        tmp_path = tmp_f.name
+        client = Client()
+        client.connect()
+        self.pho_execute(['dir', 'add', tmp_path, '--tags', 'tag-baz'])
+
+        # Check inserted media
+        media, = client.media.get(id=tmp_path)
+        self.assertItemsEqual(media.tags, ['tag-baz'])
+
+        # Update media
+        self.pho_execute(['dir', 'update', '-T', '', tmp_path])
+
+        # Check updated media
+        media, = client.media.get(id=tmp_path)
+        self.assertItemsEqual(media.tags, [])
 
     def test_dir_add_missing(self):
         """Add a non-existent directory should raise an error."""

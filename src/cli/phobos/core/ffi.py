@@ -237,9 +237,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
 
     @tags.setter
     def tags(self, tags):
-        if self._tags.tags:
-            # Avoid having to free existing data
-            raise NotImplementedError("media tags can only be assigned once")
+        self._tags.free()
         self._tags = Tags(tags)
 
 class Timeval(Structure):
