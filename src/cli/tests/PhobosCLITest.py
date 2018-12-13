@@ -116,6 +116,12 @@ class BasicExecutionTest(unittest.TestCase):
             if code:
                 self.fail("SystemExit with code %d expected" % code)
 
+    def pho_execute_capture(self, *args, **kwargs):
+        """Same as pho_execute but captures and returns (stdout, stderr)"""
+        with output_intercept() as (stdout, stderr):
+            self.pho_execute(*args, **kwargs)
+        return stdout.getvalue(), stderr.getvalue()
+
 
 class MediaAddTest(BasicExecutionTest):
     """
@@ -127,7 +133,7 @@ class MediaAddTest(BasicExecutionTest):
     """
     def test_tape_add(self):
         """test adding tapes. Simple case."""
-        #Test differents types of tape name format
+        # Test different types of tape name format
         self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
                           'STANDARD0[000-100]'])
         self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
@@ -137,19 +143,20 @@ class MediaAddTest(BasicExecutionTest):
         self.pho_execute(['tape', 'lock', 'STANDARD0[000-100]'])
         self.pho_execute(['tape', 'unlock', 'STANDARD0[000-050]'])
         self.pho_execute(['tape', 'unlock', '--force', 'STANDARD0[000-100]'])
+
+    def test_add_tags(self):
+        """Test that tags are properly added"""
         self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
                           'TAGGED0', '--tags', 'tag-foo'])
         self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
                           'TAGGED1', '--tags', 'tag-foo,tag-bar'])
-        for (tape, foo_count, bar_count) in [
-                ('TAGGED0', 1, 0),
-                ('TAGGED1', 1, 1),
-        ]:
-            with output_intercept() as (stdout, _):
-                self.pho_execute(['tape', 'show', tape])
-            output = stdout.getvalue()
-            self.assertEqual(output.count('tag-foo'), foo_count)
-            self.assertEqual(output.count('tag-bar'), bar_count)
+        # Check that tags have successfully been added
+        client = Client()
+        client.connect()
+        tagged0, = client.media.get(id='TAGGED0')
+        tagged1, = client.media.get(id='TAGGED1')
+        self.assertItemsEqual(tagged0.tags, ['tag-foo'])
+        self.assertItemsEqual(tagged1.tags, ['tag-foo', 'tag-bar'])
 
     def test_tape_add_lowercase(self):
         """Express tape technology in lowercase in the command line (PHO-67)."""
@@ -187,6 +194,14 @@ class DeviceAddTest(BasicExecutionTest):
         for file in flist:
             path = "%s:%s" % (gethostname_short(), file.name)
             self.pho_execute(['-v', 'dir', 'show', path])
+
+    def test_dir_tags(self):
+        """Test adding a directory with tags."""
+        tmp_f = tempfile.NamedTemporaryFile()
+        tmp_path = tmp_f.name
+        self.pho_execute(['dir', 'add', tmp_path, '--tags', 'tag-foo,tag-bar'])
+        output, _ = self.pho_execute_capture(['dir', 'show', tmp_path])
+        self.assertIn("['tag-foo', 'tag-bar']", output)
 
     def test_dir_add_missing(self):
         """Add a non-existent directory should raise an error."""

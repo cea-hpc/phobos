@@ -805,13 +805,14 @@ class DirOptHandler(MediaOptHandler, DeviceOptHandler):
         """
         resources = self.params.get('res')
         keep_locked = not self.params.get('unlock')
+        tags = self.params.get('tags', [])
 
         for path in resources:
             # Remove any trailing slash
             path = path.rstrip('/')
             try:
                 self.client.media.add(self.cenum, 'POSIX', None, path,
-                                      locked=keep_locked)
+                                      locked=keep_locked, tags=tags)
                 # Add device unlocked and rely on media locking
                 self.client.devices.add(self.cenum, path, locked=False)
             except EnvironmentError as err:
