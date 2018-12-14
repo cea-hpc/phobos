@@ -23,7 +23,9 @@
 High level interface for managing configuration from CLI.
 """
 
+from ctypes import byref, c_char_p
 import os
+
 from phobos.core.ffi import LIBPHOBOS
 
 def load_file(path):
@@ -32,3 +34,24 @@ def load_file(path):
     if ret != 0:
         ret = abs(ret)
         raise IOError(ret, path, os.strerror(ret))
+
+
+# Singleton to differenciate cases where default was not provided and
+# default=None
+RAISE_ERROR = ()
+
+def get_val(section, name, default=RAISE_ERROR):
+    """Return the value of a property in a given section or an optional default
+    value.
+    Raise KeyError if the value has not been found in configuration and no
+    default value has been provided.
+    """
+    cfg_value = c_char_p()
+    ret = LIBPHOBOS.pho_cfg_get_val(section, name, byref(cfg_value))
+    if ret != 0:
+        if default is RAISE_ERROR:
+            raise KeyError("No value in conf for section '%s', key '%s'"
+                           % (section, name))
+        else:
+            return default
+    return cfg_value.value
