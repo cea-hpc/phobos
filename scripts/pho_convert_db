@@ -154,8 +154,14 @@ DROP TYPE extent_lyt_type;""")
             DROP TYPE dev_model;
 
             -- drop old media_model type.
-            DROP TYPE tape_model;"""
-        )
+            DROP TYPE tape_model;
+
+            -- add the media.tags field
+            ALTER TABLE media ADD COLUMN tags JSONB;
+
+            -- create index for faster tag filtering
+            CREATE INDEX ON media USING gin(tags);
+        """)
         self.conn.commit()
         cur.close()
 
