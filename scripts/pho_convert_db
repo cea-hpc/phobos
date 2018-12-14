@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-#  All rights reserved (c) 2014-2017 CEA/DAM.
+#  All rights reserved (c) 2014-2018 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -130,12 +130,20 @@ DROP TYPE extent_lyt_type;""")
     def convert_schema_1_to_2(self):
         """
         DB schema changes:
+        - device.id    : from varchar(32) to varchar(255)
+        - media.id     : from varchar(32) to varchar(255)
         - device.model : from enum to varchar(32)
-        - media.model : from enum top varchar(32)
+        - media.model  : from enum top varchar(32)
         """
         cur = self.conn.cursor()
         #Alter model from enum to varchar(32) and drop old enum types
         cur.execute("""
+            -- increase device id size from 32 to 255
+            ALTER TABLE device ALTER id TYPE varchar(255);
+
+            -- increase media id size from 32 to 255
+            ALTER TABLE media ALTER id TYPE varchar(255);
+
             -- device model from enum to varchar(32)
             ALTER TABLE device ALTER model TYPE varchar(32);
 

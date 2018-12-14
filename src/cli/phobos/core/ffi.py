@@ -30,7 +30,7 @@ import logging
 
 from ctypes import *
 
-from phobos.core.const import PHO_LABEL_MAX_LEN, NAME_MAX
+from phobos.core.const import PHO_LABEL_MAX_LEN, PHO_URI_MAX
 from phobos.core.const import fs_type2str, fs_status2str
 from phobos.core.const import adm_status2str, dev_family2str
 
@@ -57,13 +57,6 @@ class CLIManagedResourceMixin(object):
                 conv = str
             export[key] = conv(getattr(self, key))
         return export
-
-class UnionId(Union):
-    """Media ID union type."""
-    _fields_ = [
-        ('label', c_char * PHO_LABEL_MAX_LEN),
-        ('path', c_char * NAME_MAX)
-    ]
 
 class DSSLock(Structure):
     """Resource lock as managed by DSS."""
@@ -135,7 +128,7 @@ class MediaId(Structure):
     """Generic media identifier."""
     _fields_ = [
         ('type', c_int),
-        ('id_u', UnionId)
+        ('id', c_char * PHO_URI_MAX)
     ]
 
 class MediaFS(Structure):
@@ -206,7 +199,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
 
     @property
     def ident(self):
-        return self.id.id_u.label
+        return self.id.id
 
     @property
     def expanded_fs_info(self):

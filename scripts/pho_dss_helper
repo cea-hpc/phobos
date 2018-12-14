@@ -41,14 +41,14 @@ CREATE TYPE extent_state AS ENUM('pending','sync','orphan');
 -- enums extensibles: ALTER TYPE type ADD VALUE 'value'
 
 CREATE TABLE device(family dev_family, model varchar(32),
-                    id varchar(32) UNIQUE, host varchar(128),
+                    id varchar(255) UNIQUE, host varchar(128),
                     adm_status adm_status, path varchar(256),
                     lock varchar(256) DEFAULT '' NOT NULL,
                     lock_ts bigint,
                     PRIMARY KEY (family, id));
 CREATE INDEX ON device USING gin(host);
 
-CREATE TABLE media(family dev_family, model varchar(32), id varchar(32) UNIQUE,
+CREATE TABLE media(family dev_family, model varchar(32), id varchar(255) UNIQUE,
                    adm_status adm_status, fs_type fs_type,
                    fs_label varchar(32) DEFAULT '' NOT NULL,
                    address_type address_type, fs_status fs_status,

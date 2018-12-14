@@ -157,7 +157,7 @@ PyMODINIT_FUNC initconst(void)
         return;
 
     /* Misc. constants */
-    PyModule_AddIntMacro(mod, NAME_MAX);
+    PyModule_AddIntMacro(mod, PHO_URI_MAX);
 
     PyModule_AddIntMacro(mod, PHO_LABEL_MAX_LEN);
     PyModule_AddIntMacro(mod, PHO_LAYOUT_TAG_MAX);

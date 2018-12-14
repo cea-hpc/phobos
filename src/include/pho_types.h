@@ -38,10 +38,9 @@
 
 /** max length of a tape label, FS label... */
 #define PHO_LABEL_MAX_LEN 32
-/** max length of a hash-based address in hexadecimal form.
- * A SHA-1 value is always 160 bit long, hexa representation uses 4 bit per
- * character so the string length is 160/4 + null character.
- */
+
+/** max length of media URI */
+#define PHO_URI_MAX (NAME_MAX + 1)
 
 /**
  * Max layout tag length.
@@ -264,10 +263,9 @@ struct media_id {
     /** XXX type -> id type may not be straightforward as given media type
      * could be addressed in multiple ways (FS label, FS UUID, device WWID...).
      * So, an id_type enum may be required here in a later version. */
-    union {
-        char label[PHO_LABEL_MAX_LEN];
-        char path[NAME_MAX];
-    } id_u;
+
+    /** Media identifier (tape label or URI) */
+    char id[PHO_URI_MAX];
 };
 
 /**
@@ -275,36 +273,19 @@ struct media_id {
  */
 static inline const char *media_id_get(const struct media_id *mid)
 {
-    switch (mid->type) {
-    case PHO_DEV_TAPE:
-        return mid->id_u.label;
-    case PHO_DEV_DIR:
-        return mid->id_u.path;
-    default:
-        return NULL;
-    }
+    return mid->id;
 }
 
 /**
  * Set the appropiate media identifier.
- * type field must be set in media_id.
  */
 static inline int media_id_set(struct media_id *mid, const char *id)
 {
-    switch (mid->type) {
-    case PHO_DEV_TAPE:
-        if (strlen(id) >= PHO_LABEL_MAX_LEN)
-            return -EINVAL;
-        strncpy(mid->id_u.label, id, PHO_LABEL_MAX_LEN);
-        return 0;
-    case PHO_DEV_DIR:
-        if (strlen(id) >= NAME_MAX)
-            return -EINVAL;
-        strncpy(mid->id_u.path, id, NAME_MAX);
-        return 0;
-    default:
+    if (strlen(id) >= PHO_URI_MAX)
         return -EINVAL;
-    }
+
+    strncpy(mid->id, id, sizeof(mid->id));
+    return 0;
 }
 
 /** describe a piece of data in a layout */

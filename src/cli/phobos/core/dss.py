@@ -38,7 +38,7 @@ from phobos.core.const import PHO_MDA_ADM_ST_LOCKED, PHO_MDA_ADM_ST_UNLOCKED
 from phobos.core.const import PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED
 from phobos.core.const import DSS_SET_INSERT, DSS_SET_UPDATE, DSS_SET_DELETE
 
-from phobos.core.ffi import DevInfo, MediaInfo, MediaId, MediaStats, UnionId
+from phobos.core.ffi import DevInfo, MediaInfo, MediaId, MediaStats
 from phobos.core.ffi import LIBPHOBOS
 from phobos.core.ldm import ldm_device_query
 
@@ -240,7 +240,7 @@ class MediaManager(BaseObjectManager):
     def add(self, mtype, fstype, model, label, tags=None, locked=False):
         """Insert media into DSS."""
         media = MediaInfo()
-        media.id = MediaId(mtype, UnionId(label))
+        media.id = MediaId(mtype, label)
         media.fs.type = str2fs_type(fstype)
         media.model = model
         media.addr_type = PHO_ADDR_HASH1
