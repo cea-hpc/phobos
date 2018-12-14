@@ -62,7 +62,7 @@ const struct pho_config_item cfg_tape_model[] = {
 };
 
 /* init by parse_supported_tape_models function called at config init */
-GPtrArray *supported_tape_models;
+static GPtrArray *supported_tape_models;
 
 /**
  * Parse config to init supported model for media of tape type
@@ -1119,7 +1119,8 @@ static int get_media_setrequest(struct media_info *item_list, int item_cnt,
             /* check tape model validity */
             if (p_media->id.type == PHO_DEV_TAPE &&
                     !dss_tape_model_check(p_media->model))
-                LOG_RETURN(-EINVAL, "invalid media tape model");
+                LOG_RETURN(-EINVAL, "invalid media tape model '%s'",
+                           p_media->model);
 
             model = dss_char4sql(p_media->model);
             stats = dss_media_stats_encode(p_media->stats);
