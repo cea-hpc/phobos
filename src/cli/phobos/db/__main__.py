@@ -51,7 +51,6 @@ class Migrator:
 
         # { source_version: (target_version, migration_function) }
         self.convert_funcs = {
-            "1.0": ("1.1", self.convert_0_to_1),
             "1.1": ("1.2", self.convert_1_to_2),
         }
 
@@ -66,84 +65,6 @@ class Migrator:
     def disconnect(self):
         self.conn.close()
         self.conn = None
-
-    def convert_schema_0_to_1(self):
-        """
-        DB schema changes:
-        - drop type::extent_lyt_type
-        - add media::fs_label after fs_type with the previous value of 'id'
-        - extent:
-            * pk of extent is only oid
-            * drop field copy_num
-            * drop field lyt_type
-            * lyt_info='{"name":"simple","major":0,"minor":1}'
-        """
-        cur = self.conn.cursor()
-        cur.execute("""
--- column order doesn't matter
-ALTER TABLE media ADD COLUMN fs_label VARCHAR(32) DEFAULT '' NOT NULL;
-
--- First remove PRIMARY KEY attribute of former PRIMARY KEY
-ALTER TABLE extent DROP CONSTRAINT extent_pkey;
--- Then set the new PRIMARY KEY
-ALTER TABLE extent ADD PRIMARY KEY (oid);
-
--- drop fields copy_num and lyt_type
-ALTER TABLE extent DROP COLUMN copy_num;
-ALTER TABLE extent DROP COLUMN lyt_type;
-
--- set layout info for existing extents
-UPDATE extent SET lyt_info='{"name":"simple","major":0,"minor":1}';
-
--- Drop the type once no column use it
--- Don't precise 'IF EXISTS' as the DB schema is supposed to be 1.0
--- so the type is supposed to exist.
-DROP TYPE extent_lyt_type;""")
-        self.conn.commit()
-        cur.close()
-
-    def convert_extent(self):
-        update = []
-        cur = self.conn.cursor()
-        cur.execute("""SELECT oid, extents FROM extent""")
-        for row in cur.fetchall():
-            attr = json.loads(row[1])
-            attr[0]['sz'] = int(attr[0]['sz'])
-            update.append((row[0], attr))
-
-        for u in update:
-            qry = "UPDATE extent SET extents='%s' WHERE oid='%s'" % \
-                (json.dumps(u[1]), u[0])
-            cur.execute(qry)
-        self.conn.commit()
-        cur.close()
-
-    def convert_media(self):
-        update = []
-        cur = self.conn.cursor()
-        cur.execute("""SELECT id, stats FROM media""")
-        for row in cur.fetchall():
-            stats = json.loads(row[1])
-            for f in ('nb_obj', 'last_load', 'nb_errors', 'logc_spc_used',
-                      'phys_spc_free', 'phys_spc_used'):
-                if stats.has_key(f):
-                    stats[f] = int(stats[f])
-            update.append((row[0], stats))
-
-        for u in update:
-            qry = "UPDATE media SET stats='%s' WHERE id='%s'" % \
-                (json.dumps(u[1]), u[0])
-            cur.execute(qry)
-        self.conn.commit()
-        cur.close()
-
-    def convert_0_to_1(self):
-        """Convert DB from model 0 (until phobos v1.0) to 1 (phobos v1.1)"""
-        self.connect()
-        self.convert_schema_0_to_1()
-        self.convert_extent()
-        self.convert_media()
-        self.disconnect()
 
     def convert_schema_1_to_2(self):
         """
@@ -279,17 +200,7 @@ DROP TYPE extent_lyt_type;""")
         if cursor.fetchone() is None:
             return "0"
 
-        # Media table exists: try to guess if version is 1.0 or 1.1
-        cursor.execute("""
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_name='media' and column_name='fs_label'
-        """)
-        # No 'fs_label' column: 1.0
-        if cursor.fetchone() is None:
-            return "1.0"
-
-        # 'fs_label' column exists: 1.1
+        # Otherwise: 1.1
         return "1.1"
 
 
