@@ -28,7 +28,7 @@ import os
 
 from phobos.core.ffi import LIBPHOBOS
 
-def load_file(path):
+def load_file(path=None):
     """Load a configuration file from path"""
     ret = LIBPHOBOS.pho_cfg_init_local(path)
     if ret != 0:
