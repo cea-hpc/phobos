@@ -74,7 +74,7 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_store.so*
 %{_libdir}/phobos/libpho_layout_*.so*
 %{_sbindir}/pho_*_helper
-%{_sbindir}/pho_convert_*
+%{_sbindir}/phobos_db
 %{python_sitearch}/phobos/*
 %{python_sitearch}/phobos-*-py?.?.egg-info
 %{_bindir}/phobos

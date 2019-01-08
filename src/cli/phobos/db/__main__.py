@@ -19,15 +19,6 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-import argparse
-from distutils.version import LooseVersion
-import logging
-import json
-import psycopg2
-import sys
-
-from phobos.core import cfg
-
 """
 Convert phobos database
   * from 0 (phobos v1.0) to 1 (phobos v1.1):
@@ -38,6 +29,16 @@ Convert phobos database
   - media and device model are updated from enum type to varchar
   - create schema_info table
 """
+
+import argparse
+from distutils.version import LooseVersion
+import logging
+import json
+import psycopg2
+import sys
+
+from phobos.cli import PhobosActionContext
+from phobos.core import cfg
 
 CURRENT_SCHEMA_VERSION = "1.2"
 
@@ -241,7 +242,6 @@ DROP TYPE extent_lyt_type;""")
         """Return the current version of the database schema"""
         # Be optimistic and attempt to retrieve version from schema_info table
         self.connect()
-        cursor = self.conn.cursor()
         version = None
         # Is there a "schema_info" table?
         cursor.execute("""
@@ -293,29 +293,11 @@ DROP TYPE extent_lyt_type;""")
         return "1.1"
 
 
-def main(argv=None):
-    migrator = Migrator()
-
-    parser = argparse.ArgumentParser(
-        description="Manage phobos database schema migrations. By default, "
-                    "migrates the database to the most recent schema."
-    )
-    parser.add_argument(
-        "-t", "--target-version", choices=migrator.reachable_versions,
-        default=CURRENT_SCHEMA_VERSION,
-        help="The schema version to migrate to",
-    )
-    parser.add_argument(
-        "-y", "--yes", action="store_true", help="Don't ask for confirmation",
-    )
-    parser.add_argument(
-        "-V", "--schema-version", action="store_true",
-        help="Print the current schema version and exit",
-    )
-    args = parser.parse_args(argv)
-
+def migrate(args):
+    """Perform database schema migration from arguments"""
     cfg.load_file()
 
+    migrator = Migrator()
     if args.schema_version:
         print migrator.schema_version()
         sys.exit(0)
@@ -330,8 +312,44 @@ def main(argv=None):
 
     migrator.convert(args.target_version)
 
+
+def main(argv=None):
+    migrator = Migrator()
+
+    parser = argparse.ArgumentParser(
+        prog="phobos_db",
+        description="Phobos database setup and schemas",
+    )
+
+    subparsers = parser.add_subparsers(title="action", dest="action")
+    subparsers.required = True
+
+    # migrate subparser
+    migrate_parser = subparsers.add_parser(
+        "migrate",
+        help="Manage phobos database schema initialization and migrations. By "
+             "default, migrates the database to the most recent schema."
+    )
+    migrate_parser.set_defaults(main=migrate)
+    migrate_parser.add_argument(
+        "-t", "--target-version", choices=migrator.reachable_versions,
+        default=CURRENT_SCHEMA_VERSION,
+        help="The schema version to migrate to",
+    )
+    migrate_parser.add_argument(
+        "-y", "--yes", action="store_true", help="Don't ask for confirmation",
+    )
+    migrate_parser.add_argument(
+        "-V", "--schema-version", action="store_true",
+        help="Print the current schema version and exit",
+    )
+
+    # Parse args and execute appropriate function
+    args = parser.parse_args(argv)
+    args.main(args)
+
 if __name__ == '__main__':
-    logging.basicConfig()
+    logging.basicConfig(format=PhobosActionContext.CLI_LOG_FORMAT_REG)
     main()
 
 # -*- mode: Python; c-basic-offset: 4; indent-tabs-mode: nil; -*-

@@ -57,7 +57,7 @@ glue_module = Extension(
 
 setup(
     name='phobos',
-    packages=['phobos', 'phobos.core'],
+    packages=['phobos', 'phobos.core', 'phobos.db'],
     ext_package='phobos.core',
     ext_modules=[
         const_module,
