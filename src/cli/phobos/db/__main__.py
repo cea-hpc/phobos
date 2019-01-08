@@ -31,6 +31,7 @@ Convert phobos database
 """
 
 import argparse
+from contextlib import contextmanager
 from distutils.version import LooseVersion
 import logging
 import json
@@ -58,12 +59,12 @@ class Migrator:
             version for version, _ in self.convert_funcs.itervalues()
         )
 
+    @contextmanager
     def connect(self):
         conn_str = cfg.get_val("dss", "connect_string")
-        self.conn = psycopg2.connect(conn_str)
-
-    def disconnect(self):
-        self.conn.close()
+        with psycopg2.connect(conn_str) as conn:
+            self.conn = conn
+            yield conn
         self.conn = None
 
     def convert_schema_1_to_2(self):
@@ -114,9 +115,8 @@ class Migrator:
 
     def convert_1_to_2(self):
         """Convert DB from model 1 (phobos v1.1) to 2 (phobos v1.2)"""
-        self.connect()
-        self.convert_schema_1_to_2();
-        self.disconnect()
+        with self.connect():
+            self.convert_schema_1_to_2();
 
     def convert(self, target_version=None):
         """Convert DB schema up to a given phobos version"""
@@ -162,46 +162,48 @@ class Migrator:
     def schema_version(self):
         """Return the current version of the database schema"""
         # Be optimistic and attempt to retrieve version from schema_info table
-        self.connect()
-        version = None
-        # Is there a "schema_info" table?
-        cursor.execute("""
-            SELECT 1
-            FROM information_schema.tables
-            WHERE table_name='schema_info'
-        """)
+        with self.connect(), self.conn.cursor() as cursor:
+            version = None
+            # Is there a "schema_info" table?
+            cursor.execute("""
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_name='schema_info'
+            """)
 
-        # Schema info present, use it
-        if cursor.fetchone() is not None:
-            cursor.execute("SELECT version FROM schema_info")
-            versions = cursor.fetchall()
+            # Schema info present, use it
+            if cursor.fetchone() is not None:
+                cursor.execute("SELECT version FROM schema_info")
+                versions = cursor.fetchall()
 
-            # Check for inconsistencies in database
-            if len(versions) > 1:
-                LOGGER.warning(
-                    "Invalid db state: multiple versions are specified"
-                )
+                # Check for inconsistencies in database
+                if len(versions) > 1:
+                    LOGGER.warning(
+                        "Invalid db state: multiple versions are specified"
+                    )
 
-            # Table created but not value: this state is invalid
-            if not versions:
-                raise RuntimeError(
-                    "Invalid db state: schema_info table present but empty"
-                )
+                # Table created but not value: this state is invalid
+                if not versions:
+                    raise RuntimeError(
+                        "Invalid db state: schema_info table present but empty"
+                    )
 
-            # In case of multiple detected versions, take the latest
-            versions = [row[0] for row in versions]
-            return max(versions, key=lambda v: LooseVersion)
+                # In case of multiple detected versions, take the latest
+                versions = [row[0] for row in versions]
+                return max(versions, key=lambda v: LooseVersion)
 
-        # No schema_info table, if the "media" table does not exist either,
-        # the schema has not been initialized
-        cursor.execute(
-            "SELECT 1 FROM information_schema.tables WHERE table_name='media'"
-        )
-        if cursor.fetchone() is None:
-            return "0"
+            # No schema_info table, if the "media" table does not exist either,
+            # the schema has not been initialized
+            cursor.execute("""
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_name='media'
+            """)
+            if cursor.fetchone() is None:
+                return "0"
 
-        # Otherwise: 1.1
-        return "1.1"
+            # Otherwise: 1.1
+            return "1.1"
 
 
 def migrate(args):
