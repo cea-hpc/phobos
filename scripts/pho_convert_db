@@ -19,9 +19,14 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-import psycopg2
+import argparse
+from distutils.version import LooseVersion
+import logging
 import json
+import psycopg2
 import sys
+
+from phobos.core import cfg
 
 """
 Convert phobos database
@@ -31,19 +36,31 @@ Convert phobos database
     with the appropriate type.
   * from 1 (phobos v1.1) to 2 (phobos v1.2):
   - media and device model are updated from enum type to varchar
+  - create schema_info table
 """
 
-CONN_STR = "dbname='phobos' user='phobos' host='localhost' password='phobos'"
+CURRENT_SCHEMA_VERSION = "1.2"
 
-DB_V_PHOBOS_V = (("1.0",), ("1.1",), ("1.2",))
+LOGGER = logging.getLogger(__name__)
 
 class Migrator:
     """StrToInt JSONB conversion engine"""
     def __init__(self, **kwargs):
         self.conn = None
 
+        # { source_version: (target_version, migration_function) }
+        self.convert_funcs = {
+            "1.0": ("1.1", self.convert_0_to_1),
+            "1.1": ("1.2", self.convert_1_to_2),
+        }
+
+        self.reachable_versions = set(
+            version for version, _ in self.convert_funcs.itervalues()
+        )
+
     def connect(self):
-        self.conn = psycopg2.connect(CONN_STR)
+        conn_str = cfg.get_val("dss", "connect_string")
+        self.conn = psycopg2.connect(conn_str)
 
     def disconnect(self):
         self.conn.close()
@@ -161,6 +178,14 @@ DROP TYPE extent_lyt_type;""")
 
             -- create index for faster tag filtering
             CREATE INDEX ON media USING gin(tags);
+
+            -- create schema_info table for version tracking
+            CREATE TABLE schema_info (
+                version varchar(32) PRIMARY KEY
+            );
+
+            -- Insert current schema version
+            INSERT INTO schema_info VALUES ('1.2');
         """)
         self.conn.commit()
         cur.close()
@@ -171,54 +196,142 @@ DROP TYPE extent_lyt_type;""")
         self.convert_schema_1_to_2();
         self.disconnect()
 
-    def convert(self, old_model, new_model):
-        """Convert DB from old_model to new_model"""
-        convert_functions = {(0,1) : self.convert_0_to_1,
-                             (1,2) : self.convert_1_to_2}
-        for current in range(old_model, new_model):
-            if (current, current+1) not in convert_functions:
-                print "Unable to convert from model %s to %s." % \
-                                                        (current, current + 1)
-                sys.exit(1)
+    def convert(self, target_version=None):
+        """Convert DB schema up to a given phobos version"""
+        target_version = target_version if target_version is not None \
+                                        else CURRENT_SCHEMA_VERSION
 
-        for current in range(old_model, new_model):
-            convert_functions[(old_model, new_model)]()
+        # Check that the target version can be reached before migrating
+        if target_version not in self.reachable_versions:
+            raise ValueError(
+                "Don't know how to migrate to version %s" % (target_version,)
+            )
 
-def main(args=sys.argv):
-    print "DB MODEL : corresponding Phobos versions"
-    db_v_index=0
-    for phobos_v in DB_V_PHOBOS_V:
-        print str(db_v_index) + " : " + str(phobos_v)
-        db_v_index += 1
-    old_model = int(raw_input("Which is your old existing db model : "))
-    new_model = int(raw_input("Which is the db model you aim at : "))
-    if old_model < 0 or old_model >= len(DB_V_PHOBOS_V):
-        print "Your old existing db model doesn't exist."
-        print str(old_model) + "is not between 0 and " + str(len(DB_V_PHOBOS_V))
-        sys.exit(1)
+        # Check that the current version is anterior to the target version
+        current_version = self.schema_version()
+        if LooseVersion(current_version) > LooseVersion(target_version):
+            raise ValueError(
+                "Cannot migrate to an older version (current version: %s, "
+                "target version: %s)"
+                % (current_version, target_version)
+            )
 
-    if new_model < 0 or new_model >= len(DB_V_PHOBOS_V):
-        print "The aimed db model doesn't exist."
-        print str(new_model) + "is not between 0 and " + str(len(DB_V_PHOBOS_V))
-        sys.exit(1)
+        # Perform successive migrations. To enforce consistency, the new
+        # current_version is retrieved from database at each step
+        while current_version != target_version:
+            try:
+                next_version, converter = self.convert_funcs[current_version]
+            except KeyError:
+                raise RuntimeError(
+                    "Inconsistent migration table, cannot migrate from %s"
+                    % (current_version)
+                )
+            LOGGER.info(
+                "Migrating from %s to %s", current_version, next_version
+            )
+            converter()
+            current_version = self.schema_version()
+            if current_version != next_version:
+                raise RuntimeError(
+                    "Migration to version %s unexpectedly led to version %s"
+                    % (next_version, current_version)
+                )
 
-    if old_model >= new_model:
-        print "The old_model (%s) is equal or younger than the target one (%s)"\
-                                                        % (old_model, new_model)
-        sys.exit(1)
+    def schema_version(self):
+        """Return the current version of the database schema"""
+        # Be optimistic and attempt to retrieve version from schema_info table
+        self.connect()
+        cursor = self.conn.cursor()
+        version = None
+        # Is there a "schema_info" table?
+        cursor.execute("""
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_name='schema_info'
+        """)
 
-    print "Your are about to upgrade database from model %s (phobos version "\
-          "%s) to model %s (phobos version %s)." % (
-              old_model, DB_V_PHOBOS_V[old_model], new_model,
-              DB_V_PHOBOS_V[new_model]
-          )
-    go = raw_input("Do you want to continue? [y/N]: ")
-    if go != 'y':
-        sys.exit(1)
+        # Schema info present, use it
+        if cursor.fetchone() is not None:
+            cursor.execute("SELECT version FROM schema_info")
+            versions = cursor.fetchall()
 
-    Migrator().convert(old_model, new_model)
+            # Check for inconsistencies in database
+            if len(versions) > 1:
+                LOGGER.warning(
+                    "Invalid db state: multiple versions are specified"
+                )
+
+            # Table created but not value: this state is invalid
+            if not versions:
+                raise RuntimeError(
+                    "Invalid db state: schema_info table present but empty"
+                )
+
+            # In case of multiple detected versions, take the latest
+            versions = [row[0] for row in versions]
+            return max(versions, key=lambda v: LooseVersion)
+
+        # No schema_info table, if the "media" table does not exist either,
+        # the schema has not been initialized
+        cursor.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name='media'"
+        )
+        if cursor.fetchone() is None:
+            return "0"
+
+        # Media table exists: try to guess if version is 1.0 or 1.1
+        cursor.execute("""
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name='media' and column_name='fs_label'
+        """)
+        # No 'fs_label' column: 1.0
+        if cursor.fetchone() is None:
+            return "1.0"
+
+        # 'fs_label' column exists: 1.1
+        return "1.1"
+
+
+def main(argv=None):
+    migrator = Migrator()
+
+    parser = argparse.ArgumentParser(
+        description="Manage phobos database schema migrations. By default, "
+                    "migrates the database to the most recent schema."
+    )
+    parser.add_argument(
+        "-t", "--target-version", choices=migrator.reachable_versions,
+        default=CURRENT_SCHEMA_VERSION,
+        help="The schema version to migrate to",
+    )
+    parser.add_argument(
+        "-y", "--yes", action="store_true", help="Don't ask for confirmation",
+    )
+    parser.add_argument(
+        "-V", "--schema-version", action="store_true",
+        help="Print the current schema version and exit",
+    )
+    args = parser.parse_args(argv)
+
+    cfg.load_file()
+
+    if args.schema_version:
+        print migrator.schema_version()
+        sys.exit(0)
+
+    target_version = args.target_version
+    if not args.yes:
+        print "Your are about to upgrade database schema from version %s "\
+              "to version %s." % (migrator.schema_version(), target_version)
+        confirm = raw_input("Do you want to continue? [y/N]: ")
+        if confirm != 'y':
+            sys.exit(1)
+
+    migrator.convert(args.target_version)
 
 if __name__ == '__main__':
+    logging.basicConfig()
     main()
 
 # -*- mode: Python; c-basic-offset: 4; indent-tabs-mode: nil; -*-
