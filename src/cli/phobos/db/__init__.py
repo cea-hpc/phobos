@@ -31,6 +31,15 @@ AVAIL_SCHEMAS = set(["1.1", "1.2"])
 
 LOGGER = logging.getLogger(__name__)
 
+def get_sql_script(schema_version, script_name):
+    """Return the content of a script for a given schema version"""
+    if schema_version not in AVAIL_SCHEMAS:
+        raise ValueError("Unknown schema version: %s" % (schema_version,))
+    this_dir = os.path.dirname(__file__)
+    script_path = os.path.join(this_dir, "sql", schema_version, script_name)
+    return open(script_path).read()
+
+
 class Migrator:
     """StrToInt JSONB conversion engine"""
     def __init__(self, **kwargs):
@@ -38,6 +47,7 @@ class Migrator:
 
         # { source_version: (target_version, migration_function) }
         self.convert_funcs = {
+            "0": ("1.2", lambda: self.create_schema("1.2")),
             "1.1": ("1.2", self.convert_1_to_2),
         }
 
@@ -52,6 +62,21 @@ class Migrator:
             self.conn = conn
             yield conn
         self.conn = None
+
+    def create_schema(self, schema_version):
+        """Setup all phobos tables and types"""
+        schema_script = get_sql_script(schema_version, "schema.sql")
+        with self.connect(), self.conn.cursor() as cursor:
+            cursor.execute(schema_script)
+
+    def drop_tables(self):
+        """Drop all phobos tables and types"""
+        schema_version = self.schema_version()
+        if schema_version == "0":
+            return
+        drop_schema_script = get_sql_script(schema_version, "drop_schema.sql")
+        with self.connect(), self.conn.cursor() as cursor:
+            cursor.execute(drop_schema_script)
 
     def convert_schema_1_to_2(self):
         """
@@ -102,7 +127,7 @@ class Migrator:
         with self.connect():
             self.convert_schema_1_to_2();
 
-    def convert(self, target_version=None):
+    def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""
         target_version = target_version if target_version is not None \
                                         else CURRENT_SCHEMA_VERSION

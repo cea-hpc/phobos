@@ -19,11 +19,11 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-from distutils.core import setup, Extension
-
 """
 Build and installation information for phobos CLI.
 """
+
+from distutils.core import setup, Extension
 
 # Macros to use for every C extension we build
 GLOBAL_MACROS = [('HAVE_CONFIG_H', 1)]
@@ -63,6 +63,7 @@ setup(
         const_module,
         glue_module,
     ],
+    package_data={'phobos.db': ['sql/*/*.sql']},
     scripts=['scripts/phobos'],
     version='0.0.1',
     description='Phobos control scripts and libraries',

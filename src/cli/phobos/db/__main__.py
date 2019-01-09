@@ -54,7 +54,7 @@ def migrate(args, migrator):
         if confirm != 'y':
             sys.exit(1)
 
-    migrator.convert(args.target_version)
+    migrator.migrate(args.target_version)
 
 
 def print_schema_version(_args, migrator):
@@ -95,6 +95,28 @@ def main(argv=None):
         help="Print the current schema version and exit",
     )
     version_parser.set_defaults(main=print_schema_version)
+
+    # setup_tables parser
+    setup_tables_parser = subparsers.add_parser(
+        "setup_tables",
+        help="Setup phobos tables and types at a given version",
+    )
+    setup_tables_parser.add_argument(
+        "-s", "--schema", default=CURRENT_SCHEMA_VERSION,
+        help="Version of the schema to create",
+    )
+    setup_tables_parser.set_defaults(
+        main=lambda _args, migrator: migrator.create_schema(args.schema)
+    )
+
+    # drop_tables parser
+    drop_tables_parser = subparsers.add_parser(
+        "drop_tables",
+        help="Drop phobos tables",
+    )
+    drop_tables_parser.set_defaults(
+        main=lambda _args, migrator: migrator.drop_tables()
+    )
 
     # Parse args and conf, then execute appropriate function
     args = parser.parse_args(argv)

@@ -36,13 +36,13 @@ export PYTHONPATH="$PHO_PYTHON_PATH"
 
 cur_dir=$(dirname $(readlink -m $0))
 . $cur_dir/../../../scripts/pho_dss_helper
-drop_tables
-setup_tables
 
 conn_str="dbname=phobos user=phobos password=phobos"
 export PHOBOS_DSS_connect_string="$conn_str"
 for test_case in *Test.py
 do
+    drop_tables
+    setup_tables
     $PY $test_case || exit 1
 done
 
