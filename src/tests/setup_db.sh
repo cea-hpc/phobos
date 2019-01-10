@@ -20,9 +20,10 @@
 #
 
 cur_dir=$(dirname $(readlink -m $0))
-db_helper=$cur_dir/../../scripts/pho_dss_helper
+db_helper="$cur_dir/../../scripts/phobos_db"
 
-. $db_helper
+PSQL="psql phobos -U phobos"
+. "$cur_dir/test_env.sh"
 
 # host name to insert examples in DB
 host=$(hostname -s)
@@ -72,6 +73,14 @@ select host->>0 as firsthost from device; -- needs 9.3
 select * from device where host ? 'foo1'; -- needs 9.4
 EOF
 
+}
+
+setup_tables() {
+    $db_helper setup_tables
+}
+
+drop_tables() {
+    $db_helper drop_tables
 }
 
 # if we're being sourced, don't parse arguments
