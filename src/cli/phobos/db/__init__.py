@@ -42,8 +42,10 @@ def get_sql_script(schema_version, script_name):
 
 class Migrator:
     """StrToInt JSONB conversion engine"""
-    def __init__(self, **kwargs):
+    def __init__(self, conn=None, **kwargs):
         self.conn = None
+        # Externally provided connection
+        self.ext_conn = conn
 
         # { source_version: (target_version, migration_function) }
         self.convert_funcs = {
@@ -57,13 +59,19 @@ class Migrator:
 
     @contextmanager
     def connect(self):
-        conn_str = cfg.get_val("dss", "connect_string")
-        with psycopg2.connect(conn_str) as conn:
-            self.conn = conn
-            yield conn
-        self.conn = None
+        try:
+            if self.ext_conn:
+                self.conn = self.ext_conn
+                yield self.ext_conn
+            else:
+                conn_str = cfg.get_val("dss", "connect_string")
+                with psycopg2.connect(conn_str) as conn:
+                    self.conn = conn
+                    yield conn
+        finally:
+            self.conn = None
 
-    def create_schema(self, schema_version):
+    def create_schema(self, schema_version=CURRENT_SCHEMA_VERSION):
         """Setup all phobos tables and types"""
         schema_script = get_sql_script(schema_version, "schema.sql")
         with self.connect(), self.conn.cursor() as cursor:

@@ -32,10 +32,11 @@ Convert phobos database
 
 import argparse
 import logging
+import psycopg2
 import sys
 
 from phobos.cli import PhobosActionContext
-from phobos.db import Migrator, CURRENT_SCHEMA_VERSION
+from phobos.db import Migrator, CURRENT_SCHEMA_VERSION, db_config
 from phobos.core import cfg
 
 LOGGER = logging.getLogger(__name__)
@@ -58,7 +59,45 @@ def migrate(args, migrator):
 
 
 def print_schema_version(_args, migrator):
+    """Retrieve and print schema version"""
     print migrator.schema_version()
+
+
+def setup_db_main(args, _migrator):
+    """CLI wrapper on setup_db"""
+    # Get the password to set for the new user
+    password = args.password
+    if password is None:
+        password = getpass("New password for SQL user %s:" % (user,))
+    elif password == "-":
+        sys.stdin.readline().strip('\n')
+    database = args.database
+    user = args.user
+
+    # Actually setup the database
+    db_config.setup_db(database, user, password)
+
+    print "Database properly set up."
+    print "Please fill your phobos.conf with appropriate information for "\
+          "connection, for example:\n"
+    print "    dbname='%s' user='%s' password=<your password> host=example.com"\
+          % (database, user)
+    print
+
+    if args.schema:
+        # Create a new migrator with a connection to the newly configured db
+        with psycopg2.connect(dbname=database, user=user, password=password) \
+                as conn:
+            migrator = Migrator(conn)
+            migrator.create_schema()
+
+
+def drop_db_main(args, _migrator):
+    """CLI wrapper on drop_db"""
+    db_config.drop_db(args.database, args.user)
+    print "Database %s and user %s successfully dropped" % (
+        args.user, args.database,
+    )
 
 
 def main(argv=None):
@@ -118,9 +157,56 @@ def main(argv=None):
         main=lambda _args, migrator: migrator.drop_tables()
     )
 
+    # setup_db parser
+    setup_db_parser = subparsers.add_parser(
+        "setup_db",
+        help="Create and configure an SQL user and database for phobos. Honors "
+             "PGHOST, PGPORT, PGUSER and PGPASSWORD to connect to postgres, "
+             "defaulting to localhost with no password. This requires "
+             "administrative proviledges on the database."
+    )
+    setup_db_parser.add_argument(
+        "-d", "--database", default="phobos",
+        help="Name of the database to create (default: phobos)",
+    )
+    setup_db_parser.add_argument(
+        "-u", "--user", default="phobos",
+        help="SQL user to create as the owner of the database "
+             "(default: phobos)",
+    )
+    setup_db_parser.add_argument(
+        "-p", "--password",
+        help="SQL password for the newly created user. '-' reads from stdin. "
+             "The password will be asked interactively if not specified.",
+    )
+    setup_db_parser.add_argument(
+        "-s", "--schema", action="store_true",
+        help="Also create the phobos tables and types",
+    )
+    setup_db_parser.set_defaults(main=setup_db_main)
+
+    # drop_db parser
+    drop_db_parser = subparsers.add_parser(
+        "drop_db",
+        help="Drop the configured database for phobos, same remarks as for "
+             "setup_db",
+    )
+    drop_db_parser.add_argument(
+        "-d", "--database", default="phobos",
+        help="Name of the phobos database to delete",
+    )
+    drop_db_parser.add_argument(
+        "-u", "--user", default="phobos", help="Phobos SQL user to delete",
+    )
+    drop_db_parser.set_defaults(main=drop_db_main)
+
     # Parse args and conf, then execute appropriate function
     args = parser.parse_args(argv)
-    cfg.load_file()
+
+    # Don't load config for setup_db and drop_db: the postgres user may not have
+    # access to it
+    if args.action not in ["setup_db", "drop_db"]:
+        cfg.load_file()
     args.main(args, migrator)
 
 
