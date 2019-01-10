@@ -7,6 +7,7 @@
 *.so
 *~
 .#*
+.*.swp
 .deps/
 .libs
 Makefile
@@ -33,6 +34,7 @@ config.log
 config.status
 configure
 cscope.*
+tags
 libtool
 src/include/stamp-h1
 rpms/
