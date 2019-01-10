@@ -28,7 +28,7 @@ test_bin="$test_bin_dir/test_dss"
 function clean_test
 {
     echo "cleaning..."
-    #drop_tables
+    drop_tables
 }
 
 function error
