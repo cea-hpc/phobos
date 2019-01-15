@@ -100,7 +100,7 @@ class CLIParametersTest(unittest.TestCase):
 
 
 class BasicExecutionTest(unittest.TestCase):
-    """Ease execution of the CLI."""
+    """Base execution of the CLI."""
     # Reuse configuration file from global tests
     TEST_CFG_FILE = "../../tests/phobos.conf"
     def pho_execute(self, params, auto_cfg=True, code=0):
@@ -291,6 +291,17 @@ class DeviceAddTest(BasicExecutionTest):
         file = tempfile.NamedTemporaryFile()
         self.pho_execute(['-v', 'dir', 'add', file.name])
         self.pho_execute(['-v', 'dir', 'add', file.name], code=os.EX_DATAERR)
+
+
+class SyslogTest(BasicExecutionTest):
+    """Syslog related tests"""
+
+    def test_cli_syslog(self):
+        """Partially test syslog logging feature"""
+        # Messages in /var/log/messages or journalctl can't be retrieved as
+        # an unprivileged user
+        self.pho_execute(['--syslog', 'debug', 'dir', 'list'])
+        self.pho_execute(['--syslog', 'info', '-vvv', 'dir', 'list'])
 
 
 if __name__ == '__main__':

@@ -34,6 +34,7 @@ import shlex
 import errno
 import argparse
 import logging
+from logging.handlers import SysLogHandler
 
 import os
 import os.path
@@ -956,6 +957,8 @@ class LibOptHandler(BaseResourceOptHandler):
             line.extend(flags)
             print " ".join(line)
 
+SYSLOG_LOG_LEVELS = ["critical", "error", "warning", "info", "debug"]
+
 class PhobosActionContext(object):
     """
     Find, initialize and operate an appropriate action execution context for the
@@ -1007,6 +1010,9 @@ class PhobosActionContext(object):
         verb_grp.add_argument('-q', '--quiet', help='Decrease verbosity',
                               action='count', default=0)
 
+        self.parser.add_argument('-s', '--syslog', choices=SYSLOG_LOG_LEVELS,
+                                 help='also log via syslog with a given '
+                                      'verbosity')
         self.parser.add_argument('-c', '--config',
                                  help='Alternative configuration file')
 
@@ -1036,6 +1042,7 @@ class PhobosActionContext(object):
         # Both are mutually exclusive
         lvl = self.parameters.get('verbose')
         lvl -= self.parameters.get('quiet')
+        syslog_level = self.parameters.get('syslog')
 
         if lvl >= 2:
             # -vv
@@ -1054,7 +1061,37 @@ class PhobosActionContext(object):
             # -qq
             pylvl = DISABLED
 
-        logging.basicConfig(level=pylvl, format=fmt)
+        # Basic root logger configuration: log to console
+        root_logger = logging.getLogger()
+        base_formatter = logging.Formatter(fmt)
+        stream_handler = logging.StreamHandler()
+        stream_handler.setLevel(pylvl)
+        stream_handler.setFormatter(base_formatter)
+        root_logger.addHandler(stream_handler)
+
+        # Add a syslog handler if asked on the CLI (maybe this could be done
+        # with the config file too)
+        if syslog_level is not None:
+            syslog_handler = SysLogHandler(address="/dev/log")
+            syslog_handler.setLevel(syslog_level.upper())
+
+            # Set the syslog formatter according to the syslog level
+            if syslog_handler.level <= logging.DEBUG:
+                syslog_fmt = self.CLI_LOG_FORMAT_DEV
+            else:
+                syslog_fmt = self.CLI_LOG_FORMAT_REG
+            syslog_formatter = logging.Formatter(
+                'phobos[%(process)d]: ' + syslog_fmt
+            )
+            syslog_handler.setFormatter(syslog_formatter)
+            root_logger.addHandler(syslog_handler)
+
+            # The actual log level will be the most verbose of the console and
+            # syslog ones (lesser value is more verbose)
+            pylvl = min(pylvl, syslog_handler.level)
+
+        # Set the root logger level
+        root_logger.setLevel(pylvl)
 
         self.log_ctx.set_callback(phobos_log_handler)
         self.log_ctx.set_level(pylvl)
