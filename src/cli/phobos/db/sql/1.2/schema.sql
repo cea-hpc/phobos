@@ -35,7 +35,7 @@ CREATE TABLE media(
     id              varchar(32) UNIQUE,
     adm_status      adm_status,
     fs_type         fs_type,
-    fs_label        varchar(32) DEFAULT '' NOT NULL,
+    fs_label        varchar(32),
     address_type    address_type,
     fs_status       fs_status,
     lock            varchar(256) DEFAULT '' NOT NULL,

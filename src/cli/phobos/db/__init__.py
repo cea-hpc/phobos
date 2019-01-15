@@ -107,6 +107,12 @@ class Migrator:
             -- media model from enum to varchar(32)
             ALTER TABLE media ALTER model TYPE varchar(32);
 
+            -- fs_label can be NULL
+            ALTER TABLE media ALTER fs_label DROP NOT NULL;
+
+            -- therefore, fs_label has special no default value
+            ALTER TABLE media ALTER fs_label DROP DEFAULT;
+
             -- drop old dev_model type.
             DROP TYPE dev_model;
 
