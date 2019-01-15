@@ -29,7 +29,7 @@ from random import randint
 
 from phobos.core.dss import Client
 from phobos.core.ffi import MediaInfo, DevInfo
-from phobos.core.const import dev_family2str, PHO_DEV_DIR
+from phobos.core.const import dev_family2str, PHO_DEV_DIR, PHO_DEV_TAPE
 
 
 class DSSClientTest(unittest.TestCase):
@@ -91,6 +91,14 @@ class DSSClientTest(unittest.TestCase):
                     self.assertEqual(retrieved_dev.serial, dev.serial)
 
             client.devices.delete(res)
+
+    def test_add_sqli(self):
+        """The input data is sanitized and does not cause an SQL injection."""
+        # Not the best place to test SQL escaping, but most convenient one.
+        with Client() as client:
+            client.media.add(
+                PHO_DEV_TAPE, "LTFS", "lto8", "TAPE_SQLI_0'; <sqli>",
+            )
 
     def test_manipulate_empty(self):
         """SET/DEL empty and None objects."""

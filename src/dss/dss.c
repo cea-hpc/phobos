@@ -167,13 +167,21 @@ static void dss_pq_logger(void *arg, const char *message)
     pho_info("%*s", (int)mlen, message);
 }
 
-static inline char *dss_char4sql(const char *s)
+static inline char *dss_char4sql(PGconn *conn, const char *s)
 {
     char *ns;
 
     if (s != NULL && s[0] != '\0') {
-        if (asprintf(&ns, "'%s'", s) == -1)
+        // FIXME: this memory is leaked (for now), and should be freed with
+        // PQfreemem (although this is an alias for free() on unix systems:
+        // https://www.postgresql.org/docs/9.4/libpq-misc.html#LIBPQ-PQFREEMEM)
+        ns = PQescapeLiteral(conn, s, strlen(s));
+        if (ns == NULL) {
+            pho_error(
+                EINVAL, "Cannot escape litteral %s: %s", s, PQerrorMessage(conn)
+            );
             return NULL;
+        }
     } else {
         ns = strdup("NULL");
     }
@@ -417,7 +425,7 @@ static const char * const update_query[] = {
                    " WHERE id = '%s';",
     [DSS_MEDIA]  = "UPDATE media SET (family, model, adm_status,"
                    " fs_type, address_type, fs_status, fs_label, stats, tags) ="
-                   " ('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s', '%s')"
+                   " ('%s', %s, '%s', '%s', '%s', '%s', %s, %s, %s)"
                    " WHERE id = '%s';",
     [DSS_EXTENT] = "UPDATE extent SET (state, lyt_info, extents) ="
                    " ('%s', '%s', '%s')"
@@ -437,7 +445,7 @@ static const char * const delete_query[] = {
 
 static const char * const insert_query_values[] = {
     [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '')%s",
-    [DSS_MEDIA]  = "('%s', %s, '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s',"
+    [DSS_MEDIA]  = "('%s', %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s,"
                    " '')%s",
     [DSS_EXTENT] = "('%s', '%s', '%s', '%s')%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
@@ -996,8 +1004,9 @@ static char *dss_layout_extents_encode(struct extent *extents,
     return s;
 }
 
-static int get_object_setrequest(struct object_info *item_list, int item_cnt,
-                                 enum dss_set_action action, GString *request)
+static int get_object_setrequest(PGconn *_conn, struct object_info *item_list,
+                                 int item_cnt, enum dss_set_action action,
+                                 GString *request)
 {
     int i;
     ENTRY;
@@ -1023,9 +1032,9 @@ static int get_object_setrequest(struct object_info *item_list, int item_cnt,
     return 0;
 }
 
-static int get_extent_setrequest(struct layout_info *item_list, int item_cnt,
-                                 enum dss_set_action action, GString *request,
-                                 int *error)
+static int get_extent_setrequest(PGconn *_conn, struct layout_info *item_list,
+                                 int item_cnt, enum dss_set_action action,
+                                 GString *request, int *error)
 {
     int rc = 0;
     int i;
@@ -1097,13 +1106,11 @@ static bool dss_tape_model_check(const char *model)
     return false;
 }
 
-static int get_media_setrequest(struct media_info *item_list, int item_cnt,
-                                enum dss_set_action action, GString *request)
+static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
+                                int item_cnt, enum dss_set_action action,
+                                GString *request)
 {
-    char *model = NULL;
-    char *stats = NULL;
-    char *tags = NULL;
-    int   i;
+    int i;
     ENTRY;
 
     for (i = 0; i < item_cnt; i++) {
@@ -1116,16 +1123,35 @@ static int get_media_setrequest(struct media_info *item_list, int item_cnt,
             g_string_append_printf(request, delete_query[DSS_MEDIA],
                                    media_id_get(&p_media->id));
         } else {
+            char *media_id = NULL;
+            char *fs_label = NULL;
+            char *model = NULL;
+            char *stats = NULL;
+            char *tags = NULL;
+            char *tmp_stats = NULL;
+            char *tmp_tags = NULL;
+
             /* check tape model validity */
             if (p_media->id.type == PHO_DEV_TAPE &&
                     !dss_tape_model_check(p_media->model))
                 LOG_RETURN(-EINVAL, "invalid media tape model '%s'",
                            p_media->model);
 
-            model = dss_char4sql(p_media->model);
-            stats = dss_media_stats_encode(p_media->stats);
-            tags = dss_tags_encode(&p_media->tags);
-            if (!model || !stats || !tags) {
+            media_id = dss_char4sql(conn, media_id_get(&p_media->id));
+            fs_label = dss_char4sql(conn, p_media->fs.label);
+            model = dss_char4sql(conn, p_media->model);
+
+            tmp_stats = dss_media_stats_encode(p_media->stats);
+            stats = dss_char4sql(conn, tmp_stats);
+            free(tmp_stats);
+
+            tmp_tags = dss_tags_encode(&p_media->tags);
+            tags = dss_char4sql(conn, tmp_tags);
+            free(tmp_tags);
+
+            if (!media_id || !fs_label || !model || !stats || !tags) {
+                free(media_id);
+                free(fs_label);
                 free(model);
                 free(stats);
                 free(tags);
@@ -1138,12 +1164,12 @@ static int get_media_setrequest(struct media_info *item_list, int item_cnt,
                     insert_query_values[DSS_MEDIA],
                     dev_family2str(p_media->id.type),
                     model,
-                    media_id_get(&p_media->id),
+                    media_id,
                     media_adm_status2str(p_media->adm_status),
                     fs_type2str(p_media->fs.type),
                     address_type2str(p_media->addr_type),
                     fs_status2str(p_media->fs.status),
-                    p_media->fs.label,
+                    fs_label,
                     stats,
                     tags,
                     i < item_cnt-1 ? "," : ";"
@@ -1158,13 +1184,15 @@ static int get_media_setrequest(struct media_info *item_list, int item_cnt,
                     fs_type2str(p_media->fs.type),
                     address_type2str(p_media->addr_type),
                     fs_status2str(p_media->fs.status),
-                    p_media->fs.label,
+                    fs_label,
                     stats,
                     tags,
                     media_id_get(&p_media->id)
                 );
             }
 
+            free(media_id);
+            free(fs_label);
             free(model);
             free(stats);
             free(tags);
@@ -1174,8 +1202,9 @@ static int get_media_setrequest(struct media_info *item_list, int item_cnt,
     return 0;
 }
 
-static int get_device_setrequest(struct dev_info *item_list, int item_cnt,
-                                 enum dss_set_action action, GString *request)
+static int get_device_setrequest(PGconn *conn, struct dev_info *item_list,
+                                 int item_cnt, enum dss_set_action action,
+                                 GString *request)
 {
     int i;
     ENTRY;
@@ -1191,7 +1220,7 @@ static int get_device_setrequest(struct dev_info *item_list, int item_cnt,
             g_string_append_printf(request, delete_query[DSS_DEVICE],
                                    p_dev->serial);
         } else if (action == DSS_SET_INSERT) {
-            model = dss_char4sql(p_dev->model);
+            model = dss_char4sql(conn, p_dev->model);
             if (!model)
                 LOG_RETURN(-ENOMEM, "memory allocation failed");
 
@@ -1202,7 +1231,7 @@ static int get_device_setrequest(struct dev_info *item_list, int item_cnt,
                                    p_dev->path, i < item_cnt-1 ? "," : ";");
             free(model);
         } else if (action == DSS_SET_UPDATE) {
-            model = dss_char4sql(p_dev->model);
+            model = dss_char4sql(conn, p_dev->model);
             if (!model)
                 LOG_RETURN(-ENOMEM, "memory allocation failed");
 
@@ -1656,23 +1685,23 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
 
     switch (type) {
     case DSS_DEVICE:
-        rc = get_device_setrequest(item_list, item_cnt, action, request);
+        rc = get_device_setrequest(conn, item_list, item_cnt, action, request);
         if (rc)
             LOG_GOTO(out_cleanup, rc, "SQL device request failed");
         break;
     case DSS_MEDIA:
-        rc = get_media_setrequest(item_list, item_cnt, action, request);
+        rc = get_media_setrequest(conn, item_list, item_cnt, action, request);
         if (rc)
             LOG_GOTO(out_cleanup, rc, "SQL media request failed");
         break;
     case DSS_EXTENT:
-        rc = get_extent_setrequest(item_list, item_cnt, action, request,
+        rc = get_extent_setrequest(conn, item_list, item_cnt, action, request,
                                    &error);
         if (rc)
             LOG_GOTO(out_cleanup, rc, "SQL extent request failed");
         break;
     case DSS_OBJECT:
-        rc = get_object_setrequest(item_list, item_cnt, action, request);
+        rc = get_object_setrequest(conn, item_list, item_cnt, action, request);
         if (rc)
             LOG_GOTO(out_cleanup, rc, "SQL object request failed");
         break;
