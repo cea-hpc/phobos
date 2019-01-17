@@ -770,8 +770,7 @@ retry:
                 continue;
             if (!tags_in(&itr->dss_media_info->tags, media_tags)) {
                 pho_debug("Media '%s' does not match required tags",
-                          /* id.label and id.path are the same field */
-                          itr->dss_media_info->id.id_u.path);
+                          media_id_get(&itr->dss_media_info->id));
                 continue;
             }
         }
