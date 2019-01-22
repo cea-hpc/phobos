@@ -47,6 +47,8 @@ struct simple_ctx {
     int                  sc_retcode;
 };
 
+static void simple_ctx_del(struct layout_composer *comp);
+
 static struct simple_ctx *simple_ctx_new(struct layout_module *self,
                                          struct layout_composer *comp)
 {
@@ -58,6 +60,8 @@ static struct simple_ctx *simple_ctx_new(struct layout_module *self,
 
     ctx->sc_copy_intents = g_hash_table_new_full(g_str_hash, g_str_equal,
                                                  NULL, g_free);
+    comp->lc_private      = ctx;
+    comp->lc_private_dtor = simple_ctx_del;
     return ctx;
 }
 
@@ -79,6 +83,9 @@ static void simple_ctx_del(struct layout_composer *comp)
 
     g_hash_table_destroy(ctx->sc_copy_intents);
     free(ctx);
+
+    comp->lc_private = NULL;
+    comp->lc_private_dtor = NULL;
 }
 
 static int decode_intent_alloc_cb(const void *key, void *val, void *udata)
@@ -113,9 +120,6 @@ static int simple_compose_dec(struct layout_module *self,
     ctx = simple_ctx_new(self, comp);
     if (!ctx)
         return -ENOMEM;
-
-    comp->lc_private      = ctx;
-    comp->lc_private_dtor = simple_ctx_del;
 
     return pho_ht_foreach(comp->lc_layouts, decode_intent_alloc_cb, comp);
 }
@@ -153,15 +157,14 @@ static int simple_compose_enc(struct layout_module *self,
     if (!ctx)
         return -ENOMEM;
 
-    comp->lc_private      = ctx;
-    comp->lc_private_dtor = simple_ctx_del;
-
     /* Unique intent of size=sum(slices) */
     pho_ht_foreach(comp->lc_layouts, sce_sum_sizes_cb, ctx);
 
     rc = lrs_write_prepare(comp->lc_dss, &ctx->sc_main_intent, &comp->lc_tags);
-    if (rc)
+    if (rc) {
+        simple_ctx_del(comp);
         return rc;
+    }
 
     /* Assign intent layout to the slices' layouts */
     pho_ht_foreach(comp->lc_layouts, sce_layout_assign_cb, ctx);

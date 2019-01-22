@@ -75,6 +75,8 @@ struct raid1_ctx {
     struct replica_state     replicas[0];   /**< Reference intents  */
 };
 
+static void raid1_ctx_del(struct layout_composer *comp);
+
 static void mktag(char *tag, size_t tag_len, int extent_index)
 {
     int rc;
@@ -108,6 +110,9 @@ static struct raid1_ctx *raid1_ctx_new(struct layout_module *self,
 
     ctx->replica_cnt = copy_count;
     ctx->intent_copies = g_hash_table_new(g_str_hash, g_str_equal);
+
+    comp->lc_private      = ctx;
+    comp->lc_private_dtor = raid1_ctx_del;
     return ctx;
 }
 
@@ -137,6 +142,9 @@ static void raid1_ctx_del(struct layout_composer *comp)
     g_hash_table_foreach(comp->lc_layouts, extent_free_cb, NULL);
     g_hash_table_destroy(ctx->intent_copies);
     free(ctx);
+
+    comp->lc_private      = NULL;
+    comp->lc_private_dtor = NULL;
 }
 
 static int decode_intent_alloc_cb(const void *key, void *val, void *udata)
@@ -182,9 +190,6 @@ static int raid1_compose_dec(struct layout_module *self,
     ctx = raid1_ctx_new(self, comp);
     if (!ctx)
         return -ENOMEM;
-
-    comp->lc_private      = ctx;
-    comp->lc_private_dtor = raid1_ctx_del;
 
     return pho_ht_foreach(comp->lc_layouts, decode_intent_alloc_cb, comp);
 }
@@ -241,9 +246,6 @@ static int raid1_compose_enc(struct layout_module *self,
     if (!ctx)
         return -ENOMEM;
 
-    comp->lc_private      = ctx;
-    comp->lc_private_dtor = raid1_ctx_del;
-
     /* Multiple intents of size=sum(slices) each */
     g_hash_table_foreach(comp->lc_layouts, sum_sizes_cb, ctx);
 
@@ -264,6 +266,7 @@ static int raid1_compose_enc(struct layout_module *self,
     return pho_ht_foreach(comp->lc_layouts, layout_assign_extent_cb, ctx);
 
 err_int_free:
+    raid1_ctx_del(comp);
     for (i = 0; i < expressed_intents; i++)
         lrs_resource_release(&ctx->replicas[i].intent);
 

@@ -1698,8 +1698,12 @@ int lrs_resource_release(struct lrs_intent *intent)
 {
     ENTRY;
 
-    lrs_dev_release(intent->li_dss, intent->li_device);
-    lrs_media_release(intent->li_dss, intent->li_device->dss_media_info);
+    if (intent->li_device) {
+        // Cannot release li_device if li_dss is NULL (but it should not be)
+        assert(intent->li_dss);
+        lrs_dev_release(intent->li_dss, intent->li_device);
+        lrs_media_release(intent->li_dss, intent->li_device->dss_media_info);
+    }
     free(intent->li_location.root_path);
     return 0;
 }
