@@ -195,7 +195,7 @@ for f in $TEST_FILES; do
     assert_fails $test_bin tag-put $f no-such-tag
     assert_fails $test_bin tag-put $f mytag no-such-tag
     # Ensure the right directory is chosen for this tag
-    $test_bin tag-put $f mytag |& grep /tmp/pho_testdir2
+    $test_bin tag-put $f mytag |& tee /dev/stderr | grep /tmp/pho_testdir2
 done
 
 drop_tables
