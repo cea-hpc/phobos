@@ -264,7 +264,7 @@ function ensure_nb_drives
     ((nb == count))
 }
 
-# Execute a phobos command but sleep on lrs_dev_release for $1 second
+# Execute a phobos command but sleep on layout_io for $1 second
 function phobos_delayed_dev_release
 {
     sleep_time="$1"
@@ -274,7 +274,7 @@ function phobos_delayed_dev_release
         trap "rm $tmp_gdb_script" EXIT
         cat <<EOF > "$tmp_gdb_script"
 set breakpoint pending on
-break lrs_dev_release
+break layout_io
 commands
 shell sleep $sleep_time
 continue
@@ -317,9 +317,9 @@ function concurrent_put
               | grep -v "^$" | wc -l)
     echo "$nb_lock devices are locked"
     if (( single==0 )) && (( $nb_lock != 2 )); then
-        error "2 media locks expected (actual: $nb_lock)"
+        error "2 device locks expected (actual: $nb_lock)"
     elif (( single==1 )) && (( $nb_lock != 1 )); then
-        error "1 media lock expected (actual: $nb_lock)"
+        error "1 device lock expected (actual: $nb_lock)"
     fi
 
     wait
