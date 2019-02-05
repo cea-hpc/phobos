@@ -343,18 +343,22 @@ function check_status
     done
 }
 
-if  [[ ! -w /dev/changer ]]; then
-    echo "Cannot access library: switch to POSIX test"
-    export PHOBOS_LRS_default_family="dir"
-    trap dir_cleanup EXIT
-    dir_setup
-    put_get_test
-    put_tags
-    concurrent_put
-    check_status dir "$dirs"
-    lock_test
-else
+echo "POSIX test mode"
+export PHOBOS_LRS_default_family="dir"
+trap dir_cleanup EXIT
+dir_setup
+put_get_test
+put_tags
+concurrent_put
+check_status dir "$dirs"
+lock_test
+
+if  [[ -w /dev/changer ]]; then
     echo "Tape test mode"
+    if [ "$CLEAN_ALL" -eq "1" ]; then
+        drop_tables
+        setup_tables
+    fi
     export PHOBOS_LRS_default_family="tape"
     tape_setup
     put_get_test
