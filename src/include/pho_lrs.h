@@ -108,4 +108,12 @@ static inline bool is_media_global_error(int errcode)
  */
 int lrs_format(struct dss_handle *dss, const struct media_id *id,
                enum fs_type fs, bool unlock);
+
+/**
+ * Make the LRS aware of a new device
+ *
+ * @FIXME This is a temporary API waiting for a transparent way to add devices
+ * while running.
+ */
+int lrs_device_add(struct dss_handle *dss, const struct dev_info *devi);
 #endif

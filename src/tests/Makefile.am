@@ -5,13 +5,14 @@ AM_CFLAGS= $(CC_OPT)
 # 2) run TESTS and generate a summary
 check_PROGRAMS=test_common test_attrs test_mapper test_log test_store \
 	       test_dss test_cfg test_scsi test_scsi_scan test_lintape \
-               test_ldm test_type_utils
+               test_ldm test_type_utils test_store_retry
 
 # 1st step: low level tests
 UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_lintape \
 	   test_ldm test_type_utils
 # 2nd step: integration tests
-INTEG_TESTS=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh
+INTEG_TESTS=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh \
+		test_store_retry.sh
 
 TESTS=$(UNIT_TESTS) $(INTEG_TESTS)
 
@@ -59,3 +60,6 @@ test_ldm_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common
 
 test_type_utils_SOURCES=test_type_utils.c
 test_type_utils_LDADD=../common/libpho_common.la
+
+test_store_retry_SOURCES=test_store_retry.c
+test_store_retry_LDADD=../store/libphobos_store.la

@@ -357,7 +357,6 @@ enum dev_op_status {
     PHO_DEV_OP_ST_EMPTY   = 1,
     PHO_DEV_OP_ST_LOADED  = 2,
     PHO_DEV_OP_ST_MOUNTED = 3,
-    PHO_DEV_OP_ST_BUSY    = 4,
     PHO_DEV_OP_ST_LAST,
     PHO_DEV_OP_ST_UNSPEC = PHO_DEV_OP_ST_LAST,
 };
@@ -367,12 +366,11 @@ static const char * const dev_op_st_names[] = {
     [PHO_DEV_OP_ST_EMPTY]   = "empty",
     [PHO_DEV_OP_ST_LOADED]  = "loaded",
     [PHO_DEV_OP_ST_MOUNTED] = "mounted",
-    [PHO_DEV_OP_ST_BUSY]    = "busy",
 };
 
 static inline const char *op_status2str(enum dev_op_status op_st)
 {
-    if (op_st > PHO_DEV_OP_ST_BUSY || op_st < 0)
+    if (op_st >= PHO_DEV_OP_ST_LAST || op_st < 0)
         return NULL;
     return dev_op_st_names[op_st];
 }
