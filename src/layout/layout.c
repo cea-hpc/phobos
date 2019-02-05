@@ -66,6 +66,8 @@ static int build_module_instance_path(const char *name, char *path, size_t len)
     return 0;
 }
 
+static int layout_deregister(struct layout_module *mod);
+
 /**
  * Load and register a layout module for a given mode (\a action).
  * The module must provide an initialization function which will be called.
@@ -81,6 +83,13 @@ static int layout_register(const char *name, struct layout_module *mod,
     void            *hdl;
     int              rc;
     ENTRY;
+
+    /*
+     * First deregister any loaded module (note: we cannot use the previously
+     * loaded module because its mod_name is not guaranteed to be equal to the
+     * name used to retrieve it).
+     */
+    layout_deregister(mod);
 
     rc = build_module_instance_path(name, libpath, sizeof(libpath));
     if (rc)
@@ -120,6 +129,10 @@ static int layout_deregister(struct layout_module *mod)
     mod_fini_func_t  op_fini;
     int              rc;
     ENTRY;
+
+    /* If no module is loaded, return success */
+    if (!mod->lm_dl_handle)
+        return 0;
 
     /* Optional teardown function */
     op_fini = dlsym(mod->lm_dl_handle, PLM_OP_FINI);
