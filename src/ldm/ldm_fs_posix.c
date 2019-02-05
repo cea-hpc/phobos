@@ -126,6 +126,7 @@ static int dir_get_label(const char *mnt_path, char *fs_label, size_t llen)
         LOG_GOTO(out_close, rc = -errno, "Cannot read label: '%s'", label_path);
 
     fs_label[rc] = '\0';
+    rc = 0;
 
 out_close:
     close(fd);
