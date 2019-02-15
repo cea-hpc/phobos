@@ -267,7 +267,7 @@ static int read_next_element_status(const struct element_descriptor *elmt,
 
         if (id_len > 0) {
             strncpy(elem_out->dev_id, dev_info->devid, id_len);
-            elem_out->dev_id[id_len + 1] = '\0';
+            elem_out->dev_id[id_len] = '\0';
             rstrip(elem_out->dev_id);
         }
     }
