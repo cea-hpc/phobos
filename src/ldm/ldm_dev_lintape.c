@@ -317,6 +317,10 @@ static int lintape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
     if (!dme)
         return -ENOENT;
 
+    /* Free any preexisting serial and model */
+    free(lds->lds_serial);
+    free(lds->lds_model);
+
     memset(lds, 0, sizeof(*lds));
     lds->lds_family = PHO_DEV_TAPE;
     lds->lds_model = strdup(dme->dme_model);

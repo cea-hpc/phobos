@@ -43,7 +43,7 @@
 
 static int test_unit(void *hint)
 {
-    struct ldm_dev_state lds;
+    struct ldm_dev_state lds = {0};
     struct dev_adapter deva;
     char *dev_name = hint;
     int rc;
@@ -64,7 +64,7 @@ static int test_name_serial_match(void *hint)
 {
     char  *name_ref = hint;
     struct dev_adapter deva;
-    struct ldm_dev_state lds;
+    struct ldm_dev_state lds = {0};
     char   path[128];
     int    rc;
 

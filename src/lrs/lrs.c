@@ -313,6 +313,7 @@ static int lrs_fill_media_info(struct dss_handle *dss,
         GOTO(out_free, rc = -ENOLCK);
     }
 
+    media_info_free(*pmedia);
     *pmedia = media_info_dup(media_res);
 
     pho_debug("%s: spc_free=%zd",
@@ -336,21 +337,20 @@ out_nores:
  *
  * @param[in]  dss  handle to dss connection.
  * @param[in]  lib  library handler for tape devices.
- * @param[in]  devi device_info from DB
  * @param[out] devd dev_descr structure filled with all needed information.
  */
 static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
-                             struct dev_descr *devd,
-                             const struct dev_info *devi)
+                             struct dev_descr *devd)
 {
     struct dev_adapter deva;
+    struct dev_info   *devi;
     int                rc;
     ENTRY;
 
-    if (devi == NULL || devd == NULL)
+    if (devd == NULL)
         return -EINVAL;
 
-    devd->dss_dev_info = dev_info_dup(devi);
+    devi = devd->dss_dev_info;
 
     rc = get_dev_adapter(devi->family, &deva);
     if (rc)
@@ -463,48 +463,56 @@ static int lrs_load_dev_state(struct dss_handle *dss)
 {
     struct dev_info    *devs = NULL;
     int                 dcnt = 0;
-    struct dss_filter   filter;
     enum dev_family     family;
     struct lib_adapter  lib;
     int                 i;
     int                 rc;
     ENTRY;
 
-    if (devices != NULL && dev_count != 0)
-        /* already loaded */
-        return 0;
-
     family = default_family();
     if (family == PHO_DEV_INVAL)
         return -EINVAL;
 
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                          "  {\"DSS::DEV::host\": \"%s\"},"
-                          "  {\"DSS::DEV::adm_status\": \"%s\"},"
-                          "  {\"DSS::DEV::family\": \"%s\"},"
-                          "  {\"DSS::DEV::lock\": \"\"} ]}",
-                          get_hostname(),
-                          adm_status2str(PHO_DEV_ADM_ST_UNLOCKED),
-                          dev_family2str(family));
-    if (rc)
-        return rc;
+    /* If no device has previously been loaded, load the list of available
+     * devices from DSS; otherwise just refresh informations for the current
+     * list of devices
+     */
+    if (devices == NULL || dev_count == 0) {
+        struct dss_filter   filter;
 
-    /* get all unlocked devices from DB for the given family */
-    rc = dss_device_get(dss, &filter, &devs, &dcnt);
-    if (rc)
-        GOTO(err_nores, rc);
+        rc = dss_filter_build(&filter,
+                              "{\"$AND\": ["
+                              "  {\"DSS::DEV::host\": \"%s\"},"
+                              "  {\"DSS::DEV::adm_status\": \"%s\"},"
+                              "  {\"DSS::DEV::family\": \"%s\"}"
+                              "]}",
+                              get_hostname(),
+                              adm_status2str(PHO_DEV_ADM_ST_UNLOCKED),
+                              dev_family2str(family));
+        if (rc)
+            return rc;
 
-    if (dcnt == 0) {
-        pho_info("No usable device found (%s): check devices status",
-                 dev_family2str(family));
-        GOTO(err, rc = -EAGAIN);
+        /* get all unlocked devices from DB for the given family */
+        rc = dss_device_get(dss, &filter, &devs, &dcnt);
+        dss_filter_free(&filter);
+        if (rc)
+            GOTO(err_no_res, rc);
+
+        if (dcnt == 0) {
+            pho_info("No usable device found (%s): check devices status",
+                     dev_family2str(family));
+            GOTO(err, rc = -EAGAIN);
+        }
+
+        dev_count = dcnt;
+        devices = (struct dev_descr *)calloc(dcnt, sizeof(*devices));
+        if (devices == NULL)
+            GOTO(err, rc = -ENOMEM);
+
+        /* Copy information from DSS to local device list */
+        for (i = 0 ; i < dcnt; i++)
+            devices[i].dss_dev_info = dev_info_dup(&devs[i]);
     }
-
-    dev_count = dcnt;
-    devices = (struct dev_descr *)calloc(dcnt, sizeof(*devices));
-    if (devices == NULL)
-        GOTO(err, rc = -ENOMEM);
 
     /* get a handle to the library to query it */
     rc = wrap_lib_open(family, &lib);
@@ -512,7 +520,7 @@ static int lrs_load_dev_state(struct dss_handle *dss)
         GOTO(err, rc);
 
     for (i = 0 ; i < dcnt; i++) {
-        rc = lrs_fill_dev_info(dss, &lib, &devices[i], &devs[i]);
+        rc = lrs_fill_dev_info(dss, &lib, &devices[i]);
         if (rc) {
             pho_debug("Marking device %s as failed", devices[i].dev_path);
             devices[i].op_status = PHO_DEV_OP_ST_FAILED;
@@ -527,8 +535,7 @@ static int lrs_load_dev_state(struct dss_handle *dss)
 err:
     /* free devs array, as they have been copied to devices[].device */
     dss_res_free(devs, dcnt);
-err_nores:
-    dss_filter_free(&filter);
+err_no_res:
     return rc;
 }
 
@@ -545,8 +552,10 @@ int lrs_device_add(struct dss_handle *dss, const struct dev_info *devi)
     if (rc)
         return rc;
 
+    device.dss_dev_info = dev_info_dup(devi);
+
     /* Retrieve device information */
-    rc = lrs_fill_dev_info(dss, &lib, &device, devi);
+    rc = lrs_fill_dev_info(dss, &lib, &device);
     if (rc)
         GOTO(err, rc);
 
@@ -1430,7 +1439,7 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
 {
     const char          *label = media_id_get(id);
     struct dev_descr    *dev;
-    struct media_info   *med;
+    struct media_info   *med = NULL;
     bool                 post_fs_mount;
     int                  rc;
     ENTRY;
