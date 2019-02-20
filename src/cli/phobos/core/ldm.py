@@ -100,7 +100,7 @@ def ldm_device_query(dev_type, dev_path):
     rc = LIBPHOBOS.get_dev_adapter(dev_type, byref(adapter))
     if rc:
         raise EnvironmentError(rc,
-                               "Cannot get device adapter for '%r'" % dev_type)
+                               "Cannot get device adapter for %r" % dev_type)
 
     real_path = os.path.realpath(dev_path)
 
@@ -108,6 +108,6 @@ def ldm_device_query(dev_type, dev_path):
 
     rc = LIBPHOBOS.ldm_dev_query(byref(adapter), real_path, byref(state))
     if rc:
-        raise EnvironmentError(rc, "Cannot query device '%r'" % real_path)
+        raise EnvironmentError(rc, "Cannot query device %r" % real_path)
 
     return state

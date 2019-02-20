@@ -315,7 +315,7 @@ class StorePutHandler(StoreGenericPutHandler):
         attrs = self.params.get('metadata')
         if attrs is not None:
             attrs = attr_convert(attrs)
-            self.logger.debug("Loaded attributes set '%r'", attrs)
+            self.logger.debug("Loaded attributes set %r", attrs)
         tags = self.params.get('tags', [])
 
         self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
@@ -370,7 +370,7 @@ class StoreMPutHandler(StoreGenericPutHandler):
                 attrs = None
             else:
                 attrs = attr_convert(attrs)
-                self.logger.debug("Loaded attributes set '%r'", attrs)
+                self.logger.debug("Loaded attributes set %r", attrs)
 
             self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
             self.client.put_register(oid, src, attrs=attrs, tags=tags)
