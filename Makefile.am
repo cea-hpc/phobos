@@ -10,7 +10,7 @@ rpm: dist phobos.spec
 
 EXTRA_DIST= phobos.spec phobos.spec.in scripts/pho_ldm_helper \
 	    scripts/phobos_db \
-	    doc/INSTALL doc/cfg/template.conf ChangeLog
+	    doc/README.md doc/cfg/template.conf ChangeLog
 
 sbin_SCRIPTS=scripts/pho_ldm_helper \
              scripts/phobos_db

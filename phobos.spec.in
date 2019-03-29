@@ -61,7 +61,7 @@ install -D -p -m 0640 doc/cfg/template.conf %{buildroot}/%{_sysconfdir}/phobos.c
 # create another copy of configuration in documentation directory
 install -D -p -m 0640 doc/cfg/template.conf %{buildroot}/%{phobosdocdir}/template.conf
 install -p -m 0640 ChangeLog %{buildroot}/%{phobosdocdir}/ChangeLog
-install -p -m 0640 doc/INSTALL %{buildroot}/%{phobosdocdir}/INSTALL
+install -p -m 0640 doc/README.md %{buildroot}/%{phobosdocdir}/README.md
 cd %{_builddir}/%{name}-%{version}/src/cli/
 %{__python} setup.py install --skip-build --root %{buildroot}
 
@@ -80,7 +80,7 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_bindir}/phobos
 %config(noreplace) %{_sysconfdir}/phobos.conf
 %dir %{phobosdocdir}
-%doc %{phobosdocdir}/INSTALL
+%doc %{phobosdocdir}/README.md
 %doc %{phobosdocdir}/ChangeLog
 %doc %{phobosdocdir}/template.conf
 
