@@ -105,7 +105,7 @@ while [[ $# -gt 0 ]]; do
 		;;
 	*)
 		# forward all other calls to the db helper
-		$db_helper $*
+		$db_helper "$1"
 		;;
 	esac
 	shift
