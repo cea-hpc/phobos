@@ -267,6 +267,7 @@ static int raid1_compose_enc(struct layout_module *self,
 
 err_int_free:
     raid1_ctx_del(comp);
+
     for (i = 0; i < expressed_intents; i++)
         lrs_resource_release(&ctx->replicas[i].intent);
 

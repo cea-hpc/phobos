@@ -39,6 +39,8 @@ fi
 # display error message and exits
 function error {
     echo "$*"
+    # Wait pending processes before exit and cleanup
+    wait
     exit 1
 }
 
@@ -333,6 +335,23 @@ function concurrent_put
     fi
 }
 
+# Try to put with lots of phobos instances and check that the retry mechanism
+# allows all the instances to succeed
+function concurrent_put_retry
+{
+    files=$(echo $test_dir/*)
+    pids=
+
+    for file in $files; do
+        $phobos put "$file" "$file" &
+        pids="$pids $!"
+    done
+
+    for pid in $pids; do
+        wait $pid || error "some phobos instances failed to put"
+    done
+}
+
 function check_status
 {
     local type="$1"
@@ -352,6 +371,7 @@ put_tags
 concurrent_put
 check_status dir "$dirs"
 lock_test
+concurrent_put_retry
 
 if  [[ -w /dev/changer ]]; then
     echo "Tape test mode"
@@ -366,4 +386,5 @@ if  [[ -w /dev/changer ]]; then
     concurrent_put
     check_status tape "$tapes"
     lock_test
+    concurrent_put_retry
 fi

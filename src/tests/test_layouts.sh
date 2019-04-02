@@ -27,8 +27,8 @@ bash ./test_store.sh
 # test raid1 (replication, default parameters)
 bash ./test_store.sh raid1
 
-# test raid1 (replication, 3 replicas total)
-export PHOBOS_LAYOUT_RAID1_repl_count=3
+# test raid1 (replication, 2 replicas total)
+export PHOBOS_LAYOUT_RAID1_repl_count=2
 bash ./test_store.sh raid1
 
 trap - EXIT ERR

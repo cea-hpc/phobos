@@ -112,7 +112,7 @@ struct dev_descr {
     struct media_id      media_id; /**< id of the media (if loaded) */
     struct media_info   *dss_media_info;  /**< loaded media info from DSS, if any */
     char                 mnt_path[PATH_MAX]; /**< mount path of the filesystem */
-    bool                 locked;             /**< dss lock acquired by us */
+    bool                 locked_local;       /**< dss lock acquired by us */
 };
 
 /** global structure of available devices and media information
@@ -169,7 +169,7 @@ static int lrs_dev_acquire(struct dss_handle *dss, struct dev_descr *pdev)
     if (!dss || !pdev)
         return -EINVAL;
 
-    if (pdev->locked) {
+    if (pdev->locked_local) {
         pho_debug("Device '%s' already locked (ignoring)", pdev->dev_path);
         return 0;
     }
@@ -182,7 +182,7 @@ static int lrs_dev_acquire(struct dss_handle *dss, struct dev_descr *pdev)
     }
 
     pho_debug("Acquired ownership on device '%s'", pdev->dev_path);
-    pdev->locked = true;
+    pdev->locked_local = true;
 
     return 0;
 }
@@ -198,7 +198,7 @@ static int lrs_dev_release(struct dss_handle *dss, struct dev_descr *pdev)
     if (!dss || !pdev)
         return -EINVAL;
 
-    if (!pdev->locked) {
+    if (!pdev->locked_local) {
         pho_debug("Device '%s' is not locked (ignoring)", pdev->dev_path);
         return 0;
     }
@@ -208,7 +208,7 @@ static int lrs_dev_release(struct dss_handle *dss, struct dev_descr *pdev)
         LOG_RETURN(rc, "Cannot unlock device '%s'", pdev->dev_path);
 
     pho_debug("Released ownership on device '%s'", pdev->dev_path);
-    pdev->locked = false;
+    pdev->locked_local = false;
 
     return 0;
 }
@@ -228,8 +228,10 @@ static int lrs_media_acquire(struct dss_handle *dss, struct media_info *pmedia)
     media_id = media_id_get(&pmedia->id);
 
     rc = dss_media_lock(dss, pmedia, 1);
-    if (rc)
+    if (rc) {
+        pmedia->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
         LOG_RETURN(rc, "Cannot lock media '%s'", media_id);
+    }
 
     pho_debug("Acquired ownership on media '%s'", media_id);
     return 0;
@@ -249,6 +251,10 @@ static int lrs_media_release(struct dss_handle *dss, struct media_info *pmedia)
 
     media_id = media_id_get(&pmedia->id);
 
+    /*
+     * TODO: dss_media_unlock should check that the lock has been acquired
+     * by this process
+     */
     rc = dss_media_unlock(dss, pmedia, 1);
     if (rc)
         LOG_RETURN(rc, "Cannot unlock media '%s'", media_id);
@@ -257,9 +263,33 @@ static int lrs_media_release(struct dss_handle *dss, struct media_info *pmedia)
     return 0;
 }
 
-static inline bool lock_empty(const struct pho_lock *lock)
+/**
+ * True if this lock is empty, only used to test the lock when returned from
+ * the database and replace it with the generic LRS_MEDIA_LOCKED_EXTERNAL
+ */
+static bool lock_empty(const struct pho_lock *lock)
 {
     return lock->lock == NULL || lock->lock[0] == '\0';
+}
+
+/**
+ * False if the device is locked or if it contains a locked media,
+ * true otherwise.
+ */
+static bool dev_is_available(const struct dev_descr *devd)
+{
+    if (devd->locked_local) {
+        pho_debug("'%s' is locked\n", devd->dev_path);
+        return false;
+    }
+
+    /* Test if the contained media lock is taken by another phobos */
+    if (devd->dss_media_info != NULL
+            && &devd->dss_media_info->lock == LRS_MEDIA_LOCKED_EXTERNAL) {
+        pho_debug("'%s' contains a locked media", devd->dev_path);
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -308,13 +338,14 @@ static int lrs_fill_media_info(struct dss_handle *dss,
         LOG_GOTO(out_free, rc = -EINVAL,
                  "Too many media found matching id '%s'", id_str);
 
-    if (!lock_empty(&media_res->lock)) {
-        pho_info("Media '%s' is locked (%s)", id_str, media_res->lock.lock);
-        GOTO(out_free, rc = -ENOLCK);
-    }
-
     media_info_free(*pmedia);
     *pmedia = media_info_dup(media_res);
+
+    /* If the lock is already taken, mark it as externally locked */
+    if (!lock_empty(&(*pmedia)->lock)) {
+        pho_info("Media '%s' is locked (%s)", id_str, (*pmedia)->lock.lock);
+        (*pmedia)->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
+    }
 
     pho_debug("%s: spc_free=%zd",
               media_id_get(&(*pmedia)->id), (*pmedia)->stats.phys_spc_free);
@@ -386,40 +417,54 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
     }
 
     if (devd->lib_dev_info.ldi_full) {
+        struct fs_adapter fsa;
+
         devd->op_status = PHO_DEV_OP_ST_LOADED;
         devd->media_id = devd->lib_dev_info.ldi_media_id;
 
+        pho_verb("Device '%s' (S/N '%s') contains media '%s'", devd->dev_path,
+                 devi->serial, media_id_get(&devd->media_id));
+
         /* get media info for loaded drives */
         rc = lrs_fill_media_info(dss, &devd->dss_media_info, &devd->media_id);
-        if (rc == -ENOLCK)
-            devd->locked = true;
+
+        /*
+         * If the drive is marked as locally locked, the contained media was in
+         * fact locked by us, this happens when the raid1 layout refreshes the
+         * drive list.
+         */
+        if (devd->locked_local &&
+                devd->dss_media_info->lock.lock == LRS_MEDIA_LOCKED_EXTERNAL)
+            devd->dss_media_info->lock.lock = NULL;
+
+        /* Drive has not been found, mark it as unusable */
+        if (rc == -ENXIO)
+            devd->op_status = PHO_DEV_OP_ST_FAILED;
         else if (rc)
             return rc;
+        else {
+            /* See if the device is currently mounted */
+            rc = get_fs_adapter(devd->dss_media_info->fs.type, &fsa);
+            if (rc)
+                return rc;
+
+            /* If device is loaded, check if it is mounted as a filesystem */
+            rc = ldm_fs_mounted(&fsa, devd->dev_path, devd->mnt_path,
+                                sizeof(devd->mnt_path));
+
+            if (rc == 0) {
+                pho_verb("Discovered mounted filesystem at '%s'",
+                         devd->mnt_path);
+                devd->op_status = PHO_DEV_OP_ST_MOUNTED;
+            } else if (rc == -ENOENT)
+                /* not mounted, not an error */
+                rc = 0;
+            else
+                LOG_RETURN(rc, "Cannot determine if device '%s' is mounted",
+                           devd->dev_path);
+        }
     } else {
         devd->op_status = PHO_DEV_OP_ST_EMPTY;
-    }
-
-    /* If device has been previously marked as loaded, check if it is mounted
-     * as a filesystem */
-    if (devd->op_status == PHO_DEV_OP_ST_LOADED) {
-        struct fs_adapter fsa;
-
-        rc = get_fs_adapter(devd->dss_media_info->fs.type, &fsa);
-        if (rc)
-            return rc;
-
-        rc = ldm_fs_mounted(&fsa, devd->dev_path, devd->mnt_path,
-                            sizeof(devd->mnt_path));
-
-        if (rc == 0) {
-            pho_verb("Discovered new mounted filesystem at %s", devd->mnt_path);
-            devd->op_status = PHO_DEV_OP_ST_MOUNTED;
-        } else if (rc == -ENOENT)
-            /* not mounted, not an error */
-            rc = 0;
-        else
-            LOG_RETURN(rc, "Cannot determine if device '%s' is mounted",
-                       devd->dev_path);
     }
 
     pho_debug("Drive '%s' is '%s'", devd->dev_path,
@@ -501,7 +546,7 @@ static int lrs_load_dev_state(struct dss_handle *dss)
         if (dcnt == 0) {
             pho_info("No usable device found (%s): check devices status",
                      dev_family2str(family));
-            GOTO(err, rc = -EAGAIN);
+            GOTO(err, rc = -ENXIO);
         }
 
         dev_count = dcnt;
@@ -519,10 +564,10 @@ static int lrs_load_dev_state(struct dss_handle *dss)
     if (rc)
         GOTO(err, rc);
 
-    for (i = 0 ; i < dcnt; i++) {
+    for (i = 0 ; i < dev_count; i++) {
         rc = lrs_fill_dev_info(dss, &lib, &devices[i]);
         if (rc) {
-            pho_debug("Marking device %s as failed", devices[i].dev_path);
+            pho_debug("Marking device '%s' as failed", devices[i].dev_path);
             devices[i].op_status = PHO_DEV_OP_ST_FAILED;
         }
     }
@@ -656,6 +701,7 @@ static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
     struct dss_filter    filter;
     char                *tag_filter_json = NULL;
     bool                 with_tags = tags != NULL && tags->n_tags > 0;
+    bool                 avail_media = false;
     int                  mcnt = 0;
     int                  rc;
     int                  i;
@@ -674,8 +720,6 @@ static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
                           /* Exclude media locked by admin */
                           "  {\"DSS::MDA::adm_status\": \"%s\"},"
                           "  {\"$GTE\": {\"DSS::MDA::vol_free\": %zu}},"
-                          /* Exclude locked media */
-                          "  {\"DSS::MDA::lock\": \"\"},"
                           "  {\"$NOR\": ["
                                /* Exclude non-formatted media */
                           "    {\"DSS::MDA::fs_status\": \"%s\"},"
@@ -711,27 +755,37 @@ lock_race_retry:
     for (i = 0; i < mcnt; i++) {
         struct media_info *curr = &pmedia_res[i];
 
-        /* reuse locked flag to signify that it was locked by someone else */
-        if (curr->lock.lock == LRS_MEDIA_LOCKED_EXTERNAL)
-            continue;
-
         if (curr->stats.phys_spc_free < required_size)
             continue;
 
         if (media_best == NULL ||
-            curr->stats.phys_spc_free < media_best->stats.phys_spc_free)
+                curr->stats.phys_spc_free < media_best->stats.phys_spc_free) {
+            /* Remember that at least one fitting media has been found */
+            avail_media = true;
+
+            /* The media is already locked, continue searching */
+            if (curr->lock.lock == LRS_MEDIA_LOCKED_EXTERNAL)
+                continue;
+
             media_best = curr;
+        }
     }
 
     if (media_best == NULL) {
         pho_info("No compatible media found to write %zu bytes", required_size);
-        GOTO(free_res, rc = -ENOSPC);
+        /* If we found a matching media but it was locked, return EAGAIN,
+         * otherwise return ENOSPC
+         */
+        if (avail_media)
+            GOTO(free_res, rc = -EAGAIN);
+        else
+            GOTO(free_res, rc = -ENOSPC);
     }
 
     pho_debug("Acquiring selected media '%s'", media_id_get(&media_best->id));
     rc = lrs_media_acquire(dss, media_best);
     if (rc) {
-        pho_debug("Failed to lock media %s, looking for another one",
+        pho_debug("Failed to lock media '%s', looking for another one",
                   media_id_get(&media_best->id));
         media_best->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
         goto lock_race_retry;
@@ -772,7 +826,8 @@ typedef int (*device_select_func_t)(size_t required_size,
 
 /**
  * Select a device according to a given status and policy function.
- * Returns a device in locked state.
+ * Returns a device in locked state; if a media is in the device, the media is
+ * locked first.
  * @param dss     DSS handle.
  * @param op_st   Filter devices by the given operational status.
  *                No filtering is op_st is PHO_DEV_OP_ST_UNSPEC.
@@ -808,8 +863,8 @@ retry:
         if (failed_dev && failed_dev[i])
             continue;
 
-        if (itr->locked) {
-            pho_debug("Skipping locked device '%s'", itr->dev_path);
+        if (!dev_is_available(itr)) {
+            pho_debug("Skipping locked or busy device '%s'", itr->dev_path);
             continue;
         }
 
@@ -826,12 +881,6 @@ retry:
         if (required_size > 0 && itr->dss_media_info) {
             if (itr->dss_media_info->fs.status == PHO_FS_STATUS_FULL) {
                 pho_debug("Media '%s' is full",
-                          media_id_get(&itr->dss_media_info->id));
-                continue;
-            }
-            /* Exclude drives containing locked media */
-            if (itr->dss_media_info->lock.lock == LRS_MEDIA_LOCKED_EXTERNAL) {
-                pho_debug("Media '%s' is locked by another phobos instance",
                           media_id_get(&itr->dss_media_info->id));
                 continue;
             }
@@ -853,10 +902,31 @@ retry:
 
     if (selected != NULL) {
         int selected_i = selected - devices;
+        struct media_info *pmedia = selected->dss_media_info;
 
         pho_debug("Picked dev number %d (%s)", selected_i, selected->dev_path);
-        rc = lrs_dev_acquire(dss, selected);
+
+        rc = 0;
+        if (pmedia != NULL) {
+            pho_debug("Acquiring %s media '%s'",
+                      op_status2str(selected->op_status),
+                      media_id_get(&pmedia->id));
+            rc = lrs_media_acquire(dss, pmedia);
+            if (rc)
+                /* Avoid releasing a media that has not been acquired */
+                pmedia = NULL;
+        }
+
+        /* Potential media locking suceeded (or no media was loaded): acquire
+         * device
+         */
+        if (rc == 0)
+            rc = lrs_dev_acquire(dss, selected);
+
+        /* Something went wrong */
         if (rc != 0) {
+            /* Release media if necessary */
+            lrs_media_release(dss, pmedia);
             /* clear previously selected device */
             selected = NULL;
             /* Allocate failed_dev if necessary */
@@ -957,10 +1027,11 @@ static int select_drive_to_free(size_t required_size,
     ENTRY;
 
     /* skip failed and locked drives */
-    if (dev_curr->op_status == PHO_DEV_OP_ST_FAILED || dev_curr->locked) {
+    if (dev_curr->op_status == PHO_DEV_OP_ST_FAILED
+            || !dev_is_available(dev_curr)) {
         pho_debug("Skipping drive '%s' with status %s%s",
                   dev_curr->dev_path, op_status2str(dev_curr->op_status),
-                  dev_curr->locked ? " (locked)" : "");
+                  !dev_is_available(dev_curr) ? " (locked or busy)" : "");
         return 1;
     }
 
@@ -1085,6 +1156,9 @@ static int lrs_umount(struct dev_descr *dev)
 
 /**
  * Load a media into a drive.
+ *
+ * @return 0 on success, -error number on error. -EBUSY is returned when a drive
+ * to drive media movement was prevented by the library.
  */
 static int lrs_load(struct dev_descr *dev, struct media_info *media)
 {
@@ -1095,11 +1169,11 @@ static int lrs_load(struct dev_descr *dev, struct media_info *media)
     ENTRY;
 
     if (dev->op_status != PHO_DEV_OP_ST_EMPTY)
-        LOG_RETURN(-EINVAL, "%s: unexpected drive status: status='%s'",
+        LOG_RETURN(-EAGAIN, "%s: unexpected drive status: status='%s'",
                    dev->dev_path, op_status2str(dev->op_status));
 
     if (dev->dss_media_info != NULL)
-        LOG_RETURN(-EINVAL, "No media expected in device '%s' (found '%s')",
+        LOG_RETURN(-EAGAIN, "No media expected in device '%s' (found '%s')",
                    dev->dev_path, media_id_get(&dev->dss_media_info->id));
 
     pho_verb("Loading '%s' into '%s'", media_id_get(&media->id),
@@ -1117,7 +1191,21 @@ static int lrs_load(struct dev_descr *dev, struct media_info *media)
         LOG_GOTO(out_close, rc, "Media lookup failed");
 
     rc = ldm_lib_media_move(&lib, &media_addr, &dev->lib_dev_info.ldi_addr);
-    if (rc != 0) {
+    /* A movement from drive to drive can be prohibited by some libraries.
+     * If a failure is encountered in such a situation, it probably means that
+     * the state of the library has changed between the moment it has been
+     * scanned and the moment the media and drive have been selected. The
+     * easiest solution is therefore to return EBUSY to signal this situation to
+     * the caller.
+     */
+    if (rc == -EINVAL
+            && media_addr.lia_type == MED_LOC_DRIVE
+            && dev->lib_dev_info.ldi_addr.lia_type == MED_LOC_DRIVE) {
+        pho_debug("Failed to move a media from one drive to another, trying "
+                  "again later");
+        /* @TODO: acquire source drive on the fly? */
+        return -EBUSY;
+    } else if (rc != 0) {
         /* Set operationnal failure state on this drive. It is incomplete since
          * the error can originate from a defect tape too...
          *  - consider marking both as failed.
@@ -1139,9 +1227,9 @@ out_close:
 }
 
 /**
- * Unload a media from a drive.
+ * Unload a media from a drive and unlock the media.
  */
-static int lrs_unload(struct dev_descr *dev)
+static int lrs_unload(struct dss_handle *dss, struct dev_descr *dev)
 {
     /* let the library select the target location */
     struct lib_item_addr    free_slot = { .lia_type = MED_LOC_UNKNOWN };
@@ -1179,6 +1267,9 @@ static int lrs_unload(struct dev_descr *dev)
 
     /* update device status */
     dev->op_status = PHO_DEV_OP_ST_EMPTY;
+
+    /* Locked by caller, by convention */
+    lrs_media_release(dss, dev->dss_media_info);
 
     /* free media resources */
     media_info_free(dev->dss_media_info);
@@ -1244,7 +1335,7 @@ static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp)
 
         if (tmp_dev->op_status == PHO_DEV_OP_ST_LOADED) {
             /* unload the media */
-            rc = lrs_unload(tmp_dev);
+            rc = lrs_unload(dss, tmp_dev);
             if (rc) {
                 /* set it failed and get another device */
                 tmp_dev->op_status = PHO_DEV_OP_ST_FAILED;
@@ -1263,6 +1354,7 @@ static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp)
 
 next:
         lrs_dev_release(dss, tmp_dev);
+        lrs_media_release(dss, tmp_dev->dss_media_info);
     }
 }
 
@@ -1290,42 +1382,19 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
     if (!dev_select_policy)
         return -EINVAL;
 
-retry:
     pmedia = NULL;
     media_owner = false;
 
     /* 1a) is there a mounted filesystem with enough room? */
     *devp = dev_picker(dss, PHO_DEV_OP_ST_MOUNTED, dev_select_policy, size,
                        tags);
-    if (*devp != NULL) {
-        /* lock the media in it */
-        pmedia = (*devp)->dss_media_info;
-        pho_debug("Acquiring mounted media %s", media_id_get(&pmedia->id));
-        rc = lrs_media_acquire(dss, pmedia);
-        if (rc) {
-            /* mark the media as locked to select another one */
-            pmedia->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
-            lrs_dev_release(dss, *devp);
-            goto retry;
-        }
+    if (*devp != NULL)
         return 0;
-    }
 
     /* 1b) is there a loaded media with enough room? */
     *devp = dev_picker(dss, PHO_DEV_OP_ST_LOADED, dev_select_policy, size,
                        tags);
     if (*devp != NULL) {
-        /* lock the media in the device */
-        pmedia = (*devp)->dss_media_info;
-        pho_debug("Acquiring loaded media %s", media_id_get(&pmedia->id));
-        rc = lrs_media_acquire(dss, pmedia);
-        if (rc) {
-            /* mark the device and the media as locked, to select others */
-            pmedia->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
-            lrs_dev_release(dss, *devp);
-            goto retry;
-        }
-
         /* mount the filesystem and return */
         rc = lrs_mount(*devp);
         if (rc != 0)
@@ -1361,7 +1430,12 @@ retry:
 
     /* 4) load the selected media into the selected drive */
     rc = lrs_load(*devp, pmedia);
-    if (rc)
+    /* EBUSY means the tape could not be moved between two drives, try again
+     * later
+     */
+    if (rc == -EBUSY)
+        GOTO(out_release, rc = -EAGAIN);
+    else if (rc)
         goto out_release;
 
     /* On success or lrs_load, target device becomes the owner of pmedia
@@ -1374,13 +1448,19 @@ retry:
         return 0;
 
 out_release:
+    if (*devp != NULL) {
+        lrs_dev_release(dss, *devp);
+        /* Avoid releasing the same media twice */
+        if (pmedia != (*devp)->dss_media_info)
+            lrs_media_release(dss, (*devp)->dss_media_info);
+    }
+
     if (pmedia != NULL) {
+        pho_debug("Releasing selected media '%s'", media_id_get(&pmedia->id));
         lrs_media_release(dss, pmedia);
         if (media_owner)
             media_info_free(pmedia);
     }
-
-    lrs_dev_release(dss, *devp);
     return rc;
 }
 
@@ -1394,7 +1474,7 @@ static int set_loc_from_dev(const struct dev_descr *dev,
         return -EINVAL;
 
     /* fill intent descriptor with mount point and media info */
-    intent->li_location.root_path = strdup(dev->mnt_path);
+    intent->li_location.root_path        = strdup(dev->mnt_path);
     intent->li_location.extent.media     = dev->dss_media_info->id;
     intent->li_location.extent.fs_type   = dev->dss_media_info->fs.type;
     intent->li_location.extent.addr_type = dev->dss_media_info->addr_type;
@@ -1451,6 +1531,12 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
     if (rc != 0)
         return rc;
 
+    /* Check that the media is not already locked */
+    if (&med->lock.lock == LRS_MEDIA_LOCKED_EXTERNAL) {
+        pho_debug("Media '%s' is locked, returning EAGAIN", label);
+        return -EAGAIN;
+    }
+
     switch (op) {
     case LRS_OP_READ:
     case LRS_OP_WRITE:
@@ -1492,7 +1578,12 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
 
         /* load the media in it */
         rc = lrs_load(dev, med);
-        if (rc != 0)
+        /* EBUSY means the tape could not be moved between two drives, try again
+         * later
+         */
+        if (rc == -EBUSY)
+            GOTO(out_dev_unlock, rc = -EAGAIN);
+        else if (rc != 0)
             goto out_dev_unlock;
     }
 
@@ -1582,8 +1673,8 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     return 0;
 
 err_out:
-    lrs_media_release(dss, media_info);
     lrs_dev_release(dss, dev);
+    lrs_media_release(dss, media_info);
     return rc;
 }
 
@@ -1692,7 +1783,7 @@ int lrs_read_prepare(struct dss_handle *dss, struct lrs_intent *intent)
     intent->li_device = dev;
 
     if (dev->dss_media_info == NULL)
-        LOG_RETURN(rc = -EINVAL, "Invalid device state, expected media %s",
+        LOG_RETURN(rc = -EINVAL, "Invalid device state, expected media '%s'",
                    media_id_get(id));
 
     /* set fs_type and addr_type according to media description. */
@@ -1782,7 +1873,9 @@ int lrs_resource_release(struct lrs_intent *intent)
         assert(intent->li_dss);
         lrs_dev_release(intent->li_dss, intent->li_device);
         lrs_media_release(intent->li_dss, intent->li_device->dss_media_info);
+        intent->li_device = NULL;
     }
+
     free(intent->li_location.root_path);
     intent->li_location.root_path = NULL;
     return 0;

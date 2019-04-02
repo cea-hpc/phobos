@@ -41,7 +41,9 @@
 #include <attr/xattr.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
 
@@ -49,6 +51,8 @@
 #define PHO_EA_UMD_NAME     "user_md"
 #define PHO_EA_EXT_NAME     "ext_info"
 
+#define RETRY_SLEEP_MAX_US (1000 * 1000) /* 1 second */
+#define RETRY_SLEEP_MIN_US (10 * 1000)   /* 10 ms */
 
 /**
  * List of configuration parameters for store
@@ -648,6 +652,35 @@ static int mput_rc(const struct mput_desc *mput)
     return 0;
 }
 
+static int retry_layout_acquire(struct mput_desc *mput)
+{
+    unsigned int rand_seed;
+    int rc;
+
+    /* Seed the PRNG and hope two different phobos instances will be seeded
+     * differently
+     */
+    rand_seed = getpid() + time(NULL);
+    /* Get storage resource to write objects and retry periodically on EGAIN */
+    while (true) {
+        useconds_t sleep_time;
+
+        rc = layout_acquire(&mput->comp);
+        if (rc != -EAGAIN)
+            return rc;
+
+        /* Sleep before retrying */
+        sleep_time =
+            (rand_r(&rand_seed) % (RETRY_SLEEP_MAX_US - RETRY_SLEEP_MIN_US))
+            + RETRY_SLEEP_MIN_US;
+        pho_info("No resource available to perform IO, retrying in %d ms",
+                 sleep_time / 1000);
+        usleep(sleep_time);
+    }
+
+    /* Unreachable */
+}
+
 int phobos_put(const struct pho_xfer_desc *desc, size_t n,
                pho_completion_cb_t cb, void *udata)
 {
@@ -694,11 +727,11 @@ int phobos_put(const struct pho_xfer_desc *desc, size_t n,
             LOG_GOTO(out_finalize, rc, "Tags memory allocation failed");
     }
 
-    /* get storage resource to write objects */
-    rc = layout_acquire(&mput->comp);
-    if (rc)
+    rc = retry_layout_acquire(mput);
+    if (rc != 0)
         LOG_GOTO(out_finalize, rc,
-                 "Failed to get resources to put %d objects", mput->slice_cnt);
+                 "Failed to get resources to put %d objects",
+                 mput->slice_cnt);
 
     rc = mput_slices_progress(mput, MPUT_STEP_EXT_WRITE);
     if (rc) {
