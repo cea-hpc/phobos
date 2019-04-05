@@ -32,6 +32,7 @@ Convert phobos database
 
 import argparse
 import logging
+from getpass import getpass
 import psycopg2
 import sys
 
@@ -65,14 +66,15 @@ def print_schema_version(_args, migrator):
 
 def setup_db_main(args, _migrator):
     """CLI wrapper on setup_db"""
-    # Get the password to set for the new user
     password = args.password
+    user = args.user
+
+    # Get the password to set for the new user
     if password is None:
-        password = getpass("New password for SQL user %s:" % (user,))
+        password = getpass("New password for SQL user %s: " % (user,))
     elif password == "-":
         sys.stdin.readline().strip('\n')
     database = args.database
-    user = args.user
 
     # Actually setup the database
     db_config.setup_db(database, user, password)
