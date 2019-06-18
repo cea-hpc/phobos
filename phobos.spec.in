@@ -91,6 +91,9 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_store.la
 
 %changelog
+* Tue Jun 18 2019 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.2-0.alpha1
+- Pre 1.2 release (Echo)
+
 * Mon Jan 15 2018 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.1-4
 - Minor refresh with latest patches
 
