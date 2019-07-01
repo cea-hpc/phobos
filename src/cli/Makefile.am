@@ -19,6 +19,10 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/db/__init__.py \
 	   phobos/db/__main__.py \
 	   phobos/db/db_config.py \
+	   phobos/db/sql/1.1/drop_schema.sql \
+	   phobos/db/sql/1.1/schema.sql \
+	   phobos/db/sql/1.2/drop_schema.sql \
+	   phobos/db/sql/1.2/schema.sql \
 	   scripts/phobos \
 	   setup.py
 
