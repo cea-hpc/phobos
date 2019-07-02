@@ -218,7 +218,7 @@ int layout_acquire(struct layout_composer *comp)
      * since the layout type (and therefore: the layout module) to use is not
      * known before.
      */
-    pho_verb("Registering module '%s'", mod_name);
+    pho_debug("Registering module '%s'", mod_name);
 
     rc = layout_register(mod_name, &ActiveLayoutModule, comp->lc_action);
     if (rc)
@@ -276,7 +276,7 @@ int layout_fini(struct layout_composer *comp)
     if (!layout_module_is_registered(&ActiveLayoutModule))
         return 0;
 
-    pho_verb("Deregistering module '%s'", mod_name);
+    pho_debug("Deregistering module '%s'", mod_name);
 
     if (comp->lc_private_dtor)
         comp->lc_private_dtor(comp);
