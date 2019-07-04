@@ -120,6 +120,9 @@ struct dev_descr {
 static struct dev_descr *devices;
 static int               dev_count;
 
+/* Needed local function declarations */
+static struct dev_descr *search_loaded_media(const struct media_id *id);
+
 /** check that device info from DB is consistent with actual status */
 static int check_dev_info(const struct dev_descr *dev)
 {
@@ -1418,6 +1421,19 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
         return rc;
     /* we own the media structure */
     media_owner = true;
+
+    /* Check if the media is already in a drive and try to acquire it. This
+     * should never fail because media are locked before drives and a drive
+     * shall never been locked if the media in it has not previously been
+     * locked.
+     */
+    *devp = search_loaded_media(&pmedia->id);
+    if (*devp != NULL) {
+        rc = lrs_dev_acquire(dss, *devp);
+        if (rc != 0)
+            GOTO(out_release, rc = -EAGAIN);
+        return 0;
+    }
 
     /* 3) is there a free drive? */
     *devp = dev_picker(dss, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS);
