@@ -652,7 +652,7 @@ static int mput_rc(const struct mput_desc *mput)
     return 0;
 }
 
-static int retry_layout_acquire(struct mput_desc *mput)
+static int retry_layout_acquire(struct layout_composer *comp)
 {
     unsigned int rand_seed;
     int rc;
@@ -665,7 +665,7 @@ static int retry_layout_acquire(struct mput_desc *mput)
     while (true) {
         useconds_t sleep_time;
 
-        rc = layout_acquire(&mput->comp);
+        rc = layout_acquire(comp);
         if (rc != -EAGAIN)
             return rc;
 
@@ -727,7 +727,7 @@ int phobos_put(const struct pho_xfer_desc *desc, size_t n,
             LOG_GOTO(out_finalize, rc, "Tags memory allocation failed");
     }
 
-    rc = retry_layout_acquire(mput);
+    rc = retry_layout_acquire(&mput->comp);
     if (rc != 0)
         LOG_GOTO(out_finalize, rc,
                  "Failed to get resources to put %d objects",
@@ -847,7 +847,7 @@ static int store_data_get(struct dss_handle *dss,
                  "Cannot declare layout to read objid:'%s'", objid);
 
     /* Prepare storage resources to read the object */
-    rc = layout_acquire(&comp);
+    rc = retry_layout_acquire(&comp);
     if (rc)
         LOG_GOTO(out_freecomp, rc,
                  "Failed to prepare resources to read objid:'%s'", objid);

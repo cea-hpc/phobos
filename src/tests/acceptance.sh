@@ -182,7 +182,7 @@ function dir_setup
 
 function dir_cleanup
 {
-    rm -rf /tmp/test.pho.1 /tmp/test.pho.2
+    rm -rf /tmp/test.pho.1 /tmp/test.pho.2 "$PHO_TMP_DIR"
 }
 
 function lock_test
@@ -337,11 +337,12 @@ function concurrent_put
 
 # Try to put with lots of phobos instances and check that the retry mechanism
 # allows all the instances to succeed
-function concurrent_put_retry
+function concurrent_put_get_retry
 {
     files=$(echo $test_dir/*)
     pids=
 
+    # Concurrent put
     for file in $files; do
         $phobos put "$file" "$file" &
         pids="$pids $!"
@@ -350,6 +351,20 @@ function concurrent_put_retry
     for pid in $pids; do
         wait $pid || error "some phobos instances failed to put"
     done
+
+    # Concurrent get
+    pids=
+    for file in $files; do
+        $phobos get "$file" "$PHO_TMP_DIR/$(basename $file)" &
+        pids="$pids $!"
+    done
+
+    for pid in $pids; do
+        wait $pid || error "some phobos instances failed to get"
+    done
+
+    # Cleanup so that future gets can succeed
+    rm -rf "$PHO_TMP_DIR"/*
 }
 
 function check_status
@@ -364,6 +379,7 @@ function check_status
 
 echo "POSIX test mode"
 export PHOBOS_LRS_default_family="dir"
+PHO_TMP_DIR="$(mktemp -d)"
 trap dir_cleanup EXIT
 dir_setup
 put_get_test
@@ -371,7 +387,7 @@ put_tags
 concurrent_put
 check_status dir "$dirs"
 lock_test
-concurrent_put_retry
+concurrent_put_get_retry
 
 if  [[ -w /dev/changer ]]; then
     echo "Tape test mode"
@@ -386,5 +402,5 @@ if  [[ -w /dev/changer ]]; then
     concurrent_put
     check_status tape "$tapes"
     lock_test
-    concurrent_put_retry
+    concurrent_put_get_retry
 fi

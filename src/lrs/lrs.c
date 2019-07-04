@@ -1572,14 +1572,14 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
 
     rc = lrs_media_acquire(dss, med);
     if (rc != 0)
-        goto out;
+        GOTO(out, rc = -EAGAIN);
 
     /* check if the media is already in a drive */
     dev = search_loaded_media(id);
     if (dev != NULL) {
         rc = lrs_dev_acquire(dss, dev);
         if (rc != 0)
-            goto out_mda_unlock;
+            GOTO(out_mda_unlock, rc = -EAGAIN);
     } else {
         pho_verb("Media '%s' is not in a drive", media_id_get(id));
 
