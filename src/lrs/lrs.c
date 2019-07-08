@@ -43,7 +43,12 @@
 #include <sys/utsname.h>
 #include <jansson.h>
 #include <stdbool.h>
+#include <stdio.h>
 
+#define TAPE_TYPE_SECTION_CFG "tape_type \"%s\""
+#define MODELS_CFG_PARAM "models"
+#define DRIVE_RW_CFG_PARAM "drive_rw"
+#define DRIVE_TYPE_SECTION_CFG "drive_type \"%s\""
 
 /** Used to indicate that a lock is held by an external process */
 #define LRS_MEDIA_LOCKED_EXTERNAL   ((void *)0x19880429)
@@ -425,8 +430,8 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
         devd->op_status = PHO_DEV_OP_ST_LOADED;
         devd->media_id = devd->lib_dev_info.ldi_media_id;
 
-        pho_verb("Device '%s' (S/N '%s') contains media '%s'", devd->dev_path,
-                 devi->serial, media_id_get(&devd->media_id));
+        pho_debug("Device '%s' (S/N '%s') contains media '%s'", devd->dev_path,
+                  devi->serial, media_id_get(&devd->media_id));
 
         /* get media info for loaded drives */
         rc = lrs_fill_media_info(dss, &devd->dss_media_info, &devd->media_id);
@@ -456,8 +461,8 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
                                 sizeof(devd->mnt_path));
 
             if (rc == 0) {
-                pho_verb("Discovered mounted filesystem at '%s'",
-                         devd->mnt_path);
+                pho_debug("Discovered mounted filesystem at '%s'",
+                          devd->mnt_path);
                 devd->op_status = PHO_DEV_OP_ST_MOUNTED;
             } else if (rc == -ENOENT)
                 /* not mounted, not an error */
@@ -809,6 +814,159 @@ err_nores:
 }
 
 /**
+ * Get the value of the configuration parameter that contains
+ * the list of drive models for a given drive type.
+ * e.g. "LTO6_drive" -> "ULTRIUM-TD6,ULT3580-TD6,..."
+ *
+ * @return 0 on success, a negative POSIX error code on failure.
+ */
+static int drive_models_by_type(const char *drive_type, const char **list)
+{
+    char *section_name;
+    int rc;
+
+    /* build drive_type section name */
+    rc = asprintf(&section_name, DRIVE_TYPE_SECTION_CFG,
+                  drive_type);
+    if (rc < 0)
+        return -ENOMEM;
+
+    /* get list of drive models */
+    rc = pho_cfg_get_val(section_name, MODELS_CFG_PARAM, list);
+    if (rc)
+        pho_error(rc, "Unable to find parameter "MODELS_CFG_PARAM" in section "
+                  "'%s' for drive type '%s'", section_name, drive_type);
+
+    free(section_name);
+    return rc;
+}
+
+/**
+ * Get the value of the configuration parameter that contains
+ * the list of write-compatible drives for a given tape model.
+ * e.g. "LTO5" -> "LTO5_drive,LTO6_drive"
+ *
+ * @return 0 on success, a negative POSIX error code on failure.
+ */
+static int rw_drive_types_for_tape(const char *tape_model, const char **list)
+{
+    char *section_name;
+    int rc;
+
+    /* build tape_type section name */
+    rc = asprintf(&section_name, TAPE_TYPE_SECTION_CFG, tape_model);
+    if (rc < 0)
+        return -ENOMEM;
+
+    /* get list of drive_rw types */
+    rc = pho_cfg_get_val(section_name, DRIVE_RW_CFG_PARAM, list);
+    if (rc)
+        pho_error(rc, "Unable to find parameter "DRIVE_RW_CFG_PARAM
+                  " in section '%s' for tape model '%s'",
+                  section_name, tape_model);
+
+    free(section_name);
+    return rc;
+}
+
+/**
+ * Search a given item in a coma-separated list.
+ *
+ * @param[in]  list     Comma-separated list of items.
+ * @param[in]  str      Item to find in the list.
+ * @param[out] res      true of the string is found, false else.
+ *
+ * @return 0 on success. A negative POSIX error code on error.
+ */
+static int search_in_list(const char *list, const char *str, bool *res)
+{
+    char *parse_list;
+    char *item;
+    char *saveptr;
+
+    *res = false;
+
+    /* copy input list to parse it */
+    parse_list = strdup(list);
+    if (parse_list == NULL)
+        return -errno;
+
+    /* check if the string is in the list */
+    for (item = strtok_r(parse_list, ",", &saveptr);
+         item != NULL;
+         item = strtok_r(NULL, ",", &saveptr)) {
+        if (strcmp(item, str) == 0) {
+            *res = true;
+            goto out_free;
+        }
+    }
+
+out_free:
+    free(parse_list);
+    return 0;
+}
+
+/**
+ * This function determines if the input drive and tape are compatible.
+ *
+ * @param[in]  tape  tape to check compatibility
+ * @param[in]  drive drive to check compatibility
+ * @param[out] res   true if the tape and drive are compatible, else false
+ *
+ * @return 0 on success, negative error code on failure and res is false
+ */
+static int tape_drive_compat(const struct media_info *tape,
+                             const struct dev_descr *drive, bool *res)
+{
+    const char *rw_drives;
+    char *parse_rw_drives;
+    char *drive_type;
+    char *saveptr;
+    int rc;
+
+    /* false by default */
+    *res = false;
+
+    /** XXX FIXME: this function is called for each drive for the same tape by
+     *  the function dev_picker. Each time, we build/allocate same strings and
+     *  we parse again the conf. This behaviour is heavy and not optimal.
+     */
+    rc = rw_drive_types_for_tape(tape->model, &rw_drives);
+    if (rc)
+        return rc;
+
+    /* copy the rw_drives list to tokenize it */
+    parse_rw_drives = strdup(rw_drives);
+    if (parse_rw_drives == NULL)
+        return -errno;
+
+    /* For each compatible drive type, get list of associated drive models
+     * and search the current drive model in it.
+     */
+    for (drive_type = strtok_r(parse_rw_drives, ",", &saveptr);
+         drive_type != NULL;
+         drive_type = strtok_r(NULL, ",", &saveptr)) {
+        const char *drive_model_list;
+
+        rc = drive_models_by_type(drive_type, &drive_model_list);
+        if (rc)
+            goto out_free;
+
+        rc = search_in_list(drive_model_list, drive->dss_dev_info->model, res);
+        if (rc)
+            goto out_free;
+        /* drive model found: media is compatible */
+        if (*res)
+            break;
+    }
+
+out_free:
+    free(parse_rw_drives);
+    return rc;
+}
+
+
+/**
  * Device selection policy prototype.
  * @param[in]     required_size required space to perform the write operation.
  * @param[in]     dev_curr      the current device to consider.
@@ -837,7 +995,8 @@ static struct dev_descr *dev_picker(struct dss_handle *dss,
                                     enum dev_op_status op_st,
                                     device_select_func_t select_func,
                                     size_t required_size,
-                                    const struct tags *media_tags)
+                                    const struct tags *media_tags,
+                                    struct media_info *pmedia)
 {
     struct dev_descr    *selected = NULL;
     int                  i;
@@ -886,6 +1045,19 @@ retry:
                           media_id_get(&itr->dss_media_info->id));
                 continue;
             }
+        }
+
+        /* check tape / drive compat */
+        if (pmedia) {
+            bool res;
+
+            if (tape_drive_compat(pmedia, itr, &res)) {
+                selected = NULL;
+                break;
+            }
+
+            if (!res)
+                continue;
         }
 
         rc = select_func(required_size, itr, &selected);
@@ -1306,7 +1478,8 @@ static device_select_func_t get_dev_policy(void)
  * @param(in)  dss       Handle to DSS.
  * @param(out) dev_descr Pointer to an empty drive.
  */
-static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp)
+static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp,
+                               struct media_info *pmedia)
 {
     struct dev_descr *tmp_dev;
     int               rc;
@@ -1316,7 +1489,7 @@ static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp)
 
         /* get a drive to free (PHO_DEV_OP_ST_UNSPEC for any state) */
         tmp_dev = dev_picker(dss, PHO_DEV_OP_ST_UNSPEC, select_drive_to_free,
-                             0, &NO_TAGS);
+                             0, &NO_TAGS, pmedia);
         if (tmp_dev == NULL)
             LOG_RETURN(-EAGAIN, "No suitable device to free");
 
@@ -1384,13 +1557,13 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
 
     /* 1a) is there a mounted filesystem with enough room? */
     *devp = dev_picker(dss, PHO_DEV_OP_ST_MOUNTED, dev_select_policy, size,
-                       tags);
+                       tags, NULL);
     if (*devp != NULL)
         return 0;
 
     /* 1b) is there a loaded media with enough room? */
     *devp = dev_picker(dss, PHO_DEV_OP_ST_LOADED, dev_select_policy, size,
-                       tags);
+                       tags, NULL);
     if (*devp != NULL) {
         /* mount the filesystem and return */
         rc = lrs_mount(*devp);
@@ -1430,10 +1603,11 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
     }
 
     /* 3) is there a free drive? */
-    *devp = dev_picker(dss, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS);
+    *devp = dev_picker(dss, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
+                       pmedia);
     if (*devp == NULL) {
         pho_verb("No free drive: need to unload one");
-        rc = lrs_free_one_device(dss, devp);
+        rc = lrs_free_one_device(dss, devp, pmedia);
         if (rc)
             goto out_release;
     }
@@ -1578,10 +1752,11 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
         pho_verb("Media '%s' is not in a drive", media_id_get(id));
 
         /* Is there a free drive? */
-        dev = dev_picker(dss, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS);
+        dev = dev_picker(dss, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
+                         med);
         if (dev == NULL) {
             pho_verb("No free drive: need to unload one");
-            rc = lrs_free_one_device(dss, &dev);
+            rc = lrs_free_one_device(dss, &dev, med);
             if (rc != 0)
                 LOG_GOTO(out_mda_unlock, rc, "No device available");
         }
