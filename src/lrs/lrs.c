@@ -692,12 +692,11 @@ out:
 }
 
 /**
- * Get a suitable media for a write operation, and compatible
- * with the given drive model.
+ * Get a suitable media for a write operation.
  */
 static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
                             size_t required_size, enum dev_family family,
-                            const char *device_model, const struct tags *tags)
+                            const struct tags *tags)
 {
     struct media_info   *pmedia_res = NULL;
     struct media_info   *media_best;
@@ -742,11 +741,6 @@ static int lrs_select_media(struct dss_handle *dss, struct media_info **p_media,
     if (rc)
         return rc;
 
-    /**
-     * @TODO
-     * Use configurable compatility rules to determine writable
-     * media models from device_model
-     */
     rc = dss_media_get(dss, &filter, &pmedia_res, &mcnt);
     if (rc)
         GOTO(err_nores, rc);
@@ -1416,7 +1410,7 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
      * Note: lrs_select_media locks the media.
      */
     pho_verb("Not enough space on loaded media: selecting another one");
-    rc = lrs_select_media(dss, &pmedia, size, default_family(), NULL, tags);
+    rc = lrs_select_media(dss, &pmedia, size, default_family(), tags);
     if (rc)
         return rc;
     /* we own the media structure */
