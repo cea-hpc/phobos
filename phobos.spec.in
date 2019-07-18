@@ -91,9 +91,9 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_store.la
 
 %changelog
-* Fri Jul 5 2019 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.2-0.alpha2
-- Pre 1.2 release (Echo)
-- 1.2 new features:
+* Thu Jul 18 2019 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.2.0-1
+- Final 1.2 release (Echo)
+- New features:
     * Dual logging (stderr and syslog)
     * phobos lib scan (improved 'mtx status')
     * phobos_db tool (DB schema management, DB migration)
