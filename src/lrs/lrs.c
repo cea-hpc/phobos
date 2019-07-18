@@ -120,13 +120,9 @@ struct dev_descr {
     bool                 locked_local;       /**< dss lock acquired by us */
 };
 
-/** global structure of available devices and media information
- * (initially, global and static variables are NULL or 0) */
-static struct dev_descr *devices;
-static int               dev_count;
-
 /* Needed local function declarations */
-static struct dev_descr *search_loaded_media(const struct media_id *id);
+static struct dev_descr *search_loaded_media(struct lrs *lrs,
+                                             const struct media_id *id);
 
 /** check that device info from DB is consistent with actual status */
 static int check_dev_info(const struct dev_descr *dev)
@@ -512,7 +508,7 @@ static int wrap_lib_open(enum dev_family dev_type, struct lib_adapter *lib)
  * Load device states into memory.
  * Do nothing if device status is already loaded.
  */
-static int lrs_load_dev_state(struct dss_handle *dss)
+static int lrs_load_dev_state(struct lrs *lrs)
 {
     struct dev_info    *devs = NULL;
     int                 dcnt = 0;
@@ -530,7 +526,7 @@ static int lrs_load_dev_state(struct dss_handle *dss)
      * devices from DSS; otherwise just refresh informations for the current
      * list of devices
      */
-    if (devices == NULL || dev_count == 0) {
+    if (lrs->devices == NULL || lrs->dev_count == 0) {
         struct dss_filter   filter;
 
         rc = dss_filter_build(&filter,
@@ -546,7 +542,7 @@ static int lrs_load_dev_state(struct dss_handle *dss)
             return rc;
 
         /* get all unlocked devices from DB for the given family */
-        rc = dss_device_get(dss, &filter, &devs, &dcnt);
+        rc = dss_device_get(lrs->dss, &filter, &devs, &dcnt);
         dss_filter_free(&filter);
         if (rc)
             GOTO(err_no_res, rc);
@@ -557,14 +553,14 @@ static int lrs_load_dev_state(struct dss_handle *dss)
             GOTO(err, rc = -ENXIO);
         }
 
-        dev_count = dcnt;
-        devices = (struct dev_descr *)calloc(dcnt, sizeof(*devices));
-        if (devices == NULL)
+        lrs->dev_count = dcnt;
+        lrs->devices = calloc(dcnt, sizeof(*lrs->devices));
+        if (lrs->devices == NULL)
             GOTO(err, rc = -ENOMEM);
 
         /* Copy information from DSS to local device list */
         for (i = 0 ; i < dcnt; i++)
-            devices[i].dss_dev_info = dev_info_dup(&devs[i]);
+            lrs->devices[i].dss_dev_info = dev_info_dup(&devs[i]);
     }
 
     /* get a handle to the library to query it */
@@ -572,11 +568,12 @@ static int lrs_load_dev_state(struct dss_handle *dss)
     if (rc)
         GOTO(err, rc);
 
-    for (i = 0 ; i < dev_count; i++) {
-        rc = lrs_fill_dev_info(dss, &lib, &devices[i]);
+    for (i = 0 ; i < lrs->dev_count; i++) {
+        rc = lrs_fill_dev_info(lrs->dss, &lib, &lrs->devices[i]);
         if (rc) {
-            pho_debug("Marking device '%s' as failed", devices[i].dev_path);
-            devices[i].op_status = PHO_DEV_OP_ST_FAILED;
+            pho_debug("Marking device '%s' as failed",
+                      lrs->devices[i].dev_path);
+            lrs->devices[i].op_status = PHO_DEV_OP_ST_FAILED;
         }
     }
 
@@ -592,7 +589,7 @@ err_no_res:
     return rc;
 }
 
-int lrs_device_add(struct dss_handle *dss, const struct dev_info *devi)
+int lrs_device_add(struct lrs *lrs, const struct dev_info *devi)
 {
     int rc = 0;
     struct lib_adapter lib;
@@ -608,21 +605,50 @@ int lrs_device_add(struct dss_handle *dss, const struct dev_info *devi)
     device.dss_dev_info = dev_info_dup(devi);
 
     /* Retrieve device information */
-    rc = lrs_fill_dev_info(dss, &lib, &device);
+    rc = lrs_fill_dev_info(lrs->dss, &lib, &device);
     if (rc)
         GOTO(err, rc);
 
     /* Add the newly initialized device to the device list */
-    devices = realloc(devices, (dev_count + 1) * sizeof(*devices));
-    if (devices == NULL)
+    lrs->devices = realloc(lrs->devices,
+                           (lrs->dev_count + 1) * sizeof(*lrs->devices));
+    if (lrs->devices == NULL)
         GOTO(err, rc = -ENOMEM);
 
-    dev_count++;
-    devices[dev_count - 1] = device;
+    lrs->dev_count++;
+    lrs->devices[lrs->dev_count - 1] = device;
 
 err:
     ldm_lib_close(&lib);
     return rc;
+}
+
+static void dev_descr_fini(struct dev_descr *dev)
+{
+    dev_info_free(dev->dss_dev_info);
+    media_info_free(dev->dss_media_info);
+    ldm_dev_state_fini(&dev->sys_dev_state);
+}
+
+int lrs_init(struct lrs *lrs, struct dss_handle *dss)
+{
+    lrs->devices = NULL;
+    lrs->dev_count = 0;
+    lrs->dss = dss;
+    return 0;
+}
+
+void lrs_fini(struct lrs *lrs)
+{
+    size_t i;
+
+    if (lrs == NULL)
+        return;
+
+    for (i = 0; i < lrs->dev_count; i++)
+        dev_descr_fini(&lrs->devices[i]);
+
+    free(lrs->devices);
 }
 
 /**
@@ -991,7 +1017,7 @@ typedef int (*device_select_func_t)(size_t required_size,
  * @param media_tags     Mandatory tags for the contained media (for write
  *                       requests only).
  */
-static struct dev_descr *dev_picker(struct dss_handle *dss,
+static struct dev_descr *dev_picker(struct lrs *lrs,
                                     enum dev_op_status op_st,
                                     device_select_func_t select_func,
                                     size_t required_size,
@@ -1008,12 +1034,12 @@ static struct dev_descr *dev_picker(struct dss_handle *dss,
     bool                *failed_dev = NULL;
     ENTRY;
 
-    if (devices == NULL)
+    if (lrs->devices == NULL)
         return NULL;
 
 retry:
-    for (i = 0; i < dev_count; i++) {
-        struct dev_descr    *itr = &devices[i];
+    for (i = 0; i < lrs->dev_count; i++) {
+        struct dev_descr    *itr = &lrs->devices[i];
 
         /* Already unsuccessfully tried to acquire this device */
         if (failed_dev && failed_dev[i])
@@ -1070,7 +1096,7 @@ retry:
     }
 
     if (selected != NULL) {
-        int selected_i = selected - devices;
+        int selected_i = selected - lrs->devices;
         struct media_info *pmedia = selected->dss_media_info;
 
         pho_debug("Picked dev number %d (%s)", selected_i, selected->dev_path);
@@ -1080,7 +1106,7 @@ retry:
             pho_debug("Acquiring %s media '%s'",
                       op_status2str(selected->op_status),
                       media_id_get(&pmedia->id));
-            rc = lrs_media_acquire(dss, pmedia);
+            rc = lrs_media_acquire(lrs->dss, pmedia);
             if (rc)
                 /* Avoid releasing a media that has not been acquired */
                 pmedia = NULL;
@@ -1090,17 +1116,17 @@ retry:
          * device
          */
         if (rc == 0)
-            rc = lrs_dev_acquire(dss, selected);
+            rc = lrs_dev_acquire(lrs->dss, selected);
 
         /* Something went wrong */
         if (rc != 0) {
             /* Release media if necessary */
-            lrs_media_release(dss, pmedia);
+            lrs_media_release(lrs->dss, pmedia);
             /* clear previously selected device */
             selected = NULL;
             /* Allocate failed_dev if necessary */
             if (failed_dev == NULL) {
-                failed_dev = calloc(dev_count, sizeof(bool));
+                failed_dev = calloc(lrs->dev_count, sizeof(bool));
                 if (failed_dev == NULL)
                     return NULL;
             }
@@ -1478,7 +1504,7 @@ static device_select_func_t get_dev_policy(void)
  * @param(in)  dss       Handle to DSS.
  * @param(out) dev_descr Pointer to an empty drive.
  */
-static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp,
+static int lrs_free_one_device(struct lrs *lrs, struct dev_descr **devp,
                                struct media_info *pmedia)
 {
     struct dev_descr *tmp_dev;
@@ -1488,7 +1514,7 @@ static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp,
     while (1) {
 
         /* get a drive to free (PHO_DEV_OP_ST_UNSPEC for any state) */
-        tmp_dev = dev_picker(dss, PHO_DEV_OP_ST_UNSPEC, select_drive_to_free,
+        tmp_dev = dev_picker(lrs, PHO_DEV_OP_ST_UNSPEC, select_drive_to_free,
                              0, &NO_TAGS, pmedia);
         if (tmp_dev == NULL)
             LOG_RETURN(-EAGAIN, "No suitable device to free");
@@ -1505,7 +1531,7 @@ static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp,
 
         if (tmp_dev->op_status == PHO_DEV_OP_ST_LOADED) {
             /* unload the media */
-            rc = lrs_unload(dss, tmp_dev);
+            rc = lrs_unload(lrs->dss, tmp_dev);
             if (rc) {
                 /* set it failed and get another device */
                 tmp_dev->op_status = PHO_DEV_OP_ST_FAILED;
@@ -1523,8 +1549,8 @@ static int lrs_free_one_device(struct dss_handle *dss, struct dev_descr **devp,
         return 0;
 
 next:
-        lrs_dev_release(dss, tmp_dev);
-        lrs_media_release(dss, tmp_dev->dss_media_info);
+        lrs_dev_release(lrs->dss, tmp_dev);
+        lrs_media_release(lrs->dss, tmp_dev->dss_media_info);
     }
 }
 
@@ -1535,7 +1561,7 @@ next:
  *                   must have all the specified tags.
  * @param[out] devp  The selected device to write with.
  */
-static int lrs_get_write_res(struct dss_handle *dss, size_t size,
+static int lrs_get_write_res(struct lrs *lrs, size_t size,
                              const struct tags *tags, struct dev_descr **devp)
 {
     device_select_func_t dev_select_policy;
@@ -1544,7 +1570,7 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
     int rc;
     ENTRY;
 
-    rc = lrs_load_dev_state(dss);
+    rc = lrs_load_dev_state(lrs);
     if (rc != 0)
         return rc;
 
@@ -1556,13 +1582,13 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
     media_owner = false;
 
     /* 1a) is there a mounted filesystem with enough room? */
-    *devp = dev_picker(dss, PHO_DEV_OP_ST_MOUNTED, dev_select_policy, size,
+    *devp = dev_picker(lrs, PHO_DEV_OP_ST_MOUNTED, dev_select_policy, size,
                        tags, NULL);
     if (*devp != NULL)
         return 0;
 
     /* 1b) is there a loaded media with enough room? */
-    *devp = dev_picker(dss, PHO_DEV_OP_ST_LOADED, dev_select_policy, size,
+    *devp = dev_picker(lrs, PHO_DEV_OP_ST_LOADED, dev_select_policy, size,
                        tags, NULL);
     if (*devp != NULL) {
         /* mount the filesystem and return */
@@ -1583,7 +1609,7 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
      * Note: lrs_select_media locks the media.
      */
     pho_verb("Not enough space on loaded media: selecting another one");
-    rc = lrs_select_media(dss, &pmedia, size, default_family(), tags);
+    rc = lrs_select_media(lrs->dss, &pmedia, size, default_family(), tags);
     if (rc)
         return rc;
     /* we own the media structure */
@@ -1594,20 +1620,20 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
      * shall never been locked if the media in it has not previously been
      * locked.
      */
-    *devp = search_loaded_media(&pmedia->id);
+    *devp = search_loaded_media(lrs, &pmedia->id);
     if (*devp != NULL) {
-        rc = lrs_dev_acquire(dss, *devp);
+        rc = lrs_dev_acquire(lrs->dss, *devp);
         if (rc != 0)
             GOTO(out_release, rc = -EAGAIN);
         return 0;
     }
 
     /* 3) is there a free drive? */
-    *devp = dev_picker(dss, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
+    *devp = dev_picker(lrs, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
                        pmedia);
     if (*devp == NULL) {
         pho_verb("No free drive: need to unload one");
-        rc = lrs_free_one_device(dss, devp, pmedia);
+        rc = lrs_free_one_device(lrs, devp, pmedia);
         if (rc)
             goto out_release;
     }
@@ -1633,15 +1659,15 @@ static int lrs_get_write_res(struct dss_handle *dss, size_t size,
 
 out_release:
     if (*devp != NULL) {
-        lrs_dev_release(dss, *devp);
+        lrs_dev_release(lrs->dss, *devp);
         /* Avoid releasing the same media twice */
         if (pmedia != (*devp)->dss_media_info)
-            lrs_media_release(dss, (*devp)->dss_media_info);
+            lrs_media_release(lrs->dss, (*devp)->dss_media_info);
     }
 
     if (pmedia != NULL) {
         pho_debug("Releasing selected media '%s'", media_id_get(&pmedia->id));
-        lrs_media_release(dss, pmedia);
+        lrs_media_release(lrs->dss, pmedia);
         if (media_owner)
             media_info_free(pmedia);
     }
@@ -1666,7 +1692,8 @@ static int set_loc_from_dev(const struct dev_descr *dev,
     return 0;
 }
 
-static struct dev_descr *search_loaded_media(const struct media_id *id)
+static struct dev_descr *search_loaded_media(struct lrs *lrs,
+                                             const struct media_id *id)
 {
     const char *name;
     int         i;
@@ -1677,27 +1704,27 @@ static struct dev_descr *search_loaded_media(const struct media_id *id)
 
     name = media_id_get(id);
 
-    for (i = 0; i < dev_count; i++) {
+    for (i = 0; i < lrs->dev_count; i++) {
         const char          *media_id;
-        enum dev_op_status   op_st = devices[i].op_status;
+        enum dev_op_status   op_st = lrs->devices[i].op_status;
 
         if (op_st != PHO_DEV_OP_ST_MOUNTED && op_st != PHO_DEV_OP_ST_LOADED)
             continue;
 
-        media_id = media_id_get(&devices[i].media_id);
+        media_id = media_id_get(&lrs->devices[i].media_id);
         if (media_id == NULL) {
             pho_warn("Cannot retrieve media ID from device '%s'",
-                     devices[i].dev_path);
+                     lrs->devices[i].dev_path);
             continue;
         }
 
         if (!strcmp(name, media_id))
-            return &devices[i];
+            return &lrs->devices[i];
     }
     return NULL;
 }
 
-static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
+static int lrs_media_prepare(struct lrs *lrs, const struct media_id *id,
                              enum lrs_operation op, struct dev_descr **pdev,
                              struct media_info **pmedia)
 {
@@ -1711,7 +1738,7 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
     *pdev = NULL;
     *pmedia = NULL;
 
-    rc = lrs_fill_media_info(dss, &med, id);
+    rc = lrs_fill_media_info(lrs->dss, &med, id);
     if (rc != 0)
         return rc;
 
@@ -1738,25 +1765,25 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
         LOG_RETURN(-ENOSYS, "Unknown operation %x", (int)op);
     }
 
-    rc = lrs_media_acquire(dss, med);
+    rc = lrs_media_acquire(lrs->dss, med);
     if (rc != 0)
         GOTO(out, rc = -EAGAIN);
 
     /* check if the media is already in a drive */
-    dev = search_loaded_media(id);
+    dev = search_loaded_media(lrs, id);
     if (dev != NULL) {
-        rc = lrs_dev_acquire(dss, dev);
+        rc = lrs_dev_acquire(lrs->dss, dev);
         if (rc != 0)
             GOTO(out_mda_unlock, rc = -EAGAIN);
     } else {
         pho_verb("Media '%s' is not in a drive", media_id_get(id));
 
         /* Is there a free drive? */
-        dev = dev_picker(dss, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
+        dev = dev_picker(lrs, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
                          med);
         if (dev == NULL) {
             pho_verb("No free drive: need to unload one");
-            rc = lrs_free_one_device(dss, &dev, med);
+            rc = lrs_free_one_device(lrs, &dev, med);
             if (rc != 0)
                 LOG_GOTO(out_mda_unlock, rc, "No device available");
         }
@@ -1779,11 +1806,11 @@ static int lrs_media_prepare(struct dss_handle *dss, const struct media_id *id,
 
 out_dev_unlock:
     if (rc)
-        lrs_dev_release(dss, dev);
+        lrs_dev_release(lrs->dss, dev);
 
 out_mda_unlock:
     if (rc)
-        lrs_media_release(dss, med);
+        lrs_media_release(lrs->dss, med);
 
 out:
     *pmedia = med;
@@ -1794,8 +1821,8 @@ out:
 
 /* see "pho_lrs.h" for function help */
 
-int lrs_format(struct dss_handle *dss, const struct media_id *id,
-               enum fs_type fs, bool unlock)
+int lrs_format(struct lrs *lrs, const struct media_id *id, enum fs_type fs,
+               bool unlock)
 {
     const char          *label = media_id_get(id);
     struct dev_descr    *dev = NULL;
@@ -1805,11 +1832,11 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     struct fs_adapter    fsa;
     ENTRY;
 
-    rc = lrs_load_dev_state(dss);
+    rc = lrs_load_dev_state(lrs);
     if (rc != 0)
         return rc;
 
-    rc = lrs_media_prepare(dss, id, LRS_OP_FORMAT, &dev, &media_info);
+    rc = lrs_media_prepare(lrs, id, LRS_OP_FORMAT, &dev, &media_info);
     if (rc != 0)
         return rc;
 
@@ -1834,12 +1861,12 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
     media_info->stats.phys_spc_used = spc.spc_used;
     media_info->stats.phys_spc_free = spc.spc_avail;
 
-    rc = lrs_media_release(dss, media_info);
+    rc = lrs_media_release(lrs->dss, media_info);
     if (rc)
         pho_error(rc, "Failed to release lock on '%s'", label);
 
     /* Release ownership. Do not fail the whole operation if unlucky here... */
-    rc = lrs_dev_release(dss, dev);
+    rc = lrs_dev_release(lrs->dss, dev);
     if (rc)
         pho_error(rc, "Failed to release lock on '%s'", dev->dev_path);
 
@@ -1851,15 +1878,15 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
         media_info->adm_status = PHO_MDA_ADM_ST_UNLOCKED;
     }
 
-    rc = dss_media_set(dss, media_info, 1, DSS_SET_UPDATE);
+    rc = dss_media_set(lrs->dss, media_info, 1, DSS_SET_UPDATE);
     if (rc != 0)
         LOG_RETURN(rc, "Failed to update state of media '%s'", label);
 
     return 0;
 
 err_out:
-    lrs_dev_release(dss, dev);
-    lrs_media_release(dss, media_info);
+    lrs_dev_release(lrs->dss, dev);
+    lrs_media_release(lrs->dss, media_info);
     return rc;
 }
 
@@ -1883,7 +1910,7 @@ static bool lrs_mount_is_writable(const struct lrs_intent *intent)
     return !(fs_info.spc_flags & PHO_FS_READONLY);
 }
 
-int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent,
+int lrs_write_prepare(struct lrs *lrs, struct lrs_intent *intent,
                       const struct tags *tags)
 {
     struct dev_descr    *dev = NULL;
@@ -1893,11 +1920,11 @@ int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent,
     ENTRY;
 
 retry:
-    rc = lrs_get_write_res(dss, size, tags, &dev);
+    rc = lrs_get_write_res(lrs, size, tags, &dev);
     if (rc != 0)
         return rc;
 
-    intent->li_dss    = dss;
+    intent->li_dss    = lrs->dss;
     intent->li_device = dev;
 
     rc = set_loc_from_dev(dev, intent);
@@ -1918,12 +1945,12 @@ retry:
 
         media->fs.status = PHO_FS_STATUS_FULL;
 
-        rc = dss_media_set(dss, media, 1, DSS_SET_UPDATE);
+        rc = dss_media_set(lrs->dss, media, 1, DSS_SET_UPDATE);
         if (rc)
             LOG_GOTO(err_cleanup, rc, "Cannot update media information");
 
-        lrs_dev_release(dss, dev);
-        lrs_media_release(dss, media);
+        lrs_dev_release(lrs->dss, dev);
+        lrs_media_release(lrs->dss, media);
         dev = NULL;
         media = NULL;
         goto retry;
@@ -1936,8 +1963,8 @@ retry:
 
 err_cleanup:
     if (rc != 0) {
-        lrs_dev_release(dss, dev);
-        lrs_media_release(dss, media);
+        lrs_dev_release(lrs->dss, dev);
+        lrs_media_release(lrs->dss, media);
         free(intent->li_location.root_path);
         memset(intent, 0, sizeof(*intent));
     }
@@ -1945,7 +1972,7 @@ err_cleanup:
     return rc;
 }
 
-int lrs_read_prepare(struct dss_handle *dss, struct lrs_intent *intent)
+int lrs_read_prepare(struct lrs *lrs, struct lrs_intent *intent)
 {
     struct dev_descr    *dev = NULL;
     struct media_info   *media_info;
@@ -1953,18 +1980,18 @@ int lrs_read_prepare(struct dss_handle *dss, struct lrs_intent *intent)
     int                  rc;
     ENTRY;
 
-    rc = lrs_load_dev_state(dss);
+    rc = lrs_load_dev_state(lrs);
     if (rc != 0)
         return rc;
 
     id = &intent->li_location.extent.media;
 
     /* Fill in information about media and mount it if needed */
-    rc = lrs_media_prepare(dss, id, LRS_OP_READ, &dev, &media_info);
+    rc = lrs_media_prepare(lrs, id, LRS_OP_READ, &dev, &media_info);
     if (rc)
         return rc;
 
-    intent->li_dss    = dss;
+    intent->li_dss    = lrs->dss;
     intent->li_device = dev;
 
     if (dev->dss_media_info == NULL)

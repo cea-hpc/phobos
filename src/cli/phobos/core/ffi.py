@@ -65,6 +65,14 @@ class DSSLock(Structure):
         ('lock', c_char_p)
     ]
 
+class LRS(Structure):
+    """Local Resource Scheduler"""
+    _fields_ = [
+        ('dss', c_void_p),
+        ('devices', c_void_p),
+        ('dev_count', c_size_t),
+    ]
+
 class DevInfo(Structure, CLIManagedResourceMixin):
     """DSS device descriptor."""
     _fields_ = [

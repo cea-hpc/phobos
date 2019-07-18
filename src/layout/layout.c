@@ -149,12 +149,12 @@ static int layout_deregister(struct layout_module *mod)
     return 0;
 }
 
-int layout_init(struct dss_handle *dss, struct layout_composer *comp,
+int layout_init(struct lrs *lrs, struct layout_composer *comp,
                 enum layout_action action)
 {
     ENTRY;
 
-    comp->lc_dss     = dss;
+    comp->lc_lrs     = lrs;
     comp->lc_action  = action;
     comp->lc_layouts = g_hash_table_new(g_str_hash, g_str_equal);
     comp->lc_private = NULL;

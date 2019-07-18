@@ -143,6 +143,13 @@ static inline int ldm_dev_eject(const struct dev_adapter *dev,
     return dev->dev_eject(dev_path);
 }
 
+/**
+ * Free all resources associated with this lds.
+ *
+ * @param[in]   lds The lds of which to free resources
+ */
+void ldm_dev_state_fini(struct ldm_dev_state *lds);
+
 /** @}*/
 
 /**

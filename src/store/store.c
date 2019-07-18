@@ -108,6 +108,7 @@ struct mput_slice {
  */
 struct mput_desc {
     struct dss_handle        dss;       /**< A cached DSS handle */
+    struct lrs               lrs;       /**< LRS instance */
     struct layout_composer   comp;      /**< Arrange particular layouts */
     char                    *layout;    /**< Layout name to use */
     int                      slice_cnt; /**< Count of objects to PUT */
@@ -552,6 +553,10 @@ static int store_mput_init(struct mput_desc **desc,
     if (rc)
         LOG_GOTO(err_free, rc, "Cannot initialize DSS");
 
+    rc = lrs_init(&mput->lrs, &mput->dss);
+    if (rc)
+        LOG_GOTO(err_free_dss, rc, "Cannot initialize LRS");
+
     mput->layout    = strdup(layout);
     mput->slice_cnt = n;
 
@@ -560,14 +565,18 @@ static int store_mput_init(struct mput_desc **desc,
         mput->slices[i].xfer = &xfer[i];
     }
 
-    rc = layout_init(&mput->dss, &mput->comp, LA_ENCODE);
+    rc = layout_init(&mput->lrs, &mput->comp, LA_ENCODE);
     if (rc)
-        LOG_GOTO(err_free, rc, "Cannot initialize layout composition");
+        LOG_GOTO(err, rc, "Cannot initialize layout composition");
 
     *desc = mput;
 
-err_free:
     if (rc) {
+err:
+        lrs_fini(&mput->lrs);
+err_free_dss:
+        dss_fini(&mput->dss);
+err_free:
         free(mput->layout);
         free(mput);
     }
@@ -581,6 +590,7 @@ static void store_mput_fini(struct mput_desc *mput)
         return;
 
     free(mput->layout);
+    lrs_fini(&mput->lrs);
     dss_fini(&mput->dss);
     free(mput);
 }
@@ -818,6 +828,7 @@ static int store_data_get(struct dss_handle *dss,
 {
     struct layout_info      *layout = NULL;
     struct layout_composer   comp = {0};
+    struct lrs               lrs = {0};
     struct pho_io_descr      iod  = {0};
     const char              *objid = desc->xd_objid;
     int                      fd;
@@ -837,9 +848,13 @@ static int store_data_get(struct dss_handle *dss,
         LOG_GOTO(free_res, rc = -errno, "Failed to open %s for writing",
                  desc->xd_fpath);
 
-    rc = layout_init(dss, &comp, LA_DECODE);
+    rc = lrs_init(&lrs, dss);
     if (rc)
-        LOG_GOTO(out_close, rc, "Cannot initialize composite layout");
+        LOG_GOTO(out_close, rc, "Cannot initialize LRS");
+
+    rc = layout_init(&lrs, &comp, LA_DECODE);
+    if (rc)
+        LOG_GOTO(out_lrs, rc, "Cannot initialize composite layout");
 
     rc = layout_declare(&comp, layout);
     if (rc)
@@ -868,6 +883,9 @@ static int store_data_get(struct dss_handle *dss,
 out_freecomp:
     /* Release storage resources */
     layout_fini(&comp);
+
+out_lrs:
+    lrs_fini(&lrs);
 
 out_close:
     close(fd);

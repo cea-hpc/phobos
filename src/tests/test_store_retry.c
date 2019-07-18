@@ -58,8 +58,8 @@ static char *setup_tmp_dir(void)
     return TMP_DIR;
 }
 
-static void add_dir(struct dss_handle *dss, const char *path,
-                    struct dev_info *dev, struct media_info *media)
+static void add_dir(struct lrs *lrs, const char *path, struct dev_info *dev,
+                    struct media_info *media)
 {
     struct ldm_dev_state dev_st = {0};
     struct dev_adapter adapter = {0};
@@ -74,7 +74,7 @@ static void add_dir(struct dss_handle *dss, const char *path,
     media->fs.type = PHO_FS_POSIX;
     media->addr_type = PHO_ADDR_HASH1;
     media->adm_status = PHO_MDA_ADM_ST_LOCKED;
-    ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
+    ASSERT_RC(dss_media_set(lrs->dss, media, 1, DSS_SET_INSERT));
 
     /* Add dir device */
     get_dev_adapter(PHO_DEV_DIR, &adapter);
@@ -88,18 +88,17 @@ static void add_dir(struct dss_handle *dss, const char *path,
     dev->serial = dev_st.lds_serial;
     dev->adm_status = PHO_DEV_ADM_ST_UNLOCKED;
 
-    ASSERT_RC(dss_device_set(dss, dev, 1, DSS_SET_INSERT));
+    ASSERT_RC(dss_device_set(lrs->dss, dev, 1, DSS_SET_INSERT));
 
     /* Add device to lrs */
-    ASSERT_RC(lrs_device_add(dss, dev));
+    ASSERT_RC(lrs_device_add(lrs, dev));
 
     /* Format and unlock media */
-    ASSERT_RC(lrs_format(dss, &media->id, PHO_FS_POSIX, true));
+    ASSERT_RC(lrs_format(lrs, &media->id, PHO_FS_POSIX, true));
 }
 
 /* TODO: factorize with add_dir */
-static void add_drive(struct dss_handle *dss, const char *path,
-                      struct dev_info *dev)
+static void add_drive(struct lrs *lrs, const char *path, struct dev_info *dev)
 {
     struct ldm_dev_state dev_st = {0};
     struct dev_adapter adapter = {0};
@@ -119,13 +118,13 @@ static void add_drive(struct dss_handle *dss, const char *path,
     dev->serial = dev_st.lds_serial;
     dev->adm_status = PHO_DEV_ADM_ST_UNLOCKED;
 
-    ASSERT_RC(dss_device_set(dss, dev, 1, DSS_SET_INSERT));
+    ASSERT_RC(dss_device_set(lrs->dss, dev, 1, DSS_SET_INSERT));
 
     /* Add device to lrs */
-    ASSERT_RC(lrs_device_add(dss, dev));
+    ASSERT_RC(lrs_device_add(lrs, dev));
 }
 
-static void add_tape(struct dss_handle *dss, const char *tape_id,
+static void add_tape(struct lrs *lrs, const char *tape_id,
                      const char *model, struct media_info *media)
 {
     /* Add dir media */
@@ -135,10 +134,10 @@ static void add_tape(struct dss_handle *dss, const char *tape_id,
     media->fs.type = PHO_FS_LTFS;
     media->addr_type = PHO_ADDR_HASH1;
     media->adm_status = PHO_MDA_ADM_ST_UNLOCKED;
-    ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
+    ASSERT_RC(dss_media_set(lrs->dss, media, 1, DSS_SET_INSERT));
 
     /* This can fail if the tape has already been formatted */
-    lrs_format(dss, &media->id, PHO_FS_LTFS, true);
+    lrs_format(lrs, &media->id, PHO_FS_LTFS, true);
     free(media->model);
 }
 
@@ -205,6 +204,7 @@ static void test_put_retry(struct pho_xfer_desc *xfer, struct dev_info *dev,
 int main(int argc, char **argv)
 {
     struct dss_handle       dss = {0};
+    struct lrs              lrs = {0};
     struct pho_xfer_desc    xfer = {0};
     struct dev_info         dev = {0};
     struct media_info       media = { {0} };
@@ -221,6 +221,7 @@ int main(int argc, char **argv)
     xfer.xd_flags = 0;
 
     dss_init(&dss);
+    lrs_init(&lrs, &dss);
 
     default_family = getenv("PHOBOS_LRS_default_family");
     if (default_family && strcmp(default_family, "tape") == 0) {
@@ -241,8 +242,8 @@ int main(int argc, char **argv)
          */
 
         /* Tape based tests */
-        add_drive(&dss, "/dev/IBMtape0", &dev);
-        add_tape(&dss, "P00003L5", "LTO5", &media);
+        add_drive(&lrs, "/dev/IBMtape0", &dev);
+        add_tape(&lrs, "P00003L5", "LTO5", &media);
 
         /* Test put retry */
         test_put_retry(&xfer, &dev, &media);
@@ -255,7 +256,7 @@ int main(int argc, char **argv)
         setenv("PHOBOS_LRS_default_family", "dir", 1);
 
         /* Add directory drive and media */
-        add_dir(&dss, tmp_dir, &dev, &media);
+        add_dir(&lrs, tmp_dir, &dev, &media);
 
         /* Simple put */
         ASSERT_RC(phobos_put(&xfer, 1, NULL, NULL));
@@ -273,6 +274,7 @@ int main(int argc, char **argv)
     }
 
     free(xfer.xd_objid);
+    lrs_fini(&lrs);
     dss_fini(&dss);
 
     return EXIT_SUCCESS;

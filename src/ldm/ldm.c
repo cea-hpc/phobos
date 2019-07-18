@@ -81,6 +81,14 @@ int get_dev_adapter(enum dev_family dev_type, struct dev_adapter *dev)
     return 0;
 }
 
+void ldm_dev_state_fini(struct ldm_dev_state *lds)
+{
+    free(lds->lds_model);
+    free(lds->lds_serial);
+    lds->lds_model = NULL;
+    lds->lds_serial = NULL;
+}
+
 extern const struct fs_adapter fs_adapter_posix;
 extern const struct fs_adapter fs_adapter_ltfs;
 

@@ -29,7 +29,17 @@
 
 
 struct dss_handle;
-struct device_descr;
+struct dev_descr;
+
+/**
+ * Local Resource Scheduler instance, manages media and local devices for the
+ * actual IO to be performed.
+ */
+struct lrs {
+    struct dss_handle *dss;         /**< Associated DSS */
+    struct dev_descr  *devices;     /**< List of available devices */
+    size_t             dev_count;   /**< Number of devices */
+};
 
 enum lrs_operation {
     LRS_OP_NONE = 0,
@@ -45,16 +55,36 @@ struct lrs_intent {
 };
 
 /**
+ * Initialize a new LRS bound to a given DSS.
+ *
+ * @param[in]   lrs The LRS to be initialized.
+ * @param[in]   dss The DSS that will be used by \a lrs. Initialized (dss_init),
+ *                  managed and deinitialized (dss_fini) externally by the
+ *                  caller.
+ *
+ * @return 0 on success, -1 * posix error code on failure
+ */
+int lrs_init(struct lrs *lrs, struct dss_handle *dss);
+
+/**
+ * Free all resources associated with this LRS except for the dss, which must be
+ * deinitialized by the caller if necessary.
+ *
+ * @param[in]   lrs The LRS to be deinitialized.
+ */
+void lrs_fini(struct lrs *lrs);
+
+/**
  * Query to write a given amount of data with a given layout.
  * (future: several extents if the file is splitted, striped...)
  *
- * @param(in)     dss     Initialized DSS handle.
+ * @param(in)     lrs     Initialized LRS.
  * @param(in,out) intent  The intent descriptor to fill.
  * @param(in)     tags    Tags used to select a media to write on, the selected
  *                        media must have the specified tags.
  * @return 0 on success, -1 * posix error code on failure
  */
-int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent,
+int lrs_write_prepare(struct lrs *lrs, struct lrs_intent *intent,
                       const struct tags *tags);
 
 /**
@@ -63,11 +93,11 @@ int lrs_write_prepare(struct dss_handle *dss, struct lrs_intent *intent,
  *  Moreover, the object may have several locations and layouts if it is
  *  duplicated).
  *
- * @param(in)     dss     Initialized DSS handle.
+ * @param(in)     lrs     Initialized LRS.
  * @param(in,out) intent  The intent descriptor to fill.
  * @return 0 on success, -1 * posix error code on failure
  */
-int lrs_read_prepare(struct dss_handle *dss, struct lrs_intent *intent);
+int lrs_read_prepare(struct lrs *lrs, struct lrs_intent *intent);
 
 /**
  * Notify LRS of the completion of a write, let it flush data and update media
@@ -100,13 +130,13 @@ static inline bool is_media_global_error(int errcode)
 /**
  * Load and format a media to the given fs type.
  *
- * @param(in)   dss     Initialized DSS handle.
+ * @param(in)   lrs     Initialized LRS.
  * @param(in)   id      Media ID for the media to format.
  * @param(in)   fs      Filesystem type (only PHO_FS_LTFS for now).
  * @param(in)   unlock  Unlock tape if successfully formated.
  * @return 0 on success, negative error code on failure.
  */
-int lrs_format(struct dss_handle *dss, const struct media_id *id,
+int lrs_format(struct lrs *lrs, const struct media_id *id,
                enum fs_type fs, bool unlock);
 
 /**
@@ -115,5 +145,5 @@ int lrs_format(struct dss_handle *dss, const struct media_id *id,
  * @FIXME This is a temporary API waiting for a transparent way to add devices
  * while running.
  */
-int lrs_device_add(struct dss_handle *dss, const struct dev_info *devi);
+int lrs_device_add(struct lrs *lrs, const struct dev_info *devi);
 #endif

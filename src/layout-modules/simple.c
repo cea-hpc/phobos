@@ -29,7 +29,6 @@
 #include <glib.h>
 #include "pho_lrs.h"
 #include "pho_common.h"
-#include "pho_dss.h"
 #include "pho_type_utils.h"
 #include "pho_cfg.h"
 #include "pho_layout.h"
@@ -105,7 +104,7 @@ static int decode_intent_alloc_cb(const void *key, void *val, void *udata)
 
     intent->li_location.extent = layout->extents[0];
     g_hash_table_insert(ctx->sc_copy_intents, layout->oid, intent);
-    return lrs_read_prepare(comp->lc_dss, intent);
+    return lrs_read_prepare(comp->lc_lrs, intent);
 }
 
 /**
@@ -160,7 +159,7 @@ static int simple_compose_enc(struct layout_module *self,
     /* Unique intent of size=sum(slices) */
     pho_ht_foreach(comp->lc_layouts, sce_sum_sizes_cb, ctx);
 
-    rc = lrs_write_prepare(comp->lc_dss, &ctx->sc_main_intent, &comp->lc_tags);
+    rc = lrs_write_prepare(comp->lc_lrs, &ctx->sc_main_intent, &comp->lc_tags);
     if (rc) {
         simple_ctx_del(comp);
         return rc;

@@ -29,7 +29,6 @@
 #include <glib.h>
 #include "pho_lrs.h"
 #include "pho_common.h"
-#include "pho_dss.h"
 #include "pho_type_utils.h"
 #include "pho_cfg.h"
 #include "pho_layout.h"
@@ -168,7 +167,7 @@ static int decode_intent_alloc_cb(const void *key, void *val, void *udata)
     do {
         intent->li_location.extent = layout->extents[retry];
 
-        rc = lrs_read_prepare(comp->lc_dss, intent);
+        rc = lrs_read_prepare(comp->lc_lrs, intent);
         if (rc == 0) {
             g_hash_table_insert(ctx->intent_copies, layout->oid, intent);
             break;
@@ -255,7 +254,7 @@ static int raid1_compose_enc(struct layout_module *self,
         /* Declare replica size as computed above */
         curr->li_location.extent.size = ctx->intent_size;
 
-        rc = lrs_write_prepare(comp->lc_dss, curr, &comp->lc_tags);
+        rc = lrs_write_prepare(comp->lc_lrs, curr, &comp->lc_tags);
         if (rc)
             LOG_GOTO(err_int_free, rc, "Write intent expression #%d failed", i);
 

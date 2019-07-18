@@ -43,7 +43,7 @@ struct layout_composer;
 struct layout_module;
 struct pho_io_descr;
 struct layout_info;
-struct dss_handle;
+struct lrs;
 
 enum layout_action {
     LA_ENCODE = 0,
@@ -53,7 +53,7 @@ enum layout_action {
 typedef void (*comp_priv_dtor_t)(struct layout_composer *);
 
 struct layout_composer {
-    struct dss_handle   *lc_dss;        /**< Cached DSS handle */
+    struct lrs          *lc_lrs;        /**< LRS session */
     enum layout_action   lc_action;     /**< Encode / Decode sub-streams */
     GHashTable          *lc_layouts;    /**< Objid::Layout descr mapping */
     void                *lc_private;    /**< Module private data pointer */
@@ -144,7 +144,7 @@ static inline int layout_module_io_commit(struct layout_module *self,
  * Initialize a layout compositor.
  * Takes a reference to the given DSS handle for use by the following functions.
  */
-int layout_init(struct dss_handle *dss, struct layout_composer *comp,
+int layout_init(struct lrs *lrs, struct layout_composer *comp,
                 enum layout_action action);
 
 /**
