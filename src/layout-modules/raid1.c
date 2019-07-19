@@ -136,7 +136,7 @@ static void raid1_ctx_del(struct layout_composer *comp)
         itr = 1;
 
     for (i = 0; i < itr; i++)
-        lrs_resource_release(&ctx->replicas[i].intent);
+        lrs_resource_release(comp->lc_lrs, &ctx->replicas[i].intent);
 
     g_hash_table_foreach(comp->lc_layouts, extent_free_cb, NULL);
     g_hash_table_destroy(ctx->intent_copies);
@@ -268,7 +268,7 @@ err_int_free:
     raid1_ctx_del(comp);
 
     for (i = 0; i < expressed_intents; i++)
-        lrs_resource_release(&ctx->replicas[i].intent);
+        lrs_resource_release(comp->lc_lrs, &ctx->replicas[i].intent);
 
     return rc;
 }
@@ -362,7 +362,8 @@ static int raid1_commit(struct layout_module *self,
         struct replica_state    *repl = &ctx->replicas[i];
         int                      rc2;
 
-        rc2 = lrs_io_complete(&repl->intent, repl->items, repl->error);
+        rc2 = lrs_io_complete(comp->lc_lrs, &repl->intent, repl->items,
+                              repl->error);
         if (rc2 && !rc)
             rc = rc2;
     }

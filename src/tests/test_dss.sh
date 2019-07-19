@@ -87,10 +87,11 @@ function test_check_lock
 {
     local target=$1
     local action=$2
-    local expect_fail=$3
+    local lock_owner=$3
+    local expect_fail=$4
     local rc=0
 
-    $test_bin $action $target || rc=$?
+    $test_bin "$action" "$target" $lock_owner || rc=$?
     check_rc $rc $expect_fail
 }
 
@@ -184,25 +185,33 @@ insert_examples
 
 echo "**** TESTS: DSS_DEVICE LOCK/UNLOCK  ****"
 echo "*** TEST LOCK ***"
-test_check_lock "device" "lock"
+test_check_lock "device" "lock" "MY_LOCK"
 echo "*** TEST DOUBLE LOCK (EEXIST expected) ***"
-test_check_lock "device" "lock" "FAIL"
+test_check_lock "device" "lock" "MY_LOCK" "FAIL"
 echo "*** TEST UNLOCK ***"
-test_check_lock "device" "unlock"
+test_check_lock "device" "unlock" "MY_LOCK"
 echo "*** TEST RELOCK ***"
-test_check_lock "device" "lock"
+test_check_lock "device" "lock" "MY_LOCK"
+echo "*** TEST UNLOCK BAD NAME ***"
+test_check_lock "device" "unlock" "NOT_MY_LOCK" "FAIL"
+echo "*** TEST UNLOCK NO NAME ***"
+test_check_lock "device" "unlock"
 
 echo "**** TESTS: DSS_MEDIA LOCK/UNLOCK  ****"
 echo "*** TEST LOCK ***"
-test_check_lock "media" "lock"
+test_check_lock "media" "lock" "MY_LOCK"
 echo "*** TEST DOUBLE LOCK (EEXIST expected) ***"
-test_check_lock "media" "lock" "FAIL"
+test_check_lock "media" "lock" "MY_LOCK" "FAIL"
 echo "*** TEST UNLOCK ***"
-test_check_lock "media" "unlock"
-echo "*** TEST DOUBLE UNLOCK (EEXIST expected) ***"
-test_check_lock "media" "unlock" "FAIL"
+test_check_lock "media" "unlock" "MY_LOCK"
+echo "*** TEST DOUBLE UNLOCK (ENOLCK expected) ***"
+test_check_lock "media" "unlock" "MY_LOCK" "FAIL"
 echo "*** TEST RELOCK ***"
-test_check_lock "media" "lock"
+test_check_lock "media" "lock" "MY_LOCK"
+echo "*** TEST UNLOCK BAD NAME ***"
+test_check_lock "media" "unlock" "NOT_MY_LOCK" "FAIL"
+echo "*** TEST UNLOCK NO NAME ***"
+test_check_lock "media" "unlock"
 
 echo "*** TEST END ***"
 # Uncomment if you want the db to persist after test

@@ -75,9 +75,9 @@ static void simple_ctx_del(struct layout_composer *comp)
 
         g_hash_table_iter_init(&itr, ctx->sc_copy_intents);
         while (g_hash_table_iter_next(&itr, &key, &val))
-            lrs_resource_release(val);
+            lrs_resource_release(comp->lc_lrs, val);
     } else {
-        lrs_resource_release(&ctx->sc_main_intent);
+        lrs_resource_release(comp->lc_lrs, &ctx->sc_main_intent);
     }
 
     g_hash_table_destroy(ctx->sc_copy_intents);
@@ -238,7 +238,7 @@ static int simple_commit(struct layout_module *self,
     if (comp->lc_action == LA_DECODE)
         return 0;
 
-    return lrs_io_complete(intent, ctx->sc_itemcnt, err_code);
+    return lrs_io_complete(comp->lc_lrs, intent, ctx->sc_itemcnt, err_code);
 }
 
 

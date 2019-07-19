@@ -27,7 +27,8 @@ clean API to access it.
 
 import json
 import logging
-import os.path
+import os
+import time
 from ctypes import *
 from socket import gethostname
 from abc import ABCMeta, abstractmethod, abstractproperty
@@ -189,13 +190,15 @@ class BaseObjectManager(object):
         if rc:
             raise EnvironmentError(rc, "Cannot delete objects")
 
-    def _generic_lock_unlock(self, objects, lock_c_func, err_message):
+    def _generic_lock_unlock(self, objects, lock_c_func, err_message,
+                             lock_owner):
         """Call a dss_<object>_{un,}lock c function on this list of objects.
         lock_c_func could for example be dss_media_lock.
         """
         obj_count = len(objects)
         obj_array = (self.wrapped_class * obj_count)(*objects)
-        rc = lock_c_func(byref(self.client.handle), obj_array, obj_count)
+        rc = lock_c_func(byref(self.client.handle), obj_array, obj_count,
+                         lock_owner)
         if rc:
             raise EnvironmentError(rc, err_message)
 
@@ -236,6 +239,14 @@ class MediaManager(BaseObjectManager):
     """Proxy to manipulate media."""
     wrapped_class = MediaInfo
     wrapped_ident = 'media'
+    lock_owner_count = 0
+
+    def __init__(self, *args, **kwargs):
+        super(MediaManager, self).__init__(*args, **kwargs)
+        self.lock_owner = "py-%.210s:%.8x:%.16x:%.16x" % (
+            gethostname(), os.getpid(), int(time.time()), self.lock_owner_count
+        )
+        self.lock_owner_count += 1
 
     def add(self, mtype, fstype, model, label, tags=None, locked=False):
         """Insert media into DSS."""
@@ -271,12 +282,17 @@ class MediaManager(BaseObjectManager):
         """Lock all the media associated with a given list of MediaInfo"""
         self._generic_lock_unlock(
             objects, LIBPHOBOS.dss_media_lock, "Media locking failed",
+            self.lock_owner,
         )
 
-    def unlock(self, objects):
-        """Unlock all the media associated with a given list of MediaInfo"""
+    def unlock(self, objects, force=False):
+        """Unlock all the media associated with a given list of MediaInfo.
+        If `force` is True, unlock the objects even if they were not locked
+        by this instance.
+        """
         self._generic_lock_unlock(
             objects, LIBPHOBOS.dss_media_unlock, "Media unlocking failed",
+            None if force else self.lock_owner,
         )
 
 class DSSHandle(Structure):

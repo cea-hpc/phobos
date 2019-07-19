@@ -454,6 +454,7 @@ static const char * const insert_query_values[] = {
 enum dss_lock_queries {
     DSS_LOCK_QUERY =  0,
     DSS_UNLOCK_QUERY,
+    DSS_UNLOCK_ALWAYS_QUERY,
 };
 
 /**
@@ -465,9 +466,15 @@ enum dss_lock_queries {
  */
 static const char * const lock_query[] = {
     [DSS_UNLOCK_QUERY] = "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s AND "
+                         "lock=%s AND "
+                         "%d IN (SELECT count(*) FROM %s WHERE id IN %s AND "
+                         "       lock=%s);",
+    [DSS_UNLOCK_ALWAYS_QUERY] =
+                         "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s AND "
+                         "lock!='' AND "
                          "%d IN (SELECT count(*) FROM %s WHERE id IN %s AND "
                          "       lock!='');",
-    [DSS_LOCK_QUERY] =   "UPDATE %s SET lock='%s:%u', "
+    [DSS_LOCK_QUERY] =   "UPDATE %s SET lock=%s, "
                          "lock_ts=extract(epoch from NOW()) "
                          "WHERE lock='' AND id IN %s AND "
                          "%d IN (SELECT count(*) FROM %s WHERE id IN %s AND "
@@ -475,8 +482,11 @@ static const char * const lock_query[] = {
 };
 
 static const char * const simple_lock_query[] = {
-    [DSS_UNLOCK_QUERY] = "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s;",
-    [DSS_LOCK_QUERY] =   "UPDATE %s SET lock='%s:%u', "
+    [DSS_UNLOCK_QUERY] = "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s",
+                         "AND lock=%s;",
+    [DSS_UNLOCK_ALWAYS_QUERY] =
+                         "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s;",
+    [DSS_LOCK_QUERY] =   "UPDATE %s SET lock=%s, "
                          "lock_ts=extract(epoch from NOW()) "
                          "WHERE lock='' AND id IN %s;",
 };
@@ -1749,19 +1759,28 @@ out_cleanup:
 }
 
 static int dss_generic_lock(struct dss_handle *handle, enum dss_type type,
-                            void *item_list, int item_cnt)
+                            void *item_list, int item_cnt,
+                            const char *lock_owner)
 {
     PGconn      *conn = handle->dh_conn;
     GString     *ids;
     GString     *request;
     PGresult    *res = NULL;
-    char         hostname[HOST_NAME_MAX+1];
+    char        *lock_owner_sql;
     int          rc = 0;
     ENTRY;
 
-    if (conn == NULL || item_list == NULL || item_cnt == 0)
-        LOG_RETURN(-EINVAL, "conn: %p, item_list: %p,item_cnt: %d",
-                   conn, item_list, item_cnt);
+    if (conn == NULL || item_list == NULL || item_cnt == 0
+            || lock_owner == NULL)
+        LOG_RETURN(-EINVAL,
+                   "conn: %p, item_list: %p, item_cnt: %d, lock_owner=%s",
+                   conn, item_list, item_cnt, lock_owner);
+
+    if (strlen(lock_owner) > PHO_DSS_MAX_LOCK_OWNER_LEN)
+        LOG_RETURN(-EINVAL,
+                   "lock_owner must be at most %d characters long "
+                   "(lock_owner: %s)",
+                   PHO_DSS_MAX_LOCK_OWNER_LEN, lock_owner);
 
     ids = g_string_new("");
     request = g_string_new("");
@@ -1770,17 +1789,18 @@ static int dss_generic_lock(struct dss_handle *handle, enum dss_type type,
     if (rc)
         LOG_GOTO(out_cleanup, rc, "Ids list build failed");
 
-    if (gethostname(hostname, HOST_NAME_MAX))
-        LOG_GOTO(out_cleanup, rc = -errno, "Cannot get hostname");
+    lock_owner_sql = dss_char4sql(conn, lock_owner);
+    if (!lock_owner_sql)
+        GOTO(out_cleanup, rc = -ENOMEM);
 
     if (item_cnt == 1)
         g_string_printf(request, simple_lock_query[DSS_LOCK_QUERY],
-                        dss_type2str(type), hostname, getpid(),
-                        ids->str);
+                        dss_type2str(type), lock_owner_sql, ids->str);
     else
         g_string_printf(request, lock_query[DSS_LOCK_QUERY], dss_type2str(type),
-                        hostname, getpid(), ids->str, item_cnt,
+                        lock_owner_sql, ids->str, item_cnt,
                         dss_type2str(type),  ids->str);
+    free(lock_owner_sql);
 
     pho_debug("Executing request: '%s'", request->str);
 
@@ -1800,7 +1820,8 @@ out_cleanup:
 }
 
 static int dss_generic_unlock(struct dss_handle *handle, enum dss_type type,
-                              void *item_list, int item_cnt)
+                              void *item_list, int item_cnt,
+                              const char *lock_owner)
 {
     PGconn      *conn = handle->dh_conn;
     GString     *ids;
@@ -1820,21 +1841,38 @@ static int dss_generic_unlock(struct dss_handle *handle, enum dss_type type,
     if (rc)
         LOG_GOTO(out_cleanup, rc, "Ids list build failed");
 
-    if (item_cnt == 1)
-        g_string_printf(request, simple_lock_query[DSS_UNLOCK_QUERY],
-                        dss_type2str(type), ids->str);
-    else
-        g_string_printf(request, lock_query[DSS_UNLOCK_QUERY],
-                        dss_type2str(type), ids->str, item_cnt,
-                        dss_type2str(type), ids->str);
+    if (lock_owner != NULL) {
+        char *lock_owner_sql = dss_char4sql(conn, lock_owner);
+
+        if (!lock_owner_sql)
+            GOTO(out_cleanup, rc = -ENOMEM);
+
+        if (item_cnt == 1)
+            g_string_printf(request, simple_lock_query[DSS_UNLOCK_QUERY],
+                            dss_type2str(type), ids->str, lock_owner_sql);
+        else
+            g_string_printf(request, lock_query[DSS_UNLOCK_QUERY],
+                            dss_type2str(type), ids->str, lock_owner_sql,
+                            item_cnt, dss_type2str(type), ids->str,
+                            lock_owner_sql);
+        free(lock_owner_sql);
+    } else {
+        if (item_cnt == 1)
+            g_string_printf(request, simple_lock_query[DSS_UNLOCK_ALWAYS_QUERY],
+                            dss_type2str(type), ids->str);
+        else
+            g_string_printf(request, lock_query[DSS_UNLOCK_ALWAYS_QUERY],
+                            dss_type2str(type), ids->str, item_cnt,
+                            dss_type2str(type), ids->str);
+    }
 
     pho_debug("Executing request: '%s'", request->str);
 
     res = PQexec(conn, request->str);
     if (PQresultStatus(res) != PGRES_COMMAND_OK)
-            LOG_GOTO(out_cleanup, rc = psql_state2errno(res),
-                     "Request failed: %s",
-                     PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
+        LOG_GOTO(out_cleanup, rc = psql_state2errno(res),
+                "Request failed: %s",
+                PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
 
     if (atoi(PQcmdTuples(res)) != item_cnt)
         /* lock is not owned by caller */
@@ -1907,25 +1945,26 @@ int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
 }
 
 int dss_device_lock(struct dss_handle *handle, struct dev_info *dev_ls,
-                    int dev_cnt)
+                    int dev_cnt, const char *lock_owner)
 {
-    return dss_generic_lock(handle, DSS_DEVICE, dev_ls, dev_cnt);
+    return dss_generic_lock(handle, DSS_DEVICE, dev_ls, dev_cnt, lock_owner);
 }
 
 int dss_device_unlock(struct dss_handle *handle, struct dev_info *dev_ls,
-                      int dev_cnt)
+                      int dev_cnt, const char *lock_owner)
 {
-    return dss_generic_unlock(handle, DSS_DEVICE, dev_ls, dev_cnt);
+    return dss_generic_unlock(handle, DSS_DEVICE, dev_ls, dev_cnt, lock_owner);
 }
 
 int dss_media_lock(struct dss_handle *handle, struct media_info *media_ls,
-                   int media_cnt)
+                   int media_cnt, const char *lock_owner)
 {
-    return dss_generic_lock(handle, DSS_MEDIA, media_ls, media_cnt);
+    return dss_generic_lock(handle, DSS_MEDIA, media_ls, media_cnt, lock_owner);
 }
 
 int dss_media_unlock(struct dss_handle *handle, struct media_info *media_ls,
-                     int media_cnt)
+                     int media_cnt, const char *lock_owner)
 {
-    return dss_generic_unlock(handle, DSS_MEDIA, media_ls, media_cnt);
+    return dss_generic_unlock(handle, DSS_MEDIA, media_ls, media_cnt,
+                              lock_owner);
 }

@@ -31,6 +31,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+/* Maximum lock_owner size, related to the database schema */
+#define PHO_DSS_MAX_LOCK_OWNER_LEN 256
+
 /** item types */
 enum dss_type {
     DSS_INVAL  = -1,
@@ -301,39 +304,49 @@ int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
 
 /**
  *  Lock a device for concurrent accesses
- *  @param[in] item_list list of items
- *  @param[in] item_cnt  number of items in item_list.
+ *  @param[in] item_list  list of items
+ *  @param[in] item_cnt   number of items in item_list.
+ *  @param[in] lock_owner name of the new owner of the lock
  *  @retval 0 on success
  *  @retval -EEXIST on lock failure (device(s) already locked)
  */
 int dss_device_lock(struct dss_handle *handle, struct dev_info *dev_ls,
-                    int dev_cnt);
+                    int dev_cnt, const char *lock_owner);
 
 /**
  *  Unlock a device
- *  @param[in] item_list list of items
- *  @param[in] item_cnt  number of items in item_list.
- *  @retval 0 on success
+ *  @param[in] item_list  list of items
+ *  @param[in] item_cnt   number of items in item_list.
+ *  @param[in] lock_owner name of the owner of the lock to be released; will
+ *                        fail if the lock is currently locked by another owner.
+ *                        If NULL, will unlock inconditionally.
+ *  @retval 0 on success, -ENOLCK on failure (no previous lock or previous
+ *          lock had a different name)
  */
 int dss_device_unlock(struct dss_handle *handle, struct dev_info *dev_ls,
-                      int dev_cnt);
+                      int dev_cnt, const char *lock_owner);
 
 /**
  *  Lock a media for concurrent accesses
- *  @param[in] item_list list of items
- *  @param[in] item_cnt  number of items in item_list.
+ *  @param[in] item_list  list of items
+ *  @param[in] item_cnt   number of items in item_list.
+ *  @param[in] lock_owner name of the new owner of the lock
  *  @retval 0 on success
  *  @retval -EEXIST on lock failure (device(s) already locked)
  */
 int dss_media_lock(struct dss_handle *handle, struct media_info *media_ls,
-                   int media_cnt);
+                   int media_cnt, const char *lock_owner);
 
 /**
  *  Unlock a media
  *  @param[in] item_list list of items
  *  @param[in] item_cnt  number of items in item_list.
- *  @retval 0 on success
+ *  @param[in] lock_owner name of the owner of the lock to be released; will
+ *                        fail if the lock is currently locked by another owner.
+ *                        If NULL, will unlock inconditionally.
+ *  @retval 0 on success, -ENOLCK on failure (no previous lock or previous
+ *          lock had a different name)
  */
 int dss_media_unlock(struct dss_handle *handle, struct media_info *media_ls,
-                     int media_cnt);
+                     int media_cnt, const char *lock_owner);
 #endif

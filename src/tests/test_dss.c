@@ -39,6 +39,8 @@
 #include <string.h>
 #include <inttypes.h>
 
+#define LOCK_OWNER "generic_lock_owner"
+
 static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
                            const struct dss_filter *filter, void **item_list,
                            int *n)
@@ -83,26 +85,30 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
 }
 
 static int dss_generic_lock(struct dss_handle *handle, enum dss_type type,
-                            void *item_list, int n)
+                            void *item_list, int n, const char *lock_owner)
 {
     switch (type) {
     case DSS_DEVICE:
-        return dss_device_lock(handle, (struct dev_info *)item_list, n);
+        return dss_device_lock(handle, (struct dev_info *)item_list, n,
+                               lock_owner);
     case DSS_MEDIA:
-        return dss_media_lock(handle, (struct media_info *)item_list, n);
+        return dss_media_lock(handle, (struct media_info *)item_list, n,
+                              lock_owner);
     default:
         return -ENOTSUP;
     }
 }
 
 static int dss_generic_unlock(struct dss_handle *handle, enum dss_type type,
-                              void *item_list, int n)
+                              void *item_list, int n, const char *lock_owner)
 {
     switch (type) {
     case DSS_DEVICE:
-        return dss_device_unlock(handle, (struct dev_info *)item_list, n);
+        return dss_device_unlock(handle, (struct dev_info *)item_list, n,
+                                 lock_owner);
     case DSS_MEDIA:
-        return dss_media_unlock(handle, (struct media_info *)item_list, n);
+        return dss_media_unlock(handle, (struct media_info *)item_list, n,
+                                lock_owner);
     default:
         return -ENOTSUP;
     }
@@ -135,6 +141,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "       [ \"CRIT\" ] := \"field cmp value\"\n");
         fprintf(stderr, "Optional for set:\n");
         fprintf(stderr, "       oidtest set oid to NULL");
+        fprintf(stderr, "Optional for lock and unlock:\n");
+        fprintf(stderr, "       name of the lock to acquire or release");
         exit(1);
     }
 
@@ -329,6 +337,8 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
     } else if (!strcmp(argv[1], "lock")) {
+        const char *lock_owner = argc > 3 ? argv[3] : LOCK_OWNER;
+
         type = str2dss_type(argv[2]);
 
         if (type != DSS_DEVICE && type != DSS_MEDIA) {
@@ -342,13 +352,16 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_generic_lock(&dss_handle, type, item_list, item_cnt);
+        rc = dss_generic_lock(&dss_handle, type, item_list, item_cnt,
+                              lock_owner);
         if (rc) {
             pho_error(rc, "dss_lock failed");
             exit(EXIT_FAILURE);
         }
 
     } else if (!strcmp(argv[1], "unlock")) {
+        const char *lock_owner = argc > 3 ? argv[3] : NULL;
+
         type = str2dss_type(argv[2]);
 
         if (type != DSS_DEVICE && type != DSS_MEDIA) {
@@ -362,7 +375,8 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_generic_unlock(&dss_handle, type, item_list, item_cnt);
+        rc = dss_generic_unlock(&dss_handle, type, item_list, item_cnt,
+                                lock_owner);
         if (rc) {
             pho_error(rc, "dss_unlock failed");
             exit(EXIT_FAILURE);

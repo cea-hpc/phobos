@@ -39,6 +39,9 @@ struct lrs {
     struct dss_handle *dss;         /**< Associated DSS */
     struct dev_descr  *devices;     /**< List of available devices */
     size_t             dev_count;   /**< Number of devices */
+    char              *lock_owner;  /**< Lock owner name for this LRS
+                                      *  (contains hostname and tid)
+                                      */
 };
 
 enum lrs_operation {
@@ -49,7 +52,6 @@ enum lrs_operation {
 };
 
 struct lrs_intent {
-    struct dss_handle   *li_dss;
     struct dev_descr    *li_device;
     struct pho_ext_loc   li_location;
 };
@@ -103,19 +105,21 @@ int lrs_read_prepare(struct lrs *lrs, struct lrs_intent *intent);
  * Notify LRS of the completion of a write, let it flush data and update media
  * statistics.
  *
+ * @param(in)   lrs        The LRS to be notified
  * @param(in)   intent     The intent descriptor of the completed I/O.
  * @param(in)   fragments  The number of successfully written fragments.
  * @param(in)   err_code   An optional error code to interpret failures.
  * @return 0 on success, -1 * posix error code on failure.
  */
-int lrs_io_complete(struct lrs_intent *intent, int fragments, int err_code);
+int lrs_io_complete(struct lrs *lrs, struct lrs_intent *intent, int fragments,
+                    int err_code);
 
 /**
  * Release resources allocated by a lrs_{r/w}_prepare() call.
  * @param(in)   intent  the intent descriptor filled by lrs_{r,w}_prepare.
  * @return 0 on success, -1 * posix error code on failure
  */
-int lrs_resource_release(struct lrs_intent *intent);
+int lrs_resource_release(struct lrs *lrs, struct lrs_intent *intent);
 
 /**
  * Identify medium-global error codes.
