@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fa65353d_0efba707",
+        "filename": "phobos.spec.in",
+        "patchSetId": 1
+      },
+      "lineNbr": 95,
+      "author": {
+        "id": 1015223
+      },
+      "writtenOn": "2019-07-19T07:43:16Z",
+      "side": 1,
+      "message": "Did you remove the version name (Echo) on purpose?",
+      "range": {
+        "startLine": 95,
+        "startChar": 2,
+        "endLine": 95,
+        "endChar": 19
+      },
+      "revId": "9796c98dacd9f6d854ea57832530840f80613a38",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    }
+  ]
+}
