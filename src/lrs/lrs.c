@@ -385,6 +385,9 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
 
     devi = devd->dss_dev_info;
 
+    media_info_free(devd->dss_media_info);
+    devd->dss_media_info = NULL;
+
     rc = get_dev_adapter(devi->family, &deva);
     if (rc)
         return rc;
@@ -624,7 +627,11 @@ err:
 static void dev_descr_fini(struct dev_descr *dev)
 {
     dev_info_free(dev->dss_dev_info);
+    dev->dss_dev_info = NULL;
+
     media_info_free(dev->dss_media_info);
+    dev->dss_media_info = NULL;
+
     ldm_dev_state_fini(&dev->sys_dev_state);
 }
 
