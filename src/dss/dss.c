@@ -1852,6 +1852,7 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
 
         goto out_cleanup;
     }
+    PQclear(res);
 
     res = PQexec(conn, "COMMIT; ");
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
@@ -1922,6 +1923,7 @@ static int dss_generic_lock(struct dss_handle *handle, enum dss_type type,
         rc = -EEXIST;
 
 out_cleanup:
+    PQclear(res);
     g_string_free(request, true);
     g_string_free(ids, true);
     return rc;
@@ -1987,6 +1989,7 @@ static int dss_generic_unlock(struct dss_handle *handle, enum dss_type type,
         rc = -ENOLCK;
 
 out_cleanup:
+    PQclear(res);
     g_string_free(request, true);
     g_string_free(ids, true);
     return rc;
