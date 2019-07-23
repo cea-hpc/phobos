@@ -58,7 +58,7 @@ FILTER_OPERATORS = (
 
 OBJECT_PREFIXES = {
     'device': 'DSS::DEV::',
-    'extent': 'DSS::EXT::',
+    'layout': 'DSS::EXT::',
     'media':  'DSS::MDA::',
 }
 

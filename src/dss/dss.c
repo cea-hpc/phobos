@@ -43,6 +43,20 @@
 #include <assert.h>
 #include <gmodule.h>
 
+/* Necessary local function declaration
+ * (first two declaration are swapped because of a checkpatch bug)
+ */
+static void dss_device_result_free(void *void_dev);
+static int dss_device_from_pg_row(void *void_dev, PGresult *res, int row_num);
+static int dss_media_from_pg_row(void *void_media, PGresult *res, int row_num);
+static void dss_media_result_free(void *void_media);
+static int dss_layout_from_pg_row(void *void_layout, PGresult *res,
+                                  int row_num);
+static void dss_layout_result_free(void *void_layout);
+static int dss_object_from_pg_row(void *void_object, PGresult *res,
+                                  int row_num);
+static void dss_object_result_free(void *void_object);
+
 /** List of configuration parameters for tape_model */
 enum pho_cfg_params_tape_model {
     /* DSS parameters */
@@ -144,20 +158,24 @@ const struct pho_config_item cfg_dss[] = {
 
 struct dss_result {
     PGresult *pg_res;
-    struct media_info   media[0];
-    struct dev_info     dev[0];
-    struct object_info  object[0];
-    struct layout_info  layout[0];
+    enum dss_type item_type;
+    union {
+        char   raw[0];
+        struct media_info   media[0];
+        struct dev_info     dev[0];
+        struct object_info  object[0];
+        struct layout_info  layout[0];
+    } items;
 };
 
 #define res_of_item_list(_list) \
-    container_of((_list), struct dss_result, media)
+    container_of((_list), struct dss_result, items)
 
 /**
  * Handle notices from PostgreSQL. Strip the trailing newline and re-emit them
  * through phobos log API.
  */
-static void dss_pq_logger(void *arg, const char *message)
+static void dss_pg_logger(void *arg, const char *message)
 {
     size_t mlen = strlen(message);
 
@@ -209,7 +227,7 @@ int dss_init(struct dss_handle *handle)
         LOG_RETURN(-ENOTCONN, "Connection to database failed: %s",
                    PQerrorMessage(handle->dh_conn));
 
-    (void)PQsetNoticeProcessor(handle->dh_conn, dss_pq_logger, NULL);
+    (void)PQsetNoticeProcessor(handle->dh_conn, dss_pg_logger, NULL);
 
     return 0;
 }
@@ -396,15 +414,31 @@ static const char * const select_query[] = {
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
                    " address_type, fs_type, fs_status, fs_label, stats, tags,"
                    " lock, lock_ts FROM media",
-    [DSS_EXTENT] = "SELECT oid, state, lyt_info, extents FROM extent",
+    [DSS_LAYOUT] = "SELECT oid, state, lyt_info, extents FROM extent",
     [DSS_OBJECT] = "SELECT oid, user_md FROM object",
 };
 
 static const size_t const res_size[] = {
     [DSS_DEVICE]  = sizeof(struct dev_info),
     [DSS_MEDIA]   = sizeof(struct media_info),
-    [DSS_EXTENT]  = sizeof(struct extent),
+    [DSS_LAYOUT]  = sizeof(struct layout_info),
     [DSS_OBJECT]  = sizeof(struct object_info),
+};
+
+typedef int (*res_pg_constructor_t)(void *item, PGresult *res, int row_num);
+static const res_pg_constructor_t const res_pg_constructor[] = {
+    [DSS_DEVICE]  = dss_device_from_pg_row,
+    [DSS_MEDIA]   = dss_media_from_pg_row,
+    [DSS_LAYOUT]  = dss_layout_from_pg_row,
+    [DSS_OBJECT]  = dss_object_from_pg_row,
+};
+
+typedef void (*res_destructor_t)(void *item);
+static const res_destructor_t const res_destructor[] = {
+    [DSS_DEVICE]  = dss_device_result_free,
+    [DSS_MEDIA]   = dss_media_result_free,
+    [DSS_LAYOUT]  = dss_layout_result_free,
+    [DSS_OBJECT]  = dss_object_result_free,
 };
 
 static const char * const insert_query[] = {
@@ -414,7 +448,7 @@ static const char * const insert_query[] = {
                    " fs_type, address_type, fs_status, fs_label, stats, tags,"
                    " lock)"
                    " VALUES ",
-    [DSS_EXTENT] = "INSERT INTO extent (oid, state, lyt_info, extents) VALUES ",
+    [DSS_LAYOUT] = "INSERT INTO extent (oid, state, lyt_info, extents) VALUES ",
     [DSS_OBJECT] = "INSERT INTO object (oid, user_md) VALUES ",
 };
 
@@ -427,7 +461,7 @@ static const char * const update_query[] = {
                    " fs_type, address_type, fs_status, fs_label, stats, tags) ="
                    " ('%s', %s, '%s', '%s', '%s', '%s', %s, %s, %s)"
                    " WHERE id = '%s';",
-    [DSS_EXTENT] = "UPDATE extent SET (state, lyt_info, extents) ="
+    [DSS_LAYOUT] = "UPDATE extent SET (state, lyt_info, extents) ="
                    " ('%s', '%s', '%s')"
                    " WHERE oid = '%s';",
     [DSS_OBJECT] = "UPDATE object SET user_md = '%s' "
@@ -438,7 +472,7 @@ static const char * const update_query[] = {
 static const char * const delete_query[] = {
     [DSS_DEVICE] = "DELETE FROM device WHERE id = '%s'; ",
     [DSS_MEDIA]  = "DELETE FROM media WHERE id = '%s'; ",
-    [DSS_EXTENT] = "DELETE FROM extent WHERE oid = '%s'; ",
+    [DSS_LAYOUT] = "DELETE FROM extent WHERE oid = '%s'; ",
     [DSS_OBJECT] = "DELETE FROM object WHERE oid = '%s'; ",
 
 };
@@ -447,7 +481,7 @@ static const char * const insert_query_values[] = {
     [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '')%s",
     [DSS_MEDIA]  = "('%s', %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s,"
                    " '')%s",
-    [DSS_EXTENT] = "('%s', '%s', '%s', '%s')%s",
+    [DSS_LAYOUT] = "('%s', '%s', '%s', '%s')%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
 };
 
@@ -896,16 +930,19 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
         result[i].address.buff = tmp;
         result[i].address.size = strlen(tmp) + 1;
 
+        /* FIXME: unnecessary allocation */
         tmp = json_dict2str(child, "fam");
         if (!tmp)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'fam'");
 
         result[i].media.type = str2dev_family(tmp);
+        free(tmp);
 
         /*XXX fs_type & address_type retrieved from media info */
         if (result[i].media.type == PHO_DEV_INVAL)
             LOG_GOTO(out_decref, rc = -EINVAL, "Invalid media type");
 
+        /* FIXME: unnecessary allocation */
         tmp = json_dict2str(child, "media");
         if (!tmp)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'media'");
@@ -913,6 +950,7 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
         rc = media_id_set(&result[i].media, tmp);
         if (rc)
             LOG_GOTO(out_decref, rc = -EINVAL, "Failed to set media id");
+        free(tmp);
     }
 
     *extents = result;
@@ -1042,7 +1080,7 @@ static int get_object_setrequest(PGconn *_conn, struct object_info *item_list,
     return 0;
 }
 
-static int get_extent_setrequest(PGconn *_conn, struct layout_info *item_list,
+static int get_layout_setrequest(PGconn *_conn, struct layout_info *item_list,
                                  int item_cnt, enum dss_set_action action,
                                  GString *request, int *error)
 {
@@ -1059,7 +1097,7 @@ static int get_extent_setrequest(PGconn *_conn, struct layout_info *item_list,
             LOG_RETURN(-EINVAL, "Extent oid cannot be NULL");
 
         if (action == DSS_SET_DELETE) {
-            g_string_append_printf(request, delete_query[DSS_EXTENT],
+            g_string_append_printf(request, delete_query[DSS_LAYOUT],
                                    p_layout->oid);
             continue;
         }
@@ -1074,12 +1112,12 @@ static int get_extent_setrequest(PGconn *_conn, struct layout_info *item_list,
             LOG_GOTO(out_free, rc = -EINVAL, "JSON layout desc encoding error");
 
         if (action == DSS_SET_INSERT)
-            g_string_append_printf(request, insert_query_values[DSS_EXTENT],
+            g_string_append_printf(request, insert_query_values[DSS_LAYOUT],
                                    p_layout->oid,
                                    extent_state2str(p_layout->state),
                                    pres, layout, i < item_cnt-1 ? "," : ";");
         else if (action == DSS_SET_UPDATE)
-            g_string_append_printf(request, update_query[DSS_EXTENT],
+            g_string_append_printf(request, update_query[DSS_LAYOUT],
                                    extent_state2str(p_layout->state),
                                    pres, layout, p_layout->oid);
 out_free:
@@ -1313,7 +1351,7 @@ static inline bool is_type_supported(enum dss_type type)
 {
     switch (type) {
     case DSS_OBJECT:
-    case DSS_EXTENT:
+    case DSS_LAYOUT:
     case DSS_DEVICE:
     case DSS_MEDIA:
         return true;
@@ -1519,6 +1557,153 @@ out_free:
     return rc;
 }
 
+/**
+ * Fill a dev_info from the information in the `row_num`th row of `res`.
+ */
+static int dss_device_from_pg_row(void *void_dev, PGresult *res, int row_num)
+{
+    struct dev_info *dev = void_dev;
+
+    dev->family     = str2dev_family(PQgetvalue(res, row_num, 0));
+    dev->model      = get_str_value(res, row_num, 1);
+    dev->serial     = get_str_value(res, row_num, 2);
+    dev->adm_status = str2adm_status(PQgetvalue(res, row_num, 3));
+    dev->host       = get_str_value(res, row_num, 4);
+    dev->path       = get_str_value(res, row_num, 5);
+    dev->lock.lock  = get_str_value(res, row_num, 6);
+    dev->lock.lock_ts = strtoul(PQgetvalue(res, row_num, 7), NULL, 10);
+    return 0;
+}
+
+/**
+ * Free the resources associated with a dev_info built from a PGresult.
+ */
+static void dss_device_result_free(void *void_dev)
+{
+    (void)void_dev;
+}
+
+/**
+ * Fill a media_info from the information in the `row_num`th row of `res`.
+ */
+static int dss_media_from_pg_row(void *void_media, PGresult *res, int row_num)
+{
+    struct media_info *media = void_media;
+    int rc;
+
+    media->id.type = str2dev_family(PQgetvalue(res, row_num, 0));
+    media->model = get_str_value(res, row_num, 1);
+    media_id_set(&media->id, PQgetvalue(res, row_num, 2));
+    media->adm_status = str2media_adm_status(PQgetvalue(res, row_num, 3));
+    media->addr_type = str2address_type(PQgetvalue(res, row_num, 4));
+    media->fs.type = str2fs_type(PQgetvalue(res, row_num, 5));
+    media->fs.status = str2fs_status(PQgetvalue(res, row_num, 6));
+    strncpy(media->fs.label, PQgetvalue(res, row_num, 7),
+            sizeof(media->fs.label));
+    media->lock.lock = get_str_value(res, row_num, 10);
+    media->lock.lock_ts = strtoul(PQgetvalue(res, row_num, 11), NULL, 10);
+
+    /* No dynamic allocation here */
+    rc = dss_media_stats_decode(&media->stats, PQgetvalue(res, row_num, 8));
+    if (rc) {
+        pho_error(rc, "dss_media stats decode error");
+        return rc;
+    }
+
+    rc = dss_tags_decode(&media->tags, PQgetvalue(res, row_num, 9));
+    if (rc) {
+        pho_error(rc, "dss_media tags decode error");
+        return rc;
+    }
+    pho_debug("Decoded %lu tags (%s)",
+              media->tags.n_tags, PQgetvalue(res, row_num, 9));
+
+    return 0;
+}
+
+/**
+ * Free the resources associated with media_info built from a PGresult.
+ */
+static void dss_media_result_free(void *void_media)
+{
+    struct media_info *media = void_media;
+
+    if (!media)
+        return;
+
+    tags_free(&media->tags);
+}
+
+/**
+ * Fill a layout_info from the information in the `row_num`th row of `res`.
+ */
+static int dss_layout_from_pg_row(void *void_layout, PGresult *res, int row_num)
+{
+    struct layout_info *layout = void_layout;
+    int rc;
+
+    layout->oid = PQgetvalue(res, row_num, 0);
+    layout->state = str2extent_state(PQgetvalue(res, row_num, 1));
+    rc = dss_layout_desc_decode(&layout->layout_desc,
+                                PQgetvalue(res, row_num, 2));
+    if (rc) {
+        pho_error(rc, "dss_layout_desc decode error");
+        return rc;
+    }
+
+    rc = dss_layout_extents_decode(&layout->extents,
+                                   &layout->ext_count,
+                                   PQgetvalue(res, row_num, 3));
+    if (rc) {
+        pho_error(rc, "dss_extent tags decode error");
+        return rc;
+    }
+
+    return 0;
+}
+
+/**
+ * Free the resources associated with layout_info built from a PGresult.
+ */
+static void dss_layout_result_free(void *void_layout)
+{
+    struct layout_info *layout = void_layout;
+    int i;
+
+    if (!layout)
+        return;
+
+    /* Undo dss_layout_desc_decode */
+    free(layout->layout_desc.mod_name);
+    pho_attrs_free(&layout->layout_desc.mod_attrs);
+
+    /* Undo dss_layout_extents_decode */
+    for (i = 0; i < layout->ext_count; i++)
+        free(layout->extents[i].address.buff);
+
+    free(layout->extents);
+}
+
+/**
+ * Fill a object_info from the information in the `row_num`th row of `res`.
+ */
+static int dss_object_from_pg_row(void *void_object, PGresult *res, int row_num)
+{
+    struct object_info *object = void_object;
+
+    object->oid     = get_str_value(res, row_num, 0);
+    object->user_md = get_str_value(res, row_num, 1);
+    return 0;
+}
+
+/**
+ * Free the resources associated with object_info built from a PGresult.
+ */
+static void dss_object_result_free(void *void_object)
+{
+    (void)void_object;
+}
+
 static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
                            const struct dss_filter *filter, void **item_list,
                            int *item_cnt)
@@ -1528,8 +1713,9 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     GString             *clause;
     struct dss_result   *dss_res;
     size_t               dss_res_size;
+    size_t               item_size;
     int                  rc = 0;
-    int                  i;
+    int                  i = 0;
     ENTRY;
 
     if (conn == NULL || item_list == NULL || item_cnt == NULL)
@@ -1565,111 +1751,33 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
 
     g_string_free(clause, true);
 
-    dss_res_size = sizeof(struct dss_result) + PQntuples(res) * res_size[type];
+    item_size = res_size[type];
+    dss_res_size = sizeof(struct dss_result) + PQntuples(res) * item_size;
     dss_res = calloc(1, dss_res_size);
-    if (dss_res == NULL)
+    if (dss_res == NULL) {
+        PQclear(res);
         LOG_RETURN(-ENOMEM, "malloc of size %zu failed", dss_res_size);
-
-    switch (type) {
-    case DSS_DEVICE:
-        dss_res->pg_res = res;
-        for (i = 0; i < PQntuples(res); i++) {
-            struct dev_info *p_dev = &dss_res->dev[i];
-
-            p_dev->family = str2dev_family(PQgetvalue(res, i, 0));
-            p_dev->model  = get_str_value(res, i, 1);
-            p_dev->serial = get_str_value(res, i, 2);
-            p_dev->adm_status =
-                str2adm_status(PQgetvalue(res, i, 3));
-            p_dev->host   = get_str_value(res, i, 4);
-            p_dev->path   = get_str_value(res, i, 5);
-            p_dev->lock.lock = get_str_value(res, i, 6);
-            p_dev->lock.lock_ts = strtoul(PQgetvalue(res, i, 7), NULL, 10);
-        }
-
-        *item_list = dss_res->dev;
-        *item_cnt = PQntuples(res);
-        break;
-
-    case DSS_MEDIA:
-        dss_res->pg_res = res;
-        for (i = 0; i < PQntuples(res); i++) {
-            struct media_info *p_media = &dss_res->media[i];
-
-            p_media->id.type = str2dev_family(PQgetvalue(res, i, 0));
-            p_media->model = get_str_value(res, i, 1);
-            media_id_set(&p_media->id, PQgetvalue(res, i, 2));
-            p_media->adm_status = str2media_adm_status(PQgetvalue(res, i, 3));
-            p_media->addr_type = str2address_type(PQgetvalue(res, i, 4));
-            p_media->fs.type = str2fs_type(PQgetvalue(res, i, 5));
-            p_media->fs.status = str2fs_status(PQgetvalue(res, i, 6));
-            strncpy(p_media->fs.label, PQgetvalue(res, i, 7),
-                    sizeof(p_media->fs.label));
-            rc = dss_media_stats_decode(&p_media->stats, PQgetvalue(res, i, 8));
-            if (rc) {
-                PQclear(res);
-                LOG_GOTO(out, rc, "dss_media stats decode error");
-            }
-            /* FIXME: this creates (yet another) memory leak, a future patch
-             * will allow to free that properly. See redmine #382. */
-            rc = dss_tags_decode(&p_media->tags, PQgetvalue(res, i, 9));
-            if (rc) {
-                PQclear(res);
-                LOG_GOTO(out, rc, "dss_media tags decode error");
-            }
-            p_media->lock.lock = get_str_value(res, i, 10);
-            p_media->lock.lock_ts = strtoul(PQgetvalue(res, i, 11), NULL, 10);
-        }
-
-        *item_list = dss_res->media;
-        *item_cnt = PQntuples(res);
-        break;
-
-    case DSS_EXTENT:
-        dss_res->pg_res = res;
-        for (i = 0; i < PQntuples(res); i++) {
-            struct layout_info *p_layout = &dss_res->layout[i];
-
-            p_layout->oid = PQgetvalue(res, i, 0);
-            p_layout->state = str2extent_state(PQgetvalue(res, i, 1));
-            rc = dss_layout_desc_decode(&p_layout->layout_desc,
-                                        PQgetvalue(res, i, 2));
-            if (rc) {
-                PQclear(res);
-                LOG_GOTO(out, rc, "dss_layout_desc_decode error");
-            }
-
-            rc = dss_layout_extents_decode(&p_layout->extents,
-                                           &p_layout->ext_count,
-                                           PQgetvalue(res, i, 3));
-            if (rc) {
-                PQclear(res);
-                LOG_GOTO(out, rc, "dss_extent decode error");
-            }
-        }
-
-        *item_list = dss_res->layout;
-        *item_cnt = PQntuples(res);
-        break;
-
-    case DSS_OBJECT:
-        dss_res->pg_res = res;
-        for (i = 0; i < PQntuples(res); i++) {
-            struct object_info *p_object = &dss_res->object[i];
-
-            p_object->oid     = get_str_value(res, i, 0);
-            p_object->user_md = get_str_value(res, i, 1);
-        }
-
-        *item_list = dss_res->object;
-        *item_cnt = PQntuples(res);
-        break;
-
-    default:
-        return -EINVAL;
     }
 
+    dss_res->item_type = type;
+    dss_res->pg_res = res;
+
+    for (i = 0; i < PQntuples(res); i++) {
+        void *item_ptr = (char *)&dss_res->items.raw + i * item_size;
+
+        rc = res_pg_constructor[type](item_ptr, res, i);
+        if (rc)
+            goto out;
+    }
+
+    *item_list = &dss_res->items.raw;
+    *item_cnt = PQntuples(res);
+
 out:
+    if (rc)
+        /* Only free elements that were initialized, this also frees res */
+        dss_res_free(dss_res, i);
+
     return rc;
 }
 
@@ -1704,8 +1812,8 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         if (rc)
             LOG_GOTO(out_cleanup, rc, "SQL media request failed");
         break;
-    case DSS_EXTENT:
-        rc = get_extent_setrequest(conn, item_list, item_cnt, action, request,
+    case DSS_LAYOUT:
+        rc = get_layout_setrequest(conn, item_list, item_cnt, action, request,
                                    &error);
         if (rc)
             LOG_GOTO(out_cleanup, rc, "SQL extent request failed");
@@ -1887,13 +1995,22 @@ out_cleanup:
 void dss_res_free(void *item_list, int item_cnt)
 {
     struct dss_result *dss_res;
+    res_destructor_t dtor;
+    size_t item_size;
+    int i;
 
-    if (item_list) {
-        dss_res = res_of_item_list(item_list);
+    if (!item_list)
+        return;
 
-        PQclear(dss_res->pg_res);
-        free(dss_res);
-    }
+    dss_res = res_of_item_list(item_list);
+    item_size = res_size[dss_res->item_type];
+    dtor = res_destructor[dss_res->item_type];
+
+    for (i = 0; i < item_cnt; i++)
+        dtor((char *)&dss_res->items.raw + i * item_size);
+
+    PQclear(dss_res->pg_res);
+    free(dss_res);
 }
 
 int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
@@ -1908,10 +2025,10 @@ int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
     return dss_generic_get(hdl, DSS_MEDIA, filter, (void **)med_ls, med_cnt);
 }
 
-int dss_extent_get(struct dss_handle *hdl, const struct dss_filter *filter,
+int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
                    struct layout_info **lyt_ls, int *lyt_cnt)
 {
-    return dss_generic_get(hdl, DSS_EXTENT, filter, (void **)lyt_ls, lyt_cnt);
+    return dss_generic_get(hdl, DSS_LAYOUT, filter, (void **)lyt_ls, lyt_cnt);
 }
 
 int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
@@ -1932,10 +2049,10 @@ int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
     return dss_generic_set(hdl, DSS_MEDIA, (void *)med_ls, med_cnt, action);
 }
 
-int dss_extent_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
+int dss_layout_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
                    int lyt_cnt, enum dss_set_action action)
 {
-    return dss_generic_set(hdl, DSS_EXTENT, (void *)lyt_ls, lyt_cnt, action);
+    return dss_generic_set(hdl, DSS_LAYOUT, (void *)lyt_ls, lyt_cnt, action);
 }
 
 int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,

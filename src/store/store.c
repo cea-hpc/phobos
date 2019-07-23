@@ -349,9 +349,9 @@ int _ext_put_start_cb(struct mput_desc *mput, struct mput_slice *slice)
     int      rc;
     ENTRY;
 
-    rc = dss_extent_set(&mput->dss, &slice->layout, 1, DSS_SET_INSERT);
+    rc = dss_layout_set(&mput->dss, &slice->layout, 1, DSS_SET_INSERT);
     if (rc)
-        LOG_RETURN(rc, "dss_extent_set failed for objid:'%s'", objid);
+        LOG_RETURN(rc, "dss_layout_set failed for objid:'%s'", objid);
 
     return 0;
 }
@@ -462,7 +462,7 @@ int _obj_done_cb(struct mput_desc *mput, struct mput_slice *slice)
     ENTRY;
 
     layout->state = PHO_EXT_ST_SYNC;
-    rc = dss_extent_set(&mput->dss, layout, 1, DSS_SET_UPDATE);
+    rc = dss_layout_set(&mput->dss, layout, 1, DSS_SET_UPDATE);
     if (rc)
         LOG_RETURN(rc, "obj_put_done failed for objid:'%s'",
                    slice->xfer->xd_objid);
@@ -475,9 +475,9 @@ int _ext_clean_cb(struct mput_desc *mput, struct mput_slice *slice)
     int rc;
     ENTRY;
 
-    rc = dss_extent_set(&mput->dss, &slice->layout, 1, DSS_SET_DELETE);
+    rc = dss_layout_set(&mput->dss, &slice->layout, 1, DSS_SET_DELETE);
     if (rc)
-        LOG_RETURN(rc, "dss_extent_set failed for objid:'%s'",
+        LOG_RETURN(rc, "dss_layout_set failed for objid:'%s'",
                    slice->xfer->xd_objid);
 
     return 0;
@@ -790,7 +790,7 @@ static int obj_location_get(struct dss_handle *dss, const char *obj_id,
 
     /** @TODO check if there is a pending copy of the object */
 
-    rc = dss_extent_get(dss, &filter, layout, &cnt);
+    rc = dss_layout_get(dss, &filter, layout, &cnt);
     if (rc)
         GOTO(err_nores, rc);
 

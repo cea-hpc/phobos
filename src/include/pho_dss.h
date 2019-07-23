@@ -38,7 +38,7 @@
 enum dss_type {
     DSS_INVAL  = -1,
     DSS_OBJECT =  0,
-    DSS_EXTENT,
+    DSS_LAYOUT,
     DSS_DEVICE,
     DSS_MEDIA,
     DSS_LAST,
@@ -46,7 +46,7 @@ enum dss_type {
 
 static const char * const dss_type_names[] = {
     [DSS_OBJECT] = "object",
-    [DSS_EXTENT] = "extent",
+    [DSS_LAYOUT] = "layout",
     [DSS_DEVICE] = "device",
     [DSS_MEDIA]  = "media",
 };
@@ -224,7 +224,7 @@ int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
                   struct media_info **med_ls, int *med_cnt);
 
 /**
- * Retrieve extent information from DSS
+ * Retrieve layout information from DSS
  * @param[in]  hdl      valid connection handle
  * @param[in]  filter   assembled DSS filtering criteria
  * @param[out] lyt_ls   list of retrieved items to be freed w/ dss_res_free()
@@ -232,7 +232,7 @@ int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_extent_get(struct dss_handle *hdl, const struct dss_filter *filter,
+int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
                    struct layout_info **lyt_ls, int *lyt_cnt);
 
 /**
@@ -279,7 +279,7 @@ int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
                   int med_cnt, enum dss_set_action action);
 
 /**
- * Store information for one or many extents in DSS.
+ * Store information for one or many layouts in DSS.
  * @param[in]  hdl      valid connection handle
  * @param[in]  lyt_ls   array of entries to store
  * @param[in]  lyt_cnt  number of items in the list
@@ -287,7 +287,7 @@ int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_extent_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
+int dss_layout_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
                    int lyt_cnt, enum dss_set_action action);
 
 /**

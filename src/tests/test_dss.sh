@@ -135,19 +135,19 @@ test_check_get "object" 'all'
 test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "012%"}}'
 test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "koéèê^!$£}[<>à@\\"}}'
 
-echo "**** TESTS: DSS_GET EXTENT ****"
-test_check_get "extent" 'all'
-test_check_get "extent" '{"$INJSON": {"DSS::EXT::media_idx": "073221L6"}}'
-test_check_get "extent" \
+echo "**** TESTS: DSS_GET LAYOUT ****"
+test_check_get "layout" 'all'
+test_check_get "layout" '{"$INJSON": {"DSS::EXT::media_idx": "073221L6"}}'
+test_check_get "layout" \
   '{"$INJSON": {"DSS::EXT::media_idx": "phobos1:/tmp/pho_testdir1"}}'
-test_check_get "extent" '{"$INJSON": {"DSS::EXT::media_idx": "DOESNOTEXIST"}}'
-test_check_get "extent" \
+test_check_get "layout" '{"$INJSON": {"DSS::EXT::media_idx": "DOESNOTEXIST"}}'
+test_check_get "layout" \
   '{"$INJSON": {"DSS::EXT::media_idx": "phobos1:/tmp/doesnotexist"}}'
-test_check_get "extent" '{"DSS::EXT::oid": "QQQ6ASQDSQD"}'
-test_check_get "extent" '{"$NOR": [{"DSS::EXT::oid": "QQQ6ASQDSQD"}]}'
-test_check_get "extent" '{"$LIKE": {"DSS::EXT::oid": "Q%D"}}'
-test_check_get "extent" '{"DSS::EXT::state": "pending"}'
-test_check_get "extent" '{"DSS::EXT::layout_type": "simple"}'
+test_check_get "layout" '{"DSS::EXT::oid": "QQQ6ASQDSQD"}'
+test_check_get "layout" '{"$NOR": [{"DSS::EXT::oid": "QQQ6ASQDSQD"}]}'
+test_check_get "layout" '{"$LIKE": {"DSS::EXT::oid": "Q%D"}}'
+test_check_get "layout" '{"DSS::EXT::state": "pending"}'
+test_check_get "layout" '{"DSS::EXT::layout_type": "simple"}'
 
 echo "**** TEST: DSS_SET DEVICE ****"
 test_check_set "device" "insert"
@@ -169,14 +169,14 @@ test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
 #test_check_set "object" "update"
 test_check_set "object" "delete"
 test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
-echo "**** TEST: DSS_SET EXTENT  ****"
-test_check_set "extent" "insert"
-test_check_get "extent" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
-test_check_set "extent" "update"
-test_check_get "extent" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
-test_check_set "extent" "delete" "oidtest" "FAIL"
-test_check_set "extent" "delete"
-test_check_get "extent" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
+echo "**** TEST: DSS_SET LAYOUT  ****"
+test_check_set "layout" "insert"
+test_check_get "layout" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
+test_check_set "layout" "update"
+test_check_get "layout" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
+test_check_set "layout" "delete" "oidtest" "FAIL"
+test_check_set "layout" "delete"
+test_check_get "layout" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
 
 echo "**** TEST: DSS FILTER SYNTAX ERROR ****"
 test_check_get "media" '{"DSS::MDA::idontexist": "foo"}' 'FAIL'

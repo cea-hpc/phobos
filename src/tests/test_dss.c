@@ -49,8 +49,8 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     case DSS_OBJECT:
         return dss_object_get(handle, filter,
                               (struct object_info **)item_list, n);
-    case DSS_EXTENT:
-        return dss_extent_get(handle, filter,
+    case DSS_LAYOUT:
+        return dss_layout_get(handle, filter,
                               (struct layout_info **)item_list, n);
     case DSS_DEVICE:
         return dss_device_get(handle, filter,
@@ -70,8 +70,8 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
     case DSS_OBJECT:
         return dss_object_set(handle, (struct object_info *)item_list, n,
                               action);
-    case DSS_EXTENT:
-        return dss_extent_set(handle, (struct layout_info *)item_list, n,
+    case DSS_LAYOUT:
+        return dss_layout_set(handle, (struct layout_info *)item_list, n,
                               action);
     case DSS_DEVICE:
         return dss_device_set(handle, (struct dev_info *)item_list, n,
@@ -137,7 +137,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "Usage: %s ACTION TYPE [ \"CRIT\" ]\n", argv[0]);
         fprintf(stderr, "where  ACTION := { get | set | lock | unlock }\n");
         fprintf(stderr, "       TYPE := "
-                        "{ device | media | object | extent }\n");
+                        "{ device | media | object | layout }\n");
         fprintf(stderr, "       [ \"CRIT\" ] := \"field cmp value\"\n");
         fprintf(stderr, "Optional for set:\n");
         fprintf(stderr, "       oidtest set oid to NULL");
@@ -159,7 +159,7 @@ int main(int argc, char **argv)
         type = str2dss_type(argv[2]);
         if (type == DSS_INVAL) {
             pho_error(EINVAL,
-                      "verb device|media|object|extend expected instead of %s",
+                      "verb device|media|object|layout expected instead of %s",
                       argv[2]);
             exit(EXIT_FAILURE);
         }
@@ -221,7 +221,7 @@ int main(int argc, char **argv)
             for (i = 0, object = item_list; i < item_cnt; i++, object++)
                 pho_debug("Got object: oid:%s", object->oid);
             break;
-        case DSS_EXTENT:
+        case DSS_LAYOUT:
             for (i = 0,  layout = item_list; i < item_cnt; i++, layout++) {
                 pho_debug("Got layout: "
                           "oid:%s ext_count:%u state:%s desc:%s-%d.%d",
@@ -253,7 +253,7 @@ int main(int argc, char **argv)
 
         if (type == DSS_INVAL) {
             pho_error(EINVAL,
-                      "verb dev|media|object|extent expected instead of %s",
+                      "verb dev|media|object|layout expected instead of %s",
                       argv[2]);
             exit(EXIT_FAILURE);
         }
@@ -312,7 +312,7 @@ int main(int argc, char **argv)
                     object->oid = NULL;
             }
             break;
-        case DSS_EXTENT:
+        case DSS_LAYOUT:
             for (i = 0,  layout = item_list; i < item_cnt; i++, layout++) {
                 if (action == DSS_SET_INSERT) {
                     char *s;
