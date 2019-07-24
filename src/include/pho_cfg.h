@@ -51,7 +51,6 @@ struct pho_config_item {
  *                     If cfg_file is NULL, get env(PHOBOS_CFG_FILE).
  *                     If this last is NULL, use the default path
  *                     ('/etc/phobos.conf').
-
  */
 int pho_cfg_init_local(const char *config_file);
 

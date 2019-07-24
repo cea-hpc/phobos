@@ -62,13 +62,17 @@ static int pho_cfg_load_file(const char *cfg)
             pho_error(rc, "failed to read configuration file '%s'", cfg);
             print_file_parsing_errors(stderr, errors);
             fprintf(stderr, "\n");
+            free_ini_config(cfg_items);
         }
-        free_ini_config_errors(errors);
-        return -rc;
     }
 
-    cfg_file = cfg;
-    return 0;
+    /* The error collection always has to be freed, even when empty */
+    free_ini_config_errors(errors);
+
+    if (rc == 0)
+        cfg_file = cfg;
+
+    return -rc;
 }
 
 /**
@@ -93,6 +97,8 @@ int pho_cfg_init_local(const char *config_file)
 
     if (cfg == NULL)
         cfg = PHO_DEFAULT_CFG;
+
+    pho_verb("Loading config %s", cfg);
 
     return pho_cfg_load_file(cfg);
 }
