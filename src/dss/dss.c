@@ -1032,7 +1032,7 @@ static char *dss_layout_extents_encode(struct extent *extents,
             err_cnt++;
         }
 
-        rc = json_array_append(root, child);
+        rc = json_array_append_new(root, child);
         if (rc) {
             pho_error(EINVAL, "Failed to attach child to root object");
             err_cnt++;
