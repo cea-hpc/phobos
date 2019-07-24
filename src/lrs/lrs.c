@@ -401,6 +401,7 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
     }
 
     /* now query device by path */
+    ldm_dev_state_fini(&devd->sys_dev_state);
     rc = ldm_dev_query(&deva, devd->dev_path, &devd->sys_dev_state);
     if (rc) {
         pho_debug("Failed to query device '%s'", devd->dev_path);
@@ -1647,6 +1648,9 @@ static int lrs_get_write_res(struct lrs *lrs, size_t size,
         rc = lrs_dev_acquire(lrs, *devp);
         if (rc != 0)
             GOTO(out_release, rc = -EAGAIN);
+        /* Media is in dev, update dev->dss_media_info with fresh media info */
+        media_info_free((*devp)->dss_media_info);
+        (*devp)->dss_media_info = pmedia;
         return 0;
     }
 
@@ -1767,7 +1771,7 @@ static int lrs_media_prepare(struct lrs *lrs, const struct media_id *id,
     /* Check that the media is not already locked */
     if (&med->lock.lock == LRS_MEDIA_LOCKED_EXTERNAL) {
         pho_debug("Media '%s' is locked, returning EAGAIN", label);
-        return -EAGAIN;
+        GOTO(out, rc = -EAGAIN);
     }
 
     switch (op) {
@@ -1797,6 +1801,9 @@ static int lrs_media_prepare(struct lrs *lrs, const struct media_id *id,
         rc = lrs_dev_acquire(lrs, dev);
         if (rc != 0)
             GOTO(out_mda_unlock, rc = -EAGAIN);
+        /* Media is in dev, update dev->dss_media_info with fresh media info */
+        media_info_free(dev->dss_media_info);
+        dev->dss_media_info = med;
     } else {
         pho_verb("Media '%s' is not in a drive", media_id_get(id));
 
@@ -1835,8 +1842,14 @@ out_mda_unlock:
         lrs_media_release(lrs, med);
 
 out:
-    *pmedia = med;
-    *pdev = dev;
+    if (rc) {
+        media_info_free(med);
+        *pmedia = NULL;
+        *pdev = NULL;
+    } else {
+        *pmedia = med;
+        *pdev = dev;
+    }
     return rc;
 }
 
@@ -1848,8 +1861,9 @@ int lrs_format(struct lrs *lrs, const struct media_id *id, enum fs_type fs,
 {
     const char          *label = media_id_get(id);
     struct dev_descr    *dev = NULL;
-    struct media_info   *media_info;
+    struct media_info   *media_info = NULL;
     int                  rc;
+    int                  rc2;
     struct ldm_fs_space  spc = {0};
     struct fs_adapter    fsa;
     ENTRY;
@@ -1883,15 +1897,6 @@ int lrs_format(struct lrs *lrs, const struct media_id *id, enum fs_type fs,
     media_info->stats.phys_spc_used = spc.spc_used;
     media_info->stats.phys_spc_free = spc.spc_avail;
 
-    rc = lrs_media_release(lrs, media_info);
-    if (rc)
-        pho_error(rc, "Failed to release lock on '%s'", label);
-
-    /* Release ownership. Do not fail the whole operation if unlucky here... */
-    rc = lrs_dev_release(lrs, dev);
-    if (rc)
-        pho_error(rc, "Failed to release lock on '%s'", dev->dev_path);
-
     /* Post operation: update media information in DSS */
     media_info->fs.status = PHO_FS_STATUS_EMPTY;
 
@@ -1902,13 +1907,19 @@ int lrs_format(struct lrs *lrs, const struct media_id *id, enum fs_type fs,
 
     rc = dss_media_set(lrs->dss, media_info, 1, DSS_SET_UPDATE);
     if (rc != 0)
-        LOG_RETURN(rc, "Failed to update state of media '%s'", label);
-
-    return 0;
+        LOG_GOTO(err_out, rc, "Failed to update state of media '%s'", label);
 
 err_out:
-    lrs_dev_release(lrs, dev);
-    lrs_media_release(lrs, media_info);
+    /* Release ownership. Do not fail the whole operation if unlucky here... */
+    rc2 = lrs_dev_release(lrs, dev);
+    if (rc2)
+        pho_error(rc2, "Failed to release lock on '%s'", dev->dev_path);
+
+    rc2 = lrs_media_release(lrs, media_info);
+    if (rc2)
+        pho_error(rc2, "Failed to release lock on '%s'", label);
+
+    /* Don't free media_info since it is still referenced inside dev */
     return rc;
 }
 
@@ -1996,7 +2007,7 @@ err_cleanup:
 int lrs_read_prepare(struct lrs *lrs, struct lrs_intent *intent)
 {
     struct dev_descr    *dev = NULL;
-    struct media_info   *media_info;
+    struct media_info   *media_info = NULL;
     struct media_id     *id;
     int                  rc;
     ENTRY;
@@ -2015,15 +2026,17 @@ int lrs_read_prepare(struct lrs *lrs, struct lrs_intent *intent)
     intent->li_device = dev;
 
     if (dev->dss_media_info == NULL)
-        LOG_RETURN(rc = -EINVAL, "Invalid device state, expected media '%s'",
-                   media_id_get(id));
+        LOG_GOTO(out, rc = -EINVAL, "Invalid device state, expected media '%s'",
+                 media_id_get(id));
 
     /* set fs_type and addr_type according to media description. */
     intent->li_location.root_path        = strdup(dev->mnt_path);
     intent->li_location.extent.fs_type   = dev->dss_media_info->fs.type;
     intent->li_location.extent.addr_type = dev->dss_media_info->addr_type;
 
-    return 0;
+out:
+    /* Don't free media_info since it is still referenced inside dev */
+    return rc;
 }
 
 static int lrs_media_update(struct lrs *lrs, struct lrs_intent *intent,

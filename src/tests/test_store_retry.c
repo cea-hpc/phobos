@@ -79,15 +79,16 @@ static void add_dir(struct lrs *lrs, const char *path, struct dev_info *dev,
 
     /* Add dir device */
     get_dev_adapter(PHO_DEV_DIR, &adapter);
-    /* FIXME: some struct ldm_dev_state attributes are leaked */
     ASSERT_RC(ldm_dev_query(&adapter, path, &dev_st));
 
     dev->family = dev_st.lds_family;
-    dev->model = dev_st.lds_model;
+    dev->model = dev_st.lds_model ? strdup(dev_st.lds_model) : NULL;
     dev->path = (char *) path;
     dev->host = hostname;
-    dev->serial = dev_st.lds_serial;
+    dev->serial = dev_st.lds_serial ? strdup(dev_st.lds_serial) : NULL;
     dev->adm_status = PHO_DEV_ADM_ST_UNLOCKED;
+
+    ldm_dev_state_fini(&dev_st);
 
     ASSERT_RC(dss_device_set(lrs->dss, dev, 1, DSS_SET_INSERT));
 
@@ -113,11 +114,13 @@ static void add_drive(struct lrs *lrs, const char *path, struct dev_info *dev)
     ASSERT_RC(ldm_dev_query(&adapter, path, &dev_st));
 
     dev->family = dev_st.lds_family;
-    dev->model = dev_st.lds_model;
+    dev->model = dev_st.lds_model ? strdup(dev_st.lds_model) : NULL;
     dev->path = (char *) path;
     dev->host = hostname;
-    dev->serial = dev_st.lds_serial;
+    dev->serial = dev_st.lds_serial ? strdup(dev_st.lds_serial) : NULL;
     dev->adm_status = PHO_DEV_ADM_ST_UNLOCKED;
+
+    ldm_dev_state_fini(&dev_st);
 
     ASSERT_RC(dss_device_set(lrs->dss, dev, 1, DSS_SET_INSERT));
 
@@ -274,6 +277,8 @@ int main(int argc, char **argv)
         test_put_retry(&xfer, &dev, &media);
     }
 
+    free(dev.serial);
+    free(dev.model);
     free(xfer.xd_objid);
     lrs_fini(&lrs);
     dss_fini(&dss);
