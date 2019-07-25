@@ -596,6 +596,7 @@ static void store_mput_fini(struct mput_desc *mput)
         return;
 
     free(mput->layout);
+    layout_fini(&mput->comp);
     lrs_fini(&mput->lrs);
     dss_fini(&mput->dss);
     free(mput);
@@ -750,10 +751,8 @@ int phobos_put(const struct pho_xfer_desc *desc, size_t n,
                  mput->slice_cnt);
 
     rc = mput_slices_progress(mput, MPUT_STEP_EXT_WRITE);
-    if (rc) {
-        layout_fini(&mput->comp);
+    if (rc)
         LOG_GOTO(out_finalize, rc, "All slices failed");
-    }
 
     /* Release storage resources and update device/media info */
     rc = layout_commit(&mput->comp, mput_rc(mput));
@@ -767,8 +766,6 @@ int phobos_put(const struct pho_xfer_desc *desc, size_t n,
 
 out_finalize:
     mput_slices_cleanup(mput, rc);
-
-    layout_fini(&mput->comp);
 
     rc2 = xfer_notify_all(cb, udata, mput);
     if (rc == 0)

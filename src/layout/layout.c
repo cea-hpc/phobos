@@ -270,6 +270,12 @@ int layout_fini(struct layout_composer *comp)
     const char  *mod_name = ActiveLayoutModule.lm_desc.mod_name;
     ENTRY;
 
+    if (comp->lc_private_dtor)
+        comp->lc_private_dtor(comp);
+
+    tags_free(&comp->lc_tags);
+    g_hash_table_destroy(comp->lc_layouts);
+
     /* This function can be called with unregistered modules for instance
      * if comp init is OK but layout_acquire fails to register the module
      */
@@ -278,10 +284,5 @@ int layout_fini(struct layout_composer *comp)
 
     pho_debug("Deregistering module '%s'", mod_name);
 
-    if (comp->lc_private_dtor)
-        comp->lc_private_dtor(comp);
-
-    tags_free(&comp->lc_tags);
-    g_hash_table_destroy(comp->lc_layouts);
     return layout_deregister(&ActiveLayoutModule);
 }
