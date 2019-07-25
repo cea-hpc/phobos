@@ -162,6 +162,8 @@ static int test1d(void *arg)
         LOG_RETURN(-EINVAL, "Unexpected length for JSON dump %zd < %d",
                    str->len, expected_min);
 
+    g_string_free(str, TRUE);
+
     return 0;
 }
 

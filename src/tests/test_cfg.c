@@ -67,18 +67,22 @@ static int populate_env(void)
 
     for (item = test_env_items; item->variable != NULL; item++) {
         if (item->value != NULL) {
+            char *key;
             char *sec;
             char *var;
-            char *stmt;
 
             sec = strdup(item->section);
             var = strdup(item->variable);
             upperstr(sec);
             lowerstr(var);
-            if (asprintf(&stmt, "PHOBOS_%s_%s=%s", sec, var, item->value) == -1)
+            rc = asprintf(&key, "PHOBOS_%s_%s", sec, var);
+            free(var);
+            free(sec);
+            if (rc == -1)
                 return -ENOMEM;
 
-            rc = putenv(stmt);
+            rc = setenv(key, item->value, 1);
+            free(key);
             if (rc)
                 return -rc;
         }

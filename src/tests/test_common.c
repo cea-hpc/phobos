@@ -74,14 +74,14 @@ static int test_cmd(void *arg)
 
     /** call a command and call cb_func for each output line */
     rc = command_call((char *)arg, parse_line, &lines);
-    if (rc) {
+    if (rc)
         fprintf(stderr, "command '%s' return with status %d\n", (char *)arg,
                 rc);
-        return rc;
-    }
+    else
+        print_lines(lines);
 
-    print_lines(lines);
-    return 0;
+    g_list_free_full(lines, free);
+    return rc;
 }
 
 static int test_convert(void *arg)
