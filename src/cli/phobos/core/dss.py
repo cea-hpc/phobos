@@ -106,6 +106,35 @@ def dss_filter(obj_type, **kwargs):
 
     return filt
 
+class DSSResult(object):
+    """Wrapper on the native struct dss_result"""
+
+    def __init__(self, native_result, n_elts):
+        """`native_result` must be a ctype pointer to an array of dss results
+        (DevInfo, MediaInfo, etc.)
+        """
+        self._n_elts = n_elts
+        self._native_res = native_result
+
+    def __del__(self):
+        LIBPHOBOS.dss_res_free(self._native_res, self._n_elts)
+
+    def __len__(self):
+        return self._n_elts
+
+    def __getitem__(self, index):
+        if (index >= self._n_elts or index < -self._n_elts):
+            raise IndexError("Index must be between -%d and %d, got %r"
+                             % (self._n_elts, self._n_elts - 1, index))
+        if index < 0:
+            index = self._n_elts + index
+        item = self._native_res[index]
+        # This is necessary so that self is always referenced when _native_res
+        # items are referenced. Without this, self.__del__ could be called
+        # although there exist references on _native_res items.
+        item._dss_result_parent_link = self
+        return item
+
 class BaseObjectManager(object):
     """Proxy to manipulate (CRUD) objects in DSS."""
     __metaclass__ = ABCMeta
@@ -147,14 +176,16 @@ class BaseObjectManager(object):
         else:
             fref = None
 
-        rc = self._dss_get(byref(self.client.handle), fref, byref(res),
-                           byref(res_cnt))
+        try:
+            rc = self._dss_get(byref(self.client.handle), fref, byref(res),
+                               byref(res_cnt))
+        finally:
+            LIBPHOBOS.dss_filter_free(fref)
+
         if rc:
             raise EnvironmentError(rc, "Cannot issue get request")
 
-        ret_items = []
-        for i in range(res_cnt.value):
-            ret_items.append(res[i])
+        ret_items = DSSResult(res, res_cnt.value)
 
         return ret_items
 

@@ -66,6 +66,11 @@ class DSSClientTest(unittest.TestCase):
                 # replace with assertIsInstance when we drop pre-2.7 support
                 self.assertTrue(isinstance(mda, MediaInfo))
 
+            # Check negative indexation
+            medias = client.media.get()
+            self.assertEqual(medias[0].ident, medias[-len(medias)].ident)
+            self.assertEqual(medias[len(medias) - 1].ident, medias[-1].ident)
+
     def test_getset(self):
         """GET / SET an object to validate the whole chain."""
         with Client() as client:
