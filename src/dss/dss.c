@@ -223,9 +223,14 @@ int dss_init(struct dss_handle *handle)
 
     handle->dh_conn = PQconnectdb(conn_str);
 
-    if (PQstatus(handle->dh_conn) != CONNECTION_OK)
-        LOG_RETURN(-ENOTCONN, "Connection to database failed: %s",
-                   PQerrorMessage(handle->dh_conn));
+    if (PQstatus(handle->dh_conn) != CONNECTION_OK) {
+        rc = -ENOTCONN;
+        pho_error(rc, "Connection to database failed: %s",
+                  PQerrorMessage(handle->dh_conn));
+        PQfinish(handle->dh_conn);
+        handle->dh_conn = NULL;
+        return rc;
+    }
 
     (void)PQsetNoticeProcessor(handle->dh_conn, dss_pg_logger, NULL);
 
