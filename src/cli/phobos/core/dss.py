@@ -352,6 +352,12 @@ class Client(object):
         """Exit a runtime context."""
         self.disconnect()
 
+    def __del__(self):
+        """Force disconnection on garbage collection (can be handy to easen
+        error handling).
+        """
+        self.disconnect()
+
     def connect(self, **kwargs):
         """ Establish a fresh connection or renew a stalled one if needed."""
         if self.handle is not None:
