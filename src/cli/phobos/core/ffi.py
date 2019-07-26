@@ -241,6 +241,13 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
     def tags(self, tags):
         self._tags.free()
         self._tags = Tags(tags)
+        # Manually creating and assigning tags means that we will have to free
+        # them when MediaInfo is garbage collected
+        self._free_tags = True
+
+    def __del__(self):
+        if hasattr(self, "_free_tags") and self._free_tags:
+            self._tags.free()
 
 class Timeval(Structure):
     """standard struct timeval."""
