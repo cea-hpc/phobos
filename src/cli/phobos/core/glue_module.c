@@ -39,13 +39,15 @@
  */
 static PyObject *py_jansson_dumps(PyObject *self, PyObject *args)
 {
-    PyObject *py_json_str;
-    json_t   *json;
-    char     *json_str;
+    PyObject            *py_json_str;
+    unsigned long long   json_addr;
+    json_t              *json;
+    char                *json_str;
 
-    if (!PyArg_ParseTuple(args, "i:jansson_dumps", &json))
+    if (!PyArg_ParseTuple(args, "K:jansson_dumps", &json_addr))
         return NULL;
 
+    json = (json_t *)json_addr;
     json_str = json_dumps(json, JSON_COMPACT);
     json_decref(json);
     if (json_str == NULL)
