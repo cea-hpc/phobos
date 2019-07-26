@@ -41,6 +41,10 @@ class DevState(Structure):
         ('lds_loaded', c_bool)
     ]
 
+    def __del__(self):
+        """Free allocated memory on garbage collection"""
+        LIBPHOBOS.ldm_dev_state_fini(byref(self))
+
 class DevAdapter(Structure):
     """Opaque device handle."""
     _fields_ = [
