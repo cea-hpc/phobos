@@ -79,6 +79,18 @@ bool tags_in(const struct tags *haystack, const struct tags *needle);
  */
 struct saj_parser;
 
+/**
+ * @defgroup pho_layout_info Public API for layout information
+ * @{
+ */
+
+/**
+ * Free the extents in this layout.
+ */
+void layout_info_free_extents(struct layout_info *layout);
+
+/** @} end of pho_layout_mod group */
+
 
 /**
  * Users to provide desired handlers for the following operations.

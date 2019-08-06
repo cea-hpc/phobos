@@ -448,6 +448,10 @@ int _ext_write_cb(struct mput_desc *mput, struct mput_slice *slice)
         LOG_GOTO(out_free, rc, "PUT failed for objid:'%s'", objid);
 
 out_free:
+    /*
+     * Only free the attributes and not the full iod, because its extent is
+     * shared with the layout structure, which will be accessed and freed later.
+     */
     pho_attrs_free(&iod.iod_attrs);
 
 out_close:
@@ -476,6 +480,7 @@ int _ext_clean_cb(struct mput_desc *mput, struct mput_slice *slice)
     ENTRY;
 
     rc = dss_layout_set(&mput->dss, &slice->layout, 1, DSS_SET_DELETE);
+
     if (rc)
         LOG_RETURN(rc, "dss_layout_set failed for objid:'%s'",
                    slice->xfer->xd_objid);
@@ -495,6 +500,7 @@ int _ext_abort_cb(struct mput_desc *mput, struct mput_slice *slice)
 
     /* write the extent */
     rc = layout_io(&mput->comp, xfer->xd_objid, &iod);
+    pho_io_descr_fini(&iod);
     if (rc)
         LOG_RETURN(rc, "Extent deletion failed for objid:'%s'", xfer->xd_objid);
 
@@ -871,6 +877,8 @@ static int store_data_get(struct dss_handle *dss,
     iod.iod_fd = fd;
 
     rc = layout_io(&comp, desc->xd_objid, &iod);
+    /* Only free iod attributes, extent addresses point to the dss results */
+    pho_attrs_free(&iod.iod_attrs);
     if (rc)
         LOG_GOTO(out_freecomp, rc,
                  "Failed to issue data transfer for objid:'%s'", objid);

@@ -179,3 +179,14 @@ bool tags_in(const struct tags *haystack, const struct tags *needle)
 
     return true;
 }
+
+void layout_info_free_extents(struct layout_info *layout)
+{
+    int i;
+
+    for (i = 0; i < layout->ext_count; i++)
+        free(layout->extents[i].address.buff);
+    layout->ext_count = 0;
+    free(layout->extents);
+    layout->extents = NULL;
+}

@@ -106,6 +106,11 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa);
 bool io_adapter_is_valid(const struct io_adapter *ioa);
 
 /**
+ * Free all resources associated with a struct pho_io_descr.
+ */
+void pho_io_descr_fini(struct pho_io_descr *iod);
+
+/**
  * Put an object to a media.
  * All I/O adapters must implement this call.
  *

@@ -48,6 +48,16 @@ struct simple_ctx {
 
 static void simple_ctx_del(struct layout_composer *comp);
 
+/** Free an intent in encode mode */
+static void lrs_intent_encode_free(void *void_intent)
+{
+    struct lrs_intent *intent = void_intent;
+
+    free(intent->li_location.extent.address.buff);
+    intent->li_location.extent.address.buff = NULL;
+    g_free(intent);
+}
+
 static struct simple_ctx *simple_ctx_new(struct layout_module *self,
                                          struct layout_composer *comp)
 {
@@ -57,8 +67,21 @@ static struct simple_ctx *simple_ctx_new(struct layout_module *self,
     if (!ctx)
         return NULL;
 
-    ctx->sc_copy_intents = g_hash_table_new_full(g_str_hash, g_str_equal,
-                                                 NULL, g_free);
+    if (comp->lc_action == LA_DECODE)
+        /*
+         * On DECODE, this address has been allocated by the DSS outside this
+         * module and is managed externally.
+         */
+        ctx->sc_copy_intents = g_hash_table_new_full(g_str_hash, g_str_equal,
+                                                     NULL, g_free);
+    else
+        /*
+         * On ENCODE, the intent address has been allocated by ioa_put inside
+         * this module and must be freed.
+         */
+        ctx->sc_copy_intents = g_hash_table_new_full(g_str_hash, g_str_equal,
+                                                     NULL,
+                                                     lrs_intent_encode_free);
     comp->lc_private      = ctx;
     comp->lc_private_dtor = simple_ctx_del;
     return ctx;

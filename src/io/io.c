@@ -688,3 +688,10 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa)
 
     return 0;
 }
+
+void pho_io_descr_fini(struct pho_io_descr *iod)
+{
+    pho_attrs_free(&iod->iod_attrs);
+    free(iod->iod_loc->extent.address.buff);
+    iod->iod_loc->extent.address.buff = NULL;
+}

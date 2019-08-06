@@ -1668,7 +1668,6 @@ static int dss_layout_from_pg_row(void *void_layout, PGresult *res, int row_num)
 static void dss_layout_result_free(void *void_layout)
 {
     struct layout_info *layout = void_layout;
-    int i;
 
     if (!layout)
         return;
@@ -1678,10 +1677,7 @@ static void dss_layout_result_free(void *void_layout)
     pho_attrs_free(&layout->layout_desc.mod_attrs);
 
     /* Undo dss_layout_extents_decode */
-    for (i = 0; i < layout->ext_count; i++)
-        free(layout->extents[i].address.buff);
-
-    free(layout->extents);
+    layout_info_free_extents(layout);
 }
 
 /**

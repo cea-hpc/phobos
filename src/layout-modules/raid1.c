@@ -119,9 +119,7 @@ static void extent_free_cb(void *key, void *val, void *udata)
 {
     struct layout_info *layout = val;
 
-    layout->ext_count = 0;
-    free(layout->extents);
-    layout->extents = NULL;
+    layout_info_free_extents(layout);
 }
 
 static void raid1_ctx_del(struct layout_composer *comp)
