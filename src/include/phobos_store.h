@@ -55,6 +55,12 @@ enum pho_xfer_flags {
  */
 typedef void (*pho_completion_cb_t)(void *u, const struct pho_xfer_desc *, int);
 
+enum pho_xfer_op {
+    PHO_XFER_OP_PUT, /**< Put operation */
+    PHO_XFER_OP_GET, /**< Get operation */
+    /* TODO: GETATTR operation */
+};
+
 /**
  * GET / PUT parameter.
  * The source/destination semantics of the fields vary
@@ -64,48 +70,82 @@ typedef void (*pho_completion_cb_t)(void *u, const struct pho_xfer_desc *, int);
  *  - phobos_put()
  */
 struct pho_xfer_desc {
-    char                *xd_objid;
-    char                *xd_fpath;
-    struct pho_attrs    *xd_attrs;
-    enum pho_xfer_flags  xd_flags;
+    char                *xd_objid;   /**< Object id to read or write */
+    enum pho_xfer_op     xd_op;      /**< Operation to perform (PUT or GET) */
+    bool                 xd_close_fd; /**< True if xd_fd should be closed by
+                                        *  phobos.
+                                        */
+    const char          *xd_fpath;   /**< Path to read or write */
+    int                  xd_fd;      /**< positive fd if xd_id_open */
+    ssize_t              xd_size;    /**< Amount of data to write (for the GET
+                                       * operation, the size read is equal to
+                                       * the size of the retrieved object)
+                                       */
+    const char          *xd_layout_name; /**< Name of the layout module to use
+                                           * (for put).
+                                           */
+    struct pho_attrs     xd_attrs;   /**< User defined attribute to get / put */
+    enum pho_xfer_flags  xd_flags;   /**< See enum pho_xfer_flags doc */
     struct tags          xd_tags;    /**< Tags to select a media to write */
+    int                  xd_rc;      /**< Outcome of this xfer */
 };
 
 
 /**
  * Put N files to the object store with minimal overhead.
  * Each desc entry contains:
- * - objid: The target object identifier
- * - fpath: The source file
- * - attrs: The metadata (optional)
- * - flags: Behavior flags
+ * - objid: the target object identifier
+ * - fpath: the source file
+ * - fd: (optional) if >= 0, an opened fd to read from (replaces fpath)
+ * - size: (optional) if >= 0, amount of data to read from fd
+ * - layout_name: (optional) name of the layout module to use
+ * - attrs: the metadata (optional)
+ * - flags: behavior flags
+ * - tags: tags defining constraints on which media can be selected to put the
+ *   data
+ * Other fields are not used.
  *
  * Individual completion notifications are issued via xd_callback.
  * This function returns the first encountered error or 0 if all
  * sub-operations have succeeded.
  */
-int phobos_put(const struct pho_xfer_desc *desc, size_t n,
+int phobos_put(struct pho_xfer_desc *xfers, size_t n,
                pho_completion_cb_t cb, void *udata);
 
 /**
  * Retrieve N files from the object store
  * desc contains:
- *  objid: Unique arbitrary string to identify the object
- *  fpath: Target file to write the object data to
- *  attrs: Unused (can be NULL)
- *  flags: Behavior flags
+ * - objid: identifier of the object to retrieve
+ * - fpath: target file to write the object data to
+ * - fd: (optional) an opened fd to write to (replaces fpath)
+ * - attrs: unused (can be NULL)
+ * - flags: behavior flags
+ * Other fields are not used.
  *
  * Individual completion notifications are issued via xd_callback.
  * This function returns the first encountered error or 0 if all
  * sub-operations have succeeded.
- *
- * XXX This function does not support n > 1 yet.
  */
-int phobos_get(const struct pho_xfer_desc *desc, size_t n,
+int phobos_get(struct pho_xfer_desc *xfers, size_t n,
                pho_completion_cb_t cb, void *udata);
 
 /** query metadata of the object store */
 /* TODO int phobos_query(criteria, &obj_list); */
 /* TODO int phobos_del(); */
+
+/**
+ * Initializes a xfer to originate be read/written from/to a path.  After this
+ * call, other fields can be set by the caller (xd_layout_name, xd_attrs,
+ * xd_tags, xd_flags).
+ */
+void pho_xfer_desc_init_from_path(struct pho_xfer_desc *xfer, const char *path);
+
+/**
+ * Free resources associated with this xfer, except for xd_fpath and xd_objid
+ * which are for the caller to manage.
+ *
+ * @return 0 on success, -errno on close error.
+ */
+int pho_xfer_desc_destroy(struct pho_xfer_desc *xfer);
 
 #endif

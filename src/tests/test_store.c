@@ -42,7 +42,7 @@ static void dump_md(void *udata, const struct pho_xfer_desc *desc, int rc)
 {
     GString *str = g_string_new("");
 
-    pho_attrs_to_json(desc->xd_attrs, str, 0);
+    pho_attrs_to_json(&desc->xd_attrs, str, 0);
     printf("%s\n", str->str);
     g_string_free(str, TRUE);
 }
@@ -72,10 +72,9 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
 
         for (i = 2; i < argc; i++) {
+            pho_xfer_desc_init_from_path(&xfer, argv[i]);
             xfer.xd_objid = realpath(argv[i], NULL);
-            xfer.xd_fpath = argv[i];
-            xfer.xd_attrs = &attrs;
-            xfer.xd_flags = 0;
+            xfer.xd_attrs = attrs;
 
             rc = phobos_put(&xfer, 1, NULL, NULL);
             if (rc)
@@ -100,10 +99,9 @@ int main(int argc, char **argv)
         argc -= 2;
 
         for (i = 0; i < argc; i++) {
+            pho_xfer_desc_init_from_path(&xfer[i], argv[i]);
             xfer[i].xd_objid = realpath(argv[i], NULL);
-            xfer[i].xd_fpath = argv[i];
-            xfer[i].xd_attrs = &attrs;
-            xfer[i].xd_flags = 0;
+            xfer[i].xd_attrs = attrs;
         }
 
         rc = phobos_put(xfer, xfer_cnt, NULL, NULL);
@@ -119,10 +117,9 @@ int main(int argc, char **argv)
         if (rc)
             exit(EXIT_FAILURE);
 
+        pho_xfer_desc_init_from_path(&xfer, argv[2]);
         xfer.xd_objid = realpath(argv[2], NULL);
-        xfer.xd_fpath = argv[2];
-        xfer.xd_attrs = &attrs;
-        xfer.xd_flags = 0;
+        xfer.xd_attrs = attrs;
         xfer.xd_tags.tags = &argv[3];
         xfer.xd_tags.n_tags = argc - 3;
 
@@ -134,13 +131,14 @@ int main(int argc, char **argv)
     } else if (!strcmp(argv[1], "get")) {
         struct pho_xfer_desc    xfer = {0};
 
+        pho_xfer_desc_init_from_path(&xfer, argv[3]);
         xfer.xd_objid = argv[2];
-        xfer.xd_fpath = argv[3];
 
         rc = phobos_get(&xfer, 1, NULL, NULL);
     } else if (!strcmp(argv[1], "getmd")) {
         struct pho_xfer_desc    xfer = {0};
 
+        pho_xfer_desc_init_from_path(&xfer, NULL);
         xfer.xd_objid = argv[2];
         xfer.xd_flags = PHO_XFER_OBJ_GETATTR;
 

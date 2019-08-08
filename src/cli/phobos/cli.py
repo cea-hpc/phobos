@@ -231,13 +231,13 @@ class StoreGetMDHandler(XferOptHandler):
         if err_code != 0:
             return
 
-        if not xfr.contents.xd_attrs:
-            print '<empty attribute set>'
-
         res = []
-        itm = attrs_as_dict(xfr.contents.xd_attrs.contents)
-        for k, v in sorted(itm.items()):
-            res.append('%s=%s' % (k, v))
+        itm = attrs_as_dict(xfr.contents.xd_attrs)
+        if not itm:
+            print '<empty attribute set>'
+        else:
+            for k, v in sorted(itm.items()):
+                res.append('%s=%s' % (k, v))
 
         print ','.join(res)
 

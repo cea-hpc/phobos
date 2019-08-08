@@ -66,10 +66,16 @@ class XferDescriptor(Structure):
     """phobos struct xfer_descriptor."""
     _fields_ = [
         ("xd_objid", c_char_p),
+        ("xd_op", c_int),
+        ("xd_close_fd", c_bool),
         ("xd_fpath", c_char_p),
-        ("xd_attrs", POINTER(PhoAttrs)),
+        ("xd_fd", c_int),
+        ("xd_size", c_ssize_t),
+        ("xd_layout_name", c_char_p),
+        ("xd_attrs", PhoAttrs),
         ("xd_flags", c_int),
         ("xd_tags", Tags),
+        ("xd_rc", c_int),
     ]
 
 XferCompletionCBType = CFUNCTYPE(None, c_void_p, POINTER(XferDescriptor), c_int)
@@ -87,18 +93,21 @@ class Store(object):
         """
         Internal conversion method to turn a python list into an array of
         struct xfer_descriptor as expected by phobos_{get,put} functions.
+        xfer_descriptors is a list of (id, path, attrs, flags, tags).
         """
         XferArrayType = XferDescriptor * len(xfer_descriptors)
         xfr = XferArrayType()
         for i, x in enumerate(xfer_descriptors):
+            LIBPHOBOS.pho_xfer_desc_init_from_path(byref(xfr[i]), x[1])
             xfr[i].xd_objid = x[0]
-            xfr[i].xd_fpath = x[1]
-            xfr[i].xd_flags = x[3]
             if x[2]:
-                attrs = PhoAttrs()
                 for k, v in x[2].iteritems():
-                    LIBPHOBOS.pho_attr_set(byref(attrs), str(k), str(v))
-                xfr[i].xd_attrs = pointer(attrs)
+                    rc = LIBPHOBOS.pho_attr_set(byref(xfr[i].xd_attrs),
+                                                str(k), str(v))
+                    if rc:
+                        raise EnvironmentError(
+                            rc, "Cannot add attr to xfer objid:'%s'" % (x[0],))
+            xfr[i].xd_flags = x[3]
             xfr[i].xd_tags = Tags(x[4])
 
         return xfr
@@ -106,9 +115,7 @@ class Store(object):
     def xfer_desc_release(self, xfer):
         """Release memory associated to xfer_descriptors."""
         for xd in xfer:
-            if xd.xd_attrs:
-                LIBPHOBOS.pho_attrs_free(xd.xd_attrs)
-            xd.xd_tags.free()
+            LIBPHOBOS.pho_xfer_desc_destroy(byref(xfer))
 
     def compl_cb_convert(self, compl_cb):
         """
@@ -125,7 +132,6 @@ class Store(object):
         n = len(xfer_descriptors)
         self._get_cb = self.compl_cb_convert(compl_cb)
         rc = LIBPHOBOS.phobos_get(xfer, n, self._get_cb, None)
-        self.xfer_desc_release(xfer)
         return rc
 
     def put(self, xfer_descriptors, compl_cb):
@@ -133,7 +139,6 @@ class Store(object):
         n = len(xfer_descriptors)
         self._put_cb = self.compl_cb_convert(compl_cb)
         rc = LIBPHOBOS.phobos_put(xfer, n, self._put_cb, None)
-        self.xfer_desc_release(xfer)
         return rc
 
 class Client(object):

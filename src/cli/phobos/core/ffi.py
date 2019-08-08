@@ -72,6 +72,8 @@ class LRS(Structure):
         ('devices', c_void_p),
         ('dev_count', c_size_t),
         ('lock_owner', c_char_p),
+        ('req_queue', c_void_p),
+        ('release_queue', c_void_p),
     ]
 
 class DevInfo(Structure, CLIManagedResourceMixin):

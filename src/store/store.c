@@ -45,12 +45,6 @@
 #include <string.h>
 #include <time.h>
 
-#define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
-
-#define PHO_EA_ID_NAME      "id"
-#define PHO_EA_UMD_NAME     "user_md"
-#define PHO_EA_EXT_NAME     "ext_info"
-
 #define RETRY_SLEEP_MAX_US (1000 * 1000) /* 1 second */
 #define RETRY_SLEEP_MIN_US (10 * 1000)   /* 10 ms */
 
@@ -75,245 +69,243 @@ const struct pho_config_item cfg_store[] = {
 };
 
 /**
- * The operation step of a slice is updated after the operation has succeeded.
+ * Phobos application state, eventually will offer methods to add transfers on
+ * the fly.
  */
-enum mput_step {
-    MPUT_STEP_INVAL          = -1,
-    MPUT_STEP_INITIAL        = 0,
-    MPUT_STEP_GET_FILE_SIZE  = 1,
-    MPUT_STEP_OBJ_PUT_START  = 2,
-    MPUT_STEP_LAYOUT_DECLARE = 3,
-    MPUT_STEP_EXT_PUT_START  = 4,
-    MPUT_STEP_EXT_WRITE      = 5,
-    MPUT_STEP_OBJ_DONE       = 6,
+struct phobos_handle {
+    struct dss_handle dss;          /**< DSS handle, configured from conf */
+    struct lrs lrs;                 /**< LRS handle, configured from conf */
+    struct pho_xfer_desc *xfers;    /**< Transfers being handled */
+    struct pho_encoder *encoders;   /**< Encoders corresponding to xfers */
+    size_t n_xfers;                 /**< Number of xfers */
+    size_t n_ended_xfers;           /**< Number of "true" in `ended_xfers`,
+                                      *  maintained for performance purposes
+                                      */
+    bool *ended_xfers;              /**< Array of bool, true means that the
+                                      *  transfer at this index has been
+                                      *  marked as ended (successful or failed)
+                                      *  and no more work has to be done on it.
+                                      */
+    bool *md_created;              /**< Array of bool, true means that the
+                                     *  metadata for this transfer were created
+                                     *  in the DSS by this handle (it therefore
+                                     *  may need to roll them back in case of
+                                     *  failure)
+                                     */
 
-    MPUT_STEP_COUNT = 7     /* For iterators */
+    pho_completion_cb_t cb;         /**< Callback called on xfer completion */
+    void *udata;                    /**< User-provided argument to `cb` */
 };
 
 /**
- * Single PUT slice, element of a MPUT operation.
- * Note that even though MPUT groups objects under a same LRS
- * intent, each slice has a copy, since this is where the object
- * address is stored.
- */
-struct mput_slice {
-    const struct pho_xfer_desc *xfer;   /**< pointer to the corresp. xfer */
-    struct layout_info          layout; /**< this slice data layout */
-    enum mput_step              step;   /**< current or first failed step  */
-    int                         rc;     /**< further processing stops if != 0 */
-};
-
-/**
- * Composite MPUT operation
- */
-struct mput_desc {
-    struct dss_handle        dss;       /**< A cached DSS handle */
-    struct lrs               lrs;       /**< LRS instance */
-    struct layout_composer   comp;      /**< Arrange particular layouts */
-    char                    *layout;    /**< Layout name to use */
-    int                      slice_cnt; /**< Count of objects to PUT */
-    struct mput_slice        slices[0]; /**< Objects to write */
-};
-
-/**
- * MPUT state machine step handle, invoked for each active slice. Returning
- * non-zero from a handler will mark the current slice as failed and inactive.
+ * Get a representative return code for the whole batch.
+ * Used to provide other layers with indications about how things ended,
+ * even though we have a per-transfer code for proper error management.
  *
- * @param(in,out)  mput   The MPUT global descriptor.
- * @param(in,out)  slice  The current slice to process.
- * @return 0 on success, negative error code on failure.
+ * The choice here is to return a media-global error code if any, otherwise the
+ * first non zero rc, and finally zero if all the transfers succeeded.
  */
-typedef int (*mput_operation_t)(struct mput_desc *, struct mput_slice *);
-
-
-static int _get_file_size_cb(struct mput_desc *mput, struct mput_slice *slice);
-static int _obj_put_start_cb(struct mput_desc *mput, struct mput_slice *slice);
-static int _layout_declare_cb(struct mput_desc *mput, struct mput_slice *slice);
-static int _ext_put_start_cb(struct mput_desc *mput, struct mput_slice *slice);
-static int _ext_write_cb(struct mput_desc *mput, struct mput_slice *slice);
-static int _obj_done_cb(struct mput_desc *mput, struct mput_slice *slice);
-
-/**
- * Actions to do for each slice.
- *
- * If any of these function returns a non-zero code the slice will be marked
- * as failed and its step indicator will designate the last successful step,
- * for proper iteration over the cleanup handlers.
- */
-static const mput_operation_t mput_state_machine_ops[MPUT_STEP_COUNT] = {
-    [MPUT_STEP_GET_FILE_SIZE]  = _get_file_size_cb,
-    [MPUT_STEP_OBJ_PUT_START]  = _obj_put_start_cb,
-    [MPUT_STEP_LAYOUT_DECLARE] = _layout_declare_cb,
-    [MPUT_STEP_EXT_PUT_START]  = _ext_put_start_cb,
-    [MPUT_STEP_EXT_WRITE]      = _ext_write_cb,
-    [MPUT_STEP_OBJ_DONE]       = _obj_done_cb,
-};
-
-
-static int _ext_clean_cb(struct mput_desc *mput, struct mput_slice *slice);
-static int _ext_abort_cb(struct mput_desc *mput, struct mput_slice *slice);
-static int _obj_clean_cb(struct mput_desc *mput, struct mput_slice *slice);
-
-/**
- * Cleanup actions to do for each failed slice.
- * Return values are ignored.
- */
-static const mput_operation_t mput_state_machine_clean_ops[MPUT_STEP_COUNT] = {
-    [MPUT_STEP_OBJ_PUT_START] = _obj_clean_cb,
-    [MPUT_STEP_EXT_PUT_START] = _ext_clean_cb,
-    [MPUT_STEP_EXT_WRITE]     = _ext_abort_cb,
-};
-
-/**
- * Make active slices progress from their current step to the given one.
- * Return 0 if at least one step has succeeded and -EIO otherwise.
- *
- * @param(in,out)   mput     Global bulk operation descriptor.
- * @param(in)       barrier  Step to progress to.
- *
- * @return 0 on success (even partial), min(error) if everything failed.
- *
- * XXX Note that due to errors being coded on negative numbers, the return value
- *     corresponds to max(abs(rc)).
- */
-static int mput_slices_progress(struct mput_desc *mput, enum mput_step barrier)
+static int choose_xfer_rc(const struct pho_xfer_desc *xfers, size_t n)
 {
-    int     min_err = 0;
-    int     i;
-
-    if (barrier >= MPUT_STEP_COUNT)
-        return -EINVAL;
-
-    for (i = 0; i < mput->slice_cnt; i++) {
-        struct mput_slice   *slice = &mput->slices[i];
-        enum mput_step       step;
-
-        for (step = slice->step + 1; step <= barrier; step++) {
-            int rc;
-
-            /* Skip failed slices */
-            if (slice->rc != 0)
-                break;
-
-            rc = mput_state_machine_ops[step](mput, slice);
-            if (rc != 0) {
-                pho_warn("Failing slice objid:'%s'", slice->xfer->xd_objid);
-                slice->rc = rc;
-            } else {
-                slice->step = step;
-            }
-        }
-    }
-
-    for (i = 0; i < mput->slice_cnt; i++) {
-        struct mput_slice *slice = &mput->slices[i];
-
-        if (slice->rc == 0)
-            /* At least one slice succeeded, that happens */
-            return 0;
-
-        if (slice->rc < min_err)
-            /* Get the highest error code in absolute value */
-            min_err = slice->rc;
-    }
-
-    return min_err;
-}
-
-/**
- * Force error on all successful slices.
- * This is used to propagate error state after an operation on the
- * shared state has failed. Note that slices that already failed are
- * ignored, in order to preserve the first encountered error.
- */
-static void fail_all_slices(struct mput_desc *mput, int err)
-{
+    int rc = 0;
     int i;
 
-    for (i = 0; i < mput->slice_cnt; i++) {
-        struct mput_slice   *slice = &mput->slices[i];
-
-        if (slice->rc == 0) {
-            slice->rc = err;
-            pho_debug("Marking slice objid:'%s' as failed with error %d (%s)",
-                      slice->xfer->xd_objid, err, strerror(-err));
-        }
+    for (i = 0; i < n; i++) {
+        if (is_media_global_error(xfers[i].xd_rc))
+            return xfers[i].xd_rc;
+        else if (rc == 0 && xfers[i].xd_rc != 0)
+            rc = xfers[i].xd_rc;
     }
+
+    return rc;
 }
 
-/**
- * For each failed slices, iterate over the cleanup handlers.
- * Start from last successful step (slice->step) to the initial ones to unwind
- * the full procedure.
- *
- * @param(in,out)  mput  Global put operation descriptor.
- * @param(in)      err   Error code to override slices' ones, if set.
- */
-static void mput_slices_cleanup(struct mput_desc *mput, int err)
+/** Check for inconsistencies or unsupported feature in an xfer->xd_flags */
+static int pho_xfer_desc_flag_check(const struct pho_xfer_desc *xfer)
 {
-    int i;
+    int flags = xfer->xd_flags;
 
-    /* If set, distribute the global error */
-    if (err != 0)
-        fail_all_slices(mput, err);
+    if (xfer->xd_op == PHO_XFER_OP_PUT && flags & PHO_XFER_OBJ_GETATTR)
+        LOG_RETURN(-EINVAL, "Transfer '%s' is both put and getattr",
+                   xfer->xd_objid);
 
-    for (i = 0; i < mput->slice_cnt; i++) {
-        struct mput_slice   *slice = &mput->slices[i];
-        enum mput_step       step;
+    if (xfer->xd_op == PHO_XFER_OP_PUT && flags & PHO_XFER_OBJ_REPLACE)
+        LOG_RETURN(-ENOTSUP, "OBJ_REPLACE not supported for put");
 
-        /* No error, nothing to clean for this slice */
-        if (slice->rc == 0)
-            continue;
-
-        for (step = slice->step; step > MPUT_STEP_INVAL; step--) {
-            /* unlike regular operations that are mandatory, not all steps
-             * expose cleanup handlers, thus check for holes. */
-            if (mput_state_machine_clean_ops[step] != NULL)
-                mput_state_machine_clean_ops[step](mput, slice);
-            slice->step = step;
-        }
-    }
-}
-
-int _get_file_size_cb(struct mput_desc *mput, struct mput_slice *slice)
-{
-    struct stat st;
-    int         rc;
-    ENTRY;
-
-    rc = stat(slice->xfer->xd_fpath, &st);
-    if (rc < 0)
-        LOG_RETURN(-errno, "stat(%s) failed", slice->xfer->xd_fpath);
-
-    slice->layout.wr_size = st.st_size;
     return 0;
 }
 
 /**
- * @TODO this function should properly address the case where extents already
- *      exist:
- *      - on update: keep the old ones but mark them as orphans for cleaning
- *        by LRS on mount.
- *      - on insert: ???
+ * Build a decoder for this xfer by retrieving the xfer layout and initializing
+ * the decoder from it. Only valid for GET xfers.
+ *
+ * @param[out]  dec     The decoder to be initialized
+ * @param[in]   xfer    The xfer to be decoded
+ * @param[in]   dss     A DSS handle to retrieve layout information for xfer
+ *
+ * @return 0 on success, -errno on error.
  */
-int _obj_put_start_cb(struct mput_desc *mput, struct mput_slice *slice)
+static int decoder_build(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
+                         struct dss_handle *dss)
+{
+    struct layout_info *layout;
+    struct dss_filter filter;
+    int cnt = 0;
+    int rc;
+
+    assert(xfer->xd_op == PHO_XFER_OP_GET);
+
+    rc = dss_filter_build(&filter, "{\"DSS::EXT::oid\": \"%s\"}",
+                          xfer->xd_objid);
+    if (rc)
+        return rc;
+
+    rc = dss_layout_get(dss, &filter, &layout, &cnt);
+    if (rc)
+        GOTO(err_nores, rc);
+
+    if (cnt == 0)
+        GOTO(err, rc = -ENOENT);
+
+    /* @FIXME: duplicate layout to avoid calling dss functions to free this? */
+    rc = layout_decode(dec, xfer, layout);
+    if (rc)
+        GOTO(err, rc);
+
+err:
+    if (rc)
+        dss_res_free(layout, cnt);
+
+err_nores:
+    dss_filter_free(&filter);
+    return rc;
+}
+
+/**
+ * Forward a response from the LRS to its destination encoder, collect this
+ * encoder's next requests and forward them back to the LRS.
+ *
+ * @param[in/out]   lrs     The LRS the encoder talks to.
+ * @param[in/out]   enc     The encoder to give the response to.
+ * @param[in]       resp    The response to be forwarded to \a enc. Can be NULL
+ *                          to generate the first request from \a enc.
+ * @param[in]       enc_id  Identifier of this encoder (for request / response
+ *                          tracking).
+ *
+ * @return 0 on success, -errno on error.
+ */
+static int encoder_communicate(struct lrs *lrs, struct pho_encoder *enc,
+                               struct pho_lrs_resp *resp, int enc_id)
+{
+    struct pho_lrs_req *requests = NULL;
+    size_t n_reqs = 0;
+    size_t i = 0;
+    int rc;
+
+    rc = layout_step(enc, resp, &requests, &n_reqs);
+    if (rc)
+        pho_error(rc, "Error while communicating with encoder for %s",
+                  enc->xfer->xd_objid);
+
+    /* Dispatch generated requests (even on error, if any) */
+    for (i = 0; i < n_reqs; i++) {
+        struct pho_lrs_req *req = malloc(sizeof(*req));
+        int rc2 = 0;
+
+        if (req == NULL) {
+            rc = rc ? : -ENOMEM;
+            break;
+        }
+
+        *req = requests[i];
+
+        pho_debug("%s for objid:'%s' emitted a request of type %s",
+                  enc->is_decoder ? "Decoder" : "Encoder", enc->xfer->xd_objid,
+                  lrs_req_kind_str(req->kind));
+
+        /* req_id is used to route responses to the appropriate encoder */
+        req->req_id = enc_id;
+
+        /* After this call, the LRS is responsible for freeing `req` */
+        rc2 = lrs_request_enqueue(lrs, req);
+        if (rc2) {
+            pho_error(rc2, "Error while sending request to LRS for %s",
+                      enc->xfer->xd_objid);
+            rc = rc ? : rc2;
+        }
+    }
+
+    /* Free any undelivered request */
+    for (; i < n_reqs; i++)
+        lrs_req_free(&requests[i]);
+    free(requests);
+
+    return rc;
+}
+
+/**
+ * Retrieve metadata associated with this xfer oid from the DSS and update the
+ * \a xfer xd_attrs field accordingly.
+ */
+static int object_md_get(struct dss_handle *dss, struct pho_xfer_desc *xfer)
+{
+    struct object_info  *obj;
+    struct dss_filter    filter;
+    int                  obj_cnt;
+    int                  rc;
+
+    ENTRY;
+
+    rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}",
+                          xfer->xd_objid);
+    if (rc)
+        return rc;
+
+    rc = dss_object_get(dss, &filter, &obj, &obj_cnt);
+    if (rc)
+        LOG_GOTO(filt_free, rc, "Cannot fetch objid:'%s'", xfer->xd_objid);
+
+    assert(obj_cnt <= 1);
+
+    if (obj_cnt == 0)
+        LOG_GOTO(out_free, rc = -ENOENT, "No such object objid:'%s'",
+                 xfer->xd_objid);
+
+    rc = pho_json_to_attrs(&xfer->xd_attrs, obj[0].user_md);
+    if (rc)
+        LOG_GOTO(out_free, rc, "Cannot convert attributes of objid:'%s'",
+                 xfer->xd_objid);
+
+out_free:
+    dss_res_free(obj, obj_cnt);
+filt_free:
+    dss_filter_free(&filter);
+    return rc;
+}
+
+/**
+ * Save this xfer oid and metadata (xd_attrs) into the DSS.
+ */
+static int object_md_save(struct dss_handle *dss,
+                          const struct pho_xfer_desc *xfer)
 {
     struct object_info   obj;
     GString             *md_repr = g_string_new(NULL);
     int                  rc;
+
     ENTRY;
 
-    rc = pho_attrs_to_json(slice->xfer->xd_attrs, md_repr, 0);
+    rc = pho_attrs_to_json(&xfer->xd_attrs, md_repr, 0);
     if (rc)
         LOG_GOTO(out_free, rc, "Cannot convert attributes into JSON");
 
-    obj.oid = slice->xfer->xd_objid;
+    obj.oid = xfer->xd_objid;
     obj.user_md = md_repr->str;
 
     pho_debug("Storing object objid:'%s' (transient) with attributes: %s",
-              slice->xfer->xd_objid, md_repr->str);
+              xfer->xd_objid, md_repr->str);
 
-    rc = dss_object_set(&mput->dss, &obj, 1, DSS_SET_INSERT);
+    rc = dss_object_set(dss, &obj, 1, DSS_SET_INSERT);
     if (rc)
         LOG_GOTO(out_free, rc, "dss_object_set failed for objid:'%s'", obj.oid);
 
@@ -323,654 +315,454 @@ out_free:
 }
 
 /**
- * Declare the object to the layout management layer.
+ * Delete xfer metadata from the DSS by \a objid, making the oid free to be used
+ * again (unless layout information still lay in the DSS).
  */
-int _layout_declare_cb(struct mput_desc *mput, struct mput_slice *slice)
+static int object_md_del(struct dss_handle *dss, char *objid)
 {
-    char    *objid = slice->xfer->xd_objid;
-    int      rc;
-    ENTRY;
-
-    slice->layout.oid   = objid;
-    slice->layout.state = PHO_EXT_ST_PENDING;
-
-    slice->layout.layout_desc.mod_name = mput->layout;
-
-    rc = layout_declare(&mput->comp, &slice->layout);
-    if (rc)
-        LOG_RETURN(rc, "layout_declare failed for object objid:'%s'", objid);
-
-    return 0;
-}
-
-int _ext_put_start_cb(struct mput_desc *mput, struct mput_slice *slice)
-{
-    char    *objid = slice->xfer->xd_objid;
-    int      rc;
-    ENTRY;
-
-    rc = dss_layout_set(&mput->dss, &slice->layout, 1, DSS_SET_INSERT);
-    if (rc)
-        LOG_RETURN(rc, "dss_layout_set failed for objid:'%s'", objid);
-
-    return 0;
-}
-
-/** fill an array with metadata blobs to be stored on the media */
-static int build_extent_md(const char *id, const struct pho_attrs *md,
-                           const struct layout_info *layout,
-                           struct pho_attrs *dst_md)
-{
-    GString *str;
-    int      rc;
-
-    rc = pho_attr_set(dst_md, PHO_EA_ID_NAME, id);
-    if (rc)
-        return rc;
-
-    str = g_string_new(NULL);
-
-    /* TODO This conversion is done at several place. Consider caching the
-     * result and pass it to the functions that need it. */
-    rc = pho_attrs_to_json(md, str, PHO_ATTR_BACKUP_JSON_FLAGS);
-    if (rc)
-        goto free_values;
-
-    if (!gstring_empty(str)) {
-        rc = pho_attr_set(dst_md, PHO_EA_UMD_NAME, str->str);
-        if (rc)
-            goto free_values;
-    }
-
-#if 0
-    rc = pho_layout_to_json(layout, str, PHO_ATTR_BACKUP_JSON_FLAGS);
-    if (rc != 0)
-        goto free_values;
-
-    if (!gstring_empty(str)) {
-        rc = pho_attr_set(dst_md, PHO_EA_EXT_NAME, str->str);
-        if (rc)
-            goto free_values;
-    }
-#endif
-
-free_values:
-    if (rc != 0)
-        pho_attrs_free(dst_md);
-
-    g_string_free(str, TRUE);
-    return rc;
-}
-
-/**
- * Try to open a file with O_NOATIME flag.
- * Perform a standard open if it doesn't succeed.
- */
-static int open_noatime(const char *path, int flags)
-{
-    int fd;
-
-    fd = open(path, flags | O_NOATIME);
-    /* not allowed to open with NOATIME arg, try without */
-    if (fd < 0 && errno == EPERM)
-        fd = open(path, flags & ~O_NOATIME);
-
-    return fd;
-}
-
-int _ext_write_cb(struct mput_desc *mput, struct mput_slice *slice)
-{
-    const struct pho_xfer_desc  *xfer = slice->xfer;
-    struct pho_io_descr          iod  = {0};
-    const char                  *objid = xfer->xd_objid;
-    int                          fd;
-    int                          rc;
-    ENTRY;
-
-    fd = open_noatime(xfer->xd_fpath, O_RDONLY);
-    if (fd < 0)
-        LOG_RETURN(rc = -errno, "open(%s) failed", xfer->xd_fpath);
-
-    /* Allow extent overwrite. Duplicated objects have been checked by dss
-     * already at this point, so we are actually overwriting an orphan. */
-    iod.iod_flags = PHO_IO_REPLACE | PHO_IO_NO_REUSE;
-    iod.iod_fd    = fd;
-
-    /* Prepare the attributes to be saved */
-    rc = build_extent_md(objid, xfer->xd_attrs, &slice->layout, &iod.iod_attrs);
-    if (rc)
-        LOG_GOTO(out_close, rc, "Cannot build MD representation for objid:'%s'",
-                 objid);
-
-    /* write the extent */
-    rc = layout_io(&mput->comp, objid, &iod);
-    if (rc)
-        LOG_GOTO(out_free, rc, "PUT failed for objid:'%s'", objid);
-
-out_free:
-    /*
-     * Only free the attributes and not the full iod, because its extent is
-     * shared with the layout structure, which will be accessed and freed later.
-     */
-    pho_attrs_free(&iod.iod_attrs);
-
-out_close:
-    close(fd);
-    return rc;
-}
-
-int _obj_done_cb(struct mput_desc *mput, struct mput_slice *slice)
-{
-    struct layout_info  *layout = &slice->layout;
-    int                  rc;
-    ENTRY;
-
-    layout->state = PHO_EXT_ST_SYNC;
-    rc = dss_layout_set(&mput->dss, layout, 1, DSS_SET_UPDATE);
-    if (rc)
-        LOG_RETURN(rc, "obj_put_done failed for objid:'%s'",
-                   slice->xfer->xd_objid);
-
-    return 0;
-}
-
-int _ext_clean_cb(struct mput_desc *mput, struct mput_slice *slice)
-{
-    int rc;
-    ENTRY;
-
-    rc = dss_layout_set(&mput->dss, &slice->layout, 1, DSS_SET_DELETE);
-
-    if (rc)
-        LOG_RETURN(rc, "dss_layout_set failed for objid:'%s'",
-                   slice->xfer->xd_objid);
-
-    return 0;
-}
-
-int _ext_abort_cb(struct mput_desc *mput, struct mput_slice *slice)
-{
-    const struct pho_xfer_desc  *xfer = slice->xfer;
-    struct pho_io_descr          iod  = {0};
-    int                          rc;
-    ENTRY;
-
-    iod.iod_flags = PHO_IO_DELETE;
-    iod.iod_fd    = -1;
-
-    /* write the extent */
-    rc = layout_io(&mput->comp, xfer->xd_objid, &iod);
-    pho_io_descr_fini(&iod);
-    if (rc)
-        LOG_RETURN(rc, "Extent deletion failed for objid:'%s'", xfer->xd_objid);
-
-    return 0;
-}
-
-int _obj_clean_cb(struct mput_desc *mput, struct mput_slice *slice)
-{
+    struct layout_info *layout = NULL;
+    struct dss_filter filter;
+    int cnt = 0;
     struct object_info  obj = {
-        .oid     = slice->xfer->xd_objid,
+        .oid     = objid,
         .user_md = NULL,
     };
     int rc;
+
     ENTRY;
 
-    rc = dss_object_set(&mput->dss, &obj, 1, DSS_SET_DELETE);
+    /* Ensure the oid isn't used by an existing layout before deleting it */
+    rc = dss_filter_build(&filter, "{\"DSS::EXT::oid\": \"%s\"}", objid);
     if (rc)
-        LOG_RETURN(rc, "dss_object_set failed for objid:'%s'",
-                   slice->xfer->xd_objid);
+        return rc;
+
+    rc = dss_layout_get(dss, &filter, &layout, &cnt);
+    dss_filter_free(&filter);
+    dss_res_free(layout, cnt);
+    if (rc == 0 && cnt > 0)
+        LOG_RETURN(rc = -EEXIST,
+                   "Cannot rollback objid:'%s' from DSS, a layout still exists "
+                   "for this objid", objid);
+
+    /* Then the rollback can safely happen */
+    pho_verb("Rolling back objid:'%s' from DSS", objid);
+    rc = dss_object_set(dss, &obj, 1, DSS_SET_DELETE);
+    if (rc)
+        LOG_RETURN(rc, "dss_object_set failed for objid:'%s'", objid);
 
     return 0;
 }
 
-static int store_dss_init(struct dss_handle *dss)
+/**
+ * Initialize an encoder or decoder to perform \a xfer, according to
+ * xfer->xd_op and xfer->xd_flags.
+ */
+static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
+                           struct pho_xfer_desc *xfer)
 {
-    int         rc;
+    int rc;
 
+    if (xfer->xd_op == PHO_XFER_OP_PUT)
+        /* Handle encoder creation for PUT */
+        return layout_encode(enc, xfer);
+
+    /* GET/GETATTR: handle metadata retrieval */
+    rc = object_md_get(dss, xfer);
+    if (rc)
+        LOG_RETURN(rc, "Cannot find metadata for objid:'%s'", xfer->xd_objid);
+
+    if (xfer->xd_flags & PHO_XFER_OBJ_GETATTR) {
+        /* GETATTR: create dummy decoder if only metadata are retrieved */
+        enc->xfer = xfer;
+        enc->done = true;
+        enc->is_decoder = true;
+        return 0;
+    }
+
+    /* Handle decoder creation for GET */
+    return decoder_build(enc, xfer, dss);
+}
+
+/**
+ * Mark the end of a transfer (successful or not) by updating the encoder
+ * structure, saving the encoder layout to the DSS if necessary, properly
+ * positioning xfer->xd_rc and calling the termination callback.
+ *
+ * If this function is called twice for the same transfer, the operations will
+ * only be performed once.
+ *
+ * @param[in]   pho         The phobos handle handling this encoder.
+ * @param[in]   xfer_idx    The index of the terminating xfer in \a pho.
+ * @param[in]   rc          The outcome of the xfer (replaces the xfer's xd_rc
+ *                          if it was 0).
+ */
+static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
+{
+    struct pho_encoder *enc = &pho->encoders[xfer_idx];
+    struct pho_xfer_desc *xfer = &pho->xfers[xfer_idx];
+
+    /* Don't end an encoder twice */
+    if (pho->ended_xfers[xfer_idx])
+        return;
+
+    /* Remember we ended this encoder */
+    pho->ended_xfers[xfer_idx] = true;
+    pho->n_ended_xfers++;
+    enc->done = true;
+
+    /* Once the encoder is done and successful, save the layout and metadata */
+    if (!enc->is_decoder && xfer->xd_rc == 0 && rc == 0) {
+        int rc2;
+
+        pho_debug("Saving layout for objid:'%s'", xfer->xd_objid);
+        rc2 = dss_layout_set(&pho->dss, enc->layout, 1, DSS_SET_INSERT);
+        if (rc2) {
+            pho_error(rc2, "Error while saving layout for objid:'%s'",
+                      xfer->xd_objid);
+            rc = rc ? : rc2;
+        }
+    }
+
+    /* Only overwrite xd_rc if it was 0 */
+    if (xfer->xd_rc == 0 && rc != 0)
+        xfer->xd_rc = rc;
+
+    pho_info("%s operation for objid:'%s' -> '%s' %s",
+             xfer->xd_op == PHO_XFER_OP_PUT ? "PUT" : "GET",
+             xfer->xd_objid,
+             xfer->xd_fpath, xfer->xd_rc ? "failed" : "succeeded");
+
+    /* Cleanup metadata for failed PUT */
+    if (pho->md_created[xfer_idx] &&
+            xfer->xd_op == PHO_XFER_OP_PUT && xfer->xd_rc)
+        object_md_del(&pho->dss, xfer->xd_objid);
+
+    if (pho->cb)
+        pho->cb(pho->udata, xfer, rc);
+}
+
+/**
+ * Destroy a phobos handle and all associated resources. All unfinished
+ * transfers will end with return code \a rc.
+ */
+static void store_fini(struct phobos_handle *pho, int rc)
+{
+    size_t i;
+
+    /* Cleanup encoders */
+    for (i = 0; i < pho->n_xfers; i++) {
+        /**
+         * Encoders that have not finished at this point are marked as failed
+         * with the global rc
+         */
+        if (!pho->ended_xfers[i])
+            store_end_xfer(pho, i, rc);
+
+        /*
+         * We allocated the decoder layouts from the dss (in decoder_build),
+         * hence we also free them.
+         */
+        if (pho->encoders[i].is_decoder) {
+            dss_res_free(pho->encoders[i].layout, 1);
+            pho->encoders[i].layout = NULL;
+        }
+        layout_destroy(&pho->encoders[i]);
+    }
+
+    free(pho->encoders);
+    free(pho->ended_xfers);
+    free(pho->md_created);
+    pho->encoders = NULL;
+    pho->ended_xfers = NULL;
+    pho->md_created = NULL;
+
+    lrs_fini(&pho->lrs);
+    dss_fini(&pho->dss);
+}
+
+/**
+ * Initialize a phobos handle with a set of transfers to perform.
+ *
+ * @param[out]  pho         Phobos handle to be initialized.
+ * @param[in]   xfers       Transfers to be handled.
+ * @param[in]   n_xfers     Number of transfers.
+ * @param[in]   cb          Completion callback called on each transfer end (may
+ *                          be NULL)
+ * @param[in]   udata       Callback user data (may be NULL).
+ *
+ * @return 0 on success, -errno on error.
+ */
+static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
+                      size_t n_xfers, pho_completion_cb_t cb, void *udata)
+{
+    size_t i;
+    int rc;
+
+    memset(pho, 0, sizeof(*pho));
+
+    pho->xfers = xfers;
+    pho->n_xfers = n_xfers;
+    pho->cb = cb;
+    pho->udata = udata;
+
+    /* Check xfers consistency */
+    for (i = 0; i < n_xfers; i++) {
+        rc = pho_xfer_desc_flag_check(&xfers[i]);
+        if (rc)
+            return rc;
+    }
+
+    /* Ensure conf is loaded */
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)
         return rc;
 
-    rc = dss_init(dss);
+    /* Connect to the DSS */
+    rc = dss_init(&pho->dss);
     if (rc != 0)
         return rc;
 
-    /* FUTURE: return pho_cfg_set_thread_conn(dss_hdl); */
-    return 0;
-}
-
-static int store_mput_init(struct mput_desc **desc,
-                           const struct pho_xfer_desc *xfer, size_t n)
-{
-    struct mput_desc    *mput;
-    const char          *layout = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, layout);
-    int                  rc;
-    int                  i;
-
-    if (layout == NULL)
-        LOG_RETURN(-EINVAL, "Unable to determine layout type to use");
-
-    mput = calloc(1, sizeof(*mput) + n * sizeof(struct mput_slice));
-    if (mput == NULL)
-        LOG_RETURN(-ENOMEM, "Store multiop initialization failed");
-
-    rc = store_dss_init(&mput->dss);
+    /* Instanciate the LRS (in the future: connect to the LRS service) */
+    rc = lrs_init(&pho->lrs, &pho->dss);
     if (rc)
-        LOG_GOTO(err_free, rc, "Cannot initialize DSS");
+        LOG_GOTO(out, rc, "Cannot initialize LRS");
 
-    rc = lrs_init(&mput->lrs, &mput->dss);
-    if (rc)
-        LOG_GOTO(err_free_dss, rc, "Cannot initialize LRS");
+    /* Allocate memory for the encoders */
+    pho->encoders = calloc(n_xfers, sizeof(*pho->encoders));
+    if (pho->encoders == NULL)
+        GOTO(out, rc = -ENOMEM);
 
-    mput->layout    = strdup(layout);
-    mput->slice_cnt = n;
+    /* Allocate array of ended encoders for completion tracking */
+    pho->ended_xfers = calloc(n_xfers, sizeof(*pho->ended_xfers));
+    if (pho->ended_xfers == NULL)
+        GOTO(out, rc = -ENOMEM);
 
-    for (i = 0; i < n; i++) {
-        mput->slices[i].step = MPUT_STEP_INITIAL;
-        mput->slices[i].xfer = &xfer[i];
+    /* Allocate array of to track which encoders had their metadata created */
+    pho->md_created = calloc(n_xfers, sizeof(*pho->md_created));
+    if (pho->md_created == NULL)
+        GOTO(out, rc = -ENOMEM);
+
+    /* Initialize all the encoders */
+    for (i = 0; i < n_xfers; i++) {
+        pho_debug("Initializing %s %ld for objid:'%s'",
+                  pho->encoders[i].is_decoder ? "decoder" : "encoder",
+                  i, pho->xfers[i].xd_objid);
+        rc = init_enc_or_dec(&pho->encoders[i], &pho->dss, &pho->xfers[i]);
+        if (rc)
+            pho_error(rc, "Error while creating encoders for objid:'%s'",
+                      xfers[i].xd_objid);
+        if (rc || pho->encoders[i].done)
+            store_end_xfer(pho, i, rc);
+        rc = 0;
     }
 
-    rc = layout_init(&mput->lrs, &mput->comp, LA_ENCODE);
+out:
     if (rc)
-        LOG_GOTO(err, rc, "Cannot initialize layout composition");
-
-    *desc = mput;
-
-    if (rc) {
-err:
-        lrs_fini(&mput->lrs);
-err_free_dss:
-        dss_fini(&mput->dss);
-err_free:
-        free(mput->layout);
-        free(mput);
-    }
+        store_fini(pho, rc);
 
     return rc;
 }
 
-static void store_mput_fini(struct mput_desc *mput)
+static int store_lrs_response_process(struct phobos_handle *pho,
+                                      struct pho_lrs_resp *resp)
 {
-    if (!mput)
-        return;
-
-    free(mput->layout);
-    layout_fini(&mput->comp);
-    lrs_fini(&mput->lrs);
-    dss_fini(&mput->dss);
-    free(mput);
-}
-
-static void xfer_get_notify(pho_completion_cb_t cb, void *udata,
-                            const struct pho_xfer_desc *desc, int rc)
-{
-    if (cb != NULL)
-        cb(udata, desc, rc);
-
-    /* don't display any message for GETATTR operation */
-    if (desc->xd_flags & PHO_XFER_OBJ_GETATTR)
-        return;
-
-    pho_info("GET operation objid:'%s' -> '%s' %s",
-             desc->xd_objid, desc->xd_fpath, rc ? "failed" : "succeeded");
-}
-
-static void xfer_put_notify(pho_completion_cb_t cb, void *udata,
-                            const struct pho_xfer_desc *desc, int rc)
-{
-    if (cb != NULL)
-        cb(udata, desc, rc);
-
-    pho_info("PUT operation '%s' -> objid:'%s' %s",
-             desc->xd_fpath, desc->xd_objid, rc ? "failed" : "succeeded");
-}
-
-static int xfer_notify_all(pho_completion_cb_t cb, void *udata,
-                           const struct mput_desc *mput)
-{
-    int first_rc = 0;
-    int i;
-
-    if (mput == NULL)
-        return 0;
-
-    for (i = 0; i < mput->slice_cnt; i++) {
-        if (!first_rc && mput->slices[i].rc)
-            first_rc = mput->slices[i].rc;
-
-        xfer_put_notify(cb, udata, mput->slices[i].xfer, mput->slices[i].rc);
-    }
-
-    return first_rc;
-}
-
-/**
- * Get a representative return code for the whole batch.
- * Used to provide other layers with indications about how things ended,
- * even though we have a per-slice code for proper error management.
- *
- * The choice here is to return an media-global error code if any, or zero if at
- * least one slice succeeded.
- *
- * XXX
- * Note that given the context where this function is used, we can assume that
- * at least one slice has succeeded.
- */
-static int mput_rc(const struct mput_desc *mput)
-{
-    int i;
-
-    for (i = 0; i < mput->slice_cnt; i++) {
-        if (is_media_global_error(mput->slices[i].rc))
-            return mput->slices[i].rc;
-    }
-
-    return 0;
-}
-
-static int retry_layout_acquire(struct layout_composer *comp)
-{
-    unsigned int rand_seed;
+    struct pho_encoder *encoder = &pho->encoders[resp->req_id];
     int rc;
 
-    /* Seed the PRNG and hope two different phobos instances will be seeded
-     * differently
+    pho_debug("%s for objid:'%s' received a response of type %s",
+              encoder->is_decoder ? "Decoder" : "Encoder",
+              encoder->xfer->xd_objid,
+              lrs_resp_kind_str(resp->kind));
+
+    rc = encoder_communicate(&pho->lrs, encoder, resp, resp->req_id);
+
+    /* Success or failure final callback */
+    if (rc || encoder->done)
+        store_end_xfer(pho, resp->req_id, rc);
+
+    if (rc)
+        pho_error(rc, "Error while sending response to layout for %s",
+                  encoder->xfer->xd_objid);
+
+    return rc;
+}
+
+static int store_dispatch_loop(struct phobos_handle *pho)
+{
+    struct pho_lrs_resp *responses = NULL;
+    size_t n_responses = 0;
+    int rc;
+    int i;
+
+    /* Collect LRS responses */
+    rc = lrs_responses_get(&pho->lrs, &responses, &n_responses);
+    if (rc) {
+        pho_error(rc, "Error while collecting responses from LRS");
+        lrs_responses_free(responses, n_responses);
+        return rc;
+    }
+
+    pho_debug("Collected %ld responses from LRS", n_responses);
+
+    /* Dispatch LRS responses to encoders */
+    for (i = 0; i < n_responses; i++) {
+        rc = store_lrs_response_process(pho, &responses[i]);
+        if (rc)
+            break;
+    }
+
+    lrs_responses_free(responses, n_responses);
+
+    /*
+     * If there are no new answer, it means no resource is available yet,
+     * wait a bit before retrying.
      */
-    rand_seed = getpid() + time(NULL);
-    /* Get storage resource to write objects and retry periodically on EGAIN */
-    while (true) {
+    if (n_responses == 0) {
+        unsigned int rand_seed = getpid() + time(NULL);
         useconds_t sleep_time;
 
-        rc = layout_acquire(comp);
-        if (rc != -EAGAIN)
-            return rc;
-
-        /* Sleep before retrying */
         sleep_time =
             (rand_r(&rand_seed) % (RETRY_SLEEP_MAX_US - RETRY_SLEEP_MIN_US))
             + RETRY_SLEEP_MIN_US;
         pho_info("No resource available to perform IO, retrying in %d ms",
-                 sleep_time / 1000);
+                sleep_time / 1000);
         usleep(sleep_time);
     }
 
-    /* Unreachable */
+    return rc;
 }
 
-int phobos_put(const struct pho_xfer_desc *desc, size_t n,
-               pho_completion_cb_t cb, void *udata)
+/**
+ * Perform the main store loop:
+ * - collect requests from encoders
+ * - forward them to the LRS
+ * - collect responses from the LRS
+ * - dispatch them to the corresponding encoders
+ * - handle potential xfer termination (successful or not)
+ *
+ * @param[in]   pho     Phobos handle describing the transfer.
+ *
+ * @return 0 on success, -errno on error.
+ */
+static int store_perform_xfers(struct phobos_handle *pho)
 {
-    struct mput_desc    *mput = NULL;
-    int                  i;
-    int                  rc;
-    int                  rc2;
-
-    if (desc->xd_flags & PHO_XFER_OBJ_REPLACE)
-        LOG_RETURN(-ENOTSUP, "OBJ_REPLACE not supported for put");
-
-    /* Check that all tags are the same (temporary limitation) */
-    if (n > 0) {
-        const struct tags *ref_tags = &desc[0].xd_tags;
-
-        for (i = 1; i < n; i++)
-            if (!tags_eq(ref_tags, &desc[i].xd_tags))
-                LOG_GOTO(out_finalize, rc = -EINVAL,
-                         "Tags must be identical for all objects");
-    }
-
-    /* load configuration and get dss handle... */
-    rc = store_mput_init(&mput, desc, n);
-    if (rc) {
-        /* We have no context here, thus we cannot use xfer_notify_all().
-         * Deliver rc to all components directly. */
-        for (i = 0; i < n; i++)
-            xfer_put_notify(cb, udata, &desc[i], rc);
-        LOG_GOTO(disconn, rc, "Initialization failed");
-    }
-
-    rc = mput_slices_progress(mput, MPUT_STEP_LAYOUT_DECLARE);
-    if (rc)
-        LOG_GOTO(out_finalize, rc, "All slices failed");
+    size_t i;
+    int rc = 0;
 
     /*
-     * All tags being the same, initialize the composer tag with the first
-     * transfer descriptor tags
+     * Save object metadata as a way to "reserve" the OID and ensure its
+     * unicity before performing any IO. From now on, any failed object must
+     * have its metadata cleared from the DSS.
      */
-    if (n > 0) {
-        /* Freed in layout_fini */
-        rc = tags_dup(&mput->comp.lc_tags, &mput->slices[0].xfer->xd_tags);
+    for (i = 0; i < pho->n_xfers; i++) {
+        if (pho->xfers[i].xd_op != PHO_XFER_OP_PUT)
+            continue;
+        rc = object_md_save(&pho->dss, &pho->xfers[i]);
+        if (rc && !pho->encoders[i].done) {
+            pho_error(rc, "Error while saving metadata for objid:'%s'",
+                      pho->xfers[i].xd_objid);
+            store_end_xfer(pho, i, rc);
+        }
+        pho->md_created[i] = true;
+    }
+
+    /* Generate all first requests of encoders */
+    for (i = 0; i < pho->n_xfers; i++) {
+        if (pho->encoders[i].done)
+            continue;
+
+        rc = encoder_communicate(&pho->lrs, &pho->encoders[i], NULL, i);
         if (rc)
-            LOG_GOTO(out_finalize, rc, "Tags memory allocation failed");
+            store_end_xfer(pho, i, rc);
     }
 
-    rc = retry_layout_acquire(&mput->comp);
-    if (rc != 0)
-        LOG_GOTO(out_finalize, rc,
-                 "Failed to get resources to put %d objects",
-                 mput->slice_cnt);
+    /* Handle all encoders and forward messages between them and the LRS */
+    while (pho->n_ended_xfers < pho->n_xfers) {
+        rc = store_dispatch_loop(pho);
+        if (rc)
+            break;
+    }
 
-    rc = mput_slices_progress(mput, MPUT_STEP_EXT_WRITE);
-    if (rc)
-        LOG_GOTO(out_finalize, rc, "All slices failed");
-
-    /* Release storage resources and update device/media info */
-    rc = layout_commit(&mput->comp, mput_rc(mput));
-    if (rc)
-        LOG_GOTO(out_finalize, rc, "Failed to flush data");
-
-    /* Data successfully flushed. Mark objects as stable */
-    rc = mput_slices_progress(mput, MPUT_STEP_OBJ_DONE);
-    if (rc)
-        LOG_GOTO(out_finalize, rc, "All slices failed");
-
-out_finalize:
-    mput_slices_cleanup(mput, rc);
-
-    rc2 = xfer_notify_all(cb, udata, mput);
-    if (rc == 0)
-        rc = rc2;
-
-disconn:
-    store_mput_fini(mput);
-    return rc;
+    return rc ? : choose_xfer_rc(pho->xfers, pho->n_xfers);
 }
 
 /**
- * Retrieve the location of a given object from DSS, ie. its layout type and
- * list of extents.
+ * Common function to handle PHO_XFER_OP_PUT, PHO_XFER_OP_GET and
+ * PHO_XFER_OBJ_GETATTR transfers.
+ *
+ * @param[in/out]   xfers   Transfers to be performed, they will be updated with
+ *                          an appropriate xd_rc upon successful completion of
+ *                          this function
+ * @param[in]       n       Number of transfers.
+ * @param[in]       cb      Xfer callback.
+ * @param[in]       udata   Xfer callback user provided argument.
+ *
+ * @return 0 on success, -errno on error.
  */
-static int obj_location_get(struct dss_handle *dss, const char *obj_id,
-                            struct layout_info **layout)
+static int phobos_xfer(struct pho_xfer_desc *xfers, size_t n,
+                       pho_completion_cb_t cb, void *udata)
 {
-    struct dss_filter   filter;
-    int                 cnt = 0;
-    int                 rc;
+    struct phobos_handle pho;
+    int rc;
 
-    rc = dss_filter_build(&filter, "{\"DSS::EXT::oid\": \"%s\"}", obj_id);
+    rc = store_init(&pho, xfers, n, cb, udata);
     if (rc)
         return rc;
 
-    /** @TODO check if there is a pending copy of the object */
+    rc = store_perform_xfers(&pho);
+    store_fini(&pho, rc);
 
-    rc = dss_layout_get(dss, &filter, layout, &cnt);
-    if (rc)
-        GOTO(err_nores, rc);
-
-    if (cnt == 0)
-        GOTO(err, rc = -ENOENT);
-
-err:
-    if (rc) {
-        dss_res_free(*layout, cnt);
-        *layout = NULL;
-    }
-
-err_nores:
-    dss_filter_free(&filter);
     return rc;
 }
 
-/**
- * Release object location
- * \see \a obj_location_get
- */
-static void obj_location_free(struct layout_info *layout)
-{
-    dss_res_free(layout, 1);
-}
-
-static inline int xfer2open_flags(enum pho_xfer_flags flags)
-{
-    return (flags & PHO_XFER_OBJ_REPLACE) ? O_CREAT|O_WRONLY|O_TRUNC
-                                          : O_CREAT|O_WRONLY|O_EXCL;
-}
-
-static int store_data_get(struct dss_handle *dss,
-                          const struct pho_xfer_desc *desc)
-{
-    struct layout_info      *layout = NULL;
-    struct layout_composer   comp = {0};
-    struct lrs               lrs = {0};
-    struct pho_io_descr      iod  = {0};
-    const char              *objid = desc->xd_objid;
-    int                      fd;
-    int                      rc;
-    ENTRY;
-
-    /* retrieve saved object location */
-    rc = obj_location_get(dss, desc->xd_objid, &layout);
-    if (rc)
-        LOG_RETURN(rc, "Failed to get information about objid:'%s'", objid);
-
-    assert(layout != NULL);
-
-    /* make sure we can write to the target file */
-    fd = open(desc->xd_fpath, xfer2open_flags(desc->xd_flags), 0640);
-    if (fd < 0)
-        LOG_GOTO(free_res, rc = -errno, "Failed to open %s for writing",
-                 desc->xd_fpath);
-
-    rc = lrs_init(&lrs, dss);
-    if (rc)
-        LOG_GOTO(out_close, rc, "Cannot initialize LRS");
-
-    rc = layout_init(&lrs, &comp, LA_DECODE);
-    if (rc)
-        LOG_GOTO(out_lrs, rc, "Cannot initialize composite layout");
-
-    rc = layout_declare(&comp, layout);
-    if (rc)
-        LOG_GOTO(out_freecomp, rc,
-                 "Cannot declare layout to read objid:'%s'", objid);
-
-    /* Prepare storage resources to read the object */
-    rc = retry_layout_acquire(&comp);
-    if (rc)
-        LOG_GOTO(out_freecomp, rc,
-                 "Failed to prepare resources to read objid:'%s'", objid);
-
-    /* Actually read data from the media */
-    iod.iod_fd = fd;
-
-    rc = layout_io(&comp, desc->xd_objid, &iod);
-    /* Only free iod attributes, extent addresses point to the dss results */
-    pho_attrs_free(&iod.iod_attrs);
-    if (rc)
-        LOG_GOTO(out_freecomp, rc,
-                 "Failed to issue data transfer for objid:'%s'", objid);
-
-    rc = layout_commit(&comp, 0);
-    if (rc)
-        LOG_GOTO(out_freecomp, rc,
-                 "Failed to complete operations for objid:'%s'", objid);
-
-out_freecomp:
-    /* Release storage resources */
-    layout_fini(&comp);
-
-out_lrs:
-    lrs_fini(&lrs);
-
-out_close:
-    close(fd);
-    if (rc != 0 && unlink(desc->xd_fpath) != 0 && errno != ENOENT)
-        pho_warn("Failed to clean '%s': %s", desc->xd_fpath, strerror(errno));
-
-free_res:
-    obj_location_free(layout);
-    return rc;
-}
-
-static int store_attr_get(struct dss_handle *dss, struct pho_xfer_desc *desc)
-{
-    struct object_info  *obj;
-    struct dss_filter    filter;
-    int                  obj_cnt;
-    int                  rc;
-    ENTRY;
-
-    rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}",
-                          desc->xd_objid);
-    if (rc)
-        return rc;
-
-    rc = dss_object_get(dss, &filter, &obj, &obj_cnt);
-    if (rc)
-        LOG_GOTO(filt_free, rc, "Cannot fetch objid:'%s'", desc->xd_objid);
-
-    assert(obj_cnt <= 1);
-
-    if (obj_cnt == 0)
-        LOG_GOTO(out_free, rc = -ENOENT, "No such object objid:'%s'",
-                 desc->xd_objid);
-
-    rc = pho_json_to_attrs(desc->xd_attrs, obj[0].user_md);
-    if (rc)
-        LOG_GOTO(out_free, rc, "Cannot convert attributes of objid:'%s'",
-                 desc->xd_objid);
-
-out_free:
-    dss_res_free(obj, obj_cnt);
-filt_free:
-    dss_filter_free(&filter);
-    return rc;
-}
-
-int phobos_get(const struct pho_xfer_desc *desc, size_t n,
+int phobos_put(struct pho_xfer_desc *xfers, size_t n,
                pho_completion_cb_t cb, void *udata)
 {
-    struct pho_xfer_desc     desc_res = *desc; /* internal r/w copy */
-    struct pho_attrs         attrs = {0};
-    struct dss_handle        dss;
-    int                      rc;
+    const char *layout = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, layout);
+    size_t i;
 
-    /* XXX
-     * Although we plan to eventually support it MGET is not yet implemented */
-    if (n > 1)
-        LOG_RETURN(-EINVAL, "Bulk GET not supported in this version");
+    for (i = 0; i < n; i++) {
+        xfers[i].xd_op = PHO_XFER_OP_PUT;
+        if (xfers[i].xd_layout_name == NULL)
+            xfers[i].xd_layout_name = layout;
+    }
 
-    /* load configuration and get dss handle */
-    rc = store_dss_init(&dss);
-    if (rc)
-        LOG_RETURN(rc, "Initialization failed");
+    return phobos_xfer(xfers, n, cb, udata);
+}
 
-    desc_res.xd_attrs = &attrs;
-    rc = store_attr_get(&dss, &desc_res);
-    if (rc)
-        LOG_GOTO(out_notify, rc, "Cannot retrieve object attributes");
+int phobos_get(struct pho_xfer_desc *xfers, size_t n,
+               pho_completion_cb_t cb, void *udata)
+{
+    size_t i;
 
-    /* Attributes only requested, skip actual object retrieval */
-    if (desc->xd_flags & PHO_XFER_OBJ_GETATTR)
-        GOTO(out_notify, rc = 0);
+    for (i = 0; i < n; i++)
+        xfers[i].xd_op = PHO_XFER_OP_GET;
 
-    rc = store_data_get(&dss, &desc_res);
-    if (rc)
-        LOG_GOTO(out_notify, rc, "Cannot retrieve object data");
+    return phobos_xfer(xfers, n, cb, udata);
+}
 
-out_notify:
-    xfer_get_notify(cb, udata, &desc_res, rc);
-    pho_attrs_free(&attrs);
-    dss_fini(&dss);
-    return rc;
+void pho_xfer_desc_init_from_path(struct pho_xfer_desc *xfer, const char *path)
+{
+    memset(xfer, 0, sizeof(*xfer));
+
+    xfer->xd_fpath = path;
+    xfer->xd_fd = -1;
+    xfer->xd_size = -1;
+}
+
+int pho_xfer_desc_destroy(struct pho_xfer_desc *xfer)
+{
+    int rc;
+
+    tags_free(&xfer->xd_tags);
+    pho_attrs_free(&xfer->xd_attrs);
+
+    if (xfer->xd_close_fd && xfer->xd_fd >= 0) {
+        xfer->xd_close_fd = false;
+        rc = close(xfer->xd_fd);
+        if (rc)
+            return -errno;
+    }
+
+    return 0;
 }

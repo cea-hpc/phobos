@@ -271,7 +271,7 @@ function ensure_nb_drives
     ((nb == count))
 }
 
-# Execute a phobos command but sleep on layout_io for $1 second
+# Execute a phobos command but sleep on pho_posix_put for $1 second
 function phobos_delayed_dev_release
 {
     sleep_time="$1"
@@ -281,7 +281,7 @@ function phobos_delayed_dev_release
         trap "rm $tmp_gdb_script" EXIT
         cat <<EOF > "$tmp_gdb_script"
 set breakpoint pending on
-break layout_io
+break pho_posix_put
 commands
 shell sleep $sleep_time
 continue

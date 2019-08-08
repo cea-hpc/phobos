@@ -59,6 +59,14 @@ static char *setup_tmp_dir(void)
     return TMP_DIR;
 }
 
+static void reinit_xfer(struct pho_xfer_desc *xfer, const char *path)
+{
+    free(xfer->xd_objid);
+
+    pho_xfer_desc_init_from_path(xfer, path);
+    xfer->xd_objid = realpath(path, NULL);
+}
+
 static void add_dir(struct lrs *lrs, const char *path, struct dev_info *dev,
                     struct media_info *media)
 {
@@ -145,14 +153,12 @@ static void add_tape(struct lrs *lrs, const char *tape_id,
     free(media->model);
 }
 
-/**
- * Test that two successive phobos_get work properly
- */
-static void test_double_get(struct pho_xfer_desc *xfer)
+/** Test that phobos_get work properly */
+static void test_get(struct pho_xfer_desc *xfer)
 {
     ASSERT_RC(phobos_get(xfer, 1, NULL, NULL));
+    ASSERT_RC(xfer->xd_rc);
     unlink(xfer->xd_fpath);
-    ASSERT_RC(phobos_get(xfer, 1, NULL, NULL));
 }
 
 struct wait_unlock_device_args {
@@ -200,6 +206,7 @@ static void test_put_retry(struct pho_xfer_desc *xfer, struct dev_info *dev,
      * when the other thread unlocks it the put will suceed.
      */
     ASSERT_RC(phobos_put(xfer, 1, NULL, NULL));
+    ASSERT_RC(xfer->xd_rc);
 
     /* Join spawned thread */
     assert(pthread_join(wait_unlock_thread, NULL) == 0);
@@ -220,9 +227,7 @@ int main(int argc, char **argv)
     test_env_initialize();
     pho_cfg_init_local(NULL);
 
-    xfer.xd_objid = realpath(argv[0], NULL);
-    xfer.xd_fpath = argv[0];
-    xfer.xd_flags = 0;
+    reinit_xfer(&xfer, argv[0]);
 
     dss_init(&dss);
     lrs_init(&lrs, &dss);
@@ -253,6 +258,7 @@ int main(int argc, char **argv)
         test_put_retry(&xfer, &dev, &media);
 
         /* Put retry again to ensure no new error is raised */
+        reinit_xfer(&xfer, argv[0]);
         xfer.xd_objid[0] = '0';
         test_put_retry(&xfer, &dev, &media);
     } else {
@@ -264,14 +270,20 @@ int main(int argc, char **argv)
 
         /* Simple put */
         ASSERT_RC(phobos_put(&xfer, 1, NULL, NULL));
+        ASSERT_RC(xfer.xd_rc);
 
         /* Two successive get */
+        reinit_xfer(&xfer, argv[0]);
         snprintf(dst_path, sizeof(dst_path), "%s/%s", tmp_dir, "dst");
-        sprintf(dst_path, "%s/%s", tmp_dir, "dst");
         xfer.xd_fpath = dst_path;
-        test_double_get(&xfer);
+        test_get(&xfer);
+
+        reinit_xfer(&xfer, argv[0]);
+        xfer.xd_fpath = dst_path;
+        test_get(&xfer);
 
         /* Test put retry */
+        reinit_xfer(&xfer, argv[0]);
         xfer.xd_objid[0] = '0';  /* Artificially build a new object ID */
         xfer.xd_fpath = argv[0];
         test_put_retry(&xfer, &dev, &media);

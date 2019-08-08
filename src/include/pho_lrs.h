@@ -25,8 +25,9 @@
 #ifndef _PHO_LRS_H
 #define _PHO_LRS_H
 
-#include "pho_types.h"
+#include <stdint.h>
 
+#include "pho_types.h"
 
 struct dss_handle;
 struct dev_descr;
@@ -42,19 +43,182 @@ struct lrs {
     char              *lock_owner;  /**< Lock owner name for this LRS
                                       *  (contains hostname and tid)
                                       */
+    GQueue *req_queue;              /**< Queue for all but release requests */
+    GQueue *release_queue;          /**< Queue for release requests */
 };
 
-enum lrs_operation {
-    LRS_OP_NONE = 0,
-    LRS_OP_READ,
-    LRS_OP_WRITE,
-    LRS_OP_FORMAT,
+/**
+ * @defgroup pho_lrs_protocol Structures describing the LRS protocol.
+ * @{
+ */
+
+/** Current versions of the LRS protocol */
+#define PHO_LRS_PROTOCOL_VERSION    0
+
+/** LRS request kind */
+enum pho_lrs_req_kind {
+    /**
+     * Ask the LRS to allocate media with given properties to be able to write
+     * data on them.
+     */
+    LRS_REQ_MEDIA_WRITE_ALLOC,
+
+    /**
+     * Ask the LRS to allocate given media (by id) to be able to read from
+     * them.
+     */
+    LRS_REQ_MEDIA_READ_ALLOC,
+
+    /**
+     * Ask the LRS to release medias and flush them. A medium must be released
+     * and flushed to consider the IO complete from the request emitter side.
+     */
+    LRS_REQ_MEDIA_RELEASE,
+
+    /** pho_lrs_req_kind upper bound, not a valid request kind */
+    LRS_REQ_MAX,
 };
 
-struct lrs_intent {
-    struct dev_descr    *li_device;
-    struct pho_ext_loc   li_location;
+enum pho_lrs_resp_kind {
+    /**
+     * Provide a list of allocated (mounted) medias with write permission and
+     * details to access them.
+     */
+    LRS_RESP_MEDIA_WRITE_ALLOC,
+
+    /**
+     * Provide a list of allocated (mounted) medias with read permission and
+     * details to access them
+     */
+    LRS_RESP_MEDIA_READ_ALLOC,
+
+    /** Confirm that some medias have been successfully released. */
+    LRS_RESP_MEDIA_RELEASE,
+
+    /**
+     * Signals an error when processing a request, can be an answer to any
+     * request.
+     */
+    LRS_RESP_ERROR,
+
+    /** pho_lrs_resp_kind upper bound, not a valid response kind */
+    LRS_RESP_MAX,
 };
+
+/** Request for one write accessible medium */
+struct media_write_req {
+    size_t size;        /**< Amount of data to be written on the medium */
+    struct tags tags;   /**< Tags to be satisfied */
+};
+
+/** Body of write allocation request */
+struct media_write_alloc_req {
+    int n_medias;                   /**< Number of distinct medias to request */
+    struct media_write_req *medias; /**< Write allocation requests */
+};
+
+/**
+ * Body of read allocation request, request n_required medias among n_medias
+ * media_ids provided (n_required <= n_medias).
+ */
+struct media_read_alloc_req {
+    int n_medias;               /**< Number of medias in `media_ids`*/
+    int n_required;             /**< Number of medias to actually allocate among
+                                  *  the ones specified in medias_id
+                                  */
+    struct media_id *media_ids; /**< Ids of the requested medias */
+};
+
+/** Release request for one medium */
+struct media_release_req_elt {
+    struct media_id id;     /**< Id of the medium to release */
+    int rc;                 /**< Outcome of the performed IO (0 or -errno) */
+    size_t size_written;    /**< Amount of bytes written on this medium (0 if
+                              *  the medium was only read).
+                              */
+};
+
+/** Body of the release request */
+struct media_release_req {
+    int n_medias;                           /**< Number of medias to release */
+    struct media_release_req_elt *medias;   /**< Descriptions of the medias to
+                                              *  release.
+                                              */
+};
+
+/** An LRS protocol request, emitted by layout modules */
+struct pho_lrs_req {
+    uint32_t protocol_version;  /**< Protocol version for this request */
+    size_t req_id;              /**< Request id to match its future response */
+    enum pho_lrs_req_kind kind; /**< Kind of request */
+    union {
+        struct media_write_alloc_req walloc;
+        struct media_read_alloc_req ralloc;
+        struct media_release_req release;
+    } body;                     /**< Body of the request (depends on `kind`) */
+};
+
+/** Write allocation response for one medium */
+struct media_write_resp_elt {
+    struct media_id media_id;       /**< Id of the allocated medium */
+    size_t avail_size;              /**< Size available on this medium
+                                      *  (potentially less than what was asked
+                                      *  for)
+                                      */
+    char *root_path;                /**< Mount point of this medium */
+    enum fs_type fs_type;           /**< Type of filesystem */
+    enum address_type addr_type;    /**< Type of address */
+};
+
+/** Body of the write allocation response */
+struct media_write_alloc_resp {
+    int n_medias;                        /**< Number of allocated medias */
+    struct media_write_resp_elt *medias; /**< Description of allocated medias */
+};
+
+/** Read allocation response for one medium */
+struct media_read_resp_elt {
+    struct media_id media_id;
+    char *root_path;
+    enum fs_type fs_type;
+    enum address_type addr_type;
+};
+
+/** Body of the read allocation response */
+struct media_read_alloc_resp {
+    int n_medias;                       /**< Number of allocated medias */
+    struct media_read_resp_elt *medias; /**< Description of allocated medias */
+};
+
+/** Body of the release allocation reponse */
+struct media_release_resp {
+    int n_medias;                       /**< Number of released medias */
+    struct media_id *media_ids;         /**< Ids of released medias */
+};
+
+/** Body of the error response */
+struct error_resp {
+    int rc;                          /**< Error code, -errno for homogeneity */
+    enum pho_lrs_req_kind req_kind;  /**< Kind of request that raised the error
+                                       */
+};
+
+/** An LRS protocol response, emitted by the LRS */
+struct pho_lrs_resp {
+    uint32_t protocol_version;      /**< Protocol version for this response */
+    size_t req_id;                  /**< Request ID, to be matched with the
+                                      *  corresponding request
+                                      */
+    enum pho_lrs_resp_kind kind;    /**< Kind of response */
+    union {
+        struct media_write_alloc_resp walloc;
+        struct media_read_alloc_resp ralloc;
+        struct media_release_resp release;
+        struct error_resp error;
+    } body;                     /**< Body of the response (depends on `kind`) */
+};
+
+/** @} end of pho_lrs_protocol group */
 
 /**
  * Initialize a new LRS bound to a given DSS.
@@ -77,51 +241,6 @@ int lrs_init(struct lrs *lrs, struct dss_handle *dss);
 void lrs_fini(struct lrs *lrs);
 
 /**
- * Query to write a given amount of data with a given layout.
- * (future: several extents if the file is splitted, striped...)
- *
- * @param(in)     lrs     Initialized LRS.
- * @param(in,out) intent  The intent descriptor to fill.
- * @param(in)     tags    Tags used to select a media to write on, the selected
- *                        media must have the specified tags.
- * @return 0 on success, -1 * posix error code on failure
- */
-int lrs_write_prepare(struct lrs *lrs, struct lrs_intent *intent,
-                      const struct tags *tags);
-
-/**
- * Query to read from a given set of media.
- * (future: several locations if the file is splitted, striped...
- *  Moreover, the object may have several locations and layouts if it is
- *  duplicated).
- *
- * @param(in)     lrs     Initialized LRS.
- * @param(in,out) intent  The intent descriptor to fill.
- * @return 0 on success, -1 * posix error code on failure
- */
-int lrs_read_prepare(struct lrs *lrs, struct lrs_intent *intent);
-
-/**
- * Notify LRS of the completion of a write, let it flush data and update media
- * statistics.
- *
- * @param(in)   lrs        The LRS to be notified
- * @param(in)   intent     The intent descriptor of the completed I/O.
- * @param(in)   fragments  The number of successfully written fragments.
- * @param(in)   err_code   An optional error code to interpret failures.
- * @return 0 on success, -1 * posix error code on failure.
- */
-int lrs_io_complete(struct lrs *lrs, struct lrs_intent *intent, int fragments,
-                    int err_code);
-
-/**
- * Release resources allocated by a lrs_{r/w}_prepare() call.
- * @param(in)   intent  the intent descriptor filled by lrs_{r,w}_prepare.
- * @return 0 on success, -1 * posix error code on failure
- */
-int lrs_resource_release(struct lrs *lrs, struct lrs_intent *intent);
-
-/**
  * Identify medium-global error codes.
  * Typically useful to trigger custom procedures when a medium becomes
  * read-only.
@@ -139,6 +258,8 @@ static inline bool is_media_global_error(int errcode)
  * @param(in)   fs      Filesystem type (only PHO_FS_LTFS for now).
  * @param(in)   unlock  Unlock tape if successfully formated.
  * @return 0 on success, negative error code on failure.
+ *
+ * @TODO: this should be integrated into the LRS protocol
  */
 int lrs_format(struct lrs *lrs, const struct media_id *id,
                enum fs_type fs, bool unlock);
@@ -147,7 +268,50 @@ int lrs_format(struct lrs *lrs, const struct media_id *id,
  * Make the LRS aware of a new device
  *
  * @FIXME This is a temporary API waiting for a transparent way to add devices
- * while running.
+ * while running (to be done with the LRS protocol).
  */
 int lrs_device_add(struct lrs *lrs, const struct dev_info *devi);
+
+/**
+ * Enqueue a request to be handled by the LRS. The request is guaranteed to be
+ * answered at some point.
+ *
+ * Takes ownership of the request and will free it later on.
+ *
+ * @param(in)   lrs     The LRS that will handle the request.
+ * @param(in)   req     The request to be handled.
+ *
+ * @return 0 on success, -1 * posix error code on failure.
+ */
+int lrs_request_enqueue(struct lrs *lrs, struct pho_lrs_req *req);
+
+/**
+ * Get responses for all handled pending requests (enqueued with
+ * lrs_request_enqueue).
+ *
+ * @param(in)   lrs     The LRS from which to get the responses.
+ * @param(out)  resps   An array of responses (to be freed by the caller with
+ *                      lrs_responses_free).
+ * @param(out)  n_resps Number of reponses in \a resps.
+ *
+ * @return 0 on success, -1 * posix error code on failure.
+ */
+int lrs_responses_get(struct lrs *lrs, struct pho_lrs_resp **resps,
+                      size_t *n_resps);
+
+/** Free one pho_lrs_req and all associated allocations. */
+void lrs_req_free(struct pho_lrs_req *req);
+
+/** Free one pho_lrs_resp and all associated allocations. */
+void lrs_resp_free(struct pho_lrs_resp *resp);
+
+/** Free an array of responses. */
+void lrs_responses_free(struct pho_lrs_resp *resps, size_t n_resps);
+
+/** Get a static string representation of a request kind. */
+const char *lrs_req_kind_str(enum pho_lrs_req_kind kind);
+
+/** Get a static string representation of a response kind. */
+const char *lrs_resp_kind_str(enum pho_lrs_resp_kind kind);
+
 #endif

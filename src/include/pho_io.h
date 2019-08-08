@@ -33,6 +33,7 @@
 #include <unistd.h>
 #include <assert.h>
 
+/* FIXME: only 2 combinations are used: REPLACE | NO_REUSE and DELETE */
 enum pho_io_flags {
     PHO_IO_MD_ONLY    = (1 << 0),   /**< Only operate on object MD */
     PHO_IO_REPLACE    = (1 << 1),   /**< Replace the entry if it exists */
@@ -60,7 +61,6 @@ typedef int (*io_callback_t)(const struct io_cb_data *cb_data, void *user_data);
 struct pho_io_descr {
     enum pho_io_flags    iod_flags;    /**< PHO_IO_* flags */
     int                  iod_fd;       /**< Local FD */
-    off_t                iod_off;      /**< Operation offset */
     size_t               iod_size;     /**< Operation size */
     struct pho_ext_loc  *iod_loc;      /**< Extent location */
     struct pho_attrs     iod_attrs;    /**< In/Out metadata operations buffer */
@@ -88,7 +88,7 @@ struct io_adapter {
 
     int (*ioa_del)(const char *id, const char *tag, struct pho_ext_loc *loc);
 
-    int (*ioa_flush)(const struct pho_ext_loc *loc);
+    int (*ioa_medium_sync)(const char *root_path);
 };
 
 /**
@@ -116,7 +116,6 @@ void pho_io_descr_fini(struct pho_io_descr *iod);
  *
  * The I/O descriptor must be filled as follow:
  * iod_fd       Source data stream file descriptor
- * iod_off      Start offset in source fd.
  * iod_size     Amount of data to be written.
  * iod_loc      Extent location identifier. The call must set
  *              loc->extent.address to indicate where the extent has been
@@ -206,20 +205,24 @@ static inline int ioa_del(const struct io_adapter *ioa, const char *id,
  * Flush all pending IOs to stable storage.
  * I/O adapters may implement this call.
  *
- * \param[in]   ioa     Suitable I/O adapter for the media
- * \param[in]   loc     Extent location identifier
+ * \param[in]   ioa         Suitable I/O adapter for the media
+ * \param[in]   root_path   Root path of the mounted medium to flush
  *
  * \retval -ENOTSUP the I/O adapter does not provide this function
  * \return 0 on success, negative error code on failure
+ *
+ * @FIXME: this call may need to migrate to the LDM layer in the future, as in
+ * practice it is more a medium management call than an IO call (the main caller
+ * is the LRS, not the layouts).
  */
 
-static inline int ioa_flush(const struct io_adapter *ioa,
-                            const struct pho_ext_loc *loc)
+static inline int ioa_medium_sync(const struct io_adapter *ioa,
+                                  const char *root_path)
 {
     assert(ioa != NULL);
-    if (ioa->ioa_flush == NULL)
+    if (ioa->ioa_medium_sync == NULL)
         return -ENOTSUP;
 
-    return ioa->ioa_flush(loc);
+    return ioa->ioa_medium_sync(root_path);
 }
 #endif

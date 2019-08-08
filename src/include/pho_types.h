@@ -294,10 +294,14 @@ struct extent {
     ssize_t             size;       /**< size of the extent */
     struct media_id     media;      /**< identifier of the media */
     struct pho_buff     address;    /**< address on the media */
-
-    /* XXX this is more media related (should be moved somewhere else?) */
-    enum fs_type        fs_type;    /**< type of filesystem on this media */
+    /*
+     * @FIXME: addr_type is a media field in the database, should it be removed
+     * from this structure, or stored in db as an extent property?
+     */
     enum address_type   addr_type;  /**< way to address this media */
+
+    /* @TODO: remove fs_type fields once raid1 is refactored */
+    enum fs_type        fs_type;    /**< type of filesystem on this media */
 };
 
 /**
@@ -305,12 +309,12 @@ struct extent {
  */
 struct pho_ext_loc {
     char            *root_path;
-    struct extent    extent;
+    struct extent   *extent;
 };
 
 static inline bool is_ext_addr_set(const struct pho_ext_loc *loc)
 {
-    return loc->extent.address.buff != NULL;
+    return loc->extent->address.buff != NULL;
 }
 
 

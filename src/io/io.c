@@ -44,12 +44,13 @@ static char *pho_posix_fullpath(const struct pho_ext_loc *loc)
 {
     char *p;
 
-    switch (loc->extent.addr_type) {
+    switch (loc->extent->addr_type) {
     case PHO_ADDR_PATH:
     case PHO_ADDR_HASH1:
-        if (loc->extent.address.buff == NULL)
+        if (loc->extent->address.buff == NULL)
             return NULL;
-        if (asprintf(&p, "%s/%s", loc->root_path, loc->extent.address.buff) < 0)
+        if (asprintf(&p, "%s/%s", loc->root_path,
+                     loc->extent->address.buff) < 0)
             return NULL;
         return p;
     default:
@@ -174,28 +175,30 @@ static int pho_posix_set_addr(const char *id, const char *tag,
 
 /**
  * Sendfile wrapper
- * @TODO fallback to (p)read/(p)write */
-static int pho_posix_sendfile(int tgt_fd, int src_fd, off_t *src_offset,
-                              size_t count)
+ * @TODO fallback to (p)read/(p)write
+ *
+ * @TODO: for raid1 layout, multiple destinations will be written from one
+ * source, this function will not be adapted then. Anyway, we should not rely on
+ * seekable FDs and avoid fiddling with offsets in input.
+ */
+static int pho_posix_sendfile(int tgt_fd, int src_fd, size_t count)
 {
     ssize_t rw = 0;
-    off_t   offsave = *src_offset;
     ENTRY;
 
     while (count > 0) {
-        rw = sendfile(tgt_fd, src_fd, src_offset, count);
+        rw = sendfile(tgt_fd, src_fd, NULL, count);
         if (rw < 0)
             LOG_RETURN(-errno, "sendfile failure");
+
+        if (count && rw == 0)
+            LOG_RETURN(-ENOBUFS,
+                       "sendfile failure, reached source fd eof too soon");
 
         pho_debug("sendfile returned after copying %zd bytes. %zd bytes left",
                   rw, count - rw);
 
-        /* check offset value */
-        if (*src_offset != offsave + rw)
-            LOG_RETURN(-EIO, "inconsistent src_offset value (%jd != %jd + %zd",
-                       (intmax_t)*src_offset, (intmax_t)offsave, rw);
         count -= rw;
-        offsave = *src_offset;
     }
 
     return 0;
@@ -428,8 +431,8 @@ static int pho_posix_put(const char *id, const char *tag,
 
     /* generate entry address, if it is not already set */
     if (!is_ext_addr_set(iod->iod_loc)) {
-        rc = pho_posix_set_addr(id, tag, iod->iod_loc->extent.addr_type,
-                                &iod->iod_loc->extent.address);
+        rc = pho_posix_set_addr(id, tag, iod->iod_loc->extent->addr_type,
+                                &iod->iod_loc->extent->address);
         if (rc)
             return rc;
     }
@@ -465,7 +468,7 @@ static int pho_posix_put(const char *id, const char *tag,
         goto close_tgt;
 
     /* write data */
-    rc = pho_posix_sendfile(tgt_fd, iod->iod_fd, &iod->iod_off, iod->iod_size);
+    rc = pho_posix_sendfile(tgt_fd, iod->iod_fd, iod->iod_size);
     if (rc)
         goto close_tgt;
 
@@ -509,19 +512,12 @@ static int pho_posix_get(const char *id, const char *tag,
     if (io_cb != NULL)
         return -ENOTSUP;
 
-    /* Always read the whole extent */
-    if (iod->iod_off != 0) {
-        pho_warn("Partial get not supported, reading whole extent instead of"
-                 " seeking to offset %ju", iod->iod_off);
-        iod->iod_off = 0;
-    }
-
     /* generate entry address, if it is not already set */
     if (!is_ext_addr_set(iod->iod_loc)) {
         pho_warn("Object has no address stored in database"
                  " (generating it from object id)");
-        rc = pho_posix_set_addr(id, tag, iod->iod_loc->extent.addr_type,
-                                &iod->iod_loc->extent.address);
+        rc = pho_posix_set_addr(id, tag, iod->iod_loc->extent->addr_type,
+                                &iod->iod_loc->extent->address);
         if (rc != 0)
             return rc;
     }
@@ -555,7 +551,7 @@ static int pho_posix_get(const char *id, const char *tag,
     }
 
     /* read the extent */
-    rc = pho_posix_sendfile(iod->iod_fd, src_fd, &iod->iod_off, iod->iod_size);
+    rc = pho_posix_sendfile(iod->iod_fd, src_fd, iod->iod_size);
     if (rc)
         goto close_src;
 
@@ -585,23 +581,36 @@ free_path:
 
 
 
-static int pho_posix_sync(const struct pho_ext_loc *loc)
+static int pho_posix_medium_sync(const char *root_path)
 {
+    int rc = 0;
+    int fd;
+
     ENTRY;
-    sync();
-    return 0;
+
+    fd = open(root_path, O_RDONLY);
+    if (fd == -1)
+        return -errno;
+
+    if (syncfs(fd))
+        rc = -errno;
+
+    if (close(fd) && !rc)
+        return -errno;
+
+    return rc;
 }
 
 
 #define LTFS_SYNC_ATTR_NAME "user.ltfs.sync"
 
-static int pho_ltfs_sync(const struct pho_ext_loc *loc)
+static int pho_ltfs_sync(const char *root_path)
 {
     int one = 1;
     ENTRY;
 
     /* flush the LTFS partition to tape */
-    if (setxattr(loc->root_path, LTFS_SYNC_ATTR_NAME, (void *)&one,
+    if (setxattr(root_path, LTFS_SYNC_ATTR_NAME, (void *)&one,
                  sizeof(one), 0) != 0)
         LOG_RETURN(-errno, "failed to set LTFS special xattr "
                    LTFS_SYNC_ATTR_NAME);
@@ -617,11 +626,11 @@ static int pho_posix_del(const char *id, const char *tag,
     char *path;
     ENTRY;
 
-    if (loc->extent.address.buff == NULL) {
+    if (loc->extent->address.buff == NULL) {
         pho_warn("Object has no address stored in database"
                  " (generating it from object id)");
-        rc = pho_posix_set_addr(id, tag, loc->extent.addr_type,
-                                &loc->extent.address);
+        rc = pho_posix_set_addr(id, tag, loc->extent->addr_type,
+                                &loc->extent->address);
         if (rc)
             return rc;
     }
@@ -639,18 +648,18 @@ static int pho_posix_del(const char *id, const char *tag,
 
 /** POSIX adapter */
 static const struct io_adapter posix_adapter = {
-    .ioa_put       = pho_posix_put,
-    .ioa_get       = pho_posix_get,
-    .ioa_del       = pho_posix_del,
-    .ioa_flush     = pho_posix_sync,
+    .ioa_put            = pho_posix_put,
+    .ioa_get            = pho_posix_get,
+    .ioa_del            = pho_posix_del,
+    .ioa_medium_sync    = pho_posix_medium_sync,
 };
 
 /** LTFS adapter with specialized flush function */
 static const struct io_adapter ltfs_adapter = {
-    .ioa_put       = pho_posix_put,
-    .ioa_get       = pho_posix_get,
-    .ioa_del       = pho_posix_del,
-    .ioa_flush     = pho_ltfs_sync,
+    .ioa_put            = pho_posix_put,
+    .ioa_get            = pho_posix_get,
+    .ioa_del            = pho_posix_del,
+    .ioa_medium_sync    = pho_ltfs_sync,
 };
 
 
@@ -692,6 +701,6 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa)
 void pho_io_descr_fini(struct pho_io_descr *iod)
 {
     pho_attrs_free(&iod->iod_attrs);
-    free(iod->iod_loc->extent.address.buff);
-    iod->iod_loc->extent.address.buff = NULL;
+    free(iod->iod_loc->extent->address.buff);
+    iod->iod_loc->extent->address.buff = NULL;
 }

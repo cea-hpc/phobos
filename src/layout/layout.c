@@ -26,24 +26,52 @@
 #include "config.h"
 #endif
 
+#include "pho_layout.h"
+
+#include "phobos_store.h"
+#include "pho_store_utils.h"
 #include "pho_lrs.h"
 #include "pho_common.h"
 #include "pho_dss.h"
 #include "pho_type_utils.h"
 #include "pho_cfg.h"
-#include "pho_layout.h"
 #include "pho_io.h"
 
 #include <dlfcn.h>
 #include <limits.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-/* Expected ctor/dtor types for external layout modules */
-typedef int (*mod_init_func_t)(struct layout_module *, enum layout_action);
+static pthread_rwlock_t layout_modules_rwlock;
+static GHashTable *layout_modules;
 
-typedef void (*mod_fini_func_t)(struct layout_module *);
+typedef int (*mod_init_func_t)(struct layout_module *);
 
-/* As for now we do not have to load more than a single module at a time */
-static struct layout_module ActiveLayoutModule;
+/**
+ * Initializes layout_modules_rwlock and the layout_modules hash table.
+ */
+__attribute__((constructor)) static void layout_globals_init(void)
+{
+    int rc;
+
+    rc = pthread_rwlock_init(&layout_modules_rwlock, NULL);
+    if (rc) {
+        fprintf(stderr,
+                "Unexpected error: cannot initialize layout rwlock: %s\n",
+                strerror(rc));
+        exit(EXIT_FAILURE);
+    }
+
+    /* Note: layouts are not meant to be unloaded for now */
+    layout_modules = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
+                                           NULL);
+    if (layout_modules == NULL) {
+        fprintf(stderr, "Could not create layout modules hash table\n");
+        exit(EXIT_FAILURE);
+    }
+}
 
 /**
  * Convert layout name into the corresponding module library name.
@@ -66,223 +94,191 @@ static int build_module_instance_path(const char *name, char *path, size_t len)
     return 0;
 }
 
-static int layout_deregister(struct layout_module *mod);
-
 /**
- * Load and register a layout module for a given mode (\a action).
- * The module must provide an initialization function which will be called.
+ * Load a layout module by \a mod_name into \a mod.
  *
- * This function is in turn responsible for filling in module description and
- * operation vector.
+ * @param[in]   mod_name    Name of the module to load.
+ * @param[out]  mod         Module descriptor to fill out.
+ *
+ * @return 0 on success, -errno on error.
  */
-static int layout_register(const char *name, struct layout_module *mod,
-                           enum layout_action action)
+static int layout_module_load(const char *mod_name, struct layout_module **mod)
 {
-    mod_init_func_t  op_init;
-    char             libpath[NAME_MAX];
-    void            *hdl;
-    int              rc;
+    mod_init_func_t op_init;
+    char libpath[NAME_MAX];
+    void *hdl;
+    int rc;
+
     ENTRY;
 
-    /*
-     * First deregister any loaded module (note: we cannot use the previously
-     * loaded module because its mod_name is not guaranteed to be equal to the
-     * name used to retrieve it).
-     */
-    layout_deregister(mod);
+    pho_debug("Loading layout module '%s'", mod_name);
 
-    rc = build_module_instance_path(name, libpath, sizeof(libpath));
+    rc = build_module_instance_path(mod_name, libpath, sizeof(libpath));
     if (rc)
-        LOG_RETURN(rc, "Invalid layout module name '%s'", name);
-
-    pho_debug("Loading layout module '%s'", name);
+        LOG_RETURN(rc, "Invalid layout module name '%s'", mod_name);
 
     hdl = dlopen(libpath, RTLD_NOW);
-    if (!hdl)
-        LOG_RETURN(-ENOSYS, "Cannot load module '%s': %s", name, dlerror());
+    if (hdl == NULL)
+        LOG_RETURN(-EINVAL, "Cannot load module '%s': %s", mod_name, dlerror());
+
+    *mod = calloc(1, sizeof(**mod));
+    if (*mod == NULL)
+        GOTO(out_err, rc = -ENOMEM);
 
     op_init = dlsym(hdl, PLM_OP_INIT);
     if (!op_init)
         LOG_RETURN(-ENOSYS, "Operation '%s' is missing", PLM_OP_INIT);
 
-    rc = op_init(mod, action);
+    rc = op_init(*mod);
     if (rc)
-        LOG_GOTO(out_err, rc, "Cannot initialize module '%s'", name);
+        LOG_GOTO(out_err, rc, "Could not initialize module '%s'", mod_name);
 
     pho_debug("Plugin %s-%d.%d successfully loaded",
-              mod->lm_desc.mod_name,
-              mod->lm_desc.mod_major,
-              mod->lm_desc.mod_minor);
+              (*mod)->desc.mod_name,
+              (*mod)->desc.mod_major,
+              (*mod)->desc.mod_minor);
 
-    mod->lm_dl_handle = hdl;
+    (*mod)->dl_handle = hdl;
 
 out_err:
-    if (rc)
+    if (rc) {
+        free(*mod);
         dlclose(hdl);
+    }
 
     return rc;
 }
 
-static int layout_deregister(struct layout_module *mod)
+/**
+ * Load a layout module if it has not already been. Relies on the global
+ * layout_modules hash map and its associated rwlock.
+ *
+ * @param[in]   mod_name    Name of the module to load.
+ * @param[out]  mod         Module descriptor to fill out.
+ *
+ * @return 0 on success, -errno on error.
+ */
+static int layout_module_lazy_load(const char *mod_name,
+                                   struct layout_module **module)
 {
+    int rc;
 
-    mod_fini_func_t  op_fini;
-    int              rc;
-    ENTRY;
-
-    /* If no module is loaded, return success */
-    if (!mod->lm_dl_handle)
-        return 0;
-
-    /* Optional teardown function */
-    op_fini = dlsym(mod->lm_dl_handle, PLM_OP_FINI);
-    if (op_fini)
-        op_fini(mod);
-
-    rc = dlclose(mod->lm_dl_handle);
+    rc = pthread_rwlock_rdlock(&layout_modules_rwlock);
     if (rc)
-        LOG_RETURN(rc = -EINVAL, "Cannot release module handle: %s", dlerror());
+        LOG_RETURN(rc, "Cannot read lock layout module table");
 
-    /* In case attributes were set... */
+    /* Check if module loaded */
+    *module = g_hash_table_lookup(layout_modules, mod_name);
 
-    memset(mod, 0, sizeof(*mod));
-    return 0;
-}
+    /* If not loaded, unlock, write lock, check if it is loaded and load it */
+    if (*module == NULL) {
+        /* Release the read lock */
+        rc = pthread_rwlock_unlock(&layout_modules_rwlock);
+        if (rc)
+            LOG_RETURN(rc, "Cannot unlock layout module table");
 
-int layout_init(struct lrs *lrs, struct layout_composer *comp,
-                enum layout_action action)
-{
-    ENTRY;
+        /* Re-acquire a write lock */
+        rc = pthread_rwlock_wrlock(&layout_modules_rwlock);
+        if (rc)
+            LOG_RETURN(rc, "Cannot write lock layout module table");
 
-    comp->lc_lrs     = lrs;
-    comp->lc_action  = action;
-    comp->lc_layouts = g_hash_table_new(g_str_hash, g_str_equal);
-    comp->lc_private = NULL;
-    comp->lc_tags    = NO_TAGS;
-    return 0;
-}
+        /*
+         * Re-check if module loaded (this could have changed between the read
+         * lock release and the write lock acquisition)
+         */
+        *module = g_hash_table_lookup(layout_modules, mod_name);
+        if (*module != NULL)
+            goto out_unlock;
 
-static bool declaration_is_valid(const struct layout_composer *comp,
-                                 const struct layout_info *layout)
-{
-    if (comp->lc_action == LA_ENCODE && layout->ext_count != 0)
-        return false;
+        rc = layout_module_load(mod_name, module);
+        if (rc)
+            LOG_GOTO(out_unlock, rc, "Error while loading layout module %s",
+                     mod_name);
 
-    if (comp->lc_action == LA_DECODE && layout->ext_count == 0)
-        return false;
+        /* Insert the module into the module table */
+        g_hash_table_insert(layout_modules, strdup(mod_name), *module);
 
-    return true;
-}
+        /* Write lock is released in function final cleanup */
+    }
 
-int layout_declare(struct layout_composer *comp, struct layout_info *layout)
-{
-    ENTRY;
-
-    if (!declaration_is_valid(comp, layout))
-        LOG_RETURN(-EINVAL, "Invalid layout composition request");
-
-    g_hash_table_insert(comp->lc_layouts, layout->oid, layout);
-    return 0;
-}
-
-static gboolean find_any_cb(void *key, void *val, void *udata)
-{
-    return true;
-}
-
-static const char *comp_layout_name_get(const struct layout_composer *comp)
-{
-    const struct layout_info    *val;
-
-    val = g_hash_table_find(comp->lc_layouts, find_any_cb, NULL);
-    if (!val)
-        return NULL;
-
-    return val->layout_desc.mod_name;
-}
-
-static void set_mod_desc_cb(void *key, void *value, void *udata)
-{
-    struct layout_info  *layout = value;
-
-    layout->layout_desc = ActiveLayoutModule.lm_desc;
-}
-
-int layout_acquire(struct layout_composer *comp)
-{
-    const char  *mod_name = comp_layout_name_get(comp);
-    int          rc;
-    ENTRY;
-
-    /* 1 - Load appropriate plugin. This has to be done after layout_declare()
-     * since the layout type (and therefore: the layout module) to use is not
-     * known before.
-     */
-    pho_debug("Registering module '%s'", mod_name);
-
-    rc = layout_register(mod_name, &ActiveLayoutModule, comp->lc_action);
+out_unlock:
+    rc = pthread_rwlock_unlock(&layout_modules_rwlock);
     if (rc)
-        LOG_RETURN(rc, "Layout module '%s' registration failed", mod_name);
-
-    /* 2 - Let the plugin compose a LRS intent list according to its needs */
-    rc = layout_module_compose(&ActiveLayoutModule, comp);
-    if (rc)
-        LOG_GOTO(err_dereg, rc, "Module failed to generate an intent list");
-
-    /* 3 - Store the module version with which data will be encoded */
-    if (comp->lc_action == LA_ENCODE)
-        g_hash_table_foreach(comp->lc_layouts, set_mod_desc_cb, NULL);
-
-err_dereg:
-    if (rc)
-        layout_deregister(&ActiveLayoutModule);
+        LOG_RETURN(rc, "Cannot unlock layout module table");
 
     return rc;
 }
 
-int layout_io(struct layout_composer *comp, const char *objid,
-              struct pho_io_descr *iod)
+int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
 {
-    ENTRY;
-    return layout_module_io_submit(&ActiveLayoutModule, comp, objid, iod);
-}
+    struct layout_module *mod;
+    int rc;
 
-int layout_commit(struct layout_composer *comp, int errcode)
-{
-    const char  *mod_name = ActiveLayoutModule.lm_desc.mod_name;
-    int          rc;
-    ENTRY;
-
-    rc = layout_module_io_commit(&ActiveLayoutModule, comp, errcode);
+    /* Load new module if necessary */
+    rc = layout_module_lazy_load(xfer->xd_layout_name, &mod);
     if (rc)
-        LOG_RETURN(rc, "Cannot commit pending transactions for '%s'", mod_name);
+        return rc;
 
-    return 0;
-}
-
-static inline bool layout_module_is_registered(const struct layout_module *mod)
-{
-    return mod && mod->lm_ops;
-}
-
-int layout_fini(struct layout_composer *comp)
-{
-    const char  *mod_name = ActiveLayoutModule.lm_desc.mod_name;
-    ENTRY;
-
-    if (comp->lc_private_dtor)
-        comp->lc_private_dtor(comp);
-
-    tags_free(&comp->lc_tags);
-    g_hash_table_destroy(comp->lc_layouts);
-
-    /* This function can be called with unregistered modules for instance
-     * if comp init is OK but layout_acquire fails to register the module
+    /*
+     * Note 1: we don't acquire layout_modules_rwlock because we consider that
+     * the module we just retrieved will never be unloaded.
      */
-    if (!layout_module_is_registered(&ActiveLayoutModule))
-        return 0;
+    /*
+     * Note 2: the encoder module must not be unloaded until all encoders of
+     * this type have been destroyed, since they all hold a reference to the
+     * module's code. In this implementation, the module is never unloaded.
+     */
+    enc->is_decoder = false;
+    enc->done = false;
+    enc->xfer = xfer;
+    enc->layout = calloc(1, sizeof(*enc->layout));
+    if (enc->layout == NULL)
+        return -ENOMEM;
+    enc->layout->oid = xfer->xd_objid;
+    enc->layout->wr_size = pho_xfer_desc_get_size(xfer);
+    enc->layout->state = PHO_EXT_ST_PENDING;
 
-    pho_debug("Deregistering module '%s'", mod_name);
+    rc = mod->ops->encode(enc);
+    if (rc)
+        layout_destroy(enc);
 
-    return layout_deregister(&ActiveLayoutModule);
+    return rc;
+}
+
+int layout_decode(struct pho_encoder *enc, struct pho_xfer_desc *xfer,
+                  struct layout_info *layout)
+{
+    struct layout_module *mod;
+    int rc;
+
+    /* Load new module if necessary */
+    rc = layout_module_lazy_load(layout->layout_desc.mod_name, &mod);
+    if (rc)
+        return rc;
+
+    /* See notes in layout_encode */
+    enc->is_decoder = true;
+    enc->done = false;
+    enc->xfer = xfer;
+    enc->layout = layout;
+
+    return mod->ops->decode(enc);
+}
+
+void layout_destroy(struct pho_encoder *enc)
+{
+    /* Only encoders own their layout */
+    if (!enc->is_decoder && enc->layout != NULL) {
+        layout_info_free_extents(enc->layout);
+        free(enc->layout);
+        enc->layout = NULL;
+    }
+
+    /* Not fully initialized */
+    if (enc->ops == NULL)
+        return;
+
+    CHECK_ENC_OP(enc, destroy);
+
+    enc->ops->destroy(enc);
 }

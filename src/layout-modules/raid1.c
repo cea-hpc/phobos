@@ -293,7 +293,6 @@ static int raid1_encode(struct layout_module *self,
             return rc;
 
         io->iod_size = extent->size;
-        io->iod_off  = 0;
         io->iod_loc  = &curr->li_location;
 
         /* build extent tag, specific to this layout */
