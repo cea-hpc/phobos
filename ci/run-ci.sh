@@ -15,11 +15,11 @@ cur_dir=$(dirname $(readlink -m $0))
 cd "$cur_dir"/..
 
 # export PKG_CONFIG_PATH=/usr/pgsql-9.4/lib/pkgconfig;
-./autogen.sh;
-./configure;
-make rpm;
+./autogen.sh
+./configure
+make rpm
 
-make clean || cat src/tests/test-suite.log;
+make clean || cat src/tests/test-suite.log
 make
 # FIXME: when cloning the repo, some scripts do not have o+rx
 # permissions, it is however necessary to execute them as postgres

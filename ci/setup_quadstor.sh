@@ -25,20 +25,25 @@ systemctl restart quadstorvtl
 # Give storage device to quadstorvtl
 /quadstorvtl/bin/bdconfig -a -d /dev/md0 -g phobos-pool
 
-# VTL type:
+# VTL types:
 # 09      IBM System Storage TS3100
 # Drive type:
 # 20      IBM 3580 Ultrium5
+# 21      IBM 3580 Ultrium6
 # Note: --drive-{type,count} are repeatable
 # TODO: add LTO8 drives as well
 /quadstorvtl/bin/vtconfig --add --vtl=phobos-ibm \
-    --type=09 --slots=20 --ieports=4 --drive-type=20 --drive-count=4
+    --type=09 --slots=20 --ieports=4 --drive-type=20 --drive-count=4 \
+    --drive-type=21 --drive-count=4
 
-# Add 20 cartridges (tapes), type:
+# Add 20 cartridges (tapes), types:
 # 12      LTO 5 1500GB
+# 13      LTO 6 2500GB
 # TODO: add LTO8 tapes as well
 /quadstorvtl/bin/vcconfig --add --vtl=phobos-ibm \
     --type 12 --pool=phobos-pool --label=P00000 --count=10
+/quadstorvtl/bin/vcconfig --add --vtl=phobos-ibm \
+    --type 13 --pool=phobos-pool --label=Q00000 --count=10
 
 # Symlink for phobos tests
-ln -s /dev/sg5 /dev/changer
+ln -s /dev/sg9 /dev/changer

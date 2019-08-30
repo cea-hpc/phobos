@@ -89,18 +89,22 @@ function tape_setup
     empty_drives
 
     local N_TAPES=2
-    local N_DRIVES=2
+    local N_DRIVES=8
+    local LTO5_TAGS=$TAGS,lto5
+    local LTO6_TAGS=$TAGS,lto6
 
     # get LTO5 tapes
-    export tapes="$(get_tapes L5 $N_TAPES)"
-    local type=lto5
-    if [ -z "$tapes" ]; then
-        # if there are none, get LTO6 tapes
-        export tapes="$(get_tapes L6 $N_TAPES)"
-        type=lto6
-    fi
-    echo "adding tapes $tapes with tags $TAGS..."
-    $phobos tape add -T $TAGS -t $type "$tapes"
+    local lto5_tapes="$(get_tapes L5 $N_TAPES)"
+    echo "adding tapes $lto5_tapes with tags $LTO5_TAGS..."
+    $phobos tape add -T $LTO5_TAGS -t lto5 "$lto5_tapes"
+
+    # get LTO6 tapes
+    local lto6_tapes="$(get_tapes L6 $N_TAPES)"
+    echo "adding tapes $lto6_tapes with tags $LTO6_TAGS..."
+    $phobos tape add -T $LTO6_TAGS -t lto6 "$lto6_tapes"
+
+    # set tapes
+    export tapes="$lto5_tapes,$lto6_tapes"
 
     # comparing with original list
     $phobos tape list | sort | xargs > /tmp/pho_tape.1
@@ -113,7 +117,8 @@ function tape_setup
     $phobos tape show $tp1
 
     # unlock all tapes but one
-    for t in $(echo $tapes | nodeset -e -S '\n' | head -n $(($N_TAPES - 1))); do
+    for t in $(echo "$tapes" | nodeset -e -S '\n' |
+                    head -n $(($N_TAPES * 2 - 1))); do
         $phobos tape unlock $t
     done
 
@@ -141,11 +146,11 @@ function tape_setup
         $phobos drive unlock $d
     done
 
-    # need to format 2 tapes for concurrent_put
-    local tp
-    for tp in $tapes; do
-        $phobos -v tape format $tp --unlock
-    done
+    # need to format at least 2 tapes for concurrent_put
+    # format lto5 tapes
+    $phobos -v tape format $lto5_tapes --unlock
+    # format lto6 tapes
+    $phobos -v tape format $lto6_tapes --unlock
 }
 
 function dir_setup
@@ -377,6 +382,23 @@ function check_status
     done
 }
 
+function tape_drive_compat
+{
+    $phobos put -T lto5 /etc/services svc_lto5 ||
+        error "fail to put on lto5 tape"
+
+    $phobos put -T lto6 /etc/services svc_lto6 ||
+        error "fail to put on lto6 tape"
+
+    $phobos get svc_lto5 /tmp/svc_lto5 ||
+        error "fail to get from lto5 tape"
+    rm /tmp/svc_lto5
+
+    $phobos get svc_lto6 /tmp/svc_lto6 ||
+        error "fail to get from lto6 tape"
+    rm /tmp/svc_lto6
+}
+
 echo "POSIX test mode"
 export PHOBOS_LRS_default_family="dir"
 PHO_TMP_DIR="$(mktemp -d)"
@@ -403,4 +425,5 @@ if  [[ -w /dev/changer ]]; then
     check_status tape "$tapes"
     lock_test
     concurrent_put_get_retry
+    tape_drive_compat
 fi
