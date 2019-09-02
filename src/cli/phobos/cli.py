@@ -494,7 +494,7 @@ class DriveListOptHandler(ListOptHandler):
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(DriveListOptHandler, cls).add_options(parser)
-        parser.add_argument('-t', '--type', help='filter on type')
+        parser.add_argument('-m', '--model', help='filter on model')
 
 
 class TapeAddOptHandler(MediaAddOptHandler):
@@ -897,6 +897,24 @@ class DriveOptHandler(DeviceOptHandler):
     label = 'drive'
     descr = 'handle tape drives (use ID or device path to identify resource)'
     cenum = PHO_DEV_TAPE
+    verbs = [
+        AddOptHandler,
+        FormatOptHandler,
+        DriveListOptHandler,
+        ShowOptHandler,
+        LockOptHandler,
+        UnlockOptHandler
+    ]
+
+    def exec_list(self):
+        """List devices and display results."""
+        model = self.params.get('model')
+        if model:
+            for obj in self.client.devices.get(family=self.family, model=model):
+                print obj.serial
+        else:
+            for obj in self.client.devices.get(family=self.family):
+                print obj.serial
 
 
 class TapeOptHandler(MediaOptHandler):
