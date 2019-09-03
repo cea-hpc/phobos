@@ -1067,6 +1067,8 @@ typedef int (*device_select_func_t)(size_t required_size,
  * @param required_size  Required size for the operation.
  * @param media_tags     Mandatory tags for the contained media (for write
  *                       requests only).
+ * @param pmedia         Media that should be used by the drive to check
+ *                       compatibility (ignored if NULL)
  */
 static struct dev_descr *dev_picker(struct lrs *lrs,
                                     enum dev_op_status op_st,
@@ -1148,19 +1150,19 @@ retry:
 
     if (selected != NULL) {
         int selected_i = selected - lrs->devices;
-        struct media_info *pmedia = selected->dss_media_info;
+        struct media_info *local_pmedia = selected->dss_media_info;
 
         pho_debug("Picked dev number %d (%s)", selected_i, selected->dev_path);
 
         rc = 0;
-        if (pmedia != NULL) {
+        if (local_pmedia != NULL) {
             pho_debug("Acquiring %s media '%s'",
                       op_status2str(selected->op_status),
-                      media_id_get(&pmedia->id));
-            rc = lrs_media_acquire(lrs, pmedia);
+                      media_id_get(&local_pmedia->id));
+            rc = lrs_media_acquire(lrs, local_pmedia);
             if (rc)
                 /* Avoid releasing a media that has not been acquired */
-                pmedia = NULL;
+                local_pmedia = NULL;
         }
 
         /* Potential media locking suceeded (or no media was loaded): acquire
@@ -1172,7 +1174,7 @@ retry:
         /* Something went wrong */
         if (rc != 0) {
             /* Release media if necessary */
-            lrs_media_release(lrs, pmedia);
+            lrs_media_release(lrs, local_pmedia);
             /* clear previously selected device */
             selected = NULL;
             /* Allocate failed_dev if necessary */
@@ -1550,10 +1552,44 @@ static device_select_func_t get_dev_policy(void)
 }
 
 /**
+ * Return true if at least one compatible drive is found.
+ *
+ * The found compatible drive should be not failed and not locked by
+ * administrator.
+ *
+ * @param(in) pmedia   Media that should be used by the drive to check
+ *                     compatibility (ignored if NULL, any not failed and not
+ *                     administrator locked drive will fit.)
+ * @return             True if one compatible drive is found, else false.
+ */
+static bool compatible_drive_exists(struct lrs *lrs, struct media_info *pmedia)
+{
+    int i;
+
+    for (i = 0; i < lrs->dev_count; i++) {
+        if (lrs->devices[i].op_status == PHO_DEV_OP_ST_FAILED)
+            continue;
+
+        if (pmedia) {
+            bool is_compat;
+
+            if (tape_drive_compat(pmedia, &(lrs->devices[i]), &is_compat))
+                continue;
+
+            if (is_compat)
+                return true;
+        }
+    }
+
+    return false;
+}
+/**
  * Free one of the devices to allow mounting a new media.
  * On success, the returned device is locked.
  * @param(in)  dss       Handle to DSS.
  * @param(out) dev_descr Pointer to an empty drive.
+ * @param(in)  pmedia    Media that should be used by the drive to check
+ *                       compatibility (ignored if NULL)
  */
 static int lrs_free_one_device(struct lrs *lrs, struct dev_descr **devp,
                                struct media_info *pmedia)
@@ -1567,8 +1603,13 @@ static int lrs_free_one_device(struct lrs *lrs, struct dev_descr **devp,
         /* get a drive to free (PHO_DEV_OP_ST_UNSPEC for any state) */
         tmp_dev = dev_picker(lrs, PHO_DEV_OP_ST_UNSPEC, select_drive_to_free,
                              0, &NO_TAGS, pmedia);
-        if (tmp_dev == NULL)
-            LOG_RETURN(-EAGAIN, "No suitable device to free");
+        if (tmp_dev == NULL) {
+            if (compatible_drive_exists(lrs, pmedia))
+                LOG_RETURN(-EAGAIN, "No suitable device to free");
+            else
+                LOG_RETURN(-ENODEV, "No compatible device exists not failed "
+                                    "and not locked by admin");
+        }
 
         if (tmp_dev->op_status == PHO_DEV_OP_ST_MOUNTED) {
             /* unmount it */
