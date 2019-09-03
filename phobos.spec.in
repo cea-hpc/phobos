@@ -14,7 +14,6 @@ BuildRequires: postgresql94-devel
 BuildRequires: glib2-devel >= 2.28
 BuildRequires: python-devel
 BuildRequires: jansson-devel >= 2.5
-BuildRequires: libref_array-devel
 BuildRequires: libini_config-devel
 BuildRequires: openssl-devel
 BuildRequires: libattr-devel
