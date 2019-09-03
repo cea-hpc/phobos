@@ -370,6 +370,31 @@ function check_status
     done
 }
 
+function drain_all_drives
+{
+#TODO replace umount/mtx unload by a 'phobos drive drain' command
+    #umount all ltfs
+    mount | awk '/^ltfs/ {print $3}' | xargs umount
+
+    #unload all tapes
+    mtx status | awk -F'[ :]' '/Data Transfer Element.*Full/ {print $8, $4}' |
+        xargs -n 2 mtx unload
+}
+
+function lock_all_drives
+{
+    for d in $($phobos drive list); do
+        $phobos drive lock "$d"
+    done
+}
+
+function unlock_all_drives
+{
+    for d in $($phobos drive list); do
+        $phobos drive unlock "$d"
+    done
+}
+
 function tape_drive_compat
 {
     $phobos put -T lto5 /etc/services svc_lto5 ||
@@ -385,6 +410,31 @@ function tape_drive_compat
     $phobos get svc_lto6 /tmp/svc_lto6 ||
         error "fail to get from lto6 tape"
     rm /tmp/svc_lto6
+
+    #test with only one lto5 drive
+    lock_all_drives
+    drain_all_drives
+    local lto5_d=$($phobos drive list -m ULT3580-TD5 | head -n 1)
+    $phobos drive unlock $lto5_d
+    $phobos get svc_lto5 /tmp/svc_lto5_from_lto5_drive ||
+        error "fail to get data from lto5 tape with one lto5 drive"
+    rm /tmp/svc_lto5_from_lto5_drive
+    $phobos get svc_lto6 /tmp/svc_lto6_from_lto5_drive &&
+        error "getting data from lto6 tape with one lto5 drive must fail"
+
+    #test with only one lto6 drive
+    lock_all_drives
+    drain_all_drives
+    local lto6_d=$($phobos drive list -m ULT3580-TD6 | head -n 1)
+    $phobos drive unlock $lto6_d
+    $phobos get svc_lto5 /tmp/svc_lto5_from_lto6_drive ||
+        error "fail to get data from lto5 tape with one lto6 drive"
+    rm /tmp/svc_lto5_from_lto6_drive
+    $phobos get svc_lto6 /tmp/svc_lto6_from_lto6_drive ||
+        error "fail to get data from lto6 tape with one lto6 drive"
+    rm /tmp/svc_lto6_from_lto6_drive
+
+    unlock_all_drives
 }
 
 echo "POSIX test mode"
