@@ -48,10 +48,15 @@ def migrate(args, migrator):
     schema_version = migrator.schema_version()
     target_version = args.target_version
 
+    if schema_version == target_version:
+        print "Database schema already up to date (version %s)" % \
+            (target_version,)
+        return
+
     # Skip confirmation for '-y' and if the database wasn't initialized
     if not args.yes and schema_version != "0":
         print "Your are about to upgrade database schema from version %s "\
-              "to version %s." % (migrator.schema_version(), target_version)
+              "to version %s." % (schema_version, target_version)
         confirm = raw_input("Do you want to continue? [y/N]: ")
         if confirm != 'y':
             sys.exit(1)
