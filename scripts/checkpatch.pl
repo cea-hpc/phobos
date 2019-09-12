@@ -239,6 +239,7 @@ push @ignore, 'PREFER_PACKED';
 push @ignore, 'SPLIT_STRING';
 push @ignore, 'SPDX_LICENSE_TAG';
 push @ignore, 'FILE_PATH_CHANGES';
+push @ignore, 'ENOSYS';
 
 list_types(0) if ($list_types);
 
