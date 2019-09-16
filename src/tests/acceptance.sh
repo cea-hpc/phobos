@@ -345,28 +345,16 @@ function concurrent_put
 function concurrent_put_get_retry
 {
     files=$(echo $test_dir/*)
-    pids=
 
     # Concurrent put
-    for file in $files; do
-        $phobos put "$file" "$file" &
-        pids="$pids $!"
-    done
-
-    for pid in $pids; do
-        wait $pid || error "some phobos instances failed to put"
-    done
+    echo -n $files | xargs -n1 -P0 -d' ' -i $phobos put {} {} ||
+        error "some phobos instances failed to put"
 
     # Concurrent get
-    pids=
-    for file in $files; do
-        $phobos get "$file" "$PHO_TMP_DIR/$(basename $file)" &
-        pids="$pids $!"
-    done
-
-    for pid in $pids; do
-        wait $pid || error "some phobos instances failed to get"
-    done
+    echo -n $files |
+        xargs -n1 -P0 -d' ' -i bash -c \
+            "$phobos get {} \"$PHO_TMP_DIR/\$(basename {})\"" ||
+        error "some phobos instances failed to get"
 
     # Cleanup so that future gets can succeed
     rm -rf "$PHO_TMP_DIR"/*
