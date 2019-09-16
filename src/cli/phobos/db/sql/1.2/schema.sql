@@ -18,7 +18,7 @@ INSERT INTO schema_info VALUES ('1.2');
 CREATE TABLE device(
     family          dev_family,
     model           varchar(32),
-    id              varchar(32) UNIQUE,
+    id              varchar(255) UNIQUE,
     host            varchar(128),
     adm_status      adm_status,
     path            varchar(256),
@@ -32,7 +32,7 @@ CREATE INDEX ON device USING gin(host);
 CREATE TABLE media(
     family          dev_family,
     model           varchar(32),
-    id              varchar(32) UNIQUE,
+    id              varchar(255) UNIQUE,
     adm_status      adm_status,
     fs_type         fs_type,
     fs_label        varchar(32),
