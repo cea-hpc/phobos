@@ -1,0 +1,8 @@
+dist: xenial
+language: c
+services:
+  - docker
+script:
+  - ./ci/run-docker-ci.sh
+
+# vim: set sw=2 sts=2 :
