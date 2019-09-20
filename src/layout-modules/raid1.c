@@ -301,7 +301,7 @@ static int raid1_encode(struct layout_module *self,
         if (io->iod_flags & PHO_IO_DELETE) {
             rc = ioa_del(&ioa, objid, tag, io->iod_loc);
         } else {
-            rc = ioa_put(&ioa, objid, tag, io, NULL, NULL);
+            rc = ioa_put(&ioa, objid, tag, io);
             if (rc == 0)
                 ctx->replicas[i].items++;
         }
@@ -338,7 +338,7 @@ static int raid1_decode(struct layout_module *self,
     /* build extent tag, specific to this layout */
     mktag(tag, sizeof(tag), 0);
 
-    rc = ioa_get(&ioa, objid, tag, io, NULL, NULL);
+    rc = ioa_get(&ioa, objid, tag, io);
     if (rc == 0)
         ctx->replicas[0].items++;
 

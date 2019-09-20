@@ -193,7 +193,7 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
     /* If the tag was more than 128 bytes long, it is a programming error */
     assert(rc < sizeof(extent_tag));
 
-    rc = ioa_put(&ioa, enc->xfer->xd_objid, extent_tag, &iod, NULL, NULL);
+    rc = ioa_put(&ioa, enc->xfer->xd_objid, extent_tag, &iod);
     pho_attrs_free(&iod.iod_attrs);
     if (rc == 0)
         simple->to_write -= extent->size;
@@ -269,7 +269,7 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
     pho_debug("Reading %ld bytes from media %s", extent->size,
               media_id_get(&extent->media));
 
-    rc = ioa_get(&ioa, dec->xfer->xd_objid, NULL, &iod, NULL, NULL);
+    rc = ioa_get(&ioa, dec->xfer->xd_objid, NULL, &iod);
 
     if (rc == 0) {
         simple->to_write -= extent->size;

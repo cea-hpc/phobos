@@ -42,15 +42,6 @@ enum pho_io_flags {
     PHO_IO_DELETE     = (1 << 4),   /**< Delete extent from media */
 };
 
-/** IO information passed to IO completion callback */
-struct io_cb_data {
-    int status;
-};
-
-/** IO callback function prototype */
-typedef int (*io_callback_t)(const struct io_cb_data *cb_data, void *user_data);
-
-
 /**
  * Describe an I/O operation. This can be either or both data and metadata
  * request.
@@ -80,11 +71,9 @@ struct pho_io_descr {
  * returned by the functions.
  */
 struct io_adapter {
-    int (*ioa_put)(const char *id, const char *tag, struct pho_io_descr *iod,
-                   io_callback_t io_cb, void *user_data);
+    int (*ioa_put)(const char *id, const char *tag, struct pho_io_descr *iod);
 
-    int (*ioa_get)(const char *id, const char *tag, struct pho_io_descr *iod,
-                   io_callback_t io_cb, void *user_data);
+    int (*ioa_get)(const char *id, const char *tag, struct pho_io_descr *iod);
 
     int (*ioa_del)(const char *id, const char *tag, struct pho_ext_loc *loc);
 
@@ -121,20 +110,15 @@ void pho_io_descr_fini(struct pho_io_descr *iod);
  * \param[in]       tag     Null-terminated extent tag (may be NULL)
  *
  * \param[in,out]   iod     I/O descriptor (see above)
- * \param[in]       io_cb   Callback for asynchronous put operation
- *                          If io_cb is NULL the put operation is performed
-                            synchronously
- * \param[in,out]   cb_data User data to be passed to the callback function
  *
  * \return 0 on success, negative error code on failure
  */
 static inline int ioa_put(const struct io_adapter *ioa, const char *id,
-                          const char *tag, struct pho_io_descr *iod,
-                          io_callback_t io_cb, void *cb_data)
+                          const char *tag, struct pho_io_descr *iod)
 {
     assert(ioa != NULL);
     assert(ioa->ioa_put != NULL);
-    return ioa->ioa_put(id, tag, iod, io_cb, cb_data);
+    return ioa->ioa_put(id, tag, iod);
 }
 
 /**
@@ -156,20 +140,15 @@ static inline int ioa_put(const struct io_adapter *ioa, const char *id,
  * \param[in]       id      Null-terminated object ID
  * \param[in]       tag     Null-terminated extent tag (may be NULL)
  * \param[in,out]   iod     I/O descriptor (see above)
- * \param[in]       io_cb   Callback for asynchronous get operation.
- *                          If io_cb is NULL the operation is performed
-                            synchronously
- * \param[in,out]   cb_data User data to be passed to the callback function
  *
  * \return 0 on success, negative error code on failure
  */
 static inline int ioa_get(const struct io_adapter *ioa, const char *id,
-                          const char *tag, struct pho_io_descr *iod,
-                          io_callback_t io_cb, void *cb_data)
+                          const char *tag, struct pho_io_descr *iod)
 {
     assert(ioa != NULL);
     assert(ioa->ioa_get != NULL);
-    return ioa->ioa_get(id, tag, iod, io_cb, cb_data);
+    return ioa->ioa_get(id, tag, iod);
 }
 
 /**

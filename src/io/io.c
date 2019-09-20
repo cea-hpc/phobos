@@ -417,17 +417,13 @@ static int pho_posix_md_get(const char *path, struct pho_attrs *attrs)
 }
 
 static int pho_posix_put(const char *id, const char *tag,
-                         struct pho_io_descr *iod,
-                         io_callback_t io_cb, void *user_data)
+                         struct pho_io_descr *iod)
 {
     int      rc;
     int      tgt_fd;
     int      flags;
     char    *fpath;
     ENTRY;
-
-    if (io_cb != NULL)
-        LOG_RETURN(-ENOTSUP, "Asynchronous PUT operations not supported yet");
 
     /* generate entry address, if it is not already set */
     if (!is_ext_addr_set(iod->iod_loc)) {
@@ -500,17 +496,12 @@ free_path:
 }
 
 static int pho_posix_get(const char *id, const char *tag,
-                         struct pho_io_descr *iod,
-                         io_callback_t io_cb, void *user_data)
+                         struct pho_io_descr *iod)
 {
     int      rc;
     int      src_fd;
     char    *fpath;
     ENTRY;
-
-    /* XXX asynchronous PUT is not supported for now */
-    if (io_cb != NULL)
-        return -ENOTSUP;
 
     /* generate entry address, if it is not already set */
     if (!is_ext_addr_set(iod->iod_loc)) {
