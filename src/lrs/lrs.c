@@ -2112,9 +2112,6 @@ static int lrs_io_complete(struct lrs *lrs, struct media_info *media_info,
         LOG_RETURN(rc, "No suitable I/O adapter for filesystem type: '%s'",
                    fs_type2str(media_info->fs.type));
 
-    /* Come on, this same IOA has just been used to perform the data transfer */
-    assert(io_adapter_is_valid(&ioa));
-
     rc = ioa_medium_sync(&ioa, fsroot);
     if (rc)
         LOG_RETURN(rc, "Cannot flush media at: %s", fsroot);

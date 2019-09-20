@@ -662,21 +662,6 @@ static const struct io_adapter ltfs_adapter = {
     .ioa_medium_sync    = pho_ltfs_sync,
 };
 
-
-bool io_adapter_is_valid(const struct io_adapter *ioa)
-{
-    if (ioa == NULL)
-        return false;
-
-    /* Does the IOA exposes the mandatory calls? */
-    if (ioa->ioa_put == NULL ||
-        ioa->ioa_get == NULL ||
-        ioa->ioa_del == NULL)
-        return false;
-
-    return true;
-}
-
 /** retrieve IO functions for the given filesystem and addressing type */
 int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa)
 {
@@ -691,9 +676,6 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa)
         pho_error(-EINVAL, "Invalid FS type %#x", fstype);
         return -EINVAL;
     }
-
-    /* Man, that would be so bad... */
-    assert(io_adapter_is_valid(ioa));
 
     return 0;
 }

@@ -97,15 +97,6 @@ struct io_adapter {
 int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa);
 
 /**
- * Check whether an IOA matches the requirements. It is up to the caller to
- * decide what to do on error, but the program might fail on assertions if an
- * invalid IOA is actually used.
- *
- * In order to be valid, an IOA has to provide mandatory functions: put/get/del.
- */
-bool io_adapter_is_valid(const struct io_adapter *ioa);
-
-/**
  * Free all resources associated with a struct pho_io_descr.
  */
 void pho_io_descr_fini(struct pho_io_descr *iod);
