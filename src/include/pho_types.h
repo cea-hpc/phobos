@@ -290,7 +290,7 @@ static inline int media_id_set(struct media_id *mid, const char *id)
 
 /** describe a piece of data in a layout */
 struct extent {
-    int                 layout_idx; /**< always 0 for simple layouts */
+    int                 layout_idx; /**< index of this extent in layout */
     ssize_t             size;       /**< size of the extent */
     struct media_id     media;      /**< identifier of the media */
     struct pho_buff     address;    /**< address on the media */
