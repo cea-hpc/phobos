@@ -36,7 +36,6 @@
 #include "pho_cfg.h"
 #include "pho_layout.h"
 #include "pho_io.h"
-#include "pho_store_utils.h"
 
 #define PLUGIN_NAME     "simple"
 #define PLUGIN_MAJOR    0
@@ -160,7 +159,7 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
         return rc;
 
     /* Start with field initializations that may fail */
-    iod.iod_fd = pho_xfer_desc_get_fd(enc->xfer);
+    iod.iod_fd = enc->xfer->xd_fd;
     if (iod.iod_fd < 0)
         return iod.iod_fd;
 
@@ -259,7 +258,7 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
     loc.root_path = media->root_path;
     loc.extent = extent;
 
-    iod.iod_fd = pho_xfer_desc_get_fd(dec->xfer);
+    iod.iod_fd = dec->xfer->xd_fd;
     if (iod.iod_fd < 0)
         return iod.iod_fd;
 
@@ -630,7 +629,7 @@ static int layout_simple_encode(struct pho_encoder *enc)
         for (i = 0; i < enc->layout->ext_count; i++)
             simple->to_write += enc->layout->extents[i].size;
     } else {
-        ssize_t to_write = pho_xfer_desc_get_size(enc->xfer);
+        ssize_t to_write = enc->xfer->xd_size;
 
         if (to_write < 0)
             return to_write;
@@ -640,7 +639,7 @@ static int layout_simple_encode(struct pho_encoder *enc)
 
     /* Empty GET does not need any IO */
     if (enc->is_decoder && simple->to_write == 0) {
-        int fd = pho_xfer_desc_get_fd(enc->xfer);
+        int fd = enc->xfer->xd_fd;
 
         enc->done = true;
         if (fd < 0)

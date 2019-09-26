@@ -72,10 +72,6 @@ enum pho_xfer_op {
 struct pho_xfer_desc {
     char                *xd_objid;   /**< Object id to read or write */
     enum pho_xfer_op     xd_op;      /**< Operation to perform (PUT or GET) */
-    bool                 xd_close_fd; /**< True if xd_fd should be closed by
-                                        *  phobos.
-                                        */
-    const char          *xd_fpath;   /**< Path to read or write */
     int                  xd_fd;      /**< positive fd if xd_id_open */
     ssize_t              xd_size;    /**< Amount of data to write (for the GET
                                        * operation, the size read is equal to
@@ -134,18 +130,9 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
 /* TODO int phobos_del(); */
 
 /**
- * Initializes a xfer to originate be read/written from/to a path.  After this
- * call, other fields can be set by the caller (xd_layout_name, xd_attrs,
- * xd_tags, xd_flags).
+ * Free tags and attributes resources associated with this xfer,
+ * as they are allocated in phobos.
  */
-void pho_xfer_desc_init_from_path(struct pho_xfer_desc *xfer, const char *path);
-
-/**
- * Free resources associated with this xfer, except for xd_fpath and xd_objid
- * which are for the caller to manage.
- *
- * @return 0 on success, -errno on close error.
- */
-int pho_xfer_desc_destroy(struct pho_xfer_desc *xfer);
+void pho_xfer_desc_destroy(struct pho_xfer_desc *xfer);
 
 #endif

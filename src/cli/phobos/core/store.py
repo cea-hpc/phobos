@@ -23,13 +23,15 @@
 High level interface to access the object store.
 """
 
+import errno
 import logging
+import os
 
 from ctypes import *
 
 from phobos.core.ffi import LIBPHOBOS, Tags
-from phobos.core.const import PHO_XFER_OBJ_GETATTR
-
+from phobos.core.const import (PHO_XFER_OBJ_GETATTR, PHO_XFER_OBJ_REPLACE,
+                               PHO_XFER_OP_GET, PHO_XFER_OP_PUT)
 
 AttrsForeachCBType = CFUNCTYPE(c_int, c_char_p, c_char_p, c_void_p)
 
@@ -38,6 +40,9 @@ class PhoAttrs(Structure):
     _fields_ = [
         ('attr_set', c_void_p)
     ]
+
+    def __init__(self):
+        self.attr_set = 0
 
 def attrs_from_dict(dct):
     """Fill up from a python dictionary"""
@@ -67,8 +72,6 @@ class XferDescriptor(Structure):
     _fields_ = [
         ("xd_objid", c_char_p),
         ("xd_op", c_int),
-        ("xd_close_fd", c_bool),
-        ("xd_fpath", c_char_p),
         ("xd_fd", c_int),
         ("xd_size", c_ssize_t),
         ("xd_layout_name", c_char_p),
@@ -78,6 +81,70 @@ class XferDescriptor(Structure):
         ("xd_rc", c_int),
     ]
 
+    def creat_flags(self):
+        """
+        Select the open flags depending on the operation made on the object
+        when the file is created.
+        Return the selected flags.
+        """
+        if self.xd_flags & PHO_XFER_OBJ_REPLACE:
+            return os.O_CREAT | os.O_WRONLY | os.O_TRUNC
+
+        return os.O_CREAT | os.O_WRONLY | os.O_EXCL
+
+    def open_file(self, path):
+        """
+        Retrieve the xd_fd field of the xfer, opening path with NOATIME if
+        the xfer has not been previously opened.
+        Return the fd or raise OSError if the open failed or ValueError if
+        the given path is not correct.
+        """
+        # in case of getmd, path must be none, return without exception
+        if not path and self.xd_flags & PHO_XFER_OBJ_GETATTR:
+            self.xd_fd = -1
+            self.xd_size = -1
+            return
+
+        if not path:
+            raise ValueError("path must be a non empty string")
+
+        if self.xd_op == PHO_XFER_OP_GET:
+            self.xd_fd = os.open(path, self.creat_flags(), 0666)
+        else:
+            try:
+                self.xd_fd = os.open(path, os.O_RDONLY | os.O_NOATIME)
+            except OSError as e:
+                # not allowed to open with NOATIME arg, try without
+                if e.errno != errno.EPERM:
+                    raise e
+                self.xd_fd = os.open(path, os.O_RDONLY)
+
+        self.xd_size = os.fstat(self.xd_fd).st_size
+
+    def init_from_descriptor(self, desc):
+        """
+        xfer_descriptor initialization by using python-list descriptor.
+        It opens the file descriptor of the given path. The python-list
+        contains the tuple (id, path, attrs, flags, tags, op) describing
+        the opened file.
+        """
+        self.xd_objid = desc[0]
+        self.xd_op = desc[5]
+        self.xd_layout_name = 0
+        self.xd_flags = desc[3]
+        self.xd_tags = Tags(desc[4])
+        self.xd_rc = 0
+
+        if desc[2]:
+            for k, v in desc[2].iteritems():
+                rc = LIBPHOBOS.pho_attr_set(byref(self.xd_attrs),
+                                            str(k), str(v))
+                if rc:
+                    raise EnvironmentError(
+                        rc, "Cannot add attr to xfer objid:'%s'" % (desc[0],))
+
+        self.open_file(desc[1])
+
 XferCompletionCBType = CFUNCTYPE(None, c_void_p, POINTER(XferDescriptor), c_int)
 
 class Store(object):
@@ -86,6 +153,7 @@ class Store(object):
         super(Store, self).__init__(*args, **kwargs)
         # Keep references to CFUNCTYPES objects as long as they can be
         # called by the underlying C code, so that they do not get GC'd
+        self.logger = logging.getLogger(__name__)
         self._get_cb = None
         self._put_cb = None
 
@@ -93,28 +161,24 @@ class Store(object):
         """
         Internal conversion method to turn a python list into an array of
         struct xfer_descriptor as expected by phobos_{get,put} functions.
-        xfer_descriptors is a list of (id, path, attrs, flags, tags).
+        xfer_descriptors is a list of (id, path, attrs, flags, tags, op).
+        The element conversion is made by the xfer_descriptor initializer.
         """
         XferArrayType = XferDescriptor * len(xfer_descriptors)
         xfr = XferArrayType()
         for i, x in enumerate(xfer_descriptors):
-            LIBPHOBOS.pho_xfer_desc_init_from_path(byref(xfr[i]), x[1])
-            xfr[i].xd_objid = x[0]
-            if x[2]:
-                for k, v in x[2].iteritems():
-                    rc = LIBPHOBOS.pho_attr_set(byref(xfr[i].xd_attrs),
-                                                str(k), str(v))
-                    if rc:
-                        raise EnvironmentError(
-                            rc, "Cannot add attr to xfer objid:'%s'" % (x[0],))
-            xfr[i].xd_flags = x[3]
-            xfr[i].xd_tags = Tags(x[4])
+            xfr[i].init_from_descriptor(x)
 
         return xfr
 
     def xfer_desc_release(self, xfer):
-        """Release memory associated to xfer_descriptors."""
+        """
+        Release memory associated to xfer_descriptors in both phobos and cli.
+        """
         for xd in xfer:
+            if xd.xd_fd >= 0:
+                os.close (xd.xd_fd)
+
             LIBPHOBOS.pho_xfer_desc_destroy(byref(xfer))
 
     def compl_cb_convert(self, compl_cb):
@@ -132,6 +196,7 @@ class Store(object):
         n = len(xfer_descriptors)
         self._get_cb = self.compl_cb_convert(compl_cb)
         rc = LIBPHOBOS.phobos_get(xfer, n, self._get_cb, None)
+        self.xfer_desc_release(xfer)
         return rc
 
     def put(self, xfer_descriptors, compl_cb):
@@ -139,6 +204,7 @@ class Store(object):
         n = len(xfer_descriptors)
         self._put_cb = self.compl_cb_convert(compl_cb)
         rc = LIBPHOBOS.phobos_put(xfer, n, self._put_cb, None)
+        self.xfer_desc_release(xfer)
         return rc
 
 class Client(object):
@@ -160,11 +226,13 @@ class Client(object):
         flags = 0
         if md_only:
             flags |= PHO_XFER_OBJ_GETATTR
-        self.get_session.append((oid, data_path, attrs, flags, None))
+        self.get_session.append((oid, data_path, attrs, flags, None,
+                                 PHO_XFER_OP_GET))
 
     def put_register(self, oid, data_path, attrs=None, tags=None):
         """Enqueue a PUT transfert."""
-        self.put_session.append((oid, data_path, attrs, 0, tags))
+        self.put_session.append((oid, data_path, attrs, 0, tags,
+                                 PHO_XFER_OP_PUT))
 
     def clear(self):
         """Release resources associated to the current queues."""

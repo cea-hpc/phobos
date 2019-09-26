@@ -427,10 +427,9 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     if (xfer->xd_rc == 0 && rc != 0)
         xfer->xd_rc = rc;
 
-    pho_info("%s operation for objid:'%s' -> '%s' %s",
+    pho_info("%s operation for objid:'%s' %s",
              xfer->xd_op == PHO_XFER_OP_PUT ? "PUT" : "GET",
-             xfer->xd_objid,
-             xfer->xd_fpath, xfer->xd_rc ? "failed" : "succeeded");
+             xfer->xd_objid, xfer->xd_rc ? "failed" : "succeeded");
 
     /* Cleanup metadata for failed PUT */
     if (pho->md_created[xfer_idx] &&
@@ -741,28 +740,8 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
     return phobos_xfer(xfers, n, cb, udata);
 }
 
-void pho_xfer_desc_init_from_path(struct pho_xfer_desc *xfer, const char *path)
+void pho_xfer_desc_destroy(struct pho_xfer_desc *xfer)
 {
-    memset(xfer, 0, sizeof(*xfer));
-
-    xfer->xd_fpath = path;
-    xfer->xd_fd = -1;
-    xfer->xd_size = -1;
-}
-
-int pho_xfer_desc_destroy(struct pho_xfer_desc *xfer)
-{
-    int rc;
-
     tags_free(&xfer->xd_tags);
     pho_attrs_free(&xfer->xd_attrs);
-
-    if (xfer->xd_close_fd && xfer->xd_fd >= 0) {
-        xfer->xd_close_fd = false;
-        rc = close(xfer->xd_fd);
-        if (rc)
-            return -errno;
-    }
-
-    return 0;
 }

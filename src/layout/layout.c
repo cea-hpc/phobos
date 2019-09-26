@@ -29,7 +29,6 @@
 #include "pho_layout.h"
 
 #include "phobos_store.h"
-#include "pho_store_utils.h"
 #include "pho_lrs.h"
 #include "pho_common.h"
 #include "pho_dss.h"
@@ -235,7 +234,7 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
     if (enc->layout == NULL)
         return -ENOMEM;
     enc->layout->oid = xfer->xd_objid;
-    enc->layout->wr_size = pho_xfer_desc_get_size(xfer);
+    enc->layout->wr_size = xfer->xd_size;
     enc->layout->state = PHO_EXT_ST_PENDING;
 
     rc = mod->ops->encode(enc);

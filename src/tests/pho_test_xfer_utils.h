@@ -20,14 +20,12 @@
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
 /**
- * \brief   Store related internal helpers.
+ * \brief   Testsuite xfer structure helpers. This file was a part of phobos
+ *          until the xfer file descriptors were managed by the CLI.
  */
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
 
-/* This module's header */
-#include "pho_store_utils.h"
+#ifndef _PHO_TEST_XFER_UTILS_H
+#define _PHO_TEST_XFER_UTILS_H
 
 /* Standard includes */
 #include <errno.h>
@@ -38,70 +36,71 @@
 
 /* Local Phobos includes */
 #include "pho_common.h"
+#include "phobos_store.h"
 
 /**
- * Try to open a file with O_NOATIME flag.
- * Perform a standard open if it doesn't succeed.
+ * Select the open flags depending on the operation made on the object
+ * when the file is created.
+ * Return the selected flags.
  */
-static int open_noatime(const char *path, int flags)
-{
-    int fd;
-
-    fd = open(path, flags | O_NOATIME);
-    /* not allowed to open with NOATIME arg, try without */
-    if (fd < 0 && errno == EPERM)
-        fd = open(path, flags & ~O_NOATIME);
-
-    return fd;
-}
-
 static int xfer2open_flags(enum pho_xfer_flags flags)
 {
     return (flags & PHO_XFER_OBJ_REPLACE) ? O_CREAT|O_WRONLY|O_TRUNC
                                           : O_CREAT|O_WRONLY|O_EXCL;
 }
 
-int pho_xfer_desc_get_fd(struct pho_xfer_desc *xfer)
+/**
+ * Open the file descriptor contained in the xfer descriptor data structure
+ * using path, op and flags.
+ * Return the file descriptor.
+ */
+static int xfer_desc_open_path(struct pho_xfer_desc *xfer, const char *path,
+                               enum pho_xfer_op op, enum pho_xfer_flags flags)
 {
-    if (xfer->xd_fd >= 0)
-        return xfer->xd_fd;
+    struct stat st;
 
-    if (xfer->xd_fpath == NULL)
+    memset(xfer, 0, sizeof(*xfer));
+
+    if (path == NULL) {
+        xfer->xd_fd = -1;
+        xfer->xd_size = -1;
         return -EINVAL;
+    }
+
+    xfer->xd_op = op;
+    xfer->xd_flags = flags;
 
     if (xfer->xd_op == PHO_XFER_OP_GET)
         /* Set file permission to 666 and let user umask filter unwanted bits */
-        xfer->xd_fd = open(xfer->xd_fpath, xfer2open_flags(xfer->xd_flags),
-                           0666);
+        xfer->xd_fd = open(path, xfer2open_flags(xfer->xd_flags), 0666);
     else
-        xfer->xd_fd = open_noatime(xfer->xd_fpath, O_RDONLY);
+        xfer->xd_fd = open(path, O_RDONLY);
 
     if (xfer->xd_fd < 0)
-        LOG_RETURN(-errno, "open(%s) failed", xfer->xd_fpath);
-    xfer->xd_close_fd = true;
+        LOG_RETURN(-errno, "open(%s) failed", path);
+
+    fstat(xfer->xd_fd, &st);
+    xfer->xd_size = st.st_size;
 
     return xfer->xd_fd;
 }
 
-ssize_t pho_xfer_desc_get_size(struct pho_xfer_desc *xfer)
+/**
+ * Close the file descriptor contained in the xfer dsecriptor data structure.
+ * Return 0 on success, -errno on failure.
+ */
+static int xfer_desc_close_fd(struct pho_xfer_desc *xfer)
 {
-    struct stat st;
-    int fd;
     int rc;
 
-    if (xfer->xd_size >= 0)
-        return xfer->xd_size;
+    if (xfer->xd_fd >= 0) {
+        rc = close(xfer->xd_fd);
+        if (rc)
+            return -errno;
+    }
 
-    fd = pho_xfer_desc_get_fd(xfer);
-    if (fd < 0)
-        return fd;
-
-    rc = fstat(fd, &st);
-    if (rc < 0)
-        LOG_RETURN(-errno, "stat(%s) failed", xfer->xd_fpath);
-
-    xfer->xd_size = st.st_size;
-
-    return xfer->xd_size;
+    return 0;
 }
+
+#endif
 

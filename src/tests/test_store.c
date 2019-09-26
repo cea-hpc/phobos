@@ -27,6 +27,7 @@
 #endif
 
 #include "pho_test_utils.h"
+#include "pho_test_xfer_utils.h"
 #include "phobos_store.h"
 #include "pho_common.h"
 #include <errno.h>
@@ -72,11 +73,12 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
 
         for (i = 2; i < argc; i++) {
-            pho_xfer_desc_init_from_path(&xfer, argv[i]);
+            xfer_desc_open_path(&xfer, argv[i], PHO_XFER_OP_PUT, 0);
             xfer.xd_objid = realpath(argv[i], NULL);
             xfer.xd_attrs = attrs;
 
             rc = phobos_put(&xfer, 1, NULL, NULL);
+            xfer_desc_close_fd(&xfer);
             if (rc)
                 pho_error(rc, "PUT '%s' failed", argv[i]);
         }
@@ -99,12 +101,16 @@ int main(int argc, char **argv)
         argc -= 2;
 
         for (i = 0; i < argc; i++) {
-            pho_xfer_desc_init_from_path(&xfer[i], argv[i]);
+            xfer_desc_open_path(xfer + i, argv[i], PHO_XFER_OP_PUT, 0);
             xfer[i].xd_objid = realpath(argv[i], NULL);
             xfer[i].xd_attrs = attrs;
         }
 
         rc = phobos_put(xfer, xfer_cnt, NULL, NULL);
+
+        for (i = 0; i < argc; i++)
+            xfer_desc_close_fd(xfer + i);
+
         if (rc)
             pho_error(rc, "MPUT failed");
 
@@ -117,13 +123,14 @@ int main(int argc, char **argv)
         if (rc)
             exit(EXIT_FAILURE);
 
-        pho_xfer_desc_init_from_path(&xfer, argv[2]);
+        xfer_desc_open_path(&xfer, argv[2], PHO_XFER_OP_PUT, 0);
         xfer.xd_objid = realpath(argv[2], NULL);
         xfer.xd_attrs = attrs;
         xfer.xd_tags.tags = &argv[3];
         xfer.xd_tags.n_tags = argc - 3;
 
         rc = phobos_put(&xfer, 1, NULL, NULL);
+        xfer_desc_close_fd(&xfer);
         if (rc)
             pho_error(rc, "TAG-PUT '%s' failed", argv[2]);
 
@@ -131,18 +138,19 @@ int main(int argc, char **argv)
     } else if (!strcmp(argv[1], "get")) {
         struct pho_xfer_desc    xfer = {0};
 
-        pho_xfer_desc_init_from_path(&xfer, argv[3]);
+        xfer_desc_open_path(&xfer, argv[3], PHO_XFER_OP_GET, 0);
         xfer.xd_objid = argv[2];
 
         rc = phobos_get(&xfer, 1, NULL, NULL);
+        xfer_desc_close_fd(&xfer);
     } else if (!strcmp(argv[1], "getmd")) {
         struct pho_xfer_desc    xfer = {0};
 
-        pho_xfer_desc_init_from_path(&xfer, NULL);
+        xfer_desc_open_path(&xfer, NULL, PHO_XFER_OP_GET, PHO_XFER_OBJ_GETATTR);
         xfer.xd_objid = argv[2];
-        xfer.xd_flags = PHO_XFER_OBJ_GETATTR;
 
         rc = phobos_get(&xfer, 1, dump_md, NULL);
+        xfer_desc_close_fd(&xfer);
     } else {
         rc = -EINVAL;
         pho_error(rc, "verb put|mput|get|getmd expected at '%s'\n", argv[1]);
