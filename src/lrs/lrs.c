@@ -137,7 +137,6 @@ struct dev_descr {
 
     enum dev_op_status   op_status; /**< operational status of the device */
     char                 dev_path[PATH_MAX]; /**< path to the device */
-    struct media_id      media_id; /**< id of the media (if loaded) */
     struct media_info   *dss_media_info;  /**< loaded media info from DSS, if any */
     char                 mnt_path[PATH_MAX]; /**< mount path of the filesystem */
     bool                 locked_local;       /**< dss lock acquired by us */
@@ -444,23 +443,24 @@ static int lrs_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
     }
 
     if (devd->lib_dev_info.ldi_full) {
+        struct media_id *media_id;
         struct fs_adapter fsa;
 
         devd->op_status = PHO_DEV_OP_ST_LOADED;
-        devd->media_id = devd->lib_dev_info.ldi_media_id;
+        media_id = &devd->lib_dev_info.ldi_media_id;
 
         pho_debug("Device '%s' (S/N '%s') contains media '%s'", devd->dev_path,
-                  devi->serial, media_id_get(&devd->media_id));
+                  devi->serial, media_id_get(media_id));
 
         /* get media info for loaded drives */
-        rc = lrs_fill_media_info(dss, &devd->dss_media_info, &devd->media_id);
+        rc = lrs_fill_media_info(dss, &devd->dss_media_info, media_id);
 
         /*
          * If the drive is marked as locally locked, the contained media was in
          * fact locked by us, this happens when the raid1 layout refreshes the
          * drive list.
          */
-        if (devd->locked_local &&
+        if (devd->locked_local && devd->dss_media_info &&
                 devd->dss_media_info->lock.lock == LRS_MEDIA_LOCKED_EXTERNAL)
             devd->dss_media_info->lock.lock = NULL;
 
@@ -1751,7 +1751,11 @@ static struct dev_descr *search_loaded_media(struct lrs *lrs,
         if (op_st != PHO_DEV_OP_ST_MOUNTED && op_st != PHO_DEV_OP_ST_LOADED)
             continue;
 
-        media_id = media_id_get(&lrs->devices[i].media_id);
+        /* The drive may contain a media unknown to phobos, skip it */
+        if (lrs->devices[i].dss_media_info == NULL)
+            continue;
+
+        media_id = media_id_get(&lrs->devices[i].dss_media_info->id);
         if (media_id == NULL) {
             pho_warn("Cannot retrieve media ID from device '%s'",
                      lrs->devices[i].dev_path);
