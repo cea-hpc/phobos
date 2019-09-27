@@ -2,24 +2,18 @@
 
 ## Installation
 ### Requirements for tape access
-If you need phobos to manage tapes, you need to install the `lin_tape` driver,
-as well as the open-source LTFS implementation `ltfssde` (both can be found on
-IBM Fix Central: [lin_tape](https://www-945.ibm.com/support/fixcentral/swg/selectFixes?parent=Tape%20drivers%20and%20software&product=ibm/Storage_Tape/Tape+device+drivers&release=1.0&platform=Linux+64-bit,x86_64&function=all]),
-[ltfssde](https://www-945.ibm.com/support/fixcentral/swg/selectFixes?parent=Tape%20drivers%20and%20software&product=ibm/Storage_Tape/Long+Term+File+System+LTFS&release=2.2&platform=Linux&function=all)).
+You need to install LTFS >= 2.4 to enable phobos access to tapes.
 
-For now, phobos only supports `ltfssde` up to version 2.2 based on the `lin_tape` driver.
-In a near future, it will be ported to `ltfs` version 2.4 that relies on standard `sg`
-Linux driver (SCSI generic), so `lin_tape` will no longer be required.
+LTFS RPM can be found on IBM Fix Central: [ltfs 2.4](https://www-945.ibm.com/support/fixcentral/swg/selectFixes?parent=Tape%20drivers%20and%20software&product=ibm/Storage_Tape/Long+Term+File+System+LTFS&release=2.4&platform=Linux&function=all)
 
-```
-# Installing lin_tape driver
-yum install lin_tape
-modprobe lin_tape
-# Your tape drives should now be seen as IBMtape devices:
-ls -l /dev/IBMtape*
-# Installing LTFS
-yum install ltfssde
-```
+You can also retrieve its sources on gihub:
+https://github.com/LinearTapeFileSystem/ltfs
+
+If you want to build RPMs from these sources, you can find packaging resources
+(i.e. spec file) for LTFS here: https://github.com/piste2750/rpm-ltfs
+
+Note: since LTFS 2.4, `lin_tape` driver is no longer needed to access tapes.
+LTFS now uses the standard linux tape driver (st).
 
 ### Phobos installation
 Install phobos and its requirements:

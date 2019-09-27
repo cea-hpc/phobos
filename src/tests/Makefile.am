@@ -4,11 +4,11 @@ AM_CFLAGS= $(CC_OPT)
 # 1) build check_PROGRAMS
 # 2) run TESTS and generate a summary
 check_PROGRAMS=test_common test_attrs test_mapper test_log test_store \
-	       test_dss test_cfg test_scsi test_scsi_scan test_lintape \
+	       test_dss test_cfg test_scsi test_scsi_scan test_dev_tape \
                test_ldm test_type_utils test_store_retry
 
 # 1st step: low level tests
-UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_lintape \
+UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_dev_tape \
 	   test_ldm test_type_utils
 # 2nd step: integration tests
 INTEG_TESTS=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh \
@@ -52,8 +52,8 @@ test_scsi_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_commo
 test_scsi_scan_SOURCES=test_scsi_scan.c
 test_scsi_scan_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la
 
-test_lintape_SOURCES=test_lintape.c
-test_lintape_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la
+test_dev_tape_SOURCES=test_dev_tape.c
+test_dev_tape_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la
 
 test_ldm_SOURCES=test_ldm.c
 test_ldm_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la

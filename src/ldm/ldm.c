@@ -64,7 +64,7 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter *lib)
  * They can easily be replaced later by dlopen'ed symbols.
  */
 extern const struct dev_adapter dev_adapter_dir;
-extern const struct dev_adapter dev_adapter_lintape;
+extern const struct dev_adapter dev_adapter_scsi_tape;
 
 int get_dev_adapter(enum dev_family dev_type, struct dev_adapter *dev)
 {
@@ -73,7 +73,7 @@ int get_dev_adapter(enum dev_family dev_type, struct dev_adapter *dev)
         *dev = dev_adapter_dir;
         break;
     case PHO_DEV_TAPE:
-        *dev = dev_adapter_lintape;
+        *dev = dev_adapter_scsi_tape;
         break;
     default:
         return -ENOTSUP;

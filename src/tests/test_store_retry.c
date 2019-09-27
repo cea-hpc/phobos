@@ -246,7 +246,7 @@ int main(int argc, char **argv)
          * properly, then unload the drive if necessary.
          */
 
-        rc = system("umount /mnt/phobos-IBMtape0; sleep 1");
+        rc = system("umount /mnt/phobos-st0; sleep 1");
         rc = system("mtx -f /dev/changer unload");
         (void)rc;
 
@@ -255,7 +255,7 @@ int main(int argc, char **argv)
          */
 
         /* Tape based tests */
-        add_drive(&lrs, "/dev/IBMtape0", &dev);
+        add_drive(&lrs, "/dev/st0", &dev);
         add_tape(&lrs, "P00003L5", "LTO5", &media);
 
         /* Test put retry */
