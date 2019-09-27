@@ -3,16 +3,16 @@ AM_CFLAGS= $(CC_OPT)
 # autotools automatically generate a 'make check' target that:
 # 1) build check_PROGRAMS
 # 2) run TESTS and generate a summary
-check_PROGRAMS=test_common test_attrs test_mapper test_log test_store \
+check_PROGRAMS=test_common test_attrs test_mapper test_log test_store	\
 	       test_dss test_cfg test_scsi test_scsi_scan test_dev_tape \
-               test_ldm test_type_utils test_store_retry
+	       test_ldm test_type_utils test_store_retry test_io
 
 # 1st step: low level tests
 UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_dev_tape \
-	   test_ldm test_type_utils
+	   test_ldm test_type_utils test_io
 # 2nd step: integration tests
 INTEG_TESTS=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh \
-		test_store_retry.sh
+	    test_store_retry.sh
 
 TESTS=$(UNIT_TESTS) $(INTEG_TESTS)
 
@@ -63,3 +63,6 @@ test_type_utils_LDADD=../common/libpho_common.la
 
 test_store_retry_SOURCES=test_store_retry.c
 test_store_retry_LDADD=../store/libphobos_store.la
+
+test_io_SOURCES=test_io.c
+test_io_LDADD=../io/libpho_io.la ../common/libpho_common.la

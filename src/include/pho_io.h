@@ -55,6 +55,7 @@ struct pho_io_descr {
     size_t               iod_size;     /**< Operation size */
     struct pho_ext_loc  *iod_loc;      /**< Extent location */
     struct pho_attrs     iod_attrs;    /**< In/Out metadata operations buffer */
+    void                *iod_ctx;      /**< IO adapter private context */
 };
 
 /**
@@ -75,6 +76,13 @@ struct io_adapter {
     int (*ioa_get)(const char *id, const char *tag, struct pho_io_descr *iod);
 
     int (*ioa_del)(const char *id, const char *tag, struct pho_ext_loc *loc);
+
+    int (*ioa_open)(const char *id, const char *tag, struct pho_io_descr *iod,
+                    bool is_put);
+
+    int (*ioa_write)(struct pho_io_descr *iod, const void *buf, size_t count);
+
+    int (*ioa_close)(struct pho_io_descr *iod);
 
     int (*ioa_medium_sync)(const char *root_path);
 };
@@ -179,7 +187,6 @@ static inline int ioa_del(const struct io_adapter *ioa, const char *id,
  * practice it is more a medium management call than an IO call (the main caller
  * is the LRS, not the layouts).
  */
-
 static inline int ioa_medium_sync(const struct io_adapter *ioa,
                                   const char *root_path)
 {
@@ -188,5 +195,82 @@ static inline int ioa_medium_sync(const struct io_adapter *ioa,
         return -ENOTSUP;
 
     return ioa->ioa_medium_sync(root_path);
+}
+
+/**
+ * Open all needed ressources on a media to do a transfer.
+ * All I/O adapters must implement this call.
+ * The I/O descriptor iod->iod_ctx is allocated and filled by ioa_open().
+ * iod->iod_ctx must be closed and freed by calling ioa_close.
+ *
+ * The I/O descriptor must be filled as follows:
+ * iod_loc      Extent location identifier. If it is missing by the caller, the
+ *              call will set loc->extent.address to indicate where the extent
+ *              has been located.
+ * iod_attrs    PUT: list of metadata blob k/v to set for the extent. If a value
+ *              is NULL, previous value of the attribute is removed.
+ *              GET: List of metadata blob names to be retrieved. The function
+ *              fills the value fields with the retrieved values.
+ * iod_flags    Bitmask of PHO_IO_* flags.
+ *
+ *
+ * \param[in]       ioa     Suitable I/O adapter for the media
+ * \param[in]       id      Null-terminated object ID
+ * \param[in]       tag     Null-terminated extent tag (may be NULL)
+ *
+ * \param[in,out]   iod     I/O descriptor (see above)
+ * \param[in]       is_put  Must be true when opening for a put/write and false
+ *                          when opening for a get/read
+ *
+ * \return 0 on success, negative error code on failure
+ */
+static inline int ioa_open(const struct io_adapter *ioa, const char *id,
+                          const char *tag, struct pho_io_descr *iod,
+                          bool is_put)
+{
+    assert(ioa != NULL);
+    assert(ioa->ioa_open != NULL);
+    return ioa->ioa_open(id, tag, iod, is_put);
+}
+
+/**
+ * Write data provided by the input buffer by appending into the IO adapter
+ * private context.
+ * All I/O adapters must implement this call.
+ *
+ * The I/O descriptor must be filled as follows:
+ * iod_ctx      IO adapter private context
+ *
+ * \param[in]       ioa     Suitable I/O adapter for the media
+ * \param[in]       buf     Data to write
+ * \param[in]       count   Size in byte of data to write from buf
+ * \param[in,out]   iod     I/O descriptor (see above)
+ *
+ * \return 0 on success, negative error code on failure
+ */
+static inline int ioa_write(const struct io_adapter *ioa,
+                            struct pho_io_descr *iod, const void *buf,
+                            size_t count)
+{
+    assert(ioa != NULL);
+    assert(ioa->ioa_write != NULL);
+    return ioa->ioa_write(iod, buf, count);
+}
+
+/**
+ * Clean and free the iod_ctx
+ * All I/O adapters must implement this call.
+ *
+ * \param[in]       ioa         Suitable I/O adapter for the media
+ * \param[in,out]   iod         I/O descriptor containing the iod_ctx to close.
+ *
+ * \return 0 on success, negative error code on failure
+ */
+static inline int ioa_close(const struct io_adapter *ioa,
+                            struct pho_io_descr *iod)
+{
+    assert(ioa != NULL);
+    assert(ioa->ioa_close != NULL);
+    return ioa->ioa_close(iod);
 }
 #endif

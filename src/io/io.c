@@ -37,7 +37,37 @@
 #include <sys/types.h>
 #include <attr/xattr.h>
 #include <attr/attributes.h>
+#include <unistd.h>
 
+#define MAX_NULL_WRITE_TRY 10
+
+static int pho_posix_open(const char *id, const char *tag,
+                          struct pho_io_descr *iod, bool is_put);
+static int pho_posix_close(struct pho_io_descr *iod);
+
+struct posix_io_ctx {
+    int   fd;
+    char *fpath;
+};
+
+
+/**
+ * Return a new null initialized posix_io_ctx.
+ *
+ * To free this io_ctx, call pho_posix_close.
+ */
+static struct posix_io_ctx *alloc_posix_io_ctx(void)
+{
+    struct posix_io_ctx *io_ctx;
+
+    io_ctx = malloc(sizeof(struct posix_io_ctx));
+    if (io_ctx) {
+        io_ctx->fd = -1;
+        io_ctx->fpath = NULL;
+    }
+
+    return io_ctx;
+}
 
 /** build the full posix path from a pho_ext_loc structure */
 static char *pho_posix_fullpath(const struct pho_ext_loc *loc)
@@ -419,62 +449,30 @@ static int pho_posix_md_get(const char *path, struct pho_attrs *attrs)
 static int pho_posix_put(const char *id, const char *tag,
                          struct pho_io_descr *iod)
 {
-    int      rc;
-    int      tgt_fd;
-    int      flags;
-    char    *fpath;
+    int                  rc = 0, rc2 = 0;
+    struct posix_io_ctx *io_ctx;
+
     ENTRY;
 
-    /* generate entry address, if it is not already set */
-    if (!is_ext_addr_set(iod->iod_loc)) {
-        rc = pho_posix_set_addr(id, tag, iod->iod_loc->extent->addr_type,
-                                &iod->iod_loc->extent->address);
-        if (rc)
-            return rc;
-    }
+    /* open */
+    rc = pho_posix_open(id, tag, iod, true);
+    if (rc || iod->iod_flags & PHO_IO_MD_ONLY)
+        return rc;
 
-    fpath = pho_posix_fullpath(iod->iod_loc);
-    if (fpath == NULL)
-        return -EINVAL;
-
-    pho_verb("extent location: '%s'", fpath);
-
-    /* if the call is MD_ONLY, it is expected that the entry exists. */
-    if (iod->iod_flags & PHO_IO_MD_ONLY) {
-        /* pho_io_flags are passed in to propagate SYNC options */
-        rc = pho_posix_md_set(fpath, &iod->iod_attrs, iod->iod_flags);
-        goto free_path;
-    }
-
-    /* mkdir -p */
-    rc = pho_posix_make_parent_of(iod->iod_loc->root_path, fpath);
-    if (rc)
-        goto free_path;
-
-    flags = pho_flags2open(iod->iod_flags);
-    tgt_fd = open(fpath, flags | O_CREAT | O_WRONLY, 0640);
-    if (tgt_fd < 0)
-        LOG_GOTO(free_path, rc = -errno, "open(%s) for write failed", fpath);
-
-    /* set metadata */
-    /* Only propagate REPLACE option, if specified */
-    rc = pho_posix_md_fset(tgt_fd, &iod->iod_attrs,
-                           iod->iod_flags & PHO_IO_REPLACE);
-    if (rc)
-        goto close_tgt;
+    io_ctx = iod->iod_ctx;
 
     /* write data */
-    rc = pho_posix_sendfile(tgt_fd, iod->iod_fd, iod->iod_size);
+    rc = pho_posix_sendfile(io_ctx->fd, iod->iod_fd, iod->iod_size);
     if (rc)
-        goto close_tgt;
+        goto clean;
 
     /* flush data */
     if (iod->iod_flags & PHO_IO_SYNC_FILE)
-        if (fsync(tgt_fd) != 0)
-            LOG_GOTO(close_tgt, rc = -errno, "fsync failed");
+        if (fsync(io_ctx->fd) != 0)
+            LOG_GOTO(clean, rc = -errno, "fsync failed");
 
     if (iod->iod_flags & PHO_IO_NO_REUSE) {
-        rc = posix_fadvise(tgt_fd, 0, 0,
+        rc = posix_fadvise(io_ctx->fd, 0, 0,
                            POSIX_FADV_DONTNEED | POSIX_FADV_NOREUSE);
         if (rc) {
             pho_warn("posix_fadvise failed: %s (%d)", strerror(rc), rc);
@@ -482,59 +480,45 @@ static int pho_posix_put(const char *id, const char *tag,
         }
     }
 
-close_tgt:
-    if (close(tgt_fd) && rc == 0) /* keep the first reported error */
-        rc = -errno;
-    /* clean the extent on failure */
-    if (rc != 0 && unlink(fpath) != 0)
-        pho_warn("failed to clean extent '%s': %s",
-                 fpath, strerror(errno));
+clean:
+    /* unlink if failure occurs */
+    if (rc != 0) {
+        assert(io_ctx->fpath);
+        if (unlink(io_ctx->fpath))
+            if (!rc) /* keep the first reported error */
+                rc = -errno;
+            pho_warn("Failed to clean extent '%s': %s", io_ctx->fpath,
+                     strerror(errno));
+    }
 
-free_path:
-    free(fpath);
+    rc2 = pho_posix_close(iod);
+    if (rc2 && rc == 0) /* keep the first reported error */
+        rc = rc2;
+
     return rc;
 }
 
 static int pho_posix_get(const char *id, const char *tag,
                          struct pho_io_descr *iod)
 {
-    int      rc;
-    int      src_fd;
-    char    *fpath;
+    int                  rc = 0, rc2 = 0;
+    struct posix_io_ctx *io_ctx;
+
     ENTRY;
 
-    /* generate entry address, if it is not already set */
-    if (!is_ext_addr_set(iod->iod_loc)) {
-        pho_warn("Object has no address stored in database"
-                 " (generating it from object id)");
-        rc = pho_posix_set_addr(id, tag, iod->iod_loc->extent->addr_type,
-                                &iod->iod_loc->extent->address);
-        if (rc != 0)
-            return rc;
-    }
+    rc = pho_posix_open(id, tag, iod, false);
+    if (rc || iod->iod_flags & PHO_IO_MD_ONLY)
+        return rc;
 
-    fpath = pho_posix_fullpath(iod->iod_loc);
-    if (fpath == NULL)
-        return -EINVAL;
-
-    pho_verb("extent location: '%s'", fpath);
-
-    /* get entry MD, if requested */
-    rc = pho_posix_md_get(fpath, &iod->iod_attrs);
-    if (rc != 0 || (iod->iod_flags & PHO_IO_MD_ONLY))
-        goto free_path;
-
-    /* open the extent */
-    src_fd = open(fpath, O_RDONLY);
-    if (src_fd < 0)
-        LOG_GOTO(free_attrs, rc = -errno, "open(%s) for read failed", fpath);
+    io_ctx = (struct posix_io_ctx *) iod->iod_ctx;
 
     /** If size is not stored in the DB, use the extent size */
     if (iod->iod_size == 0) {
         struct stat st;
 
-        if (fstat(src_fd, &st) != 0)
-            LOG_GOTO(free_attrs, rc = -errno, "failed to stat %s", fpath);
+        if (fstat(io_ctx->fd, &st) != 0)
+            LOG_GOTO(clean, rc = -errno, "failed to stat %s",
+                                              io_ctx->fpath);
 
         pho_warn("Extent size is not set in DB: using physical extent size: "
                  "%ju bytes", st.st_size);
@@ -542,13 +526,13 @@ static int pho_posix_get(const char *id, const char *tag,
     }
 
     /* read the extent */
-    rc = pho_posix_sendfile(iod->iod_fd, src_fd, iod->iod_size);
+    rc = pho_posix_sendfile(iod->iod_fd, io_ctx->fd, iod->iod_size);
     if (rc)
-        goto close_src;
+        goto clean;
 
     if (iod->iod_flags & PHO_IO_NO_REUSE) {
         /*  release source file from system cache */
-        rc = posix_fadvise(src_fd, 0, 0,
+        rc = posix_fadvise(io_ctx->fd, 0, 0,
                             POSIX_FADV_DONTNEED | POSIX_FADV_NOREUSE);
         if (rc) {
             pho_warn("posix_fadvise failed: %s (%d)", strerror(rc), rc);
@@ -556,21 +540,16 @@ static int pho_posix_get(const char *id, const char *tag,
         }
     }
 
-close_src:
-    if (close(src_fd) != 0)
-        /* we could read the data, just warn */
-        pho_warn("Failed to close source file: %s (%d)", strerror(errno),
-                 errno);
-free_attrs:
+clean:
     if (rc != 0)
         pho_attrs_free(&iod->iod_attrs);
 
-free_path:
-    free(fpath);
+    rc2 = pho_posix_close(iod);
+    if (rc2 && rc == 0) /* keep the first reported error */
+        rc = rc2;
+
     return rc;
 }
-
-
 
 static int pho_posix_medium_sync(const char *root_path)
 {
@@ -592,7 +571,6 @@ static int pho_posix_medium_sync(const char *root_path)
     return rc;
 }
 
-
 #define LTFS_SYNC_ATTR_NAME "user.ltfs.sync"
 
 static int pho_ltfs_sync(const char *root_path)
@@ -608,7 +586,6 @@ static int pho_ltfs_sync(const char *root_path)
 
     return 0;
 }
-
 
 static int pho_posix_del(const char *id, const char *tag,
                          struct pho_ext_loc *loc)
@@ -637,11 +614,219 @@ static int pho_posix_del(const char *id, const char *tag,
     return rc;
 }
 
+static int pho_posix_open_put(struct pho_io_descr *iod)
+{
+    int                  rc;
+    int                  flags;
+    bool                 file_existed;
+    bool                 file_created = false;
+    struct posix_io_ctx *io_ctx;
+
+    io_ctx = iod->iod_ctx;
+
+    /* if the call is MD_ONLY, it is expected that the entry exists. */
+    if (iod->iod_flags & PHO_IO_MD_ONLY) {
+        /* pho_io_flags are passed in to propagate SYNC options */
+        rc = pho_posix_md_set(io_ctx->fpath, &iod->iod_attrs,
+                              iod->iod_flags);
+        goto free_io_ctx;
+    }
+
+    /* mkdir -p */
+    rc = pho_posix_make_parent_of(iod->iod_loc->root_path, io_ctx->fpath);
+    if (rc)
+        goto free_io_ctx;
+
+    /* build posix flags */
+    flags = pho_flags2open(iod->iod_flags);
+
+    /* testing pre-existing file to know if we need to clean it on error */
+    rc = access(io_ctx->fpath, F_OK);
+    if (rc) {
+        rc = -errno;
+        if (rc != -ENOENT)
+            goto free_io_ctx;
+
+        file_existed = false;
+    } else {
+        file_existed = true;
+    }
+
+    io_ctx->fd = open(io_ctx->fpath, flags | O_CREAT | O_WRONLY, 0660);
+    if (io_ctx->fd < 0)
+        LOG_GOTO(free_io_ctx, rc = -errno, "open(%s) for write failed",
+                 io_ctx->fpath);
+
+    if (!file_existed)
+        file_created = true;
+
+    /* set metadata */
+    /* Only propagate REPLACE option, if specified */
+    rc = pho_posix_md_fset(io_ctx->fd, &iod->iod_attrs,
+                           iod->iod_flags & PHO_IO_REPLACE);
+
+    if (rc == 0) /* no error */
+        return rc;
+
+free_io_ctx:
+    /* unlink if failure occurs */
+    if (file_created) {
+        assert(io_ctx->fpath);
+        if (unlink(io_ctx->fpath))
+            if (!rc) /* keep the first reported error */
+                rc = -errno;
+            pho_warn("Failed to clean extent '%s': %s", io_ctx->fpath,
+                     strerror(errno));
+    }
+
+    /* error cleaning by closing io_ctx */
+    pho_posix_close(iod);
+    return rc;
+}
+
+static int pho_posix_open_get(struct pho_io_descr *iod)
+{
+    struct posix_io_ctx     *io_ctx;
+    int rc;
+
+    io_ctx = iod->iod_ctx;
+
+    /* get entry MD, if requested */
+    rc = pho_posix_md_get(io_ctx->fpath, &iod->iod_attrs);
+    if (rc != 0 || (iod->iod_flags & PHO_IO_MD_ONLY))
+        goto free_io_ctx;
+
+    /* open the extent */
+    io_ctx->fd = open(io_ctx->fpath, O_RDONLY);
+    if (io_ctx->fd < 0) {
+        rc = -errno;
+        pho_attrs_free(&iod->iod_attrs);
+        LOG_GOTO(free_io_ctx, rc, "open %s for read failed", io_ctx->fpath);
+    }
+
+    return 0;
+
+free_io_ctx:
+    /* cleaning */
+    pho_posix_close(iod);
+    return rc;
+}
+
+/**
+ * If (iod->iod_flags & PHO_IO_MD_ONLY), we only get/set attr, no iod_ctx is
+ * allocated and there is no need to close.
+ */
+static int pho_posix_open(const char *id, const char *tag,
+                          struct pho_io_descr *iod, bool is_put)
+{
+    int                      rc = 0;
+    struct posix_io_ctx     *io_ctx;
+
+    ENTRY;
+
+    /* generate entry address, if it is not already set */
+    if (!is_ext_addr_set(iod->iod_loc)) {
+        if (!is_put)
+            pho_warn("Object has no address stored in database"
+                     " (generating it from object id)");
+
+        rc = pho_posix_set_addr(id, tag, iod->iod_loc->extent->addr_type,
+                                &iod->iod_loc->extent->address);
+        if (rc)
+            return rc;
+    }
+
+    /* allocate io_ctx */
+    io_ctx = alloc_posix_io_ctx();
+    if (!io_ctx)
+        return -ENOMEM;
+
+    iod->iod_ctx = io_ctx;
+
+    /* build full path */
+    io_ctx->fpath = pho_posix_fullpath(iod->iod_loc);
+    if (io_ctx->fpath == NULL) {
+        rc = -EINVAL;
+        pho_posix_close(iod);
+        return rc;
+    }
+
+    pho_verb("extent location: '%s'", io_ctx->fpath);
+
+    return is_put ? pho_posix_open_put(iod) : pho_posix_open_get(iod);
+}
+
+static int pho_posix_write(struct pho_io_descr *iod, const void *buf,
+                           size_t count)
+{
+    int                  rc = 0;
+    size_t               written_size = 0;
+    int                  nb_null_try = 0;
+    struct posix_io_ctx *io_ctx;
+
+    io_ctx = iod->iod_ctx;
+
+    /* write count bytes by taking care of partial write */
+    while (written_size < count) {
+        size_t nb_written_bytes;
+
+        nb_written_bytes = write(io_ctx->fd, buf + written_size,
+                                 count - written_size);
+        if (nb_written_bytes < 0)
+            LOG_RETURN(rc = -errno, "Failed to write into %s : %s",
+                       io_ctx->fpath, strerror(errno));
+
+        /* handle partial write */
+        if (nb_written_bytes < count - written_size) {
+            pho_warn("Incomplete write into '%s': %zu of %zu",
+                     io_ctx->fpath, nb_written_bytes, count - written_size);
+            if (nb_written_bytes == 0) {
+                nb_null_try++;
+                if (nb_null_try > MAX_NULL_WRITE_TRY)
+                    LOG_RETURN(-EIO, "Too many writes of zero byte");
+            }
+        }
+
+        written_size += nb_written_bytes;
+    }
+
+    return rc;
+}
+
+/**
+ * Closing iod->iod_ctx->fd and in-depth freeing of the iod->iod_ctx .
+ */
+static int pho_posix_close(struct pho_io_descr *iod)
+{
+    int rc = 0;
+    struct posix_io_ctx *io_ctx;
+
+    io_ctx = iod->iod_ctx;
+
+    /* closing fd */
+    if (io_ctx->fd >= 0) {
+        if (close(io_ctx->fd)) {
+            rc = -errno;
+            pho_warn("Failed to close the file '%s': %s", io_ctx->fpath,
+                     strerror(errno));
+        }
+    }
+
+    /* free in-depth io_ctx */
+    free(io_ctx->fpath);
+    free(io_ctx);
+    iod->iod_ctx = NULL;
+    return rc;
+}
+
 /** POSIX adapter */
 static const struct io_adapter posix_adapter = {
     .ioa_put            = pho_posix_put,
     .ioa_get            = pho_posix_get,
     .ioa_del            = pho_posix_del,
+    .ioa_open           = pho_posix_open,
+    .ioa_write          = pho_posix_write,
+    .ioa_close          = pho_posix_close,
     .ioa_medium_sync    = pho_posix_medium_sync,
 };
 
@@ -650,6 +835,9 @@ static const struct io_adapter ltfs_adapter = {
     .ioa_put            = pho_posix_put,
     .ioa_get            = pho_posix_get,
     .ioa_del            = pho_posix_del,
+    .ioa_open           = pho_posix_open,
+    .ioa_write          = pho_posix_write,
+    .ioa_close          = pho_posix_close,
     .ioa_medium_sync    = pho_ltfs_sync,
 };
 
