@@ -20,7 +20,7 @@
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
 /**
- * \brief  Test lintape devname / serial mapping API
+ * \brief  Test scsi_tape devname / serial mapping API
  */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -90,7 +90,7 @@ static bool device_exists(int dev_index)
     char        dev_path[PATH_MAX];
     int         rc;
 
-    snprintf(dev_path, sizeof(dev_path) - 1, "/dev/IBMtape%d", dev_index);
+    snprintf(dev_path, sizeof(dev_path) - 1, "/dev/st%d", dev_index);
     rc = stat(dev_path, &st);
     pho_info("Accessing %s: %s", dev_path, rc ? strerror(errno) : "OK");
     return rc == 0;
@@ -107,7 +107,7 @@ int main(int argc, char **argv)
     for (i = 0; i < TEST_MAX_DRIVES; i++) {
         if (!device_exists(i))
             break;
-        snprintf(dev_name, sizeof(dev_name) - 1, "/dev/IBMtape%d", i);
+        snprintf(dev_name, sizeof(dev_name) - 1, "/dev/st%d", i);
         snprintf(test_name, sizeof(test_name) - 1,
                  "Test %da: get serial for drive %s", i, dev_name);
         run_test(test_name, test_unit, dev_name, PHO_TEST_SUCCESS);
@@ -116,7 +116,7 @@ int main(int argc, char **argv)
     for (i = 0; i < TEST_MAX_DRIVES; i++) {
         if (!device_exists(i))
             break;
-        snprintf(dev_name, sizeof(dev_name) - 1, "/dev/IBMtape%d", i);
+        snprintf(dev_name, sizeof(dev_name) - 1, "/dev/st%d", i);
         snprintf(test_name, sizeof(test_name) - 1,
                  "Test %dc: match name/serial for drive %s", i, dev_name);
         run_test(test_name, test_name_serial_match, dev_name, PHO_TEST_SUCCESS);

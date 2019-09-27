@@ -58,7 +58,7 @@ function get_tapes {
 function get_drives {
     local count=$1
 
-    ls /dev/IBMtape[0-9]* | grep -P "IBMtape[0-9]+$" | head -n $count |
+    ls /dev/st[0-9]* | grep -P "st[0-9]+$" | head -n $count |
         xargs
 }
 
