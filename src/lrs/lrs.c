@@ -2155,40 +2155,58 @@ int lrs_request_enqueue(struct lrs *lrs, struct pho_lrs_req *req)
  * Flush, update dss status and release locks on a medium and its associated
  * device.
  */
-static int lrs_medium_release(struct lrs *lrs, struct media_release_req *req)
+static int lrs_handle_medium_release(struct lrs *lrs,
+                                     struct media_release_req_elt *media)
+{
+    struct dev_descr *dev;
+    int rc;
+
+    /* Find the where the media is loaded */
+    dev = search_loaded_media(lrs, &media->id);
+
+    /* Media does not seem to be loaded, therefore the request must be
+     * erroneous and it is very unlikely that this LRS actually has a lock
+     * on this media.
+     */
+    if (dev == NULL)
+        LOG_RETURN(-ENOENT,
+                   "Could not find any device containing '%s', the media is "
+                   "not loaded",
+                   media_id_get(&media->id));
+
+    /* Flush media and update media info in dss */
+    rc = lrs_io_complete(lrs, dev->dss_media_info, media->size_written,
+                         media->rc, dev->mnt_path);
+
+    /* Release all associated locks */
+    lrs_dev_release(lrs, dev);
+    lrs_media_release(lrs, dev->dss_media_info);
+    return rc;
+}
+
+/**
+ * Flush, update dss status and release locks for all media from a release
+ * request and their associated devices.
+ */
+static int lrs_handle_media_release(struct lrs *lrs,
+                                    struct media_release_req *req)
 {
     size_t i;
     int rc = 0;
 
     for (i = 0; i < req->n_medias; i++) {
-        struct dev_descr *dev;
+        int rc2 = lrs_handle_medium_release(lrs, &req->medias[i]);
 
-        /* Find the where the media is loaded */
-        dev = search_loaded_media(lrs, &req->medias[i].id);
-        if (dev == NULL)
-            LOG_GOTO(out, -ENOENT,
-                     "Could not find '%s' mount point, the media is not loaded",
-                     media_id_get(&req->medias[i].id));
-
-        /* Flush media and update media info in dss */
-        rc = lrs_io_complete(lrs, dev->dss_media_info,
-                             req->medias[i].size_written, req->medias[i].rc,
-                             dev->mnt_path);
-        if (rc)
-            return rc;
-
-        lrs_dev_release(lrs, dev);
-        lrs_media_release(lrs, dev->dss_media_info);
+        rc = rc ? : rc2;
     }
 
-out:
     return rc;
 }
 
 /*
  * @FIXME: this assumes one media is reserved for one only one request. In the
  * future, we may want to give a media allocation to multiple requests, we will
- * therefore need to be more careful not to call lrs_medium_release too early,
+ * therefore need to be more careful not to call lrs_media_release too early,
  * or count nested locks.
  */
 /**
@@ -2365,7 +2383,7 @@ static int lrs_handle_release_reqs(struct lrs *lrs, GArray *resp_array)
         struct pho_lrs_resp *resp;
         int rc = 0;
 
-        rc = lrs_medium_release(lrs, &req->body.release);
+        rc = lrs_handle_media_release(lrs, &req->body.release);
 
         /* If resp_array is NULL, just release medias, do not save responses */
         if (resp_array == NULL) {
