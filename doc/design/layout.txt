@@ -2,108 +2,62 @@ Description: layout management module
 
 C library: libpho_layout
 
-This abstraction layer handles requests from the store engine, where we want
-to read or write objects with diverse layouts. It combines the competing
-queries to do clever LRS allocations and to schedule proper data access
-(layout composition). Thus this layer lives between store and LRS.
+This module abstracts the way a given object is written on medias. The layout
+layer emits medium allocation requests to the LRS (Local Resource Scheduler, see
+the `doc/design/lrs.txt` documentation) and handles the IOs to these allocated
+media.
 
-Layouts are implemented as vectors of operations which are manipulated by a
-generic code structure (declaration, allocation, scatter/gather I/O,
-finalize).
+Various layouts can be implemented, for example: simple (just plain data),
+raid1, raid0, compression or various error correction schemes. As some of
+these implementations may rely on heavy dependencies, layouts are considered
+external plugins and are dynamically loaded into Phobos on first usage.
 
+= Plugin mechanism and registration =
 
-= Combining requests =
-In the case of an MPUT, multiple layouts (potentially of different kinds) have
-to be combined to allocate resources efficiently and benefit from batching.
+A plugin is dynamically loaded by building a dynamic library name from its
+plugin name. For example, a module called "simple" will be implemented by a
+library called `libpho_layout_simple.so`.
 
-The layout code will aggregate layout declarations. For each layout, data is
-split into k blocks that are expected to reside on k different media. The goal
-is to fulfill the conditions and allocate as few resources as possible.
+This library has to implement a `pho_layout_mod_register` function that will
+fill a `struct layout_module` with the relevent information, including a
+vector of functions serving as an entry point to this layout.
 
-== Requests combination example ==
-1: distribution (RAID0)
-A -> [RAID0] -> {A0, A1, A2}
-B -> [RAID0] -> {B0, B1, B2}
-|_ alloc     => {C0, C1, C2}
+= API overview =
 
-A -> [RAID0] -> {A0, A1, A2}
-B -> [RAID1] -> {B0, B1}
-|_ alloc     => {C0, C1, C2}
+For more details, see `pho_layout.h`.
 
-Note that no complex scheduling happens here, it is simply a way to express
-the storage requirements to the LRS layer, which will be in turn responsible
-for any optimisation. First version will not handle composition of different
-layouts but of multiple objects using a same layout only.
+At the module level, the two functions `encode` and `decode` allow to
+initialize an encoder or decoder that will be responsible for performing a put
+or get on one given object.
 
-= Limitations =
-We will face situations where the combination of requests exceeds the capacity
-of each available media. Note that this is also valid in the case of a unique
-request with a simple layout. The first proposed version will not handle this
-situation and will return an error. Future versions may try advanced
-algorithms to fragment the allocations in whatever fashion they believe is
-clever and retry.
+Encoders and decoders will emit requests to the LRS in order to allocate the
+media on which they will perform the necessary IO to put or get an object.
+They are implemented around one main method: `step`. Each call to `step`
+provides potential answers from the LRS and allows the encoder or decoder to
+emit new requests (typically, to release no longer needed media and request
+the next media). Currently, all the IO happen inside this `step` function.
 
-= Architecture =
-Because advanced layouts may introduce heavy dependencies, layouts will be
-implemented as plugins and distributed as shared object libraries (.so) loaded
-dynamically. Available ones (listed in configuration) will be loaded on
-demand and requests for missing layouts will fail with -ENOSYS.
+The typical (and simplified) `step` pseudo code would be:
 
+```
+if (is_media_allocation(answer)) {
+    perform_io(answer.media);
+    emit_release_request(answer.media);
+}
 
-= Interfaces =
-== Module API ==
-Modules are only required to expose a registration method:
+if (more_io_needed) {
+    emit_media_alloc_request(next_media);
+} else {
+    /* The encoder or decoder is done */
+}
+```
 
-  int pho_layout_mod_register(struct layout_module *, enum layout_action);
+**Note:** when writing data, the data can only be considered as written when the
+media release response message is received by the encoder.
 
-It is called at registration and its purpose is to initialize the plugin:
-  - setup any internal resources
-  - fills module description in 'self'
-  - fills module operation vector for the desired mode (encode/decode)
+= Dependencies =
 
-
-An optional deregistration function can be provided to release resources if
-need be.
-
-  int pho_layout_mod_deregister(struct layout_module *);
-
-Loaded plugins are identified by their name and mode (eg. 'simple' + ENCODE
-Therefore, libraries need to provide unique module names.
-
-== Layout composition ==
-=== Module internals ===
-A module provides a description (name, major, minor) and a set of methods for
-managing a particular layout.
-
-For a given mode, a layout module provides three methods:
-  - compose: express the combination of requests with the desired layout and
-    and generate the corresponding LRS intents.
-  - io_submit: for a given request, issue the actual data transfer (get/put)
-  - io_commit: finalize all operations and release resources associated to the
-               composer.
-
-=== Phobos internal layout API ===
-Translation between high-level objects and their actual layout is handled by
-composers.
-
-A composer is essentialy a context into which requests are aggregated and
-passed to the corresponding layout module for being converted into actual
-storage requirements (LRS intents).
-
-The API to manipulate composers is:
-
-- Initialize a new, empty composer:
-  layout_init()
-
-- Express a GET/PUT request for an object
-  layout_declare()
-
-- Combine all requests and acquire corresponding storage resources via LRS:
-  layout_acquire()
-
-- Issue actual data transfer for a given object in the composer:
-  layout_io()
-
-- Stabilize the layouts by closing all open transactions (commit) and release
-  allocated resources.
-  layout_fini()
+- `lrs` protocol: layouts directly consume and produce messages defined by the
+  LRS protocol (defined in `pho_lrs.h`). See `doc/design/lrs.txt`.
+- `io`: abstracts how IOs are performed on various media. See
+  `doc/design/adapters.txt`.
