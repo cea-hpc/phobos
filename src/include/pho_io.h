@@ -57,7 +57,6 @@ struct pho_io_descr {
     struct pho_attrs     iod_attrs;    /**< In/Out metadata operations buffer */
 };
 
-
 /**
  * An I/O adapter (IOA) is a vector of functions that provide access to a media.
  * They should be invoked via their corresponding wrappers below. Refer to
@@ -84,11 +83,6 @@ struct io_adapter {
  * Retrieve IO functions for the given filesystem type.
  */
 int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa);
-
-/**
- * Free all resources associated with a struct pho_io_descr.
- */
-void pho_io_descr_fini(struct pho_io_descr *iod);
 
 /**
  * Put an object to a media.
