@@ -245,7 +245,7 @@ class StoreGetMDHandler(XferOptHandler):
         """Retrieve an object attributes from backend."""
         oid = self.params.get('object_id')
         self.logger.debug("Retrieving attrs for 'objid:%s'", oid)
-        self.client.get_register(oid, None, md_only=True)
+        self.client.getmd_register(oid, None)
         try:
             self.client.run(compl_cb=self._compl_notify)
         except IOError as err:

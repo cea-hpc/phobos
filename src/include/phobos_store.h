@@ -41,9 +41,6 @@ enum pho_xfer_flags {
     /* put: replace the object if it already exists (_not supported_)
      * get: replace the target file if it already exists */
     PHO_XFER_OBJ_REPLACE    = (1 << 0),
-    /* put: ignored
-     * get: retrieve object metadata only (no data movement) */
-    PHO_XFER_OBJ_GETATTR    = (1 << 1),
 };
 
 /**
@@ -56,9 +53,9 @@ enum pho_xfer_flags {
 typedef void (*pho_completion_cb_t)(void *u, const struct pho_xfer_desc *, int);
 
 enum pho_xfer_op {
-    PHO_XFER_OP_PUT, /**< Put operation */
-    PHO_XFER_OP_GET, /**< Get operation */
-    /* TODO: GETATTR operation */
+    PHO_XFER_OP_PUT,   /**< Put operation */
+    PHO_XFER_OP_GET,   /**< Get operation */
+    PHO_XFER_OP_GETMD  /**< Get metadata operation */
 };
 
 /**
@@ -71,7 +68,9 @@ enum pho_xfer_op {
  */
 struct pho_xfer_desc {
     char                *xd_objid;   /**< Object id to read or write */
-    enum pho_xfer_op     xd_op;      /**< Operation to perform (PUT or GET) */
+    enum pho_xfer_op     xd_op;      /**< Operation to perform
+                                       *  (GET, GETMD or PUT)
+                                       */
     int                  xd_fd;      /**< positive fd if xd_id_open */
     ssize_t              xd_size;    /**< Amount of data to write (for the GET
                                        * operation, the size read is equal to
@@ -91,9 +90,8 @@ struct pho_xfer_desc {
  * Put N files to the object store with minimal overhead.
  * Each desc entry contains:
  * - objid: the target object identifier
- * - fpath: the source file
- * - fd: (optional) if >= 0, an opened fd to read from (replaces fpath)
- * - size: (optional) if >= 0, amount of data to read from fd
+ * - fd: an opened fd to read from
+ * - size: amount of data to read from fd
  * - layout_name: (optional) name of the layout module to use
  * - attrs: the metadata (optional)
  * - flags: behavior flags
@@ -112,8 +110,7 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
  * Retrieve N files from the object store
  * desc contains:
  * - objid: identifier of the object to retrieve
- * - fpath: target file to write the object data to
- * - fd: (optional) an opened fd to write to (replaces fpath)
+ * - fd: an opened fd to write to
  * - attrs: unused (can be NULL)
  * - flags: behavior flags
  * Other fields are not used.
@@ -124,6 +121,21 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
  */
 int phobos_get(struct pho_xfer_desc *xfers, size_t n,
                pho_completion_cb_t cb, void *udata);
+
+/**
+ * Retrieve N file metadata from the object store
+ * desc contains:
+ * - objid: identifier of the object to retrieve
+ * - attrs: unused (can be NULL)
+ * - flags: behavior flags
+ * Other fields are not used.
+ *
+ * Individual completion notifications are issued via xd_callback.
+ * This function returns the first encountered error of 0 if all
+ * sub-operations have succeeded.
+ */
+int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
+                 pho_completion_cb_t cb, void *udata);
 
 /** query metadata of the object store */
 /* TODO int phobos_query(criteria, &obj_list); */

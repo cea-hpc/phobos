@@ -146,7 +146,7 @@ int main(int argc, char **argv)
     } else if (!strcmp(argv[1], "getmd")) {
         struct pho_xfer_desc    xfer = {0};
 
-        xfer_desc_open_path(&xfer, NULL, PHO_XFER_OP_GET, PHO_XFER_OBJ_GETATTR);
+        xfer_desc_open_path(&xfer, NULL, PHO_XFER_OP_GETMD, 0);
         xfer.xd_objid = argv[2];
 
         rc = phobos_get(&xfer, 1, dump_md, NULL);

@@ -27,7 +27,7 @@ import unittest
 from contextlib import contextmanager
 from tempfile import NamedTemporaryFile
 
-from phobos.core.const import PHO_XFER_OBJ_GETATTR
+from phobos.core.const import PHO_XFER_OP_GETMD
 from phobos.core.store import XferDescriptor
 
 class FileDescTest(unittest.TestCase):
@@ -72,7 +72,7 @@ class FileDescTest(unittest.TestCase):
 
     def test_open_getmd(self):
         xfr = XferDescriptor()
-        xfr.xd_flags = PHO_XFER_OBJ_GETATTR
+        xfr.xd_op = PHO_XFER_OP_GETMD
         xfr.open_file("")
         self.assertEqual(xfr.xd_fd, -1)
         xfr.open_file(None)

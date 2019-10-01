@@ -125,12 +125,11 @@ static int pho_xfer_desc_flag_check(const struct pho_xfer_desc *xfer)
 {
     int flags = xfer->xd_flags;
 
-    if (xfer->xd_op == PHO_XFER_OP_PUT && flags & PHO_XFER_OBJ_GETATTR)
-        LOG_RETURN(-EINVAL, "Transfer '%s' is both put and getattr",
-                   xfer->xd_objid);
-
     if (xfer->xd_op == PHO_XFER_OP_PUT && flags & PHO_XFER_OBJ_REPLACE)
         LOG_RETURN(-ENOTSUP, "OBJ_REPLACE not supported for put");
+
+    if (xfer->xd_op == PHO_XFER_OP_GETMD && flags & PHO_XFER_OBJ_REPLACE)
+        LOG_RETURN(0, "OBJ_REPLACE is not relevant for getmd");
 
     return 0;
 }
@@ -366,13 +365,13 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
         /* Handle encoder creation for PUT */
         return layout_encode(enc, xfer);
 
-    /* GET/GETATTR: handle metadata retrieval */
+    /* GET/GETMD: handle metadata retrieval */
     rc = object_md_get(dss, xfer);
     if (rc)
         LOG_RETURN(rc, "Cannot find metadata for objid:'%s'", xfer->xd_objid);
 
-    if (xfer->xd_flags & PHO_XFER_OBJ_GETATTR) {
-        /* GETATTR: create dummy decoder if only metadata are retrieved */
+    if (xfer->xd_op == PHO_XFER_OP_GETMD) {
+        /* GETMD: create dummy decoder if only metadata are retrieved */
         enc->xfer = xfer;
         enc->done = true;
         enc->is_decoder = true;
@@ -687,7 +686,7 @@ static int store_perform_xfers(struct phobos_handle *pho)
 
 /**
  * Common function to handle PHO_XFER_OP_PUT, PHO_XFER_OP_GET and
- * PHO_XFER_OBJ_GETATTR transfers.
+ * PHO_XFER_OP_GETMD transfers.
  *
  * @param[in/out]   xfers   Transfers to be performed, they will be updated with
  *                          an appropriate xd_rc upon successful completion of
@@ -736,6 +735,17 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
 
     for (i = 0; i < n; i++)
         xfers[i].xd_op = PHO_XFER_OP_GET;
+
+    return phobos_xfer(xfers, n, cb, udata);
+}
+
+int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
+                 pho_completion_cb_t cb, void *udata)
+{
+    size_t i;
+
+    for (i = 0; i < n; i++)
+        xfers[i].xd_op = PHO_XFER_OP_GETMD;
 
     return phobos_xfer(xfers, n, cb, udata);
 }

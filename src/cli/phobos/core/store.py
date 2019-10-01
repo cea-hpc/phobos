@@ -30,8 +30,8 @@ import os
 from ctypes import *
 
 from phobos.core.ffi import LIBPHOBOS, Tags
-from phobos.core.const import (PHO_XFER_OBJ_GETATTR, PHO_XFER_OBJ_REPLACE,
-                               PHO_XFER_OP_GET, PHO_XFER_OP_PUT)
+from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OP_GET,
+                               PHO_XFER_OP_GETMD, PHO_XFER_OP_PUT)
 
 AttrsForeachCBType = CFUNCTYPE(c_int, c_char_p, c_char_p, c_void_p)
 
@@ -99,8 +99,8 @@ class XferDescriptor(Structure):
         Return the fd or raise OSError if the open failed or ValueError if
         the given path is not correct.
         """
-        # in case of getmd, path must be none, return without exception
-        if not path and self.xd_flags & PHO_XFER_OBJ_GETATTR:
+        # in case of getmd, the file is not opened, return without exception
+        if self.xd_op == PHO_XFER_OP_GETMD:
             self.xd_fd = -1
             self.xd_size = -1
             return
@@ -154,8 +154,7 @@ class Store(object):
         # Keep references to CFUNCTYPES objects as long as they can be
         # called by the underlying C code, so that they do not get GC'd
         self.logger = logging.getLogger(__name__)
-        self._get_cb = None
-        self._put_cb = None
+        self._cb = None
 
     def xfer_desc_convert(self, xfer_descriptors):
         """
@@ -191,19 +190,11 @@ class Store(object):
 
         return XferCompletionCBType(compl_cb)
 
-    def get(self, xfer_descriptors, compl_cb):
+    def phobos_xfer(self, action_func, xfer_descriptors, compl_cb):
         xfer = self.xfer_desc_convert(xfer_descriptors)
         n = len(xfer_descriptors)
-        self._get_cb = self.compl_cb_convert(compl_cb)
-        rc = LIBPHOBOS.phobos_get(xfer, n, self._get_cb, None)
-        self.xfer_desc_release(xfer)
-        return rc
-
-    def put(self, xfer_descriptors, compl_cb):
-        xfer = self.xfer_desc_convert(xfer_descriptors)
-        n = len(xfer_descriptors)
-        self._put_cb = self.compl_cb_convert(compl_cb)
-        rc = LIBPHOBOS.phobos_put(xfer, n, self._put_cb, None)
+        self._cb = self.compl_cb_convert(compl_cb)
+        rc = action_func(xfer, n, self._cb, None)
         self.xfer_desc_release(xfer)
         return rc
 
@@ -214,6 +205,7 @@ class Client(object):
         super(Client, self).__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
         self._store = Store()
+        self.getmd_session = []
         self.get_session = []
         self.put_session = []
 
@@ -221,12 +213,14 @@ class Client(object):
         """Default, empty transfer completion handler."""
         pass
 
-    def get_register(self, oid, data_path, md_only=False, attrs=None):
-        """Enqueue a GET or GETATTR transfer."""
-        flags = 0
-        if md_only:
-            flags |= PHO_XFER_OBJ_GETATTR
-        self.get_session.append((oid, data_path, attrs, flags, None,
+    def getmd_register(self, oid, data_path, attrs=None):
+        """Enqueue a GETMD transfer."""
+        self.getmd_session.append((oid, data_path, attrs, 0, None,
+                                 PHO_XFER_OP_GETMD))
+
+    def get_register(self, oid, data_path, attrs=None):
+        """Enqueue a GET transfer."""
+        self.get_session.append((oid, data_path, attrs, 0, None,
                                  PHO_XFER_OP_GET))
 
     def put_register(self, oid, data_path, attrs=None, tags=None):
@@ -236,23 +230,35 @@ class Client(object):
 
     def clear(self):
         """Release resources associated to the current queues."""
+        self.getmd_session = []
+        self._getmd_cb = None
         self.get_session = []
         self._get_cb = None
         self.put_session = []
         self._put_cb = None
 
+    # TODO: in case phobos_xfer is called from phobos instead of
+    # phobos_{getmd,get,put}, merge the sessions into one attribute.
     def run(self, compl_cb=None, **kwargs):
         """Execute all registered transfer orders."""
         if compl_cb is None:
             compl_cb = self.noop_compl_cb
 
+        if self.getmd_session:
+            rc = self._store.phobos_xfer(LIBPHOBOS.phobos_getmd,
+                                         self.getmd_session, compl_cb)
+            if rc:
+                raise IOError(rc, "Cannot retrieve objects")
+
         if self.get_session:
-            rc = self._store.get(self.get_session, compl_cb)
+            rc = self._store.phobos_xfer(LIBPHOBOS.phobos_get,
+                                         self.get_session, compl_cb)
             if rc:
                 raise IOError(rc, "Cannot retrieve objects")
 
         if self.put_session:
-            rc = self._store.put(self.put_session, compl_cb)
+            rc = self._store.phobos_xfer(LIBPHOBOS.phobos_put,
+                                         self.put_session, compl_cb)
             if rc:
                 raise IOError(rc, "Cannot retrieve objects")
 
