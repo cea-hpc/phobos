@@ -312,10 +312,8 @@ static int scsi_tape_map_load(void)
         if (result == NULL)
             break;
 
-        if (!is_device_valid(entry.d_name)) {
-            pho_debug("Ignoring device '%s'", entry.d_name);
+        if (!is_device_valid(entry.d_name))
             continue;
-        }
 
         rc = cache_load_from_name(entry.d_name);
         if (rc)
