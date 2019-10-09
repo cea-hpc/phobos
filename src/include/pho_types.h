@@ -210,8 +210,13 @@ static inline enum address_type str2address_type(const char *str)
 }
 
 struct pho_buff {
-    int     size;
+    size_t  size;
     char   *buff;
+};
+
+struct pho_ubuff {
+    size_t   size;
+    uint8_t *buff;
 };
 
 struct pho_lock {

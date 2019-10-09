@@ -30,12 +30,11 @@
 #include <glib.h>
 #include <string.h>
 #include "pho_attrs.h"
-#include "pho_lrs.h"
-#include "pho_common.h"
-#include "pho_type_utils.h"
 #include "pho_cfg.h"
-#include "pho_layout.h"
+#include "pho_common.h"
 #include "pho_io.h"
+#include "pho_layout.h"
+#include "pho_type_utils.h"
 
 #define PLUGIN_NAME     "simple"
 #define PLUGIN_MAJOR    0
@@ -51,7 +50,7 @@ static struct module_desc SIMPLE_MODULE_DESC = {
  * Simple layout specific data.
  *
  * A simple layout just writes the data once, potentially splitting it on
- * multiple medias if necessary.
+ * multiple media if necessary.
  *
  * @FIXME: a part of simple data and logic may be very similar to raid1, a
  * factorization of the two modules will probably happen when refactoring raid1.
@@ -59,7 +58,7 @@ static struct module_desc SIMPLE_MODULE_DESC = {
 struct simple_encoder {
     size_t to_write;                /**< Amount of data to read/write */
     unsigned int cur_extent_idx;    /**< Current extent index */
-    bool pending_alloc;             /**< Whether a pending unanswer media
+    bool pending_alloc;             /**< Whether a pending unanswer medium
                                       *  allocation request has been emitted or
                                       *  not
                                       */
@@ -68,11 +67,11 @@ struct simple_encoder {
     /** Extents written (appended as they are written) */
     GArray *written_extents;
     /**
-     * Set of already released medias (key: str, value: NULL), used to ensure
-     * that all written medias have also been released (and therefore flushed)
+     * Set of already released media (key: str, value: NULL), used to ensure
+     * that all written media have also been released (and therefore flushed)
      * when writing.
      */
-    GHashTable *released_medias;
+    GHashTable *released_media;
 };
 
 /* @FIXME: taken from store.c, will be needed in raid1 too */
@@ -138,11 +137,11 @@ static bool simple_finished(struct pho_encoder *enc)
 }
 
 /*
- * Write data from current offset to media, filling \a extent according to the
+ * Write data from current offset to medium, filling \a extent according to the
  * data written.
  */
 static int simple_enc_write_chunk(struct pho_encoder *enc,
-                                  const struct media_write_resp_elt *media,
+                                  const pho_resp_write_elt_t *medium,
                                   struct extent *extent)
 {
     struct simple_encoder *simple = enc->priv_enc;
@@ -154,7 +153,7 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
 
     ENTRY;
 
-    rc = get_io_adapter(media->fs_type, &ioa);
+    rc = get_io_adapter(medium->fs_type, &ioa);
     if (rc)
         return rc;
 
@@ -168,12 +167,13 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
      * @TODO: replace extent size with the actual size written (which is not
      * returned by ioa_put as of yet)
      */
-    extent->size = min(simple->to_write, media->avail_size);
-    extent->media = media->media_id;
-    extent->addr_type = media->addr_type;
+    extent->size = min(simple->to_write, medium->avail_size);
+    extent->media.type = medium->med_id->type;
+    strncpy(extent->media.id, medium->med_id->id, sizeof(extent->media.id));
+    extent->addr_type = medium->addr_type;
     /* and extent.address will be filled by ioa_put */
 
-    loc.root_path = media->root_path;
+    loc.root_path = medium->root_path;
     loc.extent = extent;
 
     iod.iod_flags = PHO_IO_REPLACE | PHO_IO_NO_REUSE;
@@ -184,7 +184,7 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
     if (rc)
         return rc;
 
-    pho_debug("Writing %ld bytes to media %s", extent->size,
+    pho_debug("Writing %ld bytes to medium %s", extent->size,
               media_id_get(&extent->media));
     /* Build extent tag */
     rc = snprintf(extent_tag, sizeof(extent_tag), "s%d", extent->layout_idx);
@@ -201,27 +201,27 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
 }
 
 /**
- * Handle the write allocation response by writing data on the allocated media
+ * Handle the write allocation response by writing data on the allocated medium
  * and filling the associated release request with relevant information (rc and
  * size_written).
  */
 static int simple_enc_write_all_chunks(struct pho_encoder *enc,
-                                       struct media_write_alloc_resp *wresp,
-                                       struct media_release_req *rreq)
+                                       pho_resp_write_t *wresp,
+                                       pho_req_release_t *rreq)
 {
     struct simple_encoder *simple = enc->priv_enc;
     struct extent cur_extent = {0};
     int rc;
 
-    if (wresp->n_medias != 1)
+    if (wresp->n_media != 1)
         LOG_RETURN(-EPROTO,
-                   "Received %d media allocation but only 1 was requested",
-                   wresp->n_medias);
+                   "Received %ld medium allocation but only 1 was requested",
+                   wresp->n_media);
 
     /* Perform IO */
-    rc = simple_enc_write_chunk(enc, &wresp->medias[0], &cur_extent);
-    rreq->medias[0].rc = rc;
-    rreq->medias[0].size_written = cur_extent.size;
+    rc = simple_enc_write_chunk(enc, wresp->media[0], &cur_extent);
+    rreq->media[0]->rc = rc;
+    rreq->media[0]->size_written = cur_extent.size;
     if (rc)
         return rc;
 
@@ -231,11 +231,11 @@ static int simple_enc_write_all_chunks(struct pho_encoder *enc,
 }
 
 /**
- * Read the data specified by \a extent from \a media into the output fd of
+ * Read the data specified by \a extent from \a medium into the output fd of
  * dec->xfer.
  */
 static int simple_dec_read_chunk(struct pho_encoder *dec,
-                                 const struct media_read_resp_elt *media)
+                                 const pho_resp_read_elt_t *medium)
 {
     struct simple_encoder *simple = dec->priv_enc;
     struct extent *extent = &dec->layout->extents[simple->cur_extent_idx];
@@ -247,15 +247,15 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
     /*
      * NOTE: fs_type is not stored as an extent attribute in db, therefore it
      * is not retrieved when retrieving a layout either. It is currently a field
-     * of a media, this is why the LRS provides it in its response. This may be
+     * of a medium, this is why the LRS provides it in its response. This may be
      * intentional, or to be fixed later.
      */
-    rc = get_io_adapter(media->fs_type, &ioa);
+    rc = get_io_adapter(medium->fs_type, &ioa);
     if (rc)
         return rc;
 
-    extent->addr_type = media->addr_type;
-    loc.root_path = media->root_path;
+    extent->addr_type = medium->addr_type;
+    loc.root_path = medium->root_path;
     loc.extent = extent;
 
     iod.iod_fd = dec->xfer->xd_fd;
@@ -265,7 +265,7 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
     iod.iod_size = loc.extent->size;
     iod.iod_loc = &loc;
 
-    pho_debug("Reading %ld bytes from media %s", extent->size,
+    pho_debug("Reading %ld bytes from medium %s", extent->size,
               media_id_get(&extent->media));
 
     rc = ioa_get(&ioa, dec->xfer->xd_objid, NULL, &iod);
@@ -286,10 +286,10 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
 
 /**
  * When receiving a release response, check that we expected this response and
- * save in simple->released_medias the fact that this media_id was released.
+ * save in simple->released_media the fact that this media_id was released.
  */
 static int mark_written_media_released(struct simple_encoder *simple,
-                                       const struct media_id *media)
+                                       const char *media)
 {
     size_t i;
 
@@ -297,13 +297,13 @@ static int mark_written_media_released(struct simple_encoder *simple,
         struct extent *extent;
 
         extent = &g_array_index(simple->written_extents, struct extent, i);
-        if (strcmp(media_id_get(&extent->media), media_id_get(media)) == 0) {
-            char *media_id = strdup(media_id_get(media));
+        if (strcmp(media_id_get(&extent->media), media) == 0) {
+            char *media_id = strdup(media);
 
             if (media_id == NULL)
                 return -ENOMEM;
 
-            g_hash_table_insert(simple->released_medias, media_id, NULL);
+            g_hash_table_insert(simple->released_media, media_id, NULL);
             return 0;
         }
     }
@@ -314,11 +314,11 @@ static int mark_written_media_released(struct simple_encoder *simple,
 /**
  * Handle a release response for an encoder (unrelevent for a decoder) by
  * remembering that these particular media have been released. If all data has
- * been written and all written media has been released, mark the encoder as
+ * been written and all written media have been released, mark the encoder as
  * done.
  */
 static int simple_enc_handle_release_resp(struct pho_encoder *enc,
-                                          struct media_release_resp *rel_resp)
+                                          pho_resp_release_t *rel_resp)
 {
     struct simple_encoder *simple = enc->priv_enc;
     size_t n_released_media;
@@ -326,18 +326,17 @@ static int simple_enc_handle_release_resp(struct pho_encoder *enc,
     int rc = 0;
     int i;
 
-    for (i = 0; i < rel_resp->n_medias; i++) {
-        struct media_id *id = &rel_resp->media_ids[i];
+    for (i = 0; i < rel_resp->n_med_ids; i++) {
         int rc2;
 
-        pho_debug("Marking media %s as released", media_id_get(id));
+        pho_debug("Marking medium %s as released", rel_resp->med_ids[i]->id);
         /* If the media_id is unexpected, -EINVAL will be returned */
-        rc2 = mark_written_media_released(simple, id);
+        rc2 = mark_written_media_released(simple, rel_resp->med_ids[i]->id);
         if (rc2 && !rc)
             rc = rc2;
     }
 
-    n_released_media = g_hash_table_size(simple->released_medias);
+    n_released_media = g_hash_table_size(simple->released_media);
     n_written_media = simple->written_extents->len;
 
     /*
@@ -361,97 +360,66 @@ static int simple_enc_handle_release_resp(struct pho_encoder *enc,
 }
 
 /** Generate the next write allocation request for this encoder */
-static int simple_enc_next_write_req(struct pho_encoder *enc,
-                                     struct pho_lrs_req *req)
+static int simple_enc_next_write_req(struct pho_encoder *enc, pho_req_t *req)
 {
     struct simple_encoder *simple = enc->priv_enc;
-    int rc = 0;
+    int rc = 0, i;
 
     /* Otherwise, generate the next request */
-    req->kind = LRS_REQ_MEDIA_WRITE_ALLOC;
-    req->body.walloc.n_medias = 1;
-    req->body.walloc.medias = malloc(sizeof(*req->body.walloc.medias));
-    if (req->body.walloc.medias == NULL)
-        return -ENOMEM;
+    rc = pho_srl_request_write_alloc(req, 1, &enc->xfer->xd_tags.n_tags);
+    if (rc)
+        return rc;
 
-    req->body.walloc.medias[0].size = simple->to_write;
-    rc = tags_dup(&req->body.walloc.medias[0].tags, &enc->xfer->xd_tags);
-    if (rc) {
-        free(req->body.walloc.medias);
-        req->body.walloc.medias = NULL;
-    }
+    req->walloc->media[0]->size = simple->to_write;
+
+    for (i = 0; i < enc->xfer->xd_tags.n_tags; ++i)
+        req->walloc->media[0]->tags[i] = strdup(enc->xfer->xd_tags.tags[i]);
 
     return rc;
 }
 
 /** Generate the next read allocation request for this decoder */
-static int simple_dec_next_read_req(struct pho_encoder *dec,
-                                    struct pho_lrs_req *req)
+static int simple_dec_next_read_req(struct pho_encoder *dec, pho_req_t *req)
 {
+    int rc = 0;
     struct simple_encoder *simple = dec->priv_enc;
     unsigned int cur_ext_idx = simple->cur_extent_idx;
 
-    req->kind = LRS_REQ_MEDIA_READ_ALLOC;
-    req->body.ralloc.media_ids =
-        malloc(sizeof(*req->body.ralloc.media_ids));
-    if (req->body.ralloc.media_ids == NULL)
-        return -ENOMEM;
+    rc = pho_srl_request_read_alloc(req, 1);
+    if (rc)
+        return rc;
 
-    pho_debug("Requesting media %s to read extent %d",
+    pho_debug("Requesting medium %s to read extent %d",
               media_id_get(&dec->layout->extents[cur_ext_idx].media),
               simple->cur_extent_idx);
 
-    req->body.ralloc.n_medias = 1;
-    req->body.ralloc.n_required = 1;
-    req->body.ralloc.media_ids[0] = dec->layout->extents[cur_ext_idx].media;
+    req->ralloc->n_required = 1;
+
+    req->ralloc->med_ids[0]->type =
+        dec->layout->extents[cur_ext_idx].media.type;
+    req->ralloc->med_ids[0]->id =
+        strdup(dec->layout->extents[cur_ext_idx].media.id);
 
     return 0;
 }
 
-/** Build the next release request from a write or read alloc response */
-#define BUILD_MATCHING_RELEASE_REQ(_req_ptr, _n_medias, _resp_array, \
-                                   _resp_media_id_field, _rc) \
-    do { \
-        size_t _i; \
-        (_req_ptr)->kind = LRS_REQ_MEDIA_RELEASE; \
-        (_req_ptr)->body.release.n_medias = (_n_medias); \
-        (_req_ptr)->body.release.medias = \
-            calloc((_n_medias), sizeof(*(_req_ptr)->body.release.medias)); \
-        if ((_req_ptr)->body.release.medias == NULL) { \
-            _rc = -ENOMEM; \
-            break; \
-        } \
-        for (_i = 0; _i < (_n_medias); _i++) \
-            memcpy(&(_req_ptr)->body.release.medias[_i].id, \
-                   &(_resp_array)[_i]._resp_media_id_field, \
-                   sizeof(struct media_id)); \
-        _rc = 0; \
-    } while (0)
-
 /**
  * Handle one response from the LRS and potentially generate one response.
  */
-static int simple_enc_handle_resp(struct pho_encoder *enc,
-                                  struct pho_lrs_resp *resp,
-                                  struct pho_lrs_req **reqs, size_t *n_reqs)
+static int simple_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
+                                  pho_req_t **reqs, size_t *n_reqs)
 {
     struct simple_encoder *simple = enc->priv_enc;
-    int rc = 0;
+    int rc = 0, i;
 
-    if (resp->protocol_version != PHO_LRS_PROTOCOL_VERSION)
-        return -EPROTONOSUPPORT;
-
-    switch (resp->kind) {
-    case LRS_RESP_ERROR:
-        enc->xfer->xd_rc = resp->body.error.rc;
+    if (pho_response_is_error(resp)) {
+        enc->xfer->xd_rc = resp->error->rc;
         enc->done = true;
         pho_error(enc->xfer->xd_rc,
                   "%s for objid:'%s' received error to last %s request",
                   enc->is_decoder ? "Decoder" : "Encoder", enc->xfer->xd_objid,
-                  lrs_req_kind_str(resp->body.error.req_kind));
-        break;
-
-    case LRS_RESP_MEDIA_WRITE_ALLOC:
+                  pho_srl_error_kind_str(resp->error));
+    } else if (pho_response_is_write(resp)) {
         /* Last emitted allocation has now been fulfilled */
         simple->pending_alloc = false;
         if (enc->is_decoder)
@@ -462,44 +430,51 @@ static int simple_enc_handle_resp(struct pho_encoder *enc,
          * request will be emitted after the IO has been performed. Any
          * allocated medium must be released.
          */
-        BUILD_MATCHING_RELEASE_REQ(&(*reqs)[*n_reqs],
-                                   resp->body.walloc.n_medias,
-                                   resp->body.walloc.medias, media_id, rc);
+        rc = pho_srl_request_release_alloc(*reqs + *n_reqs,
+                                           resp->walloc->n_media);
         if (rc)
             return rc;
 
+        for (i = 0; i < resp->walloc->n_media; ++i) {
+            (*reqs)[*n_reqs].release->media[i]->med_id->type =
+                resp->walloc->media[i]->med_id->type;
+            (*reqs)[*n_reqs].release->media[i]->med_id->id =
+                strdup(resp->walloc->media[i]->med_id->id);
+        }
+
         /* Perform IO and populate release request with the outcome */
         rc = simple_enc_write_all_chunks(
-                enc, &resp->body.walloc, &(*reqs)[*n_reqs].body.release);
+                enc, resp->walloc, (*reqs)[*n_reqs].release);
         (*n_reqs)++;
-        break;
-
-    case LRS_RESP_MEDIA_READ_ALLOC:
+    } else if (pho_response_is_read(resp)) {
         /* Last emitted allocation has now been fulfilled */
         simple->pending_alloc = false;
         if (!enc->is_decoder)
             return -EINVAL;
 
         /* Build release req matching this allocation response */
-        BUILD_MATCHING_RELEASE_REQ(&(*reqs)[*n_reqs],
-                                   resp->body.ralloc.n_medias,
-                                   resp->body.ralloc.medias, media_id, rc);
+        rc = pho_srl_request_release_alloc(*reqs + *n_reqs,
+                                           resp->ralloc->n_media);
         if (rc)
             return rc;
 
+        for (i = 0; i < resp->ralloc->n_media; ++i) {
+            (*reqs)[*n_reqs].release->media[i]->med_id->type =
+                resp->ralloc->media[i]->med_id->type;
+            (*reqs)[*n_reqs].release->media[i]->med_id->id =
+                strdup(resp->ralloc->media[i]->med_id->id);
+        }
+
         /* Perform IO and populate release request with the outcome */
-        rc = simple_dec_read_chunk(enc, &resp->body.ralloc.medias[0]);
-        (*reqs)[*n_reqs].body.release.medias[0].rc = rc;
+        rc = simple_dec_read_chunk(enc, resp->ralloc->media[0]);
+        (*reqs)[*n_reqs].release->media[0]->rc = rc;
         (*n_reqs)++;
-        break;
-
-    case LRS_RESP_MEDIA_RELEASE:
-        /* Decoders don't need to keep track of media releases */
+    } else if (pho_response_is_release(resp)) {
+        /* Decoders don't need to keep track of medium releases */
         if (!enc->is_decoder)
-            rc = simple_enc_handle_release_resp(enc, &resp->body.release);
-        break;
+            rc = simple_enc_handle_release_resp(enc, resp->release);
 
-    default:
+    } else {
         LOG_RETURN(rc = -EINVAL, "Invalid response type");
     }
 
@@ -510,9 +485,8 @@ static int simple_enc_handle_resp(struct pho_encoder *enc,
  * Simple layout implementation of the `step` method.
  * (See `layout_step` doc)
  */
-static int simple_encoder_step(struct pho_encoder *enc,
-                               struct pho_lrs_resp *resp,
-                               struct pho_lrs_req **reqs, size_t *n_reqs)
+static int simple_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
+                               pho_req_t **reqs, size_t *n_reqs)
 {
     struct simple_encoder *simple = enc->priv_enc;
     int rc = 0;
@@ -540,9 +514,9 @@ static int simple_encoder_step(struct pho_encoder *enc,
 
     /* Build next request */
     if (enc->is_decoder)
-        rc = simple_dec_next_read_req(enc, &(*reqs)[*n_reqs]);
+        rc = simple_dec_next_read_req(enc, *reqs + *n_reqs);
     else
-        rc = simple_enc_next_write_req(enc, &(*reqs)[*n_reqs]);
+        rc = simple_enc_next_write_req(enc, *reqs + *n_reqs);
 
     if (rc)
         return rc;
@@ -582,8 +556,8 @@ static void simple_encoder_destroy(struct pho_encoder *enc)
     if (simple->written_extents != NULL)
         g_array_free(simple->written_extents, TRUE);
 
-    if (simple->released_medias != NULL)
-        g_hash_table_destroy(simple->released_medias);
+    if (simple->released_media != NULL)
+        g_hash_table_destroy(simple->released_media);
 
     free(simple);
     enc->priv_enc = NULL;
@@ -649,13 +623,13 @@ static int layout_simple_encode(struct pho_encoder *enc)
     /* Fill out the encoder appropriately */
     if (enc->is_decoder) {
         simple->written_extents = NULL;
-        simple->released_medias = NULL;
+        simple->released_media = NULL;
     } else {
         /* Allocate the extent array */
         simple->written_extents = g_array_new(FALSE, TRUE,
                                               sizeof(struct extent));
-        simple->released_medias = g_hash_table_new_full(g_str_hash, g_str_equal,
-                                                        free, NULL);
+        simple->released_media = g_hash_table_new_full(g_str_hash, g_str_equal,
+                                                       free, NULL);
         g_array_set_clear_func(simple->written_extents,
                                free_extent_address_buff);
         /*

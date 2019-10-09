@@ -27,23 +27,24 @@
 #endif
 
 #include "phobos_store.h"
-#include "pho_common.h"
-#include "pho_types.h"
 #include "pho_attrs.h"
-#include "pho_type_utils.h"
-#include "pho_lrs.h"
+#include "pho_cfg.h"
+#include "pho_common.h"
 #include "pho_dss.h"
 #include "pho_io.h"
-#include "pho_cfg.h"
 #include "pho_layout.h"
+#include "pho_lrs.h"
+#include "pho_srl_lrs.h"
+#include "pho_type_utils.h"
+#include "pho_types.h"
 
-#include <sys/types.h>
 #include <attr/xattr.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 
 #define RETRY_SLEEP_MAX_US (1000 * 1000) /* 1 second */
 #define RETRY_SLEEP_MIN_US (10 * 1000)   /* 10 ms */
@@ -194,9 +195,10 @@ err_nores:
  * @return 0 on success, -errno on error.
  */
 static int encoder_communicate(struct lrs *lrs, struct pho_encoder *enc,
-                               struct pho_lrs_resp *resp, int enc_id)
+                               pho_resp_t *resp, int enc_id)
 {
-    struct pho_lrs_req *requests = NULL;
+    pho_req_t *requests = NULL;
+    struct pho_ubuff buf;
     size_t n_reqs = 0;
     size_t i = 0;
     int rc;
@@ -208,35 +210,36 @@ static int encoder_communicate(struct lrs *lrs, struct pho_encoder *enc,
 
     /* Dispatch generated requests (even on error, if any) */
     for (i = 0; i < n_reqs; i++) {
-        struct pho_lrs_req *req = malloc(sizeof(*req));
+        pho_req_t *req;
         int rc2 = 0;
 
-        if (req == NULL) {
-            rc = rc ? : -ENOMEM;
-            break;
-        }
-
-        *req = requests[i];
+        req = requests + i;
 
         pho_debug("%s for objid:'%s' emitted a request of type %s",
                   enc->is_decoder ? "Decoder" : "Encoder", enc->xfer->xd_objid,
-                  lrs_req_kind_str(req->kind));
+                  pho_srl_request_kind_str(req));
 
         /* req_id is used to route responses to the appropriate encoder */
-        req->req_id = enc_id;
+        req->id = enc_id;
+        if (pho_srl_request_pack(req, &buf)) {
+            pho_srl_request_free(req, false);
+            return -ENOMEM;
+        }
 
         /* After this call, the LRS is responsible for freeing `req` */
-        rc2 = lrs_request_enqueue(lrs, req);
+        rc2 = lrs_request_enqueue(lrs, buf);
         if (rc2) {
             pho_error(rc2, "Error while sending request to LRS for %s",
                       enc->xfer->xd_objid);
             rc = rc ? : rc2;
         }
+
+        pho_srl_request_free(req, false);
     }
 
     /* Free any undelivered request */
     for (; i < n_reqs; i++)
-        lrs_req_free(&requests[i]);
+        pho_srl_request_free(requests + i, false);
     free(requests);
 
     return rc;
@@ -562,7 +565,7 @@ out:
 }
 
 static int store_lrs_response_process(struct phobos_handle *pho,
-                                      struct pho_lrs_resp *resp)
+                                      pho_resp_t *resp)
 {
     struct pho_encoder *encoder = &pho->encoders[resp->req_id];
     int rc;
@@ -570,7 +573,7 @@ static int store_lrs_response_process(struct phobos_handle *pho,
     pho_debug("%s for objid:'%s' received a response of type %s",
               encoder->is_decoder ? "Decoder" : "Encoder",
               encoder->xfer->xd_objid,
-              lrs_resp_kind_str(resp->kind));
+              pho_srl_response_kind_str(resp));
 
     rc = encoder_communicate(&pho->lrs, encoder, resp, resp->req_id);
 
@@ -585,9 +588,14 @@ static int store_lrs_response_process(struct phobos_handle *pho,
     return rc;
 }
 
+static void response_buffers_free(struct pho_ubuff *bufs, int n_buf)
+{
+    free(bufs);
+}
+
 static int store_dispatch_loop(struct phobos_handle *pho)
 {
-    struct pho_lrs_resp *responses = NULL;
+    struct pho_ubuff *responses = NULL;
     size_t n_responses = 0;
     int rc;
     int i;
@@ -596,20 +604,41 @@ static int store_dispatch_loop(struct phobos_handle *pho)
     rc = lrs_responses_get(&pho->lrs, &responses, &n_responses);
     if (rc) {
         pho_error(rc, "Error while collecting responses from LRS");
-        lrs_responses_free(responses, n_responses);
+        response_buffers_free(responses, n_responses);
         return rc;
     }
 
     pho_debug("Collected %ld responses from LRS", n_responses);
 
+    /* Deserialize LRS responses */
+    pho_resp_t **resps = malloc(n_responses * sizeof(*resps));
+
+    if (resps == NULL) {
+        response_buffers_free(responses, n_responses);
+        return -ENOMEM;
+    }
+
+    for (i = 0; i < n_responses; ++i)
+        resps[i] = pho_srl_response_unpack(responses + i);
+    response_buffers_free(responses, n_responses);
+
     /* Dispatch LRS responses to encoders */
     for (i = 0; i < n_responses; i++) {
-        rc = store_lrs_response_process(pho, &responses[i]);
+        /*
+         * If an error occured on the deserialization, resps[i] is now null
+         * just skip it.
+         */
+        if (!resps[i]) {
+            pho_error(-EINVAL,
+                      "an error occured during a response deserialization");
+            continue;
+        }
+
+        rc = store_lrs_response_process(pho, resps[i]);
+        pho_srl_response_free(resps[i], true);
         if (rc)
             break;
     }
-
-    lrs_responses_free(responses, n_responses);
 
     /*
      * If there are no new answer, it means no resource is available yet,
@@ -626,6 +655,8 @@ static int store_dispatch_loop(struct phobos_handle *pho)
                 sleep_time / 1000);
         usleep(sleep_time);
     }
+
+    free(resps);
 
     return rc;
 }

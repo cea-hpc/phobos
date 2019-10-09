@@ -56,6 +56,8 @@
 #define LRS_MEDIA_LOCKED_EXTERNAL   ((void *)0x19880429)
 
 static int lrs_handle_release_reqs(struct lrs *lrs, GArray *resp_array);
+static void lrs_req_free_wrapper(void *req);
+static void lrs_resp_free_wrapper(void *resp);
 
 enum lrs_operation {
     LRS_OP_NONE = 0,
@@ -63,18 +65,6 @@ enum lrs_operation {
     LRS_OP_WRITE,
     LRS_OP_FORMAT,
 };
-
-/** Wrapper of lrs_req_free to be used as glib callback */
-static void lrs_req_free_wrapper(void *req)
-{
-    lrs_req_free(req);
-}
-
-/** Wrapper of lrs_resp_free to be used as glib callback */
-static void lrs_resp_free_wrapper(void *resp)
-{
-    lrs_resp_free(resp);
-}
 
 /**
  * Build a mount path for the given identifier.
@@ -144,7 +134,7 @@ struct dev_descr {
 
 /* Needed local function declarations */
 static struct dev_descr *search_loaded_media(struct lrs *lrs,
-                                             const struct media_id *id);
+                                             const char *name);
 
 /** check that device info from DB is consistent with actual status */
 static int check_dev_info(const struct dev_descr *dev)
@@ -680,6 +670,7 @@ int lrs_init(struct lrs *lrs, struct dss_handle *dss)
     if (rc == -1)
         return -ENOMEM;
     lrs_lock_number++;
+
     return 0;
 }
 
@@ -1716,7 +1707,7 @@ static int lrs_get_write_res(struct lrs *lrs, size_t size,
      * shall never been locked if the media in it has not previously been
      * locked.
      */
-    *devp = search_loaded_media(lrs, &pmedia->id);
+    *devp = search_loaded_media(lrs, pmedia->id.id);
     if (*devp != NULL) {
         rc = lrs_dev_acquire(lrs, *devp);
         if (rc != 0)
@@ -1774,16 +1765,13 @@ out_release:
 }
 
 static struct dev_descr *search_loaded_media(struct lrs *lrs,
-                                             const struct media_id *id)
+                                             const char *name)
 {
-    const char *name;
     int         i;
     ENTRY;
 
-    if (id == NULL)
+    if (name == NULL)
         return NULL;
-
-    name = media_id_get(id);
 
     for (i = 0; i < lrs->dev_count; i++) {
         const char          *media_id;
@@ -1855,7 +1843,7 @@ static int lrs_media_prepare(struct lrs *lrs, const struct media_id *id,
         GOTO(out, rc = -EAGAIN);
 
     /* check if the media is already in a drive */
-    dev = search_loaded_media(lrs, id);
+    dev = search_loaded_media(lrs, label);
     if (dev != NULL) {
         rc = lrs_dev_acquire(lrs, dev);
         if (rc != 0)
@@ -2172,23 +2160,34 @@ static int lrs_io_complete(struct lrs *lrs, struct media_info *media_info,
     return 0;
 }
 
-int lrs_request_enqueue(struct lrs *lrs, struct pho_lrs_req *req)
+/******************************************************************************/
+/* Request/response manipulation **********************************************/
+/******************************************************************************/
+
+/** Wrapper of lrs_req_free to be used as glib callback */
+static void lrs_req_free_wrapper(void *req)
 {
-    if (req == NULL)
+    pho_srl_request_free(req, true);
+}
+
+/** Wrapper of lrs_resp_free to be used as glib callback */
+static void lrs_resp_free_wrapper(void *resp)
+{
+    free(((struct pho_buff *)resp)->buff);
+}
+
+
+int lrs_request_enqueue(struct lrs *lrs, struct pho_ubuff req)
+{
+    if (req.buff == NULL)
         return -EINVAL;
 
-    /*
-     * Note: when the protocol becomes remote, the LRS client can first retrieve
-     * the LRS server protocol version so that version compatibility can be
-     * checked early on.
-     */
-    if (req->protocol_version != PHO_LRS_PROTOCOL_VERSION)
-        return -EPROTONOSUPPORT;
+    pho_req_t *r = pho_srl_request_unpack(&req);
 
-    if (req->kind == LRS_REQ_MEDIA_RELEASE)
-        g_queue_push_tail(lrs->release_queue, req);
+    if (pho_request_is_release(r))
+        g_queue_push_tail(lrs->release_queue, r);
     else
-        g_queue_push_tail(lrs->req_queue, req);
+        g_queue_push_tail(lrs->req_queue, r);
     return 0;
 }
 
@@ -2197,31 +2196,27 @@ int lrs_request_enqueue(struct lrs *lrs, struct pho_lrs_req *req)
  * device.
  */
 static int lrs_handle_medium_release(struct lrs *lrs,
-                                     struct media_release_req_elt *media)
+                                     pho_req_release_elt_t *medium)
 {
+    int rc = 0;
     struct dev_descr *dev;
-    int rc;
 
     /* Find the where the media is loaded */
-    dev = search_loaded_media(lrs, &media->id);
-
-    /* Media does not seem to be loaded, therefore the request must be
-     * erroneous and it is very unlikely that this LRS actually has a lock
-     * on this media.
-     */
-    if (dev == NULL)
+    dev = search_loaded_media(lrs, medium->med_id->id);
+    if (dev == NULL) {
         LOG_RETURN(-ENOENT,
-                   "Could not find any device containing '%s', the media is "
-                   "not loaded",
-                   media_id_get(&media->id));
+                 "Could not find '%s' mount point, the media is not loaded",
+                 medium->med_id->id);
+    }
 
     /* Flush media and update media info in dss */
-    rc = lrs_io_complete(lrs, dev->dss_media_info, media->size_written,
-                         media->rc, dev->mnt_path);
+    rc = lrs_io_complete(lrs, dev->dss_media_info, medium->size_written,
+                         medium->rc, dev->mnt_path);
 
     /* Release all associated locks */
     lrs_dev_release(lrs, dev);
     lrs_media_release(lrs, dev->dss_media_info);
+
     return rc;
 }
 
@@ -2229,14 +2224,13 @@ static int lrs_handle_medium_release(struct lrs *lrs,
  * Flush, update dss status and release locks for all media from a release
  * request and their associated devices.
  */
-static int lrs_handle_media_release(struct lrs *lrs,
-                                    struct media_release_req *req)
+static int lrs_handle_media_release(struct lrs *lrs, pho_req_release_t *req)
 {
     size_t i;
     int rc = 0;
 
-    for (i = 0; i < req->n_medias; i++) {
-        int rc2 = lrs_handle_medium_release(lrs, &req->medias[i]);
+    for (i = 0; i < req->n_media; i++) {
+        int rc2 = lrs_handle_medium_release(lrs, req->media[i]);
 
         rc = rc ? : rc2;
     }
@@ -2247,8 +2241,8 @@ static int lrs_handle_media_release(struct lrs *lrs,
 /*
  * @FIXME: this assumes one media is reserved for one only one request. In the
  * future, we may want to give a media allocation to multiple requests, we will
- * therefore need to be more careful not to call lrs_media_release too early,
- * or count nested locks.
+ * therefore need to be more careful not to call lrs_media_release too
+ * early, or count nested locks.
  */
 /**
  * Handle a write allocation request by finding an appropriate medias to write
@@ -2257,47 +2251,50 @@ static int lrs_handle_media_release(struct lrs *lrs,
  * The request succeeds totally or all the performed allocations are rolled
  * back.
  */
-static int lrs_handle_write_alloc(struct lrs *lrs,
-                                  struct media_write_alloc_req *wreq,
-                                  struct pho_lrs_resp *resp)
+static int lrs_handle_write_alloc(struct lrs *lrs, pho_req_t *req,
+                                  pho_resp_t *resp)
 {
     struct dev_descr *dev = NULL;
     size_t i;
     int rc = 0;
+    pho_req_write_t *wreq = req->walloc;
 
-    pho_debug("Write allocation request (%d medias)",
-              wreq->n_medias);
+    pho_debug("Write allocation request (%ld medias)", wreq->n_media);
 
-    resp->kind = LRS_REQ_MEDIA_WRITE_ALLOC;
-    resp->body.walloc.n_medias = wreq->n_medias;
-    resp->body.walloc.medias = calloc(wreq->n_medias,
-                                      sizeof(*resp->body.walloc.medias));
-    if (resp->body.walloc.medias == NULL)
-        return -ENOMEM;
+    rc = pho_srl_response_write_alloc(resp, wreq->n_media);
+    if (rc)
+        return rc;
+
+    resp->req_id = req->id;
 
     /*
      * @TODO: if media locking becomes ref counted, ensure all selected medias
      * are different
      */
-    for (i = 0; i < wreq->n_medias; i++) {
-        struct media_write_resp_elt *wresp = &resp->body.walloc.medias[i];
+    for (i = 0; i < wreq->n_media; i++) {
+        struct tags t;
+
+        pho_resp_write_elt_t *wresp = resp->walloc->media[i];
 
         pho_debug("Write allocation request media %ld: need %ld bytes",
-                  i, wreq->medias[i].size);
-        rc = lrs_write_prepare(lrs, wreq->medias[i].size,
-                               &wreq->medias[i].tags, &dev);
+                  i, wreq->media[i]->size);
+
+        t.n_tags = wreq->media[i]->n_tags;
+        t.tags = wreq->media[i]->tags;
+
+        rc = lrs_write_prepare(lrs, wreq->media[i]->size, &t, &dev);
         if (rc)
             goto out;
 
         /* build response */
         wresp->avail_size = dev->dss_media_info->stats.phys_spc_free;
-        wresp->media_id = dev->dss_media_info->id;
+        wresp->med_id->type = dev->dss_media_info->id.type;
+        wresp->med_id->id = strdup(dev->dss_media_info->id.id);
         wresp->root_path = strdup(dev->mnt_path);
         wresp->fs_type = dev->dss_media_info->fs.type;
         wresp->addr_type = dev->dss_media_info->addr_type;
 
-        pho_debug("Allocated media %s for write request",
-                  media_id_get(&wresp->media_id));
+        pho_debug("Allocated media %s for write request", wresp->med_id->id);
 
         if (wresp->root_path == NULL) {
             /*
@@ -2312,21 +2309,25 @@ static int lrs_handle_write_alloc(struct lrs *lrs,
 out:
     if (rc) {
         /* Rollback device and media acquisition */
-        size_t n_medias_acquired = i;
+        size_t n_media_acquired = i;
 
-        for (i = 0; i < n_medias_acquired; i++) {
-            struct media_write_resp_elt *wresp = &resp->body.walloc.medias[i];
+        for (i = 0; i < n_media_acquired; i++) {
+            pho_resp_write_elt_t *wresp = resp->walloc->media[i];
 
-            dev = search_loaded_media(lrs, &wresp->media_id);
+            dev = search_loaded_media(lrs, wresp->med_id->id);
             lrs_dev_release(lrs, dev);
             lrs_media_release(lrs, dev->dss_media_info);
         }
 
-        lrs_resp_free(resp);
+        pho_srl_response_free(resp, false);
         if (rc != -EAGAIN) {
-            resp->kind = LRS_RESP_ERROR;
-            resp->body.error.rc = rc;
-            resp->body.error.req_kind = LRS_REQ_MEDIA_WRITE_ALLOC;
+            int rc2 = pho_srl_response_error_alloc(resp);
+
+            if (rc2)
+                return rc2;
+
+            resp->error->rc = rc;
+            resp->error->req_kind = PHO_REQUEST_KIND__RQ_WRITE;
         }
     }
 
@@ -2347,41 +2348,41 @@ out:
  * The request succeeds totally or all the performed allocations are rolled
  * back.
  */
-static int lrs_handle_read_alloc(struct lrs *lrs,
-                                 struct media_read_alloc_req *rreq,
-                                 struct pho_lrs_resp *resp)
+static int lrs_handle_read_alloc(struct lrs *lrs, pho_req_t *req,
+                                 pho_resp_t *resp)
 {
     struct dev_descr *dev = NULL;
     size_t n_selected = 0;
     size_t i;
     int rc = 0;
+    pho_req_read_t *rreq = req->ralloc;
 
-    resp->kind = LRS_REQ_MEDIA_READ_ALLOC;
-    resp->body.ralloc.n_medias = rreq->n_required;
-    resp->body.ralloc.medias = calloc(rreq->n_required,
-                                      sizeof(*resp->body.ralloc.medias));
+    rc = pho_srl_response_read_alloc(resp, rreq->n_required);
+    if (rc)
+        return rc;
 
     /*
      * FIXME: this is a very basic selection algorithm that does not try to
      * select the most available media first.
      */
-    for (i = 0; i < rreq->n_medias; i++) {
-        struct media_read_resp_elt *rresp;
+    for (i = 0; i < rreq->n_med_ids; i++) {
+        pho_resp_read_elt_t *rresp = resp->ralloc->media[n_selected];
+        struct media_id m;
 
-        rresp = &resp->body.ralloc.medias[n_selected];
-        rc = lrs_read_prepare(lrs, &rreq->media_ids[i], &dev);
+        m.type = rreq->med_ids[i]->type;
+        strncpy(m.id, rreq->med_ids[i]->id, PHO_URI_MAX);
+
+        rc = lrs_read_prepare(lrs, &m, &dev);
         if (rc)
             continue;
 
         n_selected++;
 
-        /* fill the response */
-        rresp->media_id = rreq->media_ids[i];
-        rresp->root_path = strdup(dev->mnt_path);
-        if (rresp->root_path == NULL)
-            break;
         rresp->fs_type = dev->dss_media_info->fs.type;
         rresp->addr_type = dev->dss_media_info->addr_type;
+        rresp->root_path = strdup(dev->mnt_path);
+        rresp->med_id->type = rreq->med_ids[i]->type;
+        rresp->med_id->id = strdup(rreq->med_ids[i]->id);
 
         if (n_selected == rreq->n_required)
             break;
@@ -2390,18 +2391,22 @@ static int lrs_handle_read_alloc(struct lrs *lrs,
     if (rc) {
         /* rollback */
         for (i = 0; i < n_selected; i++) {
-            struct media_read_resp_elt *rresp = &resp->body.ralloc.medias[i];
+            pho_resp_read_elt_t *rresp = resp->ralloc->media[i];
 
-            dev = search_loaded_media(lrs, &rresp->media_id);
+            dev = search_loaded_media(lrs, rresp->med_id->id);
             lrs_dev_release(lrs, dev);
             lrs_media_release(lrs, dev->dss_media_info);
         }
 
-        lrs_resp_free(resp);
+        pho_srl_response_free(resp, false);
         if (rc != -EAGAIN) {
-            resp->kind = LRS_RESP_ERROR;
-            resp->body.error.rc = rc;
-            resp->body.error.req_kind = LRS_REQ_MEDIA_READ_ALLOC;
+            int rc2 = pho_srl_response_error_alloc(resp);
+
+            if (rc2)
+                return rc2;
+
+            resp->error->rc = rc;
+            resp->error->req_kind = PHO_REQUEST_KIND__RQ_READ;
         }
     }
 
@@ -2418,64 +2423,81 @@ static int lrs_handle_read_alloc(struct lrs *lrs,
  */
 static int lrs_handle_release_reqs(struct lrs *lrs, GArray *resp_array)
 {
-    struct pho_lrs_req *req;
+    pho_req_t *req;
 
     while ((req = g_queue_pop_tail(lrs->release_queue)) != NULL) {
-        struct pho_lrs_resp *resp;
+        pho_resp_t resp;
         int rc = 0;
+        struct pho_ubuff *buf;
 
-        rc = lrs_handle_media_release(lrs, &req->body.release);
+        rc = lrs_handle_media_release(lrs, req->release);
 
-        /* If resp_array is NULL, just release medias, do not save responses */
+        /* If resp_array is NULL, just release media, do not save responses */
         if (resp_array == NULL) {
-            lrs_req_free(req);
+            pho_srl_request_free(req, true);
             continue;
         }
 
         g_array_set_size(resp_array, resp_array->len + 1);
-        resp = &g_array_index(resp_array, struct pho_lrs_resp,
-                              resp_array->len - 1);
-        if (rc) {
-            resp->kind = LRS_RESP_ERROR;
-            resp->body.error.rc = rc;
-            resp->body.error.req_kind = LRS_REQ_MEDIA_RELEASE;
-        } else {
-            size_t n_medias = req->body.release.n_medias;
-            struct media_release_resp *rel_resp = &resp->body.release;
-            size_t i;
+        buf = &g_array_index(resp_array, struct pho_ubuff,
+                             resp_array->len - 1);
 
-            /* Build the answer */
-            resp->req_id = req->req_id;
-            resp->kind = LRS_RESP_MEDIA_RELEASE;
-            rel_resp->n_medias = n_medias;
-            rel_resp->media_ids = calloc(n_medias,
-                                         sizeof(*rel_resp->media_ids));
-            if (rel_resp->media_ids == NULL) {
-                lrs_req_free(req);
-                return -ENOMEM;
+        if (rc) {
+            int rc2 = pho_srl_response_error_alloc(&resp);
+
+            if (rc2) {
+                pho_srl_request_free(req, true);
+                return rc2;
             }
 
-            for (i = 0; i < n_medias; i++)
-                rel_resp->media_ids[i] = req->body.release.medias[i].id;
+            resp.error->rc = rc;
+            resp.error->req_kind = PHO_REQUEST_KIND__RQ_RELEASE;
+        } else {
+            pho_req_release_t *rel = req->release;
+            size_t n_media = rel->n_media;
+            size_t i;
+
+            rc = pho_srl_response_release_alloc(&resp, n_media);
+            if (rc) {
+                pho_srl_request_free(req, true);
+                return rc;
+            }
+
+            /* Build the answer */
+            resp.req_id = req->id;
+
+            for (i = 0; i < n_media; ++i) {
+                resp.release->med_ids[i]->type = rel->media[i]->med_id->type;
+                resp.release->med_ids[i]->id =
+                    strdup(rel->media[i]->med_id->id);
+            }
+        }
+
+        rc = pho_srl_response_pack(&resp, buf);
+        if (rc) {
+            pho_srl_request_free(req, true);
+            pho_srl_response_free(&resp, false);
+            return rc;
         }
 
         /* Free incoming request */
-        lrs_req_free(req);
+        pho_srl_request_free(req, true);
+        pho_srl_response_free(&resp, false);
     }
 
     return 0;
 }
 
-int lrs_responses_get(struct lrs *lrs, struct pho_lrs_resp **resps,
+int lrs_responses_get(struct lrs *lrs, struct pho_ubuff **resps,
                       size_t *n_resps)
 {
     GArray *resp_array;
     size_t release_queue_len = g_queue_get_length(lrs->release_queue);
-    struct pho_lrs_req *req;
+    pho_req_t *req;
     int rc = 0;
 
     /* At least release_queue_len responses will be emitted */
-    resp_array = g_array_sized_new(FALSE, TRUE, sizeof(**resps),
+    resp_array = g_array_sized_new(FALSE, FALSE, sizeof(struct pho_ubuff),
                                    release_queue_len);
     if (resp_array == NULL)
         return -ENOMEM;
@@ -2500,29 +2522,20 @@ int lrs_responses_get(struct lrs *lrs, struct pho_lrs_resp **resps,
      * encountered.
      */
     while ((req = g_queue_pop_tail(lrs->req_queue)) != NULL) {
-        struct pho_lrs_resp *resp;
+        pho_resp_t resp;
+        struct pho_ubuff *buf;
 
-        g_array_set_size(resp_array, resp_array->len + 1);
-        resp = &g_array_index(resp_array, struct pho_lrs_resp,
-                              resp_array->len - 1);
-        resp->req_id = req->req_id;
-
-        switch (req->kind) {
-        case LRS_REQ_MEDIA_WRITE_ALLOC:
+        if (pho_request_is_write(req)) {
             pho_debug("lrs received write request (%p)", req);
-            rc = lrs_handle_write_alloc(lrs, &req->body.walloc, resp);
-            break;
-
-        case LRS_REQ_MEDIA_READ_ALLOC:
+            rc = lrs_handle_write_alloc(lrs, req, &resp);
+        } else if (pho_request_is_read(req)) {
             pho_debug("lrs received read allocation request (%p)", req);
-            rc = lrs_handle_read_alloc(lrs, &req->body.ralloc, resp);
-            break;
-
-        default:
+            rc = lrs_handle_read_alloc(lrs, req, &resp);
+        } else {
             /* Unexpected req->kind, very probably a programming error */
             pho_error(rc = -EPROTO,
-                      "lrs received an unexpected request of type %d (%p)",
-                      req->kind, req);
+                      "lrs received an invalid request "
+                      "(no walloc, ralloc or release field)");
         }
 
         /*
@@ -2530,14 +2543,25 @@ int lrs_responses_get(struct lrs *lrs, struct pho_lrs_resp **resps,
          * no response).
          */
         if (rc == -EAGAIN) {
-            /* Remove last enqueued response and requeue last request */
-            g_array_remove_index(resp_array, resp_array->len - 1);
+            /* Requeue last request */
             g_queue_push_tail(lrs->req_queue, req);
+            pho_srl_response_free(&resp, false);
             rc = 0;
             break;
         }
 
-        lrs_req_free(req);
+        g_array_set_size(resp_array, resp_array->len + 1);
+        buf = &g_array_index(resp_array, struct pho_ubuff, resp_array->len - 1);
+
+        rc = pho_srl_response_pack(&resp, buf);
+        if (rc) {
+            pho_srl_request_free(req, true);
+            pho_srl_response_free(&resp, false);
+            break;
+        }
+
+        pho_srl_request_free(req, true);
+        pho_srl_response_free(&resp, false);
     }
 
 out:
@@ -2546,121 +2570,14 @@ out:
         g_array_free(resp_array, TRUE);
     } else {
         *n_resps = resp_array->len;
-        *resps = (struct pho_lrs_resp *)g_array_free(resp_array, FALSE);
+        *resps = (struct pho_ubuff *)g_array_free(resp_array, FALSE);
     }
 
     /*
-     * Medias that have not been re-acquired at this point could be "globally
+     * Media that have not been re-acquired at this point could be "globally
      * unlocked" here rather than at the beginning of this function.
      */
 
     return rc;
 }
 
-void lrs_req_free(struct pho_lrs_req *req)
-{
-    struct media_write_alloc_req *wreq = &req->body.walloc;
-    size_t i;
-
-    switch (req->kind) {
-    case LRS_REQ_MEDIA_WRITE_ALLOC:
-
-        for (i = 0; i < wreq->n_medias; i++)
-            tags_free(&wreq->medias[i].tags);
-        free(wreq->medias);
-        wreq->medias = NULL;
-        break;
-
-    case LRS_REQ_MEDIA_READ_ALLOC:
-        free(req->body.ralloc.media_ids);
-        req->body.ralloc.media_ids = NULL;
-        break;
-
-    case LRS_REQ_MEDIA_RELEASE:
-        free(req->body.release.medias);
-        break;
-
-    /* Unexpected, but don't fail */
-    default:
-        break;
-    }
-
-    free(req);
-}
-
-void lrs_resp_free(struct pho_lrs_resp *resp)
-{
-    struct media_write_alloc_resp *wresp = &resp->body.walloc;
-    struct media_read_alloc_resp *rresp = &resp->body.ralloc;
-    size_t i;
-
-    switch (resp->kind) {
-    case LRS_RESP_MEDIA_WRITE_ALLOC:
-        if (wresp->medias == NULL)
-            break;
-
-        for (i = 0; i < wresp->n_medias; i++)
-            free(wresp->medias[i].root_path);
-        free(wresp->medias);
-        wresp->medias = NULL;
-        break;
-
-    case LRS_RESP_MEDIA_READ_ALLOC:
-        if (rresp->medias == NULL)
-            break;
-
-        for (i = 0; i < rresp->n_medias; i++)
-            free(rresp->medias[i].root_path);
-        free(rresp->medias);
-        rresp->medias = NULL;
-        break;
-
-    case LRS_RESP_MEDIA_RELEASE:
-        if (resp->body.release.media_ids == NULL)
-            break;
-
-        free(resp->body.release.media_ids);
-        resp->body.release.media_ids = NULL;
-        break;
-
-    case LRS_RESP_ERROR:
-    default:
-        break;
-    }
-}
-
-void lrs_responses_free(struct pho_lrs_resp *resps, size_t n_resps)
-{
-    size_t i;
-
-    for (i = 0; i < n_resps; i++)
-        lrs_resp_free(&resps[i]);
-    free(resps);
-}
-
-static const char *const LRS_REQ_KIND_STRS[] = {
-    [LRS_REQ_MEDIA_WRITE_ALLOC] = "write_alloc",
-    [LRS_REQ_MEDIA_READ_ALLOC] = "read_alloc",
-    [LRS_REQ_MEDIA_RELEASE] = "release",
-};
-
-static const char *const LRS_RESP_KIND_STRS[] = {
-    [LRS_RESP_MEDIA_WRITE_ALLOC] = "write_alloc",
-    [LRS_RESP_MEDIA_READ_ALLOC] = "read_alloc",
-    [LRS_RESP_MEDIA_RELEASE] = "release",
-    [LRS_RESP_ERROR] = "error",
-};
-
-const char *lrs_req_kind_str(enum pho_lrs_req_kind kind)
-{
-    if (kind >= LRS_REQ_MAX)
-        return "<invalid>";
-    return LRS_REQ_KIND_STRS[kind];
-}
-
-const char *lrs_resp_kind_str(enum pho_lrs_resp_kind kind)
-{
-    if (kind >= LRS_RESP_MAX)
-        return "<invalid>";
-    return LRS_RESP_KIND_STRS[kind];
-}

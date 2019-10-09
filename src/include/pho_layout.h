@@ -30,7 +30,7 @@
 #include <stdbool.h>
 
 #include "phobos_store.h"
-#include "pho_lrs.h"
+#include "pho_srl_lrs.h"
 
 /**
  * Operation names for dynamic loading with dlsym()
@@ -42,7 +42,6 @@
 
 struct pho_io_descr;
 struct layout_info;
-struct lrs;
 
 struct pho_encoder;
 
@@ -72,8 +71,8 @@ struct pho_layout_module_ops {
  */
 struct pho_enc_ops {
     /** Give a response and get requests from this encoder / decoder */
-    int (*step)(struct pho_encoder *enc, struct pho_lrs_resp *resp,
-                struct pho_lrs_req **reqs, size_t *n_reqs);
+    int (*step)(struct pho_encoder *enc, pho_resp_t *resp,
+                pho_req_t **reqs, size_t *n_reqs);
 
     /** Destroy this encoder / decoder */
     void (*destroy)(struct pho_encoder *enc);
@@ -177,9 +176,8 @@ int layout_decode(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
  * @return 0 on success, -errno on error. -EINVAL is returned when the encoder
  * has already finished its work (the call to this function was unexpected).
  */
-static inline int layout_step(struct pho_encoder *enc,
-                              struct pho_lrs_resp *resp,
-                              struct pho_lrs_req **reqs, size_t *n_reqs)
+static inline int layout_step(struct pho_encoder *enc, pho_resp_t *resp,
+                              pho_req_t **reqs, size_t *n_reqs)
 {
     if (enc->done)
         return -EINVAL;

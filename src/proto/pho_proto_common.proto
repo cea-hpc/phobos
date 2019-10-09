@@ -1,0 +1,38 @@
+/**
+ * \brief   Protobuf file for common structures.
+ */
+
+/** Medium info. */
+message PhoMediumInfo {
+    /** Device family. */
+    enum Type {
+        DV_DISK = 0;    // Disk.
+        DV_TAPE = 1;    // Tape.
+        DV_DIR  = 2;    // Directory.
+    }
+
+    required Type type = 1; // Device family type.
+    required string id = 2; // Media identifier.
+}
+
+/** Selected filesystem type for a medium. */
+enum PhoFsType {
+    FS_POSIX = 0;       // POSIX filesystem (no specific feature).
+    FS_LTFS  = 1;       // LTFS (Linear Tape File System).
+}
+
+/** Selected address type for a medium. */
+enum PhoAddressType {
+    AD_PATH   = 0;      // ID is entry path (e.g. for imported tapes). */
+    AD_HASH1  = 1;      // ID hashing, implementation 1. */
+    AD_OPAQUE = 2;      // Opaque identifier provided by the backend. */
+}
+
+/** LRS request kind (used in PhoResponse). */
+enum PhoRequestKind {
+    RQ_WRITE   = 0;     // Media allocation with write ability.
+    RQ_READ    = 1;     // Media allocation with read ability.
+    RQ_RELEASE = 2;     // Media release and flush. The IO is considered
+                        // complete once the release and flush are done.
+}
+

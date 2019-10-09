@@ -29,9 +29,7 @@
 #include "pho_types.h"
 #include <stdlib.h>
 
-
 struct pho_xfer_desc;
-
 
 /**
  * Transfer (GET / PUT / MPUT) flags.

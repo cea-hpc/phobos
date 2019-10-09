@@ -76,6 +76,7 @@ AC_CHECK_HEADERS([ini_config.h], [], [AC_MSG_ERROR(missing libini_config header 
 AC_CHECK_HEADERS([openssl/sha.h], [], [AC_MSG_ERROR(missing openssl libcrypt header files)])
 AC_CHECK_HEADERS([attr/xattr.h], [], [AC_MSG_ERROR(missing libattr header files)])
 AC_CHECK_HEADERS([scsi/sg_io_linux.h], [], [AC_MSG_ERROR(missing sg3_utils header files)])
+AC_CHECK_HEADERS([protobuf-c/protobuf-c.h], [], [AC_MSG_ERROR(missing protobuf-c header files)])
 PKG_CHECK_MODULES(JANSSON, [jansson >= 2.5])
 PKG_CHECK_MODULES(LIBPQ, [libpq >= 9.4])
 
@@ -89,6 +90,7 @@ AC_SUBST(ac_configure_args)
 
 AC_CONFIG_FILES([Makefile
          src/Makefile
+         src/proto/Makefile
          src/include/Makefile
          src/common/Makefile
          src/ldm/Makefile
@@ -97,6 +99,7 @@ AC_CONFIG_FILES([Makefile
          src/lrs/Makefile
          src/io/Makefile
          src/layout/Makefile
+         src/serializer/Makefile
          src/store/Makefile
          src/layout-modules/Makefile
          src/tests/Makefile

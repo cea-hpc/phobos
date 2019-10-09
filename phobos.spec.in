@@ -19,6 +19,7 @@ BuildRequires: libini_config-devel
 BuildRequires: openssl-devel
 BuildRequires: libattr-devel
 BuildRequires: sg3_utils-devel
+BuildRequires: protobuf-c-devel
 
 Requires: postgresql94-server
 Requires: postgresql94-contrib
@@ -32,6 +33,8 @@ Requires: python-argparse
 Requires: python-yaml
 Requires: clustershell
 Requires: python-psycopg2
+Requires: protobuf
+Requires: protobuf-c
 
 %description
 Phobos aims to implement high performance distributed object storage on a wide

@@ -1,0 +1,112 @@
+/**
+ * \brief   Protobuf file for LRS request/reply protocol.
+ */
+
+syntax = "proto2";
+
+import "pho_proto_common.proto";
+
+/** LRS protocol request, emitted by layout modules. */
+message PhoRequest {
+    /** Body of write allocation request. */
+    message Write {
+        /** Request for one write accessible medium. */
+        message Elt {
+            required uint64 size = 1;   // Amount of data to be written
+                                        // on the medium.
+            repeated string tags = 2;   // Tags to be satisfied.
+        }
+
+        repeated Elt media = 1;         // Write allocation requests.
+    }
+
+    /**
+     * Body of read allocation request, request n_required media among
+     * the provided med_ids (n_required <= n_med_ids).
+     */
+    message Read {
+        required uint32 n_required      = 1; // Number of media to actually
+                                            // allocate among the ones
+                                            // specified in med_ids.
+        repeated PhoMediumInfo med_ids = 2; // IDs of the requested media.
+    }
+
+    /** Body of the release request. */
+    message Release {
+        /** Release request for one medium. */
+        message Elt {
+            required PhoMediumInfo med_id = 1;  // ID of the medium to release.
+            required int32 rc             = 2;  // Outcome of the performed IO
+                                                // (0 or -errno).
+            required uint64 size_written  = 3;  // Amount of bytes written
+                                                // on this medium (0 if the
+                                                // medium was only read).
+        }
+
+        repeated Elt media = 1;                 // Description of the media
+                                                // to release.
+    }
+
+    required uint32 id       = 1;   // Request ID to match its future response.
+
+    // Only exactly one of these three fields is expected.
+    optional Write walloc    = 2;   // Write allocation body.
+    optional Read ralloc     = 3;   // Read allocation body.
+    optional Release release = 4;   // Release body.
+}
+
+/** LRS protocol response, emitted by the LRS. */
+message PhoResponse {
+    /** Body of the write allocation response. */
+    message Write {
+        /** Write allocation response for one medium. */
+        message Elt {
+            required PhoMediumInfo med_id     = 1;  // ID of the allocated
+                                                    // medium.
+            required uint64 avail_size        = 2;  // Size available on this
+                                                    // medium (potentially less
+                                                    // than requested).
+            required string root_path         = 3;  // Mount point.
+            required PhoFsType fs_type        = 4;  // Filesystem type.
+            required PhoAddressType addr_type = 5;  // Address type.
+        }
+
+        repeated Elt media = 1;     // Description of allocated media.
+    }
+
+    /** Body of the read allocation response. */
+    message Read {
+        /** Read allocation response for one medium. */
+        message Elt {
+            required PhoMediumInfo med_id     = 1;  // ID of the allocated
+                                                    // medium.
+            required string root_path         = 2;  // Mount point.
+            required PhoFsType fs_type        = 3;  // Filesystem type.
+            required PhoAddressType addr_type = 4;  // Address type.
+        }
+
+        repeated Elt media = 1;     // Description of allocated media.
+    }
+
+    /** Body of the release response. */
+    message Release {
+        repeated PhoMediumInfo med_ids = 1;     // IDs of released media.
+    }
+
+    /** Body of the error response. */
+    message Error {
+        required int32 rc                = 1;   // Error code,
+                                                // -errno for homogeneity.
+        required PhoRequestKind req_kind = 2;   // Kind of request that
+                                                // raised the error.
+    }
+
+    required uint32 req_id   = 1;   // Request ID, to be matched with
+                                    // the corresponding request.
+
+    // Only exactly one of these four fields is expected.
+    optional Write walloc    = 2;   // Write allocation body.
+    optional Read ralloc     = 3;   // Read allocation body.
+    optional Release release = 4;   // Release body.
+    optional Error error     = 5;   // Error body.
+}
