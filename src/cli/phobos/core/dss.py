@@ -75,7 +75,7 @@ def key_convert(obj_type, key):
     kname_prefx = OBJECT_PREFIXES[obj_type] # KeyError on unsupported obj_type
     for sufx, comp_enum in FILTER_OPERATORS:
         if key.endswith(sufx):
-            kname, comp = key[:len(sufx):], comp_enum
+            kname, comp = key[:-len(sufx)], comp_enum
             break
     return "%s%s" % (kname_prefx, kname), comp
 
@@ -87,11 +87,14 @@ def dss_filter(obj_type, **kwargs):
     criteria = []
     for key, val in kwargs.iteritems():
         key, comp = key_convert(obj_type, key)
-        if comp is None:
-            # Implicit equal
-            criteria.append({key: val})
-        else:
-            criteria.append({comp: {key: val}})
+        if not isinstance(val, list):
+            val = [val]
+        for v in val:
+            if comp is None:
+                # Implicit equal
+                criteria.append({key: v})
+            else:
+                criteria.append({comp: {key: v}})
 
     assert len(criteria) > 0
 
@@ -169,6 +172,11 @@ class BaseObjectManager(object):
         """Retrieve objects from DSS."""
         res = POINTER(self.wrapped_class)()
         res_cnt = c_int()
+
+        # rename the tags key to be correctly parsed by the dss filter
+        if kwargs.get('tags', None):
+            tags = kwargs.pop('tags')
+            kwargs['tags__jexist'] = tags
 
         filt = dss_filter(self.wrapped_ident, **kwargs)
         if filt is not None:

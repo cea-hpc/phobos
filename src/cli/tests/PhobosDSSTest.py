@@ -71,6 +71,35 @@ class DSSClientTest(unittest.TestCase):
             self.assertEqual(medias[0].ident, medias[-len(medias)].ident)
             self.assertEqual(medias[len(medias) - 1].ident, medias[-1].ident)
 
+    def test_list_media_by_tags(self):
+        with Client() as client:
+            client.media.add(PHO_DEV_DIR, 'POSIX', None, 'm0')
+            client.media.add(PHO_DEV_DIR, 'POSIX', None, 'm1', tags=['foo'])
+            client.media.add(PHO_DEV_DIR, 'POSIX', None, 'm2', \
+                                                    tags=['foo', 'bar'])
+            client.media.add(PHO_DEV_DIR, 'POSIX', None, 'm3', \
+                                                    tags=['goo', 'foo'])
+            client.media.add(PHO_DEV_DIR, 'POSIX', None, 'm4', \
+                                                    tags=['bar', 'goo'])
+            client.media.add(PHO_DEV_DIR, 'POSIX', None, 'm5', \
+                                                    tags=['foo', 'bar', 'goo'])
+            n_tags = {'foo': 4, 'bar': 3, 'goo': 3}
+            n_bar_foo = 2
+
+            for tag, n_tag in n_tags.iteritems():
+                n = 0
+                for medium in client.media.get(tags=tag):
+                    self.assertTrue(tag in medium.tags)
+                    n += 1
+                self.assertEqual(n, n_tag)
+
+            n = 0
+            for medium in client.media.get(tags=['bar', 'foo']):
+                self.assertTrue('bar' in medium.tags)
+                self.assertTrue('foo' in medium.tags)
+                n += 1
+            self.assertEqual(n, n_bar_foo)
+
     def test_getset(self):
         """GET / SET an object to validate the whole chain."""
         with Client() as client:

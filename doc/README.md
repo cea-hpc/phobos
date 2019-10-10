@@ -179,6 +179,11 @@ phobos tape update -T class2 [073000-073099]L8
 phobos dir update -T '' [073000-073099]L8
 ```
 
+Media can be listed following their tags:
+```
+phobos tape list -T class1,project2
+```
+
 When pushing objects to phobos, you can then restrict the subset of resources
 that can be used to store data by specifying tags with the `-T` option.
 

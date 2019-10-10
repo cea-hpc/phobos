@@ -125,7 +125,7 @@ class BasicExecutionTest(unittest.TestCase):
 
 class MediaAddTest(BasicExecutionTest):
     """
-    This sub-test suite adds tapesand makes sure that both regular and abnormal
+    This sub-test suite adds tapes and makes sure that both regular and abnormal
     cases are handled properly.
 
     Note that what we are in the CLI tests and therefore try to specifically
@@ -233,6 +233,50 @@ class MediaAddTest(BasicExecutionTest):
         self.pho_execute(['tape', 'add', 'G000[10-15]', '-t', 'lTo8'])
         self.pho_execute(['tape', 'add', 'H000[10-15]', '-t', 'LTO8'])
         self.pho_execute(['tape', 'add', 'I000[10-15]', '-t', 'raTaTouille'])
+
+
+class MediumListTest(BasicExecutionTest):
+    """
+    This sub-test suite adds tapes and makes sure that phobos list them
+    according to their tags.
+
+    Note that we are in the CLI tests and therefore try to specifically
+    exercise the upper layers (command line parsing etc.)
+    """
+    def add_media(self):
+        self.pho_execute(['tape', 'add', 'm0', '-t', 'lto8'])
+        self.pho_execute(['tape', 'add', 'm1', '-t', 'lto8', '-T', 'foo'])
+        self.pho_execute(['tape', 'add', 'm2', '-t', 'lto8', '-T', 'foo,bar'])
+        self.pho_execute(['tape', 'add', 'm3', '-t', 'lto8', '-T', 'goo,foo'])
+        self.pho_execute(['tape', 'add', 'm4', '-t', 'lto8', '-T', 'bar,goo'])
+        self.pho_execute(['tape', 'add', 'm5', '-t', 'lto8', \
+                          '-T', 'foo,bar,goo'])
+
+    def test_med_list_tags(self):
+        self.add_media()
+        output, _ = self.pho_execute_capture(['tape', 'list', '-T', 'foo'])
+        self.assertNotIn("m0", output)
+        self.assertIn("m1", output)
+        self.assertIn("m2", output)
+        self.assertIn("m3", output)
+        self.assertNotIn("m4", output)
+        self.assertIn("m5", output)
+
+        output, _ = self.pho_execute_capture(['tape', 'list', '-T', 'goo'])
+        self.assertNotIn("m0", output)
+        self.assertNotIn("m1", output)
+        self.assertNotIn("m2", output)
+        self.assertIn("m3", output)
+        self.assertIn("m4", output)
+        self.assertIn("m5", output)
+
+        output, _ = self.pho_execute_capture(['tape', 'list', '-T', 'foo,bar'])
+        self.assertNotIn("m0", output)
+        self.assertNotIn("m1", output)
+        self.assertIn("m2", output)
+        self.assertNotIn("m3", output)
+        self.assertNotIn("m4", output)
+        self.assertIn("m5", output)
 
 
 class DeviceAddTest(BasicExecutionTest):
