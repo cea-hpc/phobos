@@ -496,6 +496,17 @@ class DriveListOptHandler(ListOptHandler):
         super(DriveListOptHandler, cls).add_options(parser)
         parser.add_argument('-m', '--model', help='filter on model')
 
+class MediaListOptHandler(ListOptHandler):
+    """
+    Specific version of the 'list' command for media, with a couple
+    extra-options.
+    """
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(MediaListOptHandler, cls).add_options(parser)
+        parser.add_argument('-T', '--tags', type=lambda t: t.split(','), \
+                            help='filter on tags (comma-separated: foo,bar)')
 
 class TapeAddOptHandler(MediaAddOptHandler):
     """Specific version of the 'add' command for tapes, with extra-options."""
@@ -687,7 +698,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         MediaUpdateOptHandler,
         FormatOptHandler,
         ShowOptHandler,
-        ListOptHandler,
+        MediaListOptHandler,
         LockOptHandler,
         UnlockOptHandler
     ]
@@ -791,8 +802,11 @@ class MediaOptHandler(BaseResourceOptHandler):
                          self.params.get('numeric'))
 
     def exec_list(self):
-        """List all medias."""
-        for media in self.client.media.get(family=self.family):
+        """List all media."""
+        kwargs = {}
+        if self.params.get('tags'):
+            kwargs["tags"] = self.params.get('tags')
+        for media in self.client.media.get(family=self.family, **kwargs):
             print media.ident
 
     def exec_lock(self):
@@ -863,6 +877,7 @@ class DirOptHandler(MediaOptHandler, DeviceOptHandler):
     label = 'dir'
     descr = 'handle directories'
     cenum = PHO_DEV_DIR
+    verbs = MediaOptHandler.verbs
 
     def exec_add(self):
         """
@@ -927,7 +942,7 @@ class TapeOptHandler(MediaOptHandler):
         MediaUpdateOptHandler,
         FormatOptHandler,
         ShowOptHandler,
-        ListOptHandler,
+        MediaListOptHandler,
         LockOptHandler,
         UnlockOptHandler
     ]
