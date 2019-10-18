@@ -370,15 +370,28 @@ function check_status
     done
 }
 
+function mtx_retry
+{
+    local retry_count=0
+    while ! mtx $*; do
+        echo "mtx failure, retrying in 1 sec" >&2
+        ((retry_count++)) || true
+        (( $retry_count > 5 )) && return 1
+        sleep 1
+    done
+}
+
 function drain_all_drives
 {
 #TODO replace umount/mtx unload by a 'phobos drive drain' command
     #umount all ltfs
-    mount | awk '/^ltfs/ {print $3}' | xargs umount
+    mount | awk '/^ltfs/ {print $3}' | xargs -r umount
 
     #unload all tapes
     mtx status | awk -F'[ :]' '/Data Transfer Element.*Full/ {print $8, $4}' |
-        xargs -n 2 mtx unload
+        while read slot drive; do
+            mtx_retry unload $slot $drive
+        done
 }
 
 function lock_all_drives
