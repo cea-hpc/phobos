@@ -336,7 +336,7 @@ function concurrent_put
     # check they are both in DB
     $phobos getmd $key.1
     if (( single==0 )); then
-	$phobos getmd $key.2
+        $phobos getmd $key.2
     fi
 }
 
