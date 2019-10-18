@@ -21,7 +21,7 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-set -e
+set -xe
 
 # format and clean all by default
 CLEAN_ALL=${CLEAN_ALL:-1}
