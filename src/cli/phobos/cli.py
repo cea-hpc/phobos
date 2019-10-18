@@ -57,7 +57,6 @@ from phobos.core.lrs import lrs_fs_format
 from phobos.output import dump_object_list
 from ClusterShell.NodeSet import NodeSet
 
-
 def phobos_log_handler(log_record):
     """
     Receive log records emitted from lower layers and inject them into the

@@ -105,6 +105,7 @@ AC_CONFIG_FILES([Makefile
          src/io/Makefile
          src/layout/Makefile
          src/serializer/Makefile
+         src/communication/Makefile
          src/store/Makefile
          src/layout-modules/Makefile
          src/tests/Makefile

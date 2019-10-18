@@ -5,11 +5,13 @@ AM_CFLAGS= $(CC_OPT)
 # 2) run TESTS and generate a summary
 check_PROGRAMS=test_common test_attrs test_mapper test_log test_store	\
 	       test_dss test_cfg test_scsi test_scsi_scan test_dev_tape \
-	       test_ldm test_type_utils test_store_retry test_io
+	       test_ldm test_type_utils test_store_retry test_io \
+	       test_communication
 
 # 1st step: low level tests
 UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_dev_tape \
-	   test_ldm test_type_utils test_io
+	   test_ldm test_type_utils test_io test_communication
+
 # 2nd step: integration tests
 INTEG_TESTS=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh \
 	    test_store_retry.sh
@@ -30,6 +32,9 @@ test_log_LDADD=../common/libpho_common.la
 
 test_common_SOURCES=test_common.c
 test_common_LDADD=../common/libpho_common.la
+
+test_communication_SOURCES=test_communication.c
+test_communication_LDADD=../communication/libpho_comm.la ../common/libpho_common.la
 
 test_attrs_SOURCES=test_attrs.c
 test_attrs_LDADD=../common/libpho_common.la

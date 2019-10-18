@@ -214,11 +214,6 @@ struct pho_buff {
     char   *buff;
 };
 
-struct pho_ubuff {
-    size_t   size;
-    uint8_t *buff;
-};
-
 struct pho_lock {
     time_t   lock_ts;
     char    *lock;

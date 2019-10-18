@@ -1,0 +1,143 @@
+/* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+ * vim:expandtab:shiftwidth=4:tabstop=4:
+ */
+/*
+ *  All rights reserved (c) 2014-2019 CEA/DAM.
+ *
+ *  This file is part of Phobos.
+ *
+ *  Phobos is free software: you can redistribute it and/or modify it under
+ *  the terms of the GNU Lesser General Public License as published by
+ *  the Free Software Foundation, either version 2.1 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Phobos is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Lesser General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Lesser General Public License
+ *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+ */
+/**
+ * \brief  Phobos Local Resource Scheduler (LRS) - scheduler
+ */
+#ifndef _PHO_LRS_SCHED_H
+#define _PHO_LRS_SCHED_H
+
+#include <stdint.h>
+
+#include "pho_srl_lrs.h"
+#include "pho_types.h"
+
+struct dss_handle;
+struct dev_descr;
+
+/**
+ * Local Resource Scheduler instance, manages media and local devices for the
+ * actual IO to be performed.
+ */
+struct lrs_sched {
+    struct dss_handle *dss;         /**< Associated DSS */
+    struct dev_descr  *devices;     /**< List of available devices */
+    size_t             dev_count;   /**< Number of devices */
+    char              *lock_owner;  /**< Lock owner name for this LRS
+                                      *  (contains hostname and tid)
+                                      */
+    GQueue *req_queue;              /**< Queue for all but release requests */
+    GQueue *release_queue;          /**< Queue for release requests */
+};
+
+/**
+ * Request container used by the scheduler to transfer information
+ * between a request and its response. For now, this information consists
+ * in a token value.
+ */
+struct req_container {
+    int token;                      /**< Token value to pass to the response. */
+    pho_req_t *req;                 /**< Request. */
+};
+
+/**
+ * Response container used by the scheduler to transfer information
+ * between a request and its response. For now, this information consists
+ * in a token value.
+ */
+struct resp_container {
+    int token;                      /**< Token value got from the request. */
+    pho_resp_t *resp;               /**< Response. */
+};
+
+/**
+ * Initialize a new sched bound to a given DSS.
+ *
+ * \param[in]       sched       The sched to be initialized.
+ * \param[in]       dss         The DSS that will be used by \a lrs. Initialized
+ *                              (dss_init), managed and deinitialized (dss_fini)
+ *                              externally by the caller.
+ *
+ * \return                      0 on success, -1 * posix error code on failure.
+ */
+int sched_init(struct lrs_sched *sched, struct dss_handle *dss);
+
+/**
+ * Free all resources associated with this sched except for the dss, which must
+ * be deinitialized by the caller if necessary.
+ *
+ * \param[in]       sched       The sched to be deinitialized.
+ */
+void sched_fini(struct lrs_sched *sched);
+
+/**
+ * Load and format a medium to the given fs type.
+ *
+ * \param[in]       sched       Initialized sched.
+ * \param[in]       id          Medium ID for the medium to format.
+ * \param[in]       fs          Filesystem type (only PHO_FS_LTFS for now).
+ * \param[in]       unlock      Unlock tape if successfully formated.
+ * \return                      0 on success, negative error code on failure.
+ *
+ * @TODO: this should be integrated into the LRS protocol
+ */
+int sched_format(struct lrs_sched *sched, const struct media_id *id,
+                 enum fs_type fs, bool unlock);
+
+/**
+ * Make the sched aware of a new device
+ *
+ * @FIXME This is a temporary API waiting for a transparent way to add devices
+ * while running (to be done with the LRS protocol).
+ */
+int sched_device_add(struct lrs_sched *sched, const struct dev_info *devi);
+
+/**
+ * Enqueue a request to be handled by the sched. The request is guaranteed to be
+ * answered at some point.
+ *
+ * The request is encapsulated in a container which owns a token that must be
+ * given back with the associated response.
+ *
+ * \param[in]       sched       The sched that will handle the request.
+ * \param[in]       reqc        The request to enqueue.
+ *
+ * \return                      0 on success, -1 * posix error code on failure.
+ */
+int sched_request_enqueue(struct lrs_sched *sched, struct req_container *reqc);
+
+/**
+ * Get responses for all handled pending requests (enqueued with
+ * sched_request_enqueue).
+ *
+ * The responses are encapsulated in a container which owns a token given by
+ * the associated request.
+ *
+ * \param[in]       sched       The sched from which to get the responses.
+ * \param[out]      n_resp      The number of responses generated by the sched.
+ * \param[out]      respc       The responses issued from the sched process.
+ *
+ * \return                      0 on success, -1 * posix error code on failure.
+ */
+int sched_responses_get(struct lrs_sched *sched, int *n_resp,
+                        struct resp_container **respc);
+
+#endif

@@ -296,7 +296,7 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack);
  *
  * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_request_pack(pho_req_t *req, struct pho_ubuff *buf);
+int pho_srl_request_pack(pho_req_t *req, struct pho_buff *buf);
 
 /**
  * Deserialization of a request.
@@ -308,7 +308,7 @@ int pho_srl_request_pack(pho_req_t *req, struct pho_ubuff *buf);
  *
  * \return                      Request data structure.
  */
-pho_req_t *pho_srl_request_unpack(struct pho_ubuff *buf);
+pho_req_t *pho_srl_request_unpack(struct pho_buff *buf);
 
 /**
  * Serialization of a response.
@@ -321,7 +321,7 @@ pho_req_t *pho_srl_request_unpack(struct pho_ubuff *buf);
  *
  * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_response_pack(pho_resp_t *resp, struct pho_ubuff *buf);
+int pho_srl_response_pack(pho_resp_t *resp, struct pho_buff *buf);
 
 /**
  * Deserialization of a response.
@@ -333,6 +333,6 @@ int pho_srl_response_pack(pho_resp_t *resp, struct pho_ubuff *buf);
  *
  * \return                      Response data structure.
  */
-pho_resp_t *pho_srl_response_unpack(struct pho_ubuff *buf);
+pho_resp_t *pho_srl_response_unpack(struct pho_buff *buf);
 
 #endif

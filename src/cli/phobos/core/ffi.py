@@ -65,8 +65,18 @@ class DSSLock(Structure):
         ('lock', c_char_p)
     ]
 
-class LRS(Structure):
-    """Local Resource Scheduler"""
+class CommInfo(Structure):
+    """Communication information."""
+    _fields_ = [
+        ('is_server', c_int),
+        ('path', c_char_p),
+        ('socket_fd', c_int),
+        ('epoll_fd', c_int),
+        ('ev_tab', c_void_p),
+    ]
+
+class LRSSched(Structure):
+    """Local Resource Scheduler sub data structure."""
     _fields_ = [
         ('dss', c_void_p),
         ('devices', c_void_p),
@@ -74,6 +84,13 @@ class LRS(Structure):
         ('lock_owner', c_char_p),
         ('req_queue', c_void_p),
         ('release_queue', c_void_p),
+    ]
+
+class LRS(Structure):
+    """Local Resource Scheduler."""
+    _fields_ = [
+        ('sched', LRSSched),
+        ('comm', CommInfo)
     ]
 
 class DevInfo(Structure, CLIManagedResourceMixin):

@@ -458,7 +458,7 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
 }
 
 /* If the protocol version is greater than 127, need to increase  */
-int pho_srl_request_pack(pho_req_t *req, struct pho_ubuff *buf)
+int pho_srl_request_pack(pho_req_t *req, struct pho_buff *buf)
 {
     buf->size = pho_request__get_packed_size(req) + PHO_PROTOCOL_VERSION_SIZE;
     buf->buff = malloc(buf->size);
@@ -466,12 +466,12 @@ int pho_srl_request_pack(pho_req_t *req, struct pho_ubuff *buf)
         return -ENOMEM;
 
     buf->buff[0] = PHO_PROTOCOL_VERSION;
-    pho_request__pack(req, buf->buff + PHO_PROTOCOL_VERSION_SIZE);
+    pho_request__pack(req, (uint8_t *)buf->buff + PHO_PROTOCOL_VERSION_SIZE);
 
     return 0;
 }
 
-pho_req_t *pho_srl_request_unpack(struct pho_ubuff *buf)
+pho_req_t *pho_srl_request_unpack(struct pho_buff *buf)
 {
     pho_req_t *req = NULL;
 
@@ -481,7 +481,8 @@ pho_req_t *pho_srl_request_unpack(struct pho_ubuff *buf)
                   buf->buff[0], PHO_PROTOCOL_VERSION);
     else
         req = pho_request__unpack(NULL, buf->size - PHO_PROTOCOL_VERSION_SIZE,
-                                  buf->buff + PHO_PROTOCOL_VERSION_SIZE);
+                                  (uint8_t *)buf->buff +
+                                      PHO_PROTOCOL_VERSION_SIZE);
 
     if (!req)
         pho_error(-EINVAL, "Problem with request unpacking");
@@ -491,7 +492,7 @@ pho_req_t *pho_srl_request_unpack(struct pho_ubuff *buf)
     return req;
 }
 
-int pho_srl_response_pack(pho_resp_t *resp, struct pho_ubuff *buf)
+int pho_srl_response_pack(pho_resp_t *resp, struct pho_buff *buf)
 {
     buf->size = pho_response__get_packed_size(resp) + PHO_PROTOCOL_VERSION_SIZE;
     buf->buff = malloc(buf->size);
@@ -499,12 +500,12 @@ int pho_srl_response_pack(pho_resp_t *resp, struct pho_ubuff *buf)
         return -ENOMEM;
 
     buf->buff[0] = PHO_PROTOCOL_VERSION;
-    pho_response__pack(resp, buf->buff + PHO_PROTOCOL_VERSION_SIZE);
+    pho_response__pack(resp, (uint8_t *)buf->buff + PHO_PROTOCOL_VERSION_SIZE);
 
     return 0;
 }
 
-pho_resp_t *pho_srl_response_unpack(struct pho_ubuff *buf)
+pho_resp_t *pho_srl_response_unpack(struct pho_buff *buf)
 {
     pho_resp_t *resp = NULL;
 
@@ -514,7 +515,8 @@ pho_resp_t *pho_srl_response_unpack(struct pho_ubuff *buf)
                   buf->buff[0], PHO_PROTOCOL_VERSION);
     else
         resp = pho_response__unpack(NULL, buf->size - PHO_PROTOCOL_VERSION_SIZE,
-                                    buf->buff + PHO_PROTOCOL_VERSION_SIZE);
+                                    (uint8_t *)buf->buff +
+                                        PHO_PROTOCOL_VERSION_SIZE);
 
     if (!resp)
         pho_error(-EINVAL, "Problem with response unpacking");

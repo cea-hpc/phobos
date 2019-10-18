@@ -31,7 +31,6 @@ from phobos.core.ffi import LIBPHOBOS, LRS, MediaId
 from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX,
                                PHO_DEV_DIR, PHO_DEV_TAPE)
 
-
 def lrs_fs_format(dss, medium_id, fs_type, unlock=False):
     """Format a medium though the LRS layer."""
     fs_type = fs_type.lower()
@@ -48,7 +47,8 @@ def lrs_fs_format(dss, medium_id, fs_type, unlock=False):
     mstruct = MediaId(dev_type, medium_id)
 
     lrs = LRS()
-    rc = LIBPHOBOS.lrs_init(byref(lrs), byref(dss.handle))
+
+    rc = LIBPHOBOS.lrs_init(byref(lrs), byref(dss.handle), None)
     if rc:
         raise EnvironmentError(rc, "Cannot initialize LRS")
 
