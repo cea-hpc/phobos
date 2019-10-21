@@ -29,9 +29,7 @@ if  [[ -w /dev/changer ]]; then
     ls -ld /dev/changer
 
     # make sure no process uses the drive
-    systemctl stop ltfs || true
-    # make systemctl actually perform "stop" the next time it is done
-    systemctl start ltfs || true
+    /usr/share/ltfs/ltfs stop || true
 
     ./test_scsi
 else
