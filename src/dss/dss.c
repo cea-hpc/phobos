@@ -871,8 +871,7 @@ static char *dss_layout_desc_encode(struct module_desc *desc)
               result ? result : "(null)");
 
 out_free:
-    json_decref(attrs);
-    json_decref(root);
+    json_decref(root); /* if attrs, it is included in root */
     return result;
 }
 

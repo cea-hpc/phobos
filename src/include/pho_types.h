@@ -299,9 +299,6 @@ struct extent {
      * from this structure, or stored in db as an extent property?
      */
     enum address_type   addr_type;  /**< way to address this media */
-
-    /* @TODO: remove fs_type fields once raid1 is refactored */
-    enum fs_type        fs_type;    /**< type of filesystem on this media */
 };
 
 /**

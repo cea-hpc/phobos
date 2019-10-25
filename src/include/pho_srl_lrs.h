@@ -20,7 +20,7 @@
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
 /**
- * \brief  Phobos communication data structure helper.
+ * \brief  Phobos LRS communication data structure helper.
  *         'srl' stands for SeRiaLizer.
  */
 #ifndef _PHO_SRL_REQREP_H

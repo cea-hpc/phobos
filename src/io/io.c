@@ -803,6 +803,9 @@ static int pho_posix_close(struct pho_io_descr *iod)
 
     io_ctx = iod->iod_ctx;
 
+    if (!io_ctx)
+        return 0;
+
     /* closing fd */
     if (io_ctx->fd >= 0) {
         if (close(io_ctx->fd)) {

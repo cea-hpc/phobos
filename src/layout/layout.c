@@ -261,7 +261,11 @@ int layout_decode(struct pho_encoder *enc, struct pho_xfer_desc *xfer,
     enc->xfer = xfer;
     enc->layout = layout;
 
-    return mod->ops->decode(enc);
+    rc = mod->ops->decode(enc);
+    if (rc)
+        layout_destroy(enc); /* free private decoder if needed */
+
+    return rc;
 }
 
 void layout_destroy(struct pho_encoder *enc)
