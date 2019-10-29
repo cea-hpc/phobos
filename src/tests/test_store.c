@@ -94,8 +94,10 @@ int main(int argc, char **argv)
 
         /* Oh, let's add a tag for the mput case */
         rc = pho_attr_set(&attrs, "program", argv[0]);
-        if (rc)
+        if (rc) {
+            free(xfer);
             exit(EXIT_FAILURE);
+        }
 
         argv += 2;
         argc -= 2;
@@ -108,13 +110,16 @@ int main(int argc, char **argv)
 
         rc = phobos_put(xfer, xfer_cnt, NULL, NULL);
 
-        for (i = 0; i < argc; i++)
+        for (i = 0; i < argc; i++) {
             xfer_desc_close_fd(xfer + i);
+            free(xfer[i].xd_objid);
+        }
 
         if (rc)
             pho_error(rc, "MPUT failed");
 
         pho_attrs_free(&attrs);
+        free(xfer);
     } else if (!strcmp(argv[1], "tag-put")) {
         struct pho_xfer_desc    xfer = {0};
         struct pho_attrs        attrs = {0};

@@ -174,6 +174,7 @@ int main(int argc, char **argv)
                 }
                 rc = dss_filter_build(filter, "%s", argv[3]);
                 if (rc) {
+                    free(filter);
                     pho_error(rc, "Cannot build DSS filter");
                     exit(EXIT_FAILURE);
                 }
@@ -182,8 +183,17 @@ int main(int argc, char **argv)
 
         rc = dss_generic_get(&dss_handle, type, filter, &item_list, &item_cnt);
         if (rc) {
+            if (filter) {
+                dss_filter_free(filter);
+                free(filter);
+            }
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
+        }
+
+        if (filter) {
+            dss_filter_free(filter);
+            free(filter);
         }
 
         switch (type) {
@@ -294,6 +304,7 @@ int main(int argc, char **argv)
                     rc = asprintf(&s, "%sCOPY", id);
                     assert(rc > 0);
                     media_id_set(&media->id, s);
+                    free(s);
                 } else if (action == DSS_SET_UPDATE) {
                     media->stats.nb_obj += 1000;
                 }

@@ -57,6 +57,8 @@ static int test_unit(void *hint)
         pho_info("Mapped '%s' to '%s' (model: '%s')", dev_name, lds.lds_serial,
                  lds.lds_model);
 
+    ldm_dev_state_fini(&lds);
+
     return rc;
 }
 
@@ -77,10 +79,13 @@ static int test_name_serial_match(void *hint)
         return rc;
 
     rc = ldm_dev_lookup(&deva, lds.lds_serial, path, sizeof(path));
-    if (rc)
+    if (rc) {
+        ldm_dev_state_fini(&lds);
         return rc;
+    }
 
     pho_debug("Reverse mapped serial '%s' to '%s'", lds.lds_serial, path);
+    ldm_dev_state_fini(&lds);
     return strcmp(path, name_ref) == 0 ? 0 : -EINVAL;
 }
 
