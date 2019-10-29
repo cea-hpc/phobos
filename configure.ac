@@ -22,6 +22,11 @@ AC_PREFIX_DEFAULT([/usr])
 
 AC_GNU_SOURCE
 
+AX_VALGRIND_DFLT([helgrind],[off])
+AX_VALGRIND_DFLT([drd],[off])
+AX_VALGRIND_DFLT([sgcheck],[off])
+AX_VALGRIND_CHECK
+
 # only generate dynamic libs (used in LD_PRELOAD)
 AC_ENABLE_STATIC(no)
 # disable shared libraries generation

@@ -1,0 +1,12 @@
+# Valgrind file suppression for leaks that may come from outside phobos.
+
+# pthread_create() from GLIBC
+{
+    <insert_a_suppression_name_here>
+    Memcheck:Leak
+    fun:calloc
+    fun:_dl_allocate_tls
+    fun:pthread_create@@GLIBC_2.2.5
+    ...
+}
+

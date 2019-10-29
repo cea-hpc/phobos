@@ -23,6 +23,8 @@
 
 set -xe
 
+LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
+
 # format and clean all by default
 CLEAN_ALL=${CLEAN_ALL:-1}
 TAGS=foo-tag,bar-tag
@@ -94,12 +96,12 @@ function tape_setup
     # get LTO5 tapes
     local lto5_tapes="$(get_tapes L5 $N_TAPES)"
     echo "adding tapes $lto5_tapes with tags $LTO5_TAGS..."
-    $phobos tape add -T $LTO5_TAGS -t lto5 "$lto5_tapes"
+    $LOG_VALG $phobos tape add -T $LTO5_TAGS -t lto5 "$lto5_tapes"
 
     # get LTO6 tapes
     local lto6_tapes="$(get_tapes L6 $N_TAPES)"
     echo "adding tapes $lto6_tapes with tags $LTO6_TAGS..."
-    $phobos tape add -T $LTO6_TAGS -t lto6 "$lto6_tapes"
+    $LOG_VALG $phobos tape add -T $LTO6_TAGS -t lto6 "$lto6_tapes"
 
     # set tapes
     export tapes="$lto5_tapes,$lto6_tapes"
@@ -112,19 +114,19 @@ function tape_setup
 
     # show a tape info
     local tp1=$(echo $tapes | nodeset -e | awk '{print $1}')
-    $phobos tape show $tp1
+    $LOG_VALG $phobos tape show $tp1
 
     # unlock all tapes but one
     for t in $(echo "$tapes" | nodeset -e -S '\n' |
                     head -n $(($N_TAPES * 2 - 1))); do
-        $phobos tape unlock $t
+        $LOG_VALG $phobos tape unlock $t
     done
 
     # get drives
     local drives=$(get_drives $N_DRIVES)
     N_DRIVES=$(echo $drives | wc -w)
     echo "adding drives $drives..."
-    $phobos drive add $drives
+    $LOG_VALG $phobos drive add $drives
 
     # show a drive info
     local dr1=$(echo $drives | awk '{print $1}')
@@ -141,14 +143,14 @@ function tape_setup
     fi
     for d in $serials; do
         echo $d
-        $phobos drive unlock $d
+        $LOG_VALG $phobos drive unlock $d
     done
 
     # need to format at least 2 tapes for concurrent_put
     # format lto5 tapes
-    $phobos -v tape format $lto5_tapes --unlock
+    $LOG_VALG $phobos -v tape format $lto5_tapes --unlock
     # format lto6 tapes
-    $phobos -v tape format $lto6_tapes --unlock
+    $LOG_VALG $phobos -v tape format $lto6_tapes --unlock
 }
 
 function dir_setup
@@ -160,7 +162,7 @@ function dir_setup
     [ "$CLEAN_ALL" -eq "0" ] && return 0
 
     echo "adding directories $dirs"
-    $phobos dir add -T $TAGS $dirs
+    $LOG_VALG $phobos dir add -T $TAGS $dirs
     $phobos dir format --fs posix $dirs
 
     # comparing with original list
@@ -175,11 +177,11 @@ function dir_setup
 
     # show a directory info
     d1=$(echo $dirs | nodeset -e | awk '{print $1}')
-    $phobos dir show $d1
+    $LOG_VALG $phobos dir show $d1
 
     # unlock all directories but one
     for t in $(echo $dirs | nodeset -e -S '\n' | head -n 1); do
-        $phobos dir unlock $t
+        $LOG_VALG $phobos dir unlock $t
     done
 }
 
@@ -195,10 +197,10 @@ function lock_test
     local dir_prefix=/tmp/dir.$$
     mkdir $dir_prefix.1
     mkdir $dir_prefix.2
-    $phobos dir add $dir_prefix.1
+    $LOG_VALG $phobos dir add $dir_prefix.1
     $phobos dir show $dir_prefix.1 --format=csv | grep ",locked" ||
         error "Directory should be added with locked state"
-    $phobos dir add $dir_prefix.2 --unlock
+    $LOG_VALG $phobos dir add $dir_prefix.2 --unlock
     $phobos dir show $dir_prefix.2 --format=csv | grep ",unlocked" ||
         error "Directory should be added with unlocked state"
     rmdir $dir_prefix.*
@@ -209,12 +211,12 @@ function put_get_test
     local md="a=1,b=2,c=3"
     local id=test/hosts.$$
     # phobos put
-    $phobos put -m $md /etc/hosts $id
+    $LOG_VALG $phobos put -m $md /etc/hosts $id
 
     # phobos get
     local out_file=/tmp/out
     rm -f $out_file
-    $phobos get $id $out_file
+    $LOG_VALG $phobos get $id $out_file
 
     diff /etc/hosts $out_file
     rm -f $out_file
@@ -261,7 +263,7 @@ function ensure_nb_drives
     local nb=0
     for d in $($phobos $name list); do
         if (( $nb < $count )); then
-            $phobos $name unlock $d
+            $LOG_VALG $phobos $name unlock $d
             ((nb++)) || true
         fi
     done
@@ -332,9 +334,9 @@ function concurrent_put
     rm -f $tmp
 
     # check they are both in DB
-    $phobos getmd $key.1
+    $LOG_VALG $phobos getmd $key.1
     if (( single==0 )); then
-        $phobos getmd $key.2
+        $LOG_VALG $phobos getmd $key.2
     fi
 }
 
@@ -342,7 +344,7 @@ function concurrent_put
 # allows all the instances to succeed
 function concurrent_put_get_retry
 {
-    files=$(echo $test_dir/*)
+    files=`ls -p | grep -v /`
 
     # Concurrent put
     echo -n $files | xargs -n1 -P0 -d' ' -i $phobos put {} {} ||
@@ -364,7 +366,7 @@ function check_status
     local media="$2"
 
     for m in $media; do
-        $phobos $type show "$m"
+        $LOG_VALG $phobos $type show "$m"
     done
 }
 
@@ -395,14 +397,14 @@ function drain_all_drives
 function lock_all_drives
 {
     for d in $($phobos drive list); do
-        $phobos drive lock "$d"
+        $LOG_VALG $phobos drive lock "$d"
     done
 }
 
 function unlock_all_drives
 {
     for d in $($phobos drive list); do
-        $phobos drive unlock "$d"
+        $LOG_VALG $phobos drive unlock "$d"
     done
 }
 
@@ -426,7 +428,7 @@ function tape_drive_compat
     lock_all_drives
     drain_all_drives
     local lto5_d=$($phobos drive list -m ULT3580-TD5 | head -n 1)
-    $phobos drive unlock $lto5_d
+    $LOG_VALG $phobos drive unlock $lto5_d
     $phobos get svc_lto5 /tmp/svc_lto5_from_lto5_drive ||
         error "fail to get data from lto5 tape with one lto5 drive"
     rm /tmp/svc_lto5_from_lto5_drive
@@ -437,7 +439,7 @@ function tape_drive_compat
     lock_all_drives
     drain_all_drives
     local lto6_d=$($phobos drive list -m ULT3580-TD6 | head -n 1)
-    $phobos drive unlock $lto6_d
+    $LOG_VALG $phobos drive unlock $lto6_d
     $phobos get svc_lto5 /tmp/svc_lto5_from_lto6_drive ||
         error "fail to get data from lto5 tape with one lto6 drive"
     rm /tmp/svc_lto5_from_lto6_drive

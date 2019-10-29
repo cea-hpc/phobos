@@ -66,3 +66,12 @@ test_store_retry_LDADD=../store/libphobos_store.la
 
 test_io_SOURCES=test_io.c
 test_io_LDADD=../io/libpho_io.la ../common/libpho_common.la
+
+@VALGRIND_CHECK_RULES@
+VALGRIND_SUPPRESSIONS_FILES=supp-files/valgrind.supp supp-files/glib.supp
+EXTRA_DIST=$(VALGRIND_SUPPRESSIONS_FILES)
+VALGRIND_memcheck_FLAGS=-q --leak-check=full --errors-for-leak-kinds=definite
+
+AUTOMAKE_OPTIONS=parallel-tests
+TEST_EXTENSIONS=.sh
+LOG_COMPILER=$(VALGRIND)

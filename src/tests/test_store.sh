@@ -93,7 +93,7 @@ function test_check_put # verb, source_file, expect_failure
     done
 
     echo $test_bin $verb "${src_files[@]}"
-    $test_bin $verb "${src_files[@]}"
+    $LOG_COMPILER $LOG_FLAGS $test_bin $verb "${src_files[@]}"
     if [[ $? != 0 ]]; then
         if [ "$fail" != "yes" ]; then
             error "$verb failure"
@@ -148,7 +148,7 @@ function test_check_get # extent_path
     tgt="$TEST_RECOV_DIR/$id"
     mkdir -p $(dirname "$tgt")
 
-    $test_bin get "$id" "$tgt"
+    $LOG_COMPILER $LOG_FLAGS $test_bin get "$id" "$tgt"
 
     diff -q "$arch" "$tgt"
 

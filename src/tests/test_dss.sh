@@ -67,7 +67,7 @@ function test_check_get
     local expect_fail=$3
     local rc=0
 
-    $test_bin get "$type" "$crit" || rc=$?
+    $LOG_COMPILER $LOG_FLAGS $test_bin get "$type" "$crit" || rc=$?
     check_rc $rc $expect_fail
 }
 
@@ -79,7 +79,7 @@ function test_check_set
     local expect_fail=$4
     local rc=0
 
-    $test_bin set "$type" "$crit" "$action" || rc=$?
+    $LOG_COMPILER $LOG_FLAGS $test_bin set "$type" "$crit" "$action" || rc=$?
     check_rc $rc $expect_fail
 }
 
@@ -91,7 +91,7 @@ function test_check_lock
     local expect_fail=$4
     local rc=0
 
-    $test_bin "$action" "$target" $lock_owner || rc=$?
+    $LOG_COMPILER $LOG_FLAGS $test_bin "$action" "$target" $lock_owner || rc=$?
     check_rc $rc $expect_fail
 }
 
