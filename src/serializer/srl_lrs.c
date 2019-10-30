@@ -128,6 +128,7 @@ err_media_i:
 
 err_media:
     free(req->walloc);
+    req->walloc = NULL;
 
 err_walloc:
     return -ENOMEM;
@@ -165,6 +166,7 @@ err_media_i:
 
 err_media:
     free(req->ralloc);
+    req->ralloc = NULL;
 
 err_ralloc:
     return -ENOMEM;
@@ -213,6 +215,7 @@ err_media_i:
 
 err_media:
     free(req->release);
+    req->release = NULL;
 
 err_release:
     return -ENOMEM;
@@ -305,6 +308,7 @@ err_media_i:
 
 err_media:
     free(resp->walloc);
+    resp->walloc = NULL;
 
 err_walloc:
     return -ENOMEM;
@@ -353,6 +357,7 @@ err_media_i:
 
 err_media:
     free(resp->ralloc);
+    resp->ralloc = NULL;
 
 err_ralloc:
     return -ENOMEM;
@@ -391,6 +396,7 @@ err_media_i:
 
 err_media:
     free(resp->release);
+    resp->release = NULL;
 
 err_release:
     return -ENOMEM;
