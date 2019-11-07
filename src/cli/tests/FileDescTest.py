@@ -84,4 +84,4 @@ class FileDescTest(unittest.TestCase):
                 self._getsize_good(path, size)
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(buffer=True)

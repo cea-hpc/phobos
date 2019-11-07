@@ -45,4 +45,4 @@ class CfgTest(unittest.TestCase):
         self.assertEqual(get_val("not", "an_existing_key", "foo"), "foo")
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(buffer=True)
