@@ -89,11 +89,8 @@ int pho_comm_open(struct pho_comm_info *ci, const char *sock_path,
     struct epoll_event ev;
     int rc = 0;
 
-    ci->socket_fd = -1;
-    ci->epoll_fd = -1;
-    ci->path = NULL;
+    *ci = pho_comm_info_init();
     ci->is_server = is_server;
-    ci->ev_tab = NULL;
     ev.data.ptr = NULL;
 
     /* offline mode */

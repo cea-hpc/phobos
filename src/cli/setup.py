@@ -28,8 +28,8 @@ from distutils.core import setup, Extension
 # Macros to use for every C extension we build
 GLOBAL_MACROS = [('HAVE_CONFIG_H', 1)]
 
-GLOBAL_LIBS = ['phobos_store']
-GLOBAL_LIBDIRS = ['../store/.libs']
+GLOBAL_LIBS = ['phobos_store', 'phobos_admin']
+GLOBAL_LIBDIRS = ['../store/.libs', '../admin/.libs']
 
 # Common build arguments for C extension modules
 EXTENSION_KWARGS = {

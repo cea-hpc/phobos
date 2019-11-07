@@ -1,3 +1,24 @@
+/* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+ * vim:expandtab:shiftwidth=4:tabstop=4:
+ */
+/*
+ *  All rights reserved (c) 2014-2019 CEA/DAM.
+ *
+ *  This file is part of Phobos.
+ *
+ *  Phobos is free software: you can redistribute it and/or modify it under
+ *  the terms of the GNU Lesser General Public License as published by
+ *  the Free Software Foundation, either version 2.1 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Phobos is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Lesser General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Lesser General Public License
+ *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+ */
 /**
  * \brief   Protobuf file for LRS request/reply protocol.
  */
@@ -47,12 +68,28 @@ message PhoRequest {
                                                 // to release.
     }
 
+    /** Body of the format request. */
+    message Format {
+        required PhoMediumInfo med_id = 1; // ID of the medium to format.
+        required PhoFsType fs         = 2; // Medium file system.
+        required bool unlock          = 3; // True if the medium needs to be
+                                           // unlocked after format.
+    }
+
+    /** Body of the notify request. */
+    message Notify {
+        required PhoResourceId rsrc_id = 1; // ID of the notified resource.
+        required PhoNotifyOp op        = 2; // Notification operation.
+    }
+
     required uint32 id       = 1;   // Request ID to match its future response.
 
-    // Only exactly one of these three fields is expected.
+    // Only exactly one of these five fields is expected.
     optional Write walloc    = 2;   // Write allocation body.
     optional Read ralloc     = 3;   // Read allocation body.
     optional Release release = 4;   // Release body.
+    optional Format format   = 5;   // Format body.
+    optional Notify notify   = 6;   // Notify body.
 }
 
 /** LRS protocol response, emitted by the LRS. */
@@ -93,6 +130,16 @@ message PhoResponse {
         repeated PhoMediumInfo med_ids = 1;     // IDs of released media.
     }
 
+    /** Body of the format response. */
+    message Format {
+        required PhoMediumInfo med_id = 1;      // ID of formatted medium.
+    }
+
+    /** Body of the notify response. */
+    message Notify {
+        required PhoResourceId rsrc_id = 1;      // ID of notified resource.
+    }
+
     /** Body of the error response. */
     message Error {
         required int32 rc                = 1;   // Error code,
@@ -104,9 +151,11 @@ message PhoResponse {
     required uint32 req_id   = 1;   // Request ID, to be matched with
                                     // the corresponding request.
 
-    // Only exactly one of these four fields is expected.
+    // Only exactly one of these six fields is expected.
     optional Write walloc    = 2;   // Write allocation body.
     optional Read ralloc     = 3;   // Read allocation body.
     optional Release release = 4;   // Release body.
-    optional Error error     = 5;   // Error body.
+    optional Format format   = 5;   // Format body.
+    optional Notify notify   = 6;   // Notify body.
+    optional Error error     = 7;   // Error body.
 }

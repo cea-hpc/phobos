@@ -31,9 +31,11 @@ PHO_PYTHON_PATH="$cur_dir/../build/lib.linux-$ARCH-$PY_VERSION/"
 
 # toplevel phobos library
 PHO_STORELIB_PATH="$cur_dir/../../store/.libs/"
+PHO_ADMINLIB_PATH="$cur_dir/../../admin/.libs/"
 PHO_LAYOUTLIB_PATH="$cur_dir/../../layout-modules/.libs/"
 
-export LD_LIBRARY_PATH="$PHO_STORELIB_PATH:$PHO_PYTHON_PATH:$PHO_LAYOUTLIB_PATH"
+export LD_LIBRARY_PATH="$PHO_STORELIB_PATH:$PHO_ADMINLIB_PATH:\
+$PHO_PYTHON_PATH:$PHO_LAYOUTLIB_PATH"
 export PYTHONPATH="$PHO_PYTHON_PATH"
 
 PHOBOS_DB="$cur_dir/../../../scripts/phobos_db"

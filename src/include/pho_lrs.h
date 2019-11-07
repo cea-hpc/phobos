@@ -82,28 +82,6 @@ int lrs_init(struct lrs *lrs, struct dss_handle *dss, const char *sock_path);
 void lrs_fini(struct lrs *lrs);
 
 /**
- * Load and format a media to the given fs type
- *
- * \param[in]   lrs     Initialized LRS.
- * \param[in]   id      Media ID for the media to format.
- * \param[in]   fs      Filesystem type (only PHO_FS_LTFS for now).
- * \param[in]   unlock  Unlock tape if successfully formated.
- * \return              0 on success, negative error code on failure.
- *
- * @TODO: this should be integrated into the LRS protocol
- */
-int lrs_format(struct lrs *lrs, const struct media_id *id,
-               enum fs_type fs, bool unlock);
-
-/**
- * Make the LRS aware of a new device
- *
- * @FIXME This is a temporary API waiting for a transparent way to add devices
- * while running (to be done with the LRS protocol).
- */
-int lrs_device_add(struct lrs *lrs, const struct dev_info *devi);
-
-/**
  * Process pending requests from the unix socket and send the available
  * responses to clients.
  *

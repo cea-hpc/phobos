@@ -248,7 +248,10 @@ class DeviceManager(BaseObjectManager):
     wrapped_ident = 'device'
 
     def add(self, device_type, device_path, locked=True):
-        """Query device and insert information into DSS."""
+        """
+        Query device and insert information into DSS.
+        Returns the device family and serial, to communicate them to the LRS.
+        """
         state = ldm_device_query(device_type, device_path)
         host = gethostname().split('.')[0]
         if locked:
@@ -265,6 +268,8 @@ class DeviceManager(BaseObjectManager):
                          "model=%s serial=%s (%s)",
                          dev_info.host, device_path, dev_info.model,
                          dev_info.serial, locked and "locked" or "unlocked")
+
+        return dev_info.family, dev_info.serial
 
     def _dss_get(self, hdl, qry_filter, res, res_cnt):
         """Invoke device-specific DSS get method."""

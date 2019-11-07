@@ -10,9 +10,9 @@
 #include "pho_cfg.h"
 #include "pho_dss.h"
 #include "pho_ldm.h"
-#include "pho_lrs.h"
 #include "pho_test_utils.h"
 #include "pho_test_xfer_utils.h"
+#include "phobos_admin.h"
 #include "phobos_store.h"
 
 #define PHO_TMP_DIR_TEMPLATE "/tmp/pho_XXXXXX"
@@ -71,8 +71,9 @@ static void reinit_xfer(struct pho_xfer_desc *xfer, const char *path,
     xfer->xd_objid = realpath(objpath, NULL);
 }
 
-static void add_dir(struct lrs *lrs, struct dss_handle *dss, const char *path,
-                    struct dev_info *dev, struct media_info *media)
+static void add_dir(struct admin_handle *adm, struct dss_handle *dss,
+                    const char *path, struct dev_info *dev,
+                    struct media_info *media)
 {
     struct ldm_dev_state dev_st = {0};
     struct dev_adapter adapter = {0};
@@ -99,20 +100,19 @@ static void add_dir(struct lrs *lrs, struct dss_handle *dss, const char *path,
     dev->host = hostname;
     dev->serial = dev_st.lds_serial ? strdup(dev_st.lds_serial) : NULL;
     dev->adm_status = PHO_DEV_ADM_ST_UNLOCKED;
-
     ldm_dev_state_fini(&dev_st);
 
     ASSERT_RC(dss_device_set(dss, dev, 1, DSS_SET_INSERT));
 
     /* Add device to lrs */
-    ASSERT_RC(lrs_device_add(lrs, dev));
+    ASSERT_RC(phobos_admin_device_add(adm, dev->family, dev->serial));
 
     /* Format and unlock media */
-    ASSERT_RC(lrs_format(lrs, &media->id, PHO_FS_POSIX, true));
+    ASSERT_RC(phobos_admin_format(adm, &media->id, PHO_FS_POSIX, true));
 }
 
 /* TODO: factorize with add_dir */
-static void add_drive(struct lrs *lrs, struct dss_handle *dss,
+static void add_drive(struct admin_handle *adm, struct dss_handle *dss,
                       const char *path, struct dev_info *dev)
 {
     struct ldm_dev_state dev_st = {0};
@@ -138,10 +138,10 @@ static void add_drive(struct lrs *lrs, struct dss_handle *dss,
     ASSERT_RC(dss_device_set(dss, dev, 1, DSS_SET_INSERT));
 
     /* Add device to lrs */
-    ASSERT_RC(lrs_device_add(lrs, dev));
+    ASSERT_RC(phobos_admin_device_add(adm, dev->family, dev->serial));
 }
 
-static void add_tape(struct lrs *lrs, struct dss_handle *dss,
+static void add_tape(struct admin_handle *adm, struct dss_handle *dss,
                      const char *tape_id, const char *model,
                      struct media_info *media)
 {
@@ -155,7 +155,7 @@ static void add_tape(struct lrs *lrs, struct dss_handle *dss,
     ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
 
     /* This can fail if the tape has already been formatted */
-    lrs_format(lrs, &media->id, PHO_FS_LTFS, true);
+    phobos_admin_format(adm, &media->id, PHO_FS_LTFS, true);
     free(media->model);
 }
 
@@ -220,8 +220,8 @@ static void test_put_retry(struct pho_xfer_desc *xfer, struct dev_info *dev,
 
 int main(int argc, char **argv)
 {
+    struct admin_handle     adm;
     struct dss_handle       dss = {0};
-    struct lrs              lrs;
     struct pho_xfer_desc    xfer = {0};
     struct dev_info         dev = {0};
     struct media_info       media = { {0} };
@@ -236,7 +236,7 @@ int main(int argc, char **argv)
     reinit_xfer(&xfer, argv[0], argv[0], PHO_XFER_OP_PUT);
 
     dss_init(&dss);
-    lrs_init(&lrs, &dss, NULL);
+    phobos_admin_init(&adm);
 
     default_family = getenv("PHOBOS_LRS_default_family");
     if (default_family && strcmp(default_family, "tape") == 0) {
@@ -257,8 +257,8 @@ int main(int argc, char **argv)
          */
 
         /* Tape based tests */
-        add_drive(&lrs, &dss, "/dev/st0", &dev);
-        add_tape(&lrs, &dss, "P00003L5", "LTO5", &media);
+        add_drive(&adm, &dss, "/dev/st0", &dev);
+        add_tape(&adm, &dss, "P00003L5", "LTO5", &media);
 
         /* Test put retry */
         test_put_retry(&xfer, &dev, &media);
@@ -272,7 +272,7 @@ int main(int argc, char **argv)
         setenv("PHOBOS_LRS_default_family", "dir", 1);
 
         /* Add directory drive and media */
-        add_dir(&lrs, &dss, tmp_dir, &dev, &media);
+        add_dir(&adm, &dss, tmp_dir, &dev, &media);
 
         /* Simple put */
         ASSERT_RC(phobos_put(&xfer, 1, NULL, NULL));
@@ -295,7 +295,7 @@ int main(int argc, char **argv)
     free(dev.model);
     free(xfer.xd_objid);
     xfer_desc_close_fd(&xfer);
-    lrs_fini(&lrs);
+    phobos_admin_fini(&adm);
     dss_fini(&dss);
 
     return EXIT_SUCCESS;

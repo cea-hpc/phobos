@@ -1,18 +1,51 @@
+/* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+ * vim:expandtab:shiftwidth=4:tabstop=4:
+ */
+/*
+ *  All rights reserved (c) 2014-2019 CEA/DAM.
+ *
+ *  This file is part of Phobos.
+ *
+ *  Phobos is free software: you can redistribute it and/or modify it under
+ *  the terms of the GNU Lesser General Public License as published by
+ *  the Free Software Foundation, either version 2.1 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Phobos is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Lesser General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Lesser General Public License
+ *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+ */
 /**
  * \brief   Protobuf file for common structures.
  */
 
+/** Device family. */
+enum PhoDeviceType {
+    DV_DISK     = 0;    // Disk.
+    DV_TAPE_DRV = 1;    // Tape drive.
+    DV_DIR      = 2;    // Directory.
+}
+
 /** Medium info. */
 message PhoMediumInfo {
-    /** Device family. */
-    enum Type {
-        DV_DISK = 0;    // Disk.
-        DV_TAPE = 1;    // Tape.
-        DV_DIR  = 2;    // Directory.
-    }
+    required PhoDeviceType type = 1; // Device family type.
+    required string id          = 2; // Medium identifier.
+}
 
-    required Type type = 1; // Device family type.
-    required string id = 2; // Media identifier.
+/** Resource identifier. */
+// To replace PhoMediumInfo?
+message PhoResourceId {
+    required PhoDeviceType type = 1; // Family type.
+    required string name        = 2; // Resource name.
+}
+
+/** Notify operation. */
+enum PhoNotifyOp {
+    OP_ADD_DEV = 0;         // Add operation.
 }
 
 /** Selected filesystem type for a medium. */
@@ -34,5 +67,7 @@ enum PhoRequestKind {
     RQ_READ    = 1;     // Media allocation with read ability.
     RQ_RELEASE = 2;     // Media release and flush. The IO is considered
                         // complete once the release and flush are done.
+    RQ_FORMAT  = 3;     // Medium format.
+    RQ_NOTIFY  = 4;     // LRS notification to reload device/medium information.
 }
 

@@ -232,7 +232,7 @@ static int encoder_communicate(struct lrs *lrs, struct pho_encoder *enc,
         /* req_id is used to route responses to the appropriate encoder */
         req->id = enc_id;
 
-        data = pho_comm_init_data(ci);
+        data = pho_comm_data_init(ci);
         if (pho_srl_request_pack(req, &data.buf)) {
             pho_srl_request_free(req, false);
             return -ENOMEM;
@@ -520,17 +520,19 @@ static void store_fini(struct phobos_handle *pho, int rc)
 static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
                       size_t n_xfers, pho_completion_cb_t cb, void *udata)
 {
+    char dir_path[] = "/tmp/socklrs_XXXXXX";
+    char *sock_path;
     size_t i;
     int rc;
-    char dir_path[] = "/tmp/socklrs_XXXXXX";
-    char sock_path[32]; // must be greater than len(dir_path + "/socket")
+
+    memset(pho, 0, sizeof(*pho));
+    pho->comm = pho_comm_info_init();
 
     /* socket directory creation -- will be removed with LRS daemonization */
     if (mkdtemp(dir_path) == NULL)
         LOG_RETURN(-errno, "Error on creating the socket temporary directory");
-    strcpy(sock_path, dir_path);
-    strcat(sock_path, "/socket");
-    memset(pho, 0, sizeof(*pho));
+    if (asprintf(&sock_path, "%s/socket", dir_path) < 0)
+        LOG_RETURN(-ENOMEM, "Error on creating the socket path");
     pho->dir_sock_path = strdup(dir_path);
 
     pho->xfers = xfers;
@@ -542,18 +544,18 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
     for (i = 0; i < n_xfers; i++) {
         rc = pho_xfer_desc_flag_check(&xfers[i]);
         if (rc)
-            return rc;
+            goto out_str;
     }
 
     /* Ensure conf is loaded */
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)
-        return rc;
+        goto out_str;
 
     /* Connect to the DSS */
     rc = dss_init(&pho->dss);
     if (rc != 0)
-        return rc;
+        goto out_str;
 
     /* Instanciate the LRS --
      * in the future: connect to the LRS service, using pho_comm_open()
@@ -603,6 +605,9 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
 out:
     if (rc)
         store_fini(pho, rc);
+
+out_str:
+    free(sock_path);
 
     return rc;
 }

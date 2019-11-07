@@ -48,6 +48,29 @@ struct pho_comm_info {
                          */
 };
 
+/**
+ * Initializer for the communication information data structure where
+ * .socket_fd is initialized to -1, and gets the correct behavior if
+ * pho_comm_close() is called before pho_comm_open().
+ *
+ * It is the caller responsability to call it if pho_comm_close() may be
+ * called before pho_comm_open().
+ *
+ * \return                      An initialized data structure.
+ */
+static inline struct pho_comm_info pho_comm_info_init(void)
+{
+    struct pho_comm_info info = {
+        .is_server = false,
+        .path = NULL,
+        .socket_fd = -1,
+        .epoll_fd = -1,
+        .ev_tab = NULL
+    };
+
+    return info;
+}
+
 /** Data structure used to send and receive messages. */
 struct pho_comm_data {
     int fd;             /*!< Socket descriptor where the msg comes from/to. */
@@ -64,7 +87,7 @@ struct pho_comm_data {
  * \param[in]       ci          Communication info.
  * \return                      An initialized data structure.
  */
-static inline struct pho_comm_data pho_comm_init_data(struct pho_comm_info *ci)
+static inline struct pho_comm_data pho_comm_data_init(struct pho_comm_info *ci)
 {
     struct pho_comm_data dt = {
         .fd = ci->socket_fd,

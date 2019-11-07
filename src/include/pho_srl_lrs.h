@@ -39,6 +39,8 @@ typedef PhoRequest__Write__Elt      pho_req_write_elt_t;
 typedef PhoRequest__Read            pho_req_read_t;
 typedef PhoRequest__Release         pho_req_release_t;
 typedef PhoRequest__Release__Elt    pho_req_release_elt_t;
+typedef PhoRequest__Format          pho_req_format_t;
+typedef PhoRequest__Notify          pho_req_notify_t;
 
 typedef PhoResponse                 pho_resp_t;
 typedef PhoResponse__Write          pho_resp_write_t;
@@ -46,6 +48,8 @@ typedef PhoResponse__Write__Elt     pho_resp_write_elt_t;
 typedef PhoResponse__Read__Elt      pho_resp_read_t;
 typedef PhoResponse__Read__Elt      pho_resp_read_elt_t;
 typedef PhoResponse__Release        pho_resp_release_t;
+typedef PhoResponse__Format         pho_resp_format_t;
+typedef PhoResponse__Notify         pho_resp_notify_t;
 typedef PhoResponse__Error          pho_resp_error_t;
 
 /******************************************************************************/
@@ -57,7 +61,7 @@ typedef PhoResponse__Error          pho_resp_error_t;
  * If the protocol version is greater than 127, need to increase its size
  * to an integer size (4 bytes).
  */
-#define PHO_PROTOCOL_VERSION      1
+#define PHO_PROTOCOL_VERSION      2
 /**
  * Protocol version size in bytes.
  */
@@ -107,6 +111,32 @@ static inline bool pho_request_is_release(const pho_req_t *req)
 }
 
 /**
+ * Request format checker.
+ *
+ * \param[in]       req         Request.
+ *
+ * \return                      true if the request is a format one,
+ *                              false else.
+ */
+static inline bool pho_request_is_format(const pho_req_t *req)
+{
+    return req->format != NULL;
+}
+
+/**
+ * Request notify checker.
+ *
+ * \param[in]       req         Request.
+ *
+ * \return                      true if the request is a notify one,
+ *                              false else.
+ */
+static inline bool pho_request_is_notify(const pho_req_t *req)
+{
+    return req->notify != NULL;
+}
+
+/**
  * Response write alloc checker.
  *
  * \param[in]       req         Response.
@@ -143,6 +173,32 @@ static inline bool pho_response_is_read(const pho_resp_t *resp)
 static inline bool pho_response_is_release(const pho_resp_t *resp)
 {
     return resp->release != NULL;
+}
+
+/**
+ * Response format checker.
+ *
+ * \param[in]       req         Response.
+ *
+ * \return                      true if the response is a format one,
+ *                              false else.
+ */
+static inline bool pho_response_is_format(const pho_resp_t *resp)
+{
+    return resp->format != NULL;
+}
+
+/**
+ * Response notify checker.
+ *
+ * \param[in]       req         Response.
+ *
+ * \return                      true if the response is a notify one,
+ *                              false else.
+ */
+static inline bool pho_response_is_notify(const pho_resp_t *resp)
+{
+    return resp->notify != NULL;
 }
 
 /**
@@ -226,6 +282,24 @@ int pho_srl_request_read_alloc(pho_req_t *req, size_t n_media);
 int pho_srl_request_release_alloc(pho_req_t *req, size_t n_media);
 
 /**
+ * Allocation of format request contents.
+ *
+ * \param[out]      req         Pointer to the request data structure.
+ *
+ * \return                      0 on success, -ENOMEM on failure.
+ */
+int pho_srl_request_format_alloc(pho_req_t *req);
+
+/**
+ * Allocation of notify request contents.
+ *
+ * \param[out]      req         Pointer to the request data structure.
+ *
+ * \return                      0 on success, -ENOMEM on failure.
+ */
+int pho_srl_request_notify_alloc(pho_req_t *req);
+
+/**
  * Release of request contents.
  *
  * \param[in]       req         Pointer to the request data structure.
@@ -263,6 +337,24 @@ int pho_srl_response_read_alloc(pho_resp_t *resp, size_t n_media);
  * \return                      0 on success, -ENOMEM on failure.
  */
 int pho_srl_response_release_alloc(pho_resp_t *resp, size_t n_media);
+
+/**
+ * Allocation of format response contents.
+ *
+ * \param[out]      req         Pointer to the response data structure.
+ *
+ * \return                      0 on success, -ENOMEM on failure.
+ */
+int pho_srl_response_format_alloc(pho_resp_t *resp);
+
+/**
+ * Allocation of notify response contents.
+ *
+ * \param[out]      req         Pointer to the response data structure.
+ *
+ * \return                      0 on success, -ENOMEM on failure.
+ */
+int pho_srl_response_notify_alloc(pho_resp_t *resp);
 
 /**
  * Allocation of error response contents.

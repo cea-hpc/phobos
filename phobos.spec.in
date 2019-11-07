@@ -74,6 +74,7 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %files
 
 %{_libdir}/libphobos_store.so*
+%{_libdir}/libphobos_admin.so*
 %{_libdir}/phobos/libpho_layout_*.so*
 %{_sbindir}/pho_*_helper
 %{_sbindir}/phobos_db
@@ -90,7 +91,9 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 
 %{_includedir}/pho_attrs.h
 %{_includedir}/phobos_store.h
+%{_includedir}/phobos_admin.h
 %{_libdir}/libphobos_store.la
+%{_libdir}/libphobos_admin.la
 
 %changelog
 * Thu Jul 18 2019 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.2.0-1

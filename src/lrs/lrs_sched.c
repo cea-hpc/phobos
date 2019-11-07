@@ -558,7 +558,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
      * devices from DSS; otherwise just refresh informations for the current
      * list of devices
      */
-    if (sched->devices == NULL || sched->dev_count == 0) {
+    if (sched->devices->len == 0) {
         struct dss_filter   filter;
 
         rc = dss_filter_build(&filter,
@@ -585,14 +585,14 @@ static int sched_load_dev_state(struct lrs_sched *sched)
             GOTO(err, rc = -ENXIO);
         }
 
-        sched->dev_count = dcnt;
-        sched->devices = calloc(dcnt, sizeof(*sched->devices));
-        if (sched->devices == NULL)
-            GOTO(err, rc = -ENOMEM);
+        g_array_set_size(sched->devices, dcnt);
 
         /* Copy information from DSS to local device list */
-        for (i = 0 ; i < dcnt; i++)
-            sched->devices[i].dss_dev_info = dev_info_dup(&devs[i]);
+        for (i = 0 ; i < dcnt; i++) {
+            struct dev_descr *dev = &g_array_index(sched->devices,
+                                                   struct dev_descr, i);
+            dev->dss_dev_info = dev_info_dup(&devs[i]);
+        }
     }
 
     /* get a handle to the library to query it */
@@ -600,12 +600,13 @@ static int sched_load_dev_state(struct lrs_sched *sched)
     if (rc)
         GOTO(err, rc);
 
-    for (i = 0 ; i < sched->dev_count; i++) {
-        rc = sched_fill_dev_info(sched->dss, &lib, &sched->devices[i]);
+    for (i = 0 ; i < sched->devices->len; i++) {
+        struct dev_descr *dev = &g_array_index(sched->devices,
+                                               struct dev_descr, i);
+        rc = sched_fill_dev_info(sched->dss, &lib, dev);
         if (rc) {
-            pho_debug("Marking device '%s' as failed",
-                      sched->devices[i].dev_path);
-            sched->devices[i].op_status = PHO_DEV_OP_ST_FAILED;
+            pho_debug("Marking device '%s' as failed", dev->dev_path);
+            dev->op_status = PHO_DEV_OP_ST_FAILED;
         }
     }
 
@@ -621,42 +622,9 @@ err_no_res:
     return rc;
 }
 
-int sched_device_add(struct lrs_sched *sched, const struct dev_info *devi)
+static void dev_descr_fini(gpointer ptr)
 {
-    int rc = 0;
-    struct lib_adapter lib;
-    struct dev_descr device = {0};
-
-    pho_verb("Adding device '%s' to lrs\n", devi->serial);
-
-    /* get a handle to the library to query it */
-    rc = wrap_lib_open(devi->family, &lib);
-    if (rc)
-        return rc;
-
-    device.dss_dev_info = dev_info_dup(devi);
-
-    /* Retrieve device information */
-    rc = sched_fill_dev_info(sched->dss, &lib, &device);
-    if (rc)
-        GOTO(err, rc);
-
-    /* Add the newly initialized device to the device list */
-    sched->devices = realloc(sched->devices,
-                           (sched->dev_count + 1) * sizeof(*sched->devices));
-    if (sched->devices == NULL)
-        GOTO(err, rc = -ENOMEM);
-
-    sched->dev_count++;
-    sched->devices[sched->dev_count - 1] = device;
-
-err:
-    ldm_lib_close(&lib);
-    return rc;
-}
-
-static void dev_descr_fini(struct dev_descr *dev)
-{
+    struct dev_descr *dev = (struct dev_descr *)ptr;
     dev_info_free(dev->dss_dev_info);
     dev->dss_dev_info = NULL;
 
@@ -672,8 +640,8 @@ int sched_init(struct lrs_sched *sched, struct dss_handle *dss)
 {
     int rc;
 
-    sched->devices = NULL;
-    sched->dev_count = 0;
+    sched->devices = g_array_new(FALSE, TRUE, sizeof(struct dev_descr));
+    g_array_set_clear_func(sched->devices, dev_descr_fini);
     sched->dss = dss;
     sched->req_queue = g_queue_new();
     sched->release_queue = g_queue_new();
@@ -697,22 +665,17 @@ int sched_init(struct lrs_sched *sched, struct dss_handle *dss)
 
 void sched_fini(struct lrs_sched *sched)
 {
-    size_t i;
-
     if (sched == NULL)
         return;
 
     /* Handle all pending release requests */
     sched_handle_release_reqs(sched, NULL);
 
-    for (i = 0; i < sched->dev_count; i++)
-        dev_descr_fini(&sched->devices[i]);
-
-    free(sched->devices);
     free(sched->lock_owner);
 
     g_queue_free_full(sched->req_queue, sched_req_free_wrapper);
     g_queue_free_full(sched->release_queue, sched_req_free_wrapper);
+    g_array_free(sched->devices, TRUE);
 }
 
 /**
@@ -1120,6 +1083,7 @@ static struct dev_descr *dev_picker(struct lrs_sched *sched,
                                     struct media_info *pmedia)
 {
     struct dev_descr    *selected = NULL;
+    int                  selected_i = -1;
     int                  i;
     int                  rc;
     /*
@@ -1130,12 +1094,11 @@ static struct dev_descr *dev_picker(struct lrs_sched *sched,
 
     ENTRY;
 
-    if (sched->devices == NULL)
-        return NULL;
-
 retry:
-    for (i = 0; i < sched->dev_count; i++) {
-        struct dev_descr    *itr = &sched->devices[i];
+    for (i = 0; i < sched->devices->len; i++) {
+        struct dev_descr *itr = &g_array_index(sched->devices,
+                                               struct dev_descr, i);
+        struct dev_descr *prev = selected;
 
         /* Already unsuccessfully tried to acquire this device */
         if (failed_dev && failed_dev[i])
@@ -1183,6 +1146,9 @@ retry:
         }
 
         rc = select_func(required_size, itr, &selected);
+        if (prev != selected)
+            selected_i = i;
+
         if (rc < 0) {
             pho_debug("Device selection function failed");
             selected = NULL;
@@ -1192,7 +1158,6 @@ retry:
     }
 
     if (selected != NULL) {
-        int selected_i = selected - sched->devices;
         struct media_info *local_pmedia = selected->dss_media_info;
 
         pho_debug("Picked dev number %d (%s)", selected_i, selected->dev_path);
@@ -1221,7 +1186,7 @@ retry:
             selected = NULL;
             /* Allocate failed_dev if necessary */
             if (failed_dev == NULL) {
-                failed_dev = calloc(sched->dev_count, sizeof(bool));
+                failed_dev = calloc(sched->devices->len, sizeof(bool));
                 if (failed_dev == NULL)
                     return NULL;
             }
@@ -1606,14 +1571,17 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
 {
     int i;
 
-    for (i = 0; i < sched->dev_count; i++) {
-        if (sched->devices[i].op_status == PHO_DEV_OP_ST_FAILED)
+    for (i = 0; i < sched->devices->len; i++) {
+        struct dev_descr *dev = &g_array_index(sched->devices,
+                                               struct dev_descr, i);
+
+        if (dev->op_status == PHO_DEV_OP_ST_FAILED)
             continue;
 
         if (pmedia) {
             bool is_compat;
 
-            if (tape_drive_compat(pmedia, &(sched->devices[i]), &is_compat))
+            if (tape_drive_compat(pmedia, dev, &is_compat))
                 continue;
 
             if (is_compat)
@@ -1827,26 +1795,30 @@ static struct dev_descr *search_loaded_media(struct lrs_sched *sched,
     if (name == NULL)
         return NULL;
 
-    for (i = 0; i < sched->dev_count; i++) {
+    for (i = 0; i < sched->devices->len; i++) {
         const char          *media_id;
-        enum dev_op_status   op_st = sched->devices[i].op_status;
+        enum dev_op_status   op_st;
+        struct dev_descr    *dev;
+
+        dev = &g_array_index(sched->devices, struct dev_descr, i);
+        op_st = dev->op_status;
 
         if (op_st != PHO_DEV_OP_ST_MOUNTED && op_st != PHO_DEV_OP_ST_LOADED)
             continue;
 
         /* The drive may contain a media unknown to phobos, skip it */
-        if (sched->devices[i].dss_media_info == NULL)
+        if (dev->dss_media_info == NULL)
             continue;
 
-        media_id = media_id_get(&sched->devices[i].dss_media_info->id);
+        media_id = media_id_get(&dev->dss_media_info->id);
         if (media_id == NULL) {
             pho_warn("Cannot retrieve media ID from device '%s'",
-                     sched->devices[i].dev_path);
+                     dev->dev_path);
             continue;
         }
 
         if (!strcmp(name, media_id))
-            return &sched->devices[i];
+            return dev;
     }
     return NULL;
 }
@@ -1955,11 +1927,17 @@ out:
     return rc;
 }
 
-
-/* see "pho_lrs.h" for function help */
-
-int sched_format(struct lrs_sched *sched, const struct media_id *id,
-                 enum fs_type fs, bool unlock)
+/**
+ * Load and format a medium to the given fs type.
+ *
+ * \param[in]       sched       Initialized sched.
+ * \param[in]       id          Medium ID for the medium to format.
+ * \param[in]       fs          Filesystem type (only PHO_FS_LTFS for now).
+ * \param[in]       unlock      Unlock tape if successfully formated.
+ * \return                      0 on success, negative error code on failure.
+ */
+static int sched_format(struct lrs_sched *sched, const struct media_id *id,
+                        enum fs_type fs, bool unlock)
 {
     const char          *label = media_id_get(id);
     struct dev_descr    *dev = NULL;
@@ -2224,6 +2202,64 @@ static int sched_io_complete(struct lrs_sched *sched,
 /******************************************************************************/
 /* Request/response manipulation **********************************************/
 /******************************************************************************/
+
+static int sched_device_add(struct lrs_sched *sched, enum dev_family family,
+                            const char *name)
+{
+    struct dev_descr device = {0};
+    struct dev_info *devi = NULL;
+    struct dss_filter filter;
+    struct lib_adapter lib;
+    int dev_cnt = 0;
+    int rc = 0;
+
+    pho_verb("Adding device '%s' to lrs\n", name);
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::DEV::host\": \"%s\"},"
+                          "  {\"DSS::DEV::family\": \"%s\"},"
+                          "  {\"DSS::DEV::serial\": \"%s\"}"
+                          "]}",
+                          get_hostname(),
+                          dev_family2str(family),
+                          name);
+    if (rc)
+        goto err;
+
+    rc = dss_device_get(sched->dss, &filter, &devi, &dev_cnt);
+    dss_filter_free(&filter);
+    if (rc)
+        goto err;
+
+    if (dev_cnt == 0) {
+        pho_info("No usable device found (%s://%s): check device status",
+                 dev_family2str(family), name);
+        GOTO(err_res, rc = -ENXIO);
+    }
+
+    device.dss_dev_info = dev_info_dup(devi);
+
+    /* get a handle to the library to query it */
+    rc = wrap_lib_open(device.dss_dev_info->family, &lib);
+    if (rc)
+        goto err_res;
+
+    rc = sched_fill_dev_info(sched->dss, &lib, &device);
+    if (rc)
+        goto err_lib;
+
+    /* Add the newly initialized device to the device list */
+    g_array_append_val(sched->devices, device);
+
+err_lib:
+    ldm_lib_close(&lib);
+
+err_res:
+    dss_res_free(devi, dev_cnt);
+
+err:
+    return rc;
+}
 
 /** Wrapper of sched_req_free to be used as glib callback */
 static void sched_req_free_wrapper(void *reqc)
@@ -2562,6 +2598,87 @@ static int sched_handle_release_reqs(struct lrs_sched *sched,
     return 0;
 }
 
+static int sched_handle_format(struct lrs_sched *sched, pho_req_t *req,
+                               pho_resp_t *resp)
+{
+    int rc = 0;
+    pho_req_format_t *freq = req->format;
+    struct media_id m;
+
+    rc = pho_srl_response_format_alloc(resp);
+    if (rc)
+        return rc;
+
+    m.type = freq->med_id->type;
+    strncpy(m.id, freq->med_id->id, PHO_URI_MAX);
+
+    rc = sched_format(sched, &m, freq->fs, freq->unlock);
+    if (rc) {
+        pho_srl_response_free(resp, false);
+        if (rc != -EAGAIN) {
+            int rc2 = pho_srl_response_error_alloc(resp);
+
+            if (rc2)
+                return rc2;
+
+            resp->req_id = req->id;
+            resp->error->rc = rc;
+            resp->error->req_kind = PHO_REQUEST_KIND__RQ_FORMAT;
+        }
+    } else {
+        resp->req_id = req->id;
+        resp->format->med_id->type = freq->med_id->type;
+        resp->format->med_id->id = strdup(freq->med_id->id);
+    }
+
+    return rc;
+}
+
+static int sched_handle_notify(struct lrs_sched *sched, pho_req_t *req,
+                               pho_resp_t *resp)
+{
+    pho_req_notify_t *nreq = req->notify;
+    int rc = 0;
+
+    rc = pho_srl_response_notify_alloc(resp);
+    if (rc)
+        return rc;
+
+    switch (nreq->op) {
+    case PHO_NTFY_OP_ADD_DEVICE:
+        rc = sched_device_add(sched, nreq->rsrc_id->type, nreq->rsrc_id->name);
+        break;
+    default:
+        LOG_GOTO(err, rc = -EINVAL, "The requested operation is not "
+                 "recognized");
+    }
+
+    if (rc)
+        goto err;
+
+    resp->req_id = req->id;
+    resp->notify->rsrc_id->type = nreq->rsrc_id->type;
+    resp->notify->rsrc_id->name = strdup(nreq->rsrc_id->name);
+
+    return rc;
+
+err:
+    pho_srl_response_free(resp, false);
+
+    if (rc != EAGAIN) {
+        int rc2 = pho_srl_response_error_alloc(resp);
+
+        if (rc2)
+            return rc2;
+
+        resp->req_id = req->id;
+        resp->error->rc = rc;
+        resp->error->req_kind = PHO_REQUEST_KIND__RQ_NOTIFY;
+    }
+
+    return rc;
+}
+
 int sched_responses_get(struct lrs_sched *sched, int *n_resp,
                         struct resp_container **respc)
 {
@@ -2614,6 +2731,12 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
         } else if (pho_request_is_read(req)) {
             pho_debug("lrs received read allocation request (%p)", req);
             rc = sched_handle_read_alloc(sched, req, respc->resp);
+        } else if (pho_request_is_format(req)) {
+            pho_debug("lrs received format request (%p)", req);
+            rc = sched_handle_format(sched, req, respc->resp);
+        } else if (pho_request_is_notify(req)) {
+            pho_debug("lrs received notify request (%p)", req);
+            rc = sched_handle_notify(sched, req, respc->resp);
         } else {
             /* Unexpected req->kind, very probably a programming error */
             pho_error(rc = -EPROTO,

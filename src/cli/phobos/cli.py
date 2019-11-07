@@ -53,7 +53,7 @@ from phobos.core.cfg import load_file as cfg_load_file
 from phobos.core.dss import Client as DSSClient
 from phobos.core.store import Client as XferClient, attrs_as_dict
 from phobos.core.ldm import LibAdapter
-from phobos.core.lrs import lrs_fs_format
+from phobos.core.admin import Client as AdminClient
 from phobos.output import dump_object_list
 from ClusterShell.NodeSet import NodeSet
 
@@ -593,13 +593,23 @@ class DeviceOptHandler(BaseResourceOptHandler):
         resources = self.params.get('res')
         keep_locked = not self.params.get('unlock')
 
-        for path in resources:
-            try:
-                self.client.devices.add(self.cenum, path, locked=keep_locked)
-            except EnvironmentError as err:
-                self.logger.error("Cannot add device: %s",
-                                  env_error_format(err))
-                sys.exit(os.EX_DATAERR)
+        adm = AdminClient()
+        try:
+            adm.init()
+
+            for path in resources:
+                # TODO: this will be dropped when adding to DSS will be done by
+                # adm.device_add() below
+                family, serial = self.client.devices.add(self.cenum, path,
+                                                         locked=keep_locked)
+                adm.device_add(family, serial)
+
+            adm.fini()
+        except EnvironmentError as err:
+            self.logger.error("Cannot add device: %s",
+                              env_error_format(err))
+            adm.fini()
+            sys.exit(os.EX_DATAERR)
 
         self.logger.info("Added %d device(s) successfully", len(resources))
 
@@ -776,15 +786,21 @@ class MediaOptHandler(BaseResourceOptHandler):
         media_list = NodeSet.fromlist(self.params.get('res'))
         fs_type = self.params.get('fs')
         unlock = self.params.get('unlock')
-        if unlock:
-            self.logger.debug("Post-unlock enabled")
-        for label in media_list:
-            self.logger.debug("Formatting media '%s'", label)
-            try:
-                lrs_fs_format(self.client, label, fs_type, unlock=unlock)
-            except EnvironmentError as err:
-                # XXX add an option to exit on first error
-                self.logger.error("fs_format: %s", env_error_format(err))
+        adm = AdminClient()
+        try:
+            adm.init()
+
+            if unlock:
+                self.logger.debug("Post-unlock enabled")
+            for label in media_list:
+                self.logger.info("Formatting media '%s'", label)
+                adm.fs_format(label, fs_type, unlock=unlock)
+
+        except EnvironmentError as err:
+            # XXX add an option to exit on first error
+            self.logger.error("fs_format: %s", env_error_format(err))
+        finally:
+            adm.fini()
 
     def exec_show(self):
         """Show media details."""

@@ -39,13 +39,12 @@ struct dev_descr;
  */
 struct lrs_sched {
     struct dss_handle *dss;         /**< Associated DSS */
-    struct dev_descr  *devices;     /**< List of available devices */
-    size_t             dev_count;   /**< Number of devices */
+    GArray            *devices;     /**< List of available devices */
     char              *lock_owner;  /**< Lock owner name for this LRS
                                       *  (contains hostname and tid)
                                       */
-    GQueue *req_queue;              /**< Queue for all but release requests */
-    GQueue *release_queue;          /**< Queue for release requests */
+    GQueue            *req_queue;   /**< Queue for all but release requests */
+    GQueue            *release_queue;   /**< Queue for release requests */
 };
 
 /**
@@ -87,28 +86,6 @@ int sched_init(struct lrs_sched *sched, struct dss_handle *dss);
  * \param[in]       sched       The sched to be deinitialized.
  */
 void sched_fini(struct lrs_sched *sched);
-
-/**
- * Load and format a medium to the given fs type.
- *
- * \param[in]       sched       Initialized sched.
- * \param[in]       id          Medium ID for the medium to format.
- * \param[in]       fs          Filesystem type (only PHO_FS_LTFS for now).
- * \param[in]       unlock      Unlock tape if successfully formated.
- * \return                      0 on success, negative error code on failure.
- *
- * @TODO: this should be integrated into the LRS protocol
- */
-int sched_format(struct lrs_sched *sched, const struct media_id *id,
-                 enum fs_type fs, bool unlock);
-
-/**
- * Make the sched aware of a new device
- *
- * @FIXME This is a temporary API waiting for a transparent way to add devices
- * while running (to be done with the LRS protocol).
- */
-int sched_device_add(struct lrs_sched *sched, const struct dev_info *devi);
 
 /**
  * Enqueue a request to be handled by the sched. The request is guaranteed to be

@@ -37,6 +37,9 @@ from phobos.core.const import adm_status2str, dev_family2str
 LIBPHOBOS_NAME = "libphobos_store.so"
 LIBPHOBOS = CDLL(LIBPHOBOS_NAME)
 
+LIBPHOBOS_ADMIN_NAME = "libphobos_admin.so"
+LIBPHOBOS_ADMIN = CDLL(LIBPHOBOS_ADMIN_NAME)
+
 class CLIManagedResourceMixin(object):
     """Interface for objects directly exposed/manipulated by the CLI."""
     def get_display_fields(self):

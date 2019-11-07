@@ -34,20 +34,26 @@ enum _RESP_KIND {
     _RESP_WRITE,
     _RESP_READ,
     _RESP_RELEASE,
+    _RESP_FORMAT,
+    _RESP_NOTIFY,
     _RESP_ERROR,
 };
 
 static const char *const SRL_REQ_KIND_STRS[] = {
-    [PHO_REQUEST_KIND__RQ_WRITE] = "write alloc",
-    [PHO_REQUEST_KIND__RQ_READ] = "read alloc",
-    [PHO_REQUEST_KIND__RQ_RELEASE] = "release"
+    [PHO_REQUEST_KIND__RQ_WRITE]   = "write alloc",
+    [PHO_REQUEST_KIND__RQ_READ]    = "read alloc",
+    [PHO_REQUEST_KIND__RQ_RELEASE] = "release",
+    [PHO_REQUEST_KIND__RQ_FORMAT]  = "format",
+    [PHO_REQUEST_KIND__RQ_NOTIFY]  = "notify"
 };
 
 static const char *const SRL_RESP_KIND_STRS[] = {
-    [_RESP_WRITE] = "write alloc",
-    [_RESP_READ] = "read alloc",
+    [_RESP_WRITE]   = "write alloc",
+    [_RESP_READ]    = "read alloc",
     [_RESP_RELEASE] = "release",
-    [_RESP_ERROR] = "error"
+    [_RESP_FORMAT]  = "format",
+    [_RESP_NOTIFY]  = "notify",
+    [_RESP_ERROR]   = "error"
 };
 
 const char *pho_srl_request_kind_str(pho_req_t *req)
@@ -58,6 +64,10 @@ const char *pho_srl_request_kind_str(pho_req_t *req)
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_READ];
     if (pho_request_is_release(req))
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_RELEASE];
+    if (pho_request_is_format(req))
+        return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_FORMAT];
+    if (pho_request_is_notify(req))
+        return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_NOTIFY];
 
     return "<invalid>";
 }
@@ -70,6 +80,10 @@ const char *pho_srl_response_kind_str(pho_resp_t *resp)
         return SRL_RESP_KIND_STRS[_RESP_READ];
     if (pho_response_is_release(resp))
         return SRL_RESP_KIND_STRS[_RESP_RELEASE];
+    if (pho_response_is_format(resp))
+        return SRL_RESP_KIND_STRS[_RESP_FORMAT];
+    if (pho_response_is_notify(resp))
+        return SRL_RESP_KIND_STRS[_RESP_NOTIFY];
     if (pho_response_is_error(resp))
         return SRL_RESP_KIND_STRS[_RESP_ERROR];
 
@@ -221,6 +235,54 @@ err_release:
     return -ENOMEM;
 }
 
+int pho_srl_request_format_alloc(pho_req_t *req)
+{
+    pho_request__init(req);
+
+    req->format = malloc(sizeof(*req->format));
+    if (!req->format)
+        goto err_format;
+    pho_request__format__init(req->format);
+
+    req->format->med_id = malloc(sizeof(*req->format->med_id));
+    if (!req->format->med_id)
+        goto err_media;
+    pho_medium_info__init(req->format->med_id);
+
+    return 0;
+
+err_media:
+    free(req->format);
+    req->format = NULL;
+
+err_format:
+    return -ENOMEM;
+}
+
+int pho_srl_request_notify_alloc(pho_req_t *req)
+{
+    pho_request__init(req);
+
+    req->notify = malloc(sizeof(*req->notify));
+    if (!req->notify)
+        goto err_notify;
+    pho_request__notify__init(req->notify);
+
+    req->notify->rsrc_id = malloc(sizeof(*req->notify->rsrc_id));
+    if (!req->notify->rsrc_id)
+        goto err_rsrc;
+    pho_resource_id__init(req->notify->rsrc_id);
+
+    return 0;
+
+err_rsrc:
+    free(req->notify);
+    req->notify = NULL;
+
+err_notify:
+    return -ENOMEM;
+}
+
 void pho_srl_request_free(pho_req_t *req, bool unpack)
 {
     if (unpack) {
@@ -262,6 +324,20 @@ void pho_srl_request_free(pho_req_t *req, bool unpack)
         free(req->release->media);
         free(req->release);
         req->release = NULL;
+    }
+
+    if (req->format) {
+        free(req->format->med_id->id);
+        free(req->format->med_id);
+        free(req->format);
+        req->format = NULL;
+    }
+
+    if (req->notify) {
+        free(req->notify->rsrc_id->name);
+        free(req->notify->rsrc_id);
+        free(req->notify);
+        req->notify = NULL;
     }
 }
 
@@ -402,6 +478,54 @@ err_release:
     return -ENOMEM;
 }
 
+int pho_srl_response_format_alloc(pho_resp_t *resp)
+{
+    pho_response__init(resp);
+
+    resp->format = malloc(sizeof(*resp->format));
+    if (!resp->format)
+        goto err_format;
+    pho_response__format__init(resp->format);
+
+    resp->format->med_id = malloc(sizeof(*resp->format->med_id));
+    if (!resp->format->med_id)
+        goto err_media;
+    pho_medium_info__init(resp->format->med_id);
+
+    return 0;
+
+err_media:
+    free(resp->format);
+    resp->format = NULL;
+
+err_format:
+    return -ENOMEM;
+}
+
+int pho_srl_response_notify_alloc(pho_resp_t *resp)
+{
+    pho_response__init(resp);
+
+    resp->notify = malloc(sizeof(*resp->notify));
+    if (!resp->notify)
+        goto err_notify;
+    pho_response__notify__init(resp->notify);
+
+    resp->notify->rsrc_id = malloc(sizeof(*resp->notify->rsrc_id));
+    if (!resp->notify->rsrc_id)
+        goto err_rsrc;
+    pho_resource_id__init(resp->notify->rsrc_id);
+
+    return 0;
+
+err_rsrc:
+    free(resp->notify);
+    resp->notify = NULL;
+
+err_notify:
+    return -ENOMEM;
+}
+
 int pho_srl_response_error_alloc(pho_resp_t *resp)
 {
     pho_response__init(resp);
@@ -455,6 +579,20 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
         free(resp->release->med_ids);
         free(resp->release);
         resp->release = NULL;
+    }
+
+    if (resp->format) {
+        free(resp->format->med_id->id);
+        free(resp->format->med_id);
+        free(resp->format);
+        resp->format = NULL;
+    }
+
+    if (resp->notify) {
+        free(resp->notify->rsrc_id->name);
+        free(resp->notify->rsrc_id);
+        free(resp->notify);
+        resp->notify = NULL;
     }
 
     if (resp->error) {

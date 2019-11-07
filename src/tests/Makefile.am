@@ -67,7 +67,7 @@ test_type_utils_SOURCES=test_type_utils.c
 test_type_utils_LDADD=../common/libpho_common.la
 
 test_store_retry_SOURCES=test_store_retry.c
-test_store_retry_LDADD=../store/libphobos_store.la
+test_store_retry_LDADD=../store/libphobos_store.la ../admin/libphobos_admin.la
 
 test_io_SOURCES=test_io.c
 test_io_LDADD=../io/libpho_io.la ../common/libpho_common.la

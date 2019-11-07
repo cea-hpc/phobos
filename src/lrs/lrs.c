@@ -32,21 +32,6 @@
 
 #include "lrs_sched.h"
 
-/* TODO: LRS features that will integrate the communication protocol
- * in a future patch
- */
-
-int lrs_format(struct lrs *lrs, const struct media_id *id,
-               enum fs_type fs, bool unlock)
-{
-    return sched_format(&lrs->sched, id, fs, unlock);
-}
-
-int lrs_device_add(struct lrs *lrs, const struct dev_info *devi)
-{
-    return sched_device_add(&lrs->sched, devi);
-}
-
 /* ****************************************************************************/
 /* LRS main functions *********************************************************/
 /* ****************************************************************************/
@@ -115,7 +100,7 @@ static int _send_responses(struct lrs *lrs, const int n_resp,
         int rc2 = 0;
         struct pho_comm_data msg;
 
-        msg = pho_comm_init_data(&lrs->comm);
+        msg = pho_comm_data_init(&lrs->comm);
         msg.fd = resp_cont[i].token;
         rc2 = pho_srl_response_pack(resp_cont[i].resp, &msg.buf);
         pho_srl_response_free(resp_cont[i].resp, false);

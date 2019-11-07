@@ -484,4 +484,13 @@ struct object_info {
     char  *user_md;
 };
 
+/**
+ * Kind of notify operations
+ */
+enum notify_op {
+    PHO_NTFY_OP_INVAL = -1,
+    PHO_NTFY_OP_ADD_DEVICE,
+    PHO_NTFY_OP_LAST
+};
+
 #endif

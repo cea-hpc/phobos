@@ -7,6 +7,7 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/cli.py \
 	   phobos/output.py \
 	   phobos/core/__init__.py \
+	   phobos/core/admin.py \
 	   phobos/core/cfg.py \
 	   phobos/core/const_module.c \
 	   phobos/core/dss.py \
@@ -14,7 +15,6 @@ EXTRA_DIST=phobos/__init__.py \
 	   phobos/core/glue_module.c \
 	   phobos/core/ldm.py \
 	   phobos/core/log.py \
-	   phobos/core/lrs.py \
 	   phobos/core/store.py \
 	   phobos/db/__init__.py \
 	   phobos/db/__main__.py \
