@@ -33,8 +33,24 @@
 #include "pho_cfg.h"
 #include "pho_comm.h"
 #include "pho_dss.h"
-#include "pho_lrs.h"
 #include "pho_srl_lrs.h"
+
+enum pho_cfg_params_admin {
+    /* Actual admin parameters */
+    PHO_CFG_ADMIN_lrs_socket,
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_ADMIN_FIRST = PHO_CFG_ADMIN_lrs_socket,
+    PHO_CFG_ADMIN_LAST  = PHO_CFG_ADMIN_lrs_socket
+};
+
+const struct pho_config_item cfg_admin[] = {
+    [PHO_CFG_ADMIN_lrs_socket] = {
+        .section = "lrs",
+        .name    = "server_socket",
+        .value   = "/tmp/socklrs"
+    },
+};
 
 static int _send_and_receive(struct admin_handle *adm, pho_req_t *req,
                              pho_resp_t **resp)
@@ -54,10 +70,6 @@ static int _send_and_receive(struct admin_handle *adm, pho_req_t *req,
     free(data_out.buf.buff);
     if (rc)
         LOG_RETURN(rc, "Cannot send request to LRS");
-
-    rc = lrs_process(&adm->lrs);
-    if (rc)
-        LOG_RETURN(rc, "LRS failure while processing pending requests");
 
     rc = pho_comm_recv(&adm->comm, &data_in, &n_data_in);
     if (rc || n_data_in != 1) {
@@ -87,63 +99,40 @@ void phobos_admin_fini(struct admin_handle *adm)
     if (rc)
         pho_error(rc, "Cannot close the communication socket");
 
-    lrs_fini(&adm->lrs);
     dss_fini(&adm->dss);
-
-    /* socket directory suppression -- will be removed with LRS daemonization */
-    if (rmdir(adm->dir_sock_path))
-        pho_error(errno, "Cannot remove the socket dir(%s)",
-                  adm->dir_sock_path);
-    free(adm->dir_sock_path);
-    adm->dir_sock_path = NULL;
 }
 
-int phobos_admin_init(struct admin_handle *adm)
+int phobos_admin_init(struct admin_handle *adm, const bool lrs_required)
 {
-    char dir_path[] = "/tmp/socklrs_XXXXXX";
-    char *sock_path;
+    const char *sock_path;
     int rc;
 
     memset(adm, 0, sizeof(*adm));
     adm->comm = pho_comm_info_init();
 
-    /* socket directory creation -- will be removed with LRS daemonization */
-    if (mkdtemp(dir_path) == NULL)
-        LOG_RETURN(-errno, "Error on creating the socket temporary directory");
-    if (asprintf(&sock_path, "%s/socket", dir_path) < 0)
-        LOG_RETURN(-ENOMEM, "Error on creating the socket path");
-    adm->dir_sock_path = strdup(dir_path);
-
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)
-        goto out_str;
+        return rc;
+
+    sock_path = PHO_CFG_GET(cfg_admin, PHO_CFG_ADMIN, lrs_socket);
 
     rc = dss_init(&adm->dss);
     if (rc)
         LOG_GOTO(out, rc, "Cannot initialize DSS");
 
-    rc = lrs_init(&adm->lrs, &adm->dss, sock_path);
-    if (rc)
-        LOG_GOTO(out, rc, "Cannot initialize LRS");
-
-
     rc = pho_comm_open(&adm->comm, sock_path, false);
-    if (rc)
+    if (!lrs_required && rc == -ENOTCONN) {
+        pho_warn("The LRS is not required, will continue");
+        rc = 0;
+    } else if (rc) {
         LOG_GOTO(out, rc, "Cannot initialize LRS socket");
-
-    /* waiting for LRS to accept admin connection */
-    rc = lrs_process(&adm->lrs);
-    if (rc)
-        LOG_GOTO(out, rc, "Error during Admin accept by LRS");
+    }
 
 out:
     if (rc) {
         pho_error(rc, "Error during Admin initialization");
         phobos_admin_fini(adm);
     }
-
-out_str:
-    free(sock_path);
 
     return rc;
 }

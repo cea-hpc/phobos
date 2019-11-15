@@ -29,7 +29,6 @@
 
 #include "pho_comm.h"
 #include "pho_dss.h"
-#include "pho_lrs.h"
 
 /**
  * Phobos admin handle.
@@ -37,46 +36,41 @@
  */
 struct admin_handle {
     struct dss_handle dss;          /**< DSS handle, configured from conf. */
-    struct lrs lrs;                 /**< LRS handle, configured from conf. */
     struct pho_comm_info comm;      /**< Communication socket info. */
-    char *dir_sock_path;            /**< Communication socket dir.
-                                      *  This information will be removed once
-                                      *  the LRS is a daemon, as it will be
-                                      *  the sole socket manager.
-                                      */
 };
 
 /**
  * Release the admin handler.
  *
- * \param[in/out]   adm     Admin handler.
+ * \param[in/out]   adm             Admin handler.
  */
 void phobos_admin_fini(struct admin_handle *adm);
 
 /**
  * Initialize the admin handler.
  *
- * \param[out]      adm     Admin handler.
+ * \param[out]      adm             Admin handler.
+ * \param[in]       lrs_required    True if the LRS is required.
  *
- * \return                  0     on success,
- *                         -errno on failure.
+ * \return                          0     on success,
+ *                                 -errno on failure.
  */
-int phobos_admin_init(struct admin_handle *adm);
+int phobos_admin_init(struct admin_handle *adm, const bool lrs_required);
 
 /**
  * Inform the LRS that it needs to reload device information following
  * given operation on the DSS.
  *
- * \FIXME -- In an ulterior patch, this function will do the following:
+ * \FIXME -- In an upcoming patch, this function will do the following:
  * Add a device to the DSS and inform the LRS that it needs to load
  * information of this new device.
  *
- * \param[in]       adm     Admin module handler.
- * \param[in]       family  Device family.
- * \param[in]       name    Device name.
+ * \param[in]       adm             Admin module handler.
+ * \param[in]       family          Device family.
+ * \param[in]       name            Device name.
  *
- * \return                  0     on success,
- *                         -errno on failure.
+ * \return                          0     on success,
+ *                                 -errno on failure.
  */
 int phobos_admin_device_add(struct admin_handle *adm, enum dev_family family,
                             const char *name);
@@ -84,13 +78,13 @@ int phobos_admin_device_add(struct admin_handle *adm, enum dev_family family,
 /**
  * Load and format a medium to the given fs type.
  *
- * \param[in]       adm     Admin module handler.
- * \param[in]       id      Medium ID for the medium to format.
- * \param[in]       fs      Filesystem type.
- * \param[in]       unlock  Unlock tape if succesfully formatted.
+ * \param[in]       adm             Admin module handler.
+ * \param[in]       id              Medium ID for the medium to format.
+ * \param[in]       fs              Filesystem type.
+ * \param[in]       unlock          Unlock tape if succesfully formatted.
  *
- * \return                  0     on success,
- *                         -errno on failure.
+ * \return                          0     on success,
+ *                                 -errno on failure.
  */
 int phobos_admin_format(struct admin_handle *adm, const struct media_id *id,
                         enum fs_type fs, bool unlock);

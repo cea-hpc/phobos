@@ -57,6 +57,26 @@ the database will be retrieved from /etc/phobos.conf):
 ```
 
 ## First steps
+### Launching phobosd
+To use phobos, a daemon called phobosd needs to be launched. It mainly manages
+the drive/media allocation and sets up resources to read or write your data.
+
+To launch the daemon:
+```
+# systemctl start phobosd
+```
+
+To stop the daemon:
+```
+# systemctl stop phobosd
+```
+
+phobosd comes with its option set:
+- -i: launch phobosd in an interactive way (attached to a terminal)
+- -c: path to phobosd configuration file
+- -s: print log messages into syslog
+- -q/v: decrease/increase log verbosity
+
 ### Adding drives
 Use the `phobos` command line to add new tape drives to be managed by phobos.
 

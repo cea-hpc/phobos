@@ -253,4 +253,14 @@ int pho_ht_foreach(GHashTable *ht, pho_ht_iter_cb_t cb, void *data);
  */
 #define MEMDUP(_x)  g_memdup((_x), sizeof(*(_x)))
 
+/**
+ * Identify medium-global error codes.
+ * Typically useful to trigger custom procedures when a medium becomes
+ * read-only.
+ */
+static inline bool is_medium_global_error(int errcode)
+{
+    return errcode == -ENOSPC || errcode == -EROFS || errcode == -EDQUOT;
+}
+
 #endif

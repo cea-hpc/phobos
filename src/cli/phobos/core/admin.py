@@ -48,13 +48,13 @@ class Client(object):
         super(Client, self).__init__()
         self.handle = None
 
-    def init(self):
+    def init(self, lrs_required):
         if self.handle is not None:
             self.fini()
 
         self.handle = AdminHandle()
 
-        rc = LIBPHOBOS_ADMIN.phobos_admin_init(byref(self.handle))
+        rc = LIBPHOBOS_ADMIN.phobos_admin_init(byref(self.handle), lrs_required)
         if rc:
             raise EnvironmentError(rc, 'Admin initialization failed')
 

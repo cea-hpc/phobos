@@ -36,6 +36,7 @@ enum pho_cfg_params_lrs {
     PHO_CFG_LRS_policy,
     PHO_CFG_LRS_default_family,
     PHO_CFG_LRS_lib_device,
+    PHO_CFG_LRS_server_socket,
 
     PHO_CFG_LRS_LAST
 };

@@ -27,13 +27,11 @@
 #endif
 
 #include "lrs_sched.h"
+#include "lrs_cfg.h"
 #include "pho_common.h"
-#include "pho_dss.h"
 #include "pho_type_utils.h"
 #include "pho_ldm.h"
-#include "pho_lrs.h"
 #include "pho_io.h"
-#include "lrs_cfg.h"
 
 #include <string.h>
 #include <unistd.h>
@@ -192,7 +190,7 @@ static int sched_dev_acquire(struct lrs_sched *sched, struct dev_descr *pdev)
 
     ENTRY;
 
-    if (!sched->dss || !pdev)
+    if (!pdev)
         return -EINVAL;
 
     if (pdev->locked_local) {
@@ -200,7 +198,7 @@ static int sched_dev_acquire(struct lrs_sched *sched, struct dev_descr *pdev)
         return 0;
     }
 
-    rc = dss_device_lock(sched->dss, pdev->dss_dev_info, 1, sched->lock_owner);
+    rc = dss_device_lock(&sched->dss, pdev->dss_dev_info, 1, sched->lock_owner);
     if (rc) {
         pho_warn("Cannot lock device '%s': %s", pdev->dev_path,
                  strerror(-rc));
@@ -222,7 +220,7 @@ static int sched_dev_release(struct lrs_sched *sched, struct dev_descr *pdev)
 
     ENTRY;
 
-    if (!sched->dss || !pdev)
+    if (!pdev)
         return -EINVAL;
 
     if (!pdev->locked_local) {
@@ -230,7 +228,7 @@ static int sched_dev_release(struct lrs_sched *sched, struct dev_descr *pdev)
         return 0;
     }
 
-    rc = dss_device_unlock(sched->dss, pdev->dss_dev_info, 1,
+    rc = dss_device_unlock(&sched->dss, pdev->dss_dev_info, 1,
                            sched->lock_owner);
     if (rc)
         LOG_RETURN(rc, "Cannot unlock device '%s'", pdev->dev_path);
@@ -252,12 +250,12 @@ static int sched_media_acquire(struct lrs_sched *sched,
 
     ENTRY;
 
-    if (!sched->dss || !pmedia)
+    if (!pmedia)
         return -EINVAL;
 
     media_id = media_id_get(&pmedia->id);
 
-    rc = dss_media_lock(sched->dss, pmedia, 1, sched->lock_owner);
+    rc = dss_media_lock(&sched->dss, pmedia, 1, sched->lock_owner);
     if (rc) {
         pmedia->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
         LOG_RETURN(rc, "Cannot lock media '%s'", media_id);
@@ -278,12 +276,12 @@ static int sched_media_release(struct lrs_sched *sched,
 
     ENTRY;
 
-    if (!sched->dss || !pmedia)
+    if (!pmedia)
         return -EINVAL;
 
     media_id = media_id_get(&pmedia->id);
 
-    rc = dss_media_unlock(sched->dss, pmedia, 1, sched->lock_owner);
+    rc = dss_media_unlock(&sched->dss, pmedia, 1, sched->lock_owner);
     if (rc)
         LOG_RETURN(rc, "Cannot unlock media '%s'", media_id);
 
@@ -574,7 +572,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
             return rc;
 
         /* get all unlocked devices from DB for the given family */
-        rc = dss_device_get(sched->dss, &filter, &devs, &dcnt);
+        rc = dss_device_get(&sched->dss, &filter, &devs, &dcnt);
         dss_filter_free(&filter);
         if (rc)
             GOTO(err_no_res, rc);
@@ -603,7 +601,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
     for (i = 0 ; i < sched->devices->len; i++) {
         struct dev_descr *dev = &g_array_index(sched->devices,
                                                struct dev_descr, i);
-        rc = sched_fill_dev_info(sched->dss, &lib, dev);
+        rc = sched_fill_dev_info(&sched->dss, &lib, dev);
         if (rc) {
             pho_debug("Marking device '%s' as failed", dev->dev_path);
             dev->op_status = PHO_DEV_OP_ST_FAILED;
@@ -636,15 +634,22 @@ static void dev_descr_fini(gpointer ptr)
 
 static __thread uint64_t sched_lock_number;
 
-int sched_init(struct lrs_sched *sched, struct dss_handle *dss)
+int sched_init(struct lrs_sched *sched)
 {
     int rc;
 
     sched->devices = g_array_new(FALSE, TRUE, sizeof(struct dev_descr));
     g_array_set_clear_func(sched->devices, dev_descr_fini);
-    sched->dss = dss;
     sched->req_queue = g_queue_new();
     sched->release_queue = g_queue_new();
+
+    /* Connect to the DSS*/
+    rc = dss_init(&sched->dss);
+    if (rc)
+        return rc;
+
+    /* Load the device state -- not critical if no device are found */
+    sched_load_dev_state(sched);
 
     /*
      * For the lock owner name to generate a collision, either the tid or the
@@ -672,6 +677,8 @@ void sched_fini(struct lrs_sched *sched)
     sched_handle_release_reqs(sched, NULL);
 
     free(sched->lock_owner);
+
+    dss_fini(&sched->dss);
 
     g_queue_free_full(sched->req_queue, sched_req_free_wrapper);
     g_queue_free_full(sched->release_queue, sched_req_free_wrapper);
@@ -833,7 +840,7 @@ static int sched_select_media(struct lrs_sched *sched,
     if (rc)
         return rc;
 
-    rc = dss_media_get(sched->dss, &filter, &pmedia_res, &mcnt);
+    rc = dss_media_get(&sched->dss, &filter, &pmedia_res, &mcnt);
     if (rc)
         GOTO(err_nores, rc);
 
@@ -1873,7 +1880,7 @@ static int sched_media_prepare(struct lrs_sched *sched,
     *pdev = NULL;
     *pmedia = NULL;
 
-    rc = sched_fill_media_info(sched->dss, &med, id);
+    rc = sched_fill_media_info(&sched->dss, &med, id);
     if (rc != 0)
         return rc;
 
@@ -2020,7 +2027,7 @@ static int sched_format(struct lrs_sched *sched, const struct media_id *id,
         media_info->adm_status = PHO_MDA_ADM_ST_UNLOCKED;
     }
 
-    rc = dss_media_set(sched->dss, media_info, 1, DSS_SET_UPDATE);
+    rc = dss_media_set(&sched->dss, media_info, 1, DSS_SET_UPDATE);
     if (rc != 0)
         LOG_GOTO(err_out, rc, "Failed to update state of media '%s'", label);
 
@@ -2099,7 +2106,7 @@ retry:
 
         media->fs.status = PHO_FS_STATUS_FULL;
 
-        rc = dss_media_set(sched->dss, media, 1, DSS_SET_UPDATE);
+        rc = dss_media_set(&sched->dss, media, 1, DSS_SET_UPDATE);
         if (rc)
             LOG_GOTO(err_cleanup, rc, "Cannot update media information");
 
@@ -2198,7 +2205,7 @@ static int sched_media_update(struct lrs_sched *sched,
     /* TODO update nb_load, nb_errors, last_load */
 
     /* @FIXME: this DSS update could be done when releasing the media */
-    rc = dss_media_set(sched->dss, media_info, 1, DSS_SET_UPDATE);
+    rc = dss_media_set(&sched->dss, media_info, 1, DSS_SET_UPDATE);
     if (rc)
         LOG_RETURN(rc, "Cannot update media information");
 
@@ -2266,7 +2273,7 @@ static int sched_device_add(struct lrs_sched *sched, enum dev_family family,
     if (rc)
         goto err;
 
-    rc = dss_device_get(sched->dss, &filter, &devi, &dev_cnt);
+    rc = dss_device_get(&sched->dss, &filter, &devi, &dev_cnt);
     dss_filter_free(&filter);
     if (rc)
         goto err;
@@ -2284,7 +2291,7 @@ static int sched_device_add(struct lrs_sched *sched, enum dev_family family,
     if (rc)
         goto err_res;
 
-    rc = sched_fill_dev_info(sched->dss, &lib, &device);
+    rc = sched_fill_dev_info(&sched->dss, &lib, &device);
     if (rc)
         goto err_lib;
 

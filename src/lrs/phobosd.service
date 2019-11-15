@@ -1,0 +1,13 @@
+[Unit]
+Description=Phobos Local Resource Scheduler (LRS) daemon
+
+[Service]
+Type=forking
+Environment="PHOBOSD_PID_FILEPATH=/run/phobosd/phobosd.pid"
+EnvironmentFile=-/etc/sysconfig/phobos
+RuntimeDirectory=phobosd
+PIDFile=/run/phobosd/phobosd.pid
+ExecStart=/usr/sbin/phobosd
+
+[Install]
+WantedBy=multi-user.target

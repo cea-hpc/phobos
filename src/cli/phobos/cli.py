@@ -595,7 +595,7 @@ class DeviceOptHandler(BaseResourceOptHandler):
 
         adm = AdminClient()
         try:
-            adm.init()
+            adm.init(lrs_required=False)
 
             for path in resources:
                 # TODO: this will be dropped when adding to DSS will be done by
@@ -788,7 +788,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         unlock = self.params.get('unlock')
         adm = AdminClient()
         try:
-            adm.init()
+            adm.init(lrs_required=True)
 
             if unlock:
                 self.logger.debug("Post-unlock enabled")

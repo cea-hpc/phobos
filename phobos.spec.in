@@ -19,6 +19,7 @@ BuildRequires: openssl-devel
 BuildRequires: libattr-devel
 BuildRequires: sg3_utils-devel
 BuildRequires: protobuf-c-devel
+BuildRequires: systemd
 
 Requires: postgresql94-server
 Requires: postgresql94-contrib
@@ -81,6 +82,8 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{python_sitearch}/phobos/*
 %{python_sitearch}/phobos-*-py?.?.egg-info
 %{_bindir}/phobos
+%{_sbindir}/phobosd
+%{_unitdir}/phobosd.service
 %config(noreplace) %{_sysconfdir}/phobos.conf
 %dir %{phobosdocdir}
 %doc %{phobosdocdir}/README.md

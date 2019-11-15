@@ -19,8 +19,8 @@ The flush timing is also performance critical when dealing with tape libraries.
 = Client calls =
 
 Calls to the LRS are performed through the LRS protocol, defined and
-documented in `pho_lrs.h`. This section lists the main message types and their
-purpose.
+documented in `pho_srl_lrs.h` and `pho_proto_lrs.proto`. This section lists the
+main message types and their purpose.
 
 The typical behaviour of the LRS when managing tapes would be to buffer
 requests and answer to them in batches so that multiple IOs can be efficiently
@@ -55,14 +55,15 @@ writing to tapes, this allows to minimize the overhead of flushing LTFS.
 
 == Format ==
 
-**NOT IMPLEMENTED YET** (2019.09.27)
-
-These messages are not implemented yet and the operation can only be performed
-with an explicit `lrs_format` API call.
-
 - Format request: request to format a given medium (designated by its
   identifier) with a given filesystem.
 - Format response: signals that a medium has successfully been formatted.
+
+== Notify ==
+
+- Notify request: notify that the LRS needs to update its internal information
+  by retrieving a new state from the database.
+- Notify response: signals that the LRS internal state was updated.
 
 == Error ==
 

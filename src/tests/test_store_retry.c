@@ -236,7 +236,7 @@ int main(int argc, char **argv)
     reinit_xfer(&xfer, argv[0], argv[0], PHO_XFER_OP_PUT);
 
     dss_init(&dss);
-    phobos_admin_init(&adm);
+    phobos_admin_init(&adm, true);
 
     default_family = getenv("PHOBOS_LRS_default_family");
     if (default_family && strcmp(default_family, "tape") == 0) {

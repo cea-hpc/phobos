@@ -42,6 +42,7 @@ test_bin="$test_bin_dir/test_store"
 
 . $test_bin_dir/test_env.sh
 . $test_bin_dir/setup_db.sh
+. $test_bin_dir/test_launch_daemon.sh
 
 drop_tables
 setup_tables
@@ -55,12 +56,14 @@ TEST_FS="posix"
 
 export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
 export PHOBOS_LRS_default_family="dir"
+invoke_daemon
 
 export PHOBOS_STORE_layout=$USE_LAYOUT
 
 function clean_test
 {
     echo "cleaning..."
+    waive_daemon
     rm -f $TEST_FILES
     for d in $TEST_MNT; do
     rm -rf $d/*

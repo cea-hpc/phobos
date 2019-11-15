@@ -27,10 +27,10 @@
 
 #include <stdint.h>
 
+#include "pho_dss.h"
 #include "pho_srl_lrs.h"
 #include "pho_types.h"
 
-struct dss_handle;
 struct dev_descr;
 
 /**
@@ -38,7 +38,7 @@ struct dev_descr;
  * actual IO to be performed.
  */
 struct lrs_sched {
-    struct dss_handle *dss;         /**< Associated DSS */
+    struct dss_handle  dss;         /**< Associated DSS */
     GArray            *devices;     /**< List of available devices */
     char              *lock_owner;  /**< Lock owner name for this LRS
                                       *  (contains hostname and tid)
@@ -71,13 +71,10 @@ struct resp_container {
  * Initialize a new sched bound to a given DSS.
  *
  * \param[in]       sched       The sched to be initialized.
- * \param[in]       dss         The DSS that will be used by \a lrs. Initialized
- *                              (dss_init), managed and deinitialized (dss_fini)
- *                              externally by the caller.
  *
  * \return                      0 on success, -1 * posix error code on failure.
  */
-int sched_init(struct lrs_sched *sched, struct dss_handle *dss);
+int sched_init(struct lrs_sched *sched);
 
 /**
  * Free all resources associated with this sched except for the dss, which must

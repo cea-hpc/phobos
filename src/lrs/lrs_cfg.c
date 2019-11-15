@@ -49,4 +49,9 @@ const struct pho_config_item cfg_lrs[] = {
         .name    = "lib_device",
         .value   = "/dev/changer"
     },
+    [PHO_CFG_LRS_server_socket] = {
+        .section = "lrs",
+        .name    = "server_socket",
+        .value   = "/tmp/socklrs"
+    },
 };

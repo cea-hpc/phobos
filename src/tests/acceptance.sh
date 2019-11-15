@@ -33,6 +33,8 @@ TAGS=foo-tag,bar-tag
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
 . $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+
 if [ "$CLEAN_ALL" -eq "1" ]; then
     drop_tables
     setup_tables
@@ -42,6 +44,7 @@ fi
 function error {
     echo "$*"
     # Wait pending processes before exit and cleanup
+    waive_daemon
     wait
     exit 1
 }
@@ -185,8 +188,9 @@ function dir_setup
     done
 }
 
-function dir_cleanup
+function cleanup
 {
+    waive_daemon
     rm -rf /tmp/test.pho.1 /tmp/test.pho.2 "$PHO_TMP_DIR"
 }
 
@@ -308,7 +312,9 @@ function concurrent_put
 
     # 2 simultaneous put
     phobos_delayed_dev_release 2 put -m $md $tmp $key.1 &
+    local pid1=$!
     (( single==0 )) && phobos_delayed_dev_release 2 put -m $md $tmp $key.2 &
+    local pid2=$!
 
     # after 1 sec, make sure 2 devices and 2 media are locked
     sleep 1
@@ -320,6 +326,7 @@ function concurrent_put
     elif (( single==1 )) && (( $nb_lock != 1 )); then
         error "1 media lock expected (actual: $nb_lock)"
     fi
+
     nb_lock=$($PSQL -qt -c "select * from device where lock != ''" \
               | grep -v "^$" | wc -l)
     echo "$nb_lock devices are locked"
@@ -329,7 +336,8 @@ function concurrent_put
         error "1 device lock expected (actual: $nb_lock)"
     fi
 
-    wait
+    wait $pid1
+    wait $pid2
 
     rm -f $tmp
 
@@ -392,6 +400,9 @@ function drain_all_drives
         while read slot drive; do
             mtx_retry unload $slot $drive
         done
+
+    waive_daemon
+    invoke_daemon
 }
 
 function lock_all_drives
@@ -434,6 +445,7 @@ function tape_drive_compat
     rm /tmp/svc_lto5_from_lto5_drive
     $phobos get svc_lto6 /tmp/svc_lto6_from_lto5_drive &&
         error "getting data from lto6 tape with one lto5 drive must fail"
+    rm -f /tmp/svc_lto6_from_lto5_drive
 
     #test with only one lto6 drive
     lock_all_drives
@@ -452,8 +464,9 @@ function tape_drive_compat
 
 echo "POSIX test mode"
 export PHOBOS_LRS_default_family="dir"
+invoke_daemon
 PHO_TMP_DIR="$(mktemp -d)"
-trap dir_cleanup EXIT
+trap cleanup EXIT
 dir_setup
 put_get_test
 put_tags
@@ -461,6 +474,7 @@ concurrent_put
 check_status dir "$dirs"
 lock_test
 concurrent_put_get_retry
+waive_daemon
 
 if  [[ -w /dev/changer ]]; then
     echo "Tape test mode"
@@ -469,6 +483,7 @@ if  [[ -w /dev/changer ]]; then
         setup_tables
     fi
     export PHOBOS_LRS_default_family="tape"
+    invoke_daemon
     tape_setup
     put_get_test
     put_tags
@@ -477,4 +492,5 @@ if  [[ -w /dev/changer ]]; then
     lock_test
     concurrent_put_get_retry
     tape_drive_compat
+    waive_daemon
 fi

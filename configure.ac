@@ -13,7 +13,6 @@ AC_SUBST(RELEASE)
 AC_CONFIG_AUX_DIR([autotools])
 AC_CONFIG_MACRO_DIR([autotools/m4])
 AC_CONFIG_HEADER([src/include/config.h])
-AC_CONFIG_SRCDIR([src/include/pho_lrs.h])
 
 AM_INIT_AUTOMAKE([-Wall -Werror tar-pax foreign])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])

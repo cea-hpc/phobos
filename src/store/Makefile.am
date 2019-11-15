@@ -6,8 +6,8 @@ AM_LDFLAGS=-Wl,-rpath=$(libdir) -Wl,-rpath=$(pkglibdir)
 lib_LTLIBRARIES=libphobos_store.la
 
 libphobos_store_la_SOURCES=store.c
-libphobos_store_la_LIBADD=../common/libpho_common.la ../dss/libpho_dss.la \
-			  ../cfg/libpho_cfg.la ../ldm/libpho_ldm.la \
-			  ../lrs/libpho_lrs.la ../layout/libpho_layout.la \
-			  ../io/libpho_io.la ../communication/libpho_comm.la \
+libphobos_store_la_LIBADD=../cfg/libpho_cfg.la ../common/libpho_common.la \
+			  ../communication/libpho_comm.la ../dss/libpho_dss.la \
+			  ../io/libpho_io.la ../layout/libpho_layout.la \
+			  ../ldm/libpho_ldm.la \
 			  ../serializer/libpho_serializer.la

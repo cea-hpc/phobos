@@ -45,11 +45,6 @@
 /** Used to limit the received buffer size and avoid large allocations. */
 #define MAX_RECV_BUF_SIZE (16*1024LL)
 
-/** Used to limit the amount of time (s) we wait on recv.
- * TODO: Get it from the config file.
- */
-#define RECV_TIMEOUT 10
-
 enum _pho_comm_cri_msg_kind {
     PHO_CRI_MSG_SIZE,
     PHO_CRI_MSG_BUFF
@@ -105,9 +100,16 @@ int pho_comm_open(struct pho_comm_info *ci, const char *sock_path,
     if (is_server) {
         if (access(sock_path, F_OK) != -1) {
             pho_warn("Socket already exists(%s), will remove the old one",
-                sock_path);
+                     sock_path);
             unlink(sock_path);
         }
+    } else if (access(sock_path, F_OK) == -1) {
+        /* if the client does not see the LRS socket, we return ENOTCONN,
+         * then each client will decide if they need the LRS or not.
+         */
+        LOG_RETURN(-ENOTCONN,
+                   "Socket does not exist(%s), means that the LRS is not "
+                   "up or the socket path is not correct", sock_path);
     }
 
     ci->path = strdup(sock_path);
@@ -119,13 +121,6 @@ int pho_comm_open(struct pho_comm_info *ci, const char *sock_path,
     strncpy(socka.sun_path, ci->path, sizeof(socka.sun_path));
 
     if (!is_server) {
-        struct timeval tv = {RECV_TIMEOUT, 0};
-
-        /* define a recv timeout for the client side */
-        if (setsockopt(ci->socket_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)))
-            LOG_GOTO(out_err, rc = -errno,
-                     "Socket configuration(%s) failed", ci->path);
-
         if (connect(ci->socket_fd, (struct sockaddr *)&socka, sizeof(socka)))
             LOG_GOTO(out_err, rc = -errno,
                      "Socket connection(%s) failed", ci->path);
@@ -231,7 +226,7 @@ static int _send_until_complete(int fd, const void *buf, size_t size)
     size_t count;
 
     while (size) {
-        count = send(fd, buf, size, 0);
+        count = send(fd, buf, size, MSG_NOSIGNAL);
         if (count == -1)
             return -errno;
         size -= count;
@@ -265,27 +260,6 @@ int pho_comm_send(const struct pho_comm_data *data)
     pho_debug("Sending %zu bytes", data->buf.size);
 
     return 0;
-}
-
-/**
- * Check if data are available in the socket.
- *
- * \return      1 if there is data,
- *              0 if there is no data (EAGAIN || EWOULDBLOCK),
- *             -1 on failure.
- */
-static int _recv_peek(struct _pho_comm_recv_info *cri)
-{
-    ssize_t sz = 0;
-
-    sz = recv(cri->fd, cri->buf, cri->len, MSG_PEEK | MSG_DONTWAIT);
-
-    if (sz > 0)
-        return 1;
-    if (sz == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
-        return 0;
-
-    return -1;
 }
 
 /**
@@ -353,11 +327,6 @@ static int _recv_client(struct pho_comm_info *ci, struct pho_comm_data **data,
     /* receiving buffer size */
     _init_comm_recv_info(&cri, ci->socket_fd, PHO_CRI_MSG_SIZE, sizeof(tlen),
                          0, (char *)&tlen);
-
-    if (!_recv_peek(&cri)) {
-        free(*data);
-        return 0;
-    }
 
     rc = _recv_full(&cri);
     /* considering no response (which is a success) */
@@ -535,7 +504,7 @@ static int _recv_server(struct pho_comm_info *ci, struct pho_comm_data **data,
     int rca = 0;
 
     /* probing the socket poll */
-    *nb_data = epoll_wait(ci->epoll_fd, ev, g_hash_table_size(ci->ev_tab), 0);
+    *nb_data = epoll_wait(ci->epoll_fd, ev, g_hash_table_size(ci->ev_tab), 100);
     if (*nb_data == -1)
         LOG_RETURN(-errno, "Socket poll probe failed");
     if (*nb_data == 0)
@@ -559,7 +528,6 @@ static int _recv_server(struct pho_comm_info *ci, struct pho_comm_data **data,
                 pho_error(rc, "Client accept failed");
                 rca = rca ? : rc;
             }
-
             continue;
         }
 
@@ -573,10 +541,10 @@ static int _recv_server(struct pho_comm_info *ci, struct pho_comm_data **data,
                 if (rc == -ENOMEM)
                     LOG_GOTO(err, rc = -ENOMEM, "Error on allocation during "
                              "receiving");
-                else if (rc != -ENOTCONN)
+                else if (rc != -ENOTCONN && rc != -ECONNRESET)
                     pho_error(rc, "Error with client connection, "
                               "will close it");
-                else /* ENOTCONN is not considered as an error */
+                else /* ENOTCONN & ECONNRESET are not considered as an error */
                     rc = 0;
 
                 _process_close(ci, cri, (*data) + idx_data);

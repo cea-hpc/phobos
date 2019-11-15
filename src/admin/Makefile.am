@@ -6,5 +6,5 @@ lib_LTLIBRARIES=libphobos_admin.la
 libphobos_admin_la_SOURCES=admin.c
 libphobos_admin_la_LIBADD=../dss/libpho_dss.la ../cfg/libpho_cfg.la \
 			  ../common/libpho_common.la \
-			  ../lrs/libpho_lrs.la ../communication/libpho_comm.la \
+			  ../communication/libpho_comm.la \
 			  ../serializer/libpho_serializer.la

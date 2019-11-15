@@ -34,7 +34,6 @@
 #include "pho_dss.h"
 #include "pho_io.h"
 #include "pho_layout.h"
-#include "pho_lrs.h"
 #include "pho_srl_lrs.h"
 #include "pho_type_utils.h"
 #include "pho_types.h"
@@ -54,12 +53,13 @@
  * List of configuration parameters for store
  */
 enum pho_cfg_params_store {
-    /* Actual parameters */
-    PHO_CFG_STORE_layout,
+    PHO_CFG_STORE_FIRST,
 
-    /* Delimiters, update when modifying options */
-    PHO_CFG_STORE_FIRST = PHO_CFG_STORE_layout,
-    PHO_CFG_STORE_LAST  = PHO_CFG_STORE_layout,
+    /* store parameters */
+    PHO_CFG_STORE_layout = PHO_CFG_STORE_FIRST,
+    PHO_CFG_STORE_lrs_socket,
+
+    PHO_CFG_STORE_LAST
 };
 
 const struct pho_config_item cfg_store[] = {
@@ -67,6 +67,11 @@ const struct pho_config_item cfg_store[] = {
         .section = "store",
         .name    = "layout",
         .value   = "simple"
+    },
+    [PHO_CFG_STORE_lrs_socket] = {
+        .section = "lrs",
+        .name    = "server_socket",
+        .value   = "/tmp/socklrs"
     },
 };
 
@@ -76,7 +81,6 @@ const struct pho_config_item cfg_store[] = {
  */
 struct phobos_handle {
     struct dss_handle dss;          /**< DSS handle, configured from conf */
-    struct lrs lrs;                 /**< LRS handle, configured from conf */
     struct pho_xfer_desc *xfers;    /**< Transfers being handled */
     struct pho_encoder *encoders;   /**< Encoders corresponding to xfers */
     size_t n_xfers;                 /**< Number of xfers */
@@ -96,11 +100,6 @@ struct phobos_handle {
                                      */
 
     struct pho_comm_info comm;      /**< Communication socket info. */
-    char *dir_sock_path;            /**< Communication socket dir.
-                                      *  This information will be removed once
-                                      *  the LRS is a daemon, as it will
-                                      *  be the sole socket manager.
-                                      */
 
     pho_completion_cb_t cb;         /**< Callback called on xfer completion */
     void *udata;                    /**< User-provided argument to `cb` */
@@ -193,7 +192,6 @@ err_nores:
  * Forward a response from the LRS to its destination encoder, collect this
  * encoder's next requests and forward them back to the LRS.
  *
- * @param[in/out]   lrs     The LRS the encoder talks to.
  * @param[in/out]   enc     The encoder to give the response to.
  * @param[in]       ci      Communication information.
  * @param[in]       resp    The response to be forwarded to \a enc. Can be NULL
@@ -203,8 +201,8 @@ err_nores:
  *
  * @return 0 on success, -errno on error.
  */
-static int encoder_communicate(struct lrs *lrs, struct pho_encoder *enc,
-                               struct pho_comm_info *ci, pho_resp_t *resp,
+static int encoder_communicate(struct pho_encoder *enc,
+                               struct pho_comm_info *comm, pho_resp_t *resp,
                                int enc_id)
 {
     pho_req_t *requests = NULL;
@@ -232,7 +230,7 @@ static int encoder_communicate(struct lrs *lrs, struct pho_encoder *enc,
         /* req_id is used to route responses to the appropriate encoder */
         req->id = enc_id;
 
-        data = pho_comm_data_init(ci);
+        data = pho_comm_data_init(comm);
         if (pho_srl_request_pack(req, &data.buf)) {
             pho_srl_request_free(req, false);
             return -ENOMEM;
@@ -469,18 +467,20 @@ static void store_fini(struct phobos_handle *pho, int rc)
          * Encoders that have not finished at this point are marked as failed
          * with the global rc
          */
-        if (!pho->ended_xfers[i])
+        if (pho->ended_xfers && !pho->ended_xfers[i])
             store_end_xfer(pho, i, rc);
 
         /*
          * We allocated the decoder layouts from the dss (in decoder_build),
          * hence we also free them.
          */
-        if (pho->encoders[i].is_decoder) {
-            dss_res_free(pho->encoders[i].layout, 1);
-            pho->encoders[i].layout = NULL;
+        if (pho->encoders) {
+            if (pho->encoders[i].is_decoder) {
+                dss_res_free(pho->encoders[i].layout, 1);
+                pho->encoders[i].layout = NULL;
+            }
+            layout_destroy(&pho->encoders[i]);
         }
-        layout_destroy(&pho->encoders[i]);
     }
 
     free(pho->encoders);
@@ -494,15 +494,7 @@ static void store_fini(struct phobos_handle *pho, int rc)
     if (rc)
         pho_error(rc, "Cannot close the communication socket");
 
-    lrs_fini(&pho->lrs);
     dss_fini(&pho->dss);
-
-    /* socket directory suppression -- will be removed with LRS daemonization */
-    if (rmdir(pho->dir_sock_path))
-        pho_error(errno, "Cannot remove the socket dir(%s)",
-                  pho->dir_sock_path);
-    free(pho->dir_sock_path);
-    pho->dir_sock_path = NULL;
 }
 
 /**
@@ -520,58 +512,45 @@ static void store_fini(struct phobos_handle *pho, int rc)
 static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
                       size_t n_xfers, pho_completion_cb_t cb, void *udata)
 {
-    char dir_path[] = "/tmp/socklrs_XXXXXX";
-    char *sock_path;
+    const char *sock_path;
     size_t i;
     int rc;
 
     memset(pho, 0, sizeof(*pho));
     pho->comm = pho_comm_info_init();
 
-    /* socket directory creation -- will be removed with LRS daemonization */
-    if (mkdtemp(dir_path) == NULL)
-        LOG_RETURN(-errno, "Error on creating the socket temporary directory");
-    if (asprintf(&sock_path, "%s/socket", dir_path) < 0)
-        LOG_RETURN(-ENOMEM, "Error on creating the socket path");
-    pho->dir_sock_path = strdup(dir_path);
-
     pho->xfers = xfers;
     pho->n_xfers = n_xfers;
     pho->cb = cb;
     pho->udata = udata;
+    pho->n_ended_xfers = 0;
+    pho->ended_xfers = NULL;
+    pho->encoders = NULL;
+    pho->md_created = NULL;
 
     /* Check xfers consistency */
     for (i = 0; i < n_xfers; i++) {
         rc = pho_xfer_desc_flag_check(&xfers[i]);
         if (rc)
-            goto out_str;
+            return rc;
     }
 
     /* Ensure conf is loaded */
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)
-        goto out_str;
+        return rc;
+
+    sock_path = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, lrs_socket);
 
     /* Connect to the DSS */
     rc = dss_init(&pho->dss);
     if (rc != 0)
-        goto out_str;
+        return rc;
 
-    /* Instanciate the LRS --
-     * in the future: connect to the LRS service, using pho_comm_open()
-     */
-    rc = lrs_init(&pho->lrs, &pho->dss, sock_path);
-    if (rc)
-        LOG_GOTO(out, rc, "Cannot initialize LRS");
-
+    /* Connect to the LRS */
     rc = pho_comm_open(&pho->comm, sock_path, false);
     if (rc)
         LOG_GOTO(out, rc, "Cannot initialize LRS socket");
-
-    /* waiting for LRS to accept store connection */
-    rc = lrs_process(&pho->lrs);
-    if (rc)
-        LOG_GOTO(out, rc, "Error during Store accept by LRS");
 
     /* Allocate memory for the encoders */
     pho->encoders = calloc(n_xfers, sizeof(*pho->encoders));
@@ -606,9 +585,6 @@ out:
     if (rc)
         store_fini(pho, rc);
 
-out_str:
-    free(sock_path);
-
     return rc;
 }
 
@@ -623,8 +599,7 @@ static int store_lrs_response_process(struct phobos_handle *pho,
               encoder->xfer->xd_objid,
               pho_srl_response_kind_str(resp));
 
-    rc = encoder_communicate(&pho->lrs, encoder, &pho->comm, resp,
-                             resp->req_id);
+    rc = encoder_communicate(encoder, &pho->comm, resp, resp->req_id);
 
     /* Success or failure final callback */
     if (rc || encoder->done)
@@ -646,10 +621,6 @@ static int store_dispatch_loop(struct phobos_handle *pho)
     pho_resp_t **resps = NULL;
 
     /* Collect LRS responses */
-    rc = lrs_process(&pho->lrs);
-    if (rc)
-        LOG_RETURN(rc, "Error during LRS processing");
-
     rc = pho_comm_recv(&pho->comm, &responses, &n_responses);
     if (rc)
         LOG_RETURN(rc, "Error while collecting responses from LRS");
@@ -683,38 +654,6 @@ static int store_dispatch_loop(struct phobos_handle *pho)
         pho_srl_response_free(resps[i], true);
         if (rc)
             break;
-
-        /*
-         * lrs_process is called again here to ensure that the LRS will have
-         * some time to process the release requests. In case of a phobos_get,
-         * the store client does not iterate on dispatch_loop once its reading
-         * done and so lrs_process is not call, and can not process the
-         * pending release request. This behavior can lead to bugs where device
-         * locks are not released anymore once a phobos_get is done.
-         *
-         * With LRS daemonization, this call will no be longer needed as the
-         * LRS will process the release request, but will get an EPIPE error
-         * when sending the release response to the client.
-         *
-         * TODO: we need to think about a way to avoid this error in the future,
-         * I got three ideas:
-         * - consider that this EPIPE error is not critical and can happen if
-         *   the client does not care about the release acknowledgement;
-         * - consider a boolean 'send_resp' in the release message protocol to
-         *   indicate if the client need a response, and then send it if needed;
-         * - force the client to always receive the ack, but putting a boolean
-         *   'with_flush' in the release message protocol to let the client
-         *   be responded before or after a flush operation. If not, the client
-         *   only says to the LRS that its operation is done and that it does
-         *   not need the device anymore. The LRS sends its response once the
-         *   release request is received.
-         */
-        rc = lrs_process(&pho->lrs);
-        if (rc) {
-            pho_error(rc, "Error during LRS processing");
-            free(resps);
-            return rc;
-        }
     }
 
     /*
@@ -777,8 +716,7 @@ static int store_perform_xfers(struct phobos_handle *pho)
         if (pho->encoders[i].done)
             continue;
 
-        rc = encoder_communicate(&pho->lrs, &pho->encoders[i],
-                                 &pho->comm, NULL, i);
+        rc = encoder_communicate(&pho->encoders[i], &pho->comm, NULL, i);
         if (rc)
             store_end_xfer(pho, i, rc);
     }

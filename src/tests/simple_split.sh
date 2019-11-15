@@ -37,6 +37,7 @@ LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
 . $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
 
 IN_FILE=/tmp/simple_split_in_file
 OUT_FILE=/tmp/simple_split_out_file
@@ -79,6 +80,7 @@ function dir_setup
 
 function cleanup
 {
+    waive_daemon
     rm -rf $DIR1 $DIR2
     rm -rf $IN_FILE $OUT_FILE
     drop_tables
@@ -93,6 +95,7 @@ function create_in_file
 # start with a clean/empty phobos DB
 drop_tables
 setup_tables
+invoke_daemon
 # clean at exit
 trap cleanup EXIT
 # set start context
@@ -108,4 +111,7 @@ $LOG_VALG $phobos -v get $OBJECT $OUT_FILE
 
 # check got file
 cmp $IN_FILE $OUT_FILE
+
+trap - EXIT
+cleanup || true
 
