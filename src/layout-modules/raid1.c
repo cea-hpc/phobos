@@ -68,6 +68,9 @@ static struct module_desc RAID1_MODULE_DESC = {
  * With replica_id from 0 to repl_count - 1, the flattened layout extent index
  * is : raid1_encoder.cur_extent_idx * raid1_encoder.repl_count + repl_id .
  *
+ * To put an object of a written size of 0, we create an extent of null size to
+ * really have a residual null size object on media.
+ *
  * @FIXME: raid1 layout with a repl_count of 1 behaves exactly as the simple
  * layout. We could remove the simple layout from the code and replace it by
  * this raid1 code with a repl_count of 1.
@@ -84,12 +87,28 @@ struct raid1_encoder {
     /* The following two fields are only used when writing */
     /** Extents written (appended as they are written) */
     GArray *written_extents;
+
     /**
-     * Set of already released media (key: str, value: NULL), used to ensure
-     * that all written media have also been released (and therefore flushed)
-     * when writing.
+     * Set of media to release (key: media_id str, value: refcount), used to
+     * ensure that all written media have also been released (and therefore
+     * flushed) when writing.
+     *
+     * We use a refcount as value to manage multiple extents written on same
+     * medium.
      */
-    GHashTable *released_media;
+    GHashTable *to_release_media;
+
+    /**
+     * Nb media released
+     *
+     * We increment for each medium release response. Same medium used two
+     * different times for two different extents will increment two times this
+     * counter.
+     *
+     * Except from null sized put, the end of the write is checked by
+     * nb_released_media == written_extents->len .
+     */
+    size_t n_released_media;
 };
 
 /**
@@ -119,6 +138,64 @@ const struct pho_config_item cfg_lyt_raid1[] = {
         .value   = "2"  /* Total # of copies (default) */
     },
 };
+
+/**
+ * Add a media to release with an initial refcount of 1
+ */
+static int add_new_to_release_media(struct raid1_encoder *raid1,
+                                    const char *media_id)
+{
+    size_t *new_ref_count;
+    gboolean was_not_in;
+    char *new_media_id;
+
+    /* alloc and set new ref count */
+    new_ref_count = malloc(sizeof(*new_ref_count));
+    if (new_ref_count == NULL)
+        return -ENOMEM;
+
+    *new_ref_count = 1;
+
+    /* alloc new media_id */
+    new_media_id = strdup(media_id);
+    if (new_media_id == NULL) {
+        free(new_ref_count);
+        return -ENOMEM;
+    }
+
+    was_not_in = g_hash_table_insert(raid1->to_release_media, new_media_id,
+                                     new_ref_count);
+    assert(was_not_in);
+    return 0;
+}
+
+/**
+ * Add a written extent to the raid1 encoder and add the medium to release
+ *
+ * @return 0 if success, else a negative error code if a failure occurs
+ */
+static int add_written_extent(struct raid1_encoder *raid1,
+                              struct extent *extent)
+{
+    size_t *to_release_refcount;
+    const char *media_id;
+
+    /* add extent to written ones */
+    g_array_append_val(raid1->written_extents, *extent);
+
+    /* add medium to be released */
+    media_id =  media_id_get(&extent->media);
+    to_release_refcount = g_hash_table_lookup(raid1->to_release_media,
+                                              media_id);
+    /* existing media_id to release */
+    if (to_release_refcount != NULL) {
+        ++(*to_release_refcount);
+        return 0;
+    }
+
+    /* new media_id to release */
+    return add_new_to_release_media(raid1, media_id);
+}
 
 /**
  * Set unsigned int decoder/encoder value from char * layout attr
@@ -195,24 +272,6 @@ free_values:
 
     g_string_free(str, TRUE);
     return rc;
-}
-
-/** True if an encoder or decoder has finished writing. */
-static bool raid1_finished(struct pho_encoder *enc)
-{
-    struct raid1_encoder *raid1 = enc->priv_enc;
-
-    if (enc->done)
-        return true;
-
-    if (raid1->to_write > 0)
-        return false;
-
-    /* Ensure that even a zero-sized PUT creates at least one extent */
-    if (!enc->is_decoder && raid1->written_extents->len == 0)
-        return false;
-
-    return true;
 }
 
 /**
@@ -322,7 +381,7 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
     if (rc)
         return rc;
 
-    g_array_append_val(raid1->written_extents, cur_extent);
+    add_written_extent(raid1, &cur_extent);
 
     return 0;
 }
@@ -544,7 +603,7 @@ close:
     /* add all written extents */
     if (!rc)
         for (i = 0; i < raid1->repl_count; ++i)
-            g_array_append_val(raid1->written_extents, extent[i]);
+            add_written_extent(raid1, &extent[i]);
 
 attrs:
     for (i = 0; i < raid1->repl_count; ++i)
@@ -613,30 +672,38 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
 }
 
 /**
- * When receiving a release response, check that we expected this response and
- * save in raid1->released_media the fact that this media_id was released.
+ * When receiving a release response, check from raid1->to_release_media that
+ * we expected this response. Decrement refcount and increment
+ * raid1->n_released_media.
  */
-static int mark_written_media_released(struct raid1_encoder *raid1,
-                                       const char *media)
+static int mark_written_medium_released(struct raid1_encoder *raid1,
+                                       const char *medium)
 {
-    size_t i;
+    size_t *to_release_refcount;
 
-    for (i = 0; i < raid1->written_extents->len; i++) {
-        struct extent *extent;
+    to_release_refcount = g_hash_table_lookup(raid1->to_release_media, medium);
 
-        extent = &g_array_index(raid1->written_extents, struct extent, i);
-        if (strcmp(media_id_get(&extent->media), media) == 0) {
-            char *media_id = strdup(media);
+    if (to_release_refcount == NULL)
+        return -EINVAL;
 
-            if (media_id == NULL)
-                return -ENOMEM;
+    /* media id with refcount of zero must be removed from the hash table */
+    assert(*to_release_refcount > 0);
 
-            g_hash_table_insert(raid1->released_media, media_id, NULL);
-            return 0;
-        }
+    /* one medium was released */
+    raid1->n_released_media++;
+
+    /* only one release was ongoing for this medium: remove from the table */
+    if (*to_release_refcount == 1) {
+        gboolean was_in_table;
+
+        was_in_table = g_hash_table_remove(raid1->to_release_media, medium);
+        assert(was_in_table);
+        return 0;
     }
 
-    return -EINVAL;
+    /* several current releases: only decrement refcount */
+    --(*to_release_refcount);
+    return 0;
 }
 
 /**
@@ -649,8 +716,6 @@ static int raid1_enc_handle_release_resp(struct pho_encoder *enc,
                                          pho_resp_release_t *rel_resp)
 {
     struct raid1_encoder *raid1 = enc->priv_enc;
-    size_t n_released_media;
-    size_t n_written_media;
     int rc = 0;
     int i;
 
@@ -659,24 +724,28 @@ static int raid1_enc_handle_release_resp(struct pho_encoder *enc,
 
         pho_debug("Marking medium %s as released", rel_resp->med_ids[i]->id);
         /* If the media_id is unexpected, -EINVAL will be returned */
-        rc2 = mark_written_media_released(raid1, rel_resp->med_ids[i]->id);
+        rc2 = mark_written_medium_released(raid1, rel_resp->med_ids[i]->id);
         if (rc2 && !rc)
             rc = rc2;
     }
-
-    n_released_media = g_hash_table_size(raid1->released_media);
-    n_written_media = raid1->written_extents->len;
 
     /*
      * If we wrote everything and all the releases have been received, mark the
      * encoder as done.
      */
-    if (raid1->to_write == 0 && n_written_media == n_released_media) {
+    if (raid1->to_write == 0 && /* no more data to write */
+            /* at least one extent is created, special test for null size put */
+            raid1->written_extents->len > 0 &&
+            /* we got releases of all extents */
+            raid1->written_extents->len == raid1->n_released_media) {
         /* Fill the layout with the extents */
         enc->layout->ext_count = raid1->written_extents->len;
         enc->layout->extents =
             (struct extent *)g_array_free(raid1->written_extents, FALSE);
         raid1->written_extents = NULL;
+        raid1->n_released_media = 0;
+        g_hash_table_destroy(raid1->to_release_media);
+        raid1->to_release_media = NULL;
         enc->layout->state = PHO_EXT_ST_SYNC;
 
         /* Switch to DONE state */
@@ -821,8 +890,32 @@ static int raid1_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
     return rc;
 }
 
+static bool no_more_alloc(const struct pho_encoder *enc)
+{
+    const struct raid1_encoder *raid1 = enc->priv_enc;
+
+    /* ended encoder */
+    if (enc->done)
+        return true;
+
+    /* still something to write */
+    if (raid1->to_write > 0)
+        return false;
+
+    /* decoder with no more to read */
+    if (enc->is_decoder)
+        return true;
+
+    /* encoder with no more to write and at least one written extent */
+    if (raid1->written_extents->len > 0)
+        return true;
+
+    /* encoder with no more to write but needing to write at least one extent */
+    return false;
+}
+
 /**
- * Simple layout implementation of the `step` method.
+ * Raid1 layout implementation of the `step` method.
  * (See `layout_step` doc)
  */
 static int raid1_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
@@ -841,15 +934,10 @@ static int raid1_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
     if (resp != NULL)
         rc = raid1_enc_handle_resp(enc, resp, reqs, n_reqs);
 
-    /*
-     * If an error happened or we finished writing / reading, no need to go
-     * further and generate a new allocation request.
-     */
-    if (rc || raid1_finished(enc))
-        goto out;
-
-    /* If an allocation is already waiting unanswered, don't request another */
-    if (raid1->pending_alloc)
+    /* Do we need to generate a new alloc ? */
+    if (rc || /* an error happened */
+        raid1->pending_alloc || /* a pending alloc already exists */
+        no_more_alloc(enc))
         goto out;
 
     /* Build next request */
@@ -863,6 +951,7 @@ static int raid1_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
 
     (*n_reqs)++;
     raid1->pending_alloc = true;
+    /* TODO : alloc is noticed pending here but it is not already sent */
 
 out:
     if (*n_reqs == 0) {
@@ -893,11 +982,15 @@ static void raid1_encoder_destroy(struct pho_encoder *enc)
     if (raid1 == NULL)
         return;
 
-    if (raid1->written_extents != NULL)
+    if (raid1->written_extents != NULL) {
         g_array_free(raid1->written_extents, TRUE);
+        raid1->written_extents = NULL;
+    }
 
-    if (raid1->released_media != NULL)
-        g_hash_table_destroy(raid1->released_media);
+    if (raid1->to_release_media != NULL) {
+        g_hash_table_destroy(raid1->to_release_media);
+        raid1->to_release_media = NULL;
+    }
 
     free(raid1);
     enc->priv_enc = NULL;
@@ -972,10 +1065,11 @@ static int layout_raid1_encode(struct pho_encoder *enc)
     /* Allocate the extent array */
     raid1->written_extents = g_array_new(FALSE, TRUE,
                                          sizeof(struct extent));
-    raid1->released_media = g_hash_table_new_full(g_str_hash, g_str_equal,
-                                                  free, NULL);
     g_array_set_clear_func(raid1->written_extents,
                            free_extent_address_buff);
+    raid1->to_release_media = g_hash_table_new_full(g_str_hash, g_str_equal,
+                                                    free, free);
+    raid1->n_released_media = 0;
 
     return 0;
 }
@@ -1011,7 +1105,8 @@ static int layout_raid1_decode(struct pho_encoder *enc)
     raid1->cur_extent_idx = 0;
     raid1->pending_alloc = false;
     raid1->written_extents = NULL;
-    raid1->released_media = NULL;
+    raid1->to_release_media = NULL;
+    raid1->n_released_media = 0;
 
     /* Fill out the encoder appropriately */
     /* get repl_count from provided layout to set decoder repl_count*/
