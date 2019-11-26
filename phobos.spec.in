@@ -91,6 +91,13 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_store.la
 
 %changelog
+* Tue Nov 26 2019 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.3.0-1
+- Release 1.3 (Vala)
+- Now uses LTFS 2.4. No longer requires lin_tape.
+- Media list filter by tag, e.g. "phobos tape list -T foo,bar"
+- Drive list filter by model, e.g. "phobos drive list -m ULTRIUM-TD6"
+- Fix various memory leaks and wrong behaviors
+
 * Thu Jul 18 2019 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.2.0-1
 - Final 1.2 release (Echo)
 - New features:
