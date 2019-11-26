@@ -248,7 +248,7 @@ class Client(object):
             rc = self._store.phobos_xfer(LIBPHOBOS.phobos_getmd,
                                          self.getmd_session, compl_cb)
             if rc:
-                raise IOError(rc, "Cannot retrieve objects")
+                raise IOError(rc, "Cannot get md on objects")
 
         if self.get_session:
             rc = self._store.phobos_xfer(LIBPHOBOS.phobos_get,
@@ -260,6 +260,6 @@ class Client(object):
             rc = self._store.phobos_xfer(LIBPHOBOS.phobos_put,
                                          self.put_session, compl_cb)
             if rc:
-                raise IOError(rc, "Cannot retrieve objects")
+                raise IOError(rc, "Cannot store objects")
 
         self.clear()
