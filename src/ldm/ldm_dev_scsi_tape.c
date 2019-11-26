@@ -282,12 +282,33 @@ static void scsi_tape_map_free(void)
     drive_cache = NULL;
 }
 
+/**
+ * readdir helper with return code.
+ * This helps distinguishing readdir errors from end of directory,
+ * and preserves previous value of errno.
+ */
+static int readdir_rc(DIR *dir, struct dirent **ent)
+{
+    int save_errno = errno;
+
+    /* If  the  end  of  the directory stream is reached, NULL is returned and
+     * errno is not changed. If an error occurs, NULL is returned  and  errno
+     * is set appropriately.
+     */
+    errno = 0;
+    *ent = readdir(dir);
+    if (errno != 0)
+        return -errno;
+
+    errno = save_errno;
+    return 0;
+}
+
 static int scsi_tape_map_load(void)
 {
     char             sys_path[PATH_MAX];
     DIR             *dir;
-    struct dirent    entry;
-    struct dirent   *result;
+    struct dirent   *entry;
     int              count = 0;
     int              rc;
 
@@ -304,25 +325,26 @@ static int scsi_tape_map_load(void)
 
     drive_cache = g_slist_alloc();
 
-    for (;;) {
-        rc = readdir_r(dir, &entry, &result);
+    do {
+        rc = readdir_rc(dir, &entry);
         if (rc)
             LOG_GOTO(out_close, -rc, "Error while iterating over directory");
 
-        if (result == NULL)
+        if (entry == NULL)
+            /* end of directory */
             break;
 
-        if (!is_device_valid(entry.d_name))
+        if (!is_device_valid(entry->d_name))
             continue;
 
-        rc = cache_load_from_name(entry.d_name);
+        rc = cache_load_from_name(entry->d_name);
         if (rc)
             LOG_GOTO(out_close, rc, "Error while loading entry '%s'",
-                     entry.d_name);
+                     entry->d_name);
 
-        pho_debug("Loaded device '%s' successfully", entry.d_name);
+        pho_debug("Loaded device '%s' successfully", entry->d_name);
         count++;
-    }
+    } while (1);
 
     pho_debug("Loaded %d devices for driver %s", count, DRIVER_NAME);
 
