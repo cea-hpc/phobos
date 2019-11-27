@@ -50,7 +50,7 @@ insert_examples
 echo "**** POSIX TEST MODE ****"
 # following entries must match mount prefix
 TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2 /tmp/pho_testdir3 \
-          /tmp/pho_testdir4"
+          /tmp/pho_testdir4 /tmp/pho_testdir5"
 TEST_FS="posix"
 
 export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
