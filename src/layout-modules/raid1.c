@@ -626,11 +626,37 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
                                  const pho_resp_read_elt_t *medium)
 {
     struct raid1_encoder *raid1 = dec->priv_enc;
-    struct extent *extent = &dec->layout->extents[raid1->cur_extent_idx];
+    struct extent *extent = NULL;
     struct pho_ext_loc loc = {0};
     struct pho_io_descr iod = {0};
     struct io_adapter ioa;
     int rc;
+    int i;
+
+
+    /* find good extent among replica count */
+    for (i = 0; i < raid1->repl_count ; i++) {
+        int extent_index = raid1->cur_extent_idx * raid1->repl_count + i;
+        struct extent *candidate_extent = &dec->layout->extents[extent_index];
+
+        /* layout extents should be well ordered */
+        if (candidate_extent->layout_idx != extent_index)
+            LOG_RETURN(-EINVAL, "In raid1 layout decoder read, layout extents "
+                                "must be ordered, layout extent %d has "
+                                "layout_idx %d",
+                                extent_index, candidate_extent->layout_idx);
+        assert(candidate_extent->layout_idx == extent_index);
+        if (strcmp(medium->med_id->id, candidate_extent->media.id) == 0) {
+
+            extent = candidate_extent;
+            break;
+        }
+    }
+
+    /* No matching extent ? */
+    if (extent == NULL)
+        LOG_RETURN(-EINVAL, "raid1 layout received a medium to read not in "
+                            "layout extents list");
 
     /*
      * NOTE: fs_type is not stored as an extent attribute in db, therefore it
