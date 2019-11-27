@@ -786,10 +786,20 @@ static int raid1_enc_handle_release_resp(struct pho_encoder *enc,
 static int raid1_enc_next_write_req(struct pho_encoder *enc, pho_req_t *req)
 {
     struct raid1_encoder *raid1 = enc->priv_enc;
+    size_t *n_tags;
     int rc = 0, i, j;
 
-    rc = pho_srl_request_write_alloc(req, raid1->repl_count,
-                                     &enc->xfer->xd_tags.n_tags);
+    /* n_tags array */
+    n_tags = calloc(raid1->repl_count, sizeof(*n_tags));
+    if (n_tags == NULL)
+        LOG_RETURN(-ENOMEM, "unable to alloc n_tags array in raid1 layout "
+                            "write alloc");
+
+    for (i = 0; i < raid1->repl_count; ++i)
+        n_tags[i] = enc->xfer->xd_tags.n_tags;
+
+    rc = pho_srl_request_write_alloc(req, raid1->repl_count, n_tags);
+    free(n_tags);
     if (rc)
         return rc;
 
