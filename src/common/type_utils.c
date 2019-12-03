@@ -33,6 +33,16 @@
 #include <assert.h>
 #include <stdbool.h>
 
+bool media_id_equal(const struct media_id *id1, const struct media_id *id2)
+{
+    if (id1->type != id2->type)
+        return false;
+
+    if (strcmp(id1->id, id2->id))
+        return false;
+
+    return true;
+}
 
 static inline char *strdup_safe(const char *str)
 {

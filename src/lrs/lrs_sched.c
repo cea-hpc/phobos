@@ -749,12 +749,37 @@ out:
     return tag_filter_json;
 }
 
+static bool medium_in_devices(const struct media_info *medium,
+                                  struct dev_descr **devs, size_t n_dev)
+{
+    size_t i;
+
+    for (i = 0; i < n_dev; i++) {
+        if (devs[i]->dss_media_info == NULL)
+            continue;
+        if (media_id_equal(&medium->id, &devs[i]->dss_media_info->id))
+            return true;
+    }
+
+    return false;
+}
+
 /**
- * Get a suitable media for a write operation.
+ * Get a suitable medium for a write operation.
+ * @param[in]  sched         Current scheduler
+ * @param[out] p_media       Selected medium
+ * @param[in]  required_size Size of the extent to be written.
+ * @param[in]  family        Medium family from which getting the medium
+ * @param[in]  tags          Tags used to filter candidate media, the
+ *                           selected medium must have all the specified tags.
+ * @param[in]  devs          Array of selected devices to write with.
+ * @param[in]  n_dev         Nb in devs of already allocated devices with loaded
+ *                           and mounted media
  */
 static int sched_select_media(struct lrs_sched *sched,
                               struct media_info **p_media, size_t required_size,
-                              enum dev_family family, const struct tags *tags)
+                              enum dev_family family, const struct tags *tags,
+                              struct dev_descr **devs, size_t n_dev)
 {
     struct media_info   *pmedia_res = NULL;
     struct media_info   *split_media_best;
@@ -821,6 +846,10 @@ lock_race_retry:
     /* get the best fit */
     for (i = 0; i < mcnt; i++) {
         struct media_info *curr = &pmedia_res[i];
+
+        /* exclude medium already booked for this allocation */
+        if (medium_in_devices(curr, devs, n_dev))
+            continue;
 
         avail_size += curr->stats.phys_spc_free;
 
@@ -1594,13 +1623,12 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
 /**
  * Free one of the devices to allow mounting a new media.
  * On success, the returned device is locked.
- * @param(in)  dss       Handle to DSS.
  * @param(out) dev_descr Pointer to an empty drive.
  * @param(in)  pmedia    Media that should be used by the drive to check
  *                       compatibility (ignored if NULL)
  */
 static int sched_free_one_device(struct lrs_sched *sched,
-                                 struct dev_descr **devp,
+                                 struct dev_descr **dev_descr,
                                  struct media_info *pmedia)
 {
     struct dev_descr *tmp_dev;
@@ -1647,7 +1675,7 @@ static int sched_free_one_device(struct lrs_sched *sched,
                        op_status2str(tmp_dev->op_status), tmp_dev->dev_path);
 
         /* success: we've got an empty device */
-        *devp = tmp_dev;
+        *dev_descr = tmp_dev;
         return 0;
 
 next:
@@ -1657,15 +1685,20 @@ next:
 }
 
 /**
- * Get a prepared device to perform a write operation.
- * @param[in]  size  Size of the extent to be written.
- * @param[in]  tags  Tags used to filter candidate media, the selected media
- *                   must have all the specified tags.
- * @param[out] devp  The selected device to write with.
+ * Get an additionnal prepared device to perform a write operation.
+ * @param[in]     size          Size of the extent to be written.
+ * @param[in]     tags          Tags used to filter candidate media, the
+ *                              selected media must have all the specified tags.
+ * @param[in/out] devs          Array of selected devices to write with.
+ * @param[in]     new_dev_index Index of the new device to find. Devices from
+ *                              0 to i-1 must be already allocated (with loaded
+ *                              and mounted media)
  */
 static int sched_get_write_res(struct lrs_sched *sched, size_t size,
-                               const struct tags *tags, struct dev_descr **devp)
+                               const struct tags *tags, struct dev_descr **devs,
+                               size_t new_dev_index)
 {
+    struct dev_descr **new_dev = &devs[new_dev_index];
     device_select_func_t dev_select_policy;
     struct media_info *pmedia;
     bool media_owner;
@@ -1689,17 +1722,17 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
     media_owner = false;
 
     /* 1a) is there a mounted filesystem with enough room? */
-    *devp = dev_picker(sched, PHO_DEV_OP_ST_MOUNTED, dev_select_policy, size,
-                       tags, NULL);
-    if (*devp != NULL)
+    *new_dev = dev_picker(sched, PHO_DEV_OP_ST_MOUNTED, dev_select_policy,
+                          size, tags, NULL);
+    if (*new_dev != NULL)
         return 0;
 
     /* 1b) is there a loaded media with enough room? */
-    *devp = dev_picker(sched, PHO_DEV_OP_ST_LOADED, dev_select_policy, size,
-                       tags, NULL);
-    if (*devp != NULL) {
+    *new_dev = dev_picker(sched, PHO_DEV_OP_ST_LOADED, dev_select_policy, size,
+                          tags, NULL);
+    if (*new_dev != NULL) {
         /* mount the filesystem and return */
-        rc = sched_mount(*devp);
+        rc = sched_mount(*new_dev);
         if (rc != 0)
             goto out_release;
         return 0;
@@ -1716,7 +1749,8 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
      * Note: sched_select_media locks the media.
      */
     pho_verb("Not enough space on loaded media: selecting another one");
-    rc = sched_select_media(sched, &pmedia, size, default_family(), tags);
+    rc = sched_select_media(sched, &pmedia, size, default_family(), tags,
+                            devs, new_dev_index);
     if (rc)
         return rc;
     /* we own the media structure */
@@ -1727,29 +1761,29 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
      * shall never been locked if the media in it has not previously been
      * locked.
      */
-    *devp = search_loaded_media(sched, pmedia->id.id);
-    if (*devp != NULL) {
-        rc = sched_dev_acquire(sched, *devp);
+    *new_dev = search_loaded_media(sched, pmedia->id.id);
+    if (*new_dev != NULL) {
+        rc = sched_dev_acquire(sched, *new_dev);
         if (rc != 0)
             GOTO(out_release, rc = -EAGAIN);
         /* Media is in dev, update dev->dss_media_info with fresh media info */
-        media_info_free((*devp)->dss_media_info);
-        (*devp)->dss_media_info = pmedia;
+        media_info_free((*new_dev)->dss_media_info);
+        (*new_dev)->dss_media_info = pmedia;
         return 0;
     }
 
     /* 3) is there a free drive? */
-    *devp = dev_picker(sched, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
-                       pmedia);
-    if (*devp == NULL) {
+    *new_dev = dev_picker(sched, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
+                            pmedia);
+    if (*new_dev == NULL) {
         pho_verb("No free drive: need to unload one");
-        rc = sched_free_one_device(sched, devp, pmedia);
+        rc = sched_free_one_device(sched, new_dev, pmedia);
         if (rc)
             goto out_release;
     }
 
     /* 4) load the selected media into the selected drive */
-    rc = sched_load(*devp, pmedia);
+    rc = sched_load(*new_dev, pmedia);
     /* EBUSY means the tape could not be moved between two drives, try again
      * later
      */
@@ -1764,16 +1798,16 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
     media_owner = false;
 
     /* 5) mount the filesystem */
-    rc = sched_mount(*devp);
+    rc = sched_mount(*new_dev);
     if (rc == 0)
         return 0;
 
 out_release:
-    if (*devp != NULL) {
-        sched_dev_release(sched, *devp);
+    if (*new_dev != NULL) {
+        sched_dev_release(sched, *new_dev);
         /* Avoid releasing the same media twice */
-        if (pmedia != (*devp)->dss_media_info)
-            sched_media_release(sched, (*devp)->dss_media_info);
+        if (pmedia != (*new_dev)->dss_media_info)
+            sched_media_release(sched, (*new_dev)->dss_media_info);
     }
 
     if (pmedia != NULL) {
@@ -2023,37 +2057,43 @@ static bool sched_mount_is_writable(const char *fs_root, enum fs_type fs_type)
 }
 
 /**
- * Query to write a given amount of data with a given layout.
+ * Query to write a given amount of data by acquiring a new device with medium
  *
  * @param(in)     sched         Initialized LRS.
  * @param(in)     write_size    Size that will be written on the medium.
  * @param(in)     tags          Tags used to select a medium to write on, the
  *                              selected medium must have the specified tags.
- * @param(out)    dev           Device with the reserved medium mounted and
- *                              loaded in it (no need to free it).
+ * @param(in/out) devs          Array of devices with the reserved medium
+ *                              mounted and loaded in it (no need to free it).
+ * @param(in)     new_dev_index Index in dev of the new device to alloc (devices
+ *                              from 0 to i-1 must be already allocated : medium
+ *                              mounted and loaded)
  *
  * @return 0 on success, -1 * posix error code on failure
  */
 static int sched_write_prepare(struct lrs_sched *sched, size_t write_size,
                                const struct tags *tags,
-                               struct dev_descr **dev)
+                               struct dev_descr **devs, int new_dev_index)
 {
-    struct media_info   *media = NULL;
-    int                  rc;
+    struct media_info  *media = NULL;
+    struct dev_descr   *new_dev;
+    int                 rc;
 
     ENTRY;
 
 retry:
-    rc = sched_get_write_res(sched, write_size, tags, dev);
+    rc = sched_get_write_res(sched, write_size, tags, devs, new_dev_index);
     if (rc != 0)
         return rc;
 
-    media = (*dev)->dss_media_info;
+    new_dev = devs[new_dev_index];
+    media = new_dev->dss_media_info;
 
     /* LTFS can cunningly mount almost-full tapes as read-only, and so would
      * damaged disks. Mark the media as full and retry when this occurs.
      */
-    if (!sched_mount_is_writable((*dev)->mnt_path, media->fs.type)) {
+    if (!sched_mount_is_writable(new_dev->mnt_path,
+                                 media->fs.type)) {
         pho_warn("Media '%s' OK but mounted R/O, marking full and retrying...",
                  media_id_get(&media->id));
 
@@ -2063,21 +2103,21 @@ retry:
         if (rc)
             LOG_GOTO(err_cleanup, rc, "Cannot update media information");
 
-        sched_dev_release(sched, *dev);
+        sched_dev_release(sched, new_dev);
         sched_media_release(sched, media);
-        *dev = NULL;
+        new_dev = NULL;
         media = NULL;
         goto retry;
     }
 
     pho_verb("Writing to media '%s' using device '%s' "
              "(free space: %zu bytes)",
-             media_id_get(&media->id), (*dev)->dev_path,
-             (*dev)->dss_media_info->stats.phys_spc_free);
+             media_id_get(&media->id), new_dev->dev_path,
+             new_dev->dss_media_info->stats.phys_spc_free);
 
 err_cleanup:
     if (rc != 0) {
-        sched_dev_release(sched, *dev);
+        sched_dev_release(sched, new_dev);
         sched_media_release(sched, media);
     }
 
@@ -2359,7 +2399,7 @@ static int sched_handle_media_release(struct lrs_sched *sched,
 static int sched_handle_write_alloc(struct lrs_sched *sched, pho_req_t *req,
                                     pho_resp_t *resp)
 {
-    struct dev_descr *dev = NULL;
+    struct dev_descr **devs = NULL;
     size_t i;
     int rc = 0;
     pho_req_write_t *wreq = req->walloc;
@@ -2369,6 +2409,10 @@ static int sched_handle_write_alloc(struct lrs_sched *sched, pho_req_t *req,
     rc = pho_srl_response_write_alloc(resp, wreq->n_media);
     if (rc)
         return rc;
+
+    devs = calloc(wreq->n_media, sizeof(*devs));
+    if (devs == NULL)
+        return -ENOMEM;
 
     resp->req_id = req->id;
 
@@ -2387,17 +2431,17 @@ static int sched_handle_write_alloc(struct lrs_sched *sched, pho_req_t *req,
         t.n_tags = wreq->media[i]->n_tags;
         t.tags = wreq->media[i]->tags;
 
-        rc = sched_write_prepare(sched, wreq->media[i]->size, &t, &dev);
+        rc = sched_write_prepare(sched, wreq->media[i]->size, &t, devs, i);
         if (rc)
             goto out;
 
         /* build response */
-        wresp->avail_size = dev->dss_media_info->stats.phys_spc_free;
-        wresp->med_id->type = dev->dss_media_info->id.type;
-        wresp->med_id->id = strdup(dev->dss_media_info->id.id);
-        wresp->root_path = strdup(dev->mnt_path);
-        wresp->fs_type = dev->dss_media_info->fs.type;
-        wresp->addr_type = dev->dss_media_info->addr_type;
+        wresp->avail_size = devs[i]->dss_media_info->stats.phys_spc_free;
+        wresp->med_id->type = devs[i]->dss_media_info->id.type;
+        wresp->med_id->id = strdup(devs[i]->dss_media_info->id.id);
+        wresp->root_path = strdup(devs[i]->mnt_path);
+        wresp->fs_type = devs[i]->dss_media_info->fs.type;
+        wresp->addr_type = devs[i]->dss_media_info->addr_type;
 
         pho_debug("Allocated media %s for write request", wresp->med_id->id);
 
@@ -2412,11 +2456,14 @@ static int sched_handle_write_alloc(struct lrs_sched *sched, pho_req_t *req,
     }
 
 out:
+    free(devs);
+
     if (rc) {
-        /* Rollback device and media acquisition */
         size_t n_media_acquired = i;
 
+        /* Rollback device and media acquisition */
         for (i = 0; i < n_media_acquired; i++) {
+            struct dev_descr *dev;
             pho_resp_write_elt_t *wresp = resp->walloc->media[i];
 
             dev = search_loaded_media(sched, wresp->med_id->id);

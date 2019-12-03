@@ -13,8 +13,9 @@ UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_dev_tape \
 	   test_ldm test_type_utils test_io test_communication
 
 # 2nd step: integration tests
-INTEG_TESTS=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh \
-	    test_store_retry.sh simple_split.sh raid1_simple_split.sh
+INTEG_TESTS=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh	\
+	    test_store_retry.sh simple_split.sh raid1_simple_split.sh 	\
+	    raid1_split.sh
 
 TESTS=$(UNIT_TESTS) $(INTEG_TESTS)
 
