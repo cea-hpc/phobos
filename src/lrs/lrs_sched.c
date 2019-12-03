@@ -794,11 +794,14 @@ static int sched_select_media(struct lrs_sched *sched,
                               enum dev_family family, const struct tags *tags)
 {
     struct media_info   *pmedia_res = NULL;
-    struct media_info   *media_best;
+    struct media_info   *split_media_best;
+    size_t               avail_size;
+    struct media_info   *whole_media_best;
+    struct media_info   *chosen_media;
     struct dss_filter    filter;
     char                *tag_filter_json = NULL;
     bool                 with_tags = tags != NULL && tags->n_tags > 0;
-    bool                 avail_media = false;
+    bool                 full_avail_media = false;
     int                  mcnt = 0;
     int                  rc;
     int                  i;
@@ -817,7 +820,6 @@ static int sched_select_media(struct lrs_sched *sched,
                           "  {\"DSS::MDA::family\": \"%s\"},"
                           /* Exclude media locked by admin */
                           "  {\"DSS::MDA::adm_status\": \"%s\"},"
-                          "  {\"$GTE\": {\"DSS::MDA::vol_free\": %zu}},"
                           "  {\"$NOR\": ["
                                /* Exclude non-formatted media */
                           "    {\"DSS::MDA::fs_status\": \"%s\"},"
@@ -828,7 +830,13 @@ static int sched_select_media(struct lrs_sched *sched,
                           "]}",
                           dev_family2str(family),
                           media_adm_status2str(PHO_MDA_ADM_ST_UNLOCKED),
-                          required_size, fs_status2str(PHO_FS_STATUS_BLANK),
+                          /**
+                           * @TODO add criteria to limit the maximum number of
+                           * data fragments:
+                           * vol_free >= required_size/max_fragments
+                           * with a configurable max_fragments of 4 for example)
+                           */
+                          fs_status2str(PHO_FS_STATUS_BLANK),
                           fs_status2str(PHO_FS_STATUS_FULL),
                           with_tags ? ", " : "",
                           with_tags ? tag_filter_json : "");
@@ -842,52 +850,72 @@ static int sched_select_media(struct lrs_sched *sched,
         GOTO(err_nores, rc);
 
 lock_race_retry:
-    media_best = NULL;
+    chosen_media = NULL;
+    whole_media_best = NULL;
+    split_media_best = NULL;
+    avail_size = 0;
 
     /* get the best fit */
     for (i = 0; i < mcnt; i++) {
         struct media_info *curr = &pmedia_res[i];
 
+        avail_size += curr->stats.phys_spc_free;
+
+        if ((split_media_best == NULL ||
+            curr->stats.phys_spc_free > split_media_best->stats.phys_spc_free)
+            && curr->lock.lock != LRS_MEDIA_LOCKED_EXTERNAL)
+            split_media_best = curr;
+
         if (curr->stats.phys_spc_free < required_size)
             continue;
 
-        if (media_best == NULL ||
-                curr->stats.phys_spc_free < media_best->stats.phys_spc_free) {
+        if (whole_media_best == NULL ||
+            curr->stats.phys_spc_free < whole_media_best->stats.phys_spc_free) {
             /* Remember that at least one fitting media has been found */
-            avail_media = true;
+            full_avail_media = true;
 
             /* The media is already locked, continue searching */
             if (curr->lock.lock == LRS_MEDIA_LOCKED_EXTERNAL)
                 continue;
 
-            media_best = curr;
+            whole_media_best = curr;
         }
     }
 
-    if (media_best == NULL) {
-        pho_info("No compatible media found to write %zu bytes", required_size);
-        /* If we found a matching media but it was locked, return EAGAIN,
-         * otherwise return ENOSPC
-         */
-        if (avail_media)
-            GOTO(free_res, rc = -EAGAIN);
-        else
-            GOTO(free_res, rc = -ENOSPC);
+    if (avail_size < required_size) {
+        pho_warn("Available space on media : %zd, required size : %zd",
+                 avail_size, required_size);
+        GOTO(free_res, rc = -ENOSPC);
     }
 
-    pho_debug("Acquiring selected media '%s'", media_id_get(&media_best->id));
-    rc = sched_media_acquire(sched, media_best);
+    if (whole_media_best != NULL)
+        chosen_media = whole_media_best;
+    else if (full_avail_media) {
+        pho_info("Wait an existing compatible medium with full available size");
+        GOTO(free_res, rc = -EAGAIN);
+    } else if (split_media_best != NULL) {
+        chosen_media = split_media_best;
+        pho_info("Split %zd required_size on %zd avail size on %s medium",
+                 required_size, chosen_media->stats.phys_spc_free,
+                 media_id_get(&chosen_media->id));
+    } else {
+        pho_info("No medium available, wait for one");
+        GOTO(free_res, rc = -EAGAIN);
+    }
+
+    pho_debug("Acquiring selected media '%s'", media_id_get(&chosen_media->id));
+    rc = sched_media_acquire(sched, chosen_media);
     if (rc) {
         pho_debug("Failed to lock media '%s', looking for another one",
-                  media_id_get(&media_best->id));
-        media_best->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
+                  media_id_get(&chosen_media->id));
         goto lock_race_retry;
     }
 
     pho_verb("Selected %s '%s': %zd bytes free", dev_family2str(family),
-             media_id_get(&media_best->id), media_best->stats.phys_spc_free);
+             media_id_get(&chosen_media->id),
+             chosen_media->stats.phys_spc_free);
 
-    *p_media = media_info_dup(media_best);
+    *p_media = media_info_dup(chosen_media);
     if (*p_media == NULL)
         GOTO(free_res, rc = -ENOMEM);
 
@@ -895,7 +923,7 @@ lock_race_retry:
 
 free_res:
     if (rc != 0)
-        sched_media_release(sched, media_best);
+        sched_media_release(sched, chosen_media);
 
     dss_res_free(pmedia_res, mcnt);
 
