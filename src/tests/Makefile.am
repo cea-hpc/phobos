@@ -75,7 +75,18 @@ test_io_LDADD=../io/libpho_io.la ../common/libpho_common.la
 @VALGRIND_CHECK_RULES@
 VALGRIND_SUPPRESSIONS_FILES=supp-files/valgrind.supp supp-files/glib.supp
 EXTRA_DIST=$(VALGRIND_SUPPRESSIONS_FILES)
-VALGRIND_memcheck_FLAGS=-q --leak-check=full --errors-for-leak-kinds=definite
+# FIXME:
+# Possibly-lost leaks appear in valgrind reports when testing acceptance.sh,
+# generating millions of lines (each phobos command execution leads to ~5k
+# leaks). Those leaks are somewhat bound to the python CLI, and are not clear
+# enough to be resolve for now.
+#
+# I made some research and there is a way to get better reports and then try to
+# resolve those leaks:
+# - get an environment where python is compiled in debug mode to let valgrind
+#   catch more information
+#   $ ./configure --with-pydebug --without-pymalloc --with-valgrind
+VALGRIND_memcheck_FLAGS=-q --leak-check=full --errors-for-leak-kinds=definite --show-possibly-lost=no
 
 AUTOMAKE_OPTIONS=parallel-tests
 TEST_EXTENSIONS=.sh
