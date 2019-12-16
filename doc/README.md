@@ -171,6 +171,26 @@ cksum=md5:7c28aec5441644094064fcf651ab5e3e,user=foo
 ```
 
 ## Device and media management
+### Listing resources
+Any device or media can be listed using the 'list' operation. For instance,
+the following will list all the existing tapes:
+```
+phobos tape list
+```
+
+The 'list' output can be formatted using the -o option, following a list of
+comma-separated attributes:
+```
+phobos tape list -o stats.phys_spc_used,tags,adm_status
+```
+
+If the attribute 'all' is used, then the list is printed with full details:
+```
+phobos tape list -o all
+```
+
+Other options are available using the -h option.
+
 ### Locking resources
 A device or media can be locked. In this case it cannot be used for
 subsequent 'put' or 'get' operations:

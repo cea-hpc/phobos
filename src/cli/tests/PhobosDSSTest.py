@@ -68,8 +68,8 @@ class DSSClientTest(unittest.TestCase):
 
             # Check negative indexation
             medias = client.media.get()
-            self.assertEqual(medias[0].ident, medias[-len(medias)].ident)
-            self.assertEqual(medias[len(medias) - 1].ident, medias[-1].ident)
+            self.assertEqual(medias[0].label, medias[-len(medias)].label)
+            self.assertEqual(medias[len(medias) - 1].label, medias[-1].label)
 
     def test_list_media_by_tags(self):
         with Client() as client:

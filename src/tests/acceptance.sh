@@ -3,7 +3,7 @@
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2017 CEA/DAM.
+#  All rights reserved (c) 2014-2020 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -117,7 +117,7 @@ function tape_setup
 
     # show a tape info
     local tp1=$(echo $tapes | nodeset -e | awk '{print $1}')
-    $LOG_VALG $phobos tape show $tp1
+    $LOG_VALG $phobos tape list -o all $tp1
 
     # unlock all tapes but one
     for t in $(echo "$tapes" | nodeset -e -S '\n' |
@@ -135,7 +135,7 @@ function tape_setup
     local dr1=$(echo $drives | awk '{print $1}')
     echo "$dr1"
     # check drive status
-    $phobos drive show $dr1 --format=csv | grep "^locked" ||
+    $phobos drive list -o all $dr1 --format=csv | grep "^locked" ||
         error "Drive should be added with locked state"
 
     # unlock all drives but one (except if N_DRIVE < 2)
@@ -180,7 +180,7 @@ function dir_setup
 
     # show a directory info
     d1=$(echo $dirs | nodeset -e | awk '{print $1}')
-    $LOG_VALG $phobos dir show $d1
+    $LOG_VALG $phobos dir list -o all $d1
 
     # unlock all directories but one
     for t in $(echo $dirs | nodeset -e -S '\n' | head -n 1); do
@@ -202,10 +202,10 @@ function lock_test
     mkdir $dir_prefix.1
     mkdir $dir_prefix.2
     $LOG_VALG $phobos dir add $dir_prefix.1
-    $phobos dir show $dir_prefix.1 --format=csv | grep ",locked" ||
+    $phobos dir list -o all $dir_prefix.1 --format=csv | grep ",locked" ||
         error "Directory should be added with locked state"
     $LOG_VALG $phobos dir add $dir_prefix.2 --unlock
-    $phobos dir show $dir_prefix.2 --format=csv | grep ",unlocked" ||
+    $phobos dir list -o all $dir_prefix.2 --format=csv | grep ",unlocked" ||
         error "Directory should be added with unlocked state"
     rmdir $dir_prefix.*
 }
@@ -374,7 +374,7 @@ function check_status
     local media="$2"
 
     for m in $media; do
-        $LOG_VALG $phobos $type show "$m"
+        $LOG_VALG $phobos $type list -o all "$m"
     done
 }
 

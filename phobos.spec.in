@@ -33,6 +33,7 @@ Requires: python-argparse
 Requires: python-yaml
 Requires: clustershell
 Requires: python-psycopg2
+Requires: python2-tabulate
 Requires: protobuf
 Requires: protobuf-c
 

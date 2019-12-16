@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-#  All rights reserved (c) 2014-2017 CEA/DAM.
+#  All rights reserved (c) 2014-2020 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -45,15 +45,16 @@ from phobos.core.const import dev_family2str
 from phobos.core.const import PHO_DEV_DIR, PHO_DEV_TAPE, PHO_LIB_SCSI
 from phobos.core.const import (PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED,
                                PHO_MDA_ADM_ST_LOCKED, PHO_MDA_ADM_ST_UNLOCKED)
+from phobos.core.ffi import DevInfo, MediaInfo
 
 from phobos.core.log import LogControl
 from phobos.core.log import DISABLED, WARNING, INFO, VERBOSE, DEBUG
 
+from phobos.core.admin import Client as AdminClient
 from phobos.core.cfg import load_file as cfg_load_file
 from phobos.core.dss import Client as DSSClient
-from phobos.core.store import Client as XferClient, attrs_as_dict
 from phobos.core.ldm import LibAdapter
-from phobos.core.admin import Client as AdminClient
+from phobos.core.store import Client as XferClient, attrs_as_dict
 from phobos.output import dump_object_list
 from ClusterShell.NodeSet import NodeSet
 
@@ -429,6 +430,15 @@ class ListOptHandler(DSSInteractHandler):
     label = 'list'
     descr = 'list all entries of the kind'
 
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(ListOptHandler, cls).add_options(parser)
+        parser.add_argument('res', nargs='*', help='resource(s) to list')
+        parser.add_argument('-f', '--format', default='human',
+                            help="output format human/xml/json/csv/yaml " \
+                                 "(default: human)")
+
 
 class LockOptHandler(DSSInteractHandler):
     """Lock resource."""
@@ -456,22 +466,6 @@ class UnlockOptHandler(DSSInteractHandler):
         parser.add_argument('--force', action='store_true',
                             help='Do not check the current lock state')
 
-class ShowOptHandler(DSSInteractHandler):
-    """Show resource details."""
-    label = 'show'
-    descr = 'show resource details'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(ShowOptHandler, cls).add_options(parser)
-        parser.add_argument('res', nargs='+', help='Resource(s) to show')
-        parser.add_argument('--numeric', action='store_true', default=False,
-                            help='Output numeric values')
-        parser.add_argument('--format', default='human',
-                            help="Output format human/xml/json/csv/yaml " \
-                                 "(default: human)")
-
 class ScanOptHandler(BaseOptHandler):
     """Scan a physical resource and display retrieved information."""
     label = 'scan'
@@ -489,23 +483,41 @@ class DriveListOptHandler(ListOptHandler):
     Specific version of the 'list' command for tape drives, with a couple
     extra-options.
     """
+
     @classmethod
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(DriveListOptHandler, cls).add_options(parser)
         parser.add_argument('-m', '--model', help='filter on model')
 
+        attr = [x for x in DevInfo().get_display_dict().keys()]
+        attr.sort()
+        parser.add_argument('-o', '--output', type=lambda t: t.split(','),
+                            default='label',
+                            help="attributes to output, comma-separated, "
+                                 "choose from {" + " ".join(attr) + "} "
+                                 "(default: %(default)s)")
+
 class MediaListOptHandler(ListOptHandler):
     """
     Specific version of the 'list' command for media, with a couple
     extra-options.
     """
+
     @classmethod
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(MediaListOptHandler, cls).add_options(parser)
-        parser.add_argument('-T', '--tags', type=lambda t: t.split(','), \
+        parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
                             help='filter on tags (comma-separated: foo,bar)')
+
+        attr = [x for x in MediaInfo().get_display_dict().keys()]
+        attr.sort()
+        parser.add_argument('-o', '--output', type=lambda t: t.split(','),
+                            default='label',
+                            help="attributes to output, comma-separated, "
+                                 "choose from {" + " ".join(attr) + "} "
+                                 "(default: %(default)s)")
 
 class TapeAddOptHandler(MediaAddOptHandler):
     """Specific version of the 'add' command for tapes, with extra-options."""
@@ -571,21 +583,22 @@ class DeviceOptHandler(BaseResourceOptHandler):
         AddOptHandler,
         FormatOptHandler,
         ListOptHandler,
-        ShowOptHandler,
         LockOptHandler,
         UnlockOptHandler
     ]
 
-    def filter(self, ident):
+    def filter(self, ident, **kwargs):
         """
         Return a list of devices that match the identifier for either serial or
         path. You may call it a bug but this is a feature intended to let admins
         transparently address devices using one or the other scheme.
         """
-        dev = self.client.devices.get(family=self.family, serial=ident)
+        dev = self.client.devices.get(family=self.family, serial=ident,
+                                      **kwargs)
         if not dev:
             # 2nd attempt, by path...
-            dev = self.client.devices.get(family=self.family, path=ident)
+            dev = self.client.devices.get(family=self.family, path=ident,
+                                          **kwargs)
         return dev
 
     def exec_add(self):
@@ -612,25 +625,6 @@ class DeviceOptHandler(BaseResourceOptHandler):
             sys.exit(os.EX_DATAERR)
 
         self.logger.info("Added %d device(s) successfully", len(resources))
-
-    def exec_list(self):
-        """List devices and display results."""
-        for obj in self.client.devices.get(family=self.family):
-            print obj.serial
-
-    def exec_show(self):
-        """Show device details."""
-        devs = []
-        for serial in self.params.get('res'):
-            curr = self.filter(serial)
-            if not curr:
-                self.logger.error("'%s' not found", serial)
-                sys.exit(os.EX_DATAERR)
-            assert len(curr) == 1
-            devs.append(curr[0])
-        if len(devs) > 0:
-            dump_object_list(devs, self.params.get('format'),
-                             self.params.get('numeric'))
 
     def exec_lock(self):
         """Device lock"""
@@ -706,7 +700,6 @@ class MediaOptHandler(BaseResourceOptHandler):
         MediaAddOptHandler,
         MediaUpdateOptHandler,
         FormatOptHandler,
-        ShowOptHandler,
         MediaListOptHandler,
         LockOptHandler,
         UnlockOptHandler
@@ -802,27 +795,37 @@ class MediaOptHandler(BaseResourceOptHandler):
         finally:
             adm.fini()
 
-    def exec_show(self):
-        """Show media details."""
-        results = []
-        uids = NodeSet.fromlist(self.params.get('res'))
-        for uid in uids:
-            media = self.client.media.get(family=self.family, id=uid)
-            if not media:
-                self.logger.warning("Media id %s not found", uid)
-                continue
-            assert len(media) == 1
-            results.append(media[0])
-        dump_object_list(results, self.params.get('format'),
-                         self.params.get('numeric'))
-
     def exec_list(self):
-        """List all media."""
+        """List media and display results."""
+        attrs = [x for x in MediaInfo().get_display_dict().keys()]
+        attrs.extend(['*', 'all'])
+        out_attrs = self.params.get('output')
+        bad_attrs = set(out_attrs).difference(set(attrs))
+        if bad_attrs:
+            self.logger.error("Bad output attributes: %s", " ".join(bad_attrs))
+            sys.exit(os.EX_USAGE)
+
         kwargs = {}
         if self.params.get('tags'):
             kwargs["tags"] = self.params.get('tags')
-        for media in self.client.media.get(family=self.family, **kwargs):
-            print media.ident
+
+        objs = []
+        if self.params.get('res'):
+            uids = NodeSet.fromlist(self.params.get('res'))
+            for uid in uids:
+                curr = self.client.media.get(family=self.family, id=uid,
+                                             **kwargs)
+                if not curr:
+                    continue
+                assert len(curr) == 1
+                objs.append(curr[0])
+        else:
+            objs = self.client.media.get(family=self.family, **kwargs)
+
+
+        if len(objs) > 0:
+            dump_object_list(objs, 'media', attr=self.params.get('output'),
+                             fmt=self.params.get('format'))
 
     def exec_lock(self):
         """Lock media"""
@@ -931,21 +934,38 @@ class DriveOptHandler(DeviceOptHandler):
         AddOptHandler,
         FormatOptHandler,
         DriveListOptHandler,
-        ShowOptHandler,
         LockOptHandler,
         UnlockOptHandler
     ]
 
     def exec_list(self):
         """List devices and display results."""
-        model = self.params.get('model')
-        if model:
-            for obj in self.client.devices.get(family=self.family, model=model):
-                print obj.serial
-        else:
-            for obj in self.client.devices.get(family=self.family):
-                print obj.serial
+        attrs = [x for x in DevInfo().get_display_dict().keys()]
+        attrs.extend(['*', 'all'])
+        out_attrs = self.params.get('output')
+        bad_attrs = set(out_attrs).difference(set(attrs))
+        if bad_attrs:
+            self.logger.error("Bad output attributes: %s", " ".join(bad_attrs))
+            sys.exit(os.EX_USAGE)
 
+        kwargs = {}
+        if self.params.get('model'):
+            kwargs['model'] = self.params.get('model')
+
+        objs = []
+        if self.params.get('res'):
+            for serial in self.params.get('res'):
+                curr = self.filter(serial, **kwargs)
+                if not curr:
+                    continue
+                assert len(curr) == 1
+                objs.append(curr[0])
+        else:
+            objs = self.client.devices.get(family=self.family, **kwargs)
+
+        if len(objs) > 0:
+            dump_object_list(objs, 'device', attr=self.params.get('output'),
+                             fmt=self.params.get('format'))
 
 class TapeOptHandler(MediaOptHandler):
     """Magnetic tape options and actions."""
@@ -956,7 +976,6 @@ class TapeOptHandler(MediaOptHandler):
         TapeAddOptHandler,
         MediaUpdateOptHandler,
         FormatOptHandler,
-        ShowOptHandler,
         MediaListOptHandler,
         LockOptHandler,
         UnlockOptHandler

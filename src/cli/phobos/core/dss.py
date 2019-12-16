@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-#  All rights reserved (c) 2014-2017 CEA/DAM.
+#  All rights reserved (c) 2014-2020 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -86,6 +86,8 @@ def dss_filter(obj_type, **kwargs):
     filt = JSONFilter()
     criteria = []
     for key, val in kwargs.iteritems():
+        if val is None:
+            continue
         key, comp = key_convert(obj_type, key)
         if not isinstance(val, list):
             val = [val]
