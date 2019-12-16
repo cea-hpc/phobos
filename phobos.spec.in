@@ -32,6 +32,7 @@ Requires: python-argparse
 Requires: python-yaml
 Requires: clustershell
 Requires: python-psycopg2
+Requires: python2-tabulate
 
 %description
 Phobos aims to implement high performance distributed object storage on a wide

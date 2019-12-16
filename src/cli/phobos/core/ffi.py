@@ -94,19 +94,24 @@ class DevInfo(Structure, CLIManagedResourceMixin):
             'host': None,
             'model': None,
             'path': None,
-            'serial': None,
+            'label': None,
             'lock_status': None,
             'lock_ts': None
         }
 
     @property
+    def label(self):
+        """Wrapper to get label"""
+        return self.serial
+
+    @property
     def lock_status(self):
-        """ Wrapper to get lock status"""
+        """Wrapper to get lock status"""
         return self.lock.lock
 
     @property
     def lock_ts(self):
-        """ Wrapper to get lock timestamp"""
+        """Wrapper to get lock timestamp"""
         return self.lock.lock_ts
 
 class Tags(Structure):
@@ -179,7 +184,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'adm_status': adm_status2str,
             'addr_type': None,
             'model': None,
-            'ident': None,
+            'label': None,
             'tags': None,
             'lock_status': None,
             'lock_ts': None
@@ -207,7 +212,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         return self.lock.lock_ts
 
     @property
-    def ident(self):
+    def label(self):
         return self.id.id
 
     @property

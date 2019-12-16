@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-#  All rights reserved (c) 2014-2017 CEA/DAM.
+#  All rights reserved (c) 2014-2020 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -90,12 +90,17 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['dir', 'list'])
         self.check_cmdline_valid(['dir', 'add', '--unlock', 'toto'])
         self.check_cmdline_valid(['dir', 'add', 'A', 'B', 'C'])
-        self.check_cmdline_valid(['dir', 'show', 'A,B,C'])
+        self.check_cmdline_valid(['dir', 'list', 'A,B,C', '-o', 'all'])
+        self.check_cmdline_valid(['dir', 'list', 'A,B,C', '-o', '*'])
+        self.check_cmdline_valid(['dir', 'list', 'A,B,C', '-o', 'label,family'])
         self.check_cmdline_valid(['tape', 'add', '-t', 'LTO5', 'I,J,K'])
-        self.check_cmdline_valid(['tape', 'show', 'I,J,K'])
+        self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o', 'all'])
+        self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o', '*'])
+        self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o',
+                                  'label,family'])
 
         # Test invalid object and invalid verb
-        self.check_cmdline_exit(['voynichauthor', 'show'], code=2)
+        self.check_cmdline_exit(['voynichauthor', 'list'], code=2)
         self.check_cmdline_exit(['dir', 'teleport'], code=2)
 
 
@@ -294,14 +299,15 @@ class DeviceAddTest(BasicExecutionTest):
 
         for file in flist:
             path = "%s:%s" % (gethostname_short(), file.name)
-            self.pho_execute(['-v', 'dir', 'show', path])
+            self.pho_execute(['-v', 'dir', 'list', '-o', 'all', path])
 
     def test_dir_tags(self):
         """Test adding a directory with tags."""
         tmp_f = tempfile.NamedTemporaryFile()
         tmp_path = tmp_f.name
         self.pho_execute(['dir', 'add', tmp_path, '--tags', 'tag-foo,tag-bar'])
-        output, _ = self.pho_execute_capture(['dir', 'show', tmp_path])
+        output, _ = self.pho_execute_capture(['dir', 'list', '-o', 'all',
+                                             tmp_path])
         self.assertIn("['tag-foo', 'tag-bar']", output)
 
     def test_dir_update(self):
