@@ -122,10 +122,12 @@ int phobos_admin_init(struct admin_handle *adm, const bool lrs_required)
 
     rc = pho_comm_open(&adm->comm, sock_path, false);
     if (!lrs_required && rc == -ENOTCONN) {
-        pho_warn("The LRS is not required, will continue");
+        pho_warn("Cannot contact 'phobosd', but not required: will continue");
         rc = 0;
     } else if (rc) {
-        LOG_GOTO(out, rc, "Cannot initialize LRS socket");
+        LOG_GOTO(out, rc, "Cannot contact 'phobosd': will abort");
+    } else {
+        adm->daemon_is_online = true;
     }
 
 out:
@@ -193,6 +195,9 @@ int phobos_admin_device_add(struct admin_handle *adm, enum dev_family family,
                             const char *name)
 {
     int rc;
+
+    if (!adm->daemon_is_online)
+        return 0;
 
     rc = _admin_notify(adm, family, name, PHO_NTFY_OP_ADD_DEVICE);
     if (rc)

@@ -550,7 +550,7 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
     /* Connect to the LRS */
     rc = pho_comm_open(&pho->comm, sock_path, false);
     if (rc)
-        LOG_GOTO(out, rc, "Cannot initialize LRS socket");
+        LOG_GOTO(out, rc, "Cannot contact 'phobosd': will abort");
 
     /* Allocate memory for the encoders */
     pho->encoders = calloc(n_xfers, sizeof(*pho->encoders));

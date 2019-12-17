@@ -32,11 +32,11 @@
 
 /**
  * Phobos admin handle.
- * Will be resumed to the sole comm data structure once the LRS is a daemon.
  */
 struct admin_handle {
     struct dss_handle dss;          /**< DSS handle, configured from conf. */
     struct pho_comm_info comm;      /**< Communication socket info. */
+    bool daemon_is_online;          /**< True if phobosd is online. */
 };
 
 /**
