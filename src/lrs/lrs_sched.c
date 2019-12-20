@@ -2487,15 +2487,11 @@ out:
 
             resp->error->rc = rc;
             resp->error->req_kind = PHO_REQUEST_KIND__RQ_WRITE;
+
+            /* Request processing error, not an LRS error */
+            rc = 0;
         }
     }
-
-    /*
-     * Whitelist non fatal errors that should not be signaled to the LRS (only
-     * to the relevant transfer).
-     */
-    if (rc == -ENOSPC)
-        rc = 0;
 
     return rc;
 }
@@ -2566,6 +2562,9 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
 
             resp->error->rc = rc;
             resp->error->req_kind = PHO_REQUEST_KIND__RQ_READ;
+
+            /* Request processing error, not an LRS error */
+            rc = 0;
         }
     }
 
@@ -2678,6 +2677,9 @@ static int sched_handle_format(struct lrs_sched *sched, pho_req_t *req,
             resp->req_id = req->id;
             resp->error->rc = rc;
             resp->error->req_kind = PHO_REQUEST_KIND__RQ_FORMAT;
+
+            /* Request processing error, not an LRS error */
+            rc = 0;
         }
     } else {
         resp->req_id = req->id;
@@ -2728,6 +2730,9 @@ err:
         resp->req_id = req->id;
         resp->error->rc = rc;
         resp->error->req_kind = PHO_REQUEST_KIND__RQ_NOTIFY;
+
+        /* Request processing error, not an LRS error */
+        rc = 0;
     }
 
     return rc;
