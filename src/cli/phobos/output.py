@@ -52,6 +52,8 @@ def xml_dump(data, item_type='item'):
 
     top = xml.etree.ElementTree.Element('phobos')
     for item in data:
+        # xml only supports strings
+        item = {key: str(value) for key, value in item.items()}
         children = xml.etree.ElementTree.Element(item_type, **item)
         top.append(children)
     rough_string = xml.etree.ElementTree.tostring(top)
