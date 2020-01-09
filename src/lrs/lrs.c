@@ -346,9 +346,23 @@ static void sa_sigterm(int signum)
 }
 
 /* Argument parsing */
+static void print_usage(void)
+{
+    printf("usage: phobosd [--interactive] [--config cfg_file] "
+               "[--verbose/--quiet] [--syslog]\n"
+           "\nOptional arguments:\n"
+           "    -i,--interactive        execute the daemon in foreground\n"
+           "    -c,--config cfg_file    "
+                "use cfg_file as the daemon configuration file\n"
+           "    -v,--verbose            increase verbose level\n"
+           "    -q,--quiet              decrease verbose level\n"
+           "    -s,--syslog             print the daemon logs to syslog\n");
+}
+
 static struct lrs_params parse_args(int argc, char **argv)
 {
     static struct option long_options[] = {
+        {"help",        no_argument,       0,  'h'},
         {"interactive", no_argument,       0,  'i'},
         {"config",      required_argument, 0,  'c'},
         {"verbose",     no_argument,       0,  'v'},
@@ -361,11 +375,14 @@ static struct lrs_params parse_args(int argc, char **argv)
     while (1) {
         int c;
 
-        c = getopt_long(argc, argv, "ic:vqs", long_options, NULL);
+        c = getopt_long(argc, argv, "hic:vqs", long_options, NULL);
         if (c == -1)
             break;
 
         switch (c) {
+        case 'h':
+            print_usage();
+            exit(EXIT_SUCCESS);
         case 'i':
             parm.is_daemon = false;
             break;
@@ -382,6 +399,7 @@ static struct lrs_params parse_args(int argc, char **argv)
             parm.use_syslog = true;
             break;
         default:
+            print_usage();
             exit(EXIT_FAILURE);
         }
     }
