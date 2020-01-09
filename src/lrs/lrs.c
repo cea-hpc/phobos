@@ -353,7 +353,8 @@ static struct lrs_params parse_args(int argc, char **argv)
         {"config",      required_argument, 0,  'c'},
         {"verbose",     no_argument,       0,  'v'},
         {"quiet",       no_argument,       0,  'q'},
-        {"syslog",      no_argument,       0,  's'}
+        {"syslog",      no_argument,       0,  's'},
+        {0,             0,                 0,  0}
     };
     struct lrs_params parm = LRS_PARAMS_DEFAULT;
 
@@ -379,6 +380,9 @@ static struct lrs_params parse_args(int argc, char **argv)
             break;
         case 's':
             parm.use_syslog = true;
+            break;
+        default:
+            exit(EXIT_FAILURE);
         }
     }
 
