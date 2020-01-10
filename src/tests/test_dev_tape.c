@@ -62,9 +62,49 @@ static int test_unit(void *hint)
     return rc;
 }
 
+/**
+ * Retrieve path to sg device, given the path to an st device
+ */
+static int st_to_sg_path(const char *st_dev, char *sg_dev, size_t sg_size)
+{
+    char generic[1024];
+    char *link_path;
+    const char *c;
+    int  rc;
+
+    /* get the 'st' part from the path */
+    c = strrchr(st_dev, '/');
+    if (c == NULL)
+        c = st_dev;
+    else
+        c++;
+
+    if (asprintf(&link_path, "/sys/class/scsi_tape/%s/device/generic", c) < 0)
+        LOG_RETURN(-ENOMEM, "Failed to allocate memory");
+
+    rc = readlink(link_path, generic, sizeof(generic));
+    free(link_path);
+    if (rc < 0) {
+        rc = -errno;
+        LOG_RETURN(rc, "Failed to read link");
+    }
+    generic[rc] = '\0';
+
+    c = strrchr(generic, '/');
+    if (c == NULL)
+        c = generic;
+    else
+        c++;
+
+    snprintf(sg_dev, sg_size, "/dev/%s", c);
+    return 0;
+}
+
+
 static int test_name_serial_match(void *hint)
 {
-    char  *name_ref = hint;
+    char  *st_path = hint;
+    char  sg_path[PATH_MAX];
     struct dev_adapter deva;
     struct ldm_dev_state lds = {0};
     char   path[128];
@@ -74,7 +114,12 @@ static int test_name_serial_match(void *hint)
     if (rc)
         return rc;
 
-    rc = ldm_dev_query(&deva, name_ref, &lds);
+    /* get the matching sg name */
+    rc = st_to_sg_path(st_path, sg_path, sizeof(sg_path));
+    if (rc)
+        return rc;
+
+    rc = ldm_dev_query(&deva, st_path, &lds);
     if (rc)
         return rc;
 
@@ -86,7 +131,7 @@ static int test_name_serial_match(void *hint)
 
     pho_debug("Reverse mapped serial '%s' to '%s'", lds.lds_serial, path);
     ldm_dev_state_fini(&lds);
-    return strcmp(path, name_ref) == 0 ? 0 : -EINVAL;
+    return strcmp(path, sg_path) == 0 ? 0 : -EINVAL;
 }
 
 static bool device_exists(int dev_index)
