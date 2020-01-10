@@ -92,6 +92,10 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_store.la
 
 %changelog
+* Fri Jan 10 2020 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.3.1-1
+- Pass 'scsi generic' devices to LTFS instead of 'scsi tape'
+- 'phobos xxx list' can now output attributes (with -o option)
+
 * Tue Nov 26 2019 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.3.0-1
 - Release 1.3 (Vala)
 - Now uses LTFS 2.4. No longer requires lin_tape.
