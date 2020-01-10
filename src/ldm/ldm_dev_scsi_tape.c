@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2019 CEA/DAM.
+ *  All rights reserved (c) 2014-2020 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -42,7 +42,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-/* Driver name; to access /sys/class tree */
+/* Driver name to access /sys/class tree of scsi tape */
 #define DRIVER_NAME "scsi_tape"
 
 /* Maximum serial size (including trailing zero) */
@@ -58,15 +58,29 @@
  * includes the Serial Number.
  */
 #define SYS_DEV_PAGE80   "device/vpd_pg80"
-/* name of device model attribute in /sys/class */
+/* name of device model attribute under /sys/class/scsi_tape/stX */
 #define SYS_DEV_MODEL "device/model"
+/* name of the pointer to the SCSI generic device under
+ * /sys/class/scsi_tape/stX
+ */
+#define SYS_DEV_GENERIC "device/generic"
 
-
-/* In-memory map to associate drive serial and device name */
+/* In-memory map to associate drive serial and device name.
+ *
+ * The first time it is used, this ldm adapter lists all 'st'
+ * devices on the system and loads them in an internal cache
+ * to remember the st<->sg device association, and their related
+ * information (serial number and model).
+ * Calls to scsi_tape_dev_query() and scsi_tape_dev_lookup()
+ * relies on this list.
+ * scsi_tape_dev_query() accepts both 'st' and 'sg' devices
+ * as argument (the function checks the two fields).
+ */
 struct drive_map_entry {
-    char    serial[MAX_SERIAL];  /* 1013005381 - as a string */
-    char    model[MAX_MODEL];    /* ULT3580-TD6 */
-    char    devname[IFNAMSIZ];   /* st0 */
+    char    serial[MAX_SERIAL];  /* e.g. 1013005381 - as a string */
+    char    model[MAX_MODEL];    /* e.g. ULT3580-TD6 */
+    char    st_devname[IFNAMSIZ];   /* e.g. st1 */
+    char    sg_devname[IFNAMSIZ];   /* e.g. sg5 */
 };
 
 /* Singly-linked list of structures that describe available drives */
@@ -81,7 +95,7 @@ static void build_sys_path(const char *name, const char *attr, char *dst_path,
 }
 
 /** Read the given attribute for the given device name */
-static int read_device_attr(const char *devname, const char *attrname,
+static int read_device_attr(const char *st_devname, const char *attrname,
                             char *info, size_t info_size)
 {
     char    spath[PATH_MAX];
@@ -89,7 +103,7 @@ static int read_device_attr(const char *devname, const char *attrname,
     int     fd;
     int     rc = 0;
 
-    build_sys_path(devname, attrname, spath, sizeof(spath));
+    build_sys_path(st_devname, attrname, spath, sizeof(spath));
 
     fd = open(spath, O_RDONLY);
     if (fd < 0)
@@ -104,7 +118,7 @@ static int read_device_attr(const char *devname, const char *attrname,
     /* rstrip stupid '\n' and spaces */
     rstrip(info);
 
-    pho_debug("Device '%s': %s='%s'", devname, attrname, info);
+    pho_debug("Device '%s': %s='%s'", st_devname, attrname, info);
 
 out_close:
     close(fd);
@@ -115,7 +129,7 @@ out_close:
  * Read serial number from SCSI INQUIRY response page x80
  * (Unit Serial Number Inquiry Page).
  *
- * @param devname    SCSI device name as it appears under /sys/class/scsi_tape,
+ * @param st_devname SCSI device name as it appears under /sys/class/scsi_tape,
  *                   e.g. "st0".
  * @param attrname   Path of a page80 pseudo-file in sysclass (e.g. vpd_pg80),
  *                   relative to /sys/class/<driver>/<dev_name>.
@@ -124,7 +138,7 @@ out_close:
  *
  * @return 0 on success, -errno on error.
  */
-static int read_page80_serial(const char *devname, const char *attrname,
+static int read_page80_serial(const char *st_devname, const char *attrname,
                               char *info, size_t info_size)
 {
 #define SCSI_PAGE80_HEADER_SIZE 4
@@ -158,7 +172,7 @@ static int read_page80_serial(const char *devname, const char *attrname,
     if (!buffer)
         return -ENOMEM;
 
-    build_sys_path(devname, attrname, spath, sizeof(spath));
+    build_sys_path(st_devname, attrname, spath, sizeof(spath));
 
     fd = open(spath, O_RDONLY);
     if (fd < 0) {
@@ -195,7 +209,7 @@ static int read_page80_serial(const char *devname, const char *attrname,
     /* copy the serial number */
     memcpy(info, buffer + SCSI_PAGE80_HEADER_SIZE + i, len - i);
 
-    pho_debug("Device '%s': %s='%s'", devname, attrname, info);
+    pho_debug("Device '%s': %s='%s'", st_devname, attrname, info);
 
 out_close:
     free(buffer);
@@ -203,27 +217,83 @@ out_close:
     return rc;
 }
 
-static int cache_load_from_name(const char *devname)
+/** Indicate if the given name is a valid sg device */
+static inline bool is_sg_device(const char *dev_name)
+{
+    char suffix;
+    int  idx;
+    int  res;
+
+    res = sscanf(dev_name, "sg%d%c", &idx, &suffix);
+    return res == 1;
+}
+
+/** Retrieve the scsi generic device corresponding to 'st_devname' */
+static int read_scsi_generic(const char *st_devname, char *sg_devname,
+                             size_t sg_size)
+{
+    char  spath[PATH_MAX];
+    char  link[PATH_MAX];
+    char *sg_name;
+    int   rc = 0;
+
+    build_sys_path(st_devname, SYS_DEV_GENERIC, spath, sizeof(spath));
+
+    rc = readlink(spath, link, sizeof(link));
+    if (rc < 0)
+        LOG_RETURN(rc = -errno, "Cannot read symlink '%s'", spath);
+
+    link[rc] = '\0';
+
+    /* link is supposed to end with '/sgN' */
+    sg_name = strrchr(link, '/');
+    if (sg_name == NULL)
+        sg_name = link;
+    else
+        sg_name++;
+
+    if (!is_sg_device(sg_name))
+        LOG_RETURN(rc = -EINVAL, "'%s' is not a valid sg device", link);
+
+    strncpy(sg_devname, sg_name, sg_size);
+
+    pho_debug("Device '%s': SG='%s'", st_devname, sg_name);
+    return 0;
+}
+
+/**
+ * Load the information about a given st device into the local cache.
+ * @param st_devname  Name of a 'st' device ('sg' doesn't provide
+ *                    the required information (serial and model)).
+ * @return 0 on success, -errno on failure.
+ */
+static int cache_load_from_name(const char *st_devname)
 {
     struct drive_map_entry   *dinfo;
-    size_t                    namelen = strlen(devname);
+    size_t                    namelen = strlen(st_devname);
     int                       rc = 0;
 
     assert(namelen < IFNAMSIZ);
 
     dinfo = calloc(1, sizeof(*dinfo));
     if (dinfo == NULL)
-        LOG_RETURN(-ENOMEM, "Cannot allocate cache node for '%s'", devname);
+        LOG_RETURN(-ENOMEM, "Cannot allocate cache node for '%s'", st_devname);
 
-    memcpy(dinfo->devname, devname, namelen);
+    memcpy(dinfo->st_devname, st_devname, namelen);
 
-    rc = read_page80_serial(devname, SYS_DEV_PAGE80, dinfo->serial,
+    rc = read_page80_serial(st_devname, SYS_DEV_PAGE80, dinfo->serial,
                             sizeof(dinfo->serial));
     if (rc)
         goto err_free;
 
-    rc = read_device_attr(devname, SYS_DEV_MODEL, dinfo->model,
+    rc = read_device_attr(st_devname, SYS_DEV_MODEL, dinfo->model,
                           sizeof(dinfo->model));
+    if (rc)
+        goto err_free;
+
+    /* Read SCSI generic device name */
+    rc = read_scsi_generic(st_devname, dinfo->sg_devname,
+                           sizeof(dinfo->sg_devname));
     if (rc)
         goto err_free;
 
@@ -236,7 +306,8 @@ err_free:
     return rc;
 }
 
-static gint _find_by_name_cb(gconstpointer a, gconstpointer b)
+/** check if a drive matches the given st device name */
+static gint _find_by_st_name_cb(gconstpointer a, gconstpointer b)
 {
     const struct drive_map_entry *drive = a;
     const char *name  = b;
@@ -244,7 +315,19 @@ static gint _find_by_name_cb(gconstpointer a, gconstpointer b)
     if (drive == NULL || name == NULL)
         return -1;
 
-    return strcmp(drive->devname, name);
+    return strcmp(drive->st_devname, name);
+}
+
+/** check if a drive matches the given sg device name */
+static gint _find_by_sg_name_cb(gconstpointer a, gconstpointer b)
+{
+    const struct drive_map_entry *drive = a;
+    const char *name  = b;
+
+    if (drive == NULL || name == NULL)
+        return -1;
+
+    return strcmp(drive->sg_devname, name);
 }
 
 static gint _find_by_serial_cb(gconstpointer a, gconstpointer b)
@@ -264,8 +347,10 @@ static void build_sys_class_path(char *path, size_t path_size, const char *name)
     path[path_size - 1] = '\0';
 }
 
-/** TODO consider passing driver name to handle multiple models */
-static inline bool is_device_valid(const char *dev_name)
+/**
+ * Indicate if the given device name is a SCSI tape (st) device.
+ */
+static inline bool is_st_device(const char *dev_name)
 {
     char suffix;
     int  idx;
@@ -282,6 +367,10 @@ static void scsi_tape_map_free(void)
     drive_cache = NULL;
 }
 
+/**
+ * Loads the list of 'st' devices on the system into an internal cache.
+ * @return 0 on success, -errno on failure.
+ */
 static int scsi_tape_map_load(void)
 {
     char             sys_path[PATH_MAX];
@@ -312,7 +401,7 @@ static int scsi_tape_map_load(void)
         if (result == NULL)
             break;
 
-        if (!is_device_valid(entry.d_name))
+        if (!is_st_device(entry.d_name))
             continue;
 
         rc = cache_load_from_name(entry.d_name);
@@ -333,6 +422,10 @@ out_close:
     return rc;
 }
 
+/**
+ * Returns the drive that matches the given name (st or sg name)
+ * by searching in the drive cache.
+ */
 static const struct drive_map_entry *scsi_tape_dev_info(const char *name)
 {
     GSList  *element;
@@ -348,7 +441,13 @@ static const struct drive_map_entry *scsi_tape_dev_info(const char *name)
         scsi_tape_map_load();
     }
 
-    element = g_slist_find_custom(drive_cache, name, _find_by_name_cb);
+    /* The user can specify either an "sg" or "st" device
+     * first try to match "st", then "sg".
+     */
+    element = g_slist_find_custom(drive_cache, name, _find_by_st_name_cb);
+    if (!element)
+        element = g_slist_find_custom(drive_cache, name, _find_by_sg_name_cb);
+
     if (element != NULL) {
         struct drive_map_entry  *dme = element->data;
 
@@ -361,8 +460,12 @@ static const struct drive_map_entry *scsi_tape_dev_info(const char *name)
     return NULL;
 }
 
+/**
+ * Returns the drive that matches the given serial number by searching
+ * in the drive cache.
+ */
 static int scsi_tape_dev_lookup(const char *serial, char *path,
-                              size_t path_size)
+                                size_t path_size)
 {
     GSList  *element;
     ENTRY;
@@ -380,14 +483,20 @@ static int scsi_tape_dev_lookup(const char *serial, char *path,
     if (element != NULL) {
         struct drive_map_entry  *dme = element->data;
 
-        pho_debug("Found device at /dev/%s for '%s'", dme->devname, serial);
-        snprintf(path, path_size, "/dev/%s", dme->devname);
+        pho_debug("Found device ST=/dev/%s SG=/dev/%s matching serial '%s'",
+                  dme->st_devname, dme->sg_devname, serial);
+        /* LTFS 2.4 needs path to sg device */
+        snprintf(path, path_size, "/dev/%s", dme->sg_devname);
         return 0;
     }
 
     return -ENOENT;
 }
 
+/**
+ * Returns information about the drive with the given path (this can be a 'st'
+ * or 'sg' device).
+ */
 static int scsi_tape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
 {
     const struct drive_map_entry    *dme;
