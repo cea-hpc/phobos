@@ -6,7 +6,7 @@ AM_CFLAGS= $(CC_OPT)
 check_PROGRAMS=test_common test_attrs test_mapper test_log test_store	\
 	       test_dss test_cfg test_scsi test_scsi_scan test_dev_tape \
 	       test_ldm test_type_utils test_store_retry test_io \
-	       test_communication
+	       test_communication test_bad_comm
 
 # 1st step: low level tests
 UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_dev_tape \
@@ -15,7 +15,7 @@ UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_dev_tape \
 # 2nd step: integration tests
 INTEG_TESTS=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh	\
 	    test_store_retry.sh simple_split.sh raid1_simple_split.sh 	\
-	    raid1_split.sh
+	    raid1_split.sh test_bad_comm.sh
 
 TESTS=$(UNIT_TESTS) $(INTEG_TESTS)
 
@@ -30,6 +30,10 @@ check: pre-check-local check-am
 
 test_log_SOURCES=test_log.c
 test_log_LDADD=../common/libpho_common.la
+
+test_bad_comm_SOURCES=test_bad_comm.c
+test_bad_comm_LDADD=../communication/libpho_comm.la ../common/libpho_common.la \
+		    ../serializer/libpho_serializer.la
 
 test_common_SOURCES=test_common.c
 test_common_LDADD=../common/libpho_common.la
