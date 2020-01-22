@@ -31,6 +31,7 @@
 #include "pho_cfg.h"
 #include "pho_type_utils.h"
 #include "pho_common.h"
+#include "slist.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -83,9 +84,11 @@ struct drive_map_entry {
     char    sg_devname[IFNAMSIZ];   /* e.g. sg5 */
 };
 
-/* Singly-linked list of structures that describe available drives */
-/* FIXME not thread-safe */
-static GSList *drive_cache;
+/**
+ * List of available drives.
+ * FIXME Not thread safe
+ */
+static struct slist_entry *drive_cache;
 
 static void build_sys_path(const char *name, const char *attr, char *dst_path,
                            size_t n)
@@ -273,13 +276,16 @@ static int cache_load_from_name(const char *st_devname)
     size_t                    namelen = strlen(st_devname);
     int                       rc = 0;
 
-    assert(namelen < IFNAMSIZ);
+    /* ensure final '\0' fits in the target buffer */
+    if (namelen + 1 > IFNAMSIZ)
+        LOG_RETURN(-ENOBUFS, "Device name '%s' exceeds expected size %d",
+                   st_devname, IFNAMSIZ);
 
     dinfo = calloc(1, sizeof(*dinfo));
     if (dinfo == NULL)
         LOG_RETURN(-ENOMEM, "Cannot allocate cache node for '%s'", st_devname);
 
-    memcpy(dinfo->st_devname, st_devname, namelen);
+    memcpy(dinfo->st_devname, st_devname, namelen + 1);
 
     rc = read_page80_serial(st_devname, SYS_DEV_PAGE80, dinfo->serial,
                             sizeof(dinfo->serial));
@@ -291,13 +297,17 @@ static int cache_load_from_name(const char *st_devname)
     if (rc)
         goto err_free;
 
-    /* Read SCSI generic device name */
+    /* Read SCSI generic device name
+     * (LTFS 2.4 needs path to sg device)
+     */
     rc = read_scsi_generic(st_devname, dinfo->sg_devname,
                            sizeof(dinfo->sg_devname));
     if (rc)
         goto err_free;
 
-    drive_cache = g_slist_prepend(drive_cache, dinfo);
+    pho_debug("Added device ST=/dev/%s SG=/dev/%s with serial '%s'",
+              dinfo->st_devname, dinfo->sg_devname, dinfo->serial);
+    drive_cache = list_prepend(drive_cache, dinfo);
 
     return 0;
 
@@ -306,39 +316,37 @@ err_free:
     return rc;
 }
 
-/** check if a drive matches the given st device name */
-static gint _find_by_st_name_cb(gconstpointer a, gconstpointer b)
+static bool match_st(const void *item, const void *user_data)
 {
-    const struct drive_map_entry *drive = a;
-    const char *name  = b;
+    const struct drive_map_entry *drive = item;
+    const char *name = user_data;
 
-    if (drive == NULL || name == NULL)
-        return -1;
+    assert(drive != NULL);
+    assert(name != NULL);
 
-    return strcmp(drive->st_devname, name);
+    return !strcmp(drive->st_devname, name);
 }
 
-/** check if a drive matches the given sg device name */
-static gint _find_by_sg_name_cb(gconstpointer a, gconstpointer b)
+static bool match_sg(const void *item, const void *user_data)
 {
-    const struct drive_map_entry *drive = a;
-    const char *name  = b;
+    const struct drive_map_entry *drive = item;
+    const char *name = user_data;
 
-    if (drive == NULL || name == NULL)
-        return -1;
+    assert(drive != NULL);
+    assert(name != NULL);
 
-    return strcmp(drive->sg_devname, name);
+    return !strcmp(drive->sg_devname, name);
 }
 
-static gint _find_by_serial_cb(gconstpointer a, gconstpointer b)
+static bool match_serial(const void *item, const void *user_data)
 {
-    const struct drive_map_entry *drive  = a;
-    const char              *serial = b;
+    const struct drive_map_entry *drive = item;
+    const char *serial = user_data;
 
-    if (drive == NULL || serial == NULL)
-        return -1;
+    assert(drive != NULL);
+    assert(serial != NULL);
 
-    return strcmp(drive->serial, serial);
+    return !strcmp(drive->serial, serial);
 }
 
 static void build_sys_class_path(char *path, size_t path_size, const char *name)
@@ -363,7 +371,7 @@ static inline bool is_st_device(const char *dev_name)
 static void scsi_tape_map_free(void)
 {
     pho_debug("Freeing device serial cache");
-    g_slist_free_full(drive_cache, free);
+    list_free_all(drive_cache, free);
     drive_cache = NULL;
 }
 
@@ -412,8 +420,6 @@ static int scsi_tape_map_load(void)
     if (dir == NULL)
         LOG_RETURN(rc = -errno, "Cannot opendir(%s) to list devices", sys_path);
 
-    drive_cache = g_slist_alloc();
-
     do {
         rc = readdir_rc(dir, &entry);
         if (rc)
@@ -450,7 +456,7 @@ out_close:
  */
 static const struct drive_map_entry *scsi_tape_dev_info(const char *name)
 {
-    GSList  *element;
+    struct drive_map_entry *dme;
 
     if (strlen(name) >= IFNAMSIZ) {
         pho_error(-ENAMETOOLONG, "Device name '%s' > %d char long",
@@ -466,13 +472,11 @@ static const struct drive_map_entry *scsi_tape_dev_info(const char *name)
     /* The user can specify either an "sg" or "st" device
      * first try to match "st", then "sg".
      */
-    element = g_slist_find_custom(drive_cache, name, _find_by_st_name_cb);
-    if (!element)
-        element = g_slist_find_custom(drive_cache, name, _find_by_sg_name_cb);
+    dme = list_find(drive_cache, name, match_st);
+    if (!dme)
+        dme = list_find(drive_cache, name, match_sg);
 
-    if (element != NULL) {
-        struct drive_map_entry  *dme = element->data;
-
+    if (dme != NULL) {
         pho_debug("Found device '%s': serial='%s', model='%s',",
                   name, dme->serial, dme->model);
         return dme;
@@ -489,7 +493,8 @@ static const struct drive_map_entry *scsi_tape_dev_info(const char *name)
 static int scsi_tape_dev_lookup(const char *serial, char *path,
                                 size_t path_size)
 {
-    GSList  *element;
+    struct drive_map_entry *dme;
+
     ENTRY;
 
     if (strlen(serial) >= MAX_SERIAL)
@@ -501,10 +506,8 @@ static int scsi_tape_dev_lookup(const char *serial, char *path,
         scsi_tape_map_load();
     }
 
-    element = g_slist_find_custom(drive_cache, serial, _find_by_serial_cb);
-    if (element != NULL) {
-        struct drive_map_entry  *dme = element->data;
-
+    dme = list_find(drive_cache, serial, match_serial);
+    if (dme != NULL) {
         pho_debug("Found device ST=/dev/%s SG=/dev/%s matching serial '%s'",
                   dme->st_devname, dme->sg_devname, serial);
         /* LTFS 2.4 needs path to sg device */
