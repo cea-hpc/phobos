@@ -2719,7 +2719,7 @@ static int sched_handle_notify(struct lrs_sched *sched, pho_req_t *req,
 err:
     pho_srl_response_free(resp, false);
 
-    if (rc != EAGAIN) {
+    if (rc != -EAGAIN) {
         int rc2 = pho_srl_response_error_alloc(resp);
 
         if (rc2)
