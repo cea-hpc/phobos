@@ -173,7 +173,7 @@ cksum=md5:7c28aec5441644094064fcf651ab5e3e,user=foo
 ## Device and media management
 ### Listing resources
 Any device or media can be listed using the 'list' operation. For instance,
-the following will list all the existing tapes:
+the following will list all the existing tape identifiers:
 ```
 phobos tape list
 ```
