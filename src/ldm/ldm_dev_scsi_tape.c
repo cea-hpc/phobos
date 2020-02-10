@@ -438,7 +438,7 @@ static int scsi_tape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
     free(lds->lds_model);
 
     memset(lds, 0, sizeof(*lds));
-    lds->lds_family = PHO_DEV_TAPE;
+    lds->lds_family = PHO_RSC_TAPE;
     lds->lds_model = strdup(dme->model);
     lds->lds_serial = strdup(dme->serial);
 

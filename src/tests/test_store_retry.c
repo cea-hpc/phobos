@@ -83,32 +83,33 @@ static void add_dir(struct admin_handle *adm, struct dss_handle *dss,
     strtok(hostname, ".");
 
     /* Add dir media */
-    media->id.type = PHO_DEV_DIR;
-    media_id_set(&media->id, path);
+    media->rsc.id.family = PHO_RSC_DIR;
+    pho_id_name_set(&media->rsc.id, path);
     media->fs.type = PHO_FS_POSIX;
     media->addr_type = PHO_ADDR_HASH1;
     media->adm_status = PHO_MDA_ADM_ST_LOCKED;
     ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
 
     /* Add dir device */
-    get_dev_adapter(PHO_DEV_DIR, &adapter);
+    get_dev_adapter(PHO_RSC_DIR, &adapter);
     ASSERT_RC(ldm_dev_query(&adapter, path, &dev_st));
 
-    dev->family = dev_st.lds_family;
-    dev->model = dev_st.lds_model ? strdup(dev_st.lds_model) : NULL;
+    pho_id_name_set(&dev->rsc.id, dev_st.lds_serial ? : "");
+    dev->rsc.id.family = dev_st.lds_family;
+    dev->rsc.model = dev_st.lds_model ? strdup(dev_st.lds_model) : NULL;
     dev->path = (char *) path;
     dev->host = hostname;
-    dev->serial = dev_st.lds_serial ? strdup(dev_st.lds_serial) : NULL;
     dev->adm_status = PHO_DEV_ADM_ST_UNLOCKED;
     ldm_dev_state_fini(&dev_st);
 
     ASSERT_RC(dss_device_set(dss, dev, 1, DSS_SET_INSERT));
 
     /* Add device to lrs */
-    ASSERT_RC(phobos_admin_device_add(adm, dev->family, dev->serial));
+    ASSERT_RC(phobos_admin_device_add(adm, dev->rsc.id.family,
+                                      dev->rsc.id.name));
 
     /* Format and unlock media */
-    ASSERT_RC(phobos_admin_format(adm, &media->id, PHO_FS_POSIX, true));
+    ASSERT_RC(phobos_admin_format(adm, &media->rsc.id, PHO_FS_POSIX, true));
 }
 
 /* TODO: factorize with add_dir */
@@ -123,14 +124,14 @@ static void add_drive(struct admin_handle *adm, struct dss_handle *dss,
     strtok(hostname, ".");
 
     /* Add drive device */
-    get_dev_adapter(PHO_DEV_TAPE, &adapter);
+    get_dev_adapter(PHO_RSC_TAPE, &adapter);
     ASSERT_RC(ldm_dev_query(&adapter, path, &dev_st));
 
-    dev->family = dev_st.lds_family;
-    dev->model = dev_st.lds_model ? strdup(dev_st.lds_model) : NULL;
+    pho_id_name_set(&dev->rsc.id, dev_st.lds_serial ? : "");
+    dev->rsc.id.family = dev_st.lds_family;
+    dev->rsc.model = dev_st.lds_model ? strdup(dev_st.lds_model) : NULL;
     dev->path = (char *) path;
     dev->host = hostname;
-    dev->serial = dev_st.lds_serial ? strdup(dev_st.lds_serial) : NULL;
     dev->adm_status = PHO_DEV_ADM_ST_UNLOCKED;
 
     ldm_dev_state_fini(&dev_st);
@@ -138,7 +139,8 @@ static void add_drive(struct admin_handle *adm, struct dss_handle *dss,
     ASSERT_RC(dss_device_set(dss, dev, 1, DSS_SET_INSERT));
 
     /* Add device to lrs */
-    ASSERT_RC(phobos_admin_device_add(adm, dev->family, dev->serial));
+    ASSERT_RC(phobos_admin_device_add(adm, dev->rsc.id.family,
+                                      dev->rsc.id.name));
 }
 
 static void add_tape(struct admin_handle *adm, struct dss_handle *dss,
@@ -146,17 +148,17 @@ static void add_tape(struct admin_handle *adm, struct dss_handle *dss,
                      struct media_info *media)
 {
     /* Add dir media */
-    media->id.type = PHO_DEV_TAPE;
-    media_id_set(&media->id, tape_id);
-    media->model = strdup(model);
+    media->rsc.id.family = PHO_RSC_TAPE;
+    pho_id_name_set(&media->rsc.id, tape_id);
+    media->rsc.model = strdup(model);
     media->fs.type = PHO_FS_LTFS;
     media->addr_type = PHO_ADDR_HASH1;
     media->adm_status = PHO_MDA_ADM_ST_UNLOCKED;
     ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
 
     /* This can fail if the tape has already been formatted */
-    phobos_admin_format(adm, &media->id, PHO_FS_LTFS, true);
-    free(media->model);
+    phobos_admin_format(adm, &media->rsc.id, PHO_FS_LTFS, true);
+    free(media->rsc.model);
 }
 
 /** Test that phobos_get work properly */
@@ -223,8 +225,8 @@ int main(int argc, char **argv)
     struct admin_handle     adm;
     struct dss_handle       dss = {0};
     struct pho_xfer_desc    xfer = {0};
-    struct dev_info         dev = {0};
-    struct media_info       media = { {0} };
+    struct dev_info         dev = { { {0} } };
+    struct media_info       media = { { {0} } };
     char                   *tmp_dir = setup_tmp_dir();
     char                   *default_family;
     char                    dst_path[256];
@@ -291,8 +293,7 @@ int main(int argc, char **argv)
         test_put_retry(&xfer, &dev, &media);
     }
 
-    free(dev.serial);
-    free(dev.model);
+    free(dev.rsc.model);
     free(xfer.xd_objid);
     xfer_desc_close_fd(&xfer);
     phobos_admin_fini(&adm);

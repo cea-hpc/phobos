@@ -38,7 +38,7 @@
 
 /** device information */
 struct ldm_dev_state {
-    enum dev_family      lds_family; /**< device family */
+    enum rsc_family      lds_family; /**< device family */
     char                *lds_model;  /**< device model */
     char                *lds_serial; /**< device serial */
     bool                 lds_loaded; /**< whether a media is loaded in the
@@ -73,12 +73,12 @@ struct dev_adapter {
 
 /**
  * Retrieve device adapter for the given device type.
- * @param[in]  dev_type Family of device.
- * @param[out] dev      Vector of functions to handle the given device type.
+ * @param[in]  dev_family Family of device.
+ * @param[out] dev        Vector of functions to handle the given device type.
  *
  * @return 0 on success, negative error code on failure.
  */
-int get_dev_adapter(enum dev_family dev_type, struct dev_adapter *dev);
+int get_dev_adapter(enum rsc_family dev_family, struct dev_adapter *dev);
 
 /**
  * Get device path from its identifier (eg. serial number).
@@ -191,9 +191,9 @@ struct lib_item_addr {
  * Device information in a library.
  */
 struct lib_drv_info {
-    struct lib_item_addr ldi_addr;     /**< location of the drive */
-    bool                 ldi_full;     /**< true if a media is in the drive */
-    struct media_id      ldi_media_id; /**< media label, if drive is full */
+    struct lib_item_addr ldi_addr;      /**< location of the drive */
+    bool                 ldi_full;      /**< true if a medium is in the drive */
+    struct pho_id        ldi_medium_id; /**< medium ID, if drive is full */
 };
 
 /**

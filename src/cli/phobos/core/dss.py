@@ -39,7 +39,7 @@ from phobos.core.const import PHO_MDA_ADM_ST_LOCKED, PHO_MDA_ADM_ST_UNLOCKED
 from phobos.core.const import PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED
 from phobos.core.const import DSS_SET_INSERT, DSS_SET_UPDATE, DSS_SET_DELETE
 
-from phobos.core.ffi import DevInfo, MediaInfo, MediaId, MediaStats
+from phobos.core.ffi import DevInfo, Id, MediaInfo, MediaStats, Resource
 from phobos.core.ffi import LIBPHOBOS
 from phobos.core.ldm import ldm_device_query
 
@@ -261,17 +261,17 @@ class DeviceManager(BaseObjectManager):
         else:
             status = PHO_DEV_ADM_ST_UNLOCKED
 
-        dev_info = DevInfo(state.lds_family, state.lds_model, device_path,
-                           host, state.lds_serial, status)
+        dev_info = DevInfo(Resource(Id(state.lds_family, state.lds_serial),
+                           state.lds_model), device_path, host, status)
 
         self.insert([dev_info])
 
         self.logger.info("Device '%s:%s' successfully added: " \
                          "model=%s serial=%s (%s)",
                          dev_info.host, device_path, dev_info.model,
-                         dev_info.serial, locked and "locked" or "unlocked")
+                         dev_info.name, locked and "locked" or "unlocked")
 
-        return dev_info.family, dev_info.serial
+        return dev_info.family, dev_info.name
 
     def _dss_get(self, hdl, qry_filter, res, res_cnt):
         """Invoke device-specific DSS get method."""
@@ -294,12 +294,11 @@ class MediaManager(BaseObjectManager):
         )
         self.lock_owner_count += 1
 
-    def add(self, mtype, fstype, model, label, tags=None, locked=False):
+    def add(self, family, fstype, model, name, tags=None, locked=False):
         """Insert media into DSS."""
         media = MediaInfo()
-        media.id = MediaId(mtype, label)
+        media.rsc = Resource(Id(family, name), model)
         media.fs.type = str2fs_type(fstype)
-        media.model = model
         media.addr_type = PHO_ADDR_HASH1
         media.tags = tags or []
         if locked:
@@ -313,7 +312,7 @@ class MediaManager(BaseObjectManager):
 
         self.logger.debug("Media '%s' successfully added: "\
                           "model=%s fs=%s (%s)",
-                          label, model, fstype,
+                          name, model, fstype,
                           locked and "locked" or "unlocked")
 
     def _dss_get(self, hdl, qry_filter, res, res_cnt):

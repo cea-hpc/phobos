@@ -418,8 +418,8 @@ static int lib_scsi_drive_info(struct lib_handle *hdl,
     ldi->ldi_addr.lia_addr = drv->address;
     if (drv->full) {
         ldi->ldi_full = true;
-        ldi->ldi_media_id.type = PHO_DEV_TAPE;
-        media_id_set(&ldi->ldi_media_id, drv->vol);
+        ldi->ldi_medium_id.family = PHO_RSC_TAPE;
+        pho_id_name_set(&ldi->ldi_medium_id, drv->vol);
     }
     return 0;
 }

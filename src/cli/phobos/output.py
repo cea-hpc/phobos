@@ -62,7 +62,7 @@ def xml_dump(data, item_type='item'):
 
 def human_dump(data):
     """Convert a list of dictionaries to an identifier list text"""
-    out = "\n".join(str(item['label']) for item in data)
+    out = "\n".join(str(item['name']) for item in data)
     return out
 
 def human_pretty_dump(data):
@@ -109,7 +109,7 @@ def dump_object_list(objs, item_type, attr=None, fmt="human"):
         'human': human_dump,
     }
 
-    if attr != ['label']:
+    if attr != ['name']:
         formats['human'] = human_pretty_dump
 
     objlist = filter_display_dict(objs, attr)

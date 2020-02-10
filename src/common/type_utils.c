@@ -33,12 +33,12 @@
 #include <assert.h>
 #include <stdbool.h>
 
-bool media_id_equal(const struct media_id *id1, const struct media_id *id2)
+bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2)
 {
-    if (id1->type != id2->type)
+    if (id1->family != id2->family)
         return false;
 
-    if (strcmp(id1->id, id2->id))
+    if (strcmp(id1->name, id2->name))
         return false;
 
     return true;
@@ -60,11 +60,10 @@ struct dev_info *dev_info_dup(const struct dev_info *dev)
     if (!dev_out)
         return NULL;
 
-    dev_out->family = dev->family;
-    dev_out->model = strdup_safe(dev->model);
+    dev_out->rsc.id = dev->rsc.id;
+    dev_out->rsc.model = strdup_safe(dev->rsc.model);
     dev_out->path = strdup_safe(dev->path);
     dev_out->host = strdup_safe(dev->host);
-    dev_out->serial = strdup_safe(dev->serial);
     dev_out->adm_status = dev->adm_status;
 
     return dev_out;
@@ -74,10 +73,9 @@ void dev_info_free(struct dev_info *dev)
 {
     if (!dev)
         return;
-    free(dev->model);
+    free(dev->rsc.model);
     free(dev->path);
     free(dev->host);
-    free(dev->serial);
     free(dev);
 }
 
@@ -90,7 +88,7 @@ struct media_info *media_info_dup(const struct media_info *media)
         return NULL;
 
     memcpy(media_out, media, sizeof(*media_out));
-    media_out->model = strdup_safe(media->model);
+    media_out->rsc.model = strdup_safe(media->rsc.model);
     tags_dup(&media_out->tags, &media->tags);
 
     return media_out;
@@ -100,7 +98,7 @@ void media_info_free(struct media_info *mda)
 {
     if (!mda)
         return;
-    free(mda->model);
+    free(mda->rsc.model);
     tags_free(&mda->tags);
     free(mda);
 }

@@ -28,8 +28,8 @@ import os
 from random import randint
 
 from phobos.core.dss import Client
-from phobos.core.ffi import MediaInfo, DevInfo
-from phobos.core.const import dev_family2str, PHO_DEV_DIR, PHO_DEV_TAPE
+from phobos.core.ffi import DevInfo, Id, MediaInfo, Resource
+from phobos.core.const import PHO_RSC_DIR, PHO_RSC_TAPE, rsc_family2str
 
 
 class DSSClientTest(unittest.TestCase):
@@ -57,7 +57,7 @@ class DSSClientTest(unittest.TestCase):
         with Client() as client:
             for fam in ('tape', 'disk', 'dir'):
                 for dev in client.devices.get(family=fam):
-                    self.assertEqual(dev_family2str(dev.family), fam)
+                    self.assertEqual(rsc_family2str(dev.family), fam)
 
     def test_list_media(self):
         """List media."""
@@ -68,20 +68,20 @@ class DSSClientTest(unittest.TestCase):
 
             # Check negative indexation
             medias = client.media.get()
-            self.assertEqual(medias[0].label, medias[-len(medias)].label)
-            self.assertEqual(medias[len(medias) - 1].label, medias[-1].label)
+            self.assertEqual(medias[0].name, medias[-len(medias)].name)
+            self.assertEqual(medias[len(medias) - 1].name, medias[-1].name)
 
     def test_list_media_by_tags(self):
         with Client() as client:
-            client.media.add(PHO_DEV_DIR, 'POSIX', None, 'm0')
-            client.media.add(PHO_DEV_DIR, 'POSIX', None, 'm1', tags=['foo'])
-            client.media.add(PHO_DEV_DIR, 'POSIX', None, 'm2', \
+            client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm0')
+            client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm1', tags=['foo'])
+            client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm2', \
                                                     tags=['foo', 'bar'])
-            client.media.add(PHO_DEV_DIR, 'POSIX', None, 'm3', \
+            client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm3', \
                                                     tags=['goo', 'foo'])
-            client.media.add(PHO_DEV_DIR, 'POSIX', None, 'm4', \
+            client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm4', \
                                                     tags=['bar', 'goo'])
-            client.media.add(PHO_DEV_DIR, 'POSIX', None, 'm5', \
+            client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm5', \
                                                     tags=['foo', 'bar', 'goo'])
             n_tags = {'foo': 4, 'bar': 3, 'goo': 3}
             n_bar_foo = 2
@@ -105,12 +105,10 @@ class DSSClientTest(unittest.TestCase):
         with Client() as client:
             insert_list = []
             for i in range(10):
-                dev = DevInfo()
-                dev.family = PHO_DEV_DIR
-                dev.model = ''
-                dev.path = '/tmp/test_%d' % randint(0, 1000000)
-                dev.host = 'localhost'
-                dev.serial = '__TEST_MAGIC_%d' % randint(0, 1000000)
+                id = Id(PHO_RSC_DIR, '__TEST_MAGIC_%d' % randint(0, 1000000))
+                rsc = Resource(id=id, model='')
+                dev = DevInfo(rsc=rsc, path='/tmp/test_%d' % randint(0,1000000),
+                             host='localhost')
 
                 insert_list.append(dev)
 
@@ -118,11 +116,12 @@ class DSSClientTest(unittest.TestCase):
 
             # now retrieve them one by one and check serials
             for dev in insert_list:
-                res = client.devices.get(serial=dev.serial)
+                res = client.devices.get(serial=dev.rsc.id.name)
                 for retrieved_dev in res:
                     # replace with assertIsInstance when we drop pre-2.7 support
                     self.assertTrue(isinstance(retrieved_dev, dev.__class__))
-                    self.assertEqual(retrieved_dev.serial, dev.serial)
+                    self.assertEqual(retrieved_dev.rsc.id.name,
+                                     dev.rsc.id.name)
 
             client.devices.delete(res)
 
@@ -131,7 +130,7 @@ class DSSClientTest(unittest.TestCase):
         # Not the best place to test SQL escaping, but most convenient one.
         with Client() as client:
             client.media.add(
-                PHO_DEV_TAPE, "LTFS", "lto8", "TAPE_SQLI_0'; <sqli>",
+                PHO_RSC_TAPE, "LTFS", "lto8", "TAPE_SQLI_0'; <sqli>",
             )
 
     def test_manipulate_empty(self):
@@ -151,11 +150,11 @@ class DSSClientTest(unittest.TestCase):
         """Test media lock and unlock wrappers"""
         with Client() as client:
             # Create a dummy media in db
-            label = '/some/path_%d' % randint(0, 1000000)
-            client.media.add(PHO_DEV_DIR, 'POSIX', None, label, locked=False)
+            name = '/some/path_%d' % randint(0, 1000000)
+            client.media.add(PHO_RSC_DIR, 'POSIX', None, name, locked=False)
 
             # Get the created media from db
-            media = client.media.get(id=label)[0]
+            media = client.media.get(id=name)[0]
 
             # It should not be locked yet
             self.assertFalse(media.is_locked())
@@ -168,7 +167,7 @@ class DSSClientTest(unittest.TestCase):
                 client.media.lock([media])
 
             # Retrieve an up-to-date version
-            media = client.media.get(id=label)[0]
+            media = client.media.get(id=name)[0]
 
             # This one should be locked
             self.assertTrue(media.is_locked())
@@ -180,7 +179,7 @@ class DSSClientTest(unittest.TestCase):
             client.media.unlock([media])
 
             # The up-to-date version isn't locked anymore
-            media = client.media.get(id=label)[0]
+            media = client.media.get(id=name)[0]
             self.assertFalse(media.is_locked())
 
 

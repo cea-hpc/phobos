@@ -223,76 +223,73 @@ struct pho_lock {
 static const struct pho_buff PHO_BUFF_NULL = { .size = 0, .buff = NULL };
 
 /**
- * Family of device or media
+ * Family of resource.
+ * Families can be seen here as storage technologies.
  */
-enum dev_family {
-    PHO_DEV_INVAL = -1,
-    PHO_DEV_DISK  = 0,
-    PHO_DEV_TAPE  = 1,
-    PHO_DEV_DIR   = 2,
-    PHO_DEV_LAST,
-    PHO_DEV_UNSPEC = PHO_DEV_LAST,
+enum rsc_family {
+    PHO_RSC_INVAL = -1,
+    PHO_RSC_DISK  =  0, /**< Not supported yet */
+    PHO_RSC_TAPE  =  1, /**< Tape, drive tape or tape library */
+    PHO_RSC_DIR   =  2, /**< Directory */
+    PHO_RSC_LAST,
+    PHO_RSC_UNSPEC = PHO_RSC_LAST,
 };
 
-static const char * const dev_family_names[] = {
-    [PHO_DEV_DISK] = "disk",
-    [PHO_DEV_TAPE] = "tape",
-    [PHO_DEV_DIR]  = "dir",
+static const char * const rsc_family_names[] = {
+    [PHO_RSC_DISK] = "disk",
+    [PHO_RSC_TAPE] = "tape",
+    [PHO_RSC_DIR]  = "dir",
 };
 
-static inline const char *dev_family2str(enum dev_family family)
+static inline const char *rsc_family2str(enum rsc_family family)
 {
-    if (family >= PHO_DEV_LAST || family < 0)
+    if (family >= PHO_RSC_LAST || family < 0)
         return NULL;
-    return dev_family_names[family];
+    return rsc_family_names[family];
 }
 
-static inline enum dev_family str2dev_family(const char *str)
+static inline enum rsc_family str2rsc_family(const char *str)
 {
     int i;
 
-    for (i = 0; i < PHO_DEV_LAST; i++)
-        if (!strcmp(str, dev_family_names[i]))
+    for (i = 0; i < PHO_RSC_LAST; i++)
+        if (!strcmp(str, rsc_family_names[i]))
             return i;
-    return PHO_DEV_INVAL;
+    return PHO_RSC_INVAL;
 }
 
-/** media identifier */
-struct media_id {
-    enum dev_family type;
-    /** XXX type -> id type may not be straightforward as given media type
+/** Identifier */
+struct pho_id {
+    enum rsc_family family;             /**< Resource family. */
+    /* XXX type -> id type may not be straightforward as given media type
      * could be addressed in multiple ways (FS label, FS UUID, device WWID...).
-     * So, an id_type enum may be required here in a later version. */
-
-    /** Media identifier (tape label or URI) */
-    char id[PHO_URI_MAX];
+     * So, an id_type enum may be required here in a later version.
+     */
+    char            name[PHO_URI_MAX];  /**< Resource name. */
 };
 
-/**
- * Get media identifier string, depending of media type.
- */
-static inline const char *media_id_get(const struct media_id *mid)
+static inline int pho_id_name_set(struct pho_id *id, const char *name)
 {
-    return mid->id;
-}
+    size_t length = strlen(name) + 1;
 
-/**
- * Set the appropiate media identifier.
- */
-static inline int media_id_set(struct media_id *mid, const char *id)
-{
-    if (strlen(id) >= PHO_URI_MAX)
+    if (length > PHO_URI_MAX)
         return -EINVAL;
 
-    strncpy(mid->id, id, sizeof(mid->id));
+    memcpy(id->name, name, length);
     return 0;
 }
+
+/** Resource */
+struct pho_resource {
+    struct pho_id  id;    /**< Resource identifier. */
+    char          *model; /**< Resource model (if applicable). */
+};
 
 /** describe a piece of data in a layout */
 struct extent {
     int                 layout_idx; /**< index of this extent in layout */
     ssize_t             size;       /**< size of the extent */
-    struct media_id     media;      /**< identifier of the media */
+    struct pho_id       media;      /**< identifier of the media */
     struct pho_buff     address;    /**< address on the media */
     /*
      * @FIXME: addr_type is a media field in the database, should it be removed
@@ -388,13 +385,11 @@ static inline enum dev_op_status str2op_status(const char *str)
 
 /** Persistent device information (from DB) */
 struct dev_info {
-    enum dev_family      family;
+    struct pho_resource  rsc;
     /* Device types and their compatibility rules are configurable
      * So, use string instead of enum. */
-    char                *model;
     char                *path;
     char                *host;
-    char                *serial;
     enum dev_adm_status  adm_status;
     struct pho_lock      lock;
 
@@ -469,14 +464,13 @@ struct tags {
  * Persistent media and filesystem information
  */
 struct media_info {
-    struct media_id          id;            /**< Public media identifier */
-    enum address_type        addr_type;     /**< Way to address this media */
-    char                    *model;         /**< Media model (if applicable) */
-    enum media_adm_status    adm_status;    /**< Administrative status */
-    struct media_fs          fs;            /**< Local filesystem information */
-    struct media_stats       stats;         /**< Usage metrics */
-    struct tags              tags;          /**< Tags used for filtering */
-    struct pho_lock          lock;          /**< Distributed access lock */
+    struct pho_resource   rsc;          /**< Resource information */
+    enum address_type     addr_type;    /**< Way to address this media */
+    enum media_adm_status adm_status;   /**< Administrative status */
+    struct media_fs       fs;           /**< Local filesystem information */
+    struct media_stats    stats;        /**< Usage metrics */
+    struct tags           tags;         /**< Tags used for filtering */
+    struct pho_lock       lock;         /**< Distributed access lock */
 };
 
 struct object_info {

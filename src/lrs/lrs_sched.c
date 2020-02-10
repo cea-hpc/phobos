@@ -88,15 +88,15 @@ static char *mount_point(const char *id)
 }
 
 /** return the default device family to write data */
-static enum dev_family default_family(void)
+static enum rsc_family default_family(void)
 {
     const char *fam_str;
 
     fam_str = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, default_family);
     if (fam_str == NULL)
-        return PHO_DEV_INVAL;
+        return PHO_RSC_INVAL;
 
-    return str2dev_family(fam_str);
+    return str2rsc_family(fam_str);
 }
 
 static struct utsname host_info;
@@ -148,34 +148,35 @@ static int check_dev_info(const struct dev_descr *dev)
 {
     ENTRY;
 
-    if (dev->dss_dev_info->model == NULL
+    if (dev->dss_dev_info->rsc.model == NULL
         || dev->sys_dev_state.lds_model == NULL) {
-        if (dev->dss_dev_info->model != dev->sys_dev_state.lds_model)
+        if (dev->dss_dev_info->rsc.model != dev->sys_dev_state.lds_model)
             LOG_RETURN(-EINVAL, "%s: missing or unexpected device model",
                        dev->dev_path);
         else
             pho_debug("%s: no device model is set", dev->dev_path);
 
-    } else if (strcmp(dev->dss_dev_info->model,
+    } else if (strcmp(dev->dss_dev_info->rsc.model,
                       dev->sys_dev_state.lds_model) != 0) {
         /* @TODO ignore blanks at the end of the model */
         LOG_RETURN(-EINVAL, "%s: configured device model '%s' differs from "
                    "actual device model '%s'", dev->dev_path,
-                   dev->dss_dev_info->model, dev->sys_dev_state.lds_model);
+                   dev->dss_dev_info->rsc.model, dev->sys_dev_state.lds_model);
     }
 
-    if (dev->dss_dev_info->serial == NULL
+    if (dev->dss_dev_info->rsc.id.name == NULL
         || dev->sys_dev_state.lds_serial == NULL) {
-        if (dev->dss_dev_info->serial != dev->sys_dev_state.lds_serial)
+        if (dev->dss_dev_info->rsc.id.name != dev->sys_dev_state.lds_serial)
             LOG_RETURN(-EINVAL, "%s: missing or unexpected device serial",
                        dev->dss_dev_info->path);
         else
             pho_debug("%s: no device serial is set", dev->dev_path);
-    } else if (strcmp(dev->dss_dev_info->serial,
+    } else if (strcmp(dev->dss_dev_info->rsc.id.name,
                       dev->sys_dev_state.lds_serial) != 0) {
         LOG_RETURN(-EINVAL, "%s: configured device serial '%s' differs from "
                    "actual device serial '%s'", dev->dev_path,
-                   dev->dss_dev_info->serial, dev->sys_dev_state.lds_serial);
+                   dev->dss_dev_info->rsc.id.name,
+                   dev->sys_dev_state.lds_serial);
     }
 
     return 0;
@@ -245,7 +246,6 @@ static int sched_dev_release(struct lrs_sched *sched, struct dev_descr *pdev)
 static int sched_media_acquire(struct lrs_sched *sched,
                                struct media_info *pmedia)
 {
-    const char  *media_id;
     int          rc;
 
     ENTRY;
@@ -253,15 +253,13 @@ static int sched_media_acquire(struct lrs_sched *sched,
     if (!pmedia)
         return -EINVAL;
 
-    media_id = media_id_get(&pmedia->id);
-
     rc = dss_media_lock(&sched->dss, pmedia, 1, sched->lock_owner);
     if (rc) {
         pmedia->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
-        LOG_RETURN(rc, "Cannot lock media '%s'", media_id);
+        LOG_RETURN(rc, "Cannot lock media '%s'", pmedia->rsc.id.name);
     }
 
-    pho_debug("Acquired ownership on media '%s'", media_id);
+    pho_debug("Acquired ownership on media '%s'", pmedia->rsc.id.name);
     return 0;
 }
 
@@ -271,7 +269,6 @@ static int sched_media_acquire(struct lrs_sched *sched,
 static int sched_media_release(struct lrs_sched *sched,
                                struct media_info *pmedia)
 {
-    const char  *media_id;
     int          rc;
 
     ENTRY;
@@ -279,13 +276,11 @@ static int sched_media_release(struct lrs_sched *sched,
     if (!pmedia)
         return -EINVAL;
 
-    media_id = media_id_get(&pmedia->id);
-
     rc = dss_media_unlock(&sched->dss, pmedia, 1, sched->lock_owner);
     if (rc)
-        LOG_RETURN(rc, "Cannot unlock media '%s'", media_id);
+        LOG_RETURN(rc, "Cannot unlock media '%s'", pmedia->rsc.id.name);
 
-    pho_debug("Released ownership on media '%s'", media_id);
+    pho_debug("Released ownership on media '%s'", pmedia->rsc.id.name);
     return 0;
 }
 
@@ -319,17 +314,16 @@ static bool dev_is_available(const struct dev_descr *devd)
 }
 
 /**
- * Retrieve media info from DSS for the given label.
+ * Retrieve media info from DSS for the given ID.
  * @param pmedia[out] returned pointer to a media_info structure
  *                    allocated by this function.
- * @param label[in]   label of the media.
+ * @param id[in]      ID of the media.
  */
 static int sched_fill_media_info(struct dss_handle *dss,
                                  struct media_info **pmedia,
-                                 const struct media_id *id)
+                                 const struct pho_id *id)
 {
     struct media_info   *media_res = NULL;
-    const char          *id_str;
     struct dss_filter    filter;
     int                  mcnt = 0;
     int                  rc;
@@ -337,16 +331,14 @@ static int sched_fill_media_info(struct dss_handle *dss,
     if (id == NULL || pmedia == NULL)
         return -EINVAL;
 
-    id_str = media_id_get(id);
-
     pho_debug("Retrieving media info for %s '%s'",
-              dev_family2str(id->type), id_str);
+              rsc_family2str(id->family), id->name);
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                           "  {\"DSS::MDA::family\": \"%s\"},"
                           "  {\"DSS::MDA::id\": \"%s\"}"
-                          "]}", dev_family2str(id->type), media_id_get(id));
+                          "]}", rsc_family2str(id->family), id->name);
     if (rc)
         return rc;
 
@@ -357,24 +349,24 @@ static int sched_fill_media_info(struct dss_handle *dss,
 
     if (mcnt == 0) {
         pho_info("No media found matching %s '%s'",
-                 dev_family2str(id->type), id_str);
+                 rsc_family2str(id->family), id->name);
         /* no such device or address */
         GOTO(out_free, rc = -ENXIO);
     } else if (mcnt > 1)
         LOG_GOTO(out_free, rc = -EINVAL,
-                 "Too many media found matching id '%s'", id_str);
+                 "Too many media found matching id '%s'", id->name);
 
     media_info_free(*pmedia);
     *pmedia = media_info_dup(media_res);
 
     /* If the lock is already taken, mark it as externally locked */
     if (!lock_empty(&(*pmedia)->lock)) {
-        pho_info("Media '%s' is locked (%s)", id_str, (*pmedia)->lock.lock);
+        pho_info("Media '%s' is locked (%s)", id->name, (*pmedia)->lock.lock);
         (*pmedia)->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
     }
 
     pho_debug("%s: spc_free=%zd",
-              media_id_get(&(*pmedia)->id), (*pmedia)->stats.phys_spc_free);
+              (*pmedia)->rsc.id.name, (*pmedia)->stats.phys_spc_free);
 
     rc = 0;
 
@@ -413,15 +405,15 @@ static int sched_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
     media_info_free(devd->dss_media_info);
     devd->dss_media_info = NULL;
 
-    rc = get_dev_adapter(devi->family, &deva);
+    rc = get_dev_adapter(devi->rsc.id.family, &deva);
     if (rc)
         return rc;
 
     /* get path for the given serial */
-    rc = ldm_dev_lookup(&deva, devi->serial, devd->dev_path,
+    rc = ldm_dev_lookup(&deva, devi->rsc.id.name, devd->dev_path,
                         sizeof(devd->dev_path));
     if (rc) {
-        pho_debug("Device lookup failed: serial '%s'", devi->serial);
+        pho_debug("Device lookup failed: serial '%s'", devi->rsc.id.name);
         return rc;
     }
 
@@ -441,25 +433,25 @@ static int sched_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
     /* Query the library about the drive location and whether it contains
      * a media.
      */
-    rc = ldm_lib_drive_lookup(lib, devi->serial, &devd->lib_dev_info);
+    rc = ldm_lib_drive_lookup(lib, devi->rsc.id.name, &devd->lib_dev_info);
     if (rc) {
         pho_debug("Failed to query the library about device '%s'",
-                  devi->serial);
+                  devi->rsc.id.name);
         return rc;
     }
 
     if (devd->lib_dev_info.ldi_full) {
-        struct media_id *media_id;
+        struct pho_id *medium_id;
         struct fs_adapter fsa;
 
         devd->op_status = PHO_DEV_OP_ST_LOADED;
-        media_id = &devd->lib_dev_info.ldi_media_id;
+        medium_id = &devd->lib_dev_info.ldi_medium_id;
 
-        pho_debug("Device '%s' (S/N '%s') contains media '%s'", devd->dev_path,
-                  devi->serial, media_id_get(media_id));
+        pho_debug("Device '%s' (S/N '%s') contains medium '%s'", devd->dev_path,
+                  devi->rsc.id.name, medium_id->name);
 
         /* get media info for loaded drives */
-        rc = sched_fill_media_info(dss, &devd->dss_media_info, media_id);
+        rc = sched_fill_media_info(dss, &devd->dss_media_info, medium_id);
 
         /*
          * If the drive is marked as locally locked, the contained media was in
@@ -509,13 +501,13 @@ static int sched_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
 /** Wrap library open operations
  * @param[out] lib  Library handler.
  */
-static int wrap_lib_open(enum dev_family dev_type, struct lib_adapter *lib)
+static int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter *lib)
 {
     const char *lib_dev;
     int         rc;
 
     /* non-tape cases: dummy lib adapter (no open required) */
-    if (dev_type != PHO_DEV_TAPE)
+    if (dev_type != PHO_RSC_TAPE)
         return get_lib_adapter(PHO_LIB_DUMMY, lib);
 
     /* tape case */
@@ -541,7 +533,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
 {
     struct dev_info    *devs = NULL;
     int                 dcnt = 0;
-    enum dev_family     family;
+    enum rsc_family     family;
     struct lib_adapter  lib;
     int                 i;
     int                 rc;
@@ -549,7 +541,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
     ENTRY;
 
     family = default_family();
-    if (family == PHO_DEV_INVAL)
+    if (family == PHO_RSC_INVAL)
         return -EINVAL;
 
     /* If no device has previously been loaded, load the list of available
@@ -567,7 +559,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
                               "]}",
                               get_hostname(),
                               adm_status2str(PHO_DEV_ADM_ST_UNLOCKED),
-                              dev_family2str(family));
+                              rsc_family2str(family));
         if (rc)
             return rc;
 
@@ -579,7 +571,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
 
         if (dcnt == 0) {
             pho_info("No usable device found (%s): check devices status",
-                     dev_family2str(family));
+                     rsc_family2str(family));
             GOTO(err, rc = -ENXIO);
         }
 
@@ -764,7 +756,7 @@ static bool medium_in_devices(const struct media_info *medium,
     for (i = 0; i < n_dev; i++) {
         if (devs[i]->dss_media_info == NULL)
             continue;
-        if (media_id_equal(&medium->id, &devs[i]->dss_media_info->id))
+        if (pho_id_equal(&medium->rsc.id, &devs[i]->dss_media_info->rsc.id))
             return true;
     }
 
@@ -785,7 +777,7 @@ static bool medium_in_devices(const struct media_info *medium,
  */
 static int sched_select_media(struct lrs_sched *sched,
                               struct media_info **p_media, size_t required_size,
-                              enum dev_family family, const struct tags *tags,
+                              enum rsc_family family, const struct tags *tags,
                               struct dev_descr **devs, size_t n_dev)
 {
     struct media_info   *pmedia_res = NULL;
@@ -823,7 +815,7 @@ static int sched_select_media(struct lrs_sched *sched,
                           "  ]}"
                           "  %s%s"
                           "]}",
-                          dev_family2str(family),
+                          rsc_family2str(family),
                           media_adm_status2str(PHO_MDA_ADM_ST_UNLOCKED),
                           /**
                            * @TODO add criteria to limit the maximum number of
@@ -896,22 +888,22 @@ lock_race_retry:
         chosen_media = split_media_best;
         pho_info("Split %zd required_size on %zd avail size on %s medium",
                  required_size, chosen_media->stats.phys_spc_free,
-                 media_id_get(&chosen_media->id));
+                 chosen_media->rsc.id.name);
     } else {
         pho_info("No medium available, wait for one");
         GOTO(free_res, rc = -EAGAIN);
     }
 
-    pho_debug("Acquiring selected media '%s'", media_id_get(&chosen_media->id));
+    pho_debug("Acquiring selected media '%s'", chosen_media->rsc.id.name);
     rc = sched_media_acquire(sched, chosen_media);
     if (rc) {
         pho_debug("Failed to lock media '%s', looking for another one",
-                  media_id_get(&chosen_media->id));
+                  chosen_media->rsc.id.name);
         goto lock_race_retry;
     }
 
-    pho_verb("Selected %s '%s': %zd bytes free", dev_family2str(family),
-             media_id_get(&chosen_media->id),
+    pho_verb("Selected %s '%s': %zd bytes free", rsc_family2str(family),
+             chosen_media->rsc.id.name,
              chosen_media->stats.phys_spc_free);
 
     *p_media = media_info_dup(chosen_media);
@@ -1049,7 +1041,7 @@ static int tape_drive_compat(const struct media_info *tape,
      *  the function dev_picker. Each time, we build/allocate same strings and
      *  we parse again the conf. This behaviour is heavy and not optimal.
      */
-    rc = rw_drive_types_for_tape(tape->model, &rw_drives);
+    rc = rw_drive_types_for_tape(tape->rsc.model, &rw_drives);
     if (rc)
         return rc;
 
@@ -1070,7 +1062,8 @@ static int tape_drive_compat(const struct media_info *tape,
         if (rc)
             goto out_free;
 
-        rc = search_in_list(drive_model_list, drive->dss_dev_info->model, res);
+        rc = search_in_list(drive_model_list, drive->dss_dev_info->rsc.model,
+                            res);
         if (rc)
             goto out_free;
         /* drive model found: media is compatible */
@@ -1158,12 +1151,12 @@ retry:
         if (required_size > 0 && itr->dss_media_info) {
             if (itr->dss_media_info->fs.status == PHO_FS_STATUS_FULL) {
                 pho_debug("Media '%s' is full",
-                          media_id_get(&itr->dss_media_info->id));
+                          itr->dss_media_info->rsc.id.name);
                 continue;
             }
             if (!tags_in(&itr->dss_media_info->tags, media_tags)) {
                 pho_debug("Media '%s' does not match required tags",
-                          media_id_get(&itr->dss_media_info->id));
+                          itr->dss_media_info->rsc.id.name);
                 continue;
             }
         }
@@ -1201,7 +1194,7 @@ retry:
         if (local_pmedia != NULL) {
             pho_debug("Acquiring %s media '%s'",
                       op_status2str(selected->op_status),
-                      media_id_get(&local_pmedia->id));
+                      local_pmedia->rsc.id.name);
             rc = sched_media_acquire(sched, local_pmedia);
             if (rc)
                 /* Avoid releasing a media that has not been acquired */
@@ -1458,19 +1451,17 @@ static int sched_load(struct dev_descr *dev, struct media_info *media)
 
     if (dev->dss_media_info != NULL)
         LOG_RETURN(-EAGAIN, "No media expected in device '%s' (found '%s')",
-                   dev->dev_path, media_id_get(&dev->dss_media_info->id));
+                   dev->dev_path, dev->dss_media_info->rsc.id.name);
 
-    pho_verb("Loading '%s' into '%s'", media_id_get(&media->id),
-             dev->dev_path);
+    pho_verb("Loading '%s' into '%s'", media->rsc.id.name, dev->dev_path);
 
     /* get handle to the library depending on device type */
-    rc = wrap_lib_open(dev->dss_dev_info->family, &lib);
+    rc = wrap_lib_open(dev->dss_dev_info->rsc.id.family, &lib);
     if (rc)
         return rc;
 
     /* lookup the requested media */
-    rc = ldm_lib_media_lookup(&lib, media_id_get(&media->id),
-                              &media_addr);
+    rc = ldm_lib_media_lookup(&lib, media->rsc.id.name, &media_addr);
     if (rc)
         LOG_GOTO(out_close, rc, "Media lookup failed");
 
@@ -1532,11 +1523,11 @@ static int sched_unload(struct lrs_sched *sched, struct dev_descr *dev)
         LOG_RETURN(-EINVAL, "No media in loaded device '%s'?!",
                    dev->dev_path);
 
-    pho_verb("Unloading '%s' from '%s'", media_id_get(&dev->dss_media_info->id),
+    pho_verb("Unloading '%s' from '%s'", dev->dss_media_info->rsc.id.name,
              dev->dev_path);
 
     /* get handle to the library, depending on device type */
-    rc = wrap_lib_open(dev->dss_dev_info->family, &lib);
+    rc = wrap_lib_open(dev->dss_dev_info->rsc.id.family, &lib);
     if (rc)
         return rc;
 
@@ -1768,7 +1759,7 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
      * shall never been locked if the media in it has not previously been
      * locked.
      */
-    *new_dev = search_loaded_media(sched, pmedia->id.id);
+    *new_dev = search_loaded_media(sched, pmedia->rsc.id.name);
     if (*new_dev != NULL) {
         rc = sched_dev_acquire(sched, *new_dev);
         if (rc != 0)
@@ -1818,7 +1809,7 @@ out_release:
     }
 
     if (pmedia != NULL) {
-        pho_debug("Releasing selected media '%s'", media_id_get(&pmedia->id));
+        pho_debug("Releasing selected media '%s'", pmedia->rsc.id.name);
         sched_media_release(sched, pmedia);
         if (media_owner)
             media_info_free(pmedia);
@@ -1851,7 +1842,7 @@ static struct dev_descr *search_loaded_media(struct lrs_sched *sched,
         if (dev->dss_media_info == NULL)
             continue;
 
-        media_id = media_id_get(&dev->dss_media_info->id);
+        media_id = dev->dss_media_info->rsc.id.name;
         if (media_id == NULL) {
             pho_warn("Cannot retrieve media ID from device '%s'",
                      dev->dev_path);
@@ -1865,11 +1856,10 @@ static struct dev_descr *search_loaded_media(struct lrs_sched *sched,
 }
 
 static int sched_media_prepare(struct lrs_sched *sched,
-                               const struct media_id *id,
+                               const struct pho_id *id,
                                enum sched_operation op, struct dev_descr **pdev,
                                struct media_info **pmedia)
 {
-    const char          *label = media_id_get(id);
     struct dev_descr    *dev;
     struct media_info   *med = NULL;
     bool                 post_fs_mount;
@@ -1886,7 +1876,7 @@ static int sched_media_prepare(struct lrs_sched *sched,
 
     /* Check that the media is not already locked */
     if (&med->lock.lock == LRS_MEDIA_LOCKED_EXTERNAL) {
-        pho_debug("Media '%s' is locked, returning EAGAIN", label);
+        pho_debug("Media '%s' is locked, returning EAGAIN", id->name);
         GOTO(out, rc = -EAGAIN);
     }
 
@@ -1895,12 +1885,13 @@ static int sched_media_prepare(struct lrs_sched *sched,
     case LRS_OP_WRITE:
         if (med->fs.status == PHO_FS_STATUS_BLANK)
             LOG_RETURN(-EINVAL, "Cannot do I/O on unformatted media '%s'",
-                       label);
+                       id->name);
         post_fs_mount = true;
         break;
     case LRS_OP_FORMAT:
         if (med->fs.status != PHO_FS_STATUS_BLANK)
-            LOG_RETURN(-EINVAL, "Cannot format non-blank media '%s'", label);
+            LOG_RETURN(-EINVAL, "Cannot format non-blank media '%s'",
+                       id->name);
         post_fs_mount = false;
         break;
     default:
@@ -1912,7 +1903,7 @@ static int sched_media_prepare(struct lrs_sched *sched,
         GOTO(out, rc = -EAGAIN);
 
     /* check if the media is already in a drive */
-    dev = search_loaded_media(sched, label);
+    dev = search_loaded_media(sched, id->name);
     if (dev != NULL) {
         rc = sched_dev_acquire(sched, dev);
         if (rc != 0)
@@ -1921,7 +1912,7 @@ static int sched_media_prepare(struct lrs_sched *sched,
         media_info_free(dev->dss_media_info);
         dev->dss_media_info = med;
     } else {
-        pho_verb("Media '%s' is not in a drive", media_id_get(id));
+        pho_verb("Media '%s' is not in a drive", id->name);
 
         /* Is there a free drive? */
         dev = dev_picker(sched, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
@@ -1977,10 +1968,9 @@ out:
  * \param[in]       unlock      Unlock tape if successfully formated.
  * \return                      0 on success, negative error code on failure.
  */
-static int sched_format(struct lrs_sched *sched, const struct media_id *id,
+static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
                         enum fs_type fs, bool unlock)
 {
-    const char          *label = media_id_get(id);
     struct dev_descr    *dev = NULL;
     struct media_info   *media_info = NULL;
     int                  rc;
@@ -2003,18 +1993,18 @@ static int sched_format(struct lrs_sched *sched, const struct media_id *id,
     if (dev->dss_media_info == NULL)
         LOG_GOTO(err_out, rc = -EINVAL, "Invalid device state");
 
-    pho_verb("Format media '%s' as %s", label, fs_type2str(fs));
+    pho_verb("Format media '%s' as %s", id->name, fs_type2str(fs));
 
     rc = get_fs_adapter(fs, &fsa);
     if (rc)
         LOG_GOTO(err_out, rc, "Failed to get FS adapter");
 
-    rc = ldm_fs_format(&fsa, dev->dev_path, label, &spc);
+    rc = ldm_fs_format(&fsa, dev->dev_path, id->name, &spc);
     if (rc)
-        LOG_GOTO(err_out, rc, "Cannot format media '%s'", label);
+        LOG_GOTO(err_out, rc, "Cannot format media '%s'", id->name);
 
     /* Systematically use the media ID as filesystem label */
-    strncpy(media_info->fs.label, label, sizeof(media_info->fs.label) - 1);
+    strncpy(media_info->fs.label, id->name, sizeof(media_info->fs.label) - 1);
 
     media_info->stats.phys_spc_used = spc.spc_used;
     media_info->stats.phys_spc_free = spc.spc_avail;
@@ -2023,13 +2013,14 @@ static int sched_format(struct lrs_sched *sched, const struct media_id *id,
     media_info->fs.status = PHO_FS_STATUS_EMPTY;
 
     if (unlock) {
-        pho_verb("Unlocking media '%s'", label);
+        pho_verb("Unlocking media '%s'", id->name);
         media_info->adm_status = PHO_MDA_ADM_ST_UNLOCKED;
     }
 
     rc = dss_media_set(&sched->dss, media_info, 1, DSS_SET_UPDATE);
     if (rc != 0)
-        LOG_GOTO(err_out, rc, "Failed to update state of media '%s'", label);
+        LOG_GOTO(err_out, rc, "Failed to update state of media '%s'",
+                 id->name);
 
 err_out:
     /* Release ownership. Do not fail the whole operation if unlucky here... */
@@ -2039,7 +2030,7 @@ err_out:
 
     rc2 = sched_media_release(sched, media_info);
     if (rc2)
-        pho_error(rc2, "Failed to release lock on '%s'", label);
+        pho_error(rc2, "Failed to release lock on '%s'", id->name);
 
     /* Don't free media_info since it is still referenced inside dev */
     return rc;
@@ -2102,7 +2093,7 @@ retry:
     if (!sched_mount_is_writable(new_dev->mnt_path,
                                  media->fs.type)) {
         pho_warn("Media '%s' OK but mounted R/O, marking full and retrying...",
-                 media_id_get(&media->id));
+                 media->rsc.id.name);
 
         media->fs.status = PHO_FS_STATUS_FULL;
 
@@ -2119,7 +2110,7 @@ retry:
 
     pho_verb("Writing to media '%s' using device '%s' "
              "(free space: %zu bytes)",
-             media_id_get(&media->id), new_dev->dev_path,
+             media->rsc.id.name, new_dev->dev_path,
              new_dev->dss_media_info->stats.phys_spc_free);
 
 err_cleanup:
@@ -2134,7 +2125,7 @@ err_cleanup:
 /**
  * Query to read from a given set of medium.
  *
- * @param(in)     sched     Initialized LRS.
+ * @param(in)     sched   Initialized LRS.
  * @param(in)     id      The id of the medium to load
  * @param(out)    dev     Device with the required medium mounted and loaded in
  *                        it (no need to free it).
@@ -2142,7 +2133,7 @@ err_cleanup:
  * @return 0 on success, -1 * posix error code on failure
  */
 static int sched_read_prepare(struct lrs_sched *sched,
-                              const struct media_id *id, struct dev_descr **dev)
+                              const struct pho_id *id, struct dev_descr **dev)
 {
     struct media_info   *media_info = NULL;
     int                  rc;
@@ -2160,7 +2151,7 @@ static int sched_read_prepare(struct lrs_sched *sched,
 
     if ((*dev)->dss_media_info == NULL)
         LOG_GOTO(out, rc = -EINVAL, "Invalid device state, expected media '%s'",
-                 media_id_get(id));
+                 id->name);
 
 out:
     /* Don't free media_info since it is still referenced inside dev */
@@ -2250,7 +2241,7 @@ static int sched_io_complete(struct lrs_sched *sched,
 /* Request/response manipulation **********************************************/
 /******************************************************************************/
 
-static int sched_device_add(struct lrs_sched *sched, enum dev_family family,
+static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
                             const char *name)
 {
     struct dev_descr device = {0};
@@ -2268,7 +2259,7 @@ static int sched_device_add(struct lrs_sched *sched, enum dev_family family,
                           "  {\"DSS::DEV::serial\": \"%s\"}"
                           "]}",
                           get_hostname(),
-                          dev_family2str(family),
+                          rsc_family2str(family),
                           name);
     if (rc)
         goto err;
@@ -2280,14 +2271,14 @@ static int sched_device_add(struct lrs_sched *sched, enum dev_family family,
 
     if (dev_cnt == 0) {
         pho_info("No usable device found (%s://%s): check device status",
-                 dev_family2str(family), name);
+                 rsc_family2str(family), name);
         GOTO(err_res, rc = -ENXIO);
     }
 
     device.dss_dev_info = dev_info_dup(devi);
 
     /* get a handle to the library to query it */
-    rc = wrap_lib_open(device.dss_dev_info->family, &lib);
+    rc = wrap_lib_open(device.dss_dev_info->rsc.id.family, &lib);
     if (rc)
         goto err_res;
 
@@ -2444,8 +2435,8 @@ static int sched_handle_write_alloc(struct lrs_sched *sched, pho_req_t *req,
 
         /* build response */
         wresp->avail_size = devs[i]->dss_media_info->stats.phys_spc_free;
-        wresp->med_id->type = devs[i]->dss_media_info->id.type;
-        wresp->med_id->id = strdup(devs[i]->dss_media_info->id.id);
+        wresp->med_id->type = devs[i]->dss_media_info->rsc.id.family;
+        wresp->med_id->id = strdup(devs[i]->dss_media_info->rsc.id.name);
         wresp->root_path = strdup(devs[i]->mnt_path);
         wresp->fs_type = devs[i]->dss_media_info->fs.type;
         wresp->addr_type = devs[i]->dss_media_info->addr_type;
@@ -2522,10 +2513,10 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
      */
     for (i = 0; i < rreq->n_med_ids; i++) {
         pho_resp_read_elt_t *rresp = resp->ralloc->media[n_selected];
-        struct media_id m;
+        struct pho_id m;
 
-        m.type = rreq->med_ids[i]->type;
-        strncpy(m.id, rreq->med_ids[i]->id, PHO_URI_MAX);
+        m.family = rreq->med_ids[i]->type;
+        pho_id_name_set(&m, rreq->med_ids[i]->id);
 
         rc = sched_read_prepare(sched, &m, &dev);
         if (rc)
@@ -2656,14 +2647,14 @@ static int sched_handle_format(struct lrs_sched *sched, pho_req_t *req,
 {
     int rc = 0;
     pho_req_format_t *freq = req->format;
-    struct media_id m;
+    struct pho_id m;
 
     rc = pho_srl_response_format_alloc(resp);
     if (rc)
         return rc;
 
-    m.type = freq->med_id->type;
-    strncpy(m.id, freq->med_id->id, PHO_URI_MAX);
+    m.family = freq->med_id->type;
+    pho_id_name_set(&m, freq->med_id->id);
 
     rc = sched_format(sched, &m, freq->fs, freq->unlock);
     if (rc) {

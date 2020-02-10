@@ -66,13 +66,13 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter *lib)
 extern const struct dev_adapter dev_adapter_dir;
 extern const struct dev_adapter dev_adapter_scsi_tape;
 
-int get_dev_adapter(enum dev_family dev_type, struct dev_adapter *dev)
+int get_dev_adapter(enum rsc_family dev_family, struct dev_adapter *dev)
 {
-    switch (dev_type) {
-    case PHO_DEV_DIR:
+    switch (dev_family) {
+    case PHO_RSC_DIR:
         *dev = dev_adapter_dir;
         break;
-    case PHO_DEV_TAPE:
+    case PHO_RSC_TAPE:
         *dev = dev_adapter_scsi_tape;
         break;
     default:

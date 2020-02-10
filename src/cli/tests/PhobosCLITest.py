@@ -35,7 +35,7 @@ from socket import gethostname
 from phobos.cli import PhobosActionContext
 from phobos.core.dss import Client, MediaManager
 from phobos.core.ffi import DevInfo
-from phobos.core.const import PHO_DEV_DIR, PHO_DEV_TAPE
+from phobos.core.const import PHO_RSC_DIR, PHO_RSC_TAPE
 
 def gethostname_short():
     """Return short hostname"""
@@ -92,12 +92,12 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['dir', 'add', 'A', 'B', 'C'])
         self.check_cmdline_valid(['dir', 'list', 'A,B,C', '-o', 'all'])
         self.check_cmdline_valid(['dir', 'list', 'A,B,C', '-o', '*'])
-        self.check_cmdline_valid(['dir', 'list', 'A,B,C', '-o', 'label,family'])
+        self.check_cmdline_valid(['dir', 'list', 'A,B,C', '-o', 'name,family'])
         self.check_cmdline_valid(['tape', 'add', '-t', 'LTO5', 'I,J,K'])
         self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o', 'all'])
         self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o', '*'])
         self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o',
-                                  'label,family'])
+                                  'name,family'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['voynichauthor', 'list'], code=2)

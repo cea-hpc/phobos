@@ -201,17 +201,17 @@ int main(int argc, char **argv)
             for (i = 0, dev = item_list; i < item_cnt; i++, dev++) {
                 pho_debug("Got device: family:%s host:%s model:%s path:%s "
                           "serial:%s adm_st:%s",
-                          dev_family2str(dev->family),
-                          dev->host, dev->model, dev->path, dev->serial,
+                          rsc_family2str(dev->rsc.id.family), dev->host,
+                          dev->rsc.model, dev->path, dev->rsc.id.name,
                           adm_status2str(dev->adm_status));
             }
             break;
         case DSS_MEDIA:
             for (i = 0, media = item_list; i < item_cnt; i++, media++) {
-                pho_debug("Got Media: label:%s model:%s adm_st:%s "
+                pho_debug("Got Media: name:%s model:%s adm_st:%s "
                           "address_type:%s fs_type:%s fs_status:%s",
-                          media_id_get(&media->id),
-                          media->model,
+                          media->rsc.id.name,
+                          media->rsc.model,
                           media_adm_status2str(media->adm_status),
                           address_type2str(media->addr_type),
                           fs_type2str(media->fs.type),
@@ -246,8 +246,8 @@ int main(int argc, char **argv)
                              " address:%s,media type:%s, media:%s",
                              extents->layout_idx, extents->size,
                              extents->address.buff,
-                             dev_family2str(extents->media.type),
-                             media_id_get(&extents->media));
+                             rsc_family2str(extents->media.family),
+                             extents->media.name);
                     extents++;
                 }
             }
@@ -285,8 +285,9 @@ int main(int argc, char **argv)
         case DSS_DEVICE:
             for (i = 0, dev = item_list; i < item_cnt; i++, dev++) {
                 if (action == DSS_SET_INSERT) {
-                    rc = asprintf(&dev->serial, "%sCOPY", dev->serial);
-                    assert(rc > 0);
+                    assert(strlen(dev->rsc.id.name) + strlen("COPY") <
+                           PHO_URI_MAX);
+                    strcat(dev->rsc.id.name, "COPY");
                 }
                 if (action == DSS_SET_UPDATE) {
                     rc = asprintf(&dev->host, "%sUPDATE", dev->host);
@@ -300,10 +301,10 @@ int main(int argc, char **argv)
                 char *s;
 
                 if (action == DSS_SET_INSERT) {
-                    id = media_id_get(&media->id);
+                    id = media->rsc.id.name;
                     rc = asprintf(&s, "%sCOPY", id);
                     assert(rc > 0);
-                    media_id_set(&media->id, s);
+                    pho_id_name_set(&media->rsc.id, s);
                     free(s);
                 } else if (action == DSS_SET_UPDATE) {
                     media->stats.nb_obj += 1000;

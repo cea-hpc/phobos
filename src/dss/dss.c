@@ -939,19 +939,19 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
         if (!tmp)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'fam'");
 
-        result[i].media.type = str2dev_family(tmp);
+        result[i].media.family = str2rsc_family(tmp);
         free(tmp);
 
         /*XXX fs_type & address_type retrieved from media info */
-        if (result[i].media.type == PHO_DEV_INVAL)
-            LOG_GOTO(out_decref, rc = -EINVAL, "Invalid media type");
+        if (result[i].media.family == PHO_RSC_INVAL)
+            LOG_GOTO(out_decref, rc = -EINVAL, "Invalid medium family");
 
         /* FIXME: unnecessary allocation */
         tmp = json_dict2str(child, "media");
         if (!tmp)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'media'");
 
-        rc = media_id_set(&result[i].media, tmp);
+        rc = pho_id_name_set(&result[i].media, tmp);
         if (rc)
             LOG_GOTO(out_decref, rc = -EINVAL, "Failed to set media id");
         free(tmp);
@@ -1020,19 +1020,19 @@ static char *dss_layout_extents_encode(struct extent *extents,
         }
 
         rc = json_object_set_new(child, "fam",
-                         json_string(dev_family2str(extents[i].media.type)));
+                         json_string(rsc_family2str(extents[i].media.family)));
         if (rc) {
             pho_error(EINVAL, "Failed to encode 'fam' (%d:%s)",
-                      extents[i].media.type,
-                      dev_family2str(extents[i].media.type));
+                      extents[i].media.family,
+                      rsc_family2str(extents[i].media.family));
             err_cnt++;
         }
 
         rc = json_object_set_new(child, "media",
-                         json_string(media_id_get(&extents[i].media)));
+                         json_string(extents[i].media.name));
         if (rc) {
             pho_error(EINVAL, "Failed to encode 'media' (%s)",
-                      media_id_get(&extents[i].media));
+                      extents[i].media.name);
             err_cnt++;
         }
 
@@ -1168,14 +1168,11 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
     for (i = 0; i < item_cnt; i++) {
         struct media_info   *p_media = &item_list[i];
 
-        if (media_id_get(&p_media->id) == NULL)
-            LOG_RETURN(-EINVAL, "Media id cannot be NULL");
-
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_MEDIA],
-                                   media_id_get(&p_media->id));
+                                   p_media->rsc.id.name);
         } else {
-            char *media_id = NULL;
+            char *medium_name = NULL;
             char *fs_label = NULL;
             char *model = NULL;
             char *stats = NULL;
@@ -1184,14 +1181,14 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
             char *tmp_tags = NULL;
 
             /* check tape model validity */
-            if (p_media->id.type == PHO_DEV_TAPE &&
-                    !dss_tape_model_check(p_media->model))
+            if (p_media->rsc.id.family == PHO_RSC_TAPE &&
+                    !dss_tape_model_check(p_media->rsc.model))
                 LOG_RETURN(-EINVAL, "invalid media tape model '%s'",
-                           p_media->model);
+                           p_media->rsc.model);
 
-            media_id = dss_char4sql(conn, media_id_get(&p_media->id));
+            medium_name = dss_char4sql(conn, p_media->rsc.id.name);
             fs_label = dss_char4sql(conn, p_media->fs.label);
-            model = dss_char4sql(conn, p_media->model);
+            model = dss_char4sql(conn, p_media->rsc.model);
 
             tmp_stats = dss_media_stats_encode(p_media->stats);
             stats = dss_char4sql(conn, tmp_stats);
@@ -1201,8 +1198,8 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
             tags = dss_char4sql(conn, tmp_tags);
             free(tmp_tags);
 
-            if (!media_id || !fs_label || !model || !stats || !tags) {
-                free(media_id);
+            if (!medium_name || !fs_label || !model || !stats || !tags) {
+                free(medium_name);
                 free(fs_label);
                 free(model);
                 free(stats);
@@ -1214,9 +1211,9 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
                 g_string_append_printf(
                     request,
                     insert_query_values[DSS_MEDIA],
-                    dev_family2str(p_media->id.type),
+                    rsc_family2str(p_media->rsc.id.family),
                     model,
-                    media_id,
+                    medium_name,
                     media_adm_status2str(p_media->adm_status),
                     fs_type2str(p_media->fs.type),
                     address_type2str(p_media->addr_type),
@@ -1230,7 +1227,7 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
                 g_string_append_printf(
                     request,
                     update_query[DSS_MEDIA],
-                    dev_family2str(p_media->id.type),
+                    rsc_family2str(p_media->rsc.id.family),
                     model,
                     media_adm_status2str(p_media->adm_status),
                     fs_type2str(p_media->fs.type),
@@ -1239,11 +1236,11 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
                     fs_label,
                     stats,
                     tags,
-                    media_id_get(&p_media->id)
+                    p_media->rsc.id.name
                 );
             }
 
-            free(media_id);
+            free(medium_name);
             free(fs_label);
             free(model);
             free(stats);
@@ -1265,33 +1262,33 @@ static int get_device_setrequest(PGconn *conn, struct dev_info *item_list,
         struct dev_info *p_dev = &item_list[i];
         char            *model;
 
-        if (p_dev->serial == NULL)
+        if (p_dev->rsc.id.name == NULL)
             LOG_RETURN(-EINVAL, "Device serial cannot be NULL");
 
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_DEVICE],
-                                   p_dev->serial);
+                                   p_dev->rsc.id.name);
         } else if (action == DSS_SET_INSERT) {
-            model = dss_char4sql(conn, p_dev->model);
+            model = dss_char4sql(conn, p_dev->rsc.model);
             if (!model)
                 LOG_RETURN(-ENOMEM, "memory allocation failed");
 
             g_string_append_printf(request, insert_query_values[DSS_DEVICE],
-                                   dev_family2str(p_dev->family), model,
-                                   p_dev->serial, p_dev->host,
+                                   rsc_family2str(p_dev->rsc.id.family), model,
+                                   p_dev->rsc.id.name, p_dev->host,
                                    media_adm_status2str(p_dev->adm_status),
                                    p_dev->path, i < item_cnt-1 ? "," : ";");
             free(model);
         } else if (action == DSS_SET_UPDATE) {
-            model = dss_char4sql(conn, p_dev->model);
+            model = dss_char4sql(conn, p_dev->rsc.model);
             if (!model)
                 LOG_RETURN(-ENOMEM, "memory allocation failed");
 
             g_string_append_printf(request, update_query[DSS_DEVICE],
-                                   dev_family2str(p_dev->family),
+                                   rsc_family2str(p_dev->rsc.id.family),
                                    model, p_dev->host,
                                    media_adm_status2str(p_dev->adm_status),
-                                   p_dev->path, p_dev->serial);
+                                   p_dev->path, p_dev->rsc.id.name);
             free(model);
         }
     }
@@ -1311,12 +1308,12 @@ static int dss_build_uid_list(PGconn *conn, void *item_list, int item_cnt,
         for (i = 0; i < item_cnt; i++) {
             struct dev_info *dev_ls = item_list;
 
-            escape_len = strlen(dev_ls[i].serial) * 2 + 1;
+            escape_len = strlen(dev_ls[i].rsc.id.name) * 2 + 1;
             escape_string = malloc(escape_len);
             if (!escape_string)
                 LOG_RETURN(-ENOMEM, "Memory allocation failed");
 
-            PQescapeStringConn(conn, escape_string, dev_ls[i].serial,
+            PQescapeStringConn(conn, escape_string, dev_ls[i].rsc.id.name,
                                escape_len, NULL);
             g_string_append_printf(ids, "%s'%s' %s",
                                    i ? "" : "(",
@@ -1329,13 +1326,13 @@ static int dss_build_uid_list(PGconn *conn, void *item_list, int item_cnt,
         for (i = 0; i < item_cnt; i++) {
             struct media_info *media_ls = item_list;
 
-            escape_len = strlen(media_id_get(&media_ls[i].id)) * 2 + 1;
+            escape_len = strlen(media_ls[i].rsc.id.name) * 2 + 1;
             escape_string = malloc(escape_len);
             if (!escape_string)
                 LOG_RETURN(-ENOMEM, "Memory allocation failed");
 
             PQescapeStringConn(conn, escape_string,
-                               media_id_get(&media_ls[i].id),
+                               media_ls[i].rsc.id.name,
                                escape_len, NULL);
             g_string_append_printf(ids, "%s'%s' %s",
                                    i ? "" : "(",
@@ -1568,14 +1565,14 @@ static int dss_device_from_pg_row(void *void_dev, PGresult *res, int row_num)
 {
     struct dev_info *dev = void_dev;
 
-    dev->family     = str2dev_family(PQgetvalue(res, row_num, 0));
-    dev->model      = get_str_value(res, row_num, 1);
-    dev->serial     = get_str_value(res, row_num, 2);
-    dev->adm_status = str2adm_status(PQgetvalue(res, row_num, 3));
-    dev->host       = get_str_value(res, row_num, 4);
-    dev->path       = get_str_value(res, row_num, 5);
-    dev->lock.lock  = get_str_value(res, row_num, 6);
-    dev->lock.lock_ts = strtoul(PQgetvalue(res, row_num, 7), NULL, 10);
+    dev->rsc.id.family = str2rsc_family(PQgetvalue(res, row_num, 0));
+    dev->rsc.model     = get_str_value(res, row_num, 1);
+    pho_id_name_set(&dev->rsc.id, get_str_value(res, row_num, 2));
+    dev->adm_status    = str2adm_status(PQgetvalue(res, row_num, 3));
+    dev->host          = get_str_value(res, row_num, 4);
+    dev->path          = get_str_value(res, row_num, 5);
+    dev->lock.lock     = get_str_value(res, row_num, 6);
+    dev->lock.lock_ts  = strtoul(PQgetvalue(res, row_num, 7), NULL, 10);
     return 0;
 }
 
@@ -1592,35 +1589,35 @@ static void dss_device_result_free(void *void_dev)
  */
 static int dss_media_from_pg_row(void *void_media, PGresult *res, int row_num)
 {
-    struct media_info *media = void_media;
+    struct media_info *medium = void_media;
     int rc;
 
-    media->id.type = str2dev_family(PQgetvalue(res, row_num, 0));
-    media->model = get_str_value(res, row_num, 1);
-    media_id_set(&media->id, PQgetvalue(res, row_num, 2));
-    media->adm_status = str2media_adm_status(PQgetvalue(res, row_num, 3));
-    media->addr_type = str2address_type(PQgetvalue(res, row_num, 4));
-    media->fs.type = str2fs_type(PQgetvalue(res, row_num, 5));
-    media->fs.status = str2fs_status(PQgetvalue(res, row_num, 6));
-    strncpy(media->fs.label, PQgetvalue(res, row_num, 7),
-            sizeof(media->fs.label));
-    media->lock.lock = get_str_value(res, row_num, 10);
-    media->lock.lock_ts = strtoul(PQgetvalue(res, row_num, 11), NULL, 10);
+    medium->rsc.id.family = str2rsc_family(PQgetvalue(res, row_num, 0));
+    medium->rsc.model = get_str_value(res, row_num, 1);
+    pho_id_name_set(&medium->rsc.id, PQgetvalue(res, row_num, 2));
+    medium->adm_status = str2media_adm_status(PQgetvalue(res, row_num, 3));
+    medium->addr_type = str2address_type(PQgetvalue(res, row_num, 4));
+    medium->fs.type = str2fs_type(PQgetvalue(res, row_num, 5));
+    medium->fs.status = str2fs_status(PQgetvalue(res, row_num, 6));
+    strncpy(medium->fs.label, PQgetvalue(res, row_num, 7),
+            sizeof(medium->fs.label));
+    medium->lock.lock = get_str_value(res, row_num, 10);
+    medium->lock.lock_ts = strtoul(PQgetvalue(res, row_num, 11), NULL, 10);
 
     /* No dynamic allocation here */
-    rc = dss_media_stats_decode(&media->stats, PQgetvalue(res, row_num, 8));
+    rc = dss_media_stats_decode(&medium->stats, PQgetvalue(res, row_num, 8));
     if (rc) {
         pho_error(rc, "dss_media stats decode error");
         return rc;
     }
 
-    rc = dss_tags_decode(&media->tags, PQgetvalue(res, row_num, 9));
+    rc = dss_tags_decode(&medium->tags, PQgetvalue(res, row_num, 9));
     if (rc) {
         pho_error(rc, "dss_media tags decode error");
         return rc;
     }
     pho_debug("Decoded %lu tags (%s)",
-              media->tags.n_tags, PQgetvalue(res, row_num, 9));
+              medium->tags.n_tags, PQgetvalue(res, row_num, 9));
 
     return 0;
 }

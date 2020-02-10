@@ -168,8 +168,8 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
      * returned by ioa_put as of yet)
      */
     extent->size = min(simple->to_write, medium->avail_size);
-    extent->media.type = medium->med_id->type;
-    strncpy(extent->media.id, medium->med_id->id, sizeof(extent->media.id));
+    extent->media.family = medium->med_id->type;
+    pho_id_name_set(&extent->media, medium->med_id->id);
     extent->addr_type = medium->addr_type;
     /* and extent.address will be filled by ioa_put */
 
@@ -185,7 +185,7 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
         return rc;
 
     pho_debug("Writing %ld bytes to medium %s", extent->size,
-              media_id_get(&extent->media));
+              extent->media.name);
     /* Build extent tag */
     rc = snprintf(extent_tag, sizeof(extent_tag), "s%d", extent->layout_idx);
 
@@ -266,7 +266,7 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
     iod.iod_loc = &loc;
 
     pho_debug("Reading %ld bytes from medium %s", extent->size,
-              media_id_get(&extent->media));
+              extent->media.name);
 
     rc = ioa_get(&ioa, dec->xfer->xd_objid, NULL, &iod);
 
@@ -297,7 +297,7 @@ static int mark_written_media_released(struct simple_encoder *simple,
         struct extent *extent;
 
         extent = &g_array_index(simple->written_extents, struct extent, i);
-        if (strcmp(media_id_get(&extent->media), media) == 0) {
+        if (strcmp(extent->media.name, media) == 0) {
             char *media_id = strdup(media);
 
             if (media_id == NULL)
@@ -390,15 +390,15 @@ static int simple_dec_next_read_req(struct pho_encoder *dec, pho_req_t *req)
         return rc;
 
     pho_debug("Requesting medium %s to read extent %d",
-              media_id_get(&dec->layout->extents[cur_ext_idx].media),
+              dec->layout->extents[cur_ext_idx].media.name,
               simple->cur_extent_idx);
 
     req->ralloc->n_required = 1;
 
     req->ralloc->med_ids[0]->type =
-        dec->layout->extents[cur_ext_idx].media.type;
+        dec->layout->extents[cur_ext_idx].media.family;
     req->ralloc->med_ids[0]->id =
-        strdup(dec->layout->extents[cur_ext_idx].media.id);
+        strdup(dec->layout->extents[cur_ext_idx].media.name);
 
     return 0;
 }

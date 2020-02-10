@@ -57,7 +57,7 @@ static int dir_query(const char *dev_path, struct ldm_dev_state *lds)
     int      rc = 0;
     ENTRY;
 
-    lds->lds_family = PHO_DEV_DIR;
+    lds->lds_family = PHO_RSC_DIR;
     lds->lds_model = NULL;
 
     real = realpath(dev_path, NULL);

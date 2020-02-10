@@ -36,8 +36,11 @@ static const struct tags NO_TAGS = {0};
 int storage_info_to_json(const struct layout_info *layout,
                          GString *str, int json_flags);
 
-/** check if two media_id are equal */
-bool media_id_equal(const struct media_id *id1, const struct media_id *id2);
+/** copy a pho_id structure */
+void pho_id_copy(struct pho_id *id_dest, const struct pho_id *id_src);
+
+/** check if two pho_id are equal */
+bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2);
 
 /** duplicate a dev_info structure */
 struct dev_info *dev_info_dup(const struct dev_info *dev);

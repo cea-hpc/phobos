@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2019 CEA/DAM.
+ *  All rights reserved (c) 2014-2020 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -139,7 +139,7 @@ out:
     return rc;
 }
 
-static int _admin_notify(struct admin_handle *adm, enum dev_family family,
+static int _admin_notify(struct admin_handle *adm, enum rsc_family family,
                          const char *name, enum notify_op op)
 {
     pho_resp_t *resp;
@@ -191,7 +191,7 @@ out:
  * TODO: admin_device_add will have the responsability to add the device
  * to the DSS, to then remove this part of code from the CLI.
  */
-int phobos_admin_device_add(struct admin_handle *adm, enum dev_family family,
+int phobos_admin_device_add(struct admin_handle *adm, enum rsc_family family,
                             const char *name)
 {
     int rc;
@@ -206,7 +206,7 @@ int phobos_admin_device_add(struct admin_handle *adm, enum dev_family family,
     return 0;
 }
 
-int phobos_admin_format(struct admin_handle *adm, const struct media_id *id,
+int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
                         enum fs_type fs, bool unlock)
 {
     pho_resp_t *resp;
@@ -221,8 +221,8 @@ int phobos_admin_format(struct admin_handle *adm, const struct media_id *id,
     req.id = rid;
     req.format->fs = fs;
     req.format->unlock = unlock;
-    req.format->med_id->type = id->type;
-    req.format->med_id->id = strdup(id->id);
+    req.format->med_id->type = id->family;
+    req.format->med_id->id = strdup(id->name);
 
     rc = _send_and_receive(adm, &req, &resp);
     if (rc)
@@ -230,8 +230,8 @@ int phobos_admin_format(struct admin_handle *adm, const struct media_id *id,
 
     if (pho_response_is_format(resp)) {
         if (resp->req_id == rid &&
-            (int)resp->format->med_id->type == (int)id->type &&
-            !strcmp(resp->format->med_id->id, id->id)) {
+            (int)resp->format->med_id->type == (int)id->family &&
+            !strcmp(resp->format->med_id->id, id->name)) {
             pho_debug("Format request succeeded");
             goto out;
         }

@@ -63,15 +63,15 @@ static PyObject *py_extent_state2str(PyObject *self, PyObject *args)
     return Py_BuildValue("s", str_repr);
 }
 
-static PyObject *py_dev_family2str(PyObject *self, PyObject *args)
+static PyObject *py_rsc_family2str(PyObject *self, PyObject *args)
 {
-    enum dev_family family;
+    enum rsc_family family;
     const char *str_repr;
 
     if (!PyArg_ParseTuple(args, "i", &family))
         return NULL;
 
-    str_repr = dev_family2str(family);
+    str_repr = rsc_family2str(family);
 
     return Py_BuildValue("s", str_repr);
 }
@@ -134,7 +134,7 @@ static PyObject *py_str2fs_type(PyObject *self, PyObject *args)
 static PyMethodDef ConstMethods[] = {
     {"extent_state2str", py_extent_state2str, METH_VARARGS,
      "printable extent state name."},
-    {"dev_family2str", py_dev_family2str, METH_VARARGS,
+    {"rsc_family2str", py_rsc_family2str, METH_VARARGS,
      "printable dev family name."},
     {"adm_status2str", py_adm_status2str, METH_VARARGS,
      "printable fs status."},
@@ -169,12 +169,12 @@ PyMODINIT_FUNC initconst(void)
     PyModule_AddIntMacro(mod, PHO_EXT_ST_ORPHAN);
     PyModule_AddIntMacro(mod, PHO_EXT_ST_LAST);
 
-    /* enum dev_family */
-    PyModule_AddIntMacro(mod, PHO_DEV_INVAL);
-    PyModule_AddIntMacro(mod, PHO_DEV_DISK);
-    PyModule_AddIntMacro(mod, PHO_DEV_TAPE);
-    PyModule_AddIntMacro(mod, PHO_DEV_DIR);
-    PyModule_AddIntMacro(mod, PHO_DEV_LAST);
+    /* enum rsc_family */
+    PyModule_AddIntMacro(mod, PHO_RSC_INVAL);
+    PyModule_AddIntMacro(mod, PHO_RSC_DISK);
+    PyModule_AddIntMacro(mod, PHO_RSC_TAPE);
+    PyModule_AddIntMacro(mod, PHO_RSC_DIR);
+    PyModule_AddIntMacro(mod, PHO_RSC_LAST);
 
     /* enum lib_type */
     PyModule_AddIntMacro(mod, PHO_LIB_INVAL);

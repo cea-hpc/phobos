@@ -48,7 +48,7 @@ static int test_unit(void *hint)
     char *dev_name = hint;
     int rc;
 
-    rc = get_dev_adapter(PHO_DEV_TAPE, &deva);
+    rc = get_dev_adapter(PHO_RSC_TAPE, &deva);
     if (rc)
         return rc;
 
@@ -70,7 +70,7 @@ static int test_name_serial_match(void *hint)
     char   path[128];
     int    rc;
 
-    rc = get_dev_adapter(PHO_DEV_TAPE, &deva);
+    rc = get_dev_adapter(PHO_RSC_TAPE, &deva);
     if (rc)
         return rc;
 

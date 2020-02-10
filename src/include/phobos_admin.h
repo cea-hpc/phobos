@@ -72,7 +72,7 @@ int phobos_admin_init(struct admin_handle *adm, const bool lrs_required);
  * \return                          0     on success,
  *                                 -errno on failure.
  */
-int phobos_admin_device_add(struct admin_handle *adm, enum dev_family family,
+int phobos_admin_device_add(struct admin_handle *adm, enum rsc_family family,
                             const char *name);
 
 /**
@@ -86,7 +86,7 @@ int phobos_admin_device_add(struct admin_handle *adm, enum dev_family family,
  * \return                          0     on success,
  *                                 -errno on failure.
  */
-int phobos_admin_format(struct admin_handle *adm, const struct media_id *id,
+int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
                         enum fs_type fs, bool unlock);
 
 #endif

@@ -41,8 +41,8 @@ import os.path
 
 from abc import ABCMeta, abstractmethod
 
-from phobos.core.const import dev_family2str
-from phobos.core.const import PHO_DEV_DIR, PHO_DEV_TAPE, PHO_LIB_SCSI
+from phobos.core.const import rsc_family2str
+from phobos.core.const import PHO_LIB_SCSI, PHO_RSC_DIR, PHO_RSC_TAPE
 from phobos.core.const import (PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED,
                                PHO_MDA_ADM_ST_LOCKED, PHO_MDA_ADM_ST_UNLOCKED)
 from phobos.core.ffi import DevInfo, MediaInfo
@@ -493,7 +493,7 @@ class DriveListOptHandler(ListOptHandler):
         attr = [x for x in DevInfo().get_display_dict().keys()]
         attr.sort()
         parser.add_argument('-o', '--output', type=lambda t: t.split(','),
-                            default='label',
+                            default='name',
                             help="attributes to output, comma-separated, "
                                  "choose from {" + " ".join(attr) + "} "
                                  "(default: %(default)s)")
@@ -514,7 +514,7 @@ class MediaListOptHandler(ListOptHandler):
         attr = [x for x in MediaInfo().get_display_dict().keys()]
         attr.sort()
         parser.add_argument('-o', '--output', type=lambda t: t.split(','),
-                            default='label',
+                            default='name',
                             help="attributes to output, comma-separated, "
                                  "choose from {" + " ".join(attr) + "} "
                                  "(default: %(default)s)")
@@ -571,7 +571,7 @@ class BaseResourceOptHandler(DSSInteractHandler):
     @property
     def family(self):
         """Return family (as a string) for the current instance."""
-        return dev_family2str(self.cenum)
+        return rsc_family2str(self.cenum)
 
     def filter(self, ident):
         """Return a list of objects that match the provided identifier."""
@@ -707,13 +707,13 @@ class MediaOptHandler(BaseResourceOptHandler):
 
     def exec_add(self):
         """Add new media."""
-        labels = NodeSet.fromlist(self.params.get('res'))
+        names = NodeSet.fromlist(self.params.get('res'))
         fstype = self.params.get('fs').upper()
         techno = self.params.get('type', '').upper()
         tags = self.params.get('tags', [])
         keep_locked = not self.params.get('unlock')
 
-        for med in labels:
+        for med in names:
             try:
                 self.client.media.add(self.cenum, fstype, techno, med,
                                       tags=tags, locked=keep_locked)
@@ -722,7 +722,7 @@ class MediaOptHandler(BaseResourceOptHandler):
                                   env_error_format(err))
                 sys.exit(os.EX_DATAERR)
 
-        self.logger.info("Added %d media successfully", len(labels))
+        self.logger.info("Added %d media successfully", len(names))
 
     def exec_update(self):
         """Update an existing media"""
@@ -785,9 +785,9 @@ class MediaOptHandler(BaseResourceOptHandler):
 
             if unlock:
                 self.logger.debug("Post-unlock enabled")
-            for label in media_list:
-                self.logger.info("Formatting media '%s'", label)
-                adm.fs_format(label, fs_type, unlock=unlock)
+            for name in media_list:
+                self.logger.info("Formatting media '%s'", name)
+                adm.fs_format(name, fs_type, unlock=unlock)
 
         except EnvironmentError as err:
             # XXX add an option to exit on first error
@@ -894,7 +894,7 @@ class DirOptHandler(MediaOptHandler, DeviceOptHandler):
     """Directory-related options and actions."""
     label = 'dir'
     descr = 'handle directories'
-    cenum = PHO_DEV_DIR
+    cenum = PHO_RSC_DIR
     verbs = MediaOptHandler.verbs
 
     def exec_add(self):
@@ -929,7 +929,7 @@ class DriveOptHandler(DeviceOptHandler):
     """Tape Drive options and actions."""
     label = 'drive'
     descr = 'handle tape drives (use ID or device path to identify resource)'
-    cenum = PHO_DEV_TAPE
+    cenum = PHO_RSC_TAPE
     verbs = [
         AddOptHandler,
         FormatOptHandler,
@@ -971,7 +971,7 @@ class TapeOptHandler(MediaOptHandler):
     """Magnetic tape options and actions."""
     label = 'tape'
     descr = 'handle magnetic tape (use tape label to identify resource)'
-    cenum = PHO_DEV_TAPE
+    cenum = PHO_RSC_TAPE
     verbs = [
         TapeAddOptHandler,
         MediaUpdateOptHandler,

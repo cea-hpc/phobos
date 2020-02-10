@@ -184,7 +184,7 @@ static int add_written_extent(struct raid1_encoder *raid1,
     g_array_append_val(raid1->written_extents, *extent);
 
     /* add medium to be released */
-    media_id =  media_id_get(&extent->media);
+    media_id = extent->media.name;
     to_release_refcount = g_hash_table_lookup(raid1->to_release_media,
                                               media_id);
     /* existing media_id to release */
@@ -289,8 +289,8 @@ static void set_extent_info(struct extent *extent,
 {
     extent->layout_idx = layout_idx;
     extent->size = extent_size;
-    extent->media.type = medium->med_id->type;
-    strncpy(extent->media.id, medium->med_id->id, sizeof(extent->media.id));
+    extent->media.family = medium->med_id->type;
+    pho_id_name_set(&extent->media, medium->med_id->id);
     extent->addr_type = medium->addr_type;
 }
 
@@ -341,7 +341,7 @@ static int simple_write_chunk(struct pho_encoder *enc,
         return rc;
 
     pho_debug("Writing %ld bytes to medium %s", extent->size,
-              media_id_get(&extent->media));
+              extent->media.name);
     /* Build extent tag */
     rc = snprintf(extent_tag, sizeof(extent_tag), "s%d", extent->layout_idx);
 
@@ -646,7 +646,7 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
                                 "layout_idx %d",
                                 extent_index, candidate_extent->layout_idx);
         assert(candidate_extent->layout_idx == extent_index);
-        if (strcmp(medium->med_id->id, candidate_extent->media.id) == 0) {
+        if (strcmp(medium->med_id->id, candidate_extent->media.name) == 0) {
 
             extent = candidate_extent;
             break;
@@ -680,7 +680,7 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
     iod.iod_loc = &loc;
 
     pho_debug("Reading %ld bytes from medium %s", extent->size,
-              media_id_get(&extent->media));
+              extent->media.name);
 
     rc = ioa_get(&ioa, dec->xfer->xd_objid, NULL, &iod);
     if (rc == 0) {
@@ -831,12 +831,12 @@ static int raid1_dec_next_read_req(struct pho_encoder *dec, pho_req_t *req)
         unsigned int ext_idx = raid1->cur_extent_idx * raid1->repl_count + i;
 
         pho_debug("Requesting medium %s to read copy %d of extent %d",
-                  media_id_get(&dec->layout->extents[ext_idx].media),
+                  dec->layout->extents[ext_idx].media.name,
                   i, raid1->cur_extent_idx);
         req->ralloc->med_ids[i]->type =
-            dec->layout->extents[ext_idx].media.type;
+            dec->layout->extents[ext_idx].media.family;
         req->ralloc->med_ids[i]->id =
-            strdup(dec->layout->extents[ext_idx].media.id);
+            strdup(dec->layout->extents[ext_idx].media.name);
     }
 
     return 0;

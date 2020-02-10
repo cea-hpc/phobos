@@ -32,7 +32,7 @@ from ctypes import *
 
 from phobos.core.const import PHO_LABEL_MAX_LEN, PHO_URI_MAX
 from phobos.core.const import fs_type2str, fs_status2str
-from phobos.core.const import adm_status2str, dev_family2str
+from phobos.core.const import adm_status2str, rsc_family2str
 
 LIBPHOBOS_NAME = "libphobos_store.so"
 LIBPHOBOS = CDLL(LIBPHOBOS_NAME)
@@ -96,14 +96,26 @@ class LRS(Structure):
         ('comm', CommInfo)
     ]
 
+class Id(Structure):
+    """Resource Identifier."""
+    _fields_ = [
+        ('family', c_int),
+        ('name', c_char * PHO_URI_MAX)
+    ]
+
+class Resource(Structure):
+    """Resource."""
+    _fields_ = [
+        ('id', Id),
+        ('model', c_char_p)
+    ]
+
 class DevInfo(Structure, CLIManagedResourceMixin):
     """DSS device descriptor."""
     _fields_ = [
-        ('family', c_int),
-        ('model', c_char_p),
+        ('rsc', Resource),
         ('path', c_char_p),
         ('host', c_char_p),
-        ('serial', c_char_p),
         ('adm_status', c_int),
         ('lock', DSSLock)
     ]
@@ -112,19 +124,29 @@ class DevInfo(Structure, CLIManagedResourceMixin):
         """Return a dict of available fields and optional display formatters."""
         return {
             'adm_status': adm_status2str,
-            'family': dev_family2str,
+            'family': rsc_family2str,
             'host': None,
             'model': None,
             'path': None,
-            'label': None,
+            'name': None,
             'lock_status': None,
             'lock_ts': None
         }
 
     @property
-    def label(self):
-        """Wrapper to get label"""
-        return self.serial
+    def name(self):
+        """Wrapper to get name"""
+        return self.rsc.id.name
+
+    @property
+    def family(self):
+        """Wrapper to get family"""
+        return self.rsc.id.family
+
+    @property
+    def model(self):
+        """Wrapper to get model"""
+        return self.rsc.model
 
     @property
     def lock_status(self):
@@ -160,13 +182,6 @@ class Tags(Structure):
         """
         LIBPHOBOS.tags_free(byref(self))
 
-class MediaId(Structure):
-    """Generic media identifier."""
-    _fields_ = [
-        ('type', c_int),
-        ('id', c_char * PHO_URI_MAX)
-    ]
-
 class MediaFS(Structure):
     """Media filesystem descriptor."""
     _fields_ = [
@@ -190,9 +205,8 @@ class MediaStats(Structure):
 class MediaInfo(Structure, CLIManagedResourceMixin):
     """DSS media descriptor."""
     _fields_ = [
-        ('id', MediaId),
+        ('rsc', Resource),
         ('addr_type', c_int),
-        ('model', c_char_p),
         ('adm_status', c_int),
         ('fs', MediaFS),
         ('stats', MediaStats),
@@ -206,7 +220,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'adm_status': adm_status2str,
             'addr_type': None,
             'model': None,
-            'label': None,
+            'name': None,
             'tags': None,
             'lock_status': None,
             'lock_ts': None
@@ -230,12 +244,18 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
 
     @property
     def lock_ts(self):
-        """Wrappert to get lock timestamp"""
+        """Wrapper to get lock timestamp"""
         return self.lock.lock_ts
 
     @property
-    def label(self):
-        return self.id.id
+    def name(self):
+        """Wrapper to get medium name"""
+        return self.rsc.id.name
+
+    @property
+    def model(self):
+        """Wrapper to get medium model"""
+        return self.rsc.model
 
     @property
     def expanded_fs_info(self):

@@ -28,10 +28,10 @@ import os
 
 from ctypes import *
 
-from phobos.core.dss import DSSHandle
-from phobos.core.ffi import LIBPHOBOS_ADMIN, MediaId, LRS, CommInfo
 from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX,
-                               PHO_DEV_DIR, PHO_DEV_TAPE)
+                               PHO_RSC_DIR, PHO_RSC_TAPE)
+from phobos.core.dss import DSSHandle
+from phobos.core.ffi import CommInfo, LIBPHOBOS_ADMIN, LRS, Id
 
 class AdminHandle(Structure):
     """Admin handler"""
@@ -67,16 +67,16 @@ class Client(object):
         """Format a medium through the LRS layer."""
         fs_type = fs_type.lower()
         if fs_type == 'ltfs':
-            dev_type = PHO_DEV_TAPE
+            rsc_family = PHO_RSC_TAPE
             fs_type_enum = PHO_FS_LTFS
         elif fs_type == 'posix':
-            dev_type = PHO_DEV_DIR
+            rsc_family = PHO_RSC_DIR
             fs_type_enum = PHO_FS_POSIX
         else:
             raise EnvironmentError(errno.EOPNOTSUPP,
                                    "Unknown filesystem type '%s'" % fs_type)
 
-        mstruct = MediaId(dev_type, medium_id)
+        mstruct = Id(rsc_family, medium_id)
         rc = LIBPHOBOS_ADMIN.phobos_admin_format(byref(self.handle),
                                                  byref(mstruct), fs_type_enum,
                                                  unlock)
