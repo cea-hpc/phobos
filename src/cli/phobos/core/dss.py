@@ -175,6 +175,12 @@ class BaseObjectManager(object):
         res = POINTER(self.wrapped_class)()
         res_cnt = c_int()
 
+        # transform the family attribute into a string
+        try:
+            kwargs['family'] = str(kwargs['family'])
+        except KeyError:
+            pass
+
         # rename the tags key to be correctly parsed by the dss filter
         if kwargs.get('tags', None):
             tags = kwargs.pop('tags')

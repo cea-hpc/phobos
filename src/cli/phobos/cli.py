@@ -41,22 +41,19 @@ import os.path
 
 from abc import ABCMeta, abstractmethod
 
-from phobos.core.const import rsc_family2str
-from phobos.core.const import PHO_LIB_SCSI, PHO_RSC_DIR, PHO_RSC_TAPE
-from phobos.core.const import (PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED,
-                               PHO_MDA_ADM_ST_LOCKED, PHO_MDA_ADM_ST_UNLOCKED)
-from phobos.core.ffi import DevInfo, MediaInfo
-
-from phobos.core.log import LogControl
-from phobos.core.log import DISABLED, WARNING, INFO, VERBOSE, DEBUG
+from ClusterShell.NodeSet import NodeSet
 
 from phobos.core.admin import Client as AdminClient
 from phobos.core.cfg import load_file as cfg_load_file
+from phobos.core.const import (PHO_LIB_SCSI,
+                               PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED,
+                               PHO_MDA_ADM_ST_LOCKED, PHO_MDA_ADM_ST_UNLOCKED)
 from phobos.core.dss import Client as DSSClient
+from phobos.core.ffi import DevInfo, MediaInfo, ResourceFamily
 from phobos.core.ldm import LibAdapter
+from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
 from phobos.core.store import Client as XferClient, attrs_as_dict
 from phobos.output import dump_object_list
-from ClusterShell.NodeSet import NodeSet
 
 def phobos_log_handler(log_record):
     """
@@ -565,13 +562,8 @@ class BaseResourceOptHandler(DSSInteractHandler):
     """Generic interface for resources manipulation."""
     label = None
     descr = None
-    cenum = None
+    family = None
     verbs = []
-
-    @property
-    def family(self):
-        """Return family (as a string) for the current instance."""
-        return rsc_family2str(self.cenum)
 
     def filter(self, ident):
         """Return a list of objects that match the provided identifier."""
@@ -613,9 +605,9 @@ class DeviceOptHandler(BaseResourceOptHandler):
             for path in resources:
                 # TODO: this will be dropped when adding to DSS will be done by
                 # adm.device_add() below
-                family, serial = self.client.devices.add(self.cenum, path,
-                                                         locked=keep_locked)
-                adm.device_add(family, serial)
+                dev_family, serial = self.client.devices.add(self.family, path,
+                                                             locked=keep_locked)
+                adm.device_add(dev_family, serial)
 
             adm.fini()
         except EnvironmentError as err:
@@ -715,7 +707,7 @@ class MediaOptHandler(BaseResourceOptHandler):
 
         for med in names:
             try:
-                self.client.media.add(self.cenum, fstype, techno, med,
+                self.client.media.add(self.family, fstype, techno, med,
                                       tags=tags, locked=keep_locked)
             except EnvironmentError as err:
                 self.logger.error("Cannot add medium %s: %s", med,
@@ -894,7 +886,7 @@ class DirOptHandler(MediaOptHandler, DeviceOptHandler):
     """Directory-related options and actions."""
     label = 'dir'
     descr = 'handle directories'
-    cenum = PHO_RSC_DIR
+    family = ResourceFamily(ResourceFamily.DIR)
     verbs = MediaOptHandler.verbs
 
     def exec_add(self):
@@ -911,10 +903,10 @@ class DirOptHandler(MediaOptHandler, DeviceOptHandler):
             # Remove any trailing slash
             path = path.rstrip('/')
             try:
-                self.client.media.add(self.cenum, 'POSIX', None, path,
+                self.client.media.add(self.family, 'POSIX', None, path,
                                       locked=keep_locked, tags=tags)
                 # Add device unlocked and rely on media locking
-                self.client.devices.add(self.cenum, path, locked=False)
+                self.client.devices.add(self.family, path, locked=False)
             except EnvironmentError as err:
                 self.logger.error("Cannot add directory: %s",
                                   env_error_format(err))
@@ -929,7 +921,7 @@ class DriveOptHandler(DeviceOptHandler):
     """Tape Drive options and actions."""
     label = 'drive'
     descr = 'handle tape drives (use ID or device path to identify resource)'
-    cenum = PHO_RSC_TAPE
+    family = ResourceFamily(ResourceFamily.TAPE)
     verbs = [
         AddOptHandler,
         FormatOptHandler,
@@ -971,7 +963,7 @@ class TapeOptHandler(MediaOptHandler):
     """Magnetic tape options and actions."""
     label = 'tape'
     descr = 'handle magnetic tape (use tape label to identify resource)'
-    cenum = PHO_RSC_TAPE
+    family = ResourceFamily(ResourceFamily.TAPE)
     verbs = [
         TapeAddOptHandler,
         MediaUpdateOptHandler,
@@ -985,7 +977,9 @@ class LibOptHandler(BaseResourceOptHandler):
     """Tape library options and actions."""
     label = 'lib'
     descr = 'handle tape libraries'
-    cenum = PHO_LIB_SCSI
+    # for now, this class in only used for tape library actions, but in case
+    # it is used for other families, set family as None
+    family = ResourceFamily(ResourceFamily.TAPE)
     verbs = [
         ScanOptHandler,
     ]

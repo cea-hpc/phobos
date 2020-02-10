@@ -30,9 +30,10 @@ import logging
 
 from ctypes import *
 
-from phobos.core.const import PHO_LABEL_MAX_LEN, PHO_URI_MAX
-from phobos.core.const import fs_type2str, fs_status2str
-from phobos.core.const import adm_status2str, rsc_family2str
+from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX,
+                               PHO_RSC_DIR, PHO_RSC_DISK, PHO_RSC_TAPE,
+                               fs_type2str, fs_status2str,
+                               adm_status2str, rsc_family2str)
 
 LIBPHOBOS_NAME = "libphobos_store.so"
 LIBPHOBOS = CDLL(LIBPHOBOS_NAME)
@@ -109,6 +110,19 @@ class Resource(Structure):
         ('id', Id),
         ('model', c_char_p)
     ]
+
+class ResourceFamily(int):
+    """Resource family enumeration."""
+    # XXX: this class will become an IntEnum once we migrate to python3
+    DISK = PHO_RSC_DISK
+    TAPE = PHO_RSC_TAPE
+    DIR  = PHO_RSC_DIR
+
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return rsc_family2str(self.value)
 
 class DevInfo(Structure, CLIManagedResourceMixin):
     """DSS device descriptor."""
