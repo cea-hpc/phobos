@@ -34,14 +34,17 @@ function cleanup {
 drop_tables
 setup_tables
 
-export PHOBOS_LRS_default_family=dir
+if [ -w /dev/changer ]; then
+    export PHOBOS_LRS_families="dir,tape"
+else
+    export PHOBOS_LRS_families="dir"
+fi
+
 invoke_daemon
 trap cleanup EXIT
-
+export PHOBOS_STORE_default_family="dir"
 $LOG_COMPILER $LOG_FLAGS ./test_store_retry
 if [ -w /dev/changer ]; then
-    waive_daemon
-    export PHOBOS_LRS_default_family=tape
-    invoke_daemon
+    export PHOBOS_STORE_default_family="tape"
     $LOG_COMPILER $LOG_FLAGS ./test_store_retry
 fi

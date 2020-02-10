@@ -39,10 +39,10 @@ const struct pho_config_item cfg_lrs[] = {
         .name    = "policy",
         .value   = "best_fit"
     },
-    [PHO_CFG_LRS_default_family] = {
+    [PHO_CFG_LRS_families] = {
         .section = "lrs",
-        .name    = "default_family",
-        .value   = "tape"
+        .name    = "families",
+        .value   = "tape,dir"
     },
     [PHO_CFG_LRS_lib_device] = {
         .section = "lrs",

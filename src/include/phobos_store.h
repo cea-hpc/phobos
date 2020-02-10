@@ -77,6 +77,7 @@ struct pho_xfer_desc {
     const char          *xd_layout_name; /**< Name of the layout module to use
                                            * (for put).
                                            */
+    enum rsc_family      xd_family;  /**< Targeted resource family (for PUT) */
     struct pho_attrs     xd_attrs;   /**< User defined attribute to get / put */
     enum pho_xfer_flags  xd_flags;   /**< See enum pho_xfer_flags doc */
     struct tags          xd_tags;    /**< Tags to select a media to write */

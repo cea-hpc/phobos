@@ -39,6 +39,7 @@ struct dev_descr;
  */
 struct lrs_sched {
     struct dss_handle  dss;         /**< Associated DSS */
+    enum rsc_family    family;      /**< Managed resource family */
     GArray            *devices;     /**< List of available devices */
     char              *lock_owner;  /**< Lock owner name for this LRS
                                       *  (contains hostname and tid)
@@ -71,10 +72,11 @@ struct resp_container {
  * Initialize a new sched bound to a given DSS.
  *
  * \param[in]       sched       The sched to be initialized.
+ * \param[in]       family      Resource family managed by the scheduler.
  *
  * \return                      0 on success, -1 * posix error code on failure.
  */
-int sched_init(struct lrs_sched *sched);
+int sched_init(struct lrs_sched *sched, enum rsc_family family);
 
 /**
  * Free all resources associated with this sched except for the dss, which must

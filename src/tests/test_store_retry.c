@@ -68,6 +68,7 @@ static void reinit_xfer(struct pho_xfer_desc *xfer, const char *path,
 
     xfer_desc_open_path(xfer, path, op, 0);
     xfer->xd_op = op;
+    xfer->xd_family = PHO_RSC_INVAL;
     xfer->xd_objid = realpath(objpath, NULL);
 }
 
@@ -240,7 +241,7 @@ int main(int argc, char **argv)
     dss_init(&dss);
     phobos_admin_init(&adm, true);
 
-    default_family = getenv("PHOBOS_LRS_default_family");
+    default_family = getenv("PHOBOS_STORE_default_family");
     if (default_family && strcmp(default_family, "tape") == 0) {
         int rc;
         /* Tape based tests */
@@ -271,7 +272,6 @@ int main(int argc, char **argv)
         test_put_retry(&xfer, &dev, &media);
     } else {
         /* Dir based tests */
-        setenv("PHOBOS_LRS_default_family", "dir", 1);
 
         /* Add directory drive and media */
         add_dir(&adm, &dss, tmp_dir, &dev, &media);

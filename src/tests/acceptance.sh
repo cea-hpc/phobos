@@ -258,7 +258,7 @@ function ensure_nb_drives
     local name
     local d
 
-    if [[ $PHOBOS_LRS_default_family == "tape" ]]; then
+    if [[ $PHOBOS_STORE_default_family == "tape" ]]; then
         name=drive
     else
         name=dir
@@ -463,8 +463,13 @@ function tape_drive_compat
 }
 
 echo "POSIX test mode"
-export PHOBOS_LRS_default_family="dir"
+if [ -w /dev/changer ]; then
+    export PHOBOS_LRS_families="dir,tape"
+else
+    export PHOBOS_LRS_families="dir"
+fi
 invoke_daemon
+export PHOBOS_STORE_default_family="dir"
 PHO_TMP_DIR="$(mktemp -d)"
 trap cleanup EXIT
 dir_setup
@@ -474,7 +479,6 @@ concurrent_put
 check_status dir "$dirs"
 lock_test
 concurrent_put_get_retry
-waive_daemon
 
 if  [[ -w /dev/changer ]]; then
     echo "Tape test mode"
@@ -482,8 +486,7 @@ if  [[ -w /dev/changer ]]; then
         drop_tables
         setup_tables
     fi
-    export PHOBOS_LRS_default_family="tape"
-    invoke_daemon
+    export PHOBOS_STORE_default_family="tape"
     tape_setup
     put_get_test
     put_tags
@@ -492,5 +495,4 @@ if  [[ -w /dev/changer ]]; then
     lock_test
     concurrent_put_get_retry
     tape_drive_compat
-    waive_daemon
 fi

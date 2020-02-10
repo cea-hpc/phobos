@@ -33,12 +33,13 @@ message PhoRequest {
     message Write {
         /** Request for one write accessible medium. */
         message Elt {
-            required uint64 size = 1;   // Amount of data to be written
-                                        // on the medium.
-            repeated string tags = 2;   // Tags to be satisfied.
+            required uint64 size = 1;          // Amount of data to be written
+                                               // on the medium.
+            repeated string tags = 2;          // Tags to be satisfied.
         }
 
-        repeated Elt media = 1;         // Write allocation requests.
+        repeated Elt media = 1;                // Write allocation requests.
+        required PhoResourceFamily family = 2; // Requested resource family.
     }
 
     /**

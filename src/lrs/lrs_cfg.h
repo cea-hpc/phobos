@@ -34,7 +34,7 @@ enum pho_cfg_params_lrs {
     /* lrs parameters */
     PHO_CFG_LRS_mount_prefix = PHO_CFG_LRS_FIRST,
     PHO_CFG_LRS_policy,
-    PHO_CFG_LRS_default_family,
+    PHO_CFG_LRS_families,
     PHO_CFG_LRS_lib_device,
     PHO_CFG_LRS_server_socket,
 

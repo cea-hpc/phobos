@@ -50,8 +50,8 @@
  * - Communication info: stores info related to the communication with Store
  */
 struct lrs {
-    struct lrs_sched     sched;         /*!< Scheduler part. */
-    struct pho_comm_info comm;          /*!< Communication part. */
+    struct lrs_sched     *sched[PHO_RSC_LAST]; /*!< Scheduler handles */
+    struct pho_comm_info  comm;                /*!< Communication handle */
 };
 
 struct lrs_params {
@@ -95,46 +95,58 @@ bool running = true;
 /* LRS helpers ****************************************************************/
 /* ****************************************************************************/
 
-static int _prepare_requests(struct lrs *lrs, const int n_data,
-                             struct pho_comm_data *data)
+static enum rsc_family _determine_family(const pho_req_t *req)
 {
-    int rc = 0;
-    int i;
+    if (pho_request_is_write(req))
+        return req->walloc->family;
 
-    for (i = 0; i < n_data; ++i) {
-        struct req_container *req_cont;
-        int rc2 = 0;
-
-        if (data[i].buf.size == -1) /* close notification, ignore */
-            continue;
-
-        req_cont = malloc(sizeof(*req_cont));
-        if (!req_cont) {
-            pho_error(rc = -ENOMEM, "Cannot allocate request structure");
-            break;
-        }
-
-        /* request processing */
-        req_cont->token = data[i].fd;
-        req_cont->req = pho_srl_request_unpack(&data[i].buf);
-        if (!req_cont->req) {
-            pho_error(-EINVAL, "Request can not be unpacked");
-            free(req_cont);
-            rc = rc ? : -EINVAL;
-            continue;
-        }
-
-        rc2 = sched_request_enqueue(&lrs->sched, req_cont);
-        if (rc2) {
-            pho_error(rc2, "Request can not be enqueue");
-            pho_srl_request_free(req_cont->req, true);
-            free(req_cont);
-            rc = rc ? : rc2;
-            continue;
-        }
+    if (pho_request_is_read(req)) {
+        if (!req->ralloc->n_med_ids)
+            return PHO_RSC_INVAL;
+        return req->ralloc->med_ids[0]->family;
     }
 
-    return rc;
+    if (pho_request_is_release(req)) {
+        if (!req->release->n_media)
+            return PHO_RSC_INVAL;
+        return req->release->media[0]->med_id->family;
+    }
+
+    if (pho_request_is_format(req))
+        return req->format->med_id->family;
+
+    if (pho_request_is_notify(req))
+        return req->notify->rsrc_id->family;
+
+    return PHO_RSC_INVAL;
+}
+
+static int _prepare_error(struct resp_container *resp_cont, int req_rc,
+                          const struct req_container *req_cont)
+{
+    int rc;
+
+    resp_cont->token = req_cont->token;
+    rc = pho_srl_response_error_alloc(resp_cont->resp);
+    if (rc)
+        LOG_RETURN(rc, "Failed to allocate response");
+
+    resp_cont->resp->error->rc = req_rc;
+    if (!req_cont->req) /* If the error happened during request unpacking */
+        return 0;
+
+    resp_cont->resp->req_id = req_cont->req->id;
+    if (pho_request_is_write(req_cont->req))
+        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_WRITE;
+    else if (pho_request_is_read(req_cont->req))
+        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_READ;
+    else if (pho_request_is_release(req_cont->req))
+        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_RELEASE;
+    else if (pho_request_is_format(req_cont->req))
+        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_FORMAT;
+    else if (pho_request_is_notify(req_cont->req))
+        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_NOTIFY;
+    return 0;
 }
 
 static int _send_responses(struct lrs *lrs, const int n_resp,
@@ -153,7 +165,7 @@ static int _send_responses(struct lrs *lrs, const int n_resp,
         pho_srl_response_free(resp_cont[i].resp, false);
         free(resp_cont[i].resp);
         if (rc2) {
-            pho_error(rc2, "Response can not be packed");
+            pho_error(rc2, "Response cannot be packed");
             rc = rc ? : rc2;
             continue;
         }
@@ -164,7 +176,7 @@ static int _send_responses(struct lrs *lrs, const int n_resp,
             pho_debug("Client closed socket");
             continue;
         } else if (rc2) {
-            pho_error(rc2, "Response can not be sent");
+            pho_error(rc2, "Response cannot be sent");
             rc = rc ? : rc2;
             continue;
         }
@@ -173,9 +185,180 @@ static int _send_responses(struct lrs *lrs, const int n_resp,
     return rc;
 }
 
+static int _send_error(struct lrs *lrs, struct req_container *req_cont)
+{
+    struct resp_container resp_cont;
+    int rc;
+
+    resp_cont.resp = malloc(sizeof(*resp_cont.resp));
+    if (!resp_cont.resp)
+        LOG_RETURN(-ENOMEM, "Cannot allocate error response");
+
+    rc = _prepare_error(&resp_cont, -EINVAL, req_cont);
+    free(req_cont);
+    if (rc) {
+        free(resp_cont.resp);
+        LOG_RETURN(rc, "Cannot prepare error response");
+    }
+
+    rc = _send_responses(lrs, 1, &resp_cont);
+    if (rc)
+        LOG_RETURN(rc, "Error during response sending");
+
+    return rc;
+}
+
+static int _prepare_requests(struct lrs *lrs, const int n_data,
+                             struct pho_comm_data *data)
+{
+    enum rsc_family fam;
+    int rc = 0;
+    int i;
+
+    for (i = 0; i < n_data; ++i) {
+        struct req_container *req_cont;
+        int rc2 = 0;
+
+        if (data[i].buf.size == -1) /* close notification, ignore */
+            continue;
+
+        req_cont = malloc(sizeof(*req_cont));
+        if (!req_cont)
+            LOG_RETURN(-ENOMEM, "Cannot allocate request structure");
+
+        /* request processing */
+        req_cont->token = data[i].fd;
+        req_cont->req = pho_srl_request_unpack(&data[i].buf);
+        if (!req_cont->req) {
+            pho_error(-EINVAL, "Request cannot be unpacked");
+            rc = _send_error(lrs, req_cont);
+            if (rc)
+                LOG_RETURN(rc, "Cannot send error response");
+            continue;
+        }
+
+        fam = _determine_family(req_cont->req);
+        if (fam == PHO_RSC_INVAL) {
+            pho_error(-EINVAL, "Request type is not recognized");
+            rc = _send_error(lrs, req_cont);
+            if (rc)
+                LOG_RETURN(rc, "Cannot send error response");
+            continue;
+        }
+
+        if (!lrs->sched[fam]) {
+            pho_error(-EINVAL, "Requested family is not handled by the daemon");
+            rc = _send_error(lrs, req_cont);
+            if (rc)
+                LOG_RETURN(rc, "Cannot send error response");
+            continue;
+        }
+
+        rc2 = sched_request_enqueue(lrs->sched[fam], req_cont);
+        if (rc2) {
+            pho_srl_request_free(req_cont->req, true);
+            free(req_cont);
+            LOG_RETURN(rc2, "Request cannot be enqueue");
+        }
+    }
+
+    return rc;
+}
+
+static int _load_schedulers(struct lrs *lrs)
+{
+    const char *list;
+    char *parse_list;
+    char *saveptr;
+    char *item;
+    int rc;
+    int i;
+
+    list = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, families);
+
+    for (i = 0; i < PHO_RSC_LAST; ++i)
+        lrs->sched[i] = NULL;
+
+    parse_list = strdup(list);
+    if (!parse_list)
+        LOG_RETURN(-errno, "Error on family list duplication");
+
+    /* Initialize a scheduler for each requested family */
+    for (item = strtok_r(parse_list, ",", &saveptr);
+         item != NULL;
+         item = strtok_r(NULL, ",", &saveptr)) {
+        int family = str2rsc_family(item);
+
+        switch (family) {
+        case PHO_RSC_DISK:
+            LOG_GOTO(out_free, rc = -ENOTSUP,
+                     "The family '%s' is not supported yet", item);
+
+        case PHO_RSC_TAPE:
+        case PHO_RSC_DIR:
+            if (lrs->sched[family]) {
+                pho_warn("The family '%s' was already processed, ignore it",
+                         item);
+                continue;
+            }
+
+            lrs->sched[family] = malloc(sizeof(*lrs->sched[family]));
+            if (!lrs->sched[family])
+                LOG_GOTO(out_free, rc = -ENOMEM,
+                         "Error on lrs scheduler allocation");
+            rc = sched_init(lrs->sched[family], family);
+            if (rc) {
+                free(lrs->sched[family]);
+                lrs->sched[family] = NULL;
+                LOG_GOTO(out_free, rc, "Error on lrs scheduler initialization");
+            }
+
+            break;
+        default:
+            LOG_GOTO(out_free, rc = -EINVAL,
+                     "The family '%s' is not recognized", item);
+        }
+    }
+
+out_free:
+    /* in case of error, allocated schedulers will be terminated in the error
+     * handling of lrs_init()
+     */
+
+    free(parse_list);
+    return rc;
+}
+
 /* ****************************************************************************/
 /* LRS main functions *********************************************************/
 /* ****************************************************************************/
+
+/**
+ * Free all resources associated with this LRS except for the dss, which must be
+ * deinitialized by the caller if necessary.
+ *
+ * The LRS data structure is allocated in lrs_init()
+ * and deallocated in lrs_fini().
+ *
+ * \param[in/out]   lrs The LRS to be deinitialized.
+ */
+static void lrs_fini(struct lrs *lrs)
+{
+    int rc = 0;
+    int i;
+
+    if (lrs == NULL)
+        return;
+
+    for (i = 0; i < PHO_RSC_LAST; ++i) {
+        sched_fini(lrs->sched[i]);
+        free(lrs->sched[i]);
+    }
+
+    rc = pho_comm_close(&lrs->comm);
+    if (rc)
+        pho_error(rc, "Error on closing the socket");
+}
 
 /**
  * Initialize a new LRS.
@@ -190,8 +373,8 @@ static int _send_responses(struct lrs *lrs, const int n_resp,
  */
 static int lrs_init(struct lrs *lrs, struct lrs_params parm)
 {
-    int rc;
     const char *sock_path;
+    int rc;
 
     /* Load configuration */
     rc = pho_cfg_init_local(parm.cfg_path);
@@ -202,17 +385,20 @@ static int lrs_init(struct lrs *lrs, struct lrs_params parm)
     if (parm.use_syslog)
         pho_log_callback_set(phobos_log_callback_def_with_sys);
 
-    sock_path = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, server_socket);
-
-    rc = sched_init(&lrs->sched);
+    rc = _load_schedulers(lrs);
     if (rc)
-        LOG_RETURN(rc, "Error on lrs scheduler initialization");
+        LOG_GOTO(err, rc, "Error while loading the schedulers");
 
+    sock_path = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, server_socket);
     rc = pho_comm_open(&lrs->comm, sock_path, true);
     if (rc)
-        LOG_RETURN(rc, "Error on opening the socket");
+        LOG_GOTO(err, rc, "Error while opening the socket");
 
-    return 0;
+    return rc;
+
+err:
+    lrs_fini(lrs);
+    return rc;
 }
 
 /**
@@ -245,6 +431,7 @@ static int lrs_process(struct lrs *lrs)
     struct resp_container *resp_cont;
     int n_data, n_resp = 0;
     int rc = 0;
+    int i;
 
     /* request reception and accept handling */
     rc = pho_comm_recv(&lrs->comm, &data, &n_data);
@@ -257,39 +444,21 @@ static int lrs_process(struct lrs *lrs)
         LOG_RETURN(rc, "Error during request enqueuing");
 
     /* response processing */
-    rc = sched_responses_get(&lrs->sched, &n_resp, &resp_cont);
-    if (rc)
-        LOG_RETURN(rc, "Error during sched processing");
+    for (i = 0; i < PHO_RSC_LAST; ++i) {
+        if (!lrs->sched[i])
+            continue;
 
-    rc = _send_responses(lrs, n_resp, resp_cont);
-    free(resp_cont);
-    if (rc)
-        LOG_RETURN(rc, "Error during responses sending");
+        rc = sched_responses_get(lrs->sched[i], &n_resp, &resp_cont);
+        if (rc)
+            LOG_RETURN(rc, "Error during sched processing");
+
+        rc = _send_responses(lrs, n_resp, resp_cont);
+        free(resp_cont);
+        if (rc)
+            LOG_RETURN(rc, "Error during responses sending");
+    }
 
     return rc;
-}
-
-/**
- * Free all resources associated with this LRS except for the dss, which must be
- * deinitialized by the caller if necessary.
- *
- * The LRS data structure is allocated in lrs_init()
- * and deallocated in lrs_fini().
- *
- * \param[in/out]   lrs The LRS to be deinitialized.
- */
-static void lrs_fini(struct lrs *lrs)
-{
-    int rc = 0;
-
-    if (lrs == NULL)
-        return;
-
-    sched_fini(&lrs->sched);
-
-    rc = pho_comm_close(&lrs->comm);
-    if (rc)
-        pho_error(rc, "Error on closing the socket");
 }
 
 /* ****************************************************************************/
@@ -412,7 +581,7 @@ int main(int argc, char **argv)
     struct lrs_params parm;
     struct sigaction sa;
     int init_pipe[2];
-    struct lrs lrs;
+    struct lrs lrs = {};
     pid_t pid;
     int rc;
 

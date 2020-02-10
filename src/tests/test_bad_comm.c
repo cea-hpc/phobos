@@ -87,14 +87,34 @@ static int test_bad_put(void *arg)
     pho_req_t req;
     int rc = 0;
 
-    // Bad tag request
+    // Bad resource family
     assert(!pho_srl_request_write_alloc(&req, 1, n_tags));
     req.id = 0;
+    req.walloc->family = PHO_RSC_INVAL;
     req.walloc->media[0]->size = 1;
     req.walloc->media[0]->tags[0] = strdup("ratatouille");
     assert(!_send_and_receive(ci, &req, &resp));
+    rc = _check_error(resp, "Walloc -- bad resource family", -EINVAL);
+    if (rc)
+        goto out_fail;
+
+    // Family not available
+    pho_srl_response_free(resp, true);
+    ++req.id;
+    req.walloc->family = PHO_RSC_TAPE;
+    assert(!_send_and_receive(ci, &req, &resp));
+    rc = _check_error(resp, "Walloc -- family not available", -EINVAL);
+    if (rc)
+        goto out_fail;
+
+    // Bad tag request
+    pho_srl_response_free(resp, true);
+    ++req.id;
+    req.walloc->family = PHO_RSC_DIR;
+    assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Walloc -- bad tag request", -ENOSPC);
 
+out_fail:
     pho_srl_request_free(&req, false);
     pho_srl_response_free(resp, true);
 

@@ -46,7 +46,7 @@ test_bin_dir=$(dirname $(readlink -e $0))
 . $test_bin_dir/test_env.sh
 . $test_bin_dir/setup_db.sh
 . $test_bin_dir/test_launch_daemon.sh
-export PHOBOS_LRS_default_family=dir
+export PHOBOS_LRS_families="dir"
 
 drop_tables
 setup_tables

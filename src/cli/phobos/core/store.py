@@ -75,6 +75,7 @@ class XferDescriptor(Structure):
         ("xd_fd", c_int),
         ("xd_size", c_ssize_t),
         ("xd_layout_name", c_char_p),
+        ("xd_family", c_int),
         ("xd_attrs", PhoAttrs),
         ("xd_flags", c_int),
         ("xd_tags", Tags),
@@ -131,6 +132,7 @@ class XferDescriptor(Structure):
         self.xd_objid = desc[0]
         self.xd_op = desc[5]
         self.xd_layout_name = 0
+        self.xd_family = -1
         self.xd_flags = desc[3]
         self.xd_tags = Tags(desc[4])
         self.xd_rc = 0

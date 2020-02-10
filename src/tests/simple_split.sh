@@ -29,8 +29,9 @@
 
 set -xe
 
-export PHOBOS_LRS_default_family="dir"
-export PHOBOS_STORE_layout="simple"
+export PHOBOS_LRS_families="dir"
+export PHOBOS_STORE_default_layout="simple"
+export PHOBOS_STORE_default_family="dir"
 LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
 
 # set python and phobos environment

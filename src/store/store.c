@@ -56,17 +56,23 @@ enum pho_cfg_params_store {
     PHO_CFG_STORE_FIRST,
 
     /* store parameters */
-    PHO_CFG_STORE_layout = PHO_CFG_STORE_FIRST,
+    PHO_CFG_STORE_default_layout = PHO_CFG_STORE_FIRST,
+    PHO_CFG_STORE_default_family,
     PHO_CFG_STORE_lrs_socket,
 
     PHO_CFG_STORE_LAST
 };
 
 const struct pho_config_item cfg_store[] = {
-    [PHO_CFG_STORE_layout] = {
+    [PHO_CFG_STORE_default_layout] = {
         .section = "store",
-        .name    = "layout",
+        .name    = "default_layout",
         .value   = "simple"
+    },
+    [PHO_CFG_STORE_default_family] = {
+        .section = "store",
+        .name    = "default_family",
+        .value   = "tape"
     },
     [PHO_CFG_STORE_lrs_socket] = {
         .section = "lrs",
@@ -188,6 +194,18 @@ err_nores:
     return rc;
 }
 
+/** return the resource family to write data */
+static enum rsc_family put_family(void)
+{
+    const char *fam_str;
+
+    fam_str = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, default_family);
+    if (fam_str == NULL)
+        return PHO_RSC_INVAL;
+
+    return str2rsc_family(fam_str);
+}
+
 /**
  * Forward a response from the LRS to its destination encoder, collect this
  * encoder's next requests and forward them back to the LRS.
@@ -207,6 +225,7 @@ static int encoder_communicate(struct pho_encoder *enc,
 {
     pho_req_t *requests = NULL;
     struct pho_comm_data data;
+    enum rsc_family family;
     size_t n_reqs = 0;
     size_t i = 0;
     int rc;
@@ -215,6 +234,8 @@ static int encoder_communicate(struct pho_encoder *enc,
     if (rc)
         pho_error(rc, "Error while communicating with encoder for %s",
                   enc->xfer->xd_objid);
+
+    family = enc->xfer->xd_family;
 
     /* Dispatch generated requests (even on error, if any) */
     for (i = 0; i < n_reqs; i++) {
@@ -229,6 +250,8 @@ static int encoder_communicate(struct pho_encoder *enc,
 
         /* req_id is used to route responses to the appropriate encoder */
         req->id = enc_id;
+        if (pho_request_is_write(req))
+            req->walloc->family = family;
 
         data = pho_comm_data_init(comm);
         if (pho_srl_request_pack(req, &data.buf)) {
@@ -763,13 +786,20 @@ static int phobos_xfer(struct pho_xfer_desc *xfers, size_t n,
 int phobos_put(struct pho_xfer_desc *xfers, size_t n,
                pho_completion_cb_t cb, void *udata)
 {
-    const char *layout = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, layout);
+    enum rsc_family default_family;
+    const char *default_layout;
     size_t i;
+
+    default_family = put_family();
+    default_layout = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, default_layout);
 
     for (i = 0; i < n; i++) {
         xfers[i].xd_op = PHO_XFER_OP_PUT;
         if (xfers[i].xd_layout_name == NULL)
-            xfers[i].xd_layout_name = layout;
+            xfers[i].xd_layout_name = default_layout;
+
+        if (xfers[i].xd_family == PHO_RSC_INVAL)
+            xfers[i].xd_family = default_family;
     }
 
     return phobos_xfer(xfers, n, cb, udata);

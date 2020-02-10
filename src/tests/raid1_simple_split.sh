@@ -30,8 +30,9 @@
 
 set -xe
 
-export PHOBOS_LRS_default_family="dir"
-export PHOBOS_STORE_layout="raid1"
+export PHOBOS_LRS_families="dir"
+export PHOBOS_STORE_default_layout="raid1"
+export PHOBOS_STORE_default_family="dir"
 export PHOBOS_LAYOUT_RAID1_repl_count=1
 LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
 

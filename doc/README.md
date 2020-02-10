@@ -265,18 +265,18 @@ To specify the default family where data is to be written, specify it in the
 phobos configuration file:
 
 ```
-[lrs]
+[store]
 # indicate 'tape' or 'dir' family
-default_family = tape
+family = tape
 ```
 
-Alternativelly, you can override this value in the environment (like any other
-configuration parameter) by setting the `PHOBOS_LRS_default_family` variable.
+Alternatively, you can override this value in the environment (like any other
+configuration parameter) by setting the `PHOBOS_STORE_default_family` variable.
 
 Example:
 ```
 # put data to directory storage
-PHOBOS_LRS_default_family=dir phobos put file.in obj123
+PHOBOS_STORE_default_family=dir phobos put file.in obj123
 ```
 
 ### Configuring device and media types

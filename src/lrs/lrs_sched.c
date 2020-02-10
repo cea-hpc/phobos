@@ -87,18 +87,6 @@ static char *mount_point(const char *id)
     return mnt_out;
 }
 
-/** return the default device family to write data */
-static enum rsc_family default_family(void)
-{
-    const char *fam_str;
-
-    fam_str = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, default_family);
-    if (fam_str == NULL)
-        return PHO_RSC_INVAL;
-
-    return str2rsc_family(fam_str);
-}
-
 static struct utsname host_info;
 
 /** get host name once (/!\ not thread-safe). */
@@ -533,15 +521,13 @@ static int sched_load_dev_state(struct lrs_sched *sched)
 {
     struct dev_info    *devs = NULL;
     int                 dcnt = 0;
-    enum rsc_family     family;
     struct lib_adapter  lib;
     int                 i;
     int                 rc;
 
     ENTRY;
 
-    family = default_family();
-    if (family == PHO_RSC_INVAL)
+    if (sched->family == PHO_RSC_INVAL)
         return -EINVAL;
 
     /* If no device has previously been loaded, load the list of available
@@ -559,7 +545,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
                               "]}",
                               get_hostname(),
                               rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
-                              rsc_family2str(family));
+                              rsc_family2str(sched->family));
         if (rc)
             return rc;
 
@@ -571,7 +557,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
 
         if (dcnt == 0) {
             pho_info("No usable device found (%s): check devices status",
-                     rsc_family2str(family));
+                     rsc_family2str(sched->family));
             GOTO(err, rc = -ENXIO);
         }
 
@@ -586,7 +572,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
     }
 
     /* get a handle to the library to query it */
-    rc = wrap_lib_open(family, &lib);
+    rc = wrap_lib_open(sched->family, &lib);
     if (rc)
         GOTO(err, rc);
 
@@ -626,9 +612,11 @@ static void dev_descr_fini(gpointer ptr)
 
 static __thread uint64_t sched_lock_number;
 
-int sched_init(struct lrs_sched *sched)
+int sched_init(struct lrs_sched *sched, enum rsc_family family)
 {
     int rc;
+
+    sched->family = family;
 
     /* For the lock owner name to generate a collision, either the tid or the
      * sched_lock_number has to loop in less than 1 second.
@@ -1748,7 +1736,7 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
      * Note: sched_select_media locks the media.
      */
     pho_verb("Not enough space on loaded media: selecting another one");
-    rc = sched_select_media(sched, &pmedia, size, default_family(), tags,
+    rc = sched_select_media(sched, &pmedia, size, sched->family, tags,
                             devs, new_dev_index);
     if (rc)
         return rc;

@@ -55,10 +55,11 @@ TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2 /tmp/pho_testdir3 \
 TEST_FS="posix"
 
 export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
-export PHOBOS_LRS_default_family="dir"
+export PHOBOS_LRS_families="dir"
 invoke_daemon
 
-export PHOBOS_STORE_layout=$USE_LAYOUT
+export PHOBOS_STORE_default_layout=$USE_LAYOUT
+export PHOBOS_STORE_default_family="dir"
 
 function clean_test
 {
