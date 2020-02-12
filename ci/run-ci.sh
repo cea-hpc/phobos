@@ -25,11 +25,11 @@ fi
 
 make
 # FIXME: when cloning the repo, some scripts do not have o+rx
-# permissions, it is however necessary to execute them as postgres
-chmod o+rx . .. ./scripts/phobos_db{,_local}
-# Need to give rx permissions to the following files to let libtool use them
-# when running valgrind tests
-chmod o+rx ./scripts/pho_ldm_helper ./src/cli/scripts/phobos
+# permissions, it is however necessary to execute them as postgres,
+# as well as when running valgrind tests
+chmod    o+rx . ..
+chmod -R o+rx src scripts
+
 sudo -u postgres ./scripts/phobos_db_local drop_db || true
 sudo -u postgres ./scripts/phobos_db_local setup_db -s -p phobos
 export VERBOSE=1
