@@ -112,8 +112,8 @@ static int test_bad_get(void *arg)
     assert(!pho_srl_request_read_alloc(&req, 1));
     req.id = 0;
     req.ralloc->n_required = 1;
-    req.ralloc->med_ids[0]->type = PHO_RSC_INVAL;
-    req.ralloc->med_ids[0]->id = strdup("/tmp/test.pho.1");
+    req.ralloc->med_ids[0]->family = PHO_RSC_INVAL;
+    req.ralloc->med_ids[0]->name = strdup("/tmp/test.pho.1");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Get -- bad resource family", -EINVAL);
     if (rc)
@@ -122,9 +122,9 @@ static int test_bad_get(void *arg)
     // Bad resource name
     pho_srl_response_free(resp, true);
     ++req.id;
-    req.ralloc->med_ids[0]->type = PHO_RSC_DIR;
-    free(req.ralloc->med_ids[0]->id);
-    req.ralloc->med_ids[0]->id = strdup("/tmp/not/a/med");
+    req.ralloc->med_ids[0]->family = PHO_RSC_DIR;
+    free(req.ralloc->med_ids[0]->name);
+    req.ralloc->med_ids[0]->name = strdup("/tmp/not/a/med");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Get -- bad resource name", -ENXIO);
 
@@ -145,8 +145,8 @@ static int test_bad_release(void *arg)
     // Bad resource name
     assert(!pho_srl_request_release_alloc(&req, 1));
     req.id = 0;
-    req.release->media[0]->med_id->type = PHO_RSC_DIR;
-    req.release->media[0]->med_id->id = strdup("/tmp/not/a/med");
+    req.release->media[0]->med_id->family = PHO_RSC_DIR;
+    req.release->media[0]->med_id->name = strdup("/tmp/not/a/med");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Release -- bad resource name", -ENOENT);
 
@@ -167,8 +167,8 @@ static int test_bad_format(void *arg)
     assert(!pho_srl_request_format_alloc(&req));
     req.id = 0;
     req.format->fs = PHO_FS_INVAL;
-    req.format->med_id->type = PHO_RSC_DIR;
-    req.format->med_id->id = strdup("/tmp/test.pho.3");
+    req.format->med_id->family = PHO_RSC_DIR;
+    req.format->med_id->name = strdup("/tmp/test.pho.3");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Format -- bad file system", -ENOTSUP);
     if (rc)
@@ -178,7 +178,7 @@ static int test_bad_format(void *arg)
     pho_srl_response_free(resp, true);
     ++req.id;
     req.format->fs = PHO_FS_POSIX;
-    req.format->med_id->type = PHO_RSC_INVAL;
+    req.format->med_id->family = PHO_RSC_INVAL;
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Format -- bad resource family", -EINVAL);
     if (rc)
@@ -187,9 +187,9 @@ static int test_bad_format(void *arg)
     // Bad resource name
     pho_srl_response_free(resp, true);
     ++req.id;
-    req.format->med_id->type = PHO_RSC_DIR;
-    free(req.format->med_id->id);
-    req.format->med_id->id = strdup("/tmp/not/a/med");
+    req.format->med_id->family = PHO_RSC_DIR;
+    free(req.format->med_id->name);
+    req.format->med_id->name = strdup("/tmp/not/a/med");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Format -- bad resource name", -ENXIO);
 
@@ -220,7 +220,7 @@ static int test_bad_notify(void *arg)
     pho_srl_response_free(resp, true);
     ++req.id;
     req.notify->op = PHO_NTFY_OP_ADD_DEVICE;
-    req.notify->rsrc_id->type = PHO_RSC_INVAL;
+    req.notify->rsrc_id->family = PHO_RSC_INVAL;
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Notify -- bad family", -EINVAL);
     if (rc)
@@ -229,7 +229,7 @@ static int test_bad_notify(void *arg)
     // Bad resource name
     pho_srl_response_free(resp, true);
     ++req.id;
-    req.notify->rsrc_id->type = PHO_RSC_DIR;
+    req.notify->rsrc_id->family = PHO_RSC_DIR;
     req.notify->rsrc_id->name = strdup("/tmp/not/a/dev");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Notify -- bad resource name", -ENXIO);

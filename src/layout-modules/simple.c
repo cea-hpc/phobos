@@ -34,6 +34,7 @@
 #include "pho_common.h"
 #include "pho_io.h"
 #include "pho_layout.h"
+#include "pho_srl_common.h"
 #include "pho_type_utils.h"
 
 #define PLUGIN_NAME     "simple"
@@ -168,8 +169,8 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
      * returned by ioa_put as of yet)
      */
     extent->size = min(simple->to_write, medium->avail_size);
-    extent->media.family = medium->med_id->type;
-    pho_id_name_set(&extent->media, medium->med_id->id);
+    extent->media.family = medium->med_id->family;
+    pho_id_name_set(&extent->media, medium->med_id->name);
     extent->addr_type = medium->addr_type;
     /* and extent.address will be filled by ioa_put */
 
@@ -329,9 +330,9 @@ static int simple_enc_handle_release_resp(struct pho_encoder *enc,
     for (i = 0; i < rel_resp->n_med_ids; i++) {
         int rc2;
 
-        pho_debug("Marking medium %s as released", rel_resp->med_ids[i]->id);
+        pho_debug("Marking medium %s as released", rel_resp->med_ids[i]->name);
         /* If the media_id is unexpected, -EINVAL will be returned */
-        rc2 = mark_written_media_released(simple, rel_resp->med_ids[i]->id);
+        rc2 = mark_written_media_released(simple, rel_resp->med_ids[i]->name);
         if (rc2 && !rc)
             rc = rc2;
     }
@@ -395,9 +396,9 @@ static int simple_dec_next_read_req(struct pho_encoder *dec, pho_req_t *req)
 
     req->ralloc->n_required = 1;
 
-    req->ralloc->med_ids[0]->type =
+    req->ralloc->med_ids[0]->family =
         dec->layout->extents[cur_ext_idx].media.family;
-    req->ralloc->med_ids[0]->id =
+    req->ralloc->med_ids[0]->name =
         strdup(dec->layout->extents[cur_ext_idx].media.name);
 
     return 0;
@@ -435,12 +436,9 @@ static int simple_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
         if (rc)
             return rc;
 
-        for (i = 0; i < resp->walloc->n_media; ++i) {
-            (*reqs)[*n_reqs].release->media[i]->med_id->type =
-                resp->walloc->media[i]->med_id->type;
-            (*reqs)[*n_reqs].release->media[i]->med_id->id =
-                strdup(resp->walloc->media[i]->med_id->id);
-        }
+        for (i = 0; i < resp->walloc->n_media; ++i)
+            rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
+                       resp->walloc->media[i]->med_id);
 
         /* Perform IO and populate release request with the outcome */
         rc = simple_enc_write_all_chunks(
@@ -458,12 +456,9 @@ static int simple_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
         if (rc)
             return rc;
 
-        for (i = 0; i < resp->ralloc->n_media; ++i) {
-            (*reqs)[*n_reqs].release->media[i]->med_id->type =
-                resp->ralloc->media[i]->med_id->type;
-            (*reqs)[*n_reqs].release->media[i]->med_id->id =
-                strdup(resp->ralloc->media[i]->med_id->id);
-        }
+        for (i = 0; i < resp->ralloc->n_media; ++i)
+            rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
+                       resp->ralloc->media[i]->med_id);
 
         /* Perform IO and populate release request with the outcome */
         rc = simple_dec_read_chunk(enc, resp->ralloc->media[0]);

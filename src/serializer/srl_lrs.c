@@ -168,7 +168,7 @@ int pho_srl_request_read_alloc(pho_req_t *req, size_t n_media)
         req->ralloc->med_ids[i] = malloc(sizeof(*req->ralloc->med_ids[i]));
         if (!req->ralloc->med_ids[i])
             goto err_media_i;
-        pho_medium_info__init(req->ralloc->med_ids[i]);
+        pho_resource_id__init(req->ralloc->med_ids[i]);
     }
 
     return 0;
@@ -212,7 +212,7 @@ int pho_srl_request_release_alloc(pho_req_t *req, size_t n_media)
             malloc(sizeof(*req->release->media[i]->med_id));
         if (!req->release->media[i]->med_id)
             goto err_id;
-        pho_medium_info__init(req->release->media[i]->med_id);
+        pho_resource_id__init(req->release->media[i]->med_id);
     }
 
     return 0;
@@ -247,7 +247,7 @@ int pho_srl_request_format_alloc(pho_req_t *req)
     req->format->med_id = malloc(sizeof(*req->format->med_id));
     if (!req->format->med_id)
         goto err_media;
-    pho_medium_info__init(req->format->med_id);
+    pho_resource_id__init(req->format->med_id);
 
     return 0;
 
@@ -307,7 +307,7 @@ void pho_srl_request_free(pho_req_t *req, bool unpack)
 
     if (req->ralloc) {
         for (i = 0; i < req->ralloc->n_med_ids; ++i) {
-            free(req->ralloc->med_ids[i]->id);
+            free(req->ralloc->med_ids[i]->name);
             free(req->ralloc->med_ids[i]);
         }
         free(req->ralloc->med_ids);
@@ -317,7 +317,7 @@ void pho_srl_request_free(pho_req_t *req, bool unpack)
 
     if (req->release) {
         for (i = 0; i < req->release->n_media; ++i) {
-            free(req->release->media[i]->med_id->id);
+            free(req->release->media[i]->med_id->name);
             free(req->release->media[i]->med_id);
             free(req->release->media[i]);
         }
@@ -327,7 +327,7 @@ void pho_srl_request_free(pho_req_t *req, bool unpack)
     }
 
     if (req->format) {
-        free(req->format->med_id->id);
+        free(req->format->med_id->name);
         free(req->format->med_id);
         free(req->format);
         req->format = NULL;
@@ -367,7 +367,7 @@ int pho_srl_response_write_alloc(pho_resp_t *resp, size_t n_media)
             malloc(sizeof(*resp->walloc->media[i]->med_id));
         if (!resp->walloc->media[i]->med_id)
             goto err_id;
-        pho_medium_info__init(resp->walloc->media[i]->med_id);
+        pho_resource_id__init(resp->walloc->media[i]->med_id);
     }
 
     return 0;
@@ -416,7 +416,7 @@ int pho_srl_response_read_alloc(pho_resp_t *resp, size_t n_media)
             malloc(sizeof(*resp->ralloc->media[i]->med_id));
         if (!resp->ralloc->media[i]->med_id)
             goto err_id;
-        pho_medium_info__init(resp->ralloc->media[i]->med_id);
+        pho_resource_id__init(resp->ralloc->media[i]->med_id);
     }
 
     return 0;
@@ -459,7 +459,7 @@ int pho_srl_response_release_alloc(pho_resp_t *resp, size_t n_media)
         resp->release->med_ids[i] = malloc(sizeof(*resp->release->med_ids[i]));
         if (!resp->release->med_ids[i])
             goto err_media_i;
-        pho_medium_info__init(resp->release->med_ids[i]);
+        pho_resource_id__init(resp->release->med_ids[i]);
     }
 
     return 0;
@@ -490,7 +490,7 @@ int pho_srl_response_format_alloc(pho_resp_t *resp)
     resp->format->med_id = malloc(sizeof(*resp->format->med_id));
     if (!resp->format->med_id)
         goto err_media;
-    pho_medium_info__init(resp->format->med_id);
+    pho_resource_id__init(resp->format->med_id);
 
     return 0;
 
@@ -549,7 +549,7 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
 
     if (resp->walloc) {
         for (i = 0; i < resp->walloc->n_media; ++i) {
-            free(resp->walloc->media[i]->med_id->id);
+            free(resp->walloc->media[i]->med_id->name);
             free(resp->walloc->media[i]->med_id);
             free(resp->walloc->media[i]->root_path);
             free(resp->walloc->media[i]);
@@ -561,7 +561,7 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
 
     if (resp->ralloc) {
         for (i = 0; i < resp->ralloc->n_media; ++i) {
-            free(resp->ralloc->media[i]->med_id->id);
+            free(resp->ralloc->media[i]->med_id->name);
             free(resp->ralloc->media[i]->med_id);
             free(resp->ralloc->media[i]->root_path);
             free(resp->ralloc->media[i]);
@@ -573,7 +573,7 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
 
     if (resp->release) {
         for (i = 0; i < resp->release->n_med_ids; ++i) {
-            free(resp->release->med_ids[i]->id);
+            free(resp->release->med_ids[i]->name);
             free(resp->release->med_ids[i]);
         }
         free(resp->release->med_ids);
@@ -582,7 +582,7 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
     }
 
     if (resp->format) {
-        free(resp->format->med_id->id);
+        free(resp->format->med_id->name);
         free(resp->format->med_id);
         free(resp->format);
         resp->format = NULL;

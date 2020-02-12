@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2019 CEA/DAM.
+ *  All rights reserved (c) 2014-2020 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -34,23 +34,23 @@
 /* Typedefs *******************************************************************/
 /******************************************************************************/
 
-typedef PhoMediumInfo pho_med_info_t;
+typedef PhoResourceId pho_rsc_id_t;
 
 /******************************************************************************/
 /* Convenient functions *******************************************************/
 /******************************************************************************/
 
 /**
- * Copy content of \a model in \a dest medium info
+ * Copy content of \a model in \a dest resource ID
  *
- * \param[out] dest  Medium info to set conforming to \provided model
- * \param[in]  model Medium info to copy
+ * \param[out] dest  Resource ID to set conforming to \provided model
+ * \param[in]  model Resource ID to copy
  */
-static inline void med_info_cpy(pho_med_info_t *dest,
-                                const pho_med_info_t *model)
+static inline void rsc_id_cpy(pho_rsc_id_t *dest,
+                              const pho_rsc_id_t *model)
 {
-    dest->type = model->type;
-    dest->id = strdup(model->id);
+    dest->family = model->family;
+    dest->name = strdup(model->name);
 }
 
 #endif /* _PHO_SRL_COMMON_H */

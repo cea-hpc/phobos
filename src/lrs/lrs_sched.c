@@ -2344,11 +2344,11 @@ static int sched_handle_medium_release(struct lrs_sched *sched,
     struct dev_descr *dev;
 
     /* Find the where the media is loaded */
-    dev = search_loaded_media(sched, medium->med_id->id);
+    dev = search_loaded_media(sched, medium->med_id->name);
     if (dev == NULL) {
         LOG_RETURN(-ENOENT,
                  "Could not find '%s' mount point, the media is not loaded",
-                 medium->med_id->id);
+                 medium->med_id->name);
     }
 
     /* Flush media and update media info in dss */
@@ -2435,13 +2435,13 @@ static int sched_handle_write_alloc(struct lrs_sched *sched, pho_req_t *req,
 
         /* build response */
         wresp->avail_size = devs[i]->dss_media_info->stats.phys_spc_free;
-        wresp->med_id->type = devs[i]->dss_media_info->rsc.id.family;
-        wresp->med_id->id = strdup(devs[i]->dss_media_info->rsc.id.name);
+        wresp->med_id->family = devs[i]->dss_media_info->rsc.id.family;
+        wresp->med_id->name = strdup(devs[i]->dss_media_info->rsc.id.name);
         wresp->root_path = strdup(devs[i]->mnt_path);
         wresp->fs_type = devs[i]->dss_media_info->fs.type;
         wresp->addr_type = devs[i]->dss_media_info->addr_type;
 
-        pho_debug("Allocated media %s for write request", wresp->med_id->id);
+        pho_debug("Allocated media %s for write request", wresp->med_id->name);
 
         if (wresp->root_path == NULL) {
             /*
@@ -2464,7 +2464,7 @@ out:
             struct dev_descr *dev;
             pho_resp_write_elt_t *wresp = resp->walloc->media[i];
 
-            dev = search_loaded_media(sched, wresp->med_id->id);
+            dev = search_loaded_media(sched, wresp->med_id->name);
             sched_dev_release(sched, dev);
             sched_media_release(sched, dev->dss_media_info);
         }
@@ -2515,8 +2515,8 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
         pho_resp_read_elt_t *rresp = resp->ralloc->media[n_selected];
         struct pho_id m;
 
-        m.family = rreq->med_ids[i]->type;
-        pho_id_name_set(&m, rreq->med_ids[i]->id);
+        m.family = rreq->med_ids[i]->family;
+        pho_id_name_set(&m, rreq->med_ids[i]->name);
 
         rc = sched_read_prepare(sched, &m, &dev);
         if (rc)
@@ -2527,8 +2527,8 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
         rresp->fs_type = dev->dss_media_info->fs.type;
         rresp->addr_type = dev->dss_media_info->addr_type;
         rresp->root_path = strdup(dev->mnt_path);
-        rresp->med_id->type = rreq->med_ids[i]->type;
-        rresp->med_id->id = strdup(rreq->med_ids[i]->id);
+        rresp->med_id->family = rreq->med_ids[i]->family;
+        rresp->med_id->name = strdup(rreq->med_ids[i]->name);
 
         if (n_selected == rreq->n_required)
             break;
@@ -2539,7 +2539,7 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
         for (i = 0; i < n_selected; i++) {
             pho_resp_read_elt_t *rresp = resp->ralloc->media[i];
 
-            dev = search_loaded_media(sched, rresp->med_id->id);
+            dev = search_loaded_media(sched, rresp->med_id->name);
             sched_dev_release(sched, dev);
             sched_media_release(sched, dev->dss_media_info);
         }
@@ -2629,8 +2629,8 @@ static int sched_handle_release_reqs(struct lrs_sched *sched,
             respl = respc->resp->release;
 
             for (i = 0; i < n_media; ++i) {
-                respl->med_ids[i]->type = rel->media[i]->med_id->type;
-                respl->med_ids[i]->id = strdup(rel->media[i]->med_id->id);
+                respl->med_ids[i]->family = rel->media[i]->med_id->family;
+                respl->med_ids[i]->name = strdup(rel->media[i]->med_id->name);
             }
 
             /* Free incoming request */
@@ -2653,8 +2653,8 @@ static int sched_handle_format(struct lrs_sched *sched, pho_req_t *req,
     if (rc)
         return rc;
 
-    m.family = freq->med_id->type;
-    pho_id_name_set(&m, freq->med_id->id);
+    m.family = freq->med_id->family;
+    pho_id_name_set(&m, freq->med_id->name);
 
     rc = sched_format(sched, &m, freq->fs, freq->unlock);
     if (rc) {
@@ -2674,8 +2674,8 @@ static int sched_handle_format(struct lrs_sched *sched, pho_req_t *req,
         }
     } else {
         resp->req_id = req->id;
-        resp->format->med_id->type = freq->med_id->type;
-        resp->format->med_id->id = strdup(freq->med_id->id);
+        resp->format->med_id->family = freq->med_id->family;
+        resp->format->med_id->name = strdup(freq->med_id->name);
     }
 
     return rc;
@@ -2693,7 +2693,8 @@ static int sched_handle_notify(struct lrs_sched *sched, pho_req_t *req,
 
     switch (nreq->op) {
     case PHO_NTFY_OP_ADD_DEVICE:
-        rc = sched_device_add(sched, nreq->rsrc_id->type, nreq->rsrc_id->name);
+        rc = sched_device_add(sched, nreq->rsrc_id->family,
+                              nreq->rsrc_id->name);
         break;
     default:
         LOG_GOTO(err, rc = -EINVAL, "The requested operation is not "
@@ -2704,7 +2705,7 @@ static int sched_handle_notify(struct lrs_sched *sched, pho_req_t *req,
         goto err;
 
     resp->req_id = req->id;
-    resp->notify->rsrc_id->type = nreq->rsrc_id->type;
+    resp->notify->rsrc_id->family = nreq->rsrc_id->family;
     resp->notify->rsrc_id->name = strdup(nreq->rsrc_id->name);
 
     return rc;

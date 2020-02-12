@@ -289,8 +289,8 @@ static void set_extent_info(struct extent *extent,
 {
     extent->layout_idx = layout_idx;
     extent->size = extent_size;
-    extent->media.family = medium->med_id->type;
-    pho_id_name_set(&extent->media, medium->med_id->id);
+    extent->media.family = medium->med_id->family;
+    pho_id_name_set(&extent->media, medium->med_id->name);
     extent->addr_type = medium->addr_type;
 }
 
@@ -646,8 +646,7 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
                                 "layout_idx %d",
                                 extent_index, candidate_extent->layout_idx);
         assert(candidate_extent->layout_idx == extent_index);
-        if (strcmp(medium->med_id->id, candidate_extent->media.name) == 0) {
-
+        if (strcmp(medium->med_id->name, candidate_extent->media.name) == 0) {
             extent = candidate_extent;
             break;
         }
@@ -748,9 +747,9 @@ static int raid1_enc_handle_release_resp(struct pho_encoder *enc,
     for (i = 0; i < rel_resp->n_med_ids; i++) {
         int rc2;
 
-        pho_debug("Marking medium %s as released", rel_resp->med_ids[i]->id);
+        pho_debug("Marking medium %s as released", rel_resp->med_ids[i]->name);
         /* If the media_id is unexpected, -EINVAL will be returned */
-        rc2 = mark_written_medium_released(raid1, rel_resp->med_ids[i]->id);
+        rc2 = mark_written_medium_released(raid1, rel_resp->med_ids[i]->name);
         if (rc2 && !rc)
             rc = rc2;
     }
@@ -833,9 +832,9 @@ static int raid1_dec_next_read_req(struct pho_encoder *dec, pho_req_t *req)
         pho_debug("Requesting medium %s to read copy %d of extent %d",
                   dec->layout->extents[ext_idx].media.name,
                   i, raid1->cur_extent_idx);
-        req->ralloc->med_ids[i]->type =
+        req->ralloc->med_ids[i]->family =
             dec->layout->extents[ext_idx].media.family;
-        req->ralloc->med_ids[i]->id =
+        req->ralloc->med_ids[i]->name =
             strdup(dec->layout->extents[ext_idx].media.name);
     }
 
@@ -878,8 +877,8 @@ static int raid1_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
             return rc;
 
         for (i = 0; i < resp->walloc->n_media; ++i)
-            med_info_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
-                         resp->walloc->media[i]->med_id);
+            rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
+                       resp->walloc->media[i]->med_id);
 
         /* Perform IO and populate release request with the outcome */
         if (raid1->repl_count == 1) {
@@ -907,8 +906,8 @@ static int raid1_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
             return rc;
 
         /* copy medium id from allocation response to release request */
-        med_info_cpy((*reqs)[*n_reqs].release->media[0]->med_id,
-                     resp->ralloc->media[0]->med_id);
+        rsc_id_cpy((*reqs)[*n_reqs].release->media[0]->med_id,
+                   resp->ralloc->media[0]->med_id);
 
         /* Perform IO and populate release request with the outcome */
         rc = simple_dec_read_chunk(enc, resp->ralloc->media[0]);

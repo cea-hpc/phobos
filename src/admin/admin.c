@@ -156,7 +156,7 @@ static int _admin_notify(struct admin_handle *adm, enum rsc_family family,
 
     req.id = rid;
     req.notify->op = op;
-    req.notify->rsrc_id->type = family;
+    req.notify->rsrc_id->family = family;
     req.notify->rsrc_id->name = strdup(name);
 
     rc = _send_and_receive(adm, &req, &resp);
@@ -165,7 +165,7 @@ static int _admin_notify(struct admin_handle *adm, enum rsc_family family,
 
     if (pho_response_is_notify(resp)) {
         if (resp->req_id == rid &&
-            (int) family == (int) resp->notify->rsrc_id->type &&
+            (int) family == (int) resp->notify->rsrc_id->family &&
             !strcmp(resp->notify->rsrc_id->name, name)) {
             pho_debug("Notify request succeeded");
             goto out;
@@ -221,8 +221,8 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
     req.id = rid;
     req.format->fs = fs;
     req.format->unlock = unlock;
-    req.format->med_id->type = id->family;
-    req.format->med_id->id = strdup(id->name);
+    req.format->med_id->family = id->family;
+    req.format->med_id->name = strdup(id->name);
 
     rc = _send_and_receive(adm, &req, &resp);
     if (rc)
@@ -230,8 +230,8 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
 
     if (pho_response_is_format(resp)) {
         if (resp->req_id == rid &&
-            (int)resp->format->med_id->type == (int)id->family &&
-            !strcmp(resp->format->med_id->id, id->name)) {
+            (int)resp->format->med_id->family == (int)id->family &&
+            !strcmp(resp->format->med_id->name, id->name)) {
             pho_debug("Format request succeeded");
             goto out;
         }

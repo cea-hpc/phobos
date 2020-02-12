@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2019 CEA/DAM.
+ *  All rights reserved (c) 2014-2020 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -46,17 +46,17 @@ message PhoRequest {
      * the provided med_ids (n_required <= n_med_ids).
      */
     message Read {
-        required uint32 n_required      = 1; // Number of media to actually
+        required uint32 n_required     = 1; // Number of media to actually
                                             // allocate among the ones
                                             // specified in med_ids.
-        repeated PhoMediumInfo med_ids = 2; // IDs of the requested media.
+        repeated PhoResourceId med_ids = 2; // IDs of the requested media.
     }
 
     /** Body of the release request. */
     message Release {
         /** Release request for one medium. */
         message Elt {
-            required PhoMediumInfo med_id = 1;  // ID of the medium to release.
+            required PhoResourceId med_id = 1;  // ID of the medium to release.
             required int32 rc             = 2;  // Outcome of the performed IO
                                                 // (0 or -errno).
             required uint64 size_written  = 3;  // Amount of bytes written
@@ -70,7 +70,7 @@ message PhoRequest {
 
     /** Body of the format request. */
     message Format {
-        required PhoMediumInfo med_id = 1; // ID of the medium to format.
+        required PhoResourceId med_id = 1; // ID of the medium to format.
         required PhoFsType fs         = 2; // Medium file system.
         required bool unlock          = 3; // True if the medium needs to be
                                            // unlocked after format.
@@ -98,7 +98,7 @@ message PhoResponse {
     message Write {
         /** Write allocation response for one medium. */
         message Elt {
-            required PhoMediumInfo med_id     = 1;  // ID of the allocated
+            required PhoResourceId med_id     = 1;  // ID of the allocated
                                                     // medium.
             required uint64 avail_size        = 2;  // Size available on this
                                                     // medium (potentially less
@@ -115,7 +115,7 @@ message PhoResponse {
     message Read {
         /** Read allocation response for one medium. */
         message Elt {
-            required PhoMediumInfo med_id     = 1;  // ID of the allocated
+            required PhoResourceId med_id     = 1;  // ID of the allocated
                                                     // medium.
             required string root_path         = 2;  // Mount point.
             required PhoFsType fs_type        = 3;  // Filesystem type.
@@ -127,12 +127,12 @@ message PhoResponse {
 
     /** Body of the release response. */
     message Release {
-        repeated PhoMediumInfo med_ids = 1;     // IDs of released media.
+        repeated PhoResourceId med_ids = 1;     // IDs of released media.
     }
 
     /** Body of the format response. */
     message Format {
-        required PhoMediumInfo med_id = 1;      // ID of formatted medium.
+        required PhoResourceId med_id = 1;      // ID of formatted medium.
     }
 
     /** Body of the notify response. */

@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2019 CEA/DAM.
+ *  All rights reserved (c) 2014-2020 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -23,24 +23,17 @@
  * \brief   Protobuf file for common structures.
  */
 
-/** Device family. */
-enum PhoDeviceType {
-    DV_DISK     = 0;    // Disk.
-    DV_TAPE_DRV = 1;    // Tape drive.
-    DV_DIR      = 2;    // Directory.
-}
-
-/** Medium info. */
-message PhoMediumInfo {
-    required PhoDeviceType type = 1; // Device family type.
-    required string id          = 2; // Medium identifier.
+/** Resource family. */
+enum PhoResourceFamily {
+    FM_DISK = 0;    // Disk.
+    FM_TAPE = 1;    // Tape.
+    FM_DIR  = 2;    // Directory.
 }
 
 /** Resource identifier. */
-// To replace PhoMediumInfo?
 message PhoResourceId {
-    required PhoDeviceType type = 1; // Family type.
-    required string name        = 2; // Resource name.
+    required PhoResourceFamily family = 1; // Family type.
+    required string name              = 2; // Resource name.
 }
 
 /** Notify operation. */
