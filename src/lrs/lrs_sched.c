@@ -1134,10 +1134,16 @@ retry:
         }
 
         /*
-         * The intent is to write: exclude medias that are full or do not have
-         * the requested tags
+         * The intent is to write: exclude media that are administratively
+         * locked, full or do not have the requested tags
          */
         if (required_size > 0 && itr->dss_media_info) {
+            if (itr->dss_media_info->rsc.adm_status !=
+                    PHO_RSC_ADM_ST_UNLOCKED) {
+                pho_debug("Media '%s' is not unlocked",
+                          itr->dss_media_info->rsc.id.name);
+                continue;
+            }
             if (itr->dss_media_info->fs.status == PHO_FS_STATUS_FULL) {
                 pho_debug("Media '%s' is full",
                           itr->dss_media_info->rsc.id.name);
@@ -1874,6 +1880,9 @@ static int sched_media_prepare(struct lrs_sched *sched,
     case LRS_OP_WRITE:
         if (med->fs.status == PHO_FS_STATUS_BLANK)
             LOG_RETURN(-EINVAL, "Cannot do I/O on unformatted media '%s'",
+                       id->name);
+        if (med->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
+            LOG_RETURN(-EPERM, "Cannot do I/O on an unavailable medium '%s'",
                        id->name);
         post_fs_mount = true;
         break;
