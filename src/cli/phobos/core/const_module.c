@@ -76,15 +76,15 @@ static PyObject *py_rsc_family2str(PyObject *self, PyObject *args)
     return Py_BuildValue("s", str_repr);
 }
 
-static PyObject *py_adm_status2str(PyObject *self, PyObject *args)
+static PyObject *py_rsc_adm_status2str(PyObject *self, PyObject *args)
 {
-    enum dev_adm_status status;
+    enum rsc_adm_status status;
     const char *str_repr;
 
     if (!PyArg_ParseTuple(args, "i", &status))
         return NULL;
 
-    str_repr = adm_status2str(status);
+    str_repr = rsc_adm_status2str(status);
 
     return Py_BuildValue("s", str_repr);
 }
@@ -136,7 +136,7 @@ static PyMethodDef ConstMethods[] = {
      "printable extent state name."},
     {"rsc_family2str", py_rsc_family2str, METH_VARARGS,
      "printable dev family name."},
-    {"adm_status2str", py_adm_status2str, METH_VARARGS,
+    {"rsc_adm_status2str", py_rsc_adm_status2str, METH_VARARGS,
      "printable fs status."},
     {"fs_status2str", py_fs_status2str, METH_VARARGS,
      "printable fs status."},
@@ -176,6 +176,13 @@ PyMODINIT_FUNC initconst(void)
     PyModule_AddIntMacro(mod, PHO_RSC_DIR);
     PyModule_AddIntMacro(mod, PHO_RSC_LAST);
 
+    /* enum rsc_adm_status */
+    PyModule_AddIntMacro(mod, PHO_RSC_ADM_ST_INVAL);
+    PyModule_AddIntMacro(mod, PHO_RSC_ADM_ST_LOCKED);
+    PyModule_AddIntMacro(mod, PHO_RSC_ADM_ST_UNLOCKED);
+    PyModule_AddIntMacro(mod, PHO_RSC_ADM_ST_FAILED);
+    PyModule_AddIntMacro(mod, PHO_RSC_ADM_ST_LAST);
+
     /* enum lib_type */
     PyModule_AddIntMacro(mod, PHO_LIB_INVAL);
     PyModule_AddIntMacro(mod, PHO_LIB_DUMMY);
@@ -187,18 +194,6 @@ PyMODINIT_FUNC initconst(void)
     PyModule_AddIntMacro(mod, PHO_FS_POSIX);
     PyModule_AddIntMacro(mod, PHO_FS_LTFS);
     PyModule_AddIntMacro(mod, PHO_FS_LAST);
-
-    /* enum dev_adm_status */
-    PyModule_AddIntMacro(mod, PHO_DEV_ADM_ST_INVAL);
-    PyModule_AddIntMacro(mod, PHO_DEV_ADM_ST_LOCKED);
-    PyModule_AddIntMacro(mod, PHO_DEV_ADM_ST_UNLOCKED);
-    PyModule_AddIntMacro(mod, PHO_DEV_ADM_ST_LAST);
-
-    /* enum media_adm_status */
-    PyModule_AddIntMacro(mod, PHO_MDA_ADM_ST_INVAL);
-    PyModule_AddIntMacro(mod, PHO_MDA_ADM_ST_LOCKED);
-    PyModule_AddIntMacro(mod, PHO_MDA_ADM_ST_UNLOCKED);
-    PyModule_AddIntMacro(mod, PHO_MDA_ADM_ST_LAST);
 
     /* enum address_type */
     PyModule_AddIntMacro(mod, PHO_ADDR_INVAL);

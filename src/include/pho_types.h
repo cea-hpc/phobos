@@ -279,10 +279,43 @@ static inline int pho_id_name_set(struct pho_id *id, const char *name)
     return 0;
 }
 
+/** Resource administrative state */
+enum rsc_adm_status {
+    PHO_RSC_ADM_ST_INVAL    = -1,
+    PHO_RSC_ADM_ST_LOCKED   =  0,
+    PHO_RSC_ADM_ST_UNLOCKED =  1,
+    PHO_RSC_ADM_ST_FAILED   =  2,
+    PHO_RSC_ADM_ST_LAST
+};
+
+static const char * const RSC_ADM_STATUS_NAMES[] = {
+    [PHO_RSC_ADM_ST_LOCKED]   = "locked",
+    [PHO_RSC_ADM_ST_UNLOCKED] = "unlocked",
+    [PHO_RSC_ADM_ST_FAILED]   = "failed"
+};
+
+static inline const char *rsc_adm_status2str(enum rsc_adm_status adm_st)
+{
+    if (adm_st >= PHO_RSC_ADM_ST_LAST || adm_st < 0)
+        return NULL;
+    return RSC_ADM_STATUS_NAMES[adm_st];
+}
+
+static inline enum rsc_adm_status str2rsc_adm_status(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_RSC_ADM_ST_LAST; i++)
+        if (!strcmp(str, RSC_ADM_STATUS_NAMES[i]))
+            return i;
+    return PHO_RSC_ADM_ST_INVAL;
+}
+
 /** Resource */
 struct pho_resource {
-    struct pho_id  id;    /**< Resource identifier. */
-    char          *model; /**< Resource model (if applicable). */
+    struct pho_id       id;         /**< Resource identifier. */
+    char               *model;      /**< Resource model (if applicable). */
+    enum rsc_adm_status adm_status; /**< Administrative status */
 };
 
 /** describe a piece of data in a layout */
@@ -309,41 +342,6 @@ struct pho_ext_loc {
 static inline bool is_ext_addr_set(const struct pho_ext_loc *loc)
 {
     return loc->extent->address.buff != NULL;
-}
-
-
-/**
- * Device Administrative state
- */
-enum dev_adm_status {
-    PHO_DEV_ADM_ST_INVAL    = -1,
-    PHO_DEV_ADM_ST_LOCKED   = 0,
-    PHO_DEV_ADM_ST_UNLOCKED = 1,
-    PHO_DEV_ADM_ST_FAILED   = 2,
-    PHO_DEV_ADM_ST_LAST
-};
-
-static const char * const dev_adm_st_names[] = {
-    [PHO_DEV_ADM_ST_LOCKED] = "locked",
-    [PHO_DEV_ADM_ST_UNLOCKED] = "unlocked",
-    [PHO_DEV_ADM_ST_FAILED] = "failed",
-};
-
-static inline const char *adm_status2str(enum dev_adm_status adm_st)
-{
-    if (adm_st >= PHO_DEV_ADM_ST_LAST || adm_st < 0)
-        return NULL;
-    return dev_adm_st_names[adm_st];
-}
-
-static inline enum dev_adm_status str2adm_status(const char *str)
-{
-    int i;
-
-    for (i = 0; i < PHO_DEV_ADM_ST_LAST; i++)
-        if (!strcmp(str, dev_adm_st_names[i]))
-            return i;
-    return PHO_DEV_ADM_ST_INVAL;
 }
 
 /**
@@ -390,7 +388,6 @@ struct dev_info {
      * So, use string instead of enum. */
     char                *path;
     char                *host;
-    enum dev_adm_status  adm_status;
     struct pho_lock      lock;
 
 };
@@ -421,38 +418,6 @@ struct media_fs {
 };
 
 /**
- * Media Administrative state
- */
-enum media_adm_status {
-    PHO_MDA_ADM_ST_INVAL    = -1,
-    PHO_MDA_ADM_ST_LOCKED   = 0,
-    PHO_MDA_ADM_ST_UNLOCKED = 1,
-    PHO_MDA_ADM_ST_LAST
-};
-
-static const char * const media_adm_st_names[] = {
-    [PHO_MDA_ADM_ST_LOCKED] = "locked",
-    [PHO_MDA_ADM_ST_UNLOCKED] = "unlocked",
-};
-
-static inline const char *media_adm_status2str(enum media_adm_status adm_st)
-{
-    if (adm_st >= PHO_MDA_ADM_ST_LAST || adm_st < 0)
-        return NULL;
-    return media_adm_st_names[adm_st];
-}
-
-static inline enum media_adm_status str2media_adm_status(const char *str)
-{
-    int i;
-
-    for (i = 0; i < PHO_MDA_ADM_ST_LAST; i++)
-        if (!strcmp(str, media_adm_st_names[i]))
-            return i;
-    return PHO_MDA_ADM_ST_INVAL;
-}
-
-/**
  * A simple array of tags (strings)
  */
 struct tags {
@@ -466,7 +431,6 @@ struct tags {
 struct media_info {
     struct pho_resource   rsc;          /**< Resource information */
     enum address_type     addr_type;    /**< Way to address this media */
-    enum media_adm_status adm_status;   /**< Administrative status */
     struct media_fs       fs;           /**< Local filesystem information */
     struct media_stats    stats;        /**< Usage metrics */
     struct tags           tags;         /**< Tags used for filtering */

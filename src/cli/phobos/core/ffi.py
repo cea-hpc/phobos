@@ -33,7 +33,7 @@ from ctypes import *
 from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX,
                                PHO_RSC_DIR, PHO_RSC_DISK, PHO_RSC_TAPE,
                                fs_type2str, fs_status2str,
-                               adm_status2str, rsc_family2str)
+                               rsc_adm_status2str, rsc_family2str)
 
 LIBPHOBOS_NAME = "libphobos_store.so"
 LIBPHOBOS = CDLL(LIBPHOBOS_NAME)
@@ -108,7 +108,8 @@ class Resource(Structure):
     """Resource."""
     _fields_ = [
         ('id', Id),
-        ('model', c_char_p)
+        ('model', c_char_p),
+        ('adm_status', c_int),
     ]
 
 class ResourceFamily(int):
@@ -130,14 +131,13 @@ class DevInfo(Structure, CLIManagedResourceMixin):
         ('rsc', Resource),
         ('path', c_char_p),
         ('host', c_char_p),
-        ('adm_status', c_int),
         ('lock', DSSLock)
     ]
 
     def get_display_fields(self):
         """Return a dict of available fields and optional display formatters."""
         return {
-            'adm_status': adm_status2str,
+            'adm_status': rsc_adm_status2str,
             'family': rsc_family2str,
             'host': None,
             'model': None,
@@ -161,6 +161,11 @@ class DevInfo(Structure, CLIManagedResourceMixin):
     def model(self):
         """Wrapper to get model"""
         return self.rsc.model
+
+    @property
+    def adm_status(self):
+        """Wrapper to get adm_status"""
+        return self.rsc.adm_status
 
     @property
     def lock_status(self):
@@ -221,7 +226,6 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
     _fields_ = [
         ('rsc', Resource),
         ('addr_type', c_int),
-        ('adm_status', c_int),
         ('fs', MediaFS),
         ('stats', MediaStats),
         ('_tags', Tags),
@@ -231,7 +235,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
     def get_display_fields(self):
         """Return a dict of available fields and optional display formatters."""
         return {
-            'adm_status': adm_status2str,
+            'adm_status': rsc_adm_status2str,
             'addr_type': None,
             'model': None,
             'name': None,
@@ -270,6 +274,11 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
     def model(self):
         """Wrapper to get medium model"""
         return self.rsc.model
+
+    @property
+    def adm_status(self):
+        """Wrapper to get adm_status"""
+        return self.rsc.adm_status
 
     @property
     def expanded_fs_info(self):

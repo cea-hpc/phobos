@@ -48,18 +48,18 @@ The syntax is: {<combo>: [<criteria0>, <criteria1>, ...]}
 == Examples ==
 
 # Retrieve unlocked devices:
-{"DSS::DEV::adm_status": PHO_DEV_ADM_ST_UNLOCKED}
+{"DSS::DEV::adm_status": PHO_RSC_ADM_ST_UNLOCKED}
 
 # Retrieve unlocked tape drives:
 {"$AND": [
-    {"DSS::DEV::adm_status": PHO_DEV_ADM_ST_UNLOCKED},
+    {"DSS::DEV::adm_status": PHO_RSC_ADM_ST_UNLOCKED},
     {"DSS::DEV::family": PHO_DEV_TAPE}
 ]}
 
 # Retrieve unlocked tapes with free space >=10GB, formatted and not full:
 {"$AND": [
   {"DSS::MDA::family": PHO_DEV_TAPE},
-  {"DSS::MDA::adm_status": PHO_MDA_ADM_ST_UNLOCKED},
+  {"DSS::MDA::adm_status": PHO_RSC_ADM_ST_UNLOCKED},
   {"$GTE": {"DSS::MDA::vol_free: 10737418240}},
   {"DSS::MDA::lock": ""},
   {"$NOR": [

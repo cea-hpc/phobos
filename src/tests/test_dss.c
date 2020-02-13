@@ -203,7 +203,7 @@ int main(int argc, char **argv)
                           "serial:%s adm_st:%s",
                           rsc_family2str(dev->rsc.id.family), dev->host,
                           dev->rsc.model, dev->path, dev->rsc.id.name,
-                          adm_status2str(dev->adm_status));
+                          rsc_adm_status2str(dev->rsc.adm_status));
             }
             break;
         case DSS_MEDIA:
@@ -212,7 +212,7 @@ int main(int argc, char **argv)
                           "address_type:%s fs_type:%s fs_status:%s",
                           media->rsc.id.name,
                           media->rsc.model,
-                          media_adm_status2str(media->adm_status),
+                          rsc_adm_status2str(media->rsc.adm_status),
                           address_type2str(media->addr_type),
                           fs_type2str(media->fs.type),
                           fs_status2str(media->fs.status));

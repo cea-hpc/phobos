@@ -558,7 +558,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
                               "  {\"DSS::DEV::family\": \"%s\"}"
                               "]}",
                               get_hostname(),
-                              adm_status2str(PHO_DEV_ADM_ST_UNLOCKED),
+                              rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
                               rsc_family2str(family));
         if (rc)
             return rc;
@@ -816,7 +816,7 @@ static int sched_select_media(struct lrs_sched *sched,
                           "  %s%s"
                           "]}",
                           rsc_family2str(family),
-                          media_adm_status2str(PHO_MDA_ADM_ST_UNLOCKED),
+                          rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
                           /**
                            * @TODO add criteria to limit the maximum number of
                            * data fragments:
@@ -2014,7 +2014,7 @@ static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
 
     if (unlock) {
         pho_verb("Unlocking media '%s'", id->name);
-        media_info->adm_status = PHO_MDA_ADM_ST_UNLOCKED;
+        media_info->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
     }
 
     rc = dss_media_set(&sched->dss, media_info, 1, DSS_SET_UPDATE);

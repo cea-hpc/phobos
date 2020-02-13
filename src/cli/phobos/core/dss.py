@@ -35,8 +35,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 
 from phobos.core.const import str2fs_type
 from phobos.core.const import PHO_ADDR_HASH1
-from phobos.core.const import PHO_MDA_ADM_ST_LOCKED, PHO_MDA_ADM_ST_UNLOCKED
-from phobos.core.const import PHO_DEV_ADM_ST_LOCKED, PHO_DEV_ADM_ST_UNLOCKED
+from phobos.core.const import PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED
 from phobos.core.const import DSS_SET_INSERT, DSS_SET_UPDATE, DSS_SET_DELETE
 
 from phobos.core.ffi import DevInfo, Id, MediaInfo, MediaStats, Resource
@@ -262,13 +261,10 @@ class DeviceManager(BaseObjectManager):
         """
         state = ldm_device_query(device_type, device_path)
         host = gethostname().split('.')[0]
-        if locked:
-            status = PHO_DEV_ADM_ST_LOCKED
-        else:
-            status = PHO_DEV_ADM_ST_UNLOCKED
+        status = PHO_RSC_ADM_ST_LOCKED if locked else PHO_RSC_ADM_ST_UNLOCKED
 
         dev_info = DevInfo(Resource(Id(state.lds_family, state.lds_serial),
-                           state.lds_model), device_path, host, status)
+                           state.lds_model, status), device_path, host)
 
         self.insert([dev_info])
 
@@ -302,15 +298,12 @@ class MediaManager(BaseObjectManager):
 
     def add(self, family, fstype, model, name, tags=None, locked=False):
         """Insert media into DSS."""
-        media = MediaInfo()
-        media.rsc = Resource(Id(family, name), model)
+        status = PHO_RSC_ADM_ST_LOCKED if locked else PHO_RSC_ADM_ST_UNLOCKED
+
+        media = MediaInfo(Resource(Id(family,name), model, status))
         media.fs.type = str2fs_type(fstype)
         media.addr_type = PHO_ADDR_HASH1
         media.tags = tags or []
-        if locked:
-            media.adm_status = PHO_MDA_ADM_ST_LOCKED
-        else:
-            media.adm_status = PHO_MDA_ADM_ST_UNLOCKED
 
         media.stats = MediaStats()
 

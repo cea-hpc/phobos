@@ -62,9 +62,9 @@ struct dev_info *dev_info_dup(const struct dev_info *dev)
 
     dev_out->rsc.id = dev->rsc.id;
     dev_out->rsc.model = strdup_safe(dev->rsc.model);
+    dev_out->rsc.adm_status = dev->rsc.adm_status;
     dev_out->path = strdup_safe(dev->path);
     dev_out->host = strdup_safe(dev->host);
-    dev_out->adm_status = dev->adm_status;
 
     return dev_out;
 }

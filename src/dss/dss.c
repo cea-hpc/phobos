@@ -1214,7 +1214,7 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
                     rsc_family2str(p_media->rsc.id.family),
                     model,
                     medium_name,
-                    media_adm_status2str(p_media->adm_status),
+                    rsc_adm_status2str(p_media->rsc.adm_status),
                     fs_type2str(p_media->fs.type),
                     address_type2str(p_media->addr_type),
                     fs_status2str(p_media->fs.status),
@@ -1229,7 +1229,7 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
                     update_query[DSS_MEDIA],
                     rsc_family2str(p_media->rsc.id.family),
                     model,
-                    media_adm_status2str(p_media->adm_status),
+                    rsc_adm_status2str(p_media->rsc.adm_status),
                     fs_type2str(p_media->fs.type),
                     address_type2str(p_media->addr_type),
                     fs_status2str(p_media->fs.status),
@@ -1276,7 +1276,7 @@ static int get_device_setrequest(PGconn *conn, struct dev_info *item_list,
             g_string_append_printf(request, insert_query_values[DSS_DEVICE],
                                    rsc_family2str(p_dev->rsc.id.family), model,
                                    p_dev->rsc.id.name, p_dev->host,
-                                   media_adm_status2str(p_dev->adm_status),
+                                   rsc_adm_status2str(p_dev->rsc.adm_status),
                                    p_dev->path, i < item_cnt-1 ? "," : ";");
             free(model);
         } else if (action == DSS_SET_UPDATE) {
@@ -1287,7 +1287,7 @@ static int get_device_setrequest(PGconn *conn, struct dev_info *item_list,
             g_string_append_printf(request, update_query[DSS_DEVICE],
                                    rsc_family2str(p_dev->rsc.id.family),
                                    model, p_dev->host,
-                                   media_adm_status2str(p_dev->adm_status),
+                                   rsc_adm_status2str(p_dev->rsc.adm_status),
                                    p_dev->path, p_dev->rsc.id.name);
             free(model);
         }
@@ -1565,14 +1565,14 @@ static int dss_device_from_pg_row(void *void_dev, PGresult *res, int row_num)
 {
     struct dev_info *dev = void_dev;
 
-    dev->rsc.id.family = str2rsc_family(PQgetvalue(res, row_num, 0));
-    dev->rsc.model     = get_str_value(res, row_num, 1);
+    dev->rsc.id.family  = str2rsc_family(PQgetvalue(res, row_num, 0));
+    dev->rsc.model      = get_str_value(res, row_num, 1);
     pho_id_name_set(&dev->rsc.id, get_str_value(res, row_num, 2));
-    dev->adm_status    = str2adm_status(PQgetvalue(res, row_num, 3));
-    dev->host          = get_str_value(res, row_num, 4);
-    dev->path          = get_str_value(res, row_num, 5);
-    dev->lock.lock     = get_str_value(res, row_num, 6);
-    dev->lock.lock_ts  = strtoul(PQgetvalue(res, row_num, 7), NULL, 10);
+    dev->rsc.adm_status = str2rsc_adm_status(PQgetvalue(res, row_num, 3));
+    dev->host           = get_str_value(res, row_num, 4);
+    dev->path           = get_str_value(res, row_num, 5);
+    dev->lock.lock      = get_str_value(res, row_num, 6);
+    dev->lock.lock_ts   = strtoul(PQgetvalue(res, row_num, 7), NULL, 10);
     return 0;
 }
 
@@ -1592,17 +1592,17 @@ static int dss_media_from_pg_row(void *void_media, PGresult *res, int row_num)
     struct media_info *medium = void_media;
     int rc;
 
-    medium->rsc.id.family = str2rsc_family(PQgetvalue(res, row_num, 0));
-    medium->rsc.model = get_str_value(res, row_num, 1);
+    medium->rsc.id.family  = str2rsc_family(PQgetvalue(res, row_num, 0));
+    medium->rsc.model      = get_str_value(res, row_num, 1);
     pho_id_name_set(&medium->rsc.id, PQgetvalue(res, row_num, 2));
-    medium->adm_status = str2media_adm_status(PQgetvalue(res, row_num, 3));
-    medium->addr_type = str2address_type(PQgetvalue(res, row_num, 4));
-    medium->fs.type = str2fs_type(PQgetvalue(res, row_num, 5));
-    medium->fs.status = str2fs_status(PQgetvalue(res, row_num, 6));
+    medium->rsc.adm_status = str2rsc_adm_status(PQgetvalue(res, row_num, 3));
+    medium->addr_type      = str2address_type(PQgetvalue(res, row_num, 4));
+    medium->fs.type        = str2fs_type(PQgetvalue(res, row_num, 5));
+    medium->fs.status      = str2fs_status(PQgetvalue(res, row_num, 6));
     strncpy(medium->fs.label, PQgetvalue(res, row_num, 7),
             sizeof(medium->fs.label));
-    medium->lock.lock = get_str_value(res, row_num, 10);
-    medium->lock.lock_ts = strtoul(PQgetvalue(res, row_num, 11), NULL, 10);
+    medium->lock.lock      = get_str_value(res, row_num, 10);
+    medium->lock.lock_ts   = strtoul(PQgetvalue(res, row_num, 11), NULL, 10);
 
     /* No dynamic allocation here */
     rc = dss_media_stats_decode(&medium->stats, PQgetvalue(res, row_num, 8));

@@ -83,11 +83,11 @@ static void add_dir(struct admin_handle *adm, struct dss_handle *dss,
     strtok(hostname, ".");
 
     /* Add dir media */
-    media->rsc.id.family = PHO_RSC_DIR;
     pho_id_name_set(&media->rsc.id, path);
+    media->rsc.id.family = PHO_RSC_DIR;
+    media->rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
     media->fs.type = PHO_FS_POSIX;
     media->addr_type = PHO_ADDR_HASH1;
-    media->adm_status = PHO_MDA_ADM_ST_LOCKED;
     ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
 
     /* Add dir device */
@@ -97,9 +97,9 @@ static void add_dir(struct admin_handle *adm, struct dss_handle *dss,
     pho_id_name_set(&dev->rsc.id, dev_st.lds_serial ? : "");
     dev->rsc.id.family = dev_st.lds_family;
     dev->rsc.model = dev_st.lds_model ? strdup(dev_st.lds_model) : NULL;
+    dev->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
     dev->path = (char *) path;
     dev->host = hostname;
-    dev->adm_status = PHO_DEV_ADM_ST_UNLOCKED;
     ldm_dev_state_fini(&dev_st);
 
     ASSERT_RC(dss_device_set(dss, dev, 1, DSS_SET_INSERT));
@@ -130,9 +130,9 @@ static void add_drive(struct admin_handle *adm, struct dss_handle *dss,
     pho_id_name_set(&dev->rsc.id, dev_st.lds_serial ? : "");
     dev->rsc.id.family = dev_st.lds_family;
     dev->rsc.model = dev_st.lds_model ? strdup(dev_st.lds_model) : NULL;
+    dev->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
     dev->path = (char *) path;
     dev->host = hostname;
-    dev->adm_status = PHO_DEV_ADM_ST_UNLOCKED;
 
     ldm_dev_state_fini(&dev_st);
 
@@ -148,12 +148,12 @@ static void add_tape(struct admin_handle *adm, struct dss_handle *dss,
                      struct media_info *media)
 {
     /* Add dir media */
-    media->rsc.id.family = PHO_RSC_TAPE;
     pho_id_name_set(&media->rsc.id, tape_id);
+    media->rsc.id.family = PHO_RSC_TAPE;
     media->rsc.model = strdup(model);
+    media->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
     media->fs.type = PHO_FS_LTFS;
     media->addr_type = PHO_ADDR_HASH1;
-    media->adm_status = PHO_MDA_ADM_ST_UNLOCKED;
     ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
 
     /* This can fail if the tape has already been formatted */
