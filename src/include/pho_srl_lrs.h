@@ -311,7 +311,7 @@ void pho_srl_request_free(pho_req_t *req, bool unpack);
 /**
  * Allocation of write response contents.
  *
- * \param[out]      req         Pointer to the response data structure.
+ * \param[out]      resp        Pointer to the response data structure.
  * \param[in]       n_media     Number of media targeted by the response.
  *
  * \return                      0 on success, -ENOMEM on failure.
@@ -321,7 +321,7 @@ int pho_srl_response_write_alloc(pho_resp_t *resp, size_t n_media);
 /**
  * Allocation of read response contents.
  *
- * \param[out]      req         Pointer to the response data structure.
+ * \param[out]      resp        Pointer to the response data structure.
  * \param[in]       n_media     Number of media targeted by the response.
  *
  * \return                      0 on success, -ENOMEM on failure.
@@ -331,7 +331,7 @@ int pho_srl_response_read_alloc(pho_resp_t *resp, size_t n_media);
 /**
  * Allocation of release response contents.
  *
- * \param[out]      req         Pointer to the response data structure.
+ * \param[out]      resp        Pointer to the response data structure.
  * \param[in]       n_media     Number of media targeted by the response.
  *
  * \return                      0 on success, -ENOMEM on failure.
@@ -341,7 +341,7 @@ int pho_srl_response_release_alloc(pho_resp_t *resp, size_t n_media);
 /**
  * Allocation of format response contents.
  *
- * \param[out]      req         Pointer to the response data structure.
+ * \param[out]      resp        Pointer to the response data structure.
  *
  * \return                      0 on success, -ENOMEM on failure.
  */
@@ -350,7 +350,7 @@ int pho_srl_response_format_alloc(pho_resp_t *resp);
 /**
  * Allocation of notify response contents.
  *
- * \param[out]      req         Pointer to the response data structure.
+ * \param[out]      resp        Pointer to the response data structure.
  *
  * \return                      0 on success, -ENOMEM on failure.
  */
@@ -359,7 +359,7 @@ int pho_srl_response_notify_alloc(pho_resp_t *resp);
 /**
  * Allocation of error response contents.
  *
- * \param[out]      req         Pointer to the response data structure.
+ * \param[out]      resp        Pointer to the response data structure.
  *
  * \return                      0 on success, -ENOMEM on failure.
  */
@@ -367,7 +367,7 @@ int pho_srl_response_error_alloc(pho_resp_t *resp);
 
 /**
  * Release of response contents.
- * \param[in]       req         Pointer to the response data structure.
+ * \param[in]       resp        Pointer to the response data structure.
  * \param[in]       unpack      true if the response comes from an unpack,
  *                              false else.
  */
