@@ -630,21 +630,7 @@ int sched_init(struct lrs_sched *sched)
 {
     int rc;
 
-    sched->devices = g_array_new(FALSE, TRUE, sizeof(struct dev_descr));
-    g_array_set_clear_func(sched->devices, dev_descr_fini);
-    sched->req_queue = g_queue_new();
-    sched->release_queue = g_queue_new();
-
-    /* Connect to the DSS*/
-    rc = dss_init(&sched->dss);
-    if (rc)
-        return rc;
-
-    /* Load the device state -- not critical if no device are found */
-    sched_load_dev_state(sched);
-
-    /*
-     * For the lock owner name to generate a collision, either the tid or the
+    /* For the lock owner name to generate a collision, either the tid or the
      * sched_lock_number has to loop in less than 1 second.
      *
      * Ensure that we don't build an identifier bigger than 256 characters.
@@ -656,6 +642,21 @@ int sched_init(struct lrs_sched *sched)
         return -ENOMEM;
 
     sched_lock_number++;
+
+    /* Connect to the DSS */
+    rc = dss_init(&sched->dss);
+    if (rc) {
+        free(sched->lock_owner);
+        return rc;
+    }
+
+    sched->devices = g_array_new(FALSE, TRUE, sizeof(struct dev_descr));
+    g_array_set_clear_func(sched->devices, dev_descr_fini);
+    sched->req_queue = g_queue_new();
+    sched->release_queue = g_queue_new();
+
+    /* Load the device state -- not critical if no device is found */
+    sched_load_dev_state(sched);
 
     return 0;
 }
