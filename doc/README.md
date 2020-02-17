@@ -267,16 +267,15 @@ phobos configuration file:
 ```
 [store]
 # indicate 'tape' or 'dir' family
-family = tape
+default_family = tape
 ```
 
-Alternatively, you can override this value in the environment (like any other
-configuration parameter) by setting the `PHOBOS_STORE_default_family` variable.
+Alternatively, you can override this value by using the '-f' option of your
+put commands:
 
-Example:
 ```
 # put data to directory storage
-PHOBOS_STORE_default_family=dir phobos put file.in obj123
+phobos put -f dir file.in obj123
 ```
 
 ### Configuring device and media types

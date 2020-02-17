@@ -45,7 +45,7 @@ from ClusterShell.NodeSet import NodeSet
 
 from phobos.core.admin import Client as AdminClient
 from phobos.core.cfg import load_file as cfg_load_file
-from phobos.core.const import (PHO_LIB_SCSI,
+from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str,
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED)
 from phobos.core.dss import Client as DSSClient
 from phobos.core.ffi import DevInfo, MediaInfo, ResourceFamily
@@ -287,6 +287,10 @@ class StoreGenericPutHandler(XferOptHandler):
         parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
                             help='Only use media that contain all these tags '
                                  '(comma-separated: foo,bar)')
+        parser.add_argument('-f', '--family',
+                            choices=map(rsc_family2str,
+                                        ResourceFamily.__members__.values()),
+                            help='Targeted storage family')
 
 
 class StorePutHandler(StoreGenericPutHandler):
@@ -314,9 +318,12 @@ class StorePutHandler(StoreGenericPutHandler):
             self.logger.debug("Loaded attributes set %r", attrs)
         tags = self.params.get('tags', [])
 
+        family = self.params.get('family')
+
         self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
 
-        self.client.put_register(oid, src, attrs=attrs, tags=tags)
+        self.client.put_register(oid, src, family=family, attrs=attrs,
+                                 tags=tags)
         try:
             self.client.run()
         except IOError as err:
@@ -347,6 +354,8 @@ class StoreMPutHandler(StoreGenericPutHandler):
             fin = open(path)
         tags = self.params.get('tags', [])
 
+        family = self.params.get('family', [])
+
         for i, line in enumerate(fin):
             # Skip empty lines and comments
             line = line.strip()
@@ -369,7 +378,8 @@ class StoreMPutHandler(StoreGenericPutHandler):
                 self.logger.debug("Loaded attributes set %r", attrs)
 
             self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
-            self.client.put_register(oid, src, attrs=attrs, tags=tags)
+            self.client.put_register(oid, src, family=family, attrs=attrs,
+                                     tags=tags)
 
         if fin is not sys.stdin:
             fin.close()
@@ -885,7 +895,7 @@ class DirOptHandler(MediaOptHandler, DeviceOptHandler):
     """Directory-related options and actions."""
     label = 'dir'
     descr = 'handle directories'
-    family = ResourceFamily(ResourceFamily.DIR)
+    family = ResourceFamily(ResourceFamily.RSC_DIR)
     verbs = MediaOptHandler.verbs
 
     def exec_add(self):
@@ -920,7 +930,7 @@ class DriveOptHandler(DeviceOptHandler):
     """Tape Drive options and actions."""
     label = 'drive'
     descr = 'handle tape drives (use ID or device path to identify resource)'
-    family = ResourceFamily(ResourceFamily.TAPE)
+    family = ResourceFamily(ResourceFamily.RSC_TAPE)
     verbs = [
         AddOptHandler,
         FormatOptHandler,
@@ -962,7 +972,7 @@ class TapeOptHandler(MediaOptHandler):
     """Magnetic tape options and actions."""
     label = 'tape'
     descr = 'handle magnetic tape (use tape label to identify resource)'
-    family = ResourceFamily(ResourceFamily.TAPE)
+    family = ResourceFamily(ResourceFamily.RSC_TAPE)
     verbs = [
         TapeAddOptHandler,
         MediaUpdateOptHandler,
@@ -978,7 +988,7 @@ class LibOptHandler(BaseResourceOptHandler):
     descr = 'handle tape libraries'
     # for now, this class in only used for tape library actions, but in case
     # it is used for other families, set family as None
-    family = ResourceFamily(ResourceFamily.TAPE)
+    family = ResourceFamily(ResourceFamily.RSC_TAPE)
     verbs = [
         ScanOptHandler,
     ]

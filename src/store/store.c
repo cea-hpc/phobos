@@ -194,8 +194,8 @@ err_nores:
     return rc;
 }
 
-/** return the resource family to write data */
-static enum rsc_family put_family(void)
+/** Return the (configured) default resource family. */
+static enum rsc_family default_family_from_cfg(void)
 {
     const char *fam_str;
 
@@ -786,11 +786,9 @@ static int phobos_xfer(struct pho_xfer_desc *xfers, size_t n,
 int phobos_put(struct pho_xfer_desc *xfers, size_t n,
                pho_completion_cb_t cb, void *udata)
 {
-    enum rsc_family default_family;
     const char *default_layout;
     size_t i;
 
-    default_family = put_family();
     default_layout = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, default_layout);
 
     for (i = 0; i < n; i++) {
@@ -799,7 +797,7 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
             xfers[i].xd_layout_name = default_layout;
 
         if (xfers[i].xd_family == PHO_RSC_INVAL)
-            xfers[i].xd_family = default_family;
+            xfers[i].xd_family = default_family_from_cfg();
     }
 
     return phobos_xfer(xfers, n, cb, udata);

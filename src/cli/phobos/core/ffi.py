@@ -115,9 +115,15 @@ class Resource(Structure):
 class ResourceFamily(int):
     """Resource family enumeration."""
     # XXX: this class will become an IntEnum once we migrate to python3
-    DISK = PHO_RSC_DISK
-    TAPE = PHO_RSC_TAPE
-    DIR  = PHO_RSC_DIR
+    __members__ = {
+        'RSC_DISK': PHO_RSC_DISK,
+        'RSC_TAPE': PHO_RSC_TAPE,
+        'RSC_DIR':  PHO_RSC_DIR,
+    }
+
+    RSC_DISK = PHO_RSC_DISK
+    RSC_TAPE = PHO_RSC_TAPE
+    RSC_DIR  = PHO_RSC_DIR
 
     def __init__(self, value):
         self.value = value

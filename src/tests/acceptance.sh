@@ -230,6 +230,24 @@ function put_get_test
         error "Object attributes do not match expectations"
 }
 
+# Test family based media selection
+function put_family
+{
+    local PSQL="psql phobos phobos"
+    local id=test/hosts-fam.$$
+    local request="SELECT extents FROM extent WHERE oid='$id';"
+
+    # phobos put
+    PHOBOS_STORE_default_family="disk" $LOG_VALG $phobos put \
+        -f $1 /etc/hosts $id
+
+    # PSQL command to get the the extent metadata, with the family of
+    # the medium it was written to
+    # XXX: will be replaced by a 'phobos object list' when implemented
+    $PSQL -t -c "$request" | grep -q "\"fam\": \"$1\"" ||
+        error "Put with family should have written object on a family medium"
+}
+
 # Test tag based media selection
 function put_tags
 {
@@ -474,6 +492,7 @@ PHO_TMP_DIR="$(mktemp -d)"
 trap cleanup EXIT
 dir_setup
 put_get_test
+put_family dir
 put_tags
 concurrent_put
 check_status dir "$dirs"
@@ -489,6 +508,7 @@ if  [[ -w /dev/changer ]]; then
     export PHOBOS_STORE_default_family="tape"
     tape_setup
     put_get_test
+    put_family tape
     put_tags
     concurrent_put
     check_status tape "$tapes"

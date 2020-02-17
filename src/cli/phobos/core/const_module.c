@@ -76,6 +76,23 @@ static PyObject *py_rsc_family2str(PyObject *self, PyObject *args)
     return Py_BuildValue("s", str_repr);
 }
 
+static PyObject *ValueError;
+
+static PyObject *py_str2rsc_family(PyObject *self, PyObject *args)
+{
+    enum rsc_family family;
+    const char *str_repr;
+
+    if (!PyArg_ParseTuple(args, "s", &str_repr)) {
+        PyErr_SetString(ValueError, "Unrecognized family");
+        return Py_BuildValue("i", PHO_RSC_INVAL);
+    }
+
+    family = str2rsc_family(str_repr);
+
+    return Py_BuildValue("i", family);
+}
+
 static PyObject *py_rsc_adm_status2str(PyObject *self, PyObject *args)
 {
     enum rsc_adm_status status;
@@ -136,6 +153,8 @@ static PyMethodDef ConstMethods[] = {
      "printable extent state name."},
     {"rsc_family2str", py_rsc_family2str, METH_VARARGS,
      "printable dev family name."},
+    {"str2rsc_family", py_str2rsc_family, METH_VARARGS,
+     "family enum value from name."},
     {"rsc_adm_status2str", py_rsc_adm_status2str, METH_VARARGS,
      "printable fs status."},
     {"fs_status2str", py_fs_status2str, METH_VARARGS,
@@ -143,7 +162,7 @@ static PyMethodDef ConstMethods[] = {
     {"fs_type2str", py_fs_type2str, METH_VARARGS,
      "printable fs type."},
     {"str2fs_type", py_str2fs_type, METH_VARARGS,
-     "printable dev family name."},
+     "fs type enum value from name."},
     {NULL, NULL, 0, NULL}
 };
 
