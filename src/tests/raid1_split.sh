@@ -103,13 +103,13 @@ function create_in_file
 # start with a clean/empty phobos DB
 drop_tables
 setup_tables
-invoke_daemon
-# clean at exit
-trap cleanup EXIT
 # set start context
 create_in_file
 dir_setup
 insert_dir
+invoke_daemon
+# clean at exit
+trap cleanup EXIT
 
 # put file
 $LOG_VALG $phobos -v put $IN_FILE $OBJECT
