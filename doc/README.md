@@ -278,6 +278,36 @@ put commands:
 phobos put -f dir file.in obj123
 ```
 
+### Storage layouts
+
+For now, phobos supports 2 storage layouts: simple and raid1 (for mirroring).
+
+The default layout to use when data is written can be specified in the phobos
+configuration file:
+
+```
+[store]
+# indicate 'simple' or 'raid1' layout
+default_layout = simple
+```
+
+Alternatively, you can override this value by using the '-l' option of your
+put commands:
+
+```
+# put data using a raid1 layout
+phobos put -l raid1 file.in obj123
+```
+
+Layouts can have additional parameters. For now, the only additional parameter
+is for raid1 number of replicas. This is for now specified using the following
+env variable:
+
+```
+# put data using a raid1 layout with 3 replicas
+PHOBOS_LAYOUT_RAID1_repl_count=3 phobos put -l raid1 file.in obj123
+```
+
 ### Configuring device and media types
 
 #### Supported tape models

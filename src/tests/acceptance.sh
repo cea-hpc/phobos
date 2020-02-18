@@ -21,6 +21,10 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
+# TODO: change the way the resources are managed through the acceptance
+# test cases: maybe considering all are locked, and only unlocking
+# resources the test need at start, and relocking them when the test ends
+
 set -xe
 
 LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
@@ -246,6 +250,43 @@ function put_family
     # XXX: will be replaced by a 'phobos object list' when implemented
     $PSQL -t -c "$request" | grep -q "\"fam\": \"$1\"" ||
         error "Put with family should have written object on a family medium"
+}
+
+function put_layout
+{
+    local PSQL="psql phobos phobos"
+    local id1=test/hosts-lay1.$$
+    local id2=test/hosts-lay2.$$
+    local request1="SELECT lyt_info FROM extent WHERE oid='$id1';"
+    local request2="SELECT lyt_info FROM extent WHERE oid='$id2';"
+
+    # unlock enough resources to make the test:
+    # - only the second dir, the first one is already unlocked
+    # - not needed for tapes, as only one among eight is locked
+    # XXX: will also unlock a tape drive when lock admin on drives
+    # will be considered by daemon scheduler
+    if [[ $PHOBOS_STORE_default_family == "dir" ]]; then
+        $LOG_VALG $phobos dir unlock /tmp/test.pho.2
+    fi
+
+    # phobos put
+    $LOG_VALG $phobos put -l simple /etc/hosts $id1
+    $LOG_VALG $phobos put -l raid1 /etc/hosts $id2
+
+    # PSQL command to get the extent layout info
+    # XXX: will be replaced by a 'phobos object list' when implemented
+    $PSQL -t -c "$request1" | grep -q "\"name\": \"simple\"" ||
+        error "Put with simple layout should have written object using " \
+              "a simple layout"
+
+    $PSQL -t -c "$request2" | grep -q "\"name\": \"raid1\"" ||
+        error "Put with raid1 layout should have written object using " \
+              "a raid1 layout"
+
+    # relock resources we previously unlocked
+    if [[ $PHOBOS_STORE_default_family == "dir" ]]; then
+        $LOG_VALG $phobos dir lock /tmp/test.pho.2
+    fi
 }
 
 # Test tag based media selection
@@ -493,6 +534,7 @@ trap cleanup EXIT
 dir_setup
 put_get_test
 put_family dir
+put_layout
 put_tags
 concurrent_put
 check_status dir "$dirs"

@@ -132,15 +132,15 @@ class XferDescriptor(Structure):
         the opened file.
         """
         self.xd_objid = desc[0]
-        self.xd_op = desc[6]
-        self.xd_layout_name = 0
+        self.xd_op = desc[7]
+        self.xd_layout_name = desc[3]
         self.xd_family = desc[2]
-        self.xd_flags = desc[4]
-        self.xd_tags = Tags(desc[5])
+        self.xd_flags = desc[5]
+        self.xd_tags = Tags(desc[6])
         self.xd_rc = 0
 
-        if desc[3]:
-            for k, v in desc[3].iteritems():
+        if desc[4]:
+            for k, v in desc[4].iteritems():
                 rc = LIBPHOBOS.pho_attr_set(byref(self.xd_attrs),
                                             str(k), str(v))
                 if rc:
@@ -219,21 +219,22 @@ class Client(object):
 
     def getmd_register(self, oid, data_path, attrs=None):
         """Enqueue a GETMD transfer."""
-        self.getmd_session.append((oid, data_path, -1, attrs, 0, None,
+        self.getmd_session.append((oid, data_path, -1, 0, attrs, 0, None,
                                  PHO_XFER_OP_GETMD))
 
     def get_register(self, oid, data_path, attrs=None):
         """Enqueue a GET transfer."""
-        self.get_session.append((oid, data_path, -1, attrs, 0, None,
+        self.get_session.append((oid, data_path, -1, 0, attrs, 0, None,
                                  PHO_XFER_OP_GET))
 
-    def put_register(self, oid, data_path, family=None, attrs=None, tags=None):
+    def put_register(self, oid, data_path, family=None, layout=None, attrs=None,
+                     tags=None):
         """Enqueue a PUT transfert."""
         if family is None:
             family = cfg_get_val("store", "default_family")
 
-        self.put_session.append((oid, data_path, str2rsc_family(family), attrs,
-                                 0, tags, PHO_XFER_OP_PUT))
+        self.put_session.append((oid, data_path, str2rsc_family(family), layout,
+                                 attrs, 0, tags, PHO_XFER_OP_PUT))
 
     def clear(self):
         """Release resources associated to the current queues."""

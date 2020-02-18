@@ -291,6 +291,8 @@ class StoreGenericPutHandler(XferOptHandler):
                             choices=map(rsc_family2str,
                                         ResourceFamily.__members__.values()),
                             help='Targeted storage family')
+        parser.add_argument('-l', '--layout', choices=["simple", "raid1"],
+                            help='Desired storage layout')
 
 
 class StorePutHandler(StoreGenericPutHandler):
@@ -316,14 +318,15 @@ class StorePutHandler(StoreGenericPutHandler):
         if attrs is not None:
             attrs = attr_convert(attrs)
             self.logger.debug("Loaded attributes set %r", attrs)
-        tags = self.params.get('tags', [])
 
+        tags = self.params.get('tags', [])
         family = self.params.get('family')
+        layout = self.params.get('layout')
 
         self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
 
-        self.client.put_register(oid, src, family=family, attrs=attrs,
-                                 tags=tags)
+        self.client.put_register(oid, src, family=family, layout=layout,
+                                 attrs=attrs, tags=tags)
         try:
             self.client.run()
         except IOError as err:
@@ -352,9 +355,10 @@ class StoreMPutHandler(StoreGenericPutHandler):
             fin = sys.stdin
         else:
             fin = open(path)
-        tags = self.params.get('tags', [])
 
+        tags = self.params.get('tags', [])
         family = self.params.get('family', [])
+        layout = self.params.get('layout', [])
 
         for i, line in enumerate(fin):
             # Skip empty lines and comments
@@ -378,8 +382,8 @@ class StoreMPutHandler(StoreGenericPutHandler):
                 self.logger.debug("Loaded attributes set %r", attrs)
 
             self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
-            self.client.put_register(oid, src, family=family, attrs=attrs,
-                                     tags=tags)
+            self.client.put_register(oid, src, family=family, layout=layout,
+                                     attrs=attrs, tags=tags)
 
         if fin is not sys.stdin:
             fin.close()
