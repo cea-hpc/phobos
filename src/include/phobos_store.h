@@ -50,40 +50,50 @@ enum pho_xfer_flags {
  */
 typedef void (*pho_completion_cb_t)(void *u, const struct pho_xfer_desc *, int);
 
+/**
+ * Phobos XFer operations.
+ */
 enum pho_xfer_op {
-    PHO_XFER_OP_PUT,   /**< Put operation */
-    PHO_XFER_OP_GET,   /**< Get operation */
-    PHO_XFER_OP_GETMD  /**< Get metadata operation */
+    PHO_XFER_OP_PUT,   /**< PUT operation. */
+    PHO_XFER_OP_GET,   /**< GET operation. */
+    PHO_XFER_OP_GETMD  /**< GET metadata operation. */
 };
 
 /**
- * GET / PUT parameter.
+ * PUT parameters.
+ */
+struct pho_xfer_put_params {
+    ssize_t          size;        /**< Amount of data to write. */
+    enum rsc_family  family;      /**< Targeted resource family. */
+    const char      *layout_name; /**< Name of the layout module to use. */
+    struct tags      tags;        /**< Tags to select a media to write. */
+};
+
+/**
+ * Operation parameters.
+ */
+union pho_xfer_params {
+    struct pho_xfer_put_params put; /**< PUT parameters. */
+};
+
+/**
+ * Xfer descriptor.
  * The source/destination semantics of the fields vary
  * depending on the nature of the operation.
  * See below:
+ *  - pĥobos_getmd()
  *  - phobos_get()
  *  - phobos_put()
  */
 struct pho_xfer_desc {
-    char                *xd_objid;   /**< Object id to read or write */
-    enum pho_xfer_op     xd_op;      /**< Operation to perform
-                                       *  (GET, GETMD or PUT)
-                                       */
-    int                  xd_fd;      /**< positive fd if xd_id_open */
-    ssize_t              xd_size;    /**< Amount of data to write (for the GET
-                                       * operation, the size read is equal to
-                                       * the size of the retrieved object)
-                                       */
-    const char          *xd_layout_name; /**< Name of the layout module to use
-                                           * (for put).
-                                           */
-    enum rsc_family      xd_family;  /**< Targeted resource family (for PUT) */
-    struct pho_attrs     xd_attrs;   /**< User defined attribute to get / put */
-    enum pho_xfer_flags  xd_flags;   /**< See enum pho_xfer_flags doc */
-    struct tags          xd_tags;    /**< Tags to select a media to write */
-    int                  xd_rc;      /**< Outcome of this xfer */
+    char                   *xd_objid;  /**< Object ID to read or write. */
+    enum pho_xfer_op        xd_op;     /**< Operation to perform. */
+    int                     xd_fd;     /**< FD of the source/destination. */
+    struct pho_attrs        xd_attrs;  /**< User defined attributes. */
+    union pho_xfer_params   xd_params; /**< Operation parameters. */
+    enum pho_xfer_flags     xd_flags;  /**< See enum pho_xfer_flags doc. */
+    int                     xd_rc;     /**< Outcome of this xfer. */
 };
-
 
 /**
  * Put N files to the object store with minimal overhead.

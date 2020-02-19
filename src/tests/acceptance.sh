@@ -504,7 +504,6 @@ function tape_drive_compat
     rm /tmp/svc_lto5_from_lto5_drive
     $phobos get svc_lto6 /tmp/svc_lto6_from_lto5_drive &&
         error "getting data from lto6 tape with one lto5 drive must fail"
-    rm -f /tmp/svc_lto6_from_lto5_drive
 
     #test with only one lto6 drive
     lock_all_drives

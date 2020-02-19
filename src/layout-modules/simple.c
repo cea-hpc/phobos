@@ -367,14 +367,16 @@ static int simple_enc_next_write_req(struct pho_encoder *enc, pho_req_t *req)
     int rc = 0, i;
 
     /* Otherwise, generate the next request */
-    rc = pho_srl_request_write_alloc(req, 1, &enc->xfer->xd_tags.n_tags);
+    rc = pho_srl_request_write_alloc(req, 1,
+                                     &enc->xfer->xd_params.put.tags.n_tags);
     if (rc)
         return rc;
 
     req->walloc->media[0]->size = simple->to_write;
 
-    for (i = 0; i < enc->xfer->xd_tags.n_tags; ++i)
-        req->walloc->media[0]->tags[i] = strdup(enc->xfer->xd_tags.tags[i]);
+    for (i = 0; i < enc->xfer->xd_params.put.tags.n_tags; ++i)
+        req->walloc->media[0]->tags[i] =
+            strdup(enc->xfer->xd_params.put.tags.tags[i]);
 
     return rc;
 }
@@ -598,7 +600,7 @@ static int layout_simple_encode(struct pho_encoder *enc)
         for (i = 0; i < enc->layout->ext_count; i++)
             simple->to_write += enc->layout->extents[i].size;
     } else {
-        ssize_t to_write = enc->xfer->xd_size;
+        ssize_t to_write = enc->xfer->xd_params.put.size;
 
         if (to_write < 0)
             return to_write;

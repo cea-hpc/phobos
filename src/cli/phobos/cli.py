@@ -51,7 +51,7 @@ from phobos.core.dss import Client as DSSClient
 from phobos.core.ffi import DevInfo, MediaInfo, ResourceFamily
 from phobos.core.ldm import LibAdapter
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
-from phobos.core.store import Client as XferClient, attrs_as_dict
+from phobos.core.store import Client as XferClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
 
 def phobos_log_handler(log_record):
@@ -319,14 +319,13 @@ class StorePutHandler(StoreGenericPutHandler):
             attrs = attr_convert(attrs)
             self.logger.debug("Loaded attributes set %r", attrs)
 
-        tags = self.params.get('tags', [])
-        family = self.params.get('family')
-        layout = self.params.get('layout')
+        put_params = PutParams(self.params.get('family'),
+                               self.params.get('layout'),
+                               self.params.get('tags', []))
 
         self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
 
-        self.client.put_register(oid, src, family=family, layout=layout,
-                                 attrs=attrs, tags=tags)
+        self.client.put_register(oid, src, attrs=attrs, put_params=put_params)
         try:
             self.client.run()
         except IOError as err:
@@ -356,9 +355,9 @@ class StoreMPutHandler(StoreGenericPutHandler):
         else:
             fin = open(path)
 
-        tags = self.params.get('tags', [])
-        family = self.params.get('family', [])
-        layout = self.params.get('layout', [])
+        put_params = PutParams(self.params.get('family'),
+                               self.params.get('layout'),
+                               self.params.get('tags', []))
 
         for i, line in enumerate(fin):
             # Skip empty lines and comments
@@ -382,8 +381,8 @@ class StoreMPutHandler(StoreGenericPutHandler):
                 self.logger.debug("Loaded attributes set %r", attrs)
 
             self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
-            self.client.put_register(oid, src, family=family, layout=layout,
-                                     attrs=attrs, tags=tags)
+            self.client.put_register(oid, src, attrs=attrs,
+                                     put_params=put_params)
 
         if fin is not sys.stdin:
             fin.close()

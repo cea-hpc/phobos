@@ -27,7 +27,7 @@ import unittest
 from contextlib import contextmanager
 from tempfile import NamedTemporaryFile
 
-from phobos.core.const import PHO_XFER_OP_GETMD
+from phobos.core.const import PHO_XFER_OP_GETMD, PHO_XFER_OP_PUT
 from phobos.core.store import XferDescriptor
 
 class FileDescTest(unittest.TestCase):
@@ -47,8 +47,9 @@ class FileDescTest(unittest.TestCase):
 
     def _getsize_good(self, path, size):
         xfr = XferDescriptor()
+        xfr.xd_op = PHO_XFER_OP_PUT
         xfr.open_file(path)
-        self.assertEqual(xfr.xd_size, size)
+        self.assertEqual(xfr.xd_params.put.size, size)
         os.close(xfr.xd_fd)
 
     def test_open_good(self):

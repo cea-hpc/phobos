@@ -74,8 +74,8 @@ int main(int argc, char **argv)
 
         for (i = 2; i < argc; i++) {
             xfer_desc_open_path(&xfer, argv[i], PHO_XFER_OP_PUT, 0);
+            xfer.xd_params.put.family = PHO_RSC_INVAL;
             xfer.xd_objid = realpath(argv[i], NULL);
-            xfer.xd_family = PHO_RSC_INVAL;
             xfer.xd_attrs = attrs;
 
             rc = phobos_put(&xfer, 1, NULL, NULL);
@@ -105,8 +105,8 @@ int main(int argc, char **argv)
 
         for (i = 0; i < argc; i++) {
             xfer_desc_open_path(xfer + i, argv[i], PHO_XFER_OP_PUT, 0);
+            xfer[i].xd_params.put.family = PHO_RSC_INVAL;
             xfer[i].xd_objid = realpath(argv[i], NULL);
-            xfer[i].xd_family = PHO_RSC_INVAL;
             xfer[i].xd_attrs = attrs;
         }
 
@@ -131,11 +131,11 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
 
         xfer_desc_open_path(&xfer, argv[2], PHO_XFER_OP_PUT, 0);
+        xfer.xd_params.put.family = PHO_RSC_INVAL;
+        xfer.xd_params.put.tags.tags = &argv[3];
+        xfer.xd_params.put.tags.n_tags = argc - 3;
         xfer.xd_objid = realpath(argv[2], NULL);
-        xfer.xd_family = PHO_RSC_INVAL;
         xfer.xd_attrs = attrs;
-        xfer.xd_tags.tags = &argv[3];
-        xfer.xd_tags.n_tags = argc - 3;
 
         rc = phobos_put(&xfer, 1, NULL, NULL);
         xfer_desc_close_fd(&xfer);

@@ -68,8 +68,9 @@ static void reinit_xfer(struct pho_xfer_desc *xfer, const char *path,
 
     xfer_desc_open_path(xfer, path, op, 0);
     xfer->xd_op = op;
-    xfer->xd_family = PHO_RSC_INVAL;
     xfer->xd_objid = realpath(objpath, NULL);
+    if (op == PHO_XFER_OP_PUT)
+        xfer->xd_params.put.family = PHO_RSC_INVAL;
 }
 
 static void add_dir(struct admin_handle *adm, struct dss_handle *dss,

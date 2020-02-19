@@ -63,7 +63,6 @@ static int xfer_desc_open_path(struct pho_xfer_desc *xfer, const char *path,
 
     if (path == NULL) {
         xfer->xd_fd = -1;
-        xfer->xd_size = -1;
         return -EINVAL;
     }
 
@@ -79,8 +78,10 @@ static int xfer_desc_open_path(struct pho_xfer_desc *xfer, const char *path,
     if (xfer->xd_fd < 0)
         LOG_RETURN(-errno, "open(%s) failed", path);
 
-    fstat(xfer->xd_fd, &st);
-    xfer->xd_size = st.st_size;
+    if (xfer->xd_op == PHO_XFER_OP_PUT) {
+        fstat(xfer->xd_fd, &st);
+        xfer->xd_params.put.size = st.st_size;
+    }
 
     return xfer->xd_fd;
 }

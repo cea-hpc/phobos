@@ -213,7 +213,7 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
     int rc;
 
     /* Load new module if necessary */
-    rc = layout_module_lazy_load(xfer->xd_layout_name, &mod);
+    rc = layout_module_lazy_load(xfer->xd_params.put.layout_name, &mod);
     if (rc)
         return rc;
 
@@ -233,7 +233,7 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
     if (enc->layout == NULL)
         return -ENOMEM;
     enc->layout->oid = xfer->xd_objid;
-    enc->layout->wr_size = xfer->xd_size;
+    enc->layout->wr_size = xfer->xd_params.put.size;
     enc->layout->state = PHO_EXT_ST_PENDING;
 
     rc = mod->ops->encode(enc);

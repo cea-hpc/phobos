@@ -27,6 +27,7 @@ import errno
 import logging
 import os
 
+from collections import namedtuple
 from ctypes import *
 
 from phobos.core.ffi import LIBPHOBOS, Tags
@@ -69,18 +70,48 @@ def attrs_as_dict(attrs):
     LIBPHOBOS.pho_attrs_foreach(byref(attrs), cb, c_res)
     return res
 
+class XferPutParams(Structure):
+    """Phobos PUT parameters of the XferDescriptor."""
+    _fields_ = [
+        ("size", c_ssize_t),
+        ("family", c_int),
+        ("layout_name", c_char_p),
+        ("tags", Tags),
+    ]
+
+    def __init__(self, put_params):
+        self.size = -1
+        self.layout_name = put_params.layout
+        self.tags = Tags(put_params.tags)
+
+        if put_params.family is None:
+            self.family = str2rsc_family(cfg_get_val("store", "default_family"))
+        else:
+            self.family = str2rsc_family(put_params.family)
+
+class PutParams(namedtuple('PutParams', 'family layout tags')):
+    """
+    Transition data structure for put parameters between
+    the CLI and the XFer data structure.
+    """
+    __slots__ = ()
+PutParams.__new__.__defaults__ = (None,) * len(PutParams._fields)
+
+class XferOpParams(Union):
+    """Phobos operation parameters of the XferDescriptor."""
+    _fields_ = [
+        ("put", XferPutParams),
+    ]
+
 class XferDescriptor(Structure):
     """phobos struct xfer_descriptor."""
     _fields_ = [
         ("xd_objid", c_char_p),
         ("xd_op", c_int),
         ("xd_fd", c_int),
-        ("xd_size", c_ssize_t),
-        ("xd_layout_name", c_char_p),
-        ("xd_family", c_int),
         ("xd_attrs", PhoAttrs),
+        ("xd_params", XferOpParams),
         ("xd_flags", c_int),
-        ("xd_tags", Tags),
         ("xd_rc", c_int),
     ]
 
@@ -105,7 +136,6 @@ class XferDescriptor(Structure):
         # in case of getmd, the file is not opened, return without exception
         if self.xd_op == PHO_XFER_OP_GETMD:
             self.xd_fd = -1
-            self.xd_size = -1
             return
 
         if not path:
@@ -122,25 +152,26 @@ class XferDescriptor(Structure):
                     raise e
                 self.xd_fd = os.open(path, os.O_RDONLY)
 
-        self.xd_size = os.fstat(self.xd_fd).st_size
+            self.xd_params.put.size = os.fstat(self.xd_fd).st_size
 
     def init_from_descriptor(self, desc):
         """
         xfer_descriptor initialization by using python-list descriptor.
         It opens the file descriptor of the given path. The python-list
-        contains the tuple (id, path, attrs, flags, tags, op) describing
-        the opened file.
+        contains the tuple (id, path, attrs, flags, op and put-only parameters)
+        describing the opened file.
         """
+        self.xd_op = desc[5]
+        if self.xd_op == PHO_XFER_OP_PUT:
+            self.xd_params.put = XferPutParams(desc[4]) if \
+                                 desc[4] is not None else \
+                                 XferPutParams(PutParams())
         self.xd_objid = desc[0]
-        self.xd_op = desc[7]
-        self.xd_layout_name = desc[3]
-        self.xd_family = desc[2]
-        self.xd_flags = desc[5]
-        self.xd_tags = Tags(desc[6])
+        self.xd_flags = desc[3]
         self.xd_rc = 0
 
-        if desc[4]:
-            for k, v in desc[4].iteritems():
+        if desc[2]:
+            for k, v in desc[2].iteritems():
                 rc = LIBPHOBOS.pho_attr_set(byref(self.xd_attrs),
                                             str(k), str(v))
                 if rc:
@@ -219,22 +250,19 @@ class Client(object):
 
     def getmd_register(self, oid, data_path, attrs=None):
         """Enqueue a GETMD transfer."""
-        self.getmd_session.append((oid, data_path, -1, 0, attrs, 0, None,
-                                 PHO_XFER_OP_GETMD))
+        self.getmd_session.append((oid, data_path, attrs, 0, None,
+                                   PHO_XFER_OP_GETMD))
 
     def get_register(self, oid, data_path, attrs=None):
         """Enqueue a GET transfer."""
-        self.get_session.append((oid, data_path, -1, 0, attrs, 0, None,
+        self.get_session.append((oid, data_path, attrs, 0, None,
                                  PHO_XFER_OP_GET))
 
-    def put_register(self, oid, data_path, family=None, layout=None, attrs=None,
-                     tags=None):
+    def put_register(self, oid, data_path, attrs=None,
+                     put_params=PutParams()):
         """Enqueue a PUT transfert."""
-        if family is None:
-            family = cfg_get_val("store", "default_family")
-
-        self.put_session.append((oid, data_path, str2rsc_family(family), layout,
-                                 attrs, 0, tags, PHO_XFER_OP_PUT))
+        self.put_session.append((oid, data_path, attrs, 0, put_params,
+                                 PHO_XFER_OP_PUT))
 
     def clear(self):
         """Release resources associated to the current queues."""

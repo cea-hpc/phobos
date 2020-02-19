@@ -795,7 +795,7 @@ static int raid1_enc_next_write_req(struct pho_encoder *enc, pho_req_t *req)
                             "write alloc");
 
     for (i = 0; i < raid1->repl_count; ++i)
-        n_tags[i] = enc->xfer->xd_tags.n_tags;
+        n_tags[i] = enc->xfer->xd_params.put.tags.n_tags;
 
     rc = pho_srl_request_write_alloc(req, raid1->repl_count, n_tags);
     free(n_tags);
@@ -805,8 +805,9 @@ static int raid1_enc_next_write_req(struct pho_encoder *enc, pho_req_t *req)
     for (i = 0; i < raid1->repl_count; ++i) {
         req->walloc->media[i]->size = raid1->to_write;
 
-        for (j = 0; j < enc->xfer->xd_tags.n_tags; ++j)
-            req->walloc->media[i]->tags[j] = strdup(enc->xfer->xd_tags.tags[j]);
+        for (j = 0; j < enc->xfer->xd_params.put.tags.n_tags; ++j)
+            req->walloc->media[i]->tags[j] =
+                strdup(enc->xfer->xd_params.put.tags.tags[j]);
     }
 
     return rc;
@@ -1091,11 +1092,11 @@ static int layout_raid1_encode(struct pho_encoder *enc)
     if (raid1->repl_count <= 0)
         LOG_RETURN(-EINVAL, "Invalid # of replica (%d)", raid1->repl_count);
 
-    if (enc->xfer->xd_size < 0)
+    if (enc->xfer->xd_params.put.size < 0)
         LOG_RETURN(-EINVAL, "bad input encoder size to write when building "
                             "raid1 encoder");
 
-    raid1->to_write = enc->xfer->xd_size;
+    raid1->to_write = enc->xfer->xd_params.put.size;
 
     /* Allocate the extent array */
     raid1->written_extents = g_array_new(FALSE, TRUE,

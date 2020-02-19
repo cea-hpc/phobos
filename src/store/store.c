@@ -235,7 +235,7 @@ static int encoder_communicate(struct pho_encoder *enc,
         pho_error(rc, "Error while communicating with encoder for %s",
                   enc->xfer->xd_objid);
 
-    family = enc->xfer->xd_family;
+    family = enc->xfer->xd_params.put.family;
 
     /* Dispatch generated requests (even on error, if any) */
     for (i = 0; i < n_reqs; i++) {
@@ -793,11 +793,12 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
 
     for (i = 0; i < n; i++) {
         xfers[i].xd_op = PHO_XFER_OP_PUT;
-        if (xfers[i].xd_layout_name == NULL)
-            xfers[i].xd_layout_name = default_layout;
 
-        if (xfers[i].xd_family == PHO_RSC_INVAL)
-            xfers[i].xd_family = default_family_from_cfg();
+        if (xfers[i].xd_params.put.layout_name == NULL)
+            xfers[i].xd_params.put.layout_name = default_layout;
+
+        if (xfers[i].xd_params.put.family == PHO_RSC_INVAL)
+            xfers[i].xd_params.put.family = default_family_from_cfg();
     }
 
     return phobos_xfer(xfers, n, cb, udata);
@@ -827,6 +828,7 @@ int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
 
 void pho_xfer_desc_destroy(struct pho_xfer_desc *xfer)
 {
-    tags_free(&xfer->xd_tags);
+    if (xfer->xd_op == PHO_XFER_OP_PUT)
+        tags_free(&xfer->xd_params.put.tags);
     pho_attrs_free(&xfer->xd_attrs);
 }
