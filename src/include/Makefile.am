@@ -13,4 +13,4 @@ noinst_HEADERS=pho_cfg.h pho_comm.h pho_common.h pho_dss.h pho_io.h \
 include_HEADERS=pho_attrs.h phobos_store.h phobos_admin.h
 
 $(proto_headers): %.pb-c.h: $(protodir)/%.proto
-	make -C $(protodir) gen-proto
+	$(MAKE) -C $(protodir) gen-proto

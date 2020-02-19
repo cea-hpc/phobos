@@ -8,4 +8,4 @@ libpho_serializer_la_SOURCES=srl_lrs.c $(proto_sources)
 libpho_serializer_la_LIBADD=-lprotobuf-c
 
 $(proto_sources): %.pb-c.c: $(protodir)/pho_%.proto
-	make -C $(protodir) gen-proto
+	$(MAKE) -C $(protodir) gen-proto
