@@ -1388,7 +1388,8 @@ static int sched_mount(struct dev_descr *dev)
 
     /* update device state and set mount point */
     dev->op_status = PHO_DEV_OP_ST_MOUNTED;
-    strncpy(dev->mnt_path,  mnt_root, sizeof(dev->mnt_path));
+    strncpy(dev->mnt_path,  mnt_root, sizeof(dev->mnt_path) - 1);
+    dev->mnt_path[sizeof(dev->mnt_path) - 1] = '\0';
 
 out_free:
     free(mnt_root);
@@ -2015,6 +2016,7 @@ static int sched_format(struct lrs_sched *sched, const struct media_id *id,
 
     /* Systematically use the media ID as filesystem label */
     strncpy(media_info->fs.label, label, sizeof(media_info->fs.label) - 1);
+    media_info->fs.label[sizeof(media_info->fs.label) - 1] = '\0';
 
     media_info->stats.phys_spc_used = spc.spc_used;
     media_info->stats.phys_spc_free = spc.spc_avail;
@@ -2529,7 +2531,8 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
         struct media_id m;
 
         m.type = rreq->med_ids[i]->type;
-        strncpy(m.id, rreq->med_ids[i]->id, PHO_URI_MAX);
+        strncpy(m.id, rreq->med_ids[i]->id, PHO_URI_MAX - 1);
+        m.id[PHO_URI_MAX - 1] = '\0';
 
         rc = sched_read_prepare(sched, &m, &dev);
         if (rc)
@@ -2664,7 +2667,8 @@ static int sched_handle_format(struct lrs_sched *sched, pho_req_t *req,
         return rc;
 
     m.type = freq->med_id->type;
-    strncpy(m.id, freq->med_id->id, PHO_URI_MAX);
+    strncpy(m.id, freq->med_id->id, PHO_URI_MAX - 1);
+    m.id[PHO_URI_MAX - 1] = '\0';
 
     rc = sched_format(sched, &m, freq->fs, freq->unlock);
     if (rc) {

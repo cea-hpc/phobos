@@ -148,7 +148,8 @@ static int query_drive_sn(struct lib_descriptor *lib)
 
     for (i = 0; i < count; i++)
         strncpy(lib->drives.items[i].dev_id, items[i].dev_id,
-                sizeof(lib->drives.items[i].dev_id));
+                sizeof(lib->drives.items[i].dev_id) - 1);
+    lib->drives.items[i].dev_id[sizeof(lib->drives.items[i].dev_id) - 1] = '\0';
 
     free(items);
     return 0;

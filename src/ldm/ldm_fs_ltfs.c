@@ -298,7 +298,8 @@ static int _ltfs_mount_check(const struct mntent *mntent, void *cb_data)
         LOG_RETURN(-EMEDIUMTYPE, "Device '%s' is mounted with unexpected "
                    "FS type '%s'", mntent->mnt_fsname, mntent->mnt_type);
 
-    strncpy(check_info->mnt_dir, mntent->mnt_dir, check_info->mnt_size);
+    strncpy(check_info->mnt_dir, mntent->mnt_dir, check_info->mnt_size - 1);
+    check_info->mnt_dir[check_info->mnt_size - 1] = '\0';
 
     /* found it! */
     return 1;

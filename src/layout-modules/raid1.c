@@ -290,7 +290,8 @@ static void set_extent_info(struct extent *extent,
     extent->layout_idx = layout_idx;
     extent->size = extent_size;
     extent->media.type = medium->med_id->type;
-    strncpy(extent->media.id, medium->med_id->id, sizeof(extent->media.id));
+    strncpy(extent->media.id, medium->med_id->id, sizeof(extent->media.id) - 1);
+    extent->media.id[sizeof(extent->media.id) - 1] = '\0';
     extent->addr_type = medium->addr_type;
 }
 

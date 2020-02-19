@@ -243,7 +243,7 @@ static int read_next_element_status(const struct element_descriptor *elmt,
     }
 
     if (page->pvoltag) {
-        strncpy(elem_out->vol, elmt->pvti, VOL_ID_LEN);
+        strncpy(elem_out->vol, elmt->pvti, VOL_ID_LEN - 1);
         elem_out->vol[VOL_ID_LEN - 1] = '\0';
         rstrip(elem_out->vol);
     }
@@ -266,8 +266,8 @@ static int read_next_element_status(const struct element_descriptor *elmt,
             id_len = DEV_ID_LEN - 1;
 
         if (id_len > 0) {
-            strncpy(elem_out->dev_id, dev_info->devid, id_len);
-            elem_out->dev_id[id_len] = '\0';
+            strncpy(elem_out->dev_id, dev_info->devid, id_len - 1);
+            elem_out->dev_id[id_len - 1] = '\0';
             rstrip(elem_out->dev_id);
         }
     }

@@ -169,7 +169,8 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
      */
     extent->size = min(simple->to_write, medium->avail_size);
     extent->media.type = medium->med_id->type;
-    strncpy(extent->media.id, medium->med_id->id, sizeof(extent->media.id));
+    strncpy(extent->media.id, medium->med_id->id, sizeof(extent->media.id) - 1);
+    extent->media.id[sizeof(extent->media.id) - 1] = '\0';
     extent->addr_type = medium->addr_type;
     /* and extent.address will be filled by ioa_put */
 

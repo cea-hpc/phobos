@@ -49,9 +49,9 @@ static int dir_present(const char *dev_path, char *mnt_path,
     if (!S_ISDIR(st.st_mode))
         LOG_RETURN(-ENOTDIR, "'%s' is not a directory", dev_path);
 
-    strncpy(mnt_path, dev_path, mnt_path_size);
+    strncpy(mnt_path, dev_path, mnt_path_size - 1);
     /* make sure mnt_path is null terminated */
-    mnt_path[mnt_path_size-1] = '\0';
+    mnt_path[mnt_path_size - 1] = '\0';
 
     return 0;
 }

@@ -119,7 +119,8 @@ int pho_mapper_clean_path(const char *obj_id, const char *ext_tag,
 
     /* Keep space for delimiter + tag, if present */
     avail_size = dst_size - (tag_len ? tag_len + 1 : 0);
-    strncpy(dst_path, obj_id, avail_size);
+    strncpy(dst_path, obj_id, avail_size - 1);
+    dst_path[avail_size - 1] = '\0';
 
     /* min of <just written bytes> and <avail_size - 1> */
     rc = min(strnlen(obj_id, avail_size), avail_size - 1);

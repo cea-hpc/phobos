@@ -118,7 +118,8 @@ int pho_comm_open(struct pho_comm_info *ci, const char *sock_path,
         LOG_GOTO(out_err, rc = -errno, "Socket opening failed");
 
     socka.sun_family = AF_UNIX;
-    strncpy(socka.sun_path, ci->path, sizeof(socka.sun_path));
+    strncpy(socka.sun_path, ci->path, sizeof(socka.sun_path) - 1);
+    socka.sun_path[sizeof(socka.sun_path) - 1] = '\0';
 
     if (!is_server) {
         if (connect(ci->socket_fd, (struct sockaddr *)&socka, sizeof(socka)))

@@ -284,7 +284,8 @@ static inline int media_id_set(struct media_id *mid, const char *id)
     if (strlen(id) >= PHO_URI_MAX)
         return -EINVAL;
 
-    strncpy(mid->id, id, sizeof(mid->id));
+    strncpy(mid->id, id, sizeof(mid->id) - 1);
+    mid->id[sizeof(mid->id) - 1] = '\0';
     return 0;
 }
 
