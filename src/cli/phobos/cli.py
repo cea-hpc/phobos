@@ -661,8 +661,8 @@ class DeviceOptHandler(BaseResourceOptHandler):
 
     def exec_unlock(self):
         """Device unlock"""
-        devices = []
         serials = self.params.get('res')
+        devices = []
 
         for serial in serials:
             device = self.filter(serial)
@@ -687,6 +687,14 @@ class DeviceOptHandler(BaseResourceOptHandler):
         except EnvironmentError as err:
             self.logger.error("Failed to unlock device(s): %s",
                               env_error_format(err))
+            sys.exit(os.EX_DATAERR)
+
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                names = [dev.rsc.id.name for dev in devices]
+                adm.device_unlock(self.family, names)
+        except EnvironmentError as err:
+            self.logger.error("Failed to notify: %s", env_error_format(err))
             sys.exit(os.EX_DATAERR)
 
         self.logger.info("%d device(s) unlocked", len(devices))

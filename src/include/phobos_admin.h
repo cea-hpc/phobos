@@ -76,6 +76,20 @@ int phobos_admin_device_add(struct admin_handle *adm, enum rsc_family family,
                             const char *name);
 
 /**
+ * Update the administrative state of the given devices to 'unlocked' and
+ * inform the LRS devices state has changed.
+ *
+ * \param[in]       adm             Admin module handler.
+ * \param[in]       dev_ids         Device IDs to unlock.
+ * \param[in]       num_dev         Number of device to unlock.
+ *
+ * \return                          0     on success,
+ *                                 -errno on failure.
+ */
+int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
+                               const int num_dev);
+
+/**
  * Load and format a medium to the given fs type.
  *
  * \param[in]       adm             Admin module handler.
