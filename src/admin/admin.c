@@ -52,6 +52,10 @@ const struct pho_config_item cfg_admin[] = {
     },
 };
 
+/* ****************************************************************************/
+/* Static Functions ***********************************************************/
+/* ****************************************************************************/
+
 static int _send_and_receive(struct admin_handle *adm, pho_req_t *req,
                              pho_resp_t **resp)
 {
@@ -89,54 +93,6 @@ static int _send_and_receive(struct admin_handle *adm, pho_req_t *req,
         LOG_RETURN(-EINVAL, "The received response cannot be deserialized");
 
     return 0;
-}
-
-void phobos_admin_fini(struct admin_handle *adm)
-{
-    int rc;
-
-    rc = pho_comm_close(&adm->comm);
-    if (rc)
-        pho_error(rc, "Cannot close the communication socket");
-
-    dss_fini(&adm->dss);
-}
-
-int phobos_admin_init(struct admin_handle *adm, const bool lrs_required)
-{
-    const char *sock_path;
-    int rc;
-
-    memset(adm, 0, sizeof(*adm));
-    adm->comm = pho_comm_info_init();
-
-    rc = pho_cfg_init_local(NULL);
-    if (rc && rc != -EALREADY)
-        return rc;
-
-    sock_path = PHO_CFG_GET(cfg_admin, PHO_CFG_ADMIN, lrs_socket);
-
-    rc = dss_init(&adm->dss);
-    if (rc)
-        LOG_GOTO(out, rc, "Cannot initialize DSS");
-
-    rc = pho_comm_open(&adm->comm, sock_path, false);
-    if (!lrs_required && rc == -ENOTCONN) {
-        pho_warn("Cannot contact 'phobosd', but not required: will continue");
-        rc = 0;
-    } else if (rc) {
-        LOG_GOTO(out, rc, "Cannot contact 'phobosd': will abort");
-    } else {
-        adm->daemon_is_online = true;
-    }
-
-out:
-    if (rc) {
-        pho_error(rc, "Error during Admin initialization");
-        phobos_admin_fini(adm);
-    }
-
-    return rc;
 }
 
 static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
@@ -184,6 +140,58 @@ static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
 
 out:
     pho_srl_response_free(resp, true);
+    return rc;
+}
+
+/* ****************************************************************************/
+/* API Functions **************************************************************/
+/* ****************************************************************************/
+
+void phobos_admin_fini(struct admin_handle *adm)
+{
+    int rc;
+
+    rc = pho_comm_close(&adm->comm);
+    if (rc)
+        pho_error(rc, "Cannot close the communication socket");
+
+    dss_fini(&adm->dss);
+}
+
+int phobos_admin_init(struct admin_handle *adm, const bool lrs_required)
+{
+    const char *sock_path;
+    int rc;
+
+    memset(adm, 0, sizeof(*adm));
+    adm->comm = pho_comm_info_init();
+
+    rc = pho_cfg_init_local(NULL);
+    if (rc && rc != -EALREADY)
+        return rc;
+
+    sock_path = PHO_CFG_GET(cfg_admin, PHO_CFG_ADMIN, lrs_socket);
+
+    rc = dss_init(&adm->dss);
+    if (rc)
+        LOG_GOTO(out, rc, "Cannot initialize DSS");
+
+    rc = pho_comm_open(&adm->comm, sock_path, false);
+    if (!lrs_required && rc == -ENOTCONN) {
+        pho_warn("Cannot contact 'phobosd', but not required: will continue");
+        rc = 0;
+    } else if (rc) {
+        LOG_GOTO(out, rc, "Cannot contact 'phobosd': will abort");
+    } else {
+        adm->daemon_is_online = true;
+    }
+
+out:
+    if (rc) {
+        pho_error(rc, "Error during Admin initialization");
+        phobos_admin_fini(adm);
+    }
+
     return rc;
 }
 
