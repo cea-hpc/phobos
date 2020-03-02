@@ -525,6 +525,7 @@ our @typeList = (
 	qr{${Ident}_handler_fn},
     qr{G[A-Z][a-z]+}, # match glib types such as (GString, GHash, ...)
     qr{g[a-z]+}, # match glib types such as (gchar, gpointer, ...)
+    qr{Py[A-Z]${Ident}}, # match python types (like 'PyObject'...)
 	@typeListMisordered,
 );
 
