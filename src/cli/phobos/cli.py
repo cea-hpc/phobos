@@ -230,10 +230,10 @@ class StoreGetMDHandler(XferOptHandler):
         res = []
         itm = attrs_as_dict(xfr.contents.xd_attrs)
         if not itm:
-            print '<empty attribute set>'
-        else:
-            for k, v in sorted(itm.items()):
-                res.append('%s=%s' % (k, v))
+            return
+
+        for k, v in sorted(itm.items()):
+            res.append('%s=%s' % (k, v))
 
         print ','.join(res)
 
