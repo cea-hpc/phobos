@@ -202,7 +202,6 @@ function get_tape_simple
     # when selecting one
     # $LOG_VALG $phobos get $id /tmp/out &&
     #    error "Should not be able to get objects without unlocked device"
-    # rm /tmp/out
 
     # resources are available
     $LOG_VALG $phobos drive unlock ${DRIVE_ARRAY[0]}
@@ -214,7 +213,6 @@ function get_tape_simple
     $LOG_VALG $phobos tape lock ${TAPE_ARRAY[0]}
     $LOG_VALG $phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked medium"
-    rm /tmp/out
 
     return 0
 }
@@ -232,7 +230,6 @@ function get_dir_simple
     $LOG_VALG $phobos dir lock ${DIR_ARRAY[0]}
     $LOG_VALG $phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked medium"
-    rm /tmp/out
 
     return 0
 }
@@ -251,7 +248,6 @@ function get_tape_raid
     # $LOG_VALG $phobos drive lock ${DRIVE_ARRAY[1]}
     # $LOG_VALG $phobos get $id /tmp/out &&
     #     error "Should not be able to get objects without unlocked devices"
-    # rm /tmp/out
 
     # resources are available
     $LOG_VALG $phobos drive unlock ${DRIVE_ARRAY[@]}
@@ -268,7 +264,6 @@ function get_tape_raid
     $LOG_VALG $phobos tape lock ${TAPE_ARRAY[1]}
     $LOG_VALG $phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked media"
-    rm /tmp/out
 
     return 0
 }
@@ -291,7 +286,6 @@ function get_dir_raid
     $LOG_VALG $phobos dir lock ${DIR_ARRAY[1]}
     $LOG_VALG $phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked medium"
-    rm /tmp/out
 
     return 0
 }

@@ -290,6 +290,8 @@ class Client(object):
             rc = self._store.phobos_xfer(LIBPHOBOS.phobos_get,
                                          self.get_session, compl_cb)
             if rc:
+                for desc in self.get_session:
+                    os.remove(desc[1])
                 raise IOError(rc, "Cannot retrieve objects")
 
         if self.put_session:
