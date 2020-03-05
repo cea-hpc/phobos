@@ -9,7 +9,7 @@ rpm: dist phobos.spec
 	rpmbuild --define="_topdir $(rpm_dir)" -ta $(distdir).tar.gz
 
 EXTRA_DIST= phobos.spec phobos.spec.in scripts/pho_ldm_helper \
-	    scripts/phobos_db doc/README.md doc/cfg/template.conf ChangeLog
+	    scripts/phobos_db README.md doc/cfg/template.conf ChangeLog
 
 sbin_SCRIPTS=scripts/pho_ldm_helper \
              scripts/phobos_db

@@ -65,7 +65,7 @@ install -D -p -m 0640 doc/cfg/template.conf %{buildroot}/%{_sysconfdir}/phobos.c
 # create another copy of configuration in documentation directory
 install -D -p -m 0640 doc/cfg/template.conf %{buildroot}/%{phobosdocdir}/template.conf
 install -p -m 0640 ChangeLog %{buildroot}/%{phobosdocdir}/ChangeLog
-install -p -m 0640 doc/README.md %{buildroot}/%{phobosdocdir}/README.md
+install -p -m 0640 README.md %{buildroot}/%{phobosdocdir}/README.md
 cd %{_builddir}/%{name}-%{version}/src/cli/
 %{__python} setup.py install --skip-build --root %{buildroot}
 
