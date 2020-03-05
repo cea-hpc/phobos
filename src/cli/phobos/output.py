@@ -23,8 +23,9 @@
 Output and formatting utilities.
 """
 
-import json
+from collections import OrderedDict
 import csv
+import json
 import StringIO
 from tabulate import tabulate
 import xml.dom.minidom
@@ -37,7 +38,7 @@ import yaml
 def csv_dump(data):
     """Convert a list of dictionaries to a csv string"""
     outbuf = StringIO.StringIO()
-    writer = csv.DictWriter(outbuf, sorted(data[0].keys()))
+    writer = csv.DictWriter(outbuf, data[0].keys())
     if hasattr(writer, 'writeheader'):
         #pylint: disable=no-member
         writer.writeheader()
@@ -92,7 +93,8 @@ def filter_display_dict(objs, attrs):
         obj_list = info
     else:
         for attr_dict in info:
-            obj_list.append({k: attr_dict[k] for k in attr_dict if k in attrs})
+            obj_list.append(OrderedDict([(k, attr_dict[k]) for k in attrs
+                                         if k in attr_dict]))
 
     return obj_list
 

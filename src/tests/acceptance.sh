@@ -139,7 +139,7 @@ function tape_setup
     local dr1=$(echo $drives | awk '{print $1}')
     echo "$dr1"
     # check drive status
-    $phobos drive list -o all $dr1 --format=csv | grep "^locked" ||
+    $phobos drive list -o adm_status $dr1 --format=csv | grep "^locked" ||
         error "Drive should be added with locked state"
 
     # unlock all drives but one (except if N_DRIVE < 2)
@@ -206,10 +206,12 @@ function lock_test
     mkdir $dir_prefix.1
     mkdir $dir_prefix.2
     $LOG_VALG $phobos dir add $dir_prefix.1
-    $phobos dir list -o all $dir_prefix.1 --format=csv | grep ",locked" ||
+    $phobos dir list -o adm_status $dir_prefix.1 --format=csv |
+        grep "^locked" ||
         error "Directory should be added with locked state"
     $LOG_VALG $phobos dir add $dir_prefix.2 --unlock
-    $phobos dir list -o all $dir_prefix.2 --format=csv | grep ",unlocked" ||
+    $phobos dir list -o adm_status $dir_prefix.2 --format=csv |
+        grep "^unlocked" ||
         error "Directory should be added with unlocked state"
     rmdir $dir_prefix.*
 }
