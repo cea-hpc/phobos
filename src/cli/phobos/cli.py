@@ -894,12 +894,11 @@ class MediaOptHandler(BaseResourceOptHandler):
         self.logger.info("%d media(s) unlocked" % len(results))
 
 
-class DirOptHandler(MediaOptHandler, DeviceOptHandler):
+class DirOptHandler(MediaOptHandler):
     """Directory-related options and actions."""
     label = 'dir'
     descr = 'handle directories'
     family = ResourceFamily(ResourceFamily.RSC_DIR)
-    verbs = MediaOptHandler.verbs
 
     def exec_add(self):
         """
