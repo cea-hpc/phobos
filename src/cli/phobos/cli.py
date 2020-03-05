@@ -586,7 +586,6 @@ class DeviceOptHandler(BaseResourceOptHandler):
     """Shared interface for devices."""
     verbs = [
         AddOptHandler,
-        FormatOptHandler,
         ListOptHandler,
         LockOptHandler,
         UnlockOptHandler
@@ -937,7 +936,6 @@ class DriveOptHandler(DeviceOptHandler):
     family = ResourceFamily(ResourceFamily.RSC_TAPE)
     verbs = [
         AddOptHandler,
-        FormatOptHandler,
         DriveListOptHandler,
         LockOptHandler,
         UnlockOptHandler
