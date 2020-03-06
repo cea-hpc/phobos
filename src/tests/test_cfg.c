@@ -100,11 +100,11 @@ static int test(void *hint)
 
         rc = pho_cfg_get_val(item->section, item->variable, &val);
 
-        /* if value is NULL: -ENOATTR is expected */
+        /* if value is NULL: -ENODATA is expected */
         if (item->value == NULL) {
-            if (rc != -ENOATTR) {
+            if (rc != -ENODATA) {
                 int rc2 = rc ? rc : -EINVAL;
-                pho_error(rc2, "pho_cfg_get_val(%s, %s, ...): -ENOATTR expected"
+                pho_error(rc2, "pho_cfg_get_val(%s, %s, ...): -ENODATA expected"
                           " (got %d)", item->section, item->variable, rc);
                 return rc2;
             }

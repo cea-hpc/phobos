@@ -297,7 +297,7 @@ static int pho_setxattr(const char *path, int fd, const char *name,
             rc = removexattr(path, tmp_name);
 
         if (rc != 0) {
-            if (errno == ENOATTR)
+            if (errno == ENODATA)
                 rc = 0;
             else
                 LOG_GOTO(free_tmp, rc = -errno, "removexattr failed");
@@ -341,7 +341,7 @@ static int pho_getxattr(const char *path, const char *name, char **value)
 
     rc = getxattr(path, tmp_name, buff, ATTR_MAX_VALUELEN);
     if (rc <= 0) {
-        if (errno == ENOATTR || rc == 0)
+        if (errno == ENODATA || rc == 0)
             GOTO(free_buff, rc = 0);
 
         LOG_GOTO(free_buff, rc = -errno, "getxattr failed");

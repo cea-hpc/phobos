@@ -163,7 +163,7 @@ static int build_env_name(const char *section, const char *name, char **env)
 /**
  * Get process-wide configuration parameter from environment.
  * @retval 0 on success
- * @retval -ENOATTR if the parameter in not defined.
+ * @retval -ENODATA if the parameter in not defined.
  * @retval other negative error code on failure.
  */
 static int pho_cfg_get_env(const char *section, const char *name,
@@ -181,7 +181,7 @@ static int pho_cfg_get_env(const char *section, const char *name,
     free(env);
 
     if (val == NULL)
-        return -ENOATTR;
+        return -ENODATA;
 
     *value = val;
     return 0;
@@ -190,7 +190,7 @@ static int pho_cfg_get_env(const char *section, const char *name,
 /**
  * Get host-wide configuration parameter from config file.
  * @retval 0 on success
- * @retval -ENOATTR if the parameter in not defined.
+ * @retval -ENODATA if the parameter in not defined.
  * @retval other negative error code on failure.
  */
 static int pho_cfg_get_local(const char *section, const char *name,
@@ -207,13 +207,13 @@ static int pho_cfg_get_local(const char *section, const char *name,
     pho_debug("config file: %s::%s=%s", section, name,
               *value ? *value : "<NULL>");
     /* ini_config sets rc=EINVAL if the parameter is not found. */
-    return ((*value == NULL) ? -ENOATTR : 0);
+    return ((*value == NULL) ? -ENODATA : 0);
 }
 
 /**
  * Get global configuration parameter from DSS.
  * @retval 0 on success
- * @retval -ENOATTR if the parameter in not defined.
+ * @retval -ENODATA if the parameter in not defined.
  * @retval other negative error code on failure.
  */
 static int pho_cfg_get_global(const char *section, const char *name,
@@ -229,13 +229,13 @@ int pho_cfg_get_val(const char *section, const char *name, const char **value)
 
     /* 1) check process-wide parameter (from environment)*/
     rc = pho_cfg_get_env(section, name, value);
-    if (rc != -ENOATTR)
+    if (rc != -ENODATA)
         return rc;
 
     /* 2) check host-wide parameter (if config file has been loaded) */
     if (cfg_items) {
         rc = pho_cfg_get_local(section, name, value);
-        if (rc != -ENOATTR)
+        if (rc != -ENODATA)
             return rc;
     }
 
@@ -243,7 +243,7 @@ int pho_cfg_get_val(const char *section, const char *name, const char **value)
     if (thr_dss_hdl)
         return pho_cfg_get_global(section, name, value);
 
-    return -ENOATTR;
+    return -ENODATA;
 }
 
 const char *_pho_cfg_get(int first_index, int last_index, int param_index,
@@ -263,7 +263,7 @@ const char *_pho_cfg_get(int first_index, int last_index, int param_index,
         return NULL;
 
     rc = pho_cfg_get_val(item->section, item->name, &res);
-    if (rc == -ENOATTR)
+    if (rc == -ENODATA)
         res = item->value;
 
     return res;

@@ -81,7 +81,7 @@ int pho_cfg_set_thread_conn(void *dss_handle);
  *                      altered).
  *
  * @retval  0           The parameter is returned successfully.
- * @retval  -ENOATTR    The parameter is not found.
+ * @retval  -ENODATA    The parameter is not found.
  */
 int pho_cfg_get_val(const char *section, const char *name,
                     const char **value);
