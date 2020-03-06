@@ -119,6 +119,8 @@ int pho_comm_open(struct pho_comm_info *ci, const char *sock_path,
 
     socka.sun_family = AF_UNIX;
     strncpy(socka.sun_path, ci->path, sizeof(socka.sun_path));
+    /* make sure the path is zero-terminated */
+    socka.sun_path[sizeof(socka.sun_path)-1] = '\0';
 
     if (!is_server) {
         if (connect(ci->socket_fd, (struct sockaddr *)&socka, sizeof(socka)))

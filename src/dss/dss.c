@@ -1601,6 +1601,8 @@ static int dss_media_from_pg_row(void *void_media, PGresult *res, int row_num)
     medium->fs.status      = str2fs_status(PQgetvalue(res, row_num, 6));
     strncpy(medium->fs.label, PQgetvalue(res, row_num, 7),
             sizeof(medium->fs.label));
+    /* make sure the label is zero-terminated */
+    medium->fs.label[sizeof(medium->fs.label) - 1] = '\0';
     medium->lock.lock      = get_str_value(res, row_num, 10);
     medium->lock.lock_ts   = strtoul(PQgetvalue(res, row_num, 11), NULL, 10);
 

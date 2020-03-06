@@ -1377,6 +1377,7 @@ static int sched_mount(struct dev_descr *dev)
     /* update device state and set mount point */
     dev->op_status = PHO_DEV_OP_ST_MOUNTED;
     strncpy(dev->mnt_path,  mnt_root, sizeof(dev->mnt_path));
+    dev->mnt_path[sizeof(dev->mnt_path) - 1] = '\0';
 
 out_free:
     free(mnt_root);
@@ -2002,7 +2003,8 @@ static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
         LOG_GOTO(err_out, rc, "Cannot format media '%s'", id->name);
 
     /* Systematically use the media ID as filesystem label */
-    strncpy(media_info->fs.label, id->name, sizeof(media_info->fs.label) - 1);
+    strncpy(media_info->fs.label, id->name, sizeof(media_info->fs.label));
+    media_info->fs.label[sizeof(media_info->fs.label) - 1] = '\0';
 
     media_info->stats.phys_spc_used = spc.spc_used;
     media_info->stats.phys_spc_free = spc.spc_avail;
