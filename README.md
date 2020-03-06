@@ -41,10 +41,10 @@ Then initialize phobos database:
 systemctl start postgresql-9.4.service
 ```
 
-Finally,  create phobos database and tables (the password for SQL phobos user
-will be prompted for unless provided with -p):
+Finally, create phobos database and tables as postgres user (the password for
+SQL phobos user will be prompted for unless provided with -p):
 ```
-/usr/sbin/phobos_db setup_db -s
+sudo -u postgres phobos_db setup_db -s
 ```
 
 ## Upgrade of an existing instance
