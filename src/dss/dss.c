@@ -423,7 +423,7 @@ static const char * const select_query[] = {
     [DSS_OBJECT] = "SELECT oid, user_md FROM object",
 };
 
-static const size_t const res_size[] = {
+static const size_t res_size[] = {
     [DSS_DEVICE]  = sizeof(struct dev_info),
     [DSS_MEDIA]   = sizeof(struct media_info),
     [DSS_LAYOUT]  = sizeof(struct layout_info),
@@ -431,7 +431,7 @@ static const size_t const res_size[] = {
 };
 
 typedef int (*res_pg_constructor_t)(void *item, PGresult *res, int row_num);
-static const res_pg_constructor_t const res_pg_constructor[] = {
+static const res_pg_constructor_t res_pg_constructor[] = {
     [DSS_DEVICE]  = dss_device_from_pg_row,
     [DSS_MEDIA]   = dss_media_from_pg_row,
     [DSS_LAYOUT]  = dss_layout_from_pg_row,
@@ -439,7 +439,7 @@ static const res_pg_constructor_t const res_pg_constructor[] = {
 };
 
 typedef void (*res_destructor_t)(void *item);
-static const res_destructor_t const res_destructor[] = {
+static const res_destructor_t res_destructor[] = {
     [DSS_DEVICE]  = dss_device_result_free,
     [DSS_MEDIA]   = dss_media_result_free,
     [DSS_LAYOUT]  = dss_layout_result_free,
