@@ -28,7 +28,7 @@ EXTRA_DIST=phobos/__init__.py \
 	   setup.py
 
 all-local:
-	python setup.py build --verbose
+	$(PYTHON) setup.py build --verbose
 
 clean-local:
 	rm -f $(C_MODULES_SO)
