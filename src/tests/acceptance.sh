@@ -352,7 +352,7 @@ end
 run $phobos $*
 EOF
 
-        gdb -batch -x "$tmp_gdb_script" -q python
+        gdb -batch -x "$tmp_gdb_script" -q python2
     )
 }
 

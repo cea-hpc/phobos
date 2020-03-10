@@ -21,7 +21,7 @@
 
 cur_dir=$(dirname $(readlink -m $0))
 
-PY=$(which python)
+PY=$(which python2)
 ARCH=$(uname -m)
 PY_VERSION=$($PY -c 'import sys; print "%d.%d" % (sys.version_info[0],\
                                                   sys.version_info[1])')

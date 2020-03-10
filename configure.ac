@@ -67,6 +67,8 @@ CFLAGS="$CFLAGS -I\$(top_srcdir)/src/include"
 AC_ARG_ENABLE( [cli], AS_HELP_STRING([--disable-cli],
                [Do not generate python cli and modules]),
                [enable_cli="$enableval"],[enable_cli="yes"] )
+# force using python2
+PYTHON=$(which python2)
 AS_IF( [test "x$enable_cli" != "xno"], [
     # Enable python bindings
     AX_PYTHON_DEVEL([>='2.6'])

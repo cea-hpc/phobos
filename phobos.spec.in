@@ -9,6 +9,7 @@ URL:     http://www-hpc.cea.fr
 Source0: %{name}-%{version}.tar.gz
 
 %define phobosdocdir %{_docdir}/%{name}
+%define __python /usr/bin/python2
 
 BuildRequires: postgresql94-devel
 BuildRequires: glib2-devel >= 2.28
