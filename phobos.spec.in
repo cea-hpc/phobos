@@ -9,11 +9,20 @@ URL:     http://www-hpc.cea.fr
 Source0: %{name}-%{version}.tar.gz
 
 %define phobosdocdir %{_docdir}/%{name}
+
 %define __python /usr/bin/python2
 
-BuildRequires: postgresql94-devel
+%if 0%{?rhel} >= 8
+%global python_prefix python2
+%global postgres_prefix postgresql
+%else
+%global python_prefix python
+%global postgres_prefix postgresql94
+%endif
+
+BuildRequires: %{postgres_prefix}-devel
 BuildRequires: glib2-devel >= 2.28
-BuildRequires: python-devel
+BuildRequires: %{python_prefix}-devel
 BuildRequires: jansson-devel >= 2.5
 BuildRequires: libini_config-devel
 BuildRequires: openssl-devel
@@ -22,19 +31,22 @@ BuildRequires: sg3_utils-devel
 BuildRequires: protobuf-c-devel
 BuildRequires: systemd
 
-Requires: postgresql94-server
-Requires: postgresql94-contrib
+Requires: %{postgres_prefix}-server
+Requires: %{postgres_prefix}-contrib
 Requires: glib2 >= 2.28
 Requires: jansson
 Requires: libini_config
 Requires: openssl
+Requires: attr
 Requires: libattr
-Requires: python
+Requires: %{python_prefix}
+%if 0%{?rhel} < 8
 Requires: python-argparse
-Requires: python-yaml
-Requires: clustershell
-Requires: python-psycopg2
-Requires: python2-tabulate
+%endif
+Requires: %{python_prefix}-yaml
+Requires: %{python_prefix}-clustershell
+Requires: %{python_prefix}-psycopg2
+Requires: %{python_prefix}-tabulate
 Requires: protobuf
 Requires: protobuf-c
 
@@ -55,7 +67,9 @@ object store from a C program.
 
 
 %build
+%if 0%{?rhel} < 8
 export PKG_CONFIG_PATH=/usr/pgsql-9.4/lib/pkgconfig
+%endif
 %configure
 make %{?_smp_mflags}
 
