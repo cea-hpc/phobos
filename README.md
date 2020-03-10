@@ -22,10 +22,21 @@ yum install phobos
 ```
 
 ### Database setup
-After installing PostgreSQL server (version 9.4 or later), edit
-`/var/lib/pgsql/9.4/data/pg_hba.conf` to authorize access from phobos host
-(localhost in this example):
 
+#### On RHEL8/CentOS8
+
+Install postgresql:
+```
+dnf install postgresql-server postgresql-contrib
+```
+
+Initialize postgresql directories:
+```
+postgresql-setup --initdb --unit postgresql
+```
+
+Edit `/var/lib/pgsql/data/pg_hba.conf` to authorize access from phobos host
+(localhost in this example):
 ```
 # "local" is for Unix domain socket connections only
 local   all             all                                     trust
@@ -35,9 +46,43 @@ host    all             all             127.0.0.1/32            md5
 host    all             all             ::1/128                 md5
 ```
 
-Then initialize phobos database:
+Start the database server:
+```
+systemctl start postgresql
+```
+
+Finally, create phobos database and tables as postgres user (the password for
+SQL phobos user will be prompted for unless provided with -p):
+```
+sudo -u postgres phobos_db setup_db -s
+```
+
+#### On RHEL7/CentOS7
+
+Install postgresql version >= 9.4 (from EPEL or any version compatible with
+Postgres 9.4):
+```
+yum install postgresql94-server postgresql94-contrib
+```
+
+Initialize postgresql directories:
 ```
 /usr/pgsql-9.4/bin/postgresql94-setup initdb
+```
+
+Edit `/var/lib/pgsql/9.4/data/pg_hba.conf` to authorize access from phobos host
+(localhost in this example):
+```
+# "local" is for Unix domain socket connections only
+local   all             all                                     trust
+# IPv4 local connections:
+host    all             all             127.0.0.1/32            md5
+# IPv6 local connections:
+host    all             all             ::1/128                 md5
+```
+
+Start the database server:
+```
 systemctl start postgresql-9.4.service
 ```
 

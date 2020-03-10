@@ -4,5 +4,5 @@
 * To setup autotools stuff the first time you check out the repo, run:
     ./autogen.sh
 
-* Add PGSQL 9.4 to the build environment
+* (Before RHEL8/CentOS8) Add PGSQL 9.4 to the build environment
 export PKG_CONFIG_PATH=/usr/pgsql-9.4/lib/pkgconfig
