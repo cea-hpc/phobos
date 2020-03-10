@@ -281,7 +281,8 @@ static int test_sendrecv_multiple(void *arg)
     // sending from clients
     for (i = 0; i < TOTAL; ++i) {
         send_data_client[i] = pho_comm_data_init(ci_client + i % NCLIENT);
-        assert(send_data_client[i].buf.buff = malloc(sizeof(i)));
+        send_data_client[i].buf.buff = malloc(sizeof(i));
+        assert(send_data_client[i].buf.buff != NULL);
         memcpy(send_data_client[i].buf.buff, &i, 4);
         send_data_client[i].buf.size = sizeof(i);
         assert(!pho_comm_send(send_data_client + i));
@@ -289,7 +290,8 @@ static int test_sendrecv_multiple(void *arg)
 
     // server side
     assert(!pho_comm_recv(&ci_server, &data, &nb_data));
-    assert(send_data_server.buf.buff = malloc(sizeof(i)));
+    send_data_server.buf.buff = malloc(sizeof(i));
+    assert(send_data_server.buf.buff != NULL);
     send_data_server.buf.size = sizeof(i);
     while (cnt) {
         for (i = 0; i < nb_data; ++i) {
