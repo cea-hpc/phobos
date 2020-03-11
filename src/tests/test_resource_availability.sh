@@ -105,6 +105,8 @@ function put_tape_simple
     # $LOG_VALG $phobos drive lock ${DRIVE_ARRAY[0]}
     # $LOG_VALG $phobos put /etc/hosts ${id}.2 &&
     #     error "Should not be able to put objects without unlocked device"
+
+    return 0
 }
 
 function put_dir_simple
@@ -126,6 +128,8 @@ function put_dir_simple
     $LOG_VALG $phobos dir unlock ${DIR_ARRAY[0]}
     $LOG_VALG $phobos put /etc/hosts $id ||
         error "Put with an available medium should have worked"
+
+    return 0
 }
 
 function put_tape_raid
@@ -158,6 +162,8 @@ function put_tape_raid
     # $LOG_VALG $phobos drive lock ${DRIVE_ARRAY[0]}
     # $LOG_VALG $phobos put /etc/hosts ${id}.2 &&
     #     error "Should not be able to put objects with 1/2 unlocked devices"
+
+    return 0
 }
 
 function put_dir_raid
@@ -183,6 +189,8 @@ function put_dir_raid
     $LOG_VALG $phobos dir unlock ${DIR_ARRAY[0]}
     $LOG_VALG $phobos put /etc/hosts $id ||
         error "Put with available media should have worked"
+
+    return 0
 }
 
 function get_tape_simple
@@ -207,6 +215,8 @@ function get_tape_simple
     $LOG_VALG $phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked medium"
     rm /tmp/out
+
+    return 0
 }
 
 function get_dir_simple
@@ -223,6 +233,8 @@ function get_dir_simple
     $LOG_VALG $phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked medium"
     rm /tmp/out
+
+    return 0
 }
 
 function get_tape_raid
@@ -257,6 +269,8 @@ function get_tape_raid
     $LOG_VALG $phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked media"
     rm /tmp/out
+
+    return 0
 }
 
 function get_dir_raid
@@ -278,6 +292,8 @@ function get_dir_raid
     $LOG_VALG $phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked medium"
     rm /tmp/out
+
+    return 0
 }
 
 if [ -w /dev/changer ]; then
