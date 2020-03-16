@@ -225,7 +225,6 @@ static int encoder_communicate(struct pho_encoder *enc,
 {
     pho_req_t *requests = NULL;
     struct pho_comm_data data;
-    enum rsc_family family;
     size_t n_reqs = 0;
     size_t i = 0;
     int rc;
@@ -234,8 +233,6 @@ static int encoder_communicate(struct pho_encoder *enc,
     if (rc)
         pho_error(rc, "Error while communicating with encoder for %s",
                   enc->xfer->xd_objid);
-
-    family = enc->xfer->xd_params.put.family;
 
     /* Dispatch generated requests (even on error, if any) */
     for (i = 0; i < n_reqs; i++) {
@@ -251,7 +248,7 @@ static int encoder_communicate(struct pho_encoder *enc,
         /* req_id is used to route responses to the appropriate encoder */
         req->id = enc_id;
         if (pho_request_is_write(req))
-            req->walloc->family = family;
+            req->walloc->family = enc->xfer->xd_params.put.family;
 
         data = pho_comm_data_init(comm);
         if (pho_srl_request_pack(req, &data.buf)) {
