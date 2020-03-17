@@ -908,21 +908,28 @@ class DirOptHandler(MediaOptHandler):
         resources = self.params.get('res')
         keep_locked = not self.params.get('unlock')
         tags = self.params.get('tags', [])
+        adm = AdminClient()
 
-        for path in resources:
-            # Remove any trailing slash
-            path = path.rstrip('/')
-            try:
+        try:
+            adm.init(lrs_required=False)
+
+            for path in resources:
+                # Remove any trailing slash
+                path = path.rstrip('/')
+
                 self.client.media.add(self.family, 'POSIX', None, path,
                                       locked=keep_locked, tags=tags)
                 # Add device unlocked and rely on media locking
-                self.client.devices.add(self.family, path, locked=False)
-            except EnvironmentError as err:
-                self.logger.error("Cannot add directory: %s",
-                                  env_error_format(err))
-                sys.exit(os.EX_DATAERR)
+                _, serial = self.client.devices.add(self.family, path,
+                                                    locked=False)
+                adm.device_add(self.family, serial)
 
-            self.logger.debug("Added directory '%s'", path)
+                self.logger.debug("Added directory '%s'", path)
+
+            adm.fini()
+        except EnvironmentError as err:
+            self.logger.error("Cannot add directory: %s", env_error_format(err))
+            sys.exit(os.EX_DATAERR)
 
         self.logger.info("Added %d dir(s) successfully", len(resources))
 

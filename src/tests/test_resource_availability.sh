@@ -160,7 +160,8 @@ function put_tape_raid
     # TODO: to uncomment once the admin lock on device is considered
     # when selecting one
     # $LOG_VALG $phobos drive lock ${DRIVE_ARRAY[0]}
-    # $LOG_VALG $phobos put /etc/hosts ${id}.2 &&
+    # PHOBOS_STORE_default_layout=raid1 $LOG_VALG $phobos put \
+    #     /etc/hosts ${id}.2 &&
     #     error "Should not be able to put objects with 1/2 unlocked devices"
 
     return 0
@@ -187,7 +188,7 @@ function put_dir_raid
 
     # resources are available
     $LOG_VALG $phobos dir unlock ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put /etc/hosts $id ||
+    PHOBOS_STORE_default_layout=raid1 $LOG_VALG $phobos put /etc/hosts $id ||
         error "Put with available media should have worked"
 
     return 0
