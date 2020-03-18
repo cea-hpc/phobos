@@ -139,8 +139,8 @@ out:
     return rc;
 }
 
-static int _admin_notify(struct admin_handle *adm, enum rsc_family family,
-                         const char *name, enum notify_op op)
+static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
+                         enum notify_op op)
 {
     pho_resp_t *resp;
     pho_req_t req;
@@ -156,8 +156,8 @@ static int _admin_notify(struct admin_handle *adm, enum rsc_family family,
 
     req.id = rid;
     req.notify->op = op;
-    req.notify->rsrc_id->family = family;
-    req.notify->rsrc_id->name = strdup(name);
+    req.notify->rsrc_id->family = id->family;
+    req.notify->rsrc_id->name = strdup(id->name);
 
     rc = _send_and_receive(adm, &req, &resp);
     if (rc)
@@ -165,8 +165,8 @@ static int _admin_notify(struct admin_handle *adm, enum rsc_family family,
 
     if (pho_response_is_notify(resp)) {
         if (resp->req_id == rid &&
-            (int) family == (int) resp->notify->rsrc_id->family &&
-            !strcmp(resp->notify->rsrc_id->name, name)) {
+            (int) id->family == (int) resp->notify->rsrc_id->family &&
+            !strcmp(resp->notify->rsrc_id->name, id->name)) {
             pho_debug("Notify request succeeded");
             goto out;
         }
@@ -194,12 +194,16 @@ out:
 int phobos_admin_device_add(struct admin_handle *adm, enum rsc_family family,
                             const char *name)
 {
+    struct pho_id dev_id;
     int rc;
 
     if (!adm->daemon_is_online)
         return 0;
 
-    rc = _admin_notify(adm, family, name, PHO_NTFY_OP_ADD_DEVICE);
+    pho_id_name_set(&dev_id, name);
+    dev_id.family = family;
+
+    rc = _admin_notify(adm, &dev_id, PHO_NTFY_OP_ADD_DEVICE);
     if (rc)
         LOG_RETURN(rc, "Communication with LRS failed");
 
