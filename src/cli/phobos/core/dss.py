@@ -38,8 +38,8 @@ from phobos.core.const import PHO_ADDR_HASH1
 from phobos.core.const import PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED
 from phobos.core.const import DSS_SET_INSERT, DSS_SET_UPDATE, DSS_SET_DELETE
 
-from phobos.core.ffi import DevInfo, Id, MediaInfo, MediaStats, Resource
-from phobos.core.ffi import LIBPHOBOS
+from phobos.core.ffi import (DevInfo, Id, MediaInfo, MediaStats, ObjectInfo,
+                             Resource, LIBPHOBOS)
 from phobos.core.ldm import ldm_device_query
 
 
@@ -59,6 +59,7 @@ OBJECT_PREFIXES = {
     'device': 'DSS::DEV::',
     'layout': 'DSS::EXT::',
     'media':  'DSS::MDA::',
+    'object': 'DSS::OBJ::',
 }
 
 class JSONFilter(Structure):
@@ -139,13 +140,13 @@ class DSSResult(object):
         item._dss_result_parent_link = self
         return item
 
-class BaseObjectManager(object):
+class BaseEntityManager(object):
     """Proxy to manipulate (CRUD) objects in DSS."""
     __metaclass__ = ABCMeta
 
     def __init__(self, client, *args, **kwargs):
         """Initialize new instance."""
-        super(BaseObjectManager, self).__init__(*args, **kwargs)
+        super(BaseEntityManager, self).__init__(*args, **kwargs)
         self.logger = logging.getLogger(__name__)
         self.client = client
 
@@ -249,7 +250,7 @@ class BaseObjectManager(object):
             raise EnvironmentError(rc, err_message)
 
 
-class DeviceManager(BaseObjectManager):
+class DeviceManager(BaseEntityManager):
     """Proxy to manipulate devices."""
     wrapped_class = DevInfo
     wrapped_ident = 'device'
@@ -308,7 +309,7 @@ class DeviceManager(BaseObjectManager):
             None if force else self.lock_owner,
         )
 
-class MediaManager(BaseObjectManager):
+class MediaManager(BaseEntityManager):
     """Proxy to manipulate media."""
     wrapped_class = MediaInfo
     wrapped_ident = 'media'
@@ -364,6 +365,23 @@ class MediaManager(BaseObjectManager):
             None if force else self.lock_owner,
         )
 
+class ObjectManager(BaseEntityManager):
+    """Proxy to manipulate object."""
+    wrapped_class = ObjectInfo
+    wrapped_ident = 'object'
+
+    def __init__(self, *args, **kwargs):
+        super(ObjectManager, self).__init__(*args, **kwargs)
+
+    def _dss_get(self, hdl, qry_filter, res, res_cnt):
+        """Invoke object-specific DSS get method."""
+        return LIBPHOBOS.dss_object_get(hdl, qry_filter, res, res_cnt)
+
+    def _dss_set(self, hdl, obj, obj_cnt, opcode):
+        """Not supported."""
+        raise EnvironmentError(errno.ENOTSUP,
+                               "Operation not supposed to be used")
+
 class DSSHandle(Structure):
     """
     Wrap connection to the backend. Absolutely opaque and propagated everywhere.
@@ -380,6 +398,7 @@ class Client(object):
         self.handle = None
         self.media = MediaManager(self)
         self.devices = DeviceManager(self)
+        self.objects = ObjectManager(self)
 
     def __enter__(self):
         """Enter a runtime context"""

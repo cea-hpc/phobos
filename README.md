@@ -215,6 +215,16 @@ $ phobos getmd obj0123
 cksum=md5:7c28aec5441644094064fcf651ab5e3e,user=foo
 ```
 
+##### Listing objects
+To list objects, use `phobos object list`:
+```
+$ phobos object list -o oid,user_md
+| oid   | user_md         |
+|-------|-----------------|
+| obj01 | {}              |
+| obj02 | {"user": "foo"} |
+```
+
 ## Device and media management
 ### Listing resources
 Any device or media can be listed using the 'list' operation. For instance,

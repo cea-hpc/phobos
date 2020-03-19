@@ -48,7 +48,7 @@ from phobos.core.cfg import load_file as cfg_load_file
 from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str,
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED)
 from phobos.core.dss import Client as DSSClient
-from phobos.core.ffi import DevInfo, MediaInfo, ResourceFamily
+from phobos.core.ffi import DevInfo, MediaInfo, ObjectInfo, ResourceFamily
 from phobos.core.ldm import LibAdapter
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
 from phobos.core.store import Client as XferClient, attrs_as_dict, PutParams
@@ -528,6 +528,25 @@ class MediaListOptHandler(ListOptHandler):
                                  "choose from {" + " ".join(attr) + "} "
                                  "(default: %(default)s)")
 
+class ObjectListOptHandler(ListOptHandler):
+    """
+    Specific version of the 'list' command for object, with a couple
+    extra-options.
+    """
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add object-specific options."""
+        super(ObjectListOptHandler, cls).add_options(parser)
+
+        attrs = list(ObjectInfo().get_display_dict().keys())
+        attrs.sort()
+        parser.add_argument('-o', '--output', type=lambda t: t.split(','),
+                            default='oid',
+                            help="attributes to output, comma-separated, "
+                                 "choose from {" + " ".join(attrs) + "} "
+                                 "default: %(default)s)")
+
 class TapeAddOptHandler(MediaAddOptHandler):
     """Specific version of the 'add' command for tapes, with extra-options."""
     @classmethod
@@ -580,6 +599,39 @@ class BaseResourceOptHandler(DSSInteractHandler):
     def filter(self, ident):
         """Return a list of objects that match the provided identifier."""
         raise NotImplementedError("Abstract method subclasses must implement")
+
+class ObjectOptHandler(BaseResourceOptHandler):
+    """Shared interface for objects."""
+    label = 'object'
+    descr = 'handle objects'
+    verbs = [
+        ObjectListOptHandler
+    ]
+
+    def exec_list(self):
+        """List objects."""
+        attrs = list(ObjectInfo().get_display_dict().keys())
+        attrs.extend(['*', 'all'])
+        out_attrs = self.params.get('output')
+        bad_attrs = set(out_attrs).difference(set(attrs))
+        if bad_attrs:
+            self.logger.error("Bad output attributes: %s", " ".join(bad_attrs))
+            sys.exit(os.EX_USAGE)
+
+        objs = []
+        if self.params.get('res'):
+            for obj in self.params.get('res'):
+                curr = self.client.objects.get(oid=obj)
+                if not curr:
+                    continue
+                assert len(curr) == 1
+                objs.append(curr[0])
+        else:
+            objs = self.client.objects.get()
+
+        if len(objs) > 0:
+            dump_object_list(objs, 'object', attr=out_attrs,
+                             fmt=self.params.get('format'))
 
 class DeviceOptHandler(BaseResourceOptHandler):
     """Shared interface for devices."""
@@ -1015,6 +1067,7 @@ class PhobosActionContext(object):
         DirOptHandler,
         TapeOptHandler,
         DriveOptHandler,
+        ObjectOptHandler,
         LibOptHandler,
 
         # Store command interfaces

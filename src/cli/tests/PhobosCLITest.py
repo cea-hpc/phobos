@@ -84,6 +84,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['tape', '-h'])
         self.check_cmdline_exit(['drive', '-h'])
         self.check_cmdline_exit(['lib', '-h'])
+        self.check_cmdline_exit(['object', '-h'])
 
     def test_cli_basic(self):
         """test simple valid and invalid command lines."""
@@ -98,6 +99,13 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o', '*'])
         self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o',
                                   'name,family'])
+        self.check_cmdline_valid(['object', 'list'])
+        self.check_cmdline_valid(['object', 'list', 'oid'])
+        self.check_cmdline_valid(['object', 'list', 'oid1', 'oid2', 'oid3'])
+        self.check_cmdline_valid(['object', 'list', '-o', 'all'])
+        self.check_cmdline_valid(['object', 'list', '-o', '*'])
+        self.check_cmdline_valid(['object', 'list', '-o', 'oid'])
+        self.check_cmdline_valid(['object', 'list', '-o', 'all', 'oid'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['voynichauthor', 'list'], code=2)

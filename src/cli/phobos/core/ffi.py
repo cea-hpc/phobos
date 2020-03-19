@@ -325,6 +325,20 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         if hasattr(self, "_free_tags") and self._free_tags:
             self._tags.free()
 
+class ObjectInfo(Structure, CLIManagedResourceMixin):
+    """Object descriptor."""
+    _fields_ = [
+        ('oid', c_char_p),
+        ('user_md', c_char_p)
+    ]
+
+    def get_display_fields(self):
+        """Return a dict of available fields and optional display formatters."""
+        return {
+            'oid': None,
+            'user_md': None,
+        }
+
 class Timeval(Structure):
     """standard struct timeval."""
     _fields_ = [
