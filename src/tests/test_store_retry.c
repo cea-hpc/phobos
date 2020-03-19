@@ -287,6 +287,7 @@ int main(int argc, char **argv)
         test_get(&xfer, dst_path);
 
         reinit_xfer(&xfer, dst_path, argv[0], PHO_XFER_OP_GET);
+        test_get(&xfer, dst_path);
 
         /* Test put retry */
         reinit_xfer(&xfer, argv[0], argv[0], PHO_XFER_OP_PUT);
