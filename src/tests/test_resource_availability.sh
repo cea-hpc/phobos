@@ -84,19 +84,19 @@ function put_tape_simple
     $LOG_VALG $phobos drive add --unlock ${DRIVE_ARRAY[0]}
 
     # test tape availability
-    $LOG_VALG $phobos put /etc/hosts $id &&
+    $LOG_VALG $phobos put -f tape /etc/hosts $id &&
         error "Should not be able to put objects without media"
 
     $LOG_VALG $phobos tape add -t lto5 ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put /etc/hosts $id &&
+    $LOG_VALG $phobos put -f tape /etc/hosts $id &&
         error "Should not be able to put objects without formatted media"
 
     $LOG_VALG $phobos tape format ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put /etc/hosts $id &&
+    $LOG_VALG $phobos put -f tape /etc/hosts $id &&
         error "Should not be able to put objects without unlocked media"
 
     $LOG_VALG $phobos tape unlock ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put /etc/hosts $id ||
+    $LOG_VALG $phobos put -f tape /etc/hosts $id ||
         error "Put with an available media should have worked"
 
     # test drive availability
@@ -114,19 +114,19 @@ function put_dir_simple
     local id=test/dir.simple
 
     # test dir availability
-    $LOG_VALG $phobos put /etc/hosts $id &&
+    $LOG_VALG $phobos put -f dir /etc/hosts $id &&
         error "Should not be able to put objects without media"
 
     $LOG_VALG $phobos dir add ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put /etc/hosts $id &&
+    $LOG_VALG $phobos put -f dir /etc/hosts $id &&
         error "Should not be able to put objects without formatted media"
 
     $LOG_VALG $phobos dir format --fs posix ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put /etc/hosts $id &&
+    $LOG_VALG $phobos put -f dir /etc/hosts $id &&
         error "Should not be able to put objects without unlocked media"
 
     $LOG_VALG $phobos dir unlock ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put /etc/hosts $id ||
+    $LOG_VALG $phobos put -f dir /etc/hosts $id ||
         error "Put with an available medium should have worked"
 
     return 0
@@ -141,27 +141,26 @@ function put_tape_raid
     $LOG_VALG $phobos tape format --unlock ${TAPE_ARRAY[1]}
 
     # test tape availability
-    PHOBOS_STORE_default_layout=raid1 $LOG_VALG $phobos put /etc/hosts $id &&
+    $LOG_VALG $phobos put -f tape -l raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 media"
 
     $LOG_VALG $phobos tape add -t lto5 ${TAPE_ARRAY[0]}
-    PHOBOS_STORE_default_layout=raid1 $LOG_VALG $phobos put /etc/hosts $id &&
+    $LOG_VALG $phobos put -f tape -l raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 formatted media"
 
     $LOG_VALG $phobos tape format ${TAPE_ARRAY[0]}
-    PHOBOS_STORE_default_layout=raid1 $LOG_VALG $phobos put /etc/hosts $id &&
+    $LOG_VALG $phobos put -f tape -l raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 unlocked media"
 
     $LOG_VALG $phobos tape unlock ${TAPE_ARRAY[0]}
-    PHOBOS_STORE_default_layout=raid1 $LOG_VALG $phobos put /etc/hosts $id ||
+    $LOG_VALG $phobos put -f tape -l raid1 /etc/hosts $id ||
         error "Put with available media should have worked"
 
     # test drive availability
     # TODO: to uncomment once the admin lock on device is considered
     # when selecting one
     # $LOG_VALG $phobos drive lock ${DRIVE_ARRAY[0]}
-    # PHOBOS_STORE_default_layout=raid1 $LOG_VALG $phobos put \
-    #     /etc/hosts ${id}.2 &&
+    # $LOG_VALG $phobos put -l raid1 /etc/hosts ${id}.2 &&
     #     error "Should not be able to put objects with 1/2 unlocked devices"
 
     return 0
@@ -175,20 +174,20 @@ function put_dir_raid
     $LOG_VALG $phobos dir format --fs posix --unlock ${DIR_ARRAY[1]}
 
     # test dir availability
-    PHOBOS_STORE_default_layout=raid1 $LOG_VALG $phobos put /etc/hosts $id &&
+    $LOG_VALG $phobos put -f dir -l raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 media"
 
     $LOG_VALG $phobos dir add ${DIR_ARRAY[0]}
-    PHOBOS_STORE_default_layout=raid1 $LOG_VALG $phobos put /etc/hosts $id &&
+    $LOG_VALG $phobos put -f dir -l raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 formatted media"
 
     $LOG_VALG $phobos dir format --fs posix ${DIR_ARRAY[0]}
-    PHOBOS_STORE_default_layout=raid1 $LOG_VALG $phobos put /etc/hosts $id &&
+    $LOG_VALG $phobos put -f dir -l raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 unlocked media"
 
     # resources are available
     $LOG_VALG $phobos dir unlock ${DIR_ARRAY[0]}
-    PHOBOS_STORE_default_layout=raid1 $LOG_VALG $phobos put /etc/hosts $id ||
+    $LOG_VALG $phobos put -f dir -l raid1 /etc/hosts $id ||
         error "Put with available media should have worked"
 
     return 0
@@ -303,7 +302,6 @@ invoke_daemon
 trap cleanup EXIT
 
 # availability with simple layout
-export PHOBOS_STORE_default_family="dir"
 put_dir_simple
 get_dir_simple
 
@@ -311,7 +309,6 @@ if [[ -w /dev/changer ]]; then
     # in case the previous test did not unload the drives
     empty_drives
 
-    export PHOBOS_STORE_default_family="tape"
     put_tape_simple
     get_tape_simple
     empty_drives
@@ -325,12 +322,10 @@ setup_tables
 invoke_daemon
 
 # availability with raid layout
-export PHOBOS_STORE_default_family="dir"
 put_dir_raid
 get_dir_raid
 
 if [[ -w /dev/changer ]]; then
-    export PHOBOS_STORE_default_family="tape"
     put_tape_raid
     get_tape_raid
 fi
