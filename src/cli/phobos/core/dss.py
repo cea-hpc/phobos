@@ -51,6 +51,7 @@ FILTER_OPERATORS = (
     ('__lt', '$LT'),
     ('__le', '$LTE'),
     ('__like', '$LIKE'),
+    ('__regexp', '$REGEXP'),
     ('__jcontain', '$INJSON'),
     ('__jexist', '$XJSON')
 )
@@ -170,6 +171,12 @@ class BaseEntityManager(object):
         """Return the short name of the clas which this proxy wraps."""
         pass
 
+    def convert_kwargs(self, name, keyop, **kwargs):
+        if kwargs.get(name, None):
+            arg = kwargs.pop(name)
+            kwargs[keyop] = arg
+        return kwargs
+
     def get(self, **kwargs):
         """Retrieve objects from DSS."""
         res = POINTER(self.wrapped_class)()
@@ -181,10 +188,10 @@ class BaseEntityManager(object):
         except KeyError:
             pass
 
-        # rename the tags key to be correctly parsed by the dss filter
-        if kwargs.get('tags', None):
-            tags = kwargs.pop('tags')
-            kwargs['tags__jexist'] = tags
+        # rename keys that need a specific operation to be correctly parsed
+        # by the dss filter
+        kwargs = self.convert_kwargs('tags', 'tags__jexist', **kwargs)
+        kwargs = self.convert_kwargs('pattern', 'oid__regexp', **kwargs)
 
         filt = dss_filter(self.wrapped_ident, **kwargs)
         if filt is not None:

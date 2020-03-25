@@ -33,6 +33,7 @@ Other operators are available. They are used as such:
 - $LT: less than (<)
 - $LTE: less or equal than (<=)
 - $LIKE: pattern matching, wildcard is '%'
+- $REGEXP: posix regexp matching
 - $INJSON: json inclusion test
 - $XJSON: json existence test
 

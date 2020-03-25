@@ -100,12 +100,14 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o',
                                   'name,family'])
         self.check_cmdline_valid(['object', 'list'])
-        self.check_cmdline_valid(['object', 'list', 'oid'])
-        self.check_cmdline_valid(['object', 'list', 'oid1', 'oid2', 'oid3'])
+        self.check_cmdline_valid(['object', 'list', '"obj.*"'])
+        self.check_cmdline_valid(['object', 'list', '"obj.?2"'])
+        self.check_cmdline_valid(['object', 'list', '"obj[0-9]*"'])
+        self.check_cmdline_valid(['object', 'list', '"obj[[:digit:]]*"'])
         self.check_cmdline_valid(['object', 'list', '-o', 'all'])
         self.check_cmdline_valid(['object', 'list', '-o', '*'])
         self.check_cmdline_valid(['object', 'list', '-o', 'oid'])
-        self.check_cmdline_valid(['object', 'list', '-o', 'all', 'oid'])
+        self.check_cmdline_valid(['object', 'list', '-o', 'all', '"obj.*"'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['voynichauthor', 'list'], code=2)

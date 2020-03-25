@@ -165,10 +165,10 @@ test_check_set "media" "delete"
 test_check_get "media" '{"$LIKE": {"DSS::MDA::id": "%COPY%"}}'
 echo "**** TEST: DSS_SET OBJECT  ****"
 test_check_set "object" "insert"
-test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
+test_check_get "object" '{"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}'
 #test_check_set "object" "update"
 test_check_set "object" "delete"
-test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
+test_check_get "object" '{"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}'
 echo "**** TEST: DSS_SET LAYOUT  ****"
 test_check_set "layout" "insert"
 test_check_get "layout" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'

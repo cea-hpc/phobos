@@ -225,6 +225,16 @@ $ phobos object list -o oid,user_md
 | obj02 | {"user": "foo"} |
 ```
 
+You can add a pattern to match object oids:
+```
+phobos object list "obj.*"
+```
+
+The accepted patterns are Basic Regular Expressions (BRE) and Extended
+Regular Expressions (ERE). As defined in [PostgreSQL manual](https://www.postgresql.org/docs/9.3/functions-matching.html#POSIX-SYNTAX-DETAILS),
+PSQL also accepts Advanced Regular Expressions (ARE), but we will not maintain
+this feature as ARE is not a POSIX standard.
+
 ## Device and media management
 ### Listing resources
 Any device or media can be listed using the 'list' operation. For instance,

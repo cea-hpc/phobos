@@ -448,6 +448,22 @@ class ListOptHandler(DSSInteractHandler):
                             help="output format human/xml/json/csv/yaml " \
                                  "(default: human)")
 
+class PatternListOptHandler(DSSInteractHandler):
+    """List items of a specific type, with pattern-matching."""
+    label = 'list'
+    descr = 'list all entries of the kind'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(PatternListOptHandler, cls).add_options(parser)
+        parser.add_argument('pattern', nargs='?', default='.*',
+                            help="POSIX regexp to match, leave empty to "
+                                 "match all")
+        parser.add_argument('-f', '--format', default='human',
+                            help="output format human/xml/json/csv/yaml "
+                                 "(default: human)")
+
 
 class LockOptHandler(DSSInteractHandler):
     """Lock resource."""
@@ -528,7 +544,7 @@ class MediaListOptHandler(ListOptHandler):
                                  "choose from {" + " ".join(attr) + "} "
                                  "(default: %(default)s)")
 
-class ObjectListOptHandler(ListOptHandler):
+class ObjectListOptHandler(PatternListOptHandler):
     """
     Specific version of the 'list' command for object, with a couple
     extra-options.
@@ -618,16 +634,11 @@ class ObjectOptHandler(BaseResourceOptHandler):
             self.logger.error("Bad output attributes: %s", " ".join(bad_attrs))
             sys.exit(os.EX_USAGE)
 
-        objs = []
-        if self.params.get('res'):
-            for obj in self.params.get('res'):
-                curr = self.client.objects.get(oid=obj)
-                if not curr:
-                    continue
-                assert len(curr) == 1
-                objs.append(curr[0])
-        else:
-            objs = self.client.objects.get()
+        kwargs = {}
+        if self.params.get('pattern'):
+            kwargs["pattern"] = self.params.get('pattern')
+
+        objs = self.client.objects.get(**kwargs)
 
         if len(objs) > 0:
             dump_object_list(objs, 'object', attr=out_attrs,
