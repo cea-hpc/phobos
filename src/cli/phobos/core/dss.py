@@ -272,27 +272,6 @@ class DeviceManager(BaseEntityManager):
         )
         self.lock_owner_count += 1
 
-    def add(self, device_type, device_path, locked=True):
-        """
-        Query device and insert information into DSS.
-        Returns the device family and serial, to communicate them to the LRS.
-        """
-        state = ldm_device_query(device_type, device_path)
-        host = gethostname().split('.')[0]
-        status = PHO_RSC_ADM_ST_LOCKED if locked else PHO_RSC_ADM_ST_UNLOCKED
-
-        dev_info = DevInfo(Resource(Id(state.lds_family, state.lds_serial),
-                           state.lds_model, status), device_path, host)
-
-        self.insert([dev_info])
-
-        self.logger.info("Device '%s:%s' successfully added: " \
-                         "model=%s serial=%s (%s)",
-                         dev_info.host, device_path, dev_info.model,
-                         dev_info.name, locked and "locked" or "unlocked")
-
-        return dev_info.family, dev_info.name
-
     def _dss_get(self, hdl, qry_filter, res, res_cnt):
         """Invoke device-specific DSS get method."""
         return LIBPHOBOS.dss_device_get(hdl, qry_filter, res, res_cnt)
@@ -335,7 +314,7 @@ class MediaManager(BaseEntityManager):
         """Insert media into DSS."""
         status = PHO_RSC_ADM_ST_LOCKED if locked else PHO_RSC_ADM_ST_UNLOCKED
 
-        media = MediaInfo(Resource(Id(family,name), model, status))
+        media = MediaInfo(Resource(Id(family, name), model, status))
         media.fs.type = str2fs_type(fstype)
         media.addr_type = PHO_ADDR_HASH1
         media.tags = tags or []
@@ -348,6 +327,12 @@ class MediaManager(BaseEntityManager):
                           "model=%s fs=%s (%s)",
                           name, model, fstype,
                           locked and "locked" or "unlocked")
+
+    def remove(self, family, name):
+        """Delete media from DSS."""
+        media = MediaInfo(Resource(Id(family, name)))
+        self.delete([media])
+        self.logger.debug("Media '%s' successfully deleted: ", name)
 
     def _dss_get(self, hdl, qry_filter, res, res_cnt):
         """Invoke media-specific DSS get method."""

@@ -239,7 +239,7 @@ static int test_bad_notify(void *arg)
     // Bad resource family
     pho_srl_response_free(resp, true);
     ++req.id;
-    req.notify->op = PHO_NTFY_OP_ADD_DEVICE;
+    req.notify->op = PHO_NTFY_OP_DEVICE_ADD;
     req.notify->rsrc_id->family = PHO_RSC_INVAL;
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Notify -- bad family", -EINVAL);

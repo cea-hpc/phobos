@@ -79,6 +79,7 @@ static void add_dir(struct admin_handle *adm, struct dss_handle *dss,
 {
     struct ldm_dev_state dev_st = {0};
     struct dev_adapter adapter = {0};
+    struct pho_id dev_id = {};
     char hostname[256];
 
     gethostname(hostname, sizeof(hostname));
@@ -92,7 +93,7 @@ static void add_dir(struct admin_handle *adm, struct dss_handle *dss,
     media->addr_type = PHO_ADDR_HASH1;
     ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
 
-    /* Add dir device */
+    /* Get dir device */
     get_dev_adapter(PHO_RSC_DIR, &adapter);
     ASSERT_RC(ldm_dev_query(&adapter, path, &dev_st));
 
@@ -104,11 +105,10 @@ static void add_dir(struct admin_handle *adm, struct dss_handle *dss,
     dev->host = hostname;
     ldm_dev_state_fini(&dev_st);
 
-    ASSERT_RC(dss_device_set(dss, dev, 1, DSS_SET_INSERT));
-
-    /* Add device to lrs */
-    ASSERT_RC(phobos_admin_device_add(adm, dev->rsc.id.family,
-                                      dev->rsc.id.name));
+    /* Add dir device */
+    pho_id_name_set(&dev_id, path);
+    dev_id.family = dev->rsc.id.family;
+    ASSERT_RC(phobos_admin_device_add(adm, &dev_id, 1, false));
 
     /* Format and unlock media */
     ASSERT_RC(phobos_admin_format(adm, &media->rsc.id, PHO_FS_POSIX, true));
@@ -120,12 +120,13 @@ static void add_drive(struct admin_handle *adm, struct dss_handle *dss,
 {
     struct ldm_dev_state dev_st = {0};
     struct dev_adapter adapter = {0};
+    struct pho_id dev_id = {};
     char hostname[256];
 
     gethostname(hostname, sizeof(hostname));
     strtok(hostname, ".");
 
-    /* Add drive device */
+    /* Get drive device */
     get_dev_adapter(PHO_RSC_TAPE, &adapter);
     ASSERT_RC(ldm_dev_query(&adapter, path, &dev_st));
 
@@ -138,11 +139,10 @@ static void add_drive(struct admin_handle *adm, struct dss_handle *dss,
 
     ldm_dev_state_fini(&dev_st);
 
-    ASSERT_RC(dss_device_set(dss, dev, 1, DSS_SET_INSERT));
-
-    /* Add device to lrs */
-    ASSERT_RC(phobos_admin_device_add(adm, dev->rsc.id.family,
-                                      dev->rsc.id.name));
+    /* Add drive device */
+    pho_id_name_set(&dev_id, path);
+    dev_id.family = dev->rsc.id.family;
+    ASSERT_RC(phobos_admin_device_add(adm, &dev_id, 1, false));
 }
 
 static void add_tape(struct admin_handle *adm, struct dss_handle *dss,

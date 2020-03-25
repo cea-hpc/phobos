@@ -705,16 +705,11 @@ class DeviceOptHandler(BaseResourceOptHandler):
     def exec_add(self):
         """Add a new device"""
         resources = self.params.get('res')
-        keep_locked = not self.params.get('unlock')
 
         try:
             with AdminClient(lrs_required=False) as adm:
-                for path in resources:
-                    # TODO: this will be dropped when adding to DSS will be
-                    # done by adm.device_add() below
-                    _, serial = self.client.devices.add(self.family, path,
-                                                             locked=keep_locked)
-                    adm.device_add(self.family, serial)
+                adm.device_add(self.family, resources,
+                               not self.params.get('unlock'))
         except EnvironmentError as err:
             self.logger.error("Cannot add device: %s", env_error_format(err))
             sys.exit(os.EX_DATAERR)
@@ -975,39 +970,34 @@ class DirOptHandler(MediaOptHandler):
         resources = self.params.get('res')
         keep_locked = not self.params.get('unlock')
         tags = self.params.get('tags', [])
+        valid_count = 0
 
         try:
-            valid_count = 0
             with AdminClient(lrs_required=False) as adm:
                 for path in resources:
-                    # Remove any trailing slash
+                # Remove any trailing slash
                     path = path.rstrip('/')
+                    medium_is_added = False
 
                     try:
-                        # Add device unlocked and rely on media locking
-                        _, serial = self.client.devices.add(self.family, path,
-                                                            locked=False)
-
                         self.client.media.add(self.family, 'POSIX', None, path,
                                               locked=keep_locked, tags=tags)
-
-                        adm.device_add(self.family, serial)
-
-                        self.logger.debug("Added directory '%s'", path)
+                        medium_is_added = True
+                        adm.device_add(self.family, [path], False)
                         valid_count += 1
                     except EnvironmentError as err:
                         self.logger.error("Cannot add directory: %s",
                                           env_error_format(err))
+                        if medium_is_added:
+                            self.client.media.remove(self.family, path)
                         continue
-
-            self.logger.info("Added %d dir(s) successfully", valid_count)
-            if valid_count != len(resources):
-                raise EnvironmentError(errno.ENXIO,
-                                       "Some directories were not added")
 
         except EnvironmentError as err:
             self.logger.error("Cannot add directories: %s",
                               env_error_format(err))
+
+        self.logger.info("Added %d dir(s) successfully", valid_count)
+        if valid_count != len(resources):
             sys.exit(os.EX_DATAERR)
 
 

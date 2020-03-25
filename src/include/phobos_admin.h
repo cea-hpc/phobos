@@ -59,22 +59,19 @@ void phobos_admin_fini(struct admin_handle *adm);
 int phobos_admin_init(struct admin_handle *adm, bool lrs_required);
 
 /**
- * Inform the LRS that it needs to reload device information following
- * given operation on the DSS.
- *
- * \FIXME -- In an upcoming patch, this function will do the following:
- * Add a device to the DSS and inform the LRS that it needs to load
- * information of this new device.
+ * Add the given devices to the database and inform the LRS that it needs to
+ * load the given devices information.
  *
  * \param[in]       adm             Admin module handler.
- * \param[in]       family          Device family.
- * \param[in]       name            Device name.
+ * \param[in]       dev_ids         Device IDs to add.
+ * \param[in]       num_dev         Number of device to add.
+ * \param[in]       keep_locked     true if the device must be locked.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
  */
-int phobos_admin_device_add(struct admin_handle *adm, enum rsc_family family,
-                            const char *name);
+int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
+                            unsigned int num_dev, bool keep_locked);
 
 /**
  * Update the administrative state of the given devices to 'locked' and

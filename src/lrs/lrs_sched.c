@@ -2725,7 +2725,7 @@ static int sched_handle_notify(struct lrs_sched *sched, pho_req_t *req,
         return rc;
 
     switch (nreq->op) {
-    case PHO_NTFY_OP_ADD_DEVICE:
+    case PHO_NTFY_OP_DEVICE_ADD:
         rc = sched_device_add(sched, nreq->rsrc_id->family,
                               nreq->rsrc_id->name);
         break;

@@ -94,14 +94,16 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc, "Cannot format medium '%s'" % medium_id)
 
-    def device_add(self, dev_family, dev_name):
-        """Add a device to the LRS."""
-        rc = LIBPHOBOS_ADMIN.phobos_admin_device_add(byref(self.handle),
-                                                     dev_family, dev_name)
+    def device_add(self, dev_family, dev_names, keep_locked):
+        """Add devices to the LRS."""
+        c_id = Id * len(dev_names)
+        dev_ids = [Id(dev_family, name) for name in dev_names]
 
+        rc = LIBPHOBOS_ADMIN.phobos_admin_device_add(byref(self.handle),
+                                                     c_id(*dev_ids),
+                                                     len(dev_ids), keep_locked)
         if rc:
-            raise EnvironmentError(rc, "Cannot add device '%s' to the LRS"
-                                       % dev_name)
+            raise EnvironmentError(rc, "Error during device add")
 
     def device_lock(self, dev_family, dev_names, is_forced):
         """Wrapper for the device lock command."""

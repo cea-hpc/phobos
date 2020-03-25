@@ -28,6 +28,7 @@
 
 #include "phobos_admin.h"
 
+#include <errno.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -35,6 +36,7 @@
 #include "pho_comm.h"
 #include "pho_common.h"
 #include "pho_dss.h"
+#include "pho_ldm.h"
 #include "pho_srl_lrs.h"
 #include "pho_type_utils.h"
 
@@ -149,6 +151,91 @@ out:
 /* ****************************************************************************/
 /* Static Database-related Functions ******************************************/
 /* ****************************************************************************/
+
+static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
+                              unsigned int num_dev, bool keep_locked)
+{
+    char host_name[HOST_NAME_MAX + 1];
+    enum rsc_adm_status status;
+    struct ldm_dev_state lds = {};
+    struct dev_info *devices;
+    struct dev_adapter deva;
+    char *real_path;
+    int rc;
+    int i;
+
+    rc = get_dev_adapter(dev_ids[0].family, &deva);
+    if (rc)
+        LOG_RETURN(rc, "Cannot get device adapter");
+
+    rc = gethostname(host_name, HOST_NAME_MAX);
+    if (rc)
+        LOG_RETURN(rc, "Cannot get host name");
+    if (strchr(host_name, '.'))
+        *strchr(host_name, '.') = '\0';
+
+    devices = calloc(num_dev, sizeof(*devices));
+    if (!devices)
+        LOG_RETURN(errno, "Device info allocation failed");
+
+    for (i = 0; i < num_dev; ++i) {
+        struct dev_info *devi = devices + i;
+
+        real_path = realpath(dev_ids[i].name, NULL);
+        if (!real_path)
+            LOG_GOTO(out_free, rc = -errno,
+                     "Cannot get the real path of device '%s'",
+                     dev_ids[i].name);
+
+        rc = ldm_dev_query(&deva, real_path, &lds);
+        free(real_path);
+        if (rc)
+            LOG_GOTO(out_free, rc, "Failed to query device '%s'",
+                     dev_ids[i].name);
+
+        status = keep_locked ? PHO_RSC_ADM_ST_LOCKED : PHO_RSC_ADM_ST_UNLOCKED;
+
+        devi->rsc.id.family = dev_ids[i].family;
+        pho_id_name_set(&devi->rsc.id, lds.lds_serial);
+        devi->rsc.adm_status = status;
+        devi->host = host_name;
+
+        if (lds.lds_model) {
+            devi->rsc.model = strdup(lds.lds_model);
+            if (!devi->rsc.model)
+                LOG_GOTO(out_free, rc = -errno, "Allocation failed");
+        }
+
+        devi->path = strdup(dev_ids[i].name);
+        if (!devi->path)
+            LOG_GOTO(out_free, rc = -errno, "Allocation failed");
+
+        ldm_dev_state_fini(&lds);
+
+        pho_info("Will add device '%s:%s' to the database: "
+                 "model=%s serial=%s (%s)", rsc_family2str(devi->rsc.id.family),
+                 dev_ids[i].name, devi->rsc.model, devi->rsc.id.name,
+                 rsc_adm_status2str(devi->rsc.adm_status));
+
+        /* in case the name given by the user is not the device ID name */
+        if (strcmp(dev_ids[i].name, devi->rsc.id.name))
+            strcpy(dev_ids[i].name, devi->rsc.id.name);
+    }
+
+    rc = dss_device_set(&adm->dss, devices, num_dev, DSS_SET_INSERT);
+    if (rc)
+        LOG_GOTO(out_free, rc, "Cannot add devices");
+
+
+out_free:
+    for (i = 0; i < num_dev; ++i) {
+        free(devices[i].rsc.model);
+        free(devices[i].path);
+    }
+    free(devices);
+
+    return rc;
+}
 
 static int _get_device_by_id(struct admin_handle *adm, struct pho_id *dev_id,
                              struct dev_info **dev_res)
@@ -331,27 +418,38 @@ out:
     return rc;
 }
 
-/**
- * TODO: admin_device_add will have the responsability to add the device
- * to the DSS, to then remove this part of code from the CLI.
- */
-int phobos_admin_device_add(struct admin_handle *adm, enum rsc_family family,
-                            const char *name)
+int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
+                            unsigned int num_dev, bool keep_locked)
 {
-    struct pho_id dev_id;
     int rc;
+    int i;
+
+    if (!num_dev)
+        LOG_RETURN(-EINVAL, "No device were given");
+
+    rc = _add_device_in_dss(adm, dev_ids, num_dev, keep_locked);
+    if (rc)
+        return rc;
+
+    if (keep_locked)
+        // do not need to inform the daemon because it does not
+        // consider locked devices
+        return 0;
 
     if (!adm->daemon_is_online)
         return 0;
 
-    pho_id_name_set(&dev_id, name);
-    dev_id.family = family;
+    for (i = 0; i < num_dev; ++i) {
+        int rc2;
 
-    rc = _admin_notify(adm, &dev_id, PHO_NTFY_OP_ADD_DEVICE);
-    if (rc)
-        LOG_RETURN(rc, "Communication with LRS failed");
+        rc2 = _admin_notify(adm, dev_ids + i, PHO_NTFY_OP_DEVICE_ADD);
+        if (rc2)
+            pho_error(rc2, "Failure during daemon notification for '%s'",
+                      dev_ids[i].name);
+        rc = rc ? : rc2;
+    }
 
-    return 0;
+    return rc;
 }
 
 int phobos_admin_device_lock(struct admin_handle *adm, struct pho_id *dev_ids,

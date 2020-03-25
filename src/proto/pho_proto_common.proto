@@ -38,7 +38,7 @@ message PhoResourceId {
 
 /** Notify operation. */
 enum PhoNotifyOp {
-    OP_ADD_DEV    = 0;  // Device add operation.
+    OP_DEV_ADD    = 0;  // Device add operation.
     OP_DEV_LOCK   = 1;  // Device lock operation.
     OP_DEV_UNLOCK = 2;  // Device unlock operation.
 }
