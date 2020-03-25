@@ -562,6 +562,9 @@ class ObjectListOptHandler(PatternListOptHandler):
                             help="attributes to output, comma-separated, "
                                  "choose from {" + " ".join(attrs) + "} "
                                  "default: %(default)s)")
+        parser.add_argument('-m', '--metadata', type=lambda t: t.split(','),
+                            help="filter on metadata, comma-separated "
+                                 "'key=value' parameters")
 
 class TapeAddOptHandler(MediaAddOptHandler):
     """Specific version of the 'add' command for tapes, with extra-options."""
@@ -637,6 +640,14 @@ class ObjectOptHandler(BaseResourceOptHandler):
         kwargs = {}
         if self.params.get('pattern'):
             kwargs["pattern"] = self.params.get('pattern')
+
+        if self.params.get('metadata'):
+            kwargs["metadata"] = self.params.get('metadata')
+            for metadata in kwargs["metadata"]:
+                if not '=' in metadata:
+                    self.logger.error("Metadata parameter '%s' must be a "
+                                      "'key=value'", metadata)
+                    sys.exit(os.EX_USAGE)
 
         objs = self.client.objects.get(**kwargs)
 

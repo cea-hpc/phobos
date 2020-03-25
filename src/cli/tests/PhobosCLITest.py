@@ -108,6 +108,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['object', 'list', '-o', '*'])
         self.check_cmdline_valid(['object', 'list', '-o', 'oid'])
         self.check_cmdline_valid(['object', 'list', '-o', 'all', '"obj.*"'])
+        self.check_cmdline_valid(['object', 'list', '-m', 'user=foo,test=abd'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['voynichauthor', 'list'], code=2)

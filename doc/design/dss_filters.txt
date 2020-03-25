@@ -35,6 +35,7 @@ Other operators are available. They are used as such:
 - $LIKE: pattern matching, wildcard is '%'
 - $REGEXP: posix regexp matching
 - $INJSON: json inclusion test
+- $KVINJSON: json key-value inclusion test
 - $XJSON: json existence test
 
 == Boolean combinators ==

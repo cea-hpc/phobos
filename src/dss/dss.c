@@ -1382,10 +1382,23 @@ static inline bool key_is_logical_op(const char *key)
            !g_ascii_strcasecmp(key, "$OR");
 }
 
-static int insert_string(GString *qry, const char *strval, bool is_idx)
+/**
+ * This enum is used to define the type of the string value retrieved from the
+ * DSS filter.
+ */
+enum strvalue_type {
+    STRVAL_DEFAULT = 0, /* default string value */
+    STRVAL_INDEX   = 1, /* index of an array */
+    STRVAL_KEYVAL  = 2  /* key/value pair in an array */
+};
+
+static int insert_string(GString *qry, const char *strval,
+                         enum strvalue_type type)
 {
     size_t   esc_len = strlen(strval) * 2 + 1;
     char    *esc_str;
+    char    *esc_val;
+    int      rc = 0;
 
     esc_str = malloc(esc_len);
     if (!esc_str)
@@ -1398,23 +1411,33 @@ static int insert_string(GString *qry, const char *strval, bool is_idx)
      */
     PQescapeString(esc_str, strval, esc_len);
 
-    if (is_idx)
+    switch (type) {
+    case STRVAL_INDEX:
         g_string_append_printf(qry, "array['%s']", esc_str);
-    else
+        break;
+    case STRVAL_KEYVAL:
+        esc_val = strchr(esc_str, '=');
+        assert(esc_val);
+
+        *esc_val++ = '\0';
+        g_string_append_printf(qry, "'{\"%s\": \"%s\"}'", esc_str, esc_val);
+        break;
+    default:
         g_string_append_printf(qry, "'%s'", esc_str);
+    }
 
     free(esc_str);
-    return 0;
+    return rc;
 }
 
 static int json2sql_object_begin(struct saj_parser *parser, const char *key,
                                  json_t *value, void *priv)
 {
-    const char  *current_key = saj_parser_key(parser);
-    const char  *field_impl;
-    GString     *str = priv;
-    bool         str_index = false;
-    int          rc;
+    const char         *current_key = saj_parser_key(parser);
+    enum strvalue_type  type = STRVAL_DEFAULT;
+    const char         *field_impl;
+    GString            *str = priv;
+    int                 rc;
 
     /* out-of-context: nothing to do */
     if (!key)
@@ -1449,7 +1472,10 @@ static int json2sql_object_begin(struct saj_parser *parser, const char *key,
         g_string_append(str, " ~ ");
     } else if (!g_ascii_strcasecmp(current_key, "$INJSON")) {
         g_string_append(str, " @> ");
-        str_index = true;
+        type = STRVAL_INDEX;
+    } else if (!g_ascii_strcasecmp(current_key, "$KVINJSON")) {
+        g_string_append(str, " @> ");
+        type = STRVAL_KEYVAL;
     } else if (!g_ascii_strcasecmp(current_key, "$XJSON")) {
         g_string_append(str, " ? ");
     } else {
@@ -1458,7 +1484,7 @@ static int json2sql_object_begin(struct saj_parser *parser, const char *key,
 
     switch (json_typeof(value)) {
     case JSON_STRING:
-        rc = insert_string(str, json_string_value(value), str_index);
+        rc = insert_string(str, json_string_value(value), type);
         if (rc)
             LOG_RETURN(rc, "Cannot insert string into SQL query");
         break;

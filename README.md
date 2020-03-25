@@ -235,6 +235,11 @@ Regular Expressions (ERE). As defined in [PostgreSQL manual](https://www.postgre
 PSQL also accepts Advanced Regular Expressions (ARE), but we will not maintain
 this feature as ARE is not a POSIX standard.
 
+The option '-m' applies a filter on user metadata
+```
+phobos object list -m user=foo,test=abd
+```
+
 ## Device and media management
 ### Listing resources
 Any device or media can be listed using the 'list' operation. For instance,

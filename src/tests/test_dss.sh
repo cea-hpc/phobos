@@ -134,6 +134,8 @@ echo "**** TESTS: DSS_GET OBJECT ****"
 test_check_get "object" 'all'
 test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "012%"}}'
 test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "koéèê^!$£}[<>à@\\"}}'
+test_check_get "object" \
+   '{"$KVINJSON": {"DSS::OBJ::user_md": "test=abc"}}'
 
 echo "**** TESTS: DSS_GET LAYOUT ****"
 test_check_get "layout" 'all'

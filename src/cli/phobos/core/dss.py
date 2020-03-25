@@ -53,7 +53,8 @@ FILTER_OPERATORS = (
     ('__like', '$LIKE'),
     ('__regexp', '$REGEXP'),
     ('__jcontain', '$INJSON'),
-    ('__jexist', '$XJSON')
+    ('__jkeyval', '$KVINJSON'),
+    ('__jexist', '$XJSON'),
 )
 
 OBJECT_PREFIXES = {
@@ -192,6 +193,7 @@ class BaseEntityManager(object):
         # by the dss filter
         kwargs = self.convert_kwargs('tags', 'tags__jexist', **kwargs)
         kwargs = self.convert_kwargs('pattern', 'oid__regexp', **kwargs)
+        kwargs = self.convert_kwargs('metadata', 'user_md__jkeyval', **kwargs)
 
         filt = dss_filter(self.wrapped_ident, **kwargs)
         if filt is not None:
