@@ -609,22 +609,16 @@ class DeviceOptHandler(BaseResourceOptHandler):
         resources = self.params.get('res')
         keep_locked = not self.params.get('unlock')
 
-        adm = AdminClient()
         try:
-            adm.init(lrs_required=False)
-
-            for path in resources:
-                # TODO: this will be dropped when adding to DSS will be done by
-                # adm.device_add() below
-                dev_family, serial = self.client.devices.add(self.family, path,
+            with AdminClient(lrs_required=False) as adm:
+                for path in resources:
+                    # TODO: this will be dropped when adding to DSS will be
+                    # done by adm.device_add() below
+                    _, serial = self.client.devices.add(self.family, path,
                                                              locked=keep_locked)
-                adm.device_add(dev_family, serial)
-
-            adm.fini()
+                    adm.device_add(self.family, serial)
         except EnvironmentError as err:
-            self.logger.error("Cannot add device: %s",
-                              env_error_format(err))
-            adm.fini()
+            self.logger.error("Cannot add device: %s", env_error_format(err))
             sys.exit(os.EX_DATAERR)
 
         self.logger.info("Added %d device(s) successfully", len(resources))
@@ -782,21 +776,17 @@ class MediaOptHandler(BaseResourceOptHandler):
         media_list = NodeSet.fromlist(self.params.get('res'))
         fs_type = self.params.get('fs')
         unlock = self.params.get('unlock')
-        adm = AdminClient()
+
         try:
-            adm.init(lrs_required=True)
-
-            if unlock:
-                self.logger.debug("Post-unlock enabled")
-            for name in media_list:
-                self.logger.info("Formatting media '%s'", name)
-                adm.fs_format(name, fs_type, unlock=unlock)
-
+            with AdminClient(lrs_required=True) as adm:
+                if unlock:
+                    self.logger.debug("Post-unlock enabled")
+                for name in media_list:
+                    self.logger.info("Formatting media '%s'", name)
+                    adm.fs_format(name, fs_type, unlock=unlock)
         except EnvironmentError as err:
             # XXX add an option to exit on first error
             self.logger.error("fs_format: %s", env_error_format(err))
-        finally:
-            adm.fini()
 
     def exec_list(self):
         """List media and display results."""
@@ -908,25 +898,21 @@ class DirOptHandler(MediaOptHandler):
         resources = self.params.get('res')
         keep_locked = not self.params.get('unlock')
         tags = self.params.get('tags', [])
-        adm = AdminClient()
 
         try:
-            adm.init(lrs_required=False)
+            with AdminClient(lrs_required=False) as adm:
+                for path in resources:
+                    # Remove any trailing slash
+                    path = path.rstrip('/')
 
-            for path in resources:
-                # Remove any trailing slash
-                path = path.rstrip('/')
+                    self.client.media.add(self.family, 'POSIX', None, path,
+                                          locked=keep_locked, tags=tags)
+                    # Add device unlocked and rely on media locking
+                    _, serial = self.client.devices.add(self.family, path,
+                                                        locked=False)
+                    adm.device_add(self.family, serial)
 
-                self.client.media.add(self.family, 'POSIX', None, path,
-                                      locked=keep_locked, tags=tags)
-                # Add device unlocked and rely on media locking
-                _, serial = self.client.devices.add(self.family, path,
-                                                    locked=False)
-                adm.device_add(self.family, serial)
-
-                self.logger.debug("Added directory '%s'", path)
-
-            adm.fini()
+                    self.logger.debug("Added directory '%s'", path)
         except EnvironmentError as err:
             self.logger.error("Cannot add directory: %s", env_error_format(err))
             sys.exit(os.EX_DATAERR)

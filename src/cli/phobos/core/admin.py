@@ -44,9 +44,17 @@ class AdminHandle(Structure):
 
 class Client(object):
     """Wrapper on the phobos admin client"""
-    def __init__(self):
+    def __init__(self, lrs_required=True):
         super(Client, self).__init__()
+        self.lrs_required = lrs_required
         self.handle = None
+
+    def __enter__(self):
+        self.init(self.lrs_required)
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.fini()
 
     def init(self, lrs_required):
         if self.handle is not None:
