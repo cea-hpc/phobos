@@ -2236,11 +2236,13 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
                           "{\"$AND\": ["
                           "  {\"DSS::DEV::host\": \"%s\"},"
                           "  {\"DSS::DEV::family\": \"%s\"},"
-                          "  {\"DSS::DEV::serial\": \"%s\"}"
+                          "  {\"DSS::DEV::serial\": \"%s\"},"
+                          "  {\"DSS::DEV::adm_status\": \"%s\"}"
                           "]}",
                           get_hostname(),
                           rsc_family2str(family),
-                          name);
+                          name,
+                          rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED));
     if (rc)
         goto err;
 
@@ -2250,7 +2252,7 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
         goto err;
 
     if (dev_cnt == 0) {
-        pho_info("No usable device found (%s://%s): check device status",
+        pho_info("No usable device found (%s:%s): check device status",
                  rsc_family2str(family), name);
         GOTO(err_res, rc = -ENXIO);
     }
