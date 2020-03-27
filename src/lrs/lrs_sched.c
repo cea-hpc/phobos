@@ -1561,24 +1561,39 @@ static device_select_func_t get_dev_policy(void)
 /**
  * Return true if at least one compatible drive is found.
  *
- * The found compatible drive should be not failed and not locked by
- * administrator.
+ * The found compatible drive should be not failed, not locked by
+ * administrator and not locked for the current operation.
  *
- * @param(in) pmedia   Media that should be used by the drive to check
- *                     compatibility (ignored if NULL, any not failed and not
- *                     administrator locked drive will fit.)
- * @return             True if one compatible drive is found, else false.
+ * @param(in) pmedia          Media that should be used by the drive to check
+ *                            compatibility (ignored if NULL, any not failed and
+ *                            not administrator locked drive will fit.
+ * @param(in) selected_devs   Devices already selected for this operation.
+ * @param(in) n_selected_devs Number of devices already selected.
+ * @return                    True if one compatible drive is found, else false.
  */
 static bool compatible_drive_exists(struct lrs_sched *sched,
-                                    struct media_info *pmedia)
+                                    struct media_info *pmedia,
+                                    struct dev_descr *selected_devs,
+                                    const int n_selected_devs)
 {
-    int i;
+    int i, j;
 
     for (i = 0; i < sched->devices->len; i++) {
         struct dev_descr *dev = &g_array_index(sched->devices,
                                                struct dev_descr, i);
+        bool is_already_selected = false;
 
         if (dev->op_status == PHO_DEV_OP_ST_FAILED)
+            continue;
+
+        /* check the device is not already selected */
+        for (j = 0; j < n_selected_devs; ++j)
+            if (!strcmp(dev->dss_dev_info->rsc.id.name,
+                        selected_devs[i].dss_dev_info->rsc.id.name)) {
+                is_already_selected = true;
+                break;
+            }
+        if (is_already_selected)
             continue;
 
         if (pmedia) {
@@ -1597,13 +1612,17 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
 /**
  * Free one of the devices to allow mounting a new media.
  * On success, the returned device is locked.
- * @param(out) dev_descr Pointer to an empty drive.
- * @param(in)  pmedia    Media that should be used by the drive to check
- *                       compatibility (ignored if NULL)
+ * @param(out) dev_descr       Pointer to an empty drive.
+ * @param(in)  pmedia          Media that should be used by the drive to check
+ *                             compatibility (ignored if NULL)
+ * @param(in)  selected_devs   Devices already selected for this operation.
+ * @param(in)  n_selected_devs Number of devices already selected.
  */
 static int sched_free_one_device(struct lrs_sched *sched,
                                  struct dev_descr **dev_descr,
-                                 struct media_info *pmedia)
+                                 struct media_info *pmedia,
+                                 struct dev_descr *selected_devs,
+                                 const int n_selected_devs)
 {
     struct dev_descr *tmp_dev;
     int               rc;
@@ -1616,7 +1635,8 @@ static int sched_free_one_device(struct lrs_sched *sched,
         tmp_dev = dev_picker(sched, PHO_DEV_OP_ST_UNSPEC, select_drive_to_free,
                              0, &NO_TAGS, pmedia);
         if (tmp_dev == NULL) {
-            if (compatible_drive_exists(sched, pmedia))
+            if (compatible_drive_exists(sched, pmedia, selected_devs,
+                                        n_selected_devs))
                 LOG_RETURN(-EAGAIN, "No suitable device to free");
             else
                 LOG_RETURN(-ENODEV, "No compatible device exists not failed "
@@ -1751,7 +1771,8 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
                             pmedia);
     if (*new_dev == NULL) {
         pho_verb("No free drive: need to unload one");
-        rc = sched_free_one_device(sched, new_dev, pmedia);
+        rc = sched_free_one_device(sched, new_dev, pmedia, *devs,
+                                   new_dev_index);
         if (rc)
             goto out_release;
     }
@@ -1898,7 +1919,7 @@ static int sched_media_prepare(struct lrs_sched *sched,
                          med);
         if (dev == NULL) {
             pho_verb("No free drive: need to unload one");
-            rc = sched_free_one_device(sched, &dev, med);
+            rc = sched_free_one_device(sched, &dev, med, NULL, 0);
             if (rc != 0)
                 LOG_GOTO(out_mda_unlock, rc, "No device available");
         }

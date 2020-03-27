@@ -100,11 +100,9 @@ function put_tape_simple
         error "Put with an available media should have worked"
 
     # test drive availability
-    # TODO: to uncomment once the admin lock on device is considered
-    # when selecting one
-    # $LOG_VALG $phobos drive lock ${DRIVE_ARRAY[0]}
-    # $LOG_VALG $phobos put /etc/hosts ${id}.2 &&
-    #     error "Should not be able to put objects without unlocked device"
+    $LOG_VALG $phobos drive lock ${DRIVE_ARRAY[0]}
+    $LOG_VALG $phobos put /etc/hosts ${id}.2 &&
+        error "Should not be able to put objects without unlocked device"
 
     return 0
 }
@@ -157,11 +155,9 @@ function put_tape_raid
         error "Put with available media should have worked"
 
     # test drive availability
-    # TODO: to uncomment once the admin lock on device is considered
-    # when selecting one
-    # $LOG_VALG $phobos drive lock ${DRIVE_ARRAY[0]}
-    # $LOG_VALG $phobos put -l raid1 /etc/hosts ${id}.2 &&
-    #     error "Should not be able to put objects with 1/2 unlocked devices"
+    $LOG_VALG $phobos drive lock ${DRIVE_ARRAY[0]}
+    $LOG_VALG $phobos put -l raid1 /etc/hosts ${id}.2 &&
+        error "Should not be able to put objects with 1/2 unlocked devices"
 
     return 0
 }
@@ -198,10 +194,8 @@ function get_tape_simple
     local id=test/tape.simple
 
     # test drive availability
-    # TODO: to uncomment once the admin lock on device is considered
-    # when selecting one
-    # $LOG_VALG $phobos get $id /tmp/out &&
-    #    error "Should not be able to get objects without unlocked device"
+    $LOG_VALG $phobos get $id /tmp/out &&
+        error "Should not be able to get objects without unlocked device"
 
     # resources are available
     $LOG_VALG $phobos drive unlock ${DRIVE_ARRAY[0]}
@@ -239,15 +233,13 @@ function get_tape_raid
     local id=test/tape.raid
 
     # test drive availability
-    # TODO: to uncomment once the admin lock on device is considered
-    # when selecting one
-    # $LOG_VALG $phobos get $id /tmp/out &&
-    #    error "Get with 1/2 available device should have worked"
-    # rm /tmp/out
+    $LOG_VALG $phobos get $id /tmp/out ||
+        error "Get with 1/2 available device should have worked"
+    rm /tmp/out
 
-    # $LOG_VALG $phobos drive lock ${DRIVE_ARRAY[1]}
-    # $LOG_VALG $phobos get $id /tmp/out &&
-    #     error "Should not be able to get objects without unlocked devices"
+    $LOG_VALG $phobos drive lock ${DRIVE_ARRAY[1]}
+    $LOG_VALG $phobos get $id /tmp/out &&
+        error "Should not be able to get objects without unlocked devices"
 
     # resources are available
     $LOG_VALG $phobos drive unlock ${DRIVE_ARRAY[@]}
