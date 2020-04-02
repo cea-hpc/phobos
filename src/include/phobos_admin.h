@@ -55,7 +55,7 @@ void phobos_admin_fini(struct admin_handle *adm);
  * \return                          0     on success,
  *                                 -errno on failure.
  */
-int phobos_admin_init(struct admin_handle *adm, const bool lrs_required);
+int phobos_admin_init(struct admin_handle *adm, bool lrs_required);
 
 /**
  * Inform the LRS that it needs to reload device information following
@@ -87,7 +87,7 @@ int phobos_admin_device_add(struct admin_handle *adm, enum rsc_family family,
  *                                 -errno on failure.
  */
 int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
-                               const int num_dev);
+                               int num_dev);
 
 /**
  * Load and format a medium to the given fs type.

@@ -158,7 +158,7 @@ void phobos_admin_fini(struct admin_handle *adm)
     dss_fini(&adm->dss);
 }
 
-int phobos_admin_init(struct admin_handle *adm, const bool lrs_required)
+int phobos_admin_init(struct admin_handle *adm, bool lrs_required)
 {
     const char *sock_path;
     int rc;
@@ -223,7 +223,7 @@ int phobos_admin_device_add(struct admin_handle *adm, enum rsc_family family,
  * state, to then remove this part of code from the CLI.
  */
 int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
-                               const int num_dev)
+                               int num_dev)
 {
     int rc = 0;
     int i;
