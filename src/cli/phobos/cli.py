@@ -634,15 +634,17 @@ class DeviceOptHandler(BaseResourceOptHandler):
                 self.logger.error("Device %s not found", serial)
                 sys.exit(os.EX_DATAERR)
             assert len(device) == 1
-            if device[0].lock.lock != "":
-                if self.params.get('force'):
-                    self.logger.warn("Device %s is in use. Administrative "
-                                     "locking will not be effective "
-                                     "immediately", serial)
-                else:
-                    self.logger.error("Device %s is in use by %s.",
-                                      serial, device[0].lock.lock)
-                    continue
+
+            try:
+                self.client.devices.lock([device[0]])
+            except EnvironmentError as err:
+                self.logger.error("Failed to lock device '%s': %s", serial,
+                                  env_error_format(err))
+                continue
+
+            device = self.filter(serial)
+            assert len(device) == 1
+
             device[0].rsc.adm_status = PHO_RSC_ADM_ST_LOCKED
             devices.append(device[0])
 
@@ -656,6 +658,8 @@ class DeviceOptHandler(BaseResourceOptHandler):
             self.logger.error("Failed to lock device(s): %s",
                               env_error_format(err))
             sys.exit(os.EX_DATAERR)
+        finally:
+            self.client.devices.unlock(devices)
 
         self.logger.info("%d device(s) locked", len(devices))
 
@@ -669,10 +673,18 @@ class DeviceOptHandler(BaseResourceOptHandler):
             if not device:
                 self.logger.error("No such device: %s", serial)
                 sys.exit(os.EX_DATAERR)
-            if device[0].lock.lock != "" and not self.params.get('force'):
-                self.logger.error("Device %s is in use by %s.",
-                                  serial, device[0].lock.lock)
+            assert len(device) == 1
+
+            try:
+                self.client.devices.lock([device[0]])
+            except EnvironmentError as err:
+                self.logger.error("Failed to lock device '%s': %s", serial,
+                                  env_error_format(err))
                 continue
+
+            device = self.filter(serial)
+            assert len(device) == 1
+
             if device[0].rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED:
                 self.logger.warn("Device %s is already unlocked", serial)
             device[0].rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED
@@ -696,6 +708,8 @@ class DeviceOptHandler(BaseResourceOptHandler):
         except EnvironmentError as err:
             self.logger.error("Failed to notify: %s", env_error_format(err))
             sys.exit(os.EX_DATAERR)
+        finally:
+            self.client.devices.unlock(devices)
 
         self.logger.info("%d device(s) unlocked", len(devices))
 
@@ -763,6 +777,10 @@ class MediaOptHandler(BaseResourceOptHandler):
                                   uid, env_error_format(err))
                 failed.append(uid)
                 continue
+
+            media = self.client.media.get(family=self.family, id=uid)
+            assert len(media) == 1
+            media = media[0]
 
             # Update tags
             try:
@@ -834,15 +852,18 @@ class MediaOptHandler(BaseResourceOptHandler):
         uids = NodeSet.fromlist(self.params.get('res'))
         for uid in uids:
             media = self.client.media.get(id=uid)
-            if media[0].lock.lock != "":
-                if self.params.get('force'):
-                    self.logger.warn("Media %s is in use. Administrative "
-                                     "locking will not be effective "
-                                     "immediately", uid)
-                else:
-                    self.logger.error("Media %s is in use by %s.",
-                                      uid, media[0].lock.lock)
-                    continue
+            assert len(media) == 1
+
+            # Attempt to lock the media to avoid concurrent modifications
+            try:
+                self.client.media.lock([media[0]])
+            except EnvironmentError as err:
+                self.logger.error("Failed to lock media '%s': %s",
+                                  uid, env_error_format(err))
+                continue
+
+            media = self.client.media.get(id=uid)
+            assert len(media) == 1
 
             media[0].rsc.adm_status = PHO_RSC_ADM_ST_LOCKED
             results.append(media[0])
@@ -857,6 +878,8 @@ class MediaOptHandler(BaseResourceOptHandler):
             self.logger.error("Failed to lock one or more media(s): %s",
                               env_error_format(err))
             sys.exit(os.EX_DATAERR)
+        finally:
+            self.client.media.unlock(results)
 
         self.logger.info("%d media(s) locked" % len(results))
 
@@ -866,10 +889,18 @@ class MediaOptHandler(BaseResourceOptHandler):
         uids = NodeSet.fromlist(self.params.get('res'))
         for uid in uids:
             media = self.client.media.get(id=uid)
-            if media[0].lock.lock != "" and not self.params.get('force'):
-                self.logger.error("Media %s is in use by %s",
-                                  uid, media[0].lock.lock)
+            assert len(media) == 1
+
+            # Attempt to lock the media to avoid concurrent modifications
+            try:
+                self.client.media.lock([media[0]])
+            except EnvironmentError as err:
+                self.logger.error("Failed to lock media '%s': %s",
+                                  uid, env_error_format(err))
                 continue
+
+            media = self.client.media.get(id=uid)
+            assert len(media) == 1
 
             if media[0].rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED:
                 self.logger.warn("Media %s is already unlocked", uid)
@@ -887,6 +918,8 @@ class MediaOptHandler(BaseResourceOptHandler):
             self.logger.error("Failed to unlock one or more media(s): %s",
                               env_error_format(err))
             sys.exit(os.EX_DATAERR)
+        finally:
+            self.client.media.unlock(results)
 
         self.logger.info("%d media(s) unlocked" % len(results))
 

@@ -253,6 +253,14 @@ class DeviceManager(BaseObjectManager):
     """Proxy to manipulate devices."""
     wrapped_class = DevInfo
     wrapped_ident = 'device'
+    lock_owner_count = 0
+
+    def __init__(self, *args, **kwargs):
+        super(DeviceManager, self).__init__(*args, **kwargs)
+        self.lock_owner = "py-%.210s:%.8x:%.16x:%.16x" % (
+            gethostname(), os.getpid(), int(time.time()), self.lock_owner_count
+        )
+        self.lock_owner_count += 1
 
     def add(self, device_type, device_path, locked=True):
         """
@@ -282,6 +290,23 @@ class DeviceManager(BaseObjectManager):
     def _dss_set(self, hdl, obj, obj_cnt, opcode):
         """Invoke device-specific DSS set method."""
         return LIBPHOBOS.dss_device_set(hdl, obj, obj_cnt, opcode)
+
+    def lock(self, objects):
+        """Lock all the devices associated with a given list of DeviceInfo"""
+        self._generic_lock_unlock(
+            objects, LIBPHOBOS.dss_device_lock, "Device locking failed",
+            self.lock_owner,
+        )
+
+    def unlock(self, objects, force=False):
+        """Unlock all the devices associated with a given list of DeviceInfo.
+        If `force` is True, unlock the objects even if they were not locked
+        by this instance.
+        """
+        self._generic_lock_unlock(
+            objects, LIBPHOBOS.dss_device_unlock, "Device unlocking failed",
+            None if force else self.lock_owner,
+        )
 
 class MediaManager(BaseObjectManager):
     """Proxy to manipulate media."""
