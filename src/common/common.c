@@ -27,8 +27,10 @@
 #endif
 
 #include "pho_common.h"
+
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/utsname.h>
 #include <ctype.h>
 #include <unistd.h>
 #include <assert.h>
@@ -334,4 +336,24 @@ int pho_ht_foreach(GHashTable *ht, pho_ht_iter_cb_t cb, void *data)
 
     g_hash_table_find(ht, pho_ht_iter_cb_wrapper, &phd);
     return phd.rc;
+}
+
+const char *get_hostname()
+{
+    static struct utsname host_info;
+    char *dot;
+
+    if (host_info.nodename[0] != '\0')
+        return host_info.nodename;
+
+    if (uname(&host_info) != 0) {
+        pho_error(errno, "Failed to get host name");
+        return NULL;
+    }
+
+    dot = strchr(host_info.nodename, '.');
+    if (dot)
+        *dot = '\0';
+
+    return host_info.nodename;
 }

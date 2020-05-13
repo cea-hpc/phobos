@@ -34,9 +34,10 @@
  * Phobos admin handle.
  */
 struct admin_handle {
-    struct dss_handle dss;          /**< DSS handle, configured from conf. */
     struct pho_comm_info comm;      /**< Communication socket info. */
+    struct dss_handle dss;          /**< DSS handle, configured from conf. */
     bool daemon_is_online;          /**< True if phobosd is online. */
+    char *lock_owner;               /**< Lock owner name for this client. */
 };
 
 /**
@@ -82,12 +83,13 @@ int phobos_admin_device_add(struct admin_handle *adm, enum rsc_family family,
  * \param[in]       adm             Admin module handler.
  * \param[in]       dev_ids         Device IDs to unlock.
  * \param[in]       num_dev         Number of device to unlock.
+ * \param[in]       is_forced       true if forced unlock is requested.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
  */
 int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
-                               int num_dev);
+                               int num_dev, bool is_forced);
 
 /**
  * Load and format a medium to the given fs type.

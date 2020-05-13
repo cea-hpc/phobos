@@ -28,10 +28,12 @@
 
 #include "phobos_admin.h"
 
+#include <sys/syscall.h>
 #include <unistd.h>
 
 #include "pho_cfg.h"
 #include "pho_comm.h"
+#include "pho_common.h"
 #include "pho_dss.h"
 #include "pho_srl_lrs.h"
 
@@ -53,7 +55,7 @@ const struct pho_config_item cfg_admin[] = {
 };
 
 /* ****************************************************************************/
-/* Static Functions ***********************************************************/
+/* Static Communication-related Functions *************************************/
 /* ****************************************************************************/
 
 static int _send_and_receive(struct admin_handle *adm, pho_req_t *req,
@@ -144,6 +146,117 @@ out:
 }
 
 /* ****************************************************************************/
+/* Static Database-related Functions ******************************************/
+/* ****************************************************************************/
+
+static int _get_device_by_id(struct admin_handle *adm, struct pho_id *dev_id,
+                             struct dev_info **dev_res)
+{
+    struct dss_filter filter;
+    int dcnt;
+    int rc;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::DEV::family\": \"%s\"},"
+                          "  {\"$OR\": ["
+                          "    {\"DSS::DEV::serial\": \"%s\"},"
+                          "    {\"DSS::DEV::path\": \"%s\"}"
+                          "  ]}"
+                          "]}",
+                          rsc_family2str(dev_id->family),
+                          dev_id->name, dev_id->name);
+    if (rc)
+        return rc;
+
+    rc = dss_device_get(&adm->dss, &filter, dev_res, &dcnt);
+    dss_filter_free(&filter);
+    if (rc)
+        return rc;
+
+    if (dcnt == 0)
+        LOG_RETURN(-ENXIO, "Device '%s' not found", dev_id->name);
+
+    assert(dcnt == 1);
+
+    return 0;
+}
+
+static int _device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
+                          int num_dev, bool is_forced)
+{
+    struct dev_info *devices;
+    int avail_devices = 0;
+    int rc;
+    int i;
+
+    devices = calloc(num_dev, sizeof(*devices));
+    if (!devices)
+        LOG_RETURN(-ENOMEM, "Device info allocation failed");
+
+    for (i = 0; i < num_dev; ++i) {
+        struct dev_info *dev_res;
+
+        rc = _get_device_by_id(adm, dev_ids + i, &dev_res);
+        if (rc)
+            goto out_free;
+
+        rc = dss_device_lock(&adm->dss, dev_res, 1, adm->lock_owner);
+        if (rc) {
+            pho_error(-EBUSY, "Device '%s' is in use by '%s'", dev_ids[i].name,
+                      dev_res->lock.lock);
+            dss_res_free(dev_res, 1);
+            continue;
+        }
+
+        dss_res_free(dev_res, 1);
+        rc = _get_device_by_id(adm, dev_ids + i, &dev_res);
+        if (rc)
+            goto out_free;
+
+        /* TODO: to uncomment once the dss_device_lock() is removed ie. when
+         * the update of a single database field will be implemented
+         */
+
+/*      if (strcmp(dev_res->lock.lock, "") && !is_forced) {
+ *          pho_error(-EBUSY, "Device '%s' is in use by '%s'", dev_ids[i].name,
+ *                    dev_res->lock.lock);
+ *          dss_res_free(dev_res, 1);
+ *          continue;
+ *      }
+ */
+        if (dev_res->rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED)
+            pho_warn("Device '%s' is already unlocked", dev_ids[i].name);
+
+        dev_res->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
+        memcpy(devices + i, dev_res, sizeof(*dev_res));
+
+        dss_res_free(dev_res, 1);
+        ++avail_devices;
+    }
+
+    if (avail_devices != num_dev)
+        LOG_GOTO(out_free, rc = -EBUSY,
+                 "At least one device is in use, use --force");
+
+    rc = dss_device_set(&adm->dss, devices, num_dev, DSS_SET_UPDATE);
+    if (rc)
+        goto out_free;
+
+    // in case the name given by the user is not the device ID name
+    for (i = 0; i < num_dev; ++i)
+        if (strcmp(dev_ids[i].name, devices[i].rsc.id.name))
+            strcpy(dev_ids[i].name, devices[i].rsc.id.name);
+
+out_free:
+    dss_device_unlock(&adm->dss, devices, num_dev, adm->lock_owner);
+
+    free(devices);
+
+    return rc;
+}
+
+/* ****************************************************************************/
 /* API Functions **************************************************************/
 /* ****************************************************************************/
 
@@ -155,8 +268,12 @@ void phobos_admin_fini(struct admin_handle *adm)
     if (rc)
         pho_error(rc, "Cannot close the communication socket");
 
+    free(adm->lock_owner);
+
     dss_fini(&adm->dss);
 }
+
+static __thread uint64_t adm_lock_number;
 
 int phobos_admin_init(struct admin_handle *adm, bool lrs_required)
 {
@@ -165,6 +282,15 @@ int phobos_admin_init(struct admin_handle *adm, bool lrs_required)
 
     memset(adm, 0, sizeof(*adm));
     adm->comm = pho_comm_info_init();
+
+    rc = asprintf(&adm->lock_owner, "%.213s:%.8lx:%.16lx:%.16lx",
+                  get_hostname(), syscall(SYS_gettid), time(NULL),
+                  adm_lock_number);
+
+    if (rc == -1)
+        LOG_GOTO(out, rc, "Cannot allocate lock_owner");
+
+    ++adm_lock_number;
 
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)
@@ -218,15 +344,15 @@ int phobos_admin_device_add(struct admin_handle *adm, enum rsc_family family,
     return 0;
 }
 
-/**
- * TODO: admin_device_unlock will have the responsability to update the device
- * state, to then remove this part of code from the CLI.
- */
 int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
-                               int num_dev)
+                               int num_dev, bool is_forced)
 {
-    int rc = 0;
+    int rc;
     int i;
+
+    rc = _device_unlock(adm, dev_ids, num_dev, is_forced);
+    if (rc)
+        return rc;
 
     if (!adm->daemon_is_online)
         return 0;
@@ -238,7 +364,7 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
         if (rc2)
             pho_error(rc2, "Failure during daemon notification for '%s'",
                       dev_ids[i].name);
-        rc = rc ? rc : rc2;
+        rc = rc ? : rc2;
     }
 
     return rc;

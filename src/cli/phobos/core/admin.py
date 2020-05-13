@@ -36,10 +36,10 @@ from phobos.core.ffi import CommInfo, LIBPHOBOS_ADMIN, LRS, Id
 class AdminHandle(Structure):
     """Admin handler"""
     _fields_ = [
-        ('dss', DSSHandle),
-        ('lrs', LRS),
         ('comm', CommInfo),
-        ('dir_sock_path', c_char_p),
+        ('dss', DSSHandle),
+        ('daemon_is_online', c_int),
+        ('lock_owner', c_char_p),
     ]
 
 class Client(object):
@@ -100,13 +100,14 @@ class Client(object):
             raise EnvironmentError(rc, "Cannot add device '%s' to the LRS"
                                        % dev_name)
 
-    def device_unlock(self, dev_family, dev_names):
-        """Inform the daemon that devices are unlocked."""
+    def device_unlock(self, dev_family, dev_names, is_forced):
+        """Wrapper for the device unlock command."""
         c_id = Id * len(dev_names)
         dev_ids = [Id(dev_family, name) for name in dev_names]
 
         rc = LIBPHOBOS_ADMIN.phobos_admin_device_unlock(byref(self.handle),
                                                         c_id(*dev_ids),
-                                                        len(dev_ids))
+                                                        len(dev_ids),
+                                                        is_forced)
         if rc:
-            raise EnvironmentError(rc, "Cannot notify the daemon")
+            raise EnvironmentError(rc, "Error during device unlock")

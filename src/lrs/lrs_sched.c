@@ -41,7 +41,6 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <assert.h>
-#include <sys/utsname.h>
 #include <jansson.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -85,25 +84,6 @@ static char *mount_point(const char *id)
         return NULL;
 
     return mnt_out;
-}
-
-static struct utsname host_info;
-
-/** get host name once (/!\ not thread-safe). */
-static const char *get_hostname(void)
-{
-    if (host_info.nodename[0] == '\0') {
-        char *dot;
-
-        if (uname(&host_info) != 0) {
-            pho_error(errno, "Failed to get host name");
-            return NULL;
-        }
-        dot = strchr(host_info.nodename, '.');
-        if (dot)
-            *dot = '\0';
-    }
-    return host_info.nodename;
 }
 
 /** all needed information to select devices */

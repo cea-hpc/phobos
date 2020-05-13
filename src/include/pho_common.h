@@ -263,4 +263,9 @@ static inline bool is_medium_global_error(int errcode)
     return errcode == -ENOSPC || errcode == -EROFS || errcode == -EDQUOT;
 }
 
+/**
+ * Get short host name once (/!\ not thread-safe).
+ */
+const char *get_hostname(void);
+
 #endif

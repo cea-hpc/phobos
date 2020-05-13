@@ -665,53 +665,17 @@ class DeviceOptHandler(BaseResourceOptHandler):
 
     def exec_unlock(self):
         """Device unlock"""
-        serials = self.params.get('res')
-        devices = []
-
-        for serial in serials:
-            device = self.filter(serial)
-            if not device:
-                self.logger.error("No such device: %s", serial)
-                sys.exit(os.EX_DATAERR)
-            assert len(device) == 1
-
-            try:
-                self.client.devices.lock([device[0]])
-            except EnvironmentError as err:
-                self.logger.error("Failed to lock device '%s': %s", serial,
-                                  env_error_format(err))
-                continue
-
-            device = self.filter(serial)
-            assert len(device) == 1
-
-            if device[0].rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED:
-                self.logger.warn("Device %s is already unlocked", serial)
-            device[0].rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED
-            devices.append(device[0])
-
-        if len(devices) != len(serials):
-            self.logger.error("At least one device is in use, use --force")
-            sys.exit(os.EX_DATAERR)
+        names = self.params.get('res')
 
         try:
-            self.client.devices.update(devices)
+            with AdminClient(lrs_required=False) as adm:
+                adm.device_unlock(self.family, names, self.params.get('force'))
         except EnvironmentError as err:
             self.logger.error("Failed to unlock device(s): %s",
                               env_error_format(err))
             sys.exit(os.EX_DATAERR)
 
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                names = [dev.rsc.id.name for dev in devices]
-                adm.device_unlock(self.family, names)
-        except EnvironmentError as err:
-            self.logger.error("Failed to notify: %s", env_error_format(err))
-            sys.exit(os.EX_DATAERR)
-        finally:
-            self.client.devices.unlock(devices)
-
-        self.logger.info("%d device(s) unlocked", len(devices))
+        self.logger.info("%d device(s) unlocked", len(names))
 
 class MediaOptHandler(BaseResourceOptHandler):
     """Shared interface for media."""
