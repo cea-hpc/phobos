@@ -2280,6 +2280,32 @@ err:
 }
 
 /**
+ * Remove the locked device from the local device array.
+ * It will be inserted back once the device status is changed to 'unlocked'.
+ */
+static int sched_device_lock(struct lrs_sched *sched, const char *name)
+{
+    struct dev_descr *dev;
+    int i;
+
+    for (i = 0; i < sched->devices->len; ++i) {
+        dev = &g_array_index(sched->devices, struct dev_descr, i);
+
+        if (!strcmp(name, dev->dss_dev_info->rsc.id.name)) {
+            g_array_remove_index_fast(sched->devices, i);
+            pho_verb("Removed locked device '%s' from the local database",
+                     name);
+            return 0;
+        }
+    }
+
+    pho_verb("Cannot find local device info for '%s', not critical, "
+             "will continue", name);
+
+    return 0;
+}
+
+/**
  * Update local admin status of device to 'unlocked',
  * or fetch it from the database if unknown
  */
@@ -2700,6 +2726,9 @@ static int sched_handle_notify(struct lrs_sched *sched, pho_req_t *req,
     case PHO_NTFY_OP_ADD_DEVICE:
         rc = sched_device_add(sched, nreq->rsrc_id->family,
                               nreq->rsrc_id->name);
+        break;
+    case PHO_NTFY_OP_DEVICE_LOCK:
+        rc = sched_device_lock(sched, nreq->rsrc_id->name);
         break;
     case PHO_NTFY_OP_DEVICE_UNLOCK:
         rc = sched_device_unlock(sched, nreq->rsrc_id->name);

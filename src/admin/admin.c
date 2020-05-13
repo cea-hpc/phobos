@@ -347,6 +347,32 @@ int phobos_admin_device_add(struct admin_handle *adm, enum rsc_family family,
     return 0;
 }
 
+/**
+ * TODO: admin_device_lock will have the responsability to update the device
+ * state, to then remove this part of code from the CLI.
+ */
+int phobos_admin_device_lock(struct admin_handle *adm, struct pho_id *dev_ids,
+                             int num_dev)
+{
+    int rc = 0;
+    int i;
+
+    if (!adm->daemon_is_online)
+        return 0;
+
+    for (i = 0; i < num_dev; ++i) {
+        int rc2;
+
+        rc2 = _admin_notify(adm, dev_ids + i, PHO_NTFY_OP_DEVICE_LOCK);
+        if (rc2)
+            pho_error(rc2, "Failure during daemon notification for '%s'",
+                      dev_ids[i].name);
+        rc = rc ? : rc2;
+    }
+
+    return rc;
+}
+
 int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
                                int num_dev, bool is_forced)
 {

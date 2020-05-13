@@ -625,13 +625,13 @@ class DeviceOptHandler(BaseResourceOptHandler):
 
     def exec_lock(self):
         """Device lock"""
-        devices = []
         serials = self.params.get('res')
+        devices = []
 
         for serial in serials:
             device = self.filter(serial)
             if not device:
-                self.logger.error("Device %s not found", serial)
+                self.logger.error("Device '%s' not found", serial)
                 sys.exit(os.EX_DATAERR)
             assert len(device) == 1
 
@@ -660,6 +660,13 @@ class DeviceOptHandler(BaseResourceOptHandler):
             sys.exit(os.EX_DATAERR)
         finally:
             self.client.devices.unlock(devices)
+
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                adm.device_lock(self.family, serials)
+        except EnvironmentError as err:
+            self.logger.error("Failed to notify: %s", env_error_format(err))
+            sys.exit(os.EX_DATAERR)
 
         self.logger.info("%d device(s) locked", len(devices))
 

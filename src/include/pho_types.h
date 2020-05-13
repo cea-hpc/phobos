@@ -448,6 +448,7 @@ struct object_info {
 enum notify_op {
     PHO_NTFY_OP_INVAL = -1,
     PHO_NTFY_OP_ADD_DEVICE,
+    PHO_NTFY_OP_DEVICE_LOCK,
     PHO_NTFY_OP_DEVICE_UNLOCK,
     PHO_NTFY_OP_LAST
 };

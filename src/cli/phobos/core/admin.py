@@ -100,6 +100,17 @@ class Client(object):
             raise EnvironmentError(rc, "Cannot add device '%s' to the LRS"
                                        % dev_name)
 
+    def device_lock(self, dev_family, dev_names):
+        """Inform the daemon that devices are locked."""
+        c_id = Id * len(dev_names)
+        dev_ids = [Id(dev_family, name) for name in dev_names]
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_device_lock(byref(self.handle),
+                                                      c_id(*dev_ids),
+                                                      len(dev_ids))
+        if rc:
+            raise EnvironmentError(rc, "Cannot notify the daemon")
+
     def device_unlock(self, dev_family, dev_names, is_forced):
         """Wrapper for the device unlock command."""
         c_id = Id * len(dev_names)
