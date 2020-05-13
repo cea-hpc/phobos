@@ -77,17 +77,19 @@ int phobos_admin_device_add(struct admin_handle *adm, enum rsc_family family,
                             const char *name);
 
 /**
- * Inform the LRS devices state has changed to 'locked'.
+ * Update the administrative state of the given devices to 'locked' and
+ * inform the LRS devices state has changed.
  *
  * \param[in]       adm             Admin module handler.
  * \param[in]       dev_ids         Device IDs to lock.
  * \param[in]       num_dev         Number of device to lock.
+ * \param[in]       is_forced       true if forced lock is requested.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
  */
 int phobos_admin_device_lock(struct admin_handle *adm, struct pho_id *dev_ids,
-                             int num_dev);
+                             int num_dev, bool is_forced);
 
 /**
  * Update the administrative state of the given devices to 'unlocked' and

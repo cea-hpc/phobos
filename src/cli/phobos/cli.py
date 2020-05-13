@@ -625,50 +625,17 @@ class DeviceOptHandler(BaseResourceOptHandler):
 
     def exec_lock(self):
         """Device lock"""
-        serials = self.params.get('res')
-        devices = []
-
-        for serial in serials:
-            device = self.filter(serial)
-            if not device:
-                self.logger.error("Device '%s' not found", serial)
-                sys.exit(os.EX_DATAERR)
-            assert len(device) == 1
-
-            try:
-                self.client.devices.lock([device[0]])
-            except EnvironmentError as err:
-                self.logger.error("Failed to lock device '%s': %s", serial,
-                                  env_error_format(err))
-                continue
-
-            device = self.filter(serial)
-            assert len(device) == 1
-
-            device[0].rsc.adm_status = PHO_RSC_ADM_ST_LOCKED
-            devices.append(device[0])
-
-        if len(devices) != len(serials):
-            self.logger.error("At least one device is in use, use --force")
-            sys.exit(os.EX_DATAERR)
+        names = self.params.get('res')
 
         try:
-            self.client.devices.update(devices)
+            with AdminClient(lrs_required=False) as adm:
+                adm.device_lock(self.family, names, self.params.get('force'))
         except EnvironmentError as err:
             self.logger.error("Failed to lock device(s): %s",
                               env_error_format(err))
             sys.exit(os.EX_DATAERR)
-        finally:
-            self.client.devices.unlock(devices)
 
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                adm.device_lock(self.family, serials)
-        except EnvironmentError as err:
-            self.logger.error("Failed to notify: %s", env_error_format(err))
-            sys.exit(os.EX_DATAERR)
-
-        self.logger.info("%d device(s) locked", len(devices))
+        self.logger.info("%d device(s) locked", len(names))
 
     def exec_unlock(self):
         """Device unlock"""

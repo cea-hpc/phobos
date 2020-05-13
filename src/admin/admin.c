@@ -183,8 +183,9 @@ static int _get_device_by_id(struct admin_handle *adm, struct pho_id *dev_id,
     return 0;
 }
 
-static int _device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
-                          int num_dev, bool is_forced)
+static int _device_update_adm_status(struct admin_handle *adm,
+                                     struct pho_id *dev_ids, int num_dev,
+                                     enum rsc_adm_status status, bool is_forced)
 {
     struct dev_info *devices;
     int avail_devices = 0;
@@ -219,17 +220,23 @@ static int _device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
          * the update of a single database field will be implemented
          */
 
-/*      if (strcmp(dev_res->lock.lock, "") && !is_forced) {
- *          pho_error(-EBUSY, "Device '%s' is in use by '%s'", dev_ids[i].name,
- *                    dev_res->lock.lock);
- *          dss_res_free(dev_res, 1);
- *          continue;
+/*      if (strcmp(dev_res->lock.lock, "")) {
+ *          if (!is_forced) {
+ *              pho_error(-EBUSY, "Device '%s' is in use by '%s'",
+ *                        dev_ids[i].name, dev_res->lock.lock);
+ *              dss_res_free(dev_res, 1);
+ *              continue;
+ *          } else if (status == PHO_RSC_ADM_ST_LOCKED) {
+ *              pho_warn("Device '%s' is in use. Administrative locking will "
+ *                       "not be effective immediately", dev_res->rsc.id.name);
+ *          }
  *      }
  */
-        if (dev_res->rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED)
-            pho_warn("Device '%s' is already unlocked", dev_ids[i].name);
+        if (dev_res->rsc.adm_status == status)
+            pho_warn("Device '%s' is already in the desired state",
+                     dev_ids[i].name);
 
-        dev_res->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
+        dev_res->rsc.adm_status = status;
         dev_info_cpy(devices + i, dev_res);
 
         dss_res_free(dev_res, 1);
@@ -347,15 +354,16 @@ int phobos_admin_device_add(struct admin_handle *adm, enum rsc_family family,
     return 0;
 }
 
-/**
- * TODO: admin_device_lock will have the responsability to update the device
- * state, to then remove this part of code from the CLI.
- */
 int phobos_admin_device_lock(struct admin_handle *adm, struct pho_id *dev_ids,
-                             int num_dev)
+                             int num_dev, bool is_forced)
 {
-    int rc = 0;
+    int rc;
     int i;
+
+    rc = _device_update_adm_status(adm, dev_ids, num_dev,
+                                   PHO_RSC_ADM_ST_LOCKED, is_forced);
+    if (rc)
+        return rc;
 
     if (!adm->daemon_is_online)
         return 0;
@@ -379,7 +387,8 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
     int rc;
     int i;
 
-    rc = _device_unlock(adm, dev_ids, num_dev, is_forced);
+    rc = _device_update_adm_status(adm, dev_ids, num_dev,
+                                   PHO_RSC_ADM_ST_UNLOCKED, is_forced);
     if (rc)
         return rc;
 
