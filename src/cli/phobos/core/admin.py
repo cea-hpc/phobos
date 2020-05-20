@@ -31,7 +31,10 @@ from ctypes import *
 from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX,
                                PHO_RSC_DIR, PHO_RSC_TAPE)
 from phobos.core.dss import DSSHandle
-from phobos.core.ffi import CommInfo, LIBPHOBOS_ADMIN, LRS, Id
+from phobos.core.ffi import (CommInfo, ExtentInfo, LayoutInfo, LIBPHOBOS_ADMIN,
+                             LRS, Id)
+
+from phobos.core.const import rsc_family2str
 
 class AdminHandle(Structure):
     """Admin handler"""
@@ -122,3 +125,35 @@ class Client(object):
                                                         is_forced)
         if rc:
             raise EnvironmentError(rc, "Error during device unlock")
+
+    def extent_list(self, pattern, degroup):
+        """List extents."""
+        n_objs = c_int(0)
+        objs = pointer(LayoutInfo())
+        rc = LIBPHOBOS_ADMIN.phobos_admin_extent_list(byref(self.handle),
+                                                      pattern,
+                                                      byref(objs),
+                                                      byref(n_objs))
+
+        if rc:
+            raise EnvironmentError(rc)
+
+        if not degroup:
+            list_objs = [objs[i] for i in xrange(n_objs.value)]
+        else:
+            list_objs = []
+            for i in xrange(n_objs.value):
+                ptr = objs[i].extents
+                cnt = objs[i].ext_count
+                for j in xrange(cnt):
+                    obj = type(objs[i])()
+                    pointer(obj)[0] = objs[i]
+                    obj.ext_count = 1
+                    obj.extents = addressof(cast(ptr, POINTER(ExtentInfo))[j])
+                    list_objs.append(obj)
+
+        return list_objs, objs, n_objs
+
+    def list_free(self, objs, n_objs):
+        """Free a previously obtained object list."""
+        LIBPHOBOS_ADMIN.phobos_admin_list_free(objs, n_objs)

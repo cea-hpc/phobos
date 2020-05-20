@@ -240,6 +240,32 @@ The option '-m' applies a filter on user metadata
 phobos object list -m user=foo,test=abd
 ```
 
+##### Listing extents
+To list extents, use `phobos extent list`:
+```
+$ phobos extent list -o oid,ext_count,layout,media_name
+| oid  | ext_count | layout | media_name             |
+|------|-----------|--------|------------------------|
+| obj1 |         1 | simple | ['/tmp/d1']            |
+| obj2 |         2 | raid1  | ['/tmp/d1', '/tmp/d2'] |
+```
+
+The option `--degroup` outputs an extent per row instead of one object per row:
+```
+$ phobos extent list --degroup -o oid,layout,media_name
+| oid  | layout | media_name  |
+|------|--------|-------------|
+| obj1 | simple | ['/tmp/d1'] |
+| obj2 | raid1  | ['/tmp/d1'] |
+| obj2 | raid1  | ['/tmp/d2'] |
+```
+
+You can add a POSIX pattern to match oids, as described in "Listing objects"
+section:
+```
+phobos extent list "obj.*"
+```
+
 ## Device and media management
 ### Listing resources
 Any device or media can be listed using the 'list' operation. For instance,

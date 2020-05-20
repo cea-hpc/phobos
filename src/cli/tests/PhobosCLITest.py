@@ -85,6 +85,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['drive', '-h'])
         self.check_cmdline_exit(['lib', '-h'])
         self.check_cmdline_exit(['object', '-h'])
+        self.check_cmdline_exit(['extent', '-h'])
 
     def test_cli_basic(self):
         """test simple valid and invalid command lines."""
@@ -109,6 +110,15 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['object', 'list', '-o', 'oid'])
         self.check_cmdline_valid(['object', 'list', '-o', 'all', '"obj.*"'])
         self.check_cmdline_valid(['object', 'list', '-m', 'user=foo,test=abd'])
+        self.check_cmdline_valid(['extent', 'list'])
+        self.check_cmdline_valid(['extent', 'list', '"obj.*"'])
+        self.check_cmdline_valid(['extent', 'list', '-o', 'all'])
+        self.check_cmdline_valid(['extent', 'list', '-o', '*'])
+        self.check_cmdline_valid(['extent', 'list', '-o', 'oid'])
+        self.check_cmdline_valid(['extent', 'list', '-o', 'all', '"obj.*"'])
+        self.check_cmdline_valid(['extent', 'list', '--degroup'])
+        self.check_cmdline_valid(['extent', 'list', '--degroup', '"obj.*"'])
+        self.check_cmdline_valid(['extent', 'list', '--degroup', '-o', 'all'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['voynichauthor', 'list'], code=2)

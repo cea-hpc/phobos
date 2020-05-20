@@ -120,4 +120,29 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
 int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
                         enum fs_type fs, bool unlock);
 
+/**
+ * Retrieve the extents that belongs to objects whose IDs match
+ * the given pattern.
+ *
+ * The caller must release the list calling phobos_admin_list_free().
+ *
+ * \param[in]       adm             Admin module handler.
+ * \param[in]       pattern         POSIX regexp pattern for object IDs.
+ * \param[out]      objs            Retrieved object extents.
+ * \param[out]      n_objs          Number of retrieved items.
+ *
+ * \return                          0     on success,
+ *                                 -errno on failure.
+ */
+int phobos_admin_extent_list(struct admin_handle *adm, const char *pattern,
+                             struct layout_info **objs, int *n_objs);
+
+/**
+ * Release the list retrieved using phobos_admin_extent_list().
+ *
+ * \param[in]       objs            Object extents to release.
+ * \param[in]       n_objs          Number of objects to release.
+ */
+void phobos_admin_list_free(void *objs, const int n_objs);
+
 #endif

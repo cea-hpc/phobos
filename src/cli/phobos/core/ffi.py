@@ -339,6 +339,91 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
             'user_md': None,
         }
 
+class Buffer(Structure):
+    """String buffer."""
+    _fields_ = [
+        ('size', c_size_t),
+        ('buff', c_char_p)
+    ]
+
+class ExtentInfo(Structure):
+    """DSS extent descriptor."""
+    _fields_ = [
+        ('layout_idx', c_int),
+        ('size', c_ssize_t),
+        ('media', Id),
+        ('address', Buffer),
+        ('addr_type', c_int)
+    ]
+
+class PhoAttrs(Structure):
+    """Attribute set."""
+    _fields_ = [
+        ('attr_set', c_void_p)
+    ]
+
+class ModuleDesc(Structure):
+    """Module description."""
+    _fields_ = [
+        ('mod_name', c_char_p),
+        ('mod_major', c_int),
+        ('mod_minor', c_int),
+        ('mod_attrs', PhoAttrs)
+    ]
+
+class LayoutInfo(Structure, CLIManagedResourceMixin):
+    """Object layout and extents description."""
+    _fields_ = [
+        ('oid', c_char_p),
+        ('state', c_int),
+        ('layout_desc', ModuleDesc),
+        ('wr_size', c_size_t),
+        ('extents', c_void_p),
+        ('ext_count', c_int)
+    ]
+
+    def get_display_fields(self):
+        """Return a dict of available fields and optional display formatters."""
+        return {
+            'oid': None,
+            'ext_count': None,
+            'media_name': None,
+            'family': None,
+            'address': None,
+            'size': None,
+            'layout': None,
+        }
+
+    @property
+    def media_name(self):
+        """Wrapper to get medium name."""
+        return [cast(self.extents, POINTER(ExtentInfo))[i].media.name
+                    for i in range(self.ext_count)]
+
+    @property
+    def family(self):
+        """Wrapper to get medium family."""
+        return [rsc_family2str(cast(self.extents,
+                               POINTER(ExtentInfo))[i].media.family)
+                    for i in range(self.ext_count)]
+
+    @property
+    def size(self):
+        """Wrapper to get extent size."""
+        return [cast(self.extents, POINTER(ExtentInfo))[i].size
+                    for i in range(self.ext_count)]
+
+    @property
+    def address(self):
+        """Wrapper to get extent address."""
+        return [cast(self.extents, POINTER(ExtentInfo))[i].address.buff
+                    for i in range(self.ext_count)]
+
+    @property
+    def layout(self):
+        """Wrapper to get object layout."""
+        return self.layout_desc.mod_name
+
 class Timeval(Structure):
     """standard struct timeval."""
     _fields_ = [

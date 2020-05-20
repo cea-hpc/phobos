@@ -48,7 +48,8 @@ from phobos.core.cfg import load_file as cfg_load_file
 from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str,
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED)
 from phobos.core.dss import Client as DSSClient
-from phobos.core.ffi import DevInfo, MediaInfo, ObjectInfo, ResourceFamily
+from phobos.core.ffi import (DevInfo, LayoutInfo, MediaInfo, ObjectInfo,
+                             ResourceFamily)
 from phobos.core.ldm import LibAdapter
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
 from phobos.core.store import Client as XferClient, attrs_as_dict, PutParams
@@ -566,6 +567,27 @@ class ObjectListOptHandler(PatternListOptHandler):
                             help="filter on metadata, comma-separated "
                                  "'key=value' parameters")
 
+class ExtentListOptHandler(PatternListOptHandler):
+    """
+    Specific version of the 'list' command for extent, with a couple
+    extra-options.
+    """
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add extent-specific options."""
+        super(ExtentListOptHandler, cls).add_options(parser)
+
+        attr = [x for x in LayoutInfo().get_display_dict().keys()]
+        attr.sort()
+        parser.add_argument('-o', '--output', type=lambda t: t.split(','),
+                            default='oid',
+                            help="attributes to output, comma-separated, "
+                                 "choose from {" + " ".join(attr) + "} "
+                                 "default: %(default)s)")
+        parser.add_argument('--degroup', action='store_true',
+                            help="used to list by extent, not by object")
+
 class TapeAddOptHandler(MediaAddOptHandler):
     """Specific version of the 'add' command for tapes, with extra-options."""
     @classmethod
@@ -1042,6 +1064,40 @@ class TapeOptHandler(MediaOptHandler):
         UnlockOptHandler
     ]
 
+class ExtentOptHandler(BaseResourceOptHandler):
+    """Shared interface for extents."""
+    label = 'extent'
+    descr = 'handle extents'
+    verbs = [
+        ExtentListOptHandler
+    ]
+
+    def exec_list(self):
+        """List extents."""
+        attrs = [x for x in LayoutInfo().get_display_dict().keys()]
+        attrs.extend(['*', 'all'])
+        out_attrs = self.params.get('output')
+        bad_attrs = set(out_attrs).difference(set(attrs))
+        if bad_attrs:
+            self.logger.error("Bad output attributes: %s", " ".join(bad_attrs))
+            sys.exit(os.EX_USAGE)
+
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                obj_list, p_objs, n_objs = adm.extent_list(
+                                               self.params.get('pattern'),
+                                               self.params.get('degroup'))
+
+                if len(obj_list) > 0:
+                    dump_object_list(obj_list, 'extent', attr=out_attrs,
+                                     fmt=self.params.get('format'))
+
+                adm.list_free(p_objs, n_objs)
+        except EnvironmentError as err:
+            self.logger.error("Cannot list extents")
+            sys.exit(os.EX_DATAERR)
+
+
 class LibOptHandler(BaseResourceOptHandler):
     """Tape library options and actions."""
     label = 'lib'
@@ -1104,6 +1160,7 @@ class PhobosActionContext(object):
         TapeOptHandler,
         DriveOptHandler,
         ObjectOptHandler,
+        ExtentOptHandler,
         LibOptHandler,
 
         # Store command interfaces

@@ -453,3 +453,28 @@ out:
     pho_srl_response_free(resp, true);
     return rc;
 }
+
+int phobos_admin_extent_list(struct admin_handle *adm, const char *pattern,
+                             struct layout_info **objs, int *n_objs)
+{
+    struct dss_filter filter;
+    int rc;
+
+    rc = dss_filter_build(&filter, "{\"$REGEXP\": {\"DSS::EXT::oid\": \"%s\"}}",
+                          pattern);
+    if (rc)
+        return rc;
+
+    rc = dss_layout_get(&adm->dss, &filter, objs, n_objs);
+    if (rc)
+        pho_error(rc, "Cannot fetch extents");
+
+    dss_filter_free(&filter);
+
+    return rc;
+}
+
+void phobos_admin_list_free(void *objs, const int n_objs)
+{
+    dss_res_free(objs, n_objs);
+}
