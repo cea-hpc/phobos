@@ -45,8 +45,16 @@ bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2);
 /** duplicate a dev_info structure */
 struct dev_info *dev_info_dup(const struct dev_info *dev);
 
-/** free a dev_info structure */
-void dev_info_free(struct dev_info *dev);
+/** copy a dev_info structure in an already allocated one */
+void dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src);
+
+/**
+ * Free a dev_info structure
+ *
+ * If free_top_struct is false, only releasing the structure contents,
+ * the caller is responsible for the top structure.
+ */
+void dev_info_free(struct dev_info *dev, bool free_top_struct);
 
 /** duplicate a media_info structure */
 struct media_info *media_info_dup(const struct media_info *mda);

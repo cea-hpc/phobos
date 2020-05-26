@@ -52,6 +52,19 @@ static inline char *strdup_safe(const char *str)
     return strdup(str);
 }
 
+void dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src)
+{
+    if (!dev_dst)
+        return;
+
+    assert(dev_src);
+    dev_dst->rsc.id = dev_src->rsc.id;
+    dev_dst->rsc.model = strdup_safe(dev_src->rsc.model);
+    dev_dst->rsc.adm_status = dev_src->rsc.adm_status;
+    dev_dst->path = strdup_safe(dev_src->path);
+    dev_dst->host = strdup_safe(dev_src->host);
+}
+
 struct dev_info *dev_info_dup(const struct dev_info *dev)
 {
     struct dev_info *dev_out;
@@ -60,23 +73,20 @@ struct dev_info *dev_info_dup(const struct dev_info *dev)
     if (!dev_out)
         return NULL;
 
-    dev_out->rsc.id = dev->rsc.id;
-    dev_out->rsc.model = strdup_safe(dev->rsc.model);
-    dev_out->rsc.adm_status = dev->rsc.adm_status;
-    dev_out->path = strdup_safe(dev->path);
-    dev_out->host = strdup_safe(dev->host);
+    dev_info_cpy(dev_out, dev);
 
     return dev_out;
 }
 
-void dev_info_free(struct dev_info *dev)
+void dev_info_free(struct dev_info *dev, bool free_top_struct)
 {
     if (!dev)
         return;
     free(dev->rsc.model);
     free(dev->path);
     free(dev->host);
-    free(dev);
+    if (free_top_struct)
+        free(dev);
 }
 
 struct media_info *media_info_dup(const struct media_info *media)

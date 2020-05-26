@@ -36,6 +36,7 @@
 #include "pho_common.h"
 #include "pho_dss.h"
 #include "pho_srl_lrs.h"
+#include "pho_type_utils.h"
 
 enum pho_cfg_params_admin {
     /* Actual admin parameters */
@@ -229,7 +230,7 @@ static int _device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
             pho_warn("Device '%s' is already unlocked", dev_ids[i].name);
 
         dev_res->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
-        memcpy(devices + i, dev_res, sizeof(*dev_res));
+        dev_info_cpy(devices + i, dev_res);
 
         dss_res_free(dev_res, 1);
         ++avail_devices;
@@ -251,6 +252,8 @@ static int _device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
 out_free:
     dss_device_unlock(&adm->dss, devices, num_dev, adm->lock_owner);
 
+    for (i = 0; i < num_dev; ++i)
+        dev_info_free(devices + i, false);
     free(devices);
 
     return rc;

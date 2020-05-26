@@ -581,7 +581,7 @@ err_no_res:
 static void dev_descr_fini(gpointer ptr)
 {
     struct dev_descr *dev = (struct dev_descr *)ptr;
-    dev_info_free(dev->dss_dev_info);
+    dev_info_free(dev->dss_dev_info, true);
     dev->dss_dev_info = NULL;
 
     media_info_free(dev->dss_media_info);
