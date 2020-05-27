@@ -953,24 +953,38 @@ class DirOptHandler(MediaOptHandler):
         tags = self.params.get('tags', [])
 
         try:
+            valid_count = 0
             with AdminClient(lrs_required=False) as adm:
                 for path in resources:
                     # Remove any trailing slash
                     path = path.rstrip('/')
 
-                    self.client.media.add(self.family, 'POSIX', None, path,
-                                          locked=keep_locked, tags=tags)
-                    # Add device unlocked and rely on media locking
-                    _, serial = self.client.devices.add(self.family, path,
-                                                        locked=False)
-                    adm.device_add(self.family, serial)
+                    try:
+                        # Add device unlocked and rely on media locking
+                        _, serial = self.client.devices.add(self.family, path,
+                                                            locked=False)
 
-                    self.logger.debug("Added directory '%s'", path)
+                        self.client.media.add(self.family, 'POSIX', None, path,
+                                              locked=keep_locked, tags=tags)
+
+                        adm.device_add(self.family, serial)
+
+                        self.logger.debug("Added directory '%s'", path)
+                        valid_count += 1
+                    except EnvironmentError as err:
+                        self.logger.error("Cannot add directory: %s",
+                                          env_error_format(err))
+                        continue
+
+            self.logger.info("Added %d dir(s) successfully", valid_count)
+            if valid_count != len(resources):
+                raise EnvironmentError(errno.ENXIO,
+                                       "Some directories were not added")
+
         except EnvironmentError as err:
-            self.logger.error("Cannot add directory: %s", env_error_format(err))
+            self.logger.error("Cannot add directories: %s",
+                              env_error_format(err))
             sys.exit(os.EX_DATAERR)
-
-        self.logger.info("Added %d dir(s) successfully", len(resources))
 
 
 class DriveOptHandler(DeviceOptHandler):
