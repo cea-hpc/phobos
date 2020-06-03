@@ -116,9 +116,12 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['extent', 'list', '-o', '*'])
         self.check_cmdline_valid(['extent', 'list', '-o', 'oid'])
         self.check_cmdline_valid(['extent', 'list', '-o', 'all', '"obj.*"'])
+        self.check_cmdline_valid(['extent', 'list', '-n', 't01'])
+        self.check_cmdline_valid(['extent', 'list', '-n', 't01', '"obj.*"'])
         self.check_cmdline_valid(['extent', 'list', '--degroup'])
         self.check_cmdline_valid(['extent', 'list', '--degroup', '"obj.*"'])
         self.check_cmdline_valid(['extent', 'list', '--degroup', '-o', 'all'])
+        self.check_cmdline_valid(['extent', 'list', '--degroup', '-n', 't01'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['voynichauthor', 'list'], code=2)

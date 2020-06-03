@@ -585,6 +585,8 @@ class ExtentListOptHandler(PatternListOptHandler):
                             help="attributes to output, comma-separated, "
                                  "choose from {" + " ".join(attr) + "} "
                                  "default: %(default)s)")
+        parser.add_argument('-n', '--name',
+                            help="filter on one medium name")
         parser.add_argument('--degroup', action='store_true',
                             help="used to list by extent, not by object")
 
@@ -1086,6 +1088,7 @@ class ExtentOptHandler(BaseResourceOptHandler):
             with AdminClient(lrs_required=False) as adm:
                 obj_list, p_objs, n_objs = adm.extent_list(
                                                self.params.get('pattern'),
+                                               self.params.get('name'),
                                                self.params.get('degroup'))
 
                 if len(obj_list) > 0:

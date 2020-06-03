@@ -260,6 +260,12 @@ $ phobos extent list --degroup -o oid,layout,media_name
 | obj2 | raid1  | ['/tmp/d2'] |
 ```
 
+The option `--name` applies a filter on a medium's name. Here, the name does not
+accept a pattern.
+```
+phobos extent list --name tape01
+```
+
 You can add a POSIX pattern to match oids, as described in "Listing objects"
 section:
 ```

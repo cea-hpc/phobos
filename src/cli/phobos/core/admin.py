@@ -126,12 +126,13 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc, "Error during device unlock")
 
-    def extent_list(self, pattern, degroup):
+    def extent_list(self, pattern, medium, degroup):
         """List extents."""
         n_objs = c_int(0)
         objs = pointer(LayoutInfo())
         rc = LIBPHOBOS_ADMIN.phobos_admin_extent_list(byref(self.handle),
                                                       pattern,
+                                                      medium,
                                                       byref(objs),
                                                       byref(n_objs))
 
@@ -146,11 +147,14 @@ class Client(object):
                 ptr = objs[i].extents
                 cnt = objs[i].ext_count
                 for j in xrange(cnt):
-                    obj = type(objs[i])()
-                    pointer(obj)[0] = objs[i]
-                    obj.ext_count = 1
-                    obj.extents = addressof(cast(ptr, POINTER(ExtentInfo))[j])
-                    list_objs.append(obj)
+                    if medium is None or \
+                        medium in cast(ptr, POINTER(ExtentInfo))[j].media.name:
+                        obj = type(objs[i])()
+                        pointer(obj)[0] = objs[i]
+                        obj.ext_count = 1
+                        obj.extents = addressof(cast(ptr,
+                                                     POINTER(ExtentInfo))[j])
+                        list_objs.append(obj)
 
         return list_objs, objs, n_objs
 

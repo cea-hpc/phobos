@@ -455,13 +455,25 @@ out:
 }
 
 int phobos_admin_extent_list(struct admin_handle *adm, const char *pattern,
-                             struct layout_info **objs, int *n_objs)
+                             const char *medium, struct layout_info **objs,
+                             int *n_objs)
 {
     struct dss_filter filter;
     int rc;
 
-    rc = dss_filter_build(&filter, "{\"$REGEXP\": {\"DSS::EXT::oid\": \"%s\"}}",
-                          pattern);
+    if (!medium || !strcmp(medium, ""))
+        rc = dss_filter_build(&filter,
+                              "{\"$REGEXP\": {\"DSS::EXT::oid\": \"%s\"}}",
+                              pattern);
+    else
+        rc = dss_filter_build(&filter,
+                              "{\"$AND\": ["
+                              "  {\"$REGEXP\": "
+                              "    {\"DSS::EXT::oid\": \"%s\"}},"
+                              "  {\"$INJSON\": "
+                              "    {\"DSS::EXT::media_idx\": \"%s\"}}"
+                              "]}",
+                              pattern, medium);
     if (rc)
         return rc;
 

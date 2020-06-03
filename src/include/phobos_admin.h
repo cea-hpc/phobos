@@ -128,6 +128,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
  *
  * \param[in]       adm             Admin module handler.
  * \param[in]       pattern         POSIX regexp pattern for object IDs.
+ * \param[in]       medium          Single medium filter.
  * \param[out]      objs            Retrieved object extents.
  * \param[out]      n_objs          Number of retrieved items.
  *
@@ -135,7 +136,8 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
  *                                 -errno on failure.
  */
 int phobos_admin_extent_list(struct admin_handle *adm, const char *pattern,
-                             struct layout_info **objs, int *n_objs);
+                             const char *medium, struct layout_info **objs,
+                             int *n_objs);
 
 /**
  * Release the list retrieved using phobos_admin_extent_list().
