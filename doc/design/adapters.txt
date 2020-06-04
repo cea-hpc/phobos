@@ -39,7 +39,7 @@ entries are addressed, organized, and accessed in this backend.
   (e.g. as extended attributes, or a metadata_blob). This information is critical
   to rebuild phobos database in case of accidental loss.
 
-- Adapater should provide an object-base interface: put/get/del
+- Adapters should provide an object-based interface: put/get/del
 
 - If possible, it must provide a feature to manage media transactions,
   that could be performed after writing an extent or after writing a set of
