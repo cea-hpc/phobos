@@ -222,6 +222,11 @@ find $TEST_MNT -type f | while read f; do
     test_check_get "$f"
 done
 
+echo
+echo "**** TESTS: LIST ****"
+# check that object info can be retrieved using phobos_store_object_list()
+$LOG_COMPILER $LOG_FLAGS $test_bin list $TEST_FILES
+
 # Clean inserted files and DSS entries so that we can reinsert them using MPUT
 find $TEST_MNT -type f -delete
 rm -rf ${TEST_RECOV_DIR}

@@ -156,4 +156,30 @@ int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
  */
 void pho_xfer_desc_destroy(struct pho_xfer_desc *xfer);
 
+/**
+ * Retrieve the objects that match the given pattern and metadata.
+ *
+ * The caller must release the list calling phobos_store_object_list_free().
+ *
+ * \param[in]       pattern         Shell regexp pattern.
+ * \param[in]       metadata        Metadata filter.
+ * \param[in]       n_metadata      Number of requested metadata.
+ * \param[out]      objs            Retrieved objects.
+ * \param[out]      n_objs          Number of retrieved items.
+ *
+ * \return                          0     on success,
+ *                                 -errno on failure.
+ */
+int phobos_store_object_list(const char *pattern, const char **metadata,
+                             int n_metadata, struct object_info **objs,
+                             int *n_objs);
+
+/**
+ * Release the list retrieved using phobos_store_object_list().
+ *
+ * \param[in]       objs            Objects to release.
+ * \param[in]       n_objs          Number of objects to release.
+ */
+void phobos_store_object_list_free(struct object_info *objs, int n_objs);
+
 #endif

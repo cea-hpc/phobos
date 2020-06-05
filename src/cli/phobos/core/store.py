@@ -30,7 +30,7 @@ import os
 from collections import namedtuple
 from ctypes import *
 
-from phobos.core.ffi import LIBPHOBOS, Tags
+from phobos.core.ffi import LIBPHOBOS, ObjectInfo, Tags
 from phobos.core.cfg import get_val as cfg_get_val
 from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OP_GET,
                                PHO_XFER_OP_GETMD, PHO_XFER_OP_PUT,
@@ -233,11 +233,11 @@ class Store(object):
         self.xfer_desc_release(xfer)
         return rc
 
-class Client(object):
+class XferClient(object):
     """Main class: issue data transfers with the object store."""
     def __init__(self, **kwargs):
         """Initialize a new instance."""
-        super(Client, self).__init__(**kwargs)
+        super(XferClient, self).__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
         self._store = Store()
         self.getmd_session = []
@@ -301,3 +301,33 @@ class Client(object):
                 raise IOError(rc, "Cannot store objects")
 
         self.clear()
+
+class UtilClient(object):
+    """Secondary class: issue user commands without data transfers."""
+    def __init__(self, **kwargs):
+        """Initialize a new instance."""
+        super(UtilClient, self).__init__(**kwargs)
+        self.logger = logging.getLogger(__name__)
+
+    def object_list(self, pattern, metadata):
+        """List objects."""
+        n_objs = c_int(0)
+        objs = POINTER(ObjectInfo)()
+        c_strlist = c_char_p * len(metadata)
+        rc = LIBPHOBOS.phobos_store_object_list(pattern,
+                                                c_strlist(*metadata),
+                                                len(metadata),
+                                                byref(objs),
+                                                byref(n_objs))
+
+        if rc:
+            raise EnvironmentError(rc)
+
+        objs = (ObjectInfo * n_objs.value).from_address(
+                                                cast(objs, c_void_p).value)
+
+        return objs
+
+    def list_free(self, objs, n_objs):
+        """Free a previously obtained object list."""
+        LIBPHOBOS.phobos_store_object_list_free(objs, n_objs)

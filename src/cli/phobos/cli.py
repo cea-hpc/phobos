@@ -52,7 +52,7 @@ from phobos.core.ffi import (DevInfo, LayoutInfo, MediaInfo, ObjectInfo,
                              ResourceFamily)
 from phobos.core.ldm import LibAdapter
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
-from phobos.core.store import Client as XferClient, attrs_as_dict, PutParams
+from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
 
 def phobos_log_handler(log_record):
@@ -661,23 +661,28 @@ class ObjectOptHandler(BaseResourceOptHandler):
             self.logger.error("Bad output attributes: %s", " ".join(bad_attrs))
             sys.exit(os.EX_USAGE)
 
-        kwargs = {}
-        if self.params.get('pattern'):
-            kwargs["pattern"] = self.params.get('pattern')
-
+        metadata = []
         if self.params.get('metadata'):
-            kwargs["metadata"] = self.params.get('metadata')
-            for metadata in kwargs["metadata"]:
-                if not '=' in metadata:
+            metadata = self.params.get('metadata')
+            for md in metadata:
+                if '=' not in md:
                     self.logger.error("Metadata parameter '%s' must be a "
-                                      "'key=value'", metadata)
+                                      "'key=value'", md)
                     sys.exit(os.EX_USAGE)
 
-        objs = self.client.objects.get(**kwargs)
+        client = UtilClient()
 
-        if len(objs) > 0:
-            dump_object_list(objs, 'object', attr=out_attrs,
-                             fmt=self.params.get('format'))
+        try:
+            objs = client.object_list(self.params.get('pattern'), metadata)
+
+            if len(objs):
+                dump_object_list(objs, 'object', attr=out_attrs,
+                                 fmt=self.params.get('format'))
+
+            client.list_free(objs, len(objs))
+        except EnvironmentError as err:
+            self.logger.error("Cannot list objects: %s", env_error_format(err))
+            sys.exit(os.EX_DATAERR)
 
 class DeviceOptHandler(BaseResourceOptHandler):
     """Shared interface for devices."""

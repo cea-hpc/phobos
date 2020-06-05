@@ -159,6 +159,23 @@ int main(int argc, char **argv)
 
         rc = phobos_get(&xfer, 1, dump_md, NULL);
         xfer_desc_close_fd(&xfer);
+    } else if (!strcmp(argv[1], "list")) {
+        struct object_info *objs;
+        int n_objs;
+
+        for (i = 2; i < argc; ++i) {
+            rc = phobos_store_object_list(argv[i], NULL, 0, &objs, &n_objs);
+            if (rc) {
+                pho_error(rc, "LIST '%s' failed", argv[i]);
+                exit(EXIT_FAILURE);
+            }
+
+            phobos_store_object_list_free(objs, n_objs);
+            if (n_objs != 1)
+                pho_error(rc = -EINVAL,
+                          "LIST '%s' failed: 1 result expected, retrieved %d",
+                          argv[i], n_objs);
+        }
     } else {
         rc = -EINVAL;
         pho_error(rc, "verb put|mput|get|getmd expected at '%s'\n", argv[1]);

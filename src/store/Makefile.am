@@ -5,7 +5,7 @@ AM_LDFLAGS=-Wl,-rpath=$(libdir) -Wl,-rpath=$(pkglibdir)
 # and can be used by client apps.
 lib_LTLIBRARIES=libphobos_store.la
 
-libphobos_store_la_SOURCES=store.c
+libphobos_store_la_SOURCES=store.c store_list.c
 libphobos_store_la_LIBADD=../cfg/libpho_cfg.la ../common/libpho_common.la \
 			  ../communication/libpho_comm.la ../dss/libpho_dss.la \
 			  ../io/libpho_io.la ../layout/libpho_layout.la \
