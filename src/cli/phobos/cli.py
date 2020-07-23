@@ -1081,7 +1081,7 @@ class ExtentOptHandler(BaseResourceOptHandler):
 
         try:
             with AdminClient(lrs_required=False) as adm:
-                obj_list, p_objs, n_objs = adm.extent_list(
+                obj_list, p_objs, n_objs = adm.layout_list(
                                                self.params.get('pattern'),
                                                self.params.get('name'),
                                                self.params.get('degroup'))
@@ -1090,7 +1090,7 @@ class ExtentOptHandler(BaseResourceOptHandler):
                     dump_object_list(obj_list, 'extent', attr=out_attrs,
                                      fmt=self.params.get('format'))
 
-                adm.list_free(p_objs, n_objs)
+                adm.layout_list_free(p_objs, n_objs)
         except EnvironmentError as err:
             self.logger.error("Cannot list extents")
             sys.exit(os.EX_DATAERR)

@@ -128,38 +128,38 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc, "Error during device unlock")
 
-    def extent_list(self, pattern, medium, degroup):
-        """List extents."""
-        n_objs = c_int(0)
-        objs = pointer(LayoutInfo())
-        rc = LIBPHOBOS_ADMIN.phobos_admin_extent_list(byref(self.handle),
+    def layout_list(self, pattern, medium, degroup):
+        """List layouts."""
+        n_layouts = c_int(0)
+        layouts = pointer(LayoutInfo())
+        rc = LIBPHOBOS_ADMIN.phobos_admin_layout_list(byref(self.handle),
                                                       pattern,
                                                       medium,
-                                                      byref(objs),
-                                                      byref(n_objs))
+                                                      byref(layouts),
+                                                      byref(n_layouts))
 
         if rc:
             raise EnvironmentError(rc)
 
         if not degroup:
-            list_objs = [objs[i] for i in xrange(n_objs.value)]
+            list_lyts = [layouts[i] for i in xrange(n_layouts.value)]
         else:
-            list_objs = []
-            for i in xrange(n_objs.value):
-                ptr = objs[i].extents
-                cnt = objs[i].ext_count
+            list_lyts = []
+            for i in xrange(n_layouts.value):
+                ptr = layouts[i].extents
+                cnt = layouts[i].ext_count
                 for j in xrange(cnt):
                     if medium is None or \
                         medium in cast(ptr, POINTER(ExtentInfo))[j].media.name:
-                        obj = type(objs[i])()
-                        pointer(obj)[0] = objs[i]
-                        obj.ext_count = 1
-                        obj.extents = addressof(cast(ptr,
+                        lyt = type(layouts[i])()
+                        pointer(lyt)[0] = layouts[i]
+                        lyt.ext_count = 1
+                        lyt.extents = addressof(cast(ptr,
                                                      POINTER(ExtentInfo))[j])
-                        list_objs.append(obj)
+                        list_lyts.append(lyt)
 
-        return list_objs, objs, n_objs
+        return list_lyts, layouts, n_layouts
 
-    def list_free(self, objs, n_objs):
-        """Free a previously obtained object list."""
-        LIBPHOBOS_ADMIN.phobos_admin_list_free(objs, n_objs)
+    def layout_list_free(self, layouts, n_layouts):
+        """Free a previously obtained layout list."""
+        LIBPHOBOS_ADMIN.phobos_admin_layout_list_free(layouts, n_layouts)

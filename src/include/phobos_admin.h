@@ -118,30 +118,29 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
                         enum fs_type fs, bool unlock);
 
 /**
- * Retrieve the extents that belongs to objects whose IDs match
- * the given pattern.
+ * Retrieve layouts of objects whose IDs match the given pattern.
  *
- * The caller must release the list calling phobos_admin_list_free().
+ * The caller must release the list calling phobos_admin_layout_list_free().
  *
  * \param[in]       adm             Admin module handler.
  * \param[in]       pattern         POSIX regexp pattern for object IDs.
  * \param[in]       medium          Single medium filter.
- * \param[out]      objs            Retrieved object extents.
- * \param[out]      n_objs          Number of retrieved items.
+ * \param[out]      layouts         Retrieved layouts.
+ * \param[out]      n_layouts       Number of retrieved items.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
  */
-int phobos_admin_extent_list(struct admin_handle *adm, const char *pattern,
-                             const char *medium, struct layout_info **objs,
-                             int *n_objs);
+int phobos_admin_layout_list(struct admin_handle *adm, const char *pattern,
+                             const char *medium, struct layout_info **layouts,
+                             int *n_layouts);
 
 /**
- * Release the list retrieved using phobos_admin_extent_list().
+ * Release the list of layouts retrieved using phobos_admin_layout_list().
  *
- * \param[in]       objs            Object extents to release.
- * \param[in]       n_objs          Number of objects to release.
+ * \param[in]       layouts            List of layouts to release.
+ * \param[in]       n_layouts          Number of layouts to release.
  */
-void phobos_admin_list_free(void *objs, const int n_objs);
+void phobos_admin_layout_list_free(struct layout_info *layouts, int n_layouts);
 
 #endif

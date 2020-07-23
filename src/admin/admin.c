@@ -552,9 +552,9 @@ out:
     return rc;
 }
 
-int phobos_admin_extent_list(struct admin_handle *adm, const char *pattern,
-                             const char *medium, struct layout_info **objs,
-                             int *n_objs)
+int phobos_admin_layout_list(struct admin_handle *adm, const char *pattern,
+                             const char *medium, struct layout_info **layouts,
+                             int *n_layouts)
 {
     struct dss_filter filter;
     int rc;
@@ -575,16 +575,16 @@ int phobos_admin_extent_list(struct admin_handle *adm, const char *pattern,
     if (rc)
         return rc;
 
-    rc = dss_layout_get(&adm->dss, &filter, objs, n_objs);
+    rc = dss_layout_get(&adm->dss, &filter, layouts, n_layouts);
     if (rc)
-        pho_error(rc, "Cannot fetch extents");
+        pho_error(rc, "Cannot fetch layouts");
 
     dss_filter_free(&filter);
 
     return rc;
 }
 
-void phobos_admin_list_free(void *objs, const int n_objs)
+void phobos_admin_layout_list_free(struct layout_info *layouts, int n_layouts)
 {
-    dss_res_free(objs, n_objs);
+    dss_res_free(layouts, n_layouts);
 }
