@@ -25,6 +25,8 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
 . $test_dir/setup_db.sh
 
+export PHOBOS_LRS_lock_file="$test_bin_dir/phobosd.lock"
+
 function error
 {
     echo "$*"
@@ -36,7 +38,6 @@ function test_multiple_instances
 {
     setup_tables
 
-    export PHOBOS_LRS_lock_file="$test_bin_dir/phobosd.lock"
     pidfile="/tmp/pidfile"
 
     $phobosd -i &
@@ -51,8 +52,6 @@ function test_multiple_instances
     rc=$?
     kill $first_process
 
-    unset PHOBOS_LRS_lock_file
-
     # Second daemon error code should be -EEXIST, which is -17
     test $rc -eq $((256 - 17)) ||
         error "Second daemon instance does not get the right error code"
@@ -60,5 +59,46 @@ function test_multiple_instances
     drop_tables
 }
 
+function test_release_device_old_locks
+{
+    setup_tables
+
+    $phobos drive add --unlock /dev/st[0-1]
+    host=`hostname`
+
+    # Update devices to lock them by a 'daemon instance'
+    # Only one is locked by this host
+    psql phobos phobos -c \
+        "update device set lock='$host:0123:dummy:dummy',
+             lock_ts='1' where path='/dev/st0';
+         update device set lock='${host}0:0123:dummy:dummy',
+             lock_ts='1' where path='/dev/st1';"
+
+    # Use gdb to stop the daemon once the locks are released
+    (
+    trap -- "rm '$PHOBOS_LRS_lock_file'" EXIT
+    PHOBOS_LRS_families="tape" gdb $phobosd <<< "break sched_check_device_locks
+                                                 run -i
+                                                 next
+                                                 quit"
+    )
+
+    # Check that only the correct device is unlocked
+    lock=$($phobos drive list -o lock_status /dev/st0)
+    [ -z "$lock" ] || error "Device should be unlocked"
+
+    lock=$($phobos drive list -o lock_status /dev/st1)
+    [ "${host}0:0123:dummy:dummy" == "$lock" ] ||
+        error "Device should be locked"
+
+    drop_tables
+}
+
 drop_tables
 test_multiple_instances
+
+# Tape tests are available only if /dev/changer exists, which is the entry
+# point for the tape library.
+if [[ -w /dev/changer ]]; then
+    test_release_device_old_locks
+fi

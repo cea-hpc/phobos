@@ -26,24 +26,26 @@
 #include "config.h"
 #endif
 
-#include "lrs_sched.h"
 #include "lrs_cfg.h"
+#include "lrs_sched.h"
 #include "pho_common.h"
-#include "pho_type_utils.h"
-#include "pho_ldm.h"
 #include "pho_io.h"
+#include "pho_ldm.h"
+#include "pho_type_utils.h"
 
-#include <string.h>
-#include <unistd.h>
+#include <assert.h>
+#include <signal.h>
+#include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
-#include <assert.h>
+#include <unistd.h>
+
 #include <jansson.h>
-#include <stdbool.h>
-#include <stdio.h>
 
 #define TAPE_TYPE_SECTION_CFG "tape_type \"%s\""
 #define MODELS_CFG_PARAM "models"
@@ -590,6 +592,81 @@ static void dev_descr_fini(gpointer ptr)
     ldm_dev_state_fini(&dev->sys_dev_state);
 }
 
+/**
+ * Checks the lock host is the same as the daemon instance.
+ *
+ * The lock host is contained in the first subpart of the lock_owner string,
+ * separated by ':'.
+ *
+ * @param   sched       Scheduler handle, contains the daemon lock string.
+ * @param   lock        Lock string to compare to the daemon one.
+ * @return              true if hosts are the same,
+ *                      false otherwise.
+ */
+static bool compare_lock_hosts(struct lrs_sched *sched, const char *lock)
+{
+    if (!lock)
+        return false;
+
+    /* checks the lock string is not empty, and contains at least one ':' */
+    if (!strcmp(lock, "") || !strchr(lock, ':'))
+        return false;
+
+    /* this assert fails if the lock string is bad-constructed */
+    assert(strchr(sched->lock_owner, ':'));
+
+    /* retrieves the first part of the lock string, which corresponds to
+     * the hostname of the lock owner, and compares it to the current
+     * hostname
+     */
+    if ((strchr(lock, ':') - lock !=
+         strchr(sched->lock_owner, ':') - sched->lock_owner) ||
+        strncmp(lock, sched->lock_owner, strchr(lock, ':') - lock))
+        return false;
+
+    return true;
+}
+
+/**
+ * Unlocks all devices that were locked by a previous instance on this host.
+ *
+ * We consider that for a given configuration and so a given database, it can
+ * only exists one daemon instance at a time on a host. If two instances exist
+ * at the same time on one host, they need to be related to different databases.
+ *
+ * @param   sched       Scheduler handle.
+ * @return              0 on success,
+ *                      first encountered negative posix error on failure.
+ */
+static int sched_check_device_locks(struct lrs_sched *sched)
+{
+    int rc = 0;
+    int i;
+
+    ENTRY;
+
+    for (i = 0; i < sched->devices->len; ++i) {
+        struct dev_info *dev;
+        int rc2;
+
+        dev = g_array_index(
+            sched->devices, struct dev_descr, i).dss_dev_info;
+
+        if (!compare_lock_hosts(sched, dev->lock.lock))
+            continue;
+
+        pho_info("Device '%s' was previously locked by this host, releasing it",
+                 dev->path);
+        rc2 = dss_device_unlock(&sched->dss, dev, 1, NULL);
+        if (rc2) {
+            pho_error(rc2, "Device '%s' could not be unlocked", dev->path);
+            rc = rc ? : rc2;
+        }
+    }
+
+    return rc;
+}
+
 static __thread uint64_t sched_lock_number;
 
 int sched_init(struct lrs_sched *sched, enum rsc_family family)
@@ -625,6 +702,12 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
 
     /* Load the device state -- not critical if no device is found */
     sched_load_dev_state(sched);
+
+    rc = sched_check_device_locks(sched);
+    if (rc) {
+        sched_fini(sched);
+        return rc;
+    }
 
     return 0;
 }
