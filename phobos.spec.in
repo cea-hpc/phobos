@@ -113,6 +113,26 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_admin.la
 
 %changelog
+* Thu Sep 10 2020 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.90.0-1
+- Release 1.90 (Hi'iaka): 1.9x is the release cycle towards 2.0
+- Phobos now runs a daemon (phobosd) on each IO node to manage devices and
+  schedule IOs
+- Object and extent listing and filtering commands
+- Layout and family selection from (m)put command line
+- Split too large extents on multiple media
+- Port to RHEL/CentOS8
+- Various fixes and refactoring
+
+* Fri Jan 10 2020 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.3.1-1
+- Pass 'scsi generic' devices to LTFS instead of 'scsi tape'.
+
+* Tue Nov 26 2019 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.3.0-1
+- Release 1.3 (Vala)
+- Now uses LTFS 2.4. No longer requires lin_tape.
+- Media list filter by tag, e.g. "phobos tape list -T foo,bar"
+- Drive list filter by model, e.g. "phobos drive list -m ULTRIUM-TD6"
+- Fix various memory leaks and wrong behaviors
+
 * Thu Jul 18 2019 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.2.0-1
 - Final 1.2 release (Echo)
 - New features:
