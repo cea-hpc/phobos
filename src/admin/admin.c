@@ -324,10 +324,9 @@ static int _device_update_adm_status(struct admin_handle *adm,
                      dev_ids[i].name);
 
         dev_res->rsc.adm_status = status;
-        dev_info_cpy(devices + i, dev_res);
+        dev_info_cpy(&devices[avail_devices++], dev_res);
 
         dss_res_free(dev_res, 1);
-        ++avail_devices;
     }
 
     if (avail_devices != num_dev)
@@ -344,7 +343,7 @@ static int _device_update_adm_status(struct admin_handle *adm,
             strcpy(dev_ids[i].name, devices[i].rsc.id.name);
 
 out_free:
-    dss_device_unlock(&adm->dss, devices, num_dev, adm->lock_owner);
+    dss_device_unlock(&adm->dss, devices, avail_devices, adm->lock_owner);
 
     for (i = 0; i < num_dev; ++i)
         dev_info_free(devices + i, false);
