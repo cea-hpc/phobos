@@ -785,6 +785,12 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
 {
     const char *default_layout;
     size_t i;
+    int rc;
+
+    /* Ensure conf is loaded, to retrieve default values */
+    rc = pho_cfg_init_local(NULL);
+    if (rc && rc != -EALREADY)
+        return rc;
 
     default_layout = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, default_layout);
 
