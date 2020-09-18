@@ -37,6 +37,8 @@ cli_dir="$(readlink -e $test_bin_dir/../cli)"
 PHO_PYTHON_PATH="$cli_dir/build/lib.linux-$ARCH-$PY_VERSION/"
 export PYTHONPATH="$PHO_PYTHON_PATH"
 
+lrs_dir="$(readlink -e $test_bin_dir/../lrs)"
+
 # library paths
 PHO_STORELIB_PATH="$(readlink -e $test_bin_dir/../store/.libs/)"
 PHO_ADMINLIB_PATH="$(readlink -e $test_bin_dir/../admin/.libs/)"
@@ -55,5 +57,7 @@ export PHOBOS_LTFS_cmd_umount="$ldm_helper umount_ltfs '%s' '%s'"
 
 phobos="$cli_dir/scripts/phobos"
 [ x$DEBUG = x1 ] && phobos="$phobos -vvv"
+
+phobosd="$lrs_dir/phobosd"
 
 true

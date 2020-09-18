@@ -91,6 +91,48 @@ static void phobos_log_callback_def_with_sys(const struct pho_logrec *rec)
 
 bool running = true;
 
+/**
+ * Create a lock file.
+ *
+ * If other instances with the same configuration parameter try to create it,
+ * the call will failed.
+ *
+ * This file must be deleted using _delete_lock_file().
+ *
+ * \param[in]   lock_file   Lock file path.
+ * \return                  0 on success, -1 * posix error code on failure.
+ */
+static int _create_lock_file(const char *lock_file)
+{
+    int fd;
+
+    fd = open(lock_file, O_WRONLY | O_CREAT | O_EXCL, 0666);
+    if (fd < 0)
+        return -errno;
+
+    close(fd);
+
+    return 0;
+}
+
+/**
+ * Delete the lock file created with _create_lock_file().
+ *
+ * \param[in]   lock_file   Lock file path.
+ * \return                  0 on success, -1 * posix error code on failure.
+ */
+static int _delete_lock_file(const char *lock_file)
+{
+    int rc;
+
+    rc = unlink(lock_file);
+    if (rc)
+        pho_error(rc = -errno, "Could not unlink lock file '%s'", lock_file);
+
+    return rc;
+}
+
+
 /* ****************************************************************************/
 /* LRS helpers ****************************************************************/
 /* ****************************************************************************/
@@ -344,6 +386,7 @@ out_free:
  */
 static void lrs_fini(struct lrs *lrs)
 {
+    const char *lock_file;
     int rc = 0;
     int i;
 
@@ -358,6 +401,9 @@ static void lrs_fini(struct lrs *lrs)
     rc = pho_comm_close(&lrs->comm);
     if (rc)
         pho_error(rc, "Error on closing the socket");
+
+    lock_file = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, lock_file);
+    _delete_lock_file(lock_file);
 }
 
 /**
@@ -373,6 +419,7 @@ static void lrs_fini(struct lrs *lrs)
  */
 static int lrs_init(struct lrs *lrs, struct lrs_params parm)
 {
+    const char *lock_file;
     const char *sock_path;
     int rc;
 
@@ -384,6 +431,11 @@ static int lrs_init(struct lrs *lrs, struct lrs_params parm)
     pho_log_level_set(parm.log_level);
     if (parm.use_syslog)
         pho_log_callback_set(phobos_log_callback_def_with_sys);
+
+    lock_file = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, lock_file);
+    rc = _create_lock_file(lock_file);
+    if (rc)
+        LOG_GOTO(err, rc, "Error while creating the daemon lock file");
 
     rc = _load_schedulers(lrs);
     if (rc)

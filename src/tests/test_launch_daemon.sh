@@ -3,6 +3,7 @@
 PID_DAEMON=0
 
 export PHOBOSD_PID_FILEPATH="$test_bin_dir/phobosd.pid"
+export PHOBOS_LRS_lock_file="$test_bin_dir/phobosd.lock"
 
 function invoke_daemon()
 {
