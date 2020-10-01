@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  All rights reserved (c) 2014-2018 CEA/DAM.
@@ -61,7 +61,7 @@ def migrate(args, migrator):
     if not args.yes and schema_version != "0":
         print("You are about to upgrade database schema from version %s "
               "to version %s." % (schema_version, target_version))
-        confirm = raw_input("Do you want to continue? [y/N]: ")
+        confirm = input("Do you want to continue? [y/N]: ")
         if confirm != 'y':
             sys.exit(1)
 

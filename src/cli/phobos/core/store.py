@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  All rights reserved (c) 2014-2017 CEA/DAM.
@@ -61,6 +61,7 @@ def attrs_as_dict(attrs):
     cb = AttrsForeachCBType(inner_attrs_mapper)
     c_res = cast(pointer(py_object(res)), c_void_p)
     LIBPHOBOS.pho_attrs_foreach(byref(attrs), cb, c_res)
+    res = {k.decode('utf-8'): v.decode('utf-8') for k, v in res.items()}
     return res
 
 class XferPutParams(Structure):
@@ -68,7 +69,7 @@ class XferPutParams(Structure):
     _fields_ = [
         ("size", c_ssize_t),
         ("family", c_int),
-        ("layout_name", c_char_p),
+        ("_layout_name", c_char_p),
         ("tags", Tags),
     ]
 
@@ -81,6 +82,16 @@ class XferPutParams(Structure):
             self.family = str2rsc_family(cfg_get_val("store", "default_family"))
         else:
             self.family = str2rsc_family(put_params.family)
+
+    @property
+    def layout_name(self):
+        """Wrapper to get layout_name"""
+        return self._layout_name.decode('utf-8') if self._layout_name else None
+
+    @layout_name.setter
+    def layout_name(self, val):
+        """Wrapper to set layout_name"""
+        self._layout_name = val.encode('utf-8') if val else None
 
 class PutParams(namedtuple('PutParams', 'family layout tags')):
     """
@@ -99,7 +110,7 @@ class XferOpParams(Union):
 class XferDescriptor(Structure):
     """phobos struct xfer_descriptor."""
     _fields_ = [
-        ("xd_objid", c_char_p),
+        ("_xd_objid", c_char_p),
         ("xd_op", c_int),
         ("xd_fd", c_int),
         ("xd_attrs", PhoAttrs),
@@ -107,6 +118,16 @@ class XferDescriptor(Structure):
         ("xd_flags", c_int),
         ("xd_rc", c_int),
     ]
+
+    @property
+    def xd_objid(self):
+        """Wrapper to get xd_objid"""
+        return self._xd_objid.decode('utf-8') if self._xd_objid else None
+
+    @xd_objid.setter
+    def xd_objid(self, val):
+        """Wrapper to set xd_objid"""
+        self._xd_objid = val.encode('utf-8') if val else None
 
     def creat_flags(self):
         """
@@ -164,9 +185,10 @@ class XferDescriptor(Structure):
         self.xd_rc = 0
 
         if desc[2]:
-            for k, v in desc[2].iteritems():
+            for k, v in desc[2].items():
                 rc = LIBPHOBOS.pho_attr_set(byref(self.xd_attrs),
-                                            str(k), str(v))
+                                            str(k).encode('utf8'),
+                                            str(v).encode('utf8'))
                 if rc:
                     raise EnvironmentError(
                         rc, "Cannot add attr to xfer objid:'%s'" % (desc[0],))
@@ -175,7 +197,7 @@ class XferDescriptor(Structure):
 
 XferCompletionCBType = CFUNCTYPE(None, c_void_p, POINTER(XferDescriptor), c_int)
 
-class Store(object):
+class Store:
     def __init__(self, *args, **kwargs):
         """Initialize new instance."""
         super(Store, self).__init__(*args, **kwargs)
@@ -226,7 +248,7 @@ class Store(object):
         self.xfer_desc_release(xfer)
         return rc
 
-class XferClient(object):
+class XferClient:
     """Main class: issue data transfers with the object store."""
     def __init__(self, **kwargs):
         """Initialize a new instance."""
@@ -295,7 +317,7 @@ class XferClient(object):
 
         self.clear()
 
-class UtilClient(object):
+class UtilClient:
     """Secondary class: issue user commands without data transfers."""
     def __init__(self, **kwargs):
         """Initialize a new instance."""

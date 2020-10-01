@@ -30,7 +30,7 @@ fi
 test_bin_dir=$(dirname "$bin")
 
 # define phython paths for in-tree tests
-PY=$(which python2)
+PY=$(which python3)
 ARCH=$(uname -m)
 PY_VERSION=$($PY --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2)
 cli_dir="$(readlink -e $test_bin_dir/../cli)"

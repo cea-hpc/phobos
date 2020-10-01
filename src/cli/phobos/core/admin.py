@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  All rights reserved (c) 2014-2019 CEA/DAM.
@@ -87,7 +87,7 @@ class Client(object):
             raise EnvironmentError(errno.EOPNOTSUPP,
                                    "Unknown filesystem type '%s'" % fs_type)
 
-        mstruct = Id(rsc_family, medium_id)
+        mstruct = Id(rsc_family, name=medium_id)
         rc = LIBPHOBOS_ADMIN.phobos_admin_format(byref(self.handle),
                                                  byref(mstruct), fs_type_enum,
                                                  unlock)
@@ -97,7 +97,7 @@ class Client(object):
     def device_add(self, dev_family, dev_names, keep_locked):
         """Add devices to the LRS."""
         c_id = Id * len(dev_names)
-        dev_ids = [Id(dev_family, name) for name in dev_names]
+        dev_ids = [Id(dev_family, name=name) for name in dev_names]
 
         rc = LIBPHOBOS_ADMIN.phobos_admin_device_add(byref(self.handle),
                                                      c_id(*dev_ids),
@@ -108,7 +108,7 @@ class Client(object):
     def device_lock(self, dev_family, dev_names, is_forced):
         """Wrapper for the device lock command."""
         c_id = Id * len(dev_names)
-        dev_ids = [Id(dev_family, name) for name in dev_names]
+        dev_ids = [Id(dev_family, name=name) for name in dev_names]
 
         rc = LIBPHOBOS_ADMIN.phobos_admin_device_lock(byref(self.handle),
                                                       c_id(*dev_ids),
@@ -119,7 +119,7 @@ class Client(object):
     def device_unlock(self, dev_family, dev_names, is_forced):
         """Wrapper for the device unlock command."""
         c_id = Id * len(dev_names)
-        dev_ids = [Id(dev_family, name) for name in dev_names]
+        dev_ids = [Id(dev_family, name=name) for name in dev_names]
 
         rc = LIBPHOBOS_ADMIN.phobos_admin_device_unlock(byref(self.handle),
                                                         c_id(*dev_ids),
@@ -142,13 +142,13 @@ class Client(object):
             raise EnvironmentError(rc)
 
         if not degroup:
-            list_lyts = [layouts[i] for i in xrange(n_layouts.value)]
+            list_lyts = [layouts[i] for i in range(n_layouts.value)]
         else:
             list_lyts = []
-            for i in xrange(n_layouts.value):
+            for i in range(n_layouts.value):
                 ptr = layouts[i].extents
                 cnt = layouts[i].ext_count
-                for j in xrange(cnt):
+                for j in range(cnt):
                     if medium is None or \
                         medium in cast(ptr, POINTER(ExtentInfo))[j].media.name:
                         lyt = type(layouts[i])()

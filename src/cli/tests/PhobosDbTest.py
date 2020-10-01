@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  all rights reserved (c) 2014-2018 cea/dam.

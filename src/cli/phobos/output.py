@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  All rights reserved (c) 2014-2020 CEA/DAM.
@@ -25,8 +25,8 @@ Output and formatting utilities.
 
 from collections import OrderedDict
 import csv
+from io import StringIO
 import json
-import StringIO
 from tabulate import tabulate
 import xml.dom.minidom
 import xml.etree.ElementTree
@@ -37,7 +37,7 @@ import yaml
 
 def csv_dump(data):
     """Convert a list of dictionaries to a csv string"""
-    outbuf = StringIO.StringIO()
+    outbuf = StringIO()
     writer = csv.DictWriter(outbuf, data[0].keys())
     if hasattr(writer, 'writeheader'):
         #pylint: disable=no-member
@@ -63,7 +63,8 @@ def xml_dump(data, item_type='item'):
 
 def human_dump(data):
     """Convert a list of dictionaries to an identifier list text"""
-    out = "\n".join(str(item[item.keys()[0]]) for item in data)
+    out = "\n".join(str(list(item.values())[0]) for item in data)
+
     return out
 
 def human_pretty_dump(data):

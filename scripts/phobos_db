@@ -1,3 +1,3 @@
 #!/bin/sh
 
-python2 -m phobos.db "$@"
+python3 -m phobos.db "$@"

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  All rights reserved (c) 2014-2017 CEA/DAM.
@@ -86,7 +86,7 @@ class DSSClientTest(unittest.TestCase):
             n_tags = {'foo': 4, 'bar': 3, 'goo': 3}
             n_bar_foo = 2
 
-            for tag, n_tag in n_tags.iteritems():
+            for tag, n_tag in n_tags.items():
                 n = 0
                 for medium in client.media.get(tags=tag):
                     self.assertTrue(tag in medium.tags)
@@ -105,10 +105,11 @@ class DSSClientTest(unittest.TestCase):
         with Client() as client:
             insert_list = []
             for i in range(10):
-                id = Id(PHO_RSC_DIR, '__TEST_MAGIC_%d' % randint(0, 1000000))
+                id = Id(PHO_RSC_DIR,
+                        name='__TEST_MAGIC_%d' % randint(0, 1000000))
                 rsc = Resource(id=id, model='')
                 dev = DevInfo(rsc=rsc, path='/tmp/test_%d' % randint(0,1000000),
-                             host='localhost')
+                              host='localhost')
 
                 insert_list.append(dev)
 

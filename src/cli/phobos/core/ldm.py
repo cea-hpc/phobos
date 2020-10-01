@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  All rights reserved (c) 2014-2017 CEA/DAM.
@@ -78,7 +78,7 @@ class LibAdapter(Structure):
         LIBPHOBOS.get_lib_adapter.errcheck = pho_rc_check
         LIBPHOBOS.get_lib_adapter(lib_type, byref(self))
         if self._lib_open is not None:
-            self._lib_open(byref(self._lib_hdl), lib_dev_path)
+            self._lib_open(byref(self._lib_hdl), lib_dev_path.encode('utf-8'))
 
     def __del__(self):
         if self._lib_hdl._lh_lib is not None and self._lib_close is not None:
@@ -110,7 +110,8 @@ def ldm_device_query(dev_type, dev_path):
 
     state = DevState()
 
-    rc = LIBPHOBOS.ldm_dev_query(byref(adapter), real_path, byref(state))
+    rc = LIBPHOBOS.ldm_dev_query(byref(adapter), real_path.encode('utf-8'),
+                                 byref(state))
     if rc:
         raise EnvironmentError(rc, "Cannot query device %r" % real_path)
 

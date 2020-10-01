@@ -166,14 +166,21 @@ static PyMethodDef ConstMethods[] = {
     {NULL, NULL, 0, NULL}
 };
 
+static struct PyModuleDef cModPyConst = {
+    PyModuleDef_HEAD_INIT,
+    "const",
+    "",
+    -1,
+    ConstMethods
+};
 
-PyMODINIT_FUNC initconst(void)
+PyMODINIT_FUNC PyInit_const(void)
 {
     PyObject *mod;
 
-    mod = Py_InitModule("const", ConstMethods);
+    mod = PyModule_Create(&cModPyConst);
     if (mod == NULL)
-        return;
+        return NULL;
 
     /* Misc. constants */
     PyModule_AddIntMacro(mod, PHO_URI_MAX);
@@ -244,4 +251,6 @@ PyMODINIT_FUNC initconst(void)
     PyModule_AddIntMacro(mod, PHO_XFER_OP_GET);
     PyModule_AddIntMacro(mod, PHO_XFER_OP_GETMD);
     PyModule_AddIntMacro(mod, PHO_XFER_OP_PUT);
+
+    return mod;
 }

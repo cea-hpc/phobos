@@ -10,13 +10,13 @@ Source0: %{name}-%{version}.tar.gz
 
 %define phobosdocdir %{_docdir}/%{name}
 
-%define __python /usr/bin/python2
+%define __python /usr/bin/python3
 
 %if 0%{?rhel} >= 8
-%global python_prefix python2
+%global python_prefix python3
 %global postgres_prefix postgresql
 %else
-%global python_prefix python
+%global python_prefix python36
 %global postgres_prefix postgresql94
 %endif
 
@@ -43,7 +43,7 @@ Requires: %{python_prefix}
 %if 0%{?rhel} < 8
 Requires: python-argparse
 %endif
-Requires: %{python_prefix}-yaml
+Requires: %{python_prefix}-PyYAML
 Requires: %{python_prefix}-clustershell
 Requires: %{python_prefix}-psycopg2
 Requires: %{python_prefix}-tabulate

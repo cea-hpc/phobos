@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  All rights reserved (c) 2014-2017 CEA/DAM.
@@ -29,6 +29,7 @@ object-oriented API to the rest of the CLI.
 import logging
 
 from ctypes import *
+from enum import IntEnum
 
 from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX,
                                PHO_RSC_DIR, PHO_RSC_DISK, PHO_RSC_TAPE,
@@ -66,18 +67,40 @@ class DSSLock(Structure):
     """Resource lock as managed by DSS."""
     _fields_ = [
         ('lock_ts', c_longlong),
-        ('lock', c_char_p)
+        ('_lock', c_char_p)
     ]
+
+    @property
+    def lock(self):
+        """Wrapper to get lock"""
+        return self._lock.decode('utf-8') if self._lock else None
+
+    @lock.setter
+    def lock(self, val):
+        """Wrapper to set lock"""
+        self._lock = val.encode('utf-8')
+
 
 class CommInfo(Structure):
     """Communication information."""
     _fields_ = [
         ('is_server', c_int),
-        ('path', c_char_p),
+        ('_path', c_char_p),
         ('socket_fd', c_int),
         ('epoll_fd', c_int),
         ('ev_tab', c_void_p),
     ]
+
+    @property
+    def path(self):
+        """Wrapper to get path"""
+        return self._path.decode('utf-8') if self._path else None
+
+    @path.setter
+    def path(self, val):
+        """Wrapper to set path"""
+        self._path = val.encode('utf-8')
+
 
 class LRSSched(Structure):
     """Local Resource Scheduler sub data structure."""
@@ -85,10 +108,20 @@ class LRSSched(Structure):
         ('dss', c_void_p),
         ('devices', c_void_p),
         ('dev_count', c_size_t),
-        ('lock_owner', c_char_p),
+        ('_lock_owner', c_char_p),
         ('req_queue', c_void_p),
         ('release_queue', c_void_p),
     ]
+
+    @property
+    def lock_owner(self):
+        """Wrapper to get lock_owner"""
+        return self._lock_owner.decode('utf-8') if self._lock_owner else None
+
+    @lock_owner.setter
+    def lock_owner(self, val):
+        """Wrapper to set lock_owner"""
+        self._lock_owner = val.encode('utf-8')
 
 class LRS(Structure):
     """Local Resource Scheduler."""
@@ -101,32 +134,42 @@ class Id(Structure):
     """Resource Identifier."""
     _fields_ = [
         ('family', c_int),
-        ('name', c_char * PHO_URI_MAX)
+        ('_name', c_char * PHO_URI_MAX)
     ]
+
+    @property
+    def name(self):
+        """Wrapper to get name"""
+        return self._name.decode('utf-8')
+
+    @name.setter
+    def name(self, val):
+        """Wrapper to set name"""
+        self._name = val.encode('utf-8')
 
 class Resource(Structure):
     """Resource."""
     _fields_ = [
         ('id', Id),
-        ('model', c_char_p),
+        ('_model', c_char_p),
         ('adm_status', c_int),
     ]
 
-class ResourceFamily(int):
-    """Resource family enumeration."""
-    # XXX: this class will become an IntEnum once we migrate to python3
-    __members__ = {
-        'RSC_DISK': PHO_RSC_DISK,
-        'RSC_TAPE': PHO_RSC_TAPE,
-        'RSC_DIR':  PHO_RSC_DIR,
-    }
+    @property
+    def model(self):
+        """Wrapper to get model"""
+        return self._model.decode('utf-8') if self._model else None
 
+    @model.setter
+    def model(self, val):
+        """Wrapper to set model"""
+        self._model = val.encode('utf-8') if val else None
+
+class ResourceFamily(IntEnum):
+    """Resource family enumeration."""
     RSC_DISK = PHO_RSC_DISK
     RSC_TAPE = PHO_RSC_TAPE
     RSC_DIR  = PHO_RSC_DIR
-
-    def __init__(self, value):
-        self.value = value
 
     def __str__(self):
         return rsc_family2str(self.value)
@@ -135,8 +178,8 @@ class DevInfo(Structure, CLIManagedResourceMixin):
     """DSS device descriptor."""
     _fields_ = [
         ('rsc', Resource),
-        ('path', c_char_p),
-        ('host', c_char_p),
+        ('_path', c_char_p),
+        ('_host', c_char_p),
         ('lock', DSSLock)
     ]
 
@@ -158,6 +201,11 @@ class DevInfo(Structure, CLIManagedResourceMixin):
         """Wrapper to get name"""
         return self.rsc.id.name
 
+    @name.setter
+    def name(self, val):
+        """Wrapper to set name"""
+        self.rsc.id.name = val
+
     @property
     def family(self):
         """Wrapper to get family"""
@@ -168,6 +216,11 @@ class DevInfo(Structure, CLIManagedResourceMixin):
         """Wrapper to get model"""
         return self.rsc.model
 
+    @model.setter
+    def model(self, val):
+        """Wrapper to set model"""
+        self.rsc.model = val
+
     @property
     def adm_status(self):
         """Wrapper to get adm_status"""
@@ -175,13 +228,39 @@ class DevInfo(Structure, CLIManagedResourceMixin):
 
     @property
     def lock_status(self):
-        """Wrapper to get lock status"""
+        """Wrapper to get lock_status"""
         return self.lock.lock
+
+    @lock_status.setter
+    def lock_status(self, val):
+        """Wrapper to set lock_status"""
+        self.lock.lock = val
 
     @property
     def lock_ts(self):
         """Wrapper to get lock timestamp"""
         return self.lock.lock_ts
+
+    @property
+    def host(self):
+        """Wrapper to get host"""
+        return self._host.decode('utf-8') if self._host else None
+
+    @host.setter
+    def host(self, val):
+        """Wrapper to set host"""
+        self._host = val.encode('utf-8')
+
+    @property
+    def path(self):
+        """Wrapper to get path"""
+        return self._path.decode('utf-8') if self._path else None
+
+    @path.setter
+    def path(self, val):
+        """Wrapper to set path"""
+        self._path = val.encode('utf-8')
+
 
 class Tags(Structure):
     """List of tags"""
@@ -198,6 +277,8 @@ class Tags(Structure):
             self.tags = None
             self.n_tags = 0
         else:
+            for i in range(len(tag_list)):
+                tag_list[i] = tag_list[i].encode('utf-8') if isinstance(tag_list[i], str) else tag_list[i]
             tags = (c_char_p * len(tag_list))(*tag_list)
             LIBPHOBOS.tags_init(byref(self), tags, len(tag_list))
 
@@ -212,8 +293,18 @@ class MediaFS(Structure):
     _fields_ = [
         ('type', c_int),
         ('status', c_int),
-        ('label', c_char * (PHO_LABEL_MAX_LEN + 1))
+        ('_label', c_char * (PHO_LABEL_MAX_LEN + 1))
     ]
+
+    @property
+    def label(self):
+        """Wrapper to get label"""
+        return self._label.decode('utf-8') if self._label else None
+
+    @label.setter
+    def label(self, val):
+        """Wrapper to set label"""
+        self._label = val.encode('utf-8')
 
 class MediaStats(Structure):
     """Media usage descriptor."""
@@ -242,6 +333,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         """Return a dict of available fields and optional display formatters."""
         return {
             'adm_status': rsc_adm_status2str,
+            'family': rsc_family2str,
             'addr_type': None,
             'model': None,
             'name': None,
@@ -257,14 +349,19 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         export.update(self.expanded_stats)
         return export
 
-    def is_locked(self):
-        """True if this media is locked"""
-        return self.lock_status != ""
-
     @property
     def lock_status(self):
         """Wrapper to get lock status"""
         return self.lock.lock
+
+    @lock_status.setter
+    def lock_status(self, val):
+        """Wrapper to set lock status"""
+        self.lock.lock = val
+
+    def is_locked(self):
+        """True if this media is locked"""
+        return self.lock_status and self.lock_status != ""
 
     @property
     def lock_ts(self):
@@ -272,19 +369,44 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         return self.lock.lock_ts
 
     @property
+    def family(self):
+        """Wrapper to get family"""
+        return self.rsc.id.family
+
+    @family.setter
+    def family(self, val):
+        """Wrapper to set family"""
+        self.rsc.id.family = val
+
+    @property
     def name(self):
         """Wrapper to get medium name"""
         return self.rsc.id.name
+
+    @name.setter
+    def name(self, val):
+        """Wrapper to set medium name"""
+        self.rsc.id.name = val
 
     @property
     def model(self):
         """Wrapper to get medium model"""
         return self.rsc.model
 
+    @model.setter
+    def model(self, val):
+        """Wrapper to get medium model"""
+        self.rsc.model = val
+
     @property
     def adm_status(self):
         """Wrapper to get adm_status"""
         return self.rsc.adm_status
+
+    @adm_status.setter
+    def adm_status(self, val):
+        """Wrapper to set adm_status"""
+        self.rsc.adm_status = val
 
     @property
     def expanded_fs_info(self):
@@ -311,10 +433,12 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
 
     @property
     def tags(self):
-        return self._tags.tags[:self._tags.n_tags]
+        """Wrapper to get tags"""
+        return [t.decode('utf-8') for t in self._tags.tags[:self._tags.n_tags]]
 
     @tags.setter
     def tags(self, tags):
+        """Wrapper to set tags"""
         self._tags.free()
         self._tags = Tags(tags)
         # Manually creating and assigning tags means that we will have to free
@@ -328,8 +452,8 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
 class ObjectInfo(Structure, CLIManagedResourceMixin):
     """Object descriptor."""
     _fields_ = [
-        ('oid', c_char_p),
-        ('user_md', c_char_p)
+        ('_oid', c_char_p),
+        ('_user_md', c_char_p)
     ]
 
     def get_display_fields(self):
@@ -339,12 +463,42 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
             'user_md': None,
         }
 
+    @property
+    def oid(self):
+        """Wrapper to get oid"""
+        return self._oid.decode('utf-8') if self._oid else None
+
+    @oid.setter
+    def oid(self, val):
+        """Wrapper to set oid"""
+        self._oid = val.encode('utf-8')
+
+    @property
+    def user_md(self):
+        """Wrapper to get user_md"""
+        return self._user_md.decode('utf-8') if self._user_md else None
+
+    @user_md.setter
+    def user_md(self, val):
+        """Wrapper to set user_md"""
+        self._user_md = val.encode('utf-8')
+
 class Buffer(Structure):
     """String buffer."""
     _fields_ = [
         ('size', c_size_t),
-        ('buff', c_char_p)
+        ('_buff', c_char_p)
     ]
+
+    @property
+    def buff(self):
+        """Wrapper to get buff"""
+        return self._buff.decode('utf-8')
+
+    @buff.setter
+    def buff(self, val):
+        """Wrapper to set buff"""
+        self._buff = val.encode('utf-8')
 
 class ExtentInfo(Structure):
     """DSS extent descriptor."""
@@ -365,16 +519,21 @@ class PhoAttrs(Structure):
 class ModuleDesc(Structure):
     """Module description."""
     _fields_ = [
-        ('mod_name', c_char_p),
+        ('_mod_name', c_char_p),
         ('mod_major', c_int),
         ('mod_minor', c_int),
         ('mod_attrs', PhoAttrs)
     ]
 
+    @property
+    def mod_name(self):
+        """Wrapper to get mod_name"""
+        return self._mod_name.decode('utf-8') if self._mod_name else None
+
 class LayoutInfo(Structure, CLIManagedResourceMixin):
     """Object layout and extents description."""
     _fields_ = [
-        ('oid', c_char_p),
+        ('_oid', c_char_p),
         ('state', c_int),
         ('layout_desc', ModuleDesc),
         ('wr_size', c_size_t),
@@ -393,6 +552,11 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
             'size': None,
             'layout': None,
         }
+
+    @property
+    def oid(self):
+        """Wrapper to get oid"""
+        return self._oid.decode('utf-8') if self._oid else None
 
     @property
     def media_name(self):
@@ -436,13 +600,43 @@ class PhoLogRec(Structure):
     _fields_ = [
         ('plr_level', c_int),
         ('plr_pid', c_int),
-        ('plr_file', c_char_p),
-        ('plr_func', c_char_p),
+        ('_plr_file', c_char_p),
+        ('_plr_func', c_char_p),
         ('plr_line', c_int),
         ('plr_err', c_int),
         ('plr_time', Timeval),
-        ('plr_msg', c_char_p)
+        ('_plr_msg', c_char_p)
     ]
+
+    @property
+    def plr_file(self):
+        """Wrapper to get plr_file"""
+        return self._plr_file.decode('utf-8')
+
+    @plr_file.setter
+    def plr_file(self, val):
+        """Wrapper to set plr_file"""
+        self._plr_file = val.encode('utf-8')
+
+    @property
+    def plr_func(self):
+        """Wrapper to get plr_func"""
+        return self._plr_func.decode('utf-8')
+
+    @plr_func.setter
+    def plr_func(self, val):
+        """Wrapper to set plr_func"""
+        self._plr_func = val.encode('utf-8')
+
+    @property
+    def plr_msg(self):
+        """Wrapper to get plr_msg"""
+        return self._plr_msg.decode('utf-8')
+
+    @plr_msg.setter
+    def plr_msg(self, val):
+        """Wrapper to set plr_msg"""
+        self._plr_msg = val.encode('utf-8')
 
 def pho_rc_check(rc, func, args):
     """Helper to be set as errcheck for phobos functions returning rc"""

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  All rights reserved (c) 2014-2017 CEA/DAM.
@@ -83,7 +83,7 @@ class LdmTest(unittest.TestCase):
         mtx_elts = {}
         imp_exp_base_addr = None
         for line in mtx_output.splitlines():
-            line = line.strip()
+            line = line.strip().decode('utf-8')
             # Ignore lines we don't want to parse
             if " Element " not in line:
                 continue
@@ -114,7 +114,7 @@ class LdmTest(unittest.TestCase):
                     int(rel_addr_loaded_m.group("rel_addr")) - 1
             volume_m = volume_re.match(line)
             if volume_m:
-                elt["volume"] = unicode(volume_m.group("volume"))
+                elt["volume"] = str(volume_m.group("volume"))
             mtx_elts.setdefault(elt_type, []).append(elt)
 
         # Retrieve data as seen by ldm_lib_scan

@@ -21,7 +21,7 @@
 
 cur_dir=$(dirname $(readlink -m $0))
 
-PY=$(which python2)
+PY=$(which python3)
 ARCH=$(uname -m)
 PY_VERSION=$($PY --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2)
 

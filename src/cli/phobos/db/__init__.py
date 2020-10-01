@@ -56,7 +56,7 @@ class Migrator:
         }
 
         self.reachable_versions = set(
-            version for version, _ in self.convert_funcs.itervalues()
+            version for version, _ in self.convert_funcs.values()
         )
 
     @contextmanager

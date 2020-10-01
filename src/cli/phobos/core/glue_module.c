@@ -66,7 +66,15 @@ static PyMethodDef GlueMethods[] = {
     {NULL, NULL, 0, NULL},
 };
 
-PyMODINIT_FUNC initglue(void)
+static struct PyModuleDef cModPyGlue = {
+    PyModuleDef_HEAD_INIT,
+    "glue",
+    "",
+    -1,
+    GlueMethods
+};
+
+PyMODINIT_FUNC PyInit_glue(void)
 {
-    Py_InitModule("glue", GlueMethods);
+    return PyModule_Create(&cModPyGlue);
 }

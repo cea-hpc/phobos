@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  All rights reserved (c) 2014-2020 CEA/DAM.
@@ -28,7 +28,7 @@ import unittest
 import tempfile
 
 from contextlib import contextmanager
-from StringIO import StringIO
+from io import StringIO
 from random import randint
 from socket import gethostname
 
@@ -184,8 +184,8 @@ class MediaAddTest(BasicExecutionTest):
         client.connect()
         tagged0, = client.media.get(id='TAGGED0')
         tagged1, = client.media.get(id='TAGGED1')
-        self.assertItemsEqual(tagged0.tags, ['tag-foo'])
-        self.assertItemsEqual(tagged1.tags, ['tag-foo', 'tag-bar'])
+        self.assertCountEqual(tagged0.tags, ['tag-foo'])
+        self.assertCountEqual(tagged1.tags, ['tag-foo', 'tag-bar'])
 
     def test_media_update(self):
         """test updating media."""
@@ -199,8 +199,8 @@ class MediaAddTest(BasicExecutionTest):
         # Check inserted media
         update0, = client.media.get(id="update0")
         update1, = client.media.get(id="update1")
-        self.assertItemsEqual(update0.tags, ['tag-foo'])
-        self.assertItemsEqual(update1.tags, ['tag-foo', 'tag-bar'])
+        self.assertCountEqual(update0.tags, ['tag-foo'])
+        self.assertCountEqual(update1.tags, ['tag-foo', 'tag-bar'])
 
         # Update media
         self.pho_execute(['tape', 'update', '-T', 'new-tag1,new-tag2',
@@ -209,12 +209,12 @@ class MediaAddTest(BasicExecutionTest):
         # Check updated media
         for med_id in "update0", "update1":
             media, = client.media.get(id=med_id)
-            self.assertItemsEqual(media.tags, ['new-tag1', 'new-tag2'])
+            self.assertCountEqual(media.tags, ['new-tag1', 'new-tag2'])
 
         # No '-T' argument does nothing
         self.pho_execute(['tape', 'update', 'update0'])
         update0, = client.media.get(id=med_id)
-        self.assertItemsEqual(update0.tags, ['new-tag1', 'new-tag2'])
+        self.assertCountEqual(update0.tags, ['new-tag1', 'new-tag2'])
 
         # Test a failed update
         def failed_update(*args, **kwargs):
@@ -344,14 +344,14 @@ class DeviceAddTest(BasicExecutionTest):
 
         # Check inserted media
         media, = client.media.get(id=tmp_path)
-        self.assertItemsEqual(media.tags, ['tag-baz'])
+        self.assertCountEqual(media.tags, ['tag-baz'])
 
         # Update media
         self.pho_execute(['dir', 'update', '-T', '', tmp_path])
 
         # Check updated media
         media, = client.media.get(id=tmp_path)
-        self.assertItemsEqual(media.tags, [])
+        self.assertCountEqual(media.tags, [])
 
     def test_dir_add_missing(self):
         """Add a non-existent directory should raise an error."""

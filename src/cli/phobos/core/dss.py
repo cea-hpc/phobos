@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  All rights reserved (c) 2014-2020 CEA/DAM.
@@ -86,7 +86,7 @@ def dss_filter(obj_type, **kwargs):
         return None
     filt = JSONFilter()
     criteria = []
-    for key, val in kwargs.iteritems():
+    for key, val in kwargs.items():
         if val is None:
             continue
         key, comp = key_convert(obj_type, key)
@@ -106,13 +106,13 @@ def dss_filter(obj_type, **kwargs):
     else:
         filt_str = json.dumps({'$AND': criteria})
 
-    rc = LIBPHOBOS.dss_filter_build(byref(filt), filt_str)
+    rc = LIBPHOBOS.dss_filter_build(byref(filt), filt_str.encode('utf-8'))
     if rc:
         raise EnvironmentError(rc, "Invalid filter criteria")
 
     return filt
 
-class DSSResult(object):
+class DSSResult:
     """Wrapper on the native struct dss_result"""
 
     def __init__(self, native_result, n_elts):
@@ -141,7 +141,7 @@ class DSSResult(object):
         item._dss_result_parent_link = self
         return item
 
-class BaseEntityManager(object):
+class BaseEntityManager:
     """Proxy to manipulate (CRUD) objects in DSS."""
     __metaclass__ = ABCMeta
 
@@ -313,7 +313,8 @@ class MediaManager(BaseEntityManager):
         """Insert media into DSS."""
         status = PHO_RSC_ADM_ST_LOCKED if locked else PHO_RSC_ADM_ST_UNLOCKED
 
-        media = MediaInfo(Resource(Id(family, name), model, status))
+        media = MediaInfo(family=family, name=name, model=model,
+                          adm_status=status)
         media.fs.type = str2fs_type(fstype)
         media.addr_type = PHO_ADDR_HASH1
         media.tags = tags or []
@@ -329,7 +330,7 @@ class MediaManager(BaseEntityManager):
 
     def remove(self, family, name):
         """Delete media from DSS."""
-        media = MediaInfo(Resource(Id(family, name)))
+        media = MediaInfo(family=family, name=name)
         self.delete([media])
         self.logger.debug("Media '%s' successfully deleted: ", name)
 
@@ -366,7 +367,7 @@ class DSSHandle(Structure):
         ('dh_conn', c_void_p)
     ]
 
-class Client(object):
+class Client:
     """High-level, object-oriented, double-keyworded DSS wrappers for the CLI"""
     def __init__(self, *args, **kwargs):
         """Initialize a new DSS context."""

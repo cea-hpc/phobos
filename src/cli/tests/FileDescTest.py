@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  All rights reserved (c) 2014-2019 CEA/DAM.
@@ -39,7 +39,7 @@ class FileDescTest(unittest.TestCase):
     @contextmanager
     def _getsize_context(self):
         sizes = [0, 1, 16, 32]
-        file_sizes = [(NamedTemporaryFile(), size) for size in sizes]
+        file_sizes = [(NamedTemporaryFile('w'), size) for size in sizes]
         for f, size in file_sizes:
             f.write('a' * size)
             f.flush()

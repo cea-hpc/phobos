@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  All rights reserved (c) 2014-2017 CEA/DAM.
@@ -30,7 +30,7 @@ from phobos.core.ffi import LIBPHOBOS
 
 def load_file(path=None):
     """Load a configuration file from path"""
-    ret = LIBPHOBOS.pho_cfg_init_local(path)
+    ret = LIBPHOBOS.pho_cfg_init_local(path.encode('utf-8') if path else None)
     if ret != 0:
         ret = abs(ret)
         raise IOError(ret, path, os.strerror(ret))
@@ -47,11 +47,12 @@ def get_val(section, name, default=RAISE_ERROR):
     default value has been provided.
     """
     cfg_value = c_char_p()
-    ret = LIBPHOBOS.pho_cfg_get_val(section, name, byref(cfg_value))
+    ret = LIBPHOBOS.pho_cfg_get_val(section.encode('utf-8'),
+                                    name.encode('utf-8'), byref(cfg_value))
     if ret != 0:
         if default is RAISE_ERROR:
             raise KeyError("No value in conf for section '%s', key '%s'"
                            % (section, name))
         else:
             return default
-    return cfg_value.value
+    return cfg_value.value.decode('utf-8')

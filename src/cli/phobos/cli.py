@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 #
 #  All rights reserved (c) 2014-2020 CEA/DAM.
@@ -161,6 +161,7 @@ class BaseOptHandler(object):
         # Register supported verbs and associated options
         if cls.verbs:
             v_parser = subparser.add_subparsers(dest='verb')
+            v_parser.required = True
             for verb in cls.verbs:
                 verb.subparser_register(v_parser)
 
@@ -289,8 +290,7 @@ class StoreGenericPutHandler(XferOptHandler):
                             help='Only use media that contain all these tags '
                                  '(comma-separated: foo,bar)')
         parser.add_argument('-f', '--family',
-                            choices=map(rsc_family2str,
-                                        ResourceFamily.__members__.values()),
+                            choices=list(map(rsc_family2str, ResourceFamily)),
                             help='Targeted storage family')
         parser.add_argument('-l', '--layout', choices=["simple", "raid1"],
                             help='Desired storage layout')
@@ -1203,6 +1203,7 @@ class PhobosActionContext(object):
                                  help='Alternative configuration file')
 
         sub = self.parser.add_subparsers(dest='goal')
+        sub.required = True
 
         # Register misc actions handlers
         for handler in self.supported_handlers:
