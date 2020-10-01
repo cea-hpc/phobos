@@ -142,7 +142,7 @@ class XferDescriptor(Structure):
             raise ValueError("path must be a non empty string")
 
         if self.xd_op == PHO_XFER_OP_GET:
-            self.xd_fd = os.open(path, self.creat_flags(), 0666)
+            self.xd_fd = os.open(path, self.creat_flags(), 0o666)
         else:
             try:
                 self.xd_fd = os.open(path, os.O_RDONLY | os.O_NOATIME)
