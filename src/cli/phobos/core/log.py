@@ -39,7 +39,7 @@ from phobos.core.const import (PHO_LOG_DISABLED, PHO_LOG_ERROR, PHO_LOG_WARN,
 
 # Phobos extra logging levels
 DISABLED = CRITICAL + 10
-VERBOSE = (INFO + DEBUG) / 2
+VERBOSE = (INFO + DEBUG) // 2
 
 
 class LogControl(object):
