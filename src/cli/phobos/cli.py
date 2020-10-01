@@ -103,7 +103,7 @@ def attr_convert(usr_attr):
     kv_pairs = list(tkn_iter) # [k0, v0, k1, v1...]
 
     if len(kv_pairs) % 2 != 0:
-        print kv_pairs
+        print(kv_pairs)
         raise ValueError("Invalid attribute string")
 
     return dict(zip(kv_pairs[0::2], kv_pairs[1::2]))
@@ -236,7 +236,7 @@ class StoreGetMDHandler(XferOptHandler):
         for k, v in sorted(itm.items()):
             res.append('%s=%s' % (k, v))
 
-        print ','.join(res)
+        print(','.join(res))
 
     def exec_getmd(self):
         """Retrieve an object attributes from backend."""
@@ -1139,7 +1139,7 @@ class LibOptHandler(BaseResourceOptHandler):
                 else:
                     line.append("%s=%r" % (key, str(value)))
             line.extend(flags)
-            print " ".join(line)
+            print(" ".join(line))
 
 SYSLOG_LOG_LEVELS = ["critical", "error", "warning", "info", "debug"]
 

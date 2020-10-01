@@ -34,8 +34,8 @@ class AttrConvertTest(unittest.TestCase):
         res = attr_convert(kvstr)
         diff = set(res.items()) ^ set(exp_result.items())
         if diff:
-            print res
-            print exp_result
+            print(res)
+            print(exp_result)
         self.assertEqual(len(diff), 0)
 
     def _conv_xfail(self, kvstr):

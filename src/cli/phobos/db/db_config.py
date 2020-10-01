@@ -34,7 +34,7 @@ def _allow_pg_prog_error(pattern):
     except psycopg2.ProgrammingError as exc:
         if pattern not in str(exc):
             raise exc
-        print str(exc).strip()
+        print(str(exc).strip())
 
 def setup_db(database, user, password):
     """Create the phobos database, main user and load required postgres

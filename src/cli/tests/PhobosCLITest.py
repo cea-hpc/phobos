@@ -64,7 +64,7 @@ class CLIParametersTest(unittest.TestCase):
 
     def check_cmdline_exit(self, args, code=0):
         """Make sure a command line exits with a given error code."""
-        print ' '.join(args)
+        print('"' + ' '.join(args) + '"')
         with output_intercept() as (stdout, stderr):
             try:
                 # 2.7+ required to use assertRaises as a context manager

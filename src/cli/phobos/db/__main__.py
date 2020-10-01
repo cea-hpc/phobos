@@ -49,14 +49,14 @@ def migrate(args, migrator):
     target_version = args.target_version
 
     if schema_version == target_version:
-        print "Database schema already up to date (version %s)" % \
-            (target_version,)
+        print("Database schema already up to date (version %s)" %
+              (target_version))
         return
 
     # Skip confirmation for '-y' and if the database wasn't initialized
     if not args.yes and schema_version != "0":
-        print "Your are about to upgrade database schema from version %s "\
-              "to version %s." % (schema_version, target_version)
+        print("Your are about to upgrade database schema from version %s "
+              "to version %s." % (schema_version, target_version))
         confirm = raw_input("Do you want to continue? [y/N]: ")
         if confirm != 'y':
             sys.exit(1)
@@ -66,7 +66,7 @@ def migrate(args, migrator):
 
 def print_schema_version(_args, migrator):
     """Retrieve and print schema version"""
-    print migrator.schema_version()
+    print(migrator.schema_version())
 
 
 def setup_db_main(args, _migrator):
@@ -84,12 +84,12 @@ def setup_db_main(args, _migrator):
     # Actually setup the database
     db_config.setup_db(database, user, password)
 
-    print "Database properly set up."
-    print "Please fill your phobos.conf with appropriate information for "\
-          "connection, for example:\n"
-    print "    dbname='%s' user='%s' password=<your password> host=example.com"\
-          % (database, user)
-    print
+    print("Database properly set up.")
+    print("Please fill your phobos.conf with appropriate information for "
+          "connection, for example:\n")
+    print("    dbname='%s' user='%s' password=<your password> host=example.com"\
+          % (database, user))
+    print()
 
     if args.schema:
         # Create a new migrator with a connection to the newly configured db
@@ -102,9 +102,9 @@ def setup_db_main(args, _migrator):
 def drop_db_main(args, _migrator):
     """CLI wrapper on drop_db"""
     db_config.drop_db(args.database, args.user)
-    print "Database %s and user %s successfully dropped" % (
+    print("Database %s and user %s successfully dropped" % (
         args.user, args.database,
-    )
+    ))
 
 
 def main(argv=None):

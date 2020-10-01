@@ -42,7 +42,7 @@ def main(fp=sys.stdin):
             'notify': 'NONE',
             'labels': {'Code-Review': +1 }
         }
-    print json.dumps(output)
+    print(json.dumps(output))
 
 if __name__ == '__main__':
     main()
