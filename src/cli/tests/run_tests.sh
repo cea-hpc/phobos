@@ -23,8 +23,7 @@ cur_dir=$(dirname $(readlink -m $0))
 
 PY=$(which python2)
 ARCH=$(uname -m)
-PY_VERSION=$($PY -c 'import sys; print("%d.%d" % (sys.version_info[0],\
-                                                  sys.version_info[1]))')
+PY_VERSION=$($PY --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2)
 
 # pure-python modules
 PHO_PYTHON_PATH="$cur_dir/../build/lib.linux-$ARCH-$PY_VERSION/"

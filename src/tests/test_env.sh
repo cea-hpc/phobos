@@ -32,8 +32,7 @@ test_bin_dir=$(dirname "$bin")
 # define phython paths for in-tree tests
 PY=$(which python2)
 ARCH=$(uname -m)
-PY_VERSION=$($PY -c 'import sys; print("%d.%d" % (sys.version_info[0],\
-                                                  sys.version_info[1]))')
+PY_VERSION=$($PY --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2)
 cli_dir="$(readlink -e $test_bin_dir/../cli)"
 PHO_PYTHON_PATH="$cli_dir/build/lib.linux-$ARCH-$PY_VERSION/"
 export PYTHONPATH="$PHO_PYTHON_PATH"
