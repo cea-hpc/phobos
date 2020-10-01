@@ -24,7 +24,6 @@ Utilities functions.
 """
 
 from collections import OrderedDict
-from itertools import izip
 
 from phobos.core.ffi import DevInfo, MediaInfo
 
