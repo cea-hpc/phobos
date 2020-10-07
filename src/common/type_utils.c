@@ -63,6 +63,8 @@ void dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src)
     dev_dst->rsc.adm_status = dev_src->rsc.adm_status;
     dev_dst->path = strdup_safe(dev_src->path);
     dev_dst->host = strdup_safe(dev_src->host);
+    dev_dst->lock.lock_ts = dev_src->lock.lock_ts;
+    dev_dst->lock.lock = strdup_safe(dev_src->lock.lock);
 }
 
 struct dev_info *dev_info_dup(const struct dev_info *dev)
