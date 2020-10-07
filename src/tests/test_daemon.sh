@@ -59,6 +59,44 @@ function test_multiple_instances
     drop_tables
 }
 
+function test_release_medium_old_locks
+{
+    setup_tables
+
+    mkdir /tmp/dir0 /tmp/dir1
+    $phobos dir add --unlock /tmp/dir[0-1]
+    rmdir /tmp/dir0 /tmp/dir1
+
+    host=`hostname`
+
+    # Update media to lock them by a 'daemon instance'
+    # Only one is locked by this host
+    psql phobos phobos -c \
+        "update media set lock='$host:0123:dummy:dummy',
+             lock_ts='1' where id='/tmp/dir0';
+         update media set lock='${host}0:0123:dummy:dummy',
+             lock_ts='1' where id='/tmp/dir1';"
+
+    # Use gdb to stop the daemon once the locks are released
+    (
+    trap -- "rm '$PHOBOS_LRS_lock_file'" EXIT
+    PHOBOS_LRS_families="dir" gdb $phobosd <<< "break sched_check_medium_locks
+                                                run -i
+                                                next
+                                                quit"
+    )
+
+    # Check that only the correct medium is unlocked
+    lock=$($phobos dir list -o lock_status /tmp/dir0)
+    [ -z "$lock" ] || error "Medium should be unlocked"
+
+    lock=$($phobos dir list -o lock_status /tmp/dir1)
+    [ "${host}0:0123:dummy:dummy" == "$lock" ] ||
+        error "Medium should be locked"
+
+    drop_tables
+}
+
 function test_release_device_old_locks
 {
     setup_tables
@@ -96,6 +134,7 @@ function test_release_device_old_locks
 
 drop_tables
 test_multiple_instances
+test_release_medium_old_locks
 
 # Tape tests are available only if /dev/changer exists, which is the entry
 # point for the tape library.

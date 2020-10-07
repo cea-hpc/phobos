@@ -667,6 +667,69 @@ static int sched_check_device_locks(struct lrs_sched *sched)
     return rc;
 }
 
+/**
+ * Unlocks all media that were locked by a previous instance on this host.
+ *
+ * We consider that for a given configuration and so a given database, it can
+ * only exists one daemon instance at a time on a host. If two instances exist
+ * at the same time on one host, they need to be related to different databases.
+ *
+ * @param   sched       Scheduler handle.
+ * @return              0 on success,
+ *                      first encountered negative posix error on failure.
+ */
+static int sched_check_medium_locks(struct lrs_sched *sched)
+{
+    struct media_info *media = NULL;
+    struct dss_filter filter;
+    int mcnt = 0;
+    int rc = 0;
+    int i;
+
+    ENTRY;
+
+    // get all media of the right family with a lock
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::MDA::family\": \"%s\"},"
+                          "  {\"$NOR\": [{\"DSS::MDA::lock\": \"\"}]}"
+                          "]}",
+                          rsc_family2str(sched->family));
+    if (rc) {
+        pho_error(rc, "Filter build failed");
+        return rc;
+    }
+
+    rc = dss_media_get(&sched->dss, &filter, &media, &mcnt);
+    dss_filter_free(&filter);
+    if (rc) {
+        pho_error(rc, "Media could not be retrieved from the database");
+        return rc;
+    }
+
+    // for all check if the lock is from this host
+    for (i = 0; i < mcnt; ++i) {
+        int rc2;
+
+        if (!compare_lock_hosts(sched, media[i].lock.lock))
+            continue;
+
+        // if it is, unlock it
+        pho_info("Medium '%s' was previously locked by this host, releasing it",
+                 media[i].rsc.id.name);
+        rc2 = dss_media_unlock(&sched->dss, &media[i], 1, NULL);
+        if (rc2) {
+            pho_error(rc2, "Medium '%s' could not be unlocked",
+                      media[i].rsc.id.name);
+            rc = rc ? : rc2;
+        }
+    }
+
+    dss_res_free(media, mcnt);
+
+    return rc;
+}
+
 static __thread uint64_t sched_lock_number;
 
 int sched_init(struct lrs_sched *sched, enum rsc_family family)
@@ -704,6 +767,12 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
     sched_load_dev_state(sched);
 
     rc = sched_check_device_locks(sched);
+    if (rc) {
+        sched_fini(sched);
+        return rc;
+    }
+
+    rc = sched_check_medium_locks(sched);
     if (rc) {
         sched_fini(sched);
         return rc;
