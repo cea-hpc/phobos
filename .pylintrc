@@ -38,7 +38,7 @@ load-plugins=
 # no Warning level messages displayed, use"--disable=all --enable=classes
 # --disable=W"
 #disable=
-disable=I, W, R, import-error, no-name-in-module
+#disable=I, W, R, import-error, no-name-in-module
 
 [REPORTS]
 
@@ -112,9 +112,6 @@ additional-builtins=
 
 
 [BASIC]
-
-# Required attributes for module, separated by a comma
-required-attributes=
 
 # List of builtins function names that should not be used, separated by a comma
 bad-functions=map,filter,apply,input,file
@@ -238,7 +235,7 @@ ignore-mixin-members=yes
 # List of module names for which member attributes should not be checked
 # (useful for modules/projects where namespaces are manipulated during runtime
 # and thus existing member attributes cannot be deduced by static analysis
-ignored-modules=
+ignored-modules=phobos.core.const,phobos.core.glue
 
 # List of classes names for which member attributes should not be checked
 # (useful for classes with attributes dynamically set).
@@ -255,10 +252,6 @@ generated-members=REQUEST,acl_users,aq_parent
 
 
 [CLASSES]
-
-# List of interface methods to ignore, separated by a comma. This is used for
-# instance to not check methods defines in Zope's Interface base class.
-ignore-iface-methods=isImplementedBy,deferred,extends,names,namesAndDescriptions,queryDescriptionFor,getBases,getDescriptionFor,getDoc,getName,getTaggedValue,getTaggedValueTags,isEqualOrExtendedBy,setTaggedValue,isImplementedByInstancesOf,adaptWith,is_implemented_by
 
 # List of method names used to declare (i.e. assign) instance attributes.
 defining-attr-methods=__init__,__new__,setUp
