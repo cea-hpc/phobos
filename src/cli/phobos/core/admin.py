@@ -24,19 +24,17 @@ Provide access to admin commands with the right level (tm) of abstraction.
 """
 
 import errno
-import os
 
-from ctypes import *
+from ctypes import (addressof, byref, c_int, c_char_p, cast, pointer, POINTER,
+                    Structure)
 
-from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX,
+from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-name-in-module
                                PHO_RSC_DIR, PHO_RSC_TAPE)
 from phobos.core.dss import DSSHandle
 from phobos.core.ffi import (CommInfo, ExtentInfo, LayoutInfo, LIBPHOBOS_ADMIN,
-                             LRS, Id)
+                             Id)
 
-from phobos.core.const import rsc_family2str
-
-class AdminHandle(Structure):
+class AdminHandle(Structure): # pylint: disable=too-few-public-methods
     """Admin handler"""
     _fields_ = [
         ('comm', CommInfo),
@@ -60,6 +58,7 @@ class Client(object):
         self.fini()
 
     def init(self, lrs_required):
+        """Admin client initialization."""
         if self.handle is not None:
             self.fini()
 
@@ -70,6 +69,7 @@ class Client(object):
             raise EnvironmentError(rc, 'Admin initialization failed')
 
     def fini(self):
+        """Admin client finalization."""
         if self.handle is not None:
             LIBPHOBOS_ADMIN.phobos_admin_fini(byref(self.handle))
             self.handle = None
@@ -160,6 +160,7 @@ class Client(object):
 
         return list_lyts, layouts, n_layouts
 
-    def layout_list_free(self, layouts, n_layouts):
+    @staticmethod
+    def layout_list_free(layouts, n_layouts):
         """Free a previously obtained layout list."""
         LIBPHOBOS_ADMIN.phobos_admin_layout_list_free(layouts, n_layouts)
