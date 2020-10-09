@@ -26,12 +26,12 @@ This module wraps calls from the library and expose them under an
 object-oriented API to the rest of the CLI.
 """
 
-import logging
-
-from ctypes import *
+from ctypes import (byref, cast, CDLL, CFUNCTYPE, c_char, c_char_p, c_int,
+                    c_long, c_longlong, c_size_t, c_ssize_t, c_void_p, POINTER,
+                    Structure)
 from enum import IntEnum
 
-from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX,
+from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable=no-name-in-module
                                PHO_RSC_DIR, PHO_RSC_DISK, PHO_RSC_TAPE,
                                fs_type2str, fs_status2str,
                                rsc_adm_status2str, rsc_family2str)
@@ -63,7 +63,7 @@ class CLIManagedResourceMixin(object):
             export[key] = conv(getattr(self, key))
         return export
 
-class DSSLock(Structure):
+class DSSLock(Structure): # pylint: disable=too-few-public-methods
     """Resource lock as managed by DSS."""
     _fields_ = [
         ('lock_ts', c_longlong),
@@ -78,10 +78,11 @@ class DSSLock(Structure):
     @lock.setter
     def lock(self, val):
         """Wrapper to set lock"""
+        # pylint: disable=attribute-defined-outside-init
         self._lock = val.encode('utf-8')
 
 
-class CommInfo(Structure):
+class CommInfo(Structure): # pylint: disable=too-few-public-methods
     """Communication information."""
     _fields_ = [
         ('is_server', c_int),
@@ -99,10 +100,11 @@ class CommInfo(Structure):
     @path.setter
     def path(self, val):
         """Wrapper to set path"""
+        # pylint: disable=attribute-defined-outside-init
         self._path = val.encode('utf-8')
 
 
-class LRSSched(Structure):
+class LRSSched(Structure): # pylint: disable=too-few-public-methods
     """Local Resource Scheduler sub data structure."""
     _fields_ = [
         ('dss', c_void_p),
@@ -121,16 +123,17 @@ class LRSSched(Structure):
     @lock_owner.setter
     def lock_owner(self, val):
         """Wrapper to set lock_owner"""
+        # pylint: disable=attribute-defined-outside-init
         self._lock_owner = val.encode('utf-8')
 
-class LRS(Structure):
+class LRS(Structure): # pylint: disable=too-few-public-methods
     """Local Resource Scheduler."""
     _fields_ = [
         ('sched', LRSSched),
         ('comm', CommInfo)
     ]
 
-class Id(Structure):
+class Id(Structure): # pylint: disable=too-few-public-methods
     """Resource Identifier."""
     _fields_ = [
         ('family', c_int),
@@ -145,9 +148,10 @@ class Id(Structure):
     @name.setter
     def name(self, val):
         """Wrapper to set name"""
+        # pylint: disable=attribute-defined-outside-init
         self._name = val.encode('utf-8')
 
-class Resource(Structure):
+class Resource(Structure): # pylint: disable=too-few-public-methods
     """Resource."""
     _fields_ = [
         ('id', Id),
@@ -163,13 +167,14 @@ class Resource(Structure):
     @model.setter
     def model(self, val):
         """Wrapper to set model"""
+        # pylint: disable=attribute-defined-outside-init
         self._model = val.encode('utf-8') if val else None
 
 class ResourceFamily(IntEnum):
     """Resource family enumeration."""
     RSC_DISK = PHO_RSC_DISK
     RSC_TAPE = PHO_RSC_TAPE
-    RSC_DIR  = PHO_RSC_DIR
+    RSC_DIR = PHO_RSC_DIR
 
     def __str__(self):
         return rsc_family2str(self.value)
@@ -249,6 +254,7 @@ class DevInfo(Structure, CLIManagedResourceMixin):
     @host.setter
     def host(self, val):
         """Wrapper to set host"""
+        # pylint: disable=attribute-defined-outside-init
         self._host = val.encode('utf-8')
 
     @property
@@ -259,10 +265,11 @@ class DevInfo(Structure, CLIManagedResourceMixin):
     @path.setter
     def path(self, val):
         """Wrapper to set path"""
+        # pylint: disable=attribute-defined-outside-init
         self._path = val.encode('utf-8')
 
 
-class Tags(Structure):
+class Tags(Structure): # pylint: disable=too-few-public-methods
     """List of tags"""
     _fields_ = [
         ('tags', POINTER(c_char_p)),
@@ -273,14 +280,15 @@ class Tags(Structure):
         """Allocate C resources to create a native Tags instance from a python
         list of strings.
         """
+        super().__init__()
         if not tag_list:
             self.tags = None
             self.n_tags = 0
         else:
-            for i in range(len(tag_list)):
-                tag_list[i] = tag_list[i].encode('utf-8') if isinstance(tag_list[i], str) else tag_list[i]
-            tags = (c_char_p * len(tag_list))(*tag_list)
-            LIBPHOBOS.tags_init(byref(self), tags, len(tag_list))
+            enc_tags = list([tag.encode('utf-8') if isinstance(tag, str)
+                             else tag for _, tag in enumerate(tag_list)])
+            tags = (c_char_p * len(enc_tags))(*enc_tags)
+            LIBPHOBOS.tags_init(byref(self), tags, len(enc_tags))
 
     def free(self):
         """Free all allocated resources. Only call this if tag values were
@@ -288,7 +296,7 @@ class Tags(Structure):
         """
         LIBPHOBOS.tags_free(byref(self))
 
-class MediaFS(Structure):
+class MediaFS(Structure): # pylint: disable=too-few-public-methods
     """Media filesystem descriptor."""
     _fields_ = [
         ('type', c_int),
@@ -304,9 +312,10 @@ class MediaFS(Structure):
     @label.setter
     def label(self, val):
         """Wrapper to set label"""
+        # pylint: disable=attribute-defined-outside-init
         self._label = val.encode('utf-8')
 
-class MediaStats(Structure):
+class MediaStats(Structure): # pylint: disable=too-few-public-methods
     """Media usage descriptor."""
     _fields_ = [
         ('nb_obj', c_longlong),
@@ -434,11 +443,14 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
     @property
     def tags(self):
         """Wrapper to get tags"""
+        # pylint: disable=unsubscriptable-object
         return [t.decode('utf-8') for t in self._tags.tags[:self._tags.n_tags]]
 
     @tags.setter
     def tags(self, tags):
         """Wrapper to set tags"""
+        # pylint: disable=access-member-before-definition
+        # pylint: disable=attribute-defined-outside-init
         self._tags.free()
         self._tags = Tags(tags)
         # Manually creating and assigning tags means that we will have to free
@@ -471,6 +483,7 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
     @oid.setter
     def oid(self, val):
         """Wrapper to set oid"""
+        # pylint: disable=attribute-defined-outside-init
         self._oid = val.encode('utf-8')
 
     @property
@@ -481,9 +494,10 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
     @user_md.setter
     def user_md(self, val):
         """Wrapper to set user_md"""
+        # pylint: disable=attribute-defined-outside-init
         self._user_md = val.encode('utf-8')
 
-class Buffer(Structure):
+class Buffer(Structure): # pylint: disable=too-few-public-methods
     """String buffer."""
     _fields_ = [
         ('size', c_size_t),
@@ -498,9 +512,10 @@ class Buffer(Structure):
     @buff.setter
     def buff(self, val):
         """Wrapper to set buff"""
+        # pylint: disable=attribute-defined-outside-init
         self._buff = val.encode('utf-8')
 
-class ExtentInfo(Structure):
+class ExtentInfo(Structure): # pylint: disable=too-few-public-methods
     """DSS extent descriptor."""
     _fields_ = [
         ('layout_idx', c_int),
@@ -510,13 +525,13 @@ class ExtentInfo(Structure):
         ('addr_type', c_int)
     ]
 
-class PhoAttrs(Structure):
+class PhoAttrs(Structure): # pylint: disable=too-few-public-methods
     """Attribute set."""
     _fields_ = [
         ('attr_set', c_void_p)
     ]
 
-class ModuleDesc(Structure):
+class ModuleDesc(Structure): # pylint: disable=too-few-public-methods
     """Module description."""
     _fields_ = [
         ('_mod_name', c_char_p),
@@ -562,33 +577,33 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     def media_name(self):
         """Wrapper to get medium name."""
         return [cast(self.extents, POINTER(ExtentInfo))[i].media.name
-                    for i in range(self.ext_count)]
+                for i in range(self.ext_count)]
 
     @property
     def family(self):
         """Wrapper to get medium family."""
         return [rsc_family2str(cast(self.extents,
-                               POINTER(ExtentInfo))[i].media.family)
-                    for i in range(self.ext_count)]
+                                    POINTER(ExtentInfo))[i].media.family)
+                for i in range(self.ext_count)]
 
     @property
     def size(self):
         """Wrapper to get extent size."""
         return [cast(self.extents, POINTER(ExtentInfo))[i].size
-                    for i in range(self.ext_count)]
+                for i in range(self.ext_count)]
 
     @property
     def address(self):
         """Wrapper to get extent address."""
         return [cast(self.extents, POINTER(ExtentInfo))[i].address.buff
-                    for i in range(self.ext_count)]
+                for i in range(self.ext_count)]
 
     @property
     def layout(self):
         """Wrapper to get object layout."""
         return self.layout_desc.mod_name
 
-class Timeval(Structure):
+class Timeval(Structure): # pylint: disable=too-few-public-methods
     """standard struct timeval."""
     _fields_ = [
         ('tv_sec', c_long),
@@ -616,6 +631,7 @@ class PhoLogRec(Structure):
     @plr_file.setter
     def plr_file(self, val):
         """Wrapper to set plr_file"""
+        # pylint: disable=attribute-defined-outside-init
         self._plr_file = val.encode('utf-8')
 
     @property
@@ -626,6 +642,7 @@ class PhoLogRec(Structure):
     @plr_func.setter
     def plr_func(self, val):
         """Wrapper to set plr_func"""
+        # pylint: disable=attribute-defined-outside-init
         self._plr_func = val.encode('utf-8')
 
     @property
@@ -636,6 +653,7 @@ class PhoLogRec(Structure):
     @plr_msg.setter
     def plr_msg(self, val):
         """Wrapper to set plr_msg"""
+        # pylint: disable=attribute-defined-outside-init
         self._plr_msg = val.encode('utf-8')
 
 def pho_rc_check(rc, func, args):
@@ -665,11 +683,12 @@ def pho_rc_func(name, *args, **kwargs):
     func_type = CFUNCTYPE(c_int, *args, **kwargs)
     # Dynamically generate a subclass of func_type, as func_type must both
     # describe the type of the function and be callable
-    class _PhoRcFunc(func_type):
+    class _PhoRcFunc(func_type): # pylint: disable=too-few-public-methods
         """Overrides __call__ to set pho_rc_check as an errcheck"""
         # Definition needed by func_type's metaclass
         _flags_ = func_type._flags_
         def __call__(self, *args, **kwargs):
+            # pylint: disable=attribute-defined-outside-init
             self.errcheck = pho_rc_check
             return super(_PhoRcFunc, self).__call__(*args, **kwargs)
         def __str__(self):
