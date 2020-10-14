@@ -26,13 +26,12 @@ Provide access to LDM functionality with the right level (tm) of abstraction.
 import json
 import os.path
 
-from ctypes import *
+from ctypes import byref, c_bool, c_char_p, c_int, c_void_p, POINTER, Structure
 
 from phobos.core.ffi import LIBPHOBOS, pho_rc_check, pho_rc_func
-from phobos.core.glue import jansson_dumps
+from phobos.core.glue import jansson_dumps # pylint: disable=no-name-in-module
 
-
-class DevState(Structure):
+class DevState(Structure): # pylint: disable=too-few-public-methods
     """Device information as managed by LDM."""
     _fields_ = [
         ('lds_family', c_int),
@@ -45,7 +44,7 @@ class DevState(Structure):
         """Free allocated memory on garbage collection"""
         LIBPHOBOS.ldm_dev_state_fini(byref(self))
 
-class DevAdapter(Structure):
+class DevAdapter(Structure): # pylint: disable=too-few-public-methods
     """Opaque device handle."""
     _fields_ = [
         ('dev_lookup', c_void_p),
@@ -54,33 +53,35 @@ class DevAdapter(Structure):
         ('dev_eject', c_void_p)
     ]
 
-class LibHandle(Structure):
+class LibHandle(Structure): # pylint: disable=too-few-public-methods
     """Opaque lib handle"""
     _fields_ = [('_lh_lib', c_void_p)]
 
 
-class LibAdapter(Structure):
+class LibAdapter(Structure): # pylint: disable=too-few-public-methods
     """Opaque lib adapter."""
     _fields_ = [
         ('_lib_open', pho_rc_func("lib_open", c_void_p, c_char_p)),
         ('_lib_close', pho_rc_func("lib_close", c_void_p)),
         ('_lib_drive_lookup',
-            pho_rc_func("lib_drive_lookup", c_void_p, c_char_p, c_void_p)),
+         pho_rc_func("lib_drive_lookup", c_void_p, c_char_p, c_void_p)),
         ('_lib_media_lookup',
-            pho_rc_func("lib_media_lookup", c_void_p, c_char_p, c_void_p)),
+         pho_rc_func("lib_media_lookup", c_void_p, c_char_p, c_void_p)),
         ('_lib_media_move',
-            pho_rc_func("lib_media_move", c_void_p, c_void_p, c_void_p)),
+         pho_rc_func("lib_media_move", c_void_p, c_void_p, c_void_p)),
         ('_lib_scan', pho_rc_func("lib_scan", c_void_p, POINTER(c_void_p))),
         ('_lib_hdl', LibHandle),
     ]
 
     def __init__(self, lib_type, lib_dev_path):
+        super().__init__()
         LIBPHOBOS.get_lib_adapter.errcheck = pho_rc_check
         LIBPHOBOS.get_lib_adapter(lib_type, byref(self))
         if self._lib_open is not None:
             self._lib_open(byref(self._lib_hdl), lib_dev_path.encode('utf-8'))
 
     def __del__(self):
+        # pylint: disable=protected-access
         if self._lib_hdl._lh_lib is not None and self._lib_close is not None:
             self._lib_close(byref(self._lib_hdl))
 
