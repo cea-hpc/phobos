@@ -32,6 +32,7 @@ from ctypes import (byref, cast, CDLL, CFUNCTYPE, c_char, c_char_p, c_int,
 from enum import IntEnum
 
 from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable=no-name-in-module
+                               PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
                                PHO_RSC_DIR, PHO_RSC_DISK, PHO_RSC_TAPE,
                                fs_type2str, fs_status2str,
                                rsc_adm_status2str, rsc_family2str)
@@ -416,6 +417,12 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
     def adm_status(self, val):
         """Wrapper to set adm_status"""
         self.rsc.adm_status = val
+
+    @adm_status.setter
+    def is_adm_locked(self, val):
+        """Wrapper to set adm_status using a boolean: True is locked"""
+        self.rsc.adm_status = (PHO_RSC_ADM_ST_LOCKED if val
+                               else PHO_RSC_ADM_ST_UNLOCKED)
 
     @property
     def expanded_fs_info(self):

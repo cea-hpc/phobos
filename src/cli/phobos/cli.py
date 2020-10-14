@@ -770,8 +770,9 @@ class MediaOptHandler(BaseResourceOptHandler):
 
         for med in names:
             try:
-                self.client.media.add(self.family, fstype, techno, med,
-                                      tags=tags, locked=keep_locked)
+                medium = MediaInfo(family=self.family, name=med, model=techno,
+                                   is_adm_locked=keep_locked)
+                self.client.media.add(medium, fstype, tags=tags)
             except EnvironmentError as err:
                 self.logger.error("Cannot add medium %s: %s", med,
                                   env_error_format(err))
@@ -983,8 +984,10 @@ class DirOptHandler(MediaOptHandler):
                     medium_is_added = False
 
                     try:
-                        self.client.media.add(self.family, 'POSIX', None, path,
-                                              locked=keep_locked, tags=tags)
+                        medium = MediaInfo(family=self.family, name=path,
+                                           model=None,
+                                           is_adm_locked=keep_locked)
+                        self.client.media.add(medium, 'POSIX', tags=tags)
                         medium_is_added = True
                         adm.device_add(self.family, [path], False)
                         valid_count += 1

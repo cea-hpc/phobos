@@ -29,19 +29,14 @@ import json
 import logging
 import os
 import time
-from ctypes import *
+from ctypes import byref, c_int, c_void_p, POINTER, Structure
 from socket import gethostname
 from abc import ABCMeta, abstractmethod, abstractproperty
 
-from phobos.core.const import str2fs_type
-from phobos.core.const import PHO_ADDR_HASH1
-from phobos.core.const import PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED
-from phobos.core.const import DSS_SET_INSERT, DSS_SET_UPDATE, DSS_SET_DELETE
+from phobos.core.const import (DSS_SET_DELETE, DSS_SET_INSERT, DSS_SET_UPDATE, # pylint: disable=no-name-in-module
+                               PHO_ADDR_HASH1, str2fs_type)
 
-from phobos.core.ffi import (DevInfo, Id, MediaInfo, MediaStats,
-                             Resource, LIBPHOBOS)
-from phobos.core.ldm import ldm_device_query
-
+from phobos.core.ffi import DevInfo, MediaInfo, MediaStats, LIBPHOBOS
 
 # Valid filter suffix and associated operators.
 FILTER_OPERATORS = (
@@ -63,7 +58,7 @@ OBJECT_PREFIXES = {
     'media':  'DSS::MDA::',
 }
 
-class JSONFilter(Structure):
+class JSONFilter(Structure): # pylint: disable=too-few-public-methods
     """JSON DSS filter"""
     _fields_ = [
         ('df_json', c_void_p)
@@ -112,7 +107,7 @@ def dss_filter(obj_type, **kwargs):
 
     return filt
 
-class DSSResult:
+class DSSResult: # pylint: disable=too-few-public-methods
     """Wrapper on the native struct dss_result"""
 
     def __init__(self, native_result, n_elts):
@@ -129,7 +124,7 @@ class DSSResult:
         return self._n_elts
 
     def __getitem__(self, index):
-        if (index >= self._n_elts or index < -self._n_elts):
+        if index >= self._n_elts or index < -self._n_elts:
             raise IndexError("Index must be between -%d and %d, got %r"
                              % (self._n_elts, self._n_elts - 1, index))
         if index < 0:
@@ -138,7 +133,7 @@ class DSSResult:
         # This is necessary so that self is always referenced when _native_res
         # items are referenced. Without this, self.__del__ could be called
         # although there exist references on _native_res items.
-        item._dss_result_parent_link = self
+        item._dss_result_parent_link = self # pylint: disable=protected-access
         return item
 
 class BaseEntityManager:
@@ -154,24 +149,22 @@ class BaseEntityManager:
     @abstractmethod
     def _dss_get(self, hdl, qry_filter, res, res_cnt):
         """Return DSS specialized GET method for this type of object."""
-        pass
 
     @abstractmethod
     def _dss_set(self, hdl, obj, obj_cnt, opcode):
         """Return DSS specialized SET method for this type of object."""
-        pass
 
     @abstractproperty
     def wrapped_class(self):
         """Return the ctype class which this proxy wraps."""
-        pass
 
     @abstractproperty
     def wrapped_ident(self):
         """Return the short name of the clas which this proxy wraps."""
-        pass
 
-    def convert_kwargs(self, name, keyop, **kwargs):
+    @staticmethod
+    def convert_kwargs(name, keyop, **kwargs):
+        """Convert the given kwargs field using the new keyop."""
         if kwargs.get(name, None):
             arg = kwargs.pop(name)
             kwargs[keyop] = arg
@@ -220,8 +213,8 @@ class BaseEntityManager:
 
         obj_cnt = len(objects)
         obj = (self.wrapped_class * obj_cnt)()
-        for i, o in enumerate(objects):
-            obj[i] = o
+        for i, elt in enumerate(objects):
+            obj[i] = elt
 
         rc = self._dss_set(byref(self.client.handle), obj, obj_cnt, opcode)
         if rc:
@@ -229,21 +222,15 @@ class BaseEntityManager:
 
     def insert(self, objects):
         """Insert objects into DSS"""
-        rc = self._generic_set(objects, DSS_SET_INSERT)
-        if rc:
-            raise EnvironmentError(rc, "Cannot insert objects")
+        self._generic_set(objects, DSS_SET_INSERT)
 
     def update(self, objects):
         """Update objects in DSS"""
-        rc = self._generic_set(objects, DSS_SET_UPDATE)
-        if rc:
-            raise EnvironmentError(rc, "Cannot update objects")
+        self._generic_set(objects, DSS_SET_UPDATE)
 
     def delete(self, objects):
         """Delete objects from DSS"""
-        rc = self._generic_set(objects, DSS_SET_DELETE)
-        if rc:
-            raise EnvironmentError(rc, "Cannot delete objects")
+        self._generic_set(objects, DSS_SET_DELETE)
 
     def _generic_lock_unlock(self, objects, lock_c_func, err_message,
                              lock_owner):
@@ -309,12 +296,8 @@ class MediaManager(BaseEntityManager):
         )
         self.lock_owner_count += 1
 
-    def add(self, family, fstype, model, name, tags=None, locked=False):
+    def add(self, media, fstype, tags=None):
         """Insert media into DSS."""
-        status = PHO_RSC_ADM_ST_LOCKED if locked else PHO_RSC_ADM_ST_UNLOCKED
-
-        media = MediaInfo(family=family, name=name, model=model,
-                          adm_status=status)
         media.fs.type = str2fs_type(fstype)
         media.addr_type = PHO_ADDR_HASH1
         media.tags = tags or []
@@ -325,8 +308,7 @@ class MediaManager(BaseEntityManager):
 
         self.logger.debug("Media '%s' successfully added: "\
                           "model=%s fs=%s (%s)",
-                          name, model, fstype,
-                          locked and "locked" or "unlocked")
+                          media.name, media.model, fstype, media.adm_status)
 
     def remove(self, family, name):
         """Delete media from DSS."""
@@ -359,7 +341,7 @@ class MediaManager(BaseEntityManager):
             None if force else self.lock_owner,
         )
 
-class DSSHandle(Structure):
+class DSSHandle(Structure): # pylint: disable=too-few-public-methods
     """
     Wrap connection to the backend. Absolutely opaque and propagated everywhere.
     """
@@ -391,7 +373,7 @@ class Client:
         """
         self.disconnect()
 
-    def connect(self, **kwargs):
+    def connect(self):
         """ Establish a fresh connection or renew a stalled one if needed."""
         if self.handle is not None:
             self.disconnect()

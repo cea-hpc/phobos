@@ -73,16 +73,18 @@ class DSSClientTest(unittest.TestCase):
     def test_list_media_by_tags(self):
         """List media with tags."""
         with Client() as client:
-            client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm0')
-            client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm1', tags=['foo'])
-            client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm2', \
-                                                    tags=['foo', 'bar'])
-            client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm3', \
-                                                    tags=['goo', 'foo'])
-            client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm4', \
-                                                    tags=['bar', 'goo'])
-            client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm5', \
-                                                    tags=['foo', 'bar', 'goo'])
+            blank_medium = MediaInfo(family=PHO_RSC_DIR, name='m0', model=None)
+            client.media.add(blank_medium, 'POSIX')
+            blank_medium.name = 'm1'
+            client.media.add(blank_medium, 'POSIX', tags=['foo'])
+            blank_medium.name = 'm2'
+            client.media.add(blank_medium, 'POSIX', tags=['foo', 'bar'])
+            blank_medium.name = 'm3'
+            client.media.add(blank_medium, 'POSIX', tags=['goo', 'foo'])
+            blank_medium.name = 'm4'
+            client.media.add(blank_medium, 'POSIX', tags=['bar', 'goo'])
+            blank_medium.name = 'm5'
+            client.media.add(blank_medium, 'POSIX', tags=['foo', 'bar', 'goo'])
             n_tags = {'foo': 4, 'bar': 3, 'goo': 3}
             n_bar_foo = 2
 
@@ -131,9 +133,9 @@ class DSSClientTest(unittest.TestCase):
         """The input data is sanitized and does not cause an SQL injection."""
         # Not the best place to test SQL escaping, but most convenient one.
         with Client() as client:
-            client.media.add(
-                PHO_RSC_TAPE, "LTFS", "lto8", "TAPE_SQLI_0'; <sqli>",
-            )
+            medium = MediaInfo(family=PHO_RSC_TAPE, name="TAPE_SQLI_0'; <sqli>",
+                               model="lto8")
+            client.media.add(medium, "LTFS")
 
     def test_manipulate_empty(self): # pylint: disable=no-self-use
         """SET/DEL empty and None objects."""
@@ -152,11 +154,13 @@ class DSSClientTest(unittest.TestCase):
         """Test media lock and unlock wrappers"""
         with Client() as client:
             # Create a dummy media in db
-            name = '/some/path_%d' % randint(0, 1000000)
-            client.media.add(PHO_RSC_DIR, 'POSIX', None, name, locked=False)
+            medium = MediaInfo(name='/some/path_%d' % randint(0, 1000000),
+                               family=PHO_RSC_DIR, model=None,
+                               is_adm_locked=False)
+            client.media.add(medium, 'POSIX')
 
             # Get the created media from db
-            media = client.media.get(id=name)[0]
+            media = client.media.get(id=medium.name)[0]
 
             # It should not be locked yet
             self.assertFalse(media.is_locked())
@@ -169,7 +173,7 @@ class DSSClientTest(unittest.TestCase):
                 client.media.lock([media])
 
             # Retrieve an up-to-date version
-            media = client.media.get(id=name)[0]
+            media = client.media.get(id=medium.name)[0]
 
             # This one should be locked
             self.assertTrue(media.is_locked())
@@ -181,7 +185,7 @@ class DSSClientTest(unittest.TestCase):
             client.media.unlock([media])
 
             # The up-to-date version isn't locked anymore
-            media = client.media.get(id=name)[0]
+            media = client.media.get(id=medium.name)[0]
             self.assertFalse(media.is_locked())
 
 
