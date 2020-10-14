@@ -55,7 +55,7 @@ def migrate(args, migrator):
 
     # Skip confirmation for '-y' and if the database wasn't initialized
     if not args.yes and schema_version != "0":
-        print("Your are about to upgrade database schema from version %s "
+        print("You are about to upgrade database schema from version %s "
               "to version %s." % (schema_version, target_version))
         confirm = raw_input("Do you want to continue? [y/N]: ")
         if confirm != 'y':
