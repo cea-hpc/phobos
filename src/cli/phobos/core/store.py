@@ -28,23 +28,25 @@ import logging
 import os
 
 from collections import namedtuple
-from ctypes import *
+from ctypes import (byref, c_char_p, c_int, c_ssize_t, c_void_p, cast,
+                    CFUNCTYPE, pointer, POINTER, py_object, Structure, Union)
 
 from phobos.core.ffi import LIBPHOBOS, ObjectInfo, Tags
 from phobos.core.cfg import get_val as cfg_get_val
-from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OP_GET,
+from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OP_GET, # pylint: disable=no-name-in-module
                                PHO_XFER_OP_GETMD, PHO_XFER_OP_PUT,
-                               PHO_RSC_INVAL, str2rsc_family)
+                               str2rsc_family)
 
-AttrsForeachCBType = CFUNCTYPE(c_int, c_char_p, c_char_p, c_void_p)
+ATTRS_FOREACH_CB_TYPE = CFUNCTYPE(c_int, c_char_p, c_char_p, c_void_p)
 
-class PhoAttrs(Structure):
+class PhoAttrs(Structure): # pylint: disable=too-few-public-methods
     """Embedded hashtable, typically exposed as python dict here."""
     _fields_ = [
         ('attr_set', c_void_p)
     ]
 
     def __init__(self):
+        super().__init__()
         self.attr_set = 0
 
 def attrs_as_dict(attrs):
@@ -58,13 +60,13 @@ def attrs_as_dict(attrs):
         data[key] = val
         return 0
     res = {}
-    cb = AttrsForeachCBType(inner_attrs_mapper)
+    callback = ATTRS_FOREACH_CB_TYPE(inner_attrs_mapper)
     c_res = cast(pointer(py_object(res)), c_void_p)
-    LIBPHOBOS.pho_attrs_foreach(byref(attrs), cb, c_res)
+    LIBPHOBOS.pho_attrs_foreach(byref(attrs), callback, c_res)
     res = {k.decode('utf-8'): v.decode('utf-8') for k, v in res.items()}
     return res
 
-class XferPutParams(Structure):
+class XferPutParams(Structure): # pylint: disable=too-few-public-methods
     """Phobos PUT parameters of the XferDescriptor."""
     _fields_ = [
         ("size", c_ssize_t),
@@ -74,6 +76,7 @@ class XferPutParams(Structure):
     ]
 
     def __init__(self, put_params):
+        super().__init__()
         self.size = -1
         self.layout_name = put_params.layout
         self.tags = Tags(put_params.tags)
@@ -91,6 +94,7 @@ class XferPutParams(Structure):
     @layout_name.setter
     def layout_name(self, val):
         """Wrapper to set layout_name"""
+        # pylint: disable=attribute-defined-outside-init
         self._layout_name = val.encode('utf-8') if val else None
 
 class PutParams(namedtuple('PutParams', 'family layout tags')):
@@ -101,7 +105,7 @@ class PutParams(namedtuple('PutParams', 'family layout tags')):
     __slots__ = ()
 PutParams.__new__.__defaults__ = (None,) * len(PutParams._fields)
 
-class XferOpParams(Union):
+class XferOpParams(Union): # pylint: disable=too-few-public-methods
     """Phobos operation parameters of the XferDescriptor."""
     _fields_ = [
         ("put", XferPutParams),
@@ -119,6 +123,13 @@ class XferDescriptor(Structure):
         ("xd_rc", c_int),
     ]
 
+    def __init__(self):
+        super().__init__()
+        self.xd_fd = -1
+        self.xd_op = -1
+        self.xd_flags = 0
+        self.xd_rc = 0
+
     @property
     def xd_objid(self):
         """Wrapper to get xd_objid"""
@@ -127,6 +138,7 @@ class XferDescriptor(Structure):
     @xd_objid.setter
     def xd_objid(self, val):
         """Wrapper to set xd_objid"""
+        # pylint: disable=attribute-defined-outside-init
         self._xd_objid = val.encode('utf-8') if val else None
 
     def creat_flags(self):
@@ -160,10 +172,10 @@ class XferDescriptor(Structure):
         else:
             try:
                 self.xd_fd = os.open(path, os.O_RDONLY | os.O_NOATIME)
-            except OSError as e:
+            except OSError as exc:
                 # not allowed to open with NOATIME arg, try without
-                if e.errno != errno.EPERM:
-                    raise e
+                if exc.errno != errno.EPERM:
+                    raise exc
                 self.xd_fd = os.open(path, os.O_RDONLY)
 
             self.xd_params.put.size = os.fstat(self.xd_fd).st_size
@@ -195,9 +207,21 @@ class XferDescriptor(Structure):
 
         self.open_file(desc[1])
 
-XferCompletionCBType = CFUNCTYPE(None, c_void_p, POINTER(XferDescriptor), c_int)
+XFER_COMPLETION_CB_TYPE = CFUNCTYPE(None, c_void_p, POINTER(XferDescriptor),
+                                    c_int)
+
+def compl_cb_convert(compl_cb):
+    """
+    Internal conversion method to turn a python callable into a C
+    completion callback as expected by phobos_{get,put} functions.
+    """
+    if not callable(compl_cb):
+        raise TypeError("Completion handler must be callable")
+
+    return XFER_COMPLETION_CB_TYPE(compl_cb)
 
 class Store:
+    """Store handler"""
     def __init__(self, *args, **kwargs):
         """Initialize new instance."""
         super(Store, self).__init__(*args, **kwargs)
@@ -206,49 +230,42 @@ class Store:
         self.logger = logging.getLogger(__name__)
         self._cb = None
 
-    def xfer_desc_convert(self, xfer_descriptors):
+    @staticmethod
+    def xfer_desc_convert(xfer_descriptors):
         """
         Internal conversion method to turn a python list into an array of
         struct xfer_descriptor as expected by phobos_{get,put} functions.
         xfer_descriptors is a list of (id, path, attrs, flags, tags, op).
         The element conversion is made by the xfer_descriptor initializer.
         """
-        XferArrayType = XferDescriptor * len(xfer_descriptors)
-        xfr = XferArrayType()
-        for i, x in enumerate(xfer_descriptors):
-            xfr[i].init_from_descriptor(x)
+        xfer_array_type = XferDescriptor * len(xfer_descriptors)
+        xfr = xfer_array_type()
+        for i, val in enumerate(xfer_descriptors):
+            xfr[i].init_from_descriptor(val)
 
         return xfr
 
-    def xfer_desc_release(self, xfer):
+    @staticmethod
+    def xfer_desc_release(xfer):
         """
         Release memory associated to xfer_descriptors in both phobos and cli.
         """
-        for xd in xfer:
-            if xd.xd_fd >= 0:
-                os.close (xd.xd_fd)
+        for elt in xfer:
+            if elt.xd_fd >= 0:
+                os.close(elt.xd_fd)
 
             LIBPHOBOS.pho_xfer_desc_destroy(byref(xfer))
 
-    def compl_cb_convert(self, compl_cb):
-        """
-        Internal conversion method to turn a python callable into a C
-        completion callback as expected by phobos_{get,put} functions.
-        """
-        if not callable(compl_cb):
-            raise TypeError("Completion handler must be callable")
-
-        return XferCompletionCBType(compl_cb)
-
     def phobos_xfer(self, action_func, xfer_descriptors, compl_cb):
+        """Wrapper for phobos_xfer API calls."""
         xfer = self.xfer_desc_convert(xfer_descriptors)
-        n = len(xfer_descriptors)
-        self._cb = self.compl_cb_convert(compl_cb)
-        rc = action_func(xfer, n, self._cb, None)
+        n_xfer = len(xfer_descriptors)
+        self._cb = compl_cb_convert(compl_cb)
+        rc = action_func(xfer, n_xfer, self._cb, None)
         self.xfer_desc_release(xfer)
         return rc
 
-class XferClient:
+class XferClient: # pylint: disable=too-many-instance-attributes
     """Main class: issue data transfers with the object store."""
     def __init__(self, **kwargs):
         """Initialize a new instance."""
@@ -258,10 +275,12 @@ class XferClient:
         self.getmd_session = []
         self.get_session = []
         self.put_session = []
+        self._getmd_cb = None
+        self._get_cb = None
+        self._put_cb = None
 
     def noop_compl_cb(self, *args, **kwargs):
         """Default, empty transfer completion handler."""
-        pass
 
     def getmd_register(self, oid, data_path, attrs=None):
         """Enqueue a GETMD transfer."""
@@ -290,7 +309,7 @@ class XferClient:
 
     # TODO: in case phobos_xfer is called from phobos instead of
     # phobos_{getmd,get,put}, merge the sessions into one attribute.
-    def run(self, compl_cb=None, **kwargs):
+    def run(self, compl_cb=None):
         """Execute all registered transfer orders."""
         if compl_cb is None:
             compl_cb = self.noop_compl_cb
@@ -324,7 +343,8 @@ class UtilClient:
         super(UtilClient, self).__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
 
-    def object_list(self, pattern, metadata):
+    @staticmethod
+    def object_list(pattern, metadata):
         """List objects."""
         n_objs = c_int(0)
         objs = POINTER(ObjectInfo)()
@@ -339,10 +359,11 @@ class UtilClient:
             raise EnvironmentError(rc)
 
         objs = (ObjectInfo * n_objs.value).from_address(
-                                                cast(objs, c_void_p).value)
+            cast(objs, c_void_p).value)
 
         return objs
 
-    def list_free(self, objs, n_objs):
+    @staticmethod
+    def list_free(objs, n_objs):
         """Free a previously obtained object list."""
         LIBPHOBOS.phobos_store_object_list_free(objs, n_objs)
