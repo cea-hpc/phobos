@@ -676,7 +676,7 @@ class ObjectOptHandler(BaseResourceOptHandler):
             objs = client.object_list(self.params.get('pattern'), metadata)
 
             if objs:
-                dump_object_list(objs, 'object', attr=out_attrs,
+                dump_object_list(objs, attr=out_attrs,
                                  fmt=self.params.get('format'))
 
             client.list_free(objs, len(objs))
@@ -879,7 +879,7 @@ class MediaOptHandler(BaseResourceOptHandler):
             objs = list(self.client.media.get(family=self.family, **kwargs))
 
         if len(objs) > 0:
-            dump_object_list(objs, 'media', attr=self.params.get('output'),
+            dump_object_list(objs, attr=self.params.get('output'),
                              fmt=self.params.get('format'))
 
     def exec_lock(self):
@@ -1045,7 +1045,7 @@ class DriveOptHandler(DeviceOptHandler):
             objs = list(self.client.devices.get(family=self.family, **kwargs))
 
         if len(objs) > 0:
-            dump_object_list(objs, 'device', attr=self.params.get('output'),
+            dump_object_list(objs, attr=self.params.get('output'),
                              fmt=self.params.get('format'))
 
 class TapeOptHandler(MediaOptHandler):
@@ -1088,7 +1088,7 @@ class ExtentOptHandler(BaseResourceOptHandler):
                     self.params.get('degroup'))
 
                 if len(obj_list) > 0:
-                    dump_object_list(obj_list, 'extent', attr=out_attrs,
+                    dump_object_list(obj_list, attr=out_attrs,
                                      fmt=self.params.get('format'))
 
                 adm.layout_list_free(p_objs, n_objs)

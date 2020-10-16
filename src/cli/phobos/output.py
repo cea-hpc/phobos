@@ -27,9 +27,9 @@ from collections import OrderedDict
 import csv
 from io import StringIO
 import json
-from tabulate import tabulate
 import xml.dom.minidom
 import xml.etree.ElementTree
+from tabulate import tabulate
 
 from phobos.core.utils import bytes2human
 
@@ -86,6 +86,7 @@ def human_pretty_dump(data):
     return out
 
 def filter_display_dict(objs, attrs):
+    """Filter retrieved information to only display the selected ones."""
     info = [x.get_display_dict() for x in objs]
 
     # If all/* is an attribute, we fetch them all
@@ -99,7 +100,7 @@ def filter_display_dict(objs, attrs):
 
     return obj_list
 
-def dump_object_list(objs, item_type, attr=None, fmt="human"):
+def dump_object_list(objs, attr=None, fmt="human"):
     """Helper for user friendly object display."""
     if not objs:
         return
