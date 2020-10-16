@@ -47,13 +47,6 @@ class PhoAttrs(Structure):
     def __init__(self):
         self.attr_set = 0
 
-def attrs_from_dict(dct):
-    """Fill up from a python dictionary"""
-    attrs = PhoAttrs()
-    for k, v in dvt.iteritems():
-        LIBPHOBOS.pho_attr_set(byref(attrs), str(k), str(v))
-    return attrs
-
 def attrs_as_dict(attrs):
     """Return a python dictionary containing the attributes"""
     def inner_attrs_mapper(key, val, c_data):
