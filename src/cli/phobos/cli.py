@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pylint: disable=too-many-lines
 
 #
 #  All rights reserved (c) 2014-2020 CEA/DAM.
@@ -45,7 +46,7 @@ from ClusterShell.NodeSet import NodeSet
 
 from phobos.core.admin import Client as AdminClient
 from phobos.core.cfg import load_file as cfg_load_file
-from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str,
+from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED)
 from phobos.core.dss import Client as DSSClient
 from phobos.core.ffi import (DevInfo, LayoutInfo, MediaInfo, ObjectInfo,
@@ -135,7 +136,6 @@ class BaseOptHandler(object):
         """
         Optional method handlers can implement to prepare execution context.
         """
-        pass
 
     @abstractmethod
     def __exit__(self, exc_type, exc_value, traceback):
@@ -143,12 +143,10 @@ class BaseOptHandler(object):
         Optional method handlers can implement to release resources after
         execution.
         """
-        pass
 
     @classmethod
     def add_options(cls, parser):
         """Add options for this specific command-line subsection."""
-        pass
 
     @classmethod
     def subparser_register(cls, base_parser):
@@ -224,7 +222,7 @@ class StoreGetMDHandler(XferOptHandler):
         parser.add_argument('object_id', help='Object to target')
 
     @staticmethod
-    def _compl_notify(data, xfr, err_code):
+    def _compl_notify(data, xfr, err_code): # pylint: disable=unused-argument
         """Custom completion handler to display metadata."""
         if err_code != 0:
             return
@@ -366,7 +364,7 @@ class StoreMPutHandler(StoreGenericPutHandler):
             if not line or line.startswith('#'):
                 continue
 
-            match = re.match("(\S+)\s+(\S+)\s+(.*)", line)
+            match = re.match(r"(\S+)\s+(\S+)\s+(.*)", line)
             if match is None:
                 self.logger.error("Format error on line %d: %s", i, line)
                 sys.exit(os.EX_DATAERR)
@@ -497,6 +495,12 @@ class ScanOptHandler(BaseOptHandler):
     label = 'scan'
     descr = 'scan a physical resource and display retrieved information'
 
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
     @classmethod
     def add_options(cls, parser):
         """Add resource-specific options."""
@@ -516,13 +520,13 @@ class DriveListOptHandler(ListOptHandler):
         super(DriveListOptHandler, cls).add_options(parser)
         parser.add_argument('-m', '--model', help='filter on model')
 
-        attr = [x for x in DevInfo().get_display_dict().keys()]
+        attr = list(DevInfo().get_display_dict().keys())
         attr.sort()
         parser.add_argument('-o', '--output', type=lambda t: t.split(','),
                             default='name',
-                            help="attributes to output, comma-separated, "
-                                 "choose from {" + " ".join(attr) + "} "
-                                 "(default: %(default)s)")
+                            help=("attributes to output, comma-separated, "
+                                  "choose from {" + " ".join(attr) + "} "
+                                  "(default: %(default)s)"))
 
 class MediaListOptHandler(ListOptHandler):
     """
@@ -537,13 +541,13 @@ class MediaListOptHandler(ListOptHandler):
         parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
                             help='filter on tags (comma-separated: foo,bar)')
 
-        attr = [x for x in MediaInfo().get_display_dict().keys()]
+        attr = list(MediaInfo().get_display_dict().keys())
         attr.sort()
         parser.add_argument('-o', '--output', type=lambda t: t.split(','),
                             default='name',
-                            help="attributes to output, comma-separated, "
-                                 "choose from {" + " ".join(attr) + "} "
-                                 "(default: %(default)s)")
+                            help=("attributes to output, comma-separated, "
+                                  "choose from {" + " ".join(attr) + "} "
+                                  "(default: %(default)s)"))
 
 class ObjectListOptHandler(PatternListOptHandler):
     """
@@ -560,9 +564,9 @@ class ObjectListOptHandler(PatternListOptHandler):
         attrs.sort()
         parser.add_argument('-o', '--output', type=lambda t: t.split(','),
                             default='oid',
-                            help="attributes to output, comma-separated, "
-                                 "choose from {" + " ".join(attrs) + "} "
-                                 "default: %(default)s)")
+                            help=("attributes to output, comma-separated, "
+                                  "choose from {" + " ".join(attrs) + "} "
+                                  "default: %(default)s)"))
         parser.add_argument('-m', '--metadata', type=lambda t: t.split(','),
                             help="filter on metadata, comma-separated "
                                  "'key=value' parameters")
@@ -578,13 +582,13 @@ class ExtentListOptHandler(PatternListOptHandler):
         """Add extent-specific options."""
         super(ExtentListOptHandler, cls).add_options(parser)
 
-        attr = [x for x in LayoutInfo().get_display_dict().keys()]
+        attr = list(LayoutInfo().get_display_dict().keys())
         attr.sort()
         parser.add_argument('-o', '--output', type=lambda t: t.split(','),
                             default='oid',
-                            help="attributes to output, comma-separated, "
-                                 "choose from {" + " ".join(attr) + "} "
-                                 "default: %(default)s)")
+                            help=("attributes to output, comma-separated, "
+                                  "choose from {" + " ".join(attr) + "} "
+                                  "default: %(default)s)"))
         parser.add_argument('-n', '--name',
                             help="filter on one medium name")
         parser.add_argument('--degroup', action='store_true',
@@ -639,10 +643,6 @@ class BaseResourceOptHandler(DSSInteractHandler):
     family = None
     verbs = []
 
-    def filter(self, ident):
-        """Return a list of objects that match the provided identifier."""
-        raise NotImplementedError("Abstract method subclasses must implement")
-
 class ObjectOptHandler(BaseResourceOptHandler):
     """Shared interface for objects."""
     label = 'object'
@@ -664,10 +664,10 @@ class ObjectOptHandler(BaseResourceOptHandler):
         metadata = []
         if self.params.get('metadata'):
             metadata = self.params.get('metadata')
-            for md in metadata:
-                if '=' not in md:
+            for elt in metadata:
+                if '=' not in elt:
                     self.logger.error("Metadata parameter '%s' must be a "
-                                      "'key=value'", md)
+                                      "'key=value'", elt)
                     sys.exit(os.EX_USAGE)
 
         client = UtilClient()
@@ -675,7 +675,7 @@ class ObjectOptHandler(BaseResourceOptHandler):
         try:
             objs = client.object_list(self.params.get('pattern'), metadata)
 
-            if len(objs):
+            if objs:
                 dump_object_list(objs, 'object', attr=out_attrs,
                                  fmt=self.params.get('format'))
 
@@ -852,7 +852,7 @@ class MediaOptHandler(BaseResourceOptHandler):
 
     def exec_list(self):
         """List media and display results."""
-        attrs = [x for x in MediaInfo().get_display_dict().keys()]
+        attrs = list(MediaInfo().get_display_dict().keys())
         attrs.extend(['*', 'all'])
         out_attrs = self.params.get('output')
         bad_attrs = set(out_attrs).difference(set(attrs))
@@ -875,8 +875,7 @@ class MediaOptHandler(BaseResourceOptHandler):
                 assert len(curr) == 1
                 objs.append(curr[0])
         else:
-            objs = self.client.media.get(family=self.family, **kwargs)
-
+            objs = list(self.client.media.get(family=self.family, **kwargs))
 
         if len(objs) > 0:
             dump_object_list(objs, 'media', attr=self.params.get('output'),
@@ -917,7 +916,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         finally:
             self.client.media.unlock(results)
 
-        self.logger.info("%d media(s) locked" % len(results))
+        self.logger.info("%d media(s) locked", len(results))
 
     def exec_unlock(self):
         """Unlock media"""
@@ -939,7 +938,7 @@ class MediaOptHandler(BaseResourceOptHandler):
             assert len(media) == 1
 
             if media[0].rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED:
-                self.logger.warn("Media %s is already unlocked", uid)
+                self.logger.warning("Media %s is already unlocked", uid)
 
             media[0].rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED
             results.append(media[0])
@@ -957,8 +956,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         finally:
             self.client.media.unlock(results)
 
-        self.logger.info("%d media(s) unlocked" % len(results))
-
+        self.logger.info("%d media(s) unlocked", len(results))
 
 class DirOptHandler(MediaOptHandler):
     """Directory-related options and actions."""
@@ -1020,7 +1018,7 @@ class DriveOptHandler(DeviceOptHandler):
 
     def exec_list(self):
         """List devices and display results."""
-        attrs = [x for x in DevInfo().get_display_dict().keys()]
+        attrs = list(DevInfo().get_display_dict().keys())
         attrs.extend(['*', 'all'])
         out_attrs = self.params.get('output')
         bad_attrs = set(out_attrs).difference(set(attrs))
@@ -1041,7 +1039,7 @@ class DriveOptHandler(DeviceOptHandler):
                 assert len(curr) == 1
                 objs.append(curr[0])
         else:
-            objs = self.client.devices.get(family=self.family, **kwargs)
+            objs = list(self.client.devices.get(family=self.family, **kwargs))
 
         if len(objs) > 0:
             dump_object_list(objs, 'device', attr=self.params.get('output'),
@@ -1071,7 +1069,7 @@ class ExtentOptHandler(BaseResourceOptHandler):
 
     def exec_list(self):
         """List extents."""
-        attrs = [x for x in LayoutInfo().get_display_dict().keys()]
+        attrs = list(LayoutInfo().get_display_dict().keys())
         attrs.extend(['*', 'all'])
         out_attrs = self.params.get('output')
         bad_attrs = set(out_attrs).difference(set(attrs))
@@ -1082,19 +1080,18 @@ class ExtentOptHandler(BaseResourceOptHandler):
         try:
             with AdminClient(lrs_required=False) as adm:
                 obj_list, p_objs, n_objs = adm.layout_list(
-                                               self.params.get('pattern'),
-                                               self.params.get('name'),
-                                               self.params.get('degroup'))
+                    self.params.get('pattern'),
+                    self.params.get('name'),
+                    self.params.get('degroup'))
 
                 if len(obj_list) > 0:
                     dump_object_list(obj_list, 'extent', attr=out_attrs,
                                      fmt=self.params.get('format'))
 
                 adm.layout_list_free(p_objs, n_objs)
-        except EnvironmentError as err:
+        except EnvironmentError:
             self.logger.error("Cannot list extents")
             sys.exit(os.EX_DATAERR)
-
 
 class LibOptHandler(BaseResourceOptHandler):
     """Tape library options and actions."""
@@ -1308,10 +1305,9 @@ class PhobosActionContext(object):
         raise NotImplementedError("Unexpected parameters: '%s' '%s'" % (target,
                                                                         action))
 
-
-def phobos_main(args=sys.argv[1::]):
+def phobos_main(args=None):
     """
     Entry point for the `phobos' command. Indirectly provides
     argument parsing and execution of the appropriate actions.
     """
-    PhobosActionContext(args).run()
+    PhobosActionContext(args if args is not None else sys.argv[1::]).run()
