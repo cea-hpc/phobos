@@ -49,6 +49,11 @@
 #define RETRY_SLEEP_MAX_US (1000 * 1000) /* 1 second */
 #define RETRY_SLEEP_MIN_US (10 * 1000)   /* 10 ms */
 
+#define ALIAS_SECTION_CFG "alias \"%s\""
+#define ALIAS_FAMILY_CFG_PARAM "family"
+#define ALIAS_LAYOUT_CFG_PARAM "layout"
+#define ALIAS_TAGS_CFG_PARAM "tags"
+
 /**
  * List of configuration parameters for store
  */
@@ -194,18 +199,170 @@ err_nores:
     return rc;
 }
 
-/** Return the (configured) default resource family. */
-static enum rsc_family default_family_from_cfg(void)
+/**
+ * Load a value from an alias from the cfg
+ *
+ * @param[in]   section_name    the name of the config section (alias "name")
+ *                              to get the values from
+ * @param[in]   config_param    the name of the config parameter to get
+ * @param[out]  res             the value if found in the config, unchanged
+ *                              otherwise
+ *
+ * @return 0 on success, -errno on error.
+ */
+static void alias_val_from_cfg
+    (char * section_name, char * config_param, const char ** res)
 {
-    const char *fam_str;
+    int rc;
+    const char * res_dup = *res;
 
-    fam_str = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, default_family);
-    if (fam_str == NULL)
-        return PHO_RSC_INVAL;
-
-    return str2rsc_family(fam_str);
+    rc = pho_cfg_get_val(section_name, config_param, res);
+    if (rc)
+    {
+        pho_info("Unable to find parameter '%s' in section '%s' of the "
+                "configuration",
+                config_param, section_name);
+        *res = res_dup;
+    }
 }
 
+/**
+ * Convert the string of the form "tag1,tag2" into seperate tags (tag1 and tag2)
+ *
+ * @param[in]   tag_str the string to extract the tags from
+ * @param[out]  tags    the tags struct to fill
+ *
+ * @return 0 on success, -errno on error.
+ */
+static int str2tags(const char *tag_str, struct tags *tags)
+{
+    char *parse_tag_str;
+    char *single_tag;
+    char *saveptr1;
+    char *saveptr2;
+
+    if(tag_str == NULL || tags == NULL)
+        return 0;
+
+    /* copy the tags list to tokenize it */
+    parse_tag_str = strdup(tag_str);
+    if (parse_tag_str == NULL)
+        return -errno;
+
+    /* count number of tags in alias */
+    single_tag = strtok_r(parse_tag_str, ",", &saveptr1);
+    size_t n_alias_tags = 0;
+    while(single_tag != NULL)
+    {
+        n_alias_tags++;
+        single_tag = strtok_r(NULL, ",", &saveptr1);
+    }
+    free(parse_tag_str);
+
+    /* allocate space for new tags */
+    if (tags->n_tags > 0)
+    {
+        tags->tags = realloc(tags->tags, 
+            (tags->n_tags + n_alias_tags) * sizeof(char *));
+    }
+    else
+    {
+        tags->tags = calloc(n_alias_tags, sizeof(char *));
+    }
+        
+    /* fill tags */
+    parse_tag_str = strdup(tag_str);
+    if (parse_tag_str == NULL)
+        return -errno;
+    
+    size_t i = tags->n_tags;
+    for (single_tag = strtok_r(parse_tag_str, ",", &saveptr2);
+         single_tag != NULL;
+         single_tag = strtok_r(NULL, ",", &saveptr2), i++)
+    {
+        tags->tags[i] = strdup(single_tag);
+    }
+
+    tags->n_tags += n_alias_tags;
+
+    free(parse_tag_str);
+
+    return 0;
+}
+
+/**
+ * Fill the struct pho_xfer_put_params with data from the cfg.
+ * If an alias is given, the corresponding values are loaded and added if 
+ * nothing else was specified explicitely beforehand.
+ *
+ * @param[in]   xfer    Phobos pho_xfer_desc to update
+ *
+ * @return 0 on success, -errno on error.
+ */
+static int fill_put_params(struct pho_xfer_desc *xfer)
+{
+    int rc = 0;
+
+    /* get default values */
+    const char *layout_name;
+    const char *family_name;
+
+    layout_name = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, default_layout);
+    
+    family_name = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, default_family);
+    if (family_name == NULL)
+        family_name = "invalid";
+
+    /* get information for alias from cfg if specified */
+    if (xfer->xd_params.put.alias != NULL)
+    {
+        char* section_name;
+
+        rc = asprintf(&section_name, ALIAS_SECTION_CFG, xfer->xd_params.put.alias);
+        if (rc < 0)
+            return -ENOMEM;
+
+        /* family */
+        alias_val_from_cfg
+            (section_name, ALIAS_FAMILY_CFG_PARAM, &family_name);
+
+        /* layout */
+        alias_val_from_cfg
+            (section_name, ALIAS_LAYOUT_CFG_PARAM, &layout_name);
+
+        /* tags */
+        const char * alias_tags;
+        alias_val_from_cfg
+            (section_name, ALIAS_TAGS_CFG_PARAM, &alias_tags);
+
+        /* Extend existing tags with the ones from the alias */
+        if (alias_tags != NULL)
+        {
+            rc = str2tags(alias_tags, &xfer->xd_params.put.tags);
+            if (rc)
+            {
+                pho_error(rc, "Unable to load tags from \"%s\" tag string \"%s\"",
+                    section_name, alias_tags);
+            }
+        }
+
+        free(section_name);
+    }
+
+    /* 
+     * fill alias or default values into put params if not set prelimilarly 
+     * The family has to be checked for PHO_RSC_INVAL and PHO_RSC_DISK, because
+     * the CLI sets a different value than when this is called over the API.
+     */
+    if(xfer->xd_params.put.family == PHO_RSC_INVAL || 
+        xfer->xd_params.put.family == PHO_RSC_DISK)
+        xfer->xd_params.put.family = str2rsc_family(family_name);
+
+    if(xfer->xd_params.put.layout_name == NULL)
+        xfer->xd_params.put.layout_name = layout_name;
+    
+    return 0;
+}
 /**
  * Forward a response from the LRS to its destination encoder, collect this
  * encoder's next requests and forward them back to the LRS.
@@ -783,19 +940,17 @@ static int phobos_xfer(struct pho_xfer_desc *xfers, size_t n,
 int phobos_put(struct pho_xfer_desc *xfers, size_t n,
                pho_completion_cb_t cb, void *udata)
 {
-    const char *default_layout;
+    int rc;
     size_t i;
-
-    default_layout = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, default_layout);
+    
+    rc = pho_cfg_init_local(NULL);
+    if (rc && rc != -EALREADY)
+        return rc;
 
     for (i = 0; i < n; i++) {
         xfers[i].xd_op = PHO_XFER_OP_PUT;
-
-        if (xfers[i].xd_params.put.layout_name == NULL)
-            xfers[i].xd_params.put.layout_name = default_layout;
-
-        if (xfers[i].xd_params.put.family == PHO_RSC_INVAL)
-            xfers[i].xd_params.put.family = default_family_from_cfg();
+        
+        fill_put_params(&xfers[i]);
     }
 
     return phobos_xfer(xfers, n, cb, udata);

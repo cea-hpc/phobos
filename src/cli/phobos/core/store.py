@@ -76,20 +76,22 @@ class XferPutParams(Structure):
         ("size", c_ssize_t),
         ("family", c_int),
         ("layout_name", c_char_p),
+        ("alias", c_char_p),
         ("tags", Tags),
     ]
 
     def __init__(self, put_params):
         self.size = -1
         self.layout_name = put_params.layout
+        self.alias = put_params.alias
         self.tags = Tags(put_params.tags)
 
         if put_params.family is None:
-            self.family = str2rsc_family(cfg_get_val("store", "default_family"))
+            self.family = -1
         else:
             self.family = str2rsc_family(put_params.family)
 
-class PutParams(namedtuple('PutParams', 'family layout tags')):
+class PutParams(namedtuple('PutParams', 'family layout alias tags')):
     """
     Transition data structure for put parameters between
     the CLI and the XFer data structure.

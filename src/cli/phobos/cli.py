@@ -294,6 +294,8 @@ class StoreGenericPutHandler(XferOptHandler):
                             help='Targeted storage family')
         parser.add_argument('-l', '--layout', choices=["simple", "raid1"],
                             help='Desired storage layout')
+        parser.add_argument('-a', '--alias', 
+                            help='Desired alias for family, tags and layout')
 
 
 class StorePutHandler(StoreGenericPutHandler):
@@ -322,6 +324,7 @@ class StorePutHandler(StoreGenericPutHandler):
 
         put_params = PutParams(self.params.get('family'),
                                self.params.get('layout'),
+                               self.params.get('alias'),
                                self.params.get('tags', []))
 
         self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
@@ -358,6 +361,7 @@ class StoreMPutHandler(StoreGenericPutHandler):
 
         put_params = PutParams(self.params.get('family'),
                                self.params.get('layout'),
+                               self.params.get('alias'),
                                self.params.get('tags', []))
 
         for i, line in enumerate(fin):

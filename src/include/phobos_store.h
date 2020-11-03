@@ -66,6 +66,7 @@ struct pho_xfer_put_params {
     ssize_t          size;        /**< Amount of data to write. */
     enum rsc_family  family;      /**< Targeted resource family. */
     const char      *layout_name; /**< Name of the layout module to use. */
+    const char      *alias;       /**< Identifier for family, layout, tag combination */
     struct tags      tags;        /**< Tags to select a media to write. */
 };
 
