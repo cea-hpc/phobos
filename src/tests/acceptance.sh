@@ -312,6 +312,45 @@ function put_tags
         error "Put with one valid tag should have worked"
 }
 
+# Test alias replacement
+function put_alias
+{
+    local PSQL="psql phobos phobos"
+    local id1=test/hosts-alias1.$$
+    local id2=test/hosts-alias2.$$
+    local lay_request1="SELECT lyt_info FROM extent WHERE oid='$id1';"
+    local lay_request2="SELECT lyt_info FROM extent WHERE oid='$id2';"
+    local fam_request1="SELECT extents FROM extent WHERE oid='$id1';"
+    local fam_request2="SELECT extents FROM extent WHERE oid='$id2';"
+    local alias_good=$1
+    local alias_bad="alias-noexist"
+
+    # phobos put with alias
+    $phobos put -a $alias_bad /etc/hosts $id1 ||
+        error "Put with non existant alias should have worked"
+    $phobos put -a $alias_good /etc/hosts $id2 ||
+        error "Put with existing alias should have worked"
+
+    # check layout
+    $PSQL -t -c "$lay_request1" | grep -q "\"name\": \"simple\"" ||
+        error "Put with non-existant alias should have used default (simple)"\
+              "layout"
+    $PSQL -t -c "$lay_request2" | grep -q "\"name\": \"raid1\"" ||
+        error "Put with existing alias should have used raid1 layout"
+
+    # check family
+    $PSQL -t -c "$fam_request1" |
+        grep -q "\"fam\": \"$PHOBOS_STORE_default_family\"" ||
+        error "Put with non-existant alias should have written object on a"\
+              "$PHOBOS_STORE_default_family medium"
+
+    $PSQL -t -c "$fam_request2" |
+        grep -q "\"fam\": \"dir\"" ||
+        error "Put with non-existant alias should have written object on a"\
+              "dir medium"
+
+}
+
 # make sure there are at least N available dir/drives
 function ensure_nb_drives
 {
@@ -537,6 +576,7 @@ put_get_test
 put_family dir
 put_layout
 put_tags
+put_alias acceptance-test
 concurrent_put
 check_status dir "$dirs"
 lock_test
@@ -553,6 +593,7 @@ if  [[ -w /dev/changer ]]; then
     put_get_test
     put_family tape
     put_tags
+    put_alias acceptance-test
     concurrent_put
     check_status tape "$tapes"
     lock_test

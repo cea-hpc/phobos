@@ -28,10 +28,40 @@
 
 #include "pho_type_utils.h"
 #include "pho_common.h"
+#include "pho_cfg.h"
+#include "phobos_store.h"
 #include <errno.h>
 #include <jansson.h>
 #include <assert.h>
 #include <stdbool.h>
+
+#define ALIAS_SECTION_CFG "alias \"%s\""
+#define ALIAS_FAMILY_CFG_PARAM "family"
+#define ALIAS_LAYOUT_CFG_PARAM "layout"
+#define ALIAS_TAGS_CFG_PARAM "tags"
+
+enum pho_cfg_params_utils {
+    PHO_CFG_UTILS_FIRST,
+
+    /* type utils parameters */
+    PHO_CFG_UTILS_default_layout = PHO_CFG_UTILS_FIRST,
+    PHO_CFG_UTILS_default_family,
+
+    PHO_CFG_UTILS_LAST
+};
+
+const struct pho_config_item cfg_utils[] = {
+    [PHO_CFG_UTILS_default_layout] = {
+        .section = "store",
+        .name    = "default_layout",
+        .value   = "simple"
+    },
+    [PHO_CFG_UTILS_default_family] = {
+        .section = "store",
+        .name    = "default_family",
+        .value   = "tape"
+    },
+};
 
 bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2)
 {
@@ -198,6 +228,58 @@ bool tags_in(const struct tags *haystack, const struct tags *needle)
     return true;
 }
 
+int str2tags(const char *tag_str, struct tags *tags)
+{
+    char *parse_tag_str;
+    char *single_tag;
+    char *saveptr;
+
+    if (tag_str == NULL || tags == NULL)
+        return 0;
+
+    /* copy the tags list to tokenize it */
+    parse_tag_str = strdup(tag_str);
+    if (parse_tag_str == NULL)
+        return -errno;
+
+    /* count number of tags in alias */
+    single_tag = strtok_r(parse_tag_str, ",", &saveptr);
+    size_t n_alias_tags = 0;
+
+    while (single_tag != NULL) {
+        n_alias_tags++;
+        single_tag = strtok_r(NULL, ",", &saveptr);
+    }
+    free(parse_tag_str);
+
+    /* allocate space for new tags */
+    if (tags->n_tags > 0) {
+        tags->tags = realloc(tags->tags,
+            (tags->n_tags + n_alias_tags) * sizeof(char *));
+    } else {
+        tags->tags = calloc(n_alias_tags, sizeof(char *));
+    }
+
+    /* fill tags */
+    parse_tag_str = strdup(tag_str);
+    if (parse_tag_str == NULL)
+        return -errno;
+
+    size_t i = tags->n_tags;
+
+    for (single_tag = strtok_r(parse_tag_str, ",", &saveptr);
+         single_tag != NULL;
+         single_tag = strtok_r(NULL, ",", &saveptr), i++) {
+        tags->tags[i] = strdup(single_tag);
+    }
+
+    tags->n_tags += n_alias_tags;
+
+    free(parse_tag_str);
+
+    return 0;
+}
+
 void layout_info_free_extents(struct layout_info *layout)
 {
     int i;
@@ -207,4 +289,90 @@ void layout_info_free_extents(struct layout_info *layout)
     layout->ext_count = 0;
     free(layout->extents);
     layout->extents = NULL;
+}
+
+/**
+ *  Extract the values of the specified alias from the config and set the
+ *  parameters of xfer.
+ *  Family and layout are only applied if not formerly set, tags are joined
+ */
+static int apply_alias_to_put_params(struct pho_xfer_desc *xfer)
+{
+    int rc;
+    char *section_name;
+    const char* cfg_val;
+
+    rc = asprintf
+        (&section_name, ALIAS_SECTION_CFG, xfer->xd_params.put.alias);
+    if (rc < 0)
+        return -ENOMEM;
+
+    // family
+    if (xfer->xd_params.put.family == PHO_RSC_INVAL){
+        rc = pho_cfg_get_val(section_name, ALIAS_FAMILY_CFG_PARAM, &cfg_val);
+
+        if (rc != -ENOMEM){
+            xfer->xd_params.put.family = str2rsc_family(cfg_val);
+        }
+    }
+
+    // layout
+    if (xfer->xd_params.put.layout_name == NULL){
+        rc = pho_cfg_get_val(section_name, ALIAS_LAYOUT_CFG_PARAM, &cfg_val);
+
+        if (rc != -ENOMEM){
+            xfer->xd_params.put.layout_name = cfg_val;
+        }
+    }
+
+    // tags
+    rc = pho_cfg_get_val(section_name, ALIAS_TAGS_CFG_PARAM, &cfg_val);
+
+    if (rc != -ENOMEM){
+        rc = str2tags(cfg_val, &xfer->xd_params.put.tags);
+        if (rc) {
+            pho_error(rc,
+                "Unable to load tags from \"%s\" tag string \"%s\"",
+                xfer->xd_params.put.alias, cfg_val);
+        }
+    }
+
+    free(section_name);
+
+    return 0;
+}
+
+/** Return the (configured) default resource family. */
+static enum rsc_family default_family_from_cfg(void)
+{
+    const char *fam_str;
+
+    fam_str = PHO_CFG_GET(cfg_utils, PHO_CFG_UTILS, default_family);
+    if (fam_str == NULL)
+        return PHO_RSC_INVAL;
+
+    return str2rsc_family(fam_str);
+}
+
+int fill_put_params(struct pho_xfer_desc *xfer)
+{
+    int rc;
+
+    /* get information for alias from cfg if specified */
+    if (xfer->xd_params.put.alias != NULL) {
+        rc = apply_alias_to_put_params(xfer);
+        if (rc) {
+            return rc;
+        }
+    }
+
+    /* Fill alias or default values into put params if not set prelimilarly */
+    if (xfer->xd_params.put.family == PHO_RSC_INVAL)
+        xfer->xd_params.put.family = default_family_from_cfg();
+
+    if (xfer->xd_params.put.layout_name == NULL)
+        xfer->xd_params.put.layout_name =
+            PHO_CFG_GET(cfg_utils, PHO_CFG_UTILS, default_layout);
+
+    return 0;
 }
