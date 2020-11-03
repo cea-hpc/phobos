@@ -312,6 +312,92 @@ function put_tags
         error "Put with one valid tag should have worked"
 }
 
+function test_single_alias_put
+{
+    local alias=$1
+    local id=$2
+    local expected_fam=$3
+    local expected_layout=$4
+    local additional_arguments=$5
+
+    $phobos put -a $alias $additional_arguments /etc/hosts $id ||
+        error "Put with alias $alias should have worked"
+
+    local fam_request="SELECT extents FROM extent WHERE oid='$id';"
+    $PSQL -t -c "$fam_request" |
+        grep -q "\"fam\": \"$expected_fam\"" ||
+        error "Put with alias \"$alias\" should have written object on a"\
+              "\"$expected_fam\" medium"
+
+    local lay_request="SELECT lyt_info FROM extent WHERE oid='$id';"
+    $PSQL -t -c "$lay_request" |
+        grep -q "\"name\": \"$expected_layout\"" ||
+        error "Put with alias \"$alias\" should have used "\
+              "\"$expected_layout\" layout"
+}
+
+# Test alias replacement
+function put_alias
+{
+    local alias_full="full-test"
+    local alias_tape="full-tape-test"
+    local alias_empty_family="empty-family-test"
+    local alias_empty_layout="empty-layout-test"
+    local alias_empty_tags="empty-tag-test"
+    local alias_bad="alias-noexist"
+    local alias_nonexist_tags="erroneus-tag-test"
+
+    local PSQL="psql phobos phobos"
+    local id_full=test/hosts-alias1.$$
+    local id_empty_family=test/hosts-alias2.$$
+    local id_empty_layout=test/hosts-alias3.$$
+    local id_empty_tags=test/hosts-alias4.$$
+    local id_noexist=test/hosts-alias5.$$
+    local id_with_fam=test/hosts-alias6.$$
+    local id_with_lay=test/hosts-alias7.$$
+    local id_with_tag1=test/hosts-alias8.$$
+    local id_with_tag2=test/hosts-alias9.$$
+    local id_with_tag3=test/hosts-alias10.$$
+
+    # change repl count to test different layouts
+    local repl_count=$PHOBOS_LAYOUT_RAID1_repl_count
+    export PHOBOS_LAYOUT_RAID1_repl_count=1
+
+    # phobos put with full alias - expect alias family and layout
+    test_single_alias_put $alias_full $id_full "dir" "raid1"
+
+    # phobos put with reduced aliases - expect default for empty parameters
+    test_single_alias_put $alias_empty_family $id_empty_family \
+        $PHOBOS_STORE_default_family "raid1"
+    test_single_alias_put $alias_empty_layout $id_empty_layout "dir" "simple"
+    test_single_alias_put $alias_empty_tags $id_empty_tags "dir" "raid1"
+
+    # phobos put with non-existing alias - expect default
+    test_single_alias_put $alias_bad $id_noexist $PHOBOS_STORE_default_family \
+        "simple"
+
+    # phobos put with additional family parameter - expect additional parameter
+    test_single_alias_put $alias_tape $id_with_fam "dir" "raid1" "-f dir"
+
+    # phobos put with additional layout parameter - expect additional parameter
+    test_single_alias_put $alias_full $id_with_lay "dir" "simple" "-l simple"
+
+    # phobos put with additional tags parameter - expect success
+    test_single_alias_put $alias_empty_family $id_with_tag1 "dir" "raid1" \
+        "-T $(echo $TAGS | cut -d',' -f2)"
+
+    # phobos put with additional, non existing tags parameter - expect failure
+    $phobos put -a $alias_full -T no-such-tag /etc/hosts $id_with_tag2 &&
+        error "Put with additional tag should not have worked"
+
+    # phobos put with alias with wrong tags parameter - expect failure
+    $phobos put -a $alias_nonexist_tags /etc/hosts $id_with_tag3 &&
+        error "Put with alias $alias_nonexist_tags should not have worked"
+
+    # reset replication count for raid layout
+    export PHOBOS_LAYOUT_RAID1_repl_count=repl_count
+}
+
 # make sure there are at least N available dir/drives
 function ensure_nb_drives
 {
@@ -537,6 +623,7 @@ put_get_test
 put_family dir
 put_layout
 put_tags
+put_alias
 concurrent_put
 check_status dir "$dirs"
 lock_test
@@ -553,6 +640,7 @@ if  [[ -w /dev/changer ]]; then
     put_get_test
     put_family tape
     put_tags
+    put_alias
     concurrent_put
     check_status tape "$tapes"
     lock_test

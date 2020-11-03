@@ -22,6 +22,7 @@
 /**
  * \brief test type utils
  */
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -135,12 +136,32 @@ static void test_tags_dup(void)
     tags_free(&tags_dst);
 }
 
+static void test_str2tags(void)
+{
+    struct tags tags_new = {};
+    struct tags tags_abc = {};
+    char *tags_as_string = "";
+
+    /* empty string */
+    assert(str2tags(tags_as_string, &tags_new) == 0);
+    assert(tags_eq(&tags_abc, &tags_new));
+
+    /* 3 tags */
+    tags_abc.tags = (char **)T_ABC;
+    tags_abc.n_tags = 3;
+
+    tags_as_string = "a,b,c";
+    assert(str2tags(tags_as_string, &tags_new) == 0);
+    assert(tags_eq(&tags_abc, &tags_new));
+}
+
 int main(int argc, char **argv)
 {
     test_env_initialize();
     test_no_tags();
     test_tags_various();
     test_tags_dup();
+    test_str2tags();
 
     return EXIT_SUCCESS;
 }
