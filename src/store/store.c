@@ -37,6 +37,7 @@
 #include "pho_srl_lrs.h"
 #include "pho_type_utils.h"
 #include "pho_types.h"
+#include "store_alias.h"
 
 #include <attr/xattr.h>
 #include <fcntl.h>
@@ -56,24 +57,12 @@ enum pho_cfg_params_store {
     PHO_CFG_STORE_FIRST,
 
     /* store parameters */
-    PHO_CFG_STORE_default_layout = PHO_CFG_STORE_FIRST,
-    PHO_CFG_STORE_default_family,
-    PHO_CFG_STORE_lrs_socket,
+    PHO_CFG_STORE_lrs_socket = PHO_CFG_STORE_FIRST,
 
     PHO_CFG_STORE_LAST
 };
 
 const struct pho_config_item cfg_store[] = {
-    [PHO_CFG_STORE_default_layout] = {
-        .section = "store",
-        .name    = "default_layout",
-        .value   = "simple"
-    },
-    [PHO_CFG_STORE_default_family] = {
-        .section = "store",
-        .name    = "default_family",
-        .value   = "tape"
-    },
     [PHO_CFG_STORE_lrs_socket] = {
         .section = "lrs",
         .name    = "server_socket",
@@ -192,18 +181,6 @@ err:
 err_nores:
     dss_filter_free(&filter);
     return rc;
-}
-
-/** Return the (configured) default resource family. */
-static enum rsc_family default_family_from_cfg(void)
-{
-    const char *fam_str;
-
-    fam_str = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, default_family);
-    if (fam_str == NULL)
-        return PHO_RSC_INVAL;
-
-    return str2rsc_family(fam_str);
 }
 
 /**
@@ -783,7 +760,6 @@ static int phobos_xfer(struct pho_xfer_desc *xfers, size_t n,
 int phobos_put(struct pho_xfer_desc *xfers, size_t n,
                pho_completion_cb_t cb, void *udata)
 {
-    const char *default_layout;
     size_t i;
     int rc;
 
@@ -792,16 +768,16 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
     if (rc && rc != -EALREADY)
         return rc;
 
-    default_layout = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, default_layout);
+    rc = pho_cfg_init_local(NULL);
+    if (rc && rc != -EALREADY)
+        return rc;
 
     for (i = 0; i < n; i++) {
         xfers[i].xd_op = PHO_XFER_OP_PUT;
 
-        if (xfers[i].xd_params.put.layout_name == NULL)
-            xfers[i].xd_params.put.layout_name = default_layout;
-
-        if (xfers[i].xd_params.put.family == PHO_RSC_INVAL)
-            xfers[i].xd_params.put.family = default_family_from_cfg();
+        rc = fill_put_params(&xfers[i]);
+        if (rc)
+            return rc;
     }
 
     return phobos_xfer(xfers, n, cb, udata);

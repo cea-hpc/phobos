@@ -73,6 +73,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods
         ("family", c_int),
         ("_layout_name", c_char_p),
         ("tags", Tags),
+        ("_alias", c_char_p),
     ]
 
     def __init__(self, put_params):
@@ -80,6 +81,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods
         self.size = -1
         self.layout_name = put_params.layout
         self.tags = Tags(put_params.tags)
+        self.alias = put_params.alias
 
         if put_params.family is None:
             self.family = PHO_RSC_INVAL
@@ -97,7 +99,18 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods
         # pylint: disable=attribute-defined-outside-init
         self._layout_name = val.encode('utf-8') if val else None
 
-class PutParams(namedtuple('PutParams', 'family layout tags')):
+    @property
+    def alias(self):
+        """Wrapper to get alias"""
+        return self._alias.decode('utf-8') if self._alias else None
+
+    @alias.setter
+    def alias(self, val):
+        """Wrapper to set alias"""
+        # pylint: disable=attribute-defined-outside-init
+        self._alias = val.encode('utf-8') if val else None
+
+class PutParams(namedtuple('PutParams', 'family layout tags alias')):
     """
     Transition data structure for put parameters between
     the CLI and the XFer data structure.

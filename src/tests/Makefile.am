@@ -6,11 +6,11 @@ AM_CFLAGS= $(CC_OPT)
 check_PROGRAMS=test_common test_attrs test_mapper test_log test_store	\
 	       test_dss test_cfg test_scsi test_scsi_scan test_dev_tape \
 	       test_ldm test_type_utils test_store_retry test_io \
-	       test_communication test_bad_comm
+	       test_communication test_bad_comm test_store_alias
 
 # 1st step: low level tests
 UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_dev_tape \
-	   test_ldm test_type_utils test_io test_communication
+	   test_ldm test_type_utils test_io test_communication test_store_alias
 
 # 2nd step: integration tests
 INTEG_TESTS=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh	\
@@ -77,6 +77,10 @@ test_store_retry_LDADD=../store/libphobos_store.la ../admin/libphobos_admin.la
 
 test_io_SOURCES=test_io.c
 test_io_LDADD=../io/libpho_io.la ../common/libpho_common.la
+
+test_store_alias_SOURCES=test_store_alias.c
+test_store_alias_LDADD=../cfg/libpho_cfg.la ../common/libpho_common.la \
+			../store/.libs/store_alias.o
 
 @VALGRIND_CHECK_RULES@
 VALGRIND_SUPPRESSIONS_FILES=supp-files/valgrind.supp supp-files/glib.supp

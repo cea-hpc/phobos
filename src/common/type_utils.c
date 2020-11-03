@@ -32,6 +32,9 @@
 #include <jansson.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
+
 
 bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2)
 {
@@ -198,6 +201,71 @@ bool tags_in(const struct tags *haystack, const struct tags *needle)
     }
 
     return true;
+}
+
+int str2tags(const char *tag_str, struct tags *tags)
+{
+    char *parse_tag_str;
+    char *single_tag;
+    char *saveptr;
+
+    if (tag_str == NULL || tags == NULL)
+        return 0;
+
+    if (strcmp(tag_str, "") == 0)
+        return 0;
+
+    /* copy the tags list to tokenize it */
+    parse_tag_str = strdup(tag_str);
+    if (parse_tag_str == NULL)
+        return -errno;
+
+    /* count number of tags in alias */
+    single_tag = strtok_r(parse_tag_str, ",", &saveptr);
+    size_t n_alias_tags = 0;
+
+    while (single_tag != NULL) {
+        n_alias_tags++;
+        single_tag = strtok_r(NULL, ",", &saveptr);
+    }
+    free(parse_tag_str);
+
+    if (n_alias_tags == 0)
+        return 0;
+
+    /* allocate space for new tags */
+    if (tags->n_tags > 0) {
+        tags->tags = realloc(tags->tags,
+            (tags->n_tags + n_alias_tags) * sizeof(char *));
+        if (tags->tags == NULL)
+            return -ENOMEM;
+    } else {
+        tags->tags = calloc(n_alias_tags, sizeof(char *));
+        if (tags->tags == NULL)
+            return -ENOMEM;
+    }
+
+    /* fill tags */
+    parse_tag_str = strdup(tag_str);
+    if (parse_tag_str == NULL)
+        return -errno;
+
+    size_t i = tags->n_tags;
+
+    for (single_tag = strtok_r(parse_tag_str, ",", &saveptr);
+         single_tag != NULL;
+         single_tag = strtok_r(NULL, ",", &saveptr), i++) {
+        tags->tags[i] = strdup(single_tag);
+        if (tags->tags[i] == NULL) {
+            free(parse_tag_str);
+            return -errno;
+        }
+        tags->n_tags++;
+    }
+
+    free(parse_tag_str);
+
+    return 0;
 }
 
 void layout_info_free_extents(struct layout_info *layout)
