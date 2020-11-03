@@ -32,6 +32,8 @@
 
 static const struct tags NO_TAGS = {0};
 
+struct pho_xfer_desc;
+
 /** dump basic storage information as JSON to be attached to data objects. */
 int storage_info_to_json(const struct layout_info *layout,
                          GString *str, int json_flags);
@@ -87,6 +89,15 @@ bool tags_eq(const struct tags *tags1, const struct tags *tags2);
  */
 bool tags_in(const struct tags *haystack, const struct tags *needle);
 
+/**
+ * Convert the string of the form "tag1,tag2" into separate tags (tag1 and tag2)
+ *
+ * @param[in]   tag_str the string to extract the tags from
+ * @param[out]  tags    the tags struct to fill
+ *
+ * @return 0 on success, -errno on error.
+ */
+int str2tags(const char *tag_str, struct tags *tags);
 
 /**
  * Simple on-the-fly JSON parsing engine providing a SAX-like API.
@@ -207,5 +218,16 @@ const char *saj_parser_key(const struct saj_parser *parser);
  * @return 0 on success, non-null error code on failure.
  */
 int saj_parser_run(struct saj_parser *parser, json_t *root);
+
+/**
+ * Fill the struct pho_xfer_put_params with data from the cfg.
+ * If an alias is given, the corresponding values are loaded and added if
+ * nothing else was specified explicitely beforehand.
+ *
+ * @param[in]   xfer    Phobos pho_xfer_desc to update
+ *
+ * @return 0 on success, -errno on error.
+ */
+int fill_put_params(struct pho_xfer_desc *xfer);
 
 #endif

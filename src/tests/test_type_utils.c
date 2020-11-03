@@ -26,6 +26,7 @@
 #include "config.h"
 #endif
 
+#include "phobos_store.h"
 #include "pho_test_utils.h"
 #include "pho_types.h"
 #include "pho_type_utils.h"
@@ -135,12 +136,119 @@ static void test_tags_dup(void)
     tags_free(&tags_dst);
 }
 
+static void test_str2tags(void)
+{
+    struct tags tags_new = {};
+    struct tags tags_abc = {};
+    char *tags_as_string = "";
+
+    /* empty string */
+    assert(str2tags(tags_as_string, &tags_new) == 0);
+    assert(tags_eq(&tags_abc, &tags_new));
+
+    /* 3 tags */
+    tags_abc.tags = (char **)T_ABC;
+    tags_abc.n_tags = 3;
+
+    tags_as_string = "a,b,c";
+    assert(str2tags(tags_as_string, &tags_new) == 0);
+    assert(tags_eq(&tags_abc, &tags_new));
+}
+
+static void test_fill_put_params(void)
+{
+    static struct pho_xfer_desc empty_xfer;
+    struct pho_xfer_desc xfer;
+    char *alias_name_full = "full-test";
+    char *alias_name_no_family = "empty-family-test";
+    char *alias_name_no_layout = "empty-layout-test";
+    char *alias_name_no_tags = "empty-tag-test";
+    char *pre_existing_tag[1];
+
+    pre_existing_tag[0] = "bar-tag";
+
+    /* set family to invalid */
+    empty_xfer.xd_params.put.family = PHO_RSC_INVAL;
+
+    /* test default values */
+    xfer = empty_xfer;
+
+    assert(fill_put_params(&xfer) == 0);
+
+    assert(strcmp(xfer.xd_params.put.layout_name, "simple") == 0);
+    assert(xfer.xd_params.put.family == PHO_RSC_TAPE);
+    assert(xfer.xd_params.put.tags.n_tags == 0);
+
+    /* test full alias */
+    xfer = empty_xfer;
+    xfer.xd_params.put.alias = alias_name_full;
+
+    assert(fill_put_params(&xfer) == 0);
+
+    assert(strcmp(xfer.xd_params.put.layout_name, "raid1") == 0);
+    assert(xfer.xd_params.put.family == PHO_RSC_DIR);
+    assert(xfer.xd_params.put.tags.n_tags == 1);
+    assert(strcmp(xfer.xd_params.put.tags.tags[0], "foo-tag") == 0);
+
+    /* test alias without family */
+    xfer = empty_xfer;
+    xfer.xd_params.put.alias = alias_name_no_family;
+
+    assert(fill_put_params(&xfer) == 0);
+
+    assert(strcmp(xfer.xd_params.put.layout_name, "raid1") == 0);
+    assert(xfer.xd_params.put.family == PHO_RSC_TAPE);
+    assert(xfer.xd_params.put.tags.n_tags == 1);
+    assert(strcmp(xfer.xd_params.put.tags.tags[0], "foo-tag") == 0);
+
+    /* test alias without layout */
+    xfer = empty_xfer;
+    xfer.xd_params.put.alias = alias_name_no_layout;
+
+    assert(fill_put_params(&xfer) == 0);
+
+    assert(strcmp(xfer.xd_params.put.layout_name, "simple") == 0);
+    assert(xfer.xd_params.put.family == PHO_RSC_DIR);
+    assert(xfer.xd_params.put.tags.n_tags == 1);
+    assert(strcmp(xfer.xd_params.put.tags.tags[0], "foo-tag") == 0);
+
+    /* test alias without tags */
+    xfer = empty_xfer;
+    xfer.xd_params.put.alias = alias_name_no_tags;
+
+    assert(fill_put_params(&xfer) == 0);
+
+    assert(strcmp(xfer.xd_params.put.layout_name, "raid1") == 0);
+    assert(xfer.xd_params.put.family == PHO_RSC_DIR);
+    assert(xfer.xd_params.put.tags.n_tags == 0);
+
+    /* test additional parameters */
+    xfer = empty_xfer;
+    xfer.xd_params.put.alias = alias_name_full;
+    xfer.xd_params.put.family = PHO_RSC_TAPE;
+    xfer.xd_params.put.layout_name = "simple";
+    tags_init(&xfer.xd_params.put.tags, (char **)pre_existing_tag, 1);
+
+    assert(fill_put_params(&xfer) == 0);
+
+    assert(xfer.xd_params.put.family == PHO_RSC_TAPE);
+    assert(strcmp(xfer.xd_params.put.layout_name, "simple") == 0);
+    assert(xfer.xd_params.put.tags.n_tags == 2);
+    assert(strcmp(xfer.xd_params.put.tags.tags[0], "bar-tag") == 0);
+    assert(strcmp(xfer.xd_params.put.tags.tags[1], "foo-tag") == 0);
+
+}
+
 int main(int argc, char **argv)
 {
+    load_config(argv[0]);
+
     test_env_initialize();
     test_no_tags();
     test_tags_various();
     test_tags_dup();
+    test_str2tags();
+    test_fill_put_params();
 
     return EXIT_SUCCESS;
 }

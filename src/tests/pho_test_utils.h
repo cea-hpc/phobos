@@ -26,13 +26,19 @@
 #ifndef _PHO_TEST_UTILS_H
 #define _PHO_TEST_UTILS_H
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <assert.h>
+#include <libgen.h>
 
 #include "pho_common.h"
+#include "pho_cfg.h"
 
 typedef int (*pho_unit_test_t)(void *);
 
@@ -66,6 +72,31 @@ static inline void test_env_initialize(void)
         pho_log_level_set(PHO_LOG_DEBUG);
     else
         pho_log_level_set(PHO_LOG_VERB);
+}
+
+static inline void load_config(char *execution_filename)
+{
+    char *test_bin, *test_dir, *test_file;
+    int rc;
+
+    test_bin = strdup(execution_filename);
+    if (test_bin == NULL)
+        exit(EXIT_FAILURE);
+    test_dir = dirname(test_bin);
+
+    rc = asprintf(&test_file, "%s/phobos.conf", test_dir);
+    if (rc == -1) {
+        free(test_bin);
+        exit(EXIT_FAILURE);
+    }
+
+    rc = pho_cfg_init_local(test_file);
+    if (rc != 0 && rc != -EALREADY) {
+        free(test_bin);
+        exit(EXIT_FAILURE);
+    }
+
+    free(test_bin);
 }
 
 #endif
