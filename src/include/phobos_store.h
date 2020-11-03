@@ -61,12 +61,19 @@ enum pho_xfer_op {
 
 /**
  * PUT parameters.
+ * Family, layout_name and tags can be set directly or by using an alias.
+ * An alias is a name defined in the phobos config to combine these parameters.
+ * The alias will not override family and layout if they have been specified
+ * in this struct but extend existing tags.
  */
 struct pho_xfer_put_params {
     ssize_t          size;        /**< Amount of data to write. */
     enum rsc_family  family;      /**< Targeted resource family. */
     const char      *layout_name; /**< Name of the layout module to use. */
     struct tags      tags;        /**< Tags to select a media to write. */
+    const char      *alias;       /**< Identifier for family, layout,
+                                    *  tag combination
+                                    */
 };
 
 /**
