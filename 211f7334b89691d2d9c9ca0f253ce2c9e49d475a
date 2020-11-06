@@ -2,6 +2,282 @@
   "comments": [
     {
       "key": {
+        "uuid": "eece5c98_23f6bd01",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 1
+      },
+      "lineNbr": 9,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "nitpick: I suggest \"parameters: family, layout and tags.\"",
+      "range": {
+        "startLine": 9,
+        "startChar": 58,
+        "endLine": 9,
+        "endChar": 59
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "275d83eb_8b5cb8b5",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 1
+      },
+      "lineNbr": 10,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "minor: I guess this \"and\" could be deleted ...",
+      "range": {
+        "startLine": 10,
+        "startChar": 75,
+        "endLine": 10,
+        "endChar": 80
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "91e68546_969b1af8",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 1
+      },
+      "lineNbr": 11,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "minor: the second part of the sentence seems to me clearer than the first part. I suggest \"Direct command line family and layout options supersede alias parameters. (ie. if an alias and a family is set, the alias family if it exists will be ignored.) Direct command line tags and alias tags are joined.",
+      "range": {
+        "startLine": 11,
+        "startChar": 0,
+        "endLine": 11,
+        "endChar": 189
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "6a3cf248_aabf0974",
+        "filename": "src/cli/phobos/cli.py",
+        "patchSetId": 1
+      },
+      "lineNbr": 297,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "minor: space to remove",
+      "range": {
+        "startLine": 297,
+        "startChar": 44,
+        "endLine": 297,
+        "endChar": 45
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "49fffeff_1fc2332c",
+        "filename": "src/cli/phobos/cli.py",
+        "patchSetId": 1
+      },
+      "lineNbr": 298,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "major: I suggest to add here to the comment the behaviour of alias : layout and family supersede, whereas tags join ...",
+      "range": {
+        "startLine": 298,
+        "startChar": 34,
+        "endLine": 298,
+        "endChar": 50
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "7a1811fd_2328e1a0",
+        "filename": "src/cli/phobos/cli.py",
+        "patchSetId": 1
+      },
+      "lineNbr": 327,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "nitpick: as a solution to group the three others, I would have put the alias option at the end, after, family, layout and tags.",
+      "range": {
+        "startLine": 327,
+        "startChar": 31,
+        "endLine": 327,
+        "endChar": 55
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "d53d9ff7_de185fa3",
+        "filename": "src/cli/phobos/cli.py",
+        "patchSetId": 1
+      },
+      "lineNbr": 364,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "nitpick: as a solution to group the three others, I would have put the alias option at the end, after, family, layout and tags.",
+      "range": {
+        "startLine": 364,
+        "startChar": 31,
+        "endLine": 364,
+        "endChar": 56
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "dc27955b_6525931b",
+        "filename": "src/cli/phobos/core/store.py",
+        "patchSetId": 1
+      },
+      "lineNbr": 79,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "nitpick: as a solution to group the three others, I would have put the alias option at the end, after, family, layout and tags.",
+      "range": {
+        "startLine": 79,
+        "startChar": 9,
+        "endLine": 79,
+        "endChar": 27
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "6c1b2aa1_a78d9665",
+        "filename": "src/cli/phobos/core/store.py",
+        "patchSetId": 1
+      },
+      "lineNbr": 86,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "nitpick: as a solution to group the three others, I would have put the alias option at the end, after, family, layout and tags.",
+      "range": {
+        "startLine": 86,
+        "startChar": 8,
+        "endLine": 86,
+        "endChar": 37
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "d1edc15b_509625c1",
+        "filename": "src/cli/phobos/core/store.py",
+        "patchSetId": 1
+      },
+      "lineNbr": 90,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "major: this modification is a good one. Indeed, I aggree that the phobos_put function already load the default parameter if not set. But this modification is not directly link with the adding of the alias parameter. Could you separate this modification in a previous dedicated commit. Thanks a lot. Could you link the -1 constant value with the PHO_RSC_INVAL which is defined into enum rsc_family into src/include/pho_types.h ?",
+      "range": {
+        "startLine": 90,
+        "startChar": 12,
+        "endLine": 90,
+        "endChar": 28
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "47e59994_6bfdbcbb",
+        "filename": "src/cli/phobos/core/store.py",
+        "patchSetId": 1
+      },
+      "lineNbr": 94,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "nitpick: as a solution to group the three others, I would have put the alias option at the end, after, family, layout and tags.",
+      "range": {
+        "startLine": 94,
+        "startChar": 55,
+        "endLine": 94,
+        "endChar": 61
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "0696a8d3_6c0b0fae",
+        "filename": "src/include/phobos_store.h",
+        "patchSetId": 1
+      },
+      "lineNbr": 64,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "major: this comment must describe here the behaviour of alias against layout, family and tags. You must explain here that layout and family supersedes alias parameter, but that tags and tags from alias will be joined.",
+      "range": {
+        "startLine": 62,
+        "startChar": 0,
+        "endLine": 64,
+        "endChar": 3
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "f7fec900_c4ecbeb2",
         "filename": "src/include/phobos_store.h",
         "patchSetId": 1
@@ -18,6 +294,75 @@
         "startChar": 0,
         "endLine": 69,
         "endChar": 88
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "914d9501_4cc37bbe",
+        "filename": "src/include/phobos_store.h",
+        "patchSetId": 1
+      },
+      "lineNbr": 69,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "nitpick: as a solution to group the three others, I would have put the alias option at the end, after, family, layout and tags.",
+      "range": {
+        "startLine": 69,
+        "startChar": 4,
+        "endLine": 69,
+        "endChar": 27
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "528714b4_465ee8ac",
+        "filename": "src/store/store.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 52,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "major: you re-use the same configuration architecture than the one for drive_type (see src/lrs/lrs_shed.c) with section [drive_type \"LTO8_drive\"]. I suggest there is maybe some place for mutualizing code into include/pho_cfg.h and /cfg.c for such option of the configuration file : [section_type_name \"value_for_this_secton_type\"] .\nMore than that, the choice of ini config is maybe not the better one ...\n\nAt least, I agree with Sebastien, this code should move from store.c . Sebastien suggested a separate file store_alias.c. I suggest than instead of adding a new file, this code could go to type_utils.c through the idea of applying alias to other put_params.",
+      "range": {
+        "startLine": 52,
+        "startChar": 8,
+        "endLine": 52,
+        "endChar": 40
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "65e9acd0_1b0fab8e",
+        "filename": "src/store/store.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 213,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "major: I\u0027m not fan of the function. I guess it\u0027s adding more complexity thant providing a real solution. If this only goal of this function is to deal with the fact that the parameter is or not in the config, I suggest to directly used pho_cfg_get_val and to test the ENODATA returned value as described in include/pho_cfg.h .\n\n(see below refactoring and move of fill_put_params)",
+      "range": {
+        "startLine": 213,
+        "startChar": 0,
+        "endLine": 213,
+        "endChar": 30
       },
       "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
@@ -94,6 +439,30 @@
     },
     {
       "key": {
+        "uuid": "993cf0fe_2ad2aa2b",
+        "filename": "src/store/store.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 237,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "+1 (and the linked header is include/pho_type_utils.h )\n(I didn\u0027t review this function, I will do it when it will be moved to pho_type_utils.h)",
+      "parentUuid": "8b7985de_11278386",
+      "range": {
+        "startLine": 237,
+        "startChar": 0,
+        "endLine": 237,
+        "endChar": 19
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "1360a88d_0f4f0a49",
         "filename": "src/store/store.c",
         "patchSetId": 1
@@ -117,6 +486,75 @@
     },
     {
       "key": {
+        "uuid": "e315abbb_bc9b47e4",
+        "filename": "src/store/store.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 302,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "major: this function should move go to pho_type_utils.h and type_utils.c\n\nmajor: I would have structure this function into 2 steps :\n1) apply_alias if one\n1.1) if no layout : apply alias layout if one\n1.2) if no family : apply alias family if one\n1.3) add alias tags to existing tags\n\n2) set default to layout or family if needed\n\nStep one should be group in an other new function of type_utils.c (but not pho_type_utils.h) called \"apply_alias_to_put_params\" .",
+      "range": {
+        "startLine": 302,
+        "startChar": 11,
+        "endLine": 302,
+        "endChar": 26
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b3e76d4e_435d584b",
+        "filename": "src/store/store.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 312,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "major: there is a dedicated function for that, default_family_from_cfg() (cf refactor comment and set thsi default at the end of the function at second step .)",
+      "range": {
+        "startLine": 312,
+        "startChar": 5,
+        "endLine": 312,
+        "endChar": 16
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f8472bc7_a930a119",
+        "filename": "src/store/store.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 358,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "minor: Is to this function to take into account the fact that the disk family is not yet implemented ?",
+      "range": {
+        "startLine": 358,
+        "startChar": 8,
+        "endLine": 358,
+        "endChar": 50
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "7e5dabb0_73291c90",
         "filename": "src/tests/acceptance.sh",
         "patchSetId": 1
@@ -133,6 +571,29 @@
         "startChar": 0,
         "endLine": 299,
         "endChar": 33
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "daaeb7b0_d6d509d5",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 317,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "major: the test must also check the behaviour with layout, family and tags added to the command line.\n\nmajor: it could also be a good idea to directly test the use of the alias through the C API.",
+      "range": {
+        "startLine": 316,
+        "startChar": 10,
+        "endLine": 317,
+        "endChar": 1
       },
       "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
@@ -202,6 +663,29 @@
         "startChar": 0,
         "endLine": 349,
         "endChar": 11
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "6d433f6c_70c42cae",
+        "filename": "src/tests/phobos.conf",
+        "patchSetId": 1
+      },
+      "lineNbr": 22,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-06T13:21:07Z",
+      "side": 1,
+      "message": "major: for testing purpose and example, I suggest to provide other example of alias without family or without layout, or without tags.",
+      "range": {
+        "startLine": 22,
+        "startChar": 1,
+        "endLine": 22,
+        "endChar": 24
       },
       "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
