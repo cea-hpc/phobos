@@ -1,0 +1,211 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "f7fec900_c4ecbeb2",
+        "filename": "src/include/phobos_store.h",
+        "patchSetId": 1
+      },
+      "lineNbr": 69,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-06T09:21:27Z",
+      "side": 1,
+      "message": "style: we have a 80-character length rule in this project, this the comment needs to be on two lines:\n\n /**\u003c Identifier for family, layout,\n   *  tag combination. */",
+      "range": {
+        "startLine": 69,
+        "startChar": 0,
+        "endLine": 69,
+        "endChar": 88
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b4667669_1c950ca9",
+        "filename": "src/store/store.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 224,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-06T09:21:27Z",
+      "side": 1,
+      "message": "style: indentation must contain one more space, to align arguments",
+      "range": {
+        "startLine": 222,
+        "startChar": 17,
+        "endLine": 224,
+        "endChar": 44
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b4c0b5fb_8c3307f2",
+        "filename": "src/store/store.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 230,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-06T09:21:27Z",
+      "side": 1,
+      "message": "typo: separate",
+      "range": {
+        "startLine": 230,
+        "startChar": 51,
+        "endLine": 230,
+        "endChar": 59
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "8b7985de_11278386",
+        "filename": "src/store/store.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 237,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-06T09:21:27Z",
+      "side": 1,
+      "message": "major: I think this function needs to be located in common/type_utils.c instead",
+      "range": {
+        "startLine": 237,
+        "startChar": 0,
+        "endLine": 237,
+        "endChar": 19
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "1360a88d_0f4f0a49",
+        "filename": "src/store/store.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 279,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-06T09:21:27Z",
+      "side": 1,
+      "message": "minor: you can use the same first `saveptr` here",
+      "range": {
+        "startLine": 279,
+        "startChar": 51,
+        "endLine": 279,
+        "endChar": 60
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "7e5dabb0_73291c90",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 299,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-06T09:21:27Z",
+      "side": 1,
+      "message": "minor: is this modification necessary? I do not see this id used anywhere else.",
+      "range": {
+        "startLine": 298,
+        "startChar": 0,
+        "endLine": 299,
+        "endChar": 33
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "98eb28fc_bdbcc225",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 336,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-06T09:21:27Z",
+      "side": 1,
+      "message": "typo: missing \u0027alias\u0027?",
+      "range": {
+        "startLine": 336,
+        "startChar": 24,
+        "endLine": 336,
+        "endChar": 37
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4cbedf89_4ad1872b",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 344,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-06T09:21:27Z",
+      "side": 1,
+      "message": "style: indentation",
+      "range": {
+        "startLine": 344,
+        "startChar": 0,
+        "endLine": 344,
+        "endChar": 36
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "558dc282_cedda69d",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 349,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-06T09:21:27Z",
+      "side": 1,
+      "message": "style: indentation",
+      "range": {
+        "startLine": 349,
+        "startChar": 0,
+        "endLine": 349,
+        "endChar": 11
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    }
+  ]
+}
