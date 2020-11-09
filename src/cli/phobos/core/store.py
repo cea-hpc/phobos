@@ -35,7 +35,7 @@ from phobos.core.ffi import LIBPHOBOS, ObjectInfo, Tags
 from phobos.core.cfg import get_val as cfg_get_val
 from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OP_GET, # pylint: disable=no-name-in-module
                                PHO_XFER_OP_GETMD, PHO_XFER_OP_PUT,
-                               str2rsc_family)
+                               PHO_RSC_INVAL, str2rsc_family)
 
 ATTRS_FOREACH_CB_TYPE = CFUNCTYPE(c_int, c_char_p, c_char_p, c_void_p)
 
@@ -82,7 +82,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods
         self.tags = Tags(put_params.tags)
 
         if put_params.family is None:
-            self.family = str2rsc_family(cfg_get_val("store", "default_family"))
+            self.family = PHO_RSC_INVAL
         else:
             self.family = str2rsc_family(put_params.family)
 
