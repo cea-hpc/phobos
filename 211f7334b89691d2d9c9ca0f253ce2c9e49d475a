@@ -232,6 +232,30 @@
     },
     {
       "key": {
+        "uuid": "ad3a1a01_262da22b",
+        "filename": "src/cli/phobos/core/store.py",
+        "patchSetId": 1
+      },
+      "lineNbr": 90,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2020-11-09T15:19:12Z",
+      "side": 1,
+      "message": "See https://review.gerrithub.io/c/cea-hpc/phobos/+/505664 for the new commit on this line",
+      "parentUuid": "d1edc15b_509625c1",
+      "range": {
+        "startLine": 90,
+        "startChar": 12,
+        "endLine": 90,
+        "endChar": 28
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "47e59994_6bfdbcbb",
         "filename": "src/cli/phobos/core/store.py",
         "patchSetId": 1
@@ -335,6 +359,30 @@
       "writtenOn": "2020-11-06T13:21:07Z",
       "side": 1,
       "message": "major: you re-use the same configuration architecture than the one for drive_type (see src/lrs/lrs_shed.c) with section [drive_type \"LTO8_drive\"]. I suggest there is maybe some place for mutualizing code into include/pho_cfg.h and /cfg.c for such option of the configuration file : [section_type_name \"value_for_this_secton_type\"] .\nMore than that, the choice of ini config is maybe not the better one ...\n\nAt least, I agree with Sebastien, this code should move from store.c . Sebastien suggested a separate file store_alias.c. I suggest than instead of adding a new file, this code could go to type_utils.c through the idea of applying alias to other put_params.",
+      "range": {
+        "startLine": 52,
+        "startChar": 8,
+        "endLine": 52,
+        "endChar": 40
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b424e692_5d788a4e",
+        "filename": "src/store/store.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 52,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2020-11-09T15:19:12Z",
+      "side": 1,
+      "message": "Concerning moving this code: I thought about adding a store_alias.c in the very beginning and decided against it because I would need to add a function (currently fill_put_params until the refactoring) to the phobos_store.h file. But because this is the entry point for the API, I didn\u0027t want to do this.\nSo from my point of view I would prefer the type_utils approach and will start on this, but of course I am happy to resolve this as you want!",
+      "parentUuid": "528714b4_465ee8ac",
       "range": {
         "startLine": 52,
         "startChar": 8,
@@ -555,6 +603,30 @@
     },
     {
       "key": {
+        "uuid": "ad2daaf2_f07a06da",
+        "filename": "src/store/store.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 358,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2020-11-09T15:19:12Z",
+      "side": 1,
+      "message": "In parts, yes. The main issue is, that when the API is called with a more or less empty pho_xfer_put_params object the family in it will be set to 0 (uninitialised), not -1. So as long as the disk feature is not implemented I decided to add this here, so that it will still use the value from the alias.\nI agree that this is not a nice approach and am happy to remove it.",
+      "parentUuid": "f8472bc7_a930a119",
+      "range": {
+        "startLine": 358,
+        "startChar": 8,
+        "endLine": 358,
+        "endChar": 50
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "7e5dabb0_73291c90",
         "filename": "src/tests/acceptance.sh",
         "patchSetId": 1
@@ -566,6 +638,30 @@
       "writtenOn": "2020-11-06T09:21:27Z",
       "side": 1,
       "message": "minor: is this modification necessary? I do not see this id used anywhere else.",
+      "range": {
+        "startLine": 298,
+        "startChar": 0,
+        "endLine": 299,
+        "endChar": 33
+      },
+      "revId": "211f7334b89691d2d9c9ca0f253ce2c9e49d475a",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "ff5e5ce4_7c3e8c48",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 1
+      },
+      "lineNbr": 299,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2020-11-09T15:19:12Z",
+      "side": 1,
+      "message": "It was necessary for me, but now seeing that the tests fail for you anyway (they weren\u0027t for me of course, or I would not have committed this) there is clearly something strange going on.\nSo I will look into this issue and remove this again.",
+      "parentUuid": "7e5dabb0_73291c90",
       "range": {
         "startLine": 298,
         "startChar": 0,
