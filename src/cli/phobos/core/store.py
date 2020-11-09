@@ -85,7 +85,7 @@ class XferPutParams(Structure):
         self.tags = Tags(put_params.tags)
 
         if put_params.family is None:
-            self.family = str2rsc_family(cfg_get_val("store", "default_family"))
+            self.family = PHO_RSC_INVAL
         else:
             self.family = str2rsc_family(put_params.family)
 
