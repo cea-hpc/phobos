@@ -1,0 +1,291 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "6879191e_858b4dc7",
+        "filename": "doc/design/alias.md",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-18T16:22:45Z",
+      "side": 1,
+      "message": "nitpick: remove useless \"dead\" spaces that end lines",
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "b7d1c8ba_a44686da",
+        "filename": "doc/design/alias.md",
+        "patchSetId": 2
+      },
+      "lineNbr": 3,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-18T16:22:45Z",
+      "side": 1,
+      "message": "typo: Ich glaube das ist \"under\" oder \"behind\" oder \"inside\" auf Englisch. :-))",
+      "range": {
+        "startLine": 3,
+        "startChar": 72,
+        "endLine": 3,
+        "endChar": 77
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "3198f2ae_7b51efc4",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 254,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-18T16:22:45Z",
+      "side": 1,
+      "message": "major: add an early output if n_alias_tags is 0",
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "71097929_927c3c6a",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 257,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-18T16:22:45Z",
+      "side": 1,
+      "message": "major: test of realloc failure",
+      "range": {
+        "startLine": 257,
+        "startChar": 8,
+        "endLine": 257,
+        "endChar": 18
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "15d7a462_074d4b0d",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 260,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-18T16:22:45Z",
+      "side": 1,
+      "message": "major: test of calloc failure",
+      "range": {
+        "startLine": 260,
+        "startChar": 21,
+        "endLine": 260,
+        "endChar": 28
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "d4a44fe3_37d8db9e",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 273,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-18T16:22:45Z",
+      "side": 1,
+      "message": "major: test of strdup failure",
+      "range": {
+        "startLine": 273,
+        "startChar": 24,
+        "endLine": 273,
+        "endChar": 43
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "9af5582a_7e14f069",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 298,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-18T16:22:45Z",
+      "side": 1,
+      "message": "major: comment input parameter and error output value",
+      "range": {
+        "startLine": 297,
+        "startChar": 1,
+        "endLine": 298,
+        "endChar": 3
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "0297070e_99c2b623",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 316,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-18T16:22:45Z",
+      "side": 1,
+      "message": "defect: I would I wrote something like :\n\nif (!rc)\n    xfer-\u003exd_params.put.family \u003d str2rsc_family(cfg_val);\nelse if (rc !\u003d -ENODATA)\n  goto out;\n\nWith an out for free(section_name) and returning rc.\n\nWhy did you use -ENOMEM ? Did I miss something ? The error code returns by pho_cfg_get_val is -ENODATA if we don\u0027t find the asked parameter into the config, else 0 on success, else an error code.",
+      "range": {
+        "startLine": 314,
+        "startChar": 8,
+        "endLine": 316,
+        "endChar": 9
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "63d01d99_03699c12",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 325,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-18T16:22:45Z",
+      "side": 1,
+      "message": "defect: exactly the same than family before",
+      "range": {
+        "startLine": 323,
+        "startChar": 8,
+        "endLine": 325,
+        "endChar": 9
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "7a5855b6_26f79add",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 331,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-18T16:22:45Z",
+      "side": 1,
+      "message": "defect: same than before with family and layout",
+      "range": {
+        "startLine": 331,
+        "startChar": 4,
+        "endLine": 331,
+        "endChar": 23
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "d4723d24_1f2012de",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 337,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-18T16:22:45Z",
+      "side": 1,
+      "message": "defect: the error code must be returned, not only logged",
+      "range": {
+        "startLine": 333,
+        "startChar": 8,
+        "endLine": 337,
+        "endChar": 9
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "d1c97412_9eac1407",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 2
+      },
+      "lineNbr": 316,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-18T16:22:45Z",
+      "side": 1,
+      "message": "defect: the test is not complete and must check if family and layout from command line supersedes alias and that tags from command line are joined. The test must also test with aliases having empty family, layout and tags.",
+      "range": {
+        "startLine": 316,
+        "startChar": 9,
+        "endLine": 316,
+        "endChar": 18
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f4c56c47_19d13d8b",
+        "filename": "src/tests/phobos.conf",
+        "patchSetId": 2
+      },
+      "lineNbr": 22,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-18T16:22:45Z",
+      "side": 1,
+      "message": "defect: for complete testing purpose, I suggest tor add other examples of aliases with empty family, empty and tags \"acceptance-test-empty-family\", \"acceptance-test-empty-layout\", \"acceptance-test-empty-tags\".",
+      "range": {
+        "startLine": 22,
+        "startChar": 8,
+        "endLine": 22,
+        "endChar": 23
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    }
+  ]
+}
