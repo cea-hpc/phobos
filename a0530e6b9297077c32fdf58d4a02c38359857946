@@ -1,0 +1,142 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "775ddffa_f4a54039",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 290,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-19T16:52:28Z",
+      "side": 1,
+      "message": "minor: Now there is this early out case, it may be better to continuously increase tags-\u003en_tags into the loop after the strdup than one global time after the for loop.",
+      "range": {
+        "startLine": 287,
+        "startChar": 8,
+        "endLine": 290,
+        "endChar": 9
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "aac0e13f_c4929f21",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 3
+      },
+      "lineNbr": 315,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-19T16:52:28Z",
+      "side": 1,
+      "message": "major: tags are not checked.",
+      "range": {
+        "startLine": 315,
+        "startChar": 9,
+        "endLine": 315,
+        "endChar": 30
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "23131b14_a6a65911",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 3
+      },
+      "lineNbr": 376,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-19T16:52:28Z",
+      "side": 1,
+      "message": "minor: dir is already the family of the alias, maybe the but would be more complete with a different family than the one of the alias (even if this functionality ois already covered by your unitary test, I think it\u0027s better to test it again in the acceptance \"integration\" test for the cli command.",
+      "range": {
+        "startLine": 376,
+        "startChar": 66,
+        "endLine": 376,
+        "endChar": 73
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "67c9134f_7f2301e4",
+        "filename": "src/tests/pho_test_utils.h",
+        "patchSetId": 3
+      },
+      "lineNbr": 95,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-19T16:52:28Z",
+      "side": 1,
+      "message": "defect: free(test_file) must be added (while not having a global out section)",
+      "range": {
+        "startLine": 95,
+        "startChar": 7,
+        "endLine": 95,
+        "endChar": 23
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5c4843d2_197b232b",
+        "filename": "src/tests/pho_test_utils.h",
+        "patchSetId": 3
+      },
+      "lineNbr": 99,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-19T16:52:28Z",
+      "side": 1,
+      "message": "defect: free(test_file) must be added",
+      "range": {
+        "startLine": 99,
+        "startChar": 4,
+        "endLine": 99,
+        "endChar": 19
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5edee7f9_e7db4625",
+        "filename": "src/tests/phobos.conf",
+        "patchSetId": 3
+      },
+      "lineNbr": 25,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-19T16:52:28Z",
+      "side": 1,
+      "message": "major: I think it\u0027s better to have a list of tags to check the split comma-separated-list function",
+      "range": {
+        "startLine": 25,
+        "startChar": 0,
+        "endLine": 25,
+        "endChar": 14
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    }
+  ]
+}
