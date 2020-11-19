@@ -42,6 +42,30 @@
     },
     {
       "key": {
+        "uuid": "b84751f9_e14b600f",
+        "filename": "doc/design/alias.md",
+        "patchSetId": 2
+      },
+      "lineNbr": 3,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2020-11-19T10:09:10Z",
+      "side": 1,
+      "message": ":D Pardon Monsieur, je pense que c\u0027était un automatisme...",
+      "parentUuid": "b7d1c8ba_a44686da",
+      "range": {
+        "startLine": 3,
+        "startChar": 72,
+        "endLine": 3,
+        "endChar": 77
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "3198f2ae_7b51efc4",
         "filename": "src/common/type_utils.c",
         "patchSetId": 2
@@ -174,6 +198,30 @@
     },
     {
       "key": {
+        "uuid": "b6fcc097_affa8d85",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 2
+      },
+      "lineNbr": 316,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2020-11-19T10:09:10Z",
+      "side": 1,
+      "message": "Yes sorry, that was completely my mistake, I pushed too soon and realised it very soon afterwards.",
+      "parentUuid": "0297070e_99c2b623",
+      "range": {
+        "startLine": 314,
+        "startChar": 8,
+        "endLine": 316,
+        "endChar": 9
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "63d01d99_03699c12",
         "filename": "src/common/type_utils.c",
         "patchSetId": 2
@@ -277,6 +325,30 @@
       "writtenOn": "2020-11-18T16:22:45Z",
       "side": 1,
       "message": "defect: for complete testing purpose, I suggest tor add other examples of aliases with empty family, empty and tags \"acceptance-test-empty-family\", \"acceptance-test-empty-layout\", \"acceptance-test-empty-tags\".",
+      "range": {
+        "startLine": 22,
+        "startChar": 8,
+        "endLine": 22,
+        "endChar": 23
+      },
+      "revId": "a133d4aaddd0238df4dcdb5250683a32959866f0",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "261c5ae1_198e70c9",
+        "filename": "src/tests/phobos.conf",
+        "patchSetId": 2
+      },
+      "lineNbr": 22,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2020-11-19T10:09:10Z",
+      "side": 1,
+      "message": "As discussed in the call I didn\u0027t update the tests in this patch, but I will upload a new one shortly. Originally, I had only one alias with one field missing, not three aliases (onoe for each parameter). Adding one for each parameter blows up the tests a little bit, please tell me what you think.",
+      "parentUuid": "f4c56c47_19d13d8b",
       "range": {
         "startLine": 22,
         "startChar": 8,
