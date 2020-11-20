@@ -52,7 +52,7 @@ const struct pho_config_item cfg_lrs[] = {
     [PHO_CFG_LRS_server_socket] = {
         .section = "lrs",
         .name    = "server_socket",
-        .value   = "/tmp/socklrs"
+        .value   = "/run/phobosd/lrs"
     },
     [PHO_CFG_LRS_lock_file] = {
         .section = "lrs",
