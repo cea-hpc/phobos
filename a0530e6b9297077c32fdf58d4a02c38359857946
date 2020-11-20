@@ -2,6 +2,75 @@
   "comments": [
     {
       "key": {
+        "uuid": "f219ea24_f3b34891",
+        "filename": "doc/design/alias.md",
+        "patchSetId": 3
+      },
+      "lineNbr": 32,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-20T12:32:50Z",
+      "side": 1,
+      "message": "nit: we will tend to only use long options in documentation\n\nYou are free to remove this example now, or we will do it in a future patch, when replacing all short options.",
+      "range": {
+        "startLine": 32,
+        "startChar": 0,
+        "endLine": 32,
+        "endChar": 38
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "e32591bd_3461ef29",
+        "filename": "doc/design/alias.md",
+        "patchSetId": 3
+      },
+      "lineNbr": 49,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-20T12:32:50Z",
+      "side": 1,
+      "message": "style: missing \u0027:\u0027 at the end of line",
+      "range": {
+        "startLine": 49,
+        "startChar": 35,
+        "endLine": 49,
+        "endChar": 48
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4600915d_12f763fc",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 66,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-20T12:32:50Z",
+      "side": 1,
+      "message": "question: why were they moved from store? Did their section parameter need to be changed too?",
+      "range": {
+        "startLine": 57,
+        "startChar": 0,
+        "endLine": 66,
+        "endChar": 6
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "775ddffa_f4a54039",
         "filename": "src/common/type_utils.c",
         "patchSetId": 3
@@ -18,6 +87,29 @@
         "startChar": 8,
         "endLine": 290,
         "endChar": 9
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "72fc40fa_ca617694",
+        "filename": "src/store/store.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 62,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-20T12:32:50Z",
+      "side": 1,
+      "message": "In the first patchset, PHO_CFG_STORE_LAST got a different enum value than the last entry (to loop I think).\n\nI see that in other files (like admin.c), it got the same. I will investigate this.",
+      "range": {
+        "startLine": 62,
+        "startChar": 4,
+        "endLine": 62,
+        "endChar": 50
       },
       "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
@@ -64,6 +156,76 @@
         "startChar": 66,
         "endLine": 376,
         "endChar": 73
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "3e58edb3_5490bfc6",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 3
+      },
+      "lineNbr": 376,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-20T12:32:50Z",
+      "side": 1,
+      "message": "To test against a different family, you will need to check if tapes are available. Or you can indicate an alias using tapes, and a dir family.",
+      "parentUuid": "23131b14_a6a65911",
+      "range": {
+        "startLine": 376,
+        "startChar": 66,
+        "endLine": 376,
+        "endChar": 73
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "557b8733_c141d462",
+        "filename": "src/tests/pho_test_utils.h",
+        "patchSetId": 3
+      },
+      "lineNbr": 38,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-20T12:32:50Z",
+      "side": 1,
+      "message": "nit: you can use this occasion to sort the headers",
+      "range": {
+        "startLine": 33,
+        "startChar": 0,
+        "endLine": 38,
+        "endChar": 19
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "aa878fde_1aac9218",
+        "filename": "src/tests/pho_test_utils.h",
+        "patchSetId": 3
+      },
+      "lineNbr": 41,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-20T12:32:50Z",
+      "side": 1,
+      "message": "nit: same here",
+      "range": {
+        "startLine": 40,
+        "startChar": 0,
+        "endLine": 41,
+        "endChar": 20
       },
       "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
