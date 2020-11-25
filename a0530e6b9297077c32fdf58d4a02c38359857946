@@ -71,6 +71,30 @@
     },
     {
       "key": {
+        "uuid": "d4bcdc4a_59064308",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 66,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2020-11-25T10:10:33Z",
+      "side": 1,
+      "message": "They needed to be moved because the default values get set in fill_put_params in this file, so they are needed here.\nI don\u0027t know about the section parameter though, I didn\u0027t realise that belonged to the file it was in but rather to the action the values belong to. You will have to tell me if I should change that.",
+      "parentUuid": "4600915d_12f763fc",
+      "range": {
+        "startLine": 57,
+        "startChar": 0,
+        "endLine": 66,
+        "endChar": 6
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "775ddffa_f4a54039",
         "filename": "src/common/type_utils.c",
         "patchSetId": 3
@@ -128,6 +152,30 @@
       "writtenOn": "2020-11-19T16:52:28Z",
       "side": 1,
       "message": "major: tags are not checked.",
+      "range": {
+        "startLine": 315,
+        "startChar": 9,
+        "endLine": 315,
+        "endChar": 30
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "8d3036d1_ffac29a7",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 3
+      },
+      "lineNbr": 315,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2020-11-25T10:10:33Z",
+      "side": 1,
+      "message": "That is correct! Do you have a good idea, how to check them? They are not part of the database. The only idea I would have is to put an object with too many or wrong tags and make sure it doesn\u0027t work, similar to the tags test above.",
+      "parentUuid": "aac0e13f_c4929f21",
       "range": {
         "startLine": 315,
         "startChar": 9,
