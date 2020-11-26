@@ -143,6 +143,30 @@
     },
     {
       "key": {
+        "uuid": "8415a5ea_d70ff448",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 66,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-26T10:27:48Z",
+      "side": 1,
+      "message": "Yes, I think I misunderstood the whole thing, sorry for that. Maybe we can wait an answer from Patrice.\n\nIf an alias is a structure defined in pho_types.h, we can have a fill_alias() in type_utils.c, and its goal is to be filled using cfg calls, then the store module will fill xfer information using both default values of layout/family and the alias information?\n\nstr2tags() being in this file is correct anyway.",
+      "parentUuid": "7a69275c_a0ca6a14",
+      "range": {
+        "startLine": 57,
+        "startChar": 0,
+        "endLine": 66,
+        "endChar": 6
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "775ddffa_f4a54039",
         "filename": "src/common/type_utils.c",
         "patchSetId": 3
@@ -272,6 +296,30 @@
       "side": 1,
       "message": "So you are suggesting to check the tags of the media that object has been stored to and not of the object itself? I was thinking about this as well, but isn\u0027t it the case that also objects without any tags can end up on media with tags? \nSo ok, thank you for the suggestion, I\u0027ll do that as it is more correct than having nothing at all, but it is not a fool-proof check.",
       "parentUuid": "61e70475_26e68380",
+      "range": {
+        "startLine": 315,
+        "startChar": 9,
+        "endLine": 315,
+        "endChar": 30
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "a5c42f7f_fad0f9cb",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 3
+      },
+      "lineNbr": 315,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-26T10:27:48Z",
+      "side": 1,
+      "message": "But an object does not have tags. The tags we give in the put command are to target media which own those tags. This is why I gave you the SQL request.\n\nAnd you are right about objects put without tags: they can end up on any available media.",
+      "parentUuid": "376fb773_4bd548a5",
       "range": {
         "startLine": 315,
         "startChar": 9,
