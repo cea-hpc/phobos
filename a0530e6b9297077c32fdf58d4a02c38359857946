@@ -119,6 +119,30 @@
     },
     {
       "key": {
+        "uuid": "7a69275c_a0ca6a14",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 66,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2020-11-26T09:52:48Z",
+      "side": 1,
+      "message": "I understand. They along with phobos_store.h are however tightly linked to the functionality of \"filling up the variables of the put parameters with default values where needed\", which is exactly what the new functions are doing (mainly fill_put_parameters but also apply_alias_to_put_params in a way) - and therefore what you and Patrice agreed to move here...\nI would have put those into store.c from the beginning ;D",
+      "parentUuid": "3571e55f_4ca6fd41",
+      "range": {
+        "startLine": 57,
+        "startChar": 0,
+        "endLine": 66,
+        "endChar": 6
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "775ddffa_f4a54039",
         "filename": "src/common/type_utils.c",
         "patchSetId": 3
@@ -224,6 +248,30 @@
       "side": 1,
       "message": "Maybe you can retrieve them with an inner join request:\n\n SELECT tags FROM media INNER JOIN extent ON media.id \u003d extent.extents-\u003e0-\u003e\u003e\u0027media\u0027 WHERE oid\u003d\u0027$id\u0027;\n\nThe \u00270\u0027 of extent.extents corresponds to the extent index, and you will need to loop over it if you have multiple extents (RAID 1 case for example).",
       "parentUuid": "8d3036d1_ffac29a7",
+      "range": {
+        "startLine": 315,
+        "startChar": 9,
+        "endLine": 315,
+        "endChar": 30
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "376fb773_4bd548a5",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 3
+      },
+      "lineNbr": 315,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2020-11-26T09:52:48Z",
+      "side": 1,
+      "message": "So you are suggesting to check the tags of the media that object has been stored to and not of the object itself? I was thinking about this as well, but isn\u0027t it the case that also objects without any tags can end up on media with tags? \nSo ok, thank you for the suggestion, I\u0027ll do that as it is more correct than having nothing at all, but it is not a fool-proof check.",
+      "parentUuid": "61e70475_26e68380",
       "range": {
         "startLine": 315,
         "startChar": 9,
