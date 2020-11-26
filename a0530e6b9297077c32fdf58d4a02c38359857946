@@ -95,6 +95,30 @@
     },
     {
       "key": {
+        "uuid": "3571e55f_4ca6fd41",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 66,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-26T09:00:36Z",
+      "side": 1,
+      "message": "I think they are more tied to the module which need them. Here, even if the code moved to utils, we can consider those parameters still apply to the store module only. So yes, I do not think we need to change them.\n\nBut I am not convinced with the fact that this part of code belongs here.. Proof is we need to include the store header in the common/utils library... Not fan of this.",
+      "parentUuid": "d4bcdc4a_59064308",
+      "range": {
+        "startLine": 57,
+        "startChar": 0,
+        "endLine": 66,
+        "endChar": 6
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "775ddffa_f4a54039",
         "filename": "src/common/type_utils.c",
         "patchSetId": 3
@@ -176,6 +200,30 @@
       "side": 1,
       "message": "That is correct! Do you have a good idea, how to check them? They are not part of the database. The only idea I would have is to put an object with too many or wrong tags and make sure it doesn\u0027t work, similar to the tags test above.",
       "parentUuid": "aac0e13f_c4929f21",
+      "range": {
+        "startLine": 315,
+        "startChar": 9,
+        "endLine": 315,
+        "endChar": 30
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "61e70475_26e68380",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 3
+      },
+      "lineNbr": 315,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-11-26T09:00:36Z",
+      "side": 1,
+      "message": "Maybe you can retrieve them with an inner join request:\n\n SELECT tags FROM media INNER JOIN extent ON media.id \u003d extent.extents-\u003e0-\u003e\u003e\u0027media\u0027 WHERE oid\u003d\u0027$id\u0027;\n\nThe \u00270\u0027 of extent.extents corresponds to the extent index, and you will need to loop over it if you have multiple extents (RAID 1 case for example).",
+      "parentUuid": "8d3036d1_ffac29a7",
       "range": {
         "startLine": 315,
         "startChar": 9,
