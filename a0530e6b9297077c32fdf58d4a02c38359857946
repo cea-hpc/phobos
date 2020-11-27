@@ -167,6 +167,30 @@
     },
     {
       "key": {
+        "uuid": "b0957b79_d7340212",
+        "filename": "src/common/type_utils.c",
+        "patchSetId": 3
+      },
+      "lineNbr": 66,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-27T16:53:00Z",
+      "side": 1,
+      "message": "To avoid the import of pho_store.h here, I\u0027m OK to relocate all the alias code into the store.c file and to let only the str2tags() function here.",
+      "parentUuid": "8415a5ea_d70ff448",
+      "range": {
+        "startLine": 57,
+        "startChar": 0,
+        "endLine": 66,
+        "endChar": 6
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "775ddffa_f4a54039",
         "filename": "src/common/type_utils.c",
         "patchSetId": 3
