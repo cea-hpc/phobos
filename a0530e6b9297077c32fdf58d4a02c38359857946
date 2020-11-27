@@ -332,6 +332,30 @@
     },
     {
       "key": {
+        "uuid": "1cb240c9_4f1d060e",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 3
+      },
+      "lineNbr": 315,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-11-27T16:22:13Z",
+      "side": 1,
+      "message": "To check tags, I\u0027n not fan to add an SQL direct command. The DB layer is designed to be as independant as possible. Why not simply creating media with different tags and simply checking if tags are correctly taken into account by having an error because not media are available ?",
+      "parentUuid": "a5c42f7f_fad0f9cb",
+      "range": {
+        "startLine": 315,
+        "startChar": 9,
+        "endLine": 315,
+        "endChar": 30
+      },
+      "revId": "a0530e6b9297077c32fdf58d4a02c38359857946",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "23131b14_a6a65911",
         "filename": "src/tests/acceptance.sh",
         "patchSetId": 3
