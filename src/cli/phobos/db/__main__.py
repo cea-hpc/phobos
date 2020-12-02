@@ -37,8 +37,9 @@ Convert phobos database
 import argparse
 import logging
 from getpass import getpass
-import psycopg2
 import sys
+
+import psycopg2
 
 from phobos.cli import PhobosActionContext
 from phobos.db import Migrator, CURRENT_SCHEMA_VERSION, db_config
@@ -68,12 +69,12 @@ def migrate(args, migrator):
     migrator.migrate(args.target_version)
 
 
-def print_schema_version(_args, migrator):
+def print_schema_version(_args, migrator): # pylint: disable=unused-argument
     """Retrieve and print schema version"""
     print(migrator.schema_version())
 
 
-def setup_db_main(args, _migrator):
+def setup_db_main(args, _migrator): # pylint: disable=unused-argument
     """CLI wrapper on setup_db"""
     password = args.password
     user = args.user
@@ -103,7 +104,7 @@ def setup_db_main(args, _migrator):
             migrator.create_schema()
 
 
-def drop_db_main(args, _migrator):
+def drop_db_main(args, _migrator): # pylint: disable=unused-argument
     """CLI wrapper on drop_db"""
     db_config.drop_db(args.database, args.user)
     print("Database %s and user %s successfully dropped" % (
@@ -112,6 +113,7 @@ def drop_db_main(args, _migrator):
 
 
 def main(argv=None):
+    """Migrator main function."""
     migrator = Migrator()
 
     parser = argparse.ArgumentParser(
