@@ -53,6 +53,5 @@ def get_val(section, name, default=RAISE_ERROR):
         if default is RAISE_ERROR:
             raise KeyError("No value in conf for section '%s', key '%s'"
                            % (section, name))
-        else:
-            return default
+        return default
     return cfg_value.value.decode('utf-8')
