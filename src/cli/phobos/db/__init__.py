@@ -17,6 +17,10 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
+"""
+Database module helpers
+"""
+
 from contextlib import contextmanager
 from distutils.version import LooseVersion
 import json
@@ -43,7 +47,7 @@ def get_sql_script(schema_version, script_name):
 
 class Migrator:
     """StrToInt JSONB conversion engine"""
-    def __init__(self, conn=None, **kwargs):
+    def __init__(self, conn=None):
         self.conn = None
         # Externally provided connection
         self.ext_conn = conn
@@ -61,6 +65,7 @@ class Migrator:
 
     @contextmanager
     def connect(self):
+        """Connect to the database"""
         try:
             if self.ext_conn:
                 self.conn = self.ext_conn
@@ -141,7 +146,7 @@ class Migrator:
     def convert_1_to_2(self):
         """Convert DB from model 1 (phobos v1.1) to 2 (phobos v1.2)"""
         with self.connect():
-            self.convert_schema_1_to_2();
+            self.convert_schema_1_to_2()
 
     def convert_schema_2_to_3(self):
         """
@@ -193,7 +198,7 @@ class Migrator:
     def convert_2_to_3(self):
         """Convert DB from model 2 (phobos v1.2) to 3 (phobos v1.91)"""
         with self.connect():
-            self.convert_schema_2_to_3();
+            self.convert_schema_2_to_3()
 
     def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""
@@ -224,7 +229,7 @@ class Migrator:
                 raise RuntimeError(
                     "Inconsistent migration table, cannot migrate from %s"
                     % (current_version)
-                )
+                ) from KeyError
             LOGGER.info(
                 "Migrating from %s to %s", current_version, next_version
             )
@@ -240,7 +245,6 @@ class Migrator:
         """Return the current version of the database schema"""
         # Be optimistic and attempt to retrieve version from schema_info table
         with self.connect(), self.conn.cursor() as cursor:
-            version = None
             # Is there a "schema_info" table?
             cursor.execute("""
                 SELECT 1
