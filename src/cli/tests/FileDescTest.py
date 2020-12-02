@@ -27,25 +27,29 @@ import unittest
 from contextlib import contextmanager
 from tempfile import NamedTemporaryFile
 
-from phobos.core.const import PHO_XFER_OP_GETMD, PHO_XFER_OP_PUT
+from phobos.core.const import PHO_XFER_OP_GETMD, PHO_XFER_OP_PUT # pylint: disable=no-name-in-module
 from phobos.core.store import XferDescriptor
 
+@contextmanager
+def _open_context():
+    """Initialize open_xxx() test context."""
+    file_desc = NamedTemporaryFile()
+    yield file_desc
+
+@contextmanager
+def _getsize_context():
+    """Initialize getsize() test context."""
+    sizes = [0, 1, 16, 32]
+    file_sizes = [(NamedTemporaryFile('w'), size) for size in sizes]
+    for file_desc, size in file_sizes:
+        file_desc.write('a' * size)
+        file_desc.flush()
+    yield [(file_desc.name, size) for file_desc, size in file_sizes]
+
 class FileDescTest(unittest.TestCase):
-    @contextmanager
-    def _open_context(self):
-        f = NamedTemporaryFile()
-        yield f
-
-    @contextmanager
-    def _getsize_context(self):
-        sizes = [0, 1, 16, 32]
-        file_sizes = [(NamedTemporaryFile('w'), size) for size in sizes]
-        for f, size in file_sizes:
-            f.write('a' * size)
-            f.flush()
-        yield [(f.name, size) for f, size in file_sizes]
-
+    """Unit test class."""
     def _getsize_good(self, path, size):
+        """Check the xfer size parameter is correctly set."""
         xfr = XferDescriptor()
         xfr.xd_op = PHO_XFER_OP_PUT
         xfr.open_file(path)
@@ -53,18 +57,21 @@ class FileDescTest(unittest.TestCase):
         os.close(xfr.xd_fd)
 
     def test_open_good(self):
-        with self._open_context() as f:
+        """Check opening an existing file is valid."""
+        with _open_context() as file_desc:
             xfr = XferDescriptor()
-            xfr.open_file(f.name)
+            xfr.open_file(file_desc.name)
             self.assertTrue(xfr.xd_fd >= 0)
             os.close(xfr.xd_fd)
 
     def test_open_notexist(self):
+        """Check opening a non-existing file is not valid."""
         xfr = XferDescriptor()
         with self.assertRaises(OSError):
             xfr.open_file("foo")
 
     def test_open_empty(self):
+        """Check bad openings."""
         xfr = XferDescriptor()
         with self.assertRaises(ValueError):
             xfr.open_file("")
@@ -72,6 +79,7 @@ class FileDescTest(unittest.TestCase):
             xfr.open_file(None)
 
     def test_open_getmd(self):
+        """Check bad openings with a GETMD has no impact."""
         xfr = XferDescriptor()
         xfr.xd_op = PHO_XFER_OP_GETMD
         xfr.open_file("")
@@ -80,7 +88,8 @@ class FileDescTest(unittest.TestCase):
         self.assertEqual(xfr.xd_fd, -1)
 
     def test_getsize(self):
-        with self._getsize_context() as path_sizes:
+        """Check xfer size parameter setter."""
+        with _getsize_context() as path_sizes:
             for path, size in path_sizes:
                 self._getsize_good(path, size)
 
