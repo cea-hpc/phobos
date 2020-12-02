@@ -19,7 +19,6 @@
 """Helpers to manage postgres database and user setup."""
 
 from contextlib import contextmanager
-import os
 
 import psycopg2
 
