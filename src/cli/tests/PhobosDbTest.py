@@ -19,6 +19,10 @@
 #  along with phobos. if not, see <http://www.gnu.org/licenses/>.
 #
 
+"""
+Unit tests for database migration module
+"""
+
 import unittest
 
 from phobos.db import Migrator, ORDERED_SCHEMAS, CURRENT_SCHEMA_VERSION
@@ -44,7 +48,7 @@ class MigratorTest(unittest.TestCase):
             self.migrator.create_schema(version)
             self.assertEqual(self.migrator.schema_version(), version)
 
-        with self.assertRaisesRegexp(ValueError, "Unknown schema version: foo"):
+        with self.assertRaisesRegex(ValueError, "Unknown schema version: foo"):
             self.migrator.create_schema("foo")
 
     def test_migration(self):
@@ -64,13 +68,13 @@ class MigratorTest(unittest.TestCase):
         self.assertEqual(self.migrator.schema_version(), CURRENT_SCHEMA_VERSION)
 
         # Unreachable schema version (current is CURRENT_SCHEMA_VERSION)
-        with self.assertRaisesRegexp(ValueError, "Don't know how to migrate"):
+        with self.assertRaisesRegex(ValueError, "Don't know how to migrate"):
             self.migrator.migrate(ORDERED_SCHEMAS[0])
 
-        with self.assertRaisesRegexp(
-                ValueError,
-                "Cannot migrate to an older version"
-             ):
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot migrate to an older version"
+        ):
             self.migrator.migrate(ORDERED_SCHEMAS[-2])
 
 if __name__ == '__main__':
