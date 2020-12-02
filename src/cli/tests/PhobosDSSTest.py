@@ -21,7 +21,6 @@
 
 """Unit tests for phobos.dss"""
 
-import sys
 import unittest
 import os
 
@@ -29,7 +28,7 @@ from random import randint
 
 from phobos.core.dss import Client
 from phobos.core.ffi import DevInfo, Id, MediaInfo, Resource
-from phobos.core.const import PHO_RSC_DIR, PHO_RSC_TAPE, rsc_family2str
+from phobos.core.const import PHO_RSC_DIR, PHO_RSC_TAPE, rsc_family2str # pylint: disable=no-name-in-module
 
 
 class DSSClientTest(unittest.TestCase):
@@ -37,7 +36,7 @@ class DSSClientTest(unittest.TestCase):
     This test case issue requests to the DSS to stress the python bindings.
     """
 
-    def test_client_connect(self):
+    def test_client_connect(self): # pylint: disable=no-self-use
         """Connect to backend with valid parameters."""
         cli = Client()
         cli.connect()
@@ -72,6 +71,7 @@ class DSSClientTest(unittest.TestCase):
             self.assertEqual(medias[len(medias) - 1].name, medias[-1].name)
 
     def test_list_media_by_tags(self):
+        """List media with tags."""
         with Client() as client:
             client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm0')
             client.media.add(PHO_RSC_DIR, 'POSIX', None, 'm1', tags=['foo'])
@@ -87,28 +87,29 @@ class DSSClientTest(unittest.TestCase):
             n_bar_foo = 2
 
             for tag, n_tag in n_tags.items():
-                n = 0
+                num = 0
                 for medium in client.media.get(tags=tag):
                     self.assertTrue(tag in medium.tags)
-                    n += 1
-                self.assertEqual(n, n_tag)
+                    num += 1
+                self.assertEqual(num, n_tag)
 
-            n = 0
+            num = 0
             for medium in client.media.get(tags=['bar', 'foo']):
                 self.assertTrue('bar' in medium.tags)
                 self.assertTrue('foo' in medium.tags)
-                n += 1
-            self.assertEqual(n, n_bar_foo)
+                num += 1
+            self.assertEqual(num, n_bar_foo)
 
     def test_getset(self):
         """GET / SET an object to validate the whole chain."""
         with Client() as client:
             insert_list = []
-            for i in range(10):
-                id = Id(PHO_RSC_DIR,
-                        name='__TEST_MAGIC_%d' % randint(0, 1000000))
-                rsc = Resource(id=id, model='')
-                dev = DevInfo(rsc=rsc, path='/tmp/test_%d' % randint(0,1000000),
+            for _ in range(10):
+                rid = Id(PHO_RSC_DIR,
+                         name='__TEST_MAGIC_%d' % randint(0, 1000000))
+                rsc = Resource(id=rid, model='')
+                dev = DevInfo(rsc=rsc,
+                              path='/tmp/test_%d' % randint(0, 1000000),
                               host='localhost')
 
                 insert_list.append(dev)
@@ -126,7 +127,7 @@ class DSSClientTest(unittest.TestCase):
 
             client.devices.delete(res)
 
-    def test_add_sqli(self):
+    def test_add_sqli(self): # pylint: disable=no-self-use
         """The input data is sanitized and does not cause an SQL injection."""
         # Not the best place to test SQL escaping, but most convenient one.
         with Client() as client:
@@ -134,7 +135,7 @@ class DSSClientTest(unittest.TestCase):
                 PHO_RSC_TAPE, "LTFS", "lto8", "TAPE_SQLI_0'; <sqli>",
             )
 
-    def test_manipulate_empty(self):
+    def test_manipulate_empty(self): # pylint: disable=no-self-use
         """SET/DEL empty and None objects."""
         with Client() as client:
             client.devices.insert([])
