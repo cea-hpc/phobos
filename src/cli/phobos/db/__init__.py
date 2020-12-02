@@ -26,8 +26,9 @@ import psycopg2
 
 from phobos.core import cfg
 
-CURRENT_SCHEMA_VERSION = "1.2"
-AVAIL_SCHEMAS = set(["1.1", "1.2"])
+ORDERED_SCHEMAS = ["1.1", "1.2", "1.91"]
+CURRENT_SCHEMA_VERSION = ORDERED_SCHEMAS[-1]
+AVAIL_SCHEMAS = set(ORDERED_SCHEMAS)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -49,8 +50,9 @@ class Migrator:
 
         # { source_version: (target_version, migration_function) }
         self.convert_funcs = {
-            "0": ("1.2", lambda: self.create_schema("1.2")),
+            "0": ("1.91", lambda: self.create_schema("1.91")),
             "1.1": ("1.2", self.convert_1_to_2),
+            "1.2": ("1.91", self.convert_2_to_3),
         }
 
         self.reachable_versions = set(
@@ -140,6 +142,53 @@ class Migrator:
         """Convert DB from model 1 (phobos v1.1) to 2 (phobos v1.2)"""
         with self.connect():
             self.convert_schema_1_to_2();
+
+    def convert_schema_2_to_3(self):
+        """
+        DB schema changes:
+        - add uuid column into object table
+        - add version column into object table
+        - create deprecated_object table: as object table, adding deprec_time
+        """
+        cur = self.conn.cursor()
+        cur.execute("""
+            -- add uuid to object table and extent table
+            ALTER TABLE object ADD uuid varchar(36) UNIQUE
+                DEFAULT uuid_generate_v4();
+            ALTER TABLE extent ADD uuid varchar(36) UNIQUE;
+
+            -- copy uuid value from object table into extent table
+            UPDATE extent SET uuid = object.uuid from object
+                where extent.oid = object.oid;
+
+            -- add version to object table and extent table
+            ALTER TABLE object ADD version integer DEFAULT 1 NOT NULL;
+            ALTER TABLE extent ADD version integer DEFAULT 1 NOT NULL;
+
+            -- move primary key of extent table from (oid) to (uuid, version)
+            ALTER TABLE extent DROP CONSTRAINT extent_pkey;
+            ALTER TABLE extent ADD PRIMARY KEY (uuid, version);
+
+            -- create deprecated_object table as object table with deprec_time
+            CREATE TABLE deprecated_object (
+                oid         varchar(1024),
+                uuid        varchar(36),
+                version     integer DEFAULT 1 NOT NULL,
+                user_md     jsonb,
+                deprec_time timestamp DEFAULT now(),
+                PRIMARY KEY (uuid, version)
+            );
+
+            -- Update current schema version
+            UPDATE schema_info SET version = '1.91';
+        """)
+        self.conn.commit()
+        cur.close()
+
+    def convert_2_to_3(self):
+        """Convert DB from model 2 (phobos v1.2) to 3 (phobos v1.91)"""
+        with self.connect():
+            self.convert_schema_2_to_3();
 
     def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""

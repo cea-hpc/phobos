@@ -3,15 +3,18 @@ SCHEMA DE METADONNEES
 Object store metadata
 =====================
 
-object: oid, user_md (pk: oid)
+object: oid, uuid, version, user_md (pk: oid)
         oid: identifiant de l'objet
+        uuid: unique identifier to distinguish different generations of the same
+              oid
+        version: unique identifier inside the same uuid, from 1 to n
         user_md: blob de metadonnees utilisateur (json)
 
-extents: oid, copy_num, state, layout, extents (pk: (oid,copy_num))
-	oid: object id (as in object table): string 1024
-	copy_num: numero de la copie (v0: toujours 0): 256 is enough for anybody...
+deprecated_object: oid, uuid, version, user_md, deprec_time (pk: uuid, version)
+        deprec_time: date of migration from object to deprecated_object table
+
+extents: oid, uuid, version, state, lyt_info, extents (pk: (uuid, version))
 	state: ('pending', 'sync', 'orphan')
-	lyt_type: layout type ('simple', 'parts', 'raid0', 'raid1', ...)
 	lyt_info (objet json): parametres specifique au layout
            ex. pour 'simple': vide
                pour 'raid0': {"strp_cnt":"2","strp_sz":"1048576"})

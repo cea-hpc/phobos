@@ -69,14 +69,18 @@ def setup_db(database, user, password):
                     % (database, user)
                 )
 
-    # Connect to the newly created database to create extension
+    # Connect to the newly created database to create extensions
     with psycopg2.connect(dbname=database) as conn:
         conn.autocommit = True
         with conn.cursor() as cursor:
             # Create btree_gin extension
-            cursor.execute(
-                "CREATE EXTENSION IF NOT EXISTS btree_gin SCHEMA public"
-            )
+            cursor.execute("""
+                -- Create btree_gin extension
+                CREATE EXTENSION IF NOT EXISTS btree_gin SCHEMA public;
+
+                -- Create uuid-ossp extension
+                CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA public;
+            """)
 
 def drop_db(database, user):
     """Drop the phobos database and user"""

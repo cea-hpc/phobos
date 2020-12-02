@@ -453,7 +453,8 @@ static const char * const insert_query[] = {
                    " fs_type, address_type, fs_status, fs_label, stats, tags,"
                    " lock)"
                    " VALUES ",
-    [DSS_LAYOUT] = "INSERT INTO extent (oid, state, lyt_info, extents) VALUES ",
+    [DSS_LAYOUT] = "INSERT INTO extent (oid, uuid, state, lyt_info, extents)"
+                   " VALUES ",
     [DSS_OBJECT] = "INSERT INTO object (oid, user_md) VALUES ",
 };
 
@@ -486,7 +487,8 @@ static const char * const insert_query_values[] = {
     [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '')%s",
     [DSS_MEDIA]  = "('%s', %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s,"
                    " '')%s",
-    [DSS_LAYOUT] = "('%s', '%s', '%s', '%s')%s",
+    [DSS_LAYOUT] = "('%s', (select uuid from object where oid = '%s'), '%s',"
+                   " '%s', '%s')%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
 };
 
@@ -1117,7 +1119,7 @@ static int get_layout_setrequest(PGconn *_conn, struct layout_info *item_list,
 
         if (action == DSS_SET_INSERT)
             g_string_append_printf(request, insert_query_values[DSS_LAYOUT],
-                                   p_layout->oid,
+                                   p_layout->oid, p_layout->oid,
                                    extent_state2str(p_layout->state),
                                    pres, layout, i < item_cnt-1 ? "," : ";");
         else if (action == DSS_SET_UPDATE)

@@ -165,17 +165,16 @@ test_check_set "media" "update"
 test_check_get "media" '{"$GT": {"DSS::MDA::nb_obj": "1002"}}'
 test_check_set "media" "delete"
 test_check_get "media" '{"$LIKE": {"DSS::MDA::id": "%COPY%"}}'
-echo "**** TEST: DSS_SET OBJECT  ****"
+echo "**** TEST: DSS_SET OBJECT AND LAYOUT ****"
 test_check_set "object" "insert"
 test_check_get "object" '{"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}'
-#test_check_set "object" "update"
-test_check_set "object" "delete"
-test_check_get "object" '{"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}'
-echo "**** TEST: DSS_SET LAYOUT  ****"
+test_check_set "object" "update"
 test_check_set "layout" "insert"
 test_check_get "layout" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
 test_check_set "layout" "update"
 test_check_get "layout" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
+test_check_set "object" "delete"
+test_check_get "object" '{"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}'
 test_check_set "layout" "delete" "oidtest" "FAIL"
 test_check_set "layout" "delete"
 test_check_get "layout" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'

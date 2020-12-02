@@ -28,6 +28,10 @@ Convert phobos database
   * from 1 (phobos v1.1) to 2 (phobos v1.2):
   - media and device model are updated from enum type to varchar
   - create schema_info table
+  * from 2 (phobos v1.2) to 3 (phobos v1.91):
+  - uuid and version into object table
+  - uuid and version into extent table and primary key to (uuid, version)
+  - new deprecated_object table
 """
 
 import argparse

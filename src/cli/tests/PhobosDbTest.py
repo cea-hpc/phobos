@@ -21,7 +21,7 @@
 
 import unittest
 
-from phobos.db import Migrator, CURRENT_SCHEMA_VERSION
+from phobos.db import Migrator, ORDERED_SCHEMAS, CURRENT_SCHEMA_VERSION
 
 class MigratorTest(unittest.TestCase):
     """Test the Migrator class (schema management)"""
@@ -39,7 +39,7 @@ class MigratorTest(unittest.TestCase):
         self.assertEqual(self.migrator.schema_version(), "0")
 
         # Create various schema versions
-        for version in ["1.1", "1.2"]:
+        for version in ORDERED_SCHEMAS:
             self.migrator.drop_tables()
             self.migrator.create_schema(version)
             self.assertEqual(self.migrator.schema_version(), version)
@@ -50,7 +50,7 @@ class MigratorTest(unittest.TestCase):
     def test_migration(self):
         """Test migrations between schemas"""
         # Test migration from every valid versions
-        for version in ["1.1", "1.2"]:
+        for version in ORDERED_SCHEMAS:
             self.migrator.create_schema(version)
             self.migrator.migrate()
             self.assertEqual(
@@ -63,9 +63,15 @@ class MigratorTest(unittest.TestCase):
         self.migrator.migrate()
         self.assertEqual(self.migrator.schema_version(), CURRENT_SCHEMA_VERSION)
 
-        # Unreachable schema version (current is 1.2)
+        # Unreachable schema version (current is CURRENT_SCHEMA_VERSION)
         with self.assertRaisesRegexp(ValueError, "Don't know how to migrate"):
-            self.migrator.migrate("1.1")
+            self.migrator.migrate(ORDERED_SCHEMAS[0])
+
+        with self.assertRaisesRegexp(
+                ValueError,
+                "Cannot migrate to an older version"
+             ):
+            self.migrator.migrate(ORDERED_SCHEMAS[-2])
 
 if __name__ == '__main__':
     unittest.main(buffer=True)

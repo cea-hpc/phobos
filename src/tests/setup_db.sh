@@ -69,8 +69,9 @@ insert into media (family, model, id, adm_status, fs_type, address_type,
 insert into object (oid, user_md)
     values ('01230123ABC', '{}');
 
-insert into extent (oid, state, lyt_info, extents)
-    values ('QQQ6ASQDSQD', 'pending', '{"name":"simple","major":0,"minor":1}',
+insert into extent (oid, uuid, state, lyt_info, extents)
+    values ('01230123ABC', (select uuid from object where oid = '01230123ABC'),
+            'pending', '{"name":"simple","major":0,"minor":1}',
            '[{"media":"/tmp/pho_testdir1","addr":"test3",
 	   "sz":21123456,"fam":"dir"},\
             {"media":"/tmp/pho_testdir2","addr":"test4",
