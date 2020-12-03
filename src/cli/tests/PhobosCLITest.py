@@ -29,13 +29,10 @@ import tempfile
 
 from contextlib import contextmanager
 from io import StringIO
-from random import randint
 from socket import gethostname
 
 from phobos.cli import PhobosActionContext
 from phobos.core.dss import Client, MediaManager
-from phobos.core.ffi import DevInfo
-from phobos.core.const import PHO_RSC_DIR, PHO_RSC_TAPE
 
 def gethostname_short():
     """Return short hostname"""
@@ -51,21 +48,21 @@ def output_intercept():
     finally:
         sys.stdout, sys.stderr = old_out, old_err
 
-
 class CLIParametersTest(unittest.TestCase):
     """
+    Base class to execute CLI and check return codes.
     This test exerts phobos command line parser with valid and invalid
     combinations.
     """
-    """Base class to execute CLI and check return codes."""
-    def check_cmdline_valid(self, args):
+    @staticmethod
+    def check_cmdline_valid(args):
         """Make sure a command line is seen as valid."""
         PhobosActionContext(args)
 
     def check_cmdline_exit(self, args, code=0):
         """Make sure a command line exits with a given error code."""
         print('"' + ' '.join(args) + '"')
-        with output_intercept() as (stdout, stderr):
+        with output_intercept():
             try:
                 # 2.7+ required to use assertRaises as a context manager
                 self.check_cmdline_valid(args)
@@ -213,11 +210,11 @@ class MediaAddTest(BasicExecutionTest):
 
         # No '-T' argument does nothing
         self.pho_execute(['tape', 'update', 'update0'])
-        update0, = client.media.get(id=med_id)
+        update0, = client.media.get(id='update0')
         self.assertCountEqual(update0.tags, ['new-tag1', 'new-tag2'])
 
         # Test a failed update
-        def failed_update(*args, **kwargs):
+        def failed_update(*args, **kwargs): # pylint: disable=unused-argument
             """Emulates a failed update by raising EnvironmentError"""
             raise EnvironmentError(errno.ENOENT, "Expected failed")
 
@@ -257,7 +254,8 @@ class MediaAddTest(BasicExecutionTest):
         self.pho_execute(['tape', 'add', 'E000[10-15]', '-t', 'BLAH'],
                          code=os.EX_DATAERR)
 
-    def test_tape_model_case_insentive_match(self):
+    def test_tape_model_case_insentive_match(self): # pylint: disable=invalid-name
+        """Test tape type is case insensitive."""
         self.pho_execute(['tape', 'add', 'F000[10-15]', '-t', 'lto8'])
         self.pho_execute(['tape', 'add', 'G000[10-15]', '-t', 'lTo8'])
         self.pho_execute(['tape', 'add', 'H000[10-15]', '-t', 'LTO8'])
@@ -273,6 +271,7 @@ class MediumListTest(BasicExecutionTest):
     exercise the upper layers (command line parsing etc.)
     """
     def add_media(self):
+        """Context function which adds media."""
         self.pho_execute(['tape', 'add', 'm0', '-t', 'lto8'])
         self.pho_execute(['tape', 'add', 'm1', '-t', 'lto8', '-T', 'foo'])
         self.pho_execute(['tape', 'add', 'm2', '-t', 'lto8', '-T', 'foo,bar'])
@@ -282,6 +281,7 @@ class MediumListTest(BasicExecutionTest):
                           '-T', 'foo,bar,goo'])
 
     def test_med_list_tags(self):
+        """Test added media with tags are correctly listed."""
         self.add_media()
         output, _ = self.pho_execute_capture(['tape', 'list', '-T', 'foo'])
         self.assertNotIn("m0", output)
@@ -316,7 +316,7 @@ class DeviceAddTest(BasicExecutionTest):
     def test_dir_add(self):
         """test adding directories. Simple case."""
         flist = []
-        for i in range(5):
+        for _ in range(5):
             file = tempfile.NamedTemporaryFile()
             self.pho_execute(['-v', 'dir', 'add', file.name])
             flist.append(file)
@@ -331,7 +331,7 @@ class DeviceAddTest(BasicExecutionTest):
         tmp_path = tmp_f.name
         self.pho_execute(['dir', 'add', tmp_path, '--tags', 'tag-foo,tag-bar'])
         output, _ = self.pho_execute_capture(['dir', 'list', '-o', 'all',
-                                             tmp_path])
+                                              tmp_path])
         self.assertIn("['tag-foo', 'tag-bar']", output)
 
     def test_dir_update(self):
@@ -366,7 +366,7 @@ class DeviceAddTest(BasicExecutionTest):
         self.pho_execute(['-v', 'dir', 'add', file.name])
         self.pho_execute(['-v', 'dir', 'add', file.name], code=os.EX_DATAERR)
 
-    def test_dir_add_correct_and_missing(self):
+    def test_dir_add_correct_and_missing(self): # pylint: disable=invalid-name
         """
         Add existing and a non-existent directories should add the correct
         directories and raise an error because of the missing one.
