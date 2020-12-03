@@ -27,7 +27,7 @@ import subprocess
 import unittest
 import re
 
-from phobos.core.const import PHO_LIB_SCSI
+from phobos.core.const import PHO_LIB_SCSI # pylint: disable=no-name-in-module
 from phobos.core.ldm import LibAdapter
 
 
@@ -39,6 +39,8 @@ class LdmTest(unittest.TestCase):
     This test case issue requests to the DSS to stress the python bindings.
     """
 
+    # XXX: refactor this test to split the code in subfunctions
+    # pylint: disable=too-many-branches,too-many-locals,too-many-statements
     def test_lib_scan(self):
         """Test LdmAdapter.scan() against mtx output"""
         if not os.access(LIB_TEST_DEV, os.W_OK):
@@ -67,7 +69,7 @@ class LdmTest(unittest.TestCase):
 
         # Parse mtx output:
         #   Storage Changer /dev/changer:4 Drives, 24 Slots ( 4 Import/Export )
-        # Data Transfer Element 0:Full (Storage Element 2 Loaded):VolumeTag = P00001L5
+        # Data Transfer Element 0:Full (Storage Element 2 Loaded):VolumeTag = P00001L5 # pylint: disable=line-too-long
         # Data Transfer Element 1:Empty
         # ...
         #       Storage Element 1:Empty
@@ -75,10 +77,10 @@ class LdmTest(unittest.TestCase):
         # ...
         #       Storage Element 21 IMPORT/EXPORT:Empty
         rel_addr_re =\
-            re.compile(".*Element (?P<rel_addr>\d+)(?: IMPORT/EXPORT)?:.*")
+            re.compile(r".*Element (?P<rel_addr>\d+)(?: IMPORT/EXPORT)?:.*")
         rel_addr_loaded_re =\
-            re.compile(".*Storage Element (?P<rel_addr>\d+) Loaded.*")
-        volume_re = re.compile(".*:VolumeTag ?= ?(?P<volume>\w+).*")
+            re.compile(r".*Storage Element (?P<rel_addr>\d+) Loaded.*")
+        volume_re = re.compile(r".*:VolumeTag ?= ?(?P<volume>\w+).*")
 
         mtx_elts = {}
         imp_exp_base_addr = None
@@ -142,7 +144,7 @@ class LdmTest(unittest.TestCase):
             lib_elts.setdefault(lib_elt["type"], []).append(elt)
 
         # Check lib_elts conformity
-        self.maxDiff = None
+        self.maxDiff = None # pylint: disable=invalid-name
         self.assertGreaterEqual(len(lib_elts.pop("arm")), 1)
         self.assertEqual(mtx_elts, lib_elts)
 
