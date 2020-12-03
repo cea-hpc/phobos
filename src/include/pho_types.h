@@ -216,6 +216,11 @@ struct pho_buff {
 
 struct pho_lock {
     time_t   lock_ts;
+    /**
+     *  "" if no lock or
+     *  "hostname:tid:time:lock_number", 256 characters at the most,
+     *  "%.213s:%.8lx:%.16lx:%.16lx".
+     */
     char    *lock;
 };
 
