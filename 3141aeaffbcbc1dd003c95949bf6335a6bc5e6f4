@@ -45,6 +45,52 @@
       "revId": "3141aeaffbcbc1dd003c95949bf6335a6bc5e6f4",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "ae7c3ac6_3c9ac6e7",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 4
+      },
+      "lineNbr": 391,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-12-04T10:40:49Z",
+      "side": 1,
+      "message": "suggest: maybe add \u0027non existing\u0027 to \u0027additional\u0027",
+      "range": {
+        "startLine": 391,
+        "startChar": 24,
+        "endLine": 391,
+        "endChar": 34
+      },
+      "revId": "3141aeaffbcbc1dd003c95949bf6335a6bc5e6f4",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "c4a44884_3f1d753d",
+        "filename": "src/tests/test_store_alias.c",
+        "patchSetId": 4
+      },
+      "lineNbr": 112,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-12-04T10:40:49Z",
+      "side": 1,
+      "message": "defect: a tags_free() call on this is missing\n\nThis makes me wonder if a tags_free() call is needed each time a fill_put_params() is done, to release tags memory?",
+      "range": {
+        "startLine": 112,
+        "startChar": 4,
+        "endLine": 112,
+        "endChar": 70
+      },
+      "revId": "3141aeaffbcbc1dd003c95949bf6335a6bc5e6f4",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
     }
   ]
 }
