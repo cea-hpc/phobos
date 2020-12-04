@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "44ee3e85_b7d3cfe8",
+        "filename": "src/tests/Makefile.am",
+        "patchSetId": 4
+      },
+      "lineNbr": 72,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2020-12-04T09:00:39Z",
+      "side": 1,
+      "message": "minor: is adding this cfg lib is still mandatory ? now you remove fill_put_param test and load_config from this test_type_utils.c source ?",
+      "range": {
+        "startLine": 72,
+        "startChar": 22,
+        "endLine": 72,
+        "endChar": 42
+      },
+      "revId": "3141aeaffbcbc1dd003c95949bf6335a6bc5e6f4",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    }
+  ]
+}
