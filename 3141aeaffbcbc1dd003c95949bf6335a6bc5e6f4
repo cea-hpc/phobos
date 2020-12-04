@@ -48,6 +48,23 @@
     },
     {
       "key": {
+        "uuid": "1f2368a8_932c4c90",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 4
+      },
+      "lineNbr": 367,
+      "author": {
+        "id": 1010215
+      },
+      "writtenOn": "2020-12-04T11:48:21Z",
+      "side": 1,
+      "message": "(ci/tests)\n\n + put_alias\n + local alias_full\u003dfull-test\n + local alias_tape\u003dfull-tape-test\n + local alias_empty_family\u003dempty-family-test\n + local alias_empty_layout\u003dempty-layout-test\n + local alias_empty_tags\u003dempty-tag-test\n + local alias_bad\u003dalias-noexist\n + local alias_nonexist_tags\u003derroneus-tag-test\n + local \u0027PSQL\u003dpsql phobos phobos\u0027\n + local id_full\u003dtest/hosts-alias1.5799\n + local id_empty_family\u003dtest/hosts-alias2.5799\n + local id_empty_layout\u003dtest/hosts-alias3.5799\n + local id_empty_tags\u003dtest/hosts-alias4.5799\n + local id_noexist\u003dtest/hosts-alias5.5799\n + local id_with_fam\u003dtest/hosts-alias6.5799\n + local id_with_lay\u003dtest/hosts-alias7.5799\n + local id_with_tag1\u003dtest/hosts-alias8.5799\n + local id_with_tag2\u003dtest/hosts-alias9.5799\n + local id_with_tag3\u003dtest/hosts-alias10.5799\n + local repl_count\u003drepl_count\n + export PHOBOS_LAYOUT_RAID1_repl_count\u003d1\n + PHOBOS_LAYOUT_RAID1_repl_count\u003d1\n + test_single_alias_put full-test test/hosts-alias1.5799 dir raid1\n + local alias\u003dfull-test\n + local id\u003dtest/hosts-alias1.5799\n + local expected_fam\u003ddir\n + local expected_layout\u003draid1\n + local additional_arguments\u003d\n + /home/testuser/phobos/src/cli/scripts/phobos put -a full-test /etc/hosts test/hosts-alias1.5799\n 2020-12-04 10:00:21.619995000 \u003cINFO\u003e No media found matching dir \u0027/tmp/test.pho.1\u0027\n 2020-12-04 10:00:21.620288000 \u003cINFO\u003e No media found matching dir \u0027/tmp/test.pho.2\u0027\n 2020-12-04 10:00:21.620321000 \u003cERROR\u003e Could not resolve path \u0027/tmp/dir.5799.1\u0027: No such file or directory (2)\n 2020-12-04 10:00:21.620356000 \u003cERROR\u003e Could not resolve path \u0027/tmp/dir.5799.2\u0027: No such file or directory (2)\n 2020-12-04 10:00:21.621068000 \u003cWARNING\u003e Available space on media : 0, required size : 97158\n 2020-12-04 10:00:21,621 \u003cERROR\u003e Encoder for objid:\u0027test/hosts-alias1.5799\u0027 received error write alloc to last request: No space left on device\n 2020-12-04 10:00:21,621 \u003cINFO\u003e PUT operation for objid:\u0027test/hosts-alias1.5799\u0027 failed\n 2020-12-04 10:00:21,624 \u003cERROR\u003e Cannot PUT \u0027/etc/hosts\u0027 to \u0027objid:test/hosts-alias1.5799\u0027: Cannot store objects: No space left on device\n + error \u0027Put with alias full-test should have worked\u0027\n + echo \u0027Put with alias full-test should have worked\u0027\n Put with alias full-test should have worked",
+      "revId": "3141aeaffbcbc1dd003c95949bf6335a6bc5e6f4",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "ae7c3ac6_3c9ac6e7",
         "filename": "src/tests/acceptance.sh",
         "patchSetId": 4
