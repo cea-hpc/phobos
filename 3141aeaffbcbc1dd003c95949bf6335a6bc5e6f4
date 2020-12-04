@@ -2,6 +2,29 @@
   "comments": [
     {
       "key": {
+        "uuid": "00197a4d_2a54db18",
+        "filename": "src/store/store_alias.c",
+        "patchSetId": 4
+      },
+      "lineNbr": 29,
+      "author": {
+        "id": 1010215
+      },
+      "writtenOn": "2020-12-04T09:54:00Z",
+      "side": 1,
+      "message": "(ci/build-from-rpm) fatal error: store_alias.h: No such file or directory\n\nI think you need to reference store_alias.h in a Makefile.am as a \"noinst_HEADERS\" so that it is not discarded by \"make dist\".",
+      "range": {
+        "startLine": 29,
+        "startChar": 10,
+        "endLine": 29,
+        "endChar": 23
+      },
+      "revId": "3141aeaffbcbc1dd003c95949bf6335a6bc5e6f4",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "44ee3e85_b7d3cfe8",
         "filename": "src/tests/Makefile.am",
         "patchSetId": 4
