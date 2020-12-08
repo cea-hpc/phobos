@@ -65,6 +65,24 @@
     },
     {
       "key": {
+        "uuid": "1c6b338d_24cae7cd",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 4
+      },
+      "lineNbr": 367,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2020-12-08T10:19:22Z",
+      "side": 1,
+      "message": "Do you know why it says \"No media found matching dir \u0027/tmp/test.pho.1\u0027\"? I thought they would be set up by the function dir_setup, and are used by these tests. I cannot find where they are removed. \n\nOf course I can add new directories for these tests, but I\u0027ve preferred to reuse the existing ones.",
+      "parentUuid": "1f2368a8_932c4c90",
+      "revId": "3141aeaffbcbc1dd003c95949bf6335a6bc5e6f4",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "ae7c3ac6_3c9ac6e7",
         "filename": "src/tests/acceptance.sh",
         "patchSetId": 4
@@ -99,6 +117,30 @@
       "writtenOn": "2020-12-04T10:40:49Z",
       "side": 1,
       "message": "defect: a tags_free() call on this is missing\n\nThis makes me wonder if a tags_free() call is needed each time a fill_put_params() is done, to release tags memory?",
+      "range": {
+        "startLine": 112,
+        "startChar": 4,
+        "endLine": 112,
+        "endChar": 70
+      },
+      "revId": "3141aeaffbcbc1dd003c95949bf6335a6bc5e6f4",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "5c6d5ab0_9ad706ff",
+        "filename": "src/tests/test_store_alias.c",
+        "patchSetId": 4
+      },
+      "lineNbr": 112,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2020-12-08T10:19:22Z",
+      "side": 1,
+      "message": "You are right, if the fill_put_params is called, tags might be allocated that need to be freed. Apologies for not adding this to these test yet, I now fixed this.\n\nFor the general usecase I assumed this free would not pose a big problem because it is part of the pho_xfer_desc_destroy function. Do you agree?",
+      "parentUuid": "c4a44884_3f1d753d",
       "range": {
         "startLine": 112,
         "startChar": 4,
