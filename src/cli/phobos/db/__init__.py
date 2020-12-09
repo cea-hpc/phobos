@@ -179,6 +179,11 @@ class Migrator:
                 PRIMARY KEY (uuid, version)
             );
 
+            -- add media operation flags
+            ALTER TABLE media ADD put boolean DEFAULT TRUE;
+            ALTER TABLE media ADD get boolean DEFAULT TRUE;
+            ALTER TABLE media ADD delete boolean DEFAULT TRUE;
+
             -- Update current schema version
             UPDATE schema_info SET version = '1.91';
         """)

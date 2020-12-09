@@ -42,6 +42,9 @@ CREATE TABLE media(
     lock_ts         bigint,
     stats           jsonb,
     tags            jsonb, -- json array (optimized for searching)
+    put             boolean DEFAULT TRUE,
+    get             boolean DEFAULT TRUE,
+    delete          boolean DEFAULT TRUE,
 
     PRIMARY KEY (family, id)
 );
