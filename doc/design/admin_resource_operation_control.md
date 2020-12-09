@@ -100,15 +100,16 @@ The administrator can use the phobos cli to set these flags.
     RESOURCE  Resource(s) to add
 
     Examples:
-    phobos tape set-access GD   # allow all except new object creation (no put)
-    phobos tape set-access -PD  # forbid put and delete, (others are unchanged)
-    phobos tape set-access +G   # allow get on medium (others are unchanged)
+    phobos tape set-access GD      # allow get and delete, forbid put
+    phobos tape set-access +PG     # allow put, get (other flags are unchanged)
+    phobos tape set-access -- -P   # forbid put (other flags are unchanged)
+    (Warning: use the '--' separator to use the -PGD flags syntax)
 
 
 If an administrator wants to stop adding new data to a tape, they can use the
 admin command:
 
-    > phobos tape set-access -P 'T00001L5'
+    > phobos tape set-access -- -P 'T00001L5'
     Tape 'T00001L5' is updated: puts are disabled
 
 If an administrator wants to authorized again or be sure that put operations are
@@ -145,7 +146,7 @@ tags when the medium is unlocked again.
 
 Imagine you have a *read-only* medium (due to a hardware failure, or too
 sensitive, or only used to import data from an other system), an admin can use
-the `phobos set-access -PD` command to disable put and delete flags. If there is
-a transient need to stop get operations on it (remove the medium from the
+the `phobos set-access -- -PD` command to disable put and delete flags. If there
+is a transient need to stop get operations on it (remove the medium from the
 library for example for a short time), the administrator can use the
 `adm_status` `locked` in addition of preset media operation flags.

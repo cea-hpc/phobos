@@ -31,10 +31,51 @@ drop_tables
 setup_tables
 insert_examples
 
+function test_dir_operation_flags() {
+    local dir=$1
+    local expected_put=$2
+    local expected_get=$3
+    local expected_delete=$4
+
+    if [[ $($phobos dir list -o put_access $dir) != $expected_put ]]; then
+        echo "Error: $expected_put was expected for put operation flag for $dir"
+        return 1
+    fi
+
+    if [[ $($phobos dir list -o get_access $dir) != $expected_get ]]; then
+        echo "Error: $expected_get was expected for get operation flag for $dir"
+        return 1
+    fi
+
+    if [[ $($phobos dir list -o delete_access $dir) != $expected_delete ]]; then
+        echo "Error: $expected_delete was expected for delete operation flag"\
+             "for $dir"
+        return 1
+    fi
+
+    return 0
+}
+
 echo
 
 echo "**** TESTS: CLI LIST MEDIA OPERATION TAGS ****"
 $phobos dir list -o put_access,get_access,delete_access
+
+echo "**** TESTS: CLI \"set-access\" bad syntax detection ****"
+$phobos dir set-access p /tmp/pho_testdir1 &&
+    echo "p should be a bad FLAG" && exit 1
+$phobos dir set-access -- -PGJ /tmp/pho_testdir1 &&
+    echo "PGJ- should be a bad FLAG" && exit 1
+
+echo "**** TESTS: CLI SET MEDIA OPERATION TAGS ****"
+$phobos dir set-access P /tmp/pho_testdir1
+test_dir_operation_flags /tmp/pho_testdir1 True False False
+$phobos dir set-access +G /tmp/pho_testdir1
+test_dir_operation_flags /tmp/pho_testdir1 True True False
+$phobos dir set-access -- -PD /tmp/pho_testdir1
+test_dir_operation_flags /tmp/pho_testdir1 False True False
+$phobos dir set-access +PD /tmp/pho_testdir1
+test_dir_operation_flags /tmp/pho_testdir1 True True True
 
 echo "*** TEST END ***"
 # Uncomment if you want the db to persist after test

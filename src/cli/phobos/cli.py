@@ -118,6 +118,7 @@ class BaseOptHandler(object):
     """
     label = '(undef)'
     descr = '(undef)'
+    epilog = None
     verbs = []
 
     __metaclass__ = ABCMeta
@@ -151,7 +152,8 @@ class BaseOptHandler(object):
     @classmethod
     def subparser_register(cls, base_parser):
         """Register the subparser to a top-level one."""
-        subparser = base_parser.add_parser(cls.label, help=cls.descr)
+        subparser = base_parser.add_parser(cls.label, help=cls.descr,
+                                           epilog=cls.epilog)
 
         # Register options relating to the current media
         cls.add_options(subparser)
@@ -420,7 +422,6 @@ class MediaAddOptHandler(AddOptHandler):
                             help='tags to associate with this media (comma-'
                                  'separated: foo,bar)')
 
-
 class CheckOptHandler(DSSInteractHandler):
     """Issue a check command on the designated object(s)."""
     label = 'check'
@@ -489,6 +490,77 @@ class UnlockOptHandler(DSSInteractHandler):
         parser.add_argument('res', nargs='+', help='Resource(s) to unlock')
         parser.add_argument('--force', action='store_true',
                             help='Do not check the current lock state')
+
+OP_NAME_FROM_LETTER = {'P': 'put', 'G': 'get', 'D': 'delete'}
+def parse_set_access_flags(flags):
+    """From [+|-]PGD flags, return a dict with media operations to set
+
+    Unchanged operation are absent from the returned dict.
+    Dict key are among {'put', 'get', 'delete'}.
+    Dict values are among {True, False}.
+    """
+    res = {}
+    if not flags:
+        return {}
+
+    if flags[0] == '+':
+        target = True
+        flags = flags[1:]
+    elif flags[0] == '-':
+        target = False
+        flags = flags[1:]
+    else:
+        # present operations will be enabled
+        target = True
+        # absent operations will be disabled: preset all to False
+        for op_name in OP_NAME_FROM_LETTER.values():
+            res[op_name] = False
+
+    for op_letter in flags:
+        if op_letter not in OP_NAME_FROM_LETTER:
+            raise argparse.ArgumentTypeError(f'{op_letter} is not a valid '
+                                             'media operation flags')
+
+        res[OP_NAME_FROM_LETTER[op_letter]] = target
+
+    return res
+
+class MediaSetAccessOptHandler(DSSInteractHandler):
+    """Set media operation flags."""
+    label = 'set-access'
+    descr = 'set media operation flags'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(MediaSetAccessOptHandler, cls).add_options(parser)
+        parser.add_argument(
+            'flags',
+            type=parse_set_access_flags,
+            metavar='FLAGS',
+            help='[+|-]LIST, where LIST is made of capital letters among PGD,'
+                 ' P: put, G: get, D: delete',
+        )
+        parser.add_argument('res', nargs='+', metavar='RESOURCE',
+                            help='Resource(s) to update access mode')
+
+class DirSetAccessOptHandler(MediaSetAccessOptHandler):
+    """Set media operation flags to directory media."""
+    epilog = """Examples:
+phobos dir set-access GD      # allow get and delete, forbid put
+phobos dir set-access +PG     # allow put, get (other flags are unchanged)
+phobos dir set-access -- -P   # forbid put (other flags are unchanged)
+(Warning: use the '--' separator to use the -PGD flags syntax)
+"""
+
+class TapeSetAccessOptHandler(MediaSetAccessOptHandler):
+    """Set media operation flags to tape media."""
+    epilog = """Examples:
+phobos tape set-access GD      # allow get and delete, forbid put
+phobos tape set-access +PG     # allow put, get (other flags are unchanged)
+phobos tape set-access -- -P   # forbid put (other flags are unchanged)
+(Warning: use the '--' separator to use the -PGD flags syntax)
+"""
 
 class ScanOptHandler(BaseOptHandler):
     """Scan a physical resource and display retrieved information."""
@@ -757,7 +829,8 @@ class MediaOptHandler(BaseResourceOptHandler):
         FormatOptHandler,
         MediaListOptHandler,
         LockOptHandler,
-        UnlockOptHandler
+        UnlockOptHandler,
+        MediaSetAccessOptHandler
     ]
 
     def exec_add(self):
@@ -906,6 +979,7 @@ class MediaOptHandler(BaseResourceOptHandler):
 
         if len(results) != len(uids):
             self.logger.error("At least one media is in use, use --force")
+            # TODO: unlock media
             sys.exit(os.EX_DATAERR)
 
         try:
@@ -946,6 +1020,7 @@ class MediaOptHandler(BaseResourceOptHandler):
 
         if len(results) != len(uids):
             self.logger.error("At least one media is in use, use --force")
+            # TODO: unlock media
             sys.exit(os.EX_DATAERR)
 
         try:
@@ -959,11 +1034,63 @@ class MediaOptHandler(BaseResourceOptHandler):
 
         self.logger.info("%d media(s) unlocked", len(results))
 
+    def exec_set_access(self):
+        """Update media operations flags"""
+        results = []
+        uids = NodeSet.fromlist(self.params.get('res'))
+        for uid in uids:
+            media = self.client.media.get(id=uid)
+            assert len(media) == 1
+
+            # Attempt to lock the media to avoid concurrent modifications
+            try:
+                self.client.media.lock([media[0]])
+            except EnvironmentError as err:
+                self.logger.error("Failed to lock medium '%s': %s",
+                                  uid, env_error_format(err))
+                self.client.media.unlock(results)
+                sys.exit(os.EX_DATAERR)
+
+            media = self.client.media.get(id=uid)
+            assert len(media) == 1
+
+            flags = self.params.get('flags')
+            if 'put' in flags:
+                media[0].put_access = flags['put']
+
+            if 'get' in flags:
+                media[0].get_access = flags['get']
+
+            if 'delete' in flags:
+                media[0].delete_access = flags['delete']
+
+            results.append(media[0])
+
+        try:
+            self.client.media.update(results)
+        except EnvironmentError as err:
+            self.logger.error("Failed to update access mode of one or more "
+                              "media(s): %s", env_error_format(err))
+            sys.exit(os.EX_DATAERR)
+        finally:
+            self.client.media.unlock(results)
+
+        self.logger.info("%d media(s) updated", len(results))
+
 class DirOptHandler(MediaOptHandler):
     """Directory-related options and actions."""
     label = 'dir'
     descr = 'handle directories'
     family = ResourceFamily(ResourceFamily.RSC_DIR)
+    verbs = [
+        MediaAddOptHandler,
+        MediaUpdateOptHandler,
+        FormatOptHandler,
+        MediaListOptHandler,
+        LockOptHandler,
+        UnlockOptHandler,
+        DirSetAccessOptHandler
+    ]
 
     def exec_add(self):
         """
@@ -1059,7 +1186,8 @@ class TapeOptHandler(MediaOptHandler):
         FormatOptHandler,
         MediaListOptHandler,
         LockOptHandler,
-        UnlockOptHandler
+        UnlockOptHandler,
+        TapeSetAccessOptHandler
     ]
 
 class ExtentOptHandler(BaseResourceOptHandler):
@@ -1301,7 +1429,7 @@ class PhobosActionContext(object):
             if handler.label == target:
                 with handler(self.parameters) as target_inst:
                     # Invoke target::exec_{action}
-                    getattr(target_inst, 'exec_%s' % action)()
+                    getattr(target_inst, 'exec_%s' % action.replace('-', '_'))()
                 return
 
         # The command line parser must catch such mistakes
