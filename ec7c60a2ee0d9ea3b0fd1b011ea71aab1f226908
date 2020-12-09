@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "0cae4c69_ce713a55",
+        "filename": "src/include/phobos_store.h",
+        "patchSetId": 6
+      },
+      "lineNbr": 75,
+      "author": {
+        "id": 1010215
+      },
+      "writtenOn": "2020-12-09T17:00:05Z",
+      "side": 1,
+      "message": "(ci/checkpatch) WARNING: Block comments use a trailing */ on a separate line\n\nTo fix it:\n\n * tag combination\n */",
+      "revId": "ec7c60a2ee0d9ea3b0fd1b011ea71aab1f226908",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "6b777089_735b32a4",
+        "filename": "src/store/store.c",
+        "patchSetId": 6
+      },
+      "lineNbr": 774,
+      "author": {
+        "id": 1010215
+      },
+      "writtenOn": "2020-12-09T17:00:05Z",
+      "side": 1,
+      "message": "(ci/checkpatch) WARNING: braces {} are not necessary for single statement blocks\n\nTo fix it:\n if (rc)\n     return rc;",
+      "revId": "ec7c60a2ee0d9ea3b0fd1b011ea71aab1f226908",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    }
+  ]
+}
