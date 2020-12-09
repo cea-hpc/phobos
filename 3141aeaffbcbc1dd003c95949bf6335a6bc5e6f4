@@ -83,6 +83,24 @@
     },
     {
       "key": {
+        "uuid": "e552494d_51f7bffb",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 4
+      },
+      "lineNbr": 367,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-12-09T09:39:38Z",
+      "side": 1,
+      "message": "This is because you run your tests in the second part of acceptance.sh, where only tapes exist in phobos system, so your phobos commands with dir can not work. The test without it works totally fine. I\u0027ll add a comment where the test needs to be removed.",
+      "parentUuid": "1c6b338d_24cae7cd",
+      "revId": "3141aeaffbcbc1dd003c95949bf6335a6bc5e6f4",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
         "uuid": "ae7c3ac6_3c9ac6e7",
         "filename": "src/tests/acceptance.sh",
         "patchSetId": 4
@@ -99,6 +117,29 @@
         "startChar": 24,
         "endLine": 391,
         "endChar": 34
+      },
+      "revId": "3141aeaffbcbc1dd003c95949bf6335a6bc5e6f4",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "3a9336bf_7df4b950",
+        "filename": "src/tests/acceptance.sh",
+        "patchSetId": 4
+      },
+      "lineNbr": 643,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-12-09T09:39:38Z",
+      "side": 1,
+      "message": "defect: your test uses directories, which do not exist here, you can simply remove it here, and let the test only be made with directories (others already do this)\n\nIf you want to test your feature with tapes, you will need to modify the script to also put tags on tapes and test on them.",
+      "range": {
+        "startLine": 643,
+        "startChar": 4,
+        "endLine": 643,
+        "endChar": 13
       },
       "revId": "3141aeaffbcbc1dd003c95949bf6335a6bc5e6f4",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
@@ -141,6 +182,30 @@
       "side": 1,
       "message": "You are right, if the fill_put_params is called, tags might be allocated that need to be freed. Apologies for not adding this to these test yet, I now fixed this.\n\nFor the general usecase I assumed this free would not pose a big problem because it is part of the pho_xfer_desc_destroy function. Do you agree?",
       "parentUuid": "c4a44884_3f1d753d",
+      "range": {
+        "startLine": 112,
+        "startChar": 4,
+        "endLine": 112,
+        "endChar": 70
+      },
+      "revId": "3141aeaffbcbc1dd003c95949bf6335a6bc5e6f4",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "d543bbe1_0eb05075",
+        "filename": "src/tests/test_store_alias.c",
+        "patchSetId": 4
+      },
+      "lineNbr": 112,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-12-09T09:39:38Z",
+      "side": 1,
+      "message": "You are right for the general usecase, the function calls a realloc() in case of a tags fusion. And then tags are freed in the destroy function.",
+      "parentUuid": "5c6d5ab0_9ad706ff",
       "range": {
         "startLine": 112,
         "startChar": 4,
