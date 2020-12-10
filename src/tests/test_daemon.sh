@@ -88,7 +88,7 @@ function test_release_medium_old_locks
 
     # Check that only the correct medium is unlocked
     lock=$($phobos dir list -o lock_status /tmp/dir0)
-    [ -z "$lock" ] || error "Medium should be unlocked"
+    [ "None" == "$lock" ] || error "Medium should be unlocked"
 
     lock=$($phobos dir list -o lock_status /tmp/dir1)
     [ "${host}0:0123:dummy:dummy" == "$lock" ] ||
@@ -123,7 +123,7 @@ function test_release_device_old_locks
 
     # Check that only the correct device is unlocked
     lock=$($phobos drive list -o lock_status /dev/st0)
-    [ -z "$lock" ] || error "Device should be unlocked"
+    [ "None" == "$lock" ] || error "Device should be unlocked"
 
     lock=$($phobos drive list -o lock_status /dev/st1)
     [ "${host}0:0123:dummy:dummy" == "$lock" ] ||
