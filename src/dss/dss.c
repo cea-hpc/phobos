@@ -38,6 +38,7 @@
 #include <glib.h>
 #include <libpq-fe.h>
 #include <jansson.h>
+#include <stdbool.h>
 #include <string.h>
 #include <strings.h>
 #include <assert.h>
@@ -418,7 +419,7 @@ static const char * const select_query[] = {
                    " host, path, lock, lock_ts FROM device",
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
                    " address_type, fs_type, fs_status, fs_label, stats, tags,"
-                   " lock, lock_ts FROM media",
+                   " lock, lock_ts, put, get, delete FROM media",
     [DSS_LAYOUT] = "SELECT oid, state, lyt_info, extents FROM extent",
     [DSS_OBJECT] = "SELECT oid, user_md FROM object",
 };
@@ -451,7 +452,7 @@ static const char * const insert_query[] = {
                    " path, lock) VALUES ",
     [DSS_MEDIA]  = "INSERT INTO media (family, model, id, adm_status,"
                    " fs_type, address_type, fs_status, fs_label, stats, tags,"
-                   " lock)"
+                   " lock, put, get, delete)"
                    " VALUES ",
     [DSS_LAYOUT] = "INSERT INTO extent (oid, uuid, state, lyt_info, extents)"
                    " VALUES ",
@@ -464,9 +465,10 @@ static const char * const update_query[] = {
                    " ('%s', %s, '%s', '%s', '%s')"
                    " WHERE id = '%s';",
     [DSS_MEDIA]  = "UPDATE media SET (family, model, adm_status,"
-                   " fs_type, address_type, fs_status, fs_label, stats, tags) ="
-                   " ('%s', %s, '%s', '%s', '%s', '%s', %s, %s, %s)"
-                   " WHERE id = '%s';",
+                   " fs_type, address_type, fs_status, fs_label, stats, tags,"
+                   " put, get, delete) ="
+                   " ('%s', %s, '%s', '%s', '%s', '%s', %s, %s, %s, %s, %s, %s)"
+                   "  WHERE id = '%s';",
     [DSS_LAYOUT] = "UPDATE extent SET (state, lyt_info, extents) ="
                    " ('%s', '%s', '%s')"
                    " WHERE oid = '%s';",
@@ -485,8 +487,8 @@ static const char * const delete_query[] = {
 
 static const char * const insert_query_values[] = {
     [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '')%s",
-    [DSS_MEDIA]  = "('%s', %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s,"
-                   " '')%s",
+    [DSS_MEDIA]  = "('%s', %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s, '',"
+                   " %s, %s, %s)%s",
     [DSS_LAYOUT] = "('%s', (select uuid from object where oid = '%s'), '%s',"
                    " '%s', '%s')%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
@@ -1160,6 +1162,11 @@ static bool dss_tape_model_check(const char *model)
     return false;
 }
 
+static inline const char *bool2sqlbool(bool b)
+{
+   return b ? "TRUE" : "FALSE";
+}
+
 static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
                                 int item_cnt, enum dss_set_action action,
                                 GString *request)
@@ -1181,6 +1188,7 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
             char *tags = NULL;
             char *tmp_stats = NULL;
             char *tmp_tags = NULL;
+            bool put_flag, get_flag, delete_flag;
 
             /* check tape model validity */
             if (p_media->rsc.id.family == PHO_RSC_TAPE &&
@@ -1199,6 +1207,9 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
             tmp_tags = dss_tags_encode(&p_media->tags);
             tags = dss_char4sql(conn, tmp_tags);
             free(tmp_tags);
+            put_flag = p_media->flags.put;
+            get_flag = p_media->flags.get;
+            delete_flag = p_media->flags.delete;
 
             if (!medium_name || !fs_label || !model || !stats || !tags) {
                 free(medium_name);
@@ -1223,6 +1234,9 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
                     fs_label,
                     stats,
                     tags,
+                    bool2sqlbool(put_flag),
+                    bool2sqlbool(get_flag),
+                    bool2sqlbool(delete_flag),
                     i < item_cnt-1 ? "," : ";"
                 );
             } else if (action == DSS_SET_UPDATE) {
@@ -1238,6 +1252,9 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
                     fs_label,
                     stats,
                     tags,
+                    bool2sqlbool(put_flag),
+                    bool2sqlbool(get_flag),
+                    bool2sqlbool(delete_flag),
                     p_media->rsc.id.name
                 );
             }
@@ -1614,6 +1631,14 @@ static void dss_device_result_free(void *void_dev)
     (void)void_dev;
 }
 
+static inline bool psqlstrbool2bool(char psql_str_bool)
+{
+    if (psql_str_bool == 't')
+        return true;
+
+    return false;
+}
+
 /**
  * Fill a media_info from the information in the `row_num`th row of `res`.
  */
@@ -1635,6 +1660,9 @@ static int dss_media_from_pg_row(void *void_media, PGresult *res, int row_num)
     medium->fs.label[sizeof(medium->fs.label) - 1] = '\0';
     medium->lock.lock      = get_str_value(res, row_num, 10);
     medium->lock.lock_ts   = strtoul(PQgetvalue(res, row_num, 11), NULL, 10);
+    medium->flags.put      = psqlstrbool2bool(*PQgetvalue(res, row_num, 12));
+    medium->flags.get      = psqlstrbool2bool(*PQgetvalue(res, row_num, 13));
+    medium->flags.delete   = psqlstrbool2bool(*PQgetvalue(res, row_num, 14));
 
     /* No dynamic allocation here */
     rc = dss_media_stats_decode(&medium->stats, PQgetvalue(res, row_num, 8));

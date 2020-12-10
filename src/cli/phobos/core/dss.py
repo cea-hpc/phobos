@@ -35,8 +35,8 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 
 from phobos.core.const import (DSS_SET_DELETE, DSS_SET_INSERT, DSS_SET_UPDATE, # pylint: disable=no-name-in-module
                                PHO_ADDR_HASH1, str2fs_type)
-
-from phobos.core.ffi import DevInfo, MediaInfo, MediaStats, LIBPHOBOS
+from phobos.core.ffi import (DevInfo, MediaInfo, MediaStats, LIBPHOBOS,
+                             OperationFlags)
 
 # Valid filter suffix and associated operators.
 FILTER_OPERATORS = (
@@ -303,6 +303,7 @@ class MediaManager(BaseEntityManager):
         media.tags = tags or []
 
         media.stats = MediaStats()
+        media.flags = OperationFlags()
 
         self.insert([media])
 

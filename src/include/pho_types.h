@@ -431,15 +431,25 @@ struct tags {
 };
 
 /**
+ * Media operation flags
+ */
+struct operation_flags {
+    bool    put;
+    bool    get;
+    bool    delete;
+};
+
+/**
  * Persistent media and filesystem information
  */
 struct media_info {
-    struct pho_resource   rsc;          /**< Resource information */
-    enum address_type     addr_type;    /**< Way to address this media */
-    struct media_fs       fs;           /**< Local filesystem information */
-    struct media_stats    stats;        /**< Usage metrics */
-    struct tags           tags;         /**< Tags used for filtering */
-    struct pho_lock       lock;         /**< Distributed access lock */
+    struct pho_resource    rsc;          /**< Resource information */
+    enum address_type      addr_type;    /**< Way to address this media */
+    struct media_fs        fs;           /**< Local filesystem information */
+    struct media_stats     stats;        /**< Usage metrics */
+    struct tags            tags;         /**< Tags used for filtering */
+    struct pho_lock        lock;         /**< Distributed access lock */
+    struct operation_flags flags;        /**< Media operation flags */
 };
 
 struct object_info {

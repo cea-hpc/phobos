@@ -16,7 +16,7 @@ UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_dev_tape \
 INTEG_TESTS=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh	\
 	    test_store_retry.sh simple_split.sh raid1_simple_split.sh 	\
 	    raid1_split.sh test_bad_comm.sh test_resource_availability.sh \
-	    test_daemon.sh
+	    test_daemon.sh test_media_operation_flags.sh
 
 TESTS=$(UNIT_TESTS) $(INTEG_TESTS)
 

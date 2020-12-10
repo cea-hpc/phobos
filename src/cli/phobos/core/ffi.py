@@ -26,9 +26,9 @@ This module wraps calls from the library and expose them under an
 object-oriented API to the rest of the CLI.
 """
 
-from ctypes import (byref, cast, CDLL, CFUNCTYPE, c_char, c_char_p, c_int,
-                    c_long, c_longlong, c_size_t, c_ssize_t, c_void_p, POINTER,
-                    Structure)
+from ctypes import (byref, cast, CDLL, CFUNCTYPE, c_bool, c_char, c_char_p,
+                    c_int, c_long, c_longlong, c_size_t, c_ssize_t, c_void_p,
+                    POINTER, Structure)
 from enum import IntEnum
 
 from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable=no-name-in-module
@@ -328,6 +328,20 @@ class MediaStats(Structure): # pylint: disable=too-few-public-methods
         ('last_load', c_longlong)
     ]
 
+class OperationFlags(Structure): # pylint: disable=too-few-public-methods
+    """Media operation flags."""
+    _fields_ = [
+        ('put', c_bool),
+        ('get', c_bool),
+        ('delete', c_bool)
+    ]
+
+    def __init__(self, *args, put=True, get=True, delete=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.put = put
+        self.get = get
+        self.delete = delete
+
 class MediaInfo(Structure, CLIManagedResourceMixin):
     """DSS media descriptor."""
     _fields_ = [
@@ -336,7 +350,8 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         ('fs', MediaFS),
         ('stats', MediaStats),
         ('_tags', Tags),
-        ('lock', DSSLock)
+        ('lock', DSSLock),
+        ('flags', OperationFlags)
     ]
 
     def get_display_fields(self):
@@ -349,7 +364,10 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'name': None,
             'tags': None,
             'lock_status': None,
-            'lock_ts': None
+            'lock_ts': None,
+            'put_access': None,
+            'get_access': None,
+            'delete_access': None
         }
 
     def get_display_dict(self, numeric=False):
@@ -463,6 +481,36 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         # Manually creating and assigning tags means that we will have to free
         # them when MediaInfo is garbage collected
         self._free_tags = True
+
+    @property
+    def put_access(self):
+        """Wrapper to get put operation flag"""
+        return self.flags.put
+
+    @put_access.setter
+    def put_access(self, put_access):
+        """Wrapper to set put operation flag"""
+        self.flags.put = put_access
+
+    @property
+    def get_access(self):
+        """Wrapper to get get operation flag"""
+        return self.flags.get
+
+    @get_access.setter
+    def get_access(self, get_access):
+        """Wrapper to set get operation flag"""
+        self.flags.get = get_access
+
+    @property
+    def delete_access(self):
+        """Wrapper to get delete operation flag"""
+        return self.flags.delete
+
+    @delete_access.setter
+    def delete_access(self, delete_access):
+        """Wrapper to set delete operation flag"""
+        self.flags.delete = delete_access
 
     def __del__(self):
         if hasattr(self, "_free_tags") and self._free_tags:

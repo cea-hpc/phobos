@@ -91,6 +91,9 @@ static void add_dir(struct admin_handle *adm, struct dss_handle *dss,
     media->rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
     media->fs.type = PHO_FS_POSIX;
     media->addr_type = PHO_ADDR_HASH1;
+    media->flags.put = true;
+    media->flags.get = true;
+    media->flags.delete = true;
     ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
 
     /* Get dir device */
@@ -156,6 +159,9 @@ static void add_tape(struct admin_handle *adm, struct dss_handle *dss,
     media->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
     media->fs.type = PHO_FS_LTFS;
     media->addr_type = PHO_ADDR_HASH1;
+    media->flags.put = true;
+    media->flags.get = true;
+    media->flags.delete = true;
     ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
 
     /* This can fail if the tape has already been formatted */

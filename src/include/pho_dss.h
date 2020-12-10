@@ -136,6 +136,9 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::MDA::vol_used", "(stats->>'phys_spc_used')::bigint"},
     {"DSS::MDA::vol_free", "(stats->>'phys_spc_free')::bigint"},
     {"DSS::MDA::lock", "lock"},
+    {"DSS::MDA::put", "put"},
+    {"DSS::MDA::get", "get"},
+    {"DSS::MDA::delete", "delete"},
     /* Device related fields */
     {"DSS::DEV::family", "family"},
     {"DSS::DEV::serial", "id"},
