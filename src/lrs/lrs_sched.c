@@ -926,6 +926,8 @@ static int sched_select_media(struct lrs_sched *sched,
                           "{\"$AND\": ["
                           /* Basic criteria */
                           "  {\"DSS::MDA::family\": \"%s\"},"
+                          /* Check get media operation flags */
+                          "  {\"DSS::MDA::put\": \"t\"},"
                           /* Exclude media locked by admin */
                           "  {\"DSS::MDA::adm_status\": \"%s\"},"
                           "  {\"$NOR\": ["
@@ -1267,7 +1269,12 @@ retry:
 
         /*
          * The intent is to write: exclude media that are administratively
-         * locked, full or do not have the requested tags
+         * locked, full, do not have the put operation flag and do not have the
+         * requested tags
+         */
+        /*
+         * @TODO: using the size arg to check if the requested action is a write
+         * seems to be error prone for object with a zero size content
          */
         if (required_size > 0 && itr->dss_media_info) {
             if (itr->dss_media_info->rsc.adm_status !=
@@ -1276,11 +1283,19 @@ retry:
                           itr->dss_media_info->rsc.id.name);
                 continue;
             }
+
             if (itr->dss_media_info->fs.status == PHO_FS_STATUS_FULL) {
                 pho_debug("Media '%s' is full",
                           itr->dss_media_info->rsc.id.name);
                 continue;
             }
+
+            if (!itr->dss_media_info->flags.put) {
+                pho_debug("Media '%s' has a false put operation flag",
+                          itr->dss_media_info->rsc.id.name);
+                continue;
+            }
+
             if (!tags_in(&itr->dss_media_info->tags, media_tags)) {
                 pho_debug("Media '%s' does not match required tags",
                           itr->dss_media_info->rsc.id.name);
@@ -2037,6 +2052,9 @@ static int sched_media_prepare(struct lrs_sched *sched,
                        id->name);
         if (med->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
             LOG_RETURN(-EPERM, "Cannot do I/O on an unavailable medium '%s'",
+                       id->name);
+        if (op == LRS_OP_WRITE && !med->flags.put)
+            LOG_RETURN(-EPERM, "Cannot do a put, put flag is false on '%s'",
                        id->name);
         post_fs_mount = true;
         break;

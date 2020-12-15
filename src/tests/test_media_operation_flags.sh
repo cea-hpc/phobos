@@ -24,6 +24,13 @@ test_bin_dir=$(dirname "${BASH_SOURCE[0]}")
 
 . $test_bin_dir/test_env.sh
 . $test_bin_dir/setup_db.sh
+. $test_bin_dir/test_launch_daemon.sh
+
+
+function cleanup() {
+    waive_daemon
+    drop_tables
+}
 
 trap drop_tables ERR EXIT
 
@@ -76,6 +83,26 @@ $phobos dir set-access -- -PD /tmp/pho_testdir1
 test_dir_operation_flags /tmp/pho_testdir1 False True False
 $phobos dir set-access +PD /tmp/pho_testdir1
 test_dir_operation_flags /tmp/pho_testdir1 True True True
+
+echo "**** TESTS: PUT MEDIA OPERATION TAGS ****"
+trap cleanup ERR EXIT
+invoke_daemon
+# remove all dir put access
+$phobos dir set-access -- -P $($phobos dir list)
+# try one put without any dir put access
+$phobos put -f dir /etc/hosts host1 &&
+    echo "Put without any medium with 'P' operation flag should fail" &&
+    exit 1
+# set one put access
+$phobos dir set-access +P /tmp/pho_testdir3
+# try to put with this new dir put access
+$phobos put -f dir /etc/hosts host2
+# check the used dir corresponds to the one with the put access
+if [[ $($phobos extent list -o media_name host2) != "['/tmp/pho_testdir3']" ]]
+then
+    echo "Extent should be on the only medium with put access"
+    exit 1
+fi
 
 echo "*** TEST END ***"
 # Uncomment if you want the db to persist after test
