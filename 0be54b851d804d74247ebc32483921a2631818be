@@ -45,6 +45,52 @@
       "revId": "0be54b851d804d74247ebc32483921a2631818be",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "98f2486e_9815328e",
+        "filename": "src/tests/test_store_alias.c",
+        "patchSetId": 8
+      },
+      "lineNbr": 64,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-12-16T08:37:20Z",
+      "side": 1,
+      "message": "nit: tags_free() call before the comment header (context cleaning is part of the test which prepare the context)",
+      "range": {
+        "startLine": 63,
+        "startChar": 4,
+        "endLine": 64,
+        "endChar": 40
+      },
+      "revId": "0be54b851d804d74247ebc32483921a2631818be",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "91297de5_670791c6",
+        "filename": "src/tests/test_store_alias.c",
+        "patchSetId": 8
+      },
+      "lineNbr": 156,
+      "author": {
+        "id": 1017196
+      },
+      "writtenOn": "2020-12-16T08:37:20Z",
+      "side": 1,
+      "message": "nit: you can do the following:\n\n rc \u003d pho_cfg_init_local(test_file);\n free(test_bin);\n free(test_file);\n if (rc !\u003d 0 \u0026\u0026 rc !\u003d -EALREADY)\n     exit(EXIT_FAILURE);",
+      "range": {
+        "startLine": 155,
+        "startChar": 4,
+        "endLine": 156,
+        "endChar": 20
+      },
+      "revId": "0be54b851d804d74247ebc32483921a2631818be",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735",
+      "unresolved": true
     }
   ]
 }
