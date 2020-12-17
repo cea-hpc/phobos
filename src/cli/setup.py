@@ -43,16 +43,16 @@ EXTENSION_KWARGS = {
     "define_macros": GLOBAL_MACROS,
 }
 
-const_module = Extension(
+const_module = Extension( # pylint: disable=invalid-name
     'const',
-     sources=['phobos/core/const_module.c'],
-     **EXTENSION_KWARGS
+    sources=['phobos/core/const_module.c'],
+    **EXTENSION_KWARGS
 )
 
-glue_module = Extension(
+glue_module = Extension( # pylint: disable=invalid-name
     'glue',
-     sources=['phobos/core/glue_module.c'],
-     **EXTENSION_KWARGS
+    sources=['phobos/core/glue_module.c'],
+    **EXTENSION_KWARGS
 )
 
 setup(
