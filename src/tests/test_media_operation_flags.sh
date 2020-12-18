@@ -84,9 +84,10 @@ test_dir_operation_flags /tmp/pho_testdir1 False True False
 $phobos dir set-access +PD /tmp/pho_testdir1
 test_dir_operation_flags /tmp/pho_testdir1 True True True
 
-echo "**** TESTS: PUT MEDIA OPERATION TAGS ****"
 trap cleanup ERR EXIT
 invoke_daemon
+
+echo "**** TESTS: PUT MEDIA OPERATION TAGS ****"
 # remove all dir put access
 $phobos dir set-access -- -P $($phobos dir list)
 # try one put without any dir put access
@@ -103,6 +104,22 @@ then
     echo "Extent should be on the only medium with put access"
     exit 1
 fi
+
+echo "**** TESTS: GET MEDIA OPERATION TAGS ****"
+# put a new object to get
+$phobos put -f dir /etc/hosts obj_to_get
+# remove all dir get access
+$phobos dir set-access -- -G $($phobos dir list)
+# try one get without any dir get access
+$phobos get obj_to_get /tmp/gotten_obj &&
+    echo "Get without any medium with 'G' operation flag should fail" &&
+    rm /tmp/gotten_obj &&
+    exit 1
+# set get access on all dir
+$phobos dir set-access +G $($phobos dir list)
+# try to get
+$phobos get obj_to_get /tmp/gotten_obj
+rm /tmp/gotten_obj
 
 echo "*** TEST END ***"
 # Uncomment if you want the db to persist after test
