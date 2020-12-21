@@ -312,6 +312,49 @@ function put_tags
         error "Put with one valid tag should have worked"
 }
 
+# Test mput command
+function mput
+{
+    OBJECTS=("/etc/hosts mput_oid_1 -" \
+             "/etc/hosts.allow mput_oid_2 foo=1" \
+             "/etc/hosts.deny mput_oid_3 a=1,b=2,c=3")
+
+    # create mput input file
+    echo "${OBJECTS[0]}
+          ${OBJECTS[1]}
+          ${OBJECTS[2]}" > mput_list
+
+    # phobos execute mput command
+    $phobos mput mput_list ||
+        (rm mput_list; error "Mput should have worked")
+
+    rm mput_list
+
+    # modify metadata of first entry as '-' is interpreted as no metadata
+    OBJECTS[0]="/etc/hosts mput_oid_1 "
+
+    # check mput correct behavior
+    for object in "${OBJECTS[@]}"
+    do
+        src=$(echo "$object" | cut -d ' ' -f 1)
+        oid=$(echo "$object" | cut -d ' ' -f 2)
+        mdt=$(echo "$object" | cut -d ' ' -f 3)
+        # check metadata were well read from the input file
+        [[ $($phobos getmd $oid) == $mdt ]] ||
+            error "'$oid' object was not put with the right metadata"
+
+        # check file contents are correct
+        $phobos get $oid file_test ||
+            error "Can not retrieve '$oid' object"
+
+        [[ $(md5sum file_test | cut -d ' ' -f 1) == \
+           $(md5sum $src | cut -d ' ' -f 1) ]] ||
+            (rm file_test; error "Retrieved object '$oid' is different")
+
+        rm file_test
+    done
+}
+
 # make sure there are at least N available dir/drives
 function ensure_nb_drives
 {
@@ -537,6 +580,7 @@ put_get_test
 put_family dir
 put_layout
 put_tags
+mput
 concurrent_put
 check_status dir "$dirs"
 lock_test
@@ -553,6 +597,7 @@ if  [[ -w /dev/changer ]]; then
     put_get_test
     put_family tape
     put_tags
+    mput
     concurrent_put
     check_status tape "$tapes"
     lock_test
