@@ -28,13 +28,12 @@ UNIT_PREFIXES = ['', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
 def num2human(number, unit='', base=1000, decimals=1):
     """Convert a number to a human readable string"""
     base = float(base)
-    prefix = None
     for prefix in UNIT_PREFIXES:
         if number < base:
             break
         number /= base
 
-    return '{{:.{:d}f}}{:s}{:s}'.format(decimals, prefix, unit).format(number)
+    return '{{:.{:d}f}}{:s}{:s}'.format(decimals, prefix, unit).format(number) # pylint: disable=undefined-loop-variable
 
 def bytes2human(number, *args, **kwargs):
     """Convert a size in bytes to a human readable string"""
