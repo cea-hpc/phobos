@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ae3f9106_647e8c93",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2021-01-05T14:27:10Z",
+      "side": 1,
+      "message": "defect: PHO_RSC_INVAL is an unknown symbol in src/cli/phobos/core/store.py",
+      "revId": "afa0d5daf85f323559c1233dd53bf331180b59f7",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    }
+  ]
+}
