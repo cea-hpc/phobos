@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "2198d45d_62714ae5",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 9
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2021-01-05T17:29:15Z",
+      "side": 1,
+      "message": "Due to the rebase on up to date master, I removed one redundant rc and I managed the alias utf-8 encoding (with python3, string are now utf8 by default)",
+      "revId": "1ce693891c2429d8f18a6e56d2d6a9d2fb36dce1",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    }
+  ]
+}
