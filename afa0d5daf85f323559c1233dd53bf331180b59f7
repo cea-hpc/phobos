@@ -16,6 +16,24 @@
       "message": "defect: PHO_RSC_INVAL is an unknown symbol in src/cli/phobos/core/store.py",
       "revId": "afa0d5daf85f323559c1233dd53bf331180b59f7",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "4a5a9652_df48ceb3",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1018597
+      },
+      "writtenOn": "2021-01-05T14:47:19Z",
+      "side": 1,
+      "message": "Is it? I thought it is imported in line 36 in store.py and added in line 192 in const_module.c. \nBut I am not familiar with linking C and Python, so I might have misunderstood that.",
+      "parentUuid": "ae3f9106_647e8c93",
+      "revId": "afa0d5daf85f323559c1233dd53bf331180b59f7",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
     }
   ]
 }
