@@ -26,15 +26,18 @@
 #include "config.h"
 #endif
 
-#include "pho_type_utils.h"
-#include "pho_common.h"
+#include <assert.h>
 #include <errno.h>
 #include <jansson.h>
-#include <assert.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
+#include "pho_common.h"
+#include "pho_type_utils.h"
 
 bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2)
 {
@@ -264,6 +267,36 @@ int str2tags(const char *tag_str, struct tags *tags)
     }
 
     free(parse_tag_str);
+
+    return 0;
+}
+
+int str2timeval(const char *tv_str, struct timeval *tv)
+{
+    struct tm tmp_tm = {0};
+    char *usec_ptr;
+
+    usec_ptr = strptime(tv_str, "%Y-%m-%d %T", &tmp_tm);
+    if (!usec_ptr)
+        LOG_RETURN(-EINVAL, "Object timestamp '%s' is not well formatted",
+                   tv_str);
+    tv->tv_sec = mktime(&tmp_tm);
+    tv->tv_usec = 0;
+    if (*usec_ptr == '.') {
+        tv->tv_usec = atoi(usec_ptr + 1);
+        /* in case usec part is less than 6 characters */
+        tv->tv_usec *= pow(10, 6 - strlen(usec_ptr + 1));
+    }
+
+    return 0;
+}
+
+int timeval2str(const struct timeval *tv, char *tv_str)
+{
+    char buf[PHO_TIMEVAL_MAX_LEN];
+
+    strftime(buf, sizeof(buf), "%Y-%m-%d %T", localtime(&tv->tv_sec));
+    snprintf(tv_str, sizeof(buf), "%s.%06ld", buf, tv->tv_usec);
 
     return 0;
 }

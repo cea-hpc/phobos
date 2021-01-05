@@ -31,9 +31,10 @@
 #include "config.h"
 #endif
 
-#include <pho_dss.h>
-#include <pho_types.h>
 #include <pho_common.h>
+#include <pho_dss.h>
+#include <pho_type_utils.h>
+#include <pho_types.h>
 #include <phobos_store.h>
 
 #include <stdio.h>
@@ -187,6 +188,7 @@ PyMODINIT_FUNC PyInit_const(void)
 
     PyModule_AddIntMacro(mod, PHO_LABEL_MAX_LEN);
     PyModule_AddIntMacro(mod, PHO_LAYOUT_TAG_MAX);
+    PyModule_AddIntMacro(mod, PHO_TIMEVAL_MAX_LEN);
 
     /* enum extent_state */
     PyModule_AddIntMacro(mod, PHO_EXT_ST_INVAL);

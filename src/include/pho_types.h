@@ -31,6 +31,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <errno.h>
 
@@ -41,6 +42,12 @@
 
 /** max length of media URI */
 #define PHO_URI_MAX (NAME_MAX + 1)
+
+/**
+ * upper power of 2 of the length of a timeval representation in PSQL database
+ * which is "YYYY-mm-dd HH:MM:SS.uuuuuu"
+ */
+#define PHO_TIMEVAL_MAX_LEN 32
 
 /**
  * Max layout tag length.
@@ -453,8 +460,11 @@ struct media_info {
 };
 
 struct object_info {
-    char  *oid;
-    char  *user_md;
+    char *oid;
+    char *uuid;
+    int version;
+    char *user_md;
+    struct timeval deprec_time;
 };
 
 /**

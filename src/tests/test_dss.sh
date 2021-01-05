@@ -137,6 +137,16 @@ test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "koéèê^!$£}[<>à@\\"}}'
 test_check_get "object" \
    '{"$KVINJSON": {"DSS::OBJ::user_md": "test=abc"}}'
 
+echo "**** TESTS: DSS_GET DEPRECATED_OBJECT ****"
+test_check_get "deprecated_object" 'all'
+test_check_get "deprecated_object" '{"$LIKE": {"DSS::OBJ::oid": "012%"}}'
+test_check_get "deprecated_object" \
+    '{"$LIKE": {"DSS::OBJ::oid": "koéèê^!$£}[<>à@\\"}}'
+test_check_get "deprecated_object" \
+    '{"$KVINJSON": {"DSS::OBJ::user_md": "test=abc"}}'
+test_check_get "deprecated_object" \
+    '{"DSS::OBJ::deprec_time": "1970-01-01 12:34:56"}'
+
 echo "**** TESTS: DSS_GET LAYOUT ****"
 test_check_get "layout" 'all'
 test_check_get "layout" '{"$INJSON": {"DSS::EXT::media_idx": "073221L6"}}'
@@ -178,6 +188,12 @@ test_check_get "object" '{"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}'
 test_check_set "layout" "delete" "oidtest" "FAIL"
 test_check_set "layout" "delete"
 test_check_get "layout" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
+
+echo "**** TEST: DSS_SET DEPRECATED_OBJECT ****"
+test_check_set "deprecated_object" "insert"
+test_check_get "deprecated_object" '{"DSS::OBJ::version": "2"}'
+test_check_set "deprecated_object" "delete"
+test_check_get "deprecated_object" '{"DSS::OBJ::version": "2"}'
 
 echo "**** TEST: DSS FILTER SYNTAX ERROR ****"
 test_check_get "media" '{"DSS::MDA::idontexist": "foo"}' 'FAIL'

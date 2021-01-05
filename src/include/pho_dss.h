@@ -38,6 +38,7 @@
 enum dss_type {
     DSS_INVAL  = -1,
     DSS_OBJECT =  0,
+    DSS_DEPREC,
     DSS_LAYOUT,
     DSS_DEVICE,
     DSS_MEDIA,
@@ -46,6 +47,7 @@ enum dss_type {
 
 static const char * const dss_type_names[] = {
     [DSS_OBJECT] = "object",
+    [DSS_DEPREC] = "deprecated_object",
     [DSS_LAYOUT] = "layout",
     [DSS_DEVICE] = "device",
     [DSS_MEDIA]  = "media",
@@ -114,7 +116,10 @@ struct dss_field_def {
 static struct dss_field_def dss_fields_names[] = {
     /* Object related fields */
     {"DSS::OBJ::oid", "oid"},
+    {"DSS::OBJ::uuid", "uuid"},
+    {"DSS::OBJ::version", "version"},
     {"DSS::OBJ::user_md", "user_md"},
+    {"DSS::OBJ::deprec_time", "deprec_time"},
     /* Extent related fields */
     {"DSS::EXT::oid", "oid"},
     {"DSS::EXT::state", "state"},
@@ -251,6 +256,19 @@ int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
                    struct object_info **obj_ls, int *obj_cnt);
 
 /**
+ * Retrieve deprecated object information from DSS
+ * @param[in]   hdl     valid connection handle
+ * @param[in]   filter  assembled DSS filtering criteria
+ * @param[out]  obj_ls  list of retrieved items to be freed w/ dss_res_free()
+ * @param[out]  obj_cnt number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_deprecated_object_get(struct dss_handle *hdl,
+                              const struct dss_filter *filter,
+                              struct object_info **obj_ls, int *obj_cnt);
+
+/**
  *  Generic function: frees item_list that was allocated in dss_xxx_get()
  *  @param[in]  item_list   list of items to free
  *  @param[in]  item_cnt    number of items in item_list
@@ -304,6 +322,19 @@ int dss_layout_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
  */
 int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
                    int obj_cnt, enum dss_set_action action);
+
+/**
+ * Store information for one or many deprecated objects in DSS.
+ * @param[in]   hdl     valid connection handle
+ * @param[in]   obj_ls  array of entries to store
+ * @param[in]   obj_cnt number of items in the list
+ * @param[in]   action  operation code (insert, update, delete)
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_deprecated_object_set(struct dss_handle *hdl,
+                              struct object_info *obj_ls,
+                              int obj_cnt, enum dss_set_action action);
 
 /**
  *  Lock a device for concurrent accesses

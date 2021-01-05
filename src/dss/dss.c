@@ -56,6 +56,8 @@ static int dss_layout_from_pg_row(void *void_layout, PGresult *res,
 static void dss_layout_result_free(void *void_layout);
 static int dss_object_from_pg_row(void *void_object, PGresult *res,
                                   int row_num);
+static int dss_deprecated_object_from_pg_row(void *void_object, PGresult *res,
+                                             int row_num);
 static void dss_object_result_free(void *void_object);
 
 /** List of configuration parameters for tape_model */
@@ -441,7 +443,9 @@ static const char * const select_query[] = {
                    " address_type, fs_type, fs_status, fs_label, stats, tags,"
                    " lock, lock_ts, put, get, delete FROM media",
     [DSS_LAYOUT] = "SELECT oid, state, lyt_info, extents FROM extent",
-    [DSS_OBJECT] = "SELECT oid, user_md FROM object",
+    [DSS_OBJECT] = "SELECT oid, uuid, version, user_md FROM object",
+    [DSS_DEPREC] = "SELECT oid, uuid, version, user_md, deprec_time"
+                   " FROM deprecated_object",
 };
 
 static const size_t res_size[] = {
@@ -449,6 +453,7 @@ static const size_t res_size[] = {
     [DSS_MEDIA]  = sizeof(struct media_info),
     [DSS_LAYOUT] = sizeof(struct layout_info),
     [DSS_OBJECT] = sizeof(struct object_info),
+    [DSS_DEPREC] = sizeof(struct object_info),
 };
 
 typedef int (*res_pg_constructor_t)(void *item, PGresult *res, int row_num);
@@ -457,6 +462,7 @@ static const res_pg_constructor_t res_pg_constructor[] = {
     [DSS_MEDIA]  = dss_media_from_pg_row,
     [DSS_LAYOUT] = dss_layout_from_pg_row,
     [DSS_OBJECT] = dss_object_from_pg_row,
+    [DSS_DEPREC] = dss_deprecated_object_from_pg_row,
 };
 
 typedef void (*res_destructor_t)(void *item);
@@ -465,6 +471,7 @@ static const res_destructor_t res_destructor[] = {
     [DSS_MEDIA]  = dss_media_result_free,
     [DSS_LAYOUT] = dss_layout_result_free,
     [DSS_OBJECT] = dss_object_result_free,
+    [DSS_DEPREC] = dss_object_result_free,
 };
 
 static const char * const insert_query[] = {
@@ -477,6 +484,8 @@ static const char * const insert_query[] = {
     [DSS_LAYOUT] = "INSERT INTO extent (oid, uuid, state, lyt_info, extents)"
                    " VALUES ",
     [DSS_OBJECT] = "INSERT INTO object (oid, user_md) VALUES ",
+    [DSS_DEPREC] = "INSERT INTO deprecated_object (oid, uuid, version, user_md)"
+                   " VALUES ",
 };
 
 static const char * const update_query[] = {
@@ -494,7 +503,6 @@ static const char * const update_query[] = {
                    " WHERE oid = '%s';",
     [DSS_OBJECT] = "UPDATE object SET user_md = '%s' "
                    " WHERE oid = '%s';",
-
 };
 
 static const char * const delete_query[] = {
@@ -502,7 +510,8 @@ static const char * const delete_query[] = {
     [DSS_MEDIA]  = "DELETE FROM media WHERE id = '%s'; ",
     [DSS_LAYOUT] = "DELETE FROM extent WHERE oid = '%s'; ",
     [DSS_OBJECT] = "DELETE FROM object WHERE oid = '%s'; ",
-
+    [DSS_DEPREC] = "DELETE FROM deprecated_object"
+                   " WHERE uuid = '%s' AND version = '%d'; ",
 };
 
 static const char * const insert_query_values[] = {
@@ -512,6 +521,7 @@ static const char * const insert_query_values[] = {
     [DSS_LAYOUT] = "('%s', (select uuid from object where oid = '%s'), '%s',"
                    " '%s', '%s')%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
+    [DSS_DEPREC] = "('%s', '%s', %d, '%s')%s",
 };
 
 enum dss_lock_queries {
@@ -1103,6 +1113,39 @@ static int get_object_setrequest(PGconn *_conn, struct object_info *item_list,
     return 0;
 }
 
+static int get_deprecated_object_setrequest(PGconn *_conn,
+                                            struct object_info *item_list,
+                                            int item_cnt,
+                                            enum dss_set_action action,
+                                            GString *request)
+{
+    int i;
+
+    ENTRY;
+
+    for (i = 0; i < item_cnt; i++) {
+        struct object_info *p_object = &item_list[i];
+
+        if (p_object->uuid == NULL)
+            LOG_RETURN(-EINVAL, "Object uuid cannot be NULL");
+        if (p_object->version < 1)
+            LOG_RETURN(-EINVAL, "Object version must be strictly positive");
+
+        if (action == DSS_SET_DELETE) {
+            g_string_append_printf(request, delete_query[DSS_DEPREC],
+                                   p_object->uuid, p_object->version);
+        } else if (action == DSS_SET_INSERT) {
+            g_string_append_printf(request, insert_query_values[DSS_DEPREC],
+                                   p_object->oid, p_object->uuid,
+                                   p_object->version, p_object->user_md,
+                                   i < item_cnt-1 ? "," : ";");
+        } else if (action == DSS_SET_UPDATE) {
+            LOG_RETURN(-ENOTSUP, "Deprecated object cannot be updated");
+        }
+    }
+    return 0;
+}
+
 static int get_layout_setrequest(PGconn *_conn, struct layout_info *item_list,
                                  int item_cnt, enum dss_set_action action,
                                  GString *request, int *error)
@@ -1386,6 +1429,7 @@ static inline bool is_type_supported(enum dss_type type)
 {
     switch (type) {
     case DSS_OBJECT:
+    case DSS_DEPREC:
     case DSS_LAYOUT:
     case DSS_DEVICE:
     case DSS_MEDIA:
@@ -1763,9 +1807,31 @@ static int dss_object_from_pg_row(void *void_object, PGresult *res, int row_num)
 {
     struct object_info *object = void_object;
 
-    object->oid     = get_str_value(res, row_num, 0);
-    object->user_md = get_str_value(res, row_num, 1);
+    object->oid         = get_str_value(res, row_num, 0);
+    object->uuid        = get_str_value(res, row_num, 1);
+    object->version     = atoi(PQgetvalue(res, row_num, 2));
+    object->user_md     = get_str_value(res, row_num, 3);
+    object->deprec_time.tv_sec = 0;
+    object->deprec_time.tv_usec = 0;
+
     return 0;
+}
+
+/**
+ * Fill a deprecated object_info from the information in the `row_num`th row
+ * of `res`.
+ */
+static int dss_deprecated_object_from_pg_row(void *void_object, PGresult *res,
+                                             int row_num)
+{
+    struct object_info *object = void_object;
+    int rc;
+
+    rc = dss_object_from_pg_row(void_object, res, row_num);
+    rc = rc ? : str2timeval(get_str_value(res, row_num, 4),
+                            &object->deprec_time);
+
+    return rc;
 }
 
 /**
@@ -1894,6 +1960,12 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         rc = get_object_setrequest(conn, item_list, item_cnt, action, request);
         if (rc)
             LOG_GOTO(out_cleanup, rc, "SQL object request failed");
+        break;
+    case DSS_DEPREC:
+        rc = get_deprecated_object_setrequest(conn, item_list, item_cnt, action,
+                                              request);
+        if (rc)
+            LOG_GOTO(out_cleanup, rc, "SQL deprecated object request failed");
         break;
 
     default:
@@ -2112,6 +2184,13 @@ int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
     return dss_generic_get(hdl, DSS_OBJECT, filter, (void **)obj_ls, obj_cnt);
 }
 
+int dss_deprecated_object_get(struct dss_handle *hdl,
+                              const struct dss_filter *filter,
+                              struct object_info **obj_ls, int *obj_cnt)
+{
+    return dss_generic_get(hdl, DSS_DEPREC, filter, (void **)obj_ls, obj_cnt);
+}
+
 int dss_device_set(struct dss_handle *hdl, struct dev_info *dev_ls, int dev_cnt,
                    enum dss_set_action action)
 {
@@ -2134,6 +2213,13 @@ int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
                    int obj_cnt, enum dss_set_action action)
 {
     return dss_generic_set(hdl, DSS_OBJECT, (void *)obj_ls, obj_cnt, action);
+}
+
+int dss_deprecated_object_set(struct dss_handle *hdl,
+                              struct object_info *obj_ls, int obj_cnt,
+                              enum dss_set_action action)
+{
+    return dss_generic_set(hdl, DSS_DEPREC, (void *)obj_ls, obj_cnt, action);
 }
 
 int dss_device_lock(struct dss_handle *handle, struct dev_info *dev_ls,

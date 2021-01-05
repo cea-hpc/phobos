@@ -69,6 +69,9 @@ insert into media (family, model, id, adm_status, fs_type, address_type,
 insert into object (oid, user_md)
     values ('01230123ABC', '{}');
 
+insert into deprecated_object (oid, uuid, version, user_md)
+    values ('01230123ABD', '00112233445566778899aabbccddeeff', 1, '{}');
+
 insert into extent (oid, uuid, state, lyt_info, extents)
     values ('01230123ABC', (select uuid from object where oid = '01230123ABC'),
             'pending', '{"name":"simple","major":0,"minor":1}',

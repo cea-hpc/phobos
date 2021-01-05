@@ -49,6 +49,9 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     case DSS_OBJECT:
         return dss_object_get(handle, filter,
                               (struct object_info **)item_list, n);
+    case DSS_DEPREC:
+        return dss_deprecated_object_get(handle, filter,
+                                     (struct object_info **)item_list, n);
     case DSS_LAYOUT:
         return dss_layout_get(handle, filter,
                               (struct layout_info **)item_list, n);
@@ -70,6 +73,10 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
     case DSS_OBJECT:
         return dss_object_set(handle, (struct object_info *)item_list, n,
                               action);
+    case DSS_DEPREC:
+        return dss_deprecated_object_set(handle,
+                                         (struct object_info *)item_list, n,
+                                         action);
     case DSS_LAYOUT:
         return dss_layout_set(handle, (struct layout_info *)item_list, n,
                               action);
@@ -137,7 +144,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "Usage: %s ACTION TYPE [ \"CRIT\" ]\n", argv[0]);
         fprintf(stderr, "where  ACTION := { get | set | lock | unlock }\n");
         fprintf(stderr, "       TYPE := "
-                        "{ device | media | object | layout }\n");
+                        "{ device | media | object | deprecated_object | layout }\n");
         fprintf(stderr, "       [ \"CRIT\" ] := \"field cmp value\"\n");
         fprintf(stderr, "Optional for set:\n");
         fprintf(stderr, "       oidtest set oid to NULL");
@@ -159,7 +166,8 @@ int main(int argc, char **argv)
         type = str2dss_type(argv[2]);
         if (type == DSS_INVAL) {
             pho_error(EINVAL,
-                      "verb device|media|object|layout expected instead of %s",
+                      "verb device|media|object|deprecated_object|layout "
+                      "expected instead of %s",
                       argv[2]);
             exit(EXIT_FAILURE);
         }
@@ -228,6 +236,7 @@ int main(int argc, char **argv)
             }
             break;
         case DSS_OBJECT:
+        case DSS_DEPREC:
             for (i = 0, object = item_list; i < item_cnt; i++, object++)
                 pho_debug("Got object: oid:%s", object->oid);
             break;
@@ -263,7 +272,8 @@ int main(int argc, char **argv)
 
         if (type == DSS_INVAL) {
             pho_error(EINVAL,
-                      "verb dev|media|object|layout expected instead of %s",
+                      "verb dev|media|object|deprecated_object|layout expected "
+                      "instead of %s",
                       argv[2]);
             exit(EXIT_FAILURE);
         }
@@ -322,6 +332,12 @@ int main(int argc, char **argv)
                 }
                 if (oidtest)
                     object->oid = NULL;
+            }
+            break;
+        case DSS_DEPREC:
+            for (i = 0, object = item_list; i < item_cnt; i++, object++) {
+                if (action == DSS_SET_INSERT)
+                    ++object->version;
             }
             break;
         case DSS_LAYOUT:

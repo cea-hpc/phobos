@@ -34,6 +34,7 @@ from enum import IntEnum
 from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
                                PHO_RSC_DIR, PHO_RSC_DISK, PHO_RSC_TAPE,
+                               PHO_TIMEVAL_MAX_LEN,
                                fs_type2str, fs_status2str,
                                rsc_adm_status2str, rsc_family2str)
 
@@ -516,11 +517,28 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         if hasattr(self, "_free_tags") and self._free_tags:
             self._tags.free()
 
+class Timeval(Structure): # pylint: disable=too-few-public-methods
+    """standard struct timeval."""
+    _fields_ = [
+        ('tv_sec', c_long),
+        ('tv_usec', c_long)
+    ]
+
+def display_timeval(val):
+    """Wrapper to correctly display a Timeval structure"""
+    tv_str = (c_char * PHO_TIMEVAL_MAX_LEN)()
+    LIBPHOBOS.timeval2str(byref(val), tv_str)
+    return tv_str.value.decode('utf-8')
+
+
 class ObjectInfo(Structure, CLIManagedResourceMixin):
     """Object descriptor."""
     _fields_ = [
         ('_oid', c_char_p),
-        ('_user_md', c_char_p)
+        ('_uuid', c_char_p),
+        ('version', c_int),
+        ('_user_md', c_char_p),
+        ('deprec_time', Timeval),
     ]
 
     def get_display_fields(self):
@@ -542,6 +560,17 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
         self._oid = val.encode('utf-8')
 
     @property
+    def uuid(self):
+        """Wrapper to get uuid"""
+        return self._uuid.decode('utf-8') if self._uuid else None
+
+    @uuid.setter
+    def uuid(self, val):
+        """Wrapper to set uuid"""
+        # pylint: disable=attribute-defined-outside-init
+        self._uuid = val.encode('utf-8') if val else None
+
+    @property
     def user_md(self):
         """Wrapper to get user_md"""
         return self._user_md.decode('utf-8') if self._user_md else None
@@ -551,6 +580,18 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
         """Wrapper to set user_md"""
         # pylint: disable=attribute-defined-outside-init
         self._user_md = val.encode('utf-8')
+
+class DeprecatedObjectInfo(ObjectInfo):
+    """Deprecated object wrapper to get the correct display fields"""
+    def get_display_fields(self):
+        """Return a dict of available fields and optional display formatters."""
+        return {
+            'oid': None,
+            'uuid': None,
+            'version': None,
+            'user_md': None,
+            'deprec_time': display_timeval,
+        }
 
 class Buffer(Structure): # pylint: disable=too-few-public-methods
     """String buffer."""
@@ -657,13 +698,6 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     def layout(self):
         """Wrapper to get object layout."""
         return self.layout_desc.mod_name
-
-class Timeval(Structure): # pylint: disable=too-few-public-methods
-    """standard struct timeval."""
-    _fields_ = [
-        ('tv_sec', c_long),
-        ('tv_usec', c_long)
-    ]
 
 class PhoLogRec(Structure):
     """Single log record."""

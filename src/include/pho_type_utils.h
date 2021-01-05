@@ -99,6 +99,26 @@ bool tags_in(const struct tags *haystack, const struct tags *needle);
 int str2tags(const char *tag_str, struct tags *tags);
 
 /**
+ * Convert a string of the form "YYYY-mm-dd HH:MM:SS.uuuuuu" into a
+ * timeval structure
+ *
+ * @param[in]     tv_str the string to extract the time from
+ * @param[in,out] tv     the extracted time, must be pre-allocated
+ * @return               0 on success, -EINVAL on error
+ */
+int str2timeval(const char *tv_str, struct timeval *tv);
+
+/**
+ * Convert a timeval structure into a string of the form
+ * "YYYY-mm-dd HH:MM:SS.uuuuuu"
+ *
+ * @param[in]   tv      the time to convert
+ * @param[out]  tv_str  the formatted string
+ * @return              0 on success, -EINVAL on error
+ */
+int timeval2str(const struct timeval *tv, char *tv_str);
+
+/**
  * Simple on-the-fly JSON parsing engine providing a SAX-like API.
  */
 struct saj_parser;
