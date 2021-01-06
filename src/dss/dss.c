@@ -440,26 +440,26 @@ static const char * const select_query[] = {
 };
 
 static const size_t res_size[] = {
-    [DSS_DEVICE]  = sizeof(struct dev_info),
-    [DSS_MEDIA]   = sizeof(struct media_info),
-    [DSS_LAYOUT]  = sizeof(struct layout_info),
-    [DSS_OBJECT]  = sizeof(struct object_info),
+    [DSS_DEVICE] = sizeof(struct dev_info),
+    [DSS_MEDIA]  = sizeof(struct media_info),
+    [DSS_LAYOUT] = sizeof(struct layout_info),
+    [DSS_OBJECT] = sizeof(struct object_info),
 };
 
 typedef int (*res_pg_constructor_t)(void *item, PGresult *res, int row_num);
 static const res_pg_constructor_t res_pg_constructor[] = {
-    [DSS_DEVICE]  = dss_device_from_pg_row,
-    [DSS_MEDIA]   = dss_media_from_pg_row,
-    [DSS_LAYOUT]  = dss_layout_from_pg_row,
-    [DSS_OBJECT]  = dss_object_from_pg_row,
+    [DSS_DEVICE] = dss_device_from_pg_row,
+    [DSS_MEDIA]  = dss_media_from_pg_row,
+    [DSS_LAYOUT] = dss_layout_from_pg_row,
+    [DSS_OBJECT] = dss_object_from_pg_row,
 };
 
 typedef void (*res_destructor_t)(void *item);
 static const res_destructor_t res_destructor[] = {
-    [DSS_DEVICE]  = dss_device_result_free,
-    [DSS_MEDIA]   = dss_media_result_free,
-    [DSS_LAYOUT]  = dss_layout_result_free,
-    [DSS_OBJECT]  = dss_object_result_free,
+    [DSS_DEVICE] = dss_device_result_free,
+    [DSS_MEDIA]  = dss_media_result_free,
+    [DSS_LAYOUT] = dss_layout_result_free,
+    [DSS_OBJECT] = dss_object_result_free,
 };
 
 static const char * const insert_query[] = {
