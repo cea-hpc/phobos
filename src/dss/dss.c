@@ -564,6 +564,18 @@ static const char * const simple_lock_query[] = {
                          "WHERE lock='' AND id IN %s;",
 };
 
+enum dss_move_queries {
+    DSS_MOVE_INVAL = -1,
+    DSS_MOVE_OBJECT_TO_DEPREC = 0,
+};
+
+static const char * const move_query[] = {
+    [DSS_MOVE_OBJECT_TO_DEPREC] = "WITH moved_object AS "
+                                  "(DELETE FROM object WHERE %s RETURNING *) "
+                                  "INSERT INTO deprecated_object "
+                                  "SELECT * FROM moved_object",
+};
+
 /**
  * Load long long integer value from JSON object and zero-out the field on error
  * Caller is responsible for using the macro on a compatible type, a signed 64
@@ -2139,6 +2151,80 @@ out_cleanup:
     return rc;
 }
 
+static enum dss_move_queries move_query_type(enum dss_type type_from,
+                                             enum dss_type type_to)
+{
+    if (type_from == DSS_OBJECT && type_to == DSS_DEPREC)
+        return DSS_MOVE_OBJECT_TO_DEPREC;
+
+    return DSS_MOVE_INVAL;
+}
+
+static int dss_prepare_oid_list(PGconn *conn, GString *list,
+                                struct object_info *obj_list, int obj_cnt)
+{
+    int i;
+
+    for (i = 0; i < obj_cnt; ++i) {
+        char *tmp = PQescapeLiteral(conn, obj_list[i].oid,
+                                    strlen(obj_list[i].oid));
+
+        if (!tmp)
+            LOG_RETURN(-EINVAL,
+                       "Cannot escape litteral %s: %s",
+                       obj_list[i].oid, PQerrorMessage(conn));
+
+        g_string_append_printf(list, "oid=%s", tmp);
+        PQfreemem(tmp);
+        if (i + 1 != obj_cnt)
+            g_string_append(list, " OR ");
+    }
+    return 0;
+}
+
+static int dss_object_move(struct dss_handle *handle, enum dss_type type_from,
+                           enum dss_type type_to, struct object_info *obj_list,
+                           int obj_cnt)
+{
+    PGconn      *conn = handle->dh_conn;
+    enum dss_move_queries move_type;
+    GString     *clause;
+    GString     *oid_list;
+    PGresult    *res = NULL;
+    int          rc = 0;
+
+    ENTRY;
+
+    move_type = move_query_type(type_from, type_to);
+    if (!conn || move_type == DSS_MOVE_INVAL)
+        LOG_RETURN(-EINVAL, "dss - conn: %p, move_type: %d", conn, move_type);
+
+    clause = g_string_new(NULL);
+    oid_list = g_string_new(NULL);
+
+    rc = dss_prepare_oid_list(conn, oid_list, obj_list, obj_cnt);
+    if (rc)
+        LOG_GOTO(err, rc, "OID list could not be built");
+
+    g_string_append_printf(clause, move_query[move_type], oid_list->str);
+
+    pho_debug("Executing request: '%s'", clause->str);
+
+    res = PQexec(conn, clause->str);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        rc = psql_state2errno(res);
+        pho_error(rc, "Query '%s' failed: %s", clause->str,
+                  PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
+    }
+
+    PQclear(res);
+
+err:
+    g_string_free(oid_list, true);
+    g_string_free(clause, true);
+    return rc;
+}
+
 void dss_res_free(void *item_list, int item_cnt)
 {
     struct dss_result *dss_res;
@@ -2245,4 +2331,10 @@ int dss_media_unlock(struct dss_handle *handle, struct media_info *media_ls,
 {
     return dss_generic_unlock(handle, DSS_MEDIA, media_ls, media_cnt,
                               lock_owner);
+}
+
+int dss_object_delete(struct dss_handle *handle, struct object_info *obj_list,
+                      int obj_cnt)
+{
+    return dss_object_move(handle, DSS_OBJECT, DSS_DEPREC, obj_list, obj_cnt);
 }

@@ -383,4 +383,17 @@ int dss_media_lock(struct dss_handle *handle, struct media_info *media_ls,
  */
 int dss_media_unlock(struct dss_handle *handle, struct media_info *media_ls,
                      int media_cnt, const char *lock_owner);
+
+/**
+ * Delete a set of objects.
+ *
+ * @param[in]   handle      DSS handle.
+ * @param[in]   obj_list    List of objects.
+ * @param[in]   obj_cnt     Number of objects.
+ *
+ * @return      0 on succes, -errno on failure.
+ */
+int dss_object_delete(struct dss_handle *handle, struct object_info *obj_list,
+                      int obj_cnt);
+
 #endif
