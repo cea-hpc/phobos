@@ -56,7 +56,8 @@ typedef void (*pho_completion_cb_t)(void *u, const struct pho_xfer_desc *, int);
 enum pho_xfer_op {
     PHO_XFER_OP_PUT,   /**< PUT operation. */
     PHO_XFER_OP_GET,   /**< GET operation. */
-    PHO_XFER_OP_GETMD  /**< GET metadata operation. */
+    PHO_XFER_OP_GETMD, /**< GET metadata operation. */
+    PHO_XFER_OP_DEL,   /**< DEL operation. */
 };
 
 /**
@@ -155,7 +156,18 @@ int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
 
 /** query metadata of the object store */
 /* TODO int phobos_query(criteria, &obj_list); */
-/* TODO int phobos_del(); */
+
+/**
+ * Delete an object from the object store
+ *
+ * This deletion is not a hard remove, and only deprecate the object.
+ *
+ * @param[in]   xfers       Objects to delete, only the oid field is used
+ * @param[in]   num_xfers   Number of objects to delete
+ *
+ * @return                  0 on success, -errno on failure
+ */
+int phobos_object_delete(struct pho_xfer_desc *xfers, size_t num_xfers);
 
 /**
  * Free tags and attributes resources associated with this xfer,

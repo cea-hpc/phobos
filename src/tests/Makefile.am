@@ -6,7 +6,7 @@ AM_CFLAGS= $(CC_OPT)
 check_PROGRAMS=test_common test_attrs test_mapper test_log test_store	\
 	       test_dss test_cfg test_scsi test_scsi_scan test_dev_tape \
 	       test_ldm test_type_utils test_store_retry test_io \
-	       test_communication test_bad_comm test_store_alias
+	       test_communication test_bad_comm test_store_alias test_delete
 
 # 1st step: low level tests
 UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_dev_tape \
@@ -16,7 +16,8 @@ UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_dev_tape \
 INTEG_TESTS=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh	\
 	    test_store_retry.sh simple_split.sh raid1_simple_split.sh 	\
 	    raid1_split.sh test_bad_comm.sh test_resource_availability.sh \
-	    test_daemon.sh test_media_operation_flags.sh test_tag_update.sh
+	    test_daemon.sh test_media_operation_flags.sh test_tag_update.sh \
+	    test_delete.sh
 
 TESTS=$(UNIT_TESTS) $(INTEG_TESTS)
 
@@ -81,6 +82,9 @@ test_io_LDADD=../io/libpho_io.la ../common/libpho_common.la
 test_store_alias_SOURCES=test_store_alias.c
 test_store_alias_LDADD=../cfg/libpho_cfg.la ../common/libpho_common.la \
 			../store/.libs/store_alias.o
+
+test_delete_SOURCES=test_delete.c
+test_delete_LDADD=../store/libphobos_store.la
 
 @VALGRIND_CHECK_RULES@
 VALGRIND_SUPPRESSIONS_FILES=supp-files/valgrind.supp supp-files/glib.supp

@@ -363,6 +363,18 @@ static int object_md_del(struct dss_handle *dss, char *objid)
     return 0;
 }
 
+static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
+{
+    struct object_info obj = { .oid = xfer->xd_objid };
+    int rc;
+
+    rc = dss_object_delete(dss, &obj, 1);
+    if (rc)
+        LOG_RETURN(rc, "Cannot delete oid:'%s'", xfer->xd_objid);
+
+    return rc;
+}
+
 /**
  * Initialize an encoder or decoder to perform \a xfer, according to
  * xfer->xd_op and xfer->xd_flags.
@@ -381,8 +393,8 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
     if (rc)
         LOG_RETURN(rc, "Cannot find metadata for objid:'%s'", xfer->xd_objid);
 
-    if (xfer->xd_op == PHO_XFER_OP_GETMD) {
-        /* GETMD: create dummy decoder if only metadata are retrieved */
+    if (xfer->xd_op == PHO_XFER_OP_GETMD || xfer->xd_op == PHO_XFER_OP_DEL) {
+        /* create dummy decoder if no I/O operations are made */
         enc->xfer = xfer;
         enc->done = true;
         enc->is_decoder = true;
@@ -697,6 +709,14 @@ static int store_perform_xfers(struct phobos_handle *pho)
      * have its metadata cleared from the DSS.
      */
     for (i = 0; i < pho->n_xfers; i++) {
+        if (pho->xfers[i].xd_op == PHO_XFER_OP_DEL) {
+            rc = object_delete(&pho->dss, &pho->xfers[i]);
+            if (rc)
+                pho_error(rc, "Error while deleting objid: '%s'",
+                          pho->xfers[i].xd_objid);
+            store_end_xfer(pho, i, rc);
+        }
+
         if (pho->xfers[i].xd_op != PHO_XFER_OP_PUT)
             continue;
         rc = object_md_save(&pho->dss, &pho->xfers[i]);
@@ -803,6 +823,16 @@ int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
         xfers[i].xd_op = PHO_XFER_OP_GETMD;
 
     return phobos_xfer(xfers, n, cb, udata);
+}
+
+int phobos_object_delete(struct pho_xfer_desc *xfers, size_t num_xfers)
+{
+    size_t i;
+
+    for (i = 0; i < num_xfers; i++)
+        xfers[i].xd_op = PHO_XFER_OP_DEL;
+
+    return phobos_xfer(xfers, num_xfers, NULL, NULL);
 }
 
 void pho_xfer_desc_destroy(struct pho_xfer_desc *xfer)
