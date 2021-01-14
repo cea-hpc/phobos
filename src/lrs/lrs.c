@@ -237,7 +237,6 @@ static int _send_error(struct lrs *lrs, struct req_container *req_cont)
         LOG_RETURN(-ENOMEM, "Cannot allocate error response");
 
     rc = _prepare_error(&resp_cont, -EINVAL, req_cont);
-    free(req_cont);
     if (rc) {
         free(resp_cont.resp);
         LOG_RETURN(rc, "Cannot prepare error response");
@@ -259,7 +258,6 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
 
     for (i = 0; i < n_data; ++i) {
         struct req_container *req_cont;
-        int rc2 = 0;
 
         if (data[i].buf.size == -1) /* close notification, ignore */
             continue;
@@ -271,37 +269,31 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
         /* request processing */
         req_cont->token = data[i].fd;
         req_cont->req = pho_srl_request_unpack(&data[i].buf);
-        if (!req_cont->req) {
-            pho_error(-EINVAL, "Request cannot be unpacked");
-            rc = _send_error(lrs, req_cont);
-            if (rc)
-                LOG_RETURN(rc, "Cannot send error response");
-            continue;
-        }
+        if (!req_cont->req)
+            LOG_GOTO(send_err, rc = -EINVAL, "Request cannot be unpacked");
 
         fam = _determine_family(req_cont->req);
-        if (fam == PHO_RSC_INVAL) {
-            pho_error(-EINVAL, "Request type is not recognized");
-            rc = _send_error(lrs, req_cont);
-            if (rc)
-                LOG_RETURN(rc, "Cannot send error response");
-            continue;
-        }
+        if (fam == PHO_RSC_INVAL)
+            LOG_GOTO(send_err, rc = -EINVAL,
+                     "Requested family is not recognized");
 
-        if (!lrs->sched[fam]) {
-            pho_error(-EINVAL, "Requested family is not handled by the daemon");
-            rc = _send_error(lrs, req_cont);
-            if (rc)
-                LOG_RETURN(rc, "Cannot send error response");
-            continue;
-        }
+        if (!lrs->sched[fam])
+            LOG_GOTO(send_err, rc = -EINVAL,
+                     "Requested family is not handled by the daemon");
 
-        rc2 = sched_request_enqueue(lrs->sched[fam], req_cont);
-        if (rc2) {
+        rc = sched_request_enqueue(lrs->sched[fam], req_cont);
+        if (rc)
+            LOG_GOTO(send_err, rc, "Request cannot be enqueue");
+
+        continue;
+
+send_err:
+        rc = _send_error(lrs, req_cont);
+        if (req_cont->req)
             pho_srl_request_free(req_cont->req, true);
-            free(req_cont);
-            LOG_RETURN(rc2, "Request cannot be enqueue");
-        }
+        free(req_cont);
+        if (rc)
+            LOG_RETURN(rc, "Cannot send error response");
     }
 
     return rc;
