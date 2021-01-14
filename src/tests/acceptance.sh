@@ -542,7 +542,7 @@ function concurrent_put
 # allows all the instances to succeed
 function concurrent_put_get_retry
 {
-    files=`ls -p | grep -v /`
+    files=`ls -p | grep -v / | head -n 30`
 
     # Concurrent put
     echo -n $files | xargs -n1 -P0 -d' ' -i $phobos put {} {} ||
