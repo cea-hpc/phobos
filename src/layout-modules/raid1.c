@@ -79,9 +79,9 @@ struct raid1_encoder {
     unsigned int repl_count;
     size_t       to_write;          /**< Amount of data to read/write */
     unsigned int cur_extent_idx;    /**< Current extent index */
-    bool         pending_alloc;     /**< Whether a pending unanswer medium
-                                      *  allocation request has been emitted or
-                                      *  not
+    bool         requested_alloc;   /**< Whether an unanswer medium allocation
+                                      *  has been requested by the encoder
+                                      *  or not
                                       */
 
     /* The following two fields are only used when writing */
@@ -859,8 +859,8 @@ static int raid1_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
                   enc->is_decoder ? "Decoder" : "Encoder", enc->xfer->xd_objid,
                   pho_srl_error_kind_str(resp->error));
     } else if (pho_response_is_write(resp)) {
-        /* Last emitted allocation has now been fulfilled */
-        raid1->pending_alloc = false;
+        /* Last requested allocation has now been fulfilled */
+        raid1->requested_alloc = false;
         if (enc->is_decoder)
             return -EINVAL;
 
@@ -892,8 +892,8 @@ static int raid1_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
 
         (*n_reqs)++;
     } else if (pho_response_is_read(resp)) {
-        /* Last emitted allocation has now been fulfilled */
-        raid1->pending_alloc = false;
+        /* Last requested allocation has now been fulfilled */
+        raid1->requested_alloc = false;
         if (!enc->is_decoder)
             return -EINVAL;
 
@@ -972,7 +972,7 @@ static int raid1_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
 
     /* Do we need to generate a new alloc ? */
     if (rc || /* an error happened */
-        raid1->pending_alloc || /* a pending alloc already exists */
+        raid1->requested_alloc || /* an alloc was already requested */
         no_more_alloc(enc))
         goto out;
 
@@ -986,8 +986,7 @@ static int raid1_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
         return rc;
 
     (*n_reqs)++;
-    raid1->pending_alloc = true;
-    /* TODO : alloc is noticed pending here but it is not already sent */
+    raid1->requested_alloc = true;
 
 out:
     if (*n_reqs == 0) {
@@ -1063,7 +1062,7 @@ static int layout_raid1_encode(struct pho_encoder *enc)
 
     /* Initialize raid1-specific state */
     raid1->cur_extent_idx = 0;
-    raid1->pending_alloc = false;
+    raid1->requested_alloc = false;
 
     /* The layout description has to be set on encoding */
     enc->layout->layout_desc = RAID1_MODULE_DESC;
@@ -1139,7 +1138,7 @@ static int layout_raid1_decode(struct pho_encoder *enc)
 
     /* Initialize raid1-specific state */
     raid1->cur_extent_idx = 0;
-    raid1->pending_alloc = false;
+    raid1->requested_alloc = false;
     raid1->written_extents = NULL;
     raid1->to_release_media = NULL;
     raid1->n_released_media = 0;

@@ -59,9 +59,9 @@ static struct module_desc SIMPLE_MODULE_DESC = {
 struct simple_encoder {
     size_t to_write;                /**< Amount of data to read/write */
     unsigned int cur_extent_idx;    /**< Current extent index */
-    bool pending_alloc;             /**< Whether a pending unanswer medium
-                                      *  allocation request has been emitted or
-                                      *  not
+    bool requested_alloc;           /**< Whether an unanswer medium allocation
+                                      *  has been requested by the encoder
+                                      *  or not
                                       */
 
     /* The following two fields are only used when writing */
@@ -423,8 +423,8 @@ static int simple_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
                   enc->is_decoder ? "Decoder" : "Encoder", enc->xfer->xd_objid,
                   pho_srl_error_kind_str(resp->error));
     } else if (pho_response_is_write(resp)) {
-        /* Last emitted allocation has now been fulfilled */
-        simple->pending_alloc = false;
+        /* Last requested allocation has now been fulfilled */
+        simple->requested_alloc = false;
         if (enc->is_decoder)
             return -EINVAL;
 
@@ -447,8 +447,8 @@ static int simple_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
                 enc, resp->walloc, (*reqs)[*n_reqs].release);
         (*n_reqs)++;
     } else if (pho_response_is_read(resp)) {
-        /* Last emitted allocation has now been fulfilled */
-        simple->pending_alloc = false;
+        /* Last requested allocation has now been fulfilled */
+        simple->requested_alloc = false;
         if (!enc->is_decoder)
             return -EINVAL;
 
@@ -506,7 +506,7 @@ static int simple_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
         goto out;
 
     /* If an allocation is already waiting unanswered, don't request another */
-    if (simple->pending_alloc)
+    if (simple->requested_alloc)
         goto out;
 
     /* Build next request */
@@ -519,7 +519,7 @@ static int simple_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
         return rc;
 
     (*n_reqs)++;
-    simple->pending_alloc = true;
+    simple->requested_alloc = true;
 
 out:
     if (*n_reqs == 0) {
@@ -590,7 +590,7 @@ static int layout_simple_encode(struct pho_encoder *enc)
 
     /* Initialize simple-specific state */
     simple->cur_extent_idx = 0;
-    simple->pending_alloc = false;
+    simple->requested_alloc = false;
     if (enc->is_decoder) {
         /*
          * Size is the sum of the extent sizes, enc->layout->wr_size is not
