@@ -2452,11 +2452,13 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
     }
 
     device.dss_dev_info = dev_info_dup(devi);
+    if (!device.dss_dev_info)
+        LOG_GOTO(err_res, rc = -ENOMEM, "Device info duplication failed");
 
     /* get a handle to the library to query it */
     rc = wrap_lib_open(device.dss_dev_info->rsc.id.family, &lib);
     if (rc)
-        goto err_res;
+        goto err_dev;
 
     rc = sched_fill_dev_info(&sched->dss, &lib, &device);
     if (rc)
@@ -2467,6 +2469,10 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
 
 err_lib:
     ldm_lib_close(&lib);
+
+err_dev:
+    if (rc)
+        dev_info_free(device.dss_dev_info, true);
 
 err_res:
     dss_res_free(devi, dev_cnt);
