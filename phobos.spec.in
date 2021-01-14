@@ -113,6 +113,14 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_admin.la
 
 %changelog
+* Wed Jan 13 2021 - Sebastien Gougeaud <sebastien.gougeaud@cea.fr> - 1.91.0-1
+- Release 1.91 (Japet)
+- Python3 port
+- New DB version towards the future deletion mechanism
+- Alias feature to specify storage class of service
+- Media set-access command to control permitted medium operations
+- Daemon management optimization (ressource locks, etc.)
+
 * Thu Sep 10 2020 - Thomas Leibovici <thomas.leibovici@cea.fr> - 1.90.0-1
 - Release 1.90 (Hi'iaka): 1.9x is the release cycle towards 2.0
 - Phobos now runs a daemon (phobosd) on each IO node to manage devices and
