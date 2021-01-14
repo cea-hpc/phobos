@@ -254,7 +254,7 @@ class MediaAddTest(BasicExecutionTest):
         self.pho_execute(['tape', 'add', 'E000[10-15]', '-t', 'BLAH'],
                          code=os.EX_DATAERR)
 
-    def test_tape_model_case_insentive_match(self): # pylint: disable=invalid-name
+    def test_tape_model_case_insensitive_match(self): # pylint: disable=invalid-name
         """Test tape type is case insensitive."""
         self.pho_execute(['tape', 'add', 'F000[10-15]', '-t', 'lto8'])
         self.pho_execute(['tape', 'add', 'G000[10-15]', '-t', 'lTo8'])
