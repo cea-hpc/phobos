@@ -298,14 +298,16 @@ static int psql_state2errno(const PGresult *res)
 }
 
 /**
- * Retrieve a copy of a string contained in a JSON object under a given key.
- * The caller is responsible for freeing the result after use.
+ * Retrieve a string contained in a JSON object under a given key.
  *
- * \return a newly allocated copy of the string on success or NULL on error.
+ * The result string should not be kept in a data structure. To keep a
+ * copy of the targeted string, use json_dict2str() instead.
+ *
+ * \return The targeted string value on success, or NULL on error.
  */
-static char *json_dict2str(const struct json_t *obj, const char *key)
+static const char *json_dict2tmp_str(const struct json_t *obj, const char *key)
 {
-    struct json_t   *current_obj;
+    struct json_t *current_obj;
 
     current_obj = json_object_get(obj, key);
     if (!current_obj) {
@@ -313,7 +315,20 @@ static char *json_dict2str(const struct json_t *obj, const char *key)
         return NULL;
     }
 
-    return strdup(json_string_value(current_obj));
+    return json_string_value(current_obj);
+}
+
+/**
+ * Retrieve a copy of a string contained in a JSON object under a given key.
+ * The caller is responsible for freeing the result after use.
+ *
+ * \return a newly allocated copy of the string on success or NULL on error.
+ */
+static char *json_dict2str(const struct json_t *obj, const char *key)
+{
+    const char *res = json_dict2tmp_str(obj, key);
+
+    return res ? strdup(res) : NULL;
 }
 
 /**
@@ -923,7 +938,7 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
                  "Memory allocation of size %zu failed", extents_res_size);
 
     for (i = 0; i < *count; i++) {
-        char    *tmp;
+        const char *tmp;
 
         child = json_array_get(root, i);
         result[i].layout_idx = i;
@@ -931,34 +946,29 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
         if (result[i].size < 0)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'sz'");
 
-        tmp = json_dict2str(child, "addr");
-        if (!tmp)
+        result[i].address.buff = json_dict2str(child, "addr");
+        if (!result[i].address.buff)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'addr'");
 
-        result[i].address.buff = tmp;
-        result[i].address.size = strlen(tmp) + 1;
+        result[i].address.size = strlen(result[i].address.buff) + 1;
 
-        /* FIXME: unnecessary allocation */
-        tmp = json_dict2str(child, "fam");
+        tmp = json_dict2tmp_str(child, "fam");
         if (!tmp)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'fam'");
 
         result[i].media.family = str2rsc_family(tmp);
-        free(tmp);
 
         /*XXX fs_type & address_type retrieved from media info */
         if (result[i].media.family == PHO_RSC_INVAL)
             LOG_GOTO(out_decref, rc = -EINVAL, "Invalid medium family");
 
-        /* FIXME: unnecessary allocation */
-        tmp = json_dict2str(child, "media");
+        tmp = json_dict2tmp_str(child, "media");
         if (!tmp)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'media'");
 
         rc = pho_id_name_set(&result[i].media, tmp);
         if (rc)
             LOG_GOTO(out_decref, rc = -EINVAL, "Failed to set media id");
-        free(tmp);
     }
 
     *extents = result;
