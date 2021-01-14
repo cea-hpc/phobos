@@ -58,7 +58,22 @@ enum pho_xfer_op {
     PHO_XFER_OP_GET,   /**< GET operation. */
     PHO_XFER_OP_GETMD, /**< GET metadata operation. */
     PHO_XFER_OP_DEL,   /**< DEL operation. */
+    PHO_XFER_OP_LAST
 };
+
+static const char * const xfer_op_names[] = {
+    [PHO_XFER_OP_PUT]   = "PUT",
+    [PHO_XFER_OP_GET]   = "GET",
+    [PHO_XFER_OP_GETMD] = "GETMD",
+    [PHO_XFER_OP_DEL]   = "DELETE",
+};
+
+static inline const char *xfer_op2str(enum pho_xfer_op op)
+{
+    if (op >= PHO_XFER_OP_LAST || op < 0)
+        return NULL;
+    return xfer_op_names[op];
+}
 
 /**
  * PUT parameters.

@@ -110,6 +110,7 @@ AC_CONFIG_FILES([Makefile
          src/layout-modules/Makefile
          src/admin/Makefile
          src/tests/Makefile
+         src/tests/integration/Makefile
          src/cli/Makefile
          phobos.spec
 ])

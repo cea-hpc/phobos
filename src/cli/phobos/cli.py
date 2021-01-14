@@ -649,6 +649,27 @@ class ObjectListOptHandler(PatternListOptHandler):
                             help="filter on metadata, comma-separated "
                                  "'key=value' parameters")
 
+class ObjectDeleteOptHandler(BaseOptHandler):
+    """Delete objects handler."""
+
+    label = 'delete'
+    descr = 'remove an object from phobos namespace and '\
+            'add it to deprecated objects'
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add command options."""
+        super(ObjectDeleteOptHandler, cls).add_options(parser)
+
+        parser.add_argument('oids', nargs='+',
+                            help='Object IDs to delete')
+
 class ExtentListOptHandler(PatternListOptHandler):
     """
     Specific version of the 'list' command for extent, with a couple
@@ -726,7 +747,8 @@ class ObjectOptHandler(BaseResourceOptHandler):
     label = 'object'
     descr = 'handle objects'
     verbs = [
-        ObjectListOptHandler
+        ObjectListOptHandler,
+        ObjectDeleteOptHandler,
     ]
 
     def exec_list(self):
@@ -760,6 +782,17 @@ class ObjectOptHandler(BaseResourceOptHandler):
             client.list_free(objs, len(objs))
         except EnvironmentError as err:
             self.logger.error("Cannot list objects: %s", env_error_format(err))
+            sys.exit(os.EX_DATAERR)
+
+    def exec_delete(self):
+        """Delete objects."""
+
+        client = UtilClient()
+        try:
+            client.object_delete(self.params.get('oids'))
+        except EnvironmentError as err:
+            self.logger.error("Cannot delete objects: %s",
+                              env_error_format(err))
             sys.exit(os.EX_DATAERR)
 
 class DeviceOptHandler(BaseResourceOptHandler):

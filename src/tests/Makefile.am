@@ -24,10 +24,12 @@ TESTS=$(UNIT_TESTS) $(INTEG_TESTS)
 noinst_PROGRAMS=$(check_PROGRAMS)
 noinst_HEADERS=pho_test_utils.h pho_test_xfer_utils.h
 
+SUBDIRS=. integration
+
 pre-check-local:
 	./test_lock.sh
 
-check: pre-check-local check-am
+check-local: pre-check-local
 	rm -f /tmp/phobos_test.lock
 
 test_log_SOURCES=test_log.c
@@ -88,7 +90,8 @@ test_delete_LDADD=../store/libphobos_store.la
 
 @VALGRIND_CHECK_RULES@
 VALGRIND_SUPPRESSIONS_FILES=supp-files/valgrind.supp supp-files/glib.supp
-EXTRA_DIST=$(VALGRIND_SUPPRESSIONS_FILES)
+EXTRA_DIST=setup_db.sh test_env.sh test_launch_daemon.sh \
+           $(VALGRIND_SUPPRESSIONS_FILES)
 # FIXME:
 # Possibly-lost leaks appear in valgrind reports when testing acceptance.sh,
 # generating millions of lines (each phobos command execution leads to ~5k

@@ -7,7 +7,7 @@ export PHOBOS_LRS_lock_file="$test_bin_dir/phobosd.lock"
 
 function invoke_daemon()
 {
-    $LOG_COMPILER $LOG_FLAGS $test_bin_dir/../lrs/phobosd &
+    $LOG_COMPILER $LOG_FLAGS $phobosd &
     wait $!
     PID_DAEMON=`cat $PHOBOSD_PID_FILEPATH`
     rm $PHOBOSD_PID_FILEPATH

@@ -449,8 +449,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     if (xfer->xd_rc == 0 && rc != 0)
         xfer->xd_rc = rc;
 
-    pho_info("%s operation for objid:'%s' %s",
-             xfer->xd_op == PHO_XFER_OP_PUT ? "PUT" : "GET",
+    pho_info("%s operation for objid:'%s' %s", xfer_op2str(xfer->xd_op),
              xfer->xd_objid, xfer->xd_rc ? "failed" : "succeeded");
 
     /* Cleanup metadata for failed PUT */

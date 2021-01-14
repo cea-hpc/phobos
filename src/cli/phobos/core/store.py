@@ -32,7 +32,6 @@ from ctypes import (byref, c_char_p, c_int, c_ssize_t, c_void_p, cast,
                     CFUNCTYPE, pointer, POINTER, py_object, Structure, Union)
 
 from phobos.core.ffi import LIBPHOBOS, ObjectInfo, Tags
-from phobos.core.cfg import get_val as cfg_get_val
 from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OP_GET, # pylint: disable=no-name-in-module
                                PHO_XFER_OP_GETMD, PHO_XFER_OP_PUT,
                                PHO_RSC_INVAL, str2rsc_family)
@@ -355,6 +354,20 @@ class UtilClient:
         """Initialize a new instance."""
         super(UtilClient, self).__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
+
+    @staticmethod
+    def object_delete(oids):
+        """Delete objects."""
+        n_xfers = c_int(len(oids))
+        xfer_array_type = XferDescriptor * len(oids)
+        xfers = xfer_array_type()
+
+        for i, oid in enumerate(oids):
+            xfers[i].xd_objid = oid
+
+        rc = LIBPHOBOS.phobos_object_delete(xfers, n_xfers)
+        if rc:
+            raise EnvironmentError(rc)
 
     @staticmethod
     def object_list(pattern, metadata):

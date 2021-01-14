@@ -19,7 +19,7 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-cur_dir=$(dirname $(readlink -m $0))
+cur_dir=$(dirname $(readlink -m ${BASH_SOURCE[0]}))
 db_helper="$cur_dir/../../scripts/phobos_db"
 
 PSQL="psql phobos -U phobos"
