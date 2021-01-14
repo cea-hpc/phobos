@@ -186,14 +186,13 @@ static void dss_pg_logger(void *arg, const char *message)
     pho_info("%*s", (int)mlen, message);
 }
 
+static const char NULL_STR[] = "NULL";
+
 static inline char *dss_char4sql(PGconn *conn, const char *s)
 {
     char *ns;
 
     if (s != NULL && s[0] != '\0') {
-        // FIXME: this memory is leaked (for now), and should be freed with
-        // PQfreemem (although this is an alias for free() on unix systems:
-        // https://www.postgresql.org/docs/9.4/libpq-misc.html#LIBPQ-PQFREEMEM)
         ns = PQescapeLiteral(conn, s, strlen(s));
         if (ns == NULL) {
             pho_error(
@@ -202,10 +201,16 @@ static inline char *dss_char4sql(PGconn *conn, const char *s)
             return NULL;
         }
     } else {
-        ns = strdup("NULL");
+        ns = (char *)NULL_STR;
     }
 
     return ns;
+}
+
+static inline void free_dss_char4sql(char *s)
+{
+    if (s != NULL_STR)
+        PQfreemem(s);
 }
 
 int dss_init(struct dss_handle *handle)
@@ -1222,11 +1227,11 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
             delete_flag = p_media->flags.delete;
 
             if (!medium_name || !fs_label || !model || !stats || !tags) {
-                free(medium_name);
-                free(fs_label);
-                free(model);
-                free(stats);
-                free(tags);
+                free_dss_char4sql(medium_name);
+                free_dss_char4sql(fs_label);
+                free_dss_char4sql(model);
+                free_dss_char4sql(stats);
+                free_dss_char4sql(tags);
                 LOG_RETURN(-ENOMEM, "memory allocation failed");
             }
 
@@ -1269,11 +1274,11 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
                 );
             }
 
-            free(medium_name);
-            free(fs_label);
-            free(model);
-            free(stats);
-            free(tags);
+            free_dss_char4sql(medium_name);
+            free_dss_char4sql(fs_label);
+            free_dss_char4sql(model);
+            free_dss_char4sql(stats);
+            free_dss_char4sql(tags);
         }
     }
 
@@ -1307,7 +1312,7 @@ static int get_device_setrequest(PGconn *conn, struct dev_info *item_list,
                                    p_dev->rsc.id.name, p_dev->host,
                                    rsc_adm_status2str(p_dev->rsc.adm_status),
                                    p_dev->path, i < item_cnt-1 ? "," : ";");
-            free(model);
+            free_dss_char4sql(model);
         } else if (action == DSS_SET_UPDATE) {
             model = dss_char4sql(conn, p_dev->rsc.model);
             if (!model)
@@ -1318,7 +1323,7 @@ static int get_device_setrequest(PGconn *conn, struct dev_info *item_list,
                                    model, p_dev->host,
                                    rsc_adm_status2str(p_dev->rsc.adm_status),
                                    p_dev->path, p_dev->rsc.id.name);
-            free(model);
+            free_dss_char4sql(model);
         }
     }
 
@@ -1976,7 +1981,7 @@ static int dss_generic_lock(struct dss_handle *handle, enum dss_type type,
         g_string_printf(request, lock_query[DSS_LOCK_QUERY], dss_type2str(type),
                         lock_owner_sql, ids->str, item_cnt,
                         dss_type2str(type),  ids->str);
-    free(lock_owner_sql);
+    free_dss_char4sql(lock_owner_sql);
 
     pho_debug("Executing request: '%s'", request->str);
 
@@ -2032,7 +2037,7 @@ static int dss_generic_unlock(struct dss_handle *handle, enum dss_type type,
                             dss_type2str(type), ids->str, lock_owner_sql,
                             item_cnt, dss_type2str(type), ids->str,
                             lock_owner_sql);
-        free(lock_owner_sql);
+        free_dss_char4sql(lock_owner_sql);
     } else {
         if (item_cnt == 1)
             g_string_printf(request, simple_lock_query[DSS_UNLOCK_ALWAYS_QUERY],
