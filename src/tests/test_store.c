@@ -164,7 +164,8 @@ int main(int argc, char **argv)
         int n_objs;
 
         for (i = 2; i < argc; ++i) {
-            rc = phobos_store_object_list(argv[i], NULL, 0, &objs, &n_objs);
+            rc = phobos_store_object_list(argv[i], NULL, 0, false, &objs,
+                                          &n_objs);
             if (rc) {
                 pho_error(rc, "LIST '%s' failed", argv[i]);
                 exit(EXIT_FAILURE);

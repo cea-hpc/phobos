@@ -198,6 +198,7 @@ void pho_xfer_desc_destroy(struct pho_xfer_desc *xfer);
  * \param[in]       pattern         Shell regexp pattern.
  * \param[in]       metadata        Metadata filter.
  * \param[in]       n_metadata      Number of requested metadata.
+ * \param[in]       deprecated      true if search from deprecated objects.
  * \param[out]      objs            Retrieved objects.
  * \param[out]      n_objs          Number of retrieved items.
  *
@@ -205,8 +206,8 @@ void pho_xfer_desc_destroy(struct pho_xfer_desc *xfer);
  *                                 -errno on failure.
  */
 int phobos_store_object_list(const char *pattern, const char **metadata,
-                             int n_metadata, struct object_info **objs,
-                             int *n_objs);
+                             int n_metadata, bool deprecated,
+                             struct object_info **objs, int *n_objs);
 
 /**
  * Release the list retrieved using phobos_store_object_list().

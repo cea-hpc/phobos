@@ -64,6 +64,14 @@ function test_delete
     $phobos get oid1 test_tmp &&
         error "Object should not be got"
 
+    [ -z $($phobos object list oid1) ] ||
+        error "Object should not be listed, because deleted"
+    [ -z $($phobos object list --deprecated oid1) ] &&
+        error "Object should be listed with the deprecated option"
+    [ -z $($phobos object list --deprecated --output uuid oid1) ] &&
+        error "Object should be listed with the deprecated option and "\
+              "the uuid output filter"
+
     return 0
 }
 

@@ -29,8 +29,8 @@
 #include <glib.h>
 
 int phobos_store_object_list(const char *pattern, const char **metadata,
-                             int n_metadata, struct object_info **objs,
-                             int *n_objs)
+                             int n_metadata, bool deprecated,
+                             struct object_info **objs, int *n_objs)
 {
     struct dss_filter filter;
     struct dss_handle dss;
@@ -73,7 +73,10 @@ int phobos_store_object_list(const char *pattern, const char **metadata,
     if (rc)
         GOTO(err, rc);
 
-    rc = dss_object_get(&dss, &filter, objs, n_objs);
+    if (deprecated)
+        rc = dss_deprecated_object_get(&dss, &filter, objs, n_objs);
+    else
+        rc = dss_object_get(&dss, &filter, objs, n_objs);
     if (rc)
         pho_error(rc, "Cannot fetch objects");
 

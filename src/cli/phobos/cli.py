@@ -49,8 +49,8 @@ from phobos.core.cfg import load_file as cfg_load_file
 from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED)
 from phobos.core.dss import Client as DSSClient
-from phobos.core.ffi import (DevInfo, LayoutInfo, MediaInfo, ObjectInfo,
-                             ResourceFamily)
+from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
+                             MediaInfo, ObjectInfo, ResourceFamily)
 from phobos.core.ldm import LibAdapter
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
 from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
@@ -638,16 +638,23 @@ class ObjectListOptHandler(PatternListOptHandler):
         """Add object-specific options."""
         super(ObjectListOptHandler, cls).add_options(parser)
 
-        attrs = list(ObjectInfo().get_display_dict().keys())
-        attrs.sort()
+        base_attrs = list(ObjectInfo().get_display_dict().keys())
+        base_attrs.sort()
+        ext_attrs = list(DeprecatedObjectInfo().get_display_dict().keys() -
+                         ObjectInfo().get_display_dict().keys())
+        ext_attrs.sort()
         parser.add_argument('-o', '--output', type=lambda t: t.split(','),
                             default='oid',
                             help=("attributes to output, comma-separated, "
-                                  "choose from {" + " ".join(attrs) + "} "
-                                  "default: %(default)s)"))
+                                  "choose from {" + " ".join(base_attrs) + "} "
+                                  "default: %(default)s"))
         parser.add_argument('-m', '--metadata', type=lambda t: t.split(','),
                             help="filter on metadata, comma-separated "
                                  "'key=value' parameters")
+        parser.add_argument('-d', '--deprecated', action='store_true',
+                            help="print deprecated objects, allowing those "
+                                 "attributes for the 'output' option "
+                                 "{" + " ".join(ext_attrs) + "}")
 
 class ObjectDeleteOptHandler(BaseOptHandler):
     """Delete objects handler."""
@@ -753,7 +760,9 @@ class ObjectOptHandler(BaseResourceOptHandler):
 
     def exec_list(self):
         """List objects."""
-        attrs = list(ObjectInfo().get_display_dict().keys())
+        attrs = list(DeprecatedObjectInfo().get_display_dict().keys()
+                     if self.params.get('deprecated')
+                     else ObjectInfo().get_display_dict().keys())
         attrs.extend(['*', 'all'])
         out_attrs = self.params.get('output')
         bad_attrs = set(out_attrs).difference(set(attrs))
@@ -773,7 +782,8 @@ class ObjectOptHandler(BaseResourceOptHandler):
         client = UtilClient()
 
         try:
-            objs = client.object_list(self.params.get('pattern'), metadata)
+            objs = client.object_list(self.params.get('pattern'), metadata,
+                                      self.params.get('deprecated'))
 
             if objs:
                 dump_object_list(objs, attr=out_attrs,

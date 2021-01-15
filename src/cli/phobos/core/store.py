@@ -31,7 +31,7 @@ from collections import namedtuple
 from ctypes import (byref, c_char_p, c_int, c_ssize_t, c_void_p, cast,
                     CFUNCTYPE, pointer, POINTER, py_object, Structure, Union)
 
-from phobos.core.ffi import LIBPHOBOS, ObjectInfo, Tags
+from phobos.core.ffi import LIBPHOBOS, DeprecatedObjectInfo, ObjectInfo, Tags
 from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OP_GET, # pylint: disable=no-name-in-module
                                PHO_XFER_OP_GETMD, PHO_XFER_OP_PUT,
                                PHO_RSC_INVAL, str2rsc_family)
@@ -370,21 +370,23 @@ class UtilClient:
             raise EnvironmentError(rc)
 
     @staticmethod
-    def object_list(pattern, metadata):
+    def object_list(pattern, metadata, deprecated):
         """List objects."""
         n_objs = c_int(0)
-        objs = POINTER(ObjectInfo)()
+        obj_type = ObjectInfo if not deprecated else DeprecatedObjectInfo
+        objs = POINTER(obj_type)()
         c_strlist = c_char_p * len(metadata)
         rc = LIBPHOBOS.phobos_store_object_list(pattern,
                                                 c_strlist(*metadata),
                                                 len(metadata),
+                                                deprecated,
                                                 byref(objs),
                                                 byref(n_objs))
 
         if rc:
             raise EnvironmentError(rc)
 
-        objs = (ObjectInfo * n_objs.value).from_address(
+        objs = (obj_type * n_objs.value).from_address(
             cast(objs, c_void_p).value)
 
         return objs
