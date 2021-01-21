@@ -27,7 +27,7 @@ phobos drive add </dev/foo> [--unlock]
 	- get device information using ldm_device_query()
 	- insert it to device table in locked state (unless --unlock is specified), using dss_device_set()
 
-phobos drive {list|ls} [-t type]
+phobos drive {list|ls} [--model model]
 	- use dss_device_get()
 
 phobos drive show <devpath|drv_id>
