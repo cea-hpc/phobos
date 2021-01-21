@@ -47,13 +47,13 @@ echo "**** TESTS: TAGS a currently used dir ****"
 $phobos dir update --tags first_tag /tmp/pho_testdir1
 
 # put an object asking a media with first_tag to "load" dir1
-$phobos put -f dir --tags first_tag /etc/hosts dir_obj1
+$phobos put --family dir --tags first_tag /etc/hosts dir_obj1
 
 # put second_tag on dir1 whereas dir1 is "loaded" with old first_tag
 $phobos dir update --tags second_tag /tmp/pho_testdir1
 
 # put again one object using outdated tag and check it is updated
-$phobos put -f dir --tags first_tag /etc/hosts dir_obj2 &&
+$phobos put --family dir --tags first_tag /etc/hosts dir_obj2 &&
     echo "Using an old tag to put should fail" && exit 1
 
 if [[ -w /dev/changer ]]; then
@@ -68,13 +68,13 @@ if [[ -w /dev/changer ]]; then
     $phobos tape format --unlock $tape_name
 
     # put an object asking a media with first_tag to "load" the tape
-    $phobos put -f tape --tags first_tag /etc/hosts tape_obj1
+    $phobos put --family tape --tags first_tag /etc/hosts tape_obj1
 
     # put second_tag on the tape whereas the tape is "loaded" with old first_tag
     $phobos tape update --tags second_tag $tape_name
 
     # put again one object using outdated tag and check it is updated
-    $phobos put -f tape --tags first_tag /etc/hosts tape_obj2 &&
+    $phobos put --family tape --tags first_tag /etc/hosts tape_obj2 &&
         echo "Using an old tag to put should fail" && exit 1
 fi
 

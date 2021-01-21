@@ -84,19 +84,19 @@ function put_tape_simple
     $LOG_VALG $phobos drive add --unlock ${DRIVE_ARRAY[0]}
 
     # test tape availability
-    $LOG_VALG $phobos put -f tape /etc/hosts $id &&
+    $LOG_VALG $phobos put --family tape /etc/hosts $id &&
         error "Should not be able to put objects without media"
 
-    $LOG_VALG $phobos tape add -t lto5 ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put -f tape /etc/hosts $id &&
+    $LOG_VALG $phobos tape add --type lto5 ${TAPE_ARRAY[0]}
+    $LOG_VALG $phobos put --family tape /etc/hosts $id &&
         error "Should not be able to put objects without formatted media"
 
     $LOG_VALG $phobos tape format ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put -f tape /etc/hosts $id &&
+    $LOG_VALG $phobos put --family tape /etc/hosts $id &&
         error "Should not be able to put objects without unlocked media"
 
     $LOG_VALG $phobos tape unlock ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put -f tape /etc/hosts $id ||
+    $LOG_VALG $phobos put --family tape /etc/hosts $id ||
         error "Put with an available media should have worked"
 
     # test drive availability
@@ -112,19 +112,19 @@ function put_dir_simple
     local id=test/dir.simple
 
     # test dir availability
-    $LOG_VALG $phobos put -f dir /etc/hosts $id &&
+    $LOG_VALG $phobos put --family dir /etc/hosts $id &&
         error "Should not be able to put objects without media"
 
     $LOG_VALG $phobos dir add ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put -f dir /etc/hosts $id &&
+    $LOG_VALG $phobos put --family dir /etc/hosts $id &&
         error "Should not be able to put objects without formatted media"
 
     $LOG_VALG $phobos dir format --fs posix ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put -f dir /etc/hosts $id &&
+    $LOG_VALG $phobos put --family dir /etc/hosts $id &&
         error "Should not be able to put objects without unlocked media"
 
     $LOG_VALG $phobos dir unlock ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put -f dir /etc/hosts $id ||
+    $LOG_VALG $phobos put --family dir /etc/hosts $id ||
         error "Put with an available medium should have worked"
 
     return 0
@@ -135,28 +135,28 @@ function put_tape_raid
     local id=test/tape.raid
 
     $LOG_VALG $phobos drive add --unlock ${DRIVE_ARRAY[@]}
-    $LOG_VALG $phobos tape add -t lto5 ${TAPE_ARRAY[1]}
+    $LOG_VALG $phobos tape add --type lto5 ${TAPE_ARRAY[1]}
     $LOG_VALG $phobos tape format --unlock ${TAPE_ARRAY[1]}
 
     # test tape availability
-    $LOG_VALG $phobos put -f tape -l raid1 /etc/hosts $id &&
+    $LOG_VALG $phobos put --family tape --layout raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 media"
 
-    $LOG_VALG $phobos tape add -t lto5 ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put -f tape -l raid1 /etc/hosts $id &&
+    $LOG_VALG $phobos tape add --type lto5 ${TAPE_ARRAY[0]}
+    $LOG_VALG $phobos put --family tape --layout raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 formatted media"
 
     $LOG_VALG $phobos tape format ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put -f tape -l raid1 /etc/hosts $id &&
+    $LOG_VALG $phobos put --family tape --layout raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 unlocked media"
 
     $LOG_VALG $phobos tape unlock ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put -f tape -l raid1 /etc/hosts $id ||
+    $LOG_VALG $phobos put --family tape --layout raid1 /etc/hosts $id ||
         error "Put with available media should have worked"
 
     # test drive availability
     $LOG_VALG $phobos drive lock ${DRIVE_ARRAY[0]}
-    $LOG_VALG $phobos put -l raid1 /etc/hosts ${id}.2 &&
+    $LOG_VALG $phobos put --layout raid1 /etc/hosts ${id}.2 &&
         error "Should not be able to put objects with 1/2 unlocked devices"
 
     return 0
@@ -170,20 +170,20 @@ function put_dir_raid
     $LOG_VALG $phobos dir format --fs posix --unlock ${DIR_ARRAY[1]}
 
     # test dir availability
-    $LOG_VALG $phobos put -f dir -l raid1 /etc/hosts $id &&
+    $LOG_VALG $phobos put --family dir --layout raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 media"
 
     $LOG_VALG $phobos dir add ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put -f dir -l raid1 /etc/hosts $id &&
+    $LOG_VALG $phobos put --family dir --layout raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 formatted media"
 
     $LOG_VALG $phobos dir format --fs posix ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put -f dir -l raid1 /etc/hosts $id &&
+    $LOG_VALG $phobos put --family dir --layout raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 unlocked media"
 
     # resources are available
     $LOG_VALG $phobos dir unlock ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put -f dir -l raid1 /etc/hosts $id ||
+    $LOG_VALG $phobos put --family dir --layout raid1 /etc/hosts $id ||
         error "Put with available media should have worked"
 
     return 0

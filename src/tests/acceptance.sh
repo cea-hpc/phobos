@@ -103,12 +103,12 @@ function tape_setup
     # get LTO5 tapes
     local lto5_tapes="$(get_tapes L5 $N_TAPES)"
     echo "adding tapes $lto5_tapes with tags $LTO5_TAGS..."
-    $LOG_VALG $phobos tape add -T $LTO5_TAGS -t lto5 "$lto5_tapes"
+    $LOG_VALG $phobos tape add --tags $LTO5_TAGS --type lto5 "$lto5_tapes"
 
     # get LTO6 tapes
     local lto6_tapes="$(get_tapes L6 $N_TAPES)"
     echo "adding tapes $lto6_tapes with tags $LTO6_TAGS..."
-    $LOG_VALG $phobos tape add -T $LTO6_TAGS -t lto6 "$lto6_tapes"
+    $LOG_VALG $phobos tape add --tags $LTO6_TAGS --type lto6 "$lto6_tapes"
 
     # set tapes
     export tapes="$lto5_tapes,$lto6_tapes"
@@ -121,7 +121,7 @@ function tape_setup
 
     # show a tape info
     local tp1=$(echo $tapes | nodeset -e | awk '{print $1}')
-    $LOG_VALG $phobos tape list -o all $tp1
+    $LOG_VALG $phobos tape list --output all $tp1
 
     # unlock all tapes but one
     for t in $(echo "$tapes" | nodeset -e -S '\n' |
@@ -139,8 +139,8 @@ function tape_setup
     local dr1=$(echo $drives | awk '{print $1}')
     echo "$dr1"
     # check drive status
-    $phobos drive list -o adm_status $dr1 --format=csv | grep "^locked" ||
-        error "Drive should be added with locked state"
+    $phobos drive list --output adm_status $dr1 --format=csv |
+        grep "^locked" || error "Drive should be added with locked state"
 
     # unlock all drives but one (except if N_DRIVE < 2)
     if (( $N_DRIVES > 1 )); then
@@ -155,9 +155,9 @@ function tape_setup
 
     # need to format at least 2 tapes for concurrent_put
     # format lto5 tapes
-    $LOG_VALG $phobos -v tape format $lto5_tapes --unlock
+    $LOG_VALG $phobos --verbose tape format $lto5_tapes --unlock
     # format lto6 tapes
-    $LOG_VALG $phobos -v tape format $lto6_tapes --unlock
+    $LOG_VALG $phobos --verbose tape format $lto6_tapes --unlock
 }
 
 function dir_setup
@@ -169,7 +169,7 @@ function dir_setup
     [ "$CLEAN_ALL" -eq "0" ] && return 0
 
     echo "adding directories $dirs"
-    $LOG_VALG $phobos dir add -T $TAGS $dirs
+    $LOG_VALG $phobos dir add --tags $TAGS $dirs
     $phobos dir format --fs posix $dirs
 
     # comparing with original list
@@ -184,7 +184,7 @@ function dir_setup
 
     # show a directory info
     d1=$(echo $dirs | nodeset -e | awk '{print $1}')
-    $LOG_VALG $phobos dir list -o all $d1
+    $LOG_VALG $phobos dir list --output all $d1
 
     # unlock all directories but one
     for t in $(echo $dirs | nodeset -e -S '\n' | head -n 1); do
@@ -206,11 +206,11 @@ function lock_test
     mkdir $dir_prefix.1
     mkdir $dir_prefix.2
     $LOG_VALG $phobos dir add $dir_prefix.1
-    $phobos dir list -o adm_status $dir_prefix.1 --format=csv |
+    $phobos dir list --output adm_status $dir_prefix.1 --format=csv |
         grep "^locked" ||
         error "Directory should be added with locked state"
     $LOG_VALG $phobos dir add $dir_prefix.2 --unlock
-    $phobos dir list -o adm_status $dir_prefix.2 --format=csv |
+    $phobos dir list --output adm_status $dir_prefix.2 --format=csv |
         grep "^unlocked" ||
         error "Directory should be added with unlocked state"
     rmdir $dir_prefix.*
@@ -221,7 +221,7 @@ function put_get_test
     local md="a=1,b=2,c=3"
     local id=test/hosts.$$
     # phobos put
-    $LOG_VALG $phobos put -m $md /etc/hosts $id
+    $LOG_VALG $phobos put --metadata $md /etc/hosts $id
 
     # phobos get
     local out_file=/tmp/out
@@ -272,8 +272,8 @@ function put_layout
     fi
 
     # phobos put
-    $LOG_VALG $phobos put -l simple /etc/hosts $id1
-    $LOG_VALG $phobos put -l raid1 /etc/hosts $id2
+    $LOG_VALG $phobos put --layout simple /etc/hosts $id1
+    $LOG_VALG $phobos put --layout raid1 /etc/hosts $id2
 
     # PSQL command to get the extent layout info
     # XXX: will be replaced by a 'phobos object list' when implemented
@@ -300,15 +300,15 @@ function put_tags
     local first_tag=$(echo $TAGS | cut -d',' -f1)
 
     # phobos put with bad tags
-    $phobos put -T $TAGS-bad -m $md /etc/hosts $id &&
+    $phobos put --tags $TAGS-bad --metadata $md /etc/hosts $id &&
         error "Should not be able to put objects with no media matching tags"
-    $phobos put -T $first_tag-bad -m $md /etc/hosts $id &&
+    $phobos put --tags $first_tag-bad --metadata $md /etc/hosts $id &&
         error "Should not be able to put objects with no media matching tags"
 
     # phobos put with existing tags
-    $phobos put -T $TAGS -m $md /etc/hosts $id ||
+    $phobos put --tags $TAGS --metadata $md /etc/hosts $id ||
         error "Put with valid tags should have worked"
-    $phobos put -T $first_tag -m $md /etc/hosts $id2 ||
+    $phobos put --tags $first_tag --metadata $md /etc/hosts $id2 ||
         error "Put with one valid tag should have worked"
 }
 
@@ -320,7 +320,7 @@ function test_single_alias_put
     local expected_layout=$4
     local additional_arguments=$5
 
-    $phobos put -a $alias $additional_arguments /etc/hosts $id ||
+    $phobos put --alias $alias $additional_arguments /etc/hosts $id ||
         error "Put with alias $alias should have worked"
 
     local fam_request="SELECT extents FROM extent WHERE oid='$id';"
@@ -377,21 +377,22 @@ function put_alias
         "simple"
 
     # phobos put with additional family parameter - expect additional parameter
-    test_single_alias_put $alias_tape $id_with_fam "dir" "raid1" "-f dir"
+    test_single_alias_put $alias_tape $id_with_fam "dir" "raid1" "--family dir"
 
     # phobos put with additional layout parameter - expect additional parameter
-    test_single_alias_put $alias_full $id_with_lay "dir" "simple" "-l simple"
+    test_single_alias_put $alias_full $id_with_lay "dir" "simple" \
+        "--layout simple"
 
     # phobos put with additional tags parameter - expect success
     test_single_alias_put $alias_empty_family $id_with_tag1 "dir" "raid1" \
-        "-T $(echo $TAGS | cut -d',' -f2)"
+        "--tags $(echo $TAGS | cut -d',' -f2)"
 
     # phobos put with additional, non existing tags parameter - expect failure
-    $phobos put -a $alias_full -T no-such-tag /etc/hosts $id_with_tag2 &&
+    $phobos put -a $alias_full --tags no-such-tag /etc/hosts $id_with_tag2 &&
         error "Put with additional, non existing tag should not have worked"
 
     # phobos put with alias with wrong tags parameter - expect failure
-    $phobos put -a $alias_nonexist_tags /etc/hosts $id_with_tag3 &&
+    $phobos put --alias $alias_nonexist_tags /etc/hosts $id_with_tag3 &&
         error "Put with alias $alias_nonexist_tags should not have worked"
 
     # reset replication count for raid layout
@@ -501,9 +502,10 @@ function concurrent_put
     dd if=/dev/urandom of=$tmp bs=1M count=100
 
     # 2 simultaneous put
-    phobos_delayed_dev_release 2 put -m $md $tmp $key.1 &
+    phobos_delayed_dev_release 2 put --metadata $md $tmp $key.1 &
     local pid1=$!
-    (( single==0 )) && phobos_delayed_dev_release 2 put -m $md $tmp $key.2 &
+    (( single==0 )) && phobos_delayed_dev_release 2 put --metadata $md \
+        $tmp $key.2 &
     local pid2=$!
 
     # after 1 sec, make sure 2 devices and 2 media are locked
@@ -564,7 +566,7 @@ function check_status
     local media="$2"
 
     for m in $media; do
-        $LOG_VALG $phobos $type list -o all "$m"
+        $LOG_VALG $phobos $type list --output all "$m"
     done
 }
 
@@ -611,10 +613,10 @@ function unlock_all_drives
 
 function tape_drive_compat
 {
-    $phobos put -T lto5 /etc/services svc_lto5 ||
+    $phobos put --tags lto5 /etc/services svc_lto5 ||
         error "fail to put on lto5 tape"
 
-    $phobos put -T lto6 /etc/services svc_lto6 ||
+    $phobos put --tags lto6 /etc/services svc_lto6 ||
         error "fail to put on lto6 tape"
 
     $phobos get svc_lto5 /tmp/svc_lto5 ||
@@ -628,7 +630,7 @@ function tape_drive_compat
     #test with only one lto5 drive
     lock_all_drives
     drain_all_drives
-    local lto5_d=$($phobos drive list -m ULT3580-TD5 | head -n 1)
+    local lto5_d=$($phobos drive list --model ULT3580-TD5 | head -n 1)
     $LOG_VALG $phobos drive unlock $lto5_d
     $phobos get svc_lto5 /tmp/svc_lto5_from_lto5_drive ||
         error "fail to get data from lto5 tape with one lto5 drive"
@@ -639,7 +641,7 @@ function tape_drive_compat
     #test with only one lto6 drive
     lock_all_drives
     drain_all_drives
-    local lto6_d=$($phobos drive list -m ULT3580-TD6 | head -n 1)
+    local lto6_d=$($phobos drive list --model ULT3580-TD6 | head -n 1)
     $LOG_VALG $phobos drive unlock $lto6_d
     $phobos get svc_lto5 /tmp/svc_lto5_from_lto6_drive ||
         error "fail to get data from lto5 tape with one lto6 drive"

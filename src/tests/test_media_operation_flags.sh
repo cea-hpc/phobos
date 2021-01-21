@@ -44,17 +44,18 @@ function test_dir_operation_flags() {
     local expected_get=$3
     local expected_delete=$4
 
-    if [[ $($phobos dir list -o put_access $dir) != $expected_put ]]; then
+    if [[ $($phobos dir list --output put_access $dir) != $expected_put ]]; then
         echo "Error: $expected_put was expected for put operation flag for $dir"
         return 1
     fi
 
-    if [[ $($phobos dir list -o get_access $dir) != $expected_get ]]; then
+    if [[ $($phobos dir list --output get_access $dir) != $expected_get ]]; then
         echo "Error: $expected_get was expected for get operation flag for $dir"
         return 1
     fi
 
-    if [[ $($phobos dir list -o delete_access $dir) != $expected_delete ]]; then
+    if [[ $($phobos dir list --output delete_access $dir) != \
+        $expected_delete ]]; then
         echo "Error: $expected_delete was expected for delete operation flag"\
              "for $dir"
         return 1
@@ -66,7 +67,7 @@ function test_dir_operation_flags() {
 echo
 
 echo "**** TESTS: CLI LIST MEDIA OPERATION TAGS ****"
-$phobos dir list -o put_access,get_access,delete_access
+$phobos dir list --output put_access,get_access,delete_access
 
 echo "**** TESTS: CLI \"set-access\" bad syntax detection ****"
 $phobos dir set-access p /tmp/pho_testdir1 &&
@@ -91,15 +92,16 @@ echo "**** TESTS: PUT MEDIA OPERATION TAGS ****"
 # remove all dir put access
 $phobos dir set-access -- -P $($phobos dir list)
 # try one put without any dir put access
-$phobos put -f dir /etc/hosts host1 &&
+$phobos put --family dir /etc/hosts host1 &&
     echo "Put without any medium with 'P' operation flag should fail" &&
     exit 1
 # set one put access
 $phobos dir set-access +P /tmp/pho_testdir3
 # try to put with this new dir put access
-$phobos put -f dir /etc/hosts host2
+$phobos put --family dir /etc/hosts host2
 # check the used dir corresponds to the one with the put access
-if [[ $($phobos extent list -o media_name host2) != "['/tmp/pho_testdir3']" ]]
+if [[ $($phobos extent list --output media_name host2) != \
+    "['/tmp/pho_testdir3']" ]]
 then
     echo "Extent should be on the only medium with put access"
     exit 1
@@ -107,7 +109,7 @@ fi
 
 echo "**** TESTS: GET MEDIA OPERATION TAGS ****"
 # put a new object to get
-$phobos put -f dir /etc/hosts obj_to_get
+$phobos put --family dir /etc/hosts obj_to_get
 # remove all dir get access
 $phobos dir set-access -- -G $($phobos dir list)
 # try one get without any dir get access
