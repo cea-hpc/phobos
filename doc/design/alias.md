@@ -50,19 +50,20 @@ family = tape
 tags = long_term_1,long_term_2
 ```
 
-The command `phobos put -a long_term my_file object-my_file` will create the
-object `object-my_file` on a tape with the tags `long_term_1,long_term_2` using
-the default layout.
+The command `phobos put --alias long_term my_file object-my_file` will create
+the object `object-my_file` on a tape with the tags `long_term_1,long_term_2`
+using the default layout.
 
-The command `phobos put -a long_term -l simple my_file object-my_file` will
-create the object `object-my_file` on a tape with the tags
+The command `phobos put --alias long_term --layout simple my_file
+object-my_file` will create the object `object-my_file` on a tape with the tags
 `long_term_1,long_term_2` using the **simple** layout.
 
-The command `phobos put -a long_term -f dir my_file object-my_file` will create
-the object `object-my_file` using the default layout on a **directory** with the
-tags `long_term_1,long_term_2`, therefore overwriting the family of the alias.
+The command `phobos put --alias long_term --family dir my_file object-my_file`
+will create the object `object-my_file` using the default layout on a
+**directory** with the tags `long_term_1,long_term_2`, therefore overwriting
+the family of the alias.
 
-The command `phobos put -a long_term -T new_tag my_file object-my_file` will
-create the object `object-my_file` with the default layout on a tape with the
-tags `long_term_1,long_term_2,new_tag`, therefore extending the tags of the
+The command `phobos put --alias long_term --tags new_tag my_file object-my_file`
+will create the object `object-my_file` with the default layout on a tape with
+the tags `long_term_1,long_term_2,new_tag`, therefore extending the tags of the
 alias with the new one.

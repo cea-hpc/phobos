@@ -48,11 +48,11 @@ $ # This command gets another drive to format the tapes.
 $ phobos tape format 'T000[01-15]L5'
 
 $ # Trying to explicitely use the locked drive returns an error.
-$ phobos tape format 'T000[01-15]L5' -d 'l5-dr0'
+$ phobos tape format 'T000[01-15]L5' --drive 'l5-dr0'
 Error: Drive 'l5-dr0' (S/N 'E143DB0006') is locked by admin.
 
 $ # This command force using the specified drive.
-$ phobos tape format 'T0000[01-15]L5' -d 'l5-dr0' --force
+$ phobos tape format 'T0000[01-15]L5' --drive 'l5-dr0' --force
 Warning: Using locked drive 'l5-dr0' (S/N 'E143DB0006').
 ```
 

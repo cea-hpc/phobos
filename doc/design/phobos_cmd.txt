@@ -37,13 +37,13 @@ phobos drive lock|unlock <devpath|drv_id>
 	- use dss_device_set()
 
 === Tape ===
-phobos tape add -t ltoX [-f <fstype>] <label(s)>
+phobos tape add --type ltoX [--fs <fstype>] <label(s)>
 	- add tapes to DSS in locked mode using dss_media_set()
 		* labels syntax relies on 'nodeset'
-		* -t|--type parameter is mandatory
+		* --type parameter is mandatory
 		* if fstype is not specified, use default returned by pho_cfg_get()
 
-phobos tape format <label(s)> [-n <nb_streams>] --unlock
+phobos tape format <label(s)> [--nb_streams <nb_streams>] --unlock
 	- format tapes to the given fstype:
 		* call lrs_format() -> load the tape in a drive and format the tape
 		* if specified, multiple format operations can be started in parallel (up to <nb_streams>)
@@ -65,7 +65,7 @@ phobos get <object_id> <dest_file>
         - Retrieve an item from the object store
                 * no bulk operation supported yet
 
-phobos put [-m|--metadata=k=v,...] <orig_file> <object_id>
+phobos put [--metadata k=v,...] <orig_file> <object_id>
         - Insert an item into the object store
                 * if specified, attributes are parsed as a comma-separated
                   list of key=value pairs. Quotes can be used to encapsulate
