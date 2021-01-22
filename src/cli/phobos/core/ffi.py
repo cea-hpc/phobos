@@ -33,8 +33,7 @@ from enum import IntEnum
 
 from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
-                               PHO_RSC_DIR, PHO_RSC_DISK, PHO_RSC_TAPE,
-                               PHO_TIMEVAL_MAX_LEN,
+                               PHO_RSC_DIR, PHO_RSC_TAPE, PHO_TIMEVAL_MAX_LEN,
                                fs_type2str, fs_status2str,
                                rsc_adm_status2str, rsc_family2str)
 
@@ -174,7 +173,6 @@ class Resource(Structure): # pylint: disable=too-few-public-methods
 
 class ResourceFamily(IntEnum):
     """Resource family enumeration."""
-    RSC_DISK = PHO_RSC_DISK
     RSC_TAPE = PHO_RSC_TAPE
     RSC_DIR = PHO_RSC_DIR
 
