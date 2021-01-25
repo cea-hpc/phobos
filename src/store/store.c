@@ -651,8 +651,10 @@ static int store_dispatch_loop(struct phobos_handle *pho)
 
     /* Collect LRS responses */
     rc = pho_comm_recv(&pho->comm, &responses, &n_responses);
-    if (rc)
+    if (rc) {
+        free(responses);
         LOG_RETURN(rc, "Error while collecting responses from LRS");
+    }
 
     /* Deserialize LRS responses */
     if (n_responses) {

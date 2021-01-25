@@ -58,17 +58,16 @@ static int test_open(void *arg)
     }
 
     rc = pho_comm_recv(&ci_server, &data, &nb_data);
+    free(data);
     if (rc) {
         pho_error(rc, "Server recv failed with status %d\n", rc);
         pho_comm_close(&ci_server);
         pho_comm_close(&ci_client);
-        free(data);
         return rc;
     }
     if (nb_data) {
         pho_error(rc = PHO_TEST_FAILURE,
                   "Server recv returned %d messages (expected 0)\n", nb_data);
-        free(data);
         pho_comm_close(&ci_server);
         pho_comm_close(&ci_client);
         return rc;
@@ -158,6 +157,7 @@ static int test_sendrecv_simple(void *arg)
     assert(!pho_comm_open(&ci_server, path, true));
     assert(!pho_comm_open(&ci_client, path, false));
     assert(!pho_comm_recv(&ci_server, &data, &nb_data));
+    free(data);
 
     send_data_client = pho_comm_data_init(&ci_client);
     send_data_client.buf.buff = strdup("Hello?");
@@ -317,12 +317,12 @@ static int test_sendrecv_multiple(void *arg)
 
         assert(!pho_comm_recv(ci_client + i % NCLIENT, &data, &nb_data));
         memcpy(&tmp, data->buf.buff, 4);
+        free(data->buf.buff);
+        free(data);
         if (tmp != 2 * i) {
             LOG_GOTO(err_rc, rc = -EBADMSG, "received message is invalid: "
                      "received %d but expected %d (2*%d)\n", tmp, 2 * i, i);
         }
-        free(data->buf.buff);
-        free(data);
 
         rc = PHO_TEST_SUCCESS;
     }

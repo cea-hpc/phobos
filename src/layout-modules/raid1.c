@@ -1119,15 +1119,16 @@ static int layout_raid1_encode(struct pho_encoder *enc)
  */
 static int layout_raid1_decode(struct pho_encoder *enc)
 {
-    struct raid1_encoder *raid1 = calloc(1, sizeof(*raid1));
+    struct raid1_encoder *raid1;
     int rc;
     int i;
 
-    if (raid1 == NULL)
-        return -ENOMEM;
-
     if (!enc->is_decoder)
         LOG_RETURN(-EINVAL, "ask to create a decoder on an encoder");
+
+    raid1 = calloc(1, sizeof(*raid1));
+    if (raid1 == NULL)
+        return -ENOMEM;
 
     /*
      * The ops field is set early to allow the caller to call the destroy

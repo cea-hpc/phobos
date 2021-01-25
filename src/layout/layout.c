@@ -125,7 +125,8 @@ static int layout_module_load(const char *mod_name, struct layout_module **mod)
 
     op_init = dlsym(hdl, PLM_OP_INIT);
     if (!op_init)
-        LOG_RETURN(-ENOSYS, "Operation '%s' is missing", PLM_OP_INIT);
+        LOG_GOTO(out_err, rc = -ENOSYS,
+                 "Operation '%s' is missing", PLM_OP_INIT);
 
     rc = op_init(*mod);
     if (rc)

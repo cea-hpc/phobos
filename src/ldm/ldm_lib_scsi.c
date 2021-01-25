@@ -136,12 +136,11 @@ static int query_drive_sn(struct lib_descriptor *lib)
                              lib->msi.drives.first_addr, lib->msi.drives.nb,
                              ESF_GET_DRV_ID, &items, &count);
     if (rc)
-        LOG_RETURN(rc, "scsi_element_status() failed to get drive S/N");
+        LOG_GOTO(err_free, rc, "scsi_element_status() failed to get drive S/N");
 
-    if (count != lib->drives.count) {
-        free(items);
-        LOG_RETURN(rc, "Wrong drive count returned by scsi_element_status()");
-    }
+    if (count != lib->drives.count)
+        LOG_GOTO(err_free, rc = -EIO,
+                 "Wrong drive count returned by scsi_element_status()");
 
     /* copy serial number to the library array (should be already allocated) */
     assert(lib->drives.items != NULL);
@@ -150,8 +149,9 @@ static int query_drive_sn(struct lib_descriptor *lib)
         strncpy(lib->drives.items[i].dev_id, items[i].dev_id,
                 sizeof(lib->drives.items[i].dev_id));
 
+err_free:
     free(items);
-    return 0;
+    return rc;
 }
 
 /** load status of elements of the given type */
