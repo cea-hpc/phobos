@@ -134,8 +134,7 @@ static int check_dev_info(const struct dev_descr *dev)
                    dev->dss_dev_info->rsc.model, dev->sys_dev_state.lds_model);
     }
 
-    if (dev->dss_dev_info->rsc.id.name == NULL
-        || dev->sys_dev_state.lds_serial == NULL) {
+    if (dev->sys_dev_state.lds_serial == NULL) {
         if (dev->dss_dev_info->rsc.id.name != dev->sys_dev_state.lds_serial)
             LOG_RETURN(-EINVAL, "%s: missing or unexpected device serial",
                        dev->dss_dev_info->path);

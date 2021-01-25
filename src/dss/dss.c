@@ -1357,9 +1357,6 @@ static int get_device_setrequest(PGconn *conn, struct dev_info *item_list,
         struct dev_info *p_dev = &item_list[i];
         char            *model;
 
-        if (p_dev->rsc.id.name == NULL)
-            LOG_RETURN(-EINVAL, "Device serial cannot be NULL");
-
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_DEVICE],
                                    p_dev->rsc.id.name);
