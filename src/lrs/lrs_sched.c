@@ -2048,6 +2048,7 @@ static int sched_media_prepare(struct lrs_sched *sched,
         if (!med->flags.get)
             LOG_RETURN(-EPERM, "Cannot do a get, get flag is false on '%s'",
                        id->name);
+        /* fall through */
     case LRS_OP_WRITE:
         if (med->fs.status == PHO_FS_STATUS_BLANK)
             LOG_RETURN(-EINVAL, "Cannot do I/O on unformatted media '%s'",
