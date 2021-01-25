@@ -474,7 +474,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
              xfer->xd_rc ? "failed" : "succeeded");
 
     /* Cleanup metadata for failed PUT */
-    if (pho->md_created[xfer_idx] &&
+    if (pho->md_created && pho->md_created[xfer_idx] &&
             xfer->xd_op == PHO_XFER_OP_PUT && xfer->xd_rc)
         object_md_del(&pho->dss, xfer->xd_objid);
 
