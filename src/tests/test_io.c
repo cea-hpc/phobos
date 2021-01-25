@@ -81,7 +81,7 @@ static int check_file_content(const char *fpath, const unsigned char *ibuff,
     /* read count bytes */
     for (read_bytes = 0, zero_read_count = 0;
          read_bytes < count && zero_read_count < MAX_NULL_IO;) {
-        size_t read_count;
+        ssize_t read_count;
 
         read_count = read(fd, obuff + read_bytes, count - read_bytes);
         if (read_count < 0)

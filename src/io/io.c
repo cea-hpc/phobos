@@ -768,7 +768,7 @@ static int pho_posix_write(struct pho_io_descr *iod, const void *buf,
 
     /* write count bytes by taking care of partial write */
     while (written_size < count) {
-        size_t nb_written_bytes;
+        ssize_t nb_written_bytes;
 
         nb_written_bytes = write(io_ctx->fd, buf + written_size,
                                  count - written_size);
