@@ -246,7 +246,7 @@ static int read_scsi_generic(const char *st_devname, char *sg_devname,
     if (rc < 0)
         LOG_RETURN(rc = -errno, "Cannot read symlink '%s'", spath);
 
-    link[rc] = '\0';
+    link[rc < sizeof(link) ? rc : sizeof(link) - 1] = '\0';
 
     /* link is supposed to end with '/sgN' */
     sg_name = strrchr(link, '/');

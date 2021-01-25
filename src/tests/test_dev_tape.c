@@ -88,7 +88,7 @@ static int st_to_sg_path(const char *st_dev, char *sg_dev, size_t sg_size)
         rc = -errno;
         LOG_RETURN(rc, "Failed to read link");
     }
-    generic[rc] = '\0';
+    generic[rc < sizeof(generic) ? rc : sizeof(generic)] = '\0';
 
     c = strrchr(generic, '/');
     if (c == NULL)
