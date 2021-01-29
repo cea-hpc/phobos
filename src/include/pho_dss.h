@@ -385,15 +385,29 @@ int dss_media_unlock(struct dss_handle *handle, struct media_info *media_ls,
                      int media_cnt, const char *lock_owner);
 
 /**
- * Delete a set of objects.
+ * Delete a set of objects by oid. Move them from the object to the
+ * deprecated_object table.
  *
  * @param[in]   handle      DSS handle.
- * @param[in]   obj_list    List of objects.
+ * @param[in]   obj_list    List of objects (only the oid field is used).
  * @param[in]   obj_cnt     Number of objects.
  *
  * @return      0 on succes, -errno on failure.
  */
 int dss_object_delete(struct dss_handle *handle, struct object_info *obj_list,
+                      int obj_cnt);
+
+/**
+ * Undelete a set of objects by uuid. Move them from the deprecated_object to
+ * the object table.
+ *
+ * @param[in]   handle      DSS handle.
+ * @param[in]   obj_list    List of objects (only the uuid field is used).
+ * @param[in]   obj_cnt     Number of objects.
+ *
+ * @return      0 on succes, -errno on failure.
+ */
+int dss_object_undelete(struct dss_handle *handle, struct object_info *obj_list,
                       int obj_cnt);
 
 #endif

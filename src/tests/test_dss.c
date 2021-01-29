@@ -143,14 +143,16 @@ int main(int argc, char **argv)
     if (argc < 3 || argc > 5) {
         fprintf(stderr, "Usage: %s ACTION TYPE [ \"CRIT\" ]\n", argv[0]);
         fprintf(stderr, "where  ACTION := { get | set | lock | "
-                                           "unlock | delete }\n");
+                                           "unlock | delete | undelete }\n");
         fprintf(stderr, "       TYPE := "
                         "{ device | media | object | deprecated_object | layout }\n");
         fprintf(stderr, "       [ \"CRIT\" ] := \"field cmp value\"\n");
+        fprintf(stderr, "Optional for get:\n");
+        fprintf(stderr, "       nb item found\n");
         fprintf(stderr, "Optional for set:\n");
-        fprintf(stderr, "       oidtest set oid to NULL");
+        fprintf(stderr, "       oidtest set oid to NULL\n");
         fprintf(stderr, "Optional for lock and unlock:\n");
-        fprintf(stderr, "       name of the lock to acquire or release");
+        fprintf(stderr, "       name of the lock to acquire or release\n");
         exit(1);
     }
 
@@ -173,7 +175,7 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        if (argc == 4) {
+        if (argc >= 4) {
             pho_info("Crit Filter: %s", argv[3]);
             if (strcmp(argv[3], "all") != 0) {
                 filter = malloc(sizeof(*filter));
@@ -268,6 +270,18 @@ int main(int argc, char **argv)
 
         dss_res_free(item_list, item_cnt);
 
+        if (argc >= 5) { /* check item_cnt */
+            int target_item_cnt = atoi(argv[4]);
+
+            if (target_item_cnt != item_cnt) {
+                pho_error(-EBADMSG,
+                          "dss_object_get %s returns %d item(s) whereas %d "
+                          "where expected.\n",
+                          argv[3], item_cnt, target_item_cnt);
+
+                exit(EXIT_FAILURE);
+            }
+        }
     } else if (!strcmp(argv[1], "set")) {
         type = str2dss_type(argv[2]);
 
@@ -426,7 +440,54 @@ int main(int argc, char **argv)
 
         rc = dss_object_delete(&dss_handle, item_list, item_cnt);
         if (rc) {
-            pho_error(rc, "dss_delete failed");
+            pho_error(rc, "dss_object_delete failed");
+            exit(EXIT_FAILURE);
+        }
+    } else if (!strcmp(argv[1], "undelete")) {
+        type = str2dss_type(argv[2]);
+
+        if (type != DSS_DEPREC) {
+            pho_error(EINVAL, "verb deprecated_object expected instead of %s",
+                      argv[2]);
+            exit(EXIT_FAILURE);
+        }
+
+        if (argc == 4) {
+            pho_info("Crit Filter: %s", argv[3]);
+            if (strcmp(argv[3], "all") != 0) {
+                filter = malloc(sizeof(*filter));
+                if (!filter) {
+                    pho_error(ENOMEM, "Cannot allocate DSS filter");
+                    exit(EXIT_FAILURE);
+                }
+                rc = dss_filter_build(filter, "%s", argv[3]);
+                if (rc) {
+                    free(filter);
+                    pho_error(rc, "Cannot build DSS filter");
+                    exit(EXIT_FAILURE);
+                }
+            }
+        }
+
+        rc = dss_generic_get(&dss_handle, type, filter, &item_list, &item_cnt);
+        if (rc) {
+            pho_error(rc, "dss_get failed");
+            if (filter) {
+                dss_filter_free(filter);
+                free(filter);
+            }
+
+            exit(EXIT_FAILURE);
+        }
+
+        if (filter) {
+            dss_filter_free(filter);
+            free(filter);
+        }
+
+        rc = dss_object_undelete(&dss_handle, item_list, item_cnt);
+        if (rc) {
+            pho_error(rc, "dss_object_undelete failed");
             exit(EXIT_FAILURE);
         }
     } else {

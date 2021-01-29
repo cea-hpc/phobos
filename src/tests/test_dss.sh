@@ -64,10 +64,21 @@ function test_check_get
 {
     local type=$1
     local crit=$2
-    local expect_fail=$3
+    local nb_item=$3
+    local expect_fail=$4
     local rc=0
 
-    $LOG_COMPILER $LOG_FLAGS $test_bin get "$type" "$crit" || rc=$?
+    if [[ "$nb_item" != "" ]]
+    then
+        $LOG_COMPILER $LOG_FLAGS $test_bin get "$type" "$crit" "$nb_item" ||
+            rc=$?
+    elif [[ "$crit" != "" ]]
+    then
+        $LOG_COMPILER $LOG_FLAGS $test_bin get "$type" "$crit" || rc=$?
+    else
+        $LOG_COMPILER $LOG_FLAGS $test_bin get "$type"
+    fi
+
     check_rc $rc $expect_fail
 }
 
@@ -103,6 +114,17 @@ function test_check_del
     local rc=0
 
     $LOG_COMPILER $LOG_FLAGS $test_bin delete "$target" "$crit" || rc=$?
+    check_rc $rc $expect_fail
+}
+
+function test_check_undel
+{
+    local target=$1
+    local crit=$2
+    local expect_fail=$3
+    local rc=0
+
+    $LOG_COMPILER $LOG_FLAGS $test_bin undelete "$target" "$crit" || rc=$?
     check_rc $rc $expect_fail
 }
 
@@ -207,7 +229,7 @@ test_check_set "deprecated_object" "delete"
 test_check_get "deprecated_object" '{"DSS::OBJ::version": "2"}'
 
 echo "**** TEST: DSS FILTER SYNTAX ERROR ****"
-test_check_get "media" '{"DSS::MDA::idontexist": "foo"}' 'FAIL'
+test_check_get "media" '{"DSS::MDA::idontexist": "foo"}' 0 'FAIL'
 
 echo "**** TEST: DSS_DELETE OBJECT ****"
 psql phobos -U phobos << EOF
@@ -217,6 +239,25 @@ EOF
 
 test_check_del "object"
 test_check_get "deprecated_object" '{"DSS::OBJ::oid": "01230123ABC"}'
+
+echo "**** TEST: DSS_UNDELETE DEPRECATED OBJECT ****"
+psql phobos -U phobos << EOF
+insert into deprecated_object (oid, uuid, version, user_md)
+    values ('oid1', 'uuid1', 1, '{}'),
+           ('oid1', 'uuid1', 2, '{}'),
+           ('oid2', 'uuid2', 1, '{}');
+EOF
+test_check_undel "deprecated_object" \
+    '{"$OR": [{"DSS::OBJ::uuid": "uuid1"}, {"DSS::OBJ::uuid": "uuid2"}]}'
+# check oid1:v2 and oid2 are undelete
+test_check_get "object" \
+    '{"$AND": [{"DSS::OBJ::oid": "oid1"}, {"DSS::OBJ::version": "2"}]}'
+test_check_get "object" '{"DSS::OBJ::oid": "oid2"}'
+# check oid1:v1 is not undelete
+test_check_get "object" \
+    '{"$AND": [{"DSS::OBJ::oid": "oid1"}, {"DSS::OBJ::version": "1"}]}' 0
+# undelete should fail when oid already exists
+test_check_undel "deprecated_object" '{"DSS::OBJ::uuid": "uuid1"}' 'FAIL'
 
 insert_examples
 
