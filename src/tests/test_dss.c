@@ -131,7 +131,8 @@ int main(int argc, char **argv)
     struct  object_info *object;
     struct  layout_info *layout;
     struct  extent      *extents;
-    struct dss_filter   *filter = NULL;
+    bool                 with_filter = false;
+    struct dss_filter    filter;
     void                *item_list;
     int                  item_cnt;
     int                  i, j;
@@ -178,33 +179,23 @@ int main(int argc, char **argv)
         if (argc >= 4) {
             pho_info("Crit Filter: %s", argv[3]);
             if (strcmp(argv[3], "all") != 0) {
-                filter = malloc(sizeof(*filter));
-                if (!filter) {
-                    pho_error(ENOMEM, "Cannot allocate DSS filter");
-                    exit(EXIT_FAILURE);
-                }
-                rc = dss_filter_build(filter, "%s", argv[3]);
+                with_filter = true;
+                rc = dss_filter_build(&filter, "%s", argv[3]);
                 if (rc) {
-                    free(filter);
                     pho_error(rc, "Cannot build DSS filter");
                     exit(EXIT_FAILURE);
                 }
             }
         }
 
-        rc = dss_generic_get(&dss_handle, type, filter, &item_list, &item_cnt);
+        rc = dss_generic_get(&dss_handle, type, with_filter ? &filter : NULL,
+                             &item_list, &item_cnt);
+        if (with_filter)
+            dss_filter_free(&filter);
+
         if (rc) {
-            if (filter) {
-                dss_filter_free(filter);
-                free(filter);
-            }
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
-        }
-
-        if (filter) {
-            dss_filter_free(filter);
-            free(filter);
         }
 
         switch (type) {
@@ -455,34 +446,23 @@ int main(int argc, char **argv)
         if (argc == 4) {
             pho_info("Crit Filter: %s", argv[3]);
             if (strcmp(argv[3], "all") != 0) {
-                filter = malloc(sizeof(*filter));
-                if (!filter) {
-                    pho_error(ENOMEM, "Cannot allocate DSS filter");
-                    exit(EXIT_FAILURE);
-                }
-                rc = dss_filter_build(filter, "%s", argv[3]);
+                with_filter = true;
+                rc = dss_filter_build(&filter, "%s", argv[3]);
                 if (rc) {
-                    free(filter);
                     pho_error(rc, "Cannot build DSS filter");
                     exit(EXIT_FAILURE);
                 }
             }
         }
 
-        rc = dss_generic_get(&dss_handle, type, filter, &item_list, &item_cnt);
+        rc = dss_generic_get(&dss_handle, type, with_filter ? &filter : NULL,
+                             &item_list, &item_cnt);
+        if (with_filter)
+            dss_filter_free(&filter);
+
         if (rc) {
             pho_error(rc, "dss_get failed");
-            if (filter) {
-                dss_filter_free(filter);
-                free(filter);
-            }
-
             exit(EXIT_FAILURE);
-        }
-
-        if (filter) {
-            dss_filter_free(filter);
-            free(filter);
         }
 
         rc = dss_object_undelete(&dss_handle, item_list, item_cnt);
