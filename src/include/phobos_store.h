@@ -58,6 +58,7 @@ enum pho_xfer_op {
     PHO_XFER_OP_GET,   /**< GET operation. */
     PHO_XFER_OP_GETMD, /**< GET metadata operation. */
     PHO_XFER_OP_DEL,   /**< DEL operation. */
+    PHO_XFER_OP_UNDEL, /**< UNDEL operation. */
     PHO_XFER_OP_LAST
 };
 
@@ -66,6 +67,7 @@ static const char * const xfer_op_names[] = {
     [PHO_XFER_OP_GET]   = "GET",
     [PHO_XFER_OP_GETMD] = "GETMD",
     [PHO_XFER_OP_DEL]   = "DELETE",
+    [PHO_XFER_OP_UNDEL] = "UNDELETE",
 };
 
 static inline const char *xfer_op2str(enum pho_xfer_op op)
@@ -93,10 +95,18 @@ struct pho_xfer_put_params {
 };
 
 /**
+ * The only UNDEL parameter is the uuid of the targeted object.
+ */
+struct pho_xfer_undel_params {
+    char *uuid; /**< UUID to undelete */
+};
+
+/**
  * Operation parameters.
  */
 union pho_xfer_params {
-    struct pho_xfer_put_params put; /**< PUT parameters. */
+    struct pho_xfer_put_params put;     /**< PUT parameters. */
+    struct pho_xfer_undel_params undel; /**< UNDEL parameters. */
 };
 
 /**
@@ -107,6 +117,7 @@ union pho_xfer_params {
  *  - pĥobos_getmd()
  *  - phobos_get()
  *  - phobos_put()
+ *  - phobos_undelete()
  */
 struct pho_xfer_desc {
     char                   *xd_objid;  /**< Object ID to read or write. */
@@ -183,6 +194,18 @@ int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
  * @return                  0 on success, -errno on failure
  */
 int phobos_object_delete(struct pho_xfer_desc *xfers, size_t num_xfers);
+
+/**
+ * Undelete a deprecated object from the object store
+ *
+ * The latest version of each deprecated object is moved back.
+ *
+ * @param[in]   xfers       Objects to undelete, only the uuid field is used
+ * @param[in]   num_xfers   Number of objects to undelete
+ *
+ * @return                  0 on success, -errno on failure
+ */
+int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers);
 
 /**
  * Free tags and attributes resources associated with this xfer,

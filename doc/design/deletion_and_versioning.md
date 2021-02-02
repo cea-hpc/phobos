@@ -191,10 +191,10 @@ and ``deprecated_object`` table from an user action in addition of automatic
 policy-driven action.
 
 #### Object undelete
-The `phobos_object_undelete()` call allows to retrieve deprecated objects.
+The `phobos_undelete()` call allows to retrieve deprecated objects.
 
 ```c
-int phobos_object_undelete(struct pho_xfer_desc *xfers, int num_xfers);
+int phobos_undelete(struct pho_xfer_desc *xfers, int num_xfers);
 ```
 
 As input, only the xd_uuid field is taken into account for each xfer.

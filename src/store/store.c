@@ -375,6 +375,18 @@ static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     return rc;
 }
 
+static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
+{
+    struct object_info obj = {.uuid = xfer->xd_params.undel.uuid};
+    int rc;
+
+    rc = dss_object_undelete(dss, &obj, 1);
+    if (rc)
+        LOG_RETURN(rc, "Cannot undelete uuid:'%s'", xfer->xd_params.undel.uuid);
+
+    return rc;
+}
+
 /**
  * Initialize an encoder or decoder to perform \a xfer, according to
  * xfer->xd_op and xfer->xd_flags.
@@ -388,12 +400,18 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
         /* Handle encoder creation for PUT */
         return layout_encode(enc, xfer);
 
-    /* GET/GETMD: handle metadata retrieval */
-    rc = object_md_get(dss, xfer);
-    if (rc)
-        LOG_RETURN(rc, "Cannot find metadata for objid:'%s'", xfer->xd_objid);
+    /* can't get md for undel without any objid */
+    /* TODO: really necessary to create decoder for getmd, del and undel OP ? */
+    if (xfer->xd_op != PHO_XFER_OP_UNDEL) {
+        rc = object_md_get(dss, xfer);
+        if (rc)
+            LOG_RETURN(rc, "Cannot find metadata for objid:'%s'",
+                       xfer->xd_objid);
+    }
 
-    if (xfer->xd_op == PHO_XFER_OP_GETMD || xfer->xd_op == PHO_XFER_OP_DEL) {
+    if (xfer->xd_op == PHO_XFER_OP_GETMD ||
+        xfer->xd_op == PHO_XFER_OP_DEL ||
+        xfer->xd_op == PHO_XFER_OP_UNDEL) {
         /* create dummy decoder if no I/O operations are made */
         enc->xfer = xfer;
         enc->done = true;
@@ -449,8 +467,11 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     if (xfer->xd_rc == 0 && rc != 0)
         xfer->xd_rc = rc;
 
-    pho_info("%s operation for objid:'%s' %s", xfer_op2str(xfer->xd_op),
-             xfer->xd_objid, xfer->xd_rc ? "failed" : "succeeded");
+    pho_info("%s operation for %s:'%s' %s", xfer_op2str(xfer->xd_op),
+             xfer->xd_op != PHO_XFER_OP_UNDEL ? "objid" : "uuid",
+             xfer->xd_op != PHO_XFER_OP_UNDEL ? xfer->xd_objid :
+                xfer->xd_params.undel.uuid,
+             xfer->xd_rc ? "failed" : "succeeded");
 
     /* Cleanup metadata for failed PUT */
     if (pho->md_created[xfer_idx] &&
@@ -716,6 +737,15 @@ static int store_perform_xfers(struct phobos_handle *pho)
             store_end_xfer(pho, i, rc);
         }
 
+        if (pho->xfers[i].xd_op == PHO_XFER_OP_UNDEL) {
+            rc = object_undelete(&pho->dss, &pho->xfers[i]);
+            if (rc) {
+                pho_error(rc, "Error while deleting uuid: '%s'",
+                          pho->xfers[i].xd_params.undel.uuid);
+            }
+            store_end_xfer(pho, i, rc);
+        }
+
         if (pho->xfers[i].xd_op != PHO_XFER_OP_PUT)
             continue;
         rc = object_md_save(&pho->dss, &pho->xfers[i]);
@@ -830,6 +860,16 @@ int phobos_object_delete(struct pho_xfer_desc *xfers, size_t num_xfers)
 
     for (i = 0; i < num_xfers; i++)
         xfers[i].xd_op = PHO_XFER_OP_DEL;
+
+    return phobos_xfer(xfers, num_xfers, NULL, NULL);
+}
+
+int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers)
+{
+    size_t i;
+
+    for (i = 0; i < num_xfers; i++)
+        xfers[i].xd_op = PHO_XFER_OP_UNDEL;
 
     return phobos_xfer(xfers, num_xfers, NULL, NULL);
 }
