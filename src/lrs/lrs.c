@@ -205,7 +205,6 @@ static int _send_responses(struct lrs *lrs, const int n_resp,
         msg.fd = resp_cont[i].token;
         rc2 = pho_srl_response_pack(resp_cont[i].resp, &msg.buf);
         pho_srl_response_free(resp_cont[i].resp, false);
-        free(resp_cont[i].resp);
         if (rc2) {
             pho_error(rc2, "Response cannot be packed");
             rc = rc ? : rc2;
@@ -237,14 +236,15 @@ static int _send_error(struct lrs *lrs, struct req_container *req_cont)
         LOG_RETURN(-ENOMEM, "Cannot allocate error response");
 
     rc = _prepare_error(&resp_cont, -EINVAL, req_cont);
-    if (rc) {
-        free(resp_cont.resp);
-        LOG_RETURN(rc, "Cannot prepare error response");
-    }
+    if (rc)
+        LOG_GOTO(err_resp, rc, "Cannot prepare error response");
 
     rc = _send_responses(lrs, 1, &resp_cont);
     if (rc)
-        LOG_RETURN(rc, "Error during response sending");
+        LOG_GOTO(err_resp, rc, "Error during response sending");
+
+err_resp:
+    free(resp_cont.resp);
 
     return rc;
 }
@@ -475,7 +475,7 @@ static int lrs_process(struct lrs *lrs)
     struct resp_container *resp_cont;
     int n_data, n_resp = 0;
     int rc = 0;
-    int i;
+    int i, j;
 
     /* request reception and accept handling */
     rc = pho_comm_recv(&lrs->comm, &data, &n_data);
@@ -497,6 +497,8 @@ static int lrs_process(struct lrs *lrs)
             LOG_RETURN(rc, "Error during sched processing");
 
         rc = _send_responses(lrs, n_resp, resp_cont);
+        for (j = 0; j < n_resp; ++j)
+            free(resp_cont[j].resp);
         free(resp_cont);
         if (rc)
             LOG_RETURN(rc, "Error during responses sending");
