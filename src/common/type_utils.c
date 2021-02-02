@@ -93,6 +93,7 @@ void dev_info_free(struct dev_info *dev, bool free_top_struct)
     free(dev->rsc.model);
     free(dev->path);
     free(dev->host);
+    free(dev->lock.lock);
     if (free_top_struct)
         free(dev);
 }
