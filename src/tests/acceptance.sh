@@ -466,11 +466,15 @@ function ensure_nb_drives
     ((nb == count))
 }
 
-# Execute a phobos command but sleep on pho_posix_put for $1 second
+# Execute a phobos command but sleep on pho_posix_put for 1 second before
+# checking the number of locks taken on devices and media then sleep again.
 function phobos_delayed_dev_release
 {
-    sleep_time="$1"
-    shift
+    dev_file="$1"
+    med_file="$2"
+    dev_req="select * from device where lock !='';"
+    med_req="select * from media where lock !='';"
+    shift 2
     (
         tmp_gdb_script=$(mktemp)
         trap "rm $tmp_gdb_script" EXIT
@@ -478,7 +482,10 @@ function phobos_delayed_dev_release
 set breakpoint pending on
 break pho_posix_put
 commands
-shell sleep $sleep_time
+shell sleep 1
+shell $PSQL -qt -c "$dev_req" | grep -v "^$" | wc -l > $dev_file
+shell $PSQL -qt -c "$med_req" | grep -v "^$" | wc -l > $med_file
+shell sleep 1
 continue
 end
 run $phobos $*
@@ -501,37 +508,45 @@ function concurrent_put
     # create input file
     dd if=/dev/urandom of=$tmp bs=1M count=100
 
+    res_dev_1=$(mktemp)
+    res_dev_2=$(mktemp)
+    res_med_1=$(mktemp)
+    res_med_2=$(mktemp)
+
     # 2 simultaneous put
-    phobos_delayed_dev_release 2 put --metadata $md $tmp $key.1 &
+    phobos_delayed_dev_release $res_dev_1 $res_med_1 put --metadata $md \
+        $tmp $key.1 &
     local pid1=$!
-    (( single==0 )) && phobos_delayed_dev_release 2 put --metadata $md \
-        $tmp $key.2 &
+    (( single==0 )) && phobos_delayed_dev_release $res_dev_2 $res_med_2 put \
+        --metadata $md $tmp $key.2 &
     local pid2=$!
-
-    # after 1 sec, make sure 2 devices and 2 media are locked
-    sleep 1
-    nb_lock=$($PSQL -qt -c "select * from media where lock != ''" \
-              | grep -v "^$" | wc -l)
-    echo "$nb_lock media are locked"
-    if (( single==0 )) && (( $nb_lock != 2 )); then
-        error "2 media locks expected (actual: $nb_lock)"
-    elif (( single==1 )) && (( $nb_lock != 1 )); then
-        error "1 media lock expected (actual: $nb_lock)"
-    fi
-
-    nb_lock=$($PSQL -qt -c "select * from device where lock != ''" \
-              | grep -v "^$" | wc -l)
-    echo "$nb_lock devices are locked"
-    if (( single==0 )) && (( $nb_lock != 2 )); then
-        error "2 device locks expected (actual: $nb_lock)"
-    elif (( single==1 )) && (( $nb_lock != 1 )); then
-        error "1 device lock expected (actual: $nb_lock)"
-    fi
 
     wait $pid1
     wait $pid2
 
+    # retrieve psql request results which consists in number of locks taken
+    nb_dev_lock=$(($(cat $res_med_1)>$(cat $res_med_2) ?
+                   $(cat $res_med_1) : $(cat $res_med_2)))
+    nb_med_lock=$(($(cat $res_dev_1)>$(cat $res_dev_2) ?
+                   $(cat $res_dev_1) : $(cat $res_dev_2)))
+
+    # make sure 2 devices and 2 media were locked
+    echo "$nb_med_lock media were locked"
+    if (( single==0 )) && (( $nb_med_lock != 2 )); then
+        error "2 media locks expected (actual: $nb_med_lock)"
+    elif (( single==1 )) && (( $nb_med_lock != 1 )); then
+        error "1 media lock expected (actual: $nb_med_lock)"
+    fi
+
+    echo "$nb_dev_lock devices were locked"
+    if (( single==0 )) && (( $nb_dev_lock != 2 )); then
+        error "2 device locks expected (actual: $nb_dev_lock)"
+    elif (( single==1 )) && (( $nb_dev_lock != 1 )); then
+        error "1 device lock expected (actual: $nb_dev_lock)"
+    fi
+
     rm -f $tmp
+    rm -f res_dev_* res_med_*
 
     # check they are both in DB
     $LOG_VALG $phobos getmd $key.1
