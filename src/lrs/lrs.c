@@ -479,8 +479,12 @@ static int lrs_process(struct lrs *lrs)
 
     /* request reception and accept handling */
     rc = pho_comm_recv(&lrs->comm, &data, &n_data);
-    if (rc)
+    if (rc) {
+        for (i = 0; i < n_data; ++i)
+            free(data[i].buf.buff);
+        free(data);
         LOG_RETURN(rc, "Error during request reception");
+    }
 
     rc = _prepare_requests(lrs, n_data, data);
     free(data);
