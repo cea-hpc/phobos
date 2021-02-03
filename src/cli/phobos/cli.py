@@ -677,6 +677,26 @@ class ObjectDeleteOptHandler(BaseOptHandler):
         parser.add_argument('oids', nargs='+',
                             help='Object IDs to delete')
 
+class ObjectUndeleteOptHandler(BaseOptHandler):
+    """Undelete objects handler."""
+
+    label = 'undelete'
+    descr = 'Move back deprecated objects into phobos namespace'
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add command options."""
+        super(ObjectUndeleteOptHandler, cls).add_options(parser)
+
+        parser.add_argument('uuids', nargs='+',
+                            help='Object UUIDs to delete')
+
 class ExtentListOptHandler(PatternListOptHandler):
     """
     Specific version of the 'list' command for extent, with a couple
@@ -756,6 +776,7 @@ class ObjectOptHandler(BaseResourceOptHandler):
     verbs = [
         ObjectListOptHandler,
         ObjectDeleteOptHandler,
+        ObjectUndeleteOptHandler,
     ]
 
     def exec_list(self):
@@ -802,6 +823,17 @@ class ObjectOptHandler(BaseResourceOptHandler):
             client.object_delete(self.params.get('oids'))
         except EnvironmentError as err:
             self.logger.error("Cannot delete objects: %s",
+                              env_error_format(err))
+            sys.exit(os.EX_DATAERR)
+
+    def exec_undelete(self):
+        """Undelete deprecated objects."""
+
+        client = UtilClient()
+        try:
+            client.object_undelete(self.params.get('uuids'))
+        except EnvironmentError as err:
+            self.logger.error("Cannot undelete objects: %s",
                               env_error_format(err))
             sys.exit(os.EX_DATAERR)
 

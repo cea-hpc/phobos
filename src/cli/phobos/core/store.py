@@ -117,10 +117,32 @@ class PutParams(namedtuple('PutParams', 'family layout tags alias')):
     __slots__ = ()
 PutParams.__new__.__defaults__ = (None,) * len(PutParams._fields)
 
+class XferUndelParams(Structure): # pylint: disable=too-few-public-methods
+    """Phobos UNDEL parameters of the XferDescriptor."""
+    _fields_ = [
+        ("_uuid", c_char_p),
+    ]
+
+    def __init__(self, uuid):
+        super().__init__()
+        self.uuid = uuid
+
+    @property
+    def uuid(self):
+        """Wrapper to get uuid"""
+        return self._uuid.decode('utf-8') if self._uuid else None
+
+    @uuid.setter
+    def uuid(self, val):
+        """Wrapper to set uuid"""
+        # pylint: disable=attribute-defined-outside-init
+        self._uuid = val.encode('utf-8') if val else None
+
 class XferOpParams(Union): # pylint: disable=too-few-public-methods
     """Phobos operation parameters of the XferDescriptor."""
     _fields_ = [
         ("put", XferPutParams),
+        ("undel", XferUndelParams),
     ]
 
 class XferDescriptor(Structure):
@@ -366,6 +388,20 @@ class UtilClient:
             xfers[i].xd_objid = oid
 
         rc = LIBPHOBOS.phobos_object_delete(xfers, n_xfers)
+        if rc:
+            raise EnvironmentError(rc)
+
+    @staticmethod
+    def object_undelete(uuids):
+        """Undelete objects."""
+        n_xfers = c_int(len(uuids))
+        xfer_array_type = XferDescriptor * len(uuids)
+        xfers = xfer_array_type()
+
+        for i, uuid in enumerate(uuids):
+            xfers[i].xd_params.undel.uuid = uuid
+
+        rc = LIBPHOBOS.phobos_undelete(xfers, n_xfers)
         if rc:
             raise EnvironmentError(rc)
 
