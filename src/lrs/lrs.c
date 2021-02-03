@@ -305,7 +305,7 @@ static int _load_schedulers(struct lrs *lrs)
     char *parse_list;
     char *saveptr;
     char *item;
-    int rc;
+    int rc = 0;
     int i;
 
     list = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, families);
