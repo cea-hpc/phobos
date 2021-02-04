@@ -117,6 +117,7 @@ static int read_device_attr(const char *st_devname, const char *attrname,
     if (nread <= 0)
         LOG_GOTO(out_close, rc = -errno, "Cannot read %s in '%s'", attrname,
                  spath);
+    info[nread] = '\0';
 
     /* rstrip stupid '\n' and spaces */
     rstrip(info);
