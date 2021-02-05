@@ -70,6 +70,10 @@ function test_undelete
     [ -z $($phobos object list oid1) ] &&
         error "Object should be listed, because it is undeleted"
 
+    # TODO : return an error to user when no action is done
+    #$phobos object undelete "unexisting-fantasy-uuid" &&
+    #    error "Undeleting an unexisting uuid should failed"
+
     return 0
 }
 

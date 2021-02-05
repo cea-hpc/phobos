@@ -434,7 +434,8 @@ int main(int argc, char **argv)
             pho_error(rc, "dss_object_delete failed");
             exit(EXIT_FAILURE);
         }
-    } else if (!strcmp(argv[1], "undelete")) {
+    } else if (!strcmp(argv[1], "undelete_uuid") ||
+               !strcmp(argv[1], "undelete_oid")) {
         type = str2dss_type(argv[2]);
 
         if (type != DSS_DEPREC) {
@@ -463,6 +464,14 @@ int main(int argc, char **argv)
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
+        }
+
+        if (!strcmp(argv[1], "undelete_oid")) {
+            int i;
+
+            /* mask uuid to take into account oid */
+            for (i = 0; i < item_cnt; i++)
+                (((struct object_info *)item_list)[i]).uuid = NULL;
         }
 
         rc = dss_object_undelete(&dss_handle, item_list, item_cnt);

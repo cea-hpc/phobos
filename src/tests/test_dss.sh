@@ -119,15 +119,15 @@ function test_check_del
 
 function test_check_undel
 {
-    local target=$1
-    local crit=$2
-    local expect_fail=$3
+    local action="undelete_$1"
+    local target=$2
+    local crit=$3
+    local expect_fail=$4
     local rc=0
 
-    $LOG_COMPILER $LOG_FLAGS $test_bin undelete "$target" "$crit" || rc=$?
+    $LOG_COMPILER $LOG_FLAGS $test_bin $action "$target" "$crit" || rc=$?
     check_rc $rc $expect_fail
 }
-
 
 trap clean_test ERR EXIT
 
@@ -240,14 +240,14 @@ EOF
 test_check_del "object"
 test_check_get "deprecated_object" '{"DSS::OBJ::oid": "01230123ABC"}'
 
-echo "**** TEST: DSS_UNDELETE DEPRECATED OBJECT ****"
+echo "**** TEST: DSS_UNDELETE DEPRECATED OBJECT FROM UUID ****"
 psql phobos -U phobos << EOF
 insert into deprecated_object (oid, uuid, version, user_md)
     values ('oid1', 'uuid1', 1, '{}'),
            ('oid1', 'uuid1', 2, '{}'),
            ('oid2', 'uuid2', 1, '{}');
 EOF
-test_check_undel "deprecated_object" \
+test_check_undel uuid "deprecated_object" \
     '{"$OR": [{"DSS::OBJ::uuid": "uuid1"}, {"DSS::OBJ::uuid": "uuid2"}]}'
 # check oid1:v2 and oid2 are undelete
 test_check_get "object" \
@@ -257,7 +257,32 @@ test_check_get "object" '{"DSS::OBJ::oid": "oid2"}'
 test_check_get "object" \
     '{"$AND": [{"DSS::OBJ::oid": "oid1"}, {"DSS::OBJ::version": "1"}]}' 0
 # undelete should fail when oid already exists
-test_check_undel "deprecated_object" '{"DSS::OBJ::uuid": "uuid1"}' 'FAIL'
+test_check_undel uuid "deprecated_object" '{"DSS::OBJ::uuid": "uuid1"}' 'FAIL'
+
+echo "**** TEST: DSS_UNDELETE DEPRECATED OBJECT FROM OID ****"
+psql phobos -U phobos << EOF
+insert into deprecated_object (oid, uuid, version, user_md)
+    values ('myoid1', 'myuuid1', 1, '{}'),
+           ('myoid1', 'myuuid1', 2, '{}'),
+           ('myoid2', 'myuuid2', 1, '{}'),
+           ('myoid3', 'myuuid3', 1, '{}'),
+           ('myoid3', 'myuuid3-bis', 1, '{}');
+EOF
+test_check_undel oid "deprecated_object" \
+    '{"$OR": [{"DSS::OBJ::oid": "myoid1"}, {"DSS::OBJ::oid": "myoid2"}]}'
+# check myoid1:v2 and myoid2 are undelete
+test_check_get "object" \
+    '{"$AND": [{"DSS::OBJ::oid": "myoid1"}, {"DSS::OBJ::version": "2"}]}'
+test_check_get "object" '{"DSS::OBJ::oid": "myoid2"}'
+# check myoid1:v1 is not undelete
+test_check_get "object" \
+    '{"$AND": [{"DSS::OBJ::oid": "myoid1"}, {"DSS::OBJ::version": "1"}]}' 0
+# undelete should fail when oid already exists
+test_check_undel oid "deprecated_object" '{"DSS::OBJ::oid": "myoid1"}' 'FAIL'
+
+# TODO give back errors when no action are done on DSS
+# undelete should fail when oid has two existing uuids
+# test_check_undel oid "deprecated_object" '{"DSS::OBJ::oid": "myoid3"}' 'FAIL'
 
 insert_examples
 

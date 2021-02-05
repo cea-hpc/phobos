@@ -377,12 +377,16 @@ static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 
 static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 {
-    struct object_info obj = {.uuid = xfer->xd_params.undel.uuid};
+    struct object_info obj = {
+        .oid = xfer->xd_objid,
+        .uuid = xfer->xd_params.undel.uuid,
+    };
     int rc;
 
     rc = dss_object_undelete(dss, &obj, 1);
     if (rc)
-        LOG_RETURN(rc, "Cannot undelete uuid:'%s'", xfer->xd_params.undel.uuid);
+        LOG_RETURN(rc, "Cannot undelete (oid: '%s', uuid: '%s')",
+                   obj.oid ? obj.oid : "NULL", obj.uuid ? obj.uuid : "NULL");
 
     return rc;
 }

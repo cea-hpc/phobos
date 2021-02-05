@@ -2189,26 +2189,53 @@ static int dss_prepare_oid_list(PGconn *conn, GString *list,
     return 0;
 }
 
-static int dss_prepare_uuid_biggest_version_list(PGconn *conn, GString *list,
-                                                 struct object_info *obj_list,
-                                                 int obj_cnt)
+/**
+ * In obj_list, each obj must have a uuid or a oid. If an obj has a uuid, the
+ * oid is ignored.
+ */
+static int dss_prepare_version_list_from_deprec(PGconn *conn, GString *list,
+                                                struct object_info *obj_list,
+                                                int obj_cnt)
 {
     int i;
 
     for (i = 0; i < obj_cnt; ++i) {
-        char *sql_uuid = PQescapeLiteral(conn, obj_list[i].uuid,
-                                     strlen(obj_list[i].uuid));
+        if (obj_list[i].uuid) {
+            char *sql_uuid = PQescapeLiteral(conn, obj_list[i].uuid,
+                                         strlen(obj_list[i].uuid));
 
-        if (!sql_uuid)
-            LOG_RETURN(-EINVAL,
-                       "Cannot escape litteral %s: %s",
-                       obj_list[i].uuid, PQerrorMessage(conn));
+            if (!sql_uuid)
+                LOG_RETURN(-EINVAL,
+                           "Cannot escape litteral %s: %s",
+                           obj_list[i].uuid, PQerrorMessage(conn));
 
-        g_string_append_printf(list,
-                               "uuid=%s and version=(select MAX(version) from "
-                               "deprecated_object where uuid=%s)",
-                               sql_uuid, sql_uuid);
-        PQfreemem(sql_uuid);
+            /* we get the biggest version of the provided uuid */
+            g_string_append_printf(list,
+                                   "uuid=%s and version=(select MAX(version) "
+                                   "from deprecated_object where uuid=%s)",
+                                   sql_uuid, sql_uuid);
+            PQfreemem(sql_uuid);
+        } else { /* if no uuid, fall back on oid */
+            char *sql_oid = PQescapeLiteral(conn, obj_list[i].oid,
+                                            strlen(obj_list[i].oid));
+
+            if (!sql_oid)
+                LOG_RETURN(-EINVAL,
+                           "Cannot escape litteral %s: %s",
+                           obj_list[i].oid, PQerrorMessage(conn));
+
+            /*
+             * We check there is only one existing uuid for the provided oid,
+             * and we take the biggest existing version.
+             */
+            g_string_append_printf(list,
+                                   "oid=%s and (version, 1)=(select "
+                                   "MAX(version), COUNT(distinct uuid) from "
+                                   "deprecated_object where oid=%s)",
+                                   sql_oid, sql_oid);
+            PQfreemem(sql_oid);
+        }
+
         if (i + 1 != obj_cnt)
             g_string_append(list, " OR ");
     }
@@ -2244,10 +2271,10 @@ static int dss_object_move(struct dss_handle *handle, enum dss_type type_from,
 
         break;
     case DSS_MOVE_DEPREC_TO_OBJECT:
-        rc = dss_prepare_uuid_biggest_version_list(conn, key_list, obj_list,
-                                                   obj_cnt);
+        rc = dss_prepare_version_list_from_deprec(conn, key_list, obj_list,
+                                                  obj_cnt);
         if (rc)
-            LOG_GOTO(err, rc, "UUID biggest version list could not be built");
+            LOG_GOTO(err, rc, "Version list could not be built from deprec");
 
         break;
     default:

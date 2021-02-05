@@ -398,11 +398,22 @@ int dss_object_delete(struct dss_handle *handle, struct object_info *obj_list,
                       int obj_cnt);
 
 /**
- * Undelete a set of objects by uuid. Move them from the deprecated_object to
+ * Undelete a set of objects. Move them from the deprecated_object to
  * the object table.
  *
+ * If the object is selected by uuid, oid is ignored and the biggest existing
+ * version of this uuid in the deprecated_object table is moved to the object
+ * table.
+ *
+ * If the object is selected by oid without any provided uuid, the object is
+ * moved from the deprecated_object table to the object table if there is only
+ * one distinct corresponding uuid into the deprecated_object table. The moved
+ * object is the biggest version among the corresponding uuid.
+ *
  * @param[in]   handle      DSS handle.
- * @param[in]   obj_list    List of objects (only the uuid field is used).
+ * @param[in]   obj_list    List of objects (Only uuid or oid fields are used,
+ *                          and one at least must be filled. If uuid is filled,
+ *                          oid is ignored and can be NULL.).
  * @param[in]   obj_cnt     Number of objects.
  *
  * @return      0 on succes, -errno on failure.
