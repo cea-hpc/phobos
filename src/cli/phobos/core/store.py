@@ -392,14 +392,17 @@ class UtilClient:
             raise EnvironmentError(rc)
 
     @staticmethod
-    def object_undelete(uuids):
+    def undelete(oids, uuids):
         """Undelete objects."""
-        n_xfers = c_int(len(uuids))
-        xfer_array_type = XferDescriptor * len(uuids)
+        n_xfers = c_int(len(oids) + len(uuids))
+        xfer_array_type = XferDescriptor * (len(oids) + len(uuids))
         xfers = xfer_array_type()
 
+        for i, oid in enumerate(oids):
+            xfers[i].xd_objid = oid
+
         for i, uuid in enumerate(uuids):
-            xfers[i].xd_params.undel.uuid = uuid
+            xfers[i + len(oids)].xd_params.undel.uuid = uuid
 
         rc = LIBPHOBOS.phobos_undelete(xfers, n_xfers)
         if rc:

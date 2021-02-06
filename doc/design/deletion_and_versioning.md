@@ -257,12 +257,11 @@ $ phobos object delete obj_id [obj_id ...]
 ```
 
 #### Object undelete
-The `phobos object undelete` targets one deprecated object, referenced by an OID
-or a UUID.
+The `phobos undelete` targets deprecated objects referenced by OIDs or UUIDs.
 
 ```
-$ phobos object undelete oid obj_id
-$ phobos object undelete uuid obj_uuid
+$ phobos undelete uuid uuid [uuid ...]
+$ phobos undelete oid obj_id [obj_id ...]
 ```
 
 If a UUID is provided, and this UUID does not exist in the
@@ -446,7 +445,7 @@ $ phobos object list --deprecated --output ID,uuid,version
 | obj_bar | 99887766-5544-3322-1100-aabbccddeeff |      2  |
 | obj_foo | 00112233-4455-6677-8899-aabbccddeeff |      5  |
 +---------+--------------------------------------+---------+
-$ phobos object undelete uuid "00112233-4455-6677-8899-aabbccddeeff"
+$ phobos undelete uuid "00112233-4455-6677-8899-aabbccddeeff"
 Object 'obj_foo@5' successfully undeleted.
 $ phobos object list --deprecated --output ID,uuid,version
 +---------+--------------------------------------+---------+
@@ -461,7 +460,7 @@ $ phobos object list --output ID,version
 +---------+---------+
 | obj_foo |       5 |
 +---------+---------+
-$ phobos object undelete oid "obj_bar"
+$ phobos undelete oid "obj_bar"
 Object 'obj_bar@3' successfully undeleted.
 $ phobos object list --deprecated --output ID,uuid,version
 +---------+--------------------------------------+---------+

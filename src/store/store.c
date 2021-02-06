@@ -427,6 +427,17 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
     return decoder_build(enc, xfer, dss);
 }
 
+static bool is_uuid_arg(struct pho_xfer_desc *xfer)
+{
+    return xfer->xd_op == PHO_XFER_OP_UNDEL &&
+           xfer->xd_params.undel.uuid != NULL;
+}
+
+static const char *oid_or_uuid_val(struct pho_xfer_desc *xfer)
+{
+    return is_uuid_arg(xfer) ? xfer->xd_params.undel.uuid : xfer->xd_objid;
+}
+
 /**
  * Mark the end of a transfer (successful or not) by updating the encoder
  * structure, saving the encoder layout to the DSS if necessary, properly
@@ -471,10 +482,10 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     if (xfer->xd_rc == 0 && rc != 0)
         xfer->xd_rc = rc;
 
-    pho_info("%s operation for %s:'%s' %s", xfer_op2str(xfer->xd_op),
-             xfer->xd_op != PHO_XFER_OP_UNDEL ? "objid" : "uuid",
-             xfer->xd_op != PHO_XFER_OP_UNDEL ? xfer->xd_objid :
-                xfer->xd_params.undel.uuid,
+    pho_info("%s operation for %s:'%s' %s",
+             xfer_op2str(xfer->xd_op),
+             is_uuid_arg(xfer) ? "uuid" : "oid",
+             oid_or_uuid_val(xfer),
              xfer->xd_rc ? "failed" : "succeeded");
 
     /* Cleanup metadata for failed PUT */
@@ -748,8 +759,11 @@ static int store_perform_xfers(struct phobos_handle *pho)
         if (pho->xfers[i].xd_op == PHO_XFER_OP_UNDEL) {
             rc = object_undelete(&pho->dss, &pho->xfers[i]);
             if (rc) {
-                pho_error(rc, "Error while deleting uuid: '%s'",
-                          pho->xfers[i].xd_params.undel.uuid);
+                pho_error(rc, "Error while undeleting oid: '%s', uuid: '%s'",
+                          pho->xfers[i].xd_objid ? pho->xfers[i].xd_objid :
+                              "NULL",
+                          pho->xfers[i].xd_params.undel.uuid ?
+                              pho->xfers[i].xd_params.undel.uuid : "NULL");
             }
             store_end_xfer(pho, i, rc);
         }

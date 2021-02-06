@@ -55,14 +55,14 @@ function cleanup
 
 function test_undelete
 {
-    echo "**** TEST UNDELETE ****"
+    echo "**** TEST UNDELETE BY UUID ****"
     $phobos put --family dir /etc/hosts oid1 ||
         error "Object should be put"
     $phobos object delete oid1 ||
         error "Object should be deleted"
 
     uuid=$($phobos object list --deprecated --output uuid oid1)
-    $phobos object undelete $uuid ||
+    $phobos undelete uuid $uuid ||
         error "Object should be undeleted without any error"
     $phobos get oid1 test_tmp || error "Object should be got after undeletion"
     rm test_tmp
@@ -71,8 +71,37 @@ function test_undelete
         error "Object should be listed, because it is undeleted"
 
     # TODO : return an error to user when no action is done
-    #$phobos object undelete "unexisting-fantasy-uuid" &&
+    #$phobos undelete uuid "unexisting-fantasy-uuid" &&
     #    error "Undeleting an unexisting uuid should failed"
+
+    echo "**** TEST UNDELETE BY OID ****"
+    $phobos put --family dir /etc/hosts oid2 ||
+        error "Object should be put"
+    $phobos object delete oid2 ||
+        error "Object should be deleted"
+
+    $phobos undelete oid oid2 ||
+        error "Object should be undeleted without any error"
+    $phobos get oid2 test_tmp || error "Object should be got after undeletion"
+    rm test_tmp
+
+    [ -z $($phobos object list oid2) ] &&
+        error "Object should be listed, because it is undeleted"
+
+    # TODO : return an error to user when no action is done
+    #$phobos undelete oid "unexisting-fantasy-oid" &&
+    #    error "Undeleting an unexisting oid should failed"
+    #
+    #$phobos put --family dir /etc/hosts oid3 ||
+    #    error "Object should be put"
+    #$phobos object delete oid3 ||
+    #    error "Object should be deleted"
+    #$phobos put --family dir /etc/hosts oid3 ||
+    #    error "Object should be put"
+    #$phobos object delete oid3 ||
+    #    error "Object should be deleted"
+    #$phobos undelete oid oid3 &&
+    #    error "Undeleting an oid with two deprecated uuid should failed"
 
     return 0
 }

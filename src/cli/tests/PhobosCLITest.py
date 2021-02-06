@@ -122,11 +122,17 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['extent', 'list', '--degroup', '"obj.*"'])
         self.check_cmdline_valid(['extent', 'list', '--degroup', '-o', 'all'])
         self.check_cmdline_valid(['extent', 'list', '--degroup', '-n', 't01'])
+        self.check_cmdline_valid(['undelete', 'uuid', 'uuid1'])
+        self.check_cmdline_valid(['undelete', 'uuid', 'uuid1', 'uuid2'])
+        self.check_cmdline_valid(['undelete', 'oid', 'oid1'])
+        self.check_cmdline_valid(['undelete', 'oid', 'oid1', 'oid2'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['voynichauthor', 'list'], code=2)
         self.check_cmdline_exit(['dir', 'teleport'], code=2)
         self.check_cmdline_exit(['object', 'delete'], code=2)
+        self.check_cmdline_exit(['undelete', 'oid'], code=2)
+        self.check_cmdline_exit(['undelete', 'uuid'], code=2)
 
 
 class BasicExecutionTest(unittest.TestCase):
