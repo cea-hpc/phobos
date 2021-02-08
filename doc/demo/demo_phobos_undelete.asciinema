@@ -1,0 +1,554 @@
+{
+  "version": 1,
+  "width": 119,
+  "height": 28,
+  "duration": 148.362211,
+  "command": null,
+  "title": null,
+  "env": {
+    "TERM": "xterm-256color",
+    "SHELL": "/bin/bash"
+  },
+  "stdout": [
+    [
+      0.162642,
+      "(pcocc/2181391) "
+    ],
+    [
+      0.000146,
+      "\u001b[?1034h"
+    ],
+    [
+      2.4e-05,
+      "[lucasp@r6login phobos]$ "
+    ],
+    [
+      0.665014,
+      "pcocc ssh vm0"
+    ],
+    [
+      0.736867,
+      "\r\n"
+    ],
+    [
+      1.280272,
+      "Last login: Tue Feb  9 14:30:38 2021 from r6login.c-inti.ccc.ocre.cea.fr\r\r\n"
+    ],
+    [
+      0.029398,
+      "\u001b]0;lucasp@vm0:~\u0007\u001b[?1034h[lucasp@vm0 ~]$ "
+    ],
+    [
+      0.456928,
+      "c"
+    ],
+    [
+      0.052371,
+      "d"
+    ],
+    [
+      0.13407,
+      " "
+    ],
+    [
+      0.540921,
+      "/"
+    ],
+    [
+      0.260882,
+      "t"
+    ],
+    [
+      0.092324,
+      "m"
+    ],
+    [
+      0.160074,
+      "p"
+    ],
+    [
+      0.128613,
+      "/"
+    ],
+    [
+      0.310924,
+      "\r\n\u001b]0;lucasp@vm0:/tmp\u0007[lucasp@vm0 tmp]$ "
+    ],
+    [
+      0.954792,
+      "s"
+    ],
+    [
+      0.169221,
+      "u"
+    ],
+    [
+      0.091724,
+      "d"
+    ],
+    [
+      0.131496,
+      "o"
+    ],
+    [
+      0.240176,
+      " "
+    ],
+    [
+      0.482889,
+      "."
+    ],
+    [
+      0.202188,
+      "/"
+    ],
+    [
+      0.136065,
+      "d"
+    ],
+    [
+      0.147544,
+      "e"
+    ],
+    [
+      0.083593,
+      "m"
+    ],
+    [
+      0.150879,
+      "o_phobos_undelete.bash "
+    ],
+    [
+      0.559589,
+      "\r\n"
+    ],
+    [
+      0.015126,
+      "################################\r\n# Phobos undelete quick demo\r\n################################\r\n"
+    ],
+    [
+      5.001788,
+      "\r\n# Clean DB\r\n"
+    ],
+    [
+      5.001656,
+      "sudo -u postgres phobos_db drop_db\r\n"
+    ],
+    [
+      0.20218,
+      "database \"phobos\" does not exist\r\n"
+    ],
+    [
+      0.009357,
+      "role \"phobos\" does not exist\r\nDatabase phobos and user phobos successfully dropped\r\n"
+    ],
+    [
+      5.007897,
+      "sudo -u postgres phobos_db setup_db -s -p phobos\r\n"
+    ],
+    [
+      0.492138,
+      "Database properly set up.\r\nPlease fill your phobos.conf with appropriate information for connection, for example:\r\n\r\n    dbname='phobos' user='phobos' password=<your password> host=example.com\r\n\r\n"
+    ],
+    [
+      5.049285,
+      "\r\n# Start phobos daemon\r\nsystemctl start phobosd\r\n"
+    ],
+    [
+      5.04157,
+      "\r\n# Add a directory as backend to phobos\r\nmedia_dir=$(mktemp -d /tmp/test.pho.XXXX)\r\n"
+    ],
+    [
+      0.001509,
+      "phobos dir add $media_dir\r\n"
+    ],
+    [
+      0.185434,
+      "2021-02-09 14:32:00,946 <INFO> Will add device 'dir:/tmp/test.pho.kcR6' to the database: model=(null) serial=vm0:/tmp/test.pho.kcR6 (unlocked)\r\n"
+    ],
+    [
+      0.012851,
+      "2021-02-09 14:32:00,950 <INFO> Added 1 dir(s) successfully\r\n"
+    ],
+    [
+      0.003353,
+      "phobos dir format --fs posix --unlock $media_dir\r\n"
+    ],
+    [
+      0.179879,
+      "2021-02-09 14:32:01,142 <INFO> Formatting media '/tmp/test.pho.kcR6'\r\n"
+    ],
+    [
+      5.019029,
+      "\r\n**** TEST UNDELETE BY UUID ****\r\n# Put an object as oid1\r\nphobos put --family dir /etc/hosts oid1\r\n"
+    ],
+    [
+      0.213104,
+      "2021-02-09 14:32:06,365 <INFO> PUT operation for objid:'oid1' succeeded\r\n"
+    ],
+    [
+      0.002711,
+      "phobos object list --output oid\r\n"
+    ],
+    [
+      0.191373,
+      "oid1\r\n"
+    ],
+    [
+      0.002734,
+      "phobos object list --deprecated --output oid,uuid,version\r\n"
+    ],
+    [
+      0.194817,
+      "\r\n"
+    ],
+    [
+      5.001486,
+      "# Delete this object\r\nphobos delete oid1\r\n"
+    ],
+    [
+      0.180718,
+      "2021-02-09 14:32:11,948 <INFO> DELETE operation for objid:'oid1' succeeded\r\n"
+    ],
+    [
+      0.013506,
+      "phobos object list --output oid\r\n"
+    ],
+    [
+      0.193434,
+      "phobos object list --deprecated --output oid,uuid,version\r\n"
+    ],
+    [
+      0.191362,
+      "| oid   | uuid                                 |   version |\r\n|-------|--------------------------------------|-----------|\r\n| oid1  | 18b43f49-1e61-472e-a50e-ac3f1473bb41 |         1 |\r\n"
+    ],
+    [
+      0.003487,
+      "\r\n"
+    ],
+    [
+      5.002079,
+      "# can not get the object by oid\r\nphobos get oid1 test_tmp\r\n"
+    ],
+    [
+      0.188719,
+      "2021-02-09 14:32:17,531 <ERROR> No such object objid:'oid1': No such file or directory\r\n2021-02-09 14:32:17,531 <ERROR> Cannot find metadata for objid:'oid1': No such file or directory\r\n2021-02-09 14:32:17,531 <ERROR> Error while creating encoders for objid:'oid1': No such file or directory\r\n2021-02-09 14:32:17,532 <INFO> GET operation for objid:'oid1' failed\r\n2021-02-09 14:32:17,532 <ERROR> Cannot GET 'objid:oid1' to 'test_tmp': Cannot retrieve objects: No such file or directory\r\n"
+    ],
+    [
+      0.00334,
+      "\r\n"
+    ],
+    [
+      5.001695,
+      "# get the uuid of the deleted object\r\nuuid=$(phobos object list --deprecated --output uuid oid1)\r\n"
+    ],
+    [
+      0.195905,
+      "\r\n"
+    ],
+    [
+      5.001581,
+      "# undelete by uuid\r\nphobos undelete uuid $uuid\r\n"
+    ],
+    [
+      0.17692,
+      "2021-02-09 14:32:27,919 <INFO> UNDELETE operation for uuid:'18b43f49-1e61-472e-a50e-ac3f1473bb41' succeeded\r\n"
+    ],
+    [
+      0.015568,
+      "phobos object list --output oid\r\n"
+    ],
+    [
+      0.191399,
+      "oid1\r\n"
+    ],
+    [
+      0.002794,
+      "phobos object list --deprecated --output oid,uuid,version\r\n"
+    ],
+    [
+      0.195524,
+      "\r\n"
+    ],
+    [
+      5.001721,
+      "# get the undeleted object by oid\r\nphobos get oid1 test_tmp\r\n"
+    ],
+    [
+      0.194111,
+      "2021-02-09 14:32:33,511 <INFO> GET operation for objid:'oid1' succeeded\r\n"
+    ],
+    [
+      0.00274,
+      "\r\n"
+    ],
+    [
+      5.002018,
+      "# clean test_tmp\r\nrm test_tmp\r\n"
+    ],
+    [
+      0.001181,
+      "\r\n**** TEST UNDELETE BY OID ****\r\n\r\n"
+    ],
+    [
+      5.002029,
+      "# Put an object as oid2\r\nphobos put --family dir /etc/hosts oid2\r\n"
+    ],
+    [
+      0.205439,
+      "2021-02-09 14:32:43,725 <INFO> PUT operation for objid:'oid2' succeeded\r\n"
+    ],
+    [
+      0.003337,
+      "# Delete oid2\r\nphobos delete oid2\r\n"
+    ],
+    [
+      0.177856,
+      "2021-02-09 14:32:43,914 <INFO> DELETE operation for objid:'oid2' succeeded\r\n"
+    ],
+    [
+      0.012938,
+      "\r\n"
+    ],
+    [
+      5.001814,
+      "# can not get the object by oid\r\nphobos get oid2 test_tmp\r\n"
+    ],
+    [
+      0.189429,
+      "2021-02-09 14:32:49,109 <ERROR> No such object objid:'oid2': No such file or directory\r\n2021-02-09 14:32:49,109 <ERROR> Cannot find metadata for objid:'oid2': No such file or directory\r\n2021-02-09 14:32:49,109 <ERROR> Error while creating encoders for objid:'oid2': No such file or directory\r\n2021-02-09 14:32:49,109 <INFO> GET operation for objid:'oid2' failed\r\n2021-02-09 14:32:49,109 <ERROR> Cannot GET 'objid:oid2' to 'test_tmp': Cannot retrieve objects: No such file or directory\r\n"
+    ],
+    [
+      0.002578,
+      "\r\n"
+    ],
+    [
+      5.002012,
+      "# undelete oid2 by oid\r\nphobos undelete oid oid2\r\n"
+    ],
+    [
+      0.176683,
+      "2021-02-09 14:32:54,299 <INFO> UNDELETE operation for objid:'oid2' succeeded\r\n"
+    ],
+    [
+      0.015375,
+      "\r\n"
+    ],
+    [
+      5.001891,
+      "# get undelete oid2 object\r\nphobos get oid2 test_tmp\r\n"
+    ],
+    [
+      0.192627,
+      "2021-02-09 14:32:59,500 <INFO> GET operation for objid:'oid2' succeeded\r\n"
+    ],
+    [
+      0.002521,
+      "\r\n"
+    ],
+    [
+      5.001665,
+      "# clean test_tmp\r\nrm test_tmp\r\n"
+    ],
+    [
+      0.001376,
+      "\r\n**** TEST UNDELETE ERROR IF THE OID ALREADY EXISTS ****\r\n\r\n"
+    ],
+    [
+      5.001816,
+      "# Put an object as oid3\r\nphobos put --family dir /etc/hosts oid3\r\n"
+    ],
+    [
+      0.196123,
+      "2021-02-09 14:33:09,704 <INFO> PUT operation for objid:'oid3' succeeded\r\n"
+    ],
+    [
+      0.003773,
+      "# Delete oid3\r\nphobos delete oid3\r\n"
+    ],
+    [
+      0.17789,
+      "2021-02-09 14:33:09,894 <INFO> DELETE operation for objid:'oid3' succeeded\r\n"
+    ],
+    [
+      0.012902,
+      "# Put a new object as oid3\r\nphobos put --family dir /etc/hosts oid3\r\n"
+    ],
+    [
+      0.195256,
+      "2021-02-09 14:33:10,093 <INFO> PUT operation for objid:'oid3' succeeded\r\n"
+    ],
+    [
+      0.002729,
+      "\r\n"
+    ],
+    [
+      5.001851,
+      "phobos object list --output oid\r\n"
+    ],
+    [
+      0.191767,
+      "oid1\r\noid2\r\noid3\r\n"
+    ],
+    [
+      0.002663,
+      "phobos object list --deprecated --output oid,uuid,version\r\n"
+    ],
+    [
+      0.190229,
+      "| oid   | uuid                                 |   version |\r\n|-------|--------------------------------------|-----------|\r\n| oid3  | 9e22df3a-834c-4499-9888-07bcb1b01f8b |         1 |\r\n"
+    ],
+    [
+      0.003953,
+      "\r\n"
+    ],
+    [
+      5.001978,
+      "# get the uuid of the deleted object\r\nuuid=$(phobos object list --deprecated --output uuid oid3)\r\n"
+    ],
+    [
+      0.195429,
+      "\r\n"
+    ],
+    [
+      5.001863,
+      "# try to undelete oid3 by oid: but this OID is already existing\r\nphobos undelete oid oid3\r\n"
+    ],
+    [
+      0.177917,
+      "2021-02-09 14:33:25,872 <INFO> UNDELETE operation for objid:'oid3' succeeded\r\n"
+    ],
+    [
+      0.013143,
+      "2021-02-09 14:33:25,876 <ERROR> Query 'WITH risen_object AS (DELETE FROM deprecated_object WHERE oid='oid3' and (version, 1)=(select MAX(version), COUNT(distinct uuid) from deprecated_object where oid='oid3') RETURNING oid, uuid, version, user_md) INSERT INTO object SELECT * FROM risen_object' failed: duplicate key value violates unique constraint \"object_pkey\": File exists\r\n2021-02-09 14:33:25,876 <ERROR> Cannot undelete (oid: 'oid3', uuid: 'NULL'): File exists\r\n2021-02-09 14:33:25,876 <ERROR> Error while undeleting oid: 'oid3', uuid: 'NULL': File exists\r\nTraceback (most recent call last):\r\n  File \"/usr/lib64/python3.6/site-packages/phobos/cli.py\", line 758, in exec_oid\r\n    client.undelete(self.params.get('oids'), ())\r\n  File \"/usr/lib64/python3.6/site-packages/phobos/core/store.py\", line 409, in undelete\r\n    raise EnvironmentError(rc)\r\nOSError: -17\r\n\r\nDuring handling of the above exception, another exception occurred:\r\n\r\nTraceback (most recent call last):\r\n  File \"/bin/phobos\", line 30, in <module>\r\n    p"
+    ],
+    [
+      2.8e-05,
+      "hobos_main()\r\n  File \"/usr/lib64/python3.6/site-packages/phobos/cli.py\", line 1567, in phobos_main\r\n    PhobosActionContext(args if args is not None else sys.argv[1::]).run()\r\n  File \"/usr/lib64/python3.6/site-packages/phobos/cli.py\", line 1555, in run\r\n    getattr(target_inst, 'exec_%s' % action.replace('-', '_'))()\r\n  File \"/usr/lib64/python3.6/site-packages/phobos/cli.py\", line 761, in exec_oid\r\n    env_error_format(err))\r\n  File \"/usr/lib64/python3.6/site-packages/phobos/cli.py\", line 96, in env_error_format\r\n    return \"%s: %s\" % (exc.strerror, os.strerror(abs(exc.errno)))\r\nTypeError: bad operand type for abs(): 'NoneType'\r\n"
+    ],
+    [
+      0.005531,
+      "\r\n"
+    ],
+    [
+      5.001718,
+      "# delete the new oid3\r\nphobos delete oid3\r\n"
+    ],
+    [
+      0.180121,
+      "2021-02-09 14:33:31,073 <INFO> DELETE operation for objid:'oid3' succeeded\r\n"
+    ],
+    [
+      0.013097,
+      "phobos object list --output oid\r\n"
+    ],
+    [
+      0.19184,
+      "oid1\r\noid2\r\n"
+    ],
+    [
+      0.002767,
+      "phobos object list --deprecated --output oid,uuid,version\r\n"
+    ],
+    [
+      0.191156,
+      "| oid   | uuid                                 |   version |\r\n|-------|--------------------------------------|-----------|\r\n| oid3  | 9e22df3a-834c-4499-9888-07bcb1b01f8b |         1 |\r\n| oid3  | d5259560-c041-408b-9a8d-8ef5aa429aa5 |         1 |\r\n"
+    ],
+    [
+      0.003182,
+      "\r\n"
+    ],
+    [
+      5.002,
+      "# try to undelete oid3 by oid : but this OID has two existing uuids\r\nphobos undelete oid oid3\r\n"
+    ],
+    [
+      0.178654,
+      "2021-02-09 14:33:36,655 <INFO> UNDELETE operation for objid:'oid3' succeeded\r\n"
+    ],
+    [
+      0.015023,
+      "# There is no error, but the object is not undeleted and it is still deprecated\r\n# We need to add an error message to warn the user.\r\n\r\n"
+    ],
+    [
+      5.00164,
+      "phobos object list --output oid\r\n"
+    ],
+    [
+      0.191016,
+      "oid1\r\noid2\r\n"
+    ],
+    [
+      0.004245,
+      "phobos object list --deprecated --output oid,uuid,version\r\n"
+    ],
+    [
+      0.190713,
+      "| oid   | uuid                                 |   version |\r\n|-------|--------------------------------------|-----------|\r\n| oid3  | 9e22df3a-834c-4499-9888-07bcb1b01f8b |         1 |\r\n| oid3  | d5259560-c041-408b-9a8d-8ef5aa429aa5 |         1 |\r\n"
+    ],
+    [
+      0.003812,
+      "\r\n"
+    ],
+    [
+      5.001707,
+      "**** TEST UNDELETE SUCCESS BY UUID IF THERE IS SEVERAL DEPRECATED UUID ****\r\n# undelete oid3 by uuid\r\nphobos undelete uuid $uuid\r\n"
+    ],
+    [
+      0.176676,
+      "2021-02-09 14:33:47,239 <INFO> UNDELETE operation for uuid:'9e22df3a-834c-4499-9888-07bcb1b01f8b' succeeded\r\n"
+    ],
+    [
+      0.015052,
+      "phobos object list --output oid\r\n"
+    ],
+    [
+      0.190804,
+      "oid1\r\noid2\r\noid3\r\n"
+    ],
+    [
+      0.00228,
+      "phobos object list --deprecated --output oid,uuid,version\r\n"
+    ],
+    [
+      0.19085,
+      "| oid   | uuid                                 |   version |\r\n|-------|--------------------------------------|-----------|\r\n| oid3  | d5259560-c041-408b-9a8d-8ef5aa429aa5 |         1 |\r\n"
+    ],
+    [
+      0.003569,
+      "\r\n"
+    ],
+    [
+      5.001999,
+      "\r\n\r\n# End test cleaning\r\n+ rm -rf /tmp/test.pho.kcR6\r\n"
+    ],
+    [
+      0.001879,
+      "+ systemctl stop phobosd\r\n"
+    ],
+    [
+      0.018085,
+      "+ sudo -u postgres phobos_db drop_db\r\n"
+    ],
+    [
+      0.320629,
+      "Database phobos and user phobos successfully dropped\r\n"
+    ],
+    [
+      0.007447,
+      "\u001b]0;lucasp@vm0:/tmp\u0007[lucasp@vm0 tmp]$ "
+    ],
+    [
+      1.898497,
+      "logout\r\n"
+    ],
+    [
+      0.003139,
+      "Connection to inti2230 closed.\r\r\n"
+    ],
+    [
+      0.041287,
+      "(pcocc/2181391) [lucasp@r6login phobos]$ "
+    ]
+  ]
+}
