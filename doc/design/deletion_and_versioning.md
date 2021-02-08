@@ -250,10 +250,10 @@ The CLI needs to be extended with a new keyword/command and new options for some
 existing commands to manage generations and versions.
 
 #### Object deletion
-The `phobos object delete` targets one (or more) object ID(s) to delete.
+The `phobos delete` targets one (or more) object ID(s) to delete.
 
 ```
-$ phobos object delete obj_id [obj_id ...]
+$ phobos delete obj_id [obj_id ...]
 ```
 
 #### Object undelete
@@ -342,7 +342,7 @@ $ phobos object list
 obj_foo
 obj_bar
 obj_baz
-$ phobos object delete obj_foo obj_baz
+$ phobos delete obj_foo obj_baz
 Objects successfully deleted: 2
 $ phobos object list
 obj_bar
@@ -362,7 +362,7 @@ $ phobos object list --output ID,user_md
 | obj_bar | size=small           |
 | obj_baz | size=huge,age=old    |
 +---------+----------------------+
-$ phobos object delete obj_baz
+$ phobos delete obj_baz
 Objects successfully deleted: 1
 $ phobos object list --output ID,user_md
 +---------+----------------------+
@@ -424,7 +424,7 @@ $ phobos object list --output ID,version
 +---------+---------+
 | obj_foo |       5 |
 +---------+---------+
-$ phobos object delete obj_foo
+$ phobos delete obj_foo
 Objects successfully deleted: 1
 $ phobos object list
 $ phobos put SOURCE obj_foo

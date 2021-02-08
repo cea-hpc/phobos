@@ -108,8 +108,6 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['object', 'list', '-o', 'all', '"obj.*"'])
         self.check_cmdline_valid(['object', 'list', '-m', 'user=foo,test=abd'])
         self.check_cmdline_valid(['object', 'list', '--deprecated'])
-        self.check_cmdline_valid(['object', 'delete', 'oid'])
-        self.check_cmdline_valid(['object', 'delete', 'oid1', 'oid2', 'oid3'])
         self.check_cmdline_valid(['extent', 'list'])
         self.check_cmdline_valid(['extent', 'list', '"obj.*"'])
         self.check_cmdline_valid(['extent', 'list', '-o', 'all'])
@@ -122,6 +120,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['extent', 'list', '--degroup', '"obj.*"'])
         self.check_cmdline_valid(['extent', 'list', '--degroup', '-o', 'all'])
         self.check_cmdline_valid(['extent', 'list', '--degroup', '-n', 't01'])
+        self.check_cmdline_valid(['delete', 'oid'])
+        self.check_cmdline_valid(['delete', 'oid1', 'oid2', 'oid3'])
         self.check_cmdline_valid(['undelete', 'uuid', 'uuid1'])
         self.check_cmdline_valid(['undelete', 'uuid', 'uuid1', 'uuid2'])
         self.check_cmdline_valid(['undelete', 'oid', 'oid1'])
@@ -130,7 +130,7 @@ class CLIParametersTest(unittest.TestCase):
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['voynichauthor', 'list'], code=2)
         self.check_cmdline_exit(['dir', 'teleport'], code=2)
-        self.check_cmdline_exit(['object', 'delete'], code=2)
+        self.check_cmdline_exit(['delete'], code=2)
         self.check_cmdline_exit(['undelete', 'oid'], code=2)
         self.check_cmdline_exit(['undelete', 'uuid'], code=2)
 

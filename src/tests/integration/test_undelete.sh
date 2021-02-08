@@ -58,7 +58,7 @@ function test_undelete
     echo "**** TEST UNDELETE BY UUID ****"
     $phobos put --family dir /etc/hosts oid1 ||
         error "Object should be put"
-    $phobos object delete oid1 ||
+    $phobos delete oid1 ||
         error "Object should be deleted"
 
     uuid=$($phobos object list --deprecated --output uuid oid1)
@@ -77,7 +77,7 @@ function test_undelete
     echo "**** TEST UNDELETE BY OID ****"
     $phobos put --family dir /etc/hosts oid2 ||
         error "Object should be put"
-    $phobos object delete oid2 ||
+    $phobos delete oid2 ||
         error "Object should be deleted"
 
     $phobos undelete oid oid2 ||
@@ -94,11 +94,11 @@ function test_undelete
     #
     #$phobos put --family dir /etc/hosts oid3 ||
     #    error "Object should be put"
-    #$phobos object delete oid3 ||
+    #$phobos delete oid3 ||
     #    error "Object should be deleted"
     #$phobos put --family dir /etc/hosts oid3 ||
     #    error "Object should be put"
-    #$phobos object delete oid3 ||
+    #$phobos delete oid3 ||
     #    error "Object should be deleted"
     #$phobos undelete oid oid3 &&
     #    error "Undeleting an oid with two deprecated uuid should failed"

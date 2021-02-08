@@ -59,7 +59,7 @@ function test_delete
 {
     $phobos put --family dir /etc/hosts oid1 ||
         error "Object should be put"
-    $phobos object delete oid1 ||
+    $phobos delete oid1 ||
         error "Object should be deleted"
     $phobos get oid1 test_tmp &&
         error "Object should not be got"

@@ -656,7 +656,7 @@ class ObjectListOptHandler(PatternListOptHandler):
                                  "attributes for the 'output' option "
                                  "{" + " ".join(ext_attrs) + "}")
 
-class ObjectDeleteOptHandler(BaseOptHandler):
+class DeleteOptHandler(BaseOptHandler):
     """Delete objects handler."""
 
     label = 'delete'
@@ -664,7 +664,7 @@ class ObjectDeleteOptHandler(BaseOptHandler):
             'add it to deprecated objects'
 
     def __enter__(self):
-        pass
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         pass
@@ -672,10 +672,22 @@ class ObjectDeleteOptHandler(BaseOptHandler):
     @classmethod
     def add_options(cls, parser):
         """Add command options."""
-        super(ObjectDeleteOptHandler, cls).add_options(parser)
+        super(DeleteOptHandler, cls).add_options(parser)
 
         parser.add_argument('oids', nargs='+',
                             help='Object IDs to delete')
+        parser.set_defaults(verb=cls.label)
+
+    def exec_delete(self):
+        """Delete objects."""
+
+        client = UtilClient()
+        try:
+            client.object_delete(self.params.get('oids'))
+        except EnvironmentError as err:
+            self.logger.error("Cannot delete objects: %s",
+                              env_error_format(err))
+            sys.exit(os.EX_DATAERR)
 
 class UuidOptHandler(BaseOptHandler):
     """Handler to select objects with a list of uuids"""
@@ -831,7 +843,6 @@ class ObjectOptHandler(BaseResourceOptHandler):
     descr = 'handle objects'
     verbs = [
         ObjectListOptHandler,
-        ObjectDeleteOptHandler,
     ]
 
     def exec_list(self):
@@ -868,17 +879,6 @@ class ObjectOptHandler(BaseResourceOptHandler):
             client.list_free(objs, len(objs))
         except EnvironmentError as err:
             self.logger.error("Cannot list objects: %s", env_error_format(err))
-            sys.exit(os.EX_DATAERR)
-
-    def exec_delete(self):
-        """Delete objects."""
-
-        client = UtilClient()
-        try:
-            client.object_delete(self.params.get('oids'))
-        except EnvironmentError as err:
-            self.logger.error("Cannot delete objects: %s",
-                              env_error_format(err))
             sys.exit(os.EX_DATAERR)
 
 class DeviceOptHandler(BaseResourceOptHandler):
@@ -1413,6 +1413,7 @@ class PhobosActionContext(object):
         ObjectOptHandler,
         ExtentOptHandler,
         LibOptHandler,
+        DeleteOptHandler,
         UndeleteOptHandler,
 
         # Store command interfaces
