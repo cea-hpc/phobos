@@ -75,7 +75,7 @@ struct io_adapter {
 
     int (*ioa_get)(const char *id, const char *tag, struct pho_io_descr *iod);
 
-    int (*ioa_del)(const char *id, const char *tag, struct pho_ext_loc *loc);
+    int (*ioa_del)(struct pho_ext_loc *loc);
 
     int (*ioa_open)(const char *id, const char *tag, struct pho_io_descr *iod,
                     bool is_put);
@@ -158,19 +158,16 @@ static inline int ioa_get(const struct io_adapter *ioa, const char *id,
  * All I/O adapters must implement this call.
  *
  * \param[in]  ioa  Suitable I/O adapter for the media.
- * \param[in]  id   Null-terminated object ID.
- * \param[in]  tag  Null-terminated extent tag (may be NULL).
  * \param[in]  loc  Location of the extent to remove. The call may set
  *                  loc->extent.address if it is missing.
  *
  * \return 0 on success, negative error code on failure.
  */
-static inline int ioa_del(const struct io_adapter *ioa, const char *id,
-                          const char *tag, struct pho_ext_loc *loc)
+static inline int ioa_del(const struct io_adapter *ioa, struct pho_ext_loc *loc)
 {
     assert(ioa != NULL);
     assert(ioa->ioa_del != NULL);
-    return ioa->ioa_del(id, tag, loc);
+    return ioa->ioa_del(loc);
 }
 
 /**

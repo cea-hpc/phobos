@@ -587,21 +587,14 @@ static int pho_ltfs_sync(const char *root_path)
     return 0;
 }
 
-static int pho_posix_del(const char *id, const char *tag,
-                         struct pho_ext_loc *loc)
+static int pho_posix_del(struct pho_ext_loc *loc)
 {
     int   rc = 0;
     char *path;
     ENTRY;
 
-    if (loc->extent->address.buff == NULL) {
-        pho_warn("Object has no address stored in database"
-                 " (generating it from object id)");
-        rc = pho_posix_set_addr(id, tag, loc->extent->addr_type,
-                                &loc->extent->address);
-        if (rc)
-            return rc;
-    }
+    if (loc->extent->address.buff == NULL)
+        LOG_RETURN(-EINVAL, "Object has no address stored in database");
 
     path = pho_posix_fullpath(loc);
     if (path == NULL)
@@ -727,8 +720,7 @@ static int pho_posix_open(const char *id, const char *tag,
     /* generate entry address, if it is not already set */
     if (!is_ext_addr_set(iod->iod_loc)) {
         if (!is_put)
-            pho_warn("Object has no address stored in database"
-                     " (generating it from object id)");
+            LOG_RETURN(-EINVAL, "Object has no address stored in database");
 
         rc = pho_posix_set_addr(id, tag, iod->iod_loc->extent->addr_type,
                                 &iod->iod_loc->extent->address);
