@@ -41,7 +41,7 @@
 
 #define MAX_NULL_WRITE_TRY 10
 
-static int pho_posix_open(const char *id, const char *tag,
+static int pho_posix_open(const char *extent_key, const char *extent_desc,
                           struct pho_io_descr *iod, bool is_put);
 static int pho_posix_close(struct pho_io_descr *iod);
 
@@ -144,12 +144,12 @@ free_str:
 }
 
 /** allocate the desired path length, and call the path mapper */
-static int build_addr_path(const char *id, const char *tag,
+static int build_addr_path(const char *extent_key, const char *extent_desc,
                            struct pho_buff *addr)
 {
     int rc;
 
-    addr->size = strlen(id) + (tag ? strlen(tag) : 0) + 1;
+    addr->size = strlen(extent_desc) + strlen(extent_key) + 1;
     /* don't exceed PATH_MAX in any case */
     if (addr->size > PATH_MAX)
         addr->size = PATH_MAX;
@@ -158,7 +158,7 @@ static int build_addr_path(const char *id, const char *tag,
     if (addr->buff == NULL)
         return -ENOMEM;
 
-    rc = pho_mapper_clean_path(id, tag, addr->buff, addr->size);
+    rc = pho_mapper_clean_path(extent_key, extent_desc, addr->buff, addr->size);
     if (rc) {
         free(addr->buff);
         addr->buff = NULL;
@@ -168,7 +168,7 @@ static int build_addr_path(const char *id, const char *tag,
 }
 
 /** allocate the desired path length, and call the hash-based mapper */
-static int build_addr_hash1(const char *id, const char *tag,
+static int build_addr_hash1(const char *extent_key, const char *extent_desc,
                             struct pho_buff *addr)
 {
     int rc;
@@ -179,7 +179,7 @@ static int build_addr_hash1(const char *id, const char *tag,
     if (addr->buff == NULL)
         return -ENOMEM;
 
-    rc = pho_mapper_hash1(id, tag, addr->buff, addr->size);
+    rc = pho_mapper_hash1(extent_key, extent_desc, addr->buff, addr->size);
     if (rc) {
         free(addr->buff);
         addr->buff = NULL;
@@ -189,15 +189,15 @@ static int build_addr_hash1(const char *id, const char *tag,
 }
 
 /** set address field for a POSIX extent */
-static int pho_posix_set_addr(const char *id, const char *tag,
+static int pho_posix_set_addr(const char *extent_key, const char *extent_desc,
                               enum address_type addrtype,
                               struct pho_buff *addr)
 {
     switch (addrtype) {
     case PHO_ADDR_PATH:
-        return build_addr_path(id, tag, addr);
+        return build_addr_path(extent_key, extent_desc, addr);
     case PHO_ADDR_HASH1:
-        return build_addr_hash1(id, tag, addr);
+        return build_addr_hash1(extent_key, extent_desc, addr);
     default:
         return -EINVAL;
     }
@@ -446,7 +446,7 @@ static int pho_posix_md_get(const char *path, struct pho_attrs *attrs)
     return rc;
 }
 
-static int pho_posix_put(const char *id, const char *tag,
+static int pho_posix_put(const char *extent_key, const char *extent_desc,
                          struct pho_io_descr *iod)
 {
     int                  rc = 0, rc2 = 0;
@@ -455,7 +455,7 @@ static int pho_posix_put(const char *id, const char *tag,
     ENTRY;
 
     /* open */
-    rc = pho_posix_open(id, tag, iod, true);
+    rc = pho_posix_open(extent_key, extent_desc, iod, true);
     if (rc || iod->iod_flags & PHO_IO_MD_ONLY)
         return rc;
 
@@ -498,7 +498,7 @@ clean:
     return rc;
 }
 
-static int pho_posix_get(const char *id, const char *tag,
+static int pho_posix_get(const char *extent_key, const char *extent_desc,
                          struct pho_io_descr *iod)
 {
     int                  rc = 0, rc2 = 0;
@@ -506,7 +506,7 @@ static int pho_posix_get(const char *id, const char *tag,
 
     ENTRY;
 
-    rc = pho_posix_open(id, tag, iod, false);
+    rc = pho_posix_open(extent_key, extent_desc, iod, false);
     if (rc || iod->iod_flags & PHO_IO_MD_ONLY)
         return rc;
 
@@ -709,7 +709,7 @@ free_io_ctx:
  * If (iod->iod_flags & PHO_IO_MD_ONLY), we only get/set attr, no iod_ctx is
  * allocated and there is no need to close.
  */
-static int pho_posix_open(const char *id, const char *tag,
+static int pho_posix_open(const char *extent_key, const char *extent_desc,
                           struct pho_io_descr *iod, bool is_put)
 {
     int                      rc = 0;
@@ -722,7 +722,8 @@ static int pho_posix_open(const char *id, const char *tag,
         if (!is_put)
             LOG_RETURN(-EINVAL, "Object has no address stored in database");
 
-        rc = pho_posix_set_addr(id, tag, iod->iod_loc->extent->addr_type,
+        rc = pho_posix_set_addr(extent_key, extent_desc,
+                                iod->iod_loc->extent->addr_type,
                                 &iod->iod_loc->extent->address);
         if (rc)
             return rc;

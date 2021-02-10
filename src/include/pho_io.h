@@ -71,19 +71,15 @@ struct pho_io_descr {
  * returned by the functions.
  */
 struct io_adapter {
-    int (*ioa_put)(const char *id, const char *tag, struct pho_io_descr *iod);
-
-    int (*ioa_get)(const char *id, const char *tag, struct pho_io_descr *iod);
-
+    int (*ioa_put)(const char *extent_key, const char *extent_desc,
+                   struct pho_io_descr *iod);
+    int (*ioa_get)(const char *extent_key, const char *extent_desc,
+                   struct pho_io_descr *iod);
     int (*ioa_del)(struct pho_ext_loc *loc);
-
-    int (*ioa_open)(const char *id, const char *tag, struct pho_io_descr *iod,
-                    bool is_put);
-
+    int (*ioa_open)(const char *extent_key, const char *extent_desc,
+                    struct pho_io_descr *iod, bool is_put);
     int (*ioa_write)(struct pho_io_descr *iod, const void *buf, size_t count);
-
     int (*ioa_close)(struct pho_io_descr *iod);
-
     int (*ioa_medium_sync)(const char *root_path);
 };
 
@@ -107,20 +103,20 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa);
  * iod_flags    Bitmask of PHO_IO_* flags.
  *
  *
- * \param[in]       ioa     Suitable I/O adapter for the media
- * \param[in]       id      Null-terminated object ID
- * \param[in]       tag     Null-terminated extent tag (may be NULL)
- *
- * \param[in,out]   iod     I/O descriptor (see above)
+ * \param[in]       ioa         Suitable I/O adapter for the media
+ * \param[in]       extent_key  Null-terminated extent key, composed as
+ *                              "version.extent_tag.uuid"
+ * \param[in]       extent_desc Null-terminated extent description
+ * \param[in,out]   iod         I/O descriptor (see above)
  *
  * \return 0 on success, negative error code on failure
  */
-static inline int ioa_put(const struct io_adapter *ioa, const char *id,
-                          const char *tag, struct pho_io_descr *iod)
+static inline int ioa_put(const struct io_adapter *ioa, const char *extent_key,
+                          const char *extent_desc, struct pho_io_descr *iod)
 {
     assert(ioa != NULL);
     assert(ioa->ioa_put != NULL);
-    return ioa->ioa_put(id, tag, iod);
+    return ioa->ioa_put(extent_key, extent_desc, iod);
 }
 
 /**
@@ -138,19 +134,20 @@ static inline int ioa_put(const struct io_adapter *ioa, const char *id,
  * iod_flags    Bitmask of PHO_IO_* flags
  *
  *
- * \param[in]       ioa     Suitable I/O adapter for the media
- * \param[in]       id      Null-terminated object ID
- * \param[in]       tag     Null-terminated extent tag (may be NULL)
- * \param[in,out]   iod     I/O descriptor (see above)
+ * \param[in]       ioa         Suitable I/O adapter for the media
+ * \param[in]       extent_key  Null-terminated extent key, composed as
+ *                              "version.extent_tag.uuid"
+ * \param[in]       extent_desc Null-terminated extent description
+ * \param[in,out]   iod         I/O descriptor (see above)
  *
  * \return 0 on success, negative error code on failure
  */
-static inline int ioa_get(const struct io_adapter *ioa, const char *id,
-                          const char *tag, struct pho_io_descr *iod)
+static inline int ioa_get(const struct io_adapter *ioa, const char *extent_key,
+                          const char *extent_desc, struct pho_io_descr *iod)
 {
     assert(ioa != NULL);
     assert(ioa->ioa_get != NULL);
-    return ioa->ioa_get(id, tag, iod);
+    return ioa->ioa_get(extent_key, extent_desc, iod);
 }
 
 /**
@@ -211,23 +208,23 @@ static inline int ioa_medium_sync(const struct io_adapter *ioa,
  * iod_flags    Bitmask of PHO_IO_* flags.
  *
  *
- * \param[in]       ioa     Suitable I/O adapter for the media
- * \param[in]       id      Null-terminated object ID
- * \param[in]       tag     Null-terminated extent tag (may be NULL)
- *
- * \param[in,out]   iod     I/O descriptor (see above)
- * \param[in]       is_put  Must be true when opening for a put/write and false
- *                          when opening for a get/read
+ * \param[in]       ioa         Suitable I/O adapter for the media
+ * \param[in]       extent_key  Null-terminated extent key, composed as
+ *                              "version.extent_tag.uuid"
+ * \param[in]       extent_desc Null-terminated extent description
+ * \param[in,out]   iod         I/O descriptor (see above)
+ * \param[in]       is_put      Must be true when opening for a put/write and
+ *                              false when opening for a get/read
  *
  * \return 0 on success, negative error code on failure
  */
-static inline int ioa_open(const struct io_adapter *ioa, const char *id,
-                          const char *tag, struct pho_io_descr *iod,
-                          bool is_put)
+static inline int ioa_open(const struct io_adapter *ioa, const char *extent_key,
+                           const char *extent_desc, struct pho_io_descr *iod,
+                           bool is_put)
 {
     assert(ioa != NULL);
     assert(ioa->ioa_open != NULL);
-    return ioa->ioa_open(id, tag, iod, is_put);
+    return ioa->ioa_open(extent_key, extent_desc, iod, is_put);
 }
 
 /**

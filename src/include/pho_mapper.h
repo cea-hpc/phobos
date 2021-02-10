@@ -33,19 +33,20 @@
 /**
  * Length of the automatically generated prefix.
  */
-#define PHO_MAPPER_PREFIX_LENGTH    (sizeof("aa/bb/aabbccdd_") - 1)
+#define PHO_MAPPER_PREFIX_LENGTH    (sizeof("aa/bb/") - 1)
 
 
 /**
- * Build extent path as a cleaned and truncated version of obj_id + ext_tag.
+ * Build extent path as a cleaned version of ext_desc + ext_key where ext_desc
+ * can be truncated if too long.
  */
-int pho_mapper_clean_path(const char *obj_id, const char *ext_tag,
+int pho_mapper_clean_path(const char *ext_key, const char *ext_desc,
                           char *dst_path, size_t dst_size);
 /**
- * Build extent path using a hash, according to obj_id and ext_tag.
+ * Build extent path using a hash, according to ext_key and ext_desc.
  * See mapper.c for more explanations about how the path is generated.
  */
-int pho_mapper_hash1(const char *obj_id, const char *ext_tag, char *dst_path,
+int pho_mapper_hash1(const char *ext_key, const char *ext_desc, char *dst_path,
                      size_t dst_size);
 
 /**

@@ -36,12 +36,12 @@
 #include <errno.h>
 #include <ctype.h>
 
-/* Long string, 240 * 'a' */
-#define _240_TIMES_A    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\
+/* Long string, 249 * 'a' */
+#define _249_TIMES_A    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\
                         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\
                         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\
                         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\
-                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 static inline int is_prefix_chr_valid(int c)
 {
@@ -77,10 +77,10 @@ static int is_hash1_path_valid(const char *path)
     int     dots = 0;
     int     i;
 
-    if (path_len < 15 || path_len > NAME_MAX)
+    if (path_len < 9 || path_len > NAME_MAX)
         return 0;
 
-    /* Path are of the form: '5f/e7/5fe739a2_<obj>[.<tag>]'
+    /* Path are of the form: '5f/e7/<desc>.<key>'
      * Check the first (hashed) part first */
     for (i = 0; i < PHO_MAPPER_PREFIX_LENGTH; i++) {
         if (!is_prefix_chr_valid(path[i]))
@@ -88,8 +88,8 @@ static int is_hash1_path_valid(const char *path)
     }
 
     for (i = 6; i < path_len; i++) {
-        /* hackish check, no more that one '.' is allowed */
-        if (path[i] == '.' && dots++)
+        /* hackish check, no more that three '.' is allowed */
+        if (path[i] == '.' && ++dots > 3)
             return 0;
 
         if (path[i] != '.' && !pho_mapper_chr_valid(path[i]))
@@ -109,8 +109,8 @@ static int is_clean_path_valid(const char *path)
         return 0;
 
     for (i = 0; i < path_len; i++) {
-        /* hackish check, no more that one '.' is allowed */
-        if (path[i] == '.' && dots++)
+        /* hackish check, no more that three '.' is allowed */
+        if (path[i] == '.' && ++dots > 3)
             return 0;
 
         if (path[i] != '.' && !pho_mapper_chr_valid(path[i]))
@@ -123,7 +123,7 @@ static int is_clean_path_valid(const char *path)
 
 #define SAFE_STR(o) ((o) != NULL ? (o) : "null")
 
-static int test_build_path(const char *obj, const char *tag)
+static int test_build_path(const char *ext_desc, const char *ext_key)
 {
     char    buff[NAME_MAX + 1];
     size_t  buff_len = sizeof(buff);
@@ -132,12 +132,12 @@ static int test_build_path(const char *obj, const char *tag)
     /* poison it */
     memset(buff, '?', sizeof(buff));
 
-    rc = pho_mapper_hash1(obj, tag, buff, buff_len);
+    rc = pho_mapper_hash1(ext_key, ext_desc, buff, buff_len);
     if (rc)
         return rc;
 
-    pho_info("HASH1 MAPPER: o='%s', t='%s': '%s'",
-             SAFE_STR(obj), SAFE_STR(tag), buff);
+    pho_info("HASH1 MAPPER: d='%s', k='%s': '%s'",
+             SAFE_STR(ext_desc), SAFE_STR(ext_key), buff);
 
     if (!is_hash1_path_valid(buff)) {
         pho_error(EINVAL, "Invalid hash1 path crafted: '%s'", buff);
@@ -147,12 +147,12 @@ static int test_build_path(const char *obj, const char *tag)
     /* poison it */
     memset(buff, '?', sizeof(buff));
 
-    rc = pho_mapper_clean_path(obj, tag, buff, buff_len);
+    rc = pho_mapper_clean_path(ext_key, ext_desc, buff, buff_len);
     if (rc)
         return rc;
 
-    pho_info("PATH MAPPER: o='%s' t='%s': '%s'",
-             SAFE_STR(obj), SAFE_STR(tag), buff);
+    pho_info("PATH MAPPER: d='%s' k='%s': '%s'",
+             SAFE_STR(ext_desc), SAFE_STR(ext_key), buff);
 
     if (!is_clean_path_valid(buff)) {
         pho_error(EINVAL, "Invalid clean path crafted: '%s'", buff);
@@ -163,7 +163,7 @@ static int test_build_path(const char *obj, const char *tag)
 }
 
 
-typedef int (*pho_hash_func_t)(const char *obj_id, const char *ext_tag,
+typedef int (*pho_hash_func_t)(const char *ext_key, const char *ext_desc,
                                char *dst_path, size_t dst_size);
 
 static int test0(void *hint)
@@ -193,7 +193,7 @@ static int test4(void *hint)
 
 static int test5(void *hint)
 {
-    return test_build_path("test", _240_TIMES_A);
+    return test_build_path("test", _249_TIMES_A);
 }
 
 static int test6a(void *hint)
@@ -211,21 +211,6 @@ static int test6c(void *hint)
     return test_build_path("test\x07", "p1");
 }
 
-static int test6d(void *hint)
-{
-    return test_build_path("test", "\x07p1");
-}
-
-static int test6e(void *hint)
-{
-    return test_build_path("test", "p\x07z");
-}
-
-static int test6f(void *hint)
-{
-    return test_build_path("test", "p1\x07");
-}
-
 static int test7a(void *hint)
 {
     return test_build_path("te<st", "p1");
@@ -241,39 +226,9 @@ static int test7c(void *hint)
     return test_build_path("test.", "p1");
 }
 
-static int test8a(void *hint)
-{
-    return test_build_path("test", "p|1");
-}
-
-static int test8b(void *hint)
-{
-    return test_build_path("test", "<<{p1");
-}
-
-static int test8c(void *hint)
-{
-    return test_build_path("test", ".p1");
-}
-
-static int test9(void *hint)
-{
-    return test_build_path(_240_TIMES_A, "");
-}
-
-static int test10(void *hint)
-{
-    return test_build_path(_240_TIMES_A, NULL);
-}
-
 static int test11(void *hint)
 {
-    return test_build_path(_240_TIMES_A _240_TIMES_A, "p11");
-}
-
-static int test12(void *hint)
-{
-    return test_build_path(_240_TIMES_A, _240_TIMES_A);
+    return test_build_path(_249_TIMES_A _249_TIMES_A, "p11");
 }
 
 static int test13(void *hint)
@@ -335,19 +290,19 @@ static void string_of_char(char *s, int len, int max)
         s[len + 1] = 'Z';
 }
 
-/** test corner cases around NAME_MAX: 253 to 257 + various tags */
+/** test corner cases around NAME_MAX: 253 to 257 + various keys */
 static int test17(void *hint)
 {
     int   i, j, rc;
     char  buff[NAME_MAX+3];
-    char *tag[] = {NULL, "a", "aa", "aaa"};
+    static const char * const key[] = {"a", "aa", "aaa"};
 
     for (i = NAME_MAX - 3; i <= NAME_MAX + 2; i++) {
-        for (j = 0; j < sizeof(tag)/sizeof(*tag); j++) {
+        for (j = 0; j < sizeof(key)/sizeof(*key); j++) {
             string_of_char(buff, i, sizeof(buff));
-            pho_info("strlen(obj_id)=%zu, tag=%s",
-                     strlen(buff), SAFE_STR(tag[j]));
-            rc = test_build_path(buff, tag[j]);
+            pho_info("strlen(obj_id)=%zu, key=%s",
+                     strlen(buff), SAFE_STR(key[j]));
+            rc = test_build_path(buff, key[j]);
             if (rc)
                 return rc;
         }
@@ -359,71 +314,44 @@ int main(int argc, char **argv)
 {
     test_env_initialize();
 
-    run_test("Test 0: Simple name crafting",
+    run_test("Test 0: Simple path crafting",
              test0, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 1: No tag (empty)",
-             test1, NULL, PHO_TEST_SUCCESS);
+    run_test("Test 1: No key (empty) (INVALID)",
+             test1, NULL, PHO_TEST_FAILURE);
 
-    run_test("Test 2: No tag (null)",
-             test2, NULL, PHO_TEST_SUCCESS);
+    run_test("Test 2: No key (null) (INVALID)",
+             test2, NULL, PHO_TEST_FAILURE);
 
-    run_test("Test 3: No name (empty) (INVALID)",
+    run_test("Test 3: No desc (empty) (INVALID)",
              test3, NULL, PHO_TEST_FAILURE);
 
-    run_test("Test 4: No name (null) (INVALID)",
+    run_test("Test 4: No desc (null) (INVALID)",
              test4, NULL, PHO_TEST_FAILURE);
 
-    run_test("Test 5: Long tag (INVALID)",
+    run_test("Test 5: Long key (INVALID)",
              test5, NULL, PHO_TEST_FAILURE);
 
-    run_test("Test 6a: Non-printable chars in name (beginning)",
+    run_test("Test 6a: Non-printable chars in desc (beginning)",
              test6a, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 6b: Non-printable chars in name (middle)",
+    run_test("Test 6b: Non-printable chars in desc (middle)",
              test6b, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 6c: Non-printable chars in name (end)",
+    run_test("Test 6c: Non-printable chars in desc (end)",
              test6c, NULL, PHO_TEST_SUCCESS);
-
-    run_test("Test 6d: Non-printable chars in tag (beginning)",
-             test6d, NULL, PHO_TEST_SUCCESS);
-
-    run_test("Test 6e: Non-printable chars in tag (middle)",
-             test6e, NULL, PHO_TEST_SUCCESS);
-
-    run_test("Test 6f: Non-printable chars in tag (end)",
-             test6f, NULL, PHO_TEST_SUCCESS);
 
     run_test("Test 7a: Annoying shell specials chars",
              test7a, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 7b: clean multiple chars from name",
+    run_test("Test 7b: clean multiple chars from desc",
              test7b, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 7c: name ending with '.' separator",
+    run_test("Test 7c: desc ending with '.' separator",
              test7c, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 8a: clean special chars from middle of tag",
-             test8a, NULL, PHO_TEST_SUCCESS);
-
-    run_test("Test 8b clean chars from beginning of tag",
-             test8b, NULL, PHO_TEST_SUCCESS);
-
-    run_test("Test 8c: clean tag starting with '.' separator",
-             test8c, NULL, PHO_TEST_SUCCESS);
-
-    run_test("Test 9: Long (truncated) name, no tag (empty)",
-             test9, NULL, PHO_TEST_SUCCESS);
-
-    run_test("Test 10: Long (truncated) name, no tag (NULL)",
-             test10, NULL, PHO_TEST_SUCCESS);
-
-    run_test("Test 11: Long (truncated) name",
+    run_test("Test 11: Long (truncated) desc",
              test11, NULL, PHO_TEST_SUCCESS);
-
-    run_test("Test 12: long (truncated) name, long (invalid tag)",
-             test12, NULL, PHO_TEST_FAILURE);
 
     run_test("Test 13a: make sure fields do not collide unexpectedly (hash1)",
              test13, pho_mapper_hash1, PHO_TEST_SUCCESS);
@@ -447,7 +375,7 @@ int main(int argc, char **argv)
 
     run_test("Test 17a: corner cases around NAME_MAX (hash1)",
              test17, pho_mapper_hash1, PHO_TEST_SUCCESS);
-    run_test("Test 17b: orner cases around NAME_MAX (path)",
+    run_test("Test 17b: corner cases around NAME_MAX (path)",
              test17, pho_mapper_clean_path, PHO_TEST_SUCCESS);
 
 

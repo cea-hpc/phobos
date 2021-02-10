@@ -42,6 +42,17 @@ void pho_id_copy(struct pho_id *id_dest, const struct pho_id *id_src);
 /** check if two pho_id are equal */
 bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2);
 
+/**
+ * Build a unique extent identifier (used for path generation) from object uuid,
+ * version and extent tag.
+ *
+ * This is the caller responsability to free key.
+ *
+ * The function returns 0 if success, -ENOMEM if failure and key is NULL.
+ */
+int build_extent_key(const char *uuid, int version, const char *extent_tag,
+                     char **key);
+
 /** duplicate a dev_info structure */
 struct dev_info *dev_info_dup(const struct dev_info *dev);
 
