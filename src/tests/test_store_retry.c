@@ -64,6 +64,7 @@ static void reinit_xfer(struct pho_xfer_desc *xfer, const char *path,
                         const char *objpath, enum pho_xfer_op op)
 {
     free(xfer->xd_objid);
+    free(xfer->xd_objuuid);
     close(xfer->xd_fd);
 
     xfer_desc_open_path(xfer, path, op, 0);
@@ -303,6 +304,7 @@ int main(int argc, char **argv)
 
     free(dev.rsc.model);
     free(xfer.xd_objid);
+    free(xfer.xd_objuuid);
     xfer_desc_close_fd(&xfer);
     phobos_admin_fini(&adm);
     dss_fini(&dss);

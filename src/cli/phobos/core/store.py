@@ -117,38 +117,18 @@ class PutParams(namedtuple('PutParams', 'family layout tags alias')):
     __slots__ = ()
 PutParams.__new__.__defaults__ = (None,) * len(PutParams._fields)
 
-class XferUndelParams(Structure): # pylint: disable=too-few-public-methods
-    """Phobos UNDEL parameters of the XferDescriptor."""
-    _fields_ = [
-        ("_uuid", c_char_p),
-    ]
-
-    def __init__(self, uuid):
-        super().__init__()
-        self.uuid = uuid
-
-    @property
-    def uuid(self):
-        """Wrapper to get uuid"""
-        return self._uuid.decode('utf-8') if self._uuid else None
-
-    @uuid.setter
-    def uuid(self, val):
-        """Wrapper to set uuid"""
-        # pylint: disable=attribute-defined-outside-init
-        self._uuid = val.encode('utf-8') if val else None
-
 class XferOpParams(Union): # pylint: disable=too-few-public-methods
     """Phobos operation parameters of the XferDescriptor."""
     _fields_ = [
         ("put", XferPutParams),
-        ("undel", XferUndelParams),
     ]
 
 class XferDescriptor(Structure):
     """phobos struct xfer_descriptor."""
     _fields_ = [
         ("_xd_objid", c_char_p),
+        ("_xd_objuuid", c_char_p),
+        ("xd_version", c_int),
         ("xd_op", c_int),
         ("xd_fd", c_int),
         ("xd_attrs", PhoAttrs),
@@ -174,6 +154,17 @@ class XferDescriptor(Structure):
         """Wrapper to set xd_objid"""
         # pylint: disable=attribute-defined-outside-init
         self._xd_objid = val.encode('utf-8') if val else None
+
+    @property
+    def xd_objuuid(self):
+        """Wrapper to get xd_objuuid"""
+        return self._xd_objuuid.decode('utf-8') if self._xd_objuuid else None
+
+    @xd_objuuid.setter
+    def xd_objuuid(self, val):
+        """Wrapper to set xd_objuuid"""
+        # pylint: disable=attribute-defined-outside-init
+        self._xd_objuuid = val.encode('utf-8') if val else None
 
     def creat_flags(self):
         """
@@ -402,7 +393,7 @@ class UtilClient:
             xfers[i].xd_objid = oid
 
         for i, uuid in enumerate(uuids):
-            xfers[i + len(oids)].xd_params.undel.uuid = uuid
+            xfers[i + len(oids)].xd_objuuid = uuid
 
         rc = LIBPHOBOS.phobos_undelete(xfers, n_xfers)
         if rc:

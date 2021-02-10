@@ -286,6 +286,9 @@ static int object_md_get(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         LOG_GOTO(out_free, rc, "Cannot convert attributes of objid:'%s'",
                  xfer->xd_objid);
 
+    xfer->xd_objuuid = strdup(obj->uuid);
+    xfer->xd_version = obj->version;
+
 out_free:
     dss_res_free(obj, obj_cnt);
 filt_free:
@@ -379,7 +382,7 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 {
     struct object_info obj = {
         .oid = xfer->xd_objid,
-        .uuid = xfer->xd_params.undel.uuid,
+        .uuid = xfer->xd_objuuid,
     };
     int rc;
 
@@ -430,12 +433,12 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
 static bool is_uuid_arg(struct pho_xfer_desc *xfer)
 {
     return xfer->xd_op == PHO_XFER_OP_UNDEL &&
-           xfer->xd_params.undel.uuid != NULL;
+           xfer->xd_objuuid != NULL;
 }
 
 static const char *oid_or_uuid_val(struct pho_xfer_desc *xfer)
 {
-    return is_uuid_arg(xfer) ? xfer->xd_params.undel.uuid : xfer->xd_objid;
+    return is_uuid_arg(xfer) ? xfer->xd_objuuid : xfer->xd_objid;
 }
 
 /**
@@ -762,8 +765,8 @@ static int store_perform_xfers(struct phobos_handle *pho)
                 pho_error(rc, "Error while undeleting oid: '%s', uuid: '%s'",
                           pho->xfers[i].xd_objid ? pho->xfers[i].xd_objid :
                               "NULL",
-                          pho->xfers[i].xd_params.undel.uuid ?
-                              pho->xfers[i].xd_params.undel.uuid : "NULL");
+                          pho->xfers[i].xd_objuuid ?
+                              pho->xfers[i].xd_objuuid : "NULL");
             }
             store_end_xfer(pho, i, rc);
         }
@@ -910,4 +913,5 @@ void pho_xfer_desc_destroy(struct pho_xfer_desc *xfer)
     if (xfer->xd_op == PHO_XFER_OP_PUT)
         tags_free(&xfer->xd_params.put.tags);
     pho_attrs_free(&xfer->xd_attrs);
+    free(xfer->xd_objuuid);
 }

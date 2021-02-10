@@ -95,18 +95,10 @@ struct pho_xfer_put_params {
 };
 
 /**
- * The only UNDEL parameter is the uuid of the targeted object.
- */
-struct pho_xfer_undel_params {
-    char *uuid; /**< UUID to undelete */
-};
-
-/**
  * Operation parameters.
  */
 union pho_xfer_params {
     struct pho_xfer_put_params put;     /**< PUT parameters. */
-    struct pho_xfer_undel_params undel; /**< UNDEL parameters. */
 };
 
 /**
@@ -121,6 +113,8 @@ union pho_xfer_params {
  */
 struct pho_xfer_desc {
     char                   *xd_objid;  /**< Object ID to read or write. */
+    char                   *xd_objuuid;/**< Object UUID to read or write. */
+    int                     xd_version;/**< Object version. */
     enum pho_xfer_op        xd_op;     /**< Operation to perform. */
     int                     xd_fd;     /**< FD of the source/destination. */
     struct pho_attrs        xd_attrs;  /**< User defined attributes. */
