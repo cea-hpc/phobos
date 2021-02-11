@@ -827,6 +827,7 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
 
     for (i = 0; i < n; i++) {
         xfers[i].xd_op = PHO_XFER_OP_PUT;
+        xfers[i].xd_rc = 0;
 
         rc = fill_put_params(&xfers[i]);
         if (rc)
@@ -841,8 +842,10 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
 {
     size_t i;
 
-    for (i = 0; i < n; i++)
+    for (i = 0; i < n; i++) {
         xfers[i].xd_op = PHO_XFER_OP_GET;
+        xfers[i].xd_rc = 0;
+    }
 
     return phobos_xfer(xfers, n, cb, udata);
 }
@@ -852,8 +855,10 @@ int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
 {
     size_t i;
 
-    for (i = 0; i < n; i++)
+    for (i = 0; i < n; i++) {
         xfers[i].xd_op = PHO_XFER_OP_GETMD;
+        xfers[i].xd_rc = 0;
+    }
 
     return phobos_xfer(xfers, n, cb, udata);
 }
@@ -862,8 +867,10 @@ int phobos_object_delete(struct pho_xfer_desc *xfers, size_t num_xfers)
 {
     size_t i;
 
-    for (i = 0; i < num_xfers; i++)
+    for (i = 0; i < num_xfers; i++) {
         xfers[i].xd_op = PHO_XFER_OP_DEL;
+        xfers[i].xd_rc = 0;
+    }
 
     return phobos_xfer(xfers, num_xfers, NULL, NULL);
 }
@@ -872,8 +879,10 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers)
 {
     size_t i;
 
-    for (i = 0; i < num_xfers; i++)
+    for (i = 0; i < num_xfers; i++) {
         xfers[i].xd_op = PHO_XFER_OP_UNDEL;
+        xfers[i].xd_rc = 0;
+    }
 
     return phobos_xfer(xfers, num_xfers, NULL, NULL);
 }
