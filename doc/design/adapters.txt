@@ -1,12 +1,17 @@
 = Adapters purpose =
 
-Phobos core addresses objects using a unique identifier which is an arbitrary
-string.
-Objects can be stored as multiple parts called extents.
+Phobos core addresses objects using the couple (uuid, version).
 
-Extents of a given file are identified on storage backends using the identifier
-of the object + an optional tag to identify the extent of the object (e.g. "p2"
-for part 2).
+According to the chosen layout, objects can be stored as multiple parts called
+extents. To the unique key addressing an object, Phobos adds an extent tag to
+identify an extent of an object. For instance, this extent tag could contain
+the name and parameters of the layout and the number of this extent: r1-2_0 for
+the extent number 0 of a raid 1 layout with 2 copies. An extent is uniquely
+identified by the triplet (uuid, version, extent_tag).
+
+For each extent, phobos builds the extent_key string: version.extent_tag.uuid .
+This extent_key is unique and allows the storage backend to generate a unique
+'address' to store the extent.
 
 An adapter is a software layer to access a given type of storage backend
 (POSIX filesystem, tar file, object store, ...). It abstracts the way
@@ -16,28 +21,32 @@ entries are addressed, organized, and accessed in this backend.
 
 == General requirements ==
 
-- An adapter must be able to locate an extent by its phobos identifier + its
-  extent tag. In other world, for a given media, it must ensure the following
-  association is a bijection: id + tag <-> extent
+- On a put, in addition of the extent_key, Phobos provides to an adapter a
+  human-readable extent_description string: the object id.
 
-- This association must be persistent and compatible between increasing versions,
-  i.e. every software version > N must be able to locate an object by its id and tag
-  stored with version N.
+- On a put, the adapter turns the extent_key and the extent_description to an
+  internal representation called 'address' (e.g. a POSIX path or an opaque
+  object key). As "result" of the put, the adapter gives back to phobos the
+  generated 'address' and phobos stores this 'address' to be able to get back
+  the extent from the adapter. The adapter could rely on the uniqueness of the
+  extent_key to generate a unique 'address'.
 
-- The adapter can possibly turn an id and tag to an internal representation
-  called 'address' (e.g. a POSIX path).
+- An adapter must be able to locate an extent by its 'address'.
 
-- For sysadmin convenience, the adapter should keep a human-readable
-  representation of the object_id and extent tag in the object address, if
-  possible. It can however complete it with other internal representations
-  (eg. a hash).  These addressing components can however be modified for
-  technical reasons or performance considerations.  For instance, the object id
-  can be truncated, '/' characters can be changed to another delimiter,
-  non_printable character can be replaced, etc...
+- On a get or a delete, phobos gets back the extent from the adapter by
+  providing the corresponding registered 'address'.
 
-- Adapters should provide a way to attach an arbitrary set of metadata to extents
-  (e.g. as extended attributes, or a metadata_blob). This information is critical
-  to rebuild phobos database in case of accidental loss.
+- For sysadmin convenience, the adapter should keep the human-readable
+  extent_description in the object address, if possible. It can however complete
+  it with other internal representations (eg. a hash). These addressing
+  components can however be modified for technical reasons or performance
+  considerations.  For instance, the extent_description can be truncated, '/'
+  characters can be changed to another delimiter, non_printable character can be
+  replaced, etc...
+
+- Adapters should provide a way to attach an arbitrary set of metadata to
+  extents (e.g. as extended attributes, or a metadata_blob). This information is
+  critical to rebuild phobos database in case of accidental loss.
 
 - Adapters should provide an object-based interface: put/get/del
 
