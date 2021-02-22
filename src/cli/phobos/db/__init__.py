@@ -30,7 +30,7 @@ import psycopg2
 
 from phobos.core import cfg
 
-ORDERED_SCHEMAS = ["1.1", "1.2", "1.91"]
+ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92"]
 CURRENT_SCHEMA_VERSION = ORDERED_SCHEMAS[-1]
 AVAIL_SCHEMAS = set(ORDERED_SCHEMAS)
 
@@ -55,9 +55,10 @@ class Migrator:
 
         # { source_version: (target_version, migration_function) }
         self.convert_funcs = {
-            "0": ("1.91", lambda: self.create_schema("1.91")),
+            "0": ("1.92", lambda: self.create_schema("1.92")),
             "1.1": ("1.2", self.convert_1_to_2),
             "1.2": ("1.91", self.convert_2_to_3),
+            "1.91": ("1.92", self.convert_3_to_4),
         }
 
         self.reachable_versions = set(
@@ -200,6 +201,29 @@ class Migrator:
         """Convert DB from model 2 (phobos v1.2) to 3 (phobos v1.91)"""
         with self.connect():
             self.convert_schema_2_to_3()
+
+    def convert_schema_3_to_4(self):
+        """DB schema changes : create lock table"""
+        cur = self.conn.cursor()
+        cur.execute("""
+            -- create lock table
+            CREATE TABLE lock (
+                id          varchar(2048),
+                owner       varchar(256) NOT NULL,
+                timestamp   timestamp DEFAULT now(),
+                PRIMARY KEY (id)
+            );
+
+            -- update current schema version
+            UPDATE schema_info SET version = '1.92';
+        """)
+        self.conn.commit()
+        cur.close()
+
+    def convert_3_to_4(self):
+        """Convert DB from model 3 (phobos v1.91) to 4 (phobos v1.92)"""
+        with self.connect():
+            self.convert_schema_3_to_4()
 
     def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""

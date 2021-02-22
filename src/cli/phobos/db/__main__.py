@@ -32,6 +32,8 @@ Convert phobos database
   - uuid and version into object table
   - uuid and version into extent table and primary key to (uuid, version)
   - new deprecated_object table
+  * from 3 (phobos v1.91) to 4 (phobos v1.92):
+  - create lock table
 """
 
 import argparse
