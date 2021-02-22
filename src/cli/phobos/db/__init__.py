@@ -42,7 +42,8 @@ def get_sql_script(schema_version, script_name):
         raise ValueError("Unknown schema version: %s" % (schema_version,))
     this_dir = os.path.dirname(__file__)
     script_path = os.path.join(this_dir, "sql", schema_version, script_name)
-    return open(script_path).read()
+    with open(script_path) as script_file:
+        return script_file.read()
 
 
 class Migrator:
