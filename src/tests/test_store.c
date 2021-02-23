@@ -115,6 +115,7 @@ int main(int argc, char **argv)
         for (i = 0; i < argc; i++) {
             xfer_desc_close_fd(xfer + i);
             free(xfer[i].xd_objid);
+            free(xfer[i].xd_objuuid);
         }
 
         if (rc)
@@ -139,6 +140,7 @@ int main(int argc, char **argv)
 
         rc = phobos_put(&xfer, 1, NULL, NULL);
         xfer_desc_close_fd(&xfer);
+        free(xfer.xd_objuuid);
         if (rc)
             pho_error(rc, "TAG-PUT '%s' failed", argv[2]);
 

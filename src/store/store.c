@@ -300,11 +300,14 @@ filt_free:
  * Save this xfer oid and metadata (xd_attrs) into the DSS.
  */
 static int object_md_save(struct dss_handle *dss,
-                          const struct pho_xfer_desc *xfer)
+                          struct pho_xfer_desc *xfer)
 {
-    struct object_info   obj;
-    GString             *md_repr = g_string_new(NULL);
-    int                  rc;
+    GString *md_repr = g_string_new(NULL);
+    struct object_info *obj_res;
+    struct dss_filter filter;
+    struct object_info obj;
+    int obj_cnt;
+    int rc;
 
     ENTRY;
 
@@ -322,6 +325,25 @@ static int object_md_save(struct dss_handle *dss,
     if (rc)
         LOG_GOTO(out_free, rc, "dss_object_set failed for objid:'%s'", obj.oid);
 
+    rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}",
+                          xfer->xd_objid);
+    if (rc)
+        LOG_GOTO(out_free, rc, "dss_filter_build failed");
+
+    rc = dss_object_get(dss, &filter, &obj_res, &obj_cnt);
+    if (rc)
+        LOG_GOTO(filt_free, rc, "Cannot fetch objid:'%s'", xfer->xd_objid);
+
+    assert(obj_cnt == 1);
+
+    xfer->xd_version = obj_res->version;
+    xfer->xd_objuuid = strdup(obj_res->uuid);
+    if (xfer->xd_objuuid == NULL)
+        rc = -ENOMEM;
+
+    dss_res_free(obj_res, obj_cnt);
+filt_free:
+    dss_filter_free(&filter);
 out_free:
     g_string_free(md_repr, true);
     return rc;
