@@ -279,7 +279,7 @@ class Store:
             if elt.xd_fd >= 0:
                 os.close(elt.xd_fd)
 
-            LIBPHOBOS.pho_xfer_desc_destroy(byref(xfer))
+            LIBPHOBOS.pho_xfer_desc_destroy(byref(elt))
 
     def phobos_xfer(self, action_func, xfer_descriptors, compl_cb):
         """Wrapper for phobos_xfer API calls."""
