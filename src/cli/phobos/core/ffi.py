@@ -543,6 +543,8 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
         """Return a dict of available fields and optional display formatters."""
         return {
             'oid': None,
+            'uuid': None,
+            'version': None,
             'user_md': None,
         }
 
