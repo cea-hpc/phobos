@@ -132,9 +132,10 @@ class Client(object):
         """List layouts."""
         n_layouts = c_int(0)
         layouts = pointer(LayoutInfo())
+        enc_medium = medium.encode('utf-8') if medium else None
         rc = LIBPHOBOS_ADMIN.phobos_admin_layout_list(byref(self.handle),
-                                                      pattern,
-                                                      medium,
+                                                      pattern.encode('utf-8'),
+                                                      enc_medium,
                                                       byref(layouts),
                                                       byref(n_layouts))
 

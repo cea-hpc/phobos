@@ -406,8 +406,11 @@ class UtilClient:
         obj_type = ObjectInfo if not deprecated else DeprecatedObjectInfo
         objs = POINTER(obj_type)()
         c_strlist = c_char_p * len(metadata)
-        rc = LIBPHOBOS.phobos_store_object_list(pattern,
-                                                c_strlist(*metadata),
+
+        enc_metadata = [md.encode('utf-8') for md in metadata]
+
+        rc = LIBPHOBOS.phobos_store_object_list(pattern.encode('utf-8'),
+                                                c_strlist(*enc_metadata),
                                                 len(metadata),
                                                 deprecated,
                                                 byref(objs),
