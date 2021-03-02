@@ -29,9 +29,8 @@ specific command line parameters and the API entry points for phobos to trigger
 actions.
 """
 
-import re
 import sys
-import shlex
+from shlex import shlex
 import errno
 import argparse
 import logging
@@ -97,7 +96,7 @@ def env_error_format(exc):
 
 def attr_convert(usr_attr):
     """Convert k/v pairs as expressed by the user into a dictionnary."""
-    tkn_iter = shlex.shlex(usr_attr, posix=True)
+    tkn_iter = shlex(usr_attr, posix=True)
     tkn_iter.whitespace = '=,'
     tkn_iter.whitespace_split = True
 
@@ -108,6 +107,20 @@ def attr_convert(usr_attr):
         raise ValueError("Invalid attribute string")
 
     return dict(zip(kv_pairs[0::2], kv_pairs[1::2]))
+
+def mput_file_line_parser(line):
+    """Convert a mput file line into the 3 values needed for each put."""
+    line_parser = shlex(line, posix=True)
+    line_parser.whitespace = ' '
+    line_parser.whitespace_split = True
+
+    file_entry = list(line_parser) # [src_file, oid, user_md]
+
+    if len(file_entry) != 3:
+        raise ValueError("Invalid number of values, only 3 expected "
+                         "(src_file, oid, metadata).")
+
+    return file_entry
 
 
 class BaseOptHandler(object):
@@ -372,14 +385,15 @@ class StoreMPutHandler(StoreGenericPutHandler):
             if not line or line.startswith('#'):
                 continue
 
-            match = re.match(r"(\S+)\s+(\S+)\s+(.*)", line)
-            if match is None:
-                self.logger.error("Format error on line %d: %s", i, line)
+            try:
+                match = mput_file_line_parser(line)
+            except ValueError:
+                self.logger.error("Format error on line %d: %s", i + 1, line)
                 sys.exit(os.EX_DATAERR)
 
-            src = match.group(1)
-            oid = match.group(2)
-            attrs = match.group(3)
+            src = match[0]
+            oid = match[1]
+            attrs = match[2]
 
             if attrs == '-':
                 attrs = None
