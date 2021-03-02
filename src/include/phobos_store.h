@@ -209,10 +209,18 @@ void pho_xfer_desc_destroy(struct pho_xfer_desc *xfer);
 
 /**
  * Retrieve the objects that match the given pattern and metadata.
+ * If given multiple objids or patterns, retrieve every item with name
+ * matching any of those objids or patterns.
+ * If given multiple objids or patterns, and metadata, retrieve every item
+ * with name matching any of those objids or pattersn, but containing
+ * every given metadata.
  *
  * The caller must release the list calling phobos_store_object_list_free().
  *
- * \param[in]       pattern         Shell regexp pattern.
+ * \param[in]       res             Objids or patterns, depending on
+ *                                  \a is_pattern.
+ * \param[in]       n_res           Number of requested objids or patterns.
+ * \param[in]       is_pattern      True if search using POSIX pattern.
  * \param[in]       metadata        Metadata filter.
  * \param[in]       n_metadata      Number of requested metadata.
  * \param[in]       deprecated      true if search from deprecated objects.
@@ -222,9 +230,10 @@ void pho_xfer_desc_destroy(struct pho_xfer_desc *xfer);
  * \return                          0     on success,
  *                                 -errno on failure.
  */
-int phobos_store_object_list(const char *pattern, const char **metadata,
-                             int n_metadata, bool deprecated,
-                             struct object_info **objs, int *n_objs);
+int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
+                             const char **metadata, int n_metadata,
+                             bool deprecated, struct object_info **objs,
+                             int *n_objs);
 
 /**
  * Release the list retrieved using phobos_store_object_list().

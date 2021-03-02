@@ -400,17 +400,22 @@ class UtilClient:
             raise EnvironmentError(rc)
 
     @staticmethod
-    def object_list(pattern, metadata, deprecated):
+    def object_list(res, is_pattern, metadata, deprecated):
         """List objects."""
         n_objs = c_int(0)
         obj_type = ObjectInfo if not deprecated else DeprecatedObjectInfo
         objs = POINTER(obj_type)()
-        c_strlist = c_char_p * len(metadata)
+
+        enc_res = [elt.encode('utf-8') for elt in res]
+        c_res_strlist = c_char_p * len(enc_res)
 
         enc_metadata = [md.encode('utf-8') for md in metadata]
+        c_md_strlist = c_char_p * len(metadata)
 
-        rc = LIBPHOBOS.phobos_store_object_list(pattern.encode('utf-8'),
-                                                c_strlist(*enc_metadata),
+        rc = LIBPHOBOS.phobos_store_object_list(c_res_strlist(*enc_res),
+                                                len(enc_res),
+                                                is_pattern,
+                                                c_md_strlist(*enc_metadata),
                                                 len(metadata),
                                                 deprecated,
                                                 byref(objs),

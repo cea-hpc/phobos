@@ -642,7 +642,7 @@ class MediaListOptHandler(ListOptHandler):
                                   "choose from {" + " ".join(attr) + "} "
                                   "(default: %(default)s)"))
 
-class ObjectListOptHandler(PatternListOptHandler):
+class ObjectListOptHandler(ListOptHandler):
     """
     Specific version of the 'list' command for object, with a couple
     extra-options.
@@ -664,12 +664,16 @@ class ObjectListOptHandler(PatternListOptHandler):
                                   "choose from {" + " ".join(base_attrs) + "} "
                                   "default: %(default)s"))
         parser.add_argument('-m', '--metadata', type=lambda t: t.split(','),
-                            help="filter on metadata, comma-separated "
+                            help="filter items containing every given "
+                                 "metadata, comma-separated "
                                  "'key=value' parameters")
         parser.add_argument('-d', '--deprecated', action='store_true',
                             help="print deprecated objects, allowing those "
                                  "attributes for the 'output' option "
                                  "{" + " ".join(ext_attrs) + "}")
+        parser.add_argument('-p', '--pattern', action='store_true',
+                            help="filter using POSIX regexp instead of exact "
+                                 "objid")
 
 class DeleteOptHandler(BaseOptHandler):
     """Delete objects handler."""
@@ -884,7 +888,9 @@ class ObjectOptHandler(BaseResourceOptHandler):
         client = UtilClient()
 
         try:
-            objs = client.object_list(self.params.get('pattern'), metadata,
+            objs = client.object_list(self.params.get('res'),
+                                      self.params.get('pattern'),
+                                      metadata,
                                       self.params.get('deprecated'))
 
             if objs:
