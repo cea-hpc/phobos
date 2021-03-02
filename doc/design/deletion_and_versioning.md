@@ -183,12 +183,12 @@ The deletion mechanism moves objects from the ``object`` table to the
 avoid having the same version of an object in both tables in case a crash
 happens.
 
-Any deleted generation or version can be undeleted as long as their extents
-remain on media. Extent cleaning could be policy-driven and will be treated
-in the related design document: "removal_and_cleaning". A future "REMOVE" action
-could be added to phobos API and cli to definitely remove object from ``object``
-and ``deprecated_object`` table from an user action in addition of automatic
-policy-driven action.
+As long as their extents remain on media, any deleted generation or version can
+stay into the ``deprecated_object`` table. Extent cleaning could be
+policy-driven and will be treated in the related design document:
+"removal_and_cleaning". A future "REMOVE" action could be added to phobos API
+and cli to definitely remove object from ``object`` and ``deprecated_object``
+table from a user action in addition of automatic policy-driven action.
 
 #### Object undelete
 The `phobos_undelete()` call allows to retrieve deprecated objects.
@@ -197,7 +197,9 @@ The `phobos_undelete()` call allows to retrieve deprecated objects.
 int phobos_undelete(struct pho_xfer_desc *xfers, int num_xfers);
 ```
 
-As input, only the xd_uuid field is taken into account for each xfer.
+As input, xd_uuid or the oid field are only taken into account for each xfer and
+the last corresponding version is selected to be undeleted from the
+``deprecated_table``.
 
 The undelete mechanism moves objects from the ``deprecated_object`` table to
 the ``object`` table. This database transaction will need to be atomic to avoid
