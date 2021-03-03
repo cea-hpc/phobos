@@ -92,7 +92,8 @@ def phobos_log_handler(log_record):
 
 def env_error_format(exc):
     """Return a human readable representation of an environment exception."""
-    return "%s: %s" % (exc.strerror, os.strerror(abs(exc.errno)))
+    return "%s: %s" % (exc.strerror,
+                       os.strerror(abs(exc.errno)) if exc.errno else "(null)")
 
 def attr_convert(usr_attr):
     """Convert k/v pairs as expressed by the user into a dictionnary."""
