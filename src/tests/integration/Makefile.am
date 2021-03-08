@@ -1,3 +1,4 @@
 AM_CFLAGS=$(CC_OPT)
 
-TESTS=test_delete.sh test_undelete.sh test_put.sh test_object_list.sh
+TESTS=test_delete.sh test_undelete.sh test_put.sh test_object_list.sh \
+      test_extent_list.sh

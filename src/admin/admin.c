@@ -552,30 +552,119 @@ out:
     return rc;
 }
 
-int phobos_admin_layout_list(struct admin_handle *adm, const char *pattern,
-                             const char *medium, struct layout_info **layouts,
-                             int *n_layouts)
+/**
+ * Construct the medium string for the extent list filter.
+ *
+ * The caller must ensure medium_str is initialized before calling.
+ *
+ * \param[in,out]   medium_str      Empty medium string.
+ * \param[in]       medium          Medium filter.
+ */
+static void phobos_construct_medium(GString *medium_str, const char *medium)
 {
-    struct dss_filter filter;
-    int rc;
+    /**
+     * We prefered putting this line in a separate function to ease a
+     * possible future change that would allow for multiple medium selection.
+     */
+    g_string_append_printf(medium_str,
+                           "{\"$INJSON\": "
+                             "{\"DSS::EXT::media_idx\": \"%s\"}}",
+                           medium);
+}
 
-    if (!medium || !strcmp(medium, ""))
+/**
+ * Construct the extent string for the extent list filter.
+ *
+ * The caller must ensure extent_str is initialized before calling.
+ *
+ * \param[in,out]   extent_str      Empty extent string.
+ * \param[in]       res             Ressource filter.
+ * \param[in]       n_res           Number of requested resources.
+ * \param[in]       is_pattern      True if search done using POSIX pattern.
+ */
+static void phobos_construct_extent(GString *extent_str, const char **res,
+                                    int n_res, bool is_pattern)
+{
+    char *res_prefix = (is_pattern ? "{\"$REGEXP\": " : "");
+    char *res_suffix = (is_pattern ? "}" : "");
+    int i;
+
+    if (n_res > 1)
+        g_string_append_printf(extent_str, "{\"$OR\" : [");
+
+    for (i = 0; i < n_res; ++i)
+        g_string_append_printf(extent_str,
+                               "%s {\"DSS::OBJ::oid\":\"%s\"}%s %s",
+                               res_prefix,
+                               res[i],
+                               res_suffix,
+                               (i + 1 != n_res) ? "," : "");
+
+    if (n_res > 1)
+        g_string_append_printf(extent_str, "]}");
+}
+
+int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
+                             int n_res, bool is_pattern, const char *medium,
+                             struct layout_info **layouts, int *n_layouts)
+{
+    struct dss_filter *filter_ptr = NULL;
+    struct dss_filter filter;
+    bool medium_is_valid;
+    GString *extent_str;
+    GString *medium_str;
+    int rc = 0;
+
+    extent_str = g_string_new(NULL);
+    medium_str = g_string_new(NULL);
+    medium_is_valid = (medium && strcmp(medium, ""));
+
+    /**
+     * If a medium is specified, we construct a string to filter it.
+     */
+    if (medium_is_valid)
+        phobos_construct_medium(medium_str, medium);
+
+    /**
+     * If there are at least one resource, we construct a string containing
+     * each request.
+     */
+    if (n_res)
+        phobos_construct_extent(extent_str, res, n_res, is_pattern);
+
+    if (n_res || medium_is_valid) {
+        /**
+         * Finally, if the request has at least a medium or one resource,
+         * we build the filter in the following way: if there is one
+         * medium and resource, then using an AND is necessary
+         * (which correspond to the first and last "%s").
+         * After that, we add to the filter the resource and medium
+         * if any is present, which are the second and fourth "%s".
+         * Finally, is both are present, a comma is necessary.
+         */
         rc = dss_filter_build(&filter,
-                              "{\"$REGEXP\": {\"DSS::EXT::oid\": \"%s\"}}",
-                              pattern);
-    else
-        rc = dss_filter_build(&filter,
-                              "{\"$AND\": ["
-                              "  {\"$REGEXP\": "
-                              "    {\"DSS::EXT::oid\": \"%s\"}},"
-                              "  {\"$INJSON\": "
-                              "    {\"DSS::EXT::media_idx\": \"%s\"}}"
-                              "]}",
-                              pattern, medium);
+                              "%s %s %s %s %s",
+                              n_res && medium_is_valid ? "{\"$AND\": [" : "",
+                              extent_str->str != NULL ? extent_str->str : "",
+                              n_res && medium_is_valid ? ", " : "",
+                              medium_str->str != NULL ? medium_str->str : "",
+                              n_res && medium_is_valid ? "]}" : "");
+
+        g_string_free(extent_str, TRUE);
+        g_string_free(medium_str, TRUE);
+
+        filter_ptr = &filter;
+    }
+
     if (rc)
         return rc;
 
-    rc = dss_layout_get(&adm->dss, &filter, layouts, n_layouts);
+    /**
+     * If no resource or medium was asked for, then using a filter isn't
+     * necessary, thus passing it as NULL to dss_layout_get ensures
+     * the expected behaviour.
+     */
+    rc = dss_layout_get(&adm->dss, filter_ptr, layouts, n_layouts);
     if (rc)
         pho_error(rc, "Cannot fetch layouts");
 

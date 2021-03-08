@@ -128,13 +128,20 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc, "Error during device unlock")
 
-    def layout_list(self, pattern, medium, degroup):
+    def layout_list(self, res, is_pattern, medium, degroup):
         """List layouts."""
         n_layouts = c_int(0)
         layouts = pointer(LayoutInfo())
+
         enc_medium = medium.encode('utf-8') if medium else None
+
+        enc_res = [elt.encode('utf-8') for elt in res]
+        c_res_strlist = c_char_p * len(enc_res)
+
         rc = LIBPHOBOS_ADMIN.phobos_admin_layout_list(byref(self.handle),
-                                                      pattern.encode('utf-8'),
+                                                      c_res_strlist(*enc_res),
+                                                      len(enc_res),
+                                                      is_pattern,
                                                       enc_medium,
                                                       byref(layouts),
                                                       byref(n_layouts))

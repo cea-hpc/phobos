@@ -469,23 +469,6 @@ class ListOptHandler(DSSInteractHandler):
                             help="output format human/xml/json/csv/yaml " \
                                  "(default: human)")
 
-class PatternListOptHandler(DSSInteractHandler):
-    """List items of a specific type, with pattern-matching."""
-    label = 'list'
-    descr = 'list all entries of the kind'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(PatternListOptHandler, cls).add_options(parser)
-        parser.add_argument('pattern', nargs='?', default='.*',
-                            help="POSIX regexp to match, leave empty to "
-                                 "match all")
-        parser.add_argument('-f', '--format', default='human',
-                            help="output format human/xml/json/csv/yaml "
-                                 "(default: human)")
-
-
 class LockOptHandler(DSSInteractHandler):
     """Lock resource."""
     label = 'lock'
@@ -784,7 +767,7 @@ class UndeleteOptHandler(BaseOptHandler):
                               env_error_format(err))
             sys.exit(os.EX_DATAERR)
 
-class ExtentListOptHandler(PatternListOptHandler):
+class ExtentListOptHandler(ListOptHandler):
     """
     Specific version of the 'list' command for extent, with a couple
     extra-options.
@@ -806,6 +789,9 @@ class ExtentListOptHandler(PatternListOptHandler):
                             help="filter on one medium name")
         parser.add_argument('--degroup', action='store_true',
                             help="used to list by extent, not by object")
+        parser.add_argument('-p', '--pattern', action='store_true',
+                            help="filter using POSIX regexp instead of "
+                                 "exact extent")
 
 class TapeAddOptHandler(MediaAddOptHandler):
     """Specific version of the 'add' command for tapes, with extra-options."""
@@ -1357,6 +1343,7 @@ class ExtentOptHandler(BaseResourceOptHandler):
         try:
             with AdminClient(lrs_required=False) as adm:
                 obj_list, p_objs, n_objs = adm.layout_list(
+                    self.params.get('res'),
                     self.params.get('pattern'),
                     self.params.get('name'),
                     self.params.get('degroup'))

@@ -118,12 +118,15 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
                         enum fs_type fs, bool unlock);
 
 /**
- * Retrieve layouts of objects whose IDs match the given pattern.
+ * Retrieve layouts of objects whose IDs match the given name or pattern.
  *
  * The caller must release the list calling phobos_admin_layout_list_free().
  *
  * \param[in]       adm             Admin module handler.
- * \param[in]       pattern         POSIX regexp pattern for object IDs.
+ * \param[in]       res             Objids or patterns, depending on
+ *                                  \a is_pattern.
+ * \param[in]       n_res           Number of resources requested.
+ * \param[in]       is_pattern      True if search done using POSIX pattern.
  * \param[in]       medium          Single medium filter.
  * \param[out]      layouts         Retrieved layouts.
  * \param[out]      n_layouts       Number of retrieved items.
@@ -131,9 +134,9 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
  * \return                          0     on success,
  *                                 -errno on failure.
  */
-int phobos_admin_layout_list(struct admin_handle *adm, const char *pattern,
-                             const char *medium, struct layout_info **layouts,
-                             int *n_layouts);
+int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
+                             int n_res, bool is_pattern, const char *medium,
+                             struct layout_info **layouts, int *n_layouts);
 
 /**
  * Release the list of layouts retrieved using phobos_admin_layout_list().

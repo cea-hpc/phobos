@@ -122,6 +122,11 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['extent', 'list', '--degroup', '"obj.*"'])
         self.check_cmdline_valid(['extent', 'list', '--degroup', '-o', 'all'])
         self.check_cmdline_valid(['extent', 'list', '--degroup', '-n', 't01'])
+        self.check_cmdline_valid(['extent', 'list', '--pattern', 'blob'])
+        self.check_cmdline_valid(['extent', 'list', '-n', 't01', '--pattern',
+                                  'blob'])
+        self.check_cmdline_valid(['extent', 'list', '--pattern',
+                                  'blob', 'lorem'])
         self.check_cmdline_valid(['delete', 'oid'])
         self.check_cmdline_valid(['delete', 'oid1', 'oid2', 'oid3'])
         self.check_cmdline_valid(['undelete', 'uuid', 'uuid1'])
