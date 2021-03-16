@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2017 CEA/DAM.
+ *  All rights reserved (c) 2014-2021 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -420,5 +420,21 @@ int dss_object_delete(struct dss_handle *handle, struct object_info *obj_list,
  */
 int dss_object_undelete(struct dss_handle *handle, struct object_info *obj_list,
                       int obj_cnt);
+
+/* ****************************************************************************/
+/* Generic lock ***************************************************************/
+/* ****************************************************************************/
+
+/**
+ * Take a lock.
+ *
+ * @param[in]   handle          DSS handle.
+ * @param[in]   lock_id         Lock identifier.
+ * @param[in]   lock_owner      Name of the lock owner.
+ * @return                      0 on success,
+ *                             -EEXIST if \a lock_id already exists.
+ */
+int dss_lock(struct dss_handle *handle, const char *lock_id,
+             const char *lock_owner);
 
 #endif

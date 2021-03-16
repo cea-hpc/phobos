@@ -84,6 +84,9 @@ AC_CHECK_HEADERS([scsi/sg_io_linux.h], [], [AC_MSG_ERROR(missing sg3_utils heade
 AC_CHECK_HEADERS([protobuf-c/protobuf-c.h], [], [AC_MSG_ERROR(missing protobuf-c header files)])
 PKG_CHECK_MODULES(JANSSON, [jansson >= 2.5])
 PKG_CHECK_MODULES(LIBPQ, [libpq >= 9.4])
+PKG_CHECK_MODULES(CMOCKA, [cmocka >= 1.1], ,
+    [AC_MSG_WARN([missing package libcmocka-devel, tests will fail to compile])]
+)
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
@@ -110,6 +113,7 @@ AC_CONFIG_FILES([Makefile
          src/layout-modules/Makefile
          src/admin/Makefile
          src/tests/Makefile
+         src/tests/unit/Makefile
          src/tests/integration/Makefile
          src/cli/Makefile
          phobos.spec

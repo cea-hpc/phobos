@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2017 CEA/DAM.
+ *  All rights reserved (c) 2014-2021 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -26,6 +26,7 @@
 #include "config.h"
 #endif
 
+#include "dss_utils.h"
 #include "pho_common.h"
 #include "pho_type_utils.h"
 #include "pho_dss.h"
@@ -250,59 +251,6 @@ void dss_fini(struct dss_handle *handle)
     PQfinish(handle->dh_conn);
 }
 
-
-struct sqlerr_map_item {
-    const char *smi_prefix;     /**< SQL error code or class (prefix) */
-    int         smi_errcode;    /**< Corresponding negated errno code */
-};
-
-/**
- * Map errors from SQL to closest errno.
- * The list is traversed from top to bottom and stops at first match, so make
- * sure that new items are inserted in most-specific first order.
- * See: https://www.postgresql.org/docs/9.4/static/errcodes-appendix.html
- */
-static const struct sqlerr_map_item sqlerr_map[] = {
-    /* Class 00 - Successful completion */
-    {"00000", 0},
-    /* Class 22 - Data exception */
-    {"22", -EINVAL},
-    /* Class 23 - Integrity constraint violation */
-    {"23", -EEXIST},
-    /* Class 42 - Syntax error or access rule violation */
-    {"42", -EINVAL},
-    /* Class 53 - Insufficient resources */
-    {"53100", -ENOSPC},
-    {"53200", -ENOMEM},
-    {"53300", -EUSERS},
-    {"53", -EIO},
-    /* Catch all -- KEEP LAST -- */
-    {"", -ECOMM}
-};
-
-/**
- * Convert PostgreSQL status codes to meaningful errno values.
- * @param  res[in]  Failed query result descriptor
- * @return negated errno value corresponding to the error
- */
-static int psql_state2errno(const PGresult *res)
-{
-    char *sqlstate = PQresultErrorField(res, PG_DIAG_SQLSTATE);
-    int   i;
-
-    if (sqlstate == NULL)
-        return 0;
-
-    for (i = 0; i < ARRAY_SIZE(sqlerr_map); i++) {
-        const char *pfx = sqlerr_map[i].smi_prefix;
-
-        if (strncmp(pfx, sqlstate, strlen(pfx)) == 0)
-            return sqlerr_map[i].smi_errcode;
-    }
-
-    /* sqlerr_map must contain a catch-all entry */
-    UNREACHED();
-}
 
 /**
  * Retrieve a string contained in a JSON object under a given key.

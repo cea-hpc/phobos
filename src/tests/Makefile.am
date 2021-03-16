@@ -25,7 +25,7 @@ TESTS=$(UNIT_TESTS) $(INTEG_TESTS)
 noinst_PROGRAMS=$(check_PROGRAMS)
 noinst_HEADERS=pho_test_utils.h pho_test_xfer_utils.h
 
-SUBDIRS=. integration
+SUBDIRS=. unit integration
 
 pre-check-local:
 	./test_lock.sh
