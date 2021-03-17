@@ -30,6 +30,7 @@
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -158,6 +159,39 @@ static void dss_unlock_bad_owner(void **state)
     assert(dss_unlock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER) == 0);
 }
 
+static void dss_status_ok(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    struct timeval timestamp = { .tv_sec = 0, .tv_usec = 0 };
+    char *lock_owner;
+    int rc;
+
+    assert(dss_lock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER) == 0);
+
+    rc = dss_lock_status(handle, GOOD_LOCK_ID, NULL, NULL);
+    assert_int_equal(rc, -rc);
+
+    rc = dss_lock_status(handle, GOOD_LOCK_ID, &lock_owner, NULL);
+    assert_int_equal(rc, -rc);
+    assert_string_equal(lock_owner, GOOD_LOCK_OWNER);
+
+    rc = dss_lock_status(handle, GOOD_LOCK_ID, NULL, &timestamp);
+    assert_int_equal(rc, -rc);
+    assert_int_not_equal(timestamp.tv_sec, 0);
+    assert_int_not_equal(timestamp.tv_usec, 0);
+
+    timestamp.tv_sec = 0;
+    timestamp.tv_usec = 0;
+
+    rc = dss_lock_status(handle, GOOD_LOCK_ID, &lock_owner, &timestamp);
+    assert_int_equal(rc, -rc);
+    assert_int_not_equal(timestamp.tv_sec, 0);
+    assert_int_not_equal(timestamp.tv_usec, 0);
+    assert_string_equal(lock_owner, GOOD_LOCK_OWNER);
+
+    assert(dss_unlock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER) == 0);
+}
+
 int main(void)
 {
     const struct CMUnitTest dss_lock_test_cases[] = {
@@ -165,6 +199,7 @@ int main(void)
         cmocka_unit_test(dss_lock_exists),
         cmocka_unit_test(dss_unlock_not_exists),
         cmocka_unit_test(dss_unlock_bad_owner),
+        cmocka_unit_test(dss_status_ok),
     };
 
     return cmocka_run_group_tests(dss_lock_test_cases, setup, teardown);

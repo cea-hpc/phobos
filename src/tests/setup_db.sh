@@ -79,7 +79,6 @@ insert into extent (oid, uuid, state, lyt_info, extents)
 	   "sz":21123456,"fam":"dir"},\
             {"media":"/tmp/pho_testdir2","addr":"test4",
 	   "sz":2112555,"fam":"dir"}]');
-
 EOF
 }
 

@@ -32,11 +32,13 @@
 
 #include "dss_utils.h"
 #include "pho_common.h"
+#include "pho_type_utils.h"
 
 enum lock_query_idx {
     DSS_LOCK_QUERY,
     DSS_UNLOCK_QUERY,
     DSS_UNLOCK_FORCE_QUERY,
+    DSS_STATUS_QUERY,
 };
 
 static const char * const lock_query[] = {
@@ -67,24 +69,21 @@ static const char * const lock_query[] = {
                                " END IF;"
                                " DELETE FROM lock WHERE id = lock_id;"
                                "END $$;",
+    [DSS_STATUS_QUERY]       = "SELECT id, owner, timestamp FROM lock "
+                               " WHERE id = '%s';"
 };
 
-static int execute(PGconn *conn, GString *request)
+static int execute(PGconn *conn, GString *request, PGresult **res,
+                   ExecStatusType tested)
 {
-    PGresult *res;
-    int rc = 0;
-
     pho_debug("Executing request: '%s'", request->str);
 
-    res = PQexec(conn, request->str);
-    if (PQresultStatus(res) != PGRES_COMMAND_OK)
-        LOG_GOTO(cleanup, rc = psql_state2errno(res), "Request failed: %s",
-                 PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
+    *res = PQexec(conn, request->str);
+    if (PQresultStatus(*res) != tested)
+        LOG_RETURN(psql_state2errno(*res), "Request failed: %s",
+                   PQresultErrorField(*res, PG_DIAG_MESSAGE_PRIMARY));
 
-cleanup:
-    PQclear(res);
-    g_string_free(request, true);
-    return rc;
+    return 0;
 }
 
 int dss_lock(struct dss_handle *handle, const char *lock_id,
@@ -92,10 +91,17 @@ int dss_lock(struct dss_handle *handle, const char *lock_id,
 {
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
+    PGresult *res;
+    int rc;
 
     g_string_printf(request, lock_query[DSS_LOCK_QUERY], lock_id, lock_owner);
 
-    return execute(conn, request);
+    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
+
+    PQclear(res);
+    g_string_free(request, true);
+
+    return rc;
 }
 
 int dss_unlock(struct dss_handle *handle, const char *lock_id,
@@ -103,6 +109,8 @@ int dss_unlock(struct dss_handle *handle, const char *lock_id,
 {
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
+    PGresult *res;
+    int rc;
 
     if (lock_owner != NULL)
         g_string_printf(request, lock_query[DSS_UNLOCK_QUERY], lock_id,
@@ -110,7 +118,46 @@ int dss_unlock(struct dss_handle *handle, const char *lock_id,
     else
         g_string_printf(request, lock_query[DSS_UNLOCK_FORCE_QUERY], lock_id);
 
-    pho_debug("Executing request: '%s'", request->str);
+    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
 
-    return execute(conn, request);
+    PQclear(res);
+    g_string_free(request, true);
+
+    return rc;
+}
+
+int dss_lock_status(struct dss_handle *handle, const char *lock_id,
+                    char **lock_owner, struct timeval *lock_timestamp)
+{
+    GString *request = g_string_new("");
+    PGconn *conn = handle->dh_conn;
+    PGresult *res;
+    int rc = 0;
+
+    g_string_printf(request, lock_query[DSS_STATUS_QUERY], lock_id);
+
+    rc = execute(conn, request, &res, PGRES_TUPLES_OK);
+    if (rc)
+        goto out_cleanup;
+
+    if (PQntuples(res) == 0)
+        LOG_GOTO(out_cleanup, rc = -ENOLCK, "No row found after request: %s",
+                 PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
+
+    if (lock_owner != NULL) {
+        *lock_owner = strdup(PQgetvalue(res, 0, 1));
+        if (*lock_owner == NULL) {
+            rc = -ENOMEM;
+            goto out_cleanup;
+        }
+    }
+
+    if (lock_timestamp != NULL)
+        str2timeval(PQgetvalue(res, 0, 2), lock_timestamp);
+
+out_cleanup:
+    PQclear(res);
+    g_string_free(request, true);
+
+    return rc;
 }

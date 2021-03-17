@@ -453,4 +453,23 @@ int dss_lock(struct dss_handle *handle, const char *lock_id,
 int dss_unlock(struct dss_handle *handle, const char *lock_id,
                const char *lock_owner);
 
+/**
+ * Retrieve the status of a lock.
+ *
+ * If \a lock_owner is NULL, the string is not allocated.
+ * If \a lock_timestamp is NULL, the structure is not filled.
+ *
+ * @param[in]   handle          DSS handle.
+ * @param[in]   lock_id         Lock identifier.
+ * @param[out]  lock_owner      Name of the lock owner, must be freed by
+ *                              the caller.
+ * @param[out]  lock_timestamp  Date when the lock was taken.
+ * @return                      0 on success,
+ *                             -ENOMEM if the \a lock_owner string cannot be
+ *                              allocated,
+ *                             -ENOLCK if the lock does not exist.
+ */
+int dss_lock_status(struct dss_handle *handle, const char *lock_id,
+                    char **lock_owner, struct timeval *lock_timestamp);
+
 #endif
