@@ -132,6 +132,57 @@ static void dss_lock_exists(void **state)
     assert(dss_unlock(handle, GOOD_LOCK_ID, NULL) == 0);
 }
 
+static void dss_refresh_ok(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    struct timeval old_ts = { .tv_sec = 0, .tv_usec = 0 };
+    struct timeval new_ts = { .tv_sec = 0, .tv_usec = 0 };
+    int rc;
+
+    assert(dss_lock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER) == 0);
+
+    rc = dss_lock_status(handle, GOOD_LOCK_ID, NULL, &old_ts);
+    assert_int_equal(rc, -rc);
+
+    rc = dss_lock_refresh(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER);
+    assert_int_equal(rc, -rc);
+
+    rc = dss_lock_status(handle, GOOD_LOCK_ID, NULL, &new_ts);
+    assert_int_equal(rc, -rc);
+
+    assert_memory_not_equal(&old_ts, &new_ts, sizeof(old_ts));
+
+    assert(dss_unlock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER) == 0);
+}
+
+static void dss_refresh_not_exists(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    char *BAD_LOCK_ID = "not_exists";
+    int rc;
+
+    assert(dss_lock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER) == 0);
+
+    rc = dss_lock_refresh(handle, BAD_LOCK_ID, GOOD_LOCK_OWNER);
+    assert_int_equal(rc, -ENOLCK);
+
+    assert(dss_unlock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER) == 0);
+}
+
+static void dss_refresh_bad_owner(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    char *BAD_LOCK_OWNER = "not_an_owner";
+    int rc;
+
+    assert(dss_lock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER) == 0);
+
+    rc = dss_lock_refresh(handle, GOOD_LOCK_ID, BAD_LOCK_OWNER);
+    assert_int_equal(rc, -EACCES);
+
+    assert(dss_unlock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER) == 0);
+}
+
 static void dss_unlock_not_exists(void **state)
 {
     struct dss_handle *handle = (struct dss_handle *)*state;
@@ -197,6 +248,9 @@ int main(void)
     const struct CMUnitTest dss_lock_test_cases[] = {
         cmocka_unit_test(dss_lock_unlock_ok),
         cmocka_unit_test(dss_lock_exists),
+        cmocka_unit_test(dss_refresh_ok),
+        cmocka_unit_test(dss_refresh_not_exists),
+        cmocka_unit_test(dss_refresh_bad_owner),
         cmocka_unit_test(dss_unlock_not_exists),
         cmocka_unit_test(dss_unlock_bad_owner),
         cmocka_unit_test(dss_status_ok),

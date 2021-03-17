@@ -36,6 +36,7 @@
 
 enum lock_query_idx {
     DSS_LOCK_QUERY,
+    DSS_REFRESH_QUERY,
     DSS_UNLOCK_QUERY,
     DSS_UNLOCK_FORCE_QUERY,
     DSS_STATUS_QUERY,
@@ -44,6 +45,21 @@ enum lock_query_idx {
 static const char * const lock_query[] = {
     [DSS_LOCK_QUERY]         = "INSERT INTO lock (id, owner)"
                                " VALUES ('%s', '%s');",
+    [DSS_REFRESH_QUERY]      = "DO $$"
+                               " DECLARE lock_id TEXT:= '%s';"
+                               "         lock_owner TEXT:="
+                               "             (SELECT owner FROM lock"
+                               "              WHERE id = lock_id);"
+                               " BEGIN"
+                               " IF lock_owner IS NULL THEN"
+                               "  RAISE USING errcode = 'PHLK1';"
+                               " END IF;"
+                               " IF lock_owner <> '%s' THEN"
+                               "  RAISE USING errcode = 'PHLK2';"
+                               " END IF;"
+                               " UPDATE lock SET timestamp = now()"
+                               " WHERE id = lock_id AND owner = lock_owner;"
+                               "END $$;",
     [DSS_UNLOCK_QUERY]       = "DO $$"
                                " DECLARE lock_id TEXT:= '%s';"
                                "         lock_owner TEXT:="
@@ -95,6 +111,25 @@ int dss_lock(struct dss_handle *handle, const char *lock_id,
     int rc;
 
     g_string_printf(request, lock_query[DSS_LOCK_QUERY], lock_id, lock_owner);
+
+    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
+
+    PQclear(res);
+    g_string_free(request, true);
+
+    return rc;
+}
+
+int dss_lock_refresh(struct dss_handle *handle, const char *lock_id,
+                     const char *lock_owner)
+{
+    GString *request = g_string_new("");
+    PGconn *conn = handle->dh_conn;
+    PGresult *res;
+    int rc = 0;
+
+    g_string_printf(request, lock_query[DSS_REFRESH_QUERY],
+                    lock_id, lock_owner);
 
     rc = execute(conn, request, &res, PGRES_COMMAND_OK);
 

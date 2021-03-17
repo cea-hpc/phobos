@@ -438,6 +438,19 @@ int dss_lock(struct dss_handle *handle, const char *lock_id,
              const char *lock_owner);
 
 /**
+ * Refresh a lock timestamp.
+ *
+ * @param[in]   handle          DSS handle.
+ * @param[in]   lock_id         Lock identifier.
+ * @param[in]   lock_owner      Name of the lock owner, must be specified.
+ * @return                      0 on success,
+ *                             -ENOLCK if the lock does not exist,
+ *                             -EACCES if the lock owner does not match.
+ */
+int dss_lock_refresh(struct dss_handle *handle, const char *lock_id,
+                     const char *lock_owner);
+
+/**
  * Release a lock.
  *
  * If \a lock_owner is NULL, remove the lock without considering the
@@ -463,7 +476,7 @@ int dss_unlock(struct dss_handle *handle, const char *lock_id,
  * @param[in]   lock_id         Lock identifier.
  * @param[out]  lock_owner      Name of the lock owner, must be freed by
  *                              the caller.
- * @param[out]  lock_timestamp  Date when the lock was taken.
+ * @param[out]  lock_timestamp  Date when the lock was taken or last refreshed.
  * @return                      0 on success,
  *                             -ENOMEM if the \a lock_owner string cannot be
  *                              allocated,
