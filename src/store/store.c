@@ -906,7 +906,7 @@ int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
     return phobos_xfer(xfers, n, cb, udata);
 }
 
-int phobos_object_delete(struct pho_xfer_desc *xfers, size_t num_xfers)
+int phobos_delete(struct pho_xfer_desc *xfers, size_t num_xfers)
 {
     size_t i;
 

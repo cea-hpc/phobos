@@ -129,10 +129,16 @@ class CLIParametersTest(unittest.TestCase):
                                   'blob', 'lorem'])
         self.check_cmdline_valid(['delete', 'oid'])
         self.check_cmdline_valid(['delete', 'oid1', 'oid2', 'oid3'])
+        self.check_cmdline_valid(['del', 'oid'])
+        self.check_cmdline_valid(['del', 'oid1', 'oid2', 'oid3'])
         self.check_cmdline_valid(['undelete', 'uuid', 'uuid1'])
         self.check_cmdline_valid(['undelete', 'uuid', 'uuid1', 'uuid2'])
         self.check_cmdline_valid(['undelete', 'oid', 'oid1'])
         self.check_cmdline_valid(['undelete', 'oid', 'oid1', 'oid2'])
+        self.check_cmdline_valid(['undel', 'uuid', 'uuid1'])
+        self.check_cmdline_valid(['undel', 'uuid', 'uuid1', 'uuid2'])
+        self.check_cmdline_valid(['undel', 'oid', 'oid1'])
+        self.check_cmdline_valid(['undel', 'oid', 'oid1', 'oid2'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['voynichauthor', 'list'], code=2)

@@ -187,7 +187,7 @@ int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
  *
  * @return                  0 on success, -errno on failure
  */
-int phobos_object_delete(struct pho_xfer_desc *xfers, size_t num_xfers);
+int phobos_delete(struct pho_xfer_desc *xfers, size_t num_xfers);
 
 /**
  * Undelete a deprecated object from the object store

@@ -132,6 +132,7 @@ class BaseOptHandler(object):
     """
     label = '(undef)'
     descr = '(undef)'
+    alias = []
     epilog = None
     verbs = []
 
@@ -167,7 +168,8 @@ class BaseOptHandler(object):
     def subparser_register(cls, base_parser):
         """Register the subparser to a top-level one."""
         subparser = base_parser.add_parser(cls.label, help=cls.descr,
-                                           epilog=cls.epilog)
+                                           epilog=cls.epilog,
+                                           aliases=cls.alias)
 
         # Register options relating to the current media
         cls.add_options(subparser)
@@ -662,6 +664,7 @@ class DeleteOptHandler(BaseOptHandler):
     """Delete objects handler."""
 
     label = 'delete'
+    alias = ['del']
     descr = 'remove an object from phobos namespace and '\
             'add it to deprecated objects'
 
@@ -735,6 +738,7 @@ class UndeleteOptHandler(BaseOptHandler):
     """Undelete objects handler."""
 
     label = 'undelete'
+    alias = ['undel']
     descr = 'Move back deprecated objects into phobos namespace'
     verbs = [
         UuidOptHandler,
@@ -1570,7 +1574,7 @@ class PhobosActionContext(object):
         assert action is not None
 
         for handler in self.supported_handlers:
-            if handler.label == target:
+            if handler.label == target or target in handler.alias:
                 with handler(self.parameters) as target_inst:
                     # Invoke target::exec_{action}
                     getattr(target_inst, 'exec_%s' % action.replace('-', '_'))()

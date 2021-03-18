@@ -39,7 +39,7 @@ static bool test_delete_null_list(void)
 {
     int rc;
 
-    rc = phobos_object_delete(NULL, 0);
+    rc = phobos_delete(NULL, 0);
     if (rc)
         return false;
 
@@ -56,12 +56,12 @@ static bool test_delete_success(void)
     int rc;
 
     /* process the first xfer element */
-    rc = phobos_object_delete(xfers, 1);
+    rc = phobos_delete(xfers, 1);
     if (rc)
         return false;
 
     /* process the other xfer elements */
-    rc = phobos_object_delete(xfers + 1, 2);
+    rc = phobos_delete(xfers + 1, 2);
     if (rc)
         return false;
 
@@ -73,7 +73,7 @@ static bool test_delete_failure(void)
     struct pho_xfer_desc xfer = { .xd_objid = "not-an-object" };
     int rc;
 
-    rc = phobos_object_delete(&xfer, 1);
+    rc = phobos_delete(&xfer, 1);
     if (rc != -ENOENT)
         return false;
 

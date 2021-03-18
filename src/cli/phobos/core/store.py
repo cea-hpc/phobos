@@ -378,7 +378,7 @@ class UtilClient:
         for i, oid in enumerate(oids):
             xfers[i].xd_objid = oid
 
-        rc = LIBPHOBOS.phobos_object_delete(xfers, n_xfers)
+        rc = LIBPHOBOS.phobos_delete(xfers, n_xfers)
         if rc:
             raise EnvironmentError(rc)
 

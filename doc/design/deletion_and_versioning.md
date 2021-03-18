@@ -169,11 +169,11 @@ pair.
 This feature implies some modifications on the Phobos API.
 
 #### Object deletion
-The `phobos_object_delete()` call allows the transfer of the current generation
+The `phobos_delete()` call moves the current generation
 of an object from the ``object`` to the ``deprecated_object`` table.
 
 ```c
-int phobos_object_delete(struct pho_xfer_desc *xfers, int num_xfers);
+int phobos_delete(struct pho_xfer_desc *xfers, int num_xfers);
 ```
 
 As input, only the ``xd_oid`` field is taken into account for each ``xfer``.
@@ -191,7 +191,7 @@ and cli to definitely remove object from ``object`` and ``deprecated_object``
 table from a user action in addition of automatic policy-driven action.
 
 #### Object undelete
-The `phobos_undelete()` call allows to retrieve deprecated objects.
+The `phobos_undelete()` call retrieves deprecated objects.
 
 ```c
 int phobos_undelete(struct pho_xfer_desc *xfers, int num_xfers);
@@ -256,6 +256,7 @@ The `phobos delete` targets one (or more) object ID(s) to delete.
 
 ```
 $ phobos delete obj_id [obj_id ...]
+$ phobos del obj_id [obj_id ...]
 ```
 
 #### Object undelete
@@ -263,7 +264,9 @@ The `phobos undelete` targets deprecated objects referenced by OIDs or UUIDs.
 
 ```
 $ phobos undelete uuid uuid [uuid ...]
+$ phobos undel uuid uuid [uuid ...]
 $ phobos undelete oid obj_id [obj_id ...]
+$ phobos undel oid obj_id [obj_id ...]
 ```
 
 If a UUID is provided, and this UUID does not exist in the
