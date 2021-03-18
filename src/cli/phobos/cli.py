@@ -835,6 +835,15 @@ class FormatOptHandler(DSSInteractHandler):
                             help='Unlock media once it is ready to be written')
         parser.add_argument('res', nargs='+', help='Resource(s) to format')
 
+class DirFormatOptHandler(FormatOptHandler):
+    """Format a directory."""
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(DirFormatOptHandler, cls).add_options(parser)
+        parser.set_defaults(fs='posix')
+
 class BaseResourceOptHandler(DSSInteractHandler):
     """Generic interface for resources manipulation."""
     label = None
@@ -1217,7 +1226,7 @@ class DirOptHandler(MediaOptHandler):
     verbs = [
         MediaAddOptHandler,
         MediaUpdateOptHandler,
-        FormatOptHandler,
+        DirFormatOptHandler,
         MediaListOptHandler,
         LockOptHandler,
         UnlockOptHandler,
