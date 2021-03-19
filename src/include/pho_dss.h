@@ -437,4 +437,20 @@ int dss_object_undelete(struct dss_handle *handle, struct object_info *obj_list,
 int dss_lock(struct dss_handle *handle, const char *lock_id,
              const char *lock_owner);
 
+/**
+ * Release a lock.
+ *
+ * If \a lock_owner is NULL, remove the lock without considering the
+ * previous owner.
+ *
+ * @param[in]   handle          DSS handle.
+ * @param[in]   lock_id         Lock identifier.
+ * @param[in]   lock_owner      Name of the lock owner, ignored if NULL.
+ * @return                      0 on success,
+ *                             -ENOLCK if the lock does not exist,
+ *                             -EACCES if the lock owner does not match.
+ */
+int dss_unlock(struct dss_handle *handle, const char *lock_id,
+               const char *lock_owner);
+
 #endif

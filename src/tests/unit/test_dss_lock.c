@@ -36,6 +36,7 @@
 
 #include <cmocka.h>
 
+static const char *GOOD_LOCK_ID = "oid_dummy";
 static const char *GOOD_LOCK_OWNER = "dummy_owner";
 
 static int setup(void **state)
@@ -93,11 +94,10 @@ static int teardown(void **state)
     return 0;
 }
 
-static void dss_lock_ok(void **state)
+static void dss_lock_unlock_ok(void **state)
 {
     struct dss_handle *handle = (struct dss_handle *)*state;
     static const char *OTHER_LOCK_ID = "oid_dummy2";
-    static const char *GOOD_LOCK_ID = "oid_dummy";
     int rc;
 
     rc = dss_lock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER);
@@ -105,13 +105,18 @@ static void dss_lock_ok(void **state)
 
     rc = dss_lock(handle, OTHER_LOCK_ID, GOOD_LOCK_OWNER);
     assert_return_code(rc, -rc);
+
+    rc = dss_unlock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER);
+    assert_return_code(rc, -rc);
+
+    rc = dss_unlock(handle, OTHER_LOCK_ID, NULL);
+    assert_return_code(rc, -rc);
 }
 
 static void dss_lock_exists(void **state)
 {
     struct dss_handle *handle = (struct dss_handle *)*state;
     static const char *OTHER_LOCK_OWNER = "dummy_owner2";
-    static const char *GOOD_LOCK_ID = "oid_dummy3";
     int rc;
 
     rc = dss_lock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER);
@@ -122,13 +127,44 @@ static void dss_lock_exists(void **state)
 
     rc = dss_lock(handle, GOOD_LOCK_ID, OTHER_LOCK_OWNER);
     assert_int_equal(rc, -EEXIST);
+
+    assert(dss_unlock(handle, GOOD_LOCK_ID, NULL) == 0);
+}
+
+static void dss_unlock_not_exists(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    char *BAD_LOCK_ID = "not_exists";
+    int rc;
+
+    rc = dss_unlock(handle, BAD_LOCK_ID, NULL);
+    assert_int_equal(rc, -ENOLCK);
+
+    rc = dss_unlock(handle, BAD_LOCK_ID, GOOD_LOCK_OWNER);
+    assert_int_equal(rc, -ENOLCK);
+}
+
+static void dss_unlock_bad_owner(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    char *BAD_LOCK_OWNER = "not_an_owner";
+    int rc;
+
+    assert(dss_lock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER) == 0);
+
+    rc = dss_unlock(handle, GOOD_LOCK_ID, BAD_LOCK_OWNER);
+    assert_int_equal(rc, -EACCES);
+
+    assert(dss_unlock(handle, GOOD_LOCK_ID, GOOD_LOCK_OWNER) == 0);
 }
 
 int main(void)
 {
     const struct CMUnitTest dss_lock_test_cases[] = {
-        cmocka_unit_test(dss_lock_ok),
+        cmocka_unit_test(dss_lock_unlock_ok),
         cmocka_unit_test(dss_lock_exists),
+        cmocka_unit_test(dss_unlock_not_exists),
+        cmocka_unit_test(dss_unlock_bad_owner),
     };
 
     return cmocka_run_group_tests(dss_lock_test_cases, setup, teardown);

@@ -57,6 +57,9 @@ static const struct sqlerr_map_item sqlerr_map[] = {
     {"53200", -ENOMEM},
     {"53300", -EUSERS},
     {"53", -EIO},
+    /* Class PH - Phobos custom errors */
+    {"PHLK1", -ENOLCK},
+    {"PHLK2", -EACCES},
     /* Catch all -- KEEP LAST -- */
     {"", -ECOMM}
 };

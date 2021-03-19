@@ -35,21 +35,44 @@
 
 enum lock_query_idx {
     DSS_LOCK_QUERY,
+    DSS_UNLOCK_QUERY,
+    DSS_UNLOCK_FORCE_QUERY,
 };
 
 static const char * const lock_query[] = {
-    [DSS_LOCK_QUERY] = "INSERT INTO lock (id, owner) VALUES ('%s', '%s');",
+    [DSS_LOCK_QUERY]         = "INSERT INTO lock (id, owner)"
+                               " VALUES ('%s', '%s');",
+    [DSS_UNLOCK_QUERY]       = "DO $$"
+                               " DECLARE lock_id TEXT:= '%s';"
+                               "         lock_owner TEXT:="
+                               "             (SELECT owner FROM lock"
+                               "              WHERE id = lock_id);"
+                               " BEGIN"
+                               " IF lock_owner IS NULL THEN"
+                               "  RAISE USING errcode = 'PHLK1';"
+                               " END IF;"
+                               " IF lock_owner <> '%s' THEN"
+                               "  RAISE USING errcode = 'PHLK2';"
+                               " END IF;"
+                               " DELETE FROM lock"
+                               "  WHERE id = lock_id AND owner = lock_owner;"
+                               "END $$;",
+    [DSS_UNLOCK_FORCE_QUERY] = "DO $$"
+                               " DECLARE lock_id TEXT:= '%s';"
+                               "         owner TEXT:= (SELECT owner FROM lock"
+                               "                       WHERE id = lock_id);"
+                               " BEGIN"
+                               " IF owner IS NULL THEN"
+                               "  RAISE USING errcode = 'PHLK1';"
+                               " END IF;"
+                               " DELETE FROM lock WHERE id = lock_id;"
+                               "END $$;",
 };
 
-int dss_lock(struct dss_handle *handle, const char *lock_id,
-             const char *lock_owner)
+static int execute(PGconn *conn, GString *request)
 {
-    GString *request = g_string_new("");
-    PGconn *conn = handle->dh_conn;
     PGresult *res;
     int rc = 0;
-
-    g_string_printf(request, lock_query[DSS_LOCK_QUERY], lock_id, lock_owner);
 
     pho_debug("Executing request: '%s'", request->str);
 
@@ -62,4 +85,32 @@ cleanup:
     PQclear(res);
     g_string_free(request, true);
     return rc;
+}
+
+int dss_lock(struct dss_handle *handle, const char *lock_id,
+             const char *lock_owner)
+{
+    GString *request = g_string_new("");
+    PGconn *conn = handle->dh_conn;
+
+    g_string_printf(request, lock_query[DSS_LOCK_QUERY], lock_id, lock_owner);
+
+    return execute(conn, request);
+}
+
+int dss_unlock(struct dss_handle *handle, const char *lock_id,
+               const char *lock_owner)
+{
+    GString *request = g_string_new("");
+    PGconn *conn = handle->dh_conn;
+
+    if (lock_owner != NULL)
+        g_string_printf(request, lock_query[DSS_UNLOCK_QUERY], lock_id,
+                        lock_owner);
+    else
+        g_string_printf(request, lock_query[DSS_UNLOCK_FORCE_QUERY], lock_id);
+
+    pho_debug("Executing request: '%s'", request->str);
+
+    return execute(conn, request);
 }
