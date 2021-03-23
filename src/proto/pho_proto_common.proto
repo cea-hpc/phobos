@@ -23,6 +23,8 @@
  * \brief   Protobuf file for common structures.
  */
 
+syntax = "proto2";
+
 /** Resource family. */
 enum PhoResourceFamily {
     FM_DISK = 0;    // Disk.
