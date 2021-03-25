@@ -472,6 +472,7 @@ static const char * const insert_query_values[] = {
     [DSS_DEPREC] = "('%s', '%s', %d, '%s')%s",
 };
 
+/* To remove once all the tests have been modified to use the new locks */
 enum dss_lock_queries {
     DSS_LOCK_QUERY =  0,
     DSS_UNLOCK_QUERY,
@@ -485,6 +486,7 @@ enum dss_lock_queries {
  * to the (un)lock function to the current lockable item count.
  * "IN" is used as we can't do a subquery with ==
  */
+/* To remove once all the tests have been modified to use the new locks */
 static const char * const lock_query[] = {
     [DSS_UNLOCK_QUERY] = "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s AND "
                          "lock=%s AND "
@@ -502,6 +504,7 @@ static const char * const lock_query[] = {
                          "       lock='');",
 };
 
+/* To remove once all the tests have been modified to use the new locks */
 static const char * const simple_lock_query[] = {
     [DSS_UNLOCK_QUERY] = "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s AND "
                          "lock=%s;",
@@ -1336,8 +1339,9 @@ static int get_device_setrequest(PGconn *conn, struct dev_info *item_list,
     return 0;
 }
 
-static int dss_build_uid_list(PGconn *conn, void *item_list, int item_cnt,
-                              enum dss_type type, GString *ids)
+/* To remove once all the tests have been modified to use the new locks */
+static int dss_old_build_uid_list(PGconn *conn, void *item_list, int item_cnt,
+                                  enum dss_type type, GString *ids)
 {
     char         *escape_string;
     unsigned int  escape_len;
@@ -1371,8 +1375,7 @@ static int dss_build_uid_list(PGconn *conn, void *item_list, int item_cnt,
             if (!escape_string)
                 LOG_RETURN(-ENOMEM, "Memory allocation failed");
 
-            PQescapeStringConn(conn, escape_string,
-                               media_ls[i].rsc.id.name,
+            PQescapeStringConn(conn, escape_string, media_ls[i].rsc.id.name,
                                escape_len, NULL);
             g_string_append_printf(ids, "%s'%s' %s",
                                    i ? "" : "(",
@@ -1381,11 +1384,58 @@ static int dss_build_uid_list(PGconn *conn, void *item_list, int item_cnt,
             free(escape_string);
         }
         break;
-
     default:
         return -EINVAL;
     }
     return 0;
+}
+
+static int dss_build_lock_id_list(PGconn *conn, void *item_list, int item_cnt,
+                                  enum dss_type type, GString **ids)
+{
+    char         *escape_string;
+    unsigned int  escape_len;
+    int           rc = 0;
+    char         *name;
+    int           i;
+
+    for (i = 0; i < item_cnt; i++) {
+        switch (type) {
+        case DSS_DEVICE: {
+            struct dev_info *dev_ls = item_list;
+
+            name = dev_ls[i].rsc.id.name;
+            break;
+        }
+        case DSS_MEDIA: {
+            struct media_info *mda_ls = item_list;
+
+            name = mda_ls[i].rsc.id.name;
+            break;
+        }
+        default:
+            return -EINVAL;
+        }
+
+        escape_len = strlen(name) * 2 + 1;
+        escape_string = malloc(escape_len);
+        if (!escape_string)
+            LOG_GOTO(cleanup, rc = -ENOMEM, "Memory allocation failed");
+
+        PQescapeStringConn(conn, escape_string, name, escape_len, NULL);
+        g_string_append_printf(ids[i], "%s_%s", dss_type_names[type],
+                               escape_string);
+
+        if (ids[i]->len > PHO_DSS_MAX_LOCK_ID_LEN)
+            LOG_GOTO(cleanup, rc = -EINVAL, "lock_id name too long");
+
+cleanup:
+        free(escape_string);
+        if (rc)
+            break;
+    }
+
+    return rc;
 }
 
 static inline bool is_type_supported(enum dss_type type)
@@ -1990,9 +2040,10 @@ out_cleanup:
     return rc;
 }
 
-static int dss_generic_lock(struct dss_handle *handle, enum dss_type type,
-                            void *item_list, int item_cnt,
-                            const char *lock_owner)
+/* To remove once all the tests have been modified to use the new locks */
+static int dss_old_generic_lock(struct dss_handle *handle, enum dss_type type,
+                                void *item_list, int item_cnt,
+                                const char *lock_owner)
 {
     PGconn      *conn = handle->dh_conn;
     GString     *ids;
@@ -2000,6 +2051,7 @@ static int dss_generic_lock(struct dss_handle *handle, enum dss_type type,
     PGresult    *res = NULL;
     char        *lock_owner_sql;
     int          rc = 0;
+
     ENTRY;
 
     if (conn == NULL || item_list == NULL || item_cnt == 0
@@ -2017,7 +2069,7 @@ static int dss_generic_lock(struct dss_handle *handle, enum dss_type type,
     ids = g_string_new("");
     request = g_string_new("");
 
-    rc = dss_build_uid_list(conn, item_list, item_cnt, type, ids);
+    rc = dss_old_build_uid_list(conn, item_list, item_cnt, type, ids);
     if (rc)
         LOG_GOTO(out_cleanup, rc, "Ids list build failed");
 
@@ -2029,9 +2081,10 @@ static int dss_generic_lock(struct dss_handle *handle, enum dss_type type,
         g_string_printf(request, simple_lock_query[DSS_LOCK_QUERY],
                         dss_type2str(type), lock_owner_sql, ids->str);
     else
-        g_string_printf(request, lock_query[DSS_LOCK_QUERY], dss_type2str(type),
-                        lock_owner_sql, ids->str, item_cnt,
+        g_string_printf(request, lock_query[DSS_LOCK_QUERY],
+                        dss_type2str(type), lock_owner_sql, ids->str, item_cnt,
                         dss_type2str(type),  ids->str);
+
     free_dss_char4sql(lock_owner_sql);
 
     pho_debug("Executing request: '%s'", request->str);
@@ -2052,15 +2105,70 @@ out_cleanup:
     return rc;
 }
 
-static int dss_generic_unlock(struct dss_handle *handle, enum dss_type type,
-                              void *item_list, int item_cnt,
-                              const char *lock_owner)
+static int dss_generic_lock(struct dss_handle *handle, enum dss_type type,
+                            void *item_list, int item_cnt,
+                            const char *lock_owner)
+{
+    PGconn      *conn = handle->dh_conn;
+    GString    **ids;
+    int          rc = 0;
+    int          i;
+
+    ENTRY;
+
+    /* To remove once all the tests have been modified to use the new locks */
+    rc = dss_old_generic_lock(handle, type, item_list, item_cnt, lock_owner);
+    if (rc)
+        return rc;
+
+    ids = malloc(item_cnt * sizeof(*ids));
+    if (!ids)
+        LOG_RETURN(-ENOMEM, "Couldn't allocate ids");
+
+    for (i = 0; i < item_cnt; ++i)
+        ids[i] = g_string_new("");
+
+    rc = dss_build_lock_id_list(conn, item_list, item_cnt, type, ids);
+    if (rc)
+        LOG_GOTO(cleanup, rc, "Ids list build failed");
+
+    for (i = 0; i < item_cnt; ++i) {
+        rc = dss_lock(handle, ids[i]->str, lock_owner);
+        if (rc) {
+            pho_error(rc, "Failed to lock %s", ids[i]->str);
+            break;
+        }
+    }
+
+    if (rc) {
+        for (--i; i >= 0; --i) {
+            /* If a lock failure happens, we force every unlock */
+            rc = dss_unlock(handle, ids[i]->str, NULL);
+            if (rc)
+                pho_error(rc, "Failed to unlock %s after lock failure, "
+                          "database may be corrupted", ids[i]->str);
+        }
+    }
+
+cleanup:
+    for (i = 0; i < item_cnt; ++i)
+        g_string_free(ids[i], true);
+    free(ids);
+
+    return rc;
+}
+
+/* To remove once all the tests have been modified to use the new locks */
+static int dss_old_generic_unlock(struct dss_handle *handle, enum dss_type type,
+                                  void *item_list, int item_cnt,
+                                  const char *lock_owner)
 {
     PGconn      *conn = handle->dh_conn;
     GString     *ids;
     GString     *request;
     PGresult    *res = NULL;
     int          rc = 0;
+
     ENTRY;
 
     if (conn == NULL || item_list == NULL || item_cnt == 0)
@@ -2070,7 +2178,7 @@ static int dss_generic_unlock(struct dss_handle *handle, enum dss_type type,
     ids = g_string_new("");
     request = g_string_new("");
 
-    rc = dss_build_uid_list(conn, item_list, item_cnt, type, ids);
+    rc = dss_old_build_uid_list(conn, item_list, item_cnt, type, ids);
     if (rc)
         LOG_GOTO(out_cleanup, rc, "Ids list build failed");
 
@@ -2115,6 +2223,51 @@ out_cleanup:
     PQclear(res);
     g_string_free(request, true);
     g_string_free(ids, true);
+    return rc;
+}
+
+static int dss_generic_unlock(struct dss_handle *handle, enum dss_type type,
+                              void *item_list, int item_cnt,
+                              const char *lock_owner)
+{
+    PGconn      *conn = handle->dh_conn;
+    GString    **ids;
+    int          rc = 0;
+    int          i;
+
+    ENTRY;
+
+    /* To remove once all the tests have been modified to use the new locks */
+    rc = dss_old_generic_unlock(handle, type, item_list, item_cnt, lock_owner);
+    if (rc)
+        return rc;
+
+    ids = malloc(item_cnt * sizeof(*ids));
+    if (!ids)
+        LOG_RETURN(-ENOMEM, "Couldn't allocate ids");
+
+    for (i = 0; i < item_cnt; ++i)
+        ids[i] = g_string_new("");
+
+    rc = dss_build_lock_id_list(conn, item_list, item_cnt, type, ids);
+    if (rc)
+        LOG_GOTO(cleanup, rc, "Ids list build failed");
+
+    for (i = 0; i < item_cnt; ++i) {
+        int rc2;
+
+        rc2 = dss_unlock(handle, ids[i]->str, lock_owner);
+        if (rc2) {
+            rc = rc ? : rc2;
+            pho_error(rc2, "Failed to unlock %s", ids[i]->str);
+        }
+    }
+
+cleanup:
+    for (i = 0; i < item_cnt; ++i)
+        g_string_free(ids[i], true);
+    free(ids);
+
     return rc;
 }
 

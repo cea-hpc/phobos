@@ -145,7 +145,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "Usage: %s ACTION TYPE [ \"CRIT\" ]\n", argv[0]);
         fprintf(stderr, "where  ACTION := { get | set | lock | unlock}\n");
         fprintf(stderr, "       TYPE := "
-                        "{ device | media | object | deprecated_object | layout }\n");
+                        "{ device | media | object | deprec | layout }\n");
         fprintf(stderr, "       [ \"CRIT\" ] := \"field cmp value\"\n");
         fprintf(stderr, "Optional for get:\n");
         fprintf(stderr, "       nb item found\n");
@@ -169,7 +169,7 @@ int main(int argc, char **argv)
         type = str2dss_type(argv[2]);
         if (type == DSS_INVAL) {
             pho_error(EINVAL,
-                      "verb device|media|object|deprecated_object|layout "
+                      "verb device|media|object|deprec|layout "
                       "expected instead of %s",
                       argv[2]);
             exit(EXIT_FAILURE);
@@ -277,7 +277,7 @@ int main(int argc, char **argv)
 
         if (type == DSS_INVAL) {
             pho_error(EINVAL,
-                      "verb dev|media|object|deprecated_object|layout expected "
+                      "verb dev|media|object|deprec|layout expected "
                       "instead of %s",
                       argv[2]);
             exit(EXIT_FAILURE);

@@ -34,6 +34,9 @@
 /* Maximum lock_owner size, related to the database schema */
 #define PHO_DSS_MAX_LOCK_OWNER_LEN 256
 
+/* Maximum lock id size, related to the database schema */
+#define PHO_DSS_MAX_LOCK_ID_LEN 2048
+
 /** item types */
 enum dss_type {
     DSS_INVAL  = -1,
@@ -47,7 +50,7 @@ enum dss_type {
 
 static const char * const dss_type_names[] = {
     [DSS_OBJECT] = "object",
-    [DSS_DEPREC] = "deprecated_object",
+    [DSS_DEPREC] = "deprec",
     [DSS_LAYOUT] = "layout",
     [DSS_DEVICE] = "device",
     [DSS_MEDIA]  = "media",

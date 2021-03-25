@@ -348,7 +348,7 @@ class DeviceAddTest(BasicExecutionTest):
     that both regular and abnormal cases are handled properly.
     """
     def test_dir_add(self):
-        """test adding directories. Simple case."""
+        """Test adding directories. Simple case."""
         flist = []
         for _ in range(5):
             file = tempfile.NamedTemporaryFile()
