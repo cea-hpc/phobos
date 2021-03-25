@@ -668,7 +668,7 @@ int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
     if (rc)
         pho_error(rc, "Cannot fetch layouts");
 
-    dss_filter_free(&filter);
+    dss_filter_free(filter_ptr);
 
     return rc;
 }
