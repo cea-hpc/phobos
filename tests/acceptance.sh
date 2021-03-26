@@ -387,9 +387,15 @@ function put_alias
 # Test mput command
 function mput
 {
-    OBJECTS=("/etc/hosts mput_oid_1 -" \
-             "/etc/hosts.allow mput_oid_2 foo=1" \
-             "/etc/hosts.deny mput_oid_3 a=1,b=2,c=3")
+    local filenames=("$(mktemp)" "$(mktemp)" "$(mktemp)")
+
+    echo "test1" > ${filenames[0]}
+    echo "test2" > ${filenames[1]}
+    echo "test3" > ${filenames[2]}
+
+    OBJECTS=("${filenames[0]} mput_oid_1 -" \
+             "${filenames[1]} mput_oid_2 foo=1" \
+             "${filenames[2]} mput_oid_3 a=1,b=2,c=3")
 
     # create mput input file
     echo "${OBJECTS[0]}
@@ -403,7 +409,7 @@ function mput
     rm mput_list
 
     # modify metadata of first entry as '-' is interpreted as no metadata
-    OBJECTS[0]="/etc/hosts mput_oid_1 "
+    OBJECTS[0]="${filenames[0]} mput_oid_1 "
 
     # check mput correct behavior
     for object in "${OBJECTS[@]}"
@@ -425,6 +431,8 @@ function mput
 
         rm file_test
     done
+
+    rm ${filenames}
 }
 
 # make sure there are at least N available dir/drives
