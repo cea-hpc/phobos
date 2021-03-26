@@ -444,10 +444,10 @@ int str2timeval(const char *tv_str, struct timeval *tv)
 
 int timeval2str(const struct timeval *tv, char *tv_str)
 {
-    char buf[PHO_TIMEVAL_MAX_LEN];
+    char buf[PHO_TIMEVAL_MAX_LEN - 7];
 
     strftime(buf, sizeof(buf), "%Y-%m-%d %T", localtime(&tv->tv_sec));
-    snprintf(tv_str, sizeof(buf), "%s.%06ld", buf, tv->tv_usec);
+    snprintf(tv_str, PHO_TIMEVAL_MAX_LEN, "%s.%06ld", buf, tv->tv_usec);
 
     return 0;
 }
