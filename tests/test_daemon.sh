@@ -82,7 +82,7 @@ function test_release_medium_old_locks
     trap -- "rm '$PHOBOS_LRS_lock_file'" EXIT
     PHOBOS_LRS_families="dir" gdb $phobosd <<< "break sched_check_medium_locks
                                                 run -i
-                                                next
+                                                finish
                                                 quit"
     )
 
@@ -121,7 +121,7 @@ function test_release_device_old_locks
     trap -- "rm '$PHOBOS_LRS_lock_file'" EXIT
     PHOBOS_LRS_families="tape" gdb $phobosd <<< "break sched_check_device_locks
                                                  run -i
-                                                 next
+                                                 finish
                                                  quit"
     )
 
