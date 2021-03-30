@@ -2191,9 +2191,9 @@ static int dss_prepare_version_list_from_deprec(PGconn *conn, GString *list,
     return 0;
 }
 
-static int dss_object_move(struct dss_handle *handle, enum dss_type type_from,
-                           enum dss_type type_to, struct object_info *obj_list,
-                           int obj_cnt)
+int dss_object_move(struct dss_handle *handle, enum dss_type type_from,
+                    enum dss_type type_to, struct object_info *obj_list,
+                    int obj_cnt)
 {
     PGconn      *conn = handle->dh_conn;
     enum dss_move_queries move_type;

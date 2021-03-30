@@ -422,8 +422,69 @@ int dss_object_undelete(struct dss_handle *handle, struct object_info *obj_list,
                       int obj_cnt);
 
 /* ****************************************************************************/
+/* Generic move ***************************************************************/
+/* ****************************************************************************/
+
+/**
+ * Move an object between two tables
+ *
+ * @param[in] handle    DSS handle
+ * @param[in] type_from Table from which the object should be deleted
+ * @param[in] type_to   Table into which the object should be inserted
+ * @param[in] obj_list  Objects to move (only primary keys fields of the start
+ *                      table must be filled : oid for object table, uuid and
+ *                      version for deprecated_object table)
+ * @param[in] obj_count Number of objects
+ *
+ * @return              0 if success, negated errno code on failure
+ */
+int dss_object_move(struct dss_handle *handle, enum dss_type type_from,
+                    enum dss_type type_to, struct object_info *obj_list,
+                    int obj_cnt);
+
+/* ****************************************************************************/
 /* Generic lock ***************************************************************/
 /* ****************************************************************************/
+
+/**
+ * Generate a lock_owner "hostname:tid:time:locknumber"
+ *
+ * Where:
+ * - hostname:      local hostname without domain, limited to 213 characters
+ * - tid:           thread id limited to 8 characters
+ * - time:          number of seconds since epoch limited to 16 characters
+ * - lock_number:   unsigned int counter dedicated to each thread, incremented
+ *                  at each new lock owner creation, limited to 16 characters
+ *
+ * Ensure that we don't build an identifier bigger than 256 characters.
+ *
+ * For the lock owner name to generate a collision, either the tid or the
+ * sched_lock_number has to loop in less than 1 second.
+ *
+ * @param[out] lock_owner   Newly allocated and generated lock owner if success,
+ *                          must be freed by the caller, NULL if an error occurs
+ *
+ * @return                  0 if success,
+ *                          -ENOMEM if there is not enough memory to generate
+ *                          the lock owner
+ *                          -EADDRNOTAVAIL if hostname can't be found to
+ *                          generate the lock owner
+ */
+int dss_init_lock_owner(char **lock_owner);
+
+/**
+ * Generate a lock_id for an oid : oid.oid_value
+ *
+ * oid_value is limited to 1024 characters max
+ *
+ * @param[in]  oid          oid value
+ * @param[out] oid_lock_id  Allocated and generated oid_lock_id if success, must
+ *                          be freed by caller, NULL if error
+ *
+ * @return                  0 if success,
+ *                          -ENOMEM if unable to allocate oid_lock_id
+ */
+int dss_init_oid_lock_id(const char *oid, char **oid_lock_id);
 
 /**
  * Take a lock.

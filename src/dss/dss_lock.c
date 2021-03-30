@@ -26,12 +26,15 @@
 #include "config.h"
 #endif
 
-#include "pho_dss.h"
+#include <errno.h>
+#include <unistd.h>
+#include <sys/syscall.h>
 
 #include <libpq-fe.h>
 
 #include "dss_utils.h"
 #include "pho_common.h"
+#include "pho_dss.h"
 #include "pho_type_utils.h"
 
 enum lock_query_idx {
@@ -98,6 +101,42 @@ static int execute(PGconn *conn, GString *request, PGresult **res,
     if (PQresultStatus(*res) != tested)
         LOG_RETURN(psql_state2errno(*res), "Request failed: %s",
                    PQresultErrorField(*res, PG_DIAG_MESSAGE_PRIMARY));
+
+    return 0;
+}
+
+static __thread uint64_t lock_number;
+
+int dss_init_lock_owner(char **lock_owner)
+{
+    const char *hostname;
+    int rc;
+
+    *lock_owner = NULL;
+
+    /* get hostname */
+    hostname = get_hostname();
+    if (!hostname)
+        LOG_RETURN(-EADDRNOTAVAIL,
+                   "Unable to get hostname to generate lock_owner");
+
+    /* generate lock_owner */
+    rc = asprintf(lock_owner, "%.213s:%.8lx:%.16lx:%.16lx",
+                  hostname, syscall(SYS_gettid), time(NULL), lock_number);
+    if (rc == -1)
+        LOG_RETURN(-ENOMEM, "Unable to generate lock_owner");
+
+    lock_number++;
+    return 0;
+}
+
+int dss_init_oid_lock_id(const char *oid, char **oid_lock_id)
+{
+    int rc;
+
+    rc = asprintf(oid_lock_id, "oid.%.1024s", oid);
+    if (rc == -1)
+        LOG_RETURN(-ENOMEM, "Unable to generate oid_lock_id");
 
     return 0;
 }

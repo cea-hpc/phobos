@@ -29,6 +29,7 @@
 #include "lrs_cfg.h"
 #include "lrs_sched.h"
 #include "pho_common.h"
+#include "pho_dss.h"
 #include "pho_io.h"
 #include "pho_ldm.h"
 #include "pho_type_utils.h"
@@ -41,9 +42,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/syscall.h>
 #include <sys/types.h>
-#include <unistd.h>
 
 #include <jansson.h>
 
@@ -729,26 +728,15 @@ static int sched_check_medium_locks(struct lrs_sched *sched)
     return rc;
 }
 
-static __thread uint64_t sched_lock_number;
-
 int sched_init(struct lrs_sched *sched, enum rsc_family family)
 {
     int rc;
 
     sched->family = family;
 
-    /* For the lock owner name to generate a collision, either the tid or the
-     * sched_lock_number has to loop in less than 1 second.
-     *
-     * Ensure that we don't build an identifier bigger than 256 characters.
-     */
-    rc = asprintf(&sched->lock_owner, "%.213s:%.8lx:%.16lx:%.16lx",
-                  get_hostname(), syscall(SYS_gettid), time(NULL),
-                  sched_lock_number);
-    if (rc == -1)
-        return -ENOMEM;
-
-    sched_lock_number++;
+    rc = dss_init_lock_owner(&sched->lock_owner);
+    if (rc)
+        return rc;
 
     /* Connect to the DSS */
     rc = dss_init(&sched->dss);

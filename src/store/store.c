@@ -388,15 +388,75 @@ static int object_md_del(struct dss_handle *dss, char *objid)
     return 0;
 }
 
+/**
+ * TODO: from object_delete to objects_delete, to delete many objects (all or
+ * nothing) into the same command.
+ */
 static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 {
     struct object_info obj = { .oid = xfer->xd_objid };
+    struct dss_filter filter;
+    struct object_info *objs;
+    char *lock_owner;
+    char *lock_id;
+    int obj_cnt;
+    int rc2;
     int rc;
 
-    rc = dss_object_delete(dss, &obj, 1);
+    /* taking oid lock */
+    rc = dss_init_oid_lock_id(obj.oid, &lock_id);
     if (rc)
-        LOG_RETURN(rc, "Cannot delete oid:'%s'", xfer->xd_objid);
+        LOG_RETURN(rc, "Unable to init lock id in object delete");
 
+    rc = dss_init_lock_owner(&lock_owner);
+    if (rc)
+        LOG_GOTO(out_id, rc, "Unable to init lock owner in object delete");
+
+    rc = dss_lock(dss, lock_id, lock_owner);
+    if (rc)
+        LOG_GOTO(out_id_owner, rc, "Unable to get lock for oid %s before "
+                                   "delete, lock_id: %s , lock_owner: %s",
+                                   obj.oid, lock_id, lock_owner);
+
+    /* checking oid exists into object table */
+    rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}", obj.oid);
+    if (rc)
+        LOG_GOTO(out_unlock, rc, "Unable to build oid filter in object delete");
+
+    rc = dss_object_get(dss, &filter, &objs, &obj_cnt);
+    if (rc)
+        LOG_GOTO(out_filter, rc, "Cannot fetch objid in object delete:'%s'",
+                                 obj.oid);
+
+    if (obj_cnt != 1) {
+        rc = -ENOENT;
+        LOG_GOTO(out_free, rc, "Unable to get one object in object delete "
+                               "for oid: '%s'", obj.oid);
+    }
+
+    /* move from object table to deprecated object table */
+    rc = dss_object_move(dss, DSS_OBJECT, DSS_DEPREC, &obj, 1);
+    if (rc)
+        LOG_GOTO(out_free, rc, "Unable to move from object to deprecated in "
+                               "object delete, for oid: '%s'", obj.oid);
+
+out_free:
+    dss_res_free(objs, obj_cnt);
+out_filter:
+    dss_filter_free(&filter);
+out_unlock:
+    /* releasing oid lock */
+    rc2 = dss_unlock(dss, lock_id, lock_owner);
+    if (rc2) {
+        pho_error(rc, "Unable to unlock at end of object delete (lock_id: %s, "
+                      "lock_owner: %s)", lock_id, lock_owner);
+        rc = rc ? : rc2;
+    }
+
+out_id_owner:
+    free(lock_owner);
+out_id:
+    free(lock_id);
     return rc;
 }
 
@@ -767,8 +827,14 @@ static int store_perform_xfers(struct phobos_handle *pho)
     size_t i;
     int rc = 0;
 
+    /**
+     * TODO: delete or undelete many objects (all or
+     * nothing) into the same command.
+     */
     /*
-     * Save object metadata as a way to "reserve" the OID and ensure its
+     * DELETE or UNDELETE : perform metada move
+     *
+     * PUT : Save object metadata as a way to "reserve" the OID and ensure its
      * unicity before performing any IO. From now on, any failed object must
      * have its metadata cleared from the DSS.
      */

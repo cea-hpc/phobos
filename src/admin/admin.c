@@ -29,7 +29,6 @@
 #include "phobos_admin.h"
 
 #include <errno.h>
-#include <sys/syscall.h>
 #include <unistd.h>
 
 #include "pho_cfg.h"
@@ -371,8 +370,6 @@ void phobos_admin_fini(struct admin_handle *adm)
     dss_fini(&adm->dss);
 }
 
-static __thread uint64_t adm_lock_number;
-
 int phobos_admin_init(struct admin_handle *adm, bool lrs_required)
 {
     const char *sock_path;
@@ -381,14 +378,9 @@ int phobos_admin_init(struct admin_handle *adm, bool lrs_required)
     memset(adm, 0, sizeof(*adm));
     adm->comm = pho_comm_info_init();
 
-    rc = asprintf(&adm->lock_owner, "%.213s:%.8lx:%.16lx:%.16lx",
-                  get_hostname(), syscall(SYS_gettid), time(NULL),
-                  adm_lock_number);
-
-    if (rc == -1)
+    rc = dss_init_lock_owner(&adm->lock_owner);
+    if (rc)
         LOG_GOTO(out, rc, "Cannot allocate lock_owner");
-
-    ++adm_lock_number;
 
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)
