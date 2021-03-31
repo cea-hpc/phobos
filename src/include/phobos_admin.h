@@ -117,6 +117,16 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
 int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
                         enum fs_type fs, bool unlock);
 
+/*
+ * Ping the daemon to check if it is online or not.
+ *
+ * \param[in]       adm             Admin module handler.
+ *
+ * \return                          0     on success,
+ *                                 -errno on failure.
+ */
+int phobos_admin_ping(struct admin_handle *adm);
+
 /**
  * Retrieve layouts of objects whose IDs match the given name or pattern.
  *

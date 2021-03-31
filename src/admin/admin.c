@@ -39,6 +39,7 @@
 #include "pho_ldm.h"
 #include "pho_srl_lrs.h"
 #include "pho_type_utils.h"
+#include "admin_utils.h"
 
 enum pho_cfg_params_admin {
     /* Actual admin parameters */
@@ -61,8 +62,8 @@ const struct pho_config_item cfg_admin[] = {
 /* Static Communication-related Functions *************************************/
 /* ****************************************************************************/
 
-static int _send_and_receive(struct admin_handle *adm, pho_req_t *req,
-                             pho_resp_t **resp)
+int _send_and_receive(struct admin_handle *adm, pho_req_t *req,
+                      pho_resp_t **resp)
 {
     struct pho_comm_data *data_in = NULL;
     struct pho_comm_data data_out;
@@ -549,6 +550,32 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
 
 out:
     pho_srl_response_free(resp, true);
+    return rc;
+}
+
+int phobos_admin_ping(struct admin_handle *adm)
+{
+    pho_resp_t *resp;
+    pho_req_t req;
+    int rid = 1;
+    int rc;
+
+    rc = pho_srl_request_ping_alloc(&req);
+    if (rc)
+        LOG_RETURN(rc, "Cannot create ping request");
+
+    req.id = rid;
+
+    rc = _send_and_receive(adm, &req, &resp);
+    if (rc)
+        LOG_RETURN(rc, "Error with phobosd communication");
+
+    /* expect ping response, send error otherwise */
+    if (!(pho_response_is_ping(resp) && resp->req_id == rid))
+        pho_error(rc = -EBADMSG, "Bad response from phobosd");
+
+    pho_srl_response_free(resp, false);
+
     return rc;
 }
 

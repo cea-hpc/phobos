@@ -111,6 +111,19 @@ static inline bool pho_request_is_release(const pho_req_t *req)
 }
 
 /**
+ * Request ping checker.
+ *
+ * \param[in]       req         Request.
+ *
+ * \return                      true if the request is a ping one,
+ *                              false else.
+ */
+static inline bool pho_request_is_ping(const pho_req_t *req)
+{
+    return req->has_ping;
+}
+
+/**
  * Request format checker.
  *
  * \param[in]       req         Request.
@@ -173,6 +186,19 @@ static inline bool pho_response_is_read(const pho_resp_t *resp)
 static inline bool pho_response_is_release(const pho_resp_t *resp)
 {
     return resp->release != NULL;
+}
+
+/**
+ * Response ping checker.
+ *
+ * \param[in]       req         Response.
+ *
+ * \return                      true if the response is a ping one,
+ *                              false else.
+ */
+static inline bool pho_response_is_ping(const pho_resp_t *resp)
+{
+    return resp->has_ping;
 }
 
 /**
@@ -291,6 +317,15 @@ int pho_srl_request_release_alloc(pho_req_t *req, size_t n_media);
 int pho_srl_request_format_alloc(pho_req_t *req);
 
 /**
+ * Allocation of ping request contents.
+ *
+ * \param[out]      req         Pointer to the request data structure.
+ *
+ * \return                      0 on success, -ENOMEM on failure.
+ */
+int pho_srl_request_ping_alloc(pho_req_t *req);
+
+/**
  * Allocation of notify request contents.
  *
  * \param[out]      req         Pointer to the request data structure.
@@ -346,6 +381,15 @@ int pho_srl_response_release_alloc(pho_resp_t *resp, size_t n_media);
  * \return                      0 on success, -ENOMEM on failure.
  */
 int pho_srl_response_format_alloc(pho_resp_t *resp);
+
+/**
+ * Allocation of ping response contents.
+ *
+ * \param[out]      resp        Pointer to the response data structure.
+ *
+ * \return                      0 on success, -ENOMEM on failure.
+ */
+int pho_srl_response_ping_alloc(pho_resp_t *resp);
 
 /**
  * Allocation of notify response contents.

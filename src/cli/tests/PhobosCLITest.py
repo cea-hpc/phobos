@@ -84,7 +84,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['object', '-h'])
         self.check_cmdline_exit(['extent', '-h'])
 
-    def test_cli_basic(self):
+    def test_cli_basic(self): # pylint: disable=too-many-statements
         """test simple valid and invalid command lines."""
         self.check_cmdline_valid(['dir', 'list'])
         self.check_cmdline_valid(['dir', 'add', '--unlock', 'toto'])
@@ -139,6 +139,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['undel', 'uuid', 'uuid1', 'uuid2'])
         self.check_cmdline_valid(['undel', 'oid', 'oid1'])
         self.check_cmdline_valid(['undel', 'oid', 'oid1', 'oid2'])
+        self.check_cmdline_valid(['ping'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['voynichauthor', 'list'], code=2)

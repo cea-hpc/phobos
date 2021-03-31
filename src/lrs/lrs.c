@@ -249,6 +249,32 @@ err_resp:
     return rc;
 }
 
+static int _process_ping_request(struct lrs *lrs,
+                                 const struct req_container *req_cont)
+{
+    struct resp_container resp_cont;
+    int rc;
+
+    resp_cont.resp = malloc(sizeof(*resp_cont.resp));
+    if (!resp_cont.resp)
+        LOG_RETURN(-ENOMEM, "Cannot allocate ping response");
+
+    resp_cont.token = req_cont->token;
+    rc = pho_srl_response_ping_alloc(resp_cont.resp);
+    if (rc)
+        LOG_GOTO(err_resp, rc, "Failed to allocate response");
+    resp_cont.resp->req_id = req_cont->req->id;
+
+    rc = _send_responses(lrs, 1, &resp_cont);
+    if (rc)
+        LOG_GOTO(err_resp, rc, "Error during response sending");
+
+err_resp:
+    free(resp_cont.resp);
+
+    return rc;
+}
+
 static int _prepare_requests(struct lrs *lrs, const int n_data,
                              struct pho_comm_data *data)
 {
@@ -271,6 +297,14 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
         req_cont->req = pho_srl_request_unpack(&data[i].buf);
         if (!req_cont->req)
             LOG_GOTO(send_err, rc = -EINVAL, "Request cannot be unpacked");
+
+        /* send back the ping request */
+        if (pho_request_is_ping(req_cont->req)) {
+            rc = _process_ping_request(lrs, req_cont);
+            if (rc)
+                LOG_GOTO(send_err, rc, "Ping response cannot be sent");
+            continue;
+        }
 
         fam = _determine_family(req_cont->req);
         if (fam == PHO_RSC_INVAL)

@@ -105,6 +105,13 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc, "Error during device add")
 
+    def ping(self):
+        """Ping the phobos daemon."""
+        rc = LIBPHOBOS_ADMIN.phobos_admin_ping(byref(self.handle))
+
+        if rc:
+            raise EnvironmentError(rc, "Error during ping")
+
     def device_lock(self, dev_family, dev_names, is_forced):
         """Wrapper for the device lock command."""
         c_id = Id * len(dev_names)
@@ -128,7 +135,7 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc, "Error during device unlock")
 
-    def layout_list(self, res, is_pattern, medium, degroup):
+    def layout_list(self, res, is_pattern, medium, degroup): # pylint: disable=too-many-locals
         """List layouts."""
         n_layouts = c_int(0)
         layouts = pointer(LayoutInfo())

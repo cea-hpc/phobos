@@ -1222,6 +1222,35 @@ class MediaOptHandler(BaseResourceOptHandler):
 
         self.logger.info("%d media(s) updated", len(results))
 
+class PingOptHandler(BaseOptHandler):
+    """Ping phobos daemon"""
+    label = 'ping'
+    descr = 'ping the phobos daemon'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add ping option to the parser"""
+        super(PingOptHandler, cls).add_options(parser)
+        parser.set_defaults(verb=cls.label)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    def exec_ping(self):
+        """Ping the daemon to check if it is online."""
+        try:
+            with AdminClient(lrs_required=True) as adm:
+                adm.ping()
+
+        except EnvironmentError:
+            self.logger.error("Ping command failed")
+            sys.exit(os.EX_DATAERR)
+
+        self.logger.info("Ping sent to daemon successfully")
+
 class DirOptHandler(MediaOptHandler):
     """Directory-related options and actions."""
     label = 'dir'
@@ -1436,6 +1465,7 @@ class PhobosActionContext(object):
         LibOptHandler,
         DeleteOptHandler,
         UndeleteOptHandler,
+        PingOptHandler,
 
         # Store command interfaces
         StoreGetHandler,

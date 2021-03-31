@@ -259,6 +259,14 @@ err_format:
     return -ENOMEM;
 }
 
+int pho_srl_request_ping_alloc(pho_req_t *req)
+{
+    pho_request__init(req);
+    req->has_ping = true;
+
+    return 0;
+}
+
 int pho_srl_request_notify_alloc(pho_req_t *req)
 {
     pho_request__init(req);
@@ -502,6 +510,14 @@ err_format:
     return -ENOMEM;
 }
 
+int pho_srl_response_ping_alloc(pho_resp_t *resp)
+{
+    pho_response__init(resp);
+    resp->has_ping = true;
+
+    return 0;
+}
+
 int pho_srl_response_notify_alloc(pho_resp_t *resp)
 {
     pho_response__init(resp);
@@ -586,6 +602,10 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
         free(resp->format->med_id);
         free(resp->format);
         resp->format = NULL;
+    }
+
+    if (resp->ping) {
+        resp->has_ping = false;
     }
 
     if (resp->notify) {
