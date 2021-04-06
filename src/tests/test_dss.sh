@@ -106,17 +106,6 @@ function test_check_lock
     check_rc $rc $expect_fail
 }
 
-function test_check_del
-{
-    local target=$1
-    local crit=$2
-    local expect_fail=$3
-    local rc=0
-
-    $LOG_COMPILER $LOG_FLAGS $test_bin delete "$target" "$crit" || rc=$?
-    check_rc $rc $expect_fail
-}
-
 trap clean_test ERR EXIT
 
 clean_test
@@ -221,11 +210,10 @@ test_check_get "media" '{"DSS::MDA::idontexist": "foo"}' 0 'FAIL'
 
 echo "**** TEST: DSS_DELETE OBJECT ****"
 psql phobos -U phobos << EOF
-insert into object (oid, uuid, version, user_md)
+insert into deprecated_object (oid, uuid, version, user_md)
     values ('01230123ABC', '00112233445566778899aabbccddeeff', 1, '{}');
 EOF
 
-test_check_del "object"
 test_check_get "deprecated_object" '{"DSS::OBJ::oid": "01230123ABC"}'
 
 insert_examples

@@ -143,8 +143,7 @@ int main(int argc, char **argv)
 
     if (argc < 3 || argc > 5) {
         fprintf(stderr, "Usage: %s ACTION TYPE [ \"CRIT\" ]\n", argv[0]);
-        fprintf(stderr, "where  ACTION := { get | set | lock | "
-                                           "unlock | delete}\n");
+        fprintf(stderr, "where  ACTION := { get | set | lock | unlock}\n");
         fprintf(stderr, "       TYPE := "
                         "{ device | media | object | deprecated_object | layout }\n");
         fprintf(stderr, "       [ \"CRIT\" ] := \"field cmp value\"\n");
@@ -413,25 +412,6 @@ int main(int argc, char **argv)
                                 lock_owner);
         if (rc) {
             pho_error(rc, "dss_unlock failed");
-            exit(EXIT_FAILURE);
-        }
-    } else if (!strcmp(argv[1], "delete")) {
-        type = str2dss_type(argv[2]);
-
-        if (type != DSS_OBJECT) {
-            pho_error(EINVAL, "verb object expected instead of %s", argv[2]);
-            exit(EXIT_FAILURE);
-        }
-
-        rc = dss_generic_get(&dss_handle, type, NULL, &item_list, &item_cnt);
-        if (rc) {
-            pho_error(rc, "dss_get failed");
-            exit(EXIT_FAILURE);
-        }
-
-        rc = dss_object_delete(&dss_handle, item_list, item_cnt);
-        if (rc) {
-            pho_error(rc, "dss_object_delete failed");
             exit(EXIT_FAILURE);
         }
     } else {

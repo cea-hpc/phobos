@@ -2332,9 +2332,3 @@ int dss_media_unlock(struct dss_handle *handle, struct media_info *media_ls,
     return dss_generic_unlock(handle, DSS_MEDIA, media_ls, media_cnt,
                               lock_owner);
 }
-
-int dss_object_delete(struct dss_handle *handle, struct object_info *obj_list,
-                      int obj_cnt)
-{
-    return dss_object_move(handle, DSS_OBJECT, DSS_DEPREC, obj_list, obj_cnt);
-}
