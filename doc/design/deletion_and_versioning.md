@@ -62,7 +62,9 @@ _0_ is not allowed and reserved for querying the latest existing __version__
 with GET and GETMD calls.
 
 #### Object creation
-A new object is pushed with a __version__ number set to _1_.
+A new object is pushed with a __version__ number set to _1_. Beginning with 1
+guarantees that __version__ number 0 is an unused one. The value 0 could be used
+as an uninitialized __version__ number value.
 
 #### Object update
 A new object version of a pre-existing object is pushed with an incremented

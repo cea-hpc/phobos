@@ -144,7 +144,7 @@ int main(int argc, char **argv)
     if (argc < 3 || argc > 5) {
         fprintf(stderr, "Usage: %s ACTION TYPE [ \"CRIT\" ]\n", argv[0]);
         fprintf(stderr, "where  ACTION := { get | set | lock | "
-                                           "unlock | delete | undelete }\n");
+                                           "unlock | delete}\n");
         fprintf(stderr, "       TYPE := "
                         "{ device | media | object | deprecated_object | layout }\n");
         fprintf(stderr, "       [ \"CRIT\" ] := \"field cmp value\"\n");
@@ -432,51 +432,6 @@ int main(int argc, char **argv)
         rc = dss_object_delete(&dss_handle, item_list, item_cnt);
         if (rc) {
             pho_error(rc, "dss_object_delete failed");
-            exit(EXIT_FAILURE);
-        }
-    } else if (!strcmp(argv[1], "undelete_uuid") ||
-               !strcmp(argv[1], "undelete_oid")) {
-        type = str2dss_type(argv[2]);
-
-        if (type != DSS_DEPREC) {
-            pho_error(EINVAL, "verb deprecated_object expected instead of %s",
-                      argv[2]);
-            exit(EXIT_FAILURE);
-        }
-
-        if (argc == 4) {
-            pho_info("Crit Filter: %s", argv[3]);
-            if (strcmp(argv[3], "all") != 0) {
-                with_filter = true;
-                rc = dss_filter_build(&filter, "%s", argv[3]);
-                if (rc) {
-                    pho_error(rc, "Cannot build DSS filter");
-                    exit(EXIT_FAILURE);
-                }
-            }
-        }
-
-        rc = dss_generic_get(&dss_handle, type, with_filter ? &filter : NULL,
-                             &item_list, &item_cnt);
-        if (with_filter)
-            dss_filter_free(&filter);
-
-        if (rc) {
-            pho_error(rc, "dss_get failed");
-            exit(EXIT_FAILURE);
-        }
-
-        if (!strcmp(argv[1], "undelete_oid")) {
-            int i;
-
-            /* mask uuid to take into account oid */
-            for (i = 0; i < item_cnt; i++)
-                (((struct object_info *)item_list)[i]).uuid = NULL;
-        }
-
-        rc = dss_object_undelete(&dss_handle, item_list, item_cnt);
-        if (rc) {
-            pho_error(rc, "dss_object_undelete failed");
             exit(EXIT_FAILURE);
         }
     } else {

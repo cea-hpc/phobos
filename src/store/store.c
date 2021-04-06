@@ -462,17 +462,196 @@ out_id:
 
 static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 {
+    struct dss_filter *p_filter_uuid = NULL;
+    struct dss_filter *p_filter_oid = NULL;
+    struct dss_filter filter_uuid;
+    struct dss_filter filter_oid;
     struct object_info obj = {
         .oid = xfer->xd_objid,
         .uuid = xfer->xd_objuuid,
+        .version = 0,
     };
+    struct object_info *objs;
+    char *buf_uuid = NULL;
+    char *buf_oid = NULL;
+    char *lock_id = NULL;
+    char *lock_owner;
+    int n_objs;
+    int rc2;
     int rc;
+    int i;
 
-    rc = dss_object_undelete(dss, &obj, 1);
+    /* build uuid filter */
+    if (obj.uuid) {
+        rc = dss_filter_build(&filter_uuid,
+                              "{\"DSS::OBJ::uuid\": \"%s\"}", obj.uuid);
+        if (rc)
+            LOG_RETURN(rc, "Unable to build uuid filter in object undelete");
+
+        p_filter_uuid = &filter_uuid;
+    }
+
+    /* if oid is NULL: we get it from uuid */
+    if (!obj.oid) {
+        /* obj.oid == NULL => obj.uuid != NULL, we have the filter */
+        rc = dss_deprecated_object_get(dss, p_filter_uuid, &objs, &n_objs);
+        if (rc)
+            LOG_GOTO(out, rc, "To undelete, unable to get oid from deprecated "
+                              "object with uuid %s", obj.uuid);
+
+        if (n_objs == 0) {
+            dss_res_free(objs, n_objs);
+            LOG_GOTO(out, rc = -ENOENT,
+                     "Unable to undelete uuid %s, no entry found into "
+                     "deprecated_object table", obj.uuid);
+        }
+
+        /* found oid from max version */
+        for (i = 0; i < n_objs; i++) {
+            if (objs[i].version > obj.version) {
+                obj.oid = objs[i].oid;
+                obj.version = objs[i].version;
+            }
+        }
+
+        buf_oid = strdup(obj.oid);
+        obj.oid = buf_oid;
+        dss_res_free(objs, n_objs);
+    }
+
+    /* build oid filter */
+    rc = dss_filter_build(&filter_oid, "{\"DSS::OBJ::oid\": \"%s\"}", obj.oid);
     if (rc)
-        LOG_RETURN(rc, "Cannot undelete (oid: '%s', uuid: '%s')",
-                   obj.oid ? obj.oid : "NULL", obj.uuid ? obj.uuid : "NULL");
+        LOG_GOTO(out_id, rc, "Unable to build oid filter in object undelete");
 
+    p_filter_oid = &filter_oid;
+
+    /* LOCK */
+    /* taking oid lock */
+    rc = dss_init_oid_lock_id(obj.oid, &lock_id);
+    if (rc)
+        LOG_RETURN(rc, "Unable to init lock id in object undelete");
+
+    rc = dss_init_lock_owner(&lock_owner);
+    if (rc)
+        LOG_GOTO(out_id, rc, "Unable to init lock owner in object undelete");
+
+    rc = dss_lock(dss, lock_id, lock_owner);
+    if (rc)
+        LOG_GOTO(out_id_owner, rc, "Unable to get lock for oid %s before "
+                                   "undelete, lock_id: %s , lock_owner: %s",
+                                   obj.oid, lock_id, lock_owner);
+
+    /* CHECK */
+    /* check oid does not already exists in object table */
+    rc = dss_object_get(dss, p_filter_oid, &objs, &n_objs);
+    if (rc)
+        LOG_GOTO(out_unlock, rc,
+                 "To undelete, unable to get existing oid from object "
+                 "with oid %s", obj.oid);
+
+    dss_res_free(objs, n_objs);
+    if (n_objs > 0) {
+        rc = -EEXIST;
+        LOG_GOTO(out_unlock, rc,
+                 "Unable to undelete oid %s, existing entry found into object "
+                 "table", obj.oid);
+    }
+
+    /* check oid/uuid/version in deprecated_object table */
+    rc = dss_deprecated_object_get(dss, obj.uuid ? p_filter_uuid : p_filter_oid,
+                                   &objs, &n_objs);
+    if (rc)
+        LOG_GOTO(out_unlock, rc,
+                 "To undelete, unable to get %s from deprecated object with "
+                 "%s %s",
+                 obj.uuid ? "oid and version" : "uuid",
+                 obj.uuid ? "uuid" : "oid",
+                 obj.uuid ? : obj.oid);
+
+    if (n_objs == 0) {
+        rc = -ENOENT;
+        LOG_GOTO(out_free, rc,
+                 "Unable to undelete %s %s, no entry found into "
+                 "deprecated_object table",
+                 obj.uuid ? "uuid" : "oid", obj.uuid ? : obj.oid);
+    }
+
+    /* if not uuid: get uuid and check its unicity, get latest version */
+    if (!obj.uuid) {
+        /* found uuid and max version */
+        obj.uuid = objs[0].uuid;
+        obj.version = objs[0].version;
+        for (i = 1; i < n_objs; i++) {
+            /* check uuid unicity */
+            if (strcmp(objs[i].uuid, obj.uuid)) {
+                rc = -EINVAL;
+                LOG_GOTO(out_free, rc,
+                         "Unable to undelete oid %s because we find several "
+                         "corresponding uuid into deprecated_object", obj.oid);
+            }
+
+            /* check latest version */
+            if (objs[i].version > obj.version)
+                obj.version = objs[i].version;
+        }
+
+        buf_uuid = strdup(obj.uuid);
+        obj.oid = buf_uuid;
+    } else {
+    /* if uuid: get latest version and check oid */
+        int max_version_id;
+
+        /* found max version */
+        obj.version = objs[0].version;
+        max_version_id = 0;
+        for (i = 1; i < n_objs; i++) {
+            if (objs[i].version > obj.version) {
+                obj.version = objs[i].version;
+                max_version_id = i;
+            }
+        }
+
+        /* check oid */
+        if (strcmp(obj.oid, objs[max_version_id].oid)) {
+            rc = -EINVAL;
+            LOG_GOTO(out_free, rc,
+                     "Unable to undelete oid %s / uuid %s, latest version "
+                     "%d matches an other oid", obj.oid, obj.uuid, obj.version);
+        }
+    }
+
+    /* MOVE */
+    /* move from deprecated_object to object table */
+    rc = dss_object_move(dss, DSS_DEPREC, DSS_OBJECT, &obj, 1);
+    if (rc)
+        LOG_GOTO(out_free, rc,
+                 "Unable to move from deprecated_object to object in object "
+                 "undelete for oid %s, uuid %s, version %d",
+                 obj.oid, obj.uuid, obj.version);
+
+
+out_free:
+    dss_res_free(objs, n_objs);
+out_unlock:
+    /* UNLOCK */
+    /* releasing oid lock */
+    rc2 = dss_unlock(dss, lock_id, lock_owner);
+    if (rc2) {
+        pho_error(rc, "Unable to unlock at end of object undelete (lock_id: "
+                      "%s, lock_owner: %s)", lock_id, lock_owner);
+        rc = rc ? : rc2;
+    }
+
+out_id_owner:
+    free(lock_owner);
+out_id:
+    free(lock_id);
+    free(buf_oid);
+    free(buf_uuid);
+out:
+    dss_filter_free(p_filter_uuid);
+    dss_filter_free(p_filter_oid);
     return rc;
 }
 
