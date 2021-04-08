@@ -49,15 +49,18 @@
  * (first two declaration are swapped because of a checkpatch bug)
  */
 static void dss_device_result_free(void *void_dev);
-static int dss_device_from_pg_row(void *void_dev, PGresult *res, int row_num);
-static int dss_media_from_pg_row(void *void_media, PGresult *res, int row_num);
+static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
+                                  PGresult *res, int row_num);
+static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
+                                 PGresult *res, int row_num);
 static void dss_media_result_free(void *void_media);
-static int dss_layout_from_pg_row(void *void_layout, PGresult *res,
-                                  int row_num);
+static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
+                                  PGresult *res, int row_num);
 static void dss_layout_result_free(void *void_layout);
-static int dss_object_from_pg_row(void *void_object, PGresult *res,
-                                  int row_num);
-static int dss_deprecated_object_from_pg_row(void *void_object, PGresult *res,
+static int dss_object_from_pg_row(struct dss_handle *handle, void *void_object,
+                                  PGresult *res, int row_num);
+static int dss_deprecated_object_from_pg_row(struct dss_handle *handle,
+                                             void *void_object, PGresult *res,
                                              int row_num);
 static void dss_object_result_free(void *void_object);
 
@@ -404,7 +407,8 @@ static const size_t res_size[] = {
     [DSS_DEPREC] = sizeof(struct object_info),
 };
 
-typedef int (*res_pg_constructor_t)(void *item, PGresult *res, int row_num);
+typedef int (*res_pg_constructor_t)(struct dss_handle *handle, void *item,
+                                    PGresult *res, int row_num);
 static const res_pg_constructor_t res_pg_constructor[] = {
     [DSS_DEVICE] = dss_device_from_pg_row,
     [DSS_MEDIA]  = dss_media_from_pg_row,
@@ -1680,9 +1684,17 @@ out_free:
 /**
  * Fill a dev_info from the information in the `row_num`th row of `res`.
  */
-static int dss_device_from_pg_row(void *void_dev, PGresult *res, int row_num)
+static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
+                                  PGresult *res, int row_num)
 {
     struct dev_info *dev = void_dev;
+    char *lock_owner = NULL;
+    unsigned int escape_len;
+    struct timeval lock_ts;
+    struct pho_lock lock;
+    GString *lock_id;
+    char *escape_id;
+    int rc;
 
     dev->rsc.id.family  = str2rsc_family(PQgetvalue(res, row_num, 0));
     dev->rsc.model      = get_str_value(res, row_num, 1);
@@ -1690,9 +1702,43 @@ static int dss_device_from_pg_row(void *void_dev, PGresult *res, int row_num)
     dev->rsc.adm_status = str2rsc_adm_status(PQgetvalue(res, row_num, 3));
     dev->host           = get_str_value(res, row_num, 4);
     dev->path           = get_str_value(res, row_num, 5);
-    dev->lock.lock      = get_str_value(res, row_num, 6);
-    dev->lock.lock_ts   = strtoul(PQgetvalue(res, row_num, 7), NULL, 10);
-    return 0;
+
+    escape_len = strlen(dev->rsc.id.name) * 2 + 1;
+    escape_id = malloc(escape_len);
+    if (!escape_id)
+        LOG_RETURN(-ENOMEM, "Not enough memory to check for lock status.");
+
+    PQescapeStringConn(handle->dh_conn, escape_id, dev->rsc.id.name,
+                       escape_len, &rc);
+    if (rc) {
+        LOG_GOTO(free_escape, rc = -EINVAL, "Cannot escape id name %s: %s",
+                 dev->rsc.id.name, PQerrorMessage(handle->dh_conn));
+    }
+
+    lock_id = g_string_new("device_");
+    g_string_append(lock_id, escape_id);
+    rc = dss_lock_status(handle, lock_id->str, &lock_owner, &lock_ts);
+
+    if (rc == -ENOLCK) {
+        rc = 0;
+        init_pho_lock(&lock, NULL, NULL, NULL);
+    } else if (rc) {
+        LOG_GOTO(free_id, rc, "Could not get lock status for id %s.",
+                 lock_id->str);
+    } else {
+        init_pho_lock(&lock, lock_id->str, lock_owner, &lock_ts);
+    }
+
+    free(lock_owner);
+    dev->lock = lock;
+
+free_id:
+    g_string_free(lock_id, true);
+
+free_escape:
+    free(escape_id);
+
+    return rc;
 }
 
 /**
@@ -1700,6 +1746,11 @@ static int dss_device_from_pg_row(void *void_dev, PGresult *res, int row_num)
  */
 static void dss_device_result_free(void *void_dev)
 {
+    struct dev_info *dev = void_dev;
+
+    free(dev->lock.id);
+    free(dev->lock.owner);
+
     (void)void_dev;
 }
 
@@ -1714,9 +1765,16 @@ static inline bool psqlstrbool2bool(char psql_str_bool)
 /**
  * Fill a media_info from the information in the `row_num`th row of `res`.
  */
-static int dss_media_from_pg_row(void *void_media, PGresult *res, int row_num)
+static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
+                                 PGresult *res, int row_num)
 {
     struct media_info *medium = void_media;
+    char *lock_owner = NULL;
+    unsigned int escape_len;
+    struct timeval lock_ts;
+    struct pho_lock lock;
+    GString *lock_id;
+    char *escape_id;
     int rc;
 
     medium->rsc.id.family  = str2rsc_family(PQgetvalue(res, row_num, 0));
@@ -1730,8 +1788,6 @@ static int dss_media_from_pg_row(void *void_media, PGresult *res, int row_num)
             sizeof(medium->fs.label));
     /* make sure the label is zero-terminated */
     medium->fs.label[sizeof(medium->fs.label) - 1] = '\0';
-    medium->lock.lock      = get_str_value(res, row_num, 10);
-    medium->lock.lock_ts   = strtoul(PQgetvalue(res, row_num, 11), NULL, 10);
     medium->flags.put      = psqlstrbool2bool(*PQgetvalue(res, row_num, 12));
     medium->flags.get      = psqlstrbool2bool(*PQgetvalue(res, row_num, 13));
     medium->flags.delete   = psqlstrbool2bool(*PQgetvalue(res, row_num, 14));
@@ -1751,7 +1807,42 @@ static int dss_media_from_pg_row(void *void_media, PGresult *res, int row_num)
     pho_debug("Decoded %lu tags (%s)",
               medium->tags.n_tags, PQgetvalue(res, row_num, 9));
 
-    return 0;
+    escape_len = strlen(medium->rsc.id.name) * 2 + 1;
+    escape_id = malloc(escape_len);
+    if (!escape_id)
+        LOG_RETURN(-ENOMEM, "Not enough memory to check for lock status.");
+
+    PQescapeStringConn(handle->dh_conn, escape_id, medium->rsc.id.name,
+                       escape_len, NULL);
+    if (rc)
+        LOG_GOTO(free_escape, rc = -EINVAL, "Cannot escape id name %s: %s",
+                 medium->rsc.id.name, PQerrorMessage(handle->dh_conn));
+
+    lock_id = g_string_new("media_");
+    g_string_append(lock_id, escape_id);
+    rc = dss_lock_status(handle, lock_id->str, &lock_owner, &lock_ts);
+
+    if (rc == -ENOLCK) {
+        rc = 0;
+        init_pho_lock(&lock, NULL, NULL, NULL);
+    } else if (rc) {
+        LOG_GOTO(free_id, rc, "Could not get lock status for id %s.",
+                 lock_id->str);
+    } else {
+        init_pho_lock(&lock, lock_id->str, lock_owner, &lock_ts);
+    }
+
+    medium->lock = lock;
+
+    free(lock_owner);
+
+free_id:
+    g_string_free(lock_id, true);
+
+free_escape:
+    free(escape_id);
+
+    return rc;
 }
 
 /**
@@ -1764,16 +1855,22 @@ static void dss_media_result_free(void *void_media)
     if (!media)
         return;
 
+    free(media->lock.id);
+    free(media->lock.owner);
+
     tags_free(&media->tags);
 }
 
 /**
  * Fill a layout_info from the information in the `row_num`th row of `res`.
  */
-static int dss_layout_from_pg_row(void *void_layout, PGresult *res, int row_num)
+static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
+                                  PGresult *res, int row_num)
 {
     struct layout_info *layout = void_layout;
     int rc;
+
+    (void)handle;
 
     layout->oid = PQgetvalue(res, row_num, 0);
     layout->state = str2extent_state(PQgetvalue(res, row_num, 1));
@@ -1816,9 +1913,12 @@ static void dss_layout_result_free(void *void_layout)
 /**
  * Fill a object_info from the information in the `row_num`th row of `res`.
  */
-static int dss_object_from_pg_row(void *void_object, PGresult *res, int row_num)
+static int dss_object_from_pg_row(struct dss_handle *handle, void *void_object,
+                                  PGresult *res, int row_num)
 {
     struct object_info *object = void_object;
+
+    (void)handle;
 
     object->oid         = get_str_value(res, row_num, 0);
     object->uuid        = get_str_value(res, row_num, 1);
@@ -1834,13 +1934,14 @@ static int dss_object_from_pg_row(void *void_object, PGresult *res, int row_num)
  * Fill a deprecated object_info from the information in the `row_num`th row
  * of `res`.
  */
-static int dss_deprecated_object_from_pg_row(void *void_object, PGresult *res,
+static int dss_deprecated_object_from_pg_row(struct dss_handle *handle,
+                                             void *void_object, PGresult *res,
                                              int row_num)
 {
     struct object_info *object = void_object;
     int rc;
 
-    rc = dss_object_from_pg_row(void_object, res, row_num);
+    rc = dss_object_from_pg_row(handle, void_object, res, row_num);
     rc = rc ? : str2timeval(get_str_value(res, row_num, 4),
                             &object->deprec_time);
 
@@ -1876,13 +1977,13 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
                            int *item_cnt)
 {
     PGconn              *conn = handle->dh_conn;
-    PGresult            *res;
-    GString             *clause;
-    struct dss_result   *dss_res;
     size_t               dss_res_size;
     size_t               item_size;
+    struct dss_result   *dss_res;
+    GString             *clause;
     int                  rc = 0;
     int                  i = 0;
+    PGresult            *res;
     ENTRY;
 
     if (conn == NULL || item_list == NULL || item_cnt == NULL)
@@ -1932,7 +2033,7 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     for (i = 0; i < PQntuples(res); i++) {
         void *item_ptr = (char *)&dss_res->items.raw + i * item_size;
 
-        rc = res_pg_constructor[type](item_ptr, res, i);
+        rc = res_pg_constructor[type](handle, item_ptr, res, i);
         if (rc)
             goto out;
     }

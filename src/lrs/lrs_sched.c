@@ -51,8 +51,32 @@
 #define DRIVE_RW_CFG_PARAM "drive_rw"
 #define DRIVE_TYPE_SECTION_CFG "drive_type \"%s\""
 
-/** Used to indicate that a lock is held by an external process */
-#define LRS_MEDIA_LOCKED_EXTERNAL   ((void *)0x19880429)
+/**
+ * The following macros are used to deal with locked medias:
+ *  - When trying to lock a medium that is already locked, we set the
+ * owner of our local copy to NULL using the first macro.
+ *  - The second macro is used to verify if we own the lock or not. This is
+ * mostly a performance trick to avoid using multiple strcmp when we check
+ * if media are locked by us or not.
+ *  - The third macro is used when filling media info: if the lock id of
+ * the associated media is NULL, that means the media isn't locked.
+ *
+ * Overall, there are 3 stages in which local copies of media can be regarding
+ * their locks: ID and owner non NULL (the LRS owns the lock medium), ID
+ * non NULL and owner NULL (the medium is locked but not by the LRS), and
+ * ID and owner NULL (the medium isn't locked).
+ */
+#define SET_MEDIA_LOCKED_EXTERNAL(_pho_lock)              \
+do {                                                      \
+    free((_pho_lock).owner);                              \
+    (_pho_lock).owner = NULL;                             \
+} while (0)
+
+#define IS_MEDIA_LOCKED_EXTERNAL(_pho_lock)               \
+    ((_pho_lock).id != NULL && (_pho_lock).owner == NULL)
+
+#define IS_MEDIA_LOCKED(_pho_lock)                        \
+    ((_pho_lock).id != NULL)
 
 static int sched_handle_release_reqs(struct lrs_sched *sched,
                                      GArray *resp_array);
@@ -223,7 +247,7 @@ static int sched_media_acquire(struct lrs_sched *sched,
 
     rc = dss_media_lock(&sched->dss, pmedia, 1, sched->lock_owner);
     if (rc) {
-        pmedia->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
+        SET_MEDIA_LOCKED_EXTERNAL(pmedia->lock);
         LOG_RETURN(rc, "Cannot lock media '%s'", pmedia->rsc.id.name);
     }
 
@@ -253,15 +277,6 @@ static int sched_media_release(struct lrs_sched *sched,
 }
 
 /**
- * True if this lock is empty, only used to test the lock when returned from
- * the database and replace it with the generic LRS_MEDIA_LOCKED_EXTERNAL
- */
-static bool lock_empty(const struct pho_lock *lock)
-{
-    return lock->lock == NULL || lock->lock[0] == '\0';
-}
-
-/**
  * False if the device is locked or if it contains a locked media,
  * true otherwise.
  */
@@ -273,8 +288,8 @@ static bool dev_is_available(const struct dev_descr *devd)
     }
 
     /* Test if the contained media lock is taken by another phobos */
-    if (devd->dss_media_info != NULL
-            && &devd->dss_media_info->lock == LRS_MEDIA_LOCKED_EXTERNAL) {
+    if (devd->dss_media_info != NULL &&
+        IS_MEDIA_LOCKED_EXTERNAL(devd->dss_media_info->lock)) {
         pho_debug("'%s' contains a locked media", devd->dev_path);
         return false;
     }
@@ -328,9 +343,9 @@ static int sched_fill_media_info(struct dss_handle *dss,
     *pmedia = media_info_dup(media_res);
 
     /* If the lock is already taken, mark it as externally locked */
-    if (!lock_empty(&(*pmedia)->lock)) {
-        pho_info("Media '%s' is locked (%s)", id->name, (*pmedia)->lock.lock);
-        (*pmedia)->lock.lock = LRS_MEDIA_LOCKED_EXTERNAL;
+    if (IS_MEDIA_LOCKED((*pmedia)->lock)) {
+        pho_info("Media '%s' is locked (%s)", id->name, (*pmedia)->lock.owner);
+        SET_MEDIA_LOCKED_EXTERNAL((*pmedia)->lock);
     }
 
     pho_debug("%s: spc_free=%zd",
@@ -427,8 +442,10 @@ static int sched_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
          * drive list.
          */
         if (devd->locked_local && devd->dss_media_info &&
-                devd->dss_media_info->lock.lock == LRS_MEDIA_LOCKED_EXTERNAL)
-            devd->dss_media_info->lock.lock = NULL;
+            IS_MEDIA_LOCKED_EXTERNAL(devd->dss_media_info->lock)) {
+            free(devd->dss_media_info->lock.id);
+            devd->dss_media_info->lock.id = NULL;
+        }
 
         /* Drive has not been found, mark it as unusable */
         if (rc == -ENXIO)
@@ -650,7 +667,7 @@ static int sched_check_device_locks(struct lrs_sched *sched)
         dev = g_array_index(
             sched->devices, struct dev_descr, i).dss_dev_info;
 
-        if (!compare_lock_hosts(sched, dev->lock.lock))
+        if (!compare_lock_hosts(sched, dev->lock.owner))
             continue;
 
         pho_info("Device '%s' was previously locked by this host, releasing it",
@@ -686,12 +703,8 @@ static int sched_check_medium_locks(struct lrs_sched *sched)
 
     ENTRY;
 
-    // get all media of the right family with a lock
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                          "  {\"DSS::MDA::family\": \"%s\"},"
-                          "  {\"$NOR\": [{\"DSS::MDA::lock\": \"\"}]}"
-                          "]}",
+    // get all media of the right family
+    rc = dss_filter_build(&filter, "{\"DSS::MDA::family\": \"%s\"}",
                           rsc_family2str(sched->family));
     if (rc) {
         pho_error(rc, "Filter build failed");
@@ -709,7 +722,7 @@ static int sched_check_medium_locks(struct lrs_sched *sched)
     for (i = 0; i < mcnt; ++i) {
         int rc2;
 
-        if (!compare_lock_hosts(sched, media[i].lock.lock))
+        if (!compare_lock_hosts(sched, media[i].lock.owner))
             continue;
 
         // if it is, unlock it
@@ -964,7 +977,7 @@ lock_race_retry:
 
         if ((split_media_best == NULL ||
             curr->stats.phys_spc_free > split_media_best->stats.phys_spc_free)
-            && curr->lock.lock != LRS_MEDIA_LOCKED_EXTERNAL)
+            && !IS_MEDIA_LOCKED_EXTERNAL(curr->lock))
             split_media_best = curr;
 
         if (curr->stats.phys_spc_free < required_size)
@@ -976,7 +989,7 @@ lock_race_retry:
             full_avail_media = true;
 
             /* The media is already locked, continue searching */
-            if (curr->lock.lock == LRS_MEDIA_LOCKED_EXTERNAL)
+            if (IS_MEDIA_LOCKED_EXTERNAL(curr->lock))
                 continue;
 
             whole_media_best = curr;
@@ -2026,7 +2039,7 @@ static int sched_media_prepare(struct lrs_sched *sched,
         return rc;
 
     /* Check that the media is not already locked */
-    if (&med->lock.lock == LRS_MEDIA_LOCKED_EXTERNAL) {
+    if (IS_MEDIA_LOCKED_EXTERNAL(med->lock)) {
         pho_debug("Media '%s' is locked, returning EAGAIN", id->name);
         GOTO(out, rc = -EAGAIN);
     }

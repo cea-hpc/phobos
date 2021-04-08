@@ -64,14 +64,6 @@ int build_extent_key(const char *uuid, int version, const char *extent_tag,
     return 0;
 }
 
-static inline char *strdup_safe(const char *str)
-{
-    if (str == NULL)
-        return NULL;
-
-    return strdup(str);
-}
-
 void dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src)
 {
     if (!dev_dst)
@@ -83,8 +75,9 @@ void dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src)
     dev_dst->rsc.adm_status = dev_src->rsc.adm_status;
     dev_dst->path = strdup_safe(dev_src->path);
     dev_dst->host = strdup_safe(dev_src->host);
-    dev_dst->lock.lock_ts = dev_src->lock.lock_ts;
-    dev_dst->lock.lock = strdup_safe(dev_src->lock.lock);
+    dev_dst->lock.id = strdup_safe(dev_src->lock.id);
+    dev_dst->lock.owner = strdup_safe(dev_src->lock.owner);
+    dev_dst->lock.timestamp = dev_src->lock.timestamp;
 }
 
 struct dev_info *dev_info_dup(const struct dev_info *dev)
@@ -107,12 +100,13 @@ void dev_info_free(struct dev_info *dev, bool free_top_struct)
     free(dev->rsc.model);
     free(dev->path);
     free(dev->host);
-    free(dev->lock.lock);
+    free(dev->lock.id);
+    free(dev->lock.owner);
     if (free_top_struct)
         free(dev);
 }
 
-struct media_info *media_info_dup(const struct media_info *media)
+struct media_info *media_info_dup(const struct media_info *mda)
 {
     struct media_info *media_out;
 
@@ -120,9 +114,12 @@ struct media_info *media_info_dup(const struct media_info *media)
     if (!media_out)
         return NULL;
 
-    memcpy(media_out, media, sizeof(*media_out));
-    media_out->rsc.model = strdup_safe(media->rsc.model);
-    tags_dup(&media_out->tags, &media->tags);
+    memcpy(media_out, mda, sizeof(*media_out));
+    media_out->rsc.model = strdup_safe(mda->rsc.model);
+    tags_dup(&media_out->tags, &mda->tags);
+
+    media_out->lock.id = strdup_safe(mda->lock.id);
+    media_out->lock.owner = strdup_safe(mda->lock.owner);
 
     return media_out;
 }
@@ -131,6 +128,8 @@ void media_info_free(struct media_info *mda)
 {
     if (!mda)
         return;
+    free(mda->lock.id);
+    free(mda->lock.owner);
     free(mda->rsc.model);
     tags_free(&mda->tags);
     free(mda);

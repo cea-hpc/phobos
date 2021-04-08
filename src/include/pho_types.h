@@ -55,6 +55,14 @@
  */
 #define PHO_LAYOUT_TAG_MAX  8
 
+static inline char *strdup_safe(const char *str)
+{
+    if (str == NULL)
+        return NULL;
+
+    return strdup(str);
+}
+
 enum extent_state {
     PHO_EXT_ST_INVAL = -1,
     PHO_EXT_ST_PENDING = 0,
@@ -221,18 +229,22 @@ struct pho_buff {
     char   *buff;
 };
 
+static const struct pho_buff PHO_BUFF_NULL = { .size = 0, .buff = NULL };
+
 struct pho_lock {
-    time_t   lock_ts;
-    /**
-     *  "" if no lock or
-     *  "hostname:tid:time:lock_number", 256 characters at the most,
-     *  "%.213s:%.8lx:%.16lx:%.16lx".
-     */
-    char    *lock;
+    char          *id;
+    char          *owner;
+    struct timeval timestamp;
 };
 
+static inline void init_pho_lock(struct pho_lock *lock, char *id, char *owner,
+                                 struct timeval *timestamp){
+    lock->id = strdup_safe(id);
+    lock->owner = strdup_safe(owner);
 
-static const struct pho_buff PHO_BUFF_NULL = { .size = 0, .buff = NULL };
+    if (timestamp)
+        lock->timestamp = *timestamp;
+}
 
 /**
  * Family of resource.

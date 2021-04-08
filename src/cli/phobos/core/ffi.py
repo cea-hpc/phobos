@@ -64,23 +64,37 @@ class CLIManagedResourceMixin(object):
             export[key] = conv(getattr(self, key))
         return export
 
+class Timeval(Structure): # pylint: disable=too-few-public-methods
+    """standard struct timeval."""
+    _fields_ = [
+        ('tv_sec', c_long),
+        ('tv_usec', c_long)
+    ]
+
+    def to_string(self):
+        """Return a string displaying to values of a Timeval structure."""
+        tv_str = (c_char * PHO_TIMEVAL_MAX_LEN)()
+        LIBPHOBOS.timeval2str(byref(self), tv_str)
+        return tv_str.value.decode('utf-8')
+
 class DSSLock(Structure): # pylint: disable=too-few-public-methods
     """Resource lock as managed by DSS."""
     _fields_ = [
-        ('lock_ts', c_longlong),
-        ('_lock', c_char_p)
+        ('lock_id', c_char_p),
+        ('_lock_owner', c_char_p),
+        ('lock_ts', Timeval)
     ]
 
     @property
-    def lock(self):
+    def lock_owner(self):
         """Wrapper to get lock"""
-        return self._lock.decode('utf-8') if self._lock else None
+        return self._lock_owner.decode('utf-8') if self._lock_owner else None
 
-    @lock.setter
-    def lock(self, val):
+    @lock_owner.setter
+    def lock_owner(self, val):
         """Wrapper to set lock"""
         # pylint: disable=attribute-defined-outside-init
-        self._lock = val.encode('utf-8')
+        self._lock_owner = val.encode('utf-8')
 
 
 class CommInfo(Structure): # pylint: disable=too-few-public-methods
@@ -197,7 +211,7 @@ class DevInfo(Structure, CLIManagedResourceMixin):
             'model': None,
             'path': None,
             'name': None,
-            'lock_status': None,
+            'lock_owner': None,
             'lock_ts': None
         }
 
@@ -232,14 +246,14 @@ class DevInfo(Structure, CLIManagedResourceMixin):
         return self.rsc.adm_status
 
     @property
-    def lock_status(self):
-        """Wrapper to get lock_status"""
-        return self.lock.lock
+    def lock_owner(self):
+        """Wrapper to get lock owner"""
+        return self.lock.lock_owner
 
-    @lock_status.setter
-    def lock_status(self, val):
-        """Wrapper to set lock_status"""
-        self.lock.lock = val
+    @lock_owner.setter
+    def lock_owner(self, val):
+        """Wrapper to set lock_owner"""
+        self.lock.lock_owner = val
 
     @property
     def lock_ts(self):
@@ -362,7 +376,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'model': None,
             'name': None,
             'tags': None,
-            'lock_status': None,
+            'lock_owner': None,
             'lock_ts': None,
             'put_access': None,
             'get_access': None,
@@ -377,18 +391,18 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         return export
 
     @property
-    def lock_status(self):
-        """Wrapper to get lock status"""
-        return self.lock.lock
+    def lock_owner(self):
+        """Wrapper to get lock owner"""
+        return self.lock.lock_owner
 
-    @lock_status.setter
-    def lock_status(self, val):
-        """Wrapper to set lock status"""
-        self.lock.lock = val
+    @lock_owner.setter
+    def lock_owner(self, val):
+        """Wrapper to set lock owner"""
+        self.lock.lock_owner = val
 
     def is_locked(self):
         """True if this media is locked"""
-        return self.lock_status and self.lock_status != ""
+        return self.lock_owner and self.lock_owner != ""
 
     @property
     def lock_ts(self):
@@ -515,20 +529,6 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         if hasattr(self, "_free_tags") and self._free_tags:
             self._tags.free()
 
-class Timeval(Structure): # pylint: disable=too-few-public-methods
-    """standard struct timeval."""
-    _fields_ = [
-        ('tv_sec', c_long),
-        ('tv_usec', c_long)
-    ]
-
-def display_timeval(val):
-    """Wrapper to correctly display a Timeval structure"""
-    tv_str = (c_char * PHO_TIMEVAL_MAX_LEN)()
-    LIBPHOBOS.timeval2str(byref(val), tv_str)
-    return tv_str.value.decode('utf-8')
-
-
 class ObjectInfo(Structure, CLIManagedResourceMixin):
     """Object descriptor."""
     _fields_ = [
@@ -590,7 +590,7 @@ class DeprecatedObjectInfo(ObjectInfo):
             'uuid': None,
             'version': None,
             'user_md': None,
-            'deprec_time': display_timeval,
+            'deprec_time': Timeval.to_string,
         }
 
 class Buffer(Structure): # pylint: disable=too-few-public-methods

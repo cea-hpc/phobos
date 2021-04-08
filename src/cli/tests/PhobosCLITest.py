@@ -257,23 +257,19 @@ class MediaAddTest(BasicExecutionTest):
         # Ensure that the tape is unlocked after failure
         # Exactly one media should be returned
         output, _ = self.pho_execute_capture(['tape', 'list', '--output',
-                                              'lock_status', 'update0'])
+                                              'lock_owner', 'update0'])
         test = output.strip() == 'None' or output.strip() == ''
         self.assertTrue(test)
 
         # Check that locked tapes cannot be updated
-        os.system('psql phobos phobos -c "update media set         \
-                                          (lock, lock_ts) = \
-                                          (\'dummy\', 1)           \
-                                          where id = \'update0\';"')
+        os.system('psql phobos phobos -c "insert into lock (id, owner) values \
+                                          (\'media_update0\', \'dummy\');"')
         try:
             self.pho_execute(['tape', 'update', '-T', '', 'update0'],
                              code=os.EX_DATAERR)
         finally:
-            os.system('psql phobos phobos -c "update media set         \
-                                              (lock, lock_ts) = \
-                                              (\'\', 0)                \
-                                              where id = \'update0\';"')
+            os.system('psql phobos phobos -c "delete from lock where \
+                                              id = \'media_update0\';"')
 
     def test_tape_add_lowercase(self):
         """Express tape technology in lowercase in the command line (PHO-67)."""

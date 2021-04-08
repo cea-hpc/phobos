@@ -293,7 +293,7 @@ static int _device_update_adm_status(struct admin_handle *adm,
         rc = dss_device_lock(&adm->dss, dev_res, 1, adm->lock_owner);
         if (rc) {
             pho_error(-EBUSY, "Device '%s' is in use by '%s'", dev_ids[i].name,
-                      dev_res->lock.lock);
+                      dev_res->lock.owner);
             dss_res_free(dev_res, 1);
             continue;
         }

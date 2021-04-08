@@ -72,10 +72,9 @@ function test_release_medium_old_locks
     # Update media to lock them by a 'daemon instance'
     # Only one is locked by this host
     psql phobos phobos -c \
-        "update media set lock='$host:0123:dummy:dummy',
-             lock_ts='1' where id='/tmp/dir0';
-         update media set lock='${host}0:0123:dummy:dummy',
-             lock_ts='1' where id='/tmp/dir1';"
+        "insert into lock (id, owner) values
+             ('media_/tmp/dir0', '$host:0123:dummy:dummy'),
+             ('media_/tmp/dir1', '${host}0:0123:dummy:dummy');"
 
     # Use gdb to stop the daemon once the locks are released
     (
@@ -87,10 +86,10 @@ function test_release_medium_old_locks
     )
 
     # Check that only the correct medium is unlocked
-    lock=$($phobos dir list -o lock_status /tmp/dir0)
+    lock=$($phobos dir list -o lock_owner /tmp/dir0)
     [ "None" == "$lock" ] || error "Medium should be unlocked"
 
-    lock=$($phobos dir list -o lock_status /tmp/dir1)
+    lock=$($phobos dir list -o lock_owner /tmp/dir1)
     [ "${host}0:0123:dummy:dummy" == "$lock" ] ||
         error "Medium should be locked"
 
@@ -104,13 +103,17 @@ function test_release_device_old_locks
     $phobos drive add --unlock /dev/st[0-1]
     host=`hostname`
 
+    # Inserting directly into the lock table requires the
+    # actual names of each drive, so we fetch them
+    dev_st0_id=$($phobos drive list -o name /dev/st0)
+    dev_st1_id=$($phobos drive list -o name /dev/st1)
+
     # Update devices to lock them by a 'daemon instance'
     # Only one is locked by this host
     psql phobos phobos -c \
-        "update device set lock='$host:0123:dummy:dummy',
-             lock_ts='1' where path='/dev/st0';
-         update device set lock='${host}0:0123:dummy:dummy',
-             lock_ts='1' where path='/dev/st1';"
+        "insert into lock (id, owner) values
+             ('device_$dev_st0_id', '$host:0123:dummy:dummy'),
+             ('device_$dev_st1_id', '${host}0:0123:dummy:dummy');"
 
     # Use gdb to stop the daemon once the locks are released
     (
@@ -122,10 +125,10 @@ function test_release_device_old_locks
     )
 
     # Check that only the correct device is unlocked
-    lock=$($phobos drive list -o lock_status /dev/st0)
+    lock=$($phobos drive list -o lock_owner /dev/st0)
     [ "None" == "$lock" ] || error "Device should be unlocked"
 
-    lock=$($phobos drive list -o lock_status /dev/st1)
+    lock=$($phobos drive list -o lock_owner /dev/st1)
     [ "${host}0:0123:dummy:dummy" == "$lock" ] ||
         error "Device should be locked"
 

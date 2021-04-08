@@ -215,8 +215,8 @@ int dss_lock_status(struct dss_handle *handle, const char *lock_id,
         goto out_cleanup;
 
     if (PQntuples(res) == 0)
-        LOG_GOTO(out_cleanup, rc = -ENOLCK, "No row found after request: %s",
-                 PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
+        LOG_GOTO(out_cleanup, rc = -ENOLCK, "No row found after request : %s",
+                 request->str);
 
     if (lock_owner != NULL) {
         *lock_owner = strdup(PQgetvalue(res, 0, 1));
