@@ -88,7 +88,7 @@ int common_statfs(const char *path, struct ldm_fs_space *fs_spc)
      * used = total - free = f_blocks - f_bfree
      * if used + available < 0, there's something wrong
      */
-    if (stfs.f_blocks + stfs.f_bavail - stfs.f_bfree < 0)
+    if (stfs.f_blocks + stfs.f_bavail < stfs.f_bfree)
         LOG_RETURN(-EIO, "statfs(%s) returned inconsistent values: "
                    "blocks=%ld, avail=%ld, free=%ld",
                    path, stfs.f_blocks, stfs.f_bavail, stfs.f_bfree);

@@ -72,8 +72,9 @@ static const char * const xfer_op_names[] = {
 
 static inline const char *xfer_op2str(enum pho_xfer_op op)
 {
-    if (op >= PHO_XFER_OP_LAST || op < 0)
+    if (op >= PHO_XFER_OP_LAST)
         return NULL;
+
     return xfer_op_names[op];
 }
 

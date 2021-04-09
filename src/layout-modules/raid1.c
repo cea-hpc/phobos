@@ -289,9 +289,9 @@ static void set_extent_info(struct extent *extent,
 {
     extent->layout_idx = layout_idx;
     extent->size = extent_size;
-    extent->media.family = medium->med_id->family;
+    extent->media.family = (enum rsc_family)medium->med_id->family;
     pho_id_name_set(&extent->media, medium->med_id->name);
-    extent->addr_type = medium->addr_type;
+    extent->addr_type = (enum address_type)medium->addr_type;
 }
 
 /**
@@ -312,7 +312,7 @@ static int simple_write_chunk(struct pho_encoder *enc,
 
     ENTRY;
 
-    rc = get_io_adapter(medium->fs_type, &ioa);
+    rc = get_io_adapter((enum fs_type)medium->fs_type, &ioa);
     if (rc)
         return rc;
 
@@ -508,7 +508,7 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
         LOG_RETURN(-ENOMEM, "Unable to alloc ioa table in raid1 encoder write");
 
     for (i = 0; i < raid1->repl_count; ++i) {
-        rc = get_io_adapter(wresp->media[i]->fs_type, &ioa[i]);
+        rc = get_io_adapter((enum fs_type)wresp->media[i]->fs_type, &ioa[i]);
         if (rc)
             LOG_GOTO(out, rc,
                      "Unable to get io_adapter in raid1 encoder write");
@@ -679,11 +679,11 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
      * of a medium, this is why the LRS provides it in its response. This may be
      * intentional, or to be fixed later.
      */
-    rc = get_io_adapter(medium->fs_type, &ioa);
+    rc = get_io_adapter((enum fs_type)medium->fs_type, &ioa);
     if (rc)
         return rc;
 
-    extent->addr_type = medium->addr_type;
+    extent->addr_type = (enum address_type)medium->addr_type;
     loc.root_path = medium->root_path;
     loc.extent = extent;
 

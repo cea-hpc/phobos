@@ -140,25 +140,25 @@ static int _delete_lock_file(const char *lock_file)
 static enum rsc_family _determine_family(const pho_req_t *req)
 {
     if (pho_request_is_write(req))
-        return req->walloc->family;
+        return (enum rsc_family)req->walloc->family;
 
     if (pho_request_is_read(req)) {
         if (!req->ralloc->n_med_ids)
             return PHO_RSC_INVAL;
-        return req->ralloc->med_ids[0]->family;
+        return (enum rsc_family)req->ralloc->med_ids[0]->family;
     }
 
     if (pho_request_is_release(req)) {
         if (!req->release->n_media)
             return PHO_RSC_INVAL;
-        return req->release->media[0]->med_id->family;
+        return (enum rsc_family)req->release->media[0]->med_id->family;
     }
 
     if (pho_request_is_format(req))
-        return req->format->med_id->family;
+        return (enum rsc_family)req->format->med_id->family;
 
     if (pho_request_is_notify(req))
-        return req->notify->rsrc_id->family;
+        return (enum rsc_family)req->notify->rsrc_id->family;
 
     return PHO_RSC_INVAL;
 }

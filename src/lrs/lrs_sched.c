@@ -2748,7 +2748,7 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
         pho_resp_read_elt_t *rresp = resp->ralloc->media[n_selected];
         struct pho_id m;
 
-        m.family = rreq->med_ids[i]->family;
+        m.family = (enum rsc_family)rreq->med_ids[i]->family;
         pho_id_name_set(&m, rreq->med_ids[i]->name);
 
         rc = sched_read_prepare(sched, &m, &dev);
@@ -2886,10 +2886,10 @@ static int sched_handle_format(struct lrs_sched *sched, pho_req_t *req,
     if (rc)
         return rc;
 
-    m.family = freq->med_id->family;
+    m.family = (enum rsc_family)freq->med_id->family;
     pho_id_name_set(&m, freq->med_id->name);
 
-    rc = sched_format(sched, &m, freq->fs, freq->unlock);
+    rc = sched_format(sched, &m, (enum fs_type)freq->fs, freq->unlock);
     if (rc) {
         pho_srl_response_free(resp, false);
         if (rc != -EAGAIN) {
@@ -2926,7 +2926,7 @@ static int sched_handle_notify(struct lrs_sched *sched, pho_req_t *req,
 
     switch (nreq->op) {
     case PHO_NTFY_OP_DEVICE_ADD:
-        rc = sched_device_add(sched, nreq->rsrc_id->family,
+        rc = sched_device_add(sched, (enum rsc_family)nreq->rsrc_id->family,
                               nreq->rsrc_id->name);
         break;
     case PHO_NTFY_OP_DEVICE_LOCK:
