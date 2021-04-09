@@ -181,9 +181,6 @@ class DSSClientTest(unittest.TestCase):
             # Unlock it
             client.media.unlock([media])
 
-            # Unlocking twice works
-            client.media.unlock([media])
-
             # The up-to-date version isn't locked anymore
             media = client.media.get(id=medium.name)[0]
             self.assertFalse(media.is_locked())

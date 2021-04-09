@@ -503,8 +503,8 @@ static const char * const lock_query[] = {
 };
 
 static const char * const simple_lock_query[] = {
-    [DSS_UNLOCK_QUERY] = "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s",
-                         "AND lock=%s;",
+    [DSS_UNLOCK_QUERY] = "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s AND "
+                         "lock=%s;",
     [DSS_UNLOCK_ALWAYS_QUERY] =
                          "UPDATE %s SET lock='', lock_ts=0 WHERE id IN %s;",
     [DSS_LOCK_QUERY] =   "UPDATE %s SET lock=%s, "
