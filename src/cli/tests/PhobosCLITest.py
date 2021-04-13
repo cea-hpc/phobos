@@ -32,7 +32,7 @@ from io import StringIO
 from socket import gethostname
 
 from phobos.cli import PhobosActionContext
-from phobos.core.dss import Client, MediaManager
+from phobos.core.dss import MediaManager
 
 def gethostname_short():
     """Return short hostname"""
@@ -201,28 +201,29 @@ class MediaAddTest(BasicExecutionTest):
                           'TAGGED0', '--tags', 'tag-foo'])
         self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
                           'TAGGED1', '--tags', 'tag-foo,tag-bar'])
+
         # Check that tags have successfully been added
-        client = Client()
-        client.connect()
-        tagged0, = client.media.get(id='TAGGED0')
-        tagged1, = client.media.get(id='TAGGED1')
-        self.assertCountEqual(tagged0.tags, ['tag-foo'])
-        self.assertCountEqual(tagged1.tags, ['tag-foo', 'tag-bar'])
+        output, _ = self.pho_execute_capture(['tape', 'list', '--output',
+                                              'tags', 'TAGGED0'])
+        self.assertEqual(output.strip(), "['tag-foo']")
+        output, _ = self.pho_execute_capture(['tape', 'list', '--output',
+                                              'tags', 'TAGGED1'])
+        self.assertEqual(output.strip(), "['tag-foo', 'tag-bar']")
 
     def test_media_update(self):
         """test updating media."""
-        client = Client()
-        client.connect()
         self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
                           'update0', '--tags', 'tag-foo'])
         self.pho_execute(['tape', 'add', '-t', 'LTO6', '--fs', 'LTFS',
                           'update1', '--tags', 'tag-foo,tag-bar'])
 
         # Check inserted media
-        update0, = client.media.get(id="update0")
-        update1, = client.media.get(id="update1")
-        self.assertCountEqual(update0.tags, ['tag-foo'])
-        self.assertCountEqual(update1.tags, ['tag-foo', 'tag-bar'])
+        output, _ = self.pho_execute_capture(['tape', 'list', '--output',
+                                              'tags', 'update0'])
+        self.assertEqual(output.strip(), "['tag-foo']")
+        output, _ = self.pho_execute_capture(['tape', 'list', '--output',
+                                              'tags', 'update1'])
+        self.assertEqual(output.strip(), "['tag-foo', 'tag-bar']")
 
         # Update media
         self.pho_execute(['tape', 'update', '-T', 'new-tag1,new-tag2',
@@ -230,13 +231,15 @@ class MediaAddTest(BasicExecutionTest):
 
         # Check updated media
         for med_id in "update0", "update1":
-            media, = client.media.get(id=med_id)
-            self.assertCountEqual(media.tags, ['new-tag1', 'new-tag2'])
+            output, _ = self.pho_execute_capture(['tape', 'list', '--output',
+                                                  'tags', med_id])
+            self.assertEqual(output.strip(), "['new-tag1', 'new-tag2']")
 
         # No '-T' argument does nothing
         self.pho_execute(['tape', 'update', 'update0'])
-        update0, = client.media.get(id='update0')
-        self.assertCountEqual(update0.tags, ['new-tag1', 'new-tag2'])
+        output, _ = self.pho_execute_capture(['tape', 'list', '--output',
+                                              'tags', 'update0'])
+        self.assertEqual(output.strip(), "['new-tag1', 'new-tag2']")
 
         # Test a failed update
         def failed_update(*args, **kwargs): # pylint: disable=unused-argument
@@ -252,19 +255,25 @@ class MediaAddTest(BasicExecutionTest):
             MediaManager.update = old_update
 
         # Ensure that the tape is unlocked after failure
-        client = Client()
-        client.connect()
         # Exactly one media should be returned
-        media, = client.media.get(id='update0')
-        self.assertFalse(media.is_locked())
+        output, _ = self.pho_execute_capture(['tape', 'list', '--output',
+                                              'lock_status', 'update0'])
+        test = output.strip() == 'None' or output.strip() == ''
+        self.assertTrue(test)
 
         # Check that locked tapes cannot be updated
-        client.media.lock([media])
+        os.system('psql phobos phobos -c "update media set         \
+                                          (lock, lock_ts) = \
+                                          (\'dummy\', 1)           \
+                                          where id = \'update0\';"')
         try:
             self.pho_execute(['tape', 'update', '-T', '', 'update0'],
                              code=os.EX_DATAERR)
         finally:
-            client.media.unlock([media])
+            os.system('psql phobos phobos -c "update media set         \
+                                              (lock, lock_ts) = \
+                                              (\'\', 0)                \
+                                              where id = \'update0\';"')
 
     def test_tape_add_lowercase(self):
         """Express tape technology in lowercase in the command line (PHO-67)."""
@@ -363,20 +372,20 @@ class DeviceAddTest(BasicExecutionTest):
         """Test updating a directory."""
         tmp_f = tempfile.NamedTemporaryFile()
         tmp_path = tmp_f.name
-        client = Client()
-        client.connect()
         self.pho_execute(['dir', 'add', tmp_path, '--tags', 'tag-baz'])
 
         # Check inserted media
-        media, = client.media.get(id=tmp_path)
-        self.assertCountEqual(media.tags, ['tag-baz'])
+        output, _ = self.pho_execute_capture(['dir', 'list', '--output', 'tags',
+                                              tmp_path])
+        self.assertEqual(output.strip(), "['tag-baz']")
 
         # Update media
         self.pho_execute(['dir', 'update', '-T', '', tmp_path])
 
         # Check updated media
-        media, = client.media.get(id=tmp_path)
-        self.assertCountEqual(media.tags, [])
+        output, _ = self.pho_execute_capture(['dir', 'list', '--output', 'tags',
+                                             tmp_path])
+        self.assertEqual(output.strip(), "[]")
 
     def test_dir_add_missing(self):
         """Add a non-existent directory should raise an error."""
