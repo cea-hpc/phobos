@@ -1489,6 +1489,13 @@ class PhobosActionContext(object):
 
         self.log_ctx = LogControl()
 
+    def __enter__(self):
+        self.configure_app_logging()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.log_ctx.set_callback(None)
+
     def install_arg_parser(self):
         """Initialize hierarchical command line parser."""
         # Top-level parser for common options
@@ -1595,7 +1602,6 @@ class PhobosActionContext(object):
         It is assumed that all checks have happened already to make sure that
         the execution order refers to a valid method of the target object.
         """
-        self.configure_app_logging()
 
         target = self.parameters.get('goal')
         action = self.parameters.get('verb')
@@ -1619,4 +1625,6 @@ def phobos_main(args=None):
     Entry point for the `phobos' command. Indirectly provides
     argument parsing and execution of the appropriate actions.
     """
-    PhobosActionContext(args if args is not None else sys.argv[1::]).run()
+    with PhobosActionContext(args if args is not None else sys.argv[1::]) \
+                                                                        as pac:
+        pac.run()

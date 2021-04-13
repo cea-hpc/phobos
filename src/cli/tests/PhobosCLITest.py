@@ -159,7 +159,8 @@ class BasicExecutionTest(unittest.TestCase):
             params = ['-c', self.TEST_CFG_FILE] + params
 
         try:
-            PhobosActionContext(params).run()
+            with PhobosActionContext(params) as pac:
+                pac.run()
         except SystemExit as exc:
             self.assertEqual(exc.code, code)
         else:
