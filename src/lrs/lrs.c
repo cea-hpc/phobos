@@ -303,6 +303,7 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
             rc = _process_ping_request(lrs, req_cont);
             if (rc)
                 LOG_GOTO(send_err, rc, "Ping response cannot be sent");
+            free(req_cont);
             continue;
         }
 
