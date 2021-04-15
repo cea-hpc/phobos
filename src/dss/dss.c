@@ -1805,6 +1805,22 @@ static void dss_object_result_free(void *void_object)
     (void)void_object;
 }
 
+static void _dss_result_free(struct dss_result *dss_res, int item_cnt)
+{
+    res_destructor_t dtor;
+    size_t item_size;
+    int i;
+
+    item_size = res_size[dss_res->item_type];
+    dtor = res_destructor[dss_res->item_type];
+
+    for (i = 0; i < item_cnt; i++)
+        dtor(dss_res->items.raw + i * item_size);
+
+    PQclear(dss_res->pg_res);
+    free(dss_res);
+
+}
 static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
                            const struct dss_filter *filter, void **item_list,
                            int *item_cnt)
@@ -1877,7 +1893,7 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
 out:
     if (rc)
         /* Only free elements that were initialized, this also frees res */
-        dss_res_free(dss_res, i);
+        _dss_result_free(dss_res, i);
 
     return rc;
 }
@@ -2228,22 +2244,12 @@ err:
 void dss_res_free(void *item_list, int item_cnt)
 {
     struct dss_result *dss_res;
-    res_destructor_t dtor;
-    size_t item_size;
-    int i;
 
     if (!item_list)
         return;
 
     dss_res = res_of_item_list(item_list);
-    item_size = res_size[dss_res->item_type];
-    dtor = res_destructor[dss_res->item_type];
-
-    for (i = 0; i < item_cnt; i++)
-        dtor((char *)&dss_res->items.raw + i * item_size);
-
-    PQclear(dss_res->pg_res);
-    free(dss_res);
+    _dss_result_free(dss_res, item_cnt);
 }
 
 int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
