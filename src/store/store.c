@@ -1109,10 +1109,6 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
     if (rc && rc != -EALREADY)
         return rc;
 
-    rc = pho_cfg_init_local(NULL);
-    if (rc && rc != -EALREADY)
-        return rc;
-
     for (i = 0; i < n; i++) {
         xfers[i].xd_op = PHO_XFER_OP_PUT;
         xfers[i].xd_rc = 0;
