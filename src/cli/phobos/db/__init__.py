@@ -214,6 +214,16 @@ class Migrator:
                 PRIMARY KEY (id)
             );
 
+            -- remove old device locks
+            ALTER TABLE device
+            DROP COLUMN lock,
+            DROP COLUMN lock_ts;
+
+            -- remove old media locks
+            ALTER TABLE media
+            DROP COLUMN lock,
+            DROP COLUMN lock_ts;
+
             -- update current schema version
             UPDATE schema_info SET version = '1.92';
         """)

@@ -55,20 +55,20 @@ function insert_dir
     local host=$(hostname -s)
 
     $PSQL << EOF
-insert into device (family, model, id, host, adm_status, path, lock)
-    values ('dir', NULL, '$host:$DIR1', '$host', 'unlocked', '$DIR1', ''),
-           ('dir', NULL, '$host:$DIR2', '$host', 'unlocked', '$DIR2', '');
+insert into device (family, model, id, host, adm_status, path)
+    values ('dir', NULL, '$host:$DIR1', '$host', 'unlocked', '$DIR1'),
+           ('dir', NULL, '$host:$DIR2', '$host', 'unlocked', '$DIR2');
 
 insert into media (family, model, id, adm_status, fs_type, address_type,
-                   fs_status, stats, tags, lock)
+                   fs_status, stats, tags)
     values ('dir', NULL, '$DIR1', 'unlocked', 'POSIX', 'HASH1', 'empty',
             '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0,\
               "phys_spc_free":$PART1_SIZE, "nb_load":0, "nb_errors":0, \
-              "last_load":0}', '[]', ''),
+              "last_load":0}', '[]'),
            ('dir', NULL, '$DIR2', 'unlocked', 'POSIX', 'HASH1', 'empty',
             '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0, \
               "phys_spc_free":$PART2_SIZE, "nb_load":0, "nb_errors":0, \
-              "last_load":0}', '[]', '');
+              "last_load":0}', '[]');
 
 EOF
 }

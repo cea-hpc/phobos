@@ -22,8 +22,6 @@ CREATE TABLE device(
     host            varchar(128),
     adm_status      adm_status,
     path            varchar(256),
-    lock            varchar(256) DEFAULT '' NOT NULL,
-    lock_ts         bigint,
 
     PRIMARY KEY (family, id)
 );
@@ -38,8 +36,6 @@ CREATE TABLE media(
     fs_label        varchar(32),
     address_type    address_type,
     fs_status       fs_status,
-    lock            varchar(256) DEFAULT '' NOT NULL,
-    lock_ts         bigint,
     stats           jsonb,
     tags            jsonb, -- json array (optimized for searching)
     put             boolean DEFAULT TRUE,

@@ -32,39 +32,39 @@ insert_examples() {
 
 #  initially mounted tapes don't have enough room to store a big file
 	$PSQL << EOF
-insert into device (family, model, id, host, adm_status, path, lock)
+insert into device (family, model, id, host, adm_status, path)
     values ('dir', NULL, '$host:/tmp/pho_testdir1', '$host',
-	    'unlocked', '/tmp/pho_testdir1', ''),
+	    'unlocked', '/tmp/pho_testdir1'),
            ('dir', NULL, '$host:/tmp/pho_testdir2', '$host',
-	    'unlocked', '/tmp/pho_testdir2', ''),
+	    'unlocked', '/tmp/pho_testdir2'),
            ('dir', NULL, '$host:/tmp/pho_testdir3', '$host',
-	    'unlocked', '/tmp/pho_testdir3', ''),
+	    'unlocked', '/tmp/pho_testdir3'),
            ('dir', NULL, '$host:/tmp/pho_testdir4', '$host',
-	    'unlocked', '/tmp/pho_testdir4', ''),
+	    'unlocked', '/tmp/pho_testdir4'),
            ('dir', NULL, '$host:/tmp/pho_testdir5', '$host',
-	    'unlocked', '/tmp/pho_testdir5', '');
+	    'unlocked', '/tmp/pho_testdir5');
 insert into media (family, model, id, adm_status, fs_type, address_type,
-		   fs_status, stats, tags, lock)
+		   fs_status, stats, tags)
     values ('dir', NULL, '/tmp/pho_testdir1', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":5, "logc_spc_used":3668841456,\
 	      "phys_spc_used":3668841456,"phys_spc_free":12857675776,\
-          "nb_errors":0,"last_load":0}', '[]', ''),
+          "nb_errors":0,"last_load":0}', '[]'),
            ('dir', NULL, '/tmp/pho_testdir2', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":6,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
-          "nb_errors":0,"last_load":0}', '["mytag"]', ''),
+          "nb_errors":0,"last_load":0}', '["mytag"]'),
            ('dir', NULL, '/tmp/pho_testdir3', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":0,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
-          "nb_errors":0,"last_load":0}', '[]', ''),
+          "nb_errors":0,"last_load":0}', '[]'),
            ('dir', NULL, '/tmp/pho_testdir4', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":7,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
-          "nb_errors":0,"last_load":0}', '["mytag"]', ''),
+          "nb_errors":0,"last_load":0}', '["mytag"]'),
            ('dir', NULL, '/tmp/pho_testdir5', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":7,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
-          "nb_errors":0,"last_load":0}', '["mytag"]', '');
+          "nb_errors":0,"last_load":0}', '["mytag"]');
 
 insert into object (oid, user_md)
     values ('01230123ABC', '{}');

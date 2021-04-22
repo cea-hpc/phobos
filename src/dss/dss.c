@@ -389,10 +389,10 @@ out_free:
  */
 static const char * const select_query[] = {
     [DSS_DEVICE] = "SELECT family, model, id, adm_status,"
-                   " host, path, lock, lock_ts FROM device",
+                   " host, path FROM device",
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
                    " address_type, fs_type, fs_status, fs_label, stats, tags,"
-                   " lock, lock_ts, put, get, delete FROM media",
+                   " put, get, delete FROM media",
     [DSS_LAYOUT] = "SELECT oid, state, lyt_info, extents FROM extent",
     [DSS_OBJECT] = "SELECT oid, uuid, version, user_md FROM object",
     [DSS_DEPREC] = "SELECT oid, uuid, version, user_md, deprec_time"
@@ -428,10 +428,10 @@ static const res_destructor_t res_destructor[] = {
 
 static const char * const insert_query[] = {
     [DSS_DEVICE] = "INSERT INTO device (family, model, id, host, adm_status,"
-                   " path, lock) VALUES ",
+                   " path) VALUES ",
     [DSS_MEDIA]  = "INSERT INTO media (family, model, id, adm_status,"
                    " fs_type, address_type, fs_status, fs_label, stats, tags,"
-                   " lock, put, get, delete)"
+                   " put, get, delete)"
                    " VALUES ",
     [DSS_LAYOUT] = "INSERT INTO extent (oid, uuid, state, lyt_info, extents)"
                    " VALUES ",
@@ -441,8 +441,7 @@ static const char * const insert_query[] = {
 };
 
 static const char * const update_query[] = {
-    [DSS_DEVICE] = "UPDATE device SET (family, model, host, adm_status,"
-                   " path) ="
+    [DSS_DEVICE] = "UPDATE device SET (family, model, host, adm_status, path) ="
                    " ('%s', %s, '%s', '%s', '%s')"
                    " WHERE id = '%s';",
     [DSS_MEDIA]  = "UPDATE media SET (family, model, adm_status,"
@@ -467,8 +466,8 @@ static const char * const delete_query[] = {
 };
 
 static const char * const insert_query_values[] = {
-    [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s', '')%s",
-    [DSS_MEDIA]  = "('%s', %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s, '',"
+    [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s')%s",
+    [DSS_MEDIA]  = "('%s', %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s,"
                    " %s, %s, %s)%s",
     [DSS_LAYOUT] = "('%s', (select uuid from object where oid = '%s'), '%s',"
                    " '%s', '%s')%s",
@@ -1646,9 +1645,9 @@ static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
             sizeof(medium->fs.label));
     /* make sure the label is zero-terminated */
     medium->fs.label[sizeof(medium->fs.label) - 1] = '\0';
-    medium->flags.put      = psqlstrbool2bool(*PQgetvalue(res, row_num, 12));
-    medium->flags.get      = psqlstrbool2bool(*PQgetvalue(res, row_num, 13));
-    medium->flags.delete   = psqlstrbool2bool(*PQgetvalue(res, row_num, 14));
+    medium->flags.put      = psqlstrbool2bool(*PQgetvalue(res, row_num, 10));
+    medium->flags.get      = psqlstrbool2bool(*PQgetvalue(res, row_num, 11));
+    medium->flags.delete   = psqlstrbool2bool(*PQgetvalue(res, row_num, 12));
 
     /* No dynamic allocation here */
     rc = dss_media_stats_decode(&medium->stats, PQgetvalue(res, row_num, 8));
