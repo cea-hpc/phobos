@@ -125,6 +125,8 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::OBJ::deprec_time", "deprec_time"},
     /* Extent related fields */
     {"DSS::EXT::oid", "oid"},
+    {"DSS::EXT::uuid", "uuid"},
+    {"DSS::EXT::version", "version"},
     {"DSS::EXT::state", "state"},
     {"DSS::EXT::layout_info", "lyt_info"},
     {"DSS::EXT::layout_type", "lyt_info->>'name'"},

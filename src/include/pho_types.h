@@ -113,6 +113,8 @@ struct module_desc {
  */
 struct layout_info {
     char                *oid;           /**< Referenced object */
+    char                *uuid;          /**< UUID of referenced object */
+    int                  version;       /**< Object version */
     enum extent_state    state;         /**< Object stability state */
     struct module_desc   layout_desc;   /**< Layout module used to write it */
     size_t               wr_size;       /**< Encoding write size */

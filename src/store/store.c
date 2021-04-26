@@ -353,37 +353,64 @@ out_free:
  * Delete xfer metadata from the DSS by \a objid, making the oid free to be used
  * again (unless layout information still lay in the DSS).
  */
-static int object_md_del(struct dss_handle *dss, char *objid)
+static int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 {
     struct layout_info *layout = NULL;
+    struct object_info *obj = NULL;
     struct dss_filter filter;
     int cnt = 0;
-    struct object_info  obj = {
-        .oid     = objid,
-        .user_md = NULL,
-    };
     int rc;
 
     ENTRY;
 
-    /* Ensure the oid isn't used by an existing layout before deleting it */
-    rc = dss_filter_build(&filter, "{\"DSS::EXT::oid\": \"%s\"}", objid);
+    /* Retrieve object to get uuid and version info */
+    rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}",
+                          xfer->xd_objid);
     if (rc)
-        return rc;
+        LOG_RETURN(rc, "Couldn't build filter in md_del for objid:'%s'.",
+                   xfer->xd_objid);
+
+    rc = dss_object_get(dss, &filter, &obj, &cnt);
+    if (rc || cnt != 1)
+        LOG_GOTO(out_filt, rc, "dss_object_get failed for objid:'%s'",
+                 xfer->xd_objid);
+
+    dss_filter_free(&filter);
+
+    /**
+     * Ensure the uuid/version isn't used by an existing layout
+     * before deleting it.
+     */
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::EXT::uuid\": \"%s\"},"
+                          "  {\"DSS::EXT::version\": %d}"
+                          "]}", obj->uuid, obj->version);
+    if (rc)
+        LOG_GOTO(out_res, rc,
+                 "Couldn't build filter in md_del for extent uuid:'%s'.",
+                 obj->uuid);
 
     rc = dss_layout_get(dss, &filter, &layout, &cnt);
-    dss_filter_free(&filter);
     dss_res_free(layout, cnt);
     if (rc == 0 && cnt > 0)
-        LOG_RETURN(rc = -EEXIST,
-                   "Cannot rollback objid:'%s' from DSS, a layout still exists "
-                   "for this objid", objid);
+        LOG_GOTO(out_res, rc = -EEXIST,
+                 "Cannot rollback objid:'%s' from DSS, a layout still exists "
+                 "for this objid", obj->oid);
 
     /* Then the rollback can safely happen */
-    pho_verb("Rolling back objid:'%s' from DSS", objid);
-    rc = dss_object_set(dss, &obj, 1, DSS_SET_DELETE);
+    pho_verb("Rolling back obj oid:'%s', obj uuid:'%s' and obj version:'%d' "
+             "from DSS", obj->oid, obj->uuid, obj->version);
+    rc = dss_object_set(dss, obj, 1, DSS_SET_DELETE);
     if (rc)
-        LOG_RETURN(rc, "dss_object_set failed for objid:'%s'", objid);
+        LOG_GOTO(out_res, rc, "dss_object_set failed for objid:'%s'",
+                 obj->oid);
+
+out_res:
+    dss_res_free(obj, 1);
+
+out_filt:
+    dss_filter_free(&filter);
 
     return 0;
 }
@@ -755,7 +782,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     /* Cleanup metadata for failed PUT */
     if (pho->md_created && pho->md_created[xfer_idx] &&
             xfer->xd_op == PHO_XFER_OP_PUT && xfer->xd_rc)
-        object_md_del(&pho->dss, xfer->xd_objid);
+        object_md_del(&pho->dss, xfer);
 
     if (pho->cb)
         pho->cb(pho->udata, xfer, rc);

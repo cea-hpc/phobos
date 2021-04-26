@@ -645,6 +645,8 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     """Object layout and extents description."""
     _fields_ = [
         ('_oid', c_char_p),
+        ('_uuid', c_char_p),
+        ('version', c_int),
         ('state', c_int),
         ('layout_desc', ModuleDesc),
         ('wr_size', c_size_t),
@@ -656,6 +658,8 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
         """Return a dict of available fields and optional display formatters."""
         return {
             'oid': None,
+            'uuid': None,
+            'version': None,
             'ext_count': None,
             'media_name': None,
             'family': None,
@@ -668,6 +672,11 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     def oid(self):
         """Wrapper to get oid"""
         return self._oid.decode('utf-8') if self._oid else None
+
+    @property
+    def uuid(self):
+        """Wrapper to get uuid"""
+        return self._uuid.decode('utf-8') if self._uuid else None
 
     @property
     def media_name(self):

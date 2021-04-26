@@ -393,7 +393,8 @@ static const char * const select_query[] = {
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
                    " address_type, fs_type, fs_status, fs_label, stats, tags,"
                    " put, get, delete FROM media",
-    [DSS_LAYOUT] = "SELECT oid, state, lyt_info, extents FROM extent",
+    [DSS_LAYOUT] = "SELECT oid, uuid, version, state, lyt_info, extents"
+                   " FROM extent",
     [DSS_OBJECT] = "SELECT oid, uuid, version, user_md FROM object",
     [DSS_DEPREC] = "SELECT oid, uuid, version, user_md, deprec_time"
                    " FROM deprecated_object",
@@ -433,12 +434,13 @@ static const char * const insert_query[] = {
                    " fs_type, address_type, fs_status, fs_label, stats, tags,"
                    " put, get, delete)"
                    " VALUES ",
-    [DSS_LAYOUT] = "INSERT INTO extent (oid, uuid, state, lyt_info, extents)"
-                   " VALUES ",
+    [DSS_LAYOUT] = "INSERT INTO extent (oid, uuid, version, state, lyt_info,"
+                   " extents) VALUES ",
     [DSS_OBJECT] = "INSERT INTO object (oid, user_md) VALUES ",
     [DSS_DEPREC] = "INSERT INTO deprecated_object (oid, uuid, version, user_md)"
                    " VALUES ",
 };
+
 
 static const char * const update_query[] = {
     [DSS_DEVICE] = "UPDATE device SET (family, model, host, adm_status, path) ="
@@ -451,7 +453,7 @@ static const char * const update_query[] = {
                    "  WHERE id = '%s';",
     [DSS_LAYOUT] = "UPDATE extent SET (state, lyt_info, extents) ="
                    " ('%s', '%s', '%s')"
-                   " WHERE oid = '%s';",
+                   " WHERE uuid = '%s' and version = %d;",
     [DSS_OBJECT] = "UPDATE object SET user_md = '%s' "
                    " WHERE oid = '%s';",
 };
@@ -469,7 +471,8 @@ static const char * const insert_query_values[] = {
     [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s')%s",
     [DSS_MEDIA]  = "('%s', %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s,"
                    " %s, %s, %s)%s",
-    [DSS_LAYOUT] = "('%s', (select uuid from object where oid = '%s'), '%s',"
+    [DSS_LAYOUT] = "('%s', (select uuid from object where oid = '%s'), "
+                   " (select version from object where oid = '%s'), '%s',"
                    " '%s', '%s')%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
     [DSS_DEPREC] = "('%s', '%s', %d, '%s')%s",
@@ -1108,13 +1111,13 @@ static int get_layout_setrequest(PGconn *_conn, struct layout_info *item_list,
 
         if (action == DSS_SET_INSERT)
             g_string_append_printf(request, insert_query_values[DSS_LAYOUT],
-                                   p_layout->oid, p_layout->oid,
+                                   p_layout->oid, p_layout->oid, p_layout->oid,
                                    extent_state2str(p_layout->state),
                                    pres, layout, i < item_cnt-1 ? "," : ";");
         else if (action == DSS_SET_UPDATE)
             g_string_append_printf(request, update_query[DSS_LAYOUT],
-                                   extent_state2str(p_layout->state),
-                                   pres, layout, p_layout->oid);
+                                   extent_state2str(p_layout->state), pres,
+                                   layout, p_layout->uuid, p_layout->version);
 out_free:
         free(layout);
         free(pres);
@@ -1730,9 +1733,11 @@ static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
     (void)handle;
 
     layout->oid = PQgetvalue(res, row_num, 0);
-    layout->state = str2extent_state(PQgetvalue(res, row_num, 1));
+    layout->uuid = PQgetvalue(res, row_num, 1);
+    layout->version = atoi(PQgetvalue(res, row_num, 2));
+    layout->state = str2extent_state(PQgetvalue(res, row_num, 3));
     rc = dss_layout_desc_decode(&layout->layout_desc,
-                                PQgetvalue(res, row_num, 2));
+                                PQgetvalue(res, row_num, 4));
     if (rc) {
         pho_error(rc, "dss_layout_desc decode error");
         return rc;
@@ -1740,7 +1745,7 @@ static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
 
     rc = dss_layout_extents_decode(&layout->extents,
                                    &layout->ext_count,
-                                   PQgetvalue(res, row_num, 3));
+                                   PQgetvalue(res, row_num, 5));
     if (rc) {
         pho_error(rc, "dss_extent tags decode error");
         return rc;
