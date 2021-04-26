@@ -478,3 +478,27 @@ int dss_lock_status(struct dss_handle *handle, enum dss_type type,
 
     return dss_generic(handle, type, item_list, item_cnt, &callee);
 }
+
+int dss_hostname_from_lock_owner(const char *lock_owner, char **hostname)
+{
+    char *colon_index;
+
+    /* parse lock_owner */
+    colon_index = strchr(lock_owner, ':');
+
+    /* checks that the lock string contains at least one ':' */
+    if (!colon_index) {
+        *hostname = NULL;
+        LOG_RETURN(-EBADF, "Unable to get hostname from lock_owner %s",
+                   lock_owner);
+    }
+
+    /* extract the first part of the lock_owner string */
+    *hostname = strndup(lock_owner, colon_index - lock_owner);
+    if (!*hostname)
+        LOG_RETURN(-ENOMEM, "Unable to copy hostname from lock_owner %s",
+                   lock_owner);
+
+    /* success */
+    return 0;
+}

@@ -485,4 +485,16 @@ int dss_lock_status(struct dss_handle *handle, enum dss_type type,
                     const void *item_list, int item_cnt,
                     char **lock_owner, struct timeval *lock_timestamp);
 
+/**
+ * Allocate and return hostname from a lock owner.
+ *
+ * @param[in]   lock_owner  Lock owner containing the hostname
+ * @param[out]  hostname    Hostname allocated and extracted from /p lock_owner
+ *                          (NULL if there was an error)
+ *
+ * @return  0 is success or negative error code
+ *          -EBADF if we can't extract hostname from lock owner
+ */
+int dss_hostname_from_lock_owner(const char *lock_owner, char **hostname);
+
 #endif

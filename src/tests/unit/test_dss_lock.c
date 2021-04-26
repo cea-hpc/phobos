@@ -463,6 +463,42 @@ static void dss_multiple_refresh_not_exists(void **state)
     assert(dss_unlock(handle, DSS_OBJECT, GOOD_LOCKS, 3, GOOD_LOCK_OWNER) == 0);
 }
 
+/********************************/
+/* dss_hostname_from_lock_owner */
+/********************************/
+
+/* dhflo_ok */
+#define HOSTNAME_MODEL "hostname"
+static const char *HOST_LOCKOWNER = HOSTNAME_MODEL ":owner_queue";
+
+static void dhflo_ok(void **state)
+{
+    char *hostname;
+    int rc;
+
+    (void)state;
+
+    rc = dss_hostname_from_lock_owner(HOST_LOCKOWNER, &hostname);
+    assert_return_code(rc, -rc);
+    assert_string_equal(hostname, HOSTNAME_MODEL);
+    free(hostname);
+}
+
+/* dhflo_lock_without_host */
+static const char *NO_HOST_LOCKOWNER = "owner";
+
+static void dhflo_lock_without_host(void **state)
+{
+    char *hostname = "preexisting string";
+    int rc;
+
+    (void) state;
+
+    rc = dss_hostname_from_lock_owner(NO_HOST_LOCKOWNER, &hostname);
+    assert_int_equal(rc, -EBADF);
+    assert_null(hostname);
+}
+
 int main(void)
 {
     const struct CMUnitTest dss_lock_test_cases[] = {
@@ -481,6 +517,8 @@ int main(void)
         cmocka_unit_test(dss_multiple_status_not_exists),
         cmocka_unit_test(dss_multiple_refresh_ok),
         cmocka_unit_test(dss_multiple_refresh_not_exists),
+        cmocka_unit_test(dhflo_ok),
+        cmocka_unit_test(dhflo_lock_without_host),
     };
 
     return cmocka_run_group_tests(dss_lock_test_cases, setup, teardown);
