@@ -299,53 +299,127 @@ filt_free:
 /**
  * Save this xfer oid and metadata (xd_attrs) into the DSS.
  */
-static int object_md_save(struct dss_handle *dss,
-                          struct pho_xfer_desc *xfer)
+static int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 {
     GString *md_repr = g_string_new(NULL);
     struct object_info *obj_res;
     struct dss_filter filter;
+    char *lock_owner = NULL;
     struct object_info obj;
     int obj_cnt;
+    int rc2;
     int rc;
 
     ENTRY;
 
     rc = pho_attrs_to_json(&xfer->xd_attrs, md_repr, 0);
     if (rc)
-        LOG_GOTO(out_free, rc, "Cannot convert attributes into JSON");
+        LOG_GOTO(out_md, rc, "Cannot convert attributes into JSON");
 
     obj.oid = xfer->xd_objid;
     obj.user_md = md_repr->str;
 
-    pho_debug("Storing object objid:'%s' (transient) with attributes: %s",
-              xfer->xd_objid, md_repr->str);
-
-    rc = dss_object_set(dss, &obj, 1, DSS_SET_INSERT);
+    rc = dss_init_lock_owner(&lock_owner);
     if (rc)
-        LOG_GOTO(out_free, rc, "dss_object_set failed for objid:'%s'", obj.oid);
+        LOG_GOTO(out_md, rc, "Unable to init lock owner in object md save");
 
+    rc = dss_lock(dss, DSS_OBJECT, &obj, 1, lock_owner);
+    if (rc)
+        LOG_GOTO(out_owner, rc, "Unable to lock object objid: '%s'",
+                 obj.oid);
+
+    if (!xfer->xd_params.put.overwrite) {
+        pho_debug("Storing object objid:'%s' (transient) with attributes: %s",
+                  xfer->xd_objid, md_repr->str);
+
+        rc = dss_object_set(dss, &obj, 1, DSS_SET_INSERT);
+        if (rc)
+            LOG_GOTO(out_unlock, rc, "dss_object_set failed for objid:'%s'",
+                     obj.oid);
+
+        goto out_update;
+    } else {
+        rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}", obj.oid);
+        if (rc)
+            LOG_GOTO(out_unlock, rc,
+                     "Unable to build filter in object md save");
+
+        rc = dss_object_get(dss, &filter, &obj_res, &obj_cnt);
+        dss_filter_free(&filter);
+        if (rc || obj_cnt == 0) {
+            pho_verb("dss_object_get failed for objid:'%s'", xfer->xd_objid);
+
+            /**
+             * If we try overwritting an object that doesn't exist in the
+             * object table, we treat the command as a normal
+             * "object put", thus we insert the object we wanted to
+             * overwrite with in the table.
+             */
+            if (obj_cnt == 0)
+                pho_info("Can't overwrite unexisting object:'%s'",
+                         xfer->xd_objid);
+
+            rc = dss_object_set(dss, &obj, 1, DSS_SET_INSERT);
+            if (rc)
+                LOG_GOTO(out_filt, rc, "dss_object_set failed for objid:'%s'",
+                         xfer->xd_objid);
+
+            goto out_update;
+        }
+
+        rc = dss_object_move(dss, DSS_OBJECT, DSS_DEPREC, obj_res, 1);
+        if (rc)
+            LOG_GOTO(out_res, rc, "object_move failed for objid:'%s'",
+                     xfer->xd_objid);
+
+        ++obj_res->version;
+        if (!pho_attrs_is_empty(&xfer->xd_attrs))
+            obj_res->user_md = md_repr->str;
+
+        rc = dss_object_set(dss, obj_res, 1, DSS_SET_FULL_INSERT);
+        if (rc)
+            LOG_GOTO(out_res, rc, "object_set failed for objid:'%s'",
+                     xfer->xd_objid);
+
+        dss_res_free(obj_res, 1);
+    }
+
+out_update:
     rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}",
                           xfer->xd_objid);
     if (rc)
-        LOG_GOTO(out_free, rc, "dss_filter_build failed");
+        LOG_GOTO(out_unlock, rc, "dss_filter_build failed");
 
     rc = dss_object_get(dss, &filter, &obj_res, &obj_cnt);
     if (rc)
-        LOG_GOTO(filt_free, rc, "Cannot fetch objid:'%s'", xfer->xd_objid);
-
-    assert(obj_cnt == 1);
+        LOG_GOTO(out_filt, rc, "Cannot fetch objid:'%s'", xfer->xd_objid);
 
     xfer->xd_version = obj_res->version;
     xfer->xd_objuuid = strdup(obj_res->uuid);
     if (xfer->xd_objuuid == NULL)
         rc = -ENOMEM;
 
-    dss_res_free(obj_res, obj_cnt);
-filt_free:
+out_res:
+    dss_res_free(obj_res, 1);
+
+out_filt:
     dss_filter_free(&filter);
-out_free:
+
+out_unlock:
+    rc2 = dss_unlock(dss, DSS_OBJECT, &obj, 1, lock_owner);
+    if (rc2) {
+        rc = rc ? : rc2;
+        pho_error(rc2,
+                  "Couldn't unlock object:'%s'. Database may be corrupted.",
+                  xfer->xd_objid);
+    }
+
+out_owner:
+    free(lock_owner);
+
+out_md:
     g_string_free(md_repr, true);
+
     return rc;
 }
 
@@ -355,10 +429,15 @@ out_free:
  */
 static int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 {
+    struct object_info lock_obj = { .oid = xfer->xd_objid };
+    struct object_info *prev_obj = NULL;
     struct layout_info *layout = NULL;
     struct object_info *obj = NULL;
+    bool need_undelete = false;
     struct dss_filter filter;
+    char *lock_owner = NULL;
     int cnt = 0;
+    int rc2;
     int rc;
 
     ENTRY;
@@ -370,17 +449,44 @@ static int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         LOG_RETURN(rc, "Couldn't build filter in md_del for objid:'%s'.",
                    xfer->xd_objid);
 
+    /* taking oid lock */
+    rc = dss_init_lock_owner(&lock_owner);
+    if (rc)
+        LOG_GOTO(out_filt, rc, "Unable to init lock owner in object md save");
+
+    rc = dss_lock(dss, DSS_OBJECT, &lock_obj, 1, lock_owner);
+    if (rc)
+        LOG_GOTO(out_owner, rc, "Unable to lock object objid: '%s'",
+                 xfer->xd_objid);
+
     rc = dss_object_get(dss, &filter, &obj, &cnt);
     if (rc || cnt != 1)
-        LOG_GOTO(out_filt, rc, "dss_object_get failed for objid:'%s'",
+        LOG_GOTO(out_unlock, rc, "dss_object_get failed for objid:'%s'",
                  xfer->xd_objid);
 
     dss_filter_free(&filter);
 
-    /**
-     * Ensure the uuid/version isn't used by an existing layout
-     * before deleting it.
-     */
+    /* Check if the performed operation was an overwrite PUT */
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::OBJ::uuid\": \"%s\"},"
+                          "  {\"DSS::OBJ::version\": %d}"
+                          "]}", obj->uuid, obj->version - 1);
+    if (rc)
+        LOG_GOTO(out_res, rc,
+                 "Couldn't build filter in md_del for object uuid:'%s'.",
+                 obj->uuid);
+
+    rc = dss_deprecated_object_get(dss, &filter, &prev_obj, &cnt);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_GOTO(out_res, rc, "dss_deprecated_object_get failed for uuid:'%s'",
+                 obj->uuid);
+
+    if (cnt == 1)
+        need_undelete = true;
+
+    /* Ensure the oid isn't used by an existing layout before deleting it */
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                           "  {\"DSS::EXT::uuid\": \"%s\"},"
@@ -392,27 +498,52 @@ static int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
                  obj->uuid);
 
     rc = dss_layout_get(dss, &filter, &layout, &cnt);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_GOTO(out_res, rc, "dss_layout_get failed for uuid:'%s'",
+                 xfer->xd_objuuid);
+
     dss_res_free(layout, cnt);
-    if (rc == 0 && cnt > 0)
+
+    if (cnt > 0)
         LOG_GOTO(out_res, rc = -EEXIST,
                  "Cannot rollback objid:'%s' from DSS, a layout still exists "
-                 "for this objid", obj->oid);
+                 "for this objid", xfer->xd_objid);
 
     /* Then the rollback can safely happen */
     pho_verb("Rolling back obj oid:'%s', obj uuid:'%s' and obj version:'%d' "
-             "from DSS", obj->oid, obj->uuid, obj->version);
+             "from DSS", prev_obj->oid, prev_obj->uuid, prev_obj->version);
     rc = dss_object_set(dss, obj, 1, DSS_SET_DELETE);
     if (rc)
         LOG_GOTO(out_res, rc, "dss_object_set failed for objid:'%s'",
-                 obj->oid);
+                 xfer->xd_objid);
+
+    if (need_undelete) {
+        rc = dss_object_move(dss, DSS_DEPREC, DSS_OBJECT, prev_obj, 1);
+        if (rc)
+            LOG_GOTO(out_res, rc, "dss_object_move failed for uuid:'%s'",
+                     obj->uuid);
+    }
 
 out_res:
     dss_res_free(obj, 1);
 
+out_unlock:
+    rc2 = dss_unlock(dss, DSS_OBJECT, &lock_obj, 1, lock_owner);
+    if (rc2) {
+        rc = rc ? : rc2;
+        pho_error(rc2,
+                  "Couldn't unlock object:'%s'. Database may be corrupted.",
+                  xfer->xd_objid);
+    }
+
+out_owner:
+    free(lock_owner);
+
 out_filt:
     dss_filter_free(&filter);
 
-    return 0;
+    return rc;
 }
 
 /**

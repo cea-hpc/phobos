@@ -327,6 +327,8 @@ class StorePutHandler(StoreGenericPutHandler):
         super(StorePutHandler, cls).add_options(parser)
         parser.add_argument('-m', '--metadata',
                             help='Comma-separated list of key=value')
+        parser.add_argument('--overwrite', action='store_true',
+                            help='Allow object update')
         parser.add_argument('src_file', help='File to insert')
         parser.add_argument('object_id', help='Desired object ID')
 
@@ -340,10 +342,11 @@ class StorePutHandler(StoreGenericPutHandler):
             attrs = attr_convert(attrs)
             self.logger.debug("Loaded attributes set %r", attrs)
 
-        put_params = PutParams(self.params.get('family'),
-                               self.params.get('layout'),
-                               self.params.get('tags', []),
-                               self.params.get('alias'))
+        put_params = PutParams(alias=self.params.get('alias'),
+                               family=self.params.get('family'),
+                               layout=self.params.get('layout'),
+                               overwrite=self.params.get('overwrite'),
+                               tags=self.params.get('tags', []))
 
         self.logger.debug("Inserting object '%s' to 'objid:%s'", src, oid)
 

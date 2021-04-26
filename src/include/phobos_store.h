@@ -93,6 +93,9 @@ struct pho_xfer_put_params {
     const char      *alias;       /**< Identifier for family, layout,
                                     *  tag combination
                                     */
+    bool             overwrite;   /**< true if the put command could be an
+                                    *  update.
+                                    */
 };
 
 /**

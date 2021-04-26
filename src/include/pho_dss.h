@@ -84,15 +84,22 @@ static inline const char *dss_type2str(enum dss_type type)
 enum dss_set_action {
     DSS_SET_INVAL  = -1,
     DSS_SET_INSERT =  0,
+    DSS_SET_FULL_INSERT, /** A full insert is an insert which overrides
+                           *  the default values when adding a row. In the case
+                           *  of an object, it means adding a preexisting object
+                           *  with a particular uuid and version, not the
+                           *  default DSS values.
+                           */
     DSS_SET_UPDATE,
     DSS_SET_DELETE,
     DSS_SET_LAST,
 };
 
 static const char * const dss_set_actions_names[] = {
-    [DSS_SET_INSERT] = "insert",
-    [DSS_SET_UPDATE] = "update",
-    [DSS_SET_DELETE] = "delete",
+    [DSS_SET_INSERT]      = "insert",
+    [DSS_SET_FULL_INSERT] = "full-insert",
+    [DSS_SET_UPDATE]      = "update",
+    [DSS_SET_DELETE]      = "delete",
 };
 
 /**

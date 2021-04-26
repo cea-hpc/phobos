@@ -28,7 +28,7 @@ import logging
 import os
 
 from collections import namedtuple
-from ctypes import (byref, c_char_p, c_int, c_ssize_t, c_void_p, cast,
+from ctypes import (byref, c_bool, c_char_p, c_int, c_ssize_t, c_void_p, cast,
                     CFUNCTYPE, pointer, POINTER, py_object, Structure, Union)
 
 from phobos.core.ffi import LIBPHOBOS, DeprecatedObjectInfo, ObjectInfo, Tags
@@ -73,6 +73,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods
         ("_layout_name", c_char_p),
         ("tags", Tags),
         ("_alias", c_char_p),
+        ("overwrite", c_bool),
     ]
 
     def __init__(self, put_params):
@@ -81,6 +82,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods
         self.layout_name = put_params.layout
         self.tags = Tags(put_params.tags)
         self.alias = put_params.alias
+        self.overwrite = put_params.overwrite
 
         if put_params.family is None:
             self.family = PHO_RSC_INVAL
@@ -109,7 +111,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods
         # pylint: disable=attribute-defined-outside-init
         self._alias = val.encode('utf-8') if val else None
 
-class PutParams(namedtuple('PutParams', 'family layout tags alias')):
+class PutParams(namedtuple('PutParams', 'alias family layout overwrite tags')):
     """
     Transition data structure for put parameters between
     the CLI and the XFer data structure.

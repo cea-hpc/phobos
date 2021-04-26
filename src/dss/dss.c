@@ -441,6 +441,9 @@ static const char * const insert_query[] = {
                    " VALUES ",
 };
 
+static const char * const insert_full_query[] = {
+    [DSS_OBJECT] = "INSERT INTO object (oid, uuid, version, user_md) VALUES ",
+};
 
 static const char * const update_query[] = {
     [DSS_DEVICE] = "UPDATE device SET (family, model, host, adm_status, path) ="
@@ -476,6 +479,10 @@ static const char * const insert_query_values[] = {
                    " '%s', '%s')%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
     [DSS_DEPREC] = "('%s', '%s', %d, '%s')%s",
+};
+
+static const char * const insert_full_query_values[] = {
+    [DSS_OBJECT] = "('%s', '%s', %d, '%s')%s",
 };
 
 enum dss_move_queries {
@@ -1036,6 +1043,12 @@ static int get_object_setrequest(PGconn *_conn, struct object_info *item_list,
         } else if (action == DSS_SET_INSERT) {
             g_string_append_printf(request, insert_query_values[DSS_OBJECT],
                                    p_object->oid, p_object->user_md,
+                                   i < item_cnt-1 ? "," : ";");
+        } else if (action == DSS_SET_FULL_INSERT) {
+            g_string_append_printf(request,
+                                   insert_full_query_values[DSS_OBJECT],
+                                   p_object->oid, p_object->uuid,
+                                   p_object->version, p_object->user_md,
                                    i < item_cnt-1 ? "," : ";");
         } else if (action == DSS_SET_UPDATE) {
             g_string_append_printf(request, update_query[DSS_OBJECT],
@@ -1926,10 +1939,16 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         LOG_RETURN(-EINVAL, "conn: %p, item_list: %p, item_cnt: %d",
                    conn, item_list, item_cnt);
 
+    if (action == DSS_SET_FULL_INSERT && type != DSS_OBJECT)
+        LOG_RETURN(-ENOTSUP, "Full insert request is not supported for %s",
+                   dss_type_names[type]);
+
     request = g_string_new("BEGIN;");
 
     if (action == DSS_SET_INSERT)
         g_string_append(request, insert_query[type]);
+    else if (action == DSS_SET_FULL_INSERT)
+        g_string_append(request, insert_full_query[type]);
 
     switch (type) {
     case DSS_DEVICE:
