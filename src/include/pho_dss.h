@@ -339,54 +339,6 @@ int dss_deprecated_object_set(struct dss_handle *hdl,
                               struct object_info *obj_ls,
                               int obj_cnt, enum dss_set_action action);
 
-/**
- *  Lock a device for concurrent accesses
- *  @param[in] item_list  list of items
- *  @param[in] item_cnt   number of items in item_list.
- *  @param[in] lock_owner name of the new owner of the lock
- *  @retval 0 on success
- *  @retval -EEXIST on lock failure (device(s) already locked)
- */
-int dss_device_lock(struct dss_handle *handle, struct dev_info *dev_ls,
-                    int dev_cnt, const char *lock_owner);
-
-/**
- *  Unlock a device
- *  @param[in] item_list  list of items
- *  @param[in] item_cnt   number of items in item_list.
- *  @param[in] lock_owner name of the owner of the lock to be released; will
- *                        fail if the lock is currently locked by another owner.
- *                        If NULL, will unlock inconditionally.
- *  @retval 0 on success, -ENOLCK on failure (no previous lock or previous
- *          lock had a different name)
- */
-int dss_device_unlock(struct dss_handle *handle, struct dev_info *dev_ls,
-                      int dev_cnt, const char *lock_owner);
-
-/**
- *  Lock a media for concurrent accesses
- *  @param[in] item_list  list of items
- *  @param[in] item_cnt   number of items in item_list.
- *  @param[in] lock_owner name of the new owner of the lock
- *  @retval 0 on success
- *  @retval -EEXIST on lock failure (device(s) already locked)
- */
-int dss_media_lock(struct dss_handle *handle, struct media_info *media_ls,
-                   int media_cnt, const char *lock_owner);
-
-/**
- *  Unlock a media
- *  @param[in] item_list list of items
- *  @param[in] item_cnt  number of items in item_list.
- *  @param[in] lock_owner name of the owner of the lock to be released; will
- *                        fail if the lock is currently locked by another owner.
- *                        If NULL, will unlock inconditionally.
- *  @retval 0 on success, -ENOLCK on failure (no previous lock or previous
- *          lock had a different name)
- */
-int dss_media_unlock(struct dss_handle *handle, struct media_info *media_ls,
-                     int media_cnt, const char *lock_owner);
-
 /* ****************************************************************************/
 /* Generic move ***************************************************************/
 /* ****************************************************************************/
@@ -453,16 +405,22 @@ int dss_init_lock_owner(char **lock_owner);
 int dss_init_oid_lock_id(const char *oid, char **oid_lock_id);
 
 /**
- * Take a lock.
+ * Take locks.
+ *
+ * If any lock cannot be taken, then the ones that already are will be
+ * forcefully unlocked, and the function will not try to lock any other
+ * ressource (all-or-nothing policy).
  *
  * @param[in]   handle          DSS handle.
- * @param[in]   lock_id         Lock identifier.
+ * @param[in]   type            Type of the ressources to lock.
+ * @param[in]   item_list       List of ressources to lock.
+ * @param[in]   item_cnt        Number of ressources to lock.
  * @param[in]   lock_owner      Name of the lock owner.
  * @return                      0 on success,
  *                             -EEXIST if \a lock_id already exists.
  */
-int dss_lock(struct dss_handle *handle, const char *lock_id,
-             const char *lock_owner);
+int dss_lock(struct dss_handle *handle, enum dss_type type,
+             const void *item_list, int item_cnt, const char *lock_owner);
 
 /**
  * Refresh a lock timestamp.
@@ -478,20 +436,26 @@ int dss_lock_refresh(struct dss_handle *handle, const char *lock_id,
                      const char *lock_owner);
 
 /**
- * Release a lock.
+ * Release locks.
  *
- * If \a lock_owner is NULL, remove the lock without considering the
+ * If \a lock_owner is NULL, remove the locks without considering the
  * previous owner.
  *
+ * The function will attempt to unlock as many locks as possible. Should any
+ * unlock fail, the first error code obtained will be returned after
+ * attempting to unlock all other locks (as-much-as-possible policy).
+ *
  * @param[in]   handle          DSS handle.
- * @param[in]   lock_id         Lock identifier.
+ * @param[in]   type            Type of the ressources to unlock.
+ * @param[in]   item_list       List of ressources to unlock.
+ * @param[in]   item_cnt        Number of ressources to unlock.
  * @param[in]   lock_owner      Name of the lock owner, ignored if NULL.
  * @return                      0 on success,
  *                             -ENOLCK if the lock does not exist,
  *                             -EACCES if the lock owner does not match.
  */
-int dss_unlock(struct dss_handle *handle, const char *lock_id,
-               const char *lock_owner);
+int dss_unlock(struct dss_handle *handle, enum dss_type type,
+               const void *item_list, int item_cnt, const char *lock_owner);
 
 /**
  * Retrieve the status of a lock.

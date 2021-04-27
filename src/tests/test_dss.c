@@ -91,36 +91,6 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
     }
 }
 
-static int dss_generic_lock(struct dss_handle *handle, enum dss_type type,
-                            void *item_list, int n, const char *lock_owner)
-{
-    switch (type) {
-    case DSS_DEVICE:
-        return dss_device_lock(handle, (struct dev_info *)item_list, n,
-                               lock_owner);
-    case DSS_MEDIA:
-        return dss_media_lock(handle, (struct media_info *)item_list, n,
-                              lock_owner);
-    default:
-        return -ENOTSUP;
-    }
-}
-
-static int dss_generic_unlock(struct dss_handle *handle, enum dss_type type,
-                              void *item_list, int n, const char *lock_owner)
-{
-    switch (type) {
-    case DSS_DEVICE:
-        return dss_device_unlock(handle, (struct dev_info *)item_list, n,
-                                 lock_owner);
-    case DSS_MEDIA:
-        return dss_media_unlock(handle, (struct media_info *)item_list, n,
-                                lock_owner);
-    default:
-        return -ENOTSUP;
-    }
-}
-
 int main(int argc, char **argv)
 {
     struct dss_handle    dss_handle;
@@ -385,8 +355,7 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_generic_lock(&dss_handle, type, item_list, item_cnt,
-                              lock_owner);
+        rc = dss_lock(&dss_handle, type, item_list, item_cnt, lock_owner);
         if (rc) {
             pho_error(rc, "dss_lock failed");
             exit(EXIT_FAILURE);
@@ -408,8 +377,7 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_generic_unlock(&dss_handle, type, item_list, item_cnt,
-                                lock_owner);
+        rc = dss_unlock(&dss_handle, type, item_list, item_cnt, lock_owner);
         if (rc) {
             pho_error(rc, "dss_unlock failed");
             exit(EXIT_FAILURE);

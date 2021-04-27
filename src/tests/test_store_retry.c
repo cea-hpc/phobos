@@ -189,8 +189,8 @@ static void *wait_unlock_device(void *f_args)
     struct wait_unlock_device_args *args = f_args;
 
     sleep(WAIT_UNLOCK_SLEEP);
-    dss_device_unlock(&args->dss, args->dev, 1, LOCK_OWNER);
-    dss_media_unlock(&args->dss, args->media, 1, LOCK_OWNER);
+    dss_unlock(&args->dss, DSS_DEVICE, args->dev, 1, LOCK_OWNER);
+    dss_unlock(&args->dss, DSS_MEDIA, args->media, 1, LOCK_OWNER);
     dss_fini(&args->dss);
     return NULL;
 }
@@ -211,8 +211,8 @@ static void test_put_retry(struct pho_xfer_desc *xfer, struct dev_info *dev,
     dss_init(&wait_unlock_args.dss);
 
     /* First lock the only available device and media */
-    dss_device_lock(&wait_unlock_args.dss, dev, 1, LOCK_OWNER);
-    dss_media_lock(&wait_unlock_args.dss, media, 1, LOCK_OWNER);
+    dss_lock(&wait_unlock_args.dss, DSS_DEVICE, dev, 1, LOCK_OWNER);
+    dss_lock(&wait_unlock_args.dss, DSS_MEDIA, media, 1, LOCK_OWNER);
 
     /* In another thread, sleep for some time and unlock the device */
     assert(pthread_create(&wait_unlock_thread, NULL, wait_unlock_device,

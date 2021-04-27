@@ -412,7 +412,7 @@ static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     if (rc)
         LOG_GOTO(out_id, rc, "Unable to init lock owner in object delete");
 
-    rc = dss_lock(dss, lock_id, lock_owner);
+    rc = dss_lock(dss, DSS_OBJECT, &lock_id, 1, lock_owner);
     if (rc)
         LOG_GOTO(out_id_owner, rc, "Unable to get lock for oid %s before "
                                    "delete, lock_id: %s , lock_owner: %s",
@@ -446,7 +446,7 @@ out_filter:
     dss_filter_free(&filter);
 out_unlock:
     /* releasing oid lock */
-    rc2 = dss_unlock(dss, lock_id, lock_owner);
+    rc2 = dss_unlock(dss, DSS_OBJECT, &lock_id, 1, lock_owner);
     if (rc2) {
         pho_error(rc, "Unable to unlock at end of object delete (lock_id: %s, "
                       "lock_owner: %s)", lock_id, lock_owner);
@@ -536,7 +536,7 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     if (rc)
         LOG_GOTO(out_id, rc, "Unable to init lock owner in object undelete");
 
-    rc = dss_lock(dss, lock_id, lock_owner);
+    rc = dss_lock(dss, DSS_OBJECT, &lock_id, 1, lock_owner);
     if (rc)
         LOG_GOTO(out_id_owner, rc, "Unable to get lock for oid %s before "
                                    "undelete, lock_id: %s , lock_owner: %s",
@@ -636,7 +636,7 @@ out_free:
 out_unlock:
     /* UNLOCK */
     /* releasing oid lock */
-    rc2 = dss_unlock(dss, lock_id, lock_owner);
+    rc2 = dss_unlock(dss, DSS_OBJECT, &lock_id, 1, lock_owner);
     if (rc2) {
         pho_error(rc, "Unable to unlock at end of object undelete (lock_id: "
                       "%s, lock_owner: %s)", lock_id, lock_owner);

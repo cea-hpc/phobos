@@ -246,6 +246,10 @@ PyMODINIT_FUNC PyInit_const(void)
     PyModule_AddIntMacro(mod, DSS_SET_DELETE);
     PyModule_AddIntMacro(mod, DSS_SET_LAST);
 
+    /* enum dss_type */
+    PyModule_AddIntMacro(mod, DSS_DEVICE);
+    PyModule_AddIntMacro(mod, DSS_MEDIA);
+
     /* enum pho_xfer_flags */
     PyModule_AddIntMacro(mod, PHO_XFER_OBJ_REPLACE);
 

@@ -34,6 +34,7 @@ from socket import gethostname
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 from phobos.core.const import (DSS_SET_DELETE, DSS_SET_INSERT, DSS_SET_UPDATE, # pylint: disable=no-name-in-module
+                               DSS_DEVICE, DSS_MEDIA,
                                PHO_ADDR_HASH1, str2fs_type)
 from phobos.core.ffi import (DevInfo, MediaInfo, MediaStats, LIBPHOBOS,
                              OperationFlags)
@@ -233,14 +234,15 @@ class BaseEntityManager:
         self._generic_set(objects, DSS_SET_DELETE)
 
     def _generic_lock_unlock(self, objects, lock_c_func, err_message,
-                             lock_owner):
+                             lock_owner, lock_type):
+        #pylint: disable=too-many-arguments
         """Call a dss_<object>_{un,}lock c function on this list of objects.
         lock_c_func could for example be dss_media_lock.
         """
         obj_count = len(objects)
         obj_array = (self.wrapped_class * obj_count)(*objects)
-        rc = lock_c_func(byref(self.client.handle), obj_array, obj_count,
-                         lock_owner)
+        rc = lock_c_func(byref(self.client.handle), lock_type, obj_array,
+                         obj_count, lock_owner)
         if rc:
             raise EnvironmentError(rc, err_message)
 
@@ -269,8 +271,8 @@ class DeviceManager(BaseEntityManager):
     def lock(self, objects):
         """Lock all the devices associated with a given list of DeviceInfo"""
         self._generic_lock_unlock(
-            objects, LIBPHOBOS.dss_device_lock, "Device locking failed",
-            self.lock_owner,
+            objects, LIBPHOBOS.dss_lock, "Device locking failed",
+            self.lock_owner, DSS_DEVICE,
         )
 
     def unlock(self, objects, force=False):
@@ -279,8 +281,8 @@ class DeviceManager(BaseEntityManager):
         by this instance.
         """
         self._generic_lock_unlock(
-            objects, LIBPHOBOS.dss_device_unlock, "Device unlocking failed",
-            None if force else self.lock_owner,
+            objects, LIBPHOBOS.dss_unlock, "Device unlocking failed",
+            None if force else self.lock_owner, DSS_DEVICE,
         )
 
 class MediaManager(BaseEntityManager):
@@ -328,8 +330,8 @@ class MediaManager(BaseEntityManager):
     def lock(self, objects):
         """Lock all the media associated with a given list of MediaInfo"""
         self._generic_lock_unlock(
-            objects, LIBPHOBOS.dss_media_lock, "Media locking failed",
-            self.lock_owner,
+            objects, LIBPHOBOS.dss_lock, "Media locking failed",
+            self.lock_owner, DSS_MEDIA,
         )
 
     def unlock(self, objects, force=False):
@@ -338,8 +340,8 @@ class MediaManager(BaseEntityManager):
         by this instance.
         """
         self._generic_lock_unlock(
-            objects, LIBPHOBOS.dss_media_unlock, "Media unlocking failed",
-            None if force else self.lock_owner,
+            objects, LIBPHOBOS.dss_unlock, "Media unlocking failed",
+            None if force else self.lock_owner, DSS_MEDIA,
         )
 
 class DSSHandle(Structure): # pylint: disable=too-few-public-methods

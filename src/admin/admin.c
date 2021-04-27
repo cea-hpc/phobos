@@ -290,7 +290,7 @@ static int _device_update_adm_status(struct admin_handle *adm,
         if (rc)
             goto out_free;
 
-        rc = dss_device_lock(&adm->dss, dev_res, 1, adm->lock_owner);
+        rc = dss_lock(&adm->dss, DSS_DEVICE, dev_res, 1, adm->lock_owner);
         if (rc) {
             pho_error(-EBUSY, "Device '%s' is in use by '%s'", dev_ids[i].name,
                       dev_res->lock.owner);
@@ -344,7 +344,8 @@ static int _device_update_adm_status(struct admin_handle *adm,
 
 out_free:
     if (avail_devices)
-        dss_device_unlock(&adm->dss, devices, avail_devices, adm->lock_owner);
+        dss_unlock(&adm->dss, DSS_DEVICE, devices, avail_devices,
+                   adm->lock_owner);
 
     for (i = 0; i < num_dev; ++i)
         dev_info_free(devices + i, false);
