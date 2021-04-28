@@ -227,6 +227,25 @@ static int basic_lock(struct dss_handle *handle, const char *lock_id,
     return rc;
 }
 
+static int basic_refresh(struct dss_handle *handle, const char *lock_id,
+                         const char *lock_owner)
+{
+    GString *request = g_string_new("");
+    PGconn *conn = handle->dh_conn;
+    PGresult *res;
+    int rc = 0;
+
+    g_string_printf(request, lock_query[DSS_REFRESH_QUERY],
+                    lock_id, lock_owner);
+
+    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
+
+    PQclear(res);
+    g_string_free(request, true);
+
+    return rc;
+}
+
 static int basic_unlock(struct dss_handle *handle, const char *lock_id,
                         const char *lock_owner)
 {
@@ -249,99 +268,8 @@ static int basic_unlock(struct dss_handle *handle, const char *lock_id,
     return rc;
 }
 
-int dss_lock(struct dss_handle *handle, enum dss_type type,
-             const void *item_list, int item_cnt, const char *lock_owner)
-{
-    PGconn      *conn = handle->dh_conn;
-    GString    **ids;
-    int          rc = 0;
-    int          i;
-
-    ENTRY;
-
-    LOCK_ID_LIST_ALLOCATE(ids, item_cnt);
-
-    rc = dss_build_lock_id_list(conn, item_list, item_cnt, type, ids);
-    if (rc)
-        LOG_GOTO(cleanup, rc, "Ids list build failed");
-
-    for (i = 0; i < item_cnt; ++i) {
-        rc = basic_lock(handle, ids[i]->str, lock_owner);
-        if (rc) {
-            pho_error(rc, "Failed to lock %s", ids[i]->str);
-            break;
-        }
-    }
-
-    if (rc) {
-        for (--i; i >= 0; --i) {
-            /* If a lock failure happens, we force every unlock */
-            rc = basic_unlock(handle, ids[i]->str, NULL);
-            if (rc)
-                pho_error(rc, "Failed to unlock %s after lock failure, "
-                          "database may be corrupted", ids[i]->str);
-        }
-    }
-
-cleanup:
-    LOCK_ID_LIST_FREE(ids, item_cnt);
-
-    return rc;
-}
-
-int dss_lock_refresh(struct dss_handle *handle, const char *lock_id,
-                     const char *lock_owner)
-{
-    GString *request = g_string_new("");
-    PGconn *conn = handle->dh_conn;
-    PGresult *res;
-    int rc = 0;
-
-    g_string_printf(request, lock_query[DSS_REFRESH_QUERY],
-                    lock_id, lock_owner);
-
-    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
-
-    PQclear(res);
-    g_string_free(request, true);
-
-    return rc;
-}
-
-int dss_unlock(struct dss_handle *handle, enum dss_type type,
-               const void *item_list, int item_cnt, const char *lock_owner)
-{
-    PGconn      *conn = handle->dh_conn;
-    GString    **ids;
-    int          rc = 0;
-    int          i;
-
-    ENTRY;
-
-    LOCK_ID_LIST_ALLOCATE(ids, item_cnt);
-
-    rc = dss_build_lock_id_list(conn, item_list, item_cnt, type, ids);
-    if (rc)
-        LOG_GOTO(cleanup, rc, "Ids list build failed");
-
-   for (i = 0; i < item_cnt; ++i) {
-        int rc2;
-
-        rc2 = basic_unlock(handle, ids[i]->str, lock_owner);
-        if (rc2) {
-            rc = rc ? : rc2;
-            pho_error(rc2, "Failed to unlock %s", ids[i]->str);
-        }
-    }
-
-cleanup:
-    LOCK_ID_LIST_FREE(ids, item_cnt);
-
-    return rc;
-}
-
-int dss_lock_status(struct dss_handle *handle, const char *lock_id,
-                    char **lock_owner, struct timeval *lock_timestamp)
+static int basic_status(struct dss_handle *handle, const char *lock_id,
+                        char **lock_owner, struct timeval *lock_timestamp)
 {
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
@@ -372,6 +300,148 @@ int dss_lock_status(struct dss_handle *handle, const char *lock_id,
 out_cleanup:
     PQclear(res);
     g_string_free(request, true);
+
+    return rc;
+}
+
+int dss_lock(struct dss_handle *handle, enum dss_type type,
+             const void *item_list, int item_cnt, const char *lock_owner)
+{
+    PGconn *conn = handle->dh_conn;
+    GString **ids;
+    int rc = 0;
+    int i;
+
+    ENTRY;
+
+    LOCK_ID_LIST_ALLOCATE(ids, item_cnt);
+
+    rc = dss_build_lock_id_list(conn, item_list, item_cnt, type, ids);
+    if (rc)
+        LOG_GOTO(cleanup, rc, "Ids list build failed");
+
+    for (i = 0; i < item_cnt; ++i) {
+        rc = basic_lock(handle, ids[i]->str, lock_owner);
+        if (rc) {
+            pho_error(rc, "Failed to lock %s", ids[i]->str);
+            break;
+        }
+    }
+
+    if (rc) {
+        for (--i; i >= 0; --i) {
+            int rc2;
+
+            /* If a lock failure happens, we force every unlock */
+            rc2 = basic_unlock(handle, ids[i]->str, NULL);
+            if (rc2)
+                pho_error(rc2, "Failed to unlock %s after lock failure, "
+                               "database may be corrupted", ids[i]->str);
+        }
+    }
+
+cleanup:
+    LOCK_ID_LIST_FREE(ids, item_cnt);
+
+    return rc;
+}
+
+int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
+                     const void *item_list, int item_cnt,
+                     const char *lock_owner)
+{
+    PGconn *conn = handle->dh_conn;
+    GString **ids;
+    int rc = 0;
+    int i;
+
+    ENTRY;
+
+    LOCK_ID_LIST_ALLOCATE(ids, item_cnt);
+
+    rc = dss_build_lock_id_list(conn, item_list, item_cnt, type, ids);
+    if (rc)
+        LOG_GOTO(cleanup, rc, "Ids list build failed");
+
+    for (i = 0; i < item_cnt; ++i) {
+        int rc2;
+
+        rc2 = basic_refresh(handle, ids[i]->str, lock_owner);
+        if (rc2) {
+            rc = rc ? : rc2;
+            pho_error(rc2, "Failed to refresh %s", ids[i]->str);
+        }
+    }
+
+cleanup:
+    LOCK_ID_LIST_FREE(ids, item_cnt);
+
+    return rc;
+}
+
+int dss_unlock(struct dss_handle *handle, enum dss_type type,
+               const void *item_list, int item_cnt, const char *lock_owner)
+{
+    PGconn *conn = handle->dh_conn;
+    GString **ids;
+    int rc = 0;
+    int i;
+
+    ENTRY;
+
+    LOCK_ID_LIST_ALLOCATE(ids, item_cnt);
+
+    rc = dss_build_lock_id_list(conn, item_list, item_cnt, type, ids);
+    if (rc)
+        LOG_GOTO(cleanup, rc, "Ids list build failed");
+
+    for (i = 0; i < item_cnt; ++i) {
+        int rc2;
+
+        rc2 = basic_unlock(handle, ids[i]->str, lock_owner);
+        if (rc2) {
+            rc = rc ? : rc2;
+            pho_error(rc2, "Failed to unlock %s", ids[i]->str);
+        }
+    }
+
+cleanup:
+    LOCK_ID_LIST_FREE(ids, item_cnt);
+
+    return rc;
+}
+
+int dss_lock_status(struct dss_handle *handle, enum dss_type type,
+                    const void *item_list, int item_cnt,
+                    char **lock_owner, struct timeval *lock_timestamp)
+{
+    PGconn *conn = handle->dh_conn;
+    GString **ids;
+    int rc = 0;
+    int i;
+
+    ENTRY;
+
+    LOCK_ID_LIST_ALLOCATE(ids, item_cnt);
+
+    rc = dss_build_lock_id_list(conn, item_list, item_cnt, type, ids);
+    if (rc)
+        LOG_GOTO(cleanup, rc, "Ids list build failed");
+
+    for (i = 0; i < item_cnt; ++i) {
+        int rc2;
+
+        rc2 = basic_status(handle, ids[i]->str,
+                           lock_owner ? lock_owner + i : NULL,
+                           lock_timestamp ? lock_timestamp + i : NULL);
+        if (rc2) {
+            rc = rc ? : rc2;
+            pho_error(rc2, "Failed to status %s", ids[i]->str);
+        }
+    }
+
+cleanup:
+    LOCK_ID_LIST_FREE(ids, item_cnt);
 
     return rc;
 }

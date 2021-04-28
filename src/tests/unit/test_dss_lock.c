@@ -40,7 +40,6 @@
 static struct object_info GOOD_LOCK = {
     .oid = "oid_dummy"
 };
-static const char *FORMATED_GOOD_LOCK_ID = "object_oid_dummy";
 static const char *GOOD_LOCK_OWNER = "dummy_owner";
 
 static int setup(void **state)
@@ -144,13 +143,13 @@ static void dss_refresh_ok(void **state)
 
     assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
 
-    rc = dss_lock_status(handle, FORMATED_GOOD_LOCK_ID, NULL, &old_ts);
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCK, 1, NULL, &old_ts);
     assert_int_equal(rc, -rc);
 
-    rc = dss_lock_refresh(handle, FORMATED_GOOD_LOCK_ID, GOOD_LOCK_OWNER);
+    rc = dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER);
     assert_int_equal(rc, -rc);
 
-    rc = dss_lock_status(handle, FORMATED_GOOD_LOCK_ID, NULL, &new_ts);
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCK, 1, NULL, &new_ts);
     assert_int_equal(rc, -rc);
 
     assert_memory_not_equal(&old_ts, &new_ts, sizeof(old_ts));
@@ -161,12 +160,12 @@ static void dss_refresh_ok(void **state)
 static void dss_refresh_not_exists(void **state)
 {
     struct dss_handle *handle = (struct dss_handle *)*state;
-    char *BAD_LOCK_ID = "not_exists";
+    static struct object_info BAD_LOCK = { .oid = "not_exists" };
     int rc;
 
     assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
 
-    rc = dss_lock_refresh(handle, BAD_LOCK_ID, GOOD_LOCK_OWNER);
+    rc = dss_lock_refresh(handle, DSS_OBJECT, &BAD_LOCK, 1, GOOD_LOCK_OWNER);
     assert_int_equal(rc, -ENOLCK);
 
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
@@ -180,7 +179,7 @@ static void dss_refresh_bad_owner(void **state)
 
     assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
 
-    rc = dss_lock_refresh(handle, FORMATED_GOOD_LOCK_ID, BAD_LOCK_OWNER);
+    rc = dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCK, 1, BAD_LOCK_OWNER);
     assert_int_equal(rc, -EACCES);
 
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
@@ -217,19 +216,19 @@ static void dss_status_ok(void **state)
 {
     struct dss_handle *handle = (struct dss_handle *)*state;
     struct timeval timestamp = { .tv_sec = 0, .tv_usec = 0 };
-    char *lock_owner;
+    char *lock_owner = NULL;
     int rc;
 
     assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
 
-    rc = dss_lock_status(handle, FORMATED_GOOD_LOCK_ID, NULL, NULL);
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCK, 1, NULL, NULL);
     assert_int_equal(rc, -rc);
 
-    rc = dss_lock_status(handle, FORMATED_GOOD_LOCK_ID, &lock_owner, NULL);
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCK, 1, &lock_owner, NULL);
     assert_int_equal(rc, -rc);
     assert_string_equal(lock_owner, GOOD_LOCK_OWNER);
 
-    rc = dss_lock_status(handle, FORMATED_GOOD_LOCK_ID, NULL, &timestamp);
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCK, 1, NULL, &timestamp);
     assert_int_equal(rc, -rc);
     assert_int_not_equal(timestamp.tv_sec, 0);
     assert_int_not_equal(timestamp.tv_usec, 0);
@@ -237,7 +236,7 @@ static void dss_status_ok(void **state)
     timestamp.tv_sec = 0;
     timestamp.tv_usec = 0;
 
-    rc = dss_lock_status(handle, FORMATED_GOOD_LOCK_ID, &lock_owner,
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCK, 1, &lock_owner,
                          &timestamp);
     assert_int_equal(rc, -rc);
     assert_int_not_equal(timestamp.tv_sec, 0);

@@ -418,16 +418,23 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
              const void *item_list, int item_cnt, const char *lock_owner);
 
 /**
- * Refresh a lock timestamp.
+ * Refresh lock timestamps.
+ *
+ * The function will attempt to refresh as many locks as possible. Should any
+ * refresh fail, the first error code obtained will be returned after
+ * attempting to refresh all other locks (as-much-as-possible policy).
  *
  * @param[in]   handle          DSS handle.
- * @param[in]   lock_id         Lock identifier.
+ * @param[in]   type            Type of the ressources's lock to refresh.
+ * @param[in]   item_list       List of ressources's lock to refresh.
+ * @param[in]   item_cnt        Number of ressources's lock to refresh.
  * @param[in]   lock_owner      Name of the lock owner, must be specified.
  * @return                      0 on success,
  *                             -ENOLCK if the lock does not exist,
  *                             -EACCES if the lock owner does not match.
  */
-int dss_lock_refresh(struct dss_handle *handle, const char *lock_id,
+int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
+                     const void *item_list, int item_cnt,
                      const char *lock_owner);
 
 /**
@@ -453,22 +460,29 @@ int dss_unlock(struct dss_handle *handle, enum dss_type type,
                const void *item_list, int item_cnt, const char *lock_owner);
 
 /**
- * Retrieve the status of a lock.
+ * Retrieve the status of locks.
  *
- * If \a lock_owner is NULL, the string is not allocated.
- * If \a lock_timestamp is NULL, the structure is not filled.
+ * If \a lock_owner is NULL, the strings are not allocated.
+ * If \a lock_timestamp is NULL, the structures are not filled.
+ *
+ * The function will attempt to query the status of as many locks as possible.
+ * Should any query fail, the first error code obtained will be returned after
+ * attempting to query all other locks's statuses (as-much-as-possible policy).
  *
  * @param[in]   handle          DSS handle.
- * @param[in]   lock_id         Lock identifier.
- * @param[out]  lock_owner      Name of the lock owner, must be freed by
+ * @param[in]   type            Type of the ressources's lock to query.
+ * @param[in]   item_list       List of ressources's lock to query.
+ * @param[in]   item_cnt        Number of ressources's lock to query.
+ * @param[out]  lock_owner      Name of each lock owner, must be freed by
  *                              the caller.
- * @param[out]  lock_timestamp  Date when the lock was taken or last refreshed.
+ * @param[out]  lock_timestamp  Date when each lock was taken or last refreshed.
  * @return                      0 on success,
- *                             -ENOMEM if the \a lock_owner string cannot be
+ *                             -ENOMEM if a \a lock_owner string cannot be
  *                              allocated,
- *                             -ENOLCK if the lock does not exist.
+ *                             -ENOLCK if a lock does not exist.
  */
-int dss_lock_status(struct dss_handle *handle, const char *lock_id,
+int dss_lock_status(struct dss_handle *handle, enum dss_type type,
+                    const void *item_list, int item_cnt,
                     char **lock_owner, struct timeval *lock_timestamp);
 
 #endif

@@ -1562,10 +1562,7 @@ static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
 {
     struct dev_info *dev = void_dev;
     char *lock_owner = NULL;
-    unsigned int escape_len;
     struct timeval lock_ts;
-    GString *lock_id;
-    char *escape_id;
     int rc;
 
     dev->rsc.id.family  = str2rsc_family(PQgetvalue(res, row_num, 0));
@@ -1575,39 +1572,19 @@ static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
     dev->host           = get_str_value(res, row_num, 4);
     dev->path           = get_str_value(res, row_num, 5);
 
-    escape_len = strlen(dev->rsc.id.name) * 2 + 1;
-    escape_id = malloc(escape_len);
-    if (!escape_id)
-        LOG_RETURN(-ENOMEM, "Not enough memory to check for lock status.");
-
-    PQescapeStringConn(handle->dh_conn, escape_id, dev->rsc.id.name,
-                       escape_len, &rc);
-    if (rc) {
-        LOG_GOTO(free_escape, rc = -EINVAL, "Cannot escape id name %s: %s",
-                 dev->rsc.id.name, PQerrorMessage(handle->dh_conn));
-    }
-
-    lock_id = g_string_new("device_");
-    g_string_append(lock_id, escape_id);
-    rc = dss_lock_status(handle, lock_id->str, &lock_owner, &lock_ts);
+    rc = dss_lock_status(handle, DSS_DEVICE, dev, 1, &lock_owner, &lock_ts);
 
     if (rc == -ENOLCK) {
         rc = 0;
         init_pho_lock(&dev->lock, NULL, NULL, NULL);
     } else if (rc) {
-        LOG_GOTO(free_id, rc, "Could not get lock status for id %s.",
-                 lock_id->str);
+        LOG_RETURN(rc, "Could not get lock status for device with id %s.",
+                   dev->rsc.id.name);
     } else {
-        init_pho_lock(&dev->lock, lock_id->str, lock_owner, &lock_ts);
+        init_pho_lock(&dev->lock, dev->rsc.id.name, lock_owner, &lock_ts);
     }
 
     free(lock_owner);
-
-free_id:
-    g_string_free(lock_id, true);
-
-free_escape:
-    free(escape_id);
 
     return rc;
 }
@@ -1641,10 +1618,7 @@ static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
 {
     struct media_info *medium = void_media;
     char *lock_owner = NULL;
-    unsigned int escape_len;
     struct timeval lock_ts;
-    GString *lock_id;
-    char *escape_id;
     int rc;
 
     medium->rsc.id.family  = str2rsc_family(PQgetvalue(res, row_num, 0));
@@ -1677,38 +1651,19 @@ static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
     pho_debug("Decoded %lu tags (%s)",
               medium->tags.n_tags, PQgetvalue(res, row_num, 9));
 
-    escape_len = strlen(medium->rsc.id.name) * 2 + 1;
-    escape_id = malloc(escape_len);
-    if (!escape_id)
-        LOG_RETURN(-ENOMEM, "Not enough memory to check for lock status.");
-
-    PQescapeStringConn(handle->dh_conn, escape_id, medium->rsc.id.name,
-                       escape_len, NULL);
-    if (rc)
-        LOG_GOTO(free_escape, rc = -EINVAL, "Cannot escape id name %s: %s",
-                 medium->rsc.id.name, PQerrorMessage(handle->dh_conn));
-
-    lock_id = g_string_new("media_");
-    g_string_append(lock_id, escape_id);
-    rc = dss_lock_status(handle, lock_id->str, &lock_owner, &lock_ts);
+    rc = dss_lock_status(handle, DSS_MEDIA, medium, 1, &lock_owner, &lock_ts);
 
     if (rc == -ENOLCK) {
         rc = 0;
         init_pho_lock(&medium->lock, NULL, NULL, NULL);
     } else if (rc) {
-        LOG_GOTO(free_id, rc, "Could not get lock status for id %s.",
-                 lock_id->str);
+        LOG_RETURN(rc, "Could not get lock status for medium with id %s.",
+                   medium->rsc.id.name);
     } else {
-        init_pho_lock(&medium->lock, lock_id->str, lock_owner, &lock_ts);
+        init_pho_lock(&medium->lock, medium->rsc.id.name, lock_owner, &lock_ts);
     }
 
     free(lock_owner);
-
-free_id:
-    g_string_free(lock_id, true);
-
-free_escape:
-    free(escape_id);
 
     return rc;
 }
