@@ -141,12 +141,11 @@ do {                      \
     goto _label;          \
 } while (0)
 
-
 #define LOG_GOTO(_label, _rc, _fmt...) \
-do {                        \
-    int _code = (_rc);      \
-    pho_error(_code, _fmt); \
-    goto _label;            \
+do {                                   \
+    int _code = (_rc);                 \
+    pho_error(_code, _fmt);            \
+    goto _label;                       \
 } while (0)
 
 #define LOG_RETURN(_rc, _fmt...)   \

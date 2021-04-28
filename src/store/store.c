@@ -1336,4 +1336,61 @@ void pho_xfer_desc_destroy(struct pho_xfer_desc *xfer)
         tags_free(&xfer->xd_params.put.tags);
     pho_attrs_free(&xfer->xd_attrs);
     free(xfer->xd_objuuid);
+};
+
+int phobos_locate(const char *oid, const char *uuid, int version,
+                  char **hostname)
+{
+    struct object_info *obj = NULL;
+    struct layout_info *layout;
+    struct dss_filter filter;
+    struct dss_handle dss;
+    int cnt;
+    int rc;
+
+    *hostname = NULL;
+
+    /* Ensure conf is loaded */
+    rc = pho_cfg_init_local(NULL);
+    if (rc && rc != -EALREADY)
+        return rc;
+
+    /* Connect to the DSS */
+    rc = dss_init(&dss);
+    if (rc)
+        return rc;
+
+    /* find object */
+    rc = dss_lazy_find_object(&dss, oid, uuid, version, &obj);
+    if (rc)
+        LOG_GOTO(clean, rc, "Unable to find object to locate");
+
+    /* find layout to locate media */
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                              "{\"DSS::EXT::oid\": \"%s\"}, "
+                              "{\"DSS::EXT::uuid\": \"%s\"}, "
+                              "{\"DSS::EXT::version\": \"%d\"}"
+                          "]}",
+                          obj->oid, obj->uuid, obj->version);
+    if (rc)
+        LOG_GOTO(clean, rc,
+                 "Unable to build filter oid %s uuid %s version %d to get "
+                 "layout from extent", obj->oid, obj->uuid, obj->version);
+
+    rc = dss_layout_get(&dss, &filter, &layout, &cnt);
+    dss_filter_free(&filter);
+    if (rc)
+        GOTO(clean, rc);
+
+    assert(cnt == 1);
+
+    /* locate media */
+    rc = layout_locate(&dss, layout, hostname);
+    dss_res_free(layout, cnt);
+
+clean:
+    object_info_free(obj);
+    dss_fini(&dss);
+    return rc;
 }

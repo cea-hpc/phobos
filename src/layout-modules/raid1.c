@@ -1086,9 +1086,124 @@ static int layout_raid1_decode(struct pho_encoder *enc)
     return 0;
 }
 
+/**
+ * Retrieve one node name from which an object can be accessed
+ *
+ * Implement layout_locate layout module methods.
+ *
+ * @param[in]   layout      Layout of the object to locate
+ * @param[out]  hostname    Allocated and returned hostname of the node that
+ *                          gives access to the object (NULL is returned on
+ *                          error)
+ *
+ * @return                  0 on success or -errno on failure,
+ */
+static int layout_raid1_locate(struct dss_handle *dss,
+                               struct layout_info *layout,
+                               char **hostname)
+{
+    bool lock_free_available_medium = false;
+    bool one_existing_medium = false;
+    int rc;
+    int i;
+
+    *hostname = NULL;
+
+    /* check if a medium is available and already locked, get lock hostname */
+    for (i = 0; i < layout->ext_count; i++) {
+        struct pho_id *medium_id = &layout->extents[i].media;
+        struct media_info *medium_info;
+        struct dss_filter filter;
+        int cnt;
+
+        /* get medium info from medium id */
+        rc = dss_filter_build(&filter,
+                              "{\"$AND\": ["
+                                  "{\"DSS::MDA::family\": \"%s\"}, "
+                                  "{\"DSS::MDA::id\": \"%s\"}"
+                              "]}",
+                              rsc_family2str(medium_id->family),
+                              medium_id->name);
+        if (rc)
+            LOG_RETURN(rc,
+                       "Unable to build filter for media family %s and name %s",
+                       rsc_family2str(medium_id->family), medium_id->name);
+
+        rc = dss_media_get(dss, &filter, &medium_info, &cnt);
+        dss_filter_free(&filter);
+        if (rc)
+            LOG_RETURN(rc,
+                       "Error on getting medium info for family %s and name %s",
+                       rsc_family2str(medium_id->family), medium_id->name);
+
+        /* (family, id) is the primary key of the media table */
+        assert(cnt <= 1);
+
+        if (cnt == 0) {
+            pho_warn("Medium (family %s, name %s) is used in the extent %d of "
+                     "the object (oid %s, uuid %s, version %d) and is absent "
+                     "from media table", rsc_family2str(medium_id->family),
+                     medium_id->name, i, layout->oid, layout->uuid,
+                     layout->version);
+            goto clean_before_next_medium;
+        }
+
+        one_existing_medium = true;
+
+        /* check ADMIN STATUS to see if the medium is available */
+        if (medium_info->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
+            goto clean_before_next_medium;
+
+        /* medium without any lock */
+        if (!medium_info->lock.owner) {
+            lock_free_available_medium = true;
+            goto clean_before_next_medium;
+        }
+
+        /* get lock hostname */
+        rc = dss_hostname_from_lock_owner(medium_info->lock.owner, hostname);
+        if (rc) {
+            pho_warn("Unable to get hostname from lock_owner %s, "
+                     "error : %d, %s",
+                     medium_info->lock.owner, rc, strerror(-rc));
+            goto clean_before_next_medium;
+        }
+
+        /* success */
+        dss_res_free(medium_info, cnt);
+        return 0;
+
+clean_before_next_medium:
+        dss_res_free(medium_info, cnt);
+    }
+
+    /* If a lock free medium is available, return self hostname */
+    if (lock_free_available_medium) {
+        const char *local_hostname = get_hostname();
+
+        if (!hostname)
+            LOG_RETURN(-EADDRNOTAVAIL, "Unable to get self hostname");
+
+        *hostname = strdup(local_hostname);
+        if (!*hostname)
+            LOG_RETURN(rc = -errno, "Unable to duplicate local_hostname %s",
+                       local_hostname);
+
+        /* success */
+        return 0;
+    }
+
+    /* no medium available to locate this object */
+    if (one_existing_medium)
+        return -EAGAIN;
+    else
+        return -ENODEV;
+}
+
 static const struct pho_layout_module_ops LAYOUT_RAID1_OPS = {
     .encode = layout_raid1_encode,
     .decode = layout_raid1_decode,
+    .locate = layout_raid1_locate,
 };
 
 /** Layout module registration entry point */

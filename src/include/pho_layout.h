@@ -30,6 +30,7 @@
 #include <stdbool.h>
 
 #include "phobos_store.h"
+#include "pho_dss.h"
 #include "pho_srl_lrs.h"
 
 /**
@@ -56,6 +57,10 @@ struct pho_layout_module_ops {
 
     /** Initialize a new decoder to get an object from phobos */
     int (*decode)(struct pho_encoder *dec);
+
+    /** Retrieve one node name from which an object can be accessed */
+    int (*locate)(struct dss_handle *dss, struct layout_info *layout,
+                  char **hostname);
 };
 
 /**
@@ -162,6 +167,20 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer);
  */
 int layout_decode(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
                   struct layout_info *layout);
+
+/**
+ * Retrieve one node name from which an object can be accessed.
+ *
+ * @param[in]   dss         DSS handle
+ * @param[in]   layout      Layout of the object to locate
+ * @param[out]  hostname    Allocated and returned hostname of the node that
+ *                          gives access to the object (NULL if an error
+ *                          occurs)
+ *
+ * @return                  0 on success or -errno on failure.
+ */
+int layout_locate(struct dss_handle *dss, struct layout_info *layout,
+                  char **hostname);
 
 /**
  * Advance the layout operation of one step by providing a response from the LRS

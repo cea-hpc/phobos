@@ -40,13 +40,41 @@ object.
 /**
  * Retrieve one node name from which an object can be accessed.
  *
- * @param[in]   obj_id      ID of the object to locate.
- * @param[out]  node_name   Name of the node which can give access to \p obj_id.
- * @return                  0 on success,
- *                         -errno on failure.
- * @error       EAGAIN      The object \p obj_id is currently not reachable.
+ * If the media having this object are locked by a node, this function returns
+ * the hostname of this node. If there is currently no node that locks the media
+ * having this object, the hostname of the node executing this locate call is
+ * returned.
+ *
+ * At least one of \p oid or \p uuid must not be NULL.
+ *
+ * If \p version is not provided (zero as input), the latest one is located.
+ *
+ * If \p uuid is not provided, we first try to find the corresponding \p oid
+ * from living objects into the object table. If there is no living object with
+ * \p oid, we check amongst all deprecated objects. If there is only one
+ * corresponding \p uuid, in the deprecated objects, we take this one. If there
+ * is more than one \p uuid corresponding to this \p oid, we return -EINVAL.
+ *
+ * @param[in]   oid         OID of the object to locate (ignored if NULL and
+ *                          \p uuid must not be NULL)
+ * @param[in]   uuid        UUID of the object to locate (ignored if NULL and
+ *                          \p oid must not be NULL)
+ * @param[in]   version     Version of the object to locate (ignored if zero)
+ * @param[out]  hostname    Allocated and returned hostname of the node which
+ *                          can give access to the object (NULL is returned on
+ *                          error)
+ *
+ * @return                  0 on success or -errno on failure,
+ *                          -ENOENT if no object corresponds to input
+ *                          -EINVAL if more than one object corresponds to input
+ *                          -EAGAIN if there is not any convenient node to
+ *                          currently retrieve this object
+ *                          -ENODEV if there is no existing medium to retrieve
+ *                          this object
+ *                          -EADDRNOTAVAIL if we cannot get self hostname
  */
-int phobos_locate(const char *obj_id, char **node_name);
+int phobos_locate(const char *obj_id, const char *uuid, int version,
+                  char **hostname);
 ```
 
 The call takes an object ID as input and gives back a node name as output. The

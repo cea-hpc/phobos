@@ -350,6 +350,22 @@ int layout_decode(struct pho_encoder *enc, struct pho_xfer_desc *xfer,
     return rc;
 }
 
+int layout_locate(struct dss_handle *dss, struct layout_info *layout,
+                  char **hostname)
+{
+    struct layout_module *mod;
+    int rc;
+
+    *hostname = NULL;
+
+    /* Load new module if necessary */
+    rc = layout_module_lazy_load(layout->layout_desc.mod_name, &mod);
+    if (rc)
+        return rc;
+
+    return mod->ops->locate(dss, layout, hostname);
+}
+
 void layout_destroy(struct pho_encoder *enc)
 {
     /* Only encoders own their layout */

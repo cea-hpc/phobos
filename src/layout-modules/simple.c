@@ -706,9 +706,96 @@ static int layout_simple_encode(struct pho_encoder *enc)
     return 0;
 }
 
+/**
+ * Retrieve one node name from which an object can be accessed
+ *
+ * Implements layout_locate layout module methods.
+ *
+ * @param[in]   layout      Layout of the object to locate
+ * @param[out]  hostname    Alloc and returned hostname of the node which can
+ *                          give access to the object (NULL is returned on
+ *                          error)
+ *
+ * @return                  0 on success or -errno on failure,
+ */
+static int layout_simple_locate(struct dss_handle *dss,
+                                struct layout_info *layout,
+                                char **hostname)
+{
+    struct pho_id *medium_id = &layout->extents->media;
+    struct media_info *medium_info;
+    struct dss_filter filter;
+    int cnt;
+    int rc;
+
+    *hostname = NULL;
+
+    /* get medium info from medium id */
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                              "{\"DSS::MDA::family\": \"%s\"}, "
+                              "{\"DSS::MDA::id\": \"%s\"}"
+                          "]}",
+                          rsc_family2str(medium_id->family),
+                          medium_id->name);
+    if (rc)
+        LOG_RETURN(rc, "Unable to build filter for media family %s and name %s",
+                   rsc_family2str(medium_id->family), medium_id->name);
+
+    rc = dss_media_get(dss, &filter, &medium_info, &cnt);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc, "Error on getting medium info for family %s and name %s",
+                   rsc_family2str(medium_id->family), medium_id->name);
+
+    /* (family, id) is the primary key of the media table */
+    assert(cnt <= 1);
+
+    if (cnt == 0)
+        LOG_GOTO(clean, -EINVAL,
+                 "Medium (family %s, name %s) is used in the extent of "
+                 "the object (oid %s, uuid %s, version %d) and is absent "
+                 "from media table", rsc_family2str(medium_id->family),
+                 medium_id->name, layout->oid, layout->uuid, layout->version);
+
+    /* check ADMIN STATUS to see if the medium is available */
+    if (medium_info->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
+        LOG_GOTO(clean, rc = -ENODEV,
+                 "Medium of simple layout is not admin unlocked ");
+
+    /* medium without any lock */
+    if (!medium_info->lock.owner) {
+        const char *local_hostname = get_hostname();
+
+        if (!local_hostname)
+            LOG_GOTO(clean, rc = -EADDRNOTAVAIL, "Unable to get self hostname");
+
+        *hostname = strdup(local_hostname);
+        if (!*hostname)
+            LOG_GOTO(clean, rc = -errno,
+                     "Unable to duplicate local_hostname %s", local_hostname);
+
+        /* success */
+        rc = 0;
+        goto clean;
+    }
+
+    /* get lock hostname */
+    rc = dss_hostname_from_lock_owner(medium_info->lock.owner, hostname);
+    if (rc)
+        LOG_GOTO(clean, rc, "Unable to get hostname from lock_owner %s",
+                 medium_info->lock.owner);
+
+clean:
+    dss_res_free(medium_info, cnt);
+
+    return rc;
+}
+
 static const struct pho_layout_module_ops LAYOUT_SIMPLE_OPS = {
     .encode = layout_simple_encode,
     .decode = layout_simple_encode, /* Same as encoder */
+    .locate = layout_simple_locate,
 };
 
 /** Layout module registration entry point */

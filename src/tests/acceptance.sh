@@ -38,6 +38,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
 . $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
 
 if [ "$CLEAN_ALL" -eq "1" ]; then
     drop_tables
@@ -51,24 +52,6 @@ function error {
     waive_daemon
     wait
     exit 1
-}
-
-# list <count> tapes matching the given pattern
-# returns nodeset range
-function get_tapes {
-    local pattern=$1
-    local count=$2
-
-    mtx status | grep VolumeTag | sed -e "s/.*VolumeTag//" | tr -d " =" |
-        grep "$pattern" | head -n $count | nodeset -f
-}
-
-# get <count> drives
-function get_drives {
-    local count=$1
-
-    ls /dev/st[0-9]* | grep -P "st[0-9]+$" | head -n $count |
-        xargs
 }
 
 # empty all drives
@@ -585,29 +568,9 @@ function check_status
     done
 }
 
-function mtx_retry
+function drain_all_drives_daemon
 {
-    local retry_count=0
-    while ! mtx $*; do
-        echo "mtx failure, retrying in 1 sec" >&2
-        ((retry_count++)) || true
-        (( $retry_count > 5 )) && return 1
-        sleep 1
-    done
-}
-
-function drain_all_drives
-{
-#TODO replace umount/mtx unload by a 'phobos drive drain' command
-    #umount all ltfs
-    mount | awk '/^ltfs/ {print $3}' | xargs -r umount
-
-    #unload all tapes
-    mtx status | awk -F'[ :]' '/Data Transfer Element.*Full/ {print $8, $4}' |
-        while read slot drive; do
-            mtx_retry unload $slot $drive
-        done
-
+    drain_all_drives
     waive_daemon
     invoke_daemon
 }
@@ -644,7 +607,7 @@ function tape_drive_compat
 
     #test with only one lto5 drive
     lock_all_drives
-    drain_all_drives
+    drain_all_drives_daemon
     local lto5_d=$($phobos drive list --model ULT3580-TD5 | head -n 1)
     $LOG_VALG $phobos drive unlock $lto5_d
     $phobos get svc_lto5 /tmp/svc_lto5_from_lto5_drive ||
@@ -655,7 +618,7 @@ function tape_drive_compat
 
     #test with only one lto6 drive
     lock_all_drives
-    drain_all_drives
+    drain_all_drives_daemon
     local lto6_d=$($phobos drive list --model ULT3580-TD6 | head -n 1)
     $LOG_VALG $phobos drive unlock $lto6_d
     $phobos get svc_lto5 /tmp/svc_lto5_from_lto6_drive ||
