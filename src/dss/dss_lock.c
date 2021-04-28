@@ -209,17 +209,6 @@ int dss_init_lock_owner(char **lock_owner)
     return 0;
 }
 
-int dss_init_oid_lock_id(const char *oid, char **oid_lock_id)
-{
-    int rc;
-
-    rc = asprintf(oid_lock_id, "oid.%.1024s", oid);
-    if (rc == -1)
-        LOG_RETURN(-ENOMEM, "Unable to generate oid_lock_id");
-
-    return 0;
-}
-
 static int basic_lock(struct dss_handle *handle, const char *lock_id,
                       const char *lock_owner)
 {

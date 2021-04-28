@@ -400,20 +400,6 @@ int dss_object_move(struct dss_handle *handle, enum dss_type type_from,
 int dss_init_lock_owner(char **lock_owner);
 
 /**
- * Generate a lock_id for an oid : oid.oid_value
- *
- * oid_value is limited to 1024 characters max
- *
- * @param[in]  oid          oid value
- * @param[out] oid_lock_id  Allocated and generated oid_lock_id if success, must
- *                          be freed by caller, NULL if error
- *
- * @return                  0 if success,
- *                          -ENOMEM if unable to allocate oid_lock_id
- */
-int dss_init_oid_lock_id(const char *oid, char **oid_lock_id);
-
-/**
  * Take locks.
  *
  * If any lock cannot be taken, then the ones that already are will be

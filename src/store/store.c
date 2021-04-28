@@ -556,25 +556,19 @@ static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     struct dss_filter filter;
     struct object_info *objs;
     char *lock_owner;
-    char *lock_id;
     int obj_cnt;
     int rc2;
     int rc;
 
-    /* taking oid lock */
-    rc = dss_init_oid_lock_id(obj.oid, &lock_id);
-    if (rc)
-        LOG_RETURN(rc, "Unable to init lock id in object delete");
-
     rc = dss_init_lock_owner(&lock_owner);
     if (rc)
-        LOG_GOTO(out_id, rc, "Unable to init lock owner in object delete");
+        LOG_RETURN(rc, "Unable to init lock owner in object delete");
 
-    rc = dss_lock(dss, DSS_OBJECT, &lock_id, 1, lock_owner);
+    rc = dss_lock(dss, DSS_OBJECT, &obj, 1, lock_owner);
     if (rc)
-        LOG_GOTO(out_id_owner, rc, "Unable to get lock for oid %s before "
-                                   "delete, lock_id: %s , lock_owner: %s",
-                                   obj.oid, lock_id, lock_owner);
+        LOG_GOTO(out_owner, rc, "Unable to get lock for oid %s before "
+                                "delete, lock_owner: %s",
+                                obj.oid, lock_owner);
 
     /* checking oid exists into object table */
     rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}", obj.oid);
@@ -604,17 +598,15 @@ out_filter:
     dss_filter_free(&filter);
 out_unlock:
     /* releasing oid lock */
-    rc2 = dss_unlock(dss, DSS_OBJECT, &lock_id, 1, lock_owner);
+    rc2 = dss_unlock(dss, DSS_OBJECT, &obj, 1, lock_owner);
     if (rc2) {
-        pho_error(rc, "Unable to unlock at end of object delete (lock_id: %s, "
-                      "lock_owner: %s)", lock_id, lock_owner);
+        pho_error(rc, "Unable to unlock at end of object delete (oid: %s, "
+                      "lock_owner: %s)", obj.oid, lock_owner);
         rc = rc ? : rc2;
     }
 
-out_id_owner:
+out_owner:
     free(lock_owner);
-out_id:
-    free(lock_id);
     return rc;
 }
 
@@ -632,7 +624,6 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     struct object_info *objs;
     char *buf_uuid = NULL;
     char *buf_oid = NULL;
-    char *lock_id = NULL;
     char *lock_owner;
     int n_objs;
     int rc2;
@@ -672,9 +663,14 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
             }
         }
 
+        /* obj.oid is necessary for the unlock later, so we keep a copy */
         buf_oid = strdup(obj.oid);
-        obj.oid = buf_oid;
         dss_res_free(objs, n_objs);
+        if (!buf_oid)
+            LOG_GOTO(out, rc = -ENOMEM,
+                     "Unable to allocate buf_oid for oid:'%s'", obj.oid);
+
+        obj.oid = buf_oid;
     }
 
     /* build oid filter */
@@ -686,19 +682,15 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 
     /* LOCK */
     /* taking oid lock */
-    rc = dss_init_oid_lock_id(obj.oid, &lock_id);
-    if (rc)
-        LOG_RETURN(rc, "Unable to init lock id in object undelete");
-
     rc = dss_init_lock_owner(&lock_owner);
     if (rc)
         LOG_GOTO(out_id, rc, "Unable to init lock owner in object undelete");
 
-    rc = dss_lock(dss, DSS_OBJECT, &lock_id, 1, lock_owner);
+    rc = dss_lock(dss, DSS_OBJECT, &obj, 1, lock_owner);
     if (rc)
         LOG_GOTO(out_id_owner, rc, "Unable to get lock for oid %s before "
-                                   "undelete, lock_id: %s , lock_owner: %s",
-                                   obj.oid, lock_id, lock_owner);
+                                   "undelete, lock_owner: %s",
+                                   obj.oid, lock_owner);
 
     /* CHECK */
     /* check oid does not already exists in object table */
@@ -754,8 +746,13 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
                 obj.version = objs[i].version;
         }
 
+        /* obj.uuid is necessary for the unlock later, so we keep a copy */
         buf_uuid = strdup(obj.uuid);
-        obj.oid = buf_uuid;
+        if (!buf_uuid)
+            LOG_GOTO(out, rc = -ENOMEM,
+                     "Unable to allocate buf_uuid for uuid:'%s'", obj.uuid);
+
+        obj.uuid = buf_uuid;
     } else {
     /* if uuid: get latest version and check oid */
         int max_version_id;
@@ -794,17 +791,16 @@ out_free:
 out_unlock:
     /* UNLOCK */
     /* releasing oid lock */
-    rc2 = dss_unlock(dss, DSS_OBJECT, &lock_id, 1, lock_owner);
+    rc2 = dss_unlock(dss, DSS_OBJECT, &obj, 1, lock_owner);
     if (rc2) {
-        pho_error(rc, "Unable to unlock at end of object undelete (lock_id: "
-                      "%s, lock_owner: %s)", lock_id, lock_owner);
+        pho_error(rc, "Unable to unlock at end of object undelete (oid: "
+                      "%s, lock_owner: %s)", obj.oid, lock_owner);
         rc = rc ? : rc2;
     }
 
 out_id_owner:
     free(lock_owner);
 out_id:
-    free(lock_id);
     free(buf_oid);
     free(buf_uuid);
 out:
