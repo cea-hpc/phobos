@@ -37,10 +37,13 @@
 
 #include <cmocka.h>
 
-static struct object_info GOOD_LOCK = {
-    .oid = "oid_dummy"
-};
 static const char *GOOD_LOCK_OWNER = "dummy_owner";
+
+static const struct object_info GOOD_LOCKS[] = {
+    { .oid = "object_0"},
+    { .oid = "object_1"},
+    { .oid = "object_2"}
+};
 
 static int setup(void **state)
 {
@@ -97,22 +100,29 @@ static int teardown(void **state)
     return 0;
 }
 
+static bool check_newer(struct timeval old_ts, struct timeval new_ts)
+{
+    if (old_ts.tv_sec == new_ts.tv_sec)
+        return (old_ts.tv_usec < new_ts.tv_usec);
+
+    return (old_ts.tv_sec < new_ts.tv_sec);
+}
+
 static void dss_lock_unlock_ok(void **state)
 {
     struct dss_handle *handle = (struct dss_handle *)*state;
-    static struct object_info OTHER_LOCK_ID = { .oid = "oid_dummy2" };
     int rc;
 
-    rc = dss_lock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER);
+    rc = dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, GOOD_LOCK_OWNER);
     assert_return_code(rc, -rc);
 
-    rc = dss_lock(handle, DSS_OBJECT, &OTHER_LOCK_ID, 1, GOOD_LOCK_OWNER);
+    rc = dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1, GOOD_LOCK_OWNER);
     assert_return_code(rc, -rc);
 
-    rc = dss_unlock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER);
+    rc = dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, GOOD_LOCK_OWNER);
     assert_return_code(rc, -rc);
 
-    rc = dss_unlock(handle, DSS_OBJECT, &OTHER_LOCK_ID, 1, NULL);
+    rc = dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1, NULL);
     assert_return_code(rc, -rc);
 }
 
@@ -122,16 +132,49 @@ static void dss_lock_exists(void **state)
     static const char *OTHER_LOCK_OWNER = "dummy_owner2";
     int rc;
 
-    rc = dss_lock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER);
+    rc = dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, GOOD_LOCK_OWNER);
     assert_return_code(rc, -rc);
 
-    rc = dss_lock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER);
+    rc = dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, GOOD_LOCK_OWNER);
     assert_int_equal(rc, -EEXIST);
 
-    rc = dss_lock(handle, DSS_OBJECT, &GOOD_LOCK, 1, OTHER_LOCK_OWNER);
+    rc = dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, OTHER_LOCK_OWNER);
     assert_int_equal(rc, -EEXIST);
 
-    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCK, 1, NULL) == 0);
+    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, NULL) == 0);
+}
+
+static void dss_multiple_lock_unlock_ok(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    int rc;
+
+    rc = dss_lock(handle, DSS_OBJECT, GOOD_LOCKS, 3, GOOD_LOCK_OWNER);
+    assert_return_code(rc, -rc);
+
+    rc = dss_unlock(handle, DSS_OBJECT, GOOD_LOCKS, 3, GOOD_LOCK_OWNER);
+    assert_return_code(rc, -rc);
+}
+
+static void dss_multiple_lock_exists(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    int rc;
+
+    rc = dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1, GOOD_LOCK_OWNER);
+    assert_return_code(rc, -rc);
+
+    rc = dss_lock(handle, DSS_OBJECT, GOOD_LOCKS, 3, GOOD_LOCK_OWNER);
+    assert_int_equal(rc, -EEXIST);
+
+    rc = dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, GOOD_LOCK_OWNER);
+    assert_int_equal(rc, -ENOLCK);
+
+    rc = dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[2], 1, GOOD_LOCK_OWNER);
+    assert_int_equal(rc, -ENOLCK);
+
+    rc = dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[1], 1, GOOD_LOCK_OWNER);
+    assert_return_code(rc, -rc);
 }
 
 static void dss_refresh_ok(void **state)
@@ -141,20 +184,23 @@ static void dss_refresh_ok(void **state)
     struct timeval new_ts = { .tv_sec = 0, .tv_usec = 0 };
     int rc;
 
-    assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
+    assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                    GOOD_LOCK_OWNER) == 0);
 
-    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCK, 1, NULL, &old_ts);
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, NULL, &old_ts);
     assert_int_equal(rc, -rc);
 
-    rc = dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER);
+    rc = dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                          GOOD_LOCK_OWNER);
     assert_int_equal(rc, -rc);
 
-    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCK, 1, NULL, &new_ts);
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, NULL, &new_ts);
     assert_int_equal(rc, -rc);
 
-    assert_memory_not_equal(&old_ts, &new_ts, sizeof(old_ts));
+    assert_true(check_newer(old_ts, new_ts));
 
-    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
+    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                      GOOD_LOCK_OWNER) == 0);
 }
 
 static void dss_refresh_not_exists(void **state)
@@ -163,12 +209,14 @@ static void dss_refresh_not_exists(void **state)
     static struct object_info BAD_LOCK = { .oid = "not_exists" };
     int rc;
 
-    assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
+    assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                    GOOD_LOCK_OWNER) == 0);
 
     rc = dss_lock_refresh(handle, DSS_OBJECT, &BAD_LOCK, 1, GOOD_LOCK_OWNER);
     assert_int_equal(rc, -ENOLCK);
 
-    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
+    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                      GOOD_LOCK_OWNER) == 0);
 }
 
 static void dss_refresh_bad_owner(void **state)
@@ -177,12 +225,15 @@ static void dss_refresh_bad_owner(void **state)
     char *BAD_LOCK_OWNER = "not_an_owner";
     int rc;
 
-    assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
+    assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                    GOOD_LOCK_OWNER) == 0);
 
-    rc = dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCK, 1, BAD_LOCK_OWNER);
+    rc = dss_lock_refresh(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                          BAD_LOCK_OWNER);
     assert_int_equal(rc, -EACCES);
 
-    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
+    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                      GOOD_LOCK_OWNER) == 0);
 }
 
 static void dss_unlock_not_exists(void **state)
@@ -204,12 +255,35 @@ static void dss_unlock_bad_owner(void **state)
     char *BAD_LOCK_OWNER = "not_an_owner";
     int rc;
 
-    assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
+    assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                    GOOD_LOCK_OWNER) == 0);
 
-    rc = dss_unlock(handle, DSS_OBJECT, &GOOD_LOCK, 1, BAD_LOCK_OWNER);
+    rc = dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, BAD_LOCK_OWNER);
     assert_int_equal(rc, -EACCES);
 
-    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
+    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                      GOOD_LOCK_OWNER) == 0);
+}
+
+static void dss_multiple_unlock_not_exists(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    int rc;
+
+    rc = dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, GOOD_LOCK_OWNER);
+    assert_return_code(rc, -rc);
+
+    rc = dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[2], 1, GOOD_LOCK_OWNER);
+    assert_return_code(rc, -rc);
+
+    rc = dss_unlock(handle, DSS_OBJECT, GOOD_LOCKS, 3, GOOD_LOCK_OWNER);
+    assert_int_equal(rc, -ENOLCK);
+
+    rc = dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[2], 1, GOOD_LOCK_OWNER);
+    assert_int_equal(rc, -ENOLCK);
+
+    rc = dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, GOOD_LOCK_OWNER);
+    assert_int_equal(rc, -ENOLCK);
 }
 
 static void dss_status_ok(void **state)
@@ -219,16 +293,19 @@ static void dss_status_ok(void **state)
     char *lock_owner = NULL;
     int rc;
 
-    assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
+    assert(dss_lock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                    GOOD_LOCK_OWNER) == 0);
 
-    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCK, 1, NULL, NULL);
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, NULL, NULL);
     assert_int_equal(rc, -rc);
 
-    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCK, 1, &lock_owner, NULL);
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &lock_owner,
+                         NULL);
     assert_int_equal(rc, -rc);
     assert_string_equal(lock_owner, GOOD_LOCK_OWNER);
 
-    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCK, 1, NULL, &timestamp);
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, NULL,
+                         &timestamp);
     assert_int_equal(rc, -rc);
     assert_int_not_equal(timestamp.tv_sec, 0);
     assert_int_not_equal(timestamp.tv_usec, 0);
@@ -236,27 +313,174 @@ static void dss_status_ok(void **state)
     timestamp.tv_sec = 0;
     timestamp.tv_usec = 0;
 
-    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCK, 1, &lock_owner,
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &lock_owner,
                          &timestamp);
     assert_int_equal(rc, -rc);
     assert_int_not_equal(timestamp.tv_sec, 0);
     assert_int_not_equal(timestamp.tv_usec, 0);
     assert_string_equal(lock_owner, GOOD_LOCK_OWNER);
 
-    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCK, 1, GOOD_LOCK_OWNER) == 0);
+    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                      GOOD_LOCK_OWNER) == 0);
+}
+
+static void dss_multiple_status_ok(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    struct timeval timestamp[] = {
+        { .tv_sec = 0, .tv_usec = 0 },
+        { .tv_sec = 0, .tv_usec = 0 },
+        { .tv_sec = 0, .tv_usec = 0 }
+    };
+    char *lock_owner[3] = { NULL, NULL, NULL };
+    int rc;
+    int i;
+
+    assert(dss_lock(handle, DSS_OBJECT, GOOD_LOCKS, 3, GOOD_LOCK_OWNER) == 0);
+
+    rc = dss_lock_status(handle, DSS_OBJECT, GOOD_LOCKS, 3, NULL, NULL);
+    assert_return_code(rc, -rc);
+
+    rc = dss_lock_status(handle, DSS_OBJECT, GOOD_LOCKS, 3, lock_owner, NULL);
+    assert_return_code(rc, -rc);
+    for (i = 0; i < 3; ++i)
+        assert_string_equal(lock_owner[i], GOOD_LOCK_OWNER);
+
+    rc = dss_lock_status(handle, DSS_OBJECT, GOOD_LOCKS, 3, NULL, timestamp);
+    assert_return_code(rc, -rc);
+    for (i = 0; i < 3; ++i) {
+        assert_int_not_equal(timestamp[i].tv_sec, 0);
+        timestamp[i].tv_sec = 0;
+    }
+
+    rc = dss_lock_status(handle, DSS_OBJECT, GOOD_LOCKS, 3, lock_owner,
+                         timestamp);
+    assert_return_code(rc, -rc);
+    for (i = 0; i < 3; ++i) {
+        assert_int_not_equal(timestamp[i].tv_sec, 0);
+        assert_string_equal(lock_owner[i], GOOD_LOCK_OWNER);
+    }
+
+    assert(dss_unlock(handle, DSS_OBJECT, GOOD_LOCKS, 3,
+                      GOOD_LOCK_OWNER) == 0);
+}
+
+static void dss_multiple_status_not_exists(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    static const struct object_info BAD_LOCKS[] = {
+        { .oid = "object_0"},
+        { .oid = "object_3"},
+        { .oid = "object_2"}
+    };
+    char *lock_owner[3] = { NULL, NULL, NULL };
+    int rc;
+
+    assert(dss_lock(handle, DSS_OBJECT, GOOD_LOCKS, 3, GOOD_LOCK_OWNER) == 0);
+
+    rc = dss_lock_status(handle, DSS_OBJECT, BAD_LOCKS, 3, lock_owner, NULL);
+    assert_int_equal(rc, -ENOLCK);
+
+    assert_string_equal(lock_owner[0], GOOD_LOCK_OWNER);
+    assert_string_equal(lock_owner[2], GOOD_LOCK_OWNER);
+
+    assert_null(lock_owner[1]);
+
+    assert(dss_unlock(handle, DSS_OBJECT, GOOD_LOCKS, 3,
+                      GOOD_LOCK_OWNER) == 0);
+}
+
+static void dss_multiple_refresh_ok(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    struct timeval old_ts[] = {
+        { .tv_sec = 0, .tv_usec = 0 },
+        { .tv_sec = 0, .tv_usec = 0 },
+        { .tv_sec = 0, .tv_usec = 0 }
+    };
+    struct timeval new_ts[] = {
+        { .tv_sec = 0, .tv_usec = 0 },
+        { .tv_sec = 0, .tv_usec = 0 },
+        { .tv_sec = 0, .tv_usec = 0 }
+    };
+    int rc;
+
+    assert(dss_lock(handle, DSS_OBJECT, GOOD_LOCKS, 3, GOOD_LOCK_OWNER) == 0);
+
+    rc = dss_lock_status(handle, DSS_OBJECT, GOOD_LOCKS, 3, NULL, old_ts);
+    assert_return_code(rc, -rc);
+
+    rc = dss_lock_refresh(handle, DSS_OBJECT, GOOD_LOCKS, 3, GOOD_LOCK_OWNER);
+    assert_return_code(rc, -rc);
+
+    rc = dss_lock_status(handle, DSS_OBJECT, GOOD_LOCKS, 3, NULL, new_ts);
+    assert_return_code(rc, -rc);
+
+    assert_true(check_newer(old_ts[0], new_ts[0]));
+    assert_true(check_newer(old_ts[1], new_ts[1]));
+    assert_true(check_newer(old_ts[2], new_ts[2]));
+
+    assert(dss_unlock(handle, DSS_OBJECT, GOOD_LOCKS, 3,
+                      GOOD_LOCK_OWNER) == 0);
+}
+
+static void dss_multiple_refresh_not_exists(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    static const struct object_info BAD_LOCKS[] = {
+        { .oid = "object_0"},
+        { .oid = "object_3"},
+        { .oid = "object_2"}
+    };
+    struct timeval old_ts[] = {
+        { .tv_sec = 0, .tv_usec = 0 },
+        { .tv_sec = 0, .tv_usec = 0 },
+        { .tv_sec = 0, .tv_usec = 0 }
+    };
+    struct timeval new_ts[] = {
+        { .tv_sec = 0, .tv_usec = 0 },
+        { .tv_sec = 0, .tv_usec = 0 },
+        { .tv_sec = 0, .tv_usec = 0 }
+    };
+    int rc;
+
+    assert(dss_lock(handle, DSS_OBJECT, GOOD_LOCKS, 3, GOOD_LOCK_OWNER) == 0);
+
+    rc = dss_lock_status(handle, DSS_OBJECT, GOOD_LOCKS, 3, NULL, old_ts);
+    assert_return_code(rc, -rc);
+
+    rc = dss_lock_refresh(handle, DSS_OBJECT, BAD_LOCKS, 3, GOOD_LOCK_OWNER);
+    assert_int_equal(rc, -ENOLCK);
+
+    rc = dss_lock_status(handle, DSS_OBJECT, GOOD_LOCKS, 3, NULL, new_ts);
+    assert_return_code(rc, -rc);
+
+    assert_true(check_newer(old_ts[0], new_ts[0]));
+    assert_true(check_newer(old_ts[2], new_ts[2]));
+
+    assert_false(check_newer(old_ts[1], new_ts[1]));
+
+    assert(dss_unlock(handle, DSS_OBJECT, GOOD_LOCKS, 3, GOOD_LOCK_OWNER) == 0);
 }
 
 int main(void)
 {
     const struct CMUnitTest dss_lock_test_cases[] = {
         cmocka_unit_test(dss_lock_unlock_ok),
+        cmocka_unit_test(dss_multiple_lock_unlock_ok),
         cmocka_unit_test(dss_lock_exists),
+        cmocka_unit_test(dss_multiple_lock_exists),
         cmocka_unit_test(dss_refresh_ok),
         cmocka_unit_test(dss_refresh_not_exists),
         cmocka_unit_test(dss_refresh_bad_owner),
         cmocka_unit_test(dss_unlock_not_exists),
         cmocka_unit_test(dss_unlock_bad_owner),
+        cmocka_unit_test(dss_multiple_unlock_not_exists),
         cmocka_unit_test(dss_status_ok),
+        cmocka_unit_test(dss_multiple_status_ok),
+        cmocka_unit_test(dss_multiple_status_not_exists),
+        cmocka_unit_test(dss_multiple_refresh_ok),
+        cmocka_unit_test(dss_multiple_refresh_not_exists),
     };
 
     return cmocka_run_group_tests(dss_lock_test_cases, setup, teardown);
