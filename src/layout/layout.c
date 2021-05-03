@@ -42,6 +42,35 @@
 #include <stdlib.h>
 #include <string.h>
 
+/**
+ * Block size parameter read from configuration, only used when writting data
+ * to multiple media in raid layout.
+ */
+#define IO_BLOCK_SIZE_ATTR_KEY "io_block_size"
+#define IO_BLOCK_SIZE_ATTR_VALUE_BASE 10
+
+/**
+ * List of configuration parameters for this module
+ */
+enum pho_cfg_params_lyt {
+    /* Actual parameters */
+    PHO_CFG_LYT_io_block_size,
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_LYT_FIRST = PHO_CFG_LYT_io_block_size,
+    PHO_CFG_LYT_LAST  = PHO_CFG_LYT_io_block_size,
+};
+
+const struct pho_config_item cfg_lyt[] = {
+    [PHO_CFG_LYT_io_block_size] = {
+        .section = "io",
+        .name    = IO_BLOCK_SIZE_ATTR_KEY,
+        .value   = "-1" /** default invalid value, call sysconf(_SC_PAGESIZE)
+                          * to get the actual default value.
+                          */
+    }
+};
+
 static pthread_rwlock_t layout_modules_rwlock;
 static GHashTable *layout_modules;
 
@@ -208,6 +237,41 @@ out_unlock:
     return rc;
 }
 
+/**
+ * Set size_t decoder/encoder value from config file
+ *
+ * 0 is not a valid write block size, -EINVAL will be returned.
+ *
+ * @param[out] enc      decoder/encoder with io_block_size to modify
+ *
+ * @return 0 if success, -error_code if failure
+ */
+static int get_io_block_size(struct pho_encoder *enc)
+{
+    const char *string_io_block_size;
+
+    string_io_block_size = PHO_CFG_GET(cfg_lyt, PHO_CFG_LYT, io_block_size);
+    if (!string_io_block_size || !strcmp(string_io_block_size, "-1")) {
+        /** TODO
+         * Better than fixing it to PHO_CFG_LYT_io_block_size, we could get
+         * buffer size from an ioa_preferred_read_size/write_size function.
+         */
+        enc->io_block_size = sysconf(_SC_PAGESIZE);
+        return 0;
+    }
+
+    errno = 0;
+    enc->io_block_size = strtoul(string_io_block_size, NULL,
+                                 IO_BLOCK_SIZE_ATTR_VALUE_BASE);
+    if (errno != 0)
+        LOG_RETURN(-errno, "strtoul failed");
+
+    if (!enc->io_block_size)
+        LOG_RETURN(-EINVAL, "invalid 0 block_size");
+
+    return 0;
+}
+
 int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
 {
     struct layout_module *mod;
@@ -237,9 +301,18 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
     enc->layout->wr_size = xfer->xd_params.put.size;
     enc->layout->state = PHO_EXT_ST_PENDING;
 
-    rc = mod->ops->encode(enc);
-    if (rc)
+    /* get io_block_size from conf */
+    rc = get_io_block_size(enc);
+    if (rc) {
         layout_destroy(enc);
+        LOG_RETURN(rc, "Unable to get io_block_size");
+    }
+
+    rc = mod->ops->encode(enc);
+    if (rc) {
+        layout_destroy(enc);
+        LOG_RETURN(rc, "Unable to create encoder");
+    }
 
     return rc;
 }
@@ -261,9 +334,18 @@ int layout_decode(struct pho_encoder *enc, struct pho_xfer_desc *xfer,
     enc->xfer = xfer;
     enc->layout = layout;
 
+    /* get io_block_size from conf */
+    rc = get_io_block_size(enc);
+    if (rc) {
+        layout_destroy(enc);
+        LOG_RETURN(rc, "Unable to get io_block_size");
+    }
+
     rc = mod->ops->decode(enc);
-    if (rc)
-        layout_destroy(enc); /* free private decoder if needed */
+    if (rc) {
+        layout_destroy(enc);
+        LOG_RETURN(rc, "Unable to create decoder");
+    }
 
     return rc;
 }

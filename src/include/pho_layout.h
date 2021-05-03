@@ -105,6 +105,8 @@ struct pho_encoder {
     struct layout_info *layout;     /**< Layout of the current transfer filled
                                       *  out when decoding
                                       */
+    size_t io_block_size;           /**< Block size of the buffer when writing
+                                      */
 };
 
 /**

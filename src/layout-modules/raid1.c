@@ -203,31 +203,28 @@ static int add_written_extent(struct raid1_encoder *raid1,
  * 0 is not a valid replica count, -EINVAL will be returned.
  *
  * @param[in]  layout     layout with a REPL_COUNT_ATTR_KEY
- * @param[out] repl_count unsigned int to set
+ * @param[out] raid1      decoder/encoder with repl_count to modify
  *
  * @return 0 if success, -error_code if failure
  */
 static int layout_repl_count(struct layout_info *layout,
-                             unsigned int *repl_count)
+                             struct raid1_encoder *raid1)
 {
-        const char *string_repl_count =
-            pho_attr_get(&layout->layout_desc.mod_attrs,
-                         REPL_COUNT_ATTR_KEY);
+    const char *string_repl_count = pho_attr_get(&layout->layout_desc.mod_attrs,
+                                                 REPL_COUNT_ATTR_KEY);
+    if (string_repl_count == NULL)
+        LOG_RETURN(-EINVAL, "Unable to get replica count from layout attrs");
 
-        if (string_repl_count == NULL)
-            LOG_RETURN(-EINVAL,
-                       "Unable to get replica count from layout attrs");
+    errno = 0;
+    raid1->repl_count = strtoul(string_repl_count, NULL,
+                                REPL_COUNT_ATTR_VALUE_BASE);
+    if (errno != 0)
+        return -errno;
 
-        errno = 0;
-        *repl_count = strtoul(string_repl_count, NULL,
-                              REPL_COUNT_ATTR_VALUE_BASE);
-        if (errno != 0)
-            return -errno;
+    if (!raid1->repl_count)
+        LOG_RETURN(-EINVAL, "invalid 0 replica count");
 
-        if (*repl_count == 0)
-            LOG_RETURN(-EINVAL, "invalid 0 replica count");
-
-        return 0;
+    return 0;
 }
 
 /* @FIXME: taken from store.c, will be needed in raid1 too */
@@ -405,17 +402,13 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
  */
 static int write_all_chunks(int input_fd, const struct io_adapter *ioa,
                             struct pho_io_descr *iod,
-                            unsigned int replica_count, size_t count)
+                            unsigned int replica_count, size_t buffer_size,
+                            size_t count)
 {
-    /** TODO
-     * Better than fixing it to PAGE_SIZE, we could get buffer size from
-     * an ioa_preferred_read_size/write_size function.
-     */
-    size_t buffer_size = sysconf(_SC_PAGESIZE);
-    char *buffer;
 #define MAX_NULL_READ_TRY 10
     int nb_null_read_try = 0;
     size_t to_write = count;
+    char *buffer;
     int rc = 0;
 
     /* alloc buffer */
@@ -591,7 +584,8 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
    }
 
     /* write all extents by chunk of buffer size*/
-    rc = write_all_chunks(enc->xfer->xd_fd, ioa, iod, raid1->repl_count,
+    rc = write_all_chunks(enc->xfer->xd_fd, ioa, iod,
+                          raid1->repl_count, enc->io_block_size,
                           extent_size);
     if (rc)
         LOG_GOTO(close, rc, "Unable to write in raid1 encoder write");
@@ -1103,8 +1097,8 @@ static int layout_raid1_encode(struct pho_encoder *enc)
         LOG_RETURN(rc, "Unable to set raid1 layout repl_count attr in "
                        "encoder built");
 
-    /* set repl_count as unsigned int in encoder */
-    rc = layout_repl_count(enc->layout, &raid1->repl_count);
+    /* set repl_count in encoder */
+    rc = layout_repl_count(enc->layout, raid1);
     if (rc)
         LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
                        "encoder");
@@ -1167,8 +1161,8 @@ static int layout_raid1_decode(struct pho_encoder *enc)
     raid1->n_released_media = 0;
 
     /* Fill out the encoder appropriately */
-    /* get repl_count from provided layout to set decoder repl_count*/
-    rc = layout_repl_count(enc->layout, &raid1->repl_count);
+    /* set decoder repl_count */
+    rc = layout_repl_count(enc->layout, raid1);
     if (rc)
         LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
                        "decoder");
