@@ -480,7 +480,7 @@ function phobos_delayed_dev_release
         trap "rm $tmp_gdb_script" EXIT
         cat <<EOF > "$tmp_gdb_script"
 set breakpoint pending on
-break pho_posix_put
+break write_all_chunks
 commands
 shell sleep 1
 shell $PSQL -qt -c "$dev_req" | grep -v "^$" | wc -l > $dev_file

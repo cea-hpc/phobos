@@ -446,58 +446,6 @@ static int pho_posix_md_get(const char *path, struct pho_attrs *attrs)
     return rc;
 }
 
-static int pho_posix_put(const char *extent_key, const char *extent_desc,
-                         struct pho_io_descr *iod)
-{
-    int                  rc = 0, rc2 = 0;
-    struct posix_io_ctx *io_ctx;
-
-    ENTRY;
-
-    /* open */
-    rc = pho_posix_open(extent_key, extent_desc, iod, true);
-    if (rc || iod->iod_flags & PHO_IO_MD_ONLY)
-        return rc;
-
-    io_ctx = iod->iod_ctx;
-
-    /* write data */
-    rc = pho_posix_sendfile(io_ctx->fd, iod->iod_fd, iod->iod_size);
-    if (rc)
-        goto clean;
-
-    /* flush data */
-    if (iod->iod_flags & PHO_IO_SYNC_FILE)
-        if (fsync(io_ctx->fd) != 0)
-            LOG_GOTO(clean, rc = -errno, "fsync failed");
-
-    if (iod->iod_flags & PHO_IO_NO_REUSE) {
-        rc = posix_fadvise(io_ctx->fd, 0, 0,
-                           POSIX_FADV_DONTNEED | POSIX_FADV_NOREUSE);
-        if (rc) {
-            pho_warn("posix_fadvise failed: %s (%d)", strerror(rc), rc);
-            rc = 0; /* ignore error */
-        }
-    }
-
-clean:
-    /* unlink if failure occurs */
-    if (rc != 0) {
-        assert(io_ctx->fpath);
-        if (unlink(io_ctx->fpath))
-            if (!rc) /* keep the first reported error */
-                rc = -errno;
-            pho_warn("Failed to clean extent '%s': %s", io_ctx->fpath,
-                     strerror(errno));
-    }
-
-    rc2 = pho_posix_close(iod);
-    if (rc2 && rc == 0) /* keep the first reported error */
-        rc = rc2;
-
-    return rc;
-}
-
 static int pho_posix_get(const char *extent_key, const char *extent_desc,
                          struct pho_io_descr *iod)
 {
@@ -817,7 +765,6 @@ static int pho_posix_close(struct pho_io_descr *iod)
 
 /** POSIX adapter */
 static const struct io_adapter posix_adapter = {
-    .ioa_put            = pho_posix_put,
     .ioa_get            = pho_posix_get,
     .ioa_del            = pho_posix_del,
     .ioa_open           = pho_posix_open,
@@ -828,7 +775,6 @@ static const struct io_adapter posix_adapter = {
 
 /** LTFS adapter with specialized flush function */
 static const struct io_adapter ltfs_adapter = {
-    .ioa_put            = pho_posix_put,
     .ioa_get            = pho_posix_get,
     .ioa_del            = pho_posix_del,
     .ioa_open           = pho_posix_open,

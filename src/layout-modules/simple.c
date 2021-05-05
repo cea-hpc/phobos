@@ -137,6 +137,51 @@ static bool simple_finished(struct pho_encoder *enc)
     return true;
 }
 
+static int write_all_chunks(int input_fd, const struct io_adapter *ioa,
+                            struct pho_io_descr *iod, size_t buffer_size,
+                            size_t count)
+{
+#define MAX_NULL_READ_TRY 10
+    int nb_null_read_try = 0;
+    size_t to_write = count;
+    char *buffer;
+    int rc = 0;
+
+    buffer = malloc(buffer_size);
+    if (buffer == NULL)
+        LOG_RETURN(-ENOMEM, "Unable to alloc buffer for simple encoder write");
+
+    while (to_write > 0) {
+        ssize_t buf_size;
+
+        buf_size = read(input_fd, buffer,
+                        to_write > buffer_size ? buffer_size : to_write);
+        if (buf_size < 0)
+            LOG_GOTO(out, rc = -errno, "Error on loading buffer in simple "
+                                       "write, %zu remaning bytes", to_write);
+
+        if (buf_size == 0) {
+            ++nb_null_read_try;
+            if (nb_null_read_try > MAX_NULL_READ_TRY)
+                LOG_GOTO(out, rc = -EIO, "Too many null read in simple write, "
+                                         "%zu remaining bytes", to_write);
+            continue;
+        }
+
+        rc = ioa_write(ioa, iod, buffer, buf_size);
+        if (rc)
+            LOG_GOTO(out, rc, "Unable to write %zu bytes in simple write, "
+                              "%zu remaining bytes", buf_size, to_write);
+
+        iod->iod_size += buf_size;
+        to_write -= buf_size;
+    }
+
+out:
+    free(buffer);
+    return rc;
+}
+
 /*
  * Write data from current offset to medium, filling \a extent according to the
  * data written.
@@ -151,7 +196,7 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
     char *extent_key = NULL;
     struct io_adapter ioa;
     char extent_tag[128];
-    int rc;
+    int rc, rc2;
 
     ENTRY;
 
@@ -165,15 +210,11 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
         return iod.iod_fd;
 
     extent->layout_idx = simple->cur_extent_idx++;
-    /*
-     * @TODO: replace extent size with the actual size written (which is not
-     * returned by ioa_put as of yet)
-     */
     extent->size = min(simple->to_write, medium->avail_size);
     extent->media.family = (enum rsc_family)medium->med_id->family;
     pho_id_name_set(&extent->media, medium->med_id->name);
     extent->addr_type = (enum address_type)medium->addr_type;
-    /* and extent.address will be filled by ioa_put */
+    /* and extent.address will be filled by ioa_open */
 
     loc.root_path = medium->root_path;
     loc.extent = extent;
@@ -199,10 +240,21 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
     if (rc)
         LOG_GOTO(err_free, rc, "Extent key build failed");
 
-    rc = ioa_put(&ioa, extent_key, enc->xfer->xd_objid, &iod);
+    rc = ioa_open(&ioa, extent_key, enc->xfer->xd_objid, &iod, true);
     free(extent_key);
-    if (rc == 0)
+    if (rc)
+        LOG_GOTO(err_free, rc, "Unable to open extent %s in simple write",
+                 extent_tag);
+
+    rc = write_all_chunks(enc->xfer->xd_fd, &ioa, &iod, enc->io_block_size,
+                          extent->size);
+    if (rc)
+        pho_error(rc, "Unable to write in simple encoder");
+    else
         simple->to_write -= extent->size;
+
+    rc2 = ioa_close(&ioa, &iod);
+    rc = rc ? : rc2;
 
 err_free:
     pho_attrs_free(&iod.iod_attrs);

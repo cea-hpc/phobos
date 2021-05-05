@@ -71,8 +71,6 @@ struct pho_io_descr {
  * returned by the functions.
  */
 struct io_adapter {
-    int (*ioa_put)(const char *extent_key, const char *extent_desc,
-                   struct pho_io_descr *iod);
     int (*ioa_get)(const char *extent_key, const char *extent_desc,
                    struct pho_io_descr *iod);
     int (*ioa_del)(struct pho_ext_loc *loc);
@@ -87,37 +85,6 @@ struct io_adapter {
  * Retrieve IO functions for the given filesystem type.
  */
 int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa);
-
-/**
- * Put an object to a media.
- * All I/O adapters must implement this call.
- *
- * The I/O descriptor must be filled as follow:
- * iod_fd       Source data stream file descriptor
- * iod_size     Amount of data to be written.
- * iod_loc      Extent location identifier. The call must set
- *              loc->extent.address to indicate where the extent has been
- *              written.
- * iod_attrs    List of metadata blob k/v to set for the extent. If a value is
- *              NULL, previous value of the attribute is removed.
- * iod_flags    Bitmask of PHO_IO_* flags.
- *
- *
- * \param[in]       ioa         Suitable I/O adapter for the media
- * \param[in]       extent_key  Null-terminated extent key, composed as
- *                              "version.extent_tag.uuid"
- * \param[in]       extent_desc Null-terminated extent description
- * \param[in,out]   iod         I/O descriptor (see above)
- *
- * \return 0 on success, negative error code on failure
- */
-static inline int ioa_put(const struct io_adapter *ioa, const char *extent_key,
-                          const char *extent_desc, struct pho_io_descr *iod)
-{
-    assert(ioa != NULL);
-    assert(ioa->ioa_put != NULL);
-    return ioa->ioa_put(extent_key, extent_desc, iod);
-}
 
 /**
  * Get an object from a media.
