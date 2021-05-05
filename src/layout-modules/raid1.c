@@ -273,7 +273,7 @@ free_values:
 
 /**
  * Fill an extent structure, except the adress field, which is usually set by
- * a future call to ioa_open or ioa_put.
+ * a future call to ioa_open.
  *
  * @param[out] extent      extent to fill
  * @param[in]  media       media on which the extent is written
@@ -289,107 +289,6 @@ static void set_extent_info(struct extent *extent,
     extent->media.family = (enum rsc_family)medium->med_id->family;
     pho_id_name_set(&extent->media, medium->med_id->name);
     extent->addr_type = (enum address_type)medium->addr_type;
-}
-
-/**
- * Write data from current offset to medium, filling \a extent according to the
- * data written.
- */
-static int simple_write_chunk(struct pho_encoder *enc,
-                              const pho_resp_write_elt_t *medium,
-                              struct extent *extent)
-{
-    struct raid1_encoder *raid1 = enc->priv_enc;
-    struct pho_ext_loc loc = {0};
-    struct pho_io_descr iod = {0};
-    char *extent_key = NULL;
-    struct io_adapter ioa;
-    char extent_tag[128];
-    int rc;
-
-    ENTRY;
-
-    rc = get_io_adapter((enum fs_type)medium->fs_type, &ioa);
-    if (rc)
-        return rc;
-
-    /* Start with field initializations that may fail */
-    iod.iod_fd = enc->xfer->xd_fd;
-    if (iod.iod_fd < 0)
-        LOG_RETURN(-EBADF, "Invalid encoder xfer file descriptor in simple "
-                           "write raid1 encoder");
-
-    /*
-     * @TODO: replace extent size with the actual size written (which is not
-     * returned by ioa_put as of yet)
-     */
-    /* extent->address will be later filled by ioa_put */
-    set_extent_info(extent, medium, raid1->cur_extent_idx++,
-                    min(raid1->to_write, medium->avail_size));
-
-    loc.root_path = medium->root_path;
-    loc.extent = extent;
-
-    iod.iod_flags = PHO_IO_REPLACE | PHO_IO_NO_REUSE;
-    iod.iod_size = extent->size;
-    iod.iod_loc = &loc;
-    rc = build_extent_xattr(enc->xfer->xd_objid, &enc->xfer->xd_attrs,
-                            &iod.iod_attrs);
-    if (rc)
-        return rc;
-
-    pho_debug("Writing %ld bytes to medium %s", extent->size,
-              extent->media.name);
-    /* Build extent tag */
-    rc = snprintf(extent_tag, sizeof(extent_tag), "s%d", extent->layout_idx);
-
-    /* If the tag was more than 128 bytes long, it is a programming error */
-    assert(rc < sizeof(extent_tag));
-
-    rc = build_extent_key(enc->xfer->xd_objuuid, enc->xfer->xd_version,
-                          extent_tag, &extent_key);
-    if (rc)
-        LOG_GOTO(err_free, rc, "Extent key build failed");
-
-    rc = ioa_put(&ioa, extent_key, enc->xfer->xd_objid, &iod);
-    free(extent_key);
-    if (rc == 0)
-        raid1->to_write -= extent->size;
-
-err_free:
-    pho_attrs_free(&iod.iod_attrs);
-
-    return rc;
-}
-
-/**
- * Handle the write allocation response by writing data on the allocated medium
- * and filling the associated release request with relevant information (rc and
- * size_written).
- */
-static int simple_enc_write_chunk(struct pho_encoder *enc,
-                                  pho_resp_write_t *wresp,
-                                  pho_req_release_t *rreq)
-{
-    struct raid1_encoder *raid1 = enc->priv_enc;
-    struct extent cur_extent = {0};
-    int rc;
-
-    if (wresp->n_media != 1)
-        LOG_RETURN(-EPROTO,
-                   "Received %zu medium allocation but only 1 was requested",
-                   wresp->n_media);
-
-    /* Perform IO */
-    rc = simple_write_chunk(enc, wresp->media[0], &cur_extent);
-    rreq->media[0]->rc = rc;
-    rreq->media[0]->size_written = cur_extent.size;
-    if (rc)
-        return rc;
-
-    add_written_extent(raid1, &cur_extent);
-
-    return 0;
 }
 
 /**
@@ -898,13 +797,8 @@ static int raid1_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
                        resp->walloc->media[i]->med_id);
 
         /* Perform IO and populate release request with the outcome */
-        if (raid1->repl_count == 1) {
-            rc = simple_enc_write_chunk(enc, resp->walloc,
-                                             (*reqs)[*n_reqs].release);
-        } else { /* repl_count > 1 */
-            rc = multiple_enc_write_chunk(enc, resp->walloc,
-                                             (*reqs)[*n_reqs].release);
-        }
+        rc = multiple_enc_write_chunk(enc, resp->walloc,
+                                      (*reqs)[*n_reqs].release);
 
         (*n_reqs)++;
     } else if (pho_response_is_read(resp)) {
