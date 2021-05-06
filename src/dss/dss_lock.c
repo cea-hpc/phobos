@@ -282,9 +282,12 @@ static int basic_status(struct dss_handle *handle, const char *lock_id,
     if (rc)
         goto out_cleanup;
 
-    if (PQntuples(res) == 0)
-        LOG_GOTO(out_cleanup, rc = -ENOLCK, "No row found after request : %s",
-                 request->str);
+    if (PQntuples(res) == 0) {
+        pho_debug("Requested lock '%s' was not found, request: '%s' ",
+                  lock_id, request->str);
+        rc = -ENOLCK;
+        goto out_cleanup;
+    }
 
     if (lock_owner != NULL) {
         *lock_owner = strdup(PQgetvalue(res, 0, 1));
