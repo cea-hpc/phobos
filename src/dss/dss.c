@@ -1564,7 +1564,6 @@ static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
     char *lock_owner = NULL;
     unsigned int escape_len;
     struct timeval lock_ts;
-    struct pho_lock lock;
     GString *lock_id;
     char *escape_id;
     int rc;
@@ -1594,16 +1593,15 @@ static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
 
     if (rc == -ENOLCK) {
         rc = 0;
-        init_pho_lock(&lock, NULL, NULL, NULL);
+        init_pho_lock(&dev->lock, NULL, NULL, NULL);
     } else if (rc) {
         LOG_GOTO(free_id, rc, "Could not get lock status for id %s.",
                  lock_id->str);
     } else {
-        init_pho_lock(&lock, lock_id->str, lock_owner, &lock_ts);
+        init_pho_lock(&dev->lock, lock_id->str, lock_owner, &lock_ts);
     }
 
     free(lock_owner);
-    dev->lock = lock;
 
 free_id:
     g_string_free(lock_id, true);
@@ -1645,7 +1643,6 @@ static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
     char *lock_owner = NULL;
     unsigned int escape_len;
     struct timeval lock_ts;
-    struct pho_lock lock;
     GString *lock_id;
     char *escape_id;
     int rc;
@@ -1697,15 +1694,13 @@ static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
 
     if (rc == -ENOLCK) {
         rc = 0;
-        init_pho_lock(&lock, NULL, NULL, NULL);
+        init_pho_lock(&medium->lock, NULL, NULL, NULL);
     } else if (rc) {
         LOG_GOTO(free_id, rc, "Could not get lock status for id %s.",
                  lock_id->str);
     } else {
-        init_pho_lock(&lock, lock_id->str, lock_owner, &lock_ts);
+        init_pho_lock(&medium->lock, lock_id->str, lock_owner, &lock_ts);
     }
-
-    medium->lock = lock;
 
     free(lock_owner);
 
