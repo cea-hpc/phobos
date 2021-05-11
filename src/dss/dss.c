@@ -2162,3 +2162,150 @@ int dss_deprecated_object_set(struct dss_handle *hdl,
 {
     return dss_generic_set(hdl, DSS_DEPREC, (void *)obj_ls, obj_cnt, action);
 }
+
+static void pho_error_oid_uuid_version(int error_code, const char *msg,
+                                       const char *oid, const char *uuid,
+                                       int version)
+{
+    if (oid && uuid) {
+        if (version) {
+            pho_error(error_code, "%s, oid %s, uuid %s, version %d",
+                      msg, oid, uuid, version);
+        } else {
+            pho_error(error_code, "%s, oid %s, uuid %s", msg, oid, uuid);
+        }
+    } else {
+        if (version) {
+            pho_error(error_code, "%s, %s %s, version %d",
+                      msg, oid ? "oid" : "uuid", oid ? : uuid, version);
+        } else {
+            pho_error(error_code, "%s, %s %s",
+                      msg, oid ? "oid" : "uuid", oid ? : uuid);
+        }
+    }
+}
+
+int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
+                         const char *uuid, int version,
+                         struct object_info **obj)
+{
+    struct object_info *obj_list = NULL;
+    struct dss_filter filter;
+    char *filter_str = NULL;
+    int obj_cnt;
+    int target;
+    int rc;
+    int i;
+
+    *obj = NULL;
+
+    /* build oid and uuid filter */
+    if (oid && uuid) {
+        if (version) {
+            rc = asprintf(&filter_str,
+                          "{\"$AND\": ["
+                              "{\"DSS::OBJ::oid\": \"%s\"}, "
+                              "{\"DSS::OBJ::uuid\": \"%s\"}, "
+                              "{\"DSS::OBJ::version\": \"%d\"}"
+                              "]}",
+                          oid, uuid, version);
+        } else {
+            rc = asprintf(&filter_str,
+                          "{\"$AND\": ["
+                              "{\"DSS::OBJ::oid\": \"%s\"}, "
+                              "{\"DSS::OBJ::uuid\": \"%s\"}"
+                          "]}",
+                          oid, uuid);
+        }
+    /* build oid or uuid filter */
+    } else {
+        if (version) {
+            rc = asprintf(&filter_str,
+                          "{\"$AND\": ["
+                              "{\"DSS::OBJ::%s\": \"%s\"}, "
+                              "{\"DSS::OBJ::version\": \"%d\"}"
+                          "]}",
+                          oid ? "oid" : "uuid", oid ? : uuid, version);
+        } else {
+            rc = asprintf(&filter_str,
+                          "{\"DSS::OBJ::%s\": \"%s\"}",
+                          oid ? "oid" : "uuid", oid ? : uuid);
+        }
+    }
+
+    if (rc < 0)
+        LOG_RETURN(-ENOMEM, "Unable to build filter string");
+
+    rc = dss_filter_build(&filter, filter_str);
+    if (rc)
+        LOG_GOTO(clean, rc, "Unable to build filter: %s", filter_str);
+
+    /* search for oid/uuid into living object */
+    rc = dss_object_get(hdl, &filter, &obj_list, &obj_cnt);
+    if (rc) {
+        pho_error_oid_uuid_version(rc, "Unable to get living object",
+                                   oid, uuid, version);
+        goto clean;
+    }
+
+    /* we get one living object */
+    if (obj_cnt) {
+        assert(obj_cnt == 1);
+        *obj = object_info_dup(obj_list);
+        if (!*obj)
+            LOG_GOTO(clean, rc = -ENOMEM,
+                     "Unable to duplicate found object (oid %s, uuid %s, "
+                     "version %d)",
+                     obj_list->oid, obj_list->uuid, obj_list->version);
+
+        /* success */
+        goto clean;
+    }
+
+    dss_res_free(obj_list, obj_cnt);
+    /* check for deprecated object */
+    rc = dss_deprecated_object_get(hdl, &filter, &obj_list, &obj_cnt);
+    if (rc) {
+        pho_error_oid_uuid_version(rc, "Unable to get deprecated object",
+                                   oid, uuid, version);
+        goto clean;
+    }
+
+    /* no object found */
+    if (obj_cnt == 0) {
+        pho_error_oid_uuid_version(-ENOENT, "No object found",
+                                   oid, uuid, version);
+        GOTO(clean, rc = -ENOENT);
+    }
+
+    /* find oid/uuid and max_version */
+    target = 0;
+    for (i = 1; i < obj_cnt; i++) {
+        /* check unicity of uuid */
+        if (!uuid)
+            if (strcmp(obj_list[target].uuid, obj_list[i].uuid))
+                LOG_GOTO(clean, rc = -EINVAL,
+                         "object oid %s has multiple deprecated uuids as "
+                         "%s and %s",
+                         oid, obj_list[target].uuid, obj_list[i].uuid);
+
+        /* update version */
+        if (obj_list[target].version < obj_list[i].version)
+            target = i;
+    }
+
+    *obj = object_info_dup(&obj_list[target]);
+    if (!*obj)
+        LOG_GOTO(clean, rc = -ENOMEM,
+                 "Unable to duplicate found object (oid %s, uuid %s, "
+                 "version %d)",
+                 obj_list[target].oid, obj_list[target].uuid,
+                 obj_list[target].version);
+
+clean:
+    free(filter_str);
+    dss_filter_free(&filter);
+    dss_res_free(obj_list, obj_cnt);
+
+    return rc;
+}

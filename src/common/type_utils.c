@@ -146,6 +146,64 @@ void media_info_free(struct media_info *mda)
     free(mda);
 }
 
+struct object_info *object_info_dup(const struct object_info *obj)
+{
+    struct object_info *obj_out = NULL;
+
+    if (!obj)
+        return NULL;
+
+    /* use calloc to set memory to 0 */
+    obj_out = calloc(sizeof(*obj_out), 1);
+    if (!obj_out)
+        return NULL;
+
+    /* dup oid */
+    if (obj->oid) {
+        obj_out->oid = strdup(obj->oid);
+        if (!obj_out->oid)
+            goto clean_error;
+    }
+
+    /* dup uuid */
+    if (obj->uuid) {
+        obj_out->uuid = strdup(obj->uuid);
+        if (!obj_out->uuid)
+            goto clean_error;
+    }
+
+    /* version */
+    obj_out->version = obj->version;
+
+    /* dup user_md */
+    if (obj->user_md) {
+        obj_out->user_md = strdup(obj->user_md);
+        if (!obj_out->user_md)
+            goto clean_error;
+    }
+
+    /* timeval deprec_time */
+    obj_out->deprec_time = obj->deprec_time;
+
+    /* success */
+    return obj_out;
+
+clean_error:
+    object_info_free(obj_out);
+    return NULL;
+}
+
+void object_info_free(struct object_info *obj)
+{
+    if (!obj)
+        return;
+
+    free(obj->oid);
+    free(obj->uuid);
+    free(obj->user_md);
+    free(obj);
+}
+
 int tags_dup(struct tags *tags_dst, const struct tags *tags_src)
 {
     if (!tags_dst)

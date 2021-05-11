@@ -1,7 +1,8 @@
 AM_CFLAGS=$(CC_OPT) @CMOCKA_CFLAGS@
 AM_LDFLAGS=@CMOCKA_LIBS@
 
-TESTS=test_dss_lock test_dss_object_move test_ping test_store_object_md
+TESTS=test_dss_lock test_dss_object_move test_ping test_dss_lazy_find_object \
+      test_store_object_md
 check_PROGRAMS=$(TESTS)
 
 noinst_PROGRAMS=$(check_PROGRAMS)
@@ -21,3 +22,8 @@ test_ping_LDADD=../../admin/libphobos_admin.la ../../dss/libpho_dss.la \
 
 test_store_object_md_SOURCES=test_store_object_md.c
 test_store_object_md_LDADD=../../store/libphobos_store.la
+
+test_dss_lazy_find_object_SOURCES=test_dss_lazy_find_object.c test_setup.c
+test_dss_lazy_find_object_LDADD=../../dss/libpho_dss.la \
+                                ../../cfg/libpho_cfg.la \
+                                ../../common/libpho_common.la

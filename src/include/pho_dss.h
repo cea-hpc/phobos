@@ -348,6 +348,35 @@ int dss_deprecated_object_set(struct dss_handle *hdl,
                               struct object_info *obj_ls,
                               int obj_cnt, enum dss_set_action action);
 
+/**
+ * Find the corresponding object
+ *
+ * This function is lazy because there is no lock and the existing objects could
+ * change any time.
+ *
+ * At least one of \p oid or \p uuid must not be NULL.
+ *
+ * If \p version is not provided (zero as input) the latest one is located.
+ *
+ * If \p uuid is not provided, we first try to find the corresponding \p oid
+ * from living objects into the object table. If there is no living \p oid, we
+ * check amongst all deprecated objects. If there is only one corresponding
+ * \p uuid in the deprecated objects, we take it. If there is more than one
+ * \p uuid corresponding to this \p oid, -EINVAL is returned. If there is no
+ * existing object corresponding to provided oid/uuid/version, -ENOENT is
+ * returned.
+ *
+ * @param[in]   oid     OID to find or NULL
+ * @param[in]   uuid    UUID to find or NULL
+ * @param[in]   version Version to find or 0
+ * @param[out]  obj     Found and allocated object or NULL if error
+ *
+ * @return 0 or negative error code
+ */
+int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
+                         const char *uuid, int version,
+                         struct object_info **obj);
+
 /* ****************************************************************************/
 /* Generic move ***************************************************************/
 /* ****************************************************************************/

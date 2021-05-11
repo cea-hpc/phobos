@@ -79,6 +79,12 @@ struct media_info *media_info_dup(const struct media_info *mda);
 /** free a media_info structure */
 void media_info_free(struct media_info *mda);
 
+/** duplicate an object_info structure */
+struct object_info *object_info_dup(const struct object_info *obj);
+
+/** free an object_info structure */
+void object_info_free(struct object_info *obj);
+
 /**
  * Init tags by strdup'ing tag_values. Return 0 or -ENOMEM.
  */
