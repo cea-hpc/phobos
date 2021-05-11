@@ -1576,12 +1576,12 @@ static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
 
     if (rc == -ENOLCK) {
         rc = 0;
-        init_pho_lock(&dev->lock, NULL, NULL, NULL);
+        init_pho_lock(&dev->lock, NULL, NULL);
     } else if (rc) {
         LOG_RETURN(rc, "Could not get lock status for device with id %s.",
                    dev->rsc.id.name);
     } else {
-        init_pho_lock(&dev->lock, dev->rsc.id.name, lock_owner, &lock_ts);
+        init_pho_lock(&dev->lock, lock_owner, &lock_ts);
     }
 
     free(lock_owner);
@@ -1596,10 +1596,7 @@ static void dss_device_result_free(void *void_dev)
 {
     struct dev_info *dev = void_dev;
 
-    free(dev->lock.id);
-    free(dev->lock.owner);
-
-    (void)void_dev;
+    pho_lock_clean(&dev->lock);
 }
 
 static inline bool psqlstrbool2bool(char psql_str_bool)
@@ -1655,12 +1652,12 @@ static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
 
     if (rc == -ENOLCK) {
         rc = 0;
-        init_pho_lock(&medium->lock, NULL, NULL, NULL);
+        init_pho_lock(&medium->lock, NULL, NULL);
     } else if (rc) {
         LOG_RETURN(rc, "Could not get lock status for medium with id %s.",
                    medium->rsc.id.name);
     } else {
-        init_pho_lock(&medium->lock, medium->rsc.id.name, lock_owner, &lock_ts);
+        init_pho_lock(&medium->lock, lock_owner, &lock_ts);
     }
 
     free(lock_owner);
@@ -1678,9 +1675,7 @@ static void dss_media_result_free(void *void_media)
     if (!media)
         return;
 
-    free(media->lock.id);
-    free(media->lock.owner);
-
+    pho_lock_clean(&media->lock);
     tags_free(&media->tags);
 }
 

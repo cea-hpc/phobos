@@ -64,6 +64,23 @@ int build_extent_key(const char *uuid, int version, const char *extent_tag,
     return 0;
 }
 
+void pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src)
+{
+    lock_dst->owner = strdup_safe(lock_src->owner);
+    lock_dst->timestamp = lock_src->timestamp;
+    lock_dst->is_external = lock_src->is_external;
+}
+
+void pho_lock_clean(struct pho_lock *lock)
+{
+    if (lock == NULL)
+        return;
+
+    free(lock->owner);
+    lock->owner = NULL;
+    lock->is_external = false;
+}
+
 void dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src)
 {
     if (!dev_dst)
@@ -75,9 +92,7 @@ void dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src)
     dev_dst->rsc.adm_status = dev_src->rsc.adm_status;
     dev_dst->path = strdup_safe(dev_src->path);
     dev_dst->host = strdup_safe(dev_src->host);
-    dev_dst->lock.id = strdup_safe(dev_src->lock.id);
-    dev_dst->lock.owner = strdup_safe(dev_src->lock.owner);
-    dev_dst->lock.timestamp = dev_src->lock.timestamp;
+    pho_lock_cpy(&dev_dst->lock, &dev_src->lock);
 }
 
 struct dev_info *dev_info_dup(const struct dev_info *dev)
@@ -97,11 +112,10 @@ void dev_info_free(struct dev_info *dev, bool free_top_struct)
 {
     if (!dev)
         return;
+    pho_lock_clean(&dev->lock);
     free(dev->rsc.model);
     free(dev->path);
     free(dev->host);
-    free(dev->lock.id);
-    free(dev->lock.owner);
     if (free_top_struct)
         free(dev);
 }
@@ -117,9 +131,7 @@ struct media_info *media_info_dup(const struct media_info *mda)
     memcpy(media_out, mda, sizeof(*media_out));
     media_out->rsc.model = strdup_safe(mda->rsc.model);
     tags_dup(&media_out->tags, &mda->tags);
-
-    media_out->lock.id = strdup_safe(mda->lock.id);
-    media_out->lock.owner = strdup_safe(mda->lock.owner);
+    pho_lock_cpy(&media_out->lock, &mda->lock);
 
     return media_out;
 }
@@ -128,8 +140,7 @@ void media_info_free(struct media_info *mda)
 {
     if (!mda)
         return;
-    free(mda->lock.id);
-    free(mda->lock.owner);
+    pho_lock_clean(&mda->lock);
     free(mda->rsc.model);
     tags_free(&mda->tags);
     free(mda);

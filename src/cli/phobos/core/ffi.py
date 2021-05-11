@@ -80,9 +80,9 @@ class Timeval(Structure): # pylint: disable=too-few-public-methods
 class DSSLock(Structure): # pylint: disable=too-few-public-methods
     """Resource lock as managed by DSS."""
     _fields_ = [
-        ('lock_id', c_char_p),
         ('_lock_owner', c_char_p),
-        ('lock_ts', Timeval)
+        ('lock_ts', Timeval),
+        ('lock_extern', c_bool),
     ]
 
     @property

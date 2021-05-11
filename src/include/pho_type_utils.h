@@ -53,6 +53,12 @@ bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2);
 int build_extent_key(const char *uuid, int version, const char *extent_tag,
                      char **key);
 
+/** copy a pho_lock structure in an already allocated one */
+void pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src);
+
+/** free a pho_lock structure's contents */
+void pho_lock_clean(struct pho_lock *lock);
+
 /** duplicate a dev_info structure */
 struct dev_info *dev_info_dup(const struct dev_info *dev);
 
