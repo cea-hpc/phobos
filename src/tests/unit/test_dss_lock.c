@@ -23,6 +23,7 @@
  * \brief  Tests for DSS generic lock feature
  */
 
+#include "test_setup.h"
 #include "pho_dss.h"
 
 #include <assert.h>
@@ -31,8 +32,6 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <sys/time.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 #include <cmocka.h>
@@ -44,61 +43,6 @@ static const struct object_info GOOD_LOCKS[] = {
     { .oid = "object_1"},
     { .oid = "object_2"}
 };
-
-static int setup(void **state)
-{
-    struct dss_handle *handle;
-    int rc;
-
-    handle = malloc(sizeof(*handle));
-    if (handle == NULL)
-        return -1;
-
-    setenv("PHOBOS_DSS_connect_string", "dbname=phobos host=localhost "
-                                        "user=phobos password=phobos", 1);
-
-    if (!fork()) {
-        rc = execl("../setup_db.sh", "setup_db.sh", "setup_tables", NULL);
-        if (rc)
-            exit(EXIT_FAILURE);
-    }
-
-    wait(&rc);
-    if (rc)
-        return -1;
-
-    rc = dss_init(handle);
-    if (rc)
-        return -1;
-
-    *state = handle;
-
-    return 0;
-}
-
-static int teardown(void **state)
-{
-    int rc;
-
-    if (*state != NULL) {
-        dss_fini(*state);
-        free(*state);
-    }
-
-    if (!fork()) {
-        rc = execl("../setup_db.sh", "setup_db.sh", "drop_tables", NULL);
-        if (rc)
-            exit(EXIT_FAILURE);
-    }
-
-    wait(&rc);
-    if (rc)
-        return -1;
-
-    unsetenv("PHOBOS_DSS_connect_string");
-
-    return 0;
-}
 
 static bool check_newer(struct timeval old_ts, struct timeval new_ts)
 {
@@ -521,5 +465,6 @@ int main(void)
         cmocka_unit_test(dhflo_lock_without_host),
     };
 
-    return cmocka_run_group_tests(dss_lock_test_cases, setup, teardown);
+    return cmocka_run_group_tests(dss_lock_test_cases, global_setup_dss,
+                                  global_teardown_dss);
 }

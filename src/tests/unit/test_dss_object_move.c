@@ -23,12 +23,13 @@
  * \brief  Tests for dss_object_move function
  */
 
+/* phobos stuff */
+#include "test_setup.h"
 #include "pho_dss.h"
 #include "pho_types.h"
 
+/* standard stuff */
 #include <stdlib.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 /* cmocka stuff */
@@ -36,61 +37,6 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <cmocka.h>
-
-static int global_setup(void **state)
-{
-    struct dss_handle *handle;
-    int rc;
-
-    handle = malloc(sizeof(*handle));
-    if (handle == NULL)
-        return -1;
-
-    setenv("PHOBOS_DSS_connect_string", "dbname=phobos host=localhost "
-                                        "user=phobos password=phobos", 1);
-
-    if (!fork()) {
-        rc = execl("../setup_db.sh", "setup_db.sh", "setup_tables", NULL);
-        if (rc)
-            exit(EXIT_FAILURE);
-    }
-
-    wait(&rc);
-    if (rc)
-        return -1;
-
-    rc = dss_init(handle);
-    if (rc)
-        return -1;
-
-    *state = handle;
-
-    return 0;
-}
-
-static int global_teardown(void **state)
-{
-    int rc;
-
-    if (*state != NULL) {
-        dss_fini(*state);
-        free(*state);
-    }
-
-    if (!fork()) {
-        rc = execl("../setup_db.sh", "setup_db.sh", "drop_tables", NULL);
-        if (rc)
-            exit(EXIT_FAILURE);
-    }
-
-    wait(&rc);
-    if (rc)
-        return -1;
-
-    unsetenv("PHOBOS_DSS_connect_string");
-
-    return 0;
-}
 
 /* dom_simple_ok */
 static struct object_info OBJ = {
@@ -341,6 +287,6 @@ int main(void)
                                         dom_simple_already_exist_teardown),
     };
 
-    return cmocka_run_group_tests(dss_object_move_cases, global_setup,
-                                  global_teardown);
+    return cmocka_run_group_tests(dss_object_move_cases, global_setup_dss,
+                                  global_teardown_dss);
 }

@@ -4,11 +4,14 @@ AM_LDFLAGS=@CMOCKA_LIBS@
 TESTS=test_dss_lock test_dss_object_move test_ping test_store_object_md
 check_PROGRAMS=$(TESTS)
 
-test_dss_lock_SOURCES=test_dss_lock.c
+noinst_PROGRAMS=$(check_PROGRAMS)
+noinst_HEADERS=test_setup.h
+
+test_dss_lock_SOURCES=test_dss_lock.c test_setup.c
 test_dss_lock_LDADD=../../dss/libpho_dss.la ../../cfg/libpho_cfg.la \
                     ../../common/libpho_common.la
 
-test_dss_object_move_SOURCES=test_dss_object_move.c
+test_dss_object_move_SOURCES=test_dss_object_move.c test_setup.c
 test_dss_object_move_LDADD=../../dss/libpho_dss.la ../../cfg/libpho_cfg.la \
                            ../../common/libpho_common.la
 
