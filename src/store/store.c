@@ -815,7 +815,7 @@ out:
 }
 
 /**
- * Initialize an encoder or decoder to perform \a xfer, according to
+ * Initialize an encoder or a decoder to perform \a xfer, according to
  * xfer->xd_op and xfer->xd_flags.
  */
 static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
@@ -1029,7 +1029,10 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
     if (pho->ended_xfers == NULL)
         GOTO(out, rc = -ENOMEM);
 
-    /* Allocate array of to track which encoders had their metadata created */
+    /*
+     * Allocate array of booleans to track which encoders had their metadata
+     * created.
+     */
     pho->md_created = calloc(n_xfers, sizeof(*pho->md_created));
     if (pho->md_created == NULL)
         GOTO(out, rc = -ENOMEM);

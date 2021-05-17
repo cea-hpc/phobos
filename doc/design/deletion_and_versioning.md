@@ -5,14 +5,14 @@ discard or undelete old object versions. Phobos differentiates between
 **DELETE** and **REMOVE**. When a user **DELETE**s an object or **PUT**s a new
 version of it, the old version of the object is still accessible and is kept on
 media until a future garbage collector or the user (through a future **REMOVE**
-call) remove it. This document does not deal with extent cleaning on media nor
+call) removes it. This document does not deal with extent cleaning on media nor
 the definitive removal of objects. This will be described in a future
 *removal_and_cleaning* design document.
 
 A user can **GET** and **GETMD** any version of an object as long as this
 version is deprecated but still accessible.
 
-As long as a deleted object can be gotten and all these extents remain on
+As long as a deleted object can be retrieved and all its extents remain on
 media, it may still be taken into account for quota calculation depending on the
 implementation of the quota system.
 
@@ -57,7 +57,7 @@ An object describes a state of a set of data and metadata. As a new version of
 an object is pushed to the storage system, its state is modified. Each state is
 identified by a number called __version__ number. This number is a strictly
 positive integer which is incremented each time a new version of the object is
-pushed. The highest this number is, the most recent the version is. The value
+pushed. The higher this number is, the more recent the version is. The value
 _0_ is not allowed and reserved for querying the latest existing __version__
 with GET and GETMD calls.
 
@@ -73,16 +73,16 @@ __version__ number, going from _i_ to _i+1_.
 ### Generation and UUID
 A set of versions of the same object is called a __generation__. When an object
 is deleted, we pin the targeted generation as deprecated, and then its id can be
-reused for another generation. To distinguish generations of objects which
-shared the same ID, where at most one of them is alive, we use a __UUID__. The
-__uuid__ field of an alive object is not known by the user.
+reused for another generation. The __UUID__ distinguishes generations of objects
+which share the same ID where at most one of them is alive. The __uuid__ field
+of a living object is not known by the user.
 
 #### Object creation
 A __uuid__ is automatically generated when a new object is pushed.
 
 #### Object deletion
 The __uuid__ of the deleted object is given to the user, to allow them to
-undelete it, as this is the only way to distinguish one object to another (if
+undelete it, as this is the only way to distinguish one object from another (if
 they share the same ID). If this information is not known, or lost, by the user
 when trying to undelete the object, timestamps can be compared using the object
 list call.
@@ -104,7 +104,7 @@ Extent metadata must include the UUID and the version number of the object.
 This will avoid conflicts in case of a medium recovery, where extents for two
 different objects with the same ID are written on.
 
-The ID of an extent on a medium must stay unique. As example, the LTFS path to
+The ID of an extent on a medium must stay unique. For example, the LTFS path to
 each extent must stay unique. It will depend on UUID and version. We must ensure
 the compatibility of previous extent ID with no version and UUID.
 
@@ -114,9 +114,9 @@ This feature implies some database modifications.
 #### ``object`` table
 Each record in the database must hold a version number, to indicate the user
 which one is the current version. We add to the database one integer
-field: __version__. For a new object id which was not pre-existing in the
+field: __version__. For a new object id which did not exist in the
 ``object`` table, the new object entry into the object table will have a version
-number of _1_. For a new version of an already existing object, the pre-existing
+number of _1_. For a new version of an already existing object, the existing
 version of the object is moved to the ``deprecated_object`` table (see below)
 and the new version is added to the ``object`` table with a version number
 incremented by one.
@@ -140,7 +140,7 @@ A new table needs to be created to gather the deprecated versions of an object:
 - old versions after an update,
 - old generations after a deletion.
 
-This table, named ``deprecated_object`` gets the same fields as ``object`` table
+This table, named ``deprecated_object`` has the same fields as ``object`` table
 with the addition of a timestamp field __deprec_time__ which indicates when the
 update or deletion happened.
 
@@ -271,15 +271,15 @@ $ phobos undelete oid obj_id [obj_id ...]
 $ phobos undel oid obj_id [obj_id ...]
 ```
 
-If a UUID is provided, and this UUID does not exist in the
-``deprecated_object`` table the operation fails, else the targeted OID is the
-one corresponding to entry with this UUID into the ``deprecated_object`` table.
+If a UUID that does not exist in the ``deprecated_object`` table is provided
+the operation fails. Otherwise, the targeted OID is the one corresponding to
+the entry with this UUID in the ``deprecated_object`` table.
 
-If an OID is provided and there is no entry with this OID into the
-``deprecated_table`` table the operation will fail. Else if there is several
-UUIDs into the ``deprecated_table`` corresponding to this OID the operation will
-fail. Else, there is only one UUID corresponding to this OID, it becomes the
-targeted UUID.
+If an OID is provided and there is no entry with this OID in the
+``deprecated_table`` table the operation will fail. Otherwise, if there are
+several UUIDs in the ``deprecated_table`` corresponding to this OID the
+operation will fail. Finally, if there is only one UUID corresponding to this
+OID, it becomes the targeted UUID.
 
 If an object with the same targeted OID already exists in the ``object``
 database, the operation fails.
