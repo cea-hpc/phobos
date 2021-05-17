@@ -113,6 +113,15 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_admin.la
 
 %changelog
+* Mon May 17 2021 - Yoann Valeri <yoann.valeri@cea.fr> - 1.91.2-1
+- Modified concurrency lock management in DSS
+- Modified DB schema
+- Pattern option to extent and object list
+- Ping command
+- Configurable block size when writing data
+- Put overwrite
+- Added phobos locate command's design documentation
+
 * Wed Mar 3 2021 - Sebastien Gougeaud <sebastien.gougeaud@cea.fr> - 1.91.1-1
 - Delete and undelete commands for objects
 - Extent path generation now considers uuid and version of objects
