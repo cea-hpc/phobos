@@ -2309,3 +2309,75 @@ clean:
 
     return rc;
 }
+
+int dss_medium_locate(struct dss_handle *dss, struct pho_id *medium_id,
+                      char **hostname)
+{
+    struct media_info *medium_info;
+    struct dss_filter filter;
+    int cnt;
+    int rc;
+
+    *hostname = NULL;
+
+    /* get medium info from medium id */
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                              "{\"DSS::MDA::family\": \"%s\"}, "
+                              "{\"DSS::MDA::id\": \"%s\"}"
+                          "]}",
+                          rsc_family2str(medium_id->family),
+                          medium_id->name);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Unable to build filter for media family %s and name %s",
+                   rsc_family2str(medium_id->family), medium_id->name);
+
+    rc = dss_media_get(dss, &filter, &medium_info, &cnt);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Error while getting medium info for family %s and name %s",
+                   rsc_family2str(medium_id->family), medium_id->name);
+
+    /* (family, id) is the primary key of the media table */
+    assert(cnt <= 1);
+
+    if (cnt == 0) {
+        pho_warn("Medium (family %s, name %s) is absent from media table",
+                 rsc_family2str(medium_id->family), medium_id->name);
+        GOTO(clean, rc = -ENOENT);
+    }
+
+    /* check ADMIN STATUS to see if the medium is available */
+    if (medium_info->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED) {
+        pho_warn("Medium (family %s, name %s) is admin locked",
+                 rsc_family2str(medium_id->family), medium_id->name);
+        GOTO(clean, rc = -EACCES);
+    }
+
+    if (!medium_info->flags.get) {
+        pho_warn("Get are prevented by operation flag on this medium "
+                 "(family %s, name %s)",
+                 rsc_family2str(medium_id->family), medium_id->name);
+        GOTO(clean, rc = -EPERM);
+    }
+
+    /* medium without any lock */
+    if (!medium_info->lock.owner) {
+        *hostname = NULL;
+        GOTO(clean, rc = 0);
+    }
+
+    /* get lock hostname */
+    rc = dss_hostname_from_lock_owner(medium_info->lock.owner, hostname);
+    if (rc) {
+        pho_warn("Unable to get hostname from lock_owner %s, "
+                 "error : %d, %s",
+                 medium_info->lock.owner, rc, strerror(-rc));
+    }
+
+clean:
+    dss_res_free(medium_info, cnt);
+    return rc;
+}

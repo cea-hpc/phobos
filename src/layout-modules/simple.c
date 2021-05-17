@@ -723,73 +723,27 @@ static int layout_simple_locate(struct dss_handle *dss,
                                 char **hostname)
 {
     struct pho_id *medium_id = &layout->extents->media;
-    struct media_info *medium_info;
-    struct dss_filter filter;
-    int cnt;
+    const char *local_hostname;
     int rc;
 
     *hostname = NULL;
+    rc = dss_medium_locate(dss, medium_id, hostname);
+    /* an error occurs or we located an hostname */
+    if (rc || *hostname)
+        return rc;
 
-    /* get medium info from medium id */
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                              "{\"DSS::MDA::family\": \"%s\"}, "
-                              "{\"DSS::MDA::id\": \"%s\"}"
-                          "]}",
-                          rsc_family2str(medium_id->family),
-                          medium_id->name);
-    if (rc)
-        LOG_RETURN(rc, "Unable to build filter for media family %s and name %s",
-                   rsc_family2str(medium_id->family), medium_id->name);
+    /* If a lock free medium is available, return self hostname */
+    local_hostname = get_hostname();
+    if (!hostname)
+        LOG_RETURN(-EADDRNOTAVAIL, "Unable to get self hostname");
 
-    rc = dss_media_get(dss, &filter, &medium_info, &cnt);
-    dss_filter_free(&filter);
-    if (rc)
-        LOG_RETURN(rc, "Error on getting medium info for family %s and name %s",
-                   rsc_family2str(medium_id->family), medium_id->name);
+    *hostname = strdup(local_hostname);
+    if (!*hostname)
+        LOG_RETURN(rc = -errno, "Unable to duplicate local_hostname %s",
+                   local_hostname);
 
-    /* (family, id) is the primary key of the media table */
-    assert(cnt <= 1);
-
-    if (cnt == 0)
-        LOG_GOTO(clean, -EINVAL,
-                 "Medium (family %s, name %s) is used in the extent of "
-                 "the object (oid %s, uuid %s, version %d) and is absent "
-                 "from media table", rsc_family2str(medium_id->family),
-                 medium_id->name, layout->oid, layout->uuid, layout->version);
-
-    /* check ADMIN STATUS to see if the medium is available */
-    if (medium_info->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
-        LOG_GOTO(clean, rc = -ENODEV,
-                 "Medium of simple layout is not admin unlocked ");
-
-    /* medium without any lock */
-    if (!medium_info->lock.owner) {
-        const char *local_hostname = get_hostname();
-
-        if (!local_hostname)
-            LOG_GOTO(clean, rc = -EADDRNOTAVAIL, "Unable to get self hostname");
-
-        *hostname = strdup(local_hostname);
-        if (!*hostname)
-            LOG_GOTO(clean, rc = -errno,
-                     "Unable to duplicate local_hostname %s", local_hostname);
-
-        /* success */
-        rc = 0;
-        goto clean;
-    }
-
-    /* get lock hostname */
-    rc = dss_hostname_from_lock_owner(medium_info->lock.owner, hostname);
-    if (rc)
-        LOG_GOTO(clean, rc, "Unable to get hostname from lock_owner %s",
-                 medium_info->lock.owner);
-
-clean:
-    dss_res_free(medium_info, cnt);
-
-    return rc;
+    /* success */
+    return 0;
 }
 
 static const struct pho_layout_module_ops LAYOUT_SIMPLE_OPS = {
