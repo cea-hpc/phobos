@@ -38,6 +38,7 @@
 #include "pho_type_utils.h"
 #include "pho_types.h"
 #include "store_alias.h"
+#include "store_utils.h"
 
 #include <attr/xattr.h>
 #include <fcntl.h>
@@ -299,7 +300,7 @@ filt_free:
 /**
  * Save this xfer oid and metadata (xd_attrs) into the DSS.
  */
-static int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
+int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 {
     GString *md_repr = g_string_new(NULL);
     struct object_info *obj_res;
