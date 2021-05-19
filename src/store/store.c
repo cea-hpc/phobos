@@ -461,8 +461,12 @@ static int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
                  xfer->xd_objid);
 
     rc = dss_object_get(dss, &filter, &obj, &cnt);
-    if (rc || cnt != 1)
+    if (rc)
         LOG_GOTO(out_unlock, rc, "dss_object_get failed for objid:'%s'",
+                 xfer->xd_objid);
+
+    if (cnt != 1)
+        LOG_GOTO(out_unlock, rc = -EINVAL, "object '%s' does not exist",
                  xfer->xd_objid);
 
     dss_filter_free(&filter);
