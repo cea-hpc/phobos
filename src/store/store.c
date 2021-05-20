@@ -428,7 +428,7 @@ out_md:
  * Delete xfer metadata from the DSS by \a objid, making the oid free to be used
  * again (unless layout information still lay in the DSS).
  */
-static int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
+int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 {
     struct object_info lock_obj = { .oid = xfer->xd_objid };
     struct object_info *prev_obj = NULL;

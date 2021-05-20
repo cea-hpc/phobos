@@ -93,6 +93,9 @@ int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
                    struct object_info **obj_ls, int *obj_cnt)
 {
     int rc = (int)mock();
+    void *obj_container;
+    bool *ctn_bool;
+    int i;
 
     (void)hdl; (void)filter;
 
@@ -106,9 +109,17 @@ int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
         return rc;
     }
 
-    *obj_ls = calloc(*obj_cnt, sizeof(**obj_ls));
-    (*obj_ls)[0].version = 7;
-    (*obj_ls)[0].uuid = strdup("abcdefgh12345678");
+    obj_container = malloc(*obj_cnt * sizeof(**obj_ls) + sizeof(*ctn_bool));
+    ctn_bool = (bool *)obj_container;
+    *ctn_bool = true; // true for object, false for layout
+    *obj_ls = (struct object_info *)(obj_container + sizeof(*ctn_bool));
+
+    memset(*obj_ls, 0, *obj_cnt * sizeof(**obj_ls));
+
+    for (i = 0; i < *obj_cnt; ++i) {
+        (*obj_ls)[i].version = 7;
+        (*obj_ls)[i].uuid = strdup("abcdefgh12345678");
+    }
 
     return rc;
 }
@@ -118,6 +129,77 @@ do {                                                                           \
     will_return(dss_object_get, _rc);                                          \
     if (_rc == 0)                                                              \
         will_return(dss_object_get, _cnt);                                     \
+} while (0)
+
+int dss_deprecated_object_get(struct dss_handle *hdl,
+                              const struct dss_filter *filter,
+                              struct object_info **obj_ls, int *obj_cnt)
+{
+    int rc = (int)mock();
+    void *obj_container;
+    bool *ctn_bool;
+
+    (void)hdl; (void)filter;
+
+    if (rc != 0)
+        return rc;
+
+    *obj_cnt = (int)mock();
+
+    if (*obj_cnt == 0) {
+        *obj_ls = NULL;
+        return rc;
+    }
+
+    obj_container = malloc(*obj_cnt * sizeof(**obj_ls) + sizeof(*ctn_bool));
+    ctn_bool = (bool *)obj_container;
+    *ctn_bool = true; // true for object, false for layout
+    *obj_ls = (struct object_info *)(obj_container + sizeof(*ctn_bool));
+    memset(*obj_ls, 0, *obj_cnt * sizeof(**obj_ls));
+
+    return rc;
+}
+
+#define MOCK_DSS_DEPRECATED_OBJECT_GET(_rc, _cnt)                              \
+do {                                                                           \
+    will_return(dss_deprecated_object_get, _rc);                               \
+    if (_rc == 0)                                                              \
+        will_return(dss_deprecated_object_get, _cnt);                          \
+} while (0)
+
+int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct layout_info **lyt_ls, int *lyt_cnt)
+{
+    int rc = (int)mock();
+    void *lyt_container;
+    bool *ctn_bool;
+
+    (void)hdl; (void)filter;
+
+    if (rc != 0)
+        return rc;
+
+    *lyt_cnt = (int)mock();
+
+    if (*lyt_cnt == 0) {
+        *lyt_ls = NULL;
+        return rc;
+    }
+
+    lyt_container = malloc(*lyt_cnt * sizeof(**lyt_ls) + sizeof(*ctn_bool));
+    ctn_bool = (bool *)lyt_container;
+    *ctn_bool = false; // true for object, false for layout
+    *lyt_ls = (struct layout_info *)(lyt_container + sizeof(*ctn_bool));
+    memset(*lyt_ls, 0, *lyt_cnt * sizeof(**lyt_ls));
+
+    return rc;
+}
+
+#define MOCK_DSS_LAYOUT_GET(_rc, _cnt)                                         \
+do {                                                                           \
+    will_return(dss_layout_get, _rc);                                          \
+    if (_rc == 0)                                                              \
+        will_return(dss_layout_get, _cnt);                                     \
 } while (0)
 
 int dss_object_move(struct dss_handle *handle, enum dss_type type_from,
@@ -131,10 +213,22 @@ int dss_object_move(struct dss_handle *handle, enum dss_type type_from,
 
 void dss_res_free(void *item_list, int item_cnt)
 {
-    struct object_info *obj = (struct object_info *)item_list;
+    bool *ctn_bool;
 
-    free(obj->uuid);
-    free(obj);
+    if (item_list == NULL)
+        return;
+
+    ctn_bool = (bool *)(item_list - sizeof(*ctn_bool));
+    if (ctn_bool) { // item_list is an object list
+        struct object_info *obj_ls = (struct object_info *)item_list;
+        int i;
+
+        for (i = 0; i < item_cnt; ++i)
+            free(obj_ls[i].uuid);
+
+    }
+
+    free(item_list - sizeof(*ctn_bool));
 }
 
 int dss_filter_build(struct dss_filter *filter, const char *fmt, ...)
@@ -412,9 +506,263 @@ static void oms_success_with_overwrite(void **state)
     assert_int_equal(rc, 0);
 }
 
+/** Tests for object_md_del */
+static void omd_dss_filter_build_for_get_failure(void **state)
+{
+    struct pho_xfer_desc xfer;
+    int rc;
+
+    (void)state;
+
+    will_return(dss_filter_build, -ENOMEM);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, -ENOMEM);
+}
+
+static void omd_dss_init_lock_owner_failure(void **state)
+{
+    struct pho_xfer_desc xfer;
+    int rc;
+
+    (void)state;
+
+    will_return(dss_filter_build, 0);
+    will_return(dss_init_lock_owner, -EADDRNOTAVAIL);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, -EADDRNOTAVAIL);
+}
+
+static const struct pho_xfer_desc DEL_XFER = {
+    .xd_objid = "dummy_object",
+    .xd_objuuid = "abcdefgh12345678",
+};
+
+static void omd_dss_lock_failure(void **state)
+{
+    struct pho_xfer_desc xfer = PUT_XFER;
+    int rc;
+
+    (void)state;
+
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
+    MOCK_DSS_LOCK(-EINVAL, GOOD_OWNER);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, -EINVAL);
+}
+
+static void omd_dss_object_get_failure(void **state)
+{
+    struct pho_xfer_desc xfer = PUT_XFER;
+    int rc;
+
+    (void)state;
+
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
+    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    MOCK_DSS_OBJECT_GET(-ENOMEM, 0);
+    will_return(dss_unlock, 0);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, -ENOMEM);
+
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
+    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    MOCK_DSS_OBJECT_GET(0, 2);
+    will_return(dss_unlock, 0);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, -EINVAL);
+}
+
+static void omd_dss_filter_build_for_deprec_failure(void **state)
+{
+    struct pho_xfer_desc xfer = PUT_XFER;
+    int rc;
+
+    (void)state;
+
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
+    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, -ENOMEM);
+    will_return(dss_unlock, 0);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, -ENOMEM);
+}
+
+static void omd_dss_deprecated_object_get_failure(void **state)
+{
+    struct pho_xfer_desc xfer = PUT_XFER;
+    int rc;
+
+    (void)state;
+
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
+    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_DEPRECATED_OBJECT_GET(-EINVAL, 0);
+    will_return(dss_unlock, 0);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, -EINVAL);
+}
+
+static void omd_dss_filter_build_for_layout_failure(void **state)
+{
+    struct pho_xfer_desc xfer = PUT_XFER;
+    int rc;
+
+    (void)state;
+
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
+    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, -ENOMEM);
+    will_return(dss_unlock, 0);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, -ENOMEM);
+}
+
+static void omd_dss_layout_get_failure(void **state)
+{
+    struct pho_xfer_desc xfer = DEL_XFER;
+    int rc;
+
+    (void)state;
+
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
+    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_LAYOUT_GET(-EINVAL, 0);
+    will_return(dss_unlock, 0);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, -EINVAL);
+
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
+    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_LAYOUT_GET(0, 1);
+    will_return(dss_unlock, 0);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, -EEXIST);
+}
+
+static void omd_dss_object_set_failure(void **state)
+{
+    struct pho_xfer_desc xfer = DEL_XFER;
+    int rc;
+
+    (void)state;
+
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
+    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_LAYOUT_GET(0, 0);
+    will_return(dss_object_set, -EINVAL);
+    will_return(dss_unlock, 0);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, -EINVAL);
+}
+
+static void omd_dss_object_move_failure(void **state)
+{
+    struct pho_xfer_desc xfer = DEL_XFER;
+    int rc;
+
+    (void)state;
+
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
+    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_LAYOUT_GET(0, 0);
+    will_return(dss_object_set, 0);
+    will_return(dss_object_move, -ENOENT);
+    will_return(dss_unlock, 0);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, -ENOENT);
+}
+
+static void omd_dss_unlock_failure(void **state)
+{
+    struct pho_xfer_desc xfer = DEL_XFER;
+    int rc;
+
+    (void)state;
+
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
+    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_DEPRECATED_OBJECT_GET(0, 0);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_LAYOUT_GET(0, 0);
+    will_return(dss_object_set, 0);
+    will_return(dss_unlock, -ENOLCK);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, -ENOLCK);
+}
+
+static void omd_success(void **state)
+{
+    struct pho_xfer_desc xfer = DEL_XFER;
+    int rc;
+
+    (void)state;
+
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
+    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_LAYOUT_GET(0, 0);
+    will_return(dss_object_set, 0);
+    will_return(dss_object_move, 0);
+    will_return(dss_unlock, 0);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, 0);
+
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
+    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    MOCK_DSS_OBJECT_GET(0, 1);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_DEPRECATED_OBJECT_GET(0, 0);
+    will_return(dss_filter_build, 0);
+    MOCK_DSS_LAYOUT_GET(0, 0);
+    will_return(dss_object_set, 0);
+    will_return(dss_unlock, 0);
+    rc = object_md_del(NULL, &xfer);
+    assert_int_equal(rc, 0);
+}
+
 int main(void)
 {
-    const struct CMUnitTest object_md_save_test_cases[] = {
+    const struct CMUnitTest object_md_test_cases[] = {
         cmocka_unit_test(oms_attrs_to_json_failure),
         cmocka_unit_test(oms_dss_init_lock_owner_failure),
         cmocka_unit_test(oms_dss_lock_failure),
@@ -429,7 +777,20 @@ int main(void)
         cmocka_unit_test(oms_success_without_overwrite),
         cmocka_unit_test(oms_success_with_fake_overwrite),
         cmocka_unit_test(oms_success_with_overwrite),
+
+        cmocka_unit_test(omd_dss_filter_build_for_get_failure),
+        cmocka_unit_test(omd_dss_init_lock_owner_failure),
+        cmocka_unit_test(omd_dss_lock_failure),
+        cmocka_unit_test(omd_dss_object_get_failure),
+        cmocka_unit_test(omd_dss_filter_build_for_deprec_failure),
+        cmocka_unit_test(omd_dss_deprecated_object_get_failure),
+        cmocka_unit_test(omd_dss_filter_build_for_layout_failure),
+        cmocka_unit_test(omd_dss_layout_get_failure),
+        cmocka_unit_test(omd_dss_object_set_failure),
+        cmocka_unit_test(omd_dss_object_move_failure),
+        cmocka_unit_test(omd_dss_unlock_failure),
+        cmocka_unit_test(omd_success),
     };
 
-    return cmocka_run_group_tests(object_md_save_test_cases, NULL, NULL);
+    return cmocka_run_group_tests(object_md_test_cases, NULL, NULL);
 }
