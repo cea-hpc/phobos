@@ -517,7 +517,7 @@ static int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 
     /* Then the rollback can safely happen */
     pho_verb("Rolling back obj oid:'%s', obj uuid:'%s' and obj version:'%d' "
-             "from DSS", prev_obj->oid, prev_obj->uuid, prev_obj->version);
+             "from DSS", obj->oid, obj->uuid, obj->version);
     rc = dss_object_set(dss, obj, 1, DSS_SET_DELETE);
     if (rc)
         LOG_GOTO(out_res, rc, "dss_object_set failed for objid:'%s'",
