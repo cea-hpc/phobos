@@ -210,17 +210,16 @@ static void test_lib_adapter(void)
         rc = ldm_lib_drive_lookup(&lib, one_serial, &drv_info);
         if (rc)
             exit(EXIT_FAILURE);
+        /* unload the drive to any slot if it's full */
+        if (drv_info.ldi_full) {
+            rc = ldm_lib_media_move(&lib, &drv_info.ldi_addr, NULL);
+            if (rc)
+                exit(EXIT_FAILURE);
+        }
     }
 
     if (one_label) {
         rc = ldm_lib_media_lookup(&lib, one_label, &med_addr);
-        if (rc)
-            exit(EXIT_FAILURE);
-    }
-
-    /* unload the drive to any slot if it's full */
-    if (one_serial && drv_info.ldi_full) {
-        rc = ldm_lib_media_move(&lib, &drv_info.ldi_addr, NULL);
         if (rc)
             exit(EXIT_FAILURE);
     }
