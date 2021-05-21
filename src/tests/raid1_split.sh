@@ -24,9 +24,10 @@
 # This integration script tests the raid1 layout on a split case.
 #
 # put and get the object content "AAAABBBB" with a replica-count of 2 on :
-# medium 1 : [AAAABBBB]
+# medium 1 : [AAAA]
 # medium 2 : [AAAA]
 # medium 3 : [BBBB]
+# medium 4 : [BBBB]
 
 set -xe
 
@@ -42,12 +43,15 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
 
+test_raid1_split_locate_bin=$test_dir/test_raid1_split_locate
+
 IN_FILE=/tmp/raid1_split_in_file
 OUT_FILE=/tmp/raid1_split_out_file
 OBJECT=raid1_split_test
 DIR1=/tmp/raid1_split_testdir1
 DIR2=/tmp/raid1_split_testdir2
 DIR3=/tmp/raid1_split_testdir3
+DIR4=/tmp/raid1_split_testdir4
 PART1_SIZE=1024
 PART2_SIZE=1024
 ((FULL_SIZE=PART1_SIZE + PART2_SIZE))
@@ -61,19 +65,24 @@ function insert_dir
 insert into device (family, model, id, host, adm_status, path)
     values ('dir', NULL, '$host:$DIR1', '$host', 'unlocked', '$DIR1'),
            ('dir', NULL, '$host:$DIR2', '$host', 'unlocked', '$DIR2'),
-           ('dir', NULL, '$host:$DIR3', '$host', 'unlocked', '$DIR3');
+           ('dir', NULL, '$host:$DIR3', '$host', 'unlocked', '$DIR3'),
+           ('dir', NULL, '$host:$DIR4', '$host', 'unlocked', '$DIR4');
 
 insert into media (family, model, id, adm_status, fs_type, address_type,
                    fs_status, stats, tags)
     values ('dir', NULL, '$DIR1', 'unlocked', 'POSIX', 'HASH1', 'empty',
             '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0,\
-              "phys_spc_free":$FULL_SIZE, "nb_load":0, "nb_errors":0,\
+              "phys_spc_free":$PART1_SIZE, "nb_load":0, "nb_errors":0,\
               "last_load":0}', '[]'),
            ('dir', NULL, '$DIR2', 'unlocked', 'POSIX', 'HASH1', 'empty',
             '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0,\
               "phys_spc_free":$PART1_SIZE, "nb_load":0, "nb_errors":0,\
                "last_load":0}', '[]'),
            ('dir', NULL, '$DIR3', 'unlocked', 'POSIX', 'HASH1', 'empty',
+            '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0,\
+              "phys_spc_free":$PART2_SIZE, "nb_load":0, "nb_errors":0,\
+              "last_load":0}', '[]'),
+           ('dir', NULL, '$DIR4', 'unlocked', 'POSIX', 'HASH1', 'empty',
             '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0,\
               "phys_spc_free":$PART2_SIZE, "nb_load":0, "nb_errors":0,\
               "last_load":0}', '[]');
@@ -83,14 +92,14 @@ EOF
 
 function dir_setup
 {
-    rm -rf $DIR1 $DIR2 $DIR3
-    mkdir -p $DIR1 $DIR2 $DIR3
+    rm -rf $DIR1 $DIR2 $DIR3 $DIR4
+    mkdir -p $DIR1 $DIR2 $DIR3 $DIR4
 }
 
 function cleanup
 {
     waive_daemon
-    rm -rf $DIR1 $DIR2 $DIR3
+    rm -rf $DIR1 $DIR2 $DIR3 $DIR4
     rm -rf $IN_FILE $OUT_FILE
     drop_tables
 }
@@ -120,6 +129,9 @@ $LOG_VALG $phobos --verbose get $OBJECT $OUT_FILE
 
 # check got file
 cmp $IN_FILE $OUT_FILE
+
+# test locate
+$test_raid1_split_locate_bin $OBJECT
 
 trap - EXIT
 cleanup || true

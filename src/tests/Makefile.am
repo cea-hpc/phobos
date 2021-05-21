@@ -1,4 +1,5 @@
-AM_CFLAGS= $(CC_OPT)
+AM_CFLAGS= $(CC_OPT) @CMOCKA_CFLAGS@
+AM_LDFLAGS=@CMOCKA_LIBS@
 
 # autotools automatically generate a 'make check' target that:
 # 1) build check_PROGRAMS
@@ -7,7 +8,7 @@ check_PROGRAMS=test_common test_attrs test_mapper test_log test_store	\
 	       test_dss test_cfg test_scsi test_scsi_scan test_dev_tape \
 	       test_ldm test_type_utils test_store_retry test_io \
 	       test_communication test_bad_comm test_store_alias test_delete \
-	       test_undelete
+	       test_undelete test_raid1_split_locate
 
 # 1st step: low level tests
 UNIT_TESTS=test_common test_attrs test_mapper test_log test_cfg test_dev_tape \
@@ -91,6 +92,11 @@ test_delete_LDADD=../store/libphobos_store.la
 
 test_undelete_SOURCES=test_undelete.c
 test_undelete_LDADD=../store/libphobos_store.la
+
+test_raid1_split_locate_SOURCES=test_raid1_split_locate.c
+test_raid1_split_locate_LDADD=../cfg/libpho_cfg.la ../common/libpho_common.la \
+                              ../dss/libpho_dss.la \
+                              ../layout-modules/libpho_layout_raid1.la
 
 @VALGRIND_CHECK_RULES@
 VALGRIND_SUPPRESSIONS_FILES=supp-files/valgrind.supp supp-files/glib.supp

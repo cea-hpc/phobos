@@ -1,5 +1,7 @@
 AM_CFLAGS= $(CC_OPT)
 
+noinst_HEADERS=raid1.h
+
 pkglib_LTLIBRARIES=libpho_layout_simple.la
 libpho_layout_simple_la_SOURCES=simple.c
 libpho_layout_simple_la_CFLAGS=-fPIC $(AM_CFLAGS)
