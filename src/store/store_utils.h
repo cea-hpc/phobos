@@ -30,5 +30,6 @@
 
 int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer);
 int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer);
+int object_md_get(struct dss_handle *dss, struct pho_xfer_desc *xfer);
 
 #endif

@@ -23,244 +23,303 @@
  * \brief  Tests for dss_lazy_find_object function
  */
 
-/* phobos stuff */
-#include "pho_dss.h"
-#include "pho_types.h"
-#include "pho_type_utils.h"
 #include "test_setup.h"
 
-/* standard stuff */
-#include <errno.h>
-#include <stdlib.h>
-#include <unistd.h>
-
-/* cmocka stuff */
+#include <assert.h>
 #include <setjmp.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stddef.h>
+
+#include "../../store/store_utils.h"
+#include "pho_dss.h"
+#include "pho_type_utils.h"
+
+#include <stdlib.h> /* malloc, setenv, unsetenv */
+#include <unistd.h> /* execl, exit, fork */
+#include <sys/wait.h> /* wait */
 #include <cmocka.h>
 
-#define ASSERT_OID_UUID_VERSION(_obj_1, _obj_2)             \
-do {                                                        \
-    assert_string_equal((_obj_1).oid, (_obj_2).oid);        \
-    assert_string_equal((_obj_1).uuid, (_obj_2).uuid);      \
-    assert_int_equal((_obj_1).version, (_obj_2).version);   \
-} while (0)
+struct test_state {
+    struct dss_handle *dss;
+    struct object_info obj[9];
+} global_state;
 
-#define BAD_VERSION_SHIFT 77
-#define FIRST_UUID "uuid"
-#define SECOND_UUID "new_uuid"
-
-static void check_oid_uuid_version(struct dss_handle *dss,
-                                   struct object_info obj)
+static int insert_state_obj(struct test_state *state, int index,
+                            char *oid, char *uuid, int version, char *user_md)
 {
-    struct object_info *found_obj;
+    struct object_info *obj = state->obj + index;
     int rc;
 
-    /* oid: ok */
-    rc = dss_lazy_find_object(dss, obj.oid, NULL, 0, &found_obj);
-    assert_return_code(rc, -rc);
-    ASSERT_OID_UUID_VERSION(*found_obj, obj);
-    object_info_free(found_obj);
+    obj->oid = oid;
+    obj->uuid = uuid;
+    obj->version = version;
+    obj->user_md = user_md;
 
-    /* oid, version: ok */
-    rc = dss_lazy_find_object(dss, obj.oid, NULL, obj.version, &found_obj);
-    assert_return_code(rc, -rc);
-    ASSERT_OID_UUID_VERSION(*found_obj, obj);
-    object_info_free(found_obj);
+    rc = dss_object_set(state->dss, obj, 1, DSS_SET_FULL_INSERT);
+    if (rc)
+        return -1;
 
-    /* uuid: ok */
-    rc = dss_lazy_find_object(dss, NULL, obj.uuid, 0, &found_obj);
-    assert_return_code(rc, -rc);
-    ASSERT_OID_UUID_VERSION(*found_obj, obj);
-    object_info_free(found_obj);
-
-    /* uuid, version: ok */
-    rc = dss_lazy_find_object(dss, NULL, obj.uuid, obj.version, &found_obj);
-    assert_return_code(rc, -rc);
-    ASSERT_OID_UUID_VERSION(*found_obj, obj);
-    object_info_free(found_obj);
-
-    /* oid, uuid: ok */
-    rc = dss_lazy_find_object(dss, obj.oid, obj.uuid, 0, &found_obj);
-    assert_return_code(rc, -rc);
-    ASSERT_OID_UUID_VERSION(*found_obj, obj);
-    object_info_free(found_obj);
-
-    /* oid, uuid, version: ok */
-    rc = dss_lazy_find_object(dss, obj.oid, obj.uuid, obj.version, &found_obj);
-    assert_return_code(rc, -rc);
-    ASSERT_OID_UUID_VERSION(*found_obj, obj);
-    object_info_free(found_obj);
-
-    /* bad oid: ENOENT */
-    rc = dss_lazy_find_object(dss, "bad", NULL, 0, &found_obj);
-    assert_int_equal(rc, -ENOENT);
-
-    /* bad uuid: ENOENT */
-    rc = dss_lazy_find_object(dss, NULL, "bad", 0, &found_obj);
-    assert_int_equal(rc, -ENOENT);
-
-    /* oid, bad uuid: ENOENT */
-    rc = dss_lazy_find_object(dss, obj.oid, "bad", 0, &found_obj);
-    assert_int_equal(rc, -ENOENT);
-
-    /* bad oid, uuid: ENOENT */
-    rc = dss_lazy_find_object(dss, "bad", obj.uuid, 0, &found_obj);
-    assert_int_equal(rc, -ENOENT);
-
-    /* oid, bad version: ENOENT */
-    rc = dss_lazy_find_object(dss, obj.oid, NULL,
-                              obj.version + BAD_VERSION_SHIFT, &found_obj);
-    assert_int_equal(rc, -ENOENT);
-
-    /* uuid, bad version: ENOENT */
-    rc = dss_lazy_find_object(dss, NULL, obj.uuid,
-                              obj.version + BAD_VERSION_SHIFT, &found_obj);
-    assert_int_equal(rc, -ENOENT);
-
-    /* oid, uuid, bad version: ENOENT */
-    rc = dss_lazy_find_object(dss, obj.oid, obj.uuid,
-                              obj.version + BAD_VERSION_SHIFT, &found_obj);
-    assert_int_equal(rc, -ENOENT);
+    return 0;
 }
 
-static void two_versions_check_oid_uuid_version(struct dss_handle *dss,
-                                                struct object_info obj)
+static int move_state_object_to_deprecated(struct test_state *state, int index)
 {
-    struct object_info *found_obj;
+    struct object_info *obj = state->obj + index;
     int rc;
 
-    /* find new version */
-    check_oid_uuid_version(dss, obj);
-    obj.version -= 1;
-    /* find old version */
-    /* oid, version: ok */
-    rc = dss_lazy_find_object(dss, obj.oid, NULL, obj.version, &found_obj);
-    assert_return_code(rc, -rc);
-    ASSERT_OID_UUID_VERSION(*found_obj, obj);
-    object_info_free(found_obj);
+    rc = dss_object_move(state->dss, DSS_OBJECT, DSS_DEPREC, obj, 1);
+    if (rc)
+        return -1;
 
-    /* uuid, version: ok */
-    rc = dss_lazy_find_object(dss, NULL, obj.uuid, obj.version, &found_obj);
-    assert_return_code(rc, -rc);
-    ASSERT_OID_UUID_VERSION(*found_obj, obj);
-    object_info_free(found_obj);
-
-    /* oid, uuid, version: ok */
-    rc = dss_lazy_find_object(dss, obj.oid, obj.uuid, obj.version, &found_obj);
-    assert_return_code(rc, -rc);
-    ASSERT_OID_UUID_VERSION(*found_obj, obj);
-    object_info_free(found_obj);
+    return 0;
 }
 
-/* test dss_lazy_find_object */
-static void test_dlfo(void **state)
+static int dlfo_setup(void **state)
 {
-    struct dss_handle *dss = (struct dss_handle *)*state;
-    struct object_info *found_obj;
-    struct object_info obj = {
-        .oid = "oid",
-        .uuid = FIRST_UUID,
-        .version = 1,
-        .user_md = "{}"
-    };
     int rc;
 
-    /********************************/
-    /* one object into object table */
-    /********************************/
-    rc = dss_object_set(dss, &obj, 1, DSS_SET_FULL_INSERT);
+    *state = &global_state;
+
+    rc = global_setup_dss((void **)&global_state.dss);
+    if (rc)
+        return -1;
+
+    rc = insert_state_obj(&global_state, 0, "oid1", "uuid1", 1,
+                          "{\"titi\": \"tutu\"}");
+    if (rc)
+        return -1;
+    rc = move_state_object_to_deprecated(&global_state, 0);
+    if (rc)
+        return -1;
+
+    rc = insert_state_obj(&global_state, 1, "oid1", "uuid1", 2,
+                          "{\"titi\": \"toto\"}");
+    if (rc)
+        return -1;
+    rc = move_state_object_to_deprecated(&global_state, 1);
+    if (rc)
+        return -1;
+
+    rc = insert_state_obj(&global_state, 2, "oid1", "uuid2", 3,
+                          "{\"titi\": \"tata\"}");
+    if (rc)
+        return -1;
+    rc = move_state_object_to_deprecated(&global_state, 2);
+    if (rc)
+        return -1;
+
+    rc = insert_state_obj(&global_state, 3, "oid1", "uuid2", 4,
+                          "{\"toto\": \"titi\"}");
+    if (rc)
+        return -1;
+
+    rc = insert_state_obj(&global_state, 4, "oid2", "uuid3", 1,
+                          "{\"titi\": \"tutu\"}");
+    if (rc)
+        return -1;
+    rc = move_state_object_to_deprecated(&global_state, 4);
+    if (rc)
+        return -1;
+
+    rc = insert_state_obj(&global_state, 5, "oid2", "uuid4", 2,
+                          "{\"titi\": \"toto\"}");
+    if (rc)
+        return -1;
+    rc = move_state_object_to_deprecated(&global_state, 5);
+    if (rc)
+        return -1;
+
+    rc = insert_state_obj(&global_state, 6, "oid3", "uuid5", 1,
+                          "{\"titi\": \"tutu\"}");
+    if (rc)
+        return -1;
+    rc = move_state_object_to_deprecated(&global_state, 6);
+    if (rc)
+        return -1;
+
+    rc = insert_state_obj(&global_state, 7, "oid3", "uuid5", 2,
+                          "{\"titi\": \"toto\"}");
+    if (rc)
+        return -1;
+    rc = move_state_object_to_deprecated(&global_state, 7);
+    if (rc)
+        return -1;
+
+    rc = insert_state_obj(&global_state, 8, "oid4", "uuid6", 1,
+                          "{\"no\": \"md\"}");
+    if (rc)
+        return -1;
+    rc = move_state_object_to_deprecated(&global_state, 8);
+
+    return 0;
+}
+
+static int dlfo_teardown(void **void_state)
+{
+    struct test_state *state = (struct test_state *)*void_state;
+    int rc;
+
+    rc = global_teardown_dss((void **)&state->dss);
+    if (rc)
+        return -1;
+
+    return 0;
+}
+
+static void assert_obj_in_state(const struct test_state *state,
+                                int index,
+                                const struct object_info *obj,
+                                int rc)
+{
+    const struct object_info *target = state->obj + index;
+
+    assert_string_equal(target->user_md, obj->user_md);
+    assert_string_equal(target->oid, obj->oid);
+    assert_string_equal(target->uuid, obj->uuid);
+    assert_int_equal(target->version, obj->version);
     assert_return_code(rc, -rc);
-    check_oid_uuid_version(dss, obj);
+}
 
-    /*******************************************/
-    /* one object into deprecated_object table */
-    /*******************************************/
-    /* move to deprecated_object */
-    rc = dss_object_move(dss, DSS_OBJECT, DSS_DEPREC, &obj, 1);
-    assert_return_code(rc, -rc);
-    check_oid_uuid_version(dss, obj);
+static void get_obj_and_check_res(struct test_state *state, int index,
+                                   char *oid, char *uuid, int version)
+{
+    struct object_info *obj;
+    int rc;
 
-    /******************************************************/
-    /* one object into object and deprecated_object table */
-    /******************************************************/
-    /* add a new living version */
-    obj.version += 1;
-    rc = dss_object_set(dss, &obj, 1, DSS_SET_FULL_INSERT);
-    assert_return_code(rc, -rc);
-    two_versions_check_oid_uuid_version(dss, obj);
+    rc = dss_lazy_find_object(state->dss, oid, uuid, version, &obj);
+    assert_obj_in_state(state, index, obj, rc);
+    object_info_free(obj);
+}
 
-    /********************************************/
-    /* two objects into deprecated_object table */
-    /********************************************/
-    /* move new version to deprecated */
-    rc = dss_object_move(dss, DSS_OBJECT, DSS_DEPREC, &obj, 1);
-    assert_return_code(rc, -rc);
-    two_versions_check_oid_uuid_version(dss, obj);
+static void check_dlfo_fails_with_rc(struct test_state *state,
+                                    char *oid, char *uuid, int version,
+                                    int expected_rc)
+{
+    struct object_info *obj;
+    int rc;
 
-    /*************************************************************************/
-    /* two objects into deprecated_object table and one new uuid into object */
-    /*************************************************************************/
-    /* add new object with same oid but new uuid */
-    obj.version = 1;
-    obj.uuid = SECOND_UUID;
-    rc = dss_object_set(dss, &obj, 1, DSS_SET_FULL_INSERT);
-    assert_return_code(rc, -rc);
-    check_oid_uuid_version(dss, obj);
+    rc = dss_lazy_find_object(state->dss, oid, uuid, version, &obj);
+    assert_int_equal(rc, expected_rc);
+}
 
-    obj.uuid = FIRST_UUID;
-    /* first_uuid, version: ok */
-    rc = dss_lazy_find_object(dss, NULL, obj.uuid, obj.version, &found_obj);
-    assert_return_code(rc, -rc);
-    ASSERT_OID_UUID_VERSION(*found_obj, obj);
-    object_info_free(found_obj);
+/*
+ * Table's State:
+ *
+ * +--------+------+-------+---------+------------+--------------------+
+ * | status | oid  | uuid  | version | used_md    | global_state index |
+ * +--------+------+-------+---------+------------+--------------------+
+ * | deprec | oid4 | uuid6 | 1       | no: md     | 8                  |
+ * +--------+------+-------+---------+------------+--------------------+
+ * | deprec | oid3 | uuid5 | 2       | titi: toto | 7                  |
+ * | deprec | oid3 | uuid5 | 1       | titi: tutu | 6                  |
+ * +--------+------+-------+---------+------------+--------------------+
+ * | deprec | oid2 | uuid4 | 2       | titi: toto | 5                  |
+ * | deprec | oid2 | uuid3 | 1       | titi: tutu | 4                  |
+ * +--------+------+-------+---------+------------+--------------------+
+ * | alive  | oid1 | uuid2 | 4       | toto: titi | 3                  |
+ * | deprec | oid1 | uuid2 | 3       | titi: tata | 2                  |
+ * | deprec | oid1 | uuid1 | 2       | titi: toto | 1                  |
+ * | deprec | oid1 | uuid1 | 1       | titi: tutu | 0                  |
+ * +--------+------+-------+---------+------------+--------------------+
+ */
+static void dlfo_alive_object(void **void_state)
+{
+    struct test_state *state = (struct test_state *)*void_state;
 
-    /* oid, first_uuid, version: ok */
-    rc = dss_lazy_find_object(dss, obj.oid, obj.uuid, obj.version, &found_obj);
-    assert_return_code(rc, -rc);
-    ASSERT_OID_UUID_VERSION(*found_obj, obj);
-    object_info_free(found_obj);
+    get_obj_and_check_res(state, 3, "oid1",    NULL, 0);
+    get_obj_and_check_res(state, 3, "oid1",    NULL, 4);
+    get_obj_and_check_res(state, 3, "oid1", "uuid2", 0);
+    get_obj_and_check_res(state, 3, "oid1", "uuid2", 4);
+    get_obj_and_check_res(state, 3,   NULL, "uuid2", 0);
+    get_obj_and_check_res(state, 3,   NULL, "uuid2", 4);
+}
 
-    obj.version += 1;
-    /* first_uuid: ok */
-    rc = dss_lazy_find_object(dss, NULL, obj.uuid, 0, &found_obj);
-    assert_return_code(rc, -rc);
-    ASSERT_OID_UUID_VERSION(*found_obj, obj);
-    object_info_free(found_obj);
+static void dlfo_deprecated_object(void **void_state)
+{
+    struct test_state *state = (struct test_state *)*void_state;
 
-    /***********************************************************************/
-    /* three objects into deprecated_object table (2*1st uuid, 1*2nd uuid) */
-    /***********************************************************************/
-    /* move new uuid to deprecated */
-    obj.version -= 1;
-    obj.uuid = SECOND_UUID;
-    rc = dss_object_move(dss, DSS_OBJECT, DSS_DEPREC, &obj, 1);
-    assert_return_code(rc, -rc);
+    /* current generation's deprecated version */
+    get_obj_and_check_res(state, 2, "oid1", NULL, 3);
 
-    /* oid: EINVAL */
-    rc = dss_lazy_find_object(dss, obj.oid, NULL, 0, &found_obj);
-    assert_int_equal(rc, -EINVAL);
+    /* old generation's deprecated version */
+    check_dlfo_fails_with_rc(state, "oid1", NULL, 1, -ENOENT);
 
-    /* oid, version == 1 : EINVAL */
-    rc = dss_lazy_find_object(dss, obj.oid, NULL, obj.version, &found_obj);
-    assert_int_equal(rc, -EINVAL);
+    /* get most recent object from old generation */
+    get_obj_and_check_res(state, 1, "oid1", "uuid1", 0);
 
-    /* oid, version == 2 : ok */
-    obj.version += 1;
-    obj.uuid = FIRST_UUID;
-    rc = dss_lazy_find_object(dss, obj.oid, NULL, obj.version, &found_obj);
-    assert_return_code(rc, -rc);
-    ASSERT_OID_UUID_VERSION(*found_obj, obj);
-    object_info_free(found_obj);
+    /* correct oid, wrong version */
+    check_dlfo_fails_with_rc(state, "oid1", NULL, 5, -ENOENT);
+
+    /* get version 1 of old generation */
+    get_obj_and_check_res(state, 0, "oid1", "uuid1", 1);
+
+    /* get version 3 of current generation */
+    get_obj_and_check_res(state, 2, "oid1", "uuid2", 3);
+
+    /* get deprecated object without uuid but uuids are not unique */
+    check_dlfo_fails_with_rc(state, "oid2", NULL, 1, -EINVAL);
+
+    /* oid not in alive and no version or uuid */
+    check_dlfo_fails_with_rc(state, "oid2", NULL, 0, -ENOENT);
+
+    /* uuid and not version, oid not in alive should get most recent version */
+    get_obj_and_check_res(state, 7, "oid3", "uuid5", 0);
+
+    /* oid in alive but corresponding object in deprecated */
+    get_obj_and_check_res(state, 0, "oid1", "uuid1", 1);
+
+    /* get deprecated object without uuid and uuids are the same */
+    get_obj_and_check_res(state, 7, "oid3", NULL, 2);
+
+    /* oid not in alive get specific uuid and version */
+    get_obj_and_check_res(state, 6, "oid3", "uuid5", 1);
+
+    /* oid not in alive, version and not uuid get specific version if uuids
+     * are the same.
+     */
+    get_obj_and_check_res(state, 7, "oid3", NULL, 2);
+    get_obj_and_check_res(state, 6, "oid3", NULL, 1);
+    /* fails with wrong version */
+    check_dlfo_fails_with_rc(state, "oid3", NULL, 3, -ENOENT);
+
+    /* no uuid, invalid version on 1 object in deprecated */
+    check_dlfo_fails_with_rc(state, "oid4", NULL, 5, -ENOENT);
+}
+
+static void dlfo_deprecated_object_with_uuid(void **void_state)
+{
+    struct test_state *state = (struct test_state *)*void_state;
+
+    /* previous generation of oid1, most recent */
+    get_obj_and_check_res(state, 1, NULL, "uuid1", 0);
+
+    /* previous generation of oid1, version 1 */
+    get_obj_and_check_res(state, 0, NULL, "uuid1", 1);
+
+    /* previous generation of oid1, invalid version */
+    check_dlfo_fails_with_rc(state, NULL, "uuid1", 4, -ENOENT);
+
+    /* no alive version, only one deprecated */
+    get_obj_and_check_res(state, 8, NULL, "uuid6", 0);
+
+    /* no alive version, two deprecated */
+    get_obj_and_check_res(state, 7, NULL, "uuid5", 0);
+    get_obj_and_check_res(state, 6, NULL, "uuid5", 1);
+
+    /* no alive version, two different deprecated generations */
+    get_obj_and_check_res(state, 5, NULL, "uuid4", 0);
+    get_obj_and_check_res(state, 4, NULL, "uuid3", 0);
 }
 
 int main(void)
 {
-    const struct CMUnitTest dss_lazy_find_object_cases[] = {
-        cmocka_unit_test(test_dlfo),
+    const struct CMUnitTest object_md_save_test_cases[] = {
+        cmocka_unit_test(dlfo_alive_object),
+        cmocka_unit_test(dlfo_deprecated_object),
+        cmocka_unit_test(dlfo_deprecated_object_with_uuid),
     };
 
-    return cmocka_run_group_tests(dss_lazy_find_object_cases, global_setup_dss,
-                                  global_teardown_dss);
+    return cmocka_run_group_tests(object_md_save_test_cases,
+                                  dlfo_setup, dlfo_teardown);
 }

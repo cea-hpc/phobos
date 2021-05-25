@@ -258,7 +258,7 @@ static int encoder_communicate(struct pho_encoder *enc,
  * Retrieve metadata associated with this xfer oid from the DSS and update the
  * \a xfer xd_attrs field accordingly.
  */
-static int object_md_get(struct dss_handle *dss, struct pho_xfer_desc *xfer)
+int object_md_get(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 {
     struct object_info  *obj;
     struct dss_filter    filter;
@@ -819,6 +819,27 @@ out:
     return rc;
 }
 
+static int object_info_copy_into_xfer(struct object_info *obj,
+                                      struct pho_xfer_desc *xfer)
+{
+    int rc;
+
+    rc = pho_json_to_attrs(&xfer->xd_attrs, obj->user_md);
+    if (rc)
+        LOG_RETURN(rc, "Cannot convert attributes of objid: '%s'", obj->oid);
+
+    if (!xfer->xd_objuuid) {
+        xfer->xd_objuuid = strdup_safe(obj->uuid);
+        pho_attrs_free(&xfer->xd_attrs);
+        if (!xfer->xd_objuuid)
+            LOG_RETURN(-ENOMEM, "Unable to duplicate object uuid: %s",
+                       obj->uuid);
+    }
+
+    xfer->xd_version = obj->version;
+    return 0;
+}
+
 /**
  * Initialize an encoder or a decoder to perform \a xfer, according to
  * xfer->xd_op and xfer->xd_flags.
@@ -826,6 +847,7 @@ out:
 static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
                            struct pho_xfer_desc *xfer)
 {
+    struct object_info *obj;
     int rc;
 
     if (xfer->xd_op == PHO_XFER_OP_PUT)
@@ -834,7 +856,7 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
 
     /* can't get md for undel without any objid */
     /* TODO: really necessary to create decoder for getmd, del and undel OP ? */
-    if (xfer->xd_op != PHO_XFER_OP_UNDEL) {
+    if (xfer->xd_op != PHO_XFER_OP_UNDEL && xfer->xd_op != PHO_XFER_OP_GET) {
         rc = object_md_get(dss, xfer);
         if (rc)
             LOG_RETURN(rc, "Cannot find metadata for objid:'%s'",
@@ -852,6 +874,19 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
     }
 
     /* Handle decoder creation for GET */
+    if (!xfer->xd_objid && !xfer->xd_objuuid)
+        LOG_RETURN(rc = -EINVAL, "uuid or oid must be provided");
+
+    rc = dss_lazy_find_object(dss, xfer->xd_objid, xfer->xd_objuuid,
+                              xfer->xd_version, &obj);
+    if (rc)
+        LOG_RETURN(rc, "Cannot find metadata for objid:'%s'",
+                   xfer->xd_objid);
+    rc = object_info_copy_into_xfer(obj, xfer);
+    object_info_free(obj);
+    if (rc)
+        return rc;
+
     return decoder_build(enc, xfer, dss);
 }
 
@@ -1357,6 +1392,9 @@ int phobos_locate(const char *oid, const char *uuid, int version,
     int rc;
 
     *hostname = NULL;
+
+    if (!uuid && !oid)
+        LOG_RETURN(rc = -EINVAL, "uuid or oid must be provided");
 
     /* Ensure conf is loaded */
     rc = pho_cfg_init_local(NULL);

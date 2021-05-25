@@ -1792,6 +1792,7 @@ static void _dss_result_free(struct dss_result *dss_res, int item_cnt)
     free(dss_res);
 
 }
+
 static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
                            const struct dss_filter *filter, void **item_list,
                            int *item_cnt)
@@ -2185,128 +2186,187 @@ static void pho_error_oid_uuid_version(int error_code, const char *msg,
     }
 }
 
+static int build_json_filter(char **filter, const char *oid,
+                             const char *uuid, int version)
+{
+    int rc = 0;
+
+    if (uuid && oid) {
+        if (version) {
+            rc = asprintf(filter,
+                          "{\"$AND\": ["
+                              "{\"DSS::OBJ::oid\": \"%s\"},"
+                              "{\"DSS::OBJ::uuid\": \"%s\"},"
+                              "{\"DSS::OBJ::version\": \"%d\"}"
+                          "]}",
+                          oid, uuid, version);
+        } else {
+            rc = asprintf(filter,
+                          "{\"$AND\": ["
+                              "{\"DSS::OBJ::oid\": \"%s\"},"
+                              "{\"DSS::OBJ::uuid\": \"%s\"}"
+                          "]}",
+                          oid, uuid);
+        }
+    } else {
+        if (version && !oid) {
+            rc = asprintf(filter,
+                          "{\"$AND\": ["
+                              "{\"DSS::OBJ::uuid\": \"%s\"},"
+                              "{\"DSS::OBJ::version\": \"%d\"}"
+                          "]}",
+                          uuid, version);
+        } else {
+            rc = asprintf(filter, "{\"DSS::OBJ::%s\": \"%s\"}",
+                          oid ? "oid" : "uuid", oid ? : uuid);
+        }
+    }
+    return rc;
+}
+
+static int lazy_find_deprecated_object(struct dss_handle *hdl,
+                                       const char *oid, const char *uuid,
+                                       int version, struct object_info **obj)
+{
+    struct object_info *obj_iter;
+    struct object_info *obj_list;
+    struct dss_filter filter;
+    struct object_info *curr;
+    char *json_filter;
+    int obj_cnt;
+    int rc;
+
+    ENTRY;
+
+    rc = build_json_filter(&json_filter, oid, uuid, version);
+    if (rc < 0)
+        LOG_RETURN(rc = -ENOMEM, "Cannot allocate filter string");
+
+    rc = dss_filter_build(&filter, json_filter);
+    free(json_filter);
+    if (rc)
+        LOG_RETURN(rc, "Cannot build filter");
+
+    rc = dss_deprecated_object_get(hdl, &filter, &obj_list, &obj_cnt);
+    dss_filter_free(&filter);
+    if (rc) {
+        pho_error_oid_uuid_version(rc, "Unable to get deprecated object",
+                                   oid, uuid, version);
+        return rc;
+    }
+
+    if (obj_cnt == 0)
+        LOG_GOTO(out_free, rc = -ENOENT, "No object found");
+
+    curr = obj_list;
+    if (obj_cnt > 1) {
+        /* search the most recent object or the one matching
+         * version if != 0.
+         */
+        for (obj_iter = obj_list + 1; obj_iter != obj_list + obj_cnt;
+             ++obj_iter) {
+            /* check unicity of uuid */
+            if (!uuid && strcmp(curr->uuid, obj_iter->uuid))
+                LOG_GOTO(out_free, rc = -EINVAL,
+                        "Multiple deprecated uuids found "
+                        "%s and %s",
+                        curr->uuid, obj_iter->uuid);
+
+            if (!version && curr->version < obj_iter->version)
+                /* we found a more recent object */
+                curr = obj_iter;
+            else if (version == obj_iter->version)
+                /* we found the matching version */
+                curr = obj_iter;
+        }
+    }
+
+    if (version != 0 && curr->version != version)
+        LOG_GOTO(out_free, rc = -ENOENT, "No matching version found");
+
+    *obj = object_info_dup(curr);
+    if (!*obj)
+        pho_error(rc = -ENOMEM, "Unable to duplicate found object (oid %s, "
+                                "uuid %s, version %d)",
+                  obj_list->oid, obj_list->uuid, obj_list->version);
+
+out_free:
+    dss_res_free(obj_list, obj_cnt);
+    return rc;
+}
+
 int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
                          const char *uuid, int version,
                          struct object_info **obj)
 {
     struct object_info *obj_list = NULL;
     struct dss_filter filter;
-    char *filter_str = NULL;
+    char *json_filter;
     int obj_cnt;
-    int target;
     int rc;
-    int i;
 
-    *obj = NULL;
+    ENTRY;
 
-    /* build oid and uuid filter */
-    if (oid && uuid) {
-        if (version) {
-            rc = asprintf(&filter_str,
-                          "{\"$AND\": ["
-                              "{\"DSS::OBJ::oid\": \"%s\"}, "
-                              "{\"DSS::OBJ::uuid\": \"%s\"}, "
-                              "{\"DSS::OBJ::version\": \"%d\"}"
-                              "]}",
-                          oid, uuid, version);
-        } else {
-            rc = asprintf(&filter_str,
-                          "{\"$AND\": ["
-                              "{\"DSS::OBJ::oid\": \"%s\"}, "
-                              "{\"DSS::OBJ::uuid\": \"%s\"}"
-                          "]}",
-                          oid, uuid);
-        }
-    /* build oid or uuid filter */
-    } else {
-        if (version) {
-            rc = asprintf(&filter_str,
-                          "{\"$AND\": ["
-                              "{\"DSS::OBJ::%s\": \"%s\"}, "
-                              "{\"DSS::OBJ::version\": \"%d\"}"
-                          "]}",
-                          oid ? "oid" : "uuid", oid ? : uuid, version);
-        } else {
-            rc = asprintf(&filter_str,
-                          "{\"DSS::OBJ::%s\": \"%s\"}",
-                          oid ? "oid" : "uuid", oid ? : uuid);
-        }
-    }
-
+    rc = build_json_filter(&json_filter, oid, uuid, version);
     if (rc < 0)
-        LOG_RETURN(-ENOMEM, "Unable to build filter string");
+        LOG_RETURN(rc = -ENOMEM, "Cannot allocate filter string");
 
-    rc = dss_filter_build(&filter, filter_str);
+    rc = dss_filter_build(&filter, json_filter);
+    free(json_filter);
     if (rc)
-        LOG_GOTO(clean, rc, "Unable to build filter: %s", filter_str);
+        LOG_RETURN(rc, "Cannot build filter");
 
-    /* search for oid/uuid into living object */
     rc = dss_object_get(hdl, &filter, &obj_list, &obj_cnt);
-    if (rc) {
-        pho_error_oid_uuid_version(rc, "Unable to get living object",
-                                   oid, uuid, version);
-        goto clean;
-    }
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc, "Cannot fetch objid: '%s'", oid);
 
-    /* we get one living object */
-    if (obj_cnt) {
-        assert(obj_cnt == 1);
+    assert(obj_cnt <= 1);
+
+    /* If an object was found in the object table, we try to match it with the
+     * given uuid and/or version. Otherwise, we look in the deprecated_object
+     * table.
+     */
+    if (obj_cnt == 1 &&
+        /* If the oid is not provided, the uuid is and the filter
+         * will handle the version. No need to check.
+         */
+        ((!oid) ||
+         /* If oid is provided, the filter will handle the uuid,
+          * but the version is not necessarily used in the filter.
+          * Check that the version is correct.
+          */
+         (oid && (!version || version == obj_list->version)))) {
+
         *obj = object_info_dup(obj_list);
         if (!*obj)
-            LOG_GOTO(clean, rc = -ENOMEM,
-                     "Unable to duplicate found object (oid %s, uuid %s, "
-                     "version %d)",
+            LOG_GOTO(out_free, rc = -ENOMEM,
+                     "Unable to duplicate found object (oid %s, "
+                     "uuid %s, version %d)",
                      obj_list->oid, obj_list->uuid, obj_list->version);
+    } else {
+        if (obj_cnt == 1) {
+            /* Target the current generation if uuid not provided.
+             * At this point, version != 0.
+             */
+            if (!uuid)
+                uuid = obj_list->uuid;
+        }
 
-        /* success */
-        goto clean;
+        if (version || uuid) {
+            rc = lazy_find_deprecated_object(hdl, oid, uuid, version, obj);
+            if (rc == -ENOENT)
+                LOG_GOTO(out_free, rc, "No such object objid: '%s'", oid);
+            else if (rc)
+                LOG_GOTO(out_free, rc, "Error while trying to get object: '%s'",
+                         oid);
+        } else {
+            LOG_GOTO(out_free, rc = -ENOENT, "No such object objid: '%s'", oid);
+        }
     }
 
+out_free:
     dss_res_free(obj_list, obj_cnt);
-    /* check for deprecated object */
-    rc = dss_deprecated_object_get(hdl, &filter, &obj_list, &obj_cnt);
-    if (rc) {
-        pho_error_oid_uuid_version(rc, "Unable to get deprecated object",
-                                   oid, uuid, version);
-        goto clean;
-    }
-
-    /* no object found */
-    if (obj_cnt == 0) {
-        pho_error_oid_uuid_version(-ENOENT, "No object found",
-                                   oid, uuid, version);
-        GOTO(clean, rc = -ENOENT);
-    }
-
-    /* find oid/uuid and max_version */
-    target = 0;
-    for (i = 1; i < obj_cnt; i++) {
-        /* check unicity of uuid */
-        if (!uuid)
-            if (strcmp(obj_list[target].uuid, obj_list[i].uuid))
-                LOG_GOTO(clean, rc = -EINVAL,
-                         "object oid %s has multiple deprecated uuids as "
-                         "%s and %s",
-                         oid, obj_list[target].uuid, obj_list[i].uuid);
-
-        /* update version */
-        if (obj_list[target].version < obj_list[i].version)
-            target = i;
-    }
-
-    *obj = object_info_dup(&obj_list[target]);
-    if (!*obj)
-        LOG_GOTO(clean, rc = -ENOMEM,
-                 "Unable to duplicate found object (oid %s, uuid %s, "
-                 "version %d)",
-                 obj_list[target].oid, obj_list[target].uuid,
-                 obj_list[target].version);
-
-clean:
-    free(filter_str);
-    dss_filter_free(&filter);
-    dss_res_free(obj_list, obj_cnt);
-
     return rc;
 }
 

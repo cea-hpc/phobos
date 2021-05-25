@@ -160,17 +160,20 @@ static void pl_enoent(void **state)
     assert_int_equal(rc, -ENOENT);
 }
 
-static void pl_hostname(const char *expected_hostname, void **state)
+static void pl_hostname(const char *expected_hostname, void **state,
+                        bool alive)
 {
     struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
     char *hostname;
     int rc;
 
     /* oid */
-    rc = phobos_locate(pl_state->objs[0].oid, NULL, 0, &hostname);
-    assert_return_code(rc, -rc);
-    assert_string_equal(expected_hostname, hostname);
-    free(hostname);
+    if (alive) {
+        rc = phobos_locate(pl_state->objs[0].oid, NULL, 0, &hostname);
+        assert_return_code(rc, -rc);
+        assert_string_equal(expected_hostname, hostname);
+        free(hostname);
+    }
 
     /* oid, version */
     rc = phobos_locate(pl_state->objs[0].oid, NULL, pl_state->objs[0].version,
@@ -217,9 +220,12 @@ static void pl(void **state)
     struct pho_xfer_desc xfer;
     struct dss_filter filter;
     struct pho_id medium_id;
+    char *hostname;
     int cnt;
     int rc;
 
+    rc = phobos_locate(NULL, NULL, 1, &hostname);
+    assert_int_equal(rc, -EINVAL);
 
     /* check ENOENT from object table */
     pl_enoent(state);
@@ -227,7 +233,7 @@ static void pl(void **state)
     /* locate local hostname in object table */
     myself_hostname = get_hostname();
     assert_non_null(myself_hostname);
-    pl_hostname(myself_hostname, state);
+    pl_hostname(myself_hostname, state, true);
 
     /* lock media from other owner */
     rc = dss_filter_build(&filter,
@@ -262,7 +268,7 @@ static void pl(void **state)
     assert_return_code(rc, -rc);
     /* locate with lock */
     pl_enoent(state);
-    pl_hostname(HOSTNAME, state);
+    pl_hostname(HOSTNAME, state, true);
 
 
     /* move object to deprecated table */
@@ -274,13 +280,13 @@ static void pl(void **state)
     pl_enoent(state);
 
     /* locate with lock in deprecated table */
-    pl_hostname(HOSTNAME, state);
+    pl_hostname(HOSTNAME, state, false);
     /* free lock on medium */
     rc = dss_unlock(pl_state->dss, DSS_MEDIA, medium, cnt, NULL);
     dss_res_free(medium, cnt);
     assert_return_code(rc, -rc);
     /* locate without any lock in deprecated table */
-    pl_hostname(myself_hostname, state);
+    pl_hostname(myself_hostname, state, false);
 }
 
 static int pl_teardown(void **state)
@@ -319,9 +325,7 @@ int main(int argc, char **argv)
     }
 
     const struct CMUnitTest phobos_locate_cases[] = {
-        cmocka_unit_test_setup_teardown(pl,
-                                        pl_setup,
-                                        pl_teardown),
+        cmocka_unit_test_setup_teardown(pl, pl_setup, pl_teardown),
     };
 
     return cmocka_run_group_tests(phobos_locate_cases, global_setup,
