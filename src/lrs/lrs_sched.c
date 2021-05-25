@@ -122,9 +122,8 @@ static int check_dev_info(const struct dev_descr *dev)
         else
             pho_debug("%s: no device model is set", dev->dev_path);
 
-    } else if (strcmp(dev->dss_dev_info->rsc.model,
-                      dev->sys_dev_state.lds_model) != 0) {
-        /* @TODO ignore blanks at the end of the model */
+    } else if (cmp_trimmed_strings(dev->dss_dev_info->rsc.model,
+                                   dev->sys_dev_state.lds_model)) {
         LOG_RETURN(-EINVAL, "%s: configured device model '%s' differs from "
                    "actual device model '%s'", dev->dev_path,
                    dev->dss_dev_info->rsc.model, dev->sys_dev_state.lds_model);

@@ -357,3 +357,35 @@ const char *get_hostname()
 
     return host_info.nodename;
 }
+
+/* Returned pointer is part of the given string, so it shouldn't be freed */
+static const char *get_trimmed_string(const char *str, size_t *length)
+{
+    while (isspace(*str))
+        str++;
+    if (*str == '\0')
+        return NULL;
+
+    *length = strlen(str);
+    while (isspace(str[*length - 1]))
+        (*length)--;
+
+    return str;
+}
+
+int cmp_trimmed_strings(const char *first, const char *second)
+{
+    size_t second_len;
+    size_t first_len;
+
+    first = get_trimmed_string(first, &first_len);
+    second = get_trimmed_string(second, &second_len);
+
+    if (first == NULL || second == NULL)
+        return -EINVAL;
+
+    if (first_len != second_len)
+        return -EINVAL;
+
+    return strncmp(first, second, first_len);
+}

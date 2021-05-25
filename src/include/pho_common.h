@@ -268,4 +268,9 @@ static inline bool is_medium_global_error(int errcode)
  */
 const char *get_hostname(void);
 
+/**
+ * Compare trimmed strings
+ */
+int cmp_trimmed_strings(const char *first, const char *second);
+
 #endif
