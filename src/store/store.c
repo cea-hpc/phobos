@@ -158,14 +158,19 @@ static int decoder_build(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
 
     assert(xfer->xd_op == PHO_XFER_OP_GET);
 
-    rc = dss_filter_build(&filter, "{\"DSS::EXT::oid\": \"%s\"}",
-                          xfer->xd_objid);
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                              "{\"DSS::EXT::uuid\": \"%s\"}, "
+                              "{\"DSS::EXT::version\": \"%d\"}"
+                          "]}",
+                          xfer->xd_objuuid, xfer->xd_version);
     if (rc)
-        return rc;
+        LOG_RETURN(rc, "Cannot build filter");
 
     rc = dss_layout_get(dss, &filter, &layout, &cnt);
+    dss_filter_free(&filter);
     if (rc)
-        GOTO(err_nores, rc);
+        GOTO(err, rc);
 
     if (cnt == 0)
         GOTO(err, rc = -ENOENT);
@@ -178,9 +183,6 @@ static int decoder_build(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
 err:
     if (rc)
         dss_res_free(layout, cnt);
-
-err_nores:
-    dss_filter_free(&filter);
     return rc;
 }
 
