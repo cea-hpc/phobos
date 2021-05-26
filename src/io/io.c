@@ -74,7 +74,7 @@ static char *pho_posix_fullpath(const struct pho_ext_loc *loc)
 {
     char *p;
 
-    switch (loc->extent->addr_type) {
+    switch (loc->addr_type) {
     case PHO_ADDR_PATH:
     case PHO_ADDR_HASH1:
         if (loc->extent->address.buff == NULL)
@@ -671,7 +671,7 @@ static int pho_posix_open(const char *extent_key, const char *extent_desc,
             LOG_RETURN(-EINVAL, "Object has no address stored in database");
 
         rc = pho_posix_set_addr(extent_key, extent_desc,
-                                iod->iod_loc->extent->addr_type,
+                                iod->iod_loc->addr_type,
                                 &iod->iod_loc->extent->address);
         if (rc)
             return rc;

@@ -213,11 +213,11 @@ static int simple_enc_write_chunk(struct pho_encoder *enc,
     extent->size = min(simple->to_write, medium->avail_size);
     extent->media.family = (enum rsc_family)medium->med_id->family;
     pho_id_name_set(&extent->media, medium->med_id->name);
-    extent->addr_type = (enum address_type)medium->addr_type;
     /* and extent.address will be filled by ioa_open */
 
     loc.root_path = medium->root_path;
     loc.extent = extent;
+    loc.addr_type = (enum address_type)medium->addr_type;
 
     iod.iod_flags = PHO_IO_REPLACE | PHO_IO_NO_REUSE;
     iod.iod_size = extent->size;
@@ -317,9 +317,9 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
     if (rc)
         return rc;
 
-    extent->addr_type = (enum address_type)medium->addr_type;
     loc.root_path = medium->root_path;
     loc.extent = extent;
+    loc.addr_type = (enum address_type)medium->addr_type;
 
     iod.iod_fd = dec->xfer->xd_fd;
     if (iod.iod_fd < 0)

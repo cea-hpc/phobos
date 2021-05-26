@@ -618,7 +618,6 @@ class ExtentInfo(Structure): # pylint: disable=too-few-public-methods
         ('size', c_ssize_t),
         ('media', Id),
         ('address', Buffer),
-        ('addr_type', c_int)
     ]
 
 class PhoAttrs(Structure): # pylint: disable=too-few-public-methods

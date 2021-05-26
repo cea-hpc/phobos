@@ -288,7 +288,6 @@ static void set_extent_info(struct extent *extent,
     extent->size = extent_size;
     extent->media.family = (enum rsc_family)medium->med_id->family;
     pho_id_name_set(&extent->media, medium->med_id->name);
-    extent->addr_type = (enum address_type)medium->addr_type;
 }
 
 /**
@@ -454,6 +453,7 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
         /* set loc */
         loc[i].root_path = wresp->media[i]->root_path;
         loc[i].extent = &extent[i];
+        loc[i].addr_type = (enum address_type)wresp->media[i]->addr_type;
         /* set iod */
         iod[i].iod_flags = PHO_IO_REPLACE | PHO_IO_NO_REUSE;
         /* iod[i].iod_fd is replaced by a buffer in open/write/close api */
@@ -576,9 +576,9 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
     if (rc)
         return rc;
 
-    extent->addr_type = (enum address_type)medium->addr_type;
     loc.root_path = medium->root_path;
     loc.extent = extent;
+    loc.addr_type = (enum address_type)medium->addr_type;
 
     iod.iod_fd = dec->xfer->xd_fd;
     if (iod.iod_fd < 0)
