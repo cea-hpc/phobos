@@ -203,17 +203,18 @@ static int add_written_extent(struct raid1_encoder *raid1,
 }
 
 /**
- * Set unsigned int decoder/encoder value from char * layout attr
+ * Set unsigned int replica count value from char * layout attr
  *
  * 0 is not a valid replica count, -EINVAL will be returned.
  *
  * @param[in]  layout     layout with a REPL_COUNT_ATTR_KEY
- * @param[out] raid1      decoder/encoder with repl_count to modify
+ * @param[out] repl_count replica count value to set
  *
- * @return 0 if success, -error_code if failure
+ * @return 0 if success,
+ *         -error_code if failure and \p repl_count value is irrelevant
  */
 static int layout_repl_count(struct layout_info *layout,
-                             struct raid1_encoder *raid1)
+                             unsigned int *repl_count)
 {
     const char *string_repl_count = pho_attr_get(&layout->layout_desc.mod_attrs,
                                                  REPL_COUNT_ATTR_KEY);
@@ -221,12 +222,11 @@ static int layout_repl_count(struct layout_info *layout,
         LOG_RETURN(-EINVAL, "Unable to get replica count from layout attrs");
 
     errno = 0;
-    raid1->repl_count = strtoul(string_repl_count, NULL,
-                                REPL_COUNT_ATTR_VALUE_BASE);
+    *repl_count = strtoul(string_repl_count, NULL, REPL_COUNT_ATTR_VALUE_BASE);
     if (errno != 0)
         return -errno;
 
-    if (!raid1->repl_count)
+    if (!*repl_count)
         LOG_RETURN(-EINVAL, "invalid 0 replica count");
 
     return 0;
@@ -975,7 +975,7 @@ static int layout_raid1_encode(struct pho_encoder *enc)
                        "encoder built");
 
     /* set repl_count in encoder */
-    rc = layout_repl_count(enc->layout, raid1);
+    rc = layout_repl_count(enc->layout, &raid1->repl_count);
     if (rc)
         LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
                        "encoder");
@@ -1039,7 +1039,7 @@ static int layout_raid1_decode(struct pho_encoder *enc)
 
     /* Fill out the encoder appropriately */
     /* set decoder repl_count */
-    rc = layout_repl_count(enc->layout, raid1);
+    rc = layout_repl_count(enc->layout, &raid1->repl_count);
     if (rc)
         LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
                        "decoder");
