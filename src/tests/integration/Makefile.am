@@ -12,7 +12,8 @@ TEST_EXTENSIONS=.sh
 check_PROGRAMS=test_locate medium_locker
 
 check_SCRIPTS=test_delete.sh test_undelete.sh test_put.sh test_object_list.sh \
-	          test_extent_list.sh test_ping.sh test_overwrite.sh test_locate.sh
+	          test_extent_list.sh test_ping.sh test_overwrite.sh \
+	          test_locate.sh test_get.sh
 
 TESTS=$(check_SCRIPTS)
 

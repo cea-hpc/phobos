@@ -1333,6 +1333,25 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
     for (i = 0; i < n; i++) {
         xfers[i].xd_op = PHO_XFER_OP_GET;
         xfers[i].xd_rc = 0;
+        /* If the uuid is given by the user, we don't own that memory.
+         * The simplest solution is to duplicate it here so that it can
+         * be freed at the end by pho_xfer_desc_destroy().
+         *
+         * The user of this function must free any allocated string passed to
+         * the xfer.
+         *
+         * For the Python CLI, the garbage collector will take care of
+         * this pointer.
+         */
+        if (xfers[i].xd_objuuid) {
+            xfers[i].xd_objuuid = strdup_safe(xfers[i].xd_objuuid);
+            if (!xfers[i].xd_objuuid) {
+                size_t j;
+
+                for (j = --i; j >= 0; --j)
+                    free(xfers[i].xd_objuuid);
+            }
+        }
     }
 
     return phobos_xfer(xfers, n, cb, udata);

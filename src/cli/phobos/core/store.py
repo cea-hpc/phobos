@@ -65,7 +65,7 @@ def attrs_as_dict(attrs):
     res = {k.decode('utf-8'): v.decode('utf-8') for k, v in res.items()}
     return res
 
-class XferPutParams(Structure): # pylint: disable=too-few-public-methods,too-many-instance-attributes
+class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-many-instance-attributes
     """Phobos PUT parameters of the XferDescriptor."""
     _fields_ = [
         ("size", c_ssize_t),
@@ -125,7 +125,7 @@ class XferOpParams(Union): # pylint: disable=too-few-public-methods
         ("put", XferPutParams),
     ]
 
-class XferDescriptor(Structure):
+class XferDescriptor(Structure): # pylint: disable=too-many-instance-attributes
     """phobos struct xfer_descriptor."""
     _fields_ = [
         ("_xd_objid", c_char_p),
@@ -145,6 +145,7 @@ class XferDescriptor(Structure):
         self.xd_op = -1
         self.xd_flags = 0
         self.xd_rc = 0
+        self.xd_version = -1
 
     @property
     def xd_objid(self):
@@ -211,7 +212,7 @@ class XferDescriptor(Structure):
         """
         xfer_descriptor initialization by using python-list descriptor.
         It opens the file descriptor of the given path. The python-list
-        contains the tuple (id, path, attrs, flags, op and put-only parameters)
+        contains the tuple (id, path, attrs, flags, put or get parameters, op)
         describing the opened file.
         """
         self.xd_op = desc[5]
@@ -219,6 +220,10 @@ class XferDescriptor(Structure):
             self.xd_params.put = XferPutParams(desc[4]) if \
                                  desc[4] is not None else \
                                  XferPutParams(PutParams())
+        elif self.xd_op == PHO_XFER_OP_GET:
+            self.xd_objuuid = desc[4][0]
+            self.xd_version = desc[4][1]
+
         self.xd_objid = desc[0]
         self.xd_flags = desc[3]
         self.xd_rc = 0
@@ -314,9 +319,9 @@ class XferClient: # pylint: disable=too-many-instance-attributes
         self.getmd_session.append((oid, data_path, attrs, 0, None,
                                    PHO_XFER_OP_GETMD))
 
-    def get_register(self, oid, data_path, attrs=None):
+    def get_register(self, oid, data_path, get_args, attrs=None):
         """Enqueue a GET transfer."""
-        self.get_session.append((oid, data_path, attrs, 0, None,
+        self.get_session.append((oid, data_path, attrs, 0, get_args,
                                  PHO_XFER_OP_GET))
 
     def put_register(self, oid, data_path, attrs=None,

@@ -279,19 +279,40 @@ class StoreGetHandler(XferOptHandler):
         super(StoreGetHandler, cls).add_options(parser)
         parser.add_argument('object_id', help='Object to retrieve')
         parser.add_argument('dest_file', help='Destination file')
+        parser.add_argument('--version', help='Version of the object',
+                            type=int, default=0)
+        parser.add_argument('--uuid', help='UUID of the object')
 
     def exec_get(self):
         """Retrieve an object from backend."""
         oid = self.params.get('object_id')
         dst = self.params.get('dest_file')
+        version = self.params.get('version')
+        uuid = self.params.get('uuid')
         self.logger.debug("Retrieving object 'objid:%s' to '%s'", oid, dst)
-        self.client.get_register(oid, dst)
+        self.client.get_register(oid, dst, (uuid, version))
         try:
             self.client.run()
         except IOError as err:
             self.logger.error("Cannot GET 'objid:%s' to '%s': %s",
                               oid, dst, env_error_format(err))
             sys.exit(os.EX_DATAERR)
+
+        if version != 0:
+            if uuid is not None:
+                self.logger.info("Object '%s@%d' with uuid '%s' "
+                                 "successfully retrieved",
+                                 oid, version, uuid)
+            else:
+                self.logger.info("Object '%s@%d' successfully retrieved",
+                                 oid, version)
+        else:
+            if uuid is not None:
+                self.logger.info("Object '%s' with uuid '%s' "
+                                 "successfully retrieved",
+                                 oid, uuid)
+            else:
+                self.logger.info("Object '%s' successfully retrieved", oid)
 
 
 class StoreGenericPutHandler(XferOptHandler):

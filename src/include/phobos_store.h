@@ -150,10 +150,33 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
 /**
  * Retrieve N files from the object store
  * desc contains:
- * - objid: identifier of the object to retrieve
+ * - objid:   identifier of the object to retrieve, this is mandatory.
+ *
+ * - objuuid: uuid of the object to retrieve
+ *            if not NULL, this field is duplicated internally and freed by
+ *            pho_xfer_desc_destroy(). The caller have to make sure to keep
+ *            a copy of this pointer if it needs to be freed.
+ *            if NULL and there is an object alive, get the current generation
+ *            if NULL and there is no object alive, check the deprecated
+ *            objects:
+ *                if they all share the same uuid, the object matching
+ *                the version criteria is retrieved
+ *
+ * - version: version of the object to retrieve
+ *            if 0, get the most recent object. Otherwise, the object with the
+ *            matching version is returned if it exists
+ *            if there is an object in the object table and its version does
+ *            not match, phobos_get() will target the current generation and
+ *            query the deprecated_object table
+ *
  * - fd: an opened fd to write to
  * - attrs: unused (can be NULL)
  * - flags: behavior flags
+ *
+ * If objuuid and version are NULL and 0, phobos_get() will only query the
+ * object table. Otherwise, the object table is queried first and then the
+ * deprecated_object table.
+ *
  * Other fields are not used.
  *
  * Individual completion notifications are issued via xd_callback.

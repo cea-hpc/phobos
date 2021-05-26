@@ -144,7 +144,14 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['dir', 'locate', 'oid1'])
         self.check_cmdline_valid(['tape', 'locate', 'oid1'])
 
+        self.check_cmdline_valid(['get', '--version', '1', 'objid', 'file'])
+        self.check_cmdline_valid(['get', '--uuid', 'uuid', 'objid', 'file'])
+        self.check_cmdline_valid(['get', '--version', '1', '--uuid', 'uuid',
+                                  'objid', 'file'])
+
         # Test invalid object and invalid verb
+        self.check_cmdline_exit(['get', '--version', 'nan', 'objid', 'file'],
+                                code=2)
         self.check_cmdline_exit(['voynichauthor', 'list'], code=2)
         self.check_cmdline_exit(['dir', 'teleport'], code=2)
         self.check_cmdline_exit(['delete'], code=2)
