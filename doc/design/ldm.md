@@ -1,0 +1,22 @@
+# Local Device Manager
+
+C library: libpho_ldm
+
+## Interfaces
+* Receives orders from LRS (local resource scheduler)
+* Perform offline admin commands
+* Resource operations: load/unload tapes, format filesystem,
+  mount filesystems...
+* Query resource status
+
+## Calls
+* load(media, device)
+* unload(media, device)
+* format(type, device, label)
+* mount(device, type, path)
+* umount(device|path)
+* status(resource)
+
+## Internals
+* SCSI commands (mtx, sginfo, /proc/scsi, ...)
+* Common system tools (mkfs, mount/umount, ...)
