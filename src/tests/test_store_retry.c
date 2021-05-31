@@ -74,9 +74,9 @@ static void reinit_xfer(struct pho_xfer_desc *xfer, const char *path,
         xfer->xd_params.put.family = PHO_RSC_INVAL;
 }
 
-static void add_dir(struct admin_handle *adm, struct dss_handle *dss,
-                    const char *path, struct dev_info *dev,
-                    struct media_info *media)
+static void add_dir_or_drive(struct admin_handle *adm, struct dss_handle *dss,
+                             const char *path, struct dev_info *dev,
+                             struct media_info *media)
 {
     struct ldm_dev_state dev_st = {0};
     struct dev_adapter adapter = {0};
@@ -87,18 +87,20 @@ static void add_dir(struct admin_handle *adm, struct dss_handle *dss,
     strtok(hostname, ".");
 
     /* Add dir media */
-    pho_id_name_set(&media->rsc.id, path);
-    media->rsc.id.family = PHO_RSC_DIR;
-    media->rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
-    media->fs.type = PHO_FS_POSIX;
-    media->addr_type = PHO_ADDR_HASH1;
-    media->flags.put = true;
-    media->flags.get = true;
-    media->flags.delete = true;
-    ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
+    if (media) {
+        pho_id_name_set(&media->rsc.id, path);
+        media->rsc.id.family = PHO_RSC_DIR;
+        media->rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
+        media->fs.type = PHO_FS_POSIX;
+        media->addr_type = PHO_ADDR_HASH1;
+        media->flags.put = true;
+        media->flags.get = true;
+        media->flags.delete = true;
+        ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
+    }
 
     /* Get dir device */
-    get_dev_adapter(PHO_RSC_DIR, &adapter);
+    get_dev_adapter(media ? PHO_RSC_DIR : PHO_RSC_TAPE, &adapter);
     ASSERT_RC(ldm_dev_query(&adapter, path, &dev_st));
 
     pho_id_name_set(&dev->rsc.id, dev_st.lds_serial ? : "");
@@ -107,6 +109,7 @@ static void add_dir(struct admin_handle *adm, struct dss_handle *dss,
     dev->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
     dev->path = (char *) path;
     dev->host = hostname;
+
     ldm_dev_state_fini(&dev_st);
 
     /* Add dir device */
@@ -115,38 +118,8 @@ static void add_dir(struct admin_handle *adm, struct dss_handle *dss,
     ASSERT_RC(phobos_admin_device_add(adm, &dev_id, 1, false));
 
     /* Format and unlock media */
-    ASSERT_RC(phobos_admin_format(adm, &media->rsc.id, PHO_FS_POSIX, true));
-}
-
-/* TODO: factorize with add_dir */
-static void add_drive(struct admin_handle *adm, struct dss_handle *dss,
-                      const char *path, struct dev_info *dev)
-{
-    struct ldm_dev_state dev_st = {0};
-    struct dev_adapter adapter = {0};
-    struct pho_id dev_id = {};
-    char hostname[256];
-
-    gethostname(hostname, sizeof(hostname));
-    strtok(hostname, ".");
-
-    /* Get drive device */
-    get_dev_adapter(PHO_RSC_TAPE, &adapter);
-    ASSERT_RC(ldm_dev_query(&adapter, path, &dev_st));
-
-    pho_id_name_set(&dev->rsc.id, dev_st.lds_serial ? : "");
-    dev->rsc.id.family = dev_st.lds_family;
-    dev->rsc.model = dev_st.lds_model ? strdup(dev_st.lds_model) : NULL;
-    dev->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
-    dev->path = (char *) path;
-    dev->host = hostname;
-
-    ldm_dev_state_fini(&dev_st);
-
-    /* Add drive device */
-    pho_id_name_set(&dev_id, path);
-    dev_id.family = dev->rsc.id.family;
-    ASSERT_RC(phobos_admin_device_add(adm, &dev_id, 1, false));
+    if (media)
+        ASSERT_RC(phobos_admin_format(adm, &media->rsc.id, PHO_FS_POSIX, true));
 }
 
 static void add_tape(struct admin_handle *adm, struct dss_handle *dss,
@@ -268,7 +241,7 @@ int main(int argc, char **argv)
          */
 
         /* Tape based tests */
-        add_drive(&adm, &dss, "/dev/st0", &dev);
+        add_dir_or_drive(&adm, &dss, "/dev/st0", &dev, NULL);
         add_tape(&adm, &dss, "P00003L5", "LTO5", &media);
 
         /* Test put retry */
@@ -282,7 +255,7 @@ int main(int argc, char **argv)
         /* Dir based tests */
 
         /* Add directory drive and media */
-        add_dir(&adm, &dss, tmp_dir, &dev, &media);
+        add_dir_or_drive(&adm, &dss, tmp_dir, &dev, &media);
 
         /* Simple put */
         ASSERT_RC(phobos_put(&xfer, 1, NULL, NULL));
