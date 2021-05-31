@@ -1,6 +1,6 @@
-Description: layout management module
+# Layout management module
 
-C library: libpho_layout
+## C library: libpho_layout
 
 This module abstracts the way a given object is written on medias. The layout
 layer emits medium allocation requests to the LRS (Local Resource Scheduler, see
@@ -12,7 +12,7 @@ raid1, raid0, compression or various error correction schemes. As some of
 these implementations may rely on heavy dependencies, layouts are considered
 external plugins and are dynamically loaded into Phobos on first usage.
 
-= Plugin mechanism and registration =
+## Plugin mechanism and registration
 
 A plugin is dynamically loaded by building a dynamic library name from its
 plugin name. For example, a module called "simple" will be implemented by a
@@ -22,7 +22,7 @@ This library has to implement a `pho_layout_mod_register` function that will
 fill a `struct layout_module` with the relevent information, including a
 vector of functions serving as an entry point to this layout.
 
-= API overview =
+## API overview
 
 For more details, see `pho_layout.h`.
 
@@ -39,7 +39,7 @@ the next media). Currently, all the IO happen inside this `step` function.
 
 The typical (and simplified) `step` pseudo code would be:
 
-```
+```c
 if (is_media_allocation(answer)) {
     perform_io(answer.media);
     emit_release_request(answer.media);
@@ -55,9 +55,9 @@ if (more_io_needed) {
 **Note:** when writing data, the data can only be considered as written when the
 media release response message is received by the encoder.
 
-= Dependencies =
+## Dependencies
 
-- `lrs` protocol: layouts directly consume and produce messages defined by the
+* `lrs` protocol: layouts directly consume and produce messages defined by the
   LRS protocol (defined in `pho_lrs.h`). See `doc/design/lrs.txt`.
-- `io`: abstracts how IOs are performed on various media. See
+* `io`: abstracts how IOs are performed on various media. See
   `doc/design/adapters.txt`.
