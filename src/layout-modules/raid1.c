@@ -39,6 +39,11 @@
 #include "pho_srl_common.h"
 #include "pho_type_utils.h"
 
+/* @FIXME: taken from store.c, will be needed in raid1 too */
+#define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
+#define PHO_EA_ID_NAME      "id"
+#define PHO_EA_UMD_NAME     "user_md"
+
 #define PLUGIN_NAME     "raid1"
 #define PLUGIN_MAJOR    0
 #define PLUGIN_MINOR    2
@@ -227,50 +232,6 @@ static int layout_repl_count(struct layout_info *layout,
     return 0;
 }
 
-/* @FIXME: taken from store.c, will be needed in raid1 too */
-#define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
-#define PHO_EA_ID_NAME      "id"
-#define PHO_EA_UMD_NAME     "user_md"
-
-/**
- * Build the extent attributes from the object ID and the user provided
- * attributes. This information will be attached to backend objects for
- * "self-description"/"rebuild" purpose.
- */
-static int build_extent_xattr(const char *objid,
-                              const struct pho_attrs *user_md,
-                              struct pho_attrs *extent_xattrs)
-{
-    GString *str;
-    int      rc;
-
-    rc = pho_attr_set(extent_xattrs, PHO_EA_ID_NAME, objid);
-    if (rc)
-        return rc;
-
-    str = g_string_new(NULL);
-    /*
-     * TODO This conversion is done several times. Consider caching the result
-     * and pass it to the functions that need it.
-     */
-    rc = pho_attrs_to_json(user_md, str, PHO_ATTR_BACKUP_JSON_FLAGS);
-    if (rc)
-        goto free_values;
-
-    if (!gstring_empty(str)) {
-        rc = pho_attr_set(extent_xattrs, PHO_EA_UMD_NAME, str->str);
-        if (rc)
-            goto free_values;
-    }
-
-free_values:
-    if (rc != 0)
-        pho_attrs_free(extent_xattrs);
-
-    g_string_free(str, TRUE);
-    return rc;
-}
-
 /**
  * Fill an extent structure, except the adress field, which is usually set by
  * a future call to ioa_open.
@@ -379,6 +340,7 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
     char *extent_tag = NULL;
     char *extent_key = NULL;
     size_t extent_size;
+    GString *str;
     int rc = 0;
     int i;
 
@@ -449,6 +411,17 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
         LOG_GOTO(out, rc = -ENOMEM,
                  "Unable to alloc loc table in raid1 encoder write");
 
+    /**
+     * Build the extent attributes from the object ID and the user provided
+     * attributes. This information will be attached to backend objects for
+     * "self-description"/"rebuild" purpose.
+     */
+    str = g_string_new(NULL);
+    rc = pho_attrs_to_json(&enc->xfer->xd_attrs, str,
+                           PHO_ATTR_BACKUP_JSON_FLAGS);
+    if (rc)
+        goto free_values;
+
     for (i = 0; i < raid1->repl_count; ++i) {
         /* set loc */
         loc[i].root_path = wresp->media[i]->root_path;
@@ -460,10 +433,17 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
         /* iod[i].iod_size starts from 0 and will be updated by each write */
         iod[i].iod_size = 0;
         iod[i].iod_loc = &loc[i];
-        rc = build_extent_xattr(enc->xfer->xd_objid, &enc->xfer->xd_attrs,
-                                &(iod[i].iod_attrs));
+
+        rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_ID_NAME,
+                          enc->xfer->xd_objid);
         if (rc)
             LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d", i);
+
+        if (!gstring_empty(str)) {
+            rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_UMD_NAME, str->str);
+            if (rc)
+                LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d", i);
+        }
 
         /* iod_ctx will be set by open */
     }
@@ -516,6 +496,9 @@ close:
 attrs:
     for (i = 0; i < raid1->repl_count; ++i)
         pho_attrs_free(&iod[i].iod_attrs);
+
+free_values:
+    g_string_free(str, TRUE);
 
 out:
     free(loc);
