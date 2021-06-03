@@ -133,8 +133,8 @@ access it.
 from where we can access them.
 
 ```
-$ phobos tape locate obj_id
-$ phobos dir locate obj_id
+$ phobos tape locate tape_id
+$ phobos dir locate dir_id
 ```
 
 As for the other object actions, the 'locate' action does not need the 'object'
