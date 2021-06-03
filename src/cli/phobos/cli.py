@@ -421,7 +421,6 @@ class StoreMPutHandler(StoreGenericPutHandler):
                               env_error_format(err))
             sys.exit(os.EX_DATAERR)
 
-
 class AddOptHandler(DSSInteractHandler):
     """Insert a new resource into the system."""
     label = 'add'
@@ -772,6 +771,34 @@ class UndeleteOptHandler(BaseOptHandler):
         except EnvironmentError as err:
             self.logger.error("Cannot undelete objectsby oids: %s",
                               env_error_format(err))
+            sys.exit(os.EX_DATAERR)
+
+class LocateOptHandler(BaseOptHandler):
+    """Locate object handler."""
+
+    label = 'locate'
+    descr = 'Find the best hostname to get an object'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add command options."""
+        super(LocateOptHandler, cls).add_options(parser)
+        parser.add_argument('oid', help='Object ID to locate')
+        parser.set_defaults(verb=cls.label)
+
+    def exec_locate(self):
+        """Locate object"""
+        client = UtilClient()
+        try:
+            print(client.object_locate(self.params.get('oid')))
+        except EnvironmentError as err:
+            self.logger.error("Cannot locate object: %s", env_error_format(err))
             sys.exit(os.EX_DATAERR)
 
 class ExtentListOptHandler(ListOptHandler):
@@ -1469,6 +1496,7 @@ class PhobosActionContext(object):
         DeleteOptHandler,
         UndeleteOptHandler,
         PingOptHandler,
+        LocateOptHandler,
 
         # Store command interfaces
         StoreGetHandler,

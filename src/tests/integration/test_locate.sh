@@ -32,6 +32,12 @@ test_bin="$test_dir/test_locate"
 . $test_dir/../test_launch_daemon.sh
 . $test_dir/../tape_drive.sh
 
+function error
+{
+    echo "$*"
+    exit 1
+}
+
 function dir_setup
 {
     export dirs="
@@ -108,12 +114,30 @@ function cleanup
     rm -rf $dirs
 }
 
+function test_locate_cli
+{
+    # test error on locating an unknown object
+    $phobos locate unknown_object &&
+        error "Locating an unknown object must fail"
+
+    # put a new object from localhost and locate it on localhost
+    $phobos put /etc/hosts object_to_locate_by_cli ||
+        error "Error on putting object_to_locate_by_cli"
+    locate_hostname=$($phobos locate object_to_locate_by_cli)
+    self_hostname=$(uname -n)
+    if [ "$locate_hostname" != "$self_hostname" ]; then
+        error "Cli locate returned $locate_hostname instead of $self_hostname"
+    fi
+}
+
 setup_tables
 invoke_daemon
 trap cleanup EXIT
 dir_setup
 
 # test locate on disk
+export PHOBOS_STORE_default_family="dir"
+test_locate_cli
 $test_bin dir || exit 1
 
 if [[ -w /dev/changer ]]; then
@@ -123,6 +147,7 @@ if [[ -w /dev/changer ]]; then
     invoke_daemon
     export PHOBOS_STORE_default_family="tape"
     tape_setup
+    test_locate_cli
     $test_bin tape || exit 1
 fi
 

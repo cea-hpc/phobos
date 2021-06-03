@@ -65,7 +65,7 @@ def attrs_as_dict(attrs):
     res = {k.decode('utf-8'): v.decode('utf-8') for k, v in res.items()}
     return res
 
-class XferPutParams(Structure): # pylint: disable=too-few-public-methods
+class XferPutParams(Structure): # pylint: disable=too-few-public-methods,too-many-instance-attributes
     """Phobos PUT parameters of the XferDescriptor."""
     _fields_ = [
         ("size", c_ssize_t),
@@ -435,3 +435,14 @@ class UtilClient:
     def list_free(objs, n_objs):
         """Free a previously obtained object list."""
         LIBPHOBOS.phobos_store_object_list_free(objs, n_objs)
+
+    @staticmethod
+    def object_locate(oid):
+        """Locate an object"""
+        hostname = c_char_p(None)
+        rc = LIBPHOBOS.phobos_locate(oid.encode('utf-8'), None, 0,
+                                     byref(hostname))
+        if rc:
+            raise EnvironmentError(rc)
+
+        return hostname.value.decode('utf-8')

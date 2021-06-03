@@ -140,6 +140,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['undel', 'oid', 'oid1'])
         self.check_cmdline_valid(['undel', 'oid', 'oid1', 'oid2'])
         self.check_cmdline_valid(['ping'])
+        self.check_cmdline_valid(['locate', 'oid1'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['voynichauthor', 'list'], code=2)
@@ -147,6 +148,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['delete'], code=2)
         self.check_cmdline_exit(['undelete', 'oid'], code=2)
         self.check_cmdline_exit(['undelete', 'uuid'], code=2)
+        self.check_cmdline_exit(['locate'], code=2)
+        self.check_cmdline_exit(['locate', 'oid1', 'oid2'], code=2)
 
 
 class BasicExecutionTest(unittest.TestCase):
@@ -380,7 +383,7 @@ class DeviceAddTest(BasicExecutionTest):
 
         # Check updated media
         output, _ = self.pho_execute_capture(['dir', 'list', '--output', 'tags',
-                                             tmp_path])
+                                              tmp_path])
         self.assertEqual(output.strip(), "[]")
 
     def test_dir_add_missing(self):
@@ -422,7 +425,6 @@ class SyslogTest(BasicExecutionTest):
         # an unprivileged user
         self.pho_execute(['--syslog', 'debug', 'dir', 'list'])
         self.pho_execute(['--syslog', 'info', '-vvv', 'dir', 'list'])
-
 
 if __name__ == '__main__':
     unittest.main(buffer=True)
