@@ -247,6 +247,7 @@ static void dss_status_ok(void **state)
                          NULL);
     assert_int_equal(rc, -rc);
     assert_string_equal(lock_owner, GOOD_LOCK_OWNER);
+    free(lock_owner);
 
     rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, NULL,
                          &timestamp);
@@ -263,6 +264,7 @@ static void dss_status_ok(void **state)
     assert_int_not_equal(timestamp.tv_sec, 0);
     assert_int_not_equal(timestamp.tv_usec, 0);
     assert_string_equal(lock_owner, GOOD_LOCK_OWNER);
+    free(lock_owner);
 
     assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
                       GOOD_LOCK_OWNER) == 0);
@@ -287,8 +289,10 @@ static void dss_multiple_status_ok(void **state)
 
     rc = dss_lock_status(handle, DSS_OBJECT, GOOD_LOCKS, 3, lock_owner, NULL);
     assert_return_code(rc, -rc);
-    for (i = 0; i < 3; ++i)
+    for (i = 0; i < 3; ++i) {
         assert_string_equal(lock_owner[i], GOOD_LOCK_OWNER);
+        free(lock_owner[i]);
+    }
 
     rc = dss_lock_status(handle, DSS_OBJECT, GOOD_LOCKS, 3, NULL, timestamp);
     assert_return_code(rc, -rc);
@@ -303,6 +307,7 @@ static void dss_multiple_status_ok(void **state)
     for (i = 0; i < 3; ++i) {
         assert_int_not_equal(timestamp[i].tv_sec, 0);
         assert_string_equal(lock_owner[i], GOOD_LOCK_OWNER);
+        free(lock_owner[i]);
     }
 
     assert(dss_unlock(handle, DSS_OBJECT, GOOD_LOCKS, 3,
@@ -329,6 +334,9 @@ static void dss_multiple_status_not_exists(void **state)
     assert_string_equal(lock_owner[2], GOOD_LOCK_OWNER);
 
     assert_null(lock_owner[1]);
+
+    free(lock_owner[0]);
+    free(lock_owner[2]);
 
     assert(dss_unlock(handle, DSS_OBJECT, GOOD_LOCKS, 3,
                       GOOD_LOCK_OWNER) == 0);
