@@ -206,12 +206,14 @@ static int dml_ok_lock_setup(void **state)
 static void dml_ok_lock(void **state)
 {
     struct dss_handle *dss = (struct dss_handle *)*state;
-    char *hostname;
+    char *hostname = NULL;
     int rc;
 
     rc = dss_medium_locate(dss, &locked_medium, &hostname);
     assert_return_code(rc, -rc);
     assert_string_equal(hostname, HOSTNAME);
+
+    free(hostname);
 }
 
 int main(void)
