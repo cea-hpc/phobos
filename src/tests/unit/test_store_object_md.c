@@ -445,6 +445,8 @@ static void oms_dss_unlock_failure(void **state)
     will_return(dss_unlock, -ENOLCK);
     rc = object_md_save(NULL, &xfer);
     assert_int_equal(rc, -ENOLCK);
+
+    free(xfer.xd_objuuid);
 }
 
 static void oms_success_without_overwrite(void **state)
@@ -463,6 +465,8 @@ static void oms_success_without_overwrite(void **state)
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, &xfer);
     assert_int_equal(rc, 0);
+
+    free(xfer.xd_objuuid);
 }
 
 static void oms_success_with_fake_overwrite(void **state)
@@ -483,6 +487,8 @@ static void oms_success_with_fake_overwrite(void **state)
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, &xfer);
     assert_int_equal(rc, 0);
+
+    free(xfer.xd_objuuid);
 }
 
 static void oms_success_with_overwrite(void **state)
@@ -504,6 +510,8 @@ static void oms_success_with_overwrite(void **state)
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, &xfer);
     assert_int_equal(rc, 0);
+
+    free(xfer.xd_objuuid);
 }
 
 /** Tests for object_md_del */

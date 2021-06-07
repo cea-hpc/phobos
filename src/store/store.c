@@ -437,6 +437,8 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     bool need_undelete = false;
     struct dss_filter filter;
     char *lock_owner = NULL;
+    int prev_cnt = 0;
+    int obj_cnt = 0;
     int cnt = 0;
     int rc2;
     int rc;
@@ -460,13 +462,13 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         LOG_GOTO(out_owner, rc, "Unable to lock object objid: '%s'",
                  xfer->xd_objid);
 
-    rc = dss_object_get(dss, &filter, &obj, &cnt);
+    rc = dss_object_get(dss, &filter, &obj, &obj_cnt);
     if (rc)
         LOG_GOTO(out_unlock, rc, "dss_object_get failed for objid:'%s'",
                  xfer->xd_objid);
 
-    if (cnt != 1)
-        LOG_GOTO(out_unlock, rc = -EINVAL, "object '%s' does not exist",
+    if (obj_cnt != 1)
+        LOG_GOTO(out_res, rc = -EINVAL, "object '%s' does not exist",
                  xfer->xd_objid);
 
     dss_filter_free(&filter);
@@ -482,13 +484,13 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
                  "Couldn't build filter in md_del for object uuid:'%s'.",
                  obj->uuid);
 
-    rc = dss_deprecated_object_get(dss, &filter, &prev_obj, &cnt);
+    rc = dss_deprecated_object_get(dss, &filter, &prev_obj, &prev_cnt);
     dss_filter_free(&filter);
     if (rc)
         LOG_GOTO(out_res, rc, "dss_deprecated_object_get failed for uuid:'%s'",
                  obj->uuid);
 
-    if (cnt == 1)
+    if (prev_cnt == 1)
         need_undelete = true;
 
     /* Ensure the oid isn't used by an existing layout before deleting it */
@@ -498,20 +500,20 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
                           "  {\"DSS::EXT::version\": %d}"
                           "]}", obj->uuid, obj->version);
     if (rc)
-        LOG_GOTO(out_res, rc,
+        LOG_GOTO(out_prev, rc,
                  "Couldn't build filter in md_del for extent uuid:'%s'.",
                  obj->uuid);
 
     rc = dss_layout_get(dss, &filter, &layout, &cnt);
     dss_filter_free(&filter);
     if (rc)
-        LOG_GOTO(out_res, rc, "dss_layout_get failed for uuid:'%s'",
+        LOG_GOTO(out_prev, rc, "dss_layout_get failed for uuid:'%s'",
                  xfer->xd_objuuid);
 
     dss_res_free(layout, cnt);
 
     if (cnt > 0)
-        LOG_GOTO(out_res, rc = -EEXIST,
+        LOG_GOTO(out_prev, rc = -EEXIST,
                  "Cannot rollback objid:'%s' from DSS, a layout still exists "
                  "for this objid", xfer->xd_objid);
 
@@ -520,18 +522,21 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
              "from DSS", obj->oid, obj->uuid, obj->version);
     rc = dss_object_set(dss, obj, 1, DSS_SET_DELETE);
     if (rc)
-        LOG_GOTO(out_res, rc, "dss_object_set failed for objid:'%s'",
+        LOG_GOTO(out_prev, rc, "dss_object_set failed for objid:'%s'",
                  xfer->xd_objid);
 
     if (need_undelete) {
-        rc = dss_object_move(dss, DSS_DEPREC, DSS_OBJECT, prev_obj, 1);
+        rc = dss_object_move(dss, DSS_DEPREC, DSS_OBJECT, prev_obj, prev_cnt);
         if (rc)
-            LOG_GOTO(out_res, rc, "dss_object_move failed for uuid:'%s'",
+            LOG_GOTO(out_prev, rc, "dss_object_move failed for uuid:'%s'",
                      obj->uuid);
     }
 
+out_prev:
+    dss_res_free(prev_obj, prev_cnt);
+
 out_res:
-    dss_res_free(obj, 1);
+    dss_res_free(obj, obj_cnt);
 
 out_unlock:
     rc2 = dss_unlock(dss, DSS_OBJECT, &lock_obj, 1, lock_owner);
