@@ -54,7 +54,7 @@ $phobos dir update --tags second_tag /tmp/pho_testdir1
 
 # put again one object using outdated tag and check it is updated
 $phobos put --family dir --tags first_tag /etc/hosts dir_obj2 &&
-    echo "Using an old tag to put should fail" && exit 1
+    error "Using an old tag to put should fail"
 
 if [[ -w /dev/changer ]]; then
     echo "**** TESTS: TAGS a currently used tape ****"
@@ -75,7 +75,7 @@ if [[ -w /dev/changer ]]; then
 
     # put again one object using outdated tag and check it is updated
     $phobos put --family tape --tags first_tag /etc/hosts tape_obj2 &&
-        echo "Using an old tag to put should fail" && exit 1
+        error "Using an old tag to put should fail"
 fi
 
 echo "*** TEST END ***"

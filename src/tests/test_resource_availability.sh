@@ -35,12 +35,6 @@ DRIVE_ARRAY=( /dev/st0 /dev/st1 )
 TAPE_ARRAY=( P00000L5 P00001L5 )
 DIR_ARRAY=( /tmp/test.pho.1 /tmp/test.pho.2 )
 
-function error
-{
-    echo "$*"
-    exit 1
-}
-
 function setup_dir
 {
     mkdir ${DIR_ARRAY[@]}

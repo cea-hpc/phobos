@@ -21,11 +21,6 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-function error {
-    echo "$*" >&2
-    exit 1
-}
-
 function dir_setup {
     export dir="/tmp/test.pho.1"
     export dir_not_formatted="/tmp/test.pho.3"

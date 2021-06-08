@@ -45,20 +45,19 @@ function test_dir_operation_flags() {
     local expected_delete=$4
 
     if [[ $($phobos dir list --output put_access $dir) != $expected_put ]]; then
-        echo "Error: $expected_put was expected for put operation flag for $dir"
-        return 1
+        error "Error: $expected_put was expected for put operation flag for " \
+              "$dir"
     fi
 
     if [[ $($phobos dir list --output get_access $dir) != $expected_get ]]; then
-        echo "Error: $expected_get was expected for get operation flag for $dir"
-        return 1
+        error "Error: $expected_get was expected for get operation flag for " \
+              "$dir"
     fi
 
     if [[ $($phobos dir list --output delete_access $dir) != \
         $expected_delete ]]; then
-        echo "Error: $expected_delete was expected for delete operation flag"\
-             "for $dir"
-        return 1
+        error "Error: $expected_delete was expected for delete operation flag" \
+              "for $dir"
     fi
 
     return 0
@@ -93,8 +92,7 @@ echo "**** TESTS: PUT MEDIA OPERATION TAGS ****"
 $phobos dir set-access -- -P $($phobos dir list)
 # try one put without any dir put access
 $phobos put --family dir /etc/hosts host1 &&
-    echo "Put without any medium with 'P' operation flag should fail" &&
-    exit 1
+    error "Put without any medium with 'P' operation flag should fail"
 # set one put access
 $phobos dir set-access +P /tmp/pho_testdir3
 # try to put with this new dir put access
@@ -103,8 +101,7 @@ $phobos put --family dir /etc/hosts host2
 if [[ $($phobos extent list --output media_name host2) != \
     "['/tmp/pho_testdir3']" ]]
 then
-    echo "Extent should be on the only medium with put access"
-    exit 1
+    error "Extent should be on the only medium with put access"
 fi
 
 echo "**** TESTS: GET MEDIA OPERATION TAGS ****"
@@ -114,9 +111,8 @@ $phobos put --family dir /etc/hosts obj_to_get
 $phobos dir set-access -- -G $($phobos dir list)
 # try one get without any dir get access
 $phobos get obj_to_get /tmp/gotten_obj &&
-    echo "Get without any medium with 'G' operation flag should fail" &&
     rm /tmp/gotten_obj &&
-    exit 1
+    error "Get without any medium with 'G' operation flag should fail"
 # set get access on all dir
 $phobos dir set-access +G $($phobos dir list)
 # try to get

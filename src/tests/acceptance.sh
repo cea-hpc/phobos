@@ -45,13 +45,11 @@ if [ "$CLEAN_ALL" -eq "1" ]; then
     setup_tables
 fi
 
-# display error message and exits
-function error {
-    echo "$*"
+function exit_error {
     # Wait pending processes before exit and cleanup
     waive_daemon
     wait
-    exit 1
+    error "$*"
 }
 
 # empty all drives
@@ -123,7 +121,7 @@ function tape_setup
     echo "$dr1"
     # check drive status
     $phobos drive list --output adm_status $dr1 --format=csv |
-        grep "^locked" || error "Drive should be added with locked state"
+        grep "^locked" || exit_error "Drive should be added with locked state"
 
     # unlock all drives but one (except if N_DRIVE < 2)
     if (( $N_DRIVES > 1 )); then
@@ -191,11 +189,11 @@ function lock_test
     $LOG_VALG $phobos dir add $dir_prefix.1
     $phobos dir list --output adm_status $dir_prefix.1 --format=csv |
         grep "^locked" ||
-        error "Directory should be added with locked state"
+        exit_error "Directory should be added with locked state"
     $LOG_VALG $phobos dir add $dir_prefix.2 --unlock
     $phobos dir list --output adm_status $dir_prefix.2 --format=csv |
         grep "^unlocked" ||
-        error "Directory should be added with unlocked state"
+        exit_error "Directory should be added with unlocked state"
     rmdir $dir_prefix.*
 }
 
@@ -216,7 +214,7 @@ function put_get_test
 
     local md_check=$($phobos getmd $id)
     [ "x$md" = "x$md_check" ] ||
-        error "Object attributes do not match expectations"
+        exit_error "Object attributes do not match expectations"
 }
 
 # Test family based media selection
@@ -234,7 +232,8 @@ function put_family
     # the medium it was written to
     # XXX: will be replaced by a 'phobos object list' when implemented
     $PSQL -t -c "$request" | grep -q "\"fam\": \"$1\"" ||
-        error "Put with family should have written object on a family medium"
+        exit_error "Put with family should have written object on a family " \
+                   "medium"
 }
 
 function put_layout
@@ -261,12 +260,12 @@ function put_layout
     # PSQL command to get the extent layout info
     # XXX: will be replaced by a 'phobos object list' when implemented
     $PSQL -t -c "$request1" | grep -q "\"name\": \"simple\"" ||
-        error "Put with simple layout should have written object using " \
-              "a simple layout"
+        exit_error "Put with simple layout should have written object using " \
+                   "a simple layout"
 
     $PSQL -t -c "$request2" | grep -q "\"name\": \"raid1\"" ||
-        error "Put with raid1 layout should have written object using " \
-              "a raid1 layout"
+        exit_error "Put with raid1 layout should have written object using " \
+                   "a raid1 layout"
 
     # relock resources we previously unlocked
     if [[ $PHOBOS_STORE_default_family == "dir" ]]; then
@@ -284,15 +283,17 @@ function put_tags
 
     # phobos put with bad tags
     $phobos put --tags $TAGS-bad --metadata $md /etc/hosts $id &&
-        error "Should not be able to put objects with no media matching tags"
+        exit_error "Should not be able to put objects with no media matching " \
+                   "tags"
     $phobos put --tags $first_tag-bad --metadata $md /etc/hosts $id &&
-        error "Should not be able to put objects with no media matching tags"
+        exit_error "Should not be able to put objects with no media matching " \
+                   "tags"
 
     # phobos put with existing tags
     $phobos put --tags $TAGS --metadata $md /etc/hosts $id ||
-        error "Put with valid tags should have worked"
+        exit_error "Put with valid tags should have worked"
     $phobos put --tags $first_tag --metadata $md /etc/hosts $id2 ||
-        error "Put with one valid tag should have worked"
+        exit_error "Put with one valid tag should have worked"
 }
 
 function test_single_alias_put
@@ -304,19 +305,19 @@ function test_single_alias_put
     local additional_arguments=$5
 
     $phobos put --alias $alias $additional_arguments /etc/hosts $id ||
-        error "Put with alias $alias should have worked"
+        exit_error "Put with alias $alias should have worked"
 
     local fam_request="SELECT extents FROM extent WHERE oid='$id';"
     $PSQL -t -c "$fam_request" |
         grep -q "\"fam\": \"$expected_fam\"" ||
-        error "Put with alias \"$alias\" should have written object on a"\
-              "\"$expected_fam\" medium"
+        exit_error "Put with alias \"$alias\" should have written object on a" \
+                   "\"$expected_fam\" medium"
 
     local lay_request="SELECT lyt_info FROM extent WHERE oid='$id';"
     $PSQL -t -c "$lay_request" |
         grep -q "\"name\": \"$expected_layout\"" ||
-        error "Put with alias \"$alias\" should have used "\
-              "\"$expected_layout\" layout"
+        exit_error "Put with alias \"$alias\" should have used " \
+                   "\"$expected_layout\" layout"
 }
 
 # Test alias replacement
@@ -372,11 +373,12 @@ function put_alias
 
     # phobos put with additional, non existing tags parameter - expect failure
     $phobos put -a $alias_full --tags no-such-tag /etc/hosts $id_with_tag2 &&
-        error "Put with additional, non existing tag should not have worked"
+        exit_error "Put with additional, non existing tag should not have " \
+                   "worked"
 
     # phobos put with alias with wrong tags parameter - expect failure
     $phobos put --alias $alias_nonexist_tags /etc/hosts $id_with_tag3 &&
-        error "Put with alias $alias_nonexist_tags should not have worked"
+        exit_error "Put with alias $alias_nonexist_tags should not have worked"
 
     # reset replication count for raid layout
     export PHOBOS_LAYOUT_RAID1_repl_count=repl_count
@@ -396,7 +398,7 @@ function mput
 
     # phobos execute mput command
     $phobos mput mput_list ||
-        (rm mput_list; error "Mput should have worked")
+        (rm mput_list; exit_error "Mput should have worked")
 
     rm mput_list
 
@@ -411,15 +413,15 @@ function mput
         mdt=$(echo "$object" | cut -d ' ' -f 3)
         # check metadata were well read from the input file
         [[ $($phobos getmd $oid) == $mdt ]] ||
-            error "'$oid' object was not put with the right metadata"
+            exit_error "'$oid' object was not put with the right metadata"
 
         # check file contents are correct
         $phobos get $oid file_test ||
-            error "Can not retrieve '$oid' object"
+            exit_error "Can not retrieve '$oid' object"
 
         [[ $(md5sum file_test | cut -d ' ' -f 1) == \
            $(md5sum $src | cut -d ' ' -f 1) ]] ||
-            (rm file_test; error "Retrieved object '$oid' is different")
+            (rm file_test; exit_error "Retrieved object '$oid' is different")
 
         rm file_test
     done
@@ -516,16 +518,16 @@ function concurrent_put
     # make sure 2 devices and 2 media were locked
     echo "$nb_med_lock media were locked"
     if (( single==0 )) && (( $nb_med_lock != 2 )); then
-        error "2 media locks expected (actual: $nb_med_lock)"
+        exit_error "2 media locks expected (actual: $nb_med_lock)"
     elif (( single==1 )) && (( $nb_med_lock != 1 )); then
-        error "1 media lock expected (actual: $nb_med_lock)"
+        exit_error "1 media lock expected (actual: $nb_med_lock)"
     fi
 
     echo "$nb_dev_lock devices were locked"
     if (( single==0 )) && (( $nb_dev_lock != 2 )); then
-        error "2 device locks expected (actual: $nb_dev_lock)"
+        exit_error "2 device locks expected (actual: $nb_dev_lock)"
     elif (( single==1 )) && (( $nb_dev_lock != 1 )); then
-        error "1 device lock expected (actual: $nb_dev_lock)"
+        exit_error "1 device lock expected (actual: $nb_dev_lock)"
     fi
 
     rm -f $tmp
@@ -546,13 +548,13 @@ function concurrent_put_get_retry
 
     # Concurrent put
     echo -n $files | xargs -n1 -P0 -d' ' -i $phobos put {} {} ||
-        error "some phobos instances failed to put"
+        exit_error "some phobos instances failed to put"
 
     # Concurrent get
     echo -n $files |
         xargs -n1 -P0 -d' ' -i bash -c \
             "$phobos get {} \"$PHO_TMP_DIR/\$(basename {})\"" ||
-        error "some phobos instances failed to get"
+        exit_error "some phobos instances failed to get"
 
     # Cleanup so that future gets can succeed
     rm -rf "$PHO_TMP_DIR"/*
@@ -592,17 +594,17 @@ function unlock_all_drives
 function tape_drive_compat
 {
     $phobos put --tags lto5 /etc/services svc_lto5 ||
-        error "fail to put on lto5 tape"
+        exit_error "fail to put on lto5 tape"
 
     $phobos put --tags lto6 /etc/services svc_lto6 ||
-        error "fail to put on lto6 tape"
+        exit_error "fail to put on lto6 tape"
 
     $phobos get svc_lto5 /tmp/svc_lto5 ||
-        error "fail to get from lto5 tape"
+        exit_error "fail to get from lto5 tape"
     rm /tmp/svc_lto5
 
     $phobos get svc_lto6 /tmp/svc_lto6 ||
-        error "fail to get from lto6 tape"
+        exit_error "fail to get from lto6 tape"
     rm /tmp/svc_lto6
 
     #test with only one lto5 drive
@@ -611,10 +613,10 @@ function tape_drive_compat
     local lto5_d=$($phobos drive list --model ULT3580-TD5 | head -n 1)
     $LOG_VALG $phobos drive unlock $lto5_d
     $phobos get svc_lto5 /tmp/svc_lto5_from_lto5_drive ||
-        error "fail to get data from lto5 tape with one lto5 drive"
+        exit_error "fail to get data from lto5 tape with one lto5 drive"
     rm /tmp/svc_lto5_from_lto5_drive
     $phobos get svc_lto6 /tmp/svc_lto6_from_lto5_drive &&
-        error "getting data from lto6 tape with one lto5 drive must fail"
+        exit_error "getting data from lto6 tape with one lto5 drive must fail"
 
     #test with only one lto6 drive
     lock_all_drives
@@ -622,10 +624,10 @@ function tape_drive_compat
     local lto6_d=$($phobos drive list --model ULT3580-TD6 | head -n 1)
     $LOG_VALG $phobos drive unlock $lto6_d
     $phobos get svc_lto5 /tmp/svc_lto5_from_lto6_drive ||
-        error "fail to get data from lto5 tape with one lto6 drive"
+        exit_error "fail to get data from lto5 tape with one lto6 drive"
     rm /tmp/svc_lto5_from_lto6_drive
     $phobos get svc_lto6 /tmp/svc_lto6_from_lto6_drive ||
-        error "fail to get data from lto6 tape with one lto6 drive"
+        exit_error "fail to get data from lto6 tape with one lto6 drive"
     rm /tmp/svc_lto6_from_lto6_drive
 
     unlock_all_drives

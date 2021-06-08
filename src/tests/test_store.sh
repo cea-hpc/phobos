@@ -72,13 +72,6 @@ function clean_test
     rm -rf "$TEST_RECOV_DIR"
 }
 
-function error
-{
-    echo "ERROR: $*" >&2
-    clean_test
-    exit 1
-}
-
 trap clean_test ERR EXIT
 
 # put a file into phobos object store

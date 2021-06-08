@@ -31,13 +31,6 @@ function clean_test
     drop_tables
 }
 
-function error
-{
-    echo "ERROR: $*" >&2
-    clean_test
-    exit 1
-}
-
 function check_rc
 {
     local rc=$1

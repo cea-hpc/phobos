@@ -60,4 +60,11 @@ phobos="$cli_dir/scripts/phobos"
 
 phobosd="$lrs_dir/phobosd"
 
+# utils function
+# display error message and exits
+function error {
+    echo "$*"
+    exit 1
+}
+
 true
