@@ -2310,7 +2310,7 @@ clean:
     return rc;
 }
 
-int dss_medium_locate(struct dss_handle *dss, struct pho_id *medium_id,
+int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
                       char **hostname)
 {
     struct media_info *medium_info;

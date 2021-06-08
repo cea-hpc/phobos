@@ -112,14 +112,15 @@ detains the medium, for example where it is mounted (if tape).
 
 ```c
 /**
- * Retrieve the name of the node which detains a medium.
+ * Retrieve the name of the node which holds a medium.
  *
  * @param[in]   medium_id   ID of the medium to locate.
- * @param[out]  node_name   Name of the node which detains \p medium_id.
+ * @param[out]  node_name   Name of the node which holds \p medium_id.
  * @return                  0 on success,
  *                         -errno on failure.
  */
-int phobos_admin_medium_locate(struct pho_id medium_id, char **node_name);
+int phobos_admin_medium_locate(const struct pho_id *medium_id,
+                               char **node_name);
 ```
 
 The call takes a medium ID as input and gives back a node name as output. The

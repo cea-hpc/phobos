@@ -264,8 +264,22 @@ static inline bool is_medium_global_error(int errcode)
 
 /**
  * Get short host name once (/!\ not thread-safe).
+ *
+ * (only the first local part of the FQDN is returned)
  */
 const char *get_hostname(void);
+
+/**
+ * Get allocated short host name (/!\ not thread-safe)
+ *
+ * (only the first local part of the FQDN is returned)
+ *
+ * @param[out] hostname Self hostname is returned (or NULL on failure)
+ *
+ * @return              0 on success,
+ *                      -errno on failure.
+ */
+int get_allocated_hostname(char **hostname);
 
 /**
  * Compare trimmed strings

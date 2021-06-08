@@ -697,3 +697,31 @@ void phobos_admin_layout_list_free(struct layout_info *layouts, int n_layouts)
 {
     dss_res_free(layouts, n_layouts);
 }
+
+int phobos_admin_medium_locate(const struct pho_id *medium_id,
+                               char **node_name)
+{
+    struct dss_handle dss;
+    int rc;
+
+    *node_name = NULL;
+
+    rc = dss_init(&dss);
+    if (rc)
+        LOG_RETURN(rc, "Unable to init dss handle");
+
+    /* get hostname if locked */
+    rc = dss_medium_locate(&dss, medium_id, node_name);
+    if (rc)
+        LOG_GOTO(clean, rc, "Error when locating medium");
+
+    if (*node_name)
+        goto clean;
+
+    /* Return localhost if medium is unlocked */
+    rc = get_allocated_hostname(node_name);
+
+clean:
+    dss_fini(&dss);
+    return rc;
+}

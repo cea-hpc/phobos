@@ -723,7 +723,6 @@ static int layout_simple_locate(struct dss_handle *dss,
                                 char **hostname)
 {
     struct pho_id *medium_id = &layout->extents->media;
-    const char *local_hostname;
     int rc;
 
     *hostname = NULL;
@@ -733,17 +732,7 @@ static int layout_simple_locate(struct dss_handle *dss,
         return rc;
 
     /* If a lock free medium is available, return self hostname */
-    local_hostname = get_hostname();
-    if (!hostname)
-        LOG_RETURN(-EADDRNOTAVAIL, "Unable to get self hostname");
-
-    *hostname = strdup(local_hostname);
-    if (!*hostname)
-        LOG_RETURN(rc = -errno, "Unable to duplicate local_hostname %s",
-                   local_hostname);
-
-    /* success */
-    return 0;
+    return get_allocated_hostname(hostname);
 }
 
 static const struct pho_layout_module_ops LAYOUT_SIMPLE_OPS = {

@@ -358,6 +358,23 @@ const char *get_hostname()
     return host_info.nodename;
 }
 
+int get_allocated_hostname(char **hostname)
+{
+    const char *self_hostname = get_hostname();
+
+    *hostname = NULL;
+
+    if (!self_hostname)
+        LOG_RETURN(-EADDRNOTAVAIL, "Unable to get self hostname");
+
+    *hostname = strdup(self_hostname);
+    if (!*hostname)
+        LOG_RETURN(-errno, "Unable to duplicate self_hostname %s",
+                   self_hostname);
+
+    return 0;
+}
+
 /* Returned pointer is part of the given string, so it shouldn't be freed */
 static const char *get_trimmed_string(const char *str, size_t *length)
 {

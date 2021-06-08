@@ -20,11 +20,11 @@
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
 /**
- * \brief  Tests for dss_medium_locate function
+ * \brief  Tests for phobos_admin_medium_locate function
  */
 
 /* phobos stuff */
-#include "pho_dss.h"
+#include "phobos_admin.h"
 #include "test_setup.h"
 
 /* standard stuff */
@@ -60,11 +60,10 @@ static void fill_medium_info(struct media_info *medium_info, struct pho_id id)
 }
 
 /**
- * dss_medium_locate returns -ENOENT on an unexisting medium
+ * phobos_admin_medium_locate returns -ENOENT on an unexisting medium
  */
-static void dml_enoent(void **state)
+static void paml_enoent(void **state)
 {
-    struct dss_handle *dss = (struct dss_handle *)*state;
     struct pho_id medium_id = {
         .family = PHO_RSC_TAPE,
         .name = "unexisting_medium_name",
@@ -72,19 +71,21 @@ static void dml_enoent(void **state)
     char *hostname;
     int rc;
 
-    rc = dss_medium_locate(dss, &medium_id, &hostname);
+    (void) state;
+
+    rc = phobos_admin_medium_locate(&medium_id, &hostname);
     assert_int_equal(rc, -ENOENT);
 }
 
 /**
- * dss_medium_locate returns -EACCES on an admin locked medium
+ * phobos_admin_medium_locate returns -EACCES on an admin locked medium
  */
 static struct pho_id admin_locked_medium = {
     .family = PHO_RSC_DIR,
     .name = "admin_locked_medium",
 };
 
-static int dml_eacces_setup(void **state)
+static int paml_eacces_setup(void **state)
 {
     struct dss_handle *dss = (struct dss_handle *)*state;
     struct media_info medium_info;
@@ -99,25 +100,26 @@ static int dml_eacces_setup(void **state)
     return 0;
 }
 
-static void dml_eacces(void **state)
+static void paml_eacces(void **state)
 {
-    struct dss_handle *dss = (struct dss_handle *)*state;
     char *hostname;
     int rc;
 
-    rc = dss_medium_locate(dss, &admin_locked_medium, &hostname);
+    (void) state;
+
+    rc = phobos_admin_medium_locate(&admin_locked_medium, &hostname);
     assert_int_equal(rc, -EACCES);
 }
 
 /**
- * dss_medium_locate returns -EPERM on a medium with get flag to false
+ * phobos_admin_medium_locate returns -EPERM on a medium with get flag to false
  */
 static struct pho_id false_get_medium = {
     .family = PHO_RSC_DIR,
     .name = "false_get_medium",
 };
 
-static int dml_eperm_setup(void **state)
+static int paml_eperm_setup(void **state)
 {
     struct dss_handle *dss = (struct dss_handle *)*state;
     struct media_info medium_info;
@@ -132,25 +134,26 @@ static int dml_eperm_setup(void **state)
     return 0;
 }
 
-static void dml_eperm(void **state)
+static void paml_eperm(void **state)
 {
-    struct dss_handle *dss = (struct dss_handle *)*state;
     char *hostname;
     int rc;
 
-    rc = dss_medium_locate(dss, &false_get_medium, &hostname);
+    (void) state;
+
+    rc = phobos_admin_medium_locate(&false_get_medium, &hostname);
     assert_int_equal(rc, -EPERM);
 }
 
 /**
- * successfull dss_medium_locate on a free medium
+ * successfull phobos_admin_medium_locate on a free medium
  */
 static struct pho_id free_medium = {
     .family = PHO_RSC_DIR,
     .name = "free_medium",
 };
 
-static int dml_ok_free_setup(void **state)
+static int paml_ok_free_setup(void **state)
 {
     struct dss_handle *dss = (struct dss_handle *)*state;
     struct media_info medium_info;
@@ -164,19 +167,26 @@ static int dml_ok_free_setup(void **state)
     return 0;
 }
 
-static void dml_ok_free(void **state)
+static void paml_ok_free(void **state)
 {
-    struct dss_handle *dss = (struct dss_handle *)*state;
+    const char *self_hostname;
     char *hostname;
     int rc;
 
-    rc = dss_medium_locate(dss, &free_medium, &hostname);
+    (void) state;
+
+    /* get self hostname */
+    self_hostname = get_hostname();
+    assert_non_null(self_hostname);
+
+    rc = phobos_admin_medium_locate(&free_medium, &hostname);
     assert_return_code(rc, -rc);
-    assert_null(hostname);
+    assert_string_equal(self_hostname, hostname);
+    free(hostname);
 }
 
 /**
- * successfull dss_medium_locate on a locked medium
+ * successfull phobos_admin_medium_locate on a locked medium
  */
 static struct pho_id locked_medium = {
     .family = PHO_RSC_DIR,
@@ -185,7 +195,7 @@ static struct pho_id locked_medium = {
 
 #define HOSTNAME "hostname"
 
-static int dml_ok_lock_setup(void **state)
+static int paml_ok_lock_setup(void **state)
 {
     struct dss_handle *dss = (struct dss_handle *)*state;
     struct media_info medium_info;
@@ -203,13 +213,14 @@ static int dml_ok_lock_setup(void **state)
     return 0;
 }
 
-static void dml_ok_lock(void **state)
+static void paml_ok_lock(void **state)
 {
-    struct dss_handle *dss = (struct dss_handle *)*state;
-    char *hostname = NULL;
+    char *hostname;
     int rc;
 
-    rc = dss_medium_locate(dss, &locked_medium, &hostname);
+    (void) state;
+
+    rc = phobos_admin_medium_locate(&locked_medium, &hostname);
     assert_return_code(rc, -rc);
     assert_string_equal(hostname, HOSTNAME);
     free(hostname);
@@ -217,14 +228,14 @@ static void dml_ok_lock(void **state)
 
 int main(void)
 {
-    const struct CMUnitTest dss_medium_locate_cases[] = {
-        cmocka_unit_test(dml_enoent),
-        cmocka_unit_test_setup(dml_eacces, dml_eacces_setup),
-        cmocka_unit_test_setup(dml_eperm, dml_eperm_setup),
-        cmocka_unit_test_setup(dml_ok_free, dml_ok_free_setup),
-        cmocka_unit_test_setup(dml_ok_lock, dml_ok_lock_setup),
+    const struct CMUnitTest phobos_admin_medium_locate_cases[] = {
+        cmocka_unit_test(paml_enoent),
+        cmocka_unit_test_setup(paml_eacces, paml_eacces_setup),
+        cmocka_unit_test_setup(paml_eperm, paml_eperm_setup),
+        cmocka_unit_test_setup(paml_ok_free, paml_ok_free_setup),
+        cmocka_unit_test_setup(paml_ok_lock, paml_ok_lock_setup),
     };
 
-    return cmocka_run_group_tests(dss_medium_locate_cases, global_setup_dss,
-                                  global_teardown_dss);
+    return cmocka_run_group_tests(phobos_admin_medium_locate_cases,
+                                  global_setup_dss, global_teardown_dss);
 }

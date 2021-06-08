@@ -1404,20 +1404,8 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
         goto clean;
 
     /* no candidate: fallback on localhost if unlocked media at each split */
-    if (object_location.all_splits_have_unlocked_media) {
-        const char *self_hostname = get_hostname();
-
-        if (!self_hostname)
-            LOG_GOTO(clean, rc = -EADDRNOTAVAIL, "Unable to get self hostname");
-
-        *hostname = strdup(self_hostname);
-        if (!*hostname)
-            LOG_GOTO(clean, rc = -errno,
-                     "Unable to duplicate self_hostname %s", self_hostname);
-
-        /* success */
-        GOTO(clean, rc = 0);
-    }
+    if (object_location.all_splits_have_unlocked_media)
+        GOTO(clean, rc = get_allocated_hostname(hostname));
 
     /* no answer found */
     /*

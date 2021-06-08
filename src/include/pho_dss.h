@@ -395,7 +395,7 @@ int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
  *         -EACCES if medium is admin locked
  *         -EPERM if medium get operation flag is set to false
  */
-int dss_medium_locate(struct dss_handle *dss, struct pho_id *medium_id,
+int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
                       char **hostname);
 
 /* ****************************************************************************/
