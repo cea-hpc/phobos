@@ -32,12 +32,6 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../setup_db.sh
 . $test_dir/../test_launch_daemon.sh
 
-function error
-{
-    echo "$*"
-    exit 1
-}
-
 function dir_setup
 {
     export dirs="

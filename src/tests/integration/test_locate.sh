@@ -32,12 +32,6 @@ test_bin="$test_dir/test_locate"
 . $test_dir/../test_launch_daemon.sh
 . $test_dir/../tape_drive.sh
 
-function error
-{
-    echo "$*"
-    exit 1
-}
-
 function dir_setup
 {
     export dirs="
