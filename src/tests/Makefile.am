@@ -5,7 +5,7 @@ AM_LDFLAGS=@CMOCKA_LIBS@
 # 1) build check_PROGRAMS
 # 2) run TESTS and generate a summary
 check_PROGRAMS=test_common test_attrs test_mapper test_log test_store	\
-	       test_dss test_cfg test_scsi test_scsi_scan test_dev_tape \
+	       test_dss test_cfg test_scsi test_dev_tape \
 	       test_ldm test_type_utils test_store_retry test_io \
 	       test_communication test_bad_comm test_store_alias test_delete \
 	       test_undelete test_raid1_split_locate
@@ -64,9 +64,6 @@ test_cfg_LDADD=../cfg/libpho_cfg.la ../common/libpho_common.la
 
 test_scsi_SOURCES=test_scsi.c
 test_scsi_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la
-
-test_scsi_scan_SOURCES=test_scsi_scan.c
-test_scsi_scan_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la
 
 test_dev_tape_SOURCES=test_dev_tape.c
 test_dev_tape_LDADD=../ldm/libpho_ldm.la ../cfg/libpho_cfg.la ../common/libpho_common.la

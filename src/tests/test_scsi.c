@@ -31,6 +31,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define ASSERT_RC(_stmt)        \
+do {                            \
+    int rc = _stmt;             \
+    if (rc) {                   \
+        pho_error(rc, #_stmt);  \
+        exit(EXIT_FAILURE);     \
+    }                           \
+} while (0)
+
 static const char *type2str(enum element_type_code code)
 {
     switch (code) {
@@ -103,7 +112,7 @@ static void save_test_elements(const struct element_status *element)
 static void print_element(const struct element_status *element)
 {
     GString *gstr = g_string_new("");
-    bool     first = true;
+    bool first = true;
 
     save_test_elements(element);
 
@@ -165,18 +174,12 @@ static void print_elements(const struct element_status *list, int nb)
 
 static int single_element_status(int fd, uint16_t addr, bool expect_full)
 {
-    int rc;
-
     struct element_status *list = NULL;
     int lcount = 0;
 
-    rc = scsi_element_status(fd, SCSI_TYPE_ALL, addr, 1,
-                             ESF_GET_LABEL | ESF_GET_DRV_ID,
-                             &list, &lcount);
-    if (rc) {
-        pho_error(rc, "status ERROR %d", rc);
-        exit(EXIT_FAILURE);
-    }
+    ASSERT_RC(scsi_element_status(fd, SCSI_TYPE_ALL, addr, 1,
+                                  ESF_GET_LABEL | ESF_GET_DRV_ID,
+                                  &list, &lcount));
 
     if (lcount > 0 && list->full != expect_full) {
         pho_warn("Element at addr %#hx is expected to be full",
@@ -192,39 +195,57 @@ static int single_element_status(int fd, uint16_t addr, bool expect_full)
 /** tests of the lib adapter API */
 static void test_lib_adapter(void)
 {
-    int rc;
+    struct lib_item_addr med_addr;
     struct lib_adapter lib = {0};
     struct lib_drv_info drv_info;
-    struct lib_item_addr med_addr;
 
-
-    rc = get_lib_adapter(PHO_LIB_SCSI, &lib);
-    if (rc)
-        exit(EXIT_FAILURE);
-
-    rc = ldm_lib_open(&lib, "/dev/changer");
-    if (rc)
-        exit(EXIT_FAILURE);
+    ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib));
+    ASSERT_RC(ldm_lib_open(&lib, "/dev/changer"));
 
     if (one_serial) {
-        rc = ldm_lib_drive_lookup(&lib, one_serial, &drv_info);
-        if (rc)
-            exit(EXIT_FAILURE);
+        ASSERT_RC(ldm_lib_drive_lookup(&lib, one_serial, &drv_info));
         /* unload the drive to any slot if it's full */
-        if (drv_info.ldi_full) {
-            rc = ldm_lib_media_move(&lib, &drv_info.ldi_addr, NULL);
-            if (rc)
-                exit(EXIT_FAILURE);
+        if (drv_info.ldi_full)
+            ASSERT_RC(ldm_lib_media_move(&lib, &drv_info.ldi_addr, NULL));
+    }
+
+    if (one_label)
+        ASSERT_RC(ldm_lib_media_lookup(&lib, one_label, &med_addr));
+
+    ldm_lib_close(&lib);
+}
+
+static void test_lib_scan(void)
+{
+    struct lib_adapter lib = {0};
+    json_t *data_entry;
+    json_t *lib_data;
+    char *json_str;
+    size_t index;
+
+    ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib));
+    ASSERT_RC(ldm_lib_open(&lib, "/dev/changer"));
+    ASSERT_RC(ldm_lib_scan(&lib, &lib_data));
+
+    if (!json_array_size(lib_data)) {
+        pho_error(-EINVAL, "ldm_lib_scan returned an empty array");
+        exit(EXIT_FAILURE);
+    }
+
+    /* Iterate on lib element and perform basic checks */
+    json_array_foreach(lib_data, index, data_entry) {
+        if (!json_object_get(data_entry, "type")) {
+            pho_error(-EINVAL, "Missing \"type\" key from json in lib_scan_cb");
+            exit(EXIT_FAILURE);
         }
     }
 
-    if (one_label) {
-        rc = ldm_lib_media_lookup(&lib, one_label, &med_addr);
-        if (rc)
-            exit(EXIT_FAILURE);
-    }
+    json_str = json_dumps(lib_data, JSON_INDENT(2));
+    printf("JSON: %s\n", json_str);
+    free(json_str);
+    json_decref(lib_data);
 
-    ldm_lib_close(&lib);
+    ASSERT_RC(ldm_lib_close(&lib));
 }
 
 static int val;
@@ -294,11 +315,11 @@ static int test2(void *hint)
 int main(int argc, char **argv)
 {
     struct mode_sense_info msi = { {0} };
-    int fd, rc;
     struct element_status *list = NULL;
-    int lcount = 0;
-    char *val = NULL;
     bool was_loaded = false;
+    char *val = NULL;
+    int lcount = 0;
+    int fd;
 
     test_env_initialize();
 
@@ -312,32 +333,19 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    rc = scsi_mode_sense(fd, &msi);
-    if (rc) {
-        pho_error(rc, "mode_sense error");
-        exit(EXIT_FAILURE);
-    }
+    ASSERT_RC(scsi_mode_sense(fd, &msi));
 
     pho_info("arms: first=%#hX, nb=%d", msi.arms.first_addr, msi.arms.nb);
 
-    rc = scsi_element_status(fd, SCSI_TYPE_ARM, msi.arms.first_addr,
-                             msi.arms.nb, ESF_GET_LABEL, &list, &lcount);
-    if (rc) {
-        pho_error(rc, "element_status error");
-        exit(EXIT_FAILURE);
-    }
+    ASSERT_RC(scsi_element_status(fd, SCSI_TYPE_ARM, msi.arms.first_addr,
+                                  msi.arms.nb, ESF_GET_LABEL, &list, &lcount));
     print_elements(list, lcount);
     free(list);
 
     pho_info("slots: first=%#hX, nb=%d", msi.slots.first_addr, msi.slots.nb);
 
-    rc = scsi_element_status(fd, SCSI_TYPE_SLOT, msi.slots.first_addr,
-                             msi.slots.nb, ESF_GET_LABEL, &list, &lcount);
-    if (rc) {
-        pho_error(rc, "element_status error");
-        exit(EXIT_FAILURE);
-    }
-
+    ASSERT_RC(scsi_element_status(fd, SCSI_TYPE_SLOT, msi.slots.first_addr,
+                                  msi.slots.nb, ESF_GET_LABEL, &list, &lcount));
     print_elements(list, lcount);
     free(list);
 
@@ -347,20 +355,13 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    if (setenv("PHOBOS_SCSI_max_element_status", val, 1)) {
-        pho_error(errno, "setenv failed");
-        exit(EXIT_FAILURE);
-    }
+    ASSERT_RC(setenv("PHOBOS_SCSI_max_element_status", val, 1));
 
-    rc = scsi_element_status(fd, SCSI_TYPE_SLOT, msi.slots.first_addr,
-                             msi.slots.nb, ESF_GET_LABEL, &list, &lcount);
-    if (rc) {
-        pho_error(rc, "element_status error");
-        exit(EXIT_FAILURE);
-    }
-
+    ASSERT_RC(scsi_element_status(fd, SCSI_TYPE_SLOT, msi.slots.first_addr,
+                                  msi.slots.nb, ESF_GET_LABEL, &list, &lcount));
     if (lcount != msi.slots.nb) {
-        pho_error(rc, "Invalid count returned: %d != %d", lcount, msi.slots.nb);
+        pho_error(-EINVAL, "Invalid count returned: %d != %d",
+                           lcount, msi.slots.nb);
         exit(EXIT_FAILURE);
     }
     free(list);
@@ -368,24 +369,17 @@ int main(int argc, char **argv)
     pho_info("imp/exp: first=%#hX, nb=%d",
              msi.impexp.first_addr, msi.impexp.nb);
 
-    rc = scsi_element_status(fd, SCSI_TYPE_IMPEXP, msi.impexp.first_addr,
-                             msi.impexp.nb, ESF_GET_LABEL, &list, &lcount);
-    if (rc) {
-        pho_error(rc, "element_status error");
-        exit(EXIT_FAILURE);
-    }
+    ASSERT_RC(scsi_element_status(fd, SCSI_TYPE_IMPEXP, msi.impexp.first_addr,
+                                  msi.impexp.nb, ESF_GET_LABEL, &list,
+                                  &lcount));
     print_elements(list, lcount);
     free(list);
 
     pho_info("drives: first=%#hX, nb=%d", msi.drives.first_addr, msi.drives.nb);
 
-    rc = scsi_element_status(fd, SCSI_TYPE_DRIVE, msi.drives.first_addr,
-                             msi.drives.nb, ESF_GET_LABEL, &list, &lcount);
-    if (rc) {
-        pho_error(rc, "element_status error");
-        exit(EXIT_FAILURE);
-    }
-
+    ASSERT_RC(scsi_element_status(fd, SCSI_TYPE_DRIVE, msi.drives.first_addr,
+                                  msi.drives.nb, ESF_GET_LABEL, &list,
+                                  &lcount));
     print_elements(list, lcount);
     free(list);
 
@@ -395,11 +389,7 @@ int main(int argc, char **argv)
 
         pho_info("Unloading drive %#x to slot %#x", full_drive, free_slot);
 
-        rc = scsi_move_medium(fd, arm_addr, full_drive, free_slot);
-        if (rc) {
-            pho_error(rc, "move_medium error");
-            exit(EXIT_FAILURE);
-        }
+        ASSERT_RC(scsi_move_medium(fd, arm_addr, full_drive, free_slot));
         single_element_status(fd, full_drive, false);
         single_element_status(fd, free_slot, true);
 
@@ -413,11 +403,7 @@ int main(int argc, char **argv)
         pho_info("Loading tape from slot %#x to drive %#x",
                  full_slot, empty_drive);
 
-        rc = scsi_move_medium(fd, arm_addr, full_slot, empty_drive);
-        if (rc) {
-            pho_error(rc, "move_medium error");
-            exit(EXIT_FAILURE);
-        }
+        ASSERT_RC(scsi_move_medium(fd, arm_addr, full_slot, empty_drive));
         single_element_status(fd, full_slot, false);
         single_element_status(fd, empty_drive, true);
     } else if (was_loaded) {
@@ -427,23 +413,17 @@ int main(int argc, char **argv)
         pho_info("Loading back tape from slot %#x to drive %#x",
                  free_slot, full_drive);
 
-        rc = scsi_move_medium(fd, arm_addr, free_slot, full_drive);
-        if (rc) {
-            pho_error(rc, "move_medium error");
-            exit(EXIT_FAILURE);
-        }
+        ASSERT_RC(scsi_move_medium(fd, arm_addr, free_slot, full_drive));
         single_element_status(fd, full_drive, true);
         single_element_status(fd, free_slot, false);
     }
 
     /* test of the lib adapter API */
     test_lib_adapter();
+    test_lib_scan();
 
     /* same test with PHO_CFG_LIB_SCSI_sep_sn_query=1 */
-    if (setenv("PHOBOS_LIB_SCSI_sep_sn_query", "1", 1)) {
-        pho_error(errno, "setenv failed");
-        exit(EXIT_FAILURE);
-    }
+    ASSERT_RC(setenv("PHOBOS_LIB_SCSI_sep_sn_query", "1", 1));
     test_lib_adapter();
 
     exit(EXIT_SUCCESS);
