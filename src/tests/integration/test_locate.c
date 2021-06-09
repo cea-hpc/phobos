@@ -27,6 +27,7 @@
 #include "phobos_store.h"
 #include "pho_common.h" /* get_hostname */
 #include "pho_dss.h"
+#include "../pho_test_xfer_utils.h"
 
 /* standard stuff */
 #include <errno.h>
@@ -49,6 +50,11 @@ static struct phobos_locate_state {
     struct object_info  *objs;
     int n_objs;
 } phobos_locate_state;
+
+
+/** TODO: Mutualize global_{setup, teardown} with setup/teardown functions in
+ *  test_setup.{c, h}.
+ */
 
 /* global setup connect to the DSS */
 static int global_setup(void **state)
@@ -86,40 +92,119 @@ static int global_teardown(void **state)
     return 0;
 }
 
+static int local_setup(void **state, char *oid)
+{
+    struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
+    struct pho_xfer_desc xfer = {0};
+    int rc;
+
+    /* open the xfer path and properly set xfer values */
+    xfer_desc_open_path(&xfer, "/etc/hosts", PHO_XFER_OP_PUT, 0);
+    xfer.xd_params.put.family = pl_state->rsc_family;
+    xfer.xd_objid = oid;
+    xfer.xd_attrs.attr_set = NULL;
+
+    /* put the object and close the descriptor */
+    rc = phobos_put(&xfer, 1, NULL, NULL);
+    xfer_desc_close_fd(&xfer);
+    assert_return_code(rc, -rc);
+    assert_return_code(xfer.xd_rc, -xfer.xd_rc);
+
+    /* get object info */
+    rc = phobos_store_object_list((const char **)&oid, 1,
+                                  false, NULL, 0, false, &pl_state->objs,
+                                  &pl_state->n_objs);
+    assert_return_code(rc, -rc);
+    assert_int_equal(pl_state->n_objs, 1);
+    assert_string_equal(pl_state->objs[0].oid, oid);
+
+    return 0;
+}
+
+static int local_teardown(void **state)
+{
+    struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
+
+    /* TODO: fully remove objects when phobos_remove will be ready to use */
+    phobos_store_object_list_free(pl_state->objs, pl_state->n_objs);
+    pl_state->objs = NULL;
+    pl_state->n_objs = 0;
+    return 0;
+}
+
+/** XXX: we currently assume an object only has a single extent, on a single
+ *  medium, and we lock it. We should instead lock all media containing extents
+ *  of the object.
+ */
+static void lock_medium(struct phobos_locate_state *pl_state,
+                        struct media_info **medium, const char *hostname)
+{
+    struct object_info *obj = pl_state->objs;
+    struct layout_info *layout;
+    struct dss_filter filter;
+    struct pho_id medium_id;
+    int cnt = 0;
+    int rc;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                              "{\"DSS::EXT::oid\": \"%s\"}, "
+                              "{\"DSS::EXT::uuid\": \"%s\"}, "
+                              "{\"DSS::EXT::version\": \"%d\"}"
+                          "]}",
+                          obj->oid, obj->uuid, obj->version);
+    assert_return_code(rc, -rc);
+    rc = dss_layout_get(pl_state->dss, &filter, &layout, &cnt);
+    dss_filter_free(&filter);
+    assert_return_code(rc, -rc);
+    assert_int_equal(cnt, 1);
+    medium_id = layout->extents->media;
+    dss_res_free(layout, cnt);
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                              "{\"DSS::MDA::family\": \"%s\"}, "
+                              "{\"DSS::MDA::id\": \"%s\"}"
+                          "]}",
+                          rsc_family2str(medium_id.family),
+                          medium_id.name);
+    assert_return_code(rc, -rc);
+    rc = dss_media_get(pl_state->dss, &filter, medium, &cnt);
+    dss_filter_free(&filter);
+    assert_return_code(rc, -rc);
+    assert_int_equal(cnt, 1);
+
+    /* XXX: first ensure we can lock the media by unlocking them. This is
+     * necessary because the LRS locked the media we want to get at that point,
+     * and doesn't have time to unlock them before we request the lock.
+     */
+    dss_unlock(pl_state->dss, DSS_MEDIA, *medium, cnt, NULL);
+
+    /* simulate lock on medium */
+    rc = dss_lock(pl_state->dss, DSS_MEDIA, *medium, cnt, hostname);
+    assert_return_code(rc, -rc);
+}
+
+static void unlock_medium(struct phobos_locate_state *pl_state,
+                          struct media_info *medium)
+{
+    int rc;
+
+    rc = dss_unlock(pl_state->dss, DSS_MEDIA, medium, 1, NULL);
+    dss_res_free(medium, 1);
+    assert_return_code(rc, -rc);
+}
+
 /*********************/
 /* pl: phobos_locate */
 /*********************/
-static char *oid_pl = "oid_pl";
 #define BAD_OID "bad_oid_to_locate"
 #define BAD_UUID "bad_uuid_to_locate"
 #define HOSTNAME "hostname"
 static int pl_setup(void **state)
 {
-    struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
-    struct pho_xfer_desc xfer;
-    int rc;
+    char *oid_pl = "oid_pl";
 
-    /* put an object to locate */
-    xfer.xd_fd = open("/etc/hosts", O_RDONLY);
-    if (xfer.xd_fd == -1)
-        return -1;
-    xfer.xd_objid = oid_pl;
-    xfer.xd_attrs.attr_set = NULL;
-    xfer.xd_params.put.family = pl_state->rsc_family;
-
-    rc = phobos_put(&xfer, 1, NULL, NULL);
-    close(xfer.xd_fd);
-    assert_return_code(rc, -rc);
-
-    /* get object info */
-    rc = phobos_store_object_list((const char **)&oid_pl, 1,
-                                  false, NULL, 0, false, &pl_state->objs,
-                                  &pl_state->n_objs);
-    assert_return_code(rc, -rc);
-    assert_int_equal(pl_state->n_objs, 1);
-    assert_string_equal(pl_state->objs[0].oid, oid_pl);
-
-    return 0;
+    return local_setup(state, oid_pl);
 }
 
 static void pl_enoent(void **state)
@@ -215,13 +300,9 @@ static void pl(void **state)
     struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
     struct object_info *obj = pl_state->objs;
     const char *myself_hostname = NULL;
-    struct layout_info *layout;
     struct media_info *medium;
     struct pho_xfer_desc xfer;
-    struct dss_filter filter;
-    struct pho_id medium_id;
     char *hostname;
-    int cnt;
     int rc;
 
     rc = phobos_locate(NULL, NULL, 1, &hostname);
@@ -236,36 +317,8 @@ static void pl(void **state)
     pl_hostname(myself_hostname, state, true);
 
     /* lock media from other owner */
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                              "{\"DSS::EXT::oid\": \"%s\"}, "
-                              "{\"DSS::EXT::uuid\": \"%s\"}, "
-                              "{\"DSS::EXT::version\": \"%d\"}"
-                          "]}",
-                          obj->oid, obj->uuid, obj->version);
-    assert_return_code(rc, -rc);
-    rc = dss_layout_get(pl_state->dss, &filter, &layout, &cnt);
-    dss_filter_free(&filter);
-    assert_return_code(rc, -rc);
-    assert_int_equal(cnt, 1);
-    medium_id = layout->extents->media;
-    dss_res_free(layout, cnt);
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                          "{\"DSS::MDA::family\": \"%s\"}, "
-                          "{\"DSS::MDA::id\": \"%s\"}"
-                          "]}",
-                          rsc_family2str(medium_id.family),
-                          medium_id.name);
-    assert_return_code(rc, -rc);
-    rc = dss_media_get(pl_state->dss, &filter, &medium, &cnt);
-    dss_filter_free(&filter);
-    assert_return_code(rc, -rc);
-    assert_int_equal(cnt, 1);
-    /* simulate lock on medium */
-    rc = dss_lock(pl_state->dss, DSS_MEDIA, medium, cnt,
-                  HOSTNAME ":lock_owner");
-    assert_return_code(rc, -rc);
+    lock_medium(pl_state, &medium, HOSTNAME ":lock_owner");
+
     /* locate with lock */
     pl_enoent(state);
     pl_hostname(HOSTNAME, state, true);
@@ -282,22 +335,96 @@ static void pl(void **state)
     /* locate with lock in deprecated table */
     pl_hostname(HOSTNAME, state, false);
     /* free lock on medium */
-    rc = dss_unlock(pl_state->dss, DSS_MEDIA, medium, cnt, NULL);
-    dss_res_free(medium, cnt);
-    assert_return_code(rc, -rc);
+    unlock_medium(pl_state, medium);
     /* locate without any lock in deprecated table */
     pl_hostname(myself_hostname, state, false);
 }
 
-static int pl_teardown(void **state)
+/************************************/
+/* pgl: phobos_get with locate flag */
+/************************************/
+static int pgl_setup(void **state)
+{
+    char *oid_pgl = "oid_pgl";
+
+    return local_setup(state, oid_pgl);
+}
+
+static void assert_get_hostname(struct pho_xfer_desc xfer,
+                                const char *hostname, int expected)
+{
+    int rc = phobos_get(&xfer, 1, NULL, NULL);
+
+    assert_int_equal(rc, expected);
+    if (expected)
+        assert_string_equal(xfer.xd_params.get.node_name, hostname);
+    else
+        assert_null(xfer.xd_params.get.node_name);
+    free(xfer.xd_params.get.node_name);
+}
+
+static void pgl_scenario(struct pho_xfer_desc xfer, struct object_info *obj,
+                         const char *hostname, int expected)
+{
+    /* good OID*/
+    xfer.xd_objid = obj->oid;
+    xfer.xd_objuuid = NULL;
+    xfer.xd_version = 0;
+    assert_get_hostname(xfer, hostname, expected);
+
+    /* good OID, good VERSION */
+    xfer.xd_objid = obj->oid;
+    xfer.xd_objuuid = NULL;
+    xfer.xd_version = obj->version;
+    assert_get_hostname(xfer, hostname, expected);
+
+    /* good OID, good UUID, good VERSION */
+    xfer.xd_objid = obj->oid;
+    xfer.xd_objuuid = obj->uuid;
+    assert_get_hostname(xfer, hostname, expected);
+}
+
+static void pgl(void **state)
 {
     struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
+    struct object_info *obj = pl_state->objs;
+    struct pho_xfer_desc xfer;
+    struct media_info *medium;
+    const char *myself = NULL;
+    const char *other = NULL;
 
-    /* TODO: fully remove objects when phobos_remove will be ready to use */
-    phobos_store_object_list_free(pl_state->objs, pl_state->n_objs);
-    pl_state->objs = NULL;
-    pl_state->n_objs = 0;
-    return 0;
+    /* Setup hostnames */
+    myself = get_hostname();
+    assert_non_null(myself);
+    other = HOSTNAME ":lock_owner";
+
+    /* Open xfer descriptor */
+    xfer_desc_open_path(&xfer, "/etc/hosts", PHO_XFER_OP_GET,
+                        PHO_XFER_OBJ_REPLACE | PHO_XFER_OBJ_BEST_HOST);
+
+    /* Check we can get file as it is on local node */
+    pgl_scenario(xfer, obj, myself, 0);
+
+    /** XXX: to uncomment once there is a limit to the number of attempts
+     *  made by the LRS when doing an action on a locked medium.
+     *
+     *  lock_medium(pl_state, &medium, myself);
+     *  pgl_scenario(xfer, obj, myself, 0);
+     */
+
+    /**
+     * Lock the medium with a hostname and try getting the object.
+     * Since the medium is locked, we can't retrieve the object, as
+     * we don't own the lock, the get/locate should give return -EREMOTE.
+     */
+    lock_medium(pl_state, &medium, other);
+    pgl_scenario(xfer, obj, HOSTNAME, -EREMOTE);
+
+    /* Unlock the medium */
+    unlock_medium(pl_state, medium);
+
+    /* Close xfer descriptor */
+    xfer_desc_close_fd(&xfer);
 }
 
 #define NB_ARGS 1
@@ -325,7 +452,8 @@ int main(int argc, char **argv)
     }
 
     const struct CMUnitTest phobos_locate_cases[] = {
-        cmocka_unit_test_setup_teardown(pl, pl_setup, pl_teardown),
+        cmocka_unit_test_setup_teardown(pl, pl_setup, local_teardown),
+        cmocka_unit_test_setup_teardown(pgl, pgl_setup, local_teardown),
     };
 
     return cmocka_run_group_tests(phobos_locate_cases, global_setup,

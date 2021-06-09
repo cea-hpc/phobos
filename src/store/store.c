@@ -135,6 +135,9 @@ static int pho_xfer_desc_flag_check(const struct pho_xfer_desc *xfer)
     if (xfer->xd_op == PHO_XFER_OP_GETMD && flags & PHO_XFER_OBJ_REPLACE)
         LOG_RETURN(0, "OBJ_REPLACE is not relevant for getmd");
 
+    if (xfer->xd_op != PHO_XFER_OP_GET && flags & PHO_XFER_OBJ_BEST_HOST)
+        LOG_RETURN(-EINVAL, "OBJ_BEST_HOST is only relevant for get");
+
     return 0;
 }
 
@@ -1328,6 +1331,12 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
 int phobos_get(struct pho_xfer_desc *xfers, size_t n,
                pho_completion_cb_t cb, void *udata)
 {
+    struct pho_xfer_desc *xfers_to_get = NULL;
+    const char *hostname = NULL;
+    size_t n_xfers_to_get = 0;
+    size_t j = 0;
+    int rc2 = 0;
+    int rc = 0;
     size_t i;
 
     for (i = 0; i < n; i++) {
@@ -1357,9 +1366,69 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
                 LOG_RETURN(-ENOMEM, "Cannot duplicate uuid before get");
             }
         }
+
+        if (xfers[i].xd_flags & PHO_XFER_OBJ_BEST_HOST) {
+            if (!hostname) {
+                hostname = get_hostname();
+                if (!hostname) {
+                    pho_warn("Get was cancelled for object '%s': "
+                             "hostname couldn't be retrieved",
+                             xfers[i].xd_objid);
+                    xfers[i].xd_rc = -ECANCELED;
+                    continue;
+                }
+            }
+
+            rc2 = phobos_locate(xfers[i].xd_objid, xfers[i].xd_objuuid,
+                                xfers[i].xd_version,
+                                &xfers[i].xd_params.get.node_name);
+            rc = rc ? : rc2;
+            if (rc2) {
+                pho_warn("Object objid:'%s' couldn't be located",
+                         xfers[i].xd_objid);
+                xfers[i].xd_rc = rc2;
+            } else {
+                if (strcmp(xfers[i].xd_params.get.node_name, hostname)) {
+                    pho_warn("Object objid:'%s' located on node: %s",
+                             xfers[i].xd_objid,
+                             xfers[i].xd_params.get.node_name);
+                    xfers[i].xd_rc = -EREMOTE;
+                } else {
+                    pho_info("Object objid:'%s' located on local node",
+                             xfers[i].xd_objid);
+                    n_xfers_to_get++;
+                    free(xfers[i].xd_params.get.node_name);
+                    xfers[i].xd_params.get.node_name = NULL;
+                }
+            }
+        } else {
+            n_xfers_to_get++;
+        }
     }
 
-    return phobos_xfer(xfers, n, cb, udata);
+    if (!n_xfers_to_get)
+        return -EREMOTE;
+
+    if (n_xfers_to_get == n)
+        return phobos_xfer(xfers, n, cb, udata);
+
+    xfers_to_get = malloc(n_xfers_to_get * sizeof(*xfers_to_get));
+    if (!xfers_to_get)
+        LOG_RETURN(-ENOMEM, "Couldn't allocate xfers_to_get");
+
+    for (i = 0; i < n; ++i)
+        if (xfers[i].xd_rc == 0)
+            xfers_to_get[j++] = xfers[i];
+
+    rc2 = phobos_xfer(xfers_to_get, n_xfers_to_get, cb, udata);
+    rc = rc ? : rc2;
+
+    for (j = 0, i = 0; i < n; ++i)
+        if (xfers[i].xd_rc == 0)
+            xfers[i] = xfers_to_get[j++];
+    free(xfers_to_get);
+
+    return rc;
 }
 
 int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,

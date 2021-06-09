@@ -36,9 +36,13 @@ struct pho_xfer_desc;
  * Exact semantic depends on the operation it is applied on.
  */
 enum pho_xfer_flags {
-    /* put: replace the object if it already exists (_not supported_)
-     * get: replace the target file if it already exists */
+    /**
+     * put: replace the object if it already exists (_not supported_)
+     * get: replace the target file if it already exists
+     */
     PHO_XFER_OBJ_REPLACE    = (1 << 0),
+    /* get: check the object's location before getting it */
+    PHO_XFER_OBJ_BEST_HOST  = (1 << 1),
 };
 
 /**
@@ -99,10 +103,20 @@ struct pho_xfer_put_params {
 };
 
 /**
+ * GET parameters.
+ * Node_name corresponds to the name of the node the object can be retrieved
+ * from, if a phobos_get call fails.
+ */
+struct pho_xfer_get_params {
+    char *node_name;                    /**< Node name [out] */
+};
+
+/**
  * Operation parameters.
  */
 union pho_xfer_params {
     struct pho_xfer_put_params put;     /**< PUT parameters. */
+    struct pho_xfer_get_params get;     /**< GET parameters */
 };
 
 /**

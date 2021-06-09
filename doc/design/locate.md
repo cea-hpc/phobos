@@ -84,13 +84,14 @@ currently access the object, -EAGAIN is returned.
 
 #### Object retrieval
 The `phobos_get()` call remains the same, but it supports a new flag in the
-pho_xfer_desc data structure called `PHO_XFER_OBJ_LOCATE`. If this flag is set
-and the call failed because the object is not reachable, it will call
-`phobos_locate()`.
+`pho_xfer_desc` data structure called `PHO_XFER_OBJ_BEST_HOST`. If this flag is
+set, we will first call `phobos_locate()` on each object, and get it only if it
+is available on the current host.
 
-To retrieve the results of the `phobos_locate()` call, a field is added to the
-XFer parameters, which consists in the name of the node to access to make the
-`phobos_get()` call.
+If the `phobos_locate()` call fails on any object, its return code will be
+set to -EREMOTE, and a field added to the XFer parameters, called `node_name`,
+will be filled with the name of the node to access to make the `phobos_get()`
+call.
 
 ```c
 struct pho_xfer_get_params {
@@ -102,9 +103,6 @@ union pho_xfer_params {
     struct pho_xfer_get_params get;     /**< GET parameters */
 };
 ```
-
-Whether `PHO_XFER_OBJ_LOCATE` is set or not, the `phobos_get()` call returns
--EREMOTE if the call fails because the object is not reachable.
 
 #### Medium location
 The `phobos_admin_medium_locate()` call retrieves the name of the node which
