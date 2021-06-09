@@ -37,4 +37,15 @@ int global_setup_dss(void **state);
  */
 int global_teardown_dss(void **state);
 
+/**
+ * Setup phobos db, PHOBOS_DSS_connect_string environnement variable and set
+ * state to admin handle without lrs connection
+ */
+int global_setup_admin_no_lrs(void **state);
+
+/**
+ * Free admin handle state, drop phobos db and unset PHOBOS_DSS_connect_string
+ */
+int global_teardown_admin(void **state);
+
 #endif /* _TEST_SETUP_H */

@@ -27,6 +27,7 @@ set -xe
 
 test_dir=$(dirname $(readlink -e $0))
 test_bin="$test_dir/test_locate"
+medium_locker_bin="$test_dir/medium_locker"
 . $test_dir/../test_env.sh
 . $test_dir/../setup_db.sh
 . $test_dir/../test_launch_daemon.sh
@@ -124,6 +125,45 @@ function test_locate_cli
     fi
 }
 
+function test_medium_locate
+{
+    local dir_or_tape=$1
+    local mediums_name="${dir_or_tape}s"
+    local self_hostname=$(uname -n)
+    local locate_hostname=""
+
+    # test error on locating an unknown medium
+    $phobos $dir_or_tape locate unknown_medium &&
+        error "Locating an unknown $dir_or_tape must fail"
+
+    # set medium to test
+    local medium=$(echo ${!mediums_name} | nodeset -e | awk '{print $1;}')
+
+    # test error on an admin locked medium
+    $phobos tape lock $medium || error "Error on locking before locate"
+    $phobos $dir_or_tape locate $medium &&
+        error "Locating an admin locked $dir_or_tape must fail"
+    $phobos tape unlock $medium || error "Error on unlocking lock after locate"
+
+    # locate an unlocked medium
+    locate_hostname=$($phobos $dir_or_tape locate $medium)
+    if [ "$locate_hostname" != "$self_hostname" ]; then
+        error "$dir_or_tape locate returned $locate_hostname instead of " \
+              "$self_hostname on an unlock medium"
+    fi
+
+    # locate on a lock medium
+    $medium_locker_bin lock $dir_or_tape $medium ${self_hostname}":owner" ||
+        error "Error on locking medium before locate"
+    locate_hostname=$($phobos $dir_or_tape locate $medium)
+    if [ "$locate_hostname" != "$self_hostname" ]; then
+        error "$dir_or_tape locate returned $locate_hostname instead of " \
+              "$self_hostname on a lock medium"
+    fi
+    $medium_locker_bin unlock $dir_or_tape $medium $self_hostname":owner" ||
+        error "Error on locking medium before locate"
+}
+
 setup_tables
 invoke_daemon
 trap cleanup EXIT
@@ -131,6 +171,7 @@ dir_setup
 
 # test locate on disk
 export PHOBOS_STORE_default_family="dir"
+test_medium_locate dir
 test_locate_cli
 $test_bin dir || exit 1
 
@@ -141,7 +182,7 @@ if [[ -w /dev/changer ]]; then
     invoke_daemon
     export PHOBOS_STORE_default_family="tape"
     tape_setup
+    test_medium_locate tape
     test_locate_cli
     $test_bin tape || exit 1
 fi
-

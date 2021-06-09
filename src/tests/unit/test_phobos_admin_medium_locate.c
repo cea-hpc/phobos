@@ -64,6 +64,7 @@ static void fill_medium_info(struct media_info *medium_info, struct pho_id id)
  */
 static void paml_enoent(void **state)
 {
+    struct admin_handle *adm = (struct admin_handle *)*state;
     struct pho_id medium_id = {
         .family = PHO_RSC_TAPE,
         .name = "unexisting_medium_name",
@@ -73,7 +74,7 @@ static void paml_enoent(void **state)
 
     (void) state;
 
-    rc = phobos_admin_medium_locate(&medium_id, &hostname);
+    rc = phobos_admin_medium_locate(adm, &medium_id, &hostname);
     assert_int_equal(rc, -ENOENT);
 }
 
@@ -87,14 +88,14 @@ static struct pho_id admin_locked_medium = {
 
 static int paml_eacces_setup(void **state)
 {
-    struct dss_handle *dss = (struct dss_handle *)*state;
+    struct admin_handle *adm = (struct admin_handle *)*state;
     struct media_info medium_info;
 
     fill_medium_info(&medium_info, admin_locked_medium);
     medium_info.rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
 
     /* insert medium */
-    if (dss_media_set(dss, &medium_info, 1, DSS_SET_INSERT))
+    if (dss_media_set(&adm->dss, &medium_info, 1, DSS_SET_INSERT))
         return -1;
 
     return 0;
@@ -102,12 +103,13 @@ static int paml_eacces_setup(void **state)
 
 static void paml_eacces(void **state)
 {
+    struct admin_handle *adm = (struct admin_handle *)*state;
     char *hostname;
     int rc;
 
     (void) state;
 
-    rc = phobos_admin_medium_locate(&admin_locked_medium, &hostname);
+    rc = phobos_admin_medium_locate(adm, &admin_locked_medium, &hostname);
     assert_int_equal(rc, -EACCES);
 }
 
@@ -121,14 +123,14 @@ static struct pho_id false_get_medium = {
 
 static int paml_eperm_setup(void **state)
 {
-    struct dss_handle *dss = (struct dss_handle *)*state;
+    struct admin_handle *adm = (struct admin_handle *)*state;
     struct media_info medium_info;
 
     fill_medium_info(&medium_info, false_get_medium);
     medium_info.flags.get = false;
 
     /* insert medium */
-    if (dss_media_set(dss, &medium_info, 1, DSS_SET_INSERT))
+    if (dss_media_set(&adm->dss, &medium_info, 1, DSS_SET_INSERT))
         return -1;
 
     return 0;
@@ -136,12 +138,13 @@ static int paml_eperm_setup(void **state)
 
 static void paml_eperm(void **state)
 {
+    struct admin_handle *adm = (struct admin_handle *)*state;
     char *hostname;
     int rc;
 
     (void) state;
 
-    rc = phobos_admin_medium_locate(&false_get_medium, &hostname);
+    rc = phobos_admin_medium_locate(adm, &false_get_medium, &hostname);
     assert_int_equal(rc, -EPERM);
 }
 
@@ -155,13 +158,13 @@ static struct pho_id free_medium = {
 
 static int paml_ok_free_setup(void **state)
 {
-    struct dss_handle *dss = (struct dss_handle *)*state;
+    struct admin_handle *adm = (struct admin_handle *)*state;
     struct media_info medium_info;
 
     fill_medium_info(&medium_info, free_medium);
 
     /* insert medium */
-    if (dss_media_set(dss, &medium_info, 1, DSS_SET_INSERT))
+    if (dss_media_set(&adm->dss, &medium_info, 1, DSS_SET_INSERT))
         return -1;
 
     return 0;
@@ -169,6 +172,7 @@ static int paml_ok_free_setup(void **state)
 
 static void paml_ok_free(void **state)
 {
+    struct admin_handle *adm = (struct admin_handle *)*state;
     const char *self_hostname;
     char *hostname;
     int rc;
@@ -179,7 +183,7 @@ static void paml_ok_free(void **state)
     self_hostname = get_hostname();
     assert_non_null(self_hostname);
 
-    rc = phobos_admin_medium_locate(&free_medium, &hostname);
+    rc = phobos_admin_medium_locate(adm, &free_medium, &hostname);
     assert_return_code(rc, -rc);
     assert_string_equal(self_hostname, hostname);
     free(hostname);
@@ -197,17 +201,17 @@ static struct pho_id locked_medium = {
 
 static int paml_ok_lock_setup(void **state)
 {
-    struct dss_handle *dss = (struct dss_handle *)*state;
+    struct admin_handle *adm = (struct admin_handle *)*state;
     struct media_info medium_info;
 
     fill_medium_info(&medium_info, locked_medium);
 
     /* insert medium */
-    if (dss_media_set(dss, &medium_info, 1, DSS_SET_INSERT))
+    if (dss_media_set(&adm->dss, &medium_info, 1, DSS_SET_INSERT))
         return -1;
 
     /* lock medium */
-    if (dss_lock(dss, DSS_MEDIA, &medium_info, 1, HOSTNAME ":owner"))
+    if (dss_lock(&adm->dss, DSS_MEDIA, &medium_info, 1, HOSTNAME ":owner"))
         return -1;
 
     return 0;
@@ -215,12 +219,13 @@ static int paml_ok_lock_setup(void **state)
 
 static void paml_ok_lock(void **state)
 {
+    struct admin_handle *adm = (struct admin_handle *)*state;
     char *hostname;
     int rc;
 
     (void) state;
 
-    rc = phobos_admin_medium_locate(&locked_medium, &hostname);
+    rc = phobos_admin_medium_locate(adm, &locked_medium, &hostname);
     assert_return_code(rc, -rc);
     assert_string_equal(hostname, HOSTNAME);
     free(hostname);
@@ -237,5 +242,6 @@ int main(void)
     };
 
     return cmocka_run_group_tests(phobos_admin_medium_locate_cases,
-                                  global_setup_dss, global_teardown_dss);
+                                  global_setup_admin_no_lrs,
+                                  global_teardown_admin);
 }

@@ -175,6 +175,18 @@ class Client(object):
 
         return list_lyts, layouts, n_layouts
 
+    def medium_locate(self, rsc_family, medium_id):
+        """Locate a medium by calling phobos_admin_medium_locate API"""
+        hostname = c_char_p(None)
+        rc = LIBPHOBOS_ADMIN.phobos_admin_medium_locate(
+            byref(self.handle),
+            byref(Id(rsc_family, name=medium_id)),
+            byref(hostname))
+        if rc:
+            raise EnvironmentError(rc)
+
+        return hostname.value.decode('utf-8')
+
     @staticmethod
     def layout_list_free(layouts, n_layouts):
         """Free a previously obtained layout list."""

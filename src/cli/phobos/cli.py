@@ -838,6 +838,16 @@ class TapeAddOptHandler(MediaAddOptHandler):
         parser.add_argument('--fs', default="LTFS",
                             help='Filesystem type (default: LTFS)')
 
+class MediumLocateOptHandler(DSSInteractHandler):
+    """Locate a medium into the system."""
+    label = 'locate'
+    descr = 'locate a medium'
+
+    @classmethod
+    def add_options(cls, parser):
+        super(MediumLocateOptHandler, cls).add_options(parser)
+        parser.add_argument('res', help='medium to locate')
+
 class MediaUpdateOptHandler(DSSInteractHandler):
     """Update an existing media"""
     label = 'update'
@@ -1005,7 +1015,8 @@ class MediaOptHandler(BaseResourceOptHandler):
         MediaListOptHandler,
         LockOptHandler,
         UnlockOptHandler,
-        MediaSetAccessOptHandler
+        MediaSetAccessOptHandler,
+        MediumLocateOptHandler
     ]
 
     def exec_add(self):
@@ -1252,6 +1263,15 @@ class MediaOptHandler(BaseResourceOptHandler):
 
         self.logger.info("%d media(s) updated", len(results))
 
+    def exec_locate(self):
+        """Locate a medium"""
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                print(adm.medium_locate(self.family, self.params.get('res')))
+        except EnvironmentError as err:
+            self.logger.error("Cannot locate medium: %s", env_error_format(err))
+            sys.exit(os.EX_DATAERR)
+
 class PingOptHandler(BaseOptHandler):
     """Ping phobos daemon"""
     label = 'ping'
@@ -1293,7 +1313,8 @@ class DirOptHandler(MediaOptHandler):
         MediaListOptHandler,
         LockOptHandler,
         UnlockOptHandler,
-        DirSetAccessOptHandler
+        DirSetAccessOptHandler,
+        MediumLocateOptHandler,
     ]
 
     def exec_add(self):
@@ -1391,7 +1412,8 @@ class TapeOptHandler(MediaOptHandler):
         MediaListOptHandler,
         LockOptHandler,
         UnlockOptHandler,
-        TapeSetAccessOptHandler
+        TapeSetAccessOptHandler,
+        MediumLocateOptHandler,
     ]
 
 class ExtentOptHandler(BaseResourceOptHandler):

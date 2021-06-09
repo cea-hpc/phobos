@@ -141,6 +141,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['undel', 'oid', 'oid1', 'oid2'])
         self.check_cmdline_valid(['ping'])
         self.check_cmdline_valid(['locate', 'oid1'])
+        self.check_cmdline_valid(['dir', 'locate', 'oid1'])
+        self.check_cmdline_valid(['tape', 'locate', 'oid1'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['voynichauthor', 'list'], code=2)
@@ -150,6 +152,10 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['undelete', 'uuid'], code=2)
         self.check_cmdline_exit(['locate'], code=2)
         self.check_cmdline_exit(['locate', 'oid1', 'oid2'], code=2)
+        self.check_cmdline_exit(['dir', 'locate'], code=2)
+        self.check_cmdline_exit(['dir', 'locate', 'oid1', 'oid2'], code=2)
+        self.check_cmdline_exit(['tape', 'locate'], code=2)
+        self.check_cmdline_exit(['tape', 'locate', 'oid1', 'oid2'], code=2)
 
 
 class BasicExecutionTest(unittest.TestCase):

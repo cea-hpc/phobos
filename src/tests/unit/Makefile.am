@@ -11,11 +11,14 @@ noinst_HEADERS=test_setup.h
 
 test_dss_lock_SOURCES=test_dss_lock.c test_setup.c
 test_dss_lock_LDADD=../../dss/libpho_dss.la ../../cfg/libpho_cfg.la \
-                    ../../common/libpho_common.la
+                    ../../common/libpho_common.la  \
+                    ../../admin/libphobos_admin.la ../../ldm/libpho_ldm.la
 
 test_dss_object_move_SOURCES=test_dss_object_move.c test_setup.c
 test_dss_object_move_LDADD=../../dss/libpho_dss.la ../../cfg/libpho_cfg.la \
-                           ../../common/libpho_common.la
+                           ../../common/libpho_common.la \
+                           ../../admin/libphobos_admin.la \
+                           ../../ldm/libpho_ldm.la
 
 test_ping_SOURCES=test_ping.c mock_communication.c
 test_ping_LDADD=../../admin/libphobos_admin.la ../../dss/libpho_dss.la \
@@ -27,11 +30,15 @@ test_store_object_md_LDADD=../../store/libphobos_store.la
 test_dss_lazy_find_object_SOURCES=test_dss_lazy_find_object.c test_setup.c
 test_dss_lazy_find_object_LDADD=../../dss/libpho_dss.la \
                                 ../../cfg/libpho_cfg.la \
-                                ../../common/libpho_common.la
+                                ../../common/libpho_common.la \
+                                ../../admin/libphobos_admin.la \
+                                ../../ldm/libpho_ldm.la
 
 test_dss_medium_locate_SOURCES=test_dss_medium_locate.c test_setup.c
 test_dss_medium_locate_LDADD=../../dss/libpho_dss.la ../../cfg/libpho_cfg.la \
-                             ../../common/libpho_common.la
+                             ../../common/libpho_common.la \
+                             ../../admin/libphobos_admin.la \
+                             ../../ldm/libpho_ldm.la
 
 test_phobos_admin_medium_locate_SOURCES=test_phobos_admin_medium_locate.c \
                                         test_setup.c

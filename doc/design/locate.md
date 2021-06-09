@@ -114,12 +114,14 @@ detains the medium, for example where it is mounted (if tape).
 /**
  * Retrieve the name of the node which holds a medium.
  *
+ * @param[in]   adm         Admin module handler.
  * @param[in]   medium_id   ID of the medium to locate.
  * @param[out]  node_name   Name of the node which holds \p medium_id.
  * @return                  0 on success,
  *                         -errno on failure.
  */
-int phobos_admin_medium_locate(const struct pho_id *medium_id,
+int phobos_admin_medium_locate(struct admin_handle *adm,
+                               const struct pho_id *medium_id,
                                char **node_name);
 ```
 

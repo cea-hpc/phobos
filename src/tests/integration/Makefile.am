@@ -1,7 +1,7 @@
 AM_CFLAGS=$(CC_OPT) @CMOCKA_CFLAGS@
 AM_LDFLAGS=@CMOCKA_LIBS@
 
-check_PROGRAMS=test_locate
+check_PROGRAMS=test_locate medium_locker
 noinst_PROGRAMS=$(check_PROGRAMS)
 
 TESTS=test_delete.sh test_undelete.sh test_put.sh test_object_list.sh \
@@ -9,3 +9,6 @@ TESTS=test_delete.sh test_undelete.sh test_put.sh test_object_list.sh \
 
 test_locate_SOURCES=test_locate.c
 test_locate_LDADD=../../store/libphobos_store.la ../../dss/libpho_dss.la
+
+medium_locker_SOURCES=medium_locker.c
+medium_locker_LDADD=../../dss/libpho_dss.la ../../store/libphobos_store.la
