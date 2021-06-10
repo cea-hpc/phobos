@@ -273,9 +273,14 @@ static void oms_dss_init_lock_owner_failure(void **state)
 
 static const char *GOOD_OWNER = "dummy_owner";
 
+static const struct pho_xfer_desc PUT_XFER = {
+    .xd_params.put.overwrite = false,
+    .xd_objid = "dummy_object",
+};
+
 static void oms_dss_lock_failure(void **state)
 {
-    struct pho_xfer_desc xfer;
+    struct pho_xfer_desc xfer = PUT_XFER;
     int rc;
 
     (void)state;
@@ -286,11 +291,6 @@ static void oms_dss_lock_failure(void **state)
     rc = object_md_save(NULL, &xfer);
     assert_int_equal(rc, -EINVAL);
 }
-
-static const struct pho_xfer_desc PUT_XFER = {
-    .xd_params.put.overwrite = false,
-    .xd_objid = "dummy_object",
-};
 
 static void oms_dss_object_set_failure_without_overwrite(void **state)
 {
@@ -517,7 +517,7 @@ static void oms_success_with_overwrite(void **state)
 /** Tests for object_md_del */
 static void omd_dss_filter_build_for_get_failure(void **state)
 {
-    struct pho_xfer_desc xfer;
+    struct pho_xfer_desc xfer = PUT_XFER;
     int rc;
 
     (void)state;
@@ -547,7 +547,7 @@ static const struct pho_xfer_desc DEL_XFER = {
 
 static void omd_dss_lock_failure(void **state)
 {
-    struct pho_xfer_desc xfer = PUT_XFER;
+    struct pho_xfer_desc xfer = DEL_XFER;
     int rc;
 
     (void)state;
@@ -561,7 +561,7 @@ static void omd_dss_lock_failure(void **state)
 
 static void omd_dss_object_get_failure(void **state)
 {
-    struct pho_xfer_desc xfer = PUT_XFER;
+    struct pho_xfer_desc xfer = DEL_XFER;
     int rc;
 
     (void)state;
@@ -585,7 +585,7 @@ static void omd_dss_object_get_failure(void **state)
 
 static void omd_dss_filter_build_for_deprec_failure(void **state)
 {
-    struct pho_xfer_desc xfer = PUT_XFER;
+    struct pho_xfer_desc xfer = DEL_XFER;
     int rc;
 
     (void)state;
@@ -602,7 +602,7 @@ static void omd_dss_filter_build_for_deprec_failure(void **state)
 
 static void omd_dss_deprecated_object_get_failure(void **state)
 {
-    struct pho_xfer_desc xfer = PUT_XFER;
+    struct pho_xfer_desc xfer = DEL_XFER;
     int rc;
 
     (void)state;
@@ -620,7 +620,7 @@ static void omd_dss_deprecated_object_get_failure(void **state)
 
 static void omd_dss_filter_build_for_layout_failure(void **state)
 {
-    struct pho_xfer_desc xfer = PUT_XFER;
+    struct pho_xfer_desc xfer = DEL_XFER;
     int rc;
 
     (void)state;
