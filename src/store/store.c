@@ -356,7 +356,7 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
              * "object put", thus we insert the object we wanted to
              * overwrite with in the table.
              */
-            if (obj_cnt == 0)
+            if (rc == 0)
                 pho_info("Can't overwrite unexisting object:'%s'",
                          xfer->xd_objid);
 
