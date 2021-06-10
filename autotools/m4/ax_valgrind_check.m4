@@ -210,7 +210,7 @@ define valgrind_tool_rule
 check-valgrind-$(1)-am:
 ifeq ($$(VALGRIND_ENABLED)-$$(ENABLE_VALGRIND_$(1)),yes-yes)
 ifneq ($$(TESTS),)
-	$$(valgrind_v_use)$$(MAKE) check-TESTS \
+	$$(valgrind_v_use)$$(MAKE) check \
 		TESTS_ENVIRONMENT="$$(VALGRIND_TESTS_ENVIRONMENT)" \
 		LOG_COMPILER="$$(VALGRIND_LOG_COMPILER)" \
 		LOG_FLAGS="$$(valgrind_$(1)_flags)" \
