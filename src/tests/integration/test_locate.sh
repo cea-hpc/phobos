@@ -107,6 +107,7 @@ function cleanup
     drop_tables
     drain_all_drives
     rm -rf $dirs
+    rm /tmp/out* || true
 }
 
 function test_locate_cli
@@ -117,7 +118,7 @@ function test_locate_cli
 
     # put a new object from localhost and locate it on localhost
     $phobos put /etc/hosts object_to_locate_by_cli ||
-        error "Error on putting object_to_locate_by_cli"
+        error "Error while putting object_to_locate_by_cli"
     locate_hostname=$($phobos locate object_to_locate_by_cli)
     self_hostname=$(uname -n)
     if [ "$locate_hostname" != "$self_hostname" ]; then
@@ -132,7 +133,7 @@ function test_medium_locate
     local self_hostname=$(uname -n)
     local locate_hostname=""
 
-    # test error on locating an unknown medium
+    # test error while locating an unknown medium
     $phobos $dir_or_tape locate unknown_medium &&
         error "Locating an unknown $dir_or_tape must fail"
 
@@ -140,40 +141,68 @@ function test_medium_locate
     local medium=$(echo ${!mediums_name} | nodeset -e | awk '{print $1;}')
 
     # test error on an admin locked medium
-    $phobos $dir_or_tape lock $medium || error "Error on locking before locate"
+    $phobos $dir_or_tape lock $medium ||
+        error "Error while locking before locate"
     $phobos $dir_or_tape locate $medium &&
         error "Locating an admin locked $dir_or_tape must fail"
     $phobos $dir_or_tape unlock $medium ||
-        error "Error on unlocking lock after locate"
+        error "Error while unlocking lock after locate"
 
     # locate an unlocked medium
     locate_hostname=$($phobos $dir_or_tape locate $medium)
     if [ "$locate_hostname" != "$self_hostname" ]; then
         error "$dir_or_tape locate returned $locate_hostname instead of " \
-              "$self_hostname on an unlock medium"
+              "$self_hostname on an unlocked medium"
     fi
 
-    # locate on a lock medium
-    $medium_locker_bin lock $dir_or_tape $medium ${self_hostname}":owner" ||
-        error "Error on locking medium before locate"
+    # locate on a locked medium
+    $medium_locker_bin lock $dir_or_tape $medium $self_hostname":owner" ||
+        error "Error while locking medium before locate"
     locate_hostname=$($phobos $dir_or_tape locate $medium)
     if [ "$locate_hostname" != "$self_hostname" ]; then
         error "$dir_or_tape locate returned $locate_hostname instead of " \
-              "$self_hostname on a lock medium"
+              "$self_hostname on a locked medium"
     fi
     $medium_locker_bin unlock $dir_or_tape $medium $self_hostname":owner" ||
-        error "Error on locking medium before locate"
+        error "Error while unlocking medium after locate"
 }
 
+function test_get_locate_cli
+{
+    local dir_or_tape=$1
+    local oid="oid_get_locate"
+
+    $phobos put /etc/hosts $oid ||
+        error "Error while putting $oid"
+
+    $phobos get --best-host $oid /tmp/out1 \
+        || error "Get operation should have succeeded"
+
+    $medium_locker_bin lock $dir_or_tape all blob:owner ||
+        error "Error while locking medium1 before get --best-host"
+
+    get_locate_output=$($phobos get --best-host $oid /tmp/out2 || true)
+    if [ "$get_locate_output" != \
+         "Current host is not the best to get this object, try on this other " \
+         "node, '$oid' : 'blob'" ]; then
+        error "Object should have been located on node 'blob'"
+    fi
+
+    $medium_locker_bin unlock $dir_or_tape all blob:owner ||
+        error "Error while unlocking medium1 after get --best-host"
+}
+
+drop_tables
 setup_tables
 invoke_daemon
-trap cleanup EXIT
+trap cleanup ERR EXIT
 dir_setup
 
 # test locate on disk
 export PHOBOS_STORE_default_family="dir"
 test_medium_locate dir
 test_locate_cli
+test_get_locate_cli dir
 $test_bin dir || exit 1
 
 if [[ -w /dev/changer ]]; then
@@ -185,5 +214,6 @@ if [[ -w /dev/changer ]]; then
     tape_setup
     test_medium_locate tape
     test_locate_cli
+    test_get_locate_cli tape
     $test_bin tape || exit 1
 fi

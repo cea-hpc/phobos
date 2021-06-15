@@ -32,9 +32,9 @@ from ctypes import (byref, c_bool, c_char_p, c_int, c_ssize_t, c_void_p, cast,
                     CFUNCTYPE, pointer, POINTER, py_object, Structure, Union)
 
 from phobos.core.ffi import LIBPHOBOS, DeprecatedObjectInfo, ObjectInfo, Tags
-from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OP_GET, # pylint: disable=no-name-in-module
-                               PHO_XFER_OP_GETMD, PHO_XFER_OP_PUT,
-                               PHO_RSC_INVAL, str2rsc_family)
+from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OBJ_BEST_HOST, # pylint: disable=no-name-in-module
+                               PHO_XFER_OP_GET, PHO_XFER_OP_GETMD,
+                               PHO_XFER_OP_PUT, PHO_RSC_INVAL, str2rsc_family)
 
 ATTRS_FOREACH_CB_TYPE = CFUNCTYPE(c_int, c_char_p, c_char_p, c_void_p)
 
@@ -119,10 +119,33 @@ class PutParams(namedtuple('PutParams', 'alias family layout overwrite tags')):
     __slots__ = ()
 PutParams.__new__.__defaults__ = (None,) * len(PutParams._fields)
 
+class XferGetParams(Structure): # pylint: disable=too-few-public-methods, too-many-instance-attributes
+    """Phobos GET parameters of the XferDescriptor."""
+    _fields_ = [
+        ("_node_name", c_char_p),
+    ]
+
+    def __init__(self):
+        super().__init__()
+        self._node_name = None
+
+    @property
+    def node_name(self):
+        """Wrapper to get node_name"""
+        return self._node_name.decode('utf-8') if self._node_name else None
+
+class GetParams(namedtuple('GetParams', '')):
+    """
+    Transition data structure for get parameters between
+    the CLI and the XFer data structure.
+    """
+GetParams.__new__.__defaults__ = (None,) * len(GetParams._fields)
+
 class XferOpParams(Union): # pylint: disable=too-few-public-methods
     """Phobos operation parameters of the XferDescriptor."""
     _fields_ = [
         ("put", XferPutParams),
+        ("get", XferGetParams),
     ]
 
 class XferDescriptor(Structure): # pylint: disable=too-many-instance-attributes
@@ -223,6 +246,7 @@ class XferDescriptor(Structure): # pylint: disable=too-many-instance-attributes
         elif self.xd_op == PHO_XFER_OP_GET:
             self.xd_objuuid = desc[4][0]
             self.xd_version = desc[4][1]
+            self.xd_params.get = XferGetParams()
 
         self.xd_objid = desc[0]
         self.xd_flags = desc[3]
@@ -294,8 +318,11 @@ class Store:
         n_xfer = len(xfer_descriptors)
         self._cb = compl_cb_convert(compl_cb)
         rc = action_func(xfer, n_xfer, self._cb, None)
+        node_name = (xfer[0].xd_params.get.node_name
+                     if xfer[0].xd_op == PHO_XFER_OP_GET
+                     else None)
         self.xfer_desc_release(xfer)
-        return rc
+        return rc, node_name
 
 class XferClient: # pylint: disable=too-many-instance-attributes
     """Main class: issue data transfers with the object store."""
@@ -319,9 +346,10 @@ class XferClient: # pylint: disable=too-many-instance-attributes
         self.getmd_session.append((oid, data_path, attrs, 0, None,
                                    PHO_XFER_OP_GETMD))
 
-    def get_register(self, oid, data_path, get_args, attrs=None):
+    def get_register(self, oid, data_path, get_args, best_host, attrs=None):
         """Enqueue a GET transfer."""
-        self.get_session.append((oid, data_path, attrs, 0, get_args,
+        flags = PHO_XFER_OBJ_BEST_HOST if best_host else 0
+        self.get_session.append((oid, data_path, attrs, flags, get_args,
                                  PHO_XFER_OP_GET))
 
     def put_register(self, oid, data_path, attrs=None,
@@ -347,22 +375,29 @@ class XferClient: # pylint: disable=too-many-instance-attributes
             compl_cb = self.noop_compl_cb
 
         if self.getmd_session:
-            rc = self._store.phobos_xfer(LIBPHOBOS.phobos_getmd,
-                                         self.getmd_session, compl_cb)
+            rc, _ = self._store.phobos_xfer(LIBPHOBOS.phobos_getmd,
+                                            self.getmd_session, compl_cb)
             if rc:
                 raise IOError(rc, "Cannot get md on objects")
 
         if self.get_session:
-            rc = self._store.phobos_xfer(LIBPHOBOS.phobos_get,
-                                         self.get_session, compl_cb)
+            rc, node_name = self._store.phobos_xfer(LIBPHOBOS.phobos_get,
+                                                    self.get_session,
+                                                    compl_cb)
+
+            if node_name is not None:
+                print("Current host is not the best to get this object, try " +
+                      "on this other node, " + self.get_session[0][0] +
+                      "' : '" + node_name + "'")
+
             if rc:
                 for desc in self.get_session:
                     os.remove(desc[1])
                 raise IOError(rc, "Cannot retrieve objects")
 
         if self.put_session:
-            rc = self._store.phobos_xfer(LIBPHOBOS.phobos_put,
-                                         self.put_session, compl_cb)
+            rc, _ = self._store.phobos_xfer(LIBPHOBOS.phobos_put,
+                                            self.put_session, compl_cb)
             if rc:
                 raise IOError(rc, "Cannot store objects")
 

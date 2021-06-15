@@ -252,6 +252,7 @@ PyMODINIT_FUNC PyInit_const(void)
 
     /* enum pho_xfer_flags */
     PyModule_AddIntMacro(mod, PHO_XFER_OBJ_REPLACE);
+    PyModule_AddIntMacro(mod, PHO_XFER_OBJ_BEST_HOST);
 
     /* enum pho_xfer_op */
     PyModule_AddIntMacro(mod, PHO_XFER_OP_GET);

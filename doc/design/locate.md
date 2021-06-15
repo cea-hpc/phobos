@@ -145,11 +145,11 @@ keyword.
 $ phobos locate obj_id
 ```
 
-The command 'phobos get' is given a new option to indicate if the user wants to
-know where its object is located if not available.
+The command 'phobos get' is given a new option to indicate that the get should
+only happen if the current host is the most optimal to retrieve the object.
 
 ```
-$ phobos get [--locate] obj_id file
+$ phobos get [--best-host] obj_id file
 ```
 
 ---

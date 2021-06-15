@@ -282,6 +282,10 @@ class StoreGetHandler(XferOptHandler):
         parser.add_argument('--version', help='Version of the object',
                             type=int, default=0)
         parser.add_argument('--uuid', help='UUID of the object')
+        parser.add_argument('--best-host', action='store_true',
+                            help="Only get object if the current host is the "
+                                 "most optimal one, else return the best "
+                                 "hostname to get this object")
 
     def exec_get(self):
         """Retrieve an object from backend."""
@@ -289,8 +293,9 @@ class StoreGetHandler(XferOptHandler):
         dst = self.params.get('dest_file')
         version = self.params.get('version')
         uuid = self.params.get('uuid')
+        best_host = self.params.get('best_host')
         self.logger.debug("Retrieving object 'objid:%s' to '%s'", oid, dst)
-        self.client.get_register(oid, dst, (uuid, version))
+        self.client.get_register(oid, dst, (uuid, version), best_host)
         try:
             self.client.run()
         except IOError as err:

@@ -33,7 +33,7 @@
 
 static void usage_exit(void)
 {
-    printf("usage: lock/unlock dir/tape medium_name lock_hostname\n");
+    printf("usage: lock/unlock dir/tape medium_name/all lock_hostname\n");
     exit(EXIT_FAILURE);
 }
 
@@ -58,9 +58,6 @@ int main(int argc, char **argv)
     else
         medium_id.family = PHO_RSC_TAPE;
 
-    pho_id_name_set(&medium_id, argv[3]);
-
-
     /* init dss */
     setenv("PHOBOS_DSS_connect_string", "dbname=phobos host=localhost "
                                         "user=phobos password=phobos", 1);
@@ -69,33 +66,41 @@ int main(int argc, char **argv)
     if (rc)
         exit(EXIT_FAILURE);
 
-    /* get medium info */
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                              "{\"DSS::MDA::family\": \"%s\"}, "
-                              "{\"DSS::MDA::id\": \"%s\"}"
-                          "]}",
-                          rsc_family2str(medium_id.family),
-                          medium_id.name);
-    if (rc)
-        LOG_GOTO(clean, rc, "Error on building filter");
+    if (strcmp(argv[3], "all")) {
+        pho_id_name_set(&medium_id, argv[3]);
 
-    rc = dss_media_get(&dss, &filter, &medium, &cnt);
-    dss_filter_free(&filter);
-    if (rc)
-        LOG_GOTO(clean, rc, "Error on getting medium from dss");
+        /* get medium info */
+        rc = dss_filter_build(&filter,
+                              "{\"$AND\": ["
+                                "{\"DSS::MDA::family\": \"%s\"}, "
+                                "{\"DSS::MDA::id\": \"%s\"}"
+                              "]}",
+                              rsc_family2str(medium_id.family),
+                              medium_id.name);
+        if (rc)
+            LOG_GOTO(clean, rc, "Error while building filter");
 
-    if (cnt != 1)
-        LOG_GOTO(clean_medium, rc = -EINVAL,
-                 "Error: more than 1 medium is targeted\n");
+        rc = dss_media_get(&dss, &filter, &medium, &cnt);
+        dss_filter_free(&filter);
+        if (rc)
+            LOG_GOTO(clean, rc, "Error while getting medium from dss");
 
-    /* lock */
-    if (!strcmp(argv[1], "lock")) {
-        rc = dss_lock(&dss, DSS_MEDIA, medium, cnt, argv[4]);
+        if (cnt > 1)
+            LOG_GOTO(clean_medium, rc = -EINVAL,
+                    "Error: multiple media found when targeting unique medium");
     } else {
-    /* unlock */
-        rc = dss_unlock(&dss, DSS_MEDIA, medium, cnt, argv[4]);
+        rc = dss_media_get(&dss, NULL, &medium, &cnt);
+        if (rc)
+            LOG_GOTO(clean, rc, "Error on getting medium from dss");
     }
+
+    if (cnt == 0)
+        LOG_GOTO(clean_medium, rc = -EINVAL, "Error: no medium found");
+
+    if (!strcmp(argv[1], "lock"))
+        rc = dss_lock(&dss, DSS_MEDIA, medium, cnt, argv[4]);
+    else
+        rc = dss_unlock(&dss, DSS_MEDIA, medium, cnt, argv[4]);
 
 clean_medium:
     dss_res_free(medium, cnt);
