@@ -1344,12 +1344,17 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
          * this pointer.
          */
         if (xfers[i].xd_objuuid) {
-            xfers[i].xd_objuuid = strdup_safe(xfers[i].xd_objuuid);
+            xfers[i].xd_objuuid = strdup(xfers[i].xd_objuuid);
             if (!xfers[i].xd_objuuid) {
                 size_t j;
 
                 for (j = --i; j >= 0; --j)
                     free(xfers[i].xd_objuuid);
+
+                for (i = 0; i < n; ++i)
+                    xfers[i].xd_rc = -ENOMEM;
+
+                LOG_RETURN(-ENOMEM, "Cannot duplicate uuid before get");
             }
         }
     }
