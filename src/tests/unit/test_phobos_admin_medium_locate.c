@@ -25,7 +25,7 @@
 
 /* phobos stuff */
 #include "phobos_admin.h"
-#include "test_setup.h"
+#include "../test_setup.h"
 
 /* standard stuff */
 

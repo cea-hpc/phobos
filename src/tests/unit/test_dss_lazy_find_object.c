@@ -23,7 +23,7 @@
  * \brief  Tests for dss_lazy_find_object function
  */
 
-#include "test_setup.h"
+#include "../test_setup.h"
 
 #include <assert.h>
 #include <setjmp.h>

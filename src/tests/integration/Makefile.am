@@ -17,8 +17,9 @@ check_SCRIPTS=test_delete.sh test_undelete.sh test_put.sh test_object_list.sh \
 
 TESTS=$(check_SCRIPTS)
 
-test_locate_SOURCES=test_locate.c
-test_locate_LDADD=../../store/libphobos_store.la ../../dss/libpho_dss.la
+test_locate_SOURCES=test_locate.c ../test_setup.c ../test_setup.h
+test_locate_LDADD=../../store/libphobos_store.la ../../dss/libpho_dss.la \
+                  ../../admin/libphobos_admin.la
 
 medium_locker_SOURCES=medium_locker.c
 medium_locker_LDADD=../../dss/libpho_dss.la ../../store/libphobos_store.la

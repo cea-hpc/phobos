@@ -23,7 +23,7 @@
  * \brief  Tests for DSS generic lock feature
  */
 
-#include "test_setup.h"
+#include "../test_setup.h"
 #include "pho_dss.h"
 
 #include <assert.h>

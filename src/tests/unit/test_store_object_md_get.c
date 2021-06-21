@@ -23,7 +23,7 @@
  * \brief  Tests for Store object_md_get operations
  */
 
-#include "test_setup.h"
+#include "../test_setup.h"
 
 #include <assert.h>
 #include <setjmp.h>

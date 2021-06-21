@@ -28,6 +28,7 @@
 #include "pho_common.h" /* get_hostname */
 #include "pho_dss.h"
 #include "../pho_test_xfer_utils.h"
+#include "../test_setup.h"
 
 /* standard stuff */
 #include <errno.h>
@@ -53,29 +54,17 @@ static struct phobos_locate_state {
 } phobos_locate_state;
 
 
-/** TODO: Mutualize global_{setup, teardown} with setup/teardown functions in
- *  test_setup.{c, h}.
- */
-
 /* global setup connect to the DSS */
 static int global_setup(void **state)
 {
     int rc;
 
-    phobos_locate_state.dss = malloc(sizeof(*phobos_locate_state.dss));
-    if (!phobos_locate_state.dss)
-        return -1;
-
-    setenv("PHOBOS_DSS_connect_string", "dbname=phobos host=localhost "
-                                        "user=phobos password=phobos", 1);
-
-    rc = dss_init(phobos_locate_state.dss);
-    if (rc) {
-        free(phobos_locate_state.dss);
-        return -1;
-    }
+    rc = global_setup_dss((void **)&phobos_locate_state.dss);
+    if (rc)
+        return rc;
 
     *state = &phobos_locate_state;
+
     return 0;
 }
 
@@ -83,14 +72,7 @@ static int global_teardown(void **state)
 {
     struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
 
-    if (pl_state) {
-        dss_fini(pl_state->dss);
-        free(pl_state->dss);
-    }
-
-    unsetenv("PHOBOS_DSS_connect_string");
-
-    return 0;
+    return global_teardown_dss((void **)&pl_state->dss);
 }
 
 static int local_setup(void **state, char *oid)
