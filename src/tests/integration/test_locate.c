@@ -37,6 +37,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <glib.h>
 
 /* cmocka stuff */
 #include <setjmp.h>
@@ -132,65 +133,79 @@ static int local_teardown(void **state)
     return 0;
 }
 
-/** XXX: we currently assume an object only has a single extent, on a single
- *  medium, and we lock it. We should instead lock all media containing extents
- *  of the object.
- */
 static void lock_medium(struct phobos_locate_state *pl_state,
-                        struct media_info **medium, const char *hostname)
+                        struct media_info **medium, const char *hostname,
+                        int *cnt)
 {
     struct object_info *obj = pl_state->objs;
+    GString *filter_str = g_string_new(NULL);
     struct layout_info *layout;
     struct dss_filter filter;
     struct pho_id medium_id;
-    int cnt = 0;
     int rc;
+    int i;
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
-                              "{\"DSS::EXT::oid\": \"%s\"}, "
-                              "{\"DSS::EXT::uuid\": \"%s\"}, "
-                              "{\"DSS::EXT::version\": \"%d\"}"
+                            "{\"DSS::EXT::oid\": \"%s\"}, "
+                            "{\"DSS::EXT::uuid\": \"%s\"}, "
+                            "{\"DSS::EXT::version\": \"%d\"}"
                           "]}",
                           obj->oid, obj->uuid, obj->version);
     assert_return_code(rc, -rc);
-    rc = dss_layout_get(pl_state->dss, &filter, &layout, &cnt);
+
+    rc = dss_layout_get(pl_state->dss, &filter, &layout, cnt);
     dss_filter_free(&filter);
     assert_return_code(rc, -rc);
-    assert_int_equal(cnt, 1);
-    medium_id = layout->extents->media;
-    dss_res_free(layout, cnt);
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                              "{\"DSS::MDA::family\": \"%s\"}, "
-                              "{\"DSS::MDA::id\": \"%s\"}"
-                          "]}",
-                          rsc_family2str(medium_id.family),
-                          medium_id.name);
+    assert_int_not_equal(*cnt, 0);
+
+    if (*cnt > 1)
+        g_string_append_printf(filter_str, "{\"OR\": [");
+
+    for (i = 0; i < *cnt; ++i) {
+        medium_id = layout[i].extents->media;
+        g_string_append_printf(filter_str,
+                              "{\"$AND\": ["
+                                "{\"DSS::MDA::family\": \"%s\"}, "
+                                "{\"DSS::MDA::id\": \"%s\"}"
+                              "]}",
+                              rsc_family2str(medium_id.family),
+                              medium_id.name);
+        assert_return_code(rc, -rc);
+    }
+
+    if (*cnt > 1)
+        g_string_append_printf(filter_str, "]}");
+
+    dss_res_free(layout, *cnt);
+
+    rc = dss_filter_build(&filter, filter_str->str);
+    g_string_free(filter_str, true);
     assert_return_code(rc, -rc);
-    rc = dss_media_get(pl_state->dss, &filter, medium, &cnt);
+
+    rc = dss_media_get(pl_state->dss, &filter, medium, cnt);
     dss_filter_free(&filter);
     assert_return_code(rc, -rc);
-    assert_int_equal(cnt, 1);
+    assert_int_not_equal(*cnt, 0);
 
     /* XXX: first ensure we can lock the media by unlocking them. This is
      * necessary because the LRS locked the media we want to get at that point,
      * and doesn't have time to unlock them before we request the lock.
      */
-    dss_unlock(pl_state->dss, DSS_MEDIA, *medium, cnt, NULL);
+    dss_unlock(pl_state->dss, DSS_MEDIA, *medium, *cnt, NULL);
 
     /* simulate lock on medium */
-    rc = dss_lock(pl_state->dss, DSS_MEDIA, *medium, cnt, hostname);
+    rc = dss_lock(pl_state->dss, DSS_MEDIA, *medium, *cnt, hostname);
     assert_return_code(rc, -rc);
 }
 
 static void unlock_medium(struct phobos_locate_state *pl_state,
-                          struct media_info *medium)
+                          struct media_info *medium, int cnt)
 {
     int rc;
 
-    rc = dss_unlock(pl_state->dss, DSS_MEDIA, medium, 1, NULL);
-    dss_res_free(medium, 1);
+    rc = dss_unlock(pl_state->dss, DSS_MEDIA, medium, cnt, NULL);
+    dss_res_free(medium, cnt);
     assert_return_code(rc, -rc);
 }
 
@@ -303,6 +318,7 @@ static void pl(void **state)
     struct media_info *medium;
     struct pho_xfer_desc xfer;
     char *hostname;
+    int cnt;
     int rc;
 
     rc = phobos_locate(NULL, NULL, 1, &hostname);
@@ -317,7 +333,7 @@ static void pl(void **state)
     pl_hostname(myself_hostname, state, true);
 
     /* lock media from other owner */
-    lock_medium(pl_state, &medium, HOSTNAME ":lock_owner");
+    lock_medium(pl_state, &medium, HOSTNAME ":lock_owner", &cnt);
 
     /* locate with lock */
     pl_enoent(state);
@@ -335,7 +351,7 @@ static void pl(void **state)
     /* locate with lock in deprecated table */
     pl_hostname(HOSTNAME, state, false);
     /* free lock on medium */
-    unlock_medium(pl_state, medium);
+    unlock_medium(pl_state, medium, cnt);
     /* locate without any lock in deprecated table */
     pl_hostname(myself_hostname, state, false);
 }
@@ -392,6 +408,7 @@ static void pgl(void **state)
     struct media_info *medium;
     const char *myself = NULL;
     const char *other = NULL;
+    int cnt;
 
     /* Setup hostnames */
     myself = get_hostname();
@@ -417,11 +434,11 @@ static void pgl(void **state)
      * Since the medium is locked, we can't retrieve the object, as
      * we don't own the lock, the get/locate should give return -EREMOTE.
      */
-    lock_medium(pl_state, &medium, other);
+    lock_medium(pl_state, &medium, other, &cnt);
     pgl_scenario(xfer, obj, HOSTNAME, -EREMOTE);
 
     /* Unlock the medium */
-    unlock_medium(pl_state, medium);
+    unlock_medium(pl_state, medium, cnt);
 
     /* Close xfer descriptor */
     xfer_desc_close_fd(&xfer);
