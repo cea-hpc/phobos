@@ -140,10 +140,11 @@ function test_medium_locate
     local medium=$(echo ${!mediums_name} | nodeset -e | awk '{print $1;}')
 
     # test error on an admin locked medium
-    $phobos tape lock $medium || error "Error on locking before locate"
+    $phobos $dir_or_tape lock $medium || error "Error on locking before locate"
     $phobos $dir_or_tape locate $medium &&
         error "Locating an admin locked $dir_or_tape must fail"
-    $phobos tape unlock $medium || error "Error on unlocking lock after locate"
+    $phobos $dir_or_tape unlock $medium ||
+        error "Error on unlocking lock after locate"
 
     # locate an unlocked medium
     locate_hostname=$($phobos $dir_or_tape locate $medium)
