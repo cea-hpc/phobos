@@ -67,7 +67,7 @@ daemon. Some admin calls can directly interact with it such as **DRIVE ADD**
 commands.
 
 This table is composed of the following fields: __id__, family, model, host,
-adm_status, path, lock and lock_ts.
+adm_status and path.
 
 | field             | description                           |
 |-------------------|---------------------------------------|
@@ -77,12 +77,6 @@ adm_status, path, lock and lock_ts.
 | host              | machine which is bound to the device  |
 | adm_status        | admin status (locked, unlocked)       |
 | path              | device path                           |
-| lock              | owner of the current resource lock    |
-| lock_ts           | timestamp when the current lock       |
-|                   | was taken                             |
-
-TODO: the lock and lock_ts fields will be removed from this table, with the
-incoming feature of the generic lock.
 
 ## Media table
 The media table stores medium metadata and like the device table, is mainly
@@ -90,8 +84,8 @@ used by the phobos daemon. Some admin calls can directly interact with it
 such as **MEDIA ADD** commands.
 
 This table is composed of the following fields: __id__, family, model,
-adm_status, fs_type, fs_label, fs_status, address_type, lock, lock_ts, stats,
-tags, put, get and delete.
+adm_status, fs_type, fs_label, fs_status, address_type, stats, tags, put, get
+and delete.
 
 | field             | description                           |
 |-------------------|---------------------------------------|
@@ -108,9 +102,6 @@ tags, put, get and delete.
 | get               | get access (true if authorized)       |
 | delete            | delete access (true if authorized)    |
 
-TODO: the lock and lock_ts fields will be removed from this table, with the
-incoming feature of the generic lock.
-
 # Database management
 This section describes the tables related to database management.
 
@@ -123,10 +114,16 @@ The lock table is used to aggregate all locks of the phobos system. Those locks
 can target database resources, such as devices or objects, but can also be used
 for other means.
 
-This table is composed of the following fields: __id__, owner and timestamp.
+This table is composed of the following fields: __id__, __type__, hostname,
+owner and timestamp.
 
-| field             | description                           |
-|-------------------|---------------------------------------|
-| id                | lock identifier                       |
-| owner             | lock owner                            |
-| timestamp         | date when the lock is taken           |
+Ids are currently limited to 2048 characters, owners to 32 characters, and
+hostnames to 64 characters.
+
+| field             | description                                     |
+|-------------------|-------------------------------------------------|
+| id                | lock identifier                                 |
+| type              | type of the lock                                |
+| hostname          | hostname of the lock owner                      |
+| owner             | name of the lock owner on the host (e.g. a pid) |
+| timestamp         | date when the lock is taken                     |

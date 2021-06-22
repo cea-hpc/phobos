@@ -11,8 +11,22 @@ simple commands such as GET, SET and LOCK.
 The generic lock calls allow the user to notify they want to do some critical
 manipulations that require an exclusive access to data, resources, etc.
 
-The lock identifier must be unique and can be based on whatever is needed,
-such as a (type, name) pair if locking a resource.
+## Lock fields
+
+The lock identifier/type must be a unique pair. While the type is restricted
+to a specific list, the identifier can be any string, and it is up to the
+caller to know what this string refers to.
+
+The type of a lock represents the resource to be locked as viewed by the DSS.
+These resources are currently: media (DSS_MEDIA), devices (DSS_DEVICE),
+objects (DSS_OBJECT), layouts (DSS_LAYOUT), deprecated objects (DSS_DEPREC).
+
+The owner is an integer identifying who owns the lock on a particular hostname.
+It corresponds to the pid of the process asking for a lock.
+
+A lock is taken on a specific identifier/type pair, and belongs to a specific
+hostname/owner pair. The latter will be determined when the lock is set,
+and will match the caller's hostname/pid.
 
 ## Lock call
 This call registers new entries for the given locks. If any of the specified
@@ -35,18 +49,18 @@ lock at the same time. If it happens, the 'first' call will succeed, the
  * @param[in]   type            Type of the ressources to lock.
  * @param[in]   item_list       List of ressources to lock.
  * @param[in]   item_cnt        Number of ressources to lock.
- * @param[in]   lock_owner      Name of the lock owner.
+ *
  * @return                      0 on success,
- *                             -EEXIST if \a lock_id already exists.
+ *                             -EEXIST if \p lock_id already exists.
  */
 int dss_lock(struct dss_handle *handle, enum dss_type type,
-             const void *item_list, int item_cnt, const char *lock_owner);
+             const void *item_list, int item_cnt);
 ```
 
 ## Refresh call
 This call updates the timestamps of the entries referenced by the given locks.
 
-If a specified lock does not exist or is not possessed by the given owner,
+If a specified lock does not exist or is not possessed by the caller,
 the lock is not refreshed.
 
 ```c
@@ -61,14 +75,13 @@ the lock is not refreshed.
  * @param[in]   type            Type of the ressources's lock to refresh.
  * @param[in]   item_list       List of ressources's lock to refresh.
  * @param[in]   item_cnt        Number of ressources's lock to refresh.
- * @param[in]   lock_owner      Name of the lock owner, must be specified.
+ *
  * @return                      0 on success,
  *                             -ENOLCK if the lock does not exist,
  *                             -EACCES if the lock owner does not match.
  */
 int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
-                     const void *item_list, int item_cnt,
-                     const char *lock_owner);
+                     const void *item_list, int item_cnt);
 ```
 
 ## Unlock call
@@ -76,14 +89,12 @@ This call removes the lock entries corresponding to the given target IDs, if
 registered by the caller. If a lock is not owned by the caller or does not
 exist, the lock is not removed.
 
-If _lock_owner_ is NULL, the owner is not considered.
-
 ```c
 /**
  * Release locks.
  *
- * If \a lock_owner is NULL, remove the locks without considering the
- * previous owner.
+ * If \p force_unlock is true, the lock's hostname and owner are not matched
+ * against the caller's.
  *
  * The function will attempt to unlock as many locks as possible. Should any
  * unlock fail, the first error code obtained will be returned after
@@ -93,27 +104,27 @@ If _lock_owner_ is NULL, the owner is not considered.
  * @param[in]   type            Type of the ressources to unlock.
  * @param[in]   item_list       List of ressources to unlock.
  * @param[in]   item_cnt        Number of ressources to unlock.
- * @param[in]   lock_owner      Name of the lock owner, ignored if NULL.
+ * @param[in]   force_unlock    Whether we ignore the lock's hostname and owner
+ *                              or not.
+ *
  * @return                      0 on success,
  *                             -ENOLCK if the lock does not exist,
  *                             -EACCES if the lock owner does not match.
  */
 int dss_unlock(struct dss_handle *handle, enum dss_type type,
-               const void *item_list, int item_cnt, const char *lock_owner);
+               const void *item_list, int item_cnt, bool force_unlock);
 ```
 
 ## Status call
 This call retrieves the status of locks.
 
-If _lock_owner_ is NULL, the strings are not allocated.
-If _lock_timestamp_ is NULL, the structures are not filled.
+If _locks_ is NULL, the structures are not filled.
 
 ```c
 /**
  * Retrieve the status of locks.
  *
- * If \a lock_owner is NULL, the strings are not allocated.
- * If \a lock_timestamp is NULL, the structures are not filled.
+ * If \p locks is NULL, the structures are not filled.
  *
  * The function will attempt to query the status of as many locks as possible.
  * Should any query fail, the first error code obtained will be returned after
@@ -123,15 +134,16 @@ If _lock_timestamp_ is NULL, the structures are not filled.
  * @param[in]   type            Type of the ressources's lock to query.
  * @param[in]   item_list       List of ressources's lock to query.
  * @param[in]   item_cnt        Number of ressources's lock to query.
- * @param[out]  lock_owner      Name of each lock owner, must be freed by
- *                              the caller.
- * @param[out]  lock_timestamp  Date when each lock was taken or last refreshed.
+ * @param[out]  locks           List of \p item_cnt structures, filled with
+ *                              each lock owner, hostname and timestamp, must
+ *                              be cleaned by calling pho_lock_clean.
+ *
  * @return                      0 on success,
- *                             -ENOMEM if a \a lock_owner string cannot be
+ *                             -ENOMEM if a \p lock_owner string cannot be
  *                              allocated,
  *                             -ENOLCK if a lock does not exist.
  */
 int dss_lock_status(struct dss_handle *handle, enum dss_type type,
                     const void *item_list, int item_cnt,
-                    char **lock_owner, struct timeval *lock_timestamp);
+                    struct pho_lock *locks);
 ```
