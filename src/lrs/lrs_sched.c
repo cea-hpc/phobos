@@ -306,7 +306,6 @@ static int sched_fill_media_info(struct dss_handle *dss,
     if (mcnt == 0) {
         pho_info("No media found matching %s '%s'",
                  rsc_family2str(id->family), id->name);
-        /* no such device or address */
         GOTO(out_free, rc = -ENXIO);
     } else if (mcnt > 1)
         LOG_GOTO(out_free, rc = -EINVAL,
@@ -419,7 +418,7 @@ static int sched_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
             devd->dss_media_info->lock.is_external = false;
         }
 
-        /* Drive has not been found, mark it as unusable */
+        /* Medium hasn't been found, mark the device as unusable */
         if (rc == -ENXIO)
             devd->op_status = PHO_DEV_OP_ST_FAILED;
         else if (rc)
