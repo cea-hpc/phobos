@@ -77,7 +77,6 @@ static int dir_query(const char *dev_path, struct ldm_dev_state *lds)
         LOG_GOTO(out_free, rc = -ENOMEM, "String allocation failed");
 
     lds->lds_serial = id;
-    lds->lds_loaded = true; /* always online */
 
 out_free:
     free(real);

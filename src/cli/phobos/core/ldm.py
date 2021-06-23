@@ -37,7 +37,6 @@ class DevState(Structure): # pylint: disable=too-few-public-methods
         ('lds_family', c_int),
         ('lds_model', c_char_p),
         ('lds_serial', c_char_p),
-        ('lds_loaded', c_bool)
     ]
 
     def __del__(self):

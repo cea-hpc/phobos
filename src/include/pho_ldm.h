@@ -41,8 +41,6 @@ struct ldm_dev_state {
     enum rsc_family      lds_family; /**< device family */
     char                *lds_model;  /**< device model */
     char                *lds_serial; /**< device serial */
-    bool                 lds_loaded; /**< whether a media is loaded in the
-                                          device */
 };
 
 enum ldm_fs_spc_flag {
