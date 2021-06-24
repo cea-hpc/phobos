@@ -59,13 +59,14 @@ function test_multiple_instances
     drop_tables
 }
 
-function test_release_medium_old_locks
+function test_recover_dir_old_locks
 {
     setup_tables
 
-    mkdir /tmp/dir0 /tmp/dir1
-    $phobos dir add --unlock /tmp/dir[0-1]
-    rmdir /tmp/dir0 /tmp/dir1
+    dir0=$(mktemp -d /tmp/test_recover_dir_old_locksXXX)
+    dir1=$(mktemp -d /tmp/test_recover_dir_old_locksXXX)
+    $phobos dir add --unlock ${dir0}
+    $phobos dir add --unlock ${dir1}
 
     host=`hostname`
     pid=$BASHPID
@@ -74,29 +75,32 @@ function test_release_medium_old_locks
     # Only one is locked by this host
     psql phobos phobos -c \
         "insert into lock (type, id, hostname, owner) values
-             ('media'::lock_type, '/tmp/dir0', '$host', $pid),
-             ('media'::lock_type, '/tmp/dir1', '${host}0', $pid);"
+             ('media'::lock_type, '${dir0}', '$host', $pid),
+             ('media'::lock_type, '${dir1}', '${host}other', $pid);"
 
-    # Use gdb to stop the daemon once the locks are released
-    (
-    trap -- "rm '$PHOBOS_LRS_lock_file'" EXIT
-    PHOBOS_LRS_families="dir" gdb $phobosd <<< "break sched_check_medium_locks
-                                                run -i
-                                                finish
-                                                quit"
-    )
+    # Start and stop the lrs daemon
+    PHOBOS_LRS_families="dir" timeout --preserve-status 10 $phobosd -i &
+    daemon_process=$!
 
-    # Check that only the correct medium is unlocked
-    lock=$($phobos dir list -o lock_hostname /tmp/dir0)
-    [ "None" == "$lock" ] || error "Medium should be unlocked"
+    wait $daemon_process && true
+    rc=$?
+    rmdir ${dir0} ${dir1}
 
-    lock=$($phobos dir list -o lock_hostname /tmp/dir1)
-    [ "${host}0" == "$lock" ] || error "Medium should be locked"
+    # check return status
+    test $rc -eq 0 ||
+        error "Daemon process returns an error status : ${rc}"
+
+    # Check only the lock of the correct hostname is released
+    lock=$($phobos dir list -o lock_hostname ${dir0})
+    [ "None" == "$lock" ] || error "Dir should be unlocked"
+
+    lock=$($phobos dir list -o lock_hostname ${dir1})
+    [ "${host}other" == "$lock" ] || error "Dir should be locked"
 
     drop_tables
 }
 
-function test_release_device_old_locks
+function test_recover_drive_old_locks
 {
     setup_tables
 
@@ -114,23 +118,25 @@ function test_release_device_old_locks
     psql phobos phobos -c \
         "insert into lock (type, id, hostname, owner) values
              ('device'::lock_type, '$dev_st0_id', '$host', $pid),
-             ('device'::lock_type, '$dev_st1_id', '${host}0', $pid);"
+             ('device'::lock_type, '$dev_st1_id', '${host}other', $pid);"
 
-    # Use gdb to stop the daemon once the locks are released
-    (
-    trap -- "rm '$PHOBOS_LRS_lock_file'" EXIT
-    PHOBOS_LRS_families="tape" gdb $phobosd <<< "break sched_check_device_locks
-                                                 run -i
-                                                 finish
-                                                 quit"
-    )
+    # Start and stop the lrs daemon
+    PHOBOS_LRS_families="tape" timeout --preserve-status 10 $phobosd -i &
+    daemon_process=$!
+
+    wait $daemon_process && true
+    rc=$?
+
+    # check return status
+    test $rc -eq 0 ||
+        error "Daemon process returns an error status : ${rc}"
 
     # Check that only the correct device is unlocked
     lock=$($phobos drive list -o lock_hostname /dev/st0)
     [ "None" == "$lock" ] || error "Device should be unlocked"
 
     lock=$($phobos drive list -o lock_hostname /dev/st1)
-    [ "${host}0" == "$lock" ] ||
+    [ "${host}other" == "$lock" ] ||
         error "Device should be locked"
 
     drop_tables
@@ -138,10 +144,10 @@ function test_release_device_old_locks
 
 drop_tables
 test_multiple_instances
-test_release_medium_old_locks
+test_recover_dir_old_locks
 
 # Tape tests are available only if /dev/changer exists, which is the entry
 # point for the tape library.
 if [[ -w /dev/changer ]]; then
-    test_release_device_old_locks
+    test_recover_drive_old_locks
 fi

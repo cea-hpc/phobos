@@ -102,7 +102,7 @@ struct dev_descr {
     char                 mnt_path[PATH_MAX];    /**< mount path
                                                   *  of the filesystem
                                                   */
-    bool                 locked_local;          /**< dss lock acquired by us */
+    bool                 ongoing_io;            /**< one I/O is ongoing */
 };
 
 /* Needed local function declarations */
@@ -132,7 +132,7 @@ static int check_dev_info(const struct dev_descr *dev)
     if (dev->sys_dev_state.lds_serial == NULL) {
         if (dev->dss_dev_info->rsc.id.name != dev->sys_dev_state.lds_serial)
             LOG_RETURN(-EINVAL, "%s: missing or unexpected device serial",
-                       dev->dss_dev_info->path);
+                       dev->dev_path);
         else
             pho_debug("%s: no device serial is set", dev->dev_path);
     } else if (strcmp(dev->dss_dev_info->rsc.id.name,
@@ -147,124 +147,180 @@ static int check_dev_info(const struct dev_descr *dev)
 }
 
 /**
- * Lock a device at DSS level to prevent concurrent access.
+ * Unlock a resource device at DSS level and clean the corresponding lock
+ *
+ * @param[in]   sched   current scheduler
+ * @param[in]   type    DSS type of the resource to release
+ * @param[in]   item    Resource to release
+ * @param[out]  lock    lock to clean
  */
-static int sched_dev_acquire(struct lrs_sched *sched, struct dev_descr *pdev)
+static int sched_resource_release(struct lrs_sched *sched, enum dss_type type,
+                                  void *item, struct pho_lock *lock)
 {
     int rc;
 
     ENTRY;
 
-    if (!pdev)
-        return -EINVAL;
+    rc = dss_unlock(&sched->dss, type, item, 1, false);
+    if (rc)
+        LOG_RETURN(rc, "Cannot unlock a resource");
 
-    if (pdev->locked_local) {
-        pho_debug("Device '%s' already locked (ignoring)", pdev->dev_path);
-        return 0;
-    }
-
-    rc = dss_lock(&sched->dss, DSS_DEVICE, pdev->dss_dev_info, 1);
-    if (rc) {
-        pho_warn("Cannot lock device '%s': %s", pdev->dev_path,
-                 strerror(-rc));
-        return rc;
-    }
-
-    pho_debug("Acquired ownership on device '%s'", pdev->dev_path);
-    pdev->locked_local = true;
-
+    pho_lock_clean(lock);
     return 0;
 }
 
-/**
- * Unlock a device at DSS level.
- */
-static int sched_dev_release(struct lrs_sched *sched, struct dev_descr *pdev)
+static int sched_device_release(struct lrs_sched *sched, struct dev_descr *dev)
 {
     int rc;
 
-    ENTRY;
-
-    if (!pdev)
-        return -EINVAL;
-
-    if (!pdev->locked_local) {
-        pho_debug("Device '%s' is not locked (ignoring)", pdev->dev_path);
-        return 0;
-    }
-
-    rc = dss_unlock(&sched->dss, DSS_DEVICE, pdev->dss_dev_info, 1, false);
+    rc = sched_resource_release(sched, DSS_DEVICE, dev->dss_dev_info,
+                                &dev->dss_dev_info->lock);
     if (rc)
-        LOG_RETURN(rc, "Cannot unlock device '%s'", pdev->dev_path);
+        pho_error(rc,
+                  "Error when releasing device '%s' with current lock "
+                  "(hostname %s, owner %d)", dev->dev_path,
+                  dev->dss_dev_info->lock.hostname,
+                  dev->dss_dev_info->lock.owner);
 
-    pho_debug("Released ownership on device '%s'", pdev->dev_path);
-    pdev->locked_local = false;
-
-    return 0;
+    return rc;
 }
 
-/**
- * Lock a media at DSS level to prevent concurrent access.
- */
-static int sched_media_acquire(struct lrs_sched *sched,
-                               struct media_info *pmedia)
+static int sched_medium_release(struct lrs_sched *sched,
+                                struct media_info *medium)
 {
-    int          rc;
+    int rc;
 
-    ENTRY;
-
-    if (!pmedia)
-        return -EINVAL;
-
-    rc = dss_lock(&sched->dss, DSS_MEDIA, pmedia, 1);
-    if (rc) {
-        pmedia->lock.is_external = true;
-        LOG_RETURN(rc, "Cannot lock media '%s'", pmedia->rsc.id.name);
-    }
-
-    pho_debug("Acquired ownership on media '%s'", pmedia->rsc.id.name);
-    return 0;
-}
-
-/**
- * Unlock a media at DSS level.
- */
-static int sched_media_release(struct lrs_sched *sched,
-                               struct media_info *pmedia)
-{
-    int          rc;
-
-    ENTRY;
-
-    if (!pmedia)
-        return -EINVAL;
-
-    rc = dss_unlock(&sched->dss, DSS_MEDIA, pmedia, 1, false);
+    rc = sched_resource_release(sched, DSS_MEDIA, medium, &medium->lock);
     if (rc)
-        LOG_RETURN(rc, "Cannot unlock media '%s'", pmedia->rsc.id.name);
+        pho_error(rc,
+                  "Error when releasing medium '%s' with current lock "
+                  "(hostname %s, owner %d)", medium->rsc.id.name,
+                  medium->lock.hostname, medium->lock.owner);
 
-    pho_debug("Released ownership on media '%s'", pmedia->rsc.id.name);
+    return rc;
+}
+
+/**
+ * Lock the corresponding item into the global DSS and update the local lock
+ *
+ * @param[in]       dss     DSS handle
+ * @param[in]       type    DSS type of the item
+ * @param[in]       item    item to lock
+ * @param[in, out]  lock    already allocated lock to update
+ */
+static int take_and_update_lock(struct dss_handle *dss, enum dss_type type,
+                                void *item, struct pho_lock *lock)
+{
+    int rc2;
+    int rc;
+
+    pho_lock_clean(lock);
+    rc = dss_lock(dss, type, item, 1);
+    if (rc)
+        pho_error(rc, "Unable to get lock on item for refresh");
+
+    /* update lock values */
+    rc2 = dss_lock_status(dss, type, item, 1, lock);
+    if (rc2) {
+        pho_error(rc2, "Unable to get status of new lock while refreshing");
+        /* try to unlock before exiting */
+        if (rc == 0) {
+            dss_unlock(dss, type, item, 1, false);
+            rc = rc2;
+        }
+
+        /* put a wrong lock value */
+        init_pho_lock(lock, "error_on_hostname", 0, NULL);
+    }
+
+    return rc;
+}
+
+/**
+ * If lock->owner is different from sched->lock_owner, renew the lock with
+ * the current owner (PID).
+ */
+static int check_renew_owner(struct lrs_sched *sched, enum dss_type type,
+                             void *item, struct pho_lock *lock)
+{
+    int rc;
+
+    if (lock->owner != sched->lock_owner) {
+        pho_warn("'%s' is already locked by owner %d, owner %d will "
+                 "take ownership of this device",
+                 dss_type_names[type], lock->owner, sched->lock_owner);
+
+        /**
+         * Unlocking here is dangerous if there is another process than the
+         * LRS on the same node that also acquires locks. If it becomes the case
+         * we have to warn and return an error and we must not take the
+         * ownership of this resource again.
+         */
+        /* unlock previous owner */
+        rc = dss_unlock(&sched->dss, type, item, 1, true);
+        if (rc)
+            LOG_RETURN(rc,
+                       "Unable to clear previous lock (hostname: %s, owner "
+                       " %d) on item",
+                       lock->hostname, lock->owner);
+
+        /* get the lock again */
+        rc = take_and_update_lock(&sched->dss, type, item, lock);
+        if (rc)
+            LOG_RETURN(rc, "Unable to get and refresh lock");
+    }
+
     return 0;
 }
 
 /**
- * False if the device is locked or if it contains a locked media,
- * true otherwise.
+ * First, check that lock->hostname is the same as sched->lock_hostname. If not,
+ * -EALREADY is returned.
+ *
+ * Then, if lock->owner is different from sched->lock_owner, renew the lock with
+ * the current owner (PID) by calling check_renew_owner.
  */
-static bool dev_is_available(const struct dev_descr *devd)
+static int check_renew_lock(struct lrs_sched *sched, enum dss_type type,
+                            void *item, struct pho_lock *lock)
 {
-    if (devd->locked_local) {
-        pho_debug("'%s' is locked\n", devd->dev_path);
-        return false;
+    if (strcmp(lock->hostname, sched->lock_hostname)) {
+        pho_warn("Resource already locked by host %s instead of %s",
+                 lock->hostname, sched->lock_hostname);
+        return -EALREADY;
     }
 
-    /* Test if the contained media lock is taken by another phobos */
-    if (devd->dss_media_info != NULL &&
-        devd->dss_media_info->lock.is_external) {
-        pho_debug("'%s' contains a locked media", devd->dev_path);
-        return false;
+    return check_renew_owner(sched, type, item, lock);
+}
+
+/**
+ * Acquire device lock if it is not already set.
+ *
+ * If lock is already set, check hostname and owner.
+ * -EALREADY is returned if dev->lock.hostname is not the same as
+ *  sched->lock_hostname.
+ *  If dev->lock.owner is not the same as sched->lock_owner, the lock is
+ *  re-taken from DSS to update the owner.
+ */
+static int check_and_take_device_lock(struct lrs_sched *sched,
+                                      struct dev_info *dev)
+{
+    int rc;
+
+    if (dev->lock.hostname) {
+        rc = check_renew_lock(sched, DSS_DEVICE, dev, &dev->lock);
+        if (rc)
+            LOG_RETURN(rc,
+                       "Unable to check and renew lock of one of our devices "
+                       "'%s'", dev->rsc.id.name);
+    } else {
+        rc = take_and_update_lock(&sched->dss, DSS_DEVICE, dev, &dev->lock);
+        if (rc)
+            LOG_RETURN(rc,
+                       "Unable to acquire and update lock on device '%s'",
+                       dev->rsc.id.name);
     }
-    return true;
+
+    return 0;
 }
 
 /**
@@ -273,10 +329,11 @@ static bool dev_is_available(const struct dev_descr *devd)
  *                    allocated by this function.
  * @param id[in]      ID of the media.
  */
-static int sched_fill_media_info(struct dss_handle *dss,
+static int sched_fill_media_info(struct lrs_sched *sched,
                                  struct media_info **pmedia,
                                  const struct pho_id *id)
 {
+    struct dss_handle   *dss = &sched->dss;
     struct media_info   *media_res = NULL;
     struct dss_filter    filter;
     int                  mcnt = 0;
@@ -305,19 +362,28 @@ static int sched_fill_media_info(struct dss_handle *dss,
         pho_info("No media found matching %s '%s'",
                  rsc_family2str(id->family), id->name);
         GOTO(out_free, rc = -ENXIO);
-    } else if (mcnt > 1)
+    } else if (mcnt > 1) {
         LOG_GOTO(out_free, rc = -EINVAL,
                  "Too many media found matching id '%s'", id->name);
+    }
 
     media_info_free(*pmedia);
     *pmedia = media_info_dup(media_res);
     if (!*pmedia)
         LOG_GOTO(out_free, rc = -ENOMEM, "Couldn't duplicate media info");
 
-    /* If the lock is already taken, mark it as externally locked */
-    if ((*pmedia)->lock.hostname) {
-        pho_info("Media '%s' is locked (%d)", id->name, (*pmedia)->lock.owner);
-        (*pmedia)->lock.is_external = true;
+    if ((*pmedia)->lock.hostname != NULL) {
+        rc = check_renew_lock(sched, DSS_MEDIA, *pmedia, &(*pmedia)->lock);
+        if (rc == -EALREADY) {
+            LOG_GOTO(out_free, rc,
+                     "Media '%s' is locked by (hostname: %s, owner: %d)",
+                     id->name, (*pmedia)->lock.hostname, (*pmedia)->lock.owner);
+        } else if (rc) {
+            LOG_GOTO(out_free, rc,
+                     "Error while checking media '%s' locked with hostname "
+                     "'%s' and owner '%d'",
+                     id->name, (*pmedia)->lock.hostname, (*pmedia)->lock.owner);
+        }
     }
 
     pho_debug("%s: spc_free=%zd",
@@ -343,7 +409,7 @@ out_nores:
  * @param[in]  lib  library handler for tape devices.
  * @param[out] devd dev_descr structure filled with all needed information.
  */
-static int sched_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
+static int sched_fill_dev_info(struct lrs_sched *sched, struct lib_adapter *lib,
                                struct dev_descr *devd)
 {
     struct dev_adapter deva;
@@ -406,43 +472,57 @@ static int sched_fill_dev_info(struct dss_handle *dss, struct lib_adapter *lib,
                   devi->rsc.id.name, medium_id->name);
 
         /* get media info for loaded drives */
-        rc = sched_fill_media_info(dss, &devd->dss_media_info, medium_id);
+        rc = sched_fill_media_info(sched, &devd->dss_media_info, medium_id);
 
-        /*
-         * If the drive is marked as locally locked, the contained media was in
-         * fact locked by us, this happens when the raid1 layout refreshes the
-         * drive list.
-         */
-        if (devd->locked_local && devd->dss_media_info &&
-            devd->dss_media_info->lock.is_external) {
-            devd->dss_media_info->lock.is_external = false;
+        if (rc) {
+            if (rc == -ENXIO)
+                pho_error(rc,
+                          "Device '%s' (S/N '%s') contains medium '%s', but "
+                          "this medium cannot be found", devd->dev_path,
+                          devi->rsc.id.name, medium_id->name);
+
+            if (rc == -EALREADY)
+                pho_error(rc,
+                          "Device '%s' (S/N '%s') is owned by host %s but "
+                          "contains medium '%s' which is locked by an other "
+                          "hostname %s", devd->dev_path, devi->rsc.id.name,
+                           devi->host, medium_id->name,
+                           devd->dss_media_info->lock.hostname);
+
+            return rc;
         }
 
-        /* Medium hasn't been found, mark the device as unusable */
-        if (rc == -ENXIO)
-            devd->op_status = PHO_DEV_OP_ST_FAILED;
-        else if (rc)
-            return rc;
-        else {
-            /* See if the device is currently mounted */
-            rc = get_fs_adapter(devd->dss_media_info->fs.type, &fsa);
+        /* get lock for loaded media */
+        if (!devd->dss_media_info->lock.hostname) {
+            rc = take_and_update_lock(&sched->dss, DSS_MEDIA,
+                                      devd->dss_media_info,
+                                      &devd->dss_media_info->lock);
             if (rc)
-                return rc;
-
-            /* If device is loaded, check if it is mounted as a filesystem */
-            rc = ldm_fs_mounted(&fsa, devd->dev_path, devd->mnt_path,
-                                sizeof(devd->mnt_path));
-
-            if (rc == 0) {
-                pho_debug("Discovered mounted filesystem at '%s'",
-                          devd->mnt_path);
-                devd->op_status = PHO_DEV_OP_ST_MOUNTED;
-            } else if (rc == -ENOENT)
-                /* not mounted, not an error */
-                rc = 0;
-            else
-                LOG_RETURN(rc, "Cannot determine if device '%s' is mounted",
+                LOG_RETURN(rc,
+                           "Unable to lock the media '%s' loaded in a owned "
+                           "device '%s'", devd->dss_media_info->rsc.id.name,
                            devd->dev_path);
+        }
+
+        /* See if the device is currently mounted */
+        rc = get_fs_adapter(devd->dss_media_info->fs.type, &fsa);
+        if (rc)
+            return rc;
+
+        /* If device is loaded, check if it is mounted as a filesystem */
+        rc = ldm_fs_mounted(&fsa, devd->dev_path, devd->mnt_path,
+                            sizeof(devd->mnt_path));
+
+        if (rc == 0) {
+            pho_debug("Discovered mounted filesystem at '%s'",
+                      devd->mnt_path);
+            devd->op_status = PHO_DEV_OP_ST_MOUNTED;
+        } else if (rc == -ENOENT) {
+            /* not mounted, not an error */
+            rc = 0;
+        } else {
+            LOG_RETURN(rc, "Cannot determine if device '%s' is mounted",
+                       devd->dev_path);
         }
     } else {
         devd->op_status = PHO_DEV_OP_ST_EMPTY;
@@ -481,99 +561,105 @@ static int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter *lib)
     return ldm_lib_open(lib, lib_dev);
 }
 
+static int load_device_list_from_dss(struct lrs_sched *sched)
+{
+    struct dev_info *devs = NULL;
+    struct dss_filter filter;
+    int dcnt;
+    int rc;
+    int i;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::DEV::host\": \"%s\"},"
+                          "  {\"DSS::DEV::adm_status\": \"%s\"},"
+                          "  {\"DSS::DEV::family\": \"%s\"}"
+                          "]}",
+                          sched->lock_hostname,
+                          rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
+                          rsc_family2str(sched->family));
+    if (rc)
+        return rc;
+
+    /* get all admin unlocked devices from DB for the given family */
+    rc = dss_device_get(&sched->dss, &filter, &devs, &dcnt);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc, "Error when getting devices from DSS");
+
+    /* Copy information from DSS to local device list */
+    for (i = 0 ; i < dcnt; i++) {
+        struct dev_descr device = {0};
+
+        if (check_and_take_device_lock(sched, &devs[i]))
+            continue;
+
+        device.dss_dev_info = dev_info_dup(&devs[i]);
+        if (!device.dss_dev_info) {
+            pho_warn("Unable to dup dev_info of '%s'", devs[i].path);
+            continue;
+        }
+
+        g_array_append_val(sched->devices, device);
+    }
+
+    if (sched->devices->len == 0)
+        LOG_GOTO(clean, rc = -ENXIO,
+                 "No usable device found (%s): check devices status",
+                 rsc_family2str(sched->family));
+
+clean:
+    /* free devs array, as they have been copied to sched->devices */
+    dss_res_free(devs, dcnt);
+    return rc;
+}
+
 /**
  * Load device states into memory.
  * Do nothing if device status is already loaded.
  */
 static int sched_load_dev_state(struct lrs_sched *sched)
 {
-    struct dev_info    *devs = NULL;
-    int                 dcnt = 0;
+    bool                clean_devices = false;
     struct lib_adapter  lib;
-    int                 i;
     int                 rc;
+    int                 i;
 
     ENTRY;
 
-    if (sched->family == PHO_RSC_INVAL)
-        return -EINVAL;
-
-    /* If no device has previously been loaded, load the list of available
-     * devices from DSS; otherwise just refresh informations for the current
-     * list of devices
-     */
-    if (sched->devices->len == 0) {
-        struct dss_filter   filter;
-
-        rc = dss_filter_build(&filter,
-                              "{\"$AND\": ["
-                              "  {\"DSS::DEV::host\": \"%s\"},"
-                              "  {\"DSS::DEV::adm_status\": \"%s\"},"
-                              "  {\"DSS::DEV::family\": \"%s\"}"
-                              "]}",
-                              get_hostname(),
-                              rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
-                              rsc_family2str(sched->family));
-        if (rc)
-            return rc;
-
-        /* get all unlocked devices from DB for the given family */
-        rc = dss_device_get(&sched->dss, &filter, &devs, &dcnt);
-        dss_filter_free(&filter);
-        if (rc)
-            GOTO(err_no_res, rc);
-
-        if (dcnt == 0) {
-            pho_info("No usable device found (%s): check devices status",
-                     rsc_family2str(sched->family));
-            GOTO(err, rc = -ENXIO);
-        }
-
-        g_array_set_size(sched->devices, dcnt);
-
-        /* Copy information from DSS to local device list */
-        for (i = 0 ; i < dcnt; i++) {
-            struct dev_descr *dev = &g_array_index(sched->devices,
-                                                   struct dev_descr, i);
-            dev->dss_dev_info = dev_info_dup(&devs[i]);
-            if (!dev->dss_dev_info)
-                LOG_GOTO(free_devices, rc = -ENOMEM,
-                         "Couldn't duplicate device info");
-        }
-    }
+    if (sched->devices->len == 0)
+        LOG_RETURN(-ENXIO, "Try to load state of an empty list of devices");
 
     /* get a handle to the library to query it */
     rc = wrap_lib_open(sched->family, &lib);
     if (rc)
-        GOTO(err, rc);
+        LOG_RETURN(rc, "Error while loading devices when opening library");
 
     for (i = 0 ; i < sched->devices->len; i++) {
         struct dev_descr *dev = &g_array_index(sched->devices,
                                                struct dev_descr, i);
-        rc = sched_fill_dev_info(&sched->dss, &lib, dev);
+        rc = sched_fill_dev_info(sched, &lib, dev);
         if (rc) {
-            pho_debug("Marking device '%s' as failed", dev->dev_path);
+            pho_debug("Fail to init device '%s', marking it as failed and "
+                      "releasing it", dev->dev_path);
             dev->op_status = PHO_DEV_OP_ST_FAILED;
+            sched_device_release(sched, dev);
+        } else {
+            clean_devices = true;
         }
     }
 
     /* close handle to the library */
-    ldm_lib_close(&lib);
-
-    rc = 0;
-
-free_devices:
+    rc = ldm_lib_close(&lib);
     if (rc)
-        for (i--; i >= 0; i--) {
-            struct dev_descr *dev_to_free = &g_array_index(sched->devices,
-                                                           struct dev_descr, i);
-            dev_info_free(dev_to_free->dss_dev_info, true);
-        }
-err:
-    /* free devs array, as they have been copied to devices[].device */
-    dss_res_free(devs, dcnt);
-err_no_res:
-    return rc;
+        LOG_RETURN(rc,
+                   "Error while closing the library handle after loading "
+                   "device state");
+
+    if (!clean_devices)
+        LOG_RETURN(-ENXIO, "No functional device found");
+
+    return 0;
 }
 
 static void dev_descr_fini(gpointer ptr)
@@ -589,119 +675,47 @@ static void dev_descr_fini(gpointer ptr)
 }
 
 /**
- * Checks the lock host is the same as the daemon instance.
- *
- * @param   sched       Scheduler handle, contains the daemon lock string.
- * @param   lock        Lock string to compare to the daemon one.
- * @return              true if hosts are the same,
- *                      false otherwise.
- */
-static bool compare_lock_hosts(struct lrs_sched *sched, const char *lock)
-{
-    if (!lock)
-        return false;
-
-    /* Compare the sched->lock_hostname with the given lock */
-    return !strcmp(sched->lock_hostname, lock);
-}
-
-/**
- * Unlocks all devices that were locked by a previous instance on this host.
- *
- * We consider that for a given configuration and so a given database, it can
- * only exists one daemon instance at a time on a host. If two instances exist
- * at the same time on one host, they need to be related to different databases.
+ * Unlocks all devices that were locked by a previous instance on this host and
+ * that it doesn't own anymore.
  *
  * @param   sched       Scheduler handle.
  * @return              0 on success,
  *                      first encountered negative posix error on failure.
  */
-static int sched_check_device_locks(struct lrs_sched *sched)
+static int sched_clean_device_locks(struct lrs_sched *sched)
 {
-    int rc = 0;
-    int i;
-
+    (void) sched;
     ENTRY;
 
-    for (i = 0; i < sched->devices->len; ++i) {
-        struct dev_info *dev;
-        int rc2;
+    /**
+     * TODO : when hosts will be directly accessible into lock, get list of
+     * device locks from this host and unlock them if DSS device host is not
+     * self host.
+     */
 
-        dev = g_array_index(
-            sched->devices, struct dev_descr, i).dss_dev_info;
-
-        if (!compare_lock_hosts(sched, dev->lock.hostname))
-            continue;
-
-        pho_info("Device '%s' was previously locked by this host, releasing it",
-                 dev->path);
-        rc2 = dss_unlock(&sched->dss, DSS_DEVICE, dev, 1, true);
-        if (rc2) {
-            pho_error(rc2, "Device '%s' could not be unlocked", dev->path);
-            rc = rc ? : rc2;
-        }
-    }
-
-    return rc;
+    return 0;
 }
 
 /**
- * Unlocks all media that were locked by a previous instance on this host.
- *
- * We consider that for a given configuration and so a given database, it can
- * only exists one daemon instance at a time on a host. If two instances exist
- * at the same time on one host, they need to be related to different databases.
+ * Unlocks all media that were locked by a previous instance on this host and
+ * that are not loaded anymore in a device locked by this host.
  *
  * @param   sched       Scheduler handle.
  * @return              0 on success,
  *                      first encountered negative posix error on failure.
  */
-static int sched_check_medium_locks(struct lrs_sched *sched)
+static int sched_clean_medium_locks(struct lrs_sched *sched)
 {
-    struct media_info *media = NULL;
-    struct dss_filter filter;
-    int mcnt = 0;
-    int rc = 0;
-    int i;
-
+    (void) sched;
     ENTRY;
 
-    // get all media of the right family
-    rc = dss_filter_build(&filter, "{\"DSS::MDA::family\": \"%s\"}",
-                          rsc_family2str(sched->family));
-    if (rc) {
-        pho_error(rc, "Filter build failed");
-        return rc;
-    }
+    /**
+     * TODO : when hosts will be directly accessible into lock, get list of
+     * media locks from this host and unlock them if their are not loaded into
+     * a device currently loaded into this sched.
+     */
 
-    rc = dss_media_get(&sched->dss, &filter, &media, &mcnt);
-    dss_filter_free(&filter);
-    if (rc) {
-        pho_error(rc, "Media could not be retrieved from the database");
-        return rc;
-    }
-
-    // for all check if the lock is from this host
-    for (i = 0; i < mcnt; ++i) {
-        int rc2;
-
-        if (!compare_lock_hosts(sched, media[i].lock.hostname))
-            continue;
-
-        // if it is, unlock it
-        pho_info("Medium '%s' was previously locked by this host, releasing it",
-                 media[i].rsc.id.name);
-        rc2 = dss_unlock(&sched->dss, DSS_MEDIA, &media[i], 1, true);
-        if (rc2) {
-            pho_error(rc2, "Medium '%s' could not be unlocked",
-                      media[i].rsc.id.name);
-            rc = rc ? : rc2;
-        }
-    }
-
-    dss_res_free(media, mcnt);
-
-    return rc;
+    return 0;
 }
 
 int sched_init(struct lrs_sched *sched, enum rsc_family family)
@@ -712,7 +726,7 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
 
     rc = fill_host_owner(&sched->lock_hostname, &sched->lock_owner);
     if (rc)
-        LOG_RETURN(rc, "Failed to get LRS hostname");
+        LOG_RETURN(rc, "Failed to get hostname and PID");
 
     /* Connect to the DSS */
     rc = dss_init(&sched->dss);
@@ -724,22 +738,195 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
     sched->req_queue = g_queue_new();
     sched->release_queue = g_queue_new();
 
+    /* Load devices from DSS -- not critical if no device is found */
+    load_device_list_from_dss(sched);
+
     /* Load the device state -- not critical if no device is found */
     sched_load_dev_state(sched);
 
-    rc = sched_check_device_locks(sched);
+    rc = sched_clean_device_locks(sched);
     if (rc) {
         sched_fini(sched);
         return rc;
     }
 
-    rc = sched_check_medium_locks(sched);
+    rc = sched_clean_medium_locks(sched);
     if (rc) {
         sched_fini(sched);
         return rc;
     }
 
     return 0;
+}
+
+/**
+ * Unmount the filesystem of a 'mounted' device
+ *
+ * sched_umount must be called with:
+ * - dev->op_status set to PHO_DEV_OP_ST_MOUNTED, a mounted dev->dess_media_info
+ * - a global DSS lock on dev
+ * - a global DSS lock on dev->dss_media_info
+ *
+ * On error, dev->ongoing_io is set to false, we try to release global DSS
+ * locks on dev and dev->dss_media_info, and dev->op_status is set to
+ * PHO_DEV_OP_FAILED.
+ */
+static int sched_umount(struct lrs_sched *sched, struct dev_descr *dev)
+{
+    struct fs_adapter fsa;
+    int rc;
+
+    ENTRY;
+
+    pho_verb("Unmounting device '%s' mounted at '%s'",
+             dev->dev_path, dev->mnt_path);
+
+    rc = get_fs_adapter(dev->dss_media_info->fs.type, &fsa);
+    if (rc)
+        LOG_GOTO(out, rc,
+                 "Unable to get fs adapter '%s' to unmount medium '%s' from "
+                 "device '%s'", fs_type_names[dev->dss_media_info->fs.type],
+                 dev->dss_media_info->rsc.id.name, dev->dev_path);
+
+    rc = ldm_fs_umount(&fsa, dev->dev_path, dev->mnt_path);
+    if (rc)
+        LOG_GOTO(out, rc, "Failed to unmount device '%s' mounted at '%s'",
+                 dev->dev_path, dev->mnt_path);
+
+    /* update device state and unset mount path */
+    dev->op_status = PHO_DEV_OP_ST_LOADED;
+    dev->mnt_path[0] = '\0';
+
+out:
+    if (rc) {
+        dev->op_status = PHO_DEV_OP_ST_FAILED;
+        dev->ongoing_io = false;
+        sched_medium_release(sched, dev->dss_media_info);
+        sched_device_release(sched, dev);
+    }
+
+    return rc;
+}
+
+/**
+ * Unload, unlock and free a media from a drive and set drive's op_status to
+ * PHO_DEV_OP_ST_EMPTY
+ *
+ * Must be called with:
+ * - dev->op_status set to PHO_DEV_OP_ST_LOADED and loaded dev->dss_media_info
+ * - a global DSS lock on dev
+ * - a global DSS lock on dev->dss_media_info
+ *
+ * On error, we try to release global DSS lock on dev in addition of unlocking
+ * dev->media. dev->op_status is set to PHO_DEV_OP_ST_FAILED
+ */
+static int sched_unload_medium(struct lrs_sched *sched, struct dev_descr *dev)
+{
+    /* let the library select the target location */
+    struct lib_item_addr    free_slot = { .lia_type = MED_LOC_UNKNOWN };
+    struct lib_adapter      lib;
+    int                     rc2;
+    int                     rc;
+
+    ENTRY;
+
+    pho_verb("Unloading '%s' from '%s'", dev->dss_media_info->rsc.id.name,
+             dev->dev_path);
+
+    rc = wrap_lib_open(dev->dss_dev_info->rsc.id.family, &lib);
+    if (rc)
+        LOG_GOTO(out, rc,
+                 "Unable to open lib '%s' to unload medium '%s' from device "
+                 "'%s'", rsc_family_names[dev->dss_dev_info->rsc.id.family],
+                 dev->dss_media_info->rsc.id.name, dev->dev_path);
+
+    rc = ldm_lib_media_move(&lib, &dev->lib_dev_info.ldi_addr, &free_slot);
+    if (rc != 0)
+        /* Set operationnal failure state on this drive. It is incomplete since
+         * the error can originate from a defective tape too...
+         *  - consider marking both as failed.
+         *  - consider maintaining lists of errors to diagnose and decide who to
+         *    exclude from the cool game.
+         */
+        LOG_GOTO(out_close, rc, "Media move failed");
+
+    dev->op_status = PHO_DEV_OP_ST_EMPTY;
+
+out_close:
+    rc2 = ldm_lib_close(&lib);
+    if (rc2)
+        rc = rc ? : rc2;
+
+out:
+    rc2 = sched_medium_release(sched, dev->dss_media_info);
+    if (rc2)
+        rc = rc ? : rc2;
+
+    media_info_free(dev->dss_media_info);
+    dev->dss_media_info = NULL;
+
+    if (rc) {
+        dev->op_status = PHO_DEV_OP_ST_FAILED;
+        sched_device_release(sched, dev);
+    }
+
+    return rc;
+}
+
+static int sched_empty_dev(struct lrs_sched *sched, struct dev_descr *dev)
+{
+    int rc;
+
+    if (dev->op_status == PHO_DEV_OP_ST_MOUNTED) {
+        rc = sched_umount(sched, dev);
+        if (rc)
+            return rc;
+    }
+
+    /**
+     * We follow up on unload.
+     * (a successfull umount let the op_status to LOADED)
+     */
+    if (dev->op_status == PHO_DEV_OP_ST_LOADED)
+        return sched_unload_medium(sched, dev);
+
+    return 0;
+}
+
+/**
+ * If the device contains a medium, this one is unmounted if needed and
+ * unloaded, and the global DSS lock on this medium is released.
+ *
+ * The global DSS lock of the device is released.
+ */
+static int sched_empty_and_release_dev(struct lrs_sched *sched,
+                                       struct dev_descr *dev)
+{
+    int rc;
+
+    rc = sched_empty_dev(sched, dev);
+    if (rc)
+        return rc;
+
+    return sched_device_release(sched, dev);
+}
+
+/**
+ * Unmount, unload and release global DSS lock of all medium that are loaded
+ * into devices with no ongoing I/O and that are not failed. The global DSS
+ * locks on devices with no ongoing I/O and that are not failed are released.
+ */
+static void sched_release(struct lrs_sched *sched)
+{
+    int i;
+
+    for (i = 0; i < sched->devices->len; i++) {
+        struct dev_descr *dev = &g_array_index(sched->devices,
+                                               struct dev_descr, i);
+
+        if (dev->op_status != PHO_DEV_OP_ST_FAILED && !dev->ongoing_io)
+            sched_empty_and_release_dev(sched, dev);
+    }
 }
 
 void sched_fini(struct lrs_sched *sched)
@@ -749,6 +936,9 @@ void sched_fini(struct lrs_sched *sched)
 
     /* Handle all pending release requests */
     sched_handle_release_reqs(sched, NULL);
+
+    /* Release all devices and media without any ongoing IO */
+    sched_release(sched);
 
     dss_fini(&sched->dss);
 
@@ -829,7 +1019,7 @@ out:
 }
 
 static bool medium_in_devices(const struct media_info *medium,
-                                  struct dev_descr **devs, size_t n_dev)
+                              struct dev_descr **devs, size_t n_dev)
 {
     size_t i;
 
@@ -845,6 +1035,7 @@ static bool medium_in_devices(const struct media_info *medium,
 
 /**
  * Get a suitable medium for a write operation.
+ *
  * @param[in]  sched         Current scheduler
  * @param[out] p_media       Selected medium
  * @param[in]  required_size Size of the extent to be written.
@@ -868,7 +1059,6 @@ static int sched_select_media(struct lrs_sched *sched,
     struct dss_filter    filter;
     char                *tag_filter_json = NULL;
     bool                 with_tags = tags != NULL && tags->n_tags > 0;
-    bool                 full_avail_media = false;
     int                  mcnt = 0;
     int                  rc;
     int                  i;
@@ -885,7 +1075,7 @@ static int sched_select_media(struct lrs_sched *sched,
                           "{\"$AND\": ["
                           /* Basic criteria */
                           "  {\"DSS::MDA::family\": \"%s\"},"
-                          /* Check get media operation flags */
+                          /* Check put media operation flags */
                           "  {\"DSS::MDA::put\": \"t\"},"
                           /* Exclude media locked by admin */
                           "  {\"DSS::MDA::adm_status\": \"%s\"},"
@@ -915,6 +1105,7 @@ static int sched_select_media(struct lrs_sched *sched,
         return rc;
 
     rc = dss_media_get(&sched->dss, &filter, &pmedia_res, &mcnt);
+    dss_filter_free(&filter);
     if (rc)
         GOTO(err_nores, rc);
 
@@ -934,25 +1125,30 @@ lock_race_retry:
 
         avail_size += curr->stats.phys_spc_free;
 
-        if ((split_media_best == NULL ||
+        /* already locked */
+        if (curr->lock.hostname != NULL) {
+            struct dev_descr *dev;
+
+            if (check_renew_lock(sched, DSS_MEDIA, curr, &curr->lock))
+                /* not locked by myself */
+                continue;
+
+            dev = search_loaded_media(sched, curr->rsc.id.name);
+            if (dev && dev->ongoing_io)
+                /* locked by myself but already in use */
+                continue;
+        }
+
+        if (split_media_best == NULL ||
             curr->stats.phys_spc_free > split_media_best->stats.phys_spc_free)
-            && !curr->lock.is_external)
             split_media_best = curr;
 
         if (curr->stats.phys_spc_free < required_size)
             continue;
 
         if (whole_media_best == NULL ||
-            curr->stats.phys_spc_free < whole_media_best->stats.phys_spc_free) {
-            /* Remember that at least one fitting media has been found */
-            full_avail_media = true;
-
-            /* The media is already locked, continue searching */
-            if (curr->lock.is_external)
-                continue;
-
+            curr->stats.phys_spc_free < whole_media_best->stats.phys_spc_free)
             whole_media_best = curr;
-        }
     }
 
     if (avail_size < required_size) {
@@ -961,11 +1157,8 @@ lock_race_retry:
         GOTO(free_res, rc = -ENOSPC);
     }
 
-    if (whole_media_best != NULL)
+    if (whole_media_best != NULL) {
         chosen_media = whole_media_best;
-    else if (full_avail_media) {
-        pho_info("Wait an existing compatible medium with full available size");
-        GOTO(free_res, rc = -EAGAIN);
     } else if (split_media_best != NULL) {
         chosen_media = split_media_best;
         pho_info("Split %zd required_size on %zd avail size on %s medium",
@@ -976,12 +1169,15 @@ lock_race_retry:
         GOTO(free_res, rc = -EAGAIN);
     }
 
-    pho_debug("Acquiring selected media '%s'", chosen_media->rsc.id.name);
-    rc = sched_media_acquire(sched, chosen_media);
-    if (rc) {
-        pho_debug("Failed to lock media '%s', looking for another one",
-                  chosen_media->rsc.id.name);
-        goto lock_race_retry;
+    if (!chosen_media->lock.hostname) {
+        pho_debug("Acquiring selected media '%s'", chosen_media->rsc.id.name);
+        rc = take_and_update_lock(&sched->dss, DSS_MEDIA, chosen_media,
+                                  &chosen_media->lock);
+        if (rc) {
+            pho_debug("Failed to lock media '%s', looking for another one",
+                      chosen_media->rsc.id.name);
+            goto lock_race_retry;
+        }
     }
 
     pho_verb("Selected %s '%s': %zd bytes free", rsc_family2str(family),
@@ -989,19 +1185,19 @@ lock_race_retry:
              chosen_media->stats.phys_spc_free);
 
     *p_media = media_info_dup(chosen_media);
-    if (*p_media == NULL)
-        GOTO(free_res, rc = -ENOMEM);
+    if (*p_media == NULL) {
+        sched_medium_release(sched, chosen_media);
+        LOG_GOTO(free_res, rc = -ENOMEM,
+                 "Unable to duplicate chosen media '%s'",
+                 chosen_media->rsc.id.name);
+    }
 
     rc = 0;
 
 free_res:
-    if (rc != 0)
-        sched_media_release(sched, chosen_media);
-
     dss_res_free(pmedia_res, mcnt);
 
 err_nores:
-    dss_filter_free(&filter);
     return rc;
 }
 
@@ -1174,8 +1370,8 @@ typedef int (*device_select_func_t)(size_t required_size,
 
 /**
  * Select a device according to a given status and policy function.
- * Returns a device in locked state; if a media is in the device, the media is
- * locked first.
+ * Returns a device by setting its ongoing_io flag to true.
+ *
  * @param dss     DSS handle.
  * @param op_st   Filter devices by the given operational status.
  *                No filtering is op_st is PHO_DEV_OP_ST_UNSPEC.
@@ -1197,30 +1393,21 @@ static struct dev_descr *dev_picker(struct lrs_sched *sched,
     int                  selected_i = -1;
     int                  i;
     int                  rc;
-    /*
-     * lazily allocated array to remember which devices were unsuccessfully
-     * acquired
-     */
-    bool                *failed_dev = NULL;
 
     ENTRY;
 
-retry:
     for (i = 0; i < sched->devices->len; i++) {
         struct dev_descr *itr = &g_array_index(sched->devices,
                                                struct dev_descr, i);
         struct dev_descr *prev = selected;
 
-        /* Already unsuccessfully tried to acquire this device */
-        if (failed_dev && failed_dev[i])
-            continue;
-
-        if (!dev_is_available(itr)) {
-            pho_debug("Skipping locked or busy device '%s'", itr->dev_path);
+        if (itr->ongoing_io) {
+            pho_debug("Skipping busy device '%s'", itr->dev_path);
             continue;
         }
 
-        if (op_st != PHO_DEV_OP_ST_UNSPEC && itr->op_status != op_st) {
+        if ((itr->op_status == PHO_DEV_OP_ST_FAILED) ||
+            (op_st != PHO_DEV_OP_ST_UNSPEC && itr->op_status != op_st)) {
             pho_debug("Skipping device '%s' with incompatible status %s",
                       itr->dev_path, op_status2str(itr->op_status));
             continue;
@@ -1288,47 +1475,12 @@ retry:
     }
 
     if (selected != NULL) {
-        struct media_info *local_pmedia = selected->dss_media_info;
-
         pho_debug("Picked dev number %d (%s)", selected_i, selected->dev_path);
-        rc = 0;
-        if (local_pmedia != NULL) {
-            pho_debug("Acquiring %s media '%s'",
-                      op_status2str(selected->op_status),
-                      local_pmedia->rsc.id.name);
-            rc = sched_media_acquire(sched, local_pmedia);
-            if (rc)
-                /* Avoid releasing a media that has not been acquired */
-                local_pmedia = NULL;
-        }
-
-        /* Potential media locking suceeded (or no media was loaded): acquire
-         * device
-         */
-        if (rc == 0)
-            rc = sched_dev_acquire(sched, selected);
-
-        /* Something went wrong */
-        if (rc != 0) {
-            /* Release media if necessary */
-            sched_media_release(sched, local_pmedia);
-            /* clear previously selected device */
-            selected = NULL;
-            /* Allocate failed_dev if necessary */
-            if (failed_dev == NULL) {
-                failed_dev = calloc(sched->devices->len, sizeof(bool));
-                if (failed_dev == NULL)
-                    return NULL;
-            }
-            /* Locally mark this device as failed */
-            failed_dev[selected_i] = true;
-            /* resume loop where it was */
-            goto retry;
-        }
-    } else
+        selected->ongoing_io = true;
+    } else {
         pho_debug("Could not find a suitable %s device", op_status2str(op_st));
+    }
 
-    free(failed_dev);
     return selected;
 }
 
@@ -1411,12 +1563,11 @@ static int select_drive_to_free(size_t required_size,
 {
     ENTRY;
 
-    /* skip failed and locked drives */
-    if (dev_curr->op_status == PHO_DEV_OP_ST_FAILED
-            || !dev_is_available(dev_curr)) {
+    /* skip failed and busy drives */
+    if (dev_curr->op_status == PHO_DEV_OP_ST_FAILED || dev_curr->ongoing_io) {
         pho_debug("Skipping drive '%s' with status %s%s",
                   dev_curr->dev_path, op_status2str(dev_curr->op_status),
-                  !dev_is_available(dev_curr) ? " (locked or busy)" : "");
+                  dev_curr->ongoing_io ? " (busy)" : "");
         return 1;
     }
 
@@ -1437,8 +1588,20 @@ static int select_drive_to_free(size_t required_size,
     return 1;
 }
 
-/** Mount the filesystem of a ready device */
-static int sched_mount(struct dev_descr *dev)
+/**
+ * Mount the filesystem of a ready device
+ *
+ * Must be called with :
+ * - dev->ongoing_io set to true,
+ * - dev->op_status set to PHO_DEV_OP_ST_LOADED and a loaded dev->dss_media_info
+ * - a global DSS lock on dev
+ * - a global DSS lock on dev->dss_media_info
+ *
+ * On error, we try to unload dev->media, dev->ongoing_io is set to false,
+ * we try to release global DSS locks on dev and dev->dss_media_info,
+ * dev->op_status is set to PHO_DEV_OP_ST_FAILED.
+ */
+static int sched_mount(struct lrs_sched *sched, struct dev_descr *dev)
 {
     char                *mnt_root;
     struct fs_adapter    fsa;
@@ -1449,7 +1612,7 @@ static int sched_mount(struct dev_descr *dev)
 
     rc = get_fs_adapter(dev->dss_media_info->fs.type, &fsa);
     if (rc)
-        goto out_err;
+        goto out;
 
     rc = ldm_fs_mounted(&fsa, dev->dev_path, dev->mnt_path,
                         sizeof(dev->mnt_path));
@@ -1470,7 +1633,7 @@ static int sched_mount(struct dev_descr *dev)
     /* mount the device as PHO_MNT_PREFIX<id> */
     mnt_root = mount_point(id);
     if (!mnt_root)
-        return -ENOMEM;
+        LOG_GOTO(out, rc = -ENOMEM, "Unable to get mount point of %s", id);
 
     pho_verb("Mounting device '%s' as '%s'", dev->dev_path, mnt_root);
 
@@ -1487,59 +1650,40 @@ static int sched_mount(struct dev_descr *dev)
 
 out_free:
     free(mnt_root);
-out_err:
-    if (rc != 0)
-        dev->op_status = PHO_DEV_OP_ST_FAILED;
+out:
+    if (rc != 0) {
+        /**
+         * sched_unload_medium is always unlocking dev->dss_media_info.
+         * On error, sched_unload_medium is unlocking and setting dev to failed.
+         */
+        if (!sched_unload_medium(sched, dev)) {
+            dev->op_status = PHO_DEV_OP_ST_FAILED;
+            sched_device_release(sched, dev);
+        }
+
+        dev->ongoing_io = false;
+    }
+
     return rc;
-}
-
-/** Unmount the filesystem of a 'mounted' device */
-static int sched_umount(struct dev_descr *dev)
-{
-    struct fs_adapter  fsa;
-    int                rc;
-
-    ENTRY;
-
-    if (dev->op_status != PHO_DEV_OP_ST_MOUNTED)
-        LOG_RETURN(-EINVAL, "Unexpected drive status for '%s': '%s'",
-                   dev->dev_path, op_status2str(dev->op_status));
-
-    if (dev->mnt_path[0] == '\0')
-        LOG_RETURN(-EINVAL, "No mount point for mounted device '%s'?!",
-                   dev->dev_path);
-
-    if (dev->dss_media_info == NULL)
-        LOG_RETURN(-EINVAL, "No media in mounted device '%s'?!",
-                   dev->dev_path);
-
-    pho_verb("Unmounting device '%s' mounted as '%s'",
-             dev->dev_path, dev->mnt_path);
-
-    rc = get_fs_adapter(dev->dss_media_info->fs.type, &fsa);
-    if (rc)
-        return rc;
-
-    rc = ldm_fs_umount(&fsa, dev->dev_path, dev->mnt_path);
-    if (rc)
-        LOG_RETURN(rc, "Failed to umount device '%s' mounted as '%s'",
-                   dev->dev_path, dev->mnt_path);
-
-    /* update device state and unset mount path */
-    dev->op_status = PHO_DEV_OP_ST_LOADED;
-    dev->mnt_path[0] = '\0';
-
-    return 0;
 }
 
 /**
  * Load a media into a drive.
  *
- * @return 0 on success, -error number on error. -EBUSY is returned when a drive
- * to drive media movement was prevented by the library.
+ * Must be called while owning a global DSS lock on dev and on media and with
+ * the ongoing_io flag set to true on dev.
+ *
+ * On error, the dev's ongoing_io flag is removed, the media is unlocked and the
+ * device is also unlocked is this one is set as FAILED.
+ *
+ * @return 0 on success, -error number on error. -EBUSY is returned when a
+ * drive to drive media movement was prevented by the library or if the device
+ * is empty.
  */
-static int sched_load(struct dev_descr *dev, struct media_info *media)
+static int sched_load_media(struct lrs_sched *sched, struct dev_descr *dev,
+                            struct media_info *media)
 {
+    bool                 failure_on_dev = false;
     struct lib_item_addr media_addr;
     struct lib_adapter   lib;
     int                  rc;
@@ -1548,19 +1692,20 @@ static int sched_load(struct dev_descr *dev, struct media_info *media)
     ENTRY;
 
     if (dev->op_status != PHO_DEV_OP_ST_EMPTY)
-        LOG_RETURN(-EAGAIN, "%s: unexpected drive status: status='%s'",
-                   dev->dev_path, op_status2str(dev->op_status));
+        LOG_GOTO(out, rc = -EAGAIN, "%s: unexpected drive status: status='%s'",
+                 dev->dev_path, op_status2str(dev->op_status));
 
     if (dev->dss_media_info != NULL)
-        LOG_RETURN(-EAGAIN, "No media expected in device '%s' (found '%s')",
-                   dev->dev_path, dev->dss_media_info->rsc.id.name);
+        LOG_GOTO(out, rc = -EAGAIN,
+                 "No media expected in device '%s' (found '%s')",
+                 dev->dev_path, dev->dss_media_info->rsc.id.name);
 
     pho_verb("Loading '%s' into '%s'", media->rsc.id.name, dev->dev_path);
 
     /* get handle to the library depending on device type */
     rc = wrap_lib_open(dev->dss_dev_info->rsc.id.family, &lib);
     if (rc)
-        return rc;
+        LOG_GOTO(out, rc, "Failed to open lib in %s", __func__);
 
     /* lookup the requested media */
     rc = ldm_lib_media_lookup(&lib, media->rsc.id.name, &media_addr);
@@ -1581,7 +1726,7 @@ static int sched_load(struct dev_descr *dev, struct media_info *media)
         pho_debug("Failed to move a media from one drive to another, trying "
                   "again later");
         /* @TODO: acquire source drive on the fly? */
-        return -EBUSY;
+        GOTO(out_close, rc = -EBUSY);
     } else if (rc != 0) {
         /* Set operationnal failure state on this drive. It is incomplete since
          * the error can originate from a defect tape too...
@@ -1589,7 +1734,6 @@ static int sched_load(struct dev_descr *dev, struct media_info *media)
          *  - consider maintaining lists of errors to diagnose and decide who to
          *    exclude from the cool game.
          */
-        dev->op_status = PHO_DEV_OP_ST_FAILED;
         LOG_GOTO(out_close, rc, "Media move failed");
     }
 
@@ -1601,64 +1745,23 @@ static int sched_load(struct dev_descr *dev, struct media_info *media)
 
 out_close:
     rc2 = ldm_lib_close(&lib);
-    return rc ? rc : rc2;
-}
-
-/**
- * Unload a media from a drive and unlock the media.
- */
-static int sched_unload(struct lrs_sched *sched, struct dev_descr *dev)
-{
-    /* let the library select the target location */
-    struct lib_item_addr    free_slot = { .lia_type = MED_LOC_UNKNOWN };
-    struct lib_adapter      lib;
-    int                     rc;
-    int                     rc2;
-
-    ENTRY;
-
-    if (dev->op_status != PHO_DEV_OP_ST_LOADED)
-        LOG_RETURN(-EINVAL, "Unexpected drive status for '%s': '%s'",
-                   dev->dev_path, op_status2str(dev->op_status));
-
-    if (dev->dss_media_info == NULL)
-        LOG_RETURN(-EINVAL, "No media in loaded device '%s'?!",
-                   dev->dev_path);
-
-    pho_verb("Unloading '%s' from '%s'", dev->dss_media_info->rsc.id.name,
-             dev->dev_path);
-
-    /* get handle to the library, depending on device type */
-    rc = wrap_lib_open(dev->dss_dev_info->rsc.id.family, &lib);
-    if (rc)
-        return rc;
-
-    rc = ldm_lib_media_move(&lib, &dev->lib_dev_info.ldi_addr, &free_slot);
-    if (rc != 0) {
-        /* Set operationnal failure state on this drive. It is incomplete since
-         * the error can originate from a defect tape too...
-         *  - consider marking both as failed.
-         *  - consider maintaining lists of errors to diagnose and decide who to
-         *    exclude from the cool game.
-         */
-        dev->op_status = PHO_DEV_OP_ST_FAILED;
-        LOG_GOTO(out_close, rc, "Media move failed");
+    if (rc2) {
+        pho_error(rc2, "Unable to close lib on %s", __func__);
+        rc = rc ? : rc2;
     }
 
-    /* update device status */
-    dev->op_status = PHO_DEV_OP_ST_EMPTY;
+out:
+    if (rc) {
+        sched_medium_release(sched, media);
+        if (failure_on_dev) {
+            dev->op_status = PHO_DEV_OP_ST_FAILED;
+            sched_device_release(sched, dev);
+        }
 
-    /* Locked by caller, by convention */
-    sched_media_release(sched, dev->dss_media_info);
+        dev->ongoing_io = false;
+    }
 
-    /* free media resources */
-    media_info_free(dev->dss_media_info);
-    dev->dss_media_info = NULL;
-    rc = 0;
-
-out_close:
-    rc2 = ldm_lib_close(&lib);
-    return rc ? rc : rc2;
+    return rc;
 }
 
 /** return the device policy function depending on configuration */
@@ -1751,7 +1854,6 @@ static int sched_free_one_device(struct lrs_sched *sched,
                                  const int n_selected_devs)
 {
     struct dev_descr *tmp_dev;
-    int               rc;
 
     ENTRY;
 
@@ -1769,38 +1871,12 @@ static int sched_free_one_device(struct lrs_sched *sched,
                                     "and not locked by admin");
         }
 
-        if (tmp_dev->op_status == PHO_DEV_OP_ST_MOUNTED) {
-            /* unmount it */
-            rc = sched_umount(tmp_dev);
-            if (rc) {
-                /* set it failed and get another device */
-                tmp_dev->op_status = PHO_DEV_OP_ST_FAILED;
-                goto next;
-            }
-        }
-
-        if (tmp_dev->op_status == PHO_DEV_OP_ST_LOADED) {
-            /* unload the media */
-            rc = sched_unload(sched, tmp_dev);
-            if (rc) {
-                /* set it failed and get another device */
-                tmp_dev->op_status = PHO_DEV_OP_ST_FAILED;
-                goto next;
-            }
-        }
-
-        if (tmp_dev->op_status != PHO_DEV_OP_ST_EMPTY)
-            LOG_RETURN(-EINVAL,
-                       "Unexpected dev status '%s' for '%s': should be empty",
-                       op_status2str(tmp_dev->op_status), tmp_dev->dev_path);
+        if (sched_empty_dev(sched, tmp_dev))
+            continue;
 
         /* success: we've got an empty device */
         *dev_descr = tmp_dev;
         return 0;
-
-next:
-        sched_dev_release(sched, tmp_dev);
-        sched_media_release(sched, tmp_dev->dss_media_info);
     }
 }
 
@@ -1821,7 +1897,6 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
     struct dev_descr **new_dev = &devs[new_dev_index];
     device_select_func_t dev_select_policy;
     struct media_info *pmedia;
-    bool media_owner;
     int rc;
 
     ENTRY;
@@ -1839,7 +1914,6 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
         return -EINVAL;
 
     pmedia = NULL;
-    media_owner = false;
 
     /* 1a) is there a mounted filesystem with enough room? */
     *new_dev = dev_picker(sched, PHO_DEV_OP_ST_MOUNTED, dev_select_policy,
@@ -1852,9 +1926,12 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
                           tags, NULL);
     if (*new_dev != NULL) {
         /* mount the filesystem and return */
-        rc = sched_mount(*new_dev);
-        if (rc != 0)
-            goto out_release;
+        rc = sched_mount(sched, *new_dev);
+        if (rc)
+            LOG_RETURN(rc,
+                       "Unable to mount already loaded device '%s' from "
+                       "writing", (*new_dev)->dev_path);
+
         return 0;
     }
 
@@ -1863,81 +1940,58 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
      * 2a) is there an idle drive, to eject the loaded tape?
      * 2b) is there an operation that will end soon?
      */
-
     /* 2) For the next steps, we need a media to write on.
      * It will be loaded into a free drive.
      * Note: sched_select_media locks the media.
      */
+
     pho_verb("Not enough space on loaded media: selecting another one");
     rc = sched_select_media(sched, &pmedia, size, sched->family, tags,
                             devs, new_dev_index);
     if (rc)
         return rc;
-    /* we own the media structure */
-    media_owner = true;
 
-    /* Check if the media is already in a drive and try to acquire it. This
-     * should never fail because media are locked before drives and a drive
-     * shall never been locked if the media in it has not previously been
-     * locked.
+    /**
+     * Check if the media is already in a drive.
+     *
+     * We already look for loaded media with full available size.
+     *
+     * sched_select_media could find a "split" medium which is already loaded
+     * if there is no medium with a enough available size.
      */
     *new_dev = search_loaded_media(sched, pmedia->rsc.id.name);
     if (*new_dev != NULL) {
-        rc = sched_dev_acquire(sched, *new_dev);
-        if (rc != 0)
-            GOTO(out_release, rc = -EAGAIN);
-        /* Media is in dev, update dev->dss_media_info with fresh media info */
-        media_info_free((*new_dev)->dss_media_info);
-        (*new_dev)->dss_media_info = pmedia;
+        (*new_dev)->ongoing_io = true;
+        if ((*new_dev)->op_status != PHO_DEV_OP_ST_MOUNTED)
+            return sched_mount(sched, *new_dev);
+
         return 0;
     }
 
     /* 3) is there a free drive? */
     *new_dev = dev_picker(sched, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
-                            pmedia);
+                          pmedia);
     if (*new_dev == NULL) {
         pho_verb("No free drive: need to unload one");
         rc = sched_free_one_device(sched, new_dev, pmedia, *devs,
                                    new_dev_index);
-        if (rc)
-            goto out_release;
+        if (rc) {
+            sched_medium_release(sched, pmedia);
+            media_info_free(pmedia);
+            /** TODO: maybe we can try to select an other type of media */
+            return rc;
+        }
     }
 
     /* 4) load the selected media into the selected drive */
-    rc = sched_load(*new_dev, pmedia);
-    /* EBUSY means the tape could not be moved between two drives, try again
-     * later
-     */
-    if (rc == -EBUSY)
-        GOTO(out_release, rc = -EAGAIN);
-    else if (rc)
-        goto out_release;
-
-    /* On success or sched_load, target device becomes the owner of pmedia
-     * so pmedia must not be released after that.
-     */
-    media_owner = false;
+    rc = sched_load_media(sched, *new_dev, pmedia);
+    if (rc) {
+        media_info_free(pmedia);
+        return rc;
+    }
 
     /* 5) mount the filesystem */
-    rc = sched_mount(*new_dev);
-    if (rc == 0)
-        return 0;
-
-out_release:
-    if (*new_dev != NULL) {
-        sched_dev_release(sched, *new_dev);
-        /* Avoid releasing the same media twice */
-        if (pmedia != (*new_dev)->dss_media_info)
-            sched_media_release(sched, (*new_dev)->dss_media_info);
-    }
-
-    if (pmedia != NULL) {
-        pho_debug("Releasing selected media '%s'", pmedia->rsc.id.name);
-        sched_media_release(sched, pmedia);
-        if (media_owner)
-            media_info_free(pmedia);
-    }
-    return rc;
+    return sched_mount(sched, *new_dev);
 }
 
 static struct dev_descr *search_loaded_media(struct lrs_sched *sched,
@@ -1993,14 +2047,12 @@ static int sched_media_prepare(struct lrs_sched *sched,
     *pdev = NULL;
     *pmedia = NULL;
 
-    rc = sched_fill_media_info(&sched->dss, &med, id);
-    if (rc != 0)
-        return rc;
-
-    /* Check that the media is not already locked */
-    if (med->lock.is_external) {
+    rc = sched_fill_media_info(sched, &med, id);
+    if (rc == -EALREADY) {
         pho_debug("Media '%s' is locked, returning EAGAIN", id->name);
         GOTO(out, rc = -EAGAIN);
+    } else if (rc) {
+        return rc;
     }
 
     switch (op) {
@@ -2031,21 +2083,33 @@ static int sched_media_prepare(struct lrs_sched *sched,
         LOG_RETURN(-ENOSYS, "Unknown operation %x", (int)op);
     }
 
-    rc = sched_media_acquire(sched, med);
-    if (rc != 0)
-        GOTO(out, rc = -EAGAIN);
-
     /* check if the media is already in a drive */
     dev = search_loaded_media(sched, id->name);
     if (dev != NULL) {
-        rc = sched_dev_acquire(sched, dev);
-        if (rc != 0)
-            GOTO(out_mda_unlock, rc = -EAGAIN);
+        if (dev->ongoing_io)
+            LOG_GOTO(out, rc = -EAGAIN,
+                     "Media '%s' is loaded in an already used drive '%s'",
+                     id->name, dev->dev_path);
+
+        dev->ongoing_io = true;
         /* Media is in dev, update dev->dss_media_info with fresh media info */
         media_info_free(dev->dss_media_info);
         dev->dss_media_info = med;
     } else {
         pho_verb("Media '%s' is not in a drive", id->name);
+
+        if (med->lock.hostname) {
+            rc = check_renew_lock(sched, DSS_MEDIA, med, &med->lock);
+            if (rc)
+                LOG_GOTO(out, rc,
+                         "Unable to renew an existing lock on an unloaded "
+                         "media to prepare");
+        } else {
+            rc = take_and_update_lock(&sched->dss, DSS_MEDIA, med, &med->lock);
+            if (rc != 0)
+                LOG_GOTO(out, rc = -EAGAIN,
+                         "Unable to take lock on a media to prepare");
+        }
 
         /* Is there a free drive? */
         dev = dev_picker(sched, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
@@ -2053,32 +2117,23 @@ static int sched_media_prepare(struct lrs_sched *sched,
         if (dev == NULL) {
             pho_verb("No free drive: need to unload one");
             rc = sched_free_one_device(sched, &dev, med, NULL, 0);
-            if (rc != 0)
-                LOG_GOTO(out_mda_unlock, rc, "No device available");
+            if (rc != 0) {
+                sched_medium_release(sched, med);
+                LOG_GOTO(out, rc, "No device available");
+            }
         }
 
         /* load the media in it */
-        rc = sched_load(dev, med);
-        /* EBUSY means the tape could not be moved between two drives, try again
-         * later
-         */
-        if (rc == -EBUSY)
-            GOTO(out_dev_unlock, rc = -EAGAIN);
-        else if (rc != 0)
-            goto out_dev_unlock;
+        rc = sched_load_media(sched, dev, med);
+        if (rc)
+            LOG_GOTO(out, rc,
+                     "Unable to load medium '%s' into device '%s' when "
+                     "preparing media", med->rsc.id.name, dev->dev_path);
     }
 
     /* Mount only for READ/WRITE and if not already mounted */
     if (post_fs_mount && dev->op_status != PHO_DEV_OP_ST_MOUNTED)
-        rc = sched_mount(dev);
-
-out_dev_unlock:
-    if (rc)
-        sched_dev_release(sched, dev);
-
-out_mda_unlock:
-    if (rc)
-        sched_media_release(sched, med);
+        rc = sched_mount(sched, dev);
 
 out:
     if (rc) {
@@ -2107,7 +2162,6 @@ static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
     struct dev_descr    *dev = NULL;
     struct media_info   *media_info = NULL;
     int                  rc;
-    int                  rc2;
     struct ldm_fs_space  spc = {0};
     struct fs_adapter    fsa;
     uint64_t             fields = 0;
@@ -2162,14 +2216,7 @@ static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
                  id->name);
 
 err_out:
-    /* Release ownership. Do not fail the whole operation if unlucky here... */
-    rc2 = sched_dev_release(sched, dev);
-    if (rc2)
-        pho_error(rc2, "Failed to release lock on '%s'", dev->dev_path);
-
-    rc2 = sched_media_release(sched, media_info);
-    if (rc2)
-        pho_error(rc2, "Failed to release lock on '%s'", id->name);
+    dev->ongoing_io = false;
 
     /* Don't free media_info since it is still referenced inside dev */
     return rc;
@@ -2227,7 +2274,8 @@ retry:
     media = new_dev->dss_media_info;
 
     /* LTFS can cunningly mount almost-full tapes as read-only, and so would
-     * damaged disks. Mark the media as full and retry when this occurs.
+     * damaged disks. Mark the media as full, let it be mounted and try to find
+     * a new one.
      */
     if (!sched_mount_is_writable(new_dev->mnt_path,
                                  media->fs.type)) {
@@ -2235,30 +2283,23 @@ retry:
                  media->rsc.id.name);
 
         media->fs.status = PHO_FS_STATUS_FULL;
+        new_dev->ongoing_io = false;
 
         rc = dss_media_set(&sched->dss, media, 1, DSS_SET_UPDATE, FS_STATUS);
         if (rc)
-            LOG_GOTO(err_cleanup, rc, "Cannot update media information");
+            LOG_RETURN(rc, "Unable to update DSS media '%s' status to FULL",
+                       media->rsc.id.name);
 
-        sched_dev_release(sched, new_dev);
-        sched_media_release(sched, media);
         new_dev = NULL;
         media = NULL;
         goto retry;
     }
 
-    pho_verb("Writing to media '%s' using device '%s' "
-             "(free space: %zu bytes)",
+    pho_verb("Writing to media '%s' using device '%s' (free space: %zu bytes)",
              media->rsc.id.name, new_dev->dev_path,
              new_dev->dss_media_info->stats.phys_spc_free);
 
-err_cleanup:
-    if (rc != 0) {
-        sched_dev_release(sched, new_dev);
-        sched_media_release(sched, media);
-    }
-
-    return rc;
+    return 0;
 }
 
 /**
@@ -2430,6 +2471,11 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
         GOTO(err_res, rc = -ENXIO);
     }
 
+    rc = check_and_take_device_lock(sched, devi);
+    if (rc)
+        LOG_GOTO(err_res, rc,
+                 "Unable to acquire device '%s'", devi->rsc.id.name);
+
     device.dss_dev_info = dev_info_dup(devi);
     if (!device.dss_dev_info)
         LOG_GOTO(err_res, rc = -ENOMEM, "Device info duplication failed");
@@ -2439,7 +2485,7 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
     if (rc)
         goto err_dev;
 
-    rc = sched_fill_dev_info(&sched->dss, &lib, &device);
+    rc = sched_fill_dev_info(sched, &lib, &device);
     if (rc)
         goto err_lib;
 
@@ -2566,9 +2612,8 @@ static int sched_handle_medium_release(struct lrs_sched *sched,
     rc = sched_io_complete(sched, dev->dss_media_info, medium->size_written,
                          medium->rc, dev->mnt_path);
 
-    /* Release all associated locks */
-    sched_dev_release(sched, dev);
-    sched_media_release(sched, dev->dss_media_info);
+    /* mark IO as ended */
+    dev->ongoing_io = false;
 
     return rc;
 }
@@ -2593,10 +2638,10 @@ static int sched_handle_media_release(struct lrs_sched *sched,
 }
 
 /*
- * @FIXME: this assumes one media is reserved for one only one request. In the
+ * @FIXME: this assumes one media is reserved for only one request. In the
  * future, we may want to give a media allocation to multiple requests, we will
- * therefore need to be more careful not to call sched_media_release too
- * early, or count nested locks.
+ * therefore need to be more careful not to call sched_device_release or
+ * sched_medium_release too early, or count nested locks.
  */
 /**
  * Handle a write allocation request by finding an appropriate medias to write
@@ -2676,8 +2721,8 @@ out:
             pho_resp_write_elt_t *wresp = resp->walloc->media[i];
 
             dev = search_loaded_media(sched, wresp->med_id->name);
-            sched_dev_release(sched, dev);
-            sched_media_release(sched, dev->dss_media_info);
+            assert(dev != NULL);
+            dev->ongoing_io = false;
         }
 
         pho_srl_response_free(resp, false);
@@ -2751,8 +2796,8 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
             pho_resp_read_elt_t *rresp = resp->ralloc->media[i];
 
             dev = search_loaded_media(sched, rresp->med_id->name);
-            sched_dev_release(sched, dev);
-            sched_media_release(sched, dev->dss_media_info);
+            assert(dev != NULL);
+            dev->ongoing_io = false;
         }
 
         pho_srl_response_free(resp, false);

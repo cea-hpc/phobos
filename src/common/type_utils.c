@@ -74,7 +74,6 @@ int init_pho_lock(struct pho_lock *lock, char *hostname, int owner,
         return rc;
 
     lock->owner = owner;
-    lock->is_external = false;
     lock->timestamp = *timestamp;
 
     return 0;
@@ -90,7 +89,6 @@ int pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src)
 
     lock_dst->owner = lock_src->owner;
     lock_dst->timestamp = lock_src->timestamp;
-    lock_dst->is_external = lock_src->is_external;
 
     return 0;
 }
@@ -103,7 +101,6 @@ void pho_lock_clean(struct pho_lock *lock)
     free(lock->hostname);
     lock->hostname = NULL;
     lock->owner = 0;
-    lock->is_external = false;
 }
 
 int dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src)

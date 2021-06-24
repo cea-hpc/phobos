@@ -242,7 +242,6 @@ struct pho_lock {
     char          *hostname;
     int            owner;
     struct timeval timestamp;
-    bool           is_external;
 };
 
 /**

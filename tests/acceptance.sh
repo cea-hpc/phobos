@@ -463,11 +463,6 @@ function ensure_nb_drives
 # checking the number of locks taken on devices and media then sleep again.
 function phobos_delayed_dev_release
 {
-    dev_file="$1"
-    med_file="$2"
-    dev_req="select * from lock where type = 'device'::lock_type;"
-    med_req="select * from lock where type = 'media'::lock_type;"
-    shift 2
     (
         tmp_gdb_script=$(mktemp)
         trap "rm $tmp_gdb_script" EXIT
@@ -475,10 +470,7 @@ function phobos_delayed_dev_release
 set breakpoint pending on
 break write_all_chunks
 commands
-shell sleep 1
-shell $PSQL -qt -c "$dev_req" | grep -v "^$" | wc -l > $dev_file
-shell $PSQL -qt -c "$med_req" | grep -v "^$" | wc -l > $med_file
-shell sleep 1
+shell sleep 2
 continue
 end
 run $phobos $*
@@ -501,45 +493,17 @@ function concurrent_put
     # create input file
     dd if=/dev/urandom of=$tmp bs=1M count=100
 
-    res_dev_1=$(mktemp)
-    res_dev_2=$(mktemp)
-    res_med_1=$(mktemp)
-    res_med_2=$(mktemp)
-
     # 2 simultaneous put
-    phobos_delayed_dev_release $res_dev_1 $res_med_1 put --metadata $md \
-        $tmp $key.1 &
+    phobos_delayed_dev_release put --metadata $md $tmp $key.1 &
     local pid1=$!
-    (( single==0 )) && phobos_delayed_dev_release $res_dev_2 $res_med_2 put \
-        --metadata $md $tmp $key.2 &
+    (( single==0 )) && phobos_delayed_dev_release put --metadata $md $tmp \
+                            $key.2 &
     local pid2=$!
 
     wait $pid1
     wait $pid2
 
-    # retrieve psql request results which consists in number of locks taken
-    nb_dev_lock=$(($(cat $res_med_1)>$(cat $res_med_2) ?
-                   $(cat $res_med_1) : $(cat $res_med_2)))
-    nb_med_lock=$(($(cat $res_dev_1)>$(cat $res_dev_2) ?
-                   $(cat $res_dev_1) : $(cat $res_dev_2)))
-
-    # make sure 2 devices and 2 media were locked
-    echo "$nb_med_lock media were locked"
-    if (( single==0 )) && (( $nb_med_lock != 2 )); then
-        exit_error "2 media locks expected (actual: $nb_med_lock)"
-    elif (( single==1 )) && (( $nb_med_lock != 1 )); then
-        exit_error "1 media lock expected (actual: $nb_med_lock)"
-    fi
-
-    echo "$nb_dev_lock devices were locked"
-    if (( single==0 )) && (( $nb_dev_lock != 2 )); then
-        exit_error "2 device locks expected (actual: $nb_dev_lock)"
-    elif (( single==1 )) && (( $nb_dev_lock != 1 )); then
-        exit_error "1 device lock expected (actual: $nb_dev_lock)"
-    fi
-
     rm -f $tmp
-    rm -f res_dev_* res_med_*
 
     # check they are both in DB
     $LOG_VALG $phobos getmd $key.1
@@ -588,14 +552,14 @@ function drain_all_drives_daemon
 function lock_all_drives
 {
     for d in $($phobos drive list); do
-        $LOG_VALG $phobos drive lock "$d"
+        $LOG_VALG $phobos drive lock --force "$d"
     done
 }
 
 function unlock_all_drives
 {
     for d in $($phobos drive list); do
-        $LOG_VALG $phobos drive unlock "$d"
+        $LOG_VALG $phobos drive unlock --force "$d"
     done
 }
 
@@ -619,7 +583,7 @@ function tape_drive_compat
     lock_all_drives
     drain_all_drives_daemon
     local lto5_d=$($phobos drive list --model ULT3580-TD5 | head -n 1)
-    $LOG_VALG $phobos drive unlock $lto5_d
+    $LOG_VALG $phobos drive unlock --force $lto5_d
     $phobos get svc_lto5 /tmp/svc_lto5_from_lto5_drive ||
         exit_error "fail to get data from lto5 tape with one lto5 drive"
     rm /tmp/svc_lto5_from_lto5_drive
@@ -630,7 +594,7 @@ function tape_drive_compat
     lock_all_drives
     drain_all_drives_daemon
     local lto6_d=$($phobos drive list --model ULT3580-TD6 | head -n 1)
-    $LOG_VALG $phobos drive unlock $lto6_d
+    $LOG_VALG $phobos drive unlock --force $lto6_d
     $phobos get svc_lto5 /tmp/svc_lto5_from_lto6_drive ||
         exit_error "fail to get data from lto5 tape with one lto6 drive"
     rm /tmp/svc_lto5_from_lto6_drive

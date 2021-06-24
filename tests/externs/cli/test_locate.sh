@@ -132,53 +132,44 @@ function test_locate_cli
         error "Cli locate returned $locate_hostname instead of $self_hostname"
     fi
 
-    $medium_locker_bin lock $dir_or_tape all blob $pid ||
-        error "Error while locking before phobos locate"
-
-    locate_hostname=$($phobos locate $obj)
-    if [ "$locate_hostname" != "blob" ]; then
-        error "Cli locate returned $locate_hostname instead of 'blob'"
-    fi
-
     $phobos delete $obj || error "$obj should be deleted"
     $phobos locate $obj &&
         error "Locating a deleted object without uuid or version must fail"
 
     locate_hostname=$($phobos locate --uuid $obj_uuid $obj)
-    if [ "$locate_hostname" != "blob" ]; then
-        error "Cli locate with uuid returned $locate_hostname instead of 'blob'"
+    if [ "$locate_hostname" != "$self_hostname" ]; then
+        error "Cli locate with uuid returned $locate_hostname instead of " \
+              "$self_hostname"
     fi
 
     locate_hostname=$($phobos locate --version 1 $obj)
-    if [ "$locate_hostname" != "blob" ]; then
+    if [ "$locate_hostname" != "$self_hostname" ]; then
         error "Cli locate with version returned $locate_hostname " \
-              "instead of 'blob'"
+              "instead of $self_hostname"
     fi
 
     locate_hostname=$($phobos locate --uuid $obj_uuid --version 1 $obj)
-    if [ "$locate_hostname" != "blob" ]; then
+    if [ "$locate_hostname" != "$self_hostname" ]; then
         error "Cli locate with uuid and version returned $locate_hostname " \
-              "instead of 'blob'"
+              "instead of $self_hostname"
     fi
-
-    $medium_locker_bin unlock $dir_or_tape all blob $pid ||
-        error "Error while unlocking before phobos locate"
 }
 
 function test_medium_locate
 {
     local dir_or_tape=$1
-    local mediums_name="${dir_or_tape}s"
+    local media_name="${dir_or_tape}s"
     local self_hostname=$(uname -n)
-    local pid="12345"
+    local fake_hostname="fake_hostname"
     local locate_hostname=""
+    local was_locked="false"
 
     # test error while locating an unknown medium
     $phobos $dir_or_tape locate unknown_medium &&
         error "Locating an unknown $dir_or_tape must fail"
 
     # set medium to test
-    local medium=$(echo ${!mediums_name} | nodeset -e | awk '{print $1;}')
+    local medium=$(echo ${!media_name} | nodeset -e | awk '{print $1;}')
 
     # test error on an admin locked medium
     $phobos $dir_or_tape lock $medium ||
@@ -189,6 +180,16 @@ function test_medium_locate
         error "Error while unlocking lock after locate"
 
     # locate an unlocked medium
+    # check if medium is lock
+    locker=$($phobos $dir_or_tape list -o lock_hostname $medium)
+    if [ "$locker" == "$self_hostname" ]; then
+        was_locked="true"
+        # we artificially force an unlock
+        $medium_locker_bin unlock $dir_or_tape $medium $self_hostname   \
+                $PID_DAEMON ||
+            error "Error while unlocking $dir_or_tape before locate"
+    fi
+
     locate_hostname=$($phobos $dir_or_tape locate $medium)
     if [ "$locate_hostname" != "$self_hostname" ]; then
         error "$dir_or_tape locate returned $locate_hostname instead of " \
@@ -196,15 +197,25 @@ function test_medium_locate
     fi
 
     # locate on a locked medium
-    $medium_locker_bin lock $dir_or_tape $medium $self_hostname $pid ||
+    $medium_locker_bin lock $dir_or_tape $medium $fake_hostname $PID_DAEMON ||
         error "Error while locking medium before locate"
+
     locate_hostname=$($phobos $dir_or_tape locate $medium)
-    if [ "$locate_hostname" != "$self_hostname" ]; then
+    if [ "$locate_hostname" != "$fake_hostname" ]; then
         error "$dir_or_tape locate returned $locate_hostname instead of " \
-              "$self_hostname on a locked medium"
+              "$fake_hostname on a locked medium"
     fi
-    $medium_locker_bin unlock $dir_or_tape $medium $self_hostname $pid ||
+
+    # We remove the lock
+    $medium_locker_bin unlock $dir_or_tape $medium $fake_hostname $PID_DAEMON ||
         error "Error while unlocking medium after locate"
+
+    # we artificially restore the lock
+    if [ "$was_locked" == "true" ]; then
+        $medium_locker_bin lock $dir_or_tape $medium $self_hostname \
+                $PID_DAEMON ||
+            error "Error while restore $dir_or_tape lock after locate"
+    fi
 }
 
 function test_get_locate_cli
@@ -212,6 +223,12 @@ function test_get_locate_cli
     local oid="oid_get_locate"
     local dir_or_tape=$1
     local pid="12345"
+    local media_name="${dir_or_tape}s"
+    local media=$(echo ${!media_name} | nodeset -e)
+    declare -A was_locked
+    for med in ${media}; do
+        was_locked[${med}]="false"
+    done
 
     $phobos put /etc/hosts $oid ||
         error "Error while putting $oid"
@@ -219,8 +236,20 @@ function test_get_locate_cli
     $phobos get --best-host $oid /tmp/out1 \
         || error "Get operation should have succeeded"
 
+    # PUT and GET let existing locks, we artificaly clear it
+    for med in ${media}; do
+        locker=$($phobos $dir_or_tape list -o lock_hostname $med)
+        if [ "$locker" == "$self_hostname" ]; then
+            was_locked[${med}]="true"
+            $medium_locker_bin unlock $dir_or_tape $med $self_hostname  \
+                    $PID_DAEMON ||
+                error "Error unlocking $dir_or_tape before get --best-host"
+        fi
+    done
+
+    # We force an "exotic" locker hostname : "blob"
     $medium_locker_bin lock $dir_or_tape all blob $pid ||
-        error "Error while locking medium1 before get --best-host"
+        error "Error while locking media before get --best-host"
 
     get_locate_output=$($phobos get --best-host $oid /tmp/out2 || true)
     local output="Current host is not the best to get this object, try on"
@@ -231,6 +260,15 @@ function test_get_locate_cli
 
     $medium_locker_bin unlock $dir_or_tape all blob $pid ||
         error "Error while unlocking medium1 after get --best-host"
+
+    # we artificially restore the locks
+    for med in ${media}; do
+        if [ "${was_locked[$med]}" == "true" ]; then
+            $medium_locker_bin lock $dir_or_tape $med $self_hostname \
+                    $PID_DAEMON ||
+                error "Error while restoring $dir_or_tape lock after locate"
+        fi
+    done
 }
 
 drop_tables

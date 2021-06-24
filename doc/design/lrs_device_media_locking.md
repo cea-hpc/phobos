@@ -22,13 +22,13 @@ I/O operations. It can manage many parallel I/O operations on many resources.
 
 Currently, we chose as first step a simple design to manage local concurrency.
 Each resource could be dedicated to only one operation. To achieve this, LRS
-manages a `one_ongoing_io` boolean flag per device to know if this device is
+manages a `ongoing_io` boolean flag per device to know if this device is
 already used for one operation. There is no flag attached by the LRS to a medium
 because we always use a medium through a device and the concurrency is already
 managed by the flag of the device.
 
 In the future, this local concurrency strategy could evolve to manage many I/O
-in parallel on the same resource. We can imagine replacing the `one_ongoing_io`
+in parallel on the same resource. We can imagine replacing the `ongoing_io`
 boolean flag by a counter and adding to a device the list of current running I/O
 operations.
 
