@@ -69,14 +69,14 @@ commands.
 This table is composed of the following fields: __id__, family, model, host,
 adm_status and path.
 
-| field             | description                           |
-|-------------------|---------------------------------------|
-| id                | unique device identifier (ex: serial) |
-| family            | device technology (dir, tape, ...)    |
-| model             | device model (ULTRIUM-TD6)            |
-| host              | machine which is bound to the device  |
-| adm_status        | admin status (locked, unlocked)       |
-| path              | device path                           |
+| field             | description                             |
+|-------------------|-----------------------------------------|
+| id                | unique device identifier (ex: serial)   |
+| family            | device technology (dir, tape, ...)      |
+| model             | device model (ULTRIUM-TD6)              |
+| host              | machine which is bound to the device    |
+| adm_status        | admin status (locked, unlocked, failed) |
+| path              | device path                             |
 
 ## Media table
 The media table stores medium metadata and like the device table, is mainly
