@@ -127,21 +127,23 @@ class LRSSched(Structure): # pylint: disable=too-few-public-methods
         ('dss', c_void_p),
         ('devices', c_void_p),
         ('dev_count', c_size_t),
-        ('_lock_owner', c_char_p),
+        ('_lock_hostname', c_char_p),
+        ('lock_owner', c_int),
         ('req_queue', c_void_p),
         ('release_queue', c_void_p),
     ]
 
     @property
-    def lock_owner(self):
-        """Wrapper to get lock_owner"""
-        return self._lock_owner.decode('utf-8') if self._lock_owner else None
+    def lock_hostname(self):
+        """Wrapper to get lock_hostname"""
+        return (self._lock_hostname.decode('utf-8') if self._lock_hostname
+                else None)
 
-    @lock_owner.setter
-    def lock_owner(self, val):
-        """Wrapper to set lock_owner"""
+    @lock_hostname.setter
+    def lock_hostname(self, val):
+        """Wrapper to set lock_hostname"""
         # pylint: disable=attribute-defined-outside-init
-        self._lock_owner = val.encode('utf-8')
+        self._lock_hostname = val.encode('utf-8')
 
 class LRS(Structure): # pylint: disable=too-few-public-methods
     """Local Resource Scheduler."""

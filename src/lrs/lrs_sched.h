@@ -38,13 +38,14 @@ struct dev_descr;
  * actual IO to be performed.
  */
 struct lrs_sched {
-    struct dss_handle  dss;         /**< Associated DSS */
-    enum rsc_family    family;      /**< Managed resource family */
-    GArray            *devices;     /**< List of available devices */
-    char              *lock_owner;  /**< Lock owner name for this LRS
-                                      *  (contains hostname and tid)
-                                      */
-    GQueue            *req_queue;   /**< Queue for all but release requests */
+    struct dss_handle  dss;             /**< Associated DSS */
+    enum rsc_family    family;          /**< Managed resource family */
+    GArray            *devices;         /**< List of available devices */
+    const char        *lock_hostname;   /**< Lock hostname for this LRS */
+    int                lock_owner;      /**< Lock owner (pid) for this LRS */
+    GQueue            *req_queue;       /**< Queue for all but
+                                          *  release requests
+                                          */
     GQueue            *release_queue;   /**< Queue for release requests */
 };
 

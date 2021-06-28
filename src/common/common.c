@@ -406,3 +406,13 @@ int cmp_trimmed_strings(const char *first, const char *second)
 
     return strncmp(first, second, first_len);
 }
+
+int fill_host_owner(const char **hostname, int *pid)
+{
+    *hostname = get_hostname();
+    if (!*hostname)
+        return -errno;
+
+    *pid = getpid();
+    return 0;
+}

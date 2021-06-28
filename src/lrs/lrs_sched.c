@@ -164,7 +164,7 @@ static int sched_dev_acquire(struct lrs_sched *sched, struct dev_descr *pdev)
     }
 
     rc = dss_lock(&sched->dss, DSS_DEVICE, pdev->dss_dev_info, 1,
-                  sched->lock_owner);
+                  sched->lock_hostname);
     if (rc) {
         pho_warn("Cannot lock device '%s': %s", pdev->dev_path,
                  strerror(-rc));
@@ -195,7 +195,7 @@ static int sched_dev_release(struct lrs_sched *sched, struct dev_descr *pdev)
     }
 
     rc = dss_unlock(&sched->dss, DSS_DEVICE, pdev->dss_dev_info, 1,
-                    sched->lock_owner);
+                    sched->lock_hostname);
     if (rc)
         LOG_RETURN(rc, "Cannot unlock device '%s'", pdev->dev_path);
 
@@ -218,7 +218,7 @@ static int sched_media_acquire(struct lrs_sched *sched,
     if (!pmedia)
         return -EINVAL;
 
-    rc = dss_lock(&sched->dss, DSS_MEDIA, pmedia, 1, sched->lock_owner);
+    rc = dss_lock(&sched->dss, DSS_MEDIA, pmedia, 1, sched->lock_hostname);
     if (rc) {
         pmedia->lock.is_external = true;
         LOG_RETURN(rc, "Cannot lock media '%s'", pmedia->rsc.id.name);
@@ -241,7 +241,7 @@ static int sched_media_release(struct lrs_sched *sched,
     if (!pmedia)
         return -EINVAL;
 
-    rc = dss_unlock(&sched->dss, DSS_MEDIA, pmedia, 1, sched->lock_owner);
+    rc = dss_unlock(&sched->dss, DSS_MEDIA, pmedia, 1, sched->lock_hostname);
     if (rc)
         LOG_RETURN(rc, "Cannot unlock media '%s'", pmedia->rsc.id.name);
 
@@ -581,9 +581,6 @@ static void dev_descr_fini(gpointer ptr)
 /**
  * Checks the lock host is the same as the daemon instance.
  *
- * The lock host is contained in the first subpart of the lock_owner string,
- * separated by ':'.
- *
  * @param   sched       Scheduler handle, contains the daemon lock string.
  * @param   lock        Lock string to compare to the daemon one.
  * @return              true if hosts are the same,
@@ -594,17 +591,8 @@ static bool compare_lock_hosts(struct lrs_sched *sched, const char *lock)
     if (!lock)
         return false;
 
-    /* checks the lock string is not empty */
-    if (!strcmp(lock, ""))
-        return false;
-
-    /* this assert fails if the lock string is badly constructed */
-    assert(strchr(sched->lock_owner, ':'));
-
-    /* Compare the first part of sched->lock_owner, which should correspond to
-     * the hostname, with the given lock
-     */
-    return !strncmp(sched->lock_owner, lock, strlen(lock));
+    /* Compare the sched->lock_hostname with the given lock */
+    return !strcmp(sched->lock_hostname, lock);
 }
 
 /**
@@ -712,16 +700,14 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
 
     sched->family = family;
 
-    rc = dss_init_lock_owner(&sched->lock_owner);
+    rc = fill_host_owner(&sched->lock_hostname, &sched->lock_owner);
     if (rc)
-        return rc;
+        LOG_RETURN(rc, "Failed to get LRS hostname");
 
     /* Connect to the DSS */
     rc = dss_init(&sched->dss);
-    if (rc) {
-        free(sched->lock_owner);
+    if (rc)
         return rc;
-    }
 
     sched->devices = g_array_new(FALSE, TRUE, sizeof(struct dev_descr));
     g_array_set_clear_func(sched->devices, dev_descr_fini);
@@ -753,8 +739,6 @@ void sched_fini(struct lrs_sched *sched)
 
     /* Handle all pending release requests */
     sched_handle_release_reqs(sched, NULL);
-
-    free(sched->lock_owner);
 
     dss_fini(&sched->dss);
 

@@ -286,4 +286,17 @@ int get_allocated_hostname(char **hostname);
  */
 int cmp_trimmed_strings(const char *first, const char *second);
 
+/**
+ * Get allocated short host name and current pid (/!\ not thread-safe)
+ *
+ * (only the first local part of the FQDN is returned)
+ *
+ * @param[out] hostname Self hostname is returned (or NULL on failure)
+ * @param[out] pid      Self pid is returned
+ *
+ * @return              0 on success,
+ *                      -errno on failure.
+ */
+int fill_host_owner(const char **hostname, int *pid);
+
 #endif
