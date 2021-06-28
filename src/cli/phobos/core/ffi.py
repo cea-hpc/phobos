@@ -80,21 +80,23 @@ class Timeval(Structure): # pylint: disable=too-few-public-methods
 class DSSLock(Structure): # pylint: disable=too-few-public-methods
     """Resource lock as managed by DSS."""
     _fields_ = [
-        ('_lock_owner', c_char_p),
+        ('_lock_hostname', c_char_p),
+        ('lock_owner', c_int),
         ('lock_ts', Timeval),
         ('lock_extern', c_bool),
     ]
 
     @property
-    def lock_owner(self):
+    def lock_hostname(self):
         """Wrapper to get lock"""
-        return self._lock_owner.decode('utf-8') if self._lock_owner else None
+        return (self._lock_hostname.decode('utf-8') if self._lock_hostname
+                else None)
 
-    @lock_owner.setter
-    def lock_owner(self, val):
+    @lock_hostname.setter
+    def lock_hostname(self, val):
         """Wrapper to set lock"""
         # pylint: disable=attribute-defined-outside-init
-        self._lock_owner = val.encode('utf-8')
+        self._lock_hostname = val.encode('utf-8')
 
 
 class CommInfo(Structure): # pylint: disable=too-few-public-methods
@@ -211,6 +213,7 @@ class DevInfo(Structure, CLIManagedResourceMixin):
             'model': None,
             'path': None,
             'name': None,
+            'lock_hostname': None,
             'lock_owner': None,
             'lock_ts': None
         }
@@ -246,14 +249,14 @@ class DevInfo(Structure, CLIManagedResourceMixin):
         return self.rsc.adm_status
 
     @property
-    def lock_owner(self):
-        """Wrapper to get lock owner"""
-        return self.lock.lock_owner
+    def lock_hostname(self):
+        """Wrapper to get lock_hostname"""
+        return self.lock.lock_hostname
 
-    @lock_owner.setter
-    def lock_owner(self, val):
-        """Wrapper to set lock_owner"""
-        self.lock.lock_owner = val
+    @property
+    def lock_owner(self):
+        """Wrapper to get lock_owner"""
+        return self.lock.lock_owner
 
     @property
     def lock_ts(self):
@@ -376,6 +379,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'model': None,
             'name': None,
             'tags': None,
+            'lock_hostname': None,
             'lock_owner': None,
             'lock_ts': None,
             'put_access': None,
@@ -391,18 +395,18 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         return export
 
     @property
+    def lock_hostname(self):
+        """Wrapper to get lock_hostname"""
+        return self.lock.lock_hostname
+
+    @property
     def lock_owner(self):
         """Wrapper to get lock owner"""
         return self.lock.lock_owner
 
-    @lock_owner.setter
-    def lock_owner(self, val):
-        """Wrapper to set lock owner"""
-        self.lock.lock_owner = val
-
     def is_locked(self):
         """True if this media is locked"""
-        return self.lock_owner and self.lock_owner != ""
+        return self.lock_hostname is not None and self.lock_hostname != ""
 
     @property
     def lock_ts(self):

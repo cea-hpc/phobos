@@ -234,19 +234,11 @@ struct pho_buff {
 static const struct pho_buff PHO_BUFF_NULL = { .size = 0, .buff = NULL };
 
 struct pho_lock {
-    char          *owner;
+    char          *hostname;
+    pid_t          owner;
     struct timeval timestamp;
     bool           is_external;
 };
-
-static inline void init_pho_lock(struct pho_lock *lock, char *owner,
-                                 struct timeval *timestamp)
-{
-    lock->owner = strdup_safe(owner);
-    lock->is_external = false;
-    if (timestamp)
-        lock->timestamp = *timestamp;
-}
 
 /**
  * Family of resource.

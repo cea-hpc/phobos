@@ -53,6 +53,8 @@ static struct phobos_locate_state {
     int n_objs;
 } phobos_locate_state;
 
+#define HOSTNAME "hostname"
+#define HOSTNAME_OWNER HOSTNAME ":12345"
 
 /* global setup connect to the DSS */
 static int global_setup(void **state)
@@ -196,7 +198,6 @@ static void unlock_medium(struct phobos_locate_state *pl_state,
 /*********************/
 #define BAD_OID "bad_oid_to_locate"
 #define BAD_UUID "bad_uuid_to_locate"
-#define HOSTNAME "hostname"
 static int pl_setup(void **state)
 {
     char *oid_pl = "oid_pl";
@@ -315,7 +316,7 @@ static void pl(void **state)
     pl_hostname(myself_hostname, state, true);
 
     /* lock media from other owner */
-    lock_medium(pl_state, &medium, HOSTNAME ":lock_owner", &cnt);
+    lock_medium(pl_state, &medium, HOSTNAME_OWNER, &cnt);
 
     /* locate with lock */
     pl_enoent(state);
@@ -389,13 +390,11 @@ static void pgl(void **state)
     struct pho_xfer_desc xfer;
     struct media_info *medium;
     const char *myself = NULL;
-    const char *other = NULL;
     int cnt;
 
     /* Setup hostnames */
     myself = get_hostname();
     assert_non_null(myself);
-    other = HOSTNAME ":lock_owner";
 
     /* Open xfer descriptor */
     xfer_desc_open_path(&xfer, "/etc/hosts", PHO_XFER_OP_GET,
@@ -416,7 +415,7 @@ static void pgl(void **state)
      * Since the medium is locked, we can't retrieve the object, as
      * we don't own the lock, the get/locate should give return -EREMOTE.
      */
-    lock_medium(pl_state, &medium, other, &cnt);
+    lock_medium(pl_state, &medium, HOSTNAME_OWNER, &cnt);
     pgl_scenario(xfer, obj, HOSTNAME, -EREMOTE);
 
     /* Unlock the medium */

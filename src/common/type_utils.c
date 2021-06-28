@@ -64,11 +64,31 @@ int build_extent_key(const char *uuid, int version, const char *extent_tag,
     return 0;
 }
 
-void pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src)
+int init_pho_lock(struct pho_lock *lock, char *hostname, pid_t owner,
+                  struct timeval *timestamp)
 {
-    lock_dst->owner = strdup_safe(lock_src->owner);
+    lock->hostname = strdup(hostname);
+    if (!lock->hostname)
+        return -errno;
+
+    lock->owner = owner;
+    lock->is_external = false;
+    lock->timestamp = *timestamp;
+
+    return 0;
+}
+
+int pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src)
+{
+    lock_dst->hostname = strdup_safe(lock_src->hostname);
+    if (lock_src->hostname && !lock_dst->hostname)
+        return -errno;
+
+    lock_dst->owner = lock_src->owner;
     lock_dst->timestamp = lock_src->timestamp;
     lock_dst->is_external = lock_src->is_external;
+
+    return 0;
 }
 
 void pho_lock_clean(struct pho_lock *lock)
@@ -76,8 +96,9 @@ void pho_lock_clean(struct pho_lock *lock)
     if (lock == NULL)
         return;
 
-    free(lock->owner);
-    lock->owner = NULL;
+    free(lock->hostname);
+    lock->hostname = NULL;
+    lock->owner = 0;
     lock->is_external = false;
 }
 

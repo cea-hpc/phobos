@@ -86,11 +86,11 @@ function test_release_medium_old_locks
     )
 
     # Check that only the correct medium is unlocked
-    lock=$($phobos dir list -o lock_owner /tmp/dir0)
+    lock=$($phobos dir list -o lock_hostname /tmp/dir0)
     [ "None" == "$lock" ] || error "Medium should be unlocked"
 
-    lock=$($phobos dir list -o lock_owner /tmp/dir1)
-    [ "${host}0:0123:dummy:dummy" == "$lock" ] ||
+    lock=$($phobos dir list -o lock_hostname /tmp/dir1)
+    [ "${host}0" == "$lock" ] ||
         error "Medium should be locked"
 
     drop_tables
@@ -125,11 +125,11 @@ function test_release_device_old_locks
     )
 
     # Check that only the correct device is unlocked
-    lock=$($phobos drive list -o lock_owner /dev/st0)
+    lock=$($phobos drive list -o lock_hostname /dev/st0)
     [ "None" == "$lock" ] || error "Device should be unlocked"
 
-    lock=$($phobos drive list -o lock_owner /dev/st1)
-    [ "${host}0:0123:dummy:dummy" == "$lock" ] ||
+    lock=$($phobos drive list -o lock_hostname /dev/st1)
+    [ "${host}0" == "$lock" ] ||
         error "Device should be locked"
 
     drop_tables

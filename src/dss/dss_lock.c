@@ -61,10 +61,9 @@ struct simple_param {
 };
 
 struct dual_param {
-    char **lock_owner;
-    struct timeval *lock_timestamp;
+    struct pho_lock *locks;
     int (*basic_func)(struct dss_handle *handle, const char *lock_id,
-                      char **lock_owner, struct timeval *lock_timestamp);
+                      struct pho_lock *locks);
 };
 
 struct dss_generic_call {
@@ -130,7 +129,7 @@ static const char * const lock_query[] = {
                                " END IF;"
                                " DELETE FROM lock WHERE id = lock_id;"
                                "END $$;",
-    [DSS_STATUS_QUERY]       = "SELECT id, owner, timestamp FROM lock "
+    [DSS_STATUS_QUERY]       = "SELECT owner, timestamp FROM lock "
                                " WHERE id = '%s';"
 };
 
@@ -293,11 +292,12 @@ static int basic_unlock(struct dss_handle *handle, const char *lock_id,
     return rc;
 }
 
-static int basic_status(struct dss_handle *handle, const char *lock_id,
-                        char **lock_owner, struct timeval *lock_timestamp)
+static int basic_status(struct dss_handle *handle,
+                        const char *lock_id, struct pho_lock *lock)
 {
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
+    struct timeval lock_timestamp;
     PGresult *res;
     int rc = 0;
 
@@ -311,19 +311,54 @@ static int basic_status(struct dss_handle *handle, const char *lock_id,
         pho_debug("Requested lock '%s' was not found, request: '%s' ",
                   lock_id, request->str);
         rc = -ENOLCK;
+        if (lock) {
+            lock->hostname = NULL;
+            lock->owner = 0;
+        }
         goto out_cleanup;
     }
 
-    if (lock_owner != NULL) {
-        *lock_owner = strdup(PQgetvalue(res, 0, 1));
-        if (*lock_owner == NULL) {
-            rc = -ENOMEM;
-            goto out_cleanup;
+    /* XXX: The below code is temporary, and will be changed in the
+     * next patch
+     */
+    if (lock) {
+        char *owner = PQgetvalue(res, 0, 0);
+        char *lock_hostname = NULL;
+        char *lock_owner = NULL;
+        char *second_colon;
+        char *first_colon;
+        pid_t pid;
+
+        str2timeval(PQgetvalue(res, 0, 1), &lock_timestamp);
+
+        first_colon = strchr(owner, ':');
+        if (first_colon++) {
+            second_colon = strchr(first_colon, ':');
+
+            lock_hostname = strndup(owner, first_colon - owner - 1);
+            if (!lock_hostname)
+                return -errno;
+
+            lock_owner = second_colon ?
+                            strndup(first_colon,
+                                    second_colon - first_colon - 1) :
+                            strdup(first_colon);
+            if (!lock_owner)
+                return -errno;
+
+            pid = (pid_t) strtoll(lock_owner, NULL, 10);
+            if (errno == EINVAL && errno == ERANGE)
+                LOG_GOTO(out_cleanup, rc = -errno,
+                         "Conversion error occurred: %d\n", errno);
+
+            rc = init_pho_lock(lock, lock_hostname, pid, &lock_timestamp);
+
+            free(lock_hostname);
+            free(lock_owner);
+        } else {
+            rc = init_pho_lock(lock, owner, 0, &lock_timestamp);
         }
     }
-
-    if (lock_timestamp != NULL)
-        str2timeval(PQgetvalue(res, 0, 2), lock_timestamp);
 
 out_cleanup:
     PQclear(res);
@@ -360,10 +395,7 @@ static int dss_generic(struct dss_handle *handle, enum dss_type type,
             struct dual_param *param = &callee->params.dual;
 
             rc2 = param->basic_func(handle, ids[i]->str,
-                                    param->lock_owner ?
-                                        param->lock_owner + i : NULL,
-                                    param->lock_timestamp ?
-                                        param->lock_timestamp + i : NULL);
+                                    param->locks ? param->locks + i : NULL);
         }
 
         if (rc2) {
@@ -461,13 +493,12 @@ int dss_unlock(struct dss_handle *handle, enum dss_type type,
 
 int dss_lock_status(struct dss_handle *handle, enum dss_type type,
                     const void *item_list, int item_cnt,
-                    char **lock_owner, struct timeval *lock_timestamp)
+                    struct pho_lock *locks)
 {
     struct dss_generic_call callee = {
         .params = {
             .dual = {
-                .lock_owner = lock_owner,
-                .lock_timestamp = lock_timestamp,
+                .locks = locks,
                 .basic_func = basic_status
             }
         },

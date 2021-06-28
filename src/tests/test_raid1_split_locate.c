@@ -48,9 +48,9 @@
 #include <cmocka.h>
 
 #define WIN_HOST "winner_hostname"
-#define WIN_LOCK_OWNER WIN_HOST":lock_owner"
+#define WIN_LOCK_OWNER WIN_HOST":12345"
 #define WIN_HOST_BIS "winner_hostname_bis"
-#define WIN_LOCK_BIS_OWNER WIN_HOST_BIS":lock_owner"
+#define WIN_LOCK_BIS_OWNER WIN_HOST_BIS":12345"
 
 static struct raid1_split_locate_state {
     const char *local_hostname;

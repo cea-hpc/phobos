@@ -280,13 +280,13 @@ class MediaAddTest(BasicExecutionTest):
         # Ensure that the tape is unlocked after failure
         # Exactly one media should be returned
         output, _ = self.pho_execute_capture(['tape', 'list', '--output',
-                                              'lock_owner', 'update0'])
+                                              'lock_hostname', 'update0'])
         test = output.strip() == 'None' or output.strip() == ''
         self.assertTrue(test)
 
         # Check that locked tapes cannot be updated
         os.system('psql phobos phobos -c "insert into lock (id, owner) values \
-                                          (\'media_update0\', \'dummy\');"')
+                                          (\'media_update0\', \'dummy:666\');"')
         try:
             self.pho_execute(['tape', 'update', '-T', '', 'update0'],
                              code=os.EX_DATAERR)

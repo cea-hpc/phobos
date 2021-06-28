@@ -1561,8 +1561,6 @@ static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
                                   PGresult *res, int row_num)
 {
     struct dev_info *dev = void_dev;
-    char *lock_owner = NULL;
-    struct timeval lock_ts;
     int rc;
 
     dev->rsc.id.family  = str2rsc_family(PQgetvalue(res, row_num, 0));
@@ -1572,19 +1570,9 @@ static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
     dev->host           = get_str_value(res, row_num, 4);
     dev->path           = get_str_value(res, row_num, 5);
 
-    rc = dss_lock_status(handle, DSS_DEVICE, dev, 1, &lock_owner, &lock_ts);
-
-    if (rc == -ENOLCK) {
+    rc = dss_lock_status(handle, DSS_DEVICE, dev, 1, &dev->lock);
+    if (rc == -ENOLCK)
         rc = 0;
-        init_pho_lock(&dev->lock, NULL, NULL);
-    } else if (rc) {
-        LOG_RETURN(rc, "Could not get lock status for device with id %s.",
-                   dev->rsc.id.name);
-    } else {
-        init_pho_lock(&dev->lock, lock_owner, &lock_ts);
-    }
-
-    free(lock_owner);
 
     return rc;
 }
@@ -1614,8 +1602,6 @@ static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
                                  PGresult *res, int row_num)
 {
     struct media_info *medium = void_media;
-    char *lock_owner = NULL;
-    struct timeval lock_ts;
     int rc;
 
     medium->rsc.id.family  = str2rsc_family(PQgetvalue(res, row_num, 0));
@@ -1648,19 +1634,9 @@ static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
     pho_debug("Decoded %lu tags (%s)",
               medium->tags.n_tags, PQgetvalue(res, row_num, 9));
 
-    rc = dss_lock_status(handle, DSS_MEDIA, medium, 1, &lock_owner, &lock_ts);
-
-    if (rc == -ENOLCK) {
+    rc = dss_lock_status(handle, DSS_MEDIA, medium, 1, &medium->lock);
+    if (rc == -ENOLCK)
         rc = 0;
-        init_pho_lock(&medium->lock, NULL, NULL);
-    } else if (rc) {
-        LOG_RETURN(rc, "Could not get lock status for medium with id %s.",
-                   medium->rsc.id.name);
-    } else {
-        init_pho_lock(&medium->lock, lock_owner, &lock_ts);
-    }
-
-    free(lock_owner);
 
     return rc;
 }
@@ -2430,11 +2406,11 @@ int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
     }
 
     /* get lock hostname */
-    rc = dss_hostname_from_lock_owner(medium_info->lock.owner, hostname);
-    if (rc) {
-        pho_warn("Unable to get hostname from lock_owner %s, "
-                 "error : %d, %s",
-                 medium_info->lock.owner, rc, strerror(-rc));
+    *hostname = strdup(medium_info->lock.hostname);
+    if (!*hostname) {
+        pho_warn("Unable to duplicate hostname %s, error : %d, %s",
+                 medium_info->lock.hostname, -errno, strerror(-errno));
+        rc = -errno;
     }
 
 clean:

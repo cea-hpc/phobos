@@ -53,8 +53,12 @@ bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2);
 int build_extent_key(const char *uuid, int version, const char *extent_tag,
                      char **key);
 
-/** copy a pho_lock structure in an already allocated one */
-void pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src);
+/** initialize a pho_lock structure */
+int init_pho_lock(struct pho_lock *lock, char *hostname, pid_t owner,
+                  struct timeval *lock_timestamp);
+
+/** copy a pho_lock structure */
+int pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src);
 
 /** free a pho_lock structure's contents */
 void pho_lock_clean(struct pho_lock *lock);

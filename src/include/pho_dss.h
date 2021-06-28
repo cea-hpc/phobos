@@ -523,17 +523,18 @@ int dss_unlock(struct dss_handle *handle, enum dss_type type,
  * @param[in]   type            Type of the ressources's lock to query.
  * @param[in]   item_list       List of ressources's lock to query.
  * @param[in]   item_cnt        Number of ressources's lock to query.
- * @param[out]  lock_owner      Name of each lock owner, must be freed by
- *                              the caller.
- * @param[out]  lock_timestamp  Date when each lock was taken or last refreshed.
+ * @param[out]  locks           List of \p item_cnt structures, filled with
+ *                              each lock owner, hostname and timestamp, must
+ *                              be cleaned by calling pho_lock_clean.
+ *
  * @return                      0 on success,
- *                             -ENOMEM if a \a lock_owner string cannot be
+ *                             -ENOMEM if a \p lock_owner string cannot be
  *                              allocated,
  *                             -ENOLCK if a lock does not exist.
  */
 int dss_lock_status(struct dss_handle *handle, enum dss_type type,
                     const void *item_list, int item_cnt,
-                    char **lock_owner, struct timeval *lock_timestamp);
+                    struct pho_lock *locks);
 
 /**
  * Allocate and return hostname from a lock owner.

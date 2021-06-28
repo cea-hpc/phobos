@@ -315,8 +315,8 @@ static int sched_fill_media_info(struct dss_handle *dss,
     *pmedia = media_info_dup(media_res);
 
     /* If the lock is already taken, mark it as externally locked */
-    if ((*pmedia)->lock.owner != NULL) {
-        pho_info("Media '%s' is locked (%s)", id->name, (*pmedia)->lock.owner);
+    if ((*pmedia)->lock.hostname) {
+        pho_info("Media '%s' is locked (%d)", id->name, (*pmedia)->lock.owner);
         (*pmedia)->lock.is_external = true;
     }
 
@@ -594,23 +594,17 @@ static bool compare_lock_hosts(struct lrs_sched *sched, const char *lock)
     if (!lock)
         return false;
 
-    /* checks the lock string is not empty, and contains at least one ':' */
-    if (!strcmp(lock, "") || !strchr(lock, ':'))
+    /* checks the lock string is not empty */
+    if (!strcmp(lock, ""))
         return false;
 
-    /* this assert fails if the lock string is bad-constructed */
+    /* this assert fails if the lock string is badly constructed */
     assert(strchr(sched->lock_owner, ':'));
 
-    /* retrieves the first part of the lock string, which corresponds to
-     * the hostname of the lock owner, and compares it to the current
-     * hostname
+    /* Compare the first part of sched->lock_owner, which should correspond to
+     * the hostname, with the given lock
      */
-    if ((strchr(lock, ':') - lock !=
-         strchr(sched->lock_owner, ':') - sched->lock_owner) ||
-        strncmp(lock, sched->lock_owner, strchr(lock, ':') - lock))
-        return false;
-
-    return true;
+    return !strncmp(sched->lock_owner, lock, strlen(lock));
 }
 
 /**
@@ -638,7 +632,7 @@ static int sched_check_device_locks(struct lrs_sched *sched)
         dev = g_array_index(
             sched->devices, struct dev_descr, i).dss_dev_info;
 
-        if (!compare_lock_hosts(sched, dev->lock.owner))
+        if (!compare_lock_hosts(sched, dev->lock.hostname))
             continue;
 
         pho_info("Device '%s' was previously locked by this host, releasing it",
@@ -693,7 +687,7 @@ static int sched_check_medium_locks(struct lrs_sched *sched)
     for (i = 0; i < mcnt; ++i) {
         int rc2;
 
-        if (!compare_lock_hosts(sched, media[i].lock.owner))
+        if (!compare_lock_hosts(sched, media[i].lock.hostname))
             continue;
 
         // if it is, unlock it
