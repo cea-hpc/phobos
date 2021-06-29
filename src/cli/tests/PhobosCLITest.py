@@ -284,15 +284,17 @@ class MediaAddTest(BasicExecutionTest):
         test = output.strip() == 'None' or output.strip() == ''
         self.assertTrue(test)
 
+        request = "insert into lock (type, id, hostname, owner) values \
+                    (\'media\'::lock_type, \'update0\', \'dummy\', 1337);"
         # Check that locked tapes cannot be updated
-        os.system('psql phobos phobos -c "insert into lock (id, owner) values \
-                                          (\'media_update0\', \'dummy:666\');"')
+        os.system('psql phobos phobos -c "' + request + '"')
         try:
             self.pho_execute(['tape', 'update', '-T', '', 'update0'],
                              code=os.EX_DATAERR)
         finally:
             os.system('psql phobos phobos -c "delete from lock where \
-                                              id = \'media_update0\';"')
+                                              type = \'media\'::lock_type \
+                                              and id = \'update0\';"')
 
     def test_tape_add_lowercase(self):
         """Express tape technology in lowercase in the command line (PHO-67)."""

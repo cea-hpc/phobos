@@ -290,7 +290,7 @@ static int _device_update_adm_status(struct admin_handle *adm,
         if (rc)
             goto out_free;
 
-        rc = dss_lock(&adm->dss, DSS_DEVICE, dev_res, 1, adm->lock_owner);
+        rc = dss_lock(&adm->dss, DSS_DEVICE, dev_res, 1);
         if (rc) {
             pho_error(-EBUSY, "Device '%s' is in use by '%d' on node '%s'",
                       dev_ids[i].name, dev_res->lock.owner,
@@ -345,8 +345,7 @@ static int _device_update_adm_status(struct admin_handle *adm,
 
 out_free:
     if (avail_devices)
-        dss_unlock(&adm->dss, DSS_DEVICE, devices, avail_devices,
-                   adm->lock_owner);
+        dss_unlock(&adm->dss, DSS_DEVICE, devices, avail_devices, false);
 
     for (i = 0; i < num_dev; ++i)
         dev_info_free(devices + i, false);
@@ -367,8 +366,6 @@ void phobos_admin_fini(struct admin_handle *adm)
     if (rc)
         pho_error(rc, "Cannot close the communication socket");
 
-    free(adm->lock_owner);
-
     dss_fini(&adm->dss);
 }
 
@@ -379,10 +376,6 @@ int phobos_admin_init(struct admin_handle *adm, bool lrs_required)
 
     memset(adm, 0, sizeof(*adm));
     adm->comm = pho_comm_info_init();
-
-    rc = dss_init_lock_owner(&adm->lock_owner);
-    if (rc)
-        LOG_GOTO(out, rc, "Cannot allocate lock_owner");
 
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)

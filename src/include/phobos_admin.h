@@ -37,7 +37,6 @@ struct admin_handle {
     struct pho_comm_info comm;      /**< Communication socket info. */
     struct dss_handle dss;          /**< DSS handle, configured from conf. */
     bool daemon_is_online;          /**< True if phobosd is online. */
-    char *lock_owner;               /**< Lock owner name for this client. */
 };
 
 /**

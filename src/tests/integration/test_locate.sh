@@ -112,8 +112,9 @@ function cleanup
 
 function test_locate_cli
 {
-    local dir_or_tape=$1
     local obj="object_to_locate"
+    local dir_or_tape=$1
+    local pid="12345"
 
     # test error on locating an unknown object
     $phobos locate unknown_object &&
@@ -132,7 +133,7 @@ function test_locate_cli
         error "Cli locate returned $locate_hostname instead of $self_hostname"
     fi
 
-    $medium_locker_bin lock $dir_or_tape all blob:12345 ||
+    $medium_locker_bin lock $dir_or_tape all blob $pid ||
         error "Error while locking before phobos locate"
 
     locate_hostname=$($phobos locate $obj)
@@ -161,7 +162,7 @@ function test_locate_cli
               "instead of 'blob'"
     fi
 
-    $medium_locker_bin unlock $dir_or_tape all blob:12345 ||
+    $medium_locker_bin unlock $dir_or_tape all blob $pid ||
         error "Error while unlocking before phobos locate"
 }
 
@@ -170,7 +171,7 @@ function test_medium_locate
     local dir_or_tape=$1
     local mediums_name="${dir_or_tape}s"
     local self_hostname=$(uname -n)
-    local self_hostname_owner="$self_hostname:12345"
+    local pid="12345"
     local locate_hostname=""
 
     # test error while locating an unknown medium
@@ -196,21 +197,22 @@ function test_medium_locate
     fi
 
     # locate on a locked medium
-    $medium_locker_bin lock $dir_or_tape $medium "$self_hostname_owner" ||
+    $medium_locker_bin lock $dir_or_tape $medium $self_hostname $pid ||
         error "Error while locking medium before locate"
     locate_hostname=$($phobos $dir_or_tape locate $medium)
     if [ "$locate_hostname" != "$self_hostname" ]; then
         error "$dir_or_tape locate returned $locate_hostname instead of " \
               "$self_hostname on a locked medium"
     fi
-    $medium_locker_bin unlock $dir_or_tape $medium "$self_hostname_owner" ||
+    $medium_locker_bin unlock $dir_or_tape $medium $self_hostname $pid ||
         error "Error while unlocking medium after locate"
 }
 
 function test_get_locate_cli
 {
-    local dir_or_tape=$1
     local oid="oid_get_locate"
+    local dir_or_tape=$1
+    local pid="12345"
 
     $phobos put /etc/hosts $oid ||
         error "Error while putting $oid"
@@ -218,7 +220,7 @@ function test_get_locate_cli
     $phobos get --best-host $oid /tmp/out1 \
         || error "Get operation should have succeeded"
 
-    $medium_locker_bin lock $dir_or_tape all blob:12345 ||
+    $medium_locker_bin lock $dir_or_tape all blob $pid ||
         error "Error while locking medium1 before get --best-host"
 
     get_locate_output=$($phobos get --best-host $oid /tmp/out2 || true)
@@ -228,7 +230,7 @@ function test_get_locate_cli
         error "Object should have been located on node 'blob'"
     fi
 
-    $medium_locker_bin unlock $dir_or_tape all blob:12345 ||
+    $medium_locker_bin unlock $dir_or_tape all blob $pid ||
         error "Error while unlocking medium1 after get --best-host"
 }
 

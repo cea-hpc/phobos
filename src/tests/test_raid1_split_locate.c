@@ -31,6 +31,7 @@
 #include "pho_common.h" /* get_hostname */
 #include "pho_dss.h"
 #include "../layout-modules/raid1.h"
+#include "../dss/dss_lock.h"
 
 /* standard stuff */
 #include <errno.h>
@@ -48,9 +49,7 @@
 #include <cmocka.h>
 
 #define WIN_HOST "winner_hostname"
-#define WIN_LOCK_OWNER WIN_HOST":12345"
 #define WIN_HOST_BIS "winner_hostname_bis"
-#define WIN_LOCK_BIS_OWNER WIN_HOST_BIS":12345"
 
 static struct raid1_split_locate_state {
     const char *local_hostname;
@@ -74,7 +73,7 @@ static int rsl_clean_all_media(void **state)
     for (i = 0; i < rsl_state->layout->ext_count; i++) {
         /* unlock */
         rc = dss_unlock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
-                        NULL);
+                        true);
         if (rc && rc != -ENOLCK) {
             fprintf(stderr, "Error when cleaning all lock : %d, %s",
                     rc, strerror(rc));
@@ -301,8 +300,8 @@ static void rsl_one_lock(void **state)
     /* test each extent */
     for (i = 0; i < rsl_state->layout->ext_count; i++) {
         /* get lock */
-        rc = dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
-                      WIN_LOCK_OWNER);
+        rc = _dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
+                       WIN_HOST, getpid());
         assert_return_code(rc, -rc);
 
         /* check locate */
@@ -351,7 +350,7 @@ static void rsl_one_lock(void **state)
 
         /* unlock */
         rc = dss_unlock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
-                        NULL);
+                        true);
         assert_return_code(rc, -rc);
     }
 }
@@ -378,8 +377,8 @@ static void rsl_one_lock_one_not_avail(void **state)
         int j;
 
         /* set lock on first split medium */
-        rc = dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
-                      WIN_LOCK_OWNER);
+        rc = _dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
+                       WIN_HOST, getpid());
         assert_return_code(rc, -rc);
 
         /* operation get flag to false on second split medium */
@@ -399,9 +398,9 @@ static void rsl_one_lock_one_not_avail(void **state)
         /* locked second split on other replica */
         for (j = 0; j < rsl_state->repl_count; j++) {
             if (j != i) {
-                rc = dss_lock(rsl_state->dss, DSS_MEDIA,
-                              rsl_state->media[j + rsl_state->repl_count], 1,
-                              WIN_LOCK_BIS_OWNER);
+                rc = _dss_lock(rsl_state->dss, DSS_MEDIA,
+                               rsl_state->media[j + rsl_state->repl_count], 1,
+                               WIN_HOST_BIS, getpid());
                 assert_return_code(rc, -rc);
             }
         }
@@ -417,14 +416,14 @@ static void rsl_one_lock_one_not_avail(void **state)
             if (j != i) {
                 rc = dss_unlock(rsl_state->dss, DSS_MEDIA,
                                 rsl_state->media[j + rsl_state->repl_count], 1,
-                                NULL);
+                                true);
                 assert_in_set(rc, ok_or_enolock, 2);
             }
         }
 
         /* unlock first split on medium */
         rc = dss_unlock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
-                        NULL);
+                        true);
         assert_in_set(rc, ok_or_enolock, 2);
 
         /* operation get flag to true */

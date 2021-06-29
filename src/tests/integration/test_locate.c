@@ -29,6 +29,7 @@
 #include "pho_dss.h"
 #include "../pho_test_xfer_utils.h"
 #include "../test_setup.h"
+#include "../../dss/dss_lock.h"
 
 /* standard stuff */
 #include <errno.h>
@@ -54,7 +55,6 @@ static struct phobos_locate_state {
 } phobos_locate_state;
 
 #define HOSTNAME "hostname"
-#define HOSTNAME_OWNER HOSTNAME ":12345"
 
 /* global setup connect to the DSS */
 static int global_setup(void **state)
@@ -176,10 +176,10 @@ static void lock_medium(struct phobos_locate_state *pl_state,
      * necessary because the LRS locked the media we want to get at that point,
      * and doesn't have time to unlock them before we request the lock.
      */
-    dss_unlock(pl_state->dss, DSS_MEDIA, *medium, *cnt, NULL);
+    dss_unlock(pl_state->dss, DSS_MEDIA, *medium, *cnt, true);
 
     /* simulate lock on medium */
-    rc = dss_lock(pl_state->dss, DSS_MEDIA, *medium, *cnt, hostname);
+    rc = _dss_lock(pl_state->dss, DSS_MEDIA, *medium, *cnt, hostname, 1337);
     assert_return_code(rc, -rc);
 }
 
@@ -188,7 +188,7 @@ static void unlock_medium(struct phobos_locate_state *pl_state,
 {
     int rc;
 
-    rc = dss_unlock(pl_state->dss, DSS_MEDIA, medium, cnt, NULL);
+    rc = dss_unlock(pl_state->dss, DSS_MEDIA, medium, cnt, true);
     dss_res_free(medium, cnt);
     assert_return_code(rc, -rc);
 }
@@ -316,7 +316,7 @@ static void pl(void **state)
     pl_hostname(myself_hostname, state, true);
 
     /* lock media from other owner */
-    lock_medium(pl_state, &medium, HOSTNAME_OWNER, &cnt);
+    lock_medium(pl_state, &medium, HOSTNAME, &cnt);
 
     /* locate with lock */
     pl_enoent(state);
@@ -415,7 +415,7 @@ static void pgl(void **state)
      * Since the medium is locked, we can't retrieve the object, as
      * we don't own the lock, the get/locate should give return -EREMOTE.
      */
-    lock_medium(pl_state, &medium, HOSTNAME_OWNER, &cnt);
+    lock_medium(pl_state, &medium, HOSTNAME, &cnt);
     pgl_scenario(xfer, obj, HOSTNAME, -EREMOTE);
 
     /* Unlock the medium */

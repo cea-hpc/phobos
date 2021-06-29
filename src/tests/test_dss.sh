@@ -91,11 +91,13 @@ function test_check_lock
 {
     local target=$1
     local action=$2
-    local lock_owner=$3
-    local expect_fail=$4
+    local lock_hostname=$3
+    local lock_owner=$4
+    local expect_fail=$5
     local rc=0
 
-    $LOG_COMPILER $LOG_FLAGS $test_bin "$action" "$target" $lock_owner || rc=$?
+    $LOG_COMPILER $LOG_FLAGS $test_bin "$action" "$target" \
+        $lock_hostname $lock_owner || rc=$?
     check_rc $rc $expect_fail
 }
 
@@ -208,33 +210,34 @@ test_check_get "deprec" '{"DSS::OBJ::oid": "01230123ABC"}'
 
 insert_examples
 
+pid="$$"
 echo "**** TESTS: DSS_DEVICE LOCK/UNLOCK  ****"
 echo "*** TEST LOCK ***"
-test_check_lock "device" "lock" "MY_LOCK"
+test_check_lock "device" "lock" "MY_LOCK" "$pid"
 echo "*** TEST DOUBLE LOCK (EEXIST expected) ***"
-test_check_lock "device" "lock" "MY_LOCK" "FAIL"
+test_check_lock "device" "lock" "MY_LOCK" "$pid" "FAIL"
 echo "*** TEST UNLOCK ***"
-test_check_lock "device" "unlock" "MY_LOCK"
+test_check_lock "device" "unlock" "MY_LOCK" "$pid"
 echo "*** TEST RELOCK ***"
-test_check_lock "device" "lock" "MY_LOCK"
+test_check_lock "device" "lock" "MY_LOCK" "$pid"
 echo "*** TEST UNLOCK BAD NAME ***"
-test_check_lock "device" "unlock" "NOT_MY_LOCK" "FAIL"
+test_check_lock "device" "unlock" "NOT_MY_LOCK" "$pid" "FAIL"
 echo "*** TEST UNLOCK NO NAME ***"
 test_check_lock "device" "unlock"
 
 echo "**** TESTS: DSS_MEDIA LOCK/UNLOCK  ****"
 echo "*** TEST LOCK ***"
-test_check_lock "media" "lock" "MY_LOCK"
+test_check_lock "media" "lock" "MY_LOCK" "$pid"
 echo "*** TEST DOUBLE LOCK (EEXIST expected) ***"
-test_check_lock "media" "lock" "MY_LOCK" "FAIL"
+test_check_lock "media" "lock" "MY_LOCK" "$pid" "FAIL"
 echo "*** TEST UNLOCK ***"
-test_check_lock "media" "unlock" "MY_LOCK"
+test_check_lock "media" "unlock" "MY_LOCK" "$pid"
 echo "*** TEST DOUBLE UNLOCK (ENOLCK expected) ***"
-test_check_lock "media" "unlock" "MY_LOCK" "FAIL"
+test_check_lock "media" "unlock" "MY_LOCK" "$pid" "FAIL"
 echo "*** TEST RELOCK ***"
-test_check_lock "media" "lock" "MY_LOCK"
+test_check_lock "media" "lock" "MY_LOCK" "$pid"
 echo "*** TEST UNLOCK BAD NAME ***"
-test_check_lock "media" "unlock" "NOT_MY_LOCK" "FAIL"
+test_check_lock "media" "unlock" "NOT_MY_LOCK" "$pid" "FAIL"
 echo "*** TEST UNLOCK NO NAME ***"
 test_check_lock "media" "unlock"
 

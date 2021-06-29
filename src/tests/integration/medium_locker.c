@@ -25,15 +25,18 @@
 
 /* phobos stuff */
 #include "pho_dss.h"
+#include "../../dss/dss_lock.h"
 
 /* standard stuff */
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 static void usage_exit(void)
 {
-    printf("usage: lock/unlock dir/tape medium_name/all lock_hostname\n");
+    printf("usage: lock/unlock dir/tape medium_name/all lock_hostname pid\n");
     exit(EXIT_FAILURE);
 }
 
@@ -43,11 +46,12 @@ int main(int argc, char **argv)
     struct dss_filter filter;
     struct pho_id medium_id;
     struct dss_handle dss;
+    int pid;
     int cnt;
     int rc;
 
     /* check params */
-    if (argc != 5 ||
+    if (argc != 6 ||
         (strcmp(argv[1], "lock") && strcmp(argv[1], "unlock")) ||
         (strcmp(argv[2], "dir") && strcmp(argv[2], "tape")))
         usage_exit();
@@ -97,10 +101,15 @@ int main(int argc, char **argv)
     if (cnt == 0)
         LOG_GOTO(clean_medium, rc = -EINVAL, "Error: no medium found");
 
+    pid = (int) strtoll(argv[5], NULL, 10);
+    if (errno == EINVAL || errno == ERANGE)
+        LOG_GOTO(clean_medium, rc = -errno,
+                 "Conversion error occurred: %d\n", errno);
+
     if (!strcmp(argv[1], "lock"))
-        rc = dss_lock(&dss, DSS_MEDIA, medium, cnt, argv[4]);
+        rc = _dss_lock(&dss, DSS_MEDIA, medium, cnt, argv[4], pid);
     else
-        rc = dss_unlock(&dss, DSS_MEDIA, medium, cnt, argv[4]);
+        rc = _dss_unlock(&dss, DSS_MEDIA, medium, cnt, argv[4], pid);
 
 clean_medium:
     dss_res_free(medium, cnt);

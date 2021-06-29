@@ -27,10 +27,7 @@ clean API to access it.
 
 import json
 import logging
-import os
-import time
 from ctypes import byref, c_int, c_void_p, POINTER, Structure
-from socket import gethostname
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 from phobos.core.const import (DSS_SET_DELETE, DSS_SET_INSERT, DSS_SET_UPDATE, # pylint: disable=no-name-in-module
@@ -234,15 +231,19 @@ class BaseEntityManager:
         self._generic_set(objects, DSS_SET_DELETE)
 
     def _generic_lock_unlock(self, objects, lock_c_func, err_message,
-                             lock_owner, lock_type):
+                             lock_type, force=None):
         #pylint: disable=too-many-arguments
         """Call a dss_<object>_{un,}lock c function on this list of objects.
         lock_c_func could for example be dss_media_lock.
         """
         obj_count = len(objects)
         obj_array = (self.wrapped_class * obj_count)(*objects)
-        rc = lock_c_func(byref(self.client.handle), lock_type, obj_array,
-                         obj_count, lock_owner)
+        if force is not None:
+            rc = lock_c_func(byref(self.client.handle), lock_type,
+                             obj_array, obj_count, force)
+        else:
+            rc = lock_c_func(byref(self.client.handle), lock_type,
+                             obj_array, obj_count)
         if rc:
             raise EnvironmentError(rc, err_message)
 
@@ -251,14 +252,9 @@ class DeviceManager(BaseEntityManager):
     """Proxy to manipulate devices."""
     wrapped_class = DevInfo
     wrapped_ident = 'device'
-    lock_owner_count = 0
 
     def __init__(self, *args, **kwargs):
         super(DeviceManager, self).__init__(*args, **kwargs)
-        self.lock_owner = "py-%.210s:%.8x:%.16x:%.16x" % (
-            gethostname(), os.getpid(), int(time.time()), self.lock_owner_count
-        )
-        self.lock_owner_count += 1
 
     def _dss_get(self, hdl, qry_filter, res, res_cnt):
         """Invoke device-specific DSS get method."""
@@ -271,8 +267,7 @@ class DeviceManager(BaseEntityManager):
     def lock(self, objects):
         """Lock all the devices associated with a given list of DeviceInfo"""
         self._generic_lock_unlock(
-            objects, LIBPHOBOS.dss_lock, "Device locking failed",
-            self.lock_owner, DSS_DEVICE,
+            objects, LIBPHOBOS.dss_lock, "Device locking failed", DSS_DEVICE,
         )
 
     def unlock(self, objects, force=False):
@@ -282,21 +277,16 @@ class DeviceManager(BaseEntityManager):
         """
         self._generic_lock_unlock(
             objects, LIBPHOBOS.dss_unlock, "Device unlocking failed",
-            None if force else self.lock_owner, DSS_DEVICE,
+            DSS_DEVICE, force,
         )
 
 class MediaManager(BaseEntityManager):
     """Proxy to manipulate media."""
     wrapped_class = MediaInfo
     wrapped_ident = 'media'
-    lock_owner_count = 0
 
     def __init__(self, *args, **kwargs):
         super(MediaManager, self).__init__(*args, **kwargs)
-        self.lock_owner = "py-%.210s:%.8x:%.16x:%.16x" % (
-            gethostname(), os.getpid(), int(time.time()), self.lock_owner_count
-        )
-        self.lock_owner_count += 1
 
     def add(self, media, fstype, tags=None):
         """Insert media into DSS."""
@@ -330,8 +320,7 @@ class MediaManager(BaseEntityManager):
     def lock(self, objects):
         """Lock all the media associated with a given list of MediaInfo"""
         self._generic_lock_unlock(
-            objects, LIBPHOBOS.dss_lock, "Media locking failed",
-            self.lock_owner, DSS_MEDIA,
+            objects, LIBPHOBOS.dss_lock, "Media locking failed", DSS_MEDIA,
         )
 
     def unlock(self, objects, force=False):
@@ -341,7 +330,7 @@ class MediaManager(BaseEntityManager):
         """
         self._generic_lock_unlock(
             objects, LIBPHOBOS.dss_unlock, "Media unlocking failed",
-            None if force else self.lock_owner, DSS_MEDIA,
+            DSS_MEDIA, force,
         )
 
 class DSSHandle(Structure): # pylint: disable=too-few-public-methods

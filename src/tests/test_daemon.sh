@@ -68,13 +68,14 @@ function test_release_medium_old_locks
     rmdir /tmp/dir0 /tmp/dir1
 
     host=`hostname`
+    pid=$BASHPID
 
     # Update media to lock them by a 'daemon instance'
     # Only one is locked by this host
     psql phobos phobos -c \
-        "insert into lock (id, owner) values
-             ('media_/tmp/dir0', '$host:0123:dummy:dummy'),
-             ('media_/tmp/dir1', '${host}0:0123:dummy:dummy');"
+        "insert into lock (type, id, hostname, owner) values
+             ('media'::lock_type, '/tmp/dir0', '$host', $pid),
+             ('media'::lock_type, '/tmp/dir1', '${host}0', $pid);"
 
     # Use gdb to stop the daemon once the locks are released
     (
@@ -90,8 +91,7 @@ function test_release_medium_old_locks
     [ "None" == "$lock" ] || error "Medium should be unlocked"
 
     lock=$($phobos dir list -o lock_hostname /tmp/dir1)
-    [ "${host}0" == "$lock" ] ||
-        error "Medium should be locked"
+    [ "${host}0" == "$lock" ] || error "Medium should be locked"
 
     drop_tables
 }
@@ -102,6 +102,7 @@ function test_release_device_old_locks
 
     $phobos drive add --unlock /dev/st[0-1]
     host=`hostname`
+    pid=$BASHPID
 
     # Inserting directly into the lock table requires the
     # actual names of each drive, so we fetch them
@@ -111,9 +112,9 @@ function test_release_device_old_locks
     # Update devices to lock them by a 'daemon instance'
     # Only one is locked by this host
     psql phobos phobos -c \
-        "insert into lock (id, owner) values
-             ('device_$dev_st0_id', '$host:0123:dummy:dummy'),
-             ('device_$dev_st1_id', '${host}0:0123:dummy:dummy');"
+        "insert into lock (type, id, hostname, owner) values
+             ('device'::lock_type, '$dev_st0_id', '$host', $pid),
+             ('device'::lock_type, '$dev_st1_id', '${host}0', $pid);"
 
     # Use gdb to stop the daemon once the locks are released
     (

@@ -29,10 +29,12 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/syscall.h>
+#include <sys/types.h>
 
 #include <libpq-fe.h>
 
 #include "dss_utils.h"
+#include "dss_lock.h"
 #include "pho_common.h"
 #include "pho_dss.h"
 #include "pho_type_utils.h"
@@ -55,25 +57,28 @@ do {                                                  \
 } while (0)
 
 struct simple_param {
-    const char *lock_owner;
-    int (*basic_func)(struct dss_handle *handle, const char *lock_id,
-                      const char *lock_owner);
+    struct pho_lock *locks;
+    int (*basic_func)(struct dss_handle *handle, enum dss_type lock_type,
+                      const char *lock_id, struct pho_lock *locks);
 };
 
 struct dual_param {
-    struct pho_lock *locks;
-    int (*basic_func)(struct dss_handle *handle, const char *lock_id,
-                      struct pho_lock *locks);
+    const char *lock_hostname;
+    int lock_owner;
+    int (*basic_func)(struct dss_handle *handle, enum dss_type lock_type,
+                      const char *lock_id, int lock_owner,
+                      const char *lock_hostname);
 };
 
+/** This structure serves as an abstraction for the basic_* calls */
 struct dss_generic_call {
     union {
         struct simple_param simple;
         struct dual_param dual;
     } params;
     bool is_simple;
-    int (*rollback_func)(struct dss_handle *handle, GString **ids,
-                         int rollback_cnt);
+    int (*rollback_func)(struct dss_handle *handle, enum dss_type type,
+                         GString **ids, int rollback_cnt);
     bool all_or_nothing;
     const char *action;
 };
@@ -86,51 +91,59 @@ enum lock_query_idx {
     DSS_STATUS_QUERY,
 };
 
+#define DECLARE_BLOCK " DECLARE lock_type lock_type:= '%s'::lock_type;" \
+                      "         lock_id TEXT:= '%s';"                   \
+                      "         lock_hostname TEXT:="                   \
+                      "             (SELECT hostname FROM lock"         \
+                      "              WHERE type = lock_type AND "       \
+                      "                    id = lock_id);"              \
+                      "         lock_owner INTEGER:="                   \
+                      "             (SELECT owner FROM lock"            \
+                      "              WHERE type = lock_type AND "       \
+                      "                    id = lock_id);"              \
+
+#define CHECK_VALID_OWNER_HOSTNAME " IF lock_owner IS NULL OR "         \
+                                   "    lock_hostname IS NULL THEN"     \
+                                   "  RAISE USING errcode = 'PHLK1';"   \
+                                   " END IF;"
+
+#define CHECK_OWNER_HOSTNAME_EXISTS " IF lock_owner <> '%d' OR "        \
+                                    "    lock_hostname <> '%s' THEN"    \
+                                    "  RAISE USING errcode = 'PHLK2';"  \
+                                    " END IF;"
+
+#define WHERE_CONDITION " WHERE type = lock_type AND id = lock_id AND " \
+                        "       owner = lock_owner AND "                \
+                        "       hostname = lock_hostname;"
+
 static const char * const lock_query[] = {
-    [DSS_LOCK_QUERY]         = "INSERT INTO lock (id, owner)"
-                               " VALUES ('%s', '%s');",
+    [DSS_LOCK_QUERY]         = "INSERT INTO lock (type, id, owner, hostname)"
+                               " VALUES ('%s'::lock_type, '%s', %d, '%s');",
     [DSS_REFRESH_QUERY]      = "DO $$"
-                               " DECLARE lock_id TEXT:= '%s';"
-                               "         lock_owner TEXT:="
-                               "             (SELECT owner FROM lock"
-                               "              WHERE id = lock_id);"
+                                 DECLARE_BLOCK
                                " BEGIN"
-                               " IF lock_owner IS NULL THEN"
-                               "  RAISE USING errcode = 'PHLK1';"
-                               " END IF;"
-                               " IF lock_owner <> '%s' THEN"
-                               "  RAISE USING errcode = 'PHLK2';"
-                               " END IF;"
+                                 CHECK_VALID_OWNER_HOSTNAME
+                                 CHECK_OWNER_HOSTNAME_EXISTS
                                " UPDATE lock SET timestamp = now()"
-                               " WHERE id = lock_id AND owner = lock_owner;"
+                                 WHERE_CONDITION
                                "END $$;",
     [DSS_UNLOCK_QUERY]       = "DO $$"
-                               " DECLARE lock_id TEXT:= '%s';"
-                               "         lock_owner TEXT:="
-                               "             (SELECT owner FROM lock"
-                               "              WHERE id = lock_id);"
+                                 DECLARE_BLOCK
                                " BEGIN"
-                               " IF lock_owner IS NULL THEN"
-                               "  RAISE USING errcode = 'PHLK1';"
-                               " END IF;"
-                               " IF lock_owner <> '%s' THEN"
-                               "  RAISE USING errcode = 'PHLK2';"
-                               " END IF;"
+                                 CHECK_VALID_OWNER_HOSTNAME
+                                 CHECK_OWNER_HOSTNAME_EXISTS
                                " DELETE FROM lock"
-                               "  WHERE id = lock_id AND owner = lock_owner;"
+                                 WHERE_CONDITION
                                "END $$;",
     [DSS_UNLOCK_FORCE_QUERY] = "DO $$"
-                               " DECLARE lock_id TEXT:= '%s';"
-                               "         owner TEXT:= (SELECT owner FROM lock"
-                               "                       WHERE id = lock_id);"
-                               " BEGIN"
-                               " IF owner IS NULL THEN"
-                               "  RAISE USING errcode = 'PHLK1';"
-                               " END IF;"
-                               " DELETE FROM lock WHERE id = lock_id;"
+                                  DECLARE_BLOCK
+                               "  BEGIN"
+                                  CHECK_VALID_OWNER_HOSTNAME
+                               "  DELETE FROM lock"
+                               "   WHERE type = lock_type AND id = lock_id;"
                                "END $$;",
-    [DSS_STATUS_QUERY]       = "SELECT owner, timestamp FROM lock "
-                               " WHERE id = '%s';"
+    [DSS_STATUS_QUERY]       = "SELECT hostname, owner, timestamp FROM lock "
+                               "  WHERE type = '%s'::lock_type AND id = '%s';"
 };
 
 static const char *dss_translate(enum dss_type type, const void *item_list,
@@ -180,8 +193,7 @@ static int dss_build_lock_id_list(PGconn *conn, const void *item_list,
             LOG_GOTO(cleanup, rc = -ENOMEM, "Memory allocation failed");
 
         PQescapeStringConn(conn, escape_string, name, escape_len, NULL);
-        g_string_append_printf(ids[i], "%s_%s", dss_type_names[type],
-                               escape_string);
+        g_string_append(ids[i], escape_string);
 
         if (ids[i]->len > PHO_DSS_MAX_LOCK_ID_LEN)
             LOG_GOTO(cleanup, rc = -EINVAL, "lock_id name too long");
@@ -208,40 +220,18 @@ static int execute(PGconn *conn, GString *request, PGresult **res,
     return 0;
 }
 
-static __thread uint64_t lock_number;
-
-int dss_init_lock_owner(char **lock_owner)
-{
-    const char *hostname;
-    int rc;
-
-    *lock_owner = NULL;
-
-    /* get hostname */
-    hostname = get_hostname();
-    if (!hostname)
-        LOG_RETURN(-EADDRNOTAVAIL,
-                   "Unable to get hostname to generate lock_owner");
-
-    /* generate lock_owner */
-    rc = asprintf(lock_owner, "%.213s:%.8lx:%.16lx:%.16lx",
-                  hostname, syscall(SYS_gettid), time(NULL), lock_number);
-    if (rc == -1)
-        LOG_RETURN(-ENOMEM, "Unable to generate lock_owner");
-
-    lock_number++;
-    return 0;
-}
-
-static int basic_lock(struct dss_handle *handle, const char *lock_id,
-                      const char *lock_owner)
+static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
+                      const char *lock_id, int lock_owner,
+                      const char *lock_hostname)
 {
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
     PGresult *res;
     int rc;
 
-    g_string_printf(request, lock_query[DSS_LOCK_QUERY], lock_id, lock_owner);
+    g_string_printf(request, lock_query[DSS_LOCK_QUERY],
+                    dss_type_names[lock_type], lock_id, lock_owner,
+                    lock_hostname);
 
     rc = execute(conn, request, &res, PGRES_COMMAND_OK);
 
@@ -251,8 +241,9 @@ static int basic_lock(struct dss_handle *handle, const char *lock_id,
     return rc;
 }
 
-static int basic_refresh(struct dss_handle *handle, const char *lock_id,
-                         const char *lock_owner)
+static int basic_refresh(struct dss_handle *handle, enum dss_type lock_type,
+                         const char *lock_id, int lock_owner,
+                         const char *lock_hostname)
 {
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
@@ -260,7 +251,8 @@ static int basic_refresh(struct dss_handle *handle, const char *lock_id,
     int rc = 0;
 
     g_string_printf(request, lock_query[DSS_REFRESH_QUERY],
-                    lock_id, lock_owner);
+                    dss_type_names[lock_type], lock_id, lock_owner,
+                    lock_hostname);
 
     rc = execute(conn, request, &res, PGRES_COMMAND_OK);
 
@@ -270,19 +262,22 @@ static int basic_refresh(struct dss_handle *handle, const char *lock_id,
     return rc;
 }
 
-static int basic_unlock(struct dss_handle *handle, const char *lock_id,
-                        const char *lock_owner)
+static int basic_unlock(struct dss_handle *handle, enum dss_type lock_type,
+                        const char *lock_id, int lock_owner,
+                        const char *lock_hostname)
 {
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
     PGresult *res;
     int rc;
 
-    if (lock_owner != NULL)
-        g_string_printf(request, lock_query[DSS_UNLOCK_QUERY], lock_id,
-                        lock_owner);
+    if (lock_owner)
+        g_string_printf(request, lock_query[DSS_UNLOCK_QUERY],
+                        dss_type_names[lock_type], lock_id, lock_owner,
+                        lock_hostname);
     else
-        g_string_printf(request, lock_query[DSS_UNLOCK_FORCE_QUERY], lock_id);
+        g_string_printf(request, lock_query[DSS_UNLOCK_FORCE_QUERY],
+                        dss_type_names[lock_type], lock_id);
 
     rc = execute(conn, request, &res, PGRES_COMMAND_OK);
 
@@ -292,7 +287,7 @@ static int basic_unlock(struct dss_handle *handle, const char *lock_id,
     return rc;
 }
 
-static int basic_status(struct dss_handle *handle,
+static int basic_status(struct dss_handle *handle, enum dss_type lock_type,
                         const char *lock_id, struct pho_lock *lock)
 {
     GString *request = g_string_new("");
@@ -301,7 +296,8 @@ static int basic_status(struct dss_handle *handle,
     PGresult *res;
     int rc = 0;
 
-    g_string_printf(request, lock_query[DSS_STATUS_QUERY], lock_id);
+    g_string_printf(request, lock_query[DSS_STATUS_QUERY],
+                    dss_type_names[lock_type], lock_id);
 
     rc = execute(conn, request, &res, PGRES_TUPLES_OK);
     if (rc)
@@ -318,46 +314,11 @@ static int basic_status(struct dss_handle *handle,
         goto out_cleanup;
     }
 
-    /* XXX: The below code is temporary, and will be changed in the
-     * next patch
-     */
     if (lock) {
-        char *owner = PQgetvalue(res, 0, 0);
-        char *lock_hostname = NULL;
-        char *lock_owner = NULL;
-        char *second_colon;
-        char *first_colon;
-        pid_t pid;
-
-        str2timeval(PQgetvalue(res, 0, 1), &lock_timestamp);
-
-        first_colon = strchr(owner, ':');
-        if (first_colon++) {
-            second_colon = strchr(first_colon, ':');
-
-            lock_hostname = strndup(owner, first_colon - owner - 1);
-            if (!lock_hostname)
-                return -errno;
-
-            lock_owner = second_colon ?
-                            strndup(first_colon,
-                                    second_colon - first_colon - 1) :
-                            strdup(first_colon);
-            if (!lock_owner)
-                return -errno;
-
-            pid = (pid_t) strtoll(lock_owner, NULL, 10);
-            if (errno == EINVAL && errno == ERANGE)
-                LOG_GOTO(out_cleanup, rc = -errno,
-                         "Conversion error occurred: %d\n", errno);
-
-            rc = init_pho_lock(lock, lock_hostname, pid, &lock_timestamp);
-
-            free(lock_hostname);
-            free(lock_owner);
-        } else {
-            rc = init_pho_lock(lock, owner, 0, &lock_timestamp);
-        }
+        str2timeval(PQgetvalue(res, 0, 2), &lock_timestamp);
+        rc = init_pho_lock(lock, PQgetvalue(res, 0, 0),
+                           (int) strtoll(PQgetvalue(res, 0, 1), NULL, 10),
+                           &lock_timestamp);
     }
 
 out_cleanup:
@@ -390,12 +351,14 @@ static int dss_generic(struct dss_handle *handle, enum dss_type type,
         if (callee->is_simple) {
             struct simple_param *param = &callee->params.simple;
 
-            rc2 = param->basic_func(handle, ids[i]->str, param->lock_owner);
+            rc2 = param->basic_func(handle, type, ids[i]->str,
+                                    param->locks ? param->locks + i : NULL);
+
         } else {
             struct dual_param *param = &callee->params.dual;
 
-            rc2 = param->basic_func(handle, ids[i]->str,
-                                    param->locks ? param->locks + i : NULL);
+            rc2 = param->basic_func(handle, type, ids[i]->str,
+                                    param->lock_owner, param->lock_hostname);
         }
 
         if (rc2) {
@@ -407,7 +370,7 @@ static int dss_generic(struct dss_handle *handle, enum dss_type type,
     }
 
     if (callee->all_or_nothing && rc)
-        callee->rollback_func(handle, ids, i - 1);
+        callee->rollback_func(handle, type, ids, i - 1);
 
 cleanup:
     LOCK_ID_LIST_FREE(ids, item_cnt);
@@ -415,8 +378,8 @@ cleanup:
     return rc;
 }
 
-static int dss_lock_rollback(struct dss_handle *handle, GString **ids,
-                             int rollback_cnt)
+static int dss_lock_rollback(struct dss_handle *handle, enum dss_type type,
+                             GString **ids, int rollback_cnt)
 {
     int rc = 0;
     int i;
@@ -425,7 +388,7 @@ static int dss_lock_rollback(struct dss_handle *handle, GString **ids,
         int rc2;
 
         /* If a lock failure happens, we force every unlock */
-        rc2 = basic_unlock(handle, ids[i]->str, NULL);
+        rc2 = basic_unlock(handle, type, ids[i]->str, 0, NULL);
         if (rc2) {
             rc = rc ? : rc2;
             pho_error(rc2, "Failed to unlock %s after lock failure, "
@@ -435,17 +398,19 @@ static int dss_lock_rollback(struct dss_handle *handle, GString **ids,
     return rc;
 }
 
-int dss_lock(struct dss_handle *handle, enum dss_type type,
-             const void *item_list, int item_cnt, const char *lock_owner)
+int _dss_lock(struct dss_handle *handle, enum dss_type type,
+              const void *item_list, int item_cnt, const char *lock_hostname,
+              int lock_pid)
 {
     struct dss_generic_call callee = {
         .params = {
-            .simple = {
-                .lock_owner = lock_owner,
+            .dual = {
+                .lock_hostname = lock_hostname,
+                .lock_owner = lock_pid,
                 .basic_func = basic_lock
             }
         },
-        .is_simple = true,
+        .is_simple = false,
         .all_or_nothing = true,
         .rollback_func = dss_lock_rollback,
         .action = "lock"
@@ -454,18 +419,31 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
     return dss_generic(handle, type, item_list, item_cnt, &callee);
 }
 
-int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
-                     const void *item_list, int item_cnt,
-                     const char *lock_owner)
+int dss_lock(struct dss_handle *handle, enum dss_type type,
+             const void *item_list, int item_cnt)
+{
+    const char *hostname;
+    int pid;
+
+    if (fill_host_owner(&hostname, &pid))
+        LOG_RETURN(-EINVAL, "Couldn't retrieve hostname");
+
+    return _dss_lock(handle, type, item_list, item_cnt, hostname, pid);
+}
+
+int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
+                      const void *item_list, int item_cnt,
+                      const char *lock_hostname, int lock_owner)
 {
     struct dss_generic_call callee = {
         .params = {
-            .simple = {
+            .dual = {
+                .lock_hostname = lock_hostname,
                 .lock_owner = lock_owner,
                 .basic_func = basic_refresh
             }
         },
-        .is_simple = true,
+        .is_simple = false,
         .all_or_nothing = false,
         .action = "refresh"
     };
@@ -473,22 +451,48 @@ int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
     return dss_generic(handle, type, item_list, item_cnt, &callee);
 }
 
-int dss_unlock(struct dss_handle *handle, enum dss_type type,
-               const void *item_list, int item_cnt, const char *lock_owner)
+int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
+                     const void *item_list, int item_cnt)
+{
+    const char *hostname;
+    int pid;
+
+    if (fill_host_owner(&hostname, &pid))
+        LOG_RETURN(-EINVAL, "Couldn't retrieve hostname");
+
+    return _dss_lock_refresh(handle, type, item_list, item_cnt, hostname, pid);
+}
+
+int _dss_unlock(struct dss_handle *handle, enum dss_type type,
+                const void *item_list, int item_cnt, const char *lock_hostname,
+                int lock_owner)
 {
     struct dss_generic_call callee = {
         .params = {
-            .simple = {
+            .dual = {
+                .lock_hostname = lock_hostname,
                 .lock_owner = lock_owner,
                 .basic_func = basic_unlock
             }
         },
-        .is_simple = true,
+        .is_simple = false,
         .all_or_nothing = false,
         .action = "unlock"
     };
 
     return dss_generic(handle, type, item_list, item_cnt, &callee);
+}
+
+int dss_unlock(struct dss_handle *handle, enum dss_type type,
+               const void *item_list, int item_cnt, bool force_unlock)
+{
+    const char *hostname = NULL;
+    int pid = 0;
+
+    if (!force_unlock && fill_host_owner(&hostname, &pid))
+        LOG_RETURN(-EINVAL, "Couldn't retrieve hostname");
+
+    return _dss_unlock(handle, type, item_list, item_cnt, hostname, pid);
 }
 
 int dss_lock_status(struct dss_handle *handle, enum dss_type type,
@@ -497,39 +501,15 @@ int dss_lock_status(struct dss_handle *handle, enum dss_type type,
 {
     struct dss_generic_call callee = {
         .params = {
-            .dual = {
+            .simple = {
                 .locks = locks,
                 .basic_func = basic_status
             }
         },
-        .is_simple = false,
+        .is_simple = true,
         .all_or_nothing = false,
         .action = "status"
     };
 
     return dss_generic(handle, type, item_list, item_cnt, &callee);
-}
-
-int dss_hostname_from_lock_owner(const char *lock_owner, char **hostname)
-{
-    char *colon_index;
-
-    /* parse lock_owner */
-    colon_index = strchr(lock_owner, ':');
-
-    /* checks that the lock string contains at least one ':' */
-    if (!colon_index) {
-        *hostname = NULL;
-        LOG_RETURN(-EBADF, "Unable to get hostname from lock_owner %s",
-                   lock_owner);
-    }
-
-    /* extract the first part of the lock_owner string */
-    *hostname = strndup(lock_owner, colon_index - lock_owner);
-    if (!*hostname)
-        LOG_RETURN(-ENOMEM, "Unable to copy hostname from lock_owner %s",
-                   lock_owner);
-
-    /* success */
-    return 0;
 }

@@ -26,6 +26,7 @@
 /* phobos stuff */
 #include "pho_dss.h"
 #include "../test_setup.h"
+#include "../../dss/dss_lock.h"
 
 /* standard stuff */
 
@@ -197,7 +198,7 @@ static int dml_ok_lock_setup(void **state)
         return -1;
 
     /* lock medium */
-    if (dss_lock(dss, DSS_MEDIA, &medium_info, 1, HOSTNAME ":12345"))
+    if (_dss_lock(dss, DSS_MEDIA, &medium_info, 1, HOSTNAME, 12345))
         return -1;
 
     return 0;

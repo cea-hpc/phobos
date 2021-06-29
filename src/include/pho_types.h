@@ -235,7 +235,7 @@ static const struct pho_buff PHO_BUFF_NULL = { .size = 0, .buff = NULL };
 
 struct pho_lock {
     char          *hostname;
-    pid_t          owner;
+    int            owner;
     struct timeval timestamp;
     bool           is_external;
 };

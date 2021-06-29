@@ -310,7 +310,6 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     GString *md_repr = g_string_new(NULL);
     struct object_info *obj_res;
     struct dss_filter filter;
-    char *lock_owner = NULL;
     struct object_info obj;
     int obj_cnt;
     int rc2;
@@ -325,13 +324,9 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     obj.oid = xfer->xd_objid;
     obj.user_md = md_repr->str;
 
-    rc = dss_init_lock_owner(&lock_owner);
+    rc = dss_lock(dss, DSS_OBJECT, &obj, 1);
     if (rc)
-        LOG_GOTO(out_md, rc, "Unable to init lock owner in object md save");
-
-    rc = dss_lock(dss, DSS_OBJECT, &obj, 1, lock_owner);
-    if (rc)
-        LOG_GOTO(out_owner, rc, "Unable to lock object objid: '%s'",
+        LOG_GOTO(out_md, rc, "Unable to lock object objid: '%s'",
                  obj.oid);
 
     if (!xfer->xd_params.put.overwrite) {
@@ -412,17 +407,13 @@ out_filt:
     dss_filter_free(&filter);
 
 out_unlock:
-    rc2 = dss_unlock(dss, DSS_OBJECT, &obj, 1, lock_owner);
+    rc2 = dss_unlock(dss, DSS_OBJECT, &obj, 1, false);
     if (rc2) {
         rc = rc ? : rc2;
         pho_error(rc2,
                   "Couldn't unlock object:'%s'. Database may be corrupted.",
                   xfer->xd_objid);
     }
-
-out_owner:
-    free(lock_owner);
-
 out_md:
     g_string_free(md_repr, true);
 
@@ -441,7 +432,6 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     struct object_info *obj = NULL;
     bool need_undelete = false;
     struct dss_filter filter;
-    char *lock_owner = NULL;
     int prev_cnt = 0;
     int obj_cnt = 0;
     int cnt = 0;
@@ -457,14 +447,9 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         LOG_RETURN(rc, "Couldn't build filter in md_del for objid:'%s'.",
                    xfer->xd_objid);
 
-    /* taking oid lock */
-    rc = dss_init_lock_owner(&lock_owner);
+    rc = dss_lock(dss, DSS_OBJECT, &lock_obj, 1);
     if (rc)
-        LOG_GOTO(out_filt, rc, "Unable to init lock owner in object md save");
-
-    rc = dss_lock(dss, DSS_OBJECT, &lock_obj, 1, lock_owner);
-    if (rc)
-        LOG_GOTO(out_owner, rc, "Unable to lock object objid: '%s'",
+        LOG_GOTO(out_filt, rc, "Unable to lock object objid: '%s'",
                  xfer->xd_objid);
 
     rc = dss_object_get(dss, &filter, &obj, &obj_cnt);
@@ -544,17 +529,13 @@ out_res:
     dss_res_free(obj, obj_cnt);
 
 out_unlock:
-    rc2 = dss_unlock(dss, DSS_OBJECT, &lock_obj, 1, lock_owner);
+    rc2 = dss_unlock(dss, DSS_OBJECT, &lock_obj, 1, false);
     if (rc2) {
         rc = rc ? : rc2;
         pho_error(rc2,
                   "Couldn't unlock object:'%s'. Database may be corrupted.",
                   xfer->xd_objid);
     }
-
-out_owner:
-    free(lock_owner);
-
 out_filt:
     dss_filter_free(&filter);
 
@@ -570,20 +551,13 @@ static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     struct object_info obj = { .oid = xfer->xd_objid };
     struct dss_filter filter;
     struct object_info *objs;
-    char *lock_owner;
     int obj_cnt;
     int rc2;
     int rc;
 
-    rc = dss_init_lock_owner(&lock_owner);
+    rc = dss_lock(dss, DSS_OBJECT, &obj, 1);
     if (rc)
-        LOG_RETURN(rc, "Unable to init lock owner in object delete");
-
-    rc = dss_lock(dss, DSS_OBJECT, &obj, 1, lock_owner);
-    if (rc)
-        LOG_GOTO(out_owner, rc, "Unable to get lock for oid %s before "
-                                "delete, lock_owner: %s",
-                                obj.oid, lock_owner);
+        LOG_RETURN(rc, "Unable to get lock for oid %s before delete", obj.oid);
 
     /* checking oid exists into object table */
     rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}", obj.oid);
@@ -613,15 +587,12 @@ out_filter:
     dss_filter_free(&filter);
 out_unlock:
     /* releasing oid lock */
-    rc2 = dss_unlock(dss, DSS_OBJECT, &obj, 1, lock_owner);
+    rc2 = dss_unlock(dss, DSS_OBJECT, &obj, 1, false);
     if (rc2) {
-        pho_error(rc, "Unable to unlock at end of object delete (oid: %s, "
-                      "lock_owner: %s)", obj.oid, lock_owner);
+        pho_error(rc, "Unable to unlock at end of object delete (oid: %s)",
+                  obj.oid);
         rc = rc ? : rc2;
     }
-
-out_owner:
-    free(lock_owner);
     return rc;
 }
 
@@ -639,7 +610,6 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     struct object_info *objs;
     char *buf_uuid = NULL;
     char *buf_oid = NULL;
-    char *lock_owner;
     int n_objs;
     int rc2;
     int rc;
@@ -697,15 +667,10 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 
     /* LOCK */
     /* taking oid lock */
-    rc = dss_init_lock_owner(&lock_owner);
+    rc = dss_lock(dss, DSS_OBJECT, &obj, 1);
     if (rc)
-        LOG_GOTO(out_id, rc, "Unable to init lock owner in object undelete");
-
-    rc = dss_lock(dss, DSS_OBJECT, &obj, 1, lock_owner);
-    if (rc)
-        LOG_GOTO(out_id_owner, rc, "Unable to get lock for oid %s before "
-                                   "undelete, lock_owner: %s",
-                                   obj.oid, lock_owner);
+        LOG_GOTO(out_id, rc, "Unable to get lock for oid %s before undelete",
+                 obj.oid);
 
     /* CHECK */
     /* check oid does not already exists in object table */
@@ -806,15 +771,12 @@ out_free:
 out_unlock:
     /* UNLOCK */
     /* releasing oid lock */
-    rc2 = dss_unlock(dss, DSS_OBJECT, &obj, 1, lock_owner);
+    rc2 = dss_unlock(dss, DSS_OBJECT, &obj, 1, false);
     if (rc2) {
-        pho_error(rc, "Unable to unlock at end of object undelete (oid: "
-                      "%s, lock_owner: %s)", obj.oid, lock_owner);
+        pho_error(rc, "Unable to unlock at end of object undelete (oid: %s)",
+                  obj.oid);
         rc = rc ? : rc2;
     }
-
-out_id_owner:
-    free(lock_owner);
 out_id:
     free(buf_oid);
     free(buf_uuid);

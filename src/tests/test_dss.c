@@ -29,6 +29,7 @@
 #include "pho_dss.h"
 #include "pho_common.h"
 #include "pho_test_utils.h"
+#include "../dss/dss_lock.h"
 #include <errno.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -39,7 +40,8 @@
 #include <string.h>
 #include <inttypes.h>
 
-#define LOCK_OWNER "generic_lock_owner"
+#define LOCK_HOSTNAME "generic_lock_hostname"
+#define LOCK_OWNER "0"
 
 static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
                            const struct dss_filter *filter, void **item_list,
@@ -89,6 +91,19 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
     default:
         return -ENOTSUP;
     }
+}
+
+static int convert_pid(const char *pid)
+{
+    int lock_owner = (int) strtoll(pid, NULL, 10);
+
+    if (errno == EINVAL || errno == ERANGE) {
+        pho_error(-errno, "Pid couldn't be converted: %s, err = %d",
+                  pid, -errno);
+        exit(EXIT_FAILURE);
+    }
+
+    return lock_owner;
 }
 
 int main(int argc, char **argv)
@@ -340,7 +355,9 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
     } else if (!strcmp(argv[1], "lock")) {
-        const char *lock_owner = argc > 3 ? argv[3] : LOCK_OWNER;
+        const char *lock_hostname = argc > 3 ? argv[3] : LOCK_HOSTNAME;
+        int lock_owner = (argc > 4) ? convert_pid(argv[4]) :
+                                      convert_pid(LOCK_OWNER);
 
         type = str2dss_type(argv[2]);
 
@@ -355,14 +372,16 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_lock(&dss_handle, type, item_list, item_cnt, lock_owner);
+        rc = _dss_lock(&dss_handle, type, item_list, item_cnt, lock_hostname,
+                       lock_owner);
         if (rc) {
-            pho_error(rc, "dss_lock failed");
+            pho_error(rc, "_dss_lock failed");
             exit(EXIT_FAILURE);
         }
 
     } else if (!strcmp(argv[1], "unlock")) {
-        const char *lock_owner = argc > 3 ? argv[3] : NULL;
+        const char *lock_hostname = argc > 3 ? argv[3] : NULL;
+        int lock_owner = (argc > 4) ? convert_pid(argv[4]) : 0;
 
         type = str2dss_type(argv[2]);
 
@@ -377,9 +396,10 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_unlock(&dss_handle, type, item_list, item_cnt, lock_owner);
+        rc = _dss_unlock(&dss_handle, type, item_list, item_cnt, lock_hostname,
+                         lock_owner);
         if (rc) {
-            pho_error(rc, "dss_unlock failed");
+            pho_error(rc, "_dss_unlock failed");
             exit(EXIT_FAILURE);
         }
     } else {

@@ -30,7 +30,7 @@ import psycopg2
 
 from phobos.core import cfg
 
-ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92"]
+ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92", "1.93"]
 CURRENT_SCHEMA_VERSION = ORDERED_SCHEMAS[-1]
 AVAIL_SCHEMAS = set(ORDERED_SCHEMAS)
 
@@ -55,10 +55,11 @@ class Migrator:
 
         # { source_version: (target_version, migration_function) }
         self.convert_funcs = {
-            "0": ("1.92", lambda: self.create_schema("1.92")),
+            "0": ("1.93", lambda: self.create_schema("1.93")),
             "1.1": ("1.2", self.convert_1_to_2),
             "1.2": ("1.91", self.convert_2_to_3),
             "1.91": ("1.92", self.convert_3_to_4),
+            "1.92": ("1.93", self.convert_4_to_5),
         }
 
         self.reachable_versions = set(
@@ -211,6 +212,7 @@ class Migrator:
                 id          varchar(2048),
                 owner       varchar(256) NOT NULL,
                 timestamp   timestamp DEFAULT now(),
+
                 PRIMARY KEY (id)
             );
 
@@ -234,6 +236,38 @@ class Migrator:
         """Convert DB from model 3 (phobos v1.91) to 4 (phobos v1.92)"""
         with self.connect():
             self.convert_schema_3_to_4()
+
+    def convert_schema_4_to_5(self):
+        """DB schema changes : create lock table"""
+        cur = self.conn.cursor()
+        cur.execute("""
+            -- create enum lock_type
+            CREATE TYPE lock_type AS ENUM('object', 'device', 'media');
+
+            -- drop old lock table
+            DROP TABLE lock;
+
+            -- create lock table
+            CREATE TABLE lock (
+                type        lock_type,
+                id          varchar(2048),
+                hostname    varchar(256) NOT NULL,
+                owner       integer NOT NULL,
+                timestamp   timestamp DEFAULT now(),
+
+                PRIMARY KEY (type, id)
+            );
+
+            -- update current schema version
+            UPDATE schema_info SET version = '1.93';
+        """)
+        self.conn.commit()
+        cur.close()
+
+    def convert_4_to_5(self):
+        """Convert DB from model 4 (phobos v1.92) to 5 (phobos v1.93)"""
+        with self.connect():
+            self.convert_schema_4_to_5()
 
     def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""

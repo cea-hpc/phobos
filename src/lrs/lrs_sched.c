@@ -163,8 +163,7 @@ static int sched_dev_acquire(struct lrs_sched *sched, struct dev_descr *pdev)
         return 0;
     }
 
-    rc = dss_lock(&sched->dss, DSS_DEVICE, pdev->dss_dev_info, 1,
-                  sched->lock_hostname);
+    rc = dss_lock(&sched->dss, DSS_DEVICE, pdev->dss_dev_info, 1);
     if (rc) {
         pho_warn("Cannot lock device '%s': %s", pdev->dev_path,
                  strerror(-rc));
@@ -194,8 +193,7 @@ static int sched_dev_release(struct lrs_sched *sched, struct dev_descr *pdev)
         return 0;
     }
 
-    rc = dss_unlock(&sched->dss, DSS_DEVICE, pdev->dss_dev_info, 1,
-                    sched->lock_hostname);
+    rc = dss_unlock(&sched->dss, DSS_DEVICE, pdev->dss_dev_info, 1, false);
     if (rc)
         LOG_RETURN(rc, "Cannot unlock device '%s'", pdev->dev_path);
 
@@ -218,7 +216,7 @@ static int sched_media_acquire(struct lrs_sched *sched,
     if (!pmedia)
         return -EINVAL;
 
-    rc = dss_lock(&sched->dss, DSS_MEDIA, pmedia, 1, sched->lock_hostname);
+    rc = dss_lock(&sched->dss, DSS_MEDIA, pmedia, 1);
     if (rc) {
         pmedia->lock.is_external = true;
         LOG_RETURN(rc, "Cannot lock media '%s'", pmedia->rsc.id.name);
@@ -241,7 +239,7 @@ static int sched_media_release(struct lrs_sched *sched,
     if (!pmedia)
         return -EINVAL;
 
-    rc = dss_unlock(&sched->dss, DSS_MEDIA, pmedia, 1, sched->lock_hostname);
+    rc = dss_unlock(&sched->dss, DSS_MEDIA, pmedia, 1, false);
     if (rc)
         LOG_RETURN(rc, "Cannot unlock media '%s'", pmedia->rsc.id.name);
 
@@ -625,7 +623,7 @@ static int sched_check_device_locks(struct lrs_sched *sched)
 
         pho_info("Device '%s' was previously locked by this host, releasing it",
                  dev->path);
-        rc2 = dss_unlock(&sched->dss, DSS_DEVICE, dev, 1, NULL);
+        rc2 = dss_unlock(&sched->dss, DSS_DEVICE, dev, 1, true);
         if (rc2) {
             pho_error(rc2, "Device '%s' could not be unlocked", dev->path);
             rc = rc ? : rc2;
@@ -681,7 +679,7 @@ static int sched_check_medium_locks(struct lrs_sched *sched)
         // if it is, unlock it
         pho_info("Medium '%s' was previously locked by this host, releasing it",
                  media[i].rsc.id.name);
-        rc2 = dss_unlock(&sched->dss, DSS_MEDIA, &media[i], 1, NULL);
+        rc2 = dss_unlock(&sched->dss, DSS_MEDIA, &media[i], 1, true);
         if (rc2) {
             pho_error(rc2, "Medium '%s' could not be unlocked",
                       media[i].rsc.id.name);

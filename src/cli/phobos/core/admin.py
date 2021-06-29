@@ -40,7 +40,6 @@ class AdminHandle(Structure): # pylint: disable=too-few-public-methods
         ('comm', CommInfo),
         ('dss', DSSHandle),
         ('daemon_is_online', c_int),
-        ('lock_owner', c_char_p),
     ]
 
 class Client(object):

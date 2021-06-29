@@ -424,32 +424,6 @@ int dss_object_move(struct dss_handle *handle, enum dss_type type_from,
 /* ****************************************************************************/
 
 /**
- * Generate a lock_owner "hostname:tid:time:locknumber"
- *
- * Where:
- * - hostname:      local hostname without domain, limited to 213 characters
- * - tid:           thread id limited to 8 characters
- * - time:          number of seconds since epoch limited to 16 characters
- * - lock_number:   unsigned int counter dedicated to each thread, incremented
- *                  at each new lock owner creation, limited to 16 characters
- *
- * Ensure that we don't build an identifier bigger than 256 characters.
- *
- * For the lock owner name to generate a collision, either the tid or the
- * sched_lock_number has to loop in less than 1 second.
- *
- * @param[out] lock_owner   Newly allocated and generated lock owner if success,
- *                          must be freed by the caller, NULL if an error occurs
- *
- * @return                  0 if success,
- *                          -ENOMEM if there is not enough memory to generate
- *                          the lock owner
- *                          -EADDRNOTAVAIL if hostname can't be found to
- *                          generate the lock owner
- */
-int dss_init_lock_owner(char **lock_owner);
-
-/**
  * Take locks.
  *
  * If any lock cannot be taken, then the ones that already are will be
@@ -460,12 +434,12 @@ int dss_init_lock_owner(char **lock_owner);
  * @param[in]   type            Type of the ressources to lock.
  * @param[in]   item_list       List of ressources to lock.
  * @param[in]   item_cnt        Number of ressources to lock.
- * @param[in]   lock_owner      Name of the lock owner.
+ *
  * @return                      0 on success,
- *                             -EEXIST if \a lock_id already exists.
+ *                             -EEXIST if \p lock_id already exists.
  */
 int dss_lock(struct dss_handle *handle, enum dss_type type,
-             const void *item_list, int item_cnt, const char *lock_owner);
+             const void *item_list, int item_cnt);
 
 /**
  * Refresh lock timestamps.
@@ -478,20 +452,19 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
  * @param[in]   type            Type of the ressources's lock to refresh.
  * @param[in]   item_list       List of ressources's lock to refresh.
  * @param[in]   item_cnt        Number of ressources's lock to refresh.
- * @param[in]   lock_owner      Name of the lock owner, must be specified.
+ *
  * @return                      0 on success,
  *                             -ENOLCK if the lock does not exist,
  *                             -EACCES if the lock owner does not match.
  */
 int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
-                     const void *item_list, int item_cnt,
-                     const char *lock_owner);
+                     const void *item_list, int item_cnt);
 
 /**
  * Release locks.
  *
- * If \a lock_owner is NULL, remove the locks without considering the
- * previous owner.
+ * If \p force_unlock is true, the lock's hostname and owner are not matched
+ * against the caller's.
  *
  * The function will attempt to unlock as many locks as possible. Should any
  * unlock fail, the first error code obtained will be returned after
@@ -501,19 +474,20 @@ int dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
  * @param[in]   type            Type of the ressources to unlock.
  * @param[in]   item_list       List of ressources to unlock.
  * @param[in]   item_cnt        Number of ressources to unlock.
- * @param[in]   lock_owner      Name of the lock owner, ignored if NULL.
+ * @param[in]   force_unlock    Whether we ignore the lock's hostname and owner
+ *                              or not.
+ *
  * @return                      0 on success,
  *                             -ENOLCK if the lock does not exist,
  *                             -EACCES if the lock owner does not match.
  */
 int dss_unlock(struct dss_handle *handle, enum dss_type type,
-               const void *item_list, int item_cnt, const char *lock_owner);
+               const void *item_list, int item_cnt, bool force_unlock);
 
 /**
  * Retrieve the status of locks.
  *
- * If \a lock_owner is NULL, the strings are not allocated.
- * If \a lock_timestamp is NULL, the structures are not filled.
+ * If \p locks is NULL, the structures are not filled.
  *
  * The function will attempt to query the status of as many locks as possible.
  * Should any query fail, the first error code obtained will be returned after
@@ -535,17 +509,5 @@ int dss_unlock(struct dss_handle *handle, enum dss_type type,
 int dss_lock_status(struct dss_handle *handle, enum dss_type type,
                     const void *item_list, int item_cnt,
                     struct pho_lock *locks);
-
-/**
- * Allocate and return hostname from a lock owner.
- *
- * @param[in]   lock_owner  Lock owner containing the hostname
- * @param[out]  hostname    Hostname allocated and extracted from /p lock_owner
- *                          (NULL if there was an error)
- *
- * @return  0 is success or negative error code
- *          -EBADF if we can't extract hostname from lock owner
- */
-int dss_hostname_from_lock_owner(const char *lock_owner, char **hostname);
 
 #endif

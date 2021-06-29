@@ -34,6 +34,9 @@ Convert phobos database
   - new deprecated_object table
   * from 3 (phobos v1.91) to 4 (phobos v1.92):
   - create lock table
+  * from 4 (phobos v1.92) to 5 (phobos v1.93):
+  - added lock_type type
+  - type, hostname and owner in lock table, primary key to (type, id)
 """
 
 import argparse

@@ -10,9 +10,10 @@ endif
 TEST_EXTENSIONS=.sh
 
 check_PROGRAMS=test_dss_lock test_dss_object_move test_ping \
-	           test_dss_lazy_find_object test_store_object_md \
+	           test_dss_lazy_find_object \
 	           test_dss_medium_locate test_phobos_admin_medium_locate \
 	           test_store_object_md_get
+#test_store_object_md
 
 TESTS=$(check_PROGRAMS)
 
@@ -36,8 +37,8 @@ test_store_object_md_get_SOURCES=test_store_object_md_get.c ../test_setup.c
 test_store_object_md_get_LDADD=../../store/libphobos_store.la \
 	                           ../../admin/libphobos_admin.la
 
-test_store_object_md_SOURCES=test_store_object_md.c
-test_store_object_md_LDADD=../../store/libphobos_store.la
+#test_store_object_md_SOURCES=test_store_object_md.c
+#test_store_object_md_LDADD=../../store/libphobos_store.la
 
 test_dss_lazy_find_object_SOURCES=test_dss_lazy_find_object.c ../test_setup.c \
 	                              ../test_setup.h

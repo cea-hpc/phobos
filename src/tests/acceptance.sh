@@ -457,8 +457,8 @@ function phobos_delayed_dev_release
 {
     dev_file="$1"
     med_file="$2"
-    dev_req="select * from lock where id like 'device%';"
-    med_req="select * from lock where id like 'media%';"
+    dev_req="select * from lock where type = 'device'::lock_type;"
+    med_req="select * from lock where type = 'media'::lock_type;"
     shift 2
     (
         tmp_gdb_script=$(mktemp)

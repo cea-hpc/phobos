@@ -54,7 +54,7 @@ int build_extent_key(const char *uuid, int version, const char *extent_tag,
                      char **key);
 
 /** initialize a pho_lock structure */
-int init_pho_lock(struct pho_lock *lock, char *hostname, pid_t owner,
+int init_pho_lock(struct pho_lock *lock, char *hostname, int owner,
                   struct timeval *lock_timestamp);
 
 /** copy a pho_lock structure */

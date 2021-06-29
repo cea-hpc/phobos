@@ -14,6 +14,7 @@
 #include "pho_test_xfer_utils.h"
 #include "phobos_admin.h"
 #include "phobos_store.h"
+#include "../dss/dss_lock.h"
 
 #define PHO_TMP_DIR_TEMPLATE "/tmp/pho_XXXXXX"
 #define LOCK_OWNER "generic_lock_owner"
@@ -162,8 +163,8 @@ static void *wait_unlock_device(void *f_args)
     struct wait_unlock_device_args *args = f_args;
 
     sleep(WAIT_UNLOCK_SLEEP);
-    dss_unlock(&args->dss, DSS_DEVICE, args->dev, 1, LOCK_OWNER);
-    dss_unlock(&args->dss, DSS_MEDIA, args->media, 1, LOCK_OWNER);
+    _dss_unlock(&args->dss, DSS_DEVICE, args->dev, 1, LOCK_OWNER, getpid());
+    _dss_unlock(&args->dss, DSS_MEDIA, args->media, 1, LOCK_OWNER, getpid());
     dss_fini(&args->dss);
     return NULL;
 }
@@ -184,8 +185,8 @@ static void test_put_retry(struct pho_xfer_desc *xfer, struct dev_info *dev,
     dss_init(&wait_unlock_args.dss);
 
     /* First lock the only available device and media */
-    dss_lock(&wait_unlock_args.dss, DSS_DEVICE, dev, 1, LOCK_OWNER);
-    dss_lock(&wait_unlock_args.dss, DSS_MEDIA, media, 1, LOCK_OWNER);
+    _dss_lock(&wait_unlock_args.dss, DSS_DEVICE, dev, 1, LOCK_OWNER, getpid());
+    _dss_lock(&wait_unlock_args.dss, DSS_MEDIA, media, 1, LOCK_OWNER, getpid());
 
     /* In another thread, sleep for some time and unlock the device */
     assert(pthread_create(&wait_unlock_thread, NULL, wait_unlock_device,
