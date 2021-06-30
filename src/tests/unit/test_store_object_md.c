@@ -29,6 +29,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "../../dss/dss_lock.h"
 #include "../../store/store_utils.h"
 
 #include <cmocka.h>
@@ -41,42 +42,19 @@ int pho_attrs_to_json(const struct pho_attrs *md, GString *str, int flags)
     return (int)mock();
 }
 
-int dss_init_lock_owner(char **lock_owner)
-{
-    int rc = (int)mock();
-
-    if (rc == 0)
-        *lock_owner = strdup_safe((char *)mock());
-
-    return rc;
-}
-
-#define MOCK_DSS_INIT_LOCK_OWNER(_rc, _owner)                                  \
-do {                                                                           \
-    will_return(dss_init_lock_owner, _rc);                                     \
-    if (_rc == 0)                                                              \
-        will_return(dss_init_lock_owner, _owner);                              \
-} while (0)
-
 int dss_lock(struct dss_handle *handle, enum dss_type type,
-             const void *item_list, int item_cnt, const char *lock_owner)
+              const void *item_list, int item_cnt)
 {
     (void)handle; (void)type; (void)item_list; (void)item_cnt;
 
-    check_expected(lock_owner);
     return (int)mock();
 }
 
-#define MOCK_DSS_LOCK(_rc, _owner)                                             \
-do {                                                                           \
-    expect_string(dss_lock, lock_owner, _owner);                               \
-    will_return(dss_lock, _rc);                                                \
-} while (0)
-
 int dss_unlock(struct dss_handle *handle, enum dss_type type,
-               const void *item_list, int item_cnt, const char *lock_owner)
+                const void *item_list, int item_cnt, bool force_unlock)
 {
-    (void)handle; (void)type; (void)item_list; (void)item_cnt; (void)lock_owner;
+    (void)handle; (void)type; (void)item_list; (void)item_cnt;
+    (void)force_unlock;
 
     return (int)mock();
 }
@@ -258,21 +236,6 @@ static void oms_attrs_to_json_failure(void **state)
     assert_int_equal(rc, -ENOMEM);
 }
 
-static void oms_dss_init_lock_owner_failure(void **state)
-{
-    struct pho_xfer_desc xfer;
-    int rc;
-
-    (void) state;
-
-    will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(-EADDRNOTAVAIL, NULL);
-    rc = object_md_save(NULL, &xfer);
-    assert_int_equal(rc, -EADDRNOTAVAIL);
-}
-
-static const char *GOOD_OWNER = "dummy_owner";
-
 static const struct pho_xfer_desc PUT_XFER = {
     .xd_params.put.overwrite = false,
     .xd_objid = "dummy_object",
@@ -286,8 +249,7 @@ static void oms_dss_lock_failure(void **state)
     (void)state;
 
     will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(-EINVAL, GOOD_OWNER);
+    will_return(dss_lock, -EINVAL);
     rc = object_md_save(NULL, &xfer);
     assert_int_equal(rc, -EINVAL);
 }
@@ -300,8 +262,7 @@ static void oms_dss_object_set_failure_without_overwrite(void **state)
     (void)state;
 
     will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     will_return(dss_object_set, -EINVAL);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, &xfer);
@@ -321,8 +282,7 @@ static void oms_dss_filter_build_failure_with_overwrite(void **state)
     (void)state;
 
     will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     will_return(dss_filter_build, -ENOMEM);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, &xfer);
@@ -337,8 +297,7 @@ static void oms_dss_object_set_failure_with_fake_overwrite(void **state)
     (void)state;
 
     will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 0);
     will_return(dss_object_set, -EINVAL);
@@ -347,8 +306,7 @@ static void oms_dss_object_set_failure_with_fake_overwrite(void **state)
     assert_int_equal(rc, -EINVAL);
 
     will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(-ENOENT, 0);
     will_return(dss_object_set, -EINVAL);
@@ -365,8 +323,7 @@ static void oms_dss_object_move_failure_with_overwrite(void **state)
     (void)state;
 
     will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_object_move, -ENOENT);
@@ -383,8 +340,7 @@ static void oms_dss_object_set_failure_with_overwrite(void **state)
     (void)state;
 
     will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_object_move, 0);
@@ -402,8 +358,7 @@ static void oms_dss_filter_build_failure(void **state)
     (void)state;
 
     will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     will_return(dss_object_set, 0);
     will_return(dss_filter_build, -ENOMEM);
     will_return(dss_unlock, 0);
@@ -419,8 +374,7 @@ static void oms_dss_object_get_failure(void **state)
     (void)state;
 
     will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     will_return(dss_object_set, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(-EINVAL, 0);
@@ -437,8 +391,7 @@ static void oms_dss_unlock_failure(void **state)
     (void)state;
 
     will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     will_return(dss_object_set, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
@@ -457,8 +410,7 @@ static void oms_success_without_overwrite(void **state)
     (void)state;
 
     will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     will_return(dss_object_set, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
@@ -477,8 +429,7 @@ static void oms_success_with_fake_overwrite(void **state)
     (void)state;
 
     will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(-ENOENT, 0);
     will_return(dss_object_set, 0);
@@ -499,8 +450,7 @@ static void oms_success_with_overwrite(void **state)
     (void)state;
 
     will_return(pho_attrs_to_json, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_object_move, 0);
@@ -527,19 +477,6 @@ static void omd_dss_filter_build_for_get_failure(void **state)
     assert_int_equal(rc, -ENOMEM);
 }
 
-static void omd_dss_init_lock_owner_failure(void **state)
-{
-    struct pho_xfer_desc xfer;
-    int rc;
-
-    (void)state;
-
-    will_return(dss_filter_build, 0);
-    will_return(dss_init_lock_owner, -EADDRNOTAVAIL);
-    rc = object_md_del(NULL, &xfer);
-    assert_int_equal(rc, -EADDRNOTAVAIL);
-}
-
 static const struct pho_xfer_desc DEL_XFER = {
     .xd_objid = "dummy_object",
     .xd_objuuid = "abcdefgh12345678",
@@ -553,8 +490,7 @@ static void omd_dss_lock_failure(void **state)
     (void)state;
 
     will_return(dss_filter_build, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(-EINVAL, GOOD_OWNER);
+    will_return(dss_lock, -EINVAL);
     rc = object_md_del(NULL, &xfer);
     assert_int_equal(rc, -EINVAL);
 }
@@ -567,16 +503,14 @@ static void omd_dss_object_get_failure(void **state)
     (void)state;
 
     will_return(dss_filter_build, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(-ENOMEM, 0);
     will_return(dss_unlock, 0);
     rc = object_md_del(NULL, &xfer);
     assert_int_equal(rc, -ENOMEM);
 
     will_return(dss_filter_build, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(0, 2);
     will_return(dss_unlock, 0);
     rc = object_md_del(NULL, &xfer);
@@ -591,8 +525,7 @@ static void omd_dss_filter_build_for_deprec_failure(void **state)
     (void)state;
 
     will_return(dss_filter_build, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, -ENOMEM);
     will_return(dss_unlock, 0);
@@ -608,8 +541,7 @@ static void omd_dss_deprecated_object_get_failure(void **state)
     (void)state;
 
     will_return(dss_filter_build, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(-EINVAL, 0);
@@ -626,8 +558,7 @@ static void omd_dss_filter_build_for_layout_failure(void **state)
     (void)state;
 
     will_return(dss_filter_build, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
@@ -645,8 +576,7 @@ static void omd_dss_layout_get_failure(void **state)
     (void)state;
 
     will_return(dss_filter_build, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
@@ -657,8 +587,7 @@ static void omd_dss_layout_get_failure(void **state)
     assert_int_equal(rc, -EINVAL);
 
     will_return(dss_filter_build, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
@@ -677,8 +606,7 @@ static void omd_dss_object_set_failure(void **state)
     (void)state;
 
     will_return(dss_filter_build, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
@@ -698,8 +626,7 @@ static void omd_dss_object_move_failure(void **state)
     (void)state;
 
     will_return(dss_filter_build, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
@@ -720,8 +647,7 @@ static void omd_dss_unlock_failure(void **state)
     (void)state;
 
     will_return(dss_filter_build, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 0);
@@ -741,8 +667,7 @@ static void omd_success(void **state)
     (void)state;
 
     will_return(dss_filter_build, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
@@ -755,8 +680,7 @@ static void omd_success(void **state)
     assert_int_equal(rc, 0);
 
     will_return(dss_filter_build, 0);
-    MOCK_DSS_INIT_LOCK_OWNER(0, GOOD_OWNER);
-    MOCK_DSS_LOCK(0, GOOD_OWNER);
+    will_return(dss_lock, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 0);
@@ -772,7 +696,6 @@ int main(void)
 {
     const struct CMUnitTest object_md_test_cases[] = {
         cmocka_unit_test(oms_attrs_to_json_failure),
-        cmocka_unit_test(oms_dss_init_lock_owner_failure),
         cmocka_unit_test(oms_dss_lock_failure),
         cmocka_unit_test(oms_dss_object_set_failure_without_overwrite),
         cmocka_unit_test(oms_dss_filter_build_failure_with_overwrite),
@@ -787,7 +710,6 @@ int main(void)
         cmocka_unit_test(oms_success_with_overwrite),
 
         cmocka_unit_test(omd_dss_filter_build_for_get_failure),
-        cmocka_unit_test(omd_dss_init_lock_owner_failure),
         cmocka_unit_test(omd_dss_lock_failure),
         cmocka_unit_test(omd_dss_object_get_failure),
         cmocka_unit_test(omd_dss_filter_build_for_deprec_failure),
