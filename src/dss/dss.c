@@ -2417,3 +2417,63 @@ clean:
     dss_res_free(medium_info, cnt);
     return rc;
 }
+
+int dss_media_of_object(struct dss_handle *hdl, struct object_info *obj,
+                        struct media_info **media, int *cnt)
+{
+    GString *filter_str = g_string_new(NULL);
+    struct layout_info *layout;
+    struct dss_filter filter;
+    struct pho_id medium_id;
+    int rc;
+    int i;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                            "{\"DSS::EXT::oid\": \"%s\"}, "
+                            "{\"DSS::EXT::uuid\": \"%s\"}, "
+                            "{\"DSS::EXT::version\": \"%d\"}"
+                          "]}",
+                          obj->oid, obj->uuid, obj->version);
+    if (rc)
+        LOG_RETURN(rc, "Cannot build filter");
+
+    rc = dss_layout_get(hdl, &filter, &layout, cnt);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc, "Failed to retrieve layout of object '%s'", obj->oid);
+
+    if (*cnt == 0) {
+        dss_res_free(layout, 0);
+        LOG_RETURN(-EINVAL, "No extent found for object '%s'", obj->oid);
+    }
+
+    if (*cnt > 1)
+        g_string_append_printf(filter_str, "{\"OR\": [");
+
+    for (i = 0; i < *cnt; ++i) {
+        medium_id = layout[i].extents->media;
+        g_string_append_printf(filter_str,
+                              "{\"$AND\": ["
+                                "{\"DSS::MDA::family\": \"%s\"}, "
+                                "{\"DSS::MDA::id\": \"%s\"}"
+                              "]}%s",
+                              rsc_family2str(medium_id.family),
+                              medium_id.name, i + 1 < *cnt ? "," : "");
+    }
+
+    if (*cnt > 1)
+        g_string_append_printf(filter_str, "]}");
+
+    dss_res_free(layout, *cnt);
+
+    rc = dss_filter_build(&filter, filter_str->str);
+    g_string_free(filter_str, true);
+    if (rc)
+        LOG_RETURN(rc, "Cannot build filter");
+
+    rc = dss_media_get(hdl, &filter, media, cnt);
+    dss_filter_free(&filter);
+
+    return rc;
+}

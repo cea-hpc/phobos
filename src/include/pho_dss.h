@@ -244,6 +244,19 @@ int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
                   struct media_info **med_ls, int *med_cnt);
 
 /**
+ * Retrieve media containing extents of an object from DSS
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  obj      object information
+ * @param[out] media    list of retrieved media, to be freed with dss_res_free()
+ * @param[out] cnt      number of media retrieved in the list
+ *
+ * @return 0 on success, -errno on failure
+ *                       -EINVAL if \p obj doesn't exist in the DSS
+ */
+int dss_media_of_object(struct dss_handle *hdl, struct object_info *obj,
+                        struct media_info **media, int *cnt);
+
+/**
  * Retrieve layout information from DSS
  * @param[in]  hdl      valid connection handle
  * @param[in]  filter   assembled DSS filtering criteria
