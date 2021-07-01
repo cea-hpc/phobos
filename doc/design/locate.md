@@ -145,6 +145,14 @@ keyword.
 $ phobos locate obj_id
 ```
 
+The 'locate' action can also take two optional arguments '--uuid' and
+'--version', allowing one to locate a deprecated object (see
+deletion_and_versionning.md for more information on their use).
+
+```
+$ phobos locate --uid obj_uuid --version obj_vers obj_id
+```
+
 The command 'phobos get' is given a new option to indicate that the get should
 only happen if the current host is the most optimal to retrieve the object.
 
