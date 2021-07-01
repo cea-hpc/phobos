@@ -815,14 +815,20 @@ class LocateOptHandler(BaseOptHandler):
     def add_options(cls, parser):
         """Add command options."""
         super(LocateOptHandler, cls).add_options(parser)
-        parser.add_argument('oid', help='Object ID to locate')
         parser.set_defaults(verb=cls.label)
+        parser.add_argument('oid', help='Object ID to locate')
+        parser.add_argument('--uuid', help='UUID of the object')
+        parser.add_argument('--version', help='Version of the object',
+                            type=int, default=0)
+
 
     def exec_locate(self):
         """Locate object"""
         client = UtilClient()
         try:
-            print(client.object_locate(self.params.get('oid')))
+            print(client.object_locate(self.params.get('oid'),
+                                       self.params.get('uuid'),
+                                       self.params.get('version')))
         except EnvironmentError as err:
             self.logger.error("Cannot locate object: %s", env_error_format(err))
             sys.exit(os.EX_DATAERR)
