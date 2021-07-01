@@ -112,18 +112,57 @@ function cleanup
 
 function test_locate_cli
 {
+    local dir_or_tape=$1
+    local obj="object_to_locate"
+
     # test error on locating an unknown object
     $phobos locate unknown_object &&
         error "Locating an unknown object must fail"
 
     # put a new object from localhost and locate it on localhost
-    $phobos put /etc/hosts object_to_locate_by_cli ||
-        error "Error while putting object_to_locate_by_cli"
-    locate_hostname=$($phobos locate object_to_locate_by_cli)
+    $phobos put /etc/hosts $obj || error "Error while putting $obj"
+    local obj_uuid=$($phobos object list --output uuid $obj) ||
+        error "Failed to retrieve uuid of $obj"
+    $phobos put --overwrite /etc/hosts $obj ||
+        error "Error while overwriting $obj"
+
+    locate_hostname=$($phobos locate $obj)
     self_hostname=$(uname -n)
     if [ "$locate_hostname" != "$self_hostname" ]; then
         error "Cli locate returned $locate_hostname instead of $self_hostname"
     fi
+
+    $medium_locker_bin lock $dir_or_tape all blob:owner ||
+        error "Error while locking before phobos locate"
+
+    locate_hostname=$($phobos locate $obj)
+    if [ "$locate_hostname" != "blob" ]; then
+        error "Cli locate returned $locate_hostname instead of 'blob'"
+    fi
+
+    $phobos delete $obj || error "$obj should be deleted"
+    $phobos locate $obj &&
+        error "Locating a deleted object without uuid or version must fail"
+
+    locate_hostname=$($phobos locate --uuid $obj_uuid $obj)
+    if [ "$locate_hostname" != "blob" ]; then
+        error "Cli locate with uuid returned $locate_hostname instead of 'blob'"
+    fi
+
+    locate_hostname=$($phobos locate --version 1 $obj)
+    if [ "$locate_hostname" != "blob" ]; then
+        error "Cli locate with version returned $locate_hostname " \
+              "instead of 'blob'"
+    fi
+
+    locate_hostname=$($phobos locate --uuid $obj_uuid --version 1 $obj)
+    if [ "$locate_hostname" != "blob" ]; then
+        error "Cli locate with uuid and version returned $locate_hostname " \
+              "instead of 'blob'"
+    fi
+
+    $medium_locker_bin unlock $dir_or_tape all blob:owner ||
+        error "Error while unlocking before phobos locate"
 }
 
 function test_medium_locate
@@ -201,7 +240,7 @@ dir_setup
 # test locate on disk
 export PHOBOS_STORE_default_family="dir"
 test_medium_locate dir
-test_locate_cli
+test_locate_cli dir
 test_get_locate_cli dir
 $test_bin dir || exit 1
 
@@ -213,7 +252,7 @@ if [[ -w /dev/changer ]]; then
     export PHOBOS_STORE_default_family="tape"
     tape_setup
     test_medium_locate tape
-    test_locate_cli
+    test_locate_cli tape
     test_get_locate_cli tape
     $test_bin tape || exit 1
 fi
