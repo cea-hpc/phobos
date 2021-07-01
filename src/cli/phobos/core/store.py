@@ -387,7 +387,7 @@ class XferClient: # pylint: disable=too-many-instance-attributes
 
             if node_name is not None:
                 print("Current host is not the best to get this object, try " +
-                      "on this other node, " + self.get_session[0][0] +
+                      "on this other node, '" + self.get_session[0][0] +
                       "' : '" + node_name + "'")
 
             if rc:

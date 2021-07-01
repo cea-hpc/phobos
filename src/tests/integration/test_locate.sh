@@ -182,9 +182,9 @@ function test_get_locate_cli
         error "Error while locking medium1 before get --best-host"
 
     get_locate_output=$($phobos get --best-host $oid /tmp/out2 || true)
-    if [ "$get_locate_output" != \
-         "Current host is not the best to get this object, try on this other " \
-         "node, '$oid' : 'blob'" ]; then
+    local output="Current host is not the best to get this object, try on"
+    output="$output this other node, '$oid' : 'blob'"
+    if [ "$get_locate_output" != "$output" ]; then
         error "Object should have been located on node 'blob'"
     fi
 
