@@ -113,6 +113,10 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_admin.la
 
 %changelog
+* Fri Jul 2 2021 - Yoann Valeri <yoann.valeri@cea.fr> - 1.92.0-1
+- Locate command
+- Uuid and version options to get command
+
 * Mon May 17 2021 - Yoann Valeri <yoann.valeri@cea.fr> - 1.91.2-1
 - Modified concurrency lock management in DSS
 - Modified DB schema
