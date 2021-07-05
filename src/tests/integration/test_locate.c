@@ -122,53 +122,9 @@ static void lock_medium(struct phobos_locate_state *pl_state,
                         int *cnt)
 {
     struct object_info *obj = pl_state->objs;
-    GString *filter_str = g_string_new(NULL);
-    struct layout_info *layout;
-    struct dss_filter filter;
-    struct pho_id medium_id;
     int rc;
-    int i;
 
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                            "{\"DSS::EXT::oid\": \"%s\"}, "
-                            "{\"DSS::EXT::uuid\": \"%s\"}, "
-                            "{\"DSS::EXT::version\": \"%d\"}"
-                          "]}",
-                          obj->oid, obj->uuid, obj->version);
-    assert_return_code(rc, -rc);
-
-    rc = dss_layout_get(pl_state->dss, &filter, &layout, cnt);
-    dss_filter_free(&filter);
-    assert_return_code(rc, -rc);
-    assert_int_not_equal(*cnt, 0);
-
-    if (*cnt > 1)
-        g_string_append_printf(filter_str, "{\"OR\": [");
-
-    for (i = 0; i < *cnt; ++i) {
-        medium_id = layout[i].extents->media;
-        g_string_append_printf(filter_str,
-                              "{\"$AND\": ["
-                                "{\"DSS::MDA::family\": \"%s\"}, "
-                                "{\"DSS::MDA::id\": \"%s\"}"
-                              "]}",
-                              rsc_family2str(medium_id.family),
-                              medium_id.name);
-        assert_return_code(rc, -rc);
-    }
-
-    if (*cnt > 1)
-        g_string_append_printf(filter_str, "]}");
-
-    dss_res_free(layout, *cnt);
-
-    rc = dss_filter_build(&filter, filter_str->str);
-    g_string_free(filter_str, true);
-    assert_return_code(rc, -rc);
-
-    rc = dss_media_get(pl_state->dss, &filter, medium, cnt);
-    dss_filter_free(&filter);
+    rc = dss_media_of_object(pl_state->dss, obj, medium, cnt);
     assert_return_code(rc, -rc);
     assert_int_not_equal(*cnt, 0);
 
