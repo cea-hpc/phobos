@@ -311,6 +311,8 @@ static int sched_fill_media_info(struct dss_handle *dss,
 
     media_info_free(*pmedia);
     *pmedia = media_info_dup(media_res);
+    if (!*pmedia)
+        LOG_GOTO(out_free, rc = -ENOMEM, "Couldn't duplicate media info");
 
     /* If the lock is already taken, mark it as externally locked */
     if ((*pmedia)->lock.hostname) {
@@ -534,6 +536,9 @@ static int sched_load_dev_state(struct lrs_sched *sched)
             struct dev_descr *dev = &g_array_index(sched->devices,
                                                    struct dev_descr, i);
             dev->dss_dev_info = dev_info_dup(&devs[i]);
+            if (!dev->dss_dev_info)
+                LOG_GOTO(free_devices, rc = -ENOMEM,
+                         "Couldn't duplicate device info");
         }
     }
 
@@ -557,6 +562,13 @@ static int sched_load_dev_state(struct lrs_sched *sched)
 
     rc = 0;
 
+free_devices:
+    if (rc)
+        for (i--; i >= 0; i--) {
+            struct dev_descr *dev_to_free = &g_array_index(sched->devices,
+                                                           struct dev_descr, i);
+            dev_info_free(dev_to_free->dss_dev_info, true);
+        }
 err:
     /* free devs array, as they have been copied to devices[].device */
     dss_res_free(devs, dcnt);

@@ -325,9 +325,12 @@ static int _device_update_adm_status(struct admin_handle *adm,
                      dev_ids[i].name);
 
         dev_res->rsc.adm_status = status;
-        dev_info_cpy(&devices[avail_devices++], dev_res);
-
+        rc = dev_info_cpy(&devices[avail_devices], dev_res);
         dss_res_free(dev_res, 1);
+        if (rc)
+            LOG_GOTO(out_free, rc, "Couldn't copy device data");
+
+        avail_devices++;
     }
 
     if (avail_devices != num_dev)

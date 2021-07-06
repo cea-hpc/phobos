@@ -67,9 +67,11 @@ int build_extent_key(const char *uuid, int version, const char *extent_tag,
 int init_pho_lock(struct pho_lock *lock, char *hostname, int owner,
                   struct timeval *timestamp)
 {
-    lock->hostname = strdup(hostname);
-    if (hostname && !lock->hostname)
-        return -ENOMEM;
+    int rc;
+
+    rc = strdup_safe(&lock->hostname, hostname);
+    if (rc)
+        return rc;
 
     lock->owner = owner;
     lock->is_external = false;
@@ -80,9 +82,11 @@ int init_pho_lock(struct pho_lock *lock, char *hostname, int owner,
 
 int pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src)
 {
-    lock_dst->hostname = strdup_safe(lock_src->hostname);
-    if (lock_src->hostname && !lock_dst->hostname)
-        return -ENOMEM;
+    int rc;
+
+    rc = strdup_safe(&lock_dst->hostname, lock_src->hostname);
+    if (rc)
+        return rc;
 
     lock_dst->owner = lock_src->owner;
     lock_dst->timestamp = lock_src->timestamp;
@@ -102,29 +106,58 @@ void pho_lock_clean(struct pho_lock *lock)
     lock->is_external = false;
 }
 
-void dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src)
+int dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src)
 {
+    int rc;
+
     if (!dev_dst)
-        return;
+        return -EINVAL;
 
     assert(dev_src);
     dev_dst->rsc.id = dev_src->rsc.id;
-    dev_dst->rsc.model = strdup_safe(dev_src->rsc.model);
+    rc = strdup_safe(&dev_dst->rsc.model, dev_src->rsc.model);
+    if (rc)
+        return rc;
+
     dev_dst->rsc.adm_status = dev_src->rsc.adm_status;
-    dev_dst->path = strdup_safe(dev_src->path);
-    dev_dst->host = strdup_safe(dev_src->host);
-    pho_lock_cpy(&dev_dst->lock, &dev_src->lock);
+    rc = strdup_safe(&dev_dst->path, dev_src->path);
+    if (rc)
+        goto free_model;
+
+    rc = strdup_safe(&dev_dst->host, dev_src->host);
+    if (rc)
+        goto free_path;
+
+    rc = pho_lock_cpy(&dev_dst->lock, &dev_src->lock);
+    if (rc)
+        goto free_host;
+
+    return 0;
+
+free_host:
+    free(dev_dst->host);
+free_path:
+    free(dev_dst->path);
+free_model:
+    free(dev_dst->rsc.model);
+
+    return rc;
 }
 
 struct dev_info *dev_info_dup(const struct dev_info *dev)
 {
     struct dev_info *dev_out;
+    int rc;
 
     dev_out = malloc(sizeof(*dev_out));
     if (!dev_out)
         return NULL;
 
-    dev_info_cpy(dev_out, dev);
+    rc = dev_info_cpy(dev_out, dev);
+    if (rc) {
+        free(dev_out);
+        return NULL;
+    }
 
     return dev_out;
 }
@@ -144,17 +177,35 @@ void dev_info_free(struct dev_info *dev, bool free_top_struct)
 struct media_info *media_info_dup(const struct media_info *mda)
 {
     struct media_info *media_out;
+    int rc;
 
     media_out = malloc(sizeof(*media_out));
     if (!media_out)
         return NULL;
 
     memcpy(media_out, mda, sizeof(*media_out));
-    media_out->rsc.model = strdup_safe(mda->rsc.model);
-    tags_dup(&media_out->tags, &mda->tags);
-    pho_lock_cpy(&media_out->lock, &mda->lock);
+    rc = strdup_safe(&media_out->rsc.model, mda->rsc.model);
+    if (rc)
+        goto free_media;
+
+    rc = tags_dup(&media_out->tags, &mda->tags);
+    if (rc)
+        goto free_model;
+
+    rc = pho_lock_cpy(&media_out->lock, &mda->lock);
+    if (rc)
+        goto free_tags;
 
     return media_out;
+
+free_tags:
+    tags_free(&media_out->tags);
+free_model:
+    free(media_out->rsc.model);
+free_media:
+    free(media_out);
+
+    return NULL;
 }
 
 void media_info_free(struct media_info *mda)
@@ -170,6 +221,7 @@ void media_info_free(struct media_info *mda)
 struct object_info *object_info_dup(const struct object_info *obj)
 {
     struct object_info *obj_out = NULL;
+    int rc;
 
     if (!obj)
         return NULL;
@@ -180,28 +232,22 @@ struct object_info *object_info_dup(const struct object_info *obj)
         return NULL;
 
     /* dup oid */
-    if (obj->oid) {
-        obj_out->oid = strdup(obj->oid);
-        if (!obj_out->oid)
-            goto clean_error;
-    }
+    rc = strdup_safe(&obj_out->oid, obj->oid);
+    if (rc)
+        goto clean_error;
 
     /* dup uuid */
-    if (obj->uuid) {
-        obj_out->uuid = strdup(obj->uuid);
-        if (!obj_out->uuid)
-            goto clean_error;
-    }
+    rc = strdup_safe(&obj_out->uuid, obj->uuid);
+    if (rc)
+        goto clean_error;
 
     /* version */
     obj_out->version = obj->version;
 
     /* dup user_md */
-    if (obj->user_md) {
-        obj_out->user_md = strdup(obj->user_md);
-        if (!obj_out->user_md)
-            goto clean_error;
-    }
+    rc = strdup_safe(&obj_out->user_md, obj->user_md);
+    if (rc)
+        goto clean_error;
 
     /* timeval deprec_time */
     obj_out->deprec_time = obj->deprec_time;
@@ -241,6 +287,7 @@ int tags_dup(struct tags *tags_dst, const struct tags *tags_src)
 int tags_init(struct tags *tags, char **tag_values, size_t n_tags)
 {
     ssize_t i;
+    int rc;
 
     tags->n_tags = n_tags;
     tags->tags = calloc(n_tags, sizeof(*tags->tags));
@@ -248,8 +295,8 @@ int tags_init(struct tags *tags, char **tag_values, size_t n_tags)
         return -ENOMEM;
 
     for (i = 0; i < n_tags; i++) {
-        tags->tags[i] = strdup(tag_values[i]);
-        if (!tags->tags[i]) {
+        rc = strdup_safe(&tags->tags[i], tag_values[i]);
+        if (rc) {
             tags_free(tags);
             return -ENOMEM;
         }

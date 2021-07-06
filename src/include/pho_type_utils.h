@@ -67,7 +67,7 @@ void pho_lock_clean(struct pho_lock *lock);
 struct dev_info *dev_info_dup(const struct dev_info *dev);
 
 /** copy a dev_info structure in an already allocated one */
-void dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src);
+int dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src);
 
 /**
  * Free a dev_info structure

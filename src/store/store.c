@@ -795,12 +795,10 @@ static int object_info_copy_into_xfer(struct object_info *obj,
     if (rc)
         LOG_RETURN(rc, "Cannot convert attributes of objid: '%s'", obj->oid);
 
-    if (!xfer->xd_objuuid) {
-        xfer->xd_objuuid = strdup_safe(obj->uuid);
+    rc = strdup_safe(&xfer->xd_objuuid, obj->uuid);
+    if (rc) {
         pho_attrs_free(&xfer->xd_attrs);
-        if (!xfer->xd_objuuid)
-            LOG_RETURN(-ENOMEM, "Unable to duplicate object uuid: %s",
-                       obj->uuid);
+        LOG_RETURN(rc, "Unable to duplicate object uuid: %s", obj->uuid);
     }
 
     xfer->xd_version = obj->version;

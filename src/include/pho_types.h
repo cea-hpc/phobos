@@ -55,12 +55,17 @@
  */
 #define PHO_LAYOUT_TAG_MAX  8
 
-static inline char *strdup_safe(const char *str)
+static inline int strdup_safe(char **dst, const char *src)
 {
-    if (str == NULL)
-        return NULL;
+    if (src) {
+        *dst = strdup(src);
+        if (!*dst)
+            return -errno;
+    } else {
+        *dst = NULL;
+    }
 
-    return strdup(str);
+    return 0;
 }
 
 enum extent_state {
