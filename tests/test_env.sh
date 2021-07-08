@@ -33,22 +33,22 @@ test_bin_dir=$(dirname "$bin")
 PY=$(which python3)
 ARCH=$(uname -m)
 PY_VERSION=$($PY --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2)
-cli_dir="$(readlink -e $test_bin_dir/../cli)"
+cli_dir="$(readlink -e $test_bin_dir/../src/cli)"
 PHO_PYTHON_PATH="$cli_dir/build/lib.linux-$ARCH-$PY_VERSION/"
 export PYTHONPATH="$PHO_PYTHON_PATH"
 
-lrs_dir="$(readlink -e $test_bin_dir/../lrs)"
+lrs_dir="$(readlink -e $test_bin_dir/../src/lrs)"
 
 # library paths
-PHO_STORELIB_PATH="$(readlink -e $test_bin_dir/../store/.libs/)"
-PHO_ADMINLIB_PATH="$(readlink -e $test_bin_dir/../admin/.libs/)"
-PHO_LAYOUTLIB_PATH="$(readlink -e $test_bin_dir/../layout-modules/.libs/)"
+PHO_STORELIB_PATH="$(readlink -e $test_bin_dir/../src/store/.libs/)"
+PHO_ADMINLIB_PATH="$(readlink -e $test_bin_dir/../src/admin/.libs/)"
+PHO_LAYOUTLIB_PATH="$(readlink -e $test_bin_dir/../src/layout-modules/.libs/)"
 
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$PHO_STORELIB_PATH:\
 $PHO_ADMINLIB_PATH:$PHO_PYTHON_PATH:$PHO_LAYOUTLIB_PATH"
 
 # phobos stuff
-ldm_helper=$(readlink -e $test_bin_dir/../../scripts/)/pho_ldm_helper
+ldm_helper=$(readlink -e $test_bin_dir/../scripts/)/pho_ldm_helper
 
 export PHOBOS_CFG_FILE="$test_bin_dir/phobos.conf"
 export PHOBOS_LTFS_cmd_format="$ldm_helper format_ltfs '%s' '%s'"

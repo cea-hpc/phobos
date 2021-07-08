@@ -29,8 +29,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "../../dss/dss_lock.h"
-#include "../../store/store_utils.h"
+#include "dss_lock.h"
+#include "store_utils.h"
 
 #include <cmocka.h>
 

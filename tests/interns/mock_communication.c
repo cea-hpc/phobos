@@ -10,7 +10,7 @@
 #include "pho_srl_lrs.h"
 #include "phobos_admin.h"
 
-#include "../../admin/admin_utils.h"
+#include "admin_utils.h"
 
 #include <cmocka.h>
 

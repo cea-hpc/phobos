@@ -24,8 +24,8 @@
  */
 
 /* phobos stuff */
+#include "dss_lock.h"
 #include "pho_dss.h"
-#include "../../dss/dss_lock.h"
 
 /* standard stuff */
 #include <errno.h>

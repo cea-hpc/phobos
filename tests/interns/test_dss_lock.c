@@ -24,9 +24,9 @@
  */
 
 #include "../test_setup.h"
+#include "dss_lock.h"
 #include "pho_dss.h"
 #include "pho_type_utils.h"
-#include "../../dss/dss_lock.h"
 
 #include <assert.h>
 #include <errno.h>

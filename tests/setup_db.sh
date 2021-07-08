@@ -20,7 +20,7 @@
 #
 
 cur_dir=$(dirname $(readlink -m ${BASH_SOURCE[0]}))
-db_helper="$cur_dir/../../scripts/phobos_db"
+db_helper="$cur_dir/../scripts/phobos_db"
 
 PSQL="psql phobos -U phobos"
 . "$cur_dir/test_env.sh"

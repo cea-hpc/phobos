@@ -24,9 +24,9 @@
  */
 
 /* phobos stuff */
+#include "dss_lock.h"
 #include "phobos_admin.h"
 #include "../test_setup.h"
-#include "../../dss/dss_lock.h"
 
 /* standard stuff */
 

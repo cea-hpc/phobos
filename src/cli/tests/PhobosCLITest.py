@@ -175,7 +175,7 @@ class CLIParametersTest(unittest.TestCase):
 class BasicExecutionTest(unittest.TestCase):
     """Base execution of the CLI."""
     # Reuse configuration file from global tests
-    TEST_CFG_FILE = "../../tests/phobos.conf"
+    TEST_CFG_FILE = "../../../tests/phobos.conf"
     def pho_execute(self, params, auto_cfg=True, code=0):
         """Instanciate and execute a PhobosActionContext."""
         if auto_cfg:

@@ -38,7 +38,7 @@ clean-local:
 	rm -f $(C_MODULES_SO)
 
 pre-check-local:
-	../tests/test_lock.sh
+	../../tests/test_lock.sh
 
 check-local: all-local pre-check-local
 	(cd tests; ./run_tests.sh)

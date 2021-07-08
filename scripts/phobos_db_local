@@ -3,5 +3,5 @@
 
 cur_dir="$(dirname $(readlink -m $0))"
 
-. "$cur_dir/../src/tests/test_env.sh"
+. "$cur_dir/../tests/test_env.sh"
 "$cur_dir/phobos_db" "$@"

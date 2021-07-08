@@ -28,7 +28,7 @@ make
 # permissions, it is however necessary to execute them as postgres,
 # as well as when running valgrind tests
 chmod    o+rx . ..
-chmod -R o+rx src scripts
+chmod -R o+rx src tests
 
 sudo -u postgres ./scripts/phobos_db_local drop_db || true
 sudo -u postgres ./scripts/phobos_db_local setup_db -s -p phobos

@@ -31,9 +31,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "../../store/store_utils.h"
 #include "pho_dss.h"
 #include "pho_type_utils.h"
+
+#include "store_utils.h"
 
 #include <stdlib.h> /* malloc, setenv, unsetenv */
 #include <unistd.h> /* execl, exit, fork */

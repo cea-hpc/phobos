@@ -24,12 +24,12 @@
  */
 
 /* phobos stuff */
+#include "dss_lock.h"
 #include "phobos_store.h"
 #include "pho_common.h" /* get_hostname */
 #include "pho_dss.h"
 #include "../pho_test_xfer_utils.h"
 #include "../test_setup.h"
-#include "../../dss/dss_lock.h"
 
 /* standard stuff */
 #include <errno.h>
