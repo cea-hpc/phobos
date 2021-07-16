@@ -2218,7 +2218,7 @@ static int lazy_find_deprecated_object(struct dss_handle *hdl,
     if (rc < 0)
         LOG_RETURN(rc = -ENOMEM, "Cannot allocate filter string");
 
-    rc = dss_filter_build(&filter, json_filter);
+    rc = dss_filter_build(&filter, "%s", json_filter);
     free(json_filter);
     if (rc)
         LOG_RETURN(rc, "Cannot build filter");
@@ -2287,7 +2287,7 @@ int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
     if (rc < 0)
         LOG_RETURN(rc = -ENOMEM, "Cannot allocate filter string");
 
-    rc = dss_filter_build(&filter, json_filter);
+    rc = dss_filter_build(&filter, "%s", json_filter);
     free(json_filter);
     if (rc)
         LOG_RETURN(rc, "Cannot build filter");
@@ -2467,7 +2467,7 @@ int dss_media_of_object(struct dss_handle *hdl, struct object_info *obj,
 
     dss_res_free(layout, *cnt);
 
-    rc = dss_filter_build(&filter, filter_str->str);
+    rc = dss_filter_build(&filter, "%s", filter_str->str);
     g_string_free(filter_str, true);
     if (rc)
         LOG_RETURN(rc, "Cannot build filter");
