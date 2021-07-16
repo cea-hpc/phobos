@@ -26,11 +26,10 @@
 #include "config.h"
 #endif
 
-#include "../store/store_alias.h"
-
 #include "phobos_store.h"
 #include "pho_cfg.h"
 #include "pho_type_utils.h"
+#include "store_alias.h"
 
 #include <assert.h>
 #include <libgen.h>
@@ -143,7 +142,7 @@ static void load_config(char *execution_filename)
         exit(EXIT_FAILURE);
     test_dir = dirname(test_bin);
 
-    rc = asprintf(&test_file, "%s/phobos.conf", test_dir);
+    rc = asprintf(&test_file, "%s/../phobos.conf", test_dir);
     if (rc == -1) {
         free(test_bin);
         free(test_file);

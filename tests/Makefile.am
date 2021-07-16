@@ -8,7 +8,6 @@ CFG_LIB=$(TO_SRC)/cfg/libpho_cfg.la
 COMMON_LIB=$(TO_SRC)/common/libpho_common.la
 COMMUNICATION_LIB=$(TO_SRC)/communication/libpho_comm.la
 DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
-IO_LIB=$(TO_SRC)/io/libpho_io.la
 LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la
 RAID1_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
@@ -38,12 +37,8 @@ TEST_EXTENSIONS=.sh
 # 1) build check_PROGRAMS
 # 2) run TESTS and generate a summary
 
-# List of binary files which will be directly tested by make check
-tests_bin=test_common test_attrs test_mapper test_log test_cfg test_dev_tape \
-	      test_ldm test_type_utils test_io test_communication test_store_alias
-
 # List of binary files to compile
-check_PROGRAMS=$(tests_bin) test_store test_dss test_scsi test_store_retry \
+check_PROGRAMS=test_store test_dss test_scsi test_store_retry \
 	           test_bad_comm test_delete test_undelete test_raid1_split_locate
 
 # List of scripts which will be directly tested by make check
@@ -56,7 +51,7 @@ tests_sh=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh	\
 # List of scripts
 check_SCRIPTS=$(tests_sh) setup_db.sh test_env.sh test_launch_daemon.sh
 
-TESTS=$(tests_bin) $(tests_sh)
+TESTS=$(tests_sh)
 
 pre-check-local:
 	./test_lock.sh
@@ -64,23 +59,8 @@ pre-check-local:
 check-local: pre-check-local
 	rm -f /tmp/phobos_test.lock
 
-test_log_SOURCES=test_log.c pho_test_utils.h
-test_log_LDADD=$(COMMON_LIB)
-
 test_bad_comm_SOURCES=test_bad_comm.c pho_test_utils.h
 test_bad_comm_LDADD=$(COMMON_LIB) $(COMMUNICATION_LIB) $(SERIALIZER_LIB)
-
-test_common_SOURCES=test_common.c pho_test_utils.h
-test_common_LDADD=$(COMMON_LIB)
-
-test_communication_SOURCES=test_communication.c pho_test_utils.h
-test_communication_LDADD=$(COMMON_LIB) $(COMMUNICATION_LIB)
-
-test_attrs_SOURCES=test_attrs.c pho_test_utils.h
-test_attrs_LDADD=$(COMMON_LIB)
-
-test_mapper_SOURCES=test_mapper.c pho_test_utils.h
-test_mapper_LDADD=$(STORE_LIB)
 
 test_store_SOURCES=test_store.c pho_test_utils.h pho_test_xfer_utils.h
 test_store_LDADD=$(STORE_LIB)
@@ -88,32 +68,11 @@ test_store_LDADD=$(STORE_LIB)
 test_dss_SOURCES=test_dss.c pho_test_utils.h
 test_dss_LDADD=$(DSS_LIB) $(CFG_LIB) $(COMMON_LIB)
 
-test_cfg_SOURCES=test_cfg.c pho_test_utils.h
-test_cfg_LDADD=$(CFG_LIB) $(COMMON_LIB)
-
 test_scsi_SOURCES=test_scsi.c pho_test_utils.h
 test_scsi_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB)
 
-test_dev_tape_SOURCES=test_dev_tape.c pho_test_utils.h
-test_dev_tape_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB)
-
-test_ldm_SOURCES=test_ldm.c pho_test_utils.h
-test_ldm_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB)
-
-test_type_utils_SOURCES=test_type_utils.c pho_test_utils.h
-test_type_utils_LDADD=$(COMMON_LIB)
-
 test_store_retry_SOURCES=test_store_retry.c pho_test_utils.h pho_test_xfer_utils.h
 test_store_retry_LDADD=$(ADMIN_LIB) $(STORE_LIB)
-
-test_io_SOURCES=test_io.c pho_test_utils.h
-test_io_LDADD=$(IO_LIB) $(COMMON_LIB)
-
-# TODO: try to link against the phobos_store library instead of
-# the store_alias object file
-test_store_alias_SOURCES=test_store_alias.c
-test_store_alias_LDADD=$(CFG_LIB) $(COMMON_LIB) \
-                       $(TO_SRC)/store/.libs/store_alias.o
 
 test_delete_SOURCES=test_delete.c pho_test_utils.h
 test_delete_LDADD=$(STORE_LIB)

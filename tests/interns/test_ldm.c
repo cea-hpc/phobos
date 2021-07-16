@@ -19,8 +19,8 @@
  *  You should have received a copy of the GNU Lesser General Public License
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
+#include "ldm_common.h"
 #include "pho_test_utils.h"
-#include "../ldm/ldm_common.h"
 #include "pho_ldm.h"
 
 static int _find_dev(const struct mntent *mntent, void *cb_data)
