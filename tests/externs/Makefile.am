@@ -1,3 +1,5 @@
+AUTOMAKE_OPTIONS=subdir-objects
+
 TO_SRC=../../src/
 
 AM_CFLAGS=$(CC_OPT) @CMOCKA_CFLAGS@
