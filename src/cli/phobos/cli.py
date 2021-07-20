@@ -406,10 +406,11 @@ class StoreMPutHandler(StoreGenericPutHandler):
         else:
             fin = open(path)
 
-        put_params = PutParams(self.params.get('family'),
-                               self.params.get('layout'),
-                               self.params.get('tags', []),
-                               self.params.get('alias'))
+        put_params = PutParams(alias=self.params.get('alias'),
+                               family=self.params.get('family'),
+                               layout=self.params.get('layout'),
+                               overwrite=self.params.get('overwrite'),
+                               tags=self.params.get('tags', []))
 
         for i, line in enumerate(fin):
             # Skip empty lines and comments
