@@ -77,10 +77,21 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         ("overwrite", c_bool),
     ]
 
+    def set_lyt_params(self, val):
+        if val:
+            for k, v in val.items():
+                rc = LIBPHOBOS.pho_attr_set(byref(self.lyt_params),
+                                            str(k).encode('utf8'),
+                                            str(v).encode('utf8'))
+                if rc:
+                    raise EnvironmentError(
+                        rc, "Cannot add lyt_params to xfer '%s':'%s'" % (k, v))
+
     def __init__(self, put_params):
         super().__init__()
         self.size = -1
         self.layout_name = put_params.layout
+        self.set_lyt_params(put_params.lyt_params)
         self.tags = Tags(put_params.tags)
         self.alias = put_params.alias
         self.overwrite = put_params.overwrite
@@ -112,7 +123,8 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         # pylint: disable=attribute-defined-outside-init
         self._alias = val.encode('utf-8') if val else None
 
-class PutParams(namedtuple('PutParams', 'alias family layout overwrite tags')):
+class PutParams(namedtuple('PutParams',
+                           'alias family layout lyt_params overwrite tags')):
     """
     Transition data structure for put parameters between
     the CLI and the XFer data structure.

@@ -340,6 +340,9 @@ class StoreGenericPutHandler(XferOptHandler):
                             help='Desired alias for family, tags and layout. '
                             'Specifically set family and layout supersede the '
                             'alias, tags are joined.')
+        parser.add_argument('-p', '--lyt-params',
+                            help='Comma-separated list of key=value for layout '
+                            'specific parameters.')
 
 
 class StorePutHandler(StoreGenericPutHandler):
@@ -368,9 +371,15 @@ class StorePutHandler(StoreGenericPutHandler):
             attrs = attr_convert(attrs)
             self.logger.debug("Loaded attributes set %r", attrs)
 
+        lyt_attrs = self.params.get('lyt_params')
+        if lyt_attrs is not None:
+            lyt_attrs = attr_convert(lyt_attrs)
+            self.logger.debug("Loaded layout params set %r", lyt_attrs)
+
         put_params = PutParams(alias=self.params.get('alias'),
                                family=self.params.get('family'),
                                layout=self.params.get('layout'),
+                               lyt_params=lyt_attrs,
                                overwrite=self.params.get('overwrite'),
                                tags=self.params.get('tags', []))
 
@@ -406,9 +415,15 @@ class StoreMPutHandler(StoreGenericPutHandler):
         else:
             fin = open(path)
 
+        lyt_attrs = self.params.get('lyt_params')
+        if lyt_attrs is not None:
+            lyt_attrs = attr_convert(lyt_attrs)
+            self.logger.debug("Loaded layout params set %r", lyt_attrs)
+
         put_params = PutParams(alias=self.params.get('alias'),
                                family=self.params.get('family'),
                                layout=self.params.get('layout'),
+                               lyt_params=lyt_attrs,
                                overwrite=self.params.get('overwrite'),
                                tags=self.params.get('tags', []))
 

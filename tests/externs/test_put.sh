@@ -91,8 +91,30 @@ function test_extent_path
         error "oid2 extent path (pt2) should contain object version"
 }
 
+function lyt_params_helper
+{
+    $phobos put --family dir $2 /etc/hosts $1
+    result=$($phobos extent list --output layout,ext_count $1 | grep "raid1")
+    ext_count=$(echo "$result" | cut -d'|' -f3 | xargs)
+    expect=$3
+    if [ $(($ext_count)) -ne $expect ]; then
+        error "Put with arguments '$2' should have used raid1 layout "
+              "and $3 extent(s)"
+    fi
+}
+
+function test_lyt_params
+{
+    lyt_params_helper "lp1" "" 1
+    lyt_params_helper "lp2" "--layout raid1" 2
+    lyt_params_helper "lp3" "--lyt-params repl_count=2" 2
+    lyt_params_helper "lp4" "--layout raid1 --lyt-params repl_count=2" 2
+    lyt_params_helper "lp5" "--layout raid1 --lyt-params repl_count=1" 1
+}
+
 setup_tables
 invoke_daemon
 trap cleanup EXIT
 dir_setup
 test_extent_path
+test_lyt_params
