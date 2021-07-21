@@ -71,6 +71,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         ("size", c_ssize_t),
         ("family", c_int),
         ("_layout_name", c_char_p),
+        ("lyt_params", PhoAttrs),
         ("tags", Tags),
         ("_alias", c_char_p),
         ("overwrite", c_bool),
@@ -347,6 +348,7 @@ class XferClient: # pylint: disable=too-many-instance-attributes
                                    PHO_XFER_OP_GETMD))
 
     def get_register(self, oid, data_path, get_args, best_host, attrs=None):
+        # pylint: disable=too-many-arguments
         """Enqueue a GET transfer."""
         flags = PHO_XFER_OBJ_BEST_HOST if best_host else 0
         self.get_session.append((oid, data_path, attrs, flags, get_args,
