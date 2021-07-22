@@ -33,7 +33,6 @@ set -xe
 export PHOBOS_LRS_families="dir"
 export PHOBOS_STORE_default_layout="raid1"
 export PHOBOS_STORE_default_family="dir"
-export PHOBOS_LAYOUT_RAID1_repl_count=1
 LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
 
 # set python and phobos environment
@@ -42,16 +41,15 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
 
-IN_FILE=/tmp/raid1_simple_split_in_file
-OUT_FILE=/tmp/raid1_simple_split_out_file
-OBJECT=raid1_simple_split_test
-DIR1=/tmp/raid1_simple_split_testdir1
-DIR2=/tmp/raid1_simple_split_testdir2
+IN_FILE=$(mktemp /tmp/test.pho.XXXX)
+OUT_FILE=$(mktemp /tmp/test.pho.XXXX)
+DIR1=$(mktemp -d /tmp/test.pho.XXXX)
+DIR2=$(mktemp -d /tmp/test.pho.XXXX)
 PART1_SIZE=1024
 PART2_SIZE=1024
 ((FULL_SIZE=PART1_SIZE + PART2_SIZE))
 
-function insert_dir
+function insert_dir_in_db
 {
     local PSQL="psql phobos -U phobos"
     local host=$(hostname -s)
@@ -85,7 +83,7 @@ function cleanup
 {
     waive_daemon
     rm -rf $DIR1 $DIR2
-    rm -rf $IN_FILE $OUT_FILE
+    rm -rf $IN_FILE
     drop_tables
 }
 
@@ -95,25 +93,39 @@ function create_in_file
     dd if=/dev/random of=$IN_FILE count=$FULL_SIZE  bs=1
 }
 
+function check_put_get
+{
+    rm $OUT_FILE
+
+    # put file
+    $LOG_VALG $phobos --verbose put $IN_FILE $1
+
+    # get file
+    $LOG_VALG $phobos --verbose get $1 $OUT_FILE
+
+    # check the file is correct
+    cmp $IN_FILE $OUT_FILE
+
+}
+
 # start with a clean/empty phobos DB
 drop_tables
 setup_tables
 # set start context
 create_in_file
 dir_setup
-insert_dir
+insert_dir_in_db
 invoke_daemon
 # clean at exit
 trap cleanup EXIT
 
-# put file
-$LOG_VALG $phobos --verbose put $IN_FILE $OBJECT
+export PHOBOS_LAYOUT_RAID1_repl_count=1
+check_put_get raid1_simple_split_test
+unset PHOBOS_LAYOUT_RAID1_repl_count
 
-# get file
-$LOG_VALG $phobos --verbose get $OBJECT $OUT_FILE
-
-# check got file
-cmp $IN_FILE $OUT_FILE
+export PHOBOS_STORE_default_lyt_params="repl_count=1"
+check_put_get raid1_simple_split_test2
+unset PHOBOS_LAYOUT_default_lyt_params
 
 trap - EXIT
 cleanup || true

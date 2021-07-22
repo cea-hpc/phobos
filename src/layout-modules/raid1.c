@@ -76,10 +76,6 @@ static struct module_desc RAID1_MODULE_DESC = {
  *
  * To put an object of a written size of 0, we create an extent of null size to
  * really have a residual null size object on media.
- *
- * @FIXME: raid1 layout with a repl_count of 1 behaves exactly as the simple
- * layout. We could remove the simple layout from the code and replace it by
- * this raid1 code with a repl_count of 1.
  */
 struct raid1_encoder {
     unsigned int repl_count;

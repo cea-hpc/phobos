@@ -43,10 +43,10 @@ check_PROGRAMS=test_store test_dss test_scsi test_store_retry \
 
 # List of scripts which will be directly tested by make check
 tests_sh=test_dss.sh test_scsi.sh test_layouts.sh acceptance.sh	\
-	     test_store_retry.sh simple_split.sh raid1_simple_split.sh 	\
+	     test_store_retry.sh raid1_simple_split.sh test_undelete.sh	\
 	     raid1_split.sh test_bad_comm.sh test_resource_availability.sh \
 	     test_daemon.sh test_media_operation_flags.sh test_tag_update.sh \
-	     test_delete.sh test_undelete.sh
+	     test_delete.sh
 
 # List of scripts
 check_SCRIPTS=$(tests_sh) setup_db.sh test_env.sh test_launch_daemon.sh
