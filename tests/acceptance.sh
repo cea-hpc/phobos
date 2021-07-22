@@ -254,18 +254,18 @@ function put_layout
     fi
 
     # phobos put
-    $LOG_VALG $phobos put --layout simple /etc/hosts $id1
+    $LOG_VALG $phobos put --alias simple /etc/hosts $id1
     $LOG_VALG $phobos put --layout raid1 /etc/hosts $id2
 
-    # PSQL command to get the extent layout info
-    # XXX: will be replaced by a 'phobos object list' when implemented
-    $PSQL -t -c "$request1" | grep -q "\"name\": \"simple\"" ||
-        exit_error "Put with simple layout should have written object using " \
-                   "a simple layout"
+    $phobos extent list --output layout,ext_count $id1 | grep "raid1" \
+                                                       | grep " 1" ||
+        exit_error "Put with default alias should have written object using " \
+                   "a raid1 layout with repl_count of 1"
 
-    $PSQL -t -c "$request2" | grep -q "\"name\": \"raid1\"" ||
+    $phobos extent list --output layout,ext_count $id2 | grep "raid1" \
+                                                       | grep " 2" ||
         exit_error "Put with raid1 layout should have written object using " \
-                   "a raid1 layout"
+                   "a raid1 layout with repl_count of 2"
 
     # relock resources we previously unlocked
     if [[ $PHOBOS_STORE_default_family == "dir" ]]; then
@@ -364,8 +364,8 @@ function put_alias
     test_single_alias_put $alias_tape $id_with_fam "dir" "raid1" "--family dir"
 
     # phobos put with additional layout parameter - expect additional parameter
-    test_single_alias_put $alias_full $id_with_lay "dir" "simple" \
-        "--layout simple"
+    test_single_alias_put $alias_full $id_with_lay "dir" "raid1" \
+        "--layout raid1"
 
     # phobos put with additional tags parameter - expect success
     test_single_alias_put $alias_empty_family $id_with_tag1 "dir" "raid1" \

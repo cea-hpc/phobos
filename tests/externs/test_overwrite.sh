@@ -50,6 +50,11 @@ function cleanup
 
 function output_checkout
 {
+    # $1 = type of item to list
+    # $2 = output to show
+    # $3 = oid to show
+    # $4 = expected result of the output
+    # $5 = check deprecated objects or not
     # The parameter $5 is only used when checking the version numbers.
     # Otherwise it isn't specified, i.e. empty.
     local result=$($phobos $1 list $5 --output $2 $3)
@@ -142,29 +147,29 @@ function test_overwrite_metadata
     return 0
 }
 
-function test_overwrite_layout
+function test_overwrite_lyt_params
 {
-    local output_func="output_checkout extent layout oid4"
+    local output_func="output_checkout extent ext_count oid4"
     local put_func="put_checkout oid4"
 
     echo "**** INSERTING OBJECT OID4 AND OVERWRITING LAYOUT ****"
-    $put_func "--layout simple"
+    $put_func "--lyt-params repl_count=1"
 
-    $output_func "simple"
+    $output_func "1"
 
-    $put_func "--layout simple --overwrite"
+    $put_func "--lyt-params repl_count=1 --overwrite"
 
-    local expect=$(printf "simple\nsimple")
+    local expect=$(printf "1\n1")
     $output_func "$expect"
 
-    $put_func "--layout raid1 --overwrite"
+    $put_func "--lyt-params repl_count=2 --overwrite"
 
-    local expect=$(printf "simple\nsimple\nraid1")
+    local expect=$(printf "1\n1\n2")
     $output_func "$expect"
 
-    $put_func "--layout simple --overwrite"
+    $put_func "--lyt-params repl_count=1 --overwrite"
 
-    local expect=$(printf "simple\nsimple\nraid1\nsimple")
+    local expect=$(printf "1\n1\n2\n1")
     $output_func "$expect"
 
     return 0
@@ -217,7 +222,7 @@ dir_setup
 test_overwrite_and_delete
 test_double_overwrite
 test_overwrite_metadata
-test_overwrite_layout
+test_overwrite_lyt_params
 
 # Tape tests are available only if /dev/changer exists, which is the entry
 # point for the tape library.
