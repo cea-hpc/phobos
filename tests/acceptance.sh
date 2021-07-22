@@ -353,12 +353,12 @@ function put_alias
     # phobos put with reduced aliases - expect default for empty parameters
     test_single_alias_put $alias_empty_family $id_empty_family \
         $PHOBOS_STORE_default_family "raid1"
-    test_single_alias_put $alias_empty_layout $id_empty_layout "dir" "simple"
+    test_single_alias_put $alias_empty_layout $id_empty_layout "dir" "raid1"
     test_single_alias_put $alias_empty_tags $id_empty_tags "dir" "raid1"
 
     # phobos put with non-existing alias - expect default
     test_single_alias_put $alias_bad $id_noexist $PHOBOS_STORE_default_family \
-        "simple"
+        "raid1"
 
     # phobos put with additional family parameter - expect additional parameter
     test_single_alias_put $alias_tape $id_with_fam "dir" "raid1" "--family dir"

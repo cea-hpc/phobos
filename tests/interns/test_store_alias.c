@@ -27,6 +27,7 @@
 #endif
 
 #include "phobos_store.h"
+#include "pho_attrs.h"
 #include "pho_cfg.h"
 #include "pho_type_utils.h"
 #include "store_alias.h"
@@ -52,10 +53,11 @@ static void test_fill_put_params(void)
 
     /* test default values */
     xfer = empty_xfer;
-
     assert(fill_put_params(&xfer) == 0);
 
     assert(strcmp(xfer.xd_params.put.layout_name, "raid1") == 0);
+    assert(strcmp(pho_attr_get(&xfer.xd_params.put.lyt_params, "repl_count"),
+                  "1") == 0);
     assert(xfer.xd_params.put.family == PHO_RSC_TAPE);
     assert(xfer.xd_params.put.tags.n_tags == 0);
 
@@ -94,7 +96,7 @@ static void test_fill_put_params(void)
 
     assert(fill_put_params(&xfer) == 0);
 
-    assert(strcmp(xfer.xd_params.put.layout_name, "simple") == 0);
+    assert(strcmp(xfer.xd_params.put.layout_name, "raid1") == 0);
     assert(xfer.xd_params.put.family == PHO_RSC_DIR);
     assert(xfer.xd_params.put.tags.n_tags == 1);
     assert(strcmp(xfer.xd_params.put.tags.tags[0], "foo-tag") == 0);
@@ -117,13 +119,14 @@ static void test_fill_put_params(void)
     xfer = empty_xfer;
     xfer.xd_params.put.alias = alias_name_full;
     xfer.xd_params.put.family = PHO_RSC_TAPE;
-    xfer.xd_params.put.layout_name = "simple";
+    xfer.xd_params.put.layout_name = "raid1";
     tags_init(&xfer.xd_params.put.tags, (char **)pre_existing_tag, 1);
 
     assert(fill_put_params(&xfer) == 0);
 
     assert(xfer.xd_params.put.family == PHO_RSC_TAPE);
-    assert(strcmp(xfer.xd_params.put.layout_name, "simple") == 0);
+    assert(strcmp(xfer.xd_params.put.layout_name, "raid1") == 0);
+    assert(pho_attrs_is_empty(&xfer.xd_params.put.lyt_params));
     assert(xfer.xd_params.put.tags.n_tags == 3);
     assert(strcmp(xfer.xd_params.put.tags.tags[0], pre_existing_tag[0]) == 0);
     assert(strcmp(xfer.xd_params.put.tags.tags[1], "foo-tag") == 0);

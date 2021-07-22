@@ -30,7 +30,7 @@
 set -xe
 
 export PHOBOS_LRS_families="dir"
-export PHOBOS_STORE_default_layout="simple"
+export PHOBOS_STORE_default_alias="simple"
 export PHOBOS_STORE_default_family="dir"
 LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
 

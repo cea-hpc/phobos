@@ -23,7 +23,7 @@
 
 set -e
 
-USE_LAYOUT=${1:-simple}
+USE_LAYOUT=${1:-raid1}
 
 TEST_RAND=/tmp/RAND_$$
 TEST_RECOV_DIR=/tmp/phobos_recov.$$

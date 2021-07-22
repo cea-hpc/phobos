@@ -59,7 +59,7 @@ const struct pho_config_item cfg_store_alias[] = {
     [PHO_CFG_STORE_default_layout] = {
         .section = "store",
         .name    = "default_layout",
-        .value   = "simple"
+        .value   = "raid1"
     },
     [PHO_CFG_STORE_default_alias] = {
         .section = "store",
@@ -127,7 +127,7 @@ static int set_lyt_params(char *section_name, struct pho_attrs *attrs)
 
     rc = pho_cfg_get_val_from_level(section_name, ALIAS_LYT_PARAMS_CFG_PARAM,
                                     PHO_CFG_LEVEL_LOCAL, &cfg_val);
-    if (!rc) {
+    if (!rc && cfg_val != NULL) {
         str_cpy = strdup(cfg_val);
         if (str_cpy == NULL)
             return -errno;

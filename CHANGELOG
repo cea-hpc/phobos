@@ -1,0 +1,8 @@
+# CHANGELOG UPDATES
+
+## Development version
+
+* The "simple" layout is no longer available. It cannot be used through the CLI
+and will not be recognized in the API anymore. Instead, an alias has been
+provided in the default template.conf, emulating the "simple" layout behaviour.
+The layout used is "raid1", with a replica count set to 1.
