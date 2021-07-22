@@ -258,6 +258,16 @@ class Migrator:
                 PRIMARY KEY (type, id)
             );
 
+            -- convert simple extents to raid1
+            UPDATE extent
+                SET lyt_info = json_build_object(
+                                'name', 'raid1',
+                                'attrs', json_build_object('repl_count', '1'),
+                                'major', 0,
+                                'minor', 2
+                               )::jsonb
+                WHERE lyt_info ->> 'name' = 'simple';
+
             -- update current schema version
             UPDATE schema_info SET version = '1.93';
         """)
