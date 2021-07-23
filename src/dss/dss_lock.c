@@ -363,7 +363,8 @@ static int dss_generic(struct dss_handle *handle, enum dss_type type,
 
         if (rc2) {
             rc = rc ? : rc2;
-            pho_error(rc2, "Failed to %s %s", callee->action, ids[i]->str);
+            pho_debug("Failed to %s %s (%s)", callee->action, ids[i]->str,
+                                              strerror(-rc2));
             if (callee->all_or_nothing)
                 break;
         }
