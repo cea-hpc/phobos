@@ -51,16 +51,40 @@ Their support is useful for testing, so they should be implemented first.
   * use dss_media_set()
 
 ## Object store
-* phobos get <object_id> <dest_file>
+* phobos get [--uuid u] [--version v] <object_id> <dest_file>
   * Retrieve an item from the object store
     * no bulk operation supported yet
-* phobos put [--metadata k=v,...] <orig_file> <object_id>
-  * Insert an item into the object store
-    * if specified, attributes are parsed as a comma-separated list of
-      key=value pairs. Quotes can be used to encapsulate separators within the
-      keys or values.
+    * If neither --uuid nor --version are specified, we can only get alive
+      objects.
+    * If --uuid is specified but not --version, get the most recent object.
+    * If --version is specified but not --uuid, get the current generation of
+      object.
+    * If both --uuid and --version are specified, get the object matching the
+      2 criteria and given oid.
+* phobos put [--family f] [--metadata k=v,...] [--overwrite] [--tags a,b,...]
+             [--layout l] [--alias a] <orig_file> <object_id>
+  * Insert an item into the object store using the given family
+    * If --family is specified, only the media of this specified family
+      will be considered when putting the object.
+    * If --metadata is specified, attributes are parsed as a comma-separated
+      list of key=value pairs. Quotes can be used to encapsulate separators
+      within the keys or values.
       eg: owner=bob,layout="ost0,ost1,ost2",attr_scheme="k=v"
-* phobos mput <input_file>
+    * If --overwrite is specified, the object will be overwritten if already
+      present in the DSS, and the new version will have its version_number
+      incremented. If not, the object will be inserted.
+    * If --tags is specified, only the media containing the given tags will
+      be considered when trying to put.
+      eg: fast,sp -> only the media containing the tags "fast" and "sp" will be
+      used
+    * If --alias is specified, the parameters defined in the configuration file
+      (usually "/etc/phobos.conf") will be used. These parameters can be
+      the family, the layout or tags. They will be used if not already
+      specified through the command line (eg: if you put with "--alias a
+      --layout b", and if alias 'a' defines a specific layout, then that layout
+      will not be used, as 'b' takes priority).
+* phobos mput [--family f] [--tags a,b,...] [--layout l] [--alias a]
+              <input_file>
   * Bulk insert multiple items into the object store.
     * file can be "-" to make phobos read from stdin.
     * the input format is expected to be:
@@ -68,3 +92,5 @@ Their support is useful for testing, so they should be implemented first.
         <orig_file>   <object_id>  <metadata|->
     * use "-" for empty metadata. See 'phobos put' section of this document
       for metadata formatting.
+    * All the specified options behave the same way as specified in
+      'phobos put', so refer to this section for more information.
