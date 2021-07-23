@@ -61,3 +61,29 @@ media release response message is received by the encoder.
   LRS protocol (defined in `pho_lrs.h`). See `doc/design/lrs.txt`.
 * `io`: abstracts how IOs are performed on various media. See
   `doc/design/adapters.txt`.
+
+## Layout parameters
+
+As specific layouts require specific parameters, one can provide these values
+by using the `lyt_params`, either through the CLI or the aliases.
+
+For instance, when using the CLI, a user can give the following command to
+put a file using the raid1 layout and a replica count of 1:
+
+```bash
+$phobos put --family dir --layout raid1 --lyt-params repl_count=1 file oid
+```
+
+Generally, the layout and layout parameters follow this algorithm:
+
+```
+If layout is defined
+    set layout
+    if lyt_params is defined in the same level of configuration or above
+        set lyt_params
+    else
+        use module's default lyt_params
+```
+
+For more information regarding the level of configuration, please read
+`config.md`.

@@ -1,6 +1,10 @@
 # Levels of configuration
 We distinguish multiple levels of configuration:
 
+## Hard coded
+A hard-coded parameter, used only in case that parameter was not set beforehand
+in another level.
+
 ## Global
 A globally specified parameter, with value shared amongst all
 nodes. Admins should prioritize this method to make sure the changes affect
@@ -30,15 +34,11 @@ Here is an example of a ".ini" file:
 	default_mapping = hash1
 ```
 
-Local parameters take priority on global ones.
-
 ## Process
 A parameter specified for a single process. One notable use of
 this method is for non-regression testing.
 
 These parameters are given using environnement variables.
-
-Process parameters take priority on local ones.
 
 Here is an example of environment variables:
 
@@ -46,6 +46,18 @@ Here is an example of environment variables:
 export PHOBOS_DSS_connect_string="dbname=dummy host=dummy "
                                  "user=dummy password=dummy"
 export PHOBOS_STORE_default_layout="simple"
+```
+
+## CLI
+A parameter defined for a single execution, given through the command-line
+interface.
+
+# Levels of configuration and priority
+We define a certain order of priority between the different levels, based on
+their locality, which corresponds to the following:
+
+```
+CLI > Process > Local > Global > Hard-coded
 ```
 
 # API calls

@@ -40,6 +40,14 @@ layout, these specifically set values will be used instead of the alias.
 If tags are provided additionally, these will be joined with the tags from the
 alias.
 
+## Default aliases
+
+Users can define a default alias that will be used to specify any parameter
+in case none was given/found in the same or higher levels of configuration.
+
+For more information regarding the levels of configuration, please read
+`config.md`.
+
 ## Example
 
 The following alias is part of the `phobos.conf`:
