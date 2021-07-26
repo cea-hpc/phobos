@@ -37,15 +37,15 @@
 #define PHO_DEFAULT_CFG "/etc/phobos.conf"
 
 enum pho_cfg_level {
-    PHO_CFG_LEVEL_PROCESS = (1 << 0), /**< consider the parameter only for
-                                        *  current process
-                                        */
-    PHO_CFG_LEVEL_LOCAL   = (1 << 1), /**< consider the parameter for local
-                                        *  host
-                                        */
-    PHO_CFG_LEVEL_GLOBAL  = (1 << 2), /**< consider the parameter for all
-                                        *  phobos hosts and instances
-                                        */
+    PHO_CFG_LEVEL_PROCESS, /**< consider the parameter only for current process
+                             */
+    PHO_CFG_LEVEL_LOCAL,   /**< consider the parameter for localhost */
+    PHO_CFG_LEVEL_LAST,
+
+    /* TODO: Move before LAST when implemented */
+    PHO_CFG_LEVEL_GLOBAL,  /**< consider the parameter for all phobos hosts and
+                             * instances
+                             */
 };
 
 struct pho_config_item {

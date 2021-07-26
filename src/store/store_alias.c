@@ -48,6 +48,7 @@ enum pho_cfg_params_store_alias {
 
     /* store parameters */
     PHO_CFG_STORE_default_layout = PHO_CFG_STORE_FIRST,
+    PHO_CFG_STORE_default_alias,
     PHO_CFG_STORE_default_family,
 
     PHO_CFG_STORE_LAST
@@ -59,12 +60,59 @@ const struct pho_config_item cfg_store_alias[] = {
         .name    = "default_layout",
         .value   = "simple"
     },
+    [PHO_CFG_STORE_default_alias] = {
+        .section = "store",
+        .name    = "default_alias",
+        .value   = NULL
+    },
     [PHO_CFG_STORE_default_family] = {
         .section = "store",
         .name    = "default_family",
         .value   = "tape"
     },
 };
+
+static int apply_defaults_to_put_params(struct pho_xfer_desc *xfer, int lvl)
+{
+    const char *cfg_val;
+    int rc = 0;
+
+    if (xfer->xd_params.put.layout_name == NULL) {
+        rc = pho_cfg_get_val_from_level(
+            cfg_store_alias[PHO_CFG_STORE_default_layout].section,
+            cfg_store_alias[PHO_CFG_STORE_default_layout].name, lvl,
+            &cfg_val);
+        if (rc == 0)
+            xfer->xd_params.put.layout_name = cfg_val;
+        else if (rc != -ENODATA)
+            return rc;
+    }
+
+    if (xfer->xd_params.put.family == PHO_RSC_INVAL) {
+        rc = pho_cfg_get_val_from_level(
+            cfg_store_alias[PHO_CFG_STORE_default_family].section,
+            cfg_store_alias[PHO_CFG_STORE_default_family].name, lvl,
+            &cfg_val);
+        if (rc == 0)
+            xfer->xd_params.put.family = str2rsc_family(cfg_val);
+        else if (rc != -ENODATA)
+            goto out;
+    }
+
+    if (xfer->xd_params.put.alias == NULL) {
+        rc = pho_cfg_get_val_from_level(
+            cfg_store_alias[PHO_CFG_STORE_default_alias].section,
+            cfg_store_alias[PHO_CFG_STORE_default_alias].name, lvl,
+            &cfg_val);
+        if (rc == 0)
+            xfer->xd_params.put.alias = cfg_val;
+        else if (rc != -ENODATA)
+            return rc;
+    }
+
+out:
+    return rc;
+}
 
 /**
  * Extract the values of the specified alias from the config and set the
@@ -81,8 +129,7 @@ static int apply_alias_to_put_params(struct pho_xfer_desc *xfer)
     char *section_name;
     const char *cfg_val;
 
-    rc = asprintf
-        (&section_name, ALIAS_SECTION_CFG, xfer->xd_params.put.alias);
+    rc = asprintf(&section_name, ALIAS_SECTION_CFG, xfer->xd_params.put.alias);
     if (rc < 0)
         return -ENOMEM;
 
@@ -109,9 +156,8 @@ static int apply_alias_to_put_params(struct pho_xfer_desc *xfer)
     if (!rc) {
         rc = str2tags(cfg_val, &xfer->xd_params.put.tags);
         if (rc) {
-            pho_error(rc,
-                "Unable to load tags from \"%s\" tag string \"%s\"",
-                xfer->xd_params.put.alias, cfg_val);
+            pho_error(rc, "Unable to load tags from \"%s\" tag string \"%s\"",
+                      xfer->xd_params.put.alias, cfg_val);
             goto out;
         }
     } else if (rc != -ENODATA)
@@ -139,13 +185,20 @@ static enum rsc_family default_family_from_cfg(void)
 
 int fill_put_params(struct pho_xfer_desc *xfer)
 {
-    int rc;
+    enum pho_cfg_level lvl;
+    int rc = 0;
 
-    /* get information for alias from cfg if specified */
-    if (xfer->xd_params.put.alias != NULL) {
-        rc = apply_alias_to_put_params(xfer);
-        if (rc)
+    for (lvl = PHO_CFG_LEVEL_PROCESS; lvl < PHO_CFG_LEVEL_LAST; ++lvl) {
+        rc = apply_defaults_to_put_params(xfer, lvl);
+        if (rc != 0 && rc != -ENODATA)
             return rc;
+
+        /* get information of alias from cfg if specified */
+        if (xfer->xd_params.put.alias != NULL) {
+            rc = apply_alias_to_put_params(xfer);
+            if (rc != 0)
+                return rc;
+        }
     }
 
     /* Fill alias or default values into put params if not set prelimilarly */
@@ -154,7 +207,7 @@ int fill_put_params(struct pho_xfer_desc *xfer)
 
     if (xfer->xd_params.put.layout_name == NULL)
         xfer->xd_params.put.layout_name =
-            PHO_CFG_GET(cfg_store_alias, PHO_CFG_STORE, default_layout);
+            cfg_store_alias[PHO_CFG_STORE_default_layout].value;
 
     return 0;
 }

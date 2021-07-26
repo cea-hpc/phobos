@@ -115,6 +115,11 @@ bool tags_eq(const struct tags *tags1, const struct tags *tags2);
 bool tags_in(const struct tags *haystack, const struct tags *needle);
 
 /**
+ * Return true if the given string is in the tags, false otherwise.
+ */
+bool tag_exists(const struct tags *tags, const char *tag_str);
+
+/**
  * Convert the string of the form "tag1,tag2" into separate tags (tag1 and tag2)
  * and add it to an existing @tags structure
  *

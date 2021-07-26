@@ -335,6 +335,17 @@ bool tags_eq(const struct tags *tags1, const struct tags *tags2)
     return true;
 }
 
+bool tag_exists(const struct tags *tags, const char *tag_str)
+{
+    int i;
+
+    for (i = 0; i < tags->n_tags; i++)
+        if (strcmp(tag_str, tags->tags[i]) == 0)
+            return true;
+
+    return false;
+}
+
 bool tags_in(const struct tags *haystack, const struct tags *needle)
 {
     size_t ndl_i, hay_i;
@@ -359,6 +370,8 @@ bool tags_in(const struct tags *haystack, const struct tags *needle)
 
 int str2tags(const char *tag_str, struct tags *tags)
 {
+    size_t n_alias_tags = 0;
+    size_t i = tags->n_tags;
     char *parse_tag_str;
     char *single_tag;
     char *saveptr;
@@ -376,8 +389,6 @@ int str2tags(const char *tag_str, struct tags *tags)
 
     /* count number of tags in alias */
     single_tag = strtok_r(parse_tag_str, ",", &saveptr);
-    size_t n_alias_tags = 0;
-
     while (single_tag != NULL) {
         n_alias_tags++;
         single_tag = strtok_r(NULL, ",", &saveptr);
@@ -404,11 +415,12 @@ int str2tags(const char *tag_str, struct tags *tags)
     if (parse_tag_str == NULL)
         return -errno;
 
-    size_t i = tags->n_tags;
-
     for (single_tag = strtok_r(parse_tag_str, ",", &saveptr);
          single_tag != NULL;
          single_tag = strtok_r(NULL, ",", &saveptr), i++) {
+        if (tag_exists(tags, single_tag))
+            continue;
+
         tags->tags[i] = strdup(single_tag);
         if (tags->tags[i] == NULL) {
             free(parse_tag_str);
