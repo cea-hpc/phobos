@@ -448,11 +448,13 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
                    xfer->xd_objid);
 
     rc = dss_lock(dss, DSS_OBJECT, &lock_obj, 1);
-    if (rc)
-        LOG_GOTO(out_filt, rc, "Unable to lock object objid: '%s'",
-                 xfer->xd_objid);
+    if (rc) {
+        dss_filter_free(&filter);
+        LOG_RETURN(rc, "Unable to lock object objid: '%s'", xfer->xd_objid);
+    }
 
     rc = dss_object_get(dss, &filter, &obj, &obj_cnt);
+    dss_filter_free(&filter);
     if (rc)
         LOG_GOTO(out_unlock, rc, "dss_object_get failed for objid:'%s'",
                  xfer->xd_objid);
@@ -461,7 +463,6 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         LOG_GOTO(out_res, rc = -EINVAL, "object '%s' does not exist",
                  xfer->xd_objid);
 
-    dss_filter_free(&filter);
 
     /* Check if the performed operation was an overwrite PUT */
     rc = dss_filter_build(&filter,
@@ -536,8 +537,6 @@ out_unlock:
                   "Couldn't unlock object:'%s'. Database may be corrupted.",
                   xfer->xd_objid);
     }
-out_filt:
-    dss_filter_free(&filter);
 
     return rc;
 }
