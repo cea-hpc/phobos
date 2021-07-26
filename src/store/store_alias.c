@@ -89,7 +89,6 @@ static int apply_alias_to_put_params(struct pho_xfer_desc *xfer)
     // family
     if (xfer->xd_params.put.family == PHO_RSC_INVAL) {
         rc = pho_cfg_get_val(section_name, ALIAS_FAMILY_CFG_PARAM, &cfg_val);
-
         if (!rc)
             xfer->xd_params.put.family = str2rsc_family(cfg_val);
         else if (rc != -ENODATA)
@@ -99,7 +98,6 @@ static int apply_alias_to_put_params(struct pho_xfer_desc *xfer)
     // layout
     if (xfer->xd_params.put.layout_name == NULL) {
         rc = pho_cfg_get_val(section_name, ALIAS_LAYOUT_CFG_PARAM, &cfg_val);
-
         if (!rc)
             xfer->xd_params.put.layout_name = cfg_val;
         else if (rc != -ENODATA)
@@ -108,7 +106,6 @@ static int apply_alias_to_put_params(struct pho_xfer_desc *xfer)
 
     // tags
     rc = pho_cfg_get_val(section_name, ALIAS_TAGS_CFG_PARAM, &cfg_val);
-
     if (!rc) {
         rc = str2tags(cfg_val, &xfer->xd_params.put.tags);
         if (rc) {

@@ -223,31 +223,58 @@ static int pho_cfg_get_global(const char *section, const char *name,
     return -ENOTSUP;
 }
 
+int pho_cfg_get_val_from_level(const char *section, const char *name,
+                               enum pho_cfg_level lvl, const char **value)
+{
+    switch (lvl) {
+    case PHO_CFG_LEVEL_PROCESS:
+        /* from environment */
+        return pho_cfg_get_env(section, name, value);
+
+    case PHO_CFG_LEVEL_LOCAL:
+        /* if config file has not been loaded */
+        if (cfg_items == NULL)
+            return -ENODATA;
+
+        return pho_cfg_get_local(section, name, value);
+
+    case PHO_CFG_LEVEL_GLOBAL:
+        /* if connection is not set */
+        if (thr_dss_hdl == NULL)
+            return -ENODATA;
+
+        return pho_cfg_get_global(section, name, value);
+
+    default:
+        return -EINVAL;
+    }
+}
+
 int pho_cfg_get_val(const char *section, const char *name, const char **value)
 {
-    int   rc;
+    int rc;
 
-    /* 1) check process-wide parameter (from environment)*/
-    rc = pho_cfg_get_env(section, name, value);
+    /* 1) check process-wide parameter */
+    rc = pho_cfg_get_val_from_level(section, name, PHO_CFG_LEVEL_PROCESS,
+                                    value);
     if (rc != -ENODATA)
         return rc;
 
-    /* 2) check host-wide parameter (if config file has been loaded) */
-    if (cfg_items) {
-        rc = pho_cfg_get_local(section, name, value);
-        if (rc != -ENODATA)
-            return rc;
-    }
+    /* 2) check host-wide parameter */
+    rc = pho_cfg_get_val_from_level(section, name, PHO_CFG_LEVEL_LOCAL, value);
+    if (rc != -ENODATA)
+        return rc;
 
-    /* 3) check global parameter (if connection is set) */
-    if (thr_dss_hdl)
-        return pho_cfg_get_global(section, name, value);
+    /* 3) check global parameter */
+    rc = pho_cfg_get_val_from_level(section, name, PHO_CFG_LEVEL_GLOBAL, value);
+    if (rc != -ENODATA)
+        return rc;
 
     return -ENODATA;
 }
 
 const char *_pho_cfg_get(int first_index, int last_index, int param_index,
-                        const struct pho_config_item *module_params)
+                         const struct pho_config_item *module_params)
 {
     const struct pho_config_item    *item;
     const char                      *res;
@@ -297,5 +324,5 @@ int pho_cfg_match(const char *section_pattern, const char *name_pattern,
                   struct pho_config_item *items, int *count);
 
 int pho_cfg_set(const char *section, const char *name, const char *value,
-                enum pho_cfg_flags flags);
+                enum pho_cfg_level lvl);
 */

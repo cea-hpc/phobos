@@ -104,14 +104,14 @@ static int test(void *hint)
         if (item->value == NULL) {
             if (rc != -ENODATA) {
                 int rc2 = rc ? rc : -EINVAL;
-                pho_error(rc2, "pho_cfg_get_val(%s, %s, ...): -ENODATA expected"
-                          " (got %d)", item->section, item->variable, rc);
+                pho_error(rc2, "pho_cfg_get_val(%s, %s, ...): -ENODATA "
+                               "expected (got %d)", item->section,
+                          item->variable, rc);
                 return rc2;
             }
-            /* else: OK */
         } else if (rc) {
-            pho_error(rc, "pho_cfg_get_val(%s, %s, ...) returned error %d",
-                    item->section, item->variable, rc);
+            pho_error(rc, "pho_cfg_get_val(%s, %s, ...) returned error "
+                          "%d", item->section, item->variable, rc);
             return rc;
         } else {
             if (strcmp(val, item->value)) {
@@ -123,6 +123,24 @@ static int test(void *hint)
         }
     }
     return 0;
+}
+
+static bool test_cfg_lvl(struct test_item *item, enum pho_cfg_level level)
+{
+    const char *val = NULL;
+    int rc;
+
+    rc = pho_cfg_get_val_from_level(item->section, item->variable, level, &val);
+    if (rc != 0)
+        return false;
+
+    if (item->value != NULL && strcmp(val, item->value) != 0) {
+        pho_info("unexpected value for '%s'::'%s': '%s' != '%s'",
+                 item->section, item->variable, val, item->value);
+        return false;
+    }
+
+    return true;
 }
 
 /** List of SCSI library configuration parameters */
@@ -184,6 +202,24 @@ int main(int argc, char **argv)
     run_test("Test 2: get variables before anything is set",
              test, test_file_items, PHO_TEST_FAILURE);
 
+    if (test_cfg_lvl(&test_env_items[1], PHO_CFG_LEVEL_PROCESS)) {
+        pho_info("test_cfg_lvl in process before anything is set should have "
+                 "failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (test_cfg_lvl(&test_file_items[1], PHO_CFG_LEVEL_LOCAL)) {
+        pho_info("test_cfg_lvl in local before anything is set should have "
+                 "failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (test_cfg_lvl(&test_env_items[1], PHO_CFG_LEVEL_GLOBAL)) {
+        pho_info("test_cfg_lvl in global before anything is set should have "
+                 "failed");
+        exit(EXIT_FAILURE);
+    }
+
     rc = populate_env();
     if (rc) {
         pho_error(rc, "populate_env failed");
@@ -192,6 +228,13 @@ int main(int argc, char **argv)
 
     run_test("Test 3: get variables from env", test, test_env_items,
              PHO_TEST_SUCCESS);
+
+    if (!test_cfg_lvl(&test_env_items[1], PHO_CFG_LEVEL_PROCESS)) {
+        pho_info("valid test_cfg_lvl test in process level should have "
+                 "suceeded");
+        exit(EXIT_FAILURE);
+    }
+
     run_test("Test 4: get variables from config file (before init)", test,
              test_file_items, PHO_TEST_FAILURE);
 
@@ -218,6 +261,11 @@ int main(int argc, char **argv)
              test, test_file_items, PHO_TEST_SUCCESS);
     run_test("Test 8: get variables from env (after loading file)",
              test, test_env_items, PHO_TEST_SUCCESS);
+
+    if (!test_cfg_lvl(&test_file_items[1], PHO_CFG_LEVEL_LOCAL)) {
+        pho_info("valid test_cfg_lvl in local level should have suceeded");
+        exit(EXIT_FAILURE);
+    }
 
     /* test pho_cfg_get_int() */
     run_test("Test 9: get numeric param", test_get_int,
