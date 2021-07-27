@@ -1347,7 +1347,8 @@ static inline bool key_is_logical_op(const char *key)
 {
     return !g_ascii_strcasecmp(key, "$AND") ||
            !g_ascii_strcasecmp(key, "$NOR") ||
-           !g_ascii_strcasecmp(key, "$OR");
+           !g_ascii_strcasecmp(key, "$OR")  ||
+           !g_ascii_strcasecmp(key, "$NOT");
 }
 
 /**

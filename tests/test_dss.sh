@@ -113,6 +113,7 @@ echo "**** TESTS: DSS_GET DEV ****"
 test_check_get "device" 'all'
 test_check_get "device" '{"$LIKE": {"DSS::DEV::path": "/dev%"}}'
 test_check_get "device" '{"DSS::DEV::family": "tape"}'
+test_check_get "device" '{"$NOT": {"DSS::DEV::family": "tape"}}'
 test_check_get "device" '{"DSS::DEV::family": "dir"}'
 test_check_get "device" '{"$NOR": [{"DSS::DEV::serial": "foo"}]}'
 test_check_get "device" '{"$NOR": [{"DSS::DEV::host": "foo"}]}'
@@ -124,6 +125,7 @@ echo "**** TESTS: DSS_GET MEDIA ****"
 test_check_get "media" "all"
 test_check_get "media" '{"$LT": {"DSS::MDA::vol_used": 42469425152}}'
 test_check_get "media" '{"DSS::MDA::vol_used": 42469425152}'
+test_check_get "media" '{"$NOT": {"DSS::MDA::vol_used": 42469425152}}'
 test_check_get "media" '{"$GT": {"DSS::MDA::vol_used": 42469425152}}'
 test_check_get "media" '{"DSS::MDA::family": "tape"}'
 test_check_get "media" '{"DSS::MDA::family": "dir"}'
@@ -138,6 +140,7 @@ test_check_get "media" '{"$XJSON": {"DSS::MDA::tags": "mytag"}}'
 echo "**** TESTS: DSS_GET OBJECT ****"
 test_check_get "object" 'all'
 test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "012%"}}'
+test_check_get "object" '{"$NOT": {"$LIKE": {"DSS::OBJ::oid": "012%"}}}'
 test_check_get "object" '{"$LIKE": {"DSS::OBJ::oid": "koéèê^!$£}[<>à@\\"}}'
 test_check_get "object" \
    '{"$KVINJSON": {"DSS::OBJ::user_md": "test=abc"}}'
@@ -145,6 +148,7 @@ test_check_get "object" \
 echo "**** TESTS: DSS_GET DEPRECATED_OBJECT ****"
 test_check_get "deprec" 'all'
 test_check_get "deprec" '{"$LIKE": {"DSS::OBJ::oid": "012%"}}'
+test_check_get "deprec" '{"$NOT": {"$LIKE": {"DSS::OBJ::oid": "012%"}}}'
 test_check_get "deprec" '{"$LIKE": {"DSS::OBJ::oid": "koéèê^!$£}[<>à@\\"}}'
 test_check_get "deprec" '{"$KVINJSON": {"DSS::OBJ::user_md": "test=abc"}}'
 test_check_get "deprec" '{"DSS::OBJ::deprec_time": "1970-01-01 12:34:56"}'
@@ -152,6 +156,8 @@ test_check_get "deprec" '{"DSS::OBJ::deprec_time": "1970-01-01 12:34:56"}'
 echo "**** TESTS: DSS_GET LAYOUT ****"
 test_check_get "layout" 'all'
 test_check_get "layout" '{"$INJSON": {"DSS::EXT::media_idx": "073221L6"}}'
+test_check_get "layout" \
+  '{"$NOT": {"$INJSON": {"DSS::EXT::media_idx": "073221L6"}}}'
 test_check_get "layout" \
   '{"$INJSON": {"DSS::EXT::media_idx": "phobos1:/tmp/pho_testdir1"}}'
 test_check_get "layout" '{"$INJSON": {"DSS::EXT::media_idx": "DOESNOTEXIST"}}'
@@ -166,6 +172,7 @@ test_check_get "layout" '{"DSS::EXT::layout_type": "simple"}'
 echo "**** TEST: DSS_SET DEVICE ****"
 test_check_set "device" "insert"
 test_check_get "device" '{"$LIKE": {"DSS::DEV::serial": "%COPY%"}}'
+test_check_get "device" '{"$NOT": {"$LIKE": {"DSS::DEV::serial": "%COPY%"}}}'
 test_check_set "device" "update"
 test_check_get "device" '{"$LIKE": {"DSS::DEV::host": "%UPDATE%"}}'
 test_check_set "device" "delete"
@@ -175,25 +182,31 @@ test_check_set "media" "insert"
 test_check_get "media" '{"$LIKE": {"DSS::MDA::id": "%COPY%"}}'
 test_check_set "media" "update"
 test_check_get "media" '{"$GT": {"DSS::MDA::nb_obj": "1002"}}'
+test_check_get "media" '{"$NOT": {"$GT": {"DSS::MDA::nb_obj": "1002"}}}'
 test_check_set "media" "delete"
 test_check_get "media" '{"$LIKE": {"DSS::MDA::id": "%COPY%"}}'
 echo "**** TEST: DSS_SET OBJECT AND LAYOUT ****"
 test_check_set "object" "insert"
 test_check_get "object" '{"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}'
+test_check_get "object" '{"$NOT": {"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}}'
 test_check_set "object" "update"
 test_check_set "layout" "insert"
 test_check_get "layout" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
+test_check_get "layout" '{"$NOT": {"$LIKE": {"DSS::EXT::oid": "%COPY%"}}}'
 test_check_set "layout" "update"
 test_check_get "layout" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
 test_check_set "object" "delete"
 test_check_get "object" '{"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}'
+test_check_get "object" '{"$NOT": {"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}}'
 test_check_set "layout" "delete" "oidtest" "FAIL"
 test_check_set "layout" "delete"
 test_check_get "layout" '{"$LIKE": {"DSS::EXT::oid": "%COPY%"}}'
+test_check_get "layout" '{"$NOT": {"$LIKE": {"DSS::EXT::oid": "%COPY%"}}}'
 
 echo "**** TEST: DSS_SET DEPRECATED_OBJECT ****"
 test_check_set "deprec" "insert"
 test_check_get "deprec" '{"DSS::OBJ::version": "2"}'
+test_check_get "deprec" '{"$NOT": {"DSS::OBJ::version": "2"}}'
 test_check_set "deprec" "delete"
 test_check_get "deprec" '{"DSS::OBJ::version": "2"}'
 
