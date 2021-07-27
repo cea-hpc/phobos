@@ -55,7 +55,7 @@ static void test_fill_put_params(void)
 
     assert(fill_put_params(&xfer) == 0);
 
-    assert(strcmp(xfer.xd_params.put.layout_name, "simple") == 0);
+    assert(strcmp(xfer.xd_params.put.layout_name, "raid1") == 0);
     assert(xfer.xd_params.put.family == PHO_RSC_TAPE);
     assert(xfer.xd_params.put.tags.n_tags == 0);
 

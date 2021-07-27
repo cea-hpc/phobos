@@ -38,6 +38,7 @@
 #define ALIAS_SECTION_CFG "alias \"%s\""
 #define ALIAS_FAMILY_CFG_PARAM "family"
 #define ALIAS_LAYOUT_CFG_PARAM "layout"
+#define ALIAS_LYT_PARAMS_CFG_PARAM "lyt-params"
 #define ALIAS_TAGS_CFG_PARAM "tags"
 
 /**
@@ -114,6 +115,40 @@ out:
     return rc;
 }
 
+static int set_lyt_params(char *section_name, struct pho_attrs *attrs)
+{
+    const char *separators = " =,";
+    const char *cfg_val;
+    char *str_cpy;
+    char *saveptr;
+    char *value;
+    char *key;
+    int rc;
+
+    rc = pho_cfg_get_val_from_level(section_name, ALIAS_LYT_PARAMS_CFG_PARAM,
+                                    PHO_CFG_LEVEL_LOCAL, &cfg_val);
+    if (!rc) {
+        str_cpy = strdup(cfg_val);
+        if (str_cpy == NULL)
+            return -errno;
+
+        for (key = strtok_r(str_cpy, separators, &saveptr);
+             key != NULL;
+             key = strtok_r(NULL, separators, &saveptr)) {
+            value = strtok_r(NULL, separators, &saveptr);
+            if (value == NULL)
+                LOG_GOTO(out, rc = -EINVAL, "Missing value for key '%s' "
+                                            "in %s", key, cfg_val);
+
+            pho_attr_set(attrs, key, value);
+        }
+out:
+        free(str_cpy);
+    }
+
+    return rc;
+}
+
 /**
  * Extract the values of the specified alias from the config and set the
  * parameters of xfer.
@@ -125,9 +160,9 @@ out:
  */
 static int apply_alias_to_put_params(struct pho_xfer_desc *xfer)
 {
-    int rc;
-    char *section_name;
     const char *cfg_val;
+    char *section_name;
+    int rc;
 
     rc = asprintf(&section_name, ALIAS_SECTION_CFG, xfer->xd_params.put.alias);
     if (rc < 0)
@@ -149,6 +184,12 @@ static int apply_alias_to_put_params(struct pho_xfer_desc *xfer)
             xfer->xd_params.put.layout_name = cfg_val;
         else if (rc != -ENODATA)
             goto out;
+
+        if (pho_attrs_is_empty(&xfer->xd_params.put.lyt_params)) {
+            rc = set_lyt_params(section_name, &xfer->xd_params.put.lyt_params);
+            if (rc != 0 && rc != -ENODATA)
+                goto out;
+        }
     }
 
     // tags

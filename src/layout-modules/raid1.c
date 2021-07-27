@@ -932,7 +932,7 @@ static const struct pho_enc_ops RAID1_ENCODER_OPS = {
 static int layout_raid1_encode(struct pho_encoder *enc)
 {
     struct raid1_encoder *raid1 = calloc(1, sizeof(*raid1));
-    const char *string_repl_count;
+    const char *string_repl_count = NULL;
     int rc;
 
     if (raid1 == NULL)
@@ -952,12 +952,18 @@ static int layout_raid1_encode(struct pho_encoder *enc)
     /* The layout description has to be set on encoding */
     enc->layout->layout_desc = RAID1_MODULE_DESC;
 
-    /* get repl_count from conf */
-    string_repl_count = PHO_CFG_GET(cfg_lyt_raid1, PHO_CFG_LYT_RAID1,
-                                    repl_count);
-    if (string_repl_count == NULL)
-        LOG_RETURN(-EINVAL, "Unable to get replica count from conf to "
-                            "built a raid1 encoder");
+    if (!pho_attrs_is_empty(&enc->xfer->xd_params.put.lyt_params))
+        string_repl_count = pho_attr_get(&enc->xfer->xd_params.put.lyt_params,
+                                         REPL_COUNT_ATTR_KEY);
+
+    if (string_repl_count == NULL) {
+        /* get repl_count from conf */
+        string_repl_count = PHO_CFG_GET(cfg_lyt_raid1, PHO_CFG_LYT_RAID1,
+                                        repl_count);
+        if (string_repl_count == NULL)
+            LOG_RETURN(-EINVAL, "Unable to get replica count from conf to "
+                                "build a raid1 encoder");
+    }
 
     /* set repl_count as char * in layout */
     rc = pho_attr_set(&enc->layout->layout_desc.mod_attrs,
