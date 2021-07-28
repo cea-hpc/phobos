@@ -33,17 +33,22 @@
 #include <unistd.h> /* execl, exit, fork */
 #include <sys/wait.h> /* wait */
 
-static int global_setup(void)
+static int setup_db_calls(char *action)
 {
     int rc;
 
-    setenv("PHOBOS_DSS_connect_string", "dbname=phobos host=localhost "
-                                        "user=phobos password=phobos", 1);
+    rc = fork();
+    if (rc == 0) {
+        /* XXX: to change once DB is unified between tests */
+        execl("../setup_db.sh", "setup_db.sh", action, NULL);
+        if (errno == ENOENT)
+            execl("../../setup_db.sh", "setup_db.sh", action, NULL);
 
-    if (!fork()) {
-        rc = execl("../setup_db.sh", "setup_db.sh", "setup_tables", NULL);
-        if (rc)
-            exit(EXIT_FAILURE);
+        perror("execl");
+        exit(EXIT_FAILURE);
+    } else if (rc == -1) {
+        perror("fork");
+        return -1;
     }
 
     wait(&rc);
@@ -53,23 +58,21 @@ static int global_setup(void)
     return 0;
 }
 
+static int global_setup(void)
+{
+    setenv("PHOBOS_DSS_connect_string", "dbname=phobos host=localhost "
+                                        "user=phobos password=phobos", 1);
+
+    return setup_db_calls("setup_tables");
+}
+
 static int global_teardown(void)
 {
-    int rc;
-
-    if (!fork()) {
-        rc = execl("../setup_db.sh", "setup_db.sh", "drop_tables", NULL);
-        if (rc)
-            exit(EXIT_FAILURE);
-    }
-
-    wait(&rc);
-    if (rc)
-        return -1;
+    int rc = setup_db_calls("drop_tables");
 
     unsetenv("PHOBOS_DSS_connect_string");
 
-    return 0;
+    return rc;
 }
 
 int global_setup_dss(void **state)

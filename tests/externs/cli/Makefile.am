@@ -1,6 +1,7 @@
 AUTOMAKE_OPTIONS=subdir-objects
 
-TO_SRC=../../src/
+TO_SRC=../../../src/
+TO_TEST=../../
 
 AM_CFLAGS=$(CC_OPT) @CMOCKA_CFLAGS@
 AM_LDFLAGS=@CMOCKA_LIBS@
@@ -11,7 +12,7 @@ STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 
 if VALGRIND_ENABLED
 @VALGRIND_CHECK_RULES@
-VALGRIND_SUPPRESSIONS_FILES=../supp-files/valgrind.supp ../supp-files/glib.supp
+VALGRIND_SUPPRESSIONS_FILES=$(TO_TEST)/supp-files/valgrind.supp $(TO_TEST)/supp-files/glib.supp
 VALGRIND_FLAGS=-q --leak-check=full --errors-for-leak-kinds=definite --show-possibly-lost=no
 endif
 
@@ -25,9 +26,9 @@ check_SCRIPTS=test_delete.sh test_undelete.sh test_put.sh test_object_list.sh \
 
 TESTS=$(check_SCRIPTS)
 
-test_locate_SOURCES=test_locate.c ../test_setup.c ../test_setup.h
+test_locate_SOURCES=test_locate.c ../../test_setup.c $(TO_TEST)/test_setup.h
 test_locate_LDADD=$(STORE_LIB) $(ADMIN_LIB) $(DSS_LIB)
-test_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss
+test_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I$(TO_TEST)
 
 medium_locker_SOURCES=medium_locker.c
 medium_locker_LDADD=$(DSS_LIB) $(STORE_LIB)

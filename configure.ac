@@ -115,7 +115,7 @@ AC_CONFIG_FILES([Makefile
          src/cli/Makefile
          tests/Makefile
          tests/interns/Makefile
-         tests/externs/Makefile
+         tests/externs/cli/Makefile
          phobos.spec
 ])
 AC_OUTPUT

@@ -28,10 +28,10 @@ set -xe
 test_dir=$(dirname $(readlink -e $0))
 test_bin="$test_dir/test_locate"
 medium_locker_bin="$test_dir/medium_locker"
-. $test_dir/../test_env.sh
-. $test_dir/../setup_db.sh
-. $test_dir/../test_launch_daemon.sh
-. $test_dir/../tape_drive.sh
+. $test_dir/../../test_env.sh
+. $test_dir/../../setup_db.sh
+. $test_dir/../../test_launch_daemon.sh
+. $test_dir/../../tape_drive.sh
 
 function dir_setup
 {

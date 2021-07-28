@@ -28,8 +28,8 @@
 #include "phobos_store.h"
 #include "pho_common.h" /* get_hostname */
 #include "pho_dss.h"
-#include "../pho_test_xfer_utils.h"
-#include "../test_setup.h"
+#include "pho_test_xfer_utils.h"
+#include "test_setup.h"
 
 /* standard stuff */
 #include <errno.h>
