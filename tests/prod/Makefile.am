@@ -1,0 +1,8 @@
+AUTOMAKE_OPTIONS=subdir-objects
+
+TEST_EXTENSIONS=.sh
+TESTS_ENVIRONMENT=export EXEC_NONREGRESSION;
+
+check_SCRIPTS=acceptance.sh
+
+TESTS=$(check_SCRIPTS)
