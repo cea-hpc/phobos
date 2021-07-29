@@ -9,6 +9,7 @@ AM_LDFLAGS=@CMOCKA_LIBS@
 ADMIN_LIB=$(TO_SRC)/admin/libphobos_admin.la
 DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
+LAYOUT_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 
 if VALGRIND_ENABLED
 @VALGRIND_CHECK_RULES@
@@ -18,14 +19,12 @@ endif
 
 TEST_EXTENSIONS=.sh
 
-check_PROGRAMS=medium_locker
+check_PROGRAMS=test_locate
 
-check_SCRIPTS=test_delete.sh test_undelete.sh test_put.sh test_object_list.sh \
-	          test_extent_list.sh test_ping.sh test_overwrite.sh \
-	          test_locate.sh test_get.sh
+check_SCRIPTS=setup_locate.sh
 
 TESTS=$(check_SCRIPTS)
 
-medium_locker_SOURCES=medium_locker.c
-medium_locker_LDADD=$(DSS_LIB) $(STORE_LIB)
-medium_locker_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss
+test_locate_SOURCES=test_locate.c ../../test_setup.c $(TO_TEST)/test_setup.h
+test_locate_LDADD=$(STORE_LIB) $(ADMIN_LIB) $(DSS_LIB) $(LAYOUT_LIB)
+test_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I$(TO_TEST)

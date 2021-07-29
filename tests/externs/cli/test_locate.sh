@@ -26,7 +26,6 @@
 set -xe
 
 test_dir=$(dirname $(readlink -e $0))
-test_bin="$test_dir/test_locate"
 medium_locker_bin="$test_dir/medium_locker"
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
@@ -245,7 +244,6 @@ export PHOBOS_STORE_default_family="dir"
 test_medium_locate dir
 test_locate_cli dir
 test_get_locate_cli dir
-$test_bin dir || exit 1
 
 if [[ -w /dev/changer ]]; then
     cleanup
@@ -257,5 +255,4 @@ if [[ -w /dev/changer ]]; then
     test_medium_locate tape
     test_locate_cli tape
     test_get_locate_cli tape
-    $test_bin tape || exit 1
 fi

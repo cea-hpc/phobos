@@ -26,9 +26,13 @@
 /* phobos stuff */
 #include "dss_lock.h"
 #include "phobos_store.h"
+#include "phobos_admin.h"
 #include "pho_common.h" /* get_hostname */
 #include "pho_dss.h"
+#include "pho_cfg.h"
+#include "pho_ldm.h"
 #include "pho_test_xfer_utils.h"
+#include "pho_test_utils.h"
 #include "test_setup.h"
 
 /* standard stuff */
@@ -38,8 +42,10 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <glib.h>
+#include <time.h>
 
 /* cmocka stuff */
 #include <setjmp.h>
@@ -48,9 +54,9 @@
 #include <cmocka.h>
 
 static struct phobos_locate_state {
-    struct dss_handle   *dss;
+    struct dss_handle  *dss;
     enum rsc_family     rsc_family;
-    struct object_info  *objs;
+    struct object_info *objs;
     int n_objs;
 } phobos_locate_state;
 
@@ -255,8 +261,8 @@ static void pl(void **state)
     struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
     struct object_info *obj = pl_state->objs;
     const char *myself_hostname = NULL;
+    struct pho_xfer_desc xfer = { 0 };
     struct media_info *medium;
-    struct pho_xfer_desc xfer;
     char *hostname;
     int cnt;
     int rc;
@@ -283,6 +289,7 @@ static void pl(void **state)
     /* move object to deprecated table */
     xfer.xd_objid = obj->oid;
     rc = phobos_delete(&xfer, 1);
+    pho_xfer_desc_destroy(&xfer);
     assert_return_code(rc, -rc);
 
     /* check ENOENT from deprecated table */
@@ -317,6 +324,7 @@ static void assert_get_hostname(struct pho_xfer_desc xfer,
     else
         assert_null(xfer.xd_params.get.node_name);
     free(xfer.xd_params.get.node_name);
+    free(xfer.xd_objuuid);
 }
 
 static void pgl_scenario(struct pho_xfer_desc xfer, struct object_info *obj,
@@ -344,7 +352,7 @@ static void pgl(void **state)
 {
     struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
     struct object_info *obj = pl_state->objs;
-    struct pho_xfer_desc xfer;
+    struct pho_xfer_desc xfer = { 0 };
     struct media_info *medium;
     const char *myself = NULL;
     int cnt;
@@ -385,6 +393,7 @@ static void pgl(void **state)
 #define NB_ARGS 1
 static const char *usage = "Take one argument the rsc_family to test, "
                            "\"dir\" or \"tape\"\n";
+
 int main(int argc, char **argv)
 {
     int family;
@@ -395,7 +404,6 @@ int main(int argc, char **argv)
     }
 
     family = str2rsc_family(argv[1]);
-
     switch (family) {
     case PHO_RSC_TAPE:
     case PHO_RSC_DIR:

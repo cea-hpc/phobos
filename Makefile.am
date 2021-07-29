@@ -1,6 +1,6 @@
 ACLOCAL_AMFLAGS = -I autotools/m4
 
-SUBDIRS=src tests tests/externs/cli tests/interns
+SUBDIRS=src tests tests/externs/api tests/externs/cli tests/interns
 
 rpm_dir=`pwd`/rpms
 
