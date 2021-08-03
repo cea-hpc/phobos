@@ -487,14 +487,16 @@ enum dss_move_queries {
 
 static const char * const move_query[] = {
     [DSS_MOVE_OBJECT_TO_DEPREC] = "WITH moved_object AS "
-                                  "(DELETE FROM object WHERE %s RETURNING *) "
-                                  "INSERT INTO deprecated_object "
+                                  "(DELETE FROM object WHERE %s RETURNING "
+                                  "oid, uuid, version, user_md) "
+                                  "INSERT INTO deprecated_object (oid, uuid, "
+                                  "version, user_md)"
                                   "SELECT * FROM moved_object",
     [DSS_MOVE_DEPREC_TO_OBJECT] = "WITH risen_object AS "
                                   "(DELETE FROM deprecated_object WHERE %s "
                                   "RETURNING oid, uuid, version, user_md) "
-                                  "INSERT INTO object "
-                                  "SELECT * FROM risen_object",
+                                  "INSERT INTO object (oid, uuid, version, "
+                                  "user_md) SELECT * FROM risen_object",
 };
 
 /**
