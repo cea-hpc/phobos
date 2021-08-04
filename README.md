@@ -92,6 +92,25 @@ SQL phobos user will be prompted for unless provided with -p):
 sudo -u postgres phobos_db setup_db -s
 ```
 
+#### Error on database setup/migration
+If the database setup failed because `generate_uuid_v4()` is missing, it means
+the psql extension `uuid-ossp` is missing. To make it available, execute the
+following command as SQL phobos user. Phobos user needs to have `create` rights
+to execute the command.
+
+```
+CREATE EXTENSION "uuid-ossp";
+```
+
+In case SQL phobos user does not have `create` rights, you can still use the
+first following command to give them to it and change them back with the second
+one:
+
+```
+ALTER USER phobos WITH SUPERUSER;
+ALTER_USER phobos WITHOUT SUPERUSER;
+```
+
 ## Upgrade of an existing instance
 
 After upgrading phobos, run the DB conversion script (credentials to connect to
