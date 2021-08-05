@@ -94,6 +94,7 @@ static int local_setup(void **state, char *oid)
     xfer_desc_close_fd(&xfer);
     assert_return_code(rc, -rc);
     assert_return_code(xfer.xd_rc, -xfer.xd_rc);
+    pho_xfer_desc_destroy(&xfer);
 
     /* get object info */
     rc = phobos_store_object_list((const char **)&oid, 1,

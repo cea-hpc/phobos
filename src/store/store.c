@@ -790,6 +790,12 @@ static int object_info_copy_into_xfer(struct object_info *obj,
 {
     int rc;
 
+    /** XXX: This is a temporary fix as the uuid and attrs may already exist
+     * before we copy them into the xfer. Despite the name, this only free the
+     * uuid and attrs.
+     */
+    pho_xfer_desc_destroy(xfer);
+
     rc = pho_json_to_attrs(&xfer->xd_attrs, obj->user_md);
     if (rc)
         LOG_RETURN(rc, "Cannot convert attributes of objid: '%s'", obj->oid);
