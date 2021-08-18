@@ -31,8 +31,7 @@ from ctypes import byref, c_int, c_void_p, POINTER, Structure
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 from phobos.core.const import (DSS_SET_DELETE, DSS_SET_INSERT, DSS_SET_UPDATE, # pylint: disable=no-name-in-module
-                               DSS_DEVICE, DSS_MEDIA,
-                               PHO_ADDR_HASH1, str2fs_type)
+                               DSS_MEDIA, PHO_ADDR_HASH1, str2fs_type)
 from phobos.core.ffi import (DevInfo, MediaInfo, MediaStats, LIBPHOBOS,
                              OperationFlags)
 
@@ -148,17 +147,13 @@ class BaseEntityManager:
     def _dss_get(self, hdl, qry_filter, res, res_cnt):
         """Return DSS specialized GET method for this type of object."""
 
-    @abstractmethod
-    def _dss_set(self, hdl, obj, obj_cnt, opcode):
-        """Return DSS specialized SET method for this type of object."""
-
     @abstractproperty
     def wrapped_class(self):
         """Return the ctype class which this proxy wraps."""
 
     @abstractproperty
     def wrapped_ident(self):
-        """Return the short name of the clas which this proxy wraps."""
+        """Return the short name of the class which this proxy wraps."""
 
     @staticmethod
     def convert_kwargs(name, keyop, **kwargs):
@@ -204,31 +199,60 @@ class BaseEntityManager:
 
         return ret_items
 
-    def _generic_set(self, objects, opcode):
-        """Common operation to wrap dss_{device,media,...}_set()"""
-        if not objects:
+
+class DeviceManager(BaseEntityManager):
+    """Proxy to manipulate devices."""
+    wrapped_class = DevInfo
+    wrapped_ident = 'device'
+
+    def __init__(self, client, *args, **kwargs):
+        super(DeviceManager, self).__init__(client, *args, **kwargs)
+
+    def _dss_get(self, hdl, qry_filter, res, res_cnt):
+        """Invoke device-specific DSS get method."""
+        return LIBPHOBOS.dss_device_get(hdl, qry_filter, res, res_cnt)
+
+class MediaManager(BaseEntityManager):
+    """Proxy to manipulate media."""
+    wrapped_class = MediaInfo
+    wrapped_ident = 'media'
+
+    def __init__(self, client, *args, **kwargs):
+        super(MediaManager, self).__init__(client, *args, **kwargs)
+
+    def _dss_get(self, hdl, qry_filter, res, res_cnt):
+        """Invoke media-specific DSS get method."""
+        return LIBPHOBOS.dss_media_get(hdl, qry_filter, res, res_cnt)
+
+    def _dss_set(self, hdl, media, media_cnt, opcode):
+        """Invoke media-specific DSS set method."""
+        return LIBPHOBOS.dss_media_set(hdl, media, media_cnt, opcode)
+
+    def _generic_set(self, media, opcode):
+        """Common operation to wrap dss_media_set()"""
+        if not media:
             return
 
-        obj_cnt = len(objects)
-        obj = (self.wrapped_class * obj_cnt)()
-        for i, elt in enumerate(objects):
-            obj[i] = elt
+        med_cnt = len(media)
+        med = (self.wrapped_class * med_cnt)()
+        for i, elt in enumerate(media):
+            med[i] = elt
 
-        rc = self._dss_set(byref(self.client.handle), obj, obj_cnt, opcode)
+        rc = self._dss_set(byref(self.client.handle), med, med_cnt, opcode)
         if rc:
             raise EnvironmentError(rc, "Cannot issue set request")
 
-    def insert(self, objects):
-        """Insert objects into DSS"""
-        self._generic_set(objects, DSS_SET_INSERT)
+    def insert(self, media):
+        """Insert media into DSS"""
+        self._generic_set(media, DSS_SET_INSERT)
 
-    def update(self, objects):
-        """Update objects in DSS"""
-        self._generic_set(objects, DSS_SET_UPDATE)
+    def update(self, media):
+        """Update media in DSS"""
+        self._generic_set(media, DSS_SET_UPDATE)
 
-    def delete(self, objects):
-        """Delete objects from DSS"""
-        self._generic_set(objects, DSS_SET_DELETE)
+    def delete(self, media):
+        """Delete media from DSS"""
+        self._generic_set(media, DSS_SET_DELETE)
 
     def _generic_lock_unlock(self, objects, lock_c_func, err_message,
                              lock_type, force=None):
@@ -246,47 +270,6 @@ class BaseEntityManager:
                              obj_array, obj_count)
         if rc:
             raise EnvironmentError(rc, err_message)
-
-
-class DeviceManager(BaseEntityManager):
-    """Proxy to manipulate devices."""
-    wrapped_class = DevInfo
-    wrapped_ident = 'device'
-
-    def __init__(self, *args, **kwargs):
-        super(DeviceManager, self).__init__(*args, **kwargs)
-
-    def _dss_get(self, hdl, qry_filter, res, res_cnt):
-        """Invoke device-specific DSS get method."""
-        return LIBPHOBOS.dss_device_get(hdl, qry_filter, res, res_cnt)
-
-    def _dss_set(self, hdl, obj, obj_cnt, opcode):
-        """Invoke device-specific DSS set method."""
-        return LIBPHOBOS.dss_device_set(hdl, obj, obj_cnt, opcode)
-
-    def lock(self, objects):
-        """Lock all the devices associated with a given list of DeviceInfo"""
-        self._generic_lock_unlock(
-            objects, LIBPHOBOS.dss_lock, "Device locking failed", DSS_DEVICE,
-        )
-
-    def unlock(self, objects, force=False):
-        """Unlock all the devices associated with a given list of DeviceInfo.
-        If `force` is True, unlock the objects even if they were not locked
-        by this instance.
-        """
-        self._generic_lock_unlock(
-            objects, LIBPHOBOS.dss_unlock, "Device unlocking failed",
-            DSS_DEVICE, force,
-        )
-
-class MediaManager(BaseEntityManager):
-    """Proxy to manipulate media."""
-    wrapped_class = MediaInfo
-    wrapped_ident = 'media'
-
-    def __init__(self, *args, **kwargs):
-        super(MediaManager, self).__init__(*args, **kwargs)
 
     def add(self, media, fstype, tags=None):
         """Insert media into DSS."""
@@ -308,14 +291,6 @@ class MediaManager(BaseEntityManager):
         media = MediaInfo(family=family, name=name)
         self.delete([media])
         self.logger.debug("Media '%s' successfully deleted: ", name)
-
-    def _dss_get(self, hdl, qry_filter, res, res_cnt):
-        """Invoke media-specific DSS get method."""
-        return LIBPHOBOS.dss_media_get(hdl, qry_filter, res, res_cnt)
-
-    def _dss_set(self, hdl, obj, obj_cnt, opcode):
-        """Invoke media-specific DSS set method."""
-        return LIBPHOBOS.dss_media_set(hdl, obj, obj_cnt, opcode)
 
     def lock(self, objects):
         """Lock all the media associated with a given list of MediaInfo"""

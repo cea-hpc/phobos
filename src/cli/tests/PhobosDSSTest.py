@@ -27,7 +27,7 @@ import os
 from random import randint
 
 from phobos.core.dss import Client
-from phobos.core.ffi import DevInfo, Id, MediaInfo, Resource
+from phobos.core.ffi import MediaInfo
 from phobos.core.const import PHO_RSC_DIR, PHO_RSC_TAPE, rsc_family2str # pylint: disable=no-name-in-module
 
 
@@ -66,9 +66,9 @@ class DSSClientTest(unittest.TestCase):
                 self.assertTrue(isinstance(mda, MediaInfo))
 
             # Check negative indexation
-            medias = client.media.get()
-            self.assertEqual(medias[0].name, medias[-len(medias)].name)
-            self.assertEqual(medias[len(medias) - 1].name, medias[-1].name)
+            media = client.media.get()
+            self.assertEqual(media[0].name, media[-len(media)].name)
+            self.assertEqual(media[len(media) - 1].name, media[-1].name)
 
     def test_list_media_by_tags(self):
         """List media with tags."""
@@ -107,27 +107,23 @@ class DSSClientTest(unittest.TestCase):
         with Client() as client:
             insert_list = []
             for _ in range(10):
-                rid = Id(PHO_RSC_DIR,
-                         name='__TEST_MAGIC_%d' % randint(0, 1000000))
-                rsc = Resource(id=rid, model='')
-                dev = DevInfo(rsc=rsc,
-                              path='/tmp/test_%d' % randint(0, 1000000),
-                              host='localhost')
+                medium = MediaInfo(name='/tmp/test_%d' % randint(0, 1000000),
+                                   family=PHO_RSC_DIR, model=None,
+                                   is_adm_locked=False)
 
-                insert_list.append(dev)
+                insert_list.append(medium)
 
-            client.devices.insert(insert_list)
+            client.media.insert(insert_list)
 
             # now retrieve them one by one and check serials
-            for dev in insert_list:
-                res = client.devices.get(serial=dev.rsc.id.name)
-                for retrieved_dev in res:
+            for medium in insert_list:
+                res = client.media.get(id=medium.name)
+                for retrieved_med in res:
                     # replace with assertIsInstance when we drop pre-2.7 support
-                    self.assertTrue(isinstance(retrieved_dev, dev.__class__))
-                    self.assertEqual(retrieved_dev.rsc.id.name,
-                                     dev.rsc.id.name)
+                    self.assertTrue(isinstance(retrieved_med, medium.__class__))
+                    self.assertEqual(retrieved_med.name, medium.name)
 
-            client.devices.delete(res)
+            client.media.delete(res)
 
     def test_add_sqli(self): # pylint: disable=no-self-use
         """The input data is sanitized and does not cause an SQL injection."""
@@ -140,11 +136,6 @@ class DSSClientTest(unittest.TestCase):
     def test_manipulate_empty(self): # pylint: disable=no-self-use
         """SET/DEL empty and None objects."""
         with Client() as client:
-            client.devices.insert([])
-            client.devices.insert(None)
-            client.devices.delete([])
-            client.devices.delete(None)
-
             client.media.insert([])
             client.media.insert(None)
             client.media.delete([])
