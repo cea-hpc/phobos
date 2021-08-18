@@ -95,7 +95,7 @@ function put_tape_simple
 
     # test drive availability
     $LOG_VALG $phobos drive lock ${DRIVE_ARRAY[0]}
-    $LOG_VALG $phobos put /etc/hosts ${id}.2 &&
+    $LOG_VALG $phobos put --family tape /etc/hosts ${id}.2 &&
         error "Should not be able to put objects without unlocked device"
 
     return 0
@@ -283,6 +283,7 @@ else
 fi
 
 setup_dir
+drop_tables
 setup_tables
 invoke_daemon
 trap cleanup EXIT
@@ -294,7 +295,6 @@ get_dir_simple
 if [[ -w /dev/changer ]]; then
     # in case the previous test did not unload the drives
     empty_drives
-
     put_tape_simple
     get_tape_simple
     empty_drives

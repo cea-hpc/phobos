@@ -83,8 +83,18 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         return dss_layout_set(handle, (struct layout_info *)item_list, n,
                               action);
     case DSS_DEVICE:
-        return dss_device_set(handle, (struct dev_info *)item_list, n,
-                              action);
+        switch (action) {
+        case DSS_SET_UPDATE_ADM_STATUS:
+            return dss_device_update_adm_status(handle,
+                                                (struct dev_info *)item_list,
+                                                n);
+        case DSS_SET_INSERT:
+            return dss_device_insert(handle, (struct dev_info *)item_list, n);
+        case DSS_SET_DELETE:
+            return dss_device_delete(handle, (struct dev_info *)item_list, n);
+        default:
+            return -ENOTSUP;
+        }
     case DSS_MEDIA:
         return dss_media_set(handle, (struct media_info *)item_list, n,
                              action);
@@ -289,10 +299,8 @@ int main(int argc, char **argv)
                            PHO_URI_MAX);
                     strcat(dev->rsc.id.name, "COPY");
                 }
-                if (action == DSS_SET_UPDATE) {
-                    rc = asprintf(&dev->host, "%sUPDATE", dev->host);
-                    assert(rc > 0);
-                }
+                if (action == DSS_SET_UPDATE_ADM_STATUS)
+                    dev->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
             }
             break;
         case DSS_MEDIA:

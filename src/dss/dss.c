@@ -446,9 +446,7 @@ static const char * const insert_full_query[] = {
 };
 
 static const char * const update_query[] = {
-    [DSS_DEVICE] = "UPDATE device SET (family, model, host, adm_status, path) ="
-                   " ('%s', %s, '%s', '%s', '%s')"
-                   " WHERE id = '%s';",
+    [DSS_DEVICE] = "UPDATE device SET adm_status = '%s' WHERE id = '%s';",
     [DSS_MEDIA]  = "UPDATE media SET (family, model, adm_status,"
                    " fs_type, address_type, fs_status, fs_label, stats, tags,"
                    " put, get, delete) ="
@@ -1298,17 +1296,12 @@ static int get_device_setrequest(PGconn *conn, struct dev_info *item_list,
                                    rsc_adm_status2str(p_dev->rsc.adm_status),
                                    p_dev->path, i < item_cnt-1 ? "," : ";");
             free_dss_char4sql(model);
-        } else if (action == DSS_SET_UPDATE) {
-            model = dss_char4sql(conn, p_dev->rsc.model);
-            if (!model)
-                LOG_RETURN(-ENOMEM, "memory allocation failed");
-
+        } else if (action == DSS_SET_UPDATE_ADM_STATUS) {
             g_string_append_printf(request, update_query[DSS_DEVICE],
-                                   rsc_family2str(p_dev->rsc.id.family),
-                                   model, p_dev->host,
                                    rsc_adm_status2str(p_dev->rsc.adm_status),
-                                   p_dev->path, p_dev->rsc.id.name);
-            free_dss_char4sql(model);
+                                   p_dev->rsc.id.name);
+        } else if (action == DSS_SET_UPDATE) {
+            LOG_RETURN(-ENOTSUP, "No generic update on device");
         }
     }
 
@@ -1866,6 +1859,11 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         LOG_RETURN(-ENOTSUP, "Full insert request is not supported for %s",
                    dss_type_names[type]);
 
+    if (action == DSS_SET_UPDATE_ADM_STATUS && type != DSS_DEVICE)
+        LOG_RETURN(-ENOTSUP,
+                   "Specific adm_status update is not supported for %s",
+                   dss_type_names[type]);
+
     request = g_string_new("BEGIN;");
 
     if (action == DSS_SET_INSERT)
@@ -2110,10 +2108,29 @@ int dss_deprecated_object_get(struct dss_handle *hdl,
     return dss_generic_get(hdl, DSS_DEPREC, filter, (void **)obj_ls, obj_cnt);
 }
 
-int dss_device_set(struct dss_handle *hdl, struct dev_info *dev_ls, int dev_cnt,
-                   enum dss_set_action action)
+int dss_device_insert(struct dss_handle *hdl, struct dev_info *dev_ls,
+                      int dev_cnt)
 {
-    return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt, action);
+    return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
+                           DSS_SET_INSERT);
+}
+
+int dss_device_delete(struct dss_handle *hdl, struct dev_info *dev_ls,
+                      int dev_cnt)
+{
+    return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
+                           DSS_SET_DELETE);
+}
+
+int dss_device_update_adm_status(struct dss_handle *hdl,
+                                 struct dev_info *dev_ls, int dev_cnt)
+{
+    /**
+     * No need to protect the update by a lock.
+     * This update of one field is a SQL atomic one.
+     */
+    return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
+                           DSS_SET_UPDATE_ADM_STATUS);
 }
 
 int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,

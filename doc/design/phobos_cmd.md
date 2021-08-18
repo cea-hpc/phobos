@@ -8,9 +8,9 @@ Their support is useful for testing, so they should be implemented first.
 
 * phobos dir add [--unlock] <dirs(s)>
   * query directory information through ldm_device_query()
-  * insert a 'dir' device in locked state using dss_device_set()
+  * insert a 'dir' device in locked state using dss_device_insert()
   * query directory information through ldm_media_query()
-  * insert a 'dir' media in locked state using dss_device_set()
+  * insert a 'dir' media in locked state using dss_media_set()
   * if --unlock is specified, unlock the device and media
     using dss_{device,media}_set()
 * phobos dir {list|ls}
@@ -24,13 +24,13 @@ Their support is useful for testing, so they should be implemented first.
 * phobos drive add </dev/foo> [--unlock]
   * get device information using ldm_device_query()
   * insert it to device table in locked state (unless --unlock is specified),
-    using dss_device_set()
+    using dss_device_insert()
 * phobos drive {list|ls} [--model model]
   * use dss_device_get()
 * phobos drive show <devpath|drv_id>
   * use dss_device_get()
 * phobos drive lock|unlock <devpath|drv_id>
-  * use dss_device_set()
+  * use dss_device_update_adm_status()
 
 ## Tape
 * phobos tape add --type ltoX [--fs <fstype>] <label(s)>

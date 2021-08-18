@@ -77,7 +77,10 @@ int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
  * inform the LRS devices state has changed.
  *
  * \param[in]       adm             Admin module handler.
- * \param[in]       dev_ids         Device IDs to lock.
+ * \param[in, out]  dev_ids         Device IDs to lock. (As input
+ *                                  dev_ids[x].name could refer to device path
+ *                                  or device id name. As ouput, dev_ids[x].name
+ *                                  will refer to device id name.)
  * \param[in]       num_dev         Number of device to lock.
  * \param[in]       is_forced       true if forced lock is requested.
  *
@@ -92,7 +95,10 @@ int phobos_admin_device_lock(struct admin_handle *adm, struct pho_id *dev_ids,
  * inform the LRS devices state has changed.
  *
  * \param[in]       adm             Admin module handler.
- * \param[in]       dev_ids         Device IDs to unlock.
+ * \param[in, out]  dev_ids         Device IDs to unlock. (As input
+ *                                  dev_ids[x].name could refer to device path
+ *                                  or device id name. As ouput, dev_ids[x].name
+ *                                  will refer to device id name.)
  * \param[in]       num_dev         Number of device to unlock.
  * \param[in]       is_forced       true if forced unlock is requested.
  *

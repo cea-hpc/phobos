@@ -2452,7 +2452,6 @@ static int sched_device_lock(struct lrs_sched *sched, const char *name)
 
     for (i = 0; i < sched->devices->len; ++i) {
         dev = &g_array_index(sched->devices, struct dev_descr, i);
-
         if (!strcmp(name, dev->dss_dev_info->rsc.id.name)) {
             g_array_remove_index_fast(sched->devices, i);
             pho_verb("Removed locked device '%s' from the local database",

@@ -222,7 +222,7 @@ static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
             strcpy(dev_ids[i].name, devi->rsc.id.name);
     }
 
-    rc = dss_device_set(&adm->dss, devices, num_dev, DSS_SET_INSERT);
+    rc = dss_device_insert(&adm->dss, devices, num_dev);
     if (rc)
         LOG_GOTO(out_free, rc, "Cannot add devices");
 
@@ -237,8 +237,13 @@ out_free:
     return rc;
 }
 
-static int _get_device_by_id(struct admin_handle *adm, struct pho_id *dev_id,
-                             struct dev_info **dev_res)
+/**
+ * At input dev_id.name could refer to dev_res->path or dev_res->rsc.id.name.
+ * At output, dev_id->name is set to dev_res->rsc.id.name
+ */
+static int _get_device_by_path_or_serial(struct admin_handle *adm,
+                                         struct pho_id *dev_id,
+                                         struct dev_info **dev_res)
 {
     struct dss_filter filter;
     int dcnt;
@@ -267,6 +272,10 @@ static int _get_device_by_id(struct admin_handle *adm, struct pho_id *dev_id,
 
     assert(dcnt == 1);
 
+    /* If needed, set the input dev_id->name to the serial rsc.id.name */
+    if (strcmp(dev_id->name, (*dev_res)->rsc.id.name))
+        strcpy(dev_id->name, (*dev_res)->rsc.id.name);
+
     return 0;
 }
 
@@ -274,6 +283,7 @@ static int _device_update_adm_status(struct admin_handle *adm,
                                      struct pho_id *dev_ids, int num_dev,
                                      enum rsc_adm_status status, bool is_forced)
 {
+    bool one_device_not_avail = false;
     struct dev_info *devices;
     int avail_devices = 0;
     int rc;
@@ -286,43 +296,32 @@ static int _device_update_adm_status(struct admin_handle *adm,
     for (i = 0; i < num_dev; ++i) {
         struct dev_info *dev_res;
 
-        rc = _get_device_by_id(adm, dev_ids + i, &dev_res);
+        rc = _get_device_by_path_or_serial(adm, dev_ids + i, &dev_res);
         if (rc)
             goto out_free;
 
-        rc = dss_lock(&adm->dss, DSS_DEVICE, dev_res, 1);
-        if (rc) {
-            pho_error(-EBUSY, "Device '%s' is in use by '%d' on node '%s'",
-                      dev_ids[i].name, dev_res->lock.owner,
-                      dev_res->lock.hostname);
+        if (dev_res->rsc.adm_status == status) {
+            pho_warn("Device (path:'%s', name:'%s') is already in the desired "
+                     "state", dev_res->path, dev_res->rsc.id.name);
             dss_res_free(dev_res, 1);
             continue;
         }
 
-        dss_res_free(dev_res, 1);
-        rc = _get_device_by_id(adm, dev_ids + i, &dev_res);
-        if (rc)
-            goto out_free;
-
-        /* TODO: to uncomment once the dss_device_lock() is removed ie. when
-         * the update of a single database field will be implemented
-         */
-
-/*      if (strcmp(dev_res->lock.lock, "")) {
- *          if (!is_forced) {
- *              pho_error(-EBUSY, "Device '%s' is in use by '%s'",
- *                        dev_ids[i].name, dev_res->lock.lock);
- *              dss_res_free(dev_res, 1);
- *              continue;
- *          } else if (status == PHO_RSC_ADM_ST_LOCKED) {
- *              pho_warn("Device '%s' is in use. Administrative locking will "
- *                       "not be effective immediately", dev_res->rsc.id.name);
- *          }
- *      }
- */
-        if (dev_res->rsc.adm_status == status)
-            pho_warn("Device '%s' is already in the desired state",
-                     dev_ids[i].name);
+        if (dev_res->lock.hostname) {
+            if (!is_forced) {
+                pho_error(-EBUSY,
+                          "Device (path:'%s', name:'%s') is in use by '%s':%d",
+                          dev_res->path, dev_res->rsc.id.name,
+                          dev_res->lock.hostname, dev_res->lock.owner);
+                one_device_not_avail = true;
+                dss_res_free(dev_res, 1);
+                continue;
+            } else if (status == PHO_RSC_ADM_ST_LOCKED) {
+                pho_warn("Device (path:'%s', name:'%s') is in use. "
+                         "Administrative locking will not be effective "
+                         "immediately", dev_res->path, dev_res->rsc.id.name);
+            }
+        }
 
         dev_res->rsc.adm_status = status;
         rc = dev_info_cpy(&devices[avail_devices], dev_res);
@@ -333,24 +332,18 @@ static int _device_update_adm_status(struct admin_handle *adm,
         avail_devices++;
     }
 
-    if (avail_devices != num_dev)
+    if (one_device_not_avail)
         LOG_GOTO(out_free, rc = -EBUSY,
                  "At least one device is in use, use --force");
 
-    rc = dss_device_set(&adm->dss, devices, num_dev, DSS_SET_UPDATE);
-    if (rc)
-        goto out_free;
-
-    // in case the name given by the user is not the device ID name
-    for (i = 0; i < num_dev; ++i)
-        if (strcmp(dev_ids[i].name, devices[i].rsc.id.name))
-            strcpy(dev_ids[i].name, devices[i].rsc.id.name);
+    if (avail_devices) {
+        rc = dss_device_update_adm_status(&adm->dss, devices, avail_devices);
+        if (rc)
+            goto out_free;
+    }
 
 out_free:
-    if (avail_devices)
-        dss_unlock(&adm->dss, DSS_DEVICE, devices, avail_devices, false);
-
-    for (i = 0; i < num_dev; ++i)
+    for (i = 0; i < avail_devices; ++i)
         dev_info_free(devices + i, false);
     free(devices);
 

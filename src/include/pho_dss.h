@@ -91,15 +91,17 @@ enum dss_set_action {
                            *  default DSS values.
                            */
     DSS_SET_UPDATE,
+    DSS_SET_UPDATE_ADM_STATUS, /** Atomic update of adm_status column */
     DSS_SET_DELETE,
     DSS_SET_LAST,
 };
 
 static const char * const dss_set_actions_names[] = {
-    [DSS_SET_INSERT]      = "insert",
-    [DSS_SET_FULL_INSERT] = "full-insert",
-    [DSS_SET_UPDATE]      = "update",
-    [DSS_SET_DELETE]      = "delete",
+    [DSS_SET_INSERT]            = "insert",
+    [DSS_SET_FULL_INSERT]       = "full-insert",
+    [DSS_SET_UPDATE]            = "update",
+    [DSS_SET_UPDATE_ADM_STATUS] = "update_adm_status",
+    [DSS_SET_DELETE]            = "delete",
 };
 
 /**
@@ -301,16 +303,38 @@ int dss_deprecated_object_get(struct dss_handle *hdl,
 void dss_res_free(void *item_list, int item_cnt);
 
 /**
- * Store information for one or many devices in DSS.
+ * Insert information of one or many devices in DSS.
  * @param[in]  hdl      valid connection handle
  * @param[in]  dev_ls   array of entries to store
  * @param[in]  dev_cnt  number of items in the list
- * @param[in]  action   operation code (insert, update, delete)
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_device_set(struct dss_handle *hdl, struct dev_info *dev_ls, int dev_cnt,
-                   enum dss_set_action action);
+int dss_device_insert(struct dss_handle *hdl, struct dev_info *dev_ls,
+                      int dev_cnt);
+
+/**
+ * Delete information of one or many devices in DSS.
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  dev_ls   array of entries to delete
+ * @param[in]  dev_cnt  number of items in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_device_delete(struct dss_handle *hdl, struct dev_info *dev_ls,
+                      int dev_cnt);
+
+/**
+ * Update adm_status of one or many devices in DSS.
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  dev_ls   array of entries to update with new adm_status
+ * @param[in]  dev_cnt  number of items in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_device_update_adm_status(struct dss_handle *hdl,
+                                 struct dev_info *dev_ls,
+                                 int dev_cnt);
 
 /**
  * Store information for one or many media in DSS.

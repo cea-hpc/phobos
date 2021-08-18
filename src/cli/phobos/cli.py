@@ -524,7 +524,9 @@ class LockOptHandler(DSSInteractHandler):
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(LockOptHandler, cls).add_options(parser)
-        parser.add_argument('res', nargs='+', help='Resource(s) to lock')
+        parser.add_argument('res', nargs='+',
+                            help='Resource(s) to lock (for a device, could be '
+                                 'the path or the id name)')
         parser.add_argument('--force', action='store_true',
                             help='Do not check the current lock state')
 
