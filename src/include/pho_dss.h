@@ -45,6 +45,7 @@ enum dss_type {
     DSS_LAYOUT,
     DSS_DEVICE,
     DSS_MEDIA,
+    DSS_MEDIA_UPDATE_LOCK,
     DSS_LAST,
 };
 
@@ -54,6 +55,7 @@ static const char * const dss_type_names[] = {
     [DSS_LAYOUT] = "layout",
     [DSS_DEVICE] = "device",
     [DSS_MEDIA]  = "media",
+    [DSS_MEDIA_UPDATE_LOCK]  = "media_update",
 };
 
 /**

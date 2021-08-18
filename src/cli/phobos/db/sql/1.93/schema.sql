@@ -4,7 +4,7 @@ CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS');
 CREATE TYPE address_type AS ENUM ('PATH', 'HASH1', 'OPAQUE');
 CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used', 'full');
 CREATE TYPE extent_state AS ENUM ('pending','sync','orphan');
-CREATE TYPE lock_type AS ENUM('object', 'device', 'media');
+CREATE TYPE lock_type AS ENUM('object', 'device', 'media', 'media_update');
 
 -- to extend enums: ALTER TYPE type ADD VALUE 'value'
 

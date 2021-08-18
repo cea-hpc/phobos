@@ -155,7 +155,8 @@ static const char *dss_translate(enum dss_type type, const void *item_list,
 
         return dev_ls[pos].rsc.id.name;
     }
-    case DSS_MEDIA: {
+    case DSS_MEDIA:
+    case DSS_MEDIA_UPDATE_LOCK: {
         const struct media_info *mda_ls = item_list;
 
         return mda_ls[pos].rsc.id.name;
