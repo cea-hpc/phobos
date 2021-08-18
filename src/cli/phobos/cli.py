@@ -910,7 +910,7 @@ class MediaUpdateOptHandler(DSSInteractHandler):
         parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
                             help='New tags for this media (comma-separated, '
                                  'e.g. "-T foo,bar"), empty string to clear '
-                                 'tags')
+                                 'tags, new tags list overwrite current tags')
         parser.add_argument('res', nargs='+', help='Resource(s) to update')
 
 class FormatOptHandler(DSSInteractHandler):

@@ -19,6 +19,9 @@ Their support is useful for testing, so they should be implemented first.
   * show device/media information using dss_{device,media}_get()
 * phobos dir lock/unlock
   * set device and media locking status using dss_{device,media}_set().
+* phobos dir update {-T|--tags} <tag(s)> <dir(s)>
+  * set a new tags list for this dir medium. Old tags are erased by this new
+    list.
 
 ## Drive
 * phobos drive add </dev/foo> [--unlock]
@@ -49,6 +52,9 @@ Their support is useful for testing, so they should be implemented first.
   * use dss_media_get()
 * phobos tape {lock|unlock}
   * use dss_media_set()
+* phobos tape update {-T|--tags} <tag(s)> <dir(s)>
+  * set a new tags list for this tape medium. Old tags are erased by this new
+    list.
 
 ## Object store
 * phobos get [--uuid u] [--version v] <object_id> <dest_file>
