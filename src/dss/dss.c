@@ -2133,10 +2133,51 @@ int dss_device_update_adm_status(struct dss_handle *hdl,
                            DSS_SET_UPDATE_ADM_STATUS);
 }
 
+static int media_update_lock_retry(struct dss_handle *hdl,
+                                   struct media_info *med_ls, int med_cnt)
+{
+    unsigned int nb_try = 0;
+    int rc = -1;
+
+    while (rc && nb_try < MAX_UPDATE_LOCK_TRY) {
+        rc = dss_lock(hdl, DSS_MEDIA_UPDATE_LOCK, med_ls, med_cnt);
+        if (rc != -EEXIST)
+            break;
+
+        pho_warn("DSS_MEDIA_UPDATE_LOCK is already locked: waiting %u ms",
+                 UPDATE_LOCK_SLEEP_MICRO_SECONDS);
+        nb_try++;
+        usleep(UPDATE_LOCK_SLEEP_MICRO_SECONDS);
+    }
+
+    return rc;
+}
+
 int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
                   int med_cnt, enum dss_set_action action)
 {
-    return dss_generic_set(hdl, DSS_MEDIA, (void *)med_ls, med_cnt, action);
+    int rc;
+
+    if (action == DSS_SET_UPDATE || action == DSS_SET_DELETE) {
+        rc = media_update_lock_retry(hdl, med_ls, med_cnt);
+        if (rc)
+            LOG_RETURN(rc, "Error when locking media to %s",
+                       dss_set_actions_names[action]);
+    }
+
+    rc = dss_generic_set(hdl, DSS_MEDIA, (void *)med_ls, med_cnt, action);
+    if (action == DSS_SET_UPDATE || action == DSS_SET_DELETE) {
+        int rc2;
+
+        rc2 = dss_unlock(hdl, DSS_MEDIA_UPDATE_LOCK, med_ls, med_cnt, false);
+        if (rc2) {
+            pho_error(rc2, "Error when unlocking media at end of %s",
+                      dss_set_actions_names[action]);
+            rc = rc ? : rc2;
+        }
+    }
+
+    return rc;
 }
 
 int dss_layout_set(struct dss_handle *hdl, struct layout_info *lyt_ls,

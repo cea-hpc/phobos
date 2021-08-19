@@ -58,6 +58,9 @@ static const char * const dss_type_names[] = {
     [DSS_MEDIA_UPDATE_LOCK]  = "media_update",
 };
 
+#define MAX_UPDATE_LOCK_TRY 5
+#define UPDATE_LOCK_SLEEP_MICRO_SECONDS 5000
+
 /**
  * get dss_type enum from string
  * @param[in]  str  dss_type string representation.
