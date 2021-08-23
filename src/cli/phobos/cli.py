@@ -46,7 +46,9 @@ from ClusterShell.NodeSet import NodeSet
 from phobos.core.admin import Client as AdminClient
 from phobos.core.cfg import load_file as cfg_load_file
 from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=no-name-in-module
-                               PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED)
+                               PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
+                               ADM_STATUS, TAGS, PUT_ACCESS, GET_ACCESS,
+                               DELETE_ACCESS)
 from phobos.core.dss import Client as DSSClient
 from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
                              MediaInfo, ObjectInfo, ResourceFamily)
@@ -1089,9 +1091,17 @@ class MediaOptHandler(BaseResourceOptHandler):
 
         self.logger.info("Added %d media successfully", len(names))
 
+    def _media_update(self, media, fields):
+        """Calling client.media.update"""
+        try:
+            self.client.media.update(media, fields)
+        except EnvironmentError as err:
+            self.logger.error("Failed to update media: %s",
+                              env_error_format(err))
+            sys.exit(os.EX_DATAERR)
+
     def exec_update(self):
-        """Update an existing media"""
-        uids = NodeSet.fromlist(self.params.get('res'))
+        """Update tags of an existing media"""
         tags = self.params.get('tags')
         if tags is None:
             self.logger.info("No update to be performed")
@@ -1101,47 +1111,10 @@ class MediaOptHandler(BaseResourceOptHandler):
         if tags == ['']:
             tags = []
 
-        failed = []
-        for uid in uids:
-            # Retrieve full media and check that it exists
-            media = self.client.media.get(family=self.family, id=uid)
-            if not media:
-                self.logger.error("No '%s' media found", uid)
-                failed.append(uid)
-                continue
-
-            # Unlikely: means an incoherent db
-            if len(media) > 1:
-                raise RuntimeError("multiple media have the same id: %s" % uid)
-            media = media[0]
-
-            # Attempt to lock the media to avoid concurrent modifications
-            try:
-                self.client.media.lock([media])
-            except EnvironmentError as err:
-                self.logger.error("Failed to lock media '%s': %s",
-                                  uid, env_error_format(err))
-                failed.append(uid)
-                continue
-
-            media = self.client.media.get(family=self.family, id=uid)
-            assert len(media) == 1
-            media = media[0]
-
-            # Update tags
-            try:
-                media.tags = tags
-                self.client.media.update([media])
-            except EnvironmentError as err:
-                self.logger.error("Failed to update media '%s': %s",
-                                  uid, env_error_format(err))
-                failed.append(uid)
-            finally:
-                self.client.media.unlock([media])
-
-        if failed:
-            self.logger.error("Failed to update: %s", ", ".join(failed))
-            sys.exit(os.EX_DATAERR)
+        uids = NodeSet.fromlist(self.params.get('res'))
+        media = [MediaInfo(family=self.family, name=uid, tags=tags)
+                 for uid in uids]
+        self._media_update(media, TAGS)
 
     def exec_format(self):
         """Format media however requested."""
@@ -1191,127 +1164,50 @@ class MediaOptHandler(BaseResourceOptHandler):
             dump_object_list(objs, attr=self.params.get('output'),
                              fmt=self.params.get('format'))
 
+    def _set_adm_status(self, adm_status):
+        """Update media.adm_status"""
+        uids = NodeSet.fromlist(self.params.get('res'))
+        media = [MediaInfo(family=self.family, name=uid,
+                           adm_status=adm_status)
+                 for uid in uids]
+        self._media_update(media, ADM_STATUS)
+
     def exec_lock(self):
         """Lock media"""
-        results = []
-        uids = NodeSet.fromlist(self.params.get('res'))
-        for uid in uids:
-            media = self.client.media.get(id=uid)
-            assert len(media) == 1
-
-            # Attempt to lock the media to avoid concurrent modifications
-            try:
-                self.client.media.lock([media[0]])
-            except EnvironmentError as err:
-                self.logger.error("Failed to lock media '%s': %s",
-                                  uid, env_error_format(err))
-                continue
-
-            media = self.client.media.get(id=uid)
-            assert len(media) == 1
-
-            media[0].rsc.adm_status = PHO_RSC_ADM_ST_LOCKED
-            results.append(media[0])
-
-        if len(results) != len(uids):
-            self.logger.error("At least one media is in use, use --force")
-            # TODO: unlock media
-            sys.exit(os.EX_DATAERR)
-
-        try:
-            self.client.media.update(results)
-        except EnvironmentError as err:
-            self.logger.error("Failed to lock one or more media(s): %s",
-                              env_error_format(err))
-            sys.exit(os.EX_DATAERR)
-        finally:
-            self.client.media.unlock(results)
-
-        self.logger.info("%d media(s) locked", len(results))
+        self._set_adm_status(PHO_RSC_ADM_ST_LOCKED)
 
     def exec_unlock(self):
         """Unlock media"""
-        results = []
-        uids = NodeSet.fromlist(self.params.get('res'))
-        for uid in uids:
-            media = self.client.media.get(id=uid)
-            assert len(media) == 1
-
-            # Attempt to lock the media to avoid concurrent modifications
-            try:
-                self.client.media.lock([media[0]])
-            except EnvironmentError as err:
-                self.logger.error("Failed to lock media '%s': %s",
-                                  uid, env_error_format(err))
-                continue
-
-            media = self.client.media.get(id=uid)
-            assert len(media) == 1
-
-            if media[0].rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED:
-                self.logger.warning("Media %s is already unlocked", uid)
-
-            media[0].rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED
-            results.append(media[0])
-
-        if len(results) != len(uids):
-            self.logger.error("At least one media is in use, use --force")
-            # TODO: unlock media
-            sys.exit(os.EX_DATAERR)
-
-        try:
-            self.client.media.update(results)
-        except EnvironmentError as err:
-            self.logger.error("Failed to unlock one or more media(s): %s",
-                              env_error_format(err))
-            sys.exit(os.EX_DATAERR)
-        finally:
-            self.client.media.unlock(results)
-
-        self.logger.info("%d media(s) unlocked", len(results))
+        self._set_adm_status(PHO_RSC_ADM_ST_UNLOCKED)
 
     def exec_set_access(self):
         """Update media operations flags"""
-        results = []
+        fields = 0
+        flags = self.params.get('flags')
+        if 'put' in flags:
+            put_access = flags['put']
+            fields += PUT_ACCESS
+        else:
+            put_access = True   # unused value
+
+        if 'get' in flags:
+            get_access = flags['get']
+            fields += GET_ACCESS
+        else:
+            get_access = True   # unused value
+
+        if 'delete' in flags:
+            delete_access = flags['delete']
+            fields += DELETE_ACCESS
+        else:
+            delete_access = True   # unused value
+
         uids = NodeSet.fromlist(self.params.get('res'))
-        for uid in uids:
-            media = self.client.media.get(id=uid)
-            assert len(media) == 1
-
-            # Attempt to lock the media to avoid concurrent modifications
-            try:
-                self.client.media.lock([media[0]])
-            except EnvironmentError as err:
-                self.logger.error("Failed to lock medium '%s': %s",
-                                  uid, env_error_format(err))
-                self.client.media.unlock(results)
-                sys.exit(os.EX_DATAERR)
-
-            media = self.client.media.get(id=uid)
-            assert len(media) == 1
-
-            flags = self.params.get('flags')
-            if 'put' in flags:
-                media[0].put_access = flags['put']
-
-            if 'get' in flags:
-                media[0].get_access = flags['get']
-
-            if 'delete' in flags:
-                media[0].delete_access = flags['delete']
-
-            results.append(media[0])
-
-        try:
-            self.client.media.update(results)
-        except EnvironmentError as err:
-            self.logger.error("Failed to update access mode of one or more "
-                              "media(s): %s", env_error_format(err))
-            sys.exit(os.EX_DATAERR)
-        finally:
-            self.client.media.unlock(results)
-
-        self.logger.info("%d media(s) updated", len(results))
+        media = [MediaInfo(family=self.family, name=uid,
+                           put_access=put_access, get_access=get_access,
+                           delete_access=delete_access)
+                 for uid in uids]
+        self._media_update(media, fields)
 
     def exec_locate(self):
         """Locate a medium"""

@@ -97,7 +97,7 @@ static void add_dir_or_drive(struct admin_handle *adm, struct dss_handle *dss,
         media->flags.put = true;
         media->flags.get = true;
         media->flags.delete = true;
-        ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
+        ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT, 0));
     }
 
     /* Get dir device */
@@ -137,7 +137,7 @@ static void add_tape(struct admin_handle *adm, struct dss_handle *dss,
     media->flags.put = true;
     media->flags.get = true;
     media->flags.delete = true;
-    ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT));
+    ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT, 0));
 
     /* This can fail if the tape has already been formatted */
     phobos_admin_format(adm, &media->rsc.id, PHO_FS_LTFS, true);

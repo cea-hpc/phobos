@@ -44,6 +44,7 @@
 #include <strings.h>
 #include <assert.h>
 #include <gmodule.h>
+#include <stdint.h>
 
 /* Necessary local function declaration
  * (first two declaration are swapped because of a checkpatch bug)
@@ -447,11 +448,6 @@ static const char * const insert_full_query[] = {
 
 static const char * const update_query[] = {
     [DSS_DEVICE] = "UPDATE device SET adm_status = '%s' WHERE id = '%s';",
-    [DSS_MEDIA]  = "UPDATE media SET (family, model, adm_status,"
-                   " fs_type, address_type, fs_status, fs_label, stats, tags,"
-                   " put, get, delete) ="
-                   " ('%s', %s, '%s', '%s', '%s', '%s', %s, %s, %s, %s, %s, %s)"
-                   "  WHERE id = '%s';",
     [DSS_LAYOUT] = "UPDATE extent SET (state, lyt_info, extents) ="
                    " ('%s', '%s', '%s')"
                    " WHERE uuid = '%s' and version = %d;",
@@ -1168,9 +1164,20 @@ static inline const char *bool2sqlbool(bool b)
    return b ? "TRUE" : "FALSE";
 }
 
+static void append_media_update_request(GString *request, const char *field,
+                                        const char *field_value,
+                                        bool *first_field)
+{
+    if (!*first_field)
+        g_string_append_printf(request, " , ");
+
+    g_string_append_printf(request, field, field_value);
+    *first_field = false;
+}
+
 static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
                                 int item_cnt, enum dss_set_action action,
-                                GString *request)
+                                uint64_t fields, GString *request)
 {
     int i;
     ENTRY;
@@ -1181,7 +1188,7 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_MEDIA],
                                    p_media->rsc.id.name);
-        } else {
+        } else if (action == DSS_SET_INSERT) {
             char *medium_name = NULL;
             char *fs_label = NULL;
             char *model = NULL;
@@ -1221,50 +1228,121 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
                 LOG_RETURN(-ENOMEM, "memory allocation failed");
             }
 
-            if (action == DSS_SET_INSERT) {
-                g_string_append_printf(
-                    request,
-                    insert_query_values[DSS_MEDIA],
-                    rsc_family2str(p_media->rsc.id.family),
-                    model,
-                    medium_name,
-                    rsc_adm_status2str(p_media->rsc.adm_status),
-                    fs_type2str(p_media->fs.type),
-                    address_type2str(p_media->addr_type),
-                    fs_status2str(p_media->fs.status),
-                    fs_label,
-                    stats,
-                    tags,
-                    bool2sqlbool(put_flag),
-                    bool2sqlbool(get_flag),
-                    bool2sqlbool(delete_flag),
-                    i < item_cnt-1 ? "," : ";"
-                );
-            } else if (action == DSS_SET_UPDATE) {
-                g_string_append_printf(
-                    request,
-                    update_query[DSS_MEDIA],
-                    rsc_family2str(p_media->rsc.id.family),
-                    model,
-                    rsc_adm_status2str(p_media->rsc.adm_status),
-                    fs_type2str(p_media->fs.type),
-                    address_type2str(p_media->addr_type),
-                    fs_status2str(p_media->fs.status),
-                    fs_label,
-                    stats,
-                    tags,
-                    bool2sqlbool(put_flag),
-                    bool2sqlbool(get_flag),
-                    bool2sqlbool(delete_flag),
-                    p_media->rsc.id.name
-                );
-            }
+            g_string_append_printf(
+                request,
+                insert_query_values[DSS_MEDIA],
+                rsc_family2str(p_media->rsc.id.family),
+                model,
+                medium_name,
+                rsc_adm_status2str(p_media->rsc.adm_status),
+                fs_type2str(p_media->fs.type),
+                address_type2str(p_media->addr_type),
+                fs_status2str(p_media->fs.status),
+                fs_label,
+                stats,
+                tags,
+                bool2sqlbool(put_flag),
+                bool2sqlbool(get_flag),
+                bool2sqlbool(delete_flag),
+                i < item_cnt-1 ? "," : ";"
+            );
 
             free_dss_char4sql(medium_name);
             free_dss_char4sql(fs_label);
             free_dss_char4sql(model);
             free_dss_char4sql(stats);
             free_dss_char4sql(tags);
+        } else if (action == DSS_SET_UPDATE) {
+            bool first_field = true;
+
+            g_string_append_printf(request, "UPDATE media SET ");
+
+            /* we check the fields parameter to select updated columns */
+            if (ADM_STATUS & fields)
+                append_media_update_request(request, "adm_status = '%s'",
+                    rsc_adm_status2str(p_media->rsc.adm_status), &first_field);
+
+            if (FS_STATUS & fields)
+                append_media_update_request(request, "fs_status = '%s'",
+                                            fs_status2str(p_media->fs.status),
+                                            &first_field);
+
+            if (FS_LABEL & fields) {
+                char *fs_label = NULL;
+
+                fs_label = dss_char4sql(conn, p_media->fs.label);
+                if (!fs_label)
+                    LOG_RETURN(-EINVAL,
+                               "Failed to build FS_LABEL (%s) media update SQL "
+                               "request", p_media->fs.label);
+
+                append_media_update_request(request, "fs_label = %s", fs_label,
+                                            &first_field);
+                free_dss_char4sql(fs_label);
+            }
+
+            if (IS_STAT(fields)) {
+                char *tmp_stats = NULL;
+                char *stats = NULL;
+
+                tmp_stats = dss_media_stats_encode(p_media->stats);
+                if (!tmp_stats)
+                    LOG_RETURN(-EINVAL,
+                               "Failed to encode stats for media update");
+
+                stats = dss_char4sql(conn, tmp_stats);
+                free(tmp_stats);
+
+                if (!stats)
+                    LOG_RETURN(-EINVAL,
+                               "Failed to build stats media update SQL "
+                               "request");
+
+                append_media_update_request(request, "stats = %s", stats,
+                                            &first_field);
+                free_dss_char4sql(stats);
+            }
+
+            if (TAGS & fields) {
+                char *tmp_tags = NULL;
+                char *tags = NULL;
+
+                tmp_tags = dss_tags_encode(&p_media->tags);
+                if (!tmp_tags)
+                    LOG_RETURN(-EINVAL,
+                               "Failed to encode tags for media update");
+
+                tags = dss_char4sql(conn, tmp_tags);
+                free(tmp_tags);
+
+                if (!tags)
+                    LOG_RETURN(-EINVAL,
+                               "Failed to build tags media update SQL request");
+
+                append_media_update_request(request, "tags = %s", tags,
+                                            &first_field);
+                free_dss_char4sql(tags);
+            }
+
+            if (PUT_ACCESS & fields)
+                append_media_update_request(request, "put = %s",
+                                            bool2sqlbool(p_media->flags.put),
+                                            &first_field);
+
+            if (GET_ACCESS & fields)
+                append_media_update_request(request, "get = %s",
+                                            bool2sqlbool(p_media->flags.get),
+                                            &first_field);
+
+            if (DELETE_ACCESS & fields)
+                append_media_update_request(request, "delete = %s",
+                                            bool2sqlbool(p_media->flags.delete),
+                                            &first_field);
+
+            g_string_append_printf(request,
+                                   " WHERE family = '%s' AND id = '%s';",
+                                   rsc_family2str(p_media->rsc.id.family),
+                                   p_media->rsc.id.name);
         }
     }
 
@@ -1840,9 +1918,12 @@ out:
     return rc;
 }
 
+/**
+ * fields is only used by DSS_SET_UPDATE on DSS_MEDIA
+ */
 static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
                            void *item_list, int item_cnt,
-                           enum dss_set_action action)
+                           enum dss_set_action action, uint64_t fields)
 {
     PGconn      *conn = handle->dh_conn;
     GString     *request;
@@ -1878,7 +1959,8 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
             LOG_GOTO(out_cleanup, rc, "SQL device request failed");
         break;
     case DSS_MEDIA:
-        rc = get_media_setrequest(conn, item_list, item_cnt, action, request);
+        rc = get_media_setrequest(conn, item_list, item_cnt, action, fields,
+                                  request);
         if (rc)
             LOG_GOTO(out_cleanup, rc, "SQL media request failed");
         break;
@@ -2112,14 +2194,14 @@ int dss_device_insert(struct dss_handle *hdl, struct dev_info *dev_ls,
                       int dev_cnt)
 {
     return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
-                           DSS_SET_INSERT);
+                           DSS_SET_INSERT, 0);
 }
 
 int dss_device_delete(struct dss_handle *hdl, struct dev_info *dev_ls,
                       int dev_cnt)
 {
     return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
-                           DSS_SET_DELETE);
+                           DSS_SET_DELETE, 0);
 }
 
 int dss_device_update_adm_status(struct dss_handle *hdl,
@@ -2130,7 +2212,7 @@ int dss_device_update_adm_status(struct dss_handle *hdl,
      * This update of one field is a SQL atomic one.
      */
     return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
-                           DSS_SET_UPDATE_ADM_STATUS);
+                           DSS_SET_UPDATE_ADM_STATUS, 0);
 }
 
 static int media_update_lock_retry(struct dss_handle *hdl,
@@ -2153,20 +2235,113 @@ static int media_update_lock_retry(struct dss_handle *hdl,
     return rc;
 }
 
+/**
+ * output medium_info must be cleaned by calling dss_res_free(medium_info, 1)
+ */
+static int dss_one_medium_get_from_id(struct dss_handle *dss,
+                                      const struct pho_id *medium_id,
+                                      struct media_info **medium_info)
+{
+    struct dss_filter filter;
+    int cnt;
+    int rc;
+
+    /* get medium info from medium id */
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                              "{\"DSS::MDA::family\": \"%s\"}, "
+                              "{\"DSS::MDA::id\": \"%s\"}"
+                          "]}",
+                          rsc_family2str(medium_id->family),
+                          medium_id->name);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Unable to build filter for media family %s and name %s",
+                   rsc_family2str(medium_id->family), medium_id->name);
+
+    rc = dss_media_get(dss, &filter, medium_info, &cnt);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Error while getting medium info for family %s and name %s",
+                   rsc_family2str(medium_id->family), medium_id->name);
+
+    /* (family, id) is the primary key of the media table */
+    assert(cnt <= 1);
+
+    if (cnt == 0) {
+        pho_warn("Medium (family %s, name %s) is absent from media table",
+                 rsc_family2str(medium_id->family), medium_id->name);
+        dss_res_free(*medium_info, cnt);
+        return(-ENOENT);
+    }
+
+    return 0;
+}
+
 int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
-                  int med_cnt, enum dss_set_action action)
+                  int med_cnt, enum dss_set_action action, uint64_t fields)
 {
     int rc;
 
-    if (action == DSS_SET_UPDATE || action == DSS_SET_DELETE) {
+    if (action == DSS_SET_UPDATE && !fields) {
+        pho_warn("Tried updating media without specifying any field");
+        return 0;
+    }
+
+    /**
+     * The only set action that needs a lock is the stats update action. Indeed,
+     * we need to get the full existing stat SQL column to fill only new fields
+     * and keep old value.
+     *
+     * All other set actions (insert, delete, or update of other fields) are
+     * atomic SQL requests and don't need any lock and prefetch.
+     */
+    if (action == DSS_SET_UPDATE && IS_STAT(fields)) {
+        int i;
+
         rc = media_update_lock_retry(hdl, med_ls, med_cnt);
         if (rc)
             LOG_RETURN(rc, "Error when locking media to %s",
                        dss_set_actions_names[action]);
+
+        for (i = 0; i < med_cnt; i++) {
+            struct media_info *medium_info;
+
+            rc = dss_one_medium_get_from_id(hdl, &med_ls[i].rsc.id,
+                                            &medium_info);
+            if (rc)
+                LOG_GOTO(clean, rc,
+                         "Error on getting medium_info (family %s, name %s) to "
+                         "update stats",
+                         rsc_family2str(med_ls[i].rsc.id.family),
+                         med_ls[i].rsc.id.name);
+
+            if (NB_OBJ_ADD & fields)
+                medium_info->stats.nb_obj += med_ls[i].stats.nb_obj;
+
+            if (LOGC_SPC_USED_ADD & fields)
+                medium_info->stats.logc_spc_used +=
+                    med_ls[i].stats.logc_spc_used;
+
+            if (PHYS_SPC_USED & fields)
+                medium_info->stats.phys_spc_used =
+                    med_ls[i].stats.phys_spc_used;
+
+            if (PHYS_SPC_FREE & fields)
+                medium_info->stats.phys_spc_free =
+                    med_ls[i].stats.phys_spc_free;
+
+            med_ls[i].stats = medium_info->stats;
+            dss_res_free(medium_info, 1);
+        }
     }
 
-    rc = dss_generic_set(hdl, DSS_MEDIA, (void *)med_ls, med_cnt, action);
-    if (action == DSS_SET_UPDATE || action == DSS_SET_DELETE) {
+    rc = dss_generic_set(hdl, DSS_MEDIA, (void *)med_ls, med_cnt, action,
+                         fields);
+
+clean:
+    if (action == DSS_SET_UPDATE && IS_STAT(fields)) {
         int rc2;
 
         rc2 = dss_unlock(hdl, DSS_MEDIA_UPDATE_LOCK, med_ls, med_cnt, false);
@@ -2183,20 +2358,20 @@ int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
 int dss_layout_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
                    int lyt_cnt, enum dss_set_action action)
 {
-    return dss_generic_set(hdl, DSS_LAYOUT, (void *)lyt_ls, lyt_cnt, action);
+    return dss_generic_set(hdl, DSS_LAYOUT, (void *)lyt_ls, lyt_cnt, action, 0);
 }
 
 int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
                    int obj_cnt, enum dss_set_action action)
 {
-    return dss_generic_set(hdl, DSS_OBJECT, (void *)obj_ls, obj_cnt, action);
+    return dss_generic_set(hdl, DSS_OBJECT, (void *)obj_ls, obj_cnt, action, 0);
 }
 
 int dss_deprecated_object_set(struct dss_handle *hdl,
                               struct object_info *obj_ls, int obj_cnt,
                               enum dss_set_action action)
 {
-    return dss_generic_set(hdl, DSS_DEPREC, (void *)obj_ls, obj_cnt, action);
+    return dss_generic_set(hdl, DSS_DEPREC, (void *)obj_ls, obj_cnt, action, 0);
 }
 
 static void pho_error_oid_uuid_version(int error_code, const char *msg,
@@ -2409,40 +2584,12 @@ int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
                       char **hostname)
 {
     struct media_info *medium_info;
-    struct dss_filter filter;
-    int cnt;
     int rc;
 
     *hostname = NULL;
-
-    /* get medium info from medium id */
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                              "{\"DSS::MDA::family\": \"%s\"}, "
-                              "{\"DSS::MDA::id\": \"%s\"}"
-                          "]}",
-                          rsc_family2str(medium_id->family),
-                          medium_id->name);
+    rc = dss_one_medium_get_from_id(dss, medium_id, &medium_info);
     if (rc)
-        LOG_RETURN(rc,
-                   "Unable to build filter for media family %s and name %s",
-                   rsc_family2str(medium_id->family), medium_id->name);
-
-    rc = dss_media_get(dss, &filter, &medium_info, &cnt);
-    dss_filter_free(&filter);
-    if (rc)
-        LOG_RETURN(rc,
-                   "Error while getting medium info for family %s and name %s",
-                   rsc_family2str(medium_id->family), medium_id->name);
-
-    /* (family, id) is the primary key of the media table */
-    assert(cnt <= 1);
-
-    if (cnt == 0) {
-        pho_warn("Medium (family %s, name %s) is absent from media table",
-                 rsc_family2str(medium_id->family), medium_id->name);
-        GOTO(clean, rc = -ENOENT);
-    }
+        LOG_RETURN(rc, "Unable to get medium_info to locate");
 
     /* check ADMIN STATUS to see if the medium is available */
     if (medium_info->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED) {
@@ -2473,7 +2620,7 @@ int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
     }
 
 clean:
-    dss_res_free(medium_info, cnt);
+    dss_res_free(medium_info, 1);
     return rc;
 }
 

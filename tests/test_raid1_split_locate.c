@@ -83,10 +83,8 @@ static int rsl_clean_all_media(void **state)
         /* admin unlock and get flag to true */
         rsl_state->media[i]->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
         rsl_state->media[i]->flags.get = true;
-        /* TODO: replace by future phobos_admin_media_unlock */
-        /* TODO: replace by future phobos_admin_media_set_access */
         rc = dss_media_set(rsl_state->dss, rsl_state->media[i], 1,
-                           DSS_SET_UPDATE);
+                           DSS_SET_UPDATE, ADM_STATUS | GET_ACCESS);
         assert_return_code(rc, -rc);
     }
 
@@ -312,9 +310,8 @@ static void rsl_one_lock(void **state)
 
         /* admin lock this medium and test fall back on localhost */
         rsl_state->media[i]->rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
-        /* TODO: replace by future phobos_admin_media_lock */
         rc = dss_media_set(rsl_state->dss, rsl_state->media[i], 1,
-                           DSS_SET_UPDATE);
+                           DSS_SET_UPDATE, ADM_STATUS);
         assert_return_code(rc, -rc);
 
         /* check locate */
@@ -324,16 +321,14 @@ static void rsl_one_lock(void **state)
         free(hostname);
 
         rsl_state->media[i]->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
-        /* TODO: replace by future phobos_admin_media_unlock */
         rc = dss_media_set(rsl_state->dss, rsl_state->media[i], 1,
-                           DSS_SET_UPDATE);
+                           DSS_SET_UPDATE, ADM_STATUS);
         assert_return_code(rc, -rc);
 
         /* set operation get flag to false and test fallback on local host */
         rsl_state->media[i]->flags.get = false;
-        /* TODO: replace by future phobos_admin_media_set_access */
         rc = dss_media_set(rsl_state->dss, rsl_state->media[i], 1,
-                           DSS_SET_UPDATE);
+                           DSS_SET_UPDATE, GET_ACCESS);
         assert_return_code(rc, -rc);
 
         /* check locate */
@@ -343,9 +338,8 @@ static void rsl_one_lock(void **state)
         free(hostname);
 
         rsl_state->media[i]->flags.get = true;
-        /* TODO: replace by future phobos_admin_media_set_access */
         rc = dss_media_set(rsl_state->dss, rsl_state->media[i], 1,
-                           DSS_SET_UPDATE);
+                           DSS_SET_UPDATE, GET_ACCESS);
         assert_return_code(rc, -rc);
 
         /* unlock */
@@ -382,11 +376,10 @@ static void rsl_one_lock_one_not_avail(void **state)
         assert_return_code(rc, -rc);
 
         /* operation get flag to false on second split medium */
-        /* TODO: replace by future phobos_admin_media_set_access */
         rsl_state->media[i + rsl_state->repl_count]->flags.get = false;
         rc = dss_media_set(rsl_state->dss,
                            rsl_state->media[i + rsl_state->repl_count], 1,
-                           DSS_SET_UPDATE);
+                           DSS_SET_UPDATE, GET_ACCESS);
         assert_return_code(rc, -rc);
 
         /* check locate */
@@ -427,11 +420,10 @@ static void rsl_one_lock_one_not_avail(void **state)
         assert_in_set(rc, ok_or_enolock, 2);
 
         /* operation get flag to true */
-        /* TODO: replace by future phobos_admin_media_set_access */
         rsl_state->media[i + rsl_state->repl_count]->flags.get = true;
         rc = dss_media_set(rsl_state->dss,
                            rsl_state->media[i + rsl_state->repl_count], 1,
-                           DSS_SET_UPDATE);
+                           DSS_SET_UPDATE, GET_ACCESS);
         assert_return_code(rc, -rc);
     }
 }

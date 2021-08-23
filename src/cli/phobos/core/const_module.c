@@ -250,6 +250,13 @@ PyMODINIT_FUNC PyInit_const(void)
     PyModule_AddIntMacro(mod, DSS_DEVICE);
     PyModule_AddIntMacro(mod, DSS_MEDIA);
 
+    /* Media update bit fields */
+    PyModule_AddIntMacro(mod, ADM_STATUS);
+    PyModule_AddIntMacro(mod, TAGS);
+    PyModule_AddIntMacro(mod, PUT_ACCESS);
+    PyModule_AddIntMacro(mod, GET_ACCESS);
+    PyModule_AddIntMacro(mod, DELETE_ACCESS);
+
     /* enum pho_xfer_flags */
     PyModule_AddIntMacro(mod, PHO_XFER_OBJ_REPLACE);
     PyModule_AddIntMacro(mod, PHO_XFER_OBJ_BEST_HOST);

@@ -2110,6 +2110,7 @@ static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
     int                  rc2;
     struct ldm_fs_space  spc = {0};
     struct fs_adapter    fsa;
+    uint64_t             fields = 0;
 
     ENTRY;
 
@@ -2139,19 +2140,23 @@ static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
     /* Systematically use the media ID as filesystem label */
     strncpy(media_info->fs.label, id->name, sizeof(media_info->fs.label));
     media_info->fs.label[sizeof(media_info->fs.label) - 1] = '\0';
+    fields |= FS_LABEL;
 
     media_info->stats.phys_spc_used = spc.spc_used;
     media_info->stats.phys_spc_free = spc.spc_avail;
+    fields |= PHYS_SPC_USED | PHYS_SPC_FREE;
 
     /* Post operation: update media information in DSS */
     media_info->fs.status = PHO_FS_STATUS_EMPTY;
+    fields |= FS_STATUS;
 
     if (unlock) {
         pho_verb("Unlocking media '%s'", id->name);
         media_info->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
+        fields |= ADM_STATUS;
     }
 
-    rc = dss_media_set(&sched->dss, media_info, 1, DSS_SET_UPDATE);
+    rc = dss_media_set(&sched->dss, media_info, 1, DSS_SET_UPDATE, fields);
     if (rc != 0)
         LOG_GOTO(err_out, rc, "Failed to update state of media '%s'",
                  id->name);
@@ -2231,7 +2236,7 @@ retry:
 
         media->fs.status = PHO_FS_STATUS_FULL;
 
-        rc = dss_media_set(&sched->dss, media, 1, DSS_SET_UPDATE);
+        rc = dss_media_set(&sched->dss, media, 1, DSS_SET_UPDATE, FS_STATUS);
         if (rc)
             LOG_GOTO(err_cleanup, rc, "Cannot update media information");
 
@@ -2301,7 +2306,13 @@ static int sched_media_update(struct lrs_sched *sched,
     struct ldm_fs_space  spc = {0};
     struct fs_adapter    fsa;
     enum fs_type         fs_type = media_info->fs.type;
+    uint64_t             fields = 0;
     int                  rc;
+
+    /* do we have an update to do ? */
+    if (!(size_written || media_info->fs.status == PHO_FS_STATUS_EMPTY ||
+        is_full || media_info->stats.phys_spc_free == 0))
+        return 0;
 
     rc = get_fs_adapter(fs_type, &fsa);
     if (rc)
@@ -2313,24 +2324,32 @@ static int sched_media_update(struct lrs_sched *sched,
         LOG_RETURN(rc, "Cannot retrieve media usage information");
 
     if (size_written) {
-        media_info->stats.nb_obj += 1;
+        media_info->stats.nb_obj = 1;
         media_info->stats.phys_spc_used = spc.spc_used;
         media_info->stats.phys_spc_free = spc.spc_avail;
+        fields |= NB_OBJ_ADD | PHYS_SPC_USED | PHYS_SPC_FREE;
 
-        if (media_rc == 0)
-            media_info->stats.logc_spc_used += size_written;
+        if (media_rc == 0) {
+            media_info->stats.logc_spc_used = size_written;
+            fields |= LOGC_SPC_USED_ADD;
+        }
     }
 
-    if (media_info->fs.status == PHO_FS_STATUS_EMPTY)
+    if (media_info->fs.status == PHO_FS_STATUS_EMPTY) {
         media_info->fs.status = PHO_FS_STATUS_USED;
+        fields |= FS_STATUS;
+    }
 
-    if (is_full || media_info->stats.phys_spc_free == 0)
+    if (is_full || media_info->stats.phys_spc_free == 0) {
         media_info->fs.status = PHO_FS_STATUS_FULL;
+        fields |= FS_STATUS;
+    }
 
     /* TODO update nb_load, nb_errors, last_load */
 
     /* @FIXME: this DSS update could be done when releasing the media */
-    rc = dss_media_set(&sched->dss, media_info, 1, DSS_SET_UPDATE);
+    assert(fields);
+    rc = dss_media_set(&sched->dss, media_info, 1, DSS_SET_UPDATE, fields);
     if (rc)
         LOG_RETURN(rc, "Cannot update media information");
 
@@ -2364,7 +2383,7 @@ static int sched_io_complete(struct lrs_sched *sched,
         is_full = true;
 
     rc = sched_media_update(sched, media_info, size_written, media_rc, fsroot,
-                          is_full);
+                            is_full);
     if (rc)
         LOG_RETURN(rc, "Cannot update media information");
 

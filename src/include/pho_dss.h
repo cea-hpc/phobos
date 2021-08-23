@@ -188,6 +188,24 @@ static inline const char *dss_fields_pub2implem(const char *public_name)
     return NULL;
 }
 
+/**
+ * Media update bits fields : 64 bits are available
+ */
+#define ADM_STATUS          (1<<0)
+#define FS_STATUS           (1<<1)
+#define FS_LABEL            (1<<2)
+#define NB_OBJ_ADD          (1<<3)
+#define LOGC_SPC_USED_ADD   (1<<4)
+#define PHYS_SPC_USED       (1<<5)
+#define PHYS_SPC_FREE       (1<<6)
+#define TAGS                (1<<7)
+#define PUT_ACCESS          (1<<8)
+#define GET_ACCESS          (1<<9)
+#define DELETE_ACCESS       (1<<10)
+
+#define IS_STAT(_f) ((NB_OBJ_ADD | LOGC_SPC_USED_ADD | PHYS_SPC_USED |      \
+                      PHYS_SPC_FREE) & _f)
+
 struct dss_filter {
     json_t  *df_json;
 };
@@ -347,11 +365,12 @@ int dss_device_update_adm_status(struct dss_handle *hdl,
  * @param[in]  med_ls   array of entries to store
  * @param[in]  med_cnt  number of items in the list
  * @param[in]  action   operation code (insert, update, delete)
+ * @param[in]  fields   fields to update (ignored for insert and delete)
  *
  * @return 0 on success, negated errno on failure
  */
 int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
-                  int med_cnt, enum dss_set_action action);
+                  int med_cnt, enum dss_set_action action, uint64_t fields);
 
 /**
  * Store information for one or many layouts in DSS.

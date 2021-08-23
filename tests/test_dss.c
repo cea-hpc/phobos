@@ -69,7 +69,8 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
 }
 
 static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
-                           void *item_list, int n, enum dss_set_action action)
+                           void *item_list, int n, enum dss_set_action action,
+                           uint64_t fields)
 {
     switch (type) {
     case DSS_OBJECT:
@@ -97,7 +98,7 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         }
     case DSS_MEDIA:
         return dss_media_set(handle, (struct media_info *)item_list, n,
-                             action);
+                             action, fields);
     default:
         return -ENOTSUP;
     }
@@ -268,6 +269,8 @@ int main(int argc, char **argv)
             }
         }
     } else if (!strcmp(argv[1], "set")) {
+        uint64_t fields = 0;
+
         type = str2dss_type(argv[2]);
 
         if (type == DSS_INVAL) {
@@ -315,7 +318,8 @@ int main(int argc, char **argv)
                     pho_id_name_set(&media->rsc.id, s);
                     free(s);
                 } else if (action == DSS_SET_UPDATE) {
-                    media->stats.nb_obj += 1000;
+                    media->stats.nb_obj = 1000;
+                    fields |= NB_OBJ_ADD;
                 }
             }
             break;
@@ -357,7 +361,8 @@ int main(int argc, char **argv)
             abort();
         }
 
-        rc = dss_generic_set(&dss_handle, type, item_list, item_cnt, action);
+        rc = dss_generic_set(&dss_handle, type, item_list, item_cnt, action,
+                             fields);
         if (rc) {
             pho_error(rc, "dss_set failed");
             exit(EXIT_FAILURE);

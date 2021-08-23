@@ -288,11 +288,10 @@ class MediaAddTest(BasicExecutionTest):
 
         request = "insert into lock (type, id, hostname, owner) values \
                     (\'media\'::lock_type, \'update0\', \'dummy\', 1337);"
-        # Check that locked tapes cannot be updated
+        # Check that locked tapes can be updated
         os.system('psql phobos phobos -c "' + request + '"')
         try:
-            self.pho_execute(['tape', 'update', '-T', '', 'update0'],
-                             code=os.EX_DATAERR)
+            self.pho_execute(['tape', 'update', '-T', '', 'update0'])
         finally:
             os.system('psql phobos phobos -c "delete from lock where \
                                               type = \'media\'::lock_type \

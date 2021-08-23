@@ -96,7 +96,7 @@ static int paml_eacces_setup(void **state)
     medium_info.rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
 
     /* insert medium */
-    if (dss_media_set(&adm->dss, &medium_info, 1, DSS_SET_INSERT))
+    if (dss_media_set(&adm->dss, &medium_info, 1, DSS_SET_INSERT, 0))
         return -1;
 
     return 0;
@@ -131,7 +131,7 @@ static int paml_eperm_setup(void **state)
     medium_info.flags.get = false;
 
     /* insert medium */
-    if (dss_media_set(&adm->dss, &medium_info, 1, DSS_SET_INSERT))
+    if (dss_media_set(&adm->dss, &medium_info, 1, DSS_SET_INSERT, 0))
         return -1;
 
     return 0;
@@ -165,7 +165,7 @@ static int paml_ok_free_setup(void **state)
     fill_medium_info(&medium_info, free_medium);
 
     /* insert medium */
-    if (dss_media_set(&adm->dss, &medium_info, 1, DSS_SET_INSERT))
+    if (dss_media_set(&adm->dss, &medium_info, 1, DSS_SET_INSERT, 0))
         return -1;
 
     return 0;
@@ -208,7 +208,7 @@ static int paml_ok_lock_setup(void **state)
     fill_medium_info(&medium_info, locked_medium);
 
     /* insert medium */
-    if (dss_media_set(&adm->dss, &medium_info, 1, DSS_SET_INSERT))
+    if (dss_media_set(&adm->dss, &medium_info, 1, DSS_SET_INSERT, 0))
         return -1;
 
     /* lock medium */

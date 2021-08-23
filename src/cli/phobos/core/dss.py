@@ -224,11 +224,12 @@ class MediaManager(BaseEntityManager):
         """Invoke media-specific DSS get method."""
         return LIBPHOBOS.dss_media_get(hdl, qry_filter, res, res_cnt)
 
-    def _dss_set(self, hdl, media, media_cnt, opcode):
+    def _dss_set(self, hdl, media, media_cnt, opcode, fields):
+        #pylint: disable=too-many-arguments,no-self-use
         """Invoke media-specific DSS set method."""
-        return LIBPHOBOS.dss_media_set(hdl, media, media_cnt, opcode)
+        return LIBPHOBOS.dss_media_set(hdl, media, media_cnt, opcode, fields)
 
-    def _generic_set(self, media, opcode):
+    def _generic_set(self, media, opcode, fields=0):
         """Common operation to wrap dss_media_set()"""
         if not media:
             return
@@ -238,7 +239,8 @@ class MediaManager(BaseEntityManager):
         for i, elt in enumerate(media):
             med[i] = elt
 
-        rc = self._dss_set(byref(self.client.handle), med, med_cnt, opcode)
+        rc = self._dss_set(byref(self.client.handle), med, med_cnt, opcode,
+                           fields)
         if rc:
             raise EnvironmentError(rc, "Cannot issue set request")
 
@@ -246,9 +248,9 @@ class MediaManager(BaseEntityManager):
         """Insert media into DSS"""
         self._generic_set(media, DSS_SET_INSERT)
 
-    def update(self, media):
+    def update(self, media, fields):
         """Update media in DSS"""
-        self._generic_set(media, DSS_SET_UPDATE)
+        self._generic_set(media, DSS_SET_UPDATE, fields)
 
     def delete(self, media):
         """Delete media from DSS"""
