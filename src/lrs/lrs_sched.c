@@ -684,16 +684,16 @@ static void dev_descr_fini(gpointer ptr)
  */
 static int sched_clean_device_locks(struct lrs_sched *sched)
 {
-    (void) sched;
+    int rc;
+
     ENTRY;
 
-    /**
-     * TODO : when hosts will be directly accessible into lock, get list of
-     * device locks from this host and unlock them if DSS device host is not
-     * self host.
-     */
+    rc = dss_lock_device_clean(&sched->dss, rsc_family_names[sched->family],
+                               sched->lock_hostname, sched->lock_owner);
+    if (rc)
+        pho_error(rc, "Failed to clean device locks");
 
-    return 0;
+    return rc;
 }
 
 /**
@@ -706,16 +706,34 @@ static int sched_clean_device_locks(struct lrs_sched *sched)
  */
 static int sched_clean_medium_locks(struct lrs_sched *sched)
 {
-    (void) sched;
+    struct media_info *media = NULL;
+    int cnt = 0;
+    int rc;
+    int i;
+
     ENTRY;
 
-    /**
-     * TODO : when hosts will be directly accessible into lock, get list of
-     * media locks from this host and unlock them if their are not loaded into
-     * a device currently loaded into this sched.
-     */
+    media = malloc(sched->devices->len * sizeof(*media));
+    if (!media)
+        LOG_RETURN(-errno, "Failed to allocate media list");
 
-    return 0;
+    for (i = 0; i < sched->devices->len; i++) {
+        struct media_info *mda = g_array_index(sched->devices,
+                                               struct dev_descr,
+                                               i).dss_media_info;
+        if (mda) {
+            media[i] = *mda;
+            cnt++;
+        }
+    }
+
+    rc = dss_lock_media_clean(&sched->dss, media, cnt,
+                              sched->lock_hostname, sched->lock_owner);
+    if (rc)
+        pho_error(rc, "Failed to clean media locks");
+
+    free(media);
+    return rc;
 }
 
 int sched_init(struct lrs_sched *sched, enum rsc_family family)

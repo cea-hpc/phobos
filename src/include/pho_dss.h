@@ -571,4 +571,39 @@ int dss_lock_status(struct dss_handle *handle, enum dss_type type,
                     const void *item_list, int item_cnt,
                     struct pho_lock *locks);
 
+/**
+ * Clean locks based on hostname and type.
+ *
+ * The function will attempt to clean all device locks not owned by the
+ * device's host and with a different owner.
+ *
+ * @param[in]   handle          DSS handle.
+ * @param[in]   lock_family     Family of the locks to clean.
+ * @param[in]   lock_hostname   Hostname owning the locks to clean.
+ * @param[in]   lock_owner      Owner whose locks shouldn't be removed.
+ *
+ * @return                      0 on success
+ */
+int dss_lock_device_clean(struct dss_handle *handle, const char *lock_family,
+                          const char *lock_hostname, int lock_owner);
+
+/**
+ * Clean media locks based on hostname and owner.
+ *
+ * The function will attempt to clean all media locks having a certain
+ * hostname and owner that shouldn't be locked.
+ *
+ * @param[in]   handle          DSS handle.
+ * @param[in]   media           List of media that are actually locked and
+ *                              shouldn't be modified.
+ * @param[in]   media_cnt       Number of ressources actually locked.
+ * @param[in]   lock_hostname   Hostname owning the locks to clean.
+ * @param[in]   lock_owner      Owner whose locks shouldn't be removed.
+ *
+ * @return                      0 on success
+ */
+int dss_lock_media_clean(struct dss_handle *handle,
+                         const struct media_info *media, int media_cnt,
+                         const char *lock_hostname, int lock_owner);
+
 #endif

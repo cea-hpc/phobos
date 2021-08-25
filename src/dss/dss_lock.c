@@ -89,6 +89,8 @@ enum lock_query_idx {
     DSS_UNLOCK_QUERY,
     DSS_UNLOCK_FORCE_QUERY,
     DSS_STATUS_QUERY,
+    DSS_CLEAN_DEVICE_QUERY,
+    DSS_CLEAN_MEDIA_QUERY,
 };
 
 #define DECLARE_BLOCK " DECLARE lock_type lock_type:= '%s'::lock_type;" \
@@ -143,7 +145,21 @@ static const char * const lock_query[] = {
                                "   WHERE type = lock_type AND id = lock_id;"
                                "END $$;",
     [DSS_STATUS_QUERY]       = "SELECT hostname, owner, timestamp FROM lock "
-                               "  WHERE type = '%s'::lock_type AND id = '%s';"
+                               "  WHERE type = '%s'::lock_type AND id = '%s';",
+    [DSS_CLEAN_DEVICE_QUERY] = "WITH id_host AS (SELECT id, host FROM device "
+                               "                   WHERE family = '%s') "
+                               "DELETE FROM lock "
+                               "  WHERE type = 'device'::lock_type "
+                               "    AND id IN (SELECT id FROM id_host) "
+                               "    AND hostname = '%s'"
+                               "    AND (hostname != "
+                               "           (SELECT host FROM id_host "
+                               "              WHERE lock.id = id_host.id) "
+                               "         OR owner != %d);",
+    [DSS_CLEAN_MEDIA_QUERY]  = "DELETE FROM lock "
+                               "  WHERE type = 'media'::lock_type "
+                               "    AND hostname = '%s' "
+                               "    AND owner != %d AND id NOT IN (%s);"
 };
 
 static const char *dss_translate(enum dss_type type, const void *item_list,
@@ -514,4 +530,58 @@ int dss_lock_status(struct dss_handle *handle, enum dss_type type,
     };
 
     return dss_generic(handle, type, item_list, item_cnt, &callee);
+}
+
+int dss_lock_device_clean(struct dss_handle *handle, const char *lock_family,
+                          const char *lock_hostname, int lock_owner)
+{
+    GString *request = g_string_new("");
+    PGconn *conn = handle->dh_conn;
+    PGresult *res;
+    int rc = 0;
+
+    ENTRY;
+
+    g_string_printf(request, lock_query[DSS_CLEAN_DEVICE_QUERY],
+                    lock_family, lock_hostname, lock_owner);
+    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
+
+    PQclear(res);
+    g_string_free(request, true);
+
+    return rc;
+}
+
+int dss_lock_media_clean(struct dss_handle *handle,
+                         const struct media_info *media, int media_cnt,
+                         const char *lock_hostname, int lock_owner)
+{
+    GString *request = g_string_new("");
+    GString *ids = g_string_new("");
+    PGconn *conn = handle->dh_conn;
+    PGresult *res;
+    int rc = 0;
+    int i;
+
+    ENTRY;
+
+    if (media_cnt == 0) {
+        g_string_append(ids, "''");
+    } else {
+        for (i = 0; i < media_cnt; ++i) {
+            g_string_append_printf(ids, "'%s'", media[i].rsc.id.name);
+            if (i + 1 < media_cnt)
+                g_string_append(ids, ", ");
+        }
+    }
+
+    g_string_printf(request, lock_query[DSS_CLEAN_MEDIA_QUERY],
+                    lock_hostname, lock_owner, ids->str);
+    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
+
+    PQclear(res);
+    g_string_free(request, true);
+    g_string_free(ids, true);
+
+    return rc;
 }

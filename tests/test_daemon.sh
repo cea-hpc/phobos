@@ -100,11 +100,58 @@ function test_recover_dir_old_locks
     drop_tables
 }
 
+function test_remove_invalid_media_locks
+{
+    setup_tables
+
+    dir0=$(mktemp -d /tmp/test_remove_invalid_media_locksXXX)
+
+    host=`hostname`
+    pid=$BASHPID
+
+    # Update media to lock them by a 'daemon instance'
+    # Only one is locked by this host
+    psql phobos phobos -c \
+        "insert into device (family, model, id, host, adm_status, path)
+            values ('dir', NULL, 'blob:${dir0}', 'blob', 'unlocked',
+                    '${dir0}');"
+    psql phobos phobos -c \
+        "insert into media (family, model, id, adm_status, fs_type,
+                            address_type, fs_status, stats, tags)
+            values ('dir', NULL, '${dir0}', 'unlocked', 'POSIX', 'HASH1',
+                    'blank', '{\"nb_obj\":0, \"logc_spc_used\":0, \
+                               \"phys_spc_used\":0, \"phys_spc_free\":1024, \
+                               \"nb_load\":0, \"nb_errors\":0, \
+                               \"last_load\":0}', '[]');"
+    psql phobos phobos -c \
+        "insert into lock (type, id, hostname, owner)
+            values ('media'::lock_type, '${dir0}', '$host', $pid);"
+
+    # Start and stop the lrs daemon
+    PHOBOS_LRS_families="dir" timeout --preserve-status 10 $phobosd -i &
+    daemon_process=$!
+
+    wait $daemon_process && true
+    rc=$?
+    rmdir ${dir0}
+
+    # check return status
+    test $rc -eq 0 ||
+        error "Daemon process returns an error status : ${rc}"
+
+    # Check only the lock of the correct hostname is released
+    lock=$($phobos dir list -o lock_hostname ${dir0})
+    [ "None" == "$lock" ] || error "${dir0} should be unlocked"
+
+    drop_tables
+}
+
 function test_recover_drive_old_locks
 {
     setup_tables
 
     $phobos drive add --unlock /dev/st[0-1]
+
     host=`hostname`
     pid=$BASHPID
 
@@ -136,8 +183,51 @@ function test_recover_drive_old_locks
     [ "None" == "$lock" ] || error "Device should be unlocked"
 
     lock=$($phobos drive list -o lock_hostname /dev/st1)
-    [ "${host}other" == "$lock" ] ||
-        error "Device should be locked"
+    [ "${host}other" == "$lock" ] || error "Device should be locked"
+
+    drop_tables
+}
+
+
+function test_remove_invalid_device_locks
+{
+    setup_tables
+
+    $phobos drive add --unlock /dev/st0
+
+    host=`hostname`
+    pid=$BASHPID
+    fake_host="blob"
+
+    dev_st0_id=$($phobos drive list -o name /dev/st0)
+    dev_st1_model=$($phobos drive list -o model /dev/st0)
+    dev_st1_id="fake_id_remove_invalid_device_locks"
+
+    psql phobos phobos -c \
+        "insert into device (family, model, id, host, adm_status, path)
+            values ('tape', '$dev_st1_model', '$dev_st1_id', '$fake_host',
+                    'unlocked', '/dev/st1');"
+    psql phobos phobos -c \
+        "insert into lock (type, id, hostname, owner)
+            values ('device'::lock_type, '$dev_st1_id', '$host', $pid);"
+
+    # Start and stop the lrs daemon
+    PHOBOS_LRS_families="tape" timeout --preserve-status 10 $phobosd -i &
+    daemon_process=$!
+
+    wait $daemon_process && true
+    rc=$?
+
+    # check return status
+    test $rc -eq 0 ||
+        error "Daemon process returns an error status : ${rc}"
+
+    # Check only the lock of the correct hostname is released
+    lock=$($phobos drive list -o lock_hostname /dev/st0)
+    [ "None" == "$lock" ] || error "Dir should be unlocked"
+
+    lock=$($phobos drive list -o lock_hostname /dev/st1)
+    [ "None" == "$lock" ] || error "Dir should be unlocked"
 
     drop_tables
 }
@@ -145,9 +235,11 @@ function test_recover_drive_old_locks
 drop_tables
 test_multiple_instances
 test_recover_dir_old_locks
+test_remove_invalid_media_locks
 
 # Tape tests are available only if /dev/changer exists, which is the entry
 # point for the tape library.
 if [[ -w /dev/changer ]]; then
     test_recover_drive_old_locks
+    test_remove_invalid_device_locks
 fi
