@@ -169,7 +169,7 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
  *
  * - objuuid: uuid of the object to retrieve
  *            if not NULL, this field is duplicated internally and freed by
- *            pho_xfer_desc_destroy(). The caller have to make sure to keep
+ *            pho_xfer_desc_clean(). The caller have to make sure to keep
  *            a copy of this pointer if it needs to be freed.
  *            if NULL and there is an object alive, get the current generation
  *            if NULL and there is no object alive, check the deprecated
@@ -283,10 +283,12 @@ int phobos_locate(const char *obj_id, const char *uuid, int version,
                   char **hostname);
 
 /**
- * Free tags and attributes resources associated with this xfer,
- * as they are allocated in phobos.
+ * Clean a pho_xfer_desc structure by freeing the uuid and attributes, and
+ * the tags in case the xfer corresponds to a PUT operation.
+ *
+ * @param[in]   xfer        The xfer structure to clean.
  */
-void pho_xfer_desc_destroy(struct pho_xfer_desc *xfer);
+void pho_xfer_desc_clean(struct pho_xfer_desc *xfer);
 
 /**
  * Retrieve the objects that match the given pattern and metadata.

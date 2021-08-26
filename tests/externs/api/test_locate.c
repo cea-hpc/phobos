@@ -100,7 +100,7 @@ static int local_setup(void **state, char *oid)
     xfer_desc_close_fd(&xfer);
     assert_return_code(rc, -rc);
     assert_return_code(xfer.xd_rc, -xfer.xd_rc);
-    pho_xfer_desc_destroy(&xfer);
+    pho_xfer_desc_clean(&xfer);
 
     /* get object info */
     rc = phobos_store_object_list((const char **)&oid, 1,
@@ -289,7 +289,7 @@ static void pl(void **state)
     /* move object to deprecated table */
     xfer.xd_objid = obj->oid;
     rc = phobos_delete(&xfer, 1);
-    pho_xfer_desc_destroy(&xfer);
+    pho_xfer_desc_clean(&xfer);
     assert_return_code(rc, -rc);
 
     /* check ENOENT from deprecated table */

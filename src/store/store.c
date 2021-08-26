@@ -791,10 +791,9 @@ static int object_info_copy_into_xfer(struct object_info *obj,
     int rc;
 
     /** XXX: This is a temporary fix as the uuid and attrs may already exist
-     * before we copy them into the xfer. Despite the name, this only free the
-     * uuid and attrs.
+     * before they are copied, so we free them beforehand.
      */
-    pho_xfer_desc_destroy(xfer);
+    pho_xfer_desc_clean(xfer);
 
     rc = pho_json_to_attrs(&xfer->xd_attrs, obj->user_md);
     if (rc)
@@ -1309,7 +1308,7 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
         xfers[i].xd_rc = 0;
         /* If the uuid is given by the user, we don't own that memory.
          * The simplest solution is to duplicate it here so that it can
-         * be freed at the end by pho_xfer_desc_destroy().
+         * be freed at the end by pho_xfer_desc_clean().
          *
          * The user of this function must free any allocated string passed to
          * the xfer.
@@ -1433,7 +1432,7 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers)
     return phobos_xfer(xfers, num_xfers, NULL, NULL);
 }
 
-void pho_xfer_desc_destroy(struct pho_xfer_desc *xfer)
+void pho_xfer_desc_clean(struct pho_xfer_desc *xfer)
 {
     if (xfer->xd_op == PHO_XFER_OP_PUT)
         tags_free(&xfer->xd_params.put.tags);
