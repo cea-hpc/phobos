@@ -69,6 +69,7 @@ function test_delete
     return 0
 }
 
+drop_tables
 setup_tables
 invoke_daemon
 trap cleanup EXIT

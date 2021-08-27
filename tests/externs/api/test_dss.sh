@@ -23,7 +23,7 @@ set -e
 test_bin_dir=$(dirname "${BASH_SOURCE[0]}")
 test_bin="$test_bin_dir/test_dss"
 
-. $test_bin_dir/setup_db.sh
+. $test_bin_dir/../../setup_db.sh
 
 function clean_test
 {

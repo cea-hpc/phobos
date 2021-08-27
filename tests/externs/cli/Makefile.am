@@ -22,7 +22,8 @@ check_PROGRAMS=medium_locker
 
 check_SCRIPTS=test_delete.sh test_undelete.sh test_put.sh test_object_list.sh \
 	          test_extent_list.sh test_ping.sh test_overwrite.sh \
-	          test_locate.sh test_get.sh
+	          test_locate.sh test_get.sh test_resource_availability.sh \
+	          test_tag_update.sh test_media_operation_flags.sh
 
 TESTS=$(check_SCRIPTS)
 

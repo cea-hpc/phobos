@@ -29,6 +29,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
+. $test_dir/../../tape_drive.sh
 
 function dir_setup
 {
@@ -177,6 +178,8 @@ function test_overwrite_lyt_params
 
 function test_overwrite_family
 {
+    drain_all_drives
+
     $phobos drive add --unlock /dev/st0 ||
         error "Drive /dev/st0 should have been added"
 

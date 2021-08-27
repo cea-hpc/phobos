@@ -22,7 +22,7 @@ set -e
 
 test_bin_dir=$(dirname "${BASH_SOURCE[0]}")
 
-. $test_bin_dir/test_env.sh
+. $test_bin_dir/../../test_env.sh
 . $test_bin_dir/setup_db.sh
 . $test_bin_dir/test_launch_daemon.sh
 

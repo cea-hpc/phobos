@@ -40,7 +40,7 @@ TEST_FILES="$TEST_FILES $TEST_RAND"
 test_bin_dir=$(dirname $(readlink -e $0))
 test_bin="$test_bin_dir/test_store"
 
-. $test_bin_dir/test_env.sh
+. $test_bin_dir/../../test_env.sh
 . $test_bin_dir/setup_db.sh
 . $test_bin_dir/test_launch_daemon.sh
 

@@ -214,7 +214,7 @@ int main(int argc, char **argv)
     char                   *default_family;
     char                    dst_path[256];
 
-    assert(system("./setup_db.sh drop_tables setup_tables") == 0);
+    assert(system("../../setup_db.sh drop_tables setup_tables") == 0);
     test_env_initialize();
     pho_cfg_init_local(NULL);
 
