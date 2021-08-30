@@ -39,9 +39,9 @@ LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
 
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/test_env.sh
-. $test_dir/setup_db.sh
-. $test_dir/test_launch_daemon.sh
+. $test_dir/../../test_env.sh
+. $test_dir/../../setup_db.sh
+. $test_dir/../../test_launch_daemon.sh
 
 test_raid1_split_locate_bin=$test_dir/test_raid1_split_locate
 

@@ -22,8 +22,8 @@
 set -xe
 
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/test_env.sh
-. $test_dir/setup_db.sh
+. $test_dir/../../test_env.sh
+. $test_dir/../../setup_db.sh
 
 export PHOBOS_LRS_lock_file="$test_bin_dir/phobosd.lock"
 

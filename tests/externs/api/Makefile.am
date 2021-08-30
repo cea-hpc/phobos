@@ -13,6 +13,7 @@ COMMUNICATION_LIB=$(TO_SRC)/communication/libpho_comm.la
 DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
 LAYOUT_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la
+RAID1_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 
@@ -31,7 +32,8 @@ check_PROGRAMS=test_locate \
 	           test_delete \
 	           test_bad_comm \
 	           test_store_retry \
-	           test_store
+	           test_store \
+	           test_raid1_split_locate
 
 check_SCRIPTS=test_locate.sh \
 	          test_scsi.sh \
@@ -40,7 +42,8 @@ check_SCRIPTS=test_locate.sh \
 	          test_delete.sh \
 	          test_bad_comm.sh \
 	          test_store_retry.sh \
-	          test_layouts.sh
+	          test_layouts.sh \
+	          test_raid1_split_locate.sh
 
 TESTS=$(check_SCRIPTS)
 
@@ -75,3 +78,7 @@ test_store_retry_CFLAGS=-I$(TO_TEST)
 test_store_SOURCES=test_store.c
 test_store_LDADD=$(STORE_LIB)
 test_store_CFLAGS=-I$(TO_TEST)
+
+test_raid1_split_locate_SOURCES=test_raid1_split_locate.c
+test_raid1_split_locate_LDADD=$(CFG_LIB) $(COMMON_LIB) $(DSS_LIB) $(RAID1_LIB)
+test_raid1_split_locate_CFLAGS=-I$(TO_TEST)
