@@ -36,7 +36,7 @@ TEST_EXTENSIONS=.sh
 check_PROGRAMS=test_raid1_split_locate
 
 # List of scripts which will be directly tested by make check
-tests_sh=acceptance.sh raid1_simple_split.sh raid1_split.sh test_daemon.sh
+tests_sh=acceptance.sh test_raid1_split_locate.sh test_daemon.sh
 
 # List of scripts
 check_SCRIPTS=$(tests_sh) setup_db.sh test_env.sh test_launch_daemon.sh

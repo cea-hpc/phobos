@@ -124,12 +124,6 @@ trap cleanup EXIT
 # put file
 $LOG_VALG $phobos --verbose put $IN_FILE $OBJECT
 
-# get file
-$LOG_VALG $phobos --verbose get $OBJECT $OUT_FILE
-
-# check got file
-cmp $IN_FILE $OUT_FILE
-
 # test locate
 $test_raid1_split_locate_bin $OBJECT
 

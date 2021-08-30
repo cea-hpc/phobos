@@ -37,9 +37,9 @@ LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
 
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/test_env.sh
-. $test_dir/setup_db.sh
-. $test_dir/test_launch_daemon.sh
+. $test_dir/../../test_env.sh
+. $test_dir/../../setup_db.sh
+. $test_dir/../../test_launch_daemon.sh
 
 IN_FILE=$(mktemp /tmp/test.pho.XXXX)
 OUT_FILE=$(mktemp /tmp/test.pho.XXXX)
@@ -126,6 +126,10 @@ unset PHOBOS_LAYOUT_RAID1_repl_count
 export PHOBOS_STORE_default_lyt_params="repl_count=1"
 check_put_get raid1_simple_split_test2
 unset PHOBOS_LAYOUT_default_lyt_params
+
+export PHOBOS_LAYOUT_RAID1_repl_count=2
+check_put_get raid1_simple_split_test3
+unset PHOBOS_LAYOUT_RAID1_repl_count
 
 trap - EXIT
 cleanup || true
