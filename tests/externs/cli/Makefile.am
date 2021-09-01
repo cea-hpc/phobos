@@ -6,8 +6,6 @@ TO_TEST=../../
 AM_CFLAGS=$(CC_OPT) @CMOCKA_CFLAGS@
 AM_LDFLAGS=@CMOCKA_LIBS@
 
-
-ADMIN_LIB=$(TO_SRC)/admin/libphobos_admin.la
 DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 
@@ -21,11 +19,20 @@ TEST_EXTENSIONS=.sh
 
 check_PROGRAMS=medium_locker
 
-check_SCRIPTS=test_delete.sh test_undelete.sh test_put.sh test_object_list.sh \
-	          test_extent_list.sh test_ping.sh test_overwrite.sh \
-	          test_locate.sh test_get.sh test_resource_availability.sh \
-	          test_tag_update.sh test_media_operation_flags.sh \
-	          test_raid1_split.sh acceptance.sh test_daemon.sh
+check_SCRIPTS=acceptance.sh \
+	          test_daemon.sh \
+	          test_delete.sh \
+	          test_extent_list.sh \
+	          test_get.sh \
+	          test_locate.sh \
+	          test_media_operation_flags.sh \
+	          test_object_list.sh \
+	          test_ping.sh \
+	          test_put.sh \
+	          test_raid1_split.sh \
+	          test_resource_availability.sh \
+	          test_tag_update.sh \
+	          test_undelete.sh
 
 TESTS=$(check_SCRIPTS)
 
