@@ -18,7 +18,7 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
-set -e
+set -xe
 
 test_bin_dir=$(dirname "${BASH_SOURCE[0]}")
 
@@ -26,6 +26,9 @@ test_bin_dir=$(dirname "${BASH_SOURCE[0]}")
 . $test_bin_dir/setup_db.sh
 . $test_bin_dir/test_launch_daemon.sh
 
+################################################################################
+#                                    SETUP                                     #
+################################################################################
 
 function cleanup() {
     waive_daemon
@@ -37,6 +40,56 @@ trap drop_tables ERR EXIT
 drop_tables
 setup_tables
 insert_examples
+trap cleanup ERR EXIT
+invoke_daemon
+
+################################################################################
+#                         TEST MEDIA UPDATE WITH TAGS                          #
+################################################################################
+
+function test_put_update() {
+    family=$1
+    media_name=$2
+    obj=$3
+
+    # put first_tag on the media
+    $phobos $family update --tags first_tag $media_name
+
+    # put an object asking a media tagged with "first_tag"
+    $phobos put --family $family --tags first_tag /etc/hosts ${obj}1
+
+    # put second_tag on the media when it is tagged with old first_tag
+    $phobos $family update --tags second_tag $media_name
+
+    # put again one object using outdated tag and check it is updated
+    $phobos put --family $family --tags first_tag /etc/hosts ${obj}2 &&
+        error "Using an old tag to put should fail"
+
+    return 0
+}
+
+echo
+
+echo "**** TESTS: TAGS a currently used dir ****"
+test_put_update "dir" "/tmp/pho_testdir1" "dir_obj"
+
+if [[ -w /dev/changer ]]; then
+    echo "**** TESTS: TAGS a currently used tape ****"
+    # add and unlock one LTO6 drive
+    $phobos drive add --unlock /dev/st4
+    # add one LT06 tape with first_tag
+    tape_name=$(mtx status | grep VolumeTag | sed -e "s/.*VolumeTag//" |
+                tr -d " =" | grep "L6" | head -n 1)
+    $phobos tape add -t lto6 $tape_name
+    # format and unlock the LTO6 tape
+    $phobos tape format --unlock $tape_name
+
+    test_put_update "tape" "$tape_name" "tape_obj"
+fi
+
+################################################################################
+#                     TEST UPDATE OF MEDIA OPERATION FLAGS                     #
+################################################################################
 
 function test_dir_operation_flags() {
     local dir=$1
@@ -56,8 +109,8 @@ function test_dir_operation_flags() {
 
     if [[ $($phobos dir list --output delete_access $dir) != \
         $expected_delete ]]; then
-        error "Error: $expected_delete was expected for delete operation flag" \
-              "for $dir"
+        error "Error: $expected_delete was expected for delete operation " \
+              "flag for $dir"
     fi
 
     return 0
@@ -69,10 +122,9 @@ echo "**** TESTS: CLI LIST MEDIA OPERATION TAGS ****"
 $phobos dir list --output put_access,get_access,delete_access
 
 echo "**** TESTS: CLI \"set-access\" bad syntax detection ****"
-$phobos dir set-access p /tmp/pho_testdir1 &&
-    echo "p should be a bad FLAG" && exit 1
+$phobos dir set-access p /tmp/pho_testdir1 && error "p should be a bad FLAG"
 $phobos dir set-access -- -PGJ /tmp/pho_testdir1 &&
-    echo "PGJ- should be a bad FLAG" && exit 1
+    error "PGJ- should be a bad FLAG"
 
 echo "**** TESTS: CLI SET MEDIA OPERATION TAGS ****"
 $phobos dir set-access P /tmp/pho_testdir1
@@ -83,9 +135,6 @@ $phobos dir set-access -- -PD /tmp/pho_testdir1
 test_dir_operation_flags /tmp/pho_testdir1 False True False
 $phobos dir set-access +PD /tmp/pho_testdir1
 test_dir_operation_flags /tmp/pho_testdir1 True True True
-
-trap cleanup ERR EXIT
-invoke_daemon
 
 echo "**** TESTS: PUT MEDIA OPERATION TAGS ****"
 # remove all dir put access
@@ -110,15 +159,9 @@ $phobos put --family dir /etc/hosts obj_to_get
 # remove all dir get access
 $phobos dir set-access -- -G $($phobos dir list)
 # try one get without any dir get access
-$phobos get obj_to_get /tmp/gotten_obj &&
-    rm /tmp/gotten_obj &&
+$phobos get obj_to_get /tmp/gotten_obj && rm /tmp/gotten_obj &&
     error "Get without any medium with 'G' operation flag should fail"
 # set get access on all dir
 $phobos dir set-access +G $($phobos dir list)
 # try to get
-$phobos get obj_to_get /tmp/gotten_obj
-rm /tmp/gotten_obj
-
-echo "*** TEST END ***"
-# Uncomment if you want the db to persist after test
-# trap - EXIT ERR
+$phobos get obj_to_get /tmp/gotten_obj && rm /tmp/gotten_obj

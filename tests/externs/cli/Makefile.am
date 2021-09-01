@@ -25,13 +25,12 @@ check_SCRIPTS=acceptance.sh \
 	          test_extent_list.sh \
 	          test_get.sh \
 	          test_locate.sh \
-	          test_media_operation_flags.sh \
+	          test_media.sh \
 	          test_object_list.sh \
 	          test_ping.sh \
 	          test_put.sh \
 	          test_raid1_split.sh \
 	          test_resource_availability.sh \
-	          test_tag_update.sh \
 	          test_undelete.sh
 
 TESTS=$(check_SCRIPTS)
