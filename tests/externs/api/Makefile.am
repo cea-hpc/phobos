@@ -41,8 +41,8 @@ check_SCRIPTS=test_locate.sh \
 	          test_undelete.sh \
 	          test_delete.sh \
 	          test_bad_comm.sh \
+	          test_store.sh \
 	          test_store_retry.sh \
-	          test_layouts.sh \
 	          test_raid1_split_locate.sh
 
 TESTS=$(check_SCRIPTS)

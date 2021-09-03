@@ -1,3 +1,6 @@
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:
+
 #!/bin/bash
 
 #
@@ -23,20 +26,6 @@
 
 set -e
 
-USE_LAYOUT=${1:-raid1}
-
-TEST_RAND=/tmp/RAND_$$
-TEST_RECOV_DIR=/tmp/phobos_recov.$$
-
-TEST_IN="/etc/redhat-release /etc/passwd /etc/group /etc/hosts"
-TEST_FILES=""
-for f in $TEST_IN; do
-    new=/tmp/$(basename $f).$$
-    /bin/cp -p $f $new
-    TEST_FILES="$TEST_FILES $new"
-done
-TEST_FILES="$TEST_FILES $TEST_RAND"
-
 test_bin_dir=$(dirname $(readlink -e $0))
 test_bin="$test_bin_dir/test_store"
 
@@ -44,77 +33,113 @@ test_bin="$test_bin_dir/test_store"
 . $test_bin_dir/setup_db.sh
 . $test_bin_dir/test_launch_daemon.sh
 
-drop_tables
-setup_tables
-insert_examples
+################################################################################
+#                                    SETUP                                     #
+################################################################################
+
+TEST_RECOV_DIR=/tmp/phobos_recov.$$
 
 echo "**** POSIX TEST MODE ****"
 # following entries must match mount prefix
 TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2 /tmp/pho_testdir3 \
           /tmp/pho_testdir4 /tmp/pho_testdir5"
-TEST_FS="posix"
 
 export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
 export PHOBOS_LRS_families="dir"
-invoke_daemon
 
-export PHOBOS_STORE_default_layout=$USE_LAYOUT
 export PHOBOS_STORE_default_family="dir"
 
-function clean_test
+function init()
 {
-    echo "cleaning..."
+    drop_tables
+    setup_tables
+    insert_examples
+    rm -rf $TEST_RECOV_DIR
+    mkdir $TEST_RECOV_DIR
+}
+
+function clear_mnt_content()
+{
+    for d in $TEST_MNT; do
+        rm -rf $d/*
+    done
+
+}
+
+function clean_test()
+{
     drop_tables
     waive_daemon
-    rm -f $TEST_FILES
+    rm -rf "$TEST_FILES"
+    rm -rf "$TEST_RECOV_DIR"
     for d in $TEST_MNT; do
         rm -rf $d
     done
-    rm -rf "$TEST_RECOV_DIR"
+}
+
+function create_files()
+{
+    rm -rf "$TEST_FILES"
+    clear_mnt_content
+
+    TEST_RAND=/tmp/RAND_$$_$1
+    dd if=/dev/urandom of=$TEST_RAND bs=1M count=10
+
+    TEST_IN="/etc/redhat-release /etc/passwd /etc/group /etc/hosts"
+    TEST_FILES=""
+    for f in $TEST_IN; do
+        new=/tmp/$(basename $f).$$_$1
+        /bin/cp -p $f $new
+        TEST_FILES="$TEST_FILES $new"
+    done
+    TEST_FILES="$TEST_FILES $TEST_RAND"
 }
 
 trap clean_test ERR EXIT
 
-# put a file into phobos object store
-function test_check_put # verb, source_file, expect_failure
+init
+invoke_daemon
+
+for dir in $TEST_MNT; do
+    # allow later cleaning by other users
+    umask 000
+    mkdir -p "$dir"
+done
+
+################################################################################
+#                   TEST PUTTING OBJECTS AND CHECK THE RESULTS                 #
+################################################################################
+
+function test_check_put() # verb, source_file
 {
     local verb=$1
-    # Is the test expected to fail?
-    local fail=$2
 
     local src_files=()
     local i=0
-    for f in "${@:3}"
+    for f in "${@:2}"
     do
         src_files[$i]=$(readlink -m $f)
         i=$(($i+1))
     done
 
-    echo $test_bin $verb "${src_files[@]}"
     $LOG_COMPILER $LOG_FLAGS $test_bin $verb "${src_files[@]}"
     if [[ $? != 0 ]]; then
-        if [ "$fail" != "yes" ]; then
-            error "$verb failure"
-        else
-            echo "OK: $verb failed as expected"
-            return 1
-        fi
+        error "Failed to $verb ${src_files[@]}"
     fi
 
     for f in ${src_files[@]}
     do
         local name=$(echo $f | tr './!<>{}#"' '_')
 
-        # check that the extent is found into the storage backend
-        local out=$(find $TEST_MNT -type f -name "*$name*" | head -n 1)
-        echo -e " \textent: $out"
-        [ -z "$out" ] && error "*$name* not found in backend"
+        # check that the extent is found in the storage backend
+        local out=$(find $TEST_MNT -type f -name "*${name}_$verb*" | tail -n 1)
+        [ -z "$out" ] && error "*$f* not found in backend"
         diff -q $f $out && echo "$f: contents OK"
 
         # check the 'id' xattr attached to this extent
         local id=$(getfattr --only-values --absolute-names -n "user.id" $out)
         [ -z "$id" ] && error "saved file has no 'id' xattr"
-        [ $id != $f ] && error "unexpected id value in xattr"
+        [ $id != "${f}_$verb" ] && error "unexpected id value in xattr"
 
         # check user_md xattr attached to this extent
         local umd=$(getfattr --only-values --absolute-names \
@@ -125,8 +150,11 @@ function test_check_put # verb, source_file, expect_failure
     true
 }
 
-# retrieve the given extent using phobos_get()
-function test_check_get # extent_path
+################################################################################
+#                       TEST RETRIEVING THE GIVEN EXTENT                       #
+################################################################################
+
+function test_check_get()
 {
     local arch=$1
 
@@ -138,11 +166,6 @@ function test_check_get # extent_path
     # however, the mount_point may not be real in the case of
     # a "directory device" (e.g. subdirectory of an existing filesystem)
     # XXXX the following code relies on the fact mount points have depth 2...
-    dir=$(echo "$arch" | cut -d '/' -f 1-3)
-    addr=$(echo "$arch" | cut -d '/' -f 4-)
-    size=$(stat -c '%s' "$arch")
-    echo "address=$addr,size=$size"
-
     tgt="$TEST_RECOV_DIR/$id"
     mkdir -p $(dirname "$tgt")
 
@@ -153,96 +176,73 @@ function test_check_get # extent_path
     rm -f $tgt
 }
 
-function assert_fails # program args ...
-{
-    local rc=0
-    # Call program
-    "$*" || rc=$?
+################################################################################
+#                          TEST PUT ON SPECIFIC MEDIA                          #
+################################################################################
 
-    # Check
-    if [[ "$rc" != 0 ]]; then
-        return 0
-    else
-        return 1
-    fi
+function test_put_tag()
+{
+    for f in $TEST_FILES; do
+        $test_bin tag-put $f no-such-tag && \
+            error "tag-put on a media with tag 'no-such-tag' " \
+                  "should have failed"
+        $test_bin tag-put $f mytag no-such-tag && \
+            error "tag-put on a media with tag 'mytag' and 'no-such-tag' " \
+                  "should have failed"
+
+        # Ensure the right directory is chosen for this tag
+        $test_bin tag-put $f mytag |& tee /dev/stderr | grep -e \
+            "/tmp/pho_testdir[245]"
+    done
 }
 
-if [[ $TEST_FS == "posix" ]]; then
-    for dir in $TEST_MNT; do
-        # clean and re-create
-        rm -rf $dir/*
-        # allow later cleaning by other users
-        umask 000
-        [ ! -d $dir ] && mkdir -p "$dir"
+################################################################################
+#                            TEST WITH PUT/GET/LIST                            #
+################################################################################
+
+function test_put_get()
+{
+    if [ "$1" == "put" ]; then
+        for f in $TEST_FILES; do
+            test_check_put "put" "$f"
+        done
+    else
+        test_check_put "mput" $TEST_FILES
+    fi
+
+    # retrieve all files from the backend, get and check them
+    find $TEST_MNT -type f | while read f; do
+        test_check_get "$f"
     done
-else
-    # clean the contents
-    for dir in $TEST_MNT; do
-        rm -rf  $dir/*
-    done
-fi
-[ ! -d $TEST_RECOV_DIR ] && mkdir -p "$TEST_RECOV_DIR"
-rm -rf "$TEST_RECOV_DIR/"*
 
-# create test file in /tmp
-dd if=/dev/urandom of=$TEST_RAND bs=1M count=10
+    # check that object info can be retrieved using phobos_store_object_list()
+    $LOG_COMPILER $LOG_FLAGS $test_bin list "_$1" $TEST_FILES
+}
 
+################################################################################
+#                              MAIN TEST ROUTINE                               #
+################################################################################
 
-echo
-echo "**** TESTS: PUT WITH TAGS ****"
-for f in $TEST_FILES; do
-    assert_fails $test_bin tag-put $f no-such-tag
-    assert_fails $test_bin tag-put $f mytag no-such-tag
-    # Ensure the right directory is chosen for this tag
-    $test_bin tag-put $f mytag |& tee /dev/stderr | grep /tmp/pho_testdir2
-done
+function test_routine()
+{
+    test_put_tag
 
-drop_tables
-setup_tables
-insert_examples
+    test_put_get "put"
 
-echo
-echo "**** TESTS: PUT ****"
-for f in $TEST_FILES; do
-    test_check_put "put" "no" "$f"
-    test_check_put "put" "yes" "$f" && error "second PUT should fail"
-done
+    test_put_get "mput"
+}
 
+create_files "base"
+test_routine
 
-echo
-echo "**** TESTS: GET ****"
-# retrieve all files from the backend, get and check them
-find $TEST_MNT -type f | while read f; do
-    test_check_get "$f"
-done
+export PHOBOS_STORE_default_layout="raid1"
+create_files "raid1"
+test_routine
 
-echo
-echo "**** TESTS: LIST ****"
-# check that object info can be retrieved using phobos_store_object_list()
-$LOG_COMPILER $LOG_FLAGS $test_bin list $TEST_FILES
+export PHOBOS_LAYOUT_RAID1_repl_count=1
+create_files "raid1_1"
+test_routine
 
-# Clean inserted files and DSS entries so that we can reinsert them using MPUT
-find $TEST_MNT -type f -delete
-rm -rf ${TEST_RECOV_DIR}
-mkdir ${TEST_RECOV_DIR}
-drop_tables
-setup_tables
-insert_examples
-
-echo
-echo "**** TESTS: MPUT ****"
-test_check_put "mput" "no" $TEST_FILES
-
-echo
-echo "**** TESTS: GET ****"
-# retrieve all files from the backend, get and check them
-find $TEST_MNT -type f | while read f; do
-    test_check_get "$f"
-done
-
-# exit normally, clean TRAP
-trap - EXIT ERR
-clean_test || true
-
-# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
-# vim:expandtab:shiftwidth=4:tabstop=4:
+export PHOBOS_LAYOUT_RAID1_repl_count=3
+create_files "raid1_3"
+test_routine
