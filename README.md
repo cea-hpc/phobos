@@ -199,6 +199,16 @@ attached to the object. They are specified when putting the object using the
 phobos put  myinput_file  foo-12345 --metadata  user=$LOGNAME,\
     put_time=$(date +%s),version=1
 ```
+
+A newer version of an object can be pushed in a phobos system. In this case, the
+old version is considered deprecated, and basic operations can no longer be
+executed on it if its version number is not given.
+
+```
+echo "new data" >> myinput_file
+phobos put --overwrite myinput_file foo-12345
+```
+
 For better performances when writing to tape, it is recommanded to write batches
 of objects in a single put command. This can be done using `phobos mput`
 command.
@@ -218,6 +228,7 @@ The mput operation is simply:
 ```
 phobos mput list_file
 ```
+
 ##### Reading objects
 To retrieve the data of an object, use `phobos get`. Its arguments are the
 identifier of the object to be retrieved, as well as a path of target file.
