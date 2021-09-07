@@ -141,6 +141,16 @@ phobosd comes with its option set:
 - -s: print log messages into syslog
 - -q/v: decrease/increase log verbosity
 
+The `phobos ping` command can be used to check if the daemon is reachable by its
+socket. The return code will be 0 if ping succeeded, or non null if it failed.
+```
+$ systemctl start phobosd
+$ phobos ping
+2021-09-16 12:01:48,772 <INFO> Ping sent to daemon successfully
+$ echo $?
+0
+```
+
 ### Adding drives
 Use the `phobos` command line to add new tape drives to be managed by phobos.
 
