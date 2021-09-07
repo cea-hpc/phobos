@@ -321,6 +321,21 @@ phobos drive {lock|unlock} <drive_serial|drive_path>
 phobos media {lock|unlock} <media_id>
 ```
 
+### Setting access
+Media can be set to accept or reject some types of operation. We distinguish
+three kinds of operation: put (P), get (G) and delete (D).
+
+```
+# Set medium access: allow get and delete, forbid put
+phobos tape set-access GD 073000L8
+
+# Add access: add put and get (delete is unchanged)
+phobos dir set-access +PG /path/to/dir
+
+# Remove access: remove put (get and delete are unchanged)
+phobos tape set-access -- -P 073000L8
+```
+
 ### Tagging resources
 Phobos implements a flexible mechanism to partition storage resources into
 (possibly overlapping) subsets.
