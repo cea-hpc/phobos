@@ -386,6 +386,14 @@ The following table illustrates conditions for matching tags:
 | C           | A,B        | no      |
 | A,C         | A,B        | no      |
 
+### Locating media
+Phobos allows you to locate its media by answering you on which host you should
+execute phobos commands or calls that require access to a specific medium.
+
+```
+phobos tape locate 073000L8
+phobos dir locate /path/to/dir
+```
 
 ### Media families
 
