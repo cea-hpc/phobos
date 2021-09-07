@@ -151,6 +151,13 @@ $ echo $?
 0
 ```
 
+### Scanning libraries
+Use the `phobos lib scan` command to scan a given library. For instance, the
+following will give the contents of the /dev/changer library:
+```
+phobos lib scan /dev/changer
+```
+
 ### Adding drives
 Use the `phobos` command line to add new tape drives to be managed by phobos.
 
