@@ -159,7 +159,7 @@ phobos drive add --unlock /dev/mapper/LTO6-012345
 To add tapes to be managed by phobos, use the `phobos` command line.
 It is mandatory to specify a media type (like LTO8, T10KD...) with option `-t`:
 ```
-phobos tape add -t lto6 [073200-073222]L6
+phobos tape add --type lto6 [073200-073222]L6
 ```
 **Note1:** this operation requires no access to the medium.
 
@@ -195,8 +195,8 @@ Phobos also allows specifying an arbitrary set of attributes (key-values) to be
 attached to the object. They are specified when putting the object using the
 '-m' option.
 ```
-# phobos put <file>       <id>      -m  <k=v,k=v,...>
-phobos put  myinput_file  foo-12345 -m  user=$LOGNAME,\
+# phobos put <file>       <id>      --metadata  <k=v,k=v,...>
+phobos put  myinput_file  foo-12345 --metadata  user=$LOGNAME,\
     put_time=$(date +%s),version=1
 ```
 For better performances when writing to tape, it is recommanded to write batches
@@ -237,7 +237,7 @@ cksum=md5:7c28aec5441644094064fcf651ab5e3e,user=foo
 ##### Listing objects
 To list objects, use `phobos object list`:
 ```
-$ phobos object list -o oid,user_md
+$ phobos object list --output oid,user_md
 | oid   | user_md         |
 |-------|-----------------|
 | obj01 | {}              |
@@ -254,15 +254,15 @@ Regular Expressions (ERE). As defined in [PostgreSQL manual](https://www.postgre
 PSQL also accepts Advanced Regular Expressions (ARE), but we will not maintain
 this feature as ARE is not a POSIX standard.
 
-The option '-m' applies a filter on user metadata
+The option '--metadata' applies a filter on user metadata
 ```
-phobos object list -m user=foo,test=abd
+phobos object list --metadata user=foo,test=abd
 ```
 
 ##### Listing extents
 To list extents, use `phobos extent list`:
 ```
-$ phobos extent list -o oid,ext_count,layout,media_name
+$ phobos extent list --output oid,ext_count,layout,media_name
 | oid  | ext_count | layout | media_name             |
 |------|-----------|--------|------------------------|
 | obj1 |         1 | simple | ['/tmp/d1']            |
@@ -271,7 +271,7 @@ $ phobos extent list -o oid,ext_count,layout,media_name
 
 The option `--degroup` outputs an extent per row instead of one object per row:
 ```
-$ phobos extent list --degroup -o oid,layout,media_name
+$ phobos extent list --degroup --output oid,layout,media_name
 | oid  | layout | media_name  |
 |------|--------|-------------|
 | obj1 | simple | ['/tmp/d1'] |
@@ -299,18 +299,18 @@ the following will list all the existing tape identifiers:
 phobos tape list
 ```
 
-The 'list' output can be formatted using the -o option, following a list of
-comma-separated attributes:
+The 'list' output can be formatted using the --output option, following a list
+of comma-separated attributes:
 ```
-phobos tape list -o stats.phys_spc_used,tags,adm_status
+phobos tape list --output stats.phys_spc_used,tags,adm_status
 ```
 
 If the attribute 'all' is used, then the list is printed with full details:
 ```
-phobos tape list -o all
+phobos tape list --output all
 ```
 
-Other options are available using the -h option.
+Other options are available using the --help option.
 
 ### Locking resources
 A device or media can be locked. In this case it cannot be used for
@@ -331,26 +331,26 @@ Multiple tags can be associated to the storage media at creation time or later
 on:
 ```
 # Add media with tags "class1" and "project2"
-phobos tape add -T class1,project2 -t LTO8 [073000-073099]L8
+phobos tape add --tags class1,project2 --type LTO8 [073000-073099]L8
 
 # Update tags for these tapes
-phobos tape update -T class2 [073000-073099]L8
+phobos tape update --tags class2 [073000-073099]L8
 
 # Clears tags
-phobos dir update -T '' [073000-073099]L8
+phobos dir update --tags '' [073000-073099]L8
 ```
 
 Media can be listed following their tags:
 ```
-phobos tape list -T class1,project2
+phobos tape list --tags class1,project2
 ```
 
 When pushing objects to phobos, you can then restrict the subset of resources
-that can be used to store data by specifying tags with the `-T` option.
+that can be used to store data by specifying tags with the `--tags` option.
 
 ```
 # The following command will only use media with tags 'class1' AND 'projX'
-phobos put -T class1,projX /path/to/obj objid
+phobos put --tags class1,projX /path/to/obj objid
 ```
 
 * If several tags are specified for put, phobos will only use media having
@@ -391,12 +391,12 @@ phobos configuration file:
 default_family = tape
 ```
 
-Alternatively, you can override this value by using the '-f' option of your
-put commands:
+Alternatively, you can override this value by using the '--family' option of
+your put commands:
 
 ```
 # put data to directory storage
-phobos put -f dir file.in obj123
+phobos put --family dir file.in obj123
 ```
 
 ### Storage layouts
@@ -412,12 +412,12 @@ configuration file:
 default_layout = simple
 ```
 
-Alternatively, you can override this value by using the '-l' option of your
-put commands:
+Alternatively, you can override this value by using the '--layout' option of
+your put commands:
 
 ```
 # put data using a raid1 layout
-phobos put -l raid1 file.in obj123
+phobos put --layout raid1 file.in obj123
 ```
 
 Layouts can have additional parameters. For now, the only additional parameter
@@ -426,7 +426,7 @@ env variable:
 
 ```
 # put data using a raid1 layout with 3 replicas
-PHOBOS_LAYOUT_RAID1_repl_count=3 phobos put -l raid1 file.in obj123
+PHOBOS_LAYOUT_RAID1_repl_count=3 phobos put --layout raid1 file.in obj123
 ```
 
 ### Configuring device and media types
