@@ -64,10 +64,11 @@ export PHOBOS_STORE_default_family="dir"
 function clean_test
 {
     echo "cleaning..."
+    drop_tables
     waive_daemon
     rm -f $TEST_FILES
     for d in $TEST_MNT; do
-    rm -rf $d/*
+        rm -rf $d
     done
     rm -rf "$TEST_RECOV_DIR"
 }

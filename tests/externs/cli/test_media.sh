@@ -33,9 +33,22 @@ test_bin_dir=$(dirname "${BASH_SOURCE[0]}")
 function cleanup() {
     waive_daemon
     drop_tables
+    for d in $TEST_MNT; do
+        rm -rf $d
+    done
 }
 
 trap drop_tables ERR EXIT
+
+TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2 /tmp/pho_testdir3 \
+          /tmp/pho_testdir4 /tmp/pho_testdir5"
+for dir in $TEST_MNT; do
+    # clean and re-create
+    rm -rf $dir/*
+    # allow later cleaning by other users
+    umask 000
+    [ ! -d $dir ] && mkdir -p "$dir"
+done
 
 drop_tables
 setup_tables
