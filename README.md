@@ -255,6 +255,11 @@ For example:
 phobos get obj0123 /tmp/obj0123.back
 ```
 
+An object can also be targeted using its uuid and/or its version number:
+```
+phobos get --uuid aabbccdd --version 2 obj0123 /tmp/obj0123.back
+```
+
 ##### Reading object attributes
 To retrieve custom object metadata, use `phobos getmd`:
 ```
