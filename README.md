@@ -108,7 +108,7 @@ one:
 
 ```
 ALTER USER phobos WITH SUPERUSER;
-ALTER_USER phobos WITHOUT SUPERUSER;
+ALTER USER phobos WITHOUT SUPERUSER;
 ```
 
 ## Upgrade of an existing instance
@@ -336,7 +336,7 @@ phobos tape add --tags class1,project2 --type LTO8 [073000-073099]L8
 # Update tags for these tapes
 phobos tape update --tags class2 [073000-073099]L8
 
-# Clears tags
+# Clear tags
 phobos dir update --tags '' [073000-073099]L8
 ```
 
