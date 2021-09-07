@@ -344,6 +344,19 @@ section:
 phobos extent list "obj.*"
 ```
 
+##### Locating objects
+Tapes can move from one drive to another, and be reachable from different
+hosts. The locate command helps you find the best host to reach your object:
+```
+phobos locate obj0123
+```
+
+A `--best-host` option is also available for the get command, to retrieve the
+object only if the request is executed on the best host:
+```
+phobos get --best-host obj0123 /tmp/obj0123.back
+```
+
 ## Device and media management
 ### Listing resources
 Any device or media can be listed using the 'list' operation. For instance,
