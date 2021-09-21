@@ -39,13 +39,15 @@ test_dir=$(dirname $(readlink -e $0))
 
 function dir_setup
 {
-    export dirs="
-        $(mktemp -d /tmp/test.pho.XXXX)
-        $(mktemp -d /tmp/test.pho.XXXX)
-    "
+    empty_put_dir1=$(mktemp -d /tmp/test.pho.XXXX)
+    empty_put_dir2=$(mktemp -d /tmp/test.pho.XXXX)
+    export dirs="$empty_put_dir1 $empty_put_dir2"
+
     echo "adding directories $dirs"
     $phobos dir add $dirs
     $phobos dir format --fs posix --unlock $dirs
+    $phobos dir update --tags empty_put_dir1 $empty_put_dir1
+    $phobos dir update --tags empty_put_dir2 $empty_put_dir2
 }
 
 function cleanup
@@ -114,6 +116,26 @@ function test_extent_path
 }
 
 test_extent_path
+
+################################################################################
+#                         TEST EMPTY PUT ON TAGGED DIR                         #
+################################################################################
+
+function test_empty_put
+{
+    touch /tmp/empty_file1 /tmp/empty_file2
+
+    $phobos put --tags empty_put_dir1 --family dir /tmp/empty_file1 empty_file1
+    $phobos put --tags empty_put_dir2 --family dir /tmp/empty_file2 empty_file2
+
+    rm /tmp/empty_file1 /tmp/empty_file2
+
+    output=$($phobos extent list -o oid,media_name)
+    echo "$output" | grep "empty_file1" | grep "$empty_put_dir1"
+    echo "$output" | grep "empty_file2" | grep "$empty_put_dir2"
+}
+
+test_empty_put
 
 ################################################################################
 #                         PUT WITH --LYT-PARAMS OPTION                         #

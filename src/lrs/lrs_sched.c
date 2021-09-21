@@ -1405,7 +1405,7 @@ static struct dev_descr *dev_picker(struct lrs_sched *sched,
                                     device_select_func_t select_func,
                                     size_t required_size,
                                     const struct tags *media_tags,
-                                    struct media_info *pmedia)
+                                    struct media_info *pmedia, bool is_write)
 {
     struct dev_descr    *selected = NULL;
     int                  selected_i = -1;
@@ -1436,11 +1436,7 @@ static struct dev_descr *dev_picker(struct lrs_sched *sched,
          * locked, full, do not have the put operation flag and do not have the
          * requested tags
          */
-        /*
-         * @TODO: using the size arg to check if the requested action is a write
-         * seems to be error prone for object with a zero size content
-         */
-        if (required_size > 0 && itr->dss_media_info) {
+        if (is_write && itr->dss_media_info) {
             if (itr->dss_media_info->rsc.adm_status !=
                     PHO_RSC_ADM_ST_UNLOCKED) {
                 pho_debug("Media '%s' is not unlocked",
@@ -1460,7 +1456,8 @@ static struct dev_descr *dev_picker(struct lrs_sched *sched,
                 continue;
             }
 
-            if (!tags_in(&itr->dss_media_info->tags, media_tags)) {
+            if (media_tags->n_tags > 0 &&
+                !tags_in(&itr->dss_media_info->tags, media_tags)) {
                 pho_debug("Media '%s' does not match required tags",
                           itr->dss_media_info->rsc.id.name);
                 continue;
@@ -1879,7 +1876,7 @@ static int sched_free_one_device(struct lrs_sched *sched,
 
         /* get a drive to free (PHO_DEV_OP_ST_UNSPEC for any state) */
         tmp_dev = dev_picker(sched, PHO_DEV_OP_ST_UNSPEC, select_drive_to_free,
-                             0, &NO_TAGS, pmedia);
+                             0, &NO_TAGS, pmedia, false);
         if (tmp_dev == NULL) {
             if (compatible_drive_exists(sched, pmedia, selected_devs,
                                         n_selected_devs))
@@ -1935,13 +1932,13 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
 
     /* 1a) is there a mounted filesystem with enough room? */
     *new_dev = dev_picker(sched, PHO_DEV_OP_ST_MOUNTED, dev_select_policy,
-                          size, tags, NULL);
+                          size, tags, NULL, true);
     if (*new_dev != NULL)
         return 0;
 
     /* 1b) is there a loaded media with enough room? */
     *new_dev = dev_picker(sched, PHO_DEV_OP_ST_LOADED, dev_select_policy, size,
-                          tags, NULL);
+                          tags, NULL, true);
     if (*new_dev != NULL) {
         /* mount the filesystem and return */
         rc = sched_mount(sched, *new_dev);
@@ -1988,7 +1985,7 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
 
     /* 3) is there a free drive? */
     *new_dev = dev_picker(sched, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
-                          pmedia);
+                          pmedia, true);
     if (*new_dev == NULL) {
         pho_verb("No free drive: need to unload one");
         rc = sched_free_one_device(sched, new_dev, pmedia, *devs,
@@ -2050,10 +2047,11 @@ static struct dev_descr *search_loaded_media(struct lrs_sched *sched,
     return NULL;
 }
 
-static int sched_media_prepare(struct lrs_sched *sched,
-                               const struct pho_id *id,
-                               enum sched_operation op, struct dev_descr **pdev,
-                               struct media_info **pmedia)
+static int sched_media_prepare_for_read_or_format(struct lrs_sched *sched,
+                                                  const struct pho_id *id,
+                                                  enum sched_operation op,
+                                                  struct dev_descr **pdev,
+                                                  struct media_info **pmedia)
 {
     struct dev_descr    *dev;
     struct media_info   *med = NULL;
@@ -2078,16 +2076,11 @@ static int sched_media_prepare(struct lrs_sched *sched,
         if (!med->flags.get)
             LOG_RETURN(-EPERM, "Cannot do a get, get flag is false on '%s'",
                        id->name);
-        /* fall through */
-    case LRS_OP_WRITE:
         if (med->fs.status == PHO_FS_STATUS_BLANK)
             LOG_RETURN(-EINVAL, "Cannot do I/O on unformatted media '%s'",
                        id->name);
         if (med->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
             LOG_RETURN(-EPERM, "Cannot do I/O on an unavailable medium '%s'",
-                       id->name);
-        if (op == LRS_OP_WRITE && !med->flags.put)
-            LOG_RETURN(-EPERM, "Cannot do a put, put flag is false on '%s'",
                        id->name);
         post_fs_mount = true;
         break;
@@ -2131,7 +2124,7 @@ static int sched_media_prepare(struct lrs_sched *sched,
 
         /* Is there a free drive? */
         dev = dev_picker(sched, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
-                         med);
+                         med, false);
         if (dev == NULL) {
             pho_verb("No free drive: need to unload one");
             rc = sched_free_one_device(sched, &dev, med, NULL, 0);
@@ -2190,7 +2183,8 @@ static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
     if (rc != 0)
         return rc;
 
-    rc = sched_media_prepare(sched, id, LRS_OP_FORMAT, &dev, &media_info);
+    rc = sched_media_prepare_for_read_or_format(sched, id, LRS_OP_FORMAT, &dev,
+                                                &media_info);
     if (rc != 0)
         return rc;
 
@@ -2343,7 +2337,8 @@ static int sched_read_prepare(struct lrs_sched *sched,
         return rc;
 
     /* Fill in information about media and mount it if needed */
-    rc = sched_media_prepare(sched, id, LRS_OP_READ, dev, &media_info);
+    rc = sched_media_prepare_for_read_or_format(sched, id, LRS_OP_READ, dev,
+                                                &media_info);
     if (rc)
         return rc;
 
