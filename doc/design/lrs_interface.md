@@ -1,4 +1,4 @@
-# Local Resource Scheduler
+# Local Resource Scheduler Interface
 
 C library: libpho_lrs
 
@@ -70,29 +70,3 @@ writing to tapes, this allows to minimize the overhead of flushing LTFS.
 * Error response: this response type is sent in case of error when handling
   any of the available request types. It contains details about the error that
   happened.
-
-
-## Internals
-
-The LRS is Phobos's "brain". Its scheduling policies will drive Phobos
-performance.
-
-For now (2019.09.27) its scheduling algorithm is relatively trivial:
-
-* The requests are handled one by one, in the order they arrive, with the
-  release requests handled first.
-* For write requests: the LRS first tries to find a mounted medium matching the
-  request, otherwise it will attempt to find a matching medium in the DSS and
-  mount it. A "matching medium" has enough space to contain the requested size
-  and has all the requested tags.
-* When mounting a medium: the first drive that is not currently in use is
-  freed to mount the new medium.
-* The first request that triggers an EAGAIN blocks the line of requests until
-  it can be satisfied.
-
-
-In the future, it will be critical to implement better strategies that look at
-pending requests more globally to be able to take the most out of the
-available hardware. It will also be necessary to be able to allocate a medium
-that has less space than required if no other medium can fulfill this request;
-this will have the effect of splitting the data over multiple media.
