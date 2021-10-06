@@ -248,8 +248,8 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers);
  *
  * If the media having this object are locked by a node, this function returns
  * the hostname of this node. If there is currently no node that locks the media
- * having this object, the hostname of the node executing this locate call is
- * returned.
+ * having this object, \p hostname is set to NULL with a return code of 0 to
+ * indicate that any node can perform an operation on this object.
  *
  * At least one of \p oid or \p uuid must not be NULL.
  *
@@ -268,9 +268,10 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers);
  * @param[in]   version     Version of the object to locate (ignored if zero)
  * @param[out]  hostname    Allocated and returned hostname of the node which
  *                          can give access to the object (NULL is returned on
- *                          error)
+ *                          error or if no locks are found on the object)
  *
- * @return                  0 on success or -errno on failure,
+ * @return                  0 on success (\p hostname can be NULL)
+ *                          or -errno on failure,
  *                          -ENOENT if no object corresponds to input
  *                          -EINVAL if more than one object corresponds to input
  *                          -EAGAIN if there is not any convenient node to

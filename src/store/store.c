@@ -1352,7 +1352,12 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
                          xfers[i].xd_objid);
                 xfers[i].xd_rc = rc2;
             } else {
-                if (strcmp(xfers[i].xd_params.get.node_name, hostname)) {
+                if (!xfers[i].xd_params.get.node_name) {
+                    pho_info("Object objid:'%s' can be retrieved from any node",
+                             xfers[i].xd_objid);
+                    n_xfers_to_get++;
+                } else if (xfers[i].xd_params.get.node_name &&
+                           strcmp(xfers[i].xd_params.get.node_name, hostname)) {
                     pho_warn("Object objid:'%s' located on node: %s",
                              xfers[i].xd_objid,
                              xfers[i].xd_params.get.node_name);

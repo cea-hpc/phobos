@@ -78,6 +78,7 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
     ]
 
     def set_lyt_params(self, val):
+        """Insert key/values attributes in Xfer's layout params"""
         if val:
             for k, v in val.items():
                 rc = LIBPHOBOS.pho_attr_set(byref(self.lyt_params),
@@ -500,4 +501,4 @@ class UtilClient:
         if rc:
             raise EnvironmentError(rc)
 
-        return hostname.value.decode('utf-8')
+        return hostname.value.decode('utf-8') if hostname.value else ""

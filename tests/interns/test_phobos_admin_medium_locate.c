@@ -174,19 +174,14 @@ static int paml_ok_free_setup(void **state)
 static void paml_ok_free(void **state)
 {
     struct admin_handle *adm = (struct admin_handle *)*state;
-    const char *self_hostname;
     char *hostname;
     int rc;
 
     (void) state;
 
-    /* get self hostname */
-    self_hostname = get_hostname();
-    assert_non_null(self_hostname);
-
     rc = phobos_admin_medium_locate(adm, &free_medium, &hostname);
     assert_return_code(rc, -rc);
-    assert_string_equal(self_hostname, hostname);
+    assert_null(hostname);
     free(hostname);
 }
 

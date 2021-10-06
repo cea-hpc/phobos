@@ -162,12 +162,13 @@ int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
 void phobos_admin_layout_list_free(struct layout_info *layouts, int n_layouts);
 
 /**
- * Retrieve the name of the node which holds a medium.
+ * Retrieve the name of the node which holds a medium or NULL if any node can
+ * access this media.
  *
  * @param[in]   adm         Admin module handler.
  * @param[in]   medium_id   ID of the medium to locate.
- * @param[out]  node_name   Name of the node which holds \p medium_id.
- * @return                  0 on success,
+ * @param[out]  node_name   Name of the node which holds \p medium_id or NULL.
+ * @return                  0 on success (\p *node_name can be NULL),
  *                         -errno on failure.
  */
 int phobos_admin_medium_locate(struct admin_handle *adm,

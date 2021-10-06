@@ -1406,22 +1406,23 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
         goto clean;
 
     /* no candidate: fallback on localhost if unlocked media at each split */
-    if (object_location.all_splits_have_unlocked_media)
-        GOTO(clean, rc = get_allocated_hostname(hostname));
+    if (object_location.all_splits_have_unlocked_media) {
+        *hostname = NULL;
+        GOTO(clean, rc = 0);
+    }
 
     /* no answer found */
     /*
      * This case must not occur.
      * - If there is no split, the default
      *   object_location.all_splits_have_unlocked_media is true and
-     *   self_hostname must be returned or an error if we can't get it.
+     *   NULL must be returned.
      * - If there is one split with no medium: -ENODEV is already returned as
      *   error due to this split.
      * - If there is one split with at least one medium which is
      *   locked, we have at least one candidate hostname.
      * - If at least one split with at least one medium and that all splits have
-     *   only unlocked media, we can return self_hostname or an error if we
-     *   can't get it.
+     *   only unlocked media, we can return NULL.
      */
     assert(false);
 

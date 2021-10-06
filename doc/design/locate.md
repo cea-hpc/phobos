@@ -42,8 +42,8 @@ object.
  *
  * If the media having this object are locked by a node, this function returns
  * the hostname of this node. If there is currently no node that locks the media
- * having this object, the hostname of the node executing this locate call is
- * returned.
+ * having this object, \p hostname is set to NULL with a return code of 0 to
+ * indicate that any node can perform an operation on this object.
  *
  * At least one of \p oid or \p uuid must not be NULL.
  *
@@ -62,7 +62,7 @@ object.
  * @param[in]   version     Version of the object to locate (ignored if zero)
  * @param[out]  hostname    Allocated and returned hostname of the node which
  *                          can give access to the object (NULL is returned on
- *                          error)
+ *                          error or if no locks are found on the object)
  *
  * @return                  0 on success or -errno on failure,
  *                          -ENOENT if no object corresponds to input
@@ -80,13 +80,15 @@ int phobos_locate(const char *obj_id, const char *uuid, int version,
 The call takes an object ID as input and gives back a node name as output. The
 retrieved node name is the one targeted by the locate command if it can access
 the object or the first one encountered which can reach it. If no nodes can
-currently access the object, -EAGAIN is returned.
+currently access the object, -EAGAIN is returned. The hostname can be NULL with
+a return code of 0 to indicate that any node can access this object (i.e. no
+extent of the object is on a currently locked medium).
 
 #### Object retrieval
 The `phobos_get()` call remains the same, but it supports a new flag in the
 `pho_xfer_desc` data structure called `PHO_XFER_OBJ_BEST_HOST`. If this flag is
 set, we will first call `phobos_locate()` on each object, and get it only if it
-is available on the current host.
+is available on the current host or if the object can be accessed on any node.
 
 If the `phobos_locate()` call fails on any object, its return code will be
 set to -EREMOTE, and a field added to the XFer parameters, called `node_name`,
@@ -110,7 +112,8 @@ detains the medium, for example where it is mounted (if tape).
 
 ```c
 /**
- * Retrieve the name of the node which holds a medium.
+ * Retrieve the name of the node which holds a medium or NULL if any node can
+ * access this media.
  *
  * @param[in]   adm         Admin module handler.
  * @param[in]   medium_id   ID of the medium to locate.

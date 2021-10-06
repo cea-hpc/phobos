@@ -191,9 +191,9 @@ function test_medium_locate
     fi
 
     locate_hostname=$($phobos $dir_or_tape locate $medium)
-    if [ "$locate_hostname" != "$self_hostname" ]; then
+    if [ "$locate_hostname" != "" ]; then
         error "$dir_or_tape locate returned $locate_hostname instead of " \
-              "$self_hostname on an unlocked medium"
+              "an empty string on an unlocked medium"
     fi
 
     # locate on a locked medium

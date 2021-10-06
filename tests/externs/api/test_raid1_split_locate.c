@@ -280,7 +280,7 @@ static void rsl_no_lock(void **state)
 
     rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, &hostname);
     assert_return_code(rc, -rc);
-    assert_string_equal(rsl_state->local_hostname, hostname);
+    assert_null(hostname);
     free(hostname);
 }
 
@@ -308,7 +308,7 @@ static void rsl_one_lock(void **state)
         assert_string_equal(WIN_HOST, hostname);
         free(hostname);
 
-        /* admin lock this medium and test fall back on localhost */
+        /* admin lock this medium and check NULL hostname */
         rsl_state->media[i]->rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
         rc = dss_media_set(rsl_state->dss, rsl_state->media[i], 1,
                            DSS_SET_UPDATE, ADM_STATUS);
@@ -317,7 +317,7 @@ static void rsl_one_lock(void **state)
         /* check locate */
         rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, &hostname);
         assert_return_code(rc, -rc);
-        assert_string_equal(rsl_state->local_hostname, hostname);
+        assert_null(hostname);
         free(hostname);
 
         rsl_state->media[i]->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
@@ -325,7 +325,7 @@ static void rsl_one_lock(void **state)
                            DSS_SET_UPDATE, ADM_STATUS);
         assert_return_code(rc, -rc);
 
-        /* set operation get flag to false and test fallback on local host */
+        /* set operation get flag to false and check NULL hostname */
         rsl_state->media[i]->flags.get = false;
         rc = dss_media_set(rsl_state->dss, rsl_state->media[i], 1,
                            DSS_SET_UPDATE, GET_ACCESS);
@@ -334,7 +334,7 @@ static void rsl_one_lock(void **state)
         /* check locate */
         rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, &hostname);
         assert_return_code(rc, -rc);
-        assert_string_equal(rsl_state->local_hostname, hostname);
+        assert_null(hostname);
         free(hostname);
 
         rsl_state->media[i]->flags.get = true;

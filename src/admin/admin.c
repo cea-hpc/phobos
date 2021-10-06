@@ -701,9 +701,6 @@ int phobos_admin_medium_locate(struct admin_handle *adm,
     if (rc)
         LOG_RETURN(rc, "Error when locating medium");
 
-    if (*node_name)
-        return 0;
-
-    /* Return localhost if medium is unlocked */
-    return get_allocated_hostname(node_name);
+    /* Return NULL if medium is unlocked, not an error */
+    return 0;
 }

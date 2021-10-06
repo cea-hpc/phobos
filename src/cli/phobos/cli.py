@@ -286,7 +286,8 @@ class StoreGetHandler(XferOptHandler):
         parser.add_argument('--uuid', help='UUID of the object')
         parser.add_argument('--best-host', action='store_true',
                             help="Only get object if the current host is the "
-                                 "most optimal one, else return the best "
+                                 "most optimal one or if the object can be "
+                                 "accessed from any node, else return the best "
                                  "hostname to get this object")
 
     def exec_get(self):
@@ -823,7 +824,7 @@ class LocateOptHandler(BaseOptHandler):
     """Locate object handler."""
 
     label = 'locate'
-    descr = 'Find the best hostname to get an object'
+    descr = 'Find the hostname which has the best access to an object if any'
 
     def __enter__(self):
         return self
@@ -1214,6 +1215,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         try:
             with AdminClient(lrs_required=False) as adm:
                 print(adm.medium_locate(self.family, self.params.get('res')))
+
         except EnvironmentError as err:
             self.logger.error("Cannot locate medium: %s", env_error_format(err))
             sys.exit(os.EX_DATAERR)

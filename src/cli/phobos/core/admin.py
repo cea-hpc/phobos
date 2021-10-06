@@ -184,7 +184,7 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc)
 
-        return hostname.value.decode('utf-8')
+        return hostname.value.decode('utf-8') if hostname.value else ""
 
     @staticmethod
     def layout_list_free(layouts, n_layouts):
