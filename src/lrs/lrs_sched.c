@@ -2861,7 +2861,7 @@ static int sched_handle_release_reqs(struct lrs_sched *sched,
         g_array_set_size(resp_array, resp_array->len + 1);
         respc = &g_array_index(resp_array, struct resp_container,
                                resp_array->len - 1);
-        respc->token = reqc->token;
+        respc->socket_id = reqc->socket_id;
         respc->resp = malloc(sizeof(*respc->resp));
         if (!respc->resp) {
             pho_srl_request_free(req, true);
@@ -3046,7 +3046,7 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
         respc = &g_array_index(resp_array, struct resp_container,
                                resp_array->len - 1);
 
-        respc->token = reqc->token;
+        respc->socket_id = reqc->socket_id;
         respc->resp = malloc(sizeof(*respc->resp));
         if (!respc->resp)
             LOG_GOTO(out, rc = -ENOMEM, "lrs cannot allocate response");

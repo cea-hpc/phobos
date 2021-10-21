@@ -52,20 +52,20 @@ struct lrs_sched {
 /**
  * Request container used by the scheduler to transfer information
  * between a request and its response. For now, this information consists
- * in a token value.
+ * in a socket ID.
  */
 struct req_container {
-    int token;                      /**< Token value to pass to the response. */
+    int socket_id;                  /**< Socket ID to pass to the response. */
     pho_req_t *req;                 /**< Request. */
 };
 
 /**
  * Response container used by the scheduler to transfer information
  * between a request and its response. For now, this information consists
- * in a token value.
+ * in a socket ID.
  */
 struct resp_container {
-    int token;                      /**< Token value got from the request. */
+    int socket_id;                  /**< Socket ID got from the request. */
     pho_resp_t *resp;               /**< Response. */
 };
 
@@ -91,8 +91,8 @@ void sched_fini(struct lrs_sched *sched);
  * Enqueue a request to be handled by the sched. The request is guaranteed to be
  * answered at some point.
  *
- * The request is encapsulated in a container which owns a token that must be
- * given back with the associated response.
+ * The request is encapsulated in a container which owns a socket ID that must
+ * be given back with the associated response.
  *
  * \param[in]       sched       The sched that will handle the request.
  * \param[in]       reqc        The request to enqueue.
@@ -105,7 +105,7 @@ int sched_request_enqueue(struct lrs_sched *sched, struct req_container *reqc);
  * Get responses for all handled pending requests (enqueued with
  * sched_request_enqueue).
  *
- * The responses are encapsulated in a container which owns a token given by
+ * The responses are encapsulated in a container which owns a socket ID given by
  * the associated request.
  *
  * \param[in]       sched       The sched from which to get the responses.

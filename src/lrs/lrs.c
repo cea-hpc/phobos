@@ -168,7 +168,7 @@ static int _prepare_error(struct resp_container *resp_cont, int req_rc,
 {
     int rc;
 
-    resp_cont->token = req_cont->token;
+    resp_cont->socket_id = req_cont->socket_id;
     rc = pho_srl_response_error_alloc(resp_cont->resp);
     if (rc)
         LOG_RETURN(rc, "Failed to allocate response");
@@ -202,7 +202,7 @@ static int _send_responses(struct lrs *lrs, const int n_resp,
         struct pho_comm_data msg;
 
         msg = pho_comm_data_init(&lrs->comm);
-        msg.fd = resp_cont[i].token;
+        msg.fd = resp_cont[i].socket_id;
         rc2 = pho_srl_response_pack(resp_cont[i].resp, &msg.buf);
         pho_srl_response_free(resp_cont[i].resp, false);
         if (rc2) {
@@ -259,7 +259,7 @@ static int _process_ping_request(struct lrs *lrs,
     if (!resp_cont.resp)
         LOG_RETURN(-ENOMEM, "Cannot allocate ping response");
 
-    resp_cont.token = req_cont->token;
+    resp_cont.socket_id = req_cont->socket_id;
     rc = pho_srl_response_ping_alloc(resp_cont.resp);
     if (rc)
         LOG_GOTO(err_resp, rc, "Failed to allocate response");
@@ -293,7 +293,7 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
             LOG_RETURN(-ENOMEM, "Cannot allocate request structure");
 
         /* request processing */
-        req_cont->token = data[i].fd;
+        req_cont->socket_id = data[i].fd;
         req_cont->req = pho_srl_request_unpack(&data[i].buf);
         if (!req_cont->req)
             LOG_GOTO(send_err, rc = -EINVAL, "Request cannot be unpacked");
