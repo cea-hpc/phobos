@@ -2431,6 +2431,7 @@ static int sched_io_complete(struct lrs_sched *sched,
                    fs_type2str(media_info->fs.type));
 
     rc = ioa_medium_sync(&ioa, fsroot);
+    pho_debug("sync: medium=%s rc=%d", media_info->rsc.id.name, rc);
     if (rc)
         LOG_RETURN(rc, "Cannot flush media at: %s", fsroot);
 
