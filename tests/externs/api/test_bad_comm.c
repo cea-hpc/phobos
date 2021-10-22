@@ -167,6 +167,7 @@ static int test_bad_release(void *arg)
     req.id = 0;
     req.release->media[0]->med_id->family = PHO_RSC_DIR;
     req.release->media[0]->med_id->name = strdup("/tmp/not/a/med");
+    req.release->media[0]->to_sync = true;
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Release -- bad resource name", -ENOENT);
 

@@ -773,7 +773,6 @@ static int raid1_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
         /* Perform IO and populate release request with the outcome */
         rc = multiple_enc_write_chunk(enc, resp->walloc,
                                       (*reqs)[*n_reqs].release);
-
         (*n_reqs)++;
     } else if (pho_response_is_read(resp)) {
         /* Last requested allocation has now been fulfilled */

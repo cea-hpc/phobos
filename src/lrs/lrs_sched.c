@@ -2623,8 +2623,9 @@ static int sched_handle_medium_release(struct lrs_sched *sched,
     }
 
     /* Flush media and update media info in dss */
-    rc = sched_io_complete(sched, dev->dss_media_info, medium->size_written,
-                         medium->rc, dev->mnt_path);
+    if (medium->to_sync)
+        rc = sched_io_complete(sched, dev->dss_media_info, medium->size_written,
+                               medium->rc, dev->mnt_path);
 
     /* mark IO as ended */
     dev->ongoing_io = false;
@@ -2633,8 +2634,8 @@ static int sched_handle_medium_release(struct lrs_sched *sched,
 }
 
 /**
- * Flush, update dss status and release locks for all media from a release
- * request and their associated devices.
+ * Flush and update dss status for all media with to-sync flag from a release
+ * request.
  */
 static int sched_handle_media_release(struct lrs_sched *sched,
                                       pho_req_release_t *req)
@@ -2832,6 +2833,21 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
     return rc;
 }
 
+static int to_sync_media_per_release(const pho_req_t *req)
+{
+    pho_req_release_t *rel = req->release;
+    size_t n_media = 0;
+    int i;
+
+    assert(pho_request_is_release(req));
+
+    for (i = 0; i < rel->n_media; i++)
+        if (rel->media[i]->to_sync)
+            n_media++;
+
+    return n_media;
+}
+
 /**
  * Handle incoming release requests, appending corresponding release responses
  * to resp_array if it is not NULL.
@@ -2846,14 +2862,16 @@ static int sched_handle_release_reqs(struct lrs_sched *sched,
     struct req_container *reqc;
 
     while ((reqc = g_queue_pop_tail(sched->release_queue)) != NULL) {
-        pho_req_t *req = reqc->req;
-        int rc = 0;
         struct resp_container *respc;
+        pho_req_t *req = reqc->req;
+        size_t n_media;
+        int rc = 0;
 
         rc = sched_handle_media_release(sched, req->release);
+        n_media = to_sync_media_per_release(req);
 
         /* If resp_array is NULL, just release media, do not save responses */
-        if (resp_array == NULL)
+        if (resp_array == NULL || n_media == 0)
             goto freereq;
 
         g_array_set_size(resp_array, resp_array->len + 1);
@@ -2877,9 +2895,8 @@ static int sched_handle_release_reqs(struct lrs_sched *sched,
             respc->resp->error->req_kind = PHO_REQUEST_KIND__RQ_RELEASE;
         } else {
             pho_req_release_t *rel = req->release;
-            size_t n_media = rel->n_media;
-            size_t i;
             pho_resp_release_t *respl;
+            size_t i, j;
 
             rc = pho_srl_response_release_alloc(respc->resp, n_media);
             if (rc) {
@@ -2892,9 +2909,15 @@ static int sched_handle_release_reqs(struct lrs_sched *sched,
             respc->resp->req_id = req->id;
             respl = respc->resp->release;
 
-            for (i = 0; i < n_media; ++i) {
-                respl->med_ids[i]->family = rel->media[i]->med_id->family;
-                respl->med_ids[i]->name = strdup(rel->media[i]->med_id->name);
+            for (i = 0, j = 0; i < rel->n_media; ++i) {
+                const char *name = rel->media[i]->med_id->name;
+
+                if (!rel->media[i]->to_sync)
+                    continue;
+
+                respl->med_ids[j]->family = rel->media[i]->med_id->family;
+                respl->med_ids[j]->name = strdup(name);
+                j++;
             }
         }
 
