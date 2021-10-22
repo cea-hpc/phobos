@@ -63,6 +63,9 @@ message PhoRequest {
             required uint64 size_written  = 3;  // Amount of bytes written
                                                 // on this medium (0 if the
                                                 // medium was only read).
+            required bool to_sync         = 4;  // Whether the client requires
+                                                // the LRS to perform a sync or
+                                                // not.
         }
 
         repeated Elt media = 1;                 // Description of the media

@@ -763,10 +763,13 @@ static int raid1_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
         if (rc)
             return rc;
 
-        for (i = 0; i < resp->walloc->n_media; ++i)
+        for (i = 0; i < resp->walloc->n_media; ++i) {
             rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
                        resp->walloc->media[i]->med_id);
+            (*reqs)[*n_reqs].release->media[i]->to_sync = true;
+        }
 
+        /* XXX we can set to_sync to false when an error occurs here */
         /* Perform IO and populate release request with the outcome */
         rc = multiple_enc_write_chunk(enc, resp->walloc,
                                       (*reqs)[*n_reqs].release);
@@ -794,6 +797,7 @@ static int raid1_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
         /* Perform IO and populate release request with the outcome */
         rc = simple_dec_read_chunk(enc, resp->ralloc->media[0]);
         (*reqs)[*n_reqs].release->media[0]->rc = rc;
+        (*reqs)[*n_reqs].release->media[0]->to_sync = false;
         (*n_reqs)++;
     } else if (pho_response_is_release(resp)) {
         /* Decoders don't need to keep track of medium releases */
