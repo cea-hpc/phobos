@@ -21,6 +21,7 @@ check_PROGRAMS=medium_locker
 
 check_SCRIPTS=acceptance.sh \
 	          test_daemon.sh \
+	          test_daemon_scheduling.sh \
 	          test_delete.sh \
 	          test_extent_list.sh \
 	          test_get.sh \
