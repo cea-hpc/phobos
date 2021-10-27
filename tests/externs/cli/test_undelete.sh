@@ -56,7 +56,7 @@ function test_undelete
         error "Object should be deleted"
 
     uuid=$($phobos object list --deprecated --output uuid oid1)
-    $phobos undelete uuid $uuid ||
+    $valg_phobos undelete uuid $uuid ||
         error "Object should be undeleted without any error"
     $phobos get oid1 test_tmp || error "Object should be got after undeletion"
     rm test_tmp
@@ -74,7 +74,7 @@ function test_undelete
     $phobos delete oid2 ||
         error "Object should be deleted"
 
-    $phobos undelete oid oid2 ||
+    $valg_phobos undelete oid oid2 ||
         error "Object should be undeleted without any error"
     $phobos get oid2 test_tmp || error "Object should be got after undeletion"
     rm test_tmp

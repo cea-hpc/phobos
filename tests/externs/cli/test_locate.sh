@@ -116,7 +116,7 @@ function test_locate_cli
     local pid="12345"
 
     # test error on locating an unknown object
-    $phobos locate unknown_object &&
+    $valg_phobos locate unknown_object &&
         error "Locating an unknown object must fail"
 
     # put a new object from localhost and locate it on localhost
@@ -126,29 +126,29 @@ function test_locate_cli
     $phobos put --overwrite /etc/hosts $obj ||
         error "Error while overwriting $obj"
 
-    locate_hostname=$($phobos locate $obj)
+    locate_hostname=$($valg_phobos locate $obj)
     self_hostname=$(uname -n)
     if [ "$locate_hostname" != "$self_hostname" ]; then
         error "Cli locate returned $locate_hostname instead of $self_hostname"
     fi
 
     $phobos delete $obj || error "$obj should be deleted"
-    $phobos locate $obj &&
+    $valg_phobos locate $obj &&
         error "Locating a deleted object without uuid or version must fail"
 
-    locate_hostname=$($phobos locate --uuid $obj_uuid $obj)
+    locate_hostname=$($valg_phobos locate --uuid $obj_uuid $obj)
     if [ "$locate_hostname" != "$self_hostname" ]; then
         error "Cli locate with uuid returned $locate_hostname instead of " \
               "$self_hostname"
     fi
 
-    locate_hostname=$($phobos locate --version 1 $obj)
+    locate_hostname=$($valg_phobos locate --version 1 $obj)
     if [ "$locate_hostname" != "$self_hostname" ]; then
         error "Cli locate with version returned $locate_hostname " \
               "instead of $self_hostname"
     fi
 
-    locate_hostname=$($phobos locate --uuid $obj_uuid --version 1 $obj)
+    locate_hostname=$($valg_phobos locate --uuid $obj_uuid --version 1 $obj)
     if [ "$locate_hostname" != "$self_hostname" ]; then
         error "Cli locate with uuid and version returned $locate_hostname " \
               "instead of $self_hostname"
@@ -165,7 +165,7 @@ function test_medium_locate
     local was_locked="false"
 
     # test error while locating an unknown medium
-    $phobos $dir_or_tape locate unknown_medium &&
+    $valg_phobos $dir_or_tape locate unknown_medium &&
         error "Locating an unknown $dir_or_tape must fail"
 
     # set medium to test
@@ -174,7 +174,7 @@ function test_medium_locate
     # test error on an admin locked medium
     $phobos $dir_or_tape lock $medium ||
         error "Error while locking before locate"
-    $phobos $dir_or_tape locate $medium &&
+    $valg_phobos $dir_or_tape locate $medium &&
         error "Locating an admin locked $dir_or_tape must fail"
     $phobos $dir_or_tape unlock $medium ||
         error "Error while unlocking lock after locate"
@@ -190,7 +190,7 @@ function test_medium_locate
             error "Error while unlocking $dir_or_tape before locate"
     fi
 
-    locate_hostname=$($phobos $dir_or_tape locate $medium)
+    locate_hostname=$($valg_phobos $dir_or_tape locate $medium)
     if [ "$locate_hostname" != "" ]; then
         error "$dir_or_tape locate returned $locate_hostname instead of " \
               "an empty string on an unlocked medium"
@@ -200,7 +200,7 @@ function test_medium_locate
     $medium_locker_bin lock $dir_or_tape $medium $fake_hostname $PID_DAEMON ||
         error "Error while locking medium before locate"
 
-    locate_hostname=$($phobos $dir_or_tape locate $medium)
+    locate_hostname=$($valg_phobos $dir_or_tape locate $medium)
     if [ "$locate_hostname" != "$fake_hostname" ]; then
         error "$dir_or_tape locate returned $locate_hostname instead of " \
               "$fake_hostname on a locked medium"
@@ -251,7 +251,7 @@ function test_get_locate_cli
     $medium_locker_bin lock $dir_or_tape all blob $pid ||
         error "Error while locking media before get --best-host"
 
-    get_locate_output=$($phobos get --best-host $oid /tmp/out2 || true)
+    get_locate_output=$($valg_phobos get --best-host $oid /tmp/out2 || true)
     local output="Current host is not the best to get this object, try on"
     output="$output this other node, '$oid' : 'blob'"
     if [ "$get_locate_output" != "$output" ]; then

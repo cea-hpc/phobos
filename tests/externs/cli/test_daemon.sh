@@ -45,7 +45,7 @@ function test_multiple_instances
 
     sleep 1
 
-    timeout 60 $phobosd -i &
+    timeout 60 $LOG_COMPILER $phobosd -i &
     second_process=$!
 
     wait $second_process && true

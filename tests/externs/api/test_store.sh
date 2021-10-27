@@ -122,7 +122,7 @@ function test_check_put() # verb, source_file
         i=$(($i+1))
     done
 
-    $LOG_COMPILER $LOG_FLAGS $test_bin $verb "${src_files[@]}"
+    $LOG_COMPILER $test_bin $verb "${src_files[@]}"
     if [[ $? != 0 ]]; then
         error "Failed to $verb ${src_files[@]}"
     fi
@@ -169,7 +169,7 @@ function test_check_get()
     tgt="$TEST_RECOV_DIR/$id"
     mkdir -p $(dirname "$tgt")
 
-    $LOG_COMPILER $LOG_FLAGS $test_bin get "$id" "$tgt"
+    $LOG_COMPILER $test_bin get "$id" "$tgt"
 
     diff -q "$arch" "$tgt"
 
@@ -183,15 +183,15 @@ function test_check_get()
 function test_put_tag()
 {
     for f in $TEST_FILES; do
-        $test_bin tag-put $f no-such-tag && \
+        $LOG_COMPILER $test_bin tag-put $f no-such-tag && \
             error "tag-put on a media with tag 'no-such-tag' " \
                   "should have failed"
-        $test_bin tag-put $f mytag no-such-tag && \
+        $LOG_COMPILER $test_bin tag-put $f mytag no-such-tag && \
             error "tag-put on a media with tag 'mytag' and 'no-such-tag' " \
                   "should have failed"
 
         # Ensure the right directory is chosen for this tag
-        $test_bin tag-put $f mytag |& tee /dev/stderr | grep -e \
+        $LOG_COMPILER $test_bin tag-put $f mytag |& tee /dev/stderr | grep -e \
             "/tmp/pho_testdir[245]"
     done
 }
@@ -216,7 +216,7 @@ function test_put_get()
     done
 
     # check that object info can be retrieved using phobos_store_object_list()
-    $LOG_COMPILER $LOG_FLAGS $test_bin list "_$1" $TEST_FILES
+    $LOG_COMPILER $test_bin list "_$1" $TEST_FILES
 }
 
 ################################################################################

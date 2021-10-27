@@ -25,8 +25,6 @@
 
 set -xe
 
-LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
-
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
@@ -53,7 +51,7 @@ function test_delete
 {
     $phobos put --family dir /etc/hosts oid1 ||
         error "Object should be put"
-    $phobos delete oid1 ||
+    $valg_phobos delete oid1 ||
         error "Object should be deleted"
     $phobos get oid1 test_tmp &&
         error "Object should not be got"

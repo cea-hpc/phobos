@@ -33,7 +33,6 @@ set -xe
 export PHOBOS_LRS_families="dir"
 export PHOBOS_STORE_default_layout="raid1"
 export PHOBOS_STORE_default_family="dir"
-LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
 
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
@@ -98,10 +97,10 @@ function check_put_get
     rm $OUT_FILE
 
     # put file
-    $LOG_VALG $phobos --verbose put $IN_FILE $1
+    $valg_phobos --verbose put $IN_FILE $1
 
     # get file
-    $LOG_VALG $phobos --verbose get $1 $OUT_FILE
+    $valg_phobos --verbose get $1 $OUT_FILE
 
     # check the file is correct
     cmp $IN_FILE $OUT_FILE

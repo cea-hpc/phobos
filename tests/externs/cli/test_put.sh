@@ -25,8 +25,6 @@
 
 set -xe
 
-LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
-
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
@@ -76,9 +74,9 @@ trap cleanup ERR EXIT
 
 function test_extent_path
 {
-    $phobos put --family dir /etc/hosts oid1 ||
+    $valg_phobos put --family dir /etc/hosts oid1 ||
         error "Object should be put"
-    $phobos put --family dir --layout raid1 /etc/hosts oid2 ||
+    $valg_phobos put --family dir --layout raid1 /etc/hosts oid2 ||
         error "Object should be put"
 
     # some characters are removed to get a clean extent
@@ -125,8 +123,10 @@ function test_empty_put
 {
     touch /tmp/empty_file1 /tmp/empty_file2
 
-    $phobos put --tags empty_put_dir1 --family dir /tmp/empty_file1 empty_file1
-    $phobos put --tags empty_put_dir2 --family dir /tmp/empty_file2 empty_file2
+    $valg_phobos put --tags empty_put_dir1 --family dir \
+        /tmp/empty_file1 empty_file1
+    $valg_phobos put --tags empty_put_dir2 --family dir \
+        /tmp/empty_file2 empty_file2
 
     rm /tmp/empty_file1 /tmp/empty_file2
 
@@ -143,7 +143,7 @@ test_empty_put
 
 function lyt_params_helper
 {
-    $phobos put --family dir $2 /etc/hosts $1
+    $valg_phobos put --family dir $2 /etc/hosts $1
     result=$($phobos extent list --output layout,ext_count $1 | grep "raid1")
     ext_count=$(echo "$result" | cut -d'|' -f3 | xargs)
     expect=$3
@@ -192,7 +192,7 @@ function put_checkout
         local action="created"
     fi
 
-    $phobos put $2 /etc/hosts $1 ||
+    $valg_phobos put $2 /etc/hosts $1 ||
         error "Object $1 should have been $action : " \
               "phobos put $2 /etc/hosts $1"
 }

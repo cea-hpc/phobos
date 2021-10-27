@@ -23,8 +23,6 @@
 
 set -xe
 
-LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
-
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
@@ -75,27 +73,27 @@ function put_tape_simple
 {
     local id=test/tape.simple
 
-    $LOG_VALG $phobos drive add --unlock ${DRIVE_ARRAY[0]}
+    $valg_phobos drive add --unlock ${DRIVE_ARRAY[0]}
 
     # test tape availability
-    $LOG_VALG $phobos put --family tape /etc/hosts $id &&
+    $valg_phobos put --family tape /etc/hosts $id &&
         error "Should not be able to put objects without media"
 
-    $LOG_VALG $phobos tape add --type lto5 ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put --family tape /etc/hosts $id &&
+    $valg_phobos tape add --type lto5 ${TAPE_ARRAY[0]}
+    $valg_phobos put --family tape /etc/hosts $id &&
         error "Should not be able to put objects without formatted media"
 
-    $LOG_VALG $phobos tape format ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put --family tape /etc/hosts $id &&
+    $valg_phobos tape format ${TAPE_ARRAY[0]}
+    $valg_phobos put --family tape /etc/hosts $id &&
         error "Should not be able to put objects without unlocked media"
 
-    $LOG_VALG $phobos tape unlock --force ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put --family tape /etc/hosts $id ||
+    $valg_phobos tape unlock --force ${TAPE_ARRAY[0]}
+    $valg_phobos put --family tape /etc/hosts $id ||
         error "Put with an available media should have worked"
 
     # test drive availability
-    $LOG_VALG $phobos drive lock --force ${DRIVE_ARRAY[0]}
-    $LOG_VALG $phobos put --family tape /etc/hosts ${id}.2 &&
+    $valg_phobos drive lock --force ${DRIVE_ARRAY[0]}
+    $valg_phobos put --family tape /etc/hosts ${id}.2 &&
         error "Should not be able to put objects without unlocked device"
 
     return 0
@@ -106,19 +104,19 @@ function put_dir_simple
     local id=test/dir.simple
 
     # test dir availability
-    $LOG_VALG $phobos put --family dir /etc/hosts $id &&
+    $valg_phobos put --family dir /etc/hosts $id &&
         error "Should not be able to put objects without media"
 
-    $LOG_VALG $phobos dir add ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put --family dir /etc/hosts $id &&
+    $valg_phobos dir add ${DIR_ARRAY[0]}
+    $valg_phobos put --family dir /etc/hosts $id &&
         error "Should not be able to put objects without formatted media"
 
-    $LOG_VALG $phobos dir format --fs posix ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put --family dir /etc/hosts $id &&
+    $valg_phobos dir format --fs posix ${DIR_ARRAY[0]}
+    $valg_phobos put --family dir /etc/hosts $id &&
         error "Should not be able to put objects without unlocked media"
 
-    $LOG_VALG $phobos dir unlock --force ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put --family dir /etc/hosts $id ||
+    $valg_phobos dir unlock --force ${DIR_ARRAY[0]}
+    $valg_phobos put --family dir /etc/hosts $id ||
         error "Put with an available medium should have worked"
 
     return 0
@@ -128,29 +126,29 @@ function put_tape_raid
 {
     local id=test/tape.raid
 
-    $LOG_VALG $phobos drive add --unlock ${DRIVE_ARRAY[@]}
-    $LOG_VALG $phobos tape add --type lto5 ${TAPE_ARRAY[1]}
-    $LOG_VALG $phobos tape format --unlock ${TAPE_ARRAY[1]}
+    $valg_phobos drive add --unlock ${DRIVE_ARRAY[@]}
+    $valg_phobos tape add --type lto5 ${TAPE_ARRAY[1]}
+    $valg_phobos tape format --unlock ${TAPE_ARRAY[1]}
 
     # test tape availability
-    $LOG_VALG $phobos put --family tape --layout raid1 /etc/hosts $id &&
+    $valg_phobos put --family tape --layout raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 media"
 
-    $LOG_VALG $phobos tape add --type lto5 ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put --family tape --layout raid1 /etc/hosts $id &&
+    $valg_phobos tape add --type lto5 ${TAPE_ARRAY[0]}
+    $valg_phobos put --family tape --layout raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 formatted media"
 
-    $LOG_VALG $phobos tape format ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put --family tape --layout raid1 /etc/hosts $id &&
+    $valg_phobos tape format ${TAPE_ARRAY[0]}
+    $valg_phobos put --family tape --layout raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 unlocked media"
 
-    $LOG_VALG $phobos tape unlock --force ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos put --family tape --layout raid1 /etc/hosts $id ||
+    $valg_phobos tape unlock --force ${TAPE_ARRAY[0]}
+    $valg_phobos put --family tape --layout raid1 /etc/hosts $id ||
         error "Put with available media should have worked"
 
     # test drive availability
-    $LOG_VALG $phobos drive lock --force ${DRIVE_ARRAY[0]}
-    $LOG_VALG $phobos put --layout raid1 /etc/hosts ${id}.2 &&
+    $valg_phobos drive lock --force ${DRIVE_ARRAY[0]}
+    $valg_phobos put --layout raid1 /etc/hosts ${id}.2 &&
         error "Should not be able to put objects with 1/2 unlocked devices"
 
     return 0
@@ -160,24 +158,24 @@ function put_dir_raid
 {
     local id=test/dir.raid
 
-    $LOG_VALG $phobos dir add ${DIR_ARRAY[1]}
-    $LOG_VALG $phobos dir format --fs posix --unlock ${DIR_ARRAY[1]}
+    $valg_phobos dir add ${DIR_ARRAY[1]}
+    $valg_phobos dir format --fs posix --unlock ${DIR_ARRAY[1]}
 
     # test dir availability
-    $LOG_VALG $phobos put --family dir --layout raid1 /etc/hosts $id &&
+    $valg_phobos put --family dir --layout raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 media"
 
-    $LOG_VALG $phobos dir add ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put --family dir --layout raid1 /etc/hosts $id &&
+    $valg_phobos dir add ${DIR_ARRAY[0]}
+    $valg_phobos put --family dir --layout raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 formatted media"
 
-    $LOG_VALG $phobos dir format --fs posix ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put --family dir --layout raid1 /etc/hosts $id &&
+    $valg_phobos dir format --fs posix ${DIR_ARRAY[0]}
+    $valg_phobos put --family dir --layout raid1 /etc/hosts $id &&
         error "Should not be able to put objects with 1/2 unlocked media"
 
     # resources are available
-    $LOG_VALG $phobos dir unlock --force ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos put --family dir --layout raid1 /etc/hosts $id ||
+    $valg_phobos dir unlock --force ${DIR_ARRAY[0]}
+    $valg_phobos put --family dir --layout raid1 /etc/hosts $id ||
         error "Put with available media should have worked"
 
     return 0
@@ -188,18 +186,18 @@ function get_tape_simple
     local id=test/tape.simple
 
     # test drive availability
-    $LOG_VALG $phobos get $id /tmp/out &&
+    $valg_phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked device"
 
     # resources are available
-    $LOG_VALG $phobos drive unlock --force ${DRIVE_ARRAY[0]}
-    $LOG_VALG $phobos get $id /tmp/out ||
+    $valg_phobos drive unlock --force ${DRIVE_ARRAY[0]}
+    $valg_phobos get $id /tmp/out ||
         error "Get with available medium should have worked"
     rm /tmp/out
 
     # test tape availability
-    $LOG_VALG $phobos tape lock --force ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos get $id /tmp/out &&
+    $valg_phobos tape lock --force ${TAPE_ARRAY[0]}
+    $valg_phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked medium"
 
     return 0
@@ -210,13 +208,13 @@ function get_dir_simple
     local id=test/dir.simple
 
     # ressources are available
-    $LOG_VALG $phobos get $id /tmp/out ||
+    $valg_phobos get $id /tmp/out ||
         error "Get with available medium should have worked"
     rm /tmp/out
 
     # test dir availability
-    $LOG_VALG $phobos dir lock --force ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos get $id /tmp/out &&
+    $valg_phobos dir lock --force ${DIR_ARRAY[0]}
+    $valg_phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked medium"
 
     return 0
@@ -227,28 +225,28 @@ function get_tape_raid
     local id=test/tape.raid
 
     # test drive availability
-    $LOG_VALG $phobos get $id /tmp/out ||
+    $valg_phobos get $id /tmp/out ||
         error "Get with 1/2 available device should have worked"
     rm /tmp/out
 
-    $LOG_VALG $phobos drive lock --force ${DRIVE_ARRAY[1]}
-    $LOG_VALG $phobos get $id /tmp/out &&
+    $valg_phobos drive lock --force ${DRIVE_ARRAY[1]}
+    $valg_phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked devices"
 
     # resources are available
-    $LOG_VALG $phobos drive unlock --force ${DRIVE_ARRAY[@]}
-    $LOG_VALG $phobos get $id /tmp/out ||
+    $valg_phobos drive unlock --force ${DRIVE_ARRAY[@]}
+    $valg_phobos get $id /tmp/out ||
         error "Get with available medium should have worked"
     rm /tmp/out
 
     # test tape availability
-    $LOG_VALG $phobos tape lock --force ${TAPE_ARRAY[0]}
-    $LOG_VALG $phobos get $id /tmp/out ||
+    $valg_phobos tape lock --force ${TAPE_ARRAY[0]}
+    $valg_phobos get $id /tmp/out ||
         error "Get with 1/2 available medium should have worked"
     rm /tmp/out
 
-    $LOG_VALG $phobos tape lock --force ${TAPE_ARRAY[1]}
-    $LOG_VALG $phobos get $id /tmp/out &&
+    $valg_phobos tape lock --force ${TAPE_ARRAY[1]}
+    $valg_phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked media"
 
     return 0
@@ -259,18 +257,18 @@ function get_dir_raid
     local id=test/dir.raid
 
     #ressources are available
-    $LOG_VALG $phobos get $id /tmp/out ||
+    $valg_phobos get $id /tmp/out ||
         error "Get with available medium should have worked"
     rm /tmp/out
 
     # test dir availability
-    $LOG_VALG $phobos dir lock --force ${DIR_ARRAY[0]}
-    $LOG_VALG $phobos get $id /tmp/out ||
+    $valg_phobos dir lock --force ${DIR_ARRAY[0]}
+    $valg_phobos get $id /tmp/out ||
         error "Get with 1/2 available medium should have worked"
     rm /tmp/out
 
-    $LOG_VALG $phobos dir lock --force ${DIR_ARRAY[1]}
-    $LOG_VALG $phobos get $id /tmp/out &&
+    $valg_phobos dir lock --force ${DIR_ARRAY[1]}
+    $valg_phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked medium"
 
     return 0

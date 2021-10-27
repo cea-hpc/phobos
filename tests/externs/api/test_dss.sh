@@ -63,13 +63,13 @@ function test_check_get
 
     if [[ "$nb_item" != "" ]]
     then
-        $LOG_COMPILER $LOG_FLAGS $test_bin get "$type" "$crit" "$nb_item" ||
+        $LOG_COMPILER $test_bin get "$type" "$crit" "$nb_item" ||
             rc=$?
     elif [[ "$crit" != "" ]]
     then
-        $LOG_COMPILER $LOG_FLAGS $test_bin get "$type" "$crit" || rc=$?
+        $LOG_COMPILER $test_bin get "$type" "$crit" || rc=$?
     else
-        $LOG_COMPILER $LOG_FLAGS $test_bin get "$type"
+        $LOG_COMPILER $test_bin get "$type"
     fi
 
     check_rc $rc $expect_fail
@@ -83,7 +83,7 @@ function test_check_set
     local expect_fail=$4
     local rc=0
 
-    $LOG_COMPILER $LOG_FLAGS $test_bin set "$type" "$crit" "$action" || rc=$?
+    $LOG_COMPILER $test_bin set "$type" "$crit" "$action" || rc=$?
     check_rc $rc $expect_fail
 }
 
@@ -96,7 +96,7 @@ function test_check_lock
     local expect_fail=$5
     local rc=0
 
-    $LOG_COMPILER $LOG_FLAGS $test_bin "$action" "$target" \
+    $LOG_COMPILER $test_bin "$action" "$target" \
         $lock_hostname $lock_owner || rc=$?
     check_rc $rc $expect_fail
 }

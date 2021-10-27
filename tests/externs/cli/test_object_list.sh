@@ -23,8 +23,6 @@
 
 set -xe
 
-LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
-
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
@@ -72,7 +70,7 @@ function test_object_list_pattern
     do
         match=$(echo "$id" | cut -d';' -f1)
         exp=$(echo -e $(echo "$id" | cut -d';' -f2))
-        res=$($phobos object list $match)
+        res=$($valg_phobos object list $match)
 
         if [ "$res" != "$exp" ]; then
             list_error "$match" "$res" "$exp"

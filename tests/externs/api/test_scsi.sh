@@ -31,7 +31,7 @@ if  [[ -w /dev/changer ]]; then
     # make sure no process uses the drive
     /usr/share/ltfs/ltfs stop || true
 
-    $LOG_COMPILER $LOG_FLAGS ./test_scsi
+    $LOG_COMPILER ./test_scsi
 else
     ls -ld /dev/changer
     echo "Cannot access library: test skipped"

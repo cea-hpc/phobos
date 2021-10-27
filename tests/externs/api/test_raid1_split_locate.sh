@@ -35,7 +35,6 @@ export PHOBOS_LRS_families="dir"
 export PHOBOS_STORE_default_layout="raid1"
 export PHOBOS_STORE_default_family="dir"
 export PHOBOS_LAYOUT_RAID1_repl_count=2
-LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
 
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
@@ -122,10 +121,10 @@ invoke_daemon
 trap cleanup EXIT
 
 # put file
-$LOG_VALG $phobos --verbose put $IN_FILE $OBJECT
+$phobos --verbose put $IN_FILE $OBJECT
 
 # test locate
-$test_raid1_split_locate_bin $OBJECT
+$LOG_COMPILER $test_raid1_split_locate_bin $OBJECT
 
 trap - EXIT
 cleanup || true

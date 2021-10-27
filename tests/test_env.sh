@@ -58,6 +58,8 @@ export PHOBOS_LTFS_cmd_umount="$ldm_helper umount_ltfs '%s' '%s'"
 phobos="$cli_dir/scripts/phobos"
 [ x$DEBUG = x1 ] && phobos="$phobos -vvv"
 
+valg_phobos="$LOG_COMPILER $phobos"
+
 phobosd="$lrs_dir/phobosd"
 
 # utils function

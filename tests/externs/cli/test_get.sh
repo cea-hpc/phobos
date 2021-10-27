@@ -25,8 +25,6 @@
 
 set -xe
 
-LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
-
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
@@ -54,50 +52,50 @@ function test_get
 
     local uuid=$($phobos object list --output uuid oid1)
 
-    $phobos get oid1 /tmp/out \
+    $valg_phobos get oid1 /tmp/out \
         || error "Get operation failed"
     rm /tmp/out
-    $phobos get --version 1 oid1 /tmp/out \
+    $valg_phobos get --version 1 oid1 /tmp/out \
         || error "Get operation failed"
     rm /tmp/out
-    $phobos get --uuid $uuid oid1 /tmp/out \
+    $valg_phobos get --uuid $uuid oid1 /tmp/out \
         || error "Get operation failed"
     rm /tmp/out
-    $phobos get --version 1 --uuid $uuid oid1 /tmp/out \
+    $valg_phobos get --version 1 --uuid $uuid oid1 /tmp/out \
         || error "Get operation failed"
     rm /tmp/out
 
     $phobos delete oid1
 
-    $phobos get oid1 /tmp/out \
+    $valg_phobos get oid1 /tmp/out \
         && error "Get operation should have failed" \
         || true
-    $phobos get --version 1 oid1 /tmp/out \
+    $valg_phobos get --version 1 oid1 /tmp/out \
         || error "Get operation failed"
     rm /tmp/out
 
-    $phobos get --uuid $uuid oid1 /tmp/out \
+    $valg_phobos get --uuid $uuid oid1 /tmp/out \
         || error "Get operation failed"
     rm /tmp/out
 }
 
 function test_errors
 {
-    $phobos get oid2 /tmp/out \
+    $valg_phobos get oid2 /tmp/out \
         && error "Get operation should fail on invalid oid" \
         || true
 
-    $phobos get --uuid fake_uuid oid1 /tmp/out \
+    $valg_phobos get --uuid fake_uuid oid1 /tmp/out \
         && error "Get operation should fail on invalid uuid" \
         || true
 
     $phobos put --family dir /etc/hosts oid1
-    $phobos get --version 5 oid1 /tmp/out \
+    $valg_phobos get --version 5 oid1 /tmp/out \
         && error "Get operation should fail on invalid version" \
         || true
 
     $phobos delete oid1
-    $phobos get --version 5 oid1 /tmp/out \
+    $valg_phobos get --version 5 oid1 /tmp/out \
         && error "Get operation should fail on invalid version" \
         || true
 }

@@ -25,8 +25,6 @@
 
 set -xe
 
-LOG_VALG="$LOG_COMPILER $LOG_FLAGS"
-
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
@@ -47,9 +45,9 @@ function cleanup
 function test_ping
 {
     invoke_daemon
-    $phobos ping || error "Ping should be successful"
+    $valg_phobos ping || error "Ping should be successful"
     waive_daemon
-    $phobos ping && error "Ping should fail"
+    $valg_phobos ping && error "Ping should fail"
     return 0
 }
 

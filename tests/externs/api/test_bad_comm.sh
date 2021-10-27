@@ -49,5 +49,5 @@ setup_tables
 invoke_daemon
 trap cleanup EXIT
 dir_setup
-$LOG_COMPILER $LOG_FLAGS ./test_bad_comm
+$LOG_COMPILER ./test_bad_comm
 kill -0 $PID_DAEMON &> /dev/null || error "phobosd exited prematurely"

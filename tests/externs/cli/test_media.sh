@@ -66,13 +66,13 @@ function test_put_update() {
     obj=$3
 
     # put first_tag on the media
-    $phobos $family update --tags first_tag $media_name
+    $valg_phobos $family update --tags first_tag $media_name
 
     # put an object asking a media tagged with "first_tag"
     $phobos put --family $family --tags first_tag /etc/hosts ${obj}1
 
     # put second_tag on the media when it is tagged with old first_tag
-    $phobos $family update --tags second_tag $media_name
+    $valg_phobos $family update --tags second_tag $media_name
 
     # put again one object using outdated tag and check it is updated
     $phobos put --family $family --tags first_tag /etc/hosts ${obj}2 &&
@@ -135,28 +135,29 @@ echo "**** TESTS: CLI LIST MEDIA OPERATION TAGS ****"
 $phobos dir list --output put_access,get_access,delete_access
 
 echo "**** TESTS: CLI \"set-access\" bad syntax detection ****"
-$phobos dir set-access p /tmp/pho_testdir1 && error "p should be a bad FLAG"
-$phobos dir set-access -- -PGJ /tmp/pho_testdir1 &&
+$valg_phobos dir set-access p /tmp/pho_testdir1 &&
+    error "p should be a bad FLAG"
+$valg_phobos dir set-access -- -PGJ /tmp/pho_testdir1 &&
     error "PGJ- should be a bad FLAG"
 
 echo "**** TESTS: CLI SET MEDIA OPERATION TAGS ****"
-$phobos dir set-access P /tmp/pho_testdir1
+$valg_phobos dir set-access P /tmp/pho_testdir1
 test_dir_operation_flags /tmp/pho_testdir1 True False False
-$phobos dir set-access +G /tmp/pho_testdir1
+$valg_phobos dir set-access +G /tmp/pho_testdir1
 test_dir_operation_flags /tmp/pho_testdir1 True True False
-$phobos dir set-access -- -PD /tmp/pho_testdir1
+$valg_phobos dir set-access -- -PD /tmp/pho_testdir1
 test_dir_operation_flags /tmp/pho_testdir1 False True False
-$phobos dir set-access +PD /tmp/pho_testdir1
+$valg_phobos dir set-access +PD /tmp/pho_testdir1
 test_dir_operation_flags /tmp/pho_testdir1 True True True
 
 echo "**** TESTS: PUT MEDIA OPERATION TAGS ****"
 # remove all dir put access
-$phobos dir set-access -- -P $($phobos dir list)
+$valg_phobos dir set-access -- -P $($phobos dir list)
 # try one put without any dir put access
 $phobos put --family dir /etc/hosts host1 &&
     error "Put without any medium with 'P' operation flag should fail"
 # set one put access
-$phobos dir set-access +P /tmp/pho_testdir3
+$valg_phobos dir set-access +P /tmp/pho_testdir3
 # try to put with this new dir put access
 $phobos put --family dir /etc/hosts host2
 # check the used dir corresponds to the one with the put access
@@ -170,11 +171,11 @@ echo "**** TESTS: GET MEDIA OPERATION TAGS ****"
 # put a new object to get
 $phobos put --family dir /etc/hosts obj_to_get
 # remove all dir get access
-$phobos dir set-access -- -G $($phobos dir list)
+$valg_phobos dir set-access -- -G $($phobos dir list)
 # try one get without any dir get access
 $phobos get obj_to_get /tmp/gotten_obj && rm /tmp/gotten_obj &&
     error "Get without any medium with 'G' operation flag should fail"
 # set get access on all dir
-$phobos dir set-access +G $($phobos dir list)
+$valg_phobos dir set-access +G $($phobos dir list)
 # try to get
 $phobos get obj_to_get /tmp/gotten_obj && rm /tmp/gotten_obj

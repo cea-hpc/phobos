@@ -99,7 +99,7 @@ invoke_daemon
 trap cleanup EXIT
 
 dir_setup
-$test_bin dir || exit 1
+$LOG_VALG $test_bin dir
 
 if [[ -w /dev/changer ]]; then
     cleanup
@@ -107,5 +107,5 @@ if [[ -w /dev/changer ]]; then
     invoke_daemon
 
     tape_setup
-    $test_bin tape || exit 1
+    $LOG_VALG $test_bin tape
 fi

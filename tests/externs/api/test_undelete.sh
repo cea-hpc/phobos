@@ -48,7 +48,7 @@ EOF
 
 trap clean_test ERR EXIT
 invoke_daemon
-$test_bin || exit 1
+$LOG_COMPILER $test_bin
 
 # -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
 # vim:expandtab:shiftwidth=4:tabstop=4:
