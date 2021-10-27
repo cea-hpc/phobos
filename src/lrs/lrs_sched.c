@@ -2852,22 +2852,16 @@ static int sched_handle_release_reqs(struct lrs_sched *sched,
         rc = sched_handle_media_release(sched, req->release);
 
         /* If resp_array is NULL, just release media, do not save responses */
-        if (resp_array == NULL) {
-            pho_srl_request_free(req, true);
-            free(reqc);
-            continue;
-        }
+        if (resp_array == NULL)
+            goto freereq;
 
         g_array_set_size(resp_array, resp_array->len + 1);
         respc = &g_array_index(resp_array, struct resp_container,
                                resp_array->len - 1);
         respc->socket_id = reqc->socket_id;
         respc->resp = malloc(sizeof(*respc->resp));
-        if (!respc->resp) {
-            pho_srl_request_free(req, true);
-            free(reqc);
-            continue;
-        }
+        if (!respc->resp)
+            goto freereq;
 
         if (rc) {
             int rc2 = pho_srl_response_error_alloc(respc->resp);
@@ -2901,11 +2895,12 @@ static int sched_handle_release_reqs(struct lrs_sched *sched,
                 respl->med_ids[i]->family = rel->media[i]->med_id->family;
                 respl->med_ids[i]->name = strdup(rel->media[i]->med_id->name);
             }
-
-            /* Free incoming request */
-            pho_srl_request_free(req, true);
-            free(reqc);
         }
+
+        /* Free incoming request */
+freereq:
+        pho_srl_request_free(req, true);
+        free(reqc);
     }
 
     return 0;
