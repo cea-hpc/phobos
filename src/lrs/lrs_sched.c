@@ -1976,6 +1976,7 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
      */
     *new_dev = search_loaded_media(sched, pmedia->rsc.id.name);
     if (*new_dev != NULL) {
+        media_info_free(pmedia);
         (*new_dev)->ongoing_io = true;
         if ((*new_dev)->op_status != PHO_DEV_OP_ST_MOUNTED)
             return sched_mount(sched, *new_dev);

@@ -55,9 +55,13 @@ static bool test_undelete(void)
     /* test-oid1 */
     xfers[0].xd_objuuid = "00112233445566778899aabbccddeef1";
     xfers[0].xd_objid = NULL;
+    xfers[0].xd_op = PHO_XFER_OP_UNDEL;
+    xfers[0].xd_flags = 0;
     /* test-oid2 */
     xfers[1].xd_objuuid = "00112233445566778899aabbccddeef2";
     xfers[1].xd_objid = NULL;
+    xfers[1].xd_op = PHO_XFER_OP_UNDEL;
+    xfers[1].xd_flags = 0;
 
     /* undelete */
     pho_info("Try to undelete two xfers");

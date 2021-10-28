@@ -249,18 +249,18 @@ static int global_teardown(void **state)
     int i;
 
     if (rsl_state) {
-        /* clean dss */
-        dss_fini(rsl_state->dss);
-        free(rsl_state->dss);
-
-        /* clean layout */
-        dss_res_free(rsl_state->layout, rsl_state->layout_cnt);
-
         /* clean media */
         for (i = 0; i < rsl_state->layout->ext_count; i++)
             dss_res_free(rsl_state->media[i], 1);
 
         free(rsl_state->media);
+
+        /* clean layout */
+        dss_res_free(rsl_state->layout, rsl_state->layout_cnt);
+
+        /* clean dss */
+        dss_fini(rsl_state->dss);
+        free(rsl_state->dss);
     }
 
     unsetenv("PHOBOS_DSS_connect_string");

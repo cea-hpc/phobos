@@ -60,10 +60,15 @@ static bool test_delete_success(void)
     if (rc)
         return false;
 
+    free(xfers[0].xd_objuuid);
+
     /* process the other xfer elements */
     rc = phobos_delete(xfers + 1, 2);
     if (rc)
         return false;
+
+    free(xfers[1].xd_objuuid);
+    free(xfers[2].xd_objuuid);
 
     return true;
 }
