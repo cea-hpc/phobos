@@ -1,7 +1,9 @@
 #!/bin/bash
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2017 CEA/DAM.
+#  All rights reserved (c) 2014-2021 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -18,14 +20,20 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
-set -e
+set -xe
 
 test_bin_dir=$(dirname "${BASH_SOURCE[0]}")
 test_bin="$test_bin_dir/test_dss"
 
 . $test_bin_dir/../../setup_db.sh
 
-function clean_test
+function setup
+{
+    setup_tables
+    insert_examples
+}
+
+function cleanup
 {
     echo "cleaning..."
     drop_tables
@@ -101,11 +109,8 @@ function test_check_lock
     check_rc $rc $expect_fail
 }
 
-trap clean_test ERR EXIT
-
-clean_test
-setup_tables
-insert_examples
+trap cleanup EXIT
+setup
 
 echo
 

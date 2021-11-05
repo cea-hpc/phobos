@@ -1,4 +1,6 @@
 #!/bin/bash
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
 #  All rights reserved (c) 2014-2021 CEA/DAM.
@@ -31,24 +33,25 @@ test_bin="$test_bin_dir/test_undelete"
 . $test_bin_dir/setup_db.sh
 . $test_bin_dir/test_launch_daemon.sh
 
-function clean_test
+function setup
+{
+    setup_tables
+    psql phobos phobos << EOF
+    INSERT INTO deprecated_object VALUES
+        ('test-oid1', '00112233445566778899aabbccddeef1', 1, '{}'),
+        ('test-oid1', '00112233445566778899aabbccddeef1', 2, '{}'),
+        ('test-oid2', '00112233445566778899aabbccddeef2', 1, '{}');
+EOF
+    invoke_daemon
+}
+
+function cleanup
 {
     waive_daemon
     drop_tables
 }
 
-trap drop_tables ERR EXIT
-setup_tables
-psql phobos phobos << EOF
-    INSERT INTO deprecated_object VALUES \
-        ('test-oid1', '00112233445566778899aabbccddeef1', 1, '{}'), \
-        ('test-oid1', '00112233445566778899aabbccddeef1', 2, '{}'), \
-        ('test-oid2', '00112233445566778899aabbccddeef2', 1, '{}');
-EOF
+trap cleanup EXIT
+setup
 
-trap clean_test ERR EXIT
-invoke_daemon
 $LOG_COMPILER $test_bin
-
-# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
-# vim:expandtab:shiftwidth=4:tabstop=4:

@@ -1,4 +1,6 @@
 #!/bin/bash
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
 #  All rights reserved (c) 2014-2021 CEA/DAM.
@@ -84,6 +86,13 @@ function tape_setup
     $phobos --verbose tape format $lto6_tapes --unlock
 }
 
+function setup
+{
+    drop_tables
+    setup_tables
+    invoke_daemon
+}
+
 function cleanup
 {
     waive_daemon
@@ -93,10 +102,8 @@ function cleanup
     rm -f /tmp/out*
 }
 
-drop_tables
-setup_tables
-invoke_daemon
 trap cleanup EXIT
+setup
 
 dir_setup
 $LOG_VALG $test_bin dir

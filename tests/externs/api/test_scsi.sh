@@ -1,7 +1,9 @@
 #!/bin/bash
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2017 CEA/DAM.
+#  All rights reserved (c) 2014-2021 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -33,10 +35,6 @@ if  [[ -w /dev/changer ]]; then
 
     $LOG_COMPILER ./test_scsi
 else
-    ls -ld /dev/changer
     echo "Cannot access library: test skipped"
     exit 77 # special value to mark test as 'skipped'
 fi
-
-# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
-# vim:expandtab:shiftwidth=4:tabstop=4:

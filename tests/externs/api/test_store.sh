@@ -1,10 +1,9 @@
+#!/bin/bash
 # -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
-#!/bin/bash
-
 #
-#  All rights reserved (c) 2014-2017 CEA/DAM.
+#  All rights reserved (c) 2014-2021 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -24,7 +23,7 @@
 
 # test posix mode
 
-set -e
+set -xe
 
 test_bin_dir=$(dirname $(readlink -e $0))
 test_bin="$test_bin_dir/test_store"
@@ -44,18 +43,22 @@ echo "**** POSIX TEST MODE ****"
 TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2 /tmp/pho_testdir3 \
           /tmp/pho_testdir4 /tmp/pho_testdir5"
 
-export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
-export PHOBOS_LRS_families="dir"
-
-export PHOBOS_STORE_default_family="dir"
-
-function init()
+function setup()
 {
-    drop_tables
     setup_tables
     insert_examples
-    rm -rf $TEST_RECOV_DIR
     mkdir $TEST_RECOV_DIR
+    invoke_daemon
+
+    for dir in $TEST_MNT; do
+        # allow later cleaning by other users
+        umask 000
+        mkdir -p "$dir"
+    done
+
+    export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_STORE_default_family="dir"
 }
 
 function clear_mnt_content()
@@ -66,12 +69,12 @@ function clear_mnt_content()
 
 }
 
-function clean_test()
+function cleanup()
 {
     drop_tables
     waive_daemon
-    rm -rf "$TEST_FILES"
-    rm -rf "$TEST_RECOV_DIR"
+    rm -rf $TEST_FILES
+    rm -rf $TEST_RECOV_DIR
     for d in $TEST_MNT; do
         rm -rf $d
     done
@@ -79,7 +82,7 @@ function clean_test()
 
 function create_files()
 {
-    rm -rf "$TEST_FILES"
+    rm -rf $TEST_FILES
     clear_mnt_content
 
     TEST_RAND=/tmp/RAND_$$_$1
@@ -95,16 +98,8 @@ function create_files()
     TEST_FILES="$TEST_FILES $TEST_RAND"
 }
 
-trap clean_test ERR EXIT
-
-init
-invoke_daemon
-
-for dir in $TEST_MNT; do
-    # allow later cleaning by other users
-    umask 000
-    mkdir -p "$dir"
-done
+trap cleanup EXIT
+setup
 
 ################################################################################
 #                   TEST PUTTING OBJECTS AND CHECK THE RESULTS                 #

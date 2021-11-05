@@ -3,7 +3,7 @@
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2019 CEA/DAM.
+#  All rights reserved (c) 2014-2021 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -89,10 +89,17 @@ insert into media (family, model, id, adm_status, fs_type, address_type,
 EOF
 }
 
-function dir_setup
+function setup
 {
-    rm -rf $DIR1 $DIR2 $DIR3 $DIR4
+    setup_tables
+
+    # set start context
+    dd if=/dev/random of=$IN_FILE count=$FULL_SIZE  bs=1
+
     mkdir -p $DIR1 $DIR2 $DIR3 $DIR4
+
+    insert_dir
+    invoke_daemon
 }
 
 function cleanup
@@ -103,28 +110,8 @@ function cleanup
     drop_tables
 }
 
-function create_in_file
-{
-    rm -rf $IN_FILE
-    dd if=/dev/random of=$IN_FILE count=$FULL_SIZE  bs=1
-}
-
-# start with a clean/empty phobos DB
-drop_tables
-setup_tables
-# set start context
-create_in_file
-dir_setup
-insert_dir
-invoke_daemon
-# clean at exit
 trap cleanup EXIT
+setup
 
-# put file
 $phobos --verbose put $IN_FILE $OBJECT
-
-# test locate
 $LOG_COMPILER $test_raid1_split_locate_bin $OBJECT
-
-trap - EXIT
-cleanup || true

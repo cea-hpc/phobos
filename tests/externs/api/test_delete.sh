@@ -1,7 +1,9 @@
 #!/bin/bash
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2017 CEA/DAM.
+#  All rights reserved (c) 2014-2021 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -23,7 +25,7 @@
 # Context initializer for delete API call tests
 #
 
-set -e
+set -xe
 
 test_bin_dir=$(dirname $(readlink -e $0))
 test_bin="$test_bin_dir/test_delete"
@@ -31,28 +33,27 @@ test_bin="$test_bin_dir/test_delete"
 . $test_bin_dir/setup_db.sh
 . $test_bin_dir/test_launch_daemon.sh
 
-function clean_test
+function setup
+{
+    setup_tables
+
+    psql phobos phobos << EOF
+    INSERT INTO object VALUES
+        ('test-oid1', '00112233445566778899aabbccddeef1', 1, '{}'),
+        ('test-oid2', '00112233445566778899aabbccddeef2', 1, '{}'),
+        ('test-oid3', '00112233445566778899aabbccddeef3', 1, '{}');
+EOF
+
+    invoke_daemon
+}
+
+function cleanup
 {
     waive_daemon
     drop_tables
 }
 
-trap clean_test ERR EXIT
+trap cleanup EXIT
+setup
 
-drop_tables
-setup_tables
-
-psql phobos phobos << EOF
-    INSERT INTO object VALUES ('test-oid1', '00112233445566778899aabbccddeef1',\
-                               1, '{}'),
-                              ('test-oid2', '00112233445566778899aabbccddeef2',\
-                               1, '{}'),
-                              ('test-oid3', '00112233445566778899aabbccddeef3',\
-                               1, '{}');
-EOF
-
-invoke_daemon
 $LOG_COMPILER $test_bin
-
-# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
-# vim:expandtab:shiftwidth=4:tabstop=4:

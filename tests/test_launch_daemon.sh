@@ -15,6 +15,10 @@ function invoke_daemon()
 
 function waive_daemon()
 {
+    if [ $PID_DAEMON -eq 0 ]; then
+        return 0
+    fi
+
     kill $PID_DAEMON &>/dev/null || echo "Daemon was not running"
     # wait would not work here because PID_DAEMON is not an actual child
     # of this shell (created by phobosd in invoke_daemon)
