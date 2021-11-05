@@ -27,8 +27,11 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
 
-function insert_table
+function setup
 {
+    # start with a clean and empty DB
+    setup_tables
+
     local PSQL="psql phobos -U phobos"
     $PSQL << EOF
 insert into object (oid, user_md)
@@ -80,11 +83,8 @@ function test_object_list_pattern
     return 0
 }
 
-# start with a clean and empty DB
-drop_tables
-setup_tables
-insert_table
+trap cleanup EXIT
+setup
+
 # test object list with pattern
 test_object_list_pattern
-#clean at exit
-trap cleanup EXIT

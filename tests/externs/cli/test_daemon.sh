@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-#  All rights reserved (c) 2014-2020 CEA/DAM.
+#  All rights reserved (c) 2014-2021 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -25,13 +25,14 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
 
-export PHOBOS_LRS_lock_file="$test_bin_dir/phobosd.lock"
-
-function error
+function setup
 {
-    echo "$*"
+    export PHOBOS_LRS_lock_file="$test_bin_dir/phobosd.lock"
+}
+
+function cleanup
+{
     drop_tables
-    exit 1
 }
 
 function test_multiple_instances
@@ -188,7 +189,6 @@ function test_recover_drive_old_locks
     drop_tables
 }
 
-
 function test_remove_invalid_device_locks
 {
     setup_tables
@@ -232,7 +232,9 @@ function test_remove_invalid_device_locks
     drop_tables
 }
 
-drop_tables
+trap cleanup EXIT
+setup
+
 test_multiple_instances
 test_recover_dir_old_locks
 test_remove_invalid_media_locks

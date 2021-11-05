@@ -32,12 +32,17 @@ test_dir=$(dirname $(readlink -e $0))
 
 function dir_setup
 {
-    export dirs="
-        $(mktemp -d /tmp/test.pho.XXXX)
-    "
+    dirs="$(mktemp -d /tmp/test.pho.XXXX)"
     echo "adding directories $dirs"
     $phobos dir add $dirs
     $phobos dir format --fs posix --unlock $dirs
+}
+
+function setup
+{
+    setup_tables
+    invoke_daemon
+    dir_setup
 }
 
 function cleanup
@@ -67,9 +72,7 @@ function test_delete
     return 0
 }
 
-drop_tables
-setup_tables
-invoke_daemon
 trap cleanup EXIT
-dir_setup
+setup
+
 test_delete

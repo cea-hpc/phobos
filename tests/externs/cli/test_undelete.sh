@@ -32,12 +32,17 @@ test_dir=$(dirname $(readlink -e $0))
 
 function dir_setup
 {
-    export dirs="
-        $(mktemp -d /tmp/test.pho.XXXX)
-    "
+    export dirs="$(mktemp -d /tmp/test.pho.XXXX)"
     echo "adding directories $dirs"
     $phobos dir add $dirs
     $phobos dir format --fs posix --unlock $dirs
+}
+
+function setup
+{
+    setup_tables
+    invoke_daemon
+    dir_setup
 }
 
 function cleanup
@@ -50,10 +55,8 @@ function cleanup
 function test_undelete
 {
     echo "**** TEST UNDELETE BY UUID ****"
-    $phobos put --family dir /etc/hosts oid1 ||
-        error "Object should be put"
-    $phobos delete oid1 ||
-        error "Object should be deleted"
+    $phobos put --family dir /etc/hosts oid1 || error "Object should be put"
+    $phobos delete oid1 || error "Object should be deleted"
 
     uuid=$($phobos object list --deprecated --output uuid oid1)
     $valg_phobos undelete uuid $uuid ||
@@ -69,10 +72,8 @@ function test_undelete
     #    error "Undeleting an unexisting uuid should failed"
 
     echo "**** TEST UNDELETE BY OID ****"
-    $phobos put --family dir /etc/hosts oid2 ||
-        error "Object should be put"
-    $phobos delete oid2 ||
-        error "Object should be deleted"
+    $phobos put --family dir /etc/hosts oid2 || error "Object should be put"
+    $phobos delete oid2 || error "Object should be deleted"
 
     $valg_phobos undelete oid oid2 ||
         error "Object should be undeleted without any error"
@@ -100,10 +101,7 @@ function test_undelete
     return 0
 }
 
-trap drop_tables ERR EXIT
-drop_tables
-setup_tables
-trap cleanup ERR EXIT
-invoke_daemon
-dir_setup
+trap cleanup EXIT
+setup
+
 test_undelete

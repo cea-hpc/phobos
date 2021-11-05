@@ -29,32 +29,29 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
 
-function error
-{
-    echo "$*"
-    exit 1
-}
-
 function dir_setup
 {
-    export dir1="$(mktemp -d /tmp/test.pho.XXXX)"
-    export dir2="$(mktemp -d /tmp/test.pho.XXXX)"
+    dir1="$(mktemp -d /tmp/test.pho.XXXX)"
+    dir2="$(mktemp -d /tmp/test.pho.XXXX)"
     $phobos dir add -T first_dir $dir1
     $phobos dir format --fs posix --unlock $dir1
     $phobos dir add -T second_dir $dir2
     $phobos dir format --fs posix --unlock $dir2
 }
 
-function rm_folders
+function setup
 {
-    rm -rf /tmp/test.pho.d1 /tmp/test.pho.d2
+    setup_tables
+    invoke_daemon
+
+    dir_setup
 }
 
 function cleanup
 {
     waive_daemon
     drop_tables
-    rm_folders
+    rm -rf $dir1 $dir2
 }
 
 function list_error
@@ -103,9 +100,7 @@ function test_extent_list_pattern
     return 0
 }
 
-rm_folders
-setup_tables
-invoke_daemon
 trap cleanup EXIT
-dir_setup
+setup
+
 test_extent_list_pattern

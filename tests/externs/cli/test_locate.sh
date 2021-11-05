@@ -43,6 +43,13 @@ function dir_setup
     $phobos dir format --fs posix --unlock $dirs
 }
 
+function setup
+{
+    setup_tables
+    invoke_daemon
+    dir_setup
+}
+
 function tape_setup
 {
     local N_TAPES=2
@@ -106,7 +113,7 @@ function cleanup
     drop_tables
     drain_all_drives
     rm -rf $dirs
-    rm /tmp/out* || true
+    rm -rf /tmp/out*
 }
 
 function test_locate_cli
@@ -271,11 +278,8 @@ function test_get_locate_cli
     done
 }
 
-drop_tables
-setup_tables
-invoke_daemon
-trap cleanup ERR EXIT
-dir_setup
+trap cleanup EXIT
+setup
 
 # test locate on disk
 export PHOBOS_STORE_default_family="dir"

@@ -30,10 +30,9 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
 
-function error
+function setup
 {
-    echo "$*"
-    exit 1
+    setup_tables # necessary for the daemon's initialization
 }
 
 function cleanup
@@ -51,6 +50,7 @@ function test_ping
     return 0
 }
 
-trap cleanup ERR EXIT
-setup_tables # necessary for the daemon's initialization
+trap cleanup EXIT
+setup
+
 test_ping

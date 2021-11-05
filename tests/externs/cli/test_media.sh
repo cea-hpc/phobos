@@ -30,6 +30,13 @@ test_bin_dir=$(dirname "${BASH_SOURCE[0]}")
 #                                    SETUP                                     #
 ################################################################################
 
+function setup()
+{
+    setup_tables
+    insert_examples
+    invoke_daemon
+}
+
 function cleanup() {
     waive_daemon
     drop_tables
@@ -50,11 +57,8 @@ for dir in $TEST_MNT; do
     [ ! -d $dir ] && mkdir -p "$dir"
 done
 
-drop_tables
-setup_tables
-insert_examples
-trap cleanup ERR EXIT
-invoke_daemon
+trap cleanup EXIT
+setup
 
 ################################################################################
 #                         TEST MEDIA UPDATE WITH TAGS                          #

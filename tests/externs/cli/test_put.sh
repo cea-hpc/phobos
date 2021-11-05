@@ -39,13 +39,22 @@ function dir_setup
 {
     empty_put_dir1=$(mktemp -d /tmp/test.pho.XXXX)
     empty_put_dir2=$(mktemp -d /tmp/test.pho.XXXX)
-    export dirs="$empty_put_dir1 $empty_put_dir2"
+    dirs="$empty_put_dir1 $empty_put_dir2"
 
     echo "adding directories $dirs"
     $phobos dir add $dirs
     $phobos dir format --fs posix --unlock $dirs
     $phobos dir update --tags empty_put_dir1 $empty_put_dir1
     $phobos dir update --tags empty_put_dir2 $empty_put_dir2
+}
+
+function setup
+{
+    export PHOBOS_STORE_default_family="dir"
+
+    setup_tables
+    invoke_daemon
+    dir_setup
 }
 
 function cleanup
@@ -59,14 +68,8 @@ function cleanup
     fi
 }
 
-export PHOBOS_STORE_default_family="dir"
-
-drop_tables
-setup_tables
-invoke_daemon
-dir_setup
-
-trap cleanup ERR EXIT
+trap cleanup EXIT
+setup
 
 ################################################################################
 #                               SIMPLE PUT TESTS                               #

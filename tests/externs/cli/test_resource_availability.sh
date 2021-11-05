@@ -3,7 +3,7 @@
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2020 CEA/DAM.
+#  All rights reserved (c) 2014-2021 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -31,11 +31,10 @@ test_dir=$(dirname $(readlink -e $0))
 
 DRIVE_ARRAY=( /dev/st0 /dev/st1 )
 TAPE_ARRAY=( P00000L5 P00001L5 )
-DIR_ARRAY=( /tmp/test.pho.1 /tmp/test.pho.2 )
 
 function setup_dir
 {
-    mkdir ${DIR_ARRAY[@]}
+    DIR_ARRAY=($(mktemp -d /tmp/test.pho.XXXX) $(mktemp -d /tmp/test.pho.XXXX))
 }
 
 function clean_dir
@@ -57,6 +56,19 @@ function empty_drives
             echo "Unloading drive $drive in slot $slot"
             mtx unload $slot $drive || echo "mtx failure"
         done
+}
+
+function setup
+{
+    if [ -w /dev/changer ]; then
+        export PHOBOS_LRS_families="dir,tape"
+    else
+        export PHOBOS_LRS_families="dir"
+    fi
+
+    setup_dir
+    setup_tables
+    invoke_daemon
 }
 
 function cleanup
@@ -274,17 +286,8 @@ function get_dir_raid
     return 0
 }
 
-if [ -w /dev/changer ]; then
-    export PHOBOS_LRS_families="dir,tape"
-else
-    export PHOBOS_LRS_families="dir"
-fi
-
-setup_dir
-drop_tables
-setup_tables
-invoke_daemon
 trap cleanup EXIT
+setup
 
 # availability with simple layout
 put_dir_simple

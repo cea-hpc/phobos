@@ -3,7 +3,7 @@
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2019 CEA/DAM.
+#  All rights reserved (c) 2014-2021 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -72,24 +72,26 @@ insert into media (family, model, id, adm_status, fs_type, address_type,
 EOF
 }
 
-function dir_setup
+function setup
 {
-    rm -rf $DIR1 $DIR2
+    # start with a clean/empty phobos DB
+    setup_tables
+
+    # set start context
+    dd if=/dev/random of=$IN_FILE count=$FULL_SIZE bs=1
+
     mkdir -p $DIR1 $DIR2
+
+    insert_dir_in_db
+    invoke_daemon
 }
 
 function cleanup
 {
     waive_daemon
     rm -rf $DIR1 $DIR2
-    rm -rf $IN_FILE
+    rm -rf $IN_FILE $OUT_FILE
     drop_tables
-}
-
-function create_in_file
-{
-    rm -rf $IN_FILE
-    dd if=/dev/random of=$IN_FILE count=$FULL_SIZE  bs=1
 }
 
 function check_put_get
@@ -107,16 +109,8 @@ function check_put_get
 
 }
 
-# start with a clean/empty phobos DB
-drop_tables
-setup_tables
-# set start context
-create_in_file
-dir_setup
-insert_dir_in_db
-invoke_daemon
-# clean at exit
 trap cleanup EXIT
+setup
 
 export PHOBOS_LAYOUT_RAID1_repl_count=1
 check_put_get raid1_simple_split_test
@@ -129,7 +123,3 @@ unset PHOBOS_LAYOUT_default_lyt_params
 export PHOBOS_LAYOUT_RAID1_repl_count=2
 check_put_get raid1_simple_split_test3
 unset PHOBOS_LAYOUT_RAID1_repl_count
-
-trap - EXIT
-cleanup || true
-
