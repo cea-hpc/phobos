@@ -103,6 +103,7 @@ struct dev_descr {
                                                   *  of the filesystem
                                                   */
     bool                 ongoing_io;            /**< one I/O is ongoing */
+    bool                 to_sync;               /**< device need to be synced */
 };
 
 /* Needed local function declarations */
