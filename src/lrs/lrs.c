@@ -163,6 +163,40 @@ static enum rsc_family _determine_family(const pho_req_t *req)
     return PHO_RSC_INVAL;
 }
 
+static int _init_release_container(struct req_container *req_cont)
+{
+    size_t n_media = req_cont->req->release->n_media;
+    struct tosync_medium *tosync_media;
+    pho_req_release_elt_t *media;
+    size_t i;
+    int rc;
+
+    req_cont->params.release.num_tosync_media = n_media;
+
+    tosync_media = calloc(n_media, sizeof(*tosync_media));
+    if (tosync_media == NULL)
+        return -errno;
+
+    for (i = 0; i < n_media; ++i) {
+        media = req_cont->req->release->media[i];
+
+        tosync_media[i].status = SYNC_TODO;
+        tosync_media[i].device.family = media->med_id->family;
+        tosync_media[i].medium.family = media->med_id->family;
+        tosync_media[i].written_size = media->size_written;
+
+        rc = pho_id_name_set(&tosync_media[i].medium, media->med_id->name);
+        if (rc) {
+            free(tosync_media);
+            return rc;
+        }
+    }
+
+    req_cont->params.release.tosync_media = tosync_media;
+
+    return 0;
+}
+
 static int _prepare_error(struct resp_container *resp_cont, int req_rc,
                           const struct req_container *req_cont)
 {
@@ -314,7 +348,7 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
         if (data[i].buf.size == -1) /* close notification, ignore */
             continue;
 
-        req_cont = malloc(sizeof(*req_cont));
+        req_cont = calloc(1, sizeof(*req_cont));
         if (!req_cont)
             LOG_RETURN(-ENOMEM, "Cannot allocate request structure");
 
@@ -338,6 +372,12 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
             LOG_GOTO(send_err, rc = -EINVAL,
                      "Requested family is not recognized");
 
+        if (pho_request_is_release(req_cont->req)) {
+            rc = _init_release_container(req_cont);
+            if (rc)
+                LOG_GOTO(send_err, rc, "Cannot init release container");
+        }
+
         if (!lrs->sched[fam])
             LOG_GOTO(send_err, rc = -EINVAL,
                      "Requested family is not handled by the daemon");
@@ -350,6 +390,7 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
 
 send_err:
         rc = _send_error(lrs, req_cont);
+        destroy_container_params(req_cont);
         if (req_cont->req)
             pho_srl_request_free(req_cont->req, true);
         free(req_cont);

@@ -51,6 +51,25 @@ struct lrs_sched {
 };
 
 /**
+ * Enumeration for request/medium synchronization status.
+ */
+enum tosync_status {
+    SYNC_TODO,                      /**< Synchronization is requested */
+    SYNC_DONE,                      /**< Synchronization is done */
+    SYNC_ERROR,                     /**< Synchronization failed */
+};
+
+/**
+ * Internal structure for a to-synchronize medium couple.
+ */
+struct tosync_medium {
+    enum tosync_status status;      /**< Medium synchronization status. */
+    struct pho_id device;           /**< Device ID. */
+    struct pho_id medium;           /**< Medium ID. */
+    size_t written_size;            /**< Written size on the medium to sync. */
+};
+
+/**
  * Request container used by the scheduler to transfer information
  * between a request and its response. For now, this information consists
  * in a socket ID.
@@ -58,7 +77,26 @@ struct lrs_sched {
 struct req_container {
     int socket_id;                  /**< Socket ID to pass to the response. */
     pho_req_t *req;                 /**< Request. */
+    union {                         /**< Parameters used by the LRS. */
+        struct {
+            struct tosync_medium *tosync_media;
+                                    /**< To-synchronize media. */
+            int num_tosync_media;   /**< Number of media to synchronize. */
+            int rc;                 /**< Global return code, if multiple sync
+                                      *  failed, only the first one is kept.
+                                      */
+        } release;
+    } params;
 };
+
+/**
+ * Release memory allocated for params structure of a request container.
+ */
+static inline void destroy_container_params(struct req_container *cont)
+{
+    if (pho_request_is_release(cont->req))
+        free(cont->params.release.tosync_media);
+}
 
 /**
  * Response container used by the scheduler to transfer information

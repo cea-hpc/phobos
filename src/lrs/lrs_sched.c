@@ -2591,8 +2591,11 @@ static int sched_device_unlock(struct lrs_sched *sched, const char *name)
 /** Wrapper of sched_req_free to be used as glib callback */
 static void sched_req_free_wrapper(void *reqc)
 {
-    pho_srl_request_free(((struct req_container *)reqc)->req, true);
-    free(((struct req_container *)reqc)->req);
+    struct req_container *cont = (struct req_container *)reqc;
+
+    destroy_container_params(cont);
+    pho_srl_request_free(cont->req, true);
+    free(cont->req);
 }
 
 /** Wrapper of sched_resp_free to be used as glib callback */
