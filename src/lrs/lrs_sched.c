@@ -43,6 +43,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
 
 #include <jansson.h>
 
@@ -104,6 +105,20 @@ struct dev_descr {
                                                   */
     bool                 ongoing_io;            /**< one I/O is ongoing */
     bool                 to_sync;               /**< device need to be synced */
+    struct {
+        GQueue          *release_queue;         /**< queue for release requests
+                                                  *  with to_sync to do
+                                                  */
+        struct timespec  oldest_to_sync;        /**< oldest release request in
+                                                  *  \p release_queue
+                                                  */
+        size_t           to_sync_size;          /**< total size of release
+                                                  *  requests in
+                                                  *  \p release_queue
+                                                  */
+    } sync_params;                              /**< sync information on the
+                                                  *  mounted medium
+                                                  */
 };
 
 /* Needed local function declarations */
