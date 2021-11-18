@@ -52,8 +52,7 @@
 #define DRIVE_RW_CFG_PARAM "drive_rw"
 #define DRIVE_TYPE_SECTION_CFG "drive_type \"%s\""
 
-static int sched_handle_release_reqs(struct lrs_sched *sched,
-                                     GArray *resp_array);
+static int sched_handle_release_reqs(struct lrs_sched *sched);
 static void sched_req_free_wrapper(void *req);
 static void sched_resp_free_wrapper(void *resp);
 
@@ -771,6 +770,7 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
     g_array_set_clear_func(sched->devices, dev_descr_fini);
     sched->req_queue = g_queue_new();
     sched->release_queue = g_queue_new();
+    sched->response_queue = g_queue_new();
 
     /* Load devices from DSS -- not critical if no device is found */
     load_device_list_from_dss(sched);
@@ -969,7 +969,7 @@ void sched_fini(struct lrs_sched *sched)
         return;
 
     /* Handle all pending release requests */
-    sched_handle_release_reqs(sched, NULL);
+    sched_handle_release_reqs(sched);
 
     /* Release all devices and media without any ongoing IO */
     sched_release(sched);
@@ -978,6 +978,7 @@ void sched_fini(struct lrs_sched *sched)
 
     g_queue_free_full(sched->req_queue, sched_req_free_wrapper);
     g_queue_free_full(sched->release_queue, sched_req_free_wrapper);
+    g_queue_free_full(sched->response_queue, sched_resp_free_wrapper);
     g_array_free(sched->devices, TRUE);
 }
 
@@ -2867,19 +2868,18 @@ static int to_sync_media_per_release(const pho_req_t *req)
 
 /**
  * Handle incoming release requests, appending corresponding release responses
- * to resp_array if it is not NULL.
+ * to the \p sched's response_queue.
  *
- * Can be called with a NULL resp_array to handle all pending release requests
- * without generating responses, for example when destroying an LRS with
- * sched_fini.
+ * Can be called with only_release at true to handle all pending release
+ * requests without generating responses, for example when destroying an LRS
+ * with sched_fini.
  */
-static int sched_handle_release_reqs(struct lrs_sched *sched,
-                                     GArray *resp_array)
+static int sched_handle_release_reqs(struct lrs_sched *sched)
 {
     struct req_container *reqc;
 
     while ((reqc = g_queue_pop_tail(sched->release_queue)) != NULL) {
-        struct resp_container *respc;
+        struct resp_container *respc = NULL;
         pho_req_t *req = reqc->req;
         size_t n_media;
         int rc = 0;
@@ -2887,28 +2887,28 @@ static int sched_handle_release_reqs(struct lrs_sched *sched,
         rc = sched_handle_media_release(sched, req->release);
         n_media = to_sync_media_per_release(req);
 
-        /* If resp_array is NULL, just release media, do not save responses */
-        if (resp_array == NULL || n_media == 0)
-            goto freereq;
+        if (n_media == 0)
+            goto free_req;
 
-        g_array_set_size(resp_array, resp_array->len + 1);
-        respc = &g_array_index(resp_array, struct resp_container,
-                               resp_array->len - 1);
+        respc = malloc(sizeof(*respc));
+        if (!respc)
+            goto free_req;
+
         respc->socket_id = reqc->socket_id;
         respc->resp = malloc(sizeof(*respc->resp));
         if (!respc->resp)
-            goto freereq;
+            goto free_respc;
 
         if (rc) {
             int rc2 = pho_srl_response_error_alloc(respc->resp);
 
             if (rc2) {
-                pho_srl_request_free(req, true);
-                free(reqc);
-                return rc2;
+                rc = rc2;
+                goto free_resp;
             }
 
             respc->resp->error->rc = rc;
+            rc = 0;
             respc->resp->error->req_kind = PHO_REQUEST_KIND__RQ_RELEASE;
         } else {
             pho_req_release_t *rel = req->release;
@@ -2916,11 +2916,8 @@ static int sched_handle_release_reqs(struct lrs_sched *sched,
             size_t i, j;
 
             rc = pho_srl_response_release_alloc(respc->resp, n_media);
-            if (rc) {
-                pho_srl_request_free(req, true);
-                free(reqc);
-                return rc;
-            }
+            if (rc)
+                goto free_resp;
 
             /* Build the answer */
             respc->resp->req_id = req->id;
@@ -2938,10 +2935,19 @@ static int sched_handle_release_reqs(struct lrs_sched *sched,
             }
         }
 
+        g_queue_push_tail(sched->response_queue, respc);
+        goto free_req;
+
         /* Free incoming request */
-freereq:
+free_resp:
+        free(respc->resp);
+free_respc:
+        free(respc);
+free_req:
         pho_srl_request_free(req, true);
         free(reqc);
+        if (rc)
+            return rc;
     }
 
     return 0;
@@ -3066,7 +3072,7 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
      * TODO: if there are multiple release requests for one media, only release
      * it once but answer to all requests.
      */
-    rc = sched_handle_release_reqs(sched, resp_array);
+    rc = sched_handle_release_reqs(sched);
     if (rc)
         goto out;
 

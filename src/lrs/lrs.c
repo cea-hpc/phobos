@@ -191,36 +191,60 @@ static int _prepare_error(struct resp_container *resp_cont, int req_rc,
     return 0;
 }
 
-static int _send_responses(struct lrs *lrs, const int n_resp,
-                           struct resp_container *resp_cont)
+static int _send_message(struct pho_comm_info *comm,
+                         struct resp_container *respc)
+{
+    struct pho_comm_data msg;
+    int rc = 0;
+
+    msg = pho_comm_data_init(comm);
+    msg.fd = respc->socket_id;
+    rc = pho_srl_response_pack(respc->resp, &msg.buf);
+    if (rc) {
+        pho_error(rc, "Response cannot be packed");
+        return rc;
+    }
+
+    rc = pho_comm_send(&msg);
+    free(msg.buf.buff);
+    if (rc == -EPIPE)
+        pho_debug("Client closed socket");
+    else if (rc)
+        pho_error(rc, "Response cannot be sent");
+
+    return rc;
+}
+
+static int _send_responses_from_queue(struct pho_comm_info *comm,
+                                      struct lrs_sched *sched)
+{
+    struct resp_container *respc;
+    int rc = 0;
+    int rc2;
+
+    while ((respc = g_queue_pop_tail(sched->response_queue)) != NULL) {
+        rc2 = _send_message(comm, respc);
+        rc = rc ? : rc2;
+        pho_srl_response_free(respc->resp, false);
+        free(respc->resp);
+        free(respc);
+    }
+
+    return rc;
+}
+
+static int _send_responses_from_array(struct pho_comm_info *comm,
+                                      const int n_resp,
+                                      struct resp_container *resp_cont)
 {
     int rc = 0;
+    int rc2;
     int i;
 
     for (i = 0; i < n_resp; ++i) {
-        int rc2;
-        struct pho_comm_data msg;
-
-        msg = pho_comm_data_init(&lrs->comm);
-        msg.fd = resp_cont[i].socket_id;
-        rc2 = pho_srl_response_pack(resp_cont[i].resp, &msg.buf);
+        rc2 = _send_message(comm, resp_cont + i);
+        rc = rc ? : rc2;
         pho_srl_response_free(resp_cont[i].resp, false);
-        if (rc2) {
-            pho_error(rc2, "Response cannot be packed");
-            rc = rc ? : rc2;
-            continue;
-        }
-
-        rc2 = pho_comm_send(&msg);
-        free(msg.buf.buff);
-        if (rc2 == -EPIPE) {
-            pho_debug("Client closed socket");
-            continue;
-        } else if (rc2) {
-            pho_error(rc2, "Response cannot be sent");
-            rc = rc ? : rc2;
-            continue;
-        }
     }
 
     return rc;
@@ -239,7 +263,8 @@ static int _send_error(struct lrs *lrs, struct req_container *req_cont)
     if (rc)
         LOG_GOTO(err_resp, rc, "Cannot prepare error response");
 
-    rc = _send_responses(lrs, 1, &resp_cont);
+    rc = _send_message(&lrs->comm, &resp_cont);
+    pho_srl_response_free(resp_cont.resp, false);
     if (rc)
         LOG_GOTO(err_resp, rc, "Error during response sending");
 
@@ -265,7 +290,8 @@ static int _process_ping_request(struct lrs *lrs,
         LOG_GOTO(err_resp, rc, "Failed to allocate response");
     resp_cont.resp->req_id = req_cont->req->id;
 
-    rc = _send_responses(lrs, 1, &resp_cont);
+    rc = _send_message(&lrs->comm, &resp_cont);
+    pho_srl_response_free(resp_cont.resp, false);
     if (rc)
         LOG_GOTO(err_resp, rc, "Error during response sending");
 
@@ -535,7 +561,11 @@ static int lrs_process(struct lrs *lrs)
         if (rc)
             LOG_RETURN(rc, "Error during sched processing");
 
-        rc = _send_responses(lrs, n_resp, resp_cont);
+        rc = _send_responses_from_queue(&lrs->comm, lrs->sched[i]);
+        if (rc)
+            LOG_RETURN(rc, "Error during responses sending");
+
+        rc = _send_responses_from_array(&lrs->comm, n_resp, resp_cont);
         for (j = 0; j < n_resp; ++j)
             free(resp_cont[j].resp);
         free(resp_cont);

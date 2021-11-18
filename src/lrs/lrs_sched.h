@@ -47,6 +47,7 @@ struct lrs_sched {
                                           *  release requests
                                           */
     GQueue            *release_queue;   /**< Queue for release requests */
+    GQueue            *response_queue;  /**< Queue for release responses */
 };
 
 /**
