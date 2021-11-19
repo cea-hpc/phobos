@@ -197,6 +197,8 @@ static int sched_device_release(struct lrs_sched *sched, struct dev_descr *dev)
                   dev->dss_dev_info->lock.hostname,
                   dev->dss_dev_info->lock.owner);
 
+    pho_debug("unlock: device %s\n", dev->dev_path);
+
     return rc;
 }
 
@@ -211,6 +213,8 @@ static int sched_medium_release(struct lrs_sched *sched,
                   "Error when releasing medium '%s' with current lock "
                   "(hostname %s, owner %d)", medium->rsc.id.name,
                   medium->lock.hostname, medium->lock.owner);
+
+    pho_debug("unlock: medium %s\n", medium->rsc.id.name);
 
     return rc;
 }
@@ -233,6 +237,13 @@ static int take_and_update_lock(struct dss_handle *dss, enum dss_type type,
     rc = dss_lock(dss, type, item, 1);
     if (rc)
         pho_error(rc, "Unable to get lock on item for refresh");
+
+    pho_debug("lock: %s %s\n", dss_type2str(type),
+              type == DSS_DEVICE ?
+              ((struct dev_info *)item)->rsc.id.name :
+              type == DSS_MEDIA ?
+              ((struct media_info *)item)->rsc.id.name :
+              "???");
 
     /* update lock values */
     rc2 = dss_lock_status(dss, type, item, 1, lock);
@@ -812,7 +823,7 @@ static int sched_umount(struct lrs_sched *sched, struct dev_descr *dev)
 
     ENTRY;
 
-    pho_verb("Unmounting device '%s' mounted at '%s'",
+    pho_info("umount: device '%s' mounted at '%s'",
              dev->dev_path, dev->mnt_path);
 
     rc = get_fs_adapter(dev->dss_media_info->fs.type, &fsa);
@@ -1667,7 +1678,7 @@ static int sched_mount(struct lrs_sched *sched, struct dev_descr *dev)
     if (!mnt_root)
         LOG_GOTO(out, rc = -ENOMEM, "Unable to get mount point of %s", id);
 
-    pho_verb("Mounting device '%s' as '%s'", dev->dev_path, mnt_root);
+    pho_info("mount: device '%s' as '%s'", dev->dev_path, mnt_root);
 
     rc = ldm_fs_mount(&fsa, dev->dev_path, mnt_root,
                       dev->dss_media_info->fs.label);
@@ -2211,7 +2222,7 @@ static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
     if (dev->dss_media_info == NULL)
         LOG_GOTO(err_out, rc = -EINVAL, "Invalid device state");
 
-    pho_verb("Format media '%s' as %s", id->name, fs_type2str(fs));
+    pho_verb("format: media '%s' as %s", id->name, fs_type2str(fs));
 
     rc = get_fs_adapter(fs, &fsa);
     if (rc)
@@ -2325,7 +2336,7 @@ retry:
         goto retry;
     }
 
-    pho_verb("Writing to media '%s' using device '%s' (free space: %zu bytes)",
+    pho_debug("write: media '%s' using device '%s' (free space: %zu bytes)",
              media->rsc.id.name, new_dev->dev_path,
              new_dev->dss_media_info->stats.phys_spc_free);
 
@@ -2363,6 +2374,9 @@ static int sched_read_prepare(struct lrs_sched *sched,
     if ((*dev)->dss_media_info == NULL)
         LOG_GOTO(out, rc = -EINVAL, "Invalid device state, expected media '%s'",
                  id->name);
+
+    pho_debug("read: media '%s' using device '%s'",
+             media_info->rsc.id.name, (*dev)->dev_path);
 
 out:
     /* Don't free media_info since it is still referenced inside dev */
@@ -2694,7 +2708,7 @@ static int sched_handle_write_alloc(struct lrs_sched *sched, pho_req_t *req,
     int rc = 0;
     pho_req_write_t *wreq = req->walloc;
 
-    pho_debug("Write allocation request (%ld medias)", wreq->n_media);
+    pho_debug("write: allocation request (%ld medias)", wreq->n_media);
 
     rc = pho_srl_response_write_alloc(resp, wreq->n_media);
     if (rc)
@@ -2732,8 +2746,6 @@ static int sched_handle_write_alloc(struct lrs_sched *sched, pho_req_t *req,
         wresp->root_path = strdup(devs[i]->mnt_path);
         wresp->fs_type = devs[i]->dss_media_info->fs.type;
         wresp->addr_type = devs[i]->dss_media_info->addr_type;
-
-        pho_debug("Allocated media %s for write request", wresp->med_id->name);
 
         if (wresp->root_path == NULL) {
             /*
@@ -2798,6 +2810,8 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
     rc = pho_srl_response_read_alloc(resp, rreq->n_required);
     if (rc)
         return rc;
+
+    pho_debug("read: allocation request (%ld medias)", rreq->n_med_ids);
 
     /*
      * FIXME: this is a very basic selection algorithm that does not try to
@@ -3004,6 +3018,8 @@ static int sched_handle_notify(struct lrs_sched *sched, pho_req_t *req,
     rc = pho_srl_response_notify_alloc(resp);
     if (rc)
         return rc;
+
+    pho_info("notify: media %s\n", nreq->rsrc_id->name);
 
     switch (nreq->op) {
     case PHO_NTFY_OP_DEVICE_ADD:
