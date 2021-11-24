@@ -58,7 +58,7 @@ void phobos_log_callback_default(const struct pho_logrec *rec)
 
     localtime_r(&rec->plr_time.tv_sec, &time);
 
-    fprintf(stderr, "%04d-%02d-%02d %02d:%02d:%02d.%06ld <%s>",
+    fprintf(stderr, "%04d-%02d-%02d %02d:%02d:%02d.%09ld <%s>",
             time.tm_year + 1900, time.tm_mon + 1, time.tm_mday,
             time.tm_hour, time.tm_min, time.tm_sec,
             rec->plr_time.tv_usec * 1000, pho_log_level2str(rec->plr_level));
