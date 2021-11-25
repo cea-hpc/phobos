@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE TYPE dev_family AS ENUM ('disk', 'tape', 'dir');
 CREATE TYPE adm_status AS ENUM ('locked', 'unlocked', 'failed');
 CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS');

@@ -161,6 +161,7 @@ class Migrator:
         cur = self.conn.cursor()
         cur.execute("""
             -- add uuid to object table and extent table
+            CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
             ALTER TABLE object ADD uuid varchar(36) UNIQUE
                 DEFAULT uuid_generate_v4();
             ALTER TABLE extent ADD uuid varchar(36) UNIQUE;
