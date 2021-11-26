@@ -243,7 +243,8 @@ class Migrator:
         cur = self.conn.cursor()
         cur.execute("""
             -- create enum lock_type
-            CREATE TYPE lock_type AS ENUM('object', 'device', 'media');
+            CREATE TYPE lock_type AS ENUM('object', 'device', 'media',
+                                          'media_update');
 
             -- drop old lock table
             DROP TABLE lock;
