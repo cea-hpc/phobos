@@ -113,6 +113,12 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_admin.la
 
 %changelog
+* Tue Nov 30 2021 - Patrice Lucas <patrice.lucas@cea.fr> - 1.93.0-1
+- LRS lock refactoring
+- Added layout parameters to migration
+- Removed layout simple and added simple alias
+- Limited sync to write operations
+
 * Fri Jul 2 2021 - Yoann Valeri <yoann.valeri@cea.fr> - 1.92.0-1
 - Locate command
 - Uuid and version options to get command

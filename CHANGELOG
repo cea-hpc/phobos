@@ -1,6 +1,6 @@
 # CHANGELOG UPDATES
 
-## Development version
+## 1.93
 
 * The "simple" layout is no longer available. It cannot be used through the CLI
 and will not be recognized in the API anymore. Instead, an alias has been
