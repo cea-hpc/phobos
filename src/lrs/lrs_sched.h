@@ -81,7 +81,12 @@ struct req_container {
         struct {
             struct tosync_medium *tosync_media;
                                     /**< To-synchronize media. */
-            int num_tosync_media;   /**< Number of media to synchronize. */
+            size_t n_tosync_media;
+                                    /**< Number of media to synchronize. */
+            struct pho_id *nosync_media;
+                                    /**< No-synchronize media. */
+            size_t n_nosync_media;
+                                    /**< Number of media not to synchronize. */
             int rc;                 /**< Global return code, if multiple sync
                                       *  failed, only the first one is kept.
                                       */
@@ -94,8 +99,10 @@ struct req_container {
  */
 static inline void destroy_container_params(struct req_container *cont)
 {
-    if (pho_request_is_release(cont->req))
+    if (pho_request_is_release(cont->req)) {
         free(cont->params.release.tosync_media);
+        free(cont->params.release.nosync_media);
+    }
 }
 
 /**

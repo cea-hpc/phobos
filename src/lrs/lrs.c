@@ -163,38 +163,85 @@ static enum rsc_family _determine_family(const pho_req_t *req)
     return PHO_RSC_INVAL;
 }
 
+static void n_media_per_release(struct req_container *req_cont)
+{
+    const pho_req_release_t *rel = req_cont->req->release;
+    size_t i;
+
+    req_cont->params.release.n_tosync_media = 0;
+    for (i = 0; i < rel->n_media; i++)
+        if (rel->media[i]->to_sync)
+            req_cont->params.release.n_tosync_media++;
+
+    req_cont->params.release.n_nosync_media =
+        rel->n_media - req_cont->params.release.n_tosync_media;
+}
+
 static int _init_release_container(struct req_container *req_cont)
 {
-    size_t n_media = req_cont->req->release->n_media;
-    struct tosync_medium *tosync_media;
+    struct tosync_medium *tosync_media = NULL;
+    struct pho_id *nosync_media = NULL;
+    size_t tosync_media_index = 0;
+    size_t nosync_media_index = 0;
     pho_req_release_elt_t *media;
     size_t i;
     int rc;
 
-    req_cont->params.release.num_tosync_media = n_media;
+    n_media_per_release(req_cont);
 
-    tosync_media = calloc(n_media, sizeof(*tosync_media));
-    if (tosync_media == NULL)
-        return -errno;
+    if (req_cont->params.release.n_tosync_media) {
+        tosync_media = calloc(req_cont->params.release.n_tosync_media,
+                              sizeof(*tosync_media));
+        if (tosync_media == NULL)
+            GOTO(clean_on_error, rc = -errno);
+    }
 
-    for (i = 0; i < n_media; ++i) {
+    if (req_cont->params.release.n_nosync_media) {
+        nosync_media = calloc(req_cont->params.release.n_nosync_media,
+                              sizeof(*nosync_media));
+        if (nosync_media == NULL)
+            GOTO(clean_on_error, rc = -errno);
+    }
+
+    for (i = 0; i < req_cont->req->release->n_media; ++i) {
         media = req_cont->req->release->media[i];
+        if (media->to_sync) {
+            tosync_media[tosync_media_index].status = SYNC_TODO;
+            tosync_media[tosync_media_index].device.family =
+                                                        media->med_id->family;
+            tosync_media[tosync_media_index].medium.family =
+                                                        media->med_id->family;
+            tosync_media[tosync_media_index].written_size = media->size_written;
+            rc = pho_id_name_set(&tosync_media[tosync_media_index].medium,
+                                 media->med_id->name);
+            if (rc)
+                GOTO(clean_on_error, rc);
 
-        tosync_media[i].status = SYNC_TODO;
-        tosync_media[i].device.family = media->med_id->family;
-        tosync_media[i].medium.family = media->med_id->family;
-        tosync_media[i].written_size = media->size_written;
+            /*
+             *  tosync_media[i].device is filled later when enqueuing the
+             *  request into the corresponding per device to_sync queue.
+             */
 
-        rc = pho_id_name_set(&tosync_media[i].medium, media->med_id->name);
-        if (rc) {
-            free(tosync_media);
-            return rc;
+            tosync_media_index++;
+        } else {
+            nosync_media[nosync_media_index].family = media->med_id->family;
+            rc = pho_id_name_set(&nosync_media[nosync_media_index],
+                                 media->med_id->name);
+            if (rc)
+                GOTO(clean_on_error, rc);
+
+            nosync_media_index++;
         }
     }
 
     req_cont->params.release.tosync_media = tosync_media;
-
+    req_cont->params.release.nosync_media = nosync_media;
     return 0;
+
+clean_on_error:
+    free(tosync_media);
+    free(nosync_media);
+    return rc;
 }
 
 static int _prepare_error(struct resp_container *resp_cont, int req_rc,
