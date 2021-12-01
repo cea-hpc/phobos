@@ -46,7 +46,6 @@ struct lrs_sched {
     GQueue            *req_queue;       /**< Queue for all but
                                           *  release requests
                                           */
-    GQueue            *release_queue;   /**< Queue for release requests */
     GQueue            *response_queue;  /**< Queue for release responses */
 };
 
@@ -57,16 +56,38 @@ enum tosync_status {
     SYNC_TODO,                      /**< Synchronization is requested */
     SYNC_DONE,                      /**< Synchronization is done */
     SYNC_ERROR,                     /**< Synchronization failed */
+    SYNC_CANCEL,                    /**< Synchronization canceled */
 };
 
 /**
- * Internal structure for a to-synchronize medium couple.
+ * Internal structure for a to-synchronize medium.
  */
 struct tosync_medium {
     enum tosync_status status;      /**< Medium synchronization status. */
-    struct pho_id device;           /**< Device ID. */
     struct pho_id medium;           /**< Medium ID. */
     size_t written_size;            /**< Written size on the medium to sync. */
+};
+
+/**
+ * Internal structure for a not-to-synchronize medium.
+ */
+struct nosync_medium {
+    struct pho_id medium;           /**< Medium ID. */
+    size_t written_size;            /**< Size written on the medium */
+};
+
+/**
+ * Parameters of a request container dedicated to a release request
+ */
+struct release_params {
+    struct tosync_medium *tosync_media; /**< Array of media to synchronize */
+    size_t n_tosync_media;              /**< Number of media to synchronize */
+    struct nosync_medium *nosync_media; /**< Array of media with no sync */
+    size_t n_nosync_media;              /**< Number of media with no sync */
+    int rc;                             /**< Global return code, if multiple
+                                          * sync failed, only the first one is
+                                          * kept.
+                                          */
 };
 
 /**
@@ -77,20 +98,9 @@ struct tosync_medium {
 struct req_container {
     int socket_id;                  /**< Socket ID to pass to the response. */
     pho_req_t *req;                 /**< Request. */
+    struct timespec received_at;    /**< Request reception timestamp */
     union {                         /**< Parameters used by the LRS. */
-        struct {
-            struct tosync_medium *tosync_media;
-                                    /**< To-synchronize media. */
-            size_t n_tosync_media;
-                                    /**< Number of media to synchronize. */
-            struct pho_id *nosync_media;
-                                    /**< No-synchronize media. */
-            size_t n_nosync_media;
-                                    /**< Number of media not to synchronize. */
-            int rc;                 /**< Global return code, if multiple sync
-                                      *  failed, only the first one is kept.
-                                      */
-        } release;
+        struct release_params release;
     } params;
 };
 
@@ -105,6 +115,9 @@ static inline void destroy_container_params(struct req_container *cont)
     }
 }
 
+/** sched_req_free can be used as glib callback */
+void sched_req_free(void *reqc);
+
 /**
  * Response container used by the scheduler to transfer information
  * between a request and its response. For now, this information consists
@@ -114,6 +127,18 @@ struct resp_container {
     int socket_id;                  /**< Socket ID got from the request. */
     pho_resp_t *resp;               /**< Response. */
 };
+
+/**
+ * Allocate and fill an error response into a response container
+ *
+ * \param[in, out]  resp_cont   Response container filled by prepare_error
+ * \param[in]       req_rc      Error code of the response
+ * \param[in]       req_cont    Request to answer the response
+ *
+ * \return                      0 on success, -1 * posix error code on failure.
+ */
+int prepare_error(struct resp_container *resp_cont, int req_rc,
+                  const struct req_container *req_cont);
 
 /**
  * Initialize a new sched bound to a given DSS.
@@ -134,22 +159,21 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family);
 void sched_fini(struct lrs_sched *sched);
 
 /**
- * Enqueue a request to be handled by the sched. The request is guaranteed to be
- * answered at some point.
+ * Enqueue a request to be handled by the devices.
  *
- * The request is encapsulated in a container which owns a socket ID that must
- * be given back with the associated response.
+ * This function takes ownership of the request.
+ * The request container is queued or freed by this call.
+ * If an error occurs, this function creates and queues the corresponding
+ * error message.
  *
- * \param[in]       sched       The sched that will handle the request.
- * \param[in]       reqc        The request to enqueue.
- *
- * \return                      0 on success, -1 * posix error code on failure.
+ * The error code returned by this function stands for an error of the LRS
+ * daemon itself, not an error about the release request which is managed by
+ * an error message.
  */
-int sched_request_enqueue(struct lrs_sched *sched, struct req_container *reqc);
+int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc);
 
 /**
- * Get responses for all handled pending requests (enqueued with
- * sched_request_enqueue).
+ * Get responses for every handled pending requests
  *
  * The responses are encapsulated in a container which owns a socket ID given by
  * the associated request.

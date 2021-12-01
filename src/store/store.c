@@ -1321,8 +1321,8 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
             if (!xfers[i].xd_objuuid) {
                 size_t j;
 
-                for (j = --i; j >= 0; --j)
-                    free(xfers[i].xd_objuuid);
+                for (j = 0; j < i; j++)
+                    free(xfers[j].xd_objuuid);
 
                 for (i = 0; i < n; ++i)
                     xfers[i].xd_rc = -ENOMEM;

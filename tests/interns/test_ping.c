@@ -16,16 +16,13 @@
 
 static int setup(void **state)
 {
-    int rc;
     pho_resp_t *resp;
 
     resp = malloc(sizeof(*resp));
     if (!resp)
         return -1;
 
-    rc = pho_srl_response_ping_alloc(resp);
-    if (rc)
-        return -1;
+    pho_srl_response_ping_alloc(resp);
     resp->req_id = 1;
 
     *state = resp;

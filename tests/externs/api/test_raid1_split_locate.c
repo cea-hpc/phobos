@@ -154,7 +154,11 @@ static int global_setup(void **state)
 
     /* check we have at least two splits */
     if (rsl_state.split_count < 2) {
-        fprintf(stderr, "raid1 split locate test needs at least two splits");
+        fprintf(stderr,
+                "raid1 split locate test needs at least two splits, found "
+                "only %u: extent count %u, repl_count %u",
+                rsl_state.split_count, rsl_state.layout->ext_count,
+                rsl_state.repl_count);
         GOTO(clean_layout, rc = -1);
     }
 

@@ -386,10 +386,8 @@ int pho_srl_response_format_alloc(pho_resp_t *resp);
  * Allocation of ping response contents.
  *
  * \param[out]      resp        Pointer to the response data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_response_ping_alloc(pho_resp_t *resp);
+void pho_srl_response_ping_alloc(pho_resp_t *resp);
 
 /**
  * Allocation of notify response contents.

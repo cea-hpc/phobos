@@ -452,38 +452,35 @@ int pho_srl_response_release_alloc(pho_resp_t *resp, size_t n_media)
     int i;
 
     pho_response__init(resp);
-
     resp->release = malloc(sizeof(*resp->release));
     if (!resp->release)
-        goto err_release;
-    pho_response__release__init(resp->release);
+        LOG_RETURN(-ENOMEM, "Unable to allocate resp->release");
 
+    pho_response__release__init(resp->release);
     resp->release->n_med_ids = n_media;
     resp->release->med_ids = malloc(n_media * sizeof(*resp->release->med_ids));
-    if (!resp->release->med_ids)
-        goto err_media;
+    if (!resp->release->med_ids) {
+        free(resp->release);
+        LOG_RETURN(-ENOMEM, "Unable to allocate resp->release->med_ids");
+    }
 
     for (i = 0; i < n_media; ++i) {
         resp->release->med_ids[i] = malloc(sizeof(*resp->release->med_ids[i]));
-        if (!resp->release->med_ids[i])
-            goto err_media_i;
+        if (!resp->release->med_ids[i]) {
+            int j;
+
+            for (j = 0; j < i; j++)
+                free(resp->release->med_ids[j]);
+
+            free(resp->release->med_ids);
+            free(resp->release);
+            LOG_RETURN(-ENOMEM,
+                       "Unable to allocate resp->release->med_ids[%d]", i);
+        }
         pho_resource_id__init(resp->release->med_ids[i]);
     }
 
     return 0;
-
-err_media_i:
-    for (--i; i >= 0; --i)
-        free(resp->release->med_ids[i]);
-
-    free(resp->release->med_ids);
-
-err_media:
-    free(resp->release);
-    resp->release = NULL;
-
-err_release:
-    return -ENOMEM;
 }
 
 int pho_srl_response_format_alloc(pho_resp_t *resp)
@@ -510,12 +507,10 @@ err_format:
     return -ENOMEM;
 }
 
-int pho_srl_response_ping_alloc(pho_resp_t *resp)
+void pho_srl_response_ping_alloc(pho_resp_t *resp)
 {
     pho_response__init(resp);
     resp->has_ping = true;
-
-    return 0;
 }
 
 int pho_srl_response_notify_alloc(pho_resp_t *resp)
@@ -549,8 +544,8 @@ int pho_srl_response_error_alloc(pho_resp_t *resp)
     resp->error = malloc(sizeof(*resp->error));
     if (!resp->error)
         return -ENOMEM;
-    pho_response__error__init(resp->error);
 
+    pho_response__error__init(resp->error);
     return 0;
 }
 

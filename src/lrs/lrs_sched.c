@@ -35,6 +35,7 @@
 #include "pho_type_utils.h"
 
 #include <assert.h>
+#include <glib.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -51,10 +52,6 @@
 #define MODELS_CFG_PARAM "models"
 #define DRIVE_RW_CFG_PARAM "drive_rw"
 #define DRIVE_TYPE_SECTION_CFG "drive_type \"%s\""
-
-static int sched_handle_release_reqs(struct lrs_sched *sched);
-static void sched_req_free_wrapper(void *req);
-static void sched_resp_free_wrapper(void *resp);
 
 enum sched_operation {
     LRS_OP_NONE = 0,
@@ -103,26 +100,107 @@ struct dev_descr {
                                                   *  of the filesystem
                                                   */
     bool                 ongoing_io;            /**< one I/O is ongoing */
-    bool                 to_sync;               /**< device need to be synced */
+    bool                 needs_sync;            /**< medium needs to be sync */
     struct {
-        GQueue          *release_queue;         /**< queue for release requests
+        GPtrArray        *tosync_array;         /**< array of release requests
                                                   *  with to_sync to do
                                                   */
-        struct timespec  oldest_to_sync;        /**< oldest release request in
-                                                  *  \p release_queue
+        struct timespec  oldest_tosync;         /**< oldest release request in
+                                                  *  \p tosync_array
                                                   */
-        size_t           to_sync_size;          /**< total size of release
+        size_t           tosync_size;           /**< total size of release
                                                   *  requests in
-                                                  *  \p release_queue
+                                                  *  \p tosync_array
                                                   */
     } sync_params;                              /**< sync information on the
                                                   *  mounted medium
                                                   */
 };
 
-/* Needed local function declarations */
-static struct dev_descr *search_loaded_media(struct lrs_sched *sched,
-                                             const char *name);
+/**
+ * Return true if a is older or equal to b
+ */
+static bool is_older_or_equal(struct timespec a, struct timespec b)
+{
+    if (a.tv_sec > b.tv_sec ||
+        (a.tv_sec == b.tv_sec && a.tv_nsec > b.tv_nsec))
+        return false;
+
+    return true;
+}
+
+static inline void update_oldest_tosync(struct timespec *oldest_to_update,
+                                         struct timespec candidate)
+{
+    if ((oldest_to_update->tv_sec == 0 && oldest_to_update->tv_nsec == 0) ||
+        is_older_or_equal(candidate, *oldest_to_update))
+        *oldest_to_update = candidate;
+}
+
+/** Elements pushed into the release queue of a device */
+struct request_tosync {
+    struct req_container *reqc;
+    size_t medium_index; /**< index of the medium in the tosync_media array of
+                           *  the release_params struct of the reqc
+                           */
+};
+
+void sched_req_free(void *reqc)
+{
+    struct req_container *cont = (struct req_container *)reqc;
+
+    destroy_container_params(cont);
+    if (cont->req)
+        pho_srl_request_free(cont->req, true);
+
+    free(cont);
+}
+
+/* sched_request_tosync_free can be used as glib callback */
+static void sched_request_tosync_free(struct request_tosync *req_tosync)
+{
+    sched_req_free(req_tosync->reqc);
+    free(req_tosync);
+}
+
+/* Wrapper of sched_request_tosync_free to be used by glib foreach */
+static void sched_request_tosync_free_wrapper(gpointer _req,
+                                              gpointer _null_user_data)
+{
+    (void)_null_user_data;
+    sched_request_tosync_free((struct request_tosync *)_req);
+}
+
+static inline bool is_request_tosync_ended(struct req_container *req)
+{
+    size_t i;
+
+    for (i = 0; i < req->params.release.n_tosync_media; i++)
+        if (req->params.release.tosync_media[i].status == SYNC_TODO)
+            return false;
+
+    return true;
+}
+
+static int push_new_sync_to_device(struct dev_descr *dev,
+                                   struct req_container *reqc,
+                                   size_t medium_index)
+{
+    struct request_tosync *req_tosync;
+
+    req_tosync = malloc(sizeof(*req_tosync));
+    if (!req_tosync)
+        LOG_RETURN(-ENOMEM, "Unable to allocate req_tosync");
+
+    req_tosync->reqc = reqc;
+    req_tosync->medium_index = medium_index;
+    g_ptr_array_add(dev->sync_params.tosync_array, req_tosync);
+    dev->sync_params.tosync_size +=
+        reqc->params.release.tosync_media[medium_index].written_size;
+    update_oldest_tosync(&dev->sync_params.oldest_tosync, reqc->received_at);
+
+    return 0;
+}
 
 /** check that device info from DB is consistent with actual status */
 static int check_dev_info(const struct dev_descr *dev)
@@ -587,6 +665,14 @@ static int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter *lib)
     return ldm_lib_open(lib, lib_dev);
 }
 
+static void init_device_sync_params(struct dev_descr *dev)
+{
+    dev->sync_params.tosync_array = g_ptr_array_new();
+    dev->sync_params.oldest_tosync.tv_sec = 0;
+    dev->sync_params.oldest_tosync.tv_nsec = 0;
+    dev->sync_params.tosync_size = 0;
+}
+
 static int load_device_list_from_dss(struct lrs_sched *sched)
 {
     struct dev_info *devs = NULL;
@@ -626,6 +712,7 @@ static int load_device_list_from_dss(struct lrs_sched *sched)
             continue;
         }
 
+        init_device_sync_params(&device);
         g_array_append_val(sched->devices, device);
     }
 
@@ -698,6 +785,11 @@ static void dev_descr_fini(gpointer ptr)
     dev->dss_media_info = NULL;
 
     ldm_dev_state_fini(&dev->sys_dev_state);
+
+    g_ptr_array_foreach(dev->sync_params.tosync_array,
+                        sched_request_tosync_free_wrapper,
+                        NULL);
+    g_ptr_array_unref(dev->sync_params.tosync_array);
 }
 
 /**
@@ -780,7 +872,6 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
     sched->devices = g_array_new(FALSE, TRUE, sizeof(struct dev_descr));
     g_array_set_clear_func(sched->devices, dev_descr_fini);
     sched->req_queue = g_queue_new();
-    sched->release_queue = g_queue_new();
     sched->response_queue = g_queue_new();
 
     /* Load devices from DSS -- not critical if no device is found */
@@ -804,6 +895,164 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
     return 0;
 }
 
+int prepare_error(struct resp_container *resp_cont, int req_rc,
+                  const struct req_container *req_cont)
+{
+    int rc;
+
+    resp_cont->socket_id = req_cont->socket_id;
+    rc = pho_srl_response_error_alloc(resp_cont->resp);
+    if (rc)
+        LOG_RETURN(rc, "Failed to allocate response");
+
+    resp_cont->resp->error->rc = req_rc;
+
+    resp_cont->resp->req_id = req_cont->req->id;
+    if (pho_request_is_write(req_cont->req))
+        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_WRITE;
+    else if (pho_request_is_read(req_cont->req))
+        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_READ;
+    else if (pho_request_is_release(req_cont->req))
+        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_RELEASE;
+    else if (pho_request_is_format(req_cont->req))
+        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_FORMAT;
+    else if (pho_request_is_notify(req_cont->req))
+        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_NOTIFY;
+
+    return 0;
+}
+
+static int queue_error_response(struct lrs_sched *sched, int req_rc,
+                                struct req_container *reqc)
+{
+    struct resp_container *resp_cont;
+    int rc;
+
+    resp_cont = malloc(sizeof(*resp_cont));
+    if (!resp_cont)
+        LOG_RETURN(-ENOMEM, "Unable to allocate resp_cont");
+
+    resp_cont->resp = malloc(sizeof(*resp_cont->resp));
+    if (!resp_cont->resp)
+        LOG_GOTO(clean_resp_cont, rc = -ENOMEM,
+                 "Unable to allocate resp_cont->resp");
+
+    rc = prepare_error(resp_cont, req_rc, reqc);
+    if (rc)
+        goto clean;
+
+    g_queue_push_tail(sched->response_queue, resp_cont);
+    return 0;
+
+clean:
+    free(resp_cont->resp);
+clean_resp_cont:
+    free(resp_cont);
+    return rc;
+}
+
+static int queue_release_response(struct lrs_sched *sched,
+                                  struct req_container *reqc)
+{
+    struct tosync_medium *tosync_media = reqc->params.release.tosync_media;
+    size_t n_tosync_media = reqc->params.release.n_tosync_media;
+    struct resp_container *respc = NULL;
+    pho_resp_release_t *resp_release;
+    size_t i;
+    int rc;
+
+    respc = malloc(sizeof(*respc));
+    if (!respc)
+        LOG_GOTO(err, rc = -ENOMEM, "Unable to allocate respc");
+
+    respc->socket_id = reqc->socket_id;
+    respc->resp = malloc(sizeof(*respc->resp));
+    if (!respc->resp)
+        LOG_GOTO(err_respc, rc = -ENOMEM, "Unable to allocate respc->resp");
+
+    rc = pho_srl_response_release_alloc(respc->resp, n_tosync_media);
+    if (rc)
+        goto err_respc_resp;
+
+    /* Build the answer */
+    respc->resp->req_id = reqc->req->id;
+    resp_release = respc->resp->release;
+    for (i = 0; i < n_tosync_media; i++) {
+        resp_release->med_ids[i]->family = tosync_media[i].medium.family;
+        rc = strdup_safe(&resp_release->med_ids[i]->name,
+                         tosync_media[i].medium.name);
+        if (rc) {
+            int j;
+
+            for (j = i; j < n_tosync_media; j++)
+                resp_release->med_ids[j]->name = NULL;
+
+            LOG_GOTO(err_release, rc,
+                     "Unable to duplicate resp_release->med_ids[%zu]->name", i);
+        }
+    }
+
+    g_queue_push_tail(sched->response_queue, respc);
+    return 0;
+
+err_release:
+    pho_srl_response_free(respc->resp, false);
+err_respc_resp:
+    free(respc->resp);
+err_respc:
+    free(respc);
+err:
+    return queue_error_response(sched, rc, reqc);
+}
+
+static int clean_tosync_array(struct lrs_sched *sched, struct dev_descr *dev,
+                              int rc)
+{
+    GPtrArray *tosync_array = dev->sync_params.tosync_array;
+    int internal_rc = 0;
+
+    while (tosync_array->len) {
+        struct request_tosync *req = tosync_array->pdata[tosync_array->len - 1];
+        struct tosync_medium *tosync_medium =
+            &req->reqc->params.release.tosync_media[req->medium_index];
+        int rc2;
+
+        g_ptr_array_remove_index(tosync_array, tosync_array->len - 1);
+
+        if (!rc) {
+            tosync_medium->status = SYNC_DONE;
+        } else {
+            if (!req->reqc->params.release.rc) {
+                /* this is the first SYNC_ERROR of this request */
+                req->reqc->params.release.rc = rc;
+                rc2 = queue_error_response(sched, rc, req->reqc);
+                if (rc2)
+                    internal_rc = internal_rc ? : rc2;
+            }
+
+            tosync_medium->status = SYNC_ERROR;
+        }
+
+        if (is_request_tosync_ended(req->reqc)) {
+            if (!req->reqc->params.release.rc) {
+                rc2 = queue_release_response(sched, req->reqc);
+                if (rc2)
+                    internal_rc = internal_rc ? : rc2;
+            }
+
+            sched_request_tosync_free(req);
+        }
+    }
+
+    /* sync operation acknowledgement */
+    dev->sync_params.tosync_size = 0;
+    dev->sync_params.oldest_tosync.tv_sec = 0;
+    dev->sync_params.oldest_tosync.tv_nsec = 0;
+    dev->needs_sync = false;
+
+    return internal_rc;
+}
+
 /**
  * Unmount the filesystem of a 'mounted' device
  *
@@ -819,7 +1068,7 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
 static int sched_umount(struct lrs_sched *sched, struct dev_descr *dev)
 {
     struct fs_adapter fsa;
-    int rc;
+    int rc, rc2;
 
     ENTRY;
 
@@ -834,8 +1083,15 @@ static int sched_umount(struct lrs_sched *sched, struct dev_descr *dev)
                  dev->dss_media_info->rsc.id.name, dev->dev_path);
 
     rc = ldm_fs_umount(&fsa, dev->dev_path, dev->mnt_path);
+    rc2 = clean_tosync_array(sched, dev, rc);
     if (rc)
         LOG_GOTO(out, rc, "Failed to unmount device '%s' mounted at '%s'",
+                 dev->dev_path, dev->mnt_path);
+
+    if (rc2)
+        LOG_GOTO(out, rc = rc2,
+                 "Failed to clean tosync array after having unmounted device "
+                 "'%s' mounted at '%s'",
                  dev->dev_path, dev->mnt_path);
 
     /* update device state and unset mount path */
@@ -974,22 +1230,25 @@ static void sched_release(struct lrs_sched *sched)
     }
 }
 
+/** sched_resp_free can be used as glib callback */
+static void sched_resp_free(void *respc)
+{
+    pho_srl_response_free(((struct resp_container *)respc)->resp, false);
+    free(((struct resp_container *)respc)->resp);
+}
+
 void sched_fini(struct lrs_sched *sched)
 {
     if (sched == NULL)
         return;
-
-    /* Handle all pending release requests */
-    sched_handle_release_reqs(sched);
 
     /* Release all devices and media without any ongoing IO */
     sched_release(sched);
 
     dss_fini(&sched->dss);
 
-    g_queue_free_full(sched->req_queue, sched_req_free_wrapper);
-    g_queue_free_full(sched->release_queue, sched_req_free_wrapper);
-    g_queue_free_full(sched->response_queue, sched_resp_free_wrapper);
+    g_queue_free_full(sched->req_queue, sched_req_free);
+    g_queue_free_full(sched->response_queue, sched_resp_free);
     g_array_free(sched->devices, TRUE);
 }
 
@@ -1077,6 +1336,41 @@ static bool medium_in_devices(const struct media_info *medium,
     }
 
     return false;
+}
+
+static struct dev_descr *search_loaded_media(struct lrs_sched *sched,
+                                             const char *name)
+{
+    int i;
+
+    ENTRY;
+
+    for (i = 0; i < sched->devices->len; i++) {
+        struct dev_descr *dev;
+        const char *media_id;
+
+        dev = &g_array_index(sched->devices, struct dev_descr, i);
+
+        if (dev->op_status != PHO_DEV_OP_ST_MOUNTED &&
+            dev->op_status != PHO_DEV_OP_ST_LOADED)
+            continue;
+
+        /* The drive may contain a media unknown to phobos, skip it */
+        if (dev->dss_media_info == NULL)
+            continue;
+
+        media_id = dev->dss_media_info->rsc.id.name;
+        if (media_id == NULL) {
+            pho_warn("Cannot retrieve media ID from device '%s'",
+                     dev->dev_path);
+            continue;
+        }
+
+        if (!strcmp(name, media_id))
+            return dev;
+    }
+
+    return NULL;
 }
 
 /**
@@ -1180,7 +1474,7 @@ lock_race_retry:
                 continue;
 
             dev = search_loaded_media(sched, curr->rsc.id.name);
-            if (dev && dev->ongoing_io)
+            if (dev && (dev->ongoing_io || dev->needs_sync))
                 /* locked by myself but already in use */
                 continue;
         }
@@ -1447,7 +1741,7 @@ static struct dev_descr *dev_picker(struct lrs_sched *sched,
                                                struct dev_descr, i);
         struct dev_descr *prev = selected;
 
-        if (itr->ongoing_io) {
+        if (itr->ongoing_io || itr->needs_sync) {
             pho_debug("Skipping busy device '%s'", itr->dev_path);
             continue;
         }
@@ -1607,10 +1901,12 @@ static int select_drive_to_free(size_t required_size,
     ENTRY;
 
     /* skip failed and busy drives */
-    if (dev_curr->op_status == PHO_DEV_OP_ST_FAILED || dev_curr->ongoing_io) {
+    if (dev_curr->op_status == PHO_DEV_OP_ST_FAILED ||
+        dev_curr->ongoing_io || dev_curr->needs_sync) {
         pho_debug("Skipping drive '%s' with status %s%s",
                   dev_curr->dev_path, op_status2str(dev_curr->op_status),
-                  dev_curr->ongoing_io ? " (busy)" : "");
+                  dev_curr->ongoing_io || dev_curr->needs_sync ? " (busy)" : ""
+                 );
         return 1;
     }
 
@@ -2038,44 +2334,6 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
     return sched_mount(sched, *new_dev);
 }
 
-static struct dev_descr *search_loaded_media(struct lrs_sched *sched,
-                                             const char *name)
-{
-    int         i;
-
-    ENTRY;
-
-    if (name == NULL)
-        return NULL;
-
-    for (i = 0; i < sched->devices->len; i++) {
-        const char          *media_id;
-        enum dev_op_status   op_st;
-        struct dev_descr    *dev;
-
-        dev = &g_array_index(sched->devices, struct dev_descr, i);
-        op_st = dev->op_status;
-
-        if (op_st != PHO_DEV_OP_ST_MOUNTED && op_st != PHO_DEV_OP_ST_LOADED)
-            continue;
-
-        /* The drive may contain a media unknown to phobos, skip it */
-        if (dev->dss_media_info == NULL)
-            continue;
-
-        media_id = dev->dss_media_info->rsc.id.name;
-        if (media_id == NULL) {
-            pho_warn("Cannot retrieve media ID from device '%s'",
-                     dev->dev_path);
-            continue;
-        }
-
-        if (!strcmp(name, media_id))
-            return dev;
-    }
-    return NULL;
-}
-
 static int sched_media_prepare_for_read_or_format(struct lrs_sched *sched,
                                                   const struct pho_id *id,
                                                   enum sched_operation op,
@@ -2387,71 +2645,74 @@ out:
 static int sched_media_update(struct lrs_sched *sched,
                               struct media_info *media_info,
                               size_t size_written, int media_rc,
-                              const char *fsroot, bool is_full)
+                              const char *fsroot, long long nb_new_obj)
 {
-    struct ldm_fs_space  spc = {0};
-    struct fs_adapter    fsa;
-    enum fs_type         fs_type = media_info->fs.type;
-    uint64_t             fields = 0;
-    int                  rc;
+    struct ldm_fs_space space = {0};
+    struct fs_adapter fsa;
+    uint64_t fields = 0;
+    int rc2, rc = 0;
 
-    /* do we have an update to do ? */
-    if (!(size_written || media_info->fs.status == PHO_FS_STATUS_EMPTY ||
-        is_full || media_info->stats.phys_spc_free == 0))
-        return 0;
+    if (media_info->fs.status == PHO_FS_STATUS_EMPTY && !media_rc) {
+        media_info->fs.status = PHO_FS_STATUS_USED;
+        fields |= FS_STATUS;
+    }
 
-    rc = get_fs_adapter(fs_type, &fsa);
-    if (rc)
-        LOG_RETURN(rc, "No FS adapter found for '%s' (type %s)",
-                   fsroot, fs_type2str(fs_type));
+    rc2 = get_fs_adapter(media_info->fs.type, &fsa);
+    if (rc2) {
+        rc = rc ? : rc2;
+        pho_error(rc2,
+                  "Invalid filesystem type for '%s' (database may be "
+                  "corrupted)", fsroot);
+        media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+        fields |= ADM_STATUS;
+    } else {
+        rc2 = ldm_fs_df(&fsa, fsroot, &space);
+        if (rc2) {
+            rc = rc ? : rc2;
+            pho_error(rc2, "Cannot retrieve media usage information");
+            media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+            fields |= ADM_STATUS;
+        } else {
+            media_info->stats.phys_spc_used = space.spc_used;
+            media_info->stats.phys_spc_free = space.spc_avail;
+            fields |= PHYS_SPC_USED | PHYS_SPC_FREE;
+            if (media_info->stats.phys_spc_free == 0) {
+                media_info->fs.status = PHO_FS_STATUS_FULL;
+                fields |= FS_STATUS;
+            }
+        }
+    }
 
-    rc = ldm_fs_df(&fsa, fsroot, &spc);
-    if (rc)
-        LOG_RETURN(rc, "Cannot retrieve media usage information");
+    if (media_rc) {
+        media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+        fields |= ADM_STATUS;
+    } else {
+        if (nb_new_obj) {
+            media_info->stats.nb_obj = nb_new_obj;
+            fields |= NB_OBJ_ADD;
+        }
 
-    if (size_written) {
-        media_info->stats.nb_obj = 1;
-        media_info->stats.phys_spc_used = spc.spc_used;
-        media_info->stats.phys_spc_free = spc.spc_avail;
-        fields |= NB_OBJ_ADD | PHYS_SPC_USED | PHYS_SPC_FREE;
-
-        if (media_rc == 0) {
+        if (size_written) {
             media_info->stats.logc_spc_used = size_written;
             fields |= LOGC_SPC_USED_ADD;
         }
     }
 
-    if (media_info->fs.status == PHO_FS_STATUS_EMPTY) {
-        media_info->fs.status = PHO_FS_STATUS_USED;
-        fields |= FS_STATUS;
-    }
-
-    if (is_full || media_info->stats.phys_spc_free == 0) {
-        media_info->fs.status = PHO_FS_STATUS_FULL;
-        fields |= FS_STATUS;
-    }
-
     /* TODO update nb_load, nb_errors, last_load */
 
-    /* @FIXME: this DSS update could be done when releasing the media */
     assert(fields);
-    rc = dss_media_set(&sched->dss, media_info, 1, DSS_SET_UPDATE, fields);
-    if (rc)
-        LOG_RETURN(rc, "Cannot update media information");
+    rc2 = dss_media_set(&sched->dss, media_info, 1, DSS_SET_UPDATE, fields);
+    if (rc2)
+        rc = rc ? : rc2;
 
-    return 0;
+    return rc;
 }
 
-/*
- * @TODO: support releasing multiple medias at a time (handle a
- * full media_release_req).
- */
 static int sched_io_complete(struct lrs_sched *sched,
-                             struct media_info *media_info, size_t size_written,
-                             int media_rc, const char *fsroot)
+                             struct media_info *media_info,
+                             const char *fsroot)
 {
     struct io_adapter    ioa;
-    bool                 is_full = false;
     int                  rc;
 
     ENTRY;
@@ -2466,21 +2727,17 @@ static int sched_io_complete(struct lrs_sched *sched,
     if (rc)
         LOG_RETURN(rc, "Cannot flush media at: %s", fsroot);
 
-    if (is_medium_global_error(media_rc) || is_medium_global_error(rc))
-        is_full = true;
-
-    rc = sched_media_update(sched, media_info, size_written, media_rc, fsroot,
-                            is_full);
-    if (rc)
-        LOG_RETURN(rc, "Cannot update media information");
-
-    return 0;
+    return rc;
 }
 
 /******************************************************************************/
 /* Request/response manipulation **********************************************/
 /******************************************************************************/
 
+/**
+ * @TODO: mutualize the init of the struct device with the
+ * load_device_list_from_dss function.
+ */
 static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
                             const char *name)
 {
@@ -2536,6 +2793,7 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
         goto err_lib;
 
     /* Add the newly initialized device to the device list */
+    init_device_sync_params(&device);
     g_array_append_val(sched->devices, device);
 
 err_lib:
@@ -2602,86 +2860,127 @@ static int sched_device_unlock(struct lrs_sched *sched, const char *name)
     return sched_device_add(sched, sched->family, name);
 }
 
-/** Wrapper of sched_req_free to be used as glib callback */
-static void sched_req_free_wrapper(void *reqc)
+/** remove written_size from phys_spc_free in media_info and DSS */
+static int update_phys_spc_free(struct dss_handle *dss,
+                                struct media_info *dss_media_info,
+                                size_t written_size)
 {
-    struct req_container *cont = (struct req_container *)reqc;
-
-    destroy_container_params(cont);
-    pho_srl_request_free(cont->req, true);
-    free(cont->req);
-}
-
-/** Wrapper of sched_resp_free to be used as glib callback */
-static void sched_resp_free_wrapper(void *respc)
-{
-    pho_srl_response_free(((struct resp_container *)respc)->resp, false);
-    free(((struct resp_container *)respc)->resp);
-}
-
-int sched_request_enqueue(struct lrs_sched *sched, struct req_container *reqc)
-{
-    pho_req_t *req;
-
-    if (!reqc)
-        return -EINVAL;
-
-    req = reqc->req;
-
-    if (!req)
-        return -EINVAL;
-
-    if (pho_request_is_release(req))
-        g_queue_push_tail(sched->release_queue, reqc);
-    else
-        g_queue_push_tail(sched->req_queue, reqc);
+    if (written_size > 0) {
+        dss_media_info->stats.phys_spc_free -= written_size;
+        return dss_media_set(dss, dss_media_info, 1, DSS_SET_UPDATE,
+                             PHYS_SPC_FREE);
+    }
 
     return 0;
 }
 
-/**
- * Flush, update dss status and release locks on a medium and its associated
- * device.
- */
-static int sched_handle_medium_release(struct lrs_sched *sched,
-                                       pho_req_release_elt_t *medium)
+int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
 {
     int rc = 0;
-    struct dev_descr *dev;
+    size_t i;
+    int rc2;
 
-    /* Find the where the media is loaded */
-    dev = search_loaded_media(sched, medium->med_id->name);
-    if (dev == NULL) {
-        LOG_RETURN(-ENOENT,
-                 "Could not find '%s' mount point, the media is not loaded",
-                 medium->med_id->name);
+    /* for each nosync_medium */
+    for (i = 0; i < reqc->params.release.n_nosync_media; i++) {
+        struct dev_descr *dev;
+
+        /* find the corresponding device */
+        dev = search_loaded_media(sched,
+            reqc->params.release.nosync_media[i].medium.name);
+        /* no device is found: stop to manage this request and send an error */
+        if (dev == NULL) {
+            rc2 = queue_error_response(sched, -ENODEV, reqc);
+            if (rc2) {
+                pho_error(rc2, "Unable to queue ENODEV error response");
+                rc = rc ? : rc2;
+            }
+
+            sched_req_free(reqc);
+
+            return rc;
+        }
+
+        /* update media phys_spc_free stats in advance, before next sync */
+        /**
+         * TODO: we save media status into DSS but we can also use local cached
+         * values.
+         *
+         * Many modifications are needed:
+         * - remove sched_load_dev_state from format/read/write
+         * - take into account current cached value for loaded media into
+         *   sched_select_media
+         */
+        rc2 = update_phys_spc_free(&sched->dss, dev->dss_media_info,
+            reqc->params.release.nosync_media[i].written_size);
+        if (rc2) {
+            pho_error(rc2, "Unable to update phys_spc_free");
+            rc = rc ? : rc2;
+        }
+
+        /* Acknowledgement of the request */
+        dev->ongoing_io = false;
     }
 
-    /* Flush media and update media info in dss */
-    if (medium->to_sync)
-        rc = sched_io_complete(sched, dev->dss_media_info, medium->size_written,
-                               medium->rc, dev->mnt_path);
+    if (!reqc->params.release.n_tosync_media) {
+        sched_req_free(reqc);
+        return rc;
+    }
 
-    /* mark IO as ended */
-    dev->ongoing_io = false;
+    /* for each tosync_medium */
+    for (i = 0; i < reqc->params.release.n_tosync_media; i++) {
+        struct dev_descr *dev;
 
-    return rc;
-}
+        /* find the corresponding device */
+        dev = search_loaded_media(sched,
+            reqc->params.release.tosync_media[i].medium.name);
 
-/**
- * Flush and update dss status for all media with to-sync flag from a release
- * request.
- */
-static int sched_handle_media_release(struct lrs_sched *sched,
-                                      pho_req_release_t *req)
-{
-    size_t i;
-    int rc = 0;
+        if (dev != NULL) {
 
-    for (i = 0; i < req->n_media; i++) {
-        int rc2 = sched_handle_medium_release(sched, req->media[i]);
+            /* update media phys_spc_free stats in advance, before next sync */
+            /**
+             * TODO: better to use a local cached value than always updating DSS
+             *
+             * Many modifications are needed:
+             * - remove sched_load_dev_state from format/read/write
+             * - take into account current cached value for loaded media into
+             *   sched_select_media
+             */
+            rc2 = update_phys_spc_free(&sched->dss, dev->dss_media_info,
+                reqc->params.release.tosync_media[i].written_size);
+            if (rc2) {
+                pho_error(rc2, "Unable to update phys_spc_free");
+                rc = rc ? : rc2;
+            }
 
+            /* Acknowledgement of the request */
+            dev->ongoing_io = false;
+
+            /* Queue sync request */
+            reqc->params.release.rc = push_new_sync_to_device(dev, reqc, i);
+            if (!reqc->params.release.rc)
+                continue;
+            else
+                rc = rc ? : reqc->params.release.rc;
+        } else {
+            reqc->params.release.rc = -ENODEV;
+        }
+
+        /* manage error */
+        reqc->params.release.tosync_media[i].status = SYNC_ERROR;
+        rc2 = queue_error_response(sched, reqc->params.release.rc, reqc);
         rc = rc ? : rc2;
+
+        if (i == 0) {
+            /* never queued: we can free it */
+            sched_req_free(reqc);
+        } else {
+            size_t j;
+
+            for (j = i + 1; j < reqc->params.release.n_tosync_media; j++)
+                reqc->params.release.tosync_media[j].status = SYNC_CANCEL;
+        }
+
+        break;
     }
 
     return rc;
@@ -2868,106 +3167,158 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
     return rc;
 }
 
-static int to_sync_media_per_release(const pho_req_t *req)
+/** update the dev->sync_params.oldest_tosync by scrolling the tosync_array */
+static void update_queue_oldest_tosync(struct dev_descr *dev)
 {
-    pho_req_release_t *rel = req->release;
-    size_t n_media = 0;
+    GPtrArray *tosync_array = dev->sync_params.tosync_array;
+    guint i;
+
+    if (tosync_array->len == 0) {
+        dev->sync_params.oldest_tosync.tv_sec = 0;
+        dev->sync_params.oldest_tosync.tv_nsec = 0;
+        return;
+    }
+
+    for (i = 0; i < tosync_array->len; i++) {
+        struct request_tosync *req_tosync = tosync_array->pdata[i];
+
+        update_oldest_tosync(&dev->sync_params.oldest_tosync,
+                             req_tosync->reqc->received_at);
+    }
+}
+
+/** remove from tosync_array when error occurs on other device */
+static void dev_check_sync_cancel(struct dev_descr *dev)
+{
+    GPtrArray *tosync_array = dev->sync_params.tosync_array;
+    bool need_oldest_update = false;
     int i;
 
-    assert(pho_request_is_release(req));
+    for (i = tosync_array->len - 1; i >= 0; i--) {
+        struct request_tosync *req_tosync = tosync_array->pdata[i];
 
-    for (i = 0; i < rel->n_media; i++)
-        if (rel->media[i]->to_sync)
-            n_media++;
+        if (req_tosync->reqc->params.release.rc) {
+            struct release_params *release_params;
+            struct tosync_medium *tosync_medium;
 
-    return n_media;
+            g_ptr_array_remove_index_fast(tosync_array, i);
+            release_params = &req_tosync->reqc->params.release;
+            tosync_medium =
+                &release_params->tosync_media[req_tosync->medium_index];
+
+            dev->sync_params.tosync_size -= tosync_medium->written_size;
+            need_oldest_update = true;
+
+            tosync_medium->status = SYNC_CANCEL;
+
+            if (is_request_tosync_ended(req_tosync->reqc))
+                sched_request_tosync_free(req_tosync);
+        }
+    }
+
+    if (need_oldest_update)
+        update_queue_oldest_tosync(dev);
+}
+
+/* Parameters to trigger a sync will be parameterized in a next patch */
+#define MAX_TO_SYNC 5
+struct timespec max_sync_wait = {1, 0};
+#define MAX_SIZE_TO_SYNC (1024 * 1024 * 1024) /* 1 GIGABYTE */
+
+static struct timespec add_timespec(struct timespec a, struct timespec b)
+{
+    struct timespec sum;
+
+    sum.tv_sec = a.tv_sec + b.tv_sec;
+    sum.tv_nsec = a.tv_nsec + b.tv_nsec;
+    if (sum.tv_nsec > (1000 * 1000 * 1000)) {
+        sum.tv_nsec -= (1000 * 1000 * 1000);
+        sum.tv_sec += 1;
+    }
+
+    return sum;
+}
+
+static bool is_past(struct timespec t)
+{
+    struct timespec now;
+    int rc;
+
+    rc = clock_gettime(CLOCK_REALTIME, &now);
+    if (rc) {
+        pho_error(-errno, "Unable to get CLOCK_REALTIME to check delay");
+        return true;
+    }
+
+    return is_older_or_equal(t, now);
+}
+
+static inline void check_needs_sync(struct dev_descr *dev)
+{
+    dev->needs_sync = dev->sync_params.tosync_array->len > 0 &&
+                      (dev->sync_params.tosync_array->len > MAX_TO_SYNC ||
+                       is_past(add_timespec(dev->sync_params.oldest_tosync,
+                                            max_sync_wait)) ||
+                       dev->sync_params.tosync_size >= MAX_SIZE_TO_SYNC);
+}
+
+/* Sync dev, update the media in the DSS, and flush tosync_array */
+static void dev_sync(struct lrs_sched *sched, struct dev_descr *dev)
+{
+    int rc2;
+    int rc;
+
+    /* sync operation */
+    rc = sched_io_complete(sched, dev->dss_media_info, dev->mnt_path);
+
+    rc2 = sched_media_update(sched, dev->dss_media_info,
+                             dev->sync_params.tosync_size, rc, dev->mnt_path,
+                             dev->sync_params.tosync_array->len);
+    if (rc2) {
+        rc = rc ? : rc2;
+        pho_error(rc2, "Cannot update media information");
+    }
+
+    rc2 = clean_tosync_array(sched, dev, rc);
+    if (rc2) {
+        rc = rc ? : rc2;
+        pho_error(rc2, "Cannot clean tosync array");
+    }
+
+    if (rc) {
+        dev->op_status = PHO_DEV_OP_ST_FAILED;
+        dev->dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+        rc2 = dss_device_update_adm_status(&sched->dss, dev->dss_dev_info, 1);
+        if (rc2)
+            pho_error(rc2, "Unable to set device as failed into DSS");
+    }
+
+}
+
+static void device_manage_sync(struct lrs_sched *sched, struct dev_descr *dev)
+{
+    dev_check_sync_cancel(dev);
+
+    if (!dev->needs_sync)
+        check_needs_sync(dev);
+
+    if (!dev->ongoing_io && dev->needs_sync)
+        dev_sync(sched, dev);
 }
 
 /**
- * Handle incoming release requests, appending corresponding release responses
- * to the \p sched's response_queue.
- *
- * Can be called with only_release at true to handle all pending release
- * requests without generating responses, for example when destroying an LRS
- * with sched_fini.
+ * Manage tosync queue of devices
  */
-static int sched_handle_release_reqs(struct lrs_sched *sched)
+static void sched_handle_release_reqs(struct lrs_sched *sched)
 {
-    struct req_container *reqc;
+    int i;
 
-    while ((reqc = g_queue_pop_tail(sched->release_queue)) != NULL) {
-        struct resp_container *respc = NULL;
-        pho_req_t *req = reqc->req;
-        size_t n_media;
-        int rc = 0;
-
-        rc = sched_handle_media_release(sched, req->release);
-        n_media = to_sync_media_per_release(req);
-
-        if (n_media == 0)
-            goto free_req;
-
-        respc = malloc(sizeof(*respc));
-        if (!respc)
-            goto free_req;
-
-        respc->socket_id = reqc->socket_id;
-        respc->resp = malloc(sizeof(*respc->resp));
-        if (!respc->resp)
-            goto free_respc;
-
-        if (rc) {
-            int rc2 = pho_srl_response_error_alloc(respc->resp);
-
-            if (rc2) {
-                rc = rc2;
-                goto free_resp;
-            }
-
-            respc->resp->error->rc = rc;
-            rc = 0;
-            respc->resp->error->req_kind = PHO_REQUEST_KIND__RQ_RELEASE;
-        } else {
-            pho_req_release_t *rel = req->release;
-            pho_resp_release_t *respl;
-            size_t i, j;
-
-            rc = pho_srl_response_release_alloc(respc->resp, n_media);
-            if (rc)
-                goto free_resp;
-
-            /* Build the answer */
-            respc->resp->req_id = req->id;
-            respl = respc->resp->release;
-
-            for (i = 0, j = 0; i < rel->n_media; ++i) {
-                const char *name = rel->media[i]->med_id->name;
-
-                if (!rel->media[i]->to_sync)
-                    continue;
-
-                respl->med_ids[j]->family = rel->media[i]->med_id->family;
-                respl->med_ids[j]->name = strdup(name);
-                j++;
-            }
-        }
-
-        g_queue_push_tail(sched->response_queue, respc);
-        goto free_req;
-
-        /* Free incoming request */
-free_resp:
-        free(respc->resp);
-free_respc:
-        free(respc);
-free_req:
-        pho_srl_request_free(req, true);
-        free(reqc);
-        if (rc)
-            return rc;
+    for (i = 0; i < sched->devices->len; i++) {
+        struct dev_descr *dev = &g_array_index(sched->devices,
+                                               struct dev_descr, i);
+        if (dev->op_status == PHO_DEV_OP_ST_MOUNTED)
+            device_manage_sync(sched, dev);
     }
-
-    return 0;
 }
 
 static int sched_handle_format(struct lrs_sched *sched, pho_req_t *req,
@@ -3069,31 +3420,20 @@ err:
 int sched_responses_get(struct lrs_sched *sched, int *n_resp,
                         struct resp_container **respc)
 {
-    GArray *resp_array;
-    size_t release_queue_len = g_queue_get_length(sched->release_queue);
     struct req_container *reqc;
+    GArray *resp_array;
     int rc = 0;
 
-    /* At least release_queue_len responses will be emitted */
     resp_array = g_array_sized_new(FALSE, FALSE, sizeof(struct resp_container),
-                                   release_queue_len);
+                                   g_queue_get_length(sched->req_queue));
     if (resp_array == NULL)
         return -ENOMEM;
-    g_array_set_clear_func(resp_array, sched_resp_free_wrapper);
+    g_array_set_clear_func(resp_array, sched_resp_free);
 
     /*
      * First release everything that can be.
-     *
-     * NOTE: in the future, media could be "released" as soon as possible, but
-     * only flushed in batch later on. The response to the "release" request
-     * would then have to wait for the full flush.
-     *
-     * TODO: if there are multiple release requests for one media, only release
-     * it once but answer to all requests.
      */
-    rc = sched_handle_release_reqs(sched);
-    if (rc)
-        goto out;
+    sched_handle_release_reqs(sched);
 
     /*
      * Very simple algorithm (FIXME): serve requests until the first EAGAIN is
@@ -3163,4 +3503,3 @@ out:
 
     return rc;
 }
-

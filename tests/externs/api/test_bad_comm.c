@@ -169,7 +169,7 @@ static int test_bad_release(void *arg)
     req.release->media[0]->med_id->name = strdup("/tmp/not/a/med");
     req.release->media[0]->to_sync = true;
     assert(!_send_and_receive(ci, &req, &resp));
-    rc = _check_error(resp, "Release -- bad resource name", -ENOENT);
+    rc = _check_error(resp, "Release -- bad resource name", -ENODEV);
 
     pho_srl_request_free(&req, false);
     pho_srl_response_free(resp, true);

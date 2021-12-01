@@ -180,7 +180,7 @@ static void n_media_per_release(struct req_container *req_cont)
 static int _init_release_container(struct req_container *req_cont)
 {
     struct tosync_medium *tosync_media = NULL;
-    struct pho_id *nosync_media = NULL;
+    struct nosync_medium *nosync_media = NULL;
     size_t tosync_media_index = 0;
     size_t nosync_media_index = 0;
     pho_req_release_elt_t *media;
@@ -207,25 +207,20 @@ static int _init_release_container(struct req_container *req_cont)
         media = req_cont->req->release->media[i];
         if (media->to_sync) {
             tosync_media[tosync_media_index].status = SYNC_TODO;
-            tosync_media[tosync_media_index].device.family =
-                                                        media->med_id->family;
             tosync_media[tosync_media_index].medium.family =
-                                                        media->med_id->family;
+                (enum rsc_family)media->med_id->family;
             tosync_media[tosync_media_index].written_size = media->size_written;
             rc = pho_id_name_set(&tosync_media[tosync_media_index].medium,
                                  media->med_id->name);
             if (rc)
                 GOTO(clean_on_error, rc);
 
-            /*
-             *  tosync_media[i].device is filled later when enqueuing the
-             *  request into the corresponding per device to_sync queue.
-             */
-
             tosync_media_index++;
         } else {
-            nosync_media[nosync_media_index].family = media->med_id->family;
-            rc = pho_id_name_set(&nosync_media[nosync_media_index],
+            nosync_media[nosync_media_index].medium.family =
+                (enum rsc_family)media->med_id->family;
+            nosync_media[tosync_media_index].written_size = media->size_written;
+            rc = pho_id_name_set(&nosync_media[nosync_media_index].medium,
                                  media->med_id->name);
             if (rc)
                 GOTO(clean_on_error, rc);
@@ -242,34 +237,6 @@ clean_on_error:
     free(tosync_media);
     free(nosync_media);
     return rc;
-}
-
-static int _prepare_error(struct resp_container *resp_cont, int req_rc,
-                          const struct req_container *req_cont)
-{
-    int rc;
-
-    resp_cont->socket_id = req_cont->socket_id;
-    rc = pho_srl_response_error_alloc(resp_cont->resp);
-    if (rc)
-        LOG_RETURN(rc, "Failed to allocate response");
-
-    resp_cont->resp->error->rc = req_rc;
-    if (!req_cont->req) /* If the error happened during request unpacking */
-        return 0;
-
-    resp_cont->resp->req_id = req_cont->req->id;
-    if (pho_request_is_write(req_cont->req))
-        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_WRITE;
-    else if (pho_request_is_read(req_cont->req))
-        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_READ;
-    else if (pho_request_is_release(req_cont->req))
-        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_RELEASE;
-    else if (pho_request_is_format(req_cont->req))
-        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_FORMAT;
-    else if (pho_request_is_notify(req_cont->req))
-        resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_NOTIFY;
-    return 0;
 }
 
 static int _send_message(struct pho_comm_info *comm,
@@ -331,7 +298,8 @@ static int _send_responses_from_array(struct pho_comm_info *comm,
     return rc;
 }
 
-static int _send_error(struct lrs *lrs, struct req_container *req_cont)
+static int _send_error(struct lrs *lrs, int req_rc,
+                       struct req_container *req_cont)
 {
     struct resp_container resp_cont;
     int rc;
@@ -340,7 +308,7 @@ static int _send_error(struct lrs *lrs, struct req_container *req_cont)
     if (!resp_cont.resp)
         LOG_RETURN(-ENOMEM, "Cannot allocate error response");
 
-    rc = _prepare_error(&resp_cont, -EINVAL, req_cont);
+    rc = prepare_error(&resp_cont, req_rc, req_cont);
     if (rc)
         LOG_GOTO(err_resp, rc, "Cannot prepare error response");
 
@@ -366,18 +334,12 @@ static int _process_ping_request(struct lrs *lrs,
         LOG_RETURN(-ENOMEM, "Cannot allocate ping response");
 
     resp_cont.socket_id = req_cont->socket_id;
-    rc = pho_srl_response_ping_alloc(resp_cont.resp);
-    if (rc)
-        LOG_GOTO(err_resp, rc, "Failed to allocate response");
+    pho_srl_response_ping_alloc(resp_cont.resp);
     resp_cont.resp->req_id = req_cont->req->id;
-
     rc = _send_message(&lrs->comm, &resp_cont);
     pho_srl_response_free(resp_cont.resp, false);
     if (rc)
-        LOG_GOTO(err_resp, rc, "Error during response sending");
-
-err_resp:
-    free(resp_cont.resp);
+        pho_error(rc, "Error during ping response sending");
 
     return rc;
 }
@@ -391,6 +353,7 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
 
     for (i = 0; i < n_data; ++i) {
         struct req_container *req_cont;
+        int rc2;
 
         if (data[i].buf.size == -1) /* close notification, ignore */
             continue;
@@ -402,47 +365,54 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
         /* request processing */
         req_cont->socket_id = data[i].fd;
         req_cont->req = pho_srl_request_unpack(&data[i].buf);
-        if (!req_cont->req)
-            LOG_GOTO(send_err, rc = -EINVAL, "Request cannot be unpacked");
-
-        /* send back the ping request */
-        if (pho_request_is_ping(req_cont->req)) {
-            rc = _process_ping_request(lrs, req_cont);
-            if (rc)
-                LOG_GOTO(send_err, rc, "Ping response cannot be sent");
+        if (!req_cont->req) {
             free(req_cont);
             continue;
         }
 
-        fam = _determine_family(req_cont->req);
-        if (fam == PHO_RSC_INVAL)
-            LOG_GOTO(send_err, rc = -EINVAL,
-                     "Requested family is not recognized");
+        /* send back the ping request */
+        if (pho_request_is_ping(req_cont->req)) {
+            rc2 = _process_ping_request(lrs, req_cont);
+            sched_req_free(req_cont);
+            if (rc2)
+                rc = rc ? : rc2;
 
-        if (pho_request_is_release(req_cont->req)) {
-            rc = _init_release_container(req_cont);
-            if (rc)
-                LOG_GOTO(send_err, rc, "Cannot init release container");
+            continue;
         }
 
+        rc2 = clock_gettime(CLOCK_REALTIME, &req_cont->received_at);
+        if (rc2) {
+            rc2 = -errno;
+            rc = rc ? : rc2;
+            LOG_GOTO(send_err, rc2,
+                     "Unable to get CLOCK_REALTIME at request container init");
+        }
+
+        fam = _determine_family(req_cont->req);
+        if (fam == PHO_RSC_INVAL)
+            LOG_GOTO(send_err, rc2 = -EINVAL,
+                     "Requested family is not recognized");
+
         if (!lrs->sched[fam])
-            LOG_GOTO(send_err, rc = -EINVAL,
+            LOG_GOTO(send_err, rc2 = -EINVAL,
                      "Requested family is not handled by the daemon");
 
-        rc = sched_request_enqueue(lrs->sched[fam], req_cont);
-        if (rc)
-            LOG_GOTO(send_err, rc, "Request cannot be enqueue");
+        if (pho_request_is_release(req_cont->req)) {
+            rc2 = _init_release_container(req_cont);
+            if (rc2)
+                LOG_GOTO(send_err, rc2, "Cannot init release container");
+
+            rc2 = sched_release_enqueue(lrs->sched[fam], req_cont);
+            rc = rc ? : rc2;
+        } else {
+            g_queue_push_tail(lrs->sched[fam]->req_queue, req_cont);
+        }
 
         continue;
 
 send_err:
-        rc = _send_error(lrs, req_cont);
-        destroy_container_params(req_cont);
-        if (req_cont->req)
-            pho_srl_request_free(req_cont->req, true);
-        free(req_cont);
-        if (rc)
-            LOG_RETURN(rc, "Cannot send error response");
+        _send_error(lrs, rc2, req_cont);
+        sched_req_free(req_cont);
     }
 
     return rc;
