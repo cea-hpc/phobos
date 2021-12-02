@@ -107,6 +107,10 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %files devel
 
 %{_includedir}/pho_attrs.h
+%{_includedir}/pho_comm.h
+%{_includedir}/pho_common.h
+%{_includedir}/pho_dss.h
+%{_includedir}/pho_types.h
 %{_includedir}/phobos_store.h
 %{_includedir}/phobos_admin.h
 %{_libdir}/libphobos_store.la
