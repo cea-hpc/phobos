@@ -1,4 +1,10 @@
-# Phobos documentation
+% Phobos documentation
+
+This document presents basic information about Phobos installation and the first
+steps of its utilization. More information can be found in the following links:
+* [Installation/migration and issues](doc/setup_and_issues.md)
+* [Admin commands](doc/admin_commands.md)
+* [Object-related commands](doc/object_management.md)
 
 ## Installation
 ### Requirements for tape access
@@ -21,43 +27,7 @@ Install phobos and its requirements:
 yum install phobos
 ```
 
-### Database setup
-
-#### On RHEL8/CentOS8
-
-Install postgresql:
-```
-dnf install postgresql-server postgresql-contrib
-```
-
-Initialize postgresql directories:
-```
-postgresql-setup --initdb --unit postgresql
-```
-
-Edit `/var/lib/pgsql/data/pg_hba.conf` to authorize access from phobos host
-(localhost in this example):
-```
-# "local" is for Unix domain socket connections only
-local   all             all                                     trust
-# IPv4 local connections:
-host    all             all             127.0.0.1/32            md5
-# IPv6 local connections:
-host    all             all             ::1/128                 md5
-```
-
-Start the database server:
-```
-systemctl start postgresql
-```
-
-Finally, create phobos database and tables as postgres user (the password for
-SQL phobos user will be prompted for unless provided with -p):
-```
-sudo -u postgres phobos_db setup_db -s
-```
-
-#### On RHEL7/CentOS7
+### Database setup (on RHEL7/CentOS7)
 
 Install postgresql version >= 9.4 (from EPEL or any version compatible with
 Postgres 9.4):
@@ -92,63 +62,14 @@ SQL phobos user will be prompted for unless provided with -p):
 sudo -u postgres phobos_db setup_db -s
 ```
 
-#### Error on database setup/migration
-If the database setup failed because `generate_uuid_v4()` is missing, it means
-the psql extension `uuid-ossp` is missing. To make it available, execute the
-following command as SQL phobos user. Phobos user needs to have `create` rights
-to execute the command.
-
-```
-CREATE EXTENSION "uuid-ossp";
-```
-
-In case SQL phobos user does not have `create` rights, you can still use the
-first following command to give them to it and change them back with the second
-one:
-
-```
-ALTER USER phobos WITH SUPERUSER;
-ALTER USER phobos WITHOUT SUPERUSER;
-```
-
-## Upgrade of an existing instance
-
-After upgrading phobos, run the DB conversion script (credentials to connect to
-the database will be retrieved from /etc/phobos.conf):
-```
-/usr/sbin/phobos_db migrate
-# 'y' to confirm
-```
-
 ## First steps
 ### Launching phobosd
 To use phobos, a daemon called phobosd needs to be launched. It mainly manages
 the drive/media allocation and sets up resources to read or write your data.
 
-To launch the daemon:
+To launch/stop the daemon:
 ```
-# systemctl start phobosd
-```
-
-To stop the daemon:
-```
-# systemctl stop phobosd
-```
-
-phobosd comes with its option set:
-- -i: launch phobosd in an interactive way (attached to a terminal)
-- -c: path to phobosd configuration file
-- -s: print log messages into syslog
-- -q/v: decrease/increase log verbosity
-
-The `phobos ping` command can be used to check if the daemon is reachable by its
-socket. The return code will be 0 if ping succeeded, or non null if it failed.
-```
-$ systemctl start phobosd
-$ phobos ping
-2021-09-16 12:01:48,772 <INFO> Ping sent to daemon successfully
-$ echo $?
-0
+# systemctl start/stop phobosd
 ```
 
 ### Scanning libraries
@@ -158,7 +79,8 @@ following will give the contents of the /dev/changer library:
 phobos lib scan /dev/changer
 ```
 
-### Adding drives
+### Device and media management
+#### Adding drives
 Use the `phobos` command line to add new tape drives to be managed by phobos.
 
 It is recommanded to specify a device path which is persistent after reboot
@@ -172,7 +94,8 @@ To enable using a drive in production as soon as it is added, specify the
 ```
 phobos drive add --unlock /dev/mapper/LTO6-012345
 ```
-### Adding media
+
+#### Adding media
 To add tapes to be managed by phobos, use the `phobos` command line.
 It is mandatory to specify a media type (like LTO8, T10KD...) with option `-t`:
 ```
@@ -190,21 +113,27 @@ the tape when the operation is done, so it becomes usable in production.
 phobos tape format --unlock 073200L6
 ```
 
-### Writing data
+#### Locking resources
+A device or media can be locked. In this case it cannot be used for
+subsequent 'put' or 'get' operations:
 
-#### Using the API
-You can access data in phobos using the phobos API:
+```
+phobos drive {lock|unlock} <drive_serial|drive_path>
+phobos media {lock|unlock} <media_id>
+```
 
-* Header file is `phobos_store.h`.
-* Library is `libphobos_store` (link using `-lphobos_store`).
+#### Listing resources
+Any device or media can be listed using the 'list' operation. For instance,
+the following will list all the existing tape identifiers:
+```
+phobos tape list
+```
 
-Calls for writing and retrieving objects are `phobos_put()` and
-`phobos_get()`.
+### Object management
+The rest of this document will describe object management using CLI calls. An
+API is available and is more described [here](doc/object_management.md).
 
-#### Using the CLI
-The CLI wraps `phobos_put()` and `phobos_get()` calls.
-
-##### Writting objects
+#### Writting objects
 When pushing an object you need to specify an **identifier** that can be later
 used to retrieve this data.
 
@@ -217,36 +146,7 @@ phobos put  myinput_file  foo-12345 --metadata  user=$LOGNAME,\
     put_time=$(date +%s),version=1
 ```
 
-A newer version of an object can be pushed in a phobos system. In this case, the
-old version is considered deprecated, and basic operations can no longer be
-executed on it if its version number is not given.
-
-```
-echo "new data" >> myinput_file
-phobos put --overwrite myinput_file foo-12345
-```
-
-For better performances when writing to tape, it is recommanded to write batches
-of objects in a single put command. This can be done using `phobos mput`
-command.
-
-`phobos mput` takes as agument a file that contains a list of input files (one
-per line) and the corresponding identifiers and metadata, with the following format:
-
-`<src_file>  <object_id>  <metadata|->`.
-
-Example of input file for mput:
-```
-/srcdir/file.1      obj0123    -
-/srcdir/file.2      obj0124    user=foo,md5=xxxxxx
-/srcdir/file.3      obj0125    project=29DKPOKD,date=123xyz
-```
-The mput operation is simply:
-```
-phobos mput list_file
-```
-
-##### Reading objects
+#### Reading objects
 To retrieve the data of an object, use `phobos get`. Its arguments are the
 identifier of the object to be retrieved, as well as a path of target file.
 
@@ -255,19 +155,14 @@ For example:
 phobos get obj0123 /tmp/obj0123.back
 ```
 
-An object can also be targeted using its uuid and/or its version number:
-```
-phobos get --uuid aabbccdd --version 2 obj0123 /tmp/obj0123.back
-```
-
-##### Reading object attributes
+#### Reading object attributes
 To retrieve custom object metadata, use `phobos getmd`:
 ```
 $ phobos getmd obj0123
 cksum=md5:7c28aec5441644094064fcf651ab5e3e,user=foo
 ```
 
-##### Deleting objects
+#### Deleting objects
 To delete an object, use `phobos del[ete]`:
 ```
 phobos del obj0123
@@ -297,254 +192,5 @@ $ phobos object list --output oid,user_md
 | obj02 | {"user": "foo"} |
 ```
 
-You can add a pattern to match object oids:
-```
-phobos object list "obj.*"
-```
-
-The accepted patterns are Basic Regular Expressions (BRE) and Extended
-Regular Expressions (ERE). As defined in [PostgreSQL manual](https://www.postgresql.org/docs/9.3/functions-matching.html#POSIX-SYNTAX-DETAILS),
-PSQL also accepts Advanced Regular Expressions (ARE), but we will not maintain
-this feature as ARE is not a POSIX standard.
-
-The option '--metadata' applies a filter on user metadata
-```
-phobos object list --metadata user=foo,test=abd
-```
-
-##### Listing extents
-To list extents, use `phobos extent list`:
-```
-$ phobos extent list --output oid,ext_count,layout,media_name
-| oid  | ext_count | layout | media_name             |
-|------|-----------|--------|------------------------|
-| obj1 |         1 | simple | ['/tmp/d1']            |
-| obj2 |         2 | raid1  | ['/tmp/d1', '/tmp/d2'] |
-```
-
-The option `--degroup` outputs an extent per row instead of one object per row:
-```
-$ phobos extent list --degroup --output oid,layout,media_name
-| oid  | layout | media_name  |
-|------|--------|-------------|
-| obj1 | simple | ['/tmp/d1'] |
-| obj2 | raid1  | ['/tmp/d1'] |
-| obj2 | raid1  | ['/tmp/d2'] |
-```
-
-The option `--name` applies a filter on a medium's name. Here, the name does not
-accept a pattern.
-```
-phobos extent list --name tape01
-```
-
-You can add a POSIX pattern to match oids, as described in "Listing objects"
-section:
-```
-phobos extent list "obj.*"
-```
-
-##### Locating objects
-Tapes can move from one drive to another, and be reachable from different
-hosts. The locate command helps you find the best host to reach your object:
-```
-phobos locate obj0123
-```
-
-A `--best-host` option is also available for the get command, to retrieve the
-object only if the request is executed on the best host:
-```
-phobos get --best-host obj0123 /tmp/obj0123.back
-```
-
-## Device and media management
-### Listing resources
-Any device or media can be listed using the 'list' operation. For instance,
-the following will list all the existing tape identifiers:
-```
-phobos tape list
-```
-
-The 'list' output can be formatted using the --output option, following a list
-of comma-separated attributes:
-```
-phobos tape list --output stats.phys_spc_used,tags,adm_status
-```
-
-If the attribute 'all' is used, then the list is printed with full details:
-```
-phobos tape list --output all
-```
-
-Other options are available using the --help option.
-
-### Locking resources
-A device or media can be locked. In this case it cannot be used for
-subsequent 'put' or 'get' operations:
-
-```
-phobos drive {lock|unlock} <drive_serial|drive_path>
-phobos media {lock|unlock} <media_id>
-```
-
-### Setting access
-Media can be set to accept or reject some types of operation. We distinguish
-three kinds of operation: put (P), get (G) and delete (D).
-
-```
-# Set medium access: allow get and delete, forbid put
-phobos tape set-access GD 073000L8
-
-# Add access: add put and get (delete is unchanged)
-phobos dir set-access +PG /path/to/dir
-
-# Remove access: remove put (get and delete are unchanged)
-phobos tape set-access -- -P 073000L8
-```
-
-### Tagging resources
-Phobos implements a flexible mechanism to partition storage resources into
-(possibly overlapping) subsets.
-
-This mechanism is based on **tags**.
-
-Multiple tags can be associated to the storage media at creation time or later
-on:
-```
-# Add media with tags "class1" and "project2"
-phobos tape add --tags class1,project2 --type LTO8 [073000-073099]L8
-
-# Update tags for these tapes
-phobos tape update --tags class2 [073000-073099]L8
-
-# Clear tags
-phobos dir update --tags '' [073000-073099]L8
-```
-
-Media can be listed following their tags:
-```
-phobos tape list --tags class1,project2
-```
-
-When pushing objects to phobos, you can then restrict the subset of resources
-that can be used to store data by specifying tags with the `--tags` option.
-
-```
-# The following command will only use media with tags 'class1' AND 'projX'
-phobos put --tags class1,projX /path/to/obj objid
-```
-
-* If several tags are specified for put, phobos will only use media having
-**all** of the specified tags.
-* A media is selected if its tags **include** the tags specified for the put
-operation.
-
-The following table illustrates conditions for matching tags:
-
-| put tags    | media tags | match   |
-|-------------|------------|---------|
-| (none)      | (none)     | **yes** |
-| (none)      | A,B        | **yes** |
-| A           | **A**,B    | **yes** |
-| A,B         | **A,B**    | **yes** |
-| A,B,C       | A,B        | no      |
-| A           | (none)     | no      |
-| C           | A,B        | no      |
-| A,C         | A,B        | no      |
-
-### Locating media
-Phobos allows you to locate its media by answering you on which host you should
-execute phobos commands or calls that require access to a specific medium.
-
-```
-phobos tape locate 073000L8
-phobos dir locate /path/to/dir
-```
-
-### Media families
-
-For now, phobos supports 2 families of storage devices: tapes and directories.
-
-* Tapes are media accessed by drives.
-  * Drives are managed by `phobos drive ...` commands
-  * Tapes are managed by `phobos tape ...` commands
-* Directories are self-accessible. They do not need drives to be read.
-  * Directories are managed by `phobos dir ...` commands.
-
-To specify the default family where data is to be written, specify it in the
-phobos configuration file:
-
-```
-[store]
-# indicate 'tape' or 'dir' family
-default_family = tape
-```
-
-Alternatively, you can override this value by using the '--family' option of
-your put commands:
-
-```
-# put data to directory storage
-phobos put --family dir file.in obj123
-```
-
-### Storage layouts
-
-For now, phobos only supports the 'raid1' storage layout, for mirroring.
-
-The 'simple' storage layout can be obtained by modifiying the number of
-replicas to 1.
-
-The default layout to use when data is written can be specified in the phobos
-configuration file, in case multiple are defined:
-
-```
-[store]
-default_layout = raid1
-```
-
-If an alias is defined, you can set it as default instead of the layout:
-
-```
-[store]
-default_alias = simple
-
-[alias "simple"]
-layout = raid1
-lyt-params = repl_count=1
-```
-
-Alternatively, you can override this default value by using the 'right' option
-in your put commands:
-
-```
-# put data using a raid1 layout
-phobos put --layout raid1 file.in obj123
-
-# put data using a simple alias
-phobos put --alias simple file.in obj123
-```
-
-Layouts can have additional parameters. For now, the only additional parameter
-is for raid1 number of replicas. This is for now specified using the following
-env variable:
-
-```
-# put data using a raid1 layout with 3 replicas
-PHOBOS_LAYOUT_RAID1_repl_count=3 phobos put --layout raid1 file.in obj123
-```
-
-### Configuring device and media types
-
-#### Supported tape models
-
-The set of tape technologies supported by phobos can be modified by
-configuration.
-
-This list is used to verify the model of tapes added by administrators.
-```
-[tape_model]
-# comma-separated list of tape models, without any space
-# default: LTO5,LTO6,LTO7,LTO8,T10KB,T10KC,T10KD
-supported_list = LTO5,LTO6,LTO7,LTO8,T10KB,T10KC,T10KD
-```
+The `--output` option describes which field will be output. `all` can be used as
+a special field to select them all.
