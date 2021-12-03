@@ -135,7 +135,6 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 * Wed Mar 3 2021 - Sebastien Gougeaud <sebastien.gougeaud@cea.fr> - 1.91.1-1
 - Delete and undelete commands for objects
 - Extent path generation now considers uuid and version of objects
-- Various fixes
 
 * Wed Jan 13 2021 - Sebastien Gougeaud <sebastien.gougeaud@cea.fr> - 1.91.0-1
 - Release 1.91 (Japet)
