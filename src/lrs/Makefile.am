@@ -2,6 +2,8 @@ AM_CFLAGS= $(CC_OPT)
 
 sbin_PROGRAMS=phobosd
 
+noinst_LTLIBRARIES=libpho_lrs.la
+
 unitdir=`pkg-config systemd --variable=systemdsystemunitdir`
 unit_files=phobosd.service
 unit_DATA=$(unit_files)
@@ -13,3 +15,5 @@ phobosd_LDADD=../dss/libpho_dss.la ../cfg/libpho_cfg.la ../ldm/libpho_ldm.la \
 	      ../io/libpho_io.la ../serializer/libpho_serializer.la \
 	      ../communication/libpho_comm.la ../common/libpho_common.la
 phobosd_LDFLAGS=-Wl,-rpath=$(libdir) -Wl,-rpath=$(pkglibdir)
+
+libpho_lrs_la_SOURCES=lrs_cfg.c lrs_sched.c

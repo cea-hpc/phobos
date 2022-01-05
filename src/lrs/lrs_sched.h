@@ -47,6 +47,10 @@ struct lrs_sched {
                                           *  release requests
                                           */
     GQueue            *response_queue;  /**< Queue for release responses */
+    struct timespec    sync_time_threshold;
+                                        /**< Time threshold for medium
+                                         *   synchronization
+                                         */
 };
 
 /**

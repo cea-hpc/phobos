@@ -26,6 +26,7 @@
 #define _PHO_LRS_CFG_H
 
 #include "pho_cfg.h"
+#include "pho_types.h"
 
 /** List of LRS configuration parameters */
 enum pho_cfg_params_lrs {
@@ -38,10 +39,22 @@ enum pho_cfg_params_lrs {
     PHO_CFG_LRS_lib_device,
     PHO_CFG_LRS_server_socket,
     PHO_CFG_LRS_lock_file,
+    PHO_CFG_LRS_sync_time_threshold,
 
     PHO_CFG_LRS_LAST
 };
 
 extern const struct pho_config_item cfg_lrs[];
+
+/**
+ * Getter of time threshold value for a given family.
+ *
+ * @param[in]   family      Targeted family.
+ * @param[out]  threshold   Returned threshold value.
+ * @return                  0 on success,
+ *                         -errno on failure.
+ */
+int get_cfg_time_threshold_value(enum rsc_family family,
+                                 struct timespec *threshold);
 
 #endif

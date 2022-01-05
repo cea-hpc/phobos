@@ -860,6 +860,10 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
 
     sched->family = family;
 
+    rc = get_cfg_time_threshold_value(family, &sched->sync_time_threshold);
+    if (rc)
+        LOG_RETURN(rc, "Failed to get sync time threshold value");
+
     rc = fill_host_owner(&sched->lock_hostname, &sched->lock_owner);
     if (rc)
         LOG_RETURN(rc, "Failed to get hostname and PID");
@@ -881,18 +885,18 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
     sched_load_dev_state(sched);
 
     rc = sched_clean_device_locks(sched);
-    if (rc) {
-        sched_fini(sched);
-        return rc;
-    }
+    if (rc)
+        goto err;
 
     rc = sched_clean_medium_locks(sched);
-    if (rc) {
-        sched_fini(sched);
-        return rc;
-    }
+    if (rc)
+        goto err;
 
     return 0;
+
+err:
+    sched_fini(sched);
+    return rc;
 }
 
 int prepare_error(struct resp_container *resp_cont, int req_rc,
@@ -3222,7 +3226,6 @@ static void dev_check_sync_cancel(struct dev_descr *dev)
 
 /* Parameters to trigger a sync will be parameterized in a next patch */
 #define MAX_TO_SYNC 5
-struct timespec max_sync_wait = {1, 0};
 #define MAX_SIZE_TO_SYNC (1024 * 1024 * 1024) /* 1 GIGABYTE */
 
 static struct timespec add_timespec(struct timespec a, struct timespec b)
@@ -3253,12 +3256,13 @@ static bool is_past(struct timespec t)
     return is_older_or_equal(t, now);
 }
 
-static inline void check_needs_sync(struct dev_descr *dev)
+static inline void check_needs_sync(struct lrs_sched *sched,
+                                    struct dev_descr *dev)
 {
     dev->needs_sync = dev->sync_params.tosync_array->len > 0 &&
                       (dev->sync_params.tosync_array->len > MAX_TO_SYNC ||
                        is_past(add_timespec(dev->sync_params.oldest_tosync,
-                                            max_sync_wait)) ||
+                                            sched->sync_time_threshold)) ||
                        dev->sync_params.tosync_size >= MAX_SIZE_TO_SYNC);
 }
 
@@ -3300,7 +3304,7 @@ static void device_manage_sync(struct lrs_sched *sched, struct dev_descr *dev)
     dev_check_sync_cancel(dev);
 
     if (!dev->needs_sync)
-        check_needs_sync(dev);
+        check_needs_sync(sched, dev);
 
     if (!dev->ongoing_io && dev->needs_sync)
         dev_sync(sched, dev);

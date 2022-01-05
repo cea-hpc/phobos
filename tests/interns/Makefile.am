@@ -12,6 +12,7 @@ COMMUNICATION_LIB=$(TO_SRC)/communication/libpho_comm.la
 DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
 IO_LIB=$(TO_SRC)/io/libpho_io.la
 LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la
+LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 
 if VALGRIND_ENABLED
@@ -34,6 +35,7 @@ check_PROGRAMS=test_attrs \
                test_io \
                test_ldm \
                test_log \
+               test_lrs_cfg \
                test_mapper \
                test_phobos_admin_medium_locate \
                test_ping \
@@ -96,6 +98,10 @@ test_ldm_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/ldm -I..
 test_log_SOURCES=test_log.c
 test_log_LDADD=$(COMMON_LIB)
 test_log_CFLAGS=$(AM_CFLAGS) -I..
+
+test_lrs_cfg_SOURCES=test_lrs_cfg.c
+test_lrs_cfg_LDADD=$(LRS_LIB) $(CFG_LIB) $(COMMON_LIB)
+test_lrs_cfg_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
 
 test_mapper_SOURCES=test_mapper.c
 test_mapper_LDADD=$(STORE_LIB)
