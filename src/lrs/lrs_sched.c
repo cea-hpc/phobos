@@ -864,6 +864,10 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
     if (rc)
         LOG_RETURN(rc, "Failed to get sync time threshold value");
 
+    rc = get_cfg_nb_req_threshold_value(family, &sched->sync_nb_req_threshold);
+    if (rc)
+        LOG_RETURN(rc, "Failed to get sync number of requests threshold value");
+
     rc = fill_host_owner(&sched->lock_hostname, &sched->lock_owner);
     if (rc)
         LOG_RETURN(rc, "Failed to get hostname and PID");
@@ -3225,7 +3229,6 @@ static void dev_check_sync_cancel(struct dev_descr *dev)
 }
 
 /* Parameters to trigger a sync will be parameterized in a next patch */
-#define MAX_TO_SYNC 5
 #define MAX_SIZE_TO_SYNC (1024 * 1024 * 1024) /* 1 GIGABYTE */
 
 static struct timespec add_timespec(struct timespec a, struct timespec b)
@@ -3260,7 +3263,8 @@ static inline void check_needs_sync(struct lrs_sched *sched,
                                     struct dev_descr *dev)
 {
     dev->needs_sync = dev->sync_params.tosync_array->len > 0 &&
-                      (dev->sync_params.tosync_array->len > MAX_TO_SYNC ||
+                      (dev->sync_params.tosync_array->len >=
+                           sched->sync_nb_req_threshold ||
                        is_past(add_timespec(dev->sync_params.oldest_tosync,
                                             sched->sync_time_threshold)) ||
                        dev->sync_params.tosync_size >= MAX_SIZE_TO_SYNC);

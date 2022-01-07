@@ -67,10 +67,16 @@ const struct pho_config_item cfg_lrs[] = {
         .name    = "sync_time_threshold",
         .value   = "tape=10000,dir=10"
     },
+    [PHO_CFG_LRS_sync_nb_req_threshold] = {
+        .section = "lrs",
+        .name    = "sync_nb_req_threshold",
+        .value   = "tape=5,dir=5"
+    },
 };
 
-int get_cfg_time_threshold_value(enum rsc_family family,
-                                 struct timespec *threshold)
+static int _get_substring_value_from_token(const char *cfg_param,
+                                           enum rsc_family family,
+                                           char **substring)
 {
     const char *cfg_val;
     char *token_dup;
@@ -78,7 +84,7 @@ int get_cfg_time_threshold_value(enum rsc_family family,
     char *key;
     int rc;
 
-    rc = pho_cfg_get_val("lrs", "sync_time_threshold", &cfg_val);
+    rc = pho_cfg_get_val("lrs", cfg_param, &cfg_val);
     if (rc)
         return rc;
 
@@ -93,9 +99,7 @@ int get_cfg_time_threshold_value(enum rsc_family family,
     rc = -EINVAL;
 
     do {
-        unsigned long num_milliseconds;
         char *value = strchr(key, '=');
-        char *endptr;
 
         if (value == NULL)
             continue;
@@ -104,27 +108,88 @@ int get_cfg_time_threshold_value(enum rsc_family family,
         if (strcmp(key, rsc_family_names[family]) != 0)
             continue;
 
-        if (value[0] == '-') {
-            rc = -ERANGE;
-            break;
-        }
-
-        num_milliseconds = strtoul(value, &endptr, 10);
-        if (*endptr != '\0' || *endptr == *value)
-            break;
-        if (num_milliseconds == ULONG_MAX && errno != 0) {
-            rc = -errno;
-            break;
-        }
-
-        threshold->tv_sec = num_milliseconds / 1000;
-        threshold->tv_nsec = (num_milliseconds % 1000) * 1000000;
-
         rc = 0;
+
+        *substring = strdup(value);
+        if (*substring == NULL)
+            rc = -errno;
+
         break;
     } while ((key = strtok_r(NULL, ",", &save_ptr)) != NULL);
 
     free(token_dup);
+
+    return rc;
+}
+
+int get_cfg_time_threshold_value(enum rsc_family family,
+                                 struct timespec *threshold)
+{
+    unsigned long num_milliseconds;
+    char *endptr;
+    char *value;
+    int rc;
+
+    rc = _get_substring_value_from_token("sync_time_threshold", family, &value);
+    if (rc)
+        return rc;
+
+    if (value[0] == '-') {
+        rc = -ERANGE;
+        goto free_value;
+    }
+
+    num_milliseconds = strtoul(value, &endptr, 10);
+    if (*endptr != '\0' || *endptr == *value) {
+        rc = -EINVAL;
+        goto free_value;
+    }
+    if (num_milliseconds == ULONG_MAX && errno != 0) {
+        rc = -errno;
+        goto free_value;
+    }
+
+    threshold->tv_sec = num_milliseconds / 1000;
+    threshold->tv_nsec = (num_milliseconds % 1000) * 1000000;
+
+free_value:
+    free(value);
+
+    return rc;
+}
+
+int get_cfg_nb_req_threshold_value(enum rsc_family family,
+                                   unsigned int *threshold)
+{
+    unsigned long ul_value;
+    char *endptr;
+    char *value;
+    int rc;
+
+    rc = _get_substring_value_from_token("sync_nb_req_threshold", family,
+                                         &value);
+    if (rc)
+        return rc;
+
+    if (value[0] == '-') {
+        rc = -ERANGE;
+        goto free_value;
+    }
+
+    ul_value = strtoul(value, &endptr, 10);
+    if (*endptr != '\0' || *endptr == *value) {
+        rc = -EINVAL;
+        goto free_value;
+    }
+    if (ul_value > UINT_MAX || ul_value == 0) {
+        rc = -ERANGE;
+        goto free_value;
+    }
+
+    *threshold = ul_value;
+
+free_value:
+    free(value);
 
     return rc;
 }

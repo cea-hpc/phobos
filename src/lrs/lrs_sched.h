@@ -51,6 +51,10 @@ struct lrs_sched {
                                         /**< Time threshold for medium
                                          *   synchronization
                                          */
+    unsigned int       sync_nb_req_threshold;
+                                        /**< Number of requests threshold
+                                         *   for medium synchronization
+                                         */
 };
 
 /**
