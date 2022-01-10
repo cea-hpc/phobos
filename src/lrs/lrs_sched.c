@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2019 CEA/DAM.
+ *  All rights reserved (c) 2014-2022 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -33,6 +33,7 @@
 #include "pho_io.h"
 #include "pho_ldm.h"
 #include "pho_type_utils.h"
+#include "lrs_device.h"
 
 #include <assert.h>
 #include <glib.h>
@@ -80,42 +81,6 @@ static char *mount_point(const char *id)
 
     return mnt_out;
 }
-
-/** all needed information to select devices */
-struct dev_descr {
-    struct dev_info     *dss_dev_info;          /**< device info from DSS */
-    struct lib_drv_info  lib_dev_info;          /**< device info from library
-                                                  *  (for tape drives)
-                                                  */
-    struct ldm_dev_state sys_dev_state;         /**< device info from system */
-
-    enum dev_op_status   op_status;             /**< operational status of
-                                                  *  the device
-                                                  */
-    char                 dev_path[PATH_MAX];    /**< path to the device */
-    struct media_info   *dss_media_info;        /**< loaded media info
-                                                  *  from DSS, if any
-                                                  */
-    char                 mnt_path[PATH_MAX];    /**< mount path
-                                                  *  of the filesystem
-                                                  */
-    bool                 ongoing_io;            /**< one I/O is ongoing */
-    bool                 needs_sync;            /**< medium needs to be sync */
-    struct {
-        GPtrArray        *tosync_array;         /**< array of release requests
-                                                  *  with to_sync to do
-                                                  */
-        struct timespec  oldest_tosync;         /**< oldest release request in
-                                                  *  \p tosync_array
-                                                  */
-        size_t           tosync_size;           /**< total size of release
-                                                  *  requests in
-                                                  *  \p tosync_array
-                                                  */
-    } sync_params;                              /**< sync information on the
-                                                  *  mounted medium
-                                                  */
-};
 
 /**
  * Return true if a is older or equal to b
@@ -673,6 +638,41 @@ static void init_device_sync_params(struct dev_descr *dev)
     dev->sync_params.tosync_size = 0;
 }
 
+static int dev_descr_from_info_init(struct lrs_sched *sched,
+                                    struct dev_info *info,
+                                    struct dev_descr *device)
+{
+    int rc;
+
+    rc = check_and_take_device_lock(sched, info);
+    if (rc)
+        return rc;
+
+    device->dss_dev_info = dev_info_dup(info);
+    if (!device->dss_dev_info)
+        return -ENOMEM;
+
+    init_device_sync_params(device);
+    g_ptr_array_add(sched->devices, device);
+
+    rc = lrs_dev_init(device);
+    if (rc)
+        goto free;
+
+    return 0;
+
+free:
+    dev_info_free(device->dss_dev_info, false);
+
+    return rc;
+}
+
+static void dev_descr_from_info_clear(struct dev_descr *device)
+{
+    lrs_dev_fini(device);
+    dev_info_free(device->dss_dev_info, true);
+}
+
 static int load_device_list_from_dss(struct lrs_sched *sched)
 {
     struct dev_info *devs = NULL;
@@ -701,19 +701,23 @@ static int load_device_list_from_dss(struct lrs_sched *sched)
 
     /* Copy information from DSS to local device list */
     for (i = 0 ; i < dcnt; i++) {
-        struct dev_descr device = {0};
+        struct dev_descr *device;
 
-        if (check_and_take_device_lock(sched, &devs[i]))
-            continue;
-
-        device.dss_dev_info = dev_info_dup(&devs[i]);
-        if (!device.dss_dev_info) {
-            pho_warn("Unable to dup dev_info of '%s'", devs[i].path);
+        device = calloc(1, sizeof(*device));
+        if (!device) {
+            pho_error(rc,
+                      "could not allocate dev_descr for '%s', "
+                      "will be ignored.",
+                      devs[i].path);
             continue;
         }
 
-        init_device_sync_params(&device);
-        g_array_append_val(sched->devices, device);
+        rc = dev_descr_from_info_init(sched, &devs[i], device);
+        if (rc) {
+            pho_error(rc, "error while initializing '%s', will be ignored",
+                      devs[i].path);
+            free(device);
+        }
     }
 
     if (sched->devices->len == 0)
@@ -749,8 +753,8 @@ static int sched_load_dev_state(struct lrs_sched *sched)
         LOG_RETURN(rc, "Error while loading devices when opening library");
 
     for (i = 0 ; i < sched->devices->len; i++) {
-        struct dev_descr *dev = &g_array_index(sched->devices,
-                                               struct dev_descr, i);
+        struct dev_descr *dev = g_ptr_array_index(sched->devices, i);
+
         rc = sched_fill_dev_info(sched, &lib, dev);
         if (rc) {
             pho_debug("Fail to init device '%s', marking it as failed and "
@@ -778,6 +782,9 @@ static int sched_load_dev_state(struct lrs_sched *sched)
 static void dev_descr_fini(gpointer ptr)
 {
     struct dev_descr *dev = (struct dev_descr *)ptr;
+
+    lrs_dev_fini(dev);
+
     dev_info_free(dev->dss_dev_info, true);
     dev->dss_dev_info = NULL;
 
@@ -836,9 +843,8 @@ static int sched_clean_medium_locks(struct lrs_sched *sched)
         LOG_RETURN(-errno, "Failed to allocate media list");
 
     for (i = 0; i < sched->devices->len; i++) {
-        struct media_info *mda = g_array_index(sched->devices,
-                                               struct dev_descr,
-                                               i).dss_media_info;
+        struct dev_descr *dev = g_ptr_array_index(sched->devices, i);
+        struct media_info *mda = dev->dss_media_info;
         if (mda) {
             media[i] = *mda;
             cnt++;
@@ -877,8 +883,7 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
     if (rc)
         return rc;
 
-    sched->devices = g_array_new(FALSE, TRUE, sizeof(struct dev_descr));
-    g_array_set_clear_func(sched->devices, dev_descr_fini);
+    sched->devices = g_ptr_array_new();
     sched->req_queue = g_queue_new();
     sched->response_queue = g_queue_new();
 
@@ -1230,8 +1235,7 @@ static void sched_release(struct lrs_sched *sched)
     int i;
 
     for (i = 0; i < sched->devices->len; i++) {
-        struct dev_descr *dev = &g_array_index(sched->devices,
-                                               struct dev_descr, i);
+        struct dev_descr *dev = g_ptr_array_index(sched->devices, i);
 
         if (dev->op_status != PHO_DEV_OP_ST_FAILED && !dev->ongoing_io)
             sched_empty_and_release_dev(sched, dev);
@@ -1245,6 +1249,14 @@ static void sched_resp_free(void *respc)
     free(((struct resp_container *)respc)->resp);
 }
 
+/** Wrapper of dev_descr_fini to be used as glib callback */
+static void dev_descr_fini_wrapper(gpointer _req,
+                                   gpointer _null_user_data)
+{
+    (void)_null_user_data;
+
+    dev_descr_fini((struct dev_descr *)_req);
+}
 void sched_fini(struct lrs_sched *sched)
 {
     if (sched == NULL)
@@ -1257,7 +1269,9 @@ void sched_fini(struct lrs_sched *sched)
 
     g_queue_free_full(sched->req_queue, sched_req_free);
     g_queue_free_full(sched->response_queue, sched_resp_free);
-    g_array_free(sched->devices, TRUE);
+
+    g_ptr_array_foreach(sched->devices, dev_descr_fini_wrapper, NULL);
+    g_ptr_array_free(sched->devices, TRUE);
 }
 
 /**
@@ -1357,7 +1371,7 @@ static struct dev_descr *search_loaded_media(struct lrs_sched *sched,
         struct dev_descr *dev;
         const char *media_id;
 
-        dev = &g_array_index(sched->devices, struct dev_descr, i);
+        dev = g_ptr_array_index(sched->devices, i);
 
         if (dev->op_status != PHO_DEV_OP_ST_MOUNTED &&
             dev->op_status != PHO_DEV_OP_ST_LOADED)
@@ -1745,8 +1759,7 @@ static struct dev_descr *dev_picker(struct lrs_sched *sched,
     ENTRY;
 
     for (i = 0; i < sched->devices->len; i++) {
-        struct dev_descr *itr = &g_array_index(sched->devices,
-                                               struct dev_descr, i);
+        struct dev_descr *itr = g_ptr_array_index(sched->devices, i);
         struct dev_descr *prev = selected;
 
         if (itr->ongoing_io || itr->needs_sync) {
@@ -2155,8 +2168,7 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
     int i, j;
 
     for (i = 0; i < sched->devices->len; i++) {
-        struct dev_descr *dev = &g_array_index(sched->devices,
-                                               struct dev_descr, i);
+        struct dev_descr *dev = g_ptr_array_index(sched->devices, i);
         bool is_already_selected = false;
 
         if (dev->op_status == PHO_DEV_OP_ST_FAILED)
@@ -2742,19 +2754,19 @@ static int sched_io_complete(struct lrs_sched *sched,
 /* Request/response manipulation **********************************************/
 /******************************************************************************/
 
-/**
- * @TODO: mutualize the init of the struct device with the
- * load_device_list_from_dss function.
- */
 static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
                             const char *name)
 {
-    struct dev_descr device = {0};
+    struct dev_descr *device = NULL;
     struct dev_info *devi = NULL;
     struct dss_filter filter;
     struct lib_adapter lib;
     int dev_cnt = 0;
     int rc = 0;
+
+    device = calloc(1, sizeof(*device));
+    if (!device)
+        return -errno;
 
     pho_verb("Adding device '%s' to lrs\n", name);
     rc = dss_filter_build(&filter,
@@ -2769,12 +2781,12 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
                           name,
                           rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED));
     if (rc)
-        goto err;
+        goto err_dev;
 
     rc = dss_device_get(&sched->dss, &filter, &devi, &dev_cnt);
     dss_filter_free(&filter);
     if (rc)
-        goto err;
+        goto err_dev;
 
     if (dev_cnt == 0) {
         pho_info("No usable device found (%s:%s): check device status",
@@ -2782,39 +2794,33 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
         GOTO(err_res, rc = -ENXIO);
     }
 
-    rc = check_and_take_device_lock(sched, devi);
+    rc = dev_descr_from_info_init(sched, devi, device);
     if (rc)
-        LOG_GOTO(err_res, rc,
-                 "Unable to acquire device '%s'", devi->rsc.id.name);
-
-    device.dss_dev_info = dev_info_dup(devi);
-    if (!device.dss_dev_info)
-        LOG_GOTO(err_res, rc = -ENOMEM, "Device info duplication failed");
+        goto err_res;
 
     /* get a handle to the library to query it */
-    rc = wrap_lib_open(device.dss_dev_info->rsc.id.family, &lib);
+    rc = wrap_lib_open(device->dss_dev_info->rsc.id.family, &lib);
     if (rc)
-        goto err_dev;
+        goto err_descr;
 
-    rc = sched_fill_dev_info(sched, &lib, &device);
+    rc = sched_fill_dev_info(sched, &lib, device);
     if (rc)
         goto err_lib;
 
-    /* Add the newly initialized device to the device list */
-    init_device_sync_params(&device);
-    g_array_append_val(sched->devices, device);
+    dss_res_free(devi, dev_cnt);
+
+    return 0;
 
 err_lib:
     ldm_lib_close(&lib);
-
-err_dev:
-    if (rc)
-        dev_info_free(device.dss_dev_info, true);
-
+err_descr:
+    dev_descr_from_info_clear(device);
+    g_ptr_array_remove_index_fast(sched->devices, sched->devices->len - 1);
 err_res:
     dss_res_free(devi, dev_cnt);
+err_dev:
+    free(device);
 
-err:
     return rc;
 }
 
@@ -2828,9 +2834,10 @@ static int sched_device_lock(struct lrs_sched *sched, const char *name)
     int i;
 
     for (i = 0; i < sched->devices->len; ++i) {
-        dev = &g_array_index(sched->devices, struct dev_descr, i);
+        dev = g_ptr_array_index(sched->devices, i);
         if (!strcmp(name, dev->dss_dev_info->rsc.id.name)) {
-            g_array_remove_index_fast(sched->devices, i);
+            dev_descr_fini(dev);
+            g_ptr_array_remove_index_fast(sched->devices, i);
             pho_verb("Removed locked device '%s' from the local database",
                      name);
             return 0;
@@ -2853,7 +2860,7 @@ static int sched_device_unlock(struct lrs_sched *sched, const char *name)
     int i;
 
     for (i = 0; i < sched->devices->len; ++i) {
-        dev = &g_array_index(sched->devices, struct dev_descr, i);
+        dev = g_ptr_array_index(sched->devices, i);
 
         if (!strcmp(name, dev->dss_dev_info->rsc.id.name)) {
             pho_verb("Updating device '%s' state to unlocked", name);
@@ -3322,8 +3329,8 @@ static void sched_handle_release_reqs(struct lrs_sched *sched)
     int i;
 
     for (i = 0; i < sched->devices->len; i++) {
-        struct dev_descr *dev = &g_array_index(sched->devices,
-                                               struct dev_descr, i);
+        struct dev_descr *dev = g_ptr_array_index(sched->devices, i);
+
         if (dev->op_status == PHO_DEV_OP_ST_MOUNTED)
             device_manage_sync(sched, dev);
     }

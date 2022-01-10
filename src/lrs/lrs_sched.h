@@ -40,7 +40,10 @@ struct dev_descr;
 struct lrs_sched {
     struct dss_handle  dss;             /**< Associated DSS */
     enum rsc_family    family;          /**< Managed resource family */
-    GArray            *devices;         /**< List of available devices */
+    GPtrArray         *devices;         /**< References to available devices.
+                                          *  The data is owned by the device
+                                          *  thread.
+                                          */
     const char        *lock_hostname;   /**< Lock hostname for this LRS */
     int                lock_owner;      /**< Lock owner (pid) for this LRS */
     GQueue            *req_queue;       /**< Queue for all but
