@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2017 CEA/DAM.
+ *  All rights reserved (c) 2014-2022 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -72,6 +72,11 @@ const struct pho_config_item cfg_lrs[] = {
         .name    = "sync_nb_req_threshold",
         .value   = "tape=5,dir=5"
     },
+    [PHO_CFG_LRS_sync_written_size_threshold] = {
+        .section = "lrs",
+        .name    = "sync_written_size_threshold",
+        .value   = "tape=1048576,dir=1048576"
+    },
 };
 
 static int _get_substring_value_from_token(const char *cfg_param,
@@ -122,11 +127,35 @@ static int _get_substring_value_from_token(const char *cfg_param,
     return rc;
 }
 
+static int _get_unsigned_long_from_string(const char *value,
+                                          unsigned long min_limit,
+                                          unsigned long max_limit,
+                                          unsigned long *ul_value)
+{
+    char *endptr;
+
+    if (value[0] == '-')
+        return -ERANGE;
+
+    *ul_value = strtoul(value, &endptr, 10);
+    if (*endptr != '\0' || *endptr == *value)
+        return -EINVAL;
+
+    if (*ul_value < min_limit)
+        return -ERANGE;
+
+    if (max_limit == ULONG_MAX && *ul_value == ULONG_MAX && errno != 0)
+        return -errno;
+    else if (*ul_value > max_limit)
+        return -ERANGE;
+
+    return 0;
+}
+
 int get_cfg_time_threshold_value(enum rsc_family family,
                                  struct timespec *threshold)
 {
     unsigned long num_milliseconds;
-    char *endptr;
     char *value;
     int rc;
 
@@ -134,35 +163,21 @@ int get_cfg_time_threshold_value(enum rsc_family family,
     if (rc)
         return rc;
 
-    if (value[0] == '-') {
-        rc = -ERANGE;
-        goto free_value;
-    }
-
-    num_milliseconds = strtoul(value, &endptr, 10);
-    if (*endptr != '\0' || *endptr == *value) {
-        rc = -EINVAL;
-        goto free_value;
-    }
-    if (num_milliseconds == ULONG_MAX && errno != 0) {
-        rc = -errno;
-        goto free_value;
-    }
+    rc = _get_unsigned_long_from_string(value, 0, ULONG_MAX, &num_milliseconds);
+    free(value);
+    if (rc)
+        return rc;
 
     threshold->tv_sec = num_milliseconds / 1000;
     threshold->tv_nsec = (num_milliseconds % 1000) * 1000000;
 
-free_value:
-    free(value);
-
-    return rc;
+    return 0;
 }
 
 int get_cfg_nb_req_threshold_value(enum rsc_family family,
                                    unsigned int *threshold)
 {
     unsigned long ul_value;
-    char *endptr;
     char *value;
     int rc;
 
@@ -171,25 +186,33 @@ int get_cfg_nb_req_threshold_value(enum rsc_family family,
     if (rc)
         return rc;
 
-    if (value[0] == '-') {
-        rc = -ERANGE;
-        goto free_value;
-    }
-
-    ul_value = strtoul(value, &endptr, 10);
-    if (*endptr != '\0' || *endptr == *value) {
-        rc = -EINVAL;
-        goto free_value;
-    }
-    if (ul_value > UINT_MAX || ul_value == 0) {
-        rc = -ERANGE;
-        goto free_value;
-    }
+    rc = _get_unsigned_long_from_string(value, 1, UINT_MAX, &ul_value);
+    free(value);
+    if (rc)
+        return rc;
 
     *threshold = ul_value;
 
-free_value:
-    free(value);
+    return 0;
+}
 
-    return rc;
+int get_cfg_written_size_threshold_value(enum rsc_family family,
+                                         unsigned long *threshold)
+{
+    char *value;
+    int rc;
+
+    rc = _get_substring_value_from_token("sync_written_size_threshold", family,
+                                         &value);
+    if (rc)
+        return rc;
+
+    rc = _get_unsigned_long_from_string(value, 1, ULONG_MAX / 1024, threshold);
+    free(value);
+    if (rc)
+        return rc;
+
+    *threshold *= 1024; // converting from KiB to bytes
+
+    return 0;
 }

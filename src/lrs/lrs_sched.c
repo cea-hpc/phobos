@@ -883,6 +883,11 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
     if (rc)
         LOG_RETURN(rc, "Failed to get sync number of requests threshold value");
 
+    rc = get_cfg_written_size_threshold_value(
+        family, &sched->sync_written_size_threshold);
+    if (rc)
+        LOG_RETURN(rc, "Failed to get written size threshold value: '%d'", -rc);
+
     rc = fill_host_owner(&sched->lock_hostname, &sched->lock_owner);
     if (rc)
         LOG_RETURN(rc, "Failed to get hostname and PID");
@@ -3259,9 +3264,6 @@ static void dev_check_sync_cancel(struct dev_descr *dev)
         update_queue_oldest_tosync(dev);
 }
 
-/* Parameters to trigger a sync will be parameterized in a next patch */
-#define MAX_SIZE_TO_SYNC (1024 * 1024 * 1024) /* 1 GIGABYTE */
-
 static struct timespec add_timespec(struct timespec a, struct timespec b)
 {
     struct timespec sum;
@@ -3298,7 +3300,8 @@ static inline void check_needs_sync(struct lrs_sched *sched,
                            sched->sync_nb_req_threshold ||
                        is_past(add_timespec(dev->sync_params.oldest_tosync,
                                             sched->sync_time_threshold)) ||
-                       dev->sync_params.tosync_size >= MAX_SIZE_TO_SYNC);
+                       dev->sync_params.tosync_size >=
+                           sched->sync_written_size_threshold);
 }
 
 /* Sync dev, update the media in the DSS, and flush tosync_array */

@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2019 CEA/DAM.
+ *  All rights reserved (c) 2014-2022 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -62,6 +62,10 @@ struct lrs_sched {
     unsigned int       sync_nb_req_threshold;
                                         /**< Number of requests threshold
                                          *   for medium synchronization
+                                         */
+    unsigned long      sync_written_size_threshold;
+                                        /**< Written size threshold for
+                                         *   medium synchronization
                                          */
 };
 

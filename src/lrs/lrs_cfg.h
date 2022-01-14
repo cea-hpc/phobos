@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2017 CEA/DAM.
+ *  All rights reserved (c) 2014-2022 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -41,6 +41,7 @@ enum pho_cfg_params_lrs {
     PHO_CFG_LRS_lock_file,
     PHO_CFG_LRS_sync_time_threshold,
     PHO_CFG_LRS_sync_nb_req_threshold,
+    PHO_CFG_LRS_sync_written_size_threshold,
 
     PHO_CFG_LRS_LAST
 };
@@ -69,4 +70,14 @@ int get_cfg_time_threshold_value(enum rsc_family family,
 int get_cfg_nb_req_threshold_value(enum rsc_family family,
                                    unsigned int *threshold);
 
+/**
+ * Getter of written size threshold value for a given family.
+ *
+ * @param[in]   family      Targeted family.
+ * @param[out]  threshold   Returned threshold value.
+ * @return                  0 on success,
+ *                         -errno on failure.
+ */
+int get_cfg_written_size_threshold_value(enum rsc_family family,
+                                         unsigned long *threshold);
 #endif
