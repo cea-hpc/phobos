@@ -79,6 +79,7 @@ struct io_adapter {
     int (*ioa_write)(struct pho_io_descr *iod, const void *buf, size_t count);
     int (*ioa_close)(struct pho_io_descr *iod);
     int (*ioa_medium_sync)(const char *root_path);
+    ssize_t (*ioa_preferred_io_size)(struct pho_io_descr *iod);
 };
 
 /**
@@ -156,6 +157,25 @@ static inline int ioa_medium_sync(const struct io_adapter *ioa,
         return -ENOTSUP;
 
     return ioa->ioa_medium_sync(root_path);
+}
+
+/**
+ * Retrieves the preferred IO size for the given IO descriptor.
+ *
+ * \param[in]       ioa         Suitable I/O adapter for the media
+ * \param[in,out]   iod         I/O descriptor (see above)
+ *
+ * \return a positive size on success, negative error code on failure
+ * \retval -ENOTSUP the I/O adapter does not provide this function
+ */
+static inline ssize_t ioa_preferred_io_size(const struct io_adapter *ioa,
+                                            struct pho_io_descr *iod)
+{
+    assert(ioa != NULL);
+    if (ioa->ioa_preferred_io_size == NULL)
+        return -ENOTSUP;
+
+    return ioa->ioa_preferred_io_size(iod);
 }
 
 /**

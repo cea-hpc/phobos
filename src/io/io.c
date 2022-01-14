@@ -26,17 +26,19 @@
 #include "config.h"
 #endif
 
-#include "pho_io.h"
 #include "pho_attrs.h"
 #include "pho_common.h"
+#include "pho_io.h"
 #include "pho_mapper.h"
-#include <stdlib.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include <sys/sendfile.h>
-#include <sys/types.h>
+
 #include <attr/xattr.h>
 #include <attr/attributes.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/sendfile.h>
+#include <sys/types.h>
+#include <sys/vfs.h>
 #include <unistd.h>
 
 #define MAX_NULL_WRITE_TRY 10
@@ -763,6 +765,21 @@ static int pho_posix_close(struct pho_io_descr *iod)
     return rc;
 }
 
+static ssize_t pho_posix_preferred_io_size(struct pho_io_descr *iod)
+{
+    struct posix_io_ctx *io_ctx;
+    struct statfs sfs;
+
+    io_ctx = iod->iod_ctx;
+    if (!io_ctx || io_ctx->fd < 0)
+        return -EINVAL;
+
+    if (fstatfs(io_ctx->fd, &sfs) != 0)
+        return -errno;
+
+    return sfs.f_bsize;
+}
+
 /** POSIX adapter */
 static const struct io_adapter posix_adapter = {
     .ioa_get            = pho_posix_get,
@@ -771,6 +788,7 @@ static const struct io_adapter posix_adapter = {
     .ioa_write          = pho_posix_write,
     .ioa_close          = pho_posix_close,
     .ioa_medium_sync    = pho_posix_medium_sync,
+    .ioa_preferred_io_size = pho_posix_preferred_io_size,
 };
 
 /** LTFS adapter with specialized flush function */
@@ -781,6 +799,7 @@ static const struct io_adapter ltfs_adapter = {
     .ioa_write          = pho_posix_write,
     .ioa_close          = pho_posix_close,
     .ioa_medium_sync    = pho_ltfs_sync,
+    .ioa_preferred_io_size = pho_posix_preferred_io_size,
 };
 
 /** retrieve IO functions for the given filesystem and addressing type */

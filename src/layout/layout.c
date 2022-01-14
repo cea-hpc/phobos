@@ -47,7 +47,6 @@
  * to multiple media in raid layout.
  */
 #define IO_BLOCK_SIZE_ATTR_KEY "io_block_size"
-#define IO_BLOCK_SIZE_ATTR_VALUE_BASE 10
 
 /**
  * List of configuration parameters for this module
@@ -65,9 +64,7 @@ const struct pho_config_item cfg_lyt[] = {
     [PHO_CFG_LYT_io_block_size] = {
         .section = "io",
         .name    = IO_BLOCK_SIZE_ATTR_KEY,
-        .value   = "-1" /** default invalid value, call sysconf(_SC_PAGESIZE)
-                          * to get the actual default value.
-                          */
+        .value   = "0" /** default value = not set. */
     }
 };
 
@@ -253,25 +250,24 @@ out_unlock:
 static int get_io_block_size(struct pho_encoder *enc)
 {
     const char *string_io_block_size;
+    int64_t sz;
 
     string_io_block_size = PHO_CFG_GET(cfg_lyt, PHO_CFG_LYT, io_block_size);
-    if (!string_io_block_size || !strcmp(string_io_block_size, "-1")) {
-        /** TODO
-         * Better than fixing it to PHO_CFG_LYT_io_block_size, we could get
-         * buffer size from an ioa_preferred_read_size/write_size function.
+    if (!string_io_block_size) {
+        /* If not forced by configuration, the io adapter will retrieve it
+         * from the backend storage system.
          */
-        enc->io_block_size = sysconf(_SC_PAGESIZE);
+        enc->io_block_size = 0;
         return 0;
     }
 
-    errno = 0;
-    enc->io_block_size = strtoul(string_io_block_size, NULL,
-                                 IO_BLOCK_SIZE_ATTR_VALUE_BASE);
-    if (errno != 0)
-        LOG_RETURN(-errno, "strtoul failed");
-
-    if (!enc->io_block_size)
-        LOG_RETURN(-EINVAL, "invalid 0 block_size");
+    sz = str2int64(string_io_block_size);
+    if (sz < 0) {
+        enc->io_block_size = 0;
+        LOG_RETURN(-EINVAL, "Invalid value '%s' for parameter '%s'",
+                   string_io_block_size, IO_BLOCK_SIZE_ATTR_KEY);
+    }
+    enc->io_block_size = sz;
 
     return 0;
 }
@@ -309,7 +305,7 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
     rc = get_io_block_size(enc);
     if (rc) {
         layout_destroy(enc);
-        LOG_RETURN(rc, "Unable to get io_block_size");
+        return rc;
     }
 
     rc = mod->ops->encode(enc);

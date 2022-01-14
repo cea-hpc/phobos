@@ -44,21 +44,22 @@ struct posix_io_ctx {
     char *fpath;
 };
 
-#define MEGA (1024 * 1024)
+#define TERA (1024LL * 1024LL * 1024LL * 1024LL)
 #define MAX_NULL_IO 10
 
 /* Check if the content of the file is similar to the buffer */
 static int check_file_content(const char *fpath, const unsigned char *ibuff,
-                              size_t count)
+                              size_t count, int repeat_count)
 {
-    int rc = 0;
-    unsigned char *obuff = NULL;
+    size_t size          = repeat_count * count;
     struct stat extent_file_stat;
-    int fd = -1;
-    size_t read_bytes;
+    unsigned char *obuff = NULL;
     int zero_read_count;
+    size_t read_bytes;
+    int fd = -1;
+    int rc = 0;
 
-    obuff = malloc(count);
+    obuff = malloc(size);
     if (!obuff)
         LOG_RETURN(rc = -ENOMEM, "Unable to allocate output buff");
 
@@ -68,9 +69,9 @@ static int check_file_content(const char *fpath, const unsigned char *ibuff,
                  "Unable to stat '%s' file to check size", fpath);
 
     /* check extent file size */
-    if (extent_file_stat.st_size != count)
+    if (extent_file_stat.st_size != size)
         LOG_GOTO(clean, rc = -EINVAL, "Extent file size is %zu insted of %zu",
-                 extent_file_stat.st_size, count);
+                 extent_file_stat.st_size, size);
 
     /* open extent file for reading */
     fd = open(fpath, O_RDONLY);
@@ -78,19 +79,19 @@ static int check_file_content(const char *fpath, const unsigned char *ibuff,
         LOG_GOTO(clean, rc = -errno,
                  "Error on opening '%s' file after closing it", fpath);
 
-    /* read count bytes */
+    /* read size bytes */
     for (read_bytes = 0, zero_read_count = 0;
-         read_bytes < count && zero_read_count < MAX_NULL_IO;) {
+         read_bytes < size && zero_read_count < MAX_NULL_IO;) {
         ssize_t read_count;
 
-        read_count = read(fd, obuff + read_bytes, count - read_bytes);
+        read_count = read(fd, obuff + read_bytes, size - read_bytes);
         if (read_count < 0)
             LOG_GOTO(clean, rc = -errno,
                      "Fail to read data in '%s' file", fpath);
 
         if (read_count < count - read_bytes) {
             pho_warn("Partial read : %zu of %zu",
-                     read_count, count - read_bytes);
+                     read_count, size - read_bytes);
             if (read_count == 0)
                 zero_read_count++;
         }
@@ -105,8 +106,10 @@ static int check_file_content(const char *fpath, const unsigned char *ibuff,
                  fpath);
 
     /* check read content */
-    if (memcmp(ibuff, obuff, count))
-        LOG_GOTO(clean, rc = -EINVAL, "Wrong extent file content");
+    for (int i = 0; i < repeat_count; i++) {
+        if (memcmp(ibuff, obuff + i*count, count))
+            LOG_GOTO(clean, rc = -EINVAL, "Wrong extent file content");
+    }
 
     /* cleaning */
 clean:
@@ -119,38 +122,32 @@ clean:
     return rc;
 }
 
+#define REPEAT_COUNT 3
+
 static int test_posix_open_write_close(void *hint)
 {
     char test_dir[] = "/tmp/test_posix_open_write_closeXXXXXX";
     char *put_extent_address = "put_extent";
-    char *fpath;
-    int rc;
+    struct posix_io_ctx *pioctx = NULL;
+    struct pho_io_descr iod = {0};
+    struct pho_ext_loc loc = {0};
     struct io_adapter ioa = {0};
     struct extent ext = {0};
-    struct pho_ext_loc loc = {0};
-    struct pho_io_descr iod = {0};
-    struct posix_io_ctx *pioctx = NULL;
-    char *id = NULL;
-    char *tag = NULL;
     struct stat extent_file_stat;
     unsigned char *ibuff = NULL;
-    size_t count = MEGA;
+    char *fpath = NULL;
+    char *tag = NULL;
+    char *id = NULL;
+    size_t count;
+    int rc;
     int i;
 
     /**
      *  INIT
      */
-    /* init buffers */
-    ibuff = malloc(count);
-    if (!ibuff)
-        LOG_RETURN(-ENOMEM, "Unable to allocate input buff");
-
-    for (i = 0; i < count; i++)
-        ibuff[i] = (unsigned char)i;
-
     /* create test dir */
     if (mkdtemp(test_dir) == NULL)
-        LOG_GOTO(free_ibuff, rc = -errno, "Unable to create test dir");
+        LOG_RETURN(-errno, "Unable to create test dir");
 
     /* build fpath to test the value */
     rc = asprintf(&fpath, "%s/%s", test_dir, put_extent_address);
@@ -176,6 +173,22 @@ static int test_posix_open_write_close(void *hint)
     rc = ioa_open(&ioa, id, tag, &iod, true);
     if (rc)
         LOG_GOTO(free_path, rc, "Error on opening extent");
+
+    /* get preferred IO size to allocate the IO buffer */
+    count = ioa_preferred_io_size(&ioa, &iod);
+    pho_debug("Preferred I/O size=%zu", count);
+
+    /* AFAIK, no storage system use such small/large IO size */
+    if (count < 512 || count >= TERA)
+        LOG_GOTO(clean_extent, -EINVAL, "Invalid or inconsistent IO size");
+
+    /* init buffers */
+    ibuff = malloc(count);
+    if (!ibuff)
+        LOG_GOTO(clean_extent, -ENOMEM, "Unable to allocate input buff");
+
+    for (i = 0; i < count; i++)
+        ibuff[i] = (unsigned char)i;
 
     /* Is iod->io_ctx built ? */
     if (iod.iod_ctx == NULL)
@@ -211,13 +224,15 @@ static int test_posix_open_write_close(void *hint)
                  "Extent file has no owner write access");
 
     /**
-     * WRITE / CLOSE / CHECK CONTENT
+     * WRITE x3 / CLOSE / CHECK CONTENT
      */
     /* try to write with pho_posix_write */
-    rc = ioa_write(&ioa, &iod, ibuff, count);
-    if (rc)
-        LOG_GOTO(clean_extent, rc,
-                 "Error on writting with pho_posix_write");
+    for (i = 0; i < REPEAT_COUNT; i++) {
+        rc = ioa_write(&ioa, &iod, ibuff, count);
+        if (rc)
+            LOG_GOTO(clean_extent, rc,
+                     "Error on writting with pho_posix_write");
+    }
 
     /* try to close with pho_posix_close */
     rc = ioa_close(&ioa, &iod);
@@ -231,7 +246,7 @@ static int test_posix_open_write_close(void *hint)
                  "pho_posix_close didn't clean private io ctx");
 
     /* check written extent file content */
-    rc = check_file_content(fpath, ibuff, count);
+    rc = check_file_content(fpath, ibuff, count, REPEAT_COUNT);
 
 clean_extent:
     if (iod.iod_ctx) {
@@ -246,14 +261,13 @@ clean_extent:
         pho_error(rc = rc ? : -errno, "Fail to unlink extent file");
 
 free_path:
+    /* free NULL is safe */
+    free(ibuff);
     free(fpath);
 
 clean_test_dir:
     if (rmdir(test_dir))
         pho_error(rc = rc ? : -errno, "Unable to remove test dir");
-
-free_ibuff:
-    free(ibuff);
 
     return rc;
 }

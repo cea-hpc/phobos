@@ -303,6 +303,34 @@ out:
 }
 
 /**
+ * Retrieve the preferred IO size from the backend storage
+ * if it was not set in the global "io" configuration.
+ *
+ * @param[in,out] io_size   The IO size to be used (in: value from
+ *                          configuration).
+ * @param[in]     ioa       IO adapter to access the current storage backend.
+ * @param[in,out] iod       IO decriptor to access the current object.
+ */
+static void set_block_io_size(size_t *io_size, const struct io_adapter *ioa,
+                              struct pho_io_descr *iod)
+{
+    ssize_t sz;
+
+    /* io_size already specified in the configuration? */
+    if (*io_size != 0)
+        return;
+
+    sz = ioa_preferred_io_size(ioa, iod);
+    if (sz > 0) {
+        *io_size = sz;
+        return;
+    }
+
+    /* fallback: get the system page size */
+    *io_size = sysconf(_SC_PAGESIZE);
+}
+
+/**
  * Write extents in media provided by \a wresp and fill \a rreq release requests
  *
  * As many extents as \a enc repl_count. One per medium.
@@ -448,7 +476,10 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
         if (rc)
             LOG_GOTO(close, rc, "Unable to open extent %s in raid1 write",
                      &extent_tag[i * EXTENT_TAG_SIZE]);
-   }
+
+        set_block_io_size(&enc->io_block_size, &ioa[i], &iod[i]);
+        pho_debug("I/O size for replicate %d: %zu", i, enc->io_block_size);
+    }
 
     /* write all extents by chunk of buffer size*/
     rc = write_all_chunks(enc->xfer->xd_fd, ioa, iod,
