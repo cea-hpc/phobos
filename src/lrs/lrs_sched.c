@@ -669,7 +669,8 @@ free:
 
 static void dev_descr_from_info_clear(struct dev_descr *device)
 {
-    lrs_dev_fini(device);
+    lrs_dev_signal_stop(device);
+    lrs_dev_wait_end(device);
     dev_info_free(device->dss_dev_info, true);
 }
 
@@ -783,7 +784,7 @@ static void dev_descr_fini(gpointer ptr)
 {
     struct dev_descr *dev = (struct dev_descr *)ptr;
 
-    lrs_dev_fini(dev);
+    lrs_dev_wait_end(dev);
 
     dev_info_free(dev->dss_dev_info, true);
     dev->dss_dev_info = NULL;
@@ -1249,6 +1250,14 @@ static void sched_resp_free(void *respc)
     free(((struct resp_container *)respc)->resp);
 }
 
+/** Wrapper of lrs_dev_signal_stop to be used as glib callback */
+static void lrs_dev_signal_stop_wrapper(gpointer _req, gpointer _null_user_data)
+{
+    (void)_null_user_data;
+
+    lrs_dev_signal_stop((struct dev_descr *)_req);
+}
+
 /** Wrapper of dev_descr_fini to be used as glib callback */
 static void dev_descr_fini_wrapper(gpointer _req,
                                    gpointer _null_user_data)
@@ -1257,6 +1266,7 @@ static void dev_descr_fini_wrapper(gpointer _req,
 
     dev_descr_fini((struct dev_descr *)_req);
 }
+
 void sched_fini(struct lrs_sched *sched)
 {
     if (sched == NULL)
@@ -1270,6 +1280,7 @@ void sched_fini(struct lrs_sched *sched)
     g_queue_free_full(sched->req_queue, sched_req_free);
     g_queue_free_full(sched->response_queue, sched_resp_free);
 
+    g_ptr_array_foreach(sched->devices, lrs_dev_signal_stop_wrapper, NULL);
     g_ptr_array_foreach(sched->devices, dev_descr_fini_wrapper, NULL);
     g_ptr_array_free(sched->devices, TRUE);
 }
@@ -2836,6 +2847,7 @@ static int sched_device_lock(struct lrs_sched *sched, const char *name)
     for (i = 0; i < sched->devices->len; ++i) {
         dev = g_ptr_array_index(sched->devices, i);
         if (!strcmp(name, dev->dss_dev_info->rsc.id.name)) {
+            lrs_dev_signal_stop(dev);
             dev_descr_fini(dev);
             g_ptr_array_remove_index_fast(sched->devices, i);
             pho_verb("Removed locked device '%s' from the local database",

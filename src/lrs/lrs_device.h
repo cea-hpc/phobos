@@ -97,9 +97,13 @@ struct dev_descr {
 int lrs_dev_init(struct dev_descr *device);
 
 /**
- * Indicate to the device thread that it should stop and wait for its
- * termination.
+ * Indicate to the device thread that it should stop.
  */
-void lrs_dev_fini(struct dev_descr *device);
+void lrs_dev_signal_stop(struct dev_descr *device);
+
+/**
+ * Wait for the device thread termination.
+ */
+void lrs_dev_wait_end(struct dev_descr *device);
 
 #endif

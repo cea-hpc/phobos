@@ -43,6 +43,32 @@ static inline long ms2nsec(long ms)
     return (ms % 1000) * 1000000;
 }
 
+/**
+ * Signal the thread
+ *
+ * \return 0 on success, -1 * ERROR_CODE on failure
+ */
+static int lrs_dev_signal(struct lrs_dev *thread)
+{
+    int rc, rc2;
+
+    rc = pthread_mutex_lock(&thread->ld_signal_mutex);
+    if (rc)
+        LOG_RETURN(-rc, "Unable to acquire device lock to signal it");
+
+    rc = pthread_cond_signal(&thread->ld_signal);
+    if (rc)
+        pho_error(-rc, "Unable to signal device");
+
+    rc2 = pthread_mutex_unlock(&thread->ld_signal_mutex);
+    if (rc2) {
+        pho_error(-rc2, "Unable to unlock device after signal it");
+        rc = rc ? : rc2;
+    }
+
+    return -rc;
+}
+
 /* On success, it returns:
  * - ETIMEDOUT  the thread received no signal before the timeout
  * - 0          the thread received a signal
@@ -113,13 +139,24 @@ int lrs_dev_init(struct dev_descr *device)
     return 0;
 }
 
-void lrs_dev_fini(struct dev_descr *device)
+void lrs_dev_signal_stop(struct dev_descr *device)
+{
+    struct lrs_dev *thread = &device->device_thread;
+    int rc;
+
+    thread->ld_running = false;
+    rc = lrs_dev_signal(thread);
+    if (rc)
+        pho_error(rc, "Error when signaling device (%s, %s) to stop it",
+                  device->dss_dev_info->rsc.id.name, device->dev_path);
+}
+
+void lrs_dev_wait_end(struct dev_descr *device)
 {
     struct lrs_dev *thread = &device->device_thread;
     int *threadrc = NULL;
     int rc;
 
-    thread->ld_running = false;
     rc = pthread_join(thread->ld_tid, (void **)&threadrc);
     if (rc)
         pho_error(rc, "Error while waiting for device thread");
