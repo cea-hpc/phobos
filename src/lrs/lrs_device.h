@@ -53,6 +53,7 @@ struct lrs_dev {
 
 /** all needed information to select devices */
 struct dev_descr {
+    pthread_mutex_t      mutex;                 /**< exclusive access */
     struct dev_info     *dss_dev_info;          /**< device info from DSS */
     struct lib_drv_info  lib_dev_info;          /**< device info from library
                                                   *  (for tape drives)

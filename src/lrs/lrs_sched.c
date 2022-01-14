@@ -648,29 +648,34 @@ static int dev_descr_from_info_init(struct lrs_sched *sched,
     if (rc)
         return rc;
 
+    device->mutex = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
+
     device->dss_dev_info = dev_info_dup(info);
-    if (!device->dss_dev_info)
+    if (!device->dss_dev_info) {
+        pthread_mutex_destroy(&device->mutex);
         return -ENOMEM;
+    }
 
     init_device_sync_params(device);
-    g_ptr_array_add(sched->devices, device);
 
     rc = lrs_dev_init(device);
-    if (rc)
-        goto free;
+    if (rc) {
+        pthread_mutex_destroy(&device->mutex);
+        dev_info_free(device->dss_dev_info, true);
+        g_ptr_array_unref(device->sync_params.tosync_array);
+        return rc;
+    }
 
+    g_ptr_array_add(sched->devices, device);
     return 0;
-
-free:
-    dev_info_free(device->dss_dev_info, false);
-
-    return rc;
 }
 
 static void dev_descr_from_info_clear(struct dev_descr *device)
 {
     lrs_dev_signal_stop(device);
     lrs_dev_wait_end(device);
+    pthread_mutex_destroy(&device->mutex);
+    g_ptr_array_unref(device->sync_params.tosync_array);
     dev_info_free(device->dss_dev_info, true);
 }
 
@@ -798,6 +803,7 @@ static void dev_descr_fini(gpointer ptr)
                         sched_request_tosync_free_wrapper,
                         NULL);
     g_ptr_array_unref(dev->sync_params.tosync_array);
+    pthread_mutex_destroy(&dev->mutex);
 }
 
 /**
@@ -2850,6 +2856,7 @@ static int sched_device_lock(struct lrs_sched *sched, const char *name)
             lrs_dev_signal_stop(dev);
             dev_descr_fini(dev);
             g_ptr_array_remove_index_fast(sched->devices, i);
+            free(dev);
             pho_verb("Removed locked device '%s' from the local database",
                      name);
             return 0;
