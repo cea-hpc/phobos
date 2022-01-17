@@ -37,6 +37,7 @@
 
 #include <assert.h>
 #include <glib.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -892,6 +893,7 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
 
     sched->devices = g_ptr_array_new();
     sched->req_queue = g_queue_new();
+    sched->mutex_response_queue = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
     sched->response_queue = g_queue_new();
 
     /* Load devices from DSS -- not critical if no device is found */
@@ -1289,6 +1291,8 @@ void sched_fini(struct lrs_sched *sched)
     g_ptr_array_foreach(sched->devices, lrs_dev_signal_stop_wrapper, NULL);
     g_ptr_array_foreach(sched->devices, dev_descr_fini_wrapper, NULL);
     g_ptr_array_free(sched->devices, TRUE);
+
+    pthread_mutex_destroy(&sched->mutex_response_queue);
 }
 
 /**

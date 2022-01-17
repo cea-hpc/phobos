@@ -25,6 +25,7 @@
 #ifndef _PHO_LRS_SCHED_H
 #define _PHO_LRS_SCHED_H
 
+#include <pthread.h>
 #include <stdint.h>
 
 #include "pho_dss.h"
@@ -49,6 +50,10 @@ struct lrs_sched {
     GQueue            *req_queue;       /**< Queue for all but
                                           *  release requests
                                           */
+    pthread_mutex_t    mutex_response_queue;
+                                        /**< Exclusive access to the response
+                                         *   queue
+                                         */
     GQueue            *response_queue;  /**< Queue for release responses */
     struct timespec    sync_time_threshold;
                                         /**< Time threshold for medium
