@@ -11,6 +11,8 @@ COMMON_LIB=$(TO_SRC)/common/libpho_common.la
 COMMUNICATION_LIB=$(TO_SRC)/communication/libpho_comm.la
 DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
 IO_LIB=$(TO_SRC)/io/libpho_io.la
+LAYOUT_LIB=$(TO_SRC)/layout/libpho_layout.la
+RAID1_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
@@ -33,6 +35,7 @@ check_PROGRAMS=test_attrs \
                test_dss_medium_locate \
                test_dss_object_move \
                test_io \
+               test_layout_module \
                test_ldm \
                test_log \
                test_lrs_cfg \
@@ -90,6 +93,10 @@ test_dss_object_move_LDADD=$(DSS_LIB) $(ADMIN_LIB) $(CFG_LIB) $(COMMON_LIB) \
 test_io_SOURCES=test_io.c
 test_io_LDADD=$(IO_LIB) $(COMMON_LIB)
 test_io_CFLAGS=$(AM_CFLAGS) -I..
+
+test_layout_module_SOURCES=test_layout_module.c
+test_layout_module_LDADD=$(LAYOUT_LIB) $(RAID1_LIB) $(CFG_LIB) $(COMMON_LIB) -ldl
+test_layout_module_CFLAGS=$(AM_CFLAGS) -I..
 
 test_ldm_SOURCES=test_ldm.c
 test_ldm_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB)

@@ -189,7 +189,7 @@ out_err:
 static int layout_module_lazy_load(const char *mod_name,
                                    struct layout_module **module)
 {
-    int rc;
+    int rc, rc2;
 
     rc = pthread_rwlock_rdlock(&layout_modules_rwlock);
     if (rc)
@@ -230,9 +230,13 @@ static int layout_module_lazy_load(const char *mod_name,
     }
 
 out_unlock:
-    rc = pthread_rwlock_unlock(&layout_modules_rwlock);
-    if (rc)
-        LOG_RETURN(rc, "Cannot unlock layout module table");
+    rc2 = pthread_rwlock_unlock(&layout_modules_rwlock);
+    if (rc2)
+        /* This unlock shouldn't fail as the lock was taken in this function.
+         * In case it does, one may not assume thread-safety, so we report this
+         * error instead of previous ones.
+         */
+        LOG_RETURN(rc2, "Cannot unlock layout module table");
 
     return rc;
 }
