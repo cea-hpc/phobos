@@ -112,6 +112,7 @@ struct release_params {
  * in a socket ID.
  */
 struct req_container {
+    pthread_mutex_t mutex;          /**< Exclusive access to request. */
     int socket_id;                  /**< Socket ID to pass to the response. */
     pho_req_t *req;                 /**< Request. */
     struct timespec received_at;    /**< Request reception timestamp */

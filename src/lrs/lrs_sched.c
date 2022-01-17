@@ -119,6 +119,7 @@ void sched_req_free(void *reqc)
     if (cont->req)
         pho_srl_request_free(cont->req, true);
 
+    pthread_mutex_destroy(&cont->mutex);
     free(cont);
 }
 

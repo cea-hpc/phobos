@@ -28,6 +28,7 @@
 
 #include <fcntl.h>
 #include <getopt.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -369,6 +370,8 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
             free(req_cont);
             continue;
         }
+
+        req_cont->mutex = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
 
         /* send back the ping request */
         if (pho_request_is_ping(req_cont->req)) {
