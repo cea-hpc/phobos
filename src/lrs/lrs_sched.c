@@ -1226,8 +1226,18 @@ out:
     return rc;
 }
 
-static int sched_empty_dev(struct lrs_sched *sched, struct dev_descr *dev)
+/**
+ * If the device contains a medium, this one is unmounted if needed and
+ * the global DSS lock on this medium is released.
+ *
+ * The global DSS lock of the device is released.
+ *
+ * On error, dev->op_status is set to PHO_DEV_OP_ST_FAILED.
+ */
+static int sched_umount_and_release(struct lrs_sched *sched,
+                                    struct dev_descr *dev)
 {
+    int rc2;
     int rc;
 
     if (dev->op_status == PHO_DEV_OP_ST_MOUNTED) {
@@ -1236,36 +1246,24 @@ static int sched_empty_dev(struct lrs_sched *sched, struct dev_descr *dev)
             return rc;
     }
 
-    /**
-     * We follow up on unload.
-     * (a successfull umount let the op_status to LOADED)
-     */
-    if (dev->op_status == PHO_DEV_OP_ST_LOADED)
-        return sched_unload_medium(sched, dev);
+    if (dev->op_status == PHO_DEV_OP_ST_LOADED) {
+        rc = sched_medium_release(sched, dev->dss_media_info);
 
-    return 0;
+        media_info_free(dev->dss_media_info);
+        dev->dss_media_info = NULL;
+
+        if (rc)
+            dev->op_status = PHO_DEV_OP_ST_FAILED;
+    }
+
+    rc2 = sched_device_release(sched, dev);
+    rc = rc ? : rc2;
+
+    return rc;
 }
 
 /**
- * If the device contains a medium, this one is unmounted if needed and
- * unloaded, and the global DSS lock on this medium is released.
- *
- * The global DSS lock of the device is released.
- */
-static int sched_empty_and_release_dev(struct lrs_sched *sched,
-                                       struct dev_descr *dev)
-{
-    int rc;
-
-    rc = sched_empty_dev(sched, dev);
-    if (rc)
-        return rc;
-
-    return sched_device_release(sched, dev);
-}
-
-/**
- * Unmount, unload and release global DSS lock of all medium that are loaded
+ * Unmount and release global DSS lock of all medium that are loaded
  * into devices with no ongoing I/O and that are not failed. The global DSS
  * locks on devices with no ongoing I/O and that are not failed are released.
  */
@@ -1277,7 +1275,7 @@ static void sched_release(struct lrs_sched *sched)
         struct dev_descr *dev = g_ptr_array_index(sched->devices, i);
 
         if (dev->op_status != PHO_DEV_OP_ST_FAILED && !dev->ongoing_io)
-            sched_empty_and_release_dev(sched, dev);
+            sched_umount_and_release(sched, dev);
     }
 }
 
@@ -2259,6 +2257,27 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
 
     return false;
 }
+
+static int sched_empty_dev(struct lrs_sched *sched, struct dev_descr *dev)
+{
+    int rc;
+
+    if (dev->op_status == PHO_DEV_OP_ST_MOUNTED) {
+        rc = sched_umount(sched, dev);
+        if (rc)
+            return rc;
+    }
+
+    /**
+     * We follow up on unload.
+     * (a successful umount let the op_status to LOADED)
+     */
+    if (dev->op_status == PHO_DEV_OP_ST_LOADED)
+        return sched_unload_medium(sched, dev);
+
+    return 0;
+}
+
 /**
  * Free one of the devices to allow mounting a new media.
  * On success, the returned device is locked.
