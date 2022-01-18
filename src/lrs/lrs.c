@@ -271,12 +271,22 @@ static int _send_responses_from_queue(struct pho_comm_info *comm,
     int rc = 0;
     int rc2;
 
+    rc = pthread_mutex_lock(&sched->mutex_response_queue);
+    if (rc)
+        LOG_RETURN(-rc, "Unable to lock response queue to send responses");
+
     while ((respc = g_queue_pop_tail(sched->response_queue)) != NULL) {
         rc2 = _send_message(comm, respc);
         rc = rc ? : rc2;
         pho_srl_response_free(respc->resp, false);
         free(respc->resp);
         free(respc);
+    }
+
+    rc2 = pthread_mutex_unlock(&sched->mutex_response_queue);
+    if (rc2) {
+        pho_error(-rc2, "Unable to unlock response queue");
+        rc = rc ? : -rc2;
     }
 
     return rc;

@@ -950,6 +950,24 @@ int prepare_error(struct resp_container *resp_cont, int req_rc,
     return 0;
 }
 
+static int enqueue_response(struct lrs_sched *sched,
+                            struct resp_container *resp_cont)
+{
+    int rc;
+
+    rc = pthread_mutex_lock(&sched->mutex_response_queue);
+    if (rc)
+        LOG_RETURN(-rc, "Unable to lock response queue to push response");
+
+    g_queue_push_tail(sched->response_queue, resp_cont);
+
+    rc = pthread_mutex_unlock(&sched->mutex_response_queue);
+    if (rc)
+        LOG_RETURN(-rc, "Unable to unlock response queue");
+
+    return 0;
+}
+
 static int queue_error_response(struct lrs_sched *sched, int req_rc,
                                 struct req_container *reqc)
 {
@@ -969,7 +987,10 @@ static int queue_error_response(struct lrs_sched *sched, int req_rc,
     if (rc)
         goto clean;
 
-    g_queue_push_tail(sched->response_queue, resp_cont);
+    rc = enqueue_response(sched, resp_cont);
+    if (rc)
+        goto clean;
+
     return 0;
 
 clean:
@@ -1020,7 +1041,10 @@ static int queue_release_response(struct lrs_sched *sched,
         }
     }
 
-    g_queue_push_tail(sched->response_queue, respc);
+    rc = enqueue_response(sched, respc);
+    if (rc)
+        goto err_release;
+
     return 0;
 
 err_release:
@@ -1283,6 +1307,8 @@ static void dev_descr_fini_wrapper(gpointer _req,
 
 void sched_fini(struct lrs_sched *sched)
 {
+    int rc;
+
     if (sched == NULL)
         return;
 
@@ -1292,7 +1318,16 @@ void sched_fini(struct lrs_sched *sched)
     dss_fini(&sched->dss);
 
     g_queue_free_full(sched->req_queue, sched_req_free);
+
+    rc = pthread_mutex_lock(&sched->mutex_response_queue);
+    if (rc)
+        pho_error(rc, "Unable to lock response queue to free it");
+
     g_queue_free_full(sched->response_queue, sched_resp_free);
+
+    rc = pthread_mutex_unlock(&sched->mutex_response_queue);
+    if (rc)
+        pho_error(rc, "Unable to unlock response queue");
 
     g_ptr_array_foreach(sched->devices, lrs_dev_signal_stop_wrapper, NULL);
     g_ptr_array_foreach(sched->devices, dev_descr_fini_wrapper, NULL);
