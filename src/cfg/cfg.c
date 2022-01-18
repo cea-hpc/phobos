@@ -38,11 +38,27 @@
 /** thread-wide handle to DSS */
 static __thread void *thr_dss_hdl;
 
-/** pointer to the loaded config file */
-static const char *cfg_file;
+/** global cached configuration */
+struct config {
+    const char *cfg_file;              /** pointer to the loaded config file */
+    struct collection_item *cfg_items; /** pointer to the loaded configuration
+                                         * structure
+                                         */
+    pthread_mutex_t lock;              /** lock to prevent concurrent load and
+                                         * read.
+                                         */
+};
 
-/** pointer to the loaded configuration structure */
-static struct collection_item *cfg_items;
+static struct config config = {
+    .cfg_file = NULL,
+    .cfg_items = NULL,
+    .lock = PTHREAD_MUTEX_INITIALIZER,
+};
+
+static inline bool config_is_loaded(void)
+{
+    return config.cfg_items != NULL;
+}
 
 /** load a local config file */
 static int pho_cfg_load_file(const char *cfg)
@@ -50,11 +66,19 @@ static int pho_cfg_load_file(const char *cfg)
     struct collection_item  *errors = NULL;
     int                      rc;
 
-    rc = config_from_file("phobos", cfg, &cfg_items, INI_STOP_ON_ERROR,
+    pthread_mutex_lock(&config.lock);
+
+    /* Make sure that the config was not loaded by another thread */
+    if (config.cfg_items != NULL)
+        GOTO(unlock, rc = 0);
+
+    rc = config_from_file("phobos", cfg, &config.cfg_items, INI_STOP_ON_ERROR,
                           &errors);
 
-    /* libinit returns positive errno-like error codes */
-    if (rc != 0) {
+    if (rc == 0) {
+        config.cfg_file = cfg;
+    } else {
+        /* libini returns positive errno-like error codes */
         if (rc == ENOENT && strcmp(cfg, PHO_DEFAULT_CFG) == 0) {
             pho_warn("no configuration file at default location: %s", cfg);
             rc = 0;
@@ -62,15 +86,14 @@ static int pho_cfg_load_file(const char *cfg)
             pho_error(rc, "failed to read configuration file '%s'", cfg);
             print_file_parsing_errors(stderr, errors);
             fprintf(stderr, "\n");
-            free_ini_config(cfg_items);
+            free_ini_config(config.cfg_items);
         }
     }
 
     /* The error collection always has to be freed, even when empty */
     free_ini_config_errors(errors);
-
-    if (rc == 0)
-        cfg_file = cfg;
+unlock:
+    pthread_mutex_unlock(&config.lock);
 
     return -rc;
 }
@@ -89,7 +112,7 @@ int pho_cfg_init_local(const char *config_file)
 {
     const char *cfg = config_file;
 
-    if (cfg_items != NULL)
+    if (config_is_loaded())
         return -EALREADY;
 
     if (cfg == NULL)
@@ -199,7 +222,9 @@ static int pho_cfg_get_local(const char *section, const char *name,
     int rc;
     struct collection_item *item;
 
-    rc = get_config_item(section, name, cfg_items, &item);
+    pthread_mutex_lock(&config.lock);
+    rc = get_config_item(section, name, config.cfg_items, &item);
+    pthread_mutex_unlock(&config.lock);
     if (rc)
         return -rc;
 
@@ -233,7 +258,7 @@ int pho_cfg_get_val_from_level(const char *section, const char *name,
 
     case PHO_CFG_LEVEL_LOCAL:
         /* if config file has not been loaded */
-        if (cfg_items == NULL)
+        if (!config_is_loaded())
             return -ENODATA;
 
         return pho_cfg_get_local(section, name, value);

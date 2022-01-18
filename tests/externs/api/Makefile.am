@@ -33,7 +33,8 @@ check_PROGRAMS=test_locate \
 	           test_bad_comm \
 	           test_store_retry \
 	           test_store \
-	           test_raid1_split_locate
+	           test_raid1_split_locate \
+	           test_concurrency
 
 check_SCRIPTS=test_locate.sh \
 	          test_scsi.sh \
@@ -41,6 +42,7 @@ check_SCRIPTS=test_locate.sh \
 	          test_undelete.sh \
 	          test_delete.sh \
 	          test_bad_comm.sh \
+	          test_concurrency.sh \
 	          test_store.sh \
 	          test_store_retry.sh \
 	          test_raid1_split_locate.sh
@@ -82,3 +84,6 @@ test_store_CFLAGS=-I$(TO_TEST)
 test_raid1_split_locate_SOURCES=test_raid1_split_locate.c
 test_raid1_split_locate_LDADD=$(CFG_LIB) $(COMMON_LIB) $(DSS_LIB) $(RAID1_LIB)
 test_raid1_split_locate_CFLAGS=-I$(TO_TEST)
+
+test_concurrency_SOURCES=test_concurrency.c
+test_concurrency_LDADD=$(STORE_LIB)
