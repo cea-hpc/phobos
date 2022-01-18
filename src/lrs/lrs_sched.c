@@ -3415,8 +3415,9 @@ static void device_manage_sync(struct lrs_sched *sched, struct dev_descr *dev)
     if (!dev->needs_sync)
         check_needs_sync(sched, dev);
 
-    if (!dev->ongoing_io && dev->needs_sync)
-        dev_sync(sched, dev);
+    if (dev->needs_sync)
+        if (!dev->ongoing_io)
+            dev_sync(sched, dev);
 }
 
 /**
