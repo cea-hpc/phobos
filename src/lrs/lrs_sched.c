@@ -138,6 +138,7 @@ static void sched_request_tosync_free_wrapper(gpointer _req,
     sched_request_tosync_free((struct request_tosync *)_req);
 }
 
+/* This function MUST be called with a lock on \p req */
 static inline bool is_request_tosync_ended(struct req_container *req)
 {
     size_t i;
@@ -1067,9 +1068,18 @@ static int clean_tosync_array(struct lrs_sched *sched, struct dev_descr *dev,
         struct request_tosync *req = tosync_array->pdata[tosync_array->len - 1];
         struct tosync_medium *tosync_medium =
             &req->reqc->params.release.tosync_media[req->medium_index];
+        bool should_send_error = false;
+        bool is_tosync_ended = false;
         int rc2;
 
         g_ptr_array_remove_index(tosync_array, tosync_array->len - 1);
+
+        rc2 = pthread_mutex_lock(&req->reqc->mutex);
+        if (rc2) {
+            pho_error(rc2, "Unable to lock request container");
+            internal_rc = internal_rc ? : rc2;
+            continue;
+        }
 
         if (!rc) {
             tosync_medium->status = SYNC_DONE;
@@ -1077,15 +1087,28 @@ static int clean_tosync_array(struct lrs_sched *sched, struct dev_descr *dev,
             if (!req->reqc->params.release.rc) {
                 /* this is the first SYNC_ERROR of this request */
                 req->reqc->params.release.rc = rc;
-                rc2 = queue_error_response(sched, rc, req->reqc);
-                if (rc2)
-                    internal_rc = internal_rc ? : rc2;
+                should_send_error = true;
             }
 
             tosync_medium->status = SYNC_ERROR;
         }
 
-        if (is_request_tosync_ended(req->reqc)) {
+        is_tosync_ended = is_request_tosync_ended(req->reqc);
+
+        rc2 = pthread_mutex_unlock(&req->reqc->mutex);
+        if (rc2) {
+            pho_error(rc2, "Unable to unlock request container");
+            internal_rc = internal_rc ? : rc2;
+            continue;
+        }
+
+        if (should_send_error) {
+            rc2 = queue_error_response(sched, rc, req->reqc);
+            if (rc2)
+                internal_rc = internal_rc ? : rc2;
+        }
+
+        if (is_tosync_ended) {
             if (!req->reqc->params.release.rc) {
                 rc2 = queue_release_response(sched, req->reqc);
                 if (rc2)
@@ -3027,13 +3050,13 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
     /* for each tosync_medium */
     for (i = 0; i < reqc->params.release.n_tosync_media; i++) {
         struct dev_descr *dev;
+        int result_rc;
 
         /* find the corresponding device */
         dev = search_loaded_media(sched,
             reqc->params.release.tosync_media[i].medium.name);
 
         if (dev != NULL) {
-
             /* update media phys_spc_free stats in advance, before next sync */
             /**
              * TODO: better to use a local cached value than always updating DSS
@@ -3054,31 +3077,52 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
             dev->ongoing_io = false;
 
             /* Queue sync request */
-            reqc->params.release.rc = push_new_sync_to_device(dev, reqc, i);
-            if (!reqc->params.release.rc)
-                continue;
-            else
-                rc = rc ? : reqc->params.release.rc;
+            result_rc = push_new_sync_to_device(dev, reqc, i);
+
+            if (result_rc)
+                rc = rc ? : result_rc;
         } else {
-            reqc->params.release.rc = -ENODEV;
+            result_rc = -ENODEV;
         }
+
+        rc2 = pthread_mutex_lock(&reqc->mutex);
+        if (rc2) {
+            pho_error(rc2, "Unable to lock request container");
+            rc = rc ? : rc2;
+            continue;
+        }
+
+        reqc->params.release.rc = result_rc;
+        if (!reqc->params.release.rc)
+            goto unlock;
 
         /* manage error */
         reqc->params.release.tosync_media[i].status = SYNC_ERROR;
         rc2 = queue_error_response(sched, reqc->params.release.rc, reqc);
         rc = rc ? : rc2;
 
-        if (i == 0) {
-            /* never queued: we can free it */
-            sched_req_free(reqc);
-        } else {
+        if (i != 0) {
             size_t j;
 
             for (j = i + 1; j < reqc->params.release.n_tosync_media; j++)
                 reqc->params.release.tosync_media[j].status = SYNC_CANCEL;
         }
 
-        break;
+unlock:
+        rc2 = pthread_mutex_unlock(&reqc->mutex);
+        if (rc2) {
+            pho_error(rc2, "Unable to unlock request container");
+            rc = rc ? : rc2;
+        }
+
+        if (reqc->params.release.rc) {
+            if (i == 0) {
+                /* never queued: we can free it */
+                sched_req_free(reqc);
+            }
+
+            break;
+        }
     }
 
     return rc;
@@ -3290,10 +3334,19 @@ static void dev_check_sync_cancel(struct dev_descr *dev)
 {
     GPtrArray *tosync_array = dev->sync_params.tosync_array;
     bool need_oldest_update = false;
+    int rc;
     int i;
 
     for (i = tosync_array->len - 1; i >= 0; i--) {
         struct request_tosync *req_tosync = tosync_array->pdata[i];
+        bool is_tosync_ended = false;
+
+        rc = pthread_mutex_lock(&req_tosync->reqc->mutex);
+        if (rc) {
+            pho_error(rc, "Unable to lock request container");
+            sched_request_tosync_free(req_tosync);
+            continue;
+        }
 
         if (req_tosync->reqc->params.release.rc) {
             struct release_params *release_params;
@@ -3308,10 +3361,17 @@ static void dev_check_sync_cancel(struct dev_descr *dev)
             need_oldest_update = true;
 
             tosync_medium->status = SYNC_CANCEL;
-
-            if (is_request_tosync_ended(req_tosync->reqc))
-                sched_request_tosync_free(req_tosync);
+            is_tosync_ended = is_request_tosync_ended(req_tosync->reqc);
         }
+
+        rc = pthread_mutex_unlock(&req_tosync->reqc->mutex);
+        if (rc) {
+            pho_error(rc, "Unable to unlock request container");
+            continue;
+        }
+
+        if (is_tosync_ended)
+            sched_request_tosync_free(req_tosync);
     }
 
     if (need_oldest_update)
