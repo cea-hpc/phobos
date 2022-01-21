@@ -131,6 +131,26 @@ static inline const char *pho_log_level2str(enum pho_log_level level)
     }
 }
 
+#define MUTEX_LOCK(_mutex)                                                \
+do {                                                                      \
+    int _rc;                                                              \
+    _rc = pthread_mutex_lock((_mutex));                                   \
+    if (_rc) {                                                            \
+        pho_error(_rc, "Unable to lock '%s'", (#_mutex));                 \
+        abort();                                                          \
+    }                                                                     \
+} while (0)
+
+#define MUTEX_UNLOCK(_mutex)                                              \
+do {                                                                      \
+    int _rc;                                                              \
+    _rc = pthread_mutex_unlock((_mutex));                                 \
+    if (_rc) {                                                            \
+        pho_error(_rc, "Unable to unlock '%s'", (#_mutex));               \
+        abort();                                                          \
+    }                                                                     \
+} while (0)
+
 /**
  * Lighten the code by allowing to set rc and goto a label or return
  * in a single line of code.

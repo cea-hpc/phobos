@@ -571,7 +571,7 @@ static int sched_fill_dev_info(struct lrs_sched *sched, struct lib_adapter *lib,
                                       &devd->dss_media_info->lock);
             if (rc)
                 LOG_RETURN(rc,
-                           "Unable to lock the media '%s' loaded in a owned "
+                           "Unable to lock the media '%s' loaded in an owned "
                            "device '%s'", devd->dss_media_info->rsc.id.name,
                            devd->dev_path);
         }
@@ -954,17 +954,11 @@ int prepare_error(struct resp_container *resp_cont, int req_rc,
 static int enqueue_response(struct lrs_sched *sched,
                             struct resp_container *resp_cont)
 {
-    int rc;
-
-    rc = pthread_mutex_lock(&sched->mutex_response_queue);
-    if (rc)
-        LOG_RETURN(-rc, "Unable to lock response queue to push response");
+    MUTEX_LOCK(&sched->mutex_response_queue);
 
     g_queue_push_tail(sched->response_queue, resp_cont);
 
-    rc = pthread_mutex_unlock(&sched->mutex_response_queue);
-    if (rc)
-        LOG_RETURN(-rc, "Unable to unlock response queue");
+    MUTEX_UNLOCK(&sched->mutex_response_queue);
 
     return 0;
 }
@@ -1074,12 +1068,7 @@ static int clean_tosync_array(struct lrs_sched *sched, struct dev_descr *dev,
 
         g_ptr_array_remove_index(tosync_array, tosync_array->len - 1);
 
-        rc2 = pthread_mutex_lock(&req->reqc->mutex);
-        if (rc2) {
-            pho_error(rc2, "Unable to lock request container");
-            internal_rc = internal_rc ? : rc2;
-            continue;
-        }
+        MUTEX_LOCK(&req->reqc->mutex);
 
         if (!rc) {
             tosync_medium->status = SYNC_DONE;
@@ -1095,12 +1084,7 @@ static int clean_tosync_array(struct lrs_sched *sched, struct dev_descr *dev,
 
         is_tosync_ended = is_request_tosync_ended(req->reqc);
 
-        rc2 = pthread_mutex_unlock(&req->reqc->mutex);
-        if (rc2) {
-            pho_error(rc2, "Unable to unlock request container");
-            internal_rc = internal_rc ? : rc2;
-            continue;
-        }
+        MUTEX_UNLOCK(&req->reqc->mutex);
 
         if (should_send_error) {
             rc2 = queue_error_response(sched, rc, req->reqc);
@@ -1328,8 +1312,6 @@ static void dev_descr_fini_wrapper(gpointer _req,
 
 void sched_fini(struct lrs_sched *sched)
 {
-    int rc;
-
     if (sched == NULL)
         return;
 
@@ -1340,19 +1322,13 @@ void sched_fini(struct lrs_sched *sched)
 
     g_queue_free_full(sched->req_queue, sched_req_free);
 
-    rc = pthread_mutex_lock(&sched->mutex_response_queue);
-    if (rc)
-        pho_error(rc, "Unable to lock response queue to free it");
-
-    g_queue_free_full(sched->response_queue, sched_resp_free);
-
-    rc = pthread_mutex_unlock(&sched->mutex_response_queue);
-    if (rc)
-        pho_error(rc, "Unable to unlock response queue");
-
     g_ptr_array_foreach(sched->devices, lrs_dev_signal_stop_wrapper, NULL);
     g_ptr_array_foreach(sched->devices, dev_descr_fini_wrapper, NULL);
     g_ptr_array_free(sched->devices, TRUE);
+
+    MUTEX_LOCK(&sched->mutex_response_queue);
+    g_queue_free_full(sched->response_queue, sched_resp_free);
+    MUTEX_UNLOCK(&sched->mutex_response_queue);
 
     pthread_mutex_destroy(&sched->mutex_response_queue);
 }
@@ -3085,12 +3061,7 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
             result_rc = -ENODEV;
         }
 
-        rc2 = pthread_mutex_lock(&reqc->mutex);
-        if (rc2) {
-            pho_error(rc2, "Unable to lock request container");
-            rc = rc ? : rc2;
-            continue;
-        }
+        MUTEX_LOCK(&reqc->mutex);
 
         reqc->params.release.rc = result_rc;
         if (!reqc->params.release.rc)
@@ -3109,11 +3080,7 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
         }
 
 unlock:
-        rc2 = pthread_mutex_unlock(&reqc->mutex);
-        if (rc2) {
-            pho_error(rc2, "Unable to unlock request container");
-            rc = rc ? : rc2;
-        }
+        MUTEX_UNLOCK(&reqc->mutex);
 
         if (reqc->params.release.rc) {
             if (i == 0) {
@@ -3334,19 +3301,13 @@ static void dev_check_sync_cancel(struct dev_descr *dev)
 {
     GPtrArray *tosync_array = dev->sync_params.tosync_array;
     bool need_oldest_update = false;
-    int rc;
     int i;
 
     for (i = tosync_array->len - 1; i >= 0; i--) {
         struct request_tosync *req_tosync = tosync_array->pdata[i];
         bool is_tosync_ended = false;
 
-        rc = pthread_mutex_lock(&req_tosync->reqc->mutex);
-        if (rc) {
-            pho_error(rc, "Unable to lock request container");
-            sched_request_tosync_free(req_tosync);
-            continue;
-        }
+        MUTEX_LOCK(&req_tosync->reqc->mutex);
 
         if (req_tosync->reqc->params.release.rc) {
             struct release_params *release_params;
@@ -3364,11 +3325,7 @@ static void dev_check_sync_cancel(struct dev_descr *dev)
             is_tosync_ended = is_request_tosync_ended(req_tosync->reqc);
         }
 
-        rc = pthread_mutex_unlock(&req_tosync->reqc->mutex);
-        if (rc) {
-            pho_error(rc, "Unable to unlock request container");
-            continue;
-        }
+        MUTEX_UNLOCK(&req_tosync->reqc->mutex);
 
         if (is_tosync_ended)
             sched_request_tosync_free(req_tosync);

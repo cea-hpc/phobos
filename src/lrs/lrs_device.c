@@ -50,21 +50,15 @@ static inline long ms2nsec(long ms)
  */
 static int lrs_dev_signal(struct lrs_dev *thread)
 {
-    int rc, rc2;
+    int rc;
 
-    rc = pthread_mutex_lock(&thread->ld_signal_mutex);
-    if (rc)
-        LOG_RETURN(-rc, "Unable to acquire device lock to signal it");
+    MUTEX_LOCK(&thread->ld_signal_mutex);
 
     rc = pthread_cond_signal(&thread->ld_signal);
     if (rc)
         pho_error(-rc, "Unable to signal device");
 
-    rc2 = pthread_mutex_unlock(&thread->ld_signal_mutex);
-    if (rc2) {
-        pho_error(-rc2, "Unable to unlock device after signal it");
-        rc = rc ? : rc2;
-    }
+    MUTEX_UNLOCK(&thread->ld_signal_mutex);
 
     return -rc;
 }
@@ -88,11 +82,11 @@ static int wait_for_signal(struct lrs_dev *thread)
     time.tv_sec += ms2sec(DEVICE_THREAD_WAIT_MS);
     time.tv_nsec += ms2nsec(DEVICE_THREAD_WAIT_MS);
 
-    pthread_mutex_lock(&thread->ld_signal_mutex);
+    MUTEX_LOCK(&thread->ld_signal_mutex);
     rc = pthread_cond_timedwait(&thread->ld_signal,
                                 &thread->ld_signal_mutex,
                                 &time);
-    pthread_mutex_unlock(&thread->ld_signal_mutex);
+    MUTEX_UNLOCK(&thread->ld_signal_mutex);
     if (rc != ETIMEDOUT)
         rc = -rc;
 
