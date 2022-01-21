@@ -872,7 +872,8 @@ static int sched_clean_medium_locks(struct lrs_sched *sched)
     return rc;
 }
 
-int sched_init(struct lrs_sched *sched, enum rsc_family family)
+int sched_init(struct lrs_sched *sched, enum rsc_family family,
+               struct tsqueue *resp_queue)
 {
     int rc;
 
@@ -902,8 +903,7 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family)
 
     sched->devices = g_ptr_array_new();
     sched->req_queue = g_queue_new();
-    sched->mutex_response_queue = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
-    sched->response_queue = g_queue_new();
+    sched->response_queue = resp_queue;
 
     /* Load devices from DSS -- not critical if no device is found */
     load_device_list_from_dss(sched);
@@ -953,18 +953,6 @@ int prepare_error(struct resp_container *resp_cont, int req_rc,
     return 0;
 }
 
-static int enqueue_response(struct lrs_sched *sched,
-                            struct resp_container *resp_cont)
-{
-    MUTEX_LOCK(&sched->mutex_response_queue);
-
-    g_queue_push_tail(sched->response_queue, resp_cont);
-
-    MUTEX_UNLOCK(&sched->mutex_response_queue);
-
-    return 0;
-}
-
 static int queue_error_response(struct lrs_sched *sched, int req_rc,
                                 struct req_container *reqc)
 {
@@ -984,9 +972,7 @@ static int queue_error_response(struct lrs_sched *sched, int req_rc,
     if (rc)
         goto clean;
 
-    rc = enqueue_response(sched, resp_cont);
-    if (rc)
-        goto clean;
+    tsqueue_push(sched->response_queue, resp_cont);
 
     return 0;
 
@@ -1038,9 +1024,7 @@ static int queue_release_response(struct lrs_sched *sched,
         }
     }
 
-    rc = enqueue_response(sched, respc);
-    if (rc)
-        goto err_release;
+    tsqueue_push(sched->response_queue, respc);
 
     return 0;
 
@@ -1290,8 +1274,7 @@ static void sched_release(struct lrs_sched *sched)
     }
 }
 
-/** sched_resp_free can be used as glib callback */
-static void sched_resp_free(void *respc)
+void sched_resp_free(void *respc)
 {
     pho_srl_response_free(((struct resp_container *)respc)->resp, false);
     free(((struct resp_container *)respc)->resp);
@@ -1329,12 +1312,6 @@ void sched_fini(struct lrs_sched *sched)
     g_ptr_array_foreach(sched->devices, lrs_dev_signal_stop_wrapper, NULL);
     g_ptr_array_foreach(sched->devices, dev_descr_fini_wrapper, NULL);
     g_ptr_array_free(sched->devices, TRUE);
-
-    MUTEX_LOCK(&sched->mutex_response_queue);
-    g_queue_free_full(sched->response_queue, sched_resp_free);
-    MUTEX_UNLOCK(&sched->mutex_response_queue);
-
-    pthread_mutex_destroy(&sched->mutex_response_queue);
 }
 
 /**

@@ -50,11 +50,7 @@ struct lrs_sched {
     GQueue            *req_queue;       /**< Queue for all but
                                           *  release requests
                                           */
-    pthread_mutex_t    mutex_response_queue;
-                                        /**< Exclusive access to the response
-                                         *   queue
-                                         */
-    GQueue            *response_queue;  /**< Queue for release responses */
+    struct tsqueue    *response_queue;  /**< Queue for responses */
     struct timespec    sync_time_threshold;
                                         /**< Time threshold for medium
                                          *   synchronization
@@ -166,10 +162,12 @@ int prepare_error(struct resp_container *resp_cont, int req_rc,
  *
  * \param[in]       sched       The sched to be initialized.
  * \param[in]       family      Resource family managed by the scheduler.
+ * \param[in]       resp_queue  Global response queue.
  *
  * \return                      0 on success, -1 * posix error code on failure.
  */
-int sched_init(struct lrs_sched *sched, enum rsc_family family);
+int sched_init(struct lrs_sched *sched, enum rsc_family family,
+               struct tsqueue *resp_queue);
 
 /**
  * Free all resources associated with this sched except for the dss, which must
@@ -207,5 +205,8 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc);
  */
 int sched_responses_get(struct lrs_sched *sched, int *n_resp,
                         struct resp_container **respc);
+
+/** sched_resp_free can be used as glib callback */
+void sched_resp_free(void *respc);
 
 #endif

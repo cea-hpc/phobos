@@ -267,4 +267,31 @@ const char *saj_parser_key(const struct saj_parser *parser);
  */
 int saj_parser_run(struct saj_parser *parser, json_t *root);
 
+/**
+ * Threadsafe (fifo) queue initializer.
+ * @return          Threadsafe queue.
+ */
+struct tsqueue tsqueue_init(void);
+
+/**
+ * Threadsafe queue destructor.
+ * @param[in]       tsq         Threadsafe queue.
+ * @param[in]       free_func   Function used to free queue elements contents.
+ */
+void tsqueue_destroy(struct tsqueue *tsq, GDestroyNotify free_func);
+
+/**
+ * Pop element from threadsafe queue.
+ * @param[in]       tsq         Threadsafe queue.
+ * @return          Element popped.
+ */
+void *tsqueue_pop(struct tsqueue *tsq);
+
+/**
+ * Push element in threadsafe queue.
+ * @param[in]       tsq         Threadsafe queue.
+ * @param[in]       data        Element pushed.
+ */
+void tsqueue_push(struct tsqueue *tsq, void *data);
+
 #endif

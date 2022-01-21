@@ -484,4 +484,16 @@ enum notify_op {
     PHO_NTFY_OP_LAST
 };
 
+/**
+ * Threadsafe FIFO queue, composed of a GLIB queue and a mutex.
+ *
+ * Functions that interact with this structure are available in
+ * pho_type_utils.h.
+ *
+ */
+struct tsqueue {
+    GQueue             *queue;          /**< Object queue */
+    pthread_mutex_t    *mutex;          /**< Mutex to protect the queue */
+};
+
 #endif

@@ -40,6 +40,7 @@
 #include "pho_cfg.h"
 #include "pho_comm.h"
 #include "pho_common.h"
+#include "pho_type_utils.h"
 
 #include "lrs_cfg.h"
 #include "lrs_sched.h"
@@ -51,8 +52,9 @@
  * - Communication info: stores info related to the communication with Store
  */
 struct lrs {
-    struct lrs_sched     *sched[PHO_RSC_LAST]; /*!< Scheduler handles */
-    struct pho_comm_info  comm;                /*!< Communication handle */
+    struct lrs_sched           *sched[PHO_RSC_LAST];/*!< Scheduler handles */
+    struct pho_comm_info        comm;               /*!< Communication handle */
+    struct tsqueue              response_queue;     /*!< Response queue */
 };
 
 struct lrs_params {
@@ -264,24 +266,19 @@ static int _send_message(struct pho_comm_info *comm,
     return rc;
 }
 
-static int _send_responses_from_queue(struct pho_comm_info *comm,
-                                      struct lrs_sched *sched)
+static int _send_responses_from_queue(struct lrs *lrs)
 {
     struct resp_container *respc;
     int rc = 0;
     int rc2;
 
-    MUTEX_LOCK(&sched->mutex_response_queue);
-
-    while ((respc = g_queue_pop_tail(sched->response_queue)) != NULL) {
-        rc2 = _send_message(comm, respc);
+    while ((respc = tsqueue_pop(&lrs->response_queue)) != NULL) {
+        rc2 = _send_message(&lrs->comm, respc);
         rc = rc ? : rc2;
         pho_srl_response_free(respc->resp, false);
         free(respc->resp);
         free(respc);
     }
-
-    MUTEX_UNLOCK(&sched->mutex_response_queue);
 
     return rc;
 }
@@ -466,7 +463,7 @@ static int _load_schedulers(struct lrs *lrs)
             if (!lrs->sched[family])
                 LOG_GOTO(out_free, rc = -ENOMEM,
                          "Error on lrs scheduler allocation");
-            rc = sched_init(lrs->sched[family], family);
+            rc = sched_init(lrs->sched[family], family, &lrs->response_queue);
             if (rc) {
                 free(lrs->sched[family]);
                 lrs->sched[family] = NULL;
@@ -520,6 +517,8 @@ static void lrs_fini(struct lrs *lrs)
     if (rc)
         pho_error(rc, "Error on closing the socket");
 
+    tsqueue_destroy(&lrs->response_queue, sched_resp_free);
+
     lock_file = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, lock_file);
     _delete_lock_file(lock_file);
 }
@@ -554,6 +553,8 @@ static int lrs_init(struct lrs *lrs, struct lrs_params parm)
     rc = _create_lock_file(lock_file);
     if (rc)
         LOG_RETURN(rc, "Error while creating the daemon lock file");
+
+    lrs->response_queue = tsqueue_init();
 
     rc = _load_schedulers(lrs);
     if (rc)
@@ -626,10 +627,6 @@ static int lrs_process(struct lrs *lrs)
         if (rc)
             LOG_RETURN(rc, "Error during sched processing");
 
-        rc = _send_responses_from_queue(&lrs->comm, lrs->sched[i]);
-        if (rc)
-            LOG_RETURN(rc, "Error during responses sending");
-
         rc = _send_responses_from_array(&lrs->comm, n_resp, resp_cont);
         for (j = 0; j < n_resp; ++j)
             free(resp_cont[j].resp);
@@ -637,6 +634,10 @@ static int lrs_process(struct lrs *lrs)
         if (rc)
             LOG_RETURN(rc, "Error during responses sending");
     }
+
+    rc = _send_responses_from_queue(lrs);
+    if (rc)
+        LOG_RETURN(rc, "Error during responses sending");
 
     return rc;
 }
