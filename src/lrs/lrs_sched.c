@@ -162,10 +162,12 @@ static int push_new_sync_to_device(struct dev_descr *dev,
 
     req_tosync->reqc = reqc;
     req_tosync->medium_index = medium_index;
+    MUTEX_LOCK(&dev->mutex);
     g_ptr_array_add(dev->sync_params.tosync_array, req_tosync);
     dev->sync_params.tosync_size +=
         reqc->params.release.tosync_media[medium_index].written_size;
     update_oldest_tosync(&dev->sync_params.oldest_tosync, reqc->received_at);
+    MUTEX_UNLOCK(&dev->mutex);
 
     return 0;
 }
@@ -1058,6 +1060,7 @@ static int clean_tosync_array(struct lrs_sched *sched, struct dev_descr *dev,
     GPtrArray *tosync_array = dev->sync_params.tosync_array;
     int internal_rc = 0;
 
+    MUTEX_LOCK(&dev->mutex);
     while (tosync_array->len) {
         struct request_tosync *req = tosync_array->pdata[tosync_array->len - 1];
         struct tosync_medium *tosync_medium =
@@ -1108,6 +1111,7 @@ static int clean_tosync_array(struct lrs_sched *sched, struct dev_descr *dev,
     dev->sync_params.oldest_tosync.tv_sec = 0;
     dev->sync_params.oldest_tosync.tv_nsec = 0;
     dev->needs_sync = false;
+    MUTEX_UNLOCK(&dev->mutex);
 
     return internal_rc;
 }
@@ -3276,7 +3280,11 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
     return rc;
 }
 
-/** update the dev->sync_params.oldest_tosync by scrolling the tosync_array */
+/**
+ * update the dev->sync_params.oldest_tosync by scrolling the tosync_array
+ *
+ * This function must be called with a lock on \p dev .
+ */
 static void update_queue_oldest_tosync(struct dev_descr *dev)
 {
     GPtrArray *tosync_array = dev->sync_params.tosync_array;
@@ -3303,6 +3311,7 @@ static void dev_check_sync_cancel(struct dev_descr *dev)
     bool need_oldest_update = false;
     int i;
 
+    MUTEX_LOCK(&dev->mutex);
     for (i = tosync_array->len - 1; i >= 0; i--) {
         struct request_tosync *req_tosync = tosync_array->pdata[i];
         bool is_tosync_ended = false;
@@ -3333,6 +3342,8 @@ static void dev_check_sync_cancel(struct dev_descr *dev)
 
     if (need_oldest_update)
         update_queue_oldest_tosync(dev);
+
+    MUTEX_UNLOCK(&dev->mutex);
 }
 
 static struct timespec add_timespec(struct timespec a, struct timespec b)
@@ -3366,6 +3377,7 @@ static bool is_past(struct timespec t)
 static inline void check_needs_sync(struct lrs_sched *sched,
                                     struct dev_descr *dev)
 {
+    MUTEX_LOCK(&dev->mutex);
     dev->needs_sync = dev->sync_params.tosync_array->len > 0 &&
                       (dev->sync_params.tosync_array->len >=
                            sched->sync_nb_req_threshold ||
@@ -3373,6 +3385,7 @@ static inline void check_needs_sync(struct lrs_sched *sched,
                                             sched->sync_time_threshold)) ||
                        dev->sync_params.tosync_size >=
                            sched->sync_written_size_threshold);
+    MUTEX_UNLOCK(&dev->mutex);
 }
 
 /* Sync dev, update the media in the DSS, and flush tosync_array */
