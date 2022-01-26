@@ -19,4 +19,4 @@ phobosd_LDADD=../dss/libpho_dss.la ../cfg/libpho_cfg.la ../ldm/libpho_ldm.la \
 	      ../communication/libpho_comm.la ../common/libpho_common.la
 phobosd_LDFLAGS=-Wl,-rpath=$(libdir) -Wl,-rpath=$(pkglibdir)
 
-libpho_lrs_la_SOURCES=lrs_cfg.c lrs_sched.c
+libpho_lrs_la_SOURCES=lrs_cfg.c lrs_sched.c lrs_device.c

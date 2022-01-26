@@ -366,17 +366,8 @@ static int check_renew_lock(struct lrs_sched *sched, enum dss_type type,
     return check_renew_owner(sched, type, item, lock);
 }
 
-/**
- * Acquire device lock if it is not already set.
- *
- * If lock is already set, check hostname and owner.
- * -EALREADY is returned if dev->lock.hostname is not the same as
- *  sched->lock_hostname.
- *  If dev->lock.owner is not the same as sched->lock_owner, the lock is
- *  re-taken from DSS to update the owner.
- */
-static int check_and_take_device_lock(struct lrs_sched *sched,
-                                      struct dev_info *dev)
+int check_and_take_device_lock(struct lrs_sched *sched,
+                               struct dev_info *dev)
 {
     int rc;
 

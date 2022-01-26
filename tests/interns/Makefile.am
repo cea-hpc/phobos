@@ -39,6 +39,7 @@ check_PROGRAMS=test_attrs \
                test_ldm \
                test_log \
                test_lrs_cfg \
+               test_lrs_device \
                test_mapper \
                test_phobos_admin_medium_locate \
                test_ping \
@@ -109,6 +110,11 @@ test_log_CFLAGS=$(AM_CFLAGS) -I..
 test_lrs_cfg_SOURCES=test_lrs_cfg.c
 test_lrs_cfg_LDADD=$(LRS_LIB) $(CFG_LIB) $(COMMON_LIB)
 test_lrs_cfg_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
+
+test_lrs_device_SOURCES=test_lrs_device.c ../test_setup.h ../test_setup.c
+test_lrs_device_LDADD=$(LRS_LIB) $(DSS_LIB) $(COMMON_LIB) \
+                      $(ADMIN_LIB) $(LDM_LIB) $(IO_LIB)
+test_lrs_device_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I..
 
 test_mapper_SOURCES=test_mapper.c
 test_mapper_LDADD=$(STORE_LIB)
