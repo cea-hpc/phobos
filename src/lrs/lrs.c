@@ -552,7 +552,8 @@ static int lrs_init(struct lrs *lrs, struct lrs_params parm)
     lock_file = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, lock_file);
     rc = _create_lock_file(lock_file);
     if (rc)
-        LOG_RETURN(rc, "Error while creating the daemon lock file");
+        LOG_RETURN(rc, "Error while creating the daemon lock file %s",
+                   lock_file);
 
     lrs->response_queue = tsqueue_init();
 

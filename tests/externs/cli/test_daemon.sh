@@ -93,10 +93,10 @@ function test_recover_dir_old_locks
 
     # Check only the lock of the correct hostname is released
     lock=$($phobos dir list -o lock_hostname ${dir0})
-    [ "None" == "$lock" ] || error "Dir should be unlocked"
+    [ "None" == "$lock" ] || error "${dir0} should be unlocked"
 
     lock=$($phobos dir list -o lock_hostname ${dir1})
-    [ "${host}other" == "$lock" ] || error "Dir should be locked"
+    [ "${host}other" == "$lock" ] || error "${dir1} should be locked"
 
     drop_tables
 }

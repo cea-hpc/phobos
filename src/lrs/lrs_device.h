@@ -33,7 +33,7 @@
 #include "pho_ldm.h"
 #include "pho_types.h"
 
-#include "lrs_sched.h"
+struct lrs_sched;
 
 /**
  * Structure handling thread devices used by the scheduler.
@@ -73,46 +73,6 @@ struct thread_info {
     int                  ld_status;         /**< Return status at the end of
                                               * the execution.
                                               */
-};
-
-/**
- * All needed information to select devices.
- */
-struct dev_descr {
-    pthread_mutex_t      mutex;                 /**< exclusive access */
-    struct dev_info     *dss_dev_info;          /**< device info from DSS */
-    struct lib_drv_info  lib_dev_info;          /**< device info from library
-                                                  *  (for tape drives)
-                                                  */
-    struct ldm_dev_state sys_dev_state;         /**< device info from system */
-
-    enum dev_op_status   op_status;             /**< operational status of
-                                                  *  the device
-                                                  */
-    char                 dev_path[PATH_MAX];    /**< path to the device */
-    struct media_info   *dss_media_info;        /**< loaded media info
-                                                  *  from DSS, if any
-                                                  */
-    char                 mnt_path[PATH_MAX];    /**< mount path
-                                                  *  of the filesystem
-                                                  */
-    bool                 ongoing_io;            /**< one I/O is ongoing */
-    bool                 needs_sync;            /**< medium needs to be sync */
-    struct {
-        GPtrArray        *tosync_array;         /**< array of release requests
-                                                  *  with to_sync to do
-                                                  */
-        struct timespec  oldest_tosync;         /**< oldest release request in
-                                                  *  \p tosync_array
-                                                  */
-        size_t           tosync_size;           /**< total size of release
-                                                  *  requests in
-                                                  *  \p tosync_array
-                                                  */
-    } sync_params;                              /**< sync information on the
-                                                  *  mounted medium
-                                                  */
-    struct thread_info   device_thread;         /**< Thread specific data */
 };
 
 /**
@@ -229,6 +189,17 @@ int lrs_dev_hdl_load(struct lrs_sched *sched,
 void lrs_dev_hdl_clear(struct lrs_dev_hdl *handle);
 
 /**
+ * Wrapper arround GLib's getter to retrive devices' structures
+ *
+ * \param[in]  handle  initialized device handle
+ * \param[in]  index   index of the device, must be smaller than the number of
+ *                     devices in handle->ldh_devices
+ *
+ * \return             a pointer to the requested device is returned
+ */
+struct lrs_dev *lrs_dev_hdl_get(struct lrs_dev_hdl *handle, int index);
+
+/**
  * Signal to the device thread that it should stop working
  *
  * \param[in]  device  the device to signal
@@ -244,26 +215,5 @@ void dev_thread_signal_stop(struct lrs_dev *device);
  * \param[in]  device  the device whose termination to wait for
  */
 void dev_thread_wait_end(struct lrs_dev *device);
-
-/* XXX these functions will be removed when the lrs_dev_hdl is used by
- * lrs_sched
- */
-/**
- * Starts the device thread
- *
- * On success, a new thread will be created and will start handling pending
- * requests.
- */
-int lrs_dev_init(struct dev_descr *device);
-
-/**
- * Indicate to the device thread that it should stop.
- */
-void lrs_dev_signal_stop(struct dev_descr *device);
-
-/**
- * Wait for the device thread termination.
- */
-void lrs_dev_wait_end(struct dev_descr *device);
 
 #endif

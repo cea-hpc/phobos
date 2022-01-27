@@ -32,7 +32,7 @@
 #include "pho_srl_lrs.h"
 #include "pho_types.h"
 
-struct dev_descr;
+#include "lrs_device.h"
 
 /**
  * Local Resource Scheduler instance, manages media and local devices for the
@@ -41,10 +41,7 @@ struct dev_descr;
 struct lrs_sched {
     struct dss_handle  dss;             /**< Associated DSS */
     enum rsc_family    family;          /**< Managed resource family */
-    GPtrArray         *devices;         /**< References to available devices.
-                                          *  The data is owned by the device
-                                          *  thread.
-                                          */
+    struct lrs_dev_hdl devices;         /**< Handle to device threads */
     const char        *lock_hostname;   /**< Lock hostname for this LRS */
     int                lock_owner;      /**< Lock owner (pid) for this LRS */
     GQueue            *req_queue;       /**< Queue for all but
@@ -208,6 +205,10 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
 
 /** sched_resp_free can be used as glib callback */
 void sched_resp_free(void *respc);
+
+/* Wrapper of sched_request_tosync_free to be used by glib foreach */
+void sched_request_tosync_free_wrapper(gpointer _req,
+                                       gpointer _null_user_data);
 
 /**
  * Acquire device lock if it is not already set.

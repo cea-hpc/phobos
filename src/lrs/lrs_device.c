@@ -28,6 +28,7 @@
 
 #include "lrs_cfg.h"
 #include "lrs_device.h"
+#include "lrs_sched.h"
 
 #include "pho_common.h"
 #include "pho_type_utils.h"
@@ -72,7 +73,7 @@ int lrs_dev_hdl_init(struct lrs_dev_hdl *handle, enum rsc_family family)
 
 void lrs_dev_hdl_fini(struct lrs_dev_hdl *handle)
 {
-    g_ptr_array_free(handle->ldh_devices, TRUE);
+    g_ptr_array_unref(handle->ldh_devices);
 }
 
 static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
@@ -95,7 +96,7 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
 
     rc = dev_thread_init(*dev);
     if (rc) {
-        g_ptr_array_free((*dev)->ld_sync_params.tosync_array, false);
+        g_ptr_array_unref((*dev)->ld_sync_params.tosync_array);
         dev_info_free((*dev)->ld_dss_dev_info, 1);
         free(*dev);
         return rc;
@@ -103,16 +104,30 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
 
     g_ptr_array_add(handle->ldh_devices, *dev);
 
+    /* Explicitly initialize to NULL so that lrs_dev_info_clean can call cleanup
+     * functions.
+     */
+    (*dev)->ld_dss_media_info = NULL;
+    (*dev)->ld_sys_dev_state.lds_model = NULL;
+    (*dev)->ld_sys_dev_state.lds_serial = NULL;
+
     return 0;
 }
 
 static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
                                struct lrs_dev *dev)
 {
-    dev_thread_signal_stop(dev);
     dev_thread_wait_end(dev);
 
-    g_ptr_array_free(dev->ld_sync_params.tosync_array, true);
+    media_info_free(dev->ld_dss_media_info);
+    dev->ld_dss_media_info = NULL;
+
+    ldm_dev_state_fini(&dev->ld_sys_dev_state);
+
+    g_ptr_array_foreach(dev->ld_sync_params.tosync_array,
+                        sched_request_tosync_free_wrapper,
+                        NULL);
+    g_ptr_array_unref(dev->ld_sync_params.tosync_array);
     dev_info_free(dev->ld_dss_dev_info, 1);
 
     free(dev);
@@ -179,6 +194,7 @@ int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index)
     dev = (struct lrs_dev *)g_ptr_array_remove_index_fast(handle->ldh_devices,
                                                           index);
 
+    dev_thread_signal_stop(dev);
     lrs_dev_info_clean(handle, dev);
 
     return 0;
@@ -253,11 +269,13 @@ void lrs_dev_hdl_clear(struct lrs_dev_hdl *handle)
 
         dev = (struct lrs_dev *)g_ptr_array_remove_index(handle->ldh_devices,
                                                          i);
-        dev_thread_wait_end(dev);
-
-        dev_info_free(dev->ld_dss_dev_info, true);
-        free(dev);
+        lrs_dev_info_clean(handle, dev);
     }
+}
+
+struct lrs_dev *lrs_dev_hdl_get(struct lrs_dev_hdl *handle, int index)
+{
+    return g_ptr_array_index(handle->ldh_devices, index);
 }
 
 static void sync_params_init(struct sync_params *params)
@@ -387,48 +405,4 @@ void dev_thread_wait_end(struct lrs_dev *device)
     if (*threadrc < 0)
         pho_error(*threadrc, "device thread '%s' terminated with error",
                   device->ld_dss_dev_info->rsc.id.name);
-}
-
-int lrs_dev_init(struct dev_descr *device)
-{
-    struct thread_info *thread = &device->device_thread;
-    int rc;
-
-    thread->ld_signal = (pthread_cond_t) PTHREAD_COND_INITIALIZER;
-    thread->ld_signal_mutex = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
-    thread->ld_running = true;
-    thread->ld_status = 0;
-
-    rc = pthread_create(&thread->ld_tid, NULL, lrs_dev_thread, device);
-    if (rc)
-        LOG_RETURN(rc, "Could not create device thread");
-
-    return 0;
-}
-
-void lrs_dev_signal_stop(struct dev_descr *device)
-{
-    struct thread_info *thread = &device->device_thread;
-    int rc;
-
-    thread->ld_running = false;
-    rc = lrs_dev_signal(thread);
-    if (rc)
-        pho_error(rc, "Error when signaling device (%s, %s) to stop it",
-                  device->dss_dev_info->rsc.id.name, device->dev_path);
-}
-
-void lrs_dev_wait_end(struct dev_descr *device)
-{
-    struct thread_info *thread = &device->device_thread;
-    int *threadrc = NULL;
-    int rc;
-
-    rc = pthread_join(thread->ld_tid, (void **)&threadrc);
-    if (rc)
-        pho_error(rc, "Error while waiting for device thread");
-
-    if (*threadrc < 0)
-        pho_error(*threadrc, "device thread '%s' terminated with error",
-                  device->dss_dev_info->rsc.id.name);
 }

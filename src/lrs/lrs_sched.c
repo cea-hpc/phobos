@@ -130,11 +130,11 @@ static void sched_request_tosync_free(struct request_tosync *req_tosync)
     free(req_tosync);
 }
 
-/* Wrapper of sched_request_tosync_free to be used by glib foreach */
-static void sched_request_tosync_free_wrapper(gpointer _req,
-                                              gpointer _null_user_data)
+void sched_request_tosync_free_wrapper(gpointer _req,
+                                       gpointer _null_user_data)
 {
     (void)_null_user_data;
+
     sched_request_tosync_free((struct request_tosync *)_req);
 }
 
@@ -150,10 +150,11 @@ static inline bool is_request_tosync_ended(struct req_container *req)
     return true;
 }
 
-static int push_new_sync_to_device(struct dev_descr *dev,
+static int push_new_sync_to_device(struct lrs_dev *dev,
                                    struct req_container *reqc,
                                    size_t medium_index)
 {
+    struct sync_params *sync_params = &dev->ld_sync_params;
     struct request_tosync *req_tosync;
 
     req_tosync = malloc(sizeof(*req_tosync));
@@ -162,48 +163,52 @@ static int push_new_sync_to_device(struct dev_descr *dev,
 
     req_tosync->reqc = reqc;
     req_tosync->medium_index = medium_index;
-    MUTEX_LOCK(&dev->mutex);
-    g_ptr_array_add(dev->sync_params.tosync_array, req_tosync);
-    dev->sync_params.tosync_size +=
+    MUTEX_LOCK(&dev->ld_mutex);
+    g_ptr_array_add(sync_params->tosync_array, req_tosync);
+    sync_params->tosync_size +=
         reqc->params.release.tosync_media[medium_index].written_size;
-    update_oldest_tosync(&dev->sync_params.oldest_tosync, reqc->received_at);
-    MUTEX_UNLOCK(&dev->mutex);
+    update_oldest_tosync(&sync_params->oldest_tosync, reqc->received_at);
+    MUTEX_UNLOCK(&dev->ld_mutex);
 
     return 0;
 }
 
 /** check that device info from DB is consistent with actual status */
-static int check_dev_info(const struct dev_descr *dev)
+static int check_dev_info(const struct lrs_dev *dev)
 {
     ENTRY;
 
-    if (dev->dss_dev_info->rsc.model == NULL
-        || dev->sys_dev_state.lds_model == NULL) {
-        if (dev->dss_dev_info->rsc.model != dev->sys_dev_state.lds_model)
+    if (dev->ld_dss_dev_info->rsc.model == NULL
+        || dev->ld_sys_dev_state.lds_model == NULL) {
+        if (dev->ld_dss_dev_info->rsc.model != dev->ld_sys_dev_state.lds_model)
             LOG_RETURN(-EINVAL, "%s: missing or unexpected device model",
-                       dev->dev_path);
+                       dev->ld_dev_path);
         else
-            pho_debug("%s: no device model is set", dev->dev_path);
+            pho_debug("%s: no device model is set", dev->ld_dev_path);
 
-    } else if (cmp_trimmed_strings(dev->dss_dev_info->rsc.model,
-                                   dev->sys_dev_state.lds_model)) {
+    } else if (cmp_trimmed_strings(dev->ld_dss_dev_info->rsc.model,
+                                   dev->ld_sys_dev_state.lds_model)) {
         LOG_RETURN(-EINVAL, "%s: configured device model '%s' differs from "
-                   "actual device model '%s'", dev->dev_path,
-                   dev->dss_dev_info->rsc.model, dev->sys_dev_state.lds_model);
+                   "actual device model '%s'",
+                   dev->ld_dev_path,
+                   dev->ld_dss_dev_info->rsc.model,
+                   dev->ld_sys_dev_state.lds_model);
     }
 
-    if (dev->sys_dev_state.lds_serial == NULL) {
-        if (dev->dss_dev_info->rsc.id.name != dev->sys_dev_state.lds_serial)
+    if (dev->ld_sys_dev_state.lds_serial == NULL) {
+        if (dev->ld_dss_dev_info->rsc.id.name !=
+            dev->ld_sys_dev_state.lds_serial)
             LOG_RETURN(-EINVAL, "%s: missing or unexpected device serial",
-                       dev->dev_path);
+                       dev->ld_dev_path);
         else
-            pho_debug("%s: no device serial is set", dev->dev_path);
-    } else if (strcmp(dev->dss_dev_info->rsc.id.name,
-                      dev->sys_dev_state.lds_serial) != 0) {
+            pho_debug("%s: no device serial is set", dev->ld_dev_path);
+    } else if (strcmp(dev->ld_dss_dev_info->rsc.id.name,
+                      dev->ld_sys_dev_state.lds_serial) != 0) {
         LOG_RETURN(-EINVAL, "%s: configured device serial '%s' differs from "
-                   "actual device serial '%s'", dev->dev_path,
-                   dev->dss_dev_info->rsc.id.name,
-                   dev->sys_dev_state.lds_serial);
+                   "actual device serial '%s'",
+                   dev->ld_dev_path,
+                   dev->ld_dss_dev_info->rsc.id.name,
+                   dev->ld_sys_dev_state.lds_serial);
     }
 
     return 0;
@@ -232,20 +237,21 @@ static int sched_resource_release(struct lrs_sched *sched, enum dss_type type,
     return 0;
 }
 
-static int sched_device_release(struct lrs_sched *sched, struct dev_descr *dev)
+static int sched_device_release(struct lrs_sched *sched, struct lrs_dev *dev)
 {
     int rc;
 
-    rc = sched_resource_release(sched, DSS_DEVICE, dev->dss_dev_info,
-                                &dev->dss_dev_info->lock);
+    rc = sched_resource_release(sched, DSS_DEVICE, dev->ld_dss_dev_info,
+                                &dev->ld_dss_dev_info->lock);
     if (rc)
         pho_error(rc,
                   "Error when releasing device '%s' with current lock "
-                  "(hostname %s, owner %d)", dev->dev_path,
-                  dev->dss_dev_info->lock.hostname,
-                  dev->dss_dev_info->lock.owner);
+                  "(hostname %s, owner %d)",
+                  dev->ld_dev_path,
+                  dev->ld_dss_dev_info->lock.hostname,
+                  dev->ld_dss_dev_info->lock.owner);
 
-    pho_debug("unlock: device %s\n", dev->dev_path);
+    pho_debug("unlock: device %s\n", dev->ld_dev_path);
 
     return rc;
 }
@@ -472,10 +478,10 @@ out_nores:
  *
  * @param[in]  dss  handle to dss connection.
  * @param[in]  lib  library handler for tape devices.
- * @param[out] devd dev_descr structure filled with all needed information.
+ * @param[out] dev  lrs_dev structure filled with all needed information.
  */
 static int sched_fill_dev_info(struct lrs_sched *sched, struct lib_adapter *lib,
-                               struct dev_descr *devd)
+                               struct lrs_dev *dev)
 {
     struct dev_adapter deva;
     struct dev_info   *devi;
@@ -483,118 +489,118 @@ static int sched_fill_dev_info(struct lrs_sched *sched, struct lib_adapter *lib,
 
     ENTRY;
 
-    if (devd == NULL)
+    if (dev == NULL)
         return -EINVAL;
 
-    devi = devd->dss_dev_info;
+    devi = dev->ld_dss_dev_info;
 
-    media_info_free(devd->dss_media_info);
-    devd->dss_media_info = NULL;
+    media_info_free(dev->ld_dss_media_info);
+    dev->ld_dss_media_info = NULL;
 
     rc = get_dev_adapter(devi->rsc.id.family, &deva);
     if (rc)
         return rc;
 
     /* get path for the given serial */
-    rc = ldm_dev_lookup(&deva, devi->rsc.id.name, devd->dev_path,
-                        sizeof(devd->dev_path));
+    rc = ldm_dev_lookup(&deva, devi->rsc.id.name, dev->ld_dev_path,
+                        sizeof(dev->ld_dev_path));
     if (rc) {
         pho_debug("Device lookup failed: serial '%s'", devi->rsc.id.name);
         return rc;
     }
 
     /* now query device by path */
-    ldm_dev_state_fini(&devd->sys_dev_state);
-    rc = ldm_dev_query(&deva, devd->dev_path, &devd->sys_dev_state);
+    ldm_dev_state_fini(&dev->ld_sys_dev_state);
+    rc = ldm_dev_query(&deva, dev->ld_dev_path, &dev->ld_sys_dev_state);
     if (rc) {
-        pho_debug("Failed to query device '%s'", devd->dev_path);
+        pho_debug("Failed to query device '%s'", dev->ld_dev_path);
         return rc;
     }
 
     /* compare returned device info with info from DB */
-    rc = check_dev_info(devd);
+    rc = check_dev_info(dev);
     if (rc)
         return rc;
 
     /* Query the library about the drive location and whether it contains
      * a media.
      */
-    rc = ldm_lib_drive_lookup(lib, devi->rsc.id.name, &devd->lib_dev_info);
+    rc = ldm_lib_drive_lookup(lib, devi->rsc.id.name, &dev->ld_lib_dev_info);
     if (rc) {
         pho_debug("Failed to query the library about device '%s'",
                   devi->rsc.id.name);
         return rc;
     }
 
-    if (devd->lib_dev_info.ldi_full) {
+    if (dev->ld_lib_dev_info.ldi_full) {
         struct pho_id *medium_id;
         struct fs_adapter fsa;
 
-        devd->op_status = PHO_DEV_OP_ST_LOADED;
-        medium_id = &devd->lib_dev_info.ldi_medium_id;
+        dev->ld_op_status = PHO_DEV_OP_ST_LOADED;
+        medium_id = &dev->ld_lib_dev_info.ldi_medium_id;
 
-        pho_debug("Device '%s' (S/N '%s') contains medium '%s'", devd->dev_path,
-                  devi->rsc.id.name, medium_id->name);
+        pho_debug("Device '%s' (S/N '%s') contains medium '%s'",
+                  dev->ld_dev_path, devi->rsc.id.name, medium_id->name);
 
         /* get media info for loaded drives */
-        rc = sched_fill_media_info(sched, &devd->dss_media_info, medium_id);
+        rc = sched_fill_media_info(sched, &dev->ld_dss_media_info, medium_id);
 
         if (rc) {
             if (rc == -ENXIO)
                 pho_error(rc,
                           "Device '%s' (S/N '%s') contains medium '%s', but "
-                          "this medium cannot be found", devd->dev_path,
+                          "this medium cannot be found", dev->ld_dev_path,
                           devi->rsc.id.name, medium_id->name);
 
             if (rc == -EALREADY)
                 pho_error(rc,
                           "Device '%s' (S/N '%s') is owned by host %s but "
                           "contains medium '%s' which is locked by an other "
-                          "hostname %s", devd->dev_path, devi->rsc.id.name,
+                          "hostname %s", dev->ld_dev_path, devi->rsc.id.name,
                            devi->host, medium_id->name,
-                           devd->dss_media_info->lock.hostname);
+                           dev->ld_dss_media_info->lock.hostname);
 
             return rc;
         }
 
         /* get lock for loaded media */
-        if (!devd->dss_media_info->lock.hostname) {
+        if (!dev->ld_dss_media_info->lock.hostname) {
             rc = take_and_update_lock(&sched->dss, DSS_MEDIA,
-                                      devd->dss_media_info,
-                                      &devd->dss_media_info->lock);
+                                      dev->ld_dss_media_info,
+                                      &dev->ld_dss_media_info->lock);
             if (rc)
                 LOG_RETURN(rc,
                            "Unable to lock the media '%s' loaded in an owned "
-                           "device '%s'", devd->dss_media_info->rsc.id.name,
-                           devd->dev_path);
+                           "device '%s'", dev->ld_dss_media_info->rsc.id.name,
+                           dev->ld_dev_path);
         }
 
         /* See if the device is currently mounted */
-        rc = get_fs_adapter(devd->dss_media_info->fs.type, &fsa);
+        rc = get_fs_adapter(dev->ld_dss_media_info->fs.type, &fsa);
         if (rc)
             return rc;
 
         /* If device is loaded, check if it is mounted as a filesystem */
-        rc = ldm_fs_mounted(&fsa, devd->dev_path, devd->mnt_path,
-                            sizeof(devd->mnt_path));
+        rc = ldm_fs_mounted(&fsa, dev->ld_dev_path, dev->ld_mnt_path,
+                            sizeof(dev->ld_mnt_path));
 
         if (rc == 0) {
             pho_debug("Discovered mounted filesystem at '%s'",
-                      devd->mnt_path);
-            devd->op_status = PHO_DEV_OP_ST_MOUNTED;
+                      dev->ld_mnt_path);
+            dev->ld_op_status = PHO_DEV_OP_ST_MOUNTED;
         } else if (rc == -ENOENT) {
             /* not mounted, not an error */
             rc = 0;
         } else {
             LOG_RETURN(rc, "Cannot determine if device '%s' is mounted",
-                       devd->dev_path);
+                       dev->ld_dev_path);
         }
     } else {
-        devd->op_status = PHO_DEV_OP_ST_EMPTY;
+        dev->ld_op_status = PHO_DEV_OP_ST_EMPTY;
     }
 
-    pho_debug("Drive '%s' is '%s'", devd->dev_path,
-              op_status2str(devd->op_status));
+    pho_debug("Drive '%s' is '%s'", dev->ld_dev_path,
+              op_status2str(dev->ld_op_status));
 
     return rc;
 }
@@ -626,113 +632,6 @@ static int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter *lib)
     return ldm_lib_open(lib, lib_dev);
 }
 
-static void init_device_sync_params(struct dev_descr *dev)
-{
-    dev->sync_params.tosync_array = g_ptr_array_new();
-    dev->sync_params.oldest_tosync.tv_sec = 0;
-    dev->sync_params.oldest_tosync.tv_nsec = 0;
-    dev->sync_params.tosync_size = 0;
-}
-
-static int dev_descr_from_info_init(struct lrs_sched *sched,
-                                    struct dev_info *info,
-                                    struct dev_descr *device)
-{
-    int rc;
-
-    rc = check_and_take_device_lock(sched, info);
-    if (rc)
-        return rc;
-
-    device->mutex = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
-
-    device->dss_dev_info = dev_info_dup(info);
-    if (!device->dss_dev_info) {
-        pthread_mutex_destroy(&device->mutex);
-        return -ENOMEM;
-    }
-
-    init_device_sync_params(device);
-
-    rc = lrs_dev_init(device);
-    if (rc) {
-        pthread_mutex_destroy(&device->mutex);
-        dev_info_free(device->dss_dev_info, true);
-        g_ptr_array_unref(device->sync_params.tosync_array);
-        return rc;
-    }
-
-    g_ptr_array_add(sched->devices, device);
-    return 0;
-}
-
-static void dev_descr_from_info_clear(struct dev_descr *device)
-{
-    lrs_dev_signal_stop(device);
-    lrs_dev_wait_end(device);
-    pthread_mutex_destroy(&device->mutex);
-    g_ptr_array_unref(device->sync_params.tosync_array);
-    dev_info_free(device->dss_dev_info, true);
-}
-
-static int load_device_list_from_dss(struct lrs_sched *sched)
-{
-    struct dev_info *devs = NULL;
-    struct dss_filter filter;
-    int dcnt;
-    int rc;
-    int i;
-
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                          "  {\"DSS::DEV::host\": \"%s\"},"
-                          "  {\"DSS::DEV::adm_status\": \"%s\"},"
-                          "  {\"DSS::DEV::family\": \"%s\"}"
-                          "]}",
-                          sched->lock_hostname,
-                          rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
-                          rsc_family2str(sched->family));
-    if (rc)
-        return rc;
-
-    /* get all admin unlocked devices from DB for the given family */
-    rc = dss_device_get(&sched->dss, &filter, &devs, &dcnt);
-    dss_filter_free(&filter);
-    if (rc)
-        LOG_RETURN(rc, "Error when getting devices from DSS");
-
-    /* Copy information from DSS to local device list */
-    for (i = 0 ; i < dcnt; i++) {
-        struct dev_descr *device;
-
-        device = calloc(1, sizeof(*device));
-        if (!device) {
-            pho_error(rc,
-                      "could not allocate dev_descr for '%s', "
-                      "will be ignored.",
-                      devs[i].path);
-            continue;
-        }
-
-        rc = dev_descr_from_info_init(sched, &devs[i], device);
-        if (rc) {
-            pho_error(rc, "error while initializing '%s', will be ignored",
-                      devs[i].path);
-            free(device);
-        }
-    }
-
-    if (sched->devices->len == 0)
-        LOG_GOTO(clean, rc = -ENXIO,
-                 "No usable device found (%s): check devices status",
-                 rsc_family2str(sched->family));
-
-clean:
-    /* free devs array, as they have been copied to sched->devices */
-    dss_res_free(devs, dcnt);
-    return rc;
-}
-
 /**
  * Load device states into memory.
  * Do nothing if device status is already loaded.
@@ -746,7 +645,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
 
     ENTRY;
 
-    if (sched->devices->len == 0)
+    if (sched->devices.ldh_devices->len == 0)
         LOG_RETURN(-ENXIO, "Try to load state of an empty list of devices");
 
     /* get a handle to the library to query it */
@@ -754,14 +653,16 @@ static int sched_load_dev_state(struct lrs_sched *sched)
     if (rc)
         LOG_RETURN(rc, "Error while loading devices when opening library");
 
-    for (i = 0 ; i < sched->devices->len; i++) {
-        struct dev_descr *dev = g_ptr_array_index(sched->devices, i);
+    for (i = 0 ; i < sched->devices.ldh_devices->len; i++) {
+        struct lrs_dev *dev;
+
+        dev = lrs_dev_hdl_get(&sched->devices, i);
 
         rc = sched_fill_dev_info(sched, &lib, dev);
         if (rc) {
             pho_debug("Fail to init device '%s', marking it as failed and "
-                      "releasing it", dev->dev_path);
-            dev->op_status = PHO_DEV_OP_ST_FAILED;
+                      "releasing it", dev->ld_dev_path);
+            dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
             sched_device_release(sched, dev);
         } else {
             clean_devices = true;
@@ -779,27 +680,6 @@ static int sched_load_dev_state(struct lrs_sched *sched)
         LOG_RETURN(-ENXIO, "No functional device found");
 
     return 0;
-}
-
-static void dev_descr_fini(gpointer ptr)
-{
-    struct dev_descr *dev = (struct dev_descr *)ptr;
-
-    lrs_dev_wait_end(dev);
-
-    dev_info_free(dev->dss_dev_info, true);
-    dev->dss_dev_info = NULL;
-
-    media_info_free(dev->dss_media_info);
-    dev->dss_media_info = NULL;
-
-    ldm_dev_state_fini(&dev->sys_dev_state);
-
-    g_ptr_array_foreach(dev->sync_params.tosync_array,
-                        sched_request_tosync_free_wrapper,
-                        NULL);
-    g_ptr_array_unref(dev->sync_params.tosync_array);
-    pthread_mutex_destroy(&dev->mutex);
 }
 
 /**
@@ -841,13 +721,17 @@ static int sched_clean_medium_locks(struct lrs_sched *sched)
 
     ENTRY;
 
-    media = malloc(sched->devices->len * sizeof(*media));
+    media = malloc(sched->devices.ldh_devices->len * sizeof(*media));
     if (!media)
         LOG_RETURN(-errno, "Failed to allocate media list");
 
-    for (i = 0; i < sched->devices->len; i++) {
-        struct dev_descr *dev = g_ptr_array_index(sched->devices, i);
-        struct media_info *mda = dev->dss_media_info;
+    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
+        struct media_info *mda;
+        struct lrs_dev *dev;
+
+        dev = lrs_dev_hdl_get(&sched->devices, i);
+        mda = dev->ld_dss_media_info;
+
         if (mda) {
             media[i] = *mda;
             cnt++;
@@ -869,6 +753,10 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
     int rc;
 
     sched->family = family;
+
+    rc = lrs_dev_hdl_init(&sched->devices, family);
+    if (rc)
+        LOG_RETURN(rc, "Failed to initialize device handle");
 
     rc = get_cfg_time_threshold_value(family, &sched->sync_time_threshold);
     if (rc)
@@ -892,12 +780,11 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
     if (rc)
         return rc;
 
-    sched->devices = g_ptr_array_new();
     sched->req_queue = g_queue_new();
     sched->response_queue = resp_queue;
 
     /* Load devices from DSS -- not critical if no device is found */
-    load_device_list_from_dss(sched);
+    lrs_dev_hdl_load(sched, &sched->devices);
 
     /* Load the device state -- not critical if no device is found */
     sched_load_dev_state(sched);
@@ -1029,13 +916,13 @@ err:
     return queue_error_response(sched, rc, reqc);
 }
 
-static int clean_tosync_array(struct lrs_sched *sched, struct dev_descr *dev,
+static int clean_tosync_array(struct lrs_sched *sched, struct lrs_dev *dev,
                               int rc)
 {
-    GPtrArray *tosync_array = dev->sync_params.tosync_array;
+    GPtrArray *tosync_array = dev->ld_sync_params.tosync_array;
     int internal_rc = 0;
 
-    MUTEX_LOCK(&dev->mutex);
+    MUTEX_LOCK(&dev->ld_mutex);
     while (tosync_array->len) {
         struct request_tosync *req = tosync_array->pdata[tosync_array->len - 1];
         struct tosync_medium *tosync_medium =
@@ -1082,11 +969,11 @@ static int clean_tosync_array(struct lrs_sched *sched, struct dev_descr *dev,
     }
 
     /* sync operation acknowledgement */
-    dev->sync_params.tosync_size = 0;
-    dev->sync_params.oldest_tosync.tv_sec = 0;
-    dev->sync_params.oldest_tosync.tv_nsec = 0;
-    dev->needs_sync = false;
-    MUTEX_UNLOCK(&dev->mutex);
+    dev->ld_sync_params.tosync_size = 0;
+    dev->ld_sync_params.oldest_tosync.tv_sec = 0;
+    dev->ld_sync_params.oldest_tosync.tv_nsec = 0;
+    dev->ld_needs_sync = false;
+    MUTEX_UNLOCK(&dev->ld_mutex);
 
     return internal_rc;
 }
@@ -1095,15 +982,16 @@ static int clean_tosync_array(struct lrs_sched *sched, struct dev_descr *dev,
  * Unmount the filesystem of a 'mounted' device
  *
  * sched_umount must be called with:
- * - dev->op_status set to PHO_DEV_OP_ST_MOUNTED, a mounted dev->dess_media_info
+ * - dev->ld_op_status set to PHO_DEV_OP_ST_MOUNTED, a mounted
+ *   dev->ld_dss_media_info
  * - a global DSS lock on dev
- * - a global DSS lock on dev->dss_media_info
+ * - a global DSS lock on dev->ld_dss_media_info
  *
- * On error, dev->ongoing_io is set to false, we try to release global DSS
- * locks on dev and dev->dss_media_info, and dev->op_status is set to
+ * On error, dev->ld_ongoing_io is set to false, we try to release global DSS
+ * locks on dev and dev->ld_dss_media_info, and dev->ld_op_status is set to
  * PHO_DEV_OP_FAILED.
  */
-static int sched_umount(struct lrs_sched *sched, struct dev_descr *dev)
+static int sched_umount(struct lrs_sched *sched, struct lrs_dev *dev)
 {
     struct fs_adapter fsa;
     int rc, rc2;
@@ -1111,36 +999,36 @@ static int sched_umount(struct lrs_sched *sched, struct dev_descr *dev)
     ENTRY;
 
     pho_info("umount: device '%s' mounted at '%s'",
-             dev->dev_path, dev->mnt_path);
+             dev->ld_dev_path, dev->ld_mnt_path);
 
-    rc = get_fs_adapter(dev->dss_media_info->fs.type, &fsa);
+    rc = get_fs_adapter(dev->ld_dss_media_info->fs.type, &fsa);
     if (rc)
         LOG_GOTO(out, rc,
                  "Unable to get fs adapter '%s' to unmount medium '%s' from "
-                 "device '%s'", fs_type_names[dev->dss_media_info->fs.type],
-                 dev->dss_media_info->rsc.id.name, dev->dev_path);
+                 "device '%s'", fs_type_names[dev->ld_dss_media_info->fs.type],
+                 dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
-    rc = ldm_fs_umount(&fsa, dev->dev_path, dev->mnt_path);
+    rc = ldm_fs_umount(&fsa, dev->ld_dev_path, dev->ld_mnt_path);
     rc2 = clean_tosync_array(sched, dev, rc);
     if (rc)
         LOG_GOTO(out, rc, "Failed to unmount device '%s' mounted at '%s'",
-                 dev->dev_path, dev->mnt_path);
+                 dev->ld_dev_path, dev->ld_mnt_path);
 
     if (rc2)
         LOG_GOTO(out, rc = rc2,
                  "Failed to clean tosync array after having unmounted device "
                  "'%s' mounted at '%s'",
-                 dev->dev_path, dev->mnt_path);
+                 dev->ld_dev_path, dev->ld_mnt_path);
 
     /* update device state and unset mount path */
-    dev->op_status = PHO_DEV_OP_ST_LOADED;
-    dev->mnt_path[0] = '\0';
+    dev->ld_op_status = PHO_DEV_OP_ST_LOADED;
+    dev->ld_mnt_path[0] = '\0';
 
 out:
     if (rc) {
-        dev->op_status = PHO_DEV_OP_ST_FAILED;
-        dev->ongoing_io = false;
-        sched_medium_release(sched, dev->dss_media_info);
+        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
+        dev->ld_ongoing_io = false;
+        sched_medium_release(sched, dev->ld_dss_media_info);
         sched_device_release(sched, dev);
     }
 
@@ -1148,18 +1036,19 @@ out:
 }
 
 /**
- * Unload, unlock and free a media from a drive and set drive's op_status to
+ * Unload, unlock and free a media from a drive and set drive's ld_op_status to
  * PHO_DEV_OP_ST_EMPTY
  *
  * Must be called with:
- * - dev->op_status set to PHO_DEV_OP_ST_LOADED and loaded dev->dss_media_info
+ * - dev->ld_op_status set to PHO_DEV_OP_ST_LOADED and loaded
+ *   dev->ld_dss_media_info
  * - a global DSS lock on dev
- * - a global DSS lock on dev->dss_media_info
+ * - a global DSS lock on dev->ld_dss_media_info
  *
  * On error, we try to release global DSS lock on dev in addition of unlocking
- * dev->media. dev->op_status is set to PHO_DEV_OP_ST_FAILED
+ * dev->ld_media. dev->ld_op_status is set to PHO_DEV_OP_ST_FAILED
  */
-static int sched_unload_medium(struct lrs_sched *sched, struct dev_descr *dev)
+static int sched_unload_medium(struct lrs_sched *sched, struct lrs_dev *dev)
 {
     /* let the library select the target location */
     struct lib_item_addr    free_slot = { .lia_type = MED_LOC_UNKNOWN };
@@ -1169,17 +1058,17 @@ static int sched_unload_medium(struct lrs_sched *sched, struct dev_descr *dev)
 
     ENTRY;
 
-    pho_verb("Unloading '%s' from '%s'", dev->dss_media_info->rsc.id.name,
-             dev->dev_path);
+    pho_verb("Unloading '%s' from '%s'", dev->ld_dss_media_info->rsc.id.name,
+             dev->ld_dev_path);
 
-    rc = wrap_lib_open(dev->dss_dev_info->rsc.id.family, &lib);
+    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib);
     if (rc)
         LOG_GOTO(out, rc,
                  "Unable to open lib '%s' to unload medium '%s' from device "
-                 "'%s'", rsc_family_names[dev->dss_dev_info->rsc.id.family],
-                 dev->dss_media_info->rsc.id.name, dev->dev_path);
+                 "'%s'", rsc_family_names[dev->ld_dss_dev_info->rsc.id.family],
+                 dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
-    rc = ldm_lib_media_move(&lib, &dev->lib_dev_info.ldi_addr, &free_slot);
+    rc = ldm_lib_media_move(&lib, &dev->ld_lib_dev_info.ldi_addr, &free_slot);
     if (rc != 0)
         /* Set operationnal failure state on this drive. It is incomplete since
          * the error can originate from a defective tape too...
@@ -1189,7 +1078,7 @@ static int sched_unload_medium(struct lrs_sched *sched, struct dev_descr *dev)
          */
         LOG_GOTO(out_close, rc, "Media move failed");
 
-    dev->op_status = PHO_DEV_OP_ST_EMPTY;
+    dev->ld_op_status = PHO_DEV_OP_ST_EMPTY;
 
 out_close:
     rc2 = ldm_lib_close(&lib);
@@ -1197,15 +1086,15 @@ out_close:
         rc = rc ? : rc2;
 
 out:
-    rc2 = sched_medium_release(sched, dev->dss_media_info);
+    rc2 = sched_medium_release(sched, dev->ld_dss_media_info);
     if (rc2)
         rc = rc ? : rc2;
 
-    media_info_free(dev->dss_media_info);
-    dev->dss_media_info = NULL;
+    media_info_free(dev->ld_dss_media_info);
+    dev->ld_dss_media_info = NULL;
 
     if (rc) {
-        dev->op_status = PHO_DEV_OP_ST_FAILED;
+        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         sched_device_release(sched, dev);
     }
 
@@ -1218,28 +1107,28 @@ out:
  *
  * The global DSS lock of the device is released.
  *
- * On error, dev->op_status is set to PHO_DEV_OP_ST_FAILED.
+ * On error, dev->ld_op_status is set to PHO_DEV_OP_ST_FAILED.
  */
 static int sched_umount_and_release(struct lrs_sched *sched,
-                                    struct dev_descr *dev)
+                                    struct lrs_dev *dev)
 {
     int rc2;
     int rc;
 
-    if (dev->op_status == PHO_DEV_OP_ST_MOUNTED) {
+    if (dev->ld_op_status == PHO_DEV_OP_ST_MOUNTED) {
         rc = sched_umount(sched, dev);
         if (rc)
             return rc;
     }
 
-    if (dev->op_status == PHO_DEV_OP_ST_LOADED) {
-        rc = sched_medium_release(sched, dev->dss_media_info);
+    if (dev->ld_op_status == PHO_DEV_OP_ST_LOADED) {
+        rc = sched_medium_release(sched, dev->ld_dss_media_info);
 
-        media_info_free(dev->dss_media_info);
-        dev->dss_media_info = NULL;
+        media_info_free(dev->ld_dss_media_info);
+        dev->ld_dss_media_info = NULL;
 
         if (rc)
-            dev->op_status = PHO_DEV_OP_ST_FAILED;
+            dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
     }
 
     rc2 = sched_device_release(sched, dev);
@@ -1257,10 +1146,12 @@ static void sched_release(struct lrs_sched *sched)
 {
     int i;
 
-    for (i = 0; i < sched->devices->len; i++) {
-        struct dev_descr *dev = g_ptr_array_index(sched->devices, i);
+    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
+        struct lrs_dev *dev;
 
-        if (dev->op_status != PHO_DEV_OP_ST_FAILED && !dev->ongoing_io)
+        dev = lrs_dev_hdl_get(&sched->devices, i);
+
+        if (dev->ld_op_status != PHO_DEV_OP_ST_FAILED && !dev->ld_ongoing_io)
             sched_umount_and_release(sched, dev);
     }
 }
@@ -1269,23 +1160,6 @@ void sched_resp_free(void *respc)
 {
     pho_srl_response_free(((struct resp_container *)respc)->resp, false);
     free(((struct resp_container *)respc)->resp);
-}
-
-/** Wrapper of lrs_dev_signal_stop to be used as glib callback */
-static void lrs_dev_signal_stop_wrapper(gpointer _req, gpointer _null_user_data)
-{
-    (void)_null_user_data;
-
-    lrs_dev_signal_stop((struct dev_descr *)_req);
-}
-
-/** Wrapper of dev_descr_fini to be used as glib callback */
-static void dev_descr_fini_wrapper(gpointer _req,
-                                   gpointer _null_user_data)
-{
-    (void)_null_user_data;
-
-    dev_descr_fini((struct dev_descr *)_req);
 }
 
 void sched_fini(struct lrs_sched *sched)
@@ -1300,9 +1174,9 @@ void sched_fini(struct lrs_sched *sched)
 
     g_queue_free_full(sched->req_queue, sched_req_free);
 
-    g_ptr_array_foreach(sched->devices, lrs_dev_signal_stop_wrapper, NULL);
-    g_ptr_array_foreach(sched->devices, dev_descr_fini_wrapper, NULL);
-    g_ptr_array_free(sched->devices, TRUE);
+    lrs_dev_hdl_clear(&sched->devices);
+
+    lrs_dev_hdl_fini(&sched->devices);
 }
 
 /**
@@ -1377,45 +1251,45 @@ out:
 }
 
 static bool medium_in_devices(const struct media_info *medium,
-                              struct dev_descr **devs, size_t n_dev)
+                              struct lrs_dev **devs, size_t n_dev)
 {
     size_t i;
 
     for (i = 0; i < n_dev; i++) {
-        if (devs[i]->dss_media_info == NULL)
+        if (devs[i]->ld_dss_media_info == NULL)
             continue;
-        if (pho_id_equal(&medium->rsc.id, &devs[i]->dss_media_info->rsc.id))
+        if (pho_id_equal(&medium->rsc.id, &devs[i]->ld_dss_media_info->rsc.id))
             return true;
     }
 
     return false;
 }
 
-static struct dev_descr *search_loaded_media(struct lrs_sched *sched,
-                                             const char *name)
+static struct lrs_dev *search_loaded_media(struct lrs_sched *sched,
+                                           const char *name)
 {
     int i;
 
     ENTRY;
 
-    for (i = 0; i < sched->devices->len; i++) {
-        struct dev_descr *dev;
+    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
         const char *media_id;
+        struct lrs_dev *dev;
 
-        dev = g_ptr_array_index(sched->devices, i);
+        dev = lrs_dev_hdl_get(&sched->devices, i);
 
-        if (dev->op_status != PHO_DEV_OP_ST_MOUNTED &&
-            dev->op_status != PHO_DEV_OP_ST_LOADED)
+        if (dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED &&
+            dev->ld_op_status != PHO_DEV_OP_ST_LOADED)
             continue;
 
         /* The drive may contain a media unknown to phobos, skip it */
-        if (dev->dss_media_info == NULL)
+        if (dev->ld_dss_media_info == NULL)
             continue;
 
-        media_id = dev->dss_media_info->rsc.id.name;
+        media_id = dev->ld_dss_media_info->rsc.id.name;
         if (media_id == NULL) {
             pho_warn("Cannot retrieve media ID from device '%s'",
-                     dev->dev_path);
+                     dev->ld_dev_path);
             continue;
         }
 
@@ -1442,7 +1316,7 @@ static struct dev_descr *search_loaded_media(struct lrs_sched *sched,
 static int sched_select_media(struct lrs_sched *sched,
                               struct media_info **p_media, size_t required_size,
                               enum rsc_family family, const struct tags *tags,
-                              struct dev_descr **devs, size_t n_dev)
+                              struct lrs_dev **devs, size_t n_dev)
 {
     struct media_info   *pmedia_res = NULL;
     struct media_info   *split_media_best;
@@ -1520,14 +1394,14 @@ lock_race_retry:
 
         /* already locked */
         if (curr->lock.hostname != NULL) {
-            struct dev_descr *dev;
+            struct lrs_dev *dev;
 
             if (check_renew_lock(sched, DSS_MEDIA, curr, &curr->lock))
                 /* not locked by myself */
                 continue;
 
             dev = search_loaded_media(sched, curr->rsc.id.name);
-            if (dev && (dev->ongoing_io || dev->needs_sync))
+            if (dev && (dev->ld_ongoing_io || dev->ld_needs_sync))
                 /* locked by myself but already in use */
                 continue;
         }
@@ -1697,7 +1571,7 @@ out_free:
  * @return 0 on success, negative error code on failure and res is false
  */
 static int tape_drive_compat(const struct media_info *tape,
-                             const struct dev_descr *drive, bool *res)
+                             const struct lrs_dev *drive, bool *res)
 {
     const char *rw_drives;
     char *parse_rw_drives;
@@ -1733,7 +1607,7 @@ static int tape_drive_compat(const struct media_info *tape,
         if (rc)
             goto out_free;
 
-        rc = search_in_list(drive_model_list, drive->dss_dev_info->rsc.model,
+        rc = search_in_list(drive_model_list, drive->ld_dss_dev_info->rsc.model,
                             res);
         if (rc)
             goto out_free;
@@ -1758,12 +1632,12 @@ out_free:
  * @retval >0 to check next devices.
  */
 typedef int (*device_select_func_t)(size_t required_size,
-                                    struct dev_descr *dev_curr,
-                                    struct dev_descr **dev_selected);
+                                    struct lrs_dev *dev_curr,
+                                    struct lrs_dev **dev_selected);
 
 /**
  * Select a device according to a given status and policy function.
- * Returns a device by setting its ongoing_io flag to true.
+ * Returns a device by setting its ld_ongoing_io flag to true.
  *
  * @param dss     DSS handle.
  * @param op_st   Filter devices by the given operational status.
@@ -1775,33 +1649,33 @@ typedef int (*device_select_func_t)(size_t required_size,
  * @param pmedia         Media that should be used by the drive to check
  *                       compatibility (ignored if NULL)
  */
-static struct dev_descr *dev_picker(struct lrs_sched *sched,
+static struct lrs_dev *dev_picker(struct lrs_sched *sched,
                                     enum dev_op_status op_st,
                                     device_select_func_t select_func,
                                     size_t required_size,
                                     const struct tags *media_tags,
                                     struct media_info *pmedia, bool is_write)
 {
-    struct dev_descr    *selected = NULL;
+    struct lrs_dev    *selected = NULL;
     int                  selected_i = -1;
     int                  i;
     int                  rc;
 
     ENTRY;
 
-    for (i = 0; i < sched->devices->len; i++) {
-        struct dev_descr *itr = g_ptr_array_index(sched->devices, i);
-        struct dev_descr *prev = selected;
+    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
+        struct lrs_dev *itr = lrs_dev_hdl_get(&sched->devices, i);
+        struct lrs_dev *prev = selected;
 
-        if (itr->ongoing_io || itr->needs_sync) {
-            pho_debug("Skipping busy device '%s'", itr->dev_path);
+        if (itr->ld_ongoing_io || itr->ld_needs_sync) {
+            pho_debug("Skipping busy device '%s'", itr->ld_dev_path);
             continue;
         }
 
-        if ((itr->op_status == PHO_DEV_OP_ST_FAILED) ||
-            (op_st != PHO_DEV_OP_ST_UNSPEC && itr->op_status != op_st)) {
+        if ((itr->ld_op_status == PHO_DEV_OP_ST_FAILED) ||
+            (op_st != PHO_DEV_OP_ST_UNSPEC && itr->ld_op_status != op_st)) {
             pho_debug("Skipping device '%s' with incompatible status %s",
-                      itr->dev_path, op_status2str(itr->op_status));
+                      itr->ld_dev_path, op_status2str(itr->ld_op_status));
             continue;
         }
 
@@ -1810,30 +1684,30 @@ static struct dev_descr *dev_picker(struct lrs_sched *sched,
          * locked, full, do not have the put operation flag and do not have the
          * requested tags
          */
-        if (is_write && itr->dss_media_info) {
-            if (itr->dss_media_info->rsc.adm_status !=
+        if (is_write && itr->ld_dss_media_info) {
+            if (itr->ld_dss_media_info->rsc.adm_status !=
                     PHO_RSC_ADM_ST_UNLOCKED) {
                 pho_debug("Media '%s' is not unlocked",
-                          itr->dss_media_info->rsc.id.name);
+                          itr->ld_dss_media_info->rsc.id.name);
                 continue;
             }
 
-            if (itr->dss_media_info->fs.status == PHO_FS_STATUS_FULL) {
+            if (itr->ld_dss_media_info->fs.status == PHO_FS_STATUS_FULL) {
                 pho_debug("Media '%s' is full",
-                          itr->dss_media_info->rsc.id.name);
+                          itr->ld_dss_media_info->rsc.id.name);
                 continue;
             }
 
-            if (!itr->dss_media_info->flags.put) {
+            if (!itr->ld_dss_media_info->flags.put) {
                 pho_debug("Media '%s' has a false put operation flag",
-                          itr->dss_media_info->rsc.id.name);
+                          itr->ld_dss_media_info->rsc.id.name);
                 continue;
             }
 
             if (media_tags->n_tags > 0 &&
-                !tags_in(&itr->dss_media_info->tags, media_tags)) {
+                !tags_in(&itr->ld_dss_media_info->tags, media_tags)) {
                 pho_debug("Media '%s' does not match required tags",
-                          itr->dss_media_info->rsc.id.name);
+                          itr->ld_dss_media_info->rsc.id.name);
                 continue;
             }
         }
@@ -1864,8 +1738,10 @@ static struct dev_descr *dev_picker(struct lrs_sched *sched,
     }
 
     if (selected != NULL) {
-        pho_debug("Picked dev number %d (%s)", selected_i, selected->dev_path);
-        selected->ongoing_io = true;
+        pho_debug("Picked dev number %d (%s)",
+                  selected_i,
+                  selected->ld_dev_path);
+        selected->ld_ongoing_io = true;
     } else {
         pho_debug("Could not find a suitable %s device", op_status2str(op_st));
     }
@@ -1879,15 +1755,15 @@ static struct dev_descr *dev_picker(struct lrs_sched *sched,
  * @retval 1 to check next device.
  */
 static int select_first_fit(size_t required_size,
-                            struct dev_descr *dev_curr,
-                            struct dev_descr **dev_selected)
+                            struct lrs_dev *dev_curr,
+                            struct lrs_dev **dev_selected)
 {
     ENTRY;
 
-    if (dev_curr->dss_media_info == NULL)
+    if (dev_curr->ld_dss_media_info == NULL)
         return 1;
 
-    if (dev_curr->dss_media_info->stats.phys_spc_free >= required_size) {
+    if (dev_curr->ld_dss_media_info->stats.phys_spc_free >= required_size) {
         *dev_selected = dev_curr;
         return 0;
     }
@@ -1899,24 +1775,25 @@ static int select_first_fit(size_t required_size,
  * @return 1 to check next devices, unless an exact match is found (return 0).
  */
 static int select_best_fit(size_t required_size,
-                           struct dev_descr *dev_curr,
-                           struct dev_descr **dev_selected)
+                           struct lrs_dev *dev_curr,
+                           struct lrs_dev **dev_selected)
 {
     ENTRY;
 
-    if (dev_curr->dss_media_info == NULL)
+    if (dev_curr->ld_dss_media_info == NULL)
         return 1;
 
     /* does it fit? */
-    if (dev_curr->dss_media_info->stats.phys_spc_free < required_size)
+    if (dev_curr->ld_dss_media_info->stats.phys_spc_free < required_size)
         return 1;
 
     /* no previous fit, or better fit */
-    if (*dev_selected == NULL || (dev_curr->dss_media_info->stats.phys_spc_free
-                      < (*dev_selected)->dss_media_info->stats.phys_spc_free)) {
+    if (*dev_selected == NULL ||
+        (dev_curr->ld_dss_media_info->stats.phys_spc_free <
+         (*dev_selected)->ld_dss_media_info->stats.phys_spc_free)) {
         *dev_selected = dev_curr;
 
-        if (required_size == dev_curr->dss_media_info->stats.phys_spc_free)
+        if (required_size == dev_curr->ld_dss_media_info->stats.phys_spc_free)
             /* exact match, stop searching */
             return 0;
     }
@@ -1928,8 +1805,8 @@ static int select_best_fit(size_t required_size,
  * @return 0 on first device found, 1 else (to continue searching).
  */
 static int select_any(size_t required_size,
-                      struct dev_descr *dev_curr,
-                      struct dev_descr **dev_selected)
+                      struct lrs_dev *dev_curr,
+                      struct lrs_dev **dev_selected)
 {
     ENTRY;
 
@@ -1947,31 +1824,34 @@ static int select_any(size_t required_size,
  * @return 1 (always check all devices).
  */
 static int select_drive_to_free(size_t required_size,
-                                struct dev_descr *dev_curr,
-                                struct dev_descr **dev_selected)
+                                struct lrs_dev *dev_curr,
+                                struct lrs_dev **dev_selected)
 {
     ENTRY;
 
     /* skip failed and busy drives */
-    if (dev_curr->op_status == PHO_DEV_OP_ST_FAILED ||
-        dev_curr->ongoing_io || dev_curr->needs_sync) {
+    if (dev_curr->ld_op_status == PHO_DEV_OP_ST_FAILED ||
+        dev_curr->ld_ongoing_io || dev_curr->ld_needs_sync) {
         pho_debug("Skipping drive '%s' with status %s%s",
-                  dev_curr->dev_path, op_status2str(dev_curr->op_status),
-                  dev_curr->ongoing_io || dev_curr->needs_sync ? " (busy)" : ""
-                 );
+                  dev_curr->ld_dev_path,
+                  op_status2str(dev_curr->ld_op_status),
+                  dev_curr->ld_ongoing_io || dev_curr->ld_needs_sync ?
+                  " (busy)" : "");
         return 1;
     }
 
     /* if this function is called, no drive should be empty */
-    if (dev_curr->op_status == PHO_DEV_OP_ST_EMPTY) {
+    if (dev_curr->ld_op_status == PHO_DEV_OP_ST_EMPTY) {
         pho_warn("Unexpected drive status for '%s': '%s'",
-                 dev_curr->dev_path, op_status2str(dev_curr->op_status));
+                 dev_curr->ld_dev_path,
+                 op_status2str(dev_curr->ld_op_status));
         return 1;
     }
 
     /* less space available on this device than the previous ones? */
-    if (*dev_selected == NULL || dev_curr->dss_media_info->stats.phys_spc_free
-                    < (*dev_selected)->dss_media_info->stats.phys_spc_free) {
+    if (*dev_selected == NULL ||
+        dev_curr->ld_dss_media_info->stats.phys_spc_free <
+        (*dev_selected)->ld_dss_media_info->stats.phys_spc_free) {
         *dev_selected = dev_curr;
         return 1;
     }
@@ -1983,16 +1863,17 @@ static int select_drive_to_free(size_t required_size,
  * Mount the filesystem of a ready device
  *
  * Must be called with :
- * - dev->ongoing_io set to true,
- * - dev->op_status set to PHO_DEV_OP_ST_LOADED and a loaded dev->dss_media_info
+ * - dev->ld_ongoing_io set to true,
+ * - dev->ld_op_status set to PHO_DEV_OP_ST_LOADED and a loaded
+ *   dev->ld_dss_media_info
  * - a global DSS lock on dev
- * - a global DSS lock on dev->dss_media_info
+ * - a global DSS lock on dev->ld_dss_media_info
  *
- * On error, we try to unload dev->media, dev->ongoing_io is set to false,
- * we try to release global DSS locks on dev and dev->dss_media_info,
- * dev->op_status is set to PHO_DEV_OP_ST_FAILED.
+ * On error, we try to unload dev->media, dev->ld_ongoing_io is set to false,
+ * we try to release global DSS locks on dev and dev->ld_dss_media_info,
+ * dev->ld_op_status is set to PHO_DEV_OP_ST_FAILED.
  */
-static int sched_mount(struct lrs_sched *sched, struct dev_descr *dev)
+static int sched_mount(struct lrs_sched *sched, struct lrs_dev *dev)
 {
     char                *mnt_root;
     struct fs_adapter    fsa;
@@ -2001,14 +1882,14 @@ static int sched_mount(struct lrs_sched *sched, struct dev_descr *dev)
 
     ENTRY;
 
-    rc = get_fs_adapter(dev->dss_media_info->fs.type, &fsa);
+    rc = get_fs_adapter(dev->ld_dss_media_info->fs.type, &fsa);
     if (rc)
         goto out;
 
-    rc = ldm_fs_mounted(&fsa, dev->dev_path, dev->mnt_path,
-                        sizeof(dev->mnt_path));
+    rc = ldm_fs_mounted(&fsa, dev->ld_dev_path, dev->ld_mnt_path,
+                        sizeof(dev->ld_mnt_path));
     if (rc == 0) {
-        dev->op_status = PHO_DEV_OP_ST_MOUNTED;
+        dev->ld_op_status = PHO_DEV_OP_ST_MOUNTED;
         return 0;
     }
 
@@ -2017,7 +1898,7 @@ static int sched_mount(struct lrs_sched *sched, struct dev_descr *dev)
      * doesn't, we need to query the drive to load the tape.
      */
 
-    id = basename(dev->dev_path);
+    id = basename(dev->ld_dev_path);
     if (id == NULL)
         return -EINVAL;
 
@@ -2026,33 +1907,33 @@ static int sched_mount(struct lrs_sched *sched, struct dev_descr *dev)
     if (!mnt_root)
         LOG_GOTO(out, rc = -ENOMEM, "Unable to get mount point of %s", id);
 
-    pho_info("mount: device '%s' as '%s'", dev->dev_path, mnt_root);
+    pho_info("mount: device '%s' as '%s'", dev->ld_dev_path, mnt_root);
 
-    rc = ldm_fs_mount(&fsa, dev->dev_path, mnt_root,
-                      dev->dss_media_info->fs.label);
+    rc = ldm_fs_mount(&fsa, dev->ld_dev_path, mnt_root,
+                      dev->ld_dss_media_info->fs.label);
     if (rc)
         LOG_GOTO(out_free, rc, "Failed to mount device '%s'",
-                 dev->dev_path);
+                 dev->ld_dev_path);
 
     /* update device state and set mount point */
-    dev->op_status = PHO_DEV_OP_ST_MOUNTED;
-    strncpy(dev->mnt_path,  mnt_root, sizeof(dev->mnt_path));
-    dev->mnt_path[sizeof(dev->mnt_path) - 1] = '\0';
+    dev->ld_op_status = PHO_DEV_OP_ST_MOUNTED;
+    strncpy(dev->ld_mnt_path,  mnt_root, sizeof(dev->ld_mnt_path));
+    dev->ld_mnt_path[sizeof(dev->ld_mnt_path) - 1] = '\0';
 
 out_free:
     free(mnt_root);
 out:
     if (rc != 0) {
         /**
-         * sched_unload_medium is always unlocking dev->dss_media_info.
+         * sched_unload_medium is always unlocking dev->ld_dss_media_info.
          * On error, sched_unload_medium is unlocking and setting dev to failed.
          */
         if (!sched_unload_medium(sched, dev)) {
-            dev->op_status = PHO_DEV_OP_ST_FAILED;
+            dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
             sched_device_release(sched, dev);
         }
 
-        dev->ongoing_io = false;
+        dev->ld_ongoing_io = false;
     }
 
     return rc;
@@ -2062,16 +1943,16 @@ out:
  * Load a media into a drive.
  *
  * Must be called while owning a global DSS lock on dev and on media and with
- * the ongoing_io flag set to true on dev.
+ * the ld_ongoing_io flag set to true on dev.
  *
- * On error, the dev's ongoing_io flag is removed, the media is unlocked and the
- * device is also unlocked is this one is set as FAILED.
+ * On error, the dev's ld_ongoing_io flag is removed, the media is unlocked and
+ * the device is also unlocked is this one is set as FAILED.
  *
  * @return 0 on success, -error number on error. -EBUSY is returned when a
  * drive to drive media movement was prevented by the library or if the device
  * is empty.
  */
-static int sched_load_media(struct lrs_sched *sched, struct dev_descr *dev,
+static int sched_load_media(struct lrs_sched *sched, struct lrs_dev *dev,
                             struct media_info *media)
 {
     bool                 failure_on_dev = false;
@@ -2082,19 +1963,19 @@ static int sched_load_media(struct lrs_sched *sched, struct dev_descr *dev,
 
     ENTRY;
 
-    if (dev->op_status != PHO_DEV_OP_ST_EMPTY)
+    if (dev->ld_op_status != PHO_DEV_OP_ST_EMPTY)
         LOG_GOTO(out, rc = -EAGAIN, "%s: unexpected drive status: status='%s'",
-                 dev->dev_path, op_status2str(dev->op_status));
+                 dev->ld_dev_path, op_status2str(dev->ld_op_status));
 
-    if (dev->dss_media_info != NULL)
+    if (dev->ld_dss_media_info != NULL)
         LOG_GOTO(out, rc = -EAGAIN,
                  "No media expected in device '%s' (found '%s')",
-                 dev->dev_path, dev->dss_media_info->rsc.id.name);
+                 dev->ld_dev_path, dev->ld_dss_media_info->rsc.id.name);
 
-    pho_verb("Loading '%s' into '%s'", media->rsc.id.name, dev->dev_path);
+    pho_verb("Loading '%s' into '%s'", media->rsc.id.name, dev->ld_dev_path);
 
     /* get handle to the library depending on device type */
-    rc = wrap_lib_open(dev->dss_dev_info->rsc.id.family, &lib);
+    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib);
     if (rc)
         LOG_GOTO(out, rc, "Failed to open lib in %s", __func__);
 
@@ -2103,7 +1984,7 @@ static int sched_load_media(struct lrs_sched *sched, struct dev_descr *dev,
     if (rc)
         LOG_GOTO(out_close, rc, "Media lookup failed");
 
-    rc = ldm_lib_media_move(&lib, &media_addr, &dev->lib_dev_info.ldi_addr);
+    rc = ldm_lib_media_move(&lib, &media_addr, &dev->ld_lib_dev_info.ldi_addr);
     /* A movement from drive to drive can be prohibited by some libraries.
      * If a failure is encountered in such a situation, it probably means that
      * the state of the library has changed between the moment it has been
@@ -2113,7 +1994,7 @@ static int sched_load_media(struct lrs_sched *sched, struct dev_descr *dev,
      */
     if (rc == -EINVAL
             && media_addr.lia_type == MED_LOC_DRIVE
-            && dev->lib_dev_info.ldi_addr.lia_type == MED_LOC_DRIVE) {
+            && dev->ld_lib_dev_info.ldi_addr.lia_type == MED_LOC_DRIVE) {
         pho_debug("Failed to move a media from one drive to another, trying "
                   "again later");
         /* @TODO: acquire source drive on the fly? */
@@ -2129,9 +2010,9 @@ static int sched_load_media(struct lrs_sched *sched, struct dev_descr *dev,
     }
 
     /* update device status */
-    dev->op_status = PHO_DEV_OP_ST_LOADED;
+    dev->ld_op_status = PHO_DEV_OP_ST_LOADED;
     /* associate media to this device */
-    dev->dss_media_info = media;
+    dev->ld_dss_media_info = media;
     rc = 0;
 
 out_close:
@@ -2145,11 +2026,11 @@ out:
     if (rc) {
         sched_medium_release(sched, media);
         if (failure_on_dev) {
-            dev->op_status = PHO_DEV_OP_ST_FAILED;
+            dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
             sched_device_release(sched, dev);
         }
 
-        dev->ongoing_io = false;
+        dev->ld_ongoing_io = false;
     }
 
     return rc;
@@ -2193,22 +2074,22 @@ static device_select_func_t get_dev_policy(void)
  */
 static bool compatible_drive_exists(struct lrs_sched *sched,
                                     struct media_info *pmedia,
-                                    struct dev_descr *selected_devs,
+                                    struct lrs_dev *selected_devs,
                                     const int n_selected_devs)
 {
     int i, j;
 
-    for (i = 0; i < sched->devices->len; i++) {
-        struct dev_descr *dev = g_ptr_array_index(sched->devices, i);
+    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
+        struct lrs_dev *dev = lrs_dev_hdl_get(&sched->devices, i);
         bool is_already_selected = false;
 
-        if (dev->op_status == PHO_DEV_OP_ST_FAILED)
+        if (dev->ld_op_status == PHO_DEV_OP_ST_FAILED)
             continue;
 
         /* check the device is not already selected */
         for (j = 0; j < n_selected_devs; ++j)
-            if (!strcmp(dev->dss_dev_info->rsc.id.name,
-                        selected_devs[i].dss_dev_info->rsc.id.name)) {
+            if (!strcmp(dev->ld_dss_dev_info->rsc.id.name,
+                        selected_devs[i].ld_dss_dev_info->rsc.id.name)) {
                 is_already_selected = true;
                 break;
             }
@@ -2229,11 +2110,11 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
     return false;
 }
 
-static int sched_empty_dev(struct lrs_sched *sched, struct dev_descr *dev)
+static int sched_empty_dev(struct lrs_sched *sched, struct lrs_dev *dev)
 {
     int rc;
 
-    if (dev->op_status == PHO_DEV_OP_ST_MOUNTED) {
+    if (dev->ld_op_status == PHO_DEV_OP_ST_MOUNTED) {
         rc = sched_umount(sched, dev);
         if (rc)
             return rc;
@@ -2241,9 +2122,9 @@ static int sched_empty_dev(struct lrs_sched *sched, struct dev_descr *dev)
 
     /**
      * We follow up on unload.
-     * (a successful umount let the op_status to LOADED)
+     * (a successful umount let the ld_op_status to LOADED)
      */
-    if (dev->op_status == PHO_DEV_OP_ST_LOADED)
+    if (dev->ld_op_status == PHO_DEV_OP_ST_LOADED)
         return sched_unload_medium(sched, dev);
 
     return 0;
@@ -2252,19 +2133,19 @@ static int sched_empty_dev(struct lrs_sched *sched, struct dev_descr *dev)
 /**
  * Free one of the devices to allow mounting a new media.
  * On success, the returned device is locked.
- * @param(out) dev_descr       Pointer to an empty drive.
+ * @param(out) lrs_dev       Pointer to an empty drive.
  * @param(in)  pmedia          Media that should be used by the drive to check
  *                             compatibility (ignored if NULL)
  * @param(in)  selected_devs   Devices already selected for this operation.
  * @param(in)  n_selected_devs Number of devices already selected.
  */
 static int sched_free_one_device(struct lrs_sched *sched,
-                                 struct dev_descr **dev_descr,
+                                 struct lrs_dev **lrs_dev,
                                  struct media_info *pmedia,
-                                 struct dev_descr *selected_devs,
+                                 struct lrs_dev *selected_devs,
                                  const int n_selected_devs)
 {
-    struct dev_descr *tmp_dev;
+    struct lrs_dev *tmp_dev;
 
     ENTRY;
 
@@ -2286,7 +2167,7 @@ static int sched_free_one_device(struct lrs_sched *sched,
             continue;
 
         /* success: we've got an empty device */
-        *dev_descr = tmp_dev;
+        *lrs_dev = tmp_dev;
         return 0;
     }
 }
@@ -2302,10 +2183,10 @@ static int sched_free_one_device(struct lrs_sched *sched,
  *                              and mounted media)
  */
 static int sched_get_write_res(struct lrs_sched *sched, size_t size,
-                               const struct tags *tags, struct dev_descr **devs,
+                               const struct tags *tags, struct lrs_dev **devs,
                                size_t new_dev_index)
 {
-    struct dev_descr **new_dev = &devs[new_dev_index];
+    struct lrs_dev **new_dev = &devs[new_dev_index];
     device_select_func_t dev_select_policy;
     struct media_info *pmedia;
     int rc;
@@ -2341,7 +2222,7 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
         if (rc)
             LOG_RETURN(rc,
                        "Unable to mount already loaded device '%s' from "
-                       "writing", (*new_dev)->dev_path);
+                       "writing", (*new_dev)->ld_dev_path);
 
         return 0;
     }
@@ -2373,8 +2254,8 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
     *new_dev = search_loaded_media(sched, pmedia->rsc.id.name);
     if (*new_dev != NULL) {
         media_info_free(pmedia);
-        (*new_dev)->ongoing_io = true;
-        if ((*new_dev)->op_status != PHO_DEV_OP_ST_MOUNTED)
+        (*new_dev)->ld_ongoing_io = true;
+        if ((*new_dev)->ld_op_status != PHO_DEV_OP_ST_MOUNTED)
             return sched_mount(sched, *new_dev);
 
         return 0;
@@ -2409,13 +2290,13 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
 static int sched_media_prepare_for_read_or_format(struct lrs_sched *sched,
                                                   const struct pho_id *id,
                                                   enum sched_operation op,
-                                                  struct dev_descr **pdev,
+                                                  struct lrs_dev **pdev,
                                                   struct media_info **pmedia)
 {
-    struct dev_descr    *dev;
-    struct media_info   *med = NULL;
-    bool                 post_fs_mount;
-    int                  rc;
+    struct media_info *med = NULL;
+    struct lrs_dev *dev;
+    bool post_fs_mount;
+    int rc;
 
     ENTRY;
 
@@ -2456,15 +2337,16 @@ static int sched_media_prepare_for_read_or_format(struct lrs_sched *sched,
     /* check if the media is already in a drive */
     dev = search_loaded_media(sched, id->name);
     if (dev != NULL) {
-        if (dev->ongoing_io)
+        if (dev->ld_ongoing_io)
             LOG_GOTO(out, rc = -EAGAIN,
                      "Media '%s' is loaded in an already used drive '%s'",
-                     id->name, dev->dev_path);
+                     id->name, dev->ld_dev_path);
 
-        dev->ongoing_io = true;
-        /* Media is in dev, update dev->dss_media_info with fresh media info */
-        media_info_free(dev->dss_media_info);
-        dev->dss_media_info = med;
+        dev->ld_ongoing_io = true;
+        /* Media is in dev, update dev->ld_dss_media_info with fresh media info
+         */
+        media_info_free(dev->ld_dss_media_info);
+        dev->ld_dss_media_info = med;
     } else {
         pho_verb("Media '%s' is not in a drive", id->name);
 
@@ -2498,11 +2380,11 @@ static int sched_media_prepare_for_read_or_format(struct lrs_sched *sched,
         if (rc)
             LOG_GOTO(out, rc,
                      "Unable to load medium '%s' into device '%s' when "
-                     "preparing media", med->rsc.id.name, dev->dev_path);
+                     "preparing media", med->rsc.id.name, dev->ld_dev_path);
     }
 
     /* Mount only for READ/WRITE and if not already mounted */
-    if (post_fs_mount && dev->op_status != PHO_DEV_OP_ST_MOUNTED)
+    if (post_fs_mount && dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED)
         rc = sched_mount(sched, dev);
 
 out:
@@ -2529,12 +2411,12 @@ out:
 static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
                         enum fs_type fs, bool unlock)
 {
-    struct dev_descr    *dev = NULL;
-    struct media_info   *media_info = NULL;
-    int                  rc;
-    struct ldm_fs_space  spc = {0};
-    struct fs_adapter    fsa;
-    uint64_t             fields = 0;
+    struct media_info *media_info = NULL;
+    struct ldm_fs_space spc = {0};
+    struct lrs_dev *dev = NULL;
+    struct fs_adapter fsa;
+    uint64_t fields = 0;
+    int rc;
 
     ENTRY;
 
@@ -2549,7 +2431,7 @@ static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
 
     /* -- from now on, device is owned -- */
 
-    if (dev->dss_media_info == NULL)
+    if (dev->ld_dss_media_info == NULL)
         LOG_GOTO(err_out, rc = -EINVAL, "Invalid device state");
 
     pho_verb("format: media '%s' as %s", id->name, fs_type2str(fs));
@@ -2558,7 +2440,7 @@ static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
     if (rc)
         LOG_GOTO(err_out, rc, "Failed to get FS adapter");
 
-    rc = ldm_fs_format(&fsa, dev->dev_path, id->name, &spc);
+    rc = ldm_fs_format(&fsa, dev->ld_dev_path, id->name, &spc);
     if (rc)
         LOG_GOTO(err_out, rc, "Cannot format media '%s'", id->name);
 
@@ -2587,7 +2469,7 @@ static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
                  id->name);
 
 err_out:
-    dev->ongoing_io = false;
+    dev->ld_ongoing_io = false;
 
     /* Don't free media_info since it is still referenced inside dev */
     return rc;
@@ -2628,10 +2510,10 @@ static bool sched_mount_is_writable(const char *fs_root, enum fs_type fs_type)
  */
 static int sched_write_prepare(struct lrs_sched *sched, size_t write_size,
                                const struct tags *tags,
-                               struct dev_descr **devs, int new_dev_index)
+                               struct lrs_dev **devs, int new_dev_index)
 {
     struct media_info  *media = NULL;
-    struct dev_descr   *new_dev;
+    struct lrs_dev   *new_dev;
     int                 rc;
 
     ENTRY;
@@ -2642,19 +2524,19 @@ retry:
         return rc;
 
     new_dev = devs[new_dev_index];
-    media = new_dev->dss_media_info;
+    media = new_dev->ld_dss_media_info;
 
     /* LTFS can cunningly mount almost-full tapes as read-only, and so would
      * damaged disks. Mark the media as full, let it be mounted and try to find
      * a new one.
      */
-    if (!sched_mount_is_writable(new_dev->mnt_path,
+    if (!sched_mount_is_writable(new_dev->ld_mnt_path,
                                  media->fs.type)) {
         pho_warn("Media '%s' OK but mounted R/O, marking full and retrying...",
                  media->rsc.id.name);
 
         media->fs.status = PHO_FS_STATUS_FULL;
-        new_dev->ongoing_io = false;
+        new_dev->ld_ongoing_io = false;
 
         rc = dss_media_set(&sched->dss, media, 1, DSS_SET_UPDATE, FS_STATUS);
         if (rc)
@@ -2667,8 +2549,8 @@ retry:
     }
 
     pho_debug("write: media '%s' using device '%s' (free space: %zu bytes)",
-             media->rsc.id.name, new_dev->dev_path,
-             new_dev->dss_media_info->stats.phys_spc_free);
+             media->rsc.id.name, new_dev->ld_dev_path,
+             new_dev->ld_dss_media_info->stats.phys_spc_free);
 
     return 0;
 }
@@ -2684,7 +2566,7 @@ retry:
  * @return 0 on success, -1 * posix error code on failure
  */
 static int sched_read_prepare(struct lrs_sched *sched,
-                              const struct pho_id *id, struct dev_descr **dev)
+                              const struct pho_id *id, struct lrs_dev **dev)
 {
     struct media_info   *media_info = NULL;
     int                  rc;
@@ -2701,12 +2583,12 @@ static int sched_read_prepare(struct lrs_sched *sched,
     if (rc)
         return rc;
 
-    if ((*dev)->dss_media_info == NULL)
+    if ((*dev)->ld_dss_media_info == NULL)
         LOG_GOTO(out, rc = -EINVAL, "Invalid device state, expected media '%s'",
                  id->name);
 
     pho_debug("read: media '%s' using device '%s'",
-             media_info->rsc.id.name, (*dev)->dev_path);
+             media_info->rsc.id.name, (*dev)->ld_dev_path);
 
 out:
     /* Don't free media_info since it is still referenced inside dev */
@@ -2809,69 +2691,32 @@ static int sched_io_complete(struct lrs_sched *sched,
 static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
                             const char *name)
 {
-    struct dev_descr *device = NULL;
-    struct dev_info *devi = NULL;
-    struct dss_filter filter;
+    struct lrs_dev *device = NULL;
     struct lib_adapter lib;
-    int dev_cnt = 0;
     int rc = 0;
 
-    device = calloc(1, sizeof(*device));
-    if (!device)
-        return -errno;
-
-    pho_verb("Adding device '%s' to lrs\n", name);
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                          "  {\"DSS::DEV::host\": \"%s\"},"
-                          "  {\"DSS::DEV::family\": \"%s\"},"
-                          "  {\"DSS::DEV::serial\": \"%s\"},"
-                          "  {\"DSS::DEV::adm_status\": \"%s\"}"
-                          "]}",
-                          get_hostname(),
-                          rsc_family2str(family),
-                          name,
-                          rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED));
+    rc = lrs_dev_hdl_add(sched, &sched->devices, name);
     if (rc)
-        goto err_dev;
+        return rc;
 
-    rc = dss_device_get(&sched->dss, &filter, &devi, &dev_cnt);
-    dss_filter_free(&filter);
-    if (rc)
-        goto err_dev;
-
-    if (dev_cnt == 0) {
-        pho_info("No usable device found (%s:%s): check device status",
-                 rsc_family2str(family), name);
-        GOTO(err_res, rc = -ENXIO);
-    }
-
-    rc = dev_descr_from_info_init(sched, devi, device);
-    if (rc)
-        goto err_res;
+    device = lrs_dev_hdl_get(&sched->devices,
+                             sched->devices.ldh_devices->len - 1);
 
     /* get a handle to the library to query it */
-    rc = wrap_lib_open(device->dss_dev_info->rsc.id.family, &lib);
+    rc = wrap_lib_open(family, &lib);
     if (rc)
-        goto err_descr;
+        goto dev_del;
 
     rc = sched_fill_dev_info(sched, &lib, device);
     if (rc)
         goto err_lib;
 
-    dss_res_free(devi, dev_cnt);
-
     return 0;
 
 err_lib:
     ldm_lib_close(&lib);
-err_descr:
-    dev_descr_from_info_clear(device);
-    g_ptr_array_remove_index_fast(sched->devices, sched->devices->len - 1);
-err_res:
-    dss_res_free(devi, dev_cnt);
-err_dev:
-    free(device);
+dev_del:
+    lrs_dev_hdl_del(&sched->devices, sched->devices.ldh_devices->len - 1);
 
     return rc;
 }
@@ -2882,16 +2727,14 @@ err_dev:
  */
 static int sched_device_lock(struct lrs_sched *sched, const char *name)
 {
-    struct dev_descr *dev;
+    struct lrs_dev *dev;
     int i;
 
-    for (i = 0; i < sched->devices->len; ++i) {
-        dev = g_ptr_array_index(sched->devices, i);
-        if (!strcmp(name, dev->dss_dev_info->rsc.id.name)) {
-            lrs_dev_signal_stop(dev);
-            dev_descr_fini(dev);
-            g_ptr_array_remove_index_fast(sched->devices, i);
-            free(dev);
+    for (i = 0; i < sched->devices.ldh_devices->len; ++i) {
+        dev = lrs_dev_hdl_get(&sched->devices, i);
+
+        if (!strcmp(name, dev->ld_dss_dev_info->rsc.id.name)) {
+            lrs_dev_hdl_del(&sched->devices, i);
             pho_verb("Removed locked device '%s' from the local database",
                      name);
             return 0;
@@ -2910,15 +2753,15 @@ static int sched_device_lock(struct lrs_sched *sched, const char *name)
  */
 static int sched_device_unlock(struct lrs_sched *sched, const char *name)
 {
-    struct dev_descr *dev;
+    struct lrs_dev *dev;
     int i;
 
-    for (i = 0; i < sched->devices->len; ++i) {
-        dev = g_ptr_array_index(sched->devices, i);
+    for (i = 0; i < sched->devices.ldh_devices->len; ++i) {
+        dev = lrs_dev_hdl_get(&sched->devices, i);
 
-        if (!strcmp(name, dev->dss_dev_info->rsc.id.name)) {
+        if (!strcmp(name, dev->ld_dss_dev_info->rsc.id.name)) {
             pho_verb("Updating device '%s' state to unlocked", name);
-            dev->dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
+            dev->ld_dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
             return 0;
         }
     }
@@ -2951,7 +2794,7 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
 
     /* for each nosync_medium */
     for (i = 0; i < reqc->params.release.n_nosync_media; i++) {
-        struct dev_descr *dev;
+        struct lrs_dev *dev;
 
         /* find the corresponding device */
         dev = search_loaded_media(sched,
@@ -2979,7 +2822,7 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
          * - take into account current cached value for loaded media into
          *   sched_select_media
          */
-        rc2 = update_phys_spc_free(&sched->dss, dev->dss_media_info,
+        rc2 = update_phys_spc_free(&sched->dss, dev->ld_dss_media_info,
             reqc->params.release.nosync_media[i].written_size);
         if (rc2) {
             pho_error(rc2, "Unable to update phys_spc_free");
@@ -2987,7 +2830,7 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
         }
 
         /* Acknowledgement of the request */
-        dev->ongoing_io = false;
+        dev->ld_ongoing_io = false;
     }
 
     if (!reqc->params.release.n_tosync_media) {
@@ -2997,7 +2840,7 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
 
     /* for each tosync_medium */
     for (i = 0; i < reqc->params.release.n_tosync_media; i++) {
-        struct dev_descr *dev;
+        struct lrs_dev *dev;
         int result_rc;
 
         /* find the corresponding device */
@@ -3014,7 +2857,7 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
              * - take into account current cached value for loaded media into
              *   sched_select_media
              */
-            rc2 = update_phys_spc_free(&sched->dss, dev->dss_media_info,
+            rc2 = update_phys_spc_free(&sched->dss, dev->ld_dss_media_info,
                 reqc->params.release.tosync_media[i].written_size);
             if (rc2) {
                 pho_error(rc2, "Unable to update phys_spc_free");
@@ -3022,7 +2865,7 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
             }
 
             /* Acknowledgement of the request */
-            dev->ongoing_io = false;
+            dev->ld_ongoing_io = false;
 
             /* Queue sync request */
             result_rc = push_new_sync_to_device(dev, reqc, i);
@@ -3083,7 +2926,7 @@ unlock:
 static int sched_handle_write_alloc(struct lrs_sched *sched, pho_req_t *req,
                                     pho_resp_t *resp)
 {
-    struct dev_descr **devs = NULL;
+    struct lrs_dev **devs = NULL;
     size_t i;
     int rc = 0;
     pho_req_write_t *wreq = req->walloc;
@@ -3120,12 +2963,12 @@ static int sched_handle_write_alloc(struct lrs_sched *sched, pho_req_t *req,
             goto out;
 
         /* build response */
-        wresp->avail_size = devs[i]->dss_media_info->stats.phys_spc_free;
-        wresp->med_id->family = devs[i]->dss_media_info->rsc.id.family;
-        wresp->med_id->name = strdup(devs[i]->dss_media_info->rsc.id.name);
-        wresp->root_path = strdup(devs[i]->mnt_path);
-        wresp->fs_type = devs[i]->dss_media_info->fs.type;
-        wresp->addr_type = devs[i]->dss_media_info->addr_type;
+        wresp->avail_size = devs[i]->ld_dss_media_info->stats.phys_spc_free;
+        wresp->med_id->family = devs[i]->ld_dss_media_info->rsc.id.family;
+        wresp->med_id->name = strdup(devs[i]->ld_dss_media_info->rsc.id.name);
+        wresp->root_path = strdup(devs[i]->ld_mnt_path);
+        wresp->fs_type = devs[i]->ld_dss_media_info->fs.type;
+        wresp->addr_type = devs[i]->ld_dss_media_info->addr_type;
 
         if (wresp->root_path == NULL) {
             /*
@@ -3145,12 +2988,12 @@ out:
 
         /* Rollback device and media acquisition */
         for (i = 0; i < n_media_acquired; i++) {
-            struct dev_descr *dev;
+            struct lrs_dev *dev;
             pho_resp_write_elt_t *wresp = resp->walloc->media[i];
 
             dev = search_loaded_media(sched, wresp->med_id->name);
             assert(dev != NULL);
-            dev->ongoing_io = false;
+            dev->ld_ongoing_io = false;
         }
 
         pho_srl_response_free(resp, false);
@@ -3181,7 +3024,7 @@ out:
 static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
                                    pho_resp_t *resp)
 {
-    struct dev_descr *dev = NULL;
+    struct lrs_dev *dev = NULL;
     size_t n_selected = 0;
     size_t i;
     int rc = 0;
@@ -3210,9 +3053,9 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
 
         n_selected++;
 
-        rresp->fs_type = dev->dss_media_info->fs.type;
-        rresp->addr_type = dev->dss_media_info->addr_type;
-        rresp->root_path = strdup(dev->mnt_path);
+        rresp->fs_type = dev->ld_dss_media_info->fs.type;
+        rresp->addr_type = dev->ld_dss_media_info->addr_type;
+        rresp->root_path = strdup(dev->ld_mnt_path);
         rresp->med_id->family = rreq->med_ids[i]->family;
         rresp->med_id->name = strdup(rreq->med_ids[i]->name);
 
@@ -3227,7 +3070,7 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
 
             dev = search_loaded_media(sched, rresp->med_id->name);
             assert(dev != NULL);
-            dev->ongoing_io = false;
+            dev->ld_ongoing_io = false;
         }
 
         pho_srl_response_free(resp, false);
@@ -3249,37 +3092,41 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
 }
 
 /**
- * update the dev->sync_params.oldest_tosync by scrolling the tosync_array
+ * update the dev->ld_sync_params.oldest_tosync by scrolling the tosync_array
  *
  * This function must be called with a lock on \p dev .
  */
-static void update_queue_oldest_tosync(struct dev_descr *dev)
+static void update_queue_oldest_tosync(struct lrs_dev *dev)
 {
-    GPtrArray *tosync_array = dev->sync_params.tosync_array;
+    GPtrArray *tosync_array = dev->ld_sync_params.tosync_array;
     guint i;
 
+    MUTEX_LOCK(&dev->ld_mutex);
     if (tosync_array->len == 0) {
-        dev->sync_params.oldest_tosync.tv_sec = 0;
-        dev->sync_params.oldest_tosync.tv_nsec = 0;
-        return;
+        dev->ld_sync_params.oldest_tosync.tv_sec = 0;
+        dev->ld_sync_params.oldest_tosync.tv_nsec = 0;
+        goto unlock;
     }
 
     for (i = 0; i < tosync_array->len; i++) {
         struct request_tosync *req_tosync = tosync_array->pdata[i];
 
-        update_oldest_tosync(&dev->sync_params.oldest_tosync,
+        update_oldest_tosync(&dev->ld_sync_params.oldest_tosync,
                              req_tosync->reqc->received_at);
     }
+
+unlock:
+    MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
 /** remove from tosync_array when error occurs on other device */
-static void dev_check_sync_cancel(struct dev_descr *dev)
+static void dev_check_sync_cancel(struct lrs_dev *dev)
 {
-    GPtrArray *tosync_array = dev->sync_params.tosync_array;
+    GPtrArray *tosync_array = dev->ld_sync_params.tosync_array;
     bool need_oldest_update = false;
     int i;
 
-    MUTEX_LOCK(&dev->mutex);
+    MUTEX_LOCK(&dev->ld_mutex);
     for (i = tosync_array->len - 1; i >= 0; i--) {
         struct request_tosync *req_tosync = tosync_array->pdata[i];
         bool is_tosync_ended = false;
@@ -3295,7 +3142,7 @@ static void dev_check_sync_cancel(struct dev_descr *dev)
             tosync_medium =
                 &release_params->tosync_media[req_tosync->medium_index];
 
-            dev->sync_params.tosync_size -= tosync_medium->written_size;
+            dev->ld_sync_params.tosync_size -= tosync_medium->written_size;
             need_oldest_update = true;
 
             tosync_medium->status = SYNC_CANCEL;
@@ -3311,7 +3158,7 @@ static void dev_check_sync_cancel(struct dev_descr *dev)
     if (need_oldest_update)
         update_queue_oldest_tosync(dev);
 
-    MUTEX_UNLOCK(&dev->mutex);
+    MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
 static struct timespec add_timespec(struct timespec a, struct timespec b)
@@ -3342,32 +3189,35 @@ static bool is_past(struct timespec t)
     return is_older_or_equal(t, now);
 }
 
-static inline void check_needs_sync(struct lrs_sched *sched,
-                                    struct dev_descr *dev)
+static inline void check_needs_sync(struct lrs_dev_hdl *handle,
+                                    struct lrs_dev *dev)
 {
-    MUTEX_LOCK(&dev->mutex);
-    dev->needs_sync = dev->sync_params.tosync_array->len > 0 &&
-                      (dev->sync_params.tosync_array->len >=
-                           sched->sync_nb_req_threshold ||
-                       is_past(add_timespec(dev->sync_params.oldest_tosync,
-                                            sched->sync_time_threshold)) ||
-                       dev->sync_params.tosync_size >=
-                           sched->sync_written_size_threshold);
-    MUTEX_UNLOCK(&dev->mutex);
+    struct sync_params *sync_params = &dev->ld_sync_params;
+
+    MUTEX_LOCK(&dev->ld_mutex);
+    dev->ld_needs_sync = sync_params->tosync_array->len > 0 &&
+        (sync_params->tosync_array->len >=
+         handle->sync_nb_req_threshold ||
+         is_past(add_timespec(sync_params->oldest_tosync,
+                              handle->sync_time_threshold)) ||
+         sync_params->tosync_size >=
+         handle->sync_written_size_threshold);
+    MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
 /* Sync dev, update the media in the DSS, and flush tosync_array */
-static void dev_sync(struct lrs_sched *sched, struct dev_descr *dev)
+static void dev_sync(struct lrs_sched *sched, struct lrs_dev *dev)
 {
+    struct sync_params *sync_params = &dev->ld_sync_params;
     int rc2;
     int rc;
 
     /* sync operation */
-    rc = sched_io_complete(sched, dev->dss_media_info, dev->mnt_path);
+    rc = sched_io_complete(sched, dev->ld_dss_media_info, dev->ld_mnt_path);
 
-    rc2 = sched_media_update(sched, dev->dss_media_info,
-                             dev->sync_params.tosync_size, rc, dev->mnt_path,
-                             dev->sync_params.tosync_array->len);
+    rc2 = sched_media_update(sched, dev->ld_dss_media_info,
+                             sync_params->tosync_size, rc, dev->ld_mnt_path,
+                             sync_params->tosync_array->len);
     if (rc2) {
         rc = rc ? : rc2;
         pho_error(rc2, "Cannot update media information");
@@ -3380,24 +3230,26 @@ static void dev_sync(struct lrs_sched *sched, struct dev_descr *dev)
     }
 
     if (rc) {
-        dev->op_status = PHO_DEV_OP_ST_FAILED;
-        dev->dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-        rc2 = dss_device_update_adm_status(&sched->dss, dev->dss_dev_info, 1);
+        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
+        dev->ld_dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+        rc2 = dss_device_update_adm_status(&sched->dss,
+                                           dev->ld_dss_dev_info,
+                                           1);
         if (rc2)
             pho_error(rc2, "Unable to set device as failed into DSS");
     }
 
 }
 
-static void device_manage_sync(struct lrs_sched *sched, struct dev_descr *dev)
+static void device_manage_sync(struct lrs_sched *sched, struct lrs_dev *dev)
 {
     dev_check_sync_cancel(dev);
 
-    if (!dev->needs_sync)
-        check_needs_sync(sched, dev);
+    if (!dev->ld_needs_sync)
+        check_needs_sync(&sched->devices, dev);
 
-    if (dev->needs_sync)
-        if (!dev->ongoing_io)
+    if (dev->ld_needs_sync)
+        if (!dev->ld_ongoing_io)
             dev_sync(sched, dev);
 }
 
@@ -3408,10 +3260,12 @@ static void sched_handle_release_reqs(struct lrs_sched *sched)
 {
     int i;
 
-    for (i = 0; i < sched->devices->len; i++) {
-        struct dev_descr *dev = g_ptr_array_index(sched->devices, i);
+    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
+        struct lrs_dev *dev;
 
-        if (dev->op_status == PHO_DEV_OP_ST_MOUNTED)
+        dev = lrs_dev_hdl_get(&sched->devices, i);
+
+        if (dev->ld_op_status == PHO_DEV_OP_ST_MOUNTED)
             device_manage_sync(sched, dev);
     }
 }
