@@ -310,7 +310,10 @@ static int take_and_update_lock(struct dss_handle *dss, enum dss_type type,
         }
 
         /* put a wrong lock value */
-        init_pho_lock(lock, "error_on_hostname", 0, NULL);
+        lock->hostname = NULL;
+        lock->owner = -1;
+        lock->timestamp.tv_sec = 0;
+        lock->timestamp.tv_usec = 0;
     }
 
     return rc;
@@ -658,6 +661,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
 
         dev = lrs_dev_hdl_get(&sched->devices, i);
 
+        MUTEX_LOCK(&dev->ld_mutex);
         rc = sched_fill_dev_info(sched, &lib, dev);
         if (rc) {
             pho_debug("Fail to init device '%s', marking it as failed and "
@@ -667,6 +671,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
         } else {
             clean_devices = true;
         }
+        MUTEX_UNLOCK(&dev->ld_mutex);
     }
 
     /* close handle to the library */
@@ -758,19 +763,6 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
     if (rc)
         LOG_RETURN(rc, "Failed to initialize device handle");
 
-    rc = get_cfg_time_threshold_value(family, &sched->sync_time_threshold);
-    if (rc)
-        LOG_RETURN(rc, "Failed to get sync time threshold value");
-
-    rc = get_cfg_nb_req_threshold_value(family, &sched->sync_nb_req_threshold);
-    if (rc)
-        LOG_RETURN(rc, "Failed to get sync number of requests threshold value");
-
-    rc = get_cfg_written_size_threshold_value(
-        family, &sched->sync_written_size_threshold);
-    if (rc)
-        LOG_RETURN(rc, "Failed to get written size threshold value: '%d'", -rc);
-
     rc = fill_host_owner(&sched->lock_hostname, &sched->lock_owner);
     if (rc)
         LOG_RETURN(rc, "Failed to get hostname and PID");
@@ -831,7 +823,7 @@ int prepare_error(struct resp_container *resp_cont, int req_rc,
     return 0;
 }
 
-static int queue_error_response(struct lrs_sched *sched, int req_rc,
+static int queue_error_response(struct tsqueue *response_queue, int req_rc,
                                 struct req_container *reqc)
 {
     struct resp_container *resp_cont;
@@ -850,7 +842,7 @@ static int queue_error_response(struct lrs_sched *sched, int req_rc,
     if (rc)
         goto clean;
 
-    tsqueue_push(sched->response_queue, resp_cont);
+    tsqueue_push(response_queue, resp_cont);
 
     return 0;
 
@@ -861,7 +853,7 @@ clean_resp_cont:
     return rc;
 }
 
-static int queue_release_response(struct lrs_sched *sched,
+static int queue_release_response(struct tsqueue *response_queue,
                                   struct req_container *reqc)
 {
     struct tosync_medium *tosync_media = reqc->params.release.tosync_media;
@@ -902,7 +894,7 @@ static int queue_release_response(struct lrs_sched *sched,
         }
     }
 
-    tsqueue_push(sched->response_queue, respc);
+    tsqueue_push(response_queue, respc);
 
     return 0;
 
@@ -913,11 +905,10 @@ err_respc_resp:
 err_respc:
     free(respc);
 err:
-    return queue_error_response(sched, rc, reqc);
+    return queue_error_response(response_queue, rc, reqc);
 }
 
-static int clean_tosync_array(struct lrs_sched *sched, struct lrs_dev *dev,
-                              int rc)
+static int clean_tosync_array(struct lrs_dev *dev, int rc)
 {
     GPtrArray *tosync_array = dev->ld_sync_params.tosync_array;
     int internal_rc = 0;
@@ -952,14 +943,14 @@ static int clean_tosync_array(struct lrs_sched *sched, struct lrs_dev *dev,
         MUTEX_UNLOCK(&req->reqc->mutex);
 
         if (should_send_error) {
-            rc2 = queue_error_response(sched, rc, req->reqc);
+            rc2 = queue_error_response(dev->ld_response_queue, rc, req->reqc);
             if (rc2)
                 internal_rc = internal_rc ? : rc2;
         }
 
         if (is_tosync_ended) {
             if (!req->reqc->params.release.rc) {
-                rc2 = queue_release_response(sched, req->reqc);
+                rc2 = queue_release_response(dev->ld_response_queue, req->reqc);
                 if (rc2)
                     internal_rc = internal_rc ? : rc2;
             }
@@ -1009,7 +1000,7 @@ static int sched_umount(struct lrs_sched *sched, struct lrs_dev *dev)
                  dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
     rc = ldm_fs_umount(&fsa, dev->ld_dev_path, dev->ld_mnt_path);
-    rc2 = clean_tosync_array(sched, dev, rc);
+    rc2 = clean_tosync_array(dev, rc);
     if (rc)
         LOG_GOTO(out, rc, "Failed to unmount device '%s' mounted at '%s'",
                  dev->ld_dev_path, dev->ld_mnt_path);
@@ -2596,10 +2587,10 @@ out:
 }
 
 /** Update media_info stats and push its new state to the DSS */
-static int sched_media_update(struct lrs_sched *sched,
-                              struct media_info *media_info,
-                              size_t size_written, int media_rc,
-                              const char *fsroot, long long nb_new_obj)
+static int lrs_dev_media_update(struct dss_handle *dss,
+                                struct media_info *media_info,
+                                size_t size_written, int media_rc,
+                                const char *fsroot, long long nb_new_obj)
 {
     struct ldm_fs_space space = {0};
     struct fs_adapter fsa;
@@ -2655,15 +2646,14 @@ static int sched_media_update(struct lrs_sched *sched,
     /* TODO update nb_load, nb_errors, last_load */
 
     assert(fields);
-    rc2 = dss_media_set(&sched->dss, media_info, 1, DSS_SET_UPDATE, fields);
+    rc2 = dss_media_set(dss, media_info, 1, DSS_SET_UPDATE, fields);
     if (rc2)
         rc = rc ? : rc2;
 
     return rc;
 }
 
-static int sched_io_complete(struct lrs_sched *sched,
-                             struct media_info *media_info,
+static int sched_io_complete(struct media_info *media_info,
                              const char *fsroot)
 {
     struct io_adapter    ioa;
@@ -2707,7 +2697,9 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
     if (rc)
         goto dev_del;
 
+    MUTEX_LOCK(&device->ld_mutex);
     rc = sched_fill_dev_info(sched, &lib, device);
+    MUTEX_UNLOCK(&device->ld_mutex);
     if (rc)
         goto err_lib;
 
@@ -2801,7 +2793,7 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
             reqc->params.release.nosync_media[i].medium.name);
         /* no device is found: stop to manage this request and send an error */
         if (dev == NULL) {
-            rc2 = queue_error_response(sched, -ENODEV, reqc);
+            rc2 = queue_error_response(sched->response_queue, -ENODEV, reqc);
             if (rc2) {
                 pho_error(rc2, "Unable to queue ENODEV error response");
                 rc = rc ? : rc2;
@@ -2822,8 +2814,10 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
          * - take into account current cached value for loaded media into
          *   sched_select_media
          */
+        MUTEX_LOCK(&dev->ld_mutex);
         rc2 = update_phys_spc_free(&sched->dss, dev->ld_dss_media_info,
             reqc->params.release.nosync_media[i].written_size);
+        MUTEX_UNLOCK(&dev->ld_mutex);
         if (rc2) {
             pho_error(rc2, "Unable to update phys_spc_free");
             rc = rc ? : rc2;
@@ -2857,8 +2851,10 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
              * - take into account current cached value for loaded media into
              *   sched_select_media
              */
+            MUTEX_LOCK(&dev->ld_mutex);
             rc2 = update_phys_spc_free(&sched->dss, dev->ld_dss_media_info,
                 reqc->params.release.tosync_media[i].written_size);
+            MUTEX_UNLOCK(&dev->ld_mutex);
             if (rc2) {
                 pho_error(rc2, "Unable to update phys_spc_free");
                 rc = rc ? : rc2;
@@ -2884,7 +2880,9 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
 
         /* manage error */
         reqc->params.release.tosync_media[i].status = SYNC_ERROR;
-        rc2 = queue_error_response(sched, reqc->params.release.rc, reqc);
+        rc2 = queue_error_response(sched->response_queue,
+                                   reqc->params.release.rc,
+                                   reqc);
         rc = rc ? : rc2;
 
         if (i != 0) {
@@ -3120,7 +3118,7 @@ unlock:
 }
 
 /** remove from tosync_array when error occurs on other device */
-static void dev_check_sync_cancel(struct lrs_dev *dev)
+void dev_check_sync_cancel(struct lrs_dev *dev)
 {
     GPtrArray *tosync_array = dev->ld_sync_params.tosync_array;
     bool need_oldest_update = false;
@@ -3189,8 +3187,7 @@ static bool is_past(struct timespec t)
     return is_older_or_equal(t, now);
 }
 
-static inline void check_needs_sync(struct lrs_dev_hdl *handle,
-                                    struct lrs_dev *dev)
+void check_needs_sync(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
 {
     struct sync_params *sync_params = &dev->ld_sync_params;
 
@@ -3206,24 +3203,27 @@ static inline void check_needs_sync(struct lrs_dev_hdl *handle,
 }
 
 /* Sync dev, update the media in the DSS, and flush tosync_array */
-static void dev_sync(struct lrs_sched *sched, struct lrs_dev *dev)
+void dev_sync(struct lrs_dev *dev)
 {
     struct sync_params *sync_params = &dev->ld_sync_params;
     int rc2;
     int rc;
 
     /* sync operation */
-    rc = sched_io_complete(sched, dev->ld_dss_media_info, dev->ld_mnt_path);
+    MUTEX_LOCK(&dev->ld_mutex);
+    rc = sched_io_complete(dev->ld_dss_media_info, dev->ld_mnt_path);
+    rc2 = lrs_dev_media_update(&dev->ld_device_thread.ld_dss,
+                               dev->ld_dss_media_info,
+                               sync_params->tosync_size, rc, dev->ld_mnt_path,
+                               sync_params->tosync_array->len);
 
-    rc2 = sched_media_update(sched, dev->ld_dss_media_info,
-                             sync_params->tosync_size, rc, dev->ld_mnt_path,
-                             sync_params->tosync_array->len);
+    MUTEX_UNLOCK(&dev->ld_mutex);
     if (rc2) {
         rc = rc ? : rc2;
         pho_error(rc2, "Cannot update media information");
     }
 
-    rc2 = clean_tosync_array(sched, dev, rc);
+    rc2 = clean_tosync_array(dev, rc);
     if (rc2) {
         rc = rc ? : rc2;
         pho_error(rc2, "Cannot clean tosync array");
@@ -3232,7 +3232,7 @@ static void dev_sync(struct lrs_sched *sched, struct lrs_dev *dev)
     if (rc) {
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         dev->ld_dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-        rc2 = dss_device_update_adm_status(&sched->dss,
+        rc2 = dss_device_update_adm_status(&dev->ld_device_thread.ld_dss,
                                            dev->ld_dss_dev_info,
                                            1);
         if (rc2)
@@ -3243,14 +3243,11 @@ static void dev_sync(struct lrs_sched *sched, struct lrs_dev *dev)
 
 static void device_manage_sync(struct lrs_sched *sched, struct lrs_dev *dev)
 {
-    dev_check_sync_cancel(dev);
-
     if (!dev->ld_needs_sync)
         check_needs_sync(&sched->devices, dev);
 
     if (dev->ld_needs_sync)
-        if (!dev->ld_ongoing_io)
-            dev_sync(sched, dev);
+        dev_thread_signal(dev);
 }
 
 /**

@@ -228,7 +228,6 @@ static void test_ldh_add_one_device(void **data)
     dev = (struct lrs_dev *)g_ptr_array_index(handle->ldh_devices, 0);
     assert_non_null(dev);
     assert_string_equal(dev->ld_dss_dev_info->rsc.id.name, "test");
-    assert_ptr_equal(dev->ld_dss, &scheduler.dss);
 
     rc = lrs_dev_hdl_del(handle, 0);
     assert_return_code(rc, -rc);
@@ -302,7 +301,6 @@ static void test_ldh_add_three_devices(void **data)
 
         assert_non_null(dev);
         assert_string_equal(dev->ld_dss_dev_info->rsc.id.name, names[i]);
-        assert_ptr_equal(dev->ld_dss, &scheduler.dss);
     }
 
     lrs_dev_hdl_clear(handle);

@@ -73,6 +73,9 @@ struct thread_info {
     int                  ld_status;         /**< Return status at the end of
                                               * the execution.
                                               */
+    struct dss_handle    ld_dss;            /**< per thread DSS handle for media
+                                              * and device requests
+                                              */
 };
 
 /**
@@ -119,9 +122,10 @@ struct lrs_dev {
     struct sync_params   ld_sync_params;        /**< pending synchronization
                                                   * requests
                                                   */
-    struct dss_handle   *ld_dss;                /**< DSS handle for media and
-                                                  * device requests
+    struct tsqueue      *ld_response_queue;     /**< reference to the response
+                                                  * queue
                                                   */
+    struct lrs_dev_hdl  *ld_handle;
 };
 
 /**
@@ -205,6 +209,13 @@ struct lrs_dev *lrs_dev_hdl_get(struct lrs_dev_hdl *handle, int index);
  * \param[in]  device  the device to signal
  */
 void dev_thread_signal_stop(struct lrs_dev *device);
+
+/**
+ * Signal to the device thread that work has been received
+ *
+ * \param[in]  device  the device to signal
+ */
+void dev_thread_signal(struct lrs_dev *device);
 
 /**
  * Wait for the termination of the device thread

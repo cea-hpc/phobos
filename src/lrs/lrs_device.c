@@ -34,7 +34,7 @@
 #include "pho_type_utils.h"
 
 /* XXX: this should probably be alligned with the synchronization timeout */
-#define DEVICE_THREAD_WAIT_MS 4000
+#define DEVICE_THREAD_WAIT_MS 1000
 
 static int dev_thread_init(struct lrs_dev *device);
 static void sync_params_init(struct sync_params *params);
@@ -129,6 +129,7 @@ static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
                         NULL);
     g_ptr_array_unref(dev->ld_sync_params.tosync_array);
     dev_info_free(dev->ld_dss_dev_info, 1);
+    dss_fini(&dev->ld_device_thread.ld_dss);
 
     free(dev);
 }
@@ -173,7 +174,15 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
     if (rc)
         goto free_list;
 
-    dev->ld_dss = &sched->dss;
+    rc = dss_init(&dev->ld_device_thread.ld_dss);
+    if (rc) {
+        g_ptr_array_remove_index_fast(handle->ldh_devices,
+                                      handle->ldh_devices->len - 1);
+        lrs_dev_info_clean(handle, dev);
+        goto free_list;
+    }
+    dev->ld_response_queue = sched->response_queue;
+    dev->ld_handle = handle;
 
     rc = check_and_take_device_lock(sched, dev_list);
     if (rc)
@@ -237,7 +246,17 @@ int lrs_dev_hdl_load(struct lrs_sched *sched,
             continue;
         }
 
-        dev->ld_dss = &sched->dss;
+        rc2 = dss_init(&dev->ld_device_thread.ld_dss);
+        if (rc2) {
+            rc = rc ? : rc2;
+            g_ptr_array_remove_index_fast(handle->ldh_devices,
+                                          handle->ldh_devices->len - 1);
+            lrs_dev_info_clean(handle, dev);
+            continue;
+        }
+
+        dev->ld_response_queue = sched->response_queue;
+        dev->ld_handle = handle;
 
         rc2 = check_and_take_device_lock(sched, &dev_list[i]);
         if (rc2) {
@@ -324,6 +343,8 @@ static int wait_for_signal(struct thread_info *thread)
 
     time.tv_sec += ms2sec(DEVICE_THREAD_WAIT_MS);
     time.tv_nsec += ms2nsec(DEVICE_THREAD_WAIT_MS);
+    time.tv_sec += (time.tv_nsec / 1000000000);
+    time.tv_nsec %= 1000000000;
 
     MUTEX_LOCK(&thread->ld_signal_mutex);
     rc = pthread_cond_timedwait(&thread->ld_signal,
@@ -349,6 +370,11 @@ static void *lrs_dev_thread(void *tdata)
     while (thread->ld_running) {
         int rc;
 
+        dev_check_sync_cancel(device);
+
+        if (device->ld_needs_sync && !device->ld_ongoing_io)
+            dev_sync(device);
+
         rc = wait_for_signal(thread);
 
         if (rc < 0)
@@ -367,9 +393,9 @@ static int dev_thread_init(struct lrs_dev *device)
     int rc;
 
     pthread_mutex_init(&device->ld_mutex, NULL);
+    pthread_mutex_init(&thread->ld_signal_mutex, NULL);
+    pthread_cond_init(&thread->ld_signal, NULL);
 
-    thread->ld_signal = (pthread_cond_t) PTHREAD_COND_INITIALIZER;
-    thread->ld_signal_mutex = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
     thread->ld_running = true;
     thread->ld_status = 0;
 
@@ -378,6 +404,18 @@ static int dev_thread_init(struct lrs_dev *device)
         LOG_RETURN(rc, "Could not create device thread");
 
     return 0;
+}
+
+void dev_thread_signal(struct lrs_dev *device)
+{
+    struct thread_info *thread = &device->ld_device_thread;
+    int rc;
+
+    rc = lrs_dev_signal(thread);
+    if (rc)
+        pho_error(rc, "Error when signaling device (%s, %s) to wake up",
+                  device->ld_dss_dev_info->rsc.id.name,
+                  device->ld_dev_path);
 }
 
 void dev_thread_signal_stop(struct lrs_dev *device)

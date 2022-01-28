@@ -222,4 +222,11 @@ void sched_request_tosync_free_wrapper(gpointer _req,
 int check_and_take_device_lock(struct lrs_sched *sched,
                                struct dev_info *dev);
 
+void dev_check_sync_cancel(struct lrs_dev *dev);
+
+void dev_sync(struct lrs_dev *dev);
+
+void check_needs_sync(struct lrs_dev_hdl *handle,
+                      struct lrs_dev *dev);
+
 #endif
