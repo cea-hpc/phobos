@@ -3243,9 +3243,9 @@ void dev_sync(struct lrs_dev *dev)
 
 static void device_manage_sync(struct lrs_sched *sched, struct lrs_dev *dev)
 {
-    if (!dev->ld_needs_sync)
-        check_needs_sync(&sched->devices, dev);
-
+    /* FIXME For now, the device thread only wakes up on a fixed timeout.
+     * So we wake him up here to avoid long delays.
+     */
     if (dev->ld_needs_sync)
         dev_thread_signal(dev);
 }

@@ -372,6 +372,9 @@ static void *lrs_dev_thread(void *tdata)
 
         dev_check_sync_cancel(device);
 
+        if (!device->ld_needs_sync)
+            check_needs_sync(device->ld_handle, device);
+
         if (device->ld_needs_sync && !device->ld_ongoing_io)
             dev_sync(device);
 
