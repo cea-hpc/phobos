@@ -6,7 +6,7 @@
 # This script compiles and installs the phobos RPM and configure a ready-to-use
 # environment (for demo or prod tests)
 
-# (c) 2014-2019 CEA/DAM
+# (c) 2014-2022 CEA/DAM
 # Licensed under the terms of the GNU Lesser GPL License version 2.1
 
 set -xe

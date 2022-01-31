@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  all rights reserved (c) 2014-2018 cea/dam.
+#  all rights reserved (c) 2014-2022 cea/dam.
 #
 #  this file is part of phobos.
 #
