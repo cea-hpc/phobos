@@ -23,4 +23,5 @@ function waive_daemon()
     # wait would not work here because PID_DAEMON is not an actual child
     # of this shell (created by phobosd in invoke_daemon)
     tail --pid=$PID_DAEMON -f /dev/null
+    PID_DAEMON=0
 }
