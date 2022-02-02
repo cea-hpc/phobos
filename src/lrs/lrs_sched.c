@@ -170,6 +170,8 @@ static int push_new_sync_to_device(struct lrs_dev *dev,
     update_oldest_tosync(&sync_params->oldest_tosync, reqc->received_at);
     MUTEX_UNLOCK(&dev->ld_mutex);
 
+    dev_thread_signal(dev);
+
     return 0;
 }
 
@@ -3159,20 +3161,6 @@ void dev_check_sync_cancel(struct lrs_dev *dev)
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
-static struct timespec add_timespec(struct timespec a, struct timespec b)
-{
-    struct timespec sum;
-
-    sum.tv_sec = a.tv_sec + b.tv_sec;
-    sum.tv_nsec = a.tv_nsec + b.tv_nsec;
-    if (sum.tv_nsec > (1000 * 1000 * 1000)) {
-        sum.tv_nsec -= (1000 * 1000 * 1000);
-        sum.tv_sec += 1;
-    }
-
-    return sum;
-}
-
 static bool is_past(struct timespec t)
 {
     struct timespec now;
@@ -3193,12 +3181,12 @@ void check_needs_sync(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
 
     MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_needs_sync = sync_params->tosync_array->len > 0 &&
-        (sync_params->tosync_array->len >=
-         handle->sync_nb_req_threshold ||
-         is_past(add_timespec(sync_params->oldest_tosync,
-                              handle->sync_time_threshold)) ||
-         sync_params->tosync_size >=
-         handle->sync_written_size_threshold);
+                      (sync_params->tosync_array->len >=
+                           handle->sync_nb_req_threshold ||
+                       is_past(add_timespec(&sync_params->oldest_tosync,
+                                            &handle->sync_time_threshold)) ||
+                       sync_params->tosync_size >=
+                           handle->sync_written_size_threshold);
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
@@ -3239,32 +3227,6 @@ void dev_sync(struct lrs_dev *dev)
             pho_error(rc2, "Unable to set device as failed into DSS");
     }
 
-}
-
-static void device_manage_sync(struct lrs_sched *sched, struct lrs_dev *dev)
-{
-    /* FIXME For now, the device thread only wakes up on a fixed timeout.
-     * So we wake him up here to avoid long delays.
-     */
-    if (dev->ld_needs_sync)
-        dev_thread_signal(dev);
-}
-
-/**
- * Manage tosync queue of devices
- */
-static void sched_handle_release_reqs(struct lrs_sched *sched)
-{
-    int i;
-
-    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
-        struct lrs_dev *dev;
-
-        dev = lrs_dev_hdl_get(&sched->devices, i);
-
-        if (dev->ld_op_status == PHO_DEV_OP_ST_MOUNTED)
-            device_manage_sync(sched, dev);
-    }
 }
 
 static int sched_handle_format(struct lrs_sched *sched, pho_req_t *req,
@@ -3375,11 +3337,6 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
     if (resp_array == NULL)
         return -ENOMEM;
     g_array_set_clear_func(resp_array, sched_resp_free);
-
-    /*
-     * First release everything that can be.
-     */
-    sched_handle_release_reqs(sched);
 
     /*
      * Very simple algorithm (FIXME): serve requests until the first EAGAIN is

@@ -319,4 +319,22 @@ int cmp_trimmed_strings(const char *first, const char *second);
  */
 int fill_host_owner(const char **hostname, int *pid);
 
+/** Compare two timespecs
+ *
+ * \return  0 iff a == b
+ *         -1 iff a < b
+ *          1 iff a > b
+ */
+int cmp_timespec(const struct timespec *a, const struct timespec *b);
+
+/** Compute the sum of \p a and \p b and make sure that the result's
+ * tv_nsec is lower or equal to 10^9.
+ */
+struct timespec add_timespec(const struct timespec *a,
+                             const struct timespec *b);
+
+/** Compute \p a - \p b. This function assumes that \p a >= \p b */
+struct timespec diff_timespec(const struct timespec *a,
+                              const struct timespec *b);
+
 #endif

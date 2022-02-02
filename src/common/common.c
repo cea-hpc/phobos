@@ -416,3 +416,44 @@ int fill_host_owner(const char **hostname, int *pid)
     *pid = getpid();
     return 0;
 }
+
+int cmp_timespec(const struct timespec *a, const struct timespec *b)
+{
+    if (a->tv_sec == b->tv_sec) {
+        if (a->tv_nsec < b->tv_nsec)
+            return -1;
+        else if (a->tv_nsec > b->tv_nsec)
+            return 1;
+        else
+            return 0;
+    } else if (a->tv_sec < b->tv_sec) {
+        return -1;
+    } else {
+        return 1;
+    }
+}
+
+struct timespec add_timespec(const struct timespec *a,
+                             const struct timespec *b)
+{
+    return (struct timespec) {
+        .tv_sec = a->tv_sec + b->tv_sec
+            + (a->tv_nsec + b->tv_nsec) / 1000000000,
+        .tv_nsec = (a->tv_nsec + b->tv_nsec) % 1000000000,
+    };
+}
+
+struct timespec diff_timespec(const struct timespec *a,
+                              const struct timespec *b)
+{
+    if (a->tv_nsec >= b->tv_nsec)
+        return (struct timespec) {
+            .tv_sec = a->tv_sec - b->tv_sec,
+            .tv_nsec = a->tv_nsec - b->tv_nsec,
+        };
+    else
+        return (struct timespec) {
+            .tv_sec = a->tv_sec - (b->tv_sec + 1),
+            .tv_nsec = (a->tv_nsec + 1000000000) - b->tv_nsec,
+        };
+}

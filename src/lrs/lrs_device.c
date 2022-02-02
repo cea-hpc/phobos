@@ -33,9 +33,6 @@
 #include "pho_common.h"
 #include "pho_type_utils.h"
 
-/* XXX: this should probably be alligned with the synchronization timeout */
-#define DEVICE_THREAD_WAIT_MS 1000
-
 static int dev_thread_init(struct lrs_dev *device);
 static void sync_params_init(struct sync_params *params);
 
@@ -78,7 +75,8 @@ void lrs_dev_hdl_fini(struct lrs_dev_hdl *handle)
 
 static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
                                   struct dev_info *info,
-                                  struct lrs_dev **dev)
+                                  struct lrs_dev **dev,
+                                  struct lrs_sched *sched)
 {
     int rc;
 
@@ -87,20 +85,21 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
         return -errno;
 
     (*dev)->ld_dss_dev_info = dev_info_dup(info);
-    if (!(*dev)->ld_dss_dev_info) {
-        free(*dev);
-        return -ENOMEM;
-    }
+    if (!(*dev)->ld_dss_dev_info)
+        GOTO(err_dev, rc = -ENOMEM);
 
     sync_params_init(&(*dev)->ld_sync_params);
 
+    rc = dss_init(&(*dev)->ld_device_thread.ld_dss);
+    if (rc)
+        GOTO(err_info, rc);
+
+    (*dev)->ld_response_queue = sched->response_queue;
+    (*dev)->ld_handle = handle;
+
     rc = dev_thread_init(*dev);
-    if (rc) {
-        g_ptr_array_unref((*dev)->ld_sync_params.tosync_array);
-        dev_info_free((*dev)->ld_dss_dev_info, 1);
-        free(*dev);
-        return rc;
-    }
+    if (rc)
+        GOTO(err_dss, rc);
 
     g_ptr_array_add(handle->ldh_devices, *dev);
 
@@ -112,6 +111,16 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
     (*dev)->ld_sys_dev_state.lds_serial = NULL;
 
     return 0;
+
+err_dss:
+    dss_fini(&(*dev)->ld_device_thread.ld_dss);
+err_info:
+    g_ptr_array_free((*dev)->ld_sync_params.tosync_array, true);
+    dev_info_free((*dev)->ld_dss_dev_info, 1);
+err_dev:
+    free(dev);
+
+    return rc;
 }
 
 static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
@@ -170,19 +179,9 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
         goto free_list;
     }
 
-    rc = lrs_dev_init_from_info(handle, dev_list, &dev);
+    rc = lrs_dev_init_from_info(handle, dev_list, &dev, sched);
     if (rc)
         goto free_list;
-
-    rc = dss_init(&dev->ld_device_thread.ld_dss);
-    if (rc) {
-        g_ptr_array_remove_index_fast(handle->ldh_devices,
-                                      handle->ldh_devices->len - 1);
-        lrs_dev_info_clean(handle, dev);
-        goto free_list;
-    }
-    dev->ld_response_queue = sched->response_queue;
-    dev->ld_handle = handle;
 
     rc = check_and_take_device_lock(sched, dev_list);
     if (rc)
@@ -240,23 +239,11 @@ int lrs_dev_hdl_load(struct lrs_sched *sched,
         struct lrs_dev *dev;
         int rc2;
 
-        rc2 = lrs_dev_init_from_info(handle, &dev_list[i], &dev);
+        rc2 = lrs_dev_init_from_info(handle, &dev_list[i], &dev, sched);
         if (rc2) {
             rc = rc ? : rc2;
             continue;
         }
-
-        rc2 = dss_init(&dev->ld_device_thread.ld_dss);
-        if (rc2) {
-            rc = rc ? : rc2;
-            g_ptr_array_remove_index_fast(handle->ldh_devices,
-                                          handle->ldh_devices->len - 1);
-            lrs_dev_info_clean(handle, dev);
-            continue;
-        }
-
-        dev->ld_response_queue = sched->response_queue;
-        dev->ld_handle = handle;
 
         rc2 = check_and_take_device_lock(sched, &dev_list[i]);
         if (rc2) {
@@ -325,26 +312,52 @@ static int lrs_dev_signal(struct thread_info *thread)
     return -rc;
 }
 
+static const struct timespec MINSLEEP = {
+    .tv_sec = 0,
+    .tv_nsec = 10000000, /* 10 ms */
+};
+
+static int compute_wakeup_date(struct lrs_dev *dev, struct timespec *date)
+{
+    struct timespec *oldest_tosync = &dev->ld_sync_params.oldest_tosync;
+    struct timespec diff;
+    struct timespec now;
+    int rc;
+
+    rc = clock_gettime(CLOCK_REALTIME, &now);
+    if (rc)
+        LOG_RETURN(-errno, "clock_gettime: unable to get CLOCK_REALTIME");
+
+    if (oldest_tosync->tv_sec == 0 && oldest_tosync->tv_nsec == 0) {
+        *date = add_timespec(&now,
+                             &dev->ld_handle->sync_time_threshold);
+    } else {
+        *date = add_timespec(oldest_tosync,
+                             &dev->ld_handle->sync_time_threshold);
+
+        diff = diff_timespec(date, &now);
+        if (cmp_timespec(&diff, &MINSLEEP) == -1)
+            *date = add_timespec(&MINSLEEP, &now);
+    }
+
+    return 0;
+}
+
 /* On success, it returns:
  * - ETIMEDOUT  the thread received no signal before the timeout
  * - 0          the thread received a signal
  *
  * Negative error codes reported by this function are fatal for the thread.
  */
-static int wait_for_signal(struct thread_info *thread)
+static int wait_for_signal(struct lrs_dev *dev)
 {
+    struct thread_info *thread = &dev->ld_device_thread;
     struct timespec time;
     int rc;
 
-    /* This should not fail */
-    rc = clock_gettime(CLOCK_REALTIME, &time);
+    rc = compute_wakeup_date(dev, &time);
     if (rc)
-        LOG_RETURN(-errno, "clock_gettime: unable to get CLOCK_REALTIME");
-
-    time.tv_sec += ms2sec(DEVICE_THREAD_WAIT_MS);
-    time.tv_nsec += ms2nsec(DEVICE_THREAD_WAIT_MS);
-    time.tv_sec += (time.tv_nsec / 1000000000);
-    time.tv_nsec %= 1000000000;
+        return rc;
 
     MUTEX_LOCK(&thread->ld_signal_mutex);
     rc = pthread_cond_timedwait(&thread->ld_signal,
@@ -378,7 +391,7 @@ static void *lrs_dev_thread(void *tdata)
         if (device->ld_needs_sync && !device->ld_ongoing_io)
             dev_sync(device);
 
-        rc = wait_for_signal(thread);
+        rc = wait_for_signal(device);
 
         if (rc < 0)
             LOG_GOTO(end_thread, thread->ld_status = rc,
