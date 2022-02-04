@@ -59,6 +59,40 @@ static void cleanup(struct pho_xfer_desc *xfer, char *path)
         free(path);
 }
 
+static void free_tags(char **tags, int size)
+{
+    int i;
+
+    for (i = 0; i < size; i++)
+        free(tags[i]);
+
+    free(tags);
+}
+
+static int duplicate_tags(char **argv, char ***tags, int size)
+{
+    char **tmp;
+    int rc;
+    int i;
+
+    tmp = malloc(size * sizeof(*tags));
+    if (!tmp)
+        return -errno;
+
+    for (i = 0; i < size; i++) {
+        tmp[i] = strdup(argv[i]);
+        if (!tmp[i]) {
+            free_tags(tmp, i);
+
+            return -errno;
+        }
+    }
+
+    *tags = tmp;
+
+    return rc;
+}
+
 int main(int argc, char **argv)
 {
     struct pho_attrs attrs = {0};
@@ -148,22 +182,29 @@ out_free_mput:
 
     } else if (!strcmp(argv[1], "tag-put")) {
         struct pho_xfer_desc xfer = {0};
+        char **tags;
         char *path;
+
+        rc = duplicate_tags(argv + 3, &tags, argc - 3);
+        if (rc)
+            goto out_attrs;
 
         path = realpath(argv[2], NULL);
         if (path == NULL) {
             rc = errno;
+            free_tags(tags, argc - 3);
             goto out_attrs;
         }
 
         rc = xfer_desc_open_path(&xfer, argv[2], PHO_XFER_OP_PUT, 0);
         if (rc < 0) {
             free(path);
+            free_tags(tags, argc - 3);
             goto out_attrs;
         }
 
         xfer.xd_params.put.family = PHO_RSC_INVAL;
-        xfer.xd_params.put.tags.tags = &argv[3];
+        xfer.xd_params.put.tags.tags = tags;
         xfer.xd_params.put.tags.n_tags = argc - 3;
         xfer.xd_objid = concat(path, "_tag-put");
         xfer.xd_attrs = attrs;
