@@ -94,6 +94,7 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
     if (rc)
         GOTO(err_info, rc);
 
+    (*dev)->ld_request_queue = tsqueue_init();
     (*dev)->ld_response_queue = sched->response_queue;
     (*dev)->ld_handle = handle;
 
@@ -139,6 +140,8 @@ static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
     g_ptr_array_unref(dev->ld_sync_params.tosync_array);
     dev_info_free(dev->ld_dss_dev_info, 1);
     dss_fini(&dev->ld_device_thread.ld_dss);
+
+    tsqueue_destroy(&dev->ld_request_queue, sched_req_free);
 
     free(dev);
 }

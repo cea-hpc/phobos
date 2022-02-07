@@ -122,6 +122,9 @@ struct lrs_dev {
     struct sync_params   ld_sync_params;        /**< pending synchronization
                                                   * requests
                                                   */
+    struct tsqueue       ld_request_queue;      /**< queue for read, write and
+                                                  * format requests
+                                                  */
     struct tsqueue      *ld_response_queue;     /**< reference to the response
                                                   * queue
                                                   */
