@@ -376,11 +376,8 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
 
         /* send back the ping request */
         if (pho_request_is_ping(req_cont->req)) {
-            rc2 = _process_ping_request(lrs, req_cont);
+            _process_ping_request(lrs, req_cont);
             sched_req_free(req_cont);
-            if (rc2)
-                rc = rc ? : rc2;
-
             continue;
         }
 

@@ -67,6 +67,17 @@ static int _send_and_receive(struct pho_comm_info *ci, pho_req_t *req,
     return 0;
 }
 
+static int _send_request(struct pho_comm_info *ci, pho_req_t *req)
+{
+    struct pho_comm_data data;
+    int rc;
+
+    data = pho_comm_data_init(ci);
+    assert(!pho_srl_request_pack(req, &data.buf));
+    pho_comm_send(&data);
+    free(data.buf.buff);
+}
+
 static int _check_error(pho_resp_t *resp, const char *msg_prefix,
                                  int expected_rc)
 {
@@ -262,12 +273,42 @@ out_fail:
     return rc;
 }
 
+static int test_bad_ping(void *arg)
+{
+    struct pho_comm_info *ci = (struct pho_comm_info *)arg;
+    pho_resp_t *resp;
+    pho_req_t req;
+    int rc = 0;
+
+    assert(!pho_srl_request_ping_alloc(&req));
+    req.id = 0;
+    assert(!_send_request(ci, &req));
+    pho_comm_close(ci);
+    assert(!pho_comm_open(ci, "/tmp/socklrs", false));
+
+    rc = _send_and_receive(ci, &req, &resp);
+    if (!rc)
+        pho_srl_response_free(resp, true);
+
+    /* The first read on the new connection will return ECONNRESET as we closed
+     * the socket before reading the response from the LRS
+     */
+    assert(rc == -ECONNRESET || rc == 0);
+
+    /* Make sure that we can still ping the LRS */
+    assert(!_send_and_receive(ci, &req, &resp));
+    pho_srl_response_free(resp, true);
+
+    pho_srl_request_free(&req, false);
+}
+
 int main(int argc, char **argv)
 {
     struct pho_comm_info ci;
 
     assert(!pho_comm_open(&ci, "/tmp/socklrs", false));
 
+    run_test("Test: bad ping", test_bad_ping, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad put", test_bad_put, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad get", test_bad_get, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad release", test_bad_release, &ci, PHO_TEST_SUCCESS);
