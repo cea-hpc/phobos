@@ -146,6 +146,21 @@ static PyObject *py_str2fs_type(PyObject *self, PyObject *args)
     return Py_BuildValue("i", fs);
 }
 
+static PyObject *py_str2dss_type(PyObject *self, PyObject *args)
+{
+    enum dss_type type;
+    const char *str_repr;
+
+    if (!PyArg_ParseTuple(args, "s", &str_repr)) {
+        PyErr_SetString(ValueError, "Unrecognized type");
+        return Py_BuildValue("i", DSS_INVAL);
+    }
+
+    type = str2dss_type(str_repr);
+
+    return Py_BuildValue("i", type);
+}
+
 /**
  * Exposed methods, with little docstring descriptors.
  */
@@ -164,6 +179,8 @@ static PyMethodDef ConstMethods[] = {
      "printable fs type."},
     {"str2fs_type", py_str2fs_type, METH_VARARGS,
      "fs type enum value from name."},
+    {"str2dss_type", py_str2dss_type, METH_VARARGS,
+     "dss type enum value from name."},
     {NULL, NULL, 0, NULL}
 };
 
@@ -198,6 +215,7 @@ PyMODINIT_FUNC PyInit_const(void)
     PyModule_AddIntMacro(mod, PHO_EXT_ST_LAST);
 
     /* enum rsc_family */
+    PyModule_AddIntMacro(mod, PHO_RSC_NONE);
     PyModule_AddIntMacro(mod, PHO_RSC_INVAL);
     PyModule_AddIntMacro(mod, PHO_RSC_DISK);
     PyModule_AddIntMacro(mod, PHO_RSC_TAPE);
@@ -247,8 +265,15 @@ PyMODINIT_FUNC PyInit_const(void)
     PyModule_AddIntMacro(mod, DSS_SET_LAST);
 
     /* enum dss_type */
+    PyModule_AddIntMacro(mod, DSS_NONE);
+    PyModule_AddIntMacro(mod, DSS_INVAL);
+    PyModule_AddIntMacro(mod, DSS_OBJECT);
+    PyModule_AddIntMacro(mod, DSS_DEPREC);
+    PyModule_AddIntMacro(mod, DSS_LAYOUT);
     PyModule_AddIntMacro(mod, DSS_DEVICE);
     PyModule_AddIntMacro(mod, DSS_MEDIA);
+    PyModule_AddIntMacro(mod, DSS_MEDIA_UPDATE_LOCK);
+    PyModule_AddIntMacro(mod, DSS_LAST);
 
     /* Media update bit fields */
     PyModule_AddIntMacro(mod, ADM_STATUS);

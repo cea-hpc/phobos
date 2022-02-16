@@ -50,6 +50,7 @@ function cleanup {
 }
 
 trap cleanup EXIT
+cleanup
 setup
 
 $LOG_COMPILER $test_bin

@@ -249,6 +249,7 @@ struct pho_lock {
  * Families can be seen here as storage technologies.
  */
 enum rsc_family {
+    PHO_RSC_NONE  = -2,
     PHO_RSC_INVAL = -1,
     PHO_RSC_DISK  =  0, /**< Not supported yet */
     PHO_RSC_TAPE  =  1, /**< Tape, drive tape or tape library */

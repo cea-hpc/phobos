@@ -91,6 +91,7 @@ enum lock_query_idx {
     DSS_STATUS_QUERY,
     DSS_CLEAN_DEVICE_QUERY,
     DSS_CLEAN_MEDIA_QUERY,
+    DSS_PURGE_ALL_LOCKS_QUERY,
 };
 
 #define DECLARE_BLOCK " DECLARE lock_type lock_type:= '%s'::lock_type;" \
@@ -166,7 +167,8 @@ static const char * const lock_query[] = {
                                 * all of them to allow the LRS to update the
                                 * media
                                 */
-                               "         OR type = 'media_update'::lock_type);"
+                               "         OR type = 'media_update'::lock_type);",
+    [DSS_PURGE_ALL_LOCKS_QUERY] = "TRUNCATE TABLE lock; "
 };
 
 static const char *dss_translate(enum dss_type type, const void *item_list,
@@ -589,6 +591,80 @@ int dss_lock_media_clean(struct dss_handle *handle,
     PQclear(res);
     g_string_free(request, true);
     g_string_free(ids, true);
+
+    return rc;
+}
+
+int dss_lock_clean_select(struct dss_handle *handle,
+                          const char *lock_hostname, const char *lock_type,
+                          const char *dev_family, char **lock_ids, int n_ids)
+{
+    GString *request = g_string_new("");
+    PGconn *conn = handle->dh_conn;
+    bool and_clause = false;
+    PGresult *res;
+    int rc = 0;
+    int i;
+
+    ENTRY;
+
+    g_string_printf(request, "DELETE FROM lock WHERE ");
+
+    if (n_ids > 0) {
+        g_string_append_printf(request, "(");
+        for (i = 0; i < n_ids - 1; ++i)
+            g_string_append_printf(request, "id = '%s' OR ", lock_ids[i]);
+        g_string_append_printf(request, " id = '%s')", lock_ids[n_ids - 1]);
+        and_clause = true;
+    }
+
+    if (lock_type) {
+        if (and_clause)
+            g_string_append_printf(request, " AND ");
+
+        g_string_append_printf(request, " type = '%s'::lock_type", lock_type);
+        if (dev_family) {
+            lock_type = (strcmp(lock_type, "media_update") == 0) ? "media"
+                                                                 : lock_type;
+            g_string_append_printf(request, " AND id IN (SELECT id FROM %s"
+                                            " WHERE family = '%s')",
+                                            lock_type, dev_family);
+        }
+        and_clause = true;
+    }
+
+    if (lock_hostname) {
+        if (and_clause)
+            g_string_append_printf(request, " AND ");
+
+        g_string_append_printf(request, " hostname = '%s' ", lock_hostname);
+    }
+
+    g_string_append_printf(request, " RETURNING *;");
+    rc = execute(conn, request, &res, PGRES_TUPLES_OK);
+
+    pho_info("%d lock(s) cleaned.", PQntuples(res));
+
+    PQclear(res);
+    g_string_free(request, true);
+
+    return rc;
+}
+
+int dss_lock_clean_all(struct dss_handle *handle)
+{
+    GString *request = g_string_new("");
+    PGconn *conn = handle->dh_conn;
+    PGresult *res;
+    int rc = 0;
+
+    ENTRY;
+
+    g_string_printf(request, "%s", lock_query[DSS_PURGE_ALL_LOCKS_QUERY]);
+    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
+
+    PQclear(res);
+    g_string_free(request, true);
 
     return rc;
 }

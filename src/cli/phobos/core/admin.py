@@ -29,7 +29,9 @@ from ctypes import (addressof, byref, c_int, c_char_p, cast, pointer, POINTER,
                     Structure)
 
 from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-name-in-module
-                               PHO_RSC_DIR, PHO_RSC_TAPE)
+                               PHO_RSC_DIR, PHO_RSC_TAPE,
+                               PHO_RSC_NONE, DSS_NONE,
+                               str2rsc_family, str2dss_type)
 from phobos.core.dss import DSSHandle
 from phobos.core.ffi import (CommInfo, ExtentInfo, LayoutInfo, LIBPHOBOS_ADMIN,
                              Id)
@@ -201,6 +203,26 @@ class Client(object):
             raise EnvironmentError(rc)
 
         return hostname.value.decode('utf-8') if hostname.value else ""
+
+    def clean_locks(self, global_mode, force, #pylint: disable=too-many-arguments
+                    type_str, family_str, lock_ids):
+        """Clean all locks from database based on given parameters."""
+        lock_type = str2dss_type(type_str) if type_str else DSS_NONE
+        enc_ids = [elt.encode('utf-8') for elt in lock_ids] if lock_ids else []
+        c_ids_strlist = c_char_p * len(enc_ids)
+        dev_family = (str2rsc_family(family_str) if family_str
+                      else PHO_RSC_NONE)
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_clean_locks(byref(self.handle),
+                                                      global_mode,
+                                                      force,
+                                                      lock_type,
+                                                      dev_family,
+                                                      c_ids_strlist(*enc_ids),
+                                                      len(enc_ids))
+
+        if rc:
+            raise EnvironmentError(rc, "Error during lock cleaning")
 
     @staticmethod
     def layout_list_free(layouts, n_layouts):

@@ -194,4 +194,45 @@ int phobos_admin_medium_locate(struct admin_handle *adm,
                                const struct pho_id *medium_id,
                                char **node_name);
 
+/**
+ * Clean locks
+ *
+ * Delete locks depending on the given parameters.
+ *
+ * Parameters describing the locks to delete are optional.
+ *
+ * If global is false, only locks with localhost should be cleaned.
+ *
+ * If global is true and force is false -EPERM is returned.
+ *
+ * If force is false and the deamon is running on the current node,
+ * -EPERM is returned.
+ *
+ * If global is true and type, family and id are all null,
+ * the function will attempt to clean all locks.
+ *
+ * If a given type or family is not valid or supported, return -EINVAL.
+ *
+ * If a valid family is given without a type or with a type different from
+ * 'device', 'media_update' or 'media', an -EINVAL error is returned.
+ *
+ * @param[in]   handle          Admin handle.
+ * @param[in]   global          Bool parameter indicating if all locks should be
+ *                              clean or not.
+ * @param[in]   force           Bool parameter indicating if the operation must
+ *                              ignore phobosd's online status or not.
+ * @param[in]   lock_hostname   Hostname owning the locks to clean.
+ * @param[in]   lock_type       Type of the ressources to clean.
+ * @param[in]   dev_family      Family of the devices to clean.
+ * @param[in]   lock_ids        List of ids of the ressources to clean.
+ * @param[in]   n_ids           Number of ids.
+ *
+ * @return                      0 on success
+ *                              -errno on failure
+ */
+int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
+                             bool force, enum dss_type lock_type,
+                             enum rsc_family dev_family,
+                             char **lock_ids, int n_ids);
+
 #endif

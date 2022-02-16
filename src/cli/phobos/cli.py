@@ -689,6 +689,7 @@ class MediaListOptHandler(ListOptHandler):
                                   "(default: %(default)s)"))
 
 def check_max_width_is_valid(value):
+    """ Check if max width value is valid"""
     ivalue = int(value)
     if ivalue <= len("...}"):
         raise argparse.ArgumentTypeError("%s is an invalid positive "
@@ -1498,6 +1499,67 @@ class LibOptHandler(BaseResourceOptHandler):
             line.extend(flags)
             print(" ".join(line))
 
+class CleanOptHandler(BaseOptHandler):
+    """Clean locks"""
+    label = 'clean'
+    descr = 'clean locks options'
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific clean options."""
+        super(CleanOptHandler, cls).add_options(parser)
+        parser.add_argument('--global', action='store_true',
+                            help='target all locks (can only be used '
+                                 'with --force). If not set, '
+                                 'only target localhost locks')
+        parser.add_argument('--force', action='store_true',
+                            help='clean locks even if phobosd is on')
+        parser.add_argument('-t', '--type',
+                            help='lock type to clean, between [device, media, '
+                                 'object, media_update]',
+                            choices=["device", "media",
+                                     "object", "media_update"])
+        parser.add_argument('-f', '--family',
+                            help='Family of locked ressources to clean, '
+                                 'between [disk, dir, tape]; object type '
+                                 'is not supported with this option',
+                            choices=["dir", "tape", "disk"])
+        parser.add_argument('-i', '--ids', nargs='+', help='lock id(s)')
+
+class LocksOptHandler(BaseOptHandler):
+    """Locks table actions and options"""
+    label = 'lock'
+    descr = 'handle lock table'
+    verbs = [CleanOptHandler]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    def exec_clean(self):
+        """Release locks with given arguments"""
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                adm.clean_locks(self.params.get('global'),
+                                self.params.get('force'),
+                                self.params.get('type'),
+                                self.params.get('family'),
+                                self.params.get('ids'))
+
+        except EnvironmentError:
+            self.logger.error("Clean command failed")
+            sys.exit(os.EX_DATAERR)
+
+        self.logger.info("Clean command executed successfully")
+
 SYSLOG_LOG_LEVELS = ["critical", "error", "warning", "info", "debug"]
 
 class PhobosActionContext(object):
@@ -1521,6 +1583,7 @@ class PhobosActionContext(object):
         UndeleteOptHandler,
         PingOptHandler,
         LocateOptHandler,
+        LocksOptHandler,
 
         # Store command interfaces
         StoreGetHandler,

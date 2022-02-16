@@ -765,3 +765,67 @@ int phobos_admin_medium_locate(struct admin_handle *adm,
     /* Return NULL if medium is unlocked, not an error */
     return 0;
 }
+
+int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
+                             bool force, enum dss_type lock_type,
+                             enum rsc_family dev_family,
+                             char **lock_ids, int n_ids)
+{
+    const char *lock_hostname = NULL;
+    const char *family_str = NULL;
+    const char *type_str = NULL;
+    int rc = 0;
+
+    if (global && !force)
+        LOG_RETURN(-EPERM, "Force mode is necessary for global mode.");
+
+    if (!force && adm->daemon_is_online)
+        LOG_RETURN(-EPERM, "Deamon is online. Cannot release locks.");
+
+    if (dev_family != PHO_RSC_NONE && lock_type == DSS_NONE)
+        LOG_RETURN(-EINVAL, "Family parameter must be specified "
+                            "with a type argument.");
+
+    if (!global) {
+        lock_hostname = get_hostname();
+
+        if (!lock_hostname)
+            return -EFAULT;
+    }
+
+    if (lock_type != DSS_NONE) {
+        type_str = dss_type2str(lock_type);
+
+        if (!type_str)
+            LOG_RETURN(-EINVAL, "Specified type parameter is not valid: %d.",
+                       lock_type);
+
+        else if (lock_type != DSS_MEDIA && lock_type != DSS_OBJECT &&
+            lock_type != DSS_DEVICE && lock_type != DSS_MEDIA_UPDATE_LOCK)
+            LOG_RETURN(-EINVAL, "Specified type parameter is "
+                                "not supported: %s.", type_str);
+    }
+
+    if (dev_family != PHO_RSC_NONE) {
+        if (lock_type != DSS_DEVICE &&
+            lock_type != DSS_MEDIA &&
+            lock_type != DSS_MEDIA_UPDATE_LOCK)
+            LOG_RETURN(-EINVAL, "Lock type '%s' not supported.", type_str);
+
+        family_str = rsc_family2str(dev_family);
+
+        if (!family_str)
+            LOG_RETURN(-EINVAL, "Specified family parameter is not valid: %d.",
+                       dev_family);
+    }
+
+    if (global && lock_type == DSS_NONE &&
+        dev_family == PHO_RSC_NONE && n_ids == 0)
+        rc = dss_lock_clean_all(&adm->dss);
+    else
+        rc = dss_lock_clean_select(&adm->dss, lock_hostname,
+                                   type_str, family_str,
+                                   lock_ids, n_ids);
+
+    return rc;
+}

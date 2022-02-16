@@ -39,6 +39,7 @@
 
 /** item types */
 enum dss_type {
+    DSS_NONE   = -2,
     DSS_INVAL  = -1,
     DSS_OBJECT =  0,
     DSS_DEPREC,
@@ -605,5 +606,39 @@ int dss_lock_device_clean(struct dss_handle *handle, const char *lock_family,
 int dss_lock_media_clean(struct dss_handle *handle,
                          const struct media_info *media, int media_cnt,
                          const char *lock_hostname, int lock_owner);
+
+/**
+ * Clean all locks with the given parameters.
+ *
+ * The function will attempt to clean all locks which have a certain
+ * hostname and/or owner and/or type and/or family and/or id.
+ *
+ * Lock_hostname, lock_type, dev_family and lock_id can be NULL.
+ *
+ * If type is NULL, a non-NULL family parameter will not be considered.
+ *
+ * @param[in]   handle          DSS handle.
+ * @param[in]   lock_hostname   Hostname owning the locks to clean.
+ * @param[in]   lock_type       Type of the ressources to clean.
+ * @param[in]   dev_family      Family of the devices/media to clean.
+ * @param[in]   lock_ids        List of ids of the ressources to clean.
+ * @param[in]   n_ids           Number of ids.
+ *
+ * @return                      0 on success
+ *                              errno on failure
+ */
+int dss_lock_clean_select(struct dss_handle *handle,
+                          const char *lock_hostname, const char *lock_type,
+                          const char *dev_family, char **lock_ids, int n_ids);
+
+/**
+ * Clean all locks.
+ *
+ * @param[in]   handle          DSS handle.
+ *
+ * @return                      0 on success
+ *                              errno on failure
+ */
+int dss_lock_clean_all(struct dss_handle *handle);
 
 #endif
