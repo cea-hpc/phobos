@@ -216,7 +216,7 @@ class DevInfo(Structure, CLIManagedResourceMixin):
             'name': None,
             'lock_hostname': None,
             'lock_owner': None,
-            'lock_ts': None
+            'lock_ts': Timeval.to_string
         }
 
     @property
@@ -382,7 +382,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'tags': None,
             'lock_hostname': None,
             'lock_owner': None,
-            'lock_ts': None,
+            'lock_ts': Timeval.to_string,
             'put_access': None,
             'get_access': None,
             'delete_access': None
