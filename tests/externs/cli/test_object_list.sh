@@ -39,7 +39,9 @@ insert into object (oid, user_md)
                    ('blob', '{"bloot": "bloot",
                               "blobby": "bloba"}'),
                    ('lorem', '{"ipsum": "dolor",
-                               "blobby": "bloba"}');
+                               "blobby": "bloba"}'),
+                   ('long_md', '{"abcdefghijklmnopqrstuvwxyz":
+                                 "123456789123456789123456789123456789"}');
 EOF
 }
 
@@ -54,6 +56,24 @@ function list_error
     echo "Matching: $1"
     echo "Returned: $2"
     echo "Expected: $3"
+    exit 1
+}
+
+function content_matching
+{
+    contents=$1
+    output_format="$2"
+
+    for id in "${contents[@]}"
+    do
+        match=$(echo "$id" | cut -d';' -f1)
+        exp=$(echo -e $(echo "$id" | cut -d';' -f2))
+        res=$($valg_phobos object list $output_format $match)
+
+        if [ "$res" != "$exp" ]; then
+            list_error "$match" "$res" "$exp"
+        fi
+    done
 }
 
 function test_object_list_pattern
@@ -62,28 +82,34 @@ function test_object_list_pattern
               "--pattern oid;oid1\noid2"
               "--pattern --metadata bloot=bloot oid;oid2"
               "--metadata bloot=bloot blob;blob"
-              ";oid1\noid2\nblob\nlorem"
+              ";oid1\noid2\nblob\nlorem\nlong_md"
               "--pattern OID1;"
               "--pattern --metadata bloot=bloot o;oid2\nblob"
               "--pattern --metadata blobby=bloba,bloot=bloot o;blob"
               "--pattern --metadata blobby=bloba b m;blob\nlorem")
 
-    for id in "${contents[@]}"
-    do
-        match=$(echo "$id" | cut -d';' -f1)
-        exp=$(echo -e $(echo "$id" | cut -d';' -f2))
-        res=$($valg_phobos object list $match)
+    content_matching $contents
+}
 
-        if [ "$res" != "$exp" ]; then
-            list_error "$match" "$res" "$exp"
-        fi
-    done
+function test_object_list_max_width
+{
+    alphabet="abcdefghijklmnopqrstuvwxyz"
+    numbers="123456789123456789123456789123456789"
 
-    return 0
+    contents=("long_md;{\"abcdefghijklmnopqrstuvwx...}"
+              "--max-width 15 long_md;{\"abcdefghi...}"
+              "--max-width 40 long_md;{\"$alphabet\": \"1234...}"
+              "--max-width 7 long_md;{\"a...}"
+              "--max-width 1000 long_md;{\"$alphabet\": \"$numbers\"}"
+              "--no-trunc long_md;{\"$alphabet\": \"$numbers\"}"
+              "--max-width 5 --no-trunc long_md;{\"$alphabet\": \"$numbers\"}"
+              "--max-width 10 --no-trunc long_md;{\"$alphabet\": \"$numbers\"}")
+
+    content_matching $contents "-o user_md"
 }
 
 trap cleanup EXIT
 setup
 
-# test object list with pattern
 test_object_list_pattern
+test_object_list_max_width

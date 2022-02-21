@@ -45,17 +45,17 @@ LIBPHOBOS_ADMIN = CDLL(LIBPHOBOS_ADMIN_NAME)
 
 class CLIManagedResourceMixin(object):
     """Interface for objects directly exposed/manipulated by the CLI."""
-    def get_display_fields(self):
+    def get_display_fields(self, max_width=None):
         """Return a dict of available fields and optional display formatters."""
         raise NotImplementedError("Abstract method subclasses must implement.")
 
-    def get_display_dict(self, numeric=False):
+    def get_display_dict(self, numeric=False, max_width=None):
         """
         Return a dict representing the structure as we want it to be displayed,
         i.e.: w/ only the desired fields and w/ conversion methods applied.
         """
         export = {}
-        disp_fields = self.get_display_fields()
+        disp_fields = self.get_display_fields(max_width)
         for key in sorted(disp_fields.keys()):
             if not numeric and disp_fields[key]:
                 conv = disp_fields.get(key, str)
@@ -205,7 +205,7 @@ class DevInfo(Structure, CLIManagedResourceMixin):
         ('lock', DSSLock)
     ]
 
-    def get_display_fields(self):
+    def get_display_fields(self, max_width=None):
         """Return a dict of available fields and optional display formatters."""
         return {
             'adm_status': rsc_adm_status2str,
@@ -371,7 +371,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         ('flags', OperationFlags)
     ]
 
-    def get_display_fields(self):
+    def get_display_fields(self, max_width=None):
         """Return a dict of available fields and optional display formatters."""
         return {
             'adm_status': rsc_adm_status2str,
@@ -388,7 +388,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'delete_access': None
         }
 
-    def get_display_dict(self, numeric=False):
+    def get_display_dict(self, numeric=False, max_width=None):
         """Update level0 representation with nested structures content."""
         export = super(MediaInfo, self).get_display_dict()
         export.update(self.expanded_fs_info)
@@ -534,6 +534,19 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         if hasattr(self, "_free_tags") and self._free_tags:
             self._tags.free()
 
+def truncate_user_md(user_md_str, max_width):
+    # we check that 'obj' (here, the user_md) is not None because if it
+    # is, that means the object has no user_md, and there is no need to
+    # truncate or print anything
+    if user_md_str is None:
+        return "{}"
+
+    if max_width is None:
+        return user_md_str
+
+    return (user_md_str[:(max_width - 4)] + "...}"
+            if len(user_md_str) > max_width - 4 else user_md_str)
+
 class ObjectInfo(Structure, CLIManagedResourceMixin):
     """Object descriptor."""
     _fields_ = [
@@ -544,13 +557,14 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
         ('deprec_time', Timeval),
     ]
 
-    def get_display_fields(self):
+    def get_display_fields(self, max_width):
         """Return a dict of available fields and optional display formatters."""
         return {
             'oid': None,
             'uuid': None,
             'version': None,
-            'user_md': None,
+            'user_md': (lambda obj, width=max_width: truncate_user_md(obj,
+                                                                      width))
         }
 
     @property
@@ -588,7 +602,7 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
 
 class DeprecatedObjectInfo(ObjectInfo):
     """Deprecated object wrapper to get the correct display fields"""
-    def get_display_fields(self):
+    def get_display_fields(self, max_width=None):
         """Return a dict of available fields and optional display formatters."""
         return {
             'oid': None,
@@ -658,7 +672,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
         ('ext_count', c_int)
     ]
 
-    def get_display_fields(self):
+    def get_display_fields(self, max_width=None):
         """Return a dict of available fields and optional display formatters."""
         return {
             'oid': None,

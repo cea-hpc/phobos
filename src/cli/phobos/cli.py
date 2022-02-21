@@ -678,6 +678,13 @@ class MediaListOptHandler(ListOptHandler):
                                   "choose from {" + " ".join(attr) + "} "
                                   "(default: %(default)s)"))
 
+def check_max_width_is_valid(value):
+    ivalue = int(value)
+    if ivalue <= len("...}"):
+        raise argparse.ArgumentTypeError("%s is an invalid positive "
+                                         "int value" % value)
+    return ivalue
+
 class ObjectListOptHandler(ListOptHandler):
     """
     Specific version of the 'list' command for object, with a couple
@@ -694,22 +701,30 @@ class ObjectListOptHandler(ListOptHandler):
         ext_attrs = list(DeprecatedObjectInfo().get_display_dict().keys() -
                          ObjectInfo().get_display_dict().keys())
         ext_attrs.sort()
+        parser.add_argument('-d', '--deprecated', action='store_true',
+                            help="print deprecated objects, allowing those "
+                                 "attributes for the 'output' option "
+                                 "{" + " ".join(ext_attrs) + "}")
+        parser.add_argument('-m', '--metadata', type=lambda t: t.split(','),
+                            help="filter items containing every given "
+                                 "metadata, comma-separated "
+                                 "'key=value' parameters")
         parser.add_argument('-o', '--output', type=lambda t: t.split(','),
                             default='oid',
                             help=("attributes to output, comma-separated, "
                                   "choose from {" + " ".join(base_attrs) + "} "
                                   "default: %(default)s"))
-        parser.add_argument('-m', '--metadata', type=lambda t: t.split(','),
-                            help="filter items containing every given "
-                                 "metadata, comma-separated "
-                                 "'key=value' parameters")
-        parser.add_argument('-d', '--deprecated', action='store_true',
-                            help="print deprecated objects, allowing those "
-                                 "attributes for the 'output' option "
-                                 "{" + " ".join(ext_attrs) + "}")
         parser.add_argument('-p', '--pattern', action='store_true',
                             help="filter using POSIX regexp instead of exact "
                                  "objid")
+        parser.add_argument('-t', '--no-trunc', action='store_true',
+                            help="do not truncate the user_md column (takes "
+                                 "precedency over the 'max-width' argument)")
+        parser.add_argument('-w', '--max-width', default=30,
+                            type=check_max_width_is_valid,
+                            help="max width of the user_md column keys and "
+                                 "values, must be greater or equal to 5"
+                                 "(default is 30)")
 
 class DeleteOptHandler(BaseOptHandler):
     """Delete objects handler."""
@@ -988,7 +1003,10 @@ class ObjectOptHandler(BaseResourceOptHandler):
                                       self.params.get('deprecated'))
 
             if objs:
-                dump_object_list(objs, attr=out_attrs,
+                max_width = (None if self.params.get('no_trunc')
+                             else self.params.get('max_width'))
+
+                dump_object_list(objs, attr=out_attrs, max_width=max_width,
                                  fmt=self.params.get('format'))
 
             client.list_free(objs, len(objs))
