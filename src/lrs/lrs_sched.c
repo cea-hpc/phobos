@@ -1144,7 +1144,7 @@ static void sched_release(struct lrs_sched *sched)
 
         dev = lrs_dev_hdl_get(&sched->devices, i);
 
-        if (dev->ld_op_status != PHO_DEV_OP_ST_FAILED && !dev->ld_ongoing_io)
+        if (dev->ld_op_status != PHO_DEV_OP_ST_FAILED)
             sched_umount_and_release(sched, dev);
     }
 }
@@ -1170,6 +1170,21 @@ void sched_fini(struct lrs_sched *sched)
     lrs_dev_hdl_clear(&sched->devices);
 
     lrs_dev_hdl_fini(&sched->devices);
+}
+
+bool sched_has_running_devices(struct lrs_sched *sched)
+{
+    int i;
+
+    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
+        struct lrs_dev *dev;
+
+        dev = lrs_dev_hdl_get(&sched->devices, i);
+        if (dev->ld_ongoing_io || dev->ld_sync_params.tosync_array->len > 0)
+            return true;
+    }
+
+    return false;
 }
 
 /**
@@ -2924,12 +2939,13 @@ unlock:
  * back.
  */
 static int sched_handle_write_alloc(struct lrs_sched *sched, pho_req_t *req,
-                                    pho_resp_t *resp)
+                                    struct resp_container *respc)
 {
-    struct lrs_dev **devs = NULL;
-    size_t i;
-    int rc = 0;
     pho_req_write_t *wreq = req->walloc;
+    pho_resp_t *resp = respc->resp;
+    struct lrs_dev **devs = NULL;
+    size_t i = 0;
+    int rc = 0;
 
     pho_debug("write: allocation request (%ld medias)", wreq->n_media);
 
@@ -2939,8 +2955,13 @@ static int sched_handle_write_alloc(struct lrs_sched *sched, pho_req_t *req,
 
     devs = calloc(wreq->n_media, sizeof(*devs));
     if (devs == NULL)
-        return -ENOMEM;
+        return -errno;
 
+    respc->devices = malloc(wreq->n_media * sizeof(*respc->devices));
+    if (!respc->devices)
+        GOTO(out, rc = -errno);
+
+    respc->devices_len = wreq->n_media;
     resp->req_id = req->id;
 
     /*
@@ -2969,6 +2990,7 @@ static int sched_handle_write_alloc(struct lrs_sched *sched, pho_req_t *req,
         wresp->root_path = strdup(devs[i]->ld_mnt_path);
         wresp->fs_type = devs[i]->ld_dss_media_info->fs.type;
         wresp->addr_type = devs[i]->ld_dss_media_info->addr_type;
+        respc->devices[i] = devs[i];
 
         if (wresp->root_path == NULL) {
             /*
@@ -2986,6 +3008,8 @@ out:
     if (rc) {
         size_t n_media_acquired = i;
 
+        free(respc->devices);
+        respc->devices_len = 0;
         /* Rollback device and media acquisition */
         for (i = 0; i < n_media_acquired; i++) {
             struct lrs_dev *dev;
@@ -3022,17 +3046,22 @@ out:
  * back.
  */
 static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
-                                   pho_resp_t *resp)
+                                   struct resp_container *respc)
 {
+    pho_req_read_t *rreq = req->ralloc;
+    pho_resp_t *resp = respc->resp;
     struct lrs_dev *dev = NULL;
     size_t n_selected = 0;
-    size_t i;
     int rc = 0;
-    pho_req_read_t *rreq = req->ralloc;
+    size_t i;
+
+    respc->devices = malloc(sizeof(*respc->devices));
+    if (!respc->devices)
+        return -errno;
 
     rc = pho_srl_response_read_alloc(resp, rreq->n_required);
     if (rc)
-        return rc;
+        goto free_devices;
 
     pho_debug("read: allocation request (%ld medias)", rreq->n_med_ids);
 
@@ -3078,7 +3107,7 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
             int rc2 = pho_srl_response_error_alloc(resp);
 
             if (rc2)
-                return rc2;
+                GOTO(free_devices, rc = rc2);
 
             resp->error->rc = rc;
             resp->error->req_kind = PHO_REQUEST_KIND__RQ_READ;
@@ -3088,6 +3117,9 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
         }
     }
 
+free_devices:
+    free(respc->devices);
+    respc->devices_len = 0;
     return rc;
 }
 
@@ -3187,6 +3219,7 @@ void check_needs_sync(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
                                             &handle->sync_time_threshold)) ||
                        sync_params->tosync_size >=
                            handle->sync_written_size_threshold);
+    dev->ld_needs_sync |= (!running && sync_params->tosync_array->len > 0);
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
@@ -3330,6 +3363,7 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
 {
     struct req_container *reqc;
     GArray *resp_array;
+    int req_kind = -1;
     int rc = 0;
 
     resp_array = g_array_sized_new(FALSE, FALSE, sizeof(struct resp_container),
@@ -3356,15 +3390,19 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
             LOG_GOTO(out, rc = -ENOMEM, "lrs cannot allocate response");
 
         if (pho_request_is_write(req)) {
+            req_kind = PHO_REQUEST_KIND__RQ_WRITE;
             pho_debug("lrs received write request (%p)", req);
-            rc = sched_handle_write_alloc(sched, req, respc->resp);
+            rc = sched_handle_write_alloc(sched, req, respc);
         } else if (pho_request_is_read(req)) {
+            req_kind = PHO_REQUEST_KIND__RQ_READ;
             pho_debug("lrs received read allocation request (%p)", req);
-            rc = sched_handle_read_alloc(sched, req, respc->resp);
+            rc = sched_handle_read_alloc(sched, req, respc);
         } else if (pho_request_is_format(req)) {
+            req_kind = PHO_REQUEST_KIND__RQ_FORMAT;
             pho_debug("lrs received format request (%p)", req);
             rc = sched_handle_format(sched, req, respc->resp);
         } else if (pho_request_is_notify(req)) {
+            req_kind = PHO_REQUEST_KIND__RQ_NOTIFY;
             pho_debug("lrs received notify request (%p)", req);
             rc = sched_handle_notify(sched, req, respc->resp);
         } else {
@@ -3374,16 +3412,32 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
                       "(no walloc, ralloc or release field)");
         }
 
-        /*
-         * Break on EAGAIN and mark the whole run as a success (but there may be
+        /* Break on EAGAIN and mark the whole run as a success (but there may be
          * no response).
          */
-        if (rc == -EAGAIN) {
+        if (rc == -EAGAIN && running) {
             /* Requeue last request */
             g_queue_push_tail(sched->req_queue, reqc);
             g_array_remove_index(resp_array, resp_array->len - 1);
             rc = 0;
             break;
+        } else if (rc == -EAGAIN && !running) {
+            /* create an ESHUTDOWN error */
+            int rc2;
+
+            rc2 = pho_srl_response_error_alloc(respc->resp);
+            if (rc2) {
+                /* on error, the request will be discarded and the client will
+                 * fail when the LRS finally stops
+                 */
+                pho_srl_request_free(reqc->req, true);
+                free(reqc);
+                return rc2;
+            }
+
+            respc->resp->error->rc = -ESHUTDOWN;
+            respc->resp->error->req_kind = req_kind;
+            rc = 0;
         }
 
         sched_req_free(reqc);

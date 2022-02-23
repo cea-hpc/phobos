@@ -6,7 +6,12 @@ TO_TEST=../../
 AM_CFLAGS=$(CC_OPT) @CMOCKA_CFLAGS@
 AM_LDFLAGS=@CMOCKA_LIBS@
 
+CFG_LIB=$(TO_SRC)/cfg/libpho_cfg.la
+COMMON_LIB=$(TO_SRC)/common/libpho_common.la
+COMMUNICATION_LIB=$(TO_SRC)/communication/libpho_comm.la
 DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
+LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
+SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 
 if VALGRIND_ENABLED
@@ -17,7 +22,8 @@ endif
 
 TEST_EXTENSIONS=.sh
 
-check_PROGRAMS=medium_locker
+check_PROGRAMS=controlled_store \
+               medium_locker
 
 check_SCRIPTS=acceptance.sh \
               test_daemon.sh \
@@ -37,6 +43,11 @@ check_SCRIPTS=acceptance.sh \
               test_undelete.sh
 
 TESTS=$(check_SCRIPTS)
+
+controlled_store_SOURCES=controlled_store.c
+controlled_store_LDADD=$(LRS_LIB) $(CFG_LIB) $(COMMON_LIB) \
+                          $(COMMUNICATION_LIB) $(SERIALIZER_LIB)
+controlled_store_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
 
 medium_locker_SOURCES=medium_locker.c
 medium_locker_LDADD=$(DSS_LIB) $(STORE_LIB)

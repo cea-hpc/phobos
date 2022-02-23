@@ -52,9 +52,13 @@
  * - Communication info: stores info related to the communication with Store
  */
 struct lrs {
-    struct lrs_sched           *sched[PHO_RSC_LAST];/*!< Scheduler handles */
-    struct pho_comm_info        comm;               /*!< Communication handle */
-    struct tsqueue              response_queue;     /*!< Response queue */
+    struct lrs_sched     *sched[PHO_RSC_LAST]; /*!< Scheduler handles */
+    struct pho_comm_info  comm;                /*!< Communication handle */
+    struct tsqueue        response_queue;      /*!< Response queue */
+    bool                  stopped;             /*!< true when every I/O has been
+                                                * completed after the LRS
+                                                * stopped.
+                                                */
 };
 
 struct lrs_params {
@@ -242,6 +246,63 @@ clean_on_error:
     return rc;
 }
 
+static void notify_device_request_is_canceled(struct resp_container *respc)
+{
+    int i;
+
+    for (i = 0; i < respc->devices_len; i++)
+        respc->devices[i]->ld_ongoing_io = false;
+}
+
+static int request_kind_from_response(pho_resp_t *resp)
+{
+    if (pho_response_is_write(resp))
+        return PHO_REQUEST_KIND__RQ_WRITE;
+    else if (pho_response_is_read(resp))
+        return PHO_REQUEST_KIND__RQ_READ;
+    else if (pho_response_is_release(resp))
+        return PHO_REQUEST_KIND__RQ_RELEASE;
+    else if (pho_response_is_format(resp))
+        return PHO_REQUEST_KIND__RQ_FORMAT;
+    else if (pho_response_is_notify(resp))
+        return PHO_REQUEST_KIND__RQ_NOTIFY;
+    else if (pho_response_is_error(resp))
+        return resp->error->req_kind;
+    else
+        return -1;
+}
+
+static int convert_response_to_error(struct resp_container *respc)
+{
+    int rc;
+
+    pho_srl_response_free(respc->resp, true);
+    rc = pho_srl_response_error_alloc(respc->resp);
+    if (rc)
+        return rc;
+
+    respc->resp->error->rc = -ESHUTDOWN;
+    respc->resp->error->req_kind = request_kind_from_response(respc->resp);
+
+    return 0;
+}
+
+static int cancel_response(struct resp_container *respc)
+{
+    pho_resp_t *resp = respc->resp;
+
+    if (pho_response_is_error(resp) ||
+        pho_response_is_release(resp) ||
+        /* responses to synchronous operations must not be converted to errors
+         */
+        pho_response_is_format(resp) ||
+        pho_response_is_notify(resp))
+        return 0;
+
+    notify_device_request_is_canceled(respc);
+    return convert_response_to_error(respc);
+}
+
 static int _send_message(struct pho_comm_info *comm,
                          struct resp_container *respc)
 {
@@ -250,12 +311,21 @@ static int _send_message(struct pho_comm_info *comm,
 
     msg = pho_comm_data_init(comm);
     msg.fd = respc->socket_id;
+    if (!running) {
+        rc = cancel_response(respc);
+        if (rc)
+            return rc;
+    }
+
     rc = pho_srl_response_pack(respc->resp, &msg.buf);
     if (rc) {
         pho_error(rc, "Response cannot be packed");
         return rc;
     }
 
+    /* XXX: \p running could change just before the call to send.
+     * Which means that new I/O responses would be sent with running = false
+     */
     rc = pho_comm_send(&msg);
     free(msg.buf.buff);
     if (rc == -EPIPE)
@@ -411,7 +481,12 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
             rc2 = sched_release_enqueue(lrs->sched[fam], req_cont);
             rc = rc ? : rc2;
         } else {
-            g_queue_push_tail(lrs->sched[fam]->req_queue, req_cont);
+            if (running)
+                g_queue_push_tail(lrs->sched[fam]->req_queue, req_cont);
+            else
+                LOG_GOTO(send_err, rc2 = -ESHUTDOWN,
+                         "Daemon stopping, not accepting new requests");
+
         }
 
         continue;
@@ -558,6 +633,7 @@ static int lrs_init(struct lrs *lrs, struct lrs_params parm)
                    lock_file);
 
     lrs->response_queue = tsqueue_init();
+    lrs->stopped = false;
 
     rc = _load_schedulers(lrs);
     if (rc)
@@ -604,6 +680,7 @@ static int lrs_process(struct lrs *lrs)
     struct pho_comm_data *data = NULL;
     struct resp_container *resp_cont;
     int n_data, n_resp = 0;
+    bool stopped = true;
     int rc = 0;
     int i, j;
 
@@ -636,11 +713,17 @@ static int lrs_process(struct lrs *lrs)
         free(resp_cont);
         if (rc)
             LOG_RETURN(rc, "Error during responses sending");
+
+        if (!running && sched_has_running_devices(lrs->sched[i]))
+            stopped = false;
     }
 
     rc = _send_responses_from_queue(lrs);
     if (rc)
         LOG_RETURN(rc, "Error during responses sending");
+
+    if (!running)
+        lrs->stopped = stopped;
 
     return rc;
 }
@@ -659,22 +742,27 @@ static int init_daemon(pid_t pid, int pipe_in)
 
     pid_filepath = getenv("PHOBOSD_PID_FILEPATH");
     if (pid_filepath) {
+        int _errno;
+
         fd = open(pid_filepath, O_WRONLY | O_CREAT, 0666);
         if (fd == -1) {
+            _errno = -errno;
+
             kill(pid, SIGKILL);
-            fprintf(stderr, "ERR: cannot open the pid file at '%s'",
-                    pid_filepath);
+            pho_error(_errno, "cannot open the pid file at '%s'",
+                      pid_filepath);
             rc = EXIT_FAILURE;
             goto out;
         }
 
         sprintf(buf, "%d", pid);
         rc = write(fd, buf, strlen(buf));
+        _errno = -errno;
         close(fd);
         if (rc == -1) {
             kill(pid, SIGKILL);
-            fprintf(stderr, "ERR: cannot write the pid file at '%s'",
-                    pid_filepath);
+            pho_error(_errno, "cannot write the pid file at '%s'",
+                      pid_filepath);
             rc = EXIT_FAILURE;
             goto out;
         }
@@ -812,9 +900,10 @@ int main(int argc, char **argv)
     if (rc)
         return rc;
 
-    while (running) {
+    while (running || !lrs.stopped) {
         rc = lrs_process(&lrs);
-        if (rc)
+        /* or ignore EINTR when returned by pho_comm_recv ? */
+        if (rc && rc != -EINTR)
             break;
     }
 

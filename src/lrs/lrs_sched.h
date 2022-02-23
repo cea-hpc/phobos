@@ -34,6 +34,9 @@
 
 #include "lrs_device.h"
 
+/* from lrs.c */
+extern bool running;
+
 /**
  * Local Resource Scheduler instance, manages media and local devices for the
  * actual IO to be performed.
@@ -140,6 +143,10 @@ void sched_req_free(void *reqc);
 struct resp_container {
     int socket_id;                  /**< Socket ID got from the request. */
     pho_resp_t *resp;               /**< Response. */
+    struct lrs_dev **devices;       /**< List of devices which will handle the
+                                      * request corresponding to this response.
+                                      */
+    int devices_len;                /**< size of \p devices */
 };
 
 /**
@@ -173,6 +180,13 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
  * \param[in]       sched       The sched to be deinitialized.
  */
 void sched_fini(struct lrs_sched *sched);
+
+/**
+ * Return true if no device handled by \p sched has an ongoing I/O
+ *
+ * \param[in]       sched       The scheduler to check
+ */
+bool sched_has_running_devices(struct lrs_sched *sched);
 
 /**
  * Enqueue a request to be handled by the devices.

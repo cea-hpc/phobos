@@ -48,6 +48,11 @@
 static struct dss_handle *dss;
 static struct lrs_sched scheduler;
 
+/* running is defined in lrs.c but cannot be linked with this file due to the
+ * definition of main in both
+ */
+bool running;
+
 static int setup(void **data)
 {
     int rc;

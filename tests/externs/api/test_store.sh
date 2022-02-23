@@ -71,8 +71,8 @@ function clear_mnt_content()
 
 function cleanup()
 {
-    drop_tables
     waive_daemon
+    drop_tables
     rm -rf $TEST_FILES
     rm -rf $TEST_RECOV_DIR
     for d in $TEST_MNT; do

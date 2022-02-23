@@ -24,6 +24,8 @@ set -xe
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
+. $test_dir/../../test_launch_daemon.sh
+controlled_store="$test_dir/controlled_store"
 
 function setup
 {
@@ -253,12 +255,144 @@ function test_remove_invalid_device_locks
     drop_tables
 }
 
+function test_wait_end_of_IO_before_shutdown()
+{
+    local dir=$(mktemp -d)
+
+    trap "waive_daemon; drop_tables; rm -rf '$dir'" EXIT
+    setup_tables
+    invoke_daemon
+
+    $phobos dir add "$dir"
+    $phobos dir format --unlock --fs posix "$dir"
+
+    $controlled_store put &
+    local pid=$!
+
+    # wait for the request to reach the LRS
+    sleep 1
+
+    kill $PID_DAEMON
+    sleep 1
+    ps --pid $PID_DAEMON || error "Daemon should still be online"
+
+    # send release request
+    kill -s SIGUSR1 $pid
+
+    timeout 10 tail --pid=$PID_DAEMON -f /dev/null
+    if [[ $? != 0 ]]; then
+        error "Daemon not stopped after 10 seconds"
+    fi
+    PID_DAEMON=0
+
+    drop_tables
+    rm -rf '$dir'
+}
+
+function wait_for_process_end()
+{
+    local pid="$1"
+    local count=0
+
+    while ps --pid "$pid"; do
+        if [[ $count > 10 ]]; then
+            error "Process $pid should have stopped after 10s"
+        fi
+        ((count++)) || true
+        sleep 1
+    done
+}
+
+function test_cancel_waiting_requests_before_shutdown()
+{
+    local dir=$(mktemp -d)
+    local file=$(mktemp)
+    local res_file="res_file"
+
+    trap "waive_daemon; drop_tables; rm -rf '$dir' '$file' '$res_file'" EXIT
+    setup_tables
+    invoke_daemon
+
+    $phobos dir add "$dir"
+    $phobos dir format --unlock --fs posix "$dir"
+
+    $controlled_store put &
+    local controlled_pid=$!
+
+    # this request will be waiting in the LRS as the only dir is used by
+    # controlled_store
+    ( set +e; $phobos put --family dir "$file" oid; echo $? > "$res_file" ) &
+    local put_pid=$!
+
+    # wait for the request to reach the LRS
+    sleep 1
+
+    kill $PID_DAEMON
+
+    # "timeout wait $put_pid" cannot be used here as "put_pid" will not be a
+    # child of 'timeout'
+    wait_for_process_end $put_pid
+
+    if [[ $(cat "$res_file") == 0 ]]; then
+        error "Waiting request should have been canceled"
+    fi
+
+    # send the release request
+    kill -s SIGUSR1 $controlled_pid
+
+    timeout 10 tail --pid=$PID_DAEMON -f /dev/null
+    if [[ $? != 0 ]]; then
+        error "Daemon not stopped after 10 seconds"
+    fi
+    PID_DAEMON=0
+
+    drop_tables
+    rm -rf "$dir" "$file" "$res_file"
+}
+
+function test_refuse_new_request_during_shutdown()
+{
+    local dir=$(mktemp -d)
+    local file=$(mktemp)
+
+    trap "waive_daemon; drop_tables; rm -rf '$dir' '$file'" EXIT
+    setup_tables
+    invoke_daemon
+
+    $phobos dir add "$dir"
+    $phobos dir format --unlock --fs posix "$dir"
+
+    $controlled_store put &
+    local pid=$!
+
+    sleep 1
+    kill $PID_DAEMON
+
+    $phobos put --family dir "$file" oid &&
+        error "New put should have failed during shutdown"
+
+    # send the release request
+    kill -s SIGUSR1 $pid
+
+    timeout 10 tail --pid=$PID_DAEMON -f /dev/null
+    if [[ $? != 0 ]]; then
+        error "Daemon not stopped after 10 seconds"
+    fi
+    PID_DAEMON=0
+
+    drop_tables
+    rm -rf "$dir" "$file"
+}
+
 trap cleanup EXIT
 setup
 
 test_multiple_instances
 test_recover_dir_old_locks
 test_remove_invalid_media_locks
+test_wait_end_of_IO_before_shutdown
+test_cancel_waiting_requests_before_shutdown
+test_refuse_new_request_during_shutdown
 
 # Tape tests are available only if /dev/changer exists, which is the entry
 # point for the tape library.
