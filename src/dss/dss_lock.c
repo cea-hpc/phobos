@@ -157,9 +157,16 @@ static const char * const lock_query[] = {
                                "              WHERE lock.id = id_host.id) "
                                "         OR owner != %d);",
     [DSS_CLEAN_MEDIA_QUERY]  = "DELETE FROM lock "
-                               "  WHERE type = 'media'::lock_type "
-                               "    AND hostname = '%s' "
-                               "    AND owner != %d AND id NOT IN (%s);"
+                               "  WHERE hostname = '%s' "
+                               "    AND owner != %d "
+                               "    AND ((type = 'media'::lock_type "
+                               "          AND id NOT IN (%s)) "
+                               /** Since the operations corresponding to these
+                                * locks cannot be continued, we must unlock
+                                * all of them to allow the LRS to update the
+                                * media
+                                */
+                               "         OR type = 'media_update'::lock_type);"
 };
 
 static const char *dss_translate(enum dss_type type, const void *item_list,
