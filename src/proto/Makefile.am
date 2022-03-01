@@ -1,6 +1,5 @@
 AM_CFLAGS= $(CC_OPT)
 
-.PHONY: gen-proto.stamp
 noinst_LTLIBRARIES=libpho_proto.la
 
 srcdir=$(top_srcdir)/src
