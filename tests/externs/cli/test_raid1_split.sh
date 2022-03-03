@@ -50,7 +50,6 @@ PART2_SIZE=1024
 
 function insert_dir_in_db
 {
-    local PSQL="psql phobos -U phobos"
     local host=$(hostname -s)
 
     $PSQL << EOF

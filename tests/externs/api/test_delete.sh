@@ -37,7 +37,7 @@ function setup
 {
     setup_tables
 
-    psql phobos phobos << EOF
+    $PSQL << EOF
     INSERT INTO object VALUES
         ('test-oid1', '00112233445566778899aabbccddeef1', 1, '{}'),
         ('test-oid2', '00112233445566778899aabbccddeef2', 1, '{}'),

@@ -214,7 +214,6 @@ function put_get_test
 # Test family based media selection
 function put_family
 {
-    local PSQL="psql phobos phobos"
     local id=test/hosts-fam.$$
     local request="SELECT extents FROM extent WHERE oid='$id';"
 
@@ -231,7 +230,6 @@ function put_family
 
 function put_layout
 {
-    local PSQL="psql phobos phobos"
     local id1=test/hosts-lay1.$$
     local id2=test/hosts-lay2.$$
     local request1="SELECT lyt_info FROM extent WHERE oid='$id1';"
@@ -322,7 +320,6 @@ function put_alias
     local alias_bad="alias-noexist"
     local alias_nonexist_tags="erroneus-tag-test"
 
-    local PSQL="psql phobos phobos"
     local id_full=test/hosts-alias1.$$
     local id_empty_family=test/hosts-alias2.$$
     local id_empty_layout=test/hosts-alias3.$$

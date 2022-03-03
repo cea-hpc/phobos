@@ -32,7 +32,6 @@ function setup
     # start with a clean and empty DB
     setup_tables
 
-    local PSQL="psql phobos -U phobos"
     $PSQL << EOF
 insert into object (oid, user_md)
             values ('oid1', '{}'),

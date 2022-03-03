@@ -36,7 +36,7 @@ test_bin="$test_bin_dir/test_undelete"
 function setup
 {
     setup_tables
-    psql phobos phobos << EOF
+    $PSQL << EOF
     INSERT INTO deprecated_object VALUES
         ('test-oid1', '00112233445566778899aabbccddeef1', 1, '{}'),
         ('test-oid1', '00112233445566778899aabbccddeef1', 2, '{}'),

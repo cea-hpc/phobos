@@ -219,7 +219,7 @@ echo "**** TEST: DSS FILTER SYNTAX ERROR ****"
 test_check_get "media" '{"DSS::MDA::idontexist": "foo"}' 0 'FAIL'
 
 echo "**** TEST: DSS_DELETE OBJECT ****"
-psql phobos -U phobos << EOF
+$PSQL << EOF
 insert into deprecated_object (oid, uuid, version, user_md)
     values ('01230123ABC', '00112233445566778899aabbccddeeff', 1, '{}');
 EOF
