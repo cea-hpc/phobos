@@ -72,7 +72,6 @@ static void free_tags(char **tags, int size)
 static int duplicate_tags(char **argv, char ***tags, int size)
 {
     char **tmp;
-    int rc;
     int i;
 
     tmp = malloc(size * sizeof(*tags));
@@ -90,7 +89,7 @@ static int duplicate_tags(char **argv, char ***tags, int size)
 
     *tags = tmp;
 
-    return rc;
+    return 0;
 }
 
 int main(int argc, char **argv)
