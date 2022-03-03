@@ -175,6 +175,7 @@ static char *make_oid(char *file, int i)
 {
     size_t filelength = strlen(file);
     char *oid = NULL;
+    int sz;
 
     if (i > 9999 || i < 0)
         exit(ERANGE);
@@ -185,7 +186,8 @@ static char *make_oid(char *file, int i)
         exit(errno);
 
     strcpy(oid, file);
-    snprintf(oid + filelength, 5, "%d", i);
+    sz = snprintf(oid + filelength, 5, "%d", i);
+    oid[filelength + sz] = '\0';
 
     return oid;
 }
