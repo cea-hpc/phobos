@@ -26,6 +26,7 @@ check_SCRIPTS=acceptance.sh \
               test_extent_list.sh \
               test_get.sh \
               test_group_sync.sh \
+              test_ldm.sh \
               test_locate.sh \
               test_media.sh \
               test_object_list.sh \

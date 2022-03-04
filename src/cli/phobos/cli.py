@@ -44,7 +44,7 @@ from abc import ABCMeta, abstractmethod
 from ClusterShell.NodeSet import NodeSet
 
 from phobos.core.admin import Client as AdminClient
-from phobos.core.cfg import load_file as cfg_load_file
+import phobos.core.cfg as cfg
 from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
                                ADM_STATUS, TAGS, PUT_ACCESS, GET_ACCESS,
@@ -632,8 +632,10 @@ class ScanOptHandler(BaseOptHandler):
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(ScanOptHandler, cls).add_options(parser)
-        parser.add_argument('res', nargs='+',
-                            help='Resource(s) or device(s) to scan')
+        parser.add_argument('res', nargs='*',
+                            help="Resource(s) or device(s) to scan. If not "
+                                 "given, will fetch 'lib_device' path in "
+                                 "configuration file instead")
 
 class DriveListOptHandler(ListOptHandler):
     """
@@ -1412,7 +1414,15 @@ class LibOptHandler(BaseResourceOptHandler):
 
     def exec_scan(self):
         """Scan this lib and display the result"""
-        for lib_dev in self.params.get("res"):
+        libs = self.params.get("res")
+        if not libs:
+            try:
+                lib_dev_path_from_cfg = cfg.get_val("lrs", "lib_device")
+                libs.append(lib_dev_path_from_cfg)
+            except KeyError as err:
+                print("Unable to retrieve 'lib_device' in config:", err)
+
+        for lib_dev in libs:
             lib_data = LibAdapter(PHO_LIB_SCSI, lib_dev).scan()
             # FIXME: can't use dump_object_list yet as it does not play well
             # with unstructured dict-like data (relies on getattr)
@@ -1528,7 +1538,7 @@ class PhobosActionContext(object):
         cpath = self.parameters.get('config')
         # Try to open configuration file
         try:
-            cfg_load_file(cpath)
+            cfg.load_file(cpath)
         except IOError as exc:
             if exc.errno == errno.ENOENT or exc.errno == errno.EALREADY:
                 return
