@@ -3283,40 +3283,82 @@ void dev_sync(struct lrs_dev *dev)
 
 }
 
-static int sched_handle_format(struct lrs_sched *sched, pho_req_t *req,
-                               pho_resp_t *resp)
+static int queue_format_response(struct tsqueue *response_queue,
+                                 struct req_container *reqc)
 {
-    int rc = 0;
-    pho_req_format_t *freq = req->format;
-    struct pho_id m;
+    struct resp_container *respc = NULL;
+    int rc;
 
-    rc = pho_srl_response_format_alloc(resp);
+    respc = malloc(sizeof(*respc));
+    if (!respc)
+        LOG_GOTO(send_err, rc = -ENOMEM, "Unable to allocate format respc");
+
+    respc->socket_id = reqc->socket_id;
+    respc->resp = malloc(sizeof(*respc->resp));
+    if (!respc->resp)
+        LOG_GOTO(err_respc, rc = -ENOMEM,
+                 "Unable to allocate format respc->resp");
+
+    rc = pho_srl_response_format_alloc(respc->resp);
     if (rc)
-        return rc;
+        goto err_respc_resp;
+
+    /* Build the answer */
+    respc->resp->req_id = reqc->req->id;
+    respc->resp->format->med_id->family = reqc->req->format->med_id->family;
+    rc = strdup_safe(&respc->resp->format->med_id->name,
+                     reqc->req->format->med_id->name);
+    if (rc)
+        LOG_GOTO(err_format, rc,
+                 "Error on duplicating medium name in format response");
+
+    tsqueue_push(response_queue, respc);
+    return 0;
+
+err_format:
+    pho_srl_response_free(respc->resp, false);
+err_respc_resp:
+    free(respc->resp);
+err_respc:
+    free(respc);
+send_err:
+    return queue_error_response(response_queue, rc, reqc);
+}
+
+/**
+ * Handle a format request
+ *
+ * reqc is freed, except when -EAGAIN is returned.
+ */
+static int sched_handle_format(struct lrs_sched *sched,
+                               struct req_container *reqc)
+{
+    pho_req_format_t *freq = reqc->req->format;
+    struct pho_id m;
+    int rc = 0;
 
     m.family = (enum rsc_family)freq->med_id->family;
     pho_id_name_set(&m, freq->med_id->name);
-
     rc = sched_format(sched, &m, (enum fs_type)freq->fs, freq->unlock);
-    if (rc) {
-        pho_srl_response_free(resp, false);
-        if (rc != -EAGAIN) {
-            int rc2 = pho_srl_response_error_alloc(resp);
+    if (rc != -EAGAIN) {
+        int rc2;
 
-            if (rc2)
-                return rc2;
+        if (rc)
+            rc2 = queue_error_response(sched->response_queue, rc, reqc);
+        else
+            rc2 = queue_format_response(sched->response_queue, reqc);
 
-            resp->req_id = req->id;
-            resp->error->rc = rc;
-            resp->error->req_kind = PHO_REQUEST_KIND__RQ_FORMAT;
+        sched_req_free(reqc);
+        if (rc2)
+            pho_error(rc2, "Error on sending format response");
 
-            /* Request processing error, not an LRS error */
-            rc = 0;
-        }
-    } else {
-        resp->req_id = req->id;
-        resp->format->med_id->family = freq->med_id->family;
-        resp->format->med_id->name = strdup(freq->med_id->name);
+        /*
+         * LRS global error only if we face a response error.
+         * If there is no response error, rc2 is equal to zero and we set rc to
+         * the no error zero value, else we track the response error rc2 into
+         * rc.
+         */
+        rc = rc2;
     }
 
     return rc;
@@ -3384,7 +3426,6 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
 {
     struct req_container *reqc;
     GArray *resp_array;
-    int req_kind = -1;
     int rc = 0;
 
     resp_array = g_array_sized_new(FALSE, FALSE, sizeof(struct resp_container),
@@ -3399,69 +3440,65 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
      */
     while ((reqc = g_queue_pop_tail(sched->req_queue)) != NULL) {
         pho_req_t *req = reqc->req;
-        struct resp_container *respc;
 
-        g_array_set_size(resp_array, resp_array->len + 1);
-        respc = &g_array_index(resp_array, struct resp_container,
-                               resp_array->len - 1);
-
-        respc->socket_id = reqc->socket_id;
-        respc->resp = malloc(sizeof(*respc->resp));
-        if (!respc->resp)
-            LOG_GOTO(out, rc = -ENOMEM, "lrs cannot allocate response");
-
-        if (pho_request_is_write(req)) {
-            req_kind = PHO_REQUEST_KIND__RQ_WRITE;
-            pho_debug("lrs received write request (%p)", req);
-            rc = sched_handle_write_alloc(sched, req, respc);
-        } else if (pho_request_is_read(req)) {
-            req_kind = PHO_REQUEST_KIND__RQ_READ;
-            pho_debug("lrs received read allocation request (%p)", req);
-            rc = sched_handle_read_alloc(sched, req, respc);
-        } else if (pho_request_is_format(req)) {
-            req_kind = PHO_REQUEST_KIND__RQ_FORMAT;
+        if (pho_request_is_format(req)) {
             pho_debug("lrs received format request (%p)", req);
-            rc = sched_handle_format(sched, req, respc->resp);
-        } else if (pho_request_is_notify(req)) {
-            req_kind = PHO_REQUEST_KIND__RQ_NOTIFY;
-            pho_debug("lrs received notify request (%p)", req);
-            rc = sched_handle_notify(sched, req, respc->resp);
+            rc = sched_handle_format(sched, reqc);
         } else {
-            /* Unexpected req->kind, very probably a programming error */
-            pho_error(rc = -EPROTO,
-                      "lrs received an invalid request "
-                      "(no walloc, ralloc or release field)");
-        }
+            struct resp_container *respc;
 
-        /* Break on EAGAIN and mark the whole run as a success (but there may be
-         * no response).
-         */
-        if (rc == -EAGAIN && running) {
-            /* Requeue last request */
-            g_queue_push_tail(sched->req_queue, reqc);
-            g_array_remove_index(resp_array, resp_array->len - 1);
-            rc = 0;
-            break;
-        } else if (rc == -EAGAIN && !running) {
-            /* create an ESHUTDOWN error */
-            int rc2;
-
-            rc2 = pho_srl_response_error_alloc(respc->resp);
-            if (rc2) {
-                /* on error, the request will be discarded and the client will
-                 * fail when the LRS finally stops
-                 */
-                pho_srl_request_free(reqc->req, true);
-                free(reqc);
-                return rc2;
+            g_array_set_size(resp_array, resp_array->len + 1);
+            respc = &g_array_index(resp_array, struct resp_container,
+                                   resp_array->len - 1);
+            respc->socket_id = reqc->socket_id;
+            respc->resp = malloc(sizeof(*respc->resp));
+            if (!respc->resp) {
+                sched_req_free(reqc);
+                LOG_GOTO(out, rc = -ENOMEM, "lrs cannot allocate response");
             }
 
-            respc->resp->error->rc = -ESHUTDOWN;
-            respc->resp->error->req_kind = req_kind;
-            rc = 0;
+            if (pho_request_is_write(req)) {
+                pho_debug("lrs received write request (%p)", req);
+                rc = sched_handle_write_alloc(sched, req, respc);
+            } else if (pho_request_is_read(req)) {
+                pho_debug("lrs received read allocation request (%p)", req);
+                rc = sched_handle_read_alloc(sched, req, respc);
+            } else if (pho_request_is_notify(req)) {
+                pho_debug("lrs received notify request (%p)", req);
+                rc = sched_handle_notify(sched, req, respc->resp);
+            } else {
+                /* Unexpected req->kind, very probably a programming error */
+                pho_error(rc = -EPROTO,
+                          "lrs received an invalid request "
+                          "(no walloc, ralloc or release field)");
+            }
+
+            if (rc != -EAGAIN)
+                sched_req_free(reqc);
         }
 
+        if (rc == 0)
+            continue;
+
+        if (rc != -EAGAIN)
+            break;
+
+        /* no response to -EAGAIN */
+        if (!pho_request_is_format(reqc->req))
+            g_array_remove_index(resp_array, resp_array->len - 1);
+
+        if (running) {
+            /* Requeue last request on -EAGAIN and running */
+            g_queue_push_tail(sched->req_queue, reqc);
+            rc = 0;
+            break;
+        }
+
+        /* create an -ESHUTDOWN error on -EAGAIN and !running */
+        rc = queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
         sched_req_free(reqc);
+        if (rc)
+            break;
     }
 
 out:
