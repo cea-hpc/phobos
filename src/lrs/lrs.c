@@ -372,13 +372,18 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
             continue;
         }
 
-        req_cont->mutex = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
-
         /* send back the ping request */
         if (pho_request_is_ping(req_cont->req)) {
             _process_ping_request(lrs, req_cont);
             sched_req_free(req_cont);
             continue;
+        }
+
+        rc2 = pthread_mutex_init(&req_cont->mutex, NULL);
+        if (rc2) {
+            rc = rc ? : rc2;
+            LOG_GOTO(send_err, rc2,
+                     "Unable to init mutex at request container init");
         }
 
         rc2 = clock_gettime(CLOCK_REALTIME, &req_cont->received_at);

@@ -3386,8 +3386,7 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
             break;
         }
 
-        pho_srl_request_free(reqc->req, true);
-        free(reqc);
+        sched_req_free(reqc);
     }
 
 out:
