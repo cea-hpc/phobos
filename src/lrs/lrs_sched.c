@@ -62,6 +62,59 @@ enum sched_operation {
     LRS_OP_FORMAT,
 };
 
+static int format_media_init(struct format_media *format_media)
+{
+    int rc;
+
+    rc = pthread_mutex_init(&format_media->mutex, NULL);
+    if (rc)
+        LOG_RETURN(rc, "Error on initializing format_media mutex");
+
+    format_media->media_name = g_hash_table_new(g_str_hash, g_str_equal);
+    return 0;
+}
+
+static void format_media_clean(struct format_media *format_media)
+{
+    int rc;
+
+    rc = pthread_mutex_destroy(&format_media->mutex);
+    if (rc)
+        pho_error(rc, "Error on destroying format_media mutex");
+
+    if (format_media->media_name) {
+        g_hash_table_unref(format_media->media_name);
+        format_media->media_name = NULL;
+    }
+}
+
+/**
+ * Add a medium to the format list if not already present
+ *
+ * @return true if medium is added, false if medium is already present
+ */
+static bool format_medium_add(struct format_media *format_media,
+                              struct media_info *medium)
+{
+    pthread_mutex_lock(&format_media->mutex);
+    if (g_hash_table_contains(format_media->media_name, medium->rsc.id.name)) {
+        pthread_mutex_unlock(&format_media->mutex);
+        return false;
+    }
+
+    g_hash_table_add(format_media->media_name, medium->rsc.id.name);
+    pthread_mutex_unlock(&format_media->mutex);
+    return true;
+}
+
+void format_medium_remove(struct format_media *format_media,
+                          struct media_info *medium)
+{
+    pthread_mutex_lock(&format_media->mutex);
+    g_hash_table_remove(format_media->media_name, medium->rsc.id.name);
+    pthread_mutex_unlock(&format_media->mutex);
+}
+
 /**
  * Build a mount path for the given identifier.
  * @param[in] id    Unique drive identified on the host.
@@ -763,18 +816,30 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
 
     sched->family = family;
 
-    rc = lrs_dev_hdl_init(&sched->devices, family);
+    rc = format_media_init(&sched->ongoing_format);
     if (rc)
+        LOG_RETURN(rc, "Failed to init sched format media");
+
+    rc = lrs_dev_hdl_init(&sched->devices, family);
+    if (rc) {
+        format_media_clean(&sched->ongoing_format);
         LOG_RETURN(rc, "Failed to initialize device handle");
+    }
 
     rc = fill_host_owner(&sched->lock_hostname, &sched->lock_owner);
-    if (rc)
+    if (rc) {
+        format_media_clean(&sched->ongoing_format);
+        lrs_dev_hdl_fini(&sched->devices);
         LOG_RETURN(rc, "Failed to get hostname and PID");
+    }
 
     /* Connect to the DSS */
     rc = dss_init(&sched->dss);
-    if (rc)
-        return rc;
+    if (rc) {
+        format_media_clean(&sched->ongoing_format);
+        lrs_dev_hdl_fini(&sched->devices);
+        LOG_RETURN(rc, "Failed to init dss handle");
+    }
 
     sched->req_queue = g_queue_new();
     sched->response_queue = resp_queue;
@@ -1172,6 +1237,7 @@ void sched_fini(struct lrs_sched *sched)
     lrs_dev_hdl_clear(&sched->devices);
 
     lrs_dev_hdl_fini(&sched->devices);
+    format_media_clean(&sched->ongoing_format);
 }
 
 bool sched_has_running_devices(struct lrs_sched *sched)
@@ -3334,12 +3400,33 @@ static int sched_handle_format(struct lrs_sched *sched,
                                struct req_container *reqc)
 {
     pho_req_format_t *freq = reqc->req->format;
+    struct media_info *medium = NULL;
     struct pho_id m;
     int rc = 0;
 
     m.family = (enum rsc_family)freq->med_id->family;
     pho_id_name_set(&m, freq->med_id->name);
+    rc = sched_fill_media_info(sched, &medium, &m);
+    if (rc) {
+        if (rc == -EALREADY) {
+            pho_warn("Media '%s' is already locked, format returns -EBUSY",
+                     m.name);
+            rc = -EBUSY;
+        }
+
+        goto response;
+    }
+
+    if (!format_medium_add(&sched->ongoing_format, medium)) {
+        pho_warn("Trying to format '%s' with an already existing in progress "
+                 "format", m.name);
+        rc = -EBUSY;
+        goto response;
+    }
+
     rc = sched_format(sched, &m, (enum fs_type)freq->fs, freq->unlock);
+    format_medium_remove(&sched->ongoing_format, medium);
+response:
     if (rc != -EAGAIN) {
         int rc2;
 
@@ -3361,6 +3448,7 @@ static int sched_handle_format(struct lrs_sched *sched,
         rc = rc2;
     }
 
+    media_info_free(medium);
     return rc;
 }
 

@@ -25,6 +25,7 @@
 #ifndef _PHO_LRS_SCHED_H
 #define _PHO_LRS_SCHED_H
 
+#include <glib.h>
 #include <pthread.h>
 #include <stdint.h>
 
@@ -38,31 +39,55 @@
 extern bool running;
 
 /**
+ * Media with ongoing format scheduled requests
+ *
+ * "media_name" keys and values contains "struct media_info *" rsc.id.name
+ * This structure doesn't "own" these rsc.id.name references and never
+ * frees them. They must be freed elsewhere.
+ *
+ * - The scheduler thread checks existing in progress format media to avoid
+ *   launching the same format twice.
+ * - The scheduler thread pushes new in progress format medium.
+ * - The device thread removes formated medium once the format is done.
+ */
+struct format_media {
+    pthread_mutex_t mutex;
+    GHashTable *media_name;
+};
+
+/**
+ * Remove medium from format_media
+ */
+void format_medium_remove(struct format_media *format_media,
+                          struct media_info *medium);
+
+/**
  * Local Resource Scheduler instance, manages media and local devices for the
  * actual IO to be performed.
  */
 struct lrs_sched {
-    struct dss_handle  dss;             /**< Associated DSS */
-    enum rsc_family    family;          /**< Managed resource family */
-    struct lrs_dev_hdl devices;         /**< Handle to device threads */
-    const char        *lock_hostname;   /**< Lock hostname for this LRS */
-    int                lock_owner;      /**< Lock owner (pid) for this LRS */
-    GQueue            *req_queue;       /**< Queue for all but
+    struct dss_handle   dss;            /**< Associated DSS */
+    enum rsc_family     family;         /**< Managed resource family */
+    struct lrs_dev_hdl  devices;        /**< Handle to device threads */
+    const char         *lock_hostname;  /**< Lock hostname for this LRS */
+    int                 lock_owner;     /**< Lock owner (pid) for this LRS */
+    GQueue             *req_queue;      /**< Queue for all but
                                           *  release requests
                                           */
-    struct tsqueue    *response_queue;  /**< Queue for responses */
-    struct timespec    sync_time_threshold;
+    struct format_media ongoing_format; /**< Ongoing format media */
+    struct tsqueue     *response_queue; /**< Queue for responses */
+    struct timespec     sync_time_threshold;
                                         /**< Time threshold for medium
-                                         *   synchronization
-                                         */
-    unsigned int       sync_nb_req_threshold;
+                                          *  synchronization
+                                          */
+    unsigned int        sync_nb_req_threshold;
                                         /**< Number of requests threshold
-                                         *   for medium synchronization
-                                         */
-    unsigned long      sync_written_size_threshold;
+                                          *  for medium synchronization
+                                          */
+    unsigned long       sync_written_size_threshold;
                                         /**< Written size threshold for
-                                         *   medium synchronization
-                                         */
+                                          *  medium synchronization
+                                          */
 };
 
 /**
