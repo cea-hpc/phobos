@@ -650,8 +650,10 @@ static int sched_load_dev_state(struct lrs_sched *sched)
 
     ENTRY;
 
-    if (sched->devices.ldh_devices->len == 0)
-        LOG_RETURN(-ENXIO, "Try to load state of an empty list of devices");
+    if (sched->devices.ldh_devices->len == 0) {
+        pho_verb("Try to load state of an empty list of devices");
+        return -ENXIO;
+    }
 
     /* get a handle to the library to query it */
     rc = wrap_lib_open(sched->family, &lib);
