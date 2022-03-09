@@ -2164,11 +2164,13 @@ static int sched_free_one_device(struct lrs_sched *sched,
                              0, &NO_TAGS, pmedia, false);
         if (tmp_dev == NULL) {
             if (compatible_drive_exists(sched, pmedia, selected_devs,
-                                        n_selected_devs))
-                LOG_RETURN(-EAGAIN, "No suitable device to free");
-            else
+                                        n_selected_devs)) {
+                pho_debug("No suitable device to free");
+                return -EAGAIN;
+            } else {
                 LOG_RETURN(-ENODEV, "No compatible device exists not failed "
                                     "and not locked by admin");
+            }
         }
 
         if (sched_empty_dev(sched, tmp_dev))
