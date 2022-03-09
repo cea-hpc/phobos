@@ -107,9 +107,9 @@ int pho_comm_open(struct pho_comm_info *ci, const char *sock_path,
         /* if the client does not see the LRS socket, we return ENOTCONN,
          * then each client will decide if they need the LRS or not.
          */
-        LOG_RETURN(-ENOTCONN,
-                   "Socket does not exist(%s), means that the LRS is not "
-                   "up or the socket path is not correct", sock_path);
+        pho_verb("Socket does not exist(%s), means that the LRS is not "
+                 "up or the socket path is not correct", sock_path);
+        return -ENOTCONN;
     }
 
     ci->path = strdup(sock_path);

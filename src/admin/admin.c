@@ -385,7 +385,7 @@ int phobos_admin_init(struct admin_handle *adm, bool lrs_required)
 
     rc = pho_comm_open(&adm->comm, sock_path, false);
     if (!lrs_required && rc == -ENOTCONN) {
-        pho_warn("Cannot contact 'phobosd', but not required: will continue");
+        pho_info("Cannot contact 'phobosd', but not required: will continue");
         rc = 0;
     } else if (rc) {
         LOG_GOTO(out, rc, "Cannot contact 'phobosd': will abort");
