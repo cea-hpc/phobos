@@ -73,6 +73,25 @@ int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
                             unsigned int num_dev, bool keep_locked);
 
 /**
+ * Remove the given devices from the database.
+ *
+ * All requested devices which are not currently used by a daemon will be
+ * removed from the phobos system.
+ *
+ * The first encountered error is returned once all drives are processed.
+ *
+ * \param[in]       adm             Admin module handler.
+ * \param[in]       dev_ids         Device IDs to remove.
+ * \param[in]       num_dev         Number of device to remove.
+ * \param[out]      num_removed_dev Number of removed devices.
+ *
+ * \return                          0     on success,
+ *                                 -errno on failure.
+ */
+int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
+                               int num_dev, int *num_removed_dev);
+
+/**
  * Update the administrative state of the given devices to 'locked' and
  * inform the LRS devices state has changed.
  *

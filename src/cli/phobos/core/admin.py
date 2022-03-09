@@ -104,6 +104,22 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc, "Error during device add")
 
+    def device_delete(self, dev_family, dev_names):
+        """Remove devices to phobos system."""
+        c_id = Id * len(dev_names)
+        dev_ids = [Id(dev_family, name=name) for name in dev_names]
+        count = c_int(0)
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_device_delete(byref(self.handle),
+                                                        c_id(*dev_ids),
+                                                        len(dev_ids),
+                                                        byref(count))
+
+        if rc:
+            raise EnvironmentError(rc, "Cannot remove all devices")
+
+        return count.value
+
     def ping(self):
         """Ping the phobos daemon."""
         rc = LIBPHOBOS_ADMIN.phobos_admin_ping(byref(self.handle))

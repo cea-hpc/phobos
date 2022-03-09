@@ -92,6 +92,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['dir', 'list', 'A,B,C', '-o', 'all'])
         self.check_cmdline_valid(['dir', 'list', 'A,B,C', '-o', '*'])
         self.check_cmdline_valid(['dir', 'list', 'A,B,C', '-o', 'name,family'])
+        self.check_cmdline_valid(['drive', 'delete', 'A'])
+        self.check_cmdline_valid(['drive', 'delete', 'A', 'B', 'C'])
         self.check_cmdline_valid(['tape', 'add', '-t', 'LTO5', 'I,J,K'])
         self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o', 'all'])
         self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o', '*'])
@@ -172,6 +174,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['dir', 'locate', 'oid1', 'oid2'], code=2)
         self.check_cmdline_exit(['tape', 'locate'], code=2)
         self.check_cmdline_exit(['tape', 'locate', 'oid1', 'oid2'], code=2)
+        self.check_cmdline_exit(['drive', 'delete'], code=2)
 
 
 class BasicExecutionTest(unittest.TestCase):

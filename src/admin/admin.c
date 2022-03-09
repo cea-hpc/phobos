@@ -436,6 +436,67 @@ int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
     return rc;
 }
 
+int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
+                               int num_dev, int *num_removed_dev)
+{
+    struct dev_info *devices;
+    struct dev_info *dev_res;
+    int avail_devices = 0;
+    int rc;
+    int i;
+
+    *num_removed_dev = 0;
+
+    devices = calloc(num_dev, sizeof(*devices));
+    if (!devices)
+        LOG_RETURN(-ENOMEM, "Device info allocation failed");
+
+    for (i = 0; i < num_dev; ++i) {
+        rc = _get_device_by_path_or_serial(adm, dev_ids + i, &dev_res);
+        if (rc)
+            goto out_free;
+
+        rc = dss_lock(&adm->dss, DSS_DEVICE, dev_res, 1);
+        if (rc) {
+            pho_warn("Device '%s' cannot be locked, so cannot be removed",
+                     dev_ids[i].name);
+            dss_res_free(dev_res, 1);
+            continue;
+        }
+
+        rc = dev_info_cpy(&devices[avail_devices], dev_res);
+        if (rc)
+            LOG_GOTO(out_free, rc, "Couldn't copy device data");
+
+        dss_res_free(dev_res, 1);
+        avail_devices++;
+    }
+
+    if (avail_devices == 0)
+        LOG_GOTO(out_free, rc = -ENODEV,
+                 "There are no available devices to remove");
+
+    rc = dss_device_delete(&adm->dss, devices, avail_devices);
+    if (rc)
+        pho_error(rc, "Devices cannot be removed");
+
+    *num_removed_dev = avail_devices;
+
+out_free:
+    // In case an error occured when copying device information
+    if (i != num_dev) {
+        dss_unlock(&adm->dss, DSS_DEVICE, dev_res, 1, false);
+        dss_res_free(dev_res, 1);
+    }
+
+    dss_unlock(&adm->dss, DSS_DEVICE, devices, avail_devices, false);
+    for (i = 0; i < avail_devices; ++i)
+        dev_info_free(devices + i, false);
+    free(devices);
+
+    return rc;
+}
+
 int phobos_admin_device_lock(struct admin_handle *adm, struct pho_id *dev_ids,
                              int num_dev, bool is_forced)
 {

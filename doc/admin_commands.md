@@ -32,6 +32,17 @@ To enable using a drive in production as soon as it is added, specify the
 phobos drive add --unlock /dev/mapper/LTO6-012345
 ```
 
+# Removing drives
+Use the `phobos drive delete` command line to remove tape drives from phobos
+system.
+
+Drives will be removed only if they are not currently used by the system
+ie. no daemon is using them.
+
+```
+phobos drive delete /dev/mapper/LTO6-012345
+```
+
 # Adding media
 To add tapes to be managed by phobos, use the `phobos` command line.
 It is mandatory to specify a media type (like LTO8, T10KD...) with option `-t`:

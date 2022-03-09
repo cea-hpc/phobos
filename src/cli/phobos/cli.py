@@ -492,6 +492,16 @@ class MediaAddOptHandler(AddOptHandler):
                             help='tags to associate with this media (comma-'
                                  'separated: foo,bar)')
 
+class ResourceDeleteOptHandler(DSSInteractHandler):
+    """Remove a resource from the system."""
+    label = 'delete'
+    descr = 'remove resource(s) from the system'
+
+    @classmethod
+    def add_options(cls, parser):
+        super(ResourceDeleteOptHandler, cls).add_options(parser)
+        parser.add_argument('res', nargs='+', help='Resource(s) to remove')
+
 class CheckOptHandler(DSSInteractHandler):
     """Issue a check command on the designated object(s)."""
     label = 'check'
@@ -1018,6 +1028,7 @@ class DeviceOptHandler(BaseResourceOptHandler):
     """Shared interface for devices."""
     verbs = [
         AddOptHandler,
+        ResourceDeleteOptHandler,
         ListOptHandler,
         LockOptHandler,
         UnlockOptHandler
@@ -1050,6 +1061,20 @@ class DeviceOptHandler(BaseResourceOptHandler):
             sys.exit(os.EX_DATAERR)
 
         self.logger.info("Added %d device(s) successfully", len(resources))
+
+    def exec_delete(self):
+        """Remove a device"""
+        resources = self.params.get('res')
+
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                count = adm.device_delete(self.family, resources)
+        except EnvironmentError as err:
+            self.logger.error("Some device removals failed: %s",
+                              env_error_format(err))
+            sys.exit(os.EX_DATAERR)
+
+        self.logger.info("Removed %d device(s) successfully", count)
 
     def exec_lock(self):
         """Device lock"""
@@ -1334,6 +1359,7 @@ class DriveOptHandler(DeviceOptHandler):
     family = ResourceFamily(ResourceFamily.RSC_TAPE)
     verbs = [
         AddOptHandler,
+        ResourceDeleteOptHandler,
         DriveListOptHandler,
         LockOptHandler,
         UnlockOptHandler

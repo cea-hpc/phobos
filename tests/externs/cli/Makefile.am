@@ -40,6 +40,7 @@ check_SCRIPTS=acceptance.sh \
               test_put.sh \
               test_raid1_split.sh \
               test_resource_availability.sh \
+              test_resource_management.sh \
               test_undelete.sh
 
 TESTS=$(check_SCRIPTS)
