@@ -32,6 +32,7 @@
 #include "pho_dss.h"
 #include "pho_srl_lrs.h"
 #include "pho_types.h"
+#include "pho_type_utils.h"
 
 #include "lrs_device.h"
 
@@ -132,6 +133,14 @@ struct release_params {
 };
 
 /**
+ * Parameters of a request container dedicated to a format request
+ */
+struct format_params {
+    struct media_info *medium_to_format; /**< medium to format */
+    struct fs_adapter fsa;               /**< fs_adapter to use for format */
+};
+
+/**
  * Request container used by the scheduler to transfer information
  * between a request and its response. For now, this information consists
  * in a socket ID.
@@ -143,6 +152,7 @@ struct req_container {
     struct timespec received_at;    /**< Request reception timestamp */
     union {                         /**< Parameters used by the LRS. */
         struct release_params release;
+        struct format_params format;
     } params;
 };
 
@@ -154,6 +164,8 @@ static inline void destroy_container_params(struct req_container *cont)
     if (pho_request_is_release(cont->req)) {
         free(cont->params.release.tosync_media);
         free(cont->params.release.nosync_media);
+    } else if (pho_request_is_format(cont->req)) {
+        media_info_free(cont->params.format.medium_to_format);
     }
 }
 

@@ -1058,23 +1058,19 @@ out_close:
  * \return              0 on success, negative error code on failure
  */
  __attribute__ ((unused)) static int dev_format(struct lrs_dev *dev,
-                                                enum fs_type fs, bool unlock)
+                                                struct fs_adapter *fsa,
+                                                bool unlock)
 {
     struct media_info *medium = dev->ld_dss_media_info;
     struct ldm_fs_space space = {0};
-    struct fs_adapter fsa;
     uint64_t fields = 0;
     int rc;
 
     ENTRY;
 
-    pho_verb("format: media '%s' as %s", medium->rsc.id.name, fs_type2str(fs));
+    pho_verb("format: medium '%s'", medium->rsc.id.name);
 
-    rc = get_fs_adapter(fs, &fsa);
-    if (rc)
-        LOG_RETURN(rc, "Failed to get FS adapter");
-
-    rc = ldm_fs_format(&fsa, dev->ld_dev_path, medium->rsc.id.name, &space);
+    rc = ldm_fs_format(fsa, dev->ld_dev_path, medium->rsc.id.name, &space);
     if (rc)
         LOG_RETURN(rc, "Cannot format media '%s'", medium->rsc.id.name);
 

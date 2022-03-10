@@ -2951,13 +2951,13 @@ static int sched_handle_format(struct lrs_sched *sched,
                                struct req_container *reqc)
 {
     pho_req_format_t *freq = reqc->req->format;
-    struct media_info *medium = NULL;
     struct pho_id m;
     int rc = 0;
 
     m.family = (enum rsc_family)freq->med_id->family;
     pho_id_name_set(&m, freq->med_id->name);
-    rc = sched_fill_media_info(sched, &medium, &m);
+    rc = sched_fill_media_info(sched, &reqc->params.format.medium_to_format,
+                               &m);
     if (rc) {
         if (rc == -EALREADY) {
             pho_warn("Media '%s' is already locked, format returns -EBUSY",
@@ -2968,7 +2968,13 @@ static int sched_handle_format(struct lrs_sched *sched,
         goto response;
     }
 
-    if (!format_medium_add(&sched->ongoing_format, medium)) {
+    rc = get_fs_adapter((enum fs_type)freq->fs, &reqc->params.format.fsa);
+    if (rc)
+        LOG_GOTO(response, rc, "Failed to get FS adapter for format fs_type "
+                 "'%s'", fs_type2str((enum fs_type)freq->fs));
+
+    if (!format_medium_add(&sched->ongoing_format,
+                           reqc->params.format.medium_to_format)) {
         pho_warn("Trying to format '%s' with an already existing in progress "
                  "format", m.name);
         rc = -EBUSY;
@@ -2976,7 +2982,8 @@ static int sched_handle_format(struct lrs_sched *sched,
     }
 
     rc = sched_format(sched, &m, (enum fs_type)freq->fs, freq->unlock);
-    format_medium_remove(&sched->ongoing_format, medium);
+    format_medium_remove(&sched->ongoing_format,
+                         reqc->params.format.medium_to_format);
 response:
     if (rc != -EAGAIN) {
         int rc2;
@@ -2999,7 +3006,6 @@ response:
         rc = rc2;
     }
 
-    media_info_free(medium);
     return rc;
 }
 
