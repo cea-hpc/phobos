@@ -256,4 +256,14 @@ void dev_thread_signal(struct lrs_dev *device);
  */
 void dev_thread_wait_end(struct lrs_dev *device);
 
+/**
+ * Wrap library open operations
+ *
+ * @param[in]   dev_type    Device type
+ * @param[out]  lib         Library handler.
+ *
+ * @return          0 on success, -1 * posix error code on failure.
+ */
+int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter *lib);
+
 #endif

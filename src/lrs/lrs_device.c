@@ -825,6 +825,78 @@ out:
     return rc;
 }
 
+static int dss_medium_release(struct dss_handle *dss, struct media_info *medium)
+{
+    int rc;
+
+    rc = dss_unlock(dss, DSS_MEDIA, medium, 1, false);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Error when releasing medium '%s' with current lock "
+                   "(hostname %s, owner %d)", medium->rsc.id.name,
+                   medium->lock.hostname, medium->lock.owner);
+
+    pho_lock_clean(&medium->lock);
+    return 0;
+}
+
+/**
+ * Unload medium from device
+ *
+ * - DSS unlock the medium
+ * - set drive's ld_op_status to PHO_DEV_OP_ST_EMPTY
+ */
+__attribute__ ((unused)) static int dev_unload(struct lrs_dev *dev)
+{
+    /* let the library select the target location */
+    struct lib_item_addr    free_slot = { .lia_type = MED_LOC_UNKNOWN };
+    struct lib_adapter      lib;
+    int                     rc2;
+    int                     rc;
+
+    ENTRY;
+
+    pho_verb("Unloading '%s' from '%s'", dev->ld_dss_media_info->rsc.id.name,
+             dev->ld_dev_path);
+
+    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib);
+    if (rc)
+        LOG_GOTO(out, rc,
+                 "Unable to open lib '%s' to unload medium '%s' from device "
+                 "'%s'", rsc_family_names[dev->ld_dss_dev_info->rsc.id.family],
+                 dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
+
+    rc = ldm_lib_media_move(&lib, &dev->ld_lib_dev_info.ldi_addr, &free_slot);
+    if (rc != 0)
+        /* Set operational failure state on this drive. It is incomplete since
+         * the error can originate from a defective tape too...
+         *  - consider marking both as failed.
+         *  - consider maintaining lists of errors to diagnose and decide who to
+         *    exclude from the cool game.
+         */
+        LOG_GOTO(out_close, rc, "Media move failed");
+
+    dev->ld_op_status = PHO_DEV_OP_ST_EMPTY;
+
+out_close:
+    rc2 = ldm_lib_close(&lib);
+    if (rc2)
+        rc = rc ? : rc2;
+
+out:
+    if (!rc) {
+        rc2 = dss_medium_release(&dev->ld_device_thread.ld_dss,
+                                 dev->ld_dss_media_info);
+        if (rc2)
+            rc = rc ? : rc2;
+
+        media_info_free(dev->ld_dss_media_info);
+        dev->ld_dss_media_info = NULL;
+    }
+
+    return rc;
+}
+
 /**
  * Main device thread loop.
  */
@@ -914,4 +986,28 @@ void dev_thread_wait_end(struct lrs_dev *device)
     if (*threadrc < 0)
         pho_error(*threadrc, "device thread '%s' terminated with error",
                   device->ld_dss_dev_info->rsc.id.name);
+}
+
+int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter *lib)
+{
+    const char *lib_dev;
+    int         rc;
+
+    /* non-tape cases: dummy lib adapter (no open required) */
+    if (dev_type != PHO_RSC_TAPE)
+        return get_lib_adapter(PHO_LIB_DUMMY, lib);
+
+    /* tape case */
+    rc = get_lib_adapter(PHO_LIB_SCSI, lib);
+    if (rc)
+        LOG_RETURN(rc, "Failed to get library adapter");
+
+    /* For now, one single configurable path to library device.
+     * This will have to be changed to manage multiple libraries.
+     */
+    lib_dev = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, lib_device);
+    if (!lib_dev)
+        LOG_RETURN(rc, "Failed to get default library device from config");
+
+    return ldm_lib_open(lib, lib_dev);
 }
