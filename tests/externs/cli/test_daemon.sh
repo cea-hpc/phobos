@@ -25,6 +25,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
+. $test_dir/../../utils_tape.sh
 controlled_store="$test_dir/controlled_store"
 
 function setup
@@ -384,6 +385,44 @@ function test_refuse_new_request_during_shutdown()
     rm -rf "$dir" "$file"
 }
 
+function test_mount_failure_during_read_response()
+{
+    local file=$(mktemp)
+    local tape=$(get_tapes L6 1)
+    local drive=$(get_drives 1)
+
+    trap "waive_daemon; drop_tables; rm -f '$file'; \
+          unset PHOBOS_LTFS_cmd_mount" EXIT
+    setup_tables
+    invoke_daemon
+
+    dd if=/dev/urandom of="$file" bs=4096 count=5
+
+    $phobos tape add --type lto6 "$tape"
+    $phobos drive add "$drive"
+    $phobos drive unlock "$drive"
+    $phobos tape format --unlock "$tape"
+
+    $phobos put "$file" oid ||
+        error "Put command failed"
+
+    # Force mount to fail
+    export PHOBOS_LTFS_cmd_mount="sh -c 'exit 1'"
+    waive_daemon
+    invoke_daemon
+
+    $phobos get oid "${file}.out" &&
+        error "Get command should have failed"
+
+    ps --pid "$PID_DAEMON"
+
+    unset PHO_CFG_LTFS_cmd_mount
+    waive_daemon
+    drop_tables
+
+    rm -f "$file"
+}
+
 trap cleanup EXIT
 setup
 
@@ -399,4 +438,5 @@ test_refuse_new_request_during_shutdown
 if [[ -w /dev/changer ]]; then
     test_recover_drive_old_locks
     test_remove_invalid_device_locks
+    test_mount_failure_during_read_response
 fi

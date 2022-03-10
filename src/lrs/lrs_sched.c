@@ -2299,6 +2299,47 @@ static int sched_get_write_res(struct lrs_sched *sched, size_t size,
     return sched_mount(sched, *new_dev);
 }
 
+static int sched_media_lock_and_load(struct lrs_sched *sched,
+                                     struct media_info *media,
+                                     struct lrs_dev **dev)
+{
+    int rc;
+
+    if (media->lock.hostname) {
+        rc = check_renew_lock(sched, DSS_MEDIA, media, &media->lock);
+        if (rc)
+            LOG_RETURN(rc,
+                       "Unable to renew an existing lock before loading media");
+    } else {
+        rc = take_and_update_lock(&sched->dss, DSS_MEDIA, media, &media->lock);
+        if (rc != 0)
+            LOG_RETURN(rc = -EAGAIN,
+                       "Unable to take lock before loading media");
+    }
+
+    /* Is there a free drive? */
+    *dev = dev_picker(sched, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
+                      media, false);
+    if (*dev == NULL) {
+        pho_verb("No free drive: need to unload one");
+        rc = sched_free_one_device(sched, dev, media, NULL, 0);
+        if (rc != 0) {
+            sched_medium_release(sched, media);
+            pho_verb("No device available");
+            return rc;
+        }
+    }
+
+    /* load the media in it */
+    rc = sched_load_media(sched, *dev, media);
+    if (rc)
+        LOG_RETURN(rc, "Unable to load medium '%s' into device '%s' when "
+                       "preparing media",
+                   media->rsc.id.name, (*dev)->ld_dev_path);
+
+    return 0;
+}
+
 static int sched_media_prepare_for_read_or_format(struct lrs_sched *sched,
                                                   const struct pho_id *id,
                                                   enum sched_operation op,
@@ -2360,44 +2401,21 @@ static int sched_media_prepare_for_read_or_format(struct lrs_sched *sched,
         media_info_free(dev->ld_dss_media_info);
         dev->ld_dss_media_info = med;
     } else {
-        pho_verb("Media '%s' is not in a drive", id->name);
-
-        if (med->lock.hostname) {
-            rc = check_renew_lock(sched, DSS_MEDIA, med, &med->lock);
-            if (rc)
-                LOG_GOTO(out, rc,
-                         "Unable to renew an existing lock on an unloaded "
-                         "media to prepare");
-        } else {
-            rc = take_and_update_lock(&sched->dss, DSS_MEDIA, med, &med->lock);
-            if (rc != 0)
-                LOG_GOTO(out, rc = -EAGAIN,
-                         "Unable to take lock on a media to prepare");
-        }
-
-        /* Is there a free drive? */
-        dev = dev_picker(sched, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
-                         med, false);
-        if (dev == NULL) {
-            pho_verb("No free drive: need to unload one");
-            rc = sched_free_one_device(sched, &dev, med, NULL, 0);
-            if (rc != 0) {
-                sched_medium_release(sched, med);
-                LOG_GOTO(out, rc, "No device available");
-            }
-        }
-
-        /* load the media in it */
-        rc = sched_load_media(sched, dev, med);
+        rc = sched_media_lock_and_load(sched, med, &dev);
         if (rc)
-            LOG_GOTO(out, rc,
-                     "Unable to load medium '%s' into device '%s' when "
-                     "preparing media", med->rsc.id.name, dev->ld_dev_path);
+            goto out;
     }
+    /* at this point, med == dev->ld_dss_media_info */
 
     /* Mount only for READ/WRITE and if not already mounted */
-    if (post_fs_mount && dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED)
+    if (post_fs_mount && dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED) {
         rc = sched_mount(sched, dev);
+        if (rc && !dev->ld_dss_media_info)
+            /* if an error occurs during mount, med will be unloaded and freed
+             * through ld_dss_media_info which will be set to NULL.
+             */
+            med = NULL;
+    }
 
 out:
     if (rc) {

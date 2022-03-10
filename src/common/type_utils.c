@@ -209,6 +209,7 @@ void media_info_free(struct media_info *mda)
 {
     if (!mda)
         return;
+
     pho_lock_clean(&mda->lock);
     free(mda->rsc.model);
     tags_free(&mda->tags);
