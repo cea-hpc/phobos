@@ -78,6 +78,14 @@ struct thread_info {
                                               */
 };
 
+/** Elements pushed into the tosync_array of a device */
+struct request_tosync {
+    struct req_container *reqc;
+    size_t medium_index; /**< index of the medium in the tosync_media array of
+                           *  the release_params struct of the reqc
+                           */
+};
+
 /**
  * Parameters to check when a synchronization is required.
  */
@@ -130,6 +138,24 @@ struct lrs_dev {
                                                   */
     struct lrs_dev_hdl  *ld_handle;
 };
+
+/**
+ *  TODO: will become a device thread static function when all media operations
+ *  will be moved to device thread
+ */
+int clean_tosync_array(struct lrs_dev *dev, int rc);
+
+/**
+ * Add a new sync request to a device
+ *
+ * \param[in,out]   dev     device to add the sync request
+ * \param[in]       reqc    sync request to add
+ * \param[in]       medium  index in reqc of the medium to sync
+ *
+ * \return                0 on success, -errno on failure
+ */
+int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
+                            size_t medium_index);
 
 /**
  * Initialize an lrs_dev_hdl to manipulate devices from the scheduler

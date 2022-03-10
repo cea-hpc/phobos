@@ -187,6 +187,18 @@ int prepare_error(struct resp_container *resp_cont, int req_rc,
                   const struct req_container *req_cont);
 
 /**
+ * Build and queue an error response
+ *
+ * @param[in,out]   response_queue  Response queue
+ * @param[in]       req_rc          Error code
+ * @param[in]       reqc            Request to response an error
+ *
+ * @return  0 on success, -1 * posix error code on failure.
+ */
+int queue_error_response(struct tsqueue *response_queue, int req_rc,
+                         struct req_container *reqc);
+
+/**
  * Initialize a new sched bound to a given DSS.
  *
  * \param[in]       sched       The sched to be initialized.
@@ -245,10 +257,6 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
 /** sched_resp_free can be used as glib callback */
 void sched_resp_free(void *respc);
 
-/* Wrapper of sched_request_tosync_free to be used by glib foreach */
-void sched_request_tosync_free_wrapper(gpointer _req,
-                                       gpointer _null_user_data);
-
 /**
  * Acquire device lock if it is not already set.
  *
@@ -260,12 +268,5 @@ void sched_request_tosync_free_wrapper(gpointer _req,
  */
 int check_and_take_device_lock(struct lrs_sched *sched,
                                struct dev_info *dev);
-
-void dev_check_sync_cancel(struct lrs_dev *dev);
-
-void dev_sync(struct lrs_dev *dev);
-
-void check_needs_sync(struct lrs_dev_hdl *handle,
-                      struct lrs_dev *dev);
 
 #endif
