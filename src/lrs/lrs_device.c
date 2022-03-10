@@ -787,6 +787,45 @@ static void dev_sync(struct lrs_dev *dev)
 }
 
 /**
+ * Umount medium of device but let it loaded and locked.
+ */
+__attribute__ ((unused)) static int dev_umount(struct lrs_dev *dev)
+{
+    struct fs_adapter fsa;
+    int rc, rc2;
+
+    ENTRY;
+
+    pho_info("umount: device '%s' mounted at '%s'",
+             dev->ld_dev_path, dev->ld_mnt_path);
+    rc = get_fs_adapter(dev->ld_dss_media_info->fs.type, &fsa);
+    if (rc)
+        LOG_GOTO(out, rc,
+                 "Unable to get fs adapter '%s' to unmount medium '%s' from "
+                 "device '%s'", fs_type_names[dev->ld_dss_media_info->fs.type],
+                 dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
+
+    rc = ldm_fs_umount(&fsa, dev->ld_dev_path, dev->ld_mnt_path);
+    rc2 = clean_tosync_array(dev, rc);
+    if (rc)
+        LOG_GOTO(out, rc, "Failed to unmount device '%s' mounted at '%s'",
+                 dev->ld_dev_path, dev->ld_mnt_path);
+
+    /* update device state and unset mount path */
+    dev->ld_op_status = PHO_DEV_OP_ST_LOADED;
+    dev->ld_mnt_path[0] = '\0';
+
+    if (rc2)
+        LOG_GOTO(out, rc = rc2,
+                 "Failed to clean tosync array after having unmounted device "
+                 "'%s' mounted at '%s'",
+                 dev->ld_dev_path, dev->ld_mnt_path);
+
+out:
+    return rc;
+}
+
+/**
  * Main device thread loop.
  */
 static void *lrs_dev_thread(void *tdata)
