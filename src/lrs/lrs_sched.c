@@ -3441,7 +3441,12 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
     while ((reqc = g_queue_pop_tail(sched->req_queue)) != NULL) {
         pho_req_t *req = reqc->req;
 
-        if (pho_request_is_format(req)) {
+        if (!running) {
+            rc = queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
+            sched_req_free(reqc);
+            if (rc)
+                break;
+        } else if (pho_request_is_format(req)) {
             pho_debug("lrs received format request (%p)", req);
             rc = sched_handle_format(sched, reqc);
         } else {
