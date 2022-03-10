@@ -140,6 +140,9 @@ void sched_req_free(void *reqc)
 {
     struct req_container *cont = (struct req_container *)reqc;
 
+    if (!cont)
+        return;
+
     destroy_container_params(cont);
     if (cont->req)
         pho_srl_request_free(cont->req, true);
@@ -2898,48 +2901,6 @@ free_devices:
     free(respc->devices);
     respc->devices_len = 0;
     return rc;
-}
-
-static int queue_format_response(struct tsqueue *response_queue,
-                                 struct req_container *reqc)
-{
-    struct resp_container *respc = NULL;
-    int rc;
-
-    respc = malloc(sizeof(*respc));
-    if (!respc)
-        LOG_GOTO(send_err, rc = -ENOMEM, "Unable to allocate format respc");
-
-    respc->socket_id = reqc->socket_id;
-    respc->resp = malloc(sizeof(*respc->resp));
-    if (!respc->resp)
-        LOG_GOTO(err_respc, rc = -ENOMEM,
-                 "Unable to allocate format respc->resp");
-
-    rc = pho_srl_response_format_alloc(respc->resp);
-    if (rc)
-        goto err_respc_resp;
-
-    /* Build the answer */
-    respc->resp->req_id = reqc->req->id;
-    respc->resp->format->med_id->family = reqc->req->format->med_id->family;
-    rc = strdup_safe(&respc->resp->format->med_id->name,
-                     reqc->req->format->med_id->name);
-    if (rc)
-        LOG_GOTO(err_format, rc,
-                 "Error on duplicating medium name in format response");
-
-    tsqueue_push(response_queue, respc);
-    return 0;
-
-err_format:
-    pho_srl_response_free(respc->resp, false);
-err_respc_resp:
-    free(respc->resp);
-err_respc:
-    free(respc);
-send_err:
-    return queue_error_response(response_queue, rc, reqc);
 }
 
 /**

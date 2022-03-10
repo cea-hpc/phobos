@@ -122,6 +122,7 @@ struct lrs_dev {
     char                 ld_mnt_path[PATH_MAX]; /**< mount path of the
                                                   * filesystem
                                                   */
+    struct req_container   *ld_format_request;  /**< format request to handle */
     bool                 ld_ongoing_io;         /**< one I/O is ongoing */
     bool                 ld_needs_sync;         /**< medium needs to be sync */
     struct thread_info   ld_device_thread;      /**< thread handling the actions
@@ -135,6 +136,9 @@ struct lrs_dev {
                                                   */
     struct tsqueue      *ld_response_queue;     /**< reference to the response
                                                   * queue
+                                                  */
+    struct format_media *ld_ongoing_format;     /**< reference to the ongoing
+                                                  * format array
                                                   */
     struct lrs_dev_hdl  *ld_handle;
 };
@@ -156,6 +160,13 @@ int clean_tosync_array(struct lrs_dev *dev, int rc);
  */
 int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
                             size_t medium_index);
+
+/**
+ *  TODO: will become a device thread static function when all media operations
+ *  will be moved to device thread
+ */
+int queue_format_response(struct tsqueue *response_queue,
+                          struct req_container *reqc);
 
 /**
  * Initialize an lrs_dev_hdl to manipulate devices from the scheduler

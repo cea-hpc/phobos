@@ -99,6 +99,7 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
 
     (*dev)->ld_request_queue = tsqueue_init();
     (*dev)->ld_response_queue = sched->response_queue;
+    (*dev)->ld_ongoing_format = &sched->ongoing_format;
     (*dev)->ld_handle = handle;
 
     rc = dev_thread_init(*dev);
@@ -154,6 +155,7 @@ static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
     g_ptr_array_foreach(dev->ld_sync_params.tosync_array,
                         request_tosync_free_wrapper, NULL);
     g_ptr_array_unref(dev->ld_sync_params.tosync_array);
+    sched_req_free(dev->ld_format_request);
     dev_info_free(dev->ld_dss_dev_info, 1);
     dss_fini(&dev->ld_device_thread.ld_dss);
 
@@ -900,7 +902,7 @@ out:
 /**
  * If a medium is into dev, umount, unload and release its locks.
  */
-__attribute__ ((unused)) static int dev_empty(struct lrs_dev *dev)
+static int dev_empty(struct lrs_dev *dev)
 {
     int rc;
 
@@ -970,9 +972,8 @@ static void fail_release_free_medium(struct dss_handle *dss,
  * drive to drive medium movement was prevented by the library or if the device
  * is empty.
  */
-__attribute__ ((unused)) static int dev_load(struct lrs_dev *dev,
-                                             struct media_info *medium,
-                                             bool *failure_on_dev)
+static int dev_load(struct lrs_dev *dev, struct media_info *medium,
+                    bool *failure_on_dev)
 {
     struct lib_item_addr medium_addr;
     struct lib_adapter lib;
@@ -1052,14 +1053,12 @@ out_close:
  * Format a medium to the given fs type.
  *
  * \param[in]   dev     Device with a loaded medium to format
- * \param[in]   fs      Filesystem type
+ * \param[in]   fsa     Filesystem adapter
  * \param[in]   unlock  Put admin status to "unlocked" on format success
  *
  * \return              0 on success, negative error code on failure
  */
- __attribute__ ((unused)) static int dev_format(struct lrs_dev *dev,
-                                                struct fs_adapter *fsa,
-                                                bool unlock)
+static int dev_format(struct lrs_dev *dev, struct fs_adapter *fsa, bool unlock)
 {
     struct media_info *medium = dev->ld_dss_media_info;
     struct ldm_fs_space space = {0};
@@ -1098,7 +1097,150 @@ out_close:
     if (rc != 0)
         LOG_RETURN(rc, "Failed to update state of media '%s' after format",
                    medium->rsc.id.name);
+    return rc;
+}
 
+/**
+ *  TODO: will become a device thread static function when all media operations
+ *  are moved to device thread
+ */
+int queue_format_response(struct tsqueue *response_queue,
+                          struct req_container *reqc)
+{
+    struct resp_container *respc = NULL;
+    int rc;
+
+    respc = malloc(sizeof(*respc));
+    if (!respc)
+        LOG_GOTO(send_err, rc = -ENOMEM, "Unable to allocate format respc");
+
+    respc->socket_id = reqc->socket_id;
+    respc->resp = malloc(sizeof(*respc->resp));
+    if (!respc->resp)
+        LOG_GOTO(err_respc, rc = -ENOMEM,
+                 "Unable to allocate format respc->resp");
+
+    rc = pho_srl_response_format_alloc(respc->resp);
+    if (rc)
+        goto err_respc_resp;
+
+    /* Build the answer */
+    respc->resp->req_id = reqc->req->id;
+    respc->resp->format->med_id->family = reqc->req->format->med_id->family;
+    rc = strdup_safe(&respc->resp->format->med_id->name,
+                     reqc->req->format->med_id->name);
+    if (rc)
+        LOG_GOTO(err_format, rc,
+                 "Error on duplicating medium name in format response");
+
+    tsqueue_push(response_queue, respc);
+    return 0;
+
+err_format:
+    pho_srl_response_free(respc->resp, false);
+err_respc_resp:
+    free(respc->resp);
+err_respc:
+    free(respc);
+send_err:
+    return queue_error_response(response_queue, rc, reqc);
+}
+
+static int dev_handle_format(struct lrs_dev *dev)
+{
+    struct media_info *medium_to_format =
+        dev->ld_format_request->params.format.medium_to_format;
+    int rc;
+
+    if (dev->ld_op_status == PHO_DEV_OP_ST_LOADED &&
+        !strcmp(dev->ld_dss_media_info->rsc.id.name,
+                medium_to_format->rsc.id.name)) {
+        /*
+         * medium to format already loaded, use existing dev->ld_dss_media_info,
+         * free  dev->ld_format_request->params.format.medium_to_format
+         */
+        pho_verb("medium %s to format is already loaded into device %s",
+                 dev->ld_dss_media_info->rsc.id.name,
+                 dev->ld_dss_dev_info->rsc.id.name);
+        media_info_free(medium_to_format);
+        dev->ld_format_request->params.format.medium_to_format = NULL;
+    } else {
+        bool failure_on_dev;
+
+        rc = dev_empty(dev);
+        if (rc) {
+            int rc2;
+
+            pho_error(rc, "Error when emptying device %s to format medium %s",
+                      dev->ld_dss_dev_info->rsc.id.name,
+                      medium_to_format->rsc.id.name);
+            /* release medium that cannot be loaded */
+            rc2 = dss_medium_release(&dev->ld_device_thread.ld_dss,
+                                     medium_to_format);
+            if (rc2)
+                pho_error(rc2, "Unable to release medium %s that we "
+                          "planned to format in device '%s'",
+                          medium_to_format->rsc.id.name,
+                          dev->ld_dss_dev_info->rsc.id.name);
+
+            goto out_response;
+        }
+
+        rc = dev_load(dev, medium_to_format, &failure_on_dev);
+        if (rc == -EBUSY) {
+            pho_warn("Trying to load a busy medium to format, try again later");
+            return 0;
+        }
+
+        dev->ld_format_request->params.format.medium_to_format = NULL;
+        if (rc) {
+            if (failure_on_dev) {
+                LOG_GOTO(out_response, rc, "Error when loading medium to "
+                         "format in device %s",
+                         dev->ld_dss_dev_info->rsc.id.name);
+            } else {
+                pho_error(rc, "Error on medium only when loading to format in "
+                          "device %s", dev->ld_dss_dev_info->rsc.id.name);
+                rc = queue_error_response(dev->ld_response_queue, rc,
+                                          dev->ld_format_request);
+                if (rc)
+                    pho_error(rc, "Unable to queue format error response");
+
+                goto out;
+            }
+        }
+    }
+
+    rc = dev_format(dev, &dev->ld_format_request->params.format.fsa,
+                    dev->ld_format_request->req->format->unlock);
+
+out_response:
+    if (rc) {
+        int rc2;
+
+        rc2 = queue_error_response(dev->ld_response_queue, rc,
+                                   dev->ld_format_request);
+        if (rc2)
+            pho_error(rc2, "Unable to queue format error response");
+    } else {
+        rc = queue_format_response(dev->ld_response_queue,
+                                   dev->ld_format_request);
+        if (rc)
+            pho_error(rc, "Unable to queue format response");
+    }
+
+out:
+    sched_req_free(dev->ld_format_request);
+    dev->ld_format_request = NULL;
+    /*
+     * on error: prevent new scheduled operations early by setting failed op
+     *           status before releasing ongoing_io flag
+     */
+    if (rc)
+        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
+
+    dev->ld_ongoing_io = false;
+    format_medium_remove(dev->ld_ongoing_format, medium_to_format);
     return rc;
 }
 
@@ -1122,6 +1264,14 @@ static void *lrs_dev_thread(void *tdata)
 
         if (device->ld_needs_sync && !device->ld_ongoing_io)
             dev_sync(device);
+
+        if (device->ld_ongoing_io && device->ld_format_request) {
+            rc = dev_handle_format(device);
+            if (rc)
+                LOG_GOTO(end_thread, thread->ld_status = rc,
+                         "device thread '%s': fatal error handling format",
+                         device->ld_dss_dev_info->rsc.id.name);
+        }
 
         rc = wait_for_signal(device);
 
