@@ -923,6 +923,131 @@ __attribute__ ((unused)) static int dev_empty(struct lrs_dev *dev)
                "status.", dev->ld_dev_path, op_status2str(dev->ld_op_status));
 }
 
+static int dss_set_medium_to_failed(struct dss_handle *dss,
+                                    struct media_info *media_info)
+{
+    media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+    return dss_media_set(dss, media_info, 1, DSS_SET_UPDATE, ADM_STATUS);
+}
+
+static void fail_release_free_medium(struct dss_handle *dss,
+                                     struct media_info *medium)
+{
+    int rc;
+
+    rc = dss_set_medium_to_failed(dss, medium);
+    if (rc) {
+        pho_error(rc,
+                  "Warning we keep medium %s locked because we can't set it to "
+                  "failed into DSS", medium->rsc.id.name);
+    } else {
+        rc = dss_medium_release(dss, medium);
+        if (rc)
+            pho_error(rc,
+                      "Error when releasing medium %s after setting it to "
+                      "status failed", medium->rsc.id.name);
+    }
+
+    media_info_free(medium);
+}
+
+/**
+ * Load a medium into a drive or return -EBUSY to retry later
+ *
+ * The loaded medium is registered as dev->ld_dss_media_info or DSS unlock and
+ * freed if error.
+ *
+ * If an error occurs on a medium that is not registered to
+ * dev->ld_dss_media_info, the medium is considered failed, marked as such in
+ * the DSS, and freed. WARNING: if we cannot set it to failed into the DSS, the
+ * medium DSS lock is not released
+ *
+ * @param[out]  failure_on_dev  Return false if no error or error not due to the
+ *                              device, return true if there is an error due to
+ *                              the device
+ *
+ * @return 0 on success, -error number on error. -EBUSY is returned when a
+ * drive to drive medium movement was prevented by the library or if the device
+ * is empty.
+ */
+__attribute__ ((unused)) static int dev_load(struct lrs_dev *dev,
+                                             struct media_info *medium,
+                                             bool *failure_on_dev)
+{
+    struct lib_item_addr medium_addr;
+    struct lib_adapter lib;
+    int rc2;
+    int rc;
+
+    ENTRY;
+
+    *failure_on_dev = false;
+    pho_verb("Loading '%s' into '%s'", medium->rsc.id.name, dev->ld_dev_path);
+
+    /* get handle to the library depending on device type */
+    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib);
+    if (rc) {
+        *failure_on_dev = true;
+        rc2 = dss_medium_release(&dev->ld_device_thread.ld_dss,
+                                 dev->ld_dss_media_info);
+        if (rc2)
+            pho_error(rc2, "Error when releasing a medium during device unload "
+                      "error");
+
+        media_info_free(medium);
+        return rc;
+    }
+
+    /* lookup the requested medium */
+    rc = ldm_lib_media_lookup(&lib, medium->rsc.id.name, &medium_addr);
+    if (rc) {
+        fail_release_free_medium(&dev->ld_device_thread.ld_dss, medium);
+        LOG_GOTO(out_close, rc, "Media lookup failed");
+    }
+
+    rc = ldm_lib_media_move(&lib, &medium_addr, &dev->ld_lib_dev_info.ldi_addr);
+    /* A movement from drive to drive can be prohibited by some libraries.
+     * If a failure is encountered in such a situation, it probably means that
+     * the state of the library has changed between the moment it has been
+     * scanned and the moment the medium and drive have been selected. The
+     * easiest solution is therefore to return EBUSY to signal this situation to
+     * the caller.
+     */
+    if (rc == -EINVAL
+            && medium_addr.lia_type == MED_LOC_DRIVE
+            && dev->ld_lib_dev_info.ldi_addr.lia_type == MED_LOC_DRIVE) {
+        pho_debug("Failed to move a medium from one drive to another, trying "
+                  "again later");
+        /* @TODO: acquire source drive on the fly? */
+        GOTO(out_close, rc = -EBUSY);
+    } else if (rc) {
+        /* Set operationnal failure state on this drive. It is incomplete since
+         * the error can originate from a defect tape too...
+         *  - consider marking both as failed.
+         *  - consider maintaining lists of errors to diagnose and decide who to
+         *    exclude from the cool game.
+         */
+        fail_release_free_medium(&dev->ld_device_thread.ld_dss, medium);
+        *failure_on_dev = true;
+        LOG_GOTO(out_close, rc, "Media move failed");
+    }
+
+    /* update device status */
+    dev->ld_op_status = PHO_DEV_OP_ST_LOADED;
+    dev->ld_dss_media_info = medium;
+    rc = 0;
+
+out_close:
+    rc2 = ldm_lib_close(&lib);
+    if (rc2) {
+        *failure_on_dev = true;
+        pho_error(rc2, "Unable to close lib");
+        rc = rc ? : rc2;
+    }
+
+    return rc;
+}
+
 /**
  * Main device thread loop.
  */
