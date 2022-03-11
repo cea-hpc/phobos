@@ -789,7 +789,7 @@ static void dev_sync(struct lrs_dev *dev)
 /**
  * Umount medium of device but let it loaded and locked.
  */
-__attribute__ ((unused)) static int dev_umount(struct lrs_dev *dev)
+static int dev_umount(struct lrs_dev *dev)
 {
     struct fs_adapter fsa;
     int rc, rc2;
@@ -846,7 +846,7 @@ static int dss_medium_release(struct dss_handle *dss, struct media_info *medium)
  * - DSS unlock the medium
  * - set drive's ld_op_status to PHO_DEV_OP_ST_EMPTY
  */
-__attribute__ ((unused)) static int dev_unload(struct lrs_dev *dev)
+static int dev_unload(struct lrs_dev *dev)
 {
     /* let the library select the target location */
     struct lib_item_addr    free_slot = { .lia_type = MED_LOC_UNKNOWN };
@@ -895,6 +895,32 @@ out:
     }
 
     return rc;
+}
+
+/**
+ * If a medium is into dev, umount, unload and release its locks.
+ */
+__attribute__ ((unused)) static int dev_empty(struct lrs_dev *dev)
+{
+    int rc;
+
+    if (dev->ld_op_status == PHO_DEV_OP_ST_EMPTY)
+        return 0;
+
+    /* Umount if needed */
+    if (dev->ld_op_status == PHO_DEV_OP_ST_MOUNTED) {
+        rc = dev_umount(dev);
+        if (rc)
+            return rc;
+    }
+
+    /* Follow up on unload if needed */
+    if (dev->ld_op_status == PHO_DEV_OP_ST_LOADED)
+        return dev_unload(dev);
+
+    LOG_RETURN(-EINVAL,
+               "We cannot empty device '%s' which is in '%s' op "
+               "status.", dev->ld_dev_path, op_status2str(dev->ld_op_status));
 }
 
 /**
