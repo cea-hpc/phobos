@@ -1100,12 +1100,8 @@ static int dev_format(struct lrs_dev *dev, struct fs_adapter *fsa, bool unlock)
     return rc;
 }
 
-/**
- *  TODO: will become a device thread static function when all media operations
- *  are moved to device thread
- */
-int queue_format_response(struct tsqueue *response_queue,
-                          struct req_container *reqc)
+static int queue_format_response(struct tsqueue *response_queue,
+                                 struct req_container *reqc)
 {
     struct resp_container *respc = NULL;
     int rc;

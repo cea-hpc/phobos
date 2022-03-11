@@ -2186,15 +2186,29 @@ static int sched_media_lock_and_load(struct lrs_sched *sched,
     return 0;
 }
 
-static int sched_media_prepare_for_read_or_format(struct lrs_sched *sched,
-                                                  const struct pho_id *id,
-                                                  enum sched_operation op,
-                                                  struct lrs_dev **pdev,
-                                                  struct media_info **pmedia)
+static int
+check_read_medium_permission_and_status(const struct media_info *medium)
+{
+    if (!medium->flags.get)
+        LOG_RETURN(-EPERM, "'%s' get flag is false",
+                   medium->rsc.id.name);
+    if (medium->fs.status == PHO_FS_STATUS_BLANK)
+        LOG_RETURN(-EINVAL, "Cannot do I/O on unformatted medium '%s'",
+                   medium->rsc.id.name);
+    if (medium->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
+        LOG_RETURN(-EPERM, "Cannot do I/O on an admin locked medium '%s'",
+                   medium->rsc.id.name);
+
+    return 0;
+}
+
+static int sched_media_prepare_for_read(struct lrs_sched *sched,
+                                        const struct pho_id *id,
+                                        struct lrs_dev **pdev,
+                                        struct media_info **pmedia)
 {
     struct media_info *med = NULL;
     struct lrs_dev *dev;
-    bool post_fs_mount;
     int rc;
 
     ENTRY;
@@ -2210,28 +2224,11 @@ static int sched_media_prepare_for_read_or_format(struct lrs_sched *sched,
         return rc;
     }
 
-    switch (op) {
-    case LRS_OP_READ:
-        if (!med->flags.get)
-            LOG_RETURN(-EPERM, "Cannot do a get, get flag is false on '%s'",
-                       id->name);
-        if (med->fs.status == PHO_FS_STATUS_BLANK)
-            LOG_RETURN(-EINVAL, "Cannot do I/O on unformatted media '%s'",
-                       id->name);
-        if (med->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
-            LOG_RETURN(-EPERM, "Cannot do I/O on an unavailable medium '%s'",
-                       id->name);
-        post_fs_mount = true;
-        break;
-    case LRS_OP_FORMAT:
-        if (med->fs.status != PHO_FS_STATUS_BLANK)
-            LOG_RETURN(-EINVAL, "Cannot format non-blank media '%s'",
-                       id->name);
-        post_fs_mount = false;
-        break;
-    default:
-        LOG_RETURN(-ENOSYS, "Unknown operation %x", (int)op);
-    }
+    rc = check_read_medium_permission_and_status(med);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Cannot read on medium '%s' due to permission or status "
+                   "mismatch", id->name);
 
     /* check if the media is already in a drive */
     dev = search_loaded_media(sched, id->name);
@@ -2253,8 +2250,8 @@ static int sched_media_prepare_for_read_or_format(struct lrs_sched *sched,
     }
     /* at this point, med == dev->ld_dss_media_info */
 
-    /* Mount only for READ/WRITE and if not already mounted */
-    if (post_fs_mount && dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED) {
+    /* Mount only if not already mounted */
+    if (dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED) {
         rc = sched_mount(sched, dev);
         if (rc && !dev->ld_dss_media_info)
             /* if an error occurs during mount, med will be unloaded and freed
@@ -2272,82 +2269,6 @@ out:
         *pmedia = med;
         *pdev = dev;
     }
-    return rc;
-}
-
-/**
- * Load and format a medium to the given fs type.
- *
- * \param[in]       sched       Initialized sched.
- * \param[in]       id          Medium ID for the medium to format.
- * \param[in]       fs          Filesystem type (only PHO_FS_LTFS for now).
- * \param[in]       unlock      Unlock tape if successfully formated.
- * \return                      0 on success, negative error code on failure.
- */
-static int sched_format(struct lrs_sched *sched, const struct pho_id *id,
-                        enum fs_type fs, bool unlock)
-{
-    struct media_info *media_info = NULL;
-    struct ldm_fs_space spc = {0};
-    struct lrs_dev *dev = NULL;
-    struct fs_adapter fsa;
-    uint64_t fields = 0;
-    int rc;
-
-    ENTRY;
-
-    rc = sched_load_dev_state(sched);
-    if (rc != 0)
-        return rc;
-
-    rc = sched_media_prepare_for_read_or_format(sched, id, LRS_OP_FORMAT, &dev,
-                                                &media_info);
-    if (rc != 0)
-        return rc;
-
-    /* -- from now on, device is owned -- */
-
-    if (dev->ld_dss_media_info == NULL)
-        LOG_GOTO(err_out, rc = -EINVAL, "Invalid device state");
-
-    pho_verb("format: media '%s' as %s", id->name, fs_type2str(fs));
-
-    rc = get_fs_adapter(fs, &fsa);
-    if (rc)
-        LOG_GOTO(err_out, rc, "Failed to get FS adapter");
-
-    rc = ldm_fs_format(&fsa, dev->ld_dev_path, id->name, &spc);
-    if (rc)
-        LOG_GOTO(err_out, rc, "Cannot format media '%s'", id->name);
-
-    /* Systematically use the media ID as filesystem label */
-    strncpy(media_info->fs.label, id->name, sizeof(media_info->fs.label));
-    media_info->fs.label[sizeof(media_info->fs.label) - 1] = '\0';
-    fields |= FS_LABEL;
-
-    media_info->stats.phys_spc_used = spc.spc_used;
-    media_info->stats.phys_spc_free = spc.spc_avail;
-    fields |= PHYS_SPC_USED | PHYS_SPC_FREE;
-
-    /* Post operation: update media information in DSS */
-    media_info->fs.status = PHO_FS_STATUS_EMPTY;
-    fields |= FS_STATUS;
-
-    if (unlock) {
-        pho_verb("Unlocking media '%s'", id->name);
-        media_info->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
-        fields |= ADM_STATUS;
-    }
-
-    rc = dss_media_set(&sched->dss, media_info, 1, DSS_SET_UPDATE, fields);
-    if (rc != 0)
-        LOG_GOTO(err_out, rc, "Failed to update state of media '%s'",
-                 id->name);
-
-err_out:
-    dev->ld_ongoing_io = false;
-
-    /* Don't free media_info since it is still referenced inside dev */
     return rc;
 }
 
@@ -2454,8 +2375,7 @@ static int sched_read_prepare(struct lrs_sched *sched,
         return rc;
 
     /* Fill in information about media and mount it if needed */
-    rc = sched_media_prepare_for_read_or_format(sched, id, LRS_OP_READ, dev,
-                                                &media_info);
+    rc = sched_media_prepare_for_read(sched, id, dev, &media_info);
     if (rc)
         return rc;
 
@@ -2912,6 +2832,7 @@ static int sched_handle_format(struct lrs_sched *sched,
                                struct req_container *reqc)
 {
     pho_req_format_t *freq = reqc->req->format;
+    struct lrs_dev *device = NULL;
     struct pho_id m;
     int rc = 0;
 
@@ -2920,43 +2841,93 @@ static int sched_handle_format(struct lrs_sched *sched,
     rc = sched_fill_media_info(sched, &reqc->params.format.medium_to_format,
                                &m);
     if (rc) {
-        if (rc == -EALREADY) {
-            pho_warn("Media '%s' is already locked, format returns -EBUSY",
-                     m.name);
-            rc = -EBUSY;
-        }
-
-        goto response;
+        if (rc == -EALREADY)
+            LOG_GOTO(err_out, rc = -EBUSY,
+                     "medium '%s' to format is already locked", m.name);
+        else
+            goto err_out;
     }
+
+    if (reqc->params.format.medium_to_format->fs.status != PHO_FS_STATUS_BLANK)
+        LOG_GOTO(err_out, rc = -EINVAL,
+                 "Medium '%s' has a fs.status '%s', expected "
+                 "PHO_FS_STATUS_BLANK to be formatted", m.name,
+                 fs_status2str(
+                    reqc->params.format.medium_to_format->fs.status));
 
     rc = get_fs_adapter((enum fs_type)freq->fs, &reqc->params.format.fsa);
     if (rc)
-        LOG_GOTO(response, rc, "Failed to get FS adapter for format fs_type "
-                 "'%s'", fs_type2str((enum fs_type)freq->fs));
+        LOG_GOTO(err_out, rc, "Invalid fs_type (%d)", freq->fs);
 
     if (!format_medium_add(&sched->ongoing_format,
-                           reqc->params.format.medium_to_format)) {
-        pho_warn("Trying to format '%s' with an already existing in progress "
-                 "format", m.name);
-        rc = -EBUSY;
-        goto response;
+                           reqc->params.format.medium_to_format))
+        LOG_GOTO(err_out, rc = -EINVAL,
+                 "trying to format the medium '%s' while it is already being "
+                 "formatted", m.name);
+
+    device = search_loaded_media(sched, m.name);
+    if (device) {
+        if (device->ld_ongoing_io || device->ld_needs_sync)
+            LOG_GOTO(remove_format_err_out, rc = -EINVAL,
+                     "medium %s is already loaded into a busy device %s, "
+                     "unexpected state, will abort request",
+                     m.name, device->ld_dss_dev_info->rsc.id.name);
+
+        device->ld_ongoing_io = true;
+    } else {
+        /* medium to format isn't already loaded into any drive, need lock */
+        if (!reqc->params.format.medium_to_format->lock.hostname) {
+            rc = take_and_update_lock(&sched->dss, DSS_MEDIA,
+                    reqc->params.format.medium_to_format,
+                    &reqc->params.format.medium_to_format->lock);
+            if (rc == -EEXIST)
+                LOG_GOTO(remove_format_err_out, rc = -EBUSY,
+                         "Media '%s' is locked by an other LRS node", m.name);
+            else if (rc)
+                LOG_GOTO(remove_format_err_out, rc,
+                         "Unable to lock the media '%s' to format it", m.name);
+        }
+
+        /*
+         * TODO: refresh a global dev_picker function to avoid scrolling 3 times
+         *       the devices list and to differentiate errors between all
+         *       devices are busy (returning -EAGAIN) or no compatible device
+         *       (sending a format error response)
+         */
+        device = dev_picker(sched, PHO_DEV_OP_ST_EMPTY, select_any, 0, &NO_TAGS,
+                            reqc->params.format.medium_to_format, false);
+        if (!device)
+            device = dev_picker(sched, PHO_DEV_OP_ST_LOADED, select_any, 0,
+                                &NO_TAGS, reqc->params.format.medium_to_format,
+                                false);
+
+        if (!device)
+            device = dev_picker(sched, PHO_DEV_OP_ST_MOUNTED, select_any, 0,
+                                &NO_TAGS, reqc->params.format.medium_to_format,
+                                false);
+
+        if (!device) {
+            pho_verb("Unable to find an available device to format medium '%s'",
+                     m.name);
+            return -EAGAIN;
+        }
     }
 
-    rc = sched_format(sched, &m, (enum fs_type)freq->fs, freq->unlock);
+    device->ld_format_request = reqc;
+    return 0;
+
+remove_format_err_out:
     format_medium_remove(&sched->ongoing_format,
                          reqc->params.format.medium_to_format);
-response:
+
+err_out:
     if (rc != -EAGAIN) {
         int rc2;
 
-        if (rc)
-            rc2 = queue_error_response(sched->response_queue, rc, reqc);
-        else
-            rc2 = queue_format_response(sched->response_queue, reqc);
-
+        rc2 = queue_error_response(sched->response_queue, rc, reqc);
         sched_req_free(reqc);
         if (rc2)
-            pho_error(rc2, "Error on sending format response");
+            pho_error(rc2, "Error on sending format error response");
 
         /*
          * LRS global error only if we face a response error.

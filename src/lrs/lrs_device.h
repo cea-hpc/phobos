@@ -162,13 +162,6 @@ int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
                             size_t medium_index);
 
 /**
- *  TODO: will become a device thread static function when all media operations
- *  will be moved to device thread
- */
-int queue_format_response(struct tsqueue *response_queue,
-                          struct req_container *reqc);
-
-/**
  * Initialize an lrs_dev_hdl to manipulate devices from the scheduler
  *
  * \param[out]   handle   pointer to an uninitialized handle
