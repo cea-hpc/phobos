@@ -1049,6 +1049,64 @@ out_close:
 }
 
 /**
+ * Format a medium to the given fs type.
+ *
+ * \param[in]   dev     Device with a loaded medium to format
+ * \param[in]   fs      Filesystem type
+ * \param[in]   unlock  Put admin status to "unlocked" on format success
+ *
+ * \return              0 on success, negative error code on failure
+ */
+ __attribute__ ((unused)) static int dev_format(struct lrs_dev *dev,
+                                                enum fs_type fs, bool unlock)
+{
+    struct media_info *medium = dev->ld_dss_media_info;
+    struct ldm_fs_space space = {0};
+    struct fs_adapter fsa;
+    uint64_t fields = 0;
+    int rc;
+
+    ENTRY;
+
+    pho_verb("format: media '%s' as %s", medium->rsc.id.name, fs_type2str(fs));
+
+    rc = get_fs_adapter(fs, &fsa);
+    if (rc)
+        LOG_RETURN(rc, "Failed to get FS adapter");
+
+    rc = ldm_fs_format(&fsa, dev->ld_dev_path, medium->rsc.id.name, &space);
+    if (rc)
+        LOG_RETURN(rc, "Cannot format media '%s'", medium->rsc.id.name);
+
+    /* Systematically use the media ID as filesystem label */
+    strncpy(medium->fs.label, medium->rsc.id.name, sizeof(medium->fs.label));
+    medium->fs.label[sizeof(medium->fs.label) - 1] = '\0';
+    fields |= FS_LABEL;
+
+    medium->stats.phys_spc_used = space.spc_used;
+    medium->stats.phys_spc_free = space.spc_avail;
+    fields |= PHYS_SPC_USED | PHYS_SPC_FREE;
+
+    /* Post operation: update media information in DSS */
+    medium->fs.status = PHO_FS_STATUS_EMPTY;
+    fields |= FS_STATUS;
+
+    if (unlock) {
+        pho_verb("Unlocking media '%s' after format", medium->rsc.id.name);
+        medium->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
+        fields |= ADM_STATUS;
+    }
+
+    rc = dss_media_set(&dev->ld_device_thread.ld_dss, medium, 1, DSS_SET_UPDATE,
+                       fields);
+    if (rc != 0)
+        LOG_RETURN(rc, "Failed to update state of media '%s' after format",
+                   medium->rsc.id.name);
+
+    return rc;
+}
+
+/**
  * Main device thread loop.
  */
 static void *lrs_dev_thread(void *tdata)
