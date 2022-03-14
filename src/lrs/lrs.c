@@ -329,6 +329,11 @@ static int cancel_response(struct resp_container *respc)
     return convert_response_to_error(respc);
 }
 
+static inline bool client_disconnected_error(int rc)
+{
+    return rc == EPIPE || rc == ECONNRESET;
+}
+
 static int _send_message(struct pho_comm_info *comm,
                          struct resp_container *respc)
 {
@@ -354,10 +359,21 @@ static int _send_message(struct pho_comm_info *comm,
      */
     rc = pho_comm_send(&msg);
     free(msg.buf.buff);
-    if (rc == -EPIPE)
-        pho_debug("Client closed socket");
-    else if (rc)
+    if (client_disconnected_error(rc)) {
+        pho_error(rc, "Failed to send %s response to client %d, not fatal",
+                  pho_srl_response_kind_str(respc->resp),
+                  respc->socket_id);
+        if (pho_response_is_read(respc->resp) ||
+            pho_response_is_write(respc->resp))
+            /* do not block device's ongoing_io status if the client disconnects
+             */
+            notify_device_request_is_canceled(respc);
+
+        /* error not fatal for the LRS */
+        rc = 0;
+    } else if (rc) {
         pho_error(rc, "Response cannot be sent");
+    }
 
     return rc;
 }
@@ -371,6 +387,7 @@ static int _send_responses_from_queue(struct lrs *lrs)
     while ((respc = tsqueue_pop(&lrs->response_queue)) != NULL) {
         rc2 = _send_message(&lrs->comm, respc);
         rc = rc ? : rc2;
+
         pho_srl_response_free(respc->resp, false);
         free(respc->resp);
         free(respc);
@@ -390,6 +407,7 @@ static int _send_responses_from_array(struct pho_comm_info *comm,
     for (i = 0; i < n_resp; ++i) {
         rc2 = _send_message(comm, resp_cont + i);
         rc = rc ? : rc2;
+
         sched_resp_free(&resp_cont[i]);
     }
 
@@ -802,7 +820,7 @@ static int lrs_process(struct lrs *lrs)
         rc = _send_responses_from_array(&lrs->comm, n_resp, resp_cont);
         free(resp_cont);
         if (rc)
-            LOG_RETURN(rc, "Error during responses sending");
+            return rc;
 
         if (running || sched_has_running_devices(lrs->sched[i]))
             stopped = false;
@@ -810,7 +828,7 @@ static int lrs_process(struct lrs *lrs)
 
     rc = _send_responses_from_queue(lrs);
     if (rc)
-        LOG_RETURN(rc, "Error during responses sending");
+        return rc;
 
     if (!running)
         lrs->stopped = stopped;
@@ -992,7 +1010,6 @@ int main(int argc, char **argv)
 
     while (running || !lrs.stopped) {
         rc = lrs_process(&lrs);
-        /* or ignore EINTR when returned by pho_comm_recv ? */
         if (rc && rc != -EINTR)
             break;
     }

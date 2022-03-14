@@ -451,9 +451,11 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
 {
     const char *hostname;
     int pid;
+    int rc;
 
-    if (fill_host_owner(&hostname, &pid))
-        LOG_RETURN(-EINVAL, "Couldn't retrieve hostname");
+    rc = fill_host_owner(&hostname, &pid);
+    if (rc)
+        LOG_RETURN(rc, "Couldn't retrieve hostname");
 
     return _dss_lock(handle, type, item_list, item_cnt, hostname, pid);
 }
