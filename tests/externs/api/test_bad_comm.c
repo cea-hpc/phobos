@@ -74,8 +74,10 @@ static int _send_request(struct pho_comm_info *ci, pho_req_t *req)
 
     data = pho_comm_data_init(ci);
     assert(!pho_srl_request_pack(req, &data.buf));
-    pho_comm_send(&data);
+    rc = pho_comm_send(&data);
     free(data.buf.buff);
+
+    return rc;
 }
 
 static int _check_error(pho_resp_t *resp, const char *msg_prefix,
@@ -132,6 +134,58 @@ out_fail:
     return rc;
 }
 
+static int test_bad_mput(void *arg)
+{
+    struct pho_comm_info *ci = (struct pho_comm_info *)arg;
+    size_t tags[1] = {1};
+    pho_resp_t *resps[2];
+    pho_req_t reqs[2];
+    int rc;
+    int i;
+
+    tags[0] = 0;
+    assert(!pho_srl_request_write_alloc(&reqs[0], 1, tags));
+    tags[0] = 1;
+    assert(!pho_srl_request_write_alloc(&reqs[1], 1, tags));
+
+    reqs[0].walloc->media[0]->tags = NULL;
+    reqs[1].walloc->media[0]->tags[0] = strdup("invalid-tag");
+
+    for (i = 0; i < 2; i++) {
+        reqs[i].id = i;
+        reqs[i].walloc->family = PHO_RSC_DIR;
+        reqs[i].walloc->media[0]->size = 1;
+        rc = _send_and_receive(ci, &reqs[i], &resps[i]);
+        if (rc)
+            goto out;
+
+        printf("i=%d, req_id=%d\n", i, resps[i]->req_id);
+        assert(resps[i]->req_id == i);
+    }
+
+    assert(pho_response_is_write(resps[0]));
+    assert(pho_response_is_error(resps[1]));
+
+    pho_srl_request_free(&reqs[0], false);
+
+    assert(!pho_srl_request_release_alloc(&reqs[0], 1));
+    reqs[0].id = 0;
+    reqs[0].release->media[0]->med_id->family = PHO_RSC_DIR;
+    reqs[0].release->media[0]->med_id->name =
+        strdup(resps[0]->walloc->media[0]->med_id->name);
+    reqs[0].release->media[0]->to_sync = false;
+
+    rc = _send_request(ci, &reqs[0]);
+
+out:
+    for (i = 0; i < 2; i++) {
+        pho_srl_request_free(&reqs[i], false);
+        pho_srl_response_free(resps[i], true);
+    }
+
+    return rc;
+}
+
 static int test_bad_get(void *arg)
 {
     struct pho_comm_info *ci = (struct pho_comm_info *)arg;
@@ -162,6 +216,55 @@ static int test_bad_get(void *arg)
 out_fail:
     pho_srl_request_free(&req, false);
     pho_srl_response_free(resp, true);
+
+    return rc;
+}
+
+static int test_bad_mget(void *arg)
+{
+    struct pho_comm_info *ci = (struct pho_comm_info *)arg;
+    pho_resp_t *resps[2];
+    pho_req_t reqs[2];
+    int rc;
+    int i;
+
+    assert(!pho_srl_request_read_alloc(&reqs[0], 1));
+    assert(!pho_srl_request_read_alloc(&reqs[1], 1));
+
+    reqs[0].ralloc->med_ids[0]->name = strdup("/tmp/test.pho.1");
+    reqs[1].ralloc->med_ids[0]->name = strdup("/not/a/dir");
+
+    for (i = 0; i < 2; i++) {
+        reqs[i].id = i;
+        reqs[i].ralloc->n_required = 1;
+        reqs[i].ralloc->med_ids[0]->family = PHO_RSC_DIR;
+        rc = _send_and_receive(ci, &reqs[i], &resps[i]);
+        if (rc)
+            goto out;
+
+        printf("i=%d, req_id=%d\n", i, resps[i]->req_id);
+        assert(resps[i]->req_id == i);
+    }
+
+    assert(pho_response_is_read(resps[0]));
+    assert(pho_response_is_error(resps[1]));
+
+    pho_srl_request_free(&reqs[0], false);
+
+    assert(!pho_srl_request_release_alloc(&reqs[0], 1));
+    reqs[0].id = 0;
+    reqs[0].release->media[0]->med_id->family = PHO_RSC_DIR;
+    reqs[0].release->media[0]->med_id->name =
+        strdup(resps[0]->ralloc->media[0]->med_id->name);
+    reqs[0].release->media[0]->to_sync = false;
+
+    rc = _send_request(ci, &reqs[0]);
+
+out:
+    for (i = 0; i < 2; i++) {
+        pho_srl_request_free(&reqs[i], false);
+        pho_srl_response_free(resps[i], true);
+    }
 
     return rc;
 }
@@ -310,7 +413,9 @@ int main(int argc, char **argv)
 
     run_test("Test: bad ping", test_bad_ping, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad put", test_bad_put, &ci, PHO_TEST_SUCCESS);
+    run_test("Test: bad mput", test_bad_mput, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad get", test_bad_get, &ci, PHO_TEST_SUCCESS);
+    run_test("Test: bad mget", test_bad_mget, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad release", test_bad_release, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad format", test_bad_format, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad notify", test_bad_notify, &ci, PHO_TEST_SUCCESS);

@@ -122,10 +122,13 @@ int pho_srl_request_write_alloc(pho_req_t *req, size_t n_media,
         pho_request__write__elt__init(req->walloc->media[i]);
 
         req->walloc->media[i]->n_tags = n_tags[i];
-        req->walloc->media[i]->tags =
-            calloc(n_tags[i], sizeof(*req->walloc->media[i]->tags));
-        if (!req->walloc->media[i]->tags)
-            goto err_tags;
+        req->walloc->media[i]->tags = NULL;
+        if (n_tags[i] > 0) {
+            req->walloc->media[i]->tags =
+                calloc(n_tags[i], sizeof(*req->walloc->media[i]->tags));
+            if (!req->walloc->media[i]->tags)
+                goto err_tags;
+        }
     }
 
     return 0;

@@ -917,10 +917,16 @@ out:
     return rc;
 }
 
-void sched_resp_free(void *respc)
+void sched_resp_free(void *_respc)
 {
-    pho_srl_response_free(((struct resp_container *)respc)->resp, false);
-    free(((struct resp_container *)respc)->resp);
+    struct resp_container *respc = (struct resp_container *)_respc;
+
+    if (pho_response_is_write(respc->resp) ||
+        pho_response_is_read(respc->resp))
+        free(respc->devices);
+
+    pho_srl_response_free(respc->resp, false);
+    free(respc->resp);
 }
 
 void sched_fini(struct lrs_sched *sched)
@@ -2652,6 +2658,7 @@ out:
             if (rc2)
                 return rc2;
 
+            resp->req_id = req->id;
             resp->error->rc = rc;
             resp->error->req_kind = PHO_REQUEST_KIND__RQ_WRITE;
 
@@ -2735,6 +2742,7 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
             if (rc2)
                 GOTO(free_devices, rc = rc2);
 
+            resp->req_id = req->id;
             resp->error->rc = rc;
             resp->error->req_kind = PHO_REQUEST_KIND__RQ_READ;
 
@@ -2744,8 +2752,10 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
     }
 
 free_devices:
-    free(respc->devices);
-    respc->devices_len = 0;
+    if (rc) {
+        free(respc->devices);
+        respc->devices_len = 0;
+    }
     return rc;
 }
 

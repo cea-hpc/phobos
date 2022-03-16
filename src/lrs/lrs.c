@@ -390,7 +390,7 @@ static int _send_responses_from_array(struct pho_comm_info *comm,
     for (i = 0; i < n_resp; ++i) {
         rc2 = _send_message(comm, resp_cont + i);
         rc = rc ? : rc2;
-        pho_srl_response_free(resp_cont[i].resp, false);
+        sched_resp_free(&resp_cont[i]);
     }
 
     return rc;
@@ -436,6 +436,7 @@ static int _process_ping_request(struct lrs *lrs,
     resp_cont.resp->req_id = req_cont->req->id;
     rc = _send_message(&lrs->comm, &resp_cont);
     pho_srl_response_free(resp_cont.resp, false);
+    free(resp_cont.resp);
     if (rc)
         pho_error(rc, "Error during ping response sending");
 
@@ -711,7 +712,7 @@ static int lrs_process(struct lrs *lrs)
     int n_data, n_resp = 0;
     bool stopped = true;
     int rc = 0;
-    int i, j;
+    int i;
 
     /* request reception and accept handling */
     rc = pho_comm_recv(&lrs->comm, &data, &n_data);
@@ -737,8 +738,6 @@ static int lrs_process(struct lrs *lrs)
             LOG_RETURN(rc, "Error during sched processing");
 
         rc = _send_responses_from_array(&lrs->comm, n_resp, resp_cont);
-        for (j = 0; j < n_resp; ++j)
-            free(resp_cont[j].resp);
         free(resp_cont);
         if (rc)
             LOG_RETURN(rc, "Error during responses sending");
