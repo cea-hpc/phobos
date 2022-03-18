@@ -1421,7 +1421,7 @@ class DriveOptHandler(DeviceOptHandler):
                 adm.device_status()
         except EnvironmentError as err:
             self.logger.error("Cannot read status of drives: %s",
-                              env_error_format(err))
+                              err.strerror)
             sys.exit(os.EX_DATAERR)
 
 

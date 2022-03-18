@@ -32,6 +32,7 @@ from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-n
                                PHO_RSC_DIR, PHO_RSC_TAPE,
                                PHO_RSC_NONE, DSS_NONE,
                                str2rsc_family, str2dss_type)
+from phobos.core.glue import admin_device_status  # pylint: disable=no-name-in-module
 from phobos.core.dss import DSSHandle
 from phobos.core.ffi import (CommInfo, ExtentInfo, LayoutInfo, LIBPHOBOS_ADMIN,
                              Id)
@@ -154,9 +155,9 @@ class Client(object):
 
     def device_status(self):
         """Query the status of the local devices"""
-        rc = LIBPHOBOS_ADMIN.phobos_admin_device_status(byref(self.handle))
-        if rc:
-            raise EnvironmentError(rc, "Error during device status")
+        status = admin_device_status(addressof(self.handle))
+
+        print(status)
 
     def layout_list(self, res, is_pattern, medium, degroup): # pylint: disable=too-many-locals
         """List layouts."""
@@ -175,7 +176,6 @@ class Client(object):
                                                       enc_medium,
                                                       byref(layouts),
                                                       byref(n_layouts))
-
         if rc:
             raise EnvironmentError(rc)
 

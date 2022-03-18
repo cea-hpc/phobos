@@ -32,6 +32,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "phobos_admin.h"
+
 /**
  * Dumps a json_t to a python string and decref the json_t.
  * @param   json    pointer to the json_t to dump as a python int
@@ -59,10 +61,36 @@ static PyObject *py_jansson_dumps(PyObject *self, PyObject *args)
     return py_json_str;
 }
 
+static PyObject *py_admin_device_status(PyObject *self, PyObject *args)
+{
+    struct admin_handle *adm;
+    PyObject *py_json_str;
+    char *str;
+    int rc;
+
+    if (!PyArg_ParseTuple(args, "l", &adm))
+        return NULL;
+
+    rc = phobos_admin_device_status(adm, &str);
+    if (rc) {
+        errno = -rc;
+        PyErr_SetFromErrno(PyExc_EnvironmentError);
+        return NULL;
+    }
+
+    py_json_str = Py_BuildValue("s", str);
+    free(str);
+
+    return py_json_str;
+}
+
 static PyMethodDef GlueMethods[] = {
     {"jansson_dumps", py_jansson_dumps, METH_VARARGS,
      "Dump a jansson json_t (pointer as python int) to a python string and "
      "then decref the json_t."},
+    {"admin_device_status", py_admin_device_status, METH_VARARGS,
+     "Call phobos_admin_device_status and copy the result string in a python "
+     "string"},
     {NULL, NULL, 0, NULL},
 };
 

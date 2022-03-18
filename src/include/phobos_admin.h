@@ -130,11 +130,12 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
 /**
  * Query the status of devices by asking the LRS for it's internal state.
  *
- * @param[in]  adm    Admin module handler.
+ * @param[in]  adm     Admin module handler.
+ * @param[in]  status  allocated JSON string containing status information
  *
- * @return            0 on succes, negative error on failure.
+ * @return             0 on succes, negative error on failure.
  */
-int phobos_admin_device_status(struct admin_handle *adm);
+int phobos_admin_device_status(struct admin_handle *adm, char **status);
 
 /**
  * Load and format a medium to the given fs type.

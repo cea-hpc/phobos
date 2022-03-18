@@ -551,7 +551,7 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
     return rc;
 }
 
-int phobos_admin_device_status(struct admin_handle *adm)
+int phobos_admin_device_status(struct admin_handle *adm, char **status)
 {
     pho_resp_t *resp = NULL;
     pho_req_t req;
@@ -568,12 +568,15 @@ int phobos_admin_device_status(struct admin_handle *adm)
     if (rc)
         return rc;
 
-    if (pho_response_is_monitor(resp))
-        printf("status: %s", resp->monitor->status);
-    else if (pho_response_is_error(resp))
+    if (pho_response_is_monitor(resp)) {
+        *status = strdup(resp->monitor->status);
+        if (!*status)
+            rc = -ENOMEM;
+    } else if (pho_response_is_error(resp)) {
         rc = resp->error->rc;
-    else
+    } else {
         rc = -EPROTO;
+    }
 
     pho_srl_response_free(resp, true);
 
