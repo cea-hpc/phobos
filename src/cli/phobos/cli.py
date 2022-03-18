@@ -556,6 +556,23 @@ class UnlockOptHandler(DSSInteractHandler):
         parser.add_argument('--force', action='store_true',
                             help='Do not check the current lock state')
 
+class StatusOptHandler(BaseOptHandler):
+    """Display I/O and drive status"""
+    label = 'status'
+    descr = 'display I/O and drive status'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(StatusOptHandler, cls).add_options(parser)
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+
 OP_NAME_FROM_LETTER = {'P': 'put', 'G': 'get', 'D': 'delete'}
 def parse_set_access_flags(flags):
     """From [+|-]PGD flags, return a dict with media operations to set
@@ -689,7 +706,7 @@ class MediaListOptHandler(ListOptHandler):
                                   "(default: %(default)s)"))
 
 def check_max_width_is_valid(value):
-    """ Check if max width value is valid"""
+    """Check that the width 'value' is greater than the one of '...}'"""
     ivalue = int(value)
     if ivalue <= len("...}"):
         raise argparse.ArgumentTypeError("%s is an invalid positive "
@@ -1364,7 +1381,8 @@ class DriveOptHandler(DeviceOptHandler):
         ResourceDeleteOptHandler,
         DriveListOptHandler,
         LockOptHandler,
-        UnlockOptHandler
+        UnlockOptHandler,
+        StatusOptHandler,
     ]
 
     def exec_list(self):
@@ -1395,6 +1413,17 @@ class DriveOptHandler(DeviceOptHandler):
         if len(objs) > 0:
             dump_object_list(objs, attr=self.params.get('output'),
                              fmt=self.params.get('format'))
+
+    def exec_status(self):
+        """Display I/O and drive status"""
+        try:
+            with AdminClient(lrs_required=True) as adm:
+                adm.device_status()
+        except EnvironmentError as err:
+            self.logger.error("Cannot read status of drives: %s",
+                              env_error_format(err))
+            sys.exit(os.EX_DATAERR)
+
 
 class TapeOptHandler(MediaOptHandler):
     """Magnetic tape options and actions."""

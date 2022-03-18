@@ -551,6 +551,12 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
     return rc;
 }
 
+int phobos_admin_device_status(struct admin_handle *adm)
+{
+    puts("drive status");
+    return 0;
+}
+
 int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
                         enum fs_type fs, bool unlock)
 {

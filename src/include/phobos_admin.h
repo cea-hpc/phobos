@@ -128,6 +128,15 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
                                int num_dev, bool is_forced);
 
 /**
+ * Query the status of devices by asking the LRS for it's internal state.
+ *
+ * @param[in]  adm    Admin module handler.
+ *
+ * @return            0 on succes, negative error on failure.
+ */
+int phobos_admin_device_status(struct admin_handle *adm);
+
+/**
  * Load and format a medium to the given fs type.
  *
  * \param[in]       adm             Admin module handler.
