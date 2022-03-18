@@ -137,6 +137,9 @@ struct lrs_dev {
     struct format_media *ld_ongoing_format;     /**< reference to the ongoing
                                                   * format array
                                                   */
+    struct tsqueue      *sched_req_queue;       /**< reference to the sched
+                                                  * request queue
+                                                  */
     struct lrs_dev_hdl  *ld_handle;
 };
 
@@ -239,6 +242,14 @@ struct lrs_dev *lrs_dev_hdl_get(struct lrs_dev_hdl *handle, int index);
  * \param[in]  device  the device to signal
  */
 void dev_thread_signal_stop(struct lrs_dev *device);
+
+/**
+ * Set the error status on device thread and signal that it should stop working
+ *
+ * \param[in]   device      device to signal
+ * \param[in]   error_code  error code
+ */
+void dev_thread_signal_stop_on_error(struct lrs_dev *device, int error_code);
 
 /**
  * Signal to the device thread that work has been received

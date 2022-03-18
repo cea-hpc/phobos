@@ -215,25 +215,6 @@ static int sched_resource_release(struct lrs_sched *sched, enum dss_type type,
     return 0;
 }
 
-static int sched_device_release(struct lrs_sched *sched, struct lrs_dev *dev)
-{
-    int rc;
-
-    rc = sched_resource_release(sched, DSS_DEVICE, dev->ld_dss_dev_info,
-                                &dev->ld_dss_dev_info->lock);
-    if (rc)
-        pho_error(rc,
-                  "Error when releasing device '%s' with current lock "
-                  "(hostname %s, owner %d)",
-                  dev->ld_dev_path,
-                  dev->ld_dss_dev_info->lock.hostname,
-                  dev->ld_dss_dev_info->lock.owner);
-
-    pho_debug("unlock: device %s\n", dev->ld_dev_path);
-
-    return rc;
-}
-
 static int sched_medium_release(struct lrs_sched *sched,
                                 struct media_info *medium)
 {
@@ -477,6 +458,7 @@ static int sched_fill_dev_info(struct lrs_sched *sched, struct lib_adapter *lib,
 
     media_info_free(dev->ld_dss_media_info);
     dev->ld_dss_media_info = NULL;
+    dev->ld_op_status = PHO_DEV_OP_ST_EMPTY;
 
     rc = get_dev_adapter(devi->rsc.id.family, &deva);
     if (rc)
@@ -617,10 +599,10 @@ static int sched_load_dev_state(struct lrs_sched *sched)
         MUTEX_LOCK(&dev->ld_mutex);
         rc = sched_fill_dev_info(sched, &lib, dev);
         if (rc) {
-            pho_debug("Fail to init device '%s', marking it as failed and "
-                      "releasing it", dev->ld_dev_path);
-            dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-            sched_device_release(sched, dev);
+            pho_error(rc,
+                      "Fail to init device '%s', stopping corresponding device "
+                      "thread", dev->ld_dev_path);
+            dev_thread_signal_stop_on_error(dev, rc);
         } else {
             clean_devices = true;
         }
@@ -688,11 +670,13 @@ static int sched_clean_medium_locks(struct lrs_sched *sched)
         struct lrs_dev *dev;
 
         dev = lrs_dev_hdl_get(&sched->devices, i);
-        mda = dev->ld_dss_media_info;
+        if (dev->ld_device_thread.ld_running) {
+            mda = dev->ld_dss_media_info;
 
-        if (mda) {
-            media[i] = *mda;
-            cnt++;
+            if (mda) {
+                media[i] = *mda;
+                cnt++;
+            }
         }
     }
 
@@ -830,9 +814,7 @@ clean_resp_cont:
  * - a global DSS lock on dev
  * - a global DSS lock on dev->ld_dss_media_info
  *
- * On error, dev->ld_ongoing_io is set to false, we try to release global DSS
- * locks on dev and dev->ld_dss_media_info, and dev->ld_op_status is set to
- * PHO_DEV_OP_FAILED.
+ * On error, signal the error to the device thread.
  */
 static int sched_umount(struct lrs_sched *sched, struct lrs_dev *dev)
 {
@@ -857,23 +839,19 @@ static int sched_umount(struct lrs_sched *sched, struct lrs_dev *dev)
         LOG_GOTO(out, rc, "Failed to unmount device '%s' mounted at '%s'",
                  dev->ld_dev_path, dev->ld_mnt_path);
 
+    /* update device state and unset mount path */
+    dev->ld_op_status = PHO_DEV_OP_ST_LOADED;
+    dev->ld_mnt_path[0] = '\0';
+
     if (rc2)
         LOG_GOTO(out, rc = rc2,
                  "Failed to clean tosync array after having unmounted device "
                  "'%s' mounted at '%s'",
                  dev->ld_dev_path, dev->ld_mnt_path);
 
-    /* update device state and unset mount path */
-    dev->ld_op_status = PHO_DEV_OP_ST_LOADED;
-    dev->ld_mnt_path[0] = '\0';
-
 out:
-    if (rc) {
-        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-        dev->ld_ongoing_io = false;
-        sched_medium_release(sched, dev->ld_dss_media_info);
-        sched_device_release(sched, dev);
-    }
+    if (rc)
+        dev_thread_signal_stop_on_error(dev, rc);
 
     return rc;
 }
@@ -888,8 +866,7 @@ out:
  * - a global DSS lock on dev
  * - a global DSS lock on dev->ld_dss_media_info
  *
- * On error, we try to release global DSS lock on dev in addition of unlocking
- * dev->ld_media. dev->ld_op_status is set to PHO_DEV_OP_ST_FAILED
+ * On error, signal the error to the device thread.
  */
 static int sched_unload_medium(struct lrs_sched *sched, struct lrs_dev *dev)
 {
@@ -936,67 +913,10 @@ out:
     media_info_free(dev->ld_dss_media_info);
     dev->ld_dss_media_info = NULL;
 
-    if (rc) {
-        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-        sched_device_release(sched, dev);
-    }
+    if (rc)
+        dev_thread_signal_stop_on_error(dev, rc);
 
     return rc;
-}
-
-/**
- * If the device contains a medium, this one is unmounted if needed and
- * the global DSS lock on this medium is released.
- *
- * The global DSS lock of the device is released.
- *
- * On error, dev->ld_op_status is set to PHO_DEV_OP_ST_FAILED.
- */
-static int sched_umount_and_release(struct lrs_sched *sched,
-                                    struct lrs_dev *dev)
-{
-    int rc2;
-    int rc;
-
-    if (dev->ld_op_status == PHO_DEV_OP_ST_MOUNTED) {
-        rc = sched_umount(sched, dev);
-        if (rc)
-            return rc;
-    }
-
-    if (dev->ld_op_status == PHO_DEV_OP_ST_LOADED) {
-        rc = sched_medium_release(sched, dev->ld_dss_media_info);
-
-        media_info_free(dev->ld_dss_media_info);
-        dev->ld_dss_media_info = NULL;
-
-        if (rc)
-            dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-    }
-
-    rc2 = sched_device_release(sched, dev);
-    rc = rc ? : rc2;
-
-    return rc;
-}
-
-/**
- * Unmount and release global DSS lock of all medium that are loaded
- * into devices with no ongoing I/O and that are not failed. The global DSS
- * locks on devices with no ongoing I/O and that are not failed are released.
- */
-static void sched_release(struct lrs_sched *sched)
-{
-    int i;
-
-    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
-        struct lrs_dev *dev;
-
-        dev = lrs_dev_hdl_get(&sched->devices, i);
-
-        if (dev->ld_op_status != PHO_DEV_OP_ST_FAILED)
-            sched_umount_and_release(sched, dev);
-    }
 }
 
 void sched_resp_free(void *respc)
@@ -1010,16 +930,10 @@ void sched_fini(struct lrs_sched *sched)
     if (sched == NULL)
         return;
 
-    /* Release all devices and media without any ongoing IO */
-    sched_release(sched);
-
-    dss_fini(&sched->dss);
-
-    tsqueue_destroy(&sched->req_queue, sched_req_free);
-
     lrs_dev_hdl_clear(&sched->devices);
-
     lrs_dev_hdl_fini(&sched->devices);
+    dss_fini(&sched->dss);
+    tsqueue_destroy(&sched->req_queue, sched_req_free);
     format_media_clean(&sched->ongoing_format);
 }
 
@@ -1031,7 +945,7 @@ bool sched_has_running_devices(struct lrs_sched *sched)
         struct lrs_dev *dev;
 
         dev = lrs_dev_hdl_get(&sched->devices, i);
-        if (dev->ld_ongoing_io || dev->ld_sync_params.tosync_array->len > 0)
+        if (dev->ld_ongoing_io)
             return true;
     }
 
@@ -1260,7 +1174,8 @@ lock_race_retry:
                 continue;
 
             dev = search_loaded_media(sched, curr->rsc.id.name);
-            if (dev && (dev->ld_ongoing_io || dev->ld_needs_sync))
+            if (dev && (dev->ld_ongoing_io || dev->ld_needs_sync ||
+                        !dev->ld_device_thread.ld_running))
                 /* locked by myself but already in use */
                 continue;
         }
@@ -1538,6 +1453,12 @@ static struct lrs_dev *dev_picker(struct lrs_sched *sched,
             continue;
         }
 
+        if (!itr->ld_device_thread.ld_running) {
+            pho_debug("Skipping ending or stopped device '%s'",
+                      itr->ld_dev_path);
+            continue;
+        }
+
         /*
          * The intent is to write: exclude media that are administratively
          * locked, full, do not have the put operation flag and do not have the
@@ -1690,12 +1611,15 @@ static int select_drive_to_free(size_t required_size,
 
     /* skip failed and busy drives */
     if (dev_curr->ld_op_status == PHO_DEV_OP_ST_FAILED ||
-        dev_curr->ld_ongoing_io || dev_curr->ld_needs_sync) {
-        pho_debug("Skipping drive '%s' with status %s%s",
+        dev_curr->ld_ongoing_io || dev_curr->ld_needs_sync ||
+        !dev_curr->ld_device_thread.ld_running) {
+        pho_debug("Skipping drive '%s' with status %s%s%s",
                   dev_curr->ld_dev_path,
                   op_status2str(dev_curr->ld_op_status),
                   dev_curr->ld_ongoing_io || dev_curr->ld_needs_sync ?
-                  " (busy)" : "");
+                  " (busy)" : "",
+                  !dev_curr->ld_device_thread.ld_running ?
+                        " (ending or stopped)" : "");
         return 1;
     }
 
@@ -1728,9 +1652,7 @@ static int select_drive_to_free(size_t required_size,
  * - a global DSS lock on dev
  * - a global DSS lock on dev->ld_dss_media_info
  *
- * On error, we try to unload dev->media, dev->ld_ongoing_io is set to false,
- * we try to release global DSS locks on dev and dev->ld_dss_media_info,
- * dev->ld_op_status is set to PHO_DEV_OP_ST_FAILED.
+ * On error, signal the error to the device thread.
  */
 static int sched_mount(struct lrs_sched *sched, struct lrs_dev *dev)
 {
@@ -1782,18 +1704,8 @@ static int sched_mount(struct lrs_sched *sched, struct lrs_dev *dev)
 out_free:
     free(mnt_root);
 out:
-    if (rc != 0) {
-        /**
-         * sched_unload_medium is always unlocking dev->ld_dss_media_info.
-         * On error, sched_unload_medium is unlocking and setting dev to failed.
-         */
-        if (!sched_unload_medium(sched, dev)) {
-            dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-            sched_device_release(sched, dev);
-        }
-
-        dev->ld_ongoing_io = false;
-    }
+    if (rc)
+        dev_thread_signal_stop_on_error(dev, rc);
 
     return rc;
 }
@@ -1804,8 +1716,8 @@ out:
  * Must be called while owning a global DSS lock on dev and on media and with
  * the ld_ongoing_io flag set to true on dev.
  *
- * On error, the dev's ld_ongoing_io flag is removed, the media is unlocked and
- * the device is also unlocked is this one is set as FAILED.
+ * On error, unlock the media into DSS and signal the error to the device thread
+ * if the error involves the device.
  *
  * @return 0 on success, -error number on error. -EBUSY is returned when a
  * drive to drive media movement was prevented by the library or if the device
@@ -1814,7 +1726,7 @@ out:
 static int sched_load_media(struct lrs_sched *sched, struct lrs_dev *dev,
                             struct media_info *media)
 {
-    bool                 failure_on_dev = false;
+    int                  failure_on_dev = 0;
     struct lib_item_addr media_addr;
     struct lib_adapter   lib;
     int                  rc;
@@ -1836,7 +1748,7 @@ static int sched_load_media(struct lrs_sched *sched, struct lrs_dev *dev,
     /* get handle to the library depending on device type */
     rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib);
     if (rc)
-        LOG_GOTO(out, rc, "Failed to open lib in %s", __func__);
+        LOG_GOTO(out, failure_on_dev = rc, "Failed to open device lib");
 
     /* lookup the requested media */
     rc = ldm_lib_media_lookup(&lib, media->rsc.id.name, &media_addr);
@@ -1865,7 +1777,7 @@ static int sched_load_media(struct lrs_sched *sched, struct lrs_dev *dev,
          *  - consider maintaining lists of errors to diagnose and decide who to
          *    exclude from the cool game.
          */
-        LOG_GOTO(out_close, rc, "Media move failed");
+        LOG_GOTO(out_close, failure_on_dev = rc, "Media move failed");
     }
 
     /* update device status */
@@ -1877,7 +1789,7 @@ static int sched_load_media(struct lrs_sched *sched, struct lrs_dev *dev,
 out_close:
     rc2 = ldm_lib_close(&lib);
     if (rc2) {
-        pho_error(rc2, "Unable to close lib on %s", __func__);
+        pho_error(rc2, "Unable to close lib");
         rc = rc ? : rc2;
     }
 
@@ -1885,11 +1797,10 @@ out:
     if (rc) {
         sched_medium_release(sched, media);
         if (failure_on_dev) {
-            dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-            sched_device_release(sched, dev);
+            dev_thread_signal_stop_on_error(dev, failure_on_dev);
+        } else {
+            dev->ld_ongoing_io = false;
         }
-
-        dev->ld_ongoing_io = false;
     }
 
     return rc;
@@ -1942,7 +1853,8 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
         struct lrs_dev *dev = lrs_dev_hdl_get(&sched->devices, i);
         bool is_already_selected = false;
 
-        if (dev->ld_op_status == PHO_DEV_OP_ST_FAILED)
+        if (dev->ld_op_status == PHO_DEV_OP_ST_FAILED ||
+            !dev->ld_device_thread.ld_running)
             continue;
 
         /* check the device is not already selected */
@@ -2229,9 +2141,9 @@ static int sched_media_prepare_for_read(struct lrs_sched *sched,
 
     rc = check_read_medium_permission_and_status(med);
     if (rc)
-        LOG_RETURN(rc,
-                   "Cannot read on medium '%s' due to permission or status "
-                   "mismatch", id->name);
+        LOG_GOTO(out, rc,
+                 "Cannot read on medium '%s' due to permission or status "
+                 "mismatch", id->name);
 
     /* check if the media is already in a drive */
     dev = search_loaded_media(sched, id->name);
@@ -2251,17 +2163,12 @@ static int sched_media_prepare_for_read(struct lrs_sched *sched,
         if (rc)
             goto out;
     }
-    /* at this point, med == dev->ld_dss_media_info */
+    /* at this point, med is transfered to dev->ld_dss_media_info */
+    med = NULL;
 
     /* Mount only if not already mounted */
-    if (dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED) {
+    if (dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED)
         rc = sched_mount(sched, dev);
-        if (rc && !dev->ld_dss_media_info)
-            /* if an error occurs during mount, med will be unloaded and freed
-             * through ld_dss_media_info which will be set to NULL.
-             */
-            med = NULL;
-    }
 
 out:
     if (rc) {
@@ -2269,9 +2176,10 @@ out:
         *pmedia = NULL;
         *pdev = NULL;
     } else {
-        *pmedia = med;
+        *pmedia = dev->ld_dss_media_info;
         *pdev = dev;
     }
+
     return rc;
 }
 
@@ -2511,17 +2419,18 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
         /* find the corresponding device */
         dev = search_loaded_media(sched,
             reqc->params.release.nosync_media[i].medium.name);
-        /* no device is found: stop to manage this request and send an error */
+        if (dev && !dev->ld_device_thread.ld_running) {
+            pho_error(-ENODEV, "device '%s' is not running but contains nosync "
+                      "release medium '%s'", dev->ld_dss_dev_info->rsc.id.name,
+                      reqc->params.release.nosync_media[i].medium.name);
+            dev = NULL;
+        }
+
         if (dev == NULL) {
-            rc2 = queue_error_response(sched->response_queue, -ENODEV, reqc);
-            if (rc2) {
-                pho_error(rc2, "Unable to queue ENODEV error response");
-                rc = rc ? : rc2;
-            }
-
-            sched_req_free(reqc);
-
-            return rc;
+            pho_error(-ENODEV, "Unable to find loaded device of the nosync "
+                      "medium '%s'",
+                      reqc->params.release.nosync_media[i].medium.name);
+            continue;
         }
 
         /* update media phys_spc_free stats in advance, before next sync */
@@ -2540,6 +2449,10 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
         MUTEX_UNLOCK(&dev->ld_mutex);
         if (rc2) {
             pho_error(rc2, "Unable to update phys_spc_free");
+            /*
+             * TODO: returning a fatal error seems to much here,
+             * only the medium and the device should be failed
+             */
             rc = rc ? : rc2;
         }
 
@@ -2561,6 +2474,13 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
         dev = search_loaded_media(sched,
             reqc->params.release.tosync_media[i].medium.name);
 
+        if (dev && !dev->ld_device_thread.ld_running) {
+            pho_error(-ENODEV, "device '%s' is not running but contains tosync "
+                      "release medium '%s'", dev->ld_dss_dev_info->rsc.id.name,
+                      reqc->params.release.nosync_media[i].medium.name);
+            dev = NULL;
+        }
+
         if (dev != NULL) {
             /* update media phys_spc_free stats in advance, before next sync */
             /**
@@ -2577,6 +2497,10 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
             MUTEX_UNLOCK(&dev->ld_mutex);
             if (rc2) {
                 pho_error(rc2, "Unable to update phys_spc_free");
+                /*
+                 * TODO: returning a fatal error seems to much here,
+                 * only the medium and the device should be failed
+                 */
                 rc = rc ? : rc2;
             }
 

@@ -99,6 +99,7 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
 
     (*dev)->ld_response_queue = sched->response_queue;
     (*dev)->ld_ongoing_format = &sched->ongoing_format;
+    (*dev)->sched_req_queue = &sched->req_queue;
     (*dev)->ld_handle = handle;
 
     rc = dev_thread_init(*dev);
@@ -748,7 +749,7 @@ static int lrs_dev_media_update(struct dss_handle *dss,
 }
 
 /* Sync dev, update the media in the DSS, and flush tosync_array */
-static void dev_sync(struct lrs_dev *dev)
+static int dev_sync(struct lrs_dev *dev)
 {
     struct sync_params *sync_params = &dev->ld_sync_params;
     int rc2;
@@ -774,15 +775,7 @@ static void dev_sync(struct lrs_dev *dev)
         pho_error(rc2, "Cannot clean tosync array");
     }
 
-    if (rc) {
-        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-        dev->ld_dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-        rc2 = dss_device_update_adm_status(&dev->ld_device_thread.ld_dss,
-                                           dev->ld_dss_dev_info,
-                                           1);
-        if (rc2)
-            pho_error(rc2, "Unable to set device as failed into DSS");
-    }
+    return rc;
 }
 
 /**
@@ -836,6 +829,21 @@ static int dss_medium_release(struct dss_handle *dss, struct media_info *medium)
                    medium->lock.hostname, medium->lock.owner);
 
     pho_lock_clean(&medium->lock);
+    return 0;
+}
+
+static int dss_device_release(struct dss_handle *dss, struct dev_info *dev)
+{
+    int rc;
+
+    rc = dss_unlock(dss, DSS_DEVICE, dev, 1, false);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Error when releasing device '%s' with current lock "
+                   "(hostname %s, owner %d)", dev->rsc.id.name,
+                   dev->lock.hostname, dev->lock.owner);
+
+    pho_lock_clean(&dev->lock);
     return 0;
 }
 
@@ -1170,13 +1178,28 @@ static int dev_handle_format(struct lrs_dev *dev)
             /* release medium that cannot be loaded */
             rc2 = dss_medium_release(&dev->ld_device_thread.ld_dss,
                                      medium_to_format);
-            if (rc2)
-                pho_error(rc2, "Unable to release medium %s that we "
-                          "planned to format in device '%s'",
+            if (rc2) {
+                pho_error(rc2,
+                          "Unable to release medium %s that we planned to "
+                          "format in device '%s'",
                           medium_to_format->rsc.id.name,
                           dev->ld_dss_dev_info->rsc.id.name);
+                rc2 = queue_error_response(dev->ld_response_queue, rc2,
+                                           dev->ld_format_request);
+                if (rc2)
+                    pho_error(rc,
+                              "Unable to queue format error response for "
+                              "medium '%s'", medium_to_format->rsc.id.name);
 
-            goto out_response;
+                goto out;
+            } else {
+                tsqueue_push(dev->sched_req_queue, dev->ld_format_request);
+                LOG_GOTO(out_no_req_free, rc,
+                         "Unable to empty device '%s' to format medium '%s', "
+                         "format request is requeued",
+                         dev->ld_dss_dev_info->rsc.id.name,
+                         medium_to_format->rsc.id.name);
+            }
         }
 
         rc = dev_load(dev, medium_to_format, &failure_on_dev);
@@ -1224,17 +1247,235 @@ out_response:
 
 out:
     sched_req_free(dev->ld_format_request);
-    dev->ld_format_request = NULL;
-    /*
-     * on error: prevent new scheduled operations early by setting failed op
-     *           status before releasing ongoing_io flag
-     */
-    if (rc)
-        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
 
+out_no_req_free:
+    dev->ld_format_request = NULL;
     dev->ld_ongoing_io = false;
     format_medium_remove(dev->ld_ongoing_format, medium_to_format);
     return rc;
+}
+
+/**
+ * Manage a format request at device thread end.
+ *
+ * If format_request:
+ *     if error with corresponding medium loaded,
+ *         send a response error and free the format request,
+ *     else
+ *         request medium DSS lock and free the format request medium info,
+ *         requeue the request with releasing the format.
+ */
+static void cancel_pending_format(struct lrs_dev *device)
+{
+    struct req_container *format_request = device->ld_format_request;
+    int rc = 0;
+
+    if (!device->ld_format_request)
+        return;
+
+    if (device->ld_device_thread.ld_status &&
+        !format_request->params.format.medium_to_format) {
+        /*
+         * A NULL medium_to_format field in the format request means the medium
+         * has been transfered to the device.
+         */
+        format_medium_remove(device->ld_ongoing_format,
+                             device->ld_dss_media_info);
+        rc = queue_error_response(device->ld_response_queue,
+                                  device->ld_device_thread.ld_status,
+                                  format_request);
+        if (rc)
+            pho_error(rc,
+                      "Unable to send error for format request of medium '%s'",
+                      format_request->req->format->med_id->name);
+
+        sched_req_free(format_request);
+    } else {
+        if (format_request->params.format.medium_to_format) {
+            struct media_info *medium_to_format =
+                format_request->params.format.medium_to_format;
+
+            format_medium_remove(device->ld_ongoing_format, medium_to_format);
+            rc = dss_medium_release(&device->ld_device_thread.ld_dss,
+                                    medium_to_format);
+            if (rc) {
+                medium_to_format->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+                rc = dss_media_set(&device->ld_device_thread.ld_dss,
+                                   medium_to_format, 1, DSS_SET_UPDATE,
+                                   ADM_STATUS);
+                if (rc)
+                    pho_error(rc,
+                              "Unable to set medium '%s' into DSS as "
+                              "PHO_RSC_ADM_ST_FAILED although we failed to "
+                              "release the corresponding lock",
+                              medium_to_format->rsc.id.name);
+            }
+
+            media_info_free(medium_to_format);
+            format_request->params.format.medium_to_format = NULL;
+        } else {
+            format_medium_remove(device->ld_ongoing_format,
+                                 device->ld_dss_media_info);
+        }
+
+        if (!rc) {
+            tsqueue_push(device->sched_req_queue, format_request);
+        } else {
+            rc = queue_error_response(device->ld_response_queue, rc,
+                                      format_request);
+            if (rc)
+                pho_error(rc,
+                          "Unable to send error to format request of medium "
+                          "'%s'", format_request->req->format->med_id->name);
+
+            sched_req_free(format_request);
+        }
+    }
+
+    device->ld_format_request = NULL;
+}
+
+/**
+ * Manage a mounted medium at device thread end.
+ *
+ * If mounted medium:
+ *     if no error:
+ *         umount mounted medium. The umount cleans tosync requests,
+ *     if error:
+ *         set mounted medium as FAILED into DSS and release corresponding
+ *         DSS lock except if we failed to set the DSS status to FAILED,
+ *         clean tosync requests by sending errors.
+ */
+static void dev_thread_end_mounted_medium(struct lrs_dev *device)
+{
+    int rc = 0;
+
+    if (device->ld_op_status != PHO_DEV_OP_ST_MOUNTED)
+        return;
+
+    if (!device->ld_device_thread.ld_status) {
+        rc = dev_umount(device);
+        if (rc) {
+            pho_error(rc, "Unable to umount medium '%s' in device '%s' exit",
+                      device->ld_dss_media_info->rsc.id.name,
+                      device->ld_dss_dev_info->rsc.id.name);
+            device->ld_device_thread.ld_status = rc;
+        }
+    }
+
+    if (device->ld_device_thread.ld_status && device->ld_dss_media_info) {
+        fail_release_free_medium(&device->ld_device_thread.ld_dss,
+                                 device->ld_dss_media_info);
+        device->ld_dss_media_info = NULL;
+    }
+}
+
+/**
+ * Manage a loaded medium at device thread end
+ *
+ * If loaded medium:
+ *     if no error:
+ *         let the medium loaded but release medium DSS lock,
+ *     if error:
+ *         set loaded medium as FAILED into DSS and release corresponding,
+ *         DSS lock except if we failed to set the DSS status to FAILED.
+ */
+static void dev_thread_end_loaded_medium(struct lrs_dev *device)
+{
+    if (device->ld_op_status != PHO_DEV_OP_ST_LOADED)
+        return;
+
+    if (!device->ld_device_thread.ld_status) {
+        int rc;
+
+        rc = dss_medium_release(&device->ld_device_thread.ld_dss,
+                                device->ld_dss_media_info);
+        if (rc) {
+            pho_error(rc,
+                      "Unable to release DSS lock of medium '%s' of device "
+                      "'%s' at device exit",
+                      device->ld_dss_media_info->rsc.id.name,
+                      device->ld_dss_dev_info->rsc.id.name);
+            device->ld_device_thread.ld_status = rc;
+        } else {
+            media_info_free(device->ld_dss_media_info);
+        }
+    }
+
+    if (device->ld_device_thread.ld_status && device->ld_dss_media_info)
+        fail_release_free_medium(&device->ld_device_thread.ld_dss,
+                                 device->ld_dss_media_info);
+
+    device->ld_dss_media_info = NULL;
+}
+
+/**
+ * Manage device and tosync_array at device thread end.
+ *
+ * If no error:
+ *     release device DSS lock.
+ *
+ * If error:
+ *     - clean tosync array,
+ *     - set device op_status to FAILED,
+ *     - set device adm_status to FAILED into DSS and release corresponding
+ *       DSS lock except if we failed to set the DSS status to FAILED.
+ *
+ * Set device->ld_ongoing_io to false.
+ */
+static void dev_thread_end_device(struct lrs_dev *device)
+{
+    struct dss_handle *dss = &device->ld_device_thread.ld_dss;
+    int rc;
+
+    if (!device->ld_device_thread.ld_status) {
+        rc = dss_device_release(dss, device->ld_dss_dev_info);
+        if (rc) {
+            pho_error(rc, "Unable to release DSS lock of device '%s' at exit",
+                      device->ld_dss_dev_info->rsc.id.name);
+            device->ld_device_thread.ld_status = rc;
+        }
+    }
+
+    if (device->ld_device_thread.ld_status) {
+        rc = clean_tosync_array(device, device->ld_device_thread.ld_status);
+        if (rc)
+            pho_error(rc,
+                      "Failed to clean tosync array of device '%s' at exit",
+                      device->ld_dss_dev_info->rsc.id.name);
+
+        device->ld_op_status = PHO_DEV_OP_ST_FAILED;
+        if (device->ld_dss_dev_info) {
+            device->ld_dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+            rc = dss_device_update_adm_status(dss, device->ld_dss_dev_info, 1);
+            if (rc) {
+                pho_error(rc,
+                          "Unable to set device '%s' as PHO_RSC_ADM_ST_FAILED "
+                          "into DSS, we don't release the corresponding DSS "
+                          "lock", device->ld_dss_dev_info->rsc.id.name);
+            } else {
+                rc = dss_device_release(dss, device->ld_dss_dev_info);
+                if (rc)
+                    pho_error(rc,
+                              "Unable to release DSS lock of device '%s' at "
+                              "device exit",
+                              device->ld_dss_dev_info->rsc.id.name);
+            }
+        }
+    }
+
+    device->ld_ongoing_io = false;
+}
+
+static void dev_thread_end(struct lrs_dev *device)
+{
+    /* prevent any new scheduled request to this device */
+    device->ld_device_thread.ld_running = false;
+
+    cancel_pending_format(device);
+    dev_thread_end_mounted_medium(device);
+    dev_thread_end_loaded_medium(device);
+    dev_thread_end_device(device);
 }
 
 /**
@@ -1255,8 +1496,13 @@ static void *lrs_dev_thread(void *tdata)
         if (!device->ld_needs_sync)
             check_needs_sync(device->ld_handle, device);
 
-        if (device->ld_needs_sync && !device->ld_ongoing_io)
-            dev_sync(device);
+        if (device->ld_needs_sync && !device->ld_ongoing_io) {
+            rc = dev_sync(device);
+            if (rc)
+                LOG_GOTO(end_thread, thread->ld_status = rc, "device thread "
+                         "'%s': fatal error syncing device",
+                         device->ld_dss_dev_info->rsc.id.name);
+        }
 
         if (device->ld_ongoing_io && device->ld_format_request) {
             rc = dev_handle_format(device);
@@ -1275,7 +1521,8 @@ static void *lrs_dev_thread(void *tdata)
     }
 
 end_thread:
-    pthread_exit(&thread->ld_status);
+    dev_thread_end(device);
+    pthread_exit(&device->ld_device_thread.ld_status);
 }
 
 static int dev_thread_init(struct lrs_dev *device)
@@ -1319,6 +1566,12 @@ void dev_thread_signal_stop(struct lrs_dev *device)
     if (rc)
         pho_error(rc, "Error when signaling device (%s, %s) to stop it",
                   device->ld_dss_dev_info->rsc.id.name, device->ld_dev_path);
+}
+
+void dev_thread_signal_stop_on_error(struct lrs_dev *device, int error_code)
+{
+    device->ld_device_thread.ld_status = error_code;
+    dev_thread_signal_stop(device);
 }
 
 void dev_thread_wait_end(struct lrs_dev *device)
