@@ -36,6 +36,7 @@ enum _RESP_KIND {
     _RESP_RELEASE,
     _RESP_FORMAT,
     _RESP_NOTIFY,
+    _RESP_MONITOR,
     _RESP_ERROR,
 };
 
@@ -44,7 +45,8 @@ static const char *const SRL_REQ_KIND_STRS[] = {
     [PHO_REQUEST_KIND__RQ_READ]    = "read alloc",
     [PHO_REQUEST_KIND__RQ_RELEASE] = "release",
     [PHO_REQUEST_KIND__RQ_FORMAT]  = "format",
-    [PHO_REQUEST_KIND__RQ_NOTIFY]  = "notify"
+    [PHO_REQUEST_KIND__RQ_NOTIFY]  = "notify",
+    [PHO_REQUEST_KIND__RQ_MONITOR] = "monitor",
 };
 
 static const char *const SRL_RESP_KIND_STRS[] = {
@@ -53,6 +55,7 @@ static const char *const SRL_RESP_KIND_STRS[] = {
     [_RESP_RELEASE] = "release",
     [_RESP_FORMAT]  = "format",
     [_RESP_NOTIFY]  = "notify",
+    [_RESP_MONITOR] = "monitor",
     [_RESP_ERROR]   = "error"
 };
 
@@ -68,6 +71,8 @@ const char *pho_srl_request_kind_str(pho_req_t *req)
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_FORMAT];
     if (pho_request_is_notify(req))
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_NOTIFY];
+    if (pho_request_is_monitor(req))
+        return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_MONITOR];
 
     return "<invalid>";
 }
@@ -84,6 +89,8 @@ const char *pho_srl_response_kind_str(pho_resp_t *resp)
         return SRL_RESP_KIND_STRS[_RESP_FORMAT];
     if (pho_response_is_notify(resp))
         return SRL_RESP_KIND_STRS[_RESP_NOTIFY];
+    if (pho_response_is_monitor(resp))
+        return SRL_RESP_KIND_STRS[_RESP_MONITOR];
     if (pho_response_is_error(resp))
         return SRL_RESP_KIND_STRS[_RESP_ERROR];
 
@@ -294,6 +301,19 @@ err_notify:
     return -ENOMEM;
 }
 
+int pho_srl_request_monitor_alloc(pho_req_t *req)
+{
+    pho_request__init(req);
+
+    req->monitor = malloc(sizeof(*req->monitor));
+    if (!req->monitor)
+        return -ENOMEM;
+
+    pho_request__monitor__init(req->monitor);
+
+    return 0;
+}
+
 void pho_srl_request_free(pho_req_t *req, bool unpack)
 {
     if (unpack) {
@@ -349,6 +369,11 @@ void pho_srl_request_free(pho_req_t *req, bool unpack)
         free(req->notify->rsrc_id);
         free(req->notify);
         req->notify = NULL;
+    }
+
+    if (req->monitor) {
+        free(req->monitor);
+        req->monitor = NULL;
     }
 }
 
@@ -540,6 +565,20 @@ err_notify:
     return -ENOMEM;
 }
 
+int pho_srl_response_monitor_alloc(pho_resp_t *resp)
+{
+    pho_response__init(resp);
+
+    resp->monitor = malloc(sizeof(*resp->monitor));
+    if (!resp->monitor)
+        return -ENOMEM;
+
+    pho_response__monitor__init(resp->monitor);
+    resp->monitor->status = NULL;
+
+    return 0;
+}
+
 int pho_srl_response_error_alloc(pho_resp_t *resp)
 {
     pho_response__init(resp);
@@ -616,6 +655,12 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
     if (resp->error) {
         free(resp->error);
         resp->error = NULL;
+    }
+
+    if (resp->monitor) {
+        free(resp->monitor->status);
+        free(resp->monitor);
+        resp->monitor = NULL;
     }
 }
 
