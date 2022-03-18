@@ -553,8 +553,31 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
 
 int phobos_admin_device_status(struct admin_handle *adm)
 {
-    puts("drive status");
-    return 0;
+    pho_resp_t *resp = NULL;
+    pho_req_t req;
+    int rc;
+
+    rc = pho_srl_request_monitor_alloc(&req);
+    if (rc)
+        LOG_RETURN(rc, "Failed to allocate monitor request");
+
+    req.id = 0;
+    req.monitor->family = PHO_RSC_TAPE;
+
+    rc = _send_and_receive(adm, &req, &resp);
+    if (rc)
+        return rc;
+
+    if (pho_response_is_monitor(resp))
+        printf("status: %s", resp->monitor->status);
+    else if (pho_response_is_error(resp))
+        rc = resp->error->rc;
+    else
+        rc = -EPROTO;
+
+    pho_srl_response_free(resp, true);
+
+    return rc;
 }
 
 int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,

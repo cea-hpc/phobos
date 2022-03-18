@@ -443,6 +443,30 @@ static int _process_ping_request(struct lrs *lrs,
     return rc;
 }
 
+static int _process_monitor_request(struct lrs *lrs,
+                                       const struct req_container *req_cont)
+{
+    struct resp_container resp_cont;
+    int rc;
+
+    resp_cont.resp = malloc(sizeof(*resp_cont.resp));
+    if (!resp_cont.resp)
+        LOG_RETURN(-ENOMEM, "Failed to allocate monitor response");
+
+    resp_cont.socket_id = req_cont->socket_id;
+
+    pho_srl_response_monitor_alloc(resp_cont.resp);
+    resp_cont.resp->req_id = req_cont->req->id;
+    resp_cont.resp->monitor->status = strdup("drive status");
+
+    rc = _send_message(&lrs->comm, &resp_cont);
+    pho_srl_response_free(resp_cont.resp, false);
+    if (rc)
+        pho_error(rc, "Failed to send ping response");
+
+    return rc;
+}
+
 static int _prepare_requests(struct lrs *lrs, const int n_data,
                              struct pho_comm_data *data)
 {
@@ -472,6 +496,12 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
         /* send back the ping request */
         if (pho_request_is_ping(req_cont->req)) {
             _process_ping_request(lrs, req_cont);
+            sched_req_free(req_cont);
+            continue;
+        }
+
+        if (pho_request_is_monitor(req_cont->req)) {
+            _process_monitor_request(lrs, req_cont);
             sched_req_free(req_cont);
             continue;
         }
