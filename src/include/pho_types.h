@@ -494,7 +494,7 @@ enum notify_op {
  */
 struct tsqueue {
     GQueue             *queue;          /**< Object queue */
-    pthread_mutex_t    *mutex;          /**< Mutex to protect the queue */
+    pthread_mutex_t     mutex;          /**< Mutex to protect the queue */
 };
 
 #endif

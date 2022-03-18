@@ -658,7 +658,10 @@ static int lrs_init(struct lrs *lrs, struct lrs_params parm)
         LOG_RETURN(rc, "Error while creating the daemon lock file %s",
                    lock_file);
 
-    lrs->response_queue = tsqueue_init();
+    rc = tsqueue_init(&lrs->response_queue);
+    if (rc)
+        LOG_GOTO(err, rc, "Unable to init lrs response queue");
+
     lrs->stopped = false;
 
     rc = _load_schedulers(lrs);

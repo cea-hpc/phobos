@@ -473,23 +473,17 @@ void layout_info_free_extents(struct layout_info *layout)
     layout->extents = NULL;
 }
 
-struct tsqueue tsqueue_init(void)
+int tsqueue_init(struct tsqueue *tsqueue)
 {
-    struct tsqueue tsq = {
-        .queue = g_queue_new(),
-        .mutex = malloc(sizeof(*tsq.mutex)),
-    };
     int rc;
 
-    if (tsq.mutex == NULL)
-        LOG_GOTO(out, -ENOMEM, "Unable to alloc threadsafe queue mutex");
-
-    rc = pthread_mutex_init(tsq.mutex, NULL);
+    rc = pthread_mutex_init(&tsqueue->mutex, NULL);
     if (rc)
-        pho_error(-rc, "Unable to init threadsafe queue mutex");
+        LOG_RETURN(-rc, "Unable to init threadsafe queue mutex");
 
-out:
-    return tsq;
+    tsqueue->queue = g_queue_new();
+
+    return 0;
 }
 
 void tsqueue_destroy(struct tsqueue *tsq, GDestroyNotify free_func)
@@ -501,27 +495,25 @@ void tsqueue_destroy(struct tsqueue *tsq, GDestroyNotify free_func)
     else
         g_queue_free_full(tsq->queue, free_func);
 
-    rc = pthread_mutex_destroy(tsq->mutex);
+    rc = pthread_mutex_destroy(&tsq->mutex);
     if (rc)
         pho_error(-rc, "Unable to destroy threadsafe queue mutex");
-
-    free(tsq->mutex);
 }
 
 void *tsqueue_pop(struct tsqueue *tsq)
 {
     void *data;
 
-    MUTEX_LOCK(tsq->mutex);
+    MUTEX_LOCK(&tsq->mutex);
     data = g_queue_pop_tail(tsq->queue);
-    MUTEX_UNLOCK(tsq->mutex);
+    MUTEX_UNLOCK(&tsq->mutex);
 
     return data;
 }
 
 void tsqueue_push(struct tsqueue *tsq, void *data)
 {
-    MUTEX_LOCK(tsq->mutex);
+    MUTEX_LOCK(&tsq->mutex);
     g_queue_push_head(tsq->queue, data);
-    MUTEX_UNLOCK(tsq->mutex);
+    MUTEX_UNLOCK(&tsq->mutex);
 }
