@@ -717,27 +717,22 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
         LOG_RETURN(rc, "Failed to init sched format media");
 
     rc = lrs_dev_hdl_init(&sched->devices, family);
-    if (rc) {
-        format_media_clean(&sched->ongoing_format);
-        LOG_RETURN(rc, "Failed to initialize device handle");
-    }
+    if (rc)
+        LOG_GOTO(err_format_media, rc, "Failed to initialize device handle");
 
     rc = fill_host_owner(&sched->lock_hostname, &sched->lock_owner);
-    if (rc) {
-        format_media_clean(&sched->ongoing_format);
-        lrs_dev_hdl_fini(&sched->devices);
-        LOG_RETURN(rc, "Failed to get hostname and PID");
-    }
+    if (rc)
+        LOG_GOTO(err_hdl_fini, rc, "Failed to get hostname and PID");
 
     /* Connect to the DSS */
     rc = dss_init(&sched->dss);
-    if (rc) {
-        format_media_clean(&sched->ongoing_format);
-        lrs_dev_hdl_fini(&sched->devices);
-        LOG_RETURN(rc, "Failed to init dss handle");
-    }
+    if (rc)
+        LOG_GOTO(err_hdl_fini, rc, "Failed to init sched dss handle");
 
-    sched->req_queue = g_queue_new();
+    rc = tsqueue_init(&sched->req_queue);
+    if (rc)
+        LOG_GOTO(err_dss_fini, rc, "Failed to init sched req_queue");
+
     sched->response_queue = resp_queue;
 
     /* Load devices from DSS -- not critical if no device is found */
@@ -748,16 +743,24 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
 
     rc = sched_clean_device_locks(sched);
     if (rc)
-        goto err;
+        goto err_sched_fini;
 
     rc = sched_clean_medium_locks(sched);
     if (rc)
-        goto err;
+        goto err_sched_fini;
 
     return 0;
 
-err:
+err_sched_fini:
     sched_fini(sched);
+    return rc;
+
+err_dss_fini:
+    dss_fini(&sched->dss);
+err_hdl_fini:
+    lrs_dev_hdl_fini(&sched->devices);
+err_format_media:
+    format_media_clean(&sched->ongoing_format);
     return rc;
 }
 
@@ -1012,7 +1015,7 @@ void sched_fini(struct lrs_sched *sched)
 
     dss_fini(&sched->dss);
 
-    g_queue_free_full(sched->req_queue, sched_req_free);
+    tsqueue_destroy(&sched->req_queue, sched_req_free);
 
     lrs_dev_hdl_clear(&sched->devices);
 
@@ -3006,7 +3009,7 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
     int rc = 0;
 
     resp_array = g_array_sized_new(FALSE, FALSE, sizeof(struct resp_container),
-                                   g_queue_get_length(sched->req_queue));
+                                   tsqueue_get_length(&sched->req_queue));
     if (resp_array == NULL)
         return -ENOMEM;
     g_array_set_clear_func(resp_array, sched_resp_free);
@@ -3015,7 +3018,7 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
      * Very simple algorithm (FIXME): serve requests until the first EAGAIN is
      * encountered.
      */
-    while ((reqc = g_queue_pop_tail(sched->req_queue)) != NULL) {
+    while ((reqc = tsqueue_pop(&sched->req_queue)) != NULL) {
         pho_req_t *req = reqc->req;
 
         if (!running) {
@@ -3071,7 +3074,7 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
 
         if (running) {
             /* Requeue last request on -EAGAIN and running */
-            g_queue_push_tail(sched->req_queue, reqc);
+            tsqueue_push(&sched->req_queue, reqc);
             rc = 0;
             break;
         }

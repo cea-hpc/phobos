@@ -72,7 +72,7 @@ struct lrs_sched {
     struct lrs_dev_hdl  devices;        /**< Handle to device threads */
     const char         *lock_hostname;  /**< Lock hostname for this LRS */
     int                 lock_owner;     /**< Lock owner (pid) for this LRS */
-    GQueue             *req_queue;      /**< Queue for all but
+    struct tsqueue      req_queue;      /**< Queue for all but
                                           *  release requests
                                           */
     struct format_media ongoing_format; /**< Ongoing format media */

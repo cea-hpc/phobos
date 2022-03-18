@@ -297,4 +297,12 @@ void *tsqueue_pop(struct tsqueue *tsq);
  */
 void tsqueue_push(struct tsqueue *tsq, void *data);
 
+/**
+ * Get length of a threadsafe queue
+ * @param[in]   tsq     Threadsafe queue
+ *
+ * @return  length of the threadsafe queue
+ */
+unsigned int tsqueue_get_length(struct tsqueue *tsq);
+
 #endif

@@ -517,3 +517,14 @@ void tsqueue_push(struct tsqueue *tsq, void *data)
     g_queue_push_head(tsq->queue, data);
     MUTEX_UNLOCK(&tsq->mutex);
 }
+
+unsigned int tsqueue_get_length(struct tsqueue *tsq)
+{
+    unsigned int length;
+
+    MUTEX_LOCK(&tsq->mutex);
+    length = g_queue_get_length(tsq->queue);
+    MUTEX_UNLOCK(&tsq->mutex);
+
+    return length;
+}

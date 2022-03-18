@@ -508,7 +508,7 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
             rc = rc ? : rc2;
         } else {
             if (running)
-                g_queue_push_tail(lrs->sched[fam]->req_queue, req_cont);
+                tsqueue_push(&lrs->sched[fam]->req_queue, req_cont);
             else
                 LOG_GOTO(send_err, rc2 = -ESHUTDOWN,
                          "Daemon stopping, not accepting new requests");
