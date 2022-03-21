@@ -29,7 +29,9 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
 . $test_dir/../../utils_tape.sh
+. $test_dir/../../tape_drive.sh
 . $test_dir/../../test_launch_daemon.sh
+controlled_store="$test_dir/controlled_store"
 
 function test_drive_status_no_daemon()
 {
@@ -59,13 +61,10 @@ function st2sg()
 
 function test_drive_status()
 {
-    local tape=$(get_tapes L6 1)
     local drives=($(get_drives 2))
 
-    $phobos tape add --type lto6 "$tape"
     $phobos drive add ${drives[@]}
     $phobos drive unlock ${drives[@]}
-    $phobos tape format --unlock "$tape"
 
     for i in ${!drives[@]}; do
         $phobos drive status | grep $(st2sg "${drives[$i]}") ||
@@ -73,9 +72,43 @@ function test_drive_status()
     done
 }
 
-test_drive_status_no_daemon
+function test_drive_status_with_ongoing_io()
+{
+    local tape=$(get_tapes L6 1)
+    local drive=$(get_drives 1)
+
+    $phobos tape add --type lto6 "$tape"
+    $phobos drive add "$drive"
+    $phobos drive unlock "$drive"
+    $phobos tape format --unlock "$tape"
+
+    $controlled_store put tape &
+    local pid=$!
+
+    trap "cleanup; kill -s SIGUSR1 '$pid'" EXIT
+
+    $phobos drive status |
+        grep True |
+        grep "/mnt/phobos-$(basename $(st2sg "$drive"))" |
+        grep "$tape"
+
+    # send release request
+    kill -s SIGUSR1 $pid
+    trap cleanup EXIT
+}
 
 trap cleanup EXIT
+
+test_drive_status_no_daemon
+
 setup
 
+drain_all_drives
 test_drive_status
+
+# reset drives
+drop_tables
+setup_tables
+drain_all_drives
+
+test_drive_status_with_ongoing_io

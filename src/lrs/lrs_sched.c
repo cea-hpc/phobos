@@ -3039,13 +3039,35 @@ out:
 static int sched_fetch_device_status(struct lrs_dev *device,
                                      json_t *device_status)
 {
-    /* TODO: this is a temporary placeholder */
-    json_t *path;
+    json_t *str;
 
-    path = json_string(device->ld_dev_path);
+    str = json_string(device->ld_dss_dev_info->path);
+    json_object_set(device_status, "name", str);
+    json_decref(str);
 
-    json_object_set(device_status, "dev_path", path);
-    json_decref(path);
+    str = json_string(device->ld_dev_path);
+    json_object_set(device_status, "device", str);
+    json_decref(str);
+
+    str = json_string(device->ld_sys_dev_state.lds_serial);
+    json_object_set(device_status, "serial", str);
+    json_decref(str);
+
+    if (device->ld_dss_media_info) {
+        json_t *ongoing_io;
+
+        str = json_string(device->ld_mnt_path);
+        json_object_set(device_status, "mount_path", str);
+        json_decref(str);
+
+        str = json_string(device->ld_dss_media_info->rsc.id.name);
+        json_object_set(device_status, "media", str);
+        json_decref(str);
+
+        ongoing_io = json_boolean(device->ld_ongoing_io);
+        json_object_set(device_status, "ongoing_io", ongoing_io);
+        json_decref(ongoing_io);
+    }
 
     return 0;
 }

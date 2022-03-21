@@ -57,6 +57,7 @@ from phobos.core.ldm import LibAdapter
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
 from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
+from tabulate import tabulate
 
 def phobos_log_handler(log_record):
     """
@@ -1421,8 +1422,7 @@ class DriveOptHandler(DeviceOptHandler):
             with AdminClient(lrs_required=True) as adm:
                 status = json.loads(adm.device_status())
 
-                for dev in status:
-                    print(dev['dev_path'])
+                print(tabulate(status, headers="keys", tablefmt="github"))
 
         except EnvironmentError as err:
             self.logger.error("Cannot read status of drives: %s",

@@ -24,8 +24,11 @@
  *         SIGUSR1 before sending the release request. This is useful to test
  *         behavior which depends on the timing at which requests are received.
  */
+#define _GNU_SOURCE
+
 #include <errno.h>
 #include <signal.h>
+#include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <time.h>
@@ -80,6 +83,7 @@ static void wait_release_signal(void)
 
 struct option {
     enum pho_xfer_op op;
+    enum rsc_family family;
 };
 
 static void parse_args(int argc, char **argv, struct option *option)
@@ -87,12 +91,25 @@ static void parse_args(int argc, char **argv, struct option *option)
     if (argc < 2)
         error("controlled_strore", "usage: controlled_store <put|get>");
 
+    option->family = PHO_RSC_DIR;
+
+    if (argc == 3) {
+        option->family = str2rsc_family(argv[2]);
+        if (option->family == PHO_RSC_INVAL)
+            goto err_usage;
+    }
+
     if (!strcmp(argv[1], "put"))
         option->op = PHO_XFER_OP_PUT;
     else if (!strcmp(argv[1], "get"))
-        option->op = PHO_XFER_OP_PUT;
+        option->op = PHO_XFER_OP_GET;
     else
-        error(__func__, "usage controlled_store <action>");
+        goto err_usage;
+
+    return;
+
+err_usage:
+    error(__func__, "usage controlled_store <action> [<family>]");
 }
 
 static void send_and_receive(struct pho_comm_info *comm,
@@ -124,12 +141,21 @@ static void send_and_receive(struct pho_comm_info *comm,
     assert(n_responses == 1);
     *resp = pho_srl_response_unpack(&responses[0].buf);
     free(responses);
-    if (pho_response_is_error(*resp))
-        error(__func__, "received an error response");
+    if (pho_response_is_error(*resp)) {
+        char *msg;
+        int rc;
+
+        rc = asprintf(&msg, "received an error response: %s",
+                      strerror(-(*resp)->error->rc));
+        if (rc == -1)
+            error(__func__, "asprintf failed");
+        error(__func__, msg);
+    }
 }
 
 static void send_write(struct pho_comm_info *comm,
-                       pho_resp_t **resp)
+                       pho_resp_t **resp,
+                       enum rsc_family family)
 {
     pho_req_t req;
     size_t n = 0;
@@ -139,7 +165,7 @@ static void send_write(struct pho_comm_info *comm,
     if (rc)
         error(__func__, strerror(-rc));
     req.walloc->media[0]->size = 0;
-    req.walloc->family = PHO_RSC_DIR;
+    req.walloc->family = family;
 
     send_and_receive(comm, &req, resp);
 }
@@ -179,7 +205,7 @@ int main(int argc, char **argv)
     if (rc)
         error("pho_comm_open", strerror(-rc));
 
-    send_write(&comm, &resp);
+    send_write(&comm, &resp, option.family);
     pho_info("allocation request sent, waiting for signal");
 
     wait_release_signal();
