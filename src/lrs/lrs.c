@@ -397,7 +397,7 @@ static int _send_responses_from_array(struct pho_comm_info *comm,
 }
 
 static int _send_error(struct lrs *lrs, int req_rc,
-                       struct req_container *req_cont)
+                       const struct req_container *req_cont)
 {
     struct resp_container resp_cont;
     int rc;
@@ -444,25 +444,57 @@ static int _process_ping_request(struct lrs *lrs,
 }
 
 static int _process_monitor_request(struct lrs *lrs,
-                                       const struct req_container *req_cont)
+                                    const struct req_container *req_cont)
 {
     struct resp_container resp_cont;
+    enum rsc_family family;
+    json_t *status;
     int rc;
+
+    family = (enum rsc_family) req_cont->req->monitor->family;
+
+    if (family < 0 || family >= PHO_RSC_LAST)
+        LOG_GOTO(send_error, rc = -EINVAL, "Invalid family argument");
+
+    if (!lrs->sched[family])
+        LOG_GOTO(send_error, rc = -EINVAL,
+                 "Requested family is not handled by the daemon");
 
     resp_cont.resp = malloc(sizeof(*resp_cont.resp));
     if (!resp_cont.resp)
-        LOG_RETURN(-ENOMEM, "Failed to allocate monitor response");
+        LOG_GOTO(send_error, rc = -ENOMEM,
+                 "Failed to allocate monitor response");
+
+    status = json_array();
+    if (!status)
+        LOG_GOTO(free_resp, rc = -ENOMEM, "Failed to allocate json array");
 
     resp_cont.socket_id = req_cont->socket_id;
-
     pho_srl_response_monitor_alloc(resp_cont.resp);
     resp_cont.resp->req_id = req_cont->req->id;
-    resp_cont.resp->monitor->status = strdup("drive status");
+
+    rc = sched_handle_monitor(lrs->sched[family], status);
+    if (rc)
+        goto free_status;
+
+    resp_cont.resp->monitor->status = json_dumps(status, 0);
+    json_decref(status);
+    if (!resp_cont.resp->monitor->status)
+        LOG_GOTO(free_resp, rc = -ENOMEM, "Failed to dump status string");
 
     rc = _send_message(&lrs->comm, &resp_cont);
     pho_srl_response_free(resp_cont.resp, false);
     if (rc)
-        pho_error(rc, "Failed to send ping response");
+        LOG_GOTO(send_error, rc, "Failed to send monitor response");
+
+    return 0;
+
+free_status:
+    json_decref(status);
+free_resp:
+    free(resp_cont.resp);
+send_error:
+    _send_error(lrs, rc, req_cont);
 
     return rc;
 }

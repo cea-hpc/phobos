@@ -3035,3 +3035,51 @@ out:
 
     return rc;
 }
+
+static int sched_fetch_device_status(struct lrs_dev *device,
+                                     json_t *device_status)
+{
+    /* TODO: this is a temporary placeholder */
+    json_t *path;
+
+    path = json_string(device->ld_dev_path);
+
+    json_object_set(device_status, "dev_path", path);
+    json_decref(path);
+
+    return 0;
+}
+
+int sched_handle_monitor(struct lrs_sched *sched, json_t *status)
+{
+    json_t *device_status;
+    int rc = 0;
+    int i;
+
+    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
+        struct lrs_dev *device;
+
+        device_status = json_object();
+        if (!device_status)
+            LOG_RETURN(-ENOMEM, "Failed to allocate device_status");
+
+        device = lrs_dev_hdl_get(&sched->devices, i);
+
+        rc = sched_fetch_device_status(device, device_status);
+        if (rc)
+            LOG_GOTO(free_device_status, rc, "Failed to get device status");
+
+        rc = json_array_append_new(status, device_status);
+        if (rc == -1)
+            LOG_GOTO(free_device_status,
+                     rc = -ENOMEM,
+                     "Failed to append device status to array");
+
+        continue;
+
+free_device_status:
+        json_decref(device_status);
+    }
+
+    return rc;
+}

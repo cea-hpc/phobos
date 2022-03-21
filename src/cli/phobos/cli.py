@@ -29,12 +29,13 @@ specific command line parameters and the API entry points for phobos to trigger
 actions.
 """
 
-import sys
-from shlex import shlex
-import errno
 import argparse
+import errno
+import json
 import logging
 from logging.handlers import SysLogHandler
+from shlex import shlex
+import sys
 
 import os
 import os.path
@@ -1418,7 +1419,11 @@ class DriveOptHandler(DeviceOptHandler):
         """Display I/O and drive status"""
         try:
             with AdminClient(lrs_required=True) as adm:
-                adm.device_status()
+                status = json.loads(adm.device_status())
+
+                for dev in status:
+                    print(dev['dev_path'])
+
         except EnvironmentError as err:
             self.logger.error("Cannot read status of drives: %s",
                               err.strerror)

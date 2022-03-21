@@ -21,9 +21,14 @@
 
 set -xe
 
+if [[ ! -w /dev/changer ]]; then
+    exit 77 # special value to mark test as 'skipped'
+fi
+
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
+. $test_dir/../../utils_tape.sh
 . $test_dir/../../test_launch_daemon.sh
 
 function test_drive_status_no_daemon()
@@ -45,10 +50,27 @@ function cleanup()
     drop_tables
 }
 
+function st2sg()
+{
+    local stdev="$1"
+
+    lsscsi -g | grep "$stdev" | tr -s ' ' ' ' | cut -d' ' -f7
+}
+
 function test_drive_status()
 {
-    $phobos drive status | grep "drive status" ||
-        error "Drive status failed"
+    local tape=$(get_tapes L6 1)
+    local drives=($(get_drives 2))
+
+    $phobos tape add --type lto6 "$tape"
+    $phobos drive add ${drives[@]}
+    $phobos drive unlock ${drives[@]}
+    $phobos tape format --unlock "$tape"
+
+    for i in ${!drives[@]}; do
+        $phobos drive status | grep $(st2sg "${drives[$i]}") ||
+            error "$(st2sg "${drives[$i]}") not found"
+    done
 }
 
 test_drive_status_no_daemon

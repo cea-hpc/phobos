@@ -155,9 +155,7 @@ class Client(object):
 
     def device_status(self):
         """Query the status of the local devices"""
-        status = admin_device_status(addressof(self.handle))
-
-        print(status)
+        return admin_device_status(addressof(self.handle))
 
     def layout_list(self, res, is_pattern, medium, degroup): # pylint: disable=too-many-locals
         """List layouts."""

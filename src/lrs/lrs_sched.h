@@ -281,4 +281,6 @@ void sched_resp_free(void *respc);
 int check_and_take_device_lock(struct lrs_sched *sched,
                                struct dev_info *dev);
 
+int sched_handle_monitor(struct lrs_sched *sched, json_t *status);
+
 #endif
