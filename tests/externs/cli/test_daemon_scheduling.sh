@@ -57,10 +57,9 @@ function cleanup()
     cleanup_test_dirs
     rm -f "$EVENT_FILE"
 
+    kill $(pgrep phobosd)
     drop_tables
 }
-
-trap cleanup ERR EXIT
 
 function now()
 {
@@ -142,6 +141,8 @@ function test_sync_after_put_get()
         error "No synchronisation should occur after a get operation"
     fi
 }
+
+trap cleanup EXIT
 
 last_read=$(now)
 setup
