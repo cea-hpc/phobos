@@ -24,7 +24,7 @@ function get_tapes
     local pattern=$1
     local count=$2
 
-    mtx status | grep VolumeTag | sed -e "s/.*VolumeTag=//" |
+    mtx status | sed -n 's/.*:VolumeTag\s\?=\s\?\(.*\)/\1/p' |
         grep "$pattern" | head -n $count | nodeset -f
 }
 
