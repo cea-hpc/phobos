@@ -153,9 +153,9 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc, "Error during device unlock")
 
-    def device_status(self):
+    def device_status(self, family):
         """Query the status of the local devices"""
-        return admin_device_status(addressof(self.handle))
+        return admin_device_status(addressof(self.handle), family)
 
     def layout_list(self, res, is_pattern, medium, degroup): # pylint: disable=too-many-locals
         """List layouts."""

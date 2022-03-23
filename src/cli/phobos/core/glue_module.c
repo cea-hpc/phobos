@@ -64,14 +64,18 @@ static PyObject *py_jansson_dumps(PyObject *self, PyObject *args)
 static PyObject *py_admin_device_status(PyObject *self, PyObject *args)
 {
     struct admin_handle *adm;
+    enum rsc_family family;
     PyObject *py_json_str;
     char *str;
     int rc;
 
-    if (!PyArg_ParseTuple(args, "l", &adm))
+    if (!PyArg_ParseTuple(args, "li", &adm, &family)) {
+        errno = EINVAL;
+        PyErr_SetFromErrno(PyExc_EnvironmentError);
         return NULL;
+    }
 
-    rc = phobos_admin_device_status(adm, &str);
+    rc = phobos_admin_device_status(adm, family, &str);
     if (rc) {
         errno = -rc;
         PyErr_SetFromErrno(PyExc_EnvironmentError);

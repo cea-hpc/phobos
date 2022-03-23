@@ -49,7 +49,7 @@ import phobos.core.cfg as cfg
 from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
                                ADM_STATUS, TAGS, PUT_ACCESS, GET_ACCESS,
-                               DELETE_ACCESS)
+                               DELETE_ACCESS, PHO_RSC_TAPE)
 from phobos.core.dss import Client as DSSClient
 from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
                              MediaInfo, ObjectInfo, ResourceFamily)
@@ -1420,7 +1420,7 @@ class DriveOptHandler(DeviceOptHandler):
         """Display I/O and drive status"""
         try:
             with AdminClient(lrs_required=True) as adm:
-                status = json.loads(adm.device_status())
+                status = json.loads(adm.device_status(PHO_RSC_TAPE))
 
                 print(tabulate(status, headers="keys", tablefmt="github"))
 

@@ -551,18 +551,23 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
     return rc;
 }
 
-int phobos_admin_device_status(struct admin_handle *adm, char **status)
+int phobos_admin_device_status(struct admin_handle *adm,
+                               enum rsc_family family,
+                               char **status)
 {
     pho_resp_t *resp = NULL;
     pho_req_t req;
     int rc;
+
+    if (family < 0 || family >= PHO_RSC_LAST)
+        LOG_RETURN(-EINVAL, "Invalid family %d", family);
 
     rc = pho_srl_request_monitor_alloc(&req);
     if (rc)
         LOG_RETURN(rc, "Failed to allocate monitor request");
 
     req.id = 0;
-    req.monitor->family = PHO_RSC_TAPE;
+    req.monitor->family = family;
 
     rc = _send_and_receive(adm, &req, &resp);
     if (rc)
