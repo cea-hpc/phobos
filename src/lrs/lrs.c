@@ -714,7 +714,7 @@ static int lrs_process(struct lrs *lrs)
         if (rc)
             LOG_RETURN(rc, "Error during responses sending");
 
-        if (!running && sched_has_running_devices(lrs->sched[i]))
+        if (running || sched_has_running_devices(lrs->sched[i]))
             stopped = false;
     }
 
