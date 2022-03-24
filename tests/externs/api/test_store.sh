@@ -48,7 +48,6 @@ function setup()
     setup_tables
     insert_examples
     mkdir $TEST_RECOV_DIR
-    invoke_daemon
 
     for dir in $TEST_MNT; do
         # allow later cleaning by other users
@@ -59,6 +58,8 @@ function setup()
     export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
     export PHOBOS_LRS_families="dir"
     export PHOBOS_STORE_default_family="dir"
+
+    invoke_daemon
 }
 
 function clear_mnt_content()
