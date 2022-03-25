@@ -575,11 +575,10 @@ static void update_queue_oldest_tosync(struct lrs_dev *dev)
     GPtrArray *tosync_array = dev->ld_sync_params.tosync_array;
     guint i;
 
-    MUTEX_LOCK(&dev->ld_mutex);
     if (tosync_array->len == 0) {
         dev->ld_sync_params.oldest_tosync.tv_sec = 0;
         dev->ld_sync_params.oldest_tosync.tv_nsec = 0;
-        goto unlock;
+        return;
     }
 
     for (i = 0; i < tosync_array->len; i++) {
@@ -588,9 +587,6 @@ static void update_queue_oldest_tosync(struct lrs_dev *dev)
         update_oldest_tosync(&dev->ld_sync_params.oldest_tosync,
                              req_tosync->reqc->received_at);
     }
-
-unlock:
-    MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
 /** remove from tosync_array when error occurs on other device */
