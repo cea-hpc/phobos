@@ -52,12 +52,12 @@ from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=n
                                DELETE_ACCESS, PHO_RSC_TAPE)
 from phobos.core.dss import Client as DSSClient
 from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
-                             MediaInfo, ObjectInfo, ResourceFamily)
+                             MediaInfo, ObjectInfo, ResourceFamily,
+                             CLIManagedResourceMixin)
 from phobos.core.ldm import LibAdapter
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
 from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
-from tabulate import tabulate
 
 def phobos_log_handler(log_record):
     """
@@ -567,6 +567,13 @@ class StatusOptHandler(BaseOptHandler):
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(StatusOptHandler, cls).add_options(parser)
+        attr = list(DriveStatus().get_display_fields().keys())
+        attr.sort()
+        parser.add_argument('-o', '--output', type=lambda t: t.split(','),
+                            default='all',
+                            help=("attributes to output, comma-separated, "
+                                  "choose from {" + " ".join(attr) + "} "
+                                  "(default: %(default)s)"))
 
     def __enter__(self):
         pass
@@ -1373,6 +1380,37 @@ class DirOptHandler(MediaOptHandler):
             sys.exit(os.EX_DATAERR)
 
 
+class DriveStatus(CLIManagedResourceMixin):
+    """Wrapper class to use dump_object_list"""
+
+    def __init__(self, values=None):
+        if not values:
+            return
+
+        self.name = values["name"]
+        self.device = values["device"]
+        self.serial = values["serial"]
+        if "media" in values.keys():
+            self.mount_path = values["mount_path"]
+            self.media = values["media"]
+            self.ongoing_io = values["ongoing_io"]
+        else:
+            self.mount_path = ""
+            self.media = ""
+            self.ongoing_io = ""
+
+    def get_display_fields(self, max_width=None):
+        """Return a dict of available fields and optional display formatters."""
+        return {
+            'name': None,
+            'device': None,
+            'serial': None,
+            'mount_path': None,
+            'media': None,
+            'ongoing_io': None,
+        }
+
+
 class DriveOptHandler(DeviceOptHandler):
     """Tape Drive options and actions."""
     label = 'drive'
@@ -1421,8 +1459,11 @@ class DriveOptHandler(DeviceOptHandler):
         try:
             with AdminClient(lrs_required=True) as adm:
                 status = json.loads(adm.device_status(PHO_RSC_TAPE))
+                # disable pylint's warning as it's suggestion does not work
+                for i in range(len(status)): #pylint: disable=consider-using-enumerate
+                    status[i] = DriveStatus(status[i])
 
-                print(tabulate(status, headers="keys", tablefmt="github"))
+                dump_object_list(status, self.params.get('output'))
 
         except EnvironmentError as err:
             self.logger.error("Cannot read status of drives: %s",

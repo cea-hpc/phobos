@@ -113,7 +113,7 @@ def dump_object_list(objs, attr=None, max_width=None, fmt="human"):
         'human': human_dump,
     }
 
-    if len(attr) > 1 or attr == ['*'] or attr == ['all']:
+    if attr is not None and (len(attr) > 1 or attr == ['*'] or attr == ['all']):
         formats['human'] = human_pretty_dump
 
     objlist = filter_display_dict(objs, attr, max_width)
