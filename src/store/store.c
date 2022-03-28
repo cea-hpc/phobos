@@ -899,15 +899,11 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
 
     /* Once the encoder is done and successful, save the layout and metadata */
     if (!enc->is_decoder && xfer->xd_rc == 0 && rc == 0) {
-        int rc2;
-
         pho_debug("Saving layout for objid:'%s'", xfer->xd_objid);
-        rc2 = dss_layout_set(&pho->dss, enc->layout, 1, DSS_SET_INSERT);
-        if (rc2) {
-            pho_error(rc2, "Error while saving layout for objid:'%s'",
+        rc = dss_layout_set(&pho->dss, enc->layout, 1, DSS_SET_INSERT);
+        if (rc)
+            pho_error(rc, "Error while saving layout for objid:'%s'",
                       xfer->xd_objid);
-            rc = rc ? : rc2;
-        }
     }
 
     /* Only overwrite xd_rc if it was 0 */

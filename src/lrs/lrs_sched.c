@@ -2634,26 +2634,25 @@ static int lrs_dev_media_update(struct dss_handle *dss,
     struct ldm_fs_space space = {0};
     struct fs_adapter fsa;
     uint64_t fields = 0;
-    int rc2, rc = 0;
+    int rc = 0;
+    int rc2;
 
     if (media_info->fs.status == PHO_FS_STATUS_EMPTY && !media_rc) {
         media_info->fs.status = PHO_FS_STATUS_USED;
         fields |= FS_STATUS;
     }
 
-    rc2 = get_fs_adapter(media_info->fs.type, &fsa);
-    if (rc2) {
-        rc = rc ? : rc2;
-        pho_error(rc2,
+    rc = get_fs_adapter(media_info->fs.type, &fsa);
+    if (rc) {
+        pho_error(rc,
                   "Invalid filesystem type for '%s' (database may be "
                   "corrupted)", fsroot);
         media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
         fields |= ADM_STATUS;
     } else {
-        rc2 = ldm_fs_df(&fsa, fsroot, &space);
-        if (rc2) {
-            rc = rc ? : rc2;
-            pho_error(rc2, "Cannot retrieve media usage information");
+        rc = ldm_fs_df(&fsa, fsroot, &space);
+        if (rc) {
+            pho_error(rc, "Cannot retrieve media usage information");
             media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
             fields |= ADM_STATUS;
         } else {

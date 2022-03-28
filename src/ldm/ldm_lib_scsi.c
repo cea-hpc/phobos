@@ -729,9 +729,10 @@ static void scan_element(const struct element_status *element,
 /** Implements phobos LDM lib scan  */
 static int lib_scsi_scan(struct lib_handle *hdl, json_t **lib_data)
 {
+    lib_scan_cb_t json_array_append_cb;
     struct lib_descriptor *lib;
-    lib_scan_cb_t          json_array_append_cb;
-    int                    rc, i = 0;
+    int i = 0;
+    int rc;
 
     json_array_append_cb = (lib_scan_cb_t)json_array_append;
 
@@ -743,8 +744,11 @@ static int lib_scsi_scan(struct lib_handle *hdl, json_t **lib_data)
 
     /* Load everything */
     rc = lib_status_load(lib, SCSI_TYPE_ALL);
-    if (rc)
+    if (rc) {
+        json_decref(*lib_data);
+        *lib_data = NULL;
         LOG_RETURN(rc, "Error loading scsi library status");
+    }
 
     /* scan arms */
     for (i = 0; i < lib->arms.count ; i++)
@@ -762,11 +766,7 @@ static int lib_scsi_scan(struct lib_handle *hdl, json_t **lib_data)
     for (i = 0; i < lib->drives.count ; i++)
         scan_element(&lib->drives.items[i], json_array_append_cb, *lib_data);
 
-    if (rc) {
-        json_decref(*lib_data);
-        *lib_data = NULL;
-    }
-    return rc;
+    return 0;
 }
 
 /** @}*/

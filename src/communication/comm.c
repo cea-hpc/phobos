@@ -213,7 +213,7 @@ int pho_comm_close(struct pho_comm_info *ci)
     g_hash_table_destroy(ci->ev_tab);
 
     if (close(ci->epoll_fd))
-        rc = rc ? : -errno;
+        rc = -errno;
 
     if (unlink(ci->path))
         rc = rc ? : -errno;
