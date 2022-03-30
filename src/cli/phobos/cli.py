@@ -1465,7 +1465,8 @@ class LibOptHandler(BaseResourceOptHandler):
                 lib_dev_path_from_cfg = cfg.get_val("lrs", "lib_device")
                 libs.append(lib_dev_path_from_cfg)
             except KeyError as err:
-                print("Unable to retrieve 'lib_device' in config:", err)
+                self.logger.error(str(err) + ", will abort 'lib scan'")
+                sys.exit(os.EX_DATAERR)
 
         for lib_dev in libs:
             lib_data = LibAdapter(PHO_LIB_SCSI, lib_dev).scan()

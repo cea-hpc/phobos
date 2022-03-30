@@ -69,6 +69,11 @@ function test_lib_scan
               "with arg '/dev/changer'"
     fi
 
+    sed -i "/lib_device/d" $PHOBOS_CFG_FILE
+
+    $phobos lib scan &&
+        error "Should have failed, no 'lib_device' specified in cfg file"
+
     echo "$old_cfg" > $PHOBOS_CFG_FILE
     trap - EXIT
 }

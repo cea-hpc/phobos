@@ -51,7 +51,7 @@ def get_val(section, name, default=RAISE_ERROR):
                                     name.encode('utf-8'), byref(cfg_value))
     if ret != 0:
         if default is RAISE_ERROR:
-            raise KeyError("No value in conf for section '%s', key '%s', rc=%s"
-                           % (section, name, os.strerror(ret)))
+            raise KeyError("No value in cfg for section '%s', key '%s', rc='%s'"
+                           % (section, name, os.strerror(-ret)))
         return default
     return cfg_value.value.decode('utf-8')
