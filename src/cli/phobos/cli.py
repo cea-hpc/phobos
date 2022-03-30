@@ -1390,6 +1390,7 @@ class DriveStatus(CLIManagedResourceMixin):
         self.name = values["name"]
         self.device = values["device"]
         self.serial = values["serial"]
+        self.address = values["address"]
         if "media" in values.keys():
             self.mount_path = values["mount_path"]
             self.media = values["media"]
@@ -1404,6 +1405,7 @@ class DriveStatus(CLIManagedResourceMixin):
         return {
             'name': None,
             'device': None,
+            'address': None,
             'serial': None,
             'mount_path': None,
             'media': None,
@@ -1463,7 +1465,8 @@ class DriveOptHandler(DeviceOptHandler):
                 for i in range(len(status)): #pylint: disable=consider-using-enumerate
                     status[i] = DriveStatus(status[i])
 
-                dump_object_list(status, self.params.get('output'))
+                dump_object_list(sorted(status, key=lambda x: x.address),
+                                 self.params.get('output'))
 
         except EnvironmentError as err:
             self.logger.error("Cannot read status of drives: %s",

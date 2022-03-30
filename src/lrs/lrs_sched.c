@@ -3039,6 +3039,7 @@ out:
 static int sched_fetch_device_status(struct lrs_dev *device,
                                      json_t *device_status)
 {
+    json_t *integer;
     json_t *str;
 
     str = json_string(device->ld_dss_dev_info->path);
@@ -3052,6 +3053,11 @@ static int sched_fetch_device_status(struct lrs_dev *device,
     str = json_string(device->ld_sys_dev_state.lds_serial);
     json_object_set(device_status, "serial", str);
     json_decref(str);
+
+    integer = json_integer(device->ld_lib_dev_info.ldi_addr.lia_addr -
+                           device->ld_lib_dev_info.ldi_first_addr);
+    json_object_set(device_status, "address", integer);
+    json_decref(integer);
 
     if (device->ld_dss_media_info) {
         json_t *ongoing_io;

@@ -416,6 +416,8 @@ static int lib_scsi_drive_info(struct lib_handle *hdl,
     memset(ldi, 0, sizeof(*ldi));
     ldi->ldi_addr.lia_type = MED_LOC_DRIVE;
     ldi->ldi_addr.lia_addr = drv->address;
+    ldi->ldi_first_addr =
+        ((struct lib_descriptor *)hdl->lh_lib)->msi.drives.first_addr;
     if (drv->full) {
         ldi->ldi_full = true;
         ldi->ldi_medium_id.family = PHO_RSC_TAPE;

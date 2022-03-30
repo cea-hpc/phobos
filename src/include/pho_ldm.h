@@ -190,6 +190,7 @@ struct lib_item_addr {
  */
 struct lib_drv_info {
     struct lib_item_addr ldi_addr;      /**< location of the drive */
+    uint64_t             ldi_first_addr;/**< address of the first drive */
     bool                 ldi_full;      /**< true if a medium is in the drive */
     struct pho_id        ldi_medium_id; /**< medium ID, if drive is full */
 };
