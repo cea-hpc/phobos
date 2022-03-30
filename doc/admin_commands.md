@@ -81,6 +81,23 @@ phobos tape list --output all
 
 Other options are available using the --help option.
 
+## Querying the status of the drives
+
+In order to have a complete view of the drives (which tape is loaded, ongoing
+I/Os, etc.) a query can be sent to the daemon through:
+
+```
+phobos drive status
+|   address | device   | media    | mount_path      | name     | ongoing_io   |     serial |
+|-----------|----------|----------|-----------------|----------|--------------|------------|
+|         6 | /dev/sg7 |          |                 | /dev/st6 |              | 1933008059 |
+|         7 | /dev/sg8 | Q00000L6 | /mnt/phobos-sg8 | /dev/st7 | False        | 1291610660 |
+```
+
+`address` is the drive index as shown by `mtx status`. `ongoing_io` can be
+either true or false indicating whether an I/O is ongoing on the corresponding
+drive.
+
 # Locking resources
 A device or media can be locked. In this case it cannot be used for
 subsequent 'put' or 'get' operations:
