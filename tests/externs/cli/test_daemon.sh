@@ -38,6 +38,50 @@ function cleanup
     drop_tables
 }
 
+function test_invalid_lock_file()
+{
+    trap "waive_daemon" EXIT
+    drop_tables
+    setup_tables
+
+set +e
+    export PHOBOS_LRS_lock_file="/phobosd.lock"
+    rm -rf "$PHOBOS_LRS_lock_file"
+    invoke_daemon
+    pgrep -f phobosd ||
+        error "Should have succeeded with valid folder '/'"
+    waive_daemon
+
+    local folder="$test_bin_dir/a"
+    export PHOBOS_LRS_lock_file="$folder/phobosd.lock"
+    rm -rf "$folder"
+    invoke_daemon
+    pgrep -f phobosd &&
+        error "Should have failed with non-existing folder '$folder'"
+
+    mkdir -p "$folder"
+    invoke_daemon
+    pgrep -f phobosd ||
+        error "Should have succeeded after creating valid folder '$folder'"
+    waive_daemon
+
+    rm -rf "$folder"
+
+    # Create $folder as a simple file to fail the "is dir" condition
+    touch "$folder"
+    invoke_daemon
+    pgrep -f phobosd &&
+        error "Should have failed because '$folder' is not a directory"
+
+    rm -rf "$folder"
+set -e
+
+    unset PHOBOS_LRS_lock_file
+    drop_tables
+
+    trap cleanup EXIT
+}
+
 function test_multiple_instances
 {
     setup_tables
@@ -424,6 +468,9 @@ function test_mount_failure_during_read_response()
 }
 
 trap cleanup EXIT
+
+test_invalid_lock_file
+
 setup
 
 test_multiple_instances

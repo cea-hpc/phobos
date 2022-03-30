@@ -28,6 +28,7 @@
 
 #include <fcntl.h>
 #include <getopt.h>
+#include <libgen.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -111,15 +112,40 @@ bool running = true;
  */
 static int _create_lock_file(const char *lock_file)
 {
+    char *path_copy;
+    struct stat sb;
+    char *folder;
+    int rc;
     int fd;
+
+    path_copy = strdup(lock_file);
+    if (path_copy == NULL)
+        LOG_RETURN(-errno, "Unable to copy '%s'", lock_file);
+
+    folder = dirname(path_copy);
+
+    rc = stat(folder, &sb);
+    if (rc)
+        LOG_GOTO(free_copy, rc = -errno,
+                 "Unable to stat '%s' path, cannot create lock file '%s'",
+                 folder, lock_file);
+
+    if (!S_ISDIR(sb.st_mode))
+        LOG_GOTO(free_copy, rc = -EPERM,
+                 "Unable to create lock file '%s', '%s' is not a dir",
+                 lock_file, folder);
 
     fd = open(lock_file, O_WRONLY | O_CREAT | O_EXCL, 0666);
     if (fd < 0)
-        return -errno;
+        LOG_GOTO(free_copy, rc = -errno,
+                 "Unable to create lock file '%s'", lock_file);
 
     close(fd);
 
-    return 0;
+free_copy:
+    free(path_copy);
+
+    return rc;
 }
 
 /**
