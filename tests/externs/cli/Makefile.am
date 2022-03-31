@@ -33,8 +33,10 @@ check_SCRIPTS=acceptance.sh \
               test_extent_list.sh \
               test_get.sh \
               test_group_sync.sh \
+              test_format.sh \
               test_ldm.sh \
               test_locate.sh \
+              test_lock_clean.sh \
               test_media.sh \
               test_object_list.sh \
               test_ping.sh \
@@ -42,8 +44,7 @@ check_SCRIPTS=acceptance.sh \
               test_raid1_split.sh \
               test_resource_availability.sh \
               test_resource_management.sh \
-              test_undelete.sh \
-              test_lock_clean.sh
+              test_undelete.sh
 
 TESTS=$(check_SCRIPTS)
 
