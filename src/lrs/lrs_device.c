@@ -26,6 +26,8 @@
 #include "config.h"
 #endif
 
+#include <assert.h>
+
 #include "lrs_cfg.h"
 #include "lrs_device.h"
 #include "lrs_sched.h"
@@ -1576,8 +1578,7 @@ void dev_thread_wait_end(struct lrs_dev *device)
     int rc;
 
     rc = pthread_join(thread->ld_tid, (void **)&threadrc);
-    if (rc)
-        pho_error(rc, "Error while waiting for device thread");
+    assert(rc == 0);
 
     if (*threadrc < 0)
         pho_error(*threadrc, "device thread '%s' terminated with error",
