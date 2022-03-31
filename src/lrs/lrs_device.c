@@ -55,16 +55,15 @@ int lrs_dev_hdl_init(struct lrs_dev_hdl *handle, enum rsc_family family)
 
     handle->ldh_devices = g_ptr_array_new();
 
-    rc = get_cfg_time_threshold_value(family, &handle->sync_time_threshold);
+    rc = get_cfg_sync_time_ms_value(family, &handle->sync_time_ms);
     if (rc)
         return rc;
 
-    rc = get_cfg_nb_req_threshold_value(family, &handle->sync_nb_req_threshold);
+    rc = get_cfg_sync_nb_req_value(family, &handle->sync_nb_req);
     if (rc)
         return rc;
 
-    rc = get_cfg_written_size_threshold_value(
-        family, &handle->sync_written_size_threshold);
+    rc = get_cfg_sync_wsize_value(family, &handle->sync_wsize_kb);
     if (rc)
         return rc;
 
@@ -348,11 +347,9 @@ static int compute_wakeup_date(struct lrs_dev *dev, struct timespec *date)
         LOG_RETURN(-errno, "clock_gettime: unable to get CLOCK_REALTIME");
 
     if (oldest_tosync->tv_sec == 0 && oldest_tosync->tv_nsec == 0) {
-        *date = add_timespec(&now,
-                             &dev->ld_handle->sync_time_threshold);
+        *date = add_timespec(&now, &dev->ld_handle->sync_time_ms);
     } else {
-        *date = add_timespec(oldest_tosync,
-                             &dev->ld_handle->sync_time_threshold);
+        *date = add_timespec(oldest_tosync, &dev->ld_handle->sync_time_ms);
 
         diff = diff_timespec(date, &now);
         if (cmp_timespec(&diff, &MINSLEEP) == -1)
@@ -651,12 +648,10 @@ static void check_needs_sync(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
 
     MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_needs_sync = sync_params->tosync_array->len > 0 &&
-                      (sync_params->tosync_array->len >=
-                           handle->sync_nb_req_threshold ||
+                      (sync_params->tosync_array->len >= handle->sync_nb_req ||
                        is_past(add_timespec(&sync_params->oldest_tosync,
-                                            &handle->sync_time_threshold)) ||
-                       sync_params->tosync_size >=
-                           handle->sync_written_size_threshold);
+                                            &handle->sync_time_ms)) ||
+                       sync_params->tosync_size >= handle->sync_wsize_kb);
     dev->ld_needs_sync |= (!running && sync_params->tosync_array->len > 0);
     MUTEX_UNLOCK(&dev->ld_mutex);
 }

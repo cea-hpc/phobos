@@ -74,9 +74,9 @@ function test_sync_no_group
 {
     local families=$1
 
-    export PHOBOS_LRS_sync_time_threshold="dir=0,tape=0"
-    export PHOBOS_LRS_sync_nb_req_threshold="dir=1,tape=1"
-    export PHOBOS_LRS_sync_written_size_threshold="dir=1,tape=1"
+    export PHOBOS_LRS_sync_time_ms="dir=0,tape=0"
+    export PHOBOS_LRS_sync_nb_req="dir=1,tape=1"
+    export PHOBOS_LRS_sync_wsize_kb="dir=1,tape=1"
     setup
 
     for family in ${families}; do
@@ -96,10 +96,9 @@ function test_sync_group_nb_req
 {
     local families=$1
 
-    export PHOBOS_LRS_sync_time_threshold="dir=60000,tape=60000"
-    export PHOBOS_LRS_sync_nb_req_threshold="dir=2,tape=2"
-    export PHOBOS_LRS_sync_written_size_threshold=\
-"dir=1000000000,tape=1000000000"
+    export PHOBOS_LRS_sync_time_ms="dir=60000,tape=60000"
+    export PHOBOS_LRS_sync_nb_req="dir=2,tape=2"
+    export PHOBOS_LRS_sync_wsize_kb="dir=1000000000,tape=1000000000"
     setup
 
     for family in ${families}; do
@@ -127,13 +126,13 @@ function test_sync_group_written_size
 {
     local families=$1
 
-    export PHOBOS_LRS_sync_time_threshold="dir=60000,tape=60000"
-    export PHOBOS_LRS_sync_nb_req_threshold="dir=1024,tape=1024"
+    export PHOBOS_LRS_sync_time_ms="dir=60000,tape=60000"
+    export PHOBOS_LRS_sync_nb_req="dir=1024,tape=1024"
     local file_byte_size=$((1024 * 2))
     local file=$(mktemp /tmp/test.pho.XXXX)
     dd if=/dev/random of=${file} count=${file_byte_size} bs=1
     local written_size_threshold=$((file_byte_size / 1024 + 1))
-    export PHOBOS_LRS_sync_written_size_threshold=\
+    export PHOBOS_LRS_sync_wsize_kb=\
 "dir=${written_size_threshold},tape=${written_size_threshold}"
     setup
 
@@ -166,11 +165,10 @@ function test_sync_group_time
     local families=$1
 
     local time_threshold=$((WAIT_PUT_S * 1000 + 2000))
-    export PHOBOS_LRS_sync_time_threshold=\
+    export PHOBOS_LRS_sync_time_ms=\
 "dir=${time_threshold},tape=${time_threshold}"
-    export PHOBOS_LRS_sync_nb_req_threshold="dir=1024,tape=1024"
-    export PHOBOS_LRS_sync_written_size_threshold=\
-"dir=1000000000,tape=1000000000"
+    export PHOBOS_LRS_sync_nb_req="dir=1024,tape=1024"
+    export PHOBOS_LRS_sync_wsize_kb="dir=1000000000,tape=1000000000"
     setup
 
     for family in ${families}; do

@@ -77,16 +77,13 @@ struct lrs_sched {
                                           */
     struct format_media ongoing_format; /**< Ongoing format media */
     struct tsqueue     *response_queue; /**< Queue for responses */
-    struct timespec     sync_time_threshold;
-                                        /**< Time threshold for medium
+    struct timespec     sync_time_ms;   /**< Time threshold for medium
                                           *  synchronization
                                           */
-    unsigned int        sync_nb_req_threshold;
-                                        /**< Number of requests threshold
+    unsigned int        sync_nb_req;    /**< Number of requests threshold
                                           *  for medium synchronization
                                           */
-    unsigned long       sync_written_size_threshold;
-                                        /**< Written size threshold for
+    unsigned long       sync_wsize_kb;  /**< Written size threshold for
                                           *  medium synchronization
                                           */
 };

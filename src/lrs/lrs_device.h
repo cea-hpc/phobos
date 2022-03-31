@@ -39,19 +39,19 @@ struct lrs_sched;
  * Structure handling thread devices used by the scheduler.
  */
 struct lrs_dev_hdl {
-    GPtrArray      *ldh_devices;                /**< List of active devices of
-                                                  * type lrs_dev
-                                                  */
-    struct timespec sync_time_threshold;        /**< Time threshold for medium
-                                                  * synchronization
-                                                  */
-    unsigned int    sync_nb_req_threshold;      /**< Number of requests
-                                                  * threshold for medium
-                                                  * synchronization
-                                                  */
-    unsigned long   sync_written_size_threshold; /**< Written size threshold for
-                                                   * medium synchronization
-                                                   */
+    GPtrArray      *ldh_devices;   /**< List of active devices of
+                                     *  type lrs_dev
+                                     */
+    struct timespec sync_time_ms;  /**< Time threshold for medium
+                                     *  synchronization
+                                     */
+    unsigned int    sync_nb_req;   /**< Number of requests
+                                     *  threshold for medium
+                                     *  synchronization
+                                     */
+    unsigned long   sync_wsize_kb; /**< Written size threshold for
+                                     *  medium synchronization
+                                     */
 };
 
 /**

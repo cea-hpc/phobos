@@ -62,19 +62,19 @@ const struct pho_config_item cfg_lrs[] = {
         .name    = "lock_file",
         .value   = "/run/phobosd/phobosd.lock"
     },
-    [PHO_CFG_LRS_sync_time_threshold] = {
+    [PHO_CFG_LRS_sync_time_ms] = {
         .section = "lrs",
-        .name    = "sync_time_threshold",
+        .name    = "sync_time_ms",
         .value   = "tape=10000,dir=10"
     },
-    [PHO_CFG_LRS_sync_nb_req_threshold] = {
+    [PHO_CFG_LRS_sync_nb_req] = {
         .section = "lrs",
-        .name    = "sync_nb_req_threshold",
+        .name    = "sync_nb_req",
         .value   = "tape=5,dir=5"
     },
-    [PHO_CFG_LRS_sync_written_size_threshold] = {
+    [PHO_CFG_LRS_sync_wsize_kb] = {
         .section = "lrs",
-        .name    = "sync_written_size_threshold",
+        .name    = "sync_wsize_kb",
         .value   = "tape=1048576,dir=1048576"
     },
 };
@@ -152,14 +152,14 @@ static int _get_unsigned_long_from_string(const char *value,
     return 0;
 }
 
-int get_cfg_time_threshold_value(enum rsc_family family,
-                                 struct timespec *threshold)
+int get_cfg_sync_time_ms_value(enum rsc_family family,
+                               struct timespec *threshold)
 {
     unsigned long num_milliseconds;
     char *value;
     int rc;
 
-    rc = _get_substring_value_from_token("sync_time_threshold", family, &value);
+    rc = _get_substring_value_from_token("sync_time_ms", family, &value);
     if (rc)
         return rc;
 
@@ -174,15 +174,13 @@ int get_cfg_time_threshold_value(enum rsc_family family,
     return 0;
 }
 
-int get_cfg_nb_req_threshold_value(enum rsc_family family,
-                                   unsigned int *threshold)
+int get_cfg_sync_nb_req_value(enum rsc_family family, unsigned int *threshold)
 {
     unsigned long ul_value;
     char *value;
     int rc;
 
-    rc = _get_substring_value_from_token("sync_nb_req_threshold", family,
-                                         &value);
+    rc = _get_substring_value_from_token("sync_nb_req", family, &value);
     if (rc)
         return rc;
 
@@ -196,14 +194,12 @@ int get_cfg_nb_req_threshold_value(enum rsc_family family,
     return 0;
 }
 
-int get_cfg_written_size_threshold_value(enum rsc_family family,
-                                         unsigned long *threshold)
+int get_cfg_sync_wsize_value(enum rsc_family family, unsigned long *threshold)
 {
     char *value;
     int rc;
 
-    rc = _get_substring_value_from_token("sync_written_size_threshold", family,
-                                         &value);
+    rc = _get_substring_value_from_token("sync_wsize_kb", family, &value);
     if (rc)
         return rc;
 

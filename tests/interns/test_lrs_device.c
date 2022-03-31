@@ -123,9 +123,9 @@ static void set_sync_params(unsigned int time,
                             unsigned int number,
                             unsigned int size)
 {
-    set_sync_param("PHOBOS_LRS_sync_time_threshold", time);
-    set_sync_param("PHOBOS_LRS_sync_nb_req_threshold", number);
-    set_sync_param("PHOBOS_LRS_sync_written_size_threshold", size);
+    set_sync_param("PHOBOS_LRS_sync_time_ms", time);
+    set_sync_param("PHOBOS_LRS_sync_nb_req", number);
+    set_sync_param("PHOBOS_LRS_sync_wsize_kb", size);
 }
 
 static void test_dev_init(void **data)
@@ -141,11 +141,11 @@ static void test_dev_init(void **data)
     assert_non_null(dev_handle.ldh_devices);
     assert_int_equal(dev_handle.ldh_devices->len, 0);
 
-    assert_int_equal(dev_handle.sync_time_threshold.tv_sec, 1);
-    assert_int_equal(dev_handle.sync_time_threshold.tv_nsec, 1000000);
+    assert_int_equal(dev_handle.sync_time_ms.tv_sec, 1);
+    assert_int_equal(dev_handle.sync_time_ms.tv_nsec, 1000000);
 
-    assert_int_equal(dev_handle.sync_nb_req_threshold, 3);
-    assert_int_equal(dev_handle.sync_written_size_threshold, 20 * 1024);
+    assert_int_equal(dev_handle.sync_nb_req, 3);
+    assert_int_equal(dev_handle.sync_wsize_kb, 20 * 1024);
 
     lrs_dev_hdl_fini(&dev_handle);
 }

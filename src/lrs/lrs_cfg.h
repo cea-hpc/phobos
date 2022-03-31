@@ -39,9 +39,9 @@ enum pho_cfg_params_lrs {
     PHO_CFG_LRS_lib_device,
     PHO_CFG_LRS_server_socket,
     PHO_CFG_LRS_lock_file,
-    PHO_CFG_LRS_sync_time_threshold,
-    PHO_CFG_LRS_sync_nb_req_threshold,
-    PHO_CFG_LRS_sync_written_size_threshold,
+    PHO_CFG_LRS_sync_time_ms,
+    PHO_CFG_LRS_sync_nb_req,
+    PHO_CFG_LRS_sync_wsize_kb,
 
     PHO_CFG_LRS_LAST
 };
@@ -56,8 +56,8 @@ extern const struct pho_config_item cfg_lrs[];
  * @return                  0 on success,
  *                         -errno on failure.
  */
-int get_cfg_time_threshold_value(enum rsc_family family,
-                                 struct timespec *threshold);
+int get_cfg_sync_time_ms_value(enum rsc_family family,
+                               struct timespec *threshold);
 
 /**
  * Getter of number of requests threshold value for a given family.
@@ -67,8 +67,7 @@ int get_cfg_time_threshold_value(enum rsc_family family,
  * @return                  0 on success,
  *                         -errno on failure.
  */
-int get_cfg_nb_req_threshold_value(enum rsc_family family,
-                                   unsigned int *threshold);
+int get_cfg_sync_nb_req_value(enum rsc_family family, unsigned int *threshold);
 
 /**
  * Getter of written size threshold value for a given family.
@@ -78,6 +77,6 @@ int get_cfg_nb_req_threshold_value(enum rsc_family family,
  * @return                  0 on success,
  *                         -errno on failure.
  */
-int get_cfg_written_size_threshold_value(enum rsc_family family,
-                                         unsigned long *threshold);
+int get_cfg_sync_wsize_value(enum rsc_family family, unsigned long *threshold);
+
 #endif
