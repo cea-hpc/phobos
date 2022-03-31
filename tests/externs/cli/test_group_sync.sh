@@ -108,14 +108,14 @@ function test_sync_group_nb_req
         pid=$!
         sleep ${WAIT_PUT_S}
         if (! ps --pid $pid); then
-            error "With a sync nb req of 2, first ${family} put should be "
+            error "With a sync nb req of 2, first ${family} put should be" \
                   "stuck."
         fi
 
         ${phobos} put --family ${family} /etc/hosts \
                                          test_sync_group_nb_req_${family}_bis
         if (ps --pid $pid); then
-            error "With a sync nb req of 2, first background ${family} put "
+            error "With a sync nb req of 2, first background ${family} put" \
                   "should be ended when second one is ended."
         fi
     done
@@ -143,16 +143,16 @@ function test_sync_group_written_size
         pid=$!
         sleep ${WAIT_PUT_S}
         if (! ps --pid $pid); then
-            error "With a written_size of one kiB more than the object size, "
+            error "With a written_size of one kiB more than the object size," \
                   "first ${family} put should be stuck."
         fi
 
         ${phobos} put --family ${family} ${file} \
                                      test_sync_group_written_size_${family}_bis
         if (ps --pid $pid); then
-            error "With a written_size of one kiB more than the object size, "
-                  "first background ${family} put should be ended when second "
-                  "one is ended."
+            error "With a written_size of one kiB more than the object size," \
+                  "first background ${family} put should be ended when" \
+                  "second one is ended."
         fi
     done
 
@@ -179,14 +179,14 @@ function test_sync_group_time
         pid=$!
         sleep ${WAIT_PUT_S}
         if (! ps --pid $pid); then
-            error "With a time 2s more than previous sleep, first ${family} "
+            error "With a time 2s more than previous sleep, first ${family}" \
                   "put should be stuck."
         fi
 
         ${phobos} put --family ${family} /etc/hosts \
                                          test_sync_group_time_${family}_bis
         if (ps --pid $pid); then
-            error "With a time 2s more than previous sleep, first background "
+            error "With a time 2s more than previous sleep, first background" \
                   "${family} put should be ended when second one is ended."
         fi
     done
