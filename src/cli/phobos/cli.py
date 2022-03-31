@@ -1179,6 +1179,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         except EnvironmentError as err:
             # XXX add an option to exit on first error
             self.logger.error("fs_format: %s", env_error_format(err))
+            sys.exit(os.EX_DATAERR)
 
     def exec_list(self):
         """List media and display results."""
