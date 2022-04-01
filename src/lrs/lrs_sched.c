@@ -673,10 +673,8 @@ static int sched_clean_medium_locks(struct lrs_sched *sched)
         if (dev->ld_device_thread.ld_running) {
             mda = dev->ld_dss_media_info;
 
-            if (mda) {
-                media[i] = *mda;
-                cnt++;
-            }
+            if (mda)
+                media[cnt++] = *mda;
         }
     }
 
