@@ -21,13 +21,13 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-set -xe
-
 test_bin_dir=$(dirname $(readlink -e $0))
 test_bin="$test_bin_dir/test_bad_comm"
 . $test_bin_dir/../../test_env.sh
 . $test_bin_dir/setup_db.sh
 . $test_bin_dir/test_launch_daemon.sh
+
+set -xe
 
 function setup {
     setup_tables

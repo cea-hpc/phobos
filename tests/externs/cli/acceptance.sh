@@ -25,16 +25,16 @@
 # test cases: maybe considering all are locked, and only unlocking
 # resources the test need at start, and relocking them when the test ends
 
-set -xe
-
-TAGS=foo-tag,bar-tag
-
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
 . $test_dir/../../tape_drive.sh
+
+set -xe
+
+TAGS=foo-tag,bar-tag
 
 function setup
 {

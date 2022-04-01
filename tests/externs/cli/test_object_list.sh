@@ -21,11 +21,11 @@
 # Integration test for deletion feature
 #
 
-set -xe
-
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
+
+set -xe
 
 function setup
 {

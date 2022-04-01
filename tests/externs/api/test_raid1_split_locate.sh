@@ -29,18 +29,18 @@
 # medium 3 : [BBBB]
 # medium 4 : [BBBB]
 
+# set python and phobos environment
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/../../test_env.sh
+. $test_dir/../../setup_db.sh
+. $test_dir/../../test_launch_daemon.sh
+
 set -xe
 
 export PHOBOS_LRS_families="dir"
 export PHOBOS_STORE_default_layout="raid1"
 export PHOBOS_STORE_default_family="dir"
 export PHOBOS_LAYOUT_RAID1_repl_count=2
-
-# set python and phobos environment
-test_dir=$(dirname $(readlink -e $0))
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
 
 test_raid1_split_locate_bin=$test_dir/test_raid1_split_locate
 

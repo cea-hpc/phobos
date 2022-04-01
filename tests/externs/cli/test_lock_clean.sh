@@ -23,12 +23,12 @@
 # Integration tests for lock clean commands
 #
 
-set -xe
-
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
+
+set -xe
 
 PSQL="psql phobos -U phobos"
 

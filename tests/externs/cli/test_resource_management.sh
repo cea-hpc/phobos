@@ -21,13 +21,13 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-set -xe
-
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
+
+set -xe
 
 DRIVE="/dev/st0"
 

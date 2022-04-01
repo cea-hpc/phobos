@@ -19,14 +19,14 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-set -xe
-
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
 . $test_dir/../../utils_tape.sh
 controlled_store="$test_dir/controlled_store"
+
+set -xe
 
 function setup
 {

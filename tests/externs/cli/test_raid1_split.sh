@@ -28,17 +28,17 @@
 # medium 1 : [AAAA]
 # medium 2 : [BBBB]
 
-set -xe
-
-export PHOBOS_LRS_families="dir"
-export PHOBOS_STORE_default_layout="raid1"
-export PHOBOS_STORE_default_family="dir"
-
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
+
+set -xe
+
+export PHOBOS_LRS_families="dir"
+export PHOBOS_STORE_default_layout="raid1"
+export PHOBOS_STORE_default_family="dir"
 
 IN_FILE=$(mktemp /tmp/test.pho.XXXX)
 OUT_FILE=$(mktemp /tmp/test.pho.XXXX)

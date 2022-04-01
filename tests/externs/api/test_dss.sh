@@ -20,12 +20,13 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
-set -xe
 
 test_bin_dir=$(dirname "${BASH_SOURCE[0]}")
 test_bin="$test_bin_dir/test_dss"
 
 . $test_bin_dir/../../setup_db.sh
+
+set -xe
 
 function setup
 {
