@@ -55,6 +55,29 @@ struct lrs_dev_hdl {
 };
 
 /**
+ * Thread status.
+ */
+enum thread_state {
+    LDT_RUNNING = 0,                /**< Thread is currently running. */
+    LDT_STOPPING,                   /**< Thread end was requested. */
+    LDT_STOPPED,                    /**< Thread ended its execution. */
+    LDT_LAST
+};
+
+static const char * const thread_state_names[] = {
+    [LDT_RUNNING]  = "running",
+    [LDT_STOPPING] = "stopping",
+    [LDT_STOPPED]  = "stopped",
+};
+
+static inline const char *thread_state2str(enum thread_state state)
+{
+    if (state >= LDT_LAST || state < 0)
+        return "unknown";
+    return thread_state_names[state];
+}
+
+/**
  * Internal state of the device thread.
  */
 struct thread_info {
@@ -67,9 +90,7 @@ struct thread_info {
     pthread_cond_t       ld_signal;         /**< Used to signal the thread
                                               * when new work is available.
                                               */
-    bool                 ld_running;        /**< true as long as the thread
-                                              * should run.
-                                              */
+    enum thread_state    ld_state;          /**< Thread status. */
     int                  ld_status;         /**< Return status at the end of
                                               * the execution.
                                               */
@@ -142,6 +163,26 @@ struct lrs_dev {
                                                   */
     struct lrs_dev_hdl  *ld_handle;
 };
+
+static inline bool ldt_is_running(struct lrs_dev *dev)
+{
+    return dev->ld_device_thread.ld_state == LDT_RUNNING;
+}
+
+static inline bool ldt_is_stopping(struct lrs_dev *dev)
+{
+    return dev->ld_device_thread.ld_state == LDT_STOPPING;
+}
+
+static inline bool ldt_is_stopped(struct lrs_dev *dev)
+{
+    return dev->ld_device_thread.ld_state == LDT_STOPPED;
+}
+
+static inline const char *ldt_state2str(struct lrs_dev *dev)
+{
+    return thread_state2str(dev->ld_device_thread.ld_state);
+}
 
 /**
  *  TODO: will become a device thread static function when all media operations

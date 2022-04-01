@@ -674,7 +674,7 @@ static int sched_clean_medium_locks(struct lrs_sched *sched)
         struct lrs_dev *dev;
 
         dev = lrs_dev_hdl_get(&sched->devices, i);
-        if (dev->ld_device_thread.ld_running) {
+        if (ldt_is_running(dev)) {
             mda = dev->ld_dss_media_info;
 
             if (mda)
@@ -1183,7 +1183,7 @@ lock_race_retry:
 
             dev = search_loaded_media(sched, curr->rsc.id.name);
             if (dev && (dev->ld_ongoing_io || dev->ld_needs_sync ||
-                        !dev->ld_device_thread.ld_running))
+                        !ldt_is_running(dev)))
                 /* locked by myself but already in use */
                 continue;
         }
@@ -1461,7 +1461,7 @@ static struct lrs_dev *dev_picker(struct lrs_sched *sched,
             continue;
         }
 
-        if (!itr->ld_device_thread.ld_running) {
+        if (!ldt_is_running(itr)) {
             pho_debug("Skipping ending or stopped device '%s'",
                       itr->ld_dev_path);
             continue;
@@ -1619,15 +1619,12 @@ static int select_drive_to_free(size_t required_size,
 
     /* skip failed and busy drives */
     if (dev_curr->ld_op_status == PHO_DEV_OP_ST_FAILED ||
-        dev_curr->ld_ongoing_io || dev_curr->ld_needs_sync ||
-        !dev_curr->ld_device_thread.ld_running) {
-        pho_debug("Skipping drive '%s' with status %s%s%s",
+        dev_curr->ld_ongoing_io || dev_curr->ld_needs_sync) {
+        pho_debug("Skipping drive '%s' with status %s%s (%s)",
                   dev_curr->ld_dev_path,
                   op_status2str(dev_curr->ld_op_status),
                   dev_curr->ld_ongoing_io || dev_curr->ld_needs_sync ?
-                  " (busy)" : "",
-                  !dev_curr->ld_device_thread.ld_running ?
-                        " (ending or stopped)" : "");
+                  " (busy)" : "", ldt_state2str(dev_curr));
         return 1;
     }
 
@@ -1861,8 +1858,7 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
         struct lrs_dev *dev = lrs_dev_hdl_get(&sched->devices, i);
         bool is_already_selected = false;
 
-        if (dev->ld_op_status == PHO_DEV_OP_ST_FAILED ||
-            !dev->ld_device_thread.ld_running)
+        if (dev->ld_op_status == PHO_DEV_OP_ST_FAILED || !ldt_is_running(dev))
             continue;
 
         /* check the device is not already selected */
@@ -2161,7 +2157,6 @@ static int sched_media_prepare_for_read(struct lrs_sched *sched,
                      "Media '%s' is loaded in an already used drive '%s'",
                      id->name, dev->ld_dev_path);
 
-        dev->ld_ongoing_io = true;
         /* Media is in dev, update dev->ld_dss_media_info with fresh media info
          */
         media_info_free(dev->ld_dss_media_info);
@@ -2178,6 +2173,8 @@ static int sched_media_prepare_for_read(struct lrs_sched *sched,
     if (dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED)
         rc = sched_mount(sched, dev);
 
+    if (!rc)
+        dev->ld_ongoing_io = true;
 out:
     if (rc) {
         media_info_free(med);
@@ -2427,16 +2424,17 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
         /* find the corresponding device */
         dev = search_loaded_media(sched,
             reqc->params.release.nosync_media[i].medium.name);
-        if (dev && !dev->ld_device_thread.ld_running) {
-            pho_error(-ENODEV, "device '%s' is not running but contains nosync "
-                      "release medium '%s'", dev->ld_dss_dev_info->rsc.id.name,
+        if (dev && ldt_is_stopped(dev)) {
+            pho_error(-ENODEV, "device '%s' is not running but contains a "
+                               "medium not sync'ed '%s'",
+                      dev->ld_dss_dev_info->rsc.id.name,
                       reqc->params.release.nosync_media[i].medium.name);
             dev = NULL;
         }
 
         if (dev == NULL) {
-            pho_error(-ENODEV, "Unable to find loaded device of the nosync "
-                      "medium '%s'",
+            pho_error(-ENODEV, "Unable to find loaded device of the medium not "
+                               "sync'ed '%s'",
                       reqc->params.release.nosync_media[i].medium.name);
             continue;
         }
@@ -2482,9 +2480,10 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
         dev = search_loaded_media(sched,
             reqc->params.release.tosync_media[i].medium.name);
 
-        if (dev && !dev->ld_device_thread.ld_running) {
-            pho_error(-ENODEV, "device '%s' is not running but contains tosync "
-                      "release medium '%s'", dev->ld_dss_dev_info->rsc.id.name,
+        if (dev && ldt_is_stopped(dev)) {
+            pho_error(-ENODEV, "device '%s' is not running but contains the "
+                               "medium not sync'ed '%s'",
+                      dev->ld_dss_dev_info->rsc.id.name,
                       reqc->params.release.nosync_media[i].medium.name);
             dev = NULL;
         }

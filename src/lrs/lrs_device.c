@@ -146,8 +146,6 @@ static void request_tosync_free_wrapper(gpointer _req, gpointer _null_user_data)
 static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
                                struct lrs_dev *dev)
 {
-    dev_thread_wait_end(dev);
-
     media_info_free(dev->ld_dss_media_info);
     dev->ld_dss_media_info = NULL;
 
@@ -223,6 +221,7 @@ int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc)
                                                           index);
 
     dev_thread_signal_stop_on_error(dev, rc);
+    dev_thread_wait_end(dev);
     lrs_dev_info_clean(handle, dev);
 
     return 0;
@@ -295,6 +294,7 @@ void lrs_dev_hdl_clear(struct lrs_dev_hdl *handle)
 
         dev = (struct lrs_dev *)g_ptr_array_remove_index(handle->ldh_devices,
                                                          i);
+        dev_thread_wait_end(dev);
         lrs_dev_info_clean(handle, dev);
     }
 }
@@ -655,6 +655,8 @@ static void check_needs_sync(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
                                             &handle->sync_time_ms)) ||
                        sync_params->tosync_size >= handle->sync_wsize_kb);
     dev->ld_needs_sync |= (!running && sync_params->tosync_array->len > 0);
+    dev->ld_needs_sync |= (ldt_is_stopping(dev) &&
+                           sync_params->tosync_array->len > 0);
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
@@ -1443,7 +1445,8 @@ static void dev_thread_end_device(struct lrs_dev *device)
 static void dev_thread_end(struct lrs_dev *device)
 {
     /* prevent any new scheduled request to this device */
-    device->ld_device_thread.ld_running = false;
+    if (ldt_is_running(device))
+        device->ld_device_thread.ld_state = LDT_STOPPING;
 
     cancel_pending_format(device);
     dev_thread_end_mounted_medium(device);
@@ -1461,7 +1464,7 @@ static void *lrs_dev_thread(void *tdata)
 
     thread = &device->ld_device_thread;
 
-    while (thread->ld_running) {
+    while (!ldt_is_stopped(device)) {
         int rc;
 
         dev_check_sync_cancel(device);
@@ -1477,6 +1480,12 @@ static void *lrs_dev_thread(void *tdata)
                          device->ld_dss_dev_info->rsc.id.name);
         }
 
+        if (ldt_is_stopping(device) && !device->ld_ongoing_io &&
+            device->ld_sync_params.tosync_array->len == 0) {
+            pho_debug("Switching to stopped");
+            thread->ld_state = LDT_STOPPED;
+        }
+
         if (device->ld_ongoing_io && device->ld_format_request) {
             rc = dev_handle_format(device);
             if (rc)
@@ -1485,12 +1494,13 @@ static void *lrs_dev_thread(void *tdata)
                          device->ld_dss_dev_info->rsc.id.name);
         }
 
-        rc = wait_for_signal(device);
-
-        if (rc < 0)
-            LOG_GOTO(end_thread, thread->ld_status = rc,
-                     "device thread '%s': fatal error",
-                     device->ld_dss_dev_info->rsc.id.name);
+        if (!ldt_is_stopped(device)) {
+            rc = wait_for_signal(device);
+            if (rc < 0)
+                LOG_GOTO(end_thread, thread->ld_status = rc,
+                         "device thread '%s': fatal error",
+                         device->ld_dss_dev_info->rsc.id.name);
+        }
     }
 
 end_thread:
@@ -1507,7 +1517,7 @@ static int dev_thread_init(struct lrs_dev *device)
     pthread_mutex_init(&thread->ld_signal_mutex, NULL);
     pthread_cond_init(&thread->ld_signal, NULL);
 
-    thread->ld_running = true;
+    thread->ld_state = LDT_RUNNING;
     thread->ld_status = 0;
 
     rc = pthread_create(&thread->ld_tid, NULL, lrs_dev_thread, device);
@@ -1534,7 +1544,7 @@ void dev_thread_signal_stop(struct lrs_dev *device)
     struct thread_info *thread = &device->ld_device_thread;
     int rc;
 
-    thread->ld_running = false;
+    thread->ld_state = LDT_STOPPING;
     rc = lrs_dev_signal(thread);
     if (rc)
         pho_error(rc, "Error when signaling device (%s, %s) to stop it",
