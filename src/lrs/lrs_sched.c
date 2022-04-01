@@ -2680,7 +2680,7 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
     int rc = 0;
     size_t i;
 
-    respc->devices = malloc(sizeof(*respc->devices));
+    respc->devices = malloc(rreq->n_required * sizeof(*respc->devices));
     if (!respc->devices)
         return -errno;
 
@@ -2705,13 +2705,14 @@ static int sched_handle_read_alloc(struct lrs_sched *sched, pho_req_t *req,
         if (rc)
             continue;
 
-        n_selected++;
-
         rresp->fs_type = dev->ld_dss_media_info->fs.type;
         rresp->addr_type = dev->ld_dss_media_info->addr_type;
         rresp->root_path = strdup(dev->ld_mnt_path);
         rresp->med_id->family = rreq->med_ids[i]->family;
         rresp->med_id->name = strdup(rreq->med_ids[i]->name);
+        respc->devices[n_selected] = dev;
+
+        n_selected++;
 
         if (n_selected == rreq->n_required)
             break;
