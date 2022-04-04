@@ -33,7 +33,7 @@ def load_file(path=None):
     ret = LIBPHOBOS.pho_cfg_init_local(path.encode('utf-8') if path else None)
     if ret != 0:
         ret = abs(ret)
-        raise IOError(ret, path, os.strerror(ret))
+        raise IOError(ret, "Failed to load configuration file '%s'" % path)
 
 
 # Singleton to differenciate cases where default was not provided and

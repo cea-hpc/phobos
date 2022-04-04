@@ -280,7 +280,7 @@ class MediaAddTest(BasicExecutionTest):
         MediaManager.update = failed_update
         try:
             self.pho_execute(['tape', 'update', '-T', '', 'update0'],
-                             code=os.EX_DATAERR)
+                             code=errno.ENOENT)
         finally:
             MediaManager.update = old_update
 
@@ -311,9 +311,9 @@ class MediaAddTest(BasicExecutionTest):
     def test_tape_invalid_const(self):
         """Unknown FS type should raise an error."""
         self.pho_execute(['tape', 'add', 'D000[10-15]', '-t', 'LTO5',
-                          '--fs', 'FooBarFS'], code=os.EX_DATAERR)
+                          '--fs', 'FooBarFS'], code=errno.EINVAL)
         self.pho_execute(['tape', 'add', 'E000[10-15]', '-t', 'BLAH'],
-                         code=os.EX_DATAERR)
+                         code=errno.EINVAL)
 
     def test_tape_model_case_insensitive_match(self): # pylint: disable=invalid-name
         """Test tape type is case insensitive."""
@@ -417,15 +417,15 @@ class DeviceAddTest(BasicExecutionTest):
     def test_dir_add_missing(self):
         """Add a non-existent directory should raise an error."""
         self.pho_execute(['-v', 'dir', 'add', '/tmp/nonexistentfileAA'],
-                         code=os.EX_DATAERR)
+                         code=errno.ENOENT)
         self.pho_execute(['-v', 'drive', 'add', '/dev/IMBtape0 /dev/IBMtape1'],
-                         code=os.EX_DATAERR)
+                         code=errno.ENOENT)
 
     def test_dir_add_double(self):
         """Add a directory twice should raise an error."""
         file = tempfile.NamedTemporaryFile()
         self.pho_execute(['-v', 'dir', 'add', file.name])
-        self.pho_execute(['-v', 'dir', 'add', file.name], code=os.EX_DATAERR)
+        self.pho_execute(['-v', 'dir', 'add', file.name], code=errno.EEXIST)
 
     def test_dir_add_correct_and_missing(self): # pylint: disable=invalid-name
         """
@@ -437,7 +437,7 @@ class DeviceAddTest(BasicExecutionTest):
 
         self.pho_execute(['-v', 'dir', 'add', file1.name, '/tmp/notfileAA',
                           file2.name],
-                         code=os.EX_DATAERR)
+                         code=errno.ENOENT)
         output, _ = self.pho_execute_capture(['dir', 'list'])
         self.assertIn(file1.name, output)
         self.assertNotIn('/tmp/notfileAA', output)

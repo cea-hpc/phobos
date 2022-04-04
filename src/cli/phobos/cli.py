@@ -96,8 +96,14 @@ def phobos_log_handler(log_record):
 
 def env_error_format(exc):
     """Return a human readable representation of an environment exception."""
-    return "%s: %s" % (exc.strerror,
-                       os.strerror(abs(exc.errno)) if exc.errno else "(null)")
+    if exc.errno and exc.strerror:
+        return "%s (%s)" % (exc.strerror, os.strerror(abs(exc.errno)))
+    elif exc.errno:
+        return "%s (%s)" % (os.strerror(abs(exc.errno)), abs(exc.errno))
+    elif exc.strerror:
+        return exc.strerror
+
+    return ""
 
 def attr_convert(usr_attr):
     """Convert k/v pairs as expressed by the user into a dictionnary."""
@@ -267,9 +273,8 @@ class StoreGetMDHandler(XferOptHandler):
         try:
             self.client.run(compl_cb=self._compl_notify)
         except IOError as err:
-            self.logger.error("Cannot GETMD for 'objid:%s': %s",
-                              oid, env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
 
 class StoreGetHandler(XferOptHandler):
@@ -304,9 +309,8 @@ class StoreGetHandler(XferOptHandler):
         try:
             self.client.run()
         except IOError as err:
-            self.logger.error("Cannot GET 'objid:%s' to '%s': %s",
-                              oid, dst, env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
         if version != 0:
             if uuid is not None:
@@ -394,9 +398,8 @@ class StorePutHandler(StoreGenericPutHandler):
         try:
             self.client.run()
         except IOError as err:
-            self.logger.error("Cannot PUT '%s' to 'objid:%s': %s",
-                              src, oid, env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
 
 class StoreMPutHandler(StoreGenericPutHandler):
@@ -464,9 +467,9 @@ class StoreMPutHandler(StoreGenericPutHandler):
         try:
             self.client.run()
         except IOError as err:
-            self.logger.error("Cannot MPUT objects, see logs for details: %s",
+            self.logger.error("Failed to MPUT: %s",
                               env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            sys.exit(abs(err.errno))
 
 class AddOptHandler(DSSInteractHandler):
     """Insert a new resource into the system."""
@@ -790,14 +793,12 @@ class DeleteOptHandler(BaseOptHandler):
 
     def exec_delete(self):
         """Delete objects."""
-
         client = UtilClient()
         try:
             client.object_delete(self.params.get('oids'))
         except EnvironmentError as err:
-            self.logger.error("Cannot delete objects: %s",
-                              env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
 class UuidOptHandler(BaseOptHandler):
     """Handler to select objects with a list of uuids"""
@@ -860,21 +861,19 @@ class UndeleteOptHandler(BaseOptHandler):
         """Undelete by uuids"""
         client = UtilClient()
         try:
-            client.undelete((), self.params.get('uuids'))
+            client.object_undelete((), self.params.get('uuids'))
         except EnvironmentError as err:
-            self.logger.error("Cannot undelete objects by uuids: %s",
-                              env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
     def exec_oid(self):
         """Undelete by oids"""
         client = UtilClient()
         try:
-            client.undelete(self.params.get('oids'), ())
+            client.object_undelete(self.params.get('oids'), ())
         except EnvironmentError as err:
-            self.logger.error("Cannot undelete objectsby oids: %s",
-                              env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
 class LocateOptHandler(BaseOptHandler):
     """Locate object handler."""
@@ -907,8 +906,8 @@ class LocateOptHandler(BaseOptHandler):
                                        self.params.get('uuid'),
                                        self.params.get('version')))
         except EnvironmentError as err:
-            self.logger.error("Cannot locate object: %s", env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
 class ExtentListOptHandler(ListOptHandler):
     """
@@ -1050,8 +1049,8 @@ class ObjectOptHandler(BaseResourceOptHandler):
 
             client.list_free(objs, len(objs))
         except EnvironmentError as err:
-            self.logger.error("Cannot list objects: %s", env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
 class DeviceOptHandler(BaseResourceOptHandler):
     """Shared interface for devices."""
@@ -1085,9 +1084,10 @@ class DeviceOptHandler(BaseResourceOptHandler):
             with AdminClient(lrs_required=False) as adm:
                 adm.device_add(self.family, resources,
                                not self.params.get('unlock'))
+
         except EnvironmentError as err:
-            self.logger.error("Cannot add device: %s", env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
         self.logger.info("Added %d device(s) successfully", len(resources))
 
@@ -1098,10 +1098,10 @@ class DeviceOptHandler(BaseResourceOptHandler):
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.device_lock(self.family, names, self.params.get('force'))
+
         except EnvironmentError as err:
-            self.logger.error("Failed to lock device(s): %s",
-                              env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
         self.logger.info("%d device(s) locked", len(names))
 
@@ -1112,10 +1112,10 @@ class DeviceOptHandler(BaseResourceOptHandler):
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.device_unlock(self.family, names, self.params.get('force'))
+
         except EnvironmentError as err:
-            self.logger.error("Failed to unlock device(s): %s",
-                              env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
         self.logger.info("%d device(s) unlocked", len(names))
 
@@ -1146,9 +1146,8 @@ class MediaOptHandler(BaseResourceOptHandler):
                                    is_adm_locked=keep_locked)
                 self.client.media.add(medium, fstype, tags=tags)
             except EnvironmentError as err:
-                self.logger.error("Cannot add medium %s: %s", med,
-                                  env_error_format(err))
-                sys.exit(os.EX_DATAERR)
+                self.logger.error(env_error_format(err))
+                sys.exit(abs(err.errno))
 
         self.logger.info("Added %d media successfully", len(names))
 
@@ -1157,9 +1156,8 @@ class MediaOptHandler(BaseResourceOptHandler):
         try:
             self.client.media.update(media, fields)
         except EnvironmentError as err:
-            self.logger.error("Failed to update media: %s",
-                              env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
     def exec_update(self):
         """Update tags of an existing media"""
@@ -1189,11 +1187,16 @@ class MediaOptHandler(BaseResourceOptHandler):
                     self.logger.debug("Post-unlock enabled")
                 for name in media_list:
                     self.logger.info("Formatting media '%s'", name)
-                    adm.fs_format(name, fs_type, unlock=unlock)
+                    try:
+                        adm.fs_format(name, fs_type, unlock=unlock)
+                    except EnvironmentError as err:
+                        # XXX add an option to exit on first error
+                        self.logger.error("fs_format: %s",
+                                          env_error_format(err))
+                        sys.exit(abs(err.errno))
         except EnvironmentError as err:
-            # XXX add an option to exit on first error
-            self.logger.error("fs_format: %s", env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
     def exec_list(self):
         """List media and display results."""
@@ -1278,8 +1281,8 @@ class MediaOptHandler(BaseResourceOptHandler):
                 print(adm.medium_locate(self.family, self.params.get('res')))
 
         except EnvironmentError as err:
-            self.logger.error("Cannot locate medium: %s", env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
 class PingOptHandler(BaseOptHandler):
     """Ping phobos daemon"""
@@ -1304,9 +1307,9 @@ class PingOptHandler(BaseOptHandler):
             with AdminClient(lrs_required=True) as adm:
                 adm.ping()
 
-        except EnvironmentError:
-            self.logger.error("Ping command failed")
-            sys.exit(os.EX_DATAERR)
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
         self.logger.info("Ping sent to daemon successfully")
 
@@ -1336,11 +1339,12 @@ class DirOptHandler(MediaOptHandler):
         keep_locked = not self.params.get('unlock')
         tags = self.params.get('tags', [])
         valid_count = 0
+        rc = 0
 
         try:
             with AdminClient(lrs_required=False) as adm:
                 for path in resources:
-                # Remove any trailing slash
+                    # Remove any trailing slash
                     path = path.rstrip('/')
                     medium_is_added = False
 
@@ -1353,20 +1357,21 @@ class DirOptHandler(MediaOptHandler):
                         adm.device_add(self.family, [path], False)
                         valid_count += 1
                     except EnvironmentError as err:
-                        self.logger.error("Cannot add directory: %s",
-                                          env_error_format(err))
+                        self.logger.error(env_error_format(err))
+                        rc = (err.errno if not rc else rc)
                         if medium_is_added:
                             self.client.media.remove(self.family, path)
                         continue
 
         except EnvironmentError as err:
-            self.logger.error("Cannot add directories: %s",
-                              env_error_format(err))
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
         self.logger.info("Added %d dir(s) successfully", valid_count)
         if valid_count != len(resources):
-            sys.exit(os.EX_DATAERR)
-
+            self.logger.error("Failed to add %d/%d directories",
+                              len(resources) - valid_count, len(resources))
+            sys.exit(abs(rc))
 
 class DriveStatus(CLIManagedResourceMixin):
     """Wrapper class to use dump_object_list"""
@@ -1457,9 +1462,9 @@ class DriveOptHandler(DeviceOptHandler):
                                  self.params.get('output'))
 
         except EnvironmentError as err:
-            self.logger.error("Cannot read status of drives: %s",
-                              err.strerror)
-            sys.exit(os.EX_DATAERR)
+            self.logger.error("Cannot read status of drives: %s" %
+                              env_error_format(err))
+            sys.exit(abs(err.errno))
 
     def exec_delete(self):
         """Remove a device"""
@@ -1469,9 +1474,8 @@ class DriveOptHandler(DeviceOptHandler):
             with AdminClient(lrs_required=False) as adm:
                 count = adm.device_delete(self.family, resources)
         except EnvironmentError as err:
-            self.logger.error("Some device removals failed: %s",
-                              env_error_format(err))
-            sys.exit(os.EX_DATAERR)
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
         self.logger.info("Removed %d device(s) successfully", count)
 
@@ -1522,9 +1526,10 @@ class ExtentOptHandler(BaseResourceOptHandler):
                                      fmt=self.params.get('format'))
 
                 adm.layout_list_free(p_objs, n_objs)
-        except EnvironmentError:
-            self.logger.error("Cannot list extents")
-            sys.exit(os.EX_DATAERR)
+
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
 class LibOptHandler(BaseResourceOptHandler):
     """Tape library options and actions."""
@@ -1635,9 +1640,9 @@ class LocksOptHandler(BaseOptHandler):
                                 self.params.get('family'),
                                 self.params.get('ids'))
 
-        except EnvironmentError:
-            self.logger.error("Clean command failed")
-            sys.exit(os.EX_DATAERR)
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
         self.logger.info("Clean command executed successfully")
 

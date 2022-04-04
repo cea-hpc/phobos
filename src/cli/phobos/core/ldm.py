@@ -24,9 +24,8 @@ Provide access to LDM functionality with the right level (tm) of abstraction.
 """
 
 import json
-import os.path
 
-from ctypes import byref, c_bool, c_char_p, c_int, c_void_p, POINTER, Structure
+from ctypes import byref, c_char_p, c_int, c_void_p, POINTER, Structure
 
 from phobos.core.ffi import LIBPHOBOS, pho_rc_check, pho_rc_func
 from phobos.core.glue import jansson_dumps # pylint: disable=no-name-in-module
@@ -96,23 +95,3 @@ class LibAdapter(Structure): # pylint: disable=too-few-public-methods
             return {}
         self._lib_scan(byref(self._lib_hdl), byref(jansson_t))
         return json.loads(jansson_dumps(jansson_t.value))
-
-
-def ldm_device_query(dev_type, dev_path):
-    """Retrieve device information at LDM level."""
-    adapter = DevAdapter()
-    rc = LIBPHOBOS.get_dev_adapter(dev_type, byref(adapter))
-    if rc:
-        raise EnvironmentError(rc,
-                               "Cannot get device adapter for %r" % dev_type)
-
-    real_path = os.path.realpath(dev_path)
-
-    state = DevState()
-
-    rc = LIBPHOBOS.ldm_dev_query(byref(adapter), real_path.encode('utf-8'),
-                                 byref(state))
-    if rc:
-        raise EnvironmentError(rc, "Cannot query device %r" % real_path)
-
-    return state

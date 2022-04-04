@@ -105,7 +105,8 @@ class Client(object):
                                                      c_id(*dev_ids),
                                                      len(dev_ids), keep_locked)
         if rc:
-            raise EnvironmentError(rc, "Error during device add")
+            raise EnvironmentError(rc, "Failed to add device(s) '%s'" %
+                                   dev_names)
 
     def device_delete(self, dev_family, dev_names):
         """Remove devices to phobos system."""
@@ -119,7 +120,8 @@ class Client(object):
                                                         byref(count))
 
         if rc:
-            raise EnvironmentError(rc, "Cannot remove all devices")
+            raise EnvironmentError(rc, "Failed to delete device(s) '%s'" %
+                                   dev_names)
 
         return count.value
 
@@ -128,7 +130,7 @@ class Client(object):
         rc = LIBPHOBOS_ADMIN.phobos_admin_ping(byref(self.handle))
 
         if rc:
-            raise EnvironmentError(rc, "Error during ping")
+            raise EnvironmentError(rc, "Failed to ping phobosd")
 
     def device_lock(self, dev_family, dev_names, is_forced):
         """Wrapper for the device lock command."""
@@ -139,7 +141,8 @@ class Client(object):
                                                       c_id(*dev_ids),
                                                       len(dev_ids), is_forced)
         if rc:
-            raise EnvironmentError(rc, "Error during device lock")
+            raise EnvironmentError(rc, "Failed to lock device(s) '%s'" %
+                                   dev_names)
 
     def device_unlock(self, dev_family, dev_names, is_forced):
         """Wrapper for the device unlock command."""
@@ -151,7 +154,8 @@ class Client(object):
                                                         len(dev_ids),
                                                         is_forced)
         if rc:
-            raise EnvironmentError(rc, "Error during device unlock")
+            raise EnvironmentError(rc, "Failed to unlock device(s) '%s'" %
+                                   dev_names)
 
     def device_status(self, family):
         """Query the status of the local devices"""
@@ -175,7 +179,8 @@ class Client(object):
                                                       byref(layouts),
                                                       byref(n_layouts))
         if rc:
-            raise EnvironmentError(rc)
+            raise EnvironmentError(rc, "Failed to list the extent(s) '%s'" %
+                                   res)
 
         if not degroup:
             list_lyts = [layouts[i] for i in range(n_layouts.value)]
@@ -204,7 +209,8 @@ class Client(object):
             byref(Id(rsc_family, name=medium_id)),
             byref(hostname))
         if rc:
-            raise EnvironmentError(rc)
+            raise EnvironmentError(rc, "Failed to locate medium '%s'" %
+                                   medium_id)
 
         return hostname.value.decode('utf-8') if hostname.value else ""
 
@@ -226,7 +232,7 @@ class Client(object):
                                                       len(enc_ids))
 
         if rc:
-            raise EnvironmentError(rc, "Error during lock cleaning")
+            raise EnvironmentError(rc, "Failed to clean lock(s)")
 
     @staticmethod
     def layout_list_free(layouts, n_layouts):

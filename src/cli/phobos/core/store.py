@@ -393,7 +393,8 @@ class XferClient: # pylint: disable=too-many-instance-attributes
             rc, _ = self._store.phobos_xfer(LIBPHOBOS.phobos_getmd,
                                             self.getmd_session, compl_cb)
             if rc:
-                raise IOError(rc, "Cannot get md on objects")
+                full_oids = ", ".join([str(x.oid) for x in self.getmd_session])
+                raise IOError(rc, "Cannot GETMD for objid(s) '%s'" % full_oids)
 
         if self.get_session:
             rc, node_name = self._store.phobos_xfer(LIBPHOBOS.phobos_get,
@@ -408,13 +409,22 @@ class XferClient: # pylint: disable=too-many-instance-attributes
             if rc:
                 for desc in self.get_session:
                     os.remove(desc[1])
-                raise IOError(rc, "Cannot retrieve objects")
+
+                full_oids = ", ".join([str(x.oid) for x in self.get_session])
+                full_paths = ", ".join([str(x.data_path) for x
+                                        in self.get_session])
+                raise IOError(rc, "Cannot GET objid(s) '%s' to '%s'" %
+                              (full_oids, full_paths))
 
         if self.put_session:
             rc, _ = self._store.phobos_xfer(LIBPHOBOS.phobos_put,
                                             self.put_session, compl_cb)
             if rc:
-                raise IOError(rc, "Cannot store objects")
+                full_oids = ", ".join([str(x.oid) for x in self.put_session])
+                full_paths = ", ".join([str(x.data_path) for x
+                                        in self.put_session])
+                raise IOError(rc, "Cannot PUT '%s' to objid(s) '%s'" %
+                              (full_paths, full_oids))
 
         self.clear()
 
@@ -437,10 +447,10 @@ class UtilClient:
 
         rc = LIBPHOBOS.phobos_delete(xfers, n_xfers)
         if rc:
-            raise EnvironmentError(rc)
+            raise EnvironmentError(rc, "Failed to delete objects '%s'" % oids)
 
     @staticmethod
-    def undelete(oids, uuids):
+    def object_undelete(oids, uuids):
         """Undelete objects."""
         n_xfers = c_int(len(oids) + len(uuids))
         xfer_array_type = XferDescriptor * (len(oids) + len(uuids))
@@ -454,7 +464,9 @@ class UtilClient:
 
         rc = LIBPHOBOS.phobos_undelete(xfers, n_xfers)
         if rc:
-            raise EnvironmentError(rc)
+            raise EnvironmentError(rc, "Failed to undelete objects by %s '%s'" %
+                                   ("oids" if oids else "uuids",
+                                    oids if oids else uuids))
 
     @staticmethod
     def object_list(res, is_pattern, metadata, deprecated):
@@ -479,7 +491,9 @@ class UtilClient:
                                                 byref(n_objs))
 
         if rc:
-            raise EnvironmentError(rc)
+            raise EnvironmentError(rc, "Failed to list %s" %
+                                   ("object(s) '%s'" % res
+                                    if res else "all objects"))
 
         objs = (obj_type * n_objs.value).from_address(
             cast(objs, c_void_p).value)
@@ -499,6 +513,8 @@ class UtilClient:
                                      uuid.encode('utf-8') if uuid else None,
                                      version, byref(hostname))
         if rc:
-            raise EnvironmentError(rc)
+            raise EnvironmentError(rc, "Failed to locate object by %s '%s'" %
+                                   ("oid" if oid else "uuid",
+                                    oid if oid else uuid))
 
         return hostname.value.decode('utf-8') if hostname.value else ""
