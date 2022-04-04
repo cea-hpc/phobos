@@ -31,12 +31,13 @@ set -xe
 
 DRIVE="/dev/st0"
 
+if [[ ! -w /dev/changer ]]; then
+    echo "Cannot access library: test skipped"
+    exit 77
+fi
+
 function setup
 {
-    if [ ! -w /dev/changer ]; then
-        exit 0
-    fi
-
     export PHOBOS_LRS_families="dir,tape"
 
     setup_tables
@@ -51,9 +52,11 @@ function cleanup
 
 function delete_tape_drive
 {
+    local del_cmd=$1
+
     $valg_phobos drive add --unlock ${DRIVE}
     output=$($valg_phobos drive list)
-    $valg_phobos drive delete ${DRIVE} &&
+    $valg_phobos drive "$del_cmd" ${DRIVE} &&
         error "Should not be able to delete a daemon-locked drive"
     [ $output -ne $($valg_phobos drive list) ] &&
         error "Drive list should return the not removed drive"
@@ -62,7 +65,7 @@ function delete_tape_drive
     #      released.
     waive_daemon
     invoke_daemon
-    $valg_phobos drive delete ${DRIVE} ||
+    $valg_phobos drive "$del_cmd" ${DRIVE} ||
         error "Delete should have worked"
     [ -z $($valg_phobos drive list) ] ||
         error "Drive list should return empty list"
@@ -73,4 +76,5 @@ function delete_tape_drive
 trap cleanup EXIT
 setup
 
-delete_tape_drive
+delete_tape_drive "del"
+delete_tape_drive "delete"
