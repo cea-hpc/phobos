@@ -41,6 +41,9 @@ function cleanup
 {
     waive_daemon
     drop_tables
+    if [[ -w /dev/changer ]]; then
+        drain_all_drives
+    fi
 }
 
 function execute_test_double_format
@@ -119,6 +122,69 @@ function test_eagain_format
     wait ${format_pid}
 }
 
+function format_check_selected_device
+{
+    local tape=$1
+    local targeted_drive=$2
+
+    $valg_phobos tape format --unlock  ${tape}
+    local loaded_tape=$($phobos drive status -o name,media | \
+                        grep ${targeted_drive} | cut -d '|' -f 3 | \
+                        cut -d ' ' -f 2)
+    if [[ ${loaded_tape} == ${tape} ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+function test_drive_selection_format
+{
+    local four_lto6_tapes=( $(get_tapes L6 4 | nodeset -e) )
+    local three_lto6_drives=( $(get_lto_drives 6 3) )
+
+    # start with one drive with one mounted medium
+    $phobos tape add --type lto6 ${four_lto6_tapes[0]}
+    $phobos drive add --unlock ${three_lto6_drives[0]}
+    $valg_phobos tape format --unlock ${four_lto6_tapes[0]}
+    # Put an object to mount the first medium
+    local file_to_put=$(mktemp /tmp/file_to_put.XXXX)
+    dd if=/dev/urandom of=${file_to_put} bs=1k count=1
+    $phobos put -f tape ${file_to_put} first_obj
+
+    # Add a new tape and a new drive
+    $phobos tape add --type lto6 ${four_lto6_tapes[1]}
+    $phobos drive add --unlock ${three_lto6_drives[1]}
+
+    # Check empty drive is chosen to format instead of mounted one
+    if ! format_check_selected_device ${four_lto6_tapes[1]} \
+                                      ${three_lto6_drives[1]}; then
+        error "New format should have happened in the empty drive, not the" \
+              "mounted one"
+    fi
+
+    # Add a new tape
+    $phobos tape add --type lto6 ${four_lto6_tapes[2]}
+
+    # Check loaded drive is chosen to format instead of mounted one
+    if ! format_check_selected_device ${four_lto6_tapes[2]} \
+                                      ${three_lto6_drives[1]}; then
+        error "New format should have happened in the loaded drive, not the" \
+              "mounted one"
+    fi
+
+    # Add a new tape and a new drive
+    $phobos tape add --type lto6 ${four_lto6_tapes[3]}
+    $phobos drive add --unlock ${three_lto6_drives[2]}
+
+    # Check empty drive is chosen instead of loaded one
+    if ! format_check_selected_device ${four_lto6_tapes[3]} \
+                                      ${three_lto6_drives[2]}; then
+        error "New format should have happened in the empty drive, not the" \
+              "mounted or loaded ones"
+    fi
+}
+
 trap cleanup EXIT
 setup
 test_double_format
@@ -126,4 +192,7 @@ if [[ -w /dev/changer ]]; then
     cleanup
     setup
     test_eagain_format
+    cleanup
+    setup
+    test_drive_selection_format
 fi
