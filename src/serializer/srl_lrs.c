@@ -291,6 +291,8 @@ int pho_srl_request_notify_alloc(pho_req_t *req)
         goto err_rsrc;
     pho_resource_id__init(req->notify->rsrc_id);
 
+    req->notify->wait = true;
+
     return 0;
 
 err_rsrc:

@@ -2347,22 +2347,53 @@ dev_del:
 }
 
 /**
- * Remove the locked device from the local device array.
- * It will be inserted back once the device status is changed to 'unlocked'.
+ * Retry to remove the locked device from the local device array.
+ *
+ * If the device cannont be removed, will try again later by returning -EAGAIN.
  */
-static int sched_device_lock(struct lrs_sched *sched, const char *name)
+static int sched_device_retry_lock(struct lrs_sched *sched, const char *name,
+                                   struct lrs_dev *dev_ptr)
+{
+    int rc;
+
+    rc = lrs_dev_hdl_retrydel(&sched->devices, dev_ptr);
+    if (rc)
+        return rc;
+
+    pho_verb("Removed locked device '%s' from the local memory", name);
+
+    return 0;
+}
+
+/**
+ * Try to remove the locked device from the local device array.
+ * It will be inserted back once the device status is changed to 'unlocked'.
+ *
+ * If the device cannot be removed, because operations are still ongoing,
+ * will try again later, by returning -EAGAIN.
+ */
+static int sched_device_lock(struct lrs_sched *sched, const char *name,
+                             struct lrs_dev **dev_ptr)
 {
     struct lrs_dev *dev;
+    int rc;
     int i;
 
     for (i = 0; i < sched->devices.ldh_devices->len; ++i) {
         dev = lrs_dev_hdl_get(&sched->devices, i);
 
         if (!strcmp(name, dev->ld_dss_dev_info->rsc.id.name)) {
-            lrs_dev_hdl_del(&sched->devices, i, 0);
-            pho_verb("Removed locked device '%s' from the local database",
-                     name);
-            return 0;
+            rc = lrs_dev_hdl_trydel(&sched->devices, i);
+            if (rc == -EAGAIN) {
+                *dev_ptr = dev;
+                return rc;
+            }
+
+            if (!rc)
+                pho_verb("Removed locked device '%s' from the local memory",
+                         name);
+
+            return rc;
         }
     }
 
@@ -2939,9 +2970,10 @@ static int sched_handle_notify(struct lrs_sched *sched,
                                struct req_container *reqc)
 {
     pho_req_notify_t *nreq = reqc->req->notify;
+    struct lrs_dev *dev;
     int rc = 0;
 
-    pho_info("notify: device %s\n", nreq->rsrc_id->name);
+    pho_info("Notify: device '%s'", nreq->rsrc_id->name);
 
     switch (nreq->op) {
     case PHO_NTFY_OP_DEVICE_ADD:
@@ -2949,7 +2981,15 @@ static int sched_handle_notify(struct lrs_sched *sched,
                               nreq->rsrc_id->name);
         break;
     case PHO_NTFY_OP_DEVICE_LOCK:
-        rc = sched_device_lock(sched, nreq->rsrc_id->name);
+        dev = reqc->params.notify.notified_device;
+
+        if (dev == NULL) {
+            rc = sched_device_lock(sched, nreq->rsrc_id->name, &dev);
+            if (rc == -EAGAIN)
+                reqc->params.notify.notified_device = dev;
+        } else {
+            rc = sched_device_retry_lock(sched, nreq->rsrc_id->name, dev);
+        }
         break;
     case PHO_NTFY_OP_DEVICE_UNLOCK:
         rc = sched_device_unlock(sched, nreq->rsrc_id->name);
@@ -3055,10 +3095,15 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
         }
 
         /* create an -ESHUTDOWN error on -EAGAIN and !running */
-        rc = queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
+        if (!pho_request_is_notify(reqc->req) || reqc->req->notify->wait) {
+            rc = queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
+            if (rc) {
+                sched_req_free(reqc);
+                break;
+            }
+        }
+
         sched_req_free(reqc);
-        if (rc)
-            break;
     }
 
 out:

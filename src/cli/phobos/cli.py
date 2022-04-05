@@ -547,8 +547,17 @@ class LockOptHandler(DSSInteractHandler):
         parser.add_argument('res', nargs='+',
                             help='Resource(s) to lock (for a device, could be '
                                  'the path or the id name)')
-        parser.add_argument('--force', action='store_true',
-                            help='Do not check the current lock state')
+
+class DeviceLockOptHandler(LockOptHandler):
+    """Lock device."""
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(DeviceLockOptHandler, cls).add_options(parser)
+        parser.add_argument('--wait', action='store_true',
+                            help='wait for any deamon releasing the device')
+
 
 class UnlockOptHandler(DSSInteractHandler):
     """Unlock resource."""
@@ -1060,7 +1069,7 @@ class DeviceOptHandler(BaseResourceOptHandler):
         AddOptHandler,
         ResourceDeleteOptHandler,
         ListOptHandler,
-        LockOptHandler,
+        DeviceLockOptHandler,
         UnlockOptHandler
     ]
 
@@ -1099,7 +1108,7 @@ class DeviceOptHandler(BaseResourceOptHandler):
 
         try:
             with AdminClient(lrs_required=False) as adm:
-                adm.device_lock(self.family, names, self.params.get('force'))
+                adm.device_lock(self.family, names, self.params.get('wait'))
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
@@ -1409,7 +1418,7 @@ class DriveOptHandler(DeviceOptHandler):
         AddOptHandler,
         ResourceDeleteOptHandler,
         DriveListOptHandler,
-        LockOptHandler,
+        DeviceLockOptHandler,
         UnlockOptHandler,
         StatusOptHandler,
     ]

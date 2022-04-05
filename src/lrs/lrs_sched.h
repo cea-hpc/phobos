@@ -138,6 +138,16 @@ struct format_params {
 };
 
 /**
+ * Parameters of a request container dedicated to a notify request
+ */
+struct notify_params {
+    struct lrs_dev *notified_device;    /**< Notified device, which is
+                                          *  currently busy, waiting for
+                                          *  a device thread to end.
+                                          */
+};
+
+/**
  * Request container used by the scheduler to transfer information
  * between a request and its response. For now, this information consists
  * in a socket ID.
@@ -150,6 +160,7 @@ struct req_container {
     union {                         /**< Parameters used by the LRS. */
         struct release_params release;
         struct format_params format;
+        struct notify_params notify;
     } params;
 };
 

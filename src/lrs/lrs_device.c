@@ -227,6 +227,73 @@ int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc)
     return 0;
 }
 
+int lrs_dev_hdl_trydel(struct lrs_dev_hdl *handle, int index)
+{
+    struct timespec wait_for_fast_del = {
+        .tv_sec = 0,
+        .tv_nsec = 100000000
+    };
+    int *threadrc = NULL;
+    struct timespec now;
+    struct lrs_dev *dev;
+    int rc;
+
+    if (index >= handle->ldh_devices->len)
+        return -ERANGE;
+
+    dev = lrs_dev_hdl_get(handle, index);
+
+    dev_thread_signal_stop(dev);
+
+    rc = clock_gettime(CLOCK_REALTIME, &now);
+    if (rc) {
+        rc = pthread_tryjoin_np(dev->ld_device_thread.ld_tid,
+                                (void **)&threadrc);
+    } else {
+        struct timespec deadline;
+
+        deadline = add_timespec(&now, &wait_for_fast_del);
+        rc = pthread_timedjoin_np(dev->ld_device_thread.ld_tid,
+                                  (void **)&threadrc, &deadline);
+    }
+
+    if (rc == EBUSY || rc == ETIMEDOUT)
+        return -EAGAIN;
+    if (rc)
+        return -rc;
+
+    if (*threadrc < 0)
+        pho_error(*threadrc, "device thread '%s' terminated with error",
+                  dev->ld_dss_dev_info->rsc.id.name);
+
+    g_ptr_array_remove_fast(handle->ldh_devices, dev);
+    lrs_dev_info_clean(handle, dev);
+
+    return 0;
+}
+
+int lrs_dev_hdl_retrydel(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
+{
+    int *threadrc;
+    int rc;
+
+    rc = pthread_tryjoin_np(dev->ld_device_thread.ld_tid, (void **)&threadrc);
+
+    if (rc == EBUSY)
+        return -EAGAIN;
+    if (rc)
+        return -rc;
+
+    if (*threadrc < 0)
+        pho_error(*threadrc, "device thread '%s' terminated with error",
+                  dev->ld_dss_dev_info->rsc.id.name);
+
+    g_ptr_array_remove_fast(handle->ldh_devices, dev);
+    lrs_dev_info_clean(handle, dev);
+
+    return 0;
+}
+
 int lrs_dev_hdl_load(struct lrs_sched *sched,
                      struct lrs_dev_hdl *handle)
 {

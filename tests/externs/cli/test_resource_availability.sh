@@ -89,7 +89,7 @@ function put_tape_simple
         error "Put with an available media should have worked"
 
     # test drive availability
-    $valg_phobos drive lock --force ${DRIVE_ARRAY[0]}
+    $valg_phobos drive lock --wait ${DRIVE_ARRAY[0]}
     $valg_phobos put --family tape /etc/hosts ${id}.2 &&
         error "Should not be able to put objects without unlocked device"
 
@@ -144,7 +144,7 @@ function put_tape_raid
         error "Put with available media should have worked"
 
     # test drive availability
-    $valg_phobos drive lock --force ${DRIVE_ARRAY[0]}
+    $valg_phobos drive lock --wait ${DRIVE_ARRAY[0]}
     $valg_phobos put --layout raid1 /etc/hosts ${id}.2 &&
         error "Should not be able to put objects with 1/2 unlocked devices"
 
@@ -193,7 +193,7 @@ function get_tape_simple
     rm /tmp/out
 
     # test tape availability
-    $valg_phobos tape lock --force ${TAPE_ARRAY[0]}
+    $valg_phobos tape lock ${TAPE_ARRAY[0]}
     $valg_phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked medium"
 
@@ -210,7 +210,7 @@ function get_dir_simple
     rm /tmp/out
 
     # test dir availability
-    $valg_phobos dir lock --force ${DIR_ARRAY[0]}
+    $valg_phobos dir lock ${DIR_ARRAY[0]}
     $valg_phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked medium"
 
@@ -226,7 +226,7 @@ function get_tape_raid
         error "Get with 1/2 available device should have worked"
     rm /tmp/out
 
-    $valg_phobos drive lock --force ${DRIVE_ARRAY[1]}
+    $valg_phobos drive lock --wait ${DRIVE_ARRAY[1]}
     $valg_phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked devices"
 
@@ -237,12 +237,12 @@ function get_tape_raid
     rm /tmp/out
 
     # test tape availability
-    $valg_phobos tape lock --force ${TAPE_ARRAY[0]}
+    $valg_phobos tape lock ${TAPE_ARRAY[0]}
     $valg_phobos get $id /tmp/out ||
         error "Get with 1/2 available medium should have worked"
     rm /tmp/out
 
-    $valg_phobos tape lock --force ${TAPE_ARRAY[1]}
+    $valg_phobos tape lock ${TAPE_ARRAY[1]}
     $valg_phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked media"
 
@@ -259,12 +259,12 @@ function get_dir_raid
     rm /tmp/out
 
     # test dir availability
-    $valg_phobos dir lock --force ${DIR_ARRAY[0]}
+    $valg_phobos dir lock ${DIR_ARRAY[0]}
     $valg_phobos get $id /tmp/out ||
         error "Get with 1/2 available medium should have worked"
     rm /tmp/out
 
-    $valg_phobos dir lock --force ${DIR_ARRAY[1]}
+    $valg_phobos dir lock ${DIR_ARRAY[1]}
     $valg_phobos get $id /tmp/out &&
         error "Should not be able to get objects without unlocked medium"
 

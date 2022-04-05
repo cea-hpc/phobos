@@ -583,6 +583,9 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
             rc2 = sched_release_enqueue(lrs->sched[fam], req_cont);
             rc = rc ? : rc2;
         } else {
+            if (pho_request_is_notify(req_cont->req))
+                req_cont->params.notify.notified_device = NULL;
+
             if (running)
                 tsqueue_push(&lrs->sched[fam]->req_queue, req_cont);
             else

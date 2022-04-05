@@ -528,7 +528,7 @@ function drain_all_drives_daemon
 function lock_all_drives
 {
     for d in $($phobos drive list); do
-        $phobos drive lock --force "$d"
+        $phobos drive lock --wait "$d"
     done
 }
 

@@ -346,6 +346,7 @@ static int test_bad_notify(void *arg)
     assert(!pho_srl_request_notify_alloc(&req));
     req.id = 0;
     req.notify->op = PHO_NTFY_OP_INVAL;
+    req.notify->wait = true;
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Notify -- bad operation", -EINVAL);
     if (rc)

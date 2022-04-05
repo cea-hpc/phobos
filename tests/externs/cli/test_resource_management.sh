@@ -60,11 +60,7 @@ function delete_tape_drive
         error "Should not be able to delete a daemon-locked drive"
     [ $output -ne $($valg_phobos drive list) ] &&
         error "Drive list should return the not removed drive"
-    $valg_phobos drive lock --force ${DRIVE}
-    # XXX: For now, we need to stop the daemon to force daemon locks to be
-    #      released.
-    waive_daemon
-    invoke_daemon
+    $valg_phobos drive lock --wait ${DRIVE}
     $valg_phobos drive "$del_cmd" ${DRIVE} ||
         error "Delete should have worked"
     [ -z $($valg_phobos drive list) ] ||

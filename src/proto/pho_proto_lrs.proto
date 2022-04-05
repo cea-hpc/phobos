@@ -84,6 +84,9 @@ message PhoRequest {
     message Notify {
         required PhoResourceId rsrc_id = 1; // ID of the notified resource.
         required PhoNotifyOp op        = 2; // Notification operation.
+        required bool wait             = 3; // Whether the client requires the
+                                            // LRS to send its ack once the
+                                            // action is complete or not.
     }
 
     /** Body of the monitor request. */

@@ -1,5 +1,13 @@
 # CHANGELOG UPDATES
 
+## Ongoing
+
+* The "phobos xxx lock" API has changed: '--force' option is removed. The option
+was only considered with devices, so removing it for media will not alter its
+behavior.
+* The "phobos drive lock" API has changed: '--wait' option is added. Its
+behavior is the same as the previous '--force' option.
+
 ## 1.94
 
 * The "phobos_admin_format" API function has been modified to be able to send
