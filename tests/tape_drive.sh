@@ -59,3 +59,11 @@ function get_drives {
 
     find /dev -regex "/dev/st[0-9]+$" | head -n $count | xargs
 }
+
+# get LTO<5|6> <count> drives
+function get_lto_drives {
+    local generation=$1
+    local count=$2
+
+    lsscsi | grep TD${generation} | awk '{print $6}' | head -n $count | xargs
+}

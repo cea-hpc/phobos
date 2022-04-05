@@ -74,7 +74,7 @@ function test_drive_status()
 function test_drive_status_with_ongoing_io()
 {
     local tape=$(get_tapes L6 1)
-    local drive=$(get_drives 1)
+    local drive=$(get_lto_drives 6 1)
 
     $phobos tape add --type lto6 "$tape"
     $phobos drive add "$drive"

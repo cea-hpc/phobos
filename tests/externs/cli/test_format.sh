@@ -81,9 +81,9 @@ function test_double_format
 
     if [[ -w /dev/changer ]]; then
         # Trying to concurrently format the same tape
-        local tape=$(get_tapes L5 1)
-        $valg_phobos tape add --type lto5 ${tape}
-        local drive=$(get_drives 1)
+        local tape=$(get_tapes L6 1)
+        $valg_phobos tape add --type lto6 ${tape}
+        local drive=$(get_lto_drives 6 1)
         $valg_phobos drive add --unlock ${drive}
         execute_test_double_format tape ${tape}
     fi

@@ -433,7 +433,7 @@ function test_mount_failure_during_read_response()
 {
     local file=$(mktemp)
     local tape=$(get_tapes L6 1)
-    local drive=$(get_drives 1)
+    local drive=$(get_lto_drives 6 1)
 
     trap "waive_daemon; drop_tables; rm -f '$file'; \
           unset PHOBOS_LTFS_cmd_mount" EXIT
