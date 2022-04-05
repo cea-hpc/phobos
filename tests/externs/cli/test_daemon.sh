@@ -322,7 +322,7 @@ function test_wait_end_of_IO_before_shutdown()
     ps --pid $PID_DAEMON || error "Daemon should still be online"
 
     # send release request
-    kill -s SIGUSR1 $pid
+    kill -s USR1 $pid
 
     timeout 10 tail --pid=$PID_DAEMON -f /dev/null
     if [[ $? != 0 ]]; then
@@ -383,7 +383,7 @@ function test_cancel_waiting_requests_before_shutdown()
     fi
 
     # send the release request
-    kill -s SIGUSR1 $controlled_pid
+    kill -s USR1 $controlled_pid
 
     timeout 10 tail --pid=$PID_DAEMON -f /dev/null
     if [[ $? != 0 ]]; then
@@ -417,7 +417,7 @@ function test_refuse_new_request_during_shutdown()
         error "New put should have failed during shutdown"
 
     # send the release request
-    kill -s SIGUSR1 $pid
+    kill -s USR1 $pid
 
     timeout 10 tail --pid=$PID_DAEMON -f /dev/null
     if [[ $? != 0 ]]; then

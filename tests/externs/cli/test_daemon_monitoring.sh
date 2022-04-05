@@ -92,7 +92,7 @@ function test_drive_status_with_ongoing_io()
         grep "$tape"
 
     # send release request
-    kill -s SIGUSR1 $pid
+    kill -s USR1 $pid
     trap cleanup EXIT
 }
 
