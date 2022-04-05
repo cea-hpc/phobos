@@ -48,8 +48,8 @@ else
 fi
 
 . $test_dir/../utils_generation.sh
-. $test_dir/../utils_tape.sh
 . $test_dir/../utils.sh
+. $test_dir/../tape_drive.sh
 
 function setup_test
 {
@@ -80,7 +80,7 @@ function setup_tape
     /usr/share/ltfs/ltfs stop || true
 
     # make sure all drives are empty
-    empty_drives
+    drain_all_drives
 
     local N_TAPES=2
     local N_DRIVES=8
@@ -311,7 +311,7 @@ function test_lock
     $phobos drive lock $($phobos drive list)
     $phobos tape lock $($phobos tape list)
 
-    empty_drives
+    drain_all_drives
     $start_phobosd
 
     local tapes=$($phobos tape list --tags $tape_model | head -n 2)

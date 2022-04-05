@@ -26,6 +26,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
+. $test_dir/../../tape_drive.sh
 
 set -xe
 
@@ -40,22 +41,6 @@ function setup_dir
 function clean_dir
 {
     rm -rf ${DIR_ARRAY[@]}
-}
-
-function empty_drives
-{
-    # make sure no LTFS filesystem is mounted, so we can unmount it
-    /usr/share/ltfs/ltfs stop || true
-
-    # make sure all drives are empty
-    mtx status | grep "Data Transfer Element" | grep "Full" |
-        while read line; do
-            echo "full drive: $line"
-            drive=$(echo $line | awk '{print $4}' | cut -d ':' -f 1)
-            slot=$(echo $line | awk '{print $7}')
-            echo "Unloading drive $drive in slot $slot"
-            mtx unload $slot $drive || echo "mtx failure"
-        done
 }
 
 function setup
@@ -77,7 +62,7 @@ function cleanup
     drop_tables
     clean_dir
     if [[ -w /dev/changer ]]; then
-        empty_drives
+        drain_all_drives
     fi
 }
 
@@ -295,10 +280,10 @@ get_dir_simple
 
 if [[ -w /dev/changer ]]; then
     # in case the previous test did not unload the drives
-    empty_drives
+    drain_all_drives
     put_tape_simple
     get_tape_simple
-    empty_drives
+    drain_all_drives
 fi
 
 waive_daemon

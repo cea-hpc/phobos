@@ -47,19 +47,6 @@ function setup
     invoke_daemon
 }
 
-# empty all drives
-function empty_drives
-{
-    mtx status | grep "Data Transfer Element" | grep "Full" |
-        while read line; do
-            echo "full drive: $line"
-            drive=$(echo $line | awk '{print $4}' | cut -d ':' -f 1)
-            slot=$(echo $line | awk '{print $7}')
-            echo "Unloading drive $drive in slot $slot"
-            mtx unload $slot $drive || echo "mtx failure"
-        done
-}
-
 function tape_setup
 {
     export PHOBOS_STORE_default_family="tape"
@@ -68,7 +55,7 @@ function tape_setup
     /usr/share/ltfs/ltfs stop || true
 
     #  make sure all drives are empty
-    empty_drives
+    drain_all_drives
 
     local N_TAPES=2
     local N_DRIVES=8
