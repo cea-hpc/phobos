@@ -84,7 +84,7 @@ function test_drive_status_with_ongoing_io()
     $controlled_store put tape &
     local pid=$!
 
-    trap "cleanup; kill -s SIGUSR1 '$pid'" EXIT
+    trap "kill -s USR1 '$pid'; cleanup" EXIT
 
     $phobos drive status |
         grep True |
