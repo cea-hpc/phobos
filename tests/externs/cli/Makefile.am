@@ -15,6 +15,18 @@ SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 
 if VALGRIND_ENABLED
+# FIXME:
+# Possibly-lost leaks appear in valgrind reports when testing
+# externs/cli/acceptance.sh, generating millions of lines (each phobos command
+# execution leads to ~5k leaks). Those leaks are somewhat bound to the python
+# CLI, and are not clear enough to be resolve for now.
+#
+# I made some research and there is a way to get better reports and then try to
+# resolve those leaks:
+# - get an environment where python is compiled in debug mode to let valgrind
+#   catch more information
+#   $ ./configure --with-pydebug --without-pymalloc --with-valgrind
+
 @VALGRIND_CHECK_RULES@
 VALGRIND_SUPPRESSIONS_FILES=$(TO_TEST)/supp-files/valgrind.supp $(TO_TEST)/supp-files/glib.supp
 VALGRIND_FLAGS=-q --leak-check=full --errors-for-leak-kinds=definite --show-possibly-lost=no

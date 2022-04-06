@@ -23,7 +23,7 @@
 # prevent from simultaneous runs of 'make check'
 
 lock_file=/tmp/phobos_test.lock
-test_timeout=300 #5 min
+test_timeout=1800 #30 min
 
 function delayed_cleanup
 {

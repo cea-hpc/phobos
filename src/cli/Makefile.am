@@ -39,11 +39,7 @@ all-local:
 clean-local:
 	rm -f $(C_MODULES_SO)
 
-pre-check-local:
-	../../tests/test_lock.sh
-
-check-local: all-local pre-check-local
+check-local: all-local
 	(cd tests; ./run_tests.sh)
-	rm -f /tmp/phobos_test.lock
 
 .PHONY: all-local

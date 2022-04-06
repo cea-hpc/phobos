@@ -1,6 +1,6 @@
 ACLOCAL_AMFLAGS = -I autotools/m4
 
-SUBDIRS=src tests tests/externs/api tests/externs/cli tests/interns tests/prod
+SUBDIRS=. src tests/externs/api tests/externs/cli tests/interns tests/prod
 
 rpm_dir=`pwd`/rpms
 
@@ -13,3 +13,8 @@ EXTRA_DIST= phobos.spec phobos.spec.in scripts/pho_ldm_helper \
 
 sbin_SCRIPTS=scripts/pho_ldm_helper \
              scripts/phobos_db
+
+check-local:
+	./tests/test_lock.sh
+
+CLEANFILES = /tmp/phobos_test.lock
