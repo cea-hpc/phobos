@@ -100,14 +100,13 @@ trap cleanup EXIT
 
 test_drive_status_no_daemon
 
+drain_all_drives
 setup
 
-drain_all_drives
 test_drive_status
 
-# reset drives
-drop_tables
-setup_tables
+cleanup
 drain_all_drives
+setup
 
 test_drive_status_with_ongoing_io
