@@ -94,9 +94,6 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
     GString *res_str;
     int rc;
 
-    metadata_str = g_string_new(NULL);
-    res_str = g_string_new(NULL);
-
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)
         return rc;
@@ -104,6 +101,9 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
     rc = dss_init(&dss);
     if (rc != 0)
         return rc;
+
+    metadata_str = g_string_new(NULL);
+    res_str = g_string_new(NULL);
 
     /**
      * If there are at least one metadata, we construct a string containing
@@ -140,10 +140,6 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
                                 metadata_str->str : "",
                               ((n_metadata && n_res) || (n_metadata > 1)) ?
                                 "]}" : "");
-
-        g_string_free(metadata_str, TRUE);
-        g_string_free(res_str, TRUE);
-
         if (rc)
             GOTO(err, rc);
 
@@ -161,6 +157,8 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
     dss_filter_free(filter_ptr);
 
 err:
+    g_string_free(metadata_str, TRUE);
+    g_string_free(res_str, TRUE);
     dss_fini(&dss);
 
     return rc;
