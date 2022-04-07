@@ -758,11 +758,11 @@ int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
                               medium_str->str != NULL ? medium_str->str : "",
                               n_res && medium_is_valid ? "]}" : "");
 
-        g_string_free(extent_str, TRUE);
-        g_string_free(medium_str, TRUE);
-
         filter_ptr = &filter;
     }
+
+    g_string_free(extent_str, TRUE);
+    g_string_free(medium_str, TRUE);
 
     if (rc)
         return rc;
