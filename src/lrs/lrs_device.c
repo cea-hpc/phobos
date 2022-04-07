@@ -124,7 +124,7 @@ err_info:
     g_ptr_array_free((*dev)->ld_sync_params.tosync_array, true);
     dev_info_free((*dev)->ld_dss_dev_info, 1);
 err_dev:
-    free(dev);
+    free(*dev);
 
     return rc;
 }
