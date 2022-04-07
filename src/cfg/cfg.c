@@ -63,10 +63,10 @@ static inline bool config_is_loaded(void)
 /** load a local config file */
 static int pho_cfg_load_file(const char *cfg)
 {
-    struct collection_item  *errors = NULL;
-    int                      rc;
+    struct collection_item *errors = NULL;
+    int rc;
 
-    pthread_mutex_lock(&config.lock);
+    MUTEX_LOCK(&config.lock);
 
     /* Make sure that the config was not loaded by another thread */
     if (config.cfg_items != NULL)
@@ -93,7 +93,7 @@ static int pho_cfg_load_file(const char *cfg)
     /* The error collection always has to be freed, even when empty */
     free_ini_config_errors(errors);
 unlock:
-    pthread_mutex_unlock(&config.lock);
+    MUTEX_UNLOCK(&config.lock);
 
     return -rc;
 }
@@ -219,12 +219,12 @@ static int pho_cfg_get_env(const char *section, const char *name,
 static int pho_cfg_get_local(const char *section, const char *name,
                              const char **value)
 {
-    int rc;
     struct collection_item *item;
+    int rc;
 
-    pthread_mutex_lock(&config.lock);
+    MUTEX_LOCK(&config.lock);
     rc = get_config_item(section, name, config.cfg_items, &item);
-    pthread_mutex_unlock(&config.lock);
+    MUTEX_UNLOCK(&config.lock);
     if (rc)
         return -rc;
 
