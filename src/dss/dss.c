@@ -1985,7 +1985,8 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         break;
 
     default:
-        LOG_RETURN(-ENOTSUP, "unsupported DSS request type %#x", type);
+        LOG_GOTO(out_cleanup, rc = -ENOTSUP,
+                 "unsupported DSS request type %#x", type);
 
     }
 
