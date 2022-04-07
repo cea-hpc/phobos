@@ -2630,10 +2630,10 @@ clean:
 int dss_media_of_object(struct dss_handle *hdl, struct object_info *obj,
                         struct media_info **media, int *cnt)
 {
-    GString *filter_str = g_string_new(NULL);
     struct layout_info *layout;
     struct dss_filter filter;
     struct pho_id medium_id;
+    GString *filter_str;
     int rc;
     int i;
 
@@ -2657,6 +2657,7 @@ int dss_media_of_object(struct dss_handle *hdl, struct object_info *obj,
         LOG_RETURN(-EINVAL, "No extent found for object '%s'", obj->oid);
     }
 
+    filter_str = g_string_new(NULL);
     if (*cnt > 1)
         g_string_append_printf(filter_str, "{\"OR\": [");
 
