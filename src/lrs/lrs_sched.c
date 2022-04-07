@@ -3040,46 +3040,53 @@ out:
     return rc;
 }
 
-static int sched_fetch_device_status(struct lrs_dev *device,
-                                     json_t *device_status)
+static void _json_object_set_str(struct json_t *object,
+                                 const char *key,
+                                 const char *value)
 {
-    json_t *integer;
     json_t *str;
 
-    str = json_string(device->ld_dss_dev_info->path);
-    json_object_set(device_status, "name", str);
-    json_decref(str);
+    if (!value)
+        return;
 
-    str = json_string(device->ld_dev_path);
-    json_object_set(device_status, "device", str);
-    json_decref(str);
+    str = json_string(value);
+    if (!str)
+        return;
 
-    str = json_string(device->ld_sys_dev_state.lds_serial);
-    json_object_set(device_status, "serial", str);
+    json_object_set(object, key, str);
     json_decref(str);
+}
+
+static void sched_fetch_device_status(struct lrs_dev *device,
+                                      json_t *device_status)
+{
+    json_t *integer;
+
+    _json_object_set_str(device_status, "name", device->ld_dss_dev_info->path);
+    _json_object_set_str(device_status, "device", device->ld_dev_path);
+    _json_object_set_str(device_status, "serial",
+                         device->ld_sys_dev_state.lds_serial);
 
     integer = json_integer(device->ld_lib_dev_info.ldi_addr.lia_addr -
                            device->ld_lib_dev_info.ldi_first_addr);
-    json_object_set(device_status, "address", integer);
-    json_decref(integer);
+    if (integer) {
+        json_object_set(device_status, "address", integer);
+        json_decref(integer);
+    }
 
     if (device->ld_dss_media_info) {
         json_t *ongoing_io;
 
-        str = json_string(device->ld_mnt_path);
-        json_object_set(device_status, "mount_path", str);
-        json_decref(str);
-
-        str = json_string(device->ld_dss_media_info->rsc.id.name);
-        json_object_set(device_status, "media", str);
-        json_decref(str);
+        _json_object_set_str(device_status, "mount_path", device->ld_mnt_path);
+        _json_object_set_str(device_status, "media",
+                             device->ld_dss_media_info->rsc.id.name);
 
         ongoing_io = json_boolean(device->ld_ongoing_io);
-        json_object_set(device_status, "ongoing_io", ongoing_io);
-        json_decref(ongoing_io);
+        if (ongoing_io) {
+            json_object_set(device_status, "ongoing_io", ongoing_io);
+            json_decref(ongoing_io);
+        }
     }
-
-    return 0;
 }
 
 int sched_handle_monitor(struct lrs_sched *sched, json_t *status)
@@ -3097,9 +3104,7 @@ int sched_handle_monitor(struct lrs_sched *sched, json_t *status)
 
         device = lrs_dev_hdl_get(&sched->devices, i);
 
-        rc = sched_fetch_device_status(device, device_status);
-        if (rc)
-            LOG_GOTO(free_device_status, rc, "Failed to get device status");
+        sched_fetch_device_status(device, device_status);
 
         rc = json_array_append_new(status, device_status);
         if (rc == -1)

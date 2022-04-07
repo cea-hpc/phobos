@@ -1373,6 +1373,7 @@ class DirOptHandler(MediaOptHandler):
                               len(resources) - valid_count, len(resources))
             sys.exit(abs(rc))
 
+
 class DriveStatus(CLIManagedResourceMixin):
     """Wrapper class to use dump_object_list"""
 
@@ -1380,18 +1381,13 @@ class DriveStatus(CLIManagedResourceMixin):
         if not values:
             return
 
-        self.name = values["name"]
-        self.device = values["device"]
-        self.serial = values["serial"]
-        self.address = values["address"]
-        if "media" in values.keys():
-            self.mount_path = values["mount_path"]
-            self.media = values["media"]
-            self.ongoing_io = values["ongoing_io"]
-        else:
-            self.mount_path = ""
-            self.media = ""
-            self.ongoing_io = ""
+        self.name = values.get("name", "")
+        self.device = values.get("device", "")
+        self.serial = values.get("serial", "")
+        self.address = values.get("address", "")
+        self.mount_path = values.get("mount_path", "")
+        self.media = values.get("media", "")
+        self.ongoing_io = values.get("ongoing_io", "")
 
     def get_display_fields(self, max_width=None):
         """Return a dict of available fields and optional display formatters."""
