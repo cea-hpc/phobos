@@ -317,12 +317,7 @@ static int cancel_response(struct resp_container *respc)
 {
     pho_resp_t *resp = respc->resp;
 
-    if (pho_response_is_error(resp) ||
-        pho_response_is_release(resp) ||
-        /* responses to synchronous operations must not be converted to errors
-         */
-        pho_response_is_format(resp) ||
-        pho_response_is_notify(resp))
+    if (!pho_response_is_read(resp) && !pho_response_is_write(resp))
         return 0;
 
     notify_device_request_is_canceled(respc);
