@@ -369,13 +369,15 @@ bool tags_in(const struct tags *haystack, const struct tags *needle)
 int str2tags(const char *tag_str, struct tags *tags)
 {
     size_t n_alias_tags = 0;
-    size_t i = tags->n_tags;
     char *parse_tag_str;
     char *single_tag;
     char *saveptr;
+    size_t i;
 
     if (tag_str == NULL || tags == NULL)
         return 0;
+
+    i = tags->n_tags;
 
     if (strcmp(tag_str, "") == 0)
         return 0;

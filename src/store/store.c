@@ -1147,7 +1147,7 @@ static int store_dispatch_loop(struct phobos_handle *pho)
             (rand_r(&rand_seed) % (RETRY_SLEEP_MAX_US - RETRY_SLEEP_MIN_US))
             + RETRY_SLEEP_MIN_US;
         pho_info("No resource available to perform IO, retrying in %d ms",
-                sleep_time / 1000);
+                 sleep_time / 1000);
         usleep(sleep_time);
     }
 
