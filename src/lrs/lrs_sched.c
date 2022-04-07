@@ -143,9 +143,13 @@ void sched_req_free(void *reqc)
     if (!cont)
         return;
 
-    destroy_container_params(cont);
-    if (cont->req)
+    if (cont->req) {
+        /* this function frees request specific memory, therefore needs to check
+         * the request type internally and dereferences the cont->req
+         */
+        destroy_container_params(cont);
         pho_srl_request_free(cont->req, true);
+    }
 
     pthread_mutex_destroy(&cont->mutex);
     free(cont);
