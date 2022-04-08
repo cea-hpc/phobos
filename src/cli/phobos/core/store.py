@@ -393,7 +393,7 @@ class XferClient: # pylint: disable=too-many-instance-attributes
             rc, _ = self._store.phobos_xfer(LIBPHOBOS.phobos_getmd,
                                             self.getmd_session, compl_cb)
             if rc:
-                full_oids = ", ".join([str(x.oid) for x in self.getmd_session])
+                full_oids = ", ".join([str(x[0]) for x in self.getmd_session])
                 raise IOError(rc, "Cannot GETMD for objid(s) '%s'" % full_oids)
 
         if self.get_session:
@@ -410,9 +410,8 @@ class XferClient: # pylint: disable=too-many-instance-attributes
                 for desc in self.get_session:
                     os.remove(desc[1])
 
-                full_oids = ", ".join([str(x.oid) for x in self.get_session])
-                full_paths = ", ".join([str(x.data_path) for x
-                                        in self.get_session])
+                full_oids = ", ".join([str(x[0]) for x in self.get_session])
+                full_paths = ", ".join([str(x[1]) for x in self.get_session])
                 raise IOError(rc, "Cannot GET objid(s) '%s' to '%s'" %
                               (full_oids, full_paths))
 
@@ -420,9 +419,8 @@ class XferClient: # pylint: disable=too-many-instance-attributes
             rc, _ = self._store.phobos_xfer(LIBPHOBOS.phobos_put,
                                             self.put_session, compl_cb)
             if rc:
-                full_oids = ", ".join([str(x.oid) for x in self.put_session])
-                full_paths = ", ".join([str(x.data_path) for x
-                                        in self.put_session])
+                full_oids = ", ".join([str(x[0]) for x in self.put_session])
+                full_paths = ", ".join([str(x[1]) for x in self.put_session])
                 raise IOError(rc, "Cannot PUT '%s' to objid(s) '%s'" %
                               (full_paths, full_oids))
 
