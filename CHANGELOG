@@ -1,5 +1,11 @@
 # CHANGELOG UPDATES
 
+## 1.94
+
+* The "phobos_admin_format" API function has been modified to be able to send
+multiple format requests in a single call. The medium id provided thus becomes
+an array of medium ids, and the length of that array is added as a parameter.
+
 ## 1.93
 
 * The "simple" layout is no longer available. It cannot be used through the CLI

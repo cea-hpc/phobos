@@ -29,6 +29,8 @@
 #include "phobos_admin.h"
 
 #include <errno.h>
+#include <glib.h>
+#include <limits.h>
 #include <unistd.h>
 
 #include "pho_cfg.h"
@@ -61,12 +63,9 @@ const struct pho_config_item cfg_admin[] = {
 /* Static Communication-related Functions *************************************/
 /* ****************************************************************************/
 
-int _send_and_receive(struct admin_handle *adm, pho_req_t *req,
-                      pho_resp_t **resp)
+static int _send(struct admin_handle *adm, pho_req_t *req)
 {
-    struct pho_comm_data *data_in = NULL;
     struct pho_comm_data data_out;
-    int n_data_in = 0;
     int rc;
 
     data_out = pho_comm_data_init(&adm->comm);
@@ -80,10 +79,20 @@ int _send_and_receive(struct admin_handle *adm, pho_req_t *req,
     if (rc)
         LOG_RETURN(rc, "Cannot send request to LRS");
 
+    return 0;
+}
+
+static int _receive(struct admin_handle *adm, pho_resp_t **resp)
+{
+    struct pho_comm_data *data_in = NULL;
+    int n_data_in = 0;
+    int rc;
+
     rc = pho_comm_recv(&adm->comm, &data_in, &n_data_in);
     if (rc || n_data_in != 1) {
         if (data_in)
             free(data_in->buf.buff);
+
         free(data_in);
         if (rc)
             LOG_RETURN(rc, "Cannot receive responses from LRS");
@@ -98,6 +107,20 @@ int _send_and_receive(struct admin_handle *adm, pho_req_t *req,
         LOG_RETURN(-EINVAL, "The received response cannot be deserialized");
 
     return 0;
+}
+
+int _send_and_receive(struct admin_handle *adm, pho_req_t *req,
+                      pho_resp_t **resp)
+{
+    int rc;
+
+    rc = _send(adm, req);
+    if (rc)
+        return rc;
+
+    rc = _receive(adm, resp);
+
+    return rc;
 }
 
 static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
@@ -588,49 +611,133 @@ int phobos_admin_device_status(struct admin_handle *adm,
     return rc;
 }
 
-int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
-                        enum fs_type fs, bool unlock)
+static int receive_format_response(struct admin_handle *adm,
+                                   const struct pho_id *ids,
+                                   bool *awaiting_resps,
+                                   int n_ids)
 {
     pho_resp_t *resp;
-    pho_req_t req;
-    int rid = 1;
-    int rc;
+    int rc = 0;
 
-    rc = pho_srl_request_format_alloc(&req);
+    rc = _receive(adm, &resp);
     if (rc)
-        LOG_RETURN(rc, "Cannot create format request");
-
-    req.id = rid;
-    req.format->fs = fs;
-    req.format->unlock = unlock;
-    req.format->med_id->family = id->family;
-    req.format->med_id->name = strdup(id->name);
-
-    rc = _send_and_receive(adm, &req, &resp);
-    if (rc)
-        LOG_RETURN(rc, "Error with LRS communication");
+        return rc;
 
     if (pho_response_is_format(resp)) {
-        if (resp->req_id == rid &&
-            (int)resp->format->med_id->family == (int)id->family &&
-            !strcmp(resp->format->med_id->name, id->name)) {
-            pho_debug("Format request succeeded");
-            goto out;
+        if (awaiting_resps[resp->req_id] == false)
+            LOG_GOTO(out, -EPROTO,
+                     "Received unexpected answer for id %d (corresponds to "
+                     "medium '%s')", resp->req_id, ids[resp->req_id].name);
+        else if (resp->req_id < 0 || resp->req_id >= n_ids)
+            LOG_GOTO(out, rc = -EPROTO,
+                     "Received response does not match any emitted request "
+                     "(invalid req_id %d, only sent %d requests)",
+                     resp->req_id, n_ids);
+
+        awaiting_resps[resp->req_id] = false;
+
+        if (resp->req_id < n_ids) {
+            int resp_family = (int) resp->format->med_id->family;
+            char *resp_name = resp->format->med_id->name;
+
+            if (resp_family == ids[resp->req_id].family &&
+                !strcmp(resp_name, ids[resp->req_id].name))
+                pho_debug("Format request for medium '%s' succeeded",
+                          resp_name);
+            else
+                pho_error(rc = -EPROTO,
+                          "Received response does not answer emitted request, "
+                          "expected '%s' (%s), "
+                          "got '%s' (%s) (invalid req_id %d)",
+                          ids[resp->req_id].name,
+                          fs_type2str(ids[resp->req_id].family),
+                          resp_name,
+                          fs_type2str(resp_family),
+                          resp->req_id);
         }
-
-        LOG_GOTO(out, rc = -EINVAL, "Received response does not "
-                                    "answer emitted request");
+    } else if (pho_response_is_error(resp) &&
+               resp->error->req_kind == PHO_REQUEST_KIND__RQ_FORMAT) {
+        pho_error(rc = resp->error->rc, "Format failed for medium '%s'",
+                  ids[resp->req_id].name);
+    } else {
+        pho_error(rc = -EPROTO, "Received invalid response");
     }
-
-    if (pho_response_is_error(resp)) {
-        rc = resp->error->rc;
-        LOG_GOTO(out, rc, "Received error response");
-    }
-
-    pho_error(rc = -EINVAL, "Received invalid response");
 
 out:
     pho_srl_response_free(resp, true);
+
+    return rc;
+}
+
+int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
+                        int n_ids, enum fs_type fs, bool unlock)
+{
+    int n_rq_to_recv = 0;
+    bool *awaiting_resps;
+    pho_req_t req;
+    int rc = 0;
+    int rc2;
+    int i;
+
+    awaiting_resps = malloc(n_ids * sizeof(*awaiting_resps));
+    if (awaiting_resps == NULL)
+        LOG_RETURN(-ENOMEM, "Failed to allocate awaiting_resps array");
+
+    for (i = 0; i < n_ids; i++) {
+        awaiting_resps[i] = false;
+
+        rc2 = pho_srl_request_format_alloc(&req);
+        if (rc2)
+            LOG_GOTO(req_fail, rc2,
+                     "Cannot create format request for medium '%s', will skip",
+                     ids[i].name);
+
+        req.format->med_id->name = strdup(ids[i].name);
+        if (req.format->med_id->name == NULL)
+            LOG_GOTO(format_req_free, rc2 = -ENOMEM,
+                     "Failed to duplicate medium name '%s', will skip",
+                     ids[i].name);
+
+        req.format->fs = fs;
+        req.format->unlock = unlock;
+        req.format->med_id->family = ids[i].family;
+
+        req.id = i;
+
+        rc2 = _send(adm, &req);
+        if (rc2) {
+            rc = rc ? : rc2;
+            pho_error(rc2, "Failed to send format request for medium '%s', "
+                           "will skip", ids[i].name);
+        } else {
+            awaiting_resps[i] = true;
+            n_rq_to_recv++;
+        }
+
+        continue;
+
+format_req_free:
+        pho_srl_request_free(&req, false);
+req_fail:
+        rc = rc ? : rc2;
+    }
+
+    for (i = 0; i < n_rq_to_recv; ++i) {
+        rc2 = receive_format_response(adm, ids, awaiting_resps, n_ids);
+        if (rc2)
+            rc = rc ? : rc2;
+    }
+
+    for (i = 0; i < n_ids; i++) {
+        if (awaiting_resps[i] == true) {
+            rc = rc ? : -ENODATA;
+            pho_error(-ENODATA, "Did not receive a response for medium '%s'",
+                      ids[i].name);
+        }
+    }
+
+    free(awaiting_resps);
+
     return rc;
 }
 

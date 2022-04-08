@@ -76,8 +76,8 @@ class Client(object):
             LIBPHOBOS_ADMIN.phobos_admin_fini(byref(self.handle))
             self.handle = None
 
-    def fs_format(self, medium_id, fs_type, unlock=False):
-        """Format a medium through the LRS layer."""
+    def fs_format(self, media_list, fs_type, unlock=False):
+        """Format media through the LRS layer."""
         fs_type = fs_type.lower()
         if fs_type == 'ltfs':
             rsc_family = PHO_RSC_TAPE
@@ -89,12 +89,17 @@ class Client(object):
             raise EnvironmentError(errno.EOPNOTSUPP,
                                    "Unknown filesystem type '%s'" % fs_type)
 
-        mstruct = Id(rsc_family, name=medium_id)
+        c_id = Id * len(media_list)
+        mstruct = [Id(rsc_family, name=medium_id) for medium_id in media_list]
         rc = LIBPHOBOS_ADMIN.phobos_admin_format(byref(self.handle),
-                                                 byref(mstruct), fs_type_enum,
+                                                 c_id(*mstruct),
+                                                 len(media_list),
+                                                 fs_type_enum,
                                                  unlock)
         if rc:
-            raise EnvironmentError(rc, "Cannot format medium '%s'" % medium_id)
+            raise EnvironmentError(rc,
+                                   "Failed to format every medium in '%s'" %
+                                   str(media_list))
 
     def device_add(self, dev_family, dev_names, keep_locked):
         """Add devices to the LRS."""

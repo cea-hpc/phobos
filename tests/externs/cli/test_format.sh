@@ -21,8 +21,6 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-set -xe
-
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
@@ -30,6 +28,8 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_launch_daemon.sh
 . $test_dir/../../tape_drive.sh
 controlled_store="$test_dir/controlled_store"
+
+set -xe
 
 function setup
 {
@@ -52,7 +52,7 @@ function execute_test_double_format
     local medium=$2
 
     if [[ ${dir_or_tape} == "dir" ]]; then
-        local phobos_format_options="dir format --fs posix --unlock"
+        local phobos_format_options="dir format --unlock"
     else
         local phobos_format_options="tape format --unlock"
     fi
@@ -185,9 +185,61 @@ function test_drive_selection_format
     fi
 }
 
+function assert_formated
+{
+    echo "$1" | grep "$2" | grep "empty" || error "'$2' should be formated"
+}
+
+function test_multiple_formats
+{
+    local dirs=($(mktemp -d /tmp/test.pho.XXXX) $(mktemp -d /tmp/test.pho.XXXX))
+    trap "rm -rf ${dirs[0]} ${dirs[1]}; cleanup" EXIT
+
+    $phobos dir add ${dirs[@]}
+
+    # Test formatting 2 valid dirs return no error
+    $valg_phobos dir format --unlock ${dirs[@]} ||
+        error "Formatting 2 valid directories '$dirs' should have succeeded"
+
+    local output=$($phobos dir list -o all)
+    assert_formated "$output" "${dirs[0]}"
+    assert_formated "$output" "${dirs[1]}"
+
+    dirs+=($(mktemp -d /tmp/test.pho.XXXX))
+    trap "rm -rf ${dirs[0]} ${dirs[1]} ${dirs[2]}; cleanup" EXIT
+
+    # Test formatting 3 dirs with 2 already formatted and 1 non-existing
+    $valg_phobos dir format --unlock ${dirs[@]} &&
+        error "Format with already formatted dirs and a non-existing dir" \
+              "should have failed"
+
+    local output=$($phobos dir list -o all)
+    assert_formated "$output" "${dirs[0]}"
+    assert_formated "$output" "${dirs[1]}"
+    echo "$output" | grep "${dirs[2]}" &&
+        error "'${dirs[2]}' shouldn't be listed"
+
+    $phobos dir add ${dirs[2]}
+
+    # Test formatting 3 dirs with 2 already formatted
+    $valg_phobos dir format --unlock ${dirs[@]} &&
+        error "Format with already formatted dirs should have failed"
+
+    local output="$($phobos dir list -o all)"
+    assert_formated "$output" "${dirs[0]}"
+    assert_formated "$output" "${dirs[1]}"
+    assert_formated "$output" "${dirs[2]}"
+
+    rm -rf ${dirs[@]}
+    trap cleanup EXIT
+}
+
 trap cleanup EXIT
 setup
 test_double_format
+cleanup
+setup
+test_multiple_formats
 if [[ -w /dev/changer ]]; then
     cleanup
     setup

@@ -140,18 +140,19 @@ int phobos_admin_device_status(struct admin_handle *adm, enum rsc_family family,
                                char **status);
 
 /**
- * Load and format a medium to the given fs type.
+ * Load and format media to the given fs type.
  *
  * \param[in]       adm             Admin module handler.
- * \param[in]       id              Medium ID for the medium to format.
+ * \param[in]       ids             List of Medium ID for the media to format.
+ * \param[in]       n_ids           Number of format requested.
  * \param[in]       fs              Filesystem type.
  * \param[in]       unlock          Unlock tape if succesfully formatted.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
  */
-int phobos_admin_format(struct admin_handle *adm, const struct pho_id *id,
-                        enum fs_type fs, bool unlock);
+int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
+                        int n_ids, enum fs_type fs, bool unlock);
 
 /*
  * Ping the daemon to check if it is online or not.

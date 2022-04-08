@@ -120,7 +120,8 @@ static void add_dir_or_drive(struct admin_handle *adm, struct dss_handle *dss,
 
     /* Format and unlock media */
     if (media)
-        ASSERT_RC(phobos_admin_format(adm, &media->rsc.id, PHO_FS_POSIX, true));
+        ASSERT_RC(phobos_admin_format(adm, &media->rsc.id, 1, PHO_FS_POSIX,
+                                      true));
 }
 
 static void add_tape(struct admin_handle *adm, struct dss_handle *dss,
@@ -140,7 +141,7 @@ static void add_tape(struct admin_handle *adm, struct dss_handle *dss,
     ASSERT_RC(dss_media_set(dss, media, 1, DSS_SET_INSERT, 0));
 
     /* This can fail if the tape has already been formatted */
-    phobos_admin_format(adm, &media->rsc.id, PHO_FS_LTFS, true);
+    phobos_admin_format(adm, &media->rsc.id, 1, PHO_FS_LTFS, true);
     free(media->rsc.model);
 }
 

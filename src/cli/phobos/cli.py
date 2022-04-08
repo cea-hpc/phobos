@@ -1185,15 +1185,10 @@ class MediaOptHandler(BaseResourceOptHandler):
             with AdminClient(lrs_required=True) as adm:
                 if unlock:
                     self.logger.debug("Post-unlock enabled")
-                for name in media_list:
-                    self.logger.info("Formatting media '%s'", name)
-                    try:
-                        adm.fs_format(name, fs_type, unlock=unlock)
-                    except EnvironmentError as err:
-                        # XXX add an option to exit on first error
-                        self.logger.error("fs_format: %s",
-                                          env_error_format(err))
-                        sys.exit(abs(err.errno))
+
+                self.logger.info("Formatting media '%s'", media_list)
+                adm.fs_format(media_list, fs_type, unlock=unlock)
+
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
@@ -1458,7 +1453,7 @@ class DriveOptHandler(DeviceOptHandler):
                                  self.params.get('output'))
 
         except EnvironmentError as err:
-            self.logger.error("Cannot read status of drives: %s" %
+            self.logger.error("Cannot read status of drives: %s",
                               env_error_format(err))
             sys.exit(abs(err.errno))
 
