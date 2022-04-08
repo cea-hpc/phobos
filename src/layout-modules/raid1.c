@@ -1412,7 +1412,7 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
             if (rc) {
                 pho_warn("Error %d (%s) when trying to dss locate medium "
                          "(family %s, name %s) of with extent %d raid1 layout "
-                         "locate leans on other extents", rc, strerror(rc),
+                         "locate leans on other extents", -rc, strerror(-rc),
                          rsc_family2str(medium_id->family), medium_id->name, i);
             } else {
                 enodev = false;
