@@ -2999,6 +2999,15 @@ static int sched_handle_notify(struct lrs_sched *sched,
                  "recognized");
     }
 
+    if (!nreq->wait) {
+        if (rc != 0 && rc != -EAGAIN) {
+            pho_error(rc, "Notify failed for '%s'", nreq->rsrc_id->name);
+            rc = 0;
+        }
+
+        return rc;
+    }
+
     if (rc)
         goto err;
 

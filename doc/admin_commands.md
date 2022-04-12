@@ -117,6 +117,13 @@ phobos drive {lock|unlock} <drive_serial|drive_path>
 phobos media {lock|unlock} <media_id>
 ```
 
+The 'lock' and 'unlock' commands are asynchronous by default: the resource
+status is updated in the database, then the daemon is notified for a device
+update.
+
+The 'drive lock' command accepts a --wait option, which waits for the complete
+release of the drive by the daemon before returning.
+
 # Setting access
 Media can be set to accept or reject some types of operation. We distinguish
 three kinds of operation: put (P), get (G) and delete (D).

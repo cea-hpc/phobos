@@ -124,7 +124,7 @@ int _send_and_receive(struct admin_handle *adm, pho_req_t *req,
 }
 
 static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
-                         enum notify_op op)
+                         enum notify_op op, bool need_to_wait)
 {
     pho_resp_t *resp;
     pho_req_t req;
@@ -142,8 +142,16 @@ static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
     req.notify->op = op;
     req.notify->rsrc_id->family = id->family;
     req.notify->rsrc_id->name = strdup(id->name);
+    req.notify->wait = need_to_wait;
 
-    rc = _send_and_receive(adm, &req, &resp);
+    rc = _send(adm, &req);
+    if (rc)
+        LOG_RETURN(rc, "Error with LRS communication");
+
+    if (!need_to_wait)
+        return rc;
+
+    rc = _receive(adm, &resp);
     if (rc)
         LOG_RETURN(rc, "Error with LRS communication");
 
@@ -178,9 +186,8 @@ out:
 static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
                               unsigned int num_dev, bool keep_locked)
 {
-    char host_name[HOST_NAME_MAX + 1];
-    enum rsc_adm_status status;
     struct ldm_dev_state lds = {};
+    enum rsc_adm_status status;
     struct dev_info *devices;
     struct dev_adapter deva;
     char *real_path;
@@ -190,12 +197,6 @@ static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
     rc = get_dev_adapter(dev_ids[0].family, &deva);
     if (rc)
         LOG_RETURN(rc, "Cannot get device adapter");
-
-    rc = gethostname(host_name, HOST_NAME_MAX);
-    if (rc)
-        LOG_RETURN(rc, "Cannot get host name");
-    if (strchr(host_name, '.'))
-        *strchr(host_name, '.') = '\0';
 
     devices = calloc(num_dev, sizeof(*devices));
     if (!devices)
@@ -221,7 +222,9 @@ static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
         devi->rsc.id.family = dev_ids[i].family;
         pho_id_name_set(&devi->rsc.id, lds.lds_serial);
         devi->rsc.adm_status = status;
-        devi->host = host_name;
+        rc = get_allocated_hostname(&devi->host);
+        if (rc)
+            LOG_GOTO(out_free, rc, "Failed to retrieve hostname");
 
         if (lds.lds_model) {
             devi->rsc.model = strdup(lds.lds_model);
@@ -252,6 +255,7 @@ static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
 
 out_free:
     for (i = 0; i < num_dev; ++i) {
+        free(devices[i].host);
         free(devices[i].rsc.model);
         free(devices[i].path);
     }
@@ -306,6 +310,7 @@ static int _device_update_adm_status(struct admin_handle *adm,
                                      struct pho_id *dev_ids, int num_dev,
                                      enum rsc_adm_status status, bool is_forced)
 {
+    const char *hostname = get_hostname();
     bool one_device_not_avail = false;
     struct dev_info *devices;
     int avail_devices = 0;
@@ -324,23 +329,34 @@ static int _device_update_adm_status(struct admin_handle *adm,
             goto out_free;
 
         if (dev_res->rsc.adm_status == status) {
-            pho_warn("Device (path:'%s', name:'%s') is already in the desired "
-                     "state", dev_res->path, dev_res->rsc.id.name);
+            pho_warn("Device (path: '%s', name: '%s') is already in the "
+                     "desired state", dev_res->path, dev_res->rsc.id.name);
             dss_res_free(dev_res, 1);
             continue;
         }
 
-        if (dev_res->lock.hostname) {
+        if (strcmp(dev_res->host, hostname) != 0) {
+            if (dev_res->lock.hostname != NULL) {
+                pho_error(-EBUSY, "Device (path: '%s', name: '%s') is used by "
+                                  "a distant daemon (host: '%s')",
+                          dev_res->path, dev_res->rsc.id.name, dev_res->host);
+                one_device_not_avail = true;
+                dss_res_free(dev_res, 1);
+                continue;
+            }
+        }
+
+        if (dev_res->lock.hostname != NULL) {
             if (!is_forced) {
                 pho_error(-EBUSY,
-                          "Device (path:'%s', name:'%s') is in use by '%s':%d",
+                          "Device (path: '%s', name: '%s') is in use by "
+                          "'%s':%d",
                           dev_res->path, dev_res->rsc.id.name,
                           dev_res->lock.hostname, dev_res->lock.owner);
                 one_device_not_avail = true;
                 dss_res_free(dev_res, 1);
-                continue;
             } else if (status == PHO_RSC_ADM_ST_LOCKED) {
-                pho_warn("Device (path:'%s', name:'%s') is in use. "
+                pho_warn("Device (path: '%s', name: '%s') is in use. "
                          "Administrative locking will not be effective "
                          "immediately", dev_res->path, dev_res->rsc.id.name);
             }
@@ -357,7 +373,7 @@ static int _device_update_adm_status(struct admin_handle *adm,
 
     if (one_device_not_avail)
         LOG_GOTO(out_free, rc = -EBUSY,
-                 "At least one device is in use, use --force");
+                 "At least one device is in use and cannot be notified");
 
     if (avail_devices) {
         rc = dss_device_update_adm_status(&adm->dss, devices, avail_devices);
@@ -449,7 +465,7 @@ int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
     for (i = 0; i < num_dev; ++i) {
         int rc2;
 
-        rc2 = _admin_notify(adm, dev_ids + i, PHO_NTFY_OP_DEVICE_ADD);
+        rc2 = _admin_notify(adm, dev_ids + i, PHO_NTFY_OP_DEVICE_ADD, true);
         if (rc2)
             pho_error(rc2, "Failure during daemon notification for '%s'",
                       dev_ids[i].name);
@@ -521,27 +537,26 @@ out_free:
 }
 
 int phobos_admin_device_lock(struct admin_handle *adm, struct pho_id *dev_ids,
-                             int num_dev, bool is_forced)
+                             int num_dev, bool need_to_wait)
 {
-    int rc;
+    int rc = 0;
     int i;
 
     rc = _device_update_adm_status(adm, dev_ids, num_dev,
-                                   PHO_RSC_ADM_ST_LOCKED, is_forced);
-    if (rc)
+                                   PHO_RSC_ADM_ST_LOCKED, true);
+    if (!adm->daemon_is_online || rc)
         return rc;
-
-    if (!adm->daemon_is_online)
-        return 0;
 
     for (i = 0; i < num_dev; ++i) {
         int rc2;
 
-        rc2 = _admin_notify(adm, dev_ids + i, PHO_NTFY_OP_DEVICE_LOCK);
-        if (rc2)
+        rc2 = _admin_notify(adm, dev_ids + i, PHO_NTFY_OP_DEVICE_LOCK,
+                            need_to_wait);
+        if (rc2) {
             pho_error(rc2, "Failure during daemon notification for '%s'",
                       dev_ids[i].name);
-        rc = rc ? : rc2;
+            rc = rc ? : rc2;
+        }
     }
 
     return rc;
@@ -564,7 +579,7 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
     for (i = 0; i < num_dev; ++i) {
         int rc2;
 
-        rc2 = _admin_notify(adm, dev_ids + i, PHO_NTFY_OP_DEVICE_UNLOCK);
+        rc2 = _admin_notify(adm, dev_ids + i, PHO_NTFY_OP_DEVICE_UNLOCK, true);
         if (rc2)
             pho_error(rc2, "Failure during daemon notification for '%s'",
                       dev_ids[i].name);
