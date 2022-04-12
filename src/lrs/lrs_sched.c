@@ -2849,6 +2849,8 @@ static int sched_handle_format(struct lrs_sched *sched,
         if (!device) {
             pho_verb("Unable to find an available device to format medium '%s'",
                      m.name);
+            format_medium_remove(&sched->ongoing_format,
+                                 reqc->params.format.medium_to_format);
             return -EAGAIN;
         }
     }
