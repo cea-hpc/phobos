@@ -982,7 +982,9 @@ class FormatOptHandler(DSSInteractHandler):
         super(FormatOptHandler, cls).add_options(parser)
         parser.add_argument('--fs', default='ltfs', help='Filesystem type')
         parser.add_argument('-n', '--nb-streams', metavar='STREAMS', type=int,
-                            help='Max number of parallel formatting operations')
+                            default=0,
+                            help='Max number of parallel formatting operations,'
+                                 ' 0 means no limitation (default is 0)')
         parser.add_argument('--unlock', action='store_true',
                             help='Unlock media once it is ready to be written')
         parser.add_argument('res', nargs='+', help='Resource(s) to format')
@@ -1178,6 +1180,7 @@ class MediaOptHandler(BaseResourceOptHandler):
     def exec_format(self):
         """Format media however requested."""
         media_list = NodeSet.fromlist(self.params.get('res'))
+        nb_streams = self.params.get('nb_streams')
         fs_type = self.params.get('fs')
         unlock = self.params.get('unlock')
 
@@ -1187,7 +1190,7 @@ class MediaOptHandler(BaseResourceOptHandler):
                     self.logger.debug("Post-unlock enabled")
 
                 self.logger.info("Formatting media '%s'", media_list)
-                adm.fs_format(media_list, fs_type, unlock=unlock)
+                adm.fs_format(media_list, nb_streams, fs_type, unlock=unlock)
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

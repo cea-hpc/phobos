@@ -6,6 +6,11 @@
 multiple format requests in a single call. The medium id provided thus becomes
 an array of medium ids, and the length of that array is added as a parameter.
 
+* The "phobos_admin_format" API function has been modified to be able to limit
+the number of concurrent format sent to the phobosd. A "nb_streams" parameter
+is added to the parameters of the function, with 0 signifying "send all requests
+at once".
+
 ## 1.93
 
 * The "simple" layout is no longer available. It cannot be used through the CLI

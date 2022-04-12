@@ -234,14 +234,84 @@ function test_multiple_formats
     trap cleanup EXIT
 }
 
+function test_format_nb_streams_loop
+{
+    local nb_dirs=$1
+    local nb_streams=$2
+    local done=0
+    local cnt=0
+
+    shift 2
+    local dirs=($@)
+
+    # Test formatting $nb_dirs dirs but only $nb_streams at a time
+    local output=$($valg_phobos -vv dir format --nb-streams $nb_streams \
+                                               --unlock ${dirs[@]} 2>&1) ||
+        error "Formatting $nb_dirs dirs $nb_streams at a time should have" \
+              "succeeded"
+
+    while IFS= read -r line
+    do
+        if echo "$line" | grep "pho_comm_send" | grep "Sending"; then
+            cnt=$(( cnt + 1 ))
+            if (( cnt > nb_streams )); then
+                error "More than $nb_streams concurrent format ongoing"
+            fi
+        fi
+
+        if echo "$line" | grep "_recv_client" | grep "Received"; then
+            cnt=$(( cnt - 1 ))
+            done=$(( done + 1 ))
+        fi
+    done < <(echo "$output")
+
+    if (( done != nb_dirs )); then
+        error "Not all $nb_dirs dir format ended"
+    fi
+
+}
+
+function test_format_nb_streams
+{
+    local dirs1=(
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+    )
+    local dirs2=(
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+    )
+
+    trap "rm -rf ${dirs1[0]} ${dirs1[1]};
+          rm -rf ${dirs2[0]} ${dirs2[1]} ${dirs2[2]} ${dirs2[3]} ${dirs2[4]};
+          cleanup" EXIT
+
+    $phobos dir add ${dirs1[@]} ${dirs2[@]}
+
+    test_format_nb_streams_loop 2 3 ${dirs1[@]}
+
+    test_format_nb_streams_loop 5 2 ${dirs2[@]}
+
+    rm -rf ${dirs1[@]} ${dirs2[@]}
+    trap cleanup EXIT
+}
+
 trap cleanup EXIT
+
 setup
 test_double_format
 cleanup
 setup
 test_multiple_formats
+cleanup
+setup
+test_format_nb_streams
+cleanup
+
 if [[ -w /dev/changer ]]; then
-    cleanup
     setup
     test_eagain_format
     cleanup

@@ -1073,7 +1073,7 @@ static int dev_format(struct lrs_dev *dev, struct fs_adapter *fsa, bool unlock)
 
     rc = ldm_fs_format(fsa, dev->ld_dev_path, medium->rsc.id.name, &space);
     if (rc)
-        LOG_RETURN(rc, "Cannot format media '%s'", medium->rsc.id.name);
+        LOG_RETURN(rc, "Cannot format medium '%s'", medium->rsc.id.name);
 
     /* Systematically use the media ID as filesystem label */
     strncpy(medium->fs.label, medium->rsc.id.name, sizeof(medium->fs.label));

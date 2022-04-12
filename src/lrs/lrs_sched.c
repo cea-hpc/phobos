@@ -2866,6 +2866,8 @@ err_out:
     if (rc != -EAGAIN) {
         int rc2;
 
+        pho_error(rc, "format: failed to schedule format for medium '%s'",
+                  m.name);
         rc2 = queue_error_response(sched->response_queue, rc, reqc);
         sched_req_free(reqc);
         if (rc2)

@@ -76,7 +76,7 @@ class Client(object):
             LIBPHOBOS_ADMIN.phobos_admin_fini(byref(self.handle))
             self.handle = None
 
-    def fs_format(self, media_list, fs_type, unlock=False):
+    def fs_format(self, media_list, nb_streams, fs_type, unlock=False):
         """Format media through the LRS layer."""
         fs_type = fs_type.lower()
         if fs_type == 'ltfs':
@@ -94,6 +94,7 @@ class Client(object):
         rc = LIBPHOBOS_ADMIN.phobos_admin_format(byref(self.handle),
                                                  c_id(*mstruct),
                                                  len(media_list),
+                                                 nb_streams,
                                                  fs_type_enum,
                                                  unlock)
         if rc:

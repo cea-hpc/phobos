@@ -670,7 +670,7 @@ out:
 }
 
 int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
-                        int n_ids, enum fs_type fs, bool unlock)
+                        int n_ids, int nb_streams, enum fs_type fs, bool unlock)
 {
     int n_rq_to_recv = 0;
     bool *awaiting_resps;
@@ -712,6 +712,14 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
         } else {
             awaiting_resps[i] = true;
             n_rq_to_recv++;
+        }
+
+        if (nb_streams != 0 && n_rq_to_recv >= nb_streams) {
+            rc2 = receive_format_response(adm, ids, awaiting_resps, i);
+            if (rc2)
+                rc = rc ? : rc2;
+
+            n_rq_to_recv--;
         }
 
         continue;
