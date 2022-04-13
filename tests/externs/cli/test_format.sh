@@ -29,6 +29,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
 . $test_dir/../../tape_drive.sh
+controlled_store="$test_dir/controlled_store"
 
 function setup
 {
@@ -70,26 +71,59 @@ function execute_test_double_format
 
 function test_double_format
 {
-    trap cleanup EXIT
-    setup
-
     # Trying to concurrently format the same dir
     local dir=$(mktemp -d /tmp/test_double_format.XXXX)
-    $valg_phobos dir add ${dir}
+    $phobos dir add ${dir}
     set +e
     execute_test_double_format dir ${dir}
 
     if [[ -w /dev/changer ]]; then
         # Trying to concurrently format the same tape
         local tape=$(get_tapes L6 1)
-        $valg_phobos tape add --type lto6 ${tape}
+        $phobos tape add --type lto6 ${tape}
         local drive=$(get_lto_drives 6 1)
-        $valg_phobos drive add --unlock ${drive}
+        $phobos drive add --unlock ${drive}
         execute_test_double_format tape ${tape}
     fi
-
-    cleanup
-    trap EXIT
 }
 
+function test_eagain_format
+{
+    local two_lto6_tapes=( $(get_tapes L6 2 | nodeset -e) )
+    local lto6_drive=$(get_lto_drives 6 1)
+
+    # prepare one drive and one tape
+    $phobos tape add --type lto6 ${two_lto6_tapes[0]}
+    $phobos drive add --unlock ${lto6_drive}
+    $valg_phobos tape format --unlock ${two_lto6_tapes[0]}
+
+    # One put to busy the device
+    $controlled_store put tape &
+    local controlled_pid=$!
+    # Be sure the put request comes to the lrs
+    sleep 1
+
+    # Try to format a busy drive
+    $phobos tape add --type lto6 ${two_lto6_tapes[1]}
+    $valg_phobos tape format --unlock ${two_lto6_tapes[1]} &
+    local format_pid=$!
+
+    # Be sure the format request comes to the lrs
+    sleep 1
+
+    # Stop the put request
+    kill -s USR1 $controlled_pid
+
+    # Check put and format both successfully end
+    wait ${controlled_pid}
+    wait ${format_pid}
+}
+
+trap cleanup EXIT
+setup
 test_double_format
+if [[ -w /dev/changer ]]; then
+    cleanup
+    setup
+    test_eagain_format
+fi
