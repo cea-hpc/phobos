@@ -14,7 +14,7 @@ set -xe
 
 # Create a loopback device for storage
 VTL_STORAGE=/tmp/vtl_storage
-dd if=/dev/zero of=$VTL_STORAGE bs=1M count=5000
+dd if=/dev/zero of=$VTL_STORAGE bs=1M count=8000
 losetup /dev/loop0 $VTL_STORAGE
 mdadm --create /dev/md0 --level=linear --force --raid-devices=1 /dev/loop0
 systemctl restart quadstorvtl
