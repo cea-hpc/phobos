@@ -98,11 +98,12 @@ int pho_comm_open(struct pho_comm_info *ci, const char *sock_path,
                    strlen(sock_path), sizeof(socka.sun_path), sock_path);
 
     if (is_server) {
-        if (access(sock_path, F_OK) != -1) {
-            pho_warn("Socket already exists(%s), will remove the old one",
+        rc = unlink(sock_path);
+        if (!rc)
+            pho_warn("Socket already exists(%s), removed the old one",
                      sock_path);
-            unlink(sock_path);
-        }
+
+        rc = 0;
     } else if (access(sock_path, F_OK) == -1) {
         /* if the client does not see the LRS socket, we return ENOTCONN,
          * then each client will decide if they need the LRS or not.

@@ -559,11 +559,11 @@ static int pho_posix_del(struct pho_ext_loc *loc)
 
 static int pho_posix_open_put(struct pho_io_descr *iod)
 {
-    int                  rc;
-    int                  flags;
-    bool                 file_existed;
-    bool                 file_created = false;
     struct posix_io_ctx *io_ctx;
+    bool file_created = false;
+    bool file_existed = true;
+    int flags;
+    int rc;
 
     io_ctx = iod->iod_ctx;
 
@@ -583,19 +583,11 @@ static int pho_posix_open_put(struct pho_io_descr *iod)
     /* build posix flags */
     flags = pho_flags2open(iod->iod_flags);
 
-    /* testing pre-existing file to know if we need to clean it on error */
-    rc = access(io_ctx->fpath, F_OK);
-    if (rc) {
-        rc = -errno;
-        if (rc != -ENOENT)
-            goto free_io_ctx;
-
+    io_ctx->fd = open(io_ctx->fpath, flags | O_WRONLY, 0660);
+    if (io_ctx->fd < 0 && errno == ENOENT) {
         file_existed = false;
-    } else {
-        file_existed = true;
+        io_ctx->fd = open(io_ctx->fpath, flags | O_CREAT | O_WRONLY, 0660);
     }
-
-    io_ctx->fd = open(io_ctx->fpath, flags | O_CREAT | O_WRONLY, 0660);
     if (io_ctx->fd < 0)
         LOG_GOTO(free_io_ctx, rc = -errno, "open(%s) for write failed",
                  io_ctx->fpath);
