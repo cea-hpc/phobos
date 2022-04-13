@@ -234,7 +234,7 @@ static void test_ldh_add_one_device(void **data)
     assert_non_null(dev);
     assert_string_equal(dev->ld_dss_dev_info->rsc.id.name, "test");
 
-    rc = lrs_dev_hdl_del(handle, 0);
+    rc = lrs_dev_hdl_del(handle, 0, 0);
     assert_return_code(rc, -rc);
     assert_int_equal(handle->ldh_devices->len, 0);
 }

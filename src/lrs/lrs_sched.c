@@ -2344,7 +2344,7 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
 err_lib:
     ldm_lib_close(&lib);
 dev_del:
-    lrs_dev_hdl_del(&sched->devices, sched->devices.ldh_devices->len - 1);
+    lrs_dev_hdl_del(&sched->devices, sched->devices.ldh_devices->len - 1, rc);
 
     return rc;
 }
@@ -2362,7 +2362,7 @@ static int sched_device_lock(struct lrs_sched *sched, const char *name)
         dev = lrs_dev_hdl_get(&sched->devices, i);
 
         if (!strcmp(name, dev->ld_dss_dev_info->rsc.id.name)) {
-            lrs_dev_hdl_del(&sched->devices, i);
+            lrs_dev_hdl_del(&sched->devices, i, 0);
             pho_verb("Removed locked device '%s' from the local database",
                      name);
             return 0;

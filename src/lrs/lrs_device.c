@@ -205,14 +205,14 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
 
     rc = check_and_take_device_lock(sched, dev_list);
     if (rc)
-        lrs_dev_hdl_del(handle, handle->ldh_devices->len);
+        lrs_dev_hdl_del(handle, handle->ldh_devices->len, rc);
 
 free_list:
     dss_res_free(dev_list, dev_count);
     return rc;
 }
 
-int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index)
+int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc)
 {
     struct lrs_dev *dev;
 
@@ -222,7 +222,7 @@ int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index)
     dev = (struct lrs_dev *)g_ptr_array_remove_index_fast(handle->ldh_devices,
                                                           index);
 
-    dev_thread_signal_stop(dev);
+    dev_thread_signal_stop_on_error(dev, rc);
     lrs_dev_info_clean(handle, dev);
 
     return 0;
@@ -267,7 +267,7 @@ int lrs_dev_hdl_load(struct lrs_sched *sched,
 
         rc2 = check_and_take_device_lock(sched, &dev_list[i]);
         if (rc2) {
-            lrs_dev_hdl_del(handle, handle->ldh_devices->len - 1);
+            lrs_dev_hdl_del(handle, handle->ldh_devices->len - 1, rc2);
             rc = rc ? : rc2;
         }
     }

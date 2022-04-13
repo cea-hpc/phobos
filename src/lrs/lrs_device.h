@@ -198,10 +198,11 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
  *
  * \param[in]    handle   initialized device handle
  * \param[in]    index    index of the device to remove from the list
+ * \param[in]    rc       error which caused the thread to stop
  *
  * \return                0 on success, -errno no failure
  */
-int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index);
+int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc);
 
 /**
  * Load all the devices that are attributed to this LRS from the DSS
