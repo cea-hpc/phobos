@@ -148,6 +148,22 @@ struct notify_params {
 };
 
 /**
+ * Structure for a medium in a read or write allocation request
+ */
+struct rwalloc_medium {
+    struct media_info *alloc_medium;    /**< medium to allocate */
+    enum sub_request_status status;     /**< medium request status. */
+};
+
+/**
+ * Parameters of a request container dedicated to a read or write alloc request
+ */
+struct rwalloc_params {
+    struct rwalloc_medium *media;   /**< Array of media to alloc */
+    size_t n_rwalloc_media;         /**< Number of media to alloc */
+};
+
+/**
  * Request container used by the scheduler to transfer information
  * between a request and its response. For now, this information consists
  * in a socket ID.
@@ -161,6 +177,7 @@ struct req_container {
         struct release_params release;
         struct format_params format;
         struct notify_params notify;
+        struct rwalloc_params rwalloc;
     } params;
 };
 
@@ -174,6 +191,15 @@ static inline void destroy_container_params(struct req_container *cont)
         free(cont->params.release.nosync_media);
     } else if (pho_request_is_format(cont->req)) {
         media_info_free(cont->params.format.medium_to_format);
+    } else if (pho_request_is_read(cont->req) ||
+               pho_request_is_write(cont->req)) {
+        struct rwalloc_params *rwalloc_params = &cont->params.rwalloc;
+        size_t index;
+
+        for (index = 0; index < rwalloc_params->n_rwalloc_media; index++)
+            media_info_free(rwalloc_params->media[index].alloc_medium);
+
+        free(rwalloc_params->media);
     }
 }
 
