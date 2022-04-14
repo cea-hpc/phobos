@@ -89,20 +89,20 @@ struct lrs_sched {
 };
 
 /**
- * Enumeration for request/medium synchronization status.
+ * Enumeration for medium request status.
  */
-enum tosync_status {
-    SYNC_TODO,                      /**< Synchronization is requested */
-    SYNC_DONE,                      /**< Synchronization is done */
-    SYNC_ERROR,                     /**< Synchronization failed */
-    SYNC_CANCEL,                    /**< Synchronization canceled */
+enum sub_request_status {
+    SUB_REQUEST_TODO,
+    SUB_REQUEST_DONE,
+    SUB_REQUEST_ERROR,
+    SUB_REQUEST_CANCEL,
 };
 
 /**
  * Internal structure for a to-synchronize medium.
  */
 struct tosync_medium {
-    enum tosync_status status;      /**< Medium synchronization status. */
+    enum sub_request_status status; /**< Medium synchronization status. */
     struct pho_id medium;           /**< Medium ID. */
     size_t written_size;            /**< Written size on the medium to sync. */
 };

@@ -129,18 +129,18 @@ err_dev:
     return rc;
 }
 
-/* request_tosync_free can be used as glib callback */
-static void request_tosync_free(struct request_tosync *req_tosync)
+/* sub_request_free can be used as glib callback */
+static void sub_request_free(struct sub_request *sub_req)
 {
-    sched_req_free(req_tosync->reqc);
-    free(req_tosync);
+    sched_req_free(sub_req->reqc);
+    free(sub_req);
 }
 
-static void request_tosync_free_wrapper(gpointer _req, gpointer _null_user_data)
+static void sub_request_free_wrapper(gpointer sub_req, gpointer _null_user_data)
 {
     (void)_null_user_data;
 
-    request_tosync_free((struct request_tosync *)_req);
+    sub_request_free((struct sub_request *)sub_req);
 }
 
 static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
@@ -152,7 +152,7 @@ static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
     ldm_dev_state_fini(&dev->ld_sys_dev_state);
 
     g_ptr_array_foreach(dev->ld_sync_params.tosync_array,
-                        request_tosync_free_wrapper, NULL);
+                        sub_request_free_wrapper, NULL);
     g_ptr_array_unref(dev->ld_sync_params.tosync_array);
     sched_req_free(dev->ld_format_request);
     dev_info_free(dev->ld_dss_dev_info, 1);
@@ -516,7 +516,7 @@ static inline bool is_request_tosync_ended(struct req_container *req)
     size_t i;
 
     for (i = 0; i < req->params.release.n_tosync_media; i++)
-        if (req->params.release.tosync_media[i].status == SYNC_TODO)
+        if (req->params.release.tosync_media[i].status == SUB_REQUEST_TODO)
             return false;
 
     return true;
@@ -533,7 +533,7 @@ int clean_tosync_array(struct lrs_dev *dev, int rc)
 
     MUTEX_LOCK(&dev->ld_mutex);
     while (tosync_array->len) {
-        struct request_tosync *req = tosync_array->pdata[tosync_array->len - 1];
+        struct sub_request *req = tosync_array->pdata[tosync_array->len - 1];
         struct tosync_medium *tosync_medium =
             &req->reqc->params.release.tosync_media[req->medium_index];
         bool should_send_error = false;
@@ -545,15 +545,15 @@ int clean_tosync_array(struct lrs_dev *dev, int rc)
         MUTEX_LOCK(&req->reqc->mutex);
 
         if (!rc) {
-            tosync_medium->status = SYNC_DONE;
+            tosync_medium->status = SUB_REQUEST_DONE;
         } else {
             if (!req->reqc->params.release.rc) {
-                /* this is the first SYNC_ERROR of this request */
+                /* this is the first ERROR of this request */
                 req->reqc->params.release.rc = rc;
                 should_send_error = true;
             }
 
-            tosync_medium->status = SYNC_ERROR;
+            tosync_medium->status = SUB_REQUEST_ERROR;
         }
 
         is_tosync_ended = is_request_tosync_ended(req->reqc);
@@ -576,7 +576,7 @@ int clean_tosync_array(struct lrs_dev *dev, int rc)
             req->reqc = NULL;   /* only the last device free reqc */
         }
 
-        request_tosync_free(req);
+        sub_request_free(req);
     }
 
     /* sync operation acknowledgement */
@@ -613,7 +613,7 @@ int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
                             size_t medium_index)
 {
     struct sync_params *sync_params = &dev->ld_sync_params;
-    struct request_tosync *req_tosync;
+    struct sub_request *req_tosync;
 
     req_tosync = malloc(sizeof(*req_tosync));
     if (!req_tosync)
@@ -650,7 +650,7 @@ static void update_queue_oldest_tosync(struct lrs_dev *dev)
     }
 
     for (i = 0; i < tosync_array->len; i++) {
-        struct request_tosync *req_tosync = tosync_array->pdata[i];
+        struct sub_request *req_tosync = tosync_array->pdata[i];
 
         update_oldest_tosync(&dev->ld_sync_params.oldest_tosync,
                              req_tosync->reqc->received_at);
@@ -666,7 +666,7 @@ static void dev_check_sync_cancel(struct lrs_dev *dev)
 
     MUTEX_LOCK(&dev->ld_mutex);
     for (i = tosync_array->len - 1; i >= 0; i--) {
-        struct request_tosync *req_tosync = tosync_array->pdata[i];
+        struct sub_request *req_tosync = tosync_array->pdata[i];
         bool is_tosync_ended = false;
 
         MUTEX_LOCK(&req_tosync->reqc->mutex);
@@ -683,14 +683,14 @@ static void dev_check_sync_cancel(struct lrs_dev *dev)
             dev->ld_sync_params.tosync_size -= tosync_medium->written_size;
             need_oldest_update = true;
 
-            tosync_medium->status = SYNC_CANCEL;
+            tosync_medium->status = SUB_REQUEST_CANCEL;
             is_tosync_ended = is_request_tosync_ended(req_tosync->reqc);
         }
 
         MUTEX_UNLOCK(&req_tosync->reqc->mutex);
 
         if (is_tosync_ended)
-            request_tosync_free(req_tosync);
+            sub_request_free(req_tosync);
     }
 
     if (need_oldest_update)

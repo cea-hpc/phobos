@@ -2560,7 +2560,7 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
             goto unlock;
 
         /* manage error */
-        reqc->params.release.tosync_media[i].status = SYNC_ERROR;
+        reqc->params.release.tosync_media[i].status = SUB_REQUEST_ERROR;
         rc2 = queue_error_response(sched->response_queue,
                                    reqc->params.release.rc,
                                    reqc);
@@ -2570,7 +2570,8 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
             size_t j;
 
             for (j = i + 1; j < reqc->params.release.n_tosync_media; j++)
-                reqc->params.release.tosync_media[j].status = SYNC_CANCEL;
+                reqc->params.release.tosync_media[j].status =
+                    SUB_REQUEST_CANCEL;
         }
 
 unlock:

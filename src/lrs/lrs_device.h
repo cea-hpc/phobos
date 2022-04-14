@@ -99,11 +99,11 @@ struct thread_info {
                                               */
 };
 
-/** Elements pushed into the tosync_array of a device */
-struct request_tosync {
+/** Request pushed to a device */
+struct sub_request {
     struct req_container *reqc;
-    size_t medium_index; /**< index of the medium in the tosync_media array of
-                           *  the release_params struct of the reqc
+    size_t medium_index; /**< index of the medium in reqc that this device
+                           *  must handle
                            */
 };
 

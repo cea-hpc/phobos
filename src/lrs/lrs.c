@@ -239,7 +239,7 @@ static int _init_release_container(struct req_container *req_cont)
     for (i = 0; i < req_cont->req->release->n_media; ++i) {
         media = req_cont->req->release->media[i];
         if (media->to_sync) {
-            tosync_media[tosync_media_index].status = SYNC_TODO;
+            tosync_media[tosync_media_index].status = SUB_REQUEST_TODO;
             tosync_media[tosync_media_index].medium.family =
                 (enum rsc_family)media->med_id->family;
             tosync_media[tosync_media_index].written_size = media->size_written;
