@@ -105,6 +105,7 @@ struct sub_request {
     size_t medium_index; /**< index of the medium in reqc that this device
                            *  must handle
                            */
+    bool failure_on_medium; /**< an error occurs on medium */
 };
 
 /**

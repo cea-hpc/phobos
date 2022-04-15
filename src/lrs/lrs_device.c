@@ -886,6 +886,9 @@ static int dev_umount(struct lrs_dev *dev)
                  dev->ld_dev_path, dev->ld_mnt_path);
 
 out:
+    if (rc)
+        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
+
     return rc;
 }
 
@@ -971,6 +974,8 @@ out:
 
         media_info_free(dev->ld_dss_media_info);
         dev->ld_dss_media_info = NULL;
+    } else {
+        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
     }
 
     return rc;
@@ -1041,16 +1046,25 @@ static void fail_release_free_medium(struct dss_handle *dss,
  * the DSS, and freed. WARNING: if we cannot set it to failed into the DSS, the
  * medium DSS lock is not released
  *
+ * @param[in]   release_medium_on_dev_only_failure
+ *                              If true, release and free the medium on a
+ *                              dev-only failure. If false, medium is kept to be
+ *                              reused later.
  * @param[out]  failure_on_dev  Return false if no error or error not due to the
  *                              device, return true if there is an error due to
- *                              the device
+ *                              the device.
+ * @param[out]  failure_on_medium
+ *                              Return false if no error or error not due to the
+ *                              medium, return true if there is an error due to
+ *                              the medium.
  *
  * @return 0 on success, -error number on error. -EBUSY is returned when a
  * drive to drive medium movement was prevented by the library or if the device
  * is empty.
  */
 static int dev_load(struct lrs_dev *dev, struct media_info *medium,
-                    bool *failure_on_dev)
+                    bool release_medium_on_dev_only_failure,
+                    bool *failure_on_dev, bool *failure_on_medium)
 {
     struct lib_item_addr medium_addr;
     struct lib_adapter lib;
@@ -1060,25 +1074,32 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
     ENTRY;
 
     *failure_on_dev = false;
+    *failure_on_medium = false;
     pho_verb("Loading '%s' into '%s'", medium->rsc.id.name, dev->ld_dev_path);
 
     /* get handle to the library depending on device type */
     rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib);
     if (rc) {
         *failure_on_dev = true;
-        rc2 = dss_medium_release(&dev->ld_device_thread.ld_dss,
-                                 dev->ld_dss_media_info);
-        if (rc2)
-            pho_error(rc2, "Error when releasing a medium during device unload "
-                      "error");
+        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
+        if (release_medium_on_dev_only_failure) {
+            rc2 = dss_medium_release(&dev->ld_device_thread.ld_dss,
+                                     dev->ld_dss_media_info);
+            if (rc2)
+                pho_error(rc2,
+                          "Error when releasing a medium during device load "
+                          "error");
 
-        media_info_free(medium);
+            media_info_free(medium);
+        }
+
         return rc;
     }
 
     /* lookup the requested medium */
     rc = ldm_lib_media_lookup(&lib, medium->rsc.id.name, &medium_addr);
     if (rc) {
+        *failure_on_medium = true;
         fail_release_free_medium(&dev->ld_device_thread.ld_dss, medium);
         LOG_GOTO(out_close, rc, "Media lookup failed");
     }
@@ -1105,8 +1126,10 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
          *  - consider maintaining lists of errors to diagnose and decide who to
          *    exclude from the cool game.
          */
-        fail_release_free_medium(&dev->ld_device_thread.ld_dss, medium);
+        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         *failure_on_dev = true;
+        *failure_on_medium = true;
+        fail_release_free_medium(&dev->ld_device_thread.ld_dss, medium);
         LOG_GOTO(out_close, rc, "Media move failed");
     }
 
@@ -1119,6 +1142,7 @@ out_close:
     rc2 = ldm_lib_close(&lib);
     if (rc2) {
         *failure_on_dev = true;
+        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         pho_error(rc2, "Unable to close lib");
         rc = rc ? : rc2;
     }
@@ -1255,7 +1279,8 @@ static int dev_handle_format(struct lrs_dev *dev)
                      medium_to_format->rsc.id.name);
         }
 
-        rc = dev_load(dev, medium_to_format, &failure_on_dev);
+        rc = dev_load(dev, medium_to_format, true, &failure_on_dev,
+                      &dev->ld_sub_request->failure_on_medium);
         if (rc == -EBUSY) {
             pho_warn("Trying to load a busy medium to format, try again later");
             return 0;
@@ -1360,7 +1385,6 @@ static bool locked_cancel_rwalloc_on_error(struct sub_request *sub_request,
  * @return  True if there was an error and the medium is cancelled, false
  *          otherwise.
  */
-__attribute__((unused))
 static bool cancel_rwalloc_on_error(struct sub_request *sub_request)
 {
     bool ended = false;
@@ -1391,7 +1415,6 @@ static bool cancel_rwalloc_on_error(struct sub_request *sub_request)
  *
  * @return 0 on success, a negative error code on failure
  */
-__attribute__((unused))
 static int fill_rwalloc_resp_container(struct lrs_dev *dev,
                                        struct sub_request *sub_request)
 {
@@ -1448,18 +1471,392 @@ out_clean_dev:
     return rc;
 }
 
-static int dev_handle_read(struct lrs_dev *dev)
+static bool sub_request_can_be_requeued(struct sub_request *sub_request)
 {
-    /* IMPLEMENTATION IS COMING SOON */
-    (void)dev;
-    return 0;
+    struct req_container *reqc = sub_request->reqc;
+
+    if (pho_request_is_write(reqc->req))
+        return true;
+
+    if (!sub_request->failure_on_medium)
+        return true;
+
+    if (reqc->params.rwalloc.next_medium_to_read < reqc->req->ralloc->n_med_ids)
+        return true;
+
+    return false;
 }
 
-static int dev_handle_write(struct lrs_dev *dev)
+/* Called with lock on reqc */
+static void rwalloc_cancel_devices(struct req_container *reqc)
 {
-    /* IMPLEMENTATION IS COMING SOON */
-    (void)dev;
-    return 0;
+    bool is_write = pho_request_is_write(reqc->req);
+    size_t i;
+
+    for (i = 0; i < reqc->params.rwalloc.n_media; i++) {
+        if (reqc->params.rwalloc.media[i].status == SUB_REQUEST_DONE) {
+            struct resp_container *respc = reqc->params.rwalloc.respc;
+            pho_resp_t *resp = respc->resp;
+
+            reqc->params.rwalloc.media[i].status = SUB_REQUEST_CANCEL;
+            respc->devices[i]->ld_ongoing_io = false;
+            respc->devices[i] = NULL;
+            if (is_write) {
+                pho_resp_write_elt_t *wresp = resp->walloc->media[i];
+
+                free(wresp->root_path);
+                wresp->root_path = NULL;
+                free(wresp->med_id->name);
+                wresp->med_id->name = NULL;
+            } else {
+                pho_resp_read_elt_t *rresp = resp->ralloc->media[i];
+
+                free(rresp->root_path);
+                rresp->root_path = NULL;
+                free(rresp->med_id->name);
+                rresp->med_id->name = NULL;
+            }
+        }
+    }
+}
+
+/**
+ * Set sub_request result in request
+ *
+ * If request is ended, a response is queued and the request is freed and set
+ * to NULL.
+ *
+ * If rc is not NULL, request is requeued as an error in sched unless we face an
+ * error on a medium for a read alloc request with no more available medium.
+ *
+ * Unless the request is requeued on error with no error on the medium, the
+ * medium of this sub_request is freed and set to NULL in the request.
+ *
+ * @param[in]   dev                     device
+ * @param[in]   sub_request             rwalloc sub_request in which we set the
+ *                                      result
+ * @param[in]   sub_request_rc          return code (0 means "done" with no
+ *                                      error, different from 0 means we faced
+ *                                      an error)
+ * @param[out]  sub_request_requeued    set to true if sub_request is requeued
+ *                                      in the scheduler
+ * @param[out]  canceled                Set to true if the sub_request is
+ *                                      canceled when filling results
+ *
+ * @return  a negative error code on failure
+ */
+static int handle_rwalloc_sub_request_result(struct lrs_dev *dev,
+                                             struct sub_request *sub_request,
+                                             int sub_request_rc,
+                                             bool *sub_request_requeued,
+                                             bool *canceled)
+{
+    struct req_container *reqc = sub_request->reqc;
+    struct rwalloc_medium  *rwalloc_medium;
+    bool free_medium = true;
+    bool ended = false;
+    int rc = 0;
+
+    *sub_request_requeued = false;
+    *canceled = false;
+    MUTEX_LOCK(&reqc->mutex);
+    rwalloc_medium = &reqc->params.rwalloc.media[sub_request->medium_index];
+    *canceled = locked_cancel_rwalloc_on_error(sub_request, &ended);
+    if (*canceled)
+        goto out_free;
+
+    if (!sub_request_rc) {
+        rwalloc_medium->status = SUB_REQUEST_DONE;
+        rc = fill_rwalloc_resp_container(dev, sub_request);
+        if (!rc)
+            goto try_send_response;
+
+        rwalloc_medium->status = SUB_REQUEST_TODO;
+        sub_request_rc = rc;
+    }
+
+    /* sub_request_rc is not null */
+    if (sub_request_can_be_requeued(sub_request)) {
+        /* requeue failed request in the scheduler */
+        *sub_request_requeued = true;
+        if (!sub_request->failure_on_medium)
+            free_medium = false;
+
+        tsqueue_push(dev->sched_retry_queue, sub_request);
+        goto out_free;
+    } else {
+        /* First fatal error on rwalloc */
+        reqc->params.rwalloc.rc = sub_request_rc;
+        rwalloc_medium->status = SUB_REQUEST_ERROR;
+        rc = queue_error_response(dev->ld_response_queue, sub_request_rc,
+                                  sub_request->reqc);
+        rwalloc_cancel_devices(reqc);
+    }
+
+try_send_response:
+    ended = is_rwalloc_ended(reqc);
+    if (!sub_request_rc && ended) {
+        tsqueue_push(dev->ld_response_queue, reqc->params.rwalloc.respc);
+        reqc->params.rwalloc.respc = NULL;
+    }
+
+out_free:
+    if (free_medium) {
+        media_info_free(rwalloc_medium->alloc_medium);
+        rwalloc_medium->alloc_medium = NULL;
+    }
+
+    MUTEX_UNLOCK(&reqc->mutex);
+    if (ended) {
+        sched_req_free(reqc);
+        sub_request->reqc = NULL;
+    }
+
+    return rc;
+}
+
+/**
+ * Build a mount path for the given identifier.
+ *
+ * @param[in] id    Unique drive identified on the host.
+ *
+ * @return The result must be released by the caller using free(3).
+ */
+static char *mount_point(const char *id)
+{
+    const char *mnt_cfg;
+    char *mnt_out;
+
+    mnt_cfg = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, mount_prefix);
+    if (mnt_cfg == NULL)
+        return NULL;
+
+    /* mount the device as PHO_MNT_PREFIX<id> */
+    if (asprintf(&mnt_out, "%s%s", mnt_cfg, id) < 0)
+        return NULL;
+
+    return mnt_out;
+}
+
+/**
+ * Mount the device's loaded medium
+ *
+ * @param[in] dev   Device already containing a loaded medium
+ *
+ * @return 0 on success, -error number on error.
+ */
+static int dev_mount(struct lrs_dev *dev)
+{
+    struct fs_adapter fsa;
+    char *mnt_root;
+    const char *id;
+    int rc;
+
+    rc = get_fs_adapter(dev->ld_dss_media_info->fs.type, &fsa);
+    if (rc)
+        LOG_RETURN(rc, "Unable to get fs adapter to mount a medium");
+
+    rc = ldm_fs_mounted(&fsa, dev->ld_dev_path, dev->ld_mnt_path,
+                        sizeof(dev->ld_mnt_path));
+    if (rc == 0) {
+        dev->ld_op_status = PHO_DEV_OP_ST_MOUNTED;
+        return 0;
+    }
+
+    /**
+     * @TODO If library indicates a medium is in the drive but the drive
+     * doesn't, we need to query the drive to load the tape.
+     */
+
+    id = basename(dev->ld_dev_path);
+    if (id == NULL)
+        LOG_RETURN(-EINVAL, "Unable to get dev path basename");
+
+    /* mount the device as PHO_MNT_PREFIX<id> */
+    mnt_root = mount_point(id);
+    if (!mnt_root)
+        LOG_RETURN(-ENOMEM, "Unable to get mount point of %s", id);
+
+    pho_info("mount: device '%s' as '%s'", dev->ld_dev_path, mnt_root);
+
+    rc = ldm_fs_mount(&fsa, dev->ld_dev_path, mnt_root,
+                      dev->ld_dss_media_info->fs.label);
+    if (rc)
+        LOG_GOTO(out_free, rc, "Failed to mount device '%s'",
+                 dev->ld_dev_path);
+
+    /* update device state and set mount point */
+    dev->ld_op_status = PHO_DEV_OP_ST_MOUNTED;
+    strncpy(dev->ld_mnt_path, mnt_root, sizeof(dev->ld_mnt_path));
+    dev->ld_mnt_path[sizeof(dev->ld_mnt_path) - 1] = '\0';
+
+out_free:
+    free(mnt_root);
+    return rc;
+}
+
+static bool dev_mount_is_writable(const char *fs_root, enum fs_type fs_type)
+{
+    struct ldm_fs_space fs_info = {0};
+    struct fs_adapter fsa;
+    int rc;
+
+    rc = get_fs_adapter(fs_type, &fsa);
+    if (rc)
+        LOG_RETURN(rc, "No FS adapter found for '%s' (type %d)",
+                   fs_root, fs_type);
+
+    rc = ldm_fs_df(&fsa, fs_root, &fs_info);
+    if (rc)
+        LOG_RETURN(rc, "Cannot retrieve media usage information");
+
+    return !(fs_info.spc_flags & PHO_FS_READONLY);
+}
+
+static int dev_handle_read_write(struct lrs_dev *dev)
+{
+    struct sub_request *sub_request = dev->ld_sub_request;
+    struct req_container *reqc = sub_request->reqc;
+    struct media_info *medium_to_alloc;
+    bool sub_request_requeued = false;
+    bool failure_on_device = false;
+    bool io_ended = false;
+    bool cancel = false;
+    int rc = 0;
+    int rc2;
+
+    if (cancel_rwalloc_on_error(sub_request)) {
+        io_ended = true;
+        goto out_free;
+    }
+
+    medium_to_alloc =
+        reqc->params.rwalloc.media[sub_request->medium_index].alloc_medium;
+    /* using current medium */
+    if (!medium_to_alloc) {
+        if (dev->ld_op_status == PHO_DEV_OP_ST_MOUNTED) {
+            goto alloc_result;
+        } else if (dev->ld_op_status == PHO_DEV_OP_ST_LOADED) {
+            goto mount;
+        } else {
+            sub_request->failure_on_medium = true;
+            io_ended = true;
+            LOG_GOTO(alloc_result, rc = -EINVAL,
+                     "rwalloc with no medium to a device with no loaded nor "
+                     "mounted medium");
+        }
+    }
+
+    rc = dev_empty(dev);
+    if (rc) {
+        pho_error(rc, "Error when emptying device %s to %s on medium %s",
+                  dev->ld_dss_dev_info->rsc.id.name,
+                  pho_srl_request_kind_str(reqc->req),
+                  medium_to_alloc->rsc.id.name);
+        failure_on_device = true;
+        io_ended = true;
+        goto alloc_result;
+    }
+
+    /*
+     * We call dev_load with release_medium_on_dev_only_failure at false
+     * because the request will be pushed to the retry queue of the sched
+     * with an already locked medium ready to be use in a new device.
+     */
+    rc = dev_load(dev, medium_to_alloc, false, &failure_on_device,
+                  &sub_request->failure_on_medium);
+    if (rc == -EBUSY) {
+        pho_warn("Trying to load a busy medium to %s, try again later",
+                 pho_srl_request_kind_str(reqc->req));
+        return 0;
+    }
+
+    if (!rc || sub_request->failure_on_medium)
+        reqc->params.rwalloc.media[sub_request->medium_index].alloc_medium =
+            NULL;
+
+    if (rc) {
+        io_ended = true;
+        pho_error(rc, "Error when loading medium in device %s to %s it",
+                  dev->ld_dss_dev_info->rsc.id.name,
+                  pho_srl_request_kind_str(reqc->req));
+
+        goto alloc_result;
+    }
+
+mount:
+    rc = dev_mount(dev);
+    if (rc) {
+        failure_on_device = true;
+        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
+        sub_request->failure_on_medium = true;
+        io_ended = true;
+        /* set the medium to failed early to be sure to not reuse it by sched */
+        rc2 = dss_set_medium_to_failed(&dev->ld_device_thread.ld_dss,
+                                       dev->ld_dss_media_info);
+        if (rc2)
+            pho_error(rc2, "Error when setting medium %s to failed",
+                      dev->ld_dss_media_info->rsc.id.name);
+        dev->ld_dss_media_info = NULL;
+        pho_error(rc, "Error when mounting medium in device %s to %s it",
+                  dev->ld_dss_dev_info->rsc.id.name,
+                  pho_srl_request_kind_str(reqc->req));
+    }
+
+    /* LTFS can cunningly mount almost-full tapes as read-only, and so would
+     * damaged disks. Mark the media as full, let it be mounted and try to find
+     * a new one.
+     */
+    if (pho_request_is_write(reqc->req) &&
+        !dev_mount_is_writable(dev->ld_mnt_path,
+                               dev->ld_dss_media_info->fs.type)) {
+        pho_warn("Media '%s' OK but mounted R/O, marking full and retrying...",
+                 dev->ld_dss_media_info->rsc.id.name);
+        sub_request->failure_on_medium = true;
+        io_ended = true;
+        rc = -ENOSPC;
+
+        dev->ld_dss_media_info->fs.status = PHO_FS_STATUS_FULL;
+        rc2 = dss_media_set(&dev->ld_device_thread.ld_dss,
+                            dev->ld_dss_media_info, 1,
+                            DSS_SET_UPDATE, FS_STATUS);
+        if (rc2) {
+            rc = rc2;
+            failure_on_device = true;
+            LOG_RETURN(rc, "Unable to update DSS media '%s' status to FULL",
+                       dev->ld_dss_media_info->rsc.id.name);
+        }
+    }
+
+
+alloc_result:
+    rc2 = handle_rwalloc_sub_request_result(dev, sub_request, rc,
+                                            &sub_request_requeued,
+                                            &cancel);
+    if (cancel)
+        io_ended = true;
+
+    if (rc2) {
+        if (!failure_on_device) {
+            failure_on_device = true;
+            rc = rc2;
+        }
+    }
+
+out_free:
+    if (!sub_request_requeued) {
+        sub_request->reqc = NULL;
+        sub_request_free(dev->ld_sub_request);
+    }
+
+    dev->ld_sub_request = NULL;
+    if (io_ended)
+        dev->ld_ongoing_io = false;
+
+    if (!failure_on_device)
+        return 0;
+    else
+        return rc;
 }
 
 /**
@@ -1723,12 +2120,12 @@ static void *lrs_dev_thread(void *tdata)
         }
 
         if (device->ld_ongoing_io && device->ld_sub_request) {
-            if (pho_request_is_format(device->ld_sub_request->reqc->req))
+            pho_req_t *req = device->ld_sub_request->reqc->req;
+
+            if (pho_request_is_format(req))
                 rc = dev_handle_format(device);
-            else if (pho_request_is_read(device->ld_sub_request->reqc->req))
-                rc = dev_handle_read(device);
-            else if (pho_request_is_write(device->ld_sub_request->reqc->req))
-                rc = dev_handle_write(device);
+            else if (pho_request_is_read(req) || pho_request_is_write(req))
+                rc = dev_handle_read_write(device);
             else
                 pho_error(rc = -EINVAL,
                           "device thread '%s': ld_sub_request wrong type",
