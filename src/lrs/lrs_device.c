@@ -132,6 +132,9 @@ err_dev:
 /* sub_request_free can be used as glib callback */
 static void sub_request_free(struct sub_request *sub_req)
 {
+    if (!sub_req)
+        return;
+
     sched_req_free(sub_req->reqc);
     free(sub_req);
 }
@@ -154,7 +157,7 @@ static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
     g_ptr_array_foreach(dev->ld_sync_params.tosync_array,
                         sub_request_free_wrapper, NULL);
     g_ptr_array_unref(dev->ld_sync_params.tosync_array);
-    sched_req_free(dev->ld_format_request);
+    sub_request_free(dev->ld_sub_request);
     dev_info_free(dev->ld_dss_dev_info, 1);
     dss_fini(&dev->ld_device_thread.ld_dss);
 
@@ -1217,29 +1220,33 @@ send_err:
 
 static int dev_handle_format(struct lrs_dev *dev)
 {
-    struct media_info *medium_to_format =
-        dev->ld_format_request->params.format.medium_to_format;
+    struct media_info *medium_to_format;
+    struct req_container *reqc;
     int rc;
+
+    reqc = dev->ld_sub_request->reqc;
+    medium_to_format = reqc->params.format.medium_to_format;
 
     if (dev->ld_op_status == PHO_DEV_OP_ST_LOADED &&
         !strcmp(dev->ld_dss_media_info->rsc.id.name,
                 medium_to_format->rsc.id.name)) {
         /*
          * medium to format already loaded, use existing dev->ld_dss_media_info,
-         * free  dev->ld_format_request->params.format.medium_to_format
+         * free reqc->params.format.medium_to_format
          */
         pho_verb("medium %s to format is already loaded into device %s",
                  dev->ld_dss_media_info->rsc.id.name,
                  dev->ld_dss_dev_info->rsc.id.name);
         media_info_free(medium_to_format);
-        dev->ld_format_request->params.format.medium_to_format = NULL;
+        reqc->params.format.medium_to_format = NULL;
     } else {
         bool failure_on_dev;
 
         rc = dev_empty(dev);
         if (rc) {
-            tsqueue_push(dev->sched_req_queue, dev->ld_format_request);
-            LOG_GOTO(out_no_req_free, rc,
+            tsqueue_push(dev->sched_req_queue, reqc);
+            dev->ld_sub_request->reqc = NULL;
+            LOG_GOTO(out, rc,
                      "Unable to empty device '%s' to format medium '%s', "
                      "format request is requeued",
                      dev->ld_dss_dev_info->rsc.id.name,
@@ -1252,7 +1259,7 @@ static int dev_handle_format(struct lrs_dev *dev)
             return 0;
         }
 
-        dev->ld_format_request->params.format.medium_to_format = NULL;
+        reqc->params.format.medium_to_format = NULL;
         if (rc) {
             if (failure_on_dev) {
                 LOG_GOTO(out_response, rc, "Error when loading medium to "
@@ -1261,8 +1268,7 @@ static int dev_handle_format(struct lrs_dev *dev)
             } else {
                 pho_error(rc, "Error on medium only when loading to format in "
                           "device %s", dev->ld_dss_dev_info->rsc.id.name);
-                rc = queue_error_response(dev->ld_response_queue, rc,
-                                          dev->ld_format_request);
+                rc = queue_error_response(dev->ld_response_queue, rc, reqc);
                 if (rc)
                     pho_error(rc, "Unable to queue format error response");
 
@@ -1271,32 +1277,41 @@ static int dev_handle_format(struct lrs_dev *dev)
         }
     }
 
-    rc = dev_format(dev, &dev->ld_format_request->params.format.fsa,
-                    dev->ld_format_request->req->format->unlock);
+    rc = dev_format(dev, &reqc->params.format.fsa, reqc->req->format->unlock);
 
 out_response:
     if (rc) {
         int rc2;
 
-        rc2 = queue_error_response(dev->ld_response_queue, rc,
-                                   dev->ld_format_request);
+        rc2 = queue_error_response(dev->ld_response_queue, rc, reqc);
         if (rc2)
             pho_error(rc2, "Unable to queue format error response");
     } else {
-        rc = queue_format_response(dev->ld_response_queue,
-                                   dev->ld_format_request);
+        rc = queue_format_response(dev->ld_response_queue, reqc);
         if (rc)
             pho_error(rc, "Unable to queue format response");
     }
 
 out:
-    sched_req_free(dev->ld_format_request);
-
-out_no_req_free:
-    dev->ld_format_request = NULL;
+    sub_request_free(dev->ld_sub_request);
+    dev->ld_sub_request = NULL;
     dev->ld_ongoing_io = false;
     format_medium_remove(dev->ld_ongoing_format, medium_to_format);
     return rc;
+}
+
+static int dev_handle_read(struct lrs_dev *dev)
+{
+    /* IMPLEMENTATION IS COMING SOON */
+    (void)dev;
+    return 0;
+}
+
+static int dev_handle_write(struct lrs_dev *dev)
+{
+    /* IMPLEMENTATION IS COMING SOON */
+    (void)dev;
+    return 0;
 }
 
 /**
@@ -1311,11 +1326,13 @@ out_no_req_free:
  */
 static void cancel_pending_format(struct lrs_dev *device)
 {
-    struct req_container *format_request = device->ld_format_request;
+    struct req_container *format_request;
     int rc = 0;
 
-    if (!device->ld_format_request)
+    if (!device->ld_sub_request)
         return;
+
+    format_request = device->ld_sub_request->reqc;
 
     if (device->ld_device_thread.ld_status &&
         !format_request->params.format.medium_to_format) {
@@ -1333,7 +1350,7 @@ static void cancel_pending_format(struct lrs_dev *device)
                       "Unable to send error for format request of medium '%s'",
                       format_request->req->format->med_id->name);
 
-        sched_req_free(format_request);
+        sub_request_free(device->ld_sub_request);
     } else {
         if (format_request->params.format.medium_to_format) {
             struct media_info *medium_to_format =
@@ -1364,6 +1381,7 @@ static void cancel_pending_format(struct lrs_dev *device)
 
         if (!rc) {
             tsqueue_push(device->sched_req_queue, format_request);
+            free(device->ld_sub_request);
         } else {
             rc = queue_error_response(device->ld_response_queue, rc,
                                       format_request);
@@ -1372,11 +1390,11 @@ static void cancel_pending_format(struct lrs_dev *device)
                           "Unable to send error to format request of medium "
                           "'%s'", format_request->req->format->med_id->name);
 
-            sched_req_free(format_request);
+            sub_request_free(device->ld_sub_request);
         }
     }
 
-    device->ld_format_request = NULL;
+    device->ld_sub_request = NULL;
 }
 
 /**
@@ -1534,7 +1552,7 @@ static void *lrs_dev_thread(void *tdata)
     thread = &device->ld_device_thread;
 
     while (!ldt_is_stopped(device)) {
-        int rc;
+        int rc = 0;
 
         dev_check_sync_cancel(device);
 
@@ -1555,12 +1573,23 @@ static void *lrs_dev_thread(void *tdata)
             thread->ld_state = LDT_STOPPED;
         }
 
-        if (device->ld_ongoing_io && device->ld_format_request) {
-            rc = dev_handle_format(device);
+        if (device->ld_ongoing_io && device->ld_sub_request) {
+            if (pho_request_is_format(device->ld_sub_request->reqc->req))
+                rc = dev_handle_format(device);
+            else if (pho_request_is_read(device->ld_sub_request->reqc->req))
+                rc = dev_handle_read(device);
+            else if (pho_request_is_write(device->ld_sub_request->reqc->req))
+                rc = dev_handle_write(device);
+            else
+                pho_error(rc = -EINVAL,
+                          "device thread '%s': ld_sub_request wrong type",
+                          device->ld_dss_dev_info->rsc.id.name);
+
             if (rc)
                 LOG_GOTO(end_thread, thread->ld_status = rc,
-                         "device thread '%s': fatal error handling format",
-                         device->ld_dss_dev_info->rsc.id.name);
+                         "device thread '%s': fatal error handling "
+                         "ld_sub_request",
+                          device->ld_dss_dev_info->rsc.id.name);
         }
 
         if (!ldt_is_stopped(device)) {

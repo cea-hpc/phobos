@@ -2836,6 +2836,7 @@ static int sched_handle_format(struct lrs_sched *sched,
                                struct req_container *reqc)
 {
     pho_req_format_t *freq = reqc->req->format;
+    struct sub_request *format_sub_request;
     struct lrs_dev *device = NULL;
     struct pho_id m;
     int rc = 0;
@@ -2928,7 +2929,14 @@ static int sched_handle_format(struct lrs_sched *sched,
         }
     }
 
-    device->ld_format_request = reqc;
+    format_sub_request = malloc(sizeof(*format_sub_request));
+    if (!format_sub_request)
+        LOG_GOTO(remove_format_err_out, rc = -ENOMEM,
+                 "Unable to alloc format sub_request of medium '%s'", m.name);
+
+    format_sub_request->medium_index = 0;
+    format_sub_request->reqc = reqc;
+    device->ld_sub_request = format_sub_request;
     return 0;
 
 remove_format_err_out:

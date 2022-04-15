@@ -143,7 +143,7 @@ struct lrs_dev {
     char                 ld_mnt_path[PATH_MAX]; /**< mount path of the
                                                   * filesystem
                                                   */
-    struct req_container   *ld_format_request;  /**< format request to handle */
+    struct sub_request  *ld_sub_request;        /**< sub request to handle */
     bool                 ld_ongoing_io;         /**< one I/O is ongoing */
     bool                 ld_needs_sync;         /**< medium needs to be sync */
     struct thread_info   ld_device_thread;      /**< thread handling the actions
