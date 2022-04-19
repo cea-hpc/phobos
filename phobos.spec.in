@@ -117,6 +117,30 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_admin.la
 
 %changelog
+* Tue Apr 19 2022 - Yoann Valeri <yoann.valeri@cea.fr> - 1.94-1
+- Release 1.94 (Rhea)
+- Improved documentation on setup, admin commands, object management, listing
+  commands
+- Added thresholds for when to synchronize a medium (time, number of requests
+  and written size). Synchronizations are now done all at once, not one by one
+- LRS is now composed of the duo of threads:
+    * communication and scheduler threads, for communicating with clients and
+      managing a specific family of device/media;
+    * device threads, to manage a device and basic operations regarding a
+      medium. Multiple device/medium can now operate in parallel for operations
+      like mount/umount/load/unload and formats, which do not block the
+      execution of read and write requests anymore
+- Media don't unload when terminating the LRS
+- LRS will wait for every I/O completion before terminating
+- LRS won't stop when a client is disconnected
+- New commands:
+    * drive delete
+    * drive status
+    * lock clean
+- Format manage multiple formats at the same time, and added a parameter to
+  limit the number of concurrent formats
+- Added max-width and no-truncate arguments to object list
+
 * Tue Nov 30 2021 - Patrice Lucas <patrice.lucas@cea.fr> - 1.93-1
 - LRS lock refactoring
 - Added layout parameters to migration
