@@ -58,8 +58,18 @@ and media types*' below for more details.
 Once a media has been added, it needs to be formatted. You can optionally unlock
 the tape when the operation is done, so it becomes usable in production.
 ```
-phobos tape format --unlock 073200L6
+phobos tape format --unlock [073200-073222]L6
 ```
+
+Phobos can format multiple media at the same time (provided there are enough
+devices to do so), and you can limit that number using the `nb-streams` command
+option:
+```
+phobos tape format --unlock --nb-streams 3 [073200-073222]L6
+```
+With this command, a maximum of 3 requests for media formatting will be sent
+at a time, and the client will wait a format is done before sending another.
+If nothing or 0 is specified, no limit is applied.
 
 # Listing resources
 Any device or media can be listed using the 'list' operation. For instance,
