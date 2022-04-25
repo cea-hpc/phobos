@@ -1,8 +1,8 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TYPE dev_family AS ENUM ('disk', 'tape', 'dir');
+CREATE TYPE dev_family AS ENUM ('disk', 'tape', 'dir', 'rados_pool');
 CREATE TYPE adm_status AS ENUM ('locked', 'unlocked', 'failed');
-CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS');
+CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS', 'RADOS');
 CREATE TYPE address_type AS ENUM ('PATH', 'HASH1', 'OPAQUE');
 CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used', 'full');
 CREATE TYPE extent_state AS ENUM ('pending','sync','orphan');

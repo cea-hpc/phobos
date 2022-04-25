@@ -17,7 +17,8 @@ cd "$cur_dir"/..
 
 # compile phobos RPM
 ./autogen.sh
-./configure
+./configure $1
+
 make rpm
 
 # (re-)install RPM

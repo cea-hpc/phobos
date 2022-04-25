@@ -260,8 +260,8 @@ class StoreGetMDHandler(XferOptHandler):
         if not itm:
             return
 
-        for k, v in sorted(itm.items()):
-            res.append('%s=%s' % (k, v))
+        for key, value in sorted(itm.items()):
+            res.append('%s=%s' % (key, value))
 
         print(','.join(res))
 
@@ -1143,6 +1143,46 @@ class MediaOptHandler(BaseResourceOptHandler):
         MediumLocateOptHandler
     ]
 
+    def add_medium(self, medium, tags):
+        """Add media method"""
+        pass
+
+    def add_medium_and_device(self):
+        """Add a new medium and a new device at once"""
+        resources = self.params.get('res')
+        keep_locked = not self.params.get('unlock')
+        tags = self.params.get('tags', [])
+        valid_count = 0
+        rc = 0
+
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                for path in resources:
+                    # Remove any trailing slash
+                    path = path.rstrip('/')
+                    medium_is_added = False
+
+                    try:
+                        medium = MediaInfo(family=self.family, name=path,
+                                           model=None,
+                                           is_adm_locked=keep_locked)
+                        self.add_medium(medium, tags=tags)
+                        medium_is_added = True
+                        adm.device_add(self.family, [path], False)
+                        valid_count += 1
+                    except EnvironmentError as err:
+                        self.logger.error(env_error_format(err))
+                        rc = (err.errno if not rc else rc)
+                        if medium_is_added:
+                            self.client.media.remove(self.family, path)
+                        continue
+
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
+        return (rc, len(resources), valid_count)
+
     def exec_add(self):
         """Add new media."""
         names = NodeSet.fromlist(self.params.get('res'))
@@ -1336,50 +1376,23 @@ class DirOptHandler(MediaOptHandler):
         MediumLocateOptHandler,
     ]
 
+    def add_medium(self, medium, tags):
+        self.client.media.add(medium, 'POSIX', tags=tags)
+
     def exec_add(self):
         """
         Add a new directory.
         Note that this is a special case where we add both a media (storage) and
         a device (mean to access it).
         """
-        resources = self.params.get('res')
-        keep_locked = not self.params.get('unlock')
-        tags = self.params.get('tags', [])
-        valid_count = 0
-        rc = 0
+        rc, nb_dev_to_add, nb_dev_added = self.add_medium_and_device()
 
-        try:
-            with AdminClient(lrs_required=False) as adm:
-                for path in resources:
-                    # Remove any trailing slash
-                    path = path.rstrip('/')
-                    medium_is_added = False
-
-                    try:
-                        medium = MediaInfo(family=self.family, name=path,
-                                           model=None,
-                                           is_adm_locked=keep_locked)
-                        self.client.media.add(medium, 'POSIX', tags=tags)
-                        medium_is_added = True
-                        adm.device_add(self.family, [path], False)
-                        valid_count += 1
-                    except EnvironmentError as err:
-                        self.logger.error(env_error_format(err))
-                        rc = (err.errno if not rc else rc)
-                        if medium_is_added:
-                            self.client.media.remove(self.family, path)
-                        continue
-
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
-            sys.exit(abs(err.errno))
-
-        self.logger.info("Added %d dir(s) successfully", valid_count)
-        if valid_count != len(resources):
-            self.logger.error("Failed to add %d/%d directories",
-                              len(resources) - valid_count, len(resources))
+        if nb_dev_added == nb_dev_to_add:
+            self.logger.info("Added %d dir(s) successfully", nb_dev_added)
+        else:
+            self.logger.error("Failed to add %d/%d dir(s)",
+                              nb_dev_to_add - nb_dev_added, nb_dev_to_add)
             sys.exit(abs(rc))
-
 
 class DriveStatus(CLIManagedResourceMixin):
     """Wrapper class to use dump_object_list"""
@@ -1497,6 +1510,33 @@ class TapeOptHandler(MediaOptHandler):
         TapeSetAccessOptHandler,
         MediumLocateOptHandler,
     ]
+
+class RadosPoolOptHandler(MediaOptHandler):
+    """RADOS pool options and actions."""
+    label = 'rados_pool'
+    descr = 'handle RADOS pools'
+    family = ResourceFamily(ResourceFamily.RSC_RADOS_POOL)
+    verbs = [
+        MediaAddOptHandler,
+    ]
+
+    def add_medium(self, medium, tags):
+        self.client.media.add(medium, 'RADOS', tags=tags)
+
+    def exec_add(self):
+        """
+        Add a new RADOS pool.
+        Note that this is a special case where we add both a media (storage) and
+        a device (mean to access it).
+        """
+        (rc, nb_dev_to_add, nb_dev_added) = self.add_medium_and_device()
+        if nb_dev_added == nb_dev_to_add:
+            self.logger.info("Added %d RADOS pool(s) successfully",
+                             nb_dev_added)
+        else:
+            self.logger.error("Failed to add %d/%d RADOS pools",
+                              nb_dev_to_add - nb_dev_added, nb_dev_to_add)
+            sys.exit(abs(rc))
 
 class ExtentOptHandler(BaseResourceOptHandler):
     """Shared interface for extents."""
@@ -1664,6 +1704,7 @@ class PhobosActionContext(object):
         # Resource interfaces
         DirOptHandler,
         TapeOptHandler,
+        RadosPoolOptHandler,
         DriveOptHandler,
         ObjectOptHandler,
         ExtentOptHandler,

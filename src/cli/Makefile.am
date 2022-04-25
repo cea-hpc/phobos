@@ -33,6 +33,12 @@ EXTRA_DIST=phobos/__init__.py \
 	   scripts/phobos \
 	   setup.py
 
+if RADOS_ENABLED
+RUN_TESTS=./run_tests.sh rados
+else
+RUN_TESTS=./run_tests.sh
+endif
+
 all-local:
 	$(PYTHON) setup.py build --verbose
 
@@ -40,6 +46,6 @@ clean-local:
 	rm -f $(C_MODULES_SO)
 
 check-local: all-local
-	(cd tests; ./run_tests.sh)
+	(cd tests; $(RUN_TESTS))
 
 .PHONY: all-local

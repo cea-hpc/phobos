@@ -67,11 +67,27 @@ CFLAGS="$CFLAGS -I\$(top_srcdir)/src/include"
 AC_ARG_ENABLE( [cli], AS_HELP_STRING([--disable-cli],
                [Do not generate python cli and modules]),
                [enable_cli="$enableval"],[enable_cli="yes"] )
+
 PYTHON=$(which python3)
 AS_IF( [test "x$enable_cli" != "xno"], [
     # Enable python bindings
     AX_PYTHON_DEVEL([>='3.6'])
 ])
+
+AC_ARG_ENABLE( [rados], AS_HELP_STRING([--enable-rados],
+               [Compile with rados modules @<:@check@:>@]),
+               [enable_rados="$enableval"], [enable_rados="no"])
+
+AC_SUBST(HAVE_RADOS, [0])
+# By default RADOS modules are not built
+AS_IF([test "x$enable_rados" = "xyes"],
+      [AC_CHECK_LIB([rados], [rados_create],
+          [AC_SUBST(HAVE_RADOS, [1])
+           AC_DEFINE([RADOS_ENABLED], ["1"], [Define if rados is enabled])],
+          [AC_MSG_ERROR([Librados required, but not found.])
+           enable_rados="no"])])
+
+AM_CONDITIONAL([RADOS_ENABLED], [test "x$enable_rados" = "xyes"])
 
 # Checks for header files.
 AC_HEADER_STDC

@@ -415,21 +415,21 @@ class DeviceAddTest(BasicExecutionTest):
         self.assertEqual(output.strip(), "[]")
 
     def test_dir_add_missing(self):
-        """Add a non-existent directory should raise an error."""
+        """Adding a non-existent directory should raise an error."""
         self.pho_execute(['-v', 'dir', 'add', '/tmp/nonexistentfileAA'],
                          code=errno.ENOENT)
         self.pho_execute(['-v', 'drive', 'add', '/dev/IMBtape0 /dev/IBMtape1'],
                          code=errno.ENOENT)
 
     def test_dir_add_double(self):
-        """Add a directory twice should raise an error."""
+        """Adding a directory twice should raise an error."""
         file = tempfile.NamedTemporaryFile()
         self.pho_execute(['-v', 'dir', 'add', file.name])
         self.pho_execute(['-v', 'dir', 'add', file.name], code=errno.EEXIST)
 
     def test_dir_add_correct_and_missing(self): # pylint: disable=invalid-name
         """
-        Add existing and a non-existent directories should add the correct
+        Adding existing and a non-existent directories should add the correct
         directories and raise an error because of the missing one.
         """
         file1 = tempfile.NamedTemporaryFile()
@@ -442,7 +442,6 @@ class DeviceAddTest(BasicExecutionTest):
         self.assertIn(file1.name, output)
         self.assertNotIn('/tmp/notfileAA', output)
         self.assertIn(file2.name, output)
-
 
 class SyslogTest(BasicExecutionTest):
     """Syslog related tests"""

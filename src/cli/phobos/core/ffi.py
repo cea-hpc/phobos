@@ -33,8 +33,8 @@ from enum import IntEnum
 
 from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
-                               PHO_RSC_DIR, PHO_RSC_TAPE, PHO_TIMEVAL_MAX_LEN,
-                               fs_type2str, fs_status2str,
+                               PHO_RSC_DIR, PHO_RSC_TAPE, PHO_RSC_RADOS_POOL,
+                               PHO_TIMEVAL_MAX_LEN, fs_type2str, fs_status2str,
                                rsc_adm_status2str, rsc_family2str)
 
 LIBPHOBOS_NAME = "libphobos_store.so"
@@ -45,7 +45,7 @@ LIBPHOBOS_ADMIN = CDLL(LIBPHOBOS_ADMIN_NAME)
 
 class CLIManagedResourceMixin(object):
     """Interface for objects directly exposed/manipulated by the CLI."""
-    def get_display_fields(self, max_width=None):
+    def get_display_fields(self, max_width):
         """Return a dict of available fields and optional display formatters."""
         raise NotImplementedError("Abstract method subclasses must implement.")
 
@@ -192,6 +192,7 @@ class ResourceFamily(IntEnum):
     """Resource family enumeration."""
     RSC_TAPE = PHO_RSC_TAPE
     RSC_DIR = PHO_RSC_DIR
+    RSC_RADOS_POOL = PHO_RSC_RADOS_POOL
 
     def __str__(self):
         return rsc_family2str(self.value)
@@ -535,6 +536,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             self._tags.free()
 
 def truncate_user_md(user_md_str, max_width):
+    """Truncate user_md."""
     # we check that 'obj' (here, the user_md) is not None because if it
     # is, that means the object has no user_md, and there is no need to
     # truncate or print anything

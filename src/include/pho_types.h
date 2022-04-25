@@ -140,13 +140,15 @@ enum lib_type {
 enum fs_type {
     PHO_FS_INVAL = -1,
     PHO_FS_POSIX = 0, /* any POSIX filesystem (no specific feature) */
-    PHO_FS_LTFS,
+    PHO_FS_LTFS  = 1,
+    PHO_FS_RADOS = 2,
     PHO_FS_LAST,
 };
 
 static const char * const fs_type_names[] = {
     [PHO_FS_POSIX] = "POSIX",
     [PHO_FS_LTFS]  = "LTFS",
+    [PHO_FS_RADOS] = "RADOS",
 };
 
 static inline const char *fs_type2str(enum fs_type type)
@@ -249,19 +251,21 @@ struct pho_lock {
  * Families can be seen here as storage technologies.
  */
 enum rsc_family {
-    PHO_RSC_NONE  = -2,
-    PHO_RSC_INVAL = -1,
-    PHO_RSC_DISK  =  0, /**< Not supported yet */
-    PHO_RSC_TAPE  =  1, /**< Tape, drive tape or tape library */
-    PHO_RSC_DIR   =  2, /**< Directory */
+    PHO_RSC_NONE        = -2,
+    PHO_RSC_INVAL       = -1,
+    PHO_RSC_DISK        =  0, /**< Not supported yet */
+    PHO_RSC_TAPE        =  1, /**< Tape, drive tape or tape library */
+    PHO_RSC_DIR         =  2, /**< Directory */
+    PHO_RSC_RADOS_POOL  =  3, /**< Ceph RADOS pools*/
     PHO_RSC_LAST,
-    PHO_RSC_UNSPEC = PHO_RSC_LAST,
+    PHO_RSC_UNSPEC      = PHO_RSC_LAST,
 };
 
 static const char * const rsc_family_names[] = {
     [PHO_RSC_DISK] = "disk",
     [PHO_RSC_TAPE] = "tape",
     [PHO_RSC_DIR]  = "dir",
+    [PHO_RSC_RADOS_POOL] = "rados_pool",
 };
 
 static inline const char *rsc_family2str(enum rsc_family family)

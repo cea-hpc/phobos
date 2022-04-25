@@ -220,6 +220,7 @@ PyMODINIT_FUNC PyInit_const(void)
     PyModule_AddIntMacro(mod, PHO_RSC_DISK);
     PyModule_AddIntMacro(mod, PHO_RSC_TAPE);
     PyModule_AddIntMacro(mod, PHO_RSC_DIR);
+    PyModule_AddIntMacro(mod, PHO_RSC_RADOS_POOL);
     PyModule_AddIntMacro(mod, PHO_RSC_LAST);
 
     /* enum rsc_adm_status */

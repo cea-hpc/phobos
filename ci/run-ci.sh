@@ -16,11 +16,13 @@ cd "$cur_dir"/..
 
 # export PKG_CONFIG_PATH=/usr/pgsql-9.4/lib/pkgconfig;
 ./autogen.sh
-./configure
 
 if [ "$1" != "check-valgrind" ]; then
+    ./configure $1
     make rpm
     make clean || cat src/tests/test-suite.log
+else
+    ./configure $2
 fi
 
 make

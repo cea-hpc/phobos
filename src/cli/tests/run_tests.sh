@@ -41,7 +41,15 @@ PHOBOS_DB="$cur_dir/../../../scripts/phobos_db"
 
 conn_str="dbname=phobos user=phobos password=phobos"
 export PHOBOS_DSS_connect_string="$conn_str"
-for test_case in *Test.py
+
+TESTS=$(ls *Test.py)
+
+# If rados is not enabled, remove RADOS tests from TESTS to execute
+if [ "x$1" != "xrados" ]; then
+    TESTS=${TESTS//PhobosCLIRADOSTest.py/}
+fi
+
+for test_case in $TESTS
 do
     $PHOBOS_DB drop_tables
     $PHOBOS_DB setup_tables

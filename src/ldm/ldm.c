@@ -32,6 +32,7 @@
 #include "pho_cfg.h"
 #include "pho_type_utils.h"
 #include "pho_common.h"
+#include "ldm_dev_adapters.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -59,13 +60,6 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter *lib)
     return 0;
 }
 
-/*
- * Use external references for now.
- * They can easily be replaced later by dlopen'ed symbols.
- */
-extern const struct dev_adapter dev_adapter_dir;
-extern const struct dev_adapter dev_adapter_scsi_tape;
-
 int get_dev_adapter(enum rsc_family dev_family, struct dev_adapter *dev)
 {
     switch (dev_family) {
@@ -74,6 +68,14 @@ int get_dev_adapter(enum rsc_family dev_family, struct dev_adapter *dev)
         break;
     case PHO_RSC_TAPE:
         *dev = dev_adapter_scsi_tape;
+        break;
+    case PHO_RSC_RADOS_POOL:
+#ifdef RADOS_ENABLED
+        *dev = dev_adapter_rados_pool;
+#else
+        LOG_RETURN(-ENOTSUP, "Phobos has been built without the necessary "
+                             "RADOS modules");
+#endif
         break;
     default:
         return -ENOTSUP;

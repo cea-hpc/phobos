@@ -190,7 +190,7 @@ static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
     enum rsc_adm_status status;
     struct dev_info *devices;
     struct dev_adapter deva;
-    char *real_path;
+    char *path;
     int rc;
     int i;
 
@@ -200,19 +200,24 @@ static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
 
     devices = calloc(num_dev, sizeof(*devices));
     if (!devices)
-        LOG_RETURN(errno, "Device info allocation failed");
+        LOG_RETURN(-errno, "Device info allocation failed");
 
     for (i = 0; i < num_dev; ++i) {
         struct dev_info *devi = devices + i;
 
-        real_path = realpath(dev_ids[i].name, NULL);
-        if (!real_path)
+        /* Pools do not have a real path */
+        if (dev_ids[i].family == PHO_RSC_RADOS_POOL)
+            path = strdup(dev_ids[i].name);
+        else
+            path = realpath(dev_ids[i].name, NULL);
+
+        if (!path)
             LOG_GOTO(out_free, rc = -errno,
                      "Cannot get the real path of device '%s'",
                      dev_ids[i].name);
 
-        rc = ldm_dev_query(&deva, real_path, &lds);
-        free(real_path);
+        rc = ldm_dev_query(&deva, path, &lds);
+        free(path);
         if (rc)
             LOG_GOTO(out_free, rc, "Failed to query device '%s'",
                      dev_ids[i].name);
