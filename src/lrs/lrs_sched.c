@@ -2885,17 +2885,64 @@ err_out:
     return rc;
 }
 
-static int sched_handle_notify(struct lrs_sched *sched, pho_req_t *req,
-                               pho_resp_t *resp)
+/**
+ * Enqueue the notify response in the response queue.
+ *
+ * This queue will then be processed by the communication thread, which send
+ * it back to the requester.
+ *
+ * @param[in]   sched       Scheduler handle
+ * @param[in]   reqc        Request container
+ *
+ * @return                  0 if success,
+ *                         -errno if failure
+ */
+static int queue_notify_response(struct lrs_sched *sched,
+                                 struct req_container *reqc)
 {
-    pho_req_notify_t *nreq = req->notify;
+    pho_req_notify_t *nreq = reqc->req->notify;
+    struct resp_container *respc;
+    pho_resp_t *resp;
+    int rc;
+
+    respc = malloc(sizeof(*respc));
+    if (respc == NULL)
+        return -errno;
+
+    respc->socket_id = reqc->socket_id;
+
+    respc->resp = malloc(sizeof(*respc->resp));
+    if (respc->resp == NULL) {
+        rc = -errno;
+        free(respc);
+        return rc;
+    }
+
+    rc = pho_srl_response_notify_alloc(respc->resp);
+    if (rc) {
+        free(respc->resp);
+        free(respc);
+        return rc;
+    }
+
+    resp = respc->resp;
+
+    resp->req_id = reqc->req->id;
+    resp->notify->rsrc_id->family = nreq->rsrc_id->family;
+    resp->notify->rsrc_id->name = strdup(nreq->rsrc_id->name);
+
+    tsqueue_push(sched->response_queue, respc);
+
+    return 0;
+}
+
+static int sched_handle_notify(struct lrs_sched *sched,
+                               struct req_container *reqc)
+{
+    pho_req_notify_t *nreq = reqc->req->notify;
     int rc = 0;
 
-    rc = pho_srl_response_notify_alloc(resp);
-    if (rc)
-        return rc;
-
-    pho_info("notify: media %s\n", nreq->rsrc_id->name);
+    pho_info("notify: device %s\n", nreq->rsrc_id->name);
 
     switch (nreq->op) {
     case PHO_NTFY_OP_DEVICE_ADD:
@@ -2916,28 +2963,15 @@ static int sched_handle_notify(struct lrs_sched *sched, pho_req_t *req,
     if (rc)
         goto err;
 
-    resp->req_id = req->id;
-    resp->notify->rsrc_id->family = nreq->rsrc_id->family;
-    resp->notify->rsrc_id->name = strdup(nreq->rsrc_id->name);
+    rc = queue_notify_response(sched, reqc);
+    if (rc)
+        goto err;
 
-    return rc;
+    return 0;
 
 err:
-    pho_srl_response_free(resp, false);
-
-    if (rc != -EAGAIN) {
-        int rc2 = pho_srl_response_error_alloc(resp);
-
-        if (rc2)
-            return rc2;
-
-        resp->req_id = req->id;
-        resp->error->rc = rc;
-        resp->error->req_kind = PHO_REQUEST_KIND__RQ_NOTIFY;
-
-        /* Request processing error, not an LRS error */
-        rc = 0;
-    }
+    if (rc != -EAGAIN)
+        rc = queue_error_response(sched->response_queue, rc, reqc);
 
     return rc;
 }
@@ -2970,6 +3004,9 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
         } else if (pho_request_is_format(req)) {
             pho_debug("lrs received format request (%p)", req);
             rc = sched_handle_format(sched, reqc);
+        } else if (pho_request_is_notify(req)) {
+            pho_debug("lrs received notify request (%p)", req);
+            rc = sched_handle_notify(sched, reqc);
         } else {
             struct resp_container *respc;
 
@@ -2989,9 +3026,6 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
             } else if (pho_request_is_read(req)) {
                 pho_debug("lrs received read allocation request (%p)", req);
                 rc = sched_handle_read_alloc(sched, req, respc);
-            } else if (pho_request_is_notify(req)) {
-                pho_debug("lrs received notify request (%p)", req);
-                rc = sched_handle_notify(sched, req, respc->resp);
             } else {
                 /* Unexpected req->kind, very probably a programming error */
                 pho_error(rc = -EPROTO,
@@ -3010,7 +3044,8 @@ int sched_responses_get(struct lrs_sched *sched, int *n_resp,
             break;
 
         /* no response to -EAGAIN */
-        if (!pho_request_is_format(reqc->req))
+        if (!pho_request_is_format(reqc->req) &&
+            !pho_request_is_notify(reqc->req))
             g_array_remove_index(resp_array, resp_array->len - 1);
 
         if (running) {
