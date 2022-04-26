@@ -1519,6 +1519,7 @@ class RadosPoolOptHandler(MediaOptHandler):
     verbs = [
         MediaAddOptHandler,
         MediaListOptHandler,
+        MediaUpdateOptHandler,
     ]
 
     def add_medium(self, medium, tags):

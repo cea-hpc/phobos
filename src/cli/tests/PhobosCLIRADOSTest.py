@@ -112,6 +112,29 @@ class RadosPoolAddTest(PhobosCLITest.BasicExecutionTest):
 
         pho_rados_pool_remove('pho_pool_tags', self.cluster)
 
+    def test_rados_pool_update(self):
+        """Test updating a RADOS pool."""
+        pho_rados_pool_add('pho_pool_update', self.cluster)
+
+        self.pho_execute(['rados_pool', 'add', 'pho_pool_update', '--tags',
+                          'tag-baz'])
+
+        # Check inserted media
+        output, _ = self.pho_execute_capture(['rados_pool', 'list', '--output',
+                                              'tags', 'pho_pool_update'])
+        self.assertEqual(output.strip(), "['tag-baz']")
+
+        # Update media
+        self.pho_execute(['rados_pool', 'update', '-T', '', 'pho_pool_update'])
+
+        # Check updated media
+        output, _ = self.pho_execute_capture(['rados_pool', 'list', '--output',
+                                              'tags', 'pho_pool_update'])
+        self.assertEqual(output.strip(), "[]")
+
+        pho_rados_pool_remove('pho_pool_update', self.cluster)
+
+
     def test_rados_pool_add_missing(self):
         """Adding a non-existent RADOS pool should raise an error."""
         pho_rados_pool_remove('pho_pool_add_missing', self.cluster)
