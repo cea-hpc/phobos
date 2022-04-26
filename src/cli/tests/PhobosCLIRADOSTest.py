@@ -86,6 +86,32 @@ class RadosPoolAddTest(PhobosCLITest.BasicExecutionTest):
         pho_rados_pool_remove('pho_pool_add1', self.cluster)
         pho_rados_pool_remove('pho_pool_add2', self.cluster)
 
+    def test_rados_pool_list(self):
+        """ List RADOS pools"""
+        pho_rados_pool_add('pho_pool_list', self.cluster)
+
+        self.pho_execute(['rados_pool', 'add', 'pho_pool_list'])
+
+        output, _ = self.pho_execute_capture(['rados_pool', 'list'])
+        self.assertTrue(output.count("pho_pool_list") == 1)
+
+        path = "%s:%s" % (PhobosCLITest.gethostname_short(), 'pho_pool_list')
+        self.pho_execute(['-v', 'rados_pool', 'list', '-o', 'all', path])
+
+        pho_rados_pool_remove('pho_pool_list', self.cluster)
+
+    def test_rados_pool_tags(self):
+        """Test adding a RADOS pool with tags."""
+        pho_rados_pool_add('pho_pool_tags', self.cluster)
+
+        self.pho_execute(['rados_pool', 'add', 'pho_pool_tags', '--tags',
+                          'tag-foo,tag-bar'])
+        output, _ = self.pho_execute_capture(['rados_pool', 'list', '-o', 'all',
+                                              'pho_pool_tags'])
+        self.assertIn("['tag-foo', 'tag-bar']", output)
+
+        pho_rados_pool_remove('pho_pool_tags', self.cluster)
+
     def test_rados_pool_add_missing(self):
         """Adding a non-existent RADOS pool should raise an error."""
         pho_rados_pool_remove('pho_pool_add_missing', self.cluster)
@@ -112,6 +138,11 @@ class RadosPoolAddTest(PhobosCLITest.BasicExecutionTest):
         self.pho_execute(['-v', 'rados_pool', 'add', 'pho_pool_correct1',
                           'pho_pool_invalid', 'pho_pool_correct2'],
                          code=errno.ENODEV)
+
+        output, _ = self.pho_execute_capture(['rados_pool', 'list'])
+        self.assertIn('pho_pool_correct1', output)
+        self.assertNotIn('pho_pool_invalid', output)
+        self.assertIn('pho_pool_correct2', output)
 
         pho_rados_pool_remove('pho_pool_correct1', self.cluster)
         pho_rados_pool_remove('pho_pool_correct2', self.cluster)

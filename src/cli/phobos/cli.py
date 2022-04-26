@@ -1518,6 +1518,7 @@ class RadosPoolOptHandler(MediaOptHandler):
     family = ResourceFamily(ResourceFamily.RSC_RADOS_POOL)
     verbs = [
         MediaAddOptHandler,
+        MediaListOptHandler,
     ]
 
     def add_medium(self, medium, tags):
