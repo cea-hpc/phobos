@@ -36,8 +36,6 @@ function umount_ltfs
 
     umount "$mnt" || exit 1
 
-    kill -TERM $ltfs_process
-
     # Wait for ltfs processes to exit
     counter=0
     while [ "$counter" -lt "$shutdown_timeout" ]; do
