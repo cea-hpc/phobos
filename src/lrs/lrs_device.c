@@ -572,9 +572,11 @@ int clean_tosync_array(struct lrs_dev *dev, int rc)
                 if (rc2)
                     internal_rc = internal_rc ? : rc2;
             }
-
-            request_tosync_free(req);
+        } else {
+            req->reqc = NULL;   /* only the last device free reqc */
         }
+
+        request_tosync_free(req);
     }
 
     /* sync operation acknowledgement */
