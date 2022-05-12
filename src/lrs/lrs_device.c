@@ -1167,36 +1167,12 @@ static int dev_handle_format(struct lrs_dev *dev)
 
         rc = dev_empty(dev);
         if (rc) {
-            int rc2;
-
-            pho_error(rc, "Error when emptying device %s to format medium %s",
-                      dev->ld_dss_dev_info->rsc.id.name,
-                      medium_to_format->rsc.id.name);
-            /* release medium that cannot be loaded */
-            rc2 = dss_medium_release(&dev->ld_device_thread.ld_dss,
-                                     medium_to_format);
-            if (rc2) {
-                pho_error(rc2,
-                          "Unable to release medium %s that we planned to "
-                          "format in device '%s'",
-                          medium_to_format->rsc.id.name,
-                          dev->ld_dss_dev_info->rsc.id.name);
-                rc2 = queue_error_response(dev->ld_response_queue, rc2,
-                                           dev->ld_format_request);
-                if (rc2)
-                    pho_error(rc,
-                              "Unable to queue format error response for "
-                              "medium '%s'", medium_to_format->rsc.id.name);
-
-                goto out;
-            } else {
-                tsqueue_push(dev->sched_req_queue, dev->ld_format_request);
-                LOG_GOTO(out_no_req_free, rc,
-                         "Unable to empty device '%s' to format medium '%s', "
-                         "format request is requeued",
-                         dev->ld_dss_dev_info->rsc.id.name,
-                         medium_to_format->rsc.id.name);
-            }
+            tsqueue_push(dev->sched_req_queue, dev->ld_format_request);
+            LOG_GOTO(out_no_req_free, rc,
+                     "Unable to empty device '%s' to format medium '%s', "
+                     "format request is requeued",
+                     dev->ld_dss_dev_info->rsc.id.name,
+                     medium_to_format->rsc.id.name);
         }
 
         rc = dev_load(dev, medium_to_format, &failure_on_dev);
