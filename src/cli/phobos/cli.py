@@ -1520,6 +1520,8 @@ class RadosPoolOptHandler(MediaOptHandler):
         MediaAddOptHandler,
         MediaListOptHandler,
         MediaUpdateOptHandler,
+        LockOptHandler,
+        UnlockOptHandler,
     ]
 
     def add_medium(self, medium, tags):

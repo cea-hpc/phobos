@@ -100,6 +100,24 @@ class RadosPoolAddTest(PhobosCLITest.BasicExecutionTest):
 
         pho_rados_pool_remove('pho_pool_list', self.cluster)
 
+    def test_rados_pool_lock_unlock(self):
+        """ Test lock/unlock on RADOS pools """
+        pho_rados_pool_add('pho_pool_lock_unlock', self.cluster)
+
+        self.pho_execute(['rados_pool', 'add', 'pho_pool_lock_unlock'])
+
+        self.pho_execute(['rados_pool', 'lock', 'pho_pool_lock_unlock'])
+        output, _ = self.pho_execute_capture(['rados_pool', 'list', '-o', 'all',
+                                              'pho_pool_lock_unlock'])
+        self.assertIn("locked", output)
+
+        self.pho_execute(['rados_pool', 'unlock', 'pho_pool_lock_unlock'])
+        output, _ = self.pho_execute_capture(['rados_pool', 'list', '-o', 'all',
+                                              'pho_pool_lock_unlock'])
+        self.assertIn("unlocked", output)
+
+        pho_rados_pool_remove('pho_pool_lock_unlock', self.cluster)
+
     def test_rados_pool_tags(self):
         """Test adding a RADOS pool with tags."""
         pho_rados_pool_add('pho_pool_tags', self.cluster)
