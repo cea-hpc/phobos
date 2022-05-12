@@ -649,23 +649,26 @@ class MediaSetAccessOptHandler(DSSInteractHandler):
         parser.add_argument('res', nargs='+', metavar='RESOURCE',
                             help='Resource(s) to update access mode')
 
+def setaccess_epilog(family):
+    """Generic epilog"""
+    return """Examples:
+    phobos %s set-access GD      # allow get and delete, forbid put
+    phobos %s set-access +PG     # allow put, get (other flags are unchanged)
+    phobos %s set-access -- -P   # forbid put (other flags are unchanged)
+    (Warning: use the '--' separator to use the -PGD flags syntax)
+    """ % (family, family, family)
+
 class DirSetAccessOptHandler(MediaSetAccessOptHandler):
     """Set media operation flags to directory media."""
-    epilog = """Examples:
-phobos dir set-access GD      # allow get and delete, forbid put
-phobos dir set-access +PG     # allow put, get (other flags are unchanged)
-phobos dir set-access -- -P   # forbid put (other flags are unchanged)
-(Warning: use the '--' separator to use the -PGD flags syntax)
-"""
+    epilog = setaccess_epilog("dir")
 
 class TapeSetAccessOptHandler(MediaSetAccessOptHandler):
     """Set media operation flags to tape media."""
-    epilog = """Examples:
-phobos tape set-access GD      # allow get and delete, forbid put
-phobos tape set-access +PG     # allow put, get (other flags are unchanged)
-phobos tape set-access -- -P   # forbid put (other flags are unchanged)
-(Warning: use the '--' separator to use the -PGD flags syntax)
-"""
+    epilog = setaccess_epilog("tape")
+
+class RadosPoolSetAccessOptHandler(MediaSetAccessOptHandler):
+    """Set media operation flags to rados_pool media."""
+    epilog = setaccess_epilog("rados_pool")
 
 class ScanOptHandler(BaseOptHandler):
     """Scan a physical resource and display retrieved information."""
@@ -1522,6 +1525,7 @@ class RadosPoolOptHandler(MediaOptHandler):
         MediaUpdateOptHandler,
         LockOptHandler,
         UnlockOptHandler,
+        RadosPoolSetAccessOptHandler,
     ]
 
     def add_medium(self, medium, tags):
