@@ -98,6 +98,7 @@ enum dss_set_action {
                            */
     DSS_SET_UPDATE,
     DSS_SET_UPDATE_ADM_STATUS, /** Atomic update of adm_status column */
+    DSS_SET_UPDATE_HOST,
     DSS_SET_DELETE,
     DSS_SET_LAST,
 };
@@ -107,6 +108,7 @@ static const char * const dss_set_actions_names[] = {
     [DSS_SET_FULL_INSERT]       = "full-insert",
     [DSS_SET_UPDATE]            = "update",
     [DSS_SET_UPDATE_ADM_STATUS] = "update_adm_status",
+    [DSS_SET_UPDATE_HOST]       = "update_host",
     [DSS_SET_DELETE]            = "delete",
 };
 
@@ -359,6 +361,17 @@ int dss_device_delete(struct dss_handle *hdl, struct dev_info *dev_ls,
 int dss_device_update_adm_status(struct dss_handle *hdl,
                                  struct dev_info *dev_ls,
                                  int dev_cnt);
+
+/**
+ * Update host of one or many devices in DSS.
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  dev_ls   array of entries to update with new host
+ * @param[in]  dev_cnt  number of items in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_device_update_host(struct dss_handle *hdl, struct dev_info *dev_ls,
+                           int dev_cnt);
 
 /**
  * Store information for one or many media in DSS.

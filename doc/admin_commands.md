@@ -32,12 +32,22 @@ To enable using a drive in production as soon as it is added, specify the
 phobos drive add --unlock /dev/mapper/LTO6-012345
 ```
 
+# Migrating drives
+Use `phobos drive migrate` to change the host of drives.
+
+Drives information will be updated only if they are not currently used by the
+system i.e. no daemon is using them.
+
+```
+phobos drive migrate host2 /dev/mapper/LT06-012345
+```
+
 # Removing drives
 Use the `phobos drive delete` command line to remove tape drives from phobos
 system.
 
 Drives will be removed only if they are not currently used by the system
-ie. no daemon is using them.
+i.e. no daemon is using them.
 
 ```
 phobos drive delete /dev/mapper/LTO6-012345

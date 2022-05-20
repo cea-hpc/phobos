@@ -89,6 +89,9 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
             return dss_device_update_adm_status(handle,
                                                 (struct dev_info *)item_list,
                                                 n);
+        case DSS_SET_UPDATE_HOST:
+            return dss_device_update_host(handle, (struct dev_info *)item_list,
+                                          n);
         case DSS_SET_INSERT:
             return dss_device_insert(handle, (struct dev_info *)item_list, n);
         case DSS_SET_DELETE:
@@ -139,7 +142,7 @@ int main(int argc, char **argv)
 
     if (argc < 3 || argc > 5) {
         fprintf(stderr, "Usage: %s ACTION TYPE [ \"CRIT\" ]\n", argv[0]);
-        fprintf(stderr, "where  ACTION := { get | set | lock | unlock}\n");
+        fprintf(stderr, "where  ACTION := { get | set | lock | unlock }\n");
         fprintf(stderr, "       TYPE := "
                         "{ device | media | object | deprec | layout }\n");
         fprintf(stderr, "       [ \"CRIT\" ] := \"field cmp value\"\n");
@@ -304,6 +307,8 @@ int main(int argc, char **argv)
                 }
                 if (action == DSS_SET_UPDATE_ADM_STATUS)
                     dev->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+                if (action == DSS_SET_UPDATE_HOST)
+                    dev->host = strdup("h0st");
             }
             break;
         case DSS_MEDIA:

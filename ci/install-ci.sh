@@ -24,8 +24,10 @@ make rpm
 # (re-)install RPM
 if [ ! -z `type -t phobos` ]; then
     sudo yum -y remove phobos
+    sudo yum -y remove phobos-debuginfo
 fi
 sudo yum -y install rpms/RPMS/x86_64/phobos-1*
+sudo yum -y install rpms/RPMS/x86_64/phobos-debug*
 
 # clean phobos compilation directory
 cd ..

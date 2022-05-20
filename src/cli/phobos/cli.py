@@ -983,6 +983,18 @@ class MediaUpdateOptHandler(DSSInteractHandler):
                                  'tags, new tags list overwrite current tags')
         parser.add_argument('res', nargs='+', help='Resource(s) to update')
 
+class DriveMigrateOptHandler(DSSInteractHandler):
+    """Migrate an existing drive"""
+    label = 'migrate'
+    descr = 'migrate existing drive to another host'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(DriveMigrateOptHandler, cls).add_options(parser)
+        parser.add_argument('host', help='New host for these drives')
+        parser.add_argument('res', nargs='+', help='Resource(s) to update')
+
 class FormatOptHandler(DSSInteractHandler):
     """Format a resource."""
     label = 'format'
@@ -1432,12 +1444,29 @@ class DriveOptHandler(DeviceOptHandler):
     family = ResourceFamily(ResourceFamily.RSC_TAPE)
     verbs = [
         AddOptHandler,
+        DriveMigrateOptHandler,
         ResourceDeleteOptHandler,
         DriveListOptHandler,
         DeviceLockOptHandler,
         UnlockOptHandler,
         StatusOptHandler,
     ]
+
+    def exec_migrate(self):
+        """Migrate devices host"""
+        resources = self.params.get('res')
+        host = self.params.get('host')
+
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                count = adm.device_migrate(resources, host)
+
+        except EnvironmentError as err:
+            self.logger.error("%s", env_error_format(err))
+            sys.exit(abs(err.errno))
+
+        if count > 0:
+            self.logger.info("Migrated %d device(s) successfully", count)
 
     def exec_list(self):
         """List devices and display results."""

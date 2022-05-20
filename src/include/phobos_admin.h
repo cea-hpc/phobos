@@ -140,6 +140,31 @@ int phobos_admin_device_status(struct admin_handle *adm, enum rsc_family family,
                                char **status);
 
 /**
+ * Migrate given devices to a new host.
+ *
+ * The migration can only occur if devices are not currently used by an LRS.
+ *
+ * \param[in]       adm              Admin module handler.
+ * \param[in, out]  dev_ids          Device IDs to update. As input
+ *                                   dev_ids[x].name could refer to device path
+ *                                   or device id name. As output,
+ *                                   dev_ids[x].name will refer to device id
+ *                                   name.
+ * \param[in]       num_dev          Number of devices to update.
+ * \param[in]       host             New host of devices.
+ * \param[out]      num_migrated_dev Number of updated device.
+ *
+ * \return                           0     on success,
+ *                                  -errno on failure.
+ *
+ * This function will process all devices. In case of failure, only the first
+ * encountered error is returned once the processing is done.
+ */
+int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
+                               unsigned int num_dev, const char *host,
+                               unsigned int *num_migrated_dev);
+
+/**
  * Load and format media to the given fs type.
  *
  * \param[in]       adm             Admin module handler.

@@ -455,6 +455,9 @@ static const char * const update_query[] = {
                    " WHERE oid = '%s';",
 };
 
+static const char * const update_host_query =
+    "UPDATE device SET host = '%s' WHERE id = '%s';";
+
 static const char * const delete_query[] = {
     [DSS_DEVICE] = "DELETE FROM device WHERE id = '%s'; ",
     [DSS_MEDIA]  = "DELETE FROM media WHERE id = '%s'; ",
@@ -1380,6 +1383,9 @@ static int get_device_setrequest(PGconn *conn, struct dev_info *item_list,
             g_string_append_printf(request, update_query[DSS_DEVICE],
                                    rsc_adm_status2str(p_dev->rsc.adm_status),
                                    p_dev->rsc.id.name);
+        } else if (action == DSS_SET_UPDATE_HOST) {
+            g_string_append_printf(request, update_host_query, p_dev->host,
+                                   p_dev->rsc.id.name);
         } else if (action == DSS_SET_UPDATE) {
             LOG_RETURN(-ENOTSUP, "No generic update on device");
         }
@@ -1947,6 +1953,10 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
                    "Specific adm_status update is not supported for %s",
                    dss_type_names[type]);
 
+    if (action == DSS_SET_UPDATE_HOST && type != DSS_DEVICE)
+        LOG_RETURN(-ENOTSUP, "Specific host update is not supported for %s",
+                   dss_type_names[type]);
+
     request = g_string_new("BEGIN;");
 
     if (action == DSS_SET_INSERT)
@@ -2216,6 +2226,13 @@ int dss_device_update_adm_status(struct dss_handle *hdl,
      */
     return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
                            DSS_SET_UPDATE_ADM_STATUS, 0);
+}
+
+int dss_device_update_host(struct dss_handle *hdl, struct dev_info *dev_ls,
+                           int dev_cnt)
+{
+    return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
+                           DSS_SET_UPDATE_HOST, 0);
 }
 
 static int media_update_lock_retry(struct dss_handle *hdl,

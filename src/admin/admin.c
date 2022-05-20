@@ -272,6 +272,8 @@ out_free:
 /**
  * At input dev_id.name could refer to dev_res->path or dev_res->rsc.id.name.
  * At output, dev_id->name is set to dev_res->rsc.id.name
+ *
+ * dev_res must be freed using dss_res_free().
  */
 static int _get_device_by_path_or_serial(struct admin_handle *adm,
                                          struct pho_id *dev_id,
@@ -627,6 +629,92 @@ int phobos_admin_device_status(struct admin_handle *adm,
     }
 
     pho_srl_response_free(resp, true);
+
+    return rc;
+}
+
+int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
+                               unsigned int num_dev, const char *host,
+                               unsigned int *num_migrated_dev)
+{
+    struct dev_info *devices;
+    struct dev_info *dev_res;
+    char *host_cpy = NULL;
+    int avail_devices = 0;
+    int rc = 0;
+    int rc2;
+    int i;
+
+    *num_migrated_dev = 0;
+
+    rc = strdup_safe(&host_cpy, host);
+    if (rc)
+        LOG_RETURN(rc, "Couldn't copy host name");
+
+    devices = calloc(num_dev, sizeof(*devices));
+    if (!devices) {
+        free(host_cpy);
+        LOG_RETURN(-ENOMEM, "Device info allocation failed");
+    }
+
+    for (i = 0; i < num_dev; ++i) {
+        char *old_host;
+
+        rc2 = _get_device_by_path_or_serial(adm, dev_ids + i, &dev_res);
+        if (rc2) {
+            rc = rc ? : rc2;
+            continue;
+        }
+
+        if (strcmp(host_cpy, dev_res->host) == 0) {
+            pho_info("Device '%s' is already located on '%s'", dev_ids[i].name,
+                                                               host_cpy);
+            dss_res_free(dev_res, 1);
+            continue;
+        }
+
+        rc2 = dss_lock(&adm->dss, DSS_DEVICE, dev_res, 1);
+        if (rc2) {
+            pho_error(rc2,
+                      "Device '%s' cannot be locked, so cannot be migrated",
+                      dev_ids[i].name);
+            dss_res_free(dev_res, 1);
+            rc = rc ? : (rc2 == -EEXIST ? -EBUSY : rc2);
+            continue;
+        }
+
+        old_host = dev_res->host;
+        dev_res->host = host_cpy;
+        rc2 = dev_info_cpy(&devices[avail_devices], dev_res);
+        dev_res->host = old_host;
+        if (rc2)
+            LOG_GOTO(out_free, rc2, "Couldn't copy device data");
+
+        dss_res_free(dev_res, 1);
+        avail_devices++;
+    }
+
+    if (avail_devices == 0)
+        LOG_GOTO(out_free, rc, "There are no available devices to migrate");
+
+    rc2 = dss_device_update_host(&adm->dss, devices, avail_devices);
+    if (rc2)
+        pho_error(rc2, "Failed to migrate devices");
+    else
+        *num_migrated_dev = avail_devices;
+
+out_free:
+    // In case an error occured when copying device information
+    if (i != num_dev) {
+        dss_unlock(&adm->dss, DSS_DEVICE, dev_res, 1, false);
+        dss_res_free(dev_res, 1);
+    }
+
+    dss_unlock(&adm->dss, DSS_DEVICE, devices, avail_devices, false);
+    for (i = 0; i < avail_devices; ++i)
+        dev_info_free(devices + i, false);
+    free(devices);
+    free(host_cpy);
 
     return rc;
 }

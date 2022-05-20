@@ -114,6 +114,23 @@ class Client(object):
             raise EnvironmentError(rc, "Failed to add device(s) '%s'" %
                                    dev_names)
 
+    def device_migrate(self, dev_names, host):
+        """Migrate devices (for now, only tape drives)."""
+        c_id = Id * len(dev_names)
+        dev_ids = [Id(PHO_RSC_TAPE, name=name) for name in dev_names]
+        c_host = c_char_p(host.encode('utf-8'))
+        count = c_int(0)
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_drive_migrate(byref(self.handle),
+                                                        c_id(*dev_ids),
+                                                        len(dev_ids), c_host,
+                                                        byref(count))
+        if rc:
+            raise EnvironmentError(rc, "Failed to migrate device(s) '%s'" %
+                                   dev_names)
+
+        return count.value
+
     def device_delete(self, dev_family, dev_names):
         """Remove devices to phobos system."""
         c_id = Id * len(dev_names)
