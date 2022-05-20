@@ -35,7 +35,7 @@
 #include <cmocka.h>
 #include <string.h>
 
-static int ldr_test_dev_adapter_add_pool(void)
+static int ldr_test_dev_adapter_add_pool(void **state)
 {
     struct admin_handle adm;
     struct pho_id dev_ids;
@@ -56,7 +56,7 @@ static int ldr_test_dev_adapter_add_pool(void)
 
 static void ldr_test_dev_adapter_add_pool_with_conf(void **state)
 {
-    int rc = ldr_test_dev_adapter_add_pool();
+    int rc = ldr_test_dev_adapter_add_pool(state);
 
     assert_int_equal(rc, -rc);
 }
@@ -102,7 +102,7 @@ static int ldr_teardown_without_conf(void **state)
 
 static void ldr_test_dev_adapter_add_pool_without_conf(void **state)
 {
-    int rc = ldr_test_dev_adapter_add_pool();
+    int rc = ldr_test_dev_adapter_add_pool(state);
 
     assert_int_equal(rc, -ENOENT);
 }

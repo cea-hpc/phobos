@@ -18,6 +18,7 @@ RAID1_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 SCSI_LIB=$(TO_SRC)/ldm-modules/libpho_scsi.la
 SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
+IO_LIB=$(TO_SRC)/io/libpho_io.la
 
 if VALGRIND_ENABLED
 @VALGRIND_CHECK_RULES@
@@ -52,8 +53,8 @@ check_SCRIPTS=test_bad_comm.sh \
               test_undelete.sh
 
 if RADOS_ENABLED
-check_PROGRAMS+=test_lib_dev_rados
-check_SCRIPTS+=test_lib_dev_rados.sh
+check_PROGRAMS+=test_lib_dev_rados test_io_rados
+check_SCRIPTS+=test_lib_dev_rados.sh test_io_rados.sh
 endif
 
 TESTS=$(check_SCRIPTS)
@@ -85,6 +86,10 @@ if RADOS_ENABLED
 test_lib_dev_rados_SOURCES=test_lib_dev_rados.c
 test_lib_dev_rados_LDADD=$(ADMIN_LIB) $(LDM_LIB)
 test_lib_dev_rados_CFLAGS=-I$(TO_TEST)
+
+test_io_rados_SOURCES=test_io_rados.c
+test_io_rados_LDADD=$(ADMIN_LIB) $(IO_LIB) $(LDM_LIB)
+test_io_rados_CFLAGS=-I$(TO_TEST)
 endif
 
 test_raid1_split_locate_SOURCES=test_raid1_split_locate.c

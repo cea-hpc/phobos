@@ -99,6 +99,9 @@ test_dss_object_move_LDADD=$(DSS_LIB) $(ADMIN_LIB) $(CFG_LIB) $(COMMON_LIB) \
 test_io_SOURCES=test_io.c
 test_io_LDADD=$(IO_LIB) $(COMMON_LIB) $(IO_POSIX_LIB)
 test_io_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/io-modules -I..
+if RADOS_ENABLED
+test_io_LDADD+=$(LDM_LIB) $(ADMIN_LIB)
+endif
 
 test_layout_module_SOURCES=test_layout_module.c
 test_layout_module_LDADD=$(LAYOUT_LIB) $(RAID1_LIB) $(CFG_LIB) $(COMMON_LIB) -ldl

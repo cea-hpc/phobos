@@ -138,8 +138,8 @@ free_str:
 }
 
 /** allocate the desired path length, and call the path mapper */
-static int build_addr_path(const char *extent_key, const char *extent_desc,
-                           struct pho_buff *addr)
+int build_addr_path(const char *extent_key, const char *extent_desc,
+                    struct pho_buff *addr)
 {
     int rc;
 
@@ -162,7 +162,7 @@ static int build_addr_path(const char *extent_key, const char *extent_desc,
 }
 
 /** allocate the desired path length, and call the hash-based mapper */
-static int build_addr_hash1(const char *extent_key, const char *extent_desc,
+int build_addr_hash1(const char *extent_key, const char *extent_desc,
                             struct pho_buff *addr)
 {
     int rc;
@@ -183,7 +183,7 @@ static int build_addr_hash1(const char *extent_key, const char *extent_desc,
 }
 
 /** set address field for a POSIX extent */
-static int pho_posix_set_addr(const char *extent_key, const char *extent_desc,
+int pho_posix_set_addr(const char *extent_key, const char *extent_desc,
                               enum address_type addrtype, struct pho_buff *addr)
 {
     switch (addrtype) {
@@ -246,7 +246,7 @@ static int pho_flags2open(enum pho_io_flags io_flags)
  * The returned pointer must be released after
  * usage.
  */
-static char *full_xattr_name(const char *name)
+char *full_xattr_name(const char *name)
 {
     char *tmp_name;
     int len;

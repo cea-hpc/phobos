@@ -1,6 +1,3 @@
-/* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
- * vim:expandtab:shiftwidth=4:tabstop=4:
- */
 /*
  *  All rights reserved (c) 2014-2022 CEA/DAM.
  *
@@ -22,6 +19,7 @@
 /**
  * \brief  Phobos I/O adapters.
  */
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -41,6 +39,9 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter_module **ioa)
         break;
     case PHO_FS_LTFS:
         rc = load_module("io_adapter_ltfs", sizeof(**ioa), (void **)ioa);
+        break;
+    case PHO_FS_RADOS:
+        rc = load_module("io_adapter_rados", sizeof(**ioa), (void **)ioa);
         break;
     default:
         pho_error(-EINVAL, "Invalid FS type %#x", fstype);
