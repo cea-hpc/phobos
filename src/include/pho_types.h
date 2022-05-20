@@ -134,6 +134,7 @@ enum lib_type {
     PHO_LIB_INVAL = -1,
     PHO_LIB_DUMMY = 0, /**< fake library, all media are always online. */
     PHO_LIB_SCSI  = 1, /**< SCSI library */
+    PHO_LIB_RADOS = 2, /**< RADOS library adapter to connect to Ceph cluster */
     PHO_LIB_LAST
 };
 

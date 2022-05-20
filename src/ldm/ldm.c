@@ -50,6 +50,9 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter_module **lib)
     case PHO_LIB_SCSI:
         rc = load_module("lib_adapter_scsi", sizeof(**lib), (void **)lib);
         break;
+    case PHO_LIB_RADOS:
+        rc = load_module("lib_adapter_rados", sizeof(**lib), (void **)lib);
+        break;
     default:
         return -ENOTSUP;
     }

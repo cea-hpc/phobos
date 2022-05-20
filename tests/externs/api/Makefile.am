@@ -51,6 +51,11 @@ check_SCRIPTS=test_bad_comm.sh \
               test_store_retry.sh \
               test_undelete.sh
 
+if RADOS_ENABLED
+check_PROGRAMS+=test_lib_dev_rados
+check_SCRIPTS+=test_lib_dev_rados.sh
+endif
+
 TESTS=$(check_SCRIPTS)
 
 test_bad_comm_SOURCES=test_bad_comm.c
@@ -75,6 +80,12 @@ test_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I$(TO_TEST)
 test_lock_clean_SOURCES=test_lock_clean.c ../../test_setup.c
 test_lock_clean_LDADD=$(ADMIN_LIB) $(STORE_LIB)
 test_lock_clean_CFLAGS=-I$(TO_TEST)
+
+if RADOS_ENABLED
+test_lib_dev_rados_SOURCES=test_lib_dev_rados.c
+test_lib_dev_rados_LDADD=$(ADMIN_LIB) $(LDM_LIB)
+test_lib_dev_rados_CFLAGS=-I$(TO_TEST)
+endif
 
 test_raid1_split_locate_SOURCES=test_raid1_split_locate.c
 test_raid1_split_locate_LDADD=$(CFG_LIB) $(COMMON_LIB) $(DSS_LIB) $(RAID1_LIB)

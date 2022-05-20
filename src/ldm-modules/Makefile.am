@@ -49,6 +49,14 @@ pkglib_LTLIBRARIES+=libpho_dev_adapter_rados_pool.la
 libpho_dev_adapter_rados_pool_la_SOURCES=ldm_dev_rados_pool.c
 libpho_dev_adapter_rados_pool_la_CFLAGS=-fPIC $(AM_CFLAGS)
 libpho_dev_adapter_rados_pool_la_LIBADD=../common/libpho_common.la \
-                                        ../cfg/libpho_cfg.la -lrados
+                                        ../cfg/libpho_cfg.la -lrados \
+                                        ../ldm/libpho_ldm.la
 libpho_dev_adapter_rados_pool_la_LDFLAGS=-version-info 0:0:0
+
+pkglib_LTLIBRARIES+=libpho_lib_adapter_rados.la
+libpho_lib_adapter_rados_la_SOURCES=ldm_lib_rados.c
+libpho_lib_adapter_rados_la_CFLAGS=-fPIC $(AM_CFLAGS)
+libpho_lib_adapter_rados_la_LIBADD=../common/libpho_common.la \
+                                   ../cfg/libpho_cfg.la -lrados
+libpho_lib_adapter_rados_la_LDFLAGS=-version-info 0:0:0
 endif

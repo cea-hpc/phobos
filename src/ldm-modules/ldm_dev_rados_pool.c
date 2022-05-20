@@ -33,7 +33,6 @@
 #include "pho_common.h"
 #include "pho_module_loader.h"
 
-#include <rados/librados.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -47,59 +46,6 @@ static struct module_desc DEV_ADAPTER_RADOS_POOL_MODULE_DESC = {
     .mod_major = PLUGIN_MAJOR,
     .mod_minor = PLUGIN_MINOR,
 };
-
-/** List of configuration parameters for Ceph RADOS */
-enum pho_cfg_params_ceph_rados {
-    PHO_CFG_CEPH_RADOS_FIRST,
-
-    /* Ceph RADOS parameters */
-    PHO_CFG_CEPH_RADOS_user_id = PHO_CFG_CEPH_RADOS_FIRST,
-    PHO_CFG_CEPH_RADOS_conf_file,
-
-    PHO_CFG_CEPH_RADOS_LAST
-};
-
-const struct pho_config_item cfg_ceph_rados[] = {
-    [PHO_CFG_CEPH_RADOS_user_id] = {
-        .section = "rados",
-        .name    = "user_id",
-        .value   = "admin"
-    },
-    [PHO_CFG_CEPH_RADOS_conf_file] = {
-        .section = "rados",
-        .name    = "ceph_conf_file",
-        .value   = "/etc/ceph/ceph.conf"
-    },
-};
-
-static int pho_rados_cluster_handle_init(rados_t *cluster)
-{
-    const char *ceph_conf_path;
-    const char *userid;
-    int rc = 0;
-
-    ENTRY;
-
-    userid = PHO_CFG_GET(cfg_ceph_rados, PHO_CFG_CEPH_RADOS, user_id);
-    ceph_conf_path = PHO_CFG_GET(cfg_ceph_rados, PHO_CFG_CEPH_RADOS, conf_file);
-
-    /* Initialize the cluster handle. Default values:  "ceph" cluster name and
-     * "client.admin" username
-     */
-    rc = rados_create(cluster, userid);
-    if (rc < 0)
-        LOG_RETURN(rc, "Cannot initialize the cluster handle");
-
-    rc = rados_conf_read_file(*cluster, ceph_conf_path);
-    if (rc < 0)
-        LOG_RETURN(rc, "Cannot read the Ceph configuration file");
-
-    rc = rados_connect(*cluster);
-    if (rc < 0)
-        LOG_RETURN(rc, "Cannot connect to cluster");
-
-    return rc;
-}
 
 static int pho_rados_pool_lookup(const char *dev_id, char *dev_path,
                                  size_t path_size)
@@ -121,27 +67,31 @@ static int pho_rados_pool_lookup(const char *dev_id, char *dev_path,
     return 0;
 }
 
-static int pho_rados_pool_exists(const char *dev_path)
+static int pho_rados_pool_exists(const char *dev_id)
 {
-    rados_t cluster_hdl;
+    struct lib_drv_info drv_info;
+    struct lib_handle lib_hdl;
+    int rc2 = 0;
     int rc = 0;
 
     ENTRY;
 
-    rc = pho_rados_cluster_handle_init(&cluster_hdl);
+    rc = get_lib_adapter(PHO_LIB_RADOS, &lib_hdl.ld_module);
+    if (rc)
+        return rc;
+
+    rc = ldm_lib_open(&lib_hdl, dev_id);
     if (rc)
         LOG_GOTO(out, rc, "Could not connect to Ceph cluster");
 
-    rc = rados_pool_lookup(cluster_hdl, dev_path);
-    if (rc == -ENOENT)
-        pho_error(rc = -ENODEV, "RADOS Poll '%s' does not exist", dev_path);
-    else if (rc < 0)
-        pho_error(rc, "RADOS pool lookup command failed");
+    rc = ldm_lib_drive_lookup(&lib_hdl, dev_id, &drv_info);
 
 out:
-        rados_shutdown(cluster_hdl);
-        /* If rc is >= 0, the pool exists and rc is the pool's id */
-        return rc < 0 ? rc : 0;
+    rc2 = ldm_lib_close(&lib_hdl);
+    if (rc2)
+        pho_error(rc2, "Closing RADOS library failed");
+    /* If rc is >= 0, the pool exists and rc is the pool's id */
+    return rc < 0 ? rc : rc2;
 }
 
 static int pho_rados_pool_query(const char *dev_path, struct ldm_dev_state *lds)
@@ -152,10 +102,6 @@ static int pho_rados_pool_query(const char *dev_path, struct ldm_dev_state *lds)
     int rc;
 
     ENTRY;
-
-    rc = pho_rados_pool_exists(dev_path);
-    if (rc < 0)
-        return rc;
 
     lds->lds_family = PHO_RSC_RADOS_POOL;
     lds->lds_model = NULL;
@@ -171,9 +117,14 @@ static int pho_rados_pool_query(const char *dev_path, struct ldm_dev_state *lds)
     if (asprintf(&id, "%s:%s", hostname, dev_path) == -1 || id == NULL)
         LOG_RETURN(-ENOMEM, "String allocation failed");
 
-    lds->lds_serial = id;
+    rc = pho_rados_pool_exists(id);
 
-    return 0;
+    if (rc)
+        free(id);
+    else
+        lds->lds_serial = id;
+
+    return rc;
 }
 
 /** Exported dev adapter */

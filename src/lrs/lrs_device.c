@@ -2138,7 +2138,11 @@ int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl)
     const char *lib_dev;
     int         rc;
 
-    /* non-tape cases: dummy lib adapter (no open required) */
+    /* RADOS case */
+    if (dev_type == PHO_RSC_RADOS_POOL)
+        return get_lib_adapter(PHO_LIB_RADOS, &lib_hdl->ld_module);
+
+    /* non-tape/RADOS cases: dummy lib adapter (no open required) */
     if (dev_type != PHO_RSC_TAPE)
         return get_lib_adapter(PHO_LIB_DUMMY, &lib_hdl->ld_module);
 
