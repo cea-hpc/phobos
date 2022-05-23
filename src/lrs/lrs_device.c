@@ -1302,6 +1302,81 @@ out:
     return rc;
 }
 
+/* This function must be called with a lock on \p reqc */
+static inline bool is_rwalloc_ended(struct req_container *reqc)
+{
+    size_t i;
+
+    for (i = 0; i < reqc->params.rwalloc.n_media; i++)
+        if (reqc->params.rwalloc.media[i].status == SUB_REQUEST_TODO)
+            return false;
+
+    return true;
+}
+
+/**
+ * Cancel sub_request on error
+ *
+ * Must be called with a lock on sub_request->reqc
+ * If a previous error is detected with a non null rc in reqc, the medium of
+ * this sub_request is freed and set to NULL and its status is set as
+ * SUB_REQUEST_CANCEL.
+ *
+ * @param[in]   sub_request     the rwalloc sub_request to check
+ * @param[out]  ended           Will be set to true if the request is ended and
+ *                              could be freed, false otherwise.
+ *
+ * @return  True if there was an error and the request was cancelled,
+ *          false otherwise.
+ */
+static bool locked_cancel_rwalloc_on_error(struct sub_request *sub_request,
+                                           bool *ended)
+{
+    struct req_container *reqc = sub_request->reqc;
+    struct rwalloc_medium  *rwalloc_medium;
+
+    *ended = false;
+    if (!reqc->params.rwalloc.rc)
+        return false;
+
+    rwalloc_medium = &reqc->params.rwalloc.media[sub_request->medium_index];
+    rwalloc_medium->status = SUB_REQUEST_CANCEL;
+    media_info_free(rwalloc_medium->alloc_medium);
+    rwalloc_medium->alloc_medium = NULL;
+    *ended = is_rwalloc_ended(reqc);
+    return true;
+}
+
+/**
+ * Cancel this rwalloc sub request if there is already an error
+ *
+ * If a previous error is detected with a not null rc in reqc, the medium of
+ * this sub_request is freed and set to NULL and its status is set as
+ * SUB_REQUEST_CANCEL.
+ * If the request is ended, reqc is freed and set to NULL.
+ *
+ * @param[in]   sub_request     the rwalloc sub_request to check
+ *
+ * @return  True if there was an error and the medium is cancelled, false
+ *          otherwise.
+ */
+__attribute__((unused))
+static bool cancel_rwalloc_on_error(struct sub_request *sub_request)
+{
+    bool ended = false;
+    bool rc = false;
+
+    MUTEX_LOCK(&sub_request->reqc->mutex);
+    rc = locked_cancel_rwalloc_on_error(sub_request, &ended);
+    MUTEX_UNLOCK(&sub_request->reqc->mutex);
+    if (ended) {
+        sched_req_free(sub_request->reqc);
+        sub_request->reqc = NULL;
+    }
+
+    return rc;
+}
+
 /**
  * Fill response container for sub requests
  *
