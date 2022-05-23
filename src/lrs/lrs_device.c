@@ -1302,6 +1302,77 @@ out:
     return rc;
 }
 
+/**
+ * Fill response container for sub requests
+ *
+ * In addition of filling the medium which is allocated, this function
+ * also fill the dev which is elected. The dev piece of information is not
+ * dedicated to the final response sent to the client, but it is a piece of
+ * information internal to the LRS in case we need to cancel a request on a
+ * device based on the response container.
+ *
+ * @param[in]   dev         device in charge of this sub request
+ * @param[in]   sub_request rwalloc sub request
+ *
+ * @return 0 on success, a negative error code on failure
+ */
+__attribute__((unused))
+static int fill_rwalloc_resp_container(struct lrs_dev *dev,
+                                       struct sub_request *sub_request)
+{
+    struct resp_container *respc = sub_request->reqc->params.rwalloc.respc;
+    pho_resp_t *resp = respc->resp;
+    int rc = 0;
+
+    respc->devices[sub_request->medium_index] = dev;
+    if (pho_request_is_read(sub_request->reqc->req)) {
+        pho_resp_read_elt_t *rresp;
+
+        rresp = resp->ralloc->media[sub_request->medium_index];
+        rresp->fs_type = dev->ld_dss_media_info->fs.type;
+        rresp->addr_type = dev->ld_dss_media_info->addr_type;
+        rresp->root_path = strdup(dev->ld_mnt_path);
+        if (!rresp->root_path)
+            GOTO(out_clean_dev, rc = -errno);
+
+        rresp->med_id->name = strdup(dev->ld_dss_media_info->rsc.id.name);
+        if (!rresp->med_id->name) {
+            rc = -errno;
+            free(rresp->root_path);
+            rresp->root_path = NULL;
+            goto out_clean_dev;
+        }
+
+        rresp->med_id->family = dev->ld_dss_media_info->rsc.id.family;
+    } else {
+        pho_resp_write_elt_t *wresp;
+
+        wresp = resp->walloc->media[sub_request->medium_index];
+        wresp->avail_size = dev->ld_dss_media_info->stats.phys_spc_free;
+        wresp->med_id->family = dev->ld_dss_media_info->rsc.id.family;
+        wresp->root_path = strdup(dev->ld_mnt_path);
+        if (!wresp->root_path)
+            GOTO(out_clean_dev, rc = -errno);
+
+        wresp->med_id->name = strdup(dev->ld_dss_media_info->rsc.id.name);
+        if (!wresp->med_id->name) {
+            rc = -errno;
+            free(wresp->root_path);
+            wresp->root_path = NULL;
+            goto out_clean_dev;
+        }
+
+        wresp->fs_type = dev->ld_dss_media_info->fs.type;
+        wresp->addr_type = dev->ld_dss_media_info->addr_type;
+    }
+
+    return 0;
+
+out_clean_dev:
+    respc->devices[sub_request->medium_index] = NULL;
+    return rc;
+}
+
 static int dev_handle_read(struct lrs_dev *dev)
 {
     /* IMPLEMENTATION IS COMING SOON */
