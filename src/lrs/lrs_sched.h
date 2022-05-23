@@ -72,8 +72,11 @@ struct lrs_sched {
     struct lrs_dev_hdl  devices;        /**< Handle to device threads */
     const char         *lock_hostname;  /**< Lock hostname for this LRS */
     int                 lock_owner;     /**< Lock owner (pid) for this LRS */
-    struct tsqueue      req_queue;      /**< Queue for all but
-                                          *  release requests
+    struct tsqueue      req_queue;      /**< Queue containing every incoming
+                                          *  non-release requests
+                                          */
+    struct tsqueue      retry_queue;    /**< Queue of request sent back by the
+                                          *  device thread on error
                                           */
     struct format_media ongoing_format; /**< Ongoing format media */
     struct tsqueue     *response_queue; /**< Queue for responses */

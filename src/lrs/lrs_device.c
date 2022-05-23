@@ -101,6 +101,7 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
     (*dev)->ld_response_queue = sched->response_queue;
     (*dev)->ld_ongoing_format = &sched->ongoing_format;
     (*dev)->sched_req_queue = &sched->req_queue;
+    (*dev)->sched_retry_queue = &sched->retry_queue;
     (*dev)->ld_handle = handle;
 
     rc = dev_thread_init(*dev);
@@ -1244,6 +1245,7 @@ static int dev_handle_format(struct lrs_dev *dev)
 
         rc = dev_empty(dev);
         if (rc) {
+            /* TODO: use sched retry queue */
             tsqueue_push(dev->sched_req_queue, reqc);
             dev->ld_sub_request->reqc = NULL;
             LOG_GOTO(out, rc,
@@ -1380,6 +1382,7 @@ static void cancel_pending_format(struct lrs_dev *device)
         }
 
         if (!rc) {
+            /* TODO: use sched error queue */
             tsqueue_push(device->sched_req_queue, format_request);
             free(device->ld_sub_request);
         } else {

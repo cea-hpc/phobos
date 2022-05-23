@@ -719,6 +719,10 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
     if (rc)
         LOG_GOTO(err_dss_fini, rc, "Failed to init sched req_queue");
 
+    rc = tsqueue_init(&sched->retry_queue);
+    if (rc)
+        LOG_GOTO(err_req_queue_fini, rc, "Failed to init sched req_queue");
+
     sched->response_queue = resp_queue;
 
     /* Load devices from DSS -- not critical if no device is found */
@@ -741,6 +745,8 @@ err_sched_fini:
     sched_fini(sched);
     return rc;
 
+err_req_queue_fini:
+    tsqueue_destroy(&sched->req_queue, sched_req_free);
 err_dss_fini:
     dss_fini(&sched->dss);
 err_hdl_fini:
@@ -925,6 +931,9 @@ void sched_resp_free(void *_respc)
 {
     struct resp_container *respc = (struct resp_container *)_respc;
 
+    if (!respc)
+        return;
+
     if (pho_response_is_write(respc->resp) ||
         pho_response_is_read(respc->resp))
         free(respc->devices);
@@ -942,6 +951,7 @@ void sched_fini(struct lrs_sched *sched)
     lrs_dev_hdl_fini(&sched->devices);
     dss_fini(&sched->dss);
     tsqueue_destroy(&sched->req_queue, sched_req_free);
+    tsqueue_destroy(&sched->retry_queue, sched_req_free);
     format_media_clean(&sched->ongoing_format);
 }
 

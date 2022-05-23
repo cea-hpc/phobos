@@ -158,8 +158,12 @@ struct lrs_dev {
     struct format_media *ld_ongoing_format;     /**< reference to the ongoing
                                                   * format array
                                                   */
+    /* TODO: move sched_req_queue use to sched_retry_queue */
     struct tsqueue      *sched_req_queue;       /**< reference to the sched
                                                   * request queue
+                                                  */
+    struct tsqueue      *sched_retry_queue;     /**< reference to the sched
+                                                  * retry queue
                                                   */
     struct lrs_dev_hdl  *ld_handle;
 };
