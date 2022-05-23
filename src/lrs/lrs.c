@@ -210,7 +210,7 @@ static void n_media_per_release(struct req_container *req_cont)
         rel->n_media - req_cont->params.release.n_tosync_media;
 }
 
-static int _init_release_container(struct req_container *req_cont)
+static int init_release_container(struct req_container *req_cont)
 {
     struct tosync_medium *tosync_media = NULL;
     struct nosync_medium *nosync_media = NULL;
@@ -513,6 +513,83 @@ send_error:
     return rc;
 }
 
+static int init_rwalloc_container(struct req_container *reqc)
+{
+    struct rwalloc_params *rwalloc_params = &reqc->params.rwalloc;
+    bool is_write = pho_request_is_write(reqc->req);
+    size_t i;
+    int rc;
+
+    if (is_write)
+        rwalloc_params->n_media = reqc->req->walloc->n_media;
+    else
+        rwalloc_params->n_media = reqc->req->ralloc->n_required;
+
+    rwalloc_params->media = calloc(rwalloc_params->n_media,
+                                   sizeof(*rwalloc_params->media));
+    if (!rwalloc_params->media)
+        return -ENOMEM;
+
+    for (i = 0; i < rwalloc_params->n_media; i++)
+        rwalloc_params->media[i].status = SUB_REQUEST_TODO;
+
+    rwalloc_params->respc = calloc(1, sizeof(*rwalloc_params->respc));
+    if (!rwalloc_params->respc)
+        GOTO(out_free_media, rc = -ENOMEM);
+
+    rwalloc_params->respc->socket_id = reqc->socket_id;
+    rwalloc_params->respc->resp = calloc(1,
+                                         sizeof(*rwalloc_params->respc->resp));
+    if (!rwalloc_params->respc->resp)
+        GOTO(out_free_respc, rc = -ENOMEM);
+
+    rwalloc_params->respc->resp->req_id = reqc->req->id;
+    if (is_write)
+        rc = pho_srl_response_write_alloc(rwalloc_params->respc->resp,
+                                          rwalloc_params->n_media);
+    else
+        rc = pho_srl_response_read_alloc(rwalloc_params->respc->resp,
+                                         rwalloc_params->n_media);
+
+    if (rc)
+        goto out_free_resp;
+
+    rwalloc_params->respc->devices_len = rwalloc_params->n_media;
+    rwalloc_params->respc->devices =
+        calloc(rwalloc_params->respc->devices_len,
+               sizeof(*rwalloc_params->respc->devices));
+    if (!rwalloc_params->respc->devices)
+        GOTO(out_free, rc = -ENOMEM);
+
+    return 0;
+out_free:
+    pho_srl_response_free(rwalloc_params->respc->resp, false);
+out_free_resp:
+    free(rwalloc_params->respc->resp);
+    rwalloc_params->respc->resp = NULL;
+out_free_respc:
+    free(rwalloc_params->respc);
+    rwalloc_params->respc = NULL;
+out_free_media:
+    free(rwalloc_params->media);
+    rwalloc_params->media = NULL;
+    return rc;
+}
+
+static int init_request_container_param(struct req_container *reqc)
+{
+        if (pho_request_is_release(reqc->req))
+            return init_release_container(reqc);
+
+        if (pho_request_is_write(reqc->req) || pho_request_is_read(reqc->req))
+            return init_rwalloc_container(reqc);
+
+        if (pho_request_is_notify(reqc->req))
+            reqc->params.notify.notified_device = NULL;
+
+        return 0;
+}
+
 static int _prepare_requests(struct lrs *lrs, const int n_data,
                              struct pho_comm_data *data)
 {
@@ -576,23 +653,19 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
             LOG_GOTO(send_err, rc2 = -EINVAL,
                      "Requested family is not handled by the daemon");
 
-        if (pho_request_is_release(req_cont->req)) {
-            rc2 = _init_release_container(req_cont);
-            if (rc2)
-                LOG_GOTO(send_err, rc2, "Cannot init release container");
+        rc2 = init_request_container_param(req_cont);
+        if (rc2)
+            LOG_GOTO(send_err, rc2, "Cannot init request container");
 
+        if (pho_request_is_release(req_cont->req)) {
             rc2 = sched_release_enqueue(lrs->sched[fam], req_cont);
             rc = rc ? : rc2;
         } else {
-            if (pho_request_is_notify(req_cont->req))
-                req_cont->params.notify.notified_device = NULL;
-
             if (running)
                 tsqueue_push(&lrs->sched[fam]->req_queue, req_cont);
             else
                 LOG_GOTO(send_err, rc2 = -ESHUTDOWN,
                          "Daemon stopping, not accepting new requests");
-
         }
 
         continue;

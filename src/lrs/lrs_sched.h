@@ -163,7 +163,15 @@ struct rwalloc_medium {
  */
 struct rwalloc_params {
     struct rwalloc_medium *media;   /**< Array of media to alloc */
-    size_t n_rwalloc_media;         /**< Number of media to alloc */
+    size_t n_media;         /**< Number of media to alloc */
+    size_t next_medium_to_read;     /**< Index of the next candidate medium for
+                                      *  read request (unused for write request)
+                                      */
+    int rc;                         /**< Global return code, if multiple sub
+                                      *  requests fail, only the first one is
+                                      *  kept.
+                                      */
+    struct resp_container *respc;   /**< Response container */
 };
 
 /**
@@ -184,6 +192,9 @@ struct req_container {
     } params;
 };
 
+/** sched_resp_free can be used as glib callback */
+void sched_resp_free(void *respc);
+
 /**
  * Release memory allocated for params structure of a request container.
  */
@@ -199,10 +210,12 @@ static inline void destroy_container_params(struct req_container *cont)
         struct rwalloc_params *rwalloc_params = &cont->params.rwalloc;
         size_t index;
 
-        for (index = 0; index < rwalloc_params->n_rwalloc_media; index++)
+        for (index = 0; index < rwalloc_params->n_media; index++)
             media_info_free(rwalloc_params->media[index].alloc_medium);
 
         free(rwalloc_params->media);
+        sched_resp_free(rwalloc_params->respc);
+        free(rwalloc_params->respc);
     }
 }
 
@@ -219,6 +232,7 @@ struct resp_container {
     pho_resp_t *resp;               /**< Response. */
     struct lrs_dev **devices;       /**< List of devices which will handle the
                                       * request corresponding to this response.
+                                      * (used only for read or write alloc)
                                       */
     int devices_len;                /**< size of \p devices */
 };
@@ -302,9 +316,6 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc);
  */
 int sched_responses_get(struct lrs_sched *sched, int *n_resp,
                         struct resp_container **respc);
-
-/** sched_resp_free can be used as glib callback */
-void sched_resp_free(void *respc);
 
 /**
  * Acquire device lock if it is not already set.
