@@ -747,6 +747,15 @@ static void lrs_fini(struct lrs *lrs)
         return;
 
     for (i = 0; i < PHO_RSC_LAST; ++i) {
+        if (lrs->sched[i])
+            thread_signal_stop(&lrs->sched[i]->sched_thread);
+    }
+
+    for (i = 0; i < PHO_RSC_LAST; ++i) {
+        if (!lrs->sched[i])
+            continue;
+
+        thread_wait_end(&lrs->sched[i]->sched_thread);
         sched_fini(lrs->sched[i]);
         free(lrs->sched[i]);
     }

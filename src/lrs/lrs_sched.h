@@ -35,6 +35,7 @@
 #include "pho_type_utils.h"
 
 #include "lrs_device.h"
+#include "lrs_thread.h"
 
 /* from lrs.c */
 extern bool running;
@@ -88,6 +89,9 @@ struct lrs_sched {
                                           */
     unsigned long       sync_wsize_kb;  /**< Written size threshold for
                                           *  medium synchronization
+                                          */
+    struct thread_info  sched_thread;   /**< thread handling the actions
+                                          *  executed by the scheduler
                                           */
 };
 

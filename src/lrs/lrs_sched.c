@@ -63,6 +63,8 @@ enum sched_operation {
     LRS_OP_FORMAT,
 };
 
+static void *lrs_sched_thread(void *sdata);
+
 static int format_media_init(struct format_media *format_media)
 {
     int rc;
@@ -729,6 +731,12 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
     rc = sched_clean_medium_locks(sched);
     if (rc)
         goto err_sched_fini;
+
+    rc = thread_init(&sched->sched_thread, lrs_sched_thread, sched);
+    if (rc)
+        LOG_GOTO(err_sched_fini, rc,
+                 "Could not create sched thread for family '%d'",
+                 sched->family);
 
     return 0;
 
@@ -2821,4 +2829,22 @@ free_device_status:
     }
 
     return rc;
+}
+
+static void *lrs_sched_thread(void *sdata)
+{
+    struct lrs_sched *sched = (struct lrs_sched *) sdata;
+    struct thread_info *thread = &sched->sched_thread;
+    int rc;
+
+    while (thread_is_running(thread)) {
+        rc = thread_signal_wait(thread);
+        if (rc < 0)
+            LOG_GOTO(end_thread, thread->status = rc,
+                     "sched thread '%d': fatal error", sched->family);
+    }
+
+end_thread:
+    thread->state = THREAD_STOPPED;
+    pthread_exit(&thread->status);
 }
