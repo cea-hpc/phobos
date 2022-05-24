@@ -190,7 +190,8 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
     if (rc)
         return rc;
 
-    rc = dss_device_get(&sched->dss, &filter, &dev_list, &dev_count);
+    rc = dss_device_get(&sched->sched_thread.dss, &filter, &dev_list,
+                        &dev_count);
     dss_filter_free(&filter);
     if (rc)
         return rc;
@@ -328,7 +329,8 @@ int lrs_dev_hdl_load(struct lrs_sched *sched,
         return rc;
 
     /* get all admin unlocked devices from DB for the given family */
-    rc = dss_device_get(&sched->dss, &filter, &dev_list, &dev_count);
+    rc = dss_device_get(&sched->sched_thread.dss, &filter, &dev_list,
+                        &dev_count);
     dss_filter_free(&filter);
     if (rc)
         return rc;

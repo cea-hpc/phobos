@@ -61,7 +61,7 @@ static int setup(void **data)
     if (rc)
         return rc;
 
-    scheduler.dss = *dss;
+    scheduler.sched_thread.dss = *dss;
     scheduler.family = PHO_RSC_DIR;
     rc = fill_host_owner(&scheduler.lock_hostname, &scheduler.lock_owner);
 
@@ -211,7 +211,7 @@ static int test_setup_one_device(void **data)
     if (rc)
         return rc;
 
-    rc = insert_device(&scheduler.dss, "test");
+    rc = insert_device(&scheduler.sched_thread.dss, "test");
     if (rc)
         return rc;
 
@@ -247,7 +247,7 @@ static int test_teardown_one_device(void **data)
     lrs_dev_hdl_fini(handle);
     free(handle);
 
-    rc = remove_device(&scheduler.dss, "test");
+    rc = remove_device(&scheduler.sched_thread.dss, "test");
 
     return rc;
 }
@@ -267,15 +267,15 @@ static int test_setup_three_devices(void **data)
     if (rc)
         return rc;
 
-    rc = insert_device(&scheduler.dss, "test1");
+    rc = insert_device(&scheduler.sched_thread.dss, "test1");
     if (rc)
         return rc;
 
-    rc = insert_device(&scheduler.dss, "test2");
+    rc = insert_device(&scheduler.sched_thread.dss, "test2");
     if (rc)
         return rc;
 
-    rc = insert_device(&scheduler.dss, "test3");
+    rc = insert_device(&scheduler.sched_thread.dss, "test3");
     if (rc)
         return rc;
 
@@ -320,15 +320,15 @@ static int test_teardown_three_devices(void **data)
     lrs_dev_hdl_fini(handle);
     free(handle);
 
-    rc = remove_device(&scheduler.dss, "test1");
+    rc = remove_device(&scheduler.sched_thread.dss, "test1");
     if (rc)
         return rc;
 
-    rc = remove_device(&scheduler.dss, "test2");
+    rc = remove_device(&scheduler.sched_thread.dss, "test2");
     if (rc)
         return rc;
 
-    rc = remove_device(&scheduler.dss, "test3");
+    rc = remove_device(&scheduler.sched_thread.dss, "test3");
     if (rc)
         return rc;
 

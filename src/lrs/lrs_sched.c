@@ -204,7 +204,7 @@ static int sched_resource_release(struct lrs_sched *sched, enum dss_type type,
 
     ENTRY;
 
-    rc = dss_unlock(&sched->dss, type, item, 1, false);
+    rc = dss_unlock(&sched->sched_thread.dss, type, item, 1, false);
     if (rc)
         LOG_RETURN(rc, "Cannot unlock a resource");
 
@@ -296,7 +296,7 @@ static int check_renew_owner(struct lrs_sched *sched, enum dss_type type,
          * ownership of this resource again.
          */
         /* unlock previous owner */
-        rc = dss_unlock(&sched->dss, type, item, 1, true);
+        rc = dss_unlock(&sched->sched_thread.dss, type, item, 1, true);
         if (rc)
             LOG_RETURN(rc,
                        "Unable to clear previous lock (hostname: %s, owner "
@@ -304,7 +304,8 @@ static int check_renew_owner(struct lrs_sched *sched, enum dss_type type,
                        lock->hostname, lock->owner);
 
         /* get the lock again */
-        rc = take_and_update_lock(&sched->dss, type, item, lock);
+        rc = take_and_update_lock(&sched->sched_thread.dss, type, item,
+                                  lock);
         if (rc)
             LOG_RETURN(rc, "Unable to get and refresh lock");
     }
@@ -343,7 +344,8 @@ int check_and_take_device_lock(struct lrs_sched *sched,
                        "Unable to check and renew lock of one of our devices "
                        "'%s'", dev->rsc.id.name);
     } else {
-        rc = take_and_update_lock(&sched->dss, DSS_DEVICE, dev, &dev->lock);
+        rc = take_and_update_lock(&sched->sched_thread.dss, DSS_DEVICE, dev,
+                                  &dev->lock);
         if (rc)
             LOG_RETURN(rc,
                        "Unable to acquire and update lock on device '%s'",
@@ -363,7 +365,7 @@ static int sched_fill_media_info(struct lrs_sched *sched,
                                  struct media_info **pmedia,
                                  const struct pho_id *id)
 {
-    struct dss_handle   *dss = &sched->dss;
+    struct dss_handle   *dss = &sched->sched_thread.dss;
     struct media_info   *media_res = NULL;
     struct dss_filter    filter;
     int                  mcnt = 0;
@@ -525,7 +527,7 @@ static int sched_fill_dev_info(struct lrs_sched *sched, struct lib_adapter *lib,
 
         /* get lock for loaded media */
         if (!dev->ld_dss_media_info->lock.hostname) {
-            rc = take_and_update_lock(&sched->dss, DSS_MEDIA,
+            rc = take_and_update_lock(&sched->sched_thread.dss, DSS_MEDIA,
                                       dev->ld_dss_media_info,
                                       &dev->ld_dss_media_info->lock);
             if (rc)
@@ -633,7 +635,8 @@ static int sched_clean_device_locks(struct lrs_sched *sched)
 
     ENTRY;
 
-    rc = dss_lock_device_clean(&sched->dss, rsc_family_names[sched->family],
+    rc = dss_lock_device_clean(&sched->sched_thread.dss,
+                               rsc_family_names[sched->family],
                                sched->lock_hostname, sched->lock_owner);
     if (rc)
         pho_error(rc, "Failed to clean device locks");
@@ -675,7 +678,7 @@ static int sched_clean_medium_locks(struct lrs_sched *sched)
         }
     }
 
-    rc = dss_lock_media_clean(&sched->dss, media, cnt,
+    rc = dss_lock_media_clean(&sched->sched_thread.dss, media, cnt,
                               sched->lock_hostname, sched->lock_owner);
     if (rc)
         pho_error(rc, "Failed to clean media locks");
@@ -704,7 +707,7 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
         LOG_GOTO(err_hdl_fini, rc, "Failed to get hostname and PID");
 
     /* Connect to the DSS */
-    rc = dss_init(&sched->dss);
+    rc = dss_init(&sched->sched_thread.dss);
     if (rc)
         LOG_GOTO(err_hdl_fini, rc, "Failed to init sched dss handle");
 
@@ -747,7 +750,7 @@ err_sched_fini:
 err_req_queue_fini:
     tsqueue_destroy(&sched->req_queue, sched_req_free);
 err_dss_fini:
-    dss_fini(&sched->dss);
+    dss_fini(&sched->sched_thread.dss);
 err_hdl_fini:
     lrs_dev_hdl_fini(&sched->devices);
 err_format_media:
@@ -834,7 +837,7 @@ void sched_fini(struct lrs_sched *sched)
 
     lrs_dev_hdl_clear(&sched->devices);
     lrs_dev_hdl_fini(&sched->devices);
-    dss_fini(&sched->dss);
+    dss_fini(&sched->sched_thread.dss);
     tsqueue_destroy(&sched->req_queue, sched_req_free);
     tsqueue_destroy(&sched->retry_queue, sched_req_free);
     format_media_clean(&sched->ongoing_format);
@@ -1089,7 +1092,8 @@ static int sched_select_media(struct lrs_sched *sched,
     if (rc)
         return rc;
 
-    rc = dss_media_get(&sched->dss, &filter, &pmedia_res, &mcnt);
+    rc = dss_media_get(&sched->sched_thread.dss, &filter, &pmedia_res,
+                       &mcnt);
     dss_filter_free(&filter);
     if (rc)
         GOTO(err_nores, rc);
@@ -1163,8 +1167,8 @@ lock_race_retry:
 
     if (!chosen_media->lock.hostname) {
         pho_debug("Acquiring selected media '%s'", chosen_media->rsc.id.name);
-        rc = take_and_update_lock(&sched->dss, DSS_MEDIA, chosen_media,
-                                  &chosen_media->lock);
+        rc = take_and_update_lock(&sched->sched_thread.dss, DSS_MEDIA,
+                                  chosen_media, &chosen_media->lock);
         if (rc) {
             pho_debug("Failed to lock media '%s', looking for another one",
                       chosen_media->rsc.id.name);
@@ -1828,7 +1832,8 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
          *   sched_select_media
          */
         MUTEX_LOCK(&dev->ld_mutex);
-        rc2 = update_phys_spc_free(&sched->dss, dev->ld_dss_media_info,
+        rc2 = update_phys_spc_free(&sched->sched_thread.dss,
+            dev->ld_dss_media_info,
             reqc->params.release.nosync_media[i].written_size);
         MUTEX_UNLOCK(&dev->ld_mutex);
         if (rc2) {
@@ -1877,7 +1882,8 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
              *   sched_select_media
              */
             MUTEX_LOCK(&dev->ld_mutex);
-            rc2 = update_phys_spc_free(&sched->dss, dev->ld_dss_media_info,
+            rc2 = update_phys_spc_free(&sched->sched_thread.dss,
+                dev->ld_dss_media_info,
                 reqc->params.release.tosync_media[i].written_size);
             MUTEX_UNLOCK(&dev->ld_mutex);
             if (rc2) {
@@ -2213,8 +2219,8 @@ find_read_device:
         rc = check_renew_lock(sched, DSS_MEDIA, *alloc_medium,
                               &(*alloc_medium)->lock);
     else
-        rc = take_and_update_lock(&sched->dss, DSS_MEDIA, *alloc_medium,
-                                  &(*alloc_medium)->lock);
+        rc = take_and_update_lock(&sched->sched_thread.dss, DSS_MEDIA,
+                                  *alloc_medium, &(*alloc_medium)->lock);
 
     if (rc)
         goto free_skip_medium;
@@ -2371,7 +2377,7 @@ static int sched_handle_format(struct lrs_sched *sched,
 
         /* medium to format isn't already loaded into any drive, need lock */
         if (!reqc->params.format.medium_to_format->lock.hostname) {
-            rc = take_and_update_lock(&sched->dss, DSS_MEDIA,
+            rc = take_and_update_lock(&sched->sched_thread.dss, DSS_MEDIA,
                     reqc->params.format.medium_to_format,
                     &reqc->params.format.medium_to_format->lock);
             if (rc == -EEXIST)

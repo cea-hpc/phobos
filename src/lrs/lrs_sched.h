@@ -68,7 +68,6 @@ void format_medium_remove(struct format_media *format_media,
  * actual IO to be performed.
  */
 struct lrs_sched {
-    struct dss_handle   dss;            /**< Associated DSS */
     enum rsc_family     family;         /**< Managed resource family */
     struct lrs_dev_hdl  devices;        /**< Handle to device threads */
     const char         *lock_hostname;  /**< Lock hostname for this LRS */
