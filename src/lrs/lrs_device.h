@@ -29,6 +29,8 @@
 #include <pthread.h>
 #include <stdbool.h>
 
+#include "lrs_thread.h"
+
 #include "pho_dss.h"
 #include "pho_ldm.h"
 #include "pho_types.h"
@@ -52,51 +54,6 @@ struct lrs_dev_hdl {
     unsigned long   sync_wsize_kb; /**< Written size threshold for
                                      *  medium synchronization
                                      */
-};
-
-/**
- * Thread status.
- */
-enum thread_state {
-    LDT_RUNNING = 0,                /**< Thread is currently running. */
-    LDT_STOPPING,                   /**< Thread end was requested. */
-    LDT_STOPPED,                    /**< Thread ended its execution. */
-    LDT_LAST
-};
-
-static const char * const thread_state_names[] = {
-    [LDT_RUNNING]  = "running",
-    [LDT_STOPPING] = "stopping",
-    [LDT_STOPPED]  = "stopped",
-};
-
-static inline const char *thread_state2str(enum thread_state state)
-{
-    if (state >= LDT_LAST || state < 0)
-        return "unknown";
-    return thread_state_names[state];
-}
-
-/**
- * Internal state of the device thread.
- */
-struct thread_info {
-    pthread_t            ld_tid;            /**< ID of the thread handling
-                                              *  this device.
-                                              */
-    pthread_mutex_t      ld_signal_mutex;   /**< Mutex to protect the signal
-                                              * access.
-                                              */
-    pthread_cond_t       ld_signal;         /**< Used to signal the thread
-                                              * when new work is available.
-                                              */
-    enum thread_state    ld_state;          /**< Thread status. */
-    int                  ld_status;         /**< Return status at the end of
-                                              * the execution.
-                                              */
-    struct dss_handle    ld_dss;            /**< per thread DSS handle for media
-                                              * and device requests
-                                              */
 };
 
 /** Request pushed to a device */
@@ -193,26 +150,6 @@ struct lrs_dev {
                                                   */
     struct lrs_dev_hdl  *ld_handle;
 };
-
-static inline bool ldt_is_running(struct lrs_dev *dev)
-{
-    return dev->ld_device_thread.ld_state == LDT_RUNNING;
-}
-
-static inline bool ldt_is_stopping(struct lrs_dev *dev)
-{
-    return dev->ld_device_thread.ld_state == LDT_STOPPING;
-}
-
-static inline bool ldt_is_stopped(struct lrs_dev *dev)
-{
-    return dev->ld_device_thread.ld_state == LDT_STOPPED;
-}
-
-static inline const char *ldt_state2str(struct lrs_dev *dev)
-{
-    return thread_state2str(dev->ld_device_thread.ld_state);
-}
 
 /**
  *  TODO: will become a device thread static function when all media operations
@@ -335,38 +272,6 @@ void lrs_dev_hdl_clear(struct lrs_dev_hdl *handle);
  * \return             a pointer to the requested device is returned
  */
 struct lrs_dev *lrs_dev_hdl_get(struct lrs_dev_hdl *handle, int index);
-
-/**
- * Signal to the device thread that it should stop working
- *
- * \param[in]  device  the device to signal
- */
-void dev_thread_signal_stop(struct lrs_dev *device);
-
-/**
- * Set the error status on device thread and signal that it should stop working
- *
- * \param[in]   device      device to signal
- * \param[in]   error_code  error code
- */
-void dev_thread_signal_stop_on_error(struct lrs_dev *device, int error_code);
-
-/**
- * Signal to the device thread that work has been received
- *
- * \param[in]  device  the device to signal
- */
-void dev_thread_signal(struct lrs_dev *device);
-
-/**
- * Wait for the termination of the device thread
- *
- * dev_thread_signal_stop must be called before this function as this one
- * is blocking.
- *
- * \param[in]  device  the device whose termination to wait for
- */
-void dev_thread_wait_end(struct lrs_dev *device);
 
 /**
  * Wrap library open operations

@@ -95,7 +95,7 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
 
     sync_params_init(&(*dev)->ld_sync_params);
 
-    rc = dss_init(&(*dev)->ld_device_thread.ld_dss);
+    rc = dss_init(&(*dev)->ld_device_thread.dss);
     if (rc)
         GOTO(err_info, rc);
 
@@ -121,7 +121,7 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
     return 0;
 
 err_dss:
-    dss_fini(&(*dev)->ld_device_thread.ld_dss);
+    dss_fini(&(*dev)->ld_device_thread.dss);
 err_info:
     g_ptr_array_free((*dev)->ld_sync_params.tosync_array, true);
     dev_info_free((*dev)->ld_dss_dev_info, 1);
@@ -161,7 +161,7 @@ static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
     g_ptr_array_unref(dev->ld_sync_params.tosync_array);
     sub_request_free(dev->ld_sub_request);
     dev_info_free(dev->ld_dss_dev_info, 1);
-    dss_fini(&dev->ld_device_thread.ld_dss);
+    dss_fini(&dev->ld_device_thread.dss);
 
     free(dev);
 }
@@ -225,8 +225,12 @@ int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc)
     dev = (struct lrs_dev *)g_ptr_array_remove_index_fast(handle->ldh_devices,
                                                           index);
 
-    dev_thread_signal_stop_on_error(dev, rc);
-    dev_thread_wait_end(dev);
+    thread_signal_stop_on_error(&dev->ld_device_thread, rc);
+    rc = thread_wait_end(&dev->ld_device_thread);
+    if (rc < 0)
+        pho_error(rc, "device thread '%s' terminated with error",
+                  dev->ld_dss_dev_info->rsc.id.name);
+
     lrs_dev_info_clean(handle, dev);
 
     return 0;
@@ -248,17 +252,20 @@ int lrs_dev_hdl_trydel(struct lrs_dev_hdl *handle, int index)
 
     dev = lrs_dev_hdl_get(handle, index);
 
-    dev_thread_signal_stop(dev);
+    rc = thread_signal_stop(&dev->ld_device_thread);
+    if (rc)
+        pho_error(rc, "Error when signaling device (%s, %s) to stop",
+                  dev->ld_dss_dev_info->rsc.id.name, dev->ld_dev_path);
 
     rc = clock_gettime(CLOCK_REALTIME, &now);
     if (rc) {
-        rc = pthread_tryjoin_np(dev->ld_device_thread.ld_tid,
+        rc = pthread_tryjoin_np(dev->ld_device_thread.tid,
                                 (void **)&threadrc);
     } else {
         struct timespec deadline;
 
         deadline = add_timespec(&now, &wait_for_fast_del);
-        rc = pthread_timedjoin_np(dev->ld_device_thread.ld_tid,
+        rc = pthread_timedjoin_np(dev->ld_device_thread.tid,
                                   (void **)&threadrc, &deadline);
     }
 
@@ -282,7 +289,7 @@ int lrs_dev_hdl_retrydel(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
     int *threadrc;
     int rc;
 
-    rc = pthread_tryjoin_np(dev->ld_device_thread.ld_tid, (void **)&threadrc);
+    rc = pthread_tryjoin_np(dev->ld_device_thread.tid, (void **)&threadrc);
 
     if (rc == EBUSY)
         return -EAGAIN;
@@ -352,13 +359,18 @@ int lrs_dev_hdl_load(struct lrs_sched *sched,
 
 void lrs_dev_hdl_clear(struct lrs_dev_hdl *handle)
 {
+    int rc;
     int i;
 
     for (i = 0; i < handle->ldh_devices->len; i++) {
         struct lrs_dev *dev;
 
         dev = (struct lrs_dev *)g_ptr_array_index(handle->ldh_devices, i);
-        dev_thread_signal_stop(dev);
+        rc = thread_signal_stop(&dev->ld_device_thread);
+        if (rc)
+            pho_error(rc, "Error when signaling device (%s, %s) to stop it",
+                      dev->ld_dss_dev_info->rsc.id.name,
+                      dev->ld_dev_path);
     }
 
     for (i = handle->ldh_devices->len - 1; i >= 0; i--) {
@@ -366,7 +378,10 @@ void lrs_dev_hdl_clear(struct lrs_dev_hdl *handle)
 
         dev = (struct lrs_dev *)g_ptr_array_remove_index(handle->ldh_devices,
                                                          i);
-        dev_thread_wait_end(dev);
+        rc = thread_wait_end(&dev->ld_device_thread);
+        if (rc < 0)
+            pho_error(rc, "device thread '%s' terminated with error",
+                      dev->ld_dss_dev_info->rsc.id.name);
         lrs_dev_info_clean(handle, dev);
     }
 }
@@ -382,26 +397,6 @@ static void sync_params_init(struct sync_params *params)
     params->oldest_tosync.tv_sec = 0;
     params->oldest_tosync.tv_nsec = 0;
     params->tosync_size = 0;
-}
-
-/**
- * Signal the thread
- *
- * \return 0 on success, -1 * ERROR_CODE on failure
- */
-static int lrs_dev_signal(struct thread_info *thread)
-{
-    int rc;
-
-    MUTEX_LOCK(&thread->ld_signal_mutex);
-
-    rc = pthread_cond_signal(&thread->ld_signal);
-    if (rc)
-        pho_error(-rc, "Unable to signal device");
-
-    MUTEX_UNLOCK(&thread->ld_signal_mutex);
-
-    return -rc;
 }
 
 static const struct timespec MINSLEEP = {
@@ -439,9 +434,8 @@ static int compute_wakeup_date(struct lrs_dev *dev, struct timespec *date)
  *
  * Negative error codes reported by this function are fatal for the thread.
  */
-static int wait_for_signal(struct lrs_dev *dev)
+static int dev_wait_for_signal(struct lrs_dev *dev)
 {
-    struct thread_info *thread = &dev->ld_device_thread;
     struct timespec time;
     int rc;
 
@@ -449,15 +443,7 @@ static int wait_for_signal(struct lrs_dev *dev)
     if (rc)
         return rc;
 
-    MUTEX_LOCK(&thread->ld_signal_mutex);
-    rc = pthread_cond_timedwait(&thread->ld_signal,
-                                &thread->ld_signal_mutex,
-                                &time);
-    MUTEX_UNLOCK(&thread->ld_signal_mutex);
-    if (rc != ETIMEDOUT)
-        rc = -rc;
-
-    return rc;
+    return thread_signal_timed_wait(&dev->ld_device_thread, &time);
 }
 
 static int queue_release_response(struct tsqueue *response_queue,
@@ -619,6 +605,7 @@ int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
 {
     struct sync_params *sync_params = &dev->ld_sync_params;
     struct sub_request *req_tosync;
+    int rc;
 
     req_tosync = malloc(sizeof(*req_tosync));
     if (!req_tosync)
@@ -633,7 +620,11 @@ int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
     update_oldest_tosync(&sync_params->oldest_tosync, reqc->received_at);
     MUTEX_UNLOCK(&dev->ld_mutex);
 
-    dev_thread_signal(dev);
+    rc = thread_signal(&dev->ld_device_thread);
+    if (rc)
+        pho_error(rc, "Error when signaling device (%s, %s) to wake up",
+                  dev->ld_dss_dev_info->rsc.id.name,
+                  dev->ld_dev_path);
 
     return 0;
 }
@@ -729,7 +720,7 @@ static void check_needs_sync(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
                                             &handle->sync_time_ms)) ||
                        sync_params->tosync_size >= handle->sync_wsize_kb);
     dev->ld_needs_sync |= (!running && sync_params->tosync_array->len > 0);
-    dev->ld_needs_sync |= (ldt_is_stopping(dev) &&
+    dev->ld_needs_sync |= (thread_is_stopping(&dev->ld_device_thread) &&
                            sync_params->tosync_array->len > 0);
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
@@ -831,7 +822,7 @@ static int dev_sync(struct lrs_dev *dev)
     /* sync operation */
     MUTEX_LOCK(&dev->ld_mutex);
     rc = medium_sync(dev->ld_dss_media_info, dev->ld_mnt_path);
-    rc2 = lrs_dev_media_update(&dev->ld_device_thread.ld_dss,
+    rc2 = lrs_dev_media_update(&dev->ld_device_thread.dss,
                                dev->ld_dss_media_info,
                                sync_params->tosync_size, rc, dev->ld_mnt_path,
                                sync_params->tosync_array->len);
@@ -968,7 +959,7 @@ out_close:
 
 out:
     if (!rc) {
-        rc2 = dss_medium_release(&dev->ld_device_thread.ld_dss,
+        rc2 = dss_medium_release(&dev->ld_device_thread.dss,
                                  dev->ld_dss_media_info);
         if (rc2)
             rc = rc ? : rc2;
@@ -1084,7 +1075,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
         *failure_on_dev = true;
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         if (release_medium_on_dev_only_failure) {
-            rc2 = dss_medium_release(&dev->ld_device_thread.ld_dss,
+            rc2 = dss_medium_release(&dev->ld_device_thread.dss,
                                      dev->ld_dss_media_info);
             if (rc2)
                 pho_error(rc2,
@@ -1101,7 +1092,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
     rc = ldm_lib_media_lookup(&lib, medium->rsc.id.name, &medium_addr);
     if (rc) {
         *failure_on_medium = true;
-        fail_release_free_medium(&dev->ld_device_thread.ld_dss, medium);
+        fail_release_free_medium(&dev->ld_device_thread.dss, medium);
         LOG_GOTO(out_close, rc, "Media lookup failed");
     }
 
@@ -1130,7 +1121,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         *failure_on_dev = true;
         *failure_on_medium = true;
-        fail_release_free_medium(&dev->ld_device_thread.ld_dss, medium);
+        fail_release_free_medium(&dev->ld_device_thread.dss, medium);
         LOG_GOTO(out_close, rc, "Media move failed");
     }
 
@@ -1194,7 +1185,7 @@ static int dev_format(struct lrs_dev *dev, struct fs_adapter *fsa, bool unlock)
         fields |= ADM_STATUS;
     }
 
-    rc = dss_media_set(&dev->ld_device_thread.ld_dss, medium, 1, DSS_SET_UPDATE,
+    rc = dss_media_set(&dev->ld_device_thread.dss, medium, 1, DSS_SET_UPDATE,
                        fields);
     if (rc != 0)
         LOG_RETURN(rc, "Failed to update state of media '%s' after format",
@@ -1745,7 +1736,7 @@ mount:
         sub_request->failure_on_medium = true;
         io_ended = true;
         /* set the medium to failed early to be sure to not reuse it by sched */
-        rc2 = dss_set_medium_to_failed(&dev->ld_device_thread.ld_dss,
+        rc2 = dss_set_medium_to_failed(&dev->ld_device_thread.dss,
                                        dev->ld_dss_media_info);
         if (rc2)
             pho_error(rc2, "Error when setting medium %s to failed",
@@ -1770,7 +1761,7 @@ mount:
         rc = -ENOSPC;
 
         dev->ld_dss_media_info->fs.status = PHO_FS_STATUS_FULL;
-        rc2 = dss_media_set(&dev->ld_device_thread.ld_dss,
+        rc2 = dss_media_set(&dev->ld_device_thread.dss,
                             dev->ld_dss_media_info, 1,
                             DSS_SET_UPDATE, FS_STATUS);
         if (rc2) {
@@ -1832,7 +1823,7 @@ static void cancel_pending_format(struct lrs_dev *device)
 
     format_request = device->ld_sub_request->reqc;
 
-    if (device->ld_device_thread.ld_status &&
+    if (device->ld_device_thread.status &&
         !format_request->params.format.medium_to_format) {
         /*
          * A NULL medium_to_format field in the format request means the medium
@@ -1841,7 +1832,7 @@ static void cancel_pending_format(struct lrs_dev *device)
         format_medium_remove(device->ld_ongoing_format,
                              device->ld_dss_media_info);
         rc = queue_error_response(device->ld_response_queue,
-                                  device->ld_device_thread.ld_status,
+                                  device->ld_device_thread.status,
                                   format_request);
         if (rc)
             pho_error(rc,
@@ -1855,11 +1846,11 @@ static void cancel_pending_format(struct lrs_dev *device)
                 format_request->params.format.medium_to_format;
 
             format_medium_remove(device->ld_ongoing_format, medium_to_format);
-            rc = dss_medium_release(&device->ld_device_thread.ld_dss,
+            rc = dss_medium_release(&device->ld_device_thread.dss,
                                     medium_to_format);
             if (rc) {
                 medium_to_format->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-                rc = dss_media_set(&device->ld_device_thread.ld_dss,
+                rc = dss_media_set(&device->ld_device_thread.dss,
                                    medium_to_format, 1, DSS_SET_UPDATE,
                                    ADM_STATUS);
                 if (rc)
@@ -1914,18 +1905,18 @@ static void dev_thread_end_mounted_medium(struct lrs_dev *device)
     if (device->ld_op_status != PHO_DEV_OP_ST_MOUNTED)
         return;
 
-    if (!device->ld_device_thread.ld_status) {
+    if (!device->ld_device_thread.status) {
         rc = dev_umount(device);
         if (rc) {
             pho_error(rc, "Unable to umount medium '%s' in device '%s' exit",
                       device->ld_dss_media_info->rsc.id.name,
                       device->ld_dss_dev_info->rsc.id.name);
-            device->ld_device_thread.ld_status = rc;
+            device->ld_device_thread.status = rc;
         }
     }
 
-    if (device->ld_device_thread.ld_status && device->ld_dss_media_info) {
-        fail_release_free_medium(&device->ld_device_thread.ld_dss,
+    if (device->ld_device_thread.status && device->ld_dss_media_info) {
+        fail_release_free_medium(&device->ld_device_thread.dss,
                                  device->ld_dss_media_info);
         device->ld_dss_media_info = NULL;
     }
@@ -1946,10 +1937,10 @@ static void dev_thread_end_loaded_medium(struct lrs_dev *device)
     if (device->ld_op_status != PHO_DEV_OP_ST_LOADED)
         return;
 
-    if (!device->ld_device_thread.ld_status) {
+    if (!device->ld_device_thread.status) {
         int rc;
 
-        rc = dss_medium_release(&device->ld_device_thread.ld_dss,
+        rc = dss_medium_release(&device->ld_device_thread.dss,
                                 device->ld_dss_media_info);
         if (rc) {
             pho_error(rc,
@@ -1957,14 +1948,14 @@ static void dev_thread_end_loaded_medium(struct lrs_dev *device)
                       "'%s' at device exit",
                       device->ld_dss_media_info->rsc.id.name,
                       device->ld_dss_dev_info->rsc.id.name);
-            device->ld_device_thread.ld_status = rc;
+            device->ld_device_thread.status = rc;
         } else {
             media_info_free(device->ld_dss_media_info);
         }
     }
 
-    if (device->ld_device_thread.ld_status && device->ld_dss_media_info)
-        fail_release_free_medium(&device->ld_device_thread.ld_dss,
+    if (device->ld_device_thread.status && device->ld_dss_media_info)
+        fail_release_free_medium(&device->ld_device_thread.dss,
                                  device->ld_dss_media_info);
 
     device->ld_dss_media_info = NULL;
@@ -1986,20 +1977,20 @@ static void dev_thread_end_loaded_medium(struct lrs_dev *device)
  */
 static void dev_thread_end_device(struct lrs_dev *device)
 {
-    struct dss_handle *dss = &device->ld_device_thread.ld_dss;
+    struct dss_handle *dss = &device->ld_device_thread.dss;
     int rc;
 
-    if (!device->ld_device_thread.ld_status) {
+    if (!device->ld_device_thread.status) {
         rc = dss_device_release(dss, device->ld_dss_dev_info);
         if (rc) {
             pho_error(rc, "Unable to release DSS lock of device '%s' at exit",
                       device->ld_dss_dev_info->rsc.id.name);
-            device->ld_device_thread.ld_status = rc;
+            device->ld_device_thread.status = rc;
         }
     }
 
-    if (device->ld_device_thread.ld_status) {
-        rc = clean_tosync_array(device, device->ld_device_thread.ld_status);
+    if (device->ld_device_thread.status) {
+        rc = clean_tosync_array(device, device->ld_device_thread.status);
         if (rc)
             pho_error(rc,
                       "Failed to clean tosync array of device '%s' at exit",
@@ -2031,8 +2022,8 @@ static void dev_thread_end_device(struct lrs_dev *device)
 static void dev_thread_end(struct lrs_dev *device)
 {
     /* prevent any new scheduled request to this device */
-    if (ldt_is_running(device))
-        device->ld_device_thread.ld_state = LDT_STOPPING;
+    if (thread_is_running(&device->ld_device_thread))
+        device->ld_device_thread.state = THREAD_STOPPING;
 
     cancel_pending_format(device);
     dev_thread_end_mounted_medium(device);
@@ -2050,7 +2041,7 @@ static void *lrs_dev_thread(void *tdata)
 
     thread = &device->ld_device_thread;
 
-    while (!ldt_is_stopped(device)) {
+    while (!thread_is_stopped(thread)) {
         int rc = 0;
 
         dev_check_sync_cancel(device);
@@ -2061,15 +2052,15 @@ static void *lrs_dev_thread(void *tdata)
         if (device->ld_needs_sync && !device->ld_ongoing_io) {
             rc = dev_sync(device);
             if (rc)
-                LOG_GOTO(end_thread, thread->ld_status = rc, "device thread "
-                         "'%s': fatal error syncing device",
+                LOG_GOTO(end_thread, thread->status = rc,
+                         "device thread '%s': fatal error syncing device",
                          device->ld_dss_dev_info->rsc.id.name);
         }
 
-        if (ldt_is_stopping(device) && !device->ld_ongoing_io &&
+        if (thread_is_stopping(thread) && !device->ld_ongoing_io &&
             device->ld_sync_params.tosync_array->len == 0) {
             pho_debug("Switching to stopped");
-            thread->ld_state = LDT_STOPPED;
+            thread->state = THREAD_STOPPED;
         }
 
         if (device->ld_ongoing_io && device->ld_sub_request) {
@@ -2085,16 +2076,16 @@ static void *lrs_dev_thread(void *tdata)
                           device->ld_dss_dev_info->rsc.id.name);
 
             if (rc)
-                LOG_GOTO(end_thread, thread->ld_status = rc,
+                LOG_GOTO(end_thread, thread->status = rc,
                          "device thread '%s': fatal error handling "
                          "ld_sub_request",
-                          device->ld_dss_dev_info->rsc.id.name);
+                         device->ld_dss_dev_info->rsc.id.name);
         }
 
-        if (!ldt_is_stopped(device)) {
-            rc = wait_for_signal(device);
+        if (!thread_is_stopped(thread)) {
+            rc = dev_wait_for_signal(device);
             if (rc < 0)
-                LOG_GOTO(end_thread, thread->ld_status = rc,
+                LOG_GOTO(end_thread, thread->status = rc,
                          "device thread '%s': fatal error",
                          device->ld_dss_dev_info->rsc.id.name);
         }
@@ -2102,70 +2093,20 @@ static void *lrs_dev_thread(void *tdata)
 
 end_thread:
     dev_thread_end(device);
-    pthread_exit(&device->ld_device_thread.ld_status);
+    pthread_exit(&device->ld_device_thread.status);
 }
 
 static int dev_thread_init(struct lrs_dev *device)
 {
-    struct thread_info *thread = &device->ld_device_thread;
     int rc;
 
     pthread_mutex_init(&device->ld_mutex, NULL);
-    pthread_mutex_init(&thread->ld_signal_mutex, NULL);
-    pthread_cond_init(&thread->ld_signal, NULL);
 
-    thread->ld_state = LDT_RUNNING;
-    thread->ld_status = 0;
-
-    rc = pthread_create(&thread->ld_tid, NULL, lrs_dev_thread, device);
+    rc = thread_init(&device->ld_device_thread, lrs_dev_thread, device);
     if (rc)
         LOG_RETURN(rc, "Could not create device thread");
 
     return 0;
-}
-
-void dev_thread_signal(struct lrs_dev *device)
-{
-    struct thread_info *thread = &device->ld_device_thread;
-    int rc;
-
-    rc = lrs_dev_signal(thread);
-    if (rc)
-        pho_error(rc, "Error when signaling device (%s, %s) to wake up",
-                  device->ld_dss_dev_info->rsc.id.name,
-                  device->ld_dev_path);
-}
-
-void dev_thread_signal_stop(struct lrs_dev *device)
-{
-    struct thread_info *thread = &device->ld_device_thread;
-    int rc;
-
-    thread->ld_state = LDT_STOPPING;
-    rc = lrs_dev_signal(thread);
-    if (rc)
-        pho_error(rc, "Error when signaling device (%s, %s) to stop it",
-                  device->ld_dss_dev_info->rsc.id.name, device->ld_dev_path);
-}
-
-void dev_thread_signal_stop_on_error(struct lrs_dev *device, int error_code)
-{
-    device->ld_device_thread.ld_status = error_code;
-    dev_thread_signal_stop(device);
-}
-
-void dev_thread_wait_end(struct lrs_dev *device)
-{
-    struct thread_info *thread = &device->ld_device_thread;
-    int *threadrc = NULL;
-    int rc;
-
-    rc = pthread_join(thread->ld_tid, (void **)&threadrc);
-    assert(rc == 0);
-
-    if (*threadrc < 0)
-        pho_error(*threadrc, "device thread '%s' terminated with error",
-                  device->ld_dss_dev_info->rsc.id.name);
 }
 
 int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter *lib)
