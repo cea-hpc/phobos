@@ -991,28 +991,34 @@ static struct lrs_dev *search_loaded_media(struct lrs_sched *sched,
     ENTRY;
 
     for (i = 0; i < sched->devices.ldh_devices->len; i++) {
+        struct lrs_dev *dev = NULL;
         const char *media_id;
-        struct lrs_dev *dev;
 
         dev = lrs_dev_hdl_get(&sched->devices, i);
+        MUTEX_LOCK(&dev->ld_mutex);
 
         if (dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED &&
             dev->ld_op_status != PHO_DEV_OP_ST_LOADED)
-            continue;
+            goto err_continue;
 
         /* The drive may contain a media unknown to phobos, skip it */
         if (dev->ld_dss_media_info == NULL)
-            continue;
+            goto err_continue;
 
         media_id = dev->ld_dss_media_info->rsc.id.name;
         if (media_id == NULL) {
             pho_warn("Cannot retrieve media ID from device '%s'",
                      dev->ld_dev_path);
-            continue;
+            goto err_continue;
         }
 
-        if (!strcmp(name, media_id))
+        if (!strcmp(name, media_id)) {
+            MUTEX_UNLOCK(&dev->ld_mutex);
             return dev;
+        }
+
+err_continue:
+        MUTEX_UNLOCK(&dev->ld_mutex);
     }
 
     return NULL;
@@ -1793,7 +1799,8 @@ static int update_phys_spc_free(struct dss_handle *dss,
     return 0;
 }
 
-int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
+int sched_release_enqueue(struct lrs_sched *sched, struct dss_handle *comm_dss,
+                          struct req_container *reqc)
 {
     int rc = 0;
     size_t i;
@@ -1832,8 +1839,7 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
          *   sched_select_media
          */
         MUTEX_LOCK(&dev->ld_mutex);
-        rc2 = update_phys_spc_free(&sched->sched_thread.dss,
-            dev->ld_dss_media_info,
+        rc2 = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,
             reqc->params.release.nosync_media[i].written_size);
         MUTEX_UNLOCK(&dev->ld_mutex);
         if (rc2) {
@@ -1867,7 +1873,7 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
             pho_error(-ENODEV, "device '%s' is not running but contains the "
                                "medium not sync'ed '%s'",
                       dev->ld_dss_dev_info->rsc.id.name,
-                      reqc->params.release.nosync_media[i].medium.name);
+                      reqc->params.release.tosync_media[i].medium.name);
             dev = NULL;
         }
 
@@ -1882,8 +1888,7 @@ int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc)
              *   sched_select_media
              */
             MUTEX_LOCK(&dev->ld_mutex);
-            rc2 = update_phys_spc_free(&sched->sched_thread.dss,
-                dev->ld_dss_media_info,
+            rc2 = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,
                 reqc->params.release.tosync_media[i].written_size);
             MUTEX_UNLOCK(&dev->ld_mutex);
             if (rc2) {
@@ -2839,12 +2844,19 @@ free_device_status:
 
 static void *lrs_sched_thread(void *sdata)
 {
+    struct timespec timeout = { .tv_sec = 1, .tv_nsec = 0 };
     struct lrs_sched *sched = (struct lrs_sched *) sdata;
     struct thread_info *thread = &sched->sched_thread;
     int rc;
 
     while (thread_is_running(thread)) {
-        rc = thread_signal_wait(thread);
+        rc = sched_handle_requests(sched);
+        if (rc)
+            LOG_GOTO(end_thread, thread->status = rc,
+                     "Error during sched processing in thread '%d'",
+                     sched->family);
+
+        rc = thread_signal_timed_wait(thread, &timeout);
         if (rc < 0)
             LOG_GOTO(end_thread, thread->status = rc,
                      "sched thread '%d': fatal error", sched->family);

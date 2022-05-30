@@ -323,7 +323,8 @@ bool sched_has_running_devices(struct lrs_sched *sched);
  * daemon itself, not an error about the release request which is managed by
  * an error message.
  */
-int sched_release_enqueue(struct lrs_sched *sched, struct req_container *reqc);
+int sched_release_enqueue(struct lrs_sched *sched, struct dss_handle *comm_dss,
+                          struct req_container *reqc);
 
 /**
  * Handle queued requests

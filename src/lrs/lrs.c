@@ -60,6 +60,9 @@ struct lrs {
                                                 * completed after the LRS
                                                 * stopped.
                                                 */
+    struct dss_handle     dss;                 /*!< DSS handle of the
+                                                * communication thread
+                                                */
 };
 
 struct lrs_params {
@@ -572,8 +575,12 @@ static int init_request_container_param(struct req_container *reqc)
         return 0;
 }
 
-static int _prepare_requests(struct lrs *lrs, const int n_data,
-                             struct pho_comm_data *data)
+/**
+ * schedulers_to_signal is a bool array of length PHO_RSC_LAST, representing
+ * every scheduler that could be signaled
+ */
+static int _prepare_requests(struct lrs *lrs, bool *schedulers_to_signal,
+                             const int n_data, struct pho_comm_data *data)
 {
     enum rsc_family fam;
     int rc = 0;
@@ -640,14 +647,16 @@ static int _prepare_requests(struct lrs *lrs, const int n_data,
             LOG_GOTO(send_err, rc2, "Cannot init request container");
 
         if (pho_request_is_release(req_cont->req)) {
-            rc2 = sched_release_enqueue(lrs->sched[fam], req_cont);
+            rc2 = sched_release_enqueue(lrs->sched[fam], &lrs->dss, req_cont);
             rc = rc ? : rc2;
         } else {
-            if (running)
+            if (running) {
                 tsqueue_push(&lrs->sched[fam]->req_queue, req_cont);
-            else
+                schedulers_to_signal[fam] = true;
+            } else {
                 LOG_GOTO(send_err, rc2 = -ESHUTDOWN,
                          "Daemon stopping, not accepting new requests");
+            }
         }
 
         continue;
@@ -765,6 +774,7 @@ static void lrs_fini(struct lrs *lrs)
         pho_error(rc, "Error on closing the socket");
 
     tsqueue_destroy(&lrs->response_queue, sched_resp_free);
+    dss_fini(&lrs->dss);
 
     lock_file = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, lock_file);
     _delete_lock_file(lock_file);
@@ -817,6 +827,10 @@ static int lrs_init(struct lrs *lrs, struct lrs_params parm)
     if (rc)
         LOG_GOTO(err, rc, "Error while opening the socket");
 
+    rc = dss_init(&lrs->dss);
+    if (rc)
+        LOG_GOTO(err, rc, "Failed to init comm dss handle");
+
     return rc;
 
 err:
@@ -850,6 +864,7 @@ err:
  */
 static int lrs_process(struct lrs *lrs)
 {
+    bool schedulers_to_signal[PHO_RSC_LAST] = {false};
     struct pho_comm_data *data = NULL;
     bool stopped = true;
     int n_data;
@@ -865,7 +880,7 @@ static int lrs_process(struct lrs *lrs)
         LOG_RETURN(rc, "Error during request reception");
     }
 
-    rc = _prepare_requests(lrs, n_data, data);
+    rc = _prepare_requests(lrs, schedulers_to_signal, n_data, data);
     free(data);
     if (rc)
         LOG_RETURN(rc, "Error during request enqueuing");
@@ -875,9 +890,11 @@ static int lrs_process(struct lrs *lrs)
         if (!lrs->sched[i])
             continue;
 
-        rc = sched_handle_requests(lrs->sched[i]);
-        if (rc)
-            LOG_RETURN(rc, "Error during sched processing");
+        if (schedulers_to_signal[i]) {
+            rc = thread_signal(&lrs->sched[i]->sched_thread);
+            if (rc)
+                pho_error(rc, "Failed to signal scheduler thread '%d'", i);
+        }
 
         if (running || sched_has_running_devices(lrs->sched[i]))
             stopped = false;
