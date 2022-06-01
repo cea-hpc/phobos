@@ -43,9 +43,9 @@ check_SCRIPTS=acceptance.sh \
               test_daemon_scheduling.sh \
               test_delete.sh \
               test_extent_list.sh \
+              test_format.sh \
               test_get.sh \
               test_group_sync.sh \
-              test_format.sh \
               test_ldm.sh \
               test_locate.sh \
               test_lock_clean.sh \
