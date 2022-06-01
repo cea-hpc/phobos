@@ -467,6 +467,53 @@ function test_mount_failure_during_read_response()
     rm -f "$file"
 }
 
+function format_wait_and_check()
+{
+    local format_pid
+    local ENODEV=19
+    local rc
+
+    $phobos tape format --unlock "$1" &
+    format_pid=$!
+
+    sleep 3
+
+    kill -9 $format_pid && true
+
+    wait $format_pid && true
+    rc=$?
+
+    test $rc -eq $ENODEV ||
+        error "Format command should have failed because $2" \
+              "(error received $rc, expected $ENODEV 'ENODEV')"
+}
+
+function test_format_fail_without_suitable_device()
+{
+    local drive=$(get_lto_drives 5 1)
+    local tape=$(get_tapes L6 1)
+
+    trap "waive_daemon; drop_tables" EXIT
+
+    setup_tables
+    invoke_daemon
+
+    $phobos tape add --type lto6 "$tape"
+    format_wait_and_check "$tape" "no device is available"
+
+    $phobos drive add "$drive"
+    format_wait_and_check "$tape" "no device thread is running"
+
+    $phobos drive unlock "$drive"
+    format_wait_and_check "$tape" \
+                          "the drive '$drive' and tape '$tape' are incompatible"
+
+    waive_daemon
+    drop_tables
+
+    trap "cleanup" EXIT
+}
+
 trap cleanup EXIT
 
 test_invalid_lock_file
@@ -486,4 +533,5 @@ if [[ -w /dev/changer ]]; then
     test_recover_drive_old_locks
     test_remove_invalid_device_locks
     test_mount_failure_during_read_response
+    test_format_fail_without_suitable_device
 fi

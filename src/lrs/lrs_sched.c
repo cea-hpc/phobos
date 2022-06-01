@@ -2794,6 +2794,40 @@ free_devices:
 }
 
 /**
+ * Count the number of available and compatible devices for a specific medium.
+ *
+ * @param[in]   sched       Scheduler handle
+ * @param[in]   medium      Medium we want to check
+ *
+ * @return                  Number of available and compatible devices
+ */
+static int count_suitable_devices(struct lrs_sched *sched,
+                                  struct media_info *medium)
+{
+    int count = 0;
+    int i;
+
+    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
+        struct lrs_dev *iter = lrs_dev_hdl_get(&sched->devices, i);
+        bool is_compatible;
+
+        if (iter->ld_op_status == PHO_DEV_OP_ST_FAILED)
+            continue;
+
+        if (!ldt_is_running(iter))
+            continue;
+
+        if (tape_drive_compat(medium, iter, &is_compatible))
+            continue;
+
+        if (is_compatible)
+            count++;
+    }
+
+    return count;
+}
+
+/**
  * Handle a format request
  *
  * reqc is freed, except when -EAGAIN is returned.
@@ -2845,6 +2879,15 @@ static int sched_handle_format(struct lrs_sched *sched,
 
         device->ld_ongoing_io = true;
     } else {
+        int suitable_devices;
+
+        suitable_devices = count_suitable_devices(sched,
+                              reqc->params.format.medium_to_format);
+        if (suitable_devices == 0)
+            LOG_GOTO(remove_format_err_out, rc = -ENODEV,
+                     "No device can format medium '%s', will abort request",
+                     m.name);
+
         /* medium to format isn't already loaded into any drive, need lock */
         if (!reqc->params.format.medium_to_format->lock.hostname) {
             rc = take_and_update_lock(&sched->dss, DSS_MEDIA,
