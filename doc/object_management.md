@@ -121,6 +121,12 @@ The option '--metadata' applies a filter on user metadata
 phobos object list --metadata user=foo,test=abd
 ```
 
+The option '--deprecated' allows one to list deprecated objects ie. older object
+versions or deleted objects
+```
+phobos object list --deprecated
+```
+
 ## Listing extents
 To list extents, use `phobos extent list`:
 ```
