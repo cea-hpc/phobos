@@ -1,4 +1,14 @@
-% Phobos documentation
+# Phobos documentation
+
+## Introduction
+
+Phobos, standing for Parallel Heterogeneous OBject Store, is a tool designed to
+manage large volumes of data for various kinds of storage technologies from SSD
+to tapes. Phobos can efficiently handle very large datasets on inexpensive media
+without sacrificing scalability, performance, or fault-tolerance requirements.
+
+Phobos is designed to allow the easy integration of new modules for layouts such
+as mirroring and erasure coding or, in a near future, I/O adapters.
 
 This document presents basic information about Phobos installation and the first
 steps of its utilization. More information can be found in the following links:
