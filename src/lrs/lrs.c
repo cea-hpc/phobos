@@ -497,6 +497,7 @@ static int _process_monitor_request(struct lrs *lrs,
 
     rc = _send_message(&lrs->comm, &resp_cont);
     pho_srl_response_free(resp_cont.resp, false);
+    free(resp_cont.resp);
     if (rc)
         LOG_GOTO(send_error, rc, "Failed to send monitor response");
 

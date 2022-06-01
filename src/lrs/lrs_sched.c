@@ -2333,13 +2333,12 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
     MUTEX_LOCK(&device->ld_mutex);
     rc = sched_fill_dev_info(sched, &lib, device);
     MUTEX_UNLOCK(&device->ld_mutex);
+    ldm_lib_close(&lib);
     if (rc)
-        goto err_lib;
+        goto dev_del;
 
     return 0;
 
-err_lib:
-    ldm_lib_close(&lib);
 dev_del:
     lrs_dev_hdl_del(&sched->devices, sched->devices.ldh_devices->len - 1, rc);
 
