@@ -218,9 +218,17 @@ struct lib_adapter {
                           const struct lib_item_addr *src_addr,
                           const struct lib_item_addr *tgt_addr);
     int (*lib_scan)(struct lib_handle *lib, json_t **lib_data);
-    /* adapter private state */
-    struct lib_handle lib_hdl;
+    struct lib_handle lib_hdl;            /**< Handle to the layout plugin */
 };
+
+#define PLAM_OP_INIT         "pho_lib_adapter_mod_register"
+
+struct lib_adapter_module {
+    struct module_desc desc;       /**< Description of this layout */
+    const struct lib_adapter *ops; /**< Operations of this layout */
+};
+
+int pho_lib_adapter_mod_register(struct lib_adapter_module *self);
 
 /**
  * Retrieve library adapter for the given library type.

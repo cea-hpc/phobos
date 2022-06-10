@@ -43,9 +43,11 @@ lrs_dir="$(readlink -e $test_bin_dir/../src/lrs)"
 PHO_STORELIB_PATH="$(readlink -e $test_bin_dir/../src/store/.libs/)"
 PHO_ADMINLIB_PATH="$(readlink -e $test_bin_dir/../src/admin/.libs/)"
 PHO_LAYOUTLIB_PATH="$(readlink -e $test_bin_dir/../src/layout-modules/.libs/)"
+PHO_LDMLIB_PATH="$(readlink -e $test_bin_dir/../src/ldm-modules/.libs/)"
 
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$PHO_STORELIB_PATH:\
-$PHO_ADMINLIB_PATH:$PHO_PYTHON_PATH:$PHO_LAYOUTLIB_PATH"
+$PHO_ADMINLIB_PATH:$PHO_PYTHON_PATH:$PHO_LAYOUTLIB_PATH:\
+$PHO_LDMLIB_PATH"
 
 # phobos stuff
 ldm_helper=$(readlink -e $test_bin_dir/../scripts/)/pho_ldm_helper

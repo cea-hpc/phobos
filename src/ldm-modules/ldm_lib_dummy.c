@@ -31,13 +31,24 @@
 #include "pho_ldm.h"
 #include "pho_common.h"
 
+#define PLUGIN_NAME     "dummy"
+#define PLUGIN_MAJOR    0
+#define PLUGIN_MINOR    1
+
+static struct module_desc LIB_ADAPTER_DUMMY_MODULE_DESC = {
+    .mod_name  = PLUGIN_NAME,
+    .mod_major = PLUGIN_MAJOR,
+    .mod_minor = PLUGIN_MINOR,
+};
+
 /**
  * Return drive info for an online device.
  */
 static int dummy_drive_lookup(struct lib_handle *lib, const char *drive_serial,
-                            struct lib_drv_info *drv_info)
+                              struct lib_drv_info *drv_info)
 {
     const char  *sep = strchr(drive_serial, ':');
+
     ENTRY;
 
     if (sep == NULL)
@@ -46,8 +57,10 @@ static int dummy_drive_lookup(struct lib_handle *lib, const char *drive_serial,
     drv_info->ldi_addr.lia_type = MED_LOC_DRIVE;
     drv_info->ldi_addr.lia_addr = 0;
     drv_info->ldi_full = true;
-    drv_info->ldi_medium_id.family = PHO_RSC_DIR; /** FIXME we don't care.
-                                                   Could be disk or other... */
+
+    /** FIXME we don't care. Could be disk or other... */
+    drv_info->ldi_medium_id.family = PHO_RSC_DIR;
+
     return pho_id_name_set(&drv_info->ldi_medium_id, sep + 1);
 }
 
@@ -66,10 +79,21 @@ static int dummy_media_lookup(struct lib_handle *lib, const char *media_label,
 }
 
 /** Exported library adapater */
-struct lib_adapter lib_adapter_dummy = {
-    .lib_open  = NULL,
-    .lib_close = NULL,
+static struct lib_adapter LIB_ADAPTER_DUMMY_OPS = {
+    .lib_open         = NULL,
+    .lib_close        = NULL,
     .lib_drive_lookup = dummy_drive_lookup,
     .lib_media_lookup = dummy_media_lookup,
-    .lib_media_move = NULL,
+    .lib_media_move   = NULL,
+    .lib_scan         = NULL,
+    .lib_hdl          = {NULL},
 };
+
+/** Lib adapter module registration entry point */
+int pho_lib_adapter_mod_register(struct lib_adapter_module *self)
+{
+    self->desc = LIB_ADAPTER_DUMMY_MODULE_DESC;
+    self->ops = &LIB_ADAPTER_DUMMY_OPS;
+
+    return 0;
+}

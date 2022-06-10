@@ -98,6 +98,8 @@ cd %{_builddir}/%{name}-%{version}/src/cli/
 
 rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.a
 rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
+rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_lib_*.a
+rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_lib_*.la
 
 
 %files
@@ -105,6 +107,7 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
 %{_libdir}/libphobos_store.so*
 %{_libdir}/libphobos_admin.so*
 %{_libdir}/phobos/libpho_layout_*.so*
+%{_libdir}/phobos/libpho_lib_*.so*
 %{_sbindir}/pho_*_helper
 %{_sbindir}/phobos_db
 %{python_sitearch}/phobos/*
