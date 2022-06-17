@@ -30,13 +30,19 @@ test_bin="$test_bin_dir/test_concurrency"
 
 set -xe
 
+NB_DIRS=${NB_DIRS:-6}
+
 function setup_dir()
 {
     local dir="$DIR_TEST_OUT"
     local file="$FILES[0]"
 
-    $phobos dir add "$dir"
-    $phobos dir format --fs posix --unlock "$dir"
+    for i in $(seq $NB_DIRS); do
+        mkdir -p "$dir/d$i"
+    done
+
+    $phobos dir add "$dir"/d[1-$NB_DIRS]
+    $phobos dir format --fs posix --unlock "$dir/d[1-$NB_DIRS]"
 }
 
 function setup()

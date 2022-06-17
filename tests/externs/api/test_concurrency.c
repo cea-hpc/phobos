@@ -256,7 +256,7 @@ int main(int argc, char **argv)
         xfer->xd_params.put.family = PHO_RSC_DIR;
         xfer->xd_params.put.overwrite = true;
         xfer->xd_params.put.layout_name = "raid1";
-        pho_attr_set(lyt_params, "repl_count", "1");
+        pho_attr_set(lyt_params, "repl_count", "3");
 
         threads[i].action = conf.action;
         threads[i].barrier = &barrier;
