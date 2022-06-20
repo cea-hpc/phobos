@@ -88,7 +88,7 @@ test_lib_dev_rados_LDADD=$(ADMIN_LIB) $(LDM_LIB)
 test_lib_dev_rados_CFLAGS=-I$(TO_TEST)
 
 test_io_rados_SOURCES=test_io_rados.c
-test_io_rados_LDADD=$(ADMIN_LIB) $(IO_LIB) $(LDM_LIB)
+test_io_rados_LDADD=$(ADMIN_LIB) $(IO_LIB) $(LDM_LIB) -lrados
 test_io_rados_CFLAGS=-I$(TO_TEST)
 endif
 

@@ -65,12 +65,12 @@ static int ior_setup(void **state)
     extent->size = 2;
     extent->media.family = PHO_RSC_RADOS_POOL;
     strcpy(extent->media.name, "pho_io");
-    extent->address.buff = "pho_io.obj";
-    extent->address.size = 10;
+    extent->address.buff = NULL;
+    extent->address.size = 0;
 
     iod_loc->extent = extent;
     iod_loc->root_path = "pho_io";
-    iod_loc->addr_type = PHO_ADDR_PATH;
+    iod_loc->addr_type = PHO_ADDR_HASH1;
     iod->iod_loc = iod_loc;
 
     *state = iod;
@@ -94,6 +94,9 @@ static void ior_io_adapter_open_close(struct io_adapter_module *ioa,
     struct pho_io_descr *iod = (struct pho_io_descr *) *state;
     int rc;
 
+    iod->iod_loc->extent->address.buff = "pho_io.obj";
+    iod->iod_loc->extent->address.size = strlen("pho_io.obj");
+
     rc = get_io_adapter(PHO_FS_RADOS, &ioa);
     assert_int_equal(rc, -rc);
 
@@ -107,6 +110,8 @@ static void ior_io_adapter_open_close(struct io_adapter_module *ioa,
     assert_int_equal(rc, -rc);
 
     free(iod->iod_ctx);
+    iod->iod_loc->extent->address.buff = NULL;
+    iod->iod_loc->extent->address.size = 0;
 }
 
 static void ior_test_io_adapter_open_close(void **state)
@@ -239,6 +244,231 @@ static void ior_test_remove_xattr(void **state)
     assert_null(pho_attr_get(&iod->iod_attrs, "pho_io_remove_xattr"));
 }
 
+static void ior_test_write_new_object(void **state)
+{
+    struct pho_io_descr *iod = (struct pho_io_descr *) *state;
+    struct pho_rados_io_ctx *rados_io_ctx;
+    struct io_adapter_module *ioa;
+    char buf[12];
+    int rc;
+
+    memset(buf, 0, sizeof(buf));
+
+    rc = get_io_adapter(PHO_FS_RADOS, &ioa);
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_open(ioa, "pho_new_obj", "pho_io", iod, true);
+    assert_int_equal(rc, -rc);
+    rados_io_ctx = iod->iod_ctx;
+
+    rc = ioa_write(ioa, iod, "new_obj", strlen("new_obj"));
+    assert_int_equal(rc, -rc);
+
+    rc = rados_read(rados_io_ctx->pool_io_ctx,
+                    iod->iod_loc->extent->address.buff,
+                    buf, sizeof(buf), 0);
+    assert_int_equal(rc, strlen("new_obj"));
+    assert_string_equal("new_obj", buf);
+
+    rc = ioa_close(ioa, iod);
+    assert_int_equal(rc, -rc);
+
+    free(iod->iod_loc->extent->address.buff);
+    iod->iod_loc->extent->address.buff = NULL;
+}
+
+static void ior_test_replace_object(void **state)
+{
+    struct pho_io_descr *iod = (struct pho_io_descr *) *state;
+    struct pho_rados_io_ctx *rados_io_ctx;
+    struct io_adapter_module *ioa;
+    char buf_in[30];
+    char buf_out[30];
+    int rc;
+
+    iod->iod_flags = PHO_IO_REPLACE;
+    memset(buf_in, 1, sizeof(buf_in));
+    memcpy(buf_in, "very_long_obj_first", strlen("very_long_obj_first"));
+
+    rc = get_io_adapter(PHO_FS_RADOS, &ioa);
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_open(ioa, "pho_replace_obj", "pho_io", iod, true);
+    assert_int_equal(rc, -rc);
+
+    rados_io_ctx = iod->iod_ctx;
+
+    /* Create object 'pho_io.pho_replace_obj' with buf_first_in's
+     * content
+     */
+    rc = ioa_write(ioa, iod, buf_in, sizeof(buf_in));
+    assert_int_equal(rc, -rc);
+
+    rc = rados_read(rados_io_ctx->pool_io_ctx,
+                    iod->iod_loc->extent->address.buff,
+                    buf_out, sizeof(buf_out), 0);
+    assert_int_equal(rc, sizeof(buf_in));
+    assert_memory_equal(buf_in, buf_out, sizeof(buf_in));
+
+    memset(buf_in, 0, sizeof(buf_in));
+    memcpy(buf_in, "obj_second", strlen("obj_second"));
+
+    /* Replace object's content with buf_second_in */
+    rc = ioa_write(ioa, iod, buf_in, sizeof(buf_in));
+    assert_int_equal(rc, -rc);
+
+    rc = rados_read(rados_io_ctx->pool_io_ctx,
+                    iod->iod_loc->extent->address.buff,
+                    buf_out, sizeof(buf_out), 0);
+    assert_int_equal(rc, sizeof(buf_in));
+    assert_memory_equal(buf_in, buf_out, sizeof(buf_in));
+
+    rc = ioa_close(ioa, iod);
+    assert_int_equal(rc, -rc);
+
+    free(iod->iod_loc->extent->address.buff);
+    iod->iod_loc->extent->address.buff = NULL;
+}
+
+static void ior_test_write_existing_object(void **state)
+{
+    struct pho_io_descr *iod = (struct pho_io_descr *) *state;
+    struct io_adapter_module *ioa;
+    int rc;
+
+    iod->iod_flags = 0;
+
+    rc = get_io_adapter(PHO_FS_RADOS, &ioa);
+    assert_int_equal(rc, -rc);
+
+    /* Open succeeds because object 'pho_io.pho_existing_obj' did not exist
+     * before call
+     */
+    rc = ioa_open(ioa, "pho_existing_obj", "pho_io", iod, true);
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_write(ioa, iod, "existing_obj", strlen("existing_obj"));
+    assert_int_equal(rc, -rc);
+
+    /* Write succeeds even though the object exists because it does not check if
+     * the object already exists
+     */
+    rc = ioa_write(ioa, iod, "existing_obj", strlen("existing_obj"));
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_close(ioa, iod);
+    assert_int_equal(rc, -rc);
+
+    /* open fails because object already exists and replace flag is not set */
+    rc = ioa_open(ioa, "pho_existing_obj", "pho_io", iod, true);
+    assert_int_equal(rc, -EEXIST);
+
+    rc = ioa_close(ioa, iod);
+    assert_int_equal(rc, -rc);
+
+    free(iod->iod_loc->extent->address.buff);
+    iod->iod_loc->extent->address.buff = NULL;
+}
+
+static void ior_test_write_object_too_big(void **state)
+{
+    struct pho_io_descr *iod = (struct pho_io_descr *) *state;
+    struct io_adapter_module *ioa;
+    int rc;
+
+    iod->iod_flags = 0;
+
+    rc = get_io_adapter(PHO_FS_RADOS, &ioa);
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_open(ioa, "pho_obj_too_big", "pho_io", iod, true);
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_write(ioa, iod, "obj_too_big", UINT_MAX);
+    assert_int_equal(rc, -EFBIG);
+
+    rc = ioa_close(ioa, iod);
+    assert_int_equal(rc, -rc);
+
+    free(iod->iod_loc->extent->address.buff);
+    iod->iod_loc->extent->address.buff = NULL;
+}
+
+void fill_buffer_with_random_data(struct pho_buff *buffer)
+{
+    size_t random_data_len = 0;
+    ssize_t bytes_written;
+    int urandom_fd;
+
+    urandom_fd = open("/dev/urandom", O_RDONLY);
+    assert(urandom_fd >= 0);
+
+    buffer->buff = malloc(buffer->size);
+    assert_non_null(buffer->buff);
+
+    bytes_written = read(urandom_fd, buffer->buff, buffer->size);
+    assert_int_equal(bytes_written, buffer->size);
+
+    close(urandom_fd);
+}
+
+static void ior_test_write_object_with_chunks(void **state)
+{
+    struct pho_io_descr *iod = (struct pho_io_descr *) *state;
+    struct pho_rados_io_ctx *rados_io_ctx;
+    struct io_adapter_module *ioa;
+    size_t chunk_size = 4096;
+    struct pho_buff buf_out;
+    struct pho_buff buf_in;
+    size_t to_write;
+    int rc;
+
+    buf_in.size = 50000;
+    buf_out.size = buf_in.size;
+    iod->iod_flags = PHO_IO_REPLACE;
+    iod->iod_size = 0;
+
+    rc = get_io_adapter(PHO_FS_RADOS, &ioa);
+    assert_int_equal(rc, -rc);
+
+    fill_buffer_with_random_data(&buf_in);
+    buf_out.buff = calloc(buf_out.size, 1);
+    assert_non_null(buf_out.buff);
+
+    rc = ioa_open(ioa, "pho_obj_chunks", "pho_io", iod, true);
+    assert_int_equal(rc, -rc);
+
+    to_write = buf_in.size;
+
+    while (to_write > 0) {
+        rc = ioa_write(ioa, iod, buf_in.buff + iod->iod_size,
+                       to_write > chunk_size ? chunk_size : to_write);
+        assert_int_equal(rc, -rc);
+
+        iod->iod_size += (to_write > chunk_size ? chunk_size : to_write);
+        to_write = to_write > chunk_size ? to_write - chunk_size : 0;
+    }
+
+    assert_int_equal(iod->iod_size, buf_in.size);
+
+    rados_io_ctx = iod->iod_ctx;
+
+    rc = rados_read(rados_io_ctx->pool_io_ctx,
+                    iod->iod_loc->extent->address.buff,
+                    buf_out.buff, buf_out.size, 0);
+    assert_int_equal(rc, buf_in.size);
+    assert_memory_equal(buf_in.buff, buf_out.buff, buf_in.size);
+
+    rc = ioa_close(ioa, iod);
+    assert_int_equal(rc, -rc);
+
+    free(buf_in.buff);
+    free(buf_out.buff);
+    iod->iod_size = 0;
+    free(iod->iod_loc->extent->address.buff);
+    iod->iod_loc->extent->address.buff = NULL;
+}
+
 int main(void)
 {
     const struct CMUnitTest rados_io_tests_open_close[] = {
@@ -251,6 +481,16 @@ int main(void)
         cmocka_unit_test(ior_test_remove_xattr),
     };
 
+    const struct CMUnitTest rados_io_tests_write[] = {
+        cmocka_unit_test(ior_test_write_new_object),
+        cmocka_unit_test(ior_test_replace_object),
+        cmocka_unit_test(ior_test_write_existing_object),
+        cmocka_unit_test(ior_test_write_object_too_big),
+        cmocka_unit_test(ior_test_write_object_with_chunks),
+    };
+
     return cmocka_run_group_tests(rados_io_tests_open_close, ior_setup,
-                                  ior_teardown);
+                                  ior_teardown)
+           + cmocka_run_group_tests(rados_io_tests_write, ior_setup,
+                                    ior_teardown);
 }

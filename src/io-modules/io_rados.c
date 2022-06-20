@@ -358,7 +358,36 @@ out:
 static int pho_rados_write(struct pho_io_descr *iod, const void *buf,
                            size_t count)
 {
-    return -ENOTSUP;
+    struct pho_rados_io_ctx *rados_io_ctx;
+    char *extent_name;
+    int rc = 0;
+
+    rados_io_ctx = iod->iod_ctx;
+    extent_name = iod->iod_loc->extent->address.buff;
+
+    /* The size of the buffer is limited to maximum UINT_MAX / 2 when writing
+     * data with Librados. This is not a bad thing since big objects
+     * drastically affect RADOS's performance.
+     */
+    if (count > UINT_MAX / 2)
+        LOG_RETURN(rc = -EFBIG, "Buffer to write into object %s of pool %s is "
+                                "too large (%zu > %d)",
+                   extent_name, iod->iod_loc->extent->media.name,
+                   count, UINT_MAX / 2);
+
+    /* iod->iod_size is used as an offset to be able to write data by dividing
+     * it into several chunks(one write per chunk). This variable is supposed
+     * to be handled correctly when using the I/O adapter API. rados_write
+     * should write count bytes into RADOS object extent_name from index
+     * iod->iod_size or return an error.
+     */
+    rc = rados_write(rados_io_ctx->pool_io_ctx, extent_name,
+                     buf, count, iod->iod_size);
+    if (rc < 0)
+        LOG_RETURN(rc, "Failed to write into object %s of pool %s",
+                   extent_name, iod->iod_loc->extent->media.name);
+
+    return rc;
 }
 
 static int pho_rados_get(const char *extent_key, const char *extent_desc,
