@@ -469,6 +469,85 @@ static void ior_test_write_object_with_chunks(void **state)
     iod->iod_loc->extent->address.buff = NULL;
 }
 
+static void ior_get_object(struct pho_io_descr *iod, char *object_name,
+                          size_t input_size)
+{
+    struct io_adapter_module *ioa;
+    char output[input_size];
+    struct pho_buff input;
+    int rc;
+
+    iod->iod_size = 0;
+    input.size = input_size;
+    fill_buffer_with_random_data(&input);
+
+    rc = get_io_adapter(PHO_FS_RADOS, &ioa);
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_open(ioa, object_name, "pho_io", iod, true);
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_write(ioa, iod, input.buff, input_size);
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_close(ioa, iod);
+    assert_int_equal(rc, -rc);
+
+    iod->iod_fd = open(".", O_TMPFILE | O_RDWR);
+    iod->iod_size = input_size;
+
+    rc = ioa_get(ioa, object_name, "pho_io", iod);
+    assert_int_equal(rc, -rc);
+
+    read(iod->iod_fd, &output, input_size);
+
+    assert_memory_equal(input.buff, output, input_size);
+
+    close(iod->iod_fd);
+
+    free(input.buff);
+    free(iod->iod_loc->extent->address.buff);
+    iod->iod_loc->extent->address.buff = NULL;
+}
+
+static void ior_test_get_small_object(void **state)
+{
+    struct pho_io_descr *iod = (struct pho_io_descr *) *state;
+    int rc;
+
+    iod->iod_flags = 0;
+
+    ior_get_object(iod, "pho_get_small_obj", 30);
+}
+
+static void ior_test_get_big_object(void **state)
+{
+    struct pho_io_descr *iod = (struct pho_io_descr *) *state;
+    struct pho_buff input;
+    int rc;
+
+    iod->iod_flags = 0;
+
+    ior_get_object(iod, "pho_get_big_obj", 1200);
+}
+
+static void ior_test_get_invalid_object(void **state)
+{
+    struct pho_io_descr *iod = (struct pho_io_descr *) *state;
+    struct io_adapter_module *ioa;
+    int rc;
+
+    iod->iod_flags = 0;
+
+    iod->iod_loc->extent->address.buff = "pho_io.pho_invalid_obj";
+    iod->iod_loc->extent->address.size = strlen("pho_io.pho_invalid_obj");
+
+    rc = get_io_adapter(PHO_FS_RADOS, &ioa);
+
+    rc = ioa_get(ioa, "pho_invalid_obj", "pho_io", iod);
+    assert_int_equal(rc, -ENOENT);
+}
+
 int main(void)
 {
     const struct CMUnitTest rados_io_tests_open_close[] = {
@@ -489,8 +568,16 @@ int main(void)
         cmocka_unit_test(ior_test_write_object_with_chunks),
     };
 
+    const struct CMUnitTest rados_io_tests_get[] = {
+        cmocka_unit_test(ior_test_get_small_object),
+        cmocka_unit_test(ior_test_get_big_object),
+        cmocka_unit_test(ior_test_get_invalid_object),
+    };
+
     return cmocka_run_group_tests(rados_io_tests_open_close, ior_setup,
                                   ior_teardown)
            + cmocka_run_group_tests(rados_io_tests_write, ior_setup,
+                                    ior_teardown)
+           + cmocka_run_group_tests(rados_io_tests_get, ior_setup,
                                     ior_teardown);
 }

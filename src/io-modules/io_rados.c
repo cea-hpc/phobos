@@ -390,10 +390,99 @@ static int pho_rados_write(struct pho_io_descr *iod, const void *buf,
     return rc;
 }
 
+static int pho_rados_copy(struct pho_io_descr *iod)
+{
+    struct pho_rados_io_ctx *rados_io_ctx;
+    ssize_t nb_written_bytes = 0;
+    ssize_t nb_read_bytes = 0;
+    size_t chunk_size = 1024;
+    char *rados_object_name;
+    int offset = 0;
+    char *buf_read;
+    int count;
+
+    ENTRY;
+
+    rados_object_name = iod->iod_loc->extent->address.buff;
+    rados_io_ctx = iod->iod_ctx;
+    count = iod->iod_size;
+    buf_read = malloc(chunk_size);
+    if (!buf_read)
+        LOG_GOTO(clean, -ENOMEM, "Unable to allocate buf_read");
+
+    while (count > 0) {
+        nb_read_bytes = rados_read(rados_io_ctx->pool_io_ctx,
+                                   rados_object_name,
+                                   buf_read, chunk_size, offset);
+        if (nb_read_bytes < 0)
+            LOG_GOTO(clean, nb_written_bytes = nb_read_bytes,
+                     "rados_read failure");
+
+        nb_written_bytes = pwrite(iod->iod_fd, buf_read, nb_read_bytes, offset);
+        if (nb_written_bytes < 0)
+            LOG_GOTO(clean, -errno, "pwrite failure");
+
+        if (count > 0 && nb_written_bytes == 0)
+            LOG_GOTO(clean, -ENOBUFS,
+                     "pwrite failure, reached source fd eof too soon");
+
+        pho_debug("pwrite returned after copying %zd bytes. %zd bytes left",
+                  nb_written_bytes, count - nb_written_bytes);
+
+        count -= nb_written_bytes;
+        offset += nb_written_bytes;
+    }
+
+clean:
+    free(buf_read);
+    return (nb_written_bytes > 0) ? 0 : nb_written_bytes;
+}
+
 static int pho_rados_get(const char *extent_key, const char *extent_desc,
                          struct pho_io_descr *iod)
 {
-    return -ENOTSUP;
+    struct pho_rados_io_ctx *rados_io_ctx;
+    char *rados_object_name;
+    uint64_t extent_size;
+    int rc2 = 0;
+    int rc = 0;
+
+    ENTRY;
+
+    rc = pho_rados_open(extent_key, extent_desc, iod, false);
+    if (rc || iod->iod_flags & PHO_IO_MD_ONLY)
+        return rc;
+
+    rados_io_ctx = iod->iod_ctx;
+    rados_object_name = iod->iod_loc->extent->address.buff;
+
+    /** If size is not stored in the DB, use the extent size */
+    if (iod->iod_size == 0) {
+        rc = rados_stat(rados_io_ctx->pool_io_ctx, rados_object_name,
+                        &extent_size, NULL);
+        if (rc < 0)
+            LOG_GOTO(clean, rc,
+                     "failed to get stats of object %s in pool %s",
+                     rados_object_name, iod->iod_loc->extent->media.name);
+
+        pho_warn("Extent size is not set in DB: using physical extent size: "
+                 "%ld bytes", extent_size);
+        iod->iod_size = (size_t) extent_size;
+    }
+
+    /* read the extent */
+    rc = pho_rados_copy(iod);
+    if (rc)
+        goto clean;
+
+clean:
+    if (rc != 0)
+        pho_attrs_free(&iod->iod_attrs);
+
+    rc2 = pho_rados_close(iod);
+    /* keep the first reported error */
+    rc = rc ? : rc2;
+    return rc;
 }
 
 static int pho_rados_del(struct pho_ext_loc *loc)
