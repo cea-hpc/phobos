@@ -202,16 +202,13 @@ function put_get_test
 function put_family
 {
     local id=test/hosts-fam.$$
-    local request="SELECT extents FROM extent WHERE oid='$id';"
 
     # phobos put
     PHOBOS_STORE_default_family="disk" $valg_phobos put \
-        -f $1 /etc/hosts $id
+        -f "$1" /etc/hosts "$id"
 
-    # PSQL command to get the the extent metadata, with the family of
-    # the medium it was written to
-    # XXX: will be replaced by a 'phobos object list' when implemented
-    $PSQL -t -c "$request" | grep -q "\"fam\": \"$1\"" ||
+    # check the family is the correct one
+    $phobos extent list -o family "$id" | grep "$1" ||
         error "Put with family should have written object on a family medium"
 }
 
@@ -219,8 +216,6 @@ function put_layout
 {
     local id1=test/hosts-lay1.$$
     local id2=test/hosts-lay2.$$
-    local request1="SELECT lyt_info FROM extent WHERE oid='$id1';"
-    local request2="SELECT lyt_info FROM extent WHERE oid='$id2';"
 
     # unlock enough resources to make the test:
     # - only the second dir, the first one is already unlocked
@@ -278,20 +273,16 @@ function test_single_alias_put
     local id=$2
     local expected_fam=$3
     local expected_layout=$4
-    local additional_arguments=$5
+    local extra_arguments=$5
 
-    $valg_phobos put --alias $alias $additional_arguments /etc/hosts $id ||
+    $valg_phobos put --alias "$alias" $extra_arguments /etc/hosts "$id" ||
         error "Put with alias $alias should have worked"
 
-    local fam_request="SELECT extents FROM extent WHERE oid='$id';"
-    $PSQL -t -c "$fam_request" |
-        grep -q "\"fam\": \"$expected_fam\"" ||
+    $phobos extent list -o family "$id" | grep "$expected_fam" ||
         error "Put with alias \"$alias\" should have written object on a" \
               "\"$expected_fam\" medium"
 
-    local lay_request="SELECT lyt_info FROM extent WHERE oid='$id';"
-    $PSQL -t -c "$lay_request" |
-        grep -q "\"name\": \"$expected_layout\"" ||
+    $phobos extent list -o layout "$id" | grep "$expected_layout" ||
         error "Put with alias \"$alias\" should have used " \
               "\"$expected_layout\" layout"
 }
