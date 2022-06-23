@@ -210,12 +210,6 @@ out_unlock:
     return rc;
 }
 
-/*
- * Use external references for now.
- * They can easily be replaced later by dlopen'ed symbols.
- */
-extern const struct lib_adapter lib_adapter_scsi;
-
 int get_lib_adapter(enum lib_type lib_type, struct lib_adapter *lib)
 {
     struct lib_adapter_module *module;
@@ -224,17 +218,19 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter *lib)
     switch (lib_type) {
     case PHO_LIB_DUMMY:
         rc = lib_adapter_mod_lazy_load("dummy", &module);
-        if (rc)
-            return rc;
-
-        *lib = *module->ops;
         break;
     case PHO_LIB_SCSI:
-        *lib = lib_adapter_scsi;
+        rc = lib_adapter_mod_lazy_load("scsi", &module);
         break;
     default:
         return -ENOTSUP;
     }
+
+    if (rc)
+        return rc;
+
+    *lib = *module->ops;
+
     return rc;
 }
 

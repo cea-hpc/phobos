@@ -21,7 +21,7 @@
  */
 #define _GNU_SOURCE
 #include "pho_test_utils.h"
-#include "../ldm/scsi_api.h"
+#include "../ldm-modules/scsi_api.h"
 #include "pho_ldm.h"
 
 #include <sys/types.h>

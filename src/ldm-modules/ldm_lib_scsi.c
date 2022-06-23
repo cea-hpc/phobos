@@ -39,6 +39,16 @@
 #include <jansson.h>
 #include <unistd.h>
 
+#define PLUGIN_NAME     "scsi"
+#define PLUGIN_MAJOR    0
+#define PLUGIN_MINOR    1
+
+static struct module_desc LA_SCSI_MODULE_DESC = {
+    .mod_name  = PLUGIN_NAME,
+    .mod_major = PLUGIN_MAJOR,
+    .mod_minor = PLUGIN_MINOR,
+};
+
 /** List of SCSI library configuration parameters */
 enum pho_cfg_params_libscsi {
     /** Query the S/N of a drive in a separate ELEMENT_STATUS request
@@ -774,7 +784,7 @@ static int lib_scsi_scan(struct lib_handle *hdl, json_t **lib_data)
 /** @}*/
 
 /** lib_scsi_adapter exported to upper layers */
-struct lib_adapter lib_adapter_scsi = {
+static struct lib_adapter LA_SCSI_OPS = {
     .lib_open         = lib_scsi_open,
     .lib_close        = lib_scsi_close,
     .lib_drive_lookup = lib_scsi_drive_info,
@@ -783,3 +793,12 @@ struct lib_adapter lib_adapter_scsi = {
     .lib_scan         = lib_scsi_scan,
     .lib_hdl          = {NULL},
 };
+
+/** Lib adapter module registration entry point */
+int pho_lib_adapter_mod_register(struct lib_adapter_module *self)
+{
+    self->desc = LA_SCSI_MODULE_DESC;
+    self->ops = &LA_SCSI_OPS;
+
+    return 0;
+}
