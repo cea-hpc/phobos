@@ -1764,15 +1764,13 @@ mount:
         sub_request->failure_on_medium = true;
         io_ended = true;
         /* set the medium to failed early to be sure to not reuse it by sched */
-        rc2 = dss_set_medium_to_failed(&dev->ld_device_thread.dss,
-                                       dev->ld_dss_media_info);
-        if (rc2)
-            pho_error(rc2, "Error when setting medium %s to failed",
-                      dev->ld_dss_media_info->rsc.id.name);
+        fail_release_free_medium(&dev->ld_device_thread.dss,
+                                 dev->ld_dss_media_info);
         dev->ld_dss_media_info = NULL;
-        pho_error(rc, "Error when mounting medium in device %s to %s it",
-                  dev->ld_dss_dev_info->rsc.id.name,
-                  pho_srl_request_kind_str(reqc->req));
+        LOG_GOTO(alloc_result, rc,
+                 "Error when mounting medium in device %s to %s it",
+                 dev->ld_dss_dev_info->rsc.id.name,
+                 pho_srl_request_kind_str(reqc->req));
     }
 
     /* LTFS can cunningly mount almost-full tapes as read-only, and so would

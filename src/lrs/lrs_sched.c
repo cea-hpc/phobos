@@ -824,12 +824,23 @@ void sched_resp_free(void *_respc)
     if (!respc)
         return;
 
+    /* XXX: remove condition by correctly initializing response container
+     * regardless of their types
+     */
     if (pho_response_is_write(respc->resp) ||
         pho_response_is_read(respc->resp))
         free(respc->devices);
 
     pho_srl_response_free(respc->resp, false);
     free(respc->resp);
+}
+
+void sched_resp_free_with_cont(void *_respc)
+{
+    struct resp_container *respc = (struct resp_container *)_respc;
+
+    sched_resp_free(_respc);
+    free(respc);
 }
 
 void sched_fini(struct lrs_sched *sched)

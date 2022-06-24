@@ -203,6 +203,7 @@ struct req_container {
 
 /** sched_resp_free can be used as glib callback */
 void sched_resp_free(void *respc);
+void sched_resp_free_with_cont(void *respc);
 
 /**
  * Release memory allocated for params structure of a request container.

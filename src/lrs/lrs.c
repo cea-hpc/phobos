@@ -388,10 +388,7 @@ static int _send_responses_from_queue(struct lrs *lrs)
     while ((respc = tsqueue_pop(&lrs->response_queue)) != NULL) {
         rc2 = _send_message(&lrs->comm, respc);
         rc = rc ? : rc2;
-
-        pho_srl_response_free(respc->resp, false);
-        free(respc->resp);
-        free(respc);
+        sched_resp_free_with_cont(respc);
     }
 
     return rc;
@@ -566,16 +563,16 @@ out_free_media:
 
 static int init_request_container_param(struct req_container *reqc)
 {
-        if (pho_request_is_release(reqc->req))
-            return init_release_container(reqc);
+    if (pho_request_is_release(reqc->req))
+        return init_release_container(reqc);
 
-        if (pho_request_is_write(reqc->req) || pho_request_is_read(reqc->req))
-            return init_rwalloc_container(reqc);
+    if (pho_request_is_write(reqc->req) || pho_request_is_read(reqc->req))
+        return init_rwalloc_container(reqc);
 
-        if (pho_request_is_notify(reqc->req))
-            reqc->params.notify.notified_device = NULL;
+    if (pho_request_is_notify(reqc->req))
+        reqc->params.notify.notified_device = NULL;
 
-        return 0;
+    return 0;
 }
 
 /**
@@ -779,7 +776,7 @@ static void lrs_fini(struct lrs *lrs)
     if (rc)
         pho_error(rc, "Error on closing the socket");
 
-    tsqueue_destroy(&lrs->response_queue, sched_resp_free);
+    tsqueue_destroy(&lrs->response_queue, sched_resp_free_with_cont);
     dss_fini(&lrs->dss);
 
     lock_file = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, lock_file);
