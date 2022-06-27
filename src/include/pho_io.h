@@ -73,7 +73,7 @@ struct pho_io_descr {
 struct pho_io_adapter_module_ops {
     int (*ioa_get)(const char *extent_key, const char *extent_desc,
                    struct pho_io_descr *iod);
-    int (*ioa_del)(struct pho_ext_loc *loc);
+    int (*ioa_del)(struct pho_io_descr *iod);
     int (*ioa_open)(const char *extent_key, const char *extent_desc,
                     struct pho_io_descr *iod, bool is_put);
     int (*ioa_write)(struct pho_io_descr *iod, const void *buf, size_t count);
@@ -138,12 +138,12 @@ static inline int ioa_get(const struct io_adapter_module *ioa,
  * \return 0 on success, negative error code on failure.
  */
 static inline int ioa_del(const struct io_adapter_module *ioa,
-                          struct pho_ext_loc *loc)
+                          struct pho_io_descr *iod)
 {
     assert(ioa != NULL);
     assert(ioa->ops != NULL);
     assert(ioa->ops->ioa_del != NULL);
-    return ioa->ops->ioa_del(loc);
+    return ioa->ops->ioa_del(iod);
 }
 
 /**

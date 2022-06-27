@@ -548,6 +548,58 @@ static void ior_test_get_invalid_object(void **state)
     assert_int_equal(rc, -ENOENT);
 }
 
+static void ior_test_delete_object(void **state)
+{
+    struct pho_io_descr *iod = (struct pho_io_descr *) *state;
+    struct io_adapter_module *ioa;
+    int rc;
+
+    iod->iod_flags = 0;
+
+    iod->iod_loc->extent->address.buff = "pho_io.pho_delete_obj";
+    iod->iod_loc->extent->address.size = strlen("pho_io.pho_delete_obj");
+
+    rc = get_io_adapter(PHO_FS_RADOS, &ioa);
+
+    rc = ioa_open(ioa, "pho_delete_obj", "pho_io", iod, true);
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_write(ioa, iod, "delete_obj", strlen("delete_obj"));
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_del(ioa, iod);
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_close(ioa, iod);
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_get(ioa, "pho_delete_obj", "pho_io", iod);
+    assert_int_equal(rc, -ENOENT);
+}
+
+static void ior_test_delete_invalid_object(void **state)
+{
+    struct pho_io_descr *iod = (struct pho_io_descr *) *state;
+    struct io_adapter_module *ioa;
+    int rc;
+
+    iod->iod_flags = 0;
+
+    iod->iod_loc->extent->address.buff = "pho_io.pho_invalid_obj";
+    iod->iod_loc->extent->address.size = strlen("pho_io.pho_invalid_obj");
+
+    rc = get_io_adapter(PHO_FS_RADOS, &ioa);
+
+    rc = ioa_open(ioa, "pho_invalid_obj", "pho_io", iod, true);
+    assert_int_equal(rc, -rc);
+
+    rc = ioa_del(ioa, iod);
+    assert_int_equal(rc, -ENOENT);
+
+    rc = ioa_close(ioa, iod);
+    assert_int_equal(rc, -rc);
+}
+
 int main(void)
 {
     const struct CMUnitTest rados_io_tests_open_close[] = {
@@ -574,10 +626,17 @@ int main(void)
         cmocka_unit_test(ior_test_get_invalid_object),
     };
 
+    const struct CMUnitTest rados_io_tests_delete[] = {
+        cmocka_unit_test(ior_test_delete_object),
+        cmocka_unit_test(ior_test_delete_invalid_object),
+    };
+
     return cmocka_run_group_tests(rados_io_tests_open_close, ior_setup,
                                   ior_teardown)
            + cmocka_run_group_tests(rados_io_tests_write, ior_setup,
                                     ior_teardown)
            + cmocka_run_group_tests(rados_io_tests_get, ior_setup,
+                                    ior_teardown)
+           + cmocka_run_group_tests(rados_io_tests_delete, ior_setup,
                                     ior_teardown);
 }

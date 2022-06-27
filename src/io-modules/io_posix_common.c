@@ -496,17 +496,17 @@ clean:
     return rc;
 }
 
-int pho_posix_del(struct pho_ext_loc *loc)
+int pho_posix_del(struct pho_io_descr *iod)
 {
     char *path;
     int rc = 0;
 
     ENTRY;
 
-    if (loc->extent->address.buff == NULL)
+    if (iod->iod_loc->extent->address.buff == NULL)
         LOG_RETURN(-EINVAL, "Object has no address stored in database");
 
-    path = pho_posix_fullpath(loc);
+    path = pho_posix_fullpath(iod->iod_loc);
     if (path == NULL)
         return -EINVAL;
 

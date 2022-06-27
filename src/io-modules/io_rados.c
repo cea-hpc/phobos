@@ -485,9 +485,23 @@ clean:
     return rc;
 }
 
-static int pho_rados_del(struct pho_ext_loc *loc)
+static int pho_rados_del(struct pho_io_descr *iod)
 {
-    return -ENOTSUP;
+    struct pho_rados_io_ctx *rados_io_ctx;
+    char *extent_name;
+    int rc = 0;
+
+    ENTRY;
+
+    extent_name = iod->iod_loc->extent->address.buff;
+    rados_io_ctx = iod->iod_ctx;
+
+    if (extent_name == NULL)
+        LOG_RETURN(-EINVAL, "Object has no address stored in database");
+
+    rc = rados_remove(rados_io_ctx->pool_io_ctx, extent_name);
+
+    return rc;
 }
 
 /** RADOS adapter */

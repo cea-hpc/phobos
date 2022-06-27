@@ -36,7 +36,7 @@ struct posix_io_ctx {
 int pho_posix_get(const char *extent_key, const char *extent_desc,
                   struct pho_io_descr *iod);
 
-int pho_posix_del(struct pho_ext_loc *loc);
+int pho_posix_del(struct pho_io_descr *iod);
 
 int pho_posix_open(const char *extent_key, const char *extent_desc,
                    struct pho_io_descr *iod, bool is_put);
