@@ -53,8 +53,8 @@ check_SCRIPTS=test_bad_comm.sh \
               test_undelete.sh
 
 if RADOS_ENABLED
-check_PROGRAMS+=test_lib_dev_rados test_io_rados
-check_SCRIPTS+=test_lib_dev_rados.sh test_io_rados.sh
+check_PROGRAMS+=test_lib_dev_rados test_io_rados test_fs_rados
+check_SCRIPTS+=test_lib_dev_rados.sh test_io_rados.sh test_fs_rados.sh
 endif
 
 TESTS=$(check_SCRIPTS)
@@ -90,6 +90,10 @@ test_lib_dev_rados_CFLAGS=-I$(TO_TEST)
 test_io_rados_SOURCES=test_io_rados.c
 test_io_rados_LDADD=$(ADMIN_LIB) $(IO_LIB) $(LDM_LIB) -lrados
 test_io_rados_CFLAGS=-I$(TO_TEST)
+
+test_fs_rados_SOURCES=test_fs_rados.c
+test_fs_rados_LDADD=$(ADMIN_LIB) $(LDM_LIB) -lrados
+test_fs_rados_CFLAGS=-I$(TO_TEST)
 endif
 
 test_raid1_split_locate_SOURCES=test_raid1_split_locate.c

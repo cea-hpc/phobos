@@ -30,7 +30,8 @@ from ctypes import (addressof, byref, c_int, c_char_p, c_void_p, cast, pointer,
                     POINTER, Structure)
 
 from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-name-in-module
-                               PHO_RSC_DIR, PHO_RSC_TAPE,
+                               PHO_FS_RADOS, PHO_RSC_DIR,
+                               PHO_RSC_TAPE, PHO_RSC_RADOS_POOL,
                                PHO_RSC_NONE, DSS_NONE,
                                str2rsc_family, str2dss_type)
 from phobos.core.glue import admin_device_status, jansson_dumps  # pylint: disable=no-name-in-module
@@ -86,6 +87,9 @@ class Client(object):
         elif fs_type == 'posix':
             rsc_family = PHO_RSC_DIR
             fs_type_enum = PHO_FS_POSIX
+        elif fs_type == 'rados':
+            rsc_family = PHO_RSC_RADOS_POOL
+            fs_type_enum = PHO_FS_RADOS
         else:
             raise EnvironmentError(errno.EOPNOTSUPP,
                                    "Unknown filesystem type '%s'" % fs_type)

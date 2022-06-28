@@ -100,6 +100,9 @@ int get_fs_adapter(enum fs_type fs_type, struct fs_adapter_module **fsa)
     case PHO_FS_LTFS:
         rc = load_module("fs_adapter_ltfs", sizeof(**fsa), (void **)fsa);
         break;
+    case PHO_FS_RADOS:
+        rc = load_module("fs_adapter_rados", sizeof(**fsa), (void **)fsa);
+        break;
     default:
         return -ENOTSUP;
     }

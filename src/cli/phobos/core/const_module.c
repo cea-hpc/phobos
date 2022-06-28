@@ -240,6 +240,7 @@ PyMODINIT_FUNC PyInit_const(void)
     PyModule_AddIntMacro(mod, PHO_FS_INVAL);
     PyModule_AddIntMacro(mod, PHO_FS_POSIX);
     PyModule_AddIntMacro(mod, PHO_FS_LTFS);
+    PyModule_AddIntMacro(mod, PHO_FS_RADOS);
     PyModule_AddIntMacro(mod, PHO_FS_LAST);
 
     /* enum address_type */

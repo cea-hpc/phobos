@@ -44,6 +44,14 @@ libpho_fs_adapter_ltfs_la_LIBADD=../common/libpho_common.la \
 libpho_fs_adapter_ltfs_la_LDFLAGS=-version-info 0:0:0
 
 if RADOS_ENABLED
+pkglib_LTLIBRARIES+=libpho_fs_adapter_rados.la
+libpho_fs_adapter_rados_la_SOURCES=ldm_fs_rados.c
+libpho_fs_adapter_rados_la_CFLAGS=-fPIC $(AM_CFLAGS)
+libpho_fs_adapter_rados_la_LIBADD=../common/libpho_common.la \
+                                  ../cfg/libpho_cfg.la -lrados \
+                                  ../ldm/libpho_ldm.la
+libpho_fs_adapter_rados_la_LDFLAGS=-version-info 0:0:0
+
 pkglib_LTLIBRARIES+=libpho_dev_adapter_rados_pool.la
 
 libpho_dev_adapter_rados_pool_la_SOURCES=ldm_dev_rados_pool.c
