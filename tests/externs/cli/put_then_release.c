@@ -20,9 +20,8 @@
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
 /*
- * \brief  Simple script which send requests to the LRS but waits for signal
- *         SIGUSR1 before sending the release request. This is useful to test
- *         behavior which depends on the timing at which requests are received.
+ * \brief  Simple program that execute write allocation and print allocate
+ *         medium name on stdout or execute a release
  */
 #define _GNU_SOURCE
 
@@ -42,74 +41,54 @@
 
 #include "lrs_cfg.h"
 
-static bool release_signaled;
-
 static void error(const char *func, const char *msg)
 {
     fprintf(stderr, "%s: %s\n", func, msg);
     exit(EXIT_FAILURE);
 }
 
-static void on_signal_received(int signum)
-{
-    release_signaled = true;
-}
-
-static void setup_signal_handler(void)
-{
-    struct sigaction sa;
-
-    sa.sa_handler = on_signal_received;
-    sa.sa_flags = 0;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGUSR1, &sa, NULL);
-}
-
-static void wait_release_signal(void)
-{
-    struct timespec duration;
-
-    duration.tv_sec = 0;
-    duration.tv_nsec = 50000000; /* 50 ms */
-
-    while (!release_signaled) {
-        int rc;
-
-        rc = nanosleep(&duration, NULL);
-        if (rc && errno != EINTR)
-            error(__func__, strerror(errno));
-    }
-}
-
 struct option {
-    enum pho_xfer_op op;
-    enum rsc_family family;
+    bool                put; /* true for a put, false for a release */
+    enum rsc_family     family;
+    const char         *release_medium_name;
 };
 
 static void parse_args(int argc, char **argv, struct option *option)
 {
+    int family_arg_index = 2;
+
     if (argc < 2)
-        error("controlled_strore", "usage: controlled_store <put|get>");
+        goto err_usage;
 
     option->family = PHO_RSC_DIR;
 
-    if (argc == 3) {
-        option->family = str2rsc_family(argv[2]);
+    if (!strcmp(argv[1], "put"))
+        option->put = true;
+    else if (!strcmp(argv[1], "release"))
+        option->put = false;
+    else
+        goto err_usage;
+
+    if (!option->put) {
+        if (argc < 3)
+            goto err_usage;
+
+        family_arg_index = 3;
+        option->release_medium_name = argv[2];
+    }
+
+    if (argc > family_arg_index) {
+        option->family = str2rsc_family(argv[family_arg_index]);
         if (option->family == PHO_RSC_INVAL)
             goto err_usage;
     }
 
-    if (!strcmp(argv[1], "put"))
-        option->op = PHO_XFER_OP_PUT;
-    else if (!strcmp(argv[1], "get"))
-        option->op = PHO_XFER_OP_GET;
-    else
-        goto err_usage;
-
     return;
 
 err_usage:
-    error(__func__, "usage controlled_store <action> [<family>]");
+    error(__func__,
+          "usage put_then_release <put | release <release_medium_name>> "
+          "[family]");
 }
 
 static void send_and_receive(struct pho_comm_info *comm,
@@ -154,9 +133,9 @@ static void send_and_receive(struct pho_comm_info *comm,
 }
 
 static void send_write(struct pho_comm_info *comm,
-                       pho_resp_t **resp,
                        enum rsc_family family)
 {
+    pho_resp_t *resp = NULL;
     pho_req_t req;
     size_t n = 0;
     int rc;
@@ -167,12 +146,16 @@ static void send_write(struct pho_comm_info *comm,
     req.walloc->media[0]->size = 0;
     req.walloc->family = family;
 
-    send_and_receive(comm, &req, resp);
+    send_and_receive(comm, &req, &resp);
+    printf("%s", resp->walloc->media[0]->med_id->name);
+    pho_srl_response_free(resp, true);
 }
 
 static void send_release(struct pho_comm_info *comm,
-                         pho_resp_t **resp)
+                         enum rsc_family family,
+                         const char *release_medium_name)
 {
+    pho_resp_t *resp = NULL;
     pho_req_t req;
     int rc;
 
@@ -180,24 +163,21 @@ static void send_release(struct pho_comm_info *comm,
     if (rc)
         error(__func__, strerror(-rc));
 
-    rsc_id_cpy(req.release->media[0]->med_id,
-               (*resp)->walloc->media[0]->med_id);
+    req.release->media[0]->med_id->family = family;
+    req.release->media[0]->med_id->name = strdup(release_medium_name);
     req.release->media[0]->to_sync = true;
-
-    pho_srl_response_free(*resp, false);
-    send_and_receive(comm, &req, resp);
+    send_and_receive(comm, &req, &resp);
+    pho_srl_response_free(resp, true);
 }
 
 int main(int argc, char **argv)
 {
     struct pho_comm_info comm;
     const char *socket_path;
-    pho_resp_t *resp = NULL;
     struct option option;
     int rc;
 
     pho_cfg_init_local(NULL);
-    setup_signal_handler();
     parse_args(argc, argv, &option);
 
     socket_path = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, server_socket);
@@ -205,15 +185,10 @@ int main(int argc, char **argv)
     if (rc)
         error("pho_comm_open", strerror(-rc));
 
-    send_write(&comm, &resp, option.family);
-    pho_info("allocation request sent, waiting for signal");
-
-    wait_release_signal();
-    pho_info("signal received, sending release request");
-
-    send_release(&comm, &resp);
-
-    pho_srl_response_free(resp, true);
+    if (option.put)
+        send_write(&comm, option.family);
+    else
+        send_release(&comm, option.family, option.release_medium_name);
 
     return EXIT_SUCCESS;
 }

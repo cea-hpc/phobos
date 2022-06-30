@@ -34,7 +34,7 @@ endif
 
 TEST_EXTENSIONS=.sh
 
-check_PROGRAMS=controlled_store \
+check_PROGRAMS=put_then_release \
                medium_locker
 
 check_SCRIPTS=acceptance.sh \
@@ -60,10 +60,10 @@ check_SCRIPTS=acceptance.sh \
 
 TESTS=$(check_SCRIPTS)
 
-controlled_store_SOURCES=controlled_store.c
-controlled_store_LDADD=$(LRS_LIB) $(CFG_LIB) $(COMMON_LIB) \
+put_then_release_SOURCES=put_then_release.c
+put_then_release_LDADD=$(LRS_LIB) $(CFG_LIB) $(COMMON_LIB) \
                           $(COMMUNICATION_LIB) $(SERIALIZER_LIB)
-controlled_store_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
+put_then_release_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
 
 medium_locker_SOURCES=medium_locker.c
 medium_locker_LDADD=$(DSS_LIB) $(STORE_LIB)

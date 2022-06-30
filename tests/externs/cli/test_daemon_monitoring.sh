@@ -30,7 +30,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../setup_db.sh
 . $test_dir/../../tape_drive.sh
 . $test_dir/../../test_launch_daemon.sh
-controlled_store="$test_dir/controlled_store"
+put_then_release="$test_dir/put_then_release"
 
 function test_drive_status_no_daemon()
 {
@@ -81,10 +81,7 @@ function test_drive_status_with_ongoing_io()
     $phobos drive unlock "$drive"
     $phobos tape format --unlock "$tape"
 
-    $controlled_store put tape &
-    local pid=$!
-
-    trap "kill -s USR1 '$pid'; cleanup" EXIT
+    local release_medium_name=$($put_then_release put tape)
 
     $phobos drive status |
         grep True |
@@ -92,8 +89,7 @@ function test_drive_status_with_ongoing_io()
         grep "$tape"
 
     # send release request
-    kill -s USR1 $pid
-    trap cleanup EXIT
+    $put_then_release release $release_medium_name tape
 }
 
 trap cleanup EXIT

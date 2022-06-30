@@ -963,7 +963,8 @@ bool sched_has_running_devices(struct lrs_sched *sched)
         struct lrs_dev *dev;
 
         dev = lrs_dev_hdl_get(&sched->devices, i);
-        if (dev->ld_ongoing_io)
+        if (dev->ld_ongoing_io || dev->ld_needs_sync ||
+            dev->ld_sync_params.tosync_array->len)
             return true;
     }
 
