@@ -131,7 +131,7 @@ err_dev:
 }
 
 /* sub_request_free can be used as glib callback */
-static void sub_request_free(struct sub_request *sub_req)
+void sub_request_free(struct sub_request *sub_req)
 {
     if (!sub_req)
         return;
@@ -1327,23 +1327,8 @@ out:
     return rc;
 }
 
-/**
- * Cancel sub_request on error
- *
- * Must be called with a lock on sub_request->reqc
- * If a previous error is detected with a non null rc in reqc, the medium of
- * this sub_request is freed and set to NULL and its status is set as
- * SUB_REQUEST_CANCEL.
- *
- * @param[in]   sub_request     the rwalloc sub_request to check
- * @param[out]  ended           Will be set to true if the request is ended and
- *                              could be freed, false otherwise.
- *
- * @return  True if there was an error and the request was cancelled,
- *          false otherwise.
- */
-static bool locked_cancel_rwalloc_on_error(struct sub_request *sub_request,
-                                           bool *ended)
+bool locked_cancel_rwalloc_on_error(struct sub_request *sub_request,
+                                    bool *ended)
 {
     struct req_container *reqc = sub_request->reqc;
     struct rwalloc_medium  *rwalloc_medium;

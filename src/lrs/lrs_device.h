@@ -109,6 +109,31 @@ struct sub_request {
 };
 
 /**
+ * sub_request_free can be used as glib callback
+ *
+ * @param[in]   sub_req     sub_request to free
+ */
+void sub_request_free(struct sub_request *sub_req);
+
+/**
+ * Cancel sub_request on error
+ *
+ * Must be called with a lock on sub_request->reqc
+ * If a previous error is detected with a non null rc in reqc, the medium of
+ * this sub_request is freed and set to NULL and its status is set as
+ * SUB_REQUEST_CANCEL.
+ *
+ * @param[in]   sub_request     the rwalloc sub_request to check
+ * @param[out]  ended           Return true if the request is ended and could be
+ *                              freed, false otherwise.
+ *
+ * @return  True is there was an error and the medium is cancelled,
+ *          false otherwise.
+ */
+bool locked_cancel_rwalloc_on_error(struct sub_request *sub_request,
+                                    bool *ended);
+
+/**
  * Parameters to check when a synchronization is required.
  */
 struct sync_params {
