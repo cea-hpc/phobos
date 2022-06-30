@@ -155,6 +155,17 @@ void sched_req_free(void *reqc)
     free(cont);
 }
 
+bool is_rwalloc_ended(struct req_container *reqc)
+{
+    size_t i;
+
+    for (i = 0; i < reqc->params.rwalloc.n_media; i++)
+        if (reqc->params.rwalloc.media[i].status == SUB_REQUEST_TODO)
+            return false;
+
+    return true;
+}
+
 /** check that device info from DB is consistent with actual status */
 static int check_dev_info(const struct lrs_dev *dev)
 {

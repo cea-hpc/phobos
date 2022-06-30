@@ -223,6 +223,17 @@ static inline void destroy_container_params(struct req_container *cont)
 void sched_req_free(void *reqc);
 
 /**
+ * Test is the rwalloc request is ended
+ *
+ * Must be called with lock on reqc.
+ *
+ * @param[in]   reqc    Request to test.
+ *
+ * @return  true if the request is ended, else false.
+ */
+bool is_rwalloc_ended(struct req_container *reqc);
+
+/**
  * Response container used by the scheduler to transfer information
  * between a request and its response. For now, this information consists
  * in a socket ID.

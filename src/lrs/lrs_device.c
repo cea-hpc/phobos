@@ -1327,18 +1327,6 @@ out:
     return rc;
 }
 
-/* This function must be called with a lock on \p reqc */
-static inline bool is_rwalloc_ended(struct req_container *reqc)
-{
-    size_t i;
-
-    for (i = 0; i < reqc->params.rwalloc.n_media; i++)
-        if (reqc->params.rwalloc.media[i].status == SUB_REQUEST_TODO)
-            return false;
-
-    return true;
-}
-
 /**
  * Cancel sub_request on error
  *
