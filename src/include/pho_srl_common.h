@@ -53,4 +53,18 @@ static inline void rsc_id_cpy(pho_rsc_id_t *dest,
     dest->name = strdup(model->name);
 }
 
+static inline void med_ids_switch(pho_rsc_id_t **med_ids, size_t first_index,
+                                  size_t second_index)
+{
+    enum rsc_family saved_medium_family;
+    char *saved_medium_name;
+
+    saved_medium_family = (enum rsc_family)med_ids[first_index]->family;
+    saved_medium_name = med_ids[first_index]->name;
+    med_ids[first_index]->family = med_ids[second_index]->family;
+    med_ids[first_index]->name = med_ids[second_index]->name;
+    med_ids[second_index]->family = saved_medium_family;
+    med_ids[second_index]->name = saved_medium_name;
+}
+
 #endif /* _PHO_SRL_COMMON_H */

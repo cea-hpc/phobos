@@ -42,24 +42,25 @@ echo "**** POSIX TEST MODE ****"
 # following entries must match mount prefix
 TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2 /tmp/pho_testdir3 \
           /tmp/pho_testdir4 /tmp/pho_testdir5"
+DIR_MYTAG="/tmp/pho_testdir2 /tmp/pho_testdir4 /tmp/pho_testdir5"
 
 function setup()
 {
     setup_tables
-    insert_examples
-    mkdir $TEST_RECOV_DIR
 
-    for dir in $TEST_MNT; do
-        # allow later cleaning by other users
-        umask 000
-        mkdir -p "$dir"
-    done
-
-    export PHOBOS_LRS_mount_prefix=/tmp/pho_testdir
     export PHOBOS_LRS_families="dir"
     export PHOBOS_STORE_default_family="dir"
 
     invoke_daemon
+
+    mkdir $TEST_RECOV_DIR
+
+    # allow later cleaning by other users
+    umask 000
+    mkdir -p $TEST_MNT
+    $phobos dir add $TEST_MNT
+    $phobos dir format --fs POSIX --unlock $TEST_MNT
+    $phobos dir update --tags mytag $DIR_MYTAG
 }
 
 function clear_mnt_content()
@@ -76,9 +77,7 @@ function cleanup()
     drop_tables
     rm -rf $TEST_FILES
     rm -rf $TEST_RECOV_DIR
-    for d in $TEST_MNT; do
-        rm -rf $d
-    done
+    rm -rf $TEST_MNT
 }
 
 function create_files()
@@ -207,7 +206,7 @@ function test_put_get()
     fi
 
     # retrieve all files from the backend, get and check them
-    find $TEST_MNT -type f | while read f; do
+    find $TEST_MNT -type f -not -path '*/\.*' | while read f; do
         test_check_get "$f"
     done
 

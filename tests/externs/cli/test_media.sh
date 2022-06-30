@@ -31,11 +31,18 @@ set -xe
 #                                    SETUP                                     #
 ################################################################################
 
+TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2 /tmp/pho_testdir3 \
+          /tmp/pho_testdir4 /tmp/pho_testdir5"
+
 function setup()
 {
     setup_tables
-    insert_examples
     invoke_daemon
+    rm -rf $TEST_MNT
+    umask 000
+    mkdir -p $TEST_MNT
+    $phobos dir add $TEST_MNT
+    $phobos dir format --fs POSIX --unlock $TEST_MNT
 }
 
 function cleanup() {
@@ -45,18 +52,6 @@ function cleanup() {
         rm -rf $d
     done
 }
-
-trap drop_tables ERR EXIT
-
-TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2 /tmp/pho_testdir3 \
-          /tmp/pho_testdir4 /tmp/pho_testdir5"
-for dir in $TEST_MNT; do
-    # clean and re-create
-    rm -rf $dir/*
-    # allow later cleaning by other users
-    umask 000
-    [ ! -d $dir ] && mkdir -p "$dir"
-done
 
 trap cleanup EXIT
 setup
@@ -159,11 +154,15 @@ test_dir_operation_flags /tmp/pho_testdir1 True True True
 echo "**** TESTS: PUT MEDIA OPERATION TAGS ****"
 # remove all dir put access
 $valg_phobos dir set-access -- -P $($phobos dir list)
+waive_daemon
+invoke_daemon
 # try one put without any dir put access
 $phobos put --family dir /etc/hosts host1 &&
     error "Put without any medium with 'P' operation flag should fail"
 # set one put access
 $valg_phobos dir set-access +P /tmp/pho_testdir3
+waive_daemon
+invoke_daemon
 # try to put with this new dir put access
 $phobos put --family dir /etc/hosts host2
 # check the used dir corresponds to the one with the put access
@@ -178,10 +177,14 @@ echo "**** TESTS: GET MEDIA OPERATION TAGS ****"
 $phobos put --family dir /etc/hosts obj_to_get
 # remove all dir get access
 $valg_phobos dir set-access -- -G $($phobos dir list)
+waive_daemon
+invoke_daemon
 # try one get without any dir get access
 $phobos get obj_to_get /tmp/gotten_obj && rm /tmp/gotten_obj &&
     error "Get without any medium with 'G' operation flag should fail"
 # set get access on all dir
 $valg_phobos dir set-access +G $($phobos dir list)
+waive_daemon
+invoke_daemon
 # try to get
 $phobos get obj_to_get /tmp/gotten_obj && rm /tmp/gotten_obj

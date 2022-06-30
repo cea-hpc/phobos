@@ -391,24 +391,6 @@ static int _send_responses_from_queue(struct lrs *lrs)
     return rc;
 }
 
-static int _send_responses_from_array(struct pho_comm_info *comm,
-                                      const int n_resp,
-                                      struct resp_container *resp_cont)
-{
-    int rc = 0;
-    int rc2;
-    int i;
-
-    for (i = 0; i < n_resp; ++i) {
-        rc2 = _send_message(comm, resp_cont + i);
-        rc = rc ? : rc2;
-
-        sched_resp_free(&resp_cont[i]);
-    }
-
-    return rc;
-}
-
 static int _send_error(struct lrs *lrs, int req_rc,
                        const struct req_container *req_cont)
 {
@@ -860,9 +842,8 @@ err:
 static int lrs_process(struct lrs *lrs)
 {
     struct pho_comm_data *data = NULL;
-    struct resp_container *resp_cont;
-    int n_data, n_resp = 0;
     bool stopped = true;
+    int n_data;
     int rc = 0;
     int i;
 
@@ -885,14 +866,9 @@ static int lrs_process(struct lrs *lrs)
         if (!lrs->sched[i])
             continue;
 
-        rc = sched_responses_get(lrs->sched[i], &n_resp, &resp_cont);
+        rc = sched_handle_requests(lrs->sched[i]);
         if (rc)
             LOG_RETURN(rc, "Error during sched processing");
-
-        rc = _send_responses_from_array(&lrs->comm, n_resp, resp_cont);
-        free(resp_cont);
-        if (rc)
-            return rc;
 
         if (running || sched_has_running_devices(lrs->sched[i]))
             stopped = false;

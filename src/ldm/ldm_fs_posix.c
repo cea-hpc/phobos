@@ -37,25 +37,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-static int dir_present(const char *dev_path, char *mnt_path,
-                       size_t mnt_path_size)
-{
-    struct stat st;
-    ENTRY;
-
-    if (stat(dev_path, &st) != 0)
-        LOG_RETURN(-errno, "stat() failed on '%s'", dev_path);
-
-    if (!S_ISDIR(st.st_mode))
-        LOG_RETURN(-ENOTDIR, "'%s' is not a directory", dev_path);
-
-    strncpy(mnt_path, dev_path, mnt_path_size);
-    /* make sure mnt_path is null terminated */
-    mnt_path[mnt_path_size-1] = '\0';
-
-    return 0;
-}
-
 static char *get_label_path(const char *dir_path)
 {
     char    *res;
@@ -66,6 +47,61 @@ static char *get_label_path(const char *dir_path)
         return NULL;
 
     return res;
+}
+
+static int dir_get_label(const char *mnt_path, char *fs_label, size_t llen)
+{
+    char    *label_path = get_label_path(mnt_path);
+    int      fd;
+    ssize_t  rc;
+
+    if (!label_path)
+        LOG_RETURN(-ENOMEM, "Cannot lookup filesystem label at '%s'", mnt_path);
+
+    fd = open(label_path, O_RDONLY);
+    if (fd < 0)
+        LOG_GOTO(out_free, rc = -errno, "Cannot open label: '%s'", label_path);
+
+    rc = read(fd, fs_label, llen - 1);
+    if (rc < 0)
+        LOG_GOTO(out_close, rc = -errno, "Cannot read label: '%s'", label_path);
+
+    fs_label[rc] = '\0';
+    rc = 0;
+
+out_close:
+    close(fd);
+
+out_free:
+    free(label_path);
+    return rc;
+}
+
+static int dir_present(const char *dev_path, char *mnt_path,
+                       size_t mnt_path_size)
+{
+    char mounted_label[PHO_LABEL_MAX_LEN + 1];
+    struct stat st;
+    int rc;
+    ENTRY;
+
+    if (stat(dev_path, &st) != 0)
+        LOG_RETURN(-errno, "stat() failed on '%s'", dev_path);
+
+    if (!S_ISDIR(st.st_mode))
+        LOG_RETURN(-ENOTDIR, "'%s' is not a directory", dev_path);
+
+    rc = dir_get_label(dev_path, mounted_label, sizeof(mounted_label));
+    if (rc) {
+        pho_info("dir is present but we can't get any label");
+        return -ENOENT;
+    }
+
+    strncpy(mnt_path, dev_path, mnt_path_size);
+    /* make sure mnt_path is null terminated */
+    mnt_path[mnt_path_size-1] = '\0';
+
+    return 0;
 }
 
 /**
@@ -99,34 +135,6 @@ static int dir_format(const char *dev_path, const char *label,
         memset(fs_spc, 0, sizeof(*fs_spc));
         rc = common_statfs(dev_path, fs_spc);
     }
-
-out_close:
-    close(fd);
-
-out_free:
-    free(label_path);
-    return rc;
-}
-
-static int dir_get_label(const char *mnt_path, char *fs_label, size_t llen)
-{
-    char    *label_path = get_label_path(mnt_path);
-    int      fd;
-    ssize_t  rc;
-
-    if (!label_path)
-        LOG_RETURN(-ENOMEM, "Cannot lookup filesystem label at '%s'", mnt_path);
-
-    fd = open(label_path, O_RDONLY);
-    if (fd < 0)
-        LOG_GOTO(out_free, rc = -errno, "Cannot open label: '%s'", label_path);
-
-    rc = read(fd, fs_label, llen - 1);
-    if (rc < 0)
-        LOG_GOTO(out_close, rc = -errno, "Cannot read label: '%s'", label_path);
-
-    fs_label[rc] = '\0';
-    rc = 0;
 
 out_close:
     close(fd);

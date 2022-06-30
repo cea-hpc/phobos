@@ -36,6 +36,7 @@
 #include "pho_dss.h"
 #include "pho_io.h"
 #include "pho_ldm.h"
+#include "pho_srl_common.h"
 #include "pho_type_utils.h"
 
 static int dev_thread_init(struct lrs_dev *device);
@@ -1447,9 +1448,11 @@ static int fill_rwalloc_resp_container(struct lrs_dev *dev,
     return 0;
 }
 
-static bool sub_request_can_be_requeued(struct sub_request *sub_request)
+static bool rwalloc_can_be_requeued(struct sub_request *sub_request)
 {
     struct req_container *reqc = sub_request->reqc;
+    size_t *nb_failed_media;
+    pho_req_read_t *ralloc;
 
     if (pho_request_is_write(reqc->req))
         return true;
@@ -1457,43 +1460,17 @@ static bool sub_request_can_be_requeued(struct sub_request *sub_request)
     if (!sub_request->failure_on_medium)
         return true;
 
-    if (reqc->params.rwalloc.next_medium_to_read < reqc->req->ralloc->n_med_ids)
+    nb_failed_media = &reqc->params.rwalloc.nb_failed_media;
+    (*nb_failed_media)++;
+    ralloc = reqc->req->ralloc;
+    /* if possible : prepare a new candidate medium and requeue */
+    if ((ralloc->n_med_ids - *nb_failed_media) >= ralloc->n_required) {
+        med_ids_switch(ralloc->med_ids, sub_request->medium_index,
+                       ralloc->n_med_ids - *nb_failed_media);
         return true;
+    }
 
     return false;
-}
-
-/* Called with lock on reqc */
-static void rwalloc_cancel_devices(struct req_container *reqc)
-{
-    bool is_write = pho_request_is_write(reqc->req);
-    size_t i;
-
-    for (i = 0; i < reqc->params.rwalloc.n_media; i++) {
-        if (reqc->params.rwalloc.media[i].status == SUB_REQUEST_DONE) {
-            struct resp_container *respc = reqc->params.rwalloc.respc;
-            pho_resp_t *resp = respc->resp;
-
-            reqc->params.rwalloc.media[i].status = SUB_REQUEST_CANCEL;
-            respc->devices[i]->ld_ongoing_io = false;
-            respc->devices[i] = NULL;
-            if (is_write) {
-                pho_resp_write_elt_t *wresp = resp->walloc->media[i];
-
-                free(wresp->root_path);
-                wresp->root_path = NULL;
-                free(wresp->med_id->name);
-                wresp->med_id->name = NULL;
-            } else {
-                pho_resp_read_elt_t *rresp = resp->ralloc->media[i];
-
-                free(rresp->root_path);
-                rresp->root_path = NULL;
-                free(rresp->med_id->name);
-                rresp->med_id->name = NULL;
-            }
-        }
-    }
 }
 
 /**
@@ -1552,7 +1529,7 @@ static int handle_rwalloc_sub_request_result(struct lrs_dev *dev,
     }
 
     /* sub_request_rc is not null */
-    if (sub_request_can_be_requeued(sub_request)) {
+    if (rwalloc_can_be_requeued(sub_request)) {
         /* requeue failed request in the scheduler */
         *sub_request_requeued = true;
         if (!sub_request->failure_on_medium)
@@ -1566,7 +1543,7 @@ static int handle_rwalloc_sub_request_result(struct lrs_dev *dev,
         rwalloc_medium->status = SUB_REQUEST_ERROR;
         rc = queue_error_response(dev->ld_response_queue, sub_request_rc,
                                   sub_request->reqc);
-        rwalloc_cancel_devices(reqc);
+        rwalloc_cancel_DONE_devices(reqc);
     }
 
 try_send_response:

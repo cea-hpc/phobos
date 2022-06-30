@@ -124,10 +124,10 @@ void sub_request_free(struct sub_request *sub_req);
  * SUB_REQUEST_CANCEL.
  *
  * @param[in]   sub_request     the rwalloc sub_request to check
- * @param[out]  ended           Return true if the request is ended and could be
- *                              freed, false otherwise.
+ * @param[out]  ended           Will be set to true if the request is ended and
+ *                              must be freed, false otherwise.
  *
- * @return  True is there was an error and the medium is cancelled,
+ * @return  True if there was an error and the request was cancelled,
  *          false otherwise.
  */
 bool locked_cancel_rwalloc_on_error(struct sub_request *sub_request,

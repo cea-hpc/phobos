@@ -48,25 +48,20 @@ PART1_SIZE=1024
 PART2_SIZE=1024
 ((FULL_SIZE=PART1_SIZE + PART2_SIZE))
 
-function insert_dir_in_db
+function resize_dir
 {
-    local host=$(hostname -s)
-
     $PSQL << EOF
-insert into device (family, model, id, host, adm_status, path)
-    values ('dir', NULL, '$host:$DIR1', '$host', 'unlocked', '$DIR1'),
-           ('dir', NULL, '$host:$DIR2', '$host', 'unlocked', '$DIR2');
+UPDATE media SET
+    stats = '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0,\
+              "phys_spc_free":$PART1_SIZE, "nb_load":0, "nb_errors":0,\
+              "last_load":0}'
+    WHERE family = 'dir' AND id = '$DIR1';
 
-insert into media (family, model, id, adm_status, fs_type, address_type,
-                   fs_status, stats, tags)
-    values ('dir', NULL, '$DIR1', 'unlocked', 'POSIX', 'HASH1', 'empty',
-            '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0, \
-              "phys_spc_free":$PART1_SIZE, "nb_load":0, "nb_errors":0, \
-              "last_load":0}', '[]'),
-           ('dir', NULL, '$DIR2', 'unlocked', 'POSIX', 'HASH1', 'empty',
-            '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0, \
-              "phys_spc_free":$PART2_SIZE, "nb_load":0, "nb_errors":0, \
-              "last_load":0}', '[]');
+UPDATE media SET
+    stats = '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0,\
+              "phys_spc_free":$PART2_SIZE, "nb_load":0, "nb_errors":0,\
+              "last_load":0}'
+    WHERE family = 'dir' AND id = '$DIR2';
 
 EOF
 }
@@ -75,13 +70,16 @@ function setup
 {
     # start with a clean/empty phobos DB
     setup_tables
+    invoke_daemon
 
     # set start context
     dd if=/dev/random of=$IN_FILE count=$FULL_SIZE bs=1
 
     mkdir -p $DIR1 $DIR2
-
-    insert_dir_in_db
+    $phobos dir add $DIR1 $DIR2
+    $phobos dir format --fs POSIX --unlock $DIR1 $DIR2
+    waive_daemon
+    resize_dir
     invoke_daemon
 }
 
