@@ -45,7 +45,7 @@ const struct pho_config_item cfg_lrs[] = {
     [PHO_CFG_LRS_families] = {
         .section = "lrs",
         .name    = "families",
-        .value   = "tape,dir"
+        .value   = "tape,dir,rados_pool"
     },
     [PHO_CFG_LRS_lib_device] = {
         .section = "lrs",
@@ -65,17 +65,17 @@ const struct pho_config_item cfg_lrs[] = {
     [PHO_CFG_LRS_sync_time_ms] = {
         .section = "lrs",
         .name    = "sync_time_ms",
-        .value   = "tape=10000,dir=10"
+        .value   = "tape=10000,dir=10,rados_pool=10"
     },
     [PHO_CFG_LRS_sync_nb_req] = {
         .section = "lrs",
         .name    = "sync_nb_req",
-        .value   = "tape=5,dir=5"
+        .value   = "tape=5,dir=5,rados_pool=5"
     },
     [PHO_CFG_LRS_sync_wsize_kb] = {
         .section = "lrs",
         .name    = "sync_wsize_kb",
-        .value   = "tape=1048576,dir=1048576"
+        .value   = "tape=1048576,dir=1048576,rados_pool=1048576"
     },
 };
 

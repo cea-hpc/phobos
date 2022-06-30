@@ -206,8 +206,10 @@ function test_sync_group_time
 
 if [[ -w /dev/changer ]]; then
     families="dir tape"
+    export PHOBOS_LRS_families="dir,tape"
 else
     families="dir"
+    export PHOBOS_LRS_families="dir"
 fi
 
 test_sync_no_group ${families}

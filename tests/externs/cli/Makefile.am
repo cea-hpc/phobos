@@ -58,6 +58,10 @@ check_SCRIPTS=acceptance.sh \
               test_resource_management.sh \
               test_undelete.sh
 
+if RADOS_ENABLED
+check_SCRIPTS+=test_store_rados_commands.sh
+endif
+
 TESTS=$(check_SCRIPTS)
 
 put_then_release_SOURCES=put_then_release.c

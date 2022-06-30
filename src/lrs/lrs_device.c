@@ -2136,18 +2136,20 @@ static int dev_thread_init(struct lrs_dev *device)
 int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl)
 {
     const char *lib_dev;
-    int         rc;
-
-    /* RADOS case */
-    if (dev_type == PHO_RSC_RADOS_POOL)
-        return get_lib_adapter(PHO_LIB_RADOS, &lib_hdl->ld_module);
+    int rc = -1;
 
     /* non-tape/RADOS cases: dummy lib adapter (no open required) */
-    if (dev_type != PHO_RSC_TAPE)
+    if (dev_type != PHO_RSC_TAPE && dev_type != PHO_RSC_RADOS_POOL)
         return get_lib_adapter(PHO_LIB_DUMMY, &lib_hdl->ld_module);
 
     /* tape case */
-    rc = get_lib_adapter(PHO_LIB_SCSI, &lib_hdl->ld_module);
+    if (dev_type == PHO_RSC_TAPE)
+        rc = get_lib_adapter(PHO_LIB_SCSI, &lib_hdl->ld_module);
+
+    /* RADOS case */
+    if (dev_type == PHO_RSC_RADOS_POOL)
+        rc = get_lib_adapter(PHO_LIB_RADOS, &lib_hdl->ld_module);
+
     if (rc)
         LOG_RETURN(rc, "Failed to get library adapter");
 
