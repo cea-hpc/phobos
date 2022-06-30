@@ -217,10 +217,13 @@ static void pl_hostname(const char *expected_hostname, void **state,
     if (alive) {
         rc = phobos_locate(pl_state->objs[0].oid, NULL, 0, &hostname);
         assert_return_code(rc, -rc);
-        if (expected_hostname)
+        if (expected_hostname) {
+            assert_non_null(hostname);
             assert_string_equal(expected_hostname, hostname);
-        else
+        } else {
             assert_null(hostname);
+        }
+
         free(hostname);
     }
 
@@ -228,49 +231,62 @@ static void pl_hostname(const char *expected_hostname, void **state,
     rc = phobos_locate(pl_state->objs[0].oid, NULL, pl_state->objs[0].version,
                        &hostname);
     assert_return_code(rc, -rc);
-    if (expected_hostname)
+    if (expected_hostname) {
+        assert_non_null(hostname);
         assert_string_equal(expected_hostname, hostname);
-    else
+    } else {
         assert_null(hostname);
+    }
+
     free(hostname);
 
     /* uuid */
     rc = phobos_locate(NULL, pl_state->objs[0].uuid, 0, &hostname);
     assert_return_code(rc, -rc);
-    if (expected_hostname)
+    if (expected_hostname) {
+        assert_non_null(hostname);
         assert_string_equal(expected_hostname, hostname);
-    else
+    } else {
         assert_null(hostname);
+    }
+
     free(hostname);
 
     /* uuid, version */
     rc = phobos_locate(NULL, pl_state->objs[0].uuid, pl_state->objs[0].version,
                        &hostname);
     assert_return_code(rc, -rc);
-    if (expected_hostname)
+    if (expected_hostname) {
+        assert_non_null(hostname);
         assert_string_equal(expected_hostname, hostname);
-    else
+    } else {
         assert_null(hostname);
+    }
+
     free(hostname);
 
     /* oid, uuid */
     rc = phobos_locate(pl_state->objs[0].oid, pl_state->objs[0].uuid, 0,
                        &hostname);
     assert_return_code(rc, -rc);
-    if (expected_hostname)
+    if (expected_hostname) {
+        assert_non_null(hostname);
         assert_string_equal(expected_hostname, hostname);
-    else
+    } else {
         assert_null(hostname);
+    }
     free(hostname);
 
     /* oid, uuid, version */
     rc = phobos_locate(pl_state->objs[0].oid, pl_state->objs[0].uuid,
                        pl_state->objs[0].version, &hostname);
     assert_return_code(rc, -rc);
-    if (expected_hostname)
+    if (expected_hostname) {
+        assert_non_null(hostname);
         assert_string_equal(expected_hostname, hostname);
-    else
+    } else {
         assert_null(hostname);
+    }
 
     free(hostname);
 }
