@@ -113,6 +113,10 @@ function test_sync_group_nb_req
 
         ${phobos} put --family ${family} /etc/hosts \
                                          test_sync_group_nb_req_${family}_bis
+
+	# give time for both put process to end before testing
+	sleep ${WAIT_PUT_S}
+
         if (ps --pid $pid); then
             error "With a sync nb req of 2, first background ${family} put" \
                   "should be ended when second one is ended."
@@ -148,6 +152,10 @@ function test_sync_group_written_size
 
         ${phobos} put --family ${family} ${file} \
                                      test_sync_group_written_size_${family}_bis
+
+	# give time for both put process to end before testing
+	sleep ${WAIT_PUT_S}
+
         if (ps --pid $pid); then
             error "With a written_size of one kiB more than the object size," \
                   "first background ${family} put should be ended when" \
@@ -183,6 +191,10 @@ function test_sync_group_time
 
         ${phobos} put --family ${family} /etc/hosts \
                                          test_sync_group_time_${family}_bis
+
+	# give time for both put process to end before testing
+	sleep ${WAIT_PUT_S}
+
         if (ps --pid $pid); then
             error "With a time 2s more than previous sleep, first background" \
                   "${family} put should be ended when second one is ended."
