@@ -302,7 +302,7 @@ static int convert_response_to_error(struct resp_container *respc)
 {
     int rc;
 
-    pho_srl_response_free(respc->resp, true);
+    pho_srl_response_free(respc->resp, false);
     rc = pho_srl_response_error_alloc(respc->resp);
     if (rc)
         return rc;
