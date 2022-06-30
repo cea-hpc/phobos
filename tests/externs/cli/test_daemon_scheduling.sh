@@ -36,7 +36,7 @@ function invoke_daemon_debug()
     # XXX grep --line-buffered allows each line to be written in EVENT_FILE as
     # they are read in the logs. Otherwise, the logs would not be always
     # flushed.
-    $phobosd -vv -i 2>&1 | tr -d '\000' \
+    stdbuf -eL -oL $phobosd -vv -i 2>&1 | stdbuf -i0 -oL tr -d '\000' \
         | grep --line-buffered "sync: " > "$EVENT_FILE"
 }
 
