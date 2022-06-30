@@ -1395,7 +1395,6 @@ static int fill_rwalloc_resp_container(struct lrs_dev *dev,
     pho_resp_t *resp = respc->resp;
     int rc = 0;
 
-    respc->devices[sub_request->medium_index] = dev;
     if (pho_request_is_read(sub_request->reqc->req)) {
         pho_resp_read_elt_t *rresp;
 
@@ -1404,14 +1403,18 @@ static int fill_rwalloc_resp_container(struct lrs_dev *dev,
         rresp->addr_type = dev->ld_dss_media_info->addr_type;
         rresp->root_path = strdup(dev->ld_mnt_path);
         if (!rresp->root_path)
-            GOTO(out_clean_dev, rc = -errno);
+            LOG_RETURN(rc = -errno,
+                       "Unable to duplicate rresp root path to fill rwalloc "
+                       "resp container");
 
         rresp->med_id->name = strdup(dev->ld_dss_media_info->rsc.id.name);
         if (!rresp->med_id->name) {
             rc = -errno;
             free(rresp->root_path);
             rresp->root_path = NULL;
-            goto out_clean_dev;
+            LOG_RETURN(rc,
+                       "Unable to duplicate rresp med_id name to fill rwalloc "
+                       "resp container");
         }
 
         rresp->med_id->family = dev->ld_dss_media_info->rsc.id.family;
@@ -1423,14 +1426,18 @@ static int fill_rwalloc_resp_container(struct lrs_dev *dev,
         wresp->med_id->family = dev->ld_dss_media_info->rsc.id.family;
         wresp->root_path = strdup(dev->ld_mnt_path);
         if (!wresp->root_path)
-            GOTO(out_clean_dev, rc = -errno);
+            LOG_RETURN(rc = -errno,
+                       "Unable to duplicate wresp root path to fill rwalloc "
+                       "resp container");
 
         wresp->med_id->name = strdup(dev->ld_dss_media_info->rsc.id.name);
         if (!wresp->med_id->name) {
             rc = -errno;
             free(wresp->root_path);
             wresp->root_path = NULL;
-            goto out_clean_dev;
+            LOG_RETURN(rc,
+                       "Unable to duplicate wresp med_id name to fill rwalloc "
+                       "resp container");
         }
 
         wresp->fs_type = dev->ld_dss_media_info->fs.type;
@@ -1438,10 +1445,6 @@ static int fill_rwalloc_resp_container(struct lrs_dev *dev,
     }
 
     return 0;
-
-out_clean_dev:
-    respc->devices[sub_request->medium_index] = NULL;
-    return rc;
 }
 
 static bool sub_request_can_be_requeued(struct sub_request *sub_request)
