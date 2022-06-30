@@ -543,7 +543,6 @@ static int init_rwalloc_container(struct req_container *reqc)
     if (!rwalloc_params->respc->resp)
         GOTO(out_free_respc, rc = -ENOMEM);
 
-    rwalloc_params->respc->resp->req_id = reqc->req->id;
     if (is_write)
         rc = pho_srl_response_write_alloc(rwalloc_params->respc->resp,
                                           rwalloc_params->n_media);
@@ -554,6 +553,7 @@ static int init_rwalloc_container(struct req_container *reqc)
     if (rc)
         goto out_free_resp;
 
+    rwalloc_params->respc->resp->req_id = reqc->req->id;
     rwalloc_params->respc->devices_len = rwalloc_params->n_media;
     rwalloc_params->respc->devices =
         calloc(rwalloc_params->respc->devices_len,
