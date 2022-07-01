@@ -276,4 +276,20 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
                              enum rsc_family dev_family,
                              char **lock_ids, int n_ids);
 
+/**
+ * Open and scan a library, and generate a json array with unstructured
+ * information. Output information may vary, depending on the library.
+ *
+ * @param[in] lib_type          Type of the library to scan
+ * @param[in] lib_dev           Path of the library to scan
+ * @param[in,out] lib_data      json object allocated by ldm_lib_scan,
+ *                              json_decref must be called later on to
+ *                              deallocate it properly
+ *
+ * @return                      0 on success
+ *                              -errno on failure
+ */
+int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
+                          json_t **lib_data);
+
 #endif

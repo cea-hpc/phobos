@@ -27,8 +27,8 @@ import subprocess
 import unittest
 import re
 
+from phobos.core.admin import Client as AdminClient
 from phobos.core.const import PHO_LIB_SCSI # pylint: disable=no-name-in-module
-from phobos.core.ldm import LibAdapter
 
 
 # Conventional lib device for phobos tests
@@ -120,7 +120,8 @@ class LdmTest(unittest.TestCase):
             mtx_elts.setdefault(elt_type, []).append(elt)
 
         # Retrieve data as seen by ldm_lib_scan
-        raw_lib_data = LibAdapter(PHO_LIB_SCSI, LIB_TEST_DEV).scan()
+        with AdminClient(lrs_required=False) as adm:
+            raw_lib_data = adm.lib_scan(PHO_LIB_SCSI, LIB_TEST_DEV)
 
         # Find the base address for each type to the first address seen (they
         # should be sorted)

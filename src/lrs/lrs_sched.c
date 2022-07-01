@@ -441,7 +441,8 @@ out_nores:
  * @param[in]  lib  library handler for tape devices.
  * @param[out] dev  lrs_dev structure filled with all needed information.
  */
-static int sched_fill_dev_info(struct lrs_sched *sched, struct lib_adapter *lib,
+static int sched_fill_dev_info(struct lrs_sched *sched,
+                               struct lib_adapter_module *lib,
                                struct lrs_dev *dev)
 {
     struct dev_adapter deva;
@@ -573,10 +574,10 @@ static int sched_fill_dev_info(struct lrs_sched *sched, struct lib_adapter *lib,
  */
 static int sched_load_dev_state(struct lrs_sched *sched)
 {
-    bool                clean_devices = false;
-    struct lib_adapter  lib;
-    int                 rc;
-    int                 i;
+    struct lib_adapter_module *lib;
+    bool clean_devices = false;
+    int rc;
+    int i;
 
     ENTRY;
 
@@ -596,7 +597,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
         dev = lrs_dev_hdl_get(&sched->devices, i);
 
         MUTEX_LOCK(&dev->ld_mutex);
-        rc = sched_fill_dev_info(sched, &lib, dev);
+        rc = sched_fill_dev_info(sched, lib, dev);
         if (rc) {
             pho_error(rc,
                       "Fail to init device '%s', stopping corresponding device "
@@ -609,7 +610,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
     }
 
     /* close handle to the library */
-    rc = ldm_lib_close(&lib);
+    rc = ldm_lib_close(lib);
     if (rc)
         LOG_RETURN(rc,
                    "Error while closing the library handle after loading "
@@ -1766,8 +1767,8 @@ check_read_medium_permission_and_status(const struct media_info *medium)
 static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
                             const char *name)
 {
+    struct lib_adapter_module *lib;
     struct lrs_dev *device = NULL;
-    struct lib_adapter lib;
     int rc = 0;
 
     rc = lrs_dev_hdl_add(sched, &sched->devices, name);
@@ -1783,9 +1784,9 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
         goto dev_del;
 
     MUTEX_LOCK(&device->ld_mutex);
-    rc = sched_fill_dev_info(sched, &lib, device);
+    rc = sched_fill_dev_info(sched, lib, device);
     MUTEX_UNLOCK(&device->ld_mutex);
-    ldm_lib_close(&lib);
+    ldm_lib_close(lib);
     if (rc)
         goto dev_del;
 

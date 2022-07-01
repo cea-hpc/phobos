@@ -20,6 +20,7 @@
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
 #define _GNU_SOURCE
+#include "phobos_admin.h"
 #include "pho_test_utils.h"
 #include "../ldm-modules/scsi_api.h"
 #include "pho_ldm.h"
@@ -195,37 +196,42 @@ static int single_element_status(int fd, uint16_t addr, bool expect_full)
 /** tests of the lib adapter API */
 static void test_lib_adapter(void)
 {
+    struct lib_adapter_module *lib = NULL;
     struct lib_item_addr med_addr;
-    struct lib_adapter lib = {0};
     struct lib_drv_info drv_info;
 
     ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib));
-    ASSERT_RC(ldm_lib_open(&lib, "/dev/changer"));
+    ASSERT_RC(ldm_lib_open(lib, "/dev/changer"));
 
     if (one_serial) {
-        ASSERT_RC(ldm_lib_drive_lookup(&lib, one_serial, &drv_info));
+        ASSERT_RC(ldm_lib_drive_lookup(lib, one_serial, &drv_info));
         /* unload the drive to any slot if it's full */
         if (drv_info.ldi_full)
-            ASSERT_RC(ldm_lib_media_move(&lib, &drv_info.ldi_addr, NULL));
+            ASSERT_RC(ldm_lib_media_move(lib, &drv_info.ldi_addr, NULL));
     }
 
     if (one_label)
-        ASSERT_RC(ldm_lib_media_lookup(&lib, one_label, &med_addr));
+        ASSERT_RC(ldm_lib_media_lookup(lib, one_label, &med_addr));
 
-    ldm_lib_close(&lib);
+    ldm_lib_close(lib);
 }
 
-static void test_lib_scan(void)
+static void test_lib_scan(bool use_admin_function)
 {
-    struct lib_adapter lib = {0};
+    struct lib_adapter_module *lib = NULL;
     json_t *data_entry;
     json_t *lib_data;
     char *json_str;
     size_t index;
 
-    ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib));
-    ASSERT_RC(ldm_lib_open(&lib, "/dev/changer"));
-    ASSERT_RC(ldm_lib_scan(&lib, &lib_data));
+    if (use_admin_function) {
+        ASSERT_RC(phobos_admin_lib_scan(PHO_LIB_SCSI, "/dev/changer",
+                                        &lib_data));
+    } else {
+        ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib));
+        ASSERT_RC(ldm_lib_open(lib, "/dev/changer"));
+        ASSERT_RC(ldm_lib_scan(lib, &lib_data));
+    }
 
     if (!json_array_size(lib_data)) {
         pho_error(-EINVAL, "ldm_lib_scan returned an empty array");
@@ -244,8 +250,8 @@ static void test_lib_scan(void)
     printf("JSON: %s\n", json_str);
     free(json_str);
     json_decref(lib_data);
-
-    ASSERT_RC(ldm_lib_close(&lib));
+    if (!use_admin_function)
+        ASSERT_RC(ldm_lib_close(lib));
 }
 
 static int val;
@@ -420,7 +426,8 @@ int main(int argc, char **argv)
 
     /* test of the lib adapter API */
     test_lib_adapter();
-    test_lib_scan();
+    test_lib_scan(false);
+    test_lib_scan(true);
 
     /* same test with PHO_CFG_LIB_SCSI_sep_sn_query=1 */
     ASSERT_RC(setenv("PHOBOS_LIB_SCSI_sep_sn_query", "1", 1));

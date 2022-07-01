@@ -59,7 +59,7 @@ struct ldm_fs_space {
  * They should be invoked via their corresponding wrappers. Refer to
  * them for more precise explanation about each call.
  *
- * dev_query are dev_lookup are mandatory.
+ * dev_query and dev_lookup are mandatory.
  * Other calls can be NULL if no operation is required, and do noop.
  */
 struct dev_adapter {
@@ -200,13 +200,10 @@ struct lib_drv_info {
  * They should be invoked via their corresponding wrappers. Refer to
  * them for more precise explanation about each call.
  *
- * lib_open, lib_close and lib_media_move do noop if they are NULL.
- *
- * @TODO Instead each lib_adapter includes a full vector of functions,
- * this should be turned to a lib_adapter object including a lib_handle
- * and a pointer to a vector of functions.
+ * lib_drive_lookup and lib_media_lookup are mandatory.
+ * lib_open, lib_close, lib_media_move and lib_scan do noop if they are NULL.
  */
-struct lib_adapter {
+struct pho_lib_adapter_module_ops {
     /* adapter functions */
     int (*lib_open)(struct lib_handle *lib, const char *dev);
     int (*lib_close)(struct lib_handle *lib);
@@ -218,14 +215,15 @@ struct lib_adapter {
                           const struct lib_item_addr *src_addr,
                           const struct lib_item_addr *tgt_addr);
     int (*lib_scan)(struct lib_handle *lib, json_t **lib_data);
-    struct lib_handle lib_hdl;            /**< Handle to the layout plugin */
 };
 
 #define PLAM_OP_INIT         "pho_lib_adapter_mod_register"
 
 struct lib_adapter_module {
-    struct module_desc desc;       /**< Description of this layout */
-    const struct lib_adapter *ops; /**< Operations of this layout */
+    struct lib_handle lib_hdl;     /**< Handle to the lib adapter plugin */
+    struct module_desc desc;       /**< Description of this lib adapter */
+    const struct pho_lib_adapter_module_ops *ops;
+                                   /**< Operations of this lib adapter */
 };
 
 int pho_lib_adapter_mod_register(struct lib_adapter_module *self);
@@ -237,7 +235,7 @@ int pho_lib_adapter_mod_register(struct lib_adapter_module *self);
  *
  * @return 0 on success, negative error code on failure.
  */
-int get_lib_adapter(enum lib_type lib_type, struct lib_adapter *lib);
+int get_lib_adapter(enum lib_type lib_type, struct lib_adapter_module **lib);
 
 /**
  * Open a library handler.
@@ -248,12 +246,13 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter *lib);
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_lib_open(struct lib_adapter *lib, const char *dev)
+static inline int ldm_lib_open(struct lib_adapter_module *lib, const char *dev)
 {
     assert(lib != NULL);
-    if (lib->lib_open == NULL)
+    assert(lib->ops != NULL);
+    if (lib->ops->lib_open == NULL)
         return 0;
-    return lib->lib_open(&lib->lib_hdl, dev);
+    return lib->ops->lib_open(&lib->lib_hdl, dev);
 }
 
 /**
@@ -263,12 +262,13 @@ static inline int ldm_lib_open(struct lib_adapter *lib, const char *dev)
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_lib_close(struct lib_adapter *lib)
+static inline int ldm_lib_close(struct lib_adapter_module *lib)
 {
     assert(lib != NULL);
-    if (lib->lib_close == NULL)
+    assert(lib->ops != NULL);
+    if (lib->ops->lib_close == NULL)
         return 0;
-    return lib->lib_close(&lib->lib_hdl);
+    return lib->ops->lib_close(&lib->lib_hdl);
 }
 
 /**
@@ -279,13 +279,14 @@ static inline int ldm_lib_close(struct lib_adapter *lib)
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_lib_drive_lookup(struct lib_adapter *lib,
+static inline int ldm_lib_drive_lookup(struct lib_adapter_module *lib,
                                        const char *drive_serial,
                                        struct lib_drv_info *drv_info)
 {
     assert(lib != NULL);
-    assert(lib->lib_drive_lookup != NULL);
-    return lib->lib_drive_lookup(&lib->lib_hdl, drive_serial, drv_info);
+    assert(lib->ops != NULL);
+    assert(lib->ops->lib_drive_lookup != NULL);
+    return lib->ops->lib_drive_lookup(&lib->lib_hdl, drive_serial, drv_info);
 }
 
 /**
@@ -296,13 +297,14 @@ static inline int ldm_lib_drive_lookup(struct lib_adapter *lib,
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_lib_media_lookup(struct lib_adapter *lib,
+static inline int ldm_lib_media_lookup(struct lib_adapter_module *lib,
                                        const char *media_label,
                                        struct lib_item_addr *med_addr)
 {
     assert(lib != NULL);
-    assert(lib->lib_media_lookup != NULL);
-    return lib->lib_media_lookup(&lib->lib_hdl, media_label, med_addr);
+    assert(lib->ops != NULL);
+    assert(lib->ops->lib_media_lookup != NULL);
+    return lib->ops->lib_media_lookup(&lib->lib_hdl, media_label, med_addr);
 }
 
 /**
@@ -311,14 +313,15 @@ static inline int ldm_lib_media_lookup(struct lib_adapter *lib,
  * @param[in]     src_addr  Source address of the move.
  * @param[in]     tgt_addr  Target address of the move.
  */
-static inline int ldm_lib_media_move(struct lib_adapter *lib,
+static inline int ldm_lib_media_move(struct lib_adapter_module *lib,
                                      const struct lib_item_addr *src_addr,
                                      const struct lib_item_addr *tgt_addr)
 {
     assert(lib != NULL);
-    if (lib->lib_media_move == NULL)
+    assert(lib->ops != NULL);
+    if (lib->ops->lib_media_move == NULL)
         return 0;
-    return lib->lib_media_move(&lib->lib_hdl, src_addr, tgt_addr);
+    return lib->ops->lib_media_move(&lib->lib_hdl, src_addr, tgt_addr);
 }
 
 /**
@@ -328,12 +331,14 @@ static inline int ldm_lib_media_move(struct lib_adapter *lib,
  * @param[in,out] lib_data  json object allocated by ldm_lib_scan, json_decref
  *                          must be called later on to deallocate it properly
  */
-static inline int ldm_lib_scan(struct lib_adapter *lib, json_t **lib_data)
+static inline int ldm_lib_scan(struct lib_adapter_module *lib,
+                               json_t **lib_data)
 {
     assert(lib != NULL);
-    if (lib->lib_scan == NULL)
+    assert(lib->ops != NULL);
+    if (lib->ops->lib_scan == NULL)
         return 0;
-    return lib->lib_scan(&lib->lib_hdl, lib_data);
+    return lib->ops->lib_scan(&lib->lib_hdl, lib_data);
 }
 
 /** @}*/

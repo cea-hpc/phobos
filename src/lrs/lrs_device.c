@@ -929,10 +929,10 @@ static int dss_device_release(struct dss_handle *dss, struct dev_info *dev)
 static int dev_unload(struct lrs_dev *dev)
 {
     /* let the library select the target location */
-    struct lib_item_addr    free_slot = { .lia_type = MED_LOC_UNKNOWN };
-    struct lib_adapter      lib;
-    int                     rc2;
-    int                     rc;
+    struct lib_item_addr free_slot = { .lia_type = MED_LOC_UNKNOWN };
+    struct lib_adapter_module *lib;
+    int rc2;
+    int rc;
 
     ENTRY;
 
@@ -946,7 +946,7 @@ static int dev_unload(struct lrs_dev *dev)
                  "'%s'", rsc_family_names[dev->ld_dss_dev_info->rsc.id.family],
                  dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
-    rc = ldm_lib_media_move(&lib, &dev->ld_lib_dev_info.ldi_addr, &free_slot);
+    rc = ldm_lib_media_move(lib, &dev->ld_lib_dev_info.ldi_addr, &free_slot);
     if (rc != 0)
         /* Set operational failure state on this drive. It is incomplete since
          * the error can originate from a defective tape too...
@@ -959,7 +959,7 @@ static int dev_unload(struct lrs_dev *dev)
     dev->ld_op_status = PHO_DEV_OP_ST_EMPTY;
 
 out_close:
-    rc2 = ldm_lib_close(&lib);
+    rc2 = ldm_lib_close(lib);
     if (rc2)
         rc = rc ? : rc2;
 
@@ -1067,7 +1067,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
                     bool *failure_on_dev, bool *failure_on_medium)
 {
     struct lib_item_addr medium_addr;
-    struct lib_adapter lib;
+    struct lib_adapter_module *lib;
     int rc2;
     int rc;
 
@@ -1097,14 +1097,14 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
     }
 
     /* lookup the requested medium */
-    rc = ldm_lib_media_lookup(&lib, medium->rsc.id.name, &medium_addr);
+    rc = ldm_lib_media_lookup(lib, medium->rsc.id.name, &medium_addr);
     if (rc) {
         *failure_on_medium = true;
         fail_release_free_medium(&dev->ld_device_thread.dss, medium);
         LOG_GOTO(out_close, rc, "Media lookup failed");
     }
 
-    rc = ldm_lib_media_move(&lib, &medium_addr, &dev->ld_lib_dev_info.ldi_addr);
+    rc = ldm_lib_media_move(lib, &medium_addr, &dev->ld_lib_dev_info.ldi_addr);
     /* A movement from drive to drive can be prohibited by some libraries.
      * If a failure is encountered in such a situation, it probably means that
      * the state of the library has changed between the moment it has been
@@ -1139,7 +1139,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
     rc = 0;
 
 out_close:
-    rc2 = ldm_lib_close(&lib);
+    rc2 = ldm_lib_close(lib);
     if (rc2) {
         *failure_on_dev = true;
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
@@ -2130,7 +2130,7 @@ static int dev_thread_init(struct lrs_dev *device)
     return 0;
 }
 
-int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter *lib)
+int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter_module **lib)
 {
     const char *lib_dev;
     int         rc;
@@ -2151,5 +2151,5 @@ int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter *lib)
     if (!lib_dev)
         LOG_RETURN(rc, "Failed to get default library device from config");
 
-    return ldm_lib_open(lib, lib_dev);
+    return ldm_lib_open(*lib, lib_dev);
 }

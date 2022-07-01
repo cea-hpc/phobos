@@ -784,14 +784,13 @@ static int lib_scsi_scan(struct lib_handle *hdl, json_t **lib_data)
 /** @}*/
 
 /** lib_scsi_adapter exported to upper layers */
-static struct lib_adapter LA_SCSI_OPS = {
+static struct pho_lib_adapter_module_ops LA_SCSI_OPS = {
     .lib_open         = lib_scsi_open,
     .lib_close        = lib_scsi_close,
     .lib_drive_lookup = lib_scsi_drive_info,
     .lib_media_lookup = lib_scsi_media_info,
     .lib_media_move   = lib_scsi_move,
     .lib_scan         = lib_scsi_scan,
-    .lib_hdl          = {NULL},
 };
 
 /** Lib adapter module registration entry point */

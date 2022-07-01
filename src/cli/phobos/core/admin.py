@@ -24,15 +24,16 @@ Provide access to admin commands with the right level (tm) of abstraction.
 """
 
 import errno
+import json
 
-from ctypes import (addressof, byref, c_int, c_char_p, cast, pointer, POINTER,
-                    Structure)
+from ctypes import (addressof, byref, c_int, c_char_p, c_void_p, cast, pointer,
+                    POINTER, Structure)
 
 from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-name-in-module
                                PHO_RSC_DIR, PHO_RSC_TAPE,
                                PHO_RSC_NONE, DSS_NONE,
                                str2rsc_family, str2dss_type)
-from phobos.core.glue import admin_device_status  # pylint: disable=no-name-in-module
+from phobos.core.glue import admin_device_status, jansson_dumps  # pylint: disable=no-name-in-module
 from phobos.core.dss import DSSHandle
 from phobos.core.ffi import (CommInfo, ExtentInfo, LayoutInfo, LIBPHOBOS_ADMIN,
                              Id)
@@ -261,3 +262,17 @@ class Client(object):
     def layout_list_free(layouts, n_layouts):
         """Free a previously obtained layout list."""
         LIBPHOBOS_ADMIN.phobos_admin_layout_list_free(layouts, n_layouts)
+
+    @staticmethod
+    def lib_scan(lib_type, lib_dev_path):
+        """Scan and return a list of dictionnaries representing the properties
+        of elements in a library of type lib_type.
+
+        The only working implementation is for PHO_LIB_SCSI, which performs a
+        SCSI scan of a given device.
+        """
+        jansson_t = c_void_p(None)
+        LIBPHOBOS_ADMIN.phobos_admin_lib_scan(lib_type,
+                                              lib_dev_path.encode('utf-8'),
+                                              byref(jansson_t))
+        return json.loads(jansson_dumps(jansson_t.value))

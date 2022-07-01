@@ -80,7 +80,7 @@ test_raid1_split_locate_LDADD=$(CFG_LIB) $(COMMON_LIB) $(DSS_LIB) $(RAID1_LIB)
 test_raid1_split_locate_CFLAGS=-I$(TO_TEST)
 
 test_scsi_SOURCES=test_scsi.c
-test_scsi_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB) $(SCSI_LIB)
+test_scsi_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB) $(SCSI_LIB) $(ADMIN_LIB)
 test_scsi_CFLAGS=-I$(TO_TEST)
 
 test_store_SOURCES=test_store.c

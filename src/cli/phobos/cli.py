@@ -54,7 +54,6 @@ from phobos.core.dss import Client as DSSClient
 from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
                              MediaInfo, ObjectInfo, ResourceFamily,
                              CLIManagedResourceMixin)
-from phobos.core.ldm import LibAdapter
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
 from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
@@ -1633,11 +1632,16 @@ class LibOptHandler(BaseResourceOptHandler):
                 self.logger.error(str(err) + ", will abort 'lib scan'")
                 sys.exit(os.EX_DATAERR)
 
-        for lib_dev in libs:
-            lib_data = LibAdapter(PHO_LIB_SCSI, lib_dev).scan()
-            # FIXME: can't use dump_object_list yet as it does not play well
-            # with unstructured dict-like data (relies on getattr)
-            self._print_lib_data(lib_data)
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                for lib_dev in libs:
+                    lib_data = adm.lib_scan(PHO_LIB_SCSI, lib_dev)
+                    # FIXME: can't use dump_object_list yet as it does not play
+                    # well with unstructured dict-like data (relies on getattr)
+                    self._print_lib_data(lib_data)
+        except EnvironmentError as err:
+            self.logger.error(str(err) + ", will abort 'lib scan'")
+            sys.exit(abs(err.errno))
 
     @staticmethod
     def _print_lib_data(lib_data):

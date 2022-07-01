@@ -292,6 +292,6 @@ struct lrs_dev *lrs_dev_hdl_get(struct lrs_dev_hdl *handle, int index);
  *
  * @return          0 on success, -1 * posix error code on failure.
  */
-int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter *lib);
+int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter_module **lib);
 
 #endif

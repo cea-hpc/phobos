@@ -210,26 +210,20 @@ out_unlock:
     return rc;
 }
 
-int get_lib_adapter(enum lib_type lib_type, struct lib_adapter *lib)
+int get_lib_adapter(enum lib_type lib_type, struct lib_adapter_module **lib)
 {
-    struct lib_adapter_module *module;
     int rc = 0;
 
     switch (lib_type) {
     case PHO_LIB_DUMMY:
-        rc = lib_adapter_mod_lazy_load("dummy", &module);
+        rc = lib_adapter_mod_lazy_load("dummy", lib);
         break;
     case PHO_LIB_SCSI:
-        rc = lib_adapter_mod_lazy_load("scsi", &module);
+        rc = lib_adapter_mod_lazy_load("scsi", lib);
         break;
     default:
         return -ENOTSUP;
     }
-
-    if (rc)
-        return rc;
-
-    *lib = *module->ops;
 
     return rc;
 }

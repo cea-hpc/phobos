@@ -137,6 +137,28 @@ enum lib_type {
     PHO_LIB_LAST
 };
 
+static const char * const lib_type_names[] = {
+    [PHO_LIB_DUMMY] = "DUMMY",
+    [PHO_LIB_SCSI]  = "SCSI",
+};
+
+static inline const char *lib_type2str(enum lib_type type)
+{
+    if (type >= PHO_LIB_LAST || type < 0)
+        return NULL;
+    return lib_type_names[type];
+}
+
+static inline enum lib_type str2lib_type(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_LIB_LAST; i++)
+        if (!strcmp(str, lib_type_names[i]))
+            return i;
+    return PHO_LIB_INVAL;
+}
+
 enum fs_type {
     PHO_FS_INVAL = -1,
     PHO_FS_POSIX = 0, /* any POSIX filesystem (no specific feature) */

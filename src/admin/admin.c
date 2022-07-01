@@ -39,6 +39,7 @@
 #include "pho_dss.h"
 #include "pho_ldm.h"
 #include "pho_srl_lrs.h"
+#include "pho_types.h"
 #include "pho_type_utils.h"
 #include "admin_utils.h"
 
@@ -1086,6 +1087,44 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
         rc = dss_lock_clean_select(&adm->dss, lock_hostname,
                                    type_str, family_str,
                                    lock_ids, n_ids);
+
+    return rc;
+}
+
+int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
+                          json_t **lib_data)
+{
+    const char *lib_type_name = lib_type2str(lib_type);
+    struct lib_adapter_module *lib;
+    int rc2;
+    int rc;
+
+    ENTRY;
+
+    if (!lib_type_name)
+        LOG_RETURN(-EINVAL, "Invalid lib type '%d'", lib_type);
+
+    rc = get_lib_adapter(lib_type, &lib);
+    if (rc)
+        LOG_RETURN(rc, "Failed to get library adapter for type '%s'",
+                   lib_type_name);
+
+    rc = ldm_lib_open(lib, lib_dev);
+    if (rc)
+        LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
+                   lib_type_name, lib_dev);
+
+    rc = ldm_lib_scan(lib, lib_data);
+    if (rc)
+        LOG_GOTO(out, rc, "Failed to scan library of type '%s' for path '%s'",
+                 lib_type_name, lib_dev);
+
+out:
+    rc2 = ldm_lib_close(lib);
+    if (rc2)
+        pho_error(rc2, "Failed to close library of type '%s'", lib_type_name);
+
+    rc = rc ? : rc2;
 
     return rc;
 }

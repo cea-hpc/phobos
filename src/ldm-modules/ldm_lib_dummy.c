@@ -79,14 +79,13 @@ static int dummy_media_lookup(struct lib_handle *lib, const char *media_label,
 }
 
 /** Exported library adapater */
-static struct lib_adapter LIB_ADAPTER_DUMMY_OPS = {
+static struct pho_lib_adapter_module_ops LIB_ADAPTER_DUMMY_OPS = {
     .lib_open         = NULL,
     .lib_close        = NULL,
     .lib_drive_lookup = dummy_drive_lookup,
     .lib_media_lookup = dummy_media_lookup,
     .lib_media_move   = NULL,
     .lib_scan         = NULL,
-    .lib_hdl          = {NULL},
 };
 
 /** Lib adapter module registration entry point */
