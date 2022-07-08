@@ -28,10 +28,11 @@
 #include "config.h"
 #endif
 
-#include "pho_ldm.h"
 #include "pho_cfg.h"
-#include "pho_type_utils.h"
 #include "pho_common.h"
+#include "pho_ldm.h"
+#include "pho_module_loader.h"
+#include "pho_type_utils.h"
 #include "ldm_dev_adapters.h"
 
 #include <dlfcn.h>
@@ -39,187 +40,16 @@
 #include <sys/types.h>
 #include <stdio.h>
 
-static pthread_rwlock_t lib_adapters_rwlock;
-static GHashTable *lib_adapters;
-
-typedef int (*lib_adapter_init_func_t)(struct lib_adapter_module *);
-
-/**
- * Initializes lib_adapters_rwlock and the lib_adapters hash table.
- */
-__attribute__((constructor)) static void adapters_init(void)
-{
-    int rc;
-
-    rc = pthread_rwlock_init(&lib_adapters_rwlock, NULL);
-    if (rc) {
-        fprintf(stderr,
-                "Unexpected error: cannot initialize lib adapters rwlock: %s\n",
-                strerror(rc));
-        exit(EXIT_FAILURE);
-    }
-
-    /* Note: lib adapters are not meant to be unloaded for now */
-    lib_adapters = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
-                                         NULL);
-    if (lib_adapters == NULL) {
-        fprintf(stderr, "Could not create lib adapters hash table\n");
-        exit(EXIT_FAILURE);
-    }
-}
-
-/**
- * Convert lib adapter name into the corresponding module library name.
- * Actual path resolution will be handled by regular LD mechanism.
- *
- * eg. "dummy" -> "libpho_lib_adapter_dummy.so"
- *
- * \return 0 on success, negated errno on error.
- */
-static int build_lib_adapter_instance_path(const char *mod_name, char *path,
-                                           size_t len)
-{
-    int rc;
-
-    rc = snprintf(path, len, "libpho_lib_adapter_%s.so", mod_name);
-    if (rc < 0 || rc >= len) {
-        path[0] = '\0';
-        return -EINVAL;
-    }
-
-    return 0;
-}
-
-/**
- * Load a lib adapter module by \a mod_name into \a mod.
- *
- * @param[in]   mod_name    Name of the module to load.
- * @param[out]  mod         Module descriptor to fill out.
- *
- * @return 0 on success, -errno on error.
- */
-static int lib_adapter_load(const char *mod_name,
-                            struct lib_adapter_module **mod)
-{
-    lib_adapter_init_func_t op_init;
-    char libpath[NAME_MAX];
-    void *hdl;
-    int rc;
-
-    ENTRY;
-
-    pho_debug("Loading lib adapter '%s'", mod_name);
-
-    rc = build_lib_adapter_instance_path(mod_name, libpath, sizeof(libpath));
-    if (rc)
-        LOG_RETURN(rc, "Invalid lib adapter name '%s'", mod_name);
-
-    hdl = dlopen(libpath, RTLD_NOW);
-    if (hdl == NULL)
-        LOG_RETURN(-EINVAL, "Cannot load module '%s': %s", mod_name, dlerror());
-
-    *mod = calloc(1, sizeof(**mod));
-    if (*mod == NULL)
-        GOTO(out_err, rc = -ENOMEM);
-
-    op_init = dlsym(hdl, PLAM_OP_INIT);
-    if (!op_init)
-        LOG_GOTO(out_err, rc = -ENOSYS,
-                 "Operation '%s' is missing", PLAM_OP_INIT);
-
-    rc = op_init(*mod);
-    if (rc)
-        LOG_GOTO(out_err, rc, "Could not initialize module '%s'", mod_name);
-
-    pho_debug("Plugin %s-%d.%d successfully loaded",
-              (*mod)->desc.mod_name,
-              (*mod)->desc.mod_major,
-              (*mod)->desc.mod_minor);
-
-out_err:
-    if (rc) {
-        free(*mod);
-        dlclose(hdl);
-    }
-
-    return rc;
-}
-
-/**
- * Load a lib adapter module if it has not already been. Relies on the global
- * lib_adapters modules hash map and its associated rwlock.
- *
- * @param[in]   mod_name    Name of the module to load.
- * @param[out]  mod         Module descriptor to fill out.
- *
- * @return 0 on success, -errno on error.
- */
-static int lib_adapter_mod_lazy_load(const char *mod_name,
-                                     struct lib_adapter_module **module)
-{
-    int rc2;
-    int rc;
-
-    rc = pthread_rwlock_rdlock(&lib_adapters_rwlock);
-    if (rc)
-        LOG_RETURN(rc, "Cannot read lock lib adapters table");
-
-    /* Check if module loaded */
-    *module = g_hash_table_lookup(lib_adapters, mod_name);
-
-    /* If not loaded, unlock, write lock, check if it is loaded and load it */
-    if (*module == NULL) {
-        /* Release the read lock */
-        rc = pthread_rwlock_unlock(&lib_adapters_rwlock);
-        if (rc)
-            LOG_RETURN(rc, "Cannot unlock lib adapters table");
-
-        /* Re-acquire a write lock */
-        rc = pthread_rwlock_wrlock(&lib_adapters_rwlock);
-        if (rc)
-            LOG_RETURN(rc, "Cannot write lock lib adapters table");
-
-        /*
-         * Re-check if module loaded (this could have changed between the read
-         * lock release and the write lock acquisition)
-         */
-        *module = g_hash_table_lookup(lib_adapters, mod_name);
-        if (*module != NULL)
-            goto out_unlock;
-
-        rc = lib_adapter_load(mod_name, module);
-        if (rc)
-            LOG_GOTO(out_unlock, rc, "Error while loading lib adapter %s",
-                     mod_name);
-
-        /* Insert the module into the module table */
-        g_hash_table_insert(lib_adapters, strdup(mod_name), *module);
-
-        /* Write lock is released in function final cleanup */
-    }
-
-out_unlock:
-    rc2 = pthread_rwlock_unlock(&lib_adapters_rwlock);
-    if (rc2)
-        /* This unlock shouldn't fail as the lock was taken in this function.
-         * In case it does, one may not assume thread-safety, so we report this
-         * error instead of previous ones.
-         */
-        LOG_RETURN(rc2, "Cannot unlock lib adapters table");
-
-    return rc;
-}
-
 int get_lib_adapter(enum lib_type lib_type, struct lib_adapter_module **lib)
 {
     int rc = 0;
 
     switch (lib_type) {
     case PHO_LIB_DUMMY:
-        rc = lib_adapter_mod_lazy_load("dummy", lib);
+        rc = load_module("lib_adapter_dummy", sizeof(**lib), (void **)lib);
         break;
     case PHO_LIB_SCSI:
-        rc = lib_adapter_mod_lazy_load("scsi", lib);
+        rc = load_module("lib_adapter_scsi", sizeof(**lib), (void **)lib);
         break;
     default:
         return -ENOTSUP;

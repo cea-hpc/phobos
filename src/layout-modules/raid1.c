@@ -31,11 +31,13 @@
 #include <glib.h>
 #include <string.h>
 #include <unistd.h>
+
 #include "pho_attrs.h"
 #include "pho_cfg.h"
 #include "pho_common.h"
 #include "pho_io.h"
 #include "pho_layout.h"
+#include "pho_module_loader.h"
 #include "pho_srl_common.h"
 #include "pho_type_utils.h"
 #include "raid1.h"
@@ -1472,8 +1474,10 @@ static const struct pho_layout_module_ops LAYOUT_RAID1_OPS = {
 };
 
 /** Layout module registration entry point */
-int pho_layout_mod_register(struct layout_module *self)
+int pho_module_register(void *module)
 {
+    struct layout_module *self = (struct layout_module *) module;
+
     self->desc = RAID1_MODULE_DESC;
     self->ops = &LAYOUT_RAID1_OPS;
 

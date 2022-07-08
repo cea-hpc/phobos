@@ -28,10 +28,12 @@
 #include "config.h"
 #endif
 
-#include "pho_ldm.h"
 #include "scsi_api.h"
+
 #include "pho_common.h"
 #include "pho_cfg.h"
+#include "pho_ldm.h"
+#include "pho_module_loader.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -794,8 +796,10 @@ static struct pho_lib_adapter_module_ops LA_SCSI_OPS = {
 };
 
 /** Lib adapter module registration entry point */
-int pho_lib_adapter_mod_register(struct lib_adapter_module *self)
+int pho_module_register(void *module)
 {
+    struct lib_adapter_module *self = (struct lib_adapter_module *) module;
+
     self->desc = LA_SCSI_MODULE_DESC;
     self->ops = &LA_SCSI_OPS;
 

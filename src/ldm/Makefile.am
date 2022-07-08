@@ -6,7 +6,7 @@ noinst_HEADERS=ldm_common.h ldm_dev_adapters.h
 
 libpho_ldm_la_SOURCES=ldm.c ldm_common.c ldm_dev_dir.c ldm_dev_scsi_tape.c \
                       ldm_fs_posix.c ldm_fs_ltfs.c
-libpho_ldm_la_LIBADD=-ldl
+libpho_ldm_la_LIBADD=../module-loader/libpho_module_loader.la
 
 if RADOS_ENABLED
 libpho_ldm_la_SOURCES+=ldm_dev_rados_pool.c

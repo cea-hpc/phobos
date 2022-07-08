@@ -117,6 +117,7 @@ AC_CONFIG_FILES([Makefile
          src/proto/Makefile
          src/include/Makefile
          src/common/Makefile
+         src/module-loader/Makefile
          src/ldm/Makefile
          src/dss/Makefile
          src/cfg/Makefile

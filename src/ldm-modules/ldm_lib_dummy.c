@@ -28,8 +28,9 @@
 #include "config.h"
 #endif
 
-#include "pho_ldm.h"
 #include "pho_common.h"
+#include "pho_ldm.h"
+#include "pho_module_loader.h"
 
 #define PLUGIN_NAME     "dummy"
 #define PLUGIN_MAJOR    0
@@ -89,8 +90,10 @@ static struct pho_lib_adapter_module_ops LIB_ADAPTER_DUMMY_OPS = {
 };
 
 /** Lib adapter module registration entry point */
-int pho_lib_adapter_mod_register(struct lib_adapter_module *self)
+int pho_module_register(void *module)
 {
+    struct lib_adapter_module *self = (struct lib_adapter_module *) module;
+
     self->desc = LIB_ADAPTER_DUMMY_MODULE_DESC;
     self->ops = &LIB_ADAPTER_DUMMY_OPS;
 
