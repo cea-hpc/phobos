@@ -19,11 +19,11 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-test_bin_dir=$(dirname "${BASH_SOURCE[0]}")
-
-. $test_bin_dir/../../test_env.sh
-. $test_bin_dir/setup_db.sh
-. $test_bin_dir/test_launch_daemon.sh
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/../../test_env.sh
+. $test_dir/../../setup_db.sh
+. $test_dir/../../test_launch_daemon.sh
+. $test_dir/../../tape_drive.sh
 
 set -xe
 
@@ -94,7 +94,8 @@ test_put_update "dir" "/tmp/pho_testdir1" "dir_obj"
 if [[ -w /dev/changer ]]; then
     echo "**** TESTS: TAGS a currently used tape ****"
     # add and unlock one LTO6 drive
-    $phobos drive add --unlock /dev/st4
+    lto6_drive=$(get_lto_drives 6 1)
+    $phobos drive add --unlock ${lto6_drive}
     # add one LT06 tape with first_tag
     tape_name=$(mtx status | grep VolumeTag | sed -e "s/.*VolumeTag//" |
                 tr -d " =" | grep "L6" | head -n 1)
