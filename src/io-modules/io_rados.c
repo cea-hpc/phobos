@@ -504,6 +504,16 @@ static int pho_rados_del(struct pho_io_descr *iod)
     return rc;
 }
 
+/* This function only simulates a correct sync because it is not necessary
+ * with RADOS
+ */
+static int pho_rados_sync(const char *root_path)
+{
+    ENTRY;
+
+    return 0;
+}
+
 /** RADOS adapter */
 static const struct pho_io_adapter_module_ops IO_ADAPTER_RADOS_OPS = {
     .ioa_get            = pho_rados_get,
@@ -511,7 +521,7 @@ static const struct pho_io_adapter_module_ops IO_ADAPTER_RADOS_OPS = {
     .ioa_open           = pho_rados_open,
     .ioa_write          = pho_rados_write,
     .ioa_close          = pho_rados_close,
-    .ioa_medium_sync    = NULL,
+    .ioa_medium_sync    = pho_rados_sync,
     .ioa_preferred_io_size = NULL,
 };
 
