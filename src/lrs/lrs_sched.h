@@ -72,8 +72,7 @@ struct lrs_sched {
     struct lrs_dev_hdl  devices;        /**< Handle to device threads */
     const char         *lock_hostname;  /**< Lock hostname for this LRS */
     int                 lock_owner;     /**< Lock owner (pid) for this LRS */
-    struct tsqueue      req_queue;      /**< Queue containing every incoming
-                                          *  non-release requests
+    struct tsqueue      incoming;       /**< Queue of new requests to schedule
                                           */
     struct tsqueue      retry_queue;    /**< Queue of request sent back by the
                                           *  device thread on error

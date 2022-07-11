@@ -713,13 +713,13 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
     if (rc)
         LOG_GOTO(err_hdl_fini, rc, "Failed to init sched dss handle");
 
-    rc = tsqueue_init(&sched->req_queue);
+    rc = tsqueue_init(&sched->incoming);
     if (rc)
-        LOG_GOTO(err_dss_fini, rc, "Failed to init sched req_queue");
+        LOG_GOTO(err_dss_fini, rc, "Failed to init sched incoming");
 
     rc = tsqueue_init(&sched->retry_queue);
     if (rc)
-        LOG_GOTO(err_req_queue_fini, rc, "Failed to init sched req_queue");
+        LOG_GOTO(err_incoming_fini, rc, "Failed to init sched retry_queue");
 
     sched->response_queue = resp_queue;
 
@@ -749,8 +749,8 @@ err_sched_fini:
     sched_fini(sched);
     return rc;
 
-err_req_queue_fini:
-    tsqueue_destroy(&sched->req_queue, sched_req_free);
+err_incoming_fini:
+    tsqueue_destroy(&sched->incoming, sched_req_free);
 err_dss_fini:
     dss_fini(&sched->sched_thread.dss);
 err_hdl_fini:
@@ -840,7 +840,7 @@ void sched_fini(struct lrs_sched *sched)
     lrs_dev_hdl_clear(&sched->devices);
     lrs_dev_hdl_fini(&sched->devices);
     dss_fini(&sched->sched_thread.dss);
-    tsqueue_destroy(&sched->req_queue, sched_req_free);
+    tsqueue_destroy(&sched->incoming, sched_req_free);
     tsqueue_destroy(&sched->retry_queue, sched_req_free);
     format_media_clean(&sched->ongoing_format);
 }
@@ -2850,7 +2850,7 @@ int sched_handle_requests(struct lrs_sched *sched)
      * Very simple algorithm (FIXME): serve requests until the first EAGAIN is
      * encountered.
      */
-    while ((reqc = tsqueue_pop(&sched->req_queue)) != NULL) {
+    while ((reqc = tsqueue_pop(&sched->incoming)) != NULL) {
         pho_req_t *req = reqc->req;
 
         if (!running) {
@@ -2885,7 +2885,7 @@ int sched_handle_requests(struct lrs_sched *sched)
 
         if (running) {
             /* Requeue last request on -EAGAIN and running */
-            tsqueue_push(&sched->req_queue, reqc);
+            tsqueue_push(&sched->incoming, reqc);
             rc = 0;
             break;
         }

@@ -656,7 +656,7 @@ static int _prepare_requests(struct lrs *lrs, bool *schedulers_to_signal,
                 schedulers_to_signal[fam] = true;
         } else {
             if (running) {
-                tsqueue_push(&lrs->sched[fam]->req_queue, req_cont);
+                tsqueue_push(&lrs->sched[fam]->incoming, req_cont);
                 schedulers_to_signal[fam] = true;
             } else {
                 LOG_GOTO(send_err, rc2 = -ESHUTDOWN,

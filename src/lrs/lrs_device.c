@@ -101,7 +101,7 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
 
     (*dev)->ld_response_queue = sched->response_queue;
     (*dev)->ld_ongoing_format = &sched->ongoing_format;
-    (*dev)->sched_req_queue = &sched->req_queue;
+    (*dev)->sched_req_queue = &sched->incoming;
     (*dev)->sched_retry_queue = &sched->retry_queue;
     (*dev)->ld_handle = handle;
     (*dev)->ld_sub_request = NULL;
