@@ -59,7 +59,7 @@ check_SCRIPTS=acceptance.sh \
               test_undelete.sh
 
 if RADOS_ENABLED
-check_SCRIPTS+=test_store_rados_commands.sh
+check_SCRIPTS+=test_store_rados_commands.sh test_locate_rados.sh
 endif
 
 TESTS=$(check_SCRIPTS)

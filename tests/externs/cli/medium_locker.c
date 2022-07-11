@@ -36,7 +36,8 @@
 
 static void usage_exit(void)
 {
-    printf("usage: lock/unlock dir/tape medium_name/all lock_hostname pid\n");
+    printf("usage: lock/unlock dir/tape/rados_pool "
+           "medium_name/all lock_hostname pid\n");
     exit(EXIT_FAILURE);
 }
 
@@ -53,12 +54,15 @@ int main(int argc, char **argv)
     /* check params */
     if (argc != 6 ||
         (strcmp(argv[1], "lock") && strcmp(argv[1], "unlock")) ||
-        (strcmp(argv[2], "dir") && strcmp(argv[2], "tape")))
+        (strcmp(argv[2], "dir") && strcmp(argv[2], "tape") &&
+         strcmp(argv[2], "rados_pool")))
         usage_exit();
 
     /* init medium_id */
     if (!strcmp(argv[2], "dir"))
         medium_id.family = PHO_RSC_DIR;
+    else if (!strcmp(argv[2], "rados_pool"))
+        medium_id.family = PHO_RSC_RADOS_POOL;
     else
         medium_id.family = PHO_RSC_TAPE;
 
