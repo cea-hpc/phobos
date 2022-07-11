@@ -29,13 +29,24 @@
 #endif
 
 #include "pho_ldm.h"
-#include "pho_common.h"
 #include "pho_cfg.h"
+#include "pho_common.h"
+#include "pho_module_loader.h"
 
 #include <rados/librados.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#define PLUGIN_NAME     "rados_pool"
+#define PLUGIN_MAJOR    0
+#define PLUGIN_MINOR    1
+
+static struct module_desc DEV_ADAPTER_RADOS_POOL_MODULE_DESC = {
+    .mod_name  = PLUGIN_NAME,
+    .mod_major = PLUGIN_MAJOR,
+    .mod_minor = PLUGIN_MINOR,
+};
 
 /** List of configuration parameters for Ceph RADOS */
 enum pho_cfg_params_ceph_rados {
@@ -165,9 +176,21 @@ static int pho_rados_pool_query(const char *dev_path, struct ldm_dev_state *lds)
     return 0;
 }
 
-struct dev_adapter dev_adapter_rados_pool = {
+/** Exported dev adapater */
+struct dev_adapter DEV_ADAPTER_RADOS_POOL_OPS = {
     .dev_lookup = pho_rados_pool_lookup,
     .dev_query  = pho_rados_pool_query,
     .dev_load   = NULL,
     .dev_eject  = NULL,
 };
+
+/** Dev adapter module registration entry point */
+int pho_module_register(void *module)
+{
+    struct dev_adapter_module *self = (struct dev_adapter_module *) module;
+
+    self->desc = DEV_ADAPTER_RADOS_POOL_MODULE_DESC;
+    self->ops = &DEV_ADAPTER_RADOS_POOL_OPS;
+
+    return 0;
+}

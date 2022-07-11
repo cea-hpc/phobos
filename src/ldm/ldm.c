@@ -33,7 +33,6 @@
 #include "pho_ldm.h"
 #include "pho_module_loader.h"
 #include "pho_type_utils.h"
-#include "ldm_dev_adapters.h"
 
 #include <dlfcn.h>
 #include <sys/stat.h>
@@ -76,7 +75,9 @@ int get_dev_adapter(enum rsc_family dev_family, struct dev_adapter *dev)
         break;
     case PHO_RSC_RADOS_POOL:
 #ifdef RADOS_ENABLED
-        *dev = dev_adapter_rados_pool;
+        rc = load_module("dev_adapter_rados_pool", sizeof(*dev_mod),
+                         (void **)&dev_mod);
+        *dev = *dev_mod->ops;
 #else
         LOG_RETURN(-ENOTSUP, "Phobos has been built without the necessary "
                              "RADOS modules");
