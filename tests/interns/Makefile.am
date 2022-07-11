@@ -14,6 +14,7 @@ IO_LIB=$(TO_SRC)/io/libpho_io.la
 LAYOUT_LIB=$(TO_SRC)/layout/libpho_layout.la
 RAID1_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la
+SCSI_TAPE_LIB=$(TO_SRC)/ldm-modules/libpho_dev_adapter_scsi_tape.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 
@@ -67,7 +68,7 @@ test_communication_LDADD=$(COMMON_LIB) $(COMMUNICATION_LIB)
 test_communication_CFLAGS=$(AM_CFLAGS) -I..
 
 test_dev_tape_SOURCES=test_dev_tape.c
-test_dev_tape_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB)
+test_dev_tape_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB) $(SCSI_TAPE_LIB)
 test_dev_tape_CFLAGS=$(AM_CFLAGS) -I..
 
 test_dss_lazy_find_object_SOURCES=test_dss_lazy_find_object.c ../test_setup.c \

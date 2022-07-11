@@ -70,7 +70,9 @@ int get_dev_adapter(enum rsc_family dev_family, struct dev_adapter *dev)
         *dev = *dev_mod->ops;
         break;
     case PHO_RSC_TAPE:
-        *dev = dev_adapter_scsi_tape;
+        rc = load_module("dev_adapter_scsi_tape", sizeof(*dev_mod),
+                         (void **)&dev_mod);
+        *dev = *dev_mod->ops;
         break;
     case PHO_RSC_RADOS_POOL:
 #ifdef RADOS_ENABLED
