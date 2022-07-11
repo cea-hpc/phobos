@@ -62,7 +62,7 @@ struct ldm_fs_space {
  * dev_query and dev_lookup are mandatory.
  * Other calls can be NULL if no operation is required, and do noop.
  */
-struct dev_adapter {
+struct pho_dev_adapter_module_ops {
     int (*dev_lookup)(const char *dev_id, char *dev_path, size_t path_size);
     int (*dev_query)(const char *dev_path, struct ldm_dev_state *lds);
     int (*dev_load)(const char *dev_path);
@@ -71,79 +71,92 @@ struct dev_adapter {
 
 struct dev_adapter_module {
     struct module_desc desc;       /**< Description of this dev_adapter */
-    const struct dev_adapter *ops; /**< Operations of this dev_adapter */
+    const struct pho_dev_adapter_module_ops *ops;
+                                   /**< Operations of this dev_adapter */
 };
 
 /**
  * Retrieve device adapter for the given device type.
  * @param[in]  dev_family Family of device.
- * @param[out] dev        Vector of functions to handle the given device type.
+ * @param[out] dev        Module that will contain the vector of functions to
+ *                        handle the given device type.
  *
  * @return 0 on success, negative error code on failure.
  */
-int get_dev_adapter(enum rsc_family dev_family, struct dev_adapter *dev);
+int get_dev_adapter(enum rsc_family dev_family,
+                    struct dev_adapter_module **dev);
 
 /**
  * Get device path from its identifier (eg. serial number).
- * @param[in]   dev         Device adapter.
+ * @param[in]   dev         Device adapter module.
  * @param[in]   dev_id      Drive identifier.
  * @param[out]  dev_path    Path to access the device.
  * @param[in]   path_size   Max bytes that can be written to dev_path.
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_dev_lookup(const struct dev_adapter *dev,
+static inline int ldm_dev_lookup(const struct dev_adapter_module *dev,
                                  const char *dev_id, char *dev_path,
                                  size_t path_size)
 {
     assert(dev != NULL);
-    assert(dev->dev_lookup != NULL);
-    return dev->dev_lookup(dev_id, dev_path, path_size);
+    assert(dev->ops != NULL);
+    assert(dev->ops->dev_lookup != NULL);
+    return dev->ops->dev_lookup(dev_id, dev_path, path_size);
 }
 
 /**
  * Query a device.
- * @param[in]   dev         Device adapter.
+ * @param[in]   dev         Device adapter module.
  * @param[in]   dev_path    Device path.
  * @param[out]  lds         Device status.
  *
  * @return 0 on success, negative error code on failure.
  */
-int ldm_dev_query(const struct dev_adapter *dev, const char *dev_path,
-                  struct ldm_dev_state *lds);
+static inline int ldm_dev_query(const struct dev_adapter_module *dev,
+                                const char *dev_path,
+                                struct ldm_dev_state *lds)
+{
+    assert(dev != NULL);
+    assert(dev->ops != NULL);
+    assert(dev->ops->dev_query != NULL);
+    return dev->ops->dev_query(dev_path, lds);
+}
 
 /**
  * Load a device with a medium on front of it.
- * @param[in]   dev         Device adapter.
+ * @param[in]   dev         Device adapter module.
  * @param[in]   dev_path    Device path.
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_dev_load(const struct dev_adapter *dev,
+static inline int ldm_dev_load(const struct dev_adapter_module *dev,
                                const char *dev_path)
 
 {
     assert(dev != NULL);
-    if (dev->dev_load == NULL)
+    assert(dev->ops != NULL);
+    if (dev->ops->dev_load == NULL)
         return 0;
-    return dev->dev_load(dev_path);
+    return dev->ops->dev_load(dev_path);
 }
 
 /**
  * Eject the medium currently loaded in the device.
- * @param[in]   dev         Device adapter.
+ * @param[in]   dev         Device adapter module.
  * @param[in]   dev_path    Device path.
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_dev_eject(const struct dev_adapter *dev,
+static inline int ldm_dev_eject(const struct dev_adapter_module *dev,
                                 const char *dev_path)
 
 {
     assert(dev != NULL);
-    if (dev->dev_eject == NULL)
+    assert(dev->ops != NULL);
+    if (dev->ops->dev_eject == NULL)
         return 0;
-    return dev->dev_eject(dev_path);
+    return dev->ops->dev_eject(dev_path);
 }
 
 /**

@@ -176,8 +176,8 @@ static int pho_rados_pool_query(const char *dev_path, struct ldm_dev_state *lds)
     return 0;
 }
 
-/** Exported dev adapater */
-struct dev_adapter DEV_ADAPTER_RADOS_POOL_OPS = {
+/** Exported dev adapter */
+struct pho_dev_adapter_module_ops DEV_ADAPTER_RADOS_POOL_OPS = {
     .dev_lookup = pho_rados_pool_lookup,
     .dev_query  = pho_rados_pool_query,
     .dev_load   = NULL,

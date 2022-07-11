@@ -79,8 +79,8 @@ static void add_dir_or_drive(struct admin_handle *adm, struct dss_handle *dss,
                              const char *path, struct dev_info *dev,
                              struct media_info *media)
 {
+    struct dev_adapter_module *adapter = NULL;
     struct ldm_dev_state dev_st = {0};
-    struct dev_adapter adapter = {0};
     struct pho_id dev_id = {};
     char hostname[256];
 
@@ -102,7 +102,7 @@ static void add_dir_or_drive(struct admin_handle *adm, struct dss_handle *dss,
 
     /* Get dir device */
     get_dev_adapter(media ? PHO_RSC_DIR : PHO_RSC_TAPE, &adapter);
-    ASSERT_RC(ldm_dev_query(&adapter, path, &dev_st));
+    ASSERT_RC(ldm_dev_query(adapter, path, &dev_st));
 
     pho_id_name_set(&dev->rsc.id, dev_st.lds_serial ? : "");
     dev->rsc.id.family = dev_st.lds_family;

@@ -57,31 +57,19 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter_module **lib)
     return rc;
 }
 
-int get_dev_adapter(enum rsc_family dev_family, struct dev_adapter *dev)
+int get_dev_adapter(enum rsc_family dev_family, struct dev_adapter_module **dev)
 {
-    struct dev_adapter_module *dev_mod;
     int rc = 0;
 
     switch (dev_family) {
     case PHO_RSC_DIR:
-        rc = load_module("dev_adapter_dir", sizeof(*dev_mod),
-                         (void **)&dev_mod);
-        *dev = *dev_mod->ops;
+        rc = load_module("dev_adapter_dir", sizeof(**dev), (void **)dev);
         break;
     case PHO_RSC_TAPE:
-        rc = load_module("dev_adapter_scsi_tape", sizeof(*dev_mod),
-                         (void **)&dev_mod);
-        *dev = *dev_mod->ops;
+        rc = load_module("dev_adapter_scsi_tape", sizeof(**dev), (void **)dev);
         break;
     case PHO_RSC_RADOS_POOL:
-#ifdef RADOS_ENABLED
-        rc = load_module("dev_adapter_rados_pool", sizeof(*dev_mod),
-                         (void **)&dev_mod);
-        *dev = *dev_mod->ops;
-#else
-        LOG_RETURN(-ENOTSUP, "Phobos has been built without the necessary "
-                             "RADOS modules");
-#endif
+        rc = load_module("dev_adapter_rados_pool", sizeof(**dev), (void **)dev);
         break;
     default:
         return -ENOTSUP;
@@ -114,12 +102,4 @@ int get_fs_adapter(enum fs_type fs_type, struct fs_adapter_module **fsa)
     }
 
     return rc;
-}
-
-int ldm_dev_query(const struct dev_adapter *dev, const char *dev_path,
-                  struct ldm_dev_state *lds)
-{
-    assert(dev != NULL);
-    assert(dev->dev_query != NULL);
-    return dev->dev_query(dev_path, lds);
 }

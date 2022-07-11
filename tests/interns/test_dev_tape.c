@@ -43,8 +43,8 @@
 
 static int test_unit(void *hint)
 {
+    struct dev_adapter_module *deva;
     struct ldm_dev_state lds = {0};
-    struct dev_adapter deva;
     char *dev_name = hint;
     int rc;
 
@@ -52,7 +52,7 @@ static int test_unit(void *hint)
     if (rc)
         return rc;
 
-    rc = ldm_dev_query(&deva, dev_name, &lds);
+    rc = ldm_dev_query(deva, dev_name, &lds);
     if (rc == 0)
         pho_info("Mapped '%s' to '%s' (model: '%s')", dev_name, lds.lds_serial,
                  lds.lds_model);
@@ -103,12 +103,12 @@ static int st_to_sg_path(const char *st_dev, char *sg_dev, size_t sg_size)
 
 static int test_name_serial_match(void *hint)
 {
-    char  *st_path = hint;
-    char  sg_path[PATH_MAX];
-    struct dev_adapter deva;
+    struct dev_adapter_module *deva;
     struct ldm_dev_state lds = {0};
-    char   path[128];
-    int    rc;
+    char sg_path[PATH_MAX];
+    char *st_path = hint;
+    char path[128];
+    int rc;
 
     rc = get_dev_adapter(PHO_RSC_TAPE, &deva);
     if (rc)
@@ -119,11 +119,11 @@ static int test_name_serial_match(void *hint)
     if (rc)
         return rc;
 
-    rc = ldm_dev_query(&deva, st_path, &lds);
+    rc = ldm_dev_query(deva, st_path, &lds);
     if (rc)
         return rc;
 
-    rc = ldm_dev_lookup(&deva, lds.lds_serial, path, sizeof(path));
+    rc = ldm_dev_lookup(deva, lds.lds_serial, path, sizeof(path));
     if (rc) {
         ldm_dev_state_fini(&lds);
         return rc;
@@ -136,9 +136,9 @@ static int test_name_serial_match(void *hint)
 
 static bool device_exists(int dev_index)
 {
+    char dev_path[PATH_MAX];
     struct stat st;
-    char        dev_path[PATH_MAX];
-    int         rc;
+    int rc;
 
     snprintf(dev_path, sizeof(dev_path) - 1, "/dev/st%d", dev_index);
     rc = stat(dev_path, &st);
@@ -148,9 +148,9 @@ static bool device_exists(int dev_index)
 
 int main(int argc, char **argv)
 {
-    char test_name[128];
     char dev_name[IFNAMSIZ];
-    int  i;
+    char test_name[128];
+    int i;
 
     test_env_initialize();
 

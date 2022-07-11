@@ -95,7 +95,7 @@ out_free:
 }
 
 /** Exported dev adapter */
-struct dev_adapter DEV_ADAPTER_DIR_OPS = {
+struct pho_dev_adapter_module_ops DEV_ADAPTER_DIR_OPS = {
     .dev_lookup = dir_lookup,
     .dev_query  = dir_query,
     .dev_load   = NULL,

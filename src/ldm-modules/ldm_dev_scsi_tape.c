@@ -569,8 +569,8 @@ static int scsi_tape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
     return 0;
 }
 
-/** Exported dev adapater */
-struct dev_adapter DEV_ADAPTER_SCSI_TAPE_OPS = {
+/** Exported dev adapter */
+struct pho_dev_adapter_module_ops DEV_ADAPTER_SCSI_TAPE_OPS = {
     .dev_lookup = scsi_tape_dev_lookup,
     .dev_query  = scsi_tape_dev_query,
     .dev_load   = NULL, /** @TODO to be implemented */

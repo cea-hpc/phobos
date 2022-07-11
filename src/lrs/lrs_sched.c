@@ -445,9 +445,9 @@ static int sched_fill_dev_info(struct lrs_sched *sched,
                                struct lib_adapter_module *lib,
                                struct lrs_dev *dev)
 {
-    struct dev_adapter deva;
-    struct dev_info   *devi;
-    int                rc;
+    struct dev_adapter_module *deva;
+    struct dev_info *devi;
+    int rc;
 
     ENTRY;
 
@@ -465,7 +465,7 @@ static int sched_fill_dev_info(struct lrs_sched *sched,
         return rc;
 
     /* get path for the given serial */
-    rc = ldm_dev_lookup(&deva, devi->rsc.id.name, dev->ld_dev_path,
+    rc = ldm_dev_lookup(deva, devi->rsc.id.name, dev->ld_dev_path,
                         sizeof(dev->ld_dev_path));
     if (rc) {
         pho_debug("Device lookup failed: serial '%s'", devi->rsc.id.name);
@@ -474,7 +474,7 @@ static int sched_fill_dev_info(struct lrs_sched *sched,
 
     /* now query device by path */
     ldm_dev_state_fini(&dev->ld_sys_dev_state);
-    rc = ldm_dev_query(&deva, dev->ld_dev_path, &dev->ld_sys_dev_state);
+    rc = ldm_dev_query(deva, dev->ld_dev_path, &dev->ld_sys_dev_state);
     if (rc) {
         pho_debug("Failed to query device '%s'", dev->ld_dev_path);
         return rc;

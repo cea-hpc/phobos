@@ -187,10 +187,10 @@ out:
 static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
                               unsigned int num_dev, bool keep_locked)
 {
+    struct dev_adapter_module *deva;
     struct ldm_dev_state lds = {};
     enum rsc_adm_status status;
     struct dev_info *devices;
-    struct dev_adapter deva;
     char *path;
     int rc;
     int i;
@@ -217,7 +217,7 @@ static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
                      "Cannot get the real path of device '%s'",
                      dev_ids[i].name);
 
-        rc = ldm_dev_query(&deva, path, &lds);
+        rc = ldm_dev_query(deva, path, &lds);
         free(path);
         if (rc)
             LOG_GOTO(out_free, rc, "Failed to query device '%s'",
