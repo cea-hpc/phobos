@@ -96,18 +96,15 @@ install -p -m 0640 README.md %{buildroot}/%{phobosdocdir}/README.md
 cd %{_builddir}/%{name}-%{version}/src/cli/
 %{__python} setup.py install --skip-build --root %{buildroot}
 
-rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.a
-rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_layout_*.la
-rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_lib_*.a
-rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_lib_*.la
+rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_*.a
+rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_*.la
 
 
 %files
 
 %{_libdir}/libphobos_store.so*
 %{_libdir}/libphobos_admin.so*
-%{_libdir}/phobos/libpho_layout_*.so*
-%{_libdir}/phobos/libpho_lib_*.so*
+%{_libdir}/phobos/libpho_*.so*
 %{_sbindir}/pho_*_helper
 %{_sbindir}/phobos_db
 %{python_sitearch}/phobos/*

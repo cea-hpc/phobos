@@ -60,9 +60,14 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter_module **lib)
 
 int get_dev_adapter(enum rsc_family dev_family, struct dev_adapter *dev)
 {
+    struct dev_adapter_module *dev_mod;
+    int rc = 0;
+
     switch (dev_family) {
     case PHO_RSC_DIR:
-        *dev = dev_adapter_dir;
+        rc = load_module("dev_adapter_dir", sizeof(*dev_mod),
+                         (void **)&dev_mod);
+        *dev = *dev_mod->ops;
         break;
     case PHO_RSC_TAPE:
         *dev = dev_adapter_scsi_tape;
@@ -78,7 +83,8 @@ int get_dev_adapter(enum rsc_family dev_family, struct dev_adapter *dev)
     default:
         return -ENOTSUP;
     }
-    return 0;
+
+    return rc;
 }
 
 void ldm_dev_state_fini(struct ldm_dev_state *lds)

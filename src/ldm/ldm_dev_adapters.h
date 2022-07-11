@@ -27,7 +27,6 @@
  * Use external references for now.
  * They can easily be replaced later by dlopen'ed symbols.
  */
-extern const struct dev_adapter dev_adapter_dir;
 extern const struct dev_adapter dev_adapter_scsi_tape;
 #ifdef RADOS_ENABLED
 extern const struct dev_adapter dev_adapter_rados_pool;

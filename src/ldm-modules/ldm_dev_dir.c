@@ -28,12 +28,23 @@
 #include "config.h"
 #endif
 
-#include "pho_ldm.h"
 #include "pho_common.h"
+#include "pho_ldm.h"
+#include "pho_module_loader.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#define PLUGIN_NAME     "dir"
+#define PLUGIN_MAJOR    0
+#define PLUGIN_MINOR    1
+
+static struct module_desc DEV_ADAPTER_DIR_MODULE_DESC = {
+    .mod_name  = PLUGIN_NAME,
+    .mod_major = PLUGIN_MAJOR,
+    .mod_minor = PLUGIN_MINOR,
+};
 
 static int dir_lookup(const char *dev_id, char *dev_path, size_t path_size)
 {
@@ -83,10 +94,21 @@ out_free:
     return rc;
 }
 
-struct dev_adapter dev_adapter_dir = {
+/** Exported dev adapter */
+struct dev_adapter DEV_ADAPTER_DIR_OPS = {
     .dev_lookup = dir_lookup,
     .dev_query  = dir_query,
     .dev_load   = NULL,
     .dev_eject  = NULL,
 };
 
+/** Dev adapter module registration entry point */
+int pho_module_register(void *module)
+{
+    struct dev_adapter_module *self = (struct dev_adapter_module *) module;
+
+    self->desc = DEV_ADAPTER_DIR_MODULE_DESC;
+    self->ops = &DEV_ADAPTER_DIR_OPS;
+
+    return 0;
+}

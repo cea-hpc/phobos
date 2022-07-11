@@ -69,6 +69,11 @@ struct dev_adapter {
     int (*dev_eject)(const char *dev_path);
 };
 
+struct dev_adapter_module {
+    struct module_desc desc;       /**< Description of this dev_adapter */
+    const struct dev_adapter *ops; /**< Operations of this dev_adapter */
+};
+
 /**
  * Retrieve device adapter for the given device type.
  * @param[in]  dev_family Family of device.
@@ -217,16 +222,12 @@ struct pho_lib_adapter_module_ops {
     int (*lib_scan)(struct lib_handle *lib, json_t **lib_data);
 };
 
-#define PLAM_OP_INIT         "pho_lib_adapter_mod_register"
-
 struct lib_adapter_module {
     struct lib_handle lib_hdl;     /**< Handle to the lib adapter plugin */
     struct module_desc desc;       /**< Description of this lib adapter */
     const struct pho_lib_adapter_module_ops *ops;
                                    /**< Operations of this lib adapter */
 };
-
-int pho_lib_adapter_mod_register(struct lib_adapter_module *self);
 
 /**
  * Retrieve library adapter for the given library type.
