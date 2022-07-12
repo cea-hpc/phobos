@@ -733,8 +733,8 @@ static void check_needs_sync(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
 
 static int medium_sync(struct media_info *media_info, const char *fsroot)
 {
-    struct io_adapter    ioa;
-    int                  rc;
+    struct io_adapter_module *ioa;
+    int rc;
 
     ENTRY;
 
@@ -743,7 +743,7 @@ static int medium_sync(struct media_info *media_info, const char *fsroot)
         LOG_RETURN(rc, "No suitable I/O adapter for filesystem type: '%s'",
                    fs_type2str(media_info->fs.type));
 
-    rc = ioa_medium_sync(&ioa, fsroot);
+    rc = ioa_medium_sync(ioa, fsroot);
     pho_debug("sync: medium=%s rc=%d", media_info->rsc.id.name, rc);
     if (rc)
         LOG_RETURN(rc, "Cannot flush media at: %s", fsroot);

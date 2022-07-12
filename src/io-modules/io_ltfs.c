@@ -57,7 +57,7 @@ static int pho_ltfs_sync(const char *root_path)
 }
 
 /** LTFS adapter */
-static const struct io_adapter IO_ADAPTER_LTFS_OPS = {
+static const struct pho_io_adapter_module_ops IO_ADAPTER_LTFS_OPS = {
     .ioa_get               = pho_posix_get,
     .ioa_del               = pho_posix_del,
     .ioa_open              = pho_posix_open,

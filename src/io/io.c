@@ -31,21 +31,16 @@
 #include "pho_module_loader.h"
 
 /** retrieve IO functions for the given filesystem and addressing type */
-int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa)
+int get_io_adapter(enum fs_type fstype, struct io_adapter_module **ioa)
 {
-    struct io_adapter_module *ioa_mod;
     int rc = 0;
 
     switch (fstype) {
     case PHO_FS_POSIX:
-        rc = load_module("io_adapter_posix", sizeof(*ioa_mod),
-                         (void **)&ioa_mod);
-        *ioa = *ioa_mod->ops;
+        rc = load_module("io_adapter_posix", sizeof(**ioa), (void **)ioa);
         break;
     case PHO_FS_LTFS:
-        rc = load_module("io_adapter_ltfs", sizeof(*ioa_mod),
-                         (void **)&ioa_mod);
-        *ioa = *ioa_mod->ops;
+        rc = load_module("io_adapter_ltfs", sizeof(**ioa), (void **)ioa);
         break;
     default:
         pho_error(-EINVAL, "Invalid FS type %#x", fstype);

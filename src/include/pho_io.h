@@ -70,7 +70,7 @@ struct pho_io_descr {
  * Refer to the documentation of wrappers for what exactly is expected, done and
  * returned by the functions.
  */
-struct io_adapter {
+struct pho_io_adapter_module_ops {
     int (*ioa_get)(const char *extent_key, const char *extent_desc,
                    struct pho_io_descr *iod);
     int (*ioa_del)(struct pho_ext_loc *loc);
@@ -84,13 +84,14 @@ struct io_adapter {
 
 struct io_adapter_module {
     struct module_desc desc;       /**< Description of this io_adapter_module */
-    const struct io_adapter *ops;  /**< Operations of this io_adapter_module */
+    const struct pho_io_adapter_module_ops *ops;
+                                   /**< Operations of this io_adapter_module */
 };
 
 /**
  * Retrieve IO functions for the given filesystem type.
  */
-int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa);
+int get_io_adapter(enum fs_type fstype, struct io_adapter_module **ioa);
 
 /**
  * Get an object from a media.
@@ -115,12 +116,15 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa);
  *
  * \return 0 on success, negative error code on failure
  */
-static inline int ioa_get(const struct io_adapter *ioa, const char *extent_key,
-                          const char *extent_desc, struct pho_io_descr *iod)
+static inline int ioa_get(const struct io_adapter_module *ioa,
+                          const char *extent_key,
+                          const char *extent_desc,
+                          struct pho_io_descr *iod)
 {
     assert(ioa != NULL);
-    assert(ioa->ioa_get != NULL);
-    return ioa->ioa_get(extent_key, extent_desc, iod);
+    assert(ioa->ops != NULL);
+    assert(ioa->ops->ioa_get != NULL);
+    return ioa->ops->ioa_get(extent_key, extent_desc, iod);
 }
 
 /**
@@ -133,11 +137,13 @@ static inline int ioa_get(const struct io_adapter *ioa, const char *extent_key,
  *
  * \return 0 on success, negative error code on failure.
  */
-static inline int ioa_del(const struct io_adapter *ioa, struct pho_ext_loc *loc)
+static inline int ioa_del(const struct io_adapter_module *ioa,
+                          struct pho_ext_loc *loc)
 {
     assert(ioa != NULL);
-    assert(ioa->ioa_del != NULL);
-    return ioa->ioa_del(loc);
+    assert(ioa->ops != NULL);
+    assert(ioa->ops->ioa_del != NULL);
+    return ioa->ops->ioa_del(loc);
 }
 
 /**
@@ -154,14 +160,15 @@ static inline int ioa_del(const struct io_adapter *ioa, struct pho_ext_loc *loc)
  * practice it is more a medium management call than an IO call (the main caller
  * is the LRS, not the layouts).
  */
-static inline int ioa_medium_sync(const struct io_adapter *ioa,
+static inline int ioa_medium_sync(const struct io_adapter_module *ioa,
                                   const char *root_path)
 {
     assert(ioa != NULL);
-    if (ioa->ioa_medium_sync == NULL)
+    assert(ioa->ops != NULL);
+    if (ioa->ops->ioa_medium_sync == NULL)
         return -ENOTSUP;
 
-    return ioa->ioa_medium_sync(root_path);
+    return ioa->ops->ioa_medium_sync(root_path);
 }
 
 /**
@@ -173,14 +180,15 @@ static inline int ioa_medium_sync(const struct io_adapter *ioa,
  * \return a positive size on success, negative error code on failure
  * \retval -ENOTSUP the I/O adapter does not provide this function
  */
-static inline ssize_t ioa_preferred_io_size(const struct io_adapter *ioa,
+static inline ssize_t ioa_preferred_io_size(const struct io_adapter_module *ioa,
                                             struct pho_io_descr *iod)
 {
     assert(ioa != NULL);
-    if (ioa->ioa_preferred_io_size == NULL)
+    assert(ioa->ops != NULL);
+    if (ioa->ops->ioa_preferred_io_size == NULL)
         return -ENOTSUP;
 
-    return ioa->ioa_preferred_io_size(iod);
+    return ioa->ops->ioa_preferred_io_size(iod);
 }
 
 /**
@@ -210,13 +218,14 @@ static inline ssize_t ioa_preferred_io_size(const struct io_adapter *ioa,
  *
  * \return 0 on success, negative error code on failure
  */
-static inline int ioa_open(const struct io_adapter *ioa, const char *extent_key,
-                           const char *extent_desc, struct pho_io_descr *iod,
-                           bool is_put)
+static inline int ioa_open(const struct io_adapter_module *ioa,
+                           const char *extent_key, const char *extent_desc,
+                           struct pho_io_descr *iod, bool is_put)
 {
     assert(ioa != NULL);
-    assert(ioa->ioa_open != NULL);
-    return ioa->ioa_open(extent_key, extent_desc, iod, is_put);
+    assert(ioa->ops != NULL);
+    assert(ioa->ops->ioa_open != NULL);
+    return ioa->ops->ioa_open(extent_key, extent_desc, iod, is_put);
 }
 
 /**
@@ -234,13 +243,14 @@ static inline int ioa_open(const struct io_adapter *ioa, const char *extent_key,
  *
  * \return 0 on success, negative error code on failure
  */
-static inline int ioa_write(const struct io_adapter *ioa,
+static inline int ioa_write(const struct io_adapter_module *ioa,
                             struct pho_io_descr *iod, const void *buf,
                             size_t count)
 {
     assert(ioa != NULL);
-    assert(ioa->ioa_write != NULL);
-    return ioa->ioa_write(iod, buf, count);
+    assert(ioa->ops != NULL);
+    assert(ioa->ops->ioa_write != NULL);
+    return ioa->ops->ioa_write(iod, buf, count);
 }
 
 /**
@@ -252,11 +262,12 @@ static inline int ioa_write(const struct io_adapter *ioa,
  *
  * \return 0 on success, negative error code on failure
  */
-static inline int ioa_close(const struct io_adapter *ioa,
+static inline int ioa_close(const struct io_adapter_module *ioa,
                             struct pho_io_descr *iod)
 {
     assert(ioa != NULL);
-    assert(ioa->ioa_close != NULL);
-    return ioa->ioa_close(iod);
+    assert(ioa->ops != NULL);
+    assert(ioa->ops->ioa_close != NULL);
+    return ioa->ops->ioa_close(iod);
 }
 #endif

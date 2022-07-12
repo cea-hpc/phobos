@@ -123,13 +123,13 @@ static int test_posix_open_write_close(void *hint)
 {
     char test_dir[] = "/tmp/test_posix_open_write_closeXXXXXX";
     char *put_extent_address = "put_extent";
+    struct io_adapter_module *ioa = {0};
     struct posix_io_ctx *pioctx = NULL;
     struct pho_io_descr iod = {0};
     struct pho_ext_loc loc = {0};
-    struct io_adapter ioa = {0};
-    struct extent ext = {0};
     struct stat extent_file_stat;
     unsigned char *ibuff = NULL;
+    struct extent ext = {0};
     char *fpath = NULL;
     char *tag = NULL;
     char *id = NULL;
@@ -165,12 +165,12 @@ static int test_posix_open_write_close(void *hint)
      *  OPEN
      */
     /* try to open for put with pho_posix_open */
-    rc = ioa_open(&ioa, id, tag, &iod, true);
+    rc = ioa_open(ioa, id, tag, &iod, true);
     if (rc)
         LOG_GOTO(free_path, rc, "Error on opening extent");
 
     /* get preferred IO size to allocate the IO buffer */
-    count = ioa_preferred_io_size(&ioa, &iod);
+    count = ioa_preferred_io_size(ioa, &iod);
     pho_debug("Preferred I/O size=%zu", count);
 
     /* AFAIK, no storage system use such small/large IO size */
@@ -223,14 +223,14 @@ static int test_posix_open_write_close(void *hint)
      */
     /* try to write with pho_posix_write */
     for (i = 0; i < REPEAT_COUNT; i++) {
-        rc = ioa_write(&ioa, &iod, ibuff, count);
+        rc = ioa_write(ioa, &iod, ibuff, count);
         if (rc)
             LOG_GOTO(clean_extent, rc,
                      "Error on writting with pho_posix_write");
     }
 
     /* try to close with pho_posix_close */
-    rc = ioa_close(&ioa, &iod);
+    rc = ioa_close(ioa, &iod);
     if (rc)
         LOG_GOTO(clean_extent, rc,
                  "Fail to close iod with pho_posix_close");
