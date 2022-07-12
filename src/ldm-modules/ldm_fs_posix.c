@@ -178,7 +178,7 @@ static int dir_labelled(const char *dev_path, const char *mnt_path,
 }
 
 /** Exported fs adapter */
-struct fs_adapter FS_ADAPTER_POSIX_OPS = {
+struct pho_fs_adapter_module_ops FS_ADAPTER_POSIX_OPS = {
     .fs_mount     = dir_labelled,
     .fs_umount    = NULL,
     .fs_format    = dir_format,

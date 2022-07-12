@@ -496,8 +496,8 @@ static int sched_fill_dev_info(struct lrs_sched *sched,
     }
 
     if (dev->ld_lib_dev_info.ldi_full) {
+        struct fs_adapter_module *fsa;
         struct pho_id *medium_id;
-        struct fs_adapter fsa;
 
         dev->ld_op_status = PHO_DEV_OP_ST_LOADED;
         medium_id = &dev->ld_lib_dev_info.ldi_medium_id;
@@ -544,7 +544,7 @@ static int sched_fill_dev_info(struct lrs_sched *sched,
             return rc;
 
         /* If device is loaded, check if it is mounted as a filesystem */
-        rc = ldm_fs_mounted(&fsa, dev->ld_dev_path, dev->ld_mnt_path,
+        rc = ldm_fs_mounted(fsa, dev->ld_dev_path, dev->ld_mnt_path,
                             sizeof(dev->ld_mnt_path));
 
         if (rc == 0) {

@@ -345,7 +345,7 @@ static inline int ldm_lib_scan(struct lib_adapter_module *lib,
 /** @}*/
 
 /**
- * \defgroup fs_adapter (FileSystem Adapter API)
+ * \defgroup fs_adapter_module (FileSystem Adapter API)
  * @{
  */
 
@@ -359,7 +359,7 @@ static inline int ldm_lib_scan(struct lib_adapter_module *lib,
  * fs_mounted, fs_df and fs_get_label are mandatory.
  * fs_mount, fs_umount and fs_format do noop if they are NULL.
  */
-struct fs_adapter {
+struct pho_fs_adapter_module_ops {
     int (*fs_mount)(const char *dev_path, const char *mnt_path,
                     const char *label);
     int (*fs_umount)(const char *dev_path, const char *mnt_path);
@@ -372,8 +372,9 @@ struct fs_adapter {
 };
 
 struct fs_adapter_module {
-    struct module_desc desc;       /**< Description of this fs_adapter */
-    const struct fs_adapter *ops;  /**< Operations of this fs_adapter */
+    struct module_desc desc;       /**< Description of this fs_adapter_module */
+    const struct pho_fs_adapter_module_ops *ops;
+                                   /**< Operations of this fs_adapter_module */
 };
 
 /**
@@ -381,47 +382,49 @@ struct fs_adapter_module {
  *
  * @return 0 on success, negative error code on failure.
  */
-int get_fs_adapter(enum fs_type fs_type, struct fs_adapter *fsa);
+int get_fs_adapter(enum fs_type fs_type, struct fs_adapter_module **fsa);
 
 /**
  * Mount a device as a given filesystem type.
- * @param[in] fsa       File system adapter.
+ * @param[in] fsa       File system adapter module.
  * @param[in] dev_path  Path to the device.
  * @param[in] mnt_path  Mount point for the filesystem.
  * @param[in] fs_label  Validation label.
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_fs_mount(const struct fs_adapter *fsa,
+static inline int ldm_fs_mount(const struct fs_adapter_module *fsa,
                                const char *dev_path, const char *mnt_point,
                                const char *fs_label)
 {
     assert(fsa != NULL);
-    if (fsa->fs_mount == NULL)
+    assert(fsa->ops != NULL);
+    if (fsa->ops->fs_mount == NULL)
         return 0;
-    return fsa->fs_mount(dev_path, mnt_point, fs_label);
+    return fsa->ops->fs_mount(dev_path, mnt_point, fs_label);
 }
 
 /**
  * Unmount a filesystem.
- * @param[in] fsa       File system adapter.
+ * @param[in] fsa       File system adapter module.
  * @param[in] dev_path  Path to the device.
  * @param[in] mnt_path  Mount point for the filesystem.
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_fs_umount(const struct fs_adapter *fsa,
+static inline int ldm_fs_umount(const struct fs_adapter_module *fsa,
                                 const char *dev_path, const char *mnt_point)
 {
     assert(fsa != NULL);
-    if (fsa->fs_umount == NULL)
+    assert(fsa->ops != NULL);
+    if (fsa->ops->fs_umount == NULL)
         return 0;
-    return fsa->fs_umount(dev_path, mnt_point);
+    return fsa->ops->fs_umount(dev_path, mnt_point);
 }
 
 /**
  * Format a media to the desired filesystem type.
- * @param[in]  fsa       File system adapter.
+ * @param[in]  fsa       File system adapter module.
  * @param[in]  dev_path  Path to the device.
  * @param[in]  label     Media label to apply.
  * @param[out] fs_spc    Filesystem space information.
@@ -429,21 +432,22 @@ static inline int ldm_fs_umount(const struct fs_adapter *fsa,
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_fs_format(const struct fs_adapter *fsa,
+static inline int ldm_fs_format(const struct fs_adapter_module *fsa,
                                 const char *dev_path, const char *label,
                                 struct ldm_fs_space *fs_spc)
 {
     assert(fsa != NULL);
-    if (fsa->fs_format == NULL) {
+    assert(fsa->ops != NULL);
+    if (fsa->ops->fs_format == NULL) {
         memset(fs_spc, 0, sizeof(*fs_spc));
         return 0;
     }
-    return fsa->fs_format(dev_path, label, fs_spc);
+    return fsa->ops->fs_format(dev_path, label, fs_spc);
 }
 
 /**
  * Indicate if a device is currently mounted as a filesystem.
- * @param[in]  fsa           File system adapter.
+ * @param[in]  fsa           File system adapter module.
  * @param[in]  dev_path      Path to the device.
  * @param[out] mnt_path      Mount point for the filesystem, if mounted.
  * @param[in]  mnt_path_size Size of mnt_path argument.
@@ -453,47 +457,50 @@ static inline int ldm_fs_format(const struct fs_adapter *fsa,
  * @retval -ENOENT      the device is not mounted.
  * @retval -EMEDIUMTYPE the device is mounted with an unexpected FS type.
  */
-static inline int ldm_fs_mounted(const struct fs_adapter *fsa,
+static inline int ldm_fs_mounted(const struct fs_adapter_module *fsa,
                                  const char *dev_path, char *mnt_path,
                                  size_t mnt_path_size)
 {
     assert(fsa != NULL);
-    assert(fsa->fs_mounted != NULL);
-    return fsa->fs_mounted(dev_path, mnt_path, mnt_path_size);
+    assert(fsa->ops != NULL);
+    assert(fsa->ops->fs_mounted != NULL);
+    return fsa->ops->fs_mounted(dev_path, mnt_path, mnt_path_size);
 }
 
 /**
  * Get used and available space in a filesystem.
- * @param[in] fsa        File system adapter.
+ * @param[in] fsa        File system adapter module.
  * @param[in] mnt_path   Mount point of the filesystem.
  * @param[out] fs_spc    Filesystem space information.
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_fs_df(const struct fs_adapter *fsa, const char *mnt_path,
-                            struct ldm_fs_space *fs_spc)
+static inline int ldm_fs_df(const struct fs_adapter_module *fsa,
+                            const char *mnt_path, struct ldm_fs_space *fs_spc)
 {
     assert(fsa != NULL);
-    assert(fsa->fs_df != NULL);
-    return fsa->fs_df(mnt_path, fs_spc);
+    assert(fsa->ops != NULL);
+    assert(fsa->ops->fs_df != NULL);
+    return fsa->ops->fs_df(mnt_path, fs_spc);
 }
 
 /**
  * Get filesystem label
- * @param[in] fsa       File system adapter.
+ * @param[in] fsa       File system adapter module.
  * @param[in] mnt_path  Mount point of the filesystem.
  * @param[out] label    Buffer of at least PHO_LABEL_MAX_LEN + 1 bytes.
  * @param[in]  llen     Label buffer length in bytes.
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_fs_get_label(const struct fs_adapter *fsa,
+static inline int ldm_fs_get_label(const struct fs_adapter_module *fsa,
                                    const char *mnt_path, char *fs_label,
                                    size_t llen)
 {
     assert(fsa != NULL);
-    assert(fsa->fs_get_label != NULL);
-    return fsa->fs_get_label(mnt_path, fs_label, llen);
+    assert(fsa->ops != NULL);
+    assert(fsa->ops->fs_get_label != NULL);
+    return fsa->ops->fs_get_label(mnt_path, fs_label, llen);
 }
 
 /** @}*/

@@ -758,7 +758,7 @@ static int lrs_dev_media_update(struct dss_handle *dss,
                                 const char *fsroot, long long nb_new_obj)
 {
     struct ldm_fs_space space = {0};
-    struct fs_adapter fsa;
+    struct fs_adapter_module *fsa;
     uint64_t fields = 0;
     int rc2, rc = 0;
 
@@ -776,7 +776,7 @@ static int lrs_dev_media_update(struct dss_handle *dss,
         media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
         fields |= ADM_STATUS;
     } else {
-        rc2 = ldm_fs_df(&fsa, fsroot, &space);
+        rc2 = ldm_fs_df(fsa, fsroot, &space);
         if (rc2) {
             rc = rc ? : rc2;
             pho_error(rc2, "Cannot retrieve media usage information");
@@ -853,7 +853,7 @@ static int dev_sync(struct lrs_dev *dev)
  */
 static int dev_umount(struct lrs_dev *dev)
 {
-    struct fs_adapter fsa;
+    struct fs_adapter_module *fsa;
     int rc, rc2;
 
     ENTRY;
@@ -867,7 +867,7 @@ static int dev_umount(struct lrs_dev *dev)
                  "device '%s'", fs_type_names[dev->ld_dss_media_info->fs.type],
                  dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
-    rc = ldm_fs_umount(&fsa, dev->ld_dev_path, dev->ld_mnt_path);
+    rc = ldm_fs_umount(fsa, dev->ld_dev_path, dev->ld_mnt_path);
     rc2 = clean_tosync_array(dev, rc);
     if (rc)
         LOG_GOTO(out, rc, "Failed to unmount device '%s' mounted at '%s'",
@@ -1154,12 +1154,13 @@ out_close:
  * Format a medium to the given fs type.
  *
  * \param[in]   dev     Device with a loaded medium to format
- * \param[in]   fsa     Filesystem adapter
+ * \param[in]   fsa     Filesystem adapter module
  * \param[in]   unlock  Put admin status to "unlocked" on format success
  *
  * \return              0 on success, negative error code on failure
  */
-static int dev_format(struct lrs_dev *dev, struct fs_adapter *fsa, bool unlock)
+static int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa,
+                      bool unlock)
 {
     struct media_info *medium = dev->ld_dss_media_info;
     struct ldm_fs_space space = {0};
@@ -1302,7 +1303,7 @@ static int dev_handle_format(struct lrs_dev *dev)
         }
     }
 
-    rc = dev_format(dev, &reqc->params.format.fsa, reqc->req->format->unlock);
+    rc = dev_format(dev, reqc->params.format.fsa, reqc->req->format->unlock);
 
 out_response:
     if (rc) {
@@ -1599,7 +1600,7 @@ static char *mount_point(const char *id)
  */
 static int dev_mount(struct lrs_dev *dev)
 {
-    struct fs_adapter fsa;
+    struct fs_adapter_module *fsa;
     char *mnt_root;
     const char *id;
     int rc;
@@ -1608,7 +1609,7 @@ static int dev_mount(struct lrs_dev *dev)
     if (rc)
         LOG_RETURN(rc, "Unable to get fs adapter to mount a medium");
 
-    rc = ldm_fs_mounted(&fsa, dev->ld_dev_path, dev->ld_mnt_path,
+    rc = ldm_fs_mounted(fsa, dev->ld_dev_path, dev->ld_mnt_path,
                         sizeof(dev->ld_mnt_path));
     if (rc == 0) {
         dev->ld_op_status = PHO_DEV_OP_ST_MOUNTED;
@@ -1632,7 +1633,7 @@ static int dev_mount(struct lrs_dev *dev)
     pho_info("mount: device '%s' ('%s') as '%s'", dev->ld_dev_path,
              dev->ld_dss_dev_info->rsc.id.name, mnt_root);
 
-    rc = ldm_fs_mount(&fsa, dev->ld_dev_path, mnt_root,
+    rc = ldm_fs_mount(fsa, dev->ld_dev_path, mnt_root,
                       dev->ld_dss_media_info->fs.label);
     if (rc)
         LOG_GOTO(out_free, rc, "Failed to mount device '%s'",
@@ -1651,7 +1652,7 @@ out_free:
 static bool dev_mount_is_writable(const char *fs_root, enum fs_type fs_type)
 {
     struct ldm_fs_space fs_info = {0};
-    struct fs_adapter fsa;
+    struct fs_adapter_module *fsa;
     int rc;
 
     rc = get_fs_adapter(fs_type, &fsa);
@@ -1659,7 +1660,7 @@ static bool dev_mount_is_writable(const char *fs_root, enum fs_type fs_type)
         LOG_RETURN(rc, "No FS adapter found for '%s' (type %d)",
                    fs_root, fs_type);
 
-    rc = ldm_fs_df(&fsa, fs_root, &fs_info);
+    rc = ldm_fs_df(fsa, fs_root, &fs_info);
     if (rc)
         LOG_RETURN(rc, "Cannot retrieve media usage information");
 

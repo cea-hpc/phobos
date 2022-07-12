@@ -61,15 +61,15 @@ static int test_df_0(void *arg)
 
 static int test_df_1(void *arg)
 {
+    struct fs_adapter_module *fsa;
     struct ldm_fs_space spc;
-    struct fs_adapter fsa;
     int rc;
 
     rc = get_fs_adapter(PHO_FS_POSIX, &fsa);
     if (rc)
         return rc;
 
-    return ldm_fs_df(&fsa, "/tmp", &spc);
+    return ldm_fs_df(fsa, "/tmp", &spc);
 }
 
 static int test_df_2(void *arg)

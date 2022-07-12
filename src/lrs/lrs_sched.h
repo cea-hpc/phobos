@@ -140,7 +140,9 @@ struct release_params {
  */
 struct format_params {
     struct media_info *medium_to_format; /**< medium to format */
-    struct fs_adapter fsa;               /**< fs_adapter to use for format */
+    struct fs_adapter_module *fsa;       /**< fs_adapter_module to use for
+                                           * format
+                                           */
 };
 
 /**

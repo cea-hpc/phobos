@@ -98,21 +98,16 @@ void ldm_dev_state_fini(struct ldm_dev_state *lds)
     lds->lds_serial = NULL;
 }
 
-int get_fs_adapter(enum fs_type fs_type, struct fs_adapter *fsa)
+int get_fs_adapter(enum fs_type fs_type, struct fs_adapter_module **fsa)
 {
-    struct fs_adapter_module *fsa_mod;
     int rc = 0;
 
     switch (fs_type) {
     case PHO_FS_POSIX:
-        rc = load_module("fs_adapter_posix", sizeof(*fsa_mod),
-                         (void **)&fsa_mod);
-        *fsa = *fsa_mod->ops;
+        rc = load_module("fs_adapter_posix", sizeof(**fsa), (void **)fsa);
         break;
     case PHO_FS_LTFS:
-        rc = load_module("fs_adapter_ltfs", sizeof(*fsa_mod),
-                         (void **)&fsa_mod);
-        *fsa = *fsa_mod->ops;
+        rc = load_module("fs_adapter_ltfs", sizeof(**fsa), (void **)fsa);
         break;
     default:
         return -ENOTSUP;

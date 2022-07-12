@@ -384,7 +384,7 @@ static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc)
 }
 
 /** Exported fs adapter */
-struct fs_adapter FS_ADAPTER_LTFS_OPS = {
+struct pho_fs_adapter_module_ops FS_ADAPTER_LTFS_OPS = {
     .fs_mount     = ltfs_mount,
     .fs_umount    = ltfs_umount,
     .fs_format    = ltfs_format,
