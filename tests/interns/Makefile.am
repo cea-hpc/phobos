@@ -15,6 +15,7 @@ LAYOUT_LIB=$(TO_SRC)/layout/libpho_layout.la
 RAID1_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la
 SCSI_TAPE_LIB=$(TO_SRC)/ldm-modules/libpho_dev_adapter_scsi_tape.la
+POSIX_LIB=$(TO_SRC)/ldm-modules/libpho_fs_adapter_posix.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 
@@ -101,8 +102,8 @@ test_layout_module_LDADD=$(LAYOUT_LIB) $(RAID1_LIB) $(CFG_LIB) $(COMMON_LIB) -ld
 test_layout_module_CFLAGS=$(AM_CFLAGS) -I..
 
 test_ldm_SOURCES=test_ldm.c
-test_ldm_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB)
-test_ldm_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/ldm -I..
+test_ldm_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB) $(POSIX_LIB)
+test_ldm_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/ldm-modules -I..
 
 test_log_SOURCES=test_log.c
 test_log_LDADD=$(COMMON_LIB)

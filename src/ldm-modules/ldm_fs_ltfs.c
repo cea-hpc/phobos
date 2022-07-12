@@ -28,14 +28,26 @@
 #include "config.h"
 #endif
 
-#include "pho_ldm.h"
+#include "ldm_common.h"
 #include "pho_cfg.h"
 #include "pho_common.h"
-#include "ldm_common.h"
+#include "pho_ldm.h"
+#include "pho_module_loader.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#define PLUGIN_NAME     "ltfs"
+#define PLUGIN_MAJOR    0
+#define PLUGIN_MINOR    1
+
+static struct module_desc FS_ADAPTER_LTFS_MODULE_DESC = {
+    .mod_name  = PLUGIN_NAME,
+    .mod_major = PLUGIN_MAJOR,
+    .mod_minor = PLUGIN_MINOR,
+};
 
 /** List of LTFS configuration parameters */
 enum pho_cfg_params_ltfs {
@@ -371,7 +383,8 @@ static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc)
     return 0;
 }
 
-struct fs_adapter fs_adapter_ltfs = {
+/** Exported fs adapter */
+struct fs_adapter FS_ADAPTER_LTFS_OPS = {
     .fs_mount     = ltfs_mount,
     .fs_umount    = ltfs_umount,
     .fs_format    = ltfs_format,
@@ -379,3 +392,14 @@ struct fs_adapter fs_adapter_ltfs = {
     .fs_df        = ltfs_df,
     .fs_get_label = ltfs_get_label,
 };
+
+/** FS adapter module registration entry point */
+int pho_module_register(void *module)
+{
+    struct fs_adapter_module *self = (struct fs_adapter_module *) module;
+
+    self->desc = FS_ADAPTER_LTFS_MODULE_DESC;
+    self->ops = &FS_ADAPTER_LTFS_OPS;
+
+    return 0;
+}

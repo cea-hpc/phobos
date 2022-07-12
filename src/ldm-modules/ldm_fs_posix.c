@@ -28,14 +28,25 @@
 #include "config.h"
 #endif
 
-#include "pho_ldm.h"
-#include "pho_common.h"
 #include "ldm_common.h"
+#include "pho_common.h"
+#include "pho_ldm.h"
+#include "pho_module_loader.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+
+#define PLUGIN_NAME     "posix"
+#define PLUGIN_MAJOR    0
+#define PLUGIN_MINOR    1
+
+static struct module_desc FS_ADAPTER_POSIX_MODULE_DESC = {
+    .mod_name  = PLUGIN_NAME,
+    .mod_major = PLUGIN_MAJOR,
+    .mod_minor = PLUGIN_MINOR,
+};
 
 static char *get_label_path(const char *dir_path)
 {
@@ -166,7 +177,8 @@ static int dir_labelled(const char *dev_path, const char *mnt_path,
     return 0;
 }
 
-struct fs_adapter fs_adapter_posix = {
+/** Exported fs adapter */
+struct fs_adapter FS_ADAPTER_POSIX_OPS = {
     .fs_mount     = dir_labelled,
     .fs_umount    = NULL,
     .fs_format    = dir_format,
@@ -174,3 +186,14 @@ struct fs_adapter fs_adapter_posix = {
     .fs_df        = common_statfs,
     .fs_get_label = dir_get_label,
 };
+
+/** FS adapter module registration entry point */
+int pho_module_register(void *module)
+{
+    struct fs_adapter_module *self = (struct fs_adapter_module *) module;
+
+    self->desc = FS_ADAPTER_POSIX_MODULE_DESC;
+    self->ops = &FS_ADAPTER_POSIX_OPS;
+
+    return 0;
+}

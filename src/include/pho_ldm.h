@@ -356,7 +356,8 @@ static inline int ldm_lib_scan(struct lib_adapter_module *lib,
  * Functions should be invoked via their corresponding wrappers. Refer to
  * them for more precise explanation about each call.
  *
- * fs_format do noop if NULL.
+ * fs_mounted, fs_df and fs_get_label are mandatory.
+ * fs_mount, fs_umount and fs_format do noop if they are NULL.
  */
 struct fs_adapter {
     int (*fs_mount)(const char *dev_path, const char *mnt_path,
@@ -368,6 +369,11 @@ struct fs_adapter {
                       size_t mnt_path_size);
     int (*fs_df)(const char *mnt_path, struct ldm_fs_space *fs_spc);
     int (*fs_get_label)(const char *mnt_path, char *fs_label, size_t llen);
+};
+
+struct fs_adapter_module {
+    struct module_desc desc;       /**< Description of this fs_adapter */
+    const struct fs_adapter *ops;  /**< Operations of this fs_adapter */
 };
 
 /**
