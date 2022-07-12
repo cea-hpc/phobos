@@ -10,12 +10,15 @@ CFG_LIB=$(TO_SRC)/cfg/libpho_cfg.la
 COMMON_LIB=$(TO_SRC)/common/libpho_common.la
 COMMUNICATION_LIB=$(TO_SRC)/communication/libpho_comm.la
 DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
-IO_LIB=$(TO_SRC)/io/libpho_io.la
+MOD_LOAD_LIB=$(TO_SRC)/module-loader/libpho_module_loader.la
+IO_LIB=$(TO_SRC)/io/libpho_io.la $(MOD_LOAD_LIB)
 LAYOUT_LIB=$(TO_SRC)/layout/libpho_layout.la
 RAID1_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
-LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la
+LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la $(MOD_LOAD_LIB)
 SCSI_TAPE_LIB=$(TO_SRC)/ldm-modules/libpho_dev_adapter_scsi_tape.la
-POSIX_LIB=$(TO_SRC)/ldm-modules/libpho_fs_adapter_posix.la
+FS_POSIX_LIB=$(TO_SRC)/ldm-modules/libpho_fs_adapter_posix.la
+IO_POSIX_LIB=$(TO_SRC)/io-modules/libpho_io_adapter_posix.la
+MAPPER_LIB=$(TO_SRC)/io-modules/libpho_mapper.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 
@@ -94,15 +97,15 @@ test_dss_object_move_LDADD=$(DSS_LIB) $(ADMIN_LIB) $(CFG_LIB) $(COMMON_LIB) \
                            $(LDM_LIB)
 
 test_io_SOURCES=test_io.c
-test_io_LDADD=$(IO_LIB) $(COMMON_LIB)
-test_io_CFLAGS=$(AM_CFLAGS) -I..
+test_io_LDADD=$(IO_LIB) $(COMMON_LIB) $(IO_POSIX_LIB)
+test_io_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/io-modules -I..
 
 test_layout_module_SOURCES=test_layout_module.c
 test_layout_module_LDADD=$(LAYOUT_LIB) $(RAID1_LIB) $(CFG_LIB) $(COMMON_LIB) -ldl
 test_layout_module_CFLAGS=$(AM_CFLAGS) -I..
 
 test_ldm_SOURCES=test_ldm.c
-test_ldm_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB) $(POSIX_LIB)
+test_ldm_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB) $(FS_POSIX_LIB)
 test_ldm_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/ldm-modules -I..
 
 test_log_SOURCES=test_log.c
@@ -119,7 +122,7 @@ test_lrs_device_LDADD=$(LRS_LIB) $(DSS_LIB) $(COMMON_LIB) \
 test_lrs_device_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I..
 
 test_mapper_SOURCES=test_mapper.c
-test_mapper_LDADD=$(STORE_LIB)
+test_mapper_LDADD=$(STORE_LIB) $(MAPPER_LIB)
 test_mapper_CFLAGS=$(AM_CFLAGS) -I..
 
 test_phobos_admin_medium_locate_SOURCES=test_phobos_admin_medium_locate.c \

@@ -26,6 +26,7 @@
 #include "config.h"
 #endif
 
+#include "io_posix_common.h"
 #include "pho_io.h"
 #include "pho_types.h"
 #include "pho_test_utils.h"
@@ -37,12 +38,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-/* private posix context structure : copied in this file to test it */
-struct posix_io_ctx {
-    int   fd;
-    char *fpath;
-};
 
 #define TERA (1024LL * 1024LL * 1024LL * 1024LL)
 #define MAX_NULL_IO 10

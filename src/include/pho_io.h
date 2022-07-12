@@ -82,6 +82,11 @@ struct io_adapter {
     ssize_t (*ioa_preferred_io_size)(struct pho_io_descr *iod);
 };
 
+struct io_adapter_module {
+    struct module_desc desc;       /**< Description of this io_adapter_module */
+    const struct io_adapter *ops;  /**< Operations of this io_adapter_module */
+};
+
 /**
  * Retrieve IO functions for the given filesystem type.
  */

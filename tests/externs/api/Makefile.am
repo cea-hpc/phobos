@@ -13,6 +13,7 @@ COMMUNICATION_LIB=$(TO_SRC)/communication/libpho_comm.la
 DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
 LAYOUT_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la
+MOD_LOAD_LIB=$(TO_SRC)/module-loader/libpho_module_loader.la
 RAID1_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 SCSI_LIB=$(TO_SRC)/ldm-modules/libpho_scsi.la
 SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
@@ -80,7 +81,8 @@ test_raid1_split_locate_LDADD=$(CFG_LIB) $(COMMON_LIB) $(DSS_LIB) $(RAID1_LIB)
 test_raid1_split_locate_CFLAGS=-I$(TO_TEST)
 
 test_scsi_SOURCES=test_scsi.c
-test_scsi_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB) $(SCSI_LIB) $(ADMIN_LIB)
+test_scsi_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB) $(SCSI_LIB) $(ADMIN_LIB) \
+                $(MOD_LOAD_LIB)
 test_scsi_CFLAGS=-I$(TO_TEST)
 
 test_store_SOURCES=test_store.c

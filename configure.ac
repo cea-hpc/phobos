@@ -127,6 +127,7 @@ AC_CONFIG_FILES([Makefile
          src/serializer/Makefile
          src/communication/Makefile
          src/store/Makefile
+         src/io-modules/Makefile
          src/layout-modules/Makefile
          src/ldm-modules/Makefile
          src/admin/Makefile

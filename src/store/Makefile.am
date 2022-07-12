@@ -10,6 +10,5 @@ noinst_HEADERS=store_alias.h store_utils.h
 libphobos_store_la_SOURCES=store.c store_list.c store_alias.c
 libphobos_store_la_LIBADD=../cfg/libpho_cfg.la ../common/libpho_common.la \
 			  ../communication/libpho_comm.la ../dss/libpho_dss.la \
-			  ../io/libpho_io.la ../layout/libpho_layout.la \
-			  ../ldm/libpho_ldm.la \
-			  ../serializer/libpho_serializer.la
+			  ../module-loader/libpho_module_loader.la ../io/libpho_io.la \
+			  ../layout/libpho_layout.la ../serializer/libpho_serializer.la

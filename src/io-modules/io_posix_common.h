@@ -20,37 +20,31 @@
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
 /**
- * \brief  Phobos I/O adapters.
+ * \brief  Phobos I/O POSIX common adapter functions header.
  */
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
+#ifndef _PHO_IO_POSIX_COMMON_H
+#define _PHO_IO_POSIX_COMMON_H
 
-#include "pho_common.h"
 #include "pho_io.h"
-#include "pho_module_loader.h"
+#include "pho_types.h"
 
-/** retrieve IO functions for the given filesystem and addressing type */
-int get_io_adapter(enum fs_type fstype, struct io_adapter *ioa)
-{
-    struct io_adapter_module *ioa_mod;
-    int rc = 0;
+struct posix_io_ctx {
+    char *fpath;
+    int fd;
+};
 
-    switch (fstype) {
-    case PHO_FS_POSIX:
-        rc = load_module("io_adapter_posix", sizeof(*ioa_mod),
-                         (void **)&ioa_mod);
-        *ioa = *ioa_mod->ops;
-        break;
-    case PHO_FS_LTFS:
-        rc = load_module("io_adapter_ltfs", sizeof(*ioa_mod),
-                         (void **)&ioa_mod);
-        *ioa = *ioa_mod->ops;
-        break;
-    default:
-        pho_error(-EINVAL, "Invalid FS type %#x", fstype);
-        return -EINVAL;
-    }
+int pho_posix_get(const char *extent_key, const char *extent_desc,
+                  struct pho_io_descr *iod);
 
-    return rc;
-}
+int pho_posix_del(struct pho_ext_loc *loc);
+
+int pho_posix_open(const char *extent_key, const char *extent_desc,
+                   struct pho_io_descr *iod, bool is_put);
+
+int pho_posix_write(struct pho_io_descr *iod, const void *buf, size_t count);
+
+int pho_posix_close(struct pho_io_descr *iod);
+
+ssize_t pho_posix_preferred_io_size(struct pho_io_descr *iod);
+
+#endif
