@@ -2502,7 +2502,7 @@ static int sched_handle_notify(struct lrs_sched *sched,
     struct lrs_dev *dev;
     int rc = 0;
 
-    pho_info("Notify: device '%s'", nreq->rsrc_id->name);
+    pho_debug("Notify: device '%s'", nreq->rsrc_id->name);
 
     switch (nreq->op) {
     case PHO_NTFY_OP_DEVICE_ADD:
