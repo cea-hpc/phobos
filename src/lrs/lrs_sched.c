@@ -1167,7 +1167,7 @@ lock_race_retry:
                  required_size, chosen_media->stats.phys_spc_free,
                  chosen_media->rsc.id.name);
     } else {
-        pho_info("No medium available, wait for one");
+        pho_debug("No medium available, wait for one");
         GOTO(free_res, rc = -EAGAIN);
     }
 
@@ -2049,7 +2049,7 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
                             reqc, handle_error ? wreq->n_media : index_to_alloc,
                             index_to_alloc);
     if (rc)
-        LOG_RETURN(rc, "Unable to select a new medium in write alloc");
+        return rc;
 
     /**
      * Check if the media is already in a drive.
