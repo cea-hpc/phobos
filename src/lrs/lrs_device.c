@@ -104,6 +104,8 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
     (*dev)->sched_req_queue = &sched->req_queue;
     (*dev)->sched_retry_queue = &sched->retry_queue;
     (*dev)->ld_handle = handle;
+    (*dev)->ld_sub_request = NULL;
+    (*dev)->ld_mnt_path[0] = 0;
 
     rc = dev_thread_init(*dev);
     if (rc)
@@ -609,6 +611,8 @@ int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
     struct sub_request *req_tosync;
     int rc;
 
+    ENTRY;
+
     req_tosync = malloc(sizeof(*req_tosync));
     if (!req_tosync)
         LOG_RETURN(-ENOMEM, "Unable to allocate req_tosync");
@@ -982,6 +986,8 @@ static int dev_empty(struct lrs_dev *dev)
 {
     int rc;
 
+    ENTRY;
+
     if (dev->ld_op_status == PHO_DEV_OP_ST_EMPTY)
         return 0;
 
@@ -1239,13 +1245,13 @@ send_err:
 
 static int dev_handle_format(struct lrs_dev *dev)
 {
+    struct sub_request *subreq = dev->ld_sub_request;
     struct media_info *medium_to_format;
     struct req_container *reqc;
     int rc;
 
     reqc = dev->ld_sub_request->reqc;
     medium_to_format = reqc->params.format.medium_to_format;
-
     if (dev->ld_op_status == PHO_DEV_OP_ST_LOADED &&
         !strcmp(dev->ld_dss_media_info->rsc.id.name,
                 medium_to_format->rsc.id.name)) {
@@ -1253,11 +1259,9 @@ static int dev_handle_format(struct lrs_dev *dev)
          * medium to format already loaded, use existing dev->ld_dss_media_info,
          * free reqc->params.format.medium_to_format
          */
-        pho_verb("medium %s to format is already loaded into device %s",
+        pho_info("medium %s to format is already loaded into device %s",
                  dev->ld_dss_media_info->rsc.id.name,
                  dev->ld_dss_dev_info->rsc.id.name);
-        media_info_free(medium_to_format);
-        reqc->params.format.medium_to_format = NULL;
     } else {
         bool failure_on_dev;
 
@@ -1314,10 +1318,12 @@ out_response:
     }
 
 out:
-    sub_request_free(dev->ld_sub_request);
+    MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_sub_request = NULL;
     dev->ld_ongoing_io = false;
     format_medium_remove(dev->ld_ongoing_format, medium_to_format);
+    sub_request_free(subreq);
+    MUTEX_UNLOCK(&dev->ld_mutex);
     return rc;
 }
 
@@ -1623,7 +1629,8 @@ static int dev_mount(struct lrs_dev *dev)
     if (!mnt_root)
         LOG_RETURN(-ENOMEM, "Unable to get mount point of %s", id);
 
-    pho_info("mount: device '%s' as '%s'", dev->ld_dev_path, mnt_root);
+    pho_info("mount: device '%s' ('%s') as '%s'", dev->ld_dev_path,
+             dev->ld_dss_dev_info->rsc.id.name, mnt_root);
 
     rc = ldm_fs_mount(&fsa, dev->ld_dev_path, mnt_root,
                       dev->ld_dss_media_info->fs.label);
@@ -1668,8 +1675,11 @@ static int dev_handle_read_write(struct lrs_dev *dev)
     bool failure_on_device = false;
     bool io_ended = false;
     bool cancel = false;
+    bool locked = false;
     int rc = 0;
     int rc2;
+
+    ENTRY;
 
     if (cancel_rwalloc_on_error(sub_request)) {
         io_ended = true;
@@ -1680,6 +1690,8 @@ static int dev_handle_read_write(struct lrs_dev *dev)
         reqc->params.rwalloc.media[sub_request->medium_index].alloc_medium;
     /* using current medium */
     if (!medium_to_alloc) {
+        pho_debug("medium_to_alloc for device '%s' is NULL",
+                  dev->ld_dss_dev_info->rsc.id.name);
         if (dev->ld_op_status == PHO_DEV_OP_ST_MOUNTED) {
             goto alloc_result;
         } else if (dev->ld_op_status == PHO_DEV_OP_ST_LOADED) {
@@ -1709,6 +1721,8 @@ static int dev_handle_read_write(struct lrs_dev *dev)
      * because the request will be pushed to the retry queue of the sched
      * with an already locked medium ready to be use in a new device.
      */
+    pho_debug("Will load '%s' in device '%s'",
+              medium_to_alloc->rsc.id.name, dev->ld_dss_dev_info->rsc.id.name);
     rc = dev_load(dev, medium_to_alloc, false, &failure_on_device,
                   &sub_request->failure_on_medium);
     if (rc == -EBUSY) {
@@ -1776,6 +1790,8 @@ mount:
 
 
 alloc_result:
+    MUTEX_LOCK(&dev->ld_mutex);
+    locked = true;
     rc2 = handle_rwalloc_sub_request_result(dev, sub_request, rc,
                                             &sub_request_requeued,
                                             &cancel);
@@ -1790,12 +1806,15 @@ alloc_result:
     }
 
 out_free:
+    if (!locked)
+        MUTEX_LOCK(&dev->ld_mutex);
+    dev->ld_sub_request = NULL;
     if (!sub_request_requeued) {
         sub_request->reqc = NULL;
-        sub_request_free(dev->ld_sub_request);
-    }
+        sub_request_free(sub_request);
+     }
 
-    dev->ld_sub_request = NULL;
+    MUTEX_UNLOCK(&dev->ld_mutex);
     if (io_ended)
         dev->ld_ongoing_io = false;
 

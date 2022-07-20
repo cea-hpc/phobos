@@ -151,6 +151,17 @@ struct lrs_dev {
     struct lrs_dev_hdl  *ld_handle;
 };
 
+static inline bool dev_is_release_ready(struct lrs_dev *dev)
+{
+    return dev && !thread_is_stopped(&dev->ld_device_thread);
+}
+
+static inline bool dev_is_sched_ready(struct lrs_dev *dev)
+{
+    return dev && thread_is_running(&dev->ld_device_thread) &
+           !dev->ld_ongoing_io & !dev->ld_needs_sync;
+}
+
 /**
  *  TODO: will become a device thread static function when all media operations
  *  will be moved to device thread
