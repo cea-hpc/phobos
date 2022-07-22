@@ -1641,9 +1641,9 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
  * @retval 0 to stop searching for a device
  * @retval 1 to check next device.
  */
-static int select_first_fit(size_t required_size,
-                            struct lrs_dev *dev_curr,
-                            struct lrs_dev **dev_selected)
+int select_first_fit(size_t required_size,
+                     struct lrs_dev *dev_curr,
+                     struct lrs_dev **dev_selected)
 {
     ENTRY;
 

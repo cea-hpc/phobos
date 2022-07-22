@@ -377,6 +377,10 @@ int select_empty_loaded_mount(size_t required_size,
                               struct lrs_dev *dev_curr,
                               struct lrs_dev **dev_selected);
 
+int select_first_fit(size_t required_size,
+                     struct lrs_dev *dev_curr,
+                     struct lrs_dev **dev_selected);
+
 struct lrs_dev *dev_picker(GPtrArray *devices,
                            enum dev_op_status op_st,
                            device_select_func_t select_func,

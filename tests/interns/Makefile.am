@@ -20,6 +20,7 @@ FS_POSIX_LIB=$(TO_SRC)/ldm-modules/libpho_fs_adapter_posix.la
 IO_POSIX_LIB=$(TO_SRC)/io-modules/libpho_io_adapter_posix.la
 MAPPER_LIB=$(TO_SRC)/io-modules/libpho_mapper.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
+SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 
 if VALGRIND_ENABLED
@@ -45,6 +46,7 @@ check_PROGRAMS=test_attrs \
                test_log \
                test_lrs_cfg \
                test_lrs_device \
+               test_lrs_scheduling \
                test_mapper \
                test_phobos_admin_medium_locate \
                test_ping \
@@ -123,6 +125,11 @@ test_lrs_device_SOURCES=test_lrs_device.c ../test_setup.h ../test_setup.c
 test_lrs_device_LDADD=$(LRS_LIB) $(DSS_LIB) $(COMMON_LIB) \
                       $(ADMIN_LIB) $(LDM_LIB) $(IO_LIB)
 test_lrs_device_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I..
+
+test_lrs_scheduling_SOURCES=test_lrs_scheduling.c
+test_lrs_scheduling_LDADD=$(LRS_LIB) $(LDM_LIB) $(MOD_LOAD_LIB) $(DSS_LIB) \
+                          $(SERIALIZER_LIB) $(CFG_LIB) $(IO_LIB) $(COMMON_LIB)
+test_lrs_scheduling_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
 
 test_mapper_SOURCES=test_mapper.c
 test_mapper_LDADD=$(STORE_LIB) $(MAPPER_LIB)
