@@ -50,13 +50,6 @@ ssize_t pho_posix_preferred_io_size(struct pho_io_descr *iod);
 int build_addr_path(const char *extent_key, const char *extent_desc,
                     struct pho_buff *addr);
 
-int build_addr_hash1(const char *extent_key, const char *extent_desc,
-                    struct pho_buff *addr);
-
-int pho_posix_set_addr(const char *extent_key, const char *extent_desc,
-                              enum address_type addrtype,
-                              struct pho_buff *addr);
-
 char *full_xattr_name(const char *name);
 
 #endif

@@ -299,6 +299,23 @@ free_io_ctx:
     return rc;
 }
 
+/** set address field for a RADOS extent */
+static int pho_rados_set_addr(const char *extent_key, const char *extent_desc,
+                              enum address_type addrtype, struct pho_buff *addr)
+{
+    switch (addrtype) {
+    /* PHO_ADDR_HASH1 sets a multi-level map with sub-directories which is not
+     * necessary for RADOS, therefore, the address will be following
+     * PHO_ADDR_PATH address type's behaviour
+     */
+    case PHO_ADDR_PATH:
+    case PHO_ADDR_HASH1:
+        return build_addr_path(extent_key, extent_desc, addr);
+    default:
+        return -EINVAL;
+    }
+}
+
 static int pho_rados_open(const char *extent_key, const char *extent_desc,
                           struct pho_io_descr *iod, bool is_put)
 {
@@ -314,7 +331,7 @@ static int pho_rados_open(const char *extent_key, const char *extent_desc,
         if (!is_put)
             LOG_RETURN(-EINVAL, "Object has no address stored in database");
 
-        rc = pho_posix_set_addr(extent_key, extent_desc,
+        rc = pho_rados_set_addr(extent_key, extent_desc,
                                 iod->iod_loc->addr_type,
                                 &iod->iod_loc->extent->address);
         if (rc)

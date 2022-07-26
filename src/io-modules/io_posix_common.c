@@ -162,7 +162,7 @@ int build_addr_path(const char *extent_key, const char *extent_desc,
 }
 
 /** allocate the desired path length, and call the hash-based mapper */
-int build_addr_hash1(const char *extent_key, const char *extent_desc,
+static int build_addr_hash1(const char *extent_key, const char *extent_desc,
                             struct pho_buff *addr)
 {
     int rc;
@@ -183,7 +183,7 @@ int build_addr_hash1(const char *extent_key, const char *extent_desc,
 }
 
 /** set address field for a POSIX extent */
-int pho_posix_set_addr(const char *extent_key, const char *extent_desc,
+static int pho_posix_set_addr(const char *extent_key, const char *extent_desc,
                               enum address_type addrtype, struct pho_buff *addr)
 {
     switch (addrtype) {

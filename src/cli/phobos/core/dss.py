@@ -31,7 +31,8 @@ from ctypes import byref, c_int, c_void_p, POINTER, Structure
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 from phobos.core.const import (DSS_SET_DELETE, DSS_SET_INSERT, DSS_SET_UPDATE, # pylint: disable=no-name-in-module
-                               DSS_MEDIA, PHO_ADDR_HASH1, str2fs_type)
+                               DSS_MEDIA, PHO_ADDR_HASH1, PHO_ADDR_PATH,
+                               PHO_FS_RADOS, str2fs_type)
 from phobos.core.ffi import (DevInfo, MediaInfo, MediaStats, LIBPHOBOS,
                              OperationFlags)
 
@@ -276,7 +277,8 @@ class MediaManager(BaseEntityManager):
     def add(self, media, fstype, tags=None):
         """Insert media into DSS."""
         media.fs.type = str2fs_type(fstype)
-        media.addr_type = PHO_ADDR_HASH1
+        media.addr_type = (PHO_ADDR_PATH if media.fs.type == PHO_FS_RADOS
+                           else PHO_ADDR_HASH1)
         media.tags = tags or []
 
         media.stats = MediaStats()
