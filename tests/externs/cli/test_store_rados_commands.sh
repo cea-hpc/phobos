@@ -36,7 +36,7 @@ function setup
     sudo ceph osd pool create pho_test
     invoke_daemon
     $phobos rados_pool add pho_test
-    $phobos rados_pool format --fs RADOS --unlock pho_test
+    $phobos rados_pool format --unlock pho_test
     rm -f /tmp/rados_out
 }
 

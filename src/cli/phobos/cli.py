@@ -1003,7 +1003,6 @@ class FormatOptHandler(DSSInteractHandler):
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(FormatOptHandler, cls).add_options(parser)
-        parser.add_argument('--fs', default='ltfs', help='Filesystem type')
         parser.add_argument('-n', '--nb-streams', metavar='STREAMS', type=int,
                             default=0,
                             help='Max number of parallel formatting operations,'
@@ -1012,6 +1011,15 @@ class FormatOptHandler(DSSInteractHandler):
                             help='Unlock media once it is ready to be written')
         parser.add_argument('res', nargs='+', help='Resource(s) to format')
 
+class TapeFormatOptHandler(FormatOptHandler):
+    """Format a tape."""
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(TapeFormatOptHandler, cls).add_options(parser)
+        parser.add_argument('--fs', default='ltfs', help='Filesystem type')
+
 class DirFormatOptHandler(FormatOptHandler):
     """Format a directory."""
 
@@ -1019,7 +1027,17 @@ class DirFormatOptHandler(FormatOptHandler):
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(DirFormatOptHandler, cls).add_options(parser)
-        parser.set_defaults(fs='posix')
+        parser.add_argument('--fs', default='posix', help='Filesystem type')
+
+class RadosPoolFormatOptHandler(FormatOptHandler):
+    """Format a RADOS pool."""
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(RadosPoolFormatOptHandler, cls).add_options(parser)
+        # invisible fs argument in help because it is not useful
+        parser.add_argument('--fs', default='RADOS', help=argparse.SUPPRESS)
 
 class BaseResourceOptHandler(DSSInteractHandler):
     """Generic interface for resources manipulation."""
@@ -1534,7 +1552,7 @@ class TapeOptHandler(MediaOptHandler):
     verbs = [
         TapeAddOptHandler,
         MediaUpdateOptHandler,
-        FormatOptHandler,
+        TapeFormatOptHandler,
         MediaListOptHandler,
         LockOptHandler,
         UnlockOptHandler,
@@ -1554,7 +1572,7 @@ class RadosPoolOptHandler(MediaOptHandler):
         LockOptHandler,
         UnlockOptHandler,
         RadosPoolSetAccessOptHandler,
-        FormatOptHandler,
+        RadosPoolFormatOptHandler,
         MediumLocateOptHandler,
     ]
 
