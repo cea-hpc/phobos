@@ -54,9 +54,6 @@ Requires: %{python_prefix}-psycopg2
 Requires: %{python_prefix}-tabulate
 Requires: protobuf
 Requires: protobuf-c
-%if %{have_rados} == 01
-Requires: ceph
-%endif
 
 %description
 Phobos aims to implement high performance distributed object storage on a wide
@@ -69,6 +66,20 @@ Summary: C API for Phobos Object Store.
 %description devel
 This package contains header files and required libraries to access Phobos
 object store from a C program.
+
+%if %{have_rados} == 01
+%package rados-adapters
+Summary: RADOS adapters for Phobos
+
+Requires: phobos
+Requires: ceph
+
+%description rados-adapters
+This package contains required libraries to use Ceph/RADOS as a Phobos storage
+backend. Verify that the Phobos configuration file has been updated to support
+RADOS functionalities.
+%endif
+
 
 %prep
 %setup -q
@@ -112,6 +123,8 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_*.la
 %{_bindir}/phobos
 %{_sbindir}/phobosd
 %{_unitdir}/phobosd.service
+%exclude %{_libdir}/phobos/libpho_*_rados.so*
+
 %config(noreplace) %{_sysconfdir}/phobos.conf
 %dir %{phobosdocdir}
 %doc %{phobosdocdir}/README.md
@@ -128,6 +141,11 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_*.la
 %{_includedir}/phobos_admin.h
 %{_libdir}/libphobos_store.la
 %{_libdir}/libphobos_admin.la
+
+%if %{have_rados} == 01
+%files rados-adapters
+%{_libdir}/phobos/libpho_*_rados.so*
+%endif
 
 %changelog
 * Tue Apr 19 2022 - Yoann Valeri <yoann.valeri@cea.fr> - 1.94-1
