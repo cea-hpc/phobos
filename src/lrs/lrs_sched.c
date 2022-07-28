@@ -1353,7 +1353,8 @@ static int rw_drive_types_for_tape(const char *tape_model, const char **list)
     /* get list of drive_rw types */
     rc = pho_cfg_get_val(section_name, DRIVE_RW_CFG_PARAM, list);
     if (rc)
-        pho_error(rc, "Unable to find parameter "DRIVE_RW_CFG_PARAM
+        pho_error(rc,
+                  "Unable to find parameter "DRIVE_RW_CFG_PARAM
                   " in section '%s' for tape model '%s'",
                   section_name, tape_model);
 
@@ -1491,12 +1492,13 @@ static struct lrs_dev *dev_picker(struct lrs_sched *sched,
                                   device_select_func_t select_func,
                                   size_t required_size,
                                   const struct tags *media_tags,
-                                  struct media_info *pmedia, bool is_write)
+                                  struct media_info *pmedia,
+                                  bool is_write)
 {
-    struct lrs_dev    *selected = NULL;
-    int                  selected_i = -1;
-    int                  i;
-    int                  rc;
+    struct lrs_dev *selected = NULL;
+    int selected_i = -1;
+    int rc;
+    int i;
 
     ENTRY;
 
@@ -1755,22 +1757,6 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
     }
 
     return false;
-}
-
-static int
-check_read_medium_permission_and_status(const struct media_info *medium)
-{
-    if (!medium->flags.get)
-        LOG_RETURN(-EPERM, "'%s' get flag is false",
-                   medium->rsc.id.name);
-    if (medium->fs.status == PHO_FS_STATUS_BLANK)
-        LOG_RETURN(-EINVAL, "Cannot do I/O on unformatted medium '%s'",
-                   medium->rsc.id.name);
-    if (medium->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
-        LOG_RETURN(-EPERM, "Cannot do I/O on an admin locked medium '%s'",
-                   medium->rsc.id.name);
-
-    return 0;
 }
 
 /******************************************************************************/
@@ -2289,6 +2275,68 @@ static int skip_read_alloc_medium(int rc, struct req_container *reqc,
     return 0;
 }
 
+static int check_medium_permission_and_status(struct req_container *reqc,
+                                              struct media_info *medium)
+{
+    if (pho_request_is_read(reqc->req)) {
+        if (!medium->flags.get)
+            LOG_RETURN(-EPERM, "'%s' get flag is false",
+                       medium->rsc.id.name);
+        if (medium->fs.status == PHO_FS_STATUS_BLANK)
+            LOG_RETURN(-EINVAL, "Cannot do I/O on unformatted medium '%s'",
+                       medium->rsc.id.name);
+        if (medium->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
+            LOG_RETURN(-EPERM, "Cannot do I/O on an admin locked medium '%s'",
+                       medium->rsc.id.name);
+    } else if (pho_request_is_format(reqc->req)) {
+        if (medium->fs.status != PHO_FS_STATUS_BLANK)
+            LOG_RETURN(-EINVAL,
+                       "Medium '%s' has a fs.status '%s', expected "
+                       "PHO_FS_STATUS_BLANK to be formatted.",
+                       medium->rsc.id.name, fs_status2str(medium->fs.status));
+    }
+
+    return 0;
+}
+
+static int fetch_and_check_medium_info(struct lrs_sched *sched,
+                                       struct req_container *reqc,
+                                       struct pho_id *m_id,
+                                       size_t index)
+{
+    struct media_info **target_medium;
+    PhoResourceId *medium_id;
+    int rc;
+
+    if (pho_request_is_format(reqc->req)) {
+        medium_id = reqc->req->format->med_id;
+        target_medium = &reqc->params.format.medium_to_format;
+    } else if (pho_request_is_read(reqc->req)) {
+        medium_id = reqc->req->ralloc->med_ids[index];
+        target_medium = &reqc->params.rwalloc.media[index].alloc_medium;
+    } else {
+        return -EINVAL;
+    }
+
+    m_id->family = (enum rsc_family) medium_id->family;
+    rc = pho_id_name_set(m_id, medium_id->name);
+    if (rc)
+        return rc;
+
+    rc = sched_fill_media_info(sched, target_medium, m_id);
+    if (rc)
+        return rc;
+
+    rc = check_medium_permission_and_status(reqc, *target_medium);
+    if (rc) {
+        media_info_free(*target_medium);
+        *target_medium = NULL;
+        return rc;
+    }
+
+    return 0;
+}
+
 /**
  * Alloc one more medium to a device in a read alloc request
  */
@@ -2298,7 +2346,6 @@ static int sched_read_alloc_one_medium(struct lrs_sched *sched,
                                        size_t next_to_select,
                                        size_t *nb_already_eagain)
 {
-    pho_req_read_t *rreq = reqc->req->ralloc;
     struct media_info **alloc_medium =
         &reqc->params.rwalloc.media[index_to_alloc].alloc_medium;
     struct pho_id medium_id;
@@ -2310,18 +2357,9 @@ static int sched_read_alloc_one_medium(struct lrs_sched *sched,
         goto find_read_device;
 
 find_read_medium:
-    medium_id.family = (enum rsc_family)rreq->med_ids[index_to_alloc]->family;
-    rc = pho_id_name_set(&medium_id, rreq->med_ids[index_to_alloc]->name);
+    rc = fetch_and_check_medium_info(sched, reqc, &medium_id, index_to_alloc);
     if (rc)
         goto skip_medium;
-
-    rc = sched_fill_media_info(sched, alloc_medium, &medium_id);
-    if (rc)
-        goto skip_medium;
-
-    rc = check_read_medium_permission_and_status(*alloc_medium);
-    if (rc)
-        goto free_skip_medium;
 
 find_read_device:
     /* check if the media is already in a drive */
@@ -2451,24 +2489,13 @@ static int sched_handle_format(struct lrs_sched *sched,
     struct pho_id m;
     int rc = 0;
 
-    m.family = (enum rsc_family)freq->med_id->family;
-    pho_id_name_set(&m, freq->med_id->name);
-    rc = sched_fill_media_info(sched, &reqc->params.format.medium_to_format,
-                               &m);
-    if (rc) {
-        if (rc == -EALREADY)
-            LOG_GOTO(err_out, rc = -EBUSY,
-                     "medium '%s' to format is already locked", m.name);
-        else
-            goto err_out;
-    }
-
-    if (reqc->params.format.medium_to_format->fs.status != PHO_FS_STATUS_BLANK)
-        LOG_GOTO(err_out, rc = -EINVAL,
-                 "Medium '%s' has a fs.status '%s', expected "
-                 "PHO_FS_STATUS_BLANK to be formatted", m.name,
-                 fs_status2str(
-                    reqc->params.format.medium_to_format->fs.status));
+    rc = fetch_and_check_medium_info(sched, reqc, &m, 0);
+    if (rc == -EALREADY)
+        LOG_GOTO(err_out, rc = -EBUSY,
+                 "Medium to format '%s' is already locked",
+                 reqc->req->format->med_id->name);
+    if (rc)
+        goto err_out;
 
     rc = get_fs_adapter((enum fs_type)freq->fs, &reqc->params.format.fsa);
     if (rc)
