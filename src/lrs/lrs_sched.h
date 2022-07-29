@@ -34,6 +34,7 @@
 #include "pho_types.h"
 #include "pho_type_utils.h"
 
+#include "io_sched.h"
 #include "lrs_device.h"
 #include "lrs_thread.h"
 
@@ -91,6 +92,7 @@ struct lrs_sched {
     struct thread_info  sched_thread;   /**< thread handling the actions
                                           *  executed by the scheduler
                                           */
+    struct pho_io_sched io_sched;       /**< I/O scheduler abstraction */
 };
 
 /**

@@ -30,4 +30,5 @@ phobosd_LDADD=../dss/libpho_dss.la \
               ../common/libpho_common.la
 phobosd_LDFLAGS=-Wl,-rpath=$(libdir) -Wl,-rpath=$(pkglibdir)
 
-libpho_lrs_la_SOURCES=lrs_cfg.c lrs_sched.c lrs_device.c lrs_thread.c
+libpho_lrs_la_SOURCES=lrs_cfg.c lrs_sched.c lrs_device.c lrs_thread.c \
+                      io_sched.c $(IO_SCHEDULERS)

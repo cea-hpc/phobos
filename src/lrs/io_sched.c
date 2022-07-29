@@ -33,6 +33,7 @@
 #include "pho_common.h"
 #include "lrs_device.h"
 #include "lrs_sched.h"
+#include "io_schedulers/schedulers.h"
 
 const struct pho_config_item cfg_io_sched[] = {
     [PHO_IO_SCHED_read_algo] = {
@@ -234,10 +235,10 @@ static int get_io_sched(struct pho_io_sched *io_sched,
         return -EINVAL;
     }
 
-    (void)ops;
-
     switch (type) {
-    // TODO
+    case IO_SCHED_FIFO:
+        *ops = IO_SCHED_FIFO_OPS;
+        break;
     default:
         return -EINVAL;
     }

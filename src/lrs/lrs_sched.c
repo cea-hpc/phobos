@@ -721,6 +721,11 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
     if (rc)
         LOG_GOTO(err_incoming_fini, rc, "Failed to init sched retry_queue");
 
+    rc = load_io_schedulers_from_config(&sched->io_sched);
+    if (rc)
+        LOG_GOTO(err_retry_queue_fini, rc,
+                 "Failed to load I/O schedulers from config");
+
     sched->response_queue = resp_queue;
 
     /* Load devices from DSS -- not critical if no device is found */
@@ -749,6 +754,8 @@ err_sched_fini:
     sched_fini(sched);
     return rc;
 
+err_retry_queue_fini:
+    tsqueue_destroy(&sched->retry_queue, sched_req_free);
 err_incoming_fini:
     tsqueue_destroy(&sched->incoming, sched_req_free);
 err_dss_fini:
@@ -848,6 +855,7 @@ void sched_fini(struct lrs_sched *sched)
     if (sched == NULL)
         return;
 
+    io_sched_fini(&sched->io_sched);
     lrs_dev_hdl_clear(&sched->devices);
     lrs_dev_hdl_fini(&sched->devices);
     dss_fini(&sched->sched_thread.dss);
