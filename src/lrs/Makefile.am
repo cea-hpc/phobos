@@ -9,12 +9,16 @@ unit_files=phobosd.service
 unit_DATA=$(unit_files)
 EXTRA_DIST=$(unit_files)
 
+IO_SCHEDULERS=io_schedulers/fifo.c \
+              io_schedulers/schedulers.h
+
 phobosd_SOURCES=lrs.c \
                 lrs_cfg.h lrs_cfg.c \
                 lrs_sched.h lrs_sched.c \
                 lrs_device.h lrs_device.c \
                 lrs_thread.h lrs_thread.c \
-                io_sched.h io_sched.c
+                io_sched.h io_sched.c \
+                $(IO_SCHEDULERS)
 phobosd_CFLAGS=$(AM_CFLAGS)
 phobosd_LDADD=../dss/libpho_dss.la \
               ../cfg/libpho_cfg.la \

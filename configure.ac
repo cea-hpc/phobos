@@ -14,7 +14,7 @@ AC_CONFIG_AUX_DIR([autotools])
 AC_CONFIG_MACRO_DIR([autotools/m4])
 AC_CONFIG_HEADER([src/include/config.h])
 
-AM_INIT_AUTOMAKE([-Wall -Werror tar-pax foreign])
+AM_INIT_AUTOMAKE([-Wall -Werror tar-pax foreign subdir-objects])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 AC_PREFIX_DEFAULT([/usr])
