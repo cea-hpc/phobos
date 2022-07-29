@@ -37,6 +37,7 @@
 #include "io_sched.h"
 #include "lrs_device.h"
 #include "lrs_thread.h"
+#include "lrs_utils.h"
 
 /* from lrs.c */
 extern bool running;
@@ -71,8 +72,7 @@ void format_medium_remove(struct format_media *format_media,
 struct lrs_sched {
     enum rsc_family     family;         /**< Managed resource family */
     struct lrs_dev_hdl  devices;        /**< Handle to device threads */
-    const char         *lock_hostname;  /**< Lock hostname for this LRS */
-    int                 lock_owner;     /**< Lock owner (pid) for this LRS */
+    struct lock_handle  lock_handle;    /**< Lock information for this LRS */
     struct tsqueue      incoming;       /**< Queue of new requests to schedule
                                           */
     struct tsqueue      retry_queue;    /**< Queue of request sent back by the

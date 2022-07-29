@@ -35,6 +35,7 @@
 #include "pho_srl_common.h"
 #include "pho_type_utils.h"
 #include "lrs_device.h"
+#include "lrs_utils.h"
 
 #include <assert.h>
 #include <glib.h>
@@ -190,21 +191,21 @@ static int check_dev_info(const struct lrs_dev *dev)
 }
 
 /**
- * Unlock a resource device at DSS level and clean the corresponding lock
+ * Unlock a resource owned by the LRS from the DSS and clean the in-memory lock
  *
  * @param[in]   sched   current scheduler
  * @param[in]   type    DSS type of the resource to release
  * @param[in]   item    Resource to release
  * @param[out]  lock    lock to clean
  */
-static int sched_resource_release(struct lrs_sched *sched, enum dss_type type,
-                                  void *item, struct pho_lock *lock)
+static int lrs_resource_unlock(struct dss_handle *dss, enum dss_type type,
+                               void *item, struct pho_lock *lock)
 {
     int rc;
 
     ENTRY;
 
-    rc = dss_unlock(&sched->sched_thread.dss, type, item, 1, false);
+    rc = dss_unlock(dss, type, item, 1, false);
     if (rc)
         LOG_RETURN(rc, "Cannot unlock a resource");
 
@@ -212,12 +213,11 @@ static int sched_resource_release(struct lrs_sched *sched, enum dss_type type,
     return 0;
 }
 
-static int sched_medium_release(struct lrs_sched *sched,
-                                struct media_info *medium)
+static int medium_unlock(struct dss_handle *dss, struct media_info *medium)
 {
     int rc;
 
-    rc = sched_resource_release(sched, DSS_MEDIA, medium, &medium->lock);
+    rc = lrs_resource_unlock(dss, DSS_MEDIA, medium, &medium->lock);
     if (rc)
         pho_error(rc,
                   "Error when releasing medium '%s' with current lock "
@@ -276,18 +276,19 @@ static int take_and_update_lock(struct dss_handle *dss, enum dss_type type,
 }
 
 /**
- * If lock->owner is different from sched->lock_owner, renew the lock with
+ * If lock->owner is different from lock_handle->lock_owner, renew the lock with
  * the current owner (PID).
  */
-static int check_renew_owner(struct lrs_sched *sched, enum dss_type type,
-                             void *item, struct pho_lock *lock)
+static int check_renew_owner(struct lock_handle *lock_handle,
+                             enum dss_type type, void *item,
+                             struct pho_lock *lock)
 {
     int rc;
 
-    if (lock->owner != sched->lock_owner) {
+    if (lock->owner != lock_handle->lock_owner) {
         pho_warn("'%s' is already locked by owner %d, owner %d will "
                  "take ownership of this device",
-                 dss_type_names[type], lock->owner, sched->lock_owner);
+                 dss_type_names[type], lock->owner, lock_handle->lock_owner);
 
         /**
          * Unlocking here is dangerous if there is another process than the
@@ -296,7 +297,7 @@ static int check_renew_owner(struct lrs_sched *sched, enum dss_type type,
          * ownership of this resource again.
          */
         /* unlock previous owner */
-        rc = dss_unlock(&sched->sched_thread.dss, type, item, 1, true);
+        rc = dss_unlock(lock_handle->dss, type, item, 1, true);
         if (rc)
             LOG_RETURN(rc,
                        "Unable to clear previous lock (hostname: %s, owner "
@@ -304,7 +305,7 @@ static int check_renew_owner(struct lrs_sched *sched, enum dss_type type,
                        lock->hostname, lock->owner);
 
         /* get the lock again */
-        rc = take_and_update_lock(&sched->sched_thread.dss, type, item,
+        rc = take_and_update_lock(lock_handle->dss, type, item,
                                   lock);
         if (rc)
             LOG_RETURN(rc, "Unable to get and refresh lock");
@@ -314,22 +315,22 @@ static int check_renew_owner(struct lrs_sched *sched, enum dss_type type,
 }
 
 /**
- * First, check that lock->hostname is the same as sched->lock_hostname. If not,
- * -EALREADY is returned.
+ * First, check that lock->hostname is the same as lock_handle->lock_hostname.
+ * If not, -EALREADY is returned.
  *
- * Then, if lock->owner is different from sched->lock_owner, renew the lock with
- * the current owner (PID) by calling check_renew_owner.
+ * Then, if lock->owner is different from lock_handle->lock_owner, renew the
+ * lock with the current owner (PID) by calling check_renew_owner.
  */
-static int check_renew_lock(struct lrs_sched *sched, enum dss_type type,
+static int check_renew_lock(struct lock_handle *lock_handle, enum dss_type type,
                             void *item, struct pho_lock *lock)
 {
-    if (strcmp(lock->hostname, sched->lock_hostname)) {
+    if (strcmp(lock->hostname, lock_handle->lock_hostname)) {
         pho_warn("Resource already locked by host %s instead of %s",
-                 lock->hostname, sched->lock_hostname);
+                 lock->hostname, lock_handle->lock_hostname);
         return -EALREADY;
     }
 
-    return check_renew_owner(sched, type, item, lock);
+    return check_renew_owner(lock_handle, type, item, lock);
 }
 
 int check_and_take_device_lock(struct lrs_sched *sched,
@@ -338,7 +339,7 @@ int check_and_take_device_lock(struct lrs_sched *sched,
     int rc;
 
     if (dev->lock.hostname) {
-        rc = check_renew_lock(sched, DSS_DEVICE, dev, &dev->lock);
+        rc = check_renew_lock(&sched->lock_handle, DSS_DEVICE, dev, &dev->lock);
         if (rc)
             LOG_RETURN(rc,
                        "Unable to check and renew lock of one of our devices "
@@ -405,7 +406,8 @@ static int sched_fill_media_info(struct lrs_sched *sched,
         LOG_GOTO(out_free, rc = -ENOMEM, "Couldn't duplicate media info");
 
     if ((*pmedia)->lock.hostname != NULL) {
-        rc = check_renew_lock(sched, DSS_MEDIA, *pmedia, &(*pmedia)->lock);
+        rc = check_renew_lock(&sched->lock_handle, DSS_MEDIA, *pmedia,
+                              &(*pmedia)->lock);
         if (rc == -EALREADY) {
             LOG_GOTO(out_free, rc,
                      "Media '%s' is locked by (hostname: %s, owner: %d)",
@@ -633,13 +635,15 @@ static int sched_load_dev_state(struct lrs_sched *sched)
  */
 static int sched_clean_device_locks(struct lrs_sched *sched)
 {
+    struct lock_handle *lock_handle = &sched->lock_handle;
     int rc;
 
     ENTRY;
 
     rc = dss_lock_device_clean(&sched->sched_thread.dss,
                                rsc_family_names[sched->family],
-                               sched->lock_hostname, sched->lock_owner);
+                               lock_handle->lock_hostname,
+                               lock_handle->lock_owner);
     if (rc)
         pho_error(rc, "Failed to clean device locks");
 
@@ -656,6 +660,7 @@ static int sched_clean_device_locks(struct lrs_sched *sched)
  */
 static int sched_clean_medium_locks(struct lrs_sched *sched)
 {
+    struct lock_handle *lock_handle = &sched->lock_handle;
     struct media_info *media = NULL;
     int cnt = 0;
     int rc;
@@ -681,7 +686,8 @@ static int sched_clean_medium_locks(struct lrs_sched *sched)
     }
 
     rc = dss_lock_media_clean(&sched->sched_thread.dss, media, cnt,
-                              sched->lock_hostname, sched->lock_owner);
+                              lock_handle->lock_hostname,
+                              lock_handle->lock_owner);
     if (rc)
         pho_error(rc, "Failed to clean media locks");
 
@@ -704,14 +710,14 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
     if (rc)
         LOG_GOTO(err_format_media, rc, "Failed to initialize device handle");
 
-    rc = fill_host_owner(&sched->lock_hostname, &sched->lock_owner);
-    if (rc)
-        LOG_GOTO(err_hdl_fini, rc, "Failed to get hostname and PID");
-
     /* Connect to the DSS */
     rc = dss_init(&sched->sched_thread.dss);
     if (rc)
         LOG_GOTO(err_hdl_fini, rc, "Failed to init sched dss handle");
+
+    rc = lock_handle_init(&sched->lock_handle, &sched->sched_thread.dss);
+    if (rc)
+        LOG_GOTO(err_dss_fini, rc, "Failed to get hostname and PID");
 
     rc = tsqueue_init(&sched->incoming);
     if (rc)
@@ -1036,8 +1042,8 @@ static char *get_sub_request_medium_name(struct sub_request *sub_request)
     }
 }
 
-static struct lrs_dev *search_loaded_media(struct lrs_sched *sched,
-                                           const char *name)
+static struct lrs_dev *search_loaded_medium(GPtrArray *devices,
+                                            const char *name)
 {
     int i;
 
@@ -1045,11 +1051,11 @@ static struct lrs_dev *search_loaded_media(struct lrs_sched *sched,
 
     pho_debug("Searching loaded medium '%s'", name);
 
-    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
+    for (i = 0; i < devices->len; i++) {
         struct lrs_dev *dev = NULL;
         const char *media_id;
 
-        dev = lrs_dev_hdl_get(&sched->devices, i);
+        dev = g_ptr_array_index(devices, i);
         MUTEX_LOCK(&dev->ld_mutex);
 
         if (dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED &&
@@ -1082,7 +1088,7 @@ err_continue:
     return NULL;
 }
 
-static struct lrs_dev *search_in_use_media(struct lrs_sched *sched,
+static struct lrs_dev *search_in_use_media(GPtrArray *devices,
                                            const char *name,
                                            bool *sched_ready)
 {
@@ -1093,11 +1099,11 @@ static struct lrs_dev *search_in_use_media(struct lrs_sched *sched,
     pho_debug("Searching in-use medium '%s'", name);
     *sched_ready = false;
 
-    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
+    for (i = 0; i < devices->len; i++) {
         struct lrs_dev *dev = NULL;
         const char *media_id;
 
-        dev = lrs_dev_hdl_get(&sched->devices, i);
+        dev = g_ptr_array_index(devices, i);
         MUTEX_LOCK(&dev->ld_mutex);
 
         if (dev->ld_sub_request != NULL) {
@@ -1163,23 +1169,27 @@ err_continue:
  *                           be set to n_med or more if every already allocated
  *                           media should be taken into account)
  */
-static int sched_select_media(struct lrs_sched *sched,
-                              struct media_info **p_media, size_t required_size,
-                              enum rsc_family family, const struct tags *tags,
-                              struct req_container *reqc, size_t n_med,
-                              size_t not_alloc)
+static int sched_select_medium(struct lock_handle *lock_handle,
+                               GPtrArray *devices,
+                               struct media_info **p_media,
+                               size_t required_size,
+                               enum rsc_family family,
+                               const struct tags *tags,
+                               struct req_container *reqc,
+                               size_t n_med,
+                               size_t not_alloc)
 {
-    struct media_info   *pmedia_res = NULL;
-    struct media_info   *split_media_best;
-    size_t               avail_size;
-    struct media_info   *whole_media_best;
-    struct media_info   *chosen_media;
-    struct dss_filter    filter;
-    char                *tag_filter_json = NULL;
-    bool                 with_tags = tags != NULL && tags->n_tags > 0;
-    int                  mcnt = 0;
-    int                  rc;
-    int                  i;
+    bool with_tags = tags != NULL && tags->n_tags > 0;
+    struct media_info *pmedia_res = NULL;
+    struct media_info *split_media_best;
+    struct media_info *whole_media_best;
+    struct media_info *chosen_media;
+    char *tag_filter_json = NULL;
+    struct dss_filter filter;
+    size_t avail_size;
+    int mcnt = 0;
+    int rc;
+    int i;
 
     ENTRY;
 
@@ -1222,7 +1232,7 @@ static int sched_select_media(struct lrs_sched *sched,
     if (rc)
         return rc;
 
-    rc = dss_media_get(&sched->sched_thread.dss, &filter, &pmedia_res,
+    rc = dss_media_get(lock_handle->dss, &filter, &pmedia_res,
                        &mcnt);
     dss_filter_free(&filter);
     if (rc)
@@ -1254,12 +1264,13 @@ lock_race_retry:
 
         /* already locked */
         if (curr->lock.hostname != NULL)
-            if (check_renew_lock(sched, DSS_MEDIA, curr, &curr->lock))
+            if (check_renew_lock(lock_handle, DSS_MEDIA, curr,
+                                 &curr->lock))
                 /* not locked by myself */
                 continue;
 
         /* already loaded and in use ? */
-        dev = search_in_use_media(sched, curr->rsc.id.name, &sched_ready);
+        dev = search_in_use_media(devices, curr->rsc.id.name, &sched_ready);
         if (dev && !sched_ready) {
             pho_debug("Skipping device '%s', already in use",
                       dev->ld_dss_dev_info->rsc.id.name);
@@ -1298,7 +1309,7 @@ lock_race_retry:
 
     if (!chosen_media->lock.hostname) {
         pho_debug("Acquiring selected media '%s'", chosen_media->rsc.id.name);
-        rc = take_and_update_lock(&sched->sched_thread.dss, DSS_MEDIA,
+        rc = take_and_update_lock(lock_handle->dss, DSS_MEDIA,
                                   chosen_media, &chosen_media->lock);
         if (rc) {
             pho_debug("Failed to lock media '%s', looking for another one",
@@ -1313,7 +1324,7 @@ lock_race_retry:
 
     *p_media = media_info_dup(chosen_media);
     if (*p_media == NULL) {
-        sched_medium_release(sched, chosen_media);
+        medium_unlock(lock_handle->dss, chosen_media);
         LOG_GOTO(free_res, rc = -ENOMEM,
                  "Unable to duplicate chosen media '%s'",
                  chosen_media->rsc.id.name);
@@ -1933,7 +1944,7 @@ int process_release_request(struct lrs_sched *sched,
         struct lrs_dev *dev = NULL;
 
         /* find the corresponding device */
-        dev = search_loaded_media(sched,
+        dev = search_loaded_medium(sched->devices.ldh_devices,
             reqc->params.release.nosync_media[i].medium.name);
         if (!dev) {
             pho_error(-ENODEV, "Unable to find loaded device of the medium '%s'"
@@ -1956,7 +1967,7 @@ int process_release_request(struct lrs_sched *sched,
          * Many modifications are needed:
          * - remove sched_load_dev_state from format/read/write
          * - take into account current cached value for loaded media into
-         *   sched_select_media
+         *   sched_select_medium
          */
         MUTEX_LOCK(&dev->ld_mutex);
         rc2 = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,
@@ -1985,7 +1996,7 @@ int process_release_request(struct lrs_sched *sched,
         int result_rc;
 
         /* find the corresponding device */
-        dev = search_loaded_media(sched,
+        dev = search_loaded_medium(sched->devices.ldh_devices,
             reqc->params.release.tosync_media[i].medium.name);
 
         if (!dev) {
@@ -2007,7 +2018,7 @@ int process_release_request(struct lrs_sched *sched,
              * Many modifications are needed:
              * - remove sched_load_dev_state from format/read/write
              * - take into account current cached value for loaded media into
-             *   sched_select_media
+             *   sched_select_medium
              */
             MUTEX_LOCK(&dev->ld_mutex);
             rc2 = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,
@@ -2160,12 +2171,13 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
 
     /* 2) For the next steps, we need a media to write on.
      * It will be loaded into a free drive.
-     * Note: sched_select_media locks the media.
+     * Note: sched_select_medium locks the media.
      */
     pho_verb("Not enough space on loaded media: selecting another one");
-    rc = sched_select_media(sched, alloc_medium, size, sched->family, &tags,
-                            reqc, handle_error ? wreq->n_media : index_to_alloc,
-                            index_to_alloc);
+    rc = sched_select_medium(&sched->lock_handle, sched->devices.ldh_devices,
+                             alloc_medium, size, sched->family, &tags, reqc,
+                             handle_error ? wreq->n_media : index_to_alloc,
+                             index_to_alloc);
     if (rc)
         return rc;
 
@@ -2174,10 +2186,11 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
      *
      * We already look for loaded media with full available size.
      *
-     * sched_select_media could find a "split" medium which is already
+     * sched_select_medium could find a "split" medium which is already
      * loaded if there is no medium with a enough available size.
      */
-    dev = search_in_use_media(sched, (*alloc_medium)->rsc.id.name,
+    dev = search_in_use_media(sched->devices.ldh_devices,
+                              (*alloc_medium)->rsc.id.name,
                               &sched_ready);
     if (dev) {
         media_info_free(*alloc_medium);
@@ -2200,7 +2213,7 @@ find_write_device:
     if (dev)
         goto select_device;
 
-    sched_medium_release(sched, *alloc_medium);
+    medium_unlock(sched->lock_handle.dss, *alloc_medium);
     if (compatible_drive_exists(sched, *alloc_medium,
                                 *reqc->params.rwalloc.respc->devices,
                                 handle_error ? wreq->n_media : index_to_alloc,
@@ -2380,7 +2393,8 @@ find_read_medium:
 
 find_read_device:
     /* check if the media is already in a drive */
-    dev = search_in_use_media(sched, medium_id.name, &sched_ready);
+    dev = search_in_use_media(sched->devices.ldh_devices, medium_id.name,
+                              &sched_ready);
     if (dev != NULL) {
         media_info_free(*alloc_medium);
         *alloc_medium = NULL;
@@ -2394,7 +2408,7 @@ find_read_device:
 
     /* lock medium */
     if ((*alloc_medium)->lock.hostname)
-        rc = check_renew_lock(sched, DSS_MEDIA, *alloc_medium,
+        rc = check_renew_lock(&sched->lock_handle, DSS_MEDIA, *alloc_medium,
                               &(*alloc_medium)->lock);
     else
         rc = take_and_update_lock(&sched->sched_thread.dss, DSS_MEDIA,
@@ -2409,7 +2423,7 @@ find_read_device:
     if (dev)
         goto select_device;
 
-    sched_medium_release(sched, *alloc_medium);
+    medium_unlock(sched->lock_handle.dss, *alloc_medium);
     if (compatible_drive_exists(sched, *alloc_medium,
                                 *reqc->params.rwalloc.respc->devices,
                                 next_to_select, index_to_alloc))
@@ -2525,7 +2539,8 @@ static int sched_handle_format(struct lrs_sched *sched,
                  "trying to format the medium '%s' while it is already being "
                  "formatted", m.name);
 
-    device = search_in_use_media(sched, m.name, &sched_ready);
+    device = search_in_use_media(sched->devices.ldh_devices, m.name,
+                                 &sched_ready);
     if (device) {
         if (!sched_ready)
             LOG_GOTO(remove_format_err_out, rc = -EINVAL,

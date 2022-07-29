@@ -185,7 +185,7 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
                           "  {\"DSS::DEV::serial\": \"%s\"},"
                           "  {\"DSS::DEV::adm_status\": \"%s\"}"
                           "]}",
-                          sched->lock_hostname,
+                          sched->lock_handle.lock_hostname,
                           rsc_family2str(sched->family),
                           name,
                           rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED));
@@ -320,7 +320,7 @@ int lrs_dev_hdl_load(struct lrs_sched *sched,
                           "  {\"DSS::DEV::adm_status\": \"%s\"},"
                           "  {\"DSS::DEV::family\": \"%s\"}"
                           "]}",
-                          sched->lock_hostname,
+                          sched->lock_handle.lock_hostname,
                           rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
                           rsc_family2str(sched->family));
     if (rc)

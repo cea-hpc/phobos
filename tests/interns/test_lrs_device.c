@@ -63,7 +63,7 @@ static int setup(void **data)
 
     scheduler.sched_thread.dss = *dss;
     scheduler.family = PHO_RSC_DIR;
-    rc = fill_host_owner(&scheduler.lock_hostname, &scheduler.lock_owner);
+    rc = lock_handle_init(&scheduler.lock_handle, dss);
 
     return rc;
 }
