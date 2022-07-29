@@ -1510,7 +1510,7 @@ typedef int (*device_select_func_t)(size_t required_size,
  * @param pmedia         Media that should be used by the drive to check
  *                       compatibility (ignored if NULL)
  */
-static struct lrs_dev *dev_picker(struct lrs_sched *sched,
+static struct lrs_dev *dev_picker(GPtrArray *devices,
                                   enum dev_op_status op_st,
                                   device_select_func_t select_func,
                                   size_t required_size,
@@ -1525,8 +1525,8 @@ static struct lrs_dev *dev_picker(struct lrs_sched *sched,
 
     ENTRY;
 
-    for (i = 0; i < sched->devices.ldh_devices->len; i++) {
-        struct lrs_dev *itr = lrs_dev_hdl_get(&sched->devices, i);
+    for (i = 0; i < devices->len; i++) {
+        struct lrs_dev *itr = g_ptr_array_index(devices, i);
         struct lrs_dev *prev = selected;
 
         MUTEX_LOCK(&itr->ld_mutex);
@@ -2147,14 +2147,14 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
     tags.tags = wreq->media[index_to_alloc]->tags;
     size = wreq->media[index_to_alloc]->size;
     /* 1a) is there a mounted filesystem with enough room? */
-    dev = dev_picker(sched, PHO_DEV_OP_ST_MOUNTED, dev_select_policy, size,
-                     &tags, NULL, true);
+    dev = dev_picker(sched->devices.ldh_devices, PHO_DEV_OP_ST_MOUNTED,
+                     dev_select_policy, size, &tags, NULL, true);
     if (dev)
         goto select_device;
 
     /* 1b) is there a loaded media with enough room? */
-    dev = dev_picker(sched, PHO_DEV_OP_ST_LOADED, dev_select_policy, size,
-                     &tags, NULL, true);
+    dev = dev_picker(sched->devices.ldh_devices, PHO_DEV_OP_ST_LOADED,
+                     dev_select_policy, size, &tags, NULL, true);
     if (dev)
         goto select_device;
 
@@ -2194,8 +2194,9 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
 
 find_write_device:
     /* 3) choose a suitable drive */
-    dev = dev_picker(sched, PHO_DEV_OP_ST_UNSPEC, select_empty_loaded_mount,
-                     0, &NO_TAGS, *alloc_medium, false);
+    dev = dev_picker(sched->devices.ldh_devices, PHO_DEV_OP_ST_UNSPEC,
+                     select_empty_loaded_mount, 0, &NO_TAGS, *alloc_medium,
+                     false);
     if (dev)
         goto select_device;
 
@@ -2402,8 +2403,9 @@ find_read_device:
     if (rc)
         goto free_skip_medium;
 
-    dev = dev_picker(sched, PHO_DEV_OP_ST_UNSPEC, select_empty_loaded_mount,
-                     0, &NO_TAGS, *alloc_medium, false);
+    dev = dev_picker(sched->devices.ldh_devices, PHO_DEV_OP_ST_UNSPEC,
+                     select_empty_loaded_mount, 0, &NO_TAGS, *alloc_medium,
+                     false);
     if (dev)
         goto select_device;
 
@@ -2553,7 +2555,7 @@ static int sched_handle_format(struct lrs_sched *sched,
                          "Unable to lock the media '%s' to format it", m.name);
         }
 
-        device = dev_picker(sched, PHO_DEV_OP_ST_UNSPEC,
+        device = dev_picker(sched->devices.ldh_devices, PHO_DEV_OP_ST_UNSPEC,
                             select_empty_loaded_mount, 0, &NO_TAGS,
                             reqc->params.format.medium_to_format,
                             false);
