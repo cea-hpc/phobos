@@ -1095,7 +1095,7 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
                           json_t **lib_data)
 {
     const char *lib_type_name = lib_type2str(lib_type);
-    struct lib_adapter_module *lib;
+    struct lib_handle lib_hdl;
     int rc2;
     int rc;
 
@@ -1104,23 +1104,23 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
     if (!lib_type_name)
         LOG_RETURN(-EINVAL, "Invalid lib type '%d'", lib_type);
 
-    rc = get_lib_adapter(lib_type, &lib);
+    rc = get_lib_adapter(lib_type, &lib_hdl.ld_module);
     if (rc)
         LOG_RETURN(rc, "Failed to get library adapter for type '%s'",
                    lib_type_name);
 
-    rc = ldm_lib_open(lib, lib_dev);
+    rc = ldm_lib_open(&lib_hdl, lib_dev);
     if (rc)
         LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
                    lib_type_name, lib_dev);
 
-    rc = ldm_lib_scan(lib, lib_data);
+    rc = ldm_lib_scan(&lib_hdl, lib_data);
     if (rc)
         LOG_GOTO(out, rc, "Failed to scan library of type '%s' for path '%s'",
                  lib_type_name, lib_dev);
 
 out:
-    rc2 = ldm_lib_close(lib);
+    rc2 = ldm_lib_close(&lib_hdl);
     if (rc2)
         pho_error(rc2, "Failed to close library of type '%s'", lib_type_name);
 

@@ -174,13 +174,6 @@ void ldm_dev_state_fini(struct ldm_dev_state *lds);
  */
 
 /**
- * Opaque library handler.
- */
-struct lib_handle {
-    void *lh_lib;
-};
-
-/**
  * Type of location in a library.
  */
 enum med_location {
@@ -213,6 +206,8 @@ struct lib_drv_info {
     struct pho_id        ldi_medium_id; /**< medium ID, if drive is full */
 };
 
+struct lib_handle;
+
 /**
  * A library adapter is a vector of functions to control a tape library.
  * They should be invoked via their corresponding wrappers. Refer to
@@ -236,10 +231,17 @@ struct pho_lib_adapter_module_ops {
 };
 
 struct lib_adapter_module {
-    struct lib_handle lib_hdl;     /**< Handle to the lib adapter plugin */
     struct module_desc desc;       /**< Description of this lib adapter */
     const struct pho_lib_adapter_module_ops *ops;
                                    /**< Operations of this lib adapter */
+};
+
+/**
+ * Library handle.
+ */
+struct lib_handle {
+    void *lh_lib; /**< Opaque library handler */
+    struct lib_adapter_module *ld_module; /**< Library adapter */
 };
 
 /**
@@ -256,103 +258,105 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter_module **lib);
  * Library access may rely on a caching of item addresses.
  * A library should be closed and reopened to refresh this cache
  * in case a change or inconsistency is detected.
- * @param[in,out] lib library adapter.
+ * @param[in,out] lib_hdl Library handle.
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_lib_open(struct lib_adapter_module *lib, const char *dev)
+static inline int ldm_lib_open(struct lib_handle *lib_hdl, const char *dev)
 {
-    assert(lib != NULL);
-    assert(lib->ops != NULL);
-    if (lib->ops->lib_open == NULL)
+    assert(lib_hdl->ld_module != NULL);
+    assert(lib_hdl->ld_module->ops != NULL);
+    if (lib_hdl->ld_module->ops->lib_open == NULL)
         return 0;
-    return lib->ops->lib_open(&lib->lib_hdl, dev);
+    return lib_hdl->ld_module->ops->lib_open(lib_hdl, dev);
 }
 
 /**
  * Close a library handler.
  * Close access to the library and clean address cache.
- * @param[in,out] lib   Opened library adapter.
+ * @param[in,out] lib_hdl      Lib handle holding an opened library adapter.
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_lib_close(struct lib_adapter_module *lib)
+static inline int ldm_lib_close(struct lib_handle *lib_hdl)
 {
-    assert(lib != NULL);
-    assert(lib->ops != NULL);
-    if (lib->ops->lib_close == NULL)
+    assert(lib_hdl->ld_module != NULL);
+    assert(lib_hdl->ld_module->ops != NULL);
+    if (lib_hdl->ld_module->ops->lib_close == NULL)
         return 0;
-    return lib->ops->lib_close(&lib->lib_hdl);
+    return lib_hdl->ld_module->ops->lib_close(lib_hdl);
 }
 
 /**
  * Get the location of a device in library from its serial number.
- * @param[in,out] lib          Opened library handler.
+ * @param[in,out] lib_hdl      Lib handle holding an opened library adapter.
  * @param[in]     drive_serial Serial number of the drive to lookup.
  * @param[out]    drv_info     Information about the drive.
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_lib_drive_lookup(struct lib_adapter_module *lib,
+static inline int ldm_lib_drive_lookup(struct lib_handle *lib_hdl,
                                        const char *drive_serial,
                                        struct lib_drv_info *drv_info)
 {
-    assert(lib != NULL);
-    assert(lib->ops != NULL);
-    assert(lib->ops->lib_drive_lookup != NULL);
-    return lib->ops->lib_drive_lookup(&lib->lib_hdl, drive_serial, drv_info);
+    assert(lib_hdl->ld_module != NULL);
+    assert(lib_hdl->ld_module->ops != NULL);
+    assert(lib_hdl->ld_module->ops->lib_drive_lookup != NULL);
+    return lib_hdl->ld_module->ops->lib_drive_lookup(lib_hdl, drive_serial,
+                                                     drv_info);
 }
 
 /**
  * Get the location of a media in library from its label.
- * @param[in,out] Lib           Library adapter.
+ * @param[in,out] Lib_hdl       Lib handle holding an opened library adapter.
  * @param[in]     media_label   Label of the media.
  * @param[out]    media_addr    Location of the media in library.
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_lib_media_lookup(struct lib_adapter_module *lib,
+static inline int ldm_lib_media_lookup(struct lib_handle *lib_hdl,
                                        const char *media_label,
                                        struct lib_item_addr *med_addr)
 {
-    assert(lib != NULL);
-    assert(lib->ops != NULL);
-    assert(lib->ops->lib_media_lookup != NULL);
-    return lib->ops->lib_media_lookup(&lib->lib_hdl, media_label, med_addr);
+    assert(lib_hdl->ld_module != NULL);
+    assert(lib_hdl->ld_module->ops != NULL);
+    assert(lib_hdl->ld_module->ops->lib_media_lookup != NULL);
+    return lib_hdl->ld_module->ops->lib_media_lookup(lib_hdl, media_label,
+                                                     med_addr);
 }
 
 /**
  * Move a media in library from a source location to a target location.
- * @param[in,out] lib       Opened library adapter.
+ * @param[in,out] lib_hdl       Lib handle holding an opened library adapter.
  * @param[in]     src_addr  Source address of the move.
  * @param[in]     tgt_addr  Target address of the move.
  */
-static inline int ldm_lib_media_move(struct lib_adapter_module *lib,
+static inline int ldm_lib_media_move(struct lib_handle *lib_hdl,
                                      const struct lib_item_addr *src_addr,
                                      const struct lib_item_addr *tgt_addr)
 {
-    assert(lib != NULL);
-    assert(lib->ops != NULL);
-    if (lib->ops->lib_media_move == NULL)
+    assert(lib_hdl->ld_module != NULL);
+    assert(lib_hdl->ld_module->ops != NULL);
+    if (lib_hdl->ld_module->ops->lib_media_move == NULL)
         return 0;
-    return lib->ops->lib_media_move(&lib->lib_hdl, src_addr, tgt_addr);
+    return lib_hdl->ld_module->ops->lib_media_move(lib_hdl, src_addr, tgt_addr);
 }
 
 /**
  * Scan a library and generate a json array with unstructured information.
  * Output information may vary, depending on the library.
- * @param[in,out] lib       Opened library adapter.
+ * @param[in,out] lib_hdl       Lib handle holding an opened library adapter.
  * @param[in,out] lib_data  json object allocated by ldm_lib_scan, json_decref
  *                          must be called later on to deallocate it properly
  */
-static inline int ldm_lib_scan(struct lib_adapter_module *lib,
+static inline int ldm_lib_scan(struct lib_handle *lib_hdl,
                                json_t **lib_data)
 {
-    assert(lib != NULL);
-    assert(lib->ops != NULL);
-    if (lib->ops->lib_scan == NULL)
+    assert(lib_hdl->ld_module != NULL);
+    assert(lib_hdl->ld_module->ops != NULL);
+    if (lib_hdl->ld_module->ops->lib_scan == NULL)
         return 0;
-    return lib->ops->lib_scan(&lib->lib_hdl, lib_data);
+    return lib_hdl->ld_module->ops->lib_scan(lib_hdl, lib_data);
 }
 
 /** @}*/

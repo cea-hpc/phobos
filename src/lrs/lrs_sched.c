@@ -442,7 +442,7 @@ out_nores:
  * @param[out] dev  lrs_dev structure filled with all needed information.
  */
 static int sched_fill_dev_info(struct lrs_sched *sched,
-                               struct lib_adapter_module *lib,
+                               struct lib_handle *lib_hdl,
                                struct lrs_dev *dev)
 {
     struct dev_adapter_module *deva;
@@ -488,7 +488,8 @@ static int sched_fill_dev_info(struct lrs_sched *sched,
     /* Query the library about the drive location and whether it contains
      * a media.
      */
-    rc = ldm_lib_drive_lookup(lib, devi->rsc.id.name, &dev->ld_lib_dev_info);
+    rc = ldm_lib_drive_lookup(lib_hdl, devi->rsc.id.name,
+                              &dev->ld_lib_dev_info);
     if (rc) {
         pho_debug("Failed to query the library about device '%s'",
                   devi->rsc.id.name);
@@ -574,8 +575,8 @@ static int sched_fill_dev_info(struct lrs_sched *sched,
  */
 static int sched_load_dev_state(struct lrs_sched *sched)
 {
-    struct lib_adapter_module *lib;
     bool clean_devices = false;
+    struct lib_handle lib_hdl;
     int rc;
     int i;
 
@@ -587,7 +588,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
     }
 
     /* get a handle to the library to query it */
-    rc = wrap_lib_open(sched->family, &lib);
+    rc = wrap_lib_open(sched->family, &lib_hdl);
     if (rc)
         LOG_RETURN(rc, "Error while loading devices when opening library");
 
@@ -597,7 +598,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
         dev = lrs_dev_hdl_get(&sched->devices, i);
 
         MUTEX_LOCK(&dev->ld_mutex);
-        rc = sched_fill_dev_info(sched, lib, dev);
+        rc = sched_fill_dev_info(sched, &lib_hdl, dev);
         if (rc) {
             pho_error(rc,
                       "Fail to init device '%s', stopping corresponding device "
@@ -610,7 +611,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
     }
 
     /* close handle to the library */
-    rc = ldm_lib_close(lib);
+    rc = ldm_lib_close(&lib_hdl);
     if (rc)
         LOG_RETURN(rc,
                    "Error while closing the library handle after loading "
@@ -1767,8 +1768,8 @@ check_read_medium_permission_and_status(const struct media_info *medium)
 static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
                             const char *name)
 {
-    struct lib_adapter_module *lib;
     struct lrs_dev *device = NULL;
+    struct lib_handle lib_hdl;
     int rc = 0;
 
     rc = lrs_dev_hdl_add(sched, &sched->devices, name);
@@ -1779,14 +1780,14 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
                              sched->devices.ldh_devices->len - 1);
 
     /* get a handle to the library to query it */
-    rc = wrap_lib_open(family, &lib);
+    rc = wrap_lib_open(family, &lib_hdl);
     if (rc)
         goto dev_del;
 
     MUTEX_LOCK(&device->ld_mutex);
-    rc = sched_fill_dev_info(sched, lib, device);
+    rc = sched_fill_dev_info(sched, &lib_hdl, device);
     MUTEX_UNLOCK(&device->ld_mutex);
-    ldm_lib_close(lib);
+    ldm_lib_close(&lib_hdl);
     if (rc)
         goto dev_del;
 

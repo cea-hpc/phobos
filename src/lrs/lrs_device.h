@@ -288,10 +288,10 @@ struct lrs_dev *lrs_dev_hdl_get(struct lrs_dev_hdl *handle, int index);
  * Wrap library open operations
  *
  * @param[in]   dev_type    Device type
- * @param[out]  lib         Library handler.
+ * @param[out]  lib_hdl     Library handle
  *
  * @return          0 on success, -1 * posix error code on failure.
  */
-int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter_module **lib);
+int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl);
 
 #endif

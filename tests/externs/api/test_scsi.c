@@ -196,29 +196,30 @@ static int single_element_status(int fd, uint16_t addr, bool expect_full)
 /** tests of the lib adapter API */
 static void test_lib_adapter(void)
 {
-    struct lib_adapter_module *lib = NULL;
     struct lib_item_addr med_addr;
     struct lib_drv_info drv_info;
+    struct lib_handle lib_hdl;
 
-    ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib));
-    ASSERT_RC(ldm_lib_open(lib, "/dev/changer"));
+    ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib_hdl.ld_module));
+    ASSERT_RC(ldm_lib_open(&lib_hdl, "/dev/changer"));
 
     if (one_serial) {
-        ASSERT_RC(ldm_lib_drive_lookup(lib, one_serial, &drv_info));
+        ASSERT_RC(ldm_lib_drive_lookup(&lib_hdl, one_serial, &drv_info));
         /* unload the drive to any slot if it's full */
         if (drv_info.ldi_full)
-            ASSERT_RC(ldm_lib_media_move(lib, &drv_info.ldi_addr, NULL));
+            ASSERT_RC(ldm_lib_media_move(&lib_hdl, &drv_info.ldi_addr,
+                      NULL));
     }
 
     if (one_label)
-        ASSERT_RC(ldm_lib_media_lookup(lib, one_label, &med_addr));
+        ASSERT_RC(ldm_lib_media_lookup(&lib_hdl, one_label, &med_addr));
 
-    ldm_lib_close(lib);
+    ldm_lib_close(&lib_hdl);
 }
 
 static void test_lib_scan(bool use_admin_function)
 {
-    struct lib_adapter_module *lib = NULL;
+    struct lib_handle lib_hdl;
     json_t *data_entry;
     json_t *lib_data;
     char *json_str;
@@ -228,9 +229,9 @@ static void test_lib_scan(bool use_admin_function)
         ASSERT_RC(phobos_admin_lib_scan(PHO_LIB_SCSI, "/dev/changer",
                                         &lib_data));
     } else {
-        ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib));
-        ASSERT_RC(ldm_lib_open(lib, "/dev/changer"));
-        ASSERT_RC(ldm_lib_scan(lib, &lib_data));
+        ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib_hdl.ld_module));
+        ASSERT_RC(ldm_lib_open(&lib_hdl, "/dev/changer"));
+        ASSERT_RC(ldm_lib_scan(&lib_hdl, &lib_data));
     }
 
     if (!json_array_size(lib_data)) {
@@ -251,7 +252,7 @@ static void test_lib_scan(bool use_admin_function)
     free(json_str);
     json_decref(lib_data);
     if (!use_admin_function)
-        ASSERT_RC(ldm_lib_close(lib));
+        ASSERT_RC(ldm_lib_close(&lib_hdl));
 }
 
 static int val;

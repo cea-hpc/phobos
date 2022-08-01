@@ -930,7 +930,7 @@ static int dev_unload(struct lrs_dev *dev)
 {
     /* let the library select the target location */
     struct lib_item_addr free_slot = { .lia_type = MED_LOC_UNKNOWN };
-    struct lib_adapter_module *lib;
+    struct lib_handle lib_hdl;
     int rc2;
     int rc;
 
@@ -939,14 +939,15 @@ static int dev_unload(struct lrs_dev *dev)
     pho_verb("Unloading '%s' from '%s'", dev->ld_dss_media_info->rsc.id.name,
              dev->ld_dev_path);
 
-    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib);
+    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl);
     if (rc)
         LOG_GOTO(out, rc,
                  "Unable to open lib '%s' to unload medium '%s' from device "
                  "'%s'", rsc_family_names[dev->ld_dss_dev_info->rsc.id.family],
                  dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
-    rc = ldm_lib_media_move(lib, &dev->ld_lib_dev_info.ldi_addr, &free_slot);
+    rc = ldm_lib_media_move(&lib_hdl, &dev->ld_lib_dev_info.ldi_addr,
+                            &free_slot);
     if (rc != 0)
         /* Set operational failure state on this drive. It is incomplete since
          * the error can originate from a defective tape too...
@@ -959,7 +960,7 @@ static int dev_unload(struct lrs_dev *dev)
     dev->ld_op_status = PHO_DEV_OP_ST_EMPTY;
 
 out_close:
-    rc2 = ldm_lib_close(lib);
+    rc2 = ldm_lib_close(&lib_hdl);
     if (rc2)
         rc = rc ? : rc2;
 
@@ -1067,7 +1068,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
                     bool *failure_on_dev, bool *failure_on_medium)
 {
     struct lib_item_addr medium_addr;
-    struct lib_adapter_module *lib;
+    struct lib_handle lib_hdl;
     int rc2;
     int rc;
 
@@ -1078,7 +1079,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
     pho_verb("Loading '%s' into '%s'", medium->rsc.id.name, dev->ld_dev_path);
 
     /* get handle to the library depending on device type */
-    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib);
+    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl);
     if (rc) {
         *failure_on_dev = true;
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
@@ -1097,14 +1098,15 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
     }
 
     /* lookup the requested medium */
-    rc = ldm_lib_media_lookup(lib, medium->rsc.id.name, &medium_addr);
+    rc = ldm_lib_media_lookup(&lib_hdl, medium->rsc.id.name, &medium_addr);
     if (rc) {
         *failure_on_medium = true;
         fail_release_free_medium(&dev->ld_device_thread.dss, medium);
         LOG_GOTO(out_close, rc, "Media lookup failed");
     }
 
-    rc = ldm_lib_media_move(lib, &medium_addr, &dev->ld_lib_dev_info.ldi_addr);
+    rc = ldm_lib_media_move(&lib_hdl, &medium_addr,
+                            &dev->ld_lib_dev_info.ldi_addr);
     /* A movement from drive to drive can be prohibited by some libraries.
      * If a failure is encountered in such a situation, it probably means that
      * the state of the library has changed between the moment it has been
@@ -1139,7 +1141,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
     rc = 0;
 
 out_close:
-    rc2 = ldm_lib_close(lib);
+    rc2 = ldm_lib_close(&lib_hdl);
     if (rc2) {
         *failure_on_dev = true;
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
@@ -2131,17 +2133,17 @@ static int dev_thread_init(struct lrs_dev *device)
     return 0;
 }
 
-int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter_module **lib)
+int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl)
 {
     const char *lib_dev;
     int         rc;
 
     /* non-tape cases: dummy lib adapter (no open required) */
     if (dev_type != PHO_RSC_TAPE)
-        return get_lib_adapter(PHO_LIB_DUMMY, lib);
+        return get_lib_adapter(PHO_LIB_DUMMY, &lib_hdl->ld_module);
 
     /* tape case */
-    rc = get_lib_adapter(PHO_LIB_SCSI, lib);
+    rc = get_lib_adapter(PHO_LIB_SCSI, &lib_hdl->ld_module);
     if (rc)
         LOG_RETURN(rc, "Failed to get library adapter");
 
@@ -2152,5 +2154,5 @@ int wrap_lib_open(enum rsc_family dev_type, struct lib_adapter_module **lib)
     if (!lib_dev)
         LOG_RETURN(rc, "Failed to get default library device from config");
 
-    return ldm_lib_open(*lib, lib_dev);
+    return ldm_lib_open(lib_hdl, lib_dev);
 }
