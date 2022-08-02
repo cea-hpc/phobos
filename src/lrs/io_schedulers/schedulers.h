@@ -29,7 +29,9 @@
 
 extern struct pho_io_scheduler_ops IO_SCHED_FIFO_OPS;
 
-/* Device dispatcher algorithms */
+/********************************
+ * Device dispatcher algorithms *
+ ********************************/
 
 /**
  * Other possible algorithms:
@@ -45,5 +47,22 @@ extern struct pho_io_scheduler_ops IO_SCHED_FIFO_OPS;
  */
 int no_dispatch(struct pho_io_sched *io_sched,
                 GPtrArray *devices);
+
+/*********************************
+ * Scheduler priority algorithms *
+ *********************************/
+
+/*
+ * Other possible algorithm:
+ * - return read Pr% of the time, write Pw% of the time and format Pf% of
+ *   the time.
+ */
+
+/* Return the oldest request out of the 3.
+ */
+struct req_container *fifo_next_request(struct pho_io_sched *io_sched,
+                                        struct req_container *read,
+                                        struct req_container *write,
+                                        struct req_container *format);
 
 #endif

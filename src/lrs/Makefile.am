@@ -11,7 +11,8 @@ EXTRA_DIST=$(unit_files)
 
 IO_SCHEDULERS=io_schedulers/fifo.c \
               io_schedulers/device_dispatch_algorithms.c \
-              io_schedulers/schedulers.h
+              io_schedulers/schedulers.h \
+              io_schedulers/scheduler_priority_algorithms.c
 
 phobosd_SOURCES=lrs.c \
                 lrs_cfg.h lrs_cfg.c \
