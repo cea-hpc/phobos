@@ -279,8 +279,11 @@ static void notify_device_request_is_canceled(struct resp_container *respc)
 {
     int i;
 
-    for (i = 0; i < respc->devices_len; i++)
+    for (i = 0; i < respc->devices_len; i++) {
+        MUTEX_LOCK(&respc->devices[i]->ld_mutex);
         respc->devices[i]->ld_ongoing_io = false;
+        MUTEX_UNLOCK(&respc->devices[i]->ld_mutex);
+    }
 }
 
 static int request_kind_from_response(pho_resp_t *resp)

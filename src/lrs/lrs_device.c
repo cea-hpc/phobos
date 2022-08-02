@@ -660,7 +660,7 @@ static void update_queue_oldest_tosync(struct lrs_dev *dev)
 }
 
 /** remove from tosync_array when error occurs on other device */
-static void dev_check_sync_cancel(struct lrs_dev *dev)
+static void remove_canceled_sync(struct lrs_dev *dev)
 {
     GPtrArray *tosync_array = dev->ld_sync_params.tosync_array;
     bool need_oldest_update = false;
@@ -1323,7 +1323,6 @@ out_response:
 out:
     MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_sub_request = NULL;
-    dev->ld_ongoing_io = false;
     format_medium_remove(dev->ld_ongoing_format, medium_to_format);
     sub_request_free(subreq);
     MUTEX_UNLOCK(&dev->ld_mutex);
@@ -1349,32 +1348,40 @@ bool locked_cancel_rwalloc_on_error(struct sub_request *sub_request,
 }
 
 /**
- * Cancel this rwalloc sub request if there is already an error
+ * Cancel this sub request if there is already an error
  *
  * If a previous error is detected with a not null rc in reqc, the medium of
  * this sub_request is freed and set to NULL and its status is set as
  * SUB_REQUEST_CANCEL.
- * If the request is ended, reqc is freed and set to NULL.
+ * If the request is ended, reqc is freed
+ * If the request is canceled sub_request->reqc is set to NULL.
  *
  * @param[in]   sub_request     the rwalloc sub_request to check
  *
  * @return  True if there was an error and the medium is cancelled, false
  *          otherwise.
  */
-static bool cancel_rwalloc_on_error(struct sub_request *sub_request)
+static bool cancel_subrequest_on_error(struct sub_request *sub_request)
 {
+    pho_req_t *req = sub_request->reqc->req;
+    bool canceled = false;
     bool ended = false;
-    bool rc = false;
+
+    if (pho_request_is_format(req))
+        return false;
 
     MUTEX_LOCK(&sub_request->reqc->mutex);
-    rc = locked_cancel_rwalloc_on_error(sub_request, &ended);
+    canceled = locked_cancel_rwalloc_on_error(sub_request, &ended);
     MUTEX_UNLOCK(&sub_request->reqc->mutex);
-    if (ended) {
-        sched_req_free(sub_request->reqc);
+
+    if (canceled) {
+        if (ended)
+            sched_req_free(sub_request->reqc);
+
         sub_request->reqc = NULL;
     }
 
-    return rc;
+    return canceled;
 }
 
 /**
@@ -1684,7 +1691,7 @@ static int dev_handle_read_write(struct lrs_dev *dev)
 
     ENTRY;
 
-    if (cancel_rwalloc_on_error(sub_request)) {
+    if (cancel_subrequest_on_error(sub_request)) {
         io_ended = true;
         goto out_free;
     }
@@ -1811,15 +1818,17 @@ alloc_result:
 out_free:
     if (!locked)
         MUTEX_LOCK(&dev->ld_mutex);
+
+    if (!io_ended && !sub_request_requeued)
+        dev->ld_ongoing_io = true;
+
     dev->ld_sub_request = NULL;
     if (!sub_request_requeued) {
         sub_request->reqc = NULL;
         sub_request_free(sub_request);
-     }
+    }
 
     MUTEX_UNLOCK(&dev->ld_mutex);
-    if (io_ended)
-        dev->ld_ongoing_io = false;
 
     if (!failure_on_device)
         return 0;
@@ -2068,42 +2077,52 @@ static void *lrs_dev_thread(void *tdata)
     while (!thread_is_stopped(thread)) {
         int rc = 0;
 
-        dev_check_sync_cancel(device);
+        if (device->ld_sub_request &&
+            cancel_subrequest_on_error(device->ld_sub_request)) {
+            MUTEX_LOCK(&device->ld_mutex);
+            sub_request_free(device->ld_sub_request);
+            device->ld_sub_request = NULL;
+            MUTEX_UNLOCK(&device->ld_mutex);
+        }
 
+        remove_canceled_sync(device);
         if (!device->ld_needs_sync)
             check_needs_sync(device->ld_handle, device);
 
-        if (device->ld_needs_sync && !device->ld_ongoing_io) {
-            rc = dev_sync(device);
-            if (rc)
-                LOG_GOTO(end_thread, thread->status = rc,
-                         "device thread '%s': fatal error syncing device",
-                         device->ld_dss_dev_info->rsc.id.name);
-        }
-
         if (thread_is_stopping(thread) && !device->ld_ongoing_io &&
+            !device->ld_sub_request &&
             device->ld_sync_params.tosync_array->len == 0) {
             pho_debug("Switching to stopped");
             thread->state = THREAD_STOPPED;
         }
 
-        if (device->ld_ongoing_io && device->ld_sub_request) {
-            pho_req_t *req = device->ld_sub_request->reqc->req;
+        if (!device->ld_ongoing_io) {
+            if (device->ld_needs_sync) {
+                rc = dev_sync(device);
+                if (rc)
+                    LOG_GOTO(end_thread, thread->status = rc,
+                             "device thread '%s': fatal error syncing device",
+                             device->ld_dss_dev_info->rsc.id.name);
+            }
 
-            if (pho_request_is_format(req))
-                rc = dev_handle_format(device);
-            else if (pho_request_is_read(req) || pho_request_is_write(req))
-                rc = dev_handle_read_write(device);
-            else
-                pho_error(rc = -EINVAL,
-                          "device thread '%s': ld_sub_request wrong type",
-                          device->ld_dss_dev_info->rsc.id.name);
+            if (device->ld_sub_request) {
+                pho_req_t *req = device->ld_sub_request->reqc->req;
 
-            if (rc)
-                LOG_GOTO(end_thread, thread->status = rc,
-                         "device thread '%s': fatal error handling "
-                         "ld_sub_request",
-                         device->ld_dss_dev_info->rsc.id.name);
+                if (pho_request_is_format(req))
+                    rc = dev_handle_format(device);
+                else if (pho_request_is_read(req) || pho_request_is_write(req))
+                    rc = dev_handle_read_write(device);
+                else
+                    pho_error(rc = -EINVAL,
+                              "device thread '%s': ld_sub_request wrong type",
+                              device->ld_dss_dev_info->rsc.id.name);
+
+                if (rc)
+                    LOG_GOTO(end_thread, thread->status = rc,
+                             "device thread '%s': fatal error handling "
+                             "ld_sub_request",
+                             device->ld_dss_dev_info->rsc.id.name);
+            }
         }
 
         if (!thread_is_stopped(thread)) {

@@ -853,9 +853,15 @@ bool sched_has_running_devices(struct lrs_sched *sched)
         struct lrs_dev *dev;
 
         dev = lrs_dev_hdl_get(&sched->devices, i);
-        if (dev->ld_ongoing_io || dev->ld_needs_sync ||
-            dev->ld_sync_params.tosync_array->len)
+        MUTEX_LOCK(&dev->ld_mutex);
+        if (dev->ld_ongoing_io || dev->ld_needs_sync || dev->ld_sub_request ||
+            dev->ld_sync_params.tosync_array->len ||
+            dev->ld_ongoing_scheduled) {
+            MUTEX_UNLOCK(&dev->ld_mutex);
             return true;
+        }
+
+        MUTEX_UNLOCK(&dev->ld_mutex);
     }
 
     return false;
@@ -1468,7 +1474,7 @@ typedef int (*device_select_func_t)(size_t required_size,
 
 /**
  * Select a device according to a given status and policy function.
- * Returns a device by setting its ld_ongoing_io flag to true.
+ * Returns a device by setting its ld_ongoing_scheduled flag to true.
  *
  * @param dss     DSS handle.
  * @param op_st   Filter devices by the given operational status.
@@ -1498,8 +1504,11 @@ static struct lrs_dev *dev_picker(struct lrs_sched *sched,
         struct lrs_dev *itr = lrs_dev_hdl_get(&sched->devices, i);
         struct lrs_dev *prev = selected;
 
-        if (itr->ld_ongoing_io || itr->ld_needs_sync) {
+        MUTEX_LOCK(&itr->ld_mutex);
+        if (itr->ld_ongoing_io || itr->ld_needs_sync || itr->ld_sub_request ||
+            itr->ld_ongoing_scheduled) {
             pho_debug("Skipping busy device '%s'", itr->ld_dev_path);
+            MUTEX_UNLOCK(&itr->ld_mutex);
             continue;
         }
 
@@ -1507,14 +1516,17 @@ static struct lrs_dev *dev_picker(struct lrs_sched *sched,
             (op_st != PHO_DEV_OP_ST_UNSPEC && itr->ld_op_status != op_st)) {
             pho_debug("Skipping device '%s' with incompatible status %s",
                       itr->ld_dev_path, op_status2str(itr->ld_op_status));
+            MUTEX_UNLOCK(&itr->ld_mutex);
             continue;
         }
 
         if (!thread_is_running(&itr->ld_device_thread)) {
             pho_debug("Skipping ending or stopped device '%s'",
                       itr->ld_dev_path);
+            MUTEX_UNLOCK(&itr->ld_mutex);
             continue;
         }
+        MUTEX_UNLOCK(&itr->ld_mutex);
 
         /*
          * The intent is to write: exclude media that are administratively
@@ -1578,7 +1590,7 @@ static struct lrs_dev *dev_picker(struct lrs_sched *sched,
         pho_debug("Picked dev number %d (%s)",
                   selected_i,
                   selected->ld_dev_path);
-        selected->ld_ongoing_io = true;
+        selected->ld_ongoing_scheduled = true;
     } else {
         pho_debug("Could not find a suitable %s device", op_status2str(op_st));
     }
@@ -1895,6 +1907,10 @@ static int update_phys_spc_free(struct dss_handle *dss,
     return 0;
 }
 
+/*
+ * TODO: move this function to lrs.c because this code is executed by the
+ * main communication thread.
+ */
 int process_release_request(struct lrs_sched *sched,
                             struct dss_handle *comm_dss,
                             struct req_container *reqc)
@@ -1936,6 +1952,8 @@ int process_release_request(struct lrs_sched *sched,
         MUTEX_LOCK(&dev->ld_mutex);
         rc2 = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,
             reqc->params.release.nosync_media[i].written_size);
+        /* Acknowledgement of the request */
+        dev->ld_ongoing_io = false;
         MUTEX_UNLOCK(&dev->ld_mutex);
         if (rc2) {
             pho_error(rc2, "Unable to update phys_spc_free");
@@ -1945,9 +1963,6 @@ int process_release_request(struct lrs_sched *sched,
              */
             rc = rc ? : rc2;
         }
-
-        /* Acknowledgement of the request */
-        dev->ld_ongoing_io = false;
     }
 
     if (!reqc->params.release.n_tosync_media) {
@@ -1988,6 +2003,8 @@ int process_release_request(struct lrs_sched *sched,
             MUTEX_LOCK(&dev->ld_mutex);
             rc2 = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,
                 reqc->params.release.tosync_media[i].written_size);
+            /* Acknowledgement of the request */
+            dev->ld_ongoing_io = false;
             MUTEX_UNLOCK(&dev->ld_mutex);
             if (rc2) {
                 pho_error(rc2, "Unable to update phys_spc_free");
@@ -1997,9 +2014,6 @@ int process_release_request(struct lrs_sched *sched,
                  */
                 rc = rc ? : rc2;
             }
-
-            /* Acknowledgement of the request */
-            dev->ld_ongoing_io = false;
 
             /* Queue sync request */
             result_rc = push_new_sync_to_device(dev, reqc, i);
@@ -2071,6 +2085,7 @@ static int push_sub_request_to_device(struct req_container *reqc)
         int rc;
 
         devices[i]->ld_sub_request = sub_requests[i];
+        devices[i]->ld_ongoing_scheduled = false;
 
         rc = thread_signal(&devices[i]->ld_device_thread);
         if (rc)
@@ -2102,7 +2117,8 @@ static int publish_or_cancel(struct lrs_sched *sched,
 
     if (rc) {
         for (i = 0; i < n_selected; i++)
-            reqc->params.rwalloc.respc->devices[i]->ld_ongoing_io = false;
+            reqc->params.rwalloc.respc->devices[i]->ld_ongoing_scheduled =
+                                                                        false;
 
         if (rc != -EAGAIN) {
             rc = queue_error_response(sched->response_queue, rc, reqc);
@@ -2172,6 +2188,7 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
         media_info_free(*alloc_medium);
         *alloc_medium = NULL;
         if (sched_ready) {
+            dev->ld_ongoing_scheduled = true;
             goto select_device;
         } else {
             pho_info("Selected medium for write is already loaded in a busy "
@@ -2203,7 +2220,6 @@ find_write_device:
     return rc;
 
 select_device:
-    dev->ld_ongoing_io = true;
     reqc->params.rwalloc.respc->devices[index_to_alloc] = dev;
     return 0;
 }
@@ -2364,7 +2380,7 @@ skip_medium:
         goto find_read_medium;
 
 select_device:
-    dev->ld_ongoing_io = true;
+    dev->ld_ongoing_scheduled = true;
     reqc->params.rwalloc.respc->devices[index_to_alloc] = dev;
     return 0;
 }
@@ -2478,8 +2494,6 @@ static int sched_handle_format(struct lrs_sched *sched,
                      "medium %s is already loaded into a busy device %s, "
                      "unexpected state, will abort request",
                      m.name, device->ld_dss_dev_info->rsc.id.name);
-
-        device->ld_ongoing_io = true;
     } else {
         int suitable_devices;
 
@@ -2514,6 +2528,16 @@ static int sched_handle_format(struct lrs_sched *sched,
                                  reqc->params.format.medium_to_format);
             return -EAGAIN;
         }
+
+        /*
+         * dev_picker set the ld_ongoing_scheduled flag to true when a device
+         * is selected. This prevent selecting the same device again for an
+         * other medium of a request that needs several media.
+         * For a format request, only one device is needed. We can directly
+         * try to push the subrequest to the selected device and clear this
+         * flag.
+         */
+        device->ld_ongoing_scheduled = false;
     }
 
     format_sub_request = malloc(sizeof(*format_sub_request));
@@ -2523,7 +2547,9 @@ static int sched_handle_format(struct lrs_sched *sched,
 
     format_sub_request->medium_index = 0;
     format_sub_request->reqc = reqc;
+    MUTEX_LOCK(&device->ld_mutex);
     device->ld_sub_request = format_sub_request;
+    MUTEX_UNLOCK(&device->ld_mutex);
     return 0;
 
 remove_format_err_out:
@@ -2676,8 +2702,10 @@ void rwalloc_cancel_DONE_devices(struct req_container *reqc)
             struct resp_container *respc = reqc->params.rwalloc.respc;
             pho_resp_t *resp = respc->resp;
 
+            MUTEX_LOCK(&respc->devices[i]->ld_mutex);
             reqc->params.rwalloc.media[i].status = SUB_REQUEST_CANCEL;
             respc->devices[i]->ld_ongoing_io = false;
+            MUTEX_UNLOCK(&respc->devices[i]->ld_mutex);
             respc->devices[i] = NULL;
             if (is_write) {
                 pho_resp_write_elt_t *wresp = resp->walloc->media[i];
@@ -2732,7 +2760,13 @@ static int sched_handle_read_or_write_error(struct lrs_sched *sched,
     }
 
     if (!rc) {
-        rwalloc->respc->devices[sreq->medium_index]->ld_sub_request = sreq;
+        struct lrs_dev *selected_device =
+            rwalloc->respc->devices[sreq->medium_index];
+
+        MUTEX_LOCK(&selected_device->ld_mutex);
+        selected_device->ld_sub_request = sreq;
+        selected_device->ld_ongoing_scheduled = false;
+        MUTEX_UNLOCK(&selected_device->ld_mutex);
         *sreq_pushed_or_requeued = true;
     } else {
         if (rc == -EAGAIN) {

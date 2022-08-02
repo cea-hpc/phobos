@@ -127,6 +127,9 @@ struct lrs_dev {
                                                   * filesystem
                                                   */
     struct sub_request  *ld_sub_request;        /**< sub request to handle */
+    bool                 ld_ongoing_scheduled;  /**< one I/O is going to be
+                                                  *  scheduled
+                                                  */
     bool                 ld_ongoing_io;         /**< one I/O is ongoing */
     bool                 ld_needs_sync;         /**< medium needs to be sync */
     struct thread_info   ld_device_thread;      /**< thread handling the actions
@@ -158,8 +161,9 @@ static inline bool dev_is_release_ready(struct lrs_dev *dev)
 
 static inline bool dev_is_sched_ready(struct lrs_dev *dev)
 {
-    return dev && thread_is_running(&dev->ld_device_thread) &
-           !dev->ld_ongoing_io & !dev->ld_needs_sync;
+    return dev && thread_is_running(&dev->ld_device_thread) &&
+           !dev->ld_ongoing_io && !dev->ld_needs_sync && !dev->ld_sub_request &&
+           !dev->ld_ongoing_scheduled;
 }
 
 /**

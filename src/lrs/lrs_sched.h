@@ -159,8 +159,13 @@ struct notify_params {
  * Structure for a medium in a read or write allocation request
  */
 struct rwalloc_medium {
-    struct media_info *alloc_medium;    /**< medium to allocate */
-    enum sub_request_status status;     /**< medium request status. */
+    struct media_info *alloc_medium;    /**< Medium to allocate
+                                          *  This field is set to NULL when
+                                          *  the medium to use is the one which
+                                          *  is already loaded or mounted in
+                                          *  the device.
+                                          */
+    enum sub_request_status status;     /**< Medium request status */
 };
 
 /**
