@@ -995,7 +995,7 @@ static char *get_sub_request_medium_name(struct sub_request *sub_request)
 
         /*
          * If the medium to be allocated is already loaded in the device, the
-         * medium to allocated will be set to NULL in the sub_request
+         * former will be set to NULL in the sub_request
          */
         if (!params->media[medium_index].alloc_medium)
             return NULL;
@@ -2050,7 +2050,6 @@ static int push_sub_request_to_device(struct req_container *reqc)
     size_t devices_len = reqc->params.rwalloc.respc->devices_len;
     struct sub_request **sub_requests;
     size_t i, j;
-    int rc = 0;
 
     sub_requests = malloc(sizeof(*sub_requests) * devices_len);
     if (!sub_requests)
@@ -2068,6 +2067,8 @@ static int push_sub_request_to_device(struct req_container *reqc)
     }
 
     for (i = 0; i < devices_len; i++) {
+        int rc;
+
         devices[i]->ld_sub_request = sub_requests[i];
 
         rc = thread_signal(&devices[i]->ld_device_thread);
@@ -2075,10 +2076,11 @@ static int push_sub_request_to_device(struct req_container *reqc)
             pho_error(rc, "Error when signaling device (%s, %s) to wake up",
                       devices[i]->ld_dss_dev_info->rsc.id.name,
                       devices[i]->ld_dev_path);
+
     }
 
     free(sub_requests);
-    return rc;
+    return 0;
 
 sub_request_alloc_error:
     for (j = 0; j < i; j++)
