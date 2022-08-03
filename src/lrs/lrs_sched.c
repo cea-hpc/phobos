@@ -1846,6 +1846,8 @@ static int sched_device_retry_lock(struct lrs_sched *sched, const char *name,
     if (rc)
         return rc;
 
+    io_sched_remove_device(&sched->io_sched, dev_ptr);
+
     pho_verb("Removed locked device '%s' from the local memory", name);
 
     return 0;
@@ -1874,6 +1876,7 @@ static int sched_device_lock(struct lrs_sched *sched, const char *name,
                 *dev_ptr = dev;
                 return rc;
             }
+            io_sched_remove_device(&sched->io_sched, dev);
 
             if (!rc)
                 pho_verb("Removed locked device '%s' from the local memory",
@@ -2518,7 +2521,6 @@ static int sched_handle_format(struct lrs_sched *sched,
     pho_req_format_t *freq = reqc->req->format;
     struct sub_request *format_sub_request;
     struct lrs_dev *device = NULL;
-    bool sched_ready;
     struct pho_id m;
     int rc = 0;
 
@@ -2541,59 +2543,63 @@ static int sched_handle_format(struct lrs_sched *sched,
                  "trying to format the medium '%s' while it is already being "
                  "formatted", m.name);
 
-    device = search_in_use_medium(sched->devices.ldh_devices, m.name,
-                                  &sched_ready);
-    if (device) {
-        if (!sched_ready)
-            LOG_GOTO(remove_format_err_out, rc = -EINVAL,
-                     "medium %s is already loaded into a busy device %s, "
-                     "unexpected state, will abort request",
-                     m.name, device->ld_dss_dev_info->rsc.id.name);
-    } else {
+    rc = io_sched_get_device_medium_pair(&sched->io_sched, reqc, &device, NULL,
+                                         false);
+    if (rc)
+        GOTO(err_out, rc);
+
+    if (!device) {
         int suitable_devices;
 
         suitable_devices = count_suitable_devices(sched,
-                              reqc->params.format.medium_to_format);
-        if (suitable_devices == 0)
+              reqc->params.format.medium_to_format);
+        if (!suitable_devices)
             LOG_GOTO(remove_format_err_out, rc = -ENODEV,
                      "No device can format medium '%s', will abort request",
                      m.name);
 
-        /* medium to format isn't already loaded into any drive, need lock */
-        if (!reqc->params.format.medium_to_format->lock.hostname) {
-            rc = take_and_update_lock(&sched->sched_thread.dss, DSS_MEDIA,
-                    reqc->params.format.medium_to_format,
-                    &reqc->params.format.medium_to_format->lock);
-            if (rc == -EEXIST)
-                LOG_GOTO(remove_format_err_out, rc = -EBUSY,
-                         "Media '%s' is locked by an other LRS node", m.name);
-            else if (rc)
-                LOG_GOTO(remove_format_err_out, rc,
-                         "Unable to lock the media '%s' to format it", m.name);
-        }
+        pho_verb("No device available to format '%s', will try again later",
+                 m.name);
+        format_medium_remove(&sched->ongoing_format,
+                             reqc->params.format.medium_to_format);
 
-        device = dev_picker(sched->devices.ldh_devices, PHO_DEV_OP_ST_UNSPEC,
-                            select_empty_loaded_mount, 0, &NO_TAGS,
-                            reqc->params.format.medium_to_format,
-                            false);
-        if (!device) {
-            pho_verb("Unable to find an available device to format medium '%s'",
-                     m.name);
-            format_medium_remove(&sched->ongoing_format,
-                                 reqc->params.format.medium_to_format);
-            return -EAGAIN;
-        }
-
-        /*
-         * dev_picker set the ld_ongoing_scheduled flag to true when a device
-         * is selected. This prevent selecting the same device again for an
-         * other medium of a request that needs several media.
-         * For a format request, only one device is needed. We can directly
-         * try to push the subrequest to the selected device and clear this
-         * flag.
-         */
-        device->ld_ongoing_scheduled = false;
+        return -EAGAIN;
+    } else if (!dev_is_sched_ready(device)) {
+        LOG_GOTO(remove_format_err_out, rc = -EINVAL,
+                 "medium %s is already loaded into a busy device %s, "
+                 "unexpected state, will abort request",
+                 m.name, device->ld_dss_dev_info->rsc.id.name);
     }
+
+    if (!reqc->params.format.medium_to_format->lock.hostname) {
+        /* medium to format isn't already loaded into any drive, need lock */
+        rc = take_and_update_lock(&sched->sched_thread.dss, DSS_MEDIA,
+                                  reqc->params.format.medium_to_format,
+                                  &reqc->params.format.medium_to_format->lock);
+        if (rc == -EEXIST)
+            LOG_GOTO(remove_format_err_out, rc = -EBUSY,
+                     "Media '%s' is locked by an other LRS node", m.name);
+        else if (rc)
+            LOG_GOTO(remove_format_err_out, rc,
+                     "Unable to lock the media '%s' to format it", m.name);
+    } else {
+        rc = check_renew_lock(&sched->lock_handle, DSS_MEDIA,
+                              reqc->params.format.medium_to_format,
+                              &reqc->params.format.medium_to_format->lock);
+        if (rc)
+            LOG_GOTO(remove_format_err_out, rc,
+                     "Could not update the lock on '%s'",
+                     reqc->params.format.medium_to_format->rsc.id.name);
+    }
+    /*
+     * dev_picker set the ld_ongoing_scheduled flag to true when a device
+     * is selected. This prevent selecting the same device again for an
+     * other medium of a request that needs several media.
+     * For a format request, only one device is needed. We can directly
+     * try to push the subrequest to the selected device and clear this
+     * flag.
+     */
+    device->ld_ongoing_scheduled = false;
 
     format_sub_request = malloc(sizeof(*format_sub_request));
     if (!format_sub_request)
@@ -2618,7 +2624,6 @@ err_out:
         pho_error(rc, "format: failed to schedule format for medium '%s'",
                   m.name);
         rc2 = queue_error_response(sched->response_queue, rc, reqc);
-        sched_req_free(reqc);
         if (rc2)
             pho_error(rc2, "Error on sending format error response");
 
@@ -2892,6 +2897,8 @@ int sched_handle_requests(struct lrs_sched *sched)
     struct sub_request *sreq;
     int rc = 0;
 
+    ENTRY;
+
     /**
      * First try to re-run sub-request errors
      */
@@ -2901,9 +2908,8 @@ int sched_handle_requests(struct lrs_sched *sched)
             return rc;
     }
 
-    /*
-     * Very simple algorithm (FIXME): serve requests until the first EAGAIN is
-     * encountered.
+    /**
+     * push new request in the I/O scheduler
      */
     while ((reqc = tsqueue_pop(&sched->incoming)) != NULL) {
         pho_req_t *req = reqc->req;
@@ -2914,16 +2920,15 @@ int sched_handle_requests(struct lrs_sched *sched)
             if (rc)
                 break;
         } else if (pho_request_is_format(req)) {
-            pho_debug("lrs received format request (%p)", req);
-            rc = sched_handle_format(sched, reqc);
+            rc = io_sched_push_request(&sched->io_sched, reqc);
         } else if (pho_request_is_notify(req)) {
             pho_debug("lrs received notify request (%p)", req);
             rc = sched_handle_notify(sched, reqc);
         } else if (pho_request_is_write(req)) {
-            pho_debug("lrs received write request (%p)", req);
+            pho_debug("lrs received write allocation request (%p)", reqc->req);
             rc = sched_handle_write_alloc(sched, reqc);
         } else if (pho_request_is_read(req)) {
-            pho_debug("lrs received read allocation request (%p)", req);
+            pho_debug("lrs received read allocation request (%p)", reqc->req);
             rc = sched_handle_read_alloc(sched, reqc);
         } else {
             /* Unexpected req->kind, very probably a programming error */
@@ -2937,6 +2942,9 @@ int sched_handle_requests(struct lrs_sched *sched)
 
         if (rc != -EAGAIN)
             break;
+
+        if (pho_request_is_format(req))
+            continue;
 
         if (running) {
             /* Requeue last request on -EAGAIN and running */
@@ -2958,6 +2966,58 @@ int sched_handle_requests(struct lrs_sched *sched)
     }
 
     return rc;
+}
+
+int lrs_schedule_work(struct lrs_sched *sched)
+{
+    struct req_container *reqc;
+    int rc = 0;
+
+    ENTRY;
+
+    // TODO send -ESHUTDOWN when running is false
+    // -> in sched_fini, reply -ESHUTDOWN to every request
+    // -> in the free function
+    // -> add response_queue to I/O scheduler
+    // TODO send -ESHUTDOWN to waiting notify requests
+    do {
+        reqc = NULL;
+        rc = io_sched_peek_request(&sched->io_sched, &reqc);
+        if (rc)
+            return rc;
+
+        if (!reqc)
+            /* no more requests to schedule for now */
+            return 0;
+
+        if (pho_request_is_format(reqc->req))
+            rc = sched_handle_format(sched, reqc);
+        else if (pho_request_is_read(reqc->req))
+            rc = sched_handle_read_alloc(sched, reqc);
+        else if (pho_request_is_write(reqc->req))
+            rc = sched_handle_write_alloc(sched, reqc);
+        else
+            abort();
+
+        if (rc == 0) {
+            rc = io_sched_remove_request(&sched->io_sched, reqc);
+            /* Do not free reqc on success since its ownership has been
+             * transfered to the device.
+             */
+            if (rc)
+                break;
+
+            continue;
+        }
+
+        if (rc == -EAGAIN) {
+            rc = io_sched_requeue(&sched->io_sched, reqc) ? : rc;
+            break;
+        }
+
+    } while (rc != 0 && thread_is_running(&sched->sched_thread));
+
+    return rc == -EAGAIN ? 0 : rc;
 }
 
 static void _json_object_set_str(struct json_t *object,
@@ -3066,11 +3126,25 @@ static void *lrs_sched_thread(void *sdata)
     while (thread_is_running(thread)) {
         struct timespec wakeup_date;
 
+        rc = io_sched_dispatch_devices(&sched->io_sched,
+                                       sched->devices.ldh_devices);
+        if (rc)
+            LOG_GOTO(end_thread, thread->status = rc,
+                     "'%s' scheduler: failed to dispatch devices to I/O "
+                     "schedulers",
+                     rsc_family2str(sched->family));
+
         rc = sched_handle_requests(sched);
         if (rc)
             LOG_GOTO(end_thread, thread->status = rc,
-                     "Error during sched processing in thread '%d'",
-                     sched->family);
+                     "'%s' scheduler: error while handling requests",
+                     rsc_family2str(sched->family));
+
+        rc = lrs_schedule_work(sched);
+        if (rc)
+            LOG_GOTO(end_thread, thread->status = rc,
+                     "'%s' scheduler: error while scheduling requests",
+                     rsc_family2str(sched->family));
 
         rc = compute_wakeup_time(&timeout, &wakeup_date);
         if (rc)

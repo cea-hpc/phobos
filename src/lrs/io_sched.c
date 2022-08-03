@@ -106,12 +106,16 @@ int io_sched_dispatch_devices(struct pho_io_sched *io_sched, GPtrArray *devices)
 int io_sched_push_request(struct pho_io_sched *io_sched,
                           struct req_container *reqc)
 {
-    if (pho_request_is_read(reqc->req))
+    if (pho_request_is_read(reqc->req)) {
+        pho_debug("lrs received read allocation request (%p)", reqc->req);
         return io_sched->read.ops.push_request(&io_sched->read, reqc);
-    else if (pho_request_is_write(reqc->req))
+    } else if (pho_request_is_write(reqc->req)) {
+        pho_debug("lrs received write allocation request (%p)", reqc->req);
         return io_sched->write.ops.push_request(&io_sched->write, reqc);
-    else if (pho_request_is_format(reqc->req))
+    } else if (pho_request_is_format(reqc->req)) {
+        pho_debug("lrs received format request (%p)", reqc->req);
         return io_sched->format.ops.push_request(&io_sched->format, reqc);
+    }
 
     LOG_RETURN(-EINVAL, "Invalid request type for I/O scheduler");
 }
@@ -280,6 +284,10 @@ int load_io_schedulers_from_config(struct pho_io_sched *io_sched)
                       IO_REQ_FORMAT);
     if (rc)
         LOG_RETURN(rc, "Failed to read 'format_algo' from config");
+
+    /* TODO load these from the configuration */
+    io_sched->next_request = fifo_next_request;
+    io_sched->dispatch_devices = no_dispatch;
 
     return io_sched_init(io_sched);
 }

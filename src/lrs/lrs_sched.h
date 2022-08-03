@@ -346,6 +346,16 @@ int process_release_request(struct lrs_sched *sched,
 int sched_handle_requests(struct lrs_sched *sched);
 
 /**
+ * Take requests from the I/O schedulers and push them to a device thread if
+ * some requests are ready to be executed.
+ *
+ * \param[in]  sched   the scheduler which will handle requests
+ *
+ * \return             0 on success, negative POSIX error code on failure
+ */
+int lrs_schedule_work(struct lrs_sched *sched);
+
+/**
  * Acquire device lock if it is not already set.
  *
  * If lock is already set, check hostname and owner.

@@ -274,6 +274,11 @@ static int find_format_device(GPtrArray *devices,
 
     *dev = dev_picker(devices, PHO_DEV_OP_ST_UNSPEC, select_empty_loaded_mount,
                       0, &NO_TAGS, reqc->params.format.medium_to_format, false);
+    if (*dev)
+        /* FIXME will be removed when read, write and format are handled by
+         * io_sched API
+         */
+        (*dev)->ld_ongoing_scheduled = false;
 
     return 0;
 }
