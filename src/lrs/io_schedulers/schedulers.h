@@ -29,4 +29,21 @@
 
 extern struct pho_io_scheduler_ops IO_SCHED_FIFO_OPS;
 
+/* Device dispatcher algorithms */
+
+/**
+ * Other possible algorithms:
+ * - dispatch devices to I/O schedulers given a percentage:
+ *   (e.g. 40% to read, 50% to write and 10% to format)
+ * - dynamically dispatch devices depending on the load, we could have a basic
+ *   repartition like in the previous algorithm and move some devices around as
+ *   needed
+ */
+
+/**
+ * Do not dispatch devices, simply copy every device in each I/O scheduler.
+ */
+int no_dispatch(struct pho_io_sched *io_sched,
+                GPtrArray *devices);
+
 #endif
