@@ -1621,18 +1621,17 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
             pho_debug("Device selection function failed");
             selected = NULL;
             break;
-        } else if (rc == 0) /* stop searching */
+        } else if (rc == 0) { /* stop searching */
             break;
+        }
     }
 
-    if (selected != NULL) {
+    if (selected != NULL)
         pho_debug("Picked dev number %d (%s)",
                   selected_i,
                   selected->ld_dev_path);
-        selected->ld_ongoing_scheduled = true;
-    } else {
+    else
         pho_debug("Could not find a suitable %s device", op_status2str(op_st));
-    }
 
     return selected;
 }
@@ -2132,14 +2131,8 @@ static int publish_or_cancel(struct lrs_sched *sched,
             reqc->params.rwalloc.respc->devices[i]->ld_ongoing_scheduled =
                                                                         false;
 
-        if (rc != -EAGAIN) {
+        if (rc != -EAGAIN)
             rc = queue_error_response(sched->response_queue, rc, reqc);
-            if (pho_request_is_read(reqc->req))
-                /* Only free reads for now since since they are not in the I/O
-                 * scheduler.
-                 */
-                sched_req_free(reqc);
-        }
     }
 
     return rc;
@@ -2259,7 +2252,6 @@ end:
 
 static int skip_read_alloc_medium(int rc, struct req_container *reqc,
                                   size_t index_to_alloc,
-                                  size_t next_to_select,
                                   size_t *nb_already_eagain)
 {
     size_t *nb_failed = &reqc->params.rwalloc.nb_failed_media;
@@ -2277,7 +2269,7 @@ static int skip_read_alloc_medium(int rc, struct req_container *reqc,
     }
 
     /* Extend eagain and failed medium by switching current with last avail */
-    if ((n_med_ids - *nb_failed - *nb_already_eagain) >= next_to_select)
+    if ((n_med_ids - *nb_failed - *nb_already_eagain) > index_to_alloc)
         med_ids_switch(med_ids, index_to_alloc,
                        n_med_ids - *nb_failed - *nb_already_eagain);
 
@@ -2304,8 +2296,10 @@ static int check_medium_permission_and_status(struct req_container *reqc,
             LOG_RETURN(-EINVAL, "Cannot do I/O on unformatted medium '%s'",
                        medium->rsc.id.name);
         if (medium->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
-            LOG_RETURN(-EPERM, "Cannot do I/O on an admin locked medium '%s'",
-                       medium->rsc.id.name);
+            LOG_RETURN(-EPERM,
+                       "Cannot read on medium '%s' with adm_status '%s'",
+                       medium->rsc.id.name,
+                       rsc_adm_status2str(medium->rsc.adm_status));
     } else if (pho_request_is_format(reqc->req)) {
         if (medium->fs.status != PHO_FS_STATUS_BLANK)
             LOG_RETURN(-EINVAL,
@@ -2357,41 +2351,44 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
  */
 static int sched_read_alloc_one_medium(struct lrs_sched *sched,
                                        struct req_container *reqc,
-                                       size_t index_to_alloc,
-                                       size_t next_to_select,
+                                       size_t num_allocated,
                                        size_t *nb_already_eagain)
 {
-    struct media_info **alloc_medium =
-        &reqc->params.rwalloc.media[index_to_alloc].alloc_medium;
-    struct pho_id medium_id;
+    pho_rsc_id_t **med_ids = reqc->req->ralloc->med_ids;
+    size_t index_to_alloc = num_allocated;
+    struct media_info **alloc_medium;
     struct lrs_dev *dev;
-    bool sched_ready;
     int rc = 0;
 
-    if (*alloc_medium)
-        goto find_read_device;
-
-find_read_medium:
-    /* *alloc_medium is filled by this function by the device at index_to_alloc
-     */
-    rc = fetch_and_check_medium_info(&sched->lock_handle, reqc, &medium_id,
-                                     index_to_alloc, alloc_medium);
-    if (rc)
-        goto skip_medium;
-
 find_read_device:
-    /* check if the media is already in a drive */
-    dev = search_in_use_medium(sched->devices.ldh_devices, medium_id.name,
-                               &sched_ready);
-    if (dev != NULL) {
-        media_info_free(*alloc_medium);
-        *alloc_medium = NULL;
-        if (sched_ready) {
-            goto select_device;
-        } else {
+    rc = io_sched_get_device_medium_pair(&sched->io_sched, reqc, &dev,
+                                         &index_to_alloc, false);
+    if (rc)
+        GOTO(skip_medium, rc);
+
+    assert(index_to_alloc >= num_allocated);
+    med_ids_switch(med_ids, index_to_alloc, num_allocated);
+    index_to_alloc = num_allocated;
+
+    alloc_medium =
+        &reqc->params.rwalloc.media[index_to_alloc].alloc_medium;
+
+    if (!dev) {
+        /* cannot schedule the medium right now, unlock it */
+        if (*alloc_medium && (*alloc_medium)->lock.hostname)
+            medium_unlock(sched->lock_handle.dss, *alloc_medium);
+
+        if (compatible_drive_exists(sched, *alloc_medium,
+                                    *reqc->params.rwalloc.respc->devices,
+                                    num_allocated, index_to_alloc))
             rc = -EAGAIN;
-            goto skip_medium;
-        }
+        else
+            rc = -ENODEV;
+
+        goto skip_medium;
+    } else if (!dev_is_sched_ready(dev)) {
+        rc = -EAGAIN;
+        goto skip_medium;
     }
 
     /* lock medium */
@@ -2402,38 +2399,27 @@ find_read_device:
         rc = take_and_update_lock(&sched->sched_thread.dss, DSS_MEDIA,
                                   *alloc_medium, &(*alloc_medium)->lock);
 
+    if (medium_is_loaded_in_device(dev, *alloc_medium)) {
+        media_info_free(*alloc_medium);
+        *alloc_medium = NULL;
+    }
+
     if (rc)
         goto free_skip_medium;
 
-    dev = dev_picker(sched->devices.ldh_devices, PHO_DEV_OP_ST_UNSPEC,
-                     select_empty_loaded_mount, 0, &NO_TAGS, *alloc_medium,
-                     false);
-    if (dev)
-        goto select_device;
-
-    medium_unlock(sched->lock_handle.dss, *alloc_medium);
-    if (compatible_drive_exists(sched, *alloc_medium,
-                                *reqc->params.rwalloc.respc->devices,
-                                next_to_select, index_to_alloc))
-        rc = -EAGAIN;
-    else
-        rc = -ENODEV;
+    dev->ld_ongoing_scheduled = true;
+    reqc->params.rwalloc.respc->devices[index_to_alloc] = dev;
+    return 0;
 
 free_skip_medium:
     media_info_free(*alloc_medium);
     *alloc_medium = NULL;
 skip_medium:
-    rc = skip_read_alloc_medium(rc, reqc, index_to_alloc, next_to_select,
-                                nb_already_eagain);
+    rc = skip_read_alloc_medium(rc, reqc, index_to_alloc, nb_already_eagain);
     if (rc)
         return rc;
-    else
-        goto find_read_medium;
 
-select_device:
-    dev->ld_ongoing_scheduled = true;
-    reqc->params.rwalloc.respc->devices[index_to_alloc] = dev;
-    return 0;
+    goto find_read_device;
 }
 
 /**
@@ -2451,8 +2437,7 @@ static int sched_handle_read_alloc(struct lrs_sched *sched,
               reqc->req->ralloc->n_med_ids);
 
     for (i = 0; i < reqc->req->ralloc->n_required; i++) {
-        rc = sched_read_alloc_one_medium(sched, reqc, i, i + 1,
-                                         &nb_already_eagain);
+        rc = sched_read_alloc_one_medium(sched, reqc, i, &nb_already_eagain);
         if (rc)
             break;
     }
@@ -2787,7 +2772,6 @@ static int sched_handle_read_or_write_error(struct lrs_sched *sched,
         size_t nb_already_eagain = 0;
 
         rc = sched_read_alloc_one_medium(sched, sreq->reqc, sreq->medium_index,
-                                         rwalloc->n_media,
                                          &nb_already_eagain);
     } else {
         device_select_func_t dev_select_policy;
@@ -2904,14 +2888,12 @@ int sched_handle_requests(struct lrs_sched *sched)
             if (rc)
                 break;
         } else if (pho_request_is_format(req) ||
+                   pho_request_is_read(req) ||
                    pho_request_is_write(req)) {
             rc = io_sched_push_request(&sched->io_sched, reqc);
         } else if (pho_request_is_notify(req)) {
             pho_debug("lrs received notify request (%p)", req);
             rc = sched_handle_notify(sched, reqc);
-        } else if (pho_request_is_read(req)) {
-            pho_debug("lrs received read allocation request (%p)", reqc->req);
-            rc = sched_handle_read_alloc(sched, reqc);
         } else {
             /* Unexpected req->kind, very probably a programming error */
             pho_error(rc = -EPROTO,
@@ -2925,8 +2907,7 @@ int sched_handle_requests(struct lrs_sched *sched)
         if (rc != -EAGAIN)
             break;
 
-        if (pho_request_is_format(req) ||
-            pho_request_is_write(req))
+        if (!pho_request_is_notify(req))
             continue;
 
         if (running) {
