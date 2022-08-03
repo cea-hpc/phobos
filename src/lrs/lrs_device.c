@@ -1706,8 +1706,9 @@ static int dev_handle_read_write(struct lrs_dev *dev)
             sub_request->failure_on_medium = true;
             io_ended = true;
             LOG_GOTO(alloc_result, rc = -EINVAL,
-                     "rwalloc with no medium to a device with no loaded nor "
-                     "mounted medium");
+                     "empty device '%s' received a %s request without medium",
+                     dev->ld_dss_dev_info->rsc.id.name,
+                     pho_srl_request_kind_str(reqc->req));
         }
     }
 

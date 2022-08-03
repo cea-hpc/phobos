@@ -217,14 +217,21 @@ static int find_write_device(GPtrArray *devices,
     /* 1a) is there a mounted filesystem with enough room? */
     *dev = dev_picker(devices, PHO_DEV_OP_ST_MOUNTED, dev_select_policy,
                       size, &tags, NULL, true);
-    if (*dev)
+    if (*dev) {
+        /* FIXME will be removed when read, write and format are handled by
+         * io_sched API
+         */
+        (*dev)->ld_ongoing_scheduled = false;
         return 0;
+    }
 
     /* 1b) is there a loaded media with enough room? */
     *dev = dev_picker(devices, PHO_DEV_OP_ST_LOADED, dev_select_policy,
                       size, &tags, NULL, true);
-    if (*dev)
+    if (*dev) {
+        (*dev)->ld_ongoing_scheduled = false;
         return 0;
+    }
 
     /* 2) For the next steps, we need a media to write on.
      * It will be loaded into a free drive.
@@ -244,8 +251,10 @@ static int find_write_device(GPtrArray *devices,
 find_device:
     *dev = dev_picker(devices, PHO_DEV_OP_ST_UNSPEC, select_empty_loaded_mount,
                       0, &NO_TAGS, *medium, false);
-    if (*dev)
+    if (*dev) {
+        (*dev)->ld_ongoing_scheduled = false;
         return 0;
+    }
 
     *dev = NULL;
 

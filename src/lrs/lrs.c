@@ -379,7 +379,7 @@ static int _send_message(struct pho_comm_info *comm,
     return rc;
 }
 
-static int _send_responses_from_queue(struct lrs *lrs)
+static int send_responses_from_queue(struct lrs *lrs)
 {
     struct resp_container *respc;
     int rc = 0;
@@ -900,7 +900,7 @@ static int lrs_process(struct lrs *lrs)
             stopped = false;
     }
 
-    rc = _send_responses_from_queue(lrs);
+    rc = send_responses_from_queue(lrs);
     if (rc)
         return rc;
 

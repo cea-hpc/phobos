@@ -366,10 +366,11 @@ static int sched_fill_media_info(struct lock_handle *lock_handle,
                                  struct media_info **pmedia,
                                  const struct pho_id *id)
 {
-    struct media_info   *media_res = NULL;
-    struct dss_filter    filter;
-    int                  mcnt = 0;
-    int                  rc;
+    struct media_info *media_res = NULL;
+    struct dss_filter filter;
+    struct media_info *tmp;
+    int mcnt = 0;
+    int rc;
 
     if (id == NULL || pmedia == NULL)
         return -EINVAL;
@@ -399,8 +400,9 @@ static int sched_fill_media_info(struct lock_handle *lock_handle,
                  "Too many media found matching id '%s'", id->name);
     }
 
-    media_info_free(*pmedia);
+    tmp = *pmedia;
     *pmedia = media_info_dup(media_res);
+    media_info_free(tmp);
     if (!*pmedia)
         LOG_GOTO(out_free, rc = -ENOMEM, "Couldn't duplicate media info");
 
@@ -1039,7 +1041,7 @@ static char *get_sub_request_medium_name(struct sub_request *sub_request)
         if (!params->medium_to_format)
             return NULL;
 
-        return params->medium_to_format[medium_index].rsc.id.name;
+        return params->medium_to_format->rsc.id.name;
     }
 }
 
@@ -2132,11 +2134,31 @@ static int publish_or_cancel(struct lrs_sched *sched,
 
         if (rc != -EAGAIN) {
             rc = queue_error_response(sched->response_queue, rc, reqc);
-            sched_req_free(reqc);
+            if (pho_request_is_read(reqc->req))
+                /* Only free reads for now since since they are not in the I/O
+                 * scheduler.
+                 */
+                sched_req_free(reqc);
         }
     }
 
     return rc;
+}
+
+static bool medium_is_loaded_in_device(struct lrs_dev *dev,
+                                       struct media_info *medium)
+{
+    const char *medium_in_device;
+    const char *medium_to_alloc;
+
+    if (!dev->ld_dss_media_info)
+        /* no medium in device */
+        return false;
+
+    medium_in_device = dev->ld_dss_media_info->rsc.id.name;
+    medium_to_alloc = medium->rsc.id.name;
+
+    return !strcmp(medium_in_device, medium_to_alloc);
 }
 
 static int sched_write_alloc_one_medium(struct lrs_sched *sched,
@@ -2145,95 +2167,57 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
                                         device_select_func_t dev_select_policy,
                                         bool handle_error)
 {
-    pho_req_write_t *wreq = reqc->req->walloc;
     struct media_info **alloc_medium =
         &reqc->params.rwalloc.media[index_to_alloc].alloc_medium;
+    pho_req_write_t *wreq = reqc->req->walloc;
     struct lrs_dev *dev;
-    bool sched_ready;
-    struct tags tags;
-    size_t size;
     int rc;
 
-    /* Are we retrying to find a new device to an already chosen medium ? */
-    if (*alloc_medium)
-        goto find_write_device;
-
-    tags.n_tags = wreq->media[index_to_alloc]->n_tags;
-    tags.tags = wreq->media[index_to_alloc]->tags;
-    size = wreq->media[index_to_alloc]->size;
-    /* 1a) is there a mounted filesystem with enough room? */
-    dev = dev_picker(sched->devices.ldh_devices, PHO_DEV_OP_ST_MOUNTED,
-                     dev_select_policy, size, &tags, NULL, true);
-    if (dev)
-        goto select_device;
-
-    /* 1b) is there a loaded media with enough room? */
-    dev = dev_picker(sched->devices.ldh_devices, PHO_DEV_OP_ST_LOADED,
-                     dev_select_policy, size, &tags, NULL, true);
-    if (dev)
-        goto select_device;
-
-    /* 2) For the next steps, we need a media to write on.
-     * It will be loaded into a free drive.
-     * Note: sched_select_medium locks the media.
-     */
-    pho_verb("Not enough space on loaded media: selecting another one");
-    rc = sched_select_medium(&sched->lock_handle, sched->devices.ldh_devices,
-                             alloc_medium, size, sched->family, &tags, reqc,
-                             handle_error ? wreq->n_media : index_to_alloc,
-                             index_to_alloc);
+    rc = io_sched_get_device_medium_pair(&sched->io_sched, reqc, &dev,
+                                         &index_to_alloc, handle_error);
     if (rc)
-        return rc;
+        GOTO(notify_error, rc);
 
-    /**
-     * Check if the media is already in a drive.
-     *
-     * We already look for loaded media with full available size.
-     *
-     * sched_select_medium could find a "split" medium which is already
-     * loaded if there is no medium with a enough available size.
-     */
-    dev = search_in_use_medium(sched->devices.ldh_devices,
-                               (*alloc_medium)->rsc.id.name,
-                               &sched_ready);
-    if (dev) {
+    if (dev && !*alloc_medium) {
+        /* a device containing a medium with enough space was found */
+        goto select_device;
+    } else if (dev && medium_is_loaded_in_device(dev, *alloc_medium)) {
         media_info_free(*alloc_medium);
         *alloc_medium = NULL;
-        if (sched_ready) {
-            dev->ld_ongoing_scheduled = true;
+
+        if (dev_is_sched_ready(dev)) {
             goto select_device;
         } else {
             pho_info("Selected medium for write is already loaded in a busy "
                      "drive");
-            return -EAGAIN;
+            rc = -EAGAIN;
+            goto notify_error;
         }
+    } else if (dev) {
+        /* a new medium needs to be loaded in \p dev */
+        goto select_device;
     }
 
-find_write_device:
-    /* 3) choose a suitable drive */
-    dev = dev_picker(sched->devices.ldh_devices, PHO_DEV_OP_ST_UNSPEC,
-                     select_empty_loaded_mount, 0, &NO_TAGS, *alloc_medium,
-                     false);
-    if (dev)
-        goto select_device;
-
+    /* dev == NULL: no device/medium pair could be found for this request */
     medium_unlock(sched->lock_handle.dss, *alloc_medium);
     if (compatible_drive_exists(sched, *alloc_medium,
                                 *reqc->params.rwalloc.respc->devices,
                                 handle_error ? wreq->n_media : index_to_alloc,
-                                index_to_alloc)) {
+                                index_to_alloc))
         rc = -EAGAIN;
-        pho_info("No compatible device available for write alloc");
-    } else {
+    else
         pho_error(rc = -ENODEV, "No compatible device found for write alloc");
-    }
 
+notify_error:
     media_info_free(*alloc_medium);
     *alloc_medium = NULL;
+
     return rc;
 
 select_device:
+    dev->ld_ongoing_scheduled = true;
     reqc->params.rwalloc.respc->devices[index_to_alloc] = dev;
+
     return 0;
 }
 
@@ -2919,14 +2903,12 @@ int sched_handle_requests(struct lrs_sched *sched)
             sched_req_free(reqc);
             if (rc)
                 break;
-        } else if (pho_request_is_format(req)) {
+        } else if (pho_request_is_format(req) ||
+                   pho_request_is_write(req)) {
             rc = io_sched_push_request(&sched->io_sched, reqc);
         } else if (pho_request_is_notify(req)) {
             pho_debug("lrs received notify request (%p)", req);
             rc = sched_handle_notify(sched, reqc);
-        } else if (pho_request_is_write(req)) {
-            pho_debug("lrs received write allocation request (%p)", reqc->req);
-            rc = sched_handle_write_alloc(sched, reqc);
         } else if (pho_request_is_read(req)) {
             pho_debug("lrs received read allocation request (%p)", reqc->req);
             rc = sched_handle_read_alloc(sched, reqc);
@@ -2943,7 +2925,8 @@ int sched_handle_requests(struct lrs_sched *sched)
         if (rc != -EAGAIN)
             break;
 
-        if (pho_request_is_format(req))
+        if (pho_request_is_format(req) ||
+            pho_request_is_write(req))
             continue;
 
         if (running) {
@@ -2975,11 +2958,6 @@ int lrs_schedule_work(struct lrs_sched *sched)
 
     ENTRY;
 
-    // TODO send -ESHUTDOWN when running is false
-    // -> in sched_fini, reply -ESHUTDOWN to every request
-    // -> in the free function
-    // -> add response_queue to I/O scheduler
-    // TODO send -ESHUTDOWN to waiting notify requests
     do {
         reqc = NULL;
         rc = io_sched_peek_request(&sched->io_sched, &reqc);
@@ -2999,20 +2977,40 @@ int lrs_schedule_work(struct lrs_sched *sched)
         else
             abort();
 
-        if (rc == 0) {
-            rc = io_sched_remove_request(&sched->io_sched, reqc);
-            /* Do not free reqc on success since its ownership has been
-             * transfered to the device.
-             */
+        /* remove the request on error and on success */
+        if (rc != -EAGAIN) {
+            int rc2 = io_sched_remove_request(&sched->io_sched, reqc);
             if (rc)
-                break;
+                /* Do not free reqc on success since its ownership has been
+                 * transfered to the device.
+                 */
+                sched_req_free(reqc);
 
-            continue;
+            if (rc2)
+                return rc2;
         }
 
-        if (rc == -EAGAIN) {
+        if (rc == 0)
+            continue;
+
+        if (rc != -EAGAIN)
+            break;
+
+        if (running) {
+            /* Requeue last request on -EAGAIN and running */
             rc = io_sched_requeue(&sched->io_sched, reqc) ? : rc;
             break;
+        } else {
+            int rc2;
+
+            /* create an -ESHUTDOWN error on -EAGAIN and !running */
+            rc = queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
+
+            rc2 = io_sched_remove_request(&sched->io_sched, reqc);
+            rc = rc2 ? : rc;
+            sched_req_free(reqc);
+            if (rc)
+                break;
         }
 
     } while (rc != 0 && thread_is_running(&sched->sched_thread));
