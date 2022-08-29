@@ -48,7 +48,7 @@ set +e
     export PHOBOS_LRS_lock_file="/phobosd.lock"
     rm -rf "$PHOBOS_LRS_lock_file"
     invoke_daemon
-    pgrep -f phobosd ||
+    pgrep -f phobosd | grep $PID_DAEMON ||
         error "Should have succeeded with valid folder '/'"
     waive_daemon
 
@@ -56,12 +56,12 @@ set +e
     export PHOBOS_LRS_lock_file="$folder/phobosd.lock"
     rm -rf "$folder"
     invoke_daemon
-    pgrep -f phobosd &&
+    pgrep -f phobosd | grep $PID_DAEMON &&
         error "Should have failed with non-existing folder '$folder'"
 
     mkdir -p "$folder"
     invoke_daemon
-    pgrep -f phobosd ||
+    pgrep -f phobosd | grep $PID_DAEMON ||
         error "Should have succeeded after creating valid folder '$folder'"
     waive_daemon
 
@@ -70,7 +70,7 @@ set +e
     # Create $folder as a simple file to fail the "is dir" condition
     touch "$folder"
     invoke_daemon
-    pgrep -f phobosd &&
+    pgrep -f phobosd | grep $PID_DAEMON &&
         error "Should have failed because '$folder' is not a directory"
 
     rm -rf "$folder"

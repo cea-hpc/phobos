@@ -68,7 +68,7 @@ function now()
 
 function get_timestamp()
 {
-    echo $1 | awk '{print $1, $2}' | xargs -I{} date -d "{}" +%s%N
+    echo "$1" | awk '{print $1, $2}' | xargs -I{} date -d "{}" +%s%N
 }
 
 function newer()
