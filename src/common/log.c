@@ -54,26 +54,43 @@ char *rstrip(char *msg)
 
 void phobos_log_callback_default(const struct pho_logrec *rec)
 {
-    struct tm   time;
+    char *error_buffer = NULL;
+    char *dev_buffer = NULL;
+    struct tm time;
 
     localtime_r(&rec->plr_time.tv_sec, &time);
 
-    fprintf(stderr, "%04d-%02d-%02d %02d:%02d:%02d.%09ld <%s>",
+    /* Running with dev mode adds filename and line number to the output */
+    if (phobos_dev_output) {
+        int rc;
+
+        rc = asprintf(&dev_buffer, " [%u/%s:%s:%d]", rec->plr_pid,
+                      rec->plr_func, rec->plr_file, rec->plr_line);
+        if (rc < 0)
+            dev_buffer = NULL;
+    }
+
+    if (rec->plr_err != 0) {
+        int rc;
+
+        rc = asprintf(&error_buffer, ": %s (%d)",
+                      strerror(rec->plr_err), rec->plr_err);
+        if (rc < 0) {
+            free(dev_buffer);
+            error_buffer = NULL;
+        }
+    }
+
+    fprintf(stderr, "%04d-%02d-%02d %02d:%02d:%02d.%09ld <%s>%s %s%s\n",
             time.tm_year + 1900, time.tm_mon + 1, time.tm_mday,
             time.tm_hour, time.tm_min, time.tm_sec,
-            rec->plr_time.tv_usec * 1000, pho_log_level2str(rec->plr_level));
+            rec->plr_time.tv_usec * 1000, pho_log_level2str(rec->plr_level),
+            dev_buffer ? : "",
+            rstrip(rec->plr_msg),
+            error_buffer ? : "");
 
-    /* Running with dev mode adds filename and line number to the output */
-    if (phobos_dev_output)
-        fprintf(stderr, " [%u/%s:%s:%d]", rec->plr_pid,
-                rec->plr_func, rec->plr_file, rec->plr_line);
-
-    fprintf(stderr, " %s", rstrip(rec->plr_msg));
-
-    if (rec->plr_err != 0)
-        fprintf(stderr, ": %s (%d)", strerror(rec->plr_err), rec->plr_err);
-
-    putc('\n', stderr);
+    free(error_buffer);
+    free(dev_buffer);
 }
 
 void pho_log_level_set(enum pho_log_level level)
