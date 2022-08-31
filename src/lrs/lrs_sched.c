@@ -2986,21 +2986,42 @@ free_device_status:
     return rc;
 }
 
+static int compute_wakeup_time(const struct timespec *timeout,
+                               struct timespec *date)
+{
+    struct timespec now;
+    int rc;
+
+    rc = clock_gettime(CLOCK_REALTIME, &now);
+    if (rc)
+        LOG_RETURN(-errno, "clock_gettime: unable to get CLOCK_REALTIME");
+
+    *date = add_timespec(&now, timeout);
+
+    return rc;
+}
+
 static void *lrs_sched_thread(void *sdata)
 {
-    struct timespec timeout = { .tv_sec = 1, .tv_nsec = 0 };
+    struct timespec timeout = { .tv_sec = 0, .tv_nsec = 100000000 }; /* 100ms */
     struct lrs_sched *sched = (struct lrs_sched *) sdata;
     struct thread_info *thread = &sched->sched_thread;
     int rc;
 
     while (thread_is_running(thread)) {
+        struct timespec wakeup_date;
+
         rc = sched_handle_requests(sched);
         if (rc)
             LOG_GOTO(end_thread, thread->status = rc,
                      "Error during sched processing in thread '%d'",
                      sched->family);
 
-        rc = thread_signal_timed_wait(thread, &timeout);
+        rc = compute_wakeup_time(&timeout, &wakeup_date);
+        if (rc)
+            GOTO(end_thread, thread->status = rc);
+
+        rc = thread_signal_timed_wait(thread, &wakeup_date);
         if (rc < 0)
             LOG_GOTO(end_thread, thread->status = rc,
                      "sched thread '%d': fatal error", sched->family);
