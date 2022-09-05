@@ -649,6 +649,8 @@ static int _prepare_requests(struct lrs *lrs, bool *schedulers_to_signal,
         if (pho_request_is_release(req_cont->req)) {
             rc2 = process_release_request(lrs->sched[fam], &lrs->dss, req_cont);
             rc = rc ? : rc2;
+            if (!rc2)
+                schedulers_to_signal[fam] = true;
         } else {
             if (running) {
                 tsqueue_push(&lrs->sched[fam]->req_queue, req_cont);
