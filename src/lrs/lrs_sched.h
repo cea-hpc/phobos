@@ -314,7 +314,7 @@ void sched_fini(struct lrs_sched *sched);
 bool sched_has_running_devices(struct lrs_sched *sched);
 
 /**
- * Enqueue a request to be handled by the devices.
+ * Process release request
  *
  * This function takes ownership of the request.
  * The request container is queued or freed by this call.
@@ -325,8 +325,9 @@ bool sched_has_running_devices(struct lrs_sched *sched);
  * daemon itself, not an error about the release request which is managed by
  * an error message.
  */
-int sched_release_enqueue(struct lrs_sched *sched, struct dss_handle *comm_dss,
-                          struct req_container *reqc);
+int process_release_request(struct lrs_sched *sched,
+                            struct dss_handle *comm_dss,
+                            struct req_container *reqc);
 
 /**
  * Handle queued requests

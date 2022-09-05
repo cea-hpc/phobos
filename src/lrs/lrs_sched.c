@@ -1895,8 +1895,9 @@ static int update_phys_spc_free(struct dss_handle *dss,
     return 0;
 }
 
-int sched_release_enqueue(struct lrs_sched *sched, struct dss_handle *comm_dss,
-                          struct req_container *reqc)
+int process_release_request(struct lrs_sched *sched,
+                            struct dss_handle *comm_dss,
+                            struct req_container *reqc)
 {
     int rc = 0;
     size_t i;

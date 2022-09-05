@@ -647,7 +647,7 @@ static int _prepare_requests(struct lrs *lrs, bool *schedulers_to_signal,
             LOG_GOTO(send_err, rc2, "Cannot init request container");
 
         if (pho_request_is_release(req_cont->req)) {
-            rc2 = sched_release_enqueue(lrs->sched[fam], &lrs->dss, req_cont);
+            rc2 = process_release_request(lrs->sched[fam], &lrs->dss, req_cont);
             rc = rc ? : rc2;
         } else {
             if (running) {
