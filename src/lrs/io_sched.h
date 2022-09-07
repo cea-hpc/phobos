@@ -174,6 +174,7 @@ struct pho_io_sched {
     struct request_handler read;
     struct request_handler write;
     struct request_handler format;
+    struct lock_handle    *lock_handle;
 };
 
 /* I/O Scheduler interface */

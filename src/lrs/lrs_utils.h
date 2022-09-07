@@ -25,6 +25,10 @@
 #ifndef _PHO_LRS_UTILS_H
 #define _PHO_LRS_UTILS_H
 
+#include <stddef.h>
+
+struct req_container;
+
 /* Contains every information needed for any component of the LRS to take and
  * update locks
  */
@@ -37,5 +41,8 @@ struct lock_handle {
 };
 
 int lock_handle_init(struct lock_handle *lock_handle, struct dss_handle *dss);
+
+struct media_info **reqc_get_medium_to_alloc(struct req_container *reqc,
+                                             size_t index);
 
 #endif

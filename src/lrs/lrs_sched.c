@@ -733,6 +733,7 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
                  "Failed to load I/O schedulers from config");
 
     sched->response_queue = resp_queue;
+    sched->io_sched.lock_handle = &sched->lock_handle;
 
     /* Load devices from DSS -- not critical if no device is found */
     lrs_dev_hdl_load(sched, &sched->devices);
@@ -1088,9 +1089,9 @@ err_continue:
     return NULL;
 }
 
-static struct lrs_dev *search_in_use_media(GPtrArray *devices,
-                                           const char *name,
-                                           bool *sched_ready)
+struct lrs_dev *search_in_use_medium(GPtrArray *devices,
+                                     const char *name,
+                                     bool *sched_ready)
 {
     int i;
 
@@ -1169,15 +1170,15 @@ err_continue:
  *                           be set to n_med or more if every already allocated
  *                           media should be taken into account)
  */
-static int sched_select_medium(struct lock_handle *lock_handle,
-                               GPtrArray *devices,
-                               struct media_info **p_media,
-                               size_t required_size,
-                               enum rsc_family family,
-                               const struct tags *tags,
-                               struct req_container *reqc,
-                               size_t n_med,
-                               size_t not_alloc)
+int sched_select_medium(struct lock_handle *lock_handle,
+                        GPtrArray *devices,
+                        struct media_info **p_media,
+                        size_t required_size,
+                        enum rsc_family family,
+                        const struct tags *tags,
+                        struct req_container *reqc,
+                        size_t n_med,
+                        size_t not_alloc)
 {
     bool with_tags = tags != NULL && tags->n_tags > 0;
     struct media_info *pmedia_res = NULL;
@@ -1270,7 +1271,7 @@ lock_race_retry:
                 continue;
 
         /* already loaded and in use ? */
-        dev = search_in_use_media(devices, curr->rsc.id.name, &sched_ready);
+        dev = search_in_use_medium(devices, curr->rsc.id.name, &sched_ready);
         if (dev && !sched_ready) {
             pho_debug("Skipping device '%s', already in use",
                       dev->ld_dss_dev_info->rsc.id.name);
@@ -1521,13 +1522,13 @@ typedef int (*device_select_func_t)(size_t required_size,
  * @param pmedia         Media that should be used by the drive to check
  *                       compatibility (ignored if NULL)
  */
-static struct lrs_dev *dev_picker(GPtrArray *devices,
-                                  enum dev_op_status op_st,
-                                  device_select_func_t select_func,
-                                  size_t required_size,
-                                  const struct tags *media_tags,
-                                  struct media_info *pmedia,
-                                  bool is_write)
+struct lrs_dev *dev_picker(GPtrArray *devices,
+                           enum dev_op_status op_st,
+                           device_select_func_t select_func,
+                           size_t required_size,
+                           const struct tags *media_tags,
+                           struct media_info *pmedia,
+                           bool is_write)
 {
     struct lrs_dev *selected = NULL;
     int selected_i = -1;
@@ -1690,9 +1691,9 @@ static int select_best_fit(size_t required_size,
  *
  * @return 0 on first empty device found, 1 otherwise (to continue searching).
  */
-static int select_empty_loaded_mount(size_t required_size,
-                                     struct lrs_dev *dev_curr,
-                                     struct lrs_dev **dev_selected)
+int select_empty_loaded_mount(size_t required_size,
+                              struct lrs_dev *dev_curr,
+                              struct lrs_dev **dev_selected)
 {
     if (dev_curr->ld_op_status == PHO_DEV_OP_ST_EMPTY) {
         *dev_selected = dev_curr;
@@ -1709,7 +1710,7 @@ static int select_empty_loaded_mount(size_t required_size,
 }
 
 /** return the device policy function depending on configuration */
-static device_select_func_t get_dev_policy(void)
+device_select_func_t get_dev_policy(void)
 {
     const char *policy_str;
 
@@ -2189,9 +2190,9 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
      * sched_select_medium could find a "split" medium which is already
      * loaded if there is no medium with a enough available size.
      */
-    dev = search_in_use_media(sched->devices.ldh_devices,
-                              (*alloc_medium)->rsc.id.name,
-                              &sched_ready);
+    dev = search_in_use_medium(sched->devices.ldh_devices,
+                               (*alloc_medium)->rsc.id.name,
+                               &sched_ready);
     if (dev) {
         media_info_free(*alloc_medium);
         *alloc_medium = NULL;
@@ -2329,24 +2330,21 @@ static int check_medium_permission_and_status(struct req_container *reqc,
     return 0;
 }
 
-static int fetch_and_check_medium_info(struct lock_handle *lock_handle,
-                                       struct req_container *reqc,
-                                       struct pho_id *m_id,
-                                       size_t index)
+int fetch_and_check_medium_info(struct lock_handle *lock_handle,
+                                struct req_container *reqc,
+                                struct pho_id *m_id,
+                                size_t index,
+                                struct media_info **target_medium)
 {
-    struct media_info **target_medium;
     PhoResourceId *medium_id;
     int rc;
 
-    if (pho_request_is_format(reqc->req)) {
+    if (pho_request_is_format(reqc->req))
         medium_id = reqc->req->format->med_id;
-        target_medium = &reqc->params.format.medium_to_format;
-    } else if (pho_request_is_read(reqc->req)) {
+    else if (pho_request_is_read(reqc->req))
         medium_id = reqc->req->ralloc->med_ids[index];
-        target_medium = &reqc->params.rwalloc.media[index].alloc_medium;
-    } else {
+    else
         return -EINVAL;
-    }
 
     m_id->family = (enum rsc_family) medium_id->family;
     rc = pho_id_name_set(m_id, medium_id->name);
@@ -2387,15 +2385,17 @@ static int sched_read_alloc_one_medium(struct lrs_sched *sched,
         goto find_read_device;
 
 find_read_medium:
+    /* *alloc_medium is filled by this function by the device at index_to_alloc
+     */
     rc = fetch_and_check_medium_info(&sched->lock_handle, reqc, &medium_id,
-                                     index_to_alloc);
+                                     index_to_alloc, alloc_medium);
     if (rc)
         goto skip_medium;
 
 find_read_device:
     /* check if the media is already in a drive */
-    dev = search_in_use_media(sched->devices.ldh_devices, medium_id.name,
-                              &sched_ready);
+    dev = search_in_use_medium(sched->devices.ldh_devices, medium_id.name,
+                               &sched_ready);
     if (dev != NULL) {
         media_info_free(*alloc_medium);
         *alloc_medium = NULL;
@@ -2522,7 +2522,8 @@ static int sched_handle_format(struct lrs_sched *sched,
     struct pho_id m;
     int rc = 0;
 
-    rc = fetch_and_check_medium_info(&sched->lock_handle, reqc, &m, 0);
+    rc = fetch_and_check_medium_info(&sched->lock_handle, reqc, &m, 0,
+                                     reqc_get_medium_to_alloc(reqc, 0));
     if (rc == -EALREADY)
         LOG_GOTO(err_out, rc = -EBUSY,
                  "Medium to format '%s' is already locked",
@@ -2540,8 +2541,8 @@ static int sched_handle_format(struct lrs_sched *sched,
                  "trying to format the medium '%s' while it is already being "
                  "formatted", m.name);
 
-    device = search_in_use_media(sched->devices.ldh_devices, m.name,
-                                 &sched_ready);
+    device = search_in_use_medium(sched->devices.ldh_devices, m.name,
+                                  &sched_ready);
     if (device) {
         if (!sched_ready)
             LOG_GOTO(remove_format_err_out, rc = -EINVAL,

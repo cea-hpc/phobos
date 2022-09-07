@@ -33,6 +33,25 @@
 #include "io_sched.h"
 #include "schedulers.h"
 
+struct queue_element {
+    struct req_container *reqc;
+    size_t num_media_allocated;
+};
+
+static void print_elem(gpointer data, gpointer user_data)
+{
+    struct queue_element *elem = data;
+
+    pho_info("%p: reqc %p, num_allocated: %lu",
+             elem, elem->reqc, elem->num_media_allocated);
+}
+
+/* useful for debuging */
+__attribute__((unused))
+static void print_queue(GQueue *queue)
+{
+    g_queue_foreach(queue, print_elem, NULL);
+}
 
 static int fifo_init(struct request_handler *handler)
 {
@@ -50,30 +69,212 @@ static void fifo_fini(struct request_handler *handler)
 }
 
 static int fifo_push_request(struct request_handler *handler,
-                             struct req_container *req)
+                             struct req_container *reqc)
 {
-    g_queue_push_head((GQueue *)handler->private_data, req);
+    struct queue_element *elem;
+
+    elem = malloc(sizeof(*elem));
+    if (!elem)
+        return -errno;
+
+    elem->reqc = reqc;
+    elem->num_media_allocated = 0;
+
+    g_queue_push_head((GQueue *)handler->private_data, elem);
+
     return 0;
+}
+
+static bool is_reqc_the_first_element(GQueue *queue, struct req_container *reqc)
+{
+    struct queue_element *elem;
+
+    elem = (struct queue_element *) g_queue_peek_tail(queue);
+    if (!elem || elem->reqc != reqc)
+        return false;
+
+    return true;
 }
 
 static int fifo_remove_request(struct request_handler *handler,
                                struct req_container *reqc)
 {
-    // TODO
+    struct queue_element *elem;
+    GQueue *queue;
+
+    queue = (GQueue *) handler->private_data;
+
+    if (!is_reqc_the_first_element(queue, reqc))
+        LOG_RETURN(-EINVAL, "element '%p' is not first, cannot remove it",
+                   reqc);
+
+    elem = g_queue_pop_tail(queue);
+    free(elem);
+
     return 0;
 }
 
 static int fifo_requeue(struct request_handler *handler,
                         struct req_container *reqc)
 {
-    // TODO
+    struct queue_element *elem;
+    GQueue *queue;
+
+    queue = (GQueue *) handler->private_data;
+    if (!is_reqc_the_first_element(queue, reqc))
+        return -EINVAL;
+
+    elem = g_queue_pop_tail(queue);
+
+    /* reset internal state */
+    elem->num_media_allocated = 0;
+
+    /* not FIFO but this is the current behavior */
+    g_queue_push_head(queue, elem);
     return 0;
 }
 
 static int fifo_peek_request(struct request_handler *handler,
-                             struct req_container **req)
+                             struct req_container **reqc)
 {
-    *req = g_queue_peek_tail((GQueue *) handler->private_data);
+    struct queue_element *elem;
+
+    elem = g_queue_peek_tail((GQueue *) handler->private_data);
+    if (!elem) {
+        *reqc = NULL;
+        return 0;
+    }
+
+    *reqc = elem->reqc;
+
+    return 0;
+}
+
+static int find_read_device(struct request_handler *handler,
+                            struct req_container *reqc,
+                            struct lrs_dev **dev,
+                            size_t index_in_reqc,
+                            size_t index)
+{
+    struct media_info *medium;
+    struct pho_id medium_id;
+    const char *name;
+    bool sched_ready;
+    int rc;
+
+    rc = fetch_and_check_medium_info(handler->io_sched->lock_handle,
+                                     reqc, &medium_id, index_in_reqc,
+                                     reqc_get_medium_to_alloc(reqc, index));
+    if (rc)
+        return rc;
+
+    /* alloc_medium should not be NULL as it was initialized by
+     * fetch_and_check_medium_info
+     */
+    medium = reqc->params.rwalloc.media[index].alloc_medium;
+    name = medium->rsc.id.name;
+
+    *dev = search_in_use_medium(handler->devices, name, &sched_ready);
+    if (*dev)
+        return 0;
+
+    *dev = dev_picker(handler->devices, PHO_DEV_OP_ST_UNSPEC,
+                      select_empty_loaded_mount,
+                      0, &NO_TAGS, medium, false);
+
+    return 0;
+}
+
+static int find_write_device(GPtrArray *devices,
+                             struct lock_handle *lock_handle,
+                             struct req_container *reqc,
+                             struct lrs_dev **dev,
+                             size_t index,
+                             bool handle_error)
+{
+    pho_req_write_t *wreq = reqc->req->walloc;
+    struct media_info **medium =
+        &reqc->params.rwalloc.media[index].alloc_medium;
+    device_select_func_t dev_select_policy;
+    struct tags tags;
+    bool sched_ready;
+    size_t size;
+    int rc;
+
+    /* Are we retrying to find a new device to an already chosen medium? */
+    if (*medium)
+        goto find_device;
+
+    dev_select_policy = get_dev_policy();
+    if (!dev_select_policy)
+        LOG_RETURN(-EINVAL,
+                   "Unable to get device select policy during write alloc");
+
+    tags.n_tags = wreq->media[index]->n_tags;
+    tags.tags = wreq->media[index]->tags;
+    size = wreq->media[index]->size;
+
+    /* 1a) is there a mounted filesystem with enough room? */
+    *dev = dev_picker(devices, PHO_DEV_OP_ST_MOUNTED, dev_select_policy,
+                      size, &tags, NULL, true);
+    if (*dev)
+        return 0;
+
+    /* 1b) is there a loaded media with enough room? */
+    *dev = dev_picker(devices, PHO_DEV_OP_ST_LOADED, dev_select_policy,
+                      size, &tags, NULL, true);
+    if (*dev)
+        return 0;
+
+    /* 2) For the next steps, we need a media to write on.
+     * It will be loaded into a free drive.
+     * Note: sched_select_media locks the media.
+     */
+    pho_verb("No loaded media with enough space found: selecting another one");
+    rc = sched_select_medium(lock_handle, devices, medium, size, wreq->family,
+                             &tags, reqc, handle_error ? wreq->n_media : index,
+                             index);
+    if (rc)
+        return rc;
+
+    *dev = search_in_use_medium(devices, (*medium)->rsc.id.name, &sched_ready);
+    if (*dev && sched_ready)
+        return 0;
+
+find_device:
+    *dev = dev_picker(devices, PHO_DEV_OP_ST_UNSPEC, select_empty_loaded_mount,
+                      0, &NO_TAGS, *medium, false);
+    if (*dev)
+        return 0;
+
+    *dev = NULL;
+
+    // XXX what should we return if no device is found?
+    return 0;
+}
+
+/**
+ * If *dev is NULL, the caller should reschedule the request later if at least
+ * one compatible device exists or abort the request otherwise.
+ *
+ * If \p *dev is returned by dev_picker, ld_ongoing_io will be false and the
+ * caller can safely use this device. Otherwise, the caller should check if the
+ * device is available for scheduling.
+ */
+static int find_format_device(GPtrArray *devices,
+                              struct req_container *reqc,
+                              struct lrs_dev **dev)
+{
+    const char *name = reqc->req->format->med_id->name;
+    bool sched_ready;
+
+    *dev = search_in_use_medium(devices, name, &sched_ready);
+    if (*dev)
+        return 0;
+
+    *dev = dev_picker(devices, PHO_DEV_OP_ST_UNSPEC, select_empty_loaded_mount,
+                      0, &NO_TAGS, reqc->params.format.medium_to_format, false);
+
     return 0;
 }
 
@@ -83,28 +284,93 @@ static int fifo_get_device_medium_pair(struct request_handler *handler,
                                        size_t *index,
                                        bool is_error)
 {
-    // TODO
-    return 0;
+    struct queue_element *elem;
+    bool is_retry = false;
+    GQueue *queue;
+    int rc;
+
+    queue = (GQueue *) handler->private_data;
+
+    elem = g_queue_peek_tail(queue);
+    if (!is_reqc_the_first_element(queue, reqc) && !is_error)
+        LOG_RETURN(-EINVAL,
+                   "Request '%p' is not the first element of the queue",
+                   reqc);
+
+    if (elem && pho_request_is_read(reqc->req) &&
+        elem->num_media_allocated != *index)
+        is_retry = true;
+
+    if (!is_error && pho_request_is_read(reqc->req) &&
+        elem->num_media_allocated >= reqc->req->ralloc->n_med_ids)
+        return -ERANGE;
+
+    if (pho_request_is_read(reqc->req)) {
+        rc = find_read_device(handler, reqc, device,
+                              is_error || is_retry ?
+                                  *index :
+                                  elem->num_media_allocated,
+                              *index);
+        if (!is_error)
+            /* On error, elem is NULL since the request has already been removed
+             */
+            *index = elem->num_media_allocated++;
+
+    } else if (pho_request_is_write(reqc->req)) {
+        rc = find_write_device(handler->devices, handler->io_sched->lock_handle,
+                               reqc, device, *index, is_error);
+    } else if (pho_request_is_format(reqc->req)) {
+        rc = find_format_device(handler->devices, reqc, device);
+    } else {
+        rc = -EINVAL;
+    }
+
+    return rc;
 }
 
 static int fifo_add_device(struct request_handler *handler,
-                           struct lrs_dev *device)
+                           struct lrs_dev *new_device)
 {
-    // TODO
+    bool found = false;
+    int i;
+
+    for (i = 0; i < handler->devices->len; i++) {
+        struct lrs_dev *dev;
+
+        dev = g_ptr_array_index(handler->devices, i);
+        if (new_device == dev)
+            found = true;
+    }
+
+    if (!found)
+        g_ptr_array_add(handler->devices, new_device);
+
     return 0;
 }
 
 static int fifo_remove_device(struct request_handler *handler,
                               struct lrs_dev *device)
 {
-    // TODO
+    g_ptr_array_remove(handler->devices, device);
+
     return 0;
 }
 
+/* XXX This function could choose to return a device ready for another request.
+ * i.e. empty, dev_is_sched_ready == true, ...
+ *
+ * But whether this is efficient in practice or not will probably depend on how
+ * this function is called.
+ */
 static int fifo_reclaim_device(struct request_handler *handler,
                                struct lrs_dev **device)
 {
-    // TODO
+    /* The FIFO algorithm doesn't do any optimization regarding the device
+     * usage. We simply give the last device back.
+     */
+    *device = g_ptr_array_remove_index(handler->devices,
+                                       handler->devices->len - 1);
+
     return 0;
 }
 

@@ -359,4 +359,42 @@ int check_and_take_device_lock(struct lrs_sched *sched,
 
 int sched_handle_monitor(struct lrs_sched *sched, json_t *status);
 
+typedef int (*device_select_func_t)(size_t required_size,
+                                    struct lrs_dev *dev_curr,
+                                    struct lrs_dev **dev_selected);
+
+int select_empty_loaded_mount(size_t required_size,
+                              struct lrs_dev *dev_curr,
+                              struct lrs_dev **dev_selected);
+
+struct lrs_dev *dev_picker(GPtrArray *devices,
+                           enum dev_op_status op_st,
+                           device_select_func_t select_func,
+                           size_t required_size,
+                           const struct tags *media_tags,
+                           struct media_info *pmedia,
+                           bool is_write);
+
+device_select_func_t get_dev_policy(void);
+
+struct lrs_dev *search_in_use_medium(GPtrArray *devices,
+                                     const char *name,
+                                     bool *sched_ready);
+
+int sched_select_medium(struct lock_handle *lock_handle,
+                        GPtrArray *devices,
+                        struct media_info **p_media,
+                        size_t required_size,
+                        enum rsc_family family,
+                        const struct tags *tags,
+                        struct req_container *reqc,
+                        size_t n_med,
+                        size_t not_alloc);
+
+int fetch_and_check_medium_info(struct lock_handle *lock_handle,
+                                struct req_container *reqc,
+                                struct pho_id *m_id,
+                                size_t index,
+                                struct media_info **target_medium);
+
 #endif
