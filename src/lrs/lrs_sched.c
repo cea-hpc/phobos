@@ -362,11 +362,10 @@ int check_and_take_device_lock(struct lrs_sched *sched,
  *                    allocated by this function.
  * @param id[in]      ID of the media.
  */
-static int sched_fill_media_info(struct lrs_sched *sched,
+static int sched_fill_media_info(struct lock_handle *lock_handle,
                                  struct media_info **pmedia,
                                  const struct pho_id *id)
 {
-    struct dss_handle   *dss = &sched->sched_thread.dss;
     struct media_info   *media_res = NULL;
     struct dss_filter    filter;
     int                  mcnt = 0;
@@ -387,7 +386,7 @@ static int sched_fill_media_info(struct lrs_sched *sched,
         return rc;
 
     /* get media info from DB */
-    rc = dss_media_get(dss, &filter, &media_res, &mcnt);
+    rc = dss_media_get(lock_handle->dss, &filter, &media_res, &mcnt);
     if (rc)
         GOTO(out_nores, rc);
 
@@ -406,7 +405,7 @@ static int sched_fill_media_info(struct lrs_sched *sched,
         LOG_GOTO(out_free, rc = -ENOMEM, "Couldn't duplicate media info");
 
     if ((*pmedia)->lock.hostname != NULL) {
-        rc = check_renew_lock(&sched->lock_handle, DSS_MEDIA, *pmedia,
+        rc = check_renew_lock(lock_handle, DSS_MEDIA, *pmedia,
                               &(*pmedia)->lock);
         if (rc == -EALREADY) {
             LOG_GOTO(out_free, rc,
@@ -509,7 +508,8 @@ static int sched_fill_dev_info(struct lrs_sched *sched,
                   dev->ld_dev_path, devi->rsc.id.name, medium_id->name);
 
         /* get media info for loaded drives */
-        rc = sched_fill_media_info(sched, &dev->ld_dss_media_info, medium_id);
+        rc = sched_fill_media_info(&sched->lock_handle, &dev->ld_dss_media_info,
+                                   medium_id);
 
         if (rc) {
             if (rc == -ENXIO)
@@ -2329,7 +2329,7 @@ static int check_medium_permission_and_status(struct req_container *reqc,
     return 0;
 }
 
-static int fetch_and_check_medium_info(struct lrs_sched *sched,
+static int fetch_and_check_medium_info(struct lock_handle *lock_handle,
                                        struct req_container *reqc,
                                        struct pho_id *m_id,
                                        size_t index)
@@ -2353,7 +2353,7 @@ static int fetch_and_check_medium_info(struct lrs_sched *sched,
     if (rc)
         return rc;
 
-    rc = sched_fill_media_info(sched, target_medium, m_id);
+    rc = sched_fill_media_info(lock_handle, target_medium, m_id);
     if (rc)
         return rc;
 
@@ -2387,7 +2387,8 @@ static int sched_read_alloc_one_medium(struct lrs_sched *sched,
         goto find_read_device;
 
 find_read_medium:
-    rc = fetch_and_check_medium_info(sched, reqc, &medium_id, index_to_alloc);
+    rc = fetch_and_check_medium_info(&sched->lock_handle, reqc, &medium_id,
+                                     index_to_alloc);
     if (rc)
         goto skip_medium;
 
@@ -2521,7 +2522,7 @@ static int sched_handle_format(struct lrs_sched *sched,
     struct pho_id m;
     int rc = 0;
 
-    rc = fetch_and_check_medium_info(sched, reqc, &m, 0);
+    rc = fetch_and_check_medium_info(&sched->lock_handle, reqc, &m, 0);
     if (rc == -EALREADY)
         LOG_GOTO(err_out, rc = -EBUSY,
                  "Medium to format '%s' is already locked",
