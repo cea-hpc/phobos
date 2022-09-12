@@ -22,7 +22,7 @@ disk_size_MiB=150 #150 MiB for each OSD
 disk_size_MB=$(printf "%.0f" \
         $(awk -v x=$disk_size_MiB 'BEGIN { print x*1.05 }'))
 # Username to connect to other VMs from the main VM
-user_for_ssh=ceph_conf
+user_for_ssh=root
 # Secondary VM hostnames
 secondary_vms_hosts=(
 vm1
