@@ -1,4 +1,4 @@
-% LRS device and media locking
+# Device and media locking
 
 # Overview
 
@@ -78,6 +78,27 @@ a medium which is not loaded into one of its devices), it must release it.
 For each of these situations, a warning must then be emitted to inform
 the administrator about this unexpected situation.
 
+
+# Locate early lock on media
+
+By locking early some media of an object, the locate call registers its choice
+and preferentially returns the same hostname for next targeted objects that
+share the same media. This is a convenient way to aggregate on the same node
+related get requests that demand the same media.
+
+When a phobos client locates an object, it ensures that the returned hostname
+will remain a convenient node to access the object by locking some media owning
+pieces of this object with the returned hostname as lock hostname and the client
+pid as owner. As result of the locate call, the number of media that are locked
+early should be the minimum number adequate to retrieve the object. The LRS of
+the hostname returned by the locate call will then refresh these locks without
+changing the hostname that is the same but setting owner to its pid and later
+releasing these locks when it releases the media. But the LRS can also choose
+other media than the one chosen by locate to get the targeted object because
+some layouts store redundant copies of the same extent on different media. In
+this case, the locks taken by the locate client will not be refreshed by the LRS
+and will stay unchanged in the DSS. Even if letting some unused locks into the
+DSS is not a classy situation, it does not bring too many drawbacks.
 
 # Administrative status versus LRS resource locking
 

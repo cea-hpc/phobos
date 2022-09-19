@@ -4,7 +4,7 @@
 
 This document describes the locate feature, to give users a way to locate on
 which node an object is currently reachable, based on its current medium
-location.
+location, and to ensure this location for future get calls.
 
 ---
 
@@ -13,7 +13,8 @@ location.
 
 1. Object location
 
-> User wants to know where an object should be accessed from.
+> User wants to know where an object should be accessed from so that future
+> access to this resource is likely to be at this node.
 
 2. Object location on get error
 
@@ -40,10 +41,15 @@ object.
 /**
  * Retrieve one node name from which an object can be accessed.
  *
- * If the media having this object are locked by a node, this function returns
- * the hostname of this node. If there is currently no node that locks the media
- * having this object, \p hostname is set to NULL with a return code of 0 to
- * indicate that any node can perform an operation on this object.
+ * This function returns the most convenient node to get an object.
+
+ * If possible, this function locks to the returned node the minimum adequate
+ * number of media storing extents of this object to ensure that the returned
+ * node will be able to get this object. The number of newly added locks is also
+ * returned to allow the caller to keep up to date the load of each host, by
+ * counting the media that are newly locked to the returned hostname.
+ *
+ * Among the most convenient nodes, this function will favour the \p focus_host.
  *
  * At least one of \p oid or \p uuid must not be NULL.
  *
@@ -60,9 +66,14 @@ object.
  * @param[in]   uuid        UUID of the object to locate (ignored if NULL and
  *                          \p oid must not be NULL)
  * @param[in]   version     Version of the object to locate (ignored if zero)
- * @param[out]  hostname    Allocated and returned hostname of the node which
- *                          can give access to the object (NULL is returned on
- *                          error or if no locks are found on the object)
+ * @param[in]   focus_host  Hostname on which the caller would like to access
+ *                          the object if there is no more convenient node (if
+ *                          NULL, focus_host is set to local hostname)
+ * @param[out]  hostname    Allocated and returned hostname of the most
+ *                          convenient node on which the object can be accessed
+ *                          (NULL is returned on error)
+ * @param[out]  nb_new_lock Number of new lock on media added for the returned
+ *                          hostname
  *
  * @return                  0 on success or -errno on failure,
  *                          -ENOENT if no object corresponds to input
@@ -74,26 +85,28 @@ object.
  *                          -EADDRNOTAVAIL if we cannot get self hostname
  */
 int phobos_locate(const char *obj_id, const char *uuid, int version,
-                  char **hostname);
+                  const char *focus_host, char **hostname, int *nb_new_lock);
 ```
 
-The call takes an object ID as input and gives back a node name as output. The
-retrieved node name is the one targeted by the locate command if it can access
-the object or the first one encountered which can reach it. If no nodes can
-currently access the object, -EAGAIN is returned. The hostname can be NULL with
-a return code of 0 to indicate that any node can access this object (i.e. no
-extent of the object is on a currently locked medium).
+The call takes an object ID as input and gives back a node name as output. If
+any node can access the object (i.e. no extent of the object is on a currently
+locked medium), the call returns the focus_host and takes locks for this host to
+ensure the availability of the object in the future. The number of locks that
+are newly taken during the call for the output hostname is also returned. This
+number can help the caller to evaluate the number of new media that this host
+would have to manage.
 
 #### Object retrieval
 The `phobos_get()` call remains the same, but it supports a new flag in the
 `pho_xfer_desc` data structure called `PHO_XFER_OBJ_BEST_HOST`. If this flag is
-set, we will first call `phobos_locate()` on each object, and get it only if it
-is available on the current host or if the object can be accessed on any node.
+set, we will first call `phobos_locate()` on each object with current host as
+focus_host (ie: focus_host is set to NULL). We get the object only if it is
+located on the current host.
 
-If the `phobos_locate()` call fails on any object, its return code will be
-set to -EREMOTE, and a field added to the XFer parameters, called `node_name`,
-will be filled with the name of the node to access to make the `phobos_get()`
-call.
+If the `phobos_locate()` returns a hostname which differs from the current host,
+the return code of this xfer will be set to -EREMOTE, and a field added to the
+XFer parameters, called `node_name`, will be filled with the name of the node
+to access to make the `phobos_get()` call.
 
 ```c
 struct pho_xfer_get_params {
@@ -148,12 +161,19 @@ keyword.
 $ phobos locate obj_id
 ```
 
-The 'locate' action can also take two optional arguments '--uuid' and
-'--version', allowing one to locate a deprecated object (see
+To target an object, the 'locate' action can also take two optional arguments
+'--uuid' and '--version', allowing one to locate a deprecated object (see
 deletion_and_versionning.md for more information on their use).
 
+We can add a preferred hostname to the 'locate' action by using the --focus-host
+optional argument. If not set, the focus_host is set to the current hostname.
+
+If possible, the 'locate' action would lock the minimum but adequate number of
+media to ensure that the returned hostname will be able to access the targeted
+object.
+
 ```
-$ phobos locate --uid obj_uuid --version obj_vers obj_id
+$ phobos locate --uid obj_uuid --version obj_vers obj_id --focus-host hostname
 ```
 
 The command 'phobos get' is given a new option to indicate that the get should

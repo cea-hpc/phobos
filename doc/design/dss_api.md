@@ -51,10 +51,31 @@ lock at the same time. If it happens, the 'first' call will succeed, the
  * @param[in]   item_cnt        Number of ressources to lock.
  *
  * @return                      0 on success,
- *                             -EEXIST if \p lock_id already exists.
+ *                             -EEXIST if one of the targeted locks already
+ *                              exists.
  */
 int dss_lock(struct dss_handle *handle, enum dss_type type,
              const void *item_list, int item_cnt);
+/**
+ * Take locks on a specific hostname.
+ *
+ * If any lock cannot be taken, then the ones that already are will be
+ * forcefully unlocked, and the function will not try to lock any other
+ * ressource (all-or-nothing policy).
+ *
+ * @param[in]   handle          DSS handle.
+ * @param[in]   type            Type of the ressources to lock.
+ * @param[in]   item_list       List of ressources to lock.
+ * @param[in]   item_cnt        Number of ressources to lock.
+ * @param[in]	hostname        Hostname of the lock to set
+ *
+ * @return                      0 on success,
+ *                             -EEXIST if one of the targeted locks already
+ *                              exists.
+ */
+int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
+             	      const void *item_list, int item_cnt,
+                      const char *hostname);
 ```
 
 ## Refresh call
