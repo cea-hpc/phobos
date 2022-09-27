@@ -2020,15 +2020,13 @@ int process_release_request(struct lrs_sched *sched,
 
             if (result_rc)
                 rc = rc ? : result_rc;
+            else
+                continue;
         }
 
-        MUTEX_LOCK(&reqc->mutex);
-
-        reqc->params.release.rc = result_rc;
-        if (!reqc->params.release.rc)
-            goto unlock;
-
         /* manage error */
+        MUTEX_LOCK(&reqc->mutex);
+        reqc->params.release.rc = result_rc;
         reqc->params.release.tosync_media[i].status = SUB_REQUEST_ERROR;
         rc2 = queue_error_response(sched->response_queue,
                                    reqc->params.release.rc,
@@ -2043,17 +2041,12 @@ int process_release_request(struct lrs_sched *sched,
                     SUB_REQUEST_CANCEL;
         }
 
-unlock:
         MUTEX_UNLOCK(&reqc->mutex);
+        if (i == 0)
+            /* never queued: we can free it */
+            sched_req_free(reqc);
 
-        if (reqc->params.release.rc) {
-            if (i == 0) {
-                /* never queued: we can free it */
-                sched_req_free(reqc);
-            }
-
-            break;
-        }
+        break;
     }
 
     return rc;
