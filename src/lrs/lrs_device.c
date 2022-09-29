@@ -1287,7 +1287,9 @@ static int dev_handle_format(struct lrs_dev *dev)
             return 0;
         }
 
+        MUTEX_LOCK(&dev->ld_mutex);
         reqc->params.format.medium_to_format = NULL;
+        MUTEX_UNLOCK(&dev->ld_mutex);
         if (rc) {
             if (failure_on_dev) {
                 LOG_GOTO(out_response, rc, "Error when loading medium to "

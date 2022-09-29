@@ -1005,9 +1005,13 @@ static char *get_sub_request_medium_name(struct sub_request *sub_request)
          */
         if (!params->media[medium_index].alloc_medium)
             return NULL;
+
         return params->media[medium_index].alloc_medium->rsc.id.name;
     } else {
         struct format_params *params = &sub_request->reqc->params.format;
+
+        if (!params->medium_to_format)
+            return NULL;
 
         return params->medium_to_format[medium_index].rsc.id.name;
     }
