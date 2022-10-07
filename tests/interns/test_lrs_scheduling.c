@@ -513,7 +513,7 @@ static void free_medium_to_alloc(struct req_container *reqc, size_t i)
 
 static int io_sched_setup(void **data)
 {
-    struct pho_io_sched *io_sched;
+    struct io_sched_handle *io_sched;
     int rc;
 
     io_sched = malloc(sizeof(*io_sched));
@@ -521,7 +521,7 @@ static int io_sched_setup(void **data)
 
     *data = io_sched;
 
-    rc = load_io_schedulers_from_config(io_sched);
+    rc = io_sched_handle_load_from_config(io_sched);
     assert_return_code(rc, -rc);
 
     return 0;
@@ -529,7 +529,7 @@ static int io_sched_setup(void **data)
 
 static int io_sched_teardown(void **data)
 {
-    struct pho_io_sched *io_sched = (struct pho_io_sched *) *data;
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
 
     io_sched_fini(io_sched);
     free(io_sched);
@@ -539,8 +539,8 @@ static int io_sched_teardown(void **data)
 
 static void io_sched_add_device_twice(void **data)
 {
-    struct pho_io_sched *io_sched = (struct pho_io_sched *) *data;
-    struct request_handler *handler;
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
+    struct io_scheduler *handler;
     struct lrs_dev device;
     int rc;
 
@@ -576,8 +576,8 @@ static void io_sched_add_device_twice(void **data)
 
 static void io_sched_remove_non_existing_device(void **data)
 {
-    struct pho_io_sched *io_sched = (struct pho_io_sched *) *data;
-    struct request_handler *handler;
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
+    struct io_scheduler *handler;
     struct lrs_dev devices[2];
     int rc;
 
@@ -616,7 +616,7 @@ static void io_sched_remove_non_existing_device(void **data)
 
 static void io_sched_no_request(void **data)
 {
-    struct pho_io_sched *io_sched = (struct pho_io_sched *) *data;
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
     struct req_container *reqc;
     int rc;
 
@@ -627,7 +627,7 @@ static void io_sched_no_request(void **data)
 
 static void io_sched_one_request(void **data)
 {
-    struct pho_io_sched *io_sched = (struct pho_io_sched *) *data;
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
     GPtrArray *devices = g_ptr_array_new();
     struct req_container *second_reqc;
     struct req_container *first_reqc;
@@ -670,7 +670,7 @@ static void io_sched_one_request(void **data)
 
 static void io_sched_one_medium_no_device(void **data)
 {
-    struct pho_io_sched *io_sched = (struct pho_io_sched *) *data;
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
     GPtrArray *devices = g_ptr_array_new();
     struct req_container *new_reqc;
     static const char * const media_names[] = {
@@ -695,13 +695,14 @@ static void io_sched_one_medium_no_device(void **data)
     assert_return_code(rc, -rc);
 
     if (new_reqc == NULL) {
-        /* some schedulers can return a request without having devices */
-
         rc = io_sched_remove_request(io_sched, &reqc);
         destroy_request(&reqc);
         assert_return_code(rc, -rc);
         g_ptr_array_free(devices, true);
         return;
+    } else {
+        /* some schedulers can return a request without having devices */
+        assert_ptr_equal(&reqc, new_reqc);
     }
 
     if (IO_REQ_TYPE == IO_REQ_WRITE) {
@@ -724,7 +725,7 @@ static void io_sched_one_medium_no_device(void **data)
 
 static void io_sched_one_medium_no_device_available(void **data)
 {
-    struct pho_io_sched *io_sched = (struct pho_io_sched *) *data;
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
     GPtrArray *device_array = g_ptr_array_new();
     static const char * const media_names[] = {
         "M1", "M2", "M3",
@@ -788,7 +789,7 @@ static void io_sched_one_medium_no_device_available(void **data)
 
 static void io_sched_one_medium(void **data)
 {
-    struct pho_io_sched *io_sched = (struct pho_io_sched *) *data;
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
     GPtrArray *devices = g_ptr_array_new();
     static const char * const media_names[] = {
         "M1",
@@ -837,13 +838,13 @@ static void io_sched_one_medium(void **data)
 
 static void io_sched_4_medium(void **data)
 {
-    struct pho_io_sched *io_sched = (struct pho_io_sched *) *data;
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
     GPtrArray *device_array = g_ptr_array_new();
     static const char * const media_names[] = {
         "M1", "M2", "M3", "M4", "M5",
     };
     struct req_container *new_reqc;
-    struct media_info media[5];
+    struct media_info media[4];
     struct lrs_dev devices[4];
     struct req_container reqc;
     bool index_seen[] = {
@@ -859,7 +860,7 @@ static void io_sched_4_medium(void **data)
     create_device(&devices[2], "D3");
     create_device(&devices[3], "D4");
 
-    for (i = 0; i < 5; i++)
+    for (i = 0; i < 4; i++)
         create_medium(&media[i], media_names[i]);
 
     create_request(&reqc, media_names, 4, 2, io_sched->lock_handle);
@@ -952,7 +953,7 @@ test_end:
 
 static void io_sched_not_enough_devices(void **data)
 {
-    struct pho_io_sched *io_sched = (struct pho_io_sched *) *data;
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
     static const char * const media_names[] = {
         "M1", "M2",
     };
@@ -1037,7 +1038,7 @@ test_end:
 
 static void io_sched_requeue_one_request(void **data)
 {
-    struct pho_io_sched *io_sched = (struct pho_io_sched *) *data;
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
     GPtrArray *devices = g_ptr_array_new();
     struct req_container *new_reqc;
     static const char * const media_names[] = {
@@ -1106,7 +1107,7 @@ static void io_sched_requeue_one_request(void **data)
 
 static void test_io_sched_error(void **data, bool free_device)
 {
-    struct pho_io_sched *io_sched = (struct pho_io_sched *) *data;
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
     static const char * const media_names[] = {
         "M1", "M2", "M3", "M4",
     };
@@ -1239,7 +1240,7 @@ static void io_sched_one_error_no_device_available(void **data)
 
 static void io_sched_eagain(void **data)
 {
-    struct pho_io_sched *io_sched = (struct pho_io_sched *) *data;
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
     static const char * const media_names[] = {
         "M1", "M2", "M3",
     };

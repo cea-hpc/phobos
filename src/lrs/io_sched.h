@@ -54,79 +54,79 @@ enum io_schedulers {
     IO_SCHED_GROUPED_READ,
 };
 
-struct pho_io_sched;
-struct request_handler;
+struct io_sched_handle;
+struct io_scheduler;
 
-struct pho_io_scheduler_ops {
-    int (*init)(struct request_handler *handler);
+struct io_scheduler_ops {
+    int (*init)(struct io_scheduler *io_sched);
 
-    void (*fini)(struct request_handler *handler);
+    void (*fini)(struct io_scheduler *io_sched);
 
-    int (*push_request)(struct request_handler *handler,
+    int (*push_request)(struct io_scheduler *io_sched,
                         struct req_container *reqc);
 
-    int (*peek_request)(struct request_handler *handler,
+    int (*peek_request)(struct io_scheduler *io_sched,
                         struct req_container **reqc);
 
-    int (*remove_request)(struct request_handler *handler,
+    int (*remove_request)(struct io_scheduler *io_sched,
                           struct req_container *reqc);
 
-    int (*get_device_medium_pair)(struct request_handler *handler,
+    int (*get_device_medium_pair)(struct io_scheduler *io_sched,
                                   struct req_container *reqc,
                                   struct lrs_dev **device,
                                   size_t *index,
                                   bool is_error);
 
-    int (*requeue)(struct request_handler *handler,
+    int (*requeue)(struct io_scheduler *io_sched,
                    struct req_container *reqc);
 
-    /* Add a device to this request_handler. This device can already be in the
+    /* Add a device to this I/O scheduler. This device can already be in the
      * I/O scheduler, it is up to this callback to check this.
      *
-     * \param[in]  handler a valid request_handler
-     * \param[in]  device  the device to add
+     * \param[in]  io_sched a valid io_scheduler
+     * \param[in]  device   the device to add
      *
      * \return             0 on success, negative POSIX error code on failure
      */
-    int (*add_device)(struct request_handler *handler,
+    int (*add_device)(struct io_scheduler *io_sched,
                       struct lrs_dev *device);
 
-    /* Remove a specific device from this request_handler. The device may not be
+    /* Remove a specific device from this I/O scheduler. The device may not be
      * in this I/O scheduler, it is up to this callback to check this.
      *
-     * \param[in]  handler  a valid request handler
-     * \param[in]  device   the device to remove
+     * \param[in]  io_sched  a valid io_sched
+     * \param[in]  device    the device to remove
      *
-     * \return              0 on success, negative POSIX error code on failure
+     * \return               0 on success, negative POSIX error code on failure
      */
-    int (*remove_device)(struct request_handler *handler,
+    int (*remove_device)(struct io_scheduler *io_sched,
                          struct lrs_dev *device);
 
-    /* Ask the request_handler for a device to remove. The scheduler will choose
+    /* Ask the I/O scheduler for a device to remove. The scheduler will choose
      * which device is removed depending on its internal state.
      *
      * This callback is not currently used. It may be called by some
      * dispatch_devices algorithms which need to dynamically move devices from
      * one scheduler to another.
      *
-     * \param[in]  handler  a valid request_handler
-     * \param[out] device   the device that was given back by the I/O scheduler
+     * \param[in]  io_sched  a valid io_scheduler
+     * \param[out] device    the device that was given back by the I/O scheduler
      *
-     * \return              0 on success, negative POSIX error code on failure
+     * \return               0 on success, negative POSIX error code on failure
      */
-    int (*reclaim_device)(struct request_handler *handler,
+    int (*reclaim_device)(struct io_scheduler *io_sched,
                           struct lrs_dev **device);
 };
 
-struct request_handler {
-    struct pho_io_sched *io_sched; /* reference the I/O scheduler */
-    GPtrArray *devices;            /* Devices that this handle can use, it may
-                                    * be a subset of the devices available. Some
-                                    * or all the devices may be shared between
-                                    * schedulers.
-                                    */
+struct io_scheduler {
+    struct io_sched_handle *io_sched_hdl; /* reference the I/O scheduler */
+    GPtrArray *devices; /* Devices that this handle can use, it may
+                         * be a subset of the devices available. Some
+                         * or all the devices may be shared between
+                         * schedulers.
+                         */
     void *private_data;
-    struct pho_io_scheduler_ops ops;
+    struct io_scheduler_ops ops;
 };
 
 enum io_request_type {
@@ -135,46 +135,50 @@ enum io_request_type {
     IO_REQ_FORMAT,
 };
 
-struct pho_io_sched {
+struct io_sched_handle {
     /**
      * Decide which request should be considered next. This callback will decide
      * from which I/O scheduler the main scheduler should take its request.
      *
      * Each request \p read, \p write and \p format must be returned by
-     * peek_request from the corresponding request_handler and can be NULL if
+     * peek_request from the corresponding I/O scheduler and can be NULL if
      * there is no request of a given type.
      *
-     * \param[in]  io_sched   a valid pho_io_sched
-     * \param[in]  read       a read request container
-     * \param[in]  write      a write request container
-     * \param[in]  format     a format request container
+     * \param[in]  io_sched_hdl a valid io_sched_handle
+     * \param[in]  read         a read request container
+     * \param[in]  write        a write request container
+     * \param[in]  format       a format request container
      *
      * \return                the next request to schedule. This function may
      *                        return NULL
      */
-    struct req_container *(*next_request)(struct pho_io_sched *io_sched,
+    struct req_container *(*next_request)(struct io_sched_handle *io_sched_hdl,
                                           struct req_container *read,
                                           struct req_container *write,
                                           struct req_container *format);
 
     /**
-     * Dispatch devices to I/O schedulers by calling request_handler::add_device
+     * Dispatch devices to I/O schedulers by calling
+     * io_scheduler_ops::add_device
      *
      * This function will be called at each iteration of the main scheduler
      * because the list of device can change dynamically but also because the
      * algorithm may dispatch devices differently depending on the system's
      * load.
      *
-     * \param[in]  io_sched  a valid pho_io_sched
-     * \param[in]  devices   the list of devices handled by the main scheduler
+     * \param[in]  io_sched_hdl  a valid io_sched_handle
+     * \param[in]  devices       the list of devices handled by the main
+     *                           scheduler
      *
-     * \return               0 on success, negative POSIX error code on failure
+     * \return                   0 on success, negative POSIX error code on
+     * failure
      */
-    int (*dispatch_devices)(struct pho_io_sched *io_sched, GPtrArray *devices);
+    int (*dispatch_devices)(struct io_sched_handle *io_sched_hdl,
+                            GPtrArray *devices);
 
-    struct request_handler read;
-    struct request_handler write;
-    struct request_handler format;
+    struct io_scheduler read;
+    struct io_scheduler write;
+    struct io_scheduler format;
     struct lock_handle    *lock_handle;
     struct tsqueue        *response_queue; /* reference to the response queue */
 };
@@ -184,25 +188,25 @@ struct pho_io_sched {
 /**
  * Initialize the I/O schedulers from the configuration. This function will also
  * initialize the request handlers' internal data by calling
- * pho_io_scheduler_ops::init.
+ * io_scheduler_ops::init.
  *
  * The name of each algorithm will be stored in the [io_sched] section from the
  * parameters: read_algo, write_algo and format_algo.
  *
- * \param[out]  io_sched   pho_io_sched structure to initialize
+ * \param[out]  io_sched_hdl io_sched_handle structure to initialize
  *
- * \return                 0 on success, negative POSIX error code on failure
+ * \return                   0 on success, negative POSIX error code on failure
  */
-int load_io_schedulers_from_config(struct pho_io_sched *io_sched);
+int io_sched_handle_load_from_config(struct io_sched_handle *io_sched_hdl);
 
 /**
- * Cleanup the memory used by the pho_io_sched and the request handlers by
- * calling pho_io_schedulers_ops::fini internally.
+ * Cleanup the memory used by the io_sched_handle and the request handlers by
+ * calling io_scheduler_ops::fini internally.
  *
- * \param[in]  io_sched  a valid pho_io_sched returned by
- *                       load_io_schedulers_from_config
+ * \param[in]  io_sched_hdl  a valid io_sched_handle returned by
+ *                           io_sched_handle_load_from_config
  */
-void io_sched_fini(struct pho_io_sched *io_sched);
+void io_sched_fini(struct io_sched_handle *io_sched_hdl);
 
 /**
  * This function will allow the main scheduler to add devices to the handlers.
@@ -213,24 +217,24 @@ void io_sched_fini(struct pho_io_sched *io_sched);
  * devices but also because some heuristics may attribute devices to certain
  * requests dynamically depending on the system's load.
  *
- * \param[in]  io_sched  a valid I/O scheduler
- * \param[in]  devices   the list of devices owned by this LRS
+ * \param[in]  io_sched_hdl  a valid I/O scheduler
+ * \param[in]  devices       the list of devices owned by this LRS
  *
  * \return               0 on success, negative POSIX error on failure
  */
-int io_sched_dispatch_devices(struct pho_io_sched *io_sched,
+int io_sched_dispatch_devices(struct io_sched_handle *io_sched_hdl,
                               GPtrArray *devices);
 
 /**
  * Push a new request to the scheduler, the request has to be of the correct
  * type.
  *
- * \param[in]  io_sched  a valid I/O scheduler
- * \param[in]  reqc      a request container to schedule
+ * \param[in]  io_sched_hdl  a valid I/O scheduler
+ * \param[in]  reqc          a request container to schedule
  *
- * \return               0 on success, negative POSIX error on failure
+ * \return                   0 on success, negative POSIX error on failure
  */
-int io_sched_push_request(struct pho_io_sched *io_sched,
+int io_sched_push_request(struct io_sched_handle *io_sched_hdl,
                           struct req_container *reqc);
 
 /**
@@ -238,37 +242,37 @@ int io_sched_push_request(struct pho_io_sched *io_sched,
  * the main scheduler to know when there are no more requests to schedule but
  * also which type of request is to be scheduled next.
  *
- * \param[in]   io_sched  a valid pho_io_sched
- * \param[out]  reqc      the next request to handle, if NULL, the scheduler
- *                        has no more request to schedule.
+ * \param[in]   io_sched_hdl  a valid io_sched_handle
+ * \param[out]  reqc          the next request to handle, if NULL, the scheduler
+ *                            has no more request to schedule.
  *
  */
-int io_sched_peek_request(struct pho_io_sched *io_sched,
+int io_sched_peek_request(struct io_sched_handle *io_sched_hdl,
                           struct req_container **reqc);
 
 /**
  * Remove a request from the scheduler.
  *
- * \param[in]  io_sched   a valid pho_io_sched
- * \param[in]  reqc       a request to remove that was just returned by
- *                        io_sched_peek_request
+ * \param[in]  io_sched_hdl   a valid io_sched_handle
+ * \param[in]  reqc           a request to remove that was just returned by
+ *                            io_sched_peek_request
  *
- * \return    -EINVAL     the request was not found
+ * \return    -EINVAL         the request was not found
  */
-int io_sched_remove_request(struct pho_io_sched *io_sched,
+int io_sched_remove_request(struct io_sched_handle *io_sched_hdl,
                             struct req_container *reqc);
 
 /**
  * Requeue a request. If a request cannot be scheduled immediatly, this function
  * will reschedule the request for later.
  *
- * \param[in]  io_sched   a valid pho_io_sched
- * \param[in]  reqc       a request to requeue that was just returned by
- *                        io_sched_peek_request
+ * \param[in]  io_sched_hdl   a valid io_sched_handle
+ * \param[in]  reqc           a request to requeue that was just returned by
+ *                            io_sched_peek_request
  *
- * \return    -EINVAL     the request was not found
+ * \return    -EINVAL         the request was not found
  */
-int io_sched_requeue(struct pho_io_sched *io_sched,
+int io_sched_requeue(struct io_sched_handle *io_sched_hdl,
                      struct req_container *reqc);
 
 /**
@@ -299,7 +303,7 @@ int io_sched_requeue(struct pho_io_sched *io_sched,
  *             -ERANGE    this function was called too many times for a request
  *                        (e.g. more than req->ralloc->n_med_ids for a read).
  */
-int io_sched_get_device_medium_pair(struct pho_io_sched *io_sched,
+int io_sched_get_device_medium_pair(struct io_sched_handle *io_sched_hdl,
                                     struct req_container *reqc,
                                     struct lrs_dev **dev,
                                     size_t *index,
@@ -307,12 +311,12 @@ int io_sched_get_device_medium_pair(struct pho_io_sched *io_sched,
 
 /* Remove a specific device from the I/O schedulers that own it
  *
- * \param[in]  io_sched    a valid pho_io_sched
- * \param[in]  device      a device to remove
+ * \param[in]  io_sched_hdl a valid io_sched_handle
+ * \param[in]  device       a device to remove
  *
  * \return                 0 on success, negative POSIX error code on failure
  */
-int io_sched_remove_device(struct pho_io_sched *io_sched,
+int io_sched_remove_device(struct io_sched_handle *io_sched_hdl,
                            struct lrs_dev *device);
 
 #endif

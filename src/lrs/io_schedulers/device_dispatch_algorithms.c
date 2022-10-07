@@ -2,9 +2,8 @@
 
 #include "schedulers.h"
 
-static int request_handler_no_dispatch(struct pho_io_sched *io_sched,
-                                       GPtrArray *devices,
-                                       struct request_handler *handler)
+static int io_scheduler_no_dispatch(struct io_scheduler *io_sched,
+                                    GPtrArray *devices)
 {
     int i;
 
@@ -13,26 +12,26 @@ static int request_handler_no_dispatch(struct pho_io_sched *io_sched,
 
         device = g_ptr_array_index(devices, i);
 
-        handler->ops.add_device(handler, device);
+        io_sched->ops.add_device(io_sched, device);
     }
 
     return 0;
 }
 
-int no_dispatch(struct pho_io_sched *io_sched,
+int no_dispatch(struct io_sched_handle *io_sched_hdl,
                 GPtrArray *devices)
 {
     int rc;
 
-    rc = request_handler_no_dispatch(io_sched, devices, &io_sched->read);
+    rc = io_scheduler_no_dispatch(&io_sched_hdl->read, devices);
     if (rc)
         return rc;
 
-    rc = request_handler_no_dispatch(io_sched, devices, &io_sched->write);
+    rc = io_scheduler_no_dispatch(&io_sched_hdl->write, devices);
     if (rc)
         return rc;
 
-    rc = request_handler_no_dispatch(io_sched, devices, &io_sched->format);
+    rc = io_scheduler_no_dispatch(&io_sched_hdl->format, devices);
     if (rc)
         return rc;
 

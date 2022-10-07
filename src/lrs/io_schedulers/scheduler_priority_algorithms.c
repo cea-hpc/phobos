@@ -45,7 +45,7 @@ static const struct req_container *oldest_request(const struct req_container *a,
 }
 
 /* Fetch the oldest request from the 3 queues */
-struct req_container *fifo_next_request(struct pho_io_sched *io_sched,
+struct req_container *fifo_next_request(struct io_sched_handle *io_sched_hdl,
                                         struct req_container *read,
                                         struct req_container *write,
                                         struct req_container *format)

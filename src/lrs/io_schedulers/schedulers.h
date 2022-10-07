@@ -27,8 +27,8 @@
 
 #include "io_sched.h"
 
-extern struct pho_io_scheduler_ops IO_SCHED_FIFO_OPS;
-extern struct pho_io_scheduler_ops IO_SCHED_GROUPED_READ_OPS;
+extern struct io_scheduler_ops IO_SCHED_FIFO_OPS;
+extern struct io_scheduler_ops IO_SCHED_GROUPED_READ_OPS;
 
 /********************************
  * Device dispatcher algorithms *
@@ -46,7 +46,7 @@ extern struct pho_io_scheduler_ops IO_SCHED_GROUPED_READ_OPS;
 /**
  * Do not dispatch devices, simply copy every device in each I/O scheduler.
  */
-int no_dispatch(struct pho_io_sched *io_sched,
+int no_dispatch(struct io_sched_handle *io_sched_hdl,
                 GPtrArray *devices);
 
 /*********************************
@@ -61,7 +61,7 @@ int no_dispatch(struct pho_io_sched *io_sched,
 
 /* Return the oldest request out of the 3.
  */
-struct req_container *fifo_next_request(struct pho_io_sched *io_sched,
+struct req_container *fifo_next_request(struct io_sched_handle *io_sched_hdl,
                                         struct req_container *read,
                                         struct req_container *write,
                                         struct req_container *format);

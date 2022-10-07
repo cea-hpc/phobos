@@ -70,29 +70,30 @@ void format_medium_remove(struct format_media *format_media,
  * actual IO to be performed.
  */
 struct lrs_sched {
-    enum rsc_family     family;         /**< Managed resource family */
-    struct lrs_dev_hdl  devices;        /**< Handle to device threads */
-    struct lock_handle  lock_handle;    /**< Lock information for this LRS */
-    struct tsqueue      incoming;       /**< Queue of new requests to schedule
-                                          */
-    struct tsqueue      retry_queue;    /**< Queue of request sent back by the
-                                          *  device thread on error
-                                          */
-    struct format_media ongoing_format; /**< Ongoing format media */
-    struct tsqueue     *response_queue; /**< Queue for responses */
-    struct timespec     sync_time_ms;   /**< Time threshold for medium
-                                          *  synchronization
-                                          */
-    unsigned int        sync_nb_req;    /**< Number of requests threshold
-                                          *  for medium synchronization
-                                          */
-    unsigned long       sync_wsize_kb;  /**< Written size threshold for
-                                          *  medium synchronization
-                                          */
-    struct thread_info  sched_thread;   /**< thread handling the actions
-                                          *  executed by the scheduler
-                                          */
-    struct pho_io_sched io_sched;       /**< I/O scheduler abstraction */
+    enum rsc_family        family;         /**< Managed resource family */
+    struct lrs_dev_hdl     devices;        /**< Handle to device threads */
+    struct lock_handle     lock_handle;    /**< Lock information for this LRS */
+    struct tsqueue         incoming;       /**< Queue of new requests to
+                                             *  schedule
+                                             */
+    struct tsqueue         retry_queue;    /**< Queue of request sent back by
+                                             *  the device thread on error
+                                             */
+    struct format_media    ongoing_format; /**< Ongoing format media */
+    struct tsqueue        *response_queue; /**< Queue for responses */
+    struct timespec        sync_time_ms;   /**< Time threshold for medium
+                                             *  synchronization
+                                             */
+    unsigned int           sync_nb_req;    /**< Number of requests threshold
+                                             *  for medium synchronization
+                                             */
+    unsigned long          sync_wsize_kb;  /**< Written size threshold for
+                                             *  medium synchronization
+                                             */
+    struct thread_info     sched_thread;   /**< thread handling the actions
+                                             *  executed by the scheduler
+                                             */
+    struct io_sched_handle io_sched_hdl;   /**< I/O scheduler handle */
 };
 
 /**

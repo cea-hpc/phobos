@@ -53,22 +53,22 @@ static void print_queue(GQueue *queue)
     g_queue_foreach(queue, print_elem, NULL);
 }
 
-static int fifo_init(struct request_handler *handler)
+static int fifo_init(struct io_scheduler *io_sched)
 {
-    handler->private_data = (void *)g_queue_new();
-    if (!handler->private_data)
+    io_sched->private_data = (void *)g_queue_new();
+    if (!io_sched->private_data)
         return -ENOMEM;
 
     return 0;
 }
 
-static void fifo_fini(struct request_handler *handler)
+static void fifo_fini(struct io_scheduler *io_sched)
 {
-    g_queue_free((GQueue *) handler->private_data);
+    g_queue_free((GQueue *) io_sched->private_data);
     return;
 }
 
-static int fifo_push_request(struct request_handler *handler,
+static int fifo_push_request(struct io_scheduler *io_sched,
                              struct req_container *reqc)
 {
     struct queue_element *elem;
@@ -80,7 +80,7 @@ static int fifo_push_request(struct request_handler *handler,
     elem->reqc = reqc;
     elem->num_media_allocated = 0;
 
-    g_queue_push_head((GQueue *)handler->private_data, elem);
+    g_queue_push_head((GQueue *)io_sched->private_data, elem);
 
     return 0;
 }
@@ -96,13 +96,13 @@ static bool is_reqc_the_first_element(GQueue *queue, struct req_container *reqc)
     return true;
 }
 
-static int fifo_remove_request(struct request_handler *handler,
+static int fifo_remove_request(struct io_scheduler *io_sched,
                                struct req_container *reqc)
 {
     struct queue_element *elem;
     GQueue *queue;
 
-    queue = (GQueue *) handler->private_data;
+    queue = (GQueue *) io_sched->private_data;
 
     if (!is_reqc_the_first_element(queue, reqc))
         LOG_RETURN(-EINVAL, "element '%p' is not first, cannot remove it",
@@ -114,13 +114,13 @@ static int fifo_remove_request(struct request_handler *handler,
     return 0;
 }
 
-static int fifo_requeue(struct request_handler *handler,
+static int fifo_requeue(struct io_scheduler *io_sched,
                         struct req_container *reqc)
 {
     struct queue_element *elem;
     GQueue *queue;
 
-    queue = (GQueue *) handler->private_data;
+    queue = (GQueue *) io_sched->private_data;
     if (!is_reqc_the_first_element(queue, reqc))
         return -EINVAL;
 
@@ -134,12 +134,12 @@ static int fifo_requeue(struct request_handler *handler,
     return 0;
 }
 
-static int fifo_peek_request(struct request_handler *handler,
+static int fifo_peek_request(struct io_scheduler *io_sched,
                              struct req_container **reqc)
 {
     struct queue_element *elem;
 
-    elem = g_queue_peek_tail((GQueue *) handler->private_data);
+    elem = g_queue_peek_tail((GQueue *) io_sched->private_data);
     if (!elem) {
         *reqc = NULL;
         return 0;
@@ -150,7 +150,7 @@ static int fifo_peek_request(struct request_handler *handler,
     return 0;
 }
 
-static int find_read_device(struct request_handler *handler,
+static int find_read_device(struct io_scheduler *io_sched,
                             struct req_container *reqc,
                             struct lrs_dev **dev,
                             size_t index_in_reqc,
@@ -162,7 +162,7 @@ static int find_read_device(struct request_handler *handler,
     bool sched_ready;
     int rc;
 
-    rc = fetch_and_check_medium_info(handler->io_sched->lock_handle,
+    rc = fetch_and_check_medium_info(io_sched->io_sched_hdl->lock_handle,
                                      reqc, &medium_id, index_in_reqc,
                                      reqc_get_medium_to_alloc(reqc, index));
     if (rc)
@@ -174,11 +174,11 @@ static int find_read_device(struct request_handler *handler,
     medium = reqc->params.rwalloc.media[index].alloc_medium;
     name = medium->rsc.id.name;
 
-    *dev = search_in_use_medium(handler->devices, name, &sched_ready);
+    *dev = search_in_use_medium(io_sched->devices, name, &sched_ready);
     if (*dev)
         return 0;
 
-    *dev = dev_picker(handler->devices, PHO_DEV_OP_ST_UNSPEC,
+    *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
                       select_empty_loaded_mount,
                       0, &NO_TAGS, medium, false);
 
@@ -282,7 +282,7 @@ static int find_format_device(GPtrArray *devices,
     return 0;
 }
 
-static int fifo_get_device_medium_pair(struct request_handler *handler,
+static int fifo_get_device_medium_pair(struct io_scheduler *io_sched,
                                        struct req_container *reqc,
                                        struct lrs_dev **device,
                                        size_t *index,
@@ -293,7 +293,7 @@ static int fifo_get_device_medium_pair(struct request_handler *handler,
     GQueue *queue;
     int rc;
 
-    queue = (GQueue *) handler->private_data;
+    queue = (GQueue *) io_sched->private_data;
 
     if (pho_request_is_read(reqc->req) &&
         *reqc_get_medium_to_alloc(reqc, *index)) {
@@ -317,7 +317,7 @@ static int fifo_get_device_medium_pair(struct request_handler *handler,
         return -ERANGE;
 
     if (pho_request_is_read(reqc->req)) {
-        rc = find_read_device(handler, reqc, device,
+        rc = find_read_device(io_sched, reqc, device,
                               is_error || is_retry ?
                                   *index :
                                   elem->num_media_allocated,
@@ -328,10 +328,11 @@ static int fifo_get_device_medium_pair(struct request_handler *handler,
             *index = elem->num_media_allocated++;
 
     } else if (pho_request_is_write(reqc->req)) {
-        rc = find_write_device(handler->devices, handler->io_sched->lock_handle,
+        rc = find_write_device(io_sched->devices,
+                               io_sched->io_sched_hdl->lock_handle,
                                reqc, device, *index, is_error);
     } else if (pho_request_is_format(reqc->req)) {
-        rc = find_format_device(handler->devices, reqc, device);
+        rc = find_format_device(io_sched->devices, reqc, device);
     } else {
         rc = -EINVAL;
     }
@@ -339,30 +340,30 @@ static int fifo_get_device_medium_pair(struct request_handler *handler,
     return rc;
 }
 
-static int fifo_add_device(struct request_handler *handler,
+static int fifo_add_device(struct io_scheduler *io_sched,
                            struct lrs_dev *new_device)
 {
     bool found = false;
     int i;
 
-    for (i = 0; i < handler->devices->len; i++) {
+    for (i = 0; i < io_sched->devices->len; i++) {
         struct lrs_dev *dev;
 
-        dev = g_ptr_array_index(handler->devices, i);
+        dev = g_ptr_array_index(io_sched->devices, i);
         if (new_device == dev)
             found = true;
     }
 
     if (!found)
-        g_ptr_array_add(handler->devices, new_device);
+        g_ptr_array_add(io_sched->devices, new_device);
 
     return 0;
 }
 
-static int fifo_remove_device(struct request_handler *handler,
+static int fifo_remove_device(struct io_scheduler *io_sched,
                               struct lrs_dev *device)
 {
-    g_ptr_array_remove(handler->devices, device);
+    g_ptr_array_remove(io_sched->devices, device);
 
     return 0;
 }
@@ -373,19 +374,19 @@ static int fifo_remove_device(struct request_handler *handler,
  * But whether this is efficient in practice or not will probably depend on how
  * this function is called.
  */
-static int fifo_reclaim_device(struct request_handler *handler,
+static int fifo_reclaim_device(struct io_scheduler *io_sched,
                                struct lrs_dev **device)
 {
     /* The FIFO algorithm doesn't do any optimization regarding the device
      * usage. We simply give the last device back.
      */
-    *device = g_ptr_array_remove_index(handler->devices,
-                                       handler->devices->len - 1);
+    *device = g_ptr_array_remove_index(io_sched->devices,
+                                       io_sched->devices->len - 1);
 
     return 0;
 }
 
-struct pho_io_scheduler_ops IO_SCHED_FIFO_OPS = {
+struct io_scheduler_ops IO_SCHED_FIFO_OPS = {
     .init                   = fifo_init,
     .fini                   = fifo_fini,
     .push_request           = fifo_push_request,

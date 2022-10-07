@@ -729,14 +729,14 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
     if (rc)
         LOG_GOTO(err_incoming_fini, rc, "Failed to init sched retry_queue");
 
-    rc = load_io_schedulers_from_config(&sched->io_sched);
+    rc = io_sched_handle_load_from_config(&sched->io_sched_hdl);
     if (rc)
         LOG_GOTO(err_retry_queue_fini, rc,
                  "Failed to load I/O schedulers from config");
 
     sched->response_queue = resp_queue;
-    sched->io_sched.lock_handle = &sched->lock_handle;
-    sched->io_sched.response_queue = sched->response_queue;
+    sched->io_sched_hdl.lock_handle = &sched->lock_handle;
+    sched->io_sched_hdl.response_queue = sched->response_queue;
 
     /* Load devices from DSS -- not critical if no device is found */
     lrs_dev_hdl_load(sched, &sched->devices);
@@ -865,7 +865,7 @@ void sched_fini(struct lrs_sched *sched)
     if (sched == NULL)
         return;
 
-    io_sched_fini(&sched->io_sched);
+    io_sched_fini(&sched->io_sched_hdl);
     lrs_dev_hdl_clear(&sched->devices);
     lrs_dev_hdl_fini(&sched->devices);
     dss_fini(&sched->sched_thread.dss);
@@ -1856,7 +1856,7 @@ static int sched_device_retry_lock(struct lrs_sched *sched, const char *name,
     if (rc)
         return rc;
 
-    io_sched_remove_device(&sched->io_sched, dev_ptr);
+    io_sched_remove_device(&sched->io_sched_hdl, dev_ptr);
 
     pho_verb("Removed locked device '%s' from the local memory", name);
 
@@ -1886,7 +1886,7 @@ static int sched_device_lock(struct lrs_sched *sched, const char *name,
                 *dev_ptr = dev;
                 return rc;
             }
-            io_sched_remove_device(&sched->io_sched, dev);
+            io_sched_remove_device(&sched->io_sched_hdl, dev);
 
             if (!rc)
                 pho_verb("Removed locked device '%s' from the local memory",
@@ -2137,7 +2137,7 @@ static int publish_or_cancel(struct lrs_sched *sched,
         return reqc_rc;
 
     if (reqc_rc != -EAGAIN) {
-        rc = io_sched_remove_request(&sched->io_sched, reqc);
+        rc = io_sched_remove_request(&sched->io_sched_hdl, reqc);
         if (rc)
             pho_error(rc, "Failed to remove request '%p' (%s)", reqc,
                       pho_srl_request_kind_str(reqc->req));
@@ -2191,7 +2191,7 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
     struct lrs_dev *dev;
     int rc;
 
-    rc = io_sched_get_device_medium_pair(&sched->io_sched, reqc, &dev,
+    rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &dev,
                                          &index_to_alloc, handle_error);
     if (rc)
         GOTO(notify_error, rc);
@@ -2391,7 +2391,7 @@ static int sched_read_alloc_one_medium(struct lrs_sched *sched,
     int rc = 0;
 
 find_read_device:
-    rc = io_sched_get_device_medium_pair(&sched->io_sched, reqc, &dev,
+    rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &dev,
                                          &index_to_alloc, false);
     if (rc)
         GOTO(skip_medium, rc);
@@ -2550,8 +2550,8 @@ static int sched_handle_format(struct lrs_sched *sched,
                  "trying to format the medium '%s' while it is already being "
                  "formatted", m.name);
 
-    rc = io_sched_get_device_medium_pair(&sched->io_sched, reqc, &device, NULL,
-                                         false);
+    rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &device,
+                                         NULL, false);
     if (rc)
         GOTO(err_out, rc);
 
@@ -2615,7 +2615,7 @@ static int sched_handle_format(struct lrs_sched *sched,
 
     format_sub_request->medium_index = 0;
     format_sub_request->reqc = reqc;
-    rc = io_sched_remove_request(&sched->io_sched, reqc);
+    rc = io_sched_remove_request(&sched->io_sched_hdl, reqc);
     if (rc)
         LOG_GOTO(remove_format_err_out, rc,
                  "Failed to remove request from I/O scheduler");
@@ -2648,7 +2648,7 @@ err_out:
          */
         rc = rc2;
 
-        rc2 = io_sched_remove_request(&sched->io_sched, reqc);
+        rc2 = io_sched_remove_request(&sched->io_sched_hdl, reqc);
         sched_req_free(reqc);
         rc = rc ? : rc2;
     }
@@ -2938,7 +2938,7 @@ int sched_handle_requests(struct lrs_sched *sched)
         } else if (pho_request_is_format(req) ||
                    pho_request_is_read(req) ||
                    pho_request_is_write(req)) {
-            rc = io_sched_push_request(&sched->io_sched, reqc);
+            rc = io_sched_push_request(&sched->io_sched_hdl, reqc);
         } else if (pho_request_is_notify(req)) {
             pho_debug("lrs received notify request (%p)", req);
             rc = sched_handle_notify(sched, reqc);
@@ -2989,7 +2989,7 @@ int lrs_schedule_work(struct lrs_sched *sched)
 
     do {
         reqc = NULL;
-        rc = io_sched_peek_request(&sched->io_sched, &reqc);
+        rc = io_sched_peek_request(&sched->io_sched_hdl, &reqc);
         if (rc)
             return rc;
 
@@ -3014,7 +3014,7 @@ int lrs_schedule_work(struct lrs_sched *sched)
 
         if (running) {
             /* Requeue last request on -EAGAIN and running */
-            rc = io_sched_requeue(&sched->io_sched, reqc) ? : rc;
+            rc = io_sched_requeue(&sched->io_sched_hdl, reqc) ? : rc;
             break;
         } else {
             int rc2;
@@ -3022,7 +3022,7 @@ int lrs_schedule_work(struct lrs_sched *sched)
             /* create an -ESHUTDOWN error on -EAGAIN and !running */
             rc = queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
 
-            rc2 = io_sched_remove_request(&sched->io_sched, reqc);
+            rc2 = io_sched_remove_request(&sched->io_sched_hdl, reqc);
             rc = rc2 ? : rc;
             sched_req_free(reqc);
             if (rc)
@@ -3140,7 +3140,7 @@ static void *lrs_sched_thread(void *sdata)
     while (thread_is_running(thread)) {
         struct timespec wakeup_date;
 
-        rc = io_sched_dispatch_devices(&sched->io_sched,
+        rc = io_sched_dispatch_devices(&sched->io_sched_hdl,
                                        sched->devices.ldh_devices);
         if (rc)
             LOG_GOTO(end_thread, thread->status = rc,
