@@ -295,6 +295,13 @@ static int fifo_get_device_medium_pair(struct request_handler *handler,
 
     queue = (GQueue *) handler->private_data;
 
+    if (pho_request_is_read(reqc->req) &&
+        *reqc_get_medium_to_alloc(reqc, *index)) {
+        /* This is a retry on a medium previously allocated for this request. */
+        media_info_free(*reqc_get_medium_to_alloc(reqc, *index));
+        *reqc_get_medium_to_alloc(reqc, *index) = NULL;
+    }
+
     elem = g_queue_peek_tail(queue);
     if (!is_reqc_the_first_element(queue, reqc) && !is_error)
         LOG_RETURN(-EINVAL,

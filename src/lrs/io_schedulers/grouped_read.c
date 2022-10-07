@@ -317,17 +317,14 @@ static int request_queue_alloc(struct request_handler *handler,
         return -errno;
 
     tmp->device = NULL;
+    tmp->medium_info = NULL;
     tmp->name = strdup(name);
     if (!tmp->name)
         GOTO(free_queue, rc = -errno);
 
-    tmp->medium_info = calloc(1, sizeof(*tmp->medium_info));
-    if (!tmp->medium_info)
-        GOTO(free_name, rc = -errno);
-
     tmp->queue = g_queue_new();
     if (!tmp->queue)
-        GOTO(free_medium_info, rc = -errno);
+        GOTO(free_name, rc = -errno);
 
     rc = fetch_and_check_medium_info(handler->io_sched->lock_handle,
                                      elem->reqc, NULL, index,
@@ -342,8 +339,6 @@ static int request_queue_alloc(struct request_handler *handler,
 
 free_g_queue:
     g_queue_free(tmp->queue);
-free_medium_info:
-    free(tmp->medium_info);
 free_name:
     free((char *)tmp->name);
 free_queue:
@@ -1124,7 +1119,8 @@ static int grouped_get_device_medium_pair(struct request_handler *handler,
                 device->queue = NULL;
             }
         }
-        /* TODO free alloc_medium and set it to NULL */
+        media_info_free(reqc->params.rwalloc.media[*index].alloc_medium);
+        reqc->params.rwalloc.media[*index].alloc_medium = NULL;
     }
 
     /* no device with a queue whose next request is reqc */
