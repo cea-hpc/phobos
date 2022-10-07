@@ -395,6 +395,8 @@ struct lrs_dev *search_in_use_medium(GPtrArray *devices,
                                      const char *name,
                                      bool *sched_ready);
 
+struct lrs_dev *search_loaded_medium(GPtrArray *devices, const char *name);
+
 int sched_select_medium(struct lock_handle *lock_handle,
                         GPtrArray *devices,
                         struct media_info **p_media,
@@ -410,5 +412,8 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
                                 struct pho_id *m_id,
                                 size_t index,
                                 struct media_info **target_medium);
+
+int tape_drive_compat(const struct media_info *tape,
+                      const struct lrs_dev *drive, bool *res);
 
 #endif

@@ -336,7 +336,7 @@ function wait_for_process_end()
     local count=0
 
     while ps --pid "$pid"; do
-        if [[ $count > 10 ]]; then
+        if (( count > 10 )); then
             error "Process $pid should have stopped after 10s"
         fi
         ((count++)) || true

@@ -28,6 +28,7 @@
 #include "io_sched.h"
 
 extern struct pho_io_scheduler_ops IO_SCHED_FIFO_OPS;
+extern struct pho_io_scheduler_ops IO_SCHED_GROUPED_READ_OPS;
 
 /********************************
  * Device dispatcher algorithms *

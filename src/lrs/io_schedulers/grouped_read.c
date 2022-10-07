@@ -1,0 +1,1260 @@
+/* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+ * vim:expandtab:shiftwidth=4:tabstop=4:
+ */
+/*
+ *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *
+ *  This file is part of Phobos.
+ *
+ *  Phobos is free software: you can redistribute it and/or modify it under
+ *  the terms of the GNU Lesser General Public License as published by
+ *  the Free Software Foundation, either version 2.1 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Phobos is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Lesser General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Lesser General Public License
+ *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+ */
+/**
+ * \brief  LRS Grouped Read I/O Scheduler: group read request per medium.
+ */
+#include "lrs_sched.h"
+#include "pho_cfg.h"
+#include "pho_common.h"
+#include "pho_types.h"
+#include "schedulers.h"
+
+/* Principle of the algorithm:
+ *
+ * This algorithm will try to associate queues of requests which target the same
+ * medium to devices. Each device will have a queue associated to it until it is
+ * emptied.
+ *
+ * On push, we look at each media that can be used for this read. For each of
+ * these media, we push the request into its corresponding queue. If the queue
+ * doesn't exist, we create it and search if the medium is already in a device.
+ * If so, the queue is immediately associated to the device.
+ *
+ * On peek_request, we look for the first device whose first request in it's
+ * associated queue can be allocate (i.e. there is enough free devices that can
+ * handle the request). If we can't find any device with an associated queue, we
+ * try to allocate a new queue and return the first request.
+ *
+ * For example:
+ *
+ * Free queues:                Devices:
+ *   M1: r1, r2                  D1: M5: r3, r4
+ *   M2: r1, r2                  D2: X
+ *   M3: r3, r4                  D3: X
+ *   M4: r3, r5
+ *
+ * On get_device_medium_pair, we will try to see if r3 can be allocated since it
+ * is the first request we will find. If r3 requires 3 medium or less, it can be
+ * allocated and will be returned.
+ *
+ * If it cannot be allocated, we will search in the free queues
+ * (grouped_data::request_queues) and pick M1 for example. We can then allocate
+ * it to a device, D2 for example and return the first element r1.
+ *
+ * On remove_request, the request is removed from all the queues it belongs to.
+ * If any of these queues are empty, it is removed from its associated device
+ * and freed.
+ */
+
+struct request_queue;
+
+struct list_pair {
+    GList *used;                 /* list of queue_element previously used */
+    GList *free;                 /* list of unused queue_element */
+};
+
+struct queue_element {
+    struct req_container *reqc;  /* reference to the corresponding req_container
+                                  */
+    struct request_queue *queue; /* queue this element belongs to */
+    struct list_pair     *pair;  /* pointer to a pair of lists shared between
+                                  * each queue_element of the same request.
+                                  */
+};
+
+struct device;
+
+struct request_queue {
+    GQueue            *queue;  /* queue containing read queue_element */
+    struct device     *device; /* device which will handle requests from this
+                                * queue
+                                */
+    const char        *name;   /* name of the medium targeted by requests of
+                                * this queue
+                                */
+    struct media_info *medium_info;
+                           /* DSS information about the medium of this queue.
+                            * This acts as a cached information since it is
+                            * fetched when the queue is first created.
+                            * It is copied into rwalloc_params::media in
+                            * grouped_get_device_medium_pair.
+                            */
+};
+
+struct device {
+    struct lrs_dev       *device;
+    struct request_queue *queue;
+};
+
+struct grouped_data {
+    GHashTable *request_queues; /* hashtable containing pointers to struct
+                                 * request_queue.
+                                 */
+    struct queue_element *current_elem;
+};
+
+/* Iterate over all the element in the GList \p list. \p var is used as the
+ * name of the current element in the iteration.
+ */
+#define glist_foreach(var, list) \
+    for (GList *var = list; var; var = var->next)
+
+static void print_queue(gpointer key, gpointer value, gpointer user_data)
+{
+    struct request_queue *queue = value;
+    const char *name = key;
+
+    pho_info("%s: %p %s %d", name, queue, queue->name,
+             g_queue_get_length(queue->queue));
+}
+
+/* useful for debuging */
+__attribute__((unused))
+static void print_hash_table(GHashTable *table)
+{
+    g_hash_table_foreach(table, print_queue, NULL);
+}
+
+__attribute__((unused))
+static void print_glist(GList *list, const char *name)
+{
+    struct queue_element *elem;
+
+    if (g_list_length(list) == 0) {
+        pho_info("%s: empty", name);
+        return;
+    }
+
+    glist_foreach(iter, list) {
+        elem = iter->data;
+
+        pho_info("%s: elem: %p, name: %s", name, elem,
+                 elem->queue->name);
+    }
+}
+
+static ssize_t reqc_get_medium_index_from_name(struct req_container *reqc,
+                                               const char *name)
+{
+    int i;
+
+    for (i = 0; i < reqc->req->ralloc->n_med_ids; i++) {
+        if (!strcmp(reqc->req->ralloc->med_ids[i]->name,
+                    name))
+            return i;
+    }
+
+    return -1;
+}
+
+static void gptr_array_copy_dev_ptr(GPtrArray *dst, GPtrArray *src)
+{
+    int i;
+
+    for (i = 0; i < src->len; i++) {
+        struct device *device;
+
+        device = g_ptr_array_index(src, i);
+        g_ptr_array_add(dst, device->device);
+    }
+}
+
+static int grouped_init(struct request_handler *handler)
+{
+    struct grouped_data *data;
+    int rc;
+
+    data = malloc(sizeof(*data));
+    if (!data)
+        return -errno;
+
+    data->request_queues = g_hash_table_new(g_str_hash, g_str_equal);
+    if (!data->request_queues)
+        GOTO(free_data, rc = -ENOMEM);
+
+    handler->private_data = data;
+
+    return 0;
+
+free_data:
+    free(data);
+
+    return rc;
+}
+
+static void grouped_fini(struct request_handler *handler)
+{
+    struct grouped_data *data = handler->private_data;
+
+    g_hash_table_destroy(data->request_queues);
+    free(data);
+}
+
+static struct device *
+find_compatible_device(GPtrArray *devices, struct media_info *medium,
+                       bool *compatible_device_found)
+{
+    int i;
+
+    *compatible_device_found = false;
+
+    for (i = 0; i < devices->len; i++) {
+        struct device *dev;
+        bool is_compatible;
+
+        dev = g_ptr_array_index(devices, i);
+
+        if (tape_drive_compat(medium, dev->device, &is_compatible))
+            continue;
+
+        if (!is_compatible)
+            continue;
+
+        *compatible_device_found = true;
+
+        if (!dev_is_sched_ready(dev->device))
+            continue;
+
+        if (!dev->queue)
+            return dev;
+    }
+
+    return NULL;
+}
+
+struct find_compatible_context {
+    struct device      *device;  /* result of the search (can be NULL) */
+    GPtrArray          *devices; /* list of devices owned by this scheduler */
+    GPtrArray          *incompatible_queues; /* List of struct request_queue
+                                              * that cannot be allocated since
+                                              * there aren't any compatible
+                                              * devices.
+                                              */
+    size_t              available_devices; /* Number of devices without an
+                                            * associated queue. A queue cannot
+                                            * be allocated if this number is
+                                            * lower than the number of required
+                                            * media ralloc->n_required.
+                                            */
+};
+
+/* This function is called on each entry of the table
+ * grouped_data::request_queues. It will stop at the first queue which has a
+ * device compatible with the queue and available for scheduling. If any queue
+ * that cannot be allocated (i.e. no device compatible with the medium) are
+ * found, they are stored in find_compatible_context::incompatible_queues and
+ * removed later since one cannot remove an entry during g_hash_table_foreach.
+ *
+ * ctxt::device will be set to the device found for the current queue if any.
+ * Once ctxt::device is not NULL, the search is stopped.
+ */
+/* TODO we can add a parameter which will tell the function to search for the
+ * queue with the most requests that can be allocated now.
+ */
+static gboolean glib_stop_at_first_compatible(gpointer _queue_name,
+                                              gpointer _queue,
+                                              gpointer _compat_ctxt)
+{
+    struct find_compatible_context *ctxt = _compat_ctxt;
+    struct request_queue *queue = _queue;
+    bool compatible_device_found;
+    struct queue_element *elem;
+
+    (void) _queue_name;
+
+    if (queue->device)
+        /* we are looking for a new queue to allocate to a device */
+        return FALSE;
+
+    elem = g_queue_peek_tail(queue->queue);
+    /* Once a queue is empty, it is removed so this should not happen */
+    assert(elem);
+
+    ctxt->device = find_compatible_device(ctxt->devices, queue->medium_info,
+                                          &compatible_device_found);
+
+    if (!compatible_device_found)
+        /* we cannot remove during g_hash_table_foreach, so save it for later */
+        g_ptr_array_add(ctxt->incompatible_queues, queue);
+
+    if (elem->reqc->req->ralloc->n_required > ctxt->available_devices)
+        return FALSE;
+
+    return ctxt->device != NULL;
+}
+
+static int request_queue_alloc(struct request_handler *handler,
+                               struct request_queue **queue,
+                               const char *name,
+                               struct queue_element *elem,
+                               size_t index)
+{
+    struct grouped_data *data = handler->private_data;
+    struct request_queue *tmp;
+    int rc;
+
+    tmp = malloc(sizeof(*tmp));
+    if (!tmp)
+        return -errno;
+
+    tmp->device = NULL;
+    tmp->name = strdup(name);
+    if (!tmp->name)
+        GOTO(free_queue, rc = -errno);
+
+    tmp->medium_info = calloc(1, sizeof(*tmp->medium_info));
+    if (!tmp->medium_info)
+        GOTO(free_name, rc = -errno);
+
+    tmp->queue = g_queue_new();
+    if (!tmp->queue)
+        GOTO(free_medium_info, rc = -errno);
+
+    rc = fetch_and_check_medium_info(handler->io_sched->lock_handle,
+                                     elem->reqc, NULL, index,
+                                     &tmp->medium_info);
+    if (rc)
+        GOTO(free_g_queue, rc);
+
+    g_hash_table_insert(data->request_queues, (gpointer *)tmp->name, tmp);
+    *queue = tmp;
+
+    return 0;
+
+free_g_queue:
+    g_queue_free(tmp->queue);
+free_medium_info:
+    free(tmp->medium_info);
+free_name:
+    free((char *)tmp->name);
+free_queue:
+    free(tmp);
+
+    return rc;
+}
+
+static void delete_queue(struct grouped_data *data,
+                         struct request_queue *queue)
+{
+    g_hash_table_remove(data->request_queues, queue->name);
+
+    if (queue->device)
+        queue->device->queue = NULL;
+
+    free((char *)queue->name);
+    media_info_free(queue->medium_info);
+    g_queue_free(queue->queue);
+    free(queue);
+}
+
+static void queue_element_free(struct queue_element *elem, bool last)
+{
+    if (last) {
+        /* this is the last element, free both lists */
+        g_list_free(elem->pair->free);
+        g_list_free(elem->pair->used);
+        free(elem->pair);
+    }
+    free(elem);
+}
+
+static void remove_element_from_queue(struct grouped_data *data,
+                                      struct queue_element *elem)
+{
+    g_queue_remove(elem->queue->queue, elem);
+    if (g_queue_get_length(elem->queue->queue) == 0)
+        delete_queue(data, elem->queue);
+}
+
+/* Delete every element in \p list except \p to_ignore. Each removed element is
+ * also removed from its associated queue.
+ *
+ * \param[in/out]  data       global data of this scheduler
+ * \param[in]      list       list of struct queue_element
+ * \param[in]      to_ignore  element to keep in the list
+ */
+static void delete_elements_in_list(struct grouped_data *data, GList *list,
+                                    struct queue_element *to_ignore)
+{
+    glist_foreach(iter, list) {
+        struct queue_element *e;
+
+        e = iter->data;
+        if (e == to_ignore)
+            continue;
+
+        remove_element_from_queue(data, e);
+        queue_element_free(e, false);
+    }
+}
+
+static void cancel_request(struct request_handler *handler,
+                           struct queue_element *elem)
+{
+    struct grouped_data *data = handler->private_data;
+    int rc;
+
+    /* we send a ENODEV error since this function is called when there are not
+     * enough devices to handle a request.
+     */
+    rc = queue_error_response(handler->io_sched->response_queue,
+                              -ENODEV, elem->reqc);
+    if (rc)
+        pho_error(rc, "Failed to queue error");
+
+    /* remove each element from the its queue */
+    delete_elements_in_list(data, elem->pair->used, elem);
+    delete_elements_in_list(data, elem->pair->free, elem);
+
+    queue_element_free(elem, true);
+}
+
+/* After a search through all the queues, we can identify which queues cannot be
+ * allocated. If the scheduler doesn't have a compatible device for this queue,
+ * the request cannot be allocated.
+ *
+ * Each of those queues will be removed. Each queue_element will be removed from
+ * its associated pair->used or pair->free list. Finally, if the request
+ * elem->reqc cannot be allocated (i.e. the number of elements of the request is
+ * lower than ralloc->n_required), the request will be canceled, an error
+ * -ENODEV will be sent to the client and each queue_element associated to reqc
+ *  will be removed from its queue.
+ */
+static void empty_incompatible_queue(struct request_handler *handler,
+                                     struct request_queue *queue)
+{
+    struct queue_element *elem;
+
+    pho_warn("No device compatible with '%s' can be found", queue->name);
+
+    while ((elem = g_queue_pop_tail(queue->queue)) != NULL) {
+        size_t num_elements;
+
+        /* remove it from both lists, it will be in only one of them */
+        elem->pair->used = g_list_remove(elem->pair->used, elem);
+        elem->pair->free = g_list_remove(elem->pair->free, elem);
+
+        num_elements = g_list_length(elem->pair->used) +
+            g_list_length(elem->pair->free);
+
+        if (elem->reqc->req->ralloc->n_required > num_elements)
+            cancel_request(handler, elem);
+        else
+            queue_element_free(elem, num_elements == 1);
+    }
+
+    delete_queue(handler->private_data, queue);
+}
+
+static struct request_queue *
+find_and_allocate_queue(struct request_handler *handler,
+                        size_t available_devices)
+{
+    struct grouped_data *data = handler->private_data;
+    struct find_compatible_context ctxt = {
+        .device = NULL,
+        .devices = handler->devices,
+        .incompatible_queues = g_ptr_array_new(),
+        .available_devices = available_devices,
+    };
+    struct request_queue *queue = NULL;
+    int i;
+
+    queue = g_hash_table_find(data->request_queues,
+                              glib_stop_at_first_compatible,
+                              &ctxt);
+    if (queue) {
+        assert(ctxt.device);
+
+        queue->device = ctxt.device;
+        ctxt.device->queue = queue;
+    }
+
+    for (i = 0; i < ctxt.incompatible_queues->len; i++) {
+        struct request_queue *queue;
+
+        queue = g_ptr_array_index(ctxt.incompatible_queues, i);
+        empty_incompatible_queue(handler, queue);
+    }
+
+    g_ptr_array_free(ctxt.incompatible_queues, TRUE);
+
+    return queue;
+}
+
+/* count the number of devices that are ready for scheduling and that don't
+ * already have a queue associated.
+ */
+static size_t count_available_devices(GPtrArray *devices)
+{
+    size_t count = 0;
+    int i;
+
+    for (i = 0; i < devices->len; i++) {
+        struct device *device;
+
+        device = g_ptr_array_index(devices, i);
+
+        if (!device->queue && dev_is_sched_ready(device->device))
+            count++;
+    }
+
+    return count;
+}
+
+/* Return true if there are enough available devices to handle \p reqc.
+ *
+ * \param[in] available_devices  Number of devices that are ready for scheduling
+ *                               and don't have a queue associated. It is given
+ *                               as a parameter to avoid recomputing it for each
+ *                               request.
+ *
+ *  Note: available_devices is the number of devices that are "sched_ready" and
+ *  don't have a queue associated to them. There is no guaranty that they are
+ *  all compatible with the media of the request. This is not an issue since
+ *  get_device_medium_pair will check for compatibility.
+ */
+static bool request_can_be_allocated(struct request_handler *handler,
+                                     struct grouped_data *data,
+                                     struct req_container *reqc,
+                                     size_t available_devices)
+{
+    size_t n_required = reqc->req->ralloc->n_required;
+    int i;
+
+    if (available_devices >= n_required)
+        return true;
+
+    for (i = 0; i < reqc->req->ralloc->n_med_ids; i++) {
+        const char *name = reqc->req->ralloc->med_ids[i]->name;
+        struct request_queue *queue;
+
+        queue = g_hash_table_lookup(data->request_queues, name);
+        assert(queue);
+
+        if (queue->device &&
+            dev_is_sched_ready(queue->device->device)) {
+            available_devices++;
+
+            if (available_devices >= n_required)
+                return true;
+        }
+    }
+
+    return false;
+}
+
+static int grouped_peek_request(struct request_handler *handler,
+                                struct req_container **reqc)
+{
+    size_t available_devices = count_available_devices(handler->devices);
+    struct grouped_data *data = handler->private_data;
+    int i;
+
+    *reqc = NULL;
+
+    /* search for a device containing a queue whose first request can be
+     * allocated
+     */
+    for (i = 0; i < handler->devices->len; i++) {
+        struct queue_element *elem;
+        struct device *device;
+
+        device = g_ptr_array_index(handler->devices, i);
+        if (!dev_is_sched_ready(device->device) || !device->queue)
+            continue;
+
+        elem = g_queue_peek_tail(device->queue->queue);
+        /* Only grouped_get_device_medium_pair can add elements to
+         * elem->pair->used. Once the caller has finished using
+         * grouped_get_device_medium_pair, the request should either be requeued
+         * and elem->pair->used is emptied or remove_request is called and the
+         * request is removed from the queues. We should never find an element
+         * with elem->pair->used not empty in this function.
+         */
+        assert(g_list_length(elem->pair->used) == 0);
+
+        if (request_can_be_allocated(handler, data, elem->reqc,
+                                     available_devices)) {
+            *reqc = elem->reqc;
+            data->current_elem = elem;
+
+            return 0;
+        }
+    }
+
+    /* If we are here, we didn't find any queue to use. If there are available
+     * devices, try to find another queue to allocate.
+     */
+    if (available_devices > 0) {
+        /* no request allocated but some devices don't have a queue yet */
+        struct request_queue *queue;
+        struct queue_element *elem;
+
+        /* no device has a queue associated to it, find a new one */
+        queue = find_and_allocate_queue(handler, available_devices);
+        if (!queue)
+            /* no more work to do */
+            return 0;
+
+        elem = g_queue_peek_tail(queue->queue);
+        /* cf. the other assert above */
+        assert(g_list_length(elem->pair->used) == 0);
+        *reqc = elem->reqc;
+        data->current_elem = elem;
+    }
+
+    return 0;
+}
+
+static int allocate_queue_if_loaded(struct request_handler *handler,
+                                    struct request_queue *queue)
+{
+    struct lrs_dev *device;
+    GPtrArray *devices;
+    int i;
+
+    devices = g_ptr_array_new();
+    gptr_array_copy_dev_ptr(devices, handler->devices);
+    device = search_loaded_medium(devices, queue->name);
+    g_ptr_array_free(devices, TRUE);
+
+    if (!device)
+        return 0;
+
+    for (i = 0; i < handler->devices->len; i++) {
+        struct device *dev;
+
+        dev = g_ptr_array_index(handler->devices, i);
+        if (dev->device == device) {
+            dev->queue = queue;
+            queue->device = dev;
+            return 0;
+        }
+    }
+
+    return 0;
+}
+
+static int insert_request_in_medium_queue(struct request_handler *handler,
+                                          struct queue_element *elem,
+                                          const char *name,
+                                          size_t index)
+{
+    struct grouped_data *data = handler->private_data;
+    struct request_queue *queue;
+    int rc;
+
+    queue = g_hash_table_lookup(data->request_queues, name);
+    if (!queue) {
+        rc = request_queue_alloc(handler, &queue, name, elem, index);
+        if (rc)
+            return rc;
+
+        allocate_queue_if_loaded(handler, queue);
+    }
+
+    g_queue_push_head(queue->queue, elem);
+    elem->queue = queue;
+
+    return 0;
+}
+
+static int grouped_push_request(struct request_handler *handler,
+                                struct req_container *reqc)
+{
+    struct grouped_data *data = handler->private_data;
+    GList *request_list = NULL; /* empty list */
+    struct list_pair *pair;
+    int rc = 0;
+    int i;
+
+    pair = malloc(sizeof(*pair));
+    if (!pair)
+        return -errno;
+
+    for (i = 0; i < reqc->req->ralloc->n_med_ids; i++) {
+        struct queue_element *elem;
+        const char *name;
+        int rc;
+
+        elem = malloc(sizeof(*elem));
+        if (!elem)
+            GOTO(free_elems, rc = -errno);
+
+        elem->reqc = reqc;
+        elem->pair = pair;
+        name = elem->reqc->req->ralloc->med_ids[i]->name;
+
+        rc = insert_request_in_medium_queue(handler, elem, name, i);
+        if (rc) {
+            free(elem);
+            GOTO(free_elems, rc);
+        }
+
+        /* insert in reverse order to avoid traversing the list on each insert
+         */
+        request_list = g_list_prepend(request_list, elem);
+    }
+
+    /* XXX this list could be sorted by some heuristic. */
+    request_list = g_list_reverse(request_list);
+
+    glist_foreach(iter, request_list) {
+        struct queue_element *elem = iter->data;
+
+        elem->pair->free = request_list;
+        elem->pair->used = NULL;
+    }
+
+    return 0;
+
+free_elems:
+    /* elements are inserted in the list only if they are allocated successfully
+     */
+    glist_foreach(iter, request_list) {
+        remove_element_from_queue(data, iter->data);
+        queue_element_free(iter->data, false);
+    }
+    free(pair);
+    g_list_free(request_list);
+
+    return rc;
+}
+
+static gint glib_table_element_contains_reqc(gconstpointer _elem,
+                                             gconstpointer _reqc)
+{
+    struct queue_element *elem = (struct queue_element *) _elem;
+    struct req_container *reqc = (struct req_container *) _reqc;
+
+    if (elem->reqc == reqc)
+        return 0;
+
+    return 1;
+}
+
+static struct queue_element *
+get_element_from_queue(GQueue *queue, struct req_container *reqc)
+{
+    GList *data;
+
+    data = g_queue_find_custom(queue, reqc, glib_table_element_contains_reqc);
+    if (!data)
+        return NULL;
+
+    return (struct queue_element *)data->data;
+}
+
+static int grouped_remove_request(struct request_handler *handler,
+                                  struct req_container *reqc)
+{
+    struct grouped_data *data;
+    int i;
+
+    data = handler->private_data;
+
+    if (data->current_elem && data->current_elem->reqc != reqc)
+        /* We should only call remove for requests that just have been returned
+         * by peek_request.
+         */
+        return -EINVAL;
+
+    for (i = 0; i < reqc->req->ralloc->n_med_ids; i++) {
+        struct request_queue *queue;
+        struct queue_element *elem;
+        const char *name;
+
+        name = reqc->req->ralloc->med_ids[i]->name;
+
+        queue = g_hash_table_lookup(data->request_queues, name);
+
+        /* Since we can only remove requests that are still in the scheduler,
+         * it should be in the hash_table.
+         */
+        assert(queue);
+
+        elem = get_element_from_queue(queue->queue, reqc);
+        remove_element_from_queue(data, elem);
+        queue_element_free(elem, i == (reqc->req->ralloc->n_med_ids - 1));
+    }
+
+    data->current_elem = NULL;
+
+    return 0;
+}
+
+static int grouped_requeue(struct request_handler *handler,
+                           struct req_container *reqc)
+{
+    struct grouped_data *data = handler->private_data;
+    int i;
+
+    if (data->current_elem && data->current_elem->reqc != reqc)
+        /* We should only call requeue for requests that just have been returned
+         * by peek_request.
+         */
+        return -EINVAL;
+
+    for (i = 0; i < reqc->req->ralloc->n_med_ids; i++) {
+        const char *name = reqc->req->ralloc->med_ids[i]->name;
+        struct request_queue *queue;
+        struct queue_element *elem;
+
+        queue = g_hash_table_lookup(data->request_queues, name);
+        if (!queue)
+            continue;
+
+        elem = g_queue_peek_tail(queue->queue);
+        if (elem && elem->reqc == reqc) {
+            g_queue_pop_tail(queue->queue);
+
+            /* FIXME After the retry modifications, some elements may have
+             * disappeared since n_med_ids may be decreased on error, it is
+             * probably best to rebuild all the elements.
+             */
+            elem->pair->free = g_list_concat(elem->pair->free,
+                                             elem->pair->used);
+            elem->pair->used = NULL;
+
+            g_queue_push_head(queue->queue, elem);
+        }
+    }
+
+    data->current_elem = NULL;
+
+    return 0;
+}
+
+static struct device *find_unallocated_device(GPtrArray *devices,
+                                              struct request_queue *queue)
+{
+    int i;
+
+    for (i = 0; i < devices->len; i++) {
+        struct device *dev;
+        bool is_compatible;
+
+        dev = g_ptr_array_index(devices, i);
+
+        if (!dev_is_sched_ready(dev->device))
+            continue;
+
+        if (!dev->queue)
+            return dev;
+
+        /* XXX we could refresh the medium_info here */
+        if (tape_drive_compat(queue->medium_info, dev->device,
+                              &is_compatible))
+            continue;
+
+        if (!is_compatible)
+            continue;
+    }
+
+    return NULL;
+}
+
+/* GLib callback for g_list_find_custom. Find the first element of the list
+ * which is first in its associated queue. The queue of this element will be
+ * allocated to a new device, so it must not already be associated to a device.
+ */
+static gint glib_is_reqc_first_in_queue(gconstpointer _elem,
+                                        gconstpointer _queue_ptr)
+{
+    struct request_queue **queue = (struct request_queue **) _queue_ptr;
+    const struct queue_element *elem = _elem;
+    struct queue_element *first_elem;
+
+    first_elem = g_queue_peek_tail(elem->queue->queue);
+    /* the queue must not be empty */
+    assert(first_elem);
+
+    if (first_elem->reqc == elem->reqc) {
+        if (elem->queue->device) {
+            /* stop as soon as we find a queue already associated to a device */
+            *queue = elem->queue;
+            return 0;
+        }
+
+        if (!*queue) /* keep the first queue found */
+            *queue = elem->queue;
+
+        /* A good queue has been found but continue to search for one that
+         * is already allocated to a device.
+         */
+        return 1;
+    }
+
+    return 1;
+}
+
+/**
+ * This function will return a queue whose first element contains reqc and is
+ * the best choice according to some heuristic which is for now the first queue
+ * associated to a device found. If no queue is associated to a device, get the
+ * first one.
+ *
+ * Simple heuristics can sort queues by:
+ * - decreasing number of requests (Nr)
+ * - decreasing Nr / T where T is the total estimated time to execute all the
+ *   requests (which is optimal with only one drive)
+ *   -> this requires, of course, to be able to estimate the total time T.
+ *      It could be done with the RAO for example.
+ */
+static struct request_queue *
+find_next_queue_for_request(struct grouped_data *data,
+                            struct queue_element *elem)
+{
+    struct request_queue *queue = NULL;
+
+    if (g_list_length(elem->pair->free) == 0)
+        return NULL;
+
+    /* XXX we could use g_list_sort to use some heuristic to chose the best
+     * medium, for now choose the first one.
+     */
+    g_list_find_custom(elem->pair->free, &queue, glib_is_reqc_first_in_queue);
+
+    return queue;
+}
+
+static void queue_element_set_used(struct queue_element *elem,
+                                   struct queue_element *allocated)
+{
+    GList *list_elem;
+
+    list_elem = g_list_find(elem->pair->free, allocated);
+
+    /* move the allocated element in the allocated list */
+    elem->pair->free = g_list_remove_link(elem->pair->free, list_elem);
+    elem->pair->used = g_list_concat(list_elem, elem->pair->used);
+}
+
+static int read_req_get_medium_index(struct req_container *reqc,
+                                     const char *name)
+{
+    int i;
+
+    for (i = 0; i < reqc->req->ralloc->n_med_ids; i++) {
+        if (!strcmp(reqc->req->ralloc->med_ids[i]->name,
+                    name))
+            return i;
+    }
+
+    return -EINVAL;
+}
+
+/* This function is called on error (i.e. the argument is_error of
+ * get_device_medium_pair is true).
+ *
+ * Since \p reqc has already been removed, the queues associated to its media
+ * may have been removed. For each valid medium, we first try to find a queue
+ * if it still exists.
+ *
+ * The best choice is to have a queue already associated to a device since it
+ * will not trigger a load. If that's not possible we will use the longest
+ * queue. /!\ in this case we don't respect the order of the requests in the
+ * queue.
+ *
+ * If no queue is found (i.e. every queue of each media was removed), we will
+ * default to the first valid media.
+ */
+static int find_device_medium_on_error(struct request_handler *handler,
+                                       struct req_container *reqc,
+                                       struct lrs_dev **dev,
+                                       size_t *index)
+{
+    struct media_info **medium = reqc_get_medium_to_alloc(reqc, *index);
+    struct grouped_data *data = handler->private_data;
+    struct request_queue *queue_to_use = NULL;
+    bool compatible_device_found;
+    struct device *device;
+    size_t max_length = 0;
+    struct pho_id m_id;
+    GPtrArray *devices;
+    int rc;
+    int i;
+
+    for (i = reqc->req->ralloc->n_required;
+         i < reqc->req->ralloc->n_med_ids;
+         i++) {
+        const char *name = reqc->req->ralloc->med_ids[i]->name;
+        struct request_queue *queue;
+
+        queue = g_hash_table_lookup(data->request_queues, name);
+        if (!queue)
+            continue;
+
+        if (!queue_to_use) {
+            if (queue->device && dev_is_sched_ready(queue->device->device))
+                queue_to_use = queue;
+        }
+
+        /* XXX We are returning the index of the queue with the most requests.
+         * It could be interesting to return the one with the least amount of
+         * requests to increase the load balance between drives. But its also
+         * interesting to use the biggest queue since we don't increase the
+         * likelihood of using queues with a small number of requests.
+         */
+        if (g_queue_get_length(queue->queue) > max_length &&
+            queue->device && dev_is_sched_ready(queue->device->device)) {
+            queue_to_use = queue;
+            max_length = g_queue_get_length(queue->queue);
+            *dev = queue->device->device;
+        }
+    }
+
+    if (!queue_to_use)
+        /* no medium in this request is in a queue, so just use the first free
+         * medium
+         */
+        *index = reqc->req->ralloc->n_required;
+    else
+        *index = read_req_get_medium_index(reqc, queue_to_use->name);
+
+    if (*index < 0)
+        return *index;
+
+    if (*dev)
+        return 0;
+
+    /* find a device for reqc->req->ralloc->med_ids[*index] */
+    devices = g_ptr_array_new();
+    gptr_array_copy_dev_ptr(devices, handler->devices);
+    *dev = search_in_use_medium(devices,
+                                reqc->req->ralloc->med_ids[*index]->name,
+                                NULL);
+    g_ptr_array_free(devices, TRUE);
+    if (*dev)
+        return 0;
+
+    /* On error, always fetch DSS information since the caller doesn't know if
+     * the \p medium was just allocated or not. It cannot free it.
+     */
+    rc = fetch_and_check_medium_info(handler->io_sched->lock_handle,
+                                     reqc, &m_id, *index, medium);
+    if (rc)
+        return rc;
+
+    device = find_compatible_device(handler->devices, *medium,
+                                    &compatible_device_found);
+    if (device)
+        *dev = device->device;
+
+    return 0;
+}
+
+static struct device *
+find_device_by_queue_name(GPtrArray *devices, const char *name)
+{
+    int i;
+
+    for (i = 0; i < devices->len; i++) {
+        struct device *device;
+
+        device = g_ptr_array_index(devices, i);
+        if (!device->queue)
+            continue;
+
+        if (!strcmp(device->queue->name, name))
+            return device;
+    }
+
+    return NULL;
+}
+
+static int grouped_get_device_medium_pair(struct request_handler *handler,
+                                          struct req_container *reqc,
+                                          struct lrs_dev **dev,
+                                          size_t *index,
+                                          bool is_error)
+{
+    struct grouped_data *data = handler->private_data;
+    struct request_queue *queue;
+    struct queue_element *elem;
+
+    *dev = NULL;
+
+    if (is_error)
+        return find_device_medium_on_error(handler, reqc, dev, index);
+
+    if (g_list_length(data->current_elem->pair->free) == 0)
+        return -ERANGE;
+
+    if (*reqc_get_medium_to_alloc(reqc, *index)) {
+        /* This is a retry on a medium previously allocated for this request.
+         * Unallocate the request if reqc is the first in the queue.
+         * This prevents the scheduler from sticking to a bad choice.
+         */
+        const char *name =
+            reqc->params.rwalloc.media[*index].alloc_medium->rsc.id.name;
+        struct device *device;
+
+        device = find_device_by_queue_name(handler->devices, name);
+        if (device) {
+            elem = g_queue_peek_tail(device->queue->queue);
+
+            /* FIXME this does not work since we can have returned the medium
+             * <name> but the queue was already allocated previously...
+             * I think the only solution is to have a boolean in the queue which
+             * indicates that we've just allocated it.
+             */
+            if (elem && elem->reqc == reqc) {
+                device->queue->device = NULL;
+                device->queue = NULL;
+            }
+        }
+        /* TODO free alloc_medium and set it to NULL */
+    }
+
+    /* no device with a queue whose next request is reqc */
+    queue = find_next_queue_for_request(data, data->current_elem);
+    if (!queue)
+        return 0;
+
+    if (!queue->device) {
+        struct device *device;
+
+        device = find_unallocated_device(handler->devices, queue);
+        if (!device)
+            return 0;
+
+        queue->device = device;
+        device->queue = queue;
+    }
+
+    elem = g_queue_peek_tail(queue->queue);
+    *reqc_get_medium_to_alloc(elem->reqc, *index) =
+        media_info_dup(queue->medium_info);
+
+    queue_element_set_used(data->current_elem, elem);
+    assert(elem && elem->reqc == reqc);
+
+    *dev = queue->device->device;
+    *index = reqc_get_medium_index_from_name(elem->reqc,
+                                             elem->queue->name);
+
+    return 0;
+}
+
+static int grouped_add_device(struct request_handler *handler,
+                              struct lrs_dev *new_device)
+{
+    struct device *device;
+    bool found = false;
+    int i;
+
+    for (i = 0; i < handler->devices->len; i++) {
+        struct device *dev;
+
+        dev = g_ptr_array_index(handler->devices, i);
+        if (new_device == dev->device)
+            found = true;
+    }
+
+    if (found)
+        return 0;
+
+    device = malloc(sizeof(*device));
+    if (!device)
+        return -errno;
+
+    device->device = new_device;
+    device->queue = NULL;
+
+    g_ptr_array_add(handler->devices, device);
+
+    return 0;
+}
+
+static int grouped_remove_device(struct request_handler *handler,
+                                 struct lrs_dev *device)
+{
+    int i;
+
+    for (i = 0; i < handler->devices->len; i++) {
+        struct device *dev;
+
+        dev = g_ptr_array_index(handler->devices, i);
+
+        if (dev->device == device) {
+            if (dev->queue)
+                dev->queue->device = NULL;
+            g_ptr_array_remove_index(handler->devices, i);
+            free(dev);
+
+            return 0;
+        }
+    }
+
+    return 0;
+}
+
+static struct lrs_dev *find_device_to_remove(struct request_handler *handler)
+{
+    size_t shortest_queue = SIZE_MAX;
+    struct device *device = NULL;
+    int i;
+
+    for (i = 0; i < handler->devices->len; i++) {
+        struct device *iter = g_ptr_array_index(handler->devices, i);
+
+        if (!iter->queue) {
+            device = iter;
+            break;
+        }
+
+        if (g_queue_get_length(iter->queue->queue) < shortest_queue) {
+            device = iter;
+            shortest_queue = g_queue_get_length(iter->queue->queue);
+        }
+    }
+
+    return device->device;
+}
+
+static int grouped_reclaim_device(struct request_handler *handler,
+                                  struct lrs_dev **device)
+{
+    *device = find_device_to_remove(handler);
+
+    if (!device)
+        return -ENODEV;
+
+    grouped_remove_device(handler, *device);
+
+    return 0;
+}
+
+struct pho_io_scheduler_ops IO_SCHED_GROUPED_READ_OPS = {
+    .init                   = grouped_init,
+    .fini                   = grouped_fini,
+    .push_request           = grouped_push_request,
+    .remove_request         = grouped_remove_request,
+    .requeue                = grouped_requeue,
+    .peek_request           = grouped_peek_request,
+    .get_device_medium_pair = grouped_get_device_medium_pair,
+    .add_device             = grouped_add_device,
+    .remove_device          = grouped_remove_device,
+    .reclaim_device         = grouped_reclaim_device,
+};

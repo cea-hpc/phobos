@@ -51,6 +51,7 @@ enum pho_cfg_params_io_sched {
 enum io_schedulers {
     IO_SCHED_INVAL = -1,
     IO_SCHED_FIFO,
+    IO_SCHED_GROUPED_READ,
 };
 
 struct pho_io_sched;
@@ -175,6 +176,7 @@ struct pho_io_sched {
     struct request_handler write;
     struct request_handler format;
     struct lock_handle    *lock_handle;
+    struct tsqueue        *response_queue; /* reference to the response queue */
 };
 
 /* I/O Scheduler interface */
@@ -273,6 +275,9 @@ int io_sched_requeue(struct pho_io_sched *io_sched,
  * Given a request container as returned by io_sched_peek_request, this function
  * will return a device to use for this request \p dev.
  *
+ * If \p is_error is true on read, valid media IDs are stored between index
+ * reqc->req->ralloc->n_required and reqc->req->ralloc->n_med_ids - 1 inclusive.
+ *
  * \param[in]   io_sched  a valid I/O scheduler
  * \param[in]   reqc      the request container used to generate sub-requests
  * \param[out]  dev       the device that must be used to handle \p sreq. It can
@@ -280,10 +285,19 @@ int io_sched_requeue(struct pho_io_sched *io_sched,
  *                        request currently.
  * \param[out]  index     index of the medium to consider in \p reqc, returned
  *                        by the I/O scheduler
+ * \param[in]   is_error  This argument is true when the request has already
+ *                        been sent to a device thread but some error occured on
+ *                        the medium at index \p *index. The caller is asking
+ *                        the scheduler to find a new medium, if possible, for
+ *                        this request. The implementer of the associated
+ *                        callback must keep in mind that remove_request has
+ *                        already been called on \p reqc.
  *
  * \return                0 on success, negative POSIX error on failure
  *             -EAGAIN    the scheduler doesn't have enough device to schedule
  *                        more requests.
+ *             -ERANGE    this function was called too many times for a request
+ *                        (e.g. more than req->ralloc->n_med_ids for a read).
  */
 int io_sched_get_device_medium_pair(struct pho_io_sched *io_sched,
                                     struct req_container *reqc,

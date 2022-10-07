@@ -249,7 +249,6 @@ find_device:
 
     *dev = NULL;
 
-    // XXX what should we return if no device is found?
     return 0;
 }
 

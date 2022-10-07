@@ -1,8 +1,7 @@
+#include "lrs_sched.h"
 #include "lrs_utils.h"
-
 #include "pho_common.h"
 #include "pho_srl_lrs.h"
-#include "lrs_sched.h"
 
 #include <errno.h>
 #include <unistd.h>
@@ -30,4 +29,3 @@ struct media_info **reqc_get_medium_to_alloc(struct req_container *reqc,
 
     return NULL;
 }
-

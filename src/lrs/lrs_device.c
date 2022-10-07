@@ -2109,8 +2109,10 @@ static void *lrs_dev_thread(void *tdata)
                     rc = dev_handle_read_write(device);
                 else
                     pho_error(rc = -EINVAL,
-                              "device thread '%s': ld_sub_request wrong type",
-                              device->ld_dss_dev_info->rsc.id.name);
+                              "device thread '%s': "
+                              "invalid type (%s) in ld_sub_request",
+                              device->ld_dss_dev_info->rsc.id.name,
+                              pho_srl_request_kind_str(req));
 
                 if (rc)
                     LOG_GOTO(end_thread, thread->status = rc,

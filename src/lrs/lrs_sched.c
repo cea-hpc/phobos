@@ -736,6 +736,7 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
 
     sched->response_queue = resp_queue;
     sched->io_sched.lock_handle = &sched->lock_handle;
+    sched->io_sched.response_queue = sched->response_queue;
 
     /* Load devices from DSS -- not critical if no device is found */
     lrs_dev_hdl_load(sched, &sched->devices);
@@ -1045,8 +1046,7 @@ static char *get_sub_request_medium_name(struct sub_request *sub_request)
     }
 }
 
-static struct lrs_dev *search_loaded_medium(GPtrArray *devices,
-                                            const char *name)
+struct lrs_dev *search_loaded_medium(GPtrArray *devices, const char *name)
 {
     int i;
 
@@ -1100,7 +1100,8 @@ struct lrs_dev *search_in_use_medium(GPtrArray *devices,
     ENTRY;
 
     pho_debug("Searching in-use medium '%s'", name);
-    *sched_ready = false;
+    if (sched_ready)
+        *sched_ready = false;
 
     for (i = 0; i < devices->len; i++) {
         struct lrs_dev *dev = NULL;
@@ -1140,7 +1141,8 @@ check_load:
             }
 
             if (!strcmp(name, media_id)) {
-                *sched_ready = dev_is_sched_ready(dev);
+                if (sched_ready)
+                    *sched_ready = dev_is_sched_ready(dev);
                 MUTEX_UNLOCK(&dev->ld_mutex);
                 pho_debug("Found loaded medium '%s' in '%s'",
                           name, dev->ld_dss_dev_info->rsc.id.name);
@@ -1172,6 +1174,7 @@ err_continue:
  *                           be set to n_med or more if every already allocated
  *                           media should be taken into account)
  */
+__attribute__((weak)) /* this attribute is useful for mocking in tests */
 int sched_select_medium(struct lock_handle *lock_handle,
                         GPtrArray *devices,
                         struct media_info **p_media,
@@ -1445,8 +1448,9 @@ out_free:
  *
  * @return 0 on success, negative error code on failure and res is false
  */
-static int tape_drive_compat(const struct media_info *tape,
-                             const struct lrs_dev *drive, bool *res)
+__attribute__((weak)) /* this attribute is useful for mocking in tests */
+int tape_drive_compat(const struct media_info *tape,
+                      const struct lrs_dev *drive, bool *res)
 {
     const char *rw_drives;
     char *parse_rw_drives;
@@ -1602,15 +1606,20 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
 
         /* check tape / drive compat */
         if (pmedia) {
-            bool res;
+            bool compatible;
+            int rc;
 
-            if (tape_drive_compat(pmedia, itr, &res)) {
+            rc = tape_drive_compat(pmedia, itr, &compatible);
+            if (rc) {
                 selected = NULL;
                 break;
             }
 
-            if (!res)
+            if (!compatible) {
+                pho_debug("Skipping incompatible device '%s'",
+                          itr->ld_dev_path);
                 continue;
+            }
         }
 
         rc = select_func(required_size, itr, &selected);
@@ -2118,24 +2127,40 @@ sub_request_alloc_error:
 }
 
 static int publish_or_cancel(struct lrs_sched *sched,
-                             struct req_container *reqc, int rc,
+                             struct req_container *reqc, int reqc_rc,
                              size_t n_selected)
 {
+    int rc = 0;
     size_t i;
 
-    if (!rc)
+    if (reqc_rc == -EAGAIN && !running)
+        return reqc_rc;
+
+    if (reqc_rc != -EAGAIN) {
+        rc = io_sched_remove_request(&sched->io_sched, reqc);
+        if (rc)
+            pho_error(rc, "Failed to remove request '%p' (%s)", reqc,
+                      pho_srl_request_kind_str(reqc->req));
+    }
+
+    if (!reqc_rc && !rc)
         rc = push_sub_request_to_device(reqc);
 
-    if (rc) {
+    if (reqc_rc || rc) {
         for (i = 0; i < n_selected; i++)
             reqc->params.rwalloc.respc->devices[i]->ld_ongoing_scheduled =
                                                                         false;
 
-        if (rc != -EAGAIN)
-            rc = queue_error_response(sched->response_queue, rc, reqc);
+        if (reqc_rc != -EAGAIN || rc) {
+            int rc2 = queue_error_response(sched->response_queue,
+                                           reqc_rc != -EAGAIN ? reqc_rc : rc,
+                                           reqc);
+            sched_req_free(reqc);
+            rc = rc ? : rc2;
+        }
     }
 
-    return rc;
+    return reqc_rc == -EAGAIN ? reqc_rc : rc;
 }
 
 static bool medium_is_loaded_in_device(struct lrs_dev *dev,
@@ -2311,6 +2336,7 @@ static int check_medium_permission_and_status(struct req_container *reqc,
     return 0;
 }
 
+__attribute__((weak)) /* this attribute is useful for mocking in tests */
 int fetch_and_check_medium_info(struct lock_handle *lock_handle,
                                 struct req_container *reqc,
                                 struct pho_id *m_id,
@@ -2318,7 +2344,11 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
                                 struct media_info **target_medium)
 {
     PhoResourceId *medium_id;
+    struct pho_id sm_id;
     int rc;
+
+    if (!m_id)
+        m_id = &sm_id;
 
     if (pho_request_is_format(reqc->req))
         medium_id = reqc->req->format->med_id;
@@ -2357,7 +2387,7 @@ static int sched_read_alloc_one_medium(struct lrs_sched *sched,
     pho_rsc_id_t **med_ids = reqc->req->ralloc->med_ids;
     size_t index_to_alloc = num_allocated;
     struct media_info **alloc_medium;
-    struct lrs_dev *dev;
+    struct lrs_dev *dev = NULL;
     int rc = 0;
 
 find_read_device:
@@ -2367,8 +2397,10 @@ find_read_device:
         GOTO(skip_medium, rc);
 
     assert(index_to_alloc >= num_allocated);
-    med_ids_switch(med_ids, index_to_alloc, num_allocated);
-    index_to_alloc = num_allocated;
+    if (dev) {
+        med_ids_switch(med_ids, index_to_alloc, num_allocated);
+        index_to_alloc = num_allocated;
+    }
 
     alloc_medium =
         &reqc->params.rwalloc.media[index_to_alloc].alloc_medium;
@@ -2378,7 +2410,11 @@ find_read_device:
         if (*alloc_medium && (*alloc_medium)->lock.hostname)
             medium_unlock(sched->lock_handle.dss, *alloc_medium);
 
-        if (compatible_drive_exists(sched, *alloc_medium,
+        /* an I/O scheduler may not set *alloc_medium if it doesn't find a
+         * suitable medium. Return EAGAIN in this case.
+         */
+        if (!*alloc_medium ||
+            compatible_drive_exists(sched, *alloc_medium,
                                     *reqc->params.rwalloc.respc->devices,
                                     num_allocated, index_to_alloc))
             rc = -EAGAIN;
@@ -2415,6 +2451,8 @@ free_skip_medium:
     media_info_free(*alloc_medium);
     *alloc_medium = NULL;
 skip_medium:
+    if (dev)
+        dev->ld_ongoing_scheduled = false;
     rc = skip_read_alloc_medium(rc, reqc, index_to_alloc, nb_already_eagain);
     if (rc)
         return rc;
@@ -2577,9 +2615,15 @@ static int sched_handle_format(struct lrs_sched *sched,
 
     format_sub_request->medium_index = 0;
     format_sub_request->reqc = reqc;
+    rc = io_sched_remove_request(&sched->io_sched, reqc);
+    if (rc)
+        LOG_GOTO(remove_format_err_out, rc,
+                 "Failed to remove request from I/O scheduler");
+
     MUTEX_LOCK(&device->ld_mutex);
     device->ld_sub_request = format_sub_request;
     MUTEX_UNLOCK(&device->ld_mutex);
+
     return 0;
 
 remove_format_err_out:
@@ -2603,6 +2647,10 @@ err_out:
          * rc.
          */
         rc = rc2;
+
+        rc2 = io_sched_remove_request(&sched->io_sched, reqc);
+        sched_req_free(reqc);
+        rc = rc ? : rc2;
     }
 
     return rc;
@@ -2957,19 +3005,6 @@ int lrs_schedule_work(struct lrs_sched *sched)
             rc = sched_handle_write_alloc(sched, reqc);
         else
             abort();
-
-        /* remove the request on error and on success */
-        if (rc != -EAGAIN) {
-            int rc2 = io_sched_remove_request(&sched->io_sched, reqc);
-            if (rc)
-                /* Do not free reqc on success since its ownership has been
-                 * transfered to the device.
-                 */
-                sched_req_free(reqc);
-
-            if (rc2)
-                return rc2;
-        }
 
         if (rc == 0)
             continue;
