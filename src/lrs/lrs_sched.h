@@ -176,14 +176,15 @@ struct rwalloc_medium {
 struct rwalloc_params {
     struct rwalloc_medium *media;   /**< Array of media to alloc */
     size_t n_media;                 /**< Number of media to alloc */
-    size_t nb_failed_media;         /**< Number of already failed read candidate
-                                      *  media (unused for write request)
-                                      */
     int rc;                         /**< Global return code, if multiple sub
                                       *  requests fail, only the first one is
                                       *  kept.
                                       */
     struct resp_container *respc;   /**< Response container */
+    size_t original_n_req_media;    /**< Number of media in the request when it
+                                      *  is first received.
+                                      */
+
 };
 
 /**

@@ -23,8 +23,10 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
+. $test_dir/../../utils_generation.sh
 . $test_dir/../../tape_drive.sh
 put_then_release="$test_dir/put_then_release"
+pho_ldm_helper="$test_dir/../../../scripts/pho_ldm_helper"
 
 set -xe
 
@@ -35,6 +37,7 @@ function setup
 
 function cleanup
 {
+    drain_all_drives
     drop_tables
 }
 
@@ -507,6 +510,85 @@ function test_format_fail_without_suitable_device()
     trap "cleanup" EXIT
 }
 
+function test_retry_on_error_setup()
+{
+    drain_all_drives
+    drop_tables
+    setup_tables
+    invoke_daemon
+
+    setup_test_dirs
+    setup_dummy_files 2
+}
+
+function test_retry_on_error_cleanup()
+{
+    waive_daemon
+    drain_all_drives
+
+    cleanup_dummy_files
+    cleanup_test_dirs
+    rm -f /tmp/mount_count
+
+    drop_tables
+}
+
+function test_retry_on_error_run()
+{
+    local drives=$(get_lto_drives 6 3)
+    local tapes=$(get_tapes L6 3)
+    local file=${FILES[1]}
+    local oid=$(basename "$file")
+
+    $phobos drive add --unlock $drives
+
+    $phobos tape add --type lto6 "$tapes"
+    $phobos tape format --unlock "$tapes"
+
+    $phobos put --layout raid1 --lyt-params "repl_count=3" "$file" "$oid"
+
+    waive_daemon
+    drain_all_drives
+
+    # Custom mount script that fails the first two mounts and succeeds on the
+    # third attempt.
+    local cmd="bash -c \"
+mount_count=\$(cat /tmp/mount_count)
+echo mount count: \$mount_count
+
+if (( mount_count == 2 )); then
+    $pho_ldm_helper mount_ltfs '%s' '%s'
+    exit
+fi
+((mount_count++))
+echo \$mount_count > /tmp/mount_count
+exit 1
+\""
+
+    echo 0 > /tmp/mount_count
+    export PHOBOS_LTFS_cmd_mount="$cmd"
+    invoke_daemon
+    $phobos ping
+
+    $phobos get "$oid" "$DIR_TEST_OUT"/"$oid"
+}
+
+function test_retry_on_error()
+{
+    for algo in fifo grouped_read; do
+        (
+         export PHOBOS_IO_SCHED_read_algo="$algo"
+         set -xe
+
+         trap test_retry_on_error_cleanup EXIT
+         test_retry_on_error_setup
+         test_retry_on_error_run
+
+         unset PHOBOS_IO_SCHED_read_algo
+        )
+    done
+}
+
 trap cleanup EXIT
 
 test_invalid_lock_file
@@ -523,6 +605,7 @@ test_refuse_new_request_during_shutdown
 # Tape tests are available only if /dev/changer exists, which is the entry
 # point for the tape library.
 if [[ -w /dev/changer ]]; then
+    test_retry_on_error
     test_recover_drive_old_locks
     test_remove_invalid_device_locks
     test_mount_failure_during_read_response

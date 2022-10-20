@@ -302,30 +302,38 @@ static int fifo_get_device_medium_pair(struct io_scheduler *io_sched,
         *reqc_get_medium_to_alloc(reqc, *index) = NULL;
     }
 
-    elem = g_queue_peek_tail(queue);
-    if (!is_reqc_the_first_element(queue, reqc) && !is_error)
-        LOG_RETURN(-EINVAL,
-                   "Request '%p' is not the first element of the queue",
-                   reqc);
+    if (!is_error) {
+        elem = g_queue_peek_tail(queue);
+        if (!is_reqc_the_first_element(queue, reqc))
+            LOG_RETURN(-EINVAL,
+                       "Request '%p' is not the first element of the queue",
+                       reqc);
 
-    if (elem && pho_request_is_read(reqc->req) &&
-        elem->num_media_allocated != *index)
-        is_retry = true;
+        if (pho_request_is_read(reqc->req)) {
+            if (elem->num_media_allocated >= reqc->req->ralloc->n_med_ids)
+                return -ERANGE;
 
-    if (!is_error && pho_request_is_read(reqc->req) &&
-        elem->num_media_allocated >= reqc->req->ralloc->n_med_ids)
-        return -ERANGE;
+            if (elem->num_media_allocated != *index)
+                is_retry = true;
+        }
+    }
 
     if (pho_request_is_read(reqc->req)) {
         rc = find_read_device(io_sched, reqc, device,
-                              is_error || is_retry ?
-                                  *index :
-                                  elem->num_media_allocated,
+                              /* select the first non-failed medium */
+                              is_error ? reqc->req->ralloc->n_required :
+                              is_retry ? *index :
+                              elem->num_media_allocated,
                               *index);
         if (!is_error)
             /* On error, elem is NULL since the request has already been removed
              */
             *index = elem->num_media_allocated++;
+        else
+            /* On error, we will try to allocate the first non-failed medium
+             * at index n_required
+             */
+            *index = reqc->req->ralloc->n_required;
 
     } else if (pho_request_is_write(reqc->req)) {
         rc = find_write_device(io_sched->devices,

@@ -126,6 +126,13 @@ void sched_req_free(void *reqc)
     if (!cont)
         return;
 
+    if (pho_request_is_read(cont->req))
+        /* On failure, n_med_ids may be reduced, we need to set it back to its
+         * orignal value to free the whole list.
+         */
+        cont->req->ralloc->n_med_ids =
+            cont->params.rwalloc.original_n_req_media;
+
     if (cont->req) {
         /* this function frees request specific memory, therefore needs to check
          * the request type internally and dereferences the cont->req
@@ -1240,6 +1247,13 @@ int sched_select_medium(struct lock_handle *lock_handle,
 
     rc = dss_media_get(lock_handle->dss, &filter, &pmedia_res,
                        &mcnt);
+    if (mcnt == 0) {
+        pho_warn("No medium found matching query: %s",
+                 json_dumps(filter.df_json, JSON_COMPACT));
+        dss_filter_free(&filter);
+        GOTO(free_res, rc = -ENOSPC);
+    }
+
     dss_filter_free(&filter);
     if (rc)
         GOTO(err_nores, rc);
@@ -1296,7 +1310,7 @@ lock_race_retry:
     }
 
     if (avail_size < required_size) {
-        pho_warn("Available space on media : %zd, required size : %zd",
+        pho_warn("Available space on all media: %zd, required size : %zd",
                  avail_size, required_size);
         GOTO(free_res, rc = -ENOSPC);
     }
@@ -2279,29 +2293,29 @@ static int skip_read_alloc_medium(int rc, struct req_container *reqc,
                                   size_t index_to_alloc,
                                   size_t *nb_already_eagain)
 {
-    size_t *nb_failed = &reqc->params.rwalloc.nb_failed_media;
     pho_rsc_id_t **med_ids = reqc->req->ralloc->med_ids;
     size_t n_required = reqc->req->ralloc->n_required;
-    size_t n_med_ids = reqc->req->ralloc->n_med_ids;
+    size_t *n_med_ids = &reqc->req->ralloc->n_med_ids;
 
     if (rc == -EAGAIN) {
         (*nb_already_eagain)++;
     } else {
-        (*nb_failed)++;
+        if (*n_med_ids > 0)
+            (*n_med_ids)--;
         /* Extend failed media by switching the last eagain with the failed */
         if (*nb_already_eagain > 0)
-            med_ids_switch(med_ids, index_to_alloc, n_med_ids - *nb_failed);
+            med_ids_switch(med_ids, index_to_alloc, *n_med_ids - 1);
     }
 
     /* Extend eagain and failed medium by switching current with last avail */
-    if ((n_med_ids - *nb_failed - *nb_already_eagain) > index_to_alloc)
+    if ((*n_med_ids - *nb_already_eagain) > index_to_alloc)
         med_ids_switch(med_ids, index_to_alloc,
-                       n_med_ids - *nb_failed - *nb_already_eagain);
+                       *n_med_ids - 1 - *nb_already_eagain);
 
     /* test if we still have enough candidate */
-    if (n_required > (n_med_ids - *nb_already_eagain - *nb_failed)) {
+    if (n_required > (*n_med_ids - *nb_already_eagain)) {
         /* any future chance ? */
-        if ((n_med_ids - *nb_failed) >= n_required)
+        if (*n_med_ids >= n_required)
             return -EAGAIN;
         else
             return rc;
@@ -2382,7 +2396,8 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
 static int sched_read_alloc_one_medium(struct lrs_sched *sched,
                                        struct req_container *reqc,
                                        size_t num_allocated,
-                                       size_t *nb_already_eagain)
+                                       size_t *nb_already_eagain,
+                                       bool is_error)
 {
     pho_rsc_id_t **med_ids = reqc->req->ralloc->med_ids;
     size_t index_to_alloc = num_allocated;
@@ -2392,11 +2407,18 @@ static int sched_read_alloc_one_medium(struct lrs_sched *sched,
 
 find_read_device:
     rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &dev,
-                                         &index_to_alloc, false);
+                                         &index_to_alloc, is_error);
     if (rc)
         GOTO(skip_medium, rc);
 
     assert(index_to_alloc >= num_allocated);
+    if (dev && is_error) {
+        med_ids_switch(med_ids, num_allocated,
+                       reqc->req->ralloc->n_med_ids - 1);
+        if (reqc->req->ralloc->n_med_ids > 0)
+            reqc->req->ralloc->n_med_ids--;
+    }
+
     if (dev) {
         med_ids_switch(med_ids, index_to_alloc, num_allocated);
         index_to_alloc = num_allocated;
@@ -2475,7 +2497,8 @@ static int sched_handle_read_alloc(struct lrs_sched *sched,
               reqc->req->ralloc->n_med_ids);
 
     for (i = 0; i < reqc->req->ralloc->n_required; i++) {
-        rc = sched_read_alloc_one_medium(sched, reqc, i, &nb_already_eagain);
+        rc = sched_read_alloc_one_medium(sched, reqc, i, &nb_already_eagain,
+                                         false);
         if (rc)
             break;
     }
@@ -2820,7 +2843,7 @@ static int sched_handle_read_or_write_error(struct lrs_sched *sched,
         size_t nb_already_eagain = 0;
 
         rc = sched_read_alloc_one_medium(sched, sreq->reqc, sreq->medium_index,
-                                         &nb_already_eagain);
+                                         &nb_already_eagain, true);
     } else {
         device_select_func_t dev_select_policy;
 
@@ -2853,7 +2876,7 @@ static int sched_handle_read_or_write_error(struct lrs_sched *sched,
             *sreq_pushed_or_requeued = false;
             rwalloc->rc = rc;
             rwalloc->media[sreq->medium_index].status = SUB_REQUEST_ERROR;
-            rc = queue_error_response(sched->response_queue, -ESHUTDOWN,
+            rc = queue_error_response(sched->response_queue, rc,
                                       sreq->reqc);
             rwalloc_cancel_DONE_devices(sreq->reqc);
             *req_ended = is_rwalloc_ended(sreq->reqc);

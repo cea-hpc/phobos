@@ -1455,7 +1455,6 @@ static int fill_rwalloc_resp_container(struct lrs_dev *dev,
 static bool rwalloc_can_be_requeued(struct sub_request *sub_request)
 {
     struct req_container *reqc = sub_request->reqc;
-    size_t *nb_failed_media;
     pho_req_read_t *ralloc;
 
     if (pho_request_is_write(reqc->req))
@@ -1464,15 +1463,10 @@ static bool rwalloc_can_be_requeued(struct sub_request *sub_request)
     if (!sub_request->failure_on_medium)
         return true;
 
-    nb_failed_media = &reqc->params.rwalloc.nb_failed_media;
-    (*nb_failed_media)++;
     ralloc = reqc->req->ralloc;
     /* if possible : prepare a new candidate medium and requeue */
-    if ((ralloc->n_med_ids - *nb_failed_media) >= ralloc->n_required) {
-        med_ids_switch(ralloc->med_ids, sub_request->medium_index,
-                       ralloc->n_med_ids - *nb_failed_media);
+    if (ralloc->n_med_ids > ralloc->n_required)
         return true;
-    }
 
     return false;
 }
@@ -1634,13 +1628,16 @@ static int dev_mount(struct lrs_dev *dev)
     if (!mnt_root)
         LOG_RETURN(-ENOMEM, "Unable to get mount point of %s", id);
 
-    pho_info("mount: device '%s' ('%s') as '%s'", dev->ld_dev_path,
+    pho_info("mount: medium '%s' in device '%s' ('%s') as '%s'",
+             dev->ld_dss_media_info->rsc.id.name,
+             dev->ld_dev_path,
              dev->ld_dss_dev_info->rsc.id.name, mnt_root);
 
     rc = ldm_fs_mount(fsa, dev->ld_dev_path, mnt_root,
                       dev->ld_dss_media_info->fs.label);
     if (rc)
-        LOG_GOTO(out_free, rc, "Failed to mount device '%s'",
+        LOG_GOTO(out_free, rc, "Failed to mount '%s' in device '%s'",
+                 dev->ld_dss_media_info->rsc.id.name,
                  dev->ld_dev_path);
 
     /* update device state and set mount point */
@@ -1758,14 +1755,17 @@ mount:
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         sub_request->failure_on_medium = true;
         io_ended = true;
+        pho_error(rc,
+                  "Error when mounting medium '%s' in device '%s' for %s, "
+                  "will try another medium if possible",
+                  dev->ld_dss_media_info->rsc.id.name,
+                  dev->ld_dss_dev_info->rsc.id.name,
+                  pho_srl_request_kind_str(reqc->req));
         /* set the medium to failed early to be sure to not reuse it by sched */
         fail_release_free_medium(&dev->ld_device_thread.dss,
                                  dev->ld_dss_media_info);
         dev->ld_dss_media_info = NULL;
-        LOG_GOTO(alloc_result, rc,
-                 "Error when mounting medium in device %s to %s it",
-                 dev->ld_dss_dev_info->rsc.id.name,
-                 pho_srl_request_kind_str(reqc->req));
+        GOTO(alloc_result, rc);
     }
 
     /* LTFS can cunningly mount almost-full tapes as read-only, and so would

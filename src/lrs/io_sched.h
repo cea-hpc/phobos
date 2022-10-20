@@ -179,8 +179,8 @@ struct io_sched_handle {
     struct io_scheduler read;
     struct io_scheduler write;
     struct io_scheduler format;
-    struct lock_handle    *lock_handle;
-    struct tsqueue        *response_queue; /* reference to the response queue */
+    struct lock_handle *lock_handle;
+    struct tsqueue     *response_queue; /* reference to the response queue */
 };
 
 /* I/O Scheduler interface */

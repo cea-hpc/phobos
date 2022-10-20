@@ -736,11 +736,36 @@ free_elems:
     return rc;
 }
 
-static gint glib_table_element_contains_reqc(gconstpointer _elem,
-                                             gconstpointer _reqc)
+static void remove_queue_element(struct grouped_data *data,
+                                 struct queue_element *elem)
 {
-    struct queue_element *elem = (struct queue_element *) _elem;
-    struct req_container *reqc = (struct req_container *) _reqc;
+    g_queue_remove(elem->queue->queue, elem);
+
+    if (g_queue_get_length(elem->queue->queue) == 0)
+        delete_queue(data, elem->queue);
+}
+
+static void remove_elements_from_list(struct grouped_data *data,
+                                      struct queue_element *to_ignore,
+                                      GList *list)
+{
+    glist_foreach(iter, list) {
+        struct queue_element *elem = iter->data;
+
+        if (elem == to_ignore)
+            /* do not free to_ignore yet */
+            continue;
+
+        remove_queue_element(data, elem);
+        queue_element_free(elem, false);
+    }
+}
+
+static gint glib_match_reqc(gconstpointer _elem,
+                            gconstpointer _reqc)
+{
+    const struct req_container *reqc = _reqc;
+    const struct queue_element *elem = _elem;
 
     if (elem->reqc == reqc)
         return 0;
@@ -748,25 +773,14 @@ static gint glib_table_element_contains_reqc(gconstpointer _elem,
     return 1;
 }
 
-static struct queue_element *
-get_element_from_queue(GQueue *queue, struct req_container *reqc)
-{
-    GList *data;
-
-    data = g_queue_find_custom(queue, reqc, glib_table_element_contains_reqc);
-    if (!data)
-        return NULL;
-
-    return (struct queue_element *)data->data;
-}
-
 static int grouped_remove_request(struct io_scheduler *io_sched,
                                   struct req_container *reqc)
 {
-    struct grouped_data *data;
-    int i;
-
-    data = io_sched->private_data;
+    struct grouped_data *data = io_sched->private_data;
+    struct request_queue *queue;
+    struct queue_element *elem;
+    const char *name;
+    GList *link;
 
     if (data->current_elem && data->current_elem->reqc != reqc)
         /* We should only call remove for requests that just have been returned
@@ -774,24 +788,21 @@ static int grouped_remove_request(struct io_scheduler *io_sched,
          */
         return -EINVAL;
 
-    for (i = 0; i < reqc->req->ralloc->n_med_ids; i++) {
-        struct request_queue *queue;
-        struct queue_element *elem;
-        const char *name;
+    name = reqc->req->ralloc->med_ids[0]->name;
 
-        name = reqc->req->ralloc->med_ids[i]->name;
+    queue = g_hash_table_lookup(data->request_queues, name);
+    assert(queue);
 
-        queue = g_hash_table_lookup(data->request_queues, name);
+    /* find the element corresponding to the first medium in reqc */
+    link = g_queue_find_custom(queue->queue, reqc, glib_match_reqc);
+    assert(link);
 
-        /* Since we can only remove requests that are still in the scheduler,
-         * it should be in the hash_table.
-         */
-        assert(queue);
+    elem = link->data;
+    remove_elements_from_list(data, elem, elem->pair->used);
+    remove_elements_from_list(data, elem, elem->pair->free);
 
-        elem = get_element_from_queue(queue->queue, reqc);
-        remove_element_from_queue(data, elem);
-        queue_element_free(elem, i == (reqc->req->ralloc->n_med_ids - 1));
-    }
+    remove_queue_element(data, elem);
+    queue_element_free(elem, true);
 
     data->current_elem = NULL;
 
@@ -854,16 +865,15 @@ static struct device *find_unallocated_device(GPtrArray *devices,
         if (!dev_is_sched_ready(dev->device))
             continue;
 
-        if (!dev->queue)
-            return dev;
+        if (dev->queue)
+            continue;
 
-        /* XXX we could refresh the medium_info here */
         if (tape_drive_compat(queue->medium_info, dev->device,
                               &is_compatible))
             continue;
 
-        if (!is_compatible)
-            continue;
+        if (is_compatible)
+            return dev;
     }
 
     return NULL;

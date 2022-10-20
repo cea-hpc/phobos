@@ -505,10 +505,13 @@ static int init_rwalloc_container(struct req_container *reqc)
     size_t i;
     int rc;
 
-    if (is_write)
+    if (is_write) {
         rwalloc_params->n_media = reqc->req->walloc->n_media;
-    else
+        rwalloc_params->original_n_req_media = reqc->req->walloc->n_media;
+    } else {
         rwalloc_params->n_media = reqc->req->ralloc->n_required;
+        rwalloc_params->original_n_req_media = reqc->req->ralloc->n_med_ids;
+    }
 
     rwalloc_params->media = calloc(rwalloc_params->n_media,
                                    sizeof(*rwalloc_params->media));

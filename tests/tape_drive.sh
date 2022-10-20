@@ -32,11 +32,11 @@ function mtx_retry
 
 function drain_all_drives
 {
-#TODO replace umount/mtx unload by a 'phobos drive drain' command
-    #umount all ltfs
+    # TODO replace umount/mtx unload by a 'phobos drive drain' command
+    # umount all ltfs
     mount | awk '/^ltfs/ {print $3}' | xargs -r umount
 
-    #unload all tapes
+    # unload all tapes
     mtx status | awk -F'[ :]' '/Data Transfer Element.*Full/ {print $8, $4}' |
         while read slot drive; do
             mtx_retry unload $slot $drive
