@@ -23,14 +23,12 @@
 
 # test posix mode
 
-test_bin_dir=$(dirname $(readlink -e $0))
+test_bin_dir=$PWD
 test_bin="$test_bin_dir/test_store"
-
-. $test_bin_dir/../../test_env.sh
-. $test_bin_dir/setup_db.sh
-. $test_bin_dir/test_launch_daemon.sh
-
-set -xe
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
 
 ################################################################################
 #                                    SETUP                                     #
@@ -97,9 +95,6 @@ function create_files()
     done
     TEST_FILES="$TEST_FILES $TEST_RAND"
 }
-
-trap cleanup EXIT
-setup
 
 ################################################################################
 #                   TEST PUTTING OBJECTS AND CHECK THE RESULTS                 #
@@ -227,17 +222,35 @@ function test_routine()
     test_put_get "mput"
 }
 
-create_files "base"
-test_routine
+function setup_base
+{
+    create_files "base"
+}
 
-export PHOBOS_STORE_default_layout="raid1"
-create_files "raid1"
-test_routine
+function setup_raid1
+{
+    export PHOBOS_STORE_default_layout="raid1"
+    create_files "raid1"
+}
 
-export PHOBOS_LAYOUT_RAID1_repl_count=1
-create_files "raid1_1"
-test_routine
+function setup_raid1_1
+{
+    export PHOBOS_STORE_default_layout="raid1"
+    export PHOBOS_LAYOUT_RAID1_repl_count=1
+    create_files "raid1_1"
+}
 
-export PHOBOS_LAYOUT_RAID1_repl_count=3
-create_files "raid1_3"
-test_routine
+function setup_raid1_3
+{
+    export PHOBOS_STORE_default_layout="raid1"
+    export PHOBOS_LAYOUT_RAID1_repl_count=3
+    create_files "raid_3"
+}
+
+TEST_SETUP=setup
+TEST_CLEANUP=cleanup
+
+TESTS=("setup_base; test_routine; noop"
+       "setup_raid1; test_routine; noop"
+       "setup_raid1_1; test_routine; noop"
+       "setup_raid1_3; test_routine; noop")

@@ -27,29 +27,34 @@
 
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
-. $test_dir/../../tape_drive.sh
-
-set -xe
-
-TAGS=foo-tag,bar-tag
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
 
 function setup
 {
+    TAGS=foo-tag,bar-tag
+
     if [ -w /dev/changer ]; then
         export PHOBOS_LRS_families="dir,tape"
     else
         export PHOBOS_LRS_families="dir"
     fi
-    setup_tables
-    invoke_daemon
+}
+
+function cleanup
+{
+    unset PHOBOS_LRS_families
 }
 
 function tape_setup
 {
+    setup_tables
+    invoke_daemon
+
     export PHOBOS_STORE_default_family="tape"
+    echo "Tape test mode"
 
     # make sure no LTFS filesystem is mounted, so we can unmount it
     /usr/share/ltfs/ltfs stop || true
@@ -122,9 +127,19 @@ function tape_setup
     $phobos --verbose tape format $lto6_tapes --unlock
 }
 
+function tape_cleanup
+{
+    waive_daemon
+    drop_tables
+}
+
 function dir_setup
 {
+    setup_tables
+    invoke_daemon
+
     export PHOBOS_STORE_default_family="dir"
+    echo "POSIX test mode"
 
     export dirs="/tmp/test.pho.1 /tmp/test.pho.2"
     mkdir -p $dirs
@@ -153,7 +168,7 @@ function dir_setup
     done
 }
 
-function cleanup
+function dir_cleanup
 {
     waive_daemon
     drop_tables
@@ -575,36 +590,32 @@ function tape_drive_compat
 export PHOBOS_IO_SCHED_DIR_read_algo="grouped_read"
 export PHOBOS_IO_SCHED_TAPE_read_algo="grouped_read"
 
-trap cleanup EXIT
-setup
+TEST_SETUP=setup
+TEST_CLEANUP=cleanup
 
-echo "POSIX test mode"
-dir_setup
-
-put_get_test
-put_family dir
-put_layout
-put_tags
-put_alias
-mput
-concurrent_put
-check_status dir "$dirs"
-lock_test
-concurrent_put_get_retry
+TESTS=("dir_setup; \
+        put_get_test; \
+        put_family dir; \
+        put_layout; \
+        put_tags; \
+        put_alias; \
+        mput; \
+        concurrent_put; \
+        check_status dir $dirs; \
+        lock_test; \
+        concurrent_put_get_retry; \
+        dir_cleanup")
 
 if  [[ -w /dev/changer ]]; then
-    echo "Tape test mode"
-    drop_tables
-    setup_tables
-    tape_setup
-
-    put_get_test
-    put_family tape
-    put_tags
-    mput
-    concurrent_put
-    check_status tape "$tapes"
-    lock_test
-    concurrent_put_get_retry
-    tape_drive_compat
+    TESTS+=("tape_setup; \
+             put_get_test; \
+             put_family tape; \
+             put_tags; \
+             mput; \
+             concurrent_put; \
+             check_status tape $tapes; \
+             lock_test; \
+             concurrent_put_get_retry; \
+             tape_drive_compat; \
+             tape_cleanup")
 fi

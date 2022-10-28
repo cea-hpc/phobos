@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/bash
 # -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
@@ -21,54 +21,42 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-test_bin_dir=$(dirname $(readlink -e $0))
-test_bin="$test_bin_dir/test_concurrency"
-. $test_bin_dir/../../test_env.sh
-. $test_bin_dir/setup_db.sh
-. $test_bin_dir/test_launch_daemon.sh
-. $test_bin_dir/utils_generation.sh
+#
+# Context initializer for delete API call tests
+#
 
-set -xe
+test_bin_dir=$PWD
+test_bin="$test_bin_dir/test_delete"
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
 
-NB_DIRS=${NB_DIRS:-6}
-
-function setup_dir()
-{
-    local dir="$DIR_TEST_OUT"
-    local file="$FILES[0]"
-
-    for i in $(seq $NB_DIRS); do
-        mkdir -p "$dir/d$i"
-    done
-
-    $phobos dir add "$dir"/d[1-$NB_DIRS]
-    $phobos dir format --fs posix --unlock "$dir/d[1-$NB_DIRS]"
-}
-
-function setup()
+function setup
 {
     setup_tables
 
-    export PHOBOS_LRS_families="dir"
+    $PSQL << EOF
+    INSERT INTO object VALUES
+        ('test-oid1', '00112233445566778899aabbccddeef1', 1, '{}'),
+        ('test-oid2', '00112233445566778899aabbccddeef2', 1, '{}'),
+        ('test-oid3', '00112233445566778899aabbccddeef3', 1, '{}');
+EOF
+
     invoke_daemon
-
-    setup_test_dirs
-    setup_dummy_files 1
-
-    setup_dir
 }
 
-function cleanup()
+function cleanup
 {
-    cleanup_dummy_files
-    cleanup_test_dirs
-
     waive_daemon
     drop_tables
 }
 
-trap cleanup EXIT
-setup
+function test_delete
+{
+    $LOG_COMPILER $test_bin
+}
 
-$test_bin --num-threads 50 --file "${FILES[0]}" --action put --load-first
-$test_bin --num-threads 50 --file "${FILES[0]}" --action put
+TEST_SETUP=setup
+TESTS=(test_delete)
+TEST_CLEANUP=cleanup

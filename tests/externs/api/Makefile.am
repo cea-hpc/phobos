@@ -27,6 +27,8 @@ VALGRIND_FLAGS=-q --leak-check=full --errors-for-leak-kinds=definite --show-poss
 endif
 
 TEST_EXTENSIONS=.sh
+TEST_EXTENSIONS+=.test
+TEST_LOG_DRIVER=$(TO_TEST)/test-driver
 
 check_PROGRAMS=test_bad_comm \
                test_concurrency \
@@ -41,14 +43,14 @@ check_PROGRAMS=test_bad_comm \
                test_undelete
 
 check_SCRIPTS=test_bad_comm.sh \
-              test_concurrency.sh \
-              test_delete.sh \
+              test_concurrency.test \
+              test_delete.test \
               test_dss.sh \
+              test_store.test \
               test_locate.sh \
               test_lock_clean.sh \
               test_raid1_split_locate.sh \
               test_scsi.sh \
-              test_store.sh \
               test_store_retry.sh \
               test_undelete.sh
 

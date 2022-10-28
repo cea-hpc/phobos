@@ -34,11 +34,13 @@ VALGRIND_FLAGS=-q --leak-check=full --errors-for-leak-kinds=definite --show-poss
 endif
 
 TEST_EXTENSIONS=.sh
+TEST_EXTENSIONS+=.test
+TEST_LOG_DRIVER=$(TO_TEST)/test-driver
 
 check_PROGRAMS=lrs_simple_client \
                medium_locker
 
-check_SCRIPTS=acceptance.sh \
+check_SCRIPTS=acceptance.test \
               test_daemon.sh \
               test_daemon_monitoring.sh \
               test_daemon_scheduling.sh \

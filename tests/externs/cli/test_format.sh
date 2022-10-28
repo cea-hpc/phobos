@@ -350,9 +350,9 @@ test_multiple_formats
 cleanup
 setup
 test_format_nb_streams
-cleanup
 
 if [[ -w /dev/changer ]]; then
+    cleanup
     setup
     test_eagain_format
     cleanup

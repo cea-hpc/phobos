@@ -21,36 +21,57 @@
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
 
-test_bin_dir=$(dirname $(readlink -e $0))
-test_bin="$test_bin_dir/test_bad_comm"
-. $test_bin_dir/../../test_env.sh
-. $test_bin_dir/setup_db.sh
-. $test_bin_dir/test_launch_daemon.sh
+test_bin_dir=$PWD
+test_bin="$test_bin_dir/test_concurrency"
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
 
-set -xe
+NB_DIRS=${NB_DIRS:-6}
 
-function setup {
+function setup_dir()
+{
+    local dir="$DIR_TEST_OUT"
+    local file="$FILES[0]"
+
+    for i in $(seq $NB_DIRS); do
+        mkdir -p "$dir/d$i"
+    done
+
+    $phobos dir add "$dir"/d[1-$NB_DIRS]
+    $phobos dir format --fs posix --unlock "$dir/d[1-$NB_DIRS]"
+}
+
+function setup()
+{
     setup_tables
 
     export PHOBOS_LRS_families="dir"
     invoke_daemon
 
-    dir="/tmp/test.pho.1"
-    dir_not_formatted="/tmp/test.pho.3"
-    mkdir -p $dir $dir_not_formatted
+    setup_test_dirs
+    setup_dummy_files 1
 
-    $phobos dir add $dir $dir_not_formatted
-    $phobos dir format --fs posix --unlock $dir
+    setup_dir
 }
 
-function cleanup {
+function cleanup()
+{
+    cleanup_dummy_files
+    cleanup_test_dirs
+
     waive_daemon
-    rm -rf $dir $dir_not_formatted
     drop_tables
 }
 
-trap cleanup EXIT
-drop_tables
-setup
+function test_concurrency()
+{
+    $test_bin --num-threads 50 --file "${FILES[0]}" --action put --load-first
+    $test_bin --num-threads 50 --file "${FILES[0]}" --action put
+}
 
-$LOG_COMPILER $test_bin
+TEST_SETUP=setup
+TESTS=(test_concurrency)
+TEST_CLEANUP=cleanup

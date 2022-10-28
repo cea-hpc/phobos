@@ -10,11 +10,17 @@ function invoke_daemon()
     $LOG_COMPILER $LOG_FLAGS $phobosd "$*" &
     wait $! || { echo "failed to start daemon"; return 1; }
     PID_DAEMON=`cat $PHOBOSD_PID_FILEPATH`
-    rm $PHOBOSD_PID_FILEPATH
 }
 
 function waive_daemon()
 {
+    if [ ! -f "$PHOBOSD_PID_FILEPATH" ]; then
+        return 0
+    fi
+
+    PID_DAEMON=`cat $PHOBOSD_PID_FILEPATH`
+    rm $PHOBOSD_PID_FILEPATH
+
     if [ $PID_DAEMON -eq 0 ]; then
         return 0
     fi
