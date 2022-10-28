@@ -403,8 +403,7 @@ int tape_drive_compat(const struct media_info *tape,
     return 0;
 }
 
-int sched_select_medium(struct lock_handle *lock_handle,
-                        GPtrArray *devices,
+int sched_select_medium(struct io_scheduler *io_sched,
                         struct media_info **p_media,
                         size_t required_size,
                         enum rsc_family family,

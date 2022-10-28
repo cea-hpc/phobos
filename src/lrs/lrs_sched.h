@@ -393,14 +393,7 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
 
 device_select_func_t get_dev_policy(void);
 
-struct lrs_dev *search_in_use_medium(GPtrArray *devices,
-                                     const char *name,
-                                     bool *sched_ready);
-
-struct lrs_dev *search_loaded_medium(GPtrArray *devices, const char *name);
-
-int sched_select_medium(struct lock_handle *lock_handle,
-                        GPtrArray *devices,
+int sched_select_medium(struct io_scheduler *io_sched,
                         struct media_info **p_media,
                         size_t required_size,
                         enum rsc_family family,

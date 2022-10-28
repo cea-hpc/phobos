@@ -157,6 +157,7 @@ static int find_read_device(struct io_scheduler *io_sched,
                             size_t index)
 {
     struct media_info *medium;
+    struct lrs_dev **dev_ref;
     struct pho_id medium_id;
     const char *name;
     bool sched_ready;
@@ -174,9 +175,11 @@ static int find_read_device(struct io_scheduler *io_sched,
     medium = reqc->params.rwalloc.media[index].alloc_medium;
     name = medium->rsc.id.name;
 
-    *dev = search_in_use_medium(io_sched->devices, name, &sched_ready);
-    if (*dev)
+    dev_ref = io_sched_search_in_use_medium(io_sched, name, &sched_ready);
+    if (dev_ref) {
+        *dev = *dev_ref;
         return 0;
+    }
 
     *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
                       select_empty_loaded_mount,
@@ -185,8 +188,7 @@ static int find_read_device(struct io_scheduler *io_sched,
     return 0;
 }
 
-static int find_write_device(GPtrArray *devices,
-                             struct lock_handle *lock_handle,
+static int find_write_device(struct io_scheduler *io_sched,
                              struct req_container *reqc,
                              struct lrs_dev **dev,
                              size_t index,
@@ -196,6 +198,7 @@ static int find_write_device(GPtrArray *devices,
     struct media_info **medium =
         &reqc->params.rwalloc.media[index].alloc_medium;
     device_select_func_t dev_select_policy;
+    struct lrs_dev **dev_ref;
     struct tags tags;
     bool sched_ready;
     size_t size;
@@ -215,13 +218,15 @@ static int find_write_device(GPtrArray *devices,
     size = wreq->media[index]->size;
 
     /* 1a) is there a mounted filesystem with enough room? */
-    *dev = dev_picker(devices, PHO_DEV_OP_ST_MOUNTED, dev_select_policy,
+    *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_MOUNTED,
+                      dev_select_policy,
                       size, &tags, NULL, true);
     if (*dev)
         return 0;
 
     /* 1b) is there a loaded media with enough room? */
-    *dev = dev_picker(devices, PHO_DEV_OP_ST_LOADED, dev_select_policy,
+    *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_LOADED,
+                      dev_select_policy,
                       size, &tags, NULL, true);
     if (*dev)
         return 0;
@@ -231,18 +236,23 @@ static int find_write_device(GPtrArray *devices,
      * Note: sched_select_media locks the media.
      */
     pho_verb("No loaded media with enough space found: selecting another one");
-    rc = sched_select_medium(lock_handle, devices, medium, size, wreq->family,
-                             &tags, reqc, handle_error ? wreq->n_media : index,
+    rc = sched_select_medium(io_sched, medium, size,
+                             wreq->family, &tags, reqc,
+                             handle_error ? wreq->n_media : index,
                              index);
     if (rc)
         return rc;
 
-    *dev = search_in_use_medium(devices, (*medium)->rsc.id.name, &sched_ready);
-    if (*dev && sched_ready)
+    dev_ref = io_sched_search_in_use_medium(io_sched, (*medium)->rsc.id.name,
+                                            &sched_ready);
+    if (dev_ref && sched_ready) {
+        *dev = *dev_ref;
         return 0;
+    }
 
 find_device:
-    *dev = dev_picker(devices, PHO_DEV_OP_ST_UNSPEC, select_empty_loaded_mount,
+    *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
+                      select_empty_loaded_mount,
                       0, &NO_TAGS, *medium, false);
     if (*dev)
         return 0;
@@ -260,18 +270,22 @@ find_device:
  * caller can safely use this device. Otherwise, the caller should check if the
  * device is available for scheduling.
  */
-static int find_format_device(GPtrArray *devices,
+static int find_format_device(struct io_scheduler *io_sched,
                               struct req_container *reqc,
                               struct lrs_dev **dev)
 {
     const char *name = reqc->req->format->med_id->name;
+    struct lrs_dev **dev_ref;
     bool sched_ready;
 
-    *dev = search_in_use_medium(devices, name, &sched_ready);
-    if (*dev)
+    dev_ref = io_sched_search_in_use_medium(io_sched, name, &sched_ready);
+    if (dev_ref) {
+        *dev = *dev_ref;
         return 0;
+    }
 
-    *dev = dev_picker(devices, PHO_DEV_OP_ST_UNSPEC, select_empty_loaded_mount,
+    *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
+                      select_empty_loaded_mount,
                       0, &NO_TAGS, reqc->params.format.medium_to_format, false);
     if (*dev)
         /* FIXME will be removed when read, write and format are handled by
@@ -336,11 +350,9 @@ static int fifo_get_device_medium_pair(struct io_scheduler *io_sched,
             *index = reqc->req->ralloc->n_required;
 
     } else if (pho_request_is_write(reqc->req)) {
-        rc = find_write_device(io_sched->devices,
-                               io_sched->io_sched_hdl->lock_handle,
-                               reqc, device, *index, is_error);
+        rc = find_write_device(io_sched, reqc, device, *index, is_error);
     } else if (pho_request_is_format(reqc->req)) {
-        rc = find_format_device(io_sched->devices, reqc, device);
+        rc = find_format_device(io_sched, reqc, device);
     } else {
         rc = -EINVAL;
     }
@@ -366,6 +378,12 @@ static int fifo_add_device(struct io_scheduler *io_sched,
         g_ptr_array_add(io_sched->devices, new_device);
 
     return 0;
+}
+
+static struct lrs_dev **fifo_get_device(struct io_scheduler *io_sched,
+                                       size_t i)
+{
+    return (struct lrs_dev **)&io_sched->devices->pdata[i];
 }
 
 static int fifo_remove_device(struct io_scheduler *io_sched,
@@ -403,6 +421,7 @@ struct io_scheduler_ops IO_SCHED_FIFO_OPS = {
     .peek_request           = fifo_peek_request,
     .get_device_medium_pair = fifo_get_device_medium_pair,
     .add_device             = fifo_add_device,
+    .get_device             = fifo_get_device,
     .remove_device          = fifo_remove_device,
     .reclaim_device         = fifo_reclaim_device,
 };

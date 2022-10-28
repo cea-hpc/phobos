@@ -166,18 +166,6 @@ static ssize_t reqc_get_medium_index_from_name(struct req_container *reqc,
     return -1;
 }
 
-static void gptr_array_copy_dev_ptr(GPtrArray *dst, GPtrArray *src)
-{
-    int i;
-
-    for (i = 0; i < src->len; i++) {
-        struct device *device;
-
-        device = g_ptr_array_index(src, i);
-        g_ptr_array_add(dst, device->device);
-    }
-}
-
 static int grouped_init(struct io_scheduler *io_sched)
 {
     struct grouped_data *data;
@@ -624,28 +612,16 @@ static int grouped_peek_request(struct io_scheduler *io_sched,
 static int allocate_queue_if_loaded(struct io_scheduler *io_sched,
                                     struct request_queue *queue)
 {
-    struct lrs_dev *device;
-    GPtrArray *devices;
-    int i;
+    struct device *device;
+    struct lrs_dev **d;
 
-    devices = g_ptr_array_new();
-    gptr_array_copy_dev_ptr(devices, io_sched->devices);
-    device = search_loaded_medium(devices, queue->name);
-    g_ptr_array_free(devices, TRUE);
-
-    if (!device)
+    d = io_sched_search_loaded_medium(io_sched, queue->name);
+    if (!d)
         return 0;
 
-    for (i = 0; i < io_sched->devices->len; i++) {
-        struct device *dev;
-
-        dev = g_ptr_array_index(io_sched->devices, i);
-        if (dev->device == device) {
-            dev->queue = queue;
-            queue->device = dev;
-            return 0;
-        }
-    }
+    device = container_of(d, struct device, device);
+    device->queue = queue;
+    queue->device = device;
 
     return 0;
 }
@@ -993,10 +969,11 @@ static int find_device_medium_on_error(struct io_scheduler *io_sched,
     struct grouped_data *data = io_sched->private_data;
     struct request_queue *queue_to_use = NULL;
     bool compatible_device_found;
+    struct lrs_dev **dev_ref;
     struct device *device;
     size_t max_length = 0;
     struct pho_id m_id;
-    GPtrArray *devices;
+    const char *name;
     int rc;
     int i;
 
@@ -1044,14 +1021,12 @@ static int find_device_medium_on_error(struct io_scheduler *io_sched,
         return 0;
 
     /* find a device for reqc->req->ralloc->med_ids[*index] */
-    devices = g_ptr_array_new();
-    gptr_array_copy_dev_ptr(devices, io_sched->devices);
-    *dev = search_in_use_medium(devices,
-                                reqc->req->ralloc->med_ids[*index]->name,
-                                NULL);
-    g_ptr_array_free(devices, TRUE);
-    if (*dev)
+    name = reqc->req->ralloc->med_ids[*index]->name;
+    dev_ref = io_sched_search_in_use_medium(io_sched, name, NULL);
+    if (dev_ref) {
+        *dev = *dev_ref;
         return 0;
+    }
 
     /* On error, always fetch DSS information since the caller doesn't know if
      * the \p medium was just allocated or not. It cannot free it.
@@ -1193,6 +1168,16 @@ static int grouped_add_device(struct io_scheduler *io_sched,
     return 0;
 }
 
+static struct lrs_dev **grouped_get_device(struct io_scheduler *io_sched,
+                                           size_t i)
+{
+    struct device *device;
+
+    device = g_ptr_array_index(io_sched->devices, i);
+
+    return &device->device;
+}
+
 static int grouped_remove_device(struct io_scheduler *io_sched,
                                  struct lrs_dev *device)
 {
@@ -1261,6 +1246,7 @@ struct io_scheduler_ops IO_SCHED_GROUPED_READ_OPS = {
     .peek_request           = grouped_peek_request,
     .get_device_medium_pair = grouped_get_device_medium_pair,
     .add_device             = grouped_add_device,
+    .get_device             = grouped_get_device,
     .remove_device          = grouped_remove_device,
     .reclaim_device         = grouped_reclaim_device,
 };

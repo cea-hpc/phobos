@@ -1027,145 +1027,6 @@ static int medium_in_devices(const struct media_info *medium,
     return 0;
 }
 
-static char *get_sub_request_medium_name(struct sub_request *sub_request)
-{
-    size_t medium_index = sub_request->medium_index;
-
-    if (pho_request_is_write(sub_request->reqc->req) ||
-        pho_request_is_read(sub_request->reqc->req)) {
-        struct rwalloc_params *params = &sub_request->reqc->params.rwalloc;
-
-        /*
-         * If the medium to be allocated is already loaded in the device, the
-         * former will be set to NULL in the sub_request
-         */
-        if (!params->media[medium_index].alloc_medium)
-            return NULL;
-
-        return params->media[medium_index].alloc_medium->rsc.id.name;
-    } else {
-        struct format_params *params = &sub_request->reqc->params.format;
-
-        if (!params->medium_to_format)
-            return NULL;
-
-        return params->medium_to_format->rsc.id.name;
-    }
-}
-
-struct lrs_dev *search_loaded_medium(GPtrArray *devices, const char *name)
-{
-    int i;
-
-    ENTRY;
-
-    pho_debug("Searching loaded medium '%s'", name);
-
-    for (i = 0; i < devices->len; i++) {
-        struct lrs_dev *dev = NULL;
-        const char *media_id;
-
-        dev = g_ptr_array_index(devices, i);
-        MUTEX_LOCK(&dev->ld_mutex);
-
-        if (dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED &&
-            dev->ld_op_status != PHO_DEV_OP_ST_LOADED)
-            goto err_continue;
-
-        /* The drive may contain a media unknown to phobos, skip it */
-        if (dev->ld_dss_media_info == NULL)
-            goto err_continue;
-
-        media_id = dev->ld_dss_media_info->rsc.id.name;
-        if (media_id == NULL) {
-            pho_warn("Cannot retrieve media ID from device '%s'",
-                     dev->ld_dev_path);
-            goto err_continue;
-        }
-
-        if (!strcmp(name, media_id)) {
-            MUTEX_UNLOCK(&dev->ld_mutex);
-            pho_debug("Found loaded medium '%s' in '%s'",
-                      name, dev->ld_dss_dev_info->rsc.id.name);
-            return dev;
-        }
-
-err_continue:
-        MUTEX_UNLOCK(&dev->ld_mutex);
-    }
-
-    pho_debug("Did not find loaded medium '%s'", name);
-    return NULL;
-}
-
-struct lrs_dev *search_in_use_medium(GPtrArray *devices,
-                                     const char *name,
-                                     bool *sched_ready)
-{
-    int i;
-
-    ENTRY;
-
-    pho_debug("Searching in-use medium '%s'", name);
-    if (sched_ready)
-        *sched_ready = false;
-
-    for (i = 0; i < devices->len; i++) {
-        struct lrs_dev *dev = NULL;
-        const char *media_id;
-
-        dev = g_ptr_array_index(devices, i);
-        MUTEX_LOCK(&dev->ld_mutex);
-
-        if (dev->ld_sub_request != NULL) {
-            media_id = get_sub_request_medium_name(dev->ld_sub_request);
-            if (media_id == NULL) {
-                pho_debug("Cannot retrieve medium ID from device '%s' sub_req",
-                          dev->ld_dev_path);
-                goto check_load;
-            }
-
-            if (!strcmp(name, media_id)) {
-                MUTEX_UNLOCK(&dev->ld_mutex);
-                pho_debug("Found '%s' in '%s' sub_request",
-                          name, dev->ld_dss_dev_info->rsc.id.name);
-                return dev;
-            }
-        }
-
-check_load:
-        if (dev->ld_op_status == PHO_DEV_OP_ST_MOUNTED ||
-            dev->ld_op_status == PHO_DEV_OP_ST_LOADED) {
-            /* The drive may contain a media unknown to phobos, skip it */
-            if (dev->ld_dss_media_info == NULL)
-                goto err_continue;
-
-            media_id = dev->ld_dss_media_info->rsc.id.name;
-            if (media_id == NULL) {
-                pho_warn("Cannot retrieve media ID from device '%s'",
-                         dev->ld_dev_path);
-                goto err_continue;
-            }
-
-            if (!strcmp(name, media_id)) {
-                if (sched_ready)
-                    *sched_ready = dev_is_sched_ready(dev);
-                MUTEX_UNLOCK(&dev->ld_mutex);
-                pho_debug("Found loaded medium '%s' in '%s'",
-                          name, dev->ld_dss_dev_info->rsc.id.name);
-                return dev;
-            }
-        }
-
-err_continue:
-        MUTEX_UNLOCK(&dev->ld_mutex);
-    }
-
-    pho_debug("Did not find in-use medium '%s'", name);
-
-    return NULL;
-}
-
 /**
  * Get a suitable medium for a write operation.
  *
@@ -1182,8 +1043,7 @@ err_continue:
  *                           media should be taken into account)
  */
 __attribute__((weak)) /* this attribute is useful for mocking in tests */
-int sched_select_medium(struct lock_handle *lock_handle,
-                        GPtrArray *devices,
+int sched_select_medium(struct io_scheduler *io_sched,
                         struct media_info **p_media,
                         size_t required_size,
                         enum rsc_family family,
@@ -1192,6 +1052,7 @@ int sched_select_medium(struct lock_handle *lock_handle,
                         size_t n_med,
                         size_t not_alloc)
 {
+    struct lock_handle *lock_handle = io_sched->io_sched_hdl->lock_handle;
     bool with_tags = tags != NULL && tags->n_tags > 0;
     struct media_info *pmedia_res = NULL;
     struct media_info *split_media_best;
@@ -1267,7 +1128,8 @@ lock_race_retry:
     /* get the best fit */
     for (i = 0; i < mcnt; i++) {
         struct media_info *curr = &pmedia_res[i];
-        struct lrs_dev *dev;
+        struct lrs_dev *dev = NULL;
+        struct lrs_dev **dev_ref;
         bool already_alloc;
         bool sched_ready;
 
@@ -1290,7 +1152,11 @@ lock_race_retry:
                 continue;
 
         /* already loaded and in use ? */
-        dev = search_in_use_medium(devices, curr->rsc.id.name, &sched_ready);
+        dev_ref = io_sched_search_in_use_medium(io_sched, curr->rsc.id.name,
+                                                &sched_ready);
+        if (dev_ref)
+            dev = *dev_ref;
+
         if (dev && !sched_ready) {
             pho_debug("Skipping device '%s', already in use",
                       dev->ld_dss_dev_info->rsc.id.name);
@@ -1955,6 +1821,28 @@ static int update_phys_spc_free(struct dss_handle *dss,
     return 0;
 }
 
+static struct lrs_dev *
+search_loaded_medium(struct io_sched_handle *io_sched_hdl,
+                     const char *name)
+{
+    struct lrs_dev **dev;
+
+    dev = io_sched_search_loaded_medium(&io_sched_hdl->read, name);
+    if (dev)
+        return *dev;
+
+    dev = io_sched_search_loaded_medium(&io_sched_hdl->write, name);
+    if (dev)
+        return *dev;
+
+    dev = io_sched_search_loaded_medium(&io_sched_hdl->format, name);
+
+    if (dev)
+        return *dev;
+
+    return NULL;
+}
+
 /*
  * TODO: move this function to lrs.c because this code is executed by the
  * main communication thread.
@@ -1972,7 +1860,7 @@ int process_release_request(struct lrs_sched *sched,
         struct lrs_dev *dev = NULL;
 
         /* find the corresponding device */
-        dev = search_loaded_medium(sched->devices.ldh_devices,
+        dev = search_loaded_medium(&sched->io_sched_hdl,
             reqc->params.release.nosync_media[i].medium.name);
         if (!dev) {
             pho_error(-ENODEV, "Unable to find loaded device of the medium '%s'"
@@ -2024,7 +1912,7 @@ int process_release_request(struct lrs_sched *sched,
         int result_rc;
 
         /* find the corresponding device */
-        dev = search_loaded_medium(sched->devices.ldh_devices,
+        dev = search_loaded_medium(&sched->io_sched_hdl,
             reqc->params.release.tosync_media[i].medium.name);
 
         if (!dev) {

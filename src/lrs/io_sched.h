@@ -91,10 +91,25 @@ struct io_scheduler_ops {
     int (*add_device)(struct io_scheduler *io_sched,
                       struct lrs_dev *device);
 
+    /* Return the i-th element of io_scheduler::devices. This function does no
+     * bound checking. It is undefined behavior to call this function with \p i
+     * greater or equal to \p io_sched->devices->len.
+     *
+     * This function returns a pointer to a pointer so that the caller can use
+     * container_of on the result to get to the outer structure if necessary.
+     *
+     *
+     * \param[in]  io_sched  a valid io_scheduler
+     * \param[in]  i         index to return
+     *
+     * \return               a pointer to a pointer of struct lrs_dev
+     */
+    struct lrs_dev **(*get_device)(struct io_scheduler *io_sched, size_t i);
+
     /* Remove a specific device from this I/O scheduler. The device may not be
      * in this I/O scheduler, it is up to this callback to check this.
      *
-     * \param[in]  io_sched  a valid io_sched
+     * \param[in]  io_sched  a valid io_scheduler
      * \param[in]  device    the device to remove
      *
      * \return               0 on success, negative POSIX error code on failure

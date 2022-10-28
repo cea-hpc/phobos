@@ -45,4 +45,13 @@ int lock_handle_init(struct lock_handle *lock_handle, struct dss_handle *dss);
 struct media_info **reqc_get_medium_to_alloc(struct req_container *reqc,
                                              size_t index);
 
+struct io_scheduler;
+
+struct lrs_dev **io_sched_search_in_use_medium(struct io_scheduler *io_sched,
+                                               const char *name,
+                                               bool *sched_ready);
+
+struct lrs_dev **io_sched_search_loaded_medium(struct io_scheduler *io_sched,
+                                               const char *name);
+
 #endif
