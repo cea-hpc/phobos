@@ -2,10 +2,23 @@
 
 ## Ongoing
 
-* The "phobos xxx lock" API has changed: '--force' option is removed. The option
-was only considered with devices, so removing it for media will not alter its
-behavior.
-* The "phobos drive lock" API has changed: '--wait' option is added. Its
+* Grouped read algorithm for tapes
+* Locate update for pre-locking
+
+## 1.94.1
+
+* Added RADOS as data storage backend (no package available yet)
+* Added module-loader to manage io, fs, dev, lib and layout adapters dynamically
+* Added drive migrate command
+* Improved command documentation
+* Internal LRS parallelization (read, write and format managed by device
+  threads)
+* Added locate modification design
+* Modified drive lock API and command:
+    - The "phobos xxx lock" API has changed: '--force' option is removed. The
+option was only considered with devices, so removing it for media will not alter
+its behavior.
+    - The "phobos drive lock" API has changed: '--wait' option is added. Its
 behavior is the same as the previous '--force' option.
 
 ## 1.94

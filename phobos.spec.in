@@ -148,6 +148,16 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_*.la
 %endif
 
 %changelog
+* Mon Nov 7 2022 - Yoann Valeri <yoann.valeri@cea.fr> - 1.94.1-1
+- Added RADOS as data storage backend (no package available yet)
+- Added module-loader to manage io, fs, dev, lib and layout adapters dynamically
+- Modified drive lock API and command
+- Added drive migrate command
+- Improved command documentation
+- Internal LRS parallelization (read, write and format managed by device
+  threads)
+- Added locate modification design
+
 * Tue Apr 19 2022 - Yoann Valeri <yoann.valeri@cea.fr> - 1.94-1
 - Release 1.94 (Rhea)
 - Improved documentation on setup, admin commands, object management, listing
