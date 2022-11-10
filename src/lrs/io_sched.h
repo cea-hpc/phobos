@@ -120,9 +120,11 @@ struct io_scheduler_ops {
     /* Ask the I/O scheduler for a device to remove. The scheduler will choose
      * which device is removed depending on its internal state.
      *
-     * This callback is not currently used. It may be called by some
-     * dispatch_devices algorithms which need to dynamically move devices from
-     * one scheduler to another.
+     * TODO reclaim_device could return a NULL pointer or EBUSY with a device
+     * to indicate to the caller that all the devices are in use but one device
+     * will be freed later. This would allow the read scheduler to keep a device
+     * until all the requests of the currently mounted tape are finished for
+     * example.
      *
      * \param[in]  io_sched  a valid io_scheduler
      * \param[out] device    the device that was given back by the I/O scheduler
@@ -148,6 +150,12 @@ enum io_request_type {
     IO_REQ_READ,
     IO_REQ_WRITE,
     IO_REQ_FORMAT,
+};
+
+struct io_stats {
+    size_t nb_reads;
+    size_t nb_writes;
+    size_t nb_formats;
 };
 
 struct io_sched_handle {
@@ -196,6 +204,7 @@ struct io_sched_handle {
     struct io_scheduler format;
     struct lock_handle *lock_handle;
     struct tsqueue     *response_queue; /* reference to the response queue */
+    struct io_stats     io_stats;
 };
 
 /* I/O Scheduler interface */
@@ -335,5 +344,22 @@ int io_sched_get_device_medium_pair(struct io_sched_handle *io_sched_hdl,
  */
 int io_sched_remove_device(struct io_sched_handle *io_sched_hdl,
                            struct lrs_dev *device);
+
+struct io_sched_weights {
+    double read;
+    double write;
+    double format;
+};
+
+/* Compute the weight of each scheduler. This weight will be used by the device
+ * dispatching algorithms to choose how many devices to allocate to each I/O
+ * scheduler.
+ *
+ * For now, this function returns the percentage of each type of request. This
+ * means that the number of devices allocated to each type of scheduler will
+ * directly depend on the number and repartition of requests.
+ */
+int io_sched_compute_scheduler_weights(struct io_sched_handle *io_sched_hdl,
+                                       struct io_sched_weights *weights);
 
 #endif

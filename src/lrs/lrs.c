@@ -898,7 +898,7 @@ static int _load_schedulers(struct lrs *lrs)
                 continue;
             }
 
-            lrs->sched[family] = malloc(sizeof(*lrs->sched[family]));
+            lrs->sched[family] = calloc(1, sizeof(*lrs->sched[family]));
             if (!lrs->sched[family])
                 LOG_GOTO(out_free, rc = -ENOMEM,
                          "Error on lrs scheduler allocation");

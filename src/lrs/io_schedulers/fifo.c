@@ -327,7 +327,9 @@ static int fifo_get_device_medium_pair(struct io_scheduler *io_sched,
 
         if (pho_request_is_read(reqc->req)) {
             if (elem->num_media_allocated >= reqc->req->ralloc->n_med_ids)
-                return -ERANGE;
+                LOG_RETURN(-ERANGE, "get_device_medium_pair called too many "
+                                    "times on the same request");
+
 
             if (elem->num_media_allocated != *index)
                 is_retry = true;

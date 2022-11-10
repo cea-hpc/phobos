@@ -2717,18 +2717,18 @@ static void *lrs_sched_thread(void *sdata)
     while (thread_is_running(thread)) {
         struct timespec wakeup_date;
 
+        rc = sched_handle_requests(sched);
+        if (rc)
+            LOG_GOTO(end_thread, thread->status = rc,
+                     "'%s' scheduler: error while handling requests",
+                     rsc_family2str(sched->family));
+
         rc = io_sched_dispatch_devices(&sched->io_sched_hdl,
                                        sched->devices.ldh_devices);
         if (rc)
             LOG_GOTO(end_thread, thread->status = rc,
                      "'%s' scheduler: failed to dispatch devices to I/O "
                      "schedulers",
-                     rsc_family2str(sched->family));
-
-        rc = sched_handle_requests(sched);
-        if (rc)
-            LOG_GOTO(end_thread, thread->status = rc,
-                     "'%s' scheduler: error while handling requests",
                      rsc_family2str(sched->family));
 
         rc = lrs_schedule_work(sched);

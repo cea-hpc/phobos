@@ -49,6 +49,25 @@ extern struct io_scheduler_ops IO_SCHED_GROUPED_READ_OPS;
 int no_dispatch(struct io_sched_handle *io_sched_hdl,
                 GPtrArray *devices);
 
+/**
+ * Dispatch devices so that the LRS handles different types of requests fairly.
+ *
+ * This algorithm will look at the load of the system (currently the proportion
+ * of read, write and format requests) and allocate devices to I/O schedulers
+ * based on the relative proportion of requests (i.e. if we have 40% of reads,
+ * the read scheduler will use 40% of the available devices).
+ *
+ * This repartition is bounded by a min/max per tape technology. As long as an
+ * I/O scheduler has at least one request to handle, it will get the minimum
+ * number of devices.
+ *
+ * If an I/O scheduler has reached the maximum number of devices it can get and
+ * its share of the devices is less than the share of its requests, the
+ * remaining devices will be allocated to other schedulers.
+ */
+int fair_share_number_of_requests(struct io_sched_handle *io_sched_hdl,
+                                  GPtrArray *devices);
+
 /*********************************
  * Scheduler priority algorithms *
  *********************************/

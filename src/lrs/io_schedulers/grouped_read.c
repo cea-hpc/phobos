@@ -409,6 +409,7 @@ static void cancel_request(struct io_scheduler *io_sched,
     delete_elements_in_list(data, elem->pair->free, elem);
 
     queue_element_free(elem, true);
+    io_sched->io_sched_hdl->io_stats.nb_reads--;
 }
 
 /* After a search through all the queues, we can identify which queues cannot be
@@ -563,6 +564,26 @@ static int grouped_peek_request(struct io_scheduler *io_sched,
         struct device *device;
 
         device = g_ptr_array_index(io_sched->devices, i);
+        if (device->device->ld_dss_media_info && !device->queue) {
+            struct request_queue *queue;
+            const char *name;
+
+            /* If a device moves from one scheduler to another, it can contain
+             * a medium that was not found when the request was first pushed.
+             */
+            name = device->device->ld_dss_media_info->rsc.id.name;
+            queue = g_hash_table_lookup(data->request_queues, name);
+            if (queue) {
+                /* queue can be NULL if, for example, a medium is already loaded
+                 * when the LRS starts. If no request for this medium has been
+                 * pushed yet, the medium is in device->device but no queue
+                 * exists.
+                 */
+                device->queue = queue;
+                queue->device = device;
+            }
+        }
+
         if (!dev_is_sched_ready(device->device) || !device->queue)
             continue;
 
@@ -1228,7 +1249,7 @@ static int grouped_reclaim_device(struct io_scheduler *io_sched,
 {
     *device = find_device_to_remove(io_sched);
 
-    if (!device)
+    if (!*device)
         return -ENODEV;
 
     grouped_remove_device(io_sched, *device);

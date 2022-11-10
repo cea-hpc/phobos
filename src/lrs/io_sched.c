@@ -108,12 +108,15 @@ int io_sched_push_request(struct io_sched_handle *io_sched_hdl,
                           struct req_container *reqc)
 {
     if (pho_request_is_read(reqc->req)) {
+        io_sched_hdl->io_stats.nb_reads++;
         pho_debug("lrs received read allocation request (%p)", reqc->req);
         return io_sched_hdl->read.ops.push_request(&io_sched_hdl->read, reqc);
     } else if (pho_request_is_write(reqc->req)) {
+        io_sched_hdl->io_stats.nb_writes++;
         pho_debug("lrs received write allocation request (%p)", reqc->req);
         return io_sched_hdl->write.ops.push_request(&io_sched_hdl->write, reqc);
     } else if (pho_request_is_format(reqc->req)) {
+        io_sched_hdl->io_stats.nb_formats++;
         pho_debug("lrs received format request (%p)", reqc->req);
         return io_sched_hdl->format.ops.push_request(&io_sched_hdl->format,
                                                      reqc);
@@ -138,14 +141,18 @@ int io_sched_requeue(struct io_sched_handle *io_sched_hdl,
 int io_sched_remove_request(struct io_sched_handle *io_sched_hdl,
                          struct req_container *reqc)
 {
-    if (pho_request_is_read(reqc->req))
+    if (pho_request_is_read(reqc->req)) {
+        io_sched_hdl->io_stats.nb_reads--;
         return io_sched_hdl->read.ops.remove_request(&io_sched_hdl->read, reqc);
-    else if (pho_request_is_write(reqc->req))
+    } else if (pho_request_is_write(reqc->req)) {
+        io_sched_hdl->io_stats.nb_writes--;
         return io_sched_hdl->write.ops.remove_request(&io_sched_hdl->write,
                                                       reqc);
-    else if (pho_request_is_format(reqc->req))
+    } else if (pho_request_is_format(reqc->req)) {
+        io_sched_hdl->io_stats.nb_formats--;
         return io_sched_hdl->format.ops.remove_request(&io_sched_hdl->format,
                                                        reqc);
+    }
 
     LOG_RETURN(-EINVAL, "Invalid request type for I/O scheduler");
 }
@@ -329,4 +336,42 @@ int io_sched_handle_load_from_config(struct io_sched_handle *io_sched_hdl,
     io_sched_hdl->dispatch_devices = no_dispatch;
 
     return io_sched_init(io_sched_hdl);
+}
+
+/* This function sets the weights as the proportion of requests in each
+ * scheduler. We can implement other metrics in the future:
+ * - size of I/O
+ * - throughput
+ * - flow time (time it takes to handle a request)
+ * - a fixed weight from the configuration
+ *
+ * We can also look at the evolution of these metrics (e.g. if the average
+ * throughput of reads decreases, add one device to the read I/O scheduler).
+ *
+ * Some metrics may require that we extend the protocol to give the size read
+ * from a medium in read requests. Also, they don't apply to formats which means
+ * that computing a meaningful weight for formats may be more complicated with
+ * other metrics. The duration of a format may be a good alternative.
+ *
+ * We could also give a weight factor in the configuration giving more or less
+ * importance to a given scheduler.
+ */
+int io_sched_compute_scheduler_weights(struct io_sched_handle *io_sched_hdl,
+                                       struct io_sched_weights *weights)
+{
+    size_t total = io_sched_hdl->io_stats.nb_reads +
+        io_sched_hdl->io_stats.nb_writes +
+        io_sched_hdl->io_stats.nb_formats;
+
+    if (total == 0) {
+        /* if no request, distribute the devices equally */
+        weights->read = weights->write = weights->format = 1.0 / 3.0;
+        return 0;
+    }
+
+    weights->read = (double)io_sched_hdl->io_stats.nb_reads / (double)total;
+    weights->write = (double)io_sched_hdl->io_stats.nb_writes / (double)total;
+    weights->format = (double)io_sched_hdl->io_stats.nb_formats / (double)total;
+
+    return 0;
 }
