@@ -4,9 +4,15 @@ SUBDIRS=. src tests/externs/api tests/externs/cli tests/interns tests/prod
 
 rpm_dir=`pwd`/rpms
 
+options =
+
+if RADOS_ENABLED
+options += --with=rados
+endif
+
 rpm: dist phobos.spec
 	mkdir -p $(rpm_dir)/BUILD $(rpm_dir)/SPECS $(rpm_dir)/SRPMS $(rpm_dir)/RPMS
-	rpmbuild --define="_topdir $(rpm_dir)" -ta $(distdir).tar.gz
+	rpmbuild $(options) --define="_topdir $(rpm_dir)" -ta $(distdir).tar.gz
 
 EXTRA_DIST= phobos.spec phobos.spec.in scripts/pho_ldm_helper \
 	    scripts/phobos_db README.md doc/cfg/template.conf

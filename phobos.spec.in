@@ -10,6 +10,12 @@ Source0: %{name}-%{version}.tar.gz
 
 %define phobosdocdir %{_docdir}/%{name}
 
+# build options || .rpmmacros options || change to default action
+# ==============  ====================  ===========================
+# --with rados  ||   %%_with_rados 1  || build the rados libraries
+
+%bcond_with rados
+
 %define __python /usr/bin/python3
 
 %if 0%{?rhel} >= 8
@@ -19,8 +25,6 @@ Source0: %{name}-%{version}.tar.gz
 %global python_prefix python36
 %global postgres_prefix postgresql94
 %endif
-
-%global have_rados 0@HAVE_RADOS@
 
 BuildRequires: %{postgres_prefix}-devel
 BuildRequires: glib2-devel >= 2.28
@@ -32,9 +36,9 @@ BuildRequires: libattr-devel
 BuildRequires: sg3_utils-devel
 BuildRequires: protobuf-c-devel
 BuildRequires: systemd
-%if %{have_rados} == 01
-BuildRequires: librados2
-%endif
+BuildRequires: autoconf
+BuildRequires: automake
+BuildRequires: libtool
 
 Requires: %{postgres_prefix}-server
 Requires: %{postgres_prefix}-contrib
@@ -63,16 +67,22 @@ in a SCSI library and local directories.
 
 %package devel
 Summary: C API for Phobos Object Store.
+
+Requires: glib2-devel >= 2.28
+Requires: jansson-devel >= 2.5
+
 %description devel
 This package contains header files and required libraries to access Phobos
 object store from a C program.
 
-%if %{have_rados} == 01
+%if %{with rados}
 %package rados-adapters
 Summary: RADOS adapters for Phobos
 
+BuildRequires: librados2-devel
+
 Requires: phobos
-Requires: ceph
+Requires: librados2
 
 %description rados-adapters
 This package contains required libraries to use Ceph/RADOS as a Phobos storage
@@ -80,21 +90,23 @@ backend. Verify that the Phobos configuration file has been updated to support
 RADOS functionalities.
 %endif
 
-
 %prep
 %setup -q
 
 
 %build
+
+CONFIGURE_OPTIONS=""
+
+%if %{with rados}
+CONFIGURE_OPTIONS="$CONFIGURE_OPTIONS --enable-rados"
+%endif
+
 %if 0%{?rhel} < 8
 export PKG_CONFIG_PATH=/usr/pgsql-9.4/lib/pkgconfig
 %endif
 
-%if %{have_rados} == 01
-%configure --enable-rados
-%else
-%configure
-%endif
+%configure $CONFIGURE_OPTIONS
 make %{?_smp_mflags}
 
 
@@ -110,12 +122,20 @@ cd %{_builddir}/%{name}-%{version}/src/cli/
 rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_*.a
 rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_*.la
 
+mkdir -p %{buildroot}/%{_sysconfdir}/ld.so.conf.d/
+echo "/usr/lib/phobos" > %{buildroot}/%{_sysconfdir}/ld.so.conf.d/phobos.conf
 
 %files
 
 %{_libdir}/libphobos_store.so*
 %{_libdir}/libphobos_admin.so*
-%{_libdir}/phobos/libpho_*.so*
+%{_libdir}/phobos/libpho_*_dir.so*
+%{_libdir}/phobos/libpho_*_tape.so*
+%{_libdir}/phobos/libpho_*_ltfs.so*
+%{_libdir}/phobos/libpho_*_posix.so*
+%{_libdir}/phobos/libpho_*_raid1.so*
+%{_libdir}/phobos/libpho_*_dummy.so*
+%{_libdir}/phobos/libpho_*_scsi.so*
 %{_sbindir}/pho_*_helper
 %{_sbindir}/phobos_db
 %{python_sitearch}/phobos/*
@@ -123,7 +143,7 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_*.la
 %{_bindir}/phobos
 %{_sbindir}/phobosd
 %{_unitdir}/phobosd.service
-%exclude %{_libdir}/phobos/libpho_*_rados.so*
+%{_sysconfdir}/ld.so.conf.d/phobos.conf
 
 %config(noreplace) %{_sysconfdir}/phobos.conf
 %dir %{phobosdocdir}
@@ -142,14 +162,20 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_*.la
 %{_libdir}/libphobos_store.la
 %{_libdir}/libphobos_admin.la
 
-%if %{have_rados} == 01
+%post
+ldconfig
+
+%if %{with rados}
 %files rados-adapters
-%{_libdir}/phobos/libpho_*_rados.so*
+%{_libdir}/phobos/libpho_*rados*.so*
+
+%post rados-adapters
+ldconfig
 %endif
 
 %changelog
 * Mon Nov 7 2022 - Yoann Valeri <yoann.valeri@cea.fr> - 1.94.1-1
-- Added RADOS as data storage backend (no package available yet)
+- Added RADOS as data storage backend
 - Added module-loader to manage io, fs, dev, lib and layout adapters dynamically
 - Modified drive lock API and command
 - Added drive migrate command

@@ -25,6 +25,11 @@
 
 set -ex
 
+function error {
+    echo "$*"
+    exit 1
+}
+
 test_dir=$(dirname $(readlink -e $0))
 
 start_phobosd="systemctl start phobosd"
@@ -34,7 +39,6 @@ start_phobosdb="phobos_db setup_tables"
 stop_phobosdb="phobos_db drop_tables"
 rados_rpm=$test_dir/../../rpms/RPMS/x86_64/phobos-rados-*
 rpm_install_rados="yum install -y $rados_rpm"
-remove_rados_adapters="yum remove -y phobos-rados-adapters"
 
 function setup_test {
     yum install -y $test_dir/../../rpms/RPMS/x86_64/phobos-1*
@@ -49,13 +53,13 @@ function cleanup_test {
     ceph osd pool rm pho_test pho_test --yes-i-really-really-mean-it
     $stop_phobosdb
     yum remove -y phobos
+    yum remove -y phobos-rados-adapters
     rm -f /etc/phobos.conf
     rm -f /tmp/out
 }
 
 function test_without_rados_rpm {
     $start_phobosd
-    $remove_rados_adapters
     phobos rados_pool add pho_test &&
             error "Add operation should have failed" || true
     $stop_phobosd
