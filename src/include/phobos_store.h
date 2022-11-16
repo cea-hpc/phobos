@@ -246,10 +246,10 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers);
 /**
  * Retrieve one node name from which an object can be accessed.
  *
- * If the media having this object are locked by a node, this function returns
- * the hostname of this node. If there is currently no node that locks the media
- * having this object, \p hostname is set to NULL with a return code of 0 to
- * indicate that any node can perform an operation on this object.
+ * If the media where this object is written are locked by a node, this function
+ * returns the hostname of that node.
+ *
+ * Among the most convenient nodes, this function will favour the \p focus_host.
  *
  * At least one of \p oid or \p uuid must not be NULL.
  *
@@ -266,12 +266,14 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers);
  * @param[in]   uuid        UUID of the object to locate (ignored if NULL and
  *                          \p oid must not be NULL)
  * @param[in]   version     Version of the object to locate (ignored if zero)
+ * @param[in]   focus_host  Hostname on which the caller would like to access
+ *                          the object if there is no node more convenient (if
+ *                          NULL, focus_host is set to local hostname)
  * @param[out]  hostname    Allocated and returned hostname of the node which
  *                          can give access to the object (NULL is returned on
- *                          error or if no locks are found on the object)
+ *                          error)
  *
- * @return                  0 on success (\p hostname can be NULL)
- *                          or -errno on failure,
+ * @return                  0 on success or -errno on failure,
  *                          -ENOENT if no object corresponds to input
  *                          -EINVAL if more than one object corresponds to input
  *                          -EAGAIN if there is not any convenient node to
@@ -281,7 +283,7 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers);
  *                          -EADDRNOTAVAIL if we cannot get self hostname
  */
 int phobos_locate(const char *obj_id, const char *uuid, int version,
-                  char **hostname);
+                  const char *focus_host, char **hostname);
 
 /**
  * Clean a pho_xfer_desc structure by freeing the uuid and attributes, and

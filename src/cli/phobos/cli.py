@@ -907,6 +907,8 @@ class LocateOptHandler(BaseOptHandler):
         parser.add_argument('--uuid', help='UUID of the object')
         parser.add_argument('--version', help='Version of the object',
                             type=int, default=0)
+        parser.add_argument('--focus-host',
+                            help='Suggested hostname for early locking')
 
 
     def exec_locate(self):
@@ -915,7 +917,8 @@ class LocateOptHandler(BaseOptHandler):
         try:
             print(client.object_locate(self.params.get('oid'),
                                        self.params.get('uuid'),
-                                       self.params.get('version')))
+                                       self.params.get('version'),
+                                       self.params.get('focus-host')))
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))

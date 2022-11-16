@@ -175,39 +175,39 @@ static void pl_enoent(void **state)
     int rc;
 
     /* bad OID */
-    rc = phobos_locate(BAD_OID, NULL, 0, &hostname);
+    rc = phobos_locate(BAD_OID, NULL, 0, NULL, &hostname);
     assert_int_equal(rc, -ENOENT);
 
     /* bad UUID */
-    rc = phobos_locate(NULL, BAD_UUID, 0, &hostname);
+    rc = phobos_locate(NULL, BAD_UUID, 0, NULL, &hostname);
     assert_int_equal(rc, -ENOENT);
 
     /* OID, bad UUID */
-    rc = phobos_locate(pl_state->objs[0].oid, BAD_UUID, 0, &hostname);
+    rc = phobos_locate(pl_state->objs[0].oid, BAD_UUID, 0, NULL, &hostname);
     assert_int_equal(rc, -ENOENT);
 
     /* bad OID, UUID */
-    rc = phobos_locate(BAD_OID, pl_state->objs[0].uuid, 0, &hostname);
+    rc = phobos_locate(BAD_OID, pl_state->objs[0].uuid, 0, NULL, &hostname);
     assert_int_equal(rc, -ENOENT);
 
     /* OID, bad version */
     rc = phobos_locate(pl_state->objs[0].oid, NULL,
-                       pl_state->objs[0].version + 1, &hostname);
+                       pl_state->objs[0].version + 1, NULL, &hostname);
     assert_int_equal(rc, -ENOENT);
 
     /* UUID, bad version */
     rc = phobos_locate(NULL, pl_state->objs[0].uuid,
-                       pl_state->objs[0].version + 1, &hostname);
+                       pl_state->objs[0].version + 1, NULL, &hostname);
     assert_int_equal(rc, -ENOENT);
 
     /* OID, UUID, bad version */
     rc = phobos_locate(pl_state->objs[0].oid, pl_state->objs[0].uuid,
-                       pl_state->objs[0].version + 1, &hostname);
+                       pl_state->objs[0].version + 1, NULL, &hostname);
     assert_int_equal(rc, -ENOENT);
 }
 
-static void pl_hostname(const char *expected_hostname, void **state,
-                        bool alive)
+static void pl_hostname(const char *expected_hostname, const char *focus_host,
+                        void **state, bool alive)
 {
     struct phobos_locate_state *pl_state = (struct phobos_locate_state *)*state;
     char *hostname;
@@ -215,79 +215,51 @@ static void pl_hostname(const char *expected_hostname, void **state,
 
     /* oid */
     if (alive) {
-        rc = phobos_locate(pl_state->objs[0].oid, NULL, 0, &hostname);
+        rc = phobos_locate(pl_state->objs[0].oid, NULL, 0, focus_host,
+                           &hostname);
         assert_return_code(rc, -rc);
-        if (expected_hostname) {
-            assert_non_null(hostname);
-            assert_string_equal(expected_hostname, hostname);
-        } else {
-            assert_null(hostname);
-        }
-
+        assert_non_null(hostname);
+        assert_string_equal(expected_hostname, hostname);
         free(hostname);
     }
 
     /* oid, version */
     rc = phobos_locate(pl_state->objs[0].oid, NULL, pl_state->objs[0].version,
-                       &hostname);
+                       focus_host, &hostname);
     assert_return_code(rc, -rc);
-    if (expected_hostname) {
-        assert_non_null(hostname);
-        assert_string_equal(expected_hostname, hostname);
-    } else {
-        assert_null(hostname);
-    }
-
+    assert_non_null(hostname);
+    assert_string_equal(expected_hostname, hostname);
     free(hostname);
 
     /* uuid */
-    rc = phobos_locate(NULL, pl_state->objs[0].uuid, 0, &hostname);
+    rc = phobos_locate(NULL, pl_state->objs[0].uuid, 0, focus_host, &hostname);
     assert_return_code(rc, -rc);
-    if (expected_hostname) {
-        assert_non_null(hostname);
-        assert_string_equal(expected_hostname, hostname);
-    } else {
-        assert_null(hostname);
-    }
-
+    assert_non_null(hostname);
+    assert_string_equal(expected_hostname, hostname);
     free(hostname);
 
     /* uuid, version */
     rc = phobos_locate(NULL, pl_state->objs[0].uuid, pl_state->objs[0].version,
-                       &hostname);
+                       focus_host, &hostname);
     assert_return_code(rc, -rc);
-    if (expected_hostname) {
-        assert_non_null(hostname);
-        assert_string_equal(expected_hostname, hostname);
-    } else {
-        assert_null(hostname);
-    }
-
+    assert_non_null(hostname);
+    assert_string_equal(expected_hostname, hostname);
     free(hostname);
 
     /* oid, uuid */
     rc = phobos_locate(pl_state->objs[0].oid, pl_state->objs[0].uuid, 0,
-                       &hostname);
+                       focus_host, &hostname);
     assert_return_code(rc, -rc);
-    if (expected_hostname) {
-        assert_non_null(hostname);
-        assert_string_equal(expected_hostname, hostname);
-    } else {
-        assert_null(hostname);
-    }
+    assert_non_null(hostname);
+    assert_string_equal(expected_hostname, hostname);
     free(hostname);
 
     /* oid, uuid, version */
     rc = phobos_locate(pl_state->objs[0].oid, pl_state->objs[0].uuid,
-                       pl_state->objs[0].version, &hostname);
+                       pl_state->objs[0].version, focus_host, &hostname);
     assert_return_code(rc, -rc);
-    if (expected_hostname) {
-        assert_non_null(hostname);
-        assert_string_equal(expected_hostname, hostname);
-    } else {
-        assert_null(hostname);
-    }
-
+    assert_non_null(hostname);
+    assert_string_equal(expected_hostname, hostname);
     free(hostname);
 }
 
@@ -302,7 +274,7 @@ static void pl(void **state)
     int cnt;
     int rc;
 
-    rc = phobos_locate(NULL, NULL, 1, &hostname);
+    rc = phobos_locate(NULL, NULL, 1, NULL, &hostname);
     assert_int_equal(rc, -EINVAL);
 
     /* check ENOENT from object table */
@@ -311,14 +283,17 @@ static void pl(void **state)
     /* locate local hostname in object table */
     myself_hostname = get_hostname();
     assert_non_null(myself_hostname);
-    pl_hostname(myself_hostname, state, true);
+    pl_hostname(myself_hostname, NULL, state, true);
+    pl_hostname(myself_hostname, myself_hostname, state, true);
 
     /* lock media from other owner */
     lock_medium(pl_state, &medium, HOSTNAME, &cnt);
 
     /* locate with lock */
     pl_enoent(state);
-    pl_hostname(HOSTNAME, state, true);
+    pl_hostname(HOSTNAME, NULL, state, true);
+    pl_hostname(HOSTNAME, myself_hostname, state, true);
+    pl_hostname(HOSTNAME, HOSTNAME, state, true);
 
 
     /* move object to deprecated table */
@@ -331,11 +306,14 @@ static void pl(void **state)
     pl_enoent(state);
 
     /* locate with lock in deprecated table */
-    pl_hostname(HOSTNAME, state, false);
+    pl_hostname(HOSTNAME, NULL, state, false);
+    pl_hostname(HOSTNAME, myself_hostname, state, false);
+    pl_hostname(HOSTNAME, HOSTNAME, state, false);
     /* free lock on medium */
     unlock_medium(pl_state, medium, cnt);
     /* locate without any lock in deprecated table */
-    pl_hostname(NULL, state, false);
+    pl_hostname(myself_hostname, NULL, state, false);
+    pl_hostname(myself_hostname, myself_hostname, state, false);
 }
 
 /************************************/

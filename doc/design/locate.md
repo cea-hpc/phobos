@@ -166,7 +166,7 @@ To target an object, the 'locate' action can also take two optional arguments
 deletion_and_versionning.md for more information on their use).
 
 We can add a preferred hostname to the 'locate' action by using the --focus-host
-optional argument. If not set, the focus_host is set to the current hostname.
+optional argument. If not set, the focus-host is set to the current hostname.
 
 If possible, the 'locate' action would lock the minimum but adequate number of
 media to ensure that the returned hostname will be able to access the targeted

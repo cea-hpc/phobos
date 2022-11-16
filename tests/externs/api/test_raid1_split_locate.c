@@ -279,12 +279,27 @@ static void rsl_no_lock(void **state)
 {
     struct raid1_split_locate_state *rsl_state =
         (struct raid1_split_locate_state *)*state;
+    const char *my_hostname;
     char *hostname;
     int rc;
 
-    rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, &hostname);
+    my_hostname = get_hostname();
+    assert_non_null(my_hostname);
+
+    /* focus_host set to NULL */
+    rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, NULL,
+                             &hostname);
     assert_return_code(rc, -rc);
-    assert_null(hostname);
+    assert_non_null(hostname);
+    assert_string_equal(my_hostname, hostname);
+    free(hostname);
+
+    /* focus_host set to my_hostname */
+    rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
+                             &hostname);
+    assert_return_code(rc, -rc);
+    assert_non_null(hostname);
+    assert_string_equal(my_hostname, hostname);
     free(hostname);
 }
 
@@ -295,33 +310,81 @@ static void rsl_one_lock(void **state)
 {
     struct raid1_split_locate_state *rsl_state =
         (struct raid1_split_locate_state *)*state;
+    const char *my_hostname;
     char *hostname;
     int rc;
     int i;
 
+    my_hostname = get_hostname();
+    assert_non_null(my_hostname);
+
     /* test each extent */
     for (i = 0; i < rsl_state->layout->ext_count; i++) {
+        int j, k;
+        int pid;
+
+        pid = getpid();
+
         /* get lock */
         rc = _dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
-                       WIN_HOST, getpid());
+                       WIN_HOST, pid);
         assert_return_code(rc, -rc);
 
         /* check locate */
-        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, &hostname);
+        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
+                                 &hostname);
         assert_return_code(rc, -rc);
+        assert_non_null(hostname);
         assert_string_equal(WIN_HOST, hostname);
         free(hostname);
 
-        /* admin lock this medium and check NULL hostname */
+        /* check focus host if my_hostname and WIN_HOST both have one lock */
+        for (j = 0; j < rsl_state->repl_count; j++)
+            for (k = 0; k < rsl_state->split_count; k++) {
+                int medium_index = j + k * rsl_state->repl_count;
+
+                if (medium_index == i)
+                    continue;
+
+                /* lock my_hostname */
+                rc = _dss_lock(rsl_state->dss, DSS_MEDIA,
+                               rsl_state->media[medium_index], 1, my_hostname,
+                               pid);
+
+                /* check WIN_HOST as focus_host */
+                rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout,
+                                         WIN_HOST, &hostname);
+                assert_return_code(rc, -rc);
+                assert_non_null(hostname);
+                assert_string_equal(WIN_HOST, hostname);
+                free(hostname);
+
+                /* check my_hostname as focus_host */
+                rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout,
+                                         my_hostname, &hostname);
+                assert_return_code(rc, -rc);
+                assert_non_null(hostname);
+                assert_string_equal(my_hostname, hostname);
+                free(hostname);
+
+                /* unlock my_hostname */
+                rc = dss_unlock(rsl_state->dss, DSS_MEDIA,
+                                rsl_state->media[medium_index], 1, true);
+                assert_return_code(rc, -rc);
+        }
+
+        /* admin lock this medium and check my_hostname */
         rsl_state->media[i]->rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
         rc = dss_media_set(rsl_state->dss, rsl_state->media[i], 1,
                            DSS_SET_UPDATE, ADM_STATUS);
         assert_return_code(rc, -rc);
 
         /* check locate */
-        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, &hostname);
+        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
+                                 &hostname);
         assert_return_code(rc, -rc);
-        assert_null(hostname);
+        assert_non_null(hostname);
+        assert_string_equal(my_hostname, hostname);
         free(hostname);
 
         rsl_state->media[i]->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
@@ -336,9 +399,11 @@ static void rsl_one_lock(void **state)
         assert_return_code(rc, -rc);
 
         /* check locate */
-        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, &hostname);
+        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
+                                 &hostname);
         assert_return_code(rc, -rc);
-        assert_null(hostname);
+        assert_non_null(hostname);
+        assert_string_equal(my_hostname, hostname);
         free(hostname);
 
         rsl_state->media[i]->flags.get = true;
@@ -363,12 +428,16 @@ static void rsl_one_lock(void **state)
  */
 static void rsl_one_lock_one_not_avail(void **state)
 {
+    LargestIntegralType ok_or_enolock[2] = {0, -ENOLCK};
     struct raid1_split_locate_state *rsl_state =
         (struct raid1_split_locate_state *)*state;
+    const char *my_hostname;
     char *hostname;
-    LargestIntegralType ok_or_enolock[2] = {0, -ENOLCK};
     int rc;
     int i;
+
+    my_hostname = get_hostname();
+    assert_non_null(my_hostname);
 
     /* test each replica */
     for (i = 0; i < rsl_state->repl_count; i++) {
@@ -387,8 +456,10 @@ static void rsl_one_lock_one_not_avail(void **state)
         assert_return_code(rc, -rc);
 
         /* check locate */
-        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, &hostname);
+        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
+                                 &hostname);
         assert_return_code(rc, -rc);
+        assert_non_null(hostname);
         assert_string_equal(WIN_HOST, hostname);
         free(hostname);
 
@@ -403,8 +474,10 @@ static void rsl_one_lock_one_not_avail(void **state)
         }
 
         /* check locate */
-        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, &hostname);
+        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
+                                 &hostname);
         assert_return_code(rc, -rc);
+        assert_non_null(hostname);
         assert_string_equal(WIN_HOST_BIS, hostname);
         free(hostname);
 

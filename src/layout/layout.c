@@ -207,7 +207,7 @@ int layout_decode(struct pho_encoder *enc, struct pho_xfer_desc *xfer,
 }
 
 int layout_locate(struct dss_handle *dss, struct layout_info *layout,
-                  char **hostname)
+                  const char *focus_host, char **hostname)
 {
     char layout_name[NAME_MAX];
     struct layout_module *mod;
@@ -225,7 +225,7 @@ int layout_locate(struct dss_handle *dss, struct layout_info *layout,
     if (rc)
         return rc;
 
-    return mod->ops->locate(dss, layout, hostname);
+    return mod->ops->locate(dss, layout, focus_host, hostname);
 }
 
 void layout_destroy(struct pho_encoder *enc)

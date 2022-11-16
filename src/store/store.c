@@ -1340,7 +1340,7 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
             }
 
             rc2 = phobos_locate(xfers[i].xd_objid, xfers[i].xd_objuuid,
-                                xfers[i].xd_version,
+                                xfers[i].xd_version, hostname,
                                 &xfers[i].xd_params.get.node_name);
             rc = rc ? : rc2;
             if (rc2) {
@@ -1348,12 +1348,7 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
                          xfers[i].xd_objid);
                 xfers[i].xd_rc = rc2;
             } else {
-                if (!xfers[i].xd_params.get.node_name) {
-                    pho_info("Object objid:'%s' can be retrieved from any node",
-                             xfers[i].xd_objid);
-                    n_xfers_to_get++;
-                } else if (xfers[i].xd_params.get.node_name &&
-                           strcmp(xfers[i].xd_params.get.node_name, hostname)) {
+                if (strcmp(xfers[i].xd_params.get.node_name, hostname)) {
                     pho_warn("Object objid:'%s' located on node: %s",
                              xfers[i].xd_objid,
                              xfers[i].xd_params.get.node_name);
@@ -1442,7 +1437,7 @@ void pho_xfer_desc_clean(struct pho_xfer_desc *xfer)
 };
 
 int phobos_locate(const char *oid, const char *uuid, int version,
-                  char **hostname)
+                  const char *focus_host, char **hostname)
 {
     struct object_info *obj = NULL;
     struct layout_info *layout;
@@ -1492,7 +1487,7 @@ int phobos_locate(const char *oid, const char *uuid, int version,
     assert(cnt == 1);
 
     /* locate media */
-    rc = layout_locate(&dss, layout, hostname);
+    rc = layout_locate(&dss, layout, focus_host, hostname);
     dss_res_free(layout, cnt);
 
 clean:

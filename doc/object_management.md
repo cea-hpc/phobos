@@ -166,6 +166,13 @@ hosts. The locate command helps you find the best host to reach your object:
 phobos locate obj0123
 ```
 
+If one has a suggested host to locate on, the --focus-host option can be used.
+If the --focus-host option is not used, self hostname is used as default
+suggested candidate.
+```
+phobos locate --focus-host node345 obj0123
+```
+
 A `--best-host` option is also available for the get command, to retrieve the
 object only if the request is executed on the best host:
 ```

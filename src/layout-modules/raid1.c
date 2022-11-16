@@ -1180,7 +1180,7 @@ struct object_location {
     unsigned int split_count;
     unsigned int repl_count;
     unsigned int nb_hosts;
-    struct one_location *hosts; /**< array of split_count by repl_count
+    struct one_location *hosts; /**< array of (split_count * repl_count) + 1
                                   *  candidates, first nb_hosts are filled
                                   *
                                   *  This array contains all different hosts
@@ -1188,6 +1188,9 @@ struct object_location {
                                   *  containing an extent of the object to
                                   *  locate, with their hostname and their
                                   *  score.
+                                  *
+                                  *  focus_host is set as first location with
+                                  *  an initial fitted split of 0.
                                   *
                                   *  Each hostname is present only once, even
                                   *  if it owns locks on several media
@@ -1228,8 +1231,9 @@ static void clean_object_location(struct object_location *object_location)
 }
 
 static int init_object_location(struct object_location *object_location,
-                                 unsigned int split_count,
-                                 unsigned int repl_count)
+                                unsigned int split_count,
+                                unsigned int repl_count,
+                                const char *focus_host)
 {
     unsigned int i;
     int rc;
@@ -1242,11 +1246,20 @@ static int init_object_location(struct object_location *object_location,
     object_location->split_count = split_count;
     object_location->repl_count = repl_count;
     object_location->nb_hosts = 0;
-    object_location->hosts = calloc(split_count * repl_count,
+    /* we add +1 host for the default focus one */
+    object_location->hosts = calloc(split_count * repl_count + 1,
                                     sizeof(*object_location->hosts));
 
     if (!object_location->hosts)
         GOTO(clean, rc = -ENOMEM);
+
+    /* initial focus host object location */
+    object_location->hosts[object_location->nb_hosts].hostname =
+        strdup(focus_host);
+    if (!object_location->hosts[object_location->nb_hosts].hostname)
+        GOTO(clean, rc = -ENOMEM);
+
+    object_location->nb_hosts += 1;
 
     object_location->splits = calloc(split_count,
                                      sizeof(*object_location->splits));
@@ -1301,7 +1314,7 @@ static void add_host_object_location(struct object_location *object_location,
     }
 
     assert(object_location->nb_hosts <
-           object_location->split_count * object_location->repl_count);
+           object_location->split_count * object_location->repl_count + 1);
     object_location->hosts[object_location->nb_hosts].hostname = hostname;
     object_location->hosts[object_location->nb_hosts].nb_fitted_split = 1;
     object_location->nb_hosts += 1;
@@ -1317,16 +1330,15 @@ static void add_host_object_location(struct object_location *object_location,
  *   other hostnames),
  * - second, being the hostname with the maximum number of splits that can be
  *   efficiently accessed (with at least one a medium locked by this hostname).
+ *
+ * Focus host is first evaluated among candidates and is always returned in case
+ * of "equality" with an other candidate.
  */
 static int get_best_object_location(struct object_location *object_location,
                                     char **hostname)
 {
     unsigned int best_index;
     unsigned int i;
-
-    *hostname = NULL;
-    if (!object_location->nb_hosts)
-        return 0;
 
     /* update nb_unreachable_split of candidate for each locked split */
     for (i = 0; i < object_location->split_count; i++) {
@@ -1375,9 +1387,10 @@ static int get_best_object_location(struct object_location *object_location,
 }
 
 int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
-                        char **hostname)
+                        const char *focus_host, char **hostname)
 {
     struct object_location object_location;
+    const char *focus_host_secured;
     unsigned int split_index;
     unsigned int repl_count;
     unsigned int nb_split;
@@ -1385,6 +1398,13 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
     int i;
 
     *hostname = NULL;
+    if (focus_host) {
+        focus_host_secured = focus_host;
+    } else {
+        focus_host_secured = get_hostname();
+        if (!focus_host_secured)
+            LOG_RETURN(-EADDRNOTAVAIL,  "Unable to get self hostname");
+    }
 
     /* get repl_count from layout */
     rc = layout_repl_count(layout, &repl_count);
@@ -1395,7 +1415,8 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
     nb_split = layout->ext_count / repl_count;
 
     /* init object_location */
-    rc = init_object_location(&object_location, nb_split, repl_count);
+    rc = init_object_location(&object_location, nb_split, repl_count,
+                              focus_host_secured);
     if (rc)
         LOG_RETURN(rc, "Unable to allocate first object_location");
 
@@ -1438,30 +1459,6 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
 
     /* get best candidate */
     rc = get_best_object_location(&object_location, hostname);
-    /* check error or final success */
-    if (rc || *hostname)
-        goto clean;
-
-    /* no candidate: fallback on localhost if unlocked media at each split */
-    if (object_location.all_splits_have_unlocked_media) {
-        *hostname = NULL;
-        GOTO(clean, rc = 0);
-    }
-
-    /* no answer found */
-    /*
-     * This case must not occur.
-     * - If there is no split, the default
-     *   object_location.all_splits_have_unlocked_media is true and
-     *   NULL must be returned.
-     * - If there is one split with no medium: -ENODEV is already returned as
-     *   error due to this split.
-     * - If there is one split with at least one medium which is
-     *   locked, we have at least one candidate hostname.
-     * - If at least one split with at least one medium and that all splits have
-     *   only unlocked media, we can return NULL.
-     */
-    assert(false);
 
 clean:
     clean_object_location(&object_location);

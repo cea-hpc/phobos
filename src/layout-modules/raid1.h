@@ -54,13 +54,20 @@ int layout_repl_count(struct layout_info *layout, unsigned int *repl_count);
  * Implement layout_locate layout module methods.
  *
  * @param[in]   layout      Layout of the object to locate
+ * @param[in]   focus_host  Hostname on which the caller would like to access
+ *                          the object if there is no node more convenient (if
+ *                          NULL, focus_host is set to local hostname)
  * @param[out]  hostname    Allocated and returned hostname of the node that
  *                          gives access to the object (NULL is returned on
  *                          error)
  *
  * @return                  0 on success or -errno on failure,
+ *                          -ENODEV if there is no existing medium to retrieve
+ *                          a split
+ *                          -EINVAL on invalid replica count
+ *                          -EADDRNOTAVAIL if we cannot get self hostname
  */
 int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
-                        char **hostname);
+                        const char *focus_host, char **hostname);
 
 #endif
