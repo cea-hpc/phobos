@@ -460,6 +460,16 @@ int dss_lock(struct dss_handle *handle, enum dss_type type,
     return _dss_lock(handle, type, item_list, item_cnt, hostname, pid);
 }
 
+int dss_lock_hostname(struct dss_handle *handle, enum dss_type type,
+                      const void *item_list, int item_cnt,
+                      const char *hostname)
+{
+    int pid;
+
+    pid = getpid();
+    return _dss_lock(handle, type, item_list, item_cnt, hostname, pid);
+}
+
 int _dss_lock_refresh(struct dss_handle *handle, enum dss_type type,
                       const void *item_list, int item_cnt,
                       const char *lock_hostname, int lock_owner)

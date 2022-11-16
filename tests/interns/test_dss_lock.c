@@ -245,7 +245,6 @@ static void dss_status_ok(void **state)
     free(lock.hostname);
 
     assert_int_not_equal(lock.timestamp.tv_sec, 0);
-    assert_int_not_equal(lock.timestamp.tv_usec, 0);
 
     lock.timestamp.tv_sec = 0;
     lock.timestamp.tv_usec = 0;
@@ -392,6 +391,28 @@ static void dss_multiple_refresh_not_exists(void **state)
     }
 }
 
+static void dss_lock_hostname_unlock_ok(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    const char *lock_hostname = "A_TRUE_HOSTNAME";
+    const int lock_owner = getpid();
+    struct pho_lock lock;
+    int rc;
+
+    rc = dss_lock_hostname(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1,
+                           lock_hostname);
+    assert_return_code(rc, -rc);
+
+    rc = dss_lock_status(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, &lock);
+    assert_int_equal(rc, -rc);
+    assert_string_equal(lock.hostname, lock_hostname);
+    assert_int_equal(lock.owner, lock_owner);
+    assert_int_not_equal(lock.timestamp.tv_sec, 0);
+
+    assert(dss_unlock(handle, DSS_OBJECT, &GOOD_LOCKS[0], 1, true) == 0);
+    pho_lock_clean(&lock);
+}
+
 int main(void)
 {
     const struct CMUnitTest dss_lock_test_cases[] = {
@@ -410,6 +431,7 @@ int main(void)
         cmocka_unit_test(dss_multiple_status_not_exists),
         cmocka_unit_test(dss_multiple_refresh_ok),
         cmocka_unit_test(dss_multiple_refresh_not_exists),
+        cmocka_unit_test(dss_lock_hostname_unlock_ok),
     };
 
     return cmocka_run_group_tests(dss_lock_test_cases, global_setup_dss,
