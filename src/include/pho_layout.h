@@ -60,7 +60,7 @@ struct pho_layout_module_ops {
 
     /** Retrieve one node name from which an object can be accessed */
     int (*locate)(struct dss_handle *dss, struct layout_info *layout,
-                  const char *focus_host, char **hostname);
+                  const char *focus_host, char **hostname, int *nb_new_lock);
 };
 
 /**
@@ -179,6 +179,8 @@ int layout_decode(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
  * @param[out]  hostname    Allocated and returned hostname of the node that
  *                          gives access to the object (NULL if an error
  *                          occurs)
+ * @param[out]  nb_new_lock Number of new locks on media added for the returned
+ *                          hostname
  *
  * @return                  0 on success or -errno on failure.
  *                          -ENODEV if there is no existing medium to retrieve
@@ -190,7 +192,7 @@ int layout_decode(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
  *                          -EADDRNOTAVAIL if we cannot get self hostname
  */
 int layout_locate(struct dss_handle *dss, struct layout_info *layout,
-                  const char *focus_host, char **hostname);
+                  const char *focus_host, char **hostname, int *nb_new_lock);
 
 /**
  * Advance the layout operation of one step by providing a response from the LRS

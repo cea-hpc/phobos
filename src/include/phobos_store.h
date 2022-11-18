@@ -246,8 +246,13 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers);
 /**
  * Retrieve one node name from which an object can be accessed.
  *
- * If the media where this object is written are locked by a node, this function
- * returns the hostname of that node.
+ * This function returns the most convenient node to get an object.
+
+ * If possible, this function locks to the returned node the minimum adequate
+ * number of media storing extents of this object to ensure that the returned
+ * node will be able to get this object. The number of newly added locks is also
+ * returned to allow the caller to keep up to date the load of each host, by
+ * counting the media that are newly locked to the returned hostname.
  *
  * Among the most convenient nodes, this function will favour the \p focus_host.
  *
@@ -269,9 +274,11 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers);
  * @param[in]   focus_host  Hostname on which the caller would like to access
  *                          the object if there is no node more convenient (if
  *                          NULL, focus_host is set to local hostname)
- * @param[out]  hostname    Allocated and returned hostname of the node which
- *                          can give access to the object (NULL is returned on
- *                          error)
+ * @param[out]  hostname    Allocated and returned hostname of the most
+ *                          convenient node on which the object can be accessed
+ *                          (NULL is returned on error)
+ * @param[out]  nb_new_lock Number of new lock on media added for the returned
+ *                          hostname
  *
  * @return                  0 on success or -errno on failure,
  *                          -ENOENT if no object corresponds to input
@@ -283,7 +290,7 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers);
  *                          -EADDRNOTAVAIL if we cannot get self hostname
  */
 int phobos_locate(const char *obj_id, const char *uuid, int version,
-                  const char *focus_host, char **hostname);
+                  const char *focus_host, char **hostname, int *nb_new_lock);
 
 /**
  * Clean a pho_xfer_desc structure by freeing the uuid and attributes, and

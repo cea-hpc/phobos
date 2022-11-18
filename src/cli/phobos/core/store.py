@@ -507,15 +507,17 @@ class UtilClient:
     def object_locate(oid, uuid, version, focus_host):
         """Locate an object"""
         hostname = c_char_p(None)
+        nb_new_lock = c_int(0)
         rc = LIBPHOBOS.phobos_locate(
             oid.encode('utf-8'),
             uuid.encode('utf-8') if uuid else None,
             version,
             focus_host.encode('utf-8') if focus_host else None,
-            byref(hostname))
+            byref(hostname), byref(nb_new_lock))
         if rc:
             raise EnvironmentError(rc, "Failed to locate object by %s '%s'" %
                                    ("oid" if oid else "uuid",
                                     oid if oid else uuid))
 
-        return hostname.value.decode('utf-8') if hostname.value else ""
+        return (hostname.value.decode('utf-8') if hostname.value else "",
+                nb_new_lock)

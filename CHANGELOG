@@ -4,6 +4,9 @@
 
 * Grouped read algorithm for tapes
 * Locate update for pre-locking
+    - We add two new parameters to the "phobos_locate" API call: 'focus_host'
+      and 'nb_new_lock'.
+    - We add the '--focus-host' option to the "phobos locate obj" command.
 
 ## 1.94.1
 

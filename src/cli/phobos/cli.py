@@ -915,10 +915,13 @@ class LocateOptHandler(BaseOptHandler):
         """Locate object"""
         client = UtilClient()
         try:
-            print(client.object_locate(self.params.get('oid'),
-                                       self.params.get('uuid'),
-                                       self.params.get('version'),
-                                       self.params.get('focus-host')))
+            hostname, nb_new_lock = client.object_locate(
+                self.params.get('oid'),
+                self.params.get('uuid'),
+                self.params.get('version'),
+                self.params.get('focus-host'))
+
+            print(hostname)
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))

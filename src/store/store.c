@@ -1328,6 +1328,8 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
         }
 
         if (xfers[i].xd_flags & PHO_XFER_OBJ_BEST_HOST) {
+            int nb_new_lock;
+
             if (!hostname) {
                 hostname = get_hostname();
                 if (!hostname) {
@@ -1341,7 +1343,8 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
 
             rc2 = phobos_locate(xfers[i].xd_objid, xfers[i].xd_objuuid,
                                 xfers[i].xd_version, hostname,
-                                &xfers[i].xd_params.get.node_name);
+                                &xfers[i].xd_params.get.node_name,
+                                &nb_new_lock);
             rc = rc ? : rc2;
             if (rc2) {
                 pho_warn("Object objid:'%s' couldn't be located",
@@ -1437,7 +1440,7 @@ void pho_xfer_desc_clean(struct pho_xfer_desc *xfer)
 };
 
 int phobos_locate(const char *oid, const char *uuid, int version,
-                  const char *focus_host, char **hostname)
+                  const char *focus_host, char **hostname, int *nb_new_lock)
 {
     struct object_info *obj = NULL;
     struct layout_info *layout;
@@ -1487,7 +1490,7 @@ int phobos_locate(const char *oid, const char *uuid, int version,
     assert(cnt == 1);
 
     /* locate media */
-    rc = layout_locate(&dss, layout, focus_host, hostname);
+    rc = layout_locate(&dss, layout, focus_host, hostname, nb_new_lock);
     dss_res_free(layout, cnt);
 
 clean:

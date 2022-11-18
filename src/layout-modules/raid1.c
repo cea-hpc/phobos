@@ -35,6 +35,7 @@
 #include "pho_attrs.h"
 #include "pho_cfg.h"
 #include "pho_common.h"
+#include "pho_dss.h"
 #include "pho_io.h"
 #include "pho_layout.h"
 #include "pho_module_loader.h"
@@ -1379,8 +1380,175 @@ static void get_best_object_location(struct object_location *object_location,
     }
 }
 
+/**
+ * Take lock on \a layout for \a best_location
+ *
+ * We ensure that \a best_location has at least one lock on one extent of each
+ * split of the \a layout.
+ * If \a best_location already has a lock on one of the extent of one split, we
+ * don't take an other lock on an other extent of the same split.
+ *
+ * If we can't successfully take a lock on each split of the object, this
+ * function does not take any new lock.
+ *
+ * @param[in]   dss             dss handle
+ * @param[in]   layout          layout on the object to locate
+ * @param[in]   repl_count      replica count of \a layout
+ * @param[in]   nb_split        number of split of \a layout
+ * @param[in]   object_location current object_location of this locate call
+ * @param[in]   best_location   best_location of this current locate call
+ * @param[out]  nb_new_lock     number of lock taken by this function
+ *                              (unrelevant if -EAGAIN is returned)
+ *
+ * @return 0 if success, -EAGAIN if we can't successfully take a lock on each
+ *         split of the object.
+ */
+static int raid1_lock_at_locate(struct dss_handle *dss,
+                                struct layout_info *layout,
+                                unsigned int repl_count,
+                                unsigned int nb_split,
+                                struct object_location *object_location,
+                                struct one_location *best_location,
+                                int *nb_new_lock)
+{
+    unsigned int new_lock_extent_index[layout->ext_count];
+    unsigned int nb_already_locked;
+    unsigned int extent_index;
+    unsigned int split_index;
+
+    /* early locking of each split */
+    nb_already_locked = best_location->nb_fitted_split;
+    *nb_new_lock = 0;
+    for (split_index = 0;
+         best_location->nb_fitted_split < nb_split && split_index < nb_split;
+         split_index++) {
+        /* check if this split is already a locked one for this best_location */
+        if (nb_already_locked > 0) {
+            struct split_location *split =
+                &object_location->splits[split_index];
+            unsigned int host_index;
+
+            for (host_index = 0; host_index < split->nb_hosts; host_index++)
+                if (!strcmp(split->hostnames[host_index],
+                            best_location->hostname))
+                    break;
+
+            if (host_index < split->nb_hosts) {
+                /*
+                 * Because if we already come across all locked media we don't
+                 * need to check it anymore, we sustain the remaining number of
+                 * already locked media.
+                 */
+                nb_already_locked--;
+                continue;
+            }
+        }
+
+        /* try to lock an available medium */
+        for (extent_index = split_index * repl_count;
+             extent_index < (split_index + 1) * repl_count &&
+                 extent_index < layout->ext_count;
+             extent_index++) {
+            struct pho_id *medium_id = &layout->extents[extent_index].media;
+            char *extent_hostname = NULL;
+            int rc2;
+
+            rc2 = dss_medium_locate(dss, medium_id,
+                                    &extent_hostname);
+            if (rc2) {
+                pho_warn("Error %d (%s) at early locking when trying to dss "
+                         "locate medium at early lock (family %s, name %s) of "
+                         "with extent %d raid1 layout early locking leans on "
+                         "other extents", -rc2, strerror(-rc2),
+                         rsc_family2str(medium_id->family), medium_id->name,
+                         extent_index);
+                continue;
+            }
+
+            if (!extent_hostname) {
+                struct media_info target_medium;
+
+                target_medium.rsc.id = *medium_id;
+                rc2 = dss_lock_hostname(dss, DSS_MEDIA, &target_medium, 1,
+                                        best_location->hostname);
+                if (rc2 == -EEXIST) {
+                    /* lock was concurrently taken */
+                    continue;
+                } else if (rc2) {
+                    pho_warn("Error (%d) %s when trying to lock the medium "
+                             "(family %s, name %s) at locate on extent %d "
+                             "raid1 layout, early locking leans on other "
+                             "extents", -rc2, strerror(-rc2),
+                             rsc_family2str(medium_id->family),
+                             medium_id->name, extent_index);
+                    continue;
+                }
+
+                best_location->nb_fitted_split++;
+                new_lock_extent_index[*nb_new_lock] = extent_index;
+                (*nb_new_lock)++;
+                break;
+            } else {
+                if (!strcmp(extent_hostname, best_location->hostname)) {
+                    /* a new medium is now locked to best_location */
+                    best_location->nb_fitted_split++;
+                    free(extent_hostname);
+                    break;
+                }
+
+                free(extent_hostname);
+            }
+        }
+
+        /* stop if we failed to lock one split */
+        if (extent_index >= (split_index + 1) * repl_count)
+            break;
+    }
+
+    if (best_location->nb_fitted_split < nb_split) {
+        unsigned int new_lock_index;
+
+        for (new_lock_index = 0; new_lock_index < *nb_new_lock;
+             new_lock_index++) {
+            struct media_info target_medium;
+            int rc2;
+
+            target_medium.rsc.id =
+                layout->extents[new_lock_extent_index[new_lock_index]].media;
+            rc2 = dss_unlock(dss, DSS_MEDIA, &target_medium, 1, false);
+            if (rc2 == -ENOLCK || rc2 == -EACCES) {
+                pho_warn("Early lock was concurrently updated %d (%s) before "
+                         "we try to unlock it when dealing with an early lock "
+                         "locate split starvation, medium (family %s, name %s) "
+                         "with extent %d raid1 layout",
+                         -rc2, strerror(-rc2),
+                         rsc_family2str(target_medium.rsc.id.family),
+                         target_medium.rsc.id.name,
+                         new_lock_extent_index[new_lock_index]);
+            } else {
+                pho_warn("Unlock error %d (%s) when dealing with an early lock "
+                         "locate split starvation, medium (family %s, name %s) "
+                         "with extent %d raid1 layout",
+                         -rc2, strerror(-rc2),
+                         rsc_family2str(target_medium.rsc.id.family),
+                         target_medium.rsc.id.name,
+                         new_lock_extent_index[new_lock_index]);
+            }
+        }
+
+        LOG_RETURN(-EAGAIN,
+                   "%d splits of the raid1 object (oid: '%s', uuid: '%s', "
+                   "version: %d) are not reachable by any host.\n",
+                   best_location->nb_fitted_split - nb_split,
+                   layout->oid, layout->uuid, layout->version);
+    }
+
+    return 0;
+}
+
 int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
-                        const char *focus_host, char **hostname)
+                        const char *focus_host, char **hostname,
+                        int *nb_new_lock)
 {
     struct object_location object_location;
     struct one_location *best_location;
@@ -1424,13 +1592,14 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
              i++) {
             struct pho_id *medium_id = &layout->extents[i].media;
             char *extent_hostname = NULL;
+            int rc2;
 
-            rc = dss_medium_locate(dss, medium_id,
-                                   &extent_hostname);
-            if (rc) {
+            rc2 = dss_medium_locate(dss, medium_id,
+                                    &extent_hostname);
+            if (rc2) {
                 pho_warn("Error %d (%s) when trying to dss locate medium "
                          "(family %s, name %s) of with extent %d raid1 layout "
-                         "locate leans on other extents", -rc, strerror(-rc),
+                         "locate leans on other extents", -rc2, strerror(-rc2),
                          rsc_family2str(medium_id->family), medium_id->name, i);
             } else {
                 enodev = false;
@@ -1451,9 +1620,7 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
             object_location.all_splits_have_unlocked_media = false;
     }
 
-    /* on the path towards success (clean transient dss_locate_medium errors) */
-    rc = 0;
-    /* get best candidate */
+    /* get best location */
     get_best_object_location(&object_location, &best_location);
 
     /* return -EAGAIN if at least one split is unreachable even on the best */
@@ -1464,6 +1631,17 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
                  best_location->nb_unreachable_split,
                  layout->oid, layout->uuid, layout->version);
 
+    /* early locks at locate for the found best location */
+    rc = raid1_lock_at_locate(dss, layout, repl_count, nb_split,
+                              &object_location, best_location, nb_new_lock);
+    if (rc)
+        LOG_GOTO(clean, rc,
+                 "failed to early locks at locate object (oid: '%s', uuid: "
+                 "'%s', version: %d) on best location %s",
+                 layout->oid, layout->uuid, layout->version,
+                 best_location->hostname);
+
+    /* allocate the returned best_location hostname */
     *hostname = strdup(best_location->hostname);
     if (!*hostname)
         LOG_GOTO(clean, rc = -errno,

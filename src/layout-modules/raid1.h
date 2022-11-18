@@ -60,6 +60,8 @@ int layout_repl_count(struct layout_info *layout, unsigned int *repl_count);
  * @param[out]  hostname    Allocated and returned hostname of the node that
  *                          gives access to the object (NULL is returned on
  *                          error)
+ * @param[out]  nb_new_lock Number of new locks on media added for the returned
+ *                          hostname
  *
  * @return                  0 on success or -errno on failure,
  *                          -ENODEV if there is no existing medium to retrieve
@@ -70,6 +72,7 @@ int layout_repl_count(struct layout_info *layout, unsigned int *repl_count);
  *                          -EADDRNOTAVAIL if we cannot get self hostname
  */
 int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
-                        const char *focus_host, char **hostname);
+                        const char *focus_host, char **hostname,
+                        int *nb_new_lock);
 
 #endif
