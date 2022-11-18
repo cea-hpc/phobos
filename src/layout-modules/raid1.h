@@ -65,6 +65,8 @@ int layout_repl_count(struct layout_info *layout, unsigned int *repl_count);
  *                          -ENODEV if there is no existing medium to retrieve
  *                          a split
  *                          -EINVAL on invalid replica count
+ *                          -EAGAIN if there is not any convenient node to
+ *                          currently retrieve this object
  *                          -EADDRNOTAVAIL if we cannot get self hostname
  */
 int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,

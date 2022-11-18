@@ -1322,22 +1322,21 @@ static void add_host_object_location(struct object_location *object_location,
 }
 
 /**
- * Find the best hostname to locate if any or NULL.
+ * Find the best location to get an object if any or NULL.
  *
  * The choice is made following two criteria:
- * - first, the most important one, being the hostname with the minimum number
+ * - first, the most important one, being the location with the minimum number
  *   of splits that can not be accessed (all extents of this split are locked by
  *   other hostnames),
- * - second, being the hostname with the maximum number of splits that can be
+ * - second, being the location with the maximum number of splits that can be
  *   efficiently accessed (with at least one a medium locked by this hostname).
  *
  * Focus host is first evaluated among candidates and is always returned in case
  * of "equality" with an other candidate.
  */
-static int get_best_object_location(struct object_location *object_location,
-                                    char **hostname)
+static void get_best_object_location(struct object_location *object_location,
+                                     struct one_location **best_location)
 {
-    unsigned int best_index;
     unsigned int i;
 
     /* update nb_unreachable_split of candidate for each locked split */
@@ -1361,35 +1360,30 @@ static int get_best_object_location(struct object_location *object_location,
         }
     }
 
+    /* default best is focus_host which is the first host */
+    *best_location = object_location->hosts;
     /* get best one */
-    best_index = 0;
     for (i = 1; i < object_location->nb_hosts; i++) {
-        const struct one_location *best = object_location->hosts+best_index;
-        const struct one_location *candidate = object_location->hosts+i;
+        struct one_location *candidate = object_location->hosts+i;
 
         /*
          * First, we compare nb_unreachable_split. Then, only if
          * nb_unreachable_split are equal, we compare nb_fitted_split.
          */
-        if (best->nb_unreachable_split > candidate->nb_unreachable_split ||
-            (best->nb_unreachable_split == candidate->nb_unreachable_split &&
-             best->nb_fitted_split < candidate->nb_fitted_split))
-            best_index = i;
+        if ((*best_location)->nb_unreachable_split >
+                candidate->nb_unreachable_split ||
+            ((*best_location)->nb_unreachable_split ==
+                 candidate->nb_unreachable_split &&
+             (*best_location)->nb_fitted_split < candidate->nb_fitted_split))
+            *best_location = candidate;
     }
-
-    *hostname = strdup(object_location->hosts[best_index].hostname);
-    if (!*hostname)
-        LOG_RETURN(-errno, "Unable to duplicate best locate hostname %s",
-                   object_location->hosts[best_index].hostname);
-
-    /* success */
-    return 0;
 }
 
 int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
                         const char *focus_host, char **hostname)
 {
     struct object_location object_location;
+    struct one_location *best_location;
     const char *focus_host_secured;
     unsigned int split_index;
     unsigned int repl_count;
@@ -1457,8 +1451,24 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
             object_location.all_splits_have_unlocked_media = false;
     }
 
+    /* on the path towards success (clean transient dss_locate_medium errors) */
+    rc = 0;
     /* get best candidate */
-    rc = get_best_object_location(&object_location, hostname);
+    get_best_object_location(&object_location, &best_location);
+
+    /* return -EAGAIN if at least one split is unreachable even on the best */
+    if (best_location->nb_unreachable_split > 0)
+        LOG_GOTO(clean, rc = -EAGAIN,
+                 "%d splits of the raid1 object (oid: \"%s\", uuid: \"%s\", "
+                 "version: %d) are not reachable by any host.\n",
+                 best_location->nb_unreachable_split,
+                 layout->oid, layout->uuid, layout->version);
+
+    *hostname = strdup(best_location->hostname);
+    if (!*hostname)
+        LOG_GOTO(clean, rc = -errno,
+                 "Unable to duplicate best locate hostname %s",
+                 best_location->hostname);
 
 clean:
     clean_object_location(&object_location);

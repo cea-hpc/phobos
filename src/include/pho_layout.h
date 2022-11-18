@@ -185,6 +185,8 @@ int layout_decode(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
  *                          this layout
  *                          -EINVAL on invalid replica count or invalid layout
  *                          name
+ *                          -EAGAIN if there is currently no convenient node to
+ *                          retrieve this layout
  *                          -EADDRNOTAVAIL if we cannot get self hostname
  */
 int layout_locate(struct dss_handle *dss, struct layout_info *layout,

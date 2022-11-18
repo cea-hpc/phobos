@@ -380,12 +380,18 @@ static void rsl_one_lock(void **state)
         assert_return_code(rc, -rc);
 
         /* check locate */
-        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
-                                 &hostname);
-        assert_return_code(rc, -rc);
-        assert_non_null(hostname);
-        assert_string_equal(my_hostname, hostname);
-        free(hostname);
+        if (rsl_state->repl_count <= 1) {
+            rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout,
+                                     my_hostname, &hostname);
+            assert_int_equal(rc, -EAGAIN);
+        } else {
+            rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout,
+                                     my_hostname, &hostname);
+            assert_return_code(rc, -rc);
+            assert_non_null(hostname);
+            assert_string_equal(my_hostname, hostname);
+            free(hostname);
+        }
 
         rsl_state->media[i]->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
         rc = dss_media_set(rsl_state->dss, rsl_state->media[i], 1,
@@ -399,12 +405,19 @@ static void rsl_one_lock(void **state)
         assert_return_code(rc, -rc);
 
         /* check locate */
-        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
-                                 &hostname);
-        assert_return_code(rc, -rc);
-        assert_non_null(hostname);
-        assert_string_equal(my_hostname, hostname);
-        free(hostname);
+        if (rsl_state->repl_count <= 1) {
+            rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout,
+                                     my_hostname, &hostname);
+            assert_int_equal(rc, -EAGAIN);
+        } else {
+            assert_return_code(rc, -rc);
+            rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout,
+                                     my_hostname, &hostname);
+            assert_return_code(rc, -rc);
+            assert_non_null(hostname);
+            assert_string_equal(my_hostname, hostname);
+            free(hostname);
+        }
 
         rsl_state->media[i]->flags.get = true;
         rc = dss_media_set(rsl_state->dss, rsl_state->media[i], 1,
@@ -455,47 +468,79 @@ static void rsl_one_lock_one_not_avail(void **state)
                            DSS_SET_UPDATE, GET_ACCESS);
         assert_return_code(rc, -rc);
 
-        /* check locate */
-        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
-                                 &hostname);
-        assert_return_code(rc, -rc);
-        assert_non_null(hostname);
-        assert_string_equal(WIN_HOST, hostname);
-        free(hostname);
+        if (rsl_state->repl_count <= 1) {
+            /* check locate */
+            rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout,
+                                     my_hostname, &hostname);
+            assert_int_equal(rc, -EAGAIN);
+        } else {
+            /* check locate */
+            rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout,
+                                     my_hostname, &hostname);
+            assert_return_code(rc, -rc);
+            assert_non_null(hostname);
+            assert_string_equal(WIN_HOST, hostname);
+            free(hostname);
 
-        /* locked second split on other replica */
-        for (j = 0; j < rsl_state->repl_count; j++) {
-            if (j != i) {
-                rc = _dss_lock(rsl_state->dss, DSS_MEDIA,
-                               rsl_state->media[j + rsl_state->repl_count], 1,
-                               WIN_HOST_BIS, getpid());
-                assert_return_code(rc, -rc);
+            /* locked second split on other replica for second candidate */
+            for (j = 0; j < rsl_state->repl_count; j++) {
+                if (j != i) {
+                    rc = _dss_lock(rsl_state->dss, DSS_MEDIA,
+                                   rsl_state->media[j + rsl_state->repl_count],
+                                   1, WIN_HOST_BIS, getpid());
+                    assert_return_code(rc, -rc);
+                }
+            }
+
+            /* check locate */
+            rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout,
+                                     my_hostname, &hostname);
+            assert_return_code(rc, -rc);
+            assert_non_null(hostname);
+            assert_string_equal(WIN_HOST_BIS, hostname);
+            free(hostname);
+
+            /* lock first split on for first candidate WIN_HOST */
+            for (j = 0; j < rsl_state->repl_count; j++) {
+                if (j != i) {
+                    rc = _dss_lock(rsl_state->dss, DSS_MEDIA,
+                                   rsl_state->media[j], 1, WIN_HOST, getpid());
+                    assert_return_code(rc, -rc);
+                }
+            }
+            /**
+             * Only WIN_HOST could access to first split.
+             * Only WIN_HOST_BIS could access to second split.
+             * Check this dead lock returns -EAGAIN.
+             */
+            rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout,
+                                     my_hostname, &hostname);
+            assert_int_equal(rc, -EAGAIN);
+
+            /* unlocked second split on other replica */
+            for (j = 0; j < rsl_state->repl_count; j++) {
+                if (j != i) {
+                    rc = dss_unlock(rsl_state->dss, DSS_MEDIA,
+                                    rsl_state->media[j + rsl_state->repl_count],
+                                    1, true);
+                    assert_return_code(rc, -rc);
+                }
+            }
+
+            /* unlock first split on other medium */
+            for (j = 0; j < rsl_state->repl_count; j++) {
+                if (j != i) {
+                    rc = dss_unlock(rsl_state->dss, DSS_MEDIA,
+                                    rsl_state->media[j], 1, true);
+                    assert_return_code(rc, -rc);
+                }
             }
         }
 
-        /* check locate */
-        rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
-                                 &hostname);
-        assert_return_code(rc, -rc);
-        assert_non_null(hostname);
-        assert_string_equal(WIN_HOST_BIS, hostname);
-        free(hostname);
-
-        /* unlocked second split on other replica */
-        for (j = 0; j < rsl_state->split_count; j++) {
-            if (j != i) {
-                rc = dss_unlock(rsl_state->dss, DSS_MEDIA,
-                                rsl_state->media[j + rsl_state->repl_count], 1,
-                                true);
-                assert_in_set(rc, ok_or_enolock, 2);
-            }
-        }
-
-        /* unlock first split on medium */
+        /* unlock first split */
         rc = dss_unlock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
                         true);
-        assert_in_set(rc, ok_or_enolock, 2);
-
+        assert_return_code(rc, -rc);
         /* operation get flag to true */
         rsl_state->media[i + rsl_state->repl_count]->flags.get = true;
         rc = dss_media_set(rsl_state->dss,
