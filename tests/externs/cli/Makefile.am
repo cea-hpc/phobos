@@ -34,7 +34,7 @@ endif
 
 TEST_EXTENSIONS=.sh
 
-check_PROGRAMS=put_then_release \
+check_PROGRAMS=lrs_simple_client \
                medium_locker
 
 check_SCRIPTS=acceptance.sh \
@@ -64,10 +64,10 @@ endif
 
 TESTS=$(check_SCRIPTS)
 
-put_then_release_SOURCES=put_then_release.c
-put_then_release_LDADD=$(LRS_LIB) $(CFG_LIB) $(COMMON_LIB) \
-                          $(COMMUNICATION_LIB) $(SERIALIZER_LIB)
-put_then_release_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
+lrs_simple_client_SOURCES=lrs_simple_client.c
+lrs_simple_client_LDADD=$(LRS_LIB) $(CFG_LIB) $(COMMON_LIB) \
+                        $(COMMUNICATION_LIB) $(SERIALIZER_LIB)
+lrs_simple_client_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
 
 medium_locker_SOURCES=medium_locker.c
 medium_locker_LDADD=$(DSS_LIB) $(STORE_LIB)

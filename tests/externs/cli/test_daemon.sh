@@ -25,7 +25,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_launch_daemon.sh
 . $test_dir/../../utils_generation.sh
 . $test_dir/../../tape_drive.sh
-put_then_release="$test_dir/put_then_release"
+lrs_simple_client="$test_dir/lrs_simple_client"
 pho_ldm_helper="$test_dir/../../../scripts/pho_ldm_helper"
 
 set -xe
@@ -314,14 +314,14 @@ function test_wait_end_of_IO_before_shutdown()
     $phobos dir add "$dir"
     $phobos dir format --unlock --fs posix "$dir"
 
-    local release_medium_name=$($put_then_release put dir)
+    local release_medium_name=$($lrs_simple_client put dir)
 
     kill $PID_DAEMON
     sleep 1
     ps --pid $PID_DAEMON || error "Daemon should still be online"
 
     # send release request
-    $put_then_release release $release_medium_name dir
+    $lrs_simple_client release $release_medium_name dir
 
     timeout 10 tail --pid=$PID_DAEMON -f /dev/null
     if [[ $? != 0 ]]; then
@@ -360,10 +360,10 @@ function test_cancel_waiting_requests_before_shutdown()
     $phobos dir add "$dir"
     $phobos dir format --unlock --fs posix "$dir"
 
-    local release_medium_name=$($put_then_release put dir)
+    local release_medium_name=$($lrs_simple_client put dir)
 
     # this request will be waiting in the LRS as the only dir is used by
-    # put_then_release
+    # lrs_simple_client
     ( set +e; $phobos put --family dir "$file" oid; echo $? > "$res_file" ) &
     local put_pid=$!
 
@@ -381,7 +381,7 @@ function test_cancel_waiting_requests_before_shutdown()
     fi
 
     # send the release request
-    $put_then_release release $release_medium_name dir
+    $lrs_simple_client release $release_medium_name dir
 
     timeout 10 tail --pid=$PID_DAEMON -f /dev/null
     if [[ $? != 0 ]]; then
@@ -405,7 +405,7 @@ function test_refuse_new_request_during_shutdown()
     $phobos dir add "$dir"
     $phobos dir format --unlock --fs posix "$dir"
 
-    local release_medium_name=$($put_then_release put dir)
+    local release_medium_name=$($lrs_simple_client put dir)
 
     kill $PID_DAEMON
 
@@ -413,7 +413,7 @@ function test_refuse_new_request_during_shutdown()
         error "New put should have failed during shutdown"
 
     # send the release request
-    $put_then_release release $release_medium_name dir
+    $lrs_simple_client release $release_medium_name dir
 
     timeout 10 tail --pid=$PID_DAEMON -f /dev/null
     if [[ $? != 0 ]]; then

@@ -30,7 +30,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../setup_db.sh
 . $test_dir/../../tape_drive.sh
 . $test_dir/../../test_launch_daemon.sh
-put_then_release="$test_dir/put_then_release"
+lrs_simple_client="$test_dir/lrs_simple_client"
 
 function test_drive_status_no_daemon()
 {
@@ -81,7 +81,7 @@ function test_drive_status_with_ongoing_io()
     $phobos drive unlock "$drive"
     $phobos tape format --unlock "$tape"
 
-    local release_medium_name=$($put_then_release put tape)
+    local release_medium_name=$($lrs_simple_client put tape)
 
     $phobos drive status |
         grep True |
@@ -89,7 +89,7 @@ function test_drive_status_with_ongoing_io()
         grep "$tape"
 
     # send release request
-    $put_then_release release $release_medium_name tape
+    $lrs_simple_client release $release_medium_name tape
 }
 
 trap cleanup EXIT

@@ -41,6 +41,17 @@
 
 #include "lrs_cfg.h"
 
+enum action {
+    READ, WRITE, RELEASE, FORMAT,
+};
+
+static const char * const action_str[] = {
+    [READ]    = "read",
+    [WRITE]   = "write",
+    [RELEASE] = "release",
+    [FORMAT]  = "format",
+};
+
 static void error(const char *func, const char *msg)
 {
     fprintf(stderr, "%s: %s\n", func, msg);
@@ -48,9 +59,9 @@ static void error(const char *func, const char *msg)
 }
 
 struct option {
-    bool                put; /* true for a put, false for a release */
-    enum rsc_family     family;
-    const char         *release_medium_name;
+    enum action     action;
+    enum rsc_family family;
+    const char     *medium_name;
 };
 
 static void parse_args(int argc, char **argv, struct option *option)
@@ -61,20 +72,25 @@ static void parse_args(int argc, char **argv, struct option *option)
         goto err_usage;
 
     option->family = PHO_RSC_DIR;
+    option->medium_name = NULL;
 
     if (!strcmp(argv[1], "put"))
-        option->put = true;
+        option->action = WRITE;
+    else if (!strcmp(argv[1], "get"))
+        option->action = READ;
+    else if (!strcmp(argv[1], "format"))
+        option->action = FORMAT;
     else if (!strcmp(argv[1], "release"))
-        option->put = false;
+        option->action = RELEASE;
     else
         goto err_usage;
 
-    if (!option->put) {
+    if (option->action != WRITE) {
         if (argc < 3)
             goto err_usage;
 
         family_arg_index = 3;
-        option->release_medium_name = argv[2];
+        option->medium_name = argv[2];
     }
 
     if (argc > family_arg_index) {
@@ -87,8 +103,12 @@ static void parse_args(int argc, char **argv, struct option *option)
 
 err_usage:
     error(__func__,
-          "usage put_then_release <put | release <release_medium_name>> "
-          "[family]");
+          "usage lrs_simple_client <action> [args...]\n\n"
+          "<action>:\n"
+          "    put [<family>]\n"
+          "    get <medium> [<family>]\n"
+          "    format <medium> [<family>]\n"
+          "    release <medium> [<family>]");
 }
 
 static void send_and_receive(struct pho_comm_info *comm,
@@ -132,6 +152,24 @@ static void send_and_receive(struct pho_comm_info *comm,
     }
 }
 
+static void send_read(struct pho_comm_info *comm,
+                      enum rsc_family family,
+                      const char *medium_name)
+{
+    pho_resp_t *resp = NULL;
+    pho_req_t req;
+    int rc;
+
+    rc = pho_srl_request_read_alloc(&req, 1);
+    if (rc)
+        error(__func__, strerror(-rc));
+    req.ralloc->med_ids[0]->name = strdup(medium_name);
+    req.ralloc->med_ids[0]->family = family;
+
+    send_and_receive(comm, &req, &resp);
+    pho_srl_response_free(resp, true);
+}
+
 static void send_write(struct pho_comm_info *comm,
                        enum rsc_family family)
 {
@@ -153,7 +191,7 @@ static void send_write(struct pho_comm_info *comm,
 
 static void send_release(struct pho_comm_info *comm,
                          enum rsc_family family,
-                         const char *release_medium_name)
+                         const char *medium_name)
 {
     pho_resp_t *resp = NULL;
     pho_req_t req;
@@ -164,8 +202,41 @@ static void send_release(struct pho_comm_info *comm,
         error(__func__, strerror(-rc));
 
     req.release->media[0]->med_id->family = family;
-    req.release->media[0]->med_id->name = strdup(release_medium_name);
+    req.release->media[0]->med_id->name = strdup(medium_name);
     req.release->media[0]->to_sync = true;
+    send_and_receive(comm, &req, &resp);
+    pho_srl_response_free(resp, true);
+}
+
+static void send_format(struct pho_comm_info *comm,
+                        enum rsc_family family,
+                        const char *medium_name)
+{
+    pho_resp_t *resp = NULL;
+    enum fs_type fs;
+    pho_req_t req;
+    int rc;
+
+    switch (family) {
+    case PHO_RSC_DIR:
+        fs = PHO_FS_POSIX;
+        break;
+    case PHO_RSC_TAPE:
+        fs = PHO_FS_LTFS;
+        break;
+    default:
+        error(__func__, "invalid family");
+        break;
+    }
+
+    rc = pho_srl_request_format_alloc(&req);
+    if (rc)
+        error(__func__, strerror(-rc));
+
+    req.format->fs = fs;
+    req.format->unlock = false;
+    req.format->med_id->family = family;
+    req.format->med_id->name = strdup(medium_name);
     send_and_receive(comm, &req, &resp);
     pho_srl_response_free(resp, true);
 }
@@ -179,16 +250,31 @@ int main(int argc, char **argv)
 
     pho_cfg_init_local(NULL);
     parse_args(argc, argv, &option);
+    pho_info("action: %s, family: %s, medium: %s",
+             action_str[option.action],
+             rsc_family2str(option.family),
+             option.medium_name);
+
 
     socket_path = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, server_socket);
     rc = pho_comm_open(&comm, socket_path, false);
     if (rc)
         error("pho_comm_open", strerror(-rc));
 
-    if (option.put)
+    switch (option.action) {
+    case WRITE:
         send_write(&comm, option.family);
-    else
-        send_release(&comm, option.family, option.release_medium_name);
+        break;
+    case READ:
+        send_read(&comm, option.family, option.medium_name);
+        break;
+    case FORMAT:
+        send_format(&comm, option.family, option.medium_name);
+        break;
+    case RELEASE:
+        send_release(&comm, option.family, option.medium_name);
+        break;
+    }
 
     return EXIT_SUCCESS;
 }

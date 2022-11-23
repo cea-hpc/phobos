@@ -27,7 +27,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
 . $test_dir/../../tape_drive.sh
-put_then_release="$test_dir/put_then_release"
+lrs_simple_client="$test_dir/lrs_simple_client"
 
 set -xe
 
@@ -101,7 +101,7 @@ function test_eagain_format
     $valg_phobos tape format --unlock ${two_lto6_tapes[0]}
 
     # One put to busy the device
-    local release_medium_name=$($put_then_release put tape)
+    local release_medium_name=$($lrs_simple_client put tape)
 
     # Try to format a busy drive
     $phobos tape add --type lto6 ${two_lto6_tapes[1]}
@@ -112,7 +112,7 @@ function test_eagain_format
     sleep 1
 
     # Release the put request
-    $put_then_release release $release_medium_name tape
+    $lrs_simple_client release $release_medium_name tape
 
     # Check format successfully end
     wait ${format_pid}
