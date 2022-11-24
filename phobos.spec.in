@@ -39,6 +39,7 @@ BuildRequires: systemd
 BuildRequires: autoconf
 BuildRequires: automake
 BuildRequires: libtool
+BuildRequires: make
 
 Requires: %{postgres_prefix}-server
 Requires: %{postgres_prefix}-contrib
@@ -123,7 +124,7 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_*.a
 rm -f $RPM_BUILD_ROOT/%{_libdir}/phobos/libpho_*.la
 
 mkdir -p %{buildroot}/%{_sysconfdir}/ld.so.conf.d/
-echo "/usr/lib/phobos" > %{buildroot}/%{_sysconfdir}/ld.so.conf.d/phobos.conf
+echo "%{_libdir}/phobos" > %{buildroot}/%{_sysconfdir}/ld.so.conf.d/phobos.conf
 
 %files
 
