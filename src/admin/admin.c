@@ -431,14 +431,13 @@ int phobos_admin_init(struct admin_handle *adm, bool lrs_required)
         LOG_GOTO(out, rc, "Cannot initialize DSS");
 
     rc = pho_comm_open(&adm->comm, sock_path, false);
-    if (!lrs_required && rc == -ENOTCONN) {
-        pho_info("Cannot contact 'phobosd', but not required: will continue");
-        rc = 0;
-    } else if (rc) {
+    if (rc && lrs_required)
         LOG_GOTO(out, rc, "Cannot contact 'phobosd': will abort");
-    } else {
+    else if (!rc)
         adm->daemon_is_online = true;
-    }
+
+    if (!lrs_required)
+        rc = 0;
 
 out:
     if (rc) {

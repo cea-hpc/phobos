@@ -97,6 +97,12 @@ function test_extent_list_pattern
         fi
     done
 
+    export PHOBOS_LRS_server_socket="regular_file"
+    touch $PHOBOS_LRS_server_socket
+    $valg_phobos extent list ||
+        error "Extent list should have succeeded"
+    unset PHOBOS_LRS_server_socket
+
     return 0
 }
 
