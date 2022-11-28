@@ -262,7 +262,7 @@ function test_format_nb_streams_loop
     done < <(echo "$output")
 
     if (( done != nb_dirs )); then
-        error "Not all $nb_dirs dir format ended"
+        error "Not all $nb_dirs dir format ended. Done: $done"
     fi
 
 }
@@ -280,6 +280,11 @@ function test_format_nb_streams
         $(mktemp -d /tmp/test.pho.XXXX)
         $(mktemp -d /tmp/test.pho.XXXX)
     )
+    local dirs3=(
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+    )
 
     trap "rm -rf ${dirs1[0]} ${dirs1[1]};
           rm -rf ${dirs2[0]} ${dirs2[1]} ${dirs2[2]} ${dirs2[3]} ${dirs2[4]};
@@ -290,6 +295,8 @@ function test_format_nb_streams
     test_format_nb_streams_loop 2 3 ${dirs1[@]}
 
     test_format_nb_streams_loop 5 2 ${dirs2[@]}
+
+    test_format_nb_streams_loop 3 1 ${dirs3[@]}
 
     rm -rf ${dirs1[@]} ${dirs2[@]}
     trap cleanup EXIT

@@ -824,7 +824,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
         }
 
         if (nb_streams != 0 && n_rq_to_recv >= nb_streams) {
-            rc2 = receive_format_response(adm, ids, awaiting_resps, i);
+            rc2 = receive_format_response(adm, ids, awaiting_resps, i + 1);
             if (rc2)
                 rc = rc ? : rc2;
 
