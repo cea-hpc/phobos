@@ -254,11 +254,7 @@ int lrs_dev_hdl_trydel(struct lrs_dev_hdl *handle, int index)
         return -ERANGE;
 
     dev = lrs_dev_hdl_get(handle, index);
-
-    rc = thread_signal_stop(&dev->ld_device_thread);
-    if (rc)
-        pho_error(rc, "Error when signaling device (%s, %s) to stop",
-                  dev->ld_dss_dev_info->rsc.id.name, dev->ld_dev_path);
+    thread_signal_stop(&dev->ld_device_thread);
 
     rc = clock_gettime(CLOCK_REALTIME, &now);
     if (rc) {
@@ -370,11 +366,7 @@ void lrs_dev_hdl_clear(struct lrs_dev_hdl *handle)
         struct lrs_dev *dev;
 
         dev = (struct lrs_dev *)g_ptr_array_index(handle->ldh_devices, i);
-        rc = thread_signal_stop(&dev->ld_device_thread);
-        if (rc)
-            pho_error(rc, "Error when signaling device (%s, %s) to stop it",
-                      dev->ld_dss_dev_info->rsc.id.name,
-                      dev->ld_dev_path);
+        thread_signal_stop(&dev->ld_device_thread);
     }
 
     for (i = handle->ldh_devices->len - 1; i >= 0; i--) {
@@ -609,7 +601,6 @@ int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
 {
     struct sync_params *sync_params = &dev->ld_sync_params;
     struct sub_request *req_tosync;
-    int rc;
 
     ENTRY;
 
@@ -626,11 +617,7 @@ int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
     update_oldest_tosync(&sync_params->oldest_tosync, reqc->received_at);
     MUTEX_UNLOCK(&dev->ld_mutex);
 
-    rc = thread_signal(&dev->ld_device_thread);
-    if (rc)
-        pho_error(rc, "Error when signaling device (%s, %s) to wake up",
-                  dev->ld_dss_dev_info->rsc.id.name,
-                  dev->ld_dev_path);
+    thread_signal(&dev->ld_device_thread);
 
     return 0;
 }

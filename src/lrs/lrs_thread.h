@@ -96,17 +96,15 @@ int thread_init(struct thread_info *thread, void *(*thread_routine)(void *),
 
 /**
  * Signal the thread
- *
- * \return 0 on success, negative error code on failure
  */
-int thread_signal(struct thread_info *thread);
+void thread_signal(struct thread_info *thread);
 
 /**
  * Signal to the thread that it should stop working
  *
  * \param[in]  thread  the thread to signal
  */
-int thread_signal_stop(struct thread_info *thread);
+void thread_signal_stop(struct thread_info *thread);
 
 /**
  * Set the error status on thread and signal that it should stop working

@@ -893,11 +893,8 @@ static int lrs_process(struct lrs *lrs)
         if (!lrs->sched[i])
             continue;
 
-        if (schedulers_to_signal[i]) {
-            rc = thread_signal(&lrs->sched[i]->sched_thread);
-            if (rc)
-                pho_error(rc, "Failed to signal scheduler thread '%d'", i);
-        }
+        if (schedulers_to_signal[i])
+            thread_signal(&lrs->sched[i]->sched_thread);
 
         if (running || sched_has_running_devices(lrs->sched[i]))
             stopped = false;

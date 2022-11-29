@@ -2076,17 +2076,10 @@ static int push_sub_request_to_device(struct req_container *reqc)
     }
 
     for (i = 0; i < devices_len; i++) {
-        int rc;
-
         devices[i]->ld_sub_request = sub_requests[i];
         devices[i]->ld_ongoing_scheduled = false;
 
-        rc = thread_signal(&devices[i]->ld_device_thread);
-        if (rc)
-            pho_error(rc, "Error when signaling device (%s, %s) to wake up",
-                      devices[i]->ld_dss_dev_info->rsc.id.name,
-                      devices[i]->ld_dev_path);
-
+        thread_signal(&devices[i]->ld_device_thread);
     }
 
     free(sub_requests);

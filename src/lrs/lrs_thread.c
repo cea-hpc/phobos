@@ -37,25 +37,23 @@ int thread_init(struct thread_info *thread, void *(*thread_routine)(void *),
     return pthread_create(&thread->tid, NULL, thread_routine, data);
 }
 
-int thread_signal(struct thread_info *thread)
+void thread_signal(struct thread_info *thread)
 {
     int rc;
 
     MUTEX_LOCK(&thread->signal_mutex);
-
     rc = pthread_cond_signal(&thread->signal);
-    if (rc)
-        pho_error(-rc, "Unable to signal thread");
-
+    if (rc) {
+        pho_error(rc, "Unable to signal thread, fatal error, will abort");
+        abort();
+    }
     MUTEX_UNLOCK(&thread->signal_mutex);
-
-    return -rc;
 }
 
-int thread_signal_stop(struct thread_info *thread)
+void thread_signal_stop(struct thread_info *thread)
 {
     thread->state = THREAD_STOPPING;
-    return thread_signal(thread);
+    thread_signal(thread);
 }
 
 void thread_signal_stop_on_error(struct thread_info *thread, int error_code)
