@@ -111,10 +111,15 @@ function test_medium_locate
             error "Error while unlocking $family before locate"
     fi
 
-    locate_hostname=$($valg_phobos $family locate $medium)
-    if [ "$locate_hostname" != "" ]; then
-        error "$family locate returned $locate_hostname instead of " \
-              "an empty string on an unlocked medium"
+    if [ "$family" == "dir" ]; then
+        $valg_phobos $family locate $medium &&
+            error "Locating a dir without any lock must failed"
+    else
+        locate_hostname=$($valg_phobos $family locate $medium)
+        if [ "$locate_hostname" != "" ]; then
+            error "$family locate returned $locate_hostname instead of " \
+                  "an empty string on an unlocked medium"
+        fi
     fi
 
     # locate on a locked medium

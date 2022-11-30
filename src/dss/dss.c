@@ -2627,6 +2627,9 @@ int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
 
     /* medium without any lock */
     if (!medium_info->lock.owner) {
+        if (medium_info->rsc.id.family == PHO_RSC_DIR)
+            GOTO(clean, rc = -ENODEV);
+
         *hostname = NULL;
         GOTO(clean, rc = 0);
     }

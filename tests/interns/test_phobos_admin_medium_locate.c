@@ -40,7 +40,11 @@ static void fill_medium_info(struct media_info *medium_info, struct pho_id id)
 {
     /* fill medium_info */
     medium_info->rsc.id = id;
-    medium_info->rsc.model = "dir";
+    if (id.family == PHO_RSC_DIR)
+        medium_info->rsc.model = "dir";
+    else
+        medium_info->rsc.model = "LTO6";
+
     medium_info->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
     medium_info->addr_type = PHO_ADDR_HASH1;
     medium_info->fs.type = PHO_FS_POSIX;
@@ -152,20 +156,30 @@ static void paml_eperm(void **state)
 /**
  * successfull phobos_admin_medium_locate on a free medium
  */
-static struct pho_id free_medium = {
+static struct pho_id dir_free_medium = {
     .family = PHO_RSC_DIR,
-    .name = "free_medium",
+    .name = "dir_free_medium",
+};
+
+static struct pho_id tape_free_medium = {
+    .family = PHO_RSC_TAPE,
+    .name = "tape_free_medium",
 };
 
 static int paml_ok_free_setup(void **state)
 {
     struct admin_handle *adm = (struct admin_handle *)*state;
-    struct media_info medium_info;
+    struct media_info dir_medium_info;
+    struct media_info tape_medium_info;
 
-    fill_medium_info(&medium_info, free_medium);
+    fill_medium_info(&dir_medium_info, dir_free_medium);
+    fill_medium_info(&tape_medium_info, tape_free_medium);
 
     /* insert medium */
-    if (dss_media_set(&adm->dss, &medium_info, 1, DSS_SET_INSERT, 0))
+    if (dss_media_set(&adm->dss, &dir_medium_info, 1, DSS_SET_INSERT, 0))
+        return -1;
+
+    if (dss_media_set(&adm->dss, &tape_medium_info, 1, DSS_SET_INSERT, 0))
         return -1;
 
     return 0;
@@ -179,10 +193,14 @@ static void paml_ok_free(void **state)
 
     (void) state;
 
-    rc = phobos_admin_medium_locate(adm, &free_medium, &hostname);
+    /* -ENODEV on free dir */
+    rc = phobos_admin_medium_locate(adm, &dir_free_medium, &hostname);
+    assert_int_equal(rc, -ENODEV);
+
+    /* NULL on free tape */
+    rc = phobos_admin_medium_locate(adm, &tape_free_medium, &hostname);
     assert_return_code(rc, -rc);
     assert_null(hostname);
-    free(hostname);
 }
 
 /**

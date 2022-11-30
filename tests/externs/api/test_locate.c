@@ -322,8 +322,15 @@ static void pl(void **state)
     /* free lock on medium */
     unlock_medium(pl_state, medium, cnt);
     /* locate without any lock in deprecated table */
-    pl_hostname(myself_hostname, NULL, state, false);
-    pl_hostname(myself_hostname, myself_hostname, state, false);
+    if (pl_state->rsc_family == PHO_RSC_DIR) {
+        rc = phobos_locate(pl_state->objs[0].oid, NULL,
+                           pl_state->objs[0].version, myself_hostname,
+                           &hostname, &nb_new_lock);
+        assert_int_equal(rc, -ENODEV);
+    } else {
+        pl_hostname(myself_hostname, NULL, state, false);
+        pl_hostname(myself_hostname, myself_hostname, state, false);
+    }
 }
 
 /************************************/
@@ -388,20 +395,15 @@ static void pgl(void **state)
     xfer_desc_open_path(&xfer, "/etc/hosts", PHO_XFER_OP_GET,
                         PHO_XFER_OBJ_REPLACE | PHO_XFER_OBJ_BEST_HOST);
 
-    /* Check we can get file as it is on local node */
+    /* Check we can get file when it is locked on local node */
+    lock_medium(pl_state, &medium, myself, &cnt);
     pgl_scenario(xfer, obj, myself, 0);
-
-    /** XXX: to uncomment once there is a limit to the number of attempts
-     *  made by the LRS when doing an action on a locked medium.
-     *
-     *  lock_medium(pl_state, &medium, myself);
-     *  pgl_scenario(xfer, obj, myself, 0);
-     */
 
     /**
      * Lock the medium with a hostname and try getting the object.
-     * Since the medium is locked, we can't retrieve the object, as
-     * we don't own the lock, the get/locate should give return -EREMOTE.
+     * Since the medium is locked by an other hostname, we can't retrieve the
+     * object, as we don't own the lock, the get/locate should return
+     * -EREMOTE.
      */
     lock_medium(pl_state, &medium, HOSTNAME, &cnt);
     pgl_scenario(xfer, obj, HOSTNAME, -EREMOTE);

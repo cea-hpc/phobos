@@ -30,6 +30,7 @@
 #include "phobos_store.h"
 #include "pho_common.h" /* get_hostname */
 #include "pho_dss.h"
+#include "pho_types.h"
 #include "../layout-modules/raid1.h"
 #include "../dss/dss_lock.h"
 
@@ -55,6 +56,7 @@ static struct raid1_split_locate_state {
     const char *local_hostname;
     struct dss_handle *dss;
     char *oid;
+    enum rsc_family rsc_family;
     int layout_cnt; /* only to free layout with dss_res_free */
     struct layout_info *layout;
     struct media_info **media; /* array of layout->ext_count media pointers */
@@ -130,6 +132,11 @@ static int global_setup(void **state)
     dss_filter_free(&filter);
     if (rc)
         GOTO(clean_dss, rc = -1);
+
+    if (rsl_state.layout_cnt != 1)
+        LOG_GOTO(clean_layout, rc = -1,
+                 "We should have 1 layout for oid %s, we got %d",
+                 rsl_state.oid, rsl_state.layout_cnt);
 
     /* check layout is "raid1" one */
     if (strcmp(rsl_state.layout->layout_desc.mod_name, "raid1")) {
@@ -270,6 +277,96 @@ static int global_teardown(void **state)
     unsetenv("PHOBOS_DSS_connect_string");
 
     return 0;
+}
+
+/*************************************************************************/
+/* rsl_loss: raid1 split locate until there is no more medium            */
+/*************************************************************************/
+static void rsl_loss(void **state)
+{
+    struct raid1_split_locate_state *rsl_state =
+        (struct raid1_split_locate_state *)*state;
+    const char *my_hostname;
+    int nb_new_lock;
+    char *hostname;
+    int pid;
+    int rc;
+    int i;
+
+    my_hostname = get_hostname();
+    assert_non_null(my_hostname);
+    pid = getpid();
+
+    /*
+     * Make sure that all the media are locked by my_hostname as if there is a
+     * put done just before.
+     */
+    for (i = 0; i < rsl_state->layout->ext_count; i++) {
+        LargestIntegralType rc_set[2] = {0, -ENOLCK};
+
+        /* ensure unlock before lock */
+        rc = dss_unlock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
+                        true);
+        assert_in_set(rc, rc_set, 2);
+
+        /* get lock */
+        rc = _dss_lock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
+                       my_hostname, pid);
+        assert_return_code(rc, -rc);
+    }
+
+    /* locate with all media locked */
+    rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
+                             &hostname, &nb_new_lock);
+    assert_return_code(rc, -rc);
+    assert_non_null(hostname);
+    assert_string_equal(my_hostname, hostname);
+    assert_int_equal(nb_new_lock, 0);
+    free(hostname);
+
+    /* locate with admin locked first extent of first split */
+    rsl_state->media[0]->rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
+    rc = dss_media_set(rsl_state->dss, rsl_state->media[0], 1,
+                       DSS_SET_UPDATE, ADM_STATUS);
+    assert_return_code(rc, -rc);
+    rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
+                             &hostname, &nb_new_lock);
+    assert_return_code(rc, -rc);
+    assert_non_null(hostname);
+    assert_string_equal(my_hostname, hostname);
+    assert_int_equal(nb_new_lock, 0);
+    free(hostname);
+
+    /* locate with get false flag on first extent of second split */
+    rsl_state->media[rsl_state->repl_count]->flags.get = false;
+    rc = dss_media_set(rsl_state->dss, rsl_state->media[rsl_state->repl_count],
+                       1, DSS_SET_UPDATE, GET_ACCESS);
+    assert_return_code(rc, -rc);
+    rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
+                             &hostname, &nb_new_lock);
+    assert_return_code(rc, -rc);
+    assert_non_null(hostname);
+    assert_string_equal(my_hostname, hostname);
+    assert_int_equal(nb_new_lock, 0);
+    free(hostname);
+
+    /* locate with all extents of first split unlock */
+    for (i = 0; i < rsl_state->repl_count; i++) {
+        rc = dss_unlock(rsl_state->dss, DSS_MEDIA, rsl_state->media[i], 1,
+                        true);
+        assert_return_code(rc, -rc);
+    }
+    rc = layout_raid1_locate(rsl_state->dss, rsl_state->layout, my_hostname,
+                             &hostname, &nb_new_lock);
+    if (rsl_state->rsc_family == PHO_RSC_DIR) {
+        assert_int_equal(rc, -ENODEV);
+    } else {
+        assert_return_code(rc, -rc);
+        assert_non_null(hostname);
+        assert_string_equal(my_hostname, hostname);
+        assert_int_equal(nb_new_lock, 1);
+        free(hostname);
+    }
 }
 
 /*************************************************************************/
@@ -480,7 +577,6 @@ static void rsl_one_lock(void **state)
  */
 static void rsl_one_lock_one_not_avail(void **state)
 {
-    LargestIntegralType ok_or_enolock[2] = {0, -ENOLCK};
     struct raid1_split_locate_state *rsl_state =
         (struct raid1_split_locate_state *)*state;
     const char *my_hostname;
@@ -584,25 +680,51 @@ static void rsl_one_lock_one_not_avail(void **state)
     }
 }
 
-#define NB_ARGS 1
-static const char *usage = "Usage: test_raid1_split_locate <oid_to_test>";
+#define NB_ARGS 2
+static const char *usage = "Usage: test_raid1_split_locate [dir|tape] "
+                           "<oid_to_test>";
 int main(int argc, char **argv)
 {
+    int tape_rc;
+    int family;
+    int rc;
+
     /* get oid from arg */
     if (argc != NB_ARGS + 1) {
         fprintf(stderr, "%s\n", usage);
         exit(EXIT_FAILURE);
     }
 
-    rsl_state.oid = argv[1];
+    family = str2rsc_family(argv[1]);
+    switch (family) {
+    case PHO_RSC_TAPE:
+    case PHO_RSC_DIR:
+        rsl_state.rsc_family = family;
+        break;
+    default:
+        fprintf(stderr, "%s\n", usage);
+        exit(EXIT_FAILURE);
+    }
 
-    const struct CMUnitTest raid1_split_locate_cases[] = {
-        cmocka_unit_test_teardown(rsl_no_lock, rsl_clean_all_media),
-        cmocka_unit_test_teardown(rsl_one_lock, rsl_clean_all_media),
-        cmocka_unit_test_teardown(rsl_one_lock_one_not_avail,
-                                  rsl_clean_all_media),
-    };
+    rsl_state.oid = argv[2];
 
-    return cmocka_run_group_tests(raid1_split_locate_cases, global_setup,
-                                  global_teardown);
+    if (rsl_state.rsc_family == PHO_RSC_DIR) {
+        const struct CMUnitTest raid1_split_locate_cases[] = {
+            cmocka_unit_test_teardown(rsl_loss, rsl_clean_all_media),
+        };
+
+        return cmocka_run_group_tests(raid1_split_locate_cases, global_setup,
+                                      global_teardown);
+    } else {
+        const struct CMUnitTest raid1_split_locate_cases[] = {
+            cmocka_unit_test_teardown(rsl_loss, rsl_clean_all_media),
+            cmocka_unit_test_teardown(rsl_no_lock, rsl_clean_all_media),
+            cmocka_unit_test_teardown(rsl_one_lock, rsl_clean_all_media),
+            cmocka_unit_test_teardown(rsl_one_lock_one_not_avail,
+                                      rsl_clean_all_media),
+        };
+
+        return cmocka_run_group_tests(raid1_split_locate_cases, global_setup,
+                                      global_teardown);
+    }
 }

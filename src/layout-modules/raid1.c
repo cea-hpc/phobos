@@ -1177,7 +1177,6 @@ static void clean_one_location(struct one_location *one)
 
 /** Stores the possible locations of an object */
 struct object_location {
-    bool all_splits_have_unlocked_media; /**< init to true */
     unsigned int split_count;
     unsigned int repl_count;
     unsigned int nb_hosts;
@@ -1208,7 +1207,6 @@ static void clean_object_location(struct object_location *object_location)
 {
     unsigned int i;
 
-    object_location->all_splits_have_unlocked_media = true;
     object_location->repl_count = 0;
     if (object_location->hosts) {
         for (i = 0; i < object_location->nb_hosts; i++)
@@ -1243,7 +1241,6 @@ static int init_object_location(struct object_location *object_location,
     object_location->hosts = NULL;
     object_location->splits = NULL;
 
-    object_location->all_splits_have_unlocked_media = true;
     object_location->split_count = split_count;
     object_location->repl_count = repl_count;
     object_location->nb_hosts = 0;
@@ -1615,9 +1612,6 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
         if (enodev)
             LOG_GOTO(clean, rc = -ENODEV,
                      "No medium exists to locate the split %d", split_index);
-
-        if (!object_location.splits[split_index].unlocked_media)
-            object_location.all_splits_have_unlocked_media = false;
     }
 
     /* get best location */

@@ -458,7 +458,11 @@ int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
  * If the medium is locked by a server, its hostname is copied from the lock
  * and returned.
  *
- * If the medium is not locked by anyone, NULL is returned as hostname.
+ * If the medium of the family dir is not locked by anyone, -ENODEV is returned
+ * because it means that the corresponding LRS is not started or that the medium
+ * is failed.
+ * If the medium is not locked by anyone and its family is not dir, NULL is
+ * returned as hostname.
  *
  * @param[in]   dss         DSS to request
  * @param[in]   medium_id   Medium to locate
@@ -467,6 +471,7 @@ int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
  *
  * @return 0 if success, -errno if an error occurs and hostname is irrelevant
  *         -ENOENT if no medium with medium_id exists in media table
+ *         -ENODEV if a medium dir is not currently locked
  *         -EACCES if medium is admin locked
  *         -EPERM if medium get operation flag is set to false
  */
