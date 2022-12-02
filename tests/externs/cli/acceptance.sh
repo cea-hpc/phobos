@@ -572,7 +572,8 @@ function tape_drive_compat
     unlock_all_drives
 }
 
-export PHOBOS_IO_SCHED_read_algo="grouped_read"
+export PHOBOS_IO_SCHED_DIR_read_algo="grouped_read"
+export PHOBOS_IO_SCHED_TAPE_read_algo="grouped_read"
 
 trap cleanup EXIT
 setup

@@ -736,7 +736,7 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
     if (rc)
         LOG_GOTO(err_incoming_fini, rc, "Failed to init sched retry_queue");
 
-    rc = io_sched_handle_load_from_config(&sched->io_sched_hdl);
+    rc = io_sched_handle_load_from_config(&sched->io_sched_hdl, family);
     if (rc)
         LOG_GOTO(err_retry_queue_fini, rc,
                  "Failed to load I/O schedulers from config");

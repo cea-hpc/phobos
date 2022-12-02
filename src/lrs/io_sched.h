@@ -34,7 +34,7 @@
 #include "pho_srl_lrs.h"
 #include "lrs_device.h"
 
-extern const struct pho_config_item cfg_io_sched[];
+extern struct pho_config_item cfg_io_sched[];
 
 /** List of I/O scheduler configuration parameters */
 enum pho_cfg_params_io_sched {
@@ -209,10 +209,12 @@ struct io_sched_handle {
  * parameters: read_algo, write_algo and format_algo.
  *
  * \param[out]  io_sched_hdl io_sched_handle structure to initialize
+ * \param[in]   family       which family will be handled by the schedulers
  *
  * \return                   0 on success, negative POSIX error code on failure
  */
-int io_sched_handle_load_from_config(struct io_sched_handle *io_sched_hdl);
+int io_sched_handle_load_from_config(struct io_sched_handle *io_sched_hdl,
+                                     enum rsc_family family);
 
 /**
  * Cleanup the memory used by the io_sched_handle and the request handlers by

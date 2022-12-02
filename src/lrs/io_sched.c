@@ -35,7 +35,7 @@
 #include "lrs_sched.h"
 #include "io_schedulers/schedulers.h"
 
-const struct pho_config_item cfg_io_sched[] = {
+struct pho_config_item cfg_io_sched[] = {
     [PHO_IO_SCHED_read_algo] = {
         .section = "io_sched",
         .name    = "read_algo",
@@ -261,37 +261,65 @@ static int get_io_sched(struct io_sched_handle *io_sched_hdl,
     return 0;
 }
 
-static enum io_schedulers
-get_io_sched_from_config(enum pho_cfg_params_io_sched type)
+#define IO_SCHED_SECTION_TEMPLATE "io_sched_%s"
+
+static void set_static_cfg_section_names(struct pho_config_item *cfg,
+                                         size_t len,
+                                         char *section_name)
 {
+    size_t i;
+
+    for (i = 0; i < len; i++)
+        cfg[i].section = section_name;
+}
+
+static enum io_schedulers
+get_io_sched_from_config(enum pho_cfg_params_io_sched type,
+                         enum rsc_family family)
+{
+    char *section_name;
     const char *value;
+    int rc;
+
+    rc = asprintf(&section_name, IO_SCHED_SECTION_TEMPLATE,
+                  rsc_family2str(family));
+    if (rc == -1)
+        return -ENOMEM;
+
+    set_static_cfg_section_names(cfg_io_sched, ARRAY_SIZE(cfg_io_sched),
+                                 section_name);
 
     value = _pho_cfg_get(PHO_IO_SCHED_FIRST, PHO_IO_SCHED_LAST,
                          type, cfg_io_sched);
+    free(section_name);
     if (!value)
         return -ENODATA;
 
     return str2io_sched(value);
 }
 
-int io_sched_handle_load_from_config(struct io_sched_handle *io_sched_hdl)
+int io_sched_handle_load_from_config(struct io_sched_handle *io_sched_hdl,
+                                     enum rsc_family family)
 {
     int rc;
 
     rc = get_io_sched(io_sched_hdl,
-                      get_io_sched_from_config(PHO_IO_SCHED_read_algo),
+                      get_io_sched_from_config(PHO_IO_SCHED_read_algo,
+                                               family),
                       IO_REQ_READ);
     if (rc)
         LOG_RETURN(rc, "Failed to read 'read_algo' from config");
 
     rc = get_io_sched(io_sched_hdl,
-                      get_io_sched_from_config(PHO_IO_SCHED_write_algo),
+                      get_io_sched_from_config(PHO_IO_SCHED_write_algo,
+                                               family),
                       IO_REQ_WRITE);
     if (rc)
         LOG_RETURN(rc, "Failed to read 'write_algo' from config");
 
     rc = get_io_sched(io_sched_hdl,
-                      get_io_sched_from_config(PHO_IO_SCHED_format_algo),
+                      get_io_sched_from_config(PHO_IO_SCHED_format_algo,
+                                               family),
                       IO_REQ_FORMAT);
     if (rc)
         LOG_RETURN(rc, "Failed to read 'format_algo' from config");

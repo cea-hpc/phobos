@@ -577,14 +577,15 @@ function test_retry_on_error()
 {
     for algo in fifo grouped_read; do
         (
-         export PHOBOS_IO_SCHED_read_algo="$algo"
+         # This test is only executed for tapes
+         export PHOBOS_IO_SCHED_TAPE_read_algo="$algo"
          set -xe
 
          trap test_retry_on_error_cleanup EXIT
          test_retry_on_error_setup
          test_retry_on_error_run
 
-         unset PHOBOS_IO_SCHED_read_algo
+         unset PHOBOS_IO_SCHED_TAPE_read_algo
         )
     done
 }

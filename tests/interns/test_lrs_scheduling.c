@@ -520,7 +520,7 @@ static int io_sched_setup(void **data)
 
     *data = io_sched;
 
-    rc = io_sched_handle_load_from_config(io_sched);
+    rc = io_sched_handle_load_from_config(io_sched, PHO_RSC_TAPE);
     assert_return_code(rc, -rc);
 
     return 0;
@@ -1328,15 +1328,15 @@ static int set_schedulers(const char *read_algo,
 {
     int rc;
 
-    rc = setenv("PHOBOS_IO_SCHED_read_algo", read_algo, 1);
+    rc = setenv("PHOBOS_IO_SCHED_TAPE_read_algo", read_algo, 1);
     if (rc)
         return rc;
 
-    rc = setenv("PHOBOS_IO_SCHED_write_algo", write_algo, 1);
+    rc = setenv("PHOBOS_IO_SCHED_TAPE_write_algo", write_algo, 1);
     if (rc)
         return rc;
 
-    rc = setenv("PHOBOS_IO_SCHED_format_algo", format_algo, 1);
+    rc = setenv("PHOBOS_IO_SCHED_TAPE_format_algo", format_algo, 1);
     if (rc)
         return rc;
 
@@ -1396,6 +1396,7 @@ int main(void)
     rc += cmocka_run_group_tests(test_io_sched_api,
                                  io_sched_setup,
                                  io_sched_teardown);
+
 
     IO_REQ_TYPE = IO_REQ_READ;
     pho_info("Starting I/O scheduler test for READ requests");
