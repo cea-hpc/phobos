@@ -1045,6 +1045,8 @@ static void fail_release_free_medium(struct dss_handle *dss,
  *                              Return false if no error or error not due to the
  *                              medium, return true if there is an error due to
  *                              the medium.
+ * @param[out]  can_retry       true if an error occured on the library and the
+ *                              operation can be retried later.
  *
  * @return 0 on success, -error number on error. -EBUSY is returned when a
  * drive to drive medium movement was prevented by the library or if the device
@@ -1052,7 +1054,8 @@ static void fail_release_free_medium(struct dss_handle *dss,
  */
 static int dev_load(struct lrs_dev *dev, struct media_info *medium,
                     bool release_medium_on_dev_only_failure,
-                    bool *failure_on_dev, bool *failure_on_medium)
+                    bool *failure_on_dev, bool *failure_on_medium,
+                    bool *can_retry)
 {
     struct lib_item_addr medium_addr;
     struct lib_handle lib_hdl;
@@ -1063,6 +1066,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
 
     *failure_on_dev = false;
     *failure_on_medium = false;
+    *can_retry = false;
     pho_verb("Loading '%s' into '%s'", medium->rsc.id.name, dev->ld_dev_path);
 
     /* get handle to the library depending on device type */
@@ -1107,6 +1111,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
         pho_debug("Failed to move a medium from one drive to another, trying "
                   "again later");
         /* @TODO: acquire source drive on the fly? */
+        *can_retry = true;
         GOTO(out_close, rc = -EBUSY);
     } else if (rc) {
         /* Set operationnal failure state on this drive. It is incomplete since
@@ -1254,6 +1259,7 @@ static int dev_handle_format(struct lrs_dev *dev)
                  dev->ld_dss_dev_info->rsc.id.name);
     } else {
         bool failure_on_dev;
+        bool can_retry;
 
         rc = dev_empty(dev);
         if (rc) {
@@ -1268,8 +1274,8 @@ static int dev_handle_format(struct lrs_dev *dev)
         }
 
         rc = dev_load(dev, medium_to_format, true, &failure_on_dev,
-                      &dev->ld_sub_request->failure_on_medium);
-        if (rc == -EBUSY) {
+                      &dev->ld_sub_request->failure_on_medium, &can_retry);
+        if (rc == -EBUSY && can_retry) {
             pho_warn("Trying to load a busy medium to format, try again later");
             return 0;
         }
@@ -1675,6 +1681,7 @@ static int dev_handle_read_write(struct lrs_dev *dev)
     bool io_ended = false;
     bool cancel = false;
     bool locked = false;
+    bool can_retry;
     int rc = 0;
     int rc2;
 
@@ -1723,8 +1730,8 @@ static int dev_handle_read_write(struct lrs_dev *dev)
     pho_debug("Will load '%s' in device '%s'",
               medium_to_alloc->rsc.id.name, dev->ld_dss_dev_info->rsc.id.name);
     rc = dev_load(dev, medium_to_alloc, false, &failure_on_device,
-                  &sub_request->failure_on_medium);
-    if (rc == -EBUSY) {
+                  &sub_request->failure_on_medium, &can_retry);
+    if (rc == -EBUSY && can_retry) {
         pho_warn("Trying to load a busy medium to %s, try again later",
                  pho_srl_request_kind_str(reqc->req));
         return 0;
