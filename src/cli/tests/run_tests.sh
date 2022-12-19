@@ -40,7 +40,11 @@ export PYTHONPATH="$PHO_PYTHON_PATH"
 
 PHOBOS_DB="$cur_dir/../../../scripts/phobos_db"
 
-conn_str="dbname=phobos user=phobos password=phobos"
+phobos_conf="$cur_dir/../../../tests/phobos.conf"
+# get the connect string from the test conf, get the string after the first '='
+conn_str="$(grep "dbname" "$phobos_conf")"
+conn_str="${conn_str#*=}"
+
 export PHOBOS_DSS_connect_string="$conn_str"
 
 TESTS=$(ls *Test.py)

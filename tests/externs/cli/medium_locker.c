@@ -26,6 +26,7 @@
 /* phobos stuff */
 #include "dss_lock.h"
 #include "pho_dss.h"
+#include "test_setup.h"
 
 /* standard stuff */
 #include <errno.h>
@@ -46,7 +47,7 @@ int main(int argc, char **argv)
     struct media_info *medium;
     struct dss_filter filter;
     struct pho_id medium_id;
-    struct dss_handle dss;
+    struct dss_handle *dss;
     int pid;
     int cnt;
     int rc;
@@ -70,12 +71,9 @@ int main(int argc, char **argv)
         medium_id.family = PHO_RSC_TAPE;
 
     /* init dss */
-    setenv("PHOBOS_DSS_connect_string", "dbname=phobos host=localhost "
-                                        "user=phobos password=phobos", 1);
-
-    rc = dss_init(&dss);
+    rc = global_setup_dss((void **)&dss);
     if (rc)
-        exit(EXIT_FAILURE);
+        GOTO(clean, rc = -1);
 
     if (strcmp(argv[3], "all")) {
         pho_id_name_set(&medium_id, argv[3]);
@@ -91,7 +89,7 @@ int main(int argc, char **argv)
         if (rc)
             LOG_GOTO(clean, rc, "Error while building filter");
 
-        rc = dss_media_get(&dss, &filter, &medium, &cnt);
+        rc = dss_media_get(dss, &filter, &medium, &cnt);
         dss_filter_free(&filter);
         if (rc)
             LOG_GOTO(clean, rc, "Error while getting medium from dss");
@@ -100,7 +98,7 @@ int main(int argc, char **argv)
             LOG_GOTO(clean_medium, rc = -EINVAL,
                     "Error: multiple media found when targeting unique medium");
     } else {
-        rc = dss_media_get(&dss, NULL, &medium, &cnt);
+        rc = dss_media_get(dss, NULL, &medium, &cnt);
         if (rc)
             LOG_GOTO(clean, rc, "Error on getting medium from dss");
     }
@@ -114,13 +112,16 @@ int main(int argc, char **argv)
                  "Conversion error occurred: %d\n", errno);
 
     if (!strcmp(argv[1], "lock"))
-        rc = _dss_lock(&dss, DSS_MEDIA, medium, cnt, argv[4], pid);
+        rc = _dss_lock(dss, DSS_MEDIA, medium, cnt, argv[4], pid);
     else
-        rc = _dss_unlock(&dss, DSS_MEDIA, medium, cnt, argv[4], pid);
+        rc = _dss_unlock(dss, DSS_MEDIA, medium, cnt, argv[4], pid);
 
 clean_medium:
     dss_res_free(medium, cnt);
 clean:
-    dss_fini(&dss);
+    dss_fini(dss);
+    if (dss)
+        free(dss);
+
     return rc;
 }

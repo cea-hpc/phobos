@@ -29,6 +29,7 @@
 #include "pho_dss.h"
 #include "pho_common.h"
 #include "pho_test_utils.h"
+#include "test_setup.h"
 #include "../dss/dss_lock.h"
 #include <errno.h>
 #include <assert.h>
@@ -122,21 +123,23 @@ static int convert_pid(const char *pid)
 
 int main(int argc, char **argv)
 {
-    struct dss_handle    dss_handle;
-    enum dss_type        type;
-    enum dss_set_action  action;
-    struct  dev_info    *dev;
-    struct  media_info  *media;
-    struct  object_info *object;
-    struct  layout_info *layout;
-    struct  extent      *extents;
-    bool                 with_filter = false;
-    struct dss_filter    filter;
-    void                *item_list;
-    int                  item_cnt;
-    int                  i, j;
-    int                  rc;
-    bool                 oidtest = false;
+    struct dss_handle *dss_handle;
+    const char *connect_string;
+    enum dss_set_action action;
+    struct object_info *object;
+    struct layout_info *layout;
+    bool with_filter = false;
+    struct dss_filter filter;
+    struct media_info *media;
+    struct extent *extents;
+    struct dev_info *dev;
+    bool oidtest = false;
+    enum dss_type type;
+    void *item_list;
+    int item_cnt;
+    int rc;
+    int i;
+    int j;
 
     test_env_initialize();
 
@@ -155,12 +158,9 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    setenv("PHOBOS_DSS_connect_string", "dbname=phobos host=localhost "
-                                        "user=phobos password=phobos", 1);
-    rc = dss_init(&dss_handle);
-
+    rc = global_setup_dss((void **)&dss_handle);
     if (rc) {
-        pho_error(rc, "dss_init failed");
+        pho_error(rc, "dss setup failed");
         exit(EXIT_FAILURE);
     }
 
@@ -186,7 +186,7 @@ int main(int argc, char **argv)
             }
         }
 
-        rc = dss_generic_get(&dss_handle, type, with_filter ? &filter : NULL,
+        rc = dss_generic_get(dss_handle, type, with_filter ? &filter : NULL,
                              &item_list, &item_cnt);
         if (with_filter)
             dss_filter_free(&filter);
@@ -291,7 +291,7 @@ int main(int argc, char **argv)
                         pho_debug("Switch to oidtest mode (test null oid)");
                 }
 
-        rc = dss_generic_get(&dss_handle, type, NULL, &item_list, &item_cnt);
+        rc = dss_generic_get(dss_handle, type, NULL, &item_list, &item_cnt);
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
@@ -366,7 +366,7 @@ int main(int argc, char **argv)
             abort();
         }
 
-        rc = dss_generic_set(&dss_handle, type, item_list, item_cnt, action,
+        rc = dss_generic_set(dss_handle, type, item_list, item_cnt, action,
                              fields);
         if (rc) {
             pho_error(rc, "dss_set failed");
@@ -384,13 +384,13 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_generic_get(&dss_handle, type, NULL, &item_list, &item_cnt);
+        rc = dss_generic_get(dss_handle, type, NULL, &item_list, &item_cnt);
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
         }
 
-        rc = _dss_lock(&dss_handle, type, item_list, item_cnt, lock_hostname,
+        rc = _dss_lock(dss_handle, type, item_list, item_cnt, lock_hostname,
                        lock_owner);
         if (rc) {
             pho_error(rc, "_dss_lock failed");
@@ -408,13 +408,13 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_generic_get(&dss_handle, type, NULL, &item_list, &item_cnt);
+        rc = dss_generic_get(dss_handle, type, NULL, &item_list, &item_cnt);
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
         }
 
-        rc = _dss_unlock(&dss_handle, type, item_list, item_cnt, lock_hostname,
+        rc = _dss_unlock(dss_handle, type, item_list, item_cnt, lock_hostname,
                          lock_owner);
         if (rc) {
             pho_error(rc, "_dss_unlock failed");

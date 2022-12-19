@@ -13,6 +13,7 @@ DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
+ADMIN_LIB=$(TO_SRC)/admin/libphobos_admin.la
 
 if VALGRIND_ENABLED
 # FIXME:
@@ -70,6 +71,6 @@ lrs_simple_client_LDADD=$(LRS_LIB) $(CFG_LIB) $(COMMON_LIB) \
                         $(COMMUNICATION_LIB) $(SERIALIZER_LIB)
 lrs_simple_client_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
 
-medium_locker_SOURCES=medium_locker.c
-medium_locker_LDADD=$(DSS_LIB) $(STORE_LIB)
-medium_locker_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss
+medium_locker_SOURCES=medium_locker.c ../../test_setup.c
+medium_locker_LDADD=$(ADMIN_LIB) $(DSS_LIB) $(STORE_LIB)
+medium_locker_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I$(TO_TEST)

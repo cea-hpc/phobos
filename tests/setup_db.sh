@@ -22,7 +22,11 @@
 cur_dir=$(dirname $(readlink -m ${BASH_SOURCE[0]}))
 db_helper="$cur_dir/../scripts/phobos_db"
 
-PSQL="psql phobos -U phobos"
+phobos_conf="$cur_dir/phobos.conf"
+test_db="$(grep "dbname" "$phobos_conf" | awk -F 'dbname=' '{print $2}' | \
+           cut -d ' ' -f1)"
+
+PSQL="psql $test_db -U phobos"
 . "$cur_dir/test_env.sh"
 
 # host name to insert examples in DB

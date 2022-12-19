@@ -21,11 +21,12 @@
 
 """Unit tests for phobos.cli"""
 
-import os
-import sys
 import errno
-import unittest
+import os
+import re
+import sys
 import tempfile
+import unittest
 
 from contextlib import contextmanager
 from io import StringIO
@@ -33,6 +34,7 @@ from socket import gethostname
 
 from phobos.cli import PhobosActionContext
 from phobos.core.dss import MediaManager
+import phobos.core.cfg as cfg
 
 def gethostname_short():
     """Return short hostname"""
@@ -183,6 +185,19 @@ class BasicExecutionTest(unittest.TestCase):
     """Base execution of the CLI."""
     # Reuse configuration file from global tests
     TEST_CFG_FILE = "../../../tests/phobos.conf"
+    def get_test_db_name(self):
+        try:
+            ret = cfg.load_file(self.TEST_CFG_FILE)
+        except IOError as exc:
+            self.fail(exc)
+
+        for value in cfg.get_val("dss", "connect_string").split(' '):
+            kv = value.split('=')
+            if kv[0] == "dbname":
+                return kv[1]
+
+        return "phobos"
+
     def pho_execute(self, params, auto_cfg=True, code=0):
         """Instanciate and execute a PhobosActionContext."""
         if auto_cfg:
@@ -291,15 +306,17 @@ class MediaAddTest(BasicExecutionTest):
         test = output.strip() == 'None' or output.strip() == ''
         self.assertTrue(test)
 
+        test_db_name = self.get_test_db_name()
+
         request = "insert into lock (type, id, hostname, owner) values \
                     (\'media\'::lock_type, \'update0\', \'dummy\', 1337);"
         # Check that locked tapes can be updated
-        os.system('psql phobos phobos -c "' + request + '"')
+        os.system('psql ' + test_db_name + ' phobos -c "' + request + '"')
         try:
             self.pho_execute(['tape', 'update', '-T', '', 'update0'])
         finally:
-            os.system('psql phobos phobos -c "delete from lock where \
-                                              type = \'media\'::lock_type \
+            os.system('psql ' + test_db_name + ' phobos -c \
+                      "delete from lock where type = \'media\'::lock_type \
                                               and id = \'update0\';"')
 
     def test_tape_add_lowercase(self):

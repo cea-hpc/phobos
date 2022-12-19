@@ -32,7 +32,7 @@ set -xe
 function setup
 {
     setup_tables
-    psql phobos phobos << EOF
+    $PSQL << EOF
 insert into lock (type, id, owner, hostname)
 values
         ('media'::lock_type, '1', 1, 'host1'),

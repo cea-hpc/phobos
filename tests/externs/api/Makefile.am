@@ -70,8 +70,8 @@ test_delete_SOURCES=test_delete.c
 test_delete_LDADD=$(STORE_LIB)
 test_delete_CFLAGS=-I$(TO_TEST)
 
-test_dss_SOURCES=test_dss.c
-test_dss_LDADD=$(DSS_LIB) $(CFG_LIB) $(COMMON_LIB)
+test_dss_SOURCES=test_dss.c ../../test_setup.c
+test_dss_LDADD=$(ADMIN_LIB) $(DSS_LIB) $(CFG_LIB) $(COMMON_LIB)
 test_dss_CFLAGS=-I$(TO_TEST)
 
 test_locate_SOURCES=test_locate.c ../../test_setup.c
@@ -96,8 +96,9 @@ test_fs_rados_LDADD=$(ADMIN_LIB) $(LDM_LIB) -lrados
 test_fs_rados_CFLAGS=-I$(TO_TEST)
 endif
 
-test_raid1_split_locate_SOURCES=test_raid1_split_locate.c
-test_raid1_split_locate_LDADD=$(CFG_LIB) $(COMMON_LIB) $(DSS_LIB) $(RAID1_LIB)
+test_raid1_split_locate_SOURCES=test_raid1_split_locate.c ../../test_setup.c
+test_raid1_split_locate_LDADD=$(ADMIN_LIB) $(CFG_LIB) $(COMMON_LIB) $(DSS_LIB) \
+                              $(RAID1_LIB)
 test_raid1_split_locate_CFLAGS=-I$(TO_TEST)
 
 test_scsi_SOURCES=test_scsi.c

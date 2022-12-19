@@ -25,6 +25,7 @@
 #include "test_setup.h"
 
 /* Phobos stuff */
+#include "pho_cfg.h"
 #include "pho_dss.h"
 #include "pho_cfg.h"
 #include "phobos_admin.h"
@@ -61,8 +62,21 @@ static int setup_db_calls(char *action)
 
 static int global_setup(void)
 {
-    setenv("PHOBOS_DSS_connect_string", "dbname=phobos host=localhost "
-                                        "user=phobos password=phobos", 1);
+    const char *connect_string;
+    int rc;
+
+    rc = pho_cfg_init_local("../phobos.conf");
+    if (rc == -ENOENT)
+        rc = pho_cfg_init_local("../../phobos.conf");
+
+    if (rc && rc != -EALREADY)
+        return rc;
+
+    rc = pho_cfg_get_val("dss", "connect_string", &connect_string);
+    if (rc)
+        return rc;
+
+    setenv("PHOBOS_DSS_connect_string", connect_string, 1);
 
     return setup_db_calls("setup_tables");
 }

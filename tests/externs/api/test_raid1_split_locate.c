@@ -33,6 +33,7 @@
 #include "pho_types.h"
 #include "../layout-modules/raid1.h"
 #include "../dss/dss_lock.h"
+#include "test_setup.h"
 
 /* standard stuff */
 #include <errno.h>
@@ -110,14 +111,7 @@ static int global_setup(void **state)
     }
 
     /* init DSS */
-    rsl_state.dss = malloc(sizeof(*rsl_state.dss));
-    if (!rsl_state.dss)
-        return -1;
-
-    setenv("PHOBOS_DSS_connect_string", "dbname=phobos host=localhost "
-                                        "user=phobos password=phobos", 1);
-
-    rc = dss_init(rsl_state.dss);
+    rc = global_setup_dss((void **)&rsl_state.dss);
     if (rc)
         GOTO(clean, rc = -1);
 

@@ -47,6 +47,8 @@ else
     stop_phobosdb="phobos_db drop_tables"
 fi
 
+$stop_phobosdb
+
 . $test_dir/../utils_generation.sh
 . $test_dir/../utils.sh
 . $test_dir/../tape_drive.sh

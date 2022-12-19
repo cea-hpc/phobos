@@ -30,8 +30,6 @@ test_dir=$(dirname $(readlink -e $0))
 
 set -xe
 
-PSQL="psql phobos -U phobos"
-
 # local host name to insert examples in DB
 host=$(hostname -s)
 
