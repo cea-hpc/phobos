@@ -230,7 +230,8 @@ int parser_json_next(struct saj_parser *parser, const char *key, json_t *next)
  * Initialize a new parser with user operations and user private data.
  */
 int saj_parser_init(struct saj_parser *parser,
-                    const struct saj_parser_operations *ops, void *priv)
+                    const struct saj_parser_operations *ops,
+                    void *priv, void *handle)
 {
     if (!parser || !ops)
         return -EINVAL;
@@ -238,6 +239,7 @@ int saj_parser_init(struct saj_parser *parser,
     parser->sp_keys    = g_queue_new();
     parser->sp_ops     = ops;
     parser->sp_private = priv;
+    parser->sp_handle  = handle;
     return 0;
 }
 

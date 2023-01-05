@@ -1440,8 +1440,8 @@ enum strvalue_type {
     STRVAL_KEYVAL  = 2  /* key/value pair in an array */
 };
 
-static int insert_string(GString *qry, const char *strval,
-                         enum strvalue_type type)
+static int insert_string(struct dss_handle *handle, GString *qry,
+                         const char *strval, enum strvalue_type type)
 {
     size_t   esc_len = strlen(strval) * 2 + 1;
     char    *esc_str;
@@ -1452,12 +1452,7 @@ static int insert_string(GString *qry, const char *strval,
     if (!esc_str)
         return -ENOMEM;
 
-    /**
-     * XXX This function has been deprecated in favor of PQescapeStringConn
-     * but it is *safe* in this single-threaded single-DB case and it makes
-     * the code slightly lighter here.
-     */
-    PQescapeString(esc_str, strval, esc_len);
+    PQescapeStringConn(handle->dh_conn, esc_str, strval, esc_len, NULL);
 
     switch (type) {
     case STRVAL_INDEX:
@@ -1482,6 +1477,7 @@ static int json2sql_object_begin(struct saj_parser *parser, const char *key,
                                  json_t *value, void *priv)
 {
     const char         *current_key = saj_parser_key(parser);
+    struct dss_handle  *handle = (struct dss_handle *)parser->sp_handle;
     enum strvalue_type  type = STRVAL_DEFAULT;
     const char         *field_impl;
     GString            *str = priv;
@@ -1532,7 +1528,7 @@ static int json2sql_object_begin(struct saj_parser *parser, const char *key,
 
     switch (json_typeof(value)) {
     case JSON_STRING:
-        rc = insert_string(str, json_string_value(value), type);
+        rc = insert_string(handle, str, json_string_value(value), type);
         if (rc)
             LOG_RETURN(rc, "Cannot insert string into SQL query");
         break;
@@ -1608,7 +1604,8 @@ static const struct saj_parser_operations json2sql_ops = {
     .so_array_end    = json2sql_array_end,
 };
 
-static int clause_filter_convert(GString *qry, const struct dss_filter *filter)
+static int clause_filter_convert(struct dss_handle *handle, GString *qry,
+                                 const struct dss_filter *filter)
 {
     struct saj_parser   json2sql;
     int                 rc;
@@ -1621,7 +1618,7 @@ static int clause_filter_convert(GString *qry, const struct dss_filter *filter)
 
     g_string_append(qry, " WHERE ");
 
-    rc = saj_parser_init(&json2sql, &json2sql_ops, qry);
+    rc = saj_parser_init(&json2sql, &json2sql_ops, qry, handle);
     if (rc)
         LOG_RETURN(rc, "Cannot initialize JSON to SQL converter");
 
@@ -1876,7 +1873,7 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     /* get everything if no criteria */
     clause = g_string_new(select_query[type]);
 
-    rc = clause_filter_convert(clause, filter);
+    rc = clause_filter_convert(handle, clause, filter);
     if (rc) {
         g_string_free(clause, true);
         return rc;

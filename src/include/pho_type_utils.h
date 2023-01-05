@@ -233,6 +233,7 @@ struct saj_parser {
     GQueue                              *sp_keys;       /**< Internal stack */
     const struct saj_parser_operations  *sp_ops;        /**< User callbacks */
     void                                *sp_private;    /**< User priv data */
+    void                                *sp_handle;     /**< User handle */
 };
 
 /**
@@ -240,10 +241,12 @@ struct saj_parser {
  * @param[out]  parser  The parser representation to initialize.
  * @param[in]   ops     The parser operations to use when iterating over a JSON.
  * @param[in]   priv    An opaque pointer passed down the provided callbacks.
+ * @param[in]   handle  A pointer to the DSS handle passed down the callbacks.
  * @return 0 on success, negated errno on failure.
  */
 int saj_parser_init(struct saj_parser *parser,
-                    const struct saj_parser_operations *ops, void *priv);
+                    const struct saj_parser_operations *ops,
+                    void *priv, void *handle);
 
 /**
  * Release resources associated to a SAJ parser object.
