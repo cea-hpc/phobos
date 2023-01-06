@@ -25,11 +25,16 @@
 #ifndef _PHO_IO_SCHED_H
 #define _PHO_IO_SCHED_H
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <glib.h>
 #include <pthread.h>
 #include <stdbool.h>
 
 #include "pho_cfg.h"
+#include "pho_common.h"
 #include "pho_types.h"
 #include "pho_srl_lrs.h"
 #include "lrs_device.h"
@@ -375,5 +380,9 @@ int io_sched_compute_scheduler_weights(struct io_sched_handle *io_sched_hdl,
  */
 size_t io_sched_count_device_per_model(struct io_scheduler *io_sched,
                                        const char *model);
+
+#define IO_SCHED_SECTION_TEMPLATE "io_sched_%s"
+
+int io_sched_cfg_section_name(enum rsc_family family, char **section_name);
 
 #endif

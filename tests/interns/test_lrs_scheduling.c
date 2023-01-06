@@ -65,6 +65,7 @@ static void create_device(struct lrs_dev *dev, char *path)
     dev->ld_needs_sync = false;
     dev->ld_dss_media_info = NULL;
     dev->ld_device_thread.state = THREAD_RUNNING;
+    dev->ld_sys_dev_state.lds_family = PHO_RSC_TAPE;
 
     dev->ld_dss_dev_info = malloc(sizeof(*dev->ld_dss_dev_info));
     assert_non_null(dev->ld_dss_dev_info);
@@ -1346,6 +1347,41 @@ static int set_schedulers(const char *read_algo,
     return 0;
 }
 
+static int set_fair_share_minmax(const char *_model,
+                                 const char *min,
+                                 const char *max)
+{
+    char key[64] = "PHOBOS_IO_SCHED_TAPE_fair_share_";
+    char *model;
+    int rc = 0;
+
+    assert(strlen(_model) <=
+           sizeof(key) - strlen("PHOBOS_IO_SCHED_TAPE_fair_share_") -
+           strlen("_min"));
+
+    model = strdup(_model);
+    assert_non_null(model);
+    /* pho_cfg_get_val will search for a lower case value in the environment */
+    lowerstr(model);
+
+    strcat(key, model);
+    strcat(key, "_min");
+    rc = setenv(key, min, 1);
+    if (rc)
+        goto free_model;
+
+    strcpy(key, "PHOBOS_IO_SCHED_TAPE_fair_share_");
+    strcat(key, model);
+    strcat(key, "_max");
+    rc = setenv(key, max, 1);
+    if (rc)
+        goto free_model;
+
+free_model:
+    free(model);
+    return rc;
+}
+
 static char *make_name(size_t i)
 {
     char *name;
@@ -1667,6 +1703,9 @@ int main(void)
                                  io_sched_teardown);
 
     check_rc(set_schedulers("grouped_read", "fifo", "fifo"));
+    check_rc(set_fair_share_minmax("LTO5", "0,0,0", "100,100,100"));
+    check_rc(set_fair_share_minmax("LTO6", "0,0,0", "100,100,100"));
+    check_rc(set_fair_share_minmax("LTO7", "0,0,0", "100,100,100"));
 
     pho_info("Starting I/O scheduler test for READ requests with "
              "'grouped_read' scheduler");

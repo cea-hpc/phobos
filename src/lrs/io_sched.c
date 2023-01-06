@@ -249,7 +249,17 @@ static void set_static_cfg_section_names(struct pho_config_item *cfg,
         cfg[i].section = section_name;
 }
 
-#define IO_SCHED_SECTION_TEMPLATE "io_sched_%s"
+int io_sched_cfg_section_name(enum rsc_family family, char **section_name)
+{
+    int rc;
+
+    rc = asprintf(section_name, IO_SCHED_SECTION_TEMPLATE,
+                  rsc_family2str(family));
+    if (rc == -1)
+        return -ENOMEM;
+
+    return 0;
+}
 
 static int
 io_sched_get_param_from_cfg(enum pho_cfg_params_io_sched type,
@@ -259,10 +269,9 @@ io_sched_get_param_from_cfg(enum pho_cfg_params_io_sched type,
     char *section_name;
     int rc;
 
-    rc = asprintf(&section_name, IO_SCHED_SECTION_TEMPLATE,
-                  rsc_family2str(family));
-    if (rc == -1)
-        return -ENOMEM;
+    rc = io_sched_cfg_section_name(family, &section_name);
+    if (rc)
+        return rc;
 
     set_static_cfg_section_names(cfg_io_sched, ARRAY_SIZE(cfg_io_sched),
                                  section_name);

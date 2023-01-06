@@ -387,10 +387,126 @@ static void compute_number_of_devices(struct io_stats *io_stats,
     }
 }
 
+struct range {
+    int min;
+    int max;
+};
+
 struct device_list {
     const char *model;
     GPtrArray  *devices;
+    struct range read;
+    struct range write;
+    struct range format;
 };
+
+static int cfg_model_get_range(enum rsc_family family,
+                               const char *model,
+                               const char *minmax,
+                               const char **value)
+{
+    char *section;
+    char *key;
+    int rc;
+
+    rc = io_sched_cfg_section_name(family, &section);
+    if (rc)
+        return rc;
+
+    rc = asprintf(&key, "fair_share_%s_%s", model, minmax);
+    if (rc == -1) {
+        rc = -ENOMEM;
+        goto free_section;
+    }
+
+    rc = pho_cfg_get_val(section, key, value);
+    if (rc)
+        goto free_key;
+
+free_key:
+    free(key);
+free_section:
+    free(section);
+
+    return rc;
+}
+
+static int csv2ints(const char *_input, int values[3])
+{
+    char *saveptr;
+    char *input;
+    int rc = 0;
+    int i;
+
+    input = strdup(_input);
+
+    for (i = 0; i < 3; i++) {
+        char *token = strtok_r(input, ",", &saveptr);
+        int64_t value;
+
+        if (!token)
+            LOG_GOTO(free_input, rc = -EINVAL,
+                     "'%s' is not a valid value for fair_share min/max "
+                     "parameter", _input);
+
+        value = str2int64(token);
+        if (value == INT64_MIN)
+            GOTO(free_input, rc = -EINVAL);
+        else if (value < 0 || value > INT_MAX)
+            GOTO(free_input, rc = -ERANGE);
+
+        values[i] = value;
+    }
+
+free_input:
+    free(input);
+
+    return rc;
+}
+
+static int device_list_init(struct device_list *device_list,
+                            struct lrs_dev *dev)
+{
+    enum rsc_family family = dev->ld_sys_dev_state.lds_family;
+    const char *cfg_min;
+    const char *cfg_max;
+    int min[3];
+    int max[3];
+    int rc;
+
+    device_list->model = dev->ld_dss_dev_info->rsc.model;
+    device_list->devices = g_ptr_array_new();
+
+    rc = cfg_model_get_range(family, device_list->model, "min", &cfg_min);
+    if (rc)
+        return rc;
+
+    rc = csv2ints(cfg_min, min);
+    if (rc)
+        return rc;
+
+    rc = cfg_model_get_range(family, device_list->model, "max", &cfg_max);
+    if (rc)
+        return rc;
+
+    rc = csv2ints(cfg_max, max);
+    if (rc)
+        return rc;
+
+    device_list->read.min = min[0];
+    device_list->read.max = max[0];
+    device_list->write.min = min[1];
+    device_list->write.max = max[1];
+    device_list->format.min = min[2];
+    device_list->format.max = max[2];
+
+    return 0;
+}
+
+static void device_list_fini(struct device_list *device_list)
+{
+    g_ptr_array_free(device_list->devices, TRUE);
+}
 
 static int sort_devices_by_model_cmp(const void *lhs, const void *rhs)
 {
@@ -436,9 +552,11 @@ int fair_share_number_of_requests(struct io_sched_handle *io_sched_hdl,
             strcmp(model_of_previous_device, dev->ld_dss_dev_info->rsc.model)) {
             struct device_list device_list;
 
-            device_list.model = dev->ld_dss_dev_info->rsc.model;
-            model_of_previous_device = device_list.model;
-            device_list.devices = g_ptr_array_new();
+            rc = device_list_init(&device_list, dev);
+            if (rc)
+                goto free_device_list;
+
+            model_of_previous_device = dev->ld_dss_dev_info->rsc.model;
             g_ptr_array_add(device_list.devices, dev);
 
             g_array_append_val(device_lists, device_list);
@@ -459,8 +577,10 @@ int fair_share_number_of_requests(struct io_sched_handle *io_sched_hdl,
         if (!rc)
             rc = fair_share_number_of_requests_one_model(io_sched_hdl, devs);
 
-        g_ptr_array_free(devs->devices, TRUE);
+        device_list_fini(devs);
     }
+
+free_device_list:
     g_array_free(device_lists, TRUE);
 
     return rc;
