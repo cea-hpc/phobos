@@ -154,10 +154,12 @@ struct io_scheduler {
     struct io_scheduler_ops ops;
 };
 
+#define IO_REQ_ALL (IO_REQ_READ | IO_REQ_WRITE | IO_REQ_WRITE)
+
 enum io_request_type {
-    IO_REQ_READ,
-    IO_REQ_WRITE,
-    IO_REQ_FORMAT,
+    IO_REQ_READ   = (1 << 0),
+    IO_REQ_WRITE  = (1 << 1),
+    IO_REQ_FORMAT = (1 << 2),
 };
 
 struct io_stats {

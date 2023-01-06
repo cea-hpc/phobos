@@ -1464,8 +1464,7 @@ static void io_sched_remove_all_devices(GPtrArray *devices,
  * \param[in]  read_req number of read requests waiting to be scheduled
  * \param[in]  read_dev expected number of devices for read after the dispatch
  * \param[in]  devices  a list of devices already allocated. If given, \p
- *                      nb_devs is ignored. Will be cleanup at the end of the
- *                      function.
+ *                      nb_devs is ignored.
  */
 static void test_dispatch(int line, void **data, size_t nb_devs,
                           size_t read_req, size_t write_req, size_t format_req,
@@ -1473,12 +1472,15 @@ static void test_dispatch(int line, void **data, size_t nb_devs,
                           GPtrArray *devices)
 {
     struct io_sched_handle *io_sched_hdl = (struct io_sched_handle *) *data;
+    bool cleanup = false;
     int rc;
 
     pho_info("%s: %d", __func__, line);
 
-    if (!devices)
+    if (!devices) {
         devices = init_devices(NULL, nb_devs, "LTO5");
+        cleanup = true;
+    }
 
     io_sched_hdl->io_stats.nb_reads = read_req;
     io_sched_hdl->io_stats.nb_writes = write_req;
@@ -1494,7 +1496,8 @@ static void test_dispatch(int line, void **data, size_t nb_devs,
     io_sched_remove_all_devices(devices, &io_sched_hdl->read);
     io_sched_remove_all_devices(devices, &io_sched_hdl->write);
     io_sched_remove_all_devices(devices, &io_sched_hdl->format);
-    cleanup_devices(devices);
+    if (cleanup)
+        cleanup_devices(devices);
 }
 
 static void fair_share_repartition(void **data)
@@ -1518,6 +1521,20 @@ static void fair_share_repartition(void **data)
     log_test_dispatch(data, 2, 1, 5, 1, 1, 2, 1, NULL);
     log_test_dispatch(data, 2, 1, 1, 5, 1, 1, 2, NULL);
     log_test_dispatch(data, 2, 5, 0, 1, 2, 0, 1, NULL);
+    /* This does not work because we will give one device to read and write
+     * and then add one additional device to the scheduler with the biggest
+     * weight.
+     * This seems like a small optimization since in practice, we probably won't
+     * have the exact same repartition of requests.
+     *
+     * But we could also consider that a repartition of 53% and 47% is close
+     * enough to 50/50 and allocate a seperate device to both schedulers.
+     * This idea can be extented to more complex repartitions to prevent 1
+     * request from making a device switch schedulers and on the next iteration
+     * when a request is handled, make the device switch again.
+     *
+     * log_test_dispatch(data, 2, 1, 0, 1, 1, 0, 1, NULL);
+     */
 
     /* check that dispatched devices match the request proportions */
     log_test_dispatch(data, 4, 2, 1, 1, 2, 1, 1, NULL);
@@ -1631,6 +1648,102 @@ static void fair_share_multi_technologies(void **data)
     devices = init_devices(devices, 8, "LTO7");
 
     log_test_dispatch(data, -1, 17, 4, 8, 15, 3, 6, devices);
+
+    cleanup_devices(devices);
+}
+
+static void fair_share_ensure_min_max(void **data)
+{
+    GPtrArray *devices;
+
+    set_fair_share_minmax("LTO5", "0,0,0", "0,2,2");
+    log_test_dispatch(data, 2, 20, 15, 10, 0, 2, 1, NULL);
+    log_test_dispatch(data, 2, 20, 10, 15, 0, 1, 2, NULL);
+
+    devices = init_devices(NULL, 8, "LTO5");
+    devices = init_devices(devices, 8, "LTO6");
+    devices = init_devices(devices, 8, "LTO7");
+
+    set_fair_share_minmax("LTO5", "0,0,0", "100,100,100");
+    log_test_dispatch(data, -1, 20, 4, 12, 12, 3, 9, devices);
+
+    set_fair_share_minmax("LTO5", "0,1,0", "0,100,0");
+    set_fair_share_minmax("LTO6", "0,1,0", "0,100,0");
+    set_fair_share_minmax("LTO7", "0,1,0", "0,100,0");
+
+    log_test_dispatch(data, -1, 20, 4, 12, 0, 24, 0, devices);
+
+    set_fair_share_minmax("LTO5", "1,1,0", "100,100,0");
+    set_fair_share_minmax("LTO6", "1,1,0", "100,100,0");
+    set_fair_share_minmax("LTO7", "1,1,0", "100,100,0");
+
+    /* Since we have one scheduler that won't be able to have devices, its share
+     * will be given equally to the two other schedulers. This computation is
+     * done by device model. This is what it will look like for one model:
+     *
+     * R: 20 / 36 = 55% => 4(.44) devs
+     * W:  4 / 36 = 11% => 0(.88) devs
+     * F: 12 / 36 = 33% => 2(.66) devs => 0 since max = 0
+     *
+     * The read and write schedulers will have half of the format scheduler's
+     * weight added.
+     *
+     * R: 26 / 36 = 72% => 5(.77) devs => 5/8 - 26/36: -9.7% => +1 dev => 6 devs
+     * W: 10 / 36 = 27% => 2(.22) devs => 2/8 - 10/36: -2.7% => +0 dev => 2 devs
+     * F: 0
+     *
+     * Since each model type has the same number of devices, the read scheduler
+     * will have 3 * 6 devices and the write one will have 2 * 3.
+     *
+     * XXX: in this case, we distribute the weight of the format scheduler
+     * equally between read and write. But since we have a repartition of 20/24
+     * reads and 4/24 writes, we are giving more importance to the writes in
+     * this case. We could give 20/24 * 12/36 to reads and 4/24 * 12/36 to
+     * writes to respect the initial balance. Which means, giving the 2.66
+     * devices that the formats should have had to each scheduler in a
+     * proportion that respect their relative weights. But this approach is not
+     * easy to implement in the general case (i.e. when a scheduler reaches its
+     * max and this max is > 0).
+     */
+    log_test_dispatch(data, -1, 20, 4, 12, 18, 6, 0, devices);
+
+    set_fair_share_minmax("LTO5", "5,1,0", "10,100,0");
+    set_fair_share_minmax("LTO6", "5,1,0", "10,100,0");
+    set_fair_share_minmax("LTO7", "5,1,0", "10,100,0");
+
+    log_test_dispatch(data, -1, 0, 4, 12, 0, 24, 0, devices);
+
+    cleanup_devices(devices);
+    devices = init_devices(NULL, 8, "LTO5");
+
+    /* R: 4(.44) devs =>  -5.5% => +0 dev => 4
+     * W: 0(.88) devs => -11.1% => +1 dev => 1
+     * F: 2(.66) devs =>  -8.3% => +1 dev => 3
+     */
+    set_fair_share_minmax("LTO5", "1,1,1", "3,1,2");
+    log_test_dispatch(data, -1, 20, 4, 12, 3, 1, 2, devices);
+
+    set_fair_share_minmax("LTO5", "0,2,4", "8,8,8");
+    log_test_dispatch(data, -1, 20, 4, 12, 2, 2, 4, devices);
+
+    /* the sum of the mins is greater than the number of available devices */
+    set_fair_share_minmax("LTO5", "3,2,4", "8,8,8");
+    log_test_dispatch(data, -1, 20, 4, 12, 3, 2, 3, devices);
+
+    cleanup_devices(devices);
+
+    /* tests with 1 device */
+    set_fair_share_minmax("LTO5", "0,0,0", "0,0,0");
+    log_test_dispatch(data, 1, 1, 0, 0, 0, 0, 0, NULL);
+    log_test_dispatch(data, 1, 0, 1, 0, 0, 0, 0, NULL);
+    log_test_dispatch(data, 1, 0, 0, 1, 0, 0, 0, NULL);
+
+    /* tests with 2 devices */
+    set_fair_share_minmax("LTO5", "0,0,0", "1,1,1");
+    log_test_dispatch(data, 2, 1, 0, 0, 1, 0, 0, NULL);
+    log_test_dispatch(data, 2, 0, 1, 0, 0, 1, 0, NULL);
+    log_test_dispatch(data, 2, 0, 0, 1, 0, 0, 1, NULL);
+    log_test_dispatch(data, 2, 5, 0, 1, 1, 0, 1, NULL);
 }
 
 int main(void)
@@ -1669,6 +1782,7 @@ int main(void)
         cmocka_unit_test(fair_share_add_device),
         cmocka_unit_test(fair_share_take_devices),
         cmocka_unit_test(fair_share_multi_technologies),
+        cmocka_unit_test(fair_share_ensure_min_max),
     };
     int rc;
 
@@ -1714,6 +1828,7 @@ int main(void)
                                  io_sched_teardown);
 
     pho_info("Starting device dispatch tests");
+    set_fair_share_minmax("LTO5", "1,1,1", "100,100,100");
     rc += cmocka_run_group_tests(test_fair_share,
                                  io_sched_setup,
                                  io_sched_teardown);
