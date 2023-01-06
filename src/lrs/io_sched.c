@@ -51,6 +51,11 @@ struct pho_config_item cfg_io_sched[] = {
         .name    = "format_algo",
         .value   = "fifo"
     },
+    [PHO_IO_SCHED_dispatch_algo] = {
+        .section = "io_sched",
+        .name    = "dispatch_algo",
+        .value   = "none",
+    },
 };
 
 static int io_sched_init(struct io_sched_handle *io_sched_hdl)
@@ -215,7 +220,7 @@ int io_sched_remove_device(struct io_sched_handle *io_sched_hdl,
 
     rc2 = io_sched_hdl->write.ops.remove_device(&io_sched_hdl->write, device);
     if (rc2)
-        rc =  rc ? : rc2;
+        rc = rc ? : rc2;
 
     rc2 = io_sched_hdl->format.ops.remove_device(&io_sched_hdl->format, device);
     if (rc2)
@@ -234,27 +239,74 @@ static enum io_schedulers str2io_sched(const char *value)
     return IO_SCHED_INVAL;
 }
 
+static void set_static_cfg_section_names(struct pho_config_item *cfg,
+                                         size_t len,
+                                         char *section_name)
+{
+    size_t i;
+
+    for (i = 0; i < len; i++)
+        cfg[i].section = section_name;
+}
+
+#define IO_SCHED_SECTION_TEMPLATE "io_sched_%s"
+
+static int
+io_sched_get_param_from_cfg(enum pho_cfg_params_io_sched type,
+                            enum rsc_family family,
+                            const char **value)
+{
+    char *section_name;
+    int rc;
+
+    rc = asprintf(&section_name, IO_SCHED_SECTION_TEMPLATE,
+                  rsc_family2str(family));
+    if (rc == -1)
+        return -ENOMEM;
+
+    set_static_cfg_section_names(cfg_io_sched, ARRAY_SIZE(cfg_io_sched),
+                                 section_name);
+
+    *value = _pho_cfg_get(PHO_IO_SCHED_FIRST, PHO_IO_SCHED_LAST,
+                         type, cfg_io_sched);
+    free(section_name);
+    if (!*value)
+        return -ENODATA;
+
+    return 0;
+}
+
 static int get_io_sched(struct io_sched_handle *io_sched_hdl,
-                        enum io_schedulers type,
+                        enum rsc_family family,
                         enum io_request_type request_type)
 {
+    enum pho_cfg_params_io_sched param_key;
     struct io_scheduler_ops *ops;
+    const char *param_value;
+    int rc;
 
     switch (request_type) {
     case IO_REQ_READ:
         ops = &io_sched_hdl->read.ops;
+        param_key = PHO_IO_SCHED_read_algo;
         break;
     case IO_REQ_WRITE:
         ops = &io_sched_hdl->write.ops;
+        param_key = PHO_IO_SCHED_write_algo;
         break;
     case IO_REQ_FORMAT:
         ops = &io_sched_hdl->format.ops;
+        param_key = PHO_IO_SCHED_format_algo;
         break;
     default:
         return -EINVAL;
     }
 
-    switch (type) {
+    rc = io_sched_get_param_from_cfg(param_key, family, &param_value);
+    if (rc)
+        return rc;
+
+    switch (str2io_sched(param_value)) {
     case IO_SCHED_FIFO:
         *ops = IO_SCHED_FIFO_OPS;
         break;
@@ -268,41 +320,23 @@ static int get_io_sched(struct io_sched_handle *io_sched_hdl,
     return 0;
 }
 
-#define IO_SCHED_SECTION_TEMPLATE "io_sched_%s"
-
-static void set_static_cfg_section_names(struct pho_config_item *cfg,
-                                         size_t len,
-                                         char *section_name)
+static int set_dispatch_algorithm(struct io_sched_handle *io_sched_hdl,
+                                  enum rsc_family family)
 {
-    size_t i;
-
-    for (i = 0; i < len; i++)
-        cfg[i].section = section_name;
-}
-
-static enum io_schedulers
-get_io_sched_from_config(enum pho_cfg_params_io_sched type,
-                         enum rsc_family family)
-{
-    char *section_name;
     const char *value;
     int rc;
 
-    rc = asprintf(&section_name, IO_SCHED_SECTION_TEMPLATE,
-                  rsc_family2str(family));
-    if (rc == -1)
-        return -ENOMEM;
+    rc = io_sched_get_param_from_cfg(PHO_IO_SCHED_dispatch_algo, family,
+                                     &value);
+    if (rc)
+        return rc;
 
-    set_static_cfg_section_names(cfg_io_sched, ARRAY_SIZE(cfg_io_sched),
-                                 section_name);
+    if (!strcmp(value, "none"))
+        io_sched_hdl->dispatch_devices = no_dispatch;
+    else if (!strcmp(value, "fair_share"))
+        io_sched_hdl->dispatch_devices = fair_share_number_of_requests;
 
-    value = _pho_cfg_get(PHO_IO_SCHED_FIRST, PHO_IO_SCHED_LAST,
-                         type, cfg_io_sched);
-    free(section_name);
-    if (!value)
-        return -ENODATA;
-
-    return str2io_sched(value);
+    return 0;
 }
 
 int io_sched_handle_load_from_config(struct io_sched_handle *io_sched_hdl,
@@ -310,30 +344,24 @@ int io_sched_handle_load_from_config(struct io_sched_handle *io_sched_hdl,
 {
     int rc;
 
-    rc = get_io_sched(io_sched_hdl,
-                      get_io_sched_from_config(PHO_IO_SCHED_read_algo,
-                                               family),
-                      IO_REQ_READ);
+    rc = get_io_sched(io_sched_hdl, family, IO_REQ_READ);
     if (rc)
         LOG_RETURN(rc, "Failed to read 'read_algo' from config");
 
-    rc = get_io_sched(io_sched_hdl,
-                      get_io_sched_from_config(PHO_IO_SCHED_write_algo,
-                                               family),
-                      IO_REQ_WRITE);
+    rc = get_io_sched(io_sched_hdl, family, IO_REQ_WRITE);
     if (rc)
         LOG_RETURN(rc, "Failed to read 'write_algo' from config");
 
-    rc = get_io_sched(io_sched_hdl,
-                      get_io_sched_from_config(PHO_IO_SCHED_format_algo,
-                                               family),
-                      IO_REQ_FORMAT);
+    rc = get_io_sched(io_sched_hdl, family, IO_REQ_FORMAT);
     if (rc)
         LOG_RETURN(rc, "Failed to read 'format_algo' from config");
 
-    /* TODO load these from the configuration */
+    rc = set_dispatch_algorithm(io_sched_hdl, family);
+    if (rc)
+        LOG_RETURN(rc, "Failed to read 'dispatch_algo' from config");
+
+    /* TODO load this from the configuration */
     io_sched_hdl->next_request = fifo_next_request;
-    io_sched_hdl->dispatch_devices = no_dispatch;
 
     return io_sched_init(io_sched_hdl);
 }
@@ -374,4 +402,21 @@ int io_sched_compute_scheduler_weights(struct io_sched_handle *io_sched_hdl,
     weights->format = (double)io_sched_hdl->io_stats.nb_formats / (double)total;
 
     return 0;
+}
+
+size_t io_sched_count_device_per_model(struct io_scheduler *io_sched,
+                                       const char *model)
+{
+    size_t count = 0;
+    int i;
+
+    for (i = 0; i < io_sched->devices->len; i++) {
+        /* we can dereference the result of get_device since \p i is valid */
+        struct lrs_dev *dev = *io_sched->ops.get_device(io_sched, i);
+
+        if (!strcmp(dev->ld_dss_dev_info->rsc.model, model))
+            count++;
+    }
+
+    return count;
 }

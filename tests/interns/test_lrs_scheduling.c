@@ -1594,10 +1594,7 @@ static void fair_share_multi_technologies(void **data)
     devices = init_devices(devices, 8, "LTO6");
     devices = init_devices(devices, 8, "LTO7");
 
-    /* TODO the dispatch does not work properly for now, it will be fixed in
-     * a later patch.
-     */
-    log_test_dispatch(data, -1, 17, 4, 8, 5, 1, 2, devices);
+    log_test_dispatch(data, -1, 17, 4, 8, 15, 3, 6, devices);
 }
 
 int main(void)

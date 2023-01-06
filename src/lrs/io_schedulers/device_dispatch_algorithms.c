@@ -41,39 +41,56 @@ int no_dispatch(struct io_sched_handle *io_sched_hdl,
 }
 
 /* Take devices from \p io_sched by calling io_scheduler_ops::reclaim_device
- * until it has \p nb_devices. Does nothing if the I/O scheduler already has
- * \p nb_devices or less.
+ * until it has \p target_nb_devices. Does nothing if the I/O scheduler already
+ * has \p target_nb_devices or less.
  */
 static int take_devices(struct io_scheduler *io_sched, GPtrArray *devices,
-                        size_t nb_devices)
+                        size_t target_nb_devices, const char *model)
 {
-    // TODO need the model argument (fixed in a later patch)
-    if (io_sched->devices->len <= nb_devices)
+    size_t current_nb_devices;
+
+    current_nb_devices = io_sched_count_device_per_model(io_sched, model);
+
+    if (current_nb_devices <= target_nb_devices)
         /* io_sched has no device to give */
         return 0;
 
-    while (io_sched->devices->len > nb_devices) {
+    while (current_nb_devices > target_nb_devices) {
         struct lrs_dev *device;
         int rc;
 
-        rc = io_sched->ops.reclaim_device(io_sched, &device);
+        rc = io_sched->ops.reclaim_device(io_sched, model, &device);
+        if (rc == -ENODEV)
+            /* the scheduler may not have a device of this model to return */
+            break;
+
         if (rc)
             return rc;
 
         g_ptr_array_add(devices, device);
+        current_nb_devices--;
     }
 
     return 0;
 }
 
+/* Give devices from \p devices to \p io_sched until it has \p nb_devices. */
 static int give_devices(struct io_scheduler *io_sched, GPtrArray *devices,
-                        size_t nb_devices)
+                        size_t nb_devices, const char *model)
 {
-    if (io_sched->devices->len >= nb_devices)
+    size_t current_nb_devices;
+    size_t target;
+
+    current_nb_devices = io_sched_count_device_per_model(io_sched, model);
+
+    if (current_nb_devices >= nb_devices)
         /* no device to take */
         return 0;
 
-    while (io_sched->devices->len < nb_devices) {
+    /* we need nb_devices - current_nb_devices more devices */
+    target = io_sched->devices->len + (nb_devices - current_nb_devices);
+
+    while (io_sched->devices->len < target) {
         struct lrs_dev *device;
         int rc;
 
@@ -91,11 +108,12 @@ static int give_devices(struct io_scheduler *io_sched, GPtrArray *devices,
     return 0;
 }
 
-static size_t count_total_devices(struct io_sched_handle *io_sched_hdl)
+static size_t count_total_devices(struct io_sched_handle *io_sched_hdl,
+                                  const char *model)
 {
-    return io_sched_hdl->read.devices->len +
-           io_sched_hdl->write.devices->len +
-           io_sched_hdl->format.devices->len;
+    return io_sched_count_device_per_model(&io_sched_hdl->read, model) +
+           io_sched_count_device_per_model(&io_sched_hdl->write, model) +
+           io_sched_count_device_per_model(&io_sched_hdl->format, model);
 }
 
 struct device_repartition {
@@ -122,6 +140,7 @@ struct device_repartition {
 static int fetch_devices_to_give(struct io_sched_handle *io_sched_hdl,
                                  GPtrArray *new_devices,
                                  struct device_repartition *repartition,
+                                 const char *model,
                                  GPtrArray *devices_to_give)
 {
     size_t i;
@@ -131,23 +150,24 @@ static int fetch_devices_to_give(struct io_sched_handle *io_sched_hdl,
      * list.
      */
     /* FIXME this does not work when devices are shared between schedulers */
-    for (i = count_total_devices(io_sched_hdl); i < new_devices->len; i++)
+    for (i = count_total_devices(io_sched_hdl, model);
+         i < new_devices->len; i++)
         g_ptr_array_add(devices_to_give,
                         g_ptr_array_index(new_devices, i));
 
     /* Take in excess devices from each scheduler */
     rc = take_devices(&io_sched_hdl->read, devices_to_give,
-                      repartition->nb_reads);
+                      repartition->nb_reads, model);
     if (rc)
         return rc;
 
     rc = take_devices(&io_sched_hdl->write, devices_to_give,
-                      repartition->nb_writes);
+                      repartition->nb_writes, model);
     if (rc)
         return rc;
 
     rc = take_devices(&io_sched_hdl->format, devices_to_give,
-                      repartition->nb_formats);
+                      repartition->nb_formats, model);
     if (rc)
         return rc;
 
@@ -156,22 +176,23 @@ static int fetch_devices_to_give(struct io_sched_handle *io_sched_hdl,
 
 static int dispatch_devices(struct io_sched_handle *io_sched_hdl,
                             GPtrArray *devices_to_give,
-                            struct device_repartition *repartition)
+                            struct device_repartition *repartition,
+                            const char *model)
 {
     int rc;
 
     rc = give_devices(&io_sched_hdl->read, devices_to_give,
-                      repartition->nb_reads);
+                      repartition->nb_reads, model);
     if (rc)
         return rc;
 
     rc = give_devices(&io_sched_hdl->write, devices_to_give,
-                      repartition->nb_writes);
+                      repartition->nb_writes, model);
     if (rc)
         return rc;
 
     rc = give_devices(&io_sched_hdl->format, devices_to_give,
-                      repartition->nb_formats);
+                      repartition->nb_formats, model);
     if (rc)
         return rc;
 
@@ -382,7 +403,7 @@ static int sort_devices_by_model_cmp(const void *lhs, const void *rhs)
 
 static int
 fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
-                                        GPtrArray *devices);
+                                        struct device_list *device_list);
 
 int fair_share_number_of_requests(struct io_sched_handle *io_sched_hdl,
                                   GPtrArray *devices)
@@ -436,8 +457,7 @@ int fair_share_number_of_requests(struct io_sched_handle *io_sched_hdl,
                                                   i);
 
         if (!rc)
-            rc = fair_share_number_of_requests_one_model(io_sched_hdl,
-                                                         devs->devices);
+            rc = fair_share_number_of_requests_one_model(io_sched_hdl, devs);
 
         g_ptr_array_free(devs->devices, TRUE);
     }
@@ -452,8 +472,9 @@ int fair_share_number_of_requests(struct io_sched_handle *io_sched_hdl,
  */
 static int
 fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
-                                        GPtrArray *devices)
+                                        struct device_list *device_list)
 {
+    GPtrArray *devices = device_list->devices;
     struct device_repartition repartition;
     struct io_sched_weights weights;
     GPtrArray *devices_to_give;
@@ -481,7 +502,7 @@ fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
                               devices->len, nb_used_sched);
 
     rc = fetch_devices_to_give(io_sched_hdl, devices, &repartition,
-                               devices_to_give);
+                               device_list->model, devices_to_give);
     if (rc)
         /* fetch_devices_to_give is not expected to fail. If rc is not 0, a
          * system error ocurred (e.g. an allocation failure). Nothing much,
@@ -543,7 +564,8 @@ fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
         GOTO(free_devices, rc = 0);
     }
 
-    rc = dispatch_devices(io_sched_hdl, devices_to_give, &repartition);
+    rc = dispatch_devices(io_sched_hdl, devices_to_give, &repartition,
+                          device_list->model);
     if (rc)
         GOTO(free_devices, rc);
 

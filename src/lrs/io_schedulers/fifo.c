@@ -405,15 +405,27 @@ static int fifo_remove_device(struct io_scheduler *io_sched,
  * this function is called.
  */
 static int fifo_reclaim_device(struct io_scheduler *io_sched,
+                               const char *model,
                                struct lrs_dev **device)
 {
-    /* The FIFO algorithm doesn't do any optimization regarding the device
-     * usage. We simply give the last device back.
-     */
-    *device = g_ptr_array_remove_index(io_sched->devices,
-                                       io_sched->devices->len - 1);
+    int i;
 
-    return 0;
+    /* The FIFO algorithm doesn't do any optimization regarding the device
+     * usage. We simply give the first device of the right model.
+     */
+    for (i = 0; i < io_sched->devices->len; i++) {
+        struct lrs_dev *dev = g_ptr_array_index(io_sched->devices, i);
+
+        if (strcmp(dev->ld_dss_dev_info->rsc.model, model))
+            continue;
+
+        *device = dev;
+        g_ptr_array_remove_index_fast(io_sched->devices, i);
+
+        return 0;
+    }
+
+    return -ENODEV;
 }
 
 struct io_scheduler_ops IO_SCHED_FIFO_OPS = {

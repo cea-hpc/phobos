@@ -1221,7 +1221,8 @@ static int grouped_remove_device(struct io_scheduler *io_sched,
     return 0;
 }
 
-static struct lrs_dev *find_device_to_remove(struct io_scheduler *io_sched)
+static struct lrs_dev *find_device_to_remove(struct io_scheduler *io_sched,
+                                             const char *model)
 {
     size_t shortest_queue = SIZE_MAX;
     struct device *device = NULL;
@@ -1229,6 +1230,9 @@ static struct lrs_dev *find_device_to_remove(struct io_scheduler *io_sched)
 
     for (i = 0; i < io_sched->devices->len; i++) {
         struct device *iter = g_ptr_array_index(io_sched->devices, i);
+
+        if (strcmp(iter->device->ld_dss_dev_info->rsc.model, model))
+            continue;
 
         if (!iter->queue) {
             device = iter;
@@ -1245,9 +1249,10 @@ static struct lrs_dev *find_device_to_remove(struct io_scheduler *io_sched)
 }
 
 static int grouped_reclaim_device(struct io_scheduler *io_sched,
+                                  const char *model,
                                   struct lrs_dev **device)
 {
-    *device = find_device_to_remove(io_sched);
+    *device = find_device_to_remove(io_sched, model);
 
     if (!*device)
         return -ENODEV;

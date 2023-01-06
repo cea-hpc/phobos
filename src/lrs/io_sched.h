@@ -44,6 +44,7 @@ enum pho_cfg_params_io_sched {
     PHO_IO_SCHED_read_algo = PHO_IO_SCHED_FIRST,
     PHO_IO_SCHED_write_algo,
     PHO_IO_SCHED_format_algo,
+    PHO_IO_SCHED_dispatch_algo,
 
     PHO_IO_SCHED_LAST
 };
@@ -127,11 +128,13 @@ struct io_scheduler_ops {
      * example.
      *
      * \param[in]  io_sched  a valid io_scheduler
+     * \param[in]  model     the desired model of the device
      * \param[out] device    the device that was given back by the I/O scheduler
      *
      * \return               0 on success, negative POSIX error code on failure
      */
     int (*reclaim_device)(struct io_scheduler *io_sched,
+                          const char *model,
                           struct lrs_dev **device);
 };
 
@@ -361,5 +364,16 @@ struct io_sched_weights {
  */
 int io_sched_compute_scheduler_weights(struct io_sched_handle *io_sched_hdl,
                                        struct io_sched_weights *weights);
+
+/**
+ * Count the number of devices of type \p model in \p io_sched.
+ *
+ * \param[in]  io_sched  I/O scheduler whose device to count
+ * \param[in]  model     which model we want to count
+ *
+ * \return               the number of devices of model \p model
+ */
+size_t io_sched_count_device_per_model(struct io_scheduler *io_sched,
+                                       const char *model);
 
 #endif
