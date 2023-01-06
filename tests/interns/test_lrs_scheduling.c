@@ -1357,10 +1357,12 @@ static char *make_name(size_t i)
     return name;
 }
 
-static GPtrArray *init_devices(size_t n)
+static GPtrArray *init_devices(GPtrArray *devices, size_t n, char *model)
 {
-    GPtrArray *devices = g_ptr_array_new();
     size_t i;
+
+    if (!devices)
+        devices = g_ptr_array_new();
 
     for (i = 0; i < n; i++) {
         struct lrs_dev *dev;
@@ -1373,6 +1375,7 @@ static GPtrArray *init_devices(size_t n)
         assert_non_null(dev);
 
         create_device(dev, name);
+        dev->ld_dss_dev_info->rsc.model = model;
         free(name);
 
         g_ptr_array_add(devices, dev);
@@ -1412,21 +1415,34 @@ static void io_sched_remove_all_devices(GPtrArray *devices,
 }
 
 #define log_test_dispatch(data, nb_devs, read_req, write_req, format_req,   \
-                          read_dev, write_dev, format_dev)                  \
+                          read_dev, write_dev, format_dev, devices)         \
     test_dispatch(__LINE__, data, nb_devs, read_req, write_req, format_req, \
-                  read_dev, write_dev, format_dev)
+                  read_dev, write_dev, format_dev, devices)
 
+/**
+ * Simple test of repartition for the fair_share algorithm.
+ *
+ * \param[in]  line     line to display in logs for simpler debugging
+ * \param[in]  data     pointer to a valid io_sched_handle
+ * \param[in]  nb_devs  total number of devices to create and dispatch
+ * \param[in]  read_req number of read requests waiting to be scheduled
+ * \param[in]  read_dev expected number of devices for read after the dispatch
+ * \param[in]  devices  a list of devices already allocated. If given, \p
+ *                      nb_devs is ignored. Will be cleanup at the end of the
+ *                      function.
+ */
 static void test_dispatch(int line, void **data, size_t nb_devs,
                           size_t read_req, size_t write_req, size_t format_req,
-                          size_t read_dev, size_t write_dev, size_t format_dev)
+                          size_t read_dev, size_t write_dev, size_t format_dev,
+                          GPtrArray *devices)
 {
     struct io_sched_handle *io_sched_hdl = (struct io_sched_handle *) *data;
-    GPtrArray *devices;
     int rc;
 
     pho_info("%s: %d", __func__, line);
 
-    devices = init_devices(nb_devs);
+    if (!devices)
+        devices = init_devices(NULL, nb_devs, "LTO5");
 
     io_sched_hdl->io_stats.nb_reads = read_req;
     io_sched_hdl->io_stats.nb_writes = write_req;
@@ -1449,28 +1465,28 @@ static void fair_share_repartition(void **data)
 {
 
     /* no devices to dispatch */
-    log_test_dispatch(data, 0, 17, 4, 8, 0, 0, 0);
+    log_test_dispatch(data, 0, 17, 4, 8, 0, 0, 0, NULL);
 
     /* 1 device: each non empty scheduler should have one device */
-    log_test_dispatch(data, 1, 0, 0, 0, 0, 0, 0);
-    log_test_dispatch(data, 1, 0, 0, 1, 0, 0, 1);
-    log_test_dispatch(data, 1, 0, 1, 0, 0, 1, 0);
-    log_test_dispatch(data, 1, 0, 1, 1, 0, 1, 1);
-    log_test_dispatch(data, 1, 1, 0, 0, 1, 0, 0);
-    log_test_dispatch(data, 1, 1, 0, 1, 1, 0, 1);
-    log_test_dispatch(data, 1, 1, 1, 0, 1, 1, 0);
-    log_test_dispatch(data, 1, 1, 1, 1, 1, 1, 1);
+    log_test_dispatch(data, 1, 0, 0, 0, 0, 0, 0, NULL);
+    log_test_dispatch(data, 1, 0, 0, 1, 0, 0, 1, NULL);
+    log_test_dispatch(data, 1, 0, 1, 0, 0, 1, 0, NULL);
+    log_test_dispatch(data, 1, 0, 1, 1, 0, 1, 1, NULL);
+    log_test_dispatch(data, 1, 1, 0, 0, 1, 0, 0, NULL);
+    log_test_dispatch(data, 1, 1, 0, 1, 1, 0, 1, NULL);
+    log_test_dispatch(data, 1, 1, 1, 0, 1, 1, 0, NULL);
+    log_test_dispatch(data, 1, 1, 1, 1, 1, 1, 1, NULL);
 
     /* 2 devices: the scheduler with the most requests should have 2 */
-    log_test_dispatch(data, 2, 5, 1, 1, 2, 1, 1);
-    log_test_dispatch(data, 2, 1, 5, 1, 1, 2, 1);
-    log_test_dispatch(data, 2, 1, 1, 5, 1, 1, 2);
-    log_test_dispatch(data, 2, 5, 0, 1, 2, 0, 1);
+    log_test_dispatch(data, 2, 5, 1, 1, 2, 1, 1, NULL);
+    log_test_dispatch(data, 2, 1, 5, 1, 1, 2, 1, NULL);
+    log_test_dispatch(data, 2, 1, 1, 5, 1, 1, 2, NULL);
+    log_test_dispatch(data, 2, 5, 0, 1, 2, 0, 1, NULL);
 
     /* check that dispatched devices match the request proportions */
-    log_test_dispatch(data, 4, 2, 1, 1, 2, 1, 1);
-    log_test_dispatch(data, 4, 4, 2, 2, 2, 1, 1);
-    log_test_dispatch(data, 4, 6, 2, 0, 3, 1, 0);
+    log_test_dispatch(data, 4, 2, 1, 1, 2, 1, 1, NULL);
+    log_test_dispatch(data, 4, 4, 2, 2, 2, 1, 1, NULL);
+    log_test_dispatch(data, 4, 6, 2, 0, 3, 1, 0, NULL);
 
     /* some random values (non divisible)
      * 31 requests in total                                        Δp
@@ -1478,8 +1494,8 @@ static void fair_share_repartition(void **data)
      * P_write  = 19 / 31 = 61.29% => 10(.42) devices => 66.6% => +5% => +0 dev
      * P_format =  5 / 31 = 16.12% =>  2(.74) devices => 13.3% => -3% => +1 dev
      */
-    log_test_dispatch(data, 17, 7, 19, 5, 4, 10, 3);
-    log_test_dispatch(data, 7, 1, 1, 4, 1, 1, 5);
+    log_test_dispatch(data, 17, 7, 19, 5, 4, 10, 3, NULL);
+    log_test_dispatch(data, 7, 1, 1, 4, 1, 1, 5, NULL);
 }
 
 static void fair_share_add_device(void **data)
@@ -1489,8 +1505,9 @@ static void fair_share_add_device(void **data)
     GPtrArray *devices;
     int rc;
 
-    devices = init_devices(8);
+    devices = init_devices(NULL, 8, "LTO5");
     create_device(&new_device, "D8");
+    new_device.ld_dss_dev_info->rsc.model = "LTO5";
 
     io_sched_hdl->io_stats.nb_reads = 5;
     io_sched_hdl->io_stats.nb_writes = 5;
@@ -1528,7 +1545,7 @@ static void fair_share_take_devices(void **data)
     GPtrArray *devices;
     int rc;
 
-    devices = init_devices(8);
+    devices = init_devices(NULL, 8, "LTO5");
 
     io_sched_hdl->io_stats.nb_reads = 5;
     io_sched_hdl->io_stats.nb_writes = 5;
@@ -1569,6 +1586,20 @@ static void fair_share_take_devices(void **data)
     cleanup_devices(devices);
 }
 
+static void fair_share_multi_technologies(void **data)
+{
+    GPtrArray *devices;
+
+    devices = init_devices(NULL, 8, "LTO5");
+    devices = init_devices(devices, 8, "LTO6");
+    devices = init_devices(devices, 8, "LTO7");
+
+    /* TODO the dispatch does not work properly for now, it will be fixed in
+     * a later patch.
+     */
+    log_test_dispatch(data, -1, 17, 4, 8, 5, 1, 2, devices);
+}
+
 int main(void)
 {
     const struct CMUnitTest test_dev_picker[] = {
@@ -1604,6 +1635,7 @@ int main(void)
         cmocka_unit_test(fair_share_repartition),
         cmocka_unit_test(fair_share_add_device),
         cmocka_unit_test(fair_share_take_devices),
+        cmocka_unit_test(fair_share_multi_technologies),
     };
     int rc;
 

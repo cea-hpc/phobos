@@ -47,6 +47,7 @@ int no_dispatch(struct io_sched_handle *io_sched_hdl,
 static int take_devices(struct io_scheduler *io_sched, GPtrArray *devices,
                         size_t nb_devices)
 {
+    // TODO need the model argument (fixed in a later patch)
     if (io_sched->devices->len <= nb_devices)
         /* io_sched has no device to give */
         return 0;
@@ -365,12 +366,93 @@ static void compute_number_of_devices(struct io_stats *io_stats,
     }
 }
 
+struct device_list {
+    const char *model;
+    GPtrArray  *devices;
+};
+
+static int sort_devices_by_model_cmp(const void *lhs, const void *rhs)
+{
+    struct lrs_dev **deva = (struct lrs_dev **)lhs;
+    struct lrs_dev **devb = (struct lrs_dev **)rhs;
+
+    return strcmp((*deva)->ld_dss_dev_info->rsc.model,
+                  (*devb)->ld_dss_dev_info->rsc.model);
+}
+
+static int
+fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
+                                        GPtrArray *devices);
+
+int fair_share_number_of_requests(struct io_sched_handle *io_sched_hdl,
+                                  GPtrArray *devices)
+{
+    GArray *device_lists = g_array_new(FALSE, FALSE,
+                                       sizeof(struct device_list));
+    const char *model_of_previous_device = NULL;
+    int rc = 0;
+    int i;
+
+    // TODO handle new devices before sort (fixed in a later patch)
+
+    /* When a device is removed, it is directly removed from the corresponding
+     * scheduler. We can only have the same amount of devices plus new ones when
+     * devices are added to the LRS.
+     */
+    assert(io_sched_hdl->read.devices->len +
+           io_sched_hdl->write.devices->len +
+           io_sched_hdl->format.devices->len <= devices->len);
+
+    /* sort devices by model before creating sublists */
+    qsort(devices->pdata, devices->len, sizeof(struct lrs_dev *),
+          sort_devices_by_model_cmp);
+
+    for (i = 0; i < devices->len; i++) {
+        struct lrs_dev *dev = g_ptr_array_index(devices, i);
+        struct device_list *current_dev_list;
+
+        if (!model_of_previous_device ||
+            strcmp(model_of_previous_device, dev->ld_dss_dev_info->rsc.model)) {
+            struct device_list device_list;
+
+            device_list.model = dev->ld_dss_dev_info->rsc.model;
+            model_of_previous_device = device_list.model;
+            device_list.devices = g_ptr_array_new();
+            g_ptr_array_add(device_list.devices, dev);
+
+            g_array_append_val(device_lists, device_list);
+            continue;
+        }
+
+        current_dev_list = &g_array_index(device_lists,
+                                          struct device_list,
+                                          device_lists->len - 1);
+        g_ptr_array_add(current_dev_list->devices, dev);
+    }
+
+    for (i = 0; i < device_lists->len; i++) {
+        struct device_list *devs = &g_array_index(device_lists,
+                                                  struct device_list,
+                                                  i);
+
+        if (!rc)
+            rc = fair_share_number_of_requests_one_model(io_sched_hdl,
+                                                         devs->devices);
+
+        g_ptr_array_free(devs->devices, TRUE);
+    }
+    g_array_free(device_lists, TRUE);
+
+    return rc;
+}
+
 /* Callback for io_sched_handle::dispatch_devices. This algorithm will compute
  * the relative weight of the I/O schedulers and dispatch devices according to
  * them.
  */
-int fair_share_number_of_requests(struct io_sched_handle *io_sched_hdl,
-                                  GPtrArray *devices)
+static int
+fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
+                                        GPtrArray *devices)
 {
     struct device_repartition repartition;
     struct io_sched_weights weights;
@@ -381,14 +463,6 @@ int fair_share_number_of_requests(struct io_sched_handle *io_sched_hdl,
     devices_to_give = g_ptr_array_new();
     if (!devices_to_give)
         return -ENOMEM;
-
-    /* When a device is removed, it is directly removed from the corresponding
-     * scheduler. We can only have the same amount of devices plus new ones when
-     * devices are added to the LRS.
-     */
-    assert(io_sched_hdl->read.devices->len +
-           io_sched_hdl->write.devices->len +
-           io_sched_hdl->format.devices->len <= devices->len);
 
     nb_used_sched += io_sched_hdl->io_stats.nb_reads > 0 ? 1 : 0;
     nb_used_sched += io_sched_hdl->io_stats.nb_writes > 0 ? 1 : 0;
