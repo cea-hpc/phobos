@@ -118,6 +118,41 @@ function test_eagain_format
     wait ${format_pid}
 }
 
+function assert_formated
+{
+    echo "$1" | grep "$2" | grep "empty" || error "'$2' should be formated"
+}
+
+function test_force_format
+{
+    local tape=$(get_tapes L6 1)
+    local drive=$(get_lto_drives 6 1)
+
+    $phobos tape add --type lto6 ${tape}
+    $phobos drive add --unlock ${drive}
+    $phobos tape format --unlock ${tape}
+
+    $phobos put /etc/hosts forced_obj1
+    trap "rm -f tmp; cleanup" EXIT
+    $phobos get forced_obj1 tmp ||
+        error "Getting forced_obj1 before format should have succeeded"
+    rm tmp
+
+    $phobos tape format ${tape} &&
+        error "Formatting without force should have failed"
+    $valg_phobos tape format --force ${tape}
+    local output="$($phobos tape list -o all)"
+    assert_formated "$output" "${tape}"
+
+    $phobos put /etc/hosts forced_obj2
+    $phobos get forced_obj1 tmp &&
+        error "Getting forced_obj1 after format should have failed"
+    $phobos get forced_obj2 tmp ||
+        error "Getting forced_obj2 should have succeeded"
+    rm tmp
+    trap cleanup EXIT
+}
+
 function format_check_selected_device
 {
     local tape=$1
@@ -181,11 +216,6 @@ function test_drive_selection_format
     fi
 }
 
-function assert_formated
-{
-    echo "$1" | grep "$2" | grep "empty" || error "'$2' should be formated"
-}
-
 function test_multiple_formats
 {
     local dirs=($(mktemp -d /tmp/test.pho.XXXX) $(mktemp -d /tmp/test.pho.XXXX))
@@ -225,6 +255,14 @@ function test_multiple_formats
     assert_formated "$output" "${dirs[0]}"
     assert_formated "$output" "${dirs[1]}"
     assert_formated "$output" "${dirs[2]}"
+
+    # Test force formatting a dir already formatted
+    # TODO: Deactivated until force formatting a directory is allowed
+#    $valg_phobos dir format --force ${dirs[0]} ||
+#        error "Force formatting 1 already formatted dir should have succeeded"
+#
+#    local output="$($phobos dir list -o all)"
+#    assert_formated "$output" "${dirs[0]}"
 
     rm -rf ${dirs[@]}
     trap cleanup EXIT
@@ -320,4 +358,7 @@ if [[ -w /dev/changer ]]; then
     cleanup
     setup
     test_drive_selection_format
+    cleanup
+    setup
+    test_force_format
 fi

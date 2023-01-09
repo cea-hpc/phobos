@@ -778,7 +778,8 @@ out:
 }
 
 int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
-                        int n_ids, int nb_streams, enum fs_type fs, bool unlock)
+                        int n_ids, int nb_streams, enum fs_type fs, bool unlock,
+                        bool force)
 {
     int n_rq_to_recv = 0;
     bool *awaiting_resps;
@@ -786,6 +787,25 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
     int rc = 0;
     int rc2;
     int i;
+
+    /* TODO? This will be removed once the API use unsigned instead of signed
+     * integers.
+     */
+    if (n_ids < 0)
+        LOG_RETURN(-EINVAL, "Number of media cannot be negative");
+
+    /* Check, in case of force, every medium is a tape, as the feature is not
+     * available yet for other families.
+     */
+    if (force) {
+        for (i = 0; i < n_ids; ++i) {
+            if (ids[i].family != PHO_RSC_TAPE) {
+                LOG_RETURN(-EINVAL,
+                           "Force option is not available for family '%s'",
+                           rsc_family2str(ids[i].family));
+            }
+        }
+    }
 
     awaiting_resps = malloc(n_ids * sizeof(*awaiting_resps));
     if (awaiting_resps == NULL)
@@ -808,6 +828,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
 
         req.format->fs = fs;
         req.format->unlock = unlock;
+        req.format->force = force;
         req.format->med_id->family = ids[i].family;
 
         req.id = i;

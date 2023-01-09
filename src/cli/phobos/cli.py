@@ -1025,6 +1025,8 @@ class TapeFormatOptHandler(FormatOptHandler):
         """Add resource-specific options."""
         super(TapeFormatOptHandler, cls).add_options(parser)
         parser.add_argument('--fs', default='ltfs', help='Filesystem type')
+        parser.add_argument('--force', action='store_true',
+                            help='Format the medium whatever its status')
 
 class DirFormatOptHandler(FormatOptHandler):
     """Format a directory."""
@@ -1270,6 +1272,10 @@ class MediaOptHandler(BaseResourceOptHandler):
         nb_streams = self.params.get('nb_streams')
         fs_type = self.params.get('fs')
         unlock = self.params.get('unlock')
+        if self.family == ResourceFamily.RSC_TAPE:
+            force = self.params.get('force')
+        else:
+            force = False
 
         try:
             with AdminClient(lrs_required=True) as adm:
@@ -1277,7 +1283,13 @@ class MediaOptHandler(BaseResourceOptHandler):
                     self.logger.debug("Post-unlock enabled")
 
                 self.logger.info("Formatting media '%s'", media_list)
-                adm.fs_format(media_list, nb_streams, fs_type, unlock=unlock)
+                if force:
+                    self.logger.warning(
+                        "This format may imply some orphan extents or lost "
+                        "objects. Hoping you know what you are doing!")
+
+                adm.fs_format(media_list, nb_streams, fs_type, unlock=unlock,
+                              force=force)
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

@@ -81,6 +81,15 @@ With this command, a maximum of 3 requests for media formatting will be sent
 at a time, and the client will wait a format is done before sending another.
 If nothing or 0 is specified, no limit is applied.
 
+Phobos can force the format of a tape, even if its status is not blank, by
+using the following command. **Remember that using this option may lead to
+orphan extents and/or lost objects.**
+```
+phobos tape format --force 073200L6
+```
+The option is not yet available for directories and rados pools.
+
+
 # Listing resources
 Any device or media can be listed using the 'list' operation. For instance,
 the following will list all the existing tape identifiers:

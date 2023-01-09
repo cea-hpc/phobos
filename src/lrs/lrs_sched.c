@@ -2227,7 +2227,9 @@ static int check_medium_permission_and_status(struct req_container *reqc,
                        "Cannot read on medium '%s' with adm_status '%s'",
                        medium->rsc.id.name,
                        rsc_adm_status2str(medium->rsc.adm_status));
-    } else if (pho_request_is_format(reqc->req)) {
+    } else if (pho_request_is_format(reqc->req) &&
+               (medium->rsc.id.family != PHO_RSC_TAPE ||
+                !reqc->req->format->force)) {
         if (medium->fs.status != PHO_FS_STATUS_BLANK)
             LOG_RETURN(-EINVAL,
                        "Medium '%s' has a fs.status '%s', expected "

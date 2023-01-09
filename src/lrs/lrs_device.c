@@ -1174,9 +1174,11 @@ static int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa,
     medium->fs.label[sizeof(medium->fs.label) - 1] = '\0';
     fields |= FS_LABEL;
 
+    medium->stats.nb_obj = 0;
+    medium->stats.logc_spc_used = 0;
     medium->stats.phys_spc_used = space.spc_used;
     medium->stats.phys_spc_free = space.spc_avail;
-    fields |= PHYS_SPC_USED | PHYS_SPC_FREE;
+    fields |= NB_OBJ | LOGC_SPC_USED | PHYS_SPC_USED | PHYS_SPC_FREE;
 
     /* Post operation: update media information in DSS */
     medium->fs.status = PHO_FS_STATUS_EMPTY;

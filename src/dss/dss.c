@@ -2339,8 +2339,15 @@ int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
                          rsc_family2str(med_ls[i].rsc.id.family),
                          med_ls[i].rsc.id.name);
 
+            if (NB_OBJ & fields)
+                medium_info->stats.nb_obj = med_ls[i].stats.nb_obj;
+
             if (NB_OBJ_ADD & fields)
                 medium_info->stats.nb_obj += med_ls[i].stats.nb_obj;
+
+            if (LOGC_SPC_USED & fields)
+                medium_info->stats.logc_spc_used =
+                    med_ls[i].stats.logc_spc_used;
 
             if (LOGC_SPC_USED_ADD & fields)
                 medium_info->stats.logc_spc_used +=

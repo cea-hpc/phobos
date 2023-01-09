@@ -173,14 +173,15 @@ int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
  * \param[in]       nb_streams      Number of concurrent format requests sent,
  *                                  0 means all requests are sent at once.
  * \param[in]       fs              Filesystem type.
- * \param[in]       unlock          Unlock tape if succesfully formatted.
+ * \param[in]       unlock          Unlock medium if succesfully formatted.
+ * \param[in]       force           Format whatever their status.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
  */
 int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
                         int n_ids, int nb_streams, enum fs_type fs,
-                        bool unlock);
+                        bool unlock, bool force);
 
 /*
  * Ping the daemon to check if it is online or not.

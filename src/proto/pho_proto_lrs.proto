@@ -78,6 +78,8 @@ message PhoRequest {
         required PhoFsType fs         = 2; // Medium file system.
         required bool unlock          = 3; // True if the medium needs to be
                                            // unlocked after format.
+        required bool force           = 4; // True if we do not care about
+                                           // the medium status.
     }
 
     /** Body of the notify request. */
