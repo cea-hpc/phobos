@@ -2,6 +2,7 @@
 
 ## Ongoing
 
+* Add a script to test tape library
 * The "phobos_admin_format" API function has been modified to be able to format
 media whose status is not blank. A "force" parameter is added to manage this.
 * Grouped read algorithm for tapes
