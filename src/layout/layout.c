@@ -232,6 +232,7 @@ void layout_destroy(struct pho_encoder *enc)
 {
     /* Only encoders own their layout */
     if (!enc->is_decoder && enc->layout != NULL) {
+        pho_attrs_free(&enc->layout->layout_desc.mod_attrs);
         layout_info_free_extents(enc->layout);
         free(enc->layout);
         enc->layout = NULL;
