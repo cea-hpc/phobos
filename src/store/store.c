@@ -308,7 +308,7 @@ filt_free:
 int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 {
     GString *md_repr = g_string_new(NULL);
-    struct object_info *obj_res;
+    struct object_info *obj_res = NULL;
     struct dss_filter filter;
     struct object_info obj;
     int obj_cnt;
@@ -381,11 +381,11 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         if (rc)
             LOG_GOTO(out_res, rc, "object_set failed for objid:'%s'",
                      xfer->xd_objid);
-
-        dss_res_free(obj_res, 1);
     }
 
 out_update:
+    dss_res_free(obj_res, 1);
+
     rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}",
                           xfer->xd_objid);
     if (rc)
