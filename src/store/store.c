@@ -1431,10 +1431,22 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers)
     return phobos_xfer(xfers, num_xfers, NULL, NULL);
 }
 
+static void xfer_put_param_clean(struct pho_xfer_desc *xfer)
+{
+    tags_free(&xfer->xd_params.put.tags);
+    pho_attrs_free(&xfer->xd_params.put.lyt_params);
+}
+
+static void (*xfer_param_cleaner[PHO_XFER_OP_LAST])(struct pho_xfer_desc *) = {
+    xfer_put_param_clean,
+    NULL,
+};
+
 void pho_xfer_desc_clean(struct pho_xfer_desc *xfer)
 {
-    if (xfer->xd_op == PHO_XFER_OP_PUT)
-        tags_free(&xfer->xd_params.put.tags);
+    if (xfer_param_cleaner[xfer->xd_op] != NULL)
+        xfer_param_cleaner[xfer->xd_op](xfer);
+
     pho_attrs_free(&xfer->xd_attrs);
     free(xfer->xd_objuuid);
 };
