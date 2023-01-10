@@ -85,6 +85,11 @@ const struct pho_config_item cfg_tape_model[] = {
 
 /* init by parse_supported_tape_models function called at config init */
 static GPtrArray *supported_tape_models;
+__attribute__((destructor)) static void _destroy_supported_tape_models(void)
+{
+    if (supported_tape_models)
+        g_ptr_array_free(supported_tape_models, TRUE);
+}
 
 /**
  * Parse config to init supported model for media of tape type
