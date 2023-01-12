@@ -6,6 +6,9 @@
 #include <errno.h>
 #include <unistd.h>
 
+/* Daemon context */
+bool running = true;
+
 int lock_handle_init(struct lock_handle *lock_handle, struct dss_handle *dss)
 {
     lock_handle->lock_hostname = get_hostname();

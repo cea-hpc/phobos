@@ -100,8 +100,6 @@ static void phobos_log_callback_def_with_sys(const struct pho_logrec *rec)
 /* Daemon context *************************************************************/
 /* ****************************************************************************/
 
-bool running = true;
-
 /**
  * Create a lock file.
  *
