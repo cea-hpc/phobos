@@ -1,8 +1,8 @@
 AM_CFLAGS= $(CC_OPT)
 
-EXTRA_DIST= phobos_tape_library_mtx_test.bash
+EXTRA_DIST= phobos_tape_library_mtx_test.bash phobos_tape_library_test.bash
 
-sbin_SCRIPTS=phobos_tape_library_mtx_test.bash
+sbin_SCRIPTS=phobos_tape_library_mtx_test.bash phobos_tape_library_test.bash
 sbin_PROGRAMS=phobos_tape_library_test
 
 phobos_tape_library_test_SOURCES=phobos_tape_library_test.c
