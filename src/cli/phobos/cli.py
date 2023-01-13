@@ -915,7 +915,7 @@ class LocateOptHandler(BaseOptHandler):
         """Locate object"""
         client = UtilClient()
         try:
-            hostname, nb_new_lock = client.object_locate(
+            hostname, _ = client.object_locate(
                 self.params.get('oid'),
                 self.params.get('uuid'),
                 self.params.get('version'),
