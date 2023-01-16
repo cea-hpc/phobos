@@ -35,13 +35,16 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter_module **ioa)
 
     switch (fstype) {
     case PHO_FS_POSIX:
-        rc = load_module("io_adapter_posix", sizeof(**ioa), (void **)ioa);
+        rc = load_module("io_adapter_posix", sizeof(**ioa), phobos_context(),
+                         (void **)ioa);
         break;
     case PHO_FS_LTFS:
-        rc = load_module("io_adapter_ltfs", sizeof(**ioa), (void **)ioa);
+        rc = load_module("io_adapter_ltfs", sizeof(**ioa), phobos_context(),
+                         (void **)ioa);
         break;
     case PHO_FS_RADOS:
-        rc = load_module("io_adapter_rados", sizeof(**ioa), (void **)ioa);
+        rc = load_module("io_adapter_rados", sizeof(**ioa), phobos_context(),
+                         (void **)ioa);
         break;
     default:
         pho_error(-EINVAL, "Invalid FS type %#x", fstype);

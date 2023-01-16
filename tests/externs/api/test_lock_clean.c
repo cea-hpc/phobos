@@ -183,6 +183,9 @@ int main(void)
         cmocka_unit_test(lc_test_local_daemon_on),
     };
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     return cmocka_run_group_tests(lock_clean_test_errors,
                                   global_setup_admin_no_lrs,
                                   global_teardown_admin) +

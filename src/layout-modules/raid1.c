@@ -1654,9 +1654,11 @@ static const struct pho_layout_module_ops LAYOUT_RAID1_OPS = {
 };
 
 /** Layout module registration entry point */
-int pho_module_register(void *module)
+int pho_module_register(void *module, void *context)
 {
     struct layout_module *self = (struct layout_module *) module;
+
+    phobos_module_context_set(context);
 
     self->desc = RAID1_MODULE_DESC;
     self->ops = &LAYOUT_RAID1_OPS;

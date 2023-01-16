@@ -34,9 +34,9 @@
 
 #define PM_OP_INIT         "pho_module_register"
 
-int pho_module_register(void *module);
+int pho_module_register(void *module, void *state);
 
-typedef int (*module_init_func_t)(void *);
+typedef int (*module_init_func_t)(void *, void *);
 
 /**
  * Load a module with \a module_name into \a module.
@@ -44,10 +44,12 @@ typedef int (*module_init_func_t)(void *);
  *
  * @param[in]   mod_name    Name of the module to load.
  * @param[in]   mod_size    Size of the structure corresponding to the module.
+ * @param[in]   state       The global state of Phobos (cf. phobos_context).
  * @param[out]  mod         Module descriptor to fill out.
  *
  * @return 0 on success, -errno on error.
  */
-int load_module(const char *mod_name, const ssize_t mod_size, void **module);
+int load_module(const char *mod_name, const ssize_t mod_size, void *state,
+                void **module);
 
 #endif

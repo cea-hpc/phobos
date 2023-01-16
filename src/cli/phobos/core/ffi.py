@@ -39,6 +39,10 @@ from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable
 
 LIBPHOBOS_NAME = "libphobos_store.so"
 LIBPHOBOS = CDLL(LIBPHOBOS_NAME)
+# FIXME we should call phobos_fini(). But this can only be done once we don't
+# need phobos anymore. Since phobos_fini() only frees memory currently, this is
+# not an issue.
+LIBPHOBOS.phobos_init()
 
 LIBPHOBOS_ADMIN_NAME = "libphobos_admin.so"
 LIBPHOBOS_ADMIN = CDLL(LIBPHOBOS_ADMIN_NAME)

@@ -434,6 +434,9 @@ int main(void)
         cmocka_unit_test(dss_lock_hostname_unlock_ok),
     };
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     return cmocka_run_group_tests(dss_lock_test_cases, global_setup_dss,
                                   global_teardown_dss);
 }

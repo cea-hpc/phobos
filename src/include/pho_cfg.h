@@ -66,6 +66,12 @@ struct pho_config_item {
  */
 int pho_cfg_init_local(const char *config_file);
 
+/**
+ * Release the memory allocated by pho_cfg_init_local. Once called, no pho_cfg_*
+ * function can be used.
+ */
+void pho_cfg_local_fini(void);
+
 /** This function gets the value of a configuration item
  *  and return default value (from module_params) if it is not found.
  *  @return A the value on success and NULL on error.

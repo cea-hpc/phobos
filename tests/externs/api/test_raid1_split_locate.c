@@ -689,6 +689,9 @@ int main(int argc, char **argv)
     int family;
     int rc;
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     /* get oid from arg */
     if (argc != NB_ARGS + 1) {
         fprintf(stderr, "%s\n", usage);

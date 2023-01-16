@@ -98,7 +98,6 @@ int main(void)
     int i;
 
     test_env_initialize();
-    pho_cfg_init_local(NULL);
 
     rc = dss_init(&dss_handle);
     if (rc) {

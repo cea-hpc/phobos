@@ -103,9 +103,11 @@ struct pho_dev_adapter_module_ops DEV_ADAPTER_DIR_OPS = {
 };
 
 /** Dev adapter module registration entry point */
-int pho_module_register(void *module)
+int pho_module_register(void *module, void *context)
 {
     struct dev_adapter_module *self = (struct dev_adapter_module *) module;
+
+    phobos_module_context_set(context);
 
     self->desc = DEV_ADAPTER_DIR_MODULE_DESC;
     self->ops = &DEV_ADAPTER_DIR_OPS;

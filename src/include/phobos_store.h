@@ -143,6 +143,18 @@ struct pho_xfer_desc {
 };
 
 /**
+ * Initialize the global context of Phobos. Must be called before any call to a
+ * phobos function.
+ */
+int phobos_init(void);
+
+/**
+ * Finalize the global context of Phobos. One must call phobos_init again if
+ * they want to use Phobos again.
+ */
+void phobos_fini(void);
+
+/**
  * Put N files to the object store with minimal overhead.
  * Each desc entry contains:
  * - objid: the target object identifier

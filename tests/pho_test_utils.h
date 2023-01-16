@@ -33,6 +33,7 @@
 #include <assert.h>
 
 #include "pho_common.h"
+#include "pho_cfg.h"
 
 typedef int (*pho_unit_test_t)(void *);
 
@@ -62,6 +63,12 @@ static inline void run_test(const char *descr, pho_unit_test_t test, void *hint,
 
 static inline void test_env_initialize(void)
 {
+    pho_context_init();
+    atexit(pho_context_fini);
+
+    pho_cfg_init_local(NULL);
+    atexit(pho_cfg_local_fini);
+
     if (getenv("DEBUG"))
         pho_log_level_set(PHO_LOG_DEBUG);
     else

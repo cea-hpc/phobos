@@ -77,9 +77,11 @@ static const struct pho_io_adapter_module_ops IO_ADAPTER_POSIX_OPS = {
 };
 
 /** IO adapter module registration entry point */
-int pho_module_register(void *module)
+int pho_module_register(void *module, void *context)
 {
     struct io_adapter_module *self = (struct io_adapter_module *) module;
+
+    phobos_module_context_set(context);
 
     self->desc = IO_ADAPTER_POSIX_MODULE_DESC;
     self->ops = &IO_ADAPTER_POSIX_OPS;

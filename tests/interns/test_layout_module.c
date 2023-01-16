@@ -135,5 +135,8 @@ int main(void)
         cmocka_unit_test(le_valid_layout_io_size),
     };
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     return cmocka_run_group_tests(layout_module_tests, NULL, NULL);
 }

@@ -245,6 +245,9 @@ int main(void)
         cmocka_unit_test_setup(dml_ok_lock, dml_ok_lock_setup),
     };
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     return cmocka_run_group_tests(dss_medium_locate_cases, global_setup_dss,
                                   global_teardown_dss);
 }

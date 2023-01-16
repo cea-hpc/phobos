@@ -51,6 +51,9 @@ int main(int argc, char **argv)
     int cnt;
     int rc;
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     /* check params */
     if (argc != 6 ||
         (strcmp(argv[1], "lock") && strcmp(argv[1], "unlock")) ||

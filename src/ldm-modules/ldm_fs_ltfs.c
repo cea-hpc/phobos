@@ -394,9 +394,11 @@ struct pho_fs_adapter_module_ops FS_ADAPTER_LTFS_OPS = {
 };
 
 /** FS adapter module registration entry point */
-int pho_module_register(void *module)
+int pho_module_register(void *module, void *context)
 {
     struct fs_adapter_module *self = (struct fs_adapter_module *) module;
+
+    phobos_module_context_set(context);
 
     self->desc = FS_ADAPTER_LTFS_MODULE_DESC;
     self->ops = &FS_ADAPTER_LTFS_OPS;

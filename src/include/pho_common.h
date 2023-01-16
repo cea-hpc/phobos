@@ -337,4 +337,73 @@ struct timespec add_timespec(const struct timespec *a,
 struct timespec diff_timespec(const struct timespec *a,
                               const struct timespec *b);
 
+struct collection_item;
+
+/** global cached configuration */
+struct config {
+    const char *cfg_file;              /** pointer to the loaded config file */
+    struct collection_item *cfg_items; /** pointer to the loaded configuration
+                                         * structure
+                                         */
+    pthread_mutex_t lock;              /** lock to prevent concurrent load and
+                                         * read.
+                                         */
+};
+
+/**
+ * Structure containing global information about Phobos. This structure is
+ * shared between all threads and modules.
+ *
+ * /!\ It is not guaranteed that accessing elements of this structure will be
+ * thread safe.
+ */
+struct phobos_global_context {
+    struct config config;            /** Content of Phobos' configuration file
+                                       */
+    enum pho_log_level log_level;    /** Minimum level of logs to display */
+    pho_log_callback_t log_callback; /** Callback used when writing logs */
+    bool log_dev_output;             /** Whether to display additional
+                                       * information on each logs.
+                                       */
+};
+
+/**
+ * Initialize the phobos_global_context structure. Must be called before any
+ * other phobos function or module loading routine.
+ *
+ * /!\ Not thread safe
+ */
+int pho_context_init(void);
+
+/**
+ * Release the phobos_global_context structure. Once called, no phobos function
+ * or module loading routine should be called unless pho_context_init is called
+ * again.
+ *
+ * /!\ Not thread safe
+ */
+void pho_context_fini(void);
+
+/**
+ * Return a pointer to the global context of Phobos. Shared between modules and
+ * threads.
+ *
+ * /!\ It is not common with dynamically loaded modules and must
+ * therefore be passed to load_module when loading a module.
+ */
+struct phobos_global_context *phobos_context(void);
+
+/**
+ * This function should be called from the code inside the module's library.
+ *
+ * \param[in] context  global context returned by phobos_context()
+ *
+ * /!\ the context argument must be retrieved by calling phobos_context() from a
+ * function defined where the global context is already properly initialized.
+ * In practice, the context will be retrieved from the main executable's source
+ * code (e.g. Python binding code for the CLI, LRS' code, individual test
+ * scripts, ...
+ */
+void phobos_module_context_set(struct phobos_global_context *context);
+
 #endif

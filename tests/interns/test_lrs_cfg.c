@@ -7,6 +7,7 @@
 
 #include "lrs_cfg.h"
 #include "pho_types.h"
+#include "pho_common.h"
 
 #include <cmocka.h>
 
@@ -305,7 +306,6 @@ static void gcwtv_invalid_numbers(void **state)
     assert_int_equal(rc, -ERANGE);
 }
 
-
 int main(void)
 {
     const struct CMUnitTest get_time_threshold_test_cases[] = {
@@ -332,8 +332,10 @@ int main(void)
         cmocka_unit_test(gcwtv_invalid_numbers),
     };
 
-    return cmocka_run_group_tests(get_time_threshold_test_cases, NULL, NULL)
-        + cmocka_run_group_tests(get_nb_req_threshold_test_cases, NULL, NULL)
-        + cmocka_run_group_tests(get_wsize_threshold_test_cases, NULL, NULL);
-}
+    pho_context_init();
+    atexit(pho_context_fini);
 
+    return cmocka_run_group_tests(get_time_threshold_test_cases, NULL, NULL) +
+        cmocka_run_group_tests(get_nb_req_threshold_test_cases, NULL, NULL) +
+        cmocka_run_group_tests(get_wsize_threshold_test_cases, NULL, NULL);
+}

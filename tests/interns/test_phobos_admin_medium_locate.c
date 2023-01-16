@@ -255,6 +255,9 @@ int main(void)
         cmocka_unit_test_setup(paml_ok_lock, paml_ok_lock_setup),
     };
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     return cmocka_run_group_tests(phobos_admin_medium_locate_cases,
                                   global_setup_admin_no_lrs,
                                   global_teardown_admin);

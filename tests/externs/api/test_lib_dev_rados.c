@@ -141,6 +141,8 @@ int main(void)
         cmocka_unit_test(ldr_test_dev_adapter_add_pool_without_conf),
         cmocka_unit_test(ldr_test_lib_adapter_without_conf),
     };
+    pho_context_init();
+    atexit(pho_context_fini);
 
     return cmocka_run_group_tests(lib_dev_rados_test_with_conf, NULL, NULL) +
            cmocka_run_group_tests(lib_dev_rados_test_without_conf,

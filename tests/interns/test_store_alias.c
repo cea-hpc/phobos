@@ -31,6 +31,7 @@
 #include "pho_cfg.h"
 #include "pho_type_utils.h"
 #include "store_alias.h"
+#include "pho_common.h"
 
 #include <assert.h>
 #include <libgen.h>
@@ -153,6 +154,7 @@ static void load_config(char *execution_filename)
     }
 
     rc = pho_cfg_init_local(test_file);
+    atexit(pho_cfg_local_fini);
     free(test_bin);
     free(test_file);
     if (rc != 0 && rc != -EALREADY)
@@ -161,6 +163,9 @@ static void load_config(char *execution_filename)
 
 int main(int argc, char **argv)
 {
+    pho_context_init();
+    atexit(pho_context_fini);
+
     load_config(argv[0]);
     test_fill_put_params();
 

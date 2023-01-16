@@ -101,6 +101,22 @@ struct phobos_handle {
     void *udata;                    /**< User-provided argument to `cb` */
 };
 
+int phobos_init(void)
+{
+    int rc;
+
+    rc = pho_context_init();
+    if (rc)
+        return rc;
+
+    return 0;
+}
+
+void phobos_fini(void)
+{
+    pho_context_fini();
+}
+
 /**
  * Get a representative return code for the whole batch.
  * Used to provide other layers with indications about how things ended,

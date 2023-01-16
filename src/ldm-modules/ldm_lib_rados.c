@@ -202,9 +202,11 @@ static struct pho_lib_adapter_module_ops LIB_ADAPTER_RADOS_OPS = {
 };
 
 /** Lib adapter module registration entry point */
-int pho_module_register(void *module)
+int pho_module_register(void *module, void *context)
 {
     struct lib_adapter_module *self = (struct lib_adapter_module *) module;
+
+    phobos_module_context_set(context);
 
     self->desc = LIB_ADAPTER_RADOS_MODULE_DESC;
     self->ops = &LIB_ADAPTER_RADOS_OPS;

@@ -35,13 +35,6 @@
 
 static void phobos_log_callback_default(const struct pho_logrec *rec);
 
-
-static enum pho_log_level   phobos_log_level = PHO_LOG_DEFAULT;
-static pho_log_callback_t   phobos_log_callback = phobos_log_callback_default;
-
-static bool                 phobos_dev_output;
-
-
 char *rstrip(char *msg)
 {
     int i;
@@ -61,7 +54,7 @@ void phobos_log_callback_default(const struct pho_logrec *rec)
     localtime_r(&rec->plr_time.tv_sec, &time);
 
     /* Running with dev mode adds filename and line number to the output */
-    if (phobos_dev_output) {
+    if (phobos_context()->log_dev_output) {
         int rc;
 
         rc = asprintf(&dev_buffer, " [%u/%s:%s:%d]", rec->plr_pid,
@@ -102,28 +95,28 @@ void pho_log_level_set(enum pho_log_level level)
     case PHO_LOG_WARN:
     case PHO_LOG_ERROR:
     case PHO_LOG_DISABLED:
-        phobos_log_level = level;
+        phobos_context()->log_level = level;
         break;
 
     default:
-        phobos_log_level = PHO_LOG_DEFAULT;
+        phobos_context()->log_level = PHO_LOG_DEFAULT;
         break;
     }
 
-    phobos_dev_output = (level == PHO_LOG_DEBUG);
+    phobos_context()->log_dev_output = (level == PHO_LOG_DEBUG);
 }
 
 enum pho_log_level pho_log_level_get(void)
 {
-    return phobos_log_level;
+    return phobos_context()->log_level;
 }
 
 void pho_log_callback_set(pho_log_callback_t cb)
 {
     if (cb == NULL)
-        phobos_log_callback = phobos_log_callback_default;
+        phobos_context()->log_callback = phobos_log_callback_default;
     else
-        phobos_log_callback = cb;
+        phobos_context()->log_callback = cb;
 }
 
 void _log_emit(enum pho_log_level level, const char *file, int line,
@@ -148,7 +141,7 @@ void _log_emit(enum pho_log_level level, const char *file, int line,
     if (rc < 0)
         rec.plr_msg = NULL;
 
-    phobos_log_callback(&rec);
+    phobos_context()->log_callback(&rec);
     free(rec.plr_msg);
     va_end(args);
 

@@ -423,6 +423,9 @@ int main(int argc, char **argv)
 {
     int family;
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     if (argc != NB_ARGS + 1) {
         fprintf(stderr, "%s", usage);
         exit(EXIT_FAILURE);

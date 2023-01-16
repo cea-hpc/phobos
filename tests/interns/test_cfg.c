@@ -192,8 +192,10 @@ static int test_get_int(void *param)
 
 int main(int argc, char **argv)
 {
+    char *test_file;
+    char *test_bin;
+    char *test_dir;
     int rc;
-    char *test_bin, *test_dir, *test_file;
 
     test_env_initialize();
 

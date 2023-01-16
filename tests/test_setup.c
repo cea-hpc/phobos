@@ -26,6 +26,7 @@
 
 /* Phobos stuff */
 #include "pho_dss.h"
+#include "pho_cfg.h"
 #include "phobos_admin.h"
 
 /* Standard stuff */
@@ -135,6 +136,7 @@ int global_teardown_admin(void **state)
         phobos_admin_fini(*state);
         free(*state);
     }
+    pho_cfg_local_fini();
 
     return global_teardown();
 }

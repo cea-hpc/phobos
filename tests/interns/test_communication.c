@@ -351,4 +351,6 @@ int main(int argc, char **argv)
              "/tmp/test_socklrs", PHO_TEST_SUCCESS);
     run_test("Test: multiple sending/receiving", test_sendrecv_multiple,
              "/tmp/test_socklrs", PHO_TEST_SUCCESS);
+
+    exit(EXIT_SUCCESS);
 }

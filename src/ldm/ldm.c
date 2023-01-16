@@ -45,13 +45,16 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter_module **lib)
 
     switch (lib_type) {
     case PHO_LIB_DUMMY:
-        rc = load_module("lib_adapter_dummy", sizeof(**lib), (void **)lib);
+        rc = load_module("lib_adapter_dummy", sizeof(**lib), phobos_context(),
+                         (void **)lib);
         break;
     case PHO_LIB_SCSI:
-        rc = load_module("lib_adapter_scsi", sizeof(**lib), (void **)lib);
+        rc = load_module("lib_adapter_scsi", sizeof(**lib), phobos_context(),
+                         (void **)lib);
         break;
     case PHO_LIB_RADOS:
-        rc = load_module("lib_adapter_rados", sizeof(**lib), (void **)lib);
+        rc = load_module("lib_adapter_rados", sizeof(**lib), phobos_context(),
+                         (void **)lib);
         break;
     default:
         return -ENOTSUP;
@@ -66,13 +69,16 @@ int get_dev_adapter(enum rsc_family dev_family, struct dev_adapter_module **dev)
 
     switch (dev_family) {
     case PHO_RSC_DIR:
-        rc = load_module("dev_adapter_dir", sizeof(**dev), (void **)dev);
+        rc = load_module("dev_adapter_dir", sizeof(**dev), phobos_context(),
+                         (void **)dev);
         break;
     case PHO_RSC_TAPE:
-        rc = load_module("dev_adapter_scsi_tape", sizeof(**dev), (void **)dev);
+        rc = load_module("dev_adapter_scsi_tape", sizeof(**dev),
+                         phobos_context(), (void **)dev);
         break;
     case PHO_RSC_RADOS_POOL:
-        rc = load_module("dev_adapter_rados_pool", sizeof(**dev), (void **)dev);
+        rc = load_module("dev_adapter_rados_pool", sizeof(**dev),
+                         phobos_context(), (void **)dev);
         break;
     default:
         return -ENOTSUP;
@@ -95,13 +101,16 @@ int get_fs_adapter(enum fs_type fs_type, struct fs_adapter_module **fsa)
 
     switch (fs_type) {
     case PHO_FS_POSIX:
-        rc = load_module("fs_adapter_posix", sizeof(**fsa), (void **)fsa);
+        rc = load_module("fs_adapter_posix", sizeof(**fsa), phobos_context(),
+                         (void **)fsa);
         break;
     case PHO_FS_LTFS:
-        rc = load_module("fs_adapter_ltfs", sizeof(**fsa), (void **)fsa);
+        rc = load_module("fs_adapter_ltfs", sizeof(**fsa), phobos_context(),
+                         (void **)fsa);
         break;
     case PHO_FS_RADOS:
-        rc = load_module("fs_adapter_rados", sizeof(**fsa), (void **)fsa);
+        rc = load_module("fs_adapter_rados", sizeof(**fsa), phobos_context(),
+                         (void **)fsa);
         break;
     default:
         return -ENOTSUP;

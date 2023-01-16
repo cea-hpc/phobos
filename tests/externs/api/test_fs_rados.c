@@ -235,9 +235,11 @@ int main(void)
         cmocka_unit_test(fsr_test_mount),
         cmocka_unit_test(fsr_test_df),
     };
+    pho_context_init();
+    atexit(pho_context_fini);
 
     return cmocka_run_group_tests(fs_rados_test_format, fsr_setup,
-                                  fsr_teardown)
-         + cmocka_run_group_tests(fs_rados_test_mount, fsr_setup,
-                                   fsr_teardown);
+                                  fsr_teardown) +
+        cmocka_run_group_tests(fs_rados_test_mount, fsr_setup,
+                               fsr_teardown);
 }

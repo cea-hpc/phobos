@@ -287,6 +287,9 @@ int main(void)
                                         dom_simple_already_exist_teardown),
     };
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     return cmocka_run_group_tests(dss_object_move_cases, global_setup_dss,
                                   global_teardown_dss);
 }

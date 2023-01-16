@@ -26,6 +26,7 @@
 
 #include "pho_io.h"
 #include "pho_ldm.h"
+#include "pho_common.h"
 
 #include <setjmp.h>
 #include <cmocka.h>
@@ -630,13 +631,15 @@ int main(void)
         cmocka_unit_test(ior_test_delete_object),
         cmocka_unit_test(ior_test_delete_invalid_object),
     };
+    pho_context_init();
+    atexit(pho_context_fini);
 
     return cmocka_run_group_tests(rados_io_tests_open_close, ior_setup,
-                                  ior_teardown)
-           + cmocka_run_group_tests(rados_io_tests_write, ior_setup,
-                                    ior_teardown)
-           + cmocka_run_group_tests(rados_io_tests_get, ior_setup,
-                                    ior_teardown)
-           + cmocka_run_group_tests(rados_io_tests_delete, ior_setup,
-                                    ior_teardown);
+                                  ior_teardown) +
+        cmocka_run_group_tests(rados_io_tests_write, ior_setup,
+                               ior_teardown) +
+        cmocka_run_group_tests(rados_io_tests_get, ior_setup,
+                               ior_teardown) +
+        cmocka_run_group_tests(rados_io_tests_delete, ior_setup,
+                               ior_teardown);
 }

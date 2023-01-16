@@ -756,6 +756,8 @@ static void lrs_fini(struct lrs *lrs)
     int rc = 0;
     int i;
 
+    ENTRY;
+
     if (lrs == NULL)
         return;
 
@@ -806,6 +808,7 @@ static int lrs_init(struct lrs *lrs, struct lrs_params parm)
     if (rc && rc != -EALREADY)
         return rc;
 
+    atexit(pho_cfg_local_fini);
     pho_log_level_set(parm.log_level);
     if (parm.use_syslog)
         pho_log_callback_set(phobos_log_callback_def_with_sys);
@@ -1040,6 +1043,12 @@ int main(int argc, char **argv)
     pid_t pid;
     int rc;
 
+    rc = pho_context_init();
+    if (rc)
+        return -rc;
+
+    atexit(pho_context_fini);
+
     parm = parse_args(argc, argv);
 
     /* forking type daemon initialization */
@@ -1090,6 +1099,5 @@ int main(int argc, char **argv)
     }
 
     lrs_fini(&lrs);
-
     return EXIT_SUCCESS;
 }

@@ -214,6 +214,9 @@ int main(int argc, char **argv)
     off_t size;
     int rc, i;
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     conf.load_first = false;
 
     rc = parse_args(argc, argv, &conf);

@@ -410,6 +410,9 @@ int main(int argc, char **argv)
 {
     struct pho_comm_info ci;
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     assert(!pho_comm_open(&ci, "/tmp/socklrs", false));
 
     run_test("Test: bad ping", test_bad_ping, &ci, PHO_TEST_SUCCESS);

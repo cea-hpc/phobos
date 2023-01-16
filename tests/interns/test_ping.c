@@ -98,5 +98,8 @@ int main(void)
         cmocka_unit_test(phobos_admin_ping_bad_response),
     };
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     return cmocka_run_group_tests(phobos_ping_test_cases, setup, teardown);
 }

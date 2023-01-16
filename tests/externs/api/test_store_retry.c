@@ -217,7 +217,6 @@ int main(int argc, char **argv)
 
     assert(system("../../setup_db.sh drop_tables setup_tables") == 0);
     test_env_initialize();
-    pho_cfg_init_local(NULL);
 
     reinit_xfer(&xfer, argv[0], argv[0], PHO_XFER_OP_PUT);
 

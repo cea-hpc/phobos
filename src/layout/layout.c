@@ -128,7 +128,8 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
         return rc;
 
     /* Load new module if necessary */
-    rc = load_module(layout_name, sizeof(*mod), (void **) &mod);
+    rc = load_module(layout_name, sizeof(*mod), phobos_context(),
+                     (void **) &mod);
     if (rc)
         return rc;
 
@@ -180,7 +181,8 @@ int layout_decode(struct pho_encoder *enc, struct pho_xfer_desc *xfer,
         return rc;
 
     /* Load new module if necessary */
-    rc = load_module(layout_name, sizeof(*mod), (void **) &mod);
+    rc = load_module(layout_name, sizeof(*mod), phobos_context(),
+                     (void **) &mod);
     if (rc)
         return rc;
 
@@ -221,7 +223,8 @@ int layout_locate(struct dss_handle *dss, struct layout_info *layout,
         return rc;
 
     /* Load new module if necessary */
-    rc = load_module(layout_name, sizeof(*mod), (void **) &mod);
+    rc = load_module(layout_name, sizeof(*mod), phobos_context(),
+                     (void **) &mod);
     if (rc)
         return rc;
 

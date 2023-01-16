@@ -231,6 +231,9 @@ int main(void)
         cmocka_unit_test(omg_filter_build_fail),
     };
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     return cmocka_run_group_tests(object_md_save_test_cases,
                                   omg_setup, omg_teardown);
 }

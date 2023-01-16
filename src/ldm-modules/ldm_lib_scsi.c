@@ -796,9 +796,11 @@ static struct pho_lib_adapter_module_ops LA_SCSI_OPS = {
 };
 
 /** Lib adapter module registration entry point */
-int pho_module_register(void *module)
+int pho_module_register(void *module, void *context)
 {
     struct lib_adapter_module *self = (struct lib_adapter_module *) module;
+
+    phobos_module_context_set(context);
 
     self->desc = LA_SCSI_MODULE_DESC;
     self->ops = &LA_SCSI_OPS;

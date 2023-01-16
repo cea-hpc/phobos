@@ -58,7 +58,7 @@ check_PROGRAMS=test_attrs \
 TESTS=$(check_PROGRAMS)
 
 test_attrs_SOURCES=test_attrs.c
-test_attrs_LDADD=$(COMMON_LIB)
+test_attrs_LDADD=$(CFG_LIB) $(COMMON_LIB)
 test_attrs_CFLAGS=$(AM_CFLAGS) -I..
 
 test_cfg_SOURCES=test_cfg.c
@@ -66,11 +66,11 @@ test_cfg_LDADD=$(CFG_LIB) $(COMMON_LIB)
 test_cfg_CFLAGS=$(AM_CFLAGS) -I..
 
 test_common_SOURCES=test_common.c
-test_common_LDADD=$(COMMON_LIB)
+test_common_LDADD=$(CFG_LIB) $(COMMON_LIB)
 test_common_CFLAGS=$(AM_CFLAGS) -I..
 
 test_communication_SOURCES=test_communication.c
-test_communication_LDADD=$(COMMON_LIB) $(COMMUNICATION_LIB)
+test_communication_LDADD=$(COMMUNICATION_LIB) $(CFG_LIB) $(COMMON_LIB)
 test_communication_CFLAGS=$(AM_CFLAGS) -I..
 
 test_dev_tape_SOURCES=test_dev_tape.c
@@ -99,7 +99,7 @@ test_dss_object_move_LDADD=$(DSS_LIB) $(ADMIN_LIB) $(CFG_LIB) $(COMMON_LIB) \
                            $(LDM_LIB)
 
 test_io_SOURCES=test_io.c
-test_io_LDADD=$(IO_LIB) $(COMMON_LIB) $(IO_POSIX_LIB)
+test_io_LDADD=$(IO_LIB) $(COMMON_LIB) $(IO_POSIX_LIB) $(CFG_LIB)
 test_io_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/io-modules -I..
 if RADOS_ENABLED
 test_io_LDADD+=$(LDM_LIB) $(ADMIN_LIB)
@@ -114,7 +114,7 @@ test_ldm_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB) $(FS_POSIX_LIB)
 test_ldm_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/ldm-modules -I..
 
 test_log_SOURCES=test_log.c
-test_log_LDADD=$(COMMON_LIB)
+test_log_LDADD=$(CFG_LIB) $(COMMON_LIB)
 test_log_CFLAGS=$(AM_CFLAGS) -I..
 
 test_lrs_cfg_SOURCES=test_lrs_cfg.c
@@ -161,5 +161,5 @@ test_store_object_md_get_LDADD=$(STORE_LIB) $(ADMIN_LIB)
 test_store_object_md_get_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/store
 
 test_type_utils_SOURCES=test_type_utils.c
-test_type_utils_LDADD=$(COMMON_LIB)
+test_type_utils_LDADD=$(CFG_LIB) $(COMMON_LIB)
 test_type_utils_CFLAGS=$(AM_CFLAGS) -I..

@@ -153,6 +153,9 @@ int main(int argc, char **argv)
     char *saveptr;
     int rc;
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     if (argc != 3 && argc != 4) {
         fprintf(stderr,
                 "usage : %s drives tapes [log_level]\n"

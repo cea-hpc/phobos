@@ -321,6 +321,9 @@ int main(void)
         cmocka_unit_test(dlfo_deprecated_object_with_uuid),
     };
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     return cmocka_run_group_tests(object_md_save_test_cases,
                                   dlfo_setup, dlfo_teardown);
 }

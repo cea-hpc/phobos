@@ -41,8 +41,6 @@
 static pthread_rwlock_t modules_rwlock;
 static GHashTable *modules;
 
-typedef int (*module_init_func_t)(void *);
-
 /**
  * Initializes modules_rwlock and the modules hash table.
  */
@@ -107,14 +105,16 @@ static int build_module_instance_path(const char *mod_name, char *path,
 /**
  * Load a module by \a mod_name into \a mod.
  *
- * @param[in]   mod_name    Name of the module to load.
- * @param[in]   mod_size    Size of the structure corresponding to the module.
- * @param[out]  mod         Module descriptor to fill out.
+ * \param[in]   mod_name    Name of the module to load.
+ * \param[in]   mod_size    Size of the structure corresponding to the module.
+ * \param[in]   state       Global state of phobos to pass to the module (cf.
+ *                          phobos_context())
+ * \param[out]  mod         Module descriptor to fill out.
  *
- * @return 0 on success, -errno on error.
+ * \return                  0 on success, -errno on error.
  */
 static int module_open(const char *mod_name, const ssize_t mod_size,
-                       void **mod)
+                       void *state, void **mod)
 {
     module_init_func_t op_init;
     char modpath[NAME_MAX];
@@ -142,7 +142,7 @@ static int module_open(const char *mod_name, const ssize_t mod_size,
         LOG_GOTO(out_err, rc = -ENOSYS,
                  "Operation '%s' is missing", PM_OP_INIT);
 
-    rc = op_init(*mod);
+    rc = op_init(*mod, state);
     if (rc)
         LOG_GOTO(out_err, rc, "Could not initialize module '%s'", mod_name);
 
@@ -161,14 +161,16 @@ out_err:
  * Load a module if it has not already been. Relies on the global modules
  * hash map and its associated rwlock.
  *
- * @param[in]   mod_name    Name of the module to load.
- * @param[in]   mod_size    Size of the structure corresponding to the module.
- * @param[out]  mod         Module descriptor to fill out.
+ * \param[in]   mod_name    Name of the module to load.
+ * \param[in]   mod_size    Size of the structure corresponding to the module.
+ * \param[in]   state       Global state of phobos to pass to the module (cf.
+ *                          phobos_context())
+ * \param[out]  mod         Module descriptor to fill out.
  *
- * @return 0 on success, -errno on error.
+ * \return 0 on success, -errno on error.
  */
 static int mod_lazy_load(const char *mod_name, const ssize_t mod_size,
-                         void **module)
+                         void *state, void **module)
 {
     int rc2;
     int rc;
@@ -200,7 +202,7 @@ static int mod_lazy_load(const char *mod_name, const ssize_t mod_size,
         if (*module != NULL)
             goto out_unlock;
 
-        rc = module_open(mod_name, mod_size, module);
+        rc = module_open(mod_name, mod_size, state, module);
         if (rc)
             LOG_GOTO(out_unlock, rc, "Error while loading module %s",
                      mod_name);
@@ -223,7 +225,8 @@ out_unlock:
     return rc;
 }
 
-int load_module(const char *mod_name, const ssize_t mod_size, void **module)
+int load_module(const char *mod_name, const ssize_t mod_size, void *state,
+                void **module)
 {
-    return mod_lazy_load(mod_name, mod_size, module);
+    return mod_lazy_load(mod_name, mod_size, state, module);
 }

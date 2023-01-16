@@ -348,5 +348,8 @@ int main(void)
                                         test_teardown_three_devices),
     };
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     return cmocka_run_group_tests(lrs_device_tests, setup, teardown);
 }

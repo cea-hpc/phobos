@@ -35,48 +35,40 @@
 #include <string.h>
 #include <ini_config.h>
 
+/** XXX if this is used one day, it must be in a global context, not a global
+ * variable as it needs to be shared between modules
+ * (cf. struct phobos_global_context).
+ *
+ * Note that a new per-thread context will have to be created for this.
+ */
 /** thread-wide handle to DSS */
 static __thread void *thr_dss_hdl;
 
-/** global cached configuration */
-struct config {
-    const char *cfg_file;              /** pointer to the loaded config file */
-    struct collection_item *cfg_items; /** pointer to the loaded configuration
-                                         * structure
-                                         */
-    pthread_mutex_t lock;              /** lock to prevent concurrent load and
-                                         * read.
-                                         */
-};
-
-static struct config config = {
-    .cfg_file = NULL,
-    .cfg_items = NULL,
-    .lock = PTHREAD_MUTEX_INITIALIZER,
-};
-
 static inline bool config_is_loaded(void)
 {
-    return config.cfg_items != NULL;
+    return phobos_context()->config.cfg_items != NULL;
 }
 
 /** load a local config file */
 static int pho_cfg_load_file(const char *cfg)
 {
     struct collection_item *errors = NULL;
+    struct config *config;
     int rc;
 
-    MUTEX_LOCK(&config.lock);
+    MUTEX_LOCK(&phobos_context()->config.lock);
+
+    config = &phobos_context()->config;
 
     /* Make sure that the config was not loaded by another thread */
-    if (config.cfg_items != NULL)
+    if (config->cfg_items != NULL)
         GOTO(unlock, rc = 0);
 
-    rc = config_from_file("phobos", cfg, &config.cfg_items, INI_STOP_ON_ERROR,
-                          &errors);
+    rc = config_from_file("phobos", cfg, &config->cfg_items,
+                          INI_STOP_ON_ERROR, &errors);
 
     if (rc == 0) {
-        config.cfg_file = cfg;
+        config->cfg_file = cfg;
     } else {
         /* libini returns positive errno-like error codes */
         if (rc == ENOENT && strcmp(cfg, PHO_DEFAULT_CFG) == 0) {
@@ -86,14 +78,14 @@ static int pho_cfg_load_file(const char *cfg)
             pho_error(rc, "failed to read configuration file '%s'", cfg);
             print_file_parsing_errors(stderr, errors);
             fprintf(stderr, "\n");
-            free_ini_config(config.cfg_items);
+            free_ini_config(config->cfg_items);
         }
     }
 
     /* The error collection always has to be freed, even when empty */
     free_ini_config_errors(errors);
 unlock:
-    MUTEX_UNLOCK(&config.lock);
+    MUTEX_UNLOCK(&config->lock);
 
     return -rc;
 }
@@ -124,6 +116,17 @@ int pho_cfg_init_local(const char *config_file)
     pho_verb("Loading config %s", cfg);
 
     return pho_cfg_load_file(cfg);
+}
+
+void pho_cfg_local_fini(void)
+{
+    if (!config_is_loaded())
+        return;
+
+    MUTEX_LOCK(&phobos_context()->config.lock);
+    free_ini_config(phobos_context()->config.cfg_items);
+    phobos_context()->config.cfg_items = NULL;
+    MUTEX_UNLOCK(&phobos_context()->config.lock);
 }
 
 /**
@@ -222,9 +225,10 @@ static int pho_cfg_get_local(const char *section, const char *name,
     struct collection_item *item;
     int rc;
 
-    MUTEX_LOCK(&config.lock);
-    rc = get_config_item(section, name, config.cfg_items, &item);
-    MUTEX_UNLOCK(&config.lock);
+    MUTEX_LOCK(&phobos_context()->config.lock);
+    rc = get_config_item(section, name,
+                         phobos_context()->config.cfg_items, &item);
+    MUTEX_UNLOCK(&phobos_context()->config.lock);
     if (rc)
         return -rc;
 

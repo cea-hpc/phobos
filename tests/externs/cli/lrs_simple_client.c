@@ -248,6 +248,9 @@ int main(int argc, char **argv)
     struct option option;
     int rc;
 
+    pho_context_init();
+    atexit(pho_context_fini);
+
     pho_cfg_init_local(NULL);
     parse_args(argc, argv, &option);
     pho_info("action: %s, family: %s, medium: %s",

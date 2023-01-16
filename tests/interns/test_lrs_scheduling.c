@@ -1376,6 +1376,8 @@ int main(void)
     };
     int rc;
 
+    pho_context_init();
+
     pho_log_level_set(PHO_LOG_INFO);
     /* TODO the initial state of the devices can be a parameter (mounted,
      * loaded, empty)
@@ -1411,6 +1413,7 @@ int main(void)
     rc += cmocka_run_group_tests(test_io_sched_api,
                                  io_sched_setup,
                                  io_sched_teardown);
+    pho_context_fini();
 
     return rc;
 }

@@ -221,5 +221,6 @@ int main(int argc, char **argv)
              testget, &attrs, PHO_TEST_FAILURE);
 
     pho_info("ATTRS: All tests succeeded");
+
     exit(EXIT_SUCCESS);
 }
