@@ -152,6 +152,11 @@ struct lrs_dev {
                                                   * retry queue
                                                   */
     struct lrs_dev_hdl  *ld_handle;
+    int                  ld_io_request_type;
+        /**< OR-ed enum io_request_type indicating which schedulers currently
+         * have access to this device. Modified by
+         * io_sched_handle::dispatch_devices.
+         */
 };
 
 static inline bool dev_is_release_ready(struct lrs_dev *dev)

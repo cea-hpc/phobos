@@ -1465,6 +1465,7 @@ class DriveStatus(CLIManagedResourceMixin):
         self.mount_path = values.get("mount_path", "")
         self.media = values.get("media", "")
         self.ongoing_io = values.get("ongoing_io", "")
+        self.request_type = values.get("request_type", "")
 
     def get_display_fields(self, max_width=None):
         """Return a dict of available fields and optional display formatters."""
@@ -1476,6 +1477,7 @@ class DriveStatus(CLIManagedResourceMixin):
             'mount_path': None,
             'media': None,
             'ongoing_io': None,
+            'request_type': None,
         }
 
 

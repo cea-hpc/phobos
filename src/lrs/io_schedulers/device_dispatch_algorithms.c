@@ -13,6 +13,9 @@ static int io_scheduler_no_dispatch(struct io_scheduler *io_sched,
         struct lrs_dev *device;
 
         device = g_ptr_array_index(devices, i);
+        device->ld_io_request_type = (IO_REQ_READ |
+                                      IO_REQ_WRITE |
+                                      IO_REQ_FORMAT);
 
         io_sched->ops.add_device(io_sched, device);
     }
@@ -75,7 +78,9 @@ static int take_devices(struct io_scheduler *io_sched, GPtrArray *devices,
 }
 
 /* Give devices from \p devices to \p io_sched until it has \p nb_devices. */
-static int give_devices(struct io_scheduler *io_sched, GPtrArray *devices,
+static int give_devices(struct io_scheduler *io_sched,
+                        enum io_request_type type,
+                        GPtrArray *devices,
                         size_t nb_devices, const char *model)
 {
     size_t current_nb_devices;
@@ -103,6 +108,7 @@ static int give_devices(struct io_scheduler *io_sched, GPtrArray *devices,
              * schedulers.
              */
             return rc;
+        device->ld_io_request_type |= type;
     }
 
     return 0;
@@ -200,17 +206,17 @@ static int dispatch_devices(struct io_sched_handle *io_sched_hdl,
 {
     int rc;
 
-    rc = give_devices(&io_sched_hdl->read, devices_to_give,
+    rc = give_devices(&io_sched_hdl->read, IO_REQ_READ, devices_to_give,
                       repartition->nb_reads, model);
     if (rc)
         return rc;
 
-    rc = give_devices(&io_sched_hdl->write, devices_to_give,
+    rc = give_devices(&io_sched_hdl->write, IO_REQ_WRITE, devices_to_give,
                       repartition->nb_writes, model);
     if (rc)
         return rc;
 
-    rc = give_devices(&io_sched_hdl->format, devices_to_give,
+    rc = give_devices(&io_sched_hdl->format, IO_REQ_FORMAT, devices_to_give,
                       repartition->nb_formats, model);
     if (rc)
         return rc;

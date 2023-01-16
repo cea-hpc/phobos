@@ -86,6 +86,7 @@ function test_drive_status_with_ongoing_io()
     $phobos drive status |
         grep True |
         grep "/mnt/phobos-$(basename $(st2sg "$drive"))" |
+        grep RWF |
         grep "$tape"
 
     # send release request

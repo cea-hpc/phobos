@@ -2628,15 +2628,35 @@ static void _json_object_set_str(struct json_t *object,
     json_decref(str);
 }
 
+static const char *device_request_type2str(struct lrs_dev *device,
+                                           char buf[4])
+{
+    char *iter = buf;
+
+    if (device->ld_io_request_type & IO_REQ_READ)
+        *iter++ = 'R';
+    if (device->ld_io_request_type & IO_REQ_WRITE)
+        *iter++ = 'W';
+    if (device->ld_io_request_type & IO_REQ_FORMAT)
+        *iter++ = 'F';
+
+    return buf;
+}
+
 static void sched_fetch_device_status(struct lrs_dev *device,
                                       json_t *device_status)
 {
+    char request_type[4];
     json_t *integer;
+
+    memset(request_type, 0, sizeof(request_type));
 
     _json_object_set_str(device_status, "name", device->ld_dss_dev_info->path);
     _json_object_set_str(device_status, "device", device->ld_dev_path);
     _json_object_set_str(device_status, "serial",
                          device->ld_sys_dev_state.lds_serial);
+    _json_object_set_str(device_status, "request_type",
+                         device_request_type2str(device, request_type));
 
     integer = json_integer(device->ld_lib_dev_info.ldi_addr.lia_addr -
                            device->ld_lib_dev_info.ldi_first_addr);
