@@ -153,15 +153,20 @@ int main(int argc, char **argv)
     char *saveptr;
     int rc;
 
-    if (argc < 3) {
+    if (argc != 3 && argc != 4) {
         fprintf(stderr,
-                "usage : %s drives tapes\n"
+                "usage : %s drives tapes [log_level]\n"
                 "\n"
-                "    drives: comma separated list\n"
-                "    tapes: comma separated list\n",
+                "    drives:    comma separated list of drive serial numbers\n"
+                "    tapes:     comma separated list of tape labels\n"
+                "    log_level: integer from 0/DISABLED to 5/DEBUG,\n"
+                "               (default is 3/INFO)\n",
                 argv[0]);
         exit(EINVAL);
     }
+
+    if (argc == 4)
+        pho_log_level_set(atoi(argv[3]));
 
     rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl);
 

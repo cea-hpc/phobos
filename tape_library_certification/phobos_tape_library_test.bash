@@ -2,11 +2,13 @@
 
 binary_test="phobos_tape_library_test"
 
-if (( $# < 2 )); then
+if (( $# != 2 && $# != 3 )); then
     echo "Usage:"
-    echo "$(basename $0) drive_paths tape_labels"
+    echo "$(basename $0) drive_paths tape_labels [log_level]"
     echo ""
-    echo "drive_slots and tape_labels must be written in nodeset syntax"
+    echo "drive_slots and tape_labels must be written in nodeset syntax."
+    echo "log level is an integer from 0/DISABLED to 5/DEBUG"
+    echo "(default is 3/INFO).\n"
     echo ""
     echo "This command is only a wrapper around the execution of ${binary_test}"
     echo "to build the comma separated list of drive serial numbers and tape"
@@ -31,7 +33,13 @@ for drive_path in `nodeset -e $1`; do
     fi
 done
 
-cmd="${binary_test} ${drives_list} ${tapes_list}"
+if (( $# == 3 )); then
+    log_level="$3"
+else
+    log_level="3"
+fi
+
+cmd="${binary_test} ${drives_list} ${tapes_list} ${log_level}"
 
 echo "We run the following commandline:"
 echo "${cmd}"
