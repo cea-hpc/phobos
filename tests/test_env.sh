@@ -38,6 +38,7 @@ PHO_PYTHON_PATH="$cli_dir/build/lib.linux-$ARCH-$PY_VERSION/"
 export PYTHONPATH="$PHO_PYTHON_PATH"
 
 lrs_dir="$(readlink -e $test_bin_dir/../src/lrs)"
+tape_lib_certif_dir="$(readlink -e $test_bin_dir/../tape_library_certification)"
 
 # library paths
 PHO_ADMINLIB_PATH="$(readlink -e $test_bin_dir/../src/admin/.libs/)"

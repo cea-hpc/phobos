@@ -51,6 +51,7 @@ check_SCRIPTS=acceptance.sh \
               test_lock_clean.sh \
               test_media.sh \
               test_object_list.sh \
+              test_phobos_tape_library_test.sh \
               test_ping.sh \
               test_put.sh \
               test_raid1_split.sh \

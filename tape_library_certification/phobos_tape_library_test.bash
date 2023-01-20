@@ -1,6 +1,12 @@
 #!/bin/bash
 
-binary_test="phobos_tape_library_test"
+if hash phobos_tape_library_test >>/dev/null 2>&1 ; then
+    binary_test="phobos_tape_library_test"
+else
+    binary_test="$(dirname $0)/phobos_tape_library_test"
+fi
+
+phobos_bin="${phobos:-phobos}"
 
 if (( $# != 2 && $# != 3 )); then
     echo "Usage:"
@@ -19,7 +25,7 @@ fi
 tapes_list=$(nodeset --separator=',' -e $2)
 drives_list=""
 for drive_path in `nodeset -e $1`; do
-    drive_serial=$(phobos drive list ${drive_path})
+    drive_serial=$(${phobos_bin} drive list ${drive_path})
     if [ "${drive_serial}" == "" ]; then
         echo "Error: ${drive_path} is not in phobos db to get its serial"
              "number."
