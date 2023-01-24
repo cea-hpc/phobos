@@ -122,6 +122,24 @@ int pho_cfg_get_val(const char *section, const char *name,
                     const char **value);
 
 /**
+ * This function gets the value of a configuration item with the given \p name
+ * in the given \p section. If the value exists, it is interpreted as a CSV
+ * item. The items are stored in a list.
+ *
+ * \param[in]  section  Name of the section to look for the parameter.
+ * \param[in]  name     Name of the parameter to read.
+ * \param[out] value    List of items in the CSV list. The list is allocated and
+ *                      must be passed to free() as well as each string of the
+ *                      list.
+ * \param[out] n        Number of values returned
+ *
+ * \return  0           The parameter is returned successfully.
+ * \return -ENODATA     The parameter is not found.
+ */
+int pho_cfg_get_val_csv(const char *section, const char *name,
+                        char ***value, size_t *n);
+
+/**
  * Helper to get a numeric configuration parameter.
  * @param[in] param       Parameter to be retrieved.
  * @param[in] fail_value  Returned value if parsing fails.

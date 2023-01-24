@@ -145,12 +145,13 @@ static bool test_cfg_lvl(struct test_item *item, enum pho_cfg_level level)
 
 /** List of SCSI library configuration parameters */
 enum pho_cfg_params_test {
+    PHO_CFG_TEST_FIRST,
+
     PHO_CFG_TEST_param0,
     PHO_CFG_TEST_param1,
     PHO_CFG_TEST_strparam,
 
-    PHO_CFG_TEST_FIRST = PHO_CFG_TEST_param0,
-    PHO_CFG_TEST_LAST  = PHO_CFG_TEST_strparam,
+    PHO_CFG_TEST_LAST,
 };
 
 /** Definition and default values of SCSI library configuration parameters */
@@ -190,8 +191,59 @@ static int test_get_int(void *param)
     return 0;
 }
 
+struct csv_test_data {
+    char *input;
+    const char * const *expected;
+    size_t n;
+};
+
+static int test_get_csv(void *param)
+{
+    struct csv_test_data *td = param;
+    char **values;
+    int rc = 0;
+    size_t n;
+    size_t i;
+
+    if (setenv("PHOBOS_CFG_TEST_csvparam", td->input, 1)) {
+        pho_error(errno, "setenv failed");
+        exit(EXIT_FAILURE);
+    }
+
+    rc = pho_cfg_get_val_csv("CFG_TEST", "csvparam", &values, &n);
+    if (rc) {
+        pho_error(rc, "failed to get param");
+        return -1;
+    }
+
+    if (n != td->n) {
+        pho_info("Invalid number of items returned. Expected: %lu, got: %lu",
+                 td->n, n);
+        return -1;
+    }
+
+    for (i = 0; i < n; i++) {
+        if (!values[i] || strcmp(td->expected[i], values[i])) {
+            pho_error(-EINVAL, "Invalid value. Expected: %s, got: %s",
+                      td->expected[i], values[i]);
+            rc = -1;
+        }
+
+        free(values[i]);
+    }
+    free(values);
+
+    return rc;
+}
+
 int main(int argc, char **argv)
 {
+    static const char * const expected_items[] = {
+        "param1",
+        "param2",
+        "param3",
+    };
+    struct csv_test_data td;
     char *test_file;
     char *test_bin;
     char *test_dir;
@@ -296,6 +348,54 @@ int main(int argc, char **argv)
 
     run_test("Test 13: get non-numeric param", test_get_int,
              (void *)PHO_CFG_TEST_strparam, PHO_TEST_FAILURE);
+
+    td.input = "param1";
+    td.expected = expected_items;
+    td.n = 1;
+    run_test("Test 14: get CSV param", test_get_csv,
+             (void *)&td, PHO_TEST_SUCCESS);
+
+    td.input = "param1,";
+    td.expected = expected_items;
+    td.n = 1;
+    run_test("Test 14: get CSV param", test_get_csv,
+             (void *)&td, PHO_TEST_SUCCESS);
+
+    td.input = "param1,param2";
+    td.expected = expected_items;
+    td.n = 2;
+    run_test("Test 14: get CSV param", test_get_csv,
+             (void *)&td, PHO_TEST_SUCCESS);
+
+    td.input = "param1,param2,";
+    td.expected = expected_items;
+    td.n = 2;
+    run_test("Test 14: get CSV param", test_get_csv,
+             (void *)&td, PHO_TEST_SUCCESS);
+
+    td.input = "param1,param2,param3";
+    td.expected = expected_items;
+    td.n = 3;
+    run_test("Test 14: get CSV param", test_get_csv,
+             (void *)&td, PHO_TEST_SUCCESS);
+
+    td.input = "param1,param2,param3,";
+    td.expected = expected_items;
+    td.n = 3;
+    run_test("Test 14: get CSV param", test_get_csv,
+             (void *)&td, PHO_TEST_SUCCESS);
+
+    td.input = "";
+    td.expected = expected_items;
+    td.n = 0;
+    run_test("Test 14: get CSV param", test_get_csv,
+             (void *)&td, PHO_TEST_SUCCESS);
+
+    td.input = ",";
+    td.expected = expected_items;
+    td.n = 0;
+    run_test("Test 14: get CSV param", test_get_csv,
+             (void *)&td, PHO_TEST_SUCCESS);
 
     pho_info("CFG: All tests succeeded");
     exit(EXIT_SUCCESS);

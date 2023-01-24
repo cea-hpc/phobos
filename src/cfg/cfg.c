@@ -279,6 +279,74 @@ int pho_cfg_get_val_from_level(const char *section, const char *name,
     }
 }
 
+static size_t count_char(const char *s, char c)
+{
+    size_t n = 0;
+
+    for (; *s != '\0'; s++)
+        if (*s == c)
+            n++;
+
+    return n;
+}
+
+int pho_cfg_get_val_csv(const char *section, const char *name,
+                        char ***values, size_t *n)
+{
+    const char *csv_value;
+    char *csv_value_dup;
+    size_t nb_values;
+    char *saveptr;
+    char **array;
+    char **iter;
+    char *token;
+    int rc = 0;
+    int i;
+
+    *n = 0;
+    *values = NULL;
+
+    rc = pho_cfg_get_val(section, name, &csv_value);
+    if (rc)
+        return rc;
+
+    csv_value_dup = strdup(csv_value);
+    if (!csv_value)
+        return -errno;
+
+    nb_values = count_char(csv_value, ',');
+    array = malloc(sizeof(*array) * (nb_values + 1));
+    if (!array)
+        GOTO(free_dup, rc = -errno);
+
+    iter = array;
+    for (token = strtok_r(csv_value_dup, ",", &saveptr);
+         token != NULL;
+         token = strtok_r(NULL, ",", &saveptr)) {
+
+        *iter = strdup(token);
+        if (!*iter)
+            GOTO(free_values, rc = -errno);
+
+        iter++;
+        (*n)++;
+    }
+
+    *values = array;
+
+    free(csv_value_dup);
+    return 0;
+
+free_values:
+    for (i = 0; i < *n; i++)
+        free(values[i]);
+
+free_dup:
+    free(csv_value_dup);
+
+    return rc;
+}
+
 int pho_cfg_get_val(const char *section, const char *name, const char **value)
 {
     int rc;
