@@ -30,6 +30,7 @@
 #include <unistd.h>
 
 #include "lrs_device.h"
+#include "pho_cfg.h"
 #include "pho_common.h"
 #include "pho_ldm.h"
 #include "pho_types.h"
@@ -188,6 +189,12 @@ int main(int argc, char **argv)
                 "               (default is 3/INFO)\n",
                 argv[0]);
         exit(EINVAL);
+    }
+
+    rc = pho_cfg_init_local(NULL);
+    if (rc) {
+        pho_error(rc, "Error when loading local conf");
+        exit(-rc);
     }
 
     if (argc == 4)
