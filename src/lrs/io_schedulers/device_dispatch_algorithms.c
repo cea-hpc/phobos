@@ -43,16 +43,30 @@ int no_dispatch(struct io_sched_handle *io_sched_hdl,
     return 0;
 }
 
+static bool gptr_array_contains(GPtrArray *array, gconstpointer target)
+{
+    int i;
+
+    for (i = 0; i < array->len; i++)
+        if (g_ptr_array_index(array, i) == target)
+            return true;
+
+    return false;
+}
+
 /* Take devices from \p io_sched by calling io_scheduler_ops::reclaim_device
  * until it has \p target_nb_devices. Does nothing if the I/O scheduler already
  * has \p target_nb_devices or less.
  */
-static int take_devices(struct io_scheduler *io_sched, GPtrArray *devices,
-                        size_t target_nb_devices, const char *model)
+static int take_devices(struct io_scheduler *io_sched,
+                        enum io_request_type type,
+                        GPtrArray *devices,
+                        size_t target_nb_devices,
+                        const char *technology)
 {
     size_t current_nb_devices;
 
-    current_nb_devices = io_sched_count_device_per_model(io_sched, model);
+    current_nb_devices = io_sched_count_device_per_techno(io_sched, technology);
 
     if (current_nb_devices <= target_nb_devices)
         /* io_sched has no device to give */
@@ -60,17 +74,28 @@ static int take_devices(struct io_scheduler *io_sched, GPtrArray *devices,
 
     while (current_nb_devices > target_nb_devices) {
         struct lrs_dev *device;
+        bool is_shared;
         int rc;
 
-        rc = io_sched->ops.reclaim_device(io_sched, model, &device);
+        rc = io_sched->ops.reclaim_device(io_sched, technology, &device);
         if (rc == -ENODEV)
-            /* the scheduler may not have a device of this model to return */
+            /* the scheduler may not have a device of this technology to return
+             */
             break;
 
         if (rc)
             return rc;
 
-        g_ptr_array_add(devices, device);
+        is_shared = is_device_shared_between_schedulers(device);
+        if (!is_shared ||
+            (is_shared && !gptr_array_contains(devices, device))) {
+            /* the device is shared, only add it if this is the first time we
+             * see it.
+             */
+            g_ptr_array_add(devices, device);
+            device->ld_io_request_type &= ~type;
+        }
+
         current_nb_devices--;
     }
 
@@ -81,12 +106,12 @@ static int take_devices(struct io_scheduler *io_sched, GPtrArray *devices,
 static int give_devices(struct io_scheduler *io_sched,
                         enum io_request_type type,
                         GPtrArray *devices,
-                        size_t nb_devices, const char *model)
+                        size_t nb_devices, const char *technology)
 {
     size_t current_nb_devices;
     size_t target;
 
-    current_nb_devices = io_sched_count_device_per_model(io_sched, model);
+    current_nb_devices = io_sched_count_device_per_techno(io_sched, technology);
 
     if (current_nb_devices >= nb_devices)
         /* no device to take */
@@ -94,6 +119,14 @@ static int give_devices(struct io_scheduler *io_sched,
 
     /* we need nb_devices - current_nb_devices more devices */
     target = io_sched->devices->len + (nb_devices - current_nb_devices);
+
+    if (devices->len < nb_devices - current_nb_devices) {
+        pho_error(0,
+                  "Not enough devices for repartition. Expected: %lu, got: %d. "
+                  "Unexpected state, will abort.",
+                  nb_devices - current_nb_devices, devices->len);
+        abort();
+    }
 
     while (io_sched->devices->len < target) {
         struct lrs_dev *device;
@@ -108,18 +141,11 @@ static int give_devices(struct io_scheduler *io_sched,
              * schedulers.
              */
             return rc;
+
         device->ld_io_request_type |= type;
     }
 
     return 0;
-}
-
-static size_t count_total_devices(struct io_sched_handle *io_sched_hdl,
-                                  const char *model)
-{
-    return io_sched_count_device_per_model(&io_sched_hdl->read, model) +
-           io_sched_count_device_per_model(&io_sched_hdl->write, model) +
-           io_sched_count_device_per_model(&io_sched_hdl->format, model);
 }
 
 struct device_repartition {
@@ -134,7 +160,7 @@ struct range {
 };
 
 struct device_list {
-    const char *model;
+    const char *technology; /* tape technology (e.g. LTO5, LTO6, ...) */
     GPtrArray  *devices;
     struct range read;
     struct range write;
@@ -153,19 +179,20 @@ static size_t device_repartition_total(struct device_repartition *repartition)
  * - the devices that belong to schedulers which exceed the new repartition
  *   \p repartition
  *
- * \param[in/out]  io_sched_hdl     Handler of the I/O schedulers, some devices
- *                                  may be taken from each I/O scheduler if they
- *                                  have more than the new repartition
- * \param[in]      new_devices      new global list of devices to dispatch
- * \param[in]      repartition      new repartition of devices to follow
- * \param[out]     devices_to_give  list of struct lrs_dev of devices that will
- *                                  be redistributed to schedulers that need
- *                                  them to follow the new repartition
+ * \param[in/out] io_sched_hdl        Handler of the I/O schedulers, some
+ *                                    devices may be taken from each I/O
+ *                                    scheduler if they have more than the new
+ *                                    repartition
+ * \param[in]     devices_to_dispatch new global list of devices to dispatch
+ * \param[in]     repartition         new repartition of devices to follow
+ * \param[out]    devices_to_give     list of struct lrs_dev of devices that
+ *                                    will be redistributed to schedulers that
+ *                                    need them to follow the new repartition
  */
 static int fetch_devices_to_give(struct io_sched_handle *io_sched_hdl,
-                                 GPtrArray *new_devices,
+                                 GPtrArray *devices_to_dispatch,
                                  struct device_repartition *repartition,
-                                 const char *model,
+                                 const char *technology,
                                  GPtrArray *devices_to_give)
 {
     size_t i;
@@ -174,25 +201,29 @@ static int fetch_devices_to_give(struct io_sched_handle *io_sched_hdl,
     /* Insert new devices into the list. New devices are added at the end of the
      * list.
      */
-    /* FIXME this does not work when devices are shared between schedulers */
-    for (i = count_total_devices(io_sched_hdl, model);
-         i < new_devices->len; i++)
-        g_ptr_array_add(devices_to_give,
-                        g_ptr_array_index(new_devices, i));
+    for (i = 0; i < devices_to_dispatch->len; i++) {
+        struct lrs_dev *dev;
+
+        dev = g_ptr_array_index(devices_to_dispatch, i);
+        if (!(dev->ld_io_request_type &
+            (IO_REQ_READ | IO_REQ_WRITE | IO_REQ_FORMAT)))
+            /* device does not belong to any scheduler */
+            g_ptr_array_add(devices_to_give, dev);
+    }
 
     /* Take in excess devices from each scheduler */
-    rc = take_devices(&io_sched_hdl->read, devices_to_give,
-                      repartition->nb_reads, model);
+    rc = take_devices(&io_sched_hdl->read, IO_REQ_READ, devices_to_give,
+                      repartition->nb_reads, technology);
     if (rc)
         return rc;
 
-    rc = take_devices(&io_sched_hdl->write, devices_to_give,
-                      repartition->nb_writes, model);
+    rc = take_devices(&io_sched_hdl->write, IO_REQ_WRITE, devices_to_give,
+                      repartition->nb_writes, technology);
     if (rc)
         return rc;
 
-    rc = take_devices(&io_sched_hdl->format, devices_to_give,
-                      repartition->nb_formats, model);
+    rc = take_devices(&io_sched_hdl->format, IO_REQ_FORMAT, devices_to_give,
+                      repartition->nb_formats, technology);
     if (rc)
         return rc;
 
@@ -202,22 +233,22 @@ static int fetch_devices_to_give(struct io_sched_handle *io_sched_hdl,
 static int dispatch_devices(struct io_sched_handle *io_sched_hdl,
                             GPtrArray *devices_to_give,
                             struct device_repartition *repartition,
-                            const char *model)
+                            const char *technology)
 {
     int rc;
 
     rc = give_devices(&io_sched_hdl->read, IO_REQ_READ, devices_to_give,
-                      repartition->nb_reads, model);
+                      repartition->nb_reads, technology);
     if (rc)
         return rc;
 
     rc = give_devices(&io_sched_hdl->write, IO_REQ_WRITE, devices_to_give,
-                      repartition->nb_writes, model);
+                      repartition->nb_writes, technology);
     if (rc)
         return rc;
 
     rc = give_devices(&io_sched_hdl->format, IO_REQ_FORMAT, devices_to_give,
-                      repartition->nb_formats, model);
+                      repartition->nb_formats, technology);
     if (rc)
         return rc;
 
@@ -552,10 +583,10 @@ static void compute_number_of_devices(struct io_stats *io_stats,
     }
 }
 
-static int cfg_model_get_range(enum rsc_family family,
-                               const char *model,
-                               const char *minmax,
-                               const char **value)
+static int cfg_technology_get_range(enum rsc_family family,
+                                    const char *technology,
+                                    const char *minmax,
+                                    const char **value)
 {
     char *section;
     char *key;
@@ -565,7 +596,7 @@ static int cfg_model_get_range(enum rsc_family family,
     if (rc)
         return rc;
 
-    rc = asprintf(&key, "fair_share_%s_%s", model, minmax);
+    rc = asprintf(&key, "fair_share_%s_%s", technology, minmax);
     if (rc == -1) {
         rc = -ENOMEM;
         goto free_section;
@@ -626,10 +657,11 @@ static int device_list_init(struct device_list *device_list,
     int max[3] = {0};
     int rc;
 
-    device_list->model = dev->ld_dss_dev_info->rsc.model;
+    device_list->technology = dev->ld_technology;
     device_list->devices = g_ptr_array_new();
 
-    rc = cfg_model_get_range(family, device_list->model, "min", &cfg_min);
+    rc = cfg_technology_get_range(family, device_list->technology, "min",
+                                  &cfg_min);
     if (rc)
         return rc;
 
@@ -637,7 +669,8 @@ static int device_list_init(struct device_list *device_list,
     if (rc)
         return rc;
 
-    rc = cfg_model_get_range(family, device_list->model, "max", &cfg_max);
+    rc = cfg_technology_get_range(family, device_list->technology, "max",
+                                  &cfg_max);
     if (rc)
         return rc;
 
@@ -660,13 +693,12 @@ static void device_list_fini(struct device_list *device_list)
     g_ptr_array_free(device_list->devices, TRUE);
 }
 
-static gint sort_devices_by_model_cmp(gconstpointer a, gconstpointer b)
+static gint sort_devices_by_technology_cmp(gconstpointer a, gconstpointer b)
 {
     struct lrs_dev **deva = (struct lrs_dev **)a;
     struct lrs_dev **devb = (struct lrs_dev **)b;
 
-    return strcmp((*deva)->ld_dss_dev_info->rsc.model,
-                  (*devb)->ld_dss_dev_info->rsc.model);
+    return strcmp((*deva)->ld_technology, (*devb)->ld_technology);
 }
 
 /* g_ptr_array_copy is not available in the current version of glib2 */
@@ -685,8 +717,41 @@ static GPtrArray *gptr_array_copy(GPtrArray *input)
 }
 
 static int
-fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
-                                        struct device_list *device_list);
+fair_share_number_of_requests_one_techno(struct io_sched_handle *io_sched_hdl,
+                                         struct device_list *device_list);
+
+static size_t count_devices_shared_with(struct io_scheduler *io_sched,
+                                        enum io_request_type type)
+{
+    size_t count = 0;
+    int i = 0;
+
+    for (i = 0; i < io_sched->devices->len; i++) {
+        struct lrs_dev **dev;
+
+        dev = io_sched->ops.get_device(io_sched, i);
+        assert(dev);
+
+        if ((*dev)->ld_io_request_type & type)
+            count++;
+    }
+
+    return count;
+}
+
+static size_t count_distinct_devices(struct io_sched_handle *io_sched_hdl)
+{
+    size_t count = io_sched_hdl->read.devices->len;
+
+    count += io_sched_hdl->write.devices->len;
+    count -= count_devices_shared_with(&io_sched_hdl->write, IO_REQ_READ);
+
+    count += io_sched_hdl->format.devices->len;
+    count -= count_devices_shared_with(&io_sched_hdl->format,
+                                       IO_REQ_READ | IO_REQ_WRITE);
+
+    return count;
+}
 
 /* Callback for io_sched_handle::dispatch_devices. This algorithm will compute
  * the relative weight of the I/O schedulers and dispatch devices according to
@@ -695,42 +760,46 @@ fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
 int fair_share_number_of_requests(struct io_sched_handle *io_sched_hdl,
                                   GPtrArray *_devices)
 {
-    GArray *device_lists = g_array_new(FALSE, FALSE,
-                                       sizeof(struct device_list));
-    const char *model_of_previous_device = NULL;
+    const char *techno_of_previous_device = NULL;
+    GArray *device_lists;
     GPtrArray *devices;
+    size_t nb_devs;
     int rc = 0;
     int i;
 
+    if (io_sched_hdl->io_stats.nb_reads +
+        io_sched_hdl->io_stats.nb_writes +
+        io_sched_hdl->io_stats.nb_formats == 0)
+        /* nothing to do */
+        return 0;
+
+    device_lists = g_array_new(FALSE, FALSE, sizeof(struct device_list));
     /* Do not modify the callers' list of devices. */
     devices = gptr_array_copy(_devices);
-
-    // TODO handle new devices before sort (fixed in a later patch)
 
     /* When a device is removed, it is directly removed from the corresponding
      * scheduler. We can only have the same amount of devices plus new ones when
      * devices are added to the LRS.
      */
-    assert(io_sched_hdl->read.devices->len +
-           io_sched_hdl->write.devices->len +
-           io_sched_hdl->format.devices->len <= devices->len);
+    nb_devs = count_distinct_devices(io_sched_hdl);
+    assert(nb_devs <= devices->len);
 
-    /* sort devices by model before creating sublists */
-    g_ptr_array_sort(devices, sort_devices_by_model_cmp);
+    /* sort devices by technology before creating sublists */
+    g_ptr_array_sort(devices, sort_devices_by_technology_cmp);
 
     for (i = 0; i < devices->len; i++) {
         struct lrs_dev *dev = g_ptr_array_index(devices, i);
         struct device_list *current_dev_list;
 
-        if (!model_of_previous_device ||
-            strcmp(model_of_previous_device, dev->ld_dss_dev_info->rsc.model)) {
+        if (!techno_of_previous_device ||
+            strcmp(techno_of_previous_device, dev->ld_technology)) {
             struct device_list device_list;
 
             rc = device_list_init(&device_list, dev);
             if (rc)
                 goto free_device_list;
 
-            model_of_previous_device = dev->ld_dss_dev_info->rsc.model;
+            techno_of_previous_device = device_list.technology;
             g_ptr_array_add(device_list.devices, dev);
 
             g_array_append_val(device_lists, device_list);
@@ -749,7 +818,7 @@ int fair_share_number_of_requests(struct io_sched_handle *io_sched_hdl,
                                                   i);
 
         if (!rc)
-            rc = fair_share_number_of_requests_one_model(io_sched_hdl, devs);
+            rc = fair_share_number_of_requests_one_techno(io_sched_hdl, devs);
 
         device_list_fini(devs);
     }
@@ -761,7 +830,7 @@ free_device_list:
 }
 
 static int
-fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
+fair_share_number_of_requests_one_techno(struct io_sched_handle *io_sched_hdl,
                                         struct device_list *device_list)
 {
     GPtrArray *devices = device_list->devices;
@@ -782,13 +851,6 @@ fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
     if (!devices_to_give)
         return -ENOMEM;
 
-    /* When a device is removed, it is directly removed from the corresponding
-     * scheduler. We can only have the same amount of devices plus new ones when
-     * devices are added to the LRS.
-     */
-    assert(count_total_devices(io_sched_hdl, device_list->model)
-           <= devices->len);
-
     /* we have to allocate at least the sum of the mins */
     min_devices += io_sched_hdl->io_stats.nb_reads > 0 ?
         device_list->read.min : 0;
@@ -805,7 +867,7 @@ fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
                               device_list, min_devices);
 
     rc = fetch_devices_to_give(io_sched_hdl, devices, &repartition,
-                               device_list->model, devices_to_give);
+                               device_list->technology, devices_to_give);
     if (rc)
         /* fetch_devices_to_give is not expected to fail. If rc is not 0, a
          * system error ocurred (e.g. an allocation failure). Nothing much,
@@ -824,12 +886,14 @@ fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
             rc = io_sched_hdl->read.ops.add_device(&io_sched_hdl->read, dev);
             if (rc)
                 GOTO(free_devices, rc);
+            dev->ld_io_request_type |= IO_REQ_READ;
         }
 
         if (repartition.nb_writes > 0) {
             rc = io_sched_hdl->write.ops.add_device(&io_sched_hdl->write, dev);
             if (rc)
                 GOTO(free_devices, rc);
+            dev->ld_io_request_type |= IO_REQ_WRITE;
         }
 
         if (repartition.nb_formats > 0) {
@@ -837,6 +901,7 @@ fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
                                                      dev);
             if (rc)
                 GOTO(free_devices, rc);
+            dev->ld_io_request_type |= IO_REQ_FORMAT;
         }
 
         if (devices->len == 2) {
@@ -847,6 +912,7 @@ fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
                                                          dev);
                 if (rc)
                     GOTO(free_devices, rc);
+                dev->ld_io_request_type |= IO_REQ_READ;
             }
 
             if (repartition.nb_writes == 2) {
@@ -854,6 +920,7 @@ fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
                                                          dev);
                 if (rc)
                     GOTO(free_devices, rc);
+                dev->ld_io_request_type |= IO_REQ_WRITE;
             }
 
             if (repartition.nb_formats == 2) {
@@ -861,18 +928,18 @@ fair_share_number_of_requests_one_model(struct io_sched_handle *io_sched_hdl,
                                                          dev);
                 if (rc)
                     GOTO(free_devices, rc);
+                dev->ld_io_request_type |= IO_REQ_FORMAT;
             }
         }
-
-        GOTO(free_devices, rc = 0);
+    } else {
+        rc = dispatch_devices(io_sched_hdl, devices_to_give, &repartition,
+                              device_list->technology);
+        if (rc)
+            GOTO(free_devices, rc);
     }
 
-    rc = dispatch_devices(io_sched_hdl, devices_to_give, &repartition,
-                          device_list->model);
-    if (rc)
-        GOTO(free_devices, rc);
-
 free_devices:
+
     g_ptr_array_free(devices_to_give, TRUE);
 
     return rc;

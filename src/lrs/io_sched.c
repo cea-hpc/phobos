@@ -340,10 +340,14 @@ static int set_dispatch_algorithm(struct io_sched_handle *io_sched_hdl,
     if (rc)
         return rc;
 
-    if (!strcmp(value, "none"))
+    if (!strcmp(value, "none")) {
         io_sched_hdl->dispatch_devices = no_dispatch;
-    else if (!strcmp(value, "fair_share"))
+    } else if (!strcmp(value, "fair_share")) {
+        if (family != PHO_RSC_TAPE)
+            LOG_RETURN(-EINVAL, "fair_share is only supported for tapes");
+
         io_sched_hdl->dispatch_devices = fair_share_number_of_requests;
+    }
 
     return 0;
 }
@@ -413,8 +417,8 @@ int io_sched_compute_scheduler_weights(struct io_sched_handle *io_sched_hdl,
     return 0;
 }
 
-size_t io_sched_count_device_per_model(struct io_scheduler *io_sched,
-                                       const char *model)
+size_t io_sched_count_device_per_techno(struct io_scheduler *io_sched,
+                                        const char *techno)
 {
     size_t count = 0;
     int i;
@@ -423,7 +427,7 @@ size_t io_sched_count_device_per_model(struct io_scheduler *io_sched,
         /* we can dereference the result of get_device since \p i is valid */
         struct lrs_dev *dev = *io_sched->ops.get_device(io_sched, i);
 
-        if (!strcmp(dev->ld_dss_dev_info->rsc.model, model))
+        if (!strcmp(dev->ld_technology, techno))
             count++;
     }
 

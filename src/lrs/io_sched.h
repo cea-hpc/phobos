@@ -133,13 +133,13 @@ struct io_scheduler_ops {
      * example.
      *
      * \param[in]  io_sched  a valid io_scheduler
-     * \param[in]  model     the desired model of the device
+     * \param[in]  techno    the desired technology of the device
      * \param[out] device    the device that was given back by the I/O scheduler
      *
      * \return               0 on success, negative POSIX error code on failure
      */
     int (*reclaim_device)(struct io_scheduler *io_sched,
-                          const char *model,
+                          const char *techno,
                           struct lrs_dev **device);
 };
 
@@ -350,7 +350,7 @@ int io_sched_get_device_medium_pair(struct io_sched_handle *io_sched_hdl,
  * \param[in]  io_sched_hdl a valid io_sched_handle
  * \param[in]  device       a device to remove
  *
- * \return                 0 on success, negative POSIX error code on failure
+ * \return                  0 on success, negative POSIX error code on failure
  */
 int io_sched_remove_device(struct io_sched_handle *io_sched_hdl,
                            struct lrs_dev *device);
@@ -373,15 +373,15 @@ int io_sched_compute_scheduler_weights(struct io_sched_handle *io_sched_hdl,
                                        struct io_sched_weights *weights);
 
 /**
- * Count the number of devices of type \p model in \p io_sched.
+ * Count the number of devices of type \p techno in \p io_sched.
  *
  * \param[in]  io_sched  I/O scheduler whose device to count
- * \param[in]  model     which model we want to count
+ * \param[in]  techno    which technology we want to count
  *
- * \return               the number of devices of model \p model
+ * \return               the number of devices of technology \p techno
  */
-size_t io_sched_count_device_per_model(struct io_scheduler *io_sched,
-                                       const char *model);
+size_t io_sched_count_device_per_techno(struct io_scheduler *io_sched,
+                                        const char *techno);
 
 #define IO_SCHED_SECTION_TEMPLATE "io_sched_%s"
 

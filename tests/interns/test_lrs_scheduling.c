@@ -46,6 +46,10 @@
 #include "io_sched.h"
 #include "io_schedulers/schedulers.h"
 
+#define LTO5_MODEL "ULTRIUM-TD5"
+#define LTO6_MODEL "ULTRIUM-TD6"
+#define LTO7_MODEL "ULTRIUM-TD7"
+
 bool running;
 
 #define check_rc(expr)                                             \
@@ -55,8 +59,10 @@ bool running;
             LOG_RETURN(rc, #expr ": failed at line %d", __LINE__); \
     } while (0)
 
-static void create_device(struct lrs_dev *dev, char *path)
+static void create_device(struct lrs_dev *dev, char *path, char *model)
 {
+    int rc;
+
     memset(dev, 0, sizeof(*dev));
 
     dev->ld_op_status = PHO_DEV_OP_ST_EMPTY;
@@ -69,8 +75,17 @@ static void create_device(struct lrs_dev *dev, char *path)
 
     dev->ld_dss_dev_info = malloc(sizeof(*dev->ld_dss_dev_info));
     assert_non_null(dev->ld_dss_dev_info);
+    dev->ld_dss_dev_info->rsc.model = model;
     strcpy(dev->ld_dss_dev_info->rsc.id.name, path);
     dev->ld_dss_dev_info->path = path;
+    rc = lrs_dev_technology(dev, &dev->ld_technology);
+    assert_return_code(rc, -rc);
+}
+
+static void cleanup_device(struct lrs_dev *dev)
+{
+    free((void *)dev->ld_technology);
+    free(dev->ld_dss_dev_info);
 }
 
 static void medium_set_size(struct media_info *medium, ssize_t size)
@@ -154,7 +169,7 @@ static void dev_picker_one_available_device(void **data)
     struct lrs_dev device;
     struct lrs_dev *dev;
 
-    create_device(&device, "test");
+    create_device(&device, "test", LTO5_MODEL);
     gptr_array_from_list(devices, &device, 1, sizeof(device));
 
     dev = dev_picker(devices, PHO_DEV_OP_ST_UNSPEC, select_empty_loaded_mount,
@@ -163,7 +178,7 @@ static void dev_picker_one_available_device(void **data)
     assert_ptr_equal(dev, &device);
 
     g_ptr_array_free(devices, true);
-    free(device.ld_dss_dev_info);
+    cleanup_device(&device);
 }
 
 static void dev_picker_one_booked_device(void **data)
@@ -172,7 +187,7 @@ static void dev_picker_one_booked_device(void **data)
     struct lrs_dev device;
     struct lrs_dev *dev;
 
-    create_device(&device, "test");
+    create_device(&device, "test", LTO5_MODEL);
     gptr_array_from_list(devices, &device, 1, sizeof(device));
 
     device.ld_ongoing_io = true;
@@ -182,7 +197,7 @@ static void dev_picker_one_booked_device(void **data)
     assert_null(dev);
 
     g_ptr_array_free(devices, true);
-    free(device.ld_dss_dev_info);
+    cleanup_device(&device);
 }
 
 static void dev_picker_one_booked_device_one_available(void **data)
@@ -191,8 +206,8 @@ static void dev_picker_one_booked_device_one_available(void **data)
     struct lrs_dev device[2];
     struct lrs_dev *dev;
 
-    create_device(&device[0], "test1");
-    create_device(&device[1], "test2");
+    create_device(&device[0], "test1", LTO5_MODEL);
+    create_device(&device[1], "test2", LTO5_MODEL);
 
     gptr_array_from_list(devices, &device, 2, sizeof(device[0]));
 
@@ -209,8 +224,8 @@ static void dev_picker_one_booked_device_one_available(void **data)
     assert_null(dev);
 
     g_ptr_array_free(devices, true);
-    free(device[0].ld_dss_dev_info);
-    free(device[1].ld_dss_dev_info);
+    cleanup_device(&device[0]);
+    cleanup_device(&device[1]);
 }
 
 static void dev_picker_search_mounted(void **data)
@@ -220,8 +235,8 @@ static void dev_picker_search_mounted(void **data)
     struct lrs_dev device[2];
     struct lrs_dev *dev;
 
-    create_device(&device[0], "test1");
-    create_device(&device[1], "test2");
+    create_device(&device[0], "test1", LTO5_MODEL);
+    create_device(&device[1], "test2", LTO5_MODEL);
 
     gptr_array_from_list(devices, &device, 2, sizeof(device[0]));
 
@@ -246,8 +261,8 @@ static void dev_picker_search_mounted(void **data)
     assert_null(dev);
 
     g_ptr_array_free(devices, true);
-    free(device[0].ld_dss_dev_info);
-    free(device[1].ld_dss_dev_info);
+    cleanup_device(&device[0]);
+    cleanup_device(&device[1]);
 }
 
 static void dev_picker_search_loaded(void **data)
@@ -257,8 +272,8 @@ static void dev_picker_search_loaded(void **data)
     struct lrs_dev device[2];
     struct lrs_dev *dev;
 
-    create_device(&device[0], "test1");
-    create_device(&device[1], "test2");
+    create_device(&device[0], "test1", LTO5_MODEL);
+    create_device(&device[1], "test2", LTO5_MODEL);
 
     gptr_array_from_list(devices, &device, 2, sizeof(device[0]));
 
@@ -289,8 +304,8 @@ static void dev_picker_search_loaded(void **data)
     assert_string_equal(dev->ld_dev_path, "test1");
 
     g_ptr_array_free(devices, true);
-    free(device[0].ld_dss_dev_info);
-    free(device[1].ld_dss_dev_info);
+    cleanup_device(&device[0]);
+    cleanup_device(&device[1]);
 }
 
 static void dev_picker_available_space(void **data)
@@ -300,8 +315,8 @@ static void dev_picker_available_space(void **data)
     struct lrs_dev device[2];
     struct lrs_dev *dev;
 
-    create_device(&device[0], "test1");
-    create_device(&device[1], "test2");
+    create_device(&device[0], "test1", LTO5_MODEL);
+    create_device(&device[1], "test2", LTO5_MODEL);
 
     create_medium(&medium[0], "test1");
     create_medium(&medium[1], "test2");
@@ -331,8 +346,8 @@ static void dev_picker_available_space(void **data)
     assert_null(dev);
 
     g_ptr_array_free(devices, true);
-    free(device[0].ld_dss_dev_info);
-    free(device[1].ld_dss_dev_info);
+    cleanup_device(&device[0]);
+    cleanup_device(&device[1]);
 }
 
 static void dev_picker_flags(void **data)
@@ -342,8 +357,8 @@ static void dev_picker_flags(void **data)
     struct lrs_dev device[2];
     struct lrs_dev *dev;
 
-    create_device(&device[0], "test1");
-    create_device(&device[1], "test2");
+    create_device(&device[0], "test1", LTO5_MODEL);
+    create_device(&device[1], "test2", LTO5_MODEL);
 
     create_medium(&medium[0], "test1");
     create_medium(&medium[1], "test2");
@@ -366,8 +381,8 @@ static void dev_picker_flags(void **data)
     assert_null(dev);
 
     g_ptr_array_free(devices, true);
-    free(device[0].ld_dss_dev_info);
-    free(device[1].ld_dss_dev_info);
+    cleanup_device(&device[0]);
+    cleanup_device(&device[1]);
 }
 
 enum io_request_type IO_REQ_TYPE;
@@ -546,7 +561,7 @@ static void io_sched_add_device_twice(void **data)
     struct lrs_dev device;
     int rc;
 
-    create_device(&device, "test");
+    create_device(&device, "test", LTO5_MODEL);
 
     switch (IO_REQ_TYPE) {
     case IO_REQ_READ:
@@ -571,7 +586,7 @@ static void io_sched_add_device_twice(void **data)
     assert_int_equal(handler->devices->len, 1);
 
     rc = handler->ops.remove_device(handler, &device);
-    free(device.ld_dss_dev_info);
+    cleanup_device(&device);
     assert_return_code(rc, -rc);
     assert_int_equal(handler->devices->len, 0);
 }
@@ -583,8 +598,8 @@ static void io_sched_remove_non_existing_device(void **data)
     struct lrs_dev devices[2];
     int rc;
 
-    create_device(&devices[0], "D1");
-    create_device(&devices[1], "D2");
+    create_device(&devices[0], "D1", LTO5_MODEL);
+    create_device(&devices[1], "D2", LTO5_MODEL);
 
     switch (IO_REQ_TYPE) {
     case IO_REQ_READ:
@@ -612,8 +627,8 @@ static void io_sched_remove_non_existing_device(void **data)
     assert_return_code(rc, -rc);
     assert_int_equal(handler->devices->len, 0);
 
-    free(devices[0].ld_dss_dev_info);
-    free(devices[1].ld_dss_dev_info);
+    cleanup_device(&devices[0]);
+    cleanup_device(&devices[1]);
 }
 
 static void io_sched_no_request(void **data)
@@ -640,7 +655,7 @@ static void io_sched_one_request(void **data)
     struct lrs_dev dev;
     int rc;
 
-    create_device(&dev, "test");
+    create_device(&dev, "test", LTO5_MODEL);
     gptr_array_from_list(devices, &dev, 1, sizeof(dev));
     create_request(&reqc, media_names, 2, 1, io_sched->lock_handle);
 
@@ -663,7 +678,7 @@ static void io_sched_one_request(void **data)
     assert_return_code(rc, -rc);
 
     rc = io_sched_remove_device(io_sched, &dev);
-    free(dev.ld_dss_dev_info);
+    cleanup_device(&dev);
     assert_return_code(rc, -rc);
 
     destroy_request(&reqc);
@@ -740,8 +755,8 @@ static void io_sched_one_medium_no_device_available(void **data)
     size_t index;
     int rc;
 
-    create_device(&devices[0], "D1");
-    create_device(&devices[1], "D2");
+    create_device(&devices[0], "D1", LTO5_MODEL);
+    create_device(&devices[1], "D2", LTO5_MODEL);
     create_medium(&media[0], media_names[0]);
     create_medium(&media[1], media_names[1]);
     create_request(&reqc, media_names, 3, 2, io_sched->lock_handle);
@@ -778,11 +793,11 @@ static void io_sched_one_medium_no_device_available(void **data)
     assert_return_code(rc, -rc);
 
     rc = io_sched_remove_device(io_sched, &devices[0]);
-    free(devices[0].ld_dss_dev_info);
+    cleanup_device(&devices[0]);
     assert_return_code(rc, -rc);
 
     rc = io_sched_remove_device(io_sched, &devices[1]);
-    free(devices[1].ld_dss_dev_info);
+    cleanup_device(&devices[1]);
     assert_return_code(rc, -rc);
 
     destroy_request(&reqc);
@@ -804,7 +819,7 @@ static void io_sched_one_medium(void **data)
     size_t index = 0;
     int rc;
 
-    create_device(&device, "test");
+    create_device(&device, "test", LTO5_MODEL);
     create_medium(&M1, media_names[0]);
     create_request(&reqc, media_names, 1, 1, io_sched->lock_handle);
 
@@ -831,7 +846,7 @@ static void io_sched_one_medium(void **data)
     assert_return_code(rc, -rc);
 
     rc = io_sched_remove_device(io_sched, &device);
-    free(device.ld_dss_dev_info);
+    cleanup_device(&device);
     assert_return_code(rc, -rc);
 
     destroy_request(&reqc);
@@ -857,10 +872,10 @@ static void io_sched_4_medium(void **data)
     int rc;
     int i;
 
-    create_device(&devices[0], "D1");
-    create_device(&devices[1], "D2");
-    create_device(&devices[2], "D3");
-    create_device(&devices[3], "D4");
+    create_device(&devices[0], "D1", LTO5_MODEL);
+    create_device(&devices[1], "D2", LTO5_MODEL);
+    create_device(&devices[2], "D3", LTO5_MODEL);
+    create_device(&devices[3], "D4", LTO5_MODEL);
 
     for (i = 0; i < 4; i++)
         create_medium(&media[i], media_names[i]);
@@ -945,7 +960,7 @@ test_end:
 
     for (i = 0; i < 4; i++) {
         rc = io_sched_remove_device(io_sched, &devices[i]);
-        free(devices[i].ld_dss_dev_info);
+        cleanup_device(&devices[i]);
         assert_return_code(rc, -rc);
     }
 
@@ -973,8 +988,8 @@ static void io_sched_not_enough_devices(void **data)
 
     device_array = g_ptr_array_new();
 
-    create_device(&devices[0], "D1");
-    create_device(&devices[1], "D2");
+    create_device(&devices[0], "D1", LTO5_MODEL);
+    create_device(&devices[1], "D2", LTO5_MODEL);
     create_medium(&media[0], media_names[0]);
     create_medium(&media[1], media_names[1]);
     create_request(&reqc, media_names, 2, 2, io_sched->lock_handle);
@@ -1027,11 +1042,11 @@ test_end:
     assert_return_code(rc, -rc);
 
     rc = io_sched_remove_device(io_sched, &devices[0]);
-    free(devices[0].ld_dss_dev_info);
+    cleanup_device(&devices[0]);
     assert_return_code(rc, -rc);
 
     rc = io_sched_remove_device(io_sched, &devices[1]);
-    free(devices[1].ld_dss_dev_info);
+    cleanup_device(&devices[1]);
     assert_return_code(rc, -rc);
 
     destroy_request(&reqc);
@@ -1053,7 +1068,7 @@ static void io_sched_requeue_one_request(void **data)
     size_t index;
     int rc;
 
-    create_device(&device, "test");
+    create_device(&device, "test", LTO5_MODEL);
     gptr_array_from_list(devices, &device, 1, sizeof(device));
 
     create_medium(&M1, media_names[0]);
@@ -1098,7 +1113,7 @@ static void io_sched_requeue_one_request(void **data)
     assert_true(index < 2);
 
     rc = io_sched_remove_device(io_sched, &device);
-    free(device.ld_dss_dev_info);
+    cleanup_device(&device);
     assert_return_code(rc, -rc);
 
     rc = io_sched_remove_request(io_sched, &reqc);
@@ -1129,9 +1144,9 @@ static void test_io_sched_error(void **data, bool free_device)
 
     device_array = g_ptr_array_new();
 
-    create_device(&devices[0], "D1");
-    create_device(&devices[1], "D2");
-    create_device(&devices[2], "D3");
+    create_device(&devices[0], "D1", LTO5_MODEL);
+    create_device(&devices[1], "D2", LTO5_MODEL);
+    create_device(&devices[2], "D3", LTO5_MODEL);
 
     for (i = 0; i < 4; i++)
         create_medium(&media[i], media_names[i]);
@@ -1222,7 +1237,7 @@ static void test_io_sched_error(void **data, bool free_device)
 
     for (i = 0; i < 3; i++) {
         rc = io_sched_remove_device(io_sched, &devices[i]);
-        free(devices[i].ld_dss_dev_info);
+        cleanup_device(&devices[i]);
         assert_return_code(rc, -rc);
     }
 
@@ -1264,7 +1279,7 @@ static void io_sched_eagain(void **data)
         skip();
 
     device_array = g_ptr_array_new();
-    create_device(&device, "D1");
+    create_device(&device, "D1", LTO5_MODEL);
 
     for (i = 0; i < 3; i++)
         create_medium(&media[i], media_names[i]);
@@ -1319,7 +1334,7 @@ static void io_sched_eagain(void **data)
     assert_return_code(rc, -rc);
 
     rc = io_sched_remove_device(io_sched, &device);
-    free(device.ld_dss_dev_info);
+    cleanup_device(&device);
     assert_return_code(rc, -rc);
 
     destroy_request(&reqc);
@@ -1393,6 +1408,18 @@ static char *make_name(size_t i)
     return name;
 }
 
+static void test_lrs_dev_techno(void **data)
+{
+    struct lrs_dev dev;
+
+    create_device(&dev, "test", LTO5_MODEL);
+
+    assert_non_null(dev.ld_technology);
+    assert_string_equal(dev.ld_technology, "LTO5");
+
+    cleanup_device(&dev);
+}
+
 static GPtrArray *init_devices(GPtrArray *devices, size_t n, char *model)
 {
     size_t i;
@@ -1410,8 +1437,7 @@ static GPtrArray *init_devices(GPtrArray *devices, size_t n, char *model)
         dev = malloc(sizeof(*dev));
         assert_non_null(dev);
 
-        create_device(dev, name);
-        dev->ld_dss_dev_info->rsc.model = model;
+        create_device(dev, name, model);
         free(name);
 
         g_ptr_array_add(devices, dev);
@@ -1421,22 +1447,9 @@ static GPtrArray *init_devices(GPtrArray *devices, size_t n, char *model)
     return devices;
 }
 
-static void cleanup_devices(GPtrArray *devices)
-{
-    int i;
-
-    for (i = 0; i < devices->len; i++) {
-        struct lrs_dev *dev;
-
-        dev = g_ptr_array_index(devices, i);
-        free(dev->ld_dss_dev_info);
-        free(dev);
-    }
-    g_ptr_array_free(devices, TRUE);
-}
-
 static void io_sched_remove_all_devices(GPtrArray *devices,
-                                        struct io_scheduler *io_sched)
+                                        struct io_scheduler *io_sched,
+                                        enum io_request_type type)
 {
     int i;
 
@@ -1446,8 +1459,32 @@ static void io_sched_remove_all_devices(GPtrArray *devices,
 
         dev = g_ptr_array_index(devices, i);
         rc = io_sched->ops.remove_device(io_sched, dev);
+        dev->ld_io_request_type &= ~type;
         assert_return_code(rc, -rc);
     }
+}
+
+static void cleanup_devices(struct io_sched_handle *io_sched_hdl,
+                            GPtrArray *devices)
+{
+    int i;
+
+    if (io_sched_hdl) {
+        io_sched_remove_all_devices(devices, &io_sched_hdl->read, IO_REQ_READ);
+        io_sched_remove_all_devices(devices, &io_sched_hdl->write,
+                                    IO_REQ_WRITE);
+        io_sched_remove_all_devices(devices, &io_sched_hdl->format,
+                                    IO_REQ_FORMAT);
+    }
+
+    for (i = 0; i < devices->len; i++) {
+        struct lrs_dev *dev;
+
+        dev = g_ptr_array_index(devices, i);
+        cleanup_device(dev);
+        free(dev);
+    }
+    g_ptr_array_free(devices, TRUE);
 }
 
 #define log_test_dispatch(data, nb_devs, read_req, write_req, format_req,   \
@@ -1478,7 +1515,7 @@ static void test_dispatch(int line, void **data, size_t nb_devs,
     pho_info("%s: %d", __func__, line);
 
     if (!devices) {
-        devices = init_devices(NULL, nb_devs, "LTO5");
+        devices = init_devices(NULL, nb_devs, LTO5_MODEL);
         cleanup = true;
     }
 
@@ -1493,11 +1530,11 @@ static void test_dispatch(int line, void **data, size_t nb_devs,
     assert_int_equal(io_sched_hdl->write.devices->len, write_dev);
     assert_int_equal(io_sched_hdl->format.devices->len, format_dev);
 
-    io_sched_remove_all_devices(devices, &io_sched_hdl->read);
-    io_sched_remove_all_devices(devices, &io_sched_hdl->write);
-    io_sched_remove_all_devices(devices, &io_sched_hdl->format);
+    io_sched_remove_all_devices(devices, &io_sched_hdl->read, IO_REQ_READ);
+    io_sched_remove_all_devices(devices, &io_sched_hdl->write, IO_REQ_WRITE);
+    io_sched_remove_all_devices(devices, &io_sched_hdl->format, IO_REQ_FORMAT);
     if (cleanup)
-        cleanup_devices(devices);
+        cleanup_devices(NULL, devices);
 }
 
 static void fair_share_repartition(void **data)
@@ -1558,9 +1595,43 @@ static void fair_share_add_device(void **data)
     GPtrArray *devices;
     int rc;
 
-    devices = init_devices(NULL, 8, "LTO5");
-    create_device(&new_device, "D8");
-    new_device.ld_dss_dev_info->rsc.model = "LTO5";
+    devices = init_devices(NULL, 2, LTO5_MODEL);
+    create_device(&new_device, "D8", LTO5_MODEL);
+
+    io_sched_hdl->io_stats.nb_reads = 5;
+    io_sched_hdl->io_stats.nb_writes = 5;
+    io_sched_hdl->io_stats.nb_formats = 10;
+
+    rc = fair_share_number_of_requests(io_sched_hdl, devices);
+    assert_return_code(rc, -rc);
+
+    /* Not enough devices. The format scheduler has the most requests, so it has
+     * two devices (one shared with the other 2. We could also choose the give
+     * one device to the format only and share the last device to read and
+     * write.
+     */
+    assert_int_equal(io_sched_hdl->read.devices->len, 1);
+    assert_int_equal(io_sched_hdl->write.devices->len, 1);
+    assert_int_equal(io_sched_hdl->format.devices->len, 2);
+
+    g_ptr_array_add(devices, &new_device);
+    rc = fair_share_number_of_requests(io_sched_hdl, devices);
+    assert_return_code(rc, -rc);
+
+    /* since we now have 3 devices available, no device should be shared between
+     * schedulers.
+     */
+    assert_int_equal(io_sched_hdl->read.devices->len, 1);
+    assert_int_equal(io_sched_hdl->write.devices->len, 1);
+    assert_int_equal(io_sched_hdl->format.devices->len, 1);
+
+    /* the last device is on the stack, do not free it */
+    cleanup_device(&new_device);
+    g_ptr_array_remove_index(devices, devices->len - 1);
+    cleanup_devices(io_sched_hdl, devices);
+
+    devices = init_devices(NULL, 8, LTO5_MODEL);
+    create_device(&new_device, "D8", LTO5_MODEL);
 
     io_sched_hdl->io_stats.nb_reads = 5;
     io_sched_hdl->io_stats.nb_writes = 5;
@@ -1582,14 +1653,14 @@ static void fair_share_add_device(void **data)
     assert_int_equal(io_sched_hdl->write.devices->len, 2);
     assert_int_equal(io_sched_hdl->format.devices->len, 5);
 
-    io_sched_remove_all_devices(devices, &io_sched_hdl->read);
-    io_sched_remove_all_devices(devices, &io_sched_hdl->write);
-    io_sched_remove_all_devices(devices, &io_sched_hdl->format);
+    io_sched_remove_all_devices(devices, &io_sched_hdl->read, IO_REQ_READ);
+    io_sched_remove_all_devices(devices, &io_sched_hdl->write, IO_REQ_WRITE);
+    io_sched_remove_all_devices(devices, &io_sched_hdl->format, IO_REQ_FORMAT);
 
     /* the last device is on the stack, do not free it */
-    free(new_device.ld_dss_dev_info);
+    cleanup_device(&new_device);
     g_ptr_array_remove_index(devices, devices->len - 1);
-    cleanup_devices(devices);
+    cleanup_devices(io_sched_hdl, devices);
 }
 
 static void fair_share_take_devices(void **data)
@@ -1598,7 +1669,7 @@ static void fair_share_take_devices(void **data)
     GPtrArray *devices;
     int rc;
 
-    devices = init_devices(NULL, 8, "LTO5");
+    devices = init_devices(NULL, 8, LTO5_MODEL);
 
     io_sched_hdl->io_stats.nb_reads = 5;
     io_sched_hdl->io_stats.nb_writes = 5;
@@ -1633,36 +1704,38 @@ static void fair_share_take_devices(void **data)
     assert_int_equal(io_sched_hdl->write.devices->len, 1);
     assert_int_equal(io_sched_hdl->format.devices->len, 5);
 
-    io_sched_remove_all_devices(devices, &io_sched_hdl->read);
-    io_sched_remove_all_devices(devices, &io_sched_hdl->write);
-    io_sched_remove_all_devices(devices, &io_sched_hdl->format);
-    cleanup_devices(devices);
+    io_sched_remove_all_devices(devices, &io_sched_hdl->read, IO_REQ_READ);
+    io_sched_remove_all_devices(devices, &io_sched_hdl->write, IO_REQ_WRITE);
+    io_sched_remove_all_devices(devices, &io_sched_hdl->format, IO_REQ_FORMAT);
+    cleanup_devices(io_sched_hdl, devices);
 }
 
 static void fair_share_multi_technologies(void **data)
 {
+    struct io_sched_handle *io_sched_hdl = *data;
     GPtrArray *devices;
 
-    devices = init_devices(NULL, 8, "LTO5");
-    devices = init_devices(devices, 8, "LTO6");
-    devices = init_devices(devices, 8, "LTO7");
+    devices = init_devices(NULL, 8, LTO5_MODEL);
+    devices = init_devices(devices, 8, LTO6_MODEL);
+    devices = init_devices(devices, 8, LTO7_MODEL);
 
     log_test_dispatch(data, -1, 17, 4, 8, 15, 3, 6, devices);
 
-    cleanup_devices(devices);
+    cleanup_devices(io_sched_hdl, devices);
 }
 
 static void fair_share_ensure_min_max(void **data)
 {
+    struct io_sched_handle *io_sched_hdl = *data;
     GPtrArray *devices;
 
     set_fair_share_minmax("LTO5", "0,0,0", "0,2,2");
     log_test_dispatch(data, 2, 20, 15, 10, 0, 2, 1, NULL);
     log_test_dispatch(data, 2, 20, 10, 15, 0, 1, 2, NULL);
 
-    devices = init_devices(NULL, 8, "LTO5");
-    devices = init_devices(devices, 8, "LTO6");
-    devices = init_devices(devices, 8, "LTO7");
+    devices = init_devices(NULL, 8, LTO5_MODEL);
+    devices = init_devices(devices, 8, LTO6_MODEL);
+    devices = init_devices(devices, 8, LTO7_MODEL);
 
     set_fair_share_minmax("LTO5", "0,0,0", "100,100,100");
     log_test_dispatch(data, -1, 20, 4, 12, 12, 3, 9, devices);
@@ -1713,8 +1786,8 @@ static void fair_share_ensure_min_max(void **data)
 
     log_test_dispatch(data, -1, 0, 4, 12, 0, 24, 0, devices);
 
-    cleanup_devices(devices);
-    devices = init_devices(NULL, 8, "LTO5");
+    cleanup_devices(io_sched_hdl, devices);
+    devices = init_devices(NULL, 8, LTO5_MODEL);
 
     /* R: 4(.44) devs =>  -5.5% => +0 dev => 4
      * W: 0(.88) devs => -11.1% => +1 dev => 1
@@ -1730,7 +1803,7 @@ static void fair_share_ensure_min_max(void **data)
     set_fair_share_minmax("LTO5", "3,2,4", "8,8,8");
     log_test_dispatch(data, -1, 20, 4, 12, 3, 2, 3, devices);
 
-    cleanup_devices(devices);
+    cleanup_devices(io_sched_hdl, devices);
 
     /* tests with 1 device */
     set_fair_share_minmax("LTO5", "0,0,0", "0,0,0");
@@ -1778,22 +1851,27 @@ int main(void)
         /* TODO failure on device: set status to failed */
     };
     const struct CMUnitTest test_fair_share[] = {
+        cmocka_unit_test(test_lrs_dev_techno),
         cmocka_unit_test(fair_share_repartition),
         cmocka_unit_test(fair_share_add_device),
         cmocka_unit_test(fair_share_take_devices),
         cmocka_unit_test(fair_share_multi_technologies),
         cmocka_unit_test(fair_share_ensure_min_max),
     };
+    int error_count;
     int rc;
 
     pho_context_init();
+    rc = pho_cfg_init_local("../phobos.conf");
+    if (rc)
+        return rc;
 
     pho_log_level_set(PHO_LOG_INFO);
     /* TODO the initial state of the devices can be a parameter (mounted,
      * loaded, empty)
      */
 
-    rc = cmocka_run_group_tests(test_dev_picker, NULL, NULL);
+    error_count = cmocka_run_group_tests(test_dev_picker, NULL, NULL);
 
     check_rc(set_schedulers("fifo", "fifo", "fifo"));
 
@@ -1805,16 +1883,15 @@ int main(void)
 
     IO_REQ_TYPE = IO_REQ_WRITE;
     pho_info("Starting I/O scheduler test for WRITE requests");
-    rc += cmocka_run_group_tests(test_io_sched_api,
-                                 io_sched_setup,
-                                 io_sched_teardown);
-
+    error_count += cmocka_run_group_tests(test_io_sched_api,
+                                          io_sched_setup,
+                                          io_sched_teardown);
 
     IO_REQ_TYPE = IO_REQ_READ;
     pho_info("Starting I/O scheduler test for READ requests");
-    rc += cmocka_run_group_tests(test_io_sched_api,
-                                 io_sched_setup,
-                                 io_sched_teardown);
+    error_count += cmocka_run_group_tests(test_io_sched_api,
+                                          io_sched_setup,
+                                          io_sched_teardown);
 
     check_rc(set_schedulers("grouped_read", "fifo", "fifo"));
     check_rc(set_fair_share_minmax("LTO5", "0,0,0", "100,100,100"));
@@ -1823,17 +1900,20 @@ int main(void)
 
     pho_info("Starting I/O scheduler test for READ requests with "
              "'grouped_read' scheduler");
-    rc += cmocka_run_group_tests(test_io_sched_api,
-                                 io_sched_setup,
-                                 io_sched_teardown);
+    error_count += cmocka_run_group_tests(test_io_sched_api,
+                                          io_sched_setup,
+                                          io_sched_teardown);
 
     pho_info("Starting device dispatch tests");
     set_fair_share_minmax("LTO5", "1,1,1", "100,100,100");
-    rc += cmocka_run_group_tests(test_fair_share,
-                                 io_sched_setup,
-                                 io_sched_teardown);
+    check_rc(setenv("PHOBOS_TAPE_MODEL_supported_list", "LTO5,LTO6,LTO7", 1));
 
+    error_count += cmocka_run_group_tests(test_fair_share,
+                                          io_sched_setup,
+                                          io_sched_teardown);
+
+    pho_cfg_local_fini();
     pho_context_fini();
 
-    return rc;
+    return error_count;
 }

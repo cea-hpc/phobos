@@ -107,9 +107,21 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
     (*dev)->ld_sub_request = NULL;
     (*dev)->ld_mnt_path[0] = 0;
 
+    if ((*dev)->ld_dss_dev_info->rsc.model) {
+        /* not every family has a model set */
+        rc = lrs_dev_technology(*dev, &(*dev)->ld_technology);
+        if (rc && rc != -ENODATA)
+            /* Do not terminate the device thread if the model is not found in
+             * the configuration. Only the fair_share algorithm needs it.
+             */
+            LOG_GOTO(err_dss, rc, "Failed to read device technology");
+
+        rc = 0; /* -ENODATA is not an error here */
+    }
+
     rc = dev_thread_init(*dev);
     if (rc)
-        GOTO(err_dss, rc);
+        GOTO(err_techno, rc);
 
     g_ptr_array_add(handle->ldh_devices, *dev);
 
@@ -122,6 +134,8 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
 
     return 0;
 
+err_techno:
+    free((void *)(*dev)->ld_technology);
 err_dss:
     dss_fini(&(*dev)->ld_device_thread.dss);
 err_info:
@@ -153,6 +167,7 @@ static void sub_request_free_wrapper(gpointer sub_req, gpointer _null_user_data)
 static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
                                struct lrs_dev *dev)
 {
+    free((void *)dev->ld_technology);
     media_info_free(dev->ld_dss_media_info);
     dev->ld_dss_media_info = NULL;
 
@@ -2186,4 +2201,69 @@ int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl)
         LOG_RETURN(rc, "Failed to get default library device from config");
 
     return ldm_lib_open(lib_hdl, lib_dev);
+}
+
+int lrs_dev_technology(const struct lrs_dev *dev, const char **techno)
+{
+    size_t nb_technologies;
+    char **supported_list;
+    char **device_models;
+    int rc = 0;
+    size_t i;
+
+    ENTRY;
+
+    rc = pho_cfg_get_val_csv("tape_model", "supported_list",
+                             &supported_list, &nb_technologies);
+    if (rc)
+        LOG_RETURN(rc, "Failed to read 'supported_list' in 'tape_model'");
+
+    for (i = 0; i < nb_technologies; i++) {
+        char *section_name;
+        size_t nb_drives;
+        size_t j;
+
+        rc = asprintf(&section_name, "drive_type \"%s_drive\"",
+                      supported_list[i]);
+        if (rc == -1)
+            goto free_supported_list;
+
+        rc = pho_cfg_get_val_csv(section_name, "models", &device_models,
+                                 &nb_drives);
+        if (rc) {
+            free(section_name);
+            if (rc == -ENODATA)
+                /* Not every elements of supported_list necessarily has a drive
+                 * type in the config.
+                 */
+                continue;
+
+            LOG_GOTO(free_supported_list, rc,
+                     "failed to read 'drive_rw' in '%s'", section_name);
+        }
+
+        free(section_name);
+
+        for (j = 0; j < nb_drives; j++) {
+            if (!strcmp(device_models[j], dev->ld_dss_dev_info->rsc.model)) {
+                *techno = supported_list[i];
+                supported_list[i] = NULL; // do not free it later
+                break;
+            }
+        }
+
+        for (j = 0; j < nb_drives; j++)
+            free(device_models[j]);
+        free(device_models);
+
+        if (*techno)
+            break;
+    }
+
+free_supported_list:
+    for (i = 0; i < nb_technologies; i++)
+        free(supported_list[i]);
+    free(supported_list);
+
+    return rc;
 }

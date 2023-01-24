@@ -160,6 +160,12 @@ struct lrs_dev {
     int                  ld_last_client_rc;     /**< last I/O error of a client
                                                   *  sent on release.
                                                   */
+    const char *ld_technology; /** The technology of the device. For tapes, this
+                                 * corresponds the tape generation (e.g. LTO5).
+                                 * For dir, it is NULL. This information is only
+                                 * used by the fair share dispatch_devices
+                                 * algorithm for now.
+                                 */
 };
 
 static inline bool dev_is_release_ready(struct lrs_dev *dev)
@@ -177,6 +183,11 @@ static inline bool dev_is_sched_ready(struct lrs_dev *dev)
     return dev && thread_is_running(&dev->ld_device_thread) &&
            !dev->ld_ongoing_io && !dev->ld_needs_sync && !dev->ld_sub_request &&
            !dev->ld_ongoing_scheduled;
+}
+
+static inline bool is_device_shared_between_schedulers(struct lrs_dev *dev)
+{
+    return __builtin_popcount(dev->ld_io_request_type & 0b111) != 0;
 }
 
 /**
@@ -310,5 +321,19 @@ struct lrs_dev *lrs_dev_hdl_get(struct lrs_dev_hdl *handle, int index);
  * @return          0 on success, -1 * posix error code on failure.
  */
 int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl);
+
+/**
+ * Returns the technology of a drive from its model using the configuration for
+ * the association.
+ *
+ * \param[in]  dev     device whose technology name to get
+ * \param[out] techno  allocated technology of the device (must be passed to
+ *                     free)
+ *
+ * \return             0 on success, negative POSIX error code on failure
+ *            -ENODATA the model of the device was not found in the
+ *                     configuration
+ */
+int lrs_dev_technology(const struct lrs_dev *dev, const char **techno);
 
 #endif

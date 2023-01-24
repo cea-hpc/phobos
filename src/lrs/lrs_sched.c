@@ -52,13 +52,6 @@
 
 #include <jansson.h>
 
-enum sched_operation {
-    LRS_OP_NONE = 0,
-    LRS_OP_READ,
-    LRS_OP_WRITE,
-    LRS_OP_FORMAT,
-};
-
 static void *lrs_sched_thread(void *sdata);
 
 static int format_media_init(struct format_media *format_media)

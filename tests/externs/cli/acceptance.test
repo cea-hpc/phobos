@@ -37,6 +37,15 @@ function setup
     TAGS=foo-tag,bar-tag
     export PHOBOS_IO_SCHED_DIR_read_algo="grouped_read"
     export PHOBOS_IO_SCHED_TAPE_read_algo="grouped_read"
+    export PHOBOS_IO_SCHED_TAPE_dispatch_algo="fair_share"
+
+    export PHOBOS_IO_SCHED_TAPE_fair_share_lto5_min="0,0,0"
+    export PHOBOS_IO_SCHED_TAPE_fair_share_lto5_max="10,10,10"
+    export PHOBOS_IO_SCHED_TAPE_fair_share_lto6_min="0,0,0"
+    export PHOBOS_IO_SCHED_TAPE_fair_share_lto6_max="10,10,10"
+    export PHOBOS_LRS_families="tape"
+
+    export PHOBOS_TAPE_MODEL_supported_list="LTO5,LTO6"
 
     if [ -w /dev/changer ]; then
         export PHOBOS_LRS_families="dir,tape"
@@ -177,7 +186,7 @@ function dir_cleanup
     rm -rf /tmp/test.pho.1 /tmp/test.pho.2
 }
 
-function lock_test
+function dir_lock_test
 {
     # add 2 dirs: 1 locked, 1 unlocked
     # make sure they are inserted with the right status.
@@ -601,7 +610,7 @@ TESTS=("dir_setup; \
         mput; \
         concurrent_put; \
         check_status dir $dirs; \
-        lock_test; \
+        dir_lock_test; \
         concurrent_put_get_retry; \
         dir_cleanup")
 
@@ -613,7 +622,6 @@ if  [[ -w /dev/changer ]]; then
              mput; \
              concurrent_put; \
              check_status tape $tapes; \
-             lock_test; \
              concurrent_put_get_retry; \
              tape_drive_compat; \
              tape_cleanup")
