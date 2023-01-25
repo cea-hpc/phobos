@@ -89,7 +89,6 @@ phobos tape format --force 073200L6
 ```
 The option is not yet available for directories and rados pools.
 
-
 # Listing resources
 Any device or media can be listed using the 'list' operation. For instance,
 the following will list all the existing tape identifiers:
@@ -109,6 +108,12 @@ phobos tape list --output all
 ```
 
 Other options are available using the --help option.
+
+The file system status of a medium can be one of the following:
+* blank: medium is not formatted;
+* empty: medium is formatted, no data written to it;
+* used: medium contains data;
+* full: medium is full, no more data can be written to it.
 
 ## Querying the status of the drives
 

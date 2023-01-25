@@ -647,6 +647,7 @@ class MediaSetAccessOptHandler(DSSInteractHandler):
         )
         parser.add_argument('res', nargs='+', metavar='RESOURCE',
                             help='Resource(s) to update access mode')
+        parser.formatter_class = argparse.RawDescriptionHelpFormatter
 
 def setaccess_epilog(family):
     """Generic epilog"""
@@ -729,6 +730,12 @@ class MediaListOptHandler(ListOptHandler):
                             help=("attributes to output, comma-separated, "
                                   "choose from {" + " ".join(attr) + "} "
                                   "(default: %(default)s)"))
+        parser.formatter_class = argparse.RawDescriptionHelpFormatter
+        parser.epilog = """About file system status `fs.status`:
+    blank: medium is not formatted
+    empty: medium is formatted, no data written to it
+    used: medium contains data
+    full: medium is full, no more data can be written to it"""
 
 def check_max_width_is_valid(value):
     """Check that the width 'value' is greater than the one of '...}'"""
