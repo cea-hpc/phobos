@@ -867,6 +867,11 @@ void sched_resp_free_with_cont(void *_respc)
     free(respc);
 }
 
+static void sub_request_free_cb(void *sub_request)
+{
+    sub_request_free(sub_request);
+}
+
 void sched_fini(struct lrs_sched *sched)
 {
     if (sched == NULL)
@@ -877,7 +882,7 @@ void sched_fini(struct lrs_sched *sched)
     lrs_dev_hdl_fini(&sched->devices);
     dss_fini(&sched->sched_thread.dss);
     tsqueue_destroy(&sched->incoming, sched_req_free);
-    tsqueue_destroy(&sched->retry_queue, sched_req_free);
+    tsqueue_destroy(&sched->retry_queue, sub_request_free_cb);
     format_media_clean(&sched->ongoing_format);
 }
 
