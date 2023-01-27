@@ -33,6 +33,7 @@
 #include "pho_module_loader.h"
 #include "pho_type_utils.h"
 #include "slist.h"
+#include "scsi_api.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -586,6 +587,8 @@ int pho_module_register(void *module, void *context)
 
     self->desc = DEV_ADAPTER_SCSI_TAPE_MODULE_DESC;
     self->ops = &DEV_ADAPTER_SCSI_TAPE_OPS;
+
+    init_semaphores(&phobos_context()->lib_sync);
 
     return 0;
 }

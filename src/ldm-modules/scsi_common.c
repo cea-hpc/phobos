@@ -159,14 +159,90 @@ static void scsi_error_trace(const struct sg_io_hdr *hdr)
                 sbp->additional_sense_code_qualifier, sizeof(msg), msg));
 }
 
+static void lib_access_lock(uint8_t op)
+{
+    int rc = 0;
+
+    pho_debug("lock: %s", op == MOVE_MEDIUM ? "move" : "lookup");
+    if (!phobos_context()->lib_sync.exclusive_lookup_and_moves) {
+
+        if (op == MOVE_MEDIUM) {
+            rc = pthread_rwlock_rdlock(
+                &phobos_context()->lib_sync.move_lookup_lock);
+            assert(rc == 0);
+
+            if (phobos_context()->lib_sync.limit_move)
+                rc = sem_wait(&phobos_context()->lib_sync.move_sem);
+
+        } else {
+            rc = pthread_rwlock_wrlock(
+                &phobos_context()->lib_sync.move_lookup_lock);
+        }
+        assert(rc == 0);
+
+        return;
+    }
+
+    switch (op) {
+    case MODE_SENSE:
+    case READ_ELEMENT_STATUS:
+        if (phobos_context()->lib_sync.limit_lookup)
+            rc = sem_wait(&phobos_context()->lib_sync.lookup_sem);
+        break;
+    case MOVE_MEDIUM:
+        if (phobos_context()->lib_sync.limit_move)
+            rc = sem_wait(&phobos_context()->lib_sync.move_sem);
+        break;
+    }
+    assert(rc == 0);
+}
+
+static void lib_access_unlock(uint8_t op)
+{
+    int rc = 0;
+
+    pho_debug("unlock: %s", op == MOVE_MEDIUM ? "move" : "lookup");
+
+    if (!phobos_context()->lib_sync.exclusive_lookup_and_moves) {
+
+        rc = pthread_rwlock_unlock(
+            &phobos_context()->lib_sync.move_lookup_lock);
+        assert(rc == 0);
+
+        if (op == MOVE_MEDIUM) {
+            if (phobos_context()->lib_sync.limit_move)
+                rc = sem_post(&phobos_context()->lib_sync.move_sem);
+        }
+        assert(rc == 0);
+
+        return;
+    }
+
+    switch (op) {
+    case MODE_SENSE:
+    case READ_ELEMENT_STATUS:
+        if (phobos_context()->lib_sync.limit_lookup)
+            rc = sem_post(&phobos_context()->lib_sync.lookup_sem);
+        break;
+    case MOVE_MEDIUM:
+        if (phobos_context()->lib_sync.limit_move)
+            rc = sem_post(&phobos_context()->lib_sync.move_sem);
+        break;
+    }
+    assert(rc == 0);
+}
+
 int scsi_execute(int fd, enum scsi_direction direction,
                  unsigned char *cdb, int cdb_len,
                  struct scsi_req_sense *sbp, int sb_len,
                  void *dxferp, int dxfer_len,
                  unsigned int timeout_msec)
 {
-    int rc;
     struct sg_io_hdr hdr = {0};
+    uint8_t op;
+    int rc;
+
+    op = *cdb;
 
     hdr.interface_id = 'S'; /* S for generic SCSI */
     hdr.dxfer_direction = scsi_dir2sg(direction);
@@ -180,7 +256,9 @@ int scsi_execute(int fd, enum scsi_direction direction,
     hdr.timeout = timeout_msec;
     /* hdr.flags = 0: default */
 
+    lib_access_lock(op);
     rc = ioctl(fd, SG_IO, &hdr);
+    lib_access_unlock(op);
     if (rc)
         LOG_RETURN(rc = -errno, "ioctl() failed");
 
