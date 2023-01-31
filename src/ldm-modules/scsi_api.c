@@ -54,11 +54,18 @@ enum pho_cfg_params_scsi {
 
     PHO_CFG_SCSI_max_element_status, /**< Max chunk size for
                                           ELEMENT_STATUS request. */
+    PHO_CFG_SCSI_query_timeout_ms, /**< Timeout of a SCSI query request */
+    PHO_CFG_SCSI_move_timeout_ms, /**< Timeout of a SCSI move request */
 
     /* Delimiters, update when modifying options */
     PHO_CFG_SCSI_FIRST = PHO_CFG_SCSI_retry_count,
     PHO_CFG_SCSI_LAST  = PHO_CFG_SCSI_max_element_status,
 };
+
+#define _STR(X) #X
+#define STR(X) _STR(X)
+#define DEFAULT_QUERY_TIMEOUT_MS     1000 /* 1 s */
+#define DEFAULT_MOVE_TIMEOUT_MS    300000 /* 5 min */
 
 /** Definition and default values of SCSI configuration parameters */
 const struct pho_config_item cfg_scsi[] = {
@@ -81,6 +88,16 @@ const struct pho_config_item cfg_scsi[] = {
         .section = "scsi",
         .name    = "max_element_status",
         .value   = "0", /* unlimited */
+    },
+    [PHO_CFG_SCSI_query_timeout_ms] = {
+        .section = "scsi",
+        .name    = "query_timeout_ms",
+        .value   = STR(DEFAULT_QUERY_TIMEOUT_MS),
+    },
+    [PHO_CFG_SCSI_move_timeout_ms] = {
+        .section = "scsi",
+        .name    = "move_timeout_ms",
+        .value   = STR(DEFAULT_MOVE_TIMEOUT_MS),
     },
 };
 
@@ -126,6 +143,35 @@ static int scsi_retry_long(void)
     return long_retry_delay;
 }
 
+/** Return query timeout ms (get it once) */
+static int scsi_query_timeout_ms(void)
+{
+    static int query_timeout_ms = -1;
+
+    if (query_timeout_ms != -1)
+        return query_timeout_ms;
+
+    query_timeout_ms = PHO_CFG_GET_INT(cfg_scsi, PHO_CFG_SCSI, query_timeout_ms,
+                                       DEFAULT_QUERY_TIMEOUT_MS);
+
+    return query_timeout_ms;
+}
+
+/** Return move timeout ms (get it once) */
+static int scsi_move_timeout_ms(void)
+{
+    static int move_timeout_ms = -1;
+
+    if (move_timeout_ms != -1)
+        return move_timeout_ms;
+
+    /* fallback to 1 s on failure */
+    move_timeout_ms = PHO_CFG_GET_INT(cfg_scsi, PHO_CFG_SCSI, move_timeout_ms,
+                                      DEFAULT_MOVE_TIMEOUT_MS);
+
+    return move_timeout_ms;
+}
+
 int scsi_mode_sense(int fd, struct mode_sense_info *info)
 {
     struct mode_sense_result_header *res_hdr;
@@ -150,7 +196,7 @@ int scsi_mode_sense(int fd, struct mode_sense_info *info)
     PHO_RETRY_LOOP(rc, scsi_retry_func, NULL, scsi_retry_count(),
                    scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), buffer, sizeof(buffer),
-                   QUERY_TIMEOUT_MS);
+                   scsi_query_timeout_ms());
     if (rc)
         return rc;
 
@@ -333,7 +379,7 @@ static int _scsi_element_status(int fd, enum element_type_code type,
     PHO_RETRY_LOOP(rc, scsi_retry_func, NULL, scsi_retry_count(),
                    scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), buffer, len,
-                   QUERY_TIMEOUT_MS);
+                   scsi_query_timeout_ms());
     if (rc)
         goto free_buff;
 
@@ -494,7 +540,7 @@ int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
     PHO_RETRY_LOOP(rc, scsi_retry_func, NULL, scsi_retry_count(),
                    scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), NULL, 0,
-                   MOVE_TIMEOUT_MS);
+                   scsi_move_timeout_ms());
     return rc;
 }
 

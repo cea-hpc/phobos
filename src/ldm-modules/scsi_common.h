@@ -28,9 +28,6 @@
 
 #include <stdint.h>
 
-#define MOVE_TIMEOUT_MS    300000 /* 5min */
-#define QUERY_TIMEOUT_MS     1000 /* 1sec */
-
 /** Request sense description */
 struct scsi_req_sense {
     uint8_t error_code:7;                           /* Byte 0 Bits 0-6 */
