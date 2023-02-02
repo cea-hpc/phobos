@@ -59,7 +59,7 @@ enum pho_cfg_params_scsi {
 
     /* Delimiters, update when modifying options */
     PHO_CFG_SCSI_FIRST = PHO_CFG_SCSI_retry_count,
-    PHO_CFG_SCSI_LAST  = PHO_CFG_SCSI_max_element_status,
+    PHO_CFG_SCSI_LAST  = PHO_CFG_SCSI_move_timeout_ms,
 };
 
 #define _STR(X) #X
