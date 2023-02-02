@@ -27,7 +27,6 @@
 /* Phobos stuff */
 #include "pho_cfg.h"
 #include "pho_dss.h"
-#include "pho_cfg.h"
 #include "phobos_admin.h"
 
 /* Standard stuff */
@@ -68,6 +67,8 @@ static int global_setup(void)
     rc = pho_cfg_init_local("../phobos.conf");
     if (rc == -ENOENT)
         rc = pho_cfg_init_local("../../phobos.conf");
+
+    atexit(pho_cfg_local_fini);
 
     if (rc && rc != -EALREADY)
         return rc;
@@ -150,7 +151,6 @@ int global_teardown_admin(void **state)
         phobos_admin_fini(*state);
         free(*state);
     }
-    pho_cfg_local_fini();
 
     return global_teardown();
 }
