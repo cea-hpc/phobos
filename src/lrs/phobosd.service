@@ -3,6 +3,10 @@ Description=Phobos Local Resource Scheduler (LRS) daemon
 
 [Service]
 Type=forking
+# Send a SIGTERM signal to the main process unit, and then a SIGKILL to the
+# whole control group after 5 minutes
+KillMode=mixed
+TimeoutStopSec=300
 Environment="PHOBOSD_PID_FILEPATH=/run/phobosd/phobosd.pid"
 RuntimeDirectory=phobosd
 PIDFile=/run/phobosd/phobosd.pid
