@@ -605,7 +605,6 @@ search_loaded_medium(struct io_sched_handle *io_sched_hdl,
         return *dev;
 
     dev = io_sched_search_loaded_medium(&io_sched_hdl->format, name);
-
     if (dev)
         return *dev;
 
@@ -746,6 +745,132 @@ static int process_release_request(struct lrs_sched *sched,
     return rc;
 }
 
+static const char *config_get_value(json_t *config, const char *key,
+                                    const char *configurationstr)
+{
+    json_t *value;
+
+    value = json_object_get(config, key);
+    if (!value) {
+        pho_error(-EINVAL, "Key '%s' not found in configuration '%s'",
+                  key, configurationstr);
+        return NULL;
+    }
+
+    if (!json_is_string(value)) {
+        pho_error(-EINVAL,
+                  "Value of '%s' in configuration '%s' is not a string",
+                  key, configurationstr);
+        return NULL;
+    }
+
+    return json_string_value(value);
+}
+
+static int handle_configure_request(struct lrs *lrs,
+                                    const struct req_container *reqc)
+{
+    pho_req_configure_t *confreq = reqc->req->configure;
+    json_t *configuration;
+    json_error_t error;
+    json_t *value;
+    size_t index;
+    int rc = 0;
+
+    if (!confreq->configuration || !strcmp(confreq->configuration, ""))
+        LOG_RETURN(-EPROTO,
+                   "Received a configuration request without configuration "
+                   "information");
+
+    configuration = json_loads(confreq->configuration, JSON_REJECT_DUPLICATES,
+                               &error);
+    if (!configuration)
+        LOG_RETURN(rc = -EINVAL, "Failed to parse configuration '%s': %s",
+                   confreq->configuration, error.text);
+
+    if (!json_is_array(configuration))
+        LOG_GOTO(free_conf, rc = -EINVAL, "Expected JSON object");
+
+    json_array_foreach(configuration, index, value) {
+        const char *elem_value;
+        const char *elem_key;
+        const char *section;
+
+        if (!json_is_object(value))
+            LOG_GOTO(free_conf, rc = -EINVAL,
+                     "Value at index %lu is not an object", index);
+
+        section = config_get_value(value, "section", confreq->configuration);
+        if (!section)
+            GOTO(free_conf, rc = -EINVAL);
+
+        elem_key = config_get_value(value, "key", confreq->configuration);
+        if (!elem_key)
+            GOTO(free_conf, rc = -EINVAL);
+
+        elem_value = config_get_value(value, "value", confreq->configuration);
+        if (!elem_value)
+            GOTO(free_conf, rc = -EINVAL);
+
+        rc = pho_cfg_set_val_local(section, elem_key, elem_value);
+        if (rc)
+            GOTO(free_conf, rc = -EINVAL);
+    }
+
+free_conf:
+    json_decref(configuration);
+
+    return rc;
+}
+
+static int _process_configure_request(struct lrs *lrs,
+                                      const struct req_container *reqc)
+{
+    struct resp_container respc;
+    pho_resp_t resp;
+    int rc;
+
+    rc = handle_configure_request(lrs, reqc);
+    if (rc)
+        goto send_error;
+
+    pho_srl_response_configure_alloc(&resp);
+    resp.req_id = reqc->req->id;
+    resp.configure = NULL;
+
+    respc.resp = &resp;
+    respc.socket_id = reqc->socket_id;
+
+    rc = _send_message(&lrs->comm, &respc);
+    pho_srl_response_free(&resp, false);
+    if (rc)
+        pho_error(rc, "Failed to send configure response");
+
+send_error:
+    _send_error(lrs, rc, reqc);
+
+    return rc;
+}
+
+static bool handle_quick_requests(struct lrs *lrs, struct req_container *reqc)
+{
+    if (pho_request_is_ping(reqc->req)) {
+        _process_ping_request(lrs, reqc);
+        sched_req_free(reqc);
+        return true;
+    } else if (pho_request_is_monitor(reqc->req)) {
+        _process_monitor_request(lrs, reqc);
+        sched_req_free(reqc);
+        return true;
+    } else if (pho_request_is_configure(reqc->req)) {
+        _process_configure_request(lrs, reqc);
+        sched_req_free(reqc);
+        return true;
+    } else {
+        return false;
+    }
+}
+
 /**
  * schedulers_to_signal is a bool array of length PHO_RSC_LAST, representing
  * every scheduler that could be signaled
@@ -776,18 +901,8 @@ static int _prepare_requests(struct lrs *lrs, bool *schedulers_to_signal,
             continue;
         }
 
-        /* send back the ping request */
-        if (pho_request_is_ping(req_cont->req)) {
-            _process_ping_request(lrs, req_cont);
-            sched_req_free(req_cont);
+        if (handle_quick_requests(lrs, req_cont))
             continue;
-        }
-
-        if (pho_request_is_monitor(req_cont->req)) {
-            _process_monitor_request(lrs, req_cont);
-            sched_req_free(req_cont);
-            continue;
-        }
 
         rc2 = pthread_mutex_init(&req_cont->mutex, NULL);
         if (rc2) {

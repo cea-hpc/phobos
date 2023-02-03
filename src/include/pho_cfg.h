@@ -122,6 +122,22 @@ int pho_cfg_get_val(const char *section, const char *name,
                     const char **value);
 
 /**
+ * Set a configuration value local to the process by inserting it to the
+ * environment since this is the location with the highest priority.
+ *
+ * \param[in]  section  Name of the section where to set the parameter.
+ * \param[in]  name     Name of the parameter to set.
+ * \param[out] value    Value of the parameter.
+ *
+ * \return  0           The parameter is set successfully.
+ *         -EINVAL      The parameters are invalid
+ *         -ENOMEM      Not enough memory on the system
+ */
+int pho_cfg_set_val_local(const char *section, const char *name,
+                          const char *value);
+
+
+/**
  * This function gets the value of a configuration item with the given \p name
  * in the given \p section. If the value exists, it is interpreted as a CSV
  * item. The items are stored in a list.

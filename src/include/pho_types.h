@@ -526,6 +526,13 @@ enum notify_op {
     PHO_NTFY_OP_LAST
 };
 
+enum configure_op {
+    PHO_CONF_OP_INVAL = -1,
+    PHO_CONF_OP_SET,
+    PHO_CONF_OP_GET,
+    PHO_CONF_OP_LAST
+};
+
 /**
  * Threadsafe FIFO queue, composed of a GLIB queue and a mutex.
  *

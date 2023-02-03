@@ -104,6 +104,24 @@ int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
                                int num_dev, int *num_removed_dev);
 
 /**
+ * Update the configuration of the local daemon
+ *
+ * \param[in]  adm      Admin module handler.
+ * \param[in]  sections Name of the sections of configuration
+ * \param[in]  keys     Name of the keys to update
+ * \param[in]  values   Values to set
+ * \param[in]  n        Number of configuration elements to update
+ *
+ * \return     0     on success,
+ *            -errno on failure.
+ */
+int phobos_admin_sched_conf_set(struct admin_handle *adm,
+                                const char **sections,
+                                const char **keys,
+                                const char **values,
+                                size_t n);
+
+/**
  * Update the administrative state of the given devices to 'locked' and
  * inform the LRS devices state has changed.
  *

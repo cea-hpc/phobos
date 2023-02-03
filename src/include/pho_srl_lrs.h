@@ -42,6 +42,7 @@ typedef PhoRequest__Release__Elt    pho_req_release_elt_t;
 typedef PhoRequest__Format          pho_req_format_t;
 typedef PhoRequest__Notify          pho_req_notify_t;
 typedef PhoRequest__Monitor         pho_req_monitor_t;
+typedef PhoRequest__Configure       pho_req_configure_t;
 
 typedef PhoResponse                 pho_resp_t;
 typedef PhoResponse__Write          pho_resp_write_t;
@@ -63,7 +64,7 @@ typedef PhoResponse__Error          pho_resp_error_t;
  * If the protocol version is greater than 127, need to increase its size
  * to an integer size (4 bytes).
  */
-#define PHO_PROTOCOL_VERSION      4
+#define PHO_PROTOCOL_VERSION      6
 /**
  * Protocol version size in bytes.
  */
@@ -110,6 +111,18 @@ static inline bool pho_request_is_read(const pho_req_t *req)
 static inline bool pho_request_is_release(const pho_req_t *req)
 {
     return req->release != NULL;
+}
+
+/**
+ * Request configure checker.
+ *
+ * \param[in]  req  Request.
+ *
+ * \return          true if the request is a configure one, false otherwise.
+ */
+static inline bool pho_request_is_configure(const pho_req_t *req)
+{
+    return req->configure != NULL;
 }
 
 /**
@@ -167,7 +180,7 @@ static inline bool pho_request_is_monitor(const pho_req_t *req)
 /**
  * Response write alloc checker.
  *
- * \param[in]       req         Response.
+ * \param[in]       resp        Response.
  *
  * \return                      true if the response is a write alloc one,
  *                              false else.
@@ -180,7 +193,7 @@ static inline bool pho_response_is_write(const pho_resp_t *resp)
 /**
  * Response read alloc checker.
  *
- * \param[in]       req         Response.
+ * \param[in]       resp        Response.
  *
  * \return                      true if the response is a read alloc one,
  *                              false else.
@@ -193,7 +206,7 @@ static inline bool pho_response_is_read(const pho_resp_t *resp)
 /**
  * Response release checker.
  *
- * \param[in]       req         Response.
+ * \param[in]       resp        Response.
  *
  * \return                      true if the response is a release one,
  *                              false else.
@@ -206,7 +219,7 @@ static inline bool pho_response_is_release(const pho_resp_t *resp)
 /**
  * Response ping checker.
  *
- * \param[in]       req         Response.
+ * \param[in]       resp        Response.
  *
  * \return                      true if the response is a ping one,
  *                              false else.
@@ -217,12 +230,24 @@ static inline bool pho_response_is_ping(const pho_resp_t *resp)
 }
 
 /**
+ * Response configure checker.
+ *
+ * \param[in]  resp  Response.
+ *
+ * \return           true if the response is a configure one, false otherwise.
+ */
+static inline bool pho_response_is_configure(const pho_resp_t *resp)
+{
+    return resp->configure != NULL;
+}
+
+/**
  * Response format checker.
  *
- * \param[in]       req         Response.
+ * \param[in]       resp         Response.
  *
- * \return                      true if the response is a format one,
- *                              false else.
+ * \return                       true if the response is a format one,
+ *                               false else.
  */
 static inline bool pho_response_is_format(const pho_resp_t *resp)
 {
@@ -232,7 +257,7 @@ static inline bool pho_response_is_format(const pho_resp_t *resp)
 /**
  * Response notify checker.
  *
- * \param[in]       req         Response.
+ * \param[in]       resp        Response.
  *
  * \return                      true if the response is a notify one,
  *                              false else.
@@ -245,7 +270,7 @@ static inline bool pho_response_is_notify(const pho_resp_t *resp)
 /**
  * Response monitor checker.
  *
- * \param[in]   req    request
+ * \param[in]   resp   request
  *
  * \return             true if the response is a monitor one,
  *                     false otherwise.
@@ -258,7 +283,7 @@ static inline bool pho_response_is_monitor(const pho_resp_t *resp)
 /**
  * Response error checker.
  *
- * \param[in]       req         Response.
+ * \param[in]       resp        Response.
  *
  * \return                      true if the response is an error one,
  *                              false else.
@@ -354,6 +379,15 @@ int pho_srl_request_format_alloc(pho_req_t *req);
 int pho_srl_request_ping_alloc(pho_req_t *req);
 
 /**
+ * Allocation of configure request contents.
+ *
+ * \param[out]      req         Pointer to the request data structure.
+ *
+ * \return                      0 on success, -ENOMEM on failure.
+ */
+int pho_srl_request_configure_alloc(pho_req_t *req);
+
+/**
  * Allocation of notify request contents.
  *
  * \param[out]      req         Pointer to the request data structure.
@@ -425,6 +459,13 @@ int pho_srl_response_format_alloc(pho_resp_t *resp);
  * \param[out]      resp        Pointer to the response data structure.
  */
 void pho_srl_response_ping_alloc(pho_resp_t *resp);
+
+/**
+ * Allocation of configure response contents.
+ *
+ * \param[out]      resp        Pointer to the response data structure.
+ */
+int pho_srl_response_configure_alloc(pho_resp_t *resp);
 
 /**
  * Allocation of notify response contents.

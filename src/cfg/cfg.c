@@ -213,6 +213,24 @@ static int pho_cfg_get_env(const char *section, const char *name,
     return 0;
 }
 
+int pho_cfg_set_val_local(const char *section, const char *name,
+                          const char *value)
+{
+    char *env;
+    int rc;
+
+    rc = build_env_name(section, name, &env);
+    if (rc)
+        return rc;
+
+    rc = setenv(env, value, 1); /* 1 for overwrite */
+    free(env);
+    if (rc)
+        return -errno;
+
+    return 0;
+}
+
 /**
  * Get host-wide configuration parameter from config file.
  * @retval 0 on success

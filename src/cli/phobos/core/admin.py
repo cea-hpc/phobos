@@ -27,7 +27,7 @@ import errno
 import json
 
 from ctypes import (addressof, byref, c_int, c_char_p, c_void_p, cast, pointer,
-                    POINTER, Structure)
+                    POINTER, Structure, c_size_t)
 
 from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-name-in-module
                                PHO_FS_RADOS, PHO_RSC_DIR,
@@ -38,6 +38,12 @@ from phobos.core.glue import admin_device_status, jansson_dumps  # pylint: disab
 from phobos.core.dss import DSSHandle
 from phobos.core.ffi import (CommInfo, ExtentInfo, LayoutInfo, LIBPHOBOS_ADMIN,
                              Id)
+
+def string_list2c_array(l, getter):
+    c_string_list = (c_char_p * len(l))()
+    c_string_list[:] = [getter(e).encode('utf-8') for e in l]
+    return c_string_list
+
 
 class AdminHandle(Structure): # pylint: disable=too-few-public-methods
     """Admin handler"""
@@ -154,6 +160,20 @@ class Client(object):
                                    dev_names)
 
         return count.value
+
+    def sched_conf(self, config_items):
+        c_string_list = c_char_p * len(config_items)
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_sched_conf_set(
+            byref(self.handle),
+            string_list2c_array(config_items, lambda c: c.section),
+            string_list2c_array(config_items, lambda c: c.key),
+            string_list2c_array(config_items, lambda c: c.value),
+            c_size_t(len(config_items)))
+
+        if rc:
+            raise EnvironmentError(rc,
+                                   "Failed to update scheduler configuration")
 
     def ping(self):
         """Ping the phobos daemon."""

@@ -147,14 +147,14 @@ static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
 
     rc = _send(adm, &req);
     if (rc)
-        LOG_RETURN(rc, "Error with LRS communication");
+        LOG_RETURN(rc, "Error with phobosd communication");
 
     if (!need_to_wait)
         return rc;
 
     rc = _receive(adm, &resp);
     if (rc)
-        LOG_RETURN(rc, "Error with LRS communication");
+        LOG_RETURN(rc, "Error with phobosd communication");
 
     if (pho_response_is_notify(resp)) {
         if (resp->req_id == rid &&
@@ -479,6 +479,123 @@ int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
                       dev_ids[i].name);
         rc = rc ? : rc2;
     }
+
+    return rc;
+}
+
+static json_t *build_config_item(const char *section,
+                                 const char *key,
+                                 const char *value)
+{
+    json_t *config_item = NULL;
+    int rc;
+
+    config_item = json_object();
+    if (!config_item)
+        return NULL;
+
+    rc = json_object_set(config_item, "section", json_string(section));
+    if (rc)
+        goto free_conf;
+
+    rc = json_object_set(config_item, "key", json_string(key));
+    if (rc)
+        goto free_conf;
+
+    rc = json_object_set(config_item, "value", json_string(value));
+    if (rc)
+        goto free_conf;
+
+    return config_item;
+
+free_conf:
+    json_decref(config_item);
+
+    return NULL;
+}
+
+static int send_configure(struct admin_handle *adm,
+                          char *configuration)
+{
+    pho_resp_t *resp;
+    pho_req_t req;
+    int rc;
+
+    rc = pho_srl_request_configure_alloc(&req);
+    if (rc)
+        LOG_RETURN(rc, "Cannot create configure request");
+
+    req.id = 1;
+    req.configure->configuration = configuration;
+
+    rc = _send(adm, &req);
+    if (rc)
+        LOG_GOTO(free_req, rc, "Failed to send configure request to phobosd");
+
+    rc = _receive(adm, &resp);
+    if (rc)
+        LOG_GOTO(free_req, rc,
+                 "Failed to receive configure response from phobosd");
+
+    if (pho_response_is_configure(resp)) {
+        if (resp->req_id == req.id) {
+            rc = 0;
+        } else {
+            rc = -EINVAL;
+            pho_error(rc, "Received response does not answer emitted request");
+        }
+
+    } else if (pho_response_is_error(resp)) {
+        rc = resp->error->rc;
+        pho_error(rc, "Received error response to configure request");
+    } else {
+        rc = -EINVAL;
+        pho_error(rc, "Invalid response to configure request");
+    }
+
+    pho_srl_response_free(resp, true);
+free_req:
+    pho_srl_request_free(&req, false);
+
+    return rc;
+}
+
+int phobos_admin_sched_conf_set(struct admin_handle *adm,
+                                const char **sections,
+                                const char **keys,
+                                const char **values,
+                                size_t n)
+{
+    json_t *configuration;
+    int rc = 0;
+    size_t i;
+
+    configuration = json_array();
+    if (!configuration)
+        return -errno;
+
+    for (i = 0; i < n; i++) {
+        json_t *config_item;
+
+        config_item = build_config_item(sections[i], keys[i], values[i]);
+        if (!config_item)
+            GOTO(free_config, rc);
+
+        rc = json_array_append(configuration, config_item);
+        if (rc == -1)
+            GOTO(free_config, rc = -errno);
+    }
+
+    rc = send_configure(adm,
+                        /* the result of json_dumps will be stored in
+                         * the notify request. Therefore, it will be
+                         * freed when the request is, no need to check
+                         * or free the result here.
+                         */
+                        json_dumps(configuration, JSON_COMPACT));
+
+free_config:
+    json_decref(configuration);
 
     return rc;
 }

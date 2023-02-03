@@ -504,6 +504,98 @@ static int test_bad_notify(void *arg)
     req.notify->rsrc_id->name = strdup("/tmp/not/a/dev");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Notify -- bad resource name", -ENXIO);
+    if (rc)
+        goto out_fail;
+
+out_fail:
+    pho_srl_request_free(&req, false);
+    pho_srl_response_free(resp, true);
+
+    return rc;
+}
+
+static int test_bad_configure(void *arg)
+{
+    struct pho_comm_info *ci = (struct pho_comm_info *)arg;
+    pho_resp_t *resp;
+    pho_req_t req;
+    int rc = 0;
+
+    // No configuration
+    assert(!pho_srl_request_configure_alloc(&req));
+    req.id = 0;
+    req.configure->op = PHO_CONF_OP_SET;
+    req.configure->configuration = NULL;
+    assert(!_send_and_receive(ci, &req, &resp));
+    rc = _check_error(resp, "Configure -- no configuration", -EPROTO);
+    if (rc)
+        goto out_fail;
+
+    // Invalid JSON string
+    pho_srl_response_free(resp, true);
+    ++req.id;
+    req.configure->configuration = strdup("this is not JSON");
+    assert(!_send_and_receive(ci, &req, &resp));
+    rc = _check_error(resp, "Configure -- invalid JSON string", -EINVAL);
+    if (rc)
+        goto out_fail;
+
+    // Not a JSON array
+    free(req.configure->configuration);
+    pho_srl_response_free(resp, true);
+    ++req.id;
+    req.configure->configuration = strdup("{}");
+    assert(!_send_and_receive(ci, &req, &resp));
+    rc = _check_error(resp, "Configure -- not a JSON array", -EINVAL);
+    if (rc)
+        goto out_fail;
+
+    // not an object
+    free(req.configure->configuration);
+    pho_srl_response_free(resp, true);
+    ++req.id;
+    req.configure->configuration = strdup("[ 1 ]");
+    assert(!_send_and_receive(ci, &req, &resp));
+    rc = _check_error(resp, "Configure -- not an object", -EINVAL);
+    if (rc)
+        goto out_fail;
+
+    // missing key 'value'
+    free(req.configure->configuration);
+    pho_srl_response_free(resp, true);
+    ++req.id;
+    req.configure->configuration =
+        strdup("[{\"section\": \"s\", \"key\": \"k\"}]");
+    assert(!_send_and_receive(ci, &req, &resp));
+    rc = _check_error(resp, "Configure -- missing key 'value'", -EINVAL);
+    if (rc)
+        goto out_fail;
+
+    // invalid value for 'section'
+    free(req.configure->configuration);
+    pho_srl_response_free(resp, true);
+    ++req.id;
+    req.configure->configuration =
+        strdup("[{\"key\": \"k\", \"section\": 1, \"value\": \"v\"}]");
+    assert(!_send_and_receive(ci, &req, &resp));
+    rc = _check_error(resp, "Configure -- invalid value for 'section'",
+                      -EINVAL);
+    if (rc)
+        goto out_fail;
+
+    // second value missing 'key'
+    free(req.configure->configuration);
+    pho_srl_response_free(resp, true);
+    ++req.id;
+    req.configure->configuration =
+        strdup("["
+               "    {\"section\": \"s\", \"key\": \"k\", \"value\": \"v\"}, "
+               "    {\"section\": \"s\", \"value\": \"v\"} "
+               "]");
+    assert(!_send_and_receive(ci, &req, &resp));
+    rc = _check_error(resp, "Configure -- second value missing 'key'", -EINVAL);
+    if (rc)
+        goto out_fail;
 
 out_fail:
     pho_srl_request_free(&req, false);
@@ -565,6 +657,7 @@ int main(int argc, char **argv)
     run_test("Test: bad notify", test_bad_notify, &ci, PHO_TEST_SUCCESS);
     /* run last as the state of the device used is set to failed at the end */
     run_test("Test: put I/O error", test_put_io_error, &ci, PHO_TEST_SUCCESS);
+    run_test("Test: bad config", test_bad_configure, &ci, PHO_TEST_SUCCESS);
 
     pho_comm_close(&ci);
 }

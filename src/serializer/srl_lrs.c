@@ -38,25 +38,28 @@ enum _RESP_KIND {
     _RESP_NOTIFY,
     _RESP_MONITOR,
     _RESP_ERROR,
+    _RESP_CONFIGURE,
 };
 
 static const char *const SRL_REQ_KIND_STRS[] = {
-    [PHO_REQUEST_KIND__RQ_WRITE]   = "write alloc",
-    [PHO_REQUEST_KIND__RQ_READ]    = "read alloc",
-    [PHO_REQUEST_KIND__RQ_RELEASE] = "release",
-    [PHO_REQUEST_KIND__RQ_FORMAT]  = "format",
-    [PHO_REQUEST_KIND__RQ_NOTIFY]  = "notify",
-    [PHO_REQUEST_KIND__RQ_MONITOR] = "monitor",
+    [PHO_REQUEST_KIND__RQ_WRITE]     = "write alloc",
+    [PHO_REQUEST_KIND__RQ_READ]      = "read alloc",
+    [PHO_REQUEST_KIND__RQ_RELEASE]   = "release",
+    [PHO_REQUEST_KIND__RQ_FORMAT]    = "format",
+    [PHO_REQUEST_KIND__RQ_NOTIFY]    = "notify",
+    [PHO_REQUEST_KIND__RQ_MONITOR]   = "monitor",
+    [PHO_REQUEST_KIND__RQ_CONFIGURE] = "configure",
 };
 
 static const char *const SRL_RESP_KIND_STRS[] = {
-    [_RESP_WRITE]   = "write alloc",
-    [_RESP_READ]    = "read alloc",
-    [_RESP_RELEASE] = "release",
-    [_RESP_FORMAT]  = "format",
-    [_RESP_NOTIFY]  = "notify",
-    [_RESP_MONITOR] = "monitor",
-    [_RESP_ERROR]   = "error"
+    [_RESP_WRITE]     = "write alloc",
+    [_RESP_READ]      = "read alloc",
+    [_RESP_RELEASE]   = "release",
+    [_RESP_FORMAT]    = "format",
+    [_RESP_NOTIFY]    = "notify",
+    [_RESP_MONITOR]   = "monitor",
+    [_RESP_CONFIGURE] = "configure",
+    [_RESP_ERROR]     = "error"
 };
 
 const char *pho_srl_request_kind_str(pho_req_t *req)
@@ -73,6 +76,8 @@ const char *pho_srl_request_kind_str(pho_req_t *req)
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_NOTIFY];
     if (pho_request_is_monitor(req))
         return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_MONITOR];
+    if (pho_request_is_configure(req))
+        return SRL_REQ_KIND_STRS[PHO_REQUEST_KIND__RQ_CONFIGURE];
 
     return "<invalid>";
 }
@@ -93,6 +98,8 @@ const char *pho_srl_response_kind_str(pho_resp_t *resp)
         return SRL_RESP_KIND_STRS[_RESP_MONITOR];
     if (pho_response_is_error(resp))
         return SRL_RESP_KIND_STRS[_RESP_ERROR];
+    if (pho_response_is_configure(resp))
+        return SRL_RESP_KIND_STRS[_RESP_CONFIGURE];
 
     return "<invalid>";
 }
@@ -277,6 +284,18 @@ int pho_srl_request_ping_alloc(pho_req_t *req)
     return 0;
 }
 
+int pho_srl_request_configure_alloc(pho_req_t *req)
+{
+    pho_request__init(req);
+    req->configure = malloc(sizeof(*req->configure));
+    if (!req->configure)
+        return -ENOMEM;
+
+    pho_request__configure__init(req->configure);
+
+    return 0;
+}
+
 int pho_srl_request_notify_alloc(pho_req_t *req)
 {
     pho_request__init(req);
@@ -376,6 +395,12 @@ void pho_srl_request_free(pho_req_t *req, bool unpack)
     if (req->monitor) {
         free(req->monitor);
         req->monitor = NULL;
+    }
+
+    if (req->configure) {
+        free(req->configure->configuration);
+        free(req->configure);
+        req->configure = NULL;
     }
 }
 
@@ -543,6 +568,18 @@ void pho_srl_response_ping_alloc(pho_resp_t *resp)
     resp->has_ping = true;
 }
 
+int pho_srl_response_configure_alloc(pho_resp_t *resp)
+{
+    pho_response__init(resp);
+    resp->configure = malloc(sizeof(*resp->configure));
+    if (!resp->configure)
+        return -ENOMEM;
+
+    pho_response__configure__init(resp->configure);
+
+    return 0;
+}
+
 int pho_srl_response_notify_alloc(pho_resp_t *resp)
 {
     pho_response__init(resp);
@@ -643,9 +680,14 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
         resp->format = NULL;
     }
 
-    if (resp->ping) {
+    if (resp->ping)
         resp->has_ping = false;
+
+    if (resp->configure) {
+        free(resp->configure->configuration);
+        resp->configure = NULL;
     }
+
 
     if (resp->notify) {
         free(resp->notify->rsrc_id->name);
@@ -663,6 +705,12 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
         free(resp->monitor->status);
         free(resp->monitor);
         resp->monitor = NULL;
+    }
+
+    if (resp->configure) {
+        free(resp->configure->configuration);
+        free(resp->configure);
+        resp->configure = NULL;
     }
 }
 

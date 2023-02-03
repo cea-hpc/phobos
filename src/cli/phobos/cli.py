@@ -1131,6 +1131,79 @@ class ObjectOptHandler(BaseResourceOptHandler):
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
+
+class FairShareOptHandler(BaseOptHandler):
+    """Handler for fair_share configuration parameters"""
+    label = "fair_share"
+    descr = "handler for fair_share configuration parameters"
+
+    @classmethod
+    def add_options(cls, parser):
+        super(FairShareOptHandler, cls).add_options(parser)
+        parser.add_argument('-t', '--type', required=True,
+                            help="tape technology")
+        parser.add_argument('--min',
+                            help="of the form r,w,f where r, w and f are "
+                            "integers representing the minimum number of "
+                            "devices that ought to be allocated to the read, "
+                            "write and format schedulers respectively")
+        parser.add_argument('--max',
+                            help="of the form r,w,f where r, w and f are "
+                            "integers representing the maximum number of "
+                            "devices that ought to be allocated to the read, "
+                            "write and format schedulers respectively")
+
+class ConfigItem:
+
+    def __init__(self, section, key, value):
+        self.section = section
+        self.key = key
+        self.value = value
+
+
+class SchedOptHandler(BaseOptHandler):
+    """Handler of sched commands"""
+    label = "sched"
+    descr = "update configuration elements of the local scheduler"
+    verbs = [
+        FairShareOptHandler
+    ]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    def exec_fair_share(self):
+        t = self.params.get("type")
+        mins = self.params.get("min")
+        maxs = self.params.get("max")
+
+        if not mins and not maxs:
+            return
+
+        config_items = []
+
+        if mins:
+            config_items.append(ConfigItem("io_sched_tape",
+                                           "fair_share_" + t + "_min",
+                                           mins))
+        if maxs:
+            config_items.append(ConfigItem("io_sched_tape",
+                                           "fair_share_" + t + "_max",
+                                           maxs))
+
+        try:
+            with AdminClient(lrs_required=True) as adm:
+                adm.sched_conf(config_items)
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
+        self.logger.info("Scheduler successfully notified ")
+
+
 class DeviceOptHandler(BaseResourceOptHandler):
     """Shared interface for devices."""
     verbs = [
@@ -1823,6 +1896,7 @@ class PhobosActionContext(object):
         PingOptHandler,
         LocateOptHandler,
         LocksOptHandler,
+        SchedOptHandler,
 
         # Store command interfaces
         StoreGetHandler,
