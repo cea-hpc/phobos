@@ -1136,6 +1136,9 @@ class FairShareOptHandler(BaseOptHandler):
     """Handler for fair_share configuration parameters"""
     label = "fair_share"
     descr = "handler for fair_share configuration parameters"
+    epilog = """If neither --min nor --max are set, this command will query the
+    configuration information from the local daemon and output them to
+    stdout."""
 
     @classmethod
     def add_options(cls, parser):
@@ -1180,9 +1183,6 @@ class SchedOptHandler(BaseOptHandler):
         mins = self.params.get("min")
         maxs = self.params.get("max")
 
-        if not mins and not maxs:
-            return
-
         config_items = []
 
         if mins:
@@ -1196,12 +1196,19 @@ class SchedOptHandler(BaseOptHandler):
 
         try:
             with AdminClient(lrs_required=True) as adm:
-                adm.sched_conf(config_items)
+                if not mins and not maxs:
+                    config_items.append(ConfigItem("io_sched_tape",
+                                                   "fair_share_" + t + "_min",
+                                                   None))
+                    config_items.append(ConfigItem("io_sched_tape",
+                                                   "fair_share_" + t + "_max",
+                                                   None))
+                    adm.sched_conf_get(config_items)
+                else:
+                    adm.sched_conf_set(config_items)
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
-
-        self.logger.info("Scheduler successfully notified ")
 
 
 class DeviceOptHandler(BaseResourceOptHandler):

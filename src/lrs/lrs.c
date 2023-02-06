@@ -768,7 +768,8 @@ static const char *config_get_value(json_t *config, const char *key,
 }
 
 static int handle_configure_request(struct lrs *lrs,
-                                    const struct req_container *reqc)
+                                    const struct req_container *reqc,
+                                    json_t *queried_elements)
 {
     pho_req_configure_t *confreq = reqc->req->configure;
     json_t *configuration;
@@ -776,6 +777,9 @@ static int handle_configure_request(struct lrs *lrs,
     json_t *value;
     size_t index;
     int rc = 0;
+
+    if (!pho_configure_op_is_valid(confreq->op))
+        LOG_RETURN(-EPROTO, "Invalid configuration request %d", confreq->op);
 
     if (!confreq->configuration || !strcmp(confreq->configuration, ""))
         LOG_RETURN(-EPROTO,
@@ -808,13 +812,31 @@ static int handle_configure_request(struct lrs *lrs,
         if (!elem_key)
             GOTO(free_conf, rc = -EINVAL);
 
-        elem_value = config_get_value(value, "value", confreq->configuration);
-        if (!elem_value)
-            GOTO(free_conf, rc = -EINVAL);
+        if (confreq->op == (int)PHO_CONF_OP_SET) {
+            elem_value = config_get_value(value, "value",
+                                          confreq->configuration);
+            if (!elem_value)
+                GOTO(free_conf, rc = -EINVAL);
 
-        rc = pho_cfg_set_val_local(section, elem_key, elem_value);
-        if (rc)
-            GOTO(free_conf, rc = -EINVAL);
+            rc = pho_cfg_set_val_local(section, elem_key, elem_value);
+            if (rc)
+                GOTO(free_conf, rc = -EINVAL);
+        } else {
+            const char *v;
+
+            rc = pho_cfg_get_val(section, elem_key, &v);
+            if (rc == -ENODATA) {
+                pho_warn("Configuration element '%s' not found", elem_key);
+                v = ""; /* return an empty string if not found */
+            } else if (rc) {
+                LOG_GOTO(free_conf, rc, "Failed to read '%s::%s' in config",
+                         section, elem_key);
+            }
+
+            rc = json_array_append(queried_elements, json_string(v));
+            if (rc == -1)
+                GOTO(free_conf, rc = -errno);
+        }
     }
 
 free_conf:
@@ -826,26 +848,43 @@ free_conf:
 static int _process_configure_request(struct lrs *lrs,
                                       const struct req_container *reqc)
 {
+    json_t *queried_elements = json_array();
     struct resp_container respc;
     pho_resp_t resp;
     int rc;
 
-    rc = handle_configure_request(lrs, reqc);
+    if (!queried_elements)
+        LOG_GOTO(send_error, rc = -errno, "Failed to create JSON array");
+
+    rc = handle_configure_request(lrs, reqc, queried_elements);
     if (rc)
-        goto send_error;
+        goto free_array;
 
     pho_srl_response_configure_alloc(&resp);
     resp.req_id = reqc->req->id;
-    resp.configure = NULL;
 
     respc.resp = &resp;
     respc.socket_id = reqc->socket_id;
 
+    if (reqc->req->configure->op == (int)PHO_CONF_OP_GET) {
+        resp.configure->configuration =
+            json_dumps(queried_elements, JSON_COMPACT);
+
+        if (!resp.configure->configuration)
+            LOG_GOTO(free_array, rc = -errno,
+                     "Failed to dump JSON configuration");
+    }
+
     rc = _send_message(&lrs->comm, &respc);
     pho_srl_response_free(&resp, false);
-    if (rc)
-        pho_error(rc, "Failed to send configure response");
+    if (rc) {
+        json_decref(queried_elements);
+        /* No need to try to send an error if the sending response failed */
+        LOG_RETURN(rc, "Failed to send configure response");
+    }
 
+free_array:
+    json_decref(queried_elements);
 send_error:
     _send_error(lrs, rc, reqc);
 

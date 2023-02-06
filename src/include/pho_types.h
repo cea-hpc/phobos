@@ -533,6 +533,11 @@ enum configure_op {
     PHO_CONF_OP_LAST
 };
 
+static inline bool pho_configure_op_is_valid(enum configure_op op)
+{
+    return op > PHO_CONF_OP_INVAL && op < PHO_CONF_OP_LAST;
+}
+
 /**
  * Threadsafe FIFO queue, composed of a GLIB queue and a mutex.
  *

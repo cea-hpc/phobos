@@ -46,7 +46,6 @@ function setup()
     rm -f "$PHOBOS_LRS_lock_file"
     setup_dummy_files 1
 
-    drop_tables
     setup_tables
     invoke_daemon_debug &
 }
@@ -142,10 +141,58 @@ function test_sync_after_put_get()
     fi
 }
 
-trap cleanup EXIT
+function check_fair_share_min_max()
+{
+    local values
+    local min
+    local max
+
+    values=$($valg_phobos sched fair_share --type LTO5)
+    min=$(echo "$values" | grep min)
+    max=$(echo "$values" | grep max)
+
+    echo "$min" | grep "$1" ||
+        error "Invalid min in '$min'. Expected '$1'"
+    echo "$max" | grep "$2" ||
+        error "Invalid max in '$max'. Expected '$2'"
+}
+
+function test_conf_set()
+{
+    $valg_phobos sched fair_share --type LTO5 --min "0,1,2" --max "1,2,3"
+    check_fair_share_min_max "0,1,2" "1,2,3"
+
+    $valg_phobos sched fair_share --type LTO5 --min "1,2,3" --max "0,1,2"
+    check_fair_share_min_max "1,2,3" "0,1,2"
+}
+
+function test_fair_share_conf_at_startup()
+{
+    export PHOBOS_IO_SCHED_TAPE_fair_share_lto5_min="12,12,12"
+    export PHOBOS_IO_SCHED_TAPE_fair_share_lto5_max="13,13,13"
+
+    trap "waive_daemon; drop_tables" EXIT
+    setup_tables
+    invoke_daemon
+
+    check_fair_share_min_max "12,12,12" "13,13,13"
+    unset PHOBOS_IO_SCHED_TAPE_fair_share_lto5_min
+    unset PHOBOS_IO_SCHED_TAPE_fair_share_lto5_max
+
+    trap drop_tables EXIT
+    waive_daemon
+    trap "" EXIT
+    drop_tables
+}
+
+# This test must be executed before the setup because it starts and stops the
+# daemon.
+test_fair_share_conf_at_startup
 
 last_read=$(now)
+trap cleanup EXIT
 setup
 wait_for_daemon
 
 test_sync_after_put_get
+test_conf_set

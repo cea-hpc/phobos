@@ -122,6 +122,25 @@ int phobos_admin_sched_conf_set(struct admin_handle *adm,
                                 size_t n);
 
 /**
+ * Read the configuration from the local daemon
+ *
+ * \param[in]  adm      Admin module handler.
+ * \param[in]  sections Name of the sections of to read
+ * \param[in]  keys     Name of the keys to read
+ * \param[in]  values   Allocated list of values (must be passed to free as well
+ *                      as each element of the list)
+ * \param[in]  n        number of configuration elements to read
+ *
+ * \return     0     on success,
+ *            -errno on failure.
+ */
+int phobos_admin_sched_conf_get(struct admin_handle *adm,
+                                const char **sections,
+                                const char **keys,
+                                const char **values,
+                                size_t n);
+
+/**
  * Update the administrative state of the given devices to 'locked' and
  * inform the LRS devices state has changed.
  *

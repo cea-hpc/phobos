@@ -161,9 +161,24 @@ class Client(object):
 
         return count.value
 
-    def sched_conf(self, config_items):
-        c_string_list = c_char_p * len(config_items)
+    def sched_conf_get(self, config_items):
+        values = (c_char_p * len(config_items))()
 
+        rc = LIBPHOBOS_ADMIN.phobos_admin_sched_conf_get(
+            byref(self.handle),
+            string_list2c_array(config_items, lambda c: c.section),
+            string_list2c_array(config_items, lambda c: c.key),
+            byref(values),
+            c_size_t(len(config_items)))
+        if rc:
+            raise EnvironmentError(rc,
+                                   "Failed to query scheduler configuration")
+
+        for i in range(len(config_items)):
+            print(f"{config_items[i].key}: {values[i].decode('utf-8')}")
+
+
+    def sched_conf_set(self, config_items):
         rc = LIBPHOBOS_ADMIN.phobos_admin_sched_conf_set(
             byref(self.handle),
             string_list2c_array(config_items, lambda c: c.section),

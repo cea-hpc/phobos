@@ -502,9 +502,11 @@ static json_t *build_config_item(const char *section,
     if (rc)
         goto free_conf;
 
-    rc = json_object_set(config_item, "value", json_string(value));
-    if (rc)
-        goto free_conf;
+    if (value) {
+        rc = json_object_set(config_item, "value", json_string(value));
+        if (rc)
+            goto free_conf;
+    }
 
     return config_item;
 
@@ -515,7 +517,9 @@ free_conf:
 }
 
 static int send_configure(struct admin_handle *adm,
-                          char *configuration)
+                          enum configure_op op,
+                          char *configuration,
+                          const char **res)
 {
     pho_resp_t *resp;
     pho_req_t req;
@@ -526,6 +530,7 @@ static int send_configure(struct admin_handle *adm,
         LOG_RETURN(rc, "Cannot create configure request");
 
     req.id = 1;
+    req.configure->op = op;
     req.configure->configuration = configuration;
 
     rc = _send(adm, &req);
@@ -537,17 +542,24 @@ static int send_configure(struct admin_handle *adm,
         LOG_GOTO(free_req, rc,
                  "Failed to receive configure response from phobosd");
 
-    if (pho_response_is_configure(resp)) {
-        if (resp->req_id == req.id) {
-            rc = 0;
-        } else {
-            rc = -EINVAL;
-            pho_error(rc, "Received response does not answer emitted request");
-        }
-
-    } else if (pho_response_is_error(resp)) {
+    if (pho_response_is_error(resp)) {
         rc = resp->error->rc;
         pho_error(rc, "Received error response to configure request");
+    } else if (pho_response_is_configure(resp)) {
+        if (op == PHO_CONF_OP_GET && !resp->configure->configuration) {
+            rc = -EPROTO;
+            pho_error(rc, "Received empty configure response");
+        }
+
+        rc = 0;
+        if (res)
+            *res = strdup(resp->configure->configuration);
+
+        if (res && !*res)
+            rc = -errno;
+    } else if (resp->req_id != req.id) {
+        rc = -EINVAL;
+        pho_error(rc, "Received response does not answer emitted request");
     } else {
         rc = -EINVAL;
         pho_error(rc, "Invalid response to configure request");
@@ -560,6 +572,110 @@ free_req:
     return rc;
 }
 
+static int build_configuration_query(const char **sections,
+                                     const char **keys,
+                                     const char **values,
+                                     size_t n,
+                                     json_t **configuration)
+{
+    int rc = 0;
+    size_t i;
+
+    *configuration = json_array();
+    if (!*configuration)
+        return -errno;
+
+    for (i = 0; i < n; i++) {
+        json_t *config_item;
+
+        config_item = build_config_item(sections[i], keys[i],
+                                        values ? values[i] : NULL);
+        if (!config_item)
+            GOTO(free_config, rc = -errno);
+
+        rc = json_array_append(*configuration, config_item);
+        if (rc == -1)
+            GOTO(free_config, rc = -errno);
+    }
+
+    return 0;
+
+free_config:
+    json_decref(*configuration);
+
+    return rc;
+}
+
+int phobos_admin_sched_conf_get(struct admin_handle *adm,
+                                const char **sections,
+                                const char **keys,
+                                const char **values,
+                                size_t n)
+{
+    const char *res = NULL;
+    json_t *configuration;
+    json_error_t error;
+    json_t *result;
+    json_t *value;
+    size_t index;
+    int rc = 0;
+
+    rc = build_configuration_query(sections, keys, NULL, n, &configuration);
+    if (rc)
+        return rc;
+
+    rc = send_configure(adm, PHO_CONF_OP_GET,
+                        /* the result of json_dumps will be stored in
+                         * the notify request. Therefore, it will be
+                         * freed when the request is, no need to check
+                         * or free the result here.
+                         */
+                        json_dumps(configuration, JSON_COMPACT),
+                        &res);
+    if (rc)
+        GOTO(free_configuration, rc = -EINVAL);
+
+    result = json_loads(res, JSON_REJECT_DUPLICATES, &error);
+    if (!result)
+        LOG_GOTO(free_configuration, rc = -EINVAL,
+                 "Failed to parse JSON result '%s': %s",
+                 res, error.text);
+
+    if (!json_is_array(result))
+        LOG_GOTO(free_result, rc = -EINVAL,
+                 "Result '%s' is not an array",
+                 res);
+
+    if (json_array_size(result) != n)
+        LOG_GOTO(free_result, rc = -ERANGE,
+                 "Expected an array of size %lu, got %lu",
+                 n, json_array_size(result));
+
+    json_array_foreach(result, index, value) {
+        values[index] = NULL;
+
+        if (!json_is_string(value)) {
+            pho_warn("Invalid type in '%s' at index %lu", res, index);
+            continue;
+        }
+
+        values[index] = strdup(json_string_value(value));
+        if (!values[index]) {
+            for (; index >= 0; index--)
+                free((void *)values[index]);
+
+            break;
+        }
+    }
+
+free_result:
+    json_decref(result);
+free_configuration:
+    json_decref(configuration);
+
+    return rc;
+}
+
 int phobos_admin_sched_conf_set(struct admin_handle *adm,
                                 const char **sections,
                                 const char **keys,
@@ -568,33 +684,20 @@ int phobos_admin_sched_conf_set(struct admin_handle *adm,
 {
     json_t *configuration;
     int rc = 0;
-    size_t i;
 
-    configuration = json_array();
-    if (!configuration)
-        return -errno;
+    rc = build_configuration_query(sections, keys, values, n, &configuration);
+    if (rc)
+        return rc;
 
-    for (i = 0; i < n; i++) {
-        json_t *config_item;
-
-        config_item = build_config_item(sections[i], keys[i], values[i]);
-        if (!config_item)
-            GOTO(free_config, rc);
-
-        rc = json_array_append(configuration, config_item);
-        if (rc == -1)
-            GOTO(free_config, rc = -errno);
-    }
-
-    rc = send_configure(adm,
+    rc = send_configure(adm, PHO_CONF_OP_SET,
                         /* the result of json_dumps will be stored in
                          * the notify request. Therefore, it will be
                          * freed when the request is, no need to check
                          * or free the result here.
                          */
-                        json_dumps(configuration, JSON_COMPACT));
+                        json_dumps(configuration, JSON_COMPACT),
+                        NULL);
 
-free_config:
     json_decref(configuration);
 
     return rc;

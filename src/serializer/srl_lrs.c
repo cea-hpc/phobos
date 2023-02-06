@@ -683,12 +683,6 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
     if (resp->ping)
         resp->has_ping = false;
 
-    if (resp->configure) {
-        free(resp->configure->configuration);
-        resp->configure = NULL;
-    }
-
-
     if (resp->notify) {
         free(resp->notify->rsrc_id->name);
         free(resp->notify->rsrc_id);
