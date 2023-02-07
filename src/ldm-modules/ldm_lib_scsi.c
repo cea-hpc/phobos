@@ -256,9 +256,11 @@ static int lib_scsi_open(struct lib_handle *hdl, const char *dev)
     int                    rc;
     ENTRY;
 
+    MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
+
     lib = calloc(1, sizeof(struct lib_descriptor));
     if (!lib)
-        return -ENOMEM;
+        GOTO(unlock, rc = -ENOMEM);
 
     hdl->lh_lib = lib;
 
@@ -266,25 +268,30 @@ static int lib_scsi_open(struct lib_handle *hdl, const char *dev)
     if (lib->fd < 0)
         LOG_GOTO(err_clean, rc = -errno, "Failed to open '%s'", dev);
 
-    return 0;
+    GOTO(unlock, rc = 0);
 
 err_clean:
     free(lib);
     hdl->lh_lib = NULL;
+unlock:
+    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
     return rc;
 }
 
 static int lib_scsi_close(struct lib_handle *hdl)
 {
     struct lib_descriptor *lib;
+    int rc;
     ENTRY;
 
+    MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
+
     if (!hdl)
-        return -EINVAL;
+        GOTO(unlock, rc = -EINVAL);
 
     lib = hdl->lh_lib;
     if (!lib) /* already closed */
-        return -EBADF;
+        GOTO(unlock, rc = -EBADF);
 
     lib_status_clear(lib);
     lib_addrs_clear(lib);
@@ -294,7 +301,11 @@ static int lib_scsi_close(struct lib_handle *hdl)
 
     free(lib);
     hdl->lh_lib = NULL;
-    return 0;
+    rc = 0;
+
+unlock:
+    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
+    return rc;
 }
 
 /**
@@ -415,15 +426,17 @@ static int lib_scsi_drive_info(struct lib_handle *hdl,
     int rc;
     ENTRY;
 
+    MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
+
     /* load status for drives */
     rc = lib_status_load(hdl->lh_lib, SCSI_TYPE_DRIVE);
     if (rc)
-        return rc;
+        goto unlock;
 
     /* search for the given drive serial */
     drv = drive_info_from_serial(hdl->lh_lib, drv_serial);
     if (!drv)
-        return -ENOENT;
+        GOTO(unlock, rc = -ENOENT);
 
     memset(ldi, 0, sizeof(*ldi));
     ldi->ldi_addr.lia_type = MED_LOC_DRIVE;
@@ -435,7 +448,12 @@ static int lib_scsi_drive_info(struct lib_handle *hdl,
         ldi->ldi_medium_id.family = PHO_RSC_TAPE;
         pho_id_name_set(&ldi->ldi_medium_id, drv->vol);
     }
-    return 0;
+
+    rc = 0;
+
+unlock:
+    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
+    return rc;
 }
 
 /** Implements phobos LDM lib media lookup */
@@ -446,21 +464,27 @@ static int lib_scsi_media_info(struct lib_handle *hdl, const char *med_label,
     int rc;
     ENTRY;
 
+    MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
+
     /* load all possible tape locations */
     rc = lib_status_load(hdl->lh_lib, SCSI_TYPE_ALL);
     if (rc)
-        return rc;
+        goto unlock;
 
     /* search for the given tape */
     tape = media_info_from_label(hdl->lh_lib, med_label);
     if (!tape)
-        return -ENOENT;
+        GOTO(unlock, rc = -ENOENT);
 
     memset(lia, 0, sizeof(*lia));
     lia->lia_type = scsi2ldm_loc_type(tape->type);
     lia->lia_addr = tape->address;
 
-    return 0;
+    rc = 0;
+
+unlock:
+    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
+    return rc;
 }
 
 /** return information about the element at the given address. */
@@ -605,9 +629,11 @@ static int lib_scsi_move(struct lib_handle *hdl,
     int rc;
     ENTRY;
 
+    MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
+
     lib = hdl->lh_lib;
     if (!lib) /* already closed */
-        return -EBADF;
+        GOTO(unlock, rc = -EBADF);
 
     if (tgt_addr == NULL
         || (tgt_addr->lia_type == MED_LOC_UNKNOWN
@@ -616,7 +642,7 @@ static int lib_scsi_move(struct lib_handle *hdl,
         origin = true;
         rc = select_target_addr(lib, src_addr, &tgt, &origin);
         if (rc)
-            return rc;
+            goto unlock;
     } else {
         tgt = tgt_addr->lia_addr;
     }
@@ -630,9 +656,12 @@ static int lib_scsi_move(struct lib_handle *hdl,
         origin = false;
         rc = select_target_addr(lib, src_addr, &tgt, &origin);
         if (rc)
-            return rc;
+            goto unlock;
         rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt);
     }
+
+unlock:
+    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
     return rc;
 }
 
@@ -748,11 +777,13 @@ static int lib_scsi_scan(struct lib_handle *hdl, json_t **lib_data)
     int i = 0;
     int rc;
 
+    MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
+
     json_array_append_cb = (lib_scan_cb_t)json_array_append;
 
     lib = hdl->lh_lib;
     if (!lib) /* closed or missing init */
-        return -EBADF;
+        GOTO(unlock, rc = -EBADF);
 
     *lib_data = json_array();
 
@@ -761,7 +792,7 @@ static int lib_scsi_scan(struct lib_handle *hdl, json_t **lib_data)
     if (rc) {
         json_decref(*lib_data);
         *lib_data = NULL;
-        LOG_RETURN(rc, "Error loading scsi library status");
+        LOG_GOTO(unlock, rc, "Error loading scsi library status");
     }
 
     /* scan arms */
@@ -780,7 +811,11 @@ static int lib_scsi_scan(struct lib_handle *hdl, json_t **lib_data)
     for (i = 0; i < lib->drives.count ; i++)
         scan_element(&lib->drives.items[i], json_array_append_cb, *lib_data);
 
-    return 0;
+    rc = 0;
+
+unlock:
+    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
+    return rc;
 }
 
 /** @}*/
@@ -804,6 +839,12 @@ int pho_module_register(void *module, void *context)
 
     self->desc = LA_SCSI_MODULE_DESC;
     self->ops = &LA_SCSI_OPS;
+
+    /*
+     * WARNING : this mutex will never be freed because we have no cleaning at
+     * module unload.
+     */
+    pthread_mutex_init(&phobos_context()->ldm_lib_scsi_mutex, NULL);
 
     return 0;
 }

@@ -37,9 +37,6 @@ function setup
     TAGS=foo-tag,bar-tag
     export PHOBOS_IO_SCHED_DIR_read_algo="grouped_read"
     export PHOBOS_IO_SCHED_TAPE_read_algo="grouped_read"
-    export PHOBOS_SCSI_concurrent_lookups=0
-    export PHOBOS_SCSI_concurrent_moves=0
-    export PHOBOS_SCSI_exclusive_move_and_lookup=true
 
     if [ -w /dev/changer ]; then
         export PHOBOS_LRS_families="dir,tape"

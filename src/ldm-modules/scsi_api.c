@@ -56,13 +56,10 @@ enum pho_cfg_params_scsi {
                                           ELEMENT_STATUS request. */
     PHO_CFG_SCSI_query_timeout_ms, /**< Timeout of a SCSI query request */
     PHO_CFG_SCSI_move_timeout_ms, /**< Timeout of a SCSI move request */
-    PHO_CFG_SCSI_concurrent_lookups,
-    PHO_CFG_SCSI_concurrent_moves,
-    PHO_CFG_SCSI_exclusive_move_and_lookup,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_SCSI_FIRST = PHO_CFG_SCSI_retry_count,
-    PHO_CFG_SCSI_LAST  = PHO_CFG_SCSI_exclusive_move_and_lookup,
+    PHO_CFG_SCSI_LAST  = PHO_CFG_SCSI_move_timeout_ms,
 };
 
 #define _STR(X) #X
@@ -101,21 +98,6 @@ const struct pho_config_item cfg_scsi[] = {
         .section = "scsi",
         .name    = "move_timeout_ms",
         .value   = STR(DEFAULT_MOVE_TIMEOUT_MS),
-    },
-    [PHO_CFG_SCSI_concurrent_lookups] = {
-        .section = "scsi",
-        .name    = "concurrent_lookups",
-        .value   = "0", /* unlimited */
-    },
-    [PHO_CFG_SCSI_concurrent_moves] = {
-        .section = "scsi",
-        .name    = "concurrent_moves",
-        .value   = "0", /* unlimited */
-    },
-    [PHO_CFG_SCSI_exclusive_move_and_lookup] = {
-        .section = "scsi",
-        .name    = "exclusive_move_and_lookup",
-        .value   = "true",
     },
 };
 
@@ -188,97 +170,6 @@ static int scsi_move_timeout_ms(void)
                                       DEFAULT_MOVE_TIMEOUT_MS);
 
     return move_timeout_ms;
-}
-
-static int scsi_concurrent_moves(void)
-{
-    static int concurrent_moves = -1;
-
-    if (concurrent_moves != -1)
-        return concurrent_moves;
-
-    concurrent_moves = PHO_CFG_GET_INT(cfg_scsi, PHO_CFG_SCSI,
-                                       concurrent_moves, 1);
-
-    return concurrent_moves;
-}
-
-static int scsi_concurrent_lookups(void)
-{
-    static int concurrent_lookups = -1;
-
-    if (concurrent_lookups != -1)
-        return concurrent_lookups;
-
-    concurrent_lookups = PHO_CFG_GET_INT(cfg_scsi, PHO_CFG_SCSI,
-                                         concurrent_lookups, 1);
-
-    return concurrent_lookups;
-}
-
-static bool scsi_exclusive_lookup_and_moves(void)
-{
-    static const char *exclusive_move_and_lookup;
-
-    if (exclusive_move_and_lookup == NULL)
-        exclusive_move_and_lookup = PHO_CFG_GET(cfg_scsi, PHO_CFG_SCSI,
-                                                exclusive_move_and_lookup);
-
-    if (!exclusive_move_and_lookup)
-        /* By default, seperate moves and lookups since it seems to be the way
-         * libraries work.
-         */
-        return true;
-
-    if (!strcmp(exclusive_move_and_lookup, "false"))
-        return false;
-    else
-        /* anything other than false is considered true as this is the safest
-         * behavior
-         */
-        return true;
-}
-
-int init_semaphores(struct lib_access_synchronization *lib_sync)
-{
-    int max_lookups = scsi_concurrent_lookups();
-    int max_moves = scsi_concurrent_moves();
-    int rc;
-
-    lib_sync->exclusive_lookup_and_moves = scsi_exclusive_lookup_and_moves();
-    lib_sync->limit_lookup = max_lookups != 0;
-    lib_sync->limit_move = max_moves != 0;
-
-    if (!lib_sync->exclusive_lookup_and_moves) {
-        pthread_rwlock_init(&lib_sync->move_lookup_lock, NULL);
-    } else {
-        if (lib_sync->limit_lookup) {
-            rc = sem_init(&lib_sync->lookup_sem, 0, max_lookups);
-            if (rc == -1)
-                return -errno;
-        }
-    }
-
-    if (lib_sync->limit_move) {
-        rc = sem_init(&lib_sync->move_sem, 0, max_moves);
-        if (rc == -1)
-            return -errno;
-    }
-
-    return 0;
-}
-
-void finish_semaphores(struct lib_access_synchronization *lib_sync)
-{
-    if (!lib_sync->exclusive_lookup_and_moves) {
-        pthread_rwlock_destroy(&lib_sync->move_lookup_lock);
-    } else {
-        if (lib_sync->limit_lookup)
-            sem_destroy(&lib_sync->lookup_sem);
-    }
-
-    if (lib_sync->limit_move)
-        sem_destroy(&lib_sync->move_sem);
 }
 
 int scsi_mode_sense(int fd, struct mode_sense_info *info)

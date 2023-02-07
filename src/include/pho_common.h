@@ -36,7 +36,6 @@
 #include <glib.h>
 #include <jansson.h>
 #include "pho_types.h"
-#include <semaphore.h>
 
 enum pho_log_level {
     PHO_LOG_DISABLED = 0,
@@ -351,18 +350,6 @@ struct config {
                                          */
 };
 
-struct lib_access_synchronization {
-    pthread_rwlock_t move_lookup_lock;
-    sem_t lookup_sem;
-    bool limit_lookup; /* if false, lookups are not limited by the semaphore */
-    sem_t move_sem;
-    bool limit_move; /* if false, moves are not limited by the semaphore */
-    bool exclusive_lookup_and_moves; /* If true, prevent lookups when moves are
-                                      * occurring but allow as many concurrent
-                                      * moves as requested at startup.
-                                      */
-};
-
 /**
  * Structure containing global information about Phobos. This structure is
  * shared between all threads and modules.
@@ -378,7 +365,7 @@ struct phobos_global_context {
     bool log_dev_output;             /** Whether to display additional
                                        * information on each logs.
                                        */
-    struct lib_access_synchronization lib_sync;
+    pthread_mutex_t ldm_lib_scsi_mutex;
 };
 
 /**

@@ -27,7 +27,6 @@
 #define _SCSI_API_H
 
 #include "scsi_common.h"
-#include "pho_common.h"
 
 #include <stdbool.h>
 
@@ -141,8 +140,5 @@ int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
 /** function to handle scsi error codes in a PHO_RETRY_LOOP */
 void scsi_retry_func(const char *fnname, int rc, int *retry_cnt,
                      void *context);
-
-int init_semaphores(struct lib_access_synchronization *lib_sync);
-void finish_semaphores(struct lib_access_synchronization *lib_sync);
 
 #endif
