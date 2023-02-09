@@ -89,6 +89,23 @@ following will give the contents of the /dev/changer library:
 phobos lib scan /dev/changer
 ```
 
+When using the library (such as when running the above command), if phobos
+returns an "invalid argument" error, and when you check the logs you see the
+following:
+```
+<WARNING> SCSI ERROR: scsi_masked_status=0x1, adapter_status=0, driver_status=0x8
+<WARNING>     req_sense_error=0x70, sense_key=0x5 (Illegal Request)
+<WARNING>     asc=0x24, ascq=0 (Additional sense: Invalid field in cbd)
+<ERROR> Sense key 0x5 (converted to -22): Invalid argument
+<ERROR> scsi_element_status failed for type 'drives': Invalid argument
+```
+It may be a tape library limitation. For some type of tape libraries, for
+instance IBM libraries, one can't query a drive's serial number and it's volume
+label in the same request. To prevent this, phobos can separate the query in two
+by activating the parameter 'sep_sn_query' in the section 'lib_scsi', as shown
+[here](doc/cfg/template.conf#L63), or as the environment variable
+'PHOBOS_LIB_SCSI_sep_sn_query=1'.
+
 ### Device and media management
 #### Adding drives
 Use the `phobos` command line to add new tape drives to be managed by phobos.
