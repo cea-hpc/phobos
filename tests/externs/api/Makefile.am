@@ -13,6 +13,7 @@ COMMUNICATION_LIB=$(TO_SRC)/communication/libpho_comm.la
 DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
 LAYOUT_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la
+LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 MOD_LOAD_LIB=$(TO_SRC)/module-loader/libpho_module_loader.la
 RAID1_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 SCSI_LIB=$(TO_SRC)/ldm-modules/libpho_scsi.la
@@ -40,7 +41,8 @@ check_PROGRAMS=test_bad_comm \
                test_scsi \
                test_store \
                test_store_retry \
-               test_undelete
+               test_undelete \
+               demo_fair_share
 
 check_SCRIPTS=test_bad_comm.sh \
               test_concurrency.test \
@@ -120,3 +122,8 @@ test_store_retry_CFLAGS=-I$(TO_TEST)
 test_undelete_SOURCES=test_undelete.c
 test_undelete_LDADD=$(STORE_LIB)
 test_undelete_CFLAGS=-I$(TO_TEST)
+
+demo_fair_share_SOURCES=demo_fair_share.c
+demo_fair_share_LDADD=$(DSS_LIB) $(COMMON_LIB) $(CFG_LIB) $(COMMUNICATION_LIB) \
+                      $(SERIALIZER_LIB) $(LRS_LIB)
+demo_fair_share_CFLAGS=-I$(TO_TEST)
