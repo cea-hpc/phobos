@@ -502,8 +502,10 @@ close:
     }
 
     /* update size in write encoder */
-    if (rc == 0)
+    if (rc == 0) {
         raid1->to_write -= extent_size;
+        raid1->cur_extent_idx++;
+    }
 
     /* update all release requests */
     for (i = 0; i < raid1->repl_count; ++i) {
