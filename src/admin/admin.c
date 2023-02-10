@@ -363,6 +363,7 @@ static int _device_update_adm_status(struct admin_handle *adm,
                           dev_res->lock.hostname, dev_res->lock.owner);
                 one_device_not_avail = true;
                 dss_res_free(dev_res, 1);
+                continue;
             } else if (status == PHO_RSC_ADM_ST_LOCKED) {
                 pho_warn("Device (path: '%s', name: '%s') is in use. "
                          "Administrative locking will not be effective "
