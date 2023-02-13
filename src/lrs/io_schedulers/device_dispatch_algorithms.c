@@ -829,6 +829,27 @@ free_device_list:
     return rc;
 }
 
+static int dispatch_shared_devices(struct io_scheduler *io_sched,
+                                   GPtrArray *devices_to_give,
+                                   size_t target,
+                                   enum io_request_type type)
+{
+    int i = 0;
+
+    while (io_sched->devices->len < target && i < devices_to_give->len) {
+        struct lrs_dev *dev = g_ptr_array_index(devices_to_give, i++);
+        int rc;
+
+        rc = io_sched->ops.add_device(io_sched, dev);
+        if (rc)
+            return rc;
+
+        dev->ld_io_request_type |= type;
+    }
+
+    return 0;
+}
+
 static int
 fair_share_number_of_requests_one_techno(struct io_sched_handle *io_sched_hdl,
                                         struct device_list *device_list)
@@ -880,57 +901,21 @@ fair_share_number_of_requests_one_techno(struct io_sched_handle *io_sched_hdl,
         GOTO(free_devices, rc = 0);
 
     if (devices->len == 1 || devices->len == 2) {
-        struct lrs_dev *dev = g_ptr_array_index(devices_to_give, 0);
+        rc = dispatch_shared_devices(&io_sched_hdl->read, devices_to_give,
+                                     repartition.nb_reads, IO_REQ_READ);
+        if (rc)
+            GOTO(free_devices, rc);
 
-        if (repartition.nb_reads > 0) {
-            rc = io_sched_hdl->read.ops.add_device(&io_sched_hdl->read, dev);
-            if (rc)
-                GOTO(free_devices, rc);
-            dev->ld_io_request_type |= IO_REQ_READ;
-        }
+        rc = dispatch_shared_devices(&io_sched_hdl->write, devices_to_give,
+                                     repartition.nb_writes, IO_REQ_WRITE);
+        if (rc)
+            GOTO(free_devices, rc);
 
-        if (repartition.nb_writes > 0) {
-            rc = io_sched_hdl->write.ops.add_device(&io_sched_hdl->write, dev);
-            if (rc)
-                GOTO(free_devices, rc);
-            dev->ld_io_request_type |= IO_REQ_WRITE;
-        }
+        rc = dispatch_shared_devices(&io_sched_hdl->format, devices_to_give,
+                                     repartition.nb_formats, IO_REQ_FORMAT);
+        if (rc)
+            GOTO(free_devices, rc);
 
-        if (repartition.nb_formats > 0) {
-            rc = io_sched_hdl->format.ops.add_device(&io_sched_hdl->format,
-                                                     dev);
-            if (rc)
-                GOTO(free_devices, rc);
-            dev->ld_io_request_type |= IO_REQ_FORMAT;
-        }
-
-        if (devices->len == 2) {
-            dev = g_ptr_array_index(devices_to_give, 1);
-
-            if (repartition.nb_reads == 2) {
-                rc = io_sched_hdl->read.ops.add_device(&io_sched_hdl->read,
-                                                         dev);
-                if (rc)
-                    GOTO(free_devices, rc);
-                dev->ld_io_request_type |= IO_REQ_READ;
-            }
-
-            if (repartition.nb_writes == 2) {
-                rc = io_sched_hdl->write.ops.add_device(&io_sched_hdl->write,
-                                                         dev);
-                if (rc)
-                    GOTO(free_devices, rc);
-                dev->ld_io_request_type |= IO_REQ_WRITE;
-            }
-
-            if (repartition.nb_formats == 2) {
-                rc = io_sched_hdl->format.ops.add_device(&io_sched_hdl->format,
-                                                         dev);
-                if (rc)
-                    GOTO(free_devices, rc);
-                dev->ld_io_request_type |= IO_REQ_FORMAT;
-            }
-        }
     } else {
         rc = dispatch_devices(io_sched_hdl, devices_to_give, &repartition,
                               device_list->technology);

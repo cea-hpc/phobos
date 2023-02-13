@@ -1819,6 +1819,82 @@ static void fair_share_ensure_min_max(void **data)
     log_test_dispatch(data, 2, 5, 0, 1, 1, 0, 1, NULL);
 }
 
+static void fair_share_one_shared_device_before_add(void **data)
+{
+    struct io_sched_handle *io_sched_hdl = *data;
+    struct lrs_dev new_device;
+    GPtrArray *devices;
+    int rc;
+
+    set_fair_share_minmax("LTO5", "0,0,0", "5,5,5");
+    devices = init_devices(NULL, 1, LTO5_MODEL);
+    create_device(&new_device, "D8", LTO5_MODEL);
+
+    io_sched_hdl->io_stats.nb_reads = 11;
+    io_sched_hdl->io_stats.nb_writes = 10;
+    io_sched_hdl->io_stats.nb_formats = 10;
+
+    rc = fair_share_number_of_requests(io_sched_hdl, devices);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(io_sched_hdl->read.devices->len, 1);
+    assert_int_equal(io_sched_hdl->write.devices->len, 1);
+    assert_int_equal(io_sched_hdl->format.devices->len, 1);
+
+    g_ptr_array_add(devices, &new_device);
+    rc = fair_share_number_of_requests(io_sched_hdl, devices);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(io_sched_hdl->read.devices->len, 2);
+    assert_int_equal(io_sched_hdl->write.devices->len, 1);
+    assert_int_equal(io_sched_hdl->format.devices->len, 1);
+
+    cleanup_device(&new_device);
+    io_sched_hdl->read.ops.remove_device(&io_sched_hdl->read, &new_device);
+    g_ptr_array_remove_index(devices, devices->len - 1);
+    cleanup_devices(io_sched_hdl, devices);
+}
+
+static void fair_share_one_non_shared_device_before_add_shared(void **data)
+{
+    struct io_sched_handle *io_sched_hdl = *data;
+    struct lrs_dev new_device;
+    GPtrArray *devices;
+    int rc;
+
+    set_fair_share_minmax("LTO5", "0,0,0", "5,5,5");
+    devices = init_devices(NULL, 1, LTO5_MODEL);
+    create_device(&new_device, "D8", LTO5_MODEL);
+
+    io_sched_hdl->io_stats.nb_reads = 10;
+    io_sched_hdl->io_stats.nb_writes = 0;
+    io_sched_hdl->io_stats.nb_formats = 0;
+
+    rc = fair_share_number_of_requests(io_sched_hdl, devices);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(io_sched_hdl->read.devices->len, 1);
+    assert_int_equal(io_sched_hdl->write.devices->len, 0);
+    assert_int_equal(io_sched_hdl->format.devices->len, 0);
+
+    g_ptr_array_add(devices, &new_device);
+    io_sched_hdl->io_stats.nb_reads = 11;
+    io_sched_hdl->io_stats.nb_writes = 10;
+    io_sched_hdl->io_stats.nb_formats = 10;
+
+    rc = fair_share_number_of_requests(io_sched_hdl, devices);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(io_sched_hdl->read.devices->len, 2);
+    assert_int_equal(io_sched_hdl->write.devices->len, 1);
+    assert_int_equal(io_sched_hdl->format.devices->len, 1);
+
+    cleanup_device(&new_device);
+    io_sched_hdl->read.ops.remove_device(&io_sched_hdl->read, &new_device);
+    g_ptr_array_remove_index(devices, devices->len - 1);
+    cleanup_devices(io_sched_hdl, devices);
+}
+
 int main(void)
 {
     const struct CMUnitTest test_dev_picker[] = {
@@ -1857,6 +1933,8 @@ int main(void)
         cmocka_unit_test(fair_share_take_devices),
         cmocka_unit_test(fair_share_multi_technologies),
         cmocka_unit_test(fair_share_ensure_min_max),
+        cmocka_unit_test(fair_share_one_shared_device_before_add),
+        cmocka_unit_test(fair_share_one_non_shared_device_before_add_shared),
     };
     int error_count;
     int rc;
