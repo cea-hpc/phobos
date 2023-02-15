@@ -380,9 +380,11 @@ static inline bool is_st_device(const char *dev_name)
     return res == 1;
 }
 
-static void scsi_tape_map_free(void)
+__attribute__((destructor)) static void scsi_tape_map_free(void)
 {
-    pho_debug("Freeing device serial cache");
+    if (drive_cache == NULL)
+        return;
+
     list_free_all(drive_cache, free);
     drive_cache = NULL;
 }
