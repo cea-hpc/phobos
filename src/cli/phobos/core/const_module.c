@@ -206,6 +206,7 @@ PyMODINIT_FUNC PyInit_const(void)
     PyModule_AddIntMacro(mod, PHO_LABEL_MAX_LEN);
     PyModule_AddIntMacro(mod, PHO_LAYOUT_TAG_MAX);
     PyModule_AddIntMacro(mod, PHO_TIMEVAL_MAX_LEN);
+    PyModule_AddIntMacro(mod, MD5_BYTE_LENGTH);
 
     /* enum extent_state */
     PyModule_AddIntMacro(mod, PHO_EXT_ST_INVAL);

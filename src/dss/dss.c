@@ -32,6 +32,7 @@
 #include "pho_dss.h"
 #include "pho_cfg.h"
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <inttypes.h>
@@ -929,6 +930,25 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
         rc = pho_id_name_set(&result[i].media, tmp);
         if (rc)
             LOG_GOTO(out_decref, rc = -EINVAL, "Failed to set media id");
+
+        tmp = json_dict2tmp_str(child, "md5");
+        if (tmp) {
+            int j;
+
+            for (j = 0; j < MD5_BYTE_LENGTH; j++) {
+                rc = sscanf(tmp + j, "%02hhx", &result[i].md5[j]);
+                if (rc != 1) {
+                    rc = -errno;
+                    memset(&result[i].md5[0], 0, MD5_BYTE_LENGTH);
+                    LOG_GOTO(out_decref, rc,
+                             "Failed to get %d unsigned char of md5 extent %d",
+                             j, i);
+                }
+            }
+        } else {
+            pho_warn("Extent %d with no md5", i);
+            memset(&result[i].md5[0], 0, MD5_BYTE_LENGTH);
+        }
     }
 
     *extents = result;
@@ -954,31 +974,33 @@ out_decref:
 static char *dss_layout_extents_encode(struct extent *extents,
                                        unsigned int count, int *error)
 {
-    json_t  *root;
-    json_t  *child;
-    char    *s;
-    int      err_cnt = 0;
-    int      rc;
-    int      i;
+    int err_cnt = 0;
+    json_t *child;
+    json_t *root;
+    char *md5buf;
+    char *s;
+    int rc;
+    int i;
+
     ENTRY;
 
     root = json_array();
     if (!root) {
-        pho_error(ENOMEM, "Failed to create json root object");
+        pho_error(-ENOMEM, "Failed to create json root object");
         return NULL;
     }
 
     for (i = 0; i < count; i++) {
         child = json_object();
         if (!child) {
-            pho_error(ENOMEM, "Failed to create json child object");
+            pho_error(-ENOMEM, "Failed to create json child object");
             err_cnt++;
             continue;
         }
 
         rc = json_object_set_new(child, "sz", json_integer(extents[i].size));
         if (rc) {
-            pho_error(EINVAL, "Failed to encode 'sz' (%zu)", extents[i].size);
+            pho_error(-EINVAL, "Failed to encode 'sz' (%zu)", extents[i].size);
             err_cnt++;
         }
 
@@ -987,32 +1009,53 @@ static char *dss_layout_extents_encode(struct extent *extents,
             rc = json_object_set_new(child, "addr",
                                      json_string(extents[i].address.buff));
             if (rc) {
-                pho_error(EINVAL, "Failed to encode 'addr' (%s)",
+                pho_error(-EINVAL, "Failed to encode 'addr' (%s)",
                           extents[i].address.buff);
                 err_cnt++;
             }
         }
 
         rc = json_object_set_new(child, "fam",
-                         json_string(rsc_family2str(extents[i].media.family)));
+            json_string(rsc_family2str(extents[i].media.family)));
         if (rc) {
-            pho_error(EINVAL, "Failed to encode 'fam' (%d:%s)",
+            pho_error(-EINVAL, "Failed to encode 'fam' (%d:%s)",
                       extents[i].media.family,
                       rsc_family2str(extents[i].media.family));
             err_cnt++;
         }
 
         rc = json_object_set_new(child, "media",
-                         json_string(extents[i].media.name));
+            json_string(extents[i].media.name));
         if (rc) {
-            pho_error(EINVAL, "Failed to encode 'media' (%s)",
+            pho_error(-EINVAL, "Failed to encode 'media' (%s)",
                       extents[i].media.name);
             err_cnt++;
         }
 
+        /* 2 hex char per byte + final '\0' */
+        md5buf = calloc(MD5_BYTE_LENGTH * 2 + 1, sizeof(char));
+        if (!md5buf) {
+            pho_error(-ENOMEM,
+                      "Failed to allocated md5buf at layout extents encoding");
+            err_cnt++;
+        } else {
+            int j, k;
+
+            for (j = 0, k = 0; j < MD5_BYTE_LENGTH; j++, k += 2)
+                sprintf(md5buf + k, "%02x", extents[i].md5[j]);
+
+            rc = json_object_set_new(child, "md5", json_string(md5buf));
+            if (rc) {
+                pho_error(-EINVAL, "Failed to encode 'md5' (%s)", md5buf);
+                err_cnt++;
+            }
+
+            free(md5buf);
+        }
+
         rc = json_array_append_new(root, child);
         if (rc) {
-            pho_error(EINVAL, "Failed to attach child to root object");
+            pho_error(-EINVAL, "Failed to attach child to root object");
             err_cnt++;
         }
     }
@@ -1022,7 +1065,7 @@ static char *dss_layout_extents_encode(struct extent *extents,
     s = json_dumps(root, 0);
     json_decref(root);
     if (!s) {
-        pho_error(EINVAL, "Failed to dump JSON to ASCIIZ");
+        pho_error(-EINVAL, "Failed to dump JSON to ASCIIZ");
         return NULL;
     }
 

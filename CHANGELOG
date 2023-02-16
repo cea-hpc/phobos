@@ -2,6 +2,7 @@
 
 ## Ongoing
 
+* md5 checksum computed and stored in DSS for each extent during put
 * Phobos API has been changed. Any call to a Phobos function must be done after
   initializing its context using `phobos_init()`. To release the context, use
   `phobos_fini()`.

@@ -40,6 +40,7 @@ BuildRequires: autoconf
 BuildRequires: automake
 BuildRequires: libtool
 BuildRequires: make
+BuildRequires: openssl-devel >= 0.9.7
 
 Requires: %{postgres_prefix}-server
 Requires: %{postgres_prefix}-contrib
@@ -59,6 +60,7 @@ Requires: %{python_prefix}-psycopg2
 Requires: %{python_prefix}-tabulate
 Requires: protobuf
 Requires: protobuf-c
+Requires: openssl >= 0.9.7
 
 %description
 Phobos aims to implement high performance distributed object storage on a wide

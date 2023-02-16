@@ -28,6 +28,7 @@
 /* glib will be used to handle common structures (GList, GString, ...) */
 #include <glib.h>
 #include <limits.h>
+#include <openssl/evp.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -369,11 +370,16 @@ struct pho_resource {
 };
 
 /** describe a piece of data in a layout */
+#define MD5_BYTE_LENGTH 16
 struct extent {
     int                 layout_idx; /**< index of this extent in layout */
     ssize_t             size;       /**< size of the extent */
     struct pho_id       media;      /**< identifier of the media */
     struct pho_buff     address;    /**< address on the media */
+    unsigned char       md5[MD5_BYTE_LENGTH];
+                                    /**< md5 checksum of the extent
+                                     *   (only filled for now at put)
+                                     */
 };
 
 /**

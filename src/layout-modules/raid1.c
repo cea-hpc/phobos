@@ -29,6 +29,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <glib.h>
+#include <openssl/evp.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -114,6 +115,11 @@ struct raid1_encoder {
      * nb_released_media == written_extents->len .
      */
     size_t n_released_media;
+
+    /**
+     *  A ready to use context to compute MD5 when needed.
+     */
+    EVP_MD_CTX *md5ctx;
 };
 
 /**
@@ -243,7 +249,7 @@ static void set_extent_info(struct extent *extent,
 }
 
 /**
- * Write count bytes from input_fd in each iod.
+ * Write count bytes from input_fd in each iod and update corresponding md5ctx
  *
  * Bytes are read from input_fd and stored to an intermediate buffer before
  * being written into each iod.
@@ -253,7 +259,7 @@ static void set_extent_info(struct extent *extent,
 static int write_all_chunks(int input_fd, struct io_adapter_module **ioa,
                             struct pho_io_descr *iod,
                             unsigned int replica_count, size_t buffer_size,
-                            size_t count)
+                            size_t count, EVP_MD_CTX *md5ctx)
 {
 #define MAX_NULL_READ_TRY 10
     int nb_null_read_try = 0;
@@ -296,6 +302,11 @@ static int write_all_chunks(int input_fd, struct io_adapter_module **ioa,
             /* update written iod size */
             iod[i].iod_size += buf_size;
         }
+
+        if (EVP_DigestUpdate(md5ctx, buffer, buf_size) == 0)
+            LOG_GOTO(out, rc = -ENOMEM, "Unable to update md5 in raid1 write, "
+                                        "buffer of %zu bytes with %zu "
+                                        "remaining bytes", buf_size, to_write);
 
         to_write -= buf_size;
     }
@@ -354,6 +365,7 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
     struct raid1_encoder *raid1 = enc->priv_enc;
 #define EXTENT_TAG_SIZE 128
     struct io_adapter_module **ioa = NULL;
+    unsigned char md5[MD5_BYTE_LENGTH];
     struct pho_io_descr *iod = NULL;
     struct pho_ext_loc *loc = NULL;
     struct extent *extent = NULL;
@@ -485,12 +497,22 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
         pho_debug("I/O size for replicate %d: %zu", i, enc->io_block_size);
     }
 
+    /* Init md5ctx */
+    if (EVP_DigestInit_ex(raid1->md5ctx, EVP_md5(), NULL) == 0)
+        LOG_GOTO(close, rc = -ENOMEM,
+                 "Unable to init md5 in raid1 encoder write");
+
     /* write all extents by chunk of buffer size*/
     rc = write_all_chunks(enc->xfer->xd_fd, ioa, iod,
                           raid1->repl_count, enc->io_block_size,
-                          extent_size);
+                          extent_size, raid1->md5ctx);
     if (rc)
         LOG_GOTO(close, rc, "Unable to write in raid1 encoder write");
+
+    /* compute extent md5 */
+    if (EVP_DigestFinal_ex(raid1->md5ctx, md5, NULL) == 0)
+        LOG_GOTO(close, rc = -ENOMEM,
+                 "Unable to produce md5 in raid1 encoder write");
 
 close:
     for (i = 0; i < raid1->repl_count; ++i) {
@@ -500,6 +522,10 @@ close:
         if (!rc && rc2)
             rc = rc2;
     }
+
+    if (rc == 0)
+        for (i = 0; i < raid1->repl_count; i++)
+            memcpy(&extent[i].md5[0], &md5[0], MD5_BYTE_LENGTH);
 
     /* update size in write encoder */
     if (rc == 0) {
@@ -948,6 +974,11 @@ static void raid1_encoder_destroy(struct pho_encoder *enc)
         raid1->to_release_media = NULL;
     }
 
+    if (raid1->md5ctx != NULL) {
+        EVP_MD_CTX_destroy(raid1->md5ctx);
+        raid1->md5ctx = NULL;
+    }
+
     free(raid1);
     enc->priv_enc = NULL;
 }
@@ -1032,6 +1063,9 @@ static int layout_raid1_encode(struct pho_encoder *enc)
     raid1->to_release_media = g_hash_table_new_full(g_str_hash, g_str_equal,
                                                     free, free);
     raid1->n_released_media = 0;
+
+    /* init EVP_MD_CTX */
+    raid1->md5ctx = EVP_MD_CTX_create();
 
     return 0;
 }

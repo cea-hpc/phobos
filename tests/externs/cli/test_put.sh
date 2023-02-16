@@ -118,6 +118,20 @@ function test_extent_path
 
 test_extent_path
 
+function test_checksum
+{
+    $valg_phobos put --family dir /etc/hosts chk ||
+        error "failed to put 'chk' object"
+
+    local md5_value=$(md5sum /etc/hosts | awk '{print $1}')
+    # XXX MUST BE REPLACED by a phobos extent list when listing of checksum
+    $PSQL -c "select extents from extent where oid = 'chk';" | \
+        grep ${md5_value} ||
+            error "chk object extents don't have the good md5 value"
+}
+
+test_checksum
+
 ################################################################################
 #                         TEST EMPTY PUT ON TAGGED DIR                         #
 ################################################################################

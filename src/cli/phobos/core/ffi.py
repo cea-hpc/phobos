@@ -27,15 +27,16 @@ object-oriented API to the rest of the CLI.
 """
 
 from ctypes import (byref, cast, CDLL, CFUNCTYPE, c_bool, c_char, c_char_p,
-                    c_int, c_long, c_longlong, c_size_t, c_ssize_t, c_void_p,
-                    POINTER, Structure)
+                    c_int, c_long, c_longlong, c_size_t, c_ssize_t, c_ubyte,
+                    c_void_p, POINTER, Structure)
 from enum import IntEnum
 
 from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
                                PHO_RSC_DIR, PHO_RSC_TAPE, PHO_RSC_RADOS_POOL,
-                               PHO_TIMEVAL_MAX_LEN, fs_type2str, fs_status2str,
-                               rsc_adm_status2str, rsc_family2str)
+                               PHO_TIMEVAL_MAX_LEN, MD5_BYTE_LENGTH,
+                               fs_type2str, fs_status2str, rsc_adm_status2str,
+                               rsc_family2str)
 
 LIBPHOBOS_NAME = "libphobos_store.so"
 LIBPHOBOS = CDLL(LIBPHOBOS_NAME)
@@ -643,6 +644,7 @@ class ExtentInfo(Structure): # pylint: disable=too-few-public-methods
         ('size', c_ssize_t),
         ('media', Id),
         ('address', Buffer),
+        ('md5', c_ubyte * MD5_BYTE_LENGTH)
     ]
 
 class PhoAttrs(Structure): # pylint: disable=too-few-public-methods
