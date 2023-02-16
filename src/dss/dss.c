@@ -2176,6 +2176,38 @@ void dss_res_free(void *item_list, int item_cnt)
     _dss_result_free(dss_res, item_cnt);
 }
 
+int dss_get_usable_devices(struct dss_handle *hdl, const enum rsc_family family,
+                           const char *host, struct dev_info **dev_ls,
+                           int *dev_cnt)
+{
+    struct dss_filter filter;
+    char *host_filter = NULL;
+    int rc;
+
+    if (host) {
+        rc = asprintf(&host_filter, "{\"DSS::DEV::host\": \"%s\"},", host);
+        if (rc < 0)
+            return -ENOMEM;
+    }
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  %s"
+                          "  {\"DSS::DEV::adm_status\": \"%s\"},"
+                          "  {\"DSS::DEV::family\": \"%s\"}"
+                          "]}",
+                          host ? host_filter : "",
+                          rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
+                          rsc_family2str(family));
+    free(host_filter);
+    if (rc)
+        return rc;
+
+    rc = dss_device_get(hdl, &filter, dev_ls, dev_cnt);
+    dss_filter_free(&filter);
+    return rc;
+}
+
 int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
                    struct dev_info **dev_ls, int *dev_cnt)
 {

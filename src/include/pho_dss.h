@@ -250,6 +250,23 @@ int dss_init(struct dss_handle *handle);
 void dss_fini(struct dss_handle *handle);
 
 /**
+ * Retrieve usable devices information from DSS, meaning devices that are
+ * unlocked.
+ *
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  family   family of the devices to retrieve
+ * @param[in]  host     host of the devices to retrieve, if NULL, will retrieve
+ *                      usable devices of every host
+ * @param[out] dev_ls   list of retrieved items to be freed w/ dss_res_free()
+ * @param[out] dev_cnt  number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_get_usable_devices(struct dss_handle *hdl, const enum rsc_family family,
+                           const char *host, struct dev_info **dev_ls,
+                           int *dev_cnt);
+
+/**
  * Retrieve devices information from DSS
  * @param[in]  hdl      valid connection handle
  * @param[in]  filter   assembled DSS filtering criteria

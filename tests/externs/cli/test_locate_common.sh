@@ -33,7 +33,6 @@ medium_locker_bin="$test_dir/medium_locker"
 function test_locate_cli
 {
     local obj="object_to_locate"
-    local family=$1
     local pid="12345"
 
     # test error on locating an unknown object

@@ -72,6 +72,9 @@ function tape_setup
 {
     local N_LTO6_TAPES=4
     local N_LTO6_DRIVES=4
+    local self_hostname="$(uname -n)"
+    local WIN_HOST="winner_hostname" # taken from the .c test
+    local WIN_HOST_BIS="winner_hostname_bis" # taken from the .c test
 
     # get LTO6 tapes
     local lto6_tapes="$(get_tapes L6 $N_LTO6_TAPES)"
@@ -83,10 +86,30 @@ function tape_setup
         $phobos tape unlock "$t"
     done
 
-    # get LTO6 drives
+    # we add drives to other hosts so that each has a compatible drive to locate
+    # any object and can be selected by the locate
     local drives=$(get_lto_drives 6 $N_LTO6_DRIVES)
+    IFS=' ' read -r -a drivesarr <<< "$drives"
     echo "adding drives $drives..."
-    $phobos drive add $drives
+    $phobos drive add ${drivesarr[0]}
+    $phobos drive unlock ${drivesarr[0]}
+
+    # change the host of the lto6 drives
+    $PSQL << EOF
+UPDATE device SET host = '$WIN_HOST'
+              WHERE host = '$self_hostname' AND family = 'tape';
+EOF
+
+    $phobos drive add ${drivesarr[1]}
+    $phobos drive unlock ${drivesarr[1]}
+
+    # change the host of the lto6 drives
+    $PSQL << EOF
+UPDATE device SET host = '$WIN_HOST_BIS'
+              WHERE host = '$self_hostname' AND family = 'tape';
+EOF
+
+    $phobos drive add ${drivesarr[2]} ${drivesarr[3]}
 
     # unlock all drives
     for d in $($phobos drive list); do

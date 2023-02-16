@@ -305,31 +305,17 @@ int lrs_dev_hdl_retrydel(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
     return 0;
 }
 
-int lrs_dev_hdl_load(struct lrs_sched *sched,
-                     struct lrs_dev_hdl *handle)
+int lrs_dev_hdl_load(struct lrs_sched *sched, struct lrs_dev_hdl *handle)
 {
     struct dev_info *dev_list = NULL;
-    struct dss_filter filter;
     int dev_count = 0;
     int rc;
     int i;
 
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                          "  {\"DSS::DEV::host\": \"%s\"},"
-                          "  {\"DSS::DEV::adm_status\": \"%s\"},"
-                          "  {\"DSS::DEV::family\": \"%s\"}"
-                          "]}",
-                          sched->lock_handle.lock_hostname,
-                          rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
-                          rsc_family2str(sched->family));
-    if (rc)
-        return rc;
-
     /* get all admin unlocked devices from DB for the given family */
-    rc = dss_device_get(&sched->sched_thread.dss, &filter, &dev_list,
-                        &dev_count);
-    dss_filter_free(&filter);
+    rc = dss_get_usable_devices(&sched->sched_thread.dss, sched->family,
+                                sched->lock_handle.lock_hostname,
+                                &dev_list, &dev_count);
     if (rc)
         return rc;
 

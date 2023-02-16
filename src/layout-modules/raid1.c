@@ -1104,106 +1104,143 @@ static int layout_raid1_decode(struct pho_encoder *enc)
 }
 
 /** Stores the possible locations of an object split */
-struct split_location {
-    bool unlocked_media; /**< true if one extent is on a free medium for this
-                           *  split, init to false
-                           */
+struct split_access_info {
     unsigned int repl_count;
     unsigned int nb_hosts;
-    char **hostnames; /**< array of max repl_count hostnames currently filled
-                        *  with only nb_hosts hostnames
-                        *
-                        *  This array contains the hostnames which own a lock on
-                        *  a medium containing at least one extent of this
-                        *  split.
-                        *
-                        *  If the same hostname owns several extents of the same
-                        *  split, it appears only once in this array.
-                        */
+    /** The following fields are arrays of maximum length repl_count, currently
+     * filled with nb_hosts values, with each element corresponding to the
+     * same extent (usable[0], hostnames[0] and tape_model[0] all concern the
+     * same extent)
+     */
+    bool *usable;      /**< false if the extent is on an unusable medium
+                         * (administrative lock, forbidden get access, ...),
+                         * true otherwise
+                         */
+    char **hostnames;  /**< The hostname of the medium on which the extent is
+                         * if it has a concurrency lock, otherwise NULL to
+                         * indicate the medium is unlocked
+                         */
+    char **tape_model; /**< The tape model if the extent is on a tape medium,
+                         * NULL if not
+                         */
 };
 
-static int init_split_location(struct split_location *split,
-                               unsigned int repl_count)
-{
-    split->unlocked_media = false;
-    split->repl_count = repl_count;
-    split->nb_hosts = 0;
-    split->hostnames = calloc(repl_count, sizeof(*split->hostnames));
-    if (!split->hostnames)
-        return -ENOMEM;
-
-    return 0;
-}
-
-/*
- * We don't free each hostname entry of the split->hostnames array because a
- * split_location does not own these strings. They are owned by each
- * one_location of an object_location.
- *
- * We only free the split->hostnames array which was dynamically allocated.
+/** Host resource access info, stores all the hosts which have access to a
+ * medium that contains an extent of the object we're trying to locate
  */
-static void clean_split_location(struct split_location *split)
-{
-    split->unlocked_media = false;
-    split->repl_count = 0;
-    split->nb_hosts = 0;
-    free(split->hostnames);
-    split->hostnames = NULL;
-}
-
-static void add_host_split_location(
-    struct split_location *split,
-    char *hostname)
-{
-    assert(split->nb_hosts < split->repl_count);
-    split->hostnames[split->nb_hosts++] = hostname;
-}
-
-struct one_location {
-    char *hostname; /**< hostname is owned by one_location */
-    unsigned int nb_fitted_split; /**< nb split with extent locked on this
-                                    *  host
-                                    */
-    unsigned int nb_unreachable_split; /**< split with no extent on a medium
-                                         *  unlocked or locked on this host
+struct host_rsc_access_info {
+    char *hostname; /**< hostname of the host */
+    unsigned int nb_locked_splits; /**< nb split with extent locked on the
+                                     * host
+                                     */
+    unsigned int nb_unreachable_split; /**< splits that this host can't access:
+                                         * locked by someone else, admin lock,
+                                         * no get access, ...
                                          */
+    int drive_count; /**< number of administratively unlocked drives the host
+                       * has access to
+                       */
+    struct dev_info *drives; /**< array of drive_count administratively unlocked
+                               * drives the host has access to. Allocated by
+                               * dss_device_get and must be freed by
+                               * dss_res_free.
+                               */
 };
-
-static void clean_one_location(struct one_location *one)
-{
-    free(one->hostname);
-    one->hostname = NULL;
-    one->nb_fitted_split = 0;
-    one->nb_unreachable_split = 0;
-}
 
 /** Stores the possible locations of an object */
 struct object_location {
     unsigned int split_count;
     unsigned int repl_count;
     unsigned int nb_hosts;
-    struct one_location *hosts; /**< array of (split_count * repl_count) + 1
-                                  *  candidates, first nb_hosts are filled
-                                  *
-                                  *  This array contains all different hosts
-                                  *  that own at least one lock on one medium
-                                  *  containing an extent of the object to
-                                  *  locate, with their hostname and their
-                                  *  score.
-                                  *
-                                  *  focus_host is set as first location with
-                                  *  an initial fitted split of 0.
-                                  *
-                                  *  Each hostname is present only once, even
-                                  *  if it owns locks on several media
-                                  *  containing extents.
-                                  */
-    struct split_location *splits; /**< array of split_count split_locations
-                                     *
-                                     *  Hostnames are listed by split to
-                                     *  compute their scores.
-                                     */
+    /**< array of maximum (split_count * repl_count) + 1 candidates, first
+     * nb_hosts are filled.
+     *
+     * This array contains all different hosts that own at least one lock on
+     * one medium containing an extent of the object to locate, with their
+     * hostname and their score.
+     *
+     * focus_host is set as first location with an initial nb_locked_splits of
+     * 0.
+     *
+     * Each hostname is present only once, even if it owns locks on several
+     * media containing extents.
+     */
+    struct host_rsc_access_info *hosts;
+    /**< array of split_count split_access_infos
+     *
+     * Hostnames are listed by split to compute their scores.
+     */
+    struct split_access_info *split_accesses;
 };
+
+static int init_split_access_info(struct split_access_info *split,
+                                  unsigned int repl_count)
+{
+    split->repl_count = repl_count;
+    split->nb_hosts = 0;
+    split->usable = calloc(repl_count, sizeof(*split->usable));
+    if (!split->usable)
+        return -ENOMEM;
+
+    split->hostnames = calloc(repl_count, sizeof(*split->hostnames));
+    if (!split->hostnames) {
+        free(split->usable);
+        return -ENOMEM;
+    }
+
+    split->tape_model = calloc(repl_count, sizeof(*split->tape_model));
+    if (!split->tape_model) {
+        free(split->usable);
+        free(split->hostnames);
+        return -ENOMEM;
+    }
+
+    return 0;
+}
+
+/*
+ * We don't free each hostname entry of the split->hostnames array because a
+ * split_access_info does not own these strings. They are owned by each
+ * host_rsc_access_info of an object_location.
+ *
+ * We only free the split->hostnames array which was dynamically allocated.
+ */
+static void clean_split_access_info(struct split_access_info *split)
+{
+    int i;
+
+    free(split->usable);
+    split->usable = NULL;
+    free(split->hostnames);
+    split->hostnames = NULL;
+    for (i = 0; i < split->repl_count; ++i)
+        free(split->tape_model[i]);
+    free(split->tape_model);
+    split->tape_model = NULL;
+    split->repl_count = 0;
+    split->nb_hosts = 0;
+}
+
+static void split_access_info_add_host(struct split_access_info *split,
+                                       char *hostname, char *tape_model,
+                                       bool usable)
+{
+    assert(split->nb_hosts < split->repl_count);
+    split->usable[split->nb_hosts] = usable;
+    split->hostnames[split->nb_hosts] = hostname;
+    split->tape_model[split->nb_hosts] = tape_model;
+    split->nb_hosts++;
+}
+
+static void clean_host_rsc_access_info(struct host_rsc_access_info *host)
+{
+    free(host->hostname);
+    host->hostname = NULL;
+    host->nb_locked_splits = 0;
+    host->nb_unreachable_split = 0;
+    dss_res_free(host->drives, host->drive_count);
+    host->drive_count = 0;
+}
 
 static void clean_object_location(struct object_location *object_location)
 {
@@ -1212,7 +1249,7 @@ static void clean_object_location(struct object_location *object_location)
     object_location->repl_count = 0;
     if (object_location->hosts) {
         for (i = 0; i < object_location->nb_hosts; i++)
-            clean_one_location(&object_location->hosts[i]);
+            clean_host_rsc_access_info(&object_location->hosts[i]);
 
         free(object_location->hosts);
         object_location->hosts = NULL;
@@ -1220,28 +1257,30 @@ static void clean_object_location(struct object_location *object_location)
 
     object_location->nb_hosts = 0;
 
-    if (object_location->splits) {
+    if (object_location->split_accesses) {
         for (i = 0; i < object_location->split_count; i++)
-            clean_split_location(&object_location->splits[i]);
+            clean_split_access_info(&object_location->split_accesses[i]);
 
-        free(object_location->splits);
-        object_location->splits = NULL;
+        free(object_location->split_accesses);
+        object_location->split_accesses = NULL;
     }
 
     object_location->split_count = 0;
 }
 
-static int init_object_location(struct object_location *object_location,
+static int init_object_location(struct dss_handle *dss,
+                                struct object_location *object_location,
                                 unsigned int split_count,
                                 unsigned int repl_count,
                                 const char *focus_host)
 {
+    struct host_rsc_access_info *host = NULL;
     unsigned int i;
     int rc;
 
     /* in case of early clean on error: ensure a NULL pointer value */
     object_location->hosts = NULL;
-    object_location->splits = NULL;
+    object_location->split_accesses = NULL;
 
     object_location->split_count = split_count;
     object_location->repl_count = repl_count;
@@ -1253,25 +1292,30 @@ static int init_object_location(struct object_location *object_location,
     if (!object_location->hosts)
         GOTO(clean, rc = -ENOMEM);
 
-    /* initial focus host object location */
-    object_location->hosts[object_location->nb_hosts].hostname =
-        strdup(focus_host);
-    if (!object_location->hosts[object_location->nb_hosts].hostname)
-        GOTO(clean, rc = -ENOMEM);
-
-    object_location->nb_hosts += 1;
-
-    object_location->splits = calloc(split_count,
-                                     sizeof(*object_location->splits));
-    if (!object_location->splits)
+    object_location->split_accesses =
+        calloc(split_count, sizeof(*object_location->split_accesses));
+    if (!object_location->split_accesses)
         GOTO(clean, rc = -ENOMEM);
 
     for (i = 0; i < object_location->split_count; i++) {
-        rc = init_split_location(&object_location->splits[i],
-                                 object_location->repl_count);
+        rc = init_split_access_info(&object_location->split_accesses[i],
+                                    object_location->repl_count);
         if (rc)
             GOTO(clean, rc = -ENOMEM);
     }
+
+    host = &object_location->hosts[object_location->nb_hosts];
+    /* initial focus host object location */
+    host->hostname = strdup(focus_host);
+    if (!host->hostname)
+        GOTO(clean, rc = -ENOMEM);
+
+    rc = dss_get_usable_devices(dss, PHO_RSC_TAPE, host->hostname,
+                                &host->drives, &host->drive_count);
+    if (rc)
+        GOTO(clean, rc);
+
+    object_location->nb_hosts += 1;
 
     /* success */
     return 0;
@@ -1281,100 +1325,225 @@ clean:
     return rc;
 }
 
-/*
- * This function takes the ownership of the allocated char * hostname.
- *
- * Two different cases:
- * 1) If the hostname is a new one: it is added to the corresponding
- * one_location which will own the "char * hostname".
- * 2) If the hostname is already known, it is freed by this function.
- */
-static void add_host_object_location(struct object_location *object_location,
-                                      char *hostname, unsigned int split_index)
+static bool object_location_contains_host(
+    struct object_location *object_location, const char *hostname,
+    unsigned int *index)
 {
-    struct split_location *split = &object_location->splits[split_index];
-    unsigned int i;
+    int i;
 
-    /* check if this host is already taken into account in this split */
-    for (i = 0; i < split->nb_hosts; i++) {
-        if (!strcmp(split->hostnames[i], hostname)) {
-            free(hostname);
-            return;
+    if (hostname == NULL)
+        return false;
+
+    for (i = 0; i < object_location->nb_hosts; i++) {
+        if (!strcmp(object_location->hosts[i].hostname, hostname)) {
+            *index = i;
+            return true;
         }
     }
 
-    /* check if this host is already known */
-    for (i = 0; i < object_location->nb_hosts; i++) {
-        if (!strcmp(object_location->hosts[i].hostname, hostname)) {
-            object_location->hosts[i].nb_fitted_split += 1;
-            add_host_split_location(split, object_location->hosts[i].hostname);
-            free(hostname);
-            return;
-        }
+    return false;
+}
+
+/**
+ * Add a new extent record to the split_access_info at \p split_index in
+ * \p object_location.
+ * This function takes the ownership of the allocated char *hostname.
+ *
+ * Three different cases:
+ * 1) If \p hostname is NULL, that means the medium holding that extent doesn't
+ * have a concurrency lock, so it is recorded but not attributed to any host.
+ * 2) \p hostname is not NULL, and already has a corresponding
+ * host_rsc_access_info structure in use, in which case we record the extent,
+ * increase the number of fitted_split for that host, and free \p hostname.
+ * 3) \p hostname is not NULL and no corresponding host_rsc_access_info
+ * structure is in use, in which case we record the extent and create a
+ * new host_rsc_access_info in \p object_location for it, which takes ownership
+ * of \p hostname.
+ */
+static int add_host_to_object_location(struct object_location *object_location,
+                                       struct dss_handle *dss, char *hostname,
+                                       char *tape_model, bool usable,
+                                       unsigned int split_index)
+{
+    struct split_access_info *split =
+        &object_location->split_accesses[split_index];
+    struct host_rsc_access_info *host_to_add = NULL;
+    unsigned int i;
+    int rc;
+
+    /* If NULL, simply add the extent to the current split */
+    if (hostname == NULL) {
+        split_access_info_add_host(split, hostname, tape_model, usable);
+        return 0;
+    }
+
+    /* If not NULL, check whether it is already a known host or not. If so,
+     * increase the number of already locked split for that host, and add the
+     * extent to the current split.
+     */
+    if (object_location_contains_host(object_location, hostname, &i)) {
+        object_location->hosts[i].nb_locked_splits += 1;
+        split_access_info_add_host(split, object_location->hosts[i].hostname,
+                                   tape_model, usable);
+        free(hostname);
+        return 0;
     }
 
     assert(object_location->nb_hosts <
            object_location->split_count * object_location->repl_count + 1);
-    object_location->hosts[object_location->nb_hosts].hostname = hostname;
-    object_location->hosts[object_location->nb_hosts].nb_fitted_split = 1;
+
+    host_to_add = &object_location->hosts[object_location->nb_hosts];
+
+    /* If the host is unknown, create a new host_rsc_access_info and add the
+     * extent
+     */
+    host_to_add->hostname = hostname;
+    host_to_add->nb_locked_splits = 1;
+    rc = dss_get_usable_devices(dss, PHO_RSC_TAPE, host_to_add->hostname,
+                                &host_to_add->drives,
+                                &host_to_add->drive_count);
+
     object_location->nb_hosts += 1;
-    add_host_split_location(split, hostname);
+    split_access_info_add_host(split, host_to_add->hostname, tape_model,
+                               usable);
+
+    return rc;
 }
 
 /**
- * Find the best location to get an object if any or NULL.
- *
- * The choice is made following two criteria:
- * - first, the most important one, being the location with the minimum number
- *   of splits that can not be accessed (all extents of this split are locked by
- *   other hostnames),
- * - second, being the location with the maximum number of splits that can be
- *   efficiently accessed (with at least one a medium locked by this hostname).
- *
- * Focus host is first evaluated among candidates and is always returned in case
- * of "equality" with an other candidate.
- */
-static void get_best_object_location(struct object_location *object_location,
-                                     struct one_location **best_location)
+* Find the best location to get an object if any or NULL.
+*
+* The choice is made following two criteria:
+* - first, the most important one, being the location with the minimum number
+*   of splits that cannot be accessed (all extents of this split are locked by
+*   other hostnames) or have no compatible drive for any media with unlocked
+*   extents,
+* - second, being the location with the maximum number of splits that can be
+*   efficiently accessed (with at least one medium locked by this hostname).
+*
+* Focus host is first evaluated among candidates and is always returned in case
+* of "equality" with an other candidate.
+*
+* XXX: there is currently no consideration for which host has the most available
+* devices to use. If there are 2 hosts that can access the object in an equal
+* fashion, but one has more devices usable, it is not assured that it will be
+* returned as the best host for this locate.
+*/
+static void get_best_object_location(
+    struct object_location *object_location,
+    struct host_rsc_access_info **best_location)
 {
+    bool *has_access;
     unsigned int i;
+    unsigned int j;
+    unsigned int k;
+    unsigned int l;
 
-    /* update nb_unreachable_split of candidate for each locked split */
+    /* This bool array will keep track of which host can access the current
+     * split.
+     */
+    has_access = malloc(object_location->nb_hosts * sizeof(*has_access));
+
+    /* The following loop aims to properly update the nb_unreachable_splits of
+     * each host by going through each split, and checking which host can access
+     * any extent. All the hosts that do not have access to any medium
+     * containing an extent of the split will have their nb_unreachable_splits
+     * increased.
+     */
     for (i = 0; i < object_location->split_count; i++) {
-        if (!object_location->splits[i].unlocked_media) {
-            struct split_location *split = &object_location->splits[i];
-            unsigned int j;
+        struct split_access_info *split = &object_location->split_accesses[i];
 
-            /* check each host */
-            for (j = 0; j < object_location->nb_hosts; j++) {
-                struct one_location *host = &object_location->hosts[j];
-                unsigned int k;
+        /* Initialize the array to false, meaning no host can access that split
+         * currently.
+         */
+        for (j = 0; j < object_location->nb_hosts; j++)
+            has_access[j] = false;
 
-                for (k = 0; k < split->nb_hosts; k++)
-                    if (!strcmp(host->hostname, split->hostnames[k]))
-                        break;
+        /* For each replica of the split */
+        for (j = 0; j < split->repl_count; j++) {
+            /* If the replica is unusable (administrative lock for instance),
+             * skip it.
+             */
+            if (!split->usable[j])
+                continue;
 
-                if (k == split->nb_hosts)
-                    host->nb_unreachable_split += 1;
+            /* If the replica has a concurrency lock, indicate the corresponding
+             * host has access to that split, and continue to the next replica.
+             */
+            if (object_location_contains_host(object_location,
+                                              split->hostnames[j], &k)) {
+                has_access[k] = true;
+                continue;
+            }
+
+            /* If the replica is NOT a tape and has no concurrency lock (as
+             * checked by the above if), consider no host has access to
+             * it.
+             *
+             * XXX: This behaviour only works because currently, dir and rados
+             * pools cannot be locked by another host, only tapes can. This will
+             * have to be changed in the future when other media can be locked
+             * by any hosts.
+             */
+            if (split->tape_model[j] == NULL)
+                continue;
+
+            /* If the replica is unlocked, for every host that does not have
+             * access to the current split, check if they have any drive
+             * compatible with the tape the replica is on. If they have, flag
+             * the host as having access to the split
+             */
+            for (k = 0; k < object_location->nb_hosts; k++) {
+                if (has_access[k])
+                    continue;
+
+                for (l = 0; l < object_location->hosts[k].drive_count; l++) {
+                    bool compat = false;
+                    int rc;
+
+                    rc = tape_drive_compat_models(split->tape_model[j],
+                            object_location->hosts[k].drives[l].rsc.model,
+                            &compat);
+                    if (rc)
+                        pho_error(rc,
+                                  "Failed to determine compatibility between "
+                                  "drive '%s' and tape '%s' for host '%s'",
+                                  object_location->hosts[k].drives[l].rsc.model,
+                                  split->tape_model[j],
+                                  object_location->hosts[k].hostname);
+
+                    if (compat)
+                        has_access[k] = true;
+                }
             }
         }
+
+        /* Finally, for each host known by the object, check if it has access
+         * to the current split. If not, increase its nb_unreachable_split
+         * value.
+         */
+        for (j = 0; j < object_location->nb_hosts; j++)
+            if (has_access[j] == false)
+                object_location->hosts[j].nb_unreachable_split++;
     }
+
+    free(has_access);
 
     /* default best is focus_host which is the first host */
     *best_location = object_location->hosts;
     /* get best one */
     for (i = 1; i < object_location->nb_hosts; i++) {
-        struct one_location *candidate = object_location->hosts+i;
+        struct host_rsc_access_info *candidate = object_location->hosts+i;
 
         /*
          * First, we compare nb_unreachable_split. Then, only if
-         * nb_unreachable_split are equal, we compare nb_fitted_split.
+         * nb_unreachable_split are equal, we compare nb_locked_splits.
          */
         if ((*best_location)->nb_unreachable_split >
-                candidate->nb_unreachable_split ||
-            ((*best_location)->nb_unreachable_split ==
-                 candidate->nb_unreachable_split &&
-             (*best_location)->nb_fitted_split < candidate->nb_fitted_split))
+             candidate->nb_unreachable_split ||
+             ((*best_location)->nb_unreachable_split ==
+              candidate->nb_unreachable_split &&
+              (*best_location)->nb_locked_splits < candidate->nb_locked_splits))
             *best_location = candidate;
     }
 }
@@ -1407,7 +1576,7 @@ static int raid1_lock_at_locate(struct dss_handle *dss,
                                 unsigned int repl_count,
                                 unsigned int nb_split,
                                 struct object_location *object_location,
-                                struct one_location *best_location,
+                                struct host_rsc_access_info *best_location,
                                 int *nb_new_lock)
 {
     unsigned int new_lock_extent_index[layout->ext_count];
@@ -1416,19 +1585,20 @@ static int raid1_lock_at_locate(struct dss_handle *dss,
     unsigned int split_index;
 
     /* early locking of each split */
-    nb_already_locked = best_location->nb_fitted_split;
+    nb_already_locked = best_location->nb_locked_splits;
     *nb_new_lock = 0;
     for (split_index = 0;
-         best_location->nb_fitted_split < nb_split && split_index < nb_split;
+         best_location->nb_locked_splits < nb_split && split_index < nb_split;
          split_index++) {
         /* check if this split is already a locked one for this best_location */
         if (nb_already_locked > 0) {
-            struct split_location *split =
-                &object_location->splits[split_index];
+            struct split_access_info *split =
+                &object_location->split_accesses[split_index];
             unsigned int host_index;
 
             for (host_index = 0; host_index < split->nb_hosts; host_index++)
-                if (!strcmp(split->hostnames[host_index],
+                if (split->hostnames[host_index] != NULL &&
+                    !strcmp(split->hostnames[host_index],
                             best_location->hostname))
                     break;
 
@@ -1482,14 +1652,14 @@ static int raid1_lock_at_locate(struct dss_handle *dss,
                     continue;
                 }
 
-                best_location->nb_fitted_split++;
+                best_location->nb_locked_splits++;
                 new_lock_extent_index[*nb_new_lock] = extent_index;
                 (*nb_new_lock)++;
                 break;
             } else {
                 if (!strcmp(extent_hostname, best_location->hostname)) {
                     /* a new medium is now locked to best_location */
-                    best_location->nb_fitted_split++;
+                    best_location->nb_locked_splits++;
                     free(extent_hostname);
                     break;
                 }
@@ -1503,7 +1673,7 @@ static int raid1_lock_at_locate(struct dss_handle *dss,
             break;
     }
 
-    if (best_location->nb_fitted_split < nb_split) {
+    if (best_location->nb_locked_splits < nb_split) {
         unsigned int new_lock_index;
 
         for (new_lock_index = 0; new_lock_index < *nb_new_lock;
@@ -1537,7 +1707,7 @@ static int raid1_lock_at_locate(struct dss_handle *dss,
         LOG_RETURN(-EAGAIN,
                    "%d splits of the raid1 object (oid: '%s', uuid: '%s', "
                    "version: %d) are not reachable by any host.\n",
-                   best_location->nb_fitted_split - nb_split,
+                   best_location->nb_locked_splits - nb_split,
                    layout->oid, layout->uuid, layout->version);
     }
 
@@ -1549,7 +1719,7 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
                         int *nb_new_lock)
 {
     struct object_location object_location;
-    struct one_location *best_location;
+    struct host_rsc_access_info *best_location;
     const char *focus_host_secured;
     unsigned int split_index;
     unsigned int repl_count;
@@ -1575,7 +1745,7 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
     nb_split = layout->ext_count / repl_count;
 
     /* init object_location */
-    rc = init_object_location(&object_location, nb_split, repl_count,
+    rc = init_object_location(dss, &object_location, nb_split, repl_count,
                               focus_host_secured);
     if (rc)
         LOG_RETURN(rc, "Unable to allocate first object_location");
@@ -1589,24 +1759,45 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
              i < (split_index + 1) * repl_count && i < layout->ext_count;
              i++) {
             struct pho_id *medium_id = &layout->extents[i].media;
+            struct media_info *medium_info = NULL;
             char *extent_hostname = NULL;
+            char *tape_model = NULL;
+            bool usable = true;
             int rc2;
 
-            rc2 = dss_medium_locate(dss, medium_id, &extent_hostname, NULL);
+            /* Retrieve the host and additionnal information about the medium */
+            rc2 = dss_medium_locate(dss, medium_id, &extent_hostname,
+                                    &medium_info);
             if (rc2) {
                 pho_warn("Error %d (%s) when trying to dss locate medium "
                          "(family %s, name %s) of with extent %d raid1 layout "
                          "locate leans on other extents", -rc2, strerror(-rc2),
                          rsc_family2str(medium_id->family), medium_id->name, i);
+                /* If the locate failed, consider the medium unusable for that
+                 * locate.
+                 */
+                usable = false;
             } else {
                 enodev = false;
-                if (extent_hostname) {
-                    add_host_object_location(&object_location,
-                                             extent_hostname, split_index);
-                } else {
-                    object_location.splits[split_index].unlocked_media = true;
+
+                if (medium_info->rsc.id.family == PHO_RSC_TAPE &&
+                    medium_info->rsc.model != NULL) {
+                    tape_model = strdup(medium_info->rsc.model);
+                    if (tape_model == NULL) {
+                        dss_res_free(medium_info, 1);
+                        continue;
+                    }
                 }
             }
+
+            rc2 = add_host_to_object_location(&object_location, dss,
+                                              extent_hostname, tape_model,
+                                              usable, split_index);
+            if (medium_info != NULL)
+                media_info_free(medium_info);
+
+            if (rc2)
+                continue;
         }
 
         if (enodev)
