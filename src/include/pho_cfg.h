@@ -29,6 +29,7 @@
 
 #include <sys/types.h>
 #include <attr/xattr.h>
+#include <stdbool.h>
 
 /** prefix string for environment variables */
 #define PHO_ENV_PREFIX "PHOBOS"
@@ -133,5 +134,19 @@ int _pho_cfg_get_int(int first_index, int last_index, int param_index,
 #define PHO_CFG_GET_INT(_params_list, _cfg_namespace, _name, _fail_val)    \
         _pho_cfg_get_int(_cfg_namespace ## _FIRST, _cfg_namespace ## _LAST, \
                 _cfg_namespace ## _ ##_name, (_params_list), (_fail_val))
+
+/**
+ * Check the compatibility between a given \p tape_model and \p drive_model
+ * using the different rules defined in the configuration file.
+ *
+ * @param[in] tape_model   Tape model used to check compatibility.
+ * @param[in] drive_model  Drive model the compatibility should be checked
+ *                         against.
+ * @param[out] res         True if the tape and drive models are compatible.
+ *
+ * @return 0 on success, negative error code on failure and res is false
+ */
+int tape_drive_compat_models(const char *tape_model, const char *drive_model,
+                             bool *res);
 
 #endif

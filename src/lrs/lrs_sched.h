@@ -29,6 +29,7 @@
 #include <pthread.h>
 #include <stdint.h>
 
+#include "pho_cfg.h"
 #include "pho_dss.h"
 #include "pho_srl_lrs.h"
 #include "pho_types.h"
@@ -41,6 +42,13 @@
 
 /* from lrs.c */
 extern bool running;
+
+static inline int tape_drive_compat(const struct media_info *tape,
+                                    const struct lrs_dev *drive, bool *res)
+{
+    return tape_drive_compat_models(tape->rsc.model,
+                                    drive->ld_dss_dev_info->rsc.model, res);
+}
 
 /**
  * Media with ongoing format scheduled requests
@@ -391,8 +399,5 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
                                 struct pho_id *m_id,
                                 size_t index,
                                 struct media_info **target_medium);
-
-int tape_drive_compat(const struct media_info *tape,
-                      const struct lrs_dev *drive, bool *res);
 
 #endif

@@ -844,8 +844,7 @@ static struct device *find_unallocated_device(GPtrArray *devices,
         if (dev->queue)
             continue;
 
-        if (tape_drive_compat(queue->medium_info, dev->device,
-                              &is_compatible))
+        if (tape_drive_compat(queue->medium_info, dev->device, &is_compatible))
             continue;
 
         if (is_compatible)

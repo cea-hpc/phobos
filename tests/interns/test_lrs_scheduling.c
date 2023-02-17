@@ -34,6 +34,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "pho_cfg.h"
 #include "pho_common.h"
 #include "pho_dss.h"
 #include "pho_layout.h"
@@ -395,8 +396,8 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
     return 0;
 }
 
-int tape_drive_compat(const struct media_info *tape,
-                      const struct lrs_dev *drive, bool *res)
+int tape_drive_compat_models(const char *tape_model, const char *drive_model,
+                             bool *res)
 {
     *res = true;
 
