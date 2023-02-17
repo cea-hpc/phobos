@@ -24,17 +24,24 @@
 #
 
 test_dir=$(dirname $(readlink -e $0))
-medium_locker_bin="$test_dir/medium_locker"
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
-. $test_dir/../../tape_drive.sh
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
 . test_locate_common.sh
 
-set -xe
+function setup
+{
+    setup_tables
+    invoke_daemon
+}
 
 function dir_setup
 {
+    setup
+
+    export PHOBOS_STORE_default_family="dir"
+
     export dirs="
         $(mktemp -d /tmp/test.pho.XXXX)
         $(mktemp -d /tmp/test.pho.XXXX)
@@ -43,19 +50,16 @@ function dir_setup
     $phobos dir format --fs posix --unlock $dirs
 }
 
-function setup
-{
-    setup_tables
-    invoke_daemon
-    dir_setup
-}
-
 function tape_setup
 {
     local N_TAPES=2
     local N_DRIVES=8
     local LTO5_TAGS=$TAGS,lto5
     local LTO6_TAGS=$TAGS,lto6
+
+    setup
+
+    export PHOBOS_STORE_default_family="tape"
 
     # get LTO5 tapes
     local lto5_tapes="$(get_tapes L5 $N_TAPES)"
@@ -96,11 +100,22 @@ function tape_setup
 
 function cleanup
 {
+    unset PHOBOS_STORE_default_family
+}
+
+function dir_cleanup
+{
+    waive_daemon
+    drop_tables
+    rm -rf $dirs
+    rm -rf /tmp/out*
+}
+
+function tape_cleanup
+{
     waive_daemon
     drop_tables
     drain_all_drives
-    rm -rf $dirs
-    rm -rf /tmp/out*
 }
 
 function test_locate_compatibility
@@ -252,28 +267,19 @@ EOF
     fi
 }
 
-trap cleanup EXIT
-setup
+TEST_CLEANUP=cleanup
 
 # test locate on disk
-export PHOBOS_STORE_default_family="dir"
-test_medium_locate dir
-test_locate_cli dir
-test_get_locate_cli dir
+TESTS=("dir_setup; \
+        test_medium_locate dir; test_locate_cli dir; test_get_locate_cli dir; \
+        dir_cleanup")
 
 if [[ -w /dev/changer ]]; then
-    cleanup
-    echo "Tape test mode"
-    setup_tables
-    invoke_daemon
-    export PHOBOS_STORE_default_family="tape"
-    tape_setup
-    test_medium_locate tape
-    test_locate_cli tape
-    test_get_locate_cli tape
-
-    cleanup
-    setup_tables
-    invoke_daemon
-    test_locate_compatibility
+    TESTS+=("tape_setup; \
+             test_medium_locate tape; test_locate_cli tape; \
+             test_get_locate_cli tape; \
+             tape_cleanup")
+    TESTS+=("setup; \
+             test_locate_compatibility; \
+             tape_cleanup")
 fi

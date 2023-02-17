@@ -50,7 +50,7 @@ check_SCRIPTS=acceptance.test \
               test_get.sh \
               test_group_sync.sh \
               test_ldm.sh \
-              test_locate.sh \
+              test_locate.test \
               test_lock_clean.sh \
               test_media.sh \
               test_object_list.sh \
@@ -63,7 +63,7 @@ check_SCRIPTS=acceptance.test \
               test_undelete.sh
 
 if RADOS_ENABLED
-check_SCRIPTS+=test_store_rados_commands.sh test_locate_rados.sh
+check_SCRIPTS+=test_store_rados_commands.sh test_locate_rados.test
 endif
 
 TESTS=$(check_SCRIPTS)

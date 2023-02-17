@@ -24,11 +24,11 @@
 #
 
 test_dir=$(dirname $(readlink -e $0))
-medium_locker_bin="$test_dir/medium_locker"
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
-. $test_dir/../../tape_drive.sh
+medium_locker_bin="./medium_locker"
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
 
 function test_locate_cli
 {
@@ -150,6 +150,7 @@ function test_get_locate_cli
     local pid="12345"
     local media_name="${family}s"
     local media=$(echo ${!media_name} | nodeset -e)
+    local self_hostname=$(uname -n)
     declare -A was_locked
     for med in ${media}; do
         was_locked[${med}]="false"
