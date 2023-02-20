@@ -288,6 +288,11 @@ int tags_init(struct tags *tags, char **tag_values, size_t n_tags)
     int rc;
 
     tags->n_tags = n_tags;
+    if (tags->n_tags == 0) {
+        tags->tags = NULL;
+        return 0;
+    }
+
     tags->tags = calloc(n_tags, sizeof(*tags->tags));
     if (!tags->tags)
         return -ENOMEM;

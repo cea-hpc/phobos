@@ -470,6 +470,9 @@ int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
  * @param[in]   medium_id   Medium to locate
  * @param[out]  hostname    Allocated and returned hostname or NULL if the
  *                          medium is not locked by anyone
+ * @param[out]  medium_info Allocated and returned additionnal information about
+ *                          the medium or NULL if the medium couldn't be
+ *                          retrieved
  *
  * @return 0 if success, -errno if an error occurs and hostname is irrelevant
  *         -ENOENT if no medium with medium_id exists in media table
@@ -478,7 +481,7 @@ int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
  *         -EPERM if medium get operation flag is set to false
  */
 int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
-                      char **hostname);
+                      char **hostname, struct media_info **medium_info);
 
 /* ****************************************************************************/
 /* Generic move ***************************************************************/

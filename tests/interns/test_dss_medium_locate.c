@@ -64,6 +64,41 @@ static void fill_medium_info(struct media_info *medium_info, struct pho_id id)
     medium_info->flags.delete = true;
 }
 
+static void check_medium_info_correctly_filled(struct media_info *medium_info,
+                                               struct pho_id id)
+{
+    struct media_info filled_medium;
+
+    fill_medium_info(&filled_medium, id);
+
+    assert_string_equal(medium_info->rsc.id.name, filled_medium.rsc.id.name);
+    assert_int_equal(medium_info->rsc.id.family, filled_medium.rsc.id.family);
+    assert_string_equal(medium_info->rsc.model, filled_medium.rsc.model);
+    assert_int_equal(medium_info->rsc.adm_status, filled_medium.rsc.adm_status);
+    assert_int_equal(medium_info->addr_type, filled_medium.addr_type);
+    assert_int_equal(medium_info->fs.type, filled_medium.fs.type);
+    assert_int_equal(medium_info->fs.status, filled_medium.fs.status);
+    assert_string_equal(medium_info->fs.label, "NULL");
+    assert_int_equal(medium_info->stats.nb_obj, filled_medium.stats.nb_obj);
+    assert_int_equal(medium_info->stats.logc_spc_used,
+                     filled_medium.stats.logc_spc_used);
+    assert_int_equal(medium_info->stats.phys_spc_used,
+                     filled_medium.stats.phys_spc_used);
+    assert_int_equal(medium_info->stats.phys_spc_free,
+                     filled_medium.stats.phys_spc_free);
+    assert_int_equal(medium_info->stats.nb_load, filled_medium.stats.nb_load);
+    assert_int_equal(medium_info->stats.nb_errors,
+                     filled_medium.stats.nb_errors);
+    assert_int_equal(medium_info->stats.last_load,
+                     filled_medium.stats.last_load);
+    assert_ptr_equal(medium_info->tags.tags, filled_medium.tags.tags);
+    assert_null(medium_info->tags.tags);
+    assert_int_equal(medium_info->tags.n_tags, filled_medium.tags.n_tags);
+    assert_int_equal(medium_info->flags.put, filled_medium.flags.put);
+    assert_int_equal(medium_info->flags.get, filled_medium.flags.get);
+    assert_int_equal(medium_info->flags.delete, filled_medium.flags.delete);
+}
+
 /**
  * dss_medium_locate returns -ENOENT on an unexisting medium
  */
@@ -77,7 +112,7 @@ static void dml_enoent(void **state)
     char *hostname;
     int rc;
 
-    rc = dss_medium_locate(dss, &medium_id, &hostname);
+    rc = dss_medium_locate(dss, &medium_id, &hostname, NULL);
     assert_int_equal(rc, -ENOENT);
 }
 
@@ -110,7 +145,7 @@ static void dml_eacces(void **state)
     char *hostname;
     int rc;
 
-    rc = dss_medium_locate(dss, &admin_locked_medium, &hostname);
+    rc = dss_medium_locate(dss, &admin_locked_medium, &hostname, NULL);
     assert_int_equal(rc, -EACCES);
 }
 
@@ -143,7 +178,7 @@ static void dml_eperm(void **state)
     char *hostname;
     int rc;
 
-    rc = dss_medium_locate(dss, &false_get_medium, &hostname);
+    rc = dss_medium_locate(dss, &false_get_medium, &hostname, NULL);
     assert_int_equal(rc, -EPERM);
 }
 
@@ -182,17 +217,20 @@ static int dml_ok_free_setup(void **state)
 static void dml_ok_free(void **state)
 {
     struct dss_handle *dss = (struct dss_handle *)*state;
+    struct media_info *medium;
     char *hostname;
     int rc;
 
     /* -ENODEV on free dir */
-    rc = dss_medium_locate(dss, &dir_free_medium, &hostname);
+    rc = dss_medium_locate(dss, &dir_free_medium, &hostname, NULL);
     assert_int_equal(rc, -ENODEV);
 
     /* NULL on free tape */
-    rc = dss_medium_locate(dss, &tape_free_medium, &hostname);
+    rc = dss_medium_locate(dss, &tape_free_medium, &hostname, &medium);
     assert_return_code(rc, -rc);
+    check_medium_info_correctly_filled(medium, tape_free_medium);
     assert_null(hostname);
+    media_info_free(medium);
 }
 
 /**
@@ -226,13 +264,17 @@ static int dml_ok_lock_setup(void **state)
 static void dml_ok_lock(void **state)
 {
     struct dss_handle *dss = (struct dss_handle *)*state;
+    struct media_info *medium;
     char *hostname = NULL;
     int rc;
 
-    rc = dss_medium_locate(dss, &locked_medium, &hostname);
+    rc = dss_medium_locate(dss, &locked_medium, &hostname, &medium);
     assert_return_code(rc, -rc);
+    check_medium_info_correctly_filled(medium, locked_medium);
+    assert_string_equal(medium->lock.hostname, HOSTNAME);
     assert_string_equal(hostname, HOSTNAME);
     free(hostname);
+    media_info_free(medium);
 }
 
 int main(void)

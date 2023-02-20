@@ -1452,8 +1452,7 @@ static int raid1_lock_at_locate(struct dss_handle *dss,
             char *extent_hostname = NULL;
             int rc2;
 
-            rc2 = dss_medium_locate(dss, medium_id,
-                                    &extent_hostname);
+            rc2 = dss_medium_locate(dss, medium_id, &extent_hostname, NULL);
             if (rc2) {
                 pho_warn("Error %d (%s) at early locking when trying to dss "
                          "locate medium at early lock (family %s, name %s) of "
@@ -1593,8 +1592,7 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
             char *extent_hostname = NULL;
             int rc2;
 
-            rc2 = dss_medium_locate(dss, medium_id,
-                                    &extent_hostname);
+            rc2 = dss_medium_locate(dss, medium_id, &extent_hostname, NULL);
             if (rc2) {
                 pho_warn("Error %d (%s) when trying to dss locate medium "
                          "(family %s, name %s) of with extent %d raid1 layout "

@@ -1040,7 +1040,7 @@ int phobos_admin_medium_locate(struct admin_handle *adm,
     *node_name = NULL;
 
     /* get hostname if locked */
-    rc = dss_medium_locate(&adm->dss, medium_id, node_name);
+    rc = dss_medium_locate(&adm->dss, medium_id, node_name, NULL);
     if (rc)
         LOG_RETURN(rc, "Error when locating medium");
 

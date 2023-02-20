@@ -575,6 +575,7 @@ static int dss_media_stats_decode(struct media_stats *stats, const char *json)
     LOAD_CHECK64(rc, root, stats, logc_spc_used, false);
     LOAD_CHECK64(rc, root, stats, phys_spc_used, false);
     LOAD_CHECK64(rc, root, stats, phys_spc_free, false);
+    LOAD_CHECK32(rc, root, stats, nb_load, true);
     LOAD_CHECK32(rc, root, stats, nb_errors, true);
     LOAD_CHECK32(rc, root, stats, last_load, true);
 
@@ -628,6 +629,7 @@ static char *dss_media_stats_encode(struct media_stats stats)
     JSON_INTEGER_SET_NEW(root, stats, logc_spc_used);
     JSON_INTEGER_SET_NEW(root, stats, phys_spc_used);
     JSON_INTEGER_SET_NEW(root, stats, phys_spc_free);
+    JSON_INTEGER_SET_NEW(root, stats, nb_load);
     JSON_INTEGER_SET_NEW(root, stats, nb_errors);
     JSON_INTEGER_SET_NEW(root, stats, last_load);
 
@@ -2610,7 +2612,7 @@ out_free:
 }
 
 int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
-                      char **hostname)
+                      char **hostname, struct media_info **_medium_info)
 {
     struct media_info *medium_info;
     int rc;
@@ -2634,6 +2636,15 @@ int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
         GOTO(clean, rc = -EPERM);
     }
 
+    if (_medium_info != NULL) {
+        *_medium_info = media_info_dup(medium_info);
+        if (*_medium_info == NULL) {
+            rc = -errno;
+            pho_warn("Unable to duplicate medium info of %s, error : %d, %s",
+                     medium_info->rsc.id.name, errno, strerror(errno));
+        }
+    }
+
     /* medium without any lock */
     if (!medium_info->lock.owner) {
         if (medium_info->rsc.id.family == PHO_RSC_DIR)
@@ -2646,13 +2657,16 @@ int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
     /* get lock hostname */
     *hostname = strdup(medium_info->lock.hostname);
     if (!*hostname) {
-        pho_warn("Unable to duplicate hostname %s, error : %d, %s",
-                 medium_info->lock.hostname, -errno, strerror(-errno));
         rc = -errno;
+        pho_warn("Unable to duplicate hostname %s, error : %d, %s",
+                 medium_info->lock.hostname, errno, strerror(errno));
+        if (_medium_info != NULL && *_medium_info != NULL)
+            dss_res_free(*_medium_info, 1);
     }
 
 clean:
     dss_res_free(medium_info, 1);
+
     return rc;
 }
 
