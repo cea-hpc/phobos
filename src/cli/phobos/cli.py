@@ -926,7 +926,7 @@ class LocateOptHandler(BaseOptHandler):
                 self.params.get('oid'),
                 self.params.get('uuid'),
                 self.params.get('version'),
-                self.params.get('focus-host'))
+                self.params.get('focus_host'))
 
             print(hostname)
         except EnvironmentError as err:

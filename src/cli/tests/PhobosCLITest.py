@@ -147,6 +147,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['undel', 'oid', 'oid1', 'oid2'])
         self.check_cmdline_valid(['ping'])
         self.check_cmdline_valid(['locate', 'oid1'])
+        self.check_cmdline_valid(['locate', '--focus-host', 'vm0', 'oid1'])
         self.check_cmdline_valid(['locate', '--uuid', 'uuid1', 'oid1'])
         self.check_cmdline_valid(['locate', '--version', '1', 'oid1'])
         self.check_cmdline_valid(['locate', '--uuid', 'uuid1',
@@ -172,6 +173,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['undelete', 'uuid'], code=2)
         self.check_cmdline_exit(['locate'], code=2)
         self.check_cmdline_exit(['locate', 'oid1', 'oid2'], code=2)
+        self.check_cmdline_exit(['locate', '--focus-host', 'oid1'], code=2)
         self.check_cmdline_exit(['locate', '--uuid', 'oid1'], code=2)
         self.check_cmdline_exit(['locate', '--version', 'blob', 'oid1'], code=2)
         self.check_cmdline_exit(['dir', 'locate'], code=2)
