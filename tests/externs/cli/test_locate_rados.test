@@ -50,7 +50,7 @@ function setup
     $phobos rados_pool format --fs RADOS --unlock $rados_pools
 }
 
-function setup_tlc
+function setup_locked_splits
 {
     setup 8
 
@@ -81,6 +81,6 @@ TESTS=("setup 3; \
         test_locate_cli rados_pool; \
         test_get_locate_cli rados_pool; \
         cleanup")
-TESTS+=("setup_tlc; \
+TESTS+=("setup_locked_splits; \
          test_locate_locked_splits rados_pool $FULL_SIZE; \
          cleanup")

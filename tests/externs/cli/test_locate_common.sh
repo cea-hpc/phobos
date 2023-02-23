@@ -224,8 +224,8 @@ function test_locate_locked_splits
     $phobos put -f $family --lyt-params "repl_count=4" $IN_FILE $oid ||
         error "Error while putting $oid"
 
-    $phobos get --best-host $oid /tmp/out1 \
-        || error "Get operation should have succeeded"
+    $phobos get --best-host $oid /tmp/out1 ||
+        error "Get operation should have succeeded"
 
     rm -f /tmp/out1
 

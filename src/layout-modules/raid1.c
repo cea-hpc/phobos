@@ -1155,7 +1155,7 @@ struct object_location {
      * nb_hosts are filled.
      *
      * This array contains all different hosts that own at least one unlocked
-     * devices of the same type as the object, with their hostname and their
+     * device of the same type as the object, with their hostname and their
      * score.
      *
      * focus_host is set as first location with an initial nb_locked_splits of
@@ -1643,22 +1643,28 @@ static void get_best_object_location(
 
     free(has_access);
 
-    /* default best is focus_host which is the first host */
-    *best_location = object_location->hosts;
-    /* get best one */
-    for (i = 1; i < object_location->nb_hosts; i++) {
+    *best_location = NULL;
+
+    /* The very first host known is guaranteed to be focus-host, so if it can
+     * read the object and has at least the same number of fitted split as every
+     * host, it will be chosen.
+     */
+    for (i = 0; i < object_location->nb_hosts; i++) {
         struct host_rsc_access_info *candidate = object_location->hosts+i;
 
-        /*
-         * First, we compare nb_unreachable_split. Then, only if
-         * nb_unreachable_split are equal, we compare nb_locked_splits.
+        /* If the candidate has any unreachable split, it cannot read the object
+         * so we skip it
          */
-        if ((*best_location)->nb_unreachable_split >
-             candidate->nb_unreachable_split ||
-             ((*best_location)->nb_unreachable_split ==
-              candidate->nb_unreachable_split &&
-              (*best_location)->nb_locked_splits < candidate->nb_locked_splits))
+        if (candidate->nb_unreachable_split > 0)
+            continue;
+
+        /* Otherwise, that means that host can read the object, so we pick the
+         * one with the most fitted split
+         */
+        if (*best_location == NULL ||
+            (*best_location)->nb_locked_splits < candidate->nb_locked_splits)
             *best_location = candidate;
+
     }
 }
 
@@ -1934,12 +1940,11 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
     /* get best location */
     get_best_object_location(&object_location, &best_location);
 
-    /* return -EAGAIN if at least one split is unreachable even on the best */
-    if (best_location->nb_unreachable_split > 0)
+    /* return -EAGAIN if we did not find any host that can read the object */
+    if (best_location == NULL)
         LOG_GOTO(clean, rc = -EAGAIN,
-                 "%d splits of the raid1 object (oid: \"%s\", uuid: \"%s\", "
-                 "version: %d) are not reachable by any host.\n",
-                 best_location->nb_unreachable_split,
+                 "At least 1 split of the raid1 object (oid: \"%s\", "
+                 "uuid: \"%s\", version: %d) is not reachable by any host.\n",
                  layout->oid, layout->uuid, layout->version);
 
     /* early locks at locate for the found best location */
