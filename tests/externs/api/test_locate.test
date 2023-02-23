@@ -3,7 +3,7 @@
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2023 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -26,21 +26,39 @@
 #
 
 test_dir=$(dirname $(readlink -e $0))
-test_bin="$test_dir/test_locate"
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
-. $test_dir/../../tape_drive.sh
-
-set -xe
+test_bin="./test_locate"
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
 
 function dir_setup
 {
+    local other_host="hostname" # fetched from test_locate.c
+
+    setup_tables
+
     export dirs="
         $(mktemp -d /tmp/test.pho.XXXX)
         $(mktemp -d /tmp/test.pho.XXXX)
     "
-    echo "adding directories $dirs"
+    export extra_dir="$(mktemp -d /tmp/test.pho.XXXX)"
+    echo "adding directories $dirs $extra_dir"
+
+    # Invoke the daemon from $other_host to allow formatting the dir with the
+    # correct naming (dir devices must contain the hostname in their name)
+    hostname $other_host
+    invoke_daemon
+
+    $phobos dir add $extra_dir
+    $phobos dir format --fs posix --unlock $extra_dir
+
+    # Waive the daemon and restart it back as $SELF_HOST to add the rest of the
+    # dirs
+    waive_daemon
+    hostname $SELF_HOST
+    invoke_daemon
+
     $phobos dir add $dirs
     $phobos dir format --fs posix --unlock $dirs
 }
@@ -48,9 +66,13 @@ function dir_setup
 function tape_setup
 {
     local N_TAPES=2
-    local N_DRIVES=8
+    local N_DRIVES=4
     local LTO5_TAGS=$TAGS,lto5
     local LTO6_TAGS=$TAGS,lto6
+    local other_hostname="hostname" # fetched from test_locate.c
+
+    setup_tables
+    invoke_daemon
 
     # get LTO5 tapes
     local lto5_tapes="$(get_tapes L5 $N_TAPES)"
@@ -71,30 +93,37 @@ function tape_setup
     done
 
     # get drives
-    local drives=$(get_drives $N_DRIVES)
-    echo "adding drives $drives..."
-    $phobos drive add $drives
+    local lto6drives=$(get_lto_drives 6 $N_DRIVES)
+    IFS=' ' read -r -a lto6drives <<< "$lto6drives"
+    local self_lto6drives="${lto6drives[0]} ${lto6drives[1]}"
+    local other_lto6drives="${lto6drives[2]} ${lto6drives[3]}"
 
-    # unlock all drives
-    for d in $($phobos drive list); do
-        $phobos drive unlock $d
-    done
+    local lto5drives=$(get_lto_drives 5 $N_DRIVES)
+    IFS=' ' read -r -a lto5drives <<< "$lto5drives"
+    local self_lto5drives="${lto5drives[0]} ${lto5drives[1]}"
+    local other_lto5drives="${lto5drives[2]} ${lto5drives[3]}"
+
+    $phobos drive add --unlock ${other_lto6drives[@]}
+    $phobos drive add --unlock ${other_lto5drives[@]}
 
     # format lto5 tapes
     $phobos --verbose tape format $lto5_tapes --unlock
     # format lto6 tapes
     $phobos --verbose tape format $lto6_tapes --unlock
-}
 
-function setup
-{
-    drop_tables
-    setup_tables
-    invoke_daemon
+    # change the host of 4 of drives to give them to $other_hostname
+    $PSQL << EOF
+UPDATE device SET host = '$other_hostname';
+EOF
+
+    # add the second part of the LT05 and LT06 drives to the current host
+    $phobos drive add --unlock ${self_lto6drives[@]}
+    $phobos drive add --unlock ${self_lto5drives[@]}
 }
 
 function cleanup
 {
+    hostname $SELF_HOST
     waive_daemon
     drain_all_drives
     drop_tables
@@ -102,17 +131,11 @@ function cleanup
     rm -f /tmp/out*
 }
 
-trap cleanup EXIT
-setup
+# since we manipulate the hostname, keep the current one around for cleanup
+SELF_HOST="$(uname -n)"
 
-dir_setup
-$LOG_VALG $test_bin dir
+TESTS=("dir_setup; $LOG_COMPILER $test_bin dir; cleanup")
 
 if [[ -w /dev/changer ]]; then
-    cleanup
-    setup_tables
-    invoke_daemon
-
-    tape_setup
-    $LOG_VALG $test_bin tape
+    TESTS+=("tape_setup; $LOG_COMPILER $test_bin tape; cleanup")
 fi

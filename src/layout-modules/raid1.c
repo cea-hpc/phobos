@@ -1137,14 +1137,13 @@ struct host_rsc_access_info {
                                          * locked by someone else, admin lock,
                                          * no get access, ...
                                          */
-    int drive_count; /**< number of administratively unlocked drives the host
-                       * has access to
-                       */
-    struct dev_info *drives; /**< array of drive_count administratively unlocked
-                               * drives the host has access to. Allocated by
-                               * dss_device_get and must be freed by
-                               * dss_res_free.
-                               */
+    int dev_count; /**< number of administratively unlocked devices the host has
+                     * access to
+                     */
+    char **dev_models; /**< array of dev_count administratively unlocked device
+                         * models the host has access to. Allocated by
+                         * dss_device_get and must be freed by dss_res_free.
+                         */
 };
 
 /** Stores the possible locations of an object */
@@ -1155,9 +1154,9 @@ struct object_location {
     /**< array of maximum (split_count * repl_count) + 1 candidates, first
      * nb_hosts are filled.
      *
-     * This array contains all different hosts that own at least one lock on
-     * one medium containing an extent of the object to locate, with their
-     * hostname and their score.
+     * This array contains all different hosts that own at least one unlocked
+     * devices of the same type as the object, with their hostname and their
+     * score.
      *
      * focus_host is set as first location with an initial nb_locked_splits of
      * 0.
@@ -1234,12 +1233,17 @@ static void split_access_info_add_host(struct split_access_info *split,
 
 static void clean_host_rsc_access_info(struct host_rsc_access_info *host)
 {
+    int i;
+
     free(host->hostname);
     host->hostname = NULL;
     host->nb_locked_splits = 0;
     host->nb_unreachable_split = 0;
-    dss_res_free(host->drives, host->drive_count);
-    host->drive_count = 0;
+    for (i = 0; i < host->dev_count; ++i)
+        free(host->dev_models[i]);
+    free(host->dev_models);
+    host->dev_models = NULL;
+    host->dev_count = 0;
 }
 
 static void clean_object_location(struct object_location *object_location)
@@ -1272,10 +1276,13 @@ static int init_object_location(struct dss_handle *dss,
                                 struct object_location *object_location,
                                 unsigned int split_count,
                                 unsigned int repl_count,
-                                const char *focus_host)
+                                const char *focus_host,
+                                enum rsc_family family)
 {
-    struct host_rsc_access_info *host = NULL;
+    struct dev_info *devs;
     unsigned int i;
+    unsigned int j;
+    int dev_count;
     int rc;
 
     /* in case of early clean on error: ensure a NULL pointer value */
@@ -1284,13 +1291,6 @@ static int init_object_location(struct dss_handle *dss,
 
     object_location->split_count = split_count;
     object_location->repl_count = repl_count;
-    object_location->nb_hosts = 0;
-    /* we add +1 host for the default focus one */
-    object_location->hosts = calloc(split_count * repl_count + 1,
-                                    sizeof(*object_location->hosts));
-
-    if (!object_location->hosts)
-        GOTO(clean, rc = -ENOMEM);
 
     object_location->split_accesses =
         calloc(split_count, sizeof(*object_location->split_accesses));
@@ -1304,23 +1304,153 @@ static int init_object_location(struct dss_handle *dss,
             GOTO(clean, rc = -ENOMEM);
     }
 
-    host = &object_location->hosts[object_location->nb_hosts];
-    /* initial focus host object location */
-    host->hostname = strdup(focus_host);
-    if (!host->hostname)
-        GOTO(clean, rc = -ENOMEM);
-
-    rc = dss_get_usable_devices(dss, PHO_RSC_TAPE, host->hostname,
-                                &host->drives, &host->drive_count);
+    /* Retrieve all the unlocked devices of the correct family in the DB */
+    rc = dss_get_usable_devices(dss, family, NULL, &devs, &dev_count);
     if (rc)
         GOTO(clean, rc);
 
-    object_location->nb_hosts += 1;
+    /* Init the number of hosts known to 1 to account for focus_host */
+    object_location->nb_hosts = 1;
+
+    for (i = 0; i < dev_count; ++i) {
+        bool seen = false;
+
+        /* If the host of the device is focus_host, skip it as we already
+         * accounted for it
+         */
+        if (!strcmp(focus_host, devs[i].host))
+            continue;
+
+        /* Check if the host has been seen before in the device list */
+        for (j = 0; j < i; ++j) {
+            if (!strcmp(devs[j].host, devs[i].host)) {
+                seen = true;
+                break;
+            }
+        }
+
+        /* If the host was not seen, increase the number of known host */
+        if (!seen)
+            object_location->nb_hosts++;
+    }
+
+    /* Allocate as many hosts as we found */
+    object_location->hosts = calloc(object_location->nb_hosts,
+                                    sizeof(*object_location->hosts));
+    if (!object_location->hosts)
+        GOTO(clean, rc = -ENOMEM);
+
+    /* Consider the first known host to be focus_host */
+    object_location->hosts[0].hostname = strdup(focus_host);
+    if (!object_location->hosts[0].hostname)
+        GOTO(clean, rc = -ENOMEM);
+    object_location->hosts[0].dev_count = 0;
+    object_location->hosts[0].dev_models = NULL;
+
+    /* focus_host is already added to the list, so start adding hosts at the
+     * first index
+     */
+    object_location->nb_hosts = 1;
+
+    /* For each drive, we check its host and increase its device count, so
+     * that at the end of this loop, we know how many usable devices each host
+     * has
+     */
+    for (i = 0; i < dev_count; ++i) {
+        struct host_rsc_access_info *host_to_add =
+            &object_location->hosts[object_location->nb_hosts];
+        char *drive_host = devs[i].host;
+        bool seen = false;
+
+        /* Check if the host of the device has been seen before, and if so,
+         * increase its dev_count by 1
+         */
+        for (j = 0; j < object_location->nb_hosts; ++j) {
+            if (!strcmp(object_location->hosts[j].hostname, drive_host)) {
+                object_location->hosts[j].dev_count += 1;
+                seen = true;
+                break;
+            }
+        }
+
+        /* If the device's host was not seen in the list of hosts, add it to
+         * the latter, and consider it has one device
+         */
+        if (!seen) {
+            host_to_add->hostname = strdup(drive_host);
+            if (host_to_add == NULL)
+                GOTO(clean, rc = -errno);
+
+            host_to_add->dev_count = 1;
+            object_location->nb_hosts++;
+        }
+    }
+
+    /* At this point, we know every host that has an unlocked device of the
+     * correct family, and for each of them, their number of devices.
+     */
+
+    for (i = 0; i < object_location->nb_hosts; ++i) {
+        struct host_rsc_access_info *host_to_update =
+            &object_location->hosts[i];
+
+        /* If a known host doesn't have any device, skip it (this can only be
+         * the case for focus_host, as we are not sure it has any device
+         * available
+         */
+        if (host_to_update->dev_count == 0)
+            continue;
+
+        /* Allocate the correct amount of devices for that host */
+        host_to_update->dev_models =
+            malloc(host_to_update->dev_count *
+                   sizeof(*host_to_update->dev_models));
+        if (!host_to_update->dev_models)
+            GOTO(clean, rc = -ENOMEM);
+
+        /* Reset their number of devices just for proper filling of devices in
+         * the next loop
+         */
+        host_to_update->dev_count = 0;
+    }
+
+    /* For each device found in the DB, associate it to its host and fill
+     * the corresponding dev_models
+     */
+    for (i = 0; i < dev_count; ++i) {
+        struct host_rsc_access_info *host_to_update = NULL;
+        char *drive_host = devs[i].host;
+
+        /* Find the host the current device belongs to */
+        for (j = 0; j < object_location->nb_hosts; ++j) {
+            if (!strcmp(object_location->hosts[j].hostname, drive_host)) {
+                host_to_update = &object_location->hosts[j];
+                break;
+            }
+        }
+
+        /* For that host, if the device has a known model, duplicate it */
+        if (devs[i].rsc.model == NULL) {
+            host_to_update->dev_models[host_to_update->dev_count] = NULL;
+        } else {
+            host_to_update->dev_models[host_to_update->dev_count] =
+                strdup(devs[i].rsc.model);
+            if (!host_to_update->dev_models[host_to_update->dev_count])
+                GOTO(clean, rc = -ENOMEM);
+        }
+
+        /* And increase its device counter by 1 */
+        host_to_update->dev_count++;
+    }
+
+    /* Free the list of devices found in the DB, as it isn't used anymore */
+    dss_res_free(devs, dev_count);
 
     /* success */
     return 0;
 
 clean:
+    dss_res_free(devs, dev_count);
     clean_object_location(object_location);
     return rc;
 }
@@ -1367,9 +1497,7 @@ static int add_host_to_object_location(struct object_location *object_location,
 {
     struct split_access_info *split =
         &object_location->split_accesses[split_index];
-    struct host_rsc_access_info *host_to_add = NULL;
     unsigned int i;
-    int rc;
 
     /* If NULL, simply add the extent to the current split */
     if (hostname == NULL) {
@@ -1389,25 +1517,7 @@ static int add_host_to_object_location(struct object_location *object_location,
         return 0;
     }
 
-    assert(object_location->nb_hosts <
-           object_location->split_count * object_location->repl_count + 1);
-
-    host_to_add = &object_location->hosts[object_location->nb_hosts];
-
-    /* If the host is unknown, create a new host_rsc_access_info and add the
-     * extent
-     */
-    host_to_add->hostname = hostname;
-    host_to_add->nb_locked_splits = 1;
-    rc = dss_get_usable_devices(dss, PHO_RSC_TAPE, host_to_add->hostname,
-                                &host_to_add->drives,
-                                &host_to_add->drive_count);
-
-    object_location->nb_hosts += 1;
-    split_access_info_add_host(split, host_to_add->hostname, tape_model,
-                               usable);
-
-    return rc;
+    return -EINVAL;
 }
 
 /**
@@ -1497,18 +1607,18 @@ static void get_best_object_location(
                 if (has_access[k])
                     continue;
 
-                for (l = 0; l < object_location->hosts[k].drive_count; l++) {
+                for (l = 0; l < object_location->hosts[k].dev_count; l++) {
                     bool compat = false;
                     int rc;
 
                     rc = tape_drive_compat_models(split->tape_model[j],
-                            object_location->hosts[k].drives[l].rsc.model,
+                            object_location->hosts[k].dev_models[l],
                             &compat);
                     if (rc)
                         pho_error(rc,
                                   "Failed to determine compatibility between "
                                   "drive '%s' and tape '%s' for host '%s'",
-                                  object_location->hosts[k].drives[l].rsc.model,
+                                  object_location->hosts[k].dev_models[l],
                                   split->tape_model[j],
                                   object_location->hosts[k].hostname);
 
@@ -1746,7 +1856,8 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
 
     /* init object_location */
     rc = init_object_location(dss, &object_location, nb_split, repl_count,
-                              focus_host_secured);
+                              focus_host_secured,
+                              layout->extents[0].media.family);
     if (rc)
         LOG_RETURN(rc, "Unable to allocate first object_location");
 

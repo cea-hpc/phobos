@@ -221,8 +221,9 @@ EOF
     # another hostname
     # Lock all the drives $self_hostname has access to
     $PSQL << EOF
-DELETE FROM lock;
+DELETE FROM lock WHERE hostname != '$self_hostname';
 EOF
+
     $phobos drive lock $self_lto5drive $self_lto6drive
 
     locate_hostname=$($valg_phobos locate --focus-host $other_hostname $oid)
@@ -233,24 +234,25 @@ EOF
     fi
 
     $PSQL << EOF
-DELETE FROM lock;
+DELETE FROM lock WHERE hostname != '$self_hostname';
 EOF
 
-    $valg_phobos locate --focus-host $self_hostname $oid &&
-        error "locate on $oid did not fail even though $self_hostname " \
-              "has no compatible device and $other_hostname has no lock " \
-              "in the DB" ||
-        true
+    locate_hostname=$($valg_phobos locate --focus-host $self_hostname $oid)
+    if [ "$locate_hostname" != "$other_hostname" ]; then
+        error "locate on $oid returned $locate_hostname instead of " \
+              "$other_hostname when $self_hostname has no compatible " \
+              "unlocked device but $other_hostname does"
+    fi
 
     # lock all the drives $other_hostname has, unlock the drives $self_hostname
     # has, and remove all concurrency locks
     # "drive lock" cannot be used because the drive belongs to another host
     $PSQL << EOF
 UPDATE device SET adm_status = 'locked' WHERE host = '$other_hostname';
-DELETE FROM lock;
+DELETE FROM lock WHERE hostname != '$self_hostname';
 EOF
 
-    $phobos drive unlock $self_lto5drive $self_lto6drive
+    $phobos drive unlock --force $self_lto6drive
 
     locate_hostname=$($valg_phobos locate --focus-host $self_hostname $oid)
     if [ "$locate_hostname" != "$self_hostname" ]; then

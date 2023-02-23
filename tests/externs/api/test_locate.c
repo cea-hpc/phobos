@@ -305,7 +305,6 @@ static void pl(void **state)
     pl_hostname(HOSTNAME, myself_hostname, state, true);
     pl_hostname(HOSTNAME, HOSTNAME, state, true);
 
-
     /* move object to deprecated table */
     xfer.xd_objid = obj->oid;
     rc = phobos_delete(&xfer, 1);
@@ -398,6 +397,11 @@ static void pgl(void **state)
     /* Check we can get file when it is locked on local node */
     lock_medium(pl_state, &medium, myself, &cnt);
     pgl_scenario(xfer, obj, myself, 0);
+
+    /* Another call to lock medium would replace the media_info structure, so
+     * we first unlock/free it
+     */
+    unlock_medium(pl_state, medium, cnt);
 
     /**
      * Lock the medium with a hostname and try getting the object.

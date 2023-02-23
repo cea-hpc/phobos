@@ -145,6 +145,7 @@ function test_medium_locate
 
 function test_get_locate_cli
 {
+    local other_host="blob" #taken from test_locate_common.sh
     local oid="oid_get_locate"
     local family=$1
     local pid="12345"
@@ -167,31 +168,34 @@ function test_get_locate_cli
         locker=$($phobos $family list -o lock_hostname $med)
         if [ "$locker" == "$self_hostname" ]; then
             was_locked[${med}]="true"
-            $medium_locker_bin unlock $family $med $self_hostname  \
-                    $PID_DAEMON ||
+            $medium_locker_bin unlock $family $med $self_hostname $PID_DAEMON ||
                 error "Error unlocking $family before get --best-host"
         fi
     done
 
-    # We force an "exotic" locker hostname : "blob"
-    $medium_locker_bin lock $family all blob $pid ||
-        error "Error while locking media before get --best-host"
+    # Lock the $family elements using the current hostname
+    $medium_locker_bin lock $family all $self_hostname $pid ||
+       error "Error while locking media before get --best-host"
 
+    # And try to use "get --best-host" as another host, which will fail because
+    # $self_hostname has locks on the object
+    hostname $other_host
     get_locate_output=$($valg_phobos get --best-host $oid /tmp/out2 || true)
+    hostname $self_hostname
+
     local output="Current host is not the best to get this object, try on"
-    output="$output this other node, '$oid' : 'blob'"
+    output="$output this other node, '$oid' : '$self_hostname'"
     if [ "$get_locate_output" != "$output" ]; then
-        error "Object should have been located on node 'blob'"
+        error "Object should have been located on node '$self_hostname'"
     fi
 
-    $medium_locker_bin unlock $family all blob $pid ||
+    $medium_locker_bin unlock $family all $self_hostname $pid ||
         error "Error while unlocking medium1 after get --best-host"
 
     # we artificially restore the locks
     for med in ${media}; do
         if [ "${was_locked[$med]}" == "true" ]; then
-            $medium_locker_bin lock $family $med $self_hostname \
-                    $PID_DAEMON ||
+            $medium_locker_bin lock $family $med $self_hostname $PID_DAEMON ||
                 error "Error while restoring $family lock after locate"
         fi
     done
