@@ -30,6 +30,9 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/tape_drive.sh
 . test_locate_common.sh
 
+HALF_SIZE=1024
+((FULL_SIZE=HALF_SIZE * 2))
+
 function setup
 {
     setup_tables
@@ -45,7 +48,9 @@ function dir_setup
     export dirs="
         $(mktemp -d /tmp/test.pho.XXXX)
         $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
     "
+    echo "adding directories $dirs"
     $phobos dir add $dirs
     $phobos dir format --fs posix --unlock $dirs
 }
@@ -98,6 +103,73 @@ function tape_setup
     $phobos tape format $lto6_tapes --unlock
 }
 
+function dir_locked_splits_setup
+{
+    # start with a clean/empty phobos DB but no daemon is online yet
+    setup_tables
+    invoke_daemon
+
+    export dirs="
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+        $(mktemp -d /tmp/test.pho.XXXX)
+    "
+
+    $phobos dir add $dirs
+    $phobos dir format --fs posix --unlock $dirs
+
+    waive_daemon
+
+    for dir in $dirs; do
+        resize_medium $dir $HALF_SIZE
+    done
+
+    invoke_daemon
+}
+
+function tape_locked_splits_setup
+{
+    local N_TAPES=8
+    local N_DRIVES=4
+
+    # start with a clean/empty phobos DB
+    setup_tables
+    invoke_daemon
+
+    local tapes="$(get_tapes L5 $N_TAPES)"
+    $phobos tape add --type lto5 "$tapes"
+
+    # unlock all tapes
+    for t in $tapes; do
+        $phobos tape unlock $t
+    done
+
+    # get drives
+    local drives=$(get_drives $N_DRIVES)
+    $phobos drive add $drives
+
+    # unlock all drives
+    for d in $($phobos drive list); do
+        $phobos drive unlock $d
+    done
+
+    # format the tapes
+    $phobos tape format $tapes --unlock
+
+    waive_daemon
+
+    for tape in $tapes; do
+        resize_medium $tape $HALF_SIZE
+    done
+
+    invoke_daemon
+}
+
 function cleanup
 {
     unset PHOBOS_STORE_default_family
@@ -116,6 +188,7 @@ function tape_cleanup
     waive_daemon
     drop_tables
     drain_all_drives
+    rm -rf /tmp/out*
 }
 
 function test_locate_compatibility
@@ -273,13 +346,21 @@ TEST_CLEANUP=cleanup
 
 # test locate on disk
 TESTS=("dir_setup; \
-        test_medium_locate dir; test_locate_cli dir; test_get_locate_cli dir; \
+        test_medium_locate dir; \
+        test_locate_cli dir; \
+        test_get_locate_cli dir; \
         dir_cleanup")
+TESTS+=("dir_locked_splits_setup; \
+         test_locate_locked_splits dir $FULL_SIZE; \
+         dir_cleanup")
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("tape_setup; \
              test_medium_locate tape; test_locate_cli tape; \
              test_get_locate_cli tape; \
+             tape_cleanup")
+    TESTS+=("tape_locked_splits_setup; \
+             test_locate_locked_splits tape $FULL_SIZE; \
              tape_cleanup")
     TESTS+=("setup; \
              test_locate_compatibility; \

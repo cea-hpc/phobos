@@ -30,18 +30,37 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/tape_drive.sh
 . test_locate_common.sh
 
+HALF_SIZE=1024
+((FULL_SIZE=HALF_SIZE * 2))
+
 function setup
 {
+    local n_pools="$1"
+
     setup_tables
     invoke_daemon
     export PHOBOS_STORE_default_family="rados_pool"
-    export rados_pools="pho_test_locate1 pho_test_locate2"
-    sudo ceph osd pool create pho_test_locate1
-    sudo ceph osd pool create pho_test_locate2
 
-    echo "adding RADOS pools $pools"
+    for i in $(eval echo "{1..$n_pools}"); do
+        export rados_pools="$rados_pools pho_test_locate$i"
+        sudo ceph osd pool create pho_test_locate$i
+    done
+
     $phobos rados_pool add $rados_pools
     $phobos rados_pool format --fs RADOS --unlock $rados_pools
+}
+
+function setup_tlc
+{
+    setup 8
+
+    waive_daemon
+
+    for pool in $rados_pools; do
+        resize_medium $pool $HALF_SIZE
+    done
+
+    invoke_daemon
 }
 
 function cleanup
@@ -49,17 +68,19 @@ function cleanup
     waive_daemon
     drop_tables
 
-    sudo ceph osd pool rm pho_test_locate1 pho_test_locate1 \
-        --yes-i-really-really-mean-it
-    sudo ceph osd pool rm pho_test_locate2 pho_test_locate2 \
-        --yes-i-really-really-mean-it
+    for pool in $rados_pools; do
+        sudo ceph osd pool rm $pool $pool --yes-i-really-really-mean-it
+    done
+
     rm -rf /tmp/out*
 }
 
-TEST_SETUP=setup
-TEST_CLEANUP=cleanup
-
 # test locate on rados_pool
-TESTS=("test_medium_locate rados_pool"
-       "test_locate_cli rados_pool"
-       "test_get_locate_cli rados_pool")
+TESTS=("setup 3; \
+        test_medium_locate rados_pool; \
+        test_locate_cli rados_pool; \
+        test_get_locate_cli rados_pool; \
+        cleanup")
+TESTS+=("setup_tlc; \
+         test_locate_locked_splits rados_pool $FULL_SIZE; \
+         cleanup")

@@ -32,7 +32,7 @@ medium_locker_bin="./medium_locker"
 
 function test_locate_cli
 {
-    local obj="object_to_locate"
+    local obj="object_tlc"
     local pid="12345"
 
     # test error on locating an unknown object
@@ -146,7 +146,7 @@ function test_medium_locate
 function test_get_locate_cli
 {
     local other_host="blob" #taken from test_locate_common.sh
-    local oid="oid_get_locate"
+    local oid="oid_tglc"
     local family=$1
     local pid="12345"
     local media_name="${family}s"
@@ -160,8 +160,10 @@ function test_get_locate_cli
     $phobos put /etc/hosts $oid ||
         error "Error while putting $oid"
 
-    $phobos get --best-host $oid /tmp/out1 \
-        || error "Get operation should have succeeded"
+    $phobos get --best-host $oid /tmp/out1 ||
+        error "Get operation should have succeeded"
+
+    rm -f /tmp/out1
 
     # PUT and GET let existing locks, we artificaly clear it
     for med in ${media}; do
@@ -199,4 +201,79 @@ function test_get_locate_cli
                 error "Error while restoring $family lock after locate"
         fi
     done
+}
+
+function test_locate_locked_splits
+{
+    local oid="oid_tlfs"
+    local family=$1
+    local pid="12345"
+    local self_host=$(uname -n)
+    local other_host="blob"
+    local size="$2"
+    local IN_FILE=$(mktemp /tmp/test.pho.XXXX)
+
+    local media=($($phobos $family list))
+
+    if [[ ${#media[@]} -ne 8 ]]; then
+        error "Invalid number of media, should be 8"
+    fi
+
+    dd if=/dev/random of=$IN_FILE count=$size bs=1
+
+    $phobos put -f $family --lyt-params "repl_count=4" $IN_FILE $oid ||
+        error "Error while putting $oid"
+
+    $phobos get --best-host $oid /tmp/out1 \
+        || error "Get operation should have succeeded"
+
+    rm -f /tmp/out1
+
+    waive_daemon
+
+    $PSQL << EOF
+UPDATE device SET host = '$other_host' WHERE path = '${media[1]}';
+UPDATE device SET host = '$other_host' WHERE path = '${media[2]}';
+UPDATE device SET host = '$other_host' WHERE path = '${media[3]}';
+EOF
+
+    invoke_daemon
+
+    # lock extents 1, 2 and 3 for $other_host
+    for medium in "${media[@]:1:3}"; do
+        $medium_locker_bin lock $family $medium $other_host $PID_DAEMON ||
+            error "Error locking $medium for host $other_host"
+    done
+
+    for medium in "${media[@]:5:3}"; do
+        $medium_locker_bin unlock $family $medium $self_host $PID_DAEMON ||
+            error "Error unlocking $medium for host $other_host"
+    done
+
+    # at this point: extents 5, 6 and 7 are unlocked
+
+    locate_hostname=$($valg_phobos locate --focus-host $self_host $oid)
+    if [ "$locate_hostname" != "$self_host" ]; then
+        error "locate on $oid returned $locate_hostname instead of " \
+              "$self_host even though it has a lock on a replica"
+    fi
+
+    locate_hostname=$($valg_phobos locate --focus-host $other_host $oid)
+    if [ "$locate_hostname" != "$self_host" ]; then
+        error "locate on $oid returned $locate_hostname instead of " \
+              "$self_host even though it has a lock on a replica"
+    fi
+
+    for medium in "${media[@]:1:3}"; do
+        $medium_locker_bin unlock $family $medium $other_host $PID_DAEMON ||
+            error "Error unlocking $medium for host $other_host"
+    done
+
+    waive_daemon
+
+    $PSQL << EOF
+UPDATE device SET host = '$self_host' WHERE host = '$other_host';
+EOF
+
+    invoke_daemon
 }

@@ -121,34 +121,6 @@ EOF
     tape_array=($(nodeset -e $lto6_tapes))
 }
 
-function resize_media
-{
-    local family=$1
-    shift
-    local media_array=($@)
-
-    $PSQL << EOF
-UPDATE media SET
-    stats = '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0,\
-              "phys_spc_free":$PART1_SIZE, "nb_load":0, "nb_errors":0,\
-              "last_load":0}'
-    WHERE family = '$family' AND (id = '${media_array[0]}' OR \
-                                  id = '${media_array[1]}');
-
-UPDATE media SET
-    stats = '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0,\
-              "phys_spc_free":$PART2_SIZE, "nb_load":0, "nb_errors":0,\
-              "last_load":0}'
-    WHERE family = '$family' AND (id = '${media_array[2]}' OR \
-                                  id = '${media_array[3]}');
-
-EOF
-
-    $PSQL << EOF
-SELECT * from media;
-EOF
-}
-
 function setup
 {
     setup_tables
@@ -161,9 +133,15 @@ function setup
         tape_setup
     fi
     waive_daemon
-    resize_media dir ${dir_array[@]}
+    resize_medium "${dir_array[0]}" "$PART1_SIZE"
+    resize_medium "${dir_array[1]}" "$PART1_SIZE"
+    resize_medium "${dir_array[2]}" "$PART2_SIZE"
+    resize_medium "${dir_array[3]}" "$PART2_SIZE"
     if [[ -w /dev/changer ]]; then
-        resize_media tape ${tape_array[@]}
+        resize_medium "${tape_array[0]}" "$PART1_SIZE"
+        resize_medium "${tape_array[1]}" "$PART1_SIZE"
+        resize_medium "${tape_array[2]}" "$PART2_SIZE"
+        resize_medium "${tape_array[3]}" "$PART2_SIZE"
     fi
     invoke_daemon
 }

@@ -48,24 +48,6 @@ PART1_SIZE=1024
 PART2_SIZE=1024
 ((FULL_SIZE=PART1_SIZE + PART2_SIZE))
 
-function resize_dir
-{
-    $PSQL << EOF
-UPDATE media SET
-    stats = '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0,\
-              "phys_spc_free":$PART1_SIZE, "nb_load":0, "nb_errors":0,\
-              "last_load":0}'
-    WHERE family = 'dir' AND id = '$DIR1';
-
-UPDATE media SET
-    stats = '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0,\
-              "phys_spc_free":$PART2_SIZE, "nb_load":0, "nb_errors":0,\
-              "last_load":0}'
-    WHERE family = 'dir' AND id = '$DIR2';
-
-EOF
-}
-
 function setup
 {
     # start with a clean/empty phobos DB
@@ -79,7 +61,8 @@ function setup
     $phobos dir add $DIR1 $DIR2
     $phobos dir format --fs POSIX --unlock $DIR1 $DIR2
     waive_daemon
-    resize_dir
+    resize_medium $DIR1 $PART1_SIZE
+    resize_medium $DIR2 $PART2_SIZE
     invoke_daemon
 }
 

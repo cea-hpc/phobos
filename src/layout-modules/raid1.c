@@ -1493,7 +1493,8 @@ static bool object_location_contains_host(
 static int add_host_to_object_location(struct object_location *object_location,
                                        struct dss_handle *dss, char *hostname,
                                        char *tape_model, bool usable,
-                                       unsigned int split_index)
+                                       unsigned int split_index,
+                                       bool *split_known_by_host)
 {
     struct split_access_info *split =
         &object_location->split_accesses[split_index];
@@ -1510,7 +1511,10 @@ static int add_host_to_object_location(struct object_location *object_location,
      * extent to the current split.
      */
     if (object_location_contains_host(object_location, hostname, &i)) {
-        object_location->hosts[i].nb_locked_splits += 1;
+        if (!split_known_by_host[i]) {
+            object_location->hosts[i].nb_locked_splits += 1;
+            split_known_by_host[i] = true;
+        }
         split_access_info_add_host(split, object_location->hosts[i].hostname,
                                    tape_model, usable);
         free(hostname);
@@ -1830,6 +1834,7 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
 {
     struct object_location object_location;
     struct host_rsc_access_info *best_location;
+    bool *split_known_by_host = NULL;
     const char *focus_host_secured;
     unsigned int split_index;
     unsigned int repl_count;
@@ -1861,9 +1866,18 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
     if (rc)
         LOG_RETURN(rc, "Unable to allocate first object_location");
 
+    split_known_by_host = malloc(object_location.nb_hosts *
+                                 sizeof(*split_known_by_host));
+    if (split_known_by_host == NULL)
+        LOG_GOTO(clean, rc = -errno,
+                 "Failed to allocate split_known_by_host");
+
     /* update object_location for each split */
     for (split_index = 0; split_index < nb_split; split_index++) {
         bool enodev = true;
+
+        for (i = 0; i < object_location.nb_hosts; ++i)
+            split_known_by_host[i] = false;
 
         /* each extent of this split */
         for (i = split_index * repl_count;
@@ -1903,7 +1917,8 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
 
             rc2 = add_host_to_object_location(&object_location, dss,
                                               extent_hostname, tape_model,
-                                              usable, split_index);
+                                              usable, split_index,
+                                              split_known_by_host);
             if (medium_info != NULL)
                 media_info_free(medium_info);
 
@@ -1945,6 +1960,7 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
                  best_location->hostname);
 
 clean:
+    free(split_known_by_host);
     clean_object_location(&object_location);
     return rc;
 }

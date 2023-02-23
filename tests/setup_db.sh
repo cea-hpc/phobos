@@ -94,6 +94,20 @@ EOF
 
 }
 
+function resize_medium
+{
+    local id="$1"
+    local size="$2"
+
+    $PSQL << EOF
+UPDATE media SET
+    stats = '{"nb_obj":0, "logc_spc_used":0, "phys_spc_used":0,\
+              "phys_spc_free":$size, "nb_load":0, "nb_errors":0,\
+              "last_load":0}'
+    WHERE id = '$id';
+EOF
+}
+
 setup_tables() {
     $db_helper setup_tables
 }
