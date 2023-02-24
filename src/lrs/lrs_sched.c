@@ -121,7 +121,9 @@ void sched_req_free(void *reqc)
     if (!cont)
         return;
 
-    if (pho_request_is_read(cont->req))
+    if (pho_request_is_read(cont->req)
+        && cont->req->ralloc->n_med_ids <
+            cont->params.rwalloc.original_n_req_media)
         /* On failure, n_med_ids may be reduced, we need to set it back to its
          * orignal value to free the whole list.
          */
@@ -1109,9 +1111,11 @@ int sched_select_medium(struct io_scheduler *io_sched,
     rc = dss_media_get(lock_handle->dss, &filter, &pmedia_res,
                        &mcnt);
     if (mcnt == 0) {
-        pho_warn("No medium found matching query: %s",
-                 json_dumps(filter.df_json, JSON_COMPACT));
+        char *dump = json_dumps(filter.df_json, JSON_COMPACT);
+
+        pho_warn("No medium found matching query: %s", dump);
         dss_filter_free(&filter);
+        free(dump);
         GOTO(free_res, rc = -ENOSPC);
     }
 
