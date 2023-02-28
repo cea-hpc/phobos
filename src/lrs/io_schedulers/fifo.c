@@ -152,6 +152,40 @@ static int fifo_peek_request(struct io_scheduler *io_sched,
     return 0;
 }
 
+/* find a device that can be allocated now */
+static struct lrs_dev *find_free_device(GPtrArray *devices)
+{
+    int i;
+
+    for (i = 0; i < devices->len; i++) {
+        struct lrs_dev *d;
+
+        d = g_ptr_array_index(devices, i);
+        if (dev_is_sched_ready(d))
+            return d;
+    }
+
+    return NULL;
+}
+
+static int exchange_device(struct io_scheduler *io_sched,
+                           enum io_request_type type,
+                           struct lrs_dev **device_to_exchange)
+{
+    union io_sched_claim_device_args args;
+    struct lrs_dev *free_device;
+
+    free_device = find_free_device(io_sched->devices);
+    if (!free_device)
+        /* No free device to give back, cannot schedule this request yet. */
+        return 0;
+
+    args.exchange.desired_device = *device_to_exchange;
+    args.exchange.unused_device = free_device;
+
+    return io_sched_claim_device(io_sched, IO_SCHED_EXCHANGE, &args);
+}
+
 static int find_read_device(struct io_scheduler *io_sched,
                             struct req_container *reqc,
                             struct lrs_dev **dev,
@@ -177,15 +211,32 @@ static int find_read_device(struct io_scheduler *io_sched,
     medium = reqc->params.rwalloc.media[index].alloc_medium;
     name = medium->rsc.id.name;
 
-    dev_ref = io_sched_search_in_use_medium(io_sched, name, &sched_ready);
-    if (dev_ref) {
-        *dev = *dev_ref;
+    *dev = NULL;
+    dev_ref = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl, name,
+                                                &sched_ready);
+    if (!dev_ref) {
+        *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
+                          select_empty_loaded_mount,
+                          0, &NO_TAGS, medium, false);
+
         return 0;
     }
 
-    *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
-                      select_empty_loaded_mount,
-                      0, &NO_TAGS, medium, false);
+    if (!((*dev_ref)->ld_io_request_type & IO_REQ_READ)) {
+        /* The tape to read is not on a drive owned by this scheduler. */
+        int rc;
+
+        rc = exchange_device(io_sched, IO_REQ_READ, dev_ref);
+        if (rc)
+            return rc;
+
+        if (!((*dev_ref)->ld_io_request_type & IO_REQ_READ)) {
+            *dev = NULL;
+            return 0;
+        }
+    }
+
+    *dev = *dev_ref;
 
     return 0;
 }
@@ -245,11 +296,20 @@ static int find_write_device(struct io_scheduler *io_sched,
     if (rc)
         return rc;
 
-    dev_ref = io_sched_search_in_use_medium(io_sched, (*medium)->rsc.id.name,
-                                            &sched_ready);
+    dev_ref = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl,
+                                                (*medium)->rsc.id.name,
+                                                &sched_ready);
     if (dev_ref && sched_ready) {
-        *dev = *dev_ref;
-        return 0;
+        if (!((*dev_ref)->ld_io_request_type & IO_REQ_WRITE)) {
+            rc = exchange_device(io_sched, IO_REQ_WRITE, dev_ref);
+            if (rc)
+                return rc;
+        }
+
+        if ((*dev_ref)->ld_io_request_type & IO_REQ_WRITE) {
+            *dev = *dev_ref;
+            return 0;
+        }
     }
 
 find_device:
@@ -280,20 +340,33 @@ static int find_format_device(struct io_scheduler *io_sched,
     struct lrs_dev **dev_ref;
     bool sched_ready;
 
-    dev_ref = io_sched_search_in_use_medium(io_sched, name, &sched_ready);
-    if (dev_ref) {
-        *dev = *dev_ref;
+    *dev = NULL;
+    dev_ref = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl, name,
+                                                &sched_ready);
+    if (!dev_ref) {
+        *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
+                          select_empty_loaded_mount,
+                          0, &NO_TAGS, reqc->params.format.medium_to_format,
+                          false);
+
         return 0;
     }
 
-    *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
-                      select_empty_loaded_mount,
-                      0, &NO_TAGS, reqc->params.format.medium_to_format, false);
-    if (*dev)
-        /* FIXME will be removed when read, write and format are handled by
-         * io_sched API
-         */
-        (*dev)->ld_ongoing_scheduled = false;
+    if (!((*dev_ref)->ld_io_request_type & IO_REQ_FORMAT)) {
+        /* The tape to format is not on a drive owned by this scheduler. */
+        int rc;
+
+        rc = exchange_device(io_sched, IO_REQ_FORMAT, dev_ref);
+        if (rc)
+            return rc;
+
+        if (!((*dev_ref)->ld_io_request_type & IO_REQ_FORMAT)) {
+            *dev = NULL;
+            return 0;
+        }
+    }
+
+    *dev = *dev_ref;
 
     return 0;
 }
@@ -398,15 +471,25 @@ static int fifo_remove_device(struct io_scheduler *io_sched,
     return 0;
 }
 
-/* XXX This function could choose to return a device ready for another request.
- * i.e. empty, dev_is_sched_ready == true, ...
- *
- * But whether this is efficient in practice or not will probably depend on how
- * this function is called.
- */
-static int fifo_reclaim_device(struct io_scheduler *io_sched,
-                               const char *techno,
-                               struct lrs_dev **device)
+static int fifo_exchange_device(struct io_scheduler *io_sched,
+                                union io_sched_claim_device_args *args)
+{
+    struct lrs_dev *device_to_remove = args->exchange.desired_device;
+    struct lrs_dev *device_to_add = args->exchange.unused_device;
+
+    if (!dev_is_sched_ready(device_to_add))
+        return 0;
+
+    device_to_remove->ld_io_request_type &= ~io_sched->type;
+    device_to_add->ld_io_request_type = io_sched->type;
+    g_ptr_array_add(io_sched->devices, device_to_add);
+    g_ptr_array_remove(io_sched->devices, device_to_remove);
+
+    return 0;
+}
+
+static int fifo_take_device(struct io_scheduler *io_sched,
+                            union io_sched_claim_device_args *args)
 {
     int i;
 
@@ -416,16 +499,34 @@ static int fifo_reclaim_device(struct io_scheduler *io_sched,
     for (i = 0; i < io_sched->devices->len; i++) {
         struct lrs_dev *dev = g_ptr_array_index(io_sched->devices, i);
 
-        if (strcmp(dev->ld_technology, techno))
+        if (strcmp(dev->ld_technology, args->take.technology))
             continue;
 
-        *device = dev;
+        args->take.device = dev;
         g_ptr_array_remove_index_fast(io_sched->devices, i);
 
         return 0;
     }
 
     return -ENODEV;
+}
+
+static int fifo_claim_device(struct io_scheduler *io_sched,
+                             enum io_sched_claim_device_type type,
+                             union io_sched_claim_device_args *args)
+{
+    switch (type) {
+    case IO_SCHED_BORROW:
+        return -ENOTSUP;
+    case IO_SCHED_EXCHANGE:
+        return fifo_exchange_device(io_sched, args);
+    case IO_SCHED_TAKE:
+        return fifo_take_device(io_sched, args);
+    default:
+        return -EINVAL;
+    }
+
+    return 0;
 }
 
 struct io_scheduler_ops IO_SCHED_FIFO_OPS = {
@@ -439,5 +540,5 @@ struct io_scheduler_ops IO_SCHED_FIFO_OPS = {
     .add_device             = fifo_add_device,
     .get_device             = fifo_get_device,
     .remove_device          = fifo_remove_device,
-    .reclaim_device         = fifo_reclaim_device,
+    .claim_device           = fifo_claim_device,
 };

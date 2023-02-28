@@ -60,6 +60,41 @@ enum io_schedulers {
     IO_SCHED_GROUPED_READ,
 };
 
+/**
+ * Type of device demands made internally by the various I/O scheduling
+ * algorithms passed as argument to io_sched_handle::claim_device.
+ */
+enum io_sched_claim_device_type {
+    IO_SCHED_TAKE,     /** Take the device from the scheduler. Used by device
+                         * dispatch algorithms.
+                         */
+    IO_SCHED_EXCHANGE, /** exchange between two devices, used by io_schedulers
+                         * to ask for other schedulers' devices when needed.
+                         * There is no reason to exchange a device shared
+                         * between several schedulers because if a device is
+                         * shared, it will be shared between every scheduler.
+                         */
+    IO_SCHED_BORROW,   /** Borrow a device from another scheduler. Used when a
+                         * scheduler needs a device temporarily to perform an
+                         * I/O.
+                         */
+
+};
+
+union io_sched_claim_device_args {
+    struct {
+        struct lrs_dev *device;
+        const char *technology;
+    } take;
+    struct {
+        struct lrs_dev *desired_device;
+        struct lrs_dev *unused_device;
+    } exchange; /* exchange is a reserved keyword */
+    struct {
+        struct lrs_dev *dev;
+    } borrow;
+};
+
 struct io_sched_handle;
 struct io_scheduler;
 
@@ -126,21 +161,30 @@ struct io_scheduler_ops {
     /* Ask the I/O scheduler for a device to remove. The scheduler will choose
      * which device is removed depending on its internal state.
      *
-     * TODO reclaim_device could return a NULL pointer or EBUSY with a device
+     * TODO claim_device could return a NULL pointer or EBUSY with a device
      * to indicate to the caller that all the devices are in use but one device
      * will be freed later. This would allow the read scheduler to keep a device
      * until all the requests of the currently mounted tape are finished for
      * example.
      *
-     * \param[in]  io_sched  a valid io_scheduler
-     * \param[in]  techno    the desired technology of the device
-     * \param[out] device    the device that was given back by the I/O scheduler
+     * \param[in]     io_sched  a valid io_scheduler
+     * \param[in]     type      which type of claim is done
+     * \param[in/out] args      arguments depending on the \p type of claim (see
+     *                          struct io_sched_claim_device_args)
      *
-     * \return               0 on success, negative POSIX error code on failure
+     * \return        0 on success, negative POSIX error code on failure
      */
-    int (*reclaim_device)(struct io_scheduler *io_sched,
-                          const char *techno,
-                          struct lrs_dev **device);
+    int (*claim_device)(struct io_scheduler *io_sched,
+                        enum io_sched_claim_device_type type,
+                        union io_sched_claim_device_args *args);
+};
+
+#define IO_REQ_ALL (IO_REQ_READ | IO_REQ_WRITE | IO_REQ_FORMAT)
+
+enum io_request_type {
+    IO_REQ_READ   = (1 << 0),
+    IO_REQ_WRITE  = (1 << 1),
+    IO_REQ_FORMAT = (1 << 2),
 };
 
 struct io_scheduler {
@@ -152,14 +196,7 @@ struct io_scheduler {
                          */
     void *private_data;
     struct io_scheduler_ops ops;
-};
-
-#define IO_REQ_ALL (IO_REQ_READ | IO_REQ_WRITE | IO_REQ_WRITE)
-
-enum io_request_type {
-    IO_REQ_READ   = (1 << 0),
-    IO_REQ_WRITE  = (1 << 1),
-    IO_REQ_FORMAT = (1 << 2),
+    enum io_request_type type;
 };
 
 struct io_stats {
@@ -354,6 +391,25 @@ int io_sched_get_device_medium_pair(struct io_sched_handle *io_sched_hdl,
  */
 int io_sched_remove_device(struct io_sched_handle *io_sched_hdl,
                            struct lrs_dev *device);
+
+/**
+ * Claim a device from an io_scheduler. Depending on the type, this function
+ * will perform various operations.
+ *
+ * - IO_SCHED_TAKE: take any device from \p io_sched. This is used by
+ *   io_sched_handle::dispatch_devices to take devices back from schedulers.
+ *
+ * - IO_SCHED_BORROW: borrow a device from \p io_sched. This is useful when a
+ *   scheduler needs a tape on a device owned by someone else but does not
+ *   intend to keep this device.
+ *
+ * - IO_SCHED_EXCHANGE: exchange 2 devices between 2 schedulers. The goal of
+ *   this feature is to take a new device without modifying the current share of
+ *   devices that has been allocated to a scheduler.
+ */
+int io_sched_claim_device(struct io_scheduler *io_sched,
+                          enum io_sched_claim_device_type type,
+                          union io_sched_claim_device_args *args);
 
 struct io_sched_weights {
     double read;

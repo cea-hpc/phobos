@@ -505,6 +505,57 @@ static size_t count_available_devices(GPtrArray *devices)
     return count;
 }
 
+/* find a device that can be allocated now */
+static struct lrs_dev *find_free_device(GPtrArray *devices)
+{
+    int i;
+
+    for (i = 0; i < devices->len; i++) {
+        struct device *d;
+
+        d = g_ptr_array_index(devices, i);
+        if (dev_is_sched_ready(d->device) && !d->queue)
+            return d->device;
+    }
+
+    return NULL;
+}
+
+static int exchange_device(struct io_scheduler *io_sched,
+                           enum io_request_type type,
+                           struct lrs_dev **device_to_exchange)
+{
+    union io_sched_claim_device_args args;
+    struct lrs_dev *free_device;
+
+    free_device = find_free_device(io_sched->devices);
+    if (!free_device)
+        /* No free device to give back, cannot schedule this request yet. */
+        return 0;
+
+    args.exchange.desired_device = *device_to_exchange;
+    args.exchange.unused_device = free_device;
+
+    return io_sched_claim_device(io_sched, IO_SCHED_EXCHANGE, &args);
+}
+
+static struct device *find_device(struct io_scheduler *io_sched,
+                                  struct lrs_dev *dev)
+{
+    int i;
+
+    for (i = 0; i < io_sched->devices->len; i++) {
+        struct device *d;
+
+        d = g_ptr_array_index(io_sched->devices, i);
+
+        if (d->device == dev)
+            return d;
+    }
+
+    return NULL;
+}
+
 /* Return true if there are enough available devices to handle \p reqc.
  *
  * \param[in] available_devices  Number of devices that are ready for scheduling
@@ -523,10 +574,21 @@ static bool request_can_be_allocated(struct io_scheduler *io_sched,
                                      size_t available_devices)
 {
     size_t n_required = reqc->req->ralloc->n_required;
+    struct lrs_dev **extra_devices;
+    struct lrs_dev **dev_iter;
+    bool res = false;
     int i;
 
     if (available_devices >= n_required)
         return true;
+
+    extra_devices = malloc(sizeof(*extra_devices) * n_required);
+    if (!extra_devices) {
+        pho_error(-errno, "Failed to allocate memory");
+        return false;
+    }
+
+    dev_iter = extra_devices;
 
     for (i = 0; i < reqc->req->ralloc->n_med_ids; i++) {
         const char *name = reqc->req->ralloc->med_ids[i]->name;
@@ -540,11 +602,54 @@ static bool request_can_be_allocated(struct io_scheduler *io_sched,
             available_devices++;
 
             if (available_devices >= n_required)
-                return true;
+                GOTO(free_list, res = true);
+        }
+
+        if (!queue->device) {
+            struct lrs_dev **dev;
+            bool sched_ready;
+
+            /* Search if someone else has the device. */
+            dev = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl,
+                                                    queue->name,
+                                                    &sched_ready);
+            if (dev && sched_ready &&
+                !((*dev)->ld_io_request_type & IO_REQ_READ)) {
+                *dev_iter++ = *dev;
+            }
         }
     }
 
-    return false;
+    dev_iter = extra_devices;
+
+    while (*dev_iter && available_devices < n_required) {
+        int rc;
+
+        rc = exchange_device(io_sched, IO_REQ_READ, dev_iter);
+        if (rc) {
+            pho_error(rc, "Failed to exchange devices");
+            GOTO(free_list, res = false);
+        }
+
+        if ((*dev_iter)->ld_io_request_type & IO_REQ_READ) {
+            struct device *d;
+
+            /* do not increment available_devices since we exchange a free
+             * device with a device that we can use.
+             */
+            d = find_device(io_sched, *dev_iter);
+            d->queue = g_hash_table_lookup(
+                data->request_queues,
+                d->device->ld_dss_media_info->rsc.id.name);
+            d->queue->device = d;
+        }
+        dev_iter++;
+    }
+
+free_list:
+    free(extra_devices);
+
+    return res;
 }
 
 static int grouped_peek_request(struct io_scheduler *io_sched,
@@ -1042,10 +1147,20 @@ static int find_device_medium_on_error(struct io_scheduler *io_sched,
 
     /* find a device for reqc->req->ralloc->med_ids[*index] */
     name = reqc->req->ralloc->med_ids[*index]->name;
-    dev_ref = io_sched_search_in_use_medium(io_sched, name, NULL);
+    dev_ref = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl, name,
+                                                NULL);
     if (dev_ref) {
-        *dev = *dev_ref;
-        return 0;
+        if (!((*dev_ref)->ld_io_request_type & IO_REQ_READ)) {
+            pho_info("exchange device");
+            rc = exchange_device(io_sched, IO_REQ_READ, dev_ref);
+            if (rc)
+                return rc;
+        }
+
+        if ((*dev_ref)->ld_io_request_type & IO_REQ_READ) {
+            *dev = *dev_ref;
+            return 0;
+        }
     }
 
     /* On error, always fetch DSS information since the caller doesn't know if
@@ -1248,16 +1363,55 @@ static struct lrs_dev *find_device_to_remove(struct io_scheduler *io_sched,
     return device->device;
 }
 
-static int grouped_reclaim_device(struct io_scheduler *io_sched,
-                                  const char *techno,
-                                  struct lrs_dev **device)
+static int grouped_exchange_device(struct io_scheduler *io_sched,
+                                   union io_sched_claim_device_args *args)
 {
-    *device = find_device_to_remove(io_sched, techno);
+    struct device *device_to_remove;
+    struct lrs_dev *device_to_add;
 
-    if (!*device)
-        return -ENODEV;
+    device_to_add = args->exchange.unused_device;
+    device_to_remove = find_device(io_sched, args->exchange.desired_device);
+    /* /!\ Since this is the device that we are asked for, it must be in
+     * the list of devices. If not, this is likely a programming error.
+     */
+    assert(device_to_remove);
 
-    grouped_remove_device(io_sched, *device);
+    if (!dev_is_sched_ready(device_to_add) ||
+        (device_to_remove->queue &&
+         g_queue_get_length(device_to_remove->queue->queue) > 0))
+        /* do not give back a device whose queue is not empty */
+        return 0;
+
+    device_to_remove->device->ld_io_request_type &= ~io_sched->type;
+    device_to_add->ld_io_request_type = io_sched->type;
+    grouped_add_device(io_sched, device_to_add);
+    g_ptr_array_remove(io_sched->devices, device_to_remove);
+    free(device_to_remove);
+
+    return 0;
+}
+
+static int grouped_claim_device(struct io_scheduler *io_sched,
+                                enum io_sched_claim_device_type type,
+                                union io_sched_claim_device_args *args)
+{
+    switch (type) {
+    case IO_SCHED_EXCHANGE:
+    case IO_SCHED_BORROW:
+        return grouped_exchange_device(io_sched, args);
+    case IO_SCHED_TAKE:
+        args->take.device =
+            find_device_to_remove(io_sched, args->take.technology);
+
+        if (!args->take.device)
+            return -ENODEV;
+
+        grouped_remove_device(io_sched, args->take.device);
+
+        return 0;
+    default:
+        return -EINVAL;
+    }
 
     return 0;
 }
@@ -1273,5 +1427,5 @@ struct io_scheduler_ops IO_SCHED_GROUPED_READ_OPS = {
     .add_device             = grouped_add_device,
     .get_device             = grouped_get_device,
     .remove_device          = grouped_remove_device,
-    .reclaim_device         = grouped_reclaim_device,
+    .claim_device           = grouped_claim_device,
 };

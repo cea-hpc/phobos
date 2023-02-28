@@ -1149,12 +1149,17 @@ lock_race_retry:
                 continue;
 
         /* already loaded and in use ? */
-        dev_ref = io_sched_search_in_use_medium(io_sched, curr->rsc.id.name,
-                                                &sched_ready);
+        dev_ref = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl,
+                                                    curr->rsc.id.name,
+                                                    &sched_ready);
         if (dev_ref)
             dev = *dev_ref;
 
-        if (dev && !sched_ready) {
+        if (dev && (!sched_ready ||
+                    /* we cannot use a medium that doesn't belong to the write
+                     * I/O scheduler.
+                     */
+                    !(dev->ld_io_request_type & io_sched->type))) {
             pho_debug("Skipping device '%s', already in use",
                       dev->ld_dss_dev_info->rsc.id.name);
             continue;

@@ -51,6 +51,11 @@ struct lrs_dev **io_sched_search_in_use_medium(struct io_scheduler *io_sched,
                                                const char *name,
                                                bool *sched_ready);
 
+struct lrs_dev **
+io_sched_hdl_search_in_use_medium(struct io_sched_handle *io_sched_hdl,
+                                  const char *name,
+                                  bool *sched_ready);
+
 struct lrs_dev **io_sched_search_loaded_medium(struct io_scheduler *io_sched,
                                                const char *name);
 

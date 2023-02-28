@@ -229,6 +229,75 @@ int io_sched_remove_device(struct io_sched_handle *io_sched_hdl,
     return rc;
 }
 
+static struct io_scheduler *
+io_type2scheduler(struct io_sched_handle *io_sched_hdl,
+                  enum io_request_type type)
+{
+    switch (type) {
+    case IO_REQ_READ:
+        return &io_sched_hdl->read;
+    case IO_REQ_WRITE:
+        return &io_sched_hdl->write;
+    case IO_REQ_FORMAT:
+        return &io_sched_hdl->format;
+    }
+
+    /* unreachable */
+    return NULL;
+}
+
+int io_sched_claim_device(struct io_scheduler *io_sched,
+                          enum io_sched_claim_device_type type,
+                          union io_sched_claim_device_args *args)
+{
+    struct io_scheduler *target_sched;
+    enum io_request_type target_type;
+    struct lrs_dev *tmp;
+    int rc;
+
+    switch (type) {
+    case IO_SCHED_BORROW:
+        target_type = args->borrow.dev->ld_io_request_type;
+        /* A scheduler must not claim a device it owns. Also, that device cannot
+         * be shared between schedulers.
+         */
+        assert(!(io_sched->type & target_type) &&
+               __builtin_popcount(IO_REQ_ALL & target_type) == 1);
+        break;
+    case IO_SCHED_EXCHANGE:
+        target_type = args->exchange.desired_device->ld_io_request_type;
+        /* A scheduler must not claim a device it owns. Also, that device cannot
+         * be shared between schedulers.
+         */
+        assert(!(io_sched->type & target_type) &&
+               __builtin_popcount(IO_REQ_ALL & target_type) == 1);
+        break;
+    case IO_SCHED_TAKE:
+        target_type = io_sched->type;
+        break;
+    default:
+        return -EINVAL;
+    }
+
+    target_sched = io_type2scheduler(io_sched->io_sched_hdl, target_type);
+    rc = target_sched->ops.claim_device(target_sched, type, args);
+
+    if (type != IO_SCHED_EXCHANGE)
+        return rc;
+
+    if (args->exchange.desired_device->ld_io_request_type & target_sched->type)
+        /* The device still belongs to target_sched. It means that target_sched
+         * is still using it. Return now and try again later.
+         */
+        return rc;
+
+    tmp = args->exchange.desired_device;
+    args->exchange.desired_device = args->exchange.unused_device;
+    args->exchange.unused_device = tmp;
+
+    return io_sched->ops.claim_device(io_sched, type, args);
+}
+
 static enum io_schedulers str2io_sched(const char *value)
 {
     if (!strcmp(value, "fifo"))
@@ -356,6 +425,10 @@ int io_sched_handle_load_from_config(struct io_sched_handle *io_sched_hdl,
                                      enum rsc_family family)
 {
     int rc;
+
+    io_sched_hdl->read.type = IO_REQ_READ;
+    io_sched_hdl->write.type = IO_REQ_WRITE;
+    io_sched_hdl->format.type = IO_REQ_FORMAT;
 
     rc = get_io_sched(io_sched_hdl, family, IO_REQ_READ);
     if (rc)

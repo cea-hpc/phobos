@@ -1343,7 +1343,8 @@ static void io_sched_eagain(void **data)
 
 static int set_schedulers(const char *read_algo,
                           const char *write_algo,
-                          const char *format_algo)
+                          const char *format_algo,
+                          const char *dispatch_algo)
 {
     int rc;
 
@@ -1356,6 +1357,10 @@ static int set_schedulers(const char *read_algo,
         return rc;
 
     rc = setenv("PHOBOS_IO_SCHED_TAPE_format_algo", format_algo, 1);
+    if (rc)
+        return rc;
+
+    rc = setenv("PHOBOS_IO_SCHED_TAPE_dispatch_algo", dispatch_algo, 1);
     if (rc)
         return rc;
 
@@ -1895,6 +1900,69 @@ static void fair_share_one_non_shared_device_before_add_shared(void **data)
     cleanup_devices(io_sched_hdl, devices);
 }
 
+static void io_sched_exchange_device(void **data)
+{
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
+    union io_sched_claim_device_args args;
+    struct lrs_dev *write_device;
+    struct lrs_dev *read_device;
+    struct lrs_dev devices[3];
+    GPtrArray *device_array;
+    int rc;
+
+    device_array = g_ptr_array_new();
+
+    create_device(&devices[0], "D1", LTO5_MODEL);
+    create_device(&devices[1], "D2", LTO5_MODEL);
+    create_device(&devices[2], "D3", LTO5_MODEL);
+    gptr_array_from_list(device_array, &devices, 3, sizeof(*devices));
+
+    io_sched->io_stats.nb_reads = 1;
+    io_sched->io_stats.nb_writes = 1;
+    io_sched->io_stats.nb_formats = 1;
+
+    rc = io_sched_dispatch_devices(io_sched, device_array);
+    assert_return_code(rc, -rc);
+    assert_int_equal(io_sched->read.devices->len, 1);
+    assert_int_equal(io_sched->write.devices->len, 1);
+    assert_int_equal(io_sched->format.devices->len, 1);
+
+    args.exchange.unused_device =
+        *io_sched->read.ops.get_device(&io_sched->read, 0);
+    args.exchange.desired_device =
+        *io_sched->write.ops.get_device(&io_sched->write, 0);
+    read_device = args.exchange.unused_device;
+    write_device = args.exchange.desired_device;
+
+    assert_ptr_not_equal(read_device, write_device);
+
+    /* In this scenario, the read scheduler wants to use the device of the write
+     * scheduler and offers one device in exchange.
+     */
+    rc = io_sched_claim_device(&io_sched->read, IO_SCHED_EXCHANGE, &args);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(io_sched->read.devices->len, 1);
+    assert_int_equal(io_sched->write.devices->len, 1);
+
+    assert_ptr_equal(read_device,
+                     *io_sched->write.ops.get_device(&io_sched->write, 0));
+    assert_ptr_equal(write_device,
+                     *io_sched->read.ops.get_device(&io_sched->read, 0));
+
+    /* the devices have been swaped */
+    assert_int_equal(write_device->ld_io_request_type, IO_REQ_READ);
+    assert_int_equal(read_device->ld_io_request_type, IO_REQ_WRITE);
+
+    io_sched_remove_all_devices(device_array, &io_sched->read, IO_REQ_READ);
+    io_sched_remove_all_devices(device_array, &io_sched->write, IO_REQ_WRITE);
+    io_sched_remove_all_devices(device_array, &io_sched->format, IO_REQ_FORMAT);
+
+    cleanup_device(&devices[0]);
+    cleanup_device(&devices[1]);
+    cleanup_device(&devices[2]);
+}
+
 int main(void)
 {
     const struct CMUnitTest test_dev_picker[] = {
@@ -1936,6 +2004,9 @@ int main(void)
         cmocka_unit_test(fair_share_one_shared_device_before_add),
         cmocka_unit_test(fair_share_one_non_shared_device_before_add_shared),
     };
+    const struct CMUnitTest test_device_exchange[] = {
+        cmocka_unit_test(io_sched_exchange_device),
+    };
     int error_count;
     int rc;
 
@@ -1951,7 +2022,7 @@ int main(void)
 
     error_count = cmocka_run_group_tests(test_dev_picker, NULL, NULL);
 
-    check_rc(set_schedulers("fifo", "fifo", "fifo"));
+    check_rc(set_schedulers("fifo", "fifo", "fifo", "none"));
 
     IO_REQ_TYPE = IO_REQ_FORMAT;
     pho_info("Starting I/O scheduler test for FORMAT requests");
@@ -1971,7 +2042,7 @@ int main(void)
                                           io_sched_setup,
                                           io_sched_teardown);
 
-    check_rc(set_schedulers("grouped_read", "fifo", "fifo"));
+    check_rc(set_schedulers("grouped_read", "fifo", "fifo", "none"));
     check_rc(set_fair_share_minmax("LTO5", "0,0,0", "100,100,100"));
     check_rc(set_fair_share_minmax("LTO6", "0,0,0", "100,100,100"));
     check_rc(set_fair_share_minmax("LTO7", "0,0,0", "100,100,100"));
@@ -1987,6 +2058,16 @@ int main(void)
     check_rc(setenv("PHOBOS_TAPE_MODEL_supported_list", "LTO5,LTO6,LTO7", 1));
 
     error_count += cmocka_run_group_tests(test_fair_share,
+                                          io_sched_setup,
+                                          io_sched_teardown);
+
+    check_rc(set_schedulers("fifo", "fifo", "fifo", "fair_share"));
+    error_count += cmocka_run_group_tests(test_device_exchange,
+                                          io_sched_setup,
+                                          io_sched_teardown);
+
+    check_rc(set_schedulers("grouped_read", "fifo", "fifo", "fair_share"));
+    error_count += cmocka_run_group_tests(test_device_exchange,
                                           io_sched_setup,
                                           io_sched_teardown);
 

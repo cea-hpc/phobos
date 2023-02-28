@@ -73,15 +73,20 @@ static int take_devices(struct io_scheduler *io_sched,
         return 0;
 
     while (current_nb_devices > target_nb_devices) {
+        union io_sched_claim_device_args args;
         struct lrs_dev *device;
         bool is_shared;
         int rc;
 
-        rc = io_sched->ops.reclaim_device(io_sched, technology, &device);
+        args.take.technology = technology;
+
+        rc = io_sched_claim_device(io_sched, IO_SCHED_TAKE, &args);
         if (rc == -ENODEV)
             /* the scheduler may not have a device of this technology to return
              */
             break;
+
+        device = args.take.device;
 
         if (rc)
             return rc;
@@ -604,7 +609,8 @@ static int cfg_technology_get_range(enum rsc_family family,
 
     rc = pho_cfg_get_val(section, key, value);
     if (rc)
-        goto free_key;
+        LOG_GOTO(free_key, rc, "Failed to retrieve '%s' from configuration",
+                 key);
 
 free_key:
     free(key);
@@ -791,11 +797,22 @@ int fair_share_number_of_requests(struct io_sched_handle *io_sched_hdl,
         struct lrs_dev *dev = g_ptr_array_index(devices, i);
         struct device_list *current_dev_list;
 
+        if (!dev->ld_technology)
+            /* The initialization of ld_technology may fail when the device
+             * is created. In this case, just ignore the device.
+             */
+            continue;
+
         if (!techno_of_previous_device ||
             strcmp(techno_of_previous_device, dev->ld_technology)) {
             struct device_list device_list;
 
             rc = device_list_init(&device_list, dev);
+            if (rc == -ENODATA)
+                LOG_GOTO(free_device_list, rc = 0,
+                         "Failed to initialize device list for technology '%s'",
+                         dev->ld_technology);
+
             if (rc)
                 goto free_device_list;
 
@@ -924,7 +941,6 @@ fair_share_number_of_requests_one_techno(struct io_sched_handle *io_sched_hdl,
     }
 
 free_devices:
-
     g_ptr_array_free(devices_to_give, TRUE);
 
     return rc;
