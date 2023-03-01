@@ -174,12 +174,13 @@ static int scsi_move_timeout_ms(void)
 
 int scsi_mode_sense(int fd, struct mode_sense_info *info)
 {
+    struct mode_sense_result_EAAP *res_element_addr;
+    unsigned char buffer[MODE_SENSE_BUFF_LEN] = "";
     struct mode_sense_result_header *res_hdr;
-    struct mode_sense_result_EAAP   *res_element_addr;
-    struct scsi_req_sense            error = {0};
-    struct mode_sense_cdb            req = {0};
-    unsigned char                    buffer[MODE_SENSE_BUFF_LEN] = "";
-    int                              rc;
+    struct scsi_req_sense error = {0};
+    struct scsi_error scsi_err = {0};
+    struct mode_sense_cdb req = {0};
+    int rc;
 
     if (!info)
         return -EINVAL;
@@ -193,7 +194,7 @@ int scsi_mode_sense(int fd, struct mode_sense_info *info)
     req.allocation_length = MODE_SENSE_BUFF_LEN;
     /* all other fields are zeroed */
 
-    PHO_RETRY_LOOP(rc, scsi_retry_func, NULL, scsi_retry_count(),
+    PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
                    scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), buffer, sizeof(buffer),
                    scsi_query_timeout_ms());
@@ -341,16 +342,17 @@ static int _scsi_element_status(int fd, enum element_type_code type,
                         enum elem_status_flags flags,
                         struct element_status *elmt_list, int *elmt_count)
 {
-    struct read_status_cdb        req = {0};
     struct element_status_header *res_hdr;
-    struct                        scsi_req_sense error = {0};
-    unsigned char                *buffer = NULL;
-    int                           len = 0;
-    int                           rc, i;
-    int                           curr_index;
-    int                           byte_count;
-    unsigned char                *curr;
-    int                           count;
+    struct scsi_req_sense error = {0};
+    struct scsi_error scsi_err = {0};
+    struct read_status_cdb req = {0};
+    unsigned char *buffer = NULL;
+    unsigned char *curr;
+    int curr_index;
+    int byte_count;
+    int len = 0;
+    int rc, i;
+    int count;
 
     assert(elmt_list != NULL);
     assert(elmt_count != NULL);
@@ -376,7 +378,7 @@ static int _scsi_element_status(int fd, enum element_type_code type,
     req.dvcid = !!(flags & ESF_GET_DRV_ID); /* query device identifier */
     htobe24(len, req.alloc_length);
 
-    PHO_RETRY_LOOP(rc, scsi_retry_func, NULL, scsi_retry_count(),
+    PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
                    scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), buffer, len,
                    scsi_query_timeout_ms());
@@ -525,8 +527,9 @@ void element_status_list_free(struct element_status *elmt_list)
 int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
                      uint16_t tgt_addr)
 {
+    struct scsi_req_sense error = {0};
     struct move_medium_cdb req = {0};
-    struct scsi_req_sense  error = {0};
+    struct scsi_error scsi_err = {0};
     int rc;
 
     pho_debug("scsi_execute: MOVE_MEDIUM, arm_addr=%#hx, src_addr=%#hx, "
@@ -537,7 +540,7 @@ int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
     req.source_address = htobe16(src_addr);
     req.destination_address = htobe16(tgt_addr);
 
-    PHO_RETRY_LOOP(rc, scsi_retry_func, NULL, scsi_retry_count(),
+    PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
                    scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), NULL, 0,
                    scsi_move_timeout_ms());
@@ -557,9 +560,9 @@ static inline bool scsi_immediate_retry(int rc)
 }
 
 void scsi_retry_func(const char *fnname, int rc, int *retry_cnt,
-                     void *context)
+                     struct scsi_error *err)
 {
-    int delay;
+    int delay = 0;
 
     (*retry_cnt)--;
     if ((*retry_cnt) < 0) {
@@ -568,22 +571,28 @@ void scsi_retry_func(const char *fnname, int rc, int *retry_cnt,
         return;
     }
 
-    if (scsi_immediate_retry(rc)) {
+    switch (err->status) {
+    case SCSI_FATAL_ERROR:
+        /* non-retriable error: exit retry loop */
+        pho_error(err->rc, "%s failed.", fnname);
+        *retry_cnt = -1;
+        break;
+    case SCSI_SUCCESS:
+        /* success: exit retry loop */
+        *retry_cnt = -1;
+        break;
+    case SCSI_RETRY_SHORT:
         /* short retry */
         delay = scsi_retry_short();
-        pho_error(rc, "%s failed: retry in %d sec...",
-                  fnname, delay);
-        sleep(delay);
-    } else if (scsi_delayed_retry(rc)) {
-        delay = scsi_retry_long();
+        break;
+    case SCSI_RETRY_LONG:
         /* longer retry delay */
-        pho_error(rc, "%s failed: retry in %d sec...",
-                  fnname, delay);
+        delay = scsi_retry_long();
+        break;
+    }
+
+    if (delay) {
+        pho_error(err->rc, "%s failed: retry in %d sec...", fnname, delay);
         sleep(delay);
-    } else {
-        if (rc)
-            pho_error(rc, "%s failed.", fnname);
-        /* success or non-retriable error: exit retry loop */
-        *retry_cnt = -1;
     }
 }

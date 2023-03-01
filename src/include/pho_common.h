@@ -253,7 +253,7 @@ typedef void(*retry_func_t)(const char *fnname, int rc, int *retry_cnt,
     do {                                         \
         int retry = (_retry_cnt);                \
         do {                                     \
-            (_rc) = (_call_func)(__VA_ARGS__);   \
+            (_rc) = (_call_func)((_udata), ##__VA_ARGS__);   \
             (_retry_func)(#_call_func, (_rc), &retry, (_udata)); \
         } while (retry >= 0);                    \
     } while (0)

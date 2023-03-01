@@ -256,40 +256,48 @@ static void test_lib_scan(bool use_admin_function)
 }
 
 static int val;
-static int incr_val1(void)
+static int incr_val1(struct scsi_error *err)
 {
     switch (val++) {
     case 0:
         /* short retry */
-        return -EAGAIN;
+        err->status = SCSI_RETRY_SHORT;
+        err->rc = -EAGAIN;
+        break;
     case 1:
         /* longer retry */
-        return -EBUSY;
+        err->status = SCSI_RETRY_LONG;
+        err->rc = -EBUSY;
+        break;
     case 2:
         /* no error */
-        return 0;
+        err->status = SCSI_SUCCESS;
+        err->rc = 0;
+        break;
     default:
         /* no later retry */
         exit(EXIT_FAILURE);
     }
 }
 
-static int incr_val2(void)
+static int incr_val2(struct scsi_error *err)
 {
     /* all retries fail */
     val++;
-    return -EAGAIN;
+    err->status = SCSI_RETRY_SHORT;
+    err->rc = -EAGAIN;
 }
 
 static int test1(void *hint)
 {
+    struct scsi_error err = {0};
     int rc;
 
     /* test retry loop */
     val = 0;
-    PHO_RETRY_LOOP(rc, scsi_retry_func, NULL, 5, incr_val1);
+    PHO_RETRY_LOOP(rc, scsi_retry_func, &err, 5, incr_val1);
     /* rc should be 0 */
-    if (rc != 0) {
+    if (err.rc != 0) {
         fprintf(stderr, "1) rc should be 0\n");
         return -1;
     }
@@ -303,11 +311,12 @@ static int test1(void *hint)
 
 static int test2(void *hint)
 {
+    struct scsi_error err = {0};
     int rc;
 
     val = 0;
-    PHO_RETRY_LOOP(rc, scsi_retry_func, NULL, 3, incr_val2);
-    if (rc != -EAGAIN) {
+    PHO_RETRY_LOOP(rc, scsi_retry_func, &err, 3, incr_val2);
+    if (err.rc != -EAGAIN) {
         fprintf(stderr, "3) rc should be -EAGAIN\n");
         return -1;
     }

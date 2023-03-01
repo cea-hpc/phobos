@@ -139,6 +139,6 @@ int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
 
 /** function to handle scsi error codes in a PHO_RETRY_LOOP */
 void scsi_retry_func(const char *fnname, int rc, int *retry_cnt,
-                     void *context);
+                     struct scsi_error *err);
 
 #endif

@@ -52,76 +52,151 @@ static inline int scsi_dir2sg(enum scsi_direction direction)
 }
 
 /** Convert SCSI host_status to -errno code */
-static int scsi_host_status2errno(uint16_t host_status)
+static void fill_host_status_scsi_error(uint16_t host_status,
+                                        struct scsi_error *err)
 {
     switch (host_status) {
-    case SG_LIB_DID_OK:           return 0;
-    case SG_LIB_DID_NO_CONNECT:   return -ECONNABORTED;
-    case SG_LIB_DID_BUS_BUSY:     return -EBUSY;
-    case SG_LIB_DID_TIME_OUT:     return -ETIMEDOUT;
-    case SG_LIB_DID_BAD_TARGET:   return -EINVAL;
-    case SG_LIB_DID_ABORT:        return -ECANCELED;
-    case SG_LIB_DID_PARITY:       return -EIO;
-    case SG_LIB_DID_ERROR:        return -EIO;
-    case SG_LIB_DID_RESET:        return -ECANCELED;
-    case SG_LIB_DID_BAD_INTR:     return -EINTR;
-    case SG_LIB_DID_PASSTHROUGH:  return -EIO; /* ? */
-    case SG_LIB_DID_SOFT_ERROR:   return -EAGAIN;
-    case SG_LIB_DID_IMM_RETRY:    return -EAGAIN; /* retry immediately */
-    case SG_LIB_DID_REQUEUE:      return -EBUSY;  /* need retry after a while */
-    default:                      return -EIO;
+    case SG_LIB_DID_OK:
+        err->status = SCSI_SUCCESS;
+        err->rc = 0;
+        break;
+
+    case SG_LIB_DID_NO_CONNECT:
+        err->status = SCSI_FATAL_ERROR;
+        err->rc = -ECONNABORTED;
+        break;
+
+    case SG_LIB_DID_TIME_OUT:
+        err->status = SCSI_RETRY_LONG;
+        err->rc = -ETIMEDOUT;
+        break;
+
+    case SG_LIB_DID_BAD_TARGET:
+        err->status = SCSI_FATAL_ERROR;
+        err->rc = -EINVAL;
+        break;
+
+    case SG_LIB_DID_ABORT:
+    case SG_LIB_DID_RESET:
+        err->status = SCSI_FATAL_ERROR;
+        err->rc = -ECANCELED;
+        break;
+
+    case SG_LIB_DID_BAD_INTR:
+        err->status = SCSI_RETRY_SHORT;
+        err->rc = -EINTR;
+        break;
+
+    case SG_LIB_DID_SOFT_ERROR:
+    case SG_LIB_DID_IMM_RETRY:
+        /* retry immediately */
+        err->status = SCSI_RETRY_SHORT;
+        err->rc = -EAGAIN;
+        break;
+
+    case SG_LIB_DID_BUS_BUSY:
+    case SG_LIB_DID_REQUEUE:
+        /* need retry after a while */
+        err->status = SCSI_RETRY_LONG;
+        err->rc = -EBUSY;
+        break;
+
+    case SG_LIB_DID_PARITY:
+    case SG_LIB_DID_ERROR:
+    case SG_LIB_DID_PASSTHROUGH:  /* ? */
+    default:
+        err->status = SCSI_RETRY_LONG;
+        err->rc = -EIO;
     }
 }
 
-/** Convert Sense Key to -errno code */
-static int scsi_sense_key2errno(uint8_t sense_key)
+/** Convert SCSI request errors to -errno code, check
+ * https://www.ibm.com/support/pages/sites/default/files/inline-files/%24FILE/SC27-4641-00_1.pdf
+ * for more information.
+ */
+static void fill_sense_key_scsi_error(struct scsi_req_sense *sbp,
+                                      struct scsi_error *err)
 {
-    switch (sense_key) {
-    case  SPC_SK_NO_SENSE:
-        return 0;
+    switch (sbp->sense_key) {
+    case SPC_SK_NO_SENSE:
+        err->status = SCSI_SUCCESS;
+        err->rc = 0;
+        break;
 
-    case  SPC_SK_RECOVERED_ERROR:
-    case  SPC_SK_UNIT_ATTENTION:
-        return -EAGAIN;
+    case SPC_SK_RECOVERED_ERROR:
+    case SPC_SK_UNIT_ATTENTION:
+        err->status = SCSI_RETRY_SHORT;
+        err->rc = -EAGAIN;
+        break;
 
-    case  SPC_SK_NOT_READY:
-        return -EBUSY;
+    case SPC_SK_NOT_READY:
+        switch (sbp->additional_sense_code) {
+        case 0x4:
+            switch (sbp->additional_sense_code_qualifier) {
+            /* In progress, almost ready, for example, scanning magazines */
+            case 0x1:
+                err->status = SCSI_RETRY_SHORT;
+                err->rc = -EBUSY;
+                break;
+            /* All other errors: cause not reportable, offline, ... */
+            default:
+                err->status = SCSI_RETRY_LONG;
+                err->rc = -EIO;
+            }
+            return;
+        default:
+            err->status = SCSI_RETRY_LONG;
+            err->rc = -EIO;
+        }
+        break;
 
-    case  SPC_SK_ILLEGAL_REQUEST:
-        return -EINVAL;
+    case SPC_SK_ILLEGAL_REQUEST:
+        err->status = SCSI_FATAL_ERROR;
+        err->rc = -EINVAL;
+        break;
 
-    case  SPC_SK_DATA_PROTECT:
-        return -EPERM;
+    case SPC_SK_DATA_PROTECT:
+        err->status = SCSI_FATAL_ERROR;
+        err->rc = -EPERM;
+        break;
 
-    case  SPC_SK_BLANK_CHECK:
-    case  SPC_SK_COPY_ABORTED:
-    case  SPC_SK_ABORTED_COMMAND:
-    case  SPC_SK_VOLUME_OVERFLOW:
-    case  SPC_SK_MISCOMPARE:
-    case  SPC_SK_MEDIUM_ERROR:
-    case  SPC_SK_HARDWARE_ERROR:
+    case SPC_SK_BLANK_CHECK:
+    case SPC_SK_COPY_ABORTED:
+    case SPC_SK_ABORTED_COMMAND:
+    case SPC_SK_VOLUME_OVERFLOW:
+    case SPC_SK_MISCOMPARE:
+    case SPC_SK_MEDIUM_ERROR:
+    case SPC_SK_HARDWARE_ERROR:
     default:
-        return -EIO;
+        err->status = SCSI_RETRY_LONG;
+        err->rc = -EIO;
     }
 }
 
 /** Convert SCSI masked_status to -errno code */
-static int scsi_masked_status2errno(uint8_t masked_status)
+static void fill_masked_status_scsi_error(uint8_t masked_status,
+                                          struct scsi_error *err)
 {
     switch (masked_status) {
     case GOOD:
     case CONDITION_GOOD:
     case INTERMEDIATE_GOOD:
     case INTERMEDIATE_C_GOOD:
-        return 0;
+        err->status = SCSI_SUCCESS;
+        err->rc = 0;
+        break;
     case BUSY:
     case RESERVATION_CONFLICT:
     case QUEUE_FULL:
-        return -EBUSY;
+        err->status = SCSI_RETRY_LONG;
+        err->rc = -EBUSY;
+        break;
     case COMMAND_TERMINATED:
     case CHECK_CONDITION:
     default:
-        return -EIO;
+        err->status = SCSI_RETRY_LONG;
+        err->rc = -EIO;
+        break;
     }
 }
 
@@ -159,10 +234,9 @@ static void scsi_error_trace(const struct sg_io_hdr *hdr)
                 sbp->additional_sense_code_qualifier, sizeof(msg), msg));
 }
 
-int scsi_execute(int fd, enum scsi_direction direction,
-                 unsigned char *cdb, int cdb_len,
-                 struct scsi_req_sense *sbp, int sb_len,
-                 void *dxferp, int dxfer_len,
+int scsi_execute(struct scsi_error *err, int fd, enum scsi_direction direction,
+                 unsigned char *cdb, int cdb_len, struct scsi_req_sense *sbp,
+                 int sb_len, void *dxferp, int dxfer_len,
                  unsigned int timeout_msec)
 {
     struct sg_io_hdr hdr = {0};
@@ -181,28 +255,33 @@ int scsi_execute(int fd, enum scsi_direction direction,
     /* hdr.flags = 0: default */
 
     rc = ioctl(fd, SG_IO, &hdr);
-    if (rc)
+    if (rc) {
+        err->rc = -errno;
+        err->status = SCSI_FATAL_ERROR;
         LOG_RETURN(rc = -errno, "ioctl() failed");
+    }
 
     if (scsi_error_check(&hdr))
         scsi_error_trace(&hdr);
 
     if (hdr.masked_status == CHECK_CONDITION) {
         /* check sense_key value */
-        rc = scsi_sense_key2errno(sbp->sense_key);
-        if (rc)
-            LOG_RETURN(rc, "Sense key %#hhx (converted to %d)", sbp->sense_key,
-                       rc);
+        fill_sense_key_scsi_error(sbp, err);
+        if (err->rc)
+            LOG_RETURN(err->rc,
+                       "Sense key %#hhx (converted to %d)", sbp->sense_key,
+                       err->rc);
     } else {
-        rc = scsi_masked_status2errno(hdr.masked_status);
-        if (rc)
-            LOG_RETURN(rc, "SCSI error %#hhx (converted to %d)",
-                       hdr.masked_status, rc);
+        fill_masked_status_scsi_error(hdr.masked_status, err);
+        if (err->rc)
+            LOG_RETURN(err->rc, "SCSI error %#hhx (converted to %d)",
+                       hdr.masked_status, err->rc);
     }
 
-    rc = scsi_host_status2errno(hdr.host_status);
-    if (rc)
-        LOG_RETURN(rc, "Adapter error %#hx (converted to %d)", hdr.host_status,
-                   rc);
+    fill_host_status_scsi_error(hdr.host_status, err);
+    if (err->rc)
+        LOG_RETURN(err->rc,
+                   "Adapter error %#hx (converted to %d)", hdr.host_status,
+                   err->rc);
     return 0;
 }

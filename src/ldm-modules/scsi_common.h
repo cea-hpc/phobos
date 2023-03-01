@@ -255,6 +255,18 @@ enum scsi_direction {
     SCSI_PUT
 };
 
+enum scsi_error_status {
+    SCSI_SUCCESS,
+    SCSI_FATAL_ERROR,
+    SCSI_RETRY_SHORT,
+    SCSI_RETRY_LONG,
+};
+
+struct scsi_error {
+    enum scsi_error_status status;
+    int rc;
+};
+
 /**
  * Execute a SCSI command.
  * @param fd           File descriptor to the device.
@@ -263,7 +275,7 @@ enum scsi_direction {
  * @param dxferp       Transfer buffer.
  * @param timeout_msec Timeout in milliseconds (MAX_UINT: no timeout).
  */
-int scsi_execute(int fd, enum scsi_direction direction,
+int scsi_execute(struct scsi_error *err, int fd, enum scsi_direction direction,
                  uint8_t *cdb, int cdb_len,
                  struct scsi_req_sense *sbp, int sb_len,
                  void *dxferp, int dxfer_len,
