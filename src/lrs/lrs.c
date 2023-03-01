@@ -576,6 +576,194 @@ static int init_request_container_param(struct req_container *reqc)
     return 0;
 }
 
+static int update_phys_spc_free(struct dss_handle *dss,
+                                struct media_info *dss_media_info,
+                                size_t written_size)
+{
+    if (written_size > 0) {
+        dss_media_info->stats.phys_spc_free -= written_size;
+        return dss_media_set(dss, dss_media_info, 1, DSS_SET_UPDATE,
+                             PHYS_SPC_FREE);
+    }
+
+    return 0;
+}
+
+static struct lrs_dev *
+search_loaded_medium(struct io_sched_handle *io_sched_hdl,
+                     const char *name)
+{
+    struct lrs_dev **dev;
+
+    dev = io_sched_search_loaded_medium(&io_sched_hdl->read, name);
+    if (dev)
+        return *dev;
+
+    dev = io_sched_search_loaded_medium(&io_sched_hdl->write, name);
+    if (dev)
+        return *dev;
+
+    dev = io_sched_search_loaded_medium(&io_sched_hdl->format, name);
+
+    if (dev)
+        return *dev;
+
+    return NULL;
+}
+
+/**
+ * Process release request
+ *
+ * This function takes ownership of the request.
+ * The request container is queued or freed by this call.
+ * If an error occurs, this function creates and queues the corresponding
+ * error message.
+ *
+ * The error code returned by this function stands for an error of the LRS
+ * daemon itself, not an error about the release request which is managed by
+ * an error message.
+ */
+static int process_release_request(struct lrs_sched *sched,
+                                   struct dss_handle *comm_dss,
+                                   struct req_container *reqc)
+{
+    int rc = 0;
+    size_t i;
+    int rc2;
+
+    /* for each nosync_medium */
+    for (i = 0; i < reqc->params.release.n_nosync_media; i++) {
+        struct lrs_dev *dev = NULL;
+
+        /* find the corresponding device */
+        dev = search_loaded_medium(&sched->io_sched_hdl,
+            reqc->params.release.nosync_media[i].medium.name);
+        if (!dev) {
+            pho_error(-ENODEV, "Unable to find loaded device of the medium '%s'"
+                               "not sync'ed",
+                      reqc->params.release.nosync_media[i].medium.name);
+            continue;
+        } else if (!dev_is_release_ready(dev)) {
+            pho_error(-ENODEV, "device '%s' is not running but contains a "
+                               "medium not sync'ed '%s'",
+                      dev->ld_dss_dev_info->rsc.id.name,
+                      reqc->params.release.nosync_media[i].medium.name);
+            continue;
+        }
+
+        /* update media phys_spc_free stats in advance, before next sync */
+        /**
+         * TODO: we save media status into DSS but we can also use local cached
+         * values.
+         *
+         * Many modifications are needed:
+         * - remove sched_load_dev_state from format/read/write
+         * - take into account current cached value for loaded media into
+         *   sched_select_medium
+         */
+        MUTEX_LOCK(&dev->ld_mutex);
+        rc2 = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,
+            reqc->params.release.nosync_media[i].written_size);
+        /* Acknowledgement of the request */
+        dev->ld_ongoing_io = false;
+        MUTEX_UNLOCK(&dev->ld_mutex);
+        if (rc2) {
+            pho_error(rc2, "Unable to update phys_spc_free");
+            /*
+             * TODO: returning a fatal error seems to much here,
+             * only the medium and the device should be failed
+             */
+            rc = rc ? : rc2;
+        }
+    }
+
+    if (!reqc->params.release.n_tosync_media) {
+        sched_req_free(reqc);
+        return rc;
+    }
+
+    /* for each tosync_medium */
+    for (i = 0; i < reqc->params.release.n_tosync_media; i++) {
+        struct lrs_dev *dev = NULL;
+        int result_rc;
+
+        /* find the corresponding device */
+        dev = search_loaded_medium(&sched->io_sched_hdl,
+            reqc->params.release.tosync_media[i].medium.name);
+
+        if (!dev) {
+            pho_error(-ENODEV, "Unable to find loaded device of the medium '%s'"
+                               "not sync'ed",
+                      reqc->params.release.tosync_media[i].medium.name);
+            result_rc = -ENODEV;
+        } else if (!dev_is_release_ready(dev)) {
+            pho_error(-ENODEV, "device '%s' is not running but contains the "
+                               "medium not sync'ed '%s'",
+                      dev->ld_dss_dev_info->rsc.id.name,
+                      reqc->params.release.tosync_media[i].medium.name);
+            result_rc = -ENODEV;
+        } else {
+            /* update media phys_spc_free stats in advance, before next sync */
+            /**
+             * TODO: better to use a local cached value than always updating DSS
+             *
+             * Many modifications are needed:
+             * - remove sched_load_dev_state from format/read/write
+             * - take into account current cached value for loaded media into
+             *   sched_select_medium
+             */
+            MUTEX_LOCK(&dev->ld_mutex);
+            rc2 = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,
+                reqc->params.release.tosync_media[i].written_size);
+            /* Acknowledgement of the request */
+            dev->ld_ongoing_io = false;
+            MUTEX_UNLOCK(&dev->ld_mutex);
+            if (rc2) {
+                pho_error(rc2, "Unable to update phys_spc_free");
+                /*
+                 * TODO: returning a fatal error seems to much here,
+                 * only the medium and the device should be failed
+                 */
+                rc = rc ? : rc2;
+            }
+
+            /* Queue sync request */
+            result_rc = push_new_sync_to_device(dev, reqc, i);
+
+            if (result_rc)
+                rc = rc ? : result_rc;
+            else
+                continue;
+        }
+
+        /* manage error */
+        MUTEX_LOCK(&reqc->mutex);
+        reqc->params.release.rc = result_rc;
+        reqc->params.release.tosync_media[i].status = SUB_REQUEST_ERROR;
+        rc2 = queue_error_response(sched->response_queue,
+                                   reqc->params.release.rc,
+                                   reqc);
+        rc = rc ? : rc2;
+
+        if (i != 0) {
+            size_t j;
+
+            for (j = i + 1; j < reqc->params.release.n_tosync_media; j++)
+                reqc->params.release.tosync_media[j].status =
+                    SUB_REQUEST_CANCEL;
+        }
+
+        MUTEX_UNLOCK(&reqc->mutex);
+        if (i == 0)
+            /* never queued: we can free it */
+            sched_req_free(reqc);
+
+        break;
+    }
+
+    return rc;
+}
+
 /**
  * schedulers_to_signal is a bool array of length PHO_RSC_LAST, representing
  * every scheduler that could be signaled

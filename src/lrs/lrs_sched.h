@@ -323,22 +323,6 @@ void sched_fini(struct lrs_sched *sched);
 bool sched_has_running_devices(struct lrs_sched *sched);
 
 /**
- * Process release request
- *
- * This function takes ownership of the request.
- * The request container is queued or freed by this call.
- * If an error occurs, this function creates and queues the corresponding
- * error message.
- *
- * The error code returned by this function stands for an error of the LRS
- * daemon itself, not an error about the release request which is managed by
- * an error message.
- */
-int process_release_request(struct lrs_sched *sched,
-                            struct dss_handle *comm_dss,
-                            struct req_container *reqc);
-
-/**
  * Handle queued requests
  *
  * \param[in]       sched       The sched from which to handle requests
