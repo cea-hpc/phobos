@@ -35,7 +35,7 @@ endif
 
 TEST_EXTENSIONS=.sh
 TEST_EXTENSIONS+=.test
-TEST_LOG_DRIVER=$(TO_TEST)/test-driver
+TEST_LOG_DRIVER=$(TO_TEST)/test-driver.sh
 
 check_PROGRAMS=lrs_simple_client \
                medium_locker

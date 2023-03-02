@@ -28,7 +28,7 @@ endif
 
 TEST_EXTENSIONS=.sh
 TEST_EXTENSIONS+=.test
-TEST_LOG_DRIVER=$(TO_TEST)/test-driver
+TEST_LOG_DRIVER=$(TO_TEST)/test-driver.sh
 
 check_PROGRAMS=test_bad_comm \
                test_concurrency \
