@@ -25,6 +25,10 @@
 #ifndef _PHO_TYPES_H
 #define _PHO_TYPES_H
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 /* glib will be used to handle common structures (GList, GString, ...) */
 #include <glib.h>
 #include <limits.h>

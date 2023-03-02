@@ -157,12 +157,20 @@ struct lrs_dev {
          * have access to this device. Modified by
          * io_sched_handle::dispatch_devices.
          */
+    int                  ld_last_client_rc;     /**< last I/O error of a client
+                                                  *  sent on release.
+                                                  */
 };
 
 static inline bool dev_is_release_ready(struct lrs_dev *dev)
 {
     return dev && !thread_is_stopped(&dev->ld_device_thread);
 }
+
+bool is_request_tosync_ended(struct req_container *req);
+
+int queue_release_response(struct tsqueue *response_queue,
+                           struct req_container *reqc);
 
 static inline bool dev_is_sched_ready(struct lrs_dev *dev)
 {

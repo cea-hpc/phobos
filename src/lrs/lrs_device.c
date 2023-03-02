@@ -428,8 +428,8 @@ static int dev_wait_for_signal(struct lrs_dev *dev)
     return thread_signal_timed_wait(&dev->ld_device_thread, &time);
 }
 
-static int queue_release_response(struct tsqueue *response_queue,
-                                  struct req_container *reqc)
+int queue_release_response(struct tsqueue *response_queue,
+                           struct req_container *reqc)
 {
     struct tosync_medium *tosync_media = reqc->params.release.tosync_media;
     size_t n_tosync_media = reqc->params.release.n_tosync_media;
@@ -484,7 +484,7 @@ err:
 }
 
 /* This function MUST be called with a lock on \p req */
-static inline bool is_request_tosync_ended(struct req_container *req)
+bool is_request_tosync_ended(struct req_container *req)
 {
     size_t i;
 
@@ -582,6 +582,11 @@ static inline void update_oldest_tosync(struct timespec *oldest_to_update,
         *oldest_to_update = candidate;
 }
 
+static int tosync_rc(struct req_container *reqc, int index)
+{
+    return reqc->params.release.tosync_media[index].client_rc;
+}
+
 int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
                             size_t medium_index)
 {
@@ -596,11 +601,16 @@ int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
 
     req_tosync->reqc = reqc;
     req_tosync->medium_index = medium_index;
+
     MUTEX_LOCK(&dev->ld_mutex);
+    if (tosync_rc(reqc, medium_index) != 0)
+        dev->ld_last_client_rc = tosync_rc(reqc, medium_index);
+
     g_ptr_array_add(sync_params->tosync_array, req_tosync);
     sync_params->tosync_size +=
         reqc->params.release.tosync_media[medium_index].written_size;
     update_oldest_tosync(&sync_params->oldest_tosync, reqc->received_at);
+
     MUTEX_UNLOCK(&dev->ld_mutex);
 
     thread_signal(&dev->ld_device_thread);
@@ -701,6 +711,10 @@ static void check_needs_sync(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
     dev->ld_needs_sync |= (!running && sync_params->tosync_array->len > 0);
     dev->ld_needs_sync |= (thread_is_stopping(&dev->ld_device_thread) &&
                            sync_params->tosync_array->len > 0);
+    /* Trigger a sync on error. We won't do a sync but the status of the device
+     * and medium will be updated accordingly by dev_sync.
+     */
+    dev->ld_needs_sync |= (dev->ld_last_client_rc != 0);
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
@@ -795,16 +809,23 @@ static int lrs_dev_media_update(struct dss_handle *dss,
 static int dev_sync(struct lrs_dev *dev)
 {
     struct sync_params *sync_params = &dev->ld_sync_params;
+    int rc = 0;
     int rc2;
-    int rc;
 
-    /* sync operation */
     MUTEX_LOCK(&dev->ld_mutex);
-    rc = medium_sync(dev->ld_dss_media_info, dev->ld_mnt_path);
+
+    /* Do not sync on error as we don't know what happened on the tape. */
+    if (dev->ld_last_client_rc == 0)
+        rc = medium_sync(dev->ld_dss_media_info, dev->ld_mnt_path);
+    else
+        /* this will cause the device thread to stop */
+        rc = dev->ld_last_client_rc;
+
     rc2 = lrs_dev_media_update(&dev->ld_device_thread.dss,
                                dev->ld_dss_media_info,
                                sync_params->tosync_size, rc, dev->ld_mnt_path,
                                sync_params->tosync_array->len);
+    dev->ld_last_client_rc = 0;
 
     MUTEX_UNLOCK(&dev->ld_mutex);
     if (rc2) {

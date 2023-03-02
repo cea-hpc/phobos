@@ -121,6 +121,9 @@ struct tosync_medium {
     enum sub_request_status status; /**< Medium synchronization status. */
     struct pho_id medium;           /**< Medium ID. */
     size_t written_size;            /**< Written size on the medium to sync. */
+    int client_rc;                  /**< Error encontered by the client during
+                                      *  I/O.
+                                      */
 };
 
 /**

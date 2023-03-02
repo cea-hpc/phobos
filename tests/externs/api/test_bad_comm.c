@@ -32,8 +32,10 @@
 #include <sys/un.h>
 
 #include "pho_comm.h"
+#include "pho_dss.h"
 #include "pho_srl_lrs.h"
 #include "pho_test_utils.h"
+#include "pho_type_utils.h"
 
 static int _send_and_receive(struct pho_comm_info *ci, pho_req_t *req,
                              pho_resp_t **resp)
@@ -46,8 +48,10 @@ static int _send_and_receive(struct pho_comm_info *ci, pho_req_t *req,
 
     data_out = pho_comm_data_init(ci);
     assert(!pho_srl_request_pack(req, &data_out.buf));
-    pho_comm_send(&data_out);
+    rc = pho_comm_send(&data_out);
     free(data_out.buf.buff);
+    if (rc)
+        return rc;
 
     rc = pho_comm_recv(ci, &data_in, &n_data_in);
     if (rc || n_data_in != 1) {
@@ -132,6 +136,137 @@ out_fail:
     pho_srl_response_free(resp, true);
 
     return rc;
+}
+
+static int fetch_medium_info(struct media_info **medium,
+                             const struct pho_id *id)
+{
+    struct media_info *res = NULL;
+    struct dss_filter filter;
+    struct dss_handle dss;
+    int count = 0;
+
+    int rc;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::MDA::family\": \"%s\"},"
+                          "  {\"DSS::MDA::id\": \"%s\"}"
+                          "]}", rsc_family2str(id->family), id->name);
+    if (rc)
+        return rc;
+
+    rc = dss_init(&dss);
+    if (rc)
+        return rc;
+
+    rc = dss_media_get(&dss, &filter, &res, &count);
+    dss_filter_free(&filter);
+    dss_fini(&dss);
+    if (rc)
+        return rc;
+
+    assert(count == 1);
+
+    *medium = media_info_dup(res);
+    dss_res_free(res, count);
+
+    return 0;
+}
+
+static void fill_pho_id(struct pho_id *id, pho_resp_t *write_resp)
+{
+    assert(pho_response_is_write(write_resp));
+
+    id->family = write_resp->walloc->media[0]->med_id->family;
+    pho_id_name_set(id, write_resp->walloc->media[0]->med_id->name);
+}
+
+static int send_write_and_release_with_rc(struct pho_comm_info *ci,
+                                          int client_rc)
+{
+    struct media_info *current_info;
+    struct media_info *new_info;
+    int rc = PHO_TEST_SUCCESS;
+    size_t n_tags[1] = {0};
+    struct pho_id med_id;
+    pho_resp_t *resp;
+    size_t size = 1;
+    pho_req_t req;
+
+    // Bad resource family
+    assert(!pho_srl_request_write_alloc(&req, 1, n_tags));
+    req.id = 0;
+    req.walloc->family = PHO_RSC_DIR;
+    req.walloc->media[0]->size = size;
+    assert(!_send_and_receive(ci, &req, &resp));
+    if (!pho_response_is_write(resp))
+        GOTO(out, rc = PHO_TEST_FAILURE);
+
+    fill_pho_id(&med_id, resp);
+    rc = fetch_medium_info(&current_info, &med_id);
+    if (rc)
+        goto out;
+
+    pho_srl_request_free(&req, false);
+    assert(!pho_srl_request_release_alloc(&req, 1));
+    req.release->media[0]->med_id->family = PHO_RSC_DIR;
+    req.release->media[0]->med_id->name =
+        strdup(resp->walloc->media[0]->med_id->name);
+    req.release->media[0]->to_sync = true;
+    req.release->media[0]->size_written = size;
+    req.release->media[0]->rc = client_rc;
+
+    pho_srl_response_free(resp, true);
+    assert(!_send_and_receive(ci, &req, &resp));
+    rc = fetch_medium_info(&new_info, &med_id);
+    if (rc)
+        goto out;
+
+    if (client_rc == 0) {
+        if (current_info->stats.nb_obj + 1 != new_info->stats.nb_obj)
+            LOG_GOTO(out, rc = PHO_TEST_FAILURE,
+                     "Total number of objects was not increased by 1");
+
+    } else {
+        struct dss_handle dss;
+
+        dss_init(&dss);
+
+        if (new_info->rsc.adm_status != PHO_RSC_ADM_ST_FAILED)
+            LOG_GOTO(out, rc = PHO_TEST_FAILURE,
+                     "Medium is not set to failed after ENOSPC error");
+
+        if (current_info->stats.nb_obj != new_info->stats.nb_obj)
+            LOG_GOTO(out, rc = PHO_TEST_FAILURE,
+                     "Number of objects was increased but no object was "
+                     "written");
+
+        /* set the status back to make other tests pass */
+        new_info->rsc.adm_status = current_info->rsc.adm_status;
+        rc = dss_media_set(&dss, new_info, 1, DSS_SET_UPDATE, ADM_STATUS);
+        dss_fini(&dss);
+    }
+
+out:
+    pho_srl_request_free(&req, false);
+    pho_srl_response_free(resp, true);
+
+    media_info_free(current_info);
+    media_info_free(new_info);
+
+    return rc;
+}
+
+static int test_put_io_error(void *arg)
+{
+    int rc;
+
+    rc = send_write_and_release_with_rc(arg, 0);
+    if (rc)
+        return rc;
+
+    return send_write_and_release_with_rc(arg, -ENOSPC);
 }
 
 static int test_bad_mput(void *arg)
@@ -413,16 +548,23 @@ int main(int argc, char **argv)
     pho_context_init();
     atexit(pho_context_fini);
 
+    pho_cfg_init_local(NULL);
+    atexit(pho_cfg_local_fini);
+
     assert(!pho_comm_open(&ci, "/tmp/socklrs", false));
 
     run_test("Test: bad ping", test_bad_ping, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad put", test_bad_put, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad mput", test_bad_mput, &ci, PHO_TEST_SUCCESS);
+
     run_test("Test: bad get", test_bad_get, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad mget", test_bad_mget, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad release", test_bad_release, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad format", test_bad_format, &ci, PHO_TEST_SUCCESS);
+
     run_test("Test: bad notify", test_bad_notify, &ci, PHO_TEST_SUCCESS);
+    /* run last as the state of the device used is set to failed at the end */
+    run_test("Test: put I/O error", test_put_io_error, &ci, PHO_TEST_SUCCESS);
 
     pho_comm_close(&ci);
 }

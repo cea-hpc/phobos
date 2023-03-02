@@ -244,6 +244,7 @@ static int init_release_container(struct req_container *req_cont)
             tosync_media[tosync_media_index].medium.family =
                 (enum rsc_family)media->med_id->family;
             tosync_media[tosync_media_index].written_size = media->size_written;
+            tosync_media[tosync_media_index].client_rc = media->rc;
             rc = pho_id_name_set(&tosync_media[tosync_media_index].medium,
                                  media->med_id->name);
             if (rc)
@@ -611,6 +612,68 @@ search_loaded_medium(struct io_sched_handle *io_sched_hdl,
     return NULL;
 }
 
+static int release_medium(struct lrs_sched *sched,
+                          struct dss_handle *comm_dss,
+                          struct req_container *reqc,
+                          pho_req_release_elt_t *release,
+                          size_t medium_index,
+                          int *req_rc)
+{
+    struct lrs_dev *dev = NULL;
+    int rc = 0;
+
+    *req_rc = 0;
+
+    /* find the corresponding device */
+    dev = search_loaded_medium(&sched->io_sched_hdl, release->med_id->name);
+    if (!dev) {
+        *req_rc = -ENODEV;
+        pho_error(*req_rc,
+                  "Unable to find loaded device of the medium '%s' to release",
+                  release->med_id->name);
+        return 0;
+    } else if (!dev_is_release_ready(dev)) {
+        pho_error(0, /* Do not display a POSIX error in the logs, as it would
+                      * be confusing to see.
+                      */
+                  "device '%s' was stopped before the medium '%s' was "
+                  "released",
+                  dev->ld_dss_dev_info->rsc.id.name,
+                  release->med_id->name);
+        *req_rc = -ESHUTDOWN;
+        return 0;
+    }
+
+    /* update media phys_spc_free stats in advance, before next sync */
+    /**
+     * TODO: we can save media status into DSS but we can also use local cached
+     * values.
+     *
+     * Many modifications are needed:
+     * - remove sched_load_dev_state from format/read/write
+     * - take into account current cached value for loaded media into
+     *   sched_select_medium
+     */
+    MUTEX_LOCK(&dev->ld_mutex);
+    if (release->rc == 0)
+        rc = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,
+                                  release->size_written);
+
+    /* Acknowledgement of the request */
+    dev->ld_ongoing_io = false;
+    MUTEX_UNLOCK(&dev->ld_mutex);
+
+    if (release->to_sync) {
+        /* Queue sync request */
+        int rc2 = push_new_sync_to_device(dev, reqc, medium_index);
+
+        if (rc2)
+            rc = rc ? : rc2;
+    }
+
+    return rc;
+}
+
 /**
  * Process release request
  *
@@ -627,139 +690,58 @@ static int process_release_request(struct lrs_sched *sched,
                                    struct dss_handle *comm_dss,
                                    struct req_container *reqc)
 {
+    int release_index = -1;
+    int client_err = 0;
     int rc = 0;
     size_t i;
-    int rc2;
+    size_t j;
 
-    /* for each nosync_medium */
-    for (i = 0; i < reqc->params.release.n_nosync_media; i++) {
-        struct lrs_dev *dev = NULL;
+    for (i = 0; i < reqc->req->release->n_media; i++) {
+        pho_req_release_elt_t *release_elt = reqc->req->release->media[i];
+        int req_rc = 0;
 
-        /* find the corresponding device */
-        dev = search_loaded_medium(&sched->io_sched_hdl,
-            reqc->params.release.nosync_media[i].medium.name);
-        if (!dev) {
-            pho_error(-ENODEV, "Unable to find loaded device of the medium '%s'"
-                               "not sync'ed",
-                      reqc->params.release.nosync_media[i].medium.name);
-            continue;
-        } else if (!dev_is_release_ready(dev)) {
-            pho_error(-ENODEV, "device '%s' is not running but contains a "
-                               "medium not sync'ed '%s'",
-                      dev->ld_dss_dev_info->rsc.id.name,
-                      reqc->params.release.nosync_media[i].medium.name);
-            continue;
-        }
+        rc = release_medium(sched, comm_dss, reqc, release_elt,
+                             release_index + 1, &req_rc);
+        if (rc)
+            /* system error, stop */
+            break;
 
-        /* update media phys_spc_free stats in advance, before next sync */
-        /**
-         * TODO: we save media status into DSS but we can also use local cached
-         * values.
-         *
-         * Many modifications are needed:
-         * - remove sched_load_dev_state from format/read/write
-         * - take into account current cached value for loaded media into
-         *   sched_select_medium
-         */
-        MUTEX_LOCK(&dev->ld_mutex);
-        rc2 = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,
-            reqc->params.release.nosync_media[i].written_size);
-        /* Acknowledgement of the request */
-        dev->ld_ongoing_io = false;
-        MUTEX_UNLOCK(&dev->ld_mutex);
-        if (rc2) {
-            pho_error(rc2, "Unable to update phys_spc_free");
-            /*
-             * TODO: returning a fatal error seems to much here,
-             * only the medium and the device should be failed
-             */
-            rc = rc ? : rc2;
+        if (release_elt->to_sync && !client_err) {
+            client_err = req_rc;
+            release_index++; /* index of first error */
         }
     }
 
-    if (!reqc->params.release.n_tosync_media) {
+    if (!rc && !client_err)
+        return 0;
+
+    if (reqc->params.release.n_tosync_media == 0) {
+        /* the client will not wait for the reponse, do not send one */
         sched_req_free(reqc);
         return rc;
     }
 
-    /* for each tosync_medium */
-    for (i = 0; i < reqc->params.release.n_tosync_media; i++) {
-        struct lrs_dev *dev = NULL;
-        int result_rc;
+    /* send error to client */
+    MUTEX_LOCK(&reqc->mutex);
+    reqc->params.release.rc = rc ? : client_err;
+    reqc->params.release.tosync_media[release_index].status =
+        SUB_REQUEST_ERROR;
+    rc = queue_error_response(sched->response_queue,
+                              reqc->params.release.rc,
+                              reqc);
 
-        /* find the corresponding device */
-        dev = search_loaded_medium(&sched->io_sched_hdl,
-            reqc->params.release.tosync_media[i].medium.name);
+    for (j = 0; j < reqc->params.release.n_tosync_media; j++) {
+        if (j == release_index)
+            continue;
 
-        if (!dev) {
-            pho_error(-ENODEV, "Unable to find loaded device of the medium '%s'"
-                               "not sync'ed",
-                      reqc->params.release.tosync_media[i].medium.name);
-            result_rc = -ENODEV;
-        } else if (!dev_is_release_ready(dev)) {
-            pho_error(-ENODEV, "device '%s' is not running but contains the "
-                               "medium not sync'ed '%s'",
-                      dev->ld_dss_dev_info->rsc.id.name,
-                      reqc->params.release.tosync_media[i].medium.name);
-            result_rc = -ENODEV;
-        } else {
-            /* update media phys_spc_free stats in advance, before next sync */
-            /**
-             * TODO: better to use a local cached value than always updating DSS
-             *
-             * Many modifications are needed:
-             * - remove sched_load_dev_state from format/read/write
-             * - take into account current cached value for loaded media into
-             *   sched_select_medium
-             */
-            MUTEX_LOCK(&dev->ld_mutex);
-            rc2 = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,
-                reqc->params.release.tosync_media[i].written_size);
-            /* Acknowledgement of the request */
-            dev->ld_ongoing_io = false;
-            MUTEX_UNLOCK(&dev->ld_mutex);
-            if (rc2) {
-                pho_error(rc2, "Unable to update phys_spc_free");
-                /*
-                 * TODO: returning a fatal error seems to much here,
-                 * only the medium and the device should be failed
-                 */
-                rc = rc ? : rc2;
-            }
-
-            /* Queue sync request */
-            result_rc = push_new_sync_to_device(dev, reqc, i);
-
-            if (result_rc)
-                rc = rc ? : result_rc;
-            else
-                continue;
-        }
-
-        /* manage error */
-        MUTEX_LOCK(&reqc->mutex);
-        reqc->params.release.rc = result_rc;
-        reqc->params.release.tosync_media[i].status = SUB_REQUEST_ERROR;
-        rc2 = queue_error_response(sched->response_queue,
-                                   reqc->params.release.rc,
-                                   reqc);
-        rc = rc ? : rc2;
-
-        if (i != 0) {
-            size_t j;
-
-            for (j = i + 1; j < reqc->params.release.n_tosync_media; j++)
-                reqc->params.release.tosync_media[j].status =
-                    SUB_REQUEST_CANCEL;
-        }
-
-        MUTEX_UNLOCK(&reqc->mutex);
-        if (i == 0)
-            /* never queued: we can free it */
-            sched_req_free(reqc);
-
-        break;
+        reqc->params.release.tosync_media[j].status =
+            SUB_REQUEST_CANCEL;
     }
+
+    MUTEX_UNLOCK(&reqc->mutex);
+    if (release_index == 0)
+        /* never queued: we can free it */
+        sched_req_free(reqc);
 
     return rc;
 }

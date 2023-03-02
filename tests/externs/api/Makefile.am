@@ -62,7 +62,8 @@ endif
 TESTS=$(check_SCRIPTS)
 
 test_bad_comm_SOURCES=test_bad_comm.c
-test_bad_comm_LDADD=$(COMMON_LIB) $(COMMUNICATION_LIB) $(SERIALIZER_LIB)
+test_bad_comm_LDADD=$(DSS_LIB) $(CFG_LIB) $(COMMON_LIB) $(COMMUNICATION_LIB) \
+                    $(SERIALIZER_LIB)
 test_bad_comm_CFLAGS=-I$(TO_TEST)
 
 test_concurrency_SOURCES=test_concurrency.c
