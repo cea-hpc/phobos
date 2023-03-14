@@ -410,12 +410,17 @@ static int set_dispatch_algorithm(struct io_sched_handle *io_sched_hdl,
         return rc;
 
     if (!strcmp(value, "none")) {
+        /* TODO load next_request from the configuration. For now, the dispatch
+         * algo imposes the next_request one so this is fine.
+         */
+        io_sched_hdl->next_request = fifo_next_request;
         io_sched_hdl->dispatch_devices = no_dispatch;
     } else if (!strcmp(value, "fair_share")) {
         if (family != PHO_RSC_TAPE)
             LOG_RETURN(-EINVAL, "fair_share is only supported for tapes");
 
         io_sched_hdl->dispatch_devices = fair_share_number_of_requests;
+        io_sched_hdl->next_request = round_robin;
     }
 
     return 0;
@@ -445,9 +450,6 @@ int io_sched_handle_load_from_config(struct io_sched_handle *io_sched_hdl,
     rc = set_dispatch_algorithm(io_sched_hdl, family);
     if (rc)
         LOG_RETURN(rc, "Failed to read 'dispatch_algo' from config");
-
-    /* TODO load this from the configuration */
-    io_sched_hdl->next_request = fifo_next_request;
 
     return io_sched_init(io_sched_hdl);
 }

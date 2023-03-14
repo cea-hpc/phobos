@@ -62,3 +62,50 @@ struct req_container *fifo_next_request(struct io_sched_handle *io_sched_hdl,
             return format;
     }
 }
+
+static enum io_request_type
+next_scheduler(enum io_request_type current_scheduler)
+{
+    switch (current_scheduler) {
+    case IO_REQ_READ:
+        return IO_REQ_WRITE;
+    case IO_REQ_WRITE:
+        return IO_REQ_FORMAT;
+    case IO_REQ_FORMAT:
+        return IO_REQ_READ;
+    }
+
+    /* programming error */
+    assert(false);
+}
+
+struct req_container *round_robin(struct io_sched_handle *io_sched_hdl,
+                                  struct req_container *read,
+                                  struct req_container *write,
+                                  struct req_container *format)
+{
+    static __thread enum io_request_type current_scheduler = IO_REQ_READ;
+
+    if (!read && !write && !format)
+        return NULL;
+
+    if (current_scheduler == IO_REQ_READ) {
+        current_scheduler = next_scheduler(current_scheduler);
+        if (read)
+            return read;
+    }
+
+    if (current_scheduler == IO_REQ_WRITE) {
+        current_scheduler = next_scheduler(current_scheduler);
+        if (write)
+            return write;
+    }
+
+    if (current_scheduler == IO_REQ_FORMAT) {
+        current_scheduler = next_scheduler(current_scheduler);
+        if (format)
+            return format;
+    }
+
+    return NULL;
+}
