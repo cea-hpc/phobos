@@ -20,16 +20,11 @@
 #
 
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
-. $test_dir/../../utils.sh
-. $test_dir/../../utils_generation.sh
-
-set -xe
-
-export PHOBOS_LRS_lock_file="$test_dir/phobosd.lock"
-EVENT_FILE="$test_dir/test_daemon_scheduling_events"
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils.sh
+. $test_dir/utils_generation.sh
 
 function invoke_daemon_debug()
 {
@@ -42,12 +37,17 @@ function invoke_daemon_debug()
 
 function setup()
 {
+    export PHOBOS_LRS_lock_file="$test_dir/phobosd.lock"
+    EVENT_FILE="$test_dir/test_daemon_scheduling_events"
+
     setup_test_dirs
     rm -f "$PHOBOS_LRS_lock_file"
     setup_dummy_files 1
 
     setup_tables
     invoke_daemon_debug &
+    wait_for_daemon
+    last_read=$(now)
 }
 
 function cleanup()
@@ -185,14 +185,9 @@ function test_fair_share_conf_at_startup()
     drop_tables
 }
 
-# This test must be executed before the setup because it starts and stops the
-# daemon.
-test_fair_share_conf_at_startup
+TESTS=(
+    "test_fair_share_conf_at_startup"
+    "setup; test_sync_after_put_get; test_conf_set; cleanup"
+)
 
-last_read=$(now)
-trap cleanup EXIT
-setup
-wait_for_daemon
 
-test_sync_after_put_get
-test_conf_set

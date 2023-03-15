@@ -153,7 +153,7 @@ function do_test
     declare rc
 
     echo -e "FUNCTION: $test_func\n" >> $log_file
-    echo -n "        $test_func: "
+    echo -n "$2    $test_func: "
     before=$(date +%s.%N)
     (set -xe; $test_func >>$log_file 2>&1)
     rc=$?
@@ -249,7 +249,7 @@ for t in "${TESTS[@]}"; do
         # If the string has a single element (i.e. no semicolon), then we just
         # execute the sub-test
         if (( ${#array[@]} == 1 )); then
-            do_test "${array[0]}"
+            do_test "${array[0]}" ""
             # If the sub-test succeeds, mark the test as successful. If it
             # fails, mark it as a failure and abort the test
             rc=$?
@@ -276,7 +276,7 @@ for t in "${TESTS[@]}"; do
             # execute the function and mark either the test as successful or
             # failure
             for test_func in "${array[@]:1:${#array[@]}-2}"; do
-                do_test "$test_func"
+                do_test "$test_func" "    "
                 rc=$?
                 if (( $rc == 0 )); then
                     estatus=0

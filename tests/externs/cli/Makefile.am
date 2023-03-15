@@ -43,7 +43,7 @@ check_PROGRAMS=lrs_simple_client \
 check_SCRIPTS=acceptance.test \
               test_daemon.sh \
               test_daemon_monitoring.sh \
-              test_daemon_scheduling.sh \
+              test_daemon_scheduling.test \
               test_delete.sh \
               test_extent_list.sh \
               test_format.sh \
