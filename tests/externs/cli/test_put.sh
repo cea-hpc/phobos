@@ -120,6 +120,8 @@ test_extent_path
 
 function test_checksum
 {
+
+    # extent md5 enabled by default
     $valg_phobos put --family dir /etc/hosts chk ||
         error "failed to put 'chk' object"
 
@@ -127,7 +129,16 @@ function test_checksum
     # XXX MUST BE REPLACED by a phobos extent list when listing of checksum
     $PSQL -c "select extents from extent where oid = 'chk';" | \
         grep ${md5_value} ||
-            error "chk object extents don't have the good md5 value"
+        error "chk object extents don't have the good md5 value"
+
+    # disable extent md5
+    PHOBOS_LAYOUT_RAID1_extent_md5="no" \
+        $valg_phobos put --family dir /etc/hosts no_chk ||
+        error "failed to put 'no_chk' object"
+
+    # XXX MUST BE REPLACED by a phobos extent list when listing of checksum
+    $PSQL -c "select extents from extent where oid = 'no_chk';" | \
+        grep md5 && error "no_chk layout should not have any md5 field" || true
 }
 
 test_checksum

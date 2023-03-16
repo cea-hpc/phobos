@@ -36,6 +36,12 @@
 #define REPL_COUNT_ATTR_VALUE_BASE 10
 
 /**
+ * Computing the md5 of each extent is disable by configuration if layout
+ * EXTENT_MD5_ATTR_KEY is set to anything else than "yes"
+ */
+#define EXTENT_MD5_ATTR_KEY "extent_md5"
+
+/**
  * Set unsigned int replica count value from char * layout attr
  *
  * 0 is not a valid replica count, -EINVAL will be returned.

@@ -935,8 +935,9 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
         if (tmp) {
             int j;
 
+            result[i].with_md5 = true;
             for (j = 0; j < MD5_BYTE_LENGTH; j++) {
-                rc = sscanf(tmp + j, "%02hhx", &result[i].md5[j]);
+                rc = sscanf(tmp + 2 * j, "%02hhx", &result[i].md5[j]);
                 if (rc != 1) {
                     rc = -errno;
                     memset(&result[i].md5[0], 0, MD5_BYTE_LENGTH);
@@ -946,8 +947,7 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
                 }
             }
         } else {
-            pho_warn("Extent %d with no md5", i);
-            memset(&result[i].md5[0], 0, MD5_BYTE_LENGTH);
+            result[i].with_md5 = false;
         }
     }
 
@@ -1033,24 +1033,27 @@ static char *dss_layout_extents_encode(struct extent *extents,
         }
 
         /* 2 hex char per byte + final '\0' */
-        md5buf = calloc(MD5_BYTE_LENGTH * 2 + 1, sizeof(char));
-        if (!md5buf) {
-            pho_error(-ENOMEM,
-                      "Failed to allocated md5buf at layout extents encoding");
-            err_cnt++;
-        } else {
-            int j, k;
-
-            for (j = 0, k = 0; j < MD5_BYTE_LENGTH; j++, k += 2)
-                sprintf(md5buf + k, "%02x", extents[i].md5[j]);
-
-            rc = json_object_set_new(child, "md5", json_string(md5buf));
-            if (rc) {
-                pho_error(-EINVAL, "Failed to encode 'md5' (%s)", md5buf);
+        if (extents[i].with_md5) {
+            md5buf = calloc(MD5_BYTE_LENGTH * 2 + 1, sizeof(char));
+            if (!md5buf) {
+                pho_error(-ENOMEM,
+                          "Failed to allocate md5buf at layout extents "
+                          "encoding");
                 err_cnt++;
-            }
+            } else {
+                int j, k;
 
-            free(md5buf);
+                for (j = 0, k = 0; j < MD5_BYTE_LENGTH; j++, k += 2)
+                    sprintf(md5buf + k, "%02x", extents[i].md5[j]);
+
+                rc = json_object_set_new(child, "md5", json_string(md5buf));
+                if (rc) {
+                    pho_error(-EINVAL, "Failed to encode 'md5' (%s)", md5buf);
+                    err_cnt++;
+                }
+
+                free(md5buf);
+            }
         }
 
         rc = json_array_append_new(root, child);

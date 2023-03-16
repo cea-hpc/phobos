@@ -376,10 +376,9 @@ struct extent {
     ssize_t             size;       /**< size of the extent */
     struct pho_id       media;      /**< identifier of the media */
     struct pho_buff     address;    /**< address on the media */
+    bool                with_md5;   /**< true if extent md5 is set */
     unsigned char       md5[MD5_BYTE_LENGTH];
-                                    /**< md5 checksum of the extent
-                                     *   (only filled for now at put)
-                                     */
+                                    /**< md5 checksum of the extent */
 };
 
 /**

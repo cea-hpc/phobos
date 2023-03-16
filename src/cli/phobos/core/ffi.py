@@ -644,6 +644,7 @@ class ExtentInfo(Structure): # pylint: disable=too-few-public-methods
         ('size', c_ssize_t),
         ('media', Id),
         ('address', Buffer),
+        ('with_md5', c_bool),
         ('md5', c_ubyte * MD5_BYTE_LENGTH)
     ]
 

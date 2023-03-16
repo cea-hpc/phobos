@@ -118,6 +118,7 @@ struct raid1_encoder {
 
     /**
      *  A ready to use context to compute MD5 when needed.
+     *  NULL if not used.
      */
     EVP_MD_CTX *md5ctx;
 };
@@ -128,10 +129,11 @@ struct raid1_encoder {
 enum pho_cfg_params_raid1 {
     /* Actual parameters */
     PHO_CFG_LYT_RAID1_repl_count,
+    PHO_CFG_LYT_RAID1_extent_md5,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_LYT_RAID1_FIRST = PHO_CFG_LYT_RAID1_repl_count,
-    PHO_CFG_LYT_RAID1_LAST  = PHO_CFG_LYT_RAID1_repl_count,
+    PHO_CFG_LYT_RAID1_LAST  = PHO_CFG_LYT_RAID1_extent_md5,
 };
 
 const struct pho_config_item cfg_lyt_raid1[] = {
@@ -139,6 +141,11 @@ const struct pho_config_item cfg_lyt_raid1[] = {
         .section = "layout_raid1",
         .name    = REPL_COUNT_ATTR_KEY,
         .value   = "2"  /* Total # of copies (default) */
+    },
+    [PHO_CFG_LYT_RAID1_extent_md5] = {
+        .section = "layout_raid1",
+        .name    = EXTENT_MD5_ATTR_KEY,
+        .value   = "yes"  /* extent md5 calculation is set by default */
     },
 };
 
@@ -249,10 +256,13 @@ static void set_extent_info(struct extent *extent,
 }
 
 /**
- * Write count bytes from input_fd in each iod and update corresponding md5ctx
+ * Write count bytes from input_fd in each iod and update corresponding
+ * checksum if needed
  *
  * Bytes are read from input_fd and stored to an intermediate buffer before
  * being written into each iod.
+ *
+ * @input[in,out]   md5ctx  MD5 context to update if not NULL
  *
  * @return 0 if success, else a negative error code
  */
@@ -303,10 +313,10 @@ static int write_all_chunks(int input_fd, struct io_adapter_module **ioa,
             iod[i].iod_size += buf_size;
         }
 
-        if (EVP_DigestUpdate(md5ctx, buffer, buf_size) == 0)
-            LOG_GOTO(out, rc = -ENOMEM, "Unable to update md5 in raid1 write, "
-                                        "buffer of %zu bytes with %zu "
-                                        "remaining bytes", buf_size, to_write);
+        if (md5ctx && EVP_DigestUpdate(md5ctx, buffer, buf_size) == 0)
+            LOG_GOTO(out, rc = -ENOMEM,
+                     "Unable to update md5 in raid1 write, buffer of %zu bytes "
+                     "with %zu remaining bytes", buf_size, to_write);
 
         to_write -= buf_size;
     }
@@ -498,9 +508,11 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
     }
 
     /* Init md5ctx */
-    if (EVP_DigestInit_ex(raid1->md5ctx, EVP_md5(), NULL) == 0)
-        LOG_GOTO(close, rc = -ENOMEM,
-                 "Unable to init md5 in raid1 encoder write");
+    if (raid1->md5ctx) {
+        if (EVP_DigestInit_ex(raid1->md5ctx, EVP_md5(), NULL) == 0)
+            LOG_GOTO(close, rc = -ENOMEM,
+                     "Unable to init md5 in raid1 encoder write");
+    }
 
     /* write all extents by chunk of buffer size*/
     rc = write_all_chunks(enc->xfer->xd_fd, ioa, iod,
@@ -510,9 +522,11 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
         LOG_GOTO(close, rc, "Unable to write in raid1 encoder write");
 
     /* compute extent md5 */
-    if (EVP_DigestFinal_ex(raid1->md5ctx, md5, NULL) == 0)
-        LOG_GOTO(close, rc = -ENOMEM,
-                 "Unable to produce md5 in raid1 encoder write");
+    if (raid1->md5ctx) {
+        if (EVP_DigestFinal_ex(raid1->md5ctx, md5, NULL) == 0)
+            LOG_GOTO(close, rc = -ENOMEM,
+                     "Unable to produce md5 in raid1 encoder write");
+    }
 
 close:
     for (i = 0; i < raid1->repl_count; ++i) {
@@ -523,9 +537,17 @@ close:
             rc = rc2;
     }
 
-    if (rc == 0)
-        for (i = 0; i < raid1->repl_count; i++)
-            memcpy(&extent[i].md5[0], &md5[0], MD5_BYTE_LENGTH);
+    if (rc == 0) {
+        if (raid1->md5ctx) {
+            for (i = 0; i < raid1->repl_count; i++) {
+                extent[i].with_md5 = true;
+                memcpy(&extent[i].md5[0], &md5[0], MD5_BYTE_LENGTH);
+            }
+        } else {
+            for (i = 0; i < raid1->repl_count; i++)
+                extent[i].with_md5 = false;
+        }
+    }
 
     /* update size in write encoder */
     if (rc == 0) {
@@ -1000,6 +1022,7 @@ static int layout_raid1_encode(struct pho_encoder *enc)
 {
     struct raid1_encoder *raid1 = calloc(1, sizeof(*raid1));
     const char *string_repl_count = NULL;
+    const char *extent_md5 = NULL;
     int rc;
 
     if (raid1 == NULL)
@@ -1065,7 +1088,9 @@ static int layout_raid1_encode(struct pho_encoder *enc)
     raid1->n_released_media = 0;
 
     /* init EVP_MD_CTX */
-    raid1->md5ctx = EVP_MD_CTX_create();
+    extent_md5 = PHO_CFG_GET(cfg_lyt_raid1, PHO_CFG_LYT_RAID1, extent_md5);
+    if (extent_md5 && !strcmp(extent_md5, "yes"))
+        raid1->md5ctx = EVP_MD_CTX_create();
 
     return 0;
 }
