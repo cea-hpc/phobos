@@ -1462,8 +1462,10 @@ device_select_func_t get_dev_policy(void)
     if (!strcmp(policy_str, "first_fit"))
         return select_first_fit;
 
-    pho_error(EINVAL, "Invalid LRS policy name '%s' "
-              "(expected: 'best_fit' or 'first_fit')", policy_str);
+    pho_error(-EINVAL,
+              "Invalid LRS policy name '%s' "
+              "(expected: 'best_fit' or 'first_fit')",
+              policy_str);
 
     return NULL;
 }
@@ -1760,7 +1762,7 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
     int rc;
 
     rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &dev,
-                                         &index_to_alloc, handle_error);
+                                         &index_to_alloc);
     if (rc)
         GOTO(notify_error, rc);
 
@@ -1950,34 +1952,53 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
  * Alloc one more medium to a device in a read alloc request
  */
 static int sched_read_alloc_one_medium(struct lrs_sched *sched,
-                                       struct req_container *reqc,
-                                       size_t num_allocated,
-                                       size_t *nb_already_eagain,
-                                       bool is_error)
+                                       struct allocation *alloc,
+                                       size_t *nb_already_eagain)
 {
+    struct req_container *reqc = alloc->is_sub_request ?
+        alloc->u.sub_req->reqc :
+        alloc->u.req.reqc;
     pho_rsc_id_t **med_ids = reqc->req->ralloc->med_ids;
+    size_t num_allocated = alloc->is_sub_request ?
+        alloc->u.sub_req->medium_index : alloc->u.req.index;
     size_t index_to_alloc = num_allocated;
     struct media_info **alloc_medium;
     struct lrs_dev *dev = NULL;
     int rc = 0;
 
 find_read_device:
-    rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &dev,
-                                         &index_to_alloc, is_error);
+    if (alloc->is_sub_request)
+        rc = io_sched_retry(&sched->io_sched_hdl, alloc->u.sub_req, &dev);
+    else
+        rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &dev,
+                                             &index_to_alloc);
+    pho_debug("%s: rc=%d, index=%lu, dev=%s",
+              "io_sched_get_device_medium_pair", rc,
+              alloc->is_sub_request ?
+                alloc->u.sub_req->medium_index :
+                index_to_alloc, dev ? dev->ld_dev_path : "none");
+
     if (rc)
         GOTO(skip_medium, rc);
 
     assert(index_to_alloc >= num_allocated);
-    if (dev && is_error) {
+    if (dev && alloc->is_sub_request && alloc->u.sub_req->failure_on_medium) {
         med_ids_switch(med_ids, num_allocated,
                        reqc->req->ralloc->n_med_ids - 1);
         if (reqc->req->ralloc->n_med_ids > 0)
             reqc->req->ralloc->n_med_ids--;
+
+        index_to_alloc = alloc->u.sub_req->medium_index;
     }
 
     if (dev) {
         med_ids_switch(med_ids, index_to_alloc, num_allocated);
         index_to_alloc = num_allocated;
+        if (alloc->is_sub_request)
+            /* On retry, we want sreq->medium_index to point to the position of
+             * the medium in
+             */
+            alloc->u.sub_req->medium_index = index_to_alloc;
     }
 
     alloc_medium =
@@ -2053,8 +2074,17 @@ static int sched_handle_read_alloc(struct lrs_sched *sched,
               reqc->req->ralloc->n_med_ids);
 
     for (i = 0; i < reqc->req->ralloc->n_required; i++) {
-        rc = sched_read_alloc_one_medium(sched, reqc, i, &nb_already_eagain,
-                                         false);
+        struct allocation alloc = {
+            .is_sub_request = false,
+            .u = {
+                .req = {
+                    .reqc = reqc,
+                    .index = i,
+                },
+            },
+        };
+
+        rc = sched_read_alloc_one_medium(sched, &alloc, &nb_already_eagain);
         if (rc)
             break;
     }
@@ -2130,7 +2160,7 @@ static int sched_handle_format(struct lrs_sched *sched,
                  "formatted", m.name);
 
     rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &device,
-                                         NULL, false);
+                                         NULL);
     if (rc)
         GOTO(err_out, rc);
 
@@ -2397,9 +2427,14 @@ static int sched_handle_read_or_write_error(struct lrs_sched *sched,
     *req_ended = false;
     if (pho_request_is_read(sreq->reqc->req)) {
         size_t nb_already_eagain = 0;
+        struct allocation alloc = {
+            .is_sub_request = true,
+            .u = {
+                .sub_req = sreq,
+            },
+        };
 
-        rc = sched_read_alloc_one_medium(sched, sreq->reqc, sreq->medium_index,
-                                         &nb_already_eagain, true);
+        rc = sched_read_alloc_one_medium(sched, &alloc, &nb_already_eagain);
     } else {
         device_select_func_t dev_select_policy;
 

@@ -216,6 +216,27 @@ struct req_container {
     } params;
 };
 
+/**
+ * Simple wrapper around the req_container and sub_request types. When a request
+ * first arrives, it is contained in a request container. But once the request
+ * is sent to the device thread, it become a sub_request.
+ *
+ * When a device thread fails to load the medium corresponding to the
+ * sub_request, it can be sent back to the scheduler through the retry_queue.
+ * In this case, we want to pass the whole sub_request to the functions handling
+ * the allocation to have the full context available.
+ */
+struct allocation {
+    bool is_sub_request;
+    union {
+        struct {
+            struct req_container *reqc;
+            size_t index;
+        } req;
+        struct sub_request *sub_req;
+    } u;
+};
+
 /** sched_resp_free can be used as glib callback */
 void sched_resp_free(void *respc);
 void sched_resp_free_with_cont(void *respc);

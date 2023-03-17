@@ -191,23 +191,40 @@ int io_sched_peek_request(struct io_sched_handle *io_sched_hdl,
 int io_sched_get_device_medium_pair(struct io_sched_handle *io_sched_hdl,
                                     struct req_container *reqc,
                                     struct lrs_dev **dev,
-                                    size_t *index,
-                                    bool is_error)
+                                    size_t *index)
 {
-    struct io_scheduler *handler;
+    struct io_scheduler *io_sched;
 
     if (pho_request_is_read(reqc->req))
-        handler = &io_sched_hdl->read;
+        io_sched = &io_sched_hdl->read;
     else if (pho_request_is_write(reqc->req))
-        handler = &io_sched_hdl->write;
+        io_sched = &io_sched_hdl->write;
     else if (pho_request_is_format(reqc->req))
-        handler = &io_sched_hdl->format;
+        io_sched = &io_sched_hdl->format;
     else
         LOG_RETURN(-EINVAL, "Invalid request type: '%s'",
                    pho_srl_request_kind_str(reqc->req));
 
-    return handler->ops.get_device_medium_pair(handler, reqc, dev, index,
-                                               is_error);
+    return io_sched->ops.get_device_medium_pair(io_sched, reqc, dev, index);
+}
+
+int io_sched_retry(struct io_sched_handle *io_sched_hdl,
+                   struct sub_request *sreq,
+                   struct lrs_dev **dev)
+{
+    struct io_scheduler *io_sched;
+
+    if (pho_request_is_read(sreq->reqc->req))
+        io_sched = &io_sched_hdl->read;
+    else if (pho_request_is_write(sreq->reqc->req))
+        io_sched = &io_sched_hdl->write;
+    else if (pho_request_is_format(sreq->reqc->req))
+        io_sched = &io_sched_hdl->format;
+    else
+        LOG_RETURN(-EINVAL, "Invalid request type: '%s'",
+                   pho_srl_request_kind_str(sreq->reqc->req));
+
+    return io_sched->ops.retry(io_sched, sreq, dev);
 }
 
 int io_sched_remove_device(struct io_sched_handle *io_sched_hdl,

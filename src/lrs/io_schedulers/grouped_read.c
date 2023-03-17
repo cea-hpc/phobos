@@ -1070,115 +1070,6 @@ static int read_req_get_medium_index(struct req_container *reqc,
     return -EINVAL;
 }
 
-/* This function is called on error (i.e. the argument is_error of
- * get_device_medium_pair is true).
- *
- * Since \p reqc has already been removed, the queues associated to its media
- * may have been removed. For each valid medium, we first try to find a queue
- * if it still exists.
- *
- * The best choice is to have a queue already associated to a device since it
- * will not trigger a load. If that's not possible we will use the longest
- * queue. /!\ in this case we don't respect the order of the requests in the
- * queue.
- *
- * If no queue is found (i.e. every queue of each media was removed), we will
- * default to the first valid media.
- */
-static int find_device_medium_on_error(struct io_scheduler *io_sched,
-                                       struct req_container *reqc,
-                                       struct lrs_dev **dev,
-                                       size_t *index)
-{
-    struct media_info **medium = reqc_get_medium_to_alloc(reqc, *index);
-    struct grouped_data *data = io_sched->private_data;
-    struct request_queue *queue_to_use = NULL;
-    bool compatible_device_found;
-    struct lrs_dev **dev_ref;
-    struct device *device;
-    size_t max_length = 0;
-    struct pho_id m_id;
-    const char *name;
-    int rc;
-    int i;
-
-    for (i = reqc->req->ralloc->n_required;
-         i < reqc->req->ralloc->n_med_ids;
-         i++) {
-        const char *name = reqc->req->ralloc->med_ids[i]->name;
-        struct request_queue *queue;
-
-        queue = g_hash_table_lookup(data->request_queues, name);
-        if (!queue)
-            continue;
-
-        if (!queue_to_use) {
-            if (queue->device && dev_is_sched_ready(queue->device->device))
-                queue_to_use = queue;
-        }
-
-        /* XXX We are returning the index of the queue with the most requests.
-         * It could be interesting to return the one with the least amount of
-         * requests to increase the load balance between drives. But its also
-         * interesting to use the biggest queue since we don't increase the
-         * likelihood of using queues with a small number of requests.
-         */
-        if (g_queue_get_length(queue->queue) > max_length &&
-            queue->device && dev_is_sched_ready(queue->device->device)) {
-            queue_to_use = queue;
-            max_length = g_queue_get_length(queue->queue);
-            *dev = queue->device->device;
-        }
-    }
-
-    if (!queue_to_use)
-        /* no medium in this request is in a queue, so just use the first free
-         * medium
-         */
-        *index = reqc->req->ralloc->n_required;
-    else
-        *index = read_req_get_medium_index(reqc, queue_to_use->name);
-
-    if (*index < 0)
-        return *index;
-
-    if (*dev)
-        return 0;
-
-    /* find a device for reqc->req->ralloc->med_ids[*index] */
-    name = reqc->req->ralloc->med_ids[*index]->name;
-    dev_ref = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl, name,
-                                                NULL);
-    if (dev_ref) {
-        if (!((*dev_ref)->ld_io_request_type & IO_REQ_READ)) {
-            pho_info("exchange device");
-            rc = exchange_device(io_sched, IO_REQ_READ, dev_ref);
-            if (rc)
-                return rc;
-        }
-
-        if ((*dev_ref)->ld_io_request_type & IO_REQ_READ) {
-            *dev = *dev_ref;
-            return 0;
-        }
-    }
-
-    /* On error, always fetch DSS information since the caller doesn't know if
-     * the \p medium was just allocated or not. It cannot free it.
-     */
-    rc = fetch_and_check_medium_info(io_sched->io_sched_hdl->lock_handle,
-                                     reqc, &m_id, *index, medium);
-    if (rc)
-        return rc;
-
-    device = find_compatible_device(io_sched->devices, *medium,
-                                    &compatible_device_found);
-    if (device)
-        *dev = device->device;
-
-    return 0;
-}
-
 static struct device *
 find_device_by_queue_name(GPtrArray *devices, const char *name)
 {
@@ -1201,17 +1092,13 @@ find_device_by_queue_name(GPtrArray *devices, const char *name)
 static int grouped_get_device_medium_pair(struct io_scheduler *io_sched,
                                           struct req_container *reqc,
                                           struct lrs_dev **dev,
-                                          size_t *index,
-                                          bool is_error)
+                                          size_t *index)
 {
     struct grouped_data *data = io_sched->private_data;
     struct request_queue *queue;
     struct queue_element *elem;
 
     *dev = NULL;
-
-    if (is_error)
-        return find_device_medium_on_error(io_sched, reqc, dev, index);
 
     if (g_list_length(data->current_elem->pair->free) == 0)
         return -ERANGE;
@@ -1269,6 +1156,140 @@ static int grouped_get_device_medium_pair(struct io_scheduler *io_sched,
     *dev = queue->device->device;
     *index = reqc_get_medium_index_from_name(elem->reqc,
                                              elem->queue->name);
+
+    return 0;
+}
+
+/*
+ * Since sreq->reqc has already been removed, the queues associated to its media
+ * may have been removed. For each valid medium, we first try to find a queue
+ * if it still exists.
+ *
+ * The best choice is to have a queue already associated to a device since it
+ * will not trigger a load. If that's not possible we will use the longest
+ * queue. /!\ in this case we don't respect the order of the requests in the
+ * queue.
+ *
+ * If no queue is found (i.e. every queue of each media was removed), we will
+ * default to the first valid media.
+ */
+static int grouped_retry(struct io_scheduler *io_sched,
+                         struct sub_request *sreq,
+                         struct lrs_dev **dev)
+{
+    struct media_info **medium = reqc_get_medium_to_alloc(sreq->reqc,
+                                                          sreq->medium_index);
+    struct grouped_data *data = io_sched->private_data;
+    struct request_queue *queue_to_use = NULL;
+    struct req_container *reqc = sreq->reqc;
+    bool compatible_device_found;
+    struct lrs_dev **dev_ref;
+    struct device *device;
+    size_t max_length = 0;
+    int n_medium_indices;
+    int *medium_indices;
+    struct pho_id m_id;
+    const char *name;
+    int rc;
+    int i;
+
+    *dev = NULL;
+
+    n_medium_indices = (sreq->failure_on_medium ? 0 : 1) +
+        (reqc->req->ralloc->n_med_ids - reqc->req->ralloc->n_required);
+
+    medium_indices = malloc(n_medium_indices * sizeof(*medium_indices));
+    if (!medium_indices)
+        return -errno;
+
+    if (!sreq->failure_on_medium) {
+        medium_indices[0] = sreq->medium_index;
+        for (i = 1; i < n_medium_indices; i++)
+            medium_indices[i] = reqc->req->ralloc->n_required + (i - 1);
+    } else {
+        for (i = 0; i < n_medium_indices; i++)
+            medium_indices[i] = reqc->req->ralloc->n_required + i;
+    }
+
+    for (i = 0; i < n_medium_indices; i++) {
+        const char *name = reqc->req->ralloc->med_ids[medium_indices[i]]->name;
+        struct request_queue *queue;
+
+        queue = g_hash_table_lookup(data->request_queues, name);
+        if (!queue)
+            continue;
+
+        if (!queue_to_use) {
+            if (queue->device && dev_is_sched_ready(queue->device->device))
+                queue_to_use = queue;
+        }
+
+        /* XXX We are returning the index of the queue with the most requests.
+         * It could be interesting to return the one with the least amount of
+         * requests to increase the load balance between drives. But its also
+         * interesting to use the biggest queue since we don't increase the
+         * likelihood of using queues with a small number of requests.
+         */
+        if (g_queue_get_length(queue->queue) > max_length &&
+            queue->device && dev_is_sched_ready(queue->device->device)) {
+            queue_to_use = queue;
+            max_length = g_queue_get_length(queue->queue);
+            *dev = queue->device->device;
+        }
+    }
+    free(medium_indices);
+
+    if (!queue_to_use) {
+        /* no medium in this request is in a queue, so just use the first free
+         * medium or the one that was just tried if no error occured on the
+         * medium.
+         */
+        if (sreq->failure_on_medium)
+            sreq->medium_index = reqc->req->ralloc->n_required;
+        /* else: we use sreq->medium_index i.e. the index of the medium that we
+         * failed to load.
+         */
+    } else {
+        sreq->medium_index = read_req_get_medium_index(reqc,
+                                                       queue_to_use->name);
+    }
+
+    if (sreq->medium_index < 0)
+        return sreq->medium_index;
+
+    if (*dev)
+        return 0;
+
+    /* find a device for reqc->req->ralloc->med_ids[*index] */
+    name = reqc->req->ralloc->med_ids[sreq->medium_index]->name;
+    dev_ref = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl, name,
+                                                NULL);
+    if (dev_ref) {
+        if (!((*dev_ref)->ld_io_request_type & IO_REQ_READ)) {
+            pho_info("exchange device");
+            rc = exchange_device(io_sched, IO_REQ_READ, dev_ref);
+            if (rc)
+                return rc;
+        }
+
+        if ((*dev_ref)->ld_io_request_type & IO_REQ_READ) {
+            *dev = *dev_ref;
+            return 0;
+        }
+    }
+
+    /* On error, always fetch DSS information since the caller doesn't know if
+     * the \p medium was just allocated or not. It cannot free it.
+     */
+    rc = fetch_and_check_medium_info(io_sched->io_sched_hdl->lock_handle,
+                                     reqc, &m_id, sreq->medium_index, medium);
+    if (rc)
+        return rc;
+
+    device = find_compatible_device(io_sched->devices, *medium,
+                                    &compatible_device_found);
+    if (device)
+        *dev = device->device;
 
     return 0;
 }
@@ -1424,6 +1445,7 @@ struct io_scheduler_ops IO_SCHED_GROUPED_READ_OPS = {
     .requeue                = grouped_requeue,
     .peek_request           = grouped_peek_request,
     .get_device_medium_pair = grouped_get_device_medium_pair,
+    .retry                  = grouped_retry,
     .add_device             = grouped_add_device,
     .get_device             = grouped_get_device,
     .remove_device          = grouped_remove_device,

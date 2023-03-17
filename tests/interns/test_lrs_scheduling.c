@@ -728,7 +728,7 @@ static void io_sched_one_medium_no_device(void **data)
     }
 
     index = 0;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 0);
     assert_return_code(rc, -rc);
     assert_null(dev);
@@ -784,7 +784,7 @@ static void io_sched_one_medium_no_device_available(void **data)
     }
 
     index = 0;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 0);
     assert_return_code(rc, -rc);
     assert_false(dev && dev->ld_ongoing_scheduled);
@@ -836,7 +836,7 @@ static void io_sched_one_medium(void **data)
     assert_return_code(rc, -rc);
     assert_ptr_equal(&reqc, new_reqc);
 
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 0);
     assert_return_code(rc, -rc);
     assert_int_equal(index, 0);
@@ -904,7 +904,7 @@ static void io_sched_4_medium(void **data)
     }
 
     index = 0;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 0);
     assert_return_code(rc, -rc);
     assert_true(index < 4);
@@ -917,7 +917,7 @@ static void io_sched_4_medium(void **data)
         goto test_end;
 
     index = 1;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 1);
     assert_return_code(rc, -rc);
     assert_true(index < 4);
@@ -930,7 +930,7 @@ static void io_sched_4_medium(void **data)
         goto test_end;
 
     index = 2;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 2);
     assert_return_code(rc, -rc);
     assert_true(index < 4);
@@ -940,7 +940,7 @@ static void io_sched_4_medium(void **data)
     dev->ld_ongoing_scheduled = true;
 
     index = 3;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 3);
     assert_return_code(rc, -rc);
     assert_true(index < 4);
@@ -950,7 +950,7 @@ static void io_sched_4_medium(void **data)
     dev->ld_ongoing_scheduled = true;
 
     index = 1;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     assert_return_code(rc, -rc);
     assert_null(dev);
 
@@ -1017,7 +1017,7 @@ static void io_sched_not_enough_devices(void **data)
     devices[1].ld_ongoing_scheduled = true;
 
     index = 0;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 0);
     assert_return_code(rc, -rc);
     assert_true(index < 2);
@@ -1028,7 +1028,7 @@ static void io_sched_not_enough_devices(void **data)
         goto test_end;
 
     index = 1;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 1);
     assert_return_code(rc, -rc);
     /* Some I/O schedulers may return devices[1] since the medium is loaded but
@@ -1087,7 +1087,7 @@ static void io_sched_requeue_one_request(void **data)
     assert_non_null(new_reqc);
 
     index = 0;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 0);
     assert_return_code(rc, -rc);
     assert_ptr_equal(dev, &device);
@@ -1106,7 +1106,7 @@ static void io_sched_requeue_one_request(void **data)
     assert_return_code(rc, -rc);
     assert_non_null(new_reqc);
 
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 0);
     assert_return_code(rc, -rc);
     assert_ptr_equal(dev, &device);
@@ -1169,7 +1169,7 @@ static void test_io_sched_error(void **data, bool free_device)
     assert_ptr_equal(&reqc, new_reqc);
 
     index = 0;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 0);
     assert_return_code(rc, -rc);
     assert_ptr_equal(dev, &devices[0]);
@@ -1181,7 +1181,7 @@ static void test_io_sched_error(void **data, bool free_device)
     dev->ld_ongoing_scheduled = true;
 
     index = 1;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 1);
     assert_return_code(rc, -rc);
     assert_ptr_equal(dev, &devices[1]);
@@ -1193,7 +1193,7 @@ static void test_io_sched_error(void **data, bool free_device)
     dev->ld_ongoing_scheduled = true;
 
     index = 2;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 2);
     assert_return_code(rc, -rc);
     assert_ptr_equal(dev, &devices[2]);
@@ -1221,7 +1221,12 @@ static void test_io_sched_error(void **data, bool free_device)
         devices[1].ld_ongoing_scheduled = false;
     unload_medium(&devices[1]);
 
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, true);
+    struct sub_request sreq = {
+        .reqc = &reqc,
+        .medium_index = index,
+        .failure_on_medium = true,
+    };
+    rc = io_sched_retry(io_sched, &sreq, &dev);
     free_medium_to_alloc(&reqc, 1);
     assert_return_code(rc, -rc);
     if (free_device) {
@@ -1299,7 +1304,7 @@ static void io_sched_eagain(void **data)
     assert_ptr_equal(&reqc, new_reqc);
 
     index = 0;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     assert_return_code(rc, -rc);
     assert_ptr_equal(dev, &device);
     dev->ld_ongoing_scheduled = false;
@@ -1308,7 +1313,7 @@ static void io_sched_eagain(void **data)
     index_seen[index] = true;
 
     index = 0;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     assert_return_code(rc, -rc);
     assert_ptr_equal(dev, &device);
     dev->ld_ongoing_scheduled = false;
@@ -1317,7 +1322,7 @@ static void io_sched_eagain(void **data)
     index_seen[index] = true;
 
     index = 0;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     free_medium_to_alloc(&reqc, 0);
     assert_return_code(rc, -rc);
     assert_ptr_equal(dev, &device);
@@ -1327,7 +1332,7 @@ static void io_sched_eagain(void **data)
     index_seen[index] = true;
 
     index = 0;
-    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index, false);
+    rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
     assert_int_equal(rc, -ERANGE);
 
     rc = io_sched_remove_request(io_sched, &reqc);

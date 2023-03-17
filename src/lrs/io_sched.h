@@ -115,8 +115,11 @@ struct io_scheduler_ops {
     int (*get_device_medium_pair)(struct io_scheduler *io_sched,
                                   struct req_container *reqc,
                                   struct lrs_dev **device,
-                                  size_t *index,
-                                  bool is_error);
+                                  size_t *index);
+
+    int (*retry)(struct io_scheduler *io_sched,
+                 struct sub_request *sreq,
+                 struct lrs_dev **device);
 
     int (*requeue)(struct io_scheduler *io_sched,
                    struct req_container *reqc);
@@ -362,13 +365,6 @@ int io_sched_requeue(struct io_sched_handle *io_sched_hdl,
  *                        request currently.
  * \param[out]  index     index of the medium to consider in \p reqc, returned
  *                        by the I/O scheduler
- * \param[in]   is_error  This argument is true when the request has already
- *                        been sent to a device thread but some error occured on
- *                        the medium at index \p *index. The caller is asking
- *                        the scheduler to find a new medium, if possible, for
- *                        this request. The implementer of the associated
- *                        callback must keep in mind that remove_request has
- *                        already been called on \p reqc.
  *
  * \return                0 on success, negative POSIX error on failure
  *             -EAGAIN    the scheduler doesn't have enough device to schedule
@@ -379,8 +375,27 @@ int io_sched_requeue(struct io_sched_handle *io_sched_hdl,
 int io_sched_get_device_medium_pair(struct io_sched_handle *io_sched_hdl,
                                     struct req_container *reqc,
                                     struct lrs_dev **dev,
-                                    size_t *index,
-                                    bool is_error);
+                                    size_t *index);
+
+/*
+ * This function is called when the request has already been sent to a device
+ * thread but some error occured on the medium at sub_request::medium_index. The
+ * caller is asking the scheduler to find a new medium, if possible, for this
+ * request. It can also reuse the same medium if sub_request::failure_on_medium
+ * is false. The implementer of the associated callback must keep in mind that
+ * remove_request has already been called on sub_request::reqc.
+ *
+ * \param[in]     io_sched  a valid I/O scheduler
+ * \param[in/out] sreq      the sub_request to reconsider
+ * \param[out]    dev       the device that must be used to handle \p sreq. It
+ *                          can point to NULL indicating that no device can
+ *                          handle the request currently
+ *
+ * \return                  0 on success, negative POSIX error on failure
+ */
+int io_sched_retry(struct io_sched_handle *io_sched_hdl,
+                   struct sub_request *sreq,
+                   struct lrs_dev **dev);
 
 /* Remove a specific device from the I/O schedulers that own it
  *
