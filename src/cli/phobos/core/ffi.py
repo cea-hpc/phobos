@@ -677,7 +677,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
         ('state', c_int),
         ('layout_desc', ModuleDesc),
         ('wr_size', c_size_t),
-        ('extents', c_void_p),
+        ('extents', POINTER(ExtentInfo)),
         ('ext_count', c_int)
     ]
 
@@ -693,6 +693,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
             'address': None,
             'size': None,
             'layout': None,
+            'md5': None,
         }
 
     @property
@@ -708,26 +709,31 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     @property
     def media_name(self):
         """Wrapper to get medium name."""
-        return [cast(self.extents, POINTER(ExtentInfo))[i].media.name
-                for i in range(self.ext_count)]
+        return [self.extents[i].media.name for i in range(self.ext_count)]
 
     @property
     def family(self):
         """Wrapper to get medium family."""
-        return [rsc_family2str(cast(self.extents,
-                                    POINTER(ExtentInfo))[i].media.family)
+        return [rsc_family2str(self.extents[i].media.family)
                 for i in range(self.ext_count)]
 
     @property
     def size(self):
         """Wrapper to get extent size."""
-        return [cast(self.extents, POINTER(ExtentInfo))[i].size
-                for i in range(self.ext_count)]
+        return [self.extents[i].size for i in range(self.ext_count)]
 
     @property
     def address(self):
         """Wrapper to get extent address."""
-        return [cast(self.extents, POINTER(ExtentInfo))[i].address.buff
+        return [self.extents[i].address.buff for i in range(self.ext_count)]
+
+    @property
+    def md5(self):
+        """Wrapper to get extent md5."""
+        return [ ''.join('%02x' % one_byte
+                         for one_byte in self.extents[i].md5)
+                    if self.extents[i].with_md5
+                    else None
                 for i in range(self.ext_count)]
 
     @property

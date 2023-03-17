@@ -217,16 +217,16 @@ class Client(object):
         else:
             list_lyts = []
             for i in range(n_layouts.value):
-                ptr = layouts[i].extents
+                extents = layouts[i].extents
                 cnt = layouts[i].ext_count
                 for j in range(cnt):
                     if medium is None or \
-                        medium in cast(ptr, POINTER(ExtentInfo))[j].media.name:
+                        medium in extents[j].media.name:
                         lyt = type(layouts[i])()
                         pointer(lyt)[0] = layouts[i]
                         lyt.ext_count = 1
-                        lyt.extents = addressof(cast(ptr,
-                                                     POINTER(ExtentInfo))[j])
+                        lyt.extents = extents
+
                         list_lyts.append(lyt)
 
         return list_lyts, layouts, n_layouts

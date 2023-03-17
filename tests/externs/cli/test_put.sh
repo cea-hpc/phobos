@@ -122,23 +122,34 @@ function test_checksum
 {
 
     # extent md5 enabled by default
-    $valg_phobos put --family dir /etc/hosts chk ||
-        error "failed to put 'chk' object"
+    $valg_phobos put --family dir /etc/hosts object_with_md5 ||
+        error "failed to put 'object_with_md5' object"
 
     local md5_value=$(md5sum /etc/hosts | awk '{print $1}')
-    # XXX MUST BE REPLACED by a phobos extent list when listing of checksum
-    $PSQL -c "select extents from extent where oid = 'chk';" | \
-        grep ${md5_value} ||
-        error "chk object extents don't have the good md5 value"
+    local extent_md5_value=$($valg_phobos extent list -o md5 object_with_md5)
+    if [[ "$?" != "0" ]]; then
+        error "'phobos extent list -o md5 object_with_md5' raises an error"
+    fi
+
+    if [[ "['${md5_value}']" != "${extent_md5_value}" ]]; then
+        error "'phobos extent list -o md5 object_with_md5' returned" \
+              "'${extent_md5_value}' instead of '${md5_value}'"
+    fi
 
     # disable extent md5
     PHOBOS_LAYOUT_RAID1_extent_md5="no" \
-        $valg_phobos put --family dir /etc/hosts no_chk ||
-        error "failed to put 'no_chk' object"
+        $valg_phobos put --family dir /etc/hosts object_no_md5 ||
+        error "failed to put 'object_no_md5' object"
 
-    # XXX MUST BE REPLACED by a phobos extent list when listing of checksum
-    $PSQL -c "select extents from extent where oid = 'no_chk';" | \
-        grep md5 && error "no_chk layout should not have any md5 field" || true
+    extent_md5_value=$($valg_phobos extent list -o md5 object_no_md5)
+    if [[ "$?" != "0" ]]; then
+        error "'phobos extent list -o md5 object_no_md5' raises an error"
+    fi
+
+    if [[ "[None]" != "${extent_md5_value}" ]]; then
+        error "'phobos extent list -o md5 object_no_md5' returned" \
+              "'${extent_md5_value}' instead of '[None]'"
+    fi
 }
 
 test_checksum
@@ -176,7 +187,7 @@ function lyt_params_helper
     ext_count=$(echo "$result" | cut -d'|' -f3 | xargs)
     expect=$3
     if [ $(($ext_count)) -ne $expect ]; then
-        error "Put with arguments '$2' should have used raid1 layout "
+        error "Put with arguments '$2' should have used raid1 layout" \
               "and $3 extent(s)"
     fi
 }
@@ -221,7 +232,7 @@ function put_checkout
     fi
 
     $valg_phobos put $2 /etc/hosts $1 ||
-        error "Object $1 should have been $action : " \
+        error "Object $1 should have been $action :" \
               "phobos put $2 /etc/hosts $1"
 }
 
