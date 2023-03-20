@@ -36,8 +36,14 @@
 #define REPL_COUNT_ATTR_VALUE_BASE 10
 
 /**
- * Computing the md5 of each extent is disable by configuration if layout
- * EXTENT_MD5_ATTR_KEY is set to anything else than "yes"
+ * Computing the XXH128 of each extent is disabled by the configuration if
+ * EXTENT_XXH128_ATTR_KEY is set to anything other than "yes"
+ */
+#define EXTENT_XXH128_ATTR_KEY "extent_xxh128"
+
+/**
+ * Computing the MD5 of each extent is disabled by the configuration if
+ * EXTENT_MD5_ATTR_KEY is set to anything other than "yes"
  */
 #define EXTENT_MD5_ATTR_KEY "extent_md5"
 

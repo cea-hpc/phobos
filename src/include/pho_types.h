@@ -35,6 +35,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <errno.h>
+#include <xxhash.h>
 
 #include "pho_attrs.h"
 
@@ -371,14 +372,18 @@ struct pho_resource {
 
 /** describe a piece of data in a layout */
 #define MD5_BYTE_LENGTH 16
+
 struct extent {
     int                 layout_idx; /**< index of this extent in layout */
     ssize_t             size;       /**< size of the extent */
     struct pho_id       media;      /**< identifier of the media */
     struct pho_buff     address;    /**< address on the media */
-    bool                with_md5;   /**< true if extent md5 is set */
+    bool                with_xxh128;
+                                    /**< true if extent xxh128 field is set */
+    unsigned char       xxh128[16]; /**< canonical XXH128 checksum digest */
+    bool                with_md5;   /**< true if extent md5 field is set */
     unsigned char       md5[MD5_BYTE_LENGTH];
-                                    /**< md5 checksum of the extent */
+                                    /**< MD5 checksum */
 };
 
 /**

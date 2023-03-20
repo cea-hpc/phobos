@@ -644,6 +644,8 @@ class ExtentInfo(Structure): # pylint: disable=too-few-public-methods
         ('size', c_ssize_t),
         ('media', Id),
         ('address', Buffer),
+        ('with_xxh128', c_bool),
+        ('xxh128', c_ubyte * 16),
         ('with_md5', c_bool),
         ('md5', c_ubyte * MD5_BYTE_LENGTH)
     ]
@@ -693,6 +695,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
             'address': None,
             'size': None,
             'layout': None,
+            'xxh128': None,
             'md5': None,
         }
 
@@ -726,6 +729,15 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     def address(self):
         """Wrapper to get extent address."""
         return [self.extents[i].address.buff for i in range(self.ext_count)]
+
+    @property
+    def xxh128(self):
+        """Wrapper to get extent xxh128."""
+        return [ ''.join('%02x' % one_byte
+                         for one_byte in self.extents[i].xxh128)
+                    if self.extents[i].with_xxh128
+                    else None
+                for i in range(self.ext_count)]
 
     @property
     def md5(self):

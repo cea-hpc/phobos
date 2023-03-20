@@ -118,12 +118,52 @@ function test_extent_path
 
 test_extent_path
 
-function test_checksum
+function test_xxh128_checksum
 {
+    # enable extent xxh128
+    PHOBOS_LAYOUT_RAID1_extent_xxh128="yes" \
+        $valg_phobos put --family dir /etc/hosts object_with_xxh128 ||
+            error "failed to put 'object_with_xxh128' object"
 
-    # extent md5 enabled by default
-    $valg_phobos put --family dir /etc/hosts object_with_md5 ||
-        error "failed to put 'object_with_md5' object"
+    local xxh128_value=$(xxh128sum /etc/hosts | awk '{print $1}')
+    local extent_xxh128_value=$($valg_phobos extent list -o xxh128 \
+                                object_with_xxh128)
+    if [[ "$?" != "0" ]]; then
+        error "'phobos extent list -o xxh128 object_with_xxh128'" \
+              "raises an error"
+    fi
+
+    if [[ "['${xxh128_value}']" != "${extent_xxh128_value}" ]]; then
+        error "'phobos extent list -o xxh128 object_with_xxh128' returned" \
+              "'${extent_xxh128_value}' instead of '${xxh128_value}'"
+    fi
+
+    # disable extent xxh128
+    PHOBOS_LAYOUT_RAID1_extent_xxh128="no" \
+        $valg_phobos put --family dir /etc/hosts object_no_xxh128 ||
+            error "failed to put 'object_no_xxh128' object"
+
+    extent_xxh128_value=$($valg_phobos extent list -o xxh128 object_no_xxh128)
+    if [[ "$?" != "0" ]]; then
+        error "'phobos extent list -o xxh128 object_no_xxh128' raises an error"
+    fi
+
+    if [[ "[None]" != "${extent_xxh128_value}" ]]; then
+        error "'phobos extent list -o xxh128 object_no_xxh128' returned" \
+              "'${extent_xxh128_value}' instead of '[None]'"
+    fi
+}
+
+if [[ "${HAVE_XXH128}" == "yes" ]]; then
+    test_xxh128_checksum
+fi
+
+function test_md5_checksum
+{
+    # enable extent md5
+    PHOBOS_LAYOUT_RAID1_extent_md5="yes" \
+        $valg_phobos put --family dir /etc/hosts object_with_md5 ||
+            error "failed to put 'object_with_md5' object"
 
     local md5_value=$(md5sum /etc/hosts | awk '{print $1}')
     local extent_md5_value=$($valg_phobos extent list -o md5 object_with_md5)
@@ -139,7 +179,7 @@ function test_checksum
     # disable extent md5
     PHOBOS_LAYOUT_RAID1_extent_md5="no" \
         $valg_phobos put --family dir /etc/hosts object_no_md5 ||
-        error "failed to put 'object_no_md5' object"
+            error "failed to put 'object_no_md5' object"
 
     extent_md5_value=$($valg_phobos extent list -o md5 object_no_md5)
     if [[ "$?" != "0" ]]; then
@@ -152,7 +192,7 @@ function test_checksum
     fi
 }
 
-test_checksum
+test_md5_checksum
 
 ################################################################################
 #                         TEST EMPTY PUT ON TAGGED DIR                         #

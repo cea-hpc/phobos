@@ -32,6 +32,7 @@
 #include <openssl/evp.h>
 #include <string.h>
 #include <unistd.h>
+#include <xxhash.h>
 
 #include "pho_attrs.h"
 #include "pho_cfg.h"
@@ -117,6 +118,16 @@ struct raid1_encoder {
     size_t n_released_media;
 
     /**
+     *  A ready to use context to compute XXH128 when needed.
+     *  NULL if not used.
+     */
+    #ifdef HAVE_XXH128
+        XXH3_state_t *xxh128state;
+    #else
+        void *xxh128state;
+    #endif
+
+    /**
      *  A ready to use context to compute MD5 when needed.
      *  NULL if not used.
      */
@@ -129,6 +140,7 @@ struct raid1_encoder {
 enum pho_cfg_params_raid1 {
     /* Actual parameters */
     PHO_CFG_LYT_RAID1_repl_count,
+    PHO_CFG_LYT_RAID1_extent_xxh128,
     PHO_CFG_LYT_RAID1_extent_md5,
 
     /* Delimiters, update when modifying options */
@@ -142,10 +154,23 @@ const struct pho_config_item cfg_lyt_raid1[] = {
         .name    = REPL_COUNT_ATTR_KEY,
         .value   = "2"  /* Total # of copies (default) */
     },
+    [PHO_CFG_LYT_RAID1_extent_xxh128] = {
+        .section = "layout_raid1",
+        .name    = EXTENT_XXH128_ATTR_KEY,
+#ifdef HAVE_XXH128
+        .value   = "yes" /* extent XXH128 calculation is set by default */
+#else
+        .value   = "no"  /* extent XXH128 calculation is unset if unavailable */
+#endif
+    },
     [PHO_CFG_LYT_RAID1_extent_md5] = {
         .section = "layout_raid1",
         .name    = EXTENT_MD5_ATTR_KEY,
-        .value   = "yes"  /* extent md5 calculation is set by default */
+#ifdef HAVE_XXH128
+        .value   = "no"  /* extent MD5 calculation is unset by default */
+#else
+        .value   = "yes" /* extent MD5 calculation is set if XXH128 is unset */
+#endif
     },
 };
 
@@ -262,14 +287,24 @@ static void set_extent_info(struct extent *extent,
  * Bytes are read from input_fd and stored to an intermediate buffer before
  * being written into each iod.
  *
- * @input[in,out]   md5ctx  MD5 context to update if not NULL
+ * @input[in,out]   xxh128state     XXH128 context to update if not NULL
+ * @input[in,out]   md5ctx          MD5 context to update if not NULL
  *
  * @return 0 if success, else a negative error code
  */
+#ifdef HAVE_XXH128
 static int write_all_chunks(int input_fd, struct io_adapter_module **ioa,
                             struct pho_io_descr *iod,
                             unsigned int replica_count, size_t buffer_size,
-                            size_t count, EVP_MD_CTX *md5ctx)
+                            size_t count, XXH3_state_t *xxh128state,
+                            EVP_MD_CTX *md5ctx)
+#else
+static int write_all_chunks(int input_fd, struct io_adapter_module **ioa,
+                            struct pho_io_descr *iod,
+                            unsigned int replica_count, size_t buffer_size,
+                            size_t count, void *xxh128state,
+                            EVP_MD_CTX *md5ctx)
+#endif
 {
 #define MAX_NULL_READ_TRY 10
     int nb_null_read_try = 0;
@@ -313,9 +348,17 @@ static int write_all_chunks(int input_fd, struct io_adapter_module **ioa,
             iod[i].iod_size += buf_size;
         }
 
+#ifdef HAVE_XXH128
+        if (xxh128state &&
+            XXH3_128bits_update(xxh128state, buffer, buf_size) == XXH_ERROR)
+            LOG_GOTO(out, rc = -ENOMEM,
+                     "Unable to update XXH128 in raid1 write, buffer of %zu "
+                     "bytes with %zu remaining bytes", buf_size, to_write);
+#endif
+
         if (md5ctx && EVP_DigestUpdate(md5ctx, buffer, buf_size) == 0)
             LOG_GOTO(out, rc = -ENOMEM,
-                     "Unable to update md5 in raid1 write, buffer of %zu bytes "
+                     "Unable to update MD5 in raid1 write, buffer of %zu bytes "
                      "with %zu remaining bytes", buf_size, to_write);
 
         to_write -= buf_size;
@@ -381,6 +424,9 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
     struct extent *extent = NULL;
     char *extent_tag = NULL;
     char *extent_key = NULL;
+#ifdef HAVE_XXH128
+    XXH128_hash_t xxh128;
+#endif
     size_t extent_size;
     GString *str;
     int rc = 0;
@@ -507,25 +553,40 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
         pho_debug("I/O size for replicate %d: %zu", i, enc->io_block_size);
     }
 
+#ifdef HAVE_XXH128
+    /* Init xxh128state */
+    if (raid1->xxh128state) {
+        if (XXH3_128bits_reset(raid1->xxh128state) == XXH_ERROR)
+            LOG_GOTO(close, rc = -ENOMEM,
+                     "Unable to init XXH128 state in raid1 encoder write");
+    }
+#endif
+
     /* Init md5ctx */
     if (raid1->md5ctx) {
         if (EVP_DigestInit_ex(raid1->md5ctx, EVP_md5(), NULL) == 0)
             LOG_GOTO(close, rc = -ENOMEM,
-                     "Unable to init md5 in raid1 encoder write");
+                     "Unable to init MD5 context in raid1 encoder write");
     }
 
     /* write all extents by chunk of buffer size*/
     rc = write_all_chunks(enc->xfer->xd_fd, ioa, iod,
                           raid1->repl_count, enc->io_block_size,
-                          extent_size, raid1->md5ctx);
+                          extent_size, raid1->xxh128state, raid1->md5ctx);
     if (rc)
         LOG_GOTO(close, rc, "Unable to write in raid1 encoder write");
 
-    /* compute extent md5 */
+#ifdef HAVE_XXH128
+    /* compute extent XXH128 */
+    if (raid1->xxh128state)
+        xxh128 = XXH3_128bits_digest(raid1->xxh128state);
+#endif
+
+    /* compute extent MD5 */
     if (raid1->md5ctx) {
         if (EVP_DigestFinal_ex(raid1->md5ctx, md5, NULL) == 0)
             LOG_GOTO(close, rc = -ENOMEM,
-                     "Unable to produce md5 in raid1 encoder write");
+                     "Unable to produce MD5 in raid1 encoder write");
     }
 
 close:
@@ -538,14 +599,27 @@ close:
     }
 
     if (rc == 0) {
-        if (raid1->md5ctx) {
-            for (i = 0; i < raid1->repl_count; i++) {
-                extent[i].with_md5 = true;
-                memcpy(&extent[i].md5[0], &md5[0], MD5_BYTE_LENGTH);
+        /* copy XXH128 into extent */
+        for (i = 0; i < raid1->repl_count; i++) {
+#ifdef HAVE_XXH128
+            if (raid1->xxh128state) {
+                XXH128_canonical_t xxh128_canonical;
+
+                XXH128_canonicalFromHash(&xxh128_canonical, xxh128);
+                memcpy(&extent[i].xxh128[0], &xxh128_canonical.digest[0],
+                       sizeof(extent[i].xxh128));
             }
-        } else {
-            for (i = 0; i < raid1->repl_count; i++)
-                extent[i].with_md5 = false;
+#endif
+
+            extent[i].with_xxh128 = raid1->xxh128state;
+        }
+
+        /* copy MD5 into extent */
+        for (i = 0; i < raid1->repl_count; i++) {
+            if (raid1->md5ctx)
+                memcpy(&extent[i].md5[0], &md5[0], MD5_BYTE_LENGTH);
+
+            extent[i].with_md5 = raid1->md5ctx;
         }
     }
 
@@ -996,6 +1070,13 @@ static void raid1_encoder_destroy(struct pho_encoder *enc)
         raid1->to_release_media = NULL;
     }
 
+#ifdef HAVE_XXH128
+    if (raid1->xxh128state != NULL) {
+        XXH3_freeState(raid1->xxh128state);
+        raid1->xxh128state = NULL;
+    }
+#endif
+
     if (raid1->md5ctx != NULL) {
         EVP_MD_CTX_destroy(raid1->md5ctx);
         raid1->md5ctx = NULL;
@@ -1022,11 +1103,12 @@ static int layout_raid1_encode(struct pho_encoder *enc)
 {
     struct raid1_encoder *raid1 = calloc(1, sizeof(*raid1));
     const char *string_repl_count = NULL;
+    const char *extent_xxh128 = NULL;
     const char *extent_md5 = NULL;
     int rc;
 
     if (raid1 == NULL)
-        return -ENOMEM;
+        LOG_RETURN(-ENOMEM, "Unable to calloc raid1 encoder");
 
     /*
      * The ops field is set early to allow the caller to call the destroy
@@ -1086,6 +1168,23 @@ static int layout_raid1_encode(struct pho_encoder *enc)
     raid1->to_release_media = g_hash_table_new_full(g_str_hash, g_str_equal,
                                                     free, free);
     raid1->n_released_media = 0;
+
+    /* init XXH3 state */
+    extent_xxh128 = PHO_CFG_GET(cfg_lyt_raid1, PHO_CFG_LYT_RAID1,
+                                extent_xxh128);
+    if (extent_xxh128 && !strcmp(extent_xxh128, "yes")) {
+#ifdef HAVE_XXH128
+        raid1->xxh128state = XXH3_createState();
+        if (raid1->xxh128state == NULL)
+            LOG_RETURN(-ENOMEM,
+                       "Unable to create XXH128 state when creating raid1 "
+                       "encoder");
+#else
+        pho_warn("extent_xxh128 is set to 'yes' in config for raid1 layout but "
+                 "xxhash-devel does not contain 128-bit XXH3 algorithm "
+                 "(required xxhash-devel >= 0.8.0)");
+#endif
+    }
 
     /* init EVP_MD_CTX */
     extent_md5 = PHO_CFG_GET(cfg_lyt_raid1, PHO_CFG_LYT_RAID1, extent_md5);

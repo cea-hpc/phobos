@@ -63,7 +63,6 @@ AC_CHECK_FUNC([g_list_free_full], AC_DEFINE(HAVE_GLIB_FREE_FULL, 1, [g_list_free
 
 CFLAGS="$CFLAGS -I\$(top_srcdir)/src/include"
 
-
 AC_ARG_ENABLE( [cli], AS_HELP_STRING([--disable-cli],
                [Do not generate python cli and modules]),
                [enable_cli="$enableval"],[enable_cli="yes"] )
@@ -88,6 +87,12 @@ AS_IF([test "x$enable_rados" = "xyes"],
            enable_rados="no"])])
 
 AM_CONDITIONAL([RADOS_ENABLED], [test "x$enable_rados" = "xyes"])
+
+AC_CHECK_LIB([xxhash], [XXH3_128bits_reset],
+             [AC_SUBST(HAVE_XXH128, 'yes')]
+             [AC_DEFINE(HAVE_XXH128, 1,
+                        [XXH128 is available since xxhash 0.8.0])],
+             [AC_SUBST(HAVE_XXH128, 'no')])
 
 # Checks for header files.
 AC_HEADER_STDC

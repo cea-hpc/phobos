@@ -66,6 +66,7 @@ if RADOS_ENABLED
 check_SCRIPTS+=test_store_rados_commands.sh test_locate_rados.test
 endif
 
+TESTS_ENVIRONMENT = HAVE_XXH128="@HAVE_XXH128@"
 TESTS=$(check_SCRIPTS)
 
 lrs_simple_client_SOURCES=lrs_simple_client.c

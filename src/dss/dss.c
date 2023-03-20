@@ -856,6 +856,33 @@ out_free:
 }
 
 /**
+ * Read size bytes into digest from hexbuf buffer of hexadecimal characters
+ *
+ * @param[in,out]   digest  digest to fill
+ * @param[in]       size    number of byte to fill in digest
+ * @param[in]       hexbuf  buffer of at least 2*size hexadecimal characters
+ *
+ * @return 0 on success, negative error code on failure.
+ */
+static int read_hex_buffer(unsigned char *digest, size_t size,
+                           const char *hexbuf)
+{
+    size_t i;
+    int rc;
+
+    for (i = 0; i < size; i++) {
+        rc = sscanf(hexbuf + 2 * i, "%02hhx", &digest[i]);
+        if (rc != 1) {
+            rc = -errno;
+            memset(&digest[0], 0, size);
+            return rc;
+        }
+    }
+
+    return 0;
+}
+
+/**
  * Extract extents from json
  *
  * \param[out] extents extent list
@@ -931,21 +958,30 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
         if (rc)
             LOG_GOTO(out_decref, rc = -EINVAL, "Failed to set media id");
 
+        /* xxh128 */
+        tmp = json_dict2tmp_str(child, "xxh128");
+        if (tmp) {
+            rc = read_hex_buffer(result[i].xxh128, sizeof(result[i].xxh128),
+                                 tmp);
+            if (rc)
+                LOG_GOTO(out_decref, rc,
+                         "Failed to decode xxh128 extent %d out of %d",
+                         i, *count);
+
+            result[i].with_xxh128 = true;
+        } else {
+            result[i].with_xxh128 = false;
+        }
+
+        /* md5 */
         tmp = json_dict2tmp_str(child, "md5");
         if (tmp) {
-            int j;
+            rc = read_hex_buffer(result[i].md5, sizeof(result[i].md5), tmp);
+            if (rc)
+                LOG_GOTO(out_decref, rc,
+                         "Failed to decode md5 extent %d out of %d", i, *count);
 
             result[i].with_md5 = true;
-            for (j = 0; j < MD5_BYTE_LENGTH; j++) {
-                rc = sscanf(tmp + 2 * j, "%02hhx", &result[i].md5[j]);
-                if (rc != 1) {
-                    rc = -errno;
-                    memset(&result[i].md5[0], 0, MD5_BYTE_LENGTH);
-                    LOG_GOTO(out_decref, rc,
-                             "Failed to get %d unsigned char of md5 extent %d",
-                             j, i);
-                }
-            }
         } else {
             result[i].with_md5 = false;
         }
@@ -962,6 +998,39 @@ out_decref:
 }
 
 /**
+ * Add a field to a json which is the hexadecimal notation of an input buffer
+ *
+ * @param[in,out]   json            Json into adding the new field
+ * @param[in]       new_field_name  Name of the new field
+ * @param[in]       buf             Buffer to encode in json
+ * @param[in]       size            Size in bytes of the input buffer
+ *
+ * @return 0 on success, negative error code on failure.
+ */
+static int fill_json_with_hex_buf(json_t *json, const char *new_field_name,
+                                  const unsigned char *buf, size_t size)
+{
+    char *json_field_buf = calloc(size * 2 + 1, sizeof(char));
+    int j, k;
+    int rc;
+
+    if (!json_field_buf)
+        return -ENOMEM;
+
+
+    for (j = 0, k = 0; j < size; j++, k += 2)
+        sprintf(json_field_buf + k, "%02x", buf[j]);
+
+    rc = json_object_set_new(json, new_field_name,
+                             json_string(json_field_buf));
+    free(json_field_buf);
+    if (rc)
+        return -EINVAL;
+
+    return 0;
+}
+
+/**
  * Encode extents to json
  *
  * \param[in]   extents extent list
@@ -970,14 +1039,12 @@ out_decref:
  *
  * \return json as string
  */
-
 static char *dss_layout_extents_encode(struct extent *extents,
                                        unsigned int count, int *error)
 {
     int err_cnt = 0;
     json_t *child;
     json_t *root;
-    char *md5buf;
     char *s;
     int rc;
     int i;
@@ -1032,27 +1099,23 @@ static char *dss_layout_extents_encode(struct extent *extents,
             err_cnt++;
         }
 
-        /* 2 hex char per byte + final '\0' */
-        if (extents[i].with_md5) {
-            md5buf = calloc(MD5_BYTE_LENGTH * 2 + 1, sizeof(char));
-            if (!md5buf) {
-                pho_error(-ENOMEM,
-                          "Failed to allocate md5buf at layout extents "
-                          "encoding");
+        /* xxh128: 2 hex char per byte + final '\0' */
+        if (extents[i].with_xxh128) {
+            rc = fill_json_with_hex_buf(child, "xxh128", extents[i].xxh128,
+                                        sizeof(extents[i].xxh128));
+            if (rc) {
+                pho_error(rc, "Failed to encode 'xxh128' in layout");
                 err_cnt++;
-            } else {
-                int j, k;
+            }
+        }
 
-                for (j = 0, k = 0; j < MD5_BYTE_LENGTH; j++, k += 2)
-                    sprintf(md5buf + k, "%02x", extents[i].md5[j]);
-
-                rc = json_object_set_new(child, "md5", json_string(md5buf));
-                if (rc) {
-                    pho_error(-EINVAL, "Failed to encode 'md5' (%s)", md5buf);
-                    err_cnt++;
-                }
-
-                free(md5buf);
+        /* md5: 2 hex char per byte + final '\0' */
+        if (extents[i].with_md5) {
+            rc = fill_json_with_hex_buf(child, "md5", extents[i].md5,
+                                        sizeof(extents[i].md5));
+            if (rc) {
+                pho_error(rc, "Failed to encode 'md5' in layout");
+                err_cnt++;
             }
         }
 
