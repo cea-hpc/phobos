@@ -259,7 +259,7 @@ io_type2scheduler(struct io_sched_handle *io_sched_hdl,
         return &io_sched_hdl->format;
     }
 
-    /* unreachable */
+    assert(type == 0);
     return NULL;
 }
 
@@ -279,7 +279,8 @@ int io_sched_claim_device(struct io_scheduler *io_sched,
          * be shared between schedulers.
          */
         assert(!(io_sched->type & target_type) &&
-               __builtin_popcount(IO_REQ_ALL & target_type) == 1);
+               /* <= 1 because the device may belong to no scheduler */
+               __builtin_popcount(IO_REQ_ALL & target_type) <= 1);
         break;
     case IO_SCHED_EXCHANGE:
         target_type = args->exchange.desired_device->ld_io_request_type;
@@ -287,13 +288,28 @@ int io_sched_claim_device(struct io_scheduler *io_sched,
          * be shared between schedulers.
          */
         assert(!(io_sched->type & target_type) &&
-               __builtin_popcount(IO_REQ_ALL & target_type) == 1);
+               /* <= 1 because the device may belong to no scheduler */
+               __builtin_popcount(IO_REQ_ALL & target_type) <= 1);
         break;
     case IO_SCHED_TAKE:
         target_type = io_sched->type;
         break;
     default:
         return -EINVAL;
+    }
+
+    if (!target_type && type == IO_SCHED_EXCHANGE) {
+        /* The target device does not belong to a scheduler, just add it. It
+         * will break the current repartition but this is a transient state and
+         * will be corrected by the fair_share algorithm on the next iteration
+         * of the scheduler thread.
+         */
+        rc = io_sched->ops.add_device(io_sched,
+                                      args->exchange.desired_device);
+        if (!rc)
+            args->exchange.desired_device->ld_io_request_type |= io_sched->type;
+
+        return rc;
     }
 
     target_sched = io_type2scheduler(io_sched->io_sched_hdl, target_type);

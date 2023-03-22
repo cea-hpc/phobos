@@ -1475,7 +1475,7 @@ static void io_sched_remove_all_devices(GPtrArray *devices,
 }
 
 static void cleanup_devices(struct io_sched_handle *io_sched_hdl,
-                            GPtrArray *devices)
+                            GPtrArray *devices, bool device_on_stack)
 {
     int i;
 
@@ -1492,7 +1492,8 @@ static void cleanup_devices(struct io_sched_handle *io_sched_hdl,
 
         dev = g_ptr_array_index(devices, i);
         cleanup_device(dev);
-        free(dev);
+        if (!device_on_stack)
+            free(dev);
     }
     g_ptr_array_free(devices, TRUE);
 }
@@ -1544,7 +1545,7 @@ static void test_dispatch(int line, void **data, size_t nb_devs,
     io_sched_remove_all_devices(devices, &io_sched_hdl->write, IO_REQ_WRITE);
     io_sched_remove_all_devices(devices, &io_sched_hdl->format, IO_REQ_FORMAT);
     if (cleanup)
-        cleanup_devices(NULL, devices);
+        cleanup_devices(NULL, devices, false);
 }
 
 static void fair_share_repartition(void **data)
@@ -1638,7 +1639,7 @@ static void fair_share_add_device(void **data)
     /* the last device is on the stack, do not free it */
     cleanup_device(&new_device);
     g_ptr_array_remove_index(devices, devices->len - 1);
-    cleanup_devices(io_sched_hdl, devices);
+    cleanup_devices(io_sched_hdl, devices, false);
 
     devices = init_devices(NULL, 8, LTO5_MODEL);
     create_device(&new_device, "D8", LTO5_MODEL);
@@ -1670,7 +1671,7 @@ static void fair_share_add_device(void **data)
     /* the last device is on the stack, do not free it */
     cleanup_device(&new_device);
     g_ptr_array_remove_index(devices, devices->len - 1);
-    cleanup_devices(io_sched_hdl, devices);
+    cleanup_devices(io_sched_hdl, devices, false);
 }
 
 static void fair_share_take_devices(void **data)
@@ -1717,7 +1718,7 @@ static void fair_share_take_devices(void **data)
     io_sched_remove_all_devices(devices, &io_sched_hdl->read, IO_REQ_READ);
     io_sched_remove_all_devices(devices, &io_sched_hdl->write, IO_REQ_WRITE);
     io_sched_remove_all_devices(devices, &io_sched_hdl->format, IO_REQ_FORMAT);
-    cleanup_devices(io_sched_hdl, devices);
+    cleanup_devices(io_sched_hdl, devices, false);
 }
 
 static void fair_share_multi_technologies(void **data)
@@ -1731,7 +1732,7 @@ static void fair_share_multi_technologies(void **data)
 
     log_test_dispatch(data, -1, 17, 4, 8, 15, 3, 6, devices);
 
-    cleanup_devices(io_sched_hdl, devices);
+    cleanup_devices(io_sched_hdl, devices, false);
 }
 
 static void fair_share_ensure_min_max(void **data)
@@ -1796,7 +1797,7 @@ static void fair_share_ensure_min_max(void **data)
 
     log_test_dispatch(data, -1, 0, 4, 12, 0, 24, 0, devices);
 
-    cleanup_devices(io_sched_hdl, devices);
+    cleanup_devices(io_sched_hdl, devices, false);
     devices = init_devices(NULL, 8, LTO5_MODEL);
 
     /* R: 4(.44) devs =>  -5.5% => +0 dev => 4
@@ -1813,7 +1814,7 @@ static void fair_share_ensure_min_max(void **data)
     set_fair_share_minmax("LTO5", "3,2,4", "8,8,8");
     log_test_dispatch(data, -1, 20, 4, 12, 3, 2, 3, devices);
 
-    cleanup_devices(io_sched_hdl, devices);
+    cleanup_devices(io_sched_hdl, devices, false);
 
     /* tests with 1 device */
     set_fair_share_minmax("LTO5", "0,0,0", "0,0,0");
@@ -1862,7 +1863,7 @@ static void fair_share_one_shared_device_before_add(void **data)
     cleanup_device(&new_device);
     io_sched_hdl->read.ops.remove_device(&io_sched_hdl->read, &new_device);
     g_ptr_array_remove_index(devices, devices->len - 1);
-    cleanup_devices(io_sched_hdl, devices);
+    cleanup_devices(io_sched_hdl, devices, false);
 }
 
 static void fair_share_one_non_shared_device_before_add_shared(void **data)
@@ -1902,7 +1903,7 @@ static void fair_share_one_non_shared_device_before_add_shared(void **data)
     cleanup_device(&new_device);
     io_sched_hdl->read.ops.remove_device(&io_sched_hdl->read, &new_device);
     g_ptr_array_remove_index(devices, devices->len - 1);
-    cleanup_devices(io_sched_hdl, devices);
+    cleanup_devices(io_sched_hdl, devices, false);
 }
 
 static void io_sched_exchange_device(void **data)
@@ -1968,6 +1969,56 @@ static void io_sched_exchange_device(void **data)
     cleanup_device(&devices[2]);
 }
 
+static void io_sched_exchange_device_no_prior_repartition(void **data)
+{
+    struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
+    union io_sched_claim_device_args args;
+    struct lrs_dev devices[2];
+    GPtrArray *device_array;
+    int rc;
+
+    device_array = g_ptr_array_new();
+
+    create_device(&devices[0], "D1", LTO5_MODEL);
+    create_device(&devices[1], "D2", LTO5_MODEL);
+    gptr_array_from_list(device_array, &devices, 1, sizeof(*devices));
+
+    io_sched->io_stats.nb_reads = 1;
+    io_sched->io_stats.nb_writes = 0;
+    io_sched->io_stats.nb_formats = 0;
+
+    rc = io_sched_dispatch_devices(io_sched, device_array);
+    assert_return_code(rc, -rc);
+    assert_int_equal(io_sched->read.devices->len, 1);
+    assert_int_equal(io_sched->write.devices->len, 0);
+    assert_int_equal(io_sched->format.devices->len, 0);
+
+    g_ptr_array_add(device_array, &devices[1]);
+    args.exchange.unused_device = &devices[0];
+    args.exchange.desired_device = &devices[1];
+
+    assert_int_equal(devices[1].ld_io_request_type, 0);
+
+    /* In this scenario, the read scheduler wants to use the new device
+     * devices[1]. Since the device is free, it will have 2 devices at the end
+     * of the exchange. In a real context, the extra device may create imbalance
+     * in the fair share algorithm but this imbalance will be corrected on the
+     * next call to io_sched_dispatch_devices in the scheduler's loop.
+     */
+    rc = io_sched_claim_device(&io_sched->read, IO_SCHED_EXCHANGE, &args);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(io_sched->read.devices->len, 2);
+    assert_int_equal(io_sched->write.devices->len, 0);
+    assert_int_equal(io_sched->format.devices->len, 0);
+
+    /* the devices have been swaped */
+    assert_int_equal(devices[0].ld_io_request_type, IO_REQ_READ);
+    assert_int_equal(devices[1].ld_io_request_type, IO_REQ_READ);
+
+    cleanup_devices(io_sched, device_array, true);
+}
+
 int main(void)
 {
     const struct CMUnitTest test_dev_picker[] = {
@@ -2010,6 +2061,7 @@ int main(void)
         cmocka_unit_test(fair_share_one_non_shared_device_before_add_shared),
     };
     const struct CMUnitTest test_device_exchange[] = {
+        cmocka_unit_test(io_sched_exchange_device_no_prior_repartition),
         cmocka_unit_test(io_sched_exchange_device),
     };
     int error_count;
