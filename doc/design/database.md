@@ -10,27 +10,33 @@ The object table stores living object metadata, and is the first target of
 DSS requests when doing basic object phobos commands, such as **PUT**, **GET**
 and **DELETE**.
 
-This table is composed of the following fields: __oid__, uuid, version
-and user_md. The field uuid must be unique.
+This table is composed of the following fields: __oid__, object_uuid, version,
+user_md and lyt_info. The field uuid must be unique.
 
-It only exists one living object per oid, and so only one living (uuid, version)
-pair per oid. The other ones are stored in the deprecated object table.
+There is only one living object per oid, and so only one living (object_uuid,
+version) pair per oid. The other ones are stored in the deprecated object table.
 
 | field             | description                           |
 |-------------------|---------------------------------------|
 | oid               | object identifier                     |
-| uuid              | unique identifier to distinguish      |
+| object_uuid       | unique identifier to distinguish      |
 |                   | different generations of the same oid |
 | version           | unique identifier inside the same     |
 |                   | uuid, from 1 to n                     |
 | user_md           | blob of user metadata (JSON)          |
+| lyt_info          | blob of layout parameters (JSON)      |
+
+_lyt_info_ examples:
+
+- raid1 layout: {"name": "raid1", "attrs": {"repl_count": "2"}, "major
+": 0, "minor": 2}
 
 ## Deprecated object table
 The deprecated object table store deprecated object metadata, those which
 were deleted. They can be retrieved, under restrictions, using an **UNDELETE**.
 
-This table is composed of the following fields: oid, __uuid__, __version__,
-user_md and deprec_time.
+This table is composed of the following fields: oid, __object_uuid__,
+__version__, user_md, lyt_info and deprec_time.
 
 | field             | description                           |
 |-------------------|---------------------------------------|
@@ -38,25 +44,36 @@ user_md and deprec_time.
 |                   | to deprecated_object table            |
 
 ## Extent table
-The extent table stores extent metadata, for all phobos objects.
-
-This table is composed of the following fields: oid, __uuid__, __version__,
-state, lyt_info, extents.
+The extent table stores extent metadata.
 
 | field             | description                           |
 |-------------------|---------------------------------------|
-| state             | extent state (pending, sync, orphan)  |
-| lyt_info          | blob of layout parameters (JSON)      |
-| extents           | blob of extent metadata (JSON)        |
+| extent_uuid       | unique identifier                     |
+|                   | (could be the checksum if we don't    |
+|                   | allow two different checksum          |
+|                   | mecanisms, or no checksum at all)     |
+| state             | state (pending, sync, orphan)         |
+| size              | size in byte                          |
+| medium_family     | family of the medium on which this    |
+|                   | extent is stored                      |
+| medium_id         | id of the medium on which the extent  |
+|                   | is stored                             |
+| address           | address of this extent on the medium  |
+| md5               | MD5 checksum or NULL                  |
+| xxh128            | XXH128 checksum or NULL               |
+| info              | blob of miscellaneous info per extent |
+|                   | (JSON, currently not used, only for   |
+|                   |  future extension)                    |
 
-_lyt_info_ examples:
+## Layout table
+This layout table stores the link between phobos objects and their extents.
 
-- simple layout: '' (empty)
-- raid1 layout: {"cnt":"2"} (two copies)
+This table is composed of the following fields: __object_uuid__,
+__version__, __extent_uuid__, __layout_index__.
 
-_extents_ examples:
-[{"media":"G00042","addr":"XXXXXX","sz":"215841651"},
- {"media":"G00048","addr":"XXXXXX","sz":"215841638"}]
+| field             | description                           |
+|-------------------|---------------------------------------|
+| layout_index      | index of this extent in the layout    |
 
 # Storage resource metadata
 This section describes the tables related to storage resource management.
