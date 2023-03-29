@@ -590,27 +590,6 @@ static int update_phys_spc_free(struct dss_handle *dss,
     return 0;
 }
 
-static struct lrs_dev *
-search_loaded_medium(struct io_sched_handle *io_sched_hdl,
-                     const char *name)
-{
-    struct lrs_dev **dev;
-
-    dev = io_sched_search_loaded_medium(&io_sched_hdl->read, name);
-    if (dev)
-        return *dev;
-
-    dev = io_sched_search_loaded_medium(&io_sched_hdl->write, name);
-    if (dev)
-        return *dev;
-
-    dev = io_sched_search_loaded_medium(&io_sched_hdl->format, name);
-    if (dev)
-        return *dev;
-
-    return NULL;
-}
-
 static int release_medium(struct lrs_sched *sched,
                           struct dss_handle *comm_dss,
                           struct req_container *reqc,
@@ -624,7 +603,8 @@ static int release_medium(struct lrs_sched *sched,
     *req_rc = 0;
 
     /* find the corresponding device */
-    dev = search_loaded_medium(&sched->io_sched_hdl, release->med_id->name);
+    dev = search_loaded_medium(sched->devices.ldh_devices,
+                               release->med_id->name);
     if (!dev) {
         *req_rc = -ENODEV;
         pho_error(*req_rc,

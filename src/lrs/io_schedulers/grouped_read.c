@@ -523,7 +523,7 @@ static struct lrs_dev *find_free_device(GPtrArray *devices)
 
 static int exchange_device(struct io_scheduler *io_sched,
                            enum io_request_type type,
-                           struct lrs_dev **device_to_exchange)
+                           struct lrs_dev *device_to_exchange)
 {
     union io_sched_claim_device_args args;
     struct lrs_dev *free_device;
@@ -533,7 +533,7 @@ static int exchange_device(struct io_scheduler *io_sched,
         /* No free device to give back, cannot schedule this request yet. */
         return 0;
 
-    args.exchange.desired_device = *device_to_exchange;
+    args.exchange.desired_device = device_to_exchange;
     args.exchange.unused_device = free_device;
 
     return io_sched_claim_device(io_sched, IO_SCHED_EXCHANGE, &args);
@@ -606,16 +606,16 @@ static bool request_can_be_allocated(struct io_scheduler *io_sched,
         }
 
         if (!queue->device) {
-            struct lrs_dev **dev;
+            struct lrs_dev *dev;
             bool sched_ready;
 
             /* Search if someone else has the device. */
-            dev = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl,
-                                                    queue->name,
-                                                    &sched_ready);
+            dev = search_in_use_medium(
+                io_sched->io_sched_hdl->global_device_list,
+                queue->name, &sched_ready);
             if (dev && sched_ready &&
-                !((*dev)->ld_io_request_type & IO_REQ_READ)) {
-                *dev_iter++ = *dev;
+                !(dev->ld_io_request_type & IO_REQ_READ)) {
+                *dev_iter++ = dev;
             }
         }
     }
@@ -625,7 +625,7 @@ static bool request_can_be_allocated(struct io_scheduler *io_sched,
     while (*dev_iter && available_devices < n_required) {
         int rc;
 
-        rc = exchange_device(io_sched, IO_REQ_READ, dev_iter);
+        rc = exchange_device(io_sched, IO_REQ_READ, *dev_iter);
         if (rc) {
             pho_error(rc, "Failed to exchange devices");
             GOTO(free_list, res = false);
@@ -735,17 +735,35 @@ static int grouped_peek_request(struct io_scheduler *io_sched,
     return 0;
 }
 
+static struct device *find_device_from_lrs_dev(struct io_scheduler *io_sched,
+                                               struct lrs_dev *dev)
+{
+    int i;
+
+    for (i = 0; i < io_sched->devices->len; i++) {
+        struct device *d;
+
+        d = g_ptr_array_index(io_sched->devices, i);
+        if (d->device == dev)
+            return d;
+    }
+
+    return NULL;
+}
+
 static int allocate_queue_if_loaded(struct io_scheduler *io_sched,
                                     struct request_queue *queue)
 {
     struct device *device;
-    struct lrs_dev **d;
+    struct lrs_dev *d;
 
-    d = io_sched_search_loaded_medium(io_sched, queue->name);
-    if (!d)
+    d = search_loaded_medium(io_sched->io_sched_hdl->global_device_list,
+                             queue->name);
+    // FIXME what if the medium is in a device that belongs to someone else.
+    if (!d || !(d->ld_io_request_type & io_sched->type))
         return 0;
 
-    device = container_of(d, struct device, device);
+    device = find_device_from_lrs_dev(io_sched, d);
     device->queue = queue;
     queue->device = device;
 
@@ -1183,7 +1201,6 @@ static int grouped_retry(struct io_scheduler *io_sched,
     struct request_queue *queue_to_use = NULL;
     struct req_container *reqc = sreq->reqc;
     bool compatible_device_found;
-    struct lrs_dev **dev_ref;
     struct device *device;
     size_t max_length = 0;
     int n_medium_indices;
@@ -1262,18 +1279,18 @@ static int grouped_retry(struct io_scheduler *io_sched,
 
     /* find a device for reqc->req->ralloc->med_ids[*index] */
     name = reqc->req->ralloc->med_ids[sreq->medium_index]->name;
-    dev_ref = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl, name,
-                                                NULL);
-    if (dev_ref) {
-        if (!((*dev_ref)->ld_io_request_type & IO_REQ_READ)) {
+    *dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
+                                name, NULL);
+    if (*dev) {
+        if (!((*dev)->ld_io_request_type & IO_REQ_READ)) {
             pho_info("exchange device");
-            rc = exchange_device(io_sched, IO_REQ_READ, dev_ref);
+            rc = exchange_device(io_sched, IO_REQ_READ, *dev);
             if (rc)
                 return rc;
         }
 
-        if ((*dev_ref)->ld_io_request_type & IO_REQ_READ) {
-            *dev = *dev_ref;
+        if ((*dev)->ld_io_request_type & IO_REQ_READ) {
+            *dev = NULL;
             return 0;
         }
     }

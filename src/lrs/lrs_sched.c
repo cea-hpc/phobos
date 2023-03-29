@@ -734,6 +734,7 @@ int sched_init(struct lrs_sched *sched, enum rsc_family family,
     sched->response_queue = resp_queue;
     sched->io_sched_hdl.lock_handle = &sched->lock_handle;
     sched->io_sched_hdl.response_queue = sched->response_queue;
+    sched->io_sched_hdl.global_device_list = sched->devices.ldh_devices;
 
     /* Load devices from DSS -- not critical if no device is found */
     lrs_dev_hdl_load(sched, &sched->devices);
@@ -1126,7 +1127,6 @@ lock_race_retry:
     for (i = 0; i < mcnt; i++) {
         struct media_info *curr = &pmedia_res[i];
         struct lrs_dev *dev = NULL;
-        struct lrs_dev **dev_ref;
         bool already_alloc;
         bool sched_ready;
 
@@ -1149,12 +1149,9 @@ lock_race_retry:
                 continue;
 
         /* already loaded and in use ? */
-        dev_ref = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl,
-                                                    curr->rsc.id.name,
-                                                    &sched_ready);
-        if (dev_ref)
-            dev = *dev_ref;
-
+        dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
+                                   curr->rsc.id.name,
+                                   &sched_ready);
         if (dev && (!sched_ready ||
                     /* we cannot use a medium that doesn't belong to the write
                      * I/O scheduler.

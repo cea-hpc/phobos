@@ -170,17 +170,19 @@ static struct lrs_dev *find_free_device(GPtrArray *devices)
 
 static int exchange_device(struct io_scheduler *io_sched,
                            enum io_request_type type,
-                           struct lrs_dev **device_to_exchange)
+                           struct lrs_dev *device_to_exchange)
 {
     union io_sched_claim_device_args args;
     struct lrs_dev *free_device;
 
     free_device = find_free_device(io_sched->devices);
-    if (!free_device)
+    if (!free_device) {
+        pho_debug("No free device to trade");
         /* No free device to give back, cannot schedule this request yet. */
         return 0;
+    }
 
-    args.exchange.desired_device = *device_to_exchange;
+    args.exchange.desired_device = device_to_exchange;
     args.exchange.unused_device = free_device;
 
     return io_sched_claim_device(io_sched, IO_SCHED_EXCHANGE, &args);
@@ -193,7 +195,6 @@ static int find_read_device(struct io_scheduler *io_sched,
                             size_t index)
 {
     struct media_info *medium;
-    struct lrs_dev **dev_ref;
     struct pho_id medium_id;
     const char *name;
     bool sched_ready;
@@ -211,10 +212,9 @@ static int find_read_device(struct io_scheduler *io_sched,
     medium = reqc->params.rwalloc.media[index].alloc_medium;
     name = medium->rsc.id.name;
 
-    *dev = NULL;
-    dev_ref = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl, name,
-                                                &sched_ready);
-    if (!dev_ref) {
+    *dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
+                                name, &sched_ready);
+    if (!*dev) {
         *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
                           select_empty_loaded_mount,
                           0, &NO_TAGS, medium, false);
@@ -222,21 +222,24 @@ static int find_read_device(struct io_scheduler *io_sched,
         return 0;
     }
 
-    if (!((*dev_ref)->ld_io_request_type & IO_REQ_READ)) {
+    pho_info("%s: dev=%s, belongs to read=%s", __func__,
+             *dev ? (*dev)->ld_dev_path : "none",
+             *dev ?
+                ((*dev)->ld_io_request_type & IO_REQ_READ) ?
+                    "true" : "false" : "none");
+    if (!((*dev)->ld_io_request_type & IO_REQ_READ)) {
         /* The tape to read is not on a drive owned by this scheduler. */
         int rc;
 
-        rc = exchange_device(io_sched, IO_REQ_READ, dev_ref);
+        rc = exchange_device(io_sched, IO_REQ_READ, *dev);
         if (rc)
             return rc;
 
-        if (!((*dev_ref)->ld_io_request_type & IO_REQ_READ)) {
+        if (!((*dev)->ld_io_request_type & IO_REQ_READ)) {
             *dev = NULL;
             return 0;
         }
     }
-
-    *dev = *dev_ref;
 
     return 0;
 }
@@ -251,7 +254,6 @@ static int find_write_device(struct io_scheduler *io_sched,
     struct media_info **medium =
         &reqc->params.rwalloc.media[index].alloc_medium;
     device_select_func_t dev_select_policy;
-    struct lrs_dev **dev_ref;
     struct tags tags;
     bool sched_ready;
     size_t size;
@@ -296,20 +298,17 @@ static int find_write_device(struct io_scheduler *io_sched,
     if (rc)
         return rc;
 
-    dev_ref = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl,
-                                                (*medium)->rsc.id.name,
-                                                &sched_ready);
-    if (dev_ref && sched_ready) {
-        if (!((*dev_ref)->ld_io_request_type & IO_REQ_WRITE)) {
-            rc = exchange_device(io_sched, IO_REQ_WRITE, dev_ref);
+    *dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
+                               (*medium)->rsc.id.name, &sched_ready);
+    if (*dev && sched_ready) {
+        if (!((*dev)->ld_io_request_type & IO_REQ_WRITE)) {
+            rc = exchange_device(io_sched, IO_REQ_WRITE, *dev);
             if (rc)
                 return rc;
         }
 
-        if ((*dev_ref)->ld_io_request_type & IO_REQ_WRITE) {
-            *dev = *dev_ref;
+        if ((*dev)->ld_io_request_type & IO_REQ_WRITE)
             return 0;
-        }
     }
 
 find_device:
@@ -337,13 +336,11 @@ static int find_format_device(struct io_scheduler *io_sched,
                               struct lrs_dev **dev)
 {
     const char *name = reqc->req->format->med_id->name;
-    struct lrs_dev **dev_ref;
     bool sched_ready;
 
-    *dev = NULL;
-    dev_ref = io_sched_hdl_search_in_use_medium(io_sched->io_sched_hdl, name,
-                                                &sched_ready);
-    if (!dev_ref) {
+    *dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
+                                name, &sched_ready);
+    if (!*dev) {
         *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
                           select_empty_loaded_mount,
                           0, &NO_TAGS, reqc->params.format.medium_to_format,
@@ -352,21 +349,19 @@ static int find_format_device(struct io_scheduler *io_sched,
         return 0;
     }
 
-    if (!((*dev_ref)->ld_io_request_type & IO_REQ_FORMAT)) {
+    if (!((*dev)->ld_io_request_type & IO_REQ_FORMAT)) {
         /* The tape to format is not on a drive owned by this scheduler. */
         int rc;
 
-        rc = exchange_device(io_sched, IO_REQ_FORMAT, dev_ref);
+        rc = exchange_device(io_sched, IO_REQ_FORMAT, *dev);
         if (rc)
             return rc;
 
-        if (!((*dev_ref)->ld_io_request_type & IO_REQ_FORMAT)) {
+        if (!((*dev)->ld_io_request_type & IO_REQ_FORMAT)) {
             *dev = NULL;
             return 0;
         }
     }
-
-    *dev = *dev_ref;
 
     return 0;
 }

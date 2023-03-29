@@ -655,6 +655,7 @@ static void io_sched_one_request(void **data)
     struct lrs_dev dev;
     int rc;
 
+    io_sched->global_device_list = devices;
     create_device(&dev, "test", LTO5_MODEL);
     gptr_array_from_list(devices, &dev, 1, sizeof(dev));
     create_request(&reqc, media_names, 2, 1, io_sched->lock_handle);
@@ -699,6 +700,7 @@ static void io_sched_one_medium_no_device(void **data)
     size_t index;
     int rc;
 
+    io_sched->global_device_list = devices;
     create_request(&reqc, media_names, 3, 2, io_sched->lock_handle);
     create_medium(&M1, media_names[0]);
 
@@ -755,6 +757,7 @@ static void io_sched_one_medium_no_device_available(void **data)
     size_t index;
     int rc;
 
+    io_sched->global_device_list = device_array;
     create_device(&devices[0], "D1", LTO5_MODEL);
     create_device(&devices[1], "D2", LTO5_MODEL);
     create_medium(&media[0], media_names[0]);
@@ -819,6 +822,7 @@ static void io_sched_one_medium(void **data)
     size_t index = 0;
     int rc;
 
+    io_sched->global_device_list = devices;
     create_device(&device, "test", LTO5_MODEL);
     create_medium(&M1, media_names[0]);
     create_request(&reqc, media_names, 1, 1, io_sched->lock_handle);
@@ -872,6 +876,7 @@ static void io_sched_4_medium(void **data)
     int rc;
     int i;
 
+    io_sched->global_device_list = device_array;
     create_device(&devices[0], "D1", LTO5_MODEL);
     create_device(&devices[1], "D2", LTO5_MODEL);
     create_device(&devices[2], "D3", LTO5_MODEL);
@@ -988,6 +993,7 @@ static void io_sched_not_enough_devices(void **data)
 
     device_array = g_ptr_array_new();
 
+    io_sched->global_device_list = device_array;
     create_device(&devices[0], "D1", LTO5_MODEL);
     create_device(&devices[1], "D2", LTO5_MODEL);
     create_medium(&media[0], media_names[0]);
@@ -1068,6 +1074,7 @@ static void io_sched_requeue_one_request(void **data)
     size_t index;
     int rc;
 
+    io_sched->global_device_list = devices;
     create_device(&device, "test", LTO5_MODEL);
     gptr_array_from_list(devices, &device, 1, sizeof(device));
 
@@ -1144,6 +1151,7 @@ static void test_io_sched_error(void **data, bool free_device)
 
     device_array = g_ptr_array_new();
 
+    io_sched->global_device_list = device_array;
     create_device(&devices[0], "D1", LTO5_MODEL);
     create_device(&devices[1], "D2", LTO5_MODEL);
     create_device(&devices[2], "D3", LTO5_MODEL);
@@ -1284,6 +1292,7 @@ static void io_sched_eagain(void **data)
         skip();
 
     device_array = g_ptr_array_new();
+    io_sched->global_device_list = device_array;
     create_device(&device, "D1", LTO5_MODEL);
 
     for (i = 0; i < 3; i++)
@@ -1527,6 +1536,7 @@ static void test_dispatch(int line, void **data, size_t nb_devs,
 
     if (!devices) {
         devices = init_devices(NULL, nb_devs, LTO5_MODEL);
+        io_sched_hdl->global_device_list = devices;
         cleanup = true;
     }
 
@@ -1607,6 +1617,7 @@ static void fair_share_add_device(void **data)
     int rc;
 
     devices = init_devices(NULL, 2, LTO5_MODEL);
+    io_sched_hdl->global_device_list = devices;
     create_device(&new_device, "D8", LTO5_MODEL);
 
     io_sched_hdl->io_stats.nb_reads = 5;
@@ -1642,6 +1653,7 @@ static void fair_share_add_device(void **data)
     cleanup_devices(io_sched_hdl, devices, false);
 
     devices = init_devices(NULL, 8, LTO5_MODEL);
+    io_sched_hdl->global_device_list = devices;
     create_device(&new_device, "D8", LTO5_MODEL);
 
     io_sched_hdl->io_stats.nb_reads = 5;
@@ -1681,6 +1693,7 @@ static void fair_share_take_devices(void **data)
     int rc;
 
     devices = init_devices(NULL, 8, LTO5_MODEL);
+    io_sched_hdl->global_device_list = devices;
 
     io_sched_hdl->io_stats.nb_reads = 5;
     io_sched_hdl->io_stats.nb_writes = 5;
@@ -1729,6 +1742,7 @@ static void fair_share_multi_technologies(void **data)
     devices = init_devices(NULL, 8, LTO5_MODEL);
     devices = init_devices(devices, 8, LTO6_MODEL);
     devices = init_devices(devices, 8, LTO7_MODEL);
+    io_sched_hdl->global_device_list = devices;
 
     log_test_dispatch(data, -1, 17, 4, 8, 15, 3, 6, devices);
 
@@ -1747,6 +1761,7 @@ static void fair_share_ensure_min_max(void **data)
     devices = init_devices(NULL, 8, LTO5_MODEL);
     devices = init_devices(devices, 8, LTO6_MODEL);
     devices = init_devices(devices, 8, LTO7_MODEL);
+    io_sched_hdl->global_device_list = devices;
 
     set_fair_share_minmax("LTO5", "0,0,0", "100,100,100");
     log_test_dispatch(data, -1, 20, 4, 12, 12, 3, 9, devices);
@@ -1799,6 +1814,7 @@ static void fair_share_ensure_min_max(void **data)
 
     cleanup_devices(io_sched_hdl, devices, false);
     devices = init_devices(NULL, 8, LTO5_MODEL);
+    io_sched_hdl->global_device_list = devices;
 
     /* R: 4(.44) devs =>  -5.5% => +0 dev => 4
      * W: 0(.88) devs => -11.1% => +1 dev => 1
@@ -1839,6 +1855,7 @@ static void fair_share_one_shared_device_before_add(void **data)
 
     set_fair_share_minmax("LTO5", "0,0,0", "5,5,5");
     devices = init_devices(NULL, 1, LTO5_MODEL);
+    io_sched_hdl->global_device_list = devices;
     create_device(&new_device, "D8", LTO5_MODEL);
 
     io_sched_hdl->io_stats.nb_reads = 11;
@@ -1875,6 +1892,7 @@ static void fair_share_one_non_shared_device_before_add_shared(void **data)
 
     set_fair_share_minmax("LTO5", "0,0,0", "5,5,5");
     devices = init_devices(NULL, 1, LTO5_MODEL);
+    io_sched_hdl->global_device_list = devices;
     create_device(&new_device, "D8", LTO5_MODEL);
 
     io_sched_hdl->io_stats.nb_reads = 10;
@@ -1918,6 +1936,7 @@ static void io_sched_exchange_device(void **data)
 
     device_array = g_ptr_array_new();
 
+    io_sched->global_device_list = device_array;
     create_device(&devices[0], "D1", LTO5_MODEL);
     create_device(&devices[1], "D2", LTO5_MODEL);
     create_device(&devices[2], "D3", LTO5_MODEL);
@@ -1979,6 +1998,7 @@ static void io_sched_exchange_device_no_prior_repartition(void **data)
 
     device_array = g_ptr_array_new();
 
+    io_sched->global_device_list = device_array;
     create_device(&devices[0], "D1", LTO5_MODEL);
     create_device(&devices[1], "D2", LTO5_MODEL);
     gptr_array_from_list(device_array, &devices, 1, sizeof(*devices));

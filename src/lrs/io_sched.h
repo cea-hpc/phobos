@@ -255,6 +255,9 @@ struct io_sched_handle {
     struct lock_handle *lock_handle;
     struct tsqueue     *response_queue; /* reference to the response queue */
     struct io_stats     io_stats;
+    GPtrArray          *global_device_list; /* reference to
+                                             * lrs_sched::devices::ldh_devices
+                                             */
 };
 
 /* I/O Scheduler interface */
