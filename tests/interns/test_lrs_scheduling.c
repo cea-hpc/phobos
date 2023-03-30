@@ -73,7 +73,8 @@ static void create_device(struct lrs_dev *dev, char *path, char *model)
     dev->ld_device_thread.state = THREAD_RUNNING;
     dev->ld_sys_dev_state.lds_family = PHO_RSC_TAPE;
 
-    dev->ld_dss_dev_info = malloc(sizeof(*dev->ld_dss_dev_info));
+    dev->ld_dss_dev_info = calloc(1, sizeof(*dev->ld_dss_dev_info));
+    dev->ld_dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
     assert_non_null(dev->ld_dss_dev_info);
     dev->ld_dss_dev_info->rsc.model = model;
     strcpy(dev->ld_dss_dev_info->rsc.id.name, path);

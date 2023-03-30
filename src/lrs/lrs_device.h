@@ -182,7 +182,14 @@ static inline bool dev_is_sched_ready(struct lrs_dev *dev)
 {
     return dev && thread_is_running(&dev->ld_device_thread) &&
            !dev->ld_ongoing_io && !dev->ld_needs_sync && !dev->ld_sub_request &&
-           !dev->ld_ongoing_scheduled;
+           !dev->ld_ongoing_scheduled &&
+           (dev->ld_dss_dev_info->rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED);
+}
+
+static inline bool dev_is_online(struct lrs_dev *dev)
+{
+    return dev && thread_is_running(&dev->ld_device_thread) &&
+        (dev->ld_dss_dev_info->rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED);
 }
 
 static inline bool is_device_shared_between_schedulers(struct lrs_dev *dev)

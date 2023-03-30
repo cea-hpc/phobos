@@ -797,9 +797,12 @@ int fair_share_number_of_requests(struct io_sched_handle *io_sched_hdl,
         struct lrs_dev *dev = g_ptr_array_index(devices, i);
         struct device_list *current_dev_list;
 
-        if (!dev->ld_technology)
+        if (!dev->ld_technology || !dev_is_online(dev))
             /* The initialization of ld_technology may fail when the device
-             * is created. In this case, just ignore the device.
+             * is created. In this case, just ignore the device. Also ignore the
+             * device if not online.
+             * XXX at some point, a device that is not online will be removed
+             * from the list of devices, until then we need to ignore them.
              */
             continue;
 
