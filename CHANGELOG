@@ -15,6 +15,8 @@ media whose status is not blank. A "force" parameter is added to manage this.
     - We add two new parameters to the "phobos_locate" API call: 'focus_host'
       and 'nb_new_lock'.
     - We add the '--focus-host' option to the "phobos locate obj" command.
+* Phobos CLI is updated. The options '--layout' and '--lyt-params' can also
+  be respectively spelled '--lyt' and '--layout-params' for consistency.
 
 ## 1.94.1
 

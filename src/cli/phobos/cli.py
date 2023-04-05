@@ -342,13 +342,13 @@ class StoreGenericPutHandler(XferOptHandler):
         parser.add_argument('-f', '--family',
                             choices=list(map(rsc_family2str, ResourceFamily)),
                             help='Targeted storage family')
-        parser.add_argument('-l', '--layout', choices=["raid1"],
+        parser.add_argument('-l', '--layout', '--lyt', choices=["raid1"],
                             help='Desired storage layout')
         parser.add_argument('-a', '--alias',
                             help='Desired alias for family, tags and layout. '
                             'Specifically set family and layout supersede the '
                             'alias, tags are joined.')
-        parser.add_argument('-p', '--lyt-params',
+        parser.add_argument('-p', '--layout-params', '--lyt-params',
                             help='Comma-separated list of key=value for layout '
                             'specific parameters.')
 
@@ -379,7 +379,7 @@ class StorePutHandler(StoreGenericPutHandler):
             attrs = attr_convert(attrs)
             self.logger.debug("Loaded attributes set %r", attrs)
 
-        lyt_attrs = self.params.get('lyt_params')
+        lyt_attrs = self.params.get('layout_params')
         if lyt_attrs is not None:
             lyt_attrs = attr_convert(lyt_attrs)
             self.logger.debug("Loaded layout params set %r", lyt_attrs)
@@ -422,7 +422,7 @@ class StoreMPutHandler(StoreGenericPutHandler):
         else:
             fin = open(path)
 
-        lyt_attrs = self.params.get('lyt_params')
+        lyt_attrs = self.params.get('layout_params')
         if lyt_attrs is not None:
             lyt_attrs = attr_convert(lyt_attrs)
             self.logger.debug("Loaded layout params set %r", lyt_attrs)
