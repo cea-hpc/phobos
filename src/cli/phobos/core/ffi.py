@@ -36,7 +36,7 @@ from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable
                                PHO_RSC_DIR, PHO_RSC_TAPE, PHO_RSC_RADOS_POOL,
                                PHO_TIMEVAL_MAX_LEN, MD5_BYTE_LENGTH,
                                fs_type2str, fs_status2str, rsc_adm_status2str,
-                               rsc_family2str)
+                               rsc_family2str, extent_state2str)
 
 LIBPHOBOS_NAME = "libphobos_store.so"
 LIBPHOBOS = CDLL(LIBPHOBOS_NAME)
@@ -689,6 +689,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
             'oid': None,
             'uuid': None,
             'version': None,
+            'state': extent_state2str,
             'ext_count': None,
             'media_name': None,
             'family': None,
