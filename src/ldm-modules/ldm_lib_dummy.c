@@ -59,7 +59,6 @@ static int dummy_drive_lookup(struct lib_handle *lib, const char *drive_serial,
     drv_info->ldi_addr.lia_addr = 0;
     drv_info->ldi_full = true;
 
-    /** FIXME we don't care. Could be disk or other... */
     drv_info->ldi_medium_id.family = PHO_RSC_DIR;
 
     return pho_id_name_set(&drv_info->ldi_medium_id, sep + 1);
