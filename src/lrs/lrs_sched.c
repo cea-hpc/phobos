@@ -1274,25 +1274,21 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
         if (itr->ld_ongoing_io || itr->ld_needs_sync || itr->ld_sub_request ||
             itr->ld_ongoing_scheduled) {
             pho_debug("Skipping busy device '%s'", itr->ld_dev_path);
-            MUTEX_UNLOCK(&itr->ld_mutex);
-            continue;
+            goto unlock_continue;
         }
 
         if ((itr->ld_op_status == PHO_DEV_OP_ST_FAILED) ||
             (op_st != PHO_DEV_OP_ST_UNSPEC && itr->ld_op_status != op_st)) {
             pho_debug("Skipping device '%s' with incompatible status %s",
                       itr->ld_dev_path, op_status2str(itr->ld_op_status));
-            MUTEX_UNLOCK(&itr->ld_mutex);
-            continue;
+            goto unlock_continue;
         }
 
         if (!thread_is_running(&itr->ld_device_thread)) {
             pho_debug("Skipping ending or stopped device '%s'",
                       itr->ld_dev_path);
-            MUTEX_UNLOCK(&itr->ld_mutex);
-            continue;
+            goto unlock_continue;
         }
-        MUTEX_UNLOCK(&itr->ld_mutex);
 
         /*
          * The intent is to write: exclude media that are administratively
@@ -1306,26 +1302,26 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
                           itr->ld_dss_media_info->rsc.id.name,
                           rsc_adm_status2str(
                               itr->ld_dss_media_info->rsc.adm_status));
-                continue;
+                goto unlock_continue;
             }
 
             if (itr->ld_dss_media_info->fs.status == PHO_FS_STATUS_FULL) {
                 pho_debug("Media '%s' is full",
                           itr->ld_dss_media_info->rsc.id.name);
-                continue;
+                goto unlock_continue;
             }
 
             if (!itr->ld_dss_media_info->flags.put) {
                 pho_debug("Media '%s' has a false put operation flag",
                           itr->ld_dss_media_info->rsc.id.name);
-                continue;
+                goto unlock_continue;
             }
 
             if (media_tags->n_tags > 0 &&
                 !tags_in(&itr->ld_dss_media_info->tags, media_tags)) {
                 pho_debug("Media '%s' does not match required tags",
                           itr->ld_dss_media_info->rsc.id.name);
-                continue;
+                goto unlock_continue;
             }
         }
 
@@ -1337,13 +1333,14 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
             rc = tape_drive_compat(pmedia, itr, &compatible);
             if (rc) {
                 selected = NULL;
+                MUTEX_UNLOCK(&itr->ld_mutex);
                 break;
             }
 
             if (!compatible) {
                 pho_debug("Skipping incompatible device '%s'",
                           itr->ld_dev_path);
-                continue;
+                goto unlock_continue;
             }
         }
 
@@ -1354,10 +1351,15 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
         if (rc < 0) {
             pho_debug("Device selection function failed");
             selected = NULL;
+            MUTEX_UNLOCK(&itr->ld_mutex);
             break;
         } else if (rc == 0) { /* stop searching */
+            MUTEX_UNLOCK(&itr->ld_mutex);
             break;
         }
+
+unlock_continue:
+        MUTEX_UNLOCK(&itr->ld_mutex);
     }
 
     if (selected != NULL)
