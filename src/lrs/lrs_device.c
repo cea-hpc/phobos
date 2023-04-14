@@ -1309,6 +1309,7 @@ static int dev_handle_format(struct lrs_dev *dev)
     struct sub_request *subreq = dev->ld_sub_request;
     struct media_info *medium_to_format;
     struct req_container *reqc;
+    bool can_retry = true;
     int rc;
 
     reqc = dev->ld_sub_request->reqc;
@@ -1325,7 +1326,6 @@ static int dev_handle_format(struct lrs_dev *dev)
                  dev->ld_dss_dev_info->rsc.id.name);
     } else {
         bool failure_on_dev;
-        bool can_retry;
 
         rc = dev_empty(dev);
         if (rc) {
@@ -1386,6 +1386,10 @@ out:
     MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_sub_request = NULL;
     format_medium_remove(dev->ld_ongoing_format, medium_to_format);
+    /* free medium_to_format is not reused */
+    if (rc && !(rc == -EBUSY && can_retry))
+        media_info_free(medium_to_format);
+
     sub_request_free(subreq);
     MUTEX_UNLOCK(&dev->ld_mutex);
     return rc;
