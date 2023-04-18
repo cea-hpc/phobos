@@ -34,6 +34,7 @@ from enum import IntEnum
 from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
                                PHO_RSC_DIR, PHO_RSC_TAPE, PHO_RSC_RADOS_POOL,
+                               PHO_FS_LTFS, PHO_FS_POSIX, PHO_FS_RADOS,
                                PHO_TIMEVAL_MAX_LEN, MD5_BYTE_LENGTH,
                                fs_type2str, fs_status2str, rsc_adm_status2str,
                                rsc_family2str, extent_state2str)
@@ -319,6 +320,15 @@ class Tags(Structure): # pylint: disable=too-few-public-methods
         dynamically allocated (and not borrowed from another structure).
         """
         LIBPHOBOS.tags_free(byref(self))
+
+class FSType(IntEnum):
+    """File system type enumeration."""
+    FS_POSIX = PHO_FS_POSIX
+    FS_LTFS = PHO_FS_LTFS
+    FS_RADOS = PHO_FS_RADOS
+
+    def __str__(self):
+        return fs_type2str(self.value)
 
 class MediaFS(Structure): # pylint: disable=too-few-public-methods
     """Media filesystem descriptor."""

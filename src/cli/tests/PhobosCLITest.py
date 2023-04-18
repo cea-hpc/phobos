@@ -330,7 +330,7 @@ class MediaAddTest(BasicExecutionTest):
     def test_tape_invalid_const(self):
         """Unknown FS type should raise an error."""
         self.pho_execute(['tape', 'add', 'D000[10-15]', '-t', 'LTO5',
-                          '--fs', 'FooBarFS'], code=errno.EINVAL)
+                          '--fs', 'FooBarFS'], code=2) # argparse check
         self.pho_execute(['tape', 'add', 'E000[10-15]', '-t', 'BLAH'],
                          code=errno.EINVAL)
 

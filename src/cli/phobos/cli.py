@@ -49,11 +49,11 @@ import phobos.core.cfg as cfg
 from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
                                ADM_STATUS, TAGS, PUT_ACCESS, GET_ACCESS,
-                               DELETE_ACCESS, PHO_RSC_TAPE)
+                               DELETE_ACCESS, PHO_RSC_TAPE, fs_type2str)
 from phobos.core.dss import Client as DSSClient
 from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
                              MediaInfo, ObjectInfo, ResourceFamily,
-                             CLIManagedResourceMixin)
+                             CLIManagedResourceMixin, FSType)
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
 from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
@@ -959,6 +959,16 @@ class ExtentListOptHandler(ListOptHandler):
                             help="filter using POSIX regexp instead of "
                                  "exact extent")
 
+def uncase_fstype(choices):
+    """Check if an uncase FS type is a valid choice."""
+    def find_choice(choice):
+        """Return the uppercase choice if valid, the input choice if not."""
+        for key, item in enumerate([elt.upper() for elt in choices]):
+            if choice.upper() == item:
+                return choices[key]
+        return choice
+    return find_choice
+
 class TapeAddOptHandler(MediaAddOptHandler):
     """Specific version of the 'add' command for tapes, with extra-options."""
     @classmethod
@@ -968,6 +978,8 @@ class TapeAddOptHandler(MediaAddOptHandler):
         parser.add_argument('-t', '--type', required=True,
                             help='tape technology')
         parser.add_argument('--fs', default="LTFS",
+                            choices=list(map(fs_type2str, FSType)),
+                            type=uncase_fstype(list(map(fs_type2str, FSType))),
                             help='Filesystem type (default: LTFS)')
 
 class MediumLocateOptHandler(DSSInteractHandler):
@@ -1031,7 +1043,10 @@ class TapeFormatOptHandler(FormatOptHandler):
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(TapeFormatOptHandler, cls).add_options(parser)
-        parser.add_argument('--fs', default='ltfs', help='Filesystem type')
+        parser.add_argument('--fs', default='ltfs',
+                            choices=list(map(fs_type2str, FSType)),
+                            type=uncase_fstype(list(map(fs_type2str, FSType))),
+                            help='Filesystem type')
         parser.add_argument('--force', action='store_true',
                             help='Format the medium whatever its status')
 
@@ -1042,7 +1057,10 @@ class DirFormatOptHandler(FormatOptHandler):
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(DirFormatOptHandler, cls).add_options(parser)
-        parser.add_argument('--fs', default='posix', help='Filesystem type')
+        parser.add_argument('--fs', default='posix',
+                            choices=list(map(fs_type2str, FSType)),
+                            type=uncase_fstype(list(map(fs_type2str, FSType))),
+                            help='Filesystem type')
 
 class RadosPoolFormatOptHandler(FormatOptHandler):
     """Format a RADOS pool."""
@@ -1052,7 +1070,10 @@ class RadosPoolFormatOptHandler(FormatOptHandler):
         """Add resource-specific options."""
         super(RadosPoolFormatOptHandler, cls).add_options(parser)
         # invisible fs argument in help because it is not useful
-        parser.add_argument('--fs', default='RADOS', help=argparse.SUPPRESS)
+        parser.add_argument('--fs', default='RADOS',
+                            choices=list(map(fs_type2str, FSType)),
+                            type=uncase_fstype(list(map(fs_type2str, FSType))),
+                            help=argparse.SUPPRESS)
 
 class BaseResourceOptHandler(DSSInteractHandler):
     """Generic interface for resources manipulation."""
