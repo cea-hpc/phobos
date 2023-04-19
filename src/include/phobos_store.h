@@ -143,14 +143,18 @@ struct pho_xfer_desc {
 };
 
 /**
- * Initialize the global context of Phobos. Must be called before any call to a
- * phobos function.
+ * Initialize the global context of Phobos.
+ *
+ * This must be called using the following order:
+ *   phobos_init -> ... -> phobos_fini
  */
 int phobos_init(void);
 
 /**
- * Finalize the global context of Phobos. One must call phobos_init again if
- * they want to use Phobos again.
+ * Finalize the global context of Phobos.
+ *
+ * This must be called using the following order:
+ *   phobos_init -> ... -> phobos_fini
  */
 void phobos_fini(void);
 
@@ -170,6 +174,8 @@ void phobos_fini(void);
  * Individual completion notifications are issued via xd_callback.
  * This function returns the first encountered error or 0 if all
  * sub-operations have succeeded.
+ *
+ * This must be called after phobos_init.
  */
 int phobos_put(struct pho_xfer_desc *xfers, size_t n,
                pho_completion_cb_t cb, void *udata);
@@ -209,6 +215,8 @@ int phobos_put(struct pho_xfer_desc *xfers, size_t n,
  * Individual completion notifications are issued via xd_callback.
  * This function returns the first encountered error or 0 if all
  * sub-operations have succeeded.
+ *
+ * This must be called after phobos_init.
  */
 int phobos_get(struct pho_xfer_desc *xfers, size_t n,
                pho_completion_cb_t cb, void *udata);
@@ -224,6 +232,8 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
  * Individual completion notifications are issued via xd_callback.
  * This function returns the first encountered error of 0 if all
  * sub-operations have succeeded.
+ *
+ * This must be called after phobos_init.
  */
 int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
                  pho_completion_cb_t cb, void *udata);
@@ -240,6 +250,8 @@ int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
  * @param[in]   num_xfers   Number of objects to delete
  *
  * @return                  0 on success, -errno on failure
+ *
+ * This must be called after phobos_init.
  */
 int phobos_delete(struct pho_xfer_desc *xfers, size_t num_xfers);
 
@@ -252,6 +264,8 @@ int phobos_delete(struct pho_xfer_desc *xfers, size_t num_xfers);
  * @param[in]   num_xfers   Number of objects to undelete
  *
  * @return                  0 on success, -errno on failure
+ *
+ * This must be called after phobos_init.
  */
 int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers);
 
@@ -300,6 +314,8 @@ int phobos_undelete(struct pho_xfer_desc *xfers, size_t num_xfers);
  *                          -ENODEV if there is no existing medium to retrieve
  *                          this object
  *                          -EADDRNOTAVAIL if we cannot get self hostname
+ *
+ * This must be called after phobos_init.
  */
 int phobos_locate(const char *obj_id, const char *uuid, int version,
                   const char *focus_host, char **hostname, int *nb_new_lock);
@@ -309,6 +325,8 @@ int phobos_locate(const char *obj_id, const char *uuid, int version,
  * the tags in case the xfer corresponds to a PUT operation.
  *
  * @param[in]   xfer        The xfer structure to clean.
+ *
+ * This must be called after phobos_init.
  */
 void pho_xfer_desc_clean(struct pho_xfer_desc *xfer);
 
@@ -334,6 +352,8 @@ void pho_xfer_desc_clean(struct pho_xfer_desc *xfer);
  *
  * \return                          0     on success,
  *                                 -errno on failure.
+ *
+ * This must be called after phobos_init.
  */
 int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
                              const char **metadata, int n_metadata,
@@ -345,6 +365,8 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
  *
  * \param[in]       objs            Objects to release.
  * \param[in]       n_objs          Number of objects to release.
+ *
+ * This must be called after phobos_init.
  */
 void phobos_store_object_list_free(struct object_info *objs, int n_objs);
 

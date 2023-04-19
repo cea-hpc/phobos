@@ -43,17 +43,25 @@ struct admin_handle {
  * Release the admin handler.
  *
  * \param[in/out]   adm             Admin handler.
+ *
+ * This must be called using the following order:
+ *   phobos_init -> phobos_admin_init -> ... -> phobos_admin_fini -> phobos_fini
  */
 void phobos_admin_fini(struct admin_handle *adm);
 
 /**
  * Initialize the admin handler.
  *
+ * The handler must be released using phobos_admin_fini.
+ *
  * \param[out]      adm             Admin handler.
  * \param[in]       lrs_required    True if the LRS is required.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
+ *
+ * This must be called using the following order:
+ *   phobos_init -> phobos_admin_init -> ... -> phobos_admin_fini -> phobos_fini
  */
 int phobos_admin_init(struct admin_handle *adm, bool lrs_required);
 
@@ -68,6 +76,8 @@ int phobos_admin_init(struct admin_handle *adm, bool lrs_required);
  *
  * \return                          0     on success,
  *                                 -errno on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
                             unsigned int num_dev, bool keep_locked);
@@ -87,6 +97,8 @@ int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
  *
  * \return                          0     on success,
  *                                 -errno on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
                                int num_dev, int *num_removed_dev);
@@ -105,6 +117,8 @@ int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
  *
  * \return                          0     on success,
  *                                 -errno on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_device_lock(struct admin_handle *adm, struct pho_id *dev_ids,
                              int num_dev, bool is_forced);
@@ -123,6 +137,8 @@ int phobos_admin_device_lock(struct admin_handle *adm, struct pho_id *dev_ids,
  *
  * \return                          0     on success,
  *                                 -errno on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
                                int num_dev, bool is_forced);
@@ -135,6 +151,8 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
  * @param[in]  status  allocated JSON string containing status information
  *
  * @return             0 on success, negative error on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_device_status(struct admin_handle *adm, enum rsc_family family,
                                char **status);
@@ -159,6 +177,8 @@ int phobos_admin_device_status(struct admin_handle *adm, enum rsc_family family,
  *
  * This function will process all devices. In case of failure, only the first
  * encountered error is returned once the processing is done.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
                                unsigned int num_dev, const char *host,
@@ -178,6 +198,8 @@ int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
  *
  * \return                          0     on success,
  *                                 -errno on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
                         int n_ids, int nb_streams, enum fs_type fs,
@@ -190,6 +212,8 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
  *
  * \return                          0     on success,
  *                                 -errno on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_ping(struct admin_handle *adm);
 
@@ -209,6 +233,8 @@ int phobos_admin_ping(struct admin_handle *adm);
  *
  * \return                          0     on success,
  *                                 -errno on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
                              int n_res, bool is_pattern, const char *medium,
@@ -219,6 +245,8 @@ int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
  *
  * \param[in]       layouts            List of layouts to release.
  * \param[in]       n_layouts          Number of layouts to release.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 void phobos_admin_layout_list_free(struct layout_info *layouts, int n_layouts);
 
@@ -231,6 +259,8 @@ void phobos_admin_layout_list_free(struct layout_info *layouts, int n_layouts);
  * @param[out]  node_name   Name of the node which holds \p medium_id or NULL.
  * @return                  0 on success (\p *node_name can be NULL),
  *                         -errno on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_medium_locate(struct admin_handle *adm,
                                const struct pho_id *medium_id,
@@ -271,6 +301,8 @@ int phobos_admin_medium_locate(struct admin_handle *adm,
  *
  * @return                      0 on success
  *                              -errno on failure
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
                              bool force, enum dss_type lock_type,
@@ -289,6 +321,8 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
  *
  * @return                      0 on success
  *                              -errno on failure
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
                           json_t **lib_data);
