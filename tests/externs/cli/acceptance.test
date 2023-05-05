@@ -610,8 +610,8 @@ TESTS=("dir_setup; \
         mput; \
         concurrent_put; \
         check_status dir $dirs; \
-        dir_lock_test; \
         concurrent_put_get_retry; \
+        dir_lock_test; \
         dir_cleanup")
 
 if  [[ -w /dev/changer ]]; then

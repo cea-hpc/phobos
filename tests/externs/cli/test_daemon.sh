@@ -37,8 +37,8 @@ function setup
 
 function cleanup
 {
-    drain_all_drives
     drop_tables
+    drain_all_drives
 }
 
 function test_invalid_lock_file()
@@ -443,6 +443,7 @@ function test_mount_failure_during_read_response()
         error "Put command failed"
 
     # Force mount to fail
+    local save_mount_cmd=$PHOBOS_LTFS_cmd_mount
     export PHOBOS_LTFS_cmd_mount="sh -c 'exit 1'"
     waive_daemon
     invoke_daemon
@@ -452,7 +453,7 @@ function test_mount_failure_during_read_response()
 
     ps --pid "$PID_DAEMON"
 
-    unset PHO_CFG_LTFS_cmd_mount
+    export PHOBOS_LTFS_cmd_mount="$save_mount_cmd"
     waive_daemon
     drop_tables
 
@@ -562,11 +563,13 @@ exit 1
 \""
 
     echo 0 > /tmp/mount_count
+    local save_mount_cmd=$PHOBOS_LTFS_cmd_mount
     export PHOBOS_LTFS_cmd_mount="$cmd"
     invoke_daemon
     $phobos ping
 
     $phobos get "$oid" "$DIR_TEST_OUT"/"$oid"
+    export PHOBOS_LTFS_cmd_mount="$save_mount_cmd"
 }
 
 function test_retry_on_error()
@@ -584,6 +587,48 @@ function test_retry_on_error()
          unset PHOBOS_IO_SCHED_TAPE_read_algo
         )
     done
+}
+
+function test_fair_share_max_reached()
+{
+    local drive=$(get_lto_drives 5 1)
+    local tape=$(get_tapes L5 1)
+    local oid=test_fair_share_max_reached
+
+    drop_tables
+    setup_tables
+    export PHOBOS_IO_SCHED_TAPE_dispatch_algo=fair_share
+    trap "waive_daemon; cleanup" EXIT
+    invoke_daemon
+
+    # With this setup, any get will wait
+    $phobos sched fair_share --type LTO5 --min 0,0,0 --max 0,1,1
+
+    $phobos drive add --unlock $drive
+    $phobos tape add --type lto5 "$tape"
+    $phobos tape format --unlock "$tape"
+
+    $phobos put /etc/hosts $oid
+
+    local lock_hostname=$($phobos tape list -o lock_hostname $tape)
+    rm -f /tmp/$oid
+    $phobos get $oid /tmp/$oid &
+    local pid=$!
+    sleep 1
+
+    local new_lock_hostname=$($phobos tape list -o lock_hostname $tape)
+    if [ "$lock_hostname" != "$new_lock_hostname" ]; then
+        # make sure that we don't unlock the medium when trying to alloc the
+        # read request and we don't have any device available.
+        error "Lock has been changed! Previous hostname: $lock_hostname," \
+            "Current hostname: $new_lock_hostname"
+    fi
+
+    ps $pid || error "phobos get process is not running"
+    $phobos sched fair_share --type LTO5 --max 1,1,1
+    wait || error "Get should have succeeded after setting max reads to 1"
+    waive_daemon
+    trap cleanup EXIT
 }
 
 trap cleanup EXIT
@@ -607,4 +652,5 @@ if [[ -w /dev/changer ]]; then
     test_remove_invalid_device_locks
     test_mount_failure_during_read_response
     test_format_fail_without_suitable_device
+    test_fair_share_max_reached
 fi

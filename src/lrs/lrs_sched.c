@@ -1302,8 +1302,10 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
         if (is_write && itr->ld_dss_media_info) {
             if (itr->ld_dss_media_info->rsc.adm_status !=
                     PHO_RSC_ADM_ST_UNLOCKED) {
-                pho_debug("Media '%s' is not unlocked",
-                          itr->ld_dss_media_info->rsc.id.name);
+                pho_debug("Media '%s' is not unlocked but '%s'",
+                          itr->ld_dss_media_info->rsc.id.name,
+                          rsc_adm_status2str(
+                              itr->ld_dss_media_info->rsc.adm_status));
                 continue;
             }
 
@@ -2002,10 +2004,6 @@ find_read_device:
         &reqc->params.rwalloc.media[index_to_alloc].alloc_medium;
 
     if (!dev) {
-        /* cannot schedule the medium right now, unlock it */
-        if (*alloc_medium && (*alloc_medium)->lock.hostname)
-            medium_unlock(sched->lock_handle.dss, *alloc_medium);
-
         /* an I/O scheduler may not set *alloc_medium if it doesn't find a
          * suitable medium. Return EAGAIN in this case.
          */
