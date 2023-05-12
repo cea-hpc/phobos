@@ -1,0 +1,56 @@
+#!/bin/bash
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+# Test matrix. Each row represents the parameters of one test.
+test_matrix=(
+    # Read algo    write  format
+    "fifo"         "fifo" "fifo"
+    "grouped_read" "fifo" "fifo"
+)
+
+function setup()
+{
+    setup_tables
+}
+
+function cleanup()
+{
+    drop_tables
+}
+
+function test_fair_share_setup()
+{
+    local index=$1
+
+    export PHO_IO_SCHED_read_algo=${test_matrix[3 * index]}
+    export PHO_IO_SCHED_write_algo=${test_matrix[3 * index + 1]}
+    export PHO_IO_SCHED_format_algo=${test_matrix[3 * index + 2]}
+    export PHO_IO_SCHED_fair_share_lto5_min="0,0,0"
+    export PHO_IO_SCHED_fair_share_lto5_max="5,5,5"
+
+    invoke_daemon
+}
+
+function test_fair_share_cleanup()
+{
+    waive_daemon
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Tapes required for this test"
+fi
+
+TEST_SETUP=setup
+TESTS=(
+    "test_fair_share_setup 0;\
+     test_fair_share_cleanup"
+
+    "test_fair_share_setup 1;\
+     test_fair_share_cleanup"
+)
+TEST_CLEANUP=cleanup

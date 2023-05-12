@@ -41,6 +41,7 @@ check_PROGRAMS=lrs_simple_client \
                medium_locker
 
 check_SCRIPTS=acceptance.test \
+              test_fair_share.test \
               test_daemon.sh \
               test_daemon_monitoring.sh \
               test_daemon_scheduling.test \

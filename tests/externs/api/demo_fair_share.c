@@ -527,6 +527,10 @@ int main(void)
     pthread_t sender;
     int rc;
 
+    // TODO add -w -r -f to specify the repartition using CLI arguments
+    // TODO count the number of errors and return it
+    // TODO count the number of requests that where never answered
+    // TODO on error find the type of request and decrement the inflight count
     // TODO remove put access from readable tapes
     // TODO make sure that each request is sent regularly
 
