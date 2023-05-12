@@ -222,11 +222,6 @@ static int find_read_device(struct io_scheduler *io_sched,
         return 0;
     }
 
-    pho_info("%s: dev=%s, belongs to read=%s", __func__,
-             *dev ? (*dev)->ld_dev_path : "none",
-             *dev ?
-                ((*dev)->ld_io_request_type & IO_REQ_READ) ?
-                    "true" : "false" : "none");
     if (!((*dev)->ld_io_request_type & IO_REQ_READ)) {
         /* The tape to read is not on a drive owned by this scheduler. */
         int rc;

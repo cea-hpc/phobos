@@ -6,6 +6,7 @@
 #include "../../../src/lrs/io_sched.h"
 #include "../../../src/lrs/lrs_cfg.h"
 
+#include <getopt.h>
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
@@ -26,8 +27,15 @@ struct requests {
     GArray *formats;
 };
 
+struct request_stats {
+    size_t sent;
+    size_t errors;
+    size_t responses;
+};
+
 struct context {
     size_t inflight;
+    struct request_stats stats;
     size_t nb_reads;
     size_t nb_writes;
     size_t nb_formats;
@@ -36,22 +44,28 @@ struct context {
     GPtrArray *tapes_to_read;
     struct pho_comm_info *comm;
     struct dss_handle dss;
+    bool interactive;
 };
 
-static int send_request(struct pho_comm_info *comm,
+static bool should_stop;
+
+static int send_request(struct context *context,
                         struct request *request)
 {
     struct pho_comm_data msg;
     int rc;
 
-    if (pho_request_is_write(&request->req))
-        pho_info("write");
-    else if (pho_request_is_read(&request->req))
-        pho_info("read: %s", request->req.ralloc->med_ids[0]->name);
-    else if (pho_request_is_format(&request->req))
-        pho_info("format: %s", request->req.format->med_id->name);
+    if (!pho_request_is_release(&request->req))
+        context->stats.sent++;
 
-    msg = pho_comm_data_init(comm);
+    if (pho_request_is_write(&request->req))
+        pho_debug("write");
+    else if (pho_request_is_read(&request->req))
+        pho_debug("read: %s", request->req.ralloc->med_ids[0]->name);
+    else if (pho_request_is_format(&request->req))
+        pho_debug("format: %s", request->req.format->med_id->name);
+
+    msg = pho_comm_data_init(context->comm);
     rc = pho_srl_request_pack(&request->req, &msg.buf);
     if (rc)
         return rc;
@@ -60,6 +74,7 @@ static int send_request(struct pho_comm_info *comm,
     free(msg.buf.buff);
     if (rc)
         return rc;
+
 
     return 0;
 }
@@ -72,7 +87,8 @@ static int handle_read_response(struct context *context,
     struct request request;
     int rc;
 
-    pho_info("read: %s", resp->ralloc->media[0]->med_id->name);
+    context->stats.responses++;
+    pho_debug("read: %s", resp->ralloc->media[0]->med_id->name);
 
     rc = pho_srl_request_release_alloc(&request.req, 1);
     if (rc)
@@ -85,7 +101,7 @@ static int handle_read_response(struct context *context,
     request.req.release->media[0]->to_sync = false;
     request.req.release->media[0]->rc = 0;
 
-    send_request(comm, &request);
+    send_request(context, &request);
 
     read_req = &g_array_index(context->requests.reads,
                               struct request,
@@ -103,7 +119,8 @@ static int handle_write_response(struct context *context,
     struct request request;
     int rc;
 
-    pho_info("write: %s", resp->walloc->media[0]->med_id->name);
+    context->stats.responses++;
+    pho_debug("write: %s", resp->walloc->media[0]->med_id->name);
     rc = pho_srl_request_release_alloc(&request.req, 1);
     if (rc)
         return rc;
@@ -115,7 +132,7 @@ static int handle_write_response(struct context *context,
     request.req.release->media[0]->to_sync = false;
     request.req.release->media[0]->rc = 0;
 
-    send_request(comm, &request);
+    send_request(context, &request);
 
     write_req = &g_array_index(context->requests.writes,
                                struct request,
@@ -137,7 +154,8 @@ static int handle_format_response(struct context *context,
     int count;
     int rc;
 
-    pho_info("format: %s", resp->format->med_id->name);
+    context->stats.responses++;
+    pho_debug("format: %s", resp->format->med_id->name);
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                           "  {\"DSS::MDA::family\": \"%s\"},"
@@ -178,10 +196,10 @@ static int build_read_request(struct context *context)
     struct request req;
     int rc;
 
-    pho_info("context->requests.reads->len: %d, "
-             "context->tapes_to_read->len: %d",
-             context->requests.reads->len,
-             context->tapes_to_read->len);
+    pho_debug("context->requests.reads->len: %d, "
+              "context->tapes_to_read->len: %d",
+              context->requests.reads->len,
+              context->tapes_to_read->len);
 
     // TODO make sure that each medium is read at least once
     medium = g_ptr_array_index(context->tapes_to_read,
@@ -280,8 +298,8 @@ static int build_and_send_requests(struct context *context,
 
         req = &g_array_index(context->requests.reads, struct request, i);
 
-        if (req->status == READY) {
-            send_request(comm, req);
+        if (req->status == READY && !should_stop) {
+            send_request(context, req);
             context->inflight++;
             req->status = SENT;
         }
@@ -293,8 +311,8 @@ static int build_and_send_requests(struct context *context,
 
         req = &g_array_index(context->requests.writes, struct request, i);
 
-        if (req->status == READY) {
-            send_request(comm, req);
+        if (req->status == READY && !should_stop) {
+            send_request(context, req);
             context->inflight++;
             req->status = SENT;
         }
@@ -306,14 +324,42 @@ static int build_and_send_requests(struct context *context,
 
         req = &g_array_index(context->requests.formats, struct request, i);
 
-        if (req->status == READY) {
-            send_request(comm, req);
+        if (req->status == READY && !should_stop) {
+            send_request(context, req);
             context->inflight++;
             req->status = SENT;
         }
     }
 
     return 0;
+}
+
+static void handle_error(struct context *context,
+                         pho_resp_t *resp)
+{
+    struct request *request;
+    GArray *requests;
+
+    context->stats.errors++;
+    context->stats.responses++;
+
+    fprintf(stderr, "received an error response: %s\n",
+            strerror(-resp->error->rc));
+
+    switch (resp->error->req_kind) {
+    case PHO_REQUEST_KIND__RQ_READ:
+        requests = context->requests.reads;
+        break;
+    case PHO_REQUEST_KIND__RQ_WRITE:
+        requests = context->requests.writes;
+        break;
+    case PHO_REQUEST_KIND__RQ_FORMAT:
+        requests = context->requests.formats;
+        break;
+    }
+
+    request = &g_array_index(requests, struct request, resp->req_id);
+    request->status = READY;
 }
 
 static void *send_requests(void *data)
@@ -333,7 +379,7 @@ static void *send_requests(void *data)
         pthread_exit(NULL);
     }
 
-    while (true) {
+    while (!should_stop || context->inflight) {
         struct pho_comm_data *responses = NULL;
         int n_responses = 0;
         int i;
@@ -370,8 +416,7 @@ static void *send_requests(void *data)
             else if (pho_response_is_format(resp))
                 handle_format_response(context, context->comm, resp);
             else if (pho_response_is_error(resp))
-                fprintf(stderr, "received an error response: %s\n",
-                        strerror(-resp->error->rc));
+                handle_error(context, resp);
             else
                 pthread_exit(NULL);
         }
@@ -520,19 +565,108 @@ static int fetch_tapes(struct context *context)
     return 0;
 }
 
-int main(void)
+static void usage(const char *progname)
+{
+    fprintf(stderr,
+            "Usage: %s [-h|--help] [-v|--verbose] [-q|--quit] [-r|--reads] "
+            "[-w|--writes] [-f|--formats]\n"
+            "\n"
+            "\t-h|--help    show this message\n"
+            "\t-r|--reads   the number of inflight read requests\n"
+            "\t-w|--writes  the number of inflight write requests\n"
+            "\t-f|--formats the number of inflight format requests\n",
+            progname);
+}
+
+#define STOP 1
+
+static int parse_args(struct context *context, int argc, char **argv)
+{
+    static struct option options[] = {
+        {"help",        no_argument,       0,  'h'},
+        {"verbose",     no_argument,       0,  'v'},
+        {"quiet",       no_argument,       0,  'q'},
+        {"reads",       required_argument, 0,  'r'},
+        {"writes",      required_argument, 0,  'w'},
+        {"formats",     required_argument, 0,  'f'},
+        {"interactive", no_argument,       0,  'i'},
+        {0,             0,                 0,  0}
+    };
+    int verbose = PHO_LOG_INFO;
+    char c;
+
+    while ((c = getopt_long(argc, argv, "ihvqr:w:f:", options, NULL)) != -1) {
+        switch (c) {
+        case 'h':
+            usage(argv[0]);
+            return STOP;
+        case 'v':
+            if (verbose < PHO_LOG_DEBUG)
+                verbose++;
+            break;
+        case 'q':
+            if (verbose > PHO_LOG_DISABLED)
+                verbose--;
+            break;
+        case 'r':
+            context->nb_reads = atoi(optarg);
+            if (context->nb_reads == 0)
+                LOG_RETURN(-EINVAL,
+                           "read argument '%s' must be a positive integer",
+                           optarg);
+            break;
+        case 'w':
+            context->nb_writes = atoi(optarg);
+            if (context->nb_writes == 0)
+                LOG_RETURN(-EINVAL,
+                           "write argument '%s' must be a positive integer",
+                           optarg);
+            break;
+        case 'f':
+            context->nb_formats = atoi(optarg);
+            if (context->nb_formats == 0)
+                LOG_RETURN(-EINVAL,
+                           "format argument '%s' must be a positive integer",
+                           optarg);
+            break;
+        case 'i':
+            context->interactive = true;
+            break;
+        default:
+            usage(argv[0]);
+            return -EINVAL;
+        }
+    }
+
+    pho_log_level_set(verbose);
+
+    return 0;
+}
+
+static void handle_sigterm(int signum)
+{
+    should_stop = true;
+}
+
+static int setup_signal(void)
+{
+    struct sigaction sig;
+
+    sig.sa_handler = handle_sigterm;
+    sig.sa_flags = 0;
+    sigemptyset(&sig.sa_mask);
+    sigaction(SIGTERM, &sig, NULL);
+    sigaction(SIGINT, &sig, NULL);
+}
+
+int main(int argc, char **argv)
 {
     struct context context = {0};
     char command[32];
     pthread_t sender;
     int rc;
 
-    // TODO add -w -r -f to specify the repartition using CLI arguments
-    // TODO count the number of errors and return it
-    // TODO count the number of requests that where never answered
-    // TODO on error find the type of request and decrement the inflight count
-    // TODO remove put access from readable tapes
-    // TODO make sure that each request is sent regularly
+    setup_signal();
 
     context.requests.reads = g_array_new(false, false,
                                          sizeof(struct request));
@@ -547,15 +681,25 @@ int main(void)
     pho_context_init();
     atexit(pho_context_fini);
 
+    rc = parse_args(&context, argc, argv);
+    if (rc)
+        return -rc;
+
     pho_cfg_init_local(NULL);
 
     fetch_tapes(&context);
 
     rc = pthread_create(&sender, NULL, send_requests, &context);
     if (rc)
-        return rc;
+        goto fini;
 
-    while (true) {
+    if (!context.interactive) {
+        rc = pthread_join(sender, NULL);
+
+        goto fini;
+    }
+
+    while (!should_stop) {
         size_t cmdlen;
         char *space;
         char *read;
@@ -581,7 +725,8 @@ int main(void)
         if (!strcmp(command, "quit")) {
             if (context.inflight == 0)
                 break;
-            pho_info("Cannot stop the client, some requests are still ongoing");
+            pho_warn("Cannot stop the client, some requests are still ongoing");
+            continue;
         }
 
         if (!strncmp(command, "reads", min(5, space - command)))
@@ -595,7 +740,15 @@ int main(void)
                     space - command, command);
     }
     pho_comm_close(context.comm);
+fini:
     dss_fini(&context.dss);
 
-    return 0;
+    if (rc == STOP)
+        return 0;
+
+    printf("errors: %lu\n", context.stats.errors);
+    printf("sent: %lu\n", context.stats.sent);
+    printf("no response: %lu\n", context.stats.sent - context.stats.responses);
+
+    return rc != 0 ? -rc : context.stats.errors;
 }

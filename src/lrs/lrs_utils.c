@@ -74,8 +74,6 @@ struct lrs_dev *search_loaded_medium(GPtrArray *devices,
 
         dev = g_ptr_array_index(devices, i);
         MUTEX_LOCK(&dev->ld_mutex);
-        pho_info("dev: %s", dev->ld_dev_path);
-
         if (dev->ld_op_status != PHO_DEV_OP_ST_MOUNTED &&
             dev->ld_op_status != PHO_DEV_OP_ST_LOADED)
             goto err_continue;

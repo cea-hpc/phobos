@@ -5,6 +5,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
 . $test_dir/tape_drive.sh
+fair_share_sender=$test_dir/externs/cli/test_fair_share
 
 # Test matrix. Each row represents the parameters of one test.
 test_matrix=(
@@ -15,7 +16,22 @@ test_matrix=(
 
 function setup()
 {
+    local drives=$(get_lto_drives 5 4)
+    local tapes=($(get_tapes L5 5 | nodeset -e))
+
+    drain_all_drives
     setup_tables
+    invoke_daemon
+
+    $phobos drive add --unlock $drives
+    $phobos tape add --type LTO5 --unlock ${tapes[@]}
+    $phobos tape format ${tapes[@]:0:4}
+    $phobos tape set-access -- -P ${tapes[@]:0:2}
+    $phobos tape set-access -- -G ${tapes[@]:2:2}
+    $phobos tape set-access -- -PG ${tapes[4]}
+    $phobos tape list -o name,adm_status,fs.status,put_access,get_access
+
+    waive_daemon
 }
 
 function cleanup()
@@ -36,6 +52,34 @@ function test_fair_share_setup()
     invoke_daemon
 }
 
+function test_fair_share()
+{
+    local rc
+
+    set +e
+    local res=$(timeout --preserve-status 5 $fair_share_sender -r 2 -w 2)
+    rc=$?
+    set -e
+
+    local errors=$(echo "$res" | grep "errors: " | cut -d':' -f2)
+    local sent=$(echo "$res" | grep "sent: " | cut -d':' -f2)
+    local no_response=$(echo "$res" | grep "no response: " | cut -d':' -f2)
+
+    if (( sent == 0 )); then
+        error "No messages sent in 5s"
+    fi
+
+    if (( errors > 0 )); then
+        error "Some errors where received"
+    fi
+
+    if (( no_response > 0 )); then
+        error "Some requests did not receive a response"
+    fi
+
+    return $rc
+}
+
 function test_fair_share_cleanup()
 {
     waive_daemon
@@ -48,9 +92,11 @@ fi
 TEST_SETUP=setup
 TESTS=(
     "test_fair_share_setup 0;\
+     test_fair_share;\
      test_fair_share_cleanup"
 
     "test_fair_share_setup 1;\
+     test_fair_share;\
      test_fair_share_cleanup"
 )
 TEST_CLEANUP=cleanup
