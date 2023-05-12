@@ -105,6 +105,21 @@ struct device {
     struct request_queue *queue;
 };
 
+static void associate_queue_to_device(struct device *device,
+                                      struct request_queue *queue)
+{
+    device->queue = queue;
+    queue->device = device;
+}
+
+static void remove_queue_from_device(struct device *device,
+                                     struct request_queue *queue)
+{
+    device->queue = NULL;
+    if (queue->device)
+        queue->device = NULL;
+}
+
 struct grouped_data {
     GHashTable *request_queues; /* hashtable containing pointers to struct
                                  * request_queue.
@@ -279,7 +294,6 @@ static gboolean glib_stop_at_first_compatible(gpointer _queue_name,
 
     ctxt->device = find_compatible_device(ctxt->devices, queue->medium_info,
                                           &compatible_device_found);
-
     if (!compatible_device_found)
         /* we cannot remove during g_hash_table_foreach, so save it for later */
         g_ptr_array_add(ctxt->incompatible_queues, queue);
@@ -341,7 +355,7 @@ static void delete_queue(struct grouped_data *data,
     g_hash_table_remove(data->request_queues, queue->name);
 
     if (queue->device)
-        queue->device->queue = NULL;
+        remove_queue_from_device(queue->device, queue);
 
     free((char *)queue->name);
     media_info_free(queue->medium_info);
@@ -556,7 +570,41 @@ static struct device *find_device(struct io_scheduler *io_sched,
     return NULL;
 }
 
-/* Return true if there are enough available devices to handle \p reqc.
+static int try_exchange_extra_devices(struct io_scheduler *io_sched,
+                                      struct lrs_dev **extra_devices,
+                                      size_t len)
+{
+    struct grouped_data *data = io_sched->private_data;
+    size_t i;
+
+    for (i = 0; i < len; i++) {
+        int rc;
+
+        rc = exchange_device(io_sched, IO_REQ_READ, extra_devices[i]);
+        if (rc) {
+            pho_error(rc, "Failed to exchange devices");
+            return rc;
+        }
+
+        if (extra_devices[i]->ld_io_request_type & IO_REQ_READ) {
+            struct device *d;
+
+            /* do not increment available_devices since we exchange a free
+             * device with a device that we can use.
+             */
+            d = find_device(io_sched, extra_devices[i]);
+            d->queue = g_hash_table_lookup(
+                data->request_queues,
+                d->device->ld_dss_media_info->rsc.id.name);
+            d->queue->device = d;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * Return true if there are enough available devices to handle \p reqc.
  *
  * \param[in] available_devices  Number of devices that are ready for scheduling
  *                               and don't have a queue associated. It is given
@@ -577,6 +625,7 @@ static bool request_can_be_allocated(struct io_scheduler *io_sched,
     struct lrs_dev **extra_devices;
     struct lrs_dev **dev_iter;
     bool res = false;
+    int rc;
     int i;
 
     if (available_devices >= n_required)
@@ -620,30 +669,11 @@ static bool request_can_be_allocated(struct io_scheduler *io_sched,
         }
     }
 
-    dev_iter = extra_devices;
-
-    while (*dev_iter && available_devices < n_required) {
-        int rc;
-
-        rc = exchange_device(io_sched, IO_REQ_READ, *dev_iter);
-        if (rc) {
-            pho_error(rc, "Failed to exchange devices");
-            GOTO(free_list, res = false);
-        }
-
-        if ((*dev_iter)->ld_io_request_type & IO_REQ_READ) {
-            struct device *d;
-
-            /* do not increment available_devices since we exchange a free
-             * device with a device that we can use.
-             */
-            d = find_device(io_sched, *dev_iter);
-            d->queue = g_hash_table_lookup(
-                data->request_queues,
-                d->device->ld_dss_media_info->rsc.id.name);
-            d->queue->device = d;
-        }
-        dev_iter++;
+    rc = try_exchange_extra_devices(io_sched, extra_devices,
+                                    dev_iter - extra_devices);
+    if (rc) {
+        pho_error(rc, "Failed to exchanged devices");
+        res = false;
     }
 
 free_list:
@@ -678,15 +708,13 @@ static int grouped_peek_request(struct io_scheduler *io_sched,
              */
             name = device->device->ld_dss_media_info->rsc.id.name;
             queue = g_hash_table_lookup(data->request_queues, name);
-            if (queue) {
+            if (queue)
                 /* queue can be NULL if, for example, a medium is already loaded
                  * when the LRS starts. If no request for this medium has been
                  * pushed yet, the medium is in device->device but no queue
                  * exists.
                  */
-                device->queue = queue;
-                queue->device = device;
-            }
+                associate_queue_to_device(device, queue);
         }
 
         if (!dev_is_sched_ready(device->device) || !device->queue)
@@ -759,13 +787,15 @@ static int allocate_queue_if_loaded(struct io_scheduler *io_sched,
 
     d = search_loaded_medium(io_sched->io_sched_hdl->global_device_list,
                              queue->name);
-    // FIXME what if the medium is in a device that belongs to someone else.
+    /* If the device belongs to another scheduler, the request will be pushed to
+     * the queue in the hash table. The device will be associated to the queue
+     * when it is exchanged with the I/O scheduler that owns it.
+     */
     if (!d || !(d->ld_io_request_type & io_sched->type))
         return 0;
 
     device = find_device_from_lrs_dev(io_sched, d);
-    device->queue = queue;
-    queue->device = device;
+    associate_queue_to_device(device, queue);
 
     return 0;
 }
@@ -856,15 +886,6 @@ free_elems:
     return rc;
 }
 
-static void remove_queue_element(struct grouped_data *data,
-                                 struct queue_element *elem)
-{
-    g_queue_remove(elem->queue->queue, elem);
-
-    if (g_queue_get_length(elem->queue->queue) == 0)
-        delete_queue(data, elem->queue);
-}
-
 static void remove_elements_from_list(struct grouped_data *data,
                                       struct queue_element *to_ignore,
                                       GList *list)
@@ -876,7 +897,7 @@ static void remove_elements_from_list(struct grouped_data *data,
             /* do not free to_ignore yet */
             continue;
 
-        remove_queue_element(data, elem);
+        remove_element_from_queue(data, elem);
         queue_element_free(elem, false);
     }
 }
@@ -921,7 +942,7 @@ static int grouped_remove_request(struct io_scheduler *io_sched,
     remove_elements_from_list(data, elem, elem->pair->used);
     remove_elements_from_list(data, elem, elem->pair->free);
 
-    remove_queue_element(data, elem);
+    remove_element_from_queue(data, elem);
     queue_element_free(elem, true);
 
     data->current_elem = NULL;
@@ -1139,10 +1160,8 @@ static int grouped_get_device_medium_pair(struct io_scheduler *io_sched,
              * I think the only solution is to have a boolean in the queue which
              * indicates that we've just allocated it.
              */
-            if (elem && elem->reqc == reqc) {
-                device->queue->device = NULL;
-                device->queue = NULL;
-            }
+            if (elem && elem->reqc == reqc)
+                remove_queue_from_device(device, device->queue);
         }
         media_info_free(reqc->params.rwalloc.media[*index].alloc_medium);
         reqc->params.rwalloc.media[*index].alloc_medium = NULL;
@@ -1160,8 +1179,7 @@ static int grouped_get_device_medium_pair(struct io_scheduler *io_sched,
         if (!device)
             return 0;
 
-        queue->device = device;
-        device->queue = queue;
+        associate_queue_to_device(device, queue);
     }
 
     elem = g_queue_peek_tail(queue->queue);
