@@ -258,7 +258,15 @@ struct find_compatible_context {
                                             * lower than the number of required
                                             * media ralloc->n_required.
                                             */
+    struct io_scheduler *io_sched;
 };
+
+static int exchange_device(struct io_scheduler *io_sched,
+                           enum io_request_type type,
+                           struct lrs_dev *device_to_exchange);
+
+static struct device *find_device_from_lrs_dev(struct io_scheduler *io_sched,
+                                               struct lrs_dev *dev);
 
 /* This function is called on each entry of the table
  * grouped_data::request_queues. It will stop at the first queue which has a
@@ -279,14 +287,48 @@ static gboolean glib_stop_at_first_compatible(gpointer _queue_name,
 {
     struct find_compatible_context *ctxt = _compat_ctxt;
     struct request_queue *queue = _queue;
+    struct lrs_dev *dev_with_medium;
     bool compatible_device_found;
     struct queue_element *elem;
+    bool sched_ready;
 
     (void) _queue_name;
 
     if (queue->device)
         /* we are looking for a new queue to allocate to a device */
         return FALSE;
+
+    dev_with_medium = search_in_use_medium(
+        ctxt->io_sched->io_sched_hdl->global_device_list,
+        queue->name, &sched_ready);
+    if (dev_with_medium && !sched_ready)
+        return FALSE;
+
+    if (dev_with_medium) {
+        ctxt->device = find_device_from_lrs_dev(ctxt->io_sched,
+                                                dev_with_medium);
+        if (!ctxt->device) {
+            int rc = exchange_device(ctxt->io_sched, IO_REQ_READ,
+                                     dev_with_medium);
+            if (rc)
+                return FALSE;
+
+            if (!(dev_with_medium->ld_io_request_type & IO_REQ_READ))
+                return FALSE;
+
+            ctxt->device = find_device_from_lrs_dev(ctxt->io_sched,
+                                                    dev_with_medium);
+
+            /* we have just exchanged the device, we must own it. */
+            assert(ctxt->device);
+            return TRUE;
+        }
+
+        /* dev_with_medium is loaded and owned by this I/O scheduler, return
+         * it.
+         */
+        return TRUE;
+    }
 
     elem = g_queue_peek_tail(queue->queue);
     /* Once a queue is empty, it is removed so this should not happen */
@@ -469,10 +511,11 @@ find_and_allocate_queue(struct io_scheduler *io_sched,
 {
     struct grouped_data *data = io_sched->private_data;
     struct find_compatible_context ctxt = {
-        .device = NULL,
-        .devices = io_sched->devices,
+        .device              = NULL,
+        .devices             = io_sched->devices,
         .incompatible_queues = g_ptr_array_new(),
-        .available_devices = available_devices,
+        .available_devices   = available_devices,
+        .io_sched            = io_sched,
     };
     struct request_queue *queue = NULL;
     int i;
@@ -483,8 +526,7 @@ find_and_allocate_queue(struct io_scheduler *io_sched,
     if (queue) {
         assert(ctxt.device);
 
-        queue->device = ctxt.device;
-        ctxt.device->queue = queue;
+        associate_queue_to_device(ctxt.device, queue);
     }
 
     for (i = 0; i < ctxt.incompatible_queues->len; i++) {
