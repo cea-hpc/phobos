@@ -6,6 +6,7 @@ TO_TEST=../../
 AM_CFLAGS=$(CC_OPT) @CMOCKA_CFLAGS@
 AM_LDFLAGS=@CMOCKA_LIBS@
 
+ADMIN_LIB=$(TO_SRC)/admin/libphobos_admin.la
 CFG_LIB=$(TO_SRC)/cfg/libpho_cfg.la
 COMMON_LIB=$(TO_SRC)/common/libpho_common.la
 COMMUNICATION_LIB=$(TO_SRC)/communication/libpho_comm.la
@@ -13,7 +14,6 @@ DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
-ADMIN_LIB=$(TO_SRC)/admin/libphobos_admin.la
 
 if VALGRIND_ENABLED
 # FIXME:
@@ -37,7 +37,8 @@ TEST_EXTENSIONS=.sh
 TEST_EXTENSIONS+=.test
 TEST_LOG_DRIVER=$(TO_TEST)/test-driver.sh
 
-check_PROGRAMS=lrs_simple_client \
+check_PROGRAMS=test_fair_share \
+               lrs_simple_client \
                medium_locker
 
 check_SCRIPTS=acceptance.test \
@@ -69,6 +70,11 @@ endif
 
 TESTS_ENVIRONMENT = HAVE_XXH128="@HAVE_XXH128@"
 TESTS=$(check_SCRIPTS)
+
+test_fair_share_SOURCES=test_fair_share.c
+test_fair_share_LDADD=$(DSS_LIB) $(COMMON_LIB) $(CFG_LIB) $(COMMUNICATION_LIB) \
+                      $(SERIALIZER_LIB) $(LRS_LIB)
+test_fair_share_CFLAGS=-I$(TO_TEST)
 
 lrs_simple_client_SOURCES=lrs_simple_client.c
 lrs_simple_client_LDADD=$(LRS_LIB) $(CFG_LIB) $(COMMON_LIB) \

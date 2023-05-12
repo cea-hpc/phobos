@@ -41,8 +41,7 @@ check_PROGRAMS=test_bad_comm \
                test_scsi \
                test_store \
                test_store_retry \
-               test_undelete \
-               demo_fair_share
+               test_undelete
 
 check_SCRIPTS=test_bad_comm.sh \
               test_concurrency.test \
@@ -122,8 +121,3 @@ test_store_retry_CFLAGS=-I$(TO_TEST)
 test_undelete_SOURCES=test_undelete.c
 test_undelete_LDADD=$(STORE_LIB)
 test_undelete_CFLAGS=-I$(TO_TEST)
-
-demo_fair_share_SOURCES=demo_fair_share.c
-demo_fair_share_LDADD=$(DSS_LIB) $(COMMON_LIB) $(CFG_LIB) $(COMMUNICATION_LIB) \
-                      $(SERIALIZER_LIB) $(LRS_LIB)
-demo_fair_share_CFLAGS=-I$(TO_TEST)
