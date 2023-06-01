@@ -2,6 +2,8 @@
 
 ## Ongoing
 
+* TLC, Tape Library Controller, server is introduced to centralize all tape
+  library commands
 * compute XXH128 extent checksum in raid1 layout during put
 * compute MD5 extent checksum in raid1 layout during put
 * Phobos API has been changed. Any call to a Phobos function must be done after

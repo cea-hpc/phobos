@@ -137,6 +137,7 @@ AC_CONFIG_FILES([Makefile
          src/ldm-modules/Makefile
          src/admin/Makefile
          src/cli/Makefile
+         src/tlc/Makefile
          tests/interns/Makefile
          tests/externs/api/Makefile
          tests/externs/cli/Makefile

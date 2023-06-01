@@ -265,7 +265,7 @@ void tlc_communication()
 }
 ```
 
-Note: like Phobosd, the TLC can be stopped at any time by a SIGKILL or SIGINT.
+Note: like Phobosd, the TLC can be stopped at any time by a SIGTERM or SIGINT.
 To make the code simpler, we could make the assumption that the signal is only
 checked at the beginning of this loop (`should_stop`).
 

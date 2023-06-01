@@ -63,6 +63,7 @@ check_SCRIPTS=acceptance.test \
               test_raid1_split.sh \
               test_resource_availability.sh \
               test_resource_management.sh \
+              test_tlc.test \
               test_undelete.sh
 
 if RADOS_ENABLED

@@ -38,6 +38,7 @@ PHO_PYTHON_PATH="$cli_dir/build/lib.linux-$ARCH-$PY_VERSION/"
 export PYTHONPATH="$PHO_PYTHON_PATH"
 
 lrs_dir="$(readlink -e $test_bin_dir/../src/lrs)"
+tlc_dir="$(readlink -e $test_bin_dir/../src/tlc)"
 tape_lib_certif_dir="$(readlink -e $test_bin_dir/../tape_library_certification)"
 
 # library paths
@@ -65,6 +66,7 @@ phobos="$cli_dir/scripts/phobos"
 valg_phobos="$LOG_COMPILER $phobos"
 
 phobosd="$lrs_dir/phobosd"
+tlc="$tlc_dir/tlc"
 
 # utils function
 # display error message and exits
