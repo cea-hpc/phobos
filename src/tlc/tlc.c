@@ -31,37 +31,33 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "pho_cfg.h"
 #include "pho_common.h"
-
-bool running = true;
+#include "pho_daemon.h"
 
 static bool should_tlc_stop(void)
 {
     return !running;
 }
 
-static void sa_sigterm(int signum)
-{
-    running = false;
-}
-
 int main(int argc, char **argv)
 {
-    struct sigaction sa;
+    int write_pipe_from_child_to_father;
+    struct daemon_params param;
     int rc;
 
-    rc = pho_context_init();
+    rc = daemon_creation(argc, argv, &param, &write_pipe_from_child_to_father,
+                         "tlc");
     if (rc)
         return -rc;
 
-    atexit(pho_context_fini);
+    rc = daemon_init(param);
 
-    /* signal handler */
-    sa.sa_handler = sa_sigterm;
-    sa.sa_flags = 0;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGTERM, &sa, NULL);
-    sigaction(SIGINT, &sa, NULL);
+    if (param.is_daemon)
+        daemon_notify_init_done(write_pipe_from_child_to_father, &rc);
+
+    if (rc)
+        return -rc;
 
     while (true) {
         if (should_tlc_stop())

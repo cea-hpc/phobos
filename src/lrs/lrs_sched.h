@@ -40,9 +40,6 @@
 #include "lrs_thread.h"
 #include "lrs_utils.h"
 
-/* from lrs.c */
-extern bool running;
-
 static inline int tape_drive_compat(const struct media_info *tape,
                                     const struct lrs_dev *drive, bool *res)
 {

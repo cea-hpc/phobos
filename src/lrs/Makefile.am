@@ -32,7 +32,9 @@ phobosd_LDADD=../dss/libpho_dss.la \
               ../io/libpho_io.la \
               ../serializer/libpho_serializer.la \
               ../communication/libpho_comm.la \
-              ../common/libpho_common.la
+              ../common/libpho_common.la \
+              ../daemon/libpho_daemon.la
+
 phobosd_LDFLAGS=-Wl,-rpath=$(libdir) -Wl,-rpath=$(pkglibdir)
 
 libpho_lrs_la_SOURCES=lrs_cfg.c lrs_sched.c lrs_device.c lrs_thread.c \

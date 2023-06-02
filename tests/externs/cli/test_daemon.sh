@@ -99,8 +99,8 @@ function test_multiple_instances
     rc=$?
     kill $first_process
 
-    # Second daemon error code should be -EEXIST, which is -17
-    test $rc -eq $((256 - 17)) ||
+    # Second daemon error code should be EEXIST, which is 17
+    test $rc -eq 17 ||
         error "Second daemon instance does not get the right error code"
 
     drop_tables

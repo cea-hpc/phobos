@@ -4,5 +4,5 @@ sbin_PROGRAMS=tlc
 
 tlc_SOURCES=tlc.c
 tlc_CFLAGS=$(AM_CFLAGS)
-tlc_LDADD=../common/libpho_common.la
+tlc_LDADD=../common/libpho_common.la ../daemon/libpho_daemon.la
 tlc_LDFLAGS=-Wl,-rpath=$(libdir) -Wl,-rpath=$(pkglibdir)

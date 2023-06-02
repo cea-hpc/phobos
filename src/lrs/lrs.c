@@ -27,13 +27,11 @@
 #endif
 
 #include <fcntl.h>
-#include <getopt.h>
 #include <libgen.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <syslog.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -41,6 +39,7 @@
 #include "pho_cfg.h"
 #include "pho_comm.h"
 #include "pho_common.h"
+#include "pho_daemon.h"
 #include "pho_type_utils.h"
 
 #include "lrs_cfg.h"
@@ -64,37 +63,6 @@ struct lrs {
                                                 * communication thread
                                                 */
 };
-
-struct lrs_params {
-    int log_level;                      /*!< Logging level. */
-    bool is_daemon;                     /*!< True if executed as a daemon. */
-    bool use_syslog;                    /*!< True if syslog is requested. */
-    char *cfg_path;                     /*!< Configuration file path. */
-};
-#define LRS_PARAMS_DEFAULT {PHO_LOG_INFO, true, false, NULL}
-
-#define pholog2syslog(lvl) (lvl?2+lvl:lvl)
-
-static void phobos_log_callback_def_with_sys(const struct pho_logrec *rec)
-{
-    struct tm time;
-
-    localtime_r(&rec->plr_time.tv_sec, &time);
-
-    if (rec->plr_err != 0)
-        syslog(pholog2syslog(rec->plr_level),
-               "<%s> [%u/%s:%s:%d] %s: %s (%d)",
-               pho_log_level2str(rec->plr_level),
-               rec->plr_pid, rec->plr_func, rec->plr_file, rec->plr_line,
-               rstrip(rec->plr_msg), strerror(rec->plr_err), rec->plr_err);
-    else
-        syslog(pholog2syslog(rec->plr_level),
-               "<%s> [%u/%s:%s:%d] %s",
-               pho_log_level2str(rec->plr_level),
-               rec->plr_pid, rec->plr_func, rec->plr_file, rec->plr_line,
-               rstrip(rec->plr_msg));
-
-}
 
 /* ****************************************************************************/
 /* Daemon context *************************************************************/
@@ -1093,29 +1061,21 @@ static void lrs_fini(struct lrs *lrs)
 /**
  * Initialize a new LRS.
  *
+ * Set umask to "0000".
  * The LRS data structure is allocated in lrs_init()
  * and deallocated in lrs_fini().
  *
  * \param[in]   lrs         The LRS to be initialized.
- * \param[in]   parm        The LRS parameters.
  *
  * \return                  0 on success, -1 * posix error code on failure.
  */
-static int lrs_init(struct lrs *lrs, struct lrs_params parm)
+static int lrs_init(struct lrs *lrs)
 {
     const char *lock_file;
     const char *sock_path;
     int rc;
 
-    /* Load configuration */
-    rc = pho_cfg_init_local(parm.cfg_path);
-    if (rc && rc != -EALREADY)
-        return rc;
-
-    atexit(pho_cfg_local_fini);
-    pho_log_level_set(parm.log_level);
-    if (parm.use_syslog)
-        pho_log_callback_set(phobos_log_callback_def_with_sys);
+    umask(0000);
 
     lock_file = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, lock_file);
     rc = _create_lock_file(lock_file);
@@ -1218,183 +1178,29 @@ static int lrs_process(struct lrs *lrs)
     return rc;
 }
 
-/* ****************************************************************************/
-/* Daemonization helpers ******************************************************/
-/* ****************************************************************************/
-
-static int init_daemon(pid_t pid, int pipe_in)
-{
-    char *pid_filepath;
-    ssize_t read_rc;
-    char buf[16];
-    int fd;
-    int rc;
-
-    pid_filepath = getenv("PHOBOSD_PID_FILEPATH");
-    if (pid_filepath) {
-        int _errno;
-
-        fd = open(pid_filepath, O_WRONLY | O_CREAT, 0666);
-        if (fd == -1) {
-            _errno = -errno;
-
-            kill(pid, SIGKILL);
-            pho_error(_errno, "cannot open the pid file at '%s'",
-                      pid_filepath);
-            rc = EXIT_FAILURE;
-            goto out;
-        }
-
-        sprintf(buf, "%d", pid);
-        rc = write(fd, buf, strlen(buf));
-        _errno = -errno;
-        close(fd);
-        if (rc == -1) {
-            kill(pid, SIGKILL);
-            pho_error(_errno, "cannot write the pid file at '%s'",
-                      pid_filepath);
-            rc = EXIT_FAILURE;
-            goto out;
-        }
-    }
-
-    do {
-        read_rc = read(pipe_in, &rc, sizeof(rc));
-    } while (read_rc == -1 && errno == EAGAIN);
-    if (read_rc != sizeof(rc))
-        rc = EXIT_FAILURE;
-
-out:
-    close(pipe_in);
-
-    return rc;
-}
-
-/* SIGTERM handler -- needs to release the LRS context */
-static void sa_sigterm(int signum)
-{
-    running = false;
-}
-
-/* Argument parsing */
-static void print_usage(void)
-{
-    printf("usage: phobosd [--interactive] [--config cfg_file] "
-               "[--verbose/--quiet] [--syslog]\n"
-           "\nOptional arguments:\n"
-           "    -i,--interactive        execute the daemon in foreground\n"
-           "    -c,--config cfg_file    "
-                "use cfg_file as the daemon configuration file\n"
-           "    -v,--verbose            increase verbose level\n"
-           "    -q,--quiet              decrease verbose level\n"
-           "    -s,--syslog             print the daemon logs to syslog\n");
-}
-
-static struct lrs_params parse_args(int argc, char **argv)
-{
-    static struct option long_options[] = {
-        {"help",        no_argument,       0,  'h'},
-        {"interactive", no_argument,       0,  'i'},
-        {"config",      required_argument, 0,  'c'},
-        {"verbose",     no_argument,       0,  'v'},
-        {"quiet",       no_argument,       0,  'q'},
-        {"syslog",      no_argument,       0,  's'},
-        {0,             0,                 0,  0}
-    };
-    struct lrs_params parm = LRS_PARAMS_DEFAULT;
-
-    while (1) {
-        int c;
-
-        c = getopt_long(argc, argv, "hic:vqs", long_options, NULL);
-        if (c == -1)
-            break;
-
-        switch (c) {
-        case 'h':
-            print_usage();
-            exit(EXIT_SUCCESS);
-        case 'i':
-            parm.is_daemon = false;
-            break;
-        case 'c':
-            parm.cfg_path = optarg;
-            break;
-        case 'v':
-            ++parm.log_level;
-            break;
-        case 'q':
-            --parm.log_level;
-            break;
-        case 's':
-            parm.use_syslog = true;
-            break;
-        default:
-            print_usage();
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    return parm;
-}
-
 int main(int argc, char **argv)
 {
-    struct lrs_params parm;
-    struct sigaction sa;
-    int init_pipe[2];
+    int write_pipe_from_child_to_father;
+    struct daemon_params param;
     struct lrs lrs = {};
-    pid_t pid;
     int rc;
 
-    rc = pho_context_init();
+    rc = daemon_creation(argc, argv, &param, &write_pipe_from_child_to_father,
+                         "phobosd");
     if (rc)
         return -rc;
 
-    atexit(pho_context_fini);
-
-    parm = parse_args(argc, argv);
-
-    /* forking type daemon initialization */
-    if (parm.is_daemon) {
-        rc = pipe(init_pipe);
-        if (rc) {
-            fprintf(stderr, "ERR: cannot init the communication pipe");
-            return EXIT_FAILURE;
-        }
-
-        pid = fork();
-        if (pid < 0) {
-            fprintf(stderr, "ERR: cannot create child process");
-            return EXIT_FAILURE;
-        }
-        if (pid) {
-            close(init_pipe[1]);
-            exit(init_daemon(pid, init_pipe[0]));
-        }
-        close(init_pipe[0]);
-    }
-
-    /* signal handler */
-    sa.sa_handler = sa_sigterm;
-    sa.sa_flags = 0;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGTERM, &sa, NULL);
-    sigaction(SIGINT, &sa, NULL);
-
-    umask(0000);
+    rc = daemon_init(param);
 
     /* lrs processing */
-    rc = lrs_init(&lrs, parm);
+    if (!rc)
+        rc = lrs_init(&lrs);
 
-    if (parm.is_daemon) {
-        if (write(init_pipe[1], &rc, sizeof(rc)) != sizeof(rc))
-            rc = -1;
-        close(init_pipe[1]);
-    }
+    if (param.is_daemon)
+        daemon_notify_init_done(write_pipe_from_child_to_father, &rc);
 
     if (rc)
-        return rc;
+        return -rc;
 
     while (running || !lrs.stopped) {
         rc = lrs_process(&lrs);

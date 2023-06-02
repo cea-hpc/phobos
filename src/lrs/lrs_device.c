@@ -33,6 +33,7 @@
 #include "lrs_sched.h"
 
 #include "pho_common.h"
+#include "pho_daemon.h"
 #include "pho_dss.h"
 #include "pho_io.h"
 #include "pho_ldm.h"

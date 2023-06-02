@@ -16,7 +16,8 @@ phobos_tape_library_test_LDADD=../src/lrs/libpho_lrs.la \
         ../src/io/libpho_io.la \
         ../src/serializer/libpho_serializer.la \
         ../src/communication/libpho_comm.la \
-        ../src/common/libpho_common.la
+        ../src/common/libpho_common.la \
+        ../src/daemon/libpho_daemon.la
 
 phobos_tape_library_test_LDFLAGS=-Wl,-rpath=$(libdir) \
                                  -Wl,-rpath=$(pkglibdir)

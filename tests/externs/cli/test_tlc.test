@@ -25,11 +25,11 @@
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
 
-function tlc_sig
+function tlc_interactive_sig
 {
     local signal_name="$1"
 
-    $tlc &
+    $tlc -i &
     TLC_PID="$!"
     sleep 1
     kill -s ${signal_name} $TLC_PID
@@ -40,4 +40,4 @@ function tlc_sig
     fi
 }
 
-TESTS=("tlc_sig SIGINT" "tlc_sig SIGTERM")
+TESTS=("tlc_interactive_sig SIGINT" "tlc_interactive_sig SIGTERM")
