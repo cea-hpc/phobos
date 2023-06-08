@@ -155,7 +155,7 @@ function test_check_get()
     # split the path into <mount_point> / <relative_path>
     # however, the mount_point may not be real in the case of
     # a "directory device" (e.g. subdirectory of an existing filesystem)
-    # XXXX the following code relies on the fact mount points have depth 2...
+    # XXX the following code relies on the fact mount points have depth 2...
     tgt="$TEST_RECOV_DIR/$id"
     mkdir -p $(dirname "$tgt")
 

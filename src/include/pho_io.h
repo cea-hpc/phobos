@@ -155,10 +155,6 @@ static inline int ioa_del(const struct io_adapter_module *ioa,
  *
  * \retval -ENOTSUP the I/O adapter does not provide this function
  * \return 0 on success, negative error code on failure
- *
- * @FIXME: this call may need to migrate to the LDM layer in the future, as in
- * practice it is more a medium management call than an IO call (the main caller
- * is the LRS, not the layouts).
  */
 static inline int ioa_medium_sync(const struct io_adapter_module *ioa,
                                   const char *root_path)

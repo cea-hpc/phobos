@@ -382,8 +382,6 @@ class XferClient: # pylint: disable=too-many-instance-attributes
         self.put_session = []
         self._put_cb = None
 
-    # TODO: in case phobos_xfer is called from phobos instead of
-    # phobos_{getmd,get,put}, merge the sessions into one attribute.
     def run(self, compl_cb=None):
         """Execute all registered transfer orders."""
         if compl_cb is None:
