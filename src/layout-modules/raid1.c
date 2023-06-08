@@ -65,6 +65,11 @@ static struct module_desc RAID1_MODULE_DESC = {
  *
  * A raid1 layout writes repl_count copies of the data.
  *
+ * This value is the number of data replicas, so a replica count of 1 means
+ * that there is only one copy of the data (the original), and 0 additional
+ * copies of it. Therefore, a replica count of 2 means the original copy of the
+ * data, plus 1 additional copy.
+ *
  * It potentially splits it on several extents if there is no convenient
  * available space on media provided by lrs. There are repl_count copies of each
  * extent.
