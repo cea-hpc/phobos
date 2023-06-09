@@ -229,6 +229,16 @@ char *rstrip(char *msg);
  */
 int64_t str2int64(const char *str);
 
+/**
+ * Converts an unsigned char * to a string hex-encoded.
+ *
+ * @param[in]   str         unsigned char * to encode to hex.
+ * @param[in]   str_size    size of the uchar * to encode.
+ * @return hex encoded string on success, NULL on failure.
+ *         errno is set on error.
+ */
+char *uchar2hex(const unsigned char *str, int str_size);
+
 /* Number of items in a fixed-size array */
 #define ARRAY_SIZE(a)   (sizeof(a) / sizeof((a)[0]))
 

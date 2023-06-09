@@ -307,6 +307,35 @@ int64_t str2int64(const char *str)
     return val;
 }
 
+char *uchar2hex(const unsigned char *buf, int buf_size)
+{
+    char *hex = calloc(buf_size * 2 + 1, sizeof(char));
+    int j;
+    int k;
+
+    if (!hex) {
+        int save_errno = errno;
+
+        pho_error(-errno, "Failed to allocate hex buffer");
+        errno = save_errno;
+        return NULL;
+    }
+
+    for (j = 0, k = 0; j < buf_size; j++, k += 2) {
+        int rc = 0;
+
+        rc = sprintf(hex + k, "%02x", buf[j]);
+        if (rc < 0) {
+            free(hex);
+            pho_error(-EINVAL, "Failed to write in hex buffer");
+            errno = EINVAL;
+            return NULL;
+        }
+    }
+
+    return hex;
+}
+
 /**
  * GLib HashTable iteration methods lack the ability for the callback to return
  * an error code, to stop the iteration on error and return it to the caller.

@@ -49,6 +49,8 @@
 #define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
 #define PHO_EA_ID_NAME      "id"
 #define PHO_EA_UMD_NAME     "user_md"
+#define PHO_EA_MD5_NAME     "md5"
+#define PHO_EA_XXH128_NAME  "xxh128"
 
 #define PLUGIN_NAME     "raid1"
 #define PLUGIN_MAJOR    0
@@ -404,6 +406,90 @@ static void set_block_io_size(size_t *io_size,
 }
 
 /**
+ * Write xattrs to a split and all of its replicates, here the oid, user md,
+ * md5/xxh128 if available.
+ *
+ * Uses function ioa_set_md to use the same file descriptor already contained
+ * in the I/O descriptor without initializing a new file context.
+ * In order to have md5/xxh128, the function ioa_open must be called before
+ * this function.
+ *
+ * @param[in]       repl_count  Number of replicates of the extent.
+ * @param[in,out]   iod         I/O descriptor to access the current object.
+ * @param[in,out]   extent      Extent to write the xattrs to.
+ * @param[in]       oid         Object descriptor.
+ * @param[in]       user_md     User metadata.
+ * @param[in,out]   ioa         I/O adapter to access the current storage
+ *                              backend.
+ *
+ * @return 0 if success, else a negative error code.
+ */
+static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
+                               struct extent *extent, const char *oid,
+                               GString *user_md,
+                               struct io_adapter_module **ioa)
+{
+    int rc = 0;
+    int i;
+
+    for (i = 0; i < repl_count; ++i) {
+
+        iod[i].iod_flags = PHO_IO_MD_ONLY;
+
+        rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_ID_NAME, oid);
+        if (rc)
+            LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d", i);
+
+        if (!gstring_empty(user_md)) {
+            rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_UMD_NAME, user_md->str);
+            if (rc)
+                LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d",
+                         i);
+        }
+
+        if (extent[i].with_md5) {
+            const char *md5_buffer = uchar2hex(extent[i].md5, MD5_BYTE_LENGTH);
+
+            if (!md5_buffer)
+                LOG_GOTO(attrs, rc = -ENOMEM, "Unable to construct hex md5");
+
+            rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_MD5_NAME,
+                              md5_buffer);
+            free((char *)md5_buffer);
+            if (rc)
+                LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d",
+                         i);
+        }
+
+        if (extent[i].with_xxh128) {
+            const char *xxh128_buffer = uchar2hex(extent[i].xxh128,
+                                                  sizeof(extent[i].xxh128));
+            if (!xxh128_buffer)
+                LOG_GOTO(attrs, rc = -ENOMEM, "Unable to construct hex xxh128");
+
+            rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_XXH128_NAME,
+                              xxh128_buffer);
+            free((char *)xxh128_buffer);
+            if (rc)
+                LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d",
+                         i);
+        }
+    }
+
+    for (i = 0; i < repl_count; ++i) {
+        rc = ioa_set_md(ioa[i], NULL, NULL, &iod[i]);
+        if (rc)
+            LOG_RETURN(rc, "Unable to set md for extent number %i in raid1",
+                       i);
+    }
+
+attrs:
+    for (i = 0; i < repl_count; ++i)
+        pho_attrs_free(&iod[i].iod_attrs);
+    return rc;
+}
+
+/**
  * Write extents in media provided by \a wresp and fill \a rreq release requests
  *
  * As many extents as \a enc repl_count. One per medium.
@@ -527,17 +613,6 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
         iod[i].iod_size = 0;
         iod[i].iod_loc = &loc[i];
 
-        rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_ID_NAME,
-                          enc->xfer->xd_objid);
-        if (rc)
-            LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d", i);
-
-        if (!gstring_empty(str)) {
-            rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_UMD_NAME, str->str);
-            if (rc)
-                LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d", i);
-        }
-
         /* iod_ctx will be set by open */
     }
 
@@ -594,15 +669,6 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
                      "Unable to produce MD5 in raid1 encoder write");
     }
 
-close:
-    for (i = 0; i < raid1->repl_count; ++i) {
-        int rc2;
-
-        rc2 = ioa_close(ioa[i], &iod[i]);
-        if (!rc && rc2)
-            rc = rc2;
-    }
-
     if (rc == 0) {
         /* copy XXH128 into extent */
         for (i = 0; i < raid1->repl_count; i++) {
@@ -628,6 +694,19 @@ close:
         }
     }
 
+
+    rc = put_xattr_to_extent(raid1->repl_count, iod,
+                             extent, enc->xfer->xd_objid, str, ioa);
+
+close:
+    for (i = 0; i < raid1->repl_count; ++i) {
+        int rc2;
+
+        rc2 = ioa_close(ioa[i], &iod[i]);
+        if (!rc && rc2)
+            rc = rc2;
+    }
+
     /* update size in write encoder */
     if (rc == 0) {
         raid1->to_write -= extent_size;
@@ -645,9 +724,6 @@ close:
         for (i = 0; i < raid1->repl_count; ++i)
             add_written_extent(raid1, &extent[i]);
 
-attrs:
-    for (i = 0; i < raid1->repl_count; ++i)
-        pho_attrs_free(&iod[i].iod_attrs);
 
 free_values:
     g_string_free(str, TRUE);

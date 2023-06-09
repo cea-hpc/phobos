@@ -48,6 +48,7 @@ check_SCRIPTS=acceptance.test \
               test_delete.sh \
               test_extent_list.sh \
               test_fair_share.test \
+              test_file_after_put.test \
               test_format.sh \
               test_get.sh \
               test_group_sync.sh \

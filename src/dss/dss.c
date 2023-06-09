@@ -1010,16 +1010,11 @@ out_decref:
 static int fill_json_with_hex_buf(json_t *json, const char *new_field_name,
                                   const unsigned char *buf, size_t size)
 {
-    char *json_field_buf = calloc(size * 2 + 1, sizeof(char));
-    int j, k;
+    char *json_field_buf = uchar2hex(buf, size);
     int rc;
 
     if (!json_field_buf)
-        return -ENOMEM;
-
-
-    for (j = 0, k = 0; j < size; j++, k += 2)
-        sprintf(json_field_buf + k, "%02x", buf[j]);
+        return -errno;
 
     rc = json_object_set_new(json, new_field_name,
                              json_string(json_field_buf));
