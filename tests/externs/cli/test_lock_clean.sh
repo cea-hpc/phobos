@@ -92,7 +92,7 @@ EOF
 
 function cleanup
 {
-    waive_daemon
+    waive_lrs
     drop_tables
 }
 
@@ -126,7 +126,7 @@ function test_errors
 
 function test_local_daemon_on
 {
-    invoke_daemon
+    invoke_lrs
 
     #Using phobos command without force attribute
     $phobos lock clean \

@@ -49,7 +49,7 @@ function setup()
     setup_tables
 
     export PHOBOS_LRS_families="dir"
-    invoke_daemon
+    invoke_lrs
 
     setup_test_dirs
     setup_dummy_files 1
@@ -62,7 +62,7 @@ function cleanup()
     cleanup_dummy_files
     cleanup_test_dirs
 
-    waive_daemon
+    waive_lrs
     drop_tables
 }
 

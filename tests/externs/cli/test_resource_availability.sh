@@ -53,12 +53,12 @@ function setup
 
     setup_dir
     setup_tables
-    invoke_daemon
+    invoke_lrs
 }
 
 function cleanup
 {
-    waive_daemon
+    waive_lrs
     drop_tables
     clean_dir
     if [[ -w /dev/changer ]]; then
@@ -286,12 +286,12 @@ if [[ -w /dev/changer ]]; then
     drain_all_drives
 fi
 
-waive_daemon
+waive_lrs
 drop_tables
 clean_dir
 setup_dir
 setup_tables
-invoke_daemon
+invoke_lrs
 
 # availability with raid layout
 put_dir_raid

@@ -21,7 +21,7 @@ function setup()
 
     drain_all_drives
     setup_tables
-    invoke_daemon
+    invoke_lrs
 
     $phobos drive add --unlock $drives
     $phobos tape add --type LTO5 --unlock ${tapes[@]}
@@ -31,7 +31,7 @@ function setup()
     $phobos tape set-access -- -PG ${tapes[4]}
     $phobos tape list -o name,adm_status,fs.status,put_access,get_access
 
-    waive_daemon
+    waive_lrs
 }
 
 function cleanup()
@@ -49,7 +49,7 @@ function test_fair_share_setup()
     export PHO_IO_SCHED_fair_share_lto5_min="0,0,0"
     export PHO_IO_SCHED_fair_share_lto5_max="5,5,5"
 
-    invoke_daemon
+    invoke_lrs
 }
 
 function test_fair_share()
@@ -82,7 +82,7 @@ function test_fair_share()
 
 function test_fair_share_cleanup()
 {
-    waive_daemon
+    waive_lrs
 }
 
 if [[ ! -w /dev/changer ]]; then

@@ -33,7 +33,7 @@ function setup {
     setup_tables
 
     export PHOBOS_LRS_families="dir"
-    invoke_daemon
+    invoke_lrs
 
     dir="/tmp/test.pho.1"
     dir_not_formatted="/tmp/test.pho.3"
@@ -44,7 +44,7 @@ function setup {
 }
 
 function cleanup {
-    waive_daemon
+    waive_lrs
     rm -rf $dir $dir_not_formatted
     drop_tables
 }

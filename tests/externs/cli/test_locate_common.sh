@@ -106,7 +106,7 @@ function test_medium_locate
         was_locked="true"
         # we artificially force an unlock
         $medium_locker_bin unlock $family $medium $self_hostname   \
-                $PID_DAEMON ||
+                $PID_LRS ||
             error "Error while unlocking $family before locate"
     fi
 
@@ -122,7 +122,7 @@ function test_medium_locate
     fi
 
     # locate on a locked medium
-    $medium_locker_bin lock $family $medium $fake_hostname $PID_DAEMON ||
+    $medium_locker_bin lock $family $medium $fake_hostname $PID_LRS ||
         error "Error while locking medium before locate"
 
     locate_hostname=$($valg_phobos $family locate $medium)
@@ -132,13 +132,13 @@ function test_medium_locate
     fi
 
     # We remove the lock
-    $medium_locker_bin unlock $family $medium $fake_hostname $PID_DAEMON ||
+    $medium_locker_bin unlock $family $medium $fake_hostname $PID_LRS ||
         error "Error while unlocking medium after locate"
 
     # we artificially restore the lock
     if [ "$was_locked" == "true" ]; then
         $medium_locker_bin lock $family $medium $self_hostname \
-                $PID_DAEMON ||
+                $PID_LRS ||
             error "Error while restore $family lock after locate"
     fi
 }
@@ -170,7 +170,7 @@ function test_get_locate_cli
         locker=$($phobos $family list -o lock_hostname $med)
         if [ "$locker" == "$self_hostname" ]; then
             was_locked[${med}]="true"
-            $medium_locker_bin unlock $family $med $self_hostname $PID_DAEMON ||
+            $medium_locker_bin unlock $family $med $self_hostname $PID_LRS ||
                 error "Error unlocking $family before get --best-host"
         fi
     done
@@ -197,7 +197,7 @@ function test_get_locate_cli
     # we artificially restore the locks
     for med in ${media}; do
         if [ "${was_locked[$med]}" == "true" ]; then
-            $medium_locker_bin lock $family $med $self_hostname $PID_DAEMON ||
+            $medium_locker_bin lock $family $med $self_hostname $PID_LRS ||
                 error "Error while restoring $family lock after locate"
         fi
     done
@@ -229,7 +229,7 @@ function test_locate_locked_splits
 
     rm -f /tmp/out1
 
-    waive_daemon
+    waive_lrs
 
     $PSQL << EOF
 UPDATE device SET host = '$other_host' WHERE path = '${media[1]}';
@@ -237,16 +237,16 @@ UPDATE device SET host = '$other_host' WHERE path = '${media[2]}';
 UPDATE device SET host = '$other_host' WHERE path = '${media[3]}';
 EOF
 
-    invoke_daemon
+    invoke_lrs
 
     # lock extents 1, 2 and 3 for $other_host
     for medium in "${media[@]:1:3}"; do
-        $medium_locker_bin lock $family $medium $other_host $PID_DAEMON ||
+        $medium_locker_bin lock $family $medium $other_host $PID_LRS ||
             error "Error locking $medium for host $other_host"
     done
 
     for medium in "${media[@]:5:3}"; do
-        $medium_locker_bin unlock $family $medium $self_host $PID_DAEMON ||
+        $medium_locker_bin unlock $family $medium $self_host $PID_LRS ||
             error "Error unlocking $medium for host $other_host"
     done
 
@@ -265,15 +265,15 @@ EOF
     fi
 
     for medium in "${media[@]:1:3}"; do
-        $medium_locker_bin unlock $family $medium $other_host $PID_DAEMON ||
+        $medium_locker_bin unlock $family $medium $other_host $PID_LRS ||
             error "Error unlocking $medium for host $other_host"
     done
 
-    waive_daemon
+    waive_lrs
 
     $PSQL << EOF
 UPDATE device SET host = '$self_host' WHERE host = '$other_host';
 EOF
 
-    invoke_daemon
+    invoke_lrs
 }

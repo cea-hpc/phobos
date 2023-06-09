@@ -39,7 +39,7 @@ tape_lib_script="${tape_lib_certif_dir}/phobos_tape_library_test.bash"
 function setup
 {
     setup_tables
-    invoke_daemon
+    invoke_lrs
     drain_all_drives
 
     for drive in $(nodeset -e "${drives_set}"); do
@@ -55,7 +55,7 @@ function setup
 
 function cleanup
 {
-    waive_daemon
+    waive_lrs
     drop_tables
     drain_all_drives
 }

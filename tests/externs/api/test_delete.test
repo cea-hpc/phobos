@@ -43,12 +43,12 @@ function setup
         ('test-oid3', '00112233445566778899aabbccddeef3', 1, '{}');
 EOF
 
-    invoke_daemon
+    invoke_lrs
 }
 
 function cleanup
 {
-    waive_daemon
+    waive_lrs
     drop_tables
 }
 

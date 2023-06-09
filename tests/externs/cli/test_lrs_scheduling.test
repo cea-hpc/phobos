@@ -26,7 +26,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/utils.sh
 . $test_dir/utils_generation.sh
 
-function invoke_daemon_debug()
+function invoke_lrs_debug()
 {
     # XXX grep --line-buffered allows each line to be written in EVENT_FILE as
     # they are read in the logs. Otherwise, the logs would not be always
@@ -45,8 +45,8 @@ function setup()
     setup_dummy_files 1
 
     setup_tables
-    invoke_daemon_debug &
-    wait_for_daemon
+    invoke_lrs_debug &
+    wait_for_lrs
     last_read=$(now)
 }
 
@@ -89,7 +89,7 @@ function get_daemon_event()
     grep "$event" "$EVENT_FILE" | newer $last_read
 }
 
-function wait_for_daemon()
+function wait_for_lrs()
 {
     local Nretry=10
     local N=0
@@ -171,16 +171,16 @@ function test_fair_share_conf_at_startup()
     export PHOBOS_IO_SCHED_TAPE_fair_share_lto5_min="12,12,12"
     export PHOBOS_IO_SCHED_TAPE_fair_share_lto5_max="13,13,13"
 
-    trap "waive_daemon; drop_tables" EXIT
+    trap "waive_lrs; drop_tables" EXIT
     setup_tables
-    invoke_daemon
+    invoke_lrs
 
     check_fair_share_min_max "12,12,12" "13,13,13"
     unset PHOBOS_IO_SCHED_TAPE_fair_share_lto5_min
     unset PHOBOS_IO_SCHED_TAPE_fair_share_lto5_max
 
     trap drop_tables EXIT
-    waive_daemon
+    waive_lrs
     trap "" EXIT
     drop_tables
 }

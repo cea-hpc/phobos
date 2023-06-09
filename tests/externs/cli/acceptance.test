@@ -62,7 +62,7 @@ function cleanup
 function tape_setup
 {
     setup_tables
-    invoke_daemon
+    invoke_lrs
 
     export PHOBOS_STORE_default_family="tape"
     echo "Tape test mode"
@@ -140,14 +140,14 @@ function tape_setup
 
 function tape_cleanup
 {
-    waive_daemon
+    waive_lrs
     drop_tables
 }
 
 function dir_setup
 {
     setup_tables
-    invoke_daemon
+    invoke_lrs
 
     export PHOBOS_STORE_default_family="dir"
     echo "POSIX test mode"
@@ -181,7 +181,7 @@ function dir_setup
 
 function dir_cleanup
 {
-    waive_daemon
+    waive_lrs
     drop_tables
     rm -rf /tmp/test.pho.1 /tmp/test.pho.2
 }
@@ -538,8 +538,8 @@ function check_status
 function drain_all_drives_daemon
 {
     drain_all_drives
-    waive_daemon
-    invoke_daemon
+    waive_lrs
+    invoke_lrs
 }
 
 function lock_all_drives

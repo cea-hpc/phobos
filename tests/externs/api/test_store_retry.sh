@@ -38,12 +38,12 @@ function setup
         export PHOBOS_LRS_families="dir"
     fi
 
-    invoke_daemon
+    invoke_lrs
 }
 
 function cleanup
 {
-    waive_daemon
+    waive_lrs
     drop_tables
 }
 

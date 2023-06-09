@@ -48,16 +48,16 @@ function dir_setup
     # Invoke the daemon from $other_host to allow formatting the dir with the
     # correct naming (dir devices must contain the hostname in their name)
     hostname $other_host
-    invoke_daemon
+    invoke_lrs
 
     $phobos dir add $extra_dir
     $phobos dir format --fs posix --unlock $extra_dir
 
     # Waive the daemon and restart it back as $SELF_HOST to add the rest of the
     # dirs
-    waive_daemon
+    waive_lrs
     hostname $SELF_HOST
-    invoke_daemon
+    invoke_lrs
 
     $phobos dir add $dirs
     $phobos dir format --fs posix --unlock $dirs
@@ -72,7 +72,7 @@ function tape_setup
     local other_hostname="hostname" # fetched from test_locate.c
 
     setup_tables
-    invoke_daemon
+    invoke_lrs
 
     # get LTO5 tapes
     local lto5_tapes="$(get_tapes L5 $N_TAPES)"
@@ -124,7 +124,7 @@ EOF
 function cleanup
 {
     hostname $SELF_HOST
-    waive_daemon
+    waive_lrs
     drain_all_drives
     drop_tables
     rm -rf $dirs

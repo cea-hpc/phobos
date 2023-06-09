@@ -52,7 +52,7 @@ function setup
 {
     # start with a clean/empty phobos DB
     setup_tables
-    invoke_daemon
+    invoke_lrs
 
     # set start context
     dd if=/dev/random of=$IN_FILE count=$FULL_SIZE bs=1
@@ -60,15 +60,15 @@ function setup
     mkdir -p $DIR1 $DIR2
     $phobos dir add $DIR1 $DIR2
     $phobos dir format --fs POSIX --unlock $DIR1 $DIR2
-    waive_daemon
+    waive_lrs
     resize_medium $DIR1 $PART1_SIZE
     resize_medium $DIR2 $PART2_SIZE
-    invoke_daemon
+    invoke_lrs
 }
 
 function cleanup
 {
-    waive_daemon
+    waive_lrs
     rm -rf $DIR1 $DIR2
     rm -rf $IN_FILE $OUT_FILE
     drop_tables

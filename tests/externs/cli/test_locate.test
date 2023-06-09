@@ -36,7 +36,7 @@ HALF_SIZE=1024
 function setup
 {
     setup_tables
-    invoke_daemon
+    invoke_lrs
 }
 
 function dir_setup
@@ -107,7 +107,7 @@ function dir_locked_splits_setup
 {
     # start with a clean/empty phobos DB but no daemon is online yet
     setup_tables
-    invoke_daemon
+    invoke_lrs
 
     export dirs="
         $(mktemp -d /tmp/test.pho.XXXX)
@@ -123,13 +123,13 @@ function dir_locked_splits_setup
     $phobos dir add $dirs
     $phobos dir format --fs posix --unlock $dirs
 
-    waive_daemon
+    waive_lrs
 
     for dir in $dirs; do
         resize_medium $dir $HALF_SIZE
     done
 
-    invoke_daemon
+    invoke_lrs
 }
 
 function tape_locked_splits_setup
@@ -139,7 +139,7 @@ function tape_locked_splits_setup
 
     # start with a clean/empty phobos DB
     setup_tables
-    invoke_daemon
+    invoke_lrs
 
     local tapes="$(get_tapes L5 $N_TAPES)"
     $phobos tape add --type lto5 "$tapes"
@@ -161,13 +161,13 @@ function tape_locked_splits_setup
     # format the tapes
     $phobos tape format $tapes --unlock
 
-    waive_daemon
+    waive_lrs
 
     for tape in $tapes; do
         resize_medium $tape $HALF_SIZE
     done
 
-    invoke_daemon
+    invoke_lrs
 }
 
 function cleanup
@@ -177,7 +177,7 @@ function cleanup
 
 function dir_cleanup
 {
-    waive_daemon
+    waive_lrs
     drop_tables
     rm -rf $dirs
     rm -rf /tmp/out*
@@ -185,7 +185,7 @@ function dir_cleanup
 
 function tape_cleanup
 {
-    waive_daemon
+    waive_lrs
     drop_tables
     drain_all_drives
     rm -rf /tmp/out*
@@ -245,7 +245,7 @@ function test_locate_compatibility
     $phobos put --lyt-params repl_count=2 --tags $LTO6_TAGS /etc/hosts $oid ||
         error "Error while putting $oid"
 
-    waive_daemon
+    waive_lrs
 
     # unload the tapes so that the daemon doesn't take any lock when waking up
     drain_all_drives
@@ -257,7 +257,7 @@ UPDATE device SET host = '$other_hostname' WHERE path = '$other_lto5drive';
 UPDATE device SET host = '$other_hostname' WHERE path = '$other_lto6drive';
 EOF
 
-    invoke_daemon
+    invoke_lrs
 
     # At this point:
     #   - the current host has one LT05 and one LTO6 drive

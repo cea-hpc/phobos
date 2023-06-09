@@ -38,7 +38,7 @@ function setup
     local n_pools="$1"
 
     setup_tables
-    invoke_daemon
+    invoke_lrs
     export PHOBOS_STORE_default_family="rados_pool"
 
     for i in $(eval echo "{1..$n_pools}"); do
@@ -54,18 +54,18 @@ function setup_locked_splits
 {
     setup 8
 
-    waive_daemon
+    waive_lrs
 
     for pool in $rados_pools; do
         resize_medium $pool $HALF_SIZE
     done
 
-    invoke_daemon
+    invoke_lrs
 }
 
 function cleanup
 {
-    waive_daemon
+    waive_lrs
     drop_tables
 
     for pool in $rados_pools; do

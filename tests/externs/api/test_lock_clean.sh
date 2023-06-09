@@ -80,12 +80,12 @@ values
             'POSIX'::fs_type, 'label4', 'PATH'::address_type,
             'full'::fs_status, '{}', '{}');
 EOF
-    waive_daemon
+    waive_lrs
 }
 
 function cleanup
 {
-    waive_daemon
+    waive_lrs
     drop_tables
 }
 

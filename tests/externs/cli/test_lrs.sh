@@ -43,33 +43,33 @@ function cleanup
 
 function test_invalid_lock_file()
 {
-    trap "waive_daemon" EXIT
+    trap "waive_lrs" EXIT
     drop_tables
     setup_tables
 
 set +e
     export PHOBOS_LRS_lock_file="/phobosd.lock"
     rm -rf "$PHOBOS_LRS_lock_file"
-    invoke_daemon ||
+    invoke_lrs ||
         error "Should have succeeded with valid folder '/'"
-    waive_daemon
+    waive_lrs
 
     local folder="$test_bin_dir/a"
     export PHOBOS_LRS_lock_file="$folder/phobosd.lock"
     rm -rf "$folder"
-    invoke_daemon &&
+    invoke_lrs &&
         error "Should have failed with non-existing folder '$folder'"
 
     mkdir -p "$folder"
-    invoke_daemon ||
+    invoke_lrs ||
         error "Should have succeeded after creating valid folder '$folder'"
-    waive_daemon
+    waive_lrs
 
     rm -rf "$folder"
 
     # Create $folder as a simple file to fail the "is dir" condition
     touch "$folder"
-    invoke_daemon &&
+    invoke_lrs &&
         error "Should have failed because '$folder' is not a directory"
 
     rm -rf "$folder"
@@ -303,27 +303,27 @@ function test_wait_end_of_IO_before_shutdown()
 {
     local dir=$(mktemp -d)
 
-    trap "waive_daemon; drop_tables; rm -rf '$dir'" EXIT
+    trap "waive_lrs; drop_tables; rm -rf '$dir'" EXIT
     setup_tables
-    invoke_daemon -vv
+    invoke_lrs -vv
 
     $phobos dir add "$dir"
     $phobos dir format --unlock --fs posix "$dir"
 
     local release_medium_name=$($lrs_simple_client put dir)
 
-    kill $PID_DAEMON
+    kill $PID_LRS
     sleep 1
-    ps --pid $PID_DAEMON || error "Daemon should still be online"
+    ps --pid $PID_LRS || error "Daemon should still be online"
 
     # send release request
     $lrs_simple_client release $release_medium_name dir
 
-    timeout 10 tail --pid=$PID_DAEMON -f /dev/null
+    timeout 10 tail --pid=$PID_LRS -f /dev/null
     if [[ $? != 0 ]]; then
         error "Daemon not stopped after 10 seconds"
     fi
-    PID_DAEMON=0
+    PID_LRS=0
 
     drop_tables
     rm -rf '$dir'
@@ -349,9 +349,9 @@ function test_cancel_waiting_requests_before_shutdown()
     local file=$(mktemp)
     local res_file="res_file"
 
-    trap "waive_daemon; drop_tables; rm -rf '$dir' '$file' '$res_file'" EXIT
+    trap "waive_lrs; drop_tables; rm -rf '$dir' '$file' '$res_file'" EXIT
     setup_tables
-    invoke_daemon
+    invoke_lrs
 
     $phobos dir add "$dir"
     $phobos dir format --unlock --fs posix "$dir"
@@ -366,7 +366,7 @@ function test_cancel_waiting_requests_before_shutdown()
     # wait for the request to reach the LRS
     sleep 1
 
-    kill $PID_DAEMON
+    kill $PID_LRS
 
     # "timeout wait $put_pid" cannot be used here as "put_pid" will not be a
     # child of 'timeout'
@@ -379,11 +379,11 @@ function test_cancel_waiting_requests_before_shutdown()
     # send the release request
     $lrs_simple_client release $release_medium_name dir
 
-    timeout 10 tail --pid=$PID_DAEMON -f /dev/null
+    timeout 10 tail --pid=$PID_LRS -f /dev/null
     if [[ $? != 0 ]]; then
         error "Daemon not stopped after 10 seconds"
     fi
-    PID_DAEMON=0
+    PID_LRS=0
 
     drop_tables
     rm -rf "$dir" "$file" "$res_file"
@@ -394,16 +394,16 @@ function test_refuse_new_request_during_shutdown()
     local dir=$(mktemp -d)
     local file=$(mktemp)
 
-    trap "waive_daemon; drop_tables; rm -rf '$dir' '$file'" EXIT
+    trap "waive_lrs; drop_tables; rm -rf '$dir' '$file'" EXIT
     setup_tables
-    invoke_daemon
+    invoke_lrs
 
     $phobos dir add "$dir"
     $phobos dir format --unlock --fs posix "$dir"
 
     local release_medium_name=$($lrs_simple_client put dir)
 
-    kill $PID_DAEMON
+    kill $PID_LRS
 
     $phobos put --family dir "$file" oid &&
         error "New put should have failed during shutdown"
@@ -411,11 +411,11 @@ function test_refuse_new_request_during_shutdown()
     # send the release request
     $lrs_simple_client release $release_medium_name dir
 
-    timeout 10 tail --pid=$PID_DAEMON -f /dev/null
+    timeout 10 tail --pid=$PID_LRS -f /dev/null
     if [[ $? != 0 ]]; then
         error "Daemon not stopped after 10 seconds"
     fi
-    PID_DAEMON=0
+    PID_LRS=0
 
     drop_tables
     rm -rf "$dir" "$file"
@@ -427,10 +427,10 @@ function test_mount_failure_during_read_response()
     local tape=$(get_tapes L6 1)
     local drive=$(get_lto_drives 6 1)
 
-    trap "waive_daemon; drop_tables; rm -f '$file'; \
+    trap "waive_lrs; drop_tables; rm -f '$file'; \
           unset PHOBOS_LTFS_cmd_mount" EXIT
     setup_tables
-    invoke_daemon
+    invoke_lrs
 
     dd if=/dev/urandom of="$file" bs=4096 count=5
 
@@ -445,16 +445,16 @@ function test_mount_failure_during_read_response()
     # Force mount to fail
     local save_mount_cmd=$PHOBOS_LTFS_cmd_mount
     export PHOBOS_LTFS_cmd_mount="sh -c 'exit 1'"
-    waive_daemon
-    invoke_daemon
+    waive_lrs
+    invoke_lrs
 
     $phobos get oid "${file}.out" &&
         error "Get command should have failed"
 
-    ps --pid "$PID_DAEMON"
+    ps --pid "$PID_LRS"
 
     export PHOBOS_LTFS_cmd_mount="$save_mount_cmd"
-    waive_daemon
+    waive_lrs
     drop_tables
 
     rm -f "$file"
@@ -486,10 +486,10 @@ function test_format_fail_without_suitable_device()
     local drive=$(get_lto_drives 5 1)
     local tape=$(get_tapes L6 1)
 
-    trap "waive_daemon; drop_tables" EXIT
+    trap "waive_lrs; drop_tables" EXIT
 
     setup_tables
-    invoke_daemon
+    invoke_lrs
 
     $phobos tape add --type lto6 "$tape"
     format_wait_and_check "$tape" "no device is available"
@@ -501,7 +501,7 @@ function test_format_fail_without_suitable_device()
     format_wait_and_check "$tape" \
                           "the drive '$drive' and tape '$tape' are incompatible"
 
-    waive_daemon
+    waive_lrs
     drop_tables
 
     trap "cleanup" EXIT
@@ -512,7 +512,7 @@ function test_retry_on_error_setup()
     drain_all_drives
     drop_tables
     setup_tables
-    invoke_daemon
+    invoke_lrs
 
     setup_test_dirs
     setup_dummy_files 2
@@ -520,7 +520,7 @@ function test_retry_on_error_setup()
 
 function test_retry_on_error_cleanup()
 {
-    waive_daemon
+    waive_lrs
     drain_all_drives
 
     cleanup_dummy_files
@@ -544,7 +544,7 @@ function test_retry_on_error_run()
 
     $phobos put --layout raid1 --lyt-params "repl_count=3" "$file" "$oid"
 
-    waive_daemon
+    waive_lrs
     drain_all_drives
 
     # Custom mount script that fails the first two mounts and succeeds on the
@@ -565,7 +565,7 @@ exit 1
     echo 0 > /tmp/mount_count
     local save_mount_cmd=$PHOBOS_LTFS_cmd_mount
     export PHOBOS_LTFS_cmd_mount="$cmd"
-    invoke_daemon
+    invoke_lrs
     $phobos ping
 
     $phobos get "$oid" "$DIR_TEST_OUT"/"$oid"
@@ -598,8 +598,8 @@ function test_fair_share_max_reached()
     drop_tables
     setup_tables
     export PHOBOS_IO_SCHED_TAPE_dispatch_algo=fair_share
-    trap "waive_daemon; cleanup" EXIT
-    invoke_daemon
+    trap "waive_lrs; cleanup" EXIT
+    invoke_lrs
 
     # With this setup, any get will wait
     $phobos sched fair_share --type LTO5 --min 0,0,0 --max 0,1,1
@@ -627,7 +627,7 @@ function test_fair_share_max_reached()
     ps $pid || error "phobos get process is not running"
     $phobos sched fair_share --type LTO5 --max 1,1,1
     wait || error "Get should have succeeded after setting max reads to 1"
-    waive_daemon
+    waive_lrs
     trap cleanup EXIT
 }
 

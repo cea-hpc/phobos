@@ -41,13 +41,13 @@ function dir_setup
 function setup
 {
     setup_tables
-    invoke_daemon
+    invoke_lrs
     dir_setup
 }
 
 function cleanup
 {
-    waive_daemon
+    waive_lrs
     rm -rf $dirs
     drop_tables
 }

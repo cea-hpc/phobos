@@ -37,15 +37,15 @@ function setup
 
 function cleanup
 {
-    waive_daemon
+    waive_lrs
     drop_tables
 }
 
 function test_ping
 {
-    invoke_daemon
+    invoke_lrs
     $valg_phobos ping || error "Ping should be successful"
-    waive_daemon
+    waive_lrs
     $valg_phobos ping && error "Ping should fail"
     return 0
 }

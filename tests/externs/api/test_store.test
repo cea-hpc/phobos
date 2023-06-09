@@ -49,7 +49,7 @@ function setup()
     export PHOBOS_LRS_families="dir"
     export PHOBOS_STORE_default_family="dir"
 
-    invoke_daemon
+    invoke_lrs
 
     mkdir $TEST_RECOV_DIR
 
@@ -71,7 +71,7 @@ function clear_mnt_content()
 
 function cleanup()
 {
-    waive_daemon
+    waive_lrs
     drop_tables
     rm -rf $TEST_FILES
     rm -rf $TEST_RECOV_DIR

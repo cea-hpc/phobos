@@ -53,13 +53,13 @@ function setup
     export PHOBOS_STORE_default_family="dir"
 
     setup_tables
-    invoke_daemon
+    invoke_lrs
     dir_setup
 }
 
 function cleanup
 {
-    waive_daemon
+    waive_lrs
     rm -rf $dirs
     drop_tables
 

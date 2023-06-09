@@ -48,7 +48,7 @@ function tape_setup
 function setup
 {
     setup_tables
-    invoke_daemon
+    invoke_lrs
     dir_setup
     if [[ -w /dev/changer ]]; then
         tape_setup
@@ -57,7 +57,7 @@ function setup
 
 function cleanup
 {
-    waive_daemon
+    waive_lrs
     rm -rf $dir
     drop_tables
 

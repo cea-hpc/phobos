@@ -34,7 +34,7 @@ function setup
 {
     setup_tables # necessary for the daemon's initialization
     sudo ceph osd pool create pho_test
-    invoke_daemon
+    invoke_lrs
     $phobos rados_pool add pho_test
     $phobos rados_pool format --unlock pho_test
     rm -f /tmp/rados_out
@@ -42,7 +42,7 @@ function setup
 
 function cleanup
 {
-    waive_daemon
+    waive_lrs
     sudo ceph osd pool rm pho_test pho_test --yes-i-really-really-mean-it
     drop_tables
 }

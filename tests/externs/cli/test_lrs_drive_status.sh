@@ -42,12 +42,12 @@ function test_drive_status_no_daemon()
 function setup()
 {
     setup_tables
-    invoke_daemon
+    invoke_lrs
 }
 
 function cleanup()
 {
-    waive_daemon
+    waive_lrs
     drop_tables
 }
 

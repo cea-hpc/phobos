@@ -33,8 +33,8 @@ if [[ -z ${EXEC_NONREGRESSION+x} ]]; then
     . $test_dir/../setup_db.sh
     . $test_dir/../test_launch_daemon.sh
 
-    start_phobosd="invoke_daemon"
-    stop_phobosd="waive_daemon"
+    start_phobosd="invoke_lrs"
+    stop_phobosd="waive_lrs"
 
     start_phobosdb="setup_tables"
     stop_phobosdb="drop_tables"
