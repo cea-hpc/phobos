@@ -6,7 +6,7 @@ PID_TLC=0
 LRS_PID_FILEPATH="$test_bin_dir/phobosd.pid"
 export PHOBOS_LRS_lock_file="$test_bin_dir/phobosd.lock"
 
-TLC_PID_FILE_PATH="$test_bin_dir/tlc.pid"
+TLC_PID_FILEPATH="$test_bin_dir/tlc.pid"
 
 function invoke_daemon()
 {
@@ -24,6 +24,11 @@ function invoke_daemon()
 function invoke_lrs()
 {
    invoke_daemon ${LRS_PID_FILEPATH} $phobosd PID_LRS "$*"
+}
+
+function invoke_tlc()
+{
+   invoke_daemon ${TLC_PID_FILEPATH} $tlc PID_TLC "$*"
 }
 
 function waive_daemon()
@@ -53,4 +58,9 @@ function waive_daemon()
 function waive_lrs()
 {
     waive_daemon ${LRS_PID_FILEPATH} PID_LRS
+}
+
+function waive_tlc()
+{
+    waive_daemon ${TLC_PID_FILEPATH} PID_TLC
 }

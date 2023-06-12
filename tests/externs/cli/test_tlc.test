@@ -24,6 +24,7 @@
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
+. $test_dir/test_launch_daemon.sh
 
 function tlc_interactive_sig
 {
@@ -40,4 +41,14 @@ function tlc_interactive_sig
     fi
 }
 
-TESTS=("tlc_interactive_sig SIGINT" "tlc_interactive_sig SIGTERM")
+function tlc_daemon_started
+{
+    WRITTEN_PID=`cat ${TLC_PID_FILEPATH}`
+    if [[ ${WRITTEN_PID} != ${PID_TLC} ]]; then
+        error "TLC daemon must have written its PID file"
+    fi
+}
+
+TESTS=("tlc_interactive_sig SIGINT" \
+       "tlc_interactive_sig SIGTERM" \
+       "invoke_tlc; tlc_daemon_started; waive_tlc")
