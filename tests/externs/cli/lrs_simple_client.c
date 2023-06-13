@@ -243,8 +243,8 @@ static void send_format(struct pho_comm_info *comm,
 
 int main(int argc, char **argv)
 {
+    union pho_comm_addr addr;
     struct pho_comm_info comm;
-    const char *socket_path;
     struct option option;
     int rc;
 
@@ -259,8 +259,8 @@ int main(int argc, char **argv)
              option.medium_name);
 
 
-    socket_path = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, server_socket);
-    rc = pho_comm_open(&comm, socket_path, false);
+    addr.af_unix.path = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, server_socket);
+    rc = pho_comm_open(&comm, &addr, PHO_COMM_UNIX_CLIENT);
     if (rc)
         error("pho_comm_open", strerror(-rc));
 

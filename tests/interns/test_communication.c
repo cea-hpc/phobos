@@ -34,25 +34,31 @@
 #include "pho_test_utils.h"
 #include "pho_comm.h"
 
+#define TCP_PORT_TEST 65530
+
+struct pho_comm_addr_type {
+    union pho_comm_addr addr;
+    enum pho_comm_socket_type server_type;
+    enum pho_comm_socket_type client_type;
+};
+
 static int test_open(void *arg)
 {
+    struct pho_comm_addr_type *addr_type = (struct pho_comm_addr_type *)arg;
     struct pho_comm_data *data = NULL;
     struct pho_comm_info ci_client;
     struct pho_comm_info ci_server;
-    char *path = (char *) arg;
     int rc, nb_data;
 
-    rc = pho_comm_open(&ci_server, path, true);
+    rc = pho_comm_open(&ci_server, &addr_type->addr, addr_type->server_type);
     if (rc) {
-        pho_error(rc, "Server socket opening '%s' failed with status %d\n",
-            path, rc);
+        pho_error(rc, "Server socket opening failed with status %d\n", rc);
         return rc;
     }
 
-    rc = pho_comm_open(&ci_client, path, false);
+    rc = pho_comm_open(&ci_client, &addr_type->addr, addr_type->client_type);
     if (rc) {
-        pho_error(rc, "Client socket opening '%s' failed with status %d\n",
-            path, rc);
+        pho_error(rc, "Client socket opening failed with status %d\n", rc);
         pho_comm_close(&ci_server);
         return rc;
     }
@@ -89,7 +95,8 @@ static int test_open(void *arg)
 
 static int test_open_ex(void *arg)
 {
-    char *path = (char *) arg;
+    struct pho_comm_addr_type addr_type;
+    char *path = (char *)arg;
     struct sockaddr_un socka;
     int fd, rc = 0;
 
@@ -110,20 +117,56 @@ static int test_open_ex(void *arg)
 
     close(fd);
 
-    return test_open(arg);
+    addr_type.addr.af_unix.path = path;
+    addr_type.server_type = PHO_COMM_UNIX_SERVER;
+    addr_type.client_type = PHO_COMM_UNIX_CLIENT;
+    return test_open(&addr_type);
 }
 
-static int test_open_off(void *arg)
+static int test_open_offline_addr_null(void *arg)
 {
+    struct pho_comm_addr_type *addr_type = (struct pho_comm_addr_type *)arg;
     struct pho_comm_info ci_client;
     struct pho_comm_info ci_server;
     int rc;
 
-    rc = pho_comm_open(&ci_server, NULL, true);
+    rc = pho_comm_open(&ci_server, NULL, addr_type->server_type);
     if (rc)
         LOG_RETURN(rc, "server socket 'opening' (offline) failed");
 
-    rc = pho_comm_open(&ci_client, NULL, false);
+    rc = pho_comm_open(&ci_client, NULL, addr_type->client_type);
+    if (rc) {
+        pho_error(rc, "client socket 'opening' (offline) failed");
+        pho_comm_close(&ci_server);
+        return rc;
+    }
+
+    rc = pho_comm_close(&ci_client);
+    if (rc) {
+        pho_error(rc, "Client connection closing failed");
+        pho_comm_close(&ci_server);
+        return rc;
+    }
+
+    rc = pho_comm_close(&ci_server);
+    if (rc)
+        pho_error(rc, "Server connection closing failed");
+
+    return rc;
+}
+
+static int test_open_offline(void *arg)
+{
+    struct pho_comm_addr_type *addr_type = (struct pho_comm_addr_type *)arg;
+    struct pho_comm_info ci_client;
+    struct pho_comm_info ci_server;
+    int rc;
+
+    rc = pho_comm_open(&ci_server, &addr_type->addr, addr_type->server_type);
+    if (rc)
+        LOG_RETURN(rc, "server socket 'opening' (offline) failed");
+
+    rc = pho_comm_open(&ci_client, &addr_type->addr, addr_type->client_type);
     if (rc) {
         pho_error(rc, "client socket 'opening' (offline) failed");
         pho_comm_close(&ci_server);
@@ -146,16 +189,18 @@ static int test_open_off(void *arg)
 
 static int test_sendrecv_simple(void *arg)
 {
+    struct pho_comm_addr_type *addr_type = (struct pho_comm_addr_type *)arg;
     struct pho_comm_data send_data_client;
     struct pho_comm_data send_data_server;
     struct pho_comm_data *data = NULL;
     struct pho_comm_info ci_server;
     struct pho_comm_info ci_client;
-    char *path = (char *)arg;
     int rc = 0, nb_data;
 
-    assert(!pho_comm_open(&ci_server, path, true));
-    assert(!pho_comm_open(&ci_client, path, false));
+    assert(!pho_comm_open(&ci_server, &addr_type->addr,
+                          addr_type->server_type));
+    assert(!pho_comm_open(&ci_client, &addr_type->addr,
+                          addr_type->client_type));
     assert(!pho_comm_recv(&ci_server, &data, &nb_data));
     free(data);
 
@@ -264,6 +309,7 @@ err_fail:
  */
 static int test_sendrecv_multiple(void *arg)
 {
+    struct pho_comm_addr_type *addr_type = (struct pho_comm_addr_type *)arg;
     const int NCLIENT = 10, NMSG = 20, TOTAL = NCLIENT * NMSG;
     struct pho_comm_data send_data_client[TOTAL];
     struct pho_comm_info ci_client[NCLIENT];
@@ -271,11 +317,12 @@ static int test_sendrecv_multiple(void *arg)
     struct pho_comm_info ci_server;
     struct pho_comm_data *data;
     int i, nb_data, rc, cnt = TOTAL;
-    char *path = (char *)arg;
 
-    assert(!pho_comm_open(&ci_server, path, true));
+    assert(!pho_comm_open(&ci_server, &addr_type->addr,
+                          addr_type->server_type));
     for (i = 0; i < NCLIENT; ++i)
-        assert(!pho_comm_open(ci_client + i, path, false));
+        assert(!pho_comm_open(ci_client + i, &addr_type->addr,
+                              addr_type->client_type));
     assert(!pho_comm_recv(&ci_server, &data, &nb_data));
 
     // sending from clients
@@ -337,20 +384,117 @@ err_rc:
     return rc;
 }
 
+static int test_bad_hostname_port(void *arg)
+{
+    struct pho_comm_info ci_client;
+    struct pho_comm_info ci_server;
+    union pho_comm_addr addr;
+    int rc;
+
+    /* bad hostname */
+    addr.tcp.hostname = "bad_hostname_unknown";
+    addr.tcp.port = TCP_PORT_TEST;
+
+    rc = pho_comm_open(&ci_server, &addr, PHO_COMM_TCP_SERVER);
+    if (rc != -EINVAL) {
+        pho_comm_close(&ci_server);
+        pho_error(rc,
+                  "Server socket opening with bad hostname %s must failed with "
+                  "%d, we get %d\n",
+                  addr.tcp.hostname, -EINVAL, rc);
+        return rc;
+    }
+
+    rc = pho_comm_open(&ci_client, &addr, PHO_COMM_TCP_CLIENT);
+    if (rc != -EINVAL) {
+        pho_comm_close(&ci_client);
+        pho_error(rc,
+                  "Server socket opening with bad hostname %s must failed with "
+                  "%d, we get %d\n",
+                  addr.tcp.hostname, -EINVAL, rc);
+        return rc;
+    }
+
+    /* bad port */
+    addr.tcp.hostname = "localhost";
+    addr.tcp.port = 655359;
+
+    rc = pho_comm_open(&ci_server, &addr, PHO_COMM_TCP_SERVER);
+    if (rc != -EINVAL) {
+        pho_comm_close(&ci_server);
+        pho_error(rc,
+                  "Server socket opening with bad port %d must failed with "
+                  "%d, we get %d\n",
+                  addr.tcp.port, -EINVAL, rc);
+        return rc;
+    }
+
+    rc = pho_comm_open(&ci_client, &addr, PHO_COMM_TCP_CLIENT);
+    if (rc != -EINVAL) {
+        pho_comm_close(&ci_client);
+        pho_error(rc,
+                  "Server socket opening with bad port %d must failed with "
+                  "%d, we get %d\n",
+                  addr.tcp.port, -EINVAL, rc);
+        return rc;
+    }
+
+    rc = pho_comm_close(&ci_server);
+    rc = pho_comm_close(&ci_client);
+    return PHO_TEST_SUCCESS;
+}
+
 int main(int argc, char **argv)
 {
+    struct pho_comm_addr_type addr_type;
     test_env_initialize();
 
-    run_test("Test: good socket opening", test_open, "/tmp/test_socklrs",
+    addr_type.addr.af_unix.path = "/tmp/test_socklrs";
+    addr_type.server_type = PHO_COMM_UNIX_SERVER;
+    addr_type.client_type = PHO_COMM_UNIX_CLIENT;
+    run_test("Test: good AF_UNIX socket opening", test_open, &addr_type,
+             PHO_TEST_SUCCESS);
+    addr_type.addr.tcp.hostname = "localhost";
+    addr_type.addr.tcp.port = TCP_PORT_TEST;
+    addr_type.server_type = PHO_COMM_TCP_SERVER;
+    addr_type.client_type = PHO_COMM_TCP_CLIENT;
+    run_test("Test: good AF_INET socket opening", test_open, &addr_type,
              PHO_TEST_SUCCESS);
     run_test("Test: socket opening (socket already exists)", test_open_ex,
              "/tmp/test_socklrs", PHO_TEST_SUCCESS);
-    run_test("Test: offline socket", test_open_off, NULL, PHO_TEST_SUCCESS);
+    addr_type.addr.af_unix.path = NULL;
+    addr_type.server_type = PHO_COMM_UNIX_SERVER;
+    addr_type.client_type = PHO_COMM_UNIX_CLIENT;
+    run_test("Test: offline socket AF_UNIX addr NULL",
+             test_open_offline_addr_null, &addr_type, PHO_TEST_SUCCESS);
+    run_test("Test: offline socket path NULL", test_open_offline, &addr_type,
+             PHO_TEST_SUCCESS);
+    addr_type.addr.tcp.hostname = NULL;
+    addr_type.addr.tcp.port = TCP_PORT_TEST;
+    addr_type.server_type = PHO_COMM_TCP_SERVER;
+    addr_type.client_type = PHO_COMM_TCP_CLIENT;
+    run_test("Test: offline socket AF_INET addr NULL",
+             test_open_offline_addr_null, &addr_type, PHO_TEST_SUCCESS);
+    run_test("Test: offline socket hostname NULL", test_open_offline,
+             &addr_type, PHO_TEST_SUCCESS);
 
-    run_test("Test: simple sending/receiving", test_sendrecv_simple,
-             "/tmp/test_socklrs", PHO_TEST_SUCCESS);
-    run_test("Test: multiple sending/receiving", test_sendrecv_multiple,
-             "/tmp/test_socklrs", PHO_TEST_SUCCESS);
+    addr_type.addr.af_unix.path = "/tmp/test_socklrs";
+    addr_type.server_type = PHO_COMM_UNIX_SERVER;
+    addr_type.client_type = PHO_COMM_UNIX_CLIENT;
+    run_test("Test: simple sending/receiving AF_UNIX", test_sendrecv_simple,
+             &addr_type, PHO_TEST_SUCCESS);
+    run_test("Test: multiple sending/receiving AF_UNIX", test_sendrecv_multiple,
+             &addr_type, PHO_TEST_SUCCESS);
+    addr_type.addr.tcp.hostname = "localhost";
+    addr_type.addr.tcp.port = TCP_PORT_TEST;
+    addr_type.server_type = PHO_COMM_TCP_SERVER;
+    addr_type.client_type = PHO_COMM_TCP_CLIENT;
+    run_test("Test: simple sending/receiving AF_INET", test_sendrecv_simple,
+             &addr_type, PHO_TEST_SUCCESS);
+    run_test("Test: multiple sending/receiving AF_INET", test_sendrecv_multiple,
+             &addr_type, PHO_TEST_SUCCESS);
+    run_test("Test: AF_INET bad hostname or port", test_bad_hostname_port, NULL,
+             PHO_TEST_SUCCESS);
 
     exit(EXIT_SUCCESS);
 }

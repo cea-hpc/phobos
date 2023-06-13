@@ -68,7 +68,7 @@ The function `pho_comm_open` will have to be extended to support TCP sockets.
 union pho_comm_addr {
     struct {
         const char *path;
-    } unix;
+    } af_unix;
     struct {
         const char *hostname;
         int port;

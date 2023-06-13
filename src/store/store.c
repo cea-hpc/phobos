@@ -1000,7 +1000,7 @@ static void store_fini(struct phobos_handle *pho, int rc)
 static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
                       size_t n_xfers, pho_completion_cb_t cb, void *udata)
 {
-    const char *sock_path;
+    union pho_comm_addr sock_addr;
     size_t i;
     int rc;
 
@@ -1028,7 +1028,7 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
     if (rc && rc != -EALREADY)
         return rc;
 
-    sock_path = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, lrs_socket);
+    sock_addr.af_unix.path = PHO_CFG_GET(cfg_store, PHO_CFG_STORE, lrs_socket);
 
     /* Connect to the DSS */
     rc = dss_init(&pho->dss);
@@ -1036,7 +1036,7 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
         return rc;
 
     /* Connect to the LRS */
-    rc = pho_comm_open(&pho->comm, sock_path, false);
+    rc = pho_comm_open(&pho->comm, &sock_addr, PHO_COMM_UNIX_CLIENT);
     if (rc)
         LOG_GOTO(out, rc, "Cannot contact 'phobosd': will abort");
 

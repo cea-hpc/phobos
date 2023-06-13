@@ -1071,8 +1071,8 @@ static void lrs_fini(struct lrs *lrs)
  */
 static int lrs_init(struct lrs *lrs)
 {
+    union pho_comm_addr sock_addr;
     const char *lock_file;
-    const char *sock_path;
     int rc;
 
     umask(0000);
@@ -1093,8 +1093,8 @@ static int lrs_init(struct lrs *lrs)
     if (rc)
         LOG_GOTO(err, rc, "Error while loading the schedulers");
 
-    sock_path = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, server_socket);
-    rc = pho_comm_open(&lrs->comm, sock_path, true);
+    sock_addr.af_unix.path = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, server_socket);
+    rc = pho_comm_open(&lrs->comm, &sock_addr, PHO_COMM_UNIX_SERVER);
     if (rc)
         LOG_GOTO(err, rc, "Error while opening the socket");
 

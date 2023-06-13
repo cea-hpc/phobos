@@ -30,15 +30,35 @@
 #include "pho_types.h"
 
 /**
+ * Address of an AF_UNIX or AF_INET socket
+ */
+union pho_comm_addr {
+    struct {
+        const char *path;
+    } af_unix;
+    struct {
+        const char *hostname;
+        int port;
+    } tcp;
+};
+
+enum pho_comm_socket_type {
+    PHO_COMM_UNIX_SERVER,
+    PHO_COMM_UNIX_CLIENT,
+    PHO_COMM_TCP_SERVER,
+    PHO_COMM_TCP_CLIENT,
+};
+
+/**
  * Data structure used to store communication information needed by this API.
  * This structure is initialized using pho_comm_open() and cleaned
  * using pho_comm_close().
  */
 struct pho_comm_info {
-    bool is_server;     /*!< true if the caller is a server,
-                         *   false if a client.
+    enum pho_comm_socket_type type;
+    char *path;         /*!< AF_UNIX: path of the socket
+                         *   AF_INET: "hostname:port"
                          */
-    char *path;         /*!< Socket path. */
     int socket_fd;      /*!< Main socket descriptor
                          *   (the one open with socket() call).
                          */
@@ -61,7 +81,7 @@ struct pho_comm_info {
 static inline struct pho_comm_info pho_comm_info_init(void)
 {
     struct pho_comm_info info = {
-        .is_server = false,
+        .type = PHO_COMM_UNIX_CLIENT,
         .path = NULL,
         .socket_fd = -1,
         .epoll_fd = -1,
@@ -99,17 +119,16 @@ static inline struct pho_comm_data pho_comm_data_init(struct pho_comm_info *ci)
 }
 
 /**
- * Opener for the unix socket.
+ * Open a socket
  *
  * \param[out]      ci          Communication info to be initialized.
- * \param[in]       sock_path   Socket path.
- * \param[in]       is_server   true if the opening was requested by the server,
- *                              false otherwise.
+ * \param[in]       addr        Address of the server.
+ * \param[in]       type        Which type of socket we are opening.
  *
- * \return                      0 on success, -errno on failure.
+ * \return                      0 on success, negative POSIX error on failure
  */
-int pho_comm_open(struct pho_comm_info *ci, const char *sock_path,
-                  const bool is_server);
+int pho_comm_open(struct pho_comm_info *ci, const union pho_comm_addr *addr,
+                  enum pho_comm_socket_type type);
 
 /**
  * Closer for the unix socket.

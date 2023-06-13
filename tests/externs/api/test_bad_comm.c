@@ -607,6 +607,7 @@ out_fail:
 static int test_bad_ping(void *arg)
 {
     struct pho_comm_info *ci = (struct pho_comm_info *)arg;
+    union pho_comm_addr addr;
     pho_resp_t *resp;
     pho_req_t req;
     int rc = 0;
@@ -615,7 +616,8 @@ static int test_bad_ping(void *arg)
     req.id = 0;
     assert(!_send_request(ci, &req));
     pho_comm_close(ci);
-    assert(!pho_comm_open(ci, "/tmp/socklrs", false));
+    addr.af_unix.path = "/tmp/socklrs";
+    assert(!pho_comm_open(ci, &addr, PHO_COMM_UNIX_CLIENT));
 
     rc = _send_and_receive(ci, &req, &resp);
     if (!rc)
@@ -635,6 +637,7 @@ static int test_bad_ping(void *arg)
 
 int main(int argc, char **argv)
 {
+    union pho_comm_addr addr;
     struct pho_comm_info ci;
 
     pho_context_init();
@@ -643,7 +646,8 @@ int main(int argc, char **argv)
     pho_cfg_init_local(NULL);
     atexit(pho_cfg_local_fini);
 
-    assert(!pho_comm_open(&ci, "/tmp/socklrs", false));
+    addr.af_unix.path = "/tmp/socklrs";
+    assert(!pho_comm_open(&ci, &addr, PHO_COMM_UNIX_CLIENT));
 
     run_test("Test: bad ping", test_bad_ping, &ci, PHO_TEST_SUCCESS);
     run_test("Test: bad put", test_bad_put, &ci, PHO_TEST_SUCCESS);

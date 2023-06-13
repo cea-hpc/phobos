@@ -415,7 +415,7 @@ void phobos_admin_fini(struct admin_handle *adm)
 
 int phobos_admin_init(struct admin_handle *adm, bool lrs_required)
 {
-    const char *sock_path;
+    union pho_comm_addr sock_addr;
     int rc;
 
     memset(adm, 0, sizeof(*adm));
@@ -425,13 +425,13 @@ int phobos_admin_init(struct admin_handle *adm, bool lrs_required)
     if (rc && rc != -EALREADY)
         return rc;
 
-    sock_path = PHO_CFG_GET(cfg_admin, PHO_CFG_ADMIN, lrs_socket);
+    sock_addr.af_unix.path = PHO_CFG_GET(cfg_admin, PHO_CFG_ADMIN, lrs_socket);
 
     rc = dss_init(&adm->dss);
     if (rc)
         LOG_GOTO(out, rc, "Cannot initialize DSS");
 
-    rc = pho_comm_open(&adm->comm, sock_path, false);
+    rc = pho_comm_open(&adm->comm, &sock_addr, PHO_COMM_UNIX_CLIENT);
     if (rc && lrs_required)
         LOG_GOTO(out, rc, "Cannot contact 'phobosd': will abort");
     else if (!rc)

@@ -32,6 +32,8 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netdb.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
@@ -75,62 +77,188 @@ static inline void _init_comm_recv_info(struct _pho_comm_recv_info *cri,
     cri->buf = buf;
 }
 
-int pho_comm_open(struct pho_comm_info *ci, const char *sock_path,
-                  const bool is_server)
+/**
+ * When no connection is needed, we support an offline mode. This function
+ * returns true if the input addr parameter fits to the offline mode, false
+ * otherwise.
+ */
+static bool pho_comm_addr_is_offline(const union pho_comm_addr *addr,
+                                     enum pho_comm_socket_type type)
+{
+    if (addr == NULL)
+        return true;
+
+    switch (type) {
+    case PHO_COMM_UNIX_SERVER:
+    case PHO_COMM_UNIX_CLIENT:
+        if (addr->af_unix.path == NULL)
+            return true;
+
+        break;
+    case PHO_COMM_TCP_SERVER:
+    case PHO_COMM_TCP_CLIENT:
+        if (addr->tcp.hostname == NULL)
+            return true;
+
+        break;
+    }
+
+    return false;
+}
+
+static int af_unix_set_socket_addr_path(const union pho_comm_addr *addr,
+                                        enum pho_comm_socket_type type,
+                                        int *socket_fd, struct sockaddr **socka,
+                                        socklen_t *address_len, char **path,
+                                        struct sockaddr_un *socka_un)
+{
+    /* check path length */
+    if (strlen(addr->af_unix.path) >= sizeof(socka_un->sun_path))
+        LOG_RETURN(-EINVAL, "unix socket path length of %lu (%s), greater "
+                   "than sockai_un.sun_path length of %lu ",
+                   strlen(addr->af_unix.path), addr->af_unix.path,
+                   sizeof(socka_un->sun_path));
+
+    /* create the socket */
+    *socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (*socket_fd == -1)
+        LOG_RETURN(-errno, "Failed to open AF_UNIX socket");
+
+    /* build address */
+    if (type == PHO_COMM_UNIX_SERVER) {
+        if (unlink(addr->af_unix.path) == 0)
+            pho_warn("Socket already exists(%s), removed the old one",
+                     addr->af_unix.path);
+    } else if (access(addr->af_unix.path, F_OK) == -1) {
+        /* if the client does not see the LRS socket, we return ENOTCONN,
+         * then each client will decide if they need the LRS or not.
+         */
+        pho_verb("Socket does not exist(%s) (%d, %s), means that the LRS "
+                 "is not up or the socket path is not correct",
+                 addr->af_unix.path, errno, strerror(errno));
+        close(*socket_fd);
+        *socket_fd = -1;
+        return -ENOTCONN;
+    }
+
+    socka_un->sun_family = AF_UNIX;
+    strncpy(socka_un->sun_path, addr->af_unix.path,
+            sizeof(socka_un->sun_path));
+    /* make sure the path is zero-terminated */
+    socka_un->sun_path[sizeof(socka_un->sun_path)-1] = '\0';
+    *socka = (struct sockaddr *)socka_un;
+    *address_len = sizeof(*socka_un);
+    *path = strdup(addr->af_unix.path);
+    if (!*path) {
+        pho_error(-ENOMEM, "Unable to alloc AF_UNIX PATH");
+        close(*socket_fd);
+        *socket_fd = -1;
+        return -ENOMEM;
+    }
+    return 0;
+}
+
+static int tcp_set_socket_addr_path(const union pho_comm_addr *addr,
+                                    int *socket_fd, struct sockaddr **socka,
+                                    socklen_t *address_len, char **path,
+                                    struct addrinfo **addr_res)
+{
+    struct addrinfo hints = {0};
+    char service[6]; /* from 0 to 65535 + final '\0' */
+    int rc;
+
+    /* create the socket */
+    *socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (*socket_fd == -1)
+        LOG_RETURN(-errno, "Failed to open AF_INET socket");
+
+    /* build address */
+    rc = snprintf(service, 6, "%d", addr->tcp.port);
+    if (rc < 0 || rc >= 6)
+        LOG_GOTO(out_err, rc = -EINVAL, "Unable to print port number %d",
+                 addr->tcp.port);
+
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = 0;
+    rc = getaddrinfo(addr->tcp.hostname, service, &hints, addr_res);
+    if (rc)
+        LOG_GOTO(out_err, rc = -EINVAL,
+                 "Unable to find an address corresponding to hostname %s "
+                 "and port %d, %s",
+                 addr->tcp.hostname, addr->tcp.port, gai_strerror(rc));
+
+    if (*addr_res == NULL)
+        LOG_GOTO(out_err, rc = -EINVAL,
+                 "Unable to find an address corresponding to hostname %s "
+                 "and port %d", addr->tcp.hostname, addr->tcp.port);
+
+    *socka = (*addr_res)->ai_addr;
+    *address_len = (*addr_res)->ai_addrlen;
+    if (asprintf(path, "%s:%d", addr->tcp.hostname, addr->tcp.port) < 0)
+        LOG_GOTO(out_err, rc = -ENOMEM, "Unable to write ci->path %s:%d",
+                 addr->tcp.hostname, addr->tcp.port);
+
+    return 0;
+
+out_err:
+    freeaddrinfo(*addr_res);
+    *addr_res = NULL;
+    *socka = NULL;
+    close(*socket_fd);
+    *socket_fd = -1;
+    return rc;
+}
+
+int pho_comm_open(struct pho_comm_info *ci, const union pho_comm_addr *addr,
+                  enum pho_comm_socket_type type)
 {
     struct _pho_comm_recv_info *cri = NULL;
+    struct addrinfo *addr_res = NULL;
+    struct sockaddr *socka = NULL;
     const int n_max_listen = 128;
-    struct sockaddr_un socka;
+    struct sockaddr_un socka_un;
+    socklen_t address_len = 0;
     struct epoll_event ev;
     int rc = 0;
 
     *ci = pho_comm_info_init();
-    ci->is_server = is_server;
+    ci->type = type;
     ev.data.ptr = NULL;
 
     /* offline mode */
-    if (sock_path == NULL)
+    if (pho_comm_addr_is_offline(addr, type))
         return 0;
 
-    if (strlen(sock_path) >= sizeof(socka.sun_path))
-        LOG_RETURN(-EINVAL, "sock_path length of %lu, greater than "
-                   "socka.sun_path length of %lu, sock_path value: %s",
-                   strlen(sock_path), sizeof(socka.sun_path), sock_path);
-
-    if (is_server) {
-        rc = unlink(sock_path);
-        if (!rc)
-            pho_warn("Socket already exists(%s), removed the old one",
-                     sock_path);
-
-        rc = 0;
-    } else if (access(sock_path, F_OK) == -1) {
-        /* if the client does not see the LRS socket, we return ENOTCONN,
-         * then each client will decide if they need the LRS or not.
-         */
-        pho_verb("Socket does not exist(%s), means that the LRS is not "
-                 "up or the socket path is not correct", sock_path);
-        return -ENOTCONN;
+    switch (type) {
+    case PHO_COMM_UNIX_SERVER:
+    case PHO_COMM_UNIX_CLIENT:
+        rc = af_unix_set_socket_addr_path(addr, type, &ci->socket_fd, &socka,
+                                          &address_len, &ci->path, &socka_un);
+        break;
+    case PHO_COMM_TCP_SERVER:
+    case PHO_COMM_TCP_CLIENT:
+        rc = tcp_set_socket_addr_path(addr, &ci->socket_fd, &socka,
+                                      &address_len, &ci->path, &addr_res);
+        break;
     }
 
-    ci->path = strdup(sock_path);
-    ci->socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (ci->socket_fd == -1)
-        LOG_GOTO(out_err, rc = -errno, "Socket opening failed");
+    if (rc)
+        return rc;
 
-    socka.sun_family = AF_UNIX;
-    strncpy(socka.sun_path, ci->path, sizeof(socka.sun_path));
-    /* make sure the path is zero-terminated */
-    socka.sun_path[sizeof(socka.sun_path)-1] = '\0';
-
-    if (!is_server) {
-        if (connect(ci->socket_fd, (struct sockaddr *)&socka, sizeof(socka)))
+    /* client connection */
+    if (type == PHO_COMM_UNIX_CLIENT || type == PHO_COMM_TCP_CLIENT) {
+        if (connect(ci->socket_fd, socka, address_len))
             LOG_GOTO(out_err, rc = -errno,
                      "Socket connection(%s) failed", ci->path);
 
+        if (type == PHO_COMM_TCP_CLIENT)
+            freeaddrinfo(addr_res);
+
         return 0;
     }
 
+    /* server: bind / listen / epoll */
     cri = malloc(sizeof(*cri));
     if (!cri)
         LOG_GOTO(out_err, rc = -ENOMEM,
@@ -143,9 +271,11 @@ int pho_comm_open(struct pho_comm_info *ci, const char *sock_path,
     ev.events = EPOLLIN;
     ev.data.ptr = cri;
 
-    if (bind(ci->socket_fd, (struct sockaddr *) &socka, sizeof(socka)))
+    if (bind(ci->socket_fd, socka, address_len))
         LOG_GOTO(out_err, rc = -errno,
                  "Socket binding(%s) failed", ci->path);
+
+    freeaddrinfo(addr_res);
 
     if (listen(ci->socket_fd, n_max_listen))
         LOG_GOTO(out_err, rc = -errno, "Socket listening failed");
@@ -164,14 +294,19 @@ int pho_comm_open(struct pho_comm_info *ci, const char *sock_path,
     return 0;
 
 out_err:
+    freeaddrinfo(addr_res);
     if (ci->epoll_fd != -1) {
         close(ci->epoll_fd);
         ci->epoll_fd = -1;
     }
+
     if (ci->socket_fd != -1) {
         close(ci->socket_fd);
         ci->socket_fd = -1;
+        if (type == PHO_COMM_UNIX_SERVER)
+            unlink(addr->af_unix.path);
     }
+
     free(cri);
     free(ci->path);
     ci->path = NULL;
@@ -202,9 +337,10 @@ int pho_comm_close(struct pho_comm_info *ci)
     if (ci->socket_fd < 0)
         return 0;
 
-    if (!ci->is_server) {
+    if (ci->type == PHO_COMM_UNIX_CLIENT || ci->type == PHO_COMM_TCP_CLIENT) {
         if (close(ci->socket_fd))
             rc = -errno;
+
         free(ci->path);
         return rc;
     }
@@ -216,11 +352,12 @@ int pho_comm_close(struct pho_comm_info *ci)
     if (close(ci->epoll_fd))
         rc = -errno;
 
-    if (unlink(ci->path))
-        rc = rc ? : -errno;
+    if (ci->type == PHO_COMM_UNIX_SERVER) {
+        if (unlink(ci->path))
+            rc = rc ? : -errno;
+    }
 
     free(ci->path);
-
     return rc;
 }
 
@@ -379,7 +516,7 @@ static int _process_accept(struct pho_comm_info *ci,
                            struct _pho_comm_recv_info *cri)
 {
     struct _pho_comm_recv_info *n_cri;
-    struct sockaddr_un socka;
+    struct sockaddr socka;
     struct epoll_event ev;
     socklen_t lensocka;
     int sfd;
@@ -605,6 +742,8 @@ int pho_comm_recv(struct pho_comm_info *ci, struct pho_comm_data **data,
 
     *data = NULL;
 
-    return ci->is_server ? _recv_server(ci, data, nb_data)
-                         : _recv_client(ci, data, nb_data);
+    if (ci->type == PHO_COMM_UNIX_SERVER || ci->type == PHO_COMM_TCP_SERVER)
+        return _recv_server(ci, data, nb_data);
+
+    return _recv_client(ci, data, nb_data);
 }

@@ -365,15 +365,15 @@ static void handle_error(struct context *context,
 static void *send_requests(void *data)
 {
     struct context *context = data;
-    const char *socket_path;
+    union pho_comm_addr addr;
     int rc;
 
     context->comm = malloc(sizeof(*context->comm));
     if (!context->comm)
         pthread_exit(NULL);
 
-    socket_path = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, server_socket);
-    rc = pho_comm_open(context->comm, socket_path, false);
+    addr.af_unix.path = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, server_socket);
+    rc = pho_comm_open(context->comm, &addr, PHO_COMM_UNIX_CLIENT);
     if (rc) {
         printf("failed to open socket: %s\n", strerror(-rc));
         pthread_exit(NULL);
