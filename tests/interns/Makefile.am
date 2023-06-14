@@ -38,6 +38,7 @@ check_PROGRAMS=test_attrs \
                test_dev_tape \
                test_dss_lazy_find_object \
                test_dss_lock \
+               test_dss_logs \
                test_dss_medium_locate \
                test_dss_object_move \
                test_io \
@@ -86,6 +87,10 @@ test_dss_lazy_find_object_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/store
 test_dss_lock_SOURCES=test_dss_lock.c ../test_setup.c ../test_setup.h
 test_dss_lock_LDADD=$(DSS_LIB) $(ADMIN_LIB) $(CFG_LIB) $(COMMON_LIB) $(LDM_LIB)
 test_dss_lock_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss
+
+test_dss_logs_SOURCES=test_dss_logs.c ../test_setup.c ../test_setup.h
+test_dss_logs_LDADD=$(DSS_LIB) $(ADMIN_LIB) $(CFG_LIB) $(COMMON_LIB) $(LDM_LIB)
+test_dss_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss
 
 test_dss_medium_locate_SOURCES=test_dss_medium_locate.c ../test_setup.c \
                                ../test_setup.h

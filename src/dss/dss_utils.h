@@ -29,7 +29,22 @@
 #include "config.h"
 #endif
 
+#include <glib.h>
 #include <libpq-fe.h>
+
+/**
+ * Execute a PSQL \p request, verify the result is as expected with \p tested
+ * and put the result in \p res.
+ *
+ * \param conn[in]    The connection to the database
+ * \param request[in] Request to execute
+ * \param res[out]    Result holder of the request
+ * \param tested[in]  The expected result of the request
+ *
+ * \return            0 on success, or the error as returned by PSQL
+ */
+int execute(PGconn *conn, GString *request, PGresult **res,
+            ExecStatusType tested);
 
 /**
  * Convert PostgreSQL status codes to meaningful errno values.

@@ -233,19 +233,6 @@ cleanup:
     return rc;
 }
 
-static int execute(PGconn *conn, GString *request, PGresult **res,
-                   ExecStatusType tested)
-{
-    pho_debug("Executing request: '%s'", request->str);
-
-    *res = PQexec(conn, request->str);
-    if (PQresultStatus(*res) != tested)
-        LOG_RETURN(psql_state2errno(*res), "Request failed: %s",
-                   PQresultErrorField(*res, PG_DIAG_MESSAGE_PRIMARY));
-
-    return 0;
-}
-
 static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
                       const char *lock_id, int lock_owner,
                       const char *lock_hostname)

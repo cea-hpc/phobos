@@ -116,12 +116,16 @@ readability and longevity, we will not use the current logging system used by
 Phobos but instead use new DSS table, with the following schema:
 
 ```sql
+TYPE operation_type AS ENUM ('library_scan', 'library_open', 'device_lookup',
+                             'medium_lookup', 'device_load', 'device_unload');
+
 TABLE logs(
-    device    varchar(2048) UNIQUE,
-    medium    varchar(2048) UNIQUE,
+    family    dev_family
+    device    varchar(2048),
+    medium    varchar(2048),
     uuid      varchar(36) UNIQUE DEFAULT uuid_generate_v4(),
     errno     integer NOT NULL,
-    cause     varchar(256),
+    cause     operation_type,
     message   jsonb,
     time      timestamp DEFAULT now(),
 
@@ -131,13 +135,15 @@ TABLE logs(
 
 In this schema:
 
+- the "family" corresponds to the family of device/medium this log is about,
 - the "device" corresponds to the device id that failed (primary key of the
   "device" table),
 - the "medium" corresponds to the medium id that failed (primary key of the
   "medium" table),
 - the "uuid" is the primary key of the logs table,
 - the "errno" is the error number of the log,
-- the "cause" is the action that triggered the log,
+- the "cause" is the Phobos action that triggered the log (for instance
+  loading a medium into a device),
 - the "msg" is additional information about the error (for instance an error
   message returned by the library),
 - and "time" is the timestamp at which time the log was produced.
@@ -170,13 +176,22 @@ because such errors can be detected long after the tape have been written.
 To manage these information, we propose a new structure containing these info:
 
 ```c
+enum operation_type {
+    PHO_LIBRARY_SCAN,
+    PHO_LIBRARY_OPEN,
+    PHO_DEVICE_LOOKUP,
+    PHO_MEDIUM_LOOKUP,
+    PHO_DEVICE_LOAD,
+    PHO_DEVICE_UNLOAD,
+};
+
 struct pho_log {
     struct pho_id device;
     struct pho_id medium;
     int error_number; /* 0 if the operation was a success */
-    char *cause;
+    enum operation_type cause;
     json_t *message;
-    timestamp_t time;
+    struct timeval time;
 };
 ```
 
@@ -188,13 +203,47 @@ struct pho_log_filter {
     struct pho_id device;
     struct pho_id medium;
     int *error_number;
-    timestamp_t *start_time;
-    timestamp_t *end_time;
+    enum operation_type cause;
+    struct timeval *start_time;
+    struct timeval *end_time;
 };
 ```
 
 Here, each field will be used, if not NULL, to filter through every logs, and
 return only the ones that satisfy the given criteria.
+
+### Low-level recording
+
+To log the different operations, we will stay at the Phobos LRS level, meaning
+only the functions that will call upon the LDM modules will log their actions.
+As such, the device, medium and cause are available before the call to the LDM,
+while the error number is available after it. That means the only thing the LDM
+layer has to fill is the message, as different JSON entries.
+
+Therefore, we only need to modify the LDM so that each operation takes in a
+`json_t` and fills it with what it deems necessary for the operation. For
+instance, a move from a slot to a driver will record the source address of the
+tape and the target address, the low-level SCSI operation (`MOVE_MEDIUM`) and
+the potential SCSI error as returned by the library.
+
+### Operations to record
+
+Following is a list of the different operations done by the LRS that can be
+recorded. However, they are only recorded if they fail, except for the load and
+unload operations, that will also be recorded on success:
+ - Library open: the library status done at open,
+ - Drive lookup: the operation to lookup a drive, retrieve information about it
+ and whether it contains a tape or not,
+ - Medium lookup: the operation to lookup a medium, retrieve information about
+ it and its address,
+ - Device load: the operation to load a medium into a device, with two known
+ addresses,
+ - Device unload: the operation to unload a medium from a device, with the
+ source address known but the destination left up to the LDM,
+
+Here are the operations done on the library from other Phobos components:
+ - Library scan: the operation to scan the library and get all the information
+ about it. Used by the admin module.
 
 ## DSS functions
 

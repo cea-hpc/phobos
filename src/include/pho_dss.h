@@ -703,4 +703,14 @@ int dss_lock_clean_select(struct dss_handle *handle,
  */
 int dss_lock_clean_all(struct dss_handle *handle);
 
+/**
+ * Emit a log.
+ *
+ * @param[in]   dss            DSS to request
+ * @param[in]   log            error log to emit
+ *
+ * @return 0 if success, -errno if an error occurs
+ */
+int dss_emit_log(struct dss_handle *dss, struct pho_log *log);
+
 #endif

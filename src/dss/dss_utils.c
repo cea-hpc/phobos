@@ -30,7 +30,7 @@
 #include "pho_common.h"
 
 #include <errno.h>
-
+#include <libpq-fe.h>
 
 struct sqlerr_map_item {
     const char *smi_prefix;  /**< SQL error code or class (prefix) */
@@ -63,6 +63,19 @@ static const struct sqlerr_map_item sqlerr_map[] = {
     /* Catch all -- KEEP LAST -- */
     {"", -ECOMM}
 };
+
+int execute(PGconn *conn, GString *request, PGresult **res,
+            ExecStatusType tested)
+{
+    pho_debug("Executing request: '%s'", request->str);
+
+    *res = PQexec(conn, request->str);
+    if (PQresultStatus(*res) != tested)
+        LOG_RETURN(psql_state2errno(*res), "Request failed: %s",
+                   PQresultErrorField(*res, PG_DIAG_MESSAGE_PRIMARY));
+
+    return 0;
+}
 
 int psql_state2errno(const PGresult *res)
 {

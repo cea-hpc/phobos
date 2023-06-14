@@ -30,7 +30,7 @@ import psycopg2
 
 from phobos.core import cfg
 
-ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92", "1.93"]
+ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92", "1.93", "2.0"]
 CURRENT_SCHEMA_VERSION = ORDERED_SCHEMAS[-1]
 AVAIL_SCHEMAS = set(ORDERED_SCHEMAS)
 
@@ -55,11 +55,12 @@ class Migrator:
 
         # { source_version: (target_version, migration_function) }
         self.convert_funcs = {
-            "0": ("1.93", lambda: self.create_schema("1.93")),
+            "0": ("2.0", lambda: self.create_schema("2.0")),
             "1.1": ("1.2", self.convert_1_to_2),
             "1.2": ("1.91", self.convert_2_to_3),
             "1.91": ("1.92", self.convert_3_to_4),
             "1.92": ("1.93", self.convert_4_to_5),
+            "1.93": ("2.0", self.convert_5_to_6),
         }
 
         self.reachable_versions = set(
@@ -280,6 +281,41 @@ class Migrator:
         """Convert DB from model 4 (phobos v1.92) to 5 (phobos v1.93)"""
         with self.connect():
             self.convert_schema_4_to_5()
+
+    def convert_schema_5_to_6(self):
+        """DB schema changes : create logs table"""
+        cur = self.conn.cursor()
+        cur.execute("""
+            -- create enum operation_type
+            CREATE TYPE operation_type AS ENUM ('library_scan', 'library_open',
+                                                'device_lookup',
+                                                'medium_lookup',
+                                                'device_load', 'device_unload');
+
+            -- create logs table
+            CREATE TABLE logs(
+                family    dev_family,
+                device    varchar(2048),
+                medium    varchar(2048),
+                uuid      varchar(36) UNIQUE DEFAULT uuid_generate_v4(),
+                errno     integer NOT NULL,
+                cause     operation_type,
+                message   jsonb,
+                time      timestamp DEFAULT now(),
+
+                PRIMARY KEY (uuid)
+            );
+
+            -- update current schema version
+            UPDATE schema_info SET version = '2.0';
+        """)
+        self.conn.commit()
+        cur.close()
+
+    def convert_5_to_6(self):
+        """Convert DB from model 5 (phobos v1.93) to 6 (phobos v2.0)"""
+        with self.connect():
+            self.convert_schema_5_to_6()
 
     def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""

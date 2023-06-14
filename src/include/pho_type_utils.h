@@ -143,9 +143,8 @@ int str2timeval(const char *tv_str, struct timeval *tv);
  *
  * @param[in]   tv      the time to convert
  * @param[out]  tv_str  the formatted string
- * @return              0 on success, -EINVAL on error
  */
-int timeval2str(const struct timeval *tv, char *tv_str);
+void timeval2str(const struct timeval *tv, char *tv_str);
 
 /**
  * Simple on-the-fly JSON parsing engine providing a SAX-like API.

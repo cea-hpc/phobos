@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <stddef.h>
+#include <time.h>
 
 #include <glib.h>
 #include <jansson.h>
@@ -150,6 +151,61 @@ do {                                                                      \
         abort();                                                          \
     }                                                                     \
 } while (0)
+
+enum operation_type {
+    PHO_OPERATION_INVALID = -1,
+    PHO_LIBRARY_SCAN = 0,
+    PHO_LIBRARY_OPEN,
+    PHO_DEVICE_LOOKUP,
+    PHO_MEDIUM_LOOKUP,
+    PHO_DEVICE_LOAD,
+    PHO_DEVICE_UNLOAD,
+    PHO_OPERATION_LAST,
+};
+
+static const char * const OPERATION_TYPE_NAMES[] = {
+    [PHO_LIBRARY_SCAN]  = "library_scan",
+    [PHO_LIBRARY_OPEN]  = "library_open",
+    [PHO_DEVICE_LOOKUP] = "device_lookup",
+    [PHO_MEDIUM_LOOKUP] = "medium_lookup",
+    [PHO_DEVICE_LOAD]   = "device_load",
+    [PHO_DEVICE_UNLOAD] = "device_unload",
+};
+
+static inline const char *operation_type2str(enum operation_type op)
+{
+    if (op >= PHO_OPERATION_LAST || op < 0)
+        return NULL;
+
+    return OPERATION_TYPE_NAMES[op];
+}
+
+static inline enum operation_type str2operation_type(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_OPERATION_LAST; i++)
+        if (!strcmp(str, OPERATION_TYPE_NAMES[i]))
+            return i;
+
+    return PHO_OPERATION_INVALID;
+}
+
+/**
+ * The logging structure used to insert logs in the database, and retrieve them
+ * from it.
+ */
+struct pho_log {
+    struct pho_id device;      /** device the log pertain to */
+    struct pho_id medium;      /** medium the log pertain to */
+    int error_number;          /** error number in case the log is about a
+                                 * failed operation, or 0 if the operation was
+                                 * a success
+                                 */
+    enum operation_type cause; /** the operation that caused the log */
+    json_t *message;           /** additional message about the operation */
+    struct timeval time;       /** time of the log */
+};
 
 /**
  * Lighten the code by allowing to set rc and goto a label or return
