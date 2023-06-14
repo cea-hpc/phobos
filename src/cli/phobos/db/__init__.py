@@ -31,8 +31,9 @@ import psycopg2
 from phobos.core import cfg
 
 ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92", "1.93", "1.95"]
+FUTURE_SCHEMAS = ["2.0"]
 CURRENT_SCHEMA_VERSION = ORDERED_SCHEMAS[-1]
-AVAIL_SCHEMAS = set(ORDERED_SCHEMAS)
+AVAIL_SCHEMAS = set(ORDERED_SCHEMAS) | set(FUTURE_SCHEMAS)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ class Migrator:
             "1.91": ("1.92", self.convert_3_to_4),
             "1.92": ("1.93", self.convert_4_to_5),
             "1.93": ("1.95", self.convert_1_93_to_1_95),
+            "1.95": ("2.0", self.convert_1_95_to_2_0),
         }
 
         self.reachable_versions = set(
@@ -82,11 +84,17 @@ class Migrator:
         finally:
             self.conn = None
 
+    def execute(self, command, output=False):
+        """Execute a command on the database, can return the command output"""
+        with self.connect(), self.conn.cursor() as cursor:
+            cursor.execute(command)
+            if output:
+                return cursor.fetchall()
+
     def create_schema(self, schema_version=CURRENT_SCHEMA_VERSION):
         """Setup all phobos tables and types"""
         schema_script = get_sql_script(schema_version, "schema.sql")
-        with self.connect(), self.conn.cursor() as cursor:
-            cursor.execute(schema_script)
+        self.execute(schema_script)
 
     def drop_tables(self):
         """Drop all phobos tables and types"""
@@ -94,8 +102,7 @@ class Migrator:
         if schema_version == "0":
             return
         drop_schema_script = get_sql_script(schema_version, "drop_schema.sql")
-        with self.connect(), self.conn.cursor() as cursor:
-            cursor.execute(drop_schema_script)
+        self.execute(drop_schema_script)
 
     def convert_schema_1_to_2(self):
         """
@@ -361,6 +368,127 @@ class Migrator:
         """Convert DB from v1.93 to v1.95"""
         with self.connect():
             self.convert_schema_1_93_to_1_95()
+
+    def convert_schema_1_95_to_2_0(self):
+        """DB schema changes: create layout table"""
+        cur = self.conn.cursor()
+        cur.execute("""
+            -- add extent to lock_type
+            ALTER TABLE lock ALTER COLUMN type TYPE VARCHAR(255);
+            DROP TYPE lock_type;
+            CREATE TYPE lock_type AS ENUM(
+                'object', 'device', 'media', 'media_update', 'extent'
+            );
+            ALTER TABLE lock ALTER COLUMN type TYPE lock_type
+                USING (type::lock_type);
+
+            -- create layout table
+            CREATE TABLE layout (
+                object_uuid     varchar(36),
+                version         integer DEFAULT 1 NOT NULL,
+                extent_uuid     varchar(36),
+                layout_index    integer,
+
+                PRIMARY KEY (object_uuid, version, extent_uuid, layout_index)
+            );
+
+            -- update object table
+            ALTER TABLE object ADD lyt_info jsonb;
+
+            UPDATE object
+                SET lyt_info = extent.lyt_info
+                FROM extent
+                WHERE object.uuid = extent.uuid
+                    AND object.version = extent.version;
+
+            ALTER TABLE object RENAME uuid TO object_uuid;
+            ALTER TABLE object RENAME CONSTRAINT object_uuid_key
+                TO object_object_uuid_key;
+
+            -- update deprecated_object table
+            ALTER TABLE deprecated_object ADD lyt_info jsonb;
+
+            UPDATE deprecated_object
+                SET lyt_info = extent.lyt_info
+                FROM extent
+                WHERE deprecated_object.uuid = extent.uuid
+                    AND deprecated_object.version = extent.version;
+
+            ALTER TABLE deprecated_object RENAME uuid TO object_uuid;
+
+            -- update and remove primary key of extent table
+            ALTER TABLE extent DROP CONSTRAINT extent_pkey;
+            ALTER TABLE extent RENAME TO old_extent;
+
+            -- object_uuid, object_version and lyt_index are temporary variables
+            -- used for the migration, they will be removed further
+            CREATE TABLE extent (
+                extent_uuid     varchar(36) UNIQUE DEFAULT uuid_generate_v4(),
+                state           extent_state,
+                size            integer,
+                medium_family   dev_family,
+                medium_id       varchar(255),
+                address         varchar(1024),
+                hash            jsonb,
+                info            jsonb,
+                object_uuid     varchar(36),
+                object_version  integer,
+                lyt_index       integer,
+
+                PRIMARY KEY (extent_uuid)
+            );
+
+            INSERT INTO extent (extent_uuid, state, size, medium_family,
+                                medium_id, address, hash,
+                                object_uuid, object_version, lyt_index)
+                SELECT uuid_generate_v4(),
+                       state,
+                       cast(value->>'sz' AS integer),
+                       cast(value->>'fam' AS dev_family),
+                       value->>'media',
+                       value->>'addr',
+                       (case
+                           when value?&array['md5', 'xxh128'] then
+                              json_build_object('md5', value->>'md5',
+                                                'xxh128', value->>'xxh128')
+                           when value?'md5' then
+                              json_build_object('md5', value->>'md5')
+                           when value?'xxh128' then
+                              json_build_object('xxh128', value->>'xxh128')
+                           else '{}'
+                       end)::jsonb,
+                       uuid,
+                       version,
+                       ordinality-1
+                FROM old_extent,
+                    LATERAL jsonb_array_elements(extents) WITH ordinality;
+
+            DROP TABLE old_extent;
+
+            -- set layout table
+            INSERT INTO layout (object_uuid, version,
+                                extent_uuid, layout_index)
+                SELECT object_uuid, object_version, extent_uuid, lyt_index
+                FROM extent;
+
+            ALTER TABLE extent
+                DROP object_uuid,
+                DROP object_version,
+                DROP lyt_index;
+
+            -- remove outdated functions and indexes
+            DROP FUNCTION IF EXISTS extents_mda_idx(jsonb) CASCADE;
+
+            -- update current schema version
+            UPDATE schema_info SET version = '2.0';
+        """)
+        self.conn.commit()
+        cur.close()
+
+    def convert_1_95_to_2_0(self):
+        """Convert DB from v1.95 to v2.0"""
+        with self.connect():
+            self.convert_schema_1_95_to_2_0()
 
     def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""

@@ -27,7 +27,8 @@ import os
 from subprocess import Popen, PIPE
 import unittest
 
-from phobos.db import Migrator, ORDERED_SCHEMAS, CURRENT_SCHEMA_VERSION
+from phobos.db import Migrator, ORDERED_SCHEMAS, CURRENT_SCHEMA_VERSION, \
+                      AVAIL_SCHEMAS, FUTURE_SCHEMAS
 
 class MigratorTest(unittest.TestCase):
     """Test the Migrator class (schema management)"""
@@ -45,7 +46,7 @@ class MigratorTest(unittest.TestCase):
         self.assertEqual(self.migrator.schema_version(), "0")
 
         # Create various schema versions
-        for version in ORDERED_SCHEMAS:
+        for version in AVAIL_SCHEMAS:
             self.migrator.drop_tables()
             self.migrator.create_schema(version)
             self.assertEqual(self.migrator.schema_version(), version)
@@ -109,6 +110,77 @@ class MigratorTest(unittest.TestCase):
                 print(out_diff.decode('utf-8'))
                 self.fail("DB is different between after a migrate and a new " +
                      "schema creation")
+
+    def test_future_migrations(self):
+        """Test migrations between current and future versions"""
+        for version in FUTURE_SCHEMAS:
+            self.migrator.create_schema(CURRENT_SCHEMA_VERSION)
+            self.migrator.migrate(version)
+            self.assertEqual(
+                self.migrator.schema_version(), version
+            )
+            self.migrator.drop_tables()
+
+    def test_1_95_to_2_0(self):
+        """
+        Test migration between 1.95 and 2.0, checking object and extent
+        information are correctly scattered
+        """
+        self.migrator.create_schema("1.95")
+
+        self.migrator.execute("""
+            INSERT INTO object(oid, uuid, user_md)
+                VALUES ('aries', 'dacfaeba-24ef-431b-a7b3-205dc1e8a34a',
+                        '{"test": "42"}');
+
+            INSERT INTO extent(oid, uuid, version, state, lyt_info, extents)
+                VALUES ('aries', 'dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 1,
+                        'sync',
+                        '{"name": "raid1", "attrs": {"repl_count": "2"},
+                          "major": 0, "minor": 2}',
+                        '[{"sz": 42, "fam": "dir", "md5": "babecafe",
+                           "addr": "ab/cd/part1", "media": "dir1"},
+                          {"sz": 43, "fam": "dir", "md5": "babecaff",
+                           "addr": "ef/01/part2", "media": "dir2"}]'
+                );
+        """)
+
+        self.migrator.migrate("2.0")
+        self.assertEqual(self.migrator.schema_version(), "2.0")
+        self.assertEqual(
+            self.migrator.execute("SELECT * FROM object;", output=True),
+            [(
+                'aries', {'test': '42'},
+                'dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 1,
+                {"name": "raid1", "attrs": {"repl_count": "2"},
+                 "major": 0, "minor": 2}
+            )]
+        )
+        ext_uuids = self.migrator.execute(
+            "SELECT extent_uuid FROM extent ORDER BY size;",
+            output=True
+        )
+        self.assertEqual(
+            self.migrator.execute("""
+                SELECT extent_uuid, state, size, medium_family, medium_id,
+                    address, hash->>'md5'
+                FROM extent ORDER BY size;
+            """, output=True),
+            [
+                (ext_uuids[0][0], 'sync', 42, 'dir', 'dir1', 'ab/cd/part1',
+                 'babecafe'),
+                (ext_uuids[1][0], 'sync', 43, 'dir', 'dir2', 'ef/01/part2',
+                 'babecaff')
+            ]
+        )
+        self.assertEqual(
+            self.migrator.execute("SELECT * FROM layout;", output=True),
+            [
+                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 1, ext_uuids[0][0], 0),
+                ('dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 1, ext_uuids[1][0], 1)
+            ]
+        )
+        self.migrator.drop_tables()
 
 if __name__ == '__main__':
     unittest.main(buffer=True)
