@@ -74,6 +74,7 @@ static const struct pho_io_adapter_module_ops IO_ADAPTER_POSIX_OPS = {
     .ioa_close             = pho_posix_close,
     .ioa_medium_sync       = pho_posix_medium_sync,
     .ioa_preferred_io_size = pho_posix_preferred_io_size,
+    .ioa_set_md            = pho_posix_set_md,
 };
 
 /** IO adapter module registration entry point */

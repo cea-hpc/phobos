@@ -170,10 +170,10 @@ static int setxattr_cb(const char *key, const char *value, void *udata)
                               value, arg->flags);
 }
 
-static int pho_rados_md_set(struct pho_rados_io_ctx *rados_io_ctx,
-                            struct pho_buff extent_addr,
-                            const struct pho_attrs *attrs,
-                            enum pho_io_flags flags)
+static int _pho_rados_md_set(struct pho_rados_io_ctx *rados_io_ctx,
+                             struct pho_buff extent_addr,
+                             const struct pho_attrs *attrs,
+                             enum pho_io_flags flags)
 {
     struct md_iter args;
 
@@ -256,8 +256,8 @@ static int pho_rados_open_put(struct pho_io_descr *iod)
     char buffer;
     int rc;
 
-    rc = pho_rados_md_set(rados_io_ctx, iod->iod_loc->extent->address,
-                          &iod->iod_attrs, iod->iod_flags);
+    rc = _pho_rados_md_set(rados_io_ctx, iod->iod_loc->extent->address,
+                           &iod->iod_attrs, iod->iod_flags);
 
     if (rc != 0 || iod->iod_flags & PHO_IO_MD_ONLY)
         goto free_io_ctx;
@@ -370,6 +370,16 @@ out:
         pho_error(rc2, "Closing RADOS library failed");
 
     return rc;
+}
+
+/* On rados, no function like fsetxattr, so just a simple call to
+ * the pho_rados_open with the corresponding flag
+ **/
+static int pho_rados_set_md(const char *extent_key, const char *extent_desc,
+                            struct pho_io_descr *iod)
+{
+    iod->iod_flags = PHO_IO_MD_ONLY;
+    return pho_rados_open(extent_key, extent_desc, iod, true);
 }
 
 static int pho_rados_write(struct pho_io_descr *iod, const void *buf,
@@ -540,6 +550,7 @@ static const struct pho_io_adapter_module_ops IO_ADAPTER_RADOS_OPS = {
     .ioa_close          = pho_rados_close,
     .ioa_medium_sync    = pho_rados_sync,
     .ioa_preferred_io_size = NULL,
+    .ioa_set_md         = pho_rados_set_md,
 };
 
 /** IO adapter module registration entry point */

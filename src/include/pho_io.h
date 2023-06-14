@@ -80,6 +80,8 @@ struct pho_io_adapter_module_ops {
     int (*ioa_close)(struct pho_io_descr *iod);
     int (*ioa_medium_sync)(const char *root_path);
     ssize_t (*ioa_preferred_io_size)(struct pho_io_descr *iod);
+    int (*ioa_set_md)(const char *extent_key, const char *extent_desc,
+                      struct pho_io_descr *iod);
 };
 
 struct io_adapter_module {
@@ -266,4 +268,28 @@ static inline int ioa_close(const struct io_adapter_module *ioa,
     assert(ioa->ops->ioa_close != NULL);
     return ioa->ops->ioa_close(iod);
 }
+
+/**
+ * If the \p iod's file descriptor is valid, set the metadata using it.
+ * Otherwise, or if \p iod->ctx is null, set the \p iod's flag to
+ * PHO_IO_MD_ONLY and call ioa_open.
+ *
+ * \param[in]       ioa         Suitable I/O adapter for the media.
+ * \param[in]       extent_key  Null-terminated extent key, composed as
+ *                              "version.extent_tag.uuid".
+ * \param[in]       extent_desc Null-terminated extent description.
+ * \param[in,out]   iod         I/O descriptor (see above).
+ *
+ * \return 0 on success, negative error code on failure.
+ */
+static inline int ioa_set_md(const struct io_adapter_module *ioa,
+                             const char *extent_key, const char *extent_desc,
+                             struct pho_io_descr *iod)
+{
+    assert(ioa != NULL);
+    assert(ioa->ops != NULL);
+    assert(ioa->ops->ioa_set_md != NULL);
+    return ioa->ops->ioa_set_md(extent_key, extent_desc, iod);
+}
+
 #endif

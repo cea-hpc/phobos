@@ -651,6 +651,27 @@ int pho_posix_open(const char *extent_key, const char *extent_desc,
     return is_put ? pho_posix_open_put(iod) : pho_posix_open_get(iod);
 }
 
+int pho_posix_set_md(const char *extent_key, const char *extent_desc,
+                     struct pho_io_descr *iod)
+{
+    struct posix_io_ctx *io_ctx = iod->iod_ctx;
+    int rc = 0;
+
+    if (io_ctx == NULL || io_ctx->fd == -1) {
+        /**
+         * Call pho_posix_open after setting the flag to PHO_IO_MD_ONLY
+         * to set the xattr without actually opening the file, meaning
+         * we don't need a 'pho_posix_close' statement.
+         */
+        iod->iod_flags = PHO_IO_MD_ONLY;
+        rc = pho_posix_open(extent_key, extent_desc, iod, true);
+    } else {
+        rc = pho_posix_md_fset(io_ctx->fd, &iod->iod_attrs, iod->iod_flags);
+    }
+
+    return rc;
+}
+
 int pho_posix_write(struct pho_io_descr *iod, const void *buf, size_t count)
 {
     struct posix_io_ctx *io_ctx;
