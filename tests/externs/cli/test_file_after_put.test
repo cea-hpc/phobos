@@ -23,20 +23,47 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
 . $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
 
-function dir_setup
+max_repl_count=3
+
+function dirs_setup
 {
-    dirs="$(mktemp -d /tmp/test.pho.XXXX)"
-    echo "adding directories $dirs"
-    $phobos dir add $dirs
-    $phobos dir format --fs posix --unlock $dirs
+    setup
+    dirs=""
+    for i in $(seq 1 $max_repl_count); do
+        dirs="$dirs $(mktemp -d /tmp/test.pho.XXXX)"
+    done
+
+    $phobos dir add $dirs ||
+        error "Dirs should have been added"
+    $phobos dir format --fs posix --unlock $dirs ||
+        error "Dirs should have been formated"
+}
+
+function tapes_setup
+{
+    setup
+    drives="$(get_lto_drives 5 $max_repl_count | nodeset -f)"
+    tapes="$(get_tapes L5 $max_repl_count)"
+
+    for drive in $(nodeset -e "${drives}"); do
+        $phobos drive add --unlock "$drive" ||
+            error "Drive ${drive} should have been added"
+    done
+
+    for tape in $(nodeset -e "${tapes}"); do
+        $phobos tape add -t lto5 "${tape}" ||
+            error "Tape ${tape} should have been added"
+        $phobos tape format --unlock "${tape}" ||
+            error "Tape ${tape} should have been formated"
+    done
 }
 
 function setup
 {
     setup_tables
     invoke_daemon
-    dir_setup
 }
 
 function cleanup
@@ -44,6 +71,7 @@ function cleanup
     waive_daemon
     drop_tables
     rm -rf $dirs
+    drain_all_drives
 }
 
 function hash_compare
@@ -57,39 +85,92 @@ function hash_compare
     fi
 }
 
-function test_file_after_put
+function get_media_path
 {
-    $phobos put --family dir /etc/hosts oid1 ||
-        error "Object should be put"
-    cd $dirs/$(ls $dirs)/
-    cd $(ls)
+    local repl_count="$1"
+    local family="$2"
+    local media_names="$3"
+    local repl_id="$4"
 
-    local ext_req=$($phobos extent list --output all | sed '3q;d' | sed "s/[][' ]//g")
-    local address=$(echo $ext_req | cut -d'|' -f2)
-    local md5=$(echo $ext_req | cut -d'|' -f6)
-    local oid=$(echo $ext_req | cut -d'|' -f8)
-    local uuid=$(echo $ext_req | cut -d'|' -f11)
-    local version=$(echo $ext_req | cut -d'|' -f12)
-    local xxh128=$(echo $ext_req | cut -d'|' -f13)
-
-    local file_name=$(ls)
-    local path_oid=$(echo $file_name | cut -d'.' -f1)
-    local path_version=$(echo $file_name | cut -d'.' -f2)
-    local path_layout=$(echo $file_name | cut -d'.' -f3 | cut -d'-' -f1)
-    local path_uuid=$(echo $file_name | cut -d'.' -f4)
-
-    local xattr_md5=$(getfattr -n user.md5 -e text --only-values "$dirs/$address")
-    local xattr_xxh128=$(getfattr -n user.xxh128 -e text --only-values "$dirs/$address")
-
-    [[ "$path_oid" == "$oid" ]] || error "Object ids do not match"
-    [[ "$path_version" == "$version" ]] || error "Object versions do not match"
-    [[ "$path_uuid" == "$uuid" ]] || error "Object uuids do not match"
-    [[ "$path_layout" == "r1" ]] || error "Object layout is not Raid1"
-
-    hash_compare "$md5" "$xattr_md5"
-    hash_compare "$xxh128" "$xattr_xxh128"
+    if [[ "$family" == "dir" ]]; then
+        echo $media_names | cut -d',' -f$repl_id
+    elif [[ "$family" == "tape" ]]; then
+        # finding mount path for the corresponding extent
+        for i in $(seq 1 $repl_count); do
+            local drive_status="$($phobos drive status |
+                sed "$((2+i))q;d" | sed "s/[ ]//g")"
+            if [[ "$(echo $drive_status | cut -d'|' -f4)" == \
+            "$(echo $media_names | cut -d',' -f$repl_id)" ]]; then
+                echo $drive_status | cut -d'|' -f5
+                break
+            fi
+        done
+    fi
 }
 
-TEST_SETUP=setup
-TEST_CLEANUP=cleanup
-TESTS=("test_file_after_put")
+
+function test_raid1_repl_count
+{
+    local repl_count="$1"
+    local family="$2"
+    local oid_id="$3"
+
+    $phobos put --family $family --layout raid1 --layout-params \
+        repl_count=$repl_count /etc/hosts "oid_$family$oid_id" ||
+        error "Object should be put"
+
+    local ext_req=$($phobos extent list --output \
+        address,md5,xxh128,oid,uuid,version,media_name "oid_$family$oid_id" |
+        sed '3q;d' | sed "s/[][' ]//g")
+    local addresses=$(echo $ext_req | cut -d'|' -f2)
+    local md5=$(echo $ext_req | cut -d'|' -f3)
+    local xxh128=$(echo $ext_req | cut -d'|' -f4)
+    local oid=$(echo $ext_req | cut -d'|' -f5)
+    local uuid=$(echo $ext_req | cut -d'|' -f6)
+    local version=$(echo $ext_req | cut -d'|' -f7)
+    local media_names=$(echo $ext_req | cut -d'|' -f8)
+
+
+    for repl_id in $(seq 1 $repl_count); do
+        local address="$(echo $addresses | cut -d',' -f$repl_id)"
+        local filename="$(basename $address)"
+        local reconst_path="$oid.$version.r1-$repl_count""_$((repl_id-1)).$uuid"
+
+        local media_path="$(get_media_path $repl_count $family \
+                         $media_names $repl_id)"
+
+        [[ -f "$media_path/$address" ]] ||
+            error "File does not exist"
+        [[ "$reconst_path" == "$filename" ]] ||
+            error "Object paths mismatch"
+
+        local xattr_md5=$(getfattr -n user.md5 -e text --only-values \
+            "$media_path/$address")
+        local xattr_xxh128=$(getfattr -n user.xxh128 -e text --only-values \
+            "$media_path/$address")
+
+        hash_compare "$(echo $md5 | cut -d',' -f$repl_id)" "$xattr_md5"
+        hash_compare "$(echo $xxh128 | cut -d ',' -f$repl_id)" "$xattr_xxh128"
+    done
+}
+
+function test_raid1_dir
+{
+    for repl_count in 1 $max_repl_count; do
+        test_raid1_repl_count $repl_count "dir" $repl_count
+    done
+}
+
+function test_raid1_tapes
+{
+    for repl_count in 1 $max_repl_count; do
+        test_raid1_repl_count $repl_count "tape" $repl_count
+    done
+}
+
+TESTS=("dirs_setup; test_raid1_dir; cleanup")
+
+if [[ -w /dev/changer ]]; then
+    TESTS+=("tapes_setup; test_raid1_tapes; cleanup")
+fi
+
