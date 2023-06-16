@@ -62,6 +62,31 @@ function list_error
     echo "Expected: $3"
 }
 
+function test_extent_list_degroup
+{
+    $phobos put --family dir --lyt-params repl_count=2 /etc/hosts degroup-oid ||
+        error "Object should be put"
+
+    cmd_list="$valg_phobos extent list --degroup -o address,media_name"
+
+    # First check when specifying the medium name
+    res1=$($cmd_list --name $dir1 degroup-oid | grep $dir1)
+    res2=$($cmd_list --name $dir2 degroup-oid | grep $dir2)
+
+    if [ "$res1" == "$res2" ]; then
+        error "Outputs should be different"
+    fi
+
+    # Then check without specifying the medium name
+    if [ "$res1" != "$($cmd_list degroup-oid | grep $dir1)" ]; then
+        error "Outputs should be identical"
+    fi
+
+    if [ "$res2" != "$($cmd_list degroup-oid | grep $dir2)" ]; then
+        error "Outputs should be identical"
+    fi
+}
+
 function test_extent_list_pattern
 {
     $phobos put --family dir -T first_dir /etc/hosts oid1 ||
@@ -109,4 +134,5 @@ function test_extent_list_pattern
 trap cleanup EXIT
 setup
 
+test_extent_list_degroup
 test_extent_list_pattern

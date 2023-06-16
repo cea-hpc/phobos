@@ -260,7 +260,7 @@ class Client(object):
                         lyt = type(layouts[i])()
                         pointer(lyt)[0] = layouts[i]
                         lyt.ext_count = 1
-                        lyt.extents = extents
+                        lyt.extents = pointer(extents[j])
 
                         list_lyts.append(lyt)
 
