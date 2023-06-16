@@ -27,6 +27,7 @@
 #ifndef _PHO_LDM_H
 #define _PHO_LDM_H
 
+#include "pho_common.h"
 #include "pho_types.h"
 #include <assert.h>
 #include <jansson.h>
@@ -226,7 +227,8 @@ struct pho_lib_adapter_module_ops {
                             struct lib_item_addr *med_addr);
     int (*lib_media_move)(struct lib_handle *lib,
                           const struct lib_item_addr *src_addr,
-                          const struct lib_item_addr *tgt_addr);
+                          const struct lib_item_addr *tgt_addr,
+                          json_t *message);
     int (*lib_scan)(struct lib_handle *lib, json_t **lib_data);
 };
 
@@ -333,13 +335,15 @@ static inline int ldm_lib_media_lookup(struct lib_handle *lib_hdl,
  */
 static inline int ldm_lib_media_move(struct lib_handle *lib_hdl,
                                      const struct lib_item_addr *src_addr,
-                                     const struct lib_item_addr *tgt_addr)
+                                     const struct lib_item_addr *tgt_addr,
+                                     json_t *message)
 {
     assert(lib_hdl->ld_module != NULL);
     assert(lib_hdl->ld_module->ops != NULL);
     if (lib_hdl->ld_module->ops->lib_media_move == NULL)
         return 0;
-    return lib_hdl->ld_module->ops->lib_media_move(lib_hdl, src_addr, tgt_addr);
+    return lib_hdl->ld_module->ops->lib_media_move(lib_hdl, src_addr, tgt_addr,
+                                                   message);
 }
 
 /**

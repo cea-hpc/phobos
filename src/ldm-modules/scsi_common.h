@@ -27,6 +27,7 @@
 #define _SCSI_COMMANDS_H
 
 #include <stdint.h>
+#include <jansson.h>
 
 /** Request sense description */
 struct scsi_req_sense {
@@ -279,6 +280,7 @@ int scsi_execute(struct scsi_error *err, int fd, enum scsi_direction direction,
                  uint8_t *cdb, int cdb_len,
                  struct scsi_req_sense *sbp, int sb_len,
                  void *dxferp, int dxfer_len,
-                 unsigned int timeout_msec);
+                 unsigned int timeout_msec,
+                 json_t *message);
 
 #endif

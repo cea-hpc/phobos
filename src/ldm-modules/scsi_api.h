@@ -26,6 +26,7 @@
 #ifndef _SCSI_API_H
 #define _SCSI_API_H
 
+#include "pho_common.h"
 #include "scsi_common.h"
 
 #include <stdbool.h>
@@ -135,7 +136,7 @@ void element_status_list_free(struct element_status *elmt_list);
  * @return 0 on success, error code < 0 on failure.
  */
 int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
-                     uint16_t tgt_addr);
+                     uint16_t tgt_addr, json_t *message);
 
 /** function to handle scsi error codes in a PHO_RETRY_LOOP */
 void scsi_retry_func(const char *fnname, int rc, int *retry_cnt,

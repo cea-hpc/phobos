@@ -207,6 +207,26 @@ struct pho_log {
     struct timeval time;       /** time of the log */
 };
 
+static inline void json_insert_element(json_t *json, const char *key,
+                                       json_t *value)
+{
+    if (!value) {
+        pho_error(-ENOMEM, "Failed to set '%s' in json", key);
+        return;
+    }
+
+    if (json_object_set_new(json, key, value) != 0) {
+        json_decref(value);
+        pho_error(-ENOMEM, "Failed to set '%s' in json", key);
+    }
+}
+
+static inline void destroy_json(json_t *json)
+{
+    json_object_clear(json);
+    json_decref(json);
+}
+
 /**
  * Lighten the code by allowing to set rc and goto a label or return
  * in a single line of code.

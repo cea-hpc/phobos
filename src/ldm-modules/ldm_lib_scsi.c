@@ -621,7 +621,8 @@ static int select_target_addr(struct lib_descriptor *lib,
 /** Implements phobos LDM lib media move */
 static int lib_scsi_move(struct lib_handle *hdl,
                          const struct lib_item_addr *src_addr,
-                         const struct lib_item_addr *tgt_addr)
+                         const struct lib_item_addr *tgt_addr,
+                         json_t *message)
 {
     struct lib_descriptor *lib;
     uint16_t tgt;
@@ -648,7 +649,7 @@ static int lib_scsi_move(struct lib_handle *hdl,
     }
 
     /* arm = 0 for default transport element */
-    rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt);
+    rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt, message);
 
     /* was the source slot invalid? */
     if (rc == -EINVAL && origin) {
@@ -657,7 +658,7 @@ static int lib_scsi_move(struct lib_handle *hdl,
         rc = select_target_addr(lib, src_addr, &tgt, &origin);
         if (rc)
             goto unlock;
-        rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt);
+        rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt, message);
     }
 
 unlock:
@@ -696,15 +697,6 @@ static const char *type2str(enum element_type_code code)
  */
 typedef void (*lib_scan_cb_t)(void *, json_t *);
 
-#define JSON_OBJECT_SET_NEW(_json, _field, _json_type, ...)                  \
-    do {                                                                     \
-        json_t *_json_value = _json_type(__VA_ARGS__);                       \
-        if (!_json_value)                                                    \
-            pho_error(-EINVAL, "Failed to encode " #__VA_ARGS__ " as json"); \
-        if (json_object_set_new(_json, _field, _json_value) != 0)            \
-            pho_error(-ENOMEM, "Failed to set " _field " in json");          \
-    } while (0)
-
 /**
  * Calls a lib_scan_cb_t callback on a scsi element
  *
@@ -723,46 +715,46 @@ static void scan_element(const struct element_status *element,
         return;
     }
 
-    JSON_OBJECT_SET_NEW(root, "type", json_string, type2str(element->type));
-    JSON_OBJECT_SET_NEW(root, "address", json_integer, element->address);
+    json_insert_element(root, "type", json_string(type2str(element->type)));
+    json_insert_element(root, "address", json_integer(element->address));
 
     if (element->type & (SCSI_TYPE_ARM | SCSI_TYPE_DRIVE | SCSI_TYPE_SLOT))
-        JSON_OBJECT_SET_NEW(root, "full", json_boolean, element->full);
+        json_insert_element(root, "full", json_boolean(element->full));
 
     if (element->full && element->vol[0])
-        JSON_OBJECT_SET_NEW(root, "volume", json_string, element->vol);
+        json_insert_element(root, "volume", json_string(element->vol));
 
     if (element->src_addr_is_set)
-        JSON_OBJECT_SET_NEW(root, "source_address",
-                            json_integer, element->src_addr);
+        json_insert_element(root, "source_address",
+                            json_integer(element->src_addr));
 
     if (element->except) {
-        JSON_OBJECT_SET_NEW(root, "error_code",
-                            json_integer, element->error_code);
-        JSON_OBJECT_SET_NEW(root, "error_code_qualifier",
-                            json_integer, element->error_code_qualifier);
+        json_insert_element(root, "error_code",
+                            json_integer(element->error_code));
+        json_insert_element(root, "error_code_qualifier",
+                            json_integer(element->error_code_qualifier));
     }
 
     if (element->dev_id[0])
-        JSON_OBJECT_SET_NEW(root, "device_id", json_string, element->dev_id);
+        json_insert_element(root, "device_id", json_string(element->dev_id));
 
     if (element->type == SCSI_TYPE_IMPEXP) {
-        JSON_OBJECT_SET_NEW(root, "current_operation",
-                            json_string, element->impexp ? "import" : "export");
-        JSON_OBJECT_SET_NEW(root, "exp_enabled",
-                            json_boolean, element->exp_enabled);
-        JSON_OBJECT_SET_NEW(root, "imp_enabled",
-                            json_boolean, element->imp_enabled);
+        json_insert_element(root, "current_operation",
+                            json_string(element->impexp ? "import" : "export"));
+        json_insert_element(root, "exp_enabled",
+                            json_boolean(element->exp_enabled));
+        json_insert_element(root, "imp_enabled",
+                            json_boolean(element->imp_enabled));
     }
 
     /* Make "accessible" appear only when it is true */
     if (element->accessible) {
-        JSON_OBJECT_SET_NEW(root, "accessible", json_true);
+        json_insert_element(root, "accessible", json_true());
     }
 
     /* Inverted media is uncommon enough so that it can be omitted if false */
     if (element->invert) {
-        JSON_OBJECT_SET_NEW(root, "invert", json_true);
+        json_insert_element(root, "invert", json_true());
     }
 
     scan_cb(udata, root);

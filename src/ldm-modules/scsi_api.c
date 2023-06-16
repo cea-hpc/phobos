@@ -197,7 +197,7 @@ int scsi_mode_sense(int fd, struct mode_sense_info *info)
     PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
                    scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), buffer, sizeof(buffer),
-                   scsi_query_timeout_ms());
+                   scsi_query_timeout_ms(), NULL);
     if (rc)
         return rc;
 
@@ -381,7 +381,7 @@ static int _scsi_element_status(int fd, enum element_type_code type,
     PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
                    scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), buffer, len,
-                   scsi_query_timeout_ms());
+                   scsi_query_timeout_ms(), NULL);
     if (rc)
         goto free_buff;
 
@@ -524,9 +524,29 @@ void element_status_list_free(struct element_status *elmt_list)
     free(elmt_list);
 }
 
-int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
-                     uint16_t tgt_addr)
+static void fill_json_message(uint16_t arm_addr, uint16_t src_addr,
+                              uint16_t tgt_addr, json_t *log_object)
 {
+    char address[16];
+
+    json_insert_element(log_object, "SCSI action", json_string("MOVE_MEDIUM"));
+
+    /* Use an intermediary buffer to keep the hexadecimal format for
+     * addresses
+     */
+    sprintf(address, "%#hx", arm_addr);
+    json_insert_element(log_object, "Arm address", json_string(address));
+    sprintf(address, "%#hx", src_addr);
+    json_insert_element(log_object, "Source address", json_string(address));
+    sprintf(address, "%#hx", tgt_addr);
+    json_insert_element(log_object, "Target address", json_string(address));
+
+}
+
+int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
+                     uint16_t tgt_addr, json_t *message)
+{
+    json_t *log_object = json_object();
     struct scsi_req_sense error = {0};
     struct move_medium_cdb req = {0};
     struct scsi_error scsi_err = {0};
@@ -534,6 +554,8 @@ int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
 
     pho_debug("scsi_execute: MOVE_MEDIUM, arm_addr=%#hx, src_addr=%#hx, "
               "tgt_addr=%#hx", arm_addr, src_addr, tgt_addr);
+
+    fill_json_message(arm_addr, src_addr, tgt_addr, log_object);
 
     req.opcode = MOVE_MEDIUM;
     req.transport_element_address = htobe16(arm_addr);
@@ -543,7 +565,10 @@ int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
     PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
                    scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), NULL, 0,
-                   scsi_move_timeout_ms());
+                   scsi_move_timeout_ms(), log_object);
+
+    json_object_set_new(message, "scsi_execute", log_object);
+
     return rc;
 }
 

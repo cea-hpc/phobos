@@ -70,7 +70,7 @@ static int dev_load(const struct lib_item_addr *dev_addr,
         return -EINVAL;
     }
 
-    rc = ldm_lib_media_move(&lib_hdl, &medium_addr, dev_addr);
+    rc = ldm_lib_media_move(&lib_hdl, &medium_addr, dev_addr, NULL);
     if (rc) {
         pho_error(rc, "Error when moving tape %s into drive addr '%" PRIu64 "'",
                   tape_name, dev_addr->lia_addr);
@@ -104,7 +104,7 @@ static int dev_unload(const struct lib_item_addr *dev_addr)
         return rc;
     }
 
-    rc = ldm_lib_media_move(&lib_hdl, dev_addr, &free_slot);
+    rc = ldm_lib_media_move(&lib_hdl, dev_addr, &free_slot, NULL);
     if (rc) {
         pho_error(rc,
                   "Error when moving tape from drive addr '%" PRIu64 "' to "

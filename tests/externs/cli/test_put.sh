@@ -374,6 +374,7 @@ function test_overwrite_family
 
     $phobos tape add -t lto5 P00000L5 ||
         error "Tape P00000L5 should have been added"
+
     $phobos tape format --unlock P00000L5 ||
         error "Tape P00000L5 should have been formated"
 

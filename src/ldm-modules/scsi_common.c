@@ -209,8 +209,9 @@ static inline bool scsi_error_check(const struct sg_io_hdr *hdr)
         || hdr->driver_status != 0);
 }
 
-static void scsi_error_trace(const struct sg_io_hdr *hdr)
+static void scsi_error_trace(const struct sg_io_hdr *hdr, json_t *message)
 {
+    json_t *log_object = json_object();
     const struct scsi_req_sense *sbp;
     char msg[SCSI_MSG_LEN];
 
@@ -219,25 +220,50 @@ static void scsi_error_trace(const struct sg_io_hdr *hdr)
     pho_warn("SCSI ERROR: scsi_masked_status=%#hhx, adapter_status=%#hx, "
              "driver_status=%#hx", hdr->masked_status,
              hdr->host_status, hdr->driver_status);
+    json_insert_element(log_object, "scsi_masked_status",
+                        json_integer(hdr->masked_status));
+    json_insert_element(log_object, "adapter_status",
+                        json_integer(hdr->host_status));
+    json_insert_element(log_object, "driver_status",
+                        json_integer(hdr->driver_status));
 
     sbp = (const struct scsi_req_sense *)hdr->sbp;
     if (sbp == NULL) {
         pho_warn("sbp=NULL");
-        return;
+    } else {
+        pho_warn("    req_sense_error=%#hhx, sense_key=%#hhx (%s)",
+                 sbp->error_code, sbp->sense_key,
+                 sg_get_sense_key_str(sbp->sense_key, sizeof(msg), msg));
+        pho_warn("    asc=%#hhx, ascq=%#hhx (%s)", sbp->additional_sense_code,
+                 sbp->additional_sense_code_qualifier,
+                 sg_get_asc_ascq_str(sbp->additional_sense_code,
+                                     sbp->additional_sense_code_qualifier,
+                                     sizeof(msg), msg));
+
+        json_insert_element(log_object, "req_sense_error",
+                            json_integer(sbp->error_code));
+        json_insert_element(log_object, "sense_key",
+                            json_integer(sbp->sense_key));
+        json_insert_element(log_object, "sense_key_str",
+            json_string(sg_get_sense_key_str(sbp->sense_key, sizeof(msg),
+                                             msg)));
+
+        json_insert_element(log_object, "asc",
+                            json_integer(sbp->additional_sense_code));
+        json_insert_element(log_object, "ascq",
+                            json_integer(sbp->additional_sense_code_qualifier));
+        json_insert_element(log_object, "asc_ascq_str",
+            json_string(sg_get_asc_ascq_str(sbp->additional_sense_code,
+                sbp->additional_sense_code_qualifier, sizeof(msg), msg)));
     }
-    pho_warn("    req_sense_error=%#hhx, sense_key=%#hhx (%s)",
-             sbp->error_code, sbp->sense_key,
-             sg_get_sense_key_str(sbp->sense_key, sizeof(msg), msg));
-    pho_warn("    asc=%#hhx, ascq=%#hhx (%s)", sbp->additional_sense_code,
-             sbp->additional_sense_code_qualifier,
-             sg_get_asc_ascq_str(sbp->additional_sense_code,
-                sbp->additional_sense_code_qualifier, sizeof(msg), msg));
+
+    json_object_set_new(message, "SCSI ERROR", log_object);
 }
 
 int scsi_execute(struct scsi_error *err, int fd, enum scsi_direction direction,
                  unsigned char *cdb, int cdb_len, struct scsi_req_sense *sbp,
                  int sb_len, void *dxferp, int dxfer_len,
-                 unsigned int timeout_msec)
+                 unsigned int timeout_msec, json_t *message)
 {
     struct sg_io_hdr hdr = {0};
     int rc;
@@ -258,11 +284,13 @@ int scsi_execute(struct scsi_error *err, int fd, enum scsi_direction direction,
     if (rc) {
         err->rc = -errno;
         err->status = SCSI_FATAL_ERROR;
+        json_insert_element(message, "SCSI ERROR",
+                            json_string("ioctl() failed"));
         LOG_RETURN(rc = -errno, "ioctl() failed");
     }
 
     if (scsi_error_check(&hdr))
-        scsi_error_trace(&hdr);
+        scsi_error_trace(&hdr, message);
 
     if (hdr.masked_status == CHECK_CONDITION) {
         /* check sense_key value */
@@ -283,5 +311,6 @@ int scsi_execute(struct scsi_error *err, int fd, enum scsi_direction direction,
         LOG_RETURN(err->rc,
                    "Adapter error %#hx (converted to %d)", hdr.host_status,
                    err->rc);
+
     return 0;
 }

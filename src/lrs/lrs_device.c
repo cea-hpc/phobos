@@ -972,7 +972,7 @@ static int dev_unload(struct lrs_dev *dev)
                  dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
     rc = ldm_lib_media_move(&lib_hdl, &dev->ld_lib_dev_info.ldi_addr,
-                            &free_slot);
+                            &free_slot, NULL);
     if (rc != 0)
         /* Set operational failure state on this drive. It is incomplete since
          * the error can originate from a defective tape too...
@@ -1112,6 +1112,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info **medium,
 {
     struct lib_item_addr medium_addr;
     struct lib_handle lib_hdl;
+    struct pho_log log;
     int rc2;
     int rc;
 
@@ -1122,6 +1123,13 @@ static int dev_load(struct lrs_dev *dev, struct media_info **medium,
     *can_retry = false;
     pho_verb("load: '%s' into '%s'", (*medium)->rsc.id.name, dev->ld_dev_path);
 
+    strcpy(log.device.name, dev->ld_dss_dev_info->rsc.id.name);
+    log.device.family = dev->ld_dss_dev_info->rsc.id.family;
+    strcpy(log.medium.name, (*medium)->rsc.id.name);
+    log.medium.family = (*medium)->rsc.id.family;
+    log.cause = PHO_DEVICE_LOAD;
+    log.message = json_object();
+
     /* get handle to the library depending on device type */
     rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl);
     if (rc) {
@@ -1129,6 +1137,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info **medium,
         MUTEX_LOCK(&dev->ld_mutex);
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         MUTEX_UNLOCK(&dev->ld_mutex);
+
         if (release_medium_on_dev_only_failure) {
             rc2 = dss_medium_release(&dev->ld_device_thread.dss,
                                      dev->ld_dss_media_info);
@@ -1150,7 +1159,8 @@ static int dev_load(struct lrs_dev *dev, struct media_info **medium,
     }
 
     rc = ldm_lib_media_move(&lib_hdl, &medium_addr,
-                            &dev->ld_lib_dev_info.ldi_addr);
+                            &dev->ld_lib_dev_info.ldi_addr, log.message);
+    log.error_number = rc;
     /* A movement from drive to drive can be prohibited by some libraries.
      * If a failure is encountered in such a situation, it probably means that
      * the state of the library has changed between the moment it has been
@@ -1201,6 +1211,9 @@ out_close:
         pho_error(rc2, "Unable to close lib");
         rc = rc ? : rc2;
     }
+
+    dss_emit_log(&dev->ld_device_thread.dss, &log);
+    destroy_json(log.message);
 
     return rc;
 }

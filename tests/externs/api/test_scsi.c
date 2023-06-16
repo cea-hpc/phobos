@@ -208,7 +208,7 @@ static void test_lib_adapter(void)
         /* unload the drive to any slot if it's full */
         if (drv_info.ldi_full)
             ASSERT_RC(ldm_lib_media_move(&lib_hdl, &drv_info.ldi_addr,
-                      NULL));
+                      NULL, NULL));
     }
 
     if (one_label)
@@ -405,7 +405,7 @@ int main(int argc, char **argv)
 
         pho_info("Unloading drive %#x to slot %#x", full_drive, free_slot);
 
-        ASSERT_RC(scsi_move_medium(fd, arm_addr, full_drive, free_slot));
+        ASSERT_RC(scsi_move_medium(fd, arm_addr, full_drive, free_slot, NULL));
         single_element_status(fd, full_drive, false);
         single_element_status(fd, free_slot, true);
 
@@ -419,7 +419,7 @@ int main(int argc, char **argv)
         pho_info("Loading tape from slot %#x to drive %#x",
                  full_slot, empty_drive);
 
-        ASSERT_RC(scsi_move_medium(fd, arm_addr, full_slot, empty_drive));
+        ASSERT_RC(scsi_move_medium(fd, arm_addr, full_slot, empty_drive, NULL));
         single_element_status(fd, full_slot, false);
         single_element_status(fd, empty_drive, true);
     } else if (was_loaded) {
@@ -429,7 +429,7 @@ int main(int argc, char **argv)
         pho_info("Loading back tape from slot %#x to drive %#x",
                  free_slot, full_drive);
 
-        ASSERT_RC(scsi_move_medium(fd, arm_addr, free_slot, full_drive));
+        ASSERT_RC(scsi_move_medium(fd, arm_addr, free_slot, full_drive, NULL));
         single_element_status(fd, full_drive, true);
         single_element_status(fd, free_slot, false);
     }
