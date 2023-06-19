@@ -42,12 +42,12 @@ check_PROGRAMS=test_fair_share \
                medium_locker
 
 check_SCRIPTS=acceptance.test \
-              test_fair_share.test \
               test_daemon.sh \
               test_daemon_monitoring.sh \
               test_daemon_scheduling.test \
               test_delete.sh \
               test_extent_list.sh \
+              test_fair_share.test \
               test_format.sh \
               test_get.sh \
               test_group_sync.sh \
