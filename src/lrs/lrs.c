@@ -1049,7 +1049,7 @@ static void lrs_fini(struct lrs *lrs)
 
     rc = pho_comm_close(&lrs->comm);
     if (rc)
-        pho_error(rc, "Error on closing the socket");
+        pho_error(rc, "Failed to close the phobosd socket");
 
     tsqueue_destroy(&lrs->response_queue, sched_resp_free_with_cont);
     dss_fini(&lrs->dss);
@@ -1096,7 +1096,7 @@ static int lrs_init(struct lrs *lrs)
     sock_addr.af_unix.path = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, server_socket);
     rc = pho_comm_open(&lrs->comm, &sock_addr, PHO_COMM_UNIX_SERVER);
     if (rc)
-        LOG_GOTO(err, rc, "Error while opening the socket");
+        LOG_GOTO(err, rc, "Failed to open the phobosd socket");
 
     rc = dss_init(&lrs->dss);
     if (rc)

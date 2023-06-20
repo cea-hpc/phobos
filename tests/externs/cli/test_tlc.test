@@ -49,6 +49,34 @@ function tlc_daemon_started
     fi
 }
 
+function tlc_daemon_bad_port
+{
+    export PHOBOS_TLC_port="65536"
+    if invoke_tlc; then
+        waive_tlc
+        unset PHOBOS_TLC_port
+        error "TLC daemon start must fail with a port greater than 65535"
+    fi
+
+    export PHOBOS_TLC_port="-1"
+    if invoke_tlc; then
+        waive_tlc
+        unset PHOBOS_TLC_port
+        error "TLC daemon start must fail with a port value of -1"
+    fi
+
+    # Test the port number 22, already used by sshd
+    export PHOBOS_TLC_port="22"
+    if invoke_tlc; then
+        waive_tlc
+        unset PHOBOS_TLC_port
+        error "TLC daemon start must fail with a port 22 already used by sshd"
+    fi
+
+    unset PHOBOS_TLC_port
+}
+
 TESTS=("tlc_interactive_sig SIGINT" \
        "tlc_interactive_sig SIGTERM" \
-       "invoke_tlc; tlc_daemon_started; waive_tlc")
+       "invoke_tlc; tlc_daemon_started; waive_tlc" \
+       "tlc_daemon_bad_port")

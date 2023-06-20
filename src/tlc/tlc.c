@@ -32,18 +32,61 @@
 #include <unistd.h>
 
 #include "pho_cfg.h"
+#include "pho_comm.h"
 #include "pho_common.h"
 #include "pho_daemon.h"
+
+#include "tlc_cfg.h"
 
 static bool should_tlc_stop(void)
 {
     return !running;
 }
 
+struct tlc {
+    struct pho_comm_info comm; /*!< Communication handle */
+};
+
+static int tlc_init(struct tlc *tlc)
+{
+    union pho_comm_addr sock_addr;
+    int rc;
+
+    sock_addr.tcp.hostname = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, hostname);
+    sock_addr.tcp.port = PHO_CFG_GET_INT(cfg_tlc, PHO_CFG_TLC, port, -1);
+    if (sock_addr.tcp.port == -1)
+        LOG_RETURN(-EINVAL, "Unable to get a valid integer TLC port value");
+
+    if (sock_addr.tcp.port > 65535)
+        LOG_RETURN(-EINVAL, "TLC port value %d cannot be greater than 65535",
+                   sock_addr.tcp.port);
+
+    rc = pho_comm_open(&tlc->comm, &sock_addr, PHO_COMM_TCP_SERVER);
+    if (rc)
+        LOG_RETURN(rc, "Error while opening the TLC socket");
+
+    return rc;
+}
+
+static void tlc_fini(struct tlc *tlc)
+{
+    int rc;
+
+    ENTRY;
+
+    if (tlc == NULL)
+        return;
+
+    rc = pho_comm_close(&tlc->comm);
+    if (rc)
+        pho_error(rc, "Error on closing the TLC socket");
+}
+
 int main(int argc, char **argv)
 {
     int write_pipe_from_child_to_father;
     struct daemon_params param;
+    struct tlc tlc = {};
     int rc;
 
     rc = daemon_creation(argc, argv, &param, &write_pipe_from_child_to_father,
@@ -52,6 +95,9 @@ int main(int argc, char **argv)
         return -rc;
 
     rc = daemon_init(param);
+
+    if (!rc)
+        rc = tlc_init(&tlc);
 
     if (param.is_daemon)
         daemon_notify_init_done(write_pipe_from_child_to_father, &rc);
@@ -66,5 +112,6 @@ int main(int argc, char **argv)
         usleep(10000);
     }
 
+    tlc_fini(&tlc);
     return EXIT_SUCCESS;
 }
