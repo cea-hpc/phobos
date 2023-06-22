@@ -26,17 +26,10 @@
 #include "config.h"
 #endif
 
+#include "pho_comm.h"
 #include "tlc_cfg.h"
 
 const struct pho_config_item cfg_tlc[] = {
-    [PHO_CFG_TLC_hostname] = {
-        .section = "tlc",
-        .name    = "hostname",
-        .value   = "localhost"
-    },
-    [PHO_CFG_TLC_port] = {
-        .section = "tlc",
-        .name    = "port",
-        .value   = "20123"
-    },
+    [PHO_CFG_TLC_hostname] = TLC_HOSTNAME_CFG_ITEM,
+    [PHO_CFG_TLC_port] = TLC_PORT_CFG_ITEM,
 };

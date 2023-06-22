@@ -566,7 +566,7 @@ exit 1
     local save_mount_cmd=$PHOBOS_LTFS_cmd_mount
     export PHOBOS_LTFS_cmd_mount="$cmd"
     invoke_lrs
-    $phobos ping
+    $phobos ping phobosd
 
     $phobos get "$oid" "$DIR_TEST_OUT"/"$oid"
     export PHOBOS_LTFS_cmd_mount="$save_mount_cmd"

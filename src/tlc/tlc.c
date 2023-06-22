@@ -35,6 +35,7 @@
 #include "pho_comm.h"
 #include "pho_common.h"
 #include "pho_daemon.h"
+#include "pho_srl_lrs.h"
 
 #include "tlc_cfg.h"
 
@@ -82,6 +83,67 @@ static void tlc_fini(struct tlc *tlc)
         pho_error(rc, "Error on closing the TLC socket");
 }
 
+static void process_ping_request(struct tlc *tlc, pho_req_t *req,
+                                 int client_socket)
+{
+    struct pho_comm_data msg;
+    pho_resp_t resp;
+    int rc;
+
+    pho_srl_response_ping_alloc(&resp);
+    resp.req_id = req->id;
+
+    rc = pho_srl_response_pack(&resp, &msg.buf);
+    if (rc)
+        LOG_GOTO(out, rc, "TLC ping response cannot be packed");
+
+    msg.fd = client_socket;
+    rc = pho_comm_send(&msg);
+    if (rc)
+        pho_error(rc, "TLC error on sending ping response");
+
+    free(msg.buf.buff);
+out:
+    pho_srl_response_free(&resp, false);
+}
+
+static int recv_work(struct tlc *tlc)
+{
+    struct pho_comm_data *data = NULL;
+    int n_data;
+    int rc, i;
+
+    rc = pho_comm_recv(&tlc->comm, &data, &n_data);
+    if (rc) {
+        for (i = 0; i < n_data; ++i)
+            free(data[i].buf.buff);
+
+        free(data);
+        LOG_RETURN(rc, "TLC error on reading input data");
+    }
+
+    for (i = 0; i < n_data; i++) {
+        pho_req_t *req;
+
+        if (data[i].buf.size == -1) /* close notification, ignore */
+            continue;
+
+        req = pho_srl_request_unpack(&data[i].buf);
+        if (!req)
+            continue;
+
+        if (pho_request_is_ping(req)) {
+            process_ping_request(tlc, req, data[i].fd);
+            goto out_request;
+        }
+
+out_request:
+        pho_srl_request_free(req, true);
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     int write_pipe_from_child_to_father;
@@ -109,7 +171,12 @@ int main(int argc, char **argv)
         if (should_tlc_stop())
             break;
 
-        usleep(10000);
+        /* recv_work waits on input sockets */
+        rc = recv_work(&tlc);
+        if (rc) {
+            pho_error(rc, "TLC error when receiving requests");
+            break;
+        }
     }
 
     tlc_fini(&tlc);

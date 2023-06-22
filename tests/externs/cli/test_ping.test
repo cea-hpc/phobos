@@ -24,9 +24,9 @@
 #
 
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
 
 set -xe
 
@@ -38,19 +38,30 @@ function setup
 function cleanup
 {
     waive_lrs
+    waive_tlc
     drop_tables
 }
 
-function test_ping
+function test_ping_phobosd
 {
     invoke_lrs
-    $valg_phobos ping || error "Ping should be successful"
+    $valg_phobos ping phobosd || error "Phobosd ping should be successful"
     waive_lrs
-    $valg_phobos ping && error "Ping should fail"
+    $valg_phobos ping phobosd && error "Phobosd ping should fail"
+
     return 0
 }
 
-trap cleanup EXIT
-setup
+function test_ping_tlc
+{
+    invoke_tlc
+    $valg_phobos ping tlc || error "TLC ping should be successful"
+    waive_tlc
+    $valg_phobos ping tlc && error "TLC ping should fail"
 
-test_ping
+    return 0
+}
+
+TEST_SETUP=setup
+TESTS=(test_ping_phobosd test_ping_tlc)
+TEST_CLEANUP=cleanup

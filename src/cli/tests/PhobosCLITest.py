@@ -146,7 +146,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['undel', 'uuid', 'uuid1', 'uuid2'])
         self.check_cmdline_valid(['undel', 'oid', 'oid1'])
         self.check_cmdline_valid(['undel', 'oid', 'oid1', 'oid2'])
-        self.check_cmdline_valid(['ping'])
+        self.check_cmdline_valid(['ping', 'phobosd'])
+        self.check_cmdline_valid(['ping', 'tlc'])
         self.check_cmdline_valid(['locate', 'oid1'])
         self.check_cmdline_valid(['locate', '--focus-host', 'vm0', 'oid1'])
         self.check_cmdline_valid(['locate', '--uuid', 'uuid1', 'oid1'])
@@ -185,6 +186,9 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['drive', 'delete'], code=2)
         self.check_cmdline_exit(['logs'], code=2)
         self.check_cmdline_exit(['logs', 'dump', '42'], code=2)
+        self.check_cmdline_exit(['ping'], code=2)
+        self.check_cmdline_exit(['ping', 'phobosd', 'tlc'], code=2)
+        self.check_cmdline_exit(['ping', 'bad_target'], code=2)
 
 
 class BasicExecutionTest(unittest.TestCase):

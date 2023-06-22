@@ -88,7 +88,7 @@ function setup_test
         fi
 
         $start_phobosd
-        $phobos ping
+        $phobos ping phobosd
         if ! $database_online; then
             setup_tape
         fi

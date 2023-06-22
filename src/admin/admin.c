@@ -31,6 +31,7 @@
 #include <errno.h>
 #include <glib.h>
 #include <limits.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "pho_cfg.h"
@@ -46,30 +47,30 @@
 enum pho_cfg_params_admin {
     /* Actual admin parameters */
     PHO_CFG_ADMIN_lrs_socket,
+    PHO_CFG_ADMIN_tlc_hostname,
+    PHO_CFG_ADMIN_tlc_port,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_ADMIN_FIRST = PHO_CFG_ADMIN_lrs_socket,
-    PHO_CFG_ADMIN_LAST  = PHO_CFG_ADMIN_lrs_socket
+    PHO_CFG_ADMIN_LAST  = PHO_CFG_ADMIN_tlc_port
 };
 
 const struct pho_config_item cfg_admin[] = {
-    [PHO_CFG_ADMIN_lrs_socket] = {
-        .section = "lrs",
-        .name    = "server_socket",
-        .value   = "/tmp/socklrs"
-    },
+    [PHO_CFG_ADMIN_lrs_socket] = LRS_SOCKET_CFG_ITEM,
+    [PHO_CFG_ADMIN_tlc_hostname] = TLC_HOSTNAME_CFG_ITEM,
+    [PHO_CFG_ADMIN_tlc_port] = TLC_PORT_CFG_ITEM,
 };
 
 /* ****************************************************************************/
 /* Static Communication-related Functions *************************************/
 /* ****************************************************************************/
 
-static int _send(struct admin_handle *adm, pho_req_t *req)
+static int _send(struct pho_comm_info *comm, pho_req_t *req)
 {
     struct pho_comm_data data_out;
     int rc;
 
-    data_out = pho_comm_data_init(&adm->comm);
+    data_out = pho_comm_data_init(comm);
     rc = pho_srl_request_pack(req, &data_out.buf);
     pho_srl_request_free(req, false);
     if (rc)
@@ -83,13 +84,13 @@ static int _send(struct admin_handle *adm, pho_req_t *req)
     return 0;
 }
 
-static int _receive(struct admin_handle *adm, pho_resp_t **resp)
+static int _receive(struct pho_comm_info *comm, pho_resp_t **resp)
 {
     struct pho_comm_data *data_in = NULL;
     int n_data_in = 0;
     int rc;
 
-    rc = pho_comm_recv(&adm->comm, &data_in, &n_data_in);
+    rc = pho_comm_recv(comm, &data_in, &n_data_in);
     if (rc || n_data_in != 1) {
         if (data_in)
             free(data_in->buf.buff);
@@ -110,16 +111,16 @@ static int _receive(struct admin_handle *adm, pho_resp_t **resp)
     return 0;
 }
 
-int _send_and_receive(struct admin_handle *adm, pho_req_t *req,
+int _send_and_receive(struct pho_comm_info *comm, pho_req_t *req,
                       pho_resp_t **resp)
 {
     int rc;
 
-    rc = _send(adm, req);
+    rc = _send(comm, req);
     if (rc)
         return rc;
 
-    rc = _receive(adm, resp);
+    rc = _receive(comm, resp);
 
     return rc;
 }
@@ -145,14 +146,14 @@ static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
     req.notify->rsrc_id->name = strdup(id->name);
     req.notify->wait = need_to_wait;
 
-    rc = _send(adm, &req);
+    rc = _send(&adm->phobosd_comm, &req);
     if (rc)
         LOG_RETURN(rc, "Error with phobosd communication");
 
     if (!need_to_wait)
         return rc;
 
-    rc = _receive(adm, &resp);
+    rc = _receive(&adm->phobosd_comm, &resp);
     if (rc)
         LOG_RETURN(rc, "Error with phobosd communication");
 
@@ -406,39 +407,68 @@ void phobos_admin_fini(struct admin_handle *adm)
 {
     int rc;
 
-    rc = pho_comm_close(&adm->comm);
+    rc = pho_comm_close(&adm->phobosd_comm);
     if (rc)
-        pho_error(rc, "Cannot close the communication socket");
+        pho_error(rc, "Cannot close the LRS communication socket");
+
+    rc = pho_comm_close(&adm->tlc_comm);
+    if (rc)
+        pho_error(rc, "Cannot close the TLC communication socket");
 
     dss_fini(&adm->dss);
 }
 
-int phobos_admin_init(struct admin_handle *adm, bool lrs_required)
+int phobos_admin_init(struct admin_handle *adm, bool lrs_required,
+                      bool tlc_required)
 {
-    union pho_comm_addr sock_addr;
+    union pho_comm_addr lrs_sock_addr;
+    union pho_comm_addr tlc_sock_addr;
     int rc;
 
     memset(adm, 0, sizeof(*adm));
-    adm->comm = pho_comm_info_init();
+    adm->phobosd_comm = pho_comm_info_init();
+    adm->tlc_comm = pho_comm_info_init();
 
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)
         return rc;
 
-    sock_addr.af_unix.path = PHO_CFG_GET(cfg_admin, PHO_CFG_ADMIN, lrs_socket);
-
     rc = dss_init(&adm->dss);
     if (rc)
         LOG_GOTO(out, rc, "Cannot initialize DSS");
 
-    rc = pho_comm_open(&adm->comm, &sock_addr, PHO_COMM_UNIX_CLIENT);
+    /* LRS client connection */
+    lrs_sock_addr.af_unix.path = PHO_CFG_GET(cfg_admin, PHO_CFG_ADMIN,
+                                             lrs_socket);
+    rc = pho_comm_open(&adm->phobosd_comm, &lrs_sock_addr,
+                       PHO_COMM_UNIX_CLIENT);
     if (rc && lrs_required)
         LOG_GOTO(out, rc, "Cannot contact 'phobosd': will abort");
     else if (!rc)
-        adm->daemon_is_online = true;
+        adm->phobosd_is_online = true;
 
     if (!lrs_required)
         rc = 0;
+
+    /* TLC client connection */
+    if (tlc_required) {
+        tlc_sock_addr.tcp.hostname = PHO_CFG_GET(cfg_admin, PHO_CFG_ADMIN,
+                                                 tlc_hostname);
+        tlc_sock_addr.tcp.port = PHO_CFG_GET_INT(cfg_admin, PHO_CFG_ADMIN,
+                                                 tlc_port, 0);
+        if (tlc_sock_addr.tcp.port == 0)
+            LOG_GOTO(out, rc = -EINVAL,
+                     "Unable to get a valid integer TLC port value");
+
+        if (tlc_sock_addr.tcp.port > 65536)
+            LOG_GOTO(out, rc = -EINVAL,
+                     "TLC port value %d can not be greater than 65536",
+                     tlc_sock_addr.tcp.port);
+
+        rc = pho_comm_open(&adm->tlc_comm, &tlc_sock_addr, PHO_COMM_TCP_CLIENT);
+        if (rc)
+            LOG_GOTO(out, rc, "Cannot contact 'TLC': will abort");
+    }
 
 out:
     if (rc) {
@@ -467,7 +497,7 @@ int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
         // consider locked devices
         return 0;
 
-    if (!adm->daemon_is_online)
+    if (!adm->phobosd_is_online)
         return 0;
 
     for (i = 0; i < num_dev; ++i) {
@@ -533,11 +563,11 @@ static int send_configure(struct admin_handle *adm,
     req.configure->op = op;
     req.configure->configuration = configuration;
 
-    rc = _send(adm, &req);
+    rc = _send(&adm->phobosd_comm, &req);
     if (rc)
         LOG_GOTO(free_req, rc, "Failed to send configure request to phobosd");
 
-    rc = _receive(adm, &resp);
+    rc = _receive(&adm->phobosd_comm, &resp);
     if (rc)
         LOG_GOTO(free_req, rc,
                  "Failed to receive configure response from phobosd");
@@ -772,7 +802,7 @@ int phobos_admin_device_lock(struct admin_handle *adm, struct pho_id *dev_ids,
 
     rc = _device_update_adm_status(adm, dev_ids, num_dev,
                                    PHO_RSC_ADM_ST_LOCKED, true);
-    if (!adm->daemon_is_online || rc)
+    if (!adm->phobosd_is_online || rc)
         return rc;
 
     for (i = 0; i < num_dev; ++i) {
@@ -801,7 +831,7 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
     if (rc)
         return rc;
 
-    if (!adm->daemon_is_online)
+    if (!adm->phobosd_is_online)
         return 0;
 
     for (i = 0; i < num_dev; ++i) {
@@ -835,7 +865,7 @@ int phobos_admin_device_status(struct admin_handle *adm,
     req.id = 0;
     req.monitor->family = family;
 
-    rc = _send_and_receive(adm, &req, &resp);
+    rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
     if (rc)
         return rc;
 
@@ -948,7 +978,7 @@ static int receive_format_response(struct admin_handle *adm,
     pho_resp_t *resp;
     int rc = 0;
 
-    rc = _receive(adm, &resp);
+    rc = _receive(&adm->phobosd_comm, &resp);
     if (rc)
         return rc;
 
@@ -1056,7 +1086,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
 
         req.id = i;
 
-        rc2 = _send(adm, &req);
+        rc2 = _send(&adm->phobosd_comm, &req);
         if (rc2) {
             rc = rc ? : rc2;
             pho_error(rc2, "Failed to send format request for medium '%s', "
@@ -1101,7 +1131,7 @@ req_fail:
     return rc;
 }
 
-int phobos_admin_ping(struct admin_handle *adm)
+int phobos_admin_ping_lrs(struct admin_handle *adm)
 {
     pho_resp_t *resp;
     pho_req_t req;
@@ -1110,17 +1140,45 @@ int phobos_admin_ping(struct admin_handle *adm)
 
     rc = pho_srl_request_ping_alloc(&req);
     if (rc)
-        LOG_RETURN(rc, "Cannot create ping request");
+        LOG_RETURN(rc, "Cannot create LRS ping request");
 
     req.id = rid;
 
-    rc = _send_and_receive(adm, &req, &resp);
+    rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
     if (rc)
         LOG_RETURN(rc, "Error with phobosd communication");
 
     /* expect ping response, send error otherwise */
     if (!(pho_response_is_ping(resp) && resp->req_id == rid))
         pho_error(rc = -EBADMSG, "Bad response from phobosd");
+
+    pho_srl_response_free(resp, false);
+
+    return rc;
+}
+
+int phobos_admin_ping_tlc(struct admin_handle *adm)
+{
+    pho_resp_t *resp;
+    pho_req_t req;
+    int rid = 1;
+    int rc;
+
+    rc = pho_srl_request_ping_alloc(&req);
+    if (rc)
+        LOG_RETURN(rc, "Cannot create TLC ping request");
+
+    req.id = rid;
+
+    rc = _send_and_receive(&adm->tlc_comm, &req, &resp);
+    if (rc) {
+        pho_verb("Error with TLC communication : %d , %s", rc, strerror(-rc));
+        return rc;
+    }
+
+    /* expect ping response, send error otherwise */
+    if (!(pho_response_is_ping(resp) && resp->req_id == rid))
+        pho_error(rc = -EBADMSG, "Bad response from TLC");
 
     pho_srl_response_free(resp, false);
 
@@ -1283,7 +1341,7 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
     if (global && !force)
         LOG_RETURN(-EPERM, "Force mode is necessary for global mode.");
 
-    if (!force && adm->daemon_is_online)
+    if (!force && adm->phobosd_is_online)
         LOG_RETURN(-EPERM, "Deamon is online. Cannot release locks.");
 
     if (dev_family != PHO_RSC_NONE && lock_type == DSS_NONE)

@@ -39,7 +39,7 @@ static int teardown(void **state)
     return 0;
 }
 
-static void phobos_admin_ping_success(void **state)
+static void phobos_admin_ping_lrs_success(void **state)
 {
     struct admin_handle handle;
     pho_resp_t *resp = (pho_resp_t *)*state;
@@ -47,11 +47,23 @@ static void phobos_admin_ping_success(void **state)
 
     will_return(_send_and_receive, resp);
     will_return(_send_and_receive, 0);
-    rc = phobos_admin_ping(&handle);
+    rc = phobos_admin_ping_lrs(&handle);
     assert_int_equal(rc, 0);
 }
 
-static void phobos_admin_ping_no_daemon(void **state)
+static void phobos_admin_ping_tlc_success(void **state)
+{
+    struct admin_handle handle;
+    pho_resp_t *resp = (pho_resp_t *)*state;
+    int rc;
+
+    will_return(_send_and_receive, resp);
+    will_return(_send_and_receive, 0);
+    rc = phobos_admin_ping_tlc(&handle);
+    assert_int_equal(rc, 0);
+}
+
+static void phobos_admin_ping_lrs_no_daemon(void **state)
 {
     struct admin_handle handle;
     pho_resp_t *resp = (pho_resp_t *)*state;
@@ -59,11 +71,23 @@ static void phobos_admin_ping_no_daemon(void **state)
 
     will_return(_send_and_receive, resp);
     will_return(_send_and_receive, -ENOTCONN);
-    rc = phobos_admin_ping(&handle);
+    rc = phobos_admin_ping_lrs(&handle);
     assert_int_equal(rc, -ENOTCONN);
 }
 
-static void phobos_admin_ping_wrong_socket_path(void **state)
+static void phobos_admin_ping_tlc_no_daemon(void **state)
+{
+    struct admin_handle handle;
+    pho_resp_t *resp = (pho_resp_t *)*state;
+    int rc;
+
+    will_return(_send_and_receive, resp);
+    will_return(_send_and_receive, -ENOTCONN);
+    rc = phobos_admin_ping_tlc(&handle);
+    assert_int_equal(rc, -ENOTCONN);
+}
+
+static void phobos_admin_ping_lrs_wrong_socket_path(void **state)
 {
     struct admin_handle handle;
     pho_resp_t *resp = (pho_resp_t *)*state;
@@ -71,11 +95,23 @@ static void phobos_admin_ping_wrong_socket_path(void **state)
 
     will_return(_send_and_receive, resp);
     will_return(_send_and_receive, -ENOTSOCK);
-    rc = phobos_admin_ping(&handle);
+    rc = phobos_admin_ping_lrs(&handle);
     assert_int_equal(rc, -ENOTSOCK);
 }
 
-static void phobos_admin_ping_bad_response(void **state)
+static void phobos_admin_ping_tlc_wrong_socket_path(void **state)
+{
+    struct admin_handle handle;
+    pho_resp_t *resp = (pho_resp_t *)*state;
+    int rc;
+
+    will_return(_send_and_receive, resp);
+    will_return(_send_and_receive, -ENOTSOCK);
+    rc = phobos_admin_ping_tlc(&handle);
+    assert_int_equal(rc, -ENOTSOCK);
+}
+
+static void phobos_admin_ping_lrs_bad_response(void **state)
 {
     struct admin_handle handle;
     pho_resp_t *resp = (pho_resp_t *)*state;
@@ -85,17 +121,35 @@ static void phobos_admin_ping_bad_response(void **state)
 
     will_return(_send_and_receive, resp);
     will_return(_send_and_receive, 0);
-    rc = phobos_admin_ping(&handle);
+    rc = phobos_admin_ping_lrs(&handle);
+    assert_int_equal(rc, -EBADMSG);
+}
+
+static void phobos_admin_ping_tlc_bad_response(void **state)
+{
+    struct admin_handle handle;
+    pho_resp_t *resp = (pho_resp_t *)*state;
+    int rc;
+
+    resp->has_ping = false;
+
+    will_return(_send_and_receive, resp);
+    will_return(_send_and_receive, 0);
+    rc = phobos_admin_ping_tlc(&handle);
     assert_int_equal(rc, -EBADMSG);
 }
 
 int main(void)
 {
     const struct CMUnitTest phobos_ping_test_cases[] = {
-        cmocka_unit_test(phobos_admin_ping_success),
-        cmocka_unit_test(phobos_admin_ping_no_daemon),
-        cmocka_unit_test(phobos_admin_ping_wrong_socket_path),
-        cmocka_unit_test(phobos_admin_ping_bad_response),
+        cmocka_unit_test(phobos_admin_ping_lrs_success),
+        cmocka_unit_test(phobos_admin_ping_tlc_success),
+        cmocka_unit_test(phobos_admin_ping_lrs_no_daemon),
+        cmocka_unit_test(phobos_admin_ping_tlc_no_daemon),
+        cmocka_unit_test(phobos_admin_ping_lrs_wrong_socket_path),
+        cmocka_unit_test(phobos_admin_ping_tlc_wrong_socket_path),
+        cmocka_unit_test(phobos_admin_ping_lrs_bad_response),
+        cmocka_unit_test(phobos_admin_ping_tlc_bad_response),
     };
 
     pho_context_init();

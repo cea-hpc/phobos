@@ -67,7 +67,7 @@ static void lc_test_local_daemon_on(void **state)
     struct admin_handle *adm = (struct admin_handle *)*state;
     int rc;
 
-    adm->daemon_is_online = true;
+    adm->phobosd_is_online = true;
 
     /* Using phobos command without force attribute */
     rc = phobos_admin_clean_locks(adm, false, false, DSS_NONE,

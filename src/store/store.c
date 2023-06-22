@@ -64,11 +64,7 @@ enum pho_cfg_params_store {
 };
 
 const struct pho_config_item cfg_store[] = {
-    [PHO_CFG_STORE_lrs_socket] = {
-        .section = "lrs",
-        .name    = "server_socket",
-        .value   = "/tmp/socklrs"
-    },
+    [PHO_CFG_STORE_lrs_socket] = LRS_SOCKET_CFG_ITEM,
 };
 
 /**

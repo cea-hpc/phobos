@@ -29,6 +29,16 @@
 
 #include "pho_types.h"
 
+#define LRS_SOCKET_CFG_ITEM {.section = "lrs", \
+                             .name = "server_socket", \
+                             .value = "/tmp/socklrs"}
+#define TLC_HOSTNAME_CFG_ITEM {.section = "tlc", \
+                               .name = "hostname", \
+                               .value = "localhost"}
+#define TLC_PORT_CFG_ITEM {.section = "tlc", \
+                           .name = "port", \
+                           .value = "20123"}
+
 /**
  * Address of an AF_UNIX or AF_INET socket
  */

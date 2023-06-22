@@ -48,33 +48,37 @@ def string_list2c_array(l, getter):
 class AdminHandle(Structure): # pylint: disable=too-few-public-methods
     """Admin handler"""
     _fields_ = [
-        ('comm', CommInfo),
+        ('phobosd_comm', CommInfo),
+        ('tlc_comm', CommInfo),
         ('dss', DSSHandle),
-        ('daemon_is_online', c_int),
+        ('phobosd_is_online', c_int),
     ]
 
 class Client(object):
     """Wrapper on the phobos admin client"""
-    def __init__(self, lrs_required=True):
+    def __init__(self, lrs_required=True, tlc_required=False):
         super(Client, self).__init__()
         self.lrs_required = lrs_required
+        self.tlc_required = tlc_required
         self.handle = None
 
     def __enter__(self):
-        self.init(self.lrs_required)
+        self.init(self.lrs_required, self.tlc_required)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.fini()
 
-    def init(self, lrs_required):
+    def init(self, lrs_required, tlc_required):
         """Admin client initialization."""
         if self.handle is not None:
             self.fini()
 
         self.handle = AdminHandle()
 
-        rc = LIBPHOBOS_ADMIN.phobos_admin_init(byref(self.handle), lrs_required)
+        rc = LIBPHOBOS_ADMIN.phobos_admin_init(byref(self.handle),
+                                               lrs_required,
+                                               tlc_required)
         if rc:
             raise EnvironmentError(rc, 'Admin initialization failed')
 
@@ -190,12 +194,19 @@ class Client(object):
             raise EnvironmentError(rc,
                                    "Failed to update scheduler configuration")
 
-    def ping(self):
-        """Ping the phobos daemon."""
-        rc = LIBPHOBOS_ADMIN.phobos_admin_ping(byref(self.handle))
+    def ping_lrs(self):
+        """Ping the LRS daemon."""
+        rc = LIBPHOBOS_ADMIN.phobos_admin_ping_lrs(byref(self.handle))
 
         if rc:
             raise EnvironmentError(rc, "Failed to ping phobosd")
+
+    def ping_tlc(self):
+        """Ping the TLC daemon."""
+        rc = LIBPHOBOS_ADMIN.phobos_admin_ping_tlc(byref(self.handle))
+
+        if rc:
+            raise EnvironmentError(rc, "Failed to ping TLC")
 
     def device_lock(self, dev_family, dev_names, is_forced):
         """Wrapper for the device lock command."""

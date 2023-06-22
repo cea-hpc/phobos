@@ -1538,10 +1538,36 @@ class MediaOptHandler(BaseResourceOptHandler):
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
+class PhobosdPingOptHandler(BaseOptHandler):
+    """Phobosd ping"""
+    label = 'phobosd'
+    descr = 'ping local phobosd process'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+class TLCPingOptHandler(BaseOptHandler):
+    """TLC ping"""
+    label = 'tlc'
+    descr = 'ping the Tape Library Controler'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
 class PingOptHandler(BaseOptHandler):
     """Ping phobos daemon"""
     label = 'ping'
     descr = 'ping the phobos daemon'
+    verbs = [
+        PhobosdPingOptHandler,
+        TLCPingOptHandler,
+    ]
 
     @classmethod
     def add_options(cls, parser):
@@ -1555,17 +1581,29 @@ class PingOptHandler(BaseOptHandler):
     def __exit__(self, exc_type, exc_value, traceback):
         pass
 
-    def exec_ping(self):
-        """Ping the daemon to check if it is online."""
+    def exec_phobosd(self):
+        """Ping the lrs daemon to check if it is online."""
         try:
             with AdminClient(lrs_required=True) as adm:
-                adm.ping()
+                adm.ping_lrs()
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
-        self.logger.info("Ping sent to daemon successfully")
+        self.logger.info("Ping sent to phobosd successfully")
+
+    def exec_tlc(self):
+        """Ping the TLC daemon to check if it is online."""
+        try:
+            with AdminClient(lrs_required=False, tlc_required=True) as adm:
+                adm.ping_tlc()
+
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
+        self.logger.info("Ping sent to TLC successfully")
 
 class DirOptHandler(MediaOptHandler):
     """Directory-related options and actions."""

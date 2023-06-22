@@ -34,9 +34,12 @@
  * Phobos admin handle.
  */
 struct admin_handle {
-    struct pho_comm_info comm;      /**< Communication socket info. */
+    struct pho_comm_info phobosd_comm;  /**< Phobosd Communication socket
+                                          *   info.
+                                          */
+    struct pho_comm_info tlc_comm;  /**< TLC Communication socket info. */
     struct dss_handle dss;          /**< DSS handle, configured from conf. */
-    bool daemon_is_online;          /**< True if phobosd is online. */
+    bool phobosd_is_online;         /**< True if phobosd is online. */
 };
 
 /**
@@ -56,6 +59,7 @@ void phobos_admin_fini(struct admin_handle *adm);
  *
  * \param[out]      adm             Admin handler.
  * \param[in]       lrs_required    True if the LRS is required.
+ * \param[in]       tlc_required    True if the TLC is required.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
@@ -63,7 +67,8 @@ void phobos_admin_fini(struct admin_handle *adm);
  * This must be called using the following order:
  *   phobos_init -> phobos_admin_init -> ... -> phobos_admin_fini -> phobos_fini
  */
-int phobos_admin_init(struct admin_handle *adm, bool lrs_required);
+int phobos_admin_init(struct admin_handle *adm, bool lrs_required,
+                      bool tlc_required);
 
 /**
  * Add the given devices to the database and inform the LRS that it needs to
@@ -243,7 +248,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
                         bool unlock, bool force);
 
 /*
- * Ping the daemon to check if it is online or not.
+ * Ping the lrs phobosd daemon to check if it is online or not.
  *
  * \param[in]       adm             Admin module handler.
  *
@@ -252,7 +257,19 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
  *
  * This must be called with an admin_handle initialized with phobos_admin_init.
  */
-int phobos_admin_ping(struct admin_handle *adm);
+int phobos_admin_ping_lrs(struct admin_handle *adm);
+
+/*
+ * Ping the TLC daemon to check if it is online or not.
+ *
+ * \param[in]       adm             Admin module handler.
+ *
+ * \return                          0     on success,
+ *                                 -errno on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
+ */
+int phobos_admin_ping_tlc(struct admin_handle *adm);
 
 /**
  * Retrieve layouts of objects whose IDs match the given name or pattern.
