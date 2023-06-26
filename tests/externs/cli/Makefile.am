@@ -53,6 +53,7 @@ check_SCRIPTS=acceptance.test \
               test_ldm.sh \
               test_locate.test \
               test_lock_clean.sh \
+              test_logs.test \
               test_lrs.sh \
               test_lrs_drive_status.sh \
               test_lrs_scheduling.test \

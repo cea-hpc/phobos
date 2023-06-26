@@ -1,0 +1,94 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2023 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for SCSI logging
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+if [[ ! -w /dev/changer ]]; then
+    skip
+fi
+
+function setup
+{
+    export PHOBOS_STORE_default_family="tape"
+
+    drain_all_drives
+    setup_tables
+    invoke_lrs
+}
+
+function cleanup
+{
+    waive_lrs
+    drop_tables
+    drain_all_drives
+}
+
+function test_put_logs
+{
+    local lto6_tape=$(get_tapes L6 1)
+    local lto6_drive=$(get_lto_drives 6 1)
+
+    $phobos drive add --unlock $lto6_drive ||
+        error "Drive $lto6_drive should have been added"
+
+    $phobos tape add -t lto6 $lto6_tape ||
+        error "Tape $lto6_tape should have been added"
+
+    $phobos tape format --unlock $lto6_tape ||
+        error "Tape $lto6_tape should have been formated"
+
+    local psql_output=$($PSQL -t -c "SELECT COUNT(*) FROM logs;")
+
+    psql_output=$(echo "$psql_output" | xargs)
+    local psql_lines=$(echo "$psql_output" | wc -l)
+
+    if (( psql_lines != 1 )); then
+        error "Only one log should have been recorded"
+    fi
+
+    lto6_drive=$($phobos drive list -o name "$lto6_drive")
+
+    local psql_output=$($PSQL -t -c "SELECT COUNT(*) FROM logs WHERE
+                            device = '${lto6_drive}' AND
+                            medium = '${lto6_tape}' AND
+                            cause = 'device_load';")
+
+    psql_output=$(echo "$psql_output" | xargs)
+    psql_lines=$(echo "$psql_output" | wc -l)
+
+    if (( psql_lines != 1 )); then
+        error "A 'device_load' log concerning '$lto6_drive' and '$lto6_tape'" \
+              "should have been recorded"
+    fi
+}
+
+TEST_CLEANUP=cleanup
+TEST_SETUP=setup
+
+TESTS=("test_put_logs")
