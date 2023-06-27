@@ -708,7 +708,6 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
     }
 }
 
-/* If the protocol version is greater than 127, need to increase  */
 int pho_srl_request_pack(pho_req_t *req, struct pho_buff *buf)
 {
     buf->size = pho_request__get_packed_size(req) + PHO_PROTOCOL_VERSION_SIZE;

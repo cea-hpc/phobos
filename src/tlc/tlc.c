@@ -35,7 +35,7 @@
 #include "pho_comm.h"
 #include "pho_common.h"
 #include "pho_daemon.h"
-#include "pho_srl_lrs.h"
+#include "pho_srl_tlc.h"
 
 #include "tlc_cfg.h"
 
@@ -83,17 +83,25 @@ static void tlc_fini(struct tlc *tlc)
         pho_error(rc, "Error on closing the TLC socket");
 }
 
-static void process_ping_request(struct tlc *tlc, pho_req_t *req,
+static int process_ping_request(struct tlc *tlc, pho_tlc_req_t *req,
                                  int client_socket)
 {
     struct pho_comm_data msg;
-    pho_resp_t resp;
+    pho_tlc_resp_t resp;
     int rc;
 
-    pho_srl_response_ping_alloc(&resp);
-    resp.req_id = req->id;
+    rc = pho_srl_tlc_response_ping_alloc(&resp);
+    if (rc)
+        LOG_GOTO(out, rc, "TLC unable to alloc ping response");
 
-    rc = pho_srl_response_pack(&resp, &msg.buf);
+    resp.req_id = req->id;
+    /**
+     *  TRUE LIBRARY PING, processed by TLC dispatcher,
+     *  WILL COME IN A NEXT PATCH.
+     */
+    resp.ping->library_is_up = true;
+
+    rc = pho_srl_tlc_response_pack(&resp, &msg.buf);
     if (rc)
         LOG_GOTO(out, rc, "TLC ping response cannot be packed");
 
@@ -104,7 +112,8 @@ static void process_ping_request(struct tlc *tlc, pho_req_t *req,
 
     free(msg.buf.buff);
 out:
-    pho_srl_response_free(&resp, false);
+    pho_srl_tlc_response_free(&resp, false);
+    return rc;
 }
 
 static int recv_work(struct tlc *tlc)
@@ -123,25 +132,25 @@ static int recv_work(struct tlc *tlc)
     }
 
     for (i = 0; i < n_data; i++) {
-        pho_req_t *req;
+        pho_tlc_req_t *req;
 
         if (data[i].buf.size == -1) /* close notification, ignore */
             continue;
 
-        req = pho_srl_request_unpack(&data[i].buf);
+        req = pho_srl_tlc_request_unpack(&data[i].buf);
         if (!req)
             continue;
 
-        if (pho_request_is_ping(req)) {
+        if (pho_tlc_request_is_ping(req)) {
             process_ping_request(tlc, req, data[i].fd);
             goto out_request;
         }
 
 out_request:
-        pho_srl_request_free(req, true);
+        pho_srl_tlc_request_free(req, true);
     }
 
-    return 0;
+    return rc;
 }
 
 int main(int argc, char **argv)

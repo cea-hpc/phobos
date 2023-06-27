@@ -263,13 +263,15 @@ int phobos_admin_ping_lrs(struct admin_handle *adm);
  * Ping the TLC daemon to check if it is online or not.
  *
  * \param[in]       adm             Admin module handler.
+ * \param[out]      library_is_up   Set to true if TLC successfully requests the
+ *                                  library, set to false otherwise.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
  *
  * This must be called with an admin_handle initialized with phobos_admin_init.
  */
-int phobos_admin_ping_tlc(struct admin_handle *adm);
+int phobos_admin_ping_tlc(struct admin_handle *adm, bool *library_is_up);
 
 /**
  * Retrieve layouts of objects whose IDs match the given name or pattern.

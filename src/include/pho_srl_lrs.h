@@ -508,8 +508,8 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack);
 /**
  * Serialization of a request.
  *
- * The allocation of the buffer is made in this function. Its release is made
- * when calling pho_srl_request_unpack(buf).
+ * The allocation of the buffer is made in this function. buf->buff must be
+ * freed after calling this function.
  *
  * \param[in]       req         Request data structure.
  * \param[out]      buf         Serialized buffer data structure.
@@ -533,11 +533,10 @@ pho_req_t *pho_srl_request_unpack(struct pho_buff *buf);
 /**
  * Serialization of a response.
  *
- * The allocation of the buffer is made in this function. Its release is made
- * when calling pho_srl_response_unpack(buf).
+ * The allocation of the buffer is made in this function.
  *
  * \param[in]       resp        Response data structure.
- * \param[out]      buf         [output] Serialized buffer data structure.
+ * \param[out]      buf         Serialized buffer data structure.
  *
  * \return                      0 on success, -ENOMEM on failure.
  */

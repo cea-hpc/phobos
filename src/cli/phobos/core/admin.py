@@ -27,7 +27,7 @@ import errno
 import json
 
 from ctypes import (addressof, byref, c_int, c_char_p, c_void_p, cast, pointer,
-                    POINTER, Structure, c_size_t)
+                    POINTER, Structure, c_size_t, c_bool)
 
 from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-name-in-module
                                PHO_FS_RADOS, PHO_RSC_DIR,
@@ -203,10 +203,16 @@ class Client(object):
 
     def ping_tlc(self):
         """Ping the TLC daemon."""
-        rc = LIBPHOBOS_ADMIN.phobos_admin_ping_tlc(byref(self.handle))
+        library_is_up = c_bool(False)
+        rc = LIBPHOBOS_ADMIN.phobos_admin_ping_tlc(byref(self.handle),
+                                                   byref(library_is_up))
 
         if rc:
             raise EnvironmentError(rc, "Failed to ping TLC")
+
+        if not library_is_up:
+            raise EnvironmentError(errno.ENODEV,
+                                   "TLC is up but cannot access the Library")
 
     def device_lock(self, dev_family, dev_names, is_forced):
         """Wrapper for the device lock command."""

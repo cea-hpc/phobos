@@ -1,0 +1,50 @@
+/* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+ * vim:expandtab:shiftwidth=4:tabstop=4:
+ */
+/*
+ *  All rights reserved (c) 2014-2023 CEA/DAM.
+ *
+ *  This file is part of Phobos.
+ *
+ *  Phobos is free software: you can redistribute it and/or modify it under
+ *  the terms of the GNU Lesser General Public License as published by
+ *  the Free Software Foundation, either version 2.1 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Phobos is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Lesser General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Lesser General Public License
+ *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+ */
+/**
+ * \brief   Protobuf file for TLC request/reply protocol.
+ */
+
+syntax = "proto2";
+
+/** TLC protocol request, emitted by layout modules. */
+message PhoTlcRequest {
+    required uint32 id  = 1;    // Request ID to match its future
+                                // response.
+
+    optional bool ping  = 2;    // Is the request a ping request ?
+
+}
+
+/** TLC protocol response, emitted by the TLC. */
+message PhoTlcResponse {
+    /** Body of the ping response. */
+    message Ping {
+        required bool library_is_up = 1; // True if the TLC could successfully
+                                         // contact the library. False,
+                                         // otherwise
+    }
+
+    required uint32 req_id  = 1;    // Request ID, to be matched with
+                                    // the corresponding request.
+
+    optional Ping ping      = 2;    // Ping body
+}

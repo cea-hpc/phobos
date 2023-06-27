@@ -40,6 +40,7 @@
 #include "pho_dss.h"
 #include "pho_ldm.h"
 #include "pho_srl_lrs.h"
+#include "pho_srl_tlc.h"
 #include "pho_types.h"
 #include "pho_type_utils.h"
 #include "admin_utils.h"
@@ -64,27 +65,37 @@ const struct pho_config_item cfg_admin[] = {
 /* ****************************************************************************/
 /* Static Communication-related Functions *************************************/
 /* ****************************************************************************/
-
-static int _send(struct pho_comm_info *comm, pho_req_t *req)
+static int _send(struct pho_comm_info *comm, struct proto_req proto_req)
 {
     struct pho_comm_data data_out;
     int rc;
 
     data_out = pho_comm_data_init(comm);
-    rc = pho_srl_request_pack(req, &data_out.buf);
-    pho_srl_request_free(req, false);
-    if (rc)
-        LOG_RETURN(rc, "Cannot serialize request");
+    if (proto_req.type == LRS_REQUEST) {
+        rc = pho_srl_request_pack(proto_req.msg.lrs_req, &data_out.buf);
+        pho_srl_request_free(proto_req.msg.lrs_req, false);
+        if (rc)
+            LOG_RETURN(rc, "Cannot serialize LRS request");
+    } else if (proto_req.type == TLC_REQUEST) {
+        rc = pho_srl_tlc_request_pack(proto_req.msg.tlc_req, &data_out.buf);
+        pho_srl_tlc_request_free(proto_req.msg.tlc_req, false);
+        if (rc)
+            LOG_RETURN(rc, "Cannot serialize TLC request");
+    } else {
+        LOG_RETURN(-EINVAL,
+                   "Admin module must only send LRS or TLC request");
+    }
 
     rc = pho_comm_send(&data_out);
     free(data_out.buf.buff);
     if (rc)
-        LOG_RETURN(rc, "Cannot send request to LRS");
+        LOG_RETURN(rc, "Cannot send request to %s",
+                   request_type2str(proto_req.type));
 
     return 0;
 }
 
-static int _receive(struct pho_comm_info *comm, pho_resp_t **resp)
+static int _receive(struct pho_comm_info *comm, struct proto_resp *proto_resp)
 {
     struct pho_comm_data *data_in = NULL;
     int n_data_in = 0;
@@ -97,30 +108,46 @@ static int _receive(struct pho_comm_info *comm, pho_resp_t **resp)
 
         free(data_in);
         if (rc)
-            LOG_RETURN(rc, "Cannot receive responses from LRS");
+            LOG_RETURN(rc, "Cannot receive responses from %s",
+                       request_type2str(proto_resp->type));
         else
-            LOG_RETURN(-EINVAL, "Received %d responses (expected 1)",
-                       n_data_in);
+            LOG_RETURN(-EINVAL, "Received %d responses (expected 1) from %s",
+                       n_data_in, request_type2str(proto_resp->type));
     }
 
-    *resp = pho_srl_response_unpack(&data_in->buf);
-    free(data_in);
-    if (!*resp)
-        LOG_RETURN(-EINVAL, "The received response cannot be deserialized");
+    switch (proto_resp->type) {
+    case LRS_REQUEST:
+        proto_resp->msg.lrs_resp = pho_srl_response_unpack(&data_in->buf);
+        if (!proto_resp->msg.lrs_resp)
+            LOG_GOTO(out, rc = -EINVAL,
+                     "The received LRS response cannot be deserialized");
+        break;
+    case TLC_REQUEST:
+        proto_resp->msg.tlc_resp = pho_srl_tlc_response_unpack(&data_in->buf);
+        if (!proto_resp->msg.tlc_resp)
+            LOG_GOTO(out, rc = -EINVAL,
+                     "The received TLC response cannot be deserialized");
+        break;
+    default:
+        LOG_GOTO(out, rc = -EINVAL,
+                 "Admin module must only receive LRS or TLC response");
+    }
 
-    return 0;
+out:
+    free(data_in);
+    return rc;
 }
 
-int _send_and_receive(struct pho_comm_info *comm, pho_req_t *req,
-                      pho_resp_t **resp)
+int _send_and_receive(struct pho_comm_info *comm, struct proto_req proto_req,
+                      struct proto_resp *proto_resp)
 {
     int rc;
 
-    rc = _send(comm, req);
+    rc = _send(comm, proto_req);
     if (rc)
         return rc;
 
-    rc = _receive(comm, resp);
+    rc = _receive(comm, proto_resp);
 
     return rc;
 }
@@ -128,11 +155,14 @@ int _send_and_receive(struct pho_comm_info *comm, pho_req_t *req,
 static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
                          enum notify_op op, bool need_to_wait)
 {
-    pho_resp_t *resp;
+    struct proto_resp proto_resp = {LRS_REQUEST};
+    struct proto_req proto_req = {LRS_REQUEST};
+    pho_resp_t *resp = NULL;
     pho_req_t req;
     int rid = 1;
     int rc;
 
+    proto_req.msg.lrs_req = &req;
     if (op <= PHO_NTFY_OP_INVAL || op >= PHO_NTFY_OP_LAST)
         LOG_RETURN(-ENOTSUP, "Operation not supported");
 
@@ -146,17 +176,18 @@ static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
     req.notify->rsrc_id->name = strdup(id->name);
     req.notify->wait = need_to_wait;
 
-    rc = _send(&adm->phobosd_comm, &req);
+    rc = _send(&adm->phobosd_comm, proto_req);
     if (rc)
         LOG_RETURN(rc, "Error with phobosd communication");
 
     if (!need_to_wait)
         return rc;
 
-    rc = _receive(&adm->phobosd_comm, &resp);
+    rc = _receive(&adm->phobosd_comm, &proto_resp);
     if (rc)
         LOG_RETURN(rc, "Error with phobosd communication");
 
+    resp = proto_resp.msg.lrs_resp;
     if (pho_response_is_notify(resp)) {
         if (resp->req_id == rid &&
             (int) id->family == (int) resp->notify->rsrc_id->family &&
@@ -551,10 +582,13 @@ static int send_configure(struct admin_handle *adm,
                           char *configuration,
                           const char **res)
 {
+    struct proto_resp proto_resp = {LRS_REQUEST};
+    struct proto_req proto_req = {LRS_REQUEST};
     pho_resp_t *resp;
     pho_req_t req;
     int rc;
 
+    proto_req.msg.lrs_req = &req;
     rc = pho_srl_request_configure_alloc(&req);
     if (rc)
         LOG_RETURN(rc, "Cannot create configure request");
@@ -563,15 +597,16 @@ static int send_configure(struct admin_handle *adm,
     req.configure->op = op;
     req.configure->configuration = configuration;
 
-    rc = _send(&adm->phobosd_comm, &req);
+    rc = _send(&adm->phobosd_comm, proto_req);
     if (rc)
         LOG_GOTO(free_req, rc, "Failed to send configure request to phobosd");
 
-    rc = _receive(&adm->phobosd_comm, &resp);
+    rc = _receive(&adm->phobosd_comm, &proto_resp);
     if (rc)
         LOG_GOTO(free_req, rc,
                  "Failed to receive configure response from phobosd");
 
+    resp = proto_resp.msg.lrs_resp;
     if (pho_response_is_error(resp)) {
         rc = resp->error->rc;
         pho_error(rc, "Received error response to configure request");
@@ -851,10 +886,13 @@ int phobos_admin_device_status(struct admin_handle *adm,
                                enum rsc_family family,
                                char **status)
 {
+    struct proto_resp proto_resp = {LRS_REQUEST};
+    struct proto_req proto_req = {LRS_REQUEST};
     pho_resp_t *resp = NULL;
     pho_req_t req;
     int rc;
 
+    proto_req.msg.lrs_req = &req;
     if (family < 0 || family >= PHO_RSC_LAST)
         LOG_RETURN(-EINVAL, "Invalid family %d", family);
 
@@ -865,10 +903,11 @@ int phobos_admin_device_status(struct admin_handle *adm,
     req.id = 0;
     req.monitor->family = family;
 
-    rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
+    rc = _send_and_receive(&adm->phobosd_comm, proto_req, &proto_resp);
     if (rc)
         return rc;
 
+    resp = proto_resp.msg.lrs_resp;
     if (pho_response_is_monitor(resp)) {
         *status = strdup(resp->monitor->status);
         if (!*status)
@@ -975,13 +1014,15 @@ static int receive_format_response(struct admin_handle *adm,
                                    bool *awaiting_resps,
                                    int n_ids)
 {
+    struct proto_resp proto_resp = {LRS_REQUEST};
     pho_resp_t *resp;
     int rc = 0;
 
-    rc = _receive(&adm->phobosd_comm, &resp);
+    rc = _receive(&adm->phobosd_comm, &proto_resp);
     if (rc)
         return rc;
 
+    resp = proto_resp.msg.lrs_resp;
     if (pho_response_is_format(resp)) {
         if (awaiting_resps[resp->req_id] == false)
             LOG_GOTO(out, -EPROTO,
@@ -1034,6 +1075,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
                         int n_ids, int nb_streams, enum fs_type fs, bool unlock,
                         bool force)
 {
+    struct proto_req proto_req = {LRS_REQUEST};
     int n_rq_to_recv = 0;
     bool *awaiting_resps;
     pho_req_t req;
@@ -1041,6 +1083,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
     int rc2;
     int i;
 
+    proto_req.msg.lrs_req = &req;
     /* TODO? This will be removed once the API use unsigned instead of signed
      * integers.
      */
@@ -1086,7 +1129,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
 
         req.id = i;
 
-        rc2 = _send(&adm->phobosd_comm, &req);
+        rc2 = _send(&adm->phobosd_comm, proto_req);
         if (rc2) {
             rc = rc ? : rc2;
             pho_error(rc2, "Failed to send format request for medium '%s', "
@@ -1133,21 +1176,25 @@ req_fail:
 
 int phobos_admin_ping_lrs(struct admin_handle *adm)
 {
+    struct proto_resp proto_resp = {LRS_REQUEST};
+    struct proto_req proto_req = {LRS_REQUEST};
     pho_resp_t *resp;
     pho_req_t req;
     int rid = 1;
     int rc;
 
+    proto_req.msg.lrs_req = &req;
     rc = pho_srl_request_ping_alloc(&req);
     if (rc)
         LOG_RETURN(rc, "Cannot create LRS ping request");
 
     req.id = rid;
 
-    rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
+    rc = _send_and_receive(&adm->phobosd_comm, proto_req, &proto_resp);
     if (rc)
         LOG_RETURN(rc, "Error with phobosd communication");
 
+    resp = proto_resp.msg.lrs_resp;
     /* expect ping response, send error otherwise */
     if (!(pho_response_is_ping(resp) && resp->req_id == rid))
         pho_error(rc = -EBADMSG, "Bad response from phobosd");
@@ -1157,30 +1204,33 @@ int phobos_admin_ping_lrs(struct admin_handle *adm)
     return rc;
 }
 
-int phobos_admin_ping_tlc(struct admin_handle *adm)
+int phobos_admin_ping_tlc(struct admin_handle *adm, bool *library_is_up)
 {
-    pho_resp_t *resp;
-    pho_req_t req;
+    struct proto_resp proto_resp = {TLC_REQUEST};
+    struct proto_req proto_req = {TLC_REQUEST};
+    pho_tlc_resp_t *resp;
+    pho_tlc_req_t req;
     int rid = 1;
     int rc;
 
-    rc = pho_srl_request_ping_alloc(&req);
-    if (rc)
-        LOG_RETURN(rc, "Cannot create TLC ping request");
-
+    proto_req.msg.tlc_req = &req;
+    pho_srl_tlc_request_ping_alloc(&req);
     req.id = rid;
 
-    rc = _send_and_receive(&adm->tlc_comm, &req, &resp);
+    rc = _send_and_receive(&adm->tlc_comm, proto_req, &proto_resp);
     if (rc) {
         pho_verb("Error with TLC communication : %d , %s", rc, strerror(-rc));
         return rc;
     }
 
-    /* expect ping response, send error otherwise */
-    if (!(pho_response_is_ping(resp) && resp->req_id == rid))
+    resp = proto_resp.msg.tlc_resp;
+    /* expect ping response and set library_is_up, send error otherwise */
+    if (!(pho_tlc_response_is_ping(resp) && resp->req_id == rid))
         pho_error(rc = -EBADMSG, "Bad response from TLC");
+    else
+        *library_is_up = resp->ping->library_is_up;
 
-    pho_srl_response_free(resp, false);
+    pho_srl_tlc_response_free(resp, false);
 
     return rc;
 }

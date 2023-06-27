@@ -8,5 +8,5 @@ tlc_LDADD=../cfg/libpho_cfg.la \
           ../common/libpho_common.la \
           ../communication/libpho_comm.la \
           ../daemon/libpho_daemon.la \
-          ../serializer/libpho_serializer.la
+          ../serializer/libpho_serializer_tlc.la
 tlc_LDFLAGS=-Wl,-rpath=$(libdir) -Wl,-rpath=$(pkglibdir)
