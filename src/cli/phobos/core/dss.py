@@ -31,10 +31,8 @@ from ctypes import byref, c_int, c_void_p, POINTER, Structure
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 from phobos.core.const import (DSS_SET_DELETE, DSS_SET_INSERT, DSS_SET_UPDATE, # pylint: disable=no-name-in-module
-                               DSS_MEDIA, PHO_ADDR_HASH1, PHO_ADDR_PATH,
-                               PHO_FS_RADOS, str2fs_type)
-from phobos.core.ffi import (DevInfo, MediaInfo, MediaStats, LIBPHOBOS,
-                             OperationFlags)
+                               DSS_MEDIA)
+from phobos.core.ffi import (DevInfo, MediaInfo, LIBPHOBOS)
 
 # Valid filter suffix and associated operators.
 FILTER_OPERATORS = (
@@ -206,9 +204,6 @@ class DeviceManager(BaseEntityManager):
     wrapped_class = DevInfo
     wrapped_ident = 'device'
 
-    def __init__(self, client, *args, **kwargs):
-        super(DeviceManager, self).__init__(client, *args, **kwargs)
-
     def _dss_get(self, hdl, qry_filter, res, res_cnt):
         """Invoke device-specific DSS get method."""
         return LIBPHOBOS.dss_device_get(hdl, qry_filter, res, res_cnt)
@@ -217,9 +212,6 @@ class MediaManager(BaseEntityManager):
     """Proxy to manipulate media."""
     wrapped_class = MediaInfo
     wrapped_ident = 'media'
-
-    def __init__(self, client, *args, **kwargs):
-        super(MediaManager, self).__init__(client, *args, **kwargs)
 
     def _dss_get(self, hdl, qry_filter, res, res_cnt):
         """Invoke media-specific DSS get method."""
@@ -273,22 +265,6 @@ class MediaManager(BaseEntityManager):
                              obj_array, obj_count)
         if rc:
             raise EnvironmentError(rc, err_message)
-
-    def add(self, media, fstype, tags=None):
-        """Insert media into DSS."""
-        media.fs.type = str2fs_type(fstype)
-        media.addr_type = (PHO_ADDR_PATH if media.fs.type == PHO_FS_RADOS
-                           else PHO_ADDR_HASH1)
-        media.tags = tags or []
-
-        media.stats = MediaStats()
-        media.flags = OperationFlags()
-
-        self.insert([media])
-
-        self.logger.debug("Media '%s' successfully added: "\
-                          "model=%s fs=%s (%s)",
-                          media.name, media.model, fstype, media.adm_status)
 
     def remove(self, family, name):
         """Delete media from DSS."""

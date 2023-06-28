@@ -368,6 +368,37 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
                              char **lock_ids, int n_ids);
 
 /**
+ * Adds a list of media into the DSS with the "blank" fs_status
+ *
+ * @param[in]  adm          Admin handle.
+ * @param[in]  med_ls       List of media to add.
+ * @param[in]  med_cnt      Number of media to add.
+ *
+ * @return                  0 on success
+ *                          -errno on failure
+ */
+int phobos_admin_media_add(struct admin_handle *adm, struct media_info *med_ls,
+                           int med_cnt);
+
+/**
+ * Imports non-empty media into the DSS without formatting them thus preserving
+ * the data on the device.
+ *
+ * @param[in]  adm          Admin handle.
+ * @param[in]  med_ls       List of media to import.
+ * @param[in]  n_ids        Number of media to import.
+ * @param[in]  check_hash   Bool parameter to indicate if hashs must be
+ *                          recalculated and compared with the hashs from
+ *                          the extended attributes of the file.
+ *
+ * @return                  0 on success
+ *                          -errno on failure
+ */
+int phobos_admin_media_import(struct admin_handle *adm,
+                              struct media_info *med_ls, int med_cnt,
+                              bool check_hash);
+
+/**
  * Open and scan a library, and generate a json array with unstructured
  * information. Output information may vary, depending on the library.
  *

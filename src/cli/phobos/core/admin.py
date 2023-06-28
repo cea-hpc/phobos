@@ -33,11 +33,14 @@ from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-n
                                PHO_FS_RADOS, PHO_RSC_DIR,
                                PHO_RSC_TAPE, PHO_RSC_RADOS_POOL,
                                PHO_RSC_NONE, DSS_NONE,
-                               str2rsc_family, str2dss_type)
+                               str2rsc_family, str2dss_type,
+                               PHO_ADDR_HASH1, PHO_ADDR_PATH,
+                               str2fs_type)
 from phobos.core.glue import admin_device_status, jansson_dumps  # pylint: disable=no-name-in-module
 from phobos.core.dss import DSSHandle
-from phobos.core.ffi import (CommInfo, LayoutInfo, LIBPHOBOS_ADMIN,
-                             Id, LibDrvInfo, LIBPHOBOS)
+from phobos.core.ffi import (CommInfo, LayoutInfo, LIBPHOBOS_ADMIN, MediaInfo,
+                             MediaStats, OperationFlags, Id, LibDrvInfo,
+                             LIBPHOBOS)
 
 def string_list2c_array(str_list, getter):
     """Convert a Python list into a C list. A getter can be used to select
@@ -54,6 +57,15 @@ class AdminHandle(Structure): # pylint: disable=too-few-public-methods
         ('dss', DSSHandle),
         ('phobosd_is_online', c_int),
     ]
+
+def init_medium(media, fstype, tags):
+    """Initialize a medium with given fstype and tags"""
+    media.fs.type = str2fs_type(fstype)
+    media.addr_type = (PHO_ADDR_PATH if fstype == PHO_FS_RADOS
+                       else PHO_ADDR_HASH1)
+    media.stats = MediaStats()
+    media.flags = OperationFlags()
+    media.tags = tags if tags else []
 
 class Client: # pylint: disable=too-many-public-methods
     """Wrapper on the phobos admin client"""
@@ -322,6 +334,34 @@ class Client: # pylint: disable=too-many-public-methods
 
         if rc:
             raise EnvironmentError(rc, "Failed to clean lock(s)")
+
+    def medium_add(self, media, fstype, tags=None):
+        """Add a new medium"""
+        for med in media:
+            init_medium(med, fstype, tags)
+
+        c_media = MediaInfo * len(list(media))
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_media_add(byref(self.handle),
+                                                    c_media(*media),
+                                                    len(list(media)))
+        if rc:
+            raise EnvironmentError(rc, "Failed to add media")
+
+    def medium_import(self, fstype, media, check_hash, tags=None):
+        """Import a new medium"""
+        for med in media:
+            init_medium(med, fstype, tags)
+
+        c_media = MediaInfo * len(list(media))
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_media_import(byref(self.handle),
+                                                       c_media(*media),
+                                                       len(list(media)),
+                                                       check_hash)
+
+        if rc:
+            raise EnvironmentError(rc, "Failed to import tape(s)")
 
     def dump_logs(self, fd, log_filter):
         """Dump all persistent logs to the given file"""

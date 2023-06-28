@@ -1003,6 +1003,35 @@ class TapeAddOptHandler(MediaAddOptHandler):
                             type=uncase_fstype(list(map(fs_type2str, FSType))),
                             help='Filesystem type (default: LTFS)')
 
+class MediumImportOptHandler(XferOptHandler):
+    """Import a medium into the system"""
+    label = 'import'
+    descr = 'import existing media'
+
+    @classmethod
+    def add_options(cls, parser):
+        super(MediumImportOptHandler, cls).add_options(parser)
+        parser.add_argument('media', nargs='+',
+                            help="name of the media to import")
+        parser.add_argument('--check-hash', action='store_true',
+                            help="recalculates hashes and compares them "
+                                 "with the hashes of the extent")
+        parser.add_argument('--unlock', action='store_true',
+                            help="unlocks the tape after the import")
+
+class TapeImportOptHandler(MediumImportOptHandler):
+    """Specific version of the 'import' command for tapes"""
+
+    @classmethod
+    def add_options(cls, parser):
+        super(TapeImportOptHandler, cls).add_options(parser)
+        parser.add_argument('-t', '--type', required=True,
+                            help='tape technology')
+        parser.add_argument('--fs', default="LTFS",
+                            choices=list(map(fs_type2str, FSType)),
+                            type=uncase_fstype(list(map(fs_type2str, FSType))),
+                            help='Filesystem type (default: LTFS)')
+
 class MediumLocateOptHandler(DSSInteractHandler):
     """Locate a medium into the system."""
     label = 'locate'
@@ -1078,7 +1107,7 @@ class DirFormatOptHandler(FormatOptHandler):
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(DirFormatOptHandler, cls).add_options(parser)
-        parser.add_argument('--fs', default='posix',
+        parser.add_argument('--fs', default='POSIX',
                             choices=list(map(fs_type2str, FSType)),
                             type=uncase_fstype(list(map(fs_type2str, FSType))),
                             help='Filesystem type')
@@ -1489,7 +1518,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         MediumLocateOptHandler
     ]
 
-    def add_medium(self, medium, tags):
+    def add_medium(self, adm, medium, tags):
         """Add media method"""
 
     def add_medium_and_device(self):
@@ -1511,7 +1540,8 @@ class MediaOptHandler(BaseResourceOptHandler):
                         medium = MediaInfo(family=self.family, name=path,
                                            model=None,
                                            is_adm_locked=keep_locked)
-                        self.add_medium(medium, tags=tags)
+
+                        self.add_medium(adm, [medium], tags)
                         medium_is_added = True
                         adm.device_add(self.family, [path], False)
                         valid_count += 1
@@ -1536,16 +1566,16 @@ class MediaOptHandler(BaseResourceOptHandler):
         tags = self.params.get('tags', [])
         keep_locked = not self.params.get('unlock')
 
-        for med in names:
-            try:
-                medium = MediaInfo(family=self.family, name=med, model=techno,
-                                   is_adm_locked=keep_locked)
-                self.client.media.add(medium, fstype, tags=tags)
-            except EnvironmentError as err:
-                self.logger.error(env_error_format(err))
-                sys.exit(abs(err.errno))
-
-        self.logger.info("Added %d media successfully", len(names))
+        media = [MediaInfo(family=self.family, name=name,
+                           model=techno, is_adm_locked=keep_locked)
+                 for name in names]
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                adm.medium_add(media, fstype, tags=tags)
+            self.logger.info("Added %d media successfully", len(names))
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
     def _media_update(self, media, fields):
         """Calling client.media.update"""
@@ -1689,6 +1719,25 @@ class MediaOptHandler(BaseResourceOptHandler):
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
+    def exec_import(self):
+        """Import a medium"""
+        media_names = NodeSet.fromlist(self.params.get('media'))
+        check_hash = self.params.get('check_hash')
+        adm_locked = not self.params.get('unlock')
+        techno = self.params.get('type', '').upper()
+        fstype = self.params.get('fs').upper()
+
+        media = (MediaInfo * len(media_names))()
+        for index, medium_name in enumerate(media_names):
+            media[index] = MediaInfo(family=self.family, name=medium_name,
+                                     model=techno, is_adm_locked=adm_locked)
+        try:
+            with AdminClient(lrs_required=True) as adm:
+                adm.medium_import(fstype, media, check_hash)
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
 class PhobosdPingOptHandler(BaseOptHandler):
     """Phobosd ping"""
     label = 'phobosd'
@@ -1772,8 +1821,8 @@ class DirOptHandler(MediaOptHandler):
         MediumLocateOptHandler,
     ]
 
-    def add_medium(self, medium, tags):
-        self.client.media.add(medium, 'POSIX', tags=tags)
+    def add_medium(self, adm, medium, tags):
+        adm.medium_add(medium, 'POSIX', tags=tags)
 
     def exec_add(self):
         """
@@ -2039,6 +2088,7 @@ class TapeOptHandler(MediaOptHandler):
         UnlockOptHandler,
         TapeSetAccessOptHandler,
         MediumLocateOptHandler,
+        TapeImportOptHandler,
     ]
 
 class RadosPoolOptHandler(MediaOptHandler):
@@ -2057,8 +2107,8 @@ class RadosPoolOptHandler(MediaOptHandler):
         MediumLocateOptHandler,
     ]
 
-    def add_medium(self, medium, tags):
-        self.client.media.add(medium, 'RADOS', tags=tags)
+    def add_medium(self, adm, medium, tags):
+        adm.medium_add(medium, 'RADOS', tags=tags)
 
     def exec_add(self):
         """

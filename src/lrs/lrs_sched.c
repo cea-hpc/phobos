@@ -1851,7 +1851,14 @@ static int skip_read_alloc_medium(int rc, struct req_container *reqc,
 static int check_medium_permission_and_status(struct req_container *reqc,
                                               struct media_info *medium)
 {
-    if (pho_request_is_read(reqc->req)) {
+    if (medium->fs.status == PHO_FS_STATUS_IMPORTING &&
+        !pho_request_is_read(reqc->req))
+        LOG_RETURN(-EINVAL,
+                   "Medium %s is being imported. Can only read from it.",
+                   medium->rsc.id.name);
+
+    if (medium->fs.status != PHO_FS_STATUS_IMPORTING &&
+        pho_request_is_read(reqc->req)) {
         if (!medium->flags.get)
             LOG_RETURN(-EPERM, "'%s' get flag is false",
                        medium->rsc.id.name);

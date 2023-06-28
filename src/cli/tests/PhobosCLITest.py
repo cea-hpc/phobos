@@ -23,7 +23,6 @@
 
 import errno
 import os
-import re
 import sys
 import tempfile
 import unittest
@@ -174,6 +173,11 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['lib', 'scan'])
         self.check_cmdline_valid(['lib', 'scan', '--refresh'])
         self.check_cmdline_valid(['lib', 'refresh'])
+        self.check_cmdline_valid(['tape', 'import', '-t', 'lto5', 'name'])
+        self.check_cmdline_valid(['tape', 'import', '-t', 'lto5', 'A', 'B',
+                                  'C'])
+        self.check_cmdline_valid(['tape', 'import', '-t', 'lto5',
+                                  '--unlock', 'A'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['get', '--version', 'nan', 'objid', 'file'],
@@ -200,9 +204,12 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['drive', 'load'], code=2)
         self.check_cmdline_exit(['drive', 'load', 'only_drive_no_tape'], code=2)
         self.check_cmdline_exit(['drive', 'unload', 'drive_serial_or_path',
-                                  'tape-label'], code=2)
+                                 'tape-label'], code=2)
+        self.check_cmdline_exit(['tape', 'import'], code=2)
+        self.check_cmdline_exit(['tape', 'import', 'A'], code=2)
 
-    def test_cli_logs_command(self):
+    def test_cli_logs_command(self): # pylint: disable=too-many-statements
+        """Check logs specific commands"""
         self.check_cmdline_valid(['logs', 'clear'])
         self.check_cmdline_valid(['logs', 'clear', '--drive', '42'])
         self.check_cmdline_valid(['logs', 'clear', '-D', '42'])
@@ -288,15 +295,16 @@ class BasicExecutionTest(unittest.TestCase):
     # Reuse configuration file from global tests
     TEST_CFG_FILE = "../../../tests/phobos.conf"
     def get_test_db_name(self):
+        """Get the test database name"""
         try:
-            ret = cfg.load_file(self.TEST_CFG_FILE)
+            cfg.load_file(self.TEST_CFG_FILE)
         except IOError as exc:
             self.fail(exc)
 
         for value in cfg.get_val("dss", "connect_string").split(' '):
-            kv = value.split('=')
-            if kv[0] == "dbname":
-                return kv[1]
+            key_value = value.split('=')
+            if key_value[0] == "dbname":
+                return key_value[1]
 
         return "phobos"
 

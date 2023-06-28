@@ -85,7 +85,7 @@ class Migrator:
         finally:
             self.conn = None
 
-    def execute(self, command, output=False):
+    def execute(self, command, output=False): # pylint: disable=inconsistent-return-statements
         """Execute a command on the database, can return the command output"""
         with self.connect(), self.conn.cursor() as cursor:
             cursor.execute(command)
@@ -498,6 +498,20 @@ class Migrator:
 
             -- delete old_operation_type type
             DROP TYPE old_operation_type;
+
+            -- new fs_status type with the 'importing' value
+            ALTER TYPE fs_status RENAME TO old_fs_status;
+            CREATE TYPE fs_status AS ENUM (
+                'blank', 'empty', 'used', 'full', 'importing'
+            );
+
+            -- use new type in media table
+            ALTER TABLE media ALTER COLUMN fs_status
+                SET DATA TYPE fs_status
+                USING fs_status::text::fs_status;
+
+            -- delete old_fs_status type
+            DROP TYPE old_fs_status;
 
             -- update current schema version
             UPDATE schema_info SET version = '2.0';

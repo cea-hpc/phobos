@@ -188,14 +188,16 @@ enum fs_status {
     PHO_FS_STATUS_EMPTY,     /**< media is formatted, no data written to it */
     PHO_FS_STATUS_USED,      /**< media contains data */
     PHO_FS_STATUS_FULL,      /**< media is full, no more data can be written */
+    PHO_FS_STATUS_IMPORTING, /**< media is being imported */
     PHO_FS_STATUS_LAST,
 };
 
 static const char * const fs_status_names[] = {
-    [PHO_FS_STATUS_BLANK] = "blank",
-    [PHO_FS_STATUS_EMPTY] = "empty",
-    [PHO_FS_STATUS_USED]  = "used",
-    [PHO_FS_STATUS_FULL]  = "full",
+    [PHO_FS_STATUS_BLANK]       = "blank",
+    [PHO_FS_STATUS_EMPTY]       = "empty",
+    [PHO_FS_STATUS_USED]        = "used",
+    [PHO_FS_STATUS_FULL]        = "full",
+    [PHO_FS_STATUS_IMPORTING]   = "importing",
 };
 
 static inline const char *fs_status2str(enum fs_status status)

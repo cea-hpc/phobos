@@ -1320,6 +1320,40 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
     return rc;
 }
 
+int phobos_admin_media_add(struct admin_handle *adm, struct media_info *med_ls,
+                           int med_cnt)
+{
+    return dss_media_set(&adm->dss, med_ls, med_cnt, DSS_SET_INSERT, 0);
+}
+
+int phobos_admin_media_import(struct admin_handle *adm,
+                              struct media_info *med_ls,
+                              int med_cnt,
+                              bool check_hash)
+{
+    int rc = 0;
+    int i;
+
+    ENTRY;
+
+    pho_debug("Options: check-hash:%s", check_hash ? "true" : "false");
+
+    for (i = 0; i < med_cnt; i++) {
+        const struct pho_id *medium = &med_ls[i].rsc.id;
+
+        med_ls[i].fs.status = PHO_FS_STATUS_IMPORTING;
+
+        pho_verb("Starting import of %s %s", rsc_family2str(medium->family),
+                 medium->name);
+
+        rc = dss_media_set(&adm->dss, med_ls + i, 1, DSS_SET_INSERT, 0);
+        if (rc)
+            LOG_RETURN(rc, "Unable to import medium %s", medium->name);
+    }
+
+    return -ENOSYS;
+}
+
 int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
                           bool refresh, json_t **lib_data)
 {

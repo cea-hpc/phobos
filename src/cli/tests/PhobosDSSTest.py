@@ -29,6 +29,7 @@ from random import randint
 from phobos.core.dss import Client
 from phobos.core.ffi import MediaInfo
 from phobos.core.const import PHO_RSC_DIR, PHO_RSC_TAPE, rsc_family2str # pylint: disable=no-name-in-module
+from phobos.core.admin import Client as AdminClient
 
 
 class DSSClientTest(unittest.TestCase):
@@ -72,22 +73,24 @@ class DSSClientTest(unittest.TestCase):
 
     def test_list_media_by_tags(self):
         """List media with tags."""
-        with Client() as client:
+        with AdminClient(lrs_required=False) as admclient:
             blank_medium = MediaInfo(family=PHO_RSC_DIR, name='m0', model=None)
-            client.media.add(blank_medium, 'POSIX')
+            admclient.medium_add([blank_medium], 'POSIX')
             blank_medium.name = 'm1'
-            client.media.add(blank_medium, 'POSIX', tags=['foo'])
+            admclient.medium_add([blank_medium], 'POSIX', tags=['foo'])
             blank_medium.name = 'm2'
-            client.media.add(blank_medium, 'POSIX', tags=['foo', 'bar'])
+            admclient.medium_add([blank_medium], 'POSIX', tags=['foo', 'bar'])
             blank_medium.name = 'm3'
-            client.media.add(blank_medium, 'POSIX', tags=['goo', 'foo'])
+            admclient.medium_add([blank_medium], 'POSIX', tags=['goo', 'foo'])
             blank_medium.name = 'm4'
-            client.media.add(blank_medium, 'POSIX', tags=['bar', 'goo'])
+            admclient.medium_add([blank_medium], 'POSIX', tags=['bar', 'goo'])
             blank_medium.name = 'm5'
-            client.media.add(blank_medium, 'POSIX', tags=['foo', 'bar', 'goo'])
+            admclient.medium_add([blank_medium], 'POSIX',
+                                 tags=['foo', 'bar', 'goo'])
             n_tags = {'foo': 4, 'bar': 3, 'goo': 3}
             n_bar_foo = 2
 
+        with Client() as client:
             for tag, n_tag in n_tags.items():
                 num = 0
                 for medium in client.media.get(tags=tag):
@@ -128,10 +131,10 @@ class DSSClientTest(unittest.TestCase):
     def test_add_sqli(self): # pylint: disable=no-self-use
         """The input data is sanitized and does not cause an SQL injection."""
         # Not the best place to test SQL escaping, but most convenient one.
-        with Client() as client:
+        with AdminClient(lrs_required=False) as admclient:
             medium = MediaInfo(family=PHO_RSC_TAPE, name="TAPE_SQLI_0'; <sqli>",
                                model="lto8")
-            client.media.add(medium, "LTFS")
+            admclient.medium_add([medium], "LTFS")
 
     def test_manipulate_empty(self): # pylint: disable=no-self-use
         """SET/DEL empty and None objects."""
@@ -143,13 +146,14 @@ class DSSClientTest(unittest.TestCase):
 
     def test_media_lock_unlock(self):
         """Test media lock and unlock wrappers"""
-        with Client() as client:
+        with AdminClient(lrs_required=False) as admclient:
             # Create a dummy media in db
             medium = MediaInfo(name='/some/path_%d' % randint(0, 1000000),
                                family=PHO_RSC_DIR, model=None,
                                is_adm_locked=False)
-            client.media.add(medium, 'POSIX')
+            admclient.medium_add([medium], 'POSIX')
 
+        with Client() as client:
             # Get the created media from db
             media = client.media.get(id=medium.name)[0]
 

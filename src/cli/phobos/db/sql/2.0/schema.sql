@@ -4,7 +4,7 @@ CREATE TYPE dev_family AS ENUM ('tape', 'dir', 'rados_pool');
 CREATE TYPE adm_status AS ENUM ('locked', 'unlocked', 'failed');
 CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS', 'RADOS');
 CREATE TYPE address_type AS ENUM ('PATH', 'HASH1', 'OPAQUE');
-CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used', 'full');
+CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used', 'full', 'importing');
 CREATE TYPE extent_state AS ENUM ('pending','sync','orphan');
 CREATE TYPE lock_type AS ENUM('object', 'device', 'media', 'media_update',
                               'extent');
