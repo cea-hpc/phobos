@@ -69,9 +69,11 @@ static int dummy_drive_lookup(struct lib_handle *lib, const char *drive_serial,
  */
 
 static int dummy_media_lookup(struct lib_handle *lib, const char *media_label,
-                            struct lib_item_addr *med_addr)
+                            struct lib_item_addr *med_addr, json_t *message)
 {
     ENTRY;
+
+    (void) message;
 
     med_addr->lia_type = MED_LOC_DRIVE; /* always in drive */
     med_addr->lia_addr = 0;

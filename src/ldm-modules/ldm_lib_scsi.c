@@ -103,7 +103,7 @@ static void lib_addrs_clear(struct lib_descriptor *lib)
  * Load addresses of elements in library.
  * @return 0 if the mode sense info is successfully loaded, or already loaded.
  */
-static int lib_addrs_load(struct lib_descriptor *lib)
+static int lib_addrs_load(struct lib_descriptor *lib, json_t *message)
 {
     int rc;
 
@@ -114,7 +114,7 @@ static int lib_addrs_load(struct lib_descriptor *lib)
     if (lib->fd < 0)
         return -EBADF;
 
-    rc = scsi_mode_sense(lib->fd, &lib->msi);
+    rc = scsi_mode_sense(lib->fd, &lib->msi, message);
     if (rc)
         LOG_RETURN(rc, "MODE_SENSE failed");
 
@@ -136,7 +136,7 @@ static void lib_status_clear(struct lib_descriptor *lib)
 }
 
 /** Retrieve drive serial numbers in a separate ELEMENT_STATUS request. */
-static int query_drive_sn(struct lib_descriptor *lib)
+static int query_drive_sn(struct lib_descriptor *lib, json_t *message)
 {
     struct element_status   *items = NULL;
     int                      count = 0;
@@ -146,7 +146,7 @@ static int query_drive_sn(struct lib_descriptor *lib)
     /* query for drive serial number */
     rc = scsi_element_status(lib->fd, SCSI_TYPE_DRIVE,
                              lib->msi.drives.first_addr, lib->msi.drives.nb,
-                             ESF_GET_DRV_ID, &items, &count);
+                             ESF_GET_DRV_ID, &items, &count, message);
     if (rc)
         LOG_GOTO(err_free, rc, "scsi_element_status() failed to get drive S/N");
 
@@ -168,25 +168,42 @@ err_free:
 
 /** load status of elements of the given type */
 static int lib_status_load(struct lib_descriptor *lib,
-                           enum element_type_code type)
+                           enum element_type_code type, json_t *message)
 {
+    json_t *lib_load_json;
+    json_t *status_json;
     int rc;
 
+    lib_load_json = json_object();
+
     /* address of elements are required */
-    rc = lib_addrs_load(lib);
-    if (rc)
+    rc = lib_addrs_load(lib, lib_load_json);
+    if (rc) {
+        if (json_object_size(lib_load_json) != 0)
+            json_object_set_new(message, "Library load", lib_load_json);
+
         return rc;
+    }
+
+    destroy_json(lib_load_json);
+    status_json = json_object();
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_ARM) && !lib->arms.loaded) {
         rc = scsi_element_status(lib->fd, SCSI_TYPE_ARM,
                                  lib->msi.arms.first_addr, lib->msi.arms.nb,
                                  ESF_GET_LABEL, /* to check if the arm holds
                                                    a tape */
-                                 &lib->arms.items, &lib->arms.count);
-        if (rc)
+                                 &lib->arms.items, &lib->arms.count,
+                                 status_json);
+        if (rc) {
+            if (json_object_size(status_json) != 0)
+                json_object_set_new(message, "Arms status", status_json);
+
             LOG_RETURN(rc, "element_status failed for type 'arms'");
+        }
 
         lib->arms.loaded = true;
+        json_object_clear(status_json);
     }
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_SLOT)
@@ -194,11 +211,17 @@ static int lib_status_load(struct lib_descriptor *lib,
         rc = scsi_element_status(lib->fd, SCSI_TYPE_SLOT,
                                  lib->msi.slots.first_addr, lib->msi.slots.nb,
                                  ESF_GET_LABEL,
-                                 &lib->slots.items, &lib->slots.count);
-        if (rc)
+                                 &lib->slots.items, &lib->slots.count,
+                                 status_json);
+        if (rc) {
+            if (json_object_size(status_json) != 0)
+                json_object_set_new(message, "Slots status", status_json);
+
             LOG_RETURN(rc, "element_status failed for type 'slots'");
+        }
 
         lib->slots.loaded = true;
+        json_object_clear(status_json);
     }
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_IMPEXP)
@@ -206,17 +229,23 @@ static int lib_status_load(struct lib_descriptor *lib,
         rc = scsi_element_status(lib->fd, SCSI_TYPE_IMPEXP,
                                  lib->msi.impexp.first_addr, lib->msi.impexp.nb,
                                  ESF_GET_LABEL,
-                                 &lib->impexp.items, &lib->impexp.count);
-        if (rc)
+                                 &lib->impexp.items, &lib->impexp.count,
+                                 status_json);
+        if (rc) {
+            if (json_object_size(status_json) != 0)
+                json_object_set_new(message, "Impexp status", status_json);
+
             LOG_RETURN(rc, "element_status failed for type 'impexp'");
+        }
 
         lib->impexp.loaded = true;
+        json_object_clear(status_json);
     }
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_DRIVE)
         && !lib->drives.loaded) {
-        enum elem_status_flags   flags;
-        bool                     separate_query_sn;
+        enum elem_status_flags flags;
+        bool separate_query_sn;
 
         /* separate S/N query? */
         separate_query_sn = PHO_CFG_GET_INT(cfg_lib_scsi, PHO_CFG_LIB_SCSI,
@@ -233,19 +262,34 @@ static int lib_status_load(struct lib_descriptor *lib,
 
         rc = scsi_element_status(lib->fd, SCSI_TYPE_DRIVE,
                                  lib->msi.drives.first_addr, lib->msi.drives.nb,
-                                 flags, &lib->drives.items, &lib->drives.count);
-        if (rc)
+                                 flags, &lib->drives.items, &lib->drives.count,
+                                 status_json);
+        if (rc) {
+            if (json_object_size(status_json) != 0)
+                json_object_set_new(message, "Drives status", status_json);
+
             LOG_RETURN(rc, "element_status failed for type 'drives'");
+        }
+
+        json_object_clear(status_json);
 
         if (separate_query_sn) {
             /* query drive serial separately */
-            rc = query_drive_sn(lib);
-            if (rc)
+            rc = query_drive_sn(lib, status_json);
+            if (rc) {
+                if (json_object_size(status_json) != 0)
+                    json_object_set_new(message,
+                                        "Separate drives status", status_json);
+
                 return rc;
+            }
+            json_object_clear(status_json);
         }
 
         lib->drives.loaded = true;
     }
+
+    destroy_json(status_json);
 
     return 0;
 }
@@ -434,7 +478,7 @@ static int lib_scsi_drive_info(struct lib_handle *hdl,
     MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
 
     /* load status for drives */
-    rc = lib_status_load(hdl->lh_lib, SCSI_TYPE_DRIVE);
+    rc = lib_status_load(hdl->lh_lib, SCSI_TYPE_DRIVE, NULL);
     if (rc)
         goto unlock;
 
@@ -463,7 +507,7 @@ unlock:
 
 /** Implements phobos LDM lib media lookup */
 static int lib_scsi_media_info(struct lib_handle *hdl, const char *med_label,
-                               struct lib_item_addr *lia)
+                               struct lib_item_addr *lia, json_t *message)
 {
     struct element_status *tape;
     int rc;
@@ -472,7 +516,7 @@ static int lib_scsi_media_info(struct lib_handle *hdl, const char *med_label,
     MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
 
     /* load all possible tape locations */
-    rc = lib_status_load(hdl->lh_lib, SCSI_TYPE_ALL);
+    rc = lib_status_load(hdl->lh_lib, SCSI_TYPE_ALL, message);
     if (rc)
         goto unlock;
 
@@ -584,7 +628,7 @@ static int select_target_addr(struct lib_descriptor *lib,
     int rc;
 
     /* load all info */
-    rc = lib_status_load(lib, SCSI_TYPE_ALL);
+    rc = lib_status_load(lib, SCSI_TYPE_ALL, NULL);
     if (rc)
         return rc;
 
@@ -630,8 +674,8 @@ static int lib_scsi_move(struct lib_handle *hdl,
                          json_t *message)
 {
     struct lib_descriptor *lib;
-    uint16_t tgt;
     bool origin = false;
+    uint16_t tgt;
     int rc;
     ENTRY;
 
@@ -649,6 +693,7 @@ static int lib_scsi_move(struct lib_handle *hdl,
         rc = select_target_addr(lib, src_addr, &tgt, &origin);
         if (rc)
             goto unlock;
+
     } else {
         tgt = tgt_addr->lia_addr;
     }
@@ -663,6 +708,7 @@ static int lib_scsi_move(struct lib_handle *hdl,
         rc = select_target_addr(lib, src_addr, &tgt, &origin);
         if (rc)
             goto unlock;
+
         rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt, message);
     }
 
@@ -785,7 +831,7 @@ static int lib_scsi_scan(struct lib_handle *hdl, json_t **lib_data)
     *lib_data = json_array();
 
     /* Load everything */
-    rc = lib_status_load(lib, SCSI_TYPE_ALL);
+    rc = lib_status_load(lib, SCSI_TYPE_ALL, NULL);
     if (rc) {
         json_decref(*lib_data);
         *lib_data = NULL;

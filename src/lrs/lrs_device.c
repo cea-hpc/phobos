@@ -1124,6 +1124,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info **medium,
                     bool *can_retry, bool free_medium)
 {
     struct lib_item_addr medium_addr;
+    json_t *medium_lookup_json;
     struct lib_handle lib_hdl;
     struct pho_log log;
     int rc2;
@@ -1162,13 +1163,25 @@ static int dev_load(struct lrs_dev *dev, struct media_info **medium,
         goto out_log;
     }
 
+    medium_lookup_json = json_object();
+
     /* lookup the requested medium */
-    rc = ldm_lib_media_lookup(&lib_hdl, (*medium)->rsc.id.name, &medium_addr);
+    rc = ldm_lib_media_lookup(&lib_hdl, (*medium)->rsc.id.name, &medium_addr,
+                              medium_lookup_json);
     if (rc) {
         *failure_on_medium = true;
         fail_release_free_medium(dev, medium, free_medium);
+
+        if (json_object_size(medium_lookup_json) != 0) {
+            json_object_set_new(log.message, "Media lookup",
+                                medium_lookup_json);
+            log.error_number = rc;
+        }
+
         LOG_GOTO(out_close, rc, "Media lookup failed");
     }
+
+    destroy_json(medium_lookup_json);
 
     rc = ldm_lib_media_move(&lib_hdl, &medium_addr,
                             &dev->ld_lib_dev_info.ldi_addr, log.message);

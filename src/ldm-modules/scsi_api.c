@@ -172,7 +172,7 @@ static int scsi_move_timeout_ms(void)
     return move_timeout_ms;
 }
 
-int scsi_mode_sense(int fd, struct mode_sense_info *info)
+int scsi_mode_sense(int fd, struct mode_sense_info *info, json_t *message)
 {
     struct mode_sense_result_EAAP *res_element_addr;
     unsigned char buffer[MODE_SENSE_BUFF_LEN] = "";
@@ -180,12 +180,17 @@ int scsi_mode_sense(int fd, struct mode_sense_info *info)
     struct scsi_req_sense error = {0};
     struct scsi_error scsi_err = {0};
     struct mode_sense_cdb req = {0};
+    json_t *log_object;
     int rc;
 
     if (!info)
         return -EINVAL;
 
     pho_debug("scsi_execute: MODE_SENSE, buffer_len=%u", MODE_SENSE_BUFF_LEN);
+
+    log_object = json_object();
+
+    json_insert_element(log_object, "SCSI action", json_string("MODE_SENSE"));
 
     req.opcode = MODE_SENSE;
     req.dbd = 1;            /* disable block descriptors */
@@ -197,9 +202,19 @@ int scsi_mode_sense(int fd, struct mode_sense_info *info)
     PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
                    scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), buffer, sizeof(buffer),
-                   scsi_query_timeout_ms(), NULL);
-    if (rc)
+                   scsi_query_timeout_ms(), log_object);
+
+    if (rc) {
+        /* log_object is a json_object here, so it cannot be used with the macro
+         * since we would have to create a json_object containing a json_object,
+         * so just use json_object_set_new directly.
+         */
+        json_object_set_new(message, "scsi_execute", log_object);
+
         return rc;
+    }
+
+    destroy_json(log_object);
 
     res_hdr = (struct mode_sense_result_header *)buffer;
     if (res_hdr->mode_data_length < sizeof(struct mode_sense_result_header) +
@@ -338,9 +353,11 @@ static int read_next_element_status(const struct element_descriptor *elmt,
  * @param elmt_count    Updated by this call.
  */
 static int _scsi_element_status(int fd, enum element_type_code type,
-                        uint16_t start_addr, uint16_t nb,
-                        enum elem_status_flags flags,
-                        struct element_status *elmt_list, int *elmt_count)
+                                uint16_t start_addr, uint16_t nb,
+                                enum elem_status_flags flags,
+                                struct element_status *elmt_list,
+                                int *elmt_count,
+                                json_t *message)
 {
     struct element_status_header *res_hdr;
     struct scsi_req_sense error = {0};
@@ -348,8 +365,10 @@ static int _scsi_element_status(int fd, enum element_type_code type,
     struct read_status_cdb req = {0};
     unsigned char *buffer = NULL;
     unsigned char *curr;
+    json_t *log_object;
     int curr_index;
     int byte_count;
+    char info[16];
     int len = 0;
     int rc, i;
     int count;
@@ -366,8 +385,18 @@ static int _scsi_element_status(int fd, enum element_type_code type,
     if (!buffer)
         return -ENOMEM;
 
+    log_object = json_object();
+
+    json_insert_element(log_object, "SCSI action",
+                        json_string("READ_ELEMENT_STATUS"));
     pho_debug("scsi_execute: READ_ELEMENT_STATUS, type=%#x, start_addr=%#hx, "
               "count=%hu, buffer_len=%u", type, start_addr, nb, len);
+
+    /* Use an intermediary buffer to keep the relevant information for logs */
+    sprintf(info, "%#x", type);
+    json_insert_element(log_object, "Type", json_string(info));
+    sprintf(info, "%hu", nb);
+    json_insert_element(log_object, "Count", json_string(info));
 
     req.opcode = READ_ELEMENT_STATUS;
     req.voltag = !!(flags & ESF_GET_LABEL); /* return volume bar-code */
@@ -381,7 +410,10 @@ static int _scsi_element_status(int fd, enum element_type_code type,
     PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
                    scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), buffer, len,
-                   scsi_query_timeout_ms(), NULL);
+                   scsi_query_timeout_ms(), log_object);
+
+    json_object_set_new(message, "scsi_execute", log_object);
+
     if (rc)
         goto free_buff;
 
@@ -446,7 +478,8 @@ free_buff:
 int scsi_element_status(int fd, enum element_type_code type,
                         uint16_t start_addr, uint16_t nb,
                         enum elem_status_flags flags,
-                        struct element_status **elmt_list, int *elmt_count)
+                        struct element_status **elmt_list, int *elmt_count,
+                        json_t *message)
 {
     static int  max_element_status_chunk = -1;
     uint16_t    req_size = nb;
@@ -474,7 +507,7 @@ int scsi_element_status(int fd, enum element_type_code type,
      * Start with nb, then try with smaller chunks in case of error. */
     do {
         rc = _scsi_element_status(fd, type, start_addr, req_size, flags,
-                                  *elmt_list, elmt_count);
+                                  *elmt_list, elmt_count, message);
         if (rc == 0) {
             if (*elmt_count < req_size)
                 /* end reached */
@@ -511,7 +544,7 @@ int scsi_element_status(int fd, enum element_type_code type,
     while (*elmt_count < nb) {
         rc = _scsi_element_status(fd, type, start_addr + *elmt_count, req_size,
                                   flags, (*elmt_list) + *elmt_count,
-                                  elmt_count);
+                                  elmt_count, message);
         if (rc)
             return rc;
     }

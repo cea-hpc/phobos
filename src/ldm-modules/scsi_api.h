@@ -52,7 +52,7 @@ struct mode_sense_info {
  * @param[out] info Allocated structure filled by the call.
  * @return 0 on success, error code < 0 on failure.
  */
-int scsi_mode_sense(int fd, struct mode_sense_info *info);
+int scsi_mode_sense(int fd, struct mode_sense_info *info, json_t *message);
 
 
 /* --------------- ELEMENT STATUS API ------------------ */
@@ -117,7 +117,8 @@ enum elem_status_flags {
 int scsi_element_status(int fd, enum element_type_code type,
                         uint16_t start_addr, uint16_t nb,
                         enum elem_status_flags flags,
-                        struct element_status **elmt_list, int *elmt_count);
+                        struct element_status **elmt_list, int *elmt_count,
+                        json_t *message);
 
 /**
  * Free a list allocated by element_status().

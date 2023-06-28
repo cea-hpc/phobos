@@ -180,7 +180,7 @@ static int single_element_status(int fd, uint16_t addr, bool expect_full)
 
     ASSERT_RC(scsi_element_status(fd, SCSI_TYPE_ALL, addr, 1,
                                   ESF_GET_LABEL | ESF_GET_DRV_ID,
-                                  &list, &lcount));
+                                  &list, &lcount, NULL));
 
     if (lcount > 0 && list->full != expect_full) {
         pho_warn("Element at addr %#hx is expected to be full",
@@ -212,7 +212,7 @@ static void test_lib_adapter(void)
     }
 
     if (one_label)
-        ASSERT_RC(ldm_lib_media_lookup(&lib_hdl, one_label, &med_addr));
+        ASSERT_RC(ldm_lib_media_lookup(&lib_hdl, one_label, &med_addr, NULL));
 
     ldm_lib_close(&lib_hdl);
 }
@@ -349,19 +349,21 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    ASSERT_RC(scsi_mode_sense(fd, &msi));
+    ASSERT_RC(scsi_mode_sense(fd, &msi, NULL));
 
     pho_info("arms: first=%#hX, nb=%d", msi.arms.first_addr, msi.arms.nb);
 
     ASSERT_RC(scsi_element_status(fd, SCSI_TYPE_ARM, msi.arms.first_addr,
-                                  msi.arms.nb, ESF_GET_LABEL, &list, &lcount));
+                                  msi.arms.nb, ESF_GET_LABEL, &list, &lcount,
+                                  NULL));
     print_elements(list, lcount);
     free(list);
 
     pho_info("slots: first=%#hX, nb=%d", msi.slots.first_addr, msi.slots.nb);
 
     ASSERT_RC(scsi_element_status(fd, SCSI_TYPE_SLOT, msi.slots.first_addr,
-                                  msi.slots.nb, ESF_GET_LABEL, &list, &lcount));
+                                  msi.slots.nb, ESF_GET_LABEL, &list, &lcount,
+                                  NULL));
     print_elements(list, lcount);
     free(list);
 
@@ -374,7 +376,8 @@ int main(int argc, char **argv)
     ASSERT_RC(setenv("PHOBOS_SCSI_max_element_status", val, 1));
 
     ASSERT_RC(scsi_element_status(fd, SCSI_TYPE_SLOT, msi.slots.first_addr,
-                                  msi.slots.nb, ESF_GET_LABEL, &list, &lcount));
+                                  msi.slots.nb, ESF_GET_LABEL, &list, &lcount,
+                                  NULL));
     if (lcount != msi.slots.nb) {
         pho_error(-EINVAL, "Invalid count returned: %d != %d",
                            lcount, msi.slots.nb);
@@ -387,7 +390,7 @@ int main(int argc, char **argv)
 
     ASSERT_RC(scsi_element_status(fd, SCSI_TYPE_IMPEXP, msi.impexp.first_addr,
                                   msi.impexp.nb, ESF_GET_LABEL, &list,
-                                  &lcount));
+                                  &lcount, NULL));
     print_elements(list, lcount);
     free(list);
 
@@ -395,7 +398,7 @@ int main(int argc, char **argv)
 
     ASSERT_RC(scsi_element_status(fd, SCSI_TYPE_DRIVE, msi.drives.first_addr,
                                   msi.drives.nb, ESF_GET_LABEL, &list,
-                                  &lcount));
+                                  &lcount, NULL));
     print_elements(list, lcount);
     free(list);
 

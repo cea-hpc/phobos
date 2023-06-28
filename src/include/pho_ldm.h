@@ -224,7 +224,7 @@ struct pho_lib_adapter_module_ops {
     int (*lib_drive_lookup)(struct lib_handle *lib, const char *drive_serial,
                             struct lib_drv_info *drv_info);
     int (*lib_media_lookup)(struct lib_handle *lib, const char *media_label,
-                            struct lib_item_addr *med_addr);
+                            struct lib_item_addr *med_addr, json_t *message);
     int (*lib_media_move)(struct lib_handle *lib,
                           const struct lib_item_addr *src_addr,
                           const struct lib_item_addr *tgt_addr,
@@ -319,13 +319,14 @@ static inline int ldm_lib_drive_lookup(struct lib_handle *lib_hdl,
  */
 static inline int ldm_lib_media_lookup(struct lib_handle *lib_hdl,
                                        const char *media_label,
-                                       struct lib_item_addr *med_addr)
+                                       struct lib_item_addr *med_addr,
+                                       json_t *message)
 {
     assert(lib_hdl->ld_module != NULL);
     assert(lib_hdl->ld_module->ops != NULL);
     assert(lib_hdl->ld_module->ops->lib_media_lookup != NULL);
     return lib_hdl->ld_module->ops->lib_media_lookup(lib_hdl, media_label,
-                                                     med_addr);
+                                                     med_addr, message);
 }
 
 /**

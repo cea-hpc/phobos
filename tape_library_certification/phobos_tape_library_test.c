@@ -56,7 +56,7 @@ static int dev_load(const struct lib_item_addr *dev_addr,
         return rc;
     }
 
-    rc = ldm_lib_media_lookup(&lib_hdl, tape_name, &medium_addr);
+    rc = ldm_lib_media_lookup(&lib_hdl, tape_name, &medium_addr, NULL);
     if (rc) {
         pho_error(rc, "Error when looking for tape %s address", tape_name);
         return rc;

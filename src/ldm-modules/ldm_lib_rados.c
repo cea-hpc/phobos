@@ -175,9 +175,12 @@ static int lib_rados_drive_lookup(struct lib_handle *lib_hdl,
  */
 static int lib_rados_media_lookup(struct lib_handle *lib_hdl,
                                   const char *media_label,
-                                  struct lib_item_addr *med_addr)
+                                  struct lib_item_addr *med_addr,
+                                  json_t *message)
 {
     int rc = 0;
+
+    (void) message;
 
     ENTRY;
 
