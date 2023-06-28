@@ -250,7 +250,8 @@ static int lib_status_load(struct lib_descriptor *lib,
     return 0;
 }
 
-static int lib_scsi_open(struct lib_handle *hdl, const char *dev)
+static int lib_scsi_open(struct lib_handle *hdl, const char *dev,
+                         json_t *message)
 {
     struct lib_descriptor *lib;
     int                    rc;
@@ -273,6 +274,10 @@ static int lib_scsi_open(struct lib_handle *hdl, const char *dev)
 err_clean:
     free(lib);
     hdl->lh_lib = NULL;
+    json_insert_element(message, "Action",
+                        json_string("Open device controller"));
+    json_insert_element(message, "Error",
+                        json_string("Failed to open device controller"));
 unlock:
     MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
     return rc;

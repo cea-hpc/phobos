@@ -324,11 +324,13 @@ struct lrs_dev *lrs_dev_hdl_get(struct lrs_dev_hdl *handle, int index);
  * Wrap library open operations
  *
  * @param[in]   dev_type    Device type
+ * @param[in]   log         Log to fill in case of an SCSI error
  * @param[out]  lib_hdl     Library handle
  *
  * @return          0 on success, -1 * posix error code on failure.
  */
-int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl);
+int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl,
+                  struct pho_log *log);
 
 /**
  * Returns the technology of a drive from its model using the configuration for

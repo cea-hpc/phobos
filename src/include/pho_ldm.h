@@ -219,7 +219,7 @@ struct lib_handle;
  */
 struct pho_lib_adapter_module_ops {
     /* adapter functions */
-    int (*lib_open)(struct lib_handle *lib, const char *dev);
+    int (*lib_open)(struct lib_handle *lib, const char *dev, json_t *message);
     int (*lib_close)(struct lib_handle *lib);
     int (*lib_drive_lookup)(struct lib_handle *lib, const char *drive_serial,
                             struct lib_drv_info *drv_info);
@@ -264,13 +264,14 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter_module **lib);
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_lib_open(struct lib_handle *lib_hdl, const char *dev)
+static inline int ldm_lib_open(struct lib_handle *lib_hdl, const char *dev,
+                               json_t *message)
 {
     assert(lib_hdl->ld_module != NULL);
     assert(lib_hdl->ld_module->ops != NULL);
     if (lib_hdl->ld_module->ops->lib_open == NULL)
         return 0;
-    return lib_hdl->ld_module->ops->lib_open(lib_hdl, dev);
+    return lib_hdl->ld_module->ops->lib_open(lib_hdl, dev, message);
 }
 
 /**

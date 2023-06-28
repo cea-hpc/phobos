@@ -201,7 +201,7 @@ static void test_lib_adapter(void)
     struct lib_handle lib_hdl;
 
     ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib_hdl.ld_module));
-    ASSERT_RC(ldm_lib_open(&lib_hdl, "/dev/changer"));
+    ASSERT_RC(ldm_lib_open(&lib_hdl, "/dev/changer", NULL));
 
     if (one_serial) {
         ASSERT_RC(ldm_lib_drive_lookup(&lib_hdl, one_serial, &drv_info));
@@ -230,7 +230,7 @@ static void test_lib_scan(bool use_admin_function)
                                         &lib_data));
     } else {
         ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib_hdl.ld_module));
-        ASSERT_RC(ldm_lib_open(&lib_hdl, "/dev/changer"));
+        ASSERT_RC(ldm_lib_open(&lib_hdl, "/dev/changer", NULL));
         ASSERT_RC(ldm_lib_scan(&lib_hdl, &lib_data));
     }
 

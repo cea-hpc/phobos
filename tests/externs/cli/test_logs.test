@@ -49,7 +49,7 @@ function cleanup
     drain_all_drives
 }
 
-function test_put_logs
+function test_device_load
 {
     local lto6_tape=$(get_tapes L6 1)
     local lto6_drive=$(get_lto_drives 6 1)
@@ -91,4 +91,4 @@ function test_put_logs
 TEST_CLEANUP=cleanup
 TEST_SETUP=setup
 
-TESTS=("test_put_logs")
+TESTS=("test_device_load")

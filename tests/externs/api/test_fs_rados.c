@@ -81,7 +81,7 @@ static int fsr_setup(void **state)
     rc = get_lib_adapter(PHO_LIB_RADOS, &test_data->lib_hdl.ld_module);
     assert_int_equal(rc, -rc);
 
-    rc = ldm_lib_open(&test_data->lib_hdl, POOLNAME);
+    rc = ldm_lib_open(&test_data->lib_hdl, POOLNAME, NULL);
     assert_int_equal(rc, -rc);
 
     cluster_hdl = test_data->lib_hdl.lh_lib;

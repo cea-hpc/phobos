@@ -47,7 +47,7 @@ static int dev_load(const struct lib_item_addr *dev_addr,
     struct lib_handle lib_hdl;
     int rc;
 
-    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl);
+    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl, NULL);
     if (rc) {
         pho_error(rc,
                   "Error when opening tape library module before loading tape %s "
@@ -96,7 +96,7 @@ static int dev_unload(const struct lib_item_addr *dev_addr)
     struct lib_handle lib_hdl;
     int rc;
 
-    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl);
+    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl, NULL);
     if (rc) {
         pho_error(rc,
                   "Error when opening tape library module before unloading "
@@ -200,7 +200,7 @@ int main(int argc, char **argv)
     if (argc == 4)
         pho_log_level_set(atoi(argv[3]));
 
-    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl);
+    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl, NULL);
 
     if (rc) {
         pho_error(rc, "Error when opening tape library module");

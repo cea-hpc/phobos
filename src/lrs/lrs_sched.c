@@ -589,7 +589,7 @@ static int sched_load_dev_state(struct lrs_sched *sched)
     }
 
     /* get a handle to the library to query it */
-    rc = wrap_lib_open(sched->family, &lib_hdl);
+    rc = wrap_lib_open(sched->family, &lib_hdl, NULL);
     if (rc)
         LOG_RETURN(rc, "Error while loading devices when opening library");
 
@@ -1563,7 +1563,7 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
                              sched->devices.ldh_devices->len - 1);
 
     /* get a handle to the library to query it */
-    rc = wrap_lib_open(family, &lib_hdl);
+    rc = wrap_lib_open(family, &lib_hdl, NULL);
     if (rc)
         goto dev_del;
 

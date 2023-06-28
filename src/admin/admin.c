@@ -1350,7 +1350,7 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
         LOG_RETURN(rc, "Failed to get library adapter for type '%s'",
                    lib_type_name);
 
-    rc = ldm_lib_open(&lib_hdl, lib_dev);
+    rc = ldm_lib_open(&lib_hdl, lib_dev, NULL);
     if (rc)
         LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
                    lib_type_name, lib_dev);

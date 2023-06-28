@@ -72,12 +72,15 @@ const struct pho_config_item cfg_ceph_rados[] = {
     },
 };
 
-static int lib_rados_open(struct lib_handle *hdl, const char *dev)
+static int lib_rados_open(struct lib_handle *hdl, const char *dev,
+                          json_t *message)
 {
     const char *ceph_conf_path;
     const char *userid;
     rados_t cluster_hdl;
     int rc = 0;
+
+    (void) message;
 
     ENTRY;
 

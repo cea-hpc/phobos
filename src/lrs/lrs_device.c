@@ -53,6 +53,19 @@ static inline long ms2nsec(long ms)
     return (ms % 1000) * 1000000;
 }
 
+static inline bool should_log(struct pho_log *log)
+{
+    switch (log->cause) {
+    case PHO_DEVICE_LOAD:
+    case PHO_DEVICE_UNLOAD:
+        return log->error_number == 0 || json_object_size(log->message) != 0;
+    default:
+        return json_object_size(log->message) != 0;
+    }
+
+    __builtin_unreachable();
+}
+
 int lrs_dev_hdl_init(struct lrs_dev_hdl *handle, enum rsc_family family)
 {
     int rc;
@@ -964,7 +977,7 @@ static int dev_unload(struct lrs_dev *dev)
     pho_verb("unload: '%s' from '%s'", dev->ld_dss_media_info->rsc.id.name,
              dev->ld_dev_path);
 
-    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl);
+    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl, NULL);
     if (rc)
         LOG_GOTO(out, rc,
                  "Unable to open lib '%s' to unload medium '%s' from device "
@@ -1131,7 +1144,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info **medium,
     log.message = json_object();
 
     /* get handle to the library depending on device type */
-    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl);
+    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl, &log);
     if (rc) {
         *failure_on_dev = true;
         MUTEX_LOCK(&dev->ld_mutex);
@@ -1139,15 +1152,14 @@ static int dev_load(struct lrs_dev *dev, struct media_info **medium,
         MUTEX_UNLOCK(&dev->ld_mutex);
 
         if (release_medium_on_dev_only_failure) {
-            rc2 = dss_medium_release(&dev->ld_device_thread.dss,
-                                     dev->ld_dss_media_info);
+            rc2 = dss_medium_release(&dev->ld_device_thread.dss, *medium);
             if (rc2)
                 pho_error(rc2,
                           "Error when releasing a medium during device load "
                           "error");
         }
 
-        return rc;
+        goto out_log;
     }
 
     /* lookup the requested medium */
@@ -1212,7 +1224,10 @@ out_close:
         rc = rc ? : rc2;
     }
 
-    dss_emit_log(&dev->ld_device_thread.dss, &log);
+out_log:
+    if (should_log(&log))
+        dss_emit_log(&dev->ld_device_thread.dss, &log);
+
     destroy_json(log.message);
 
     return rc;
@@ -2260,8 +2275,10 @@ static int dev_thread_init(struct lrs_dev *device)
     return 0;
 }
 
-int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl)
+int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl,
+                  struct pho_log *log)
 {
+    json_t *lib_open_json;
     const char *lib_dev;
     int rc = -1;
 
@@ -2287,7 +2304,17 @@ int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl)
     if (!lib_dev)
         LOG_RETURN(rc, "Failed to get default library device from config");
 
-    return ldm_lib_open(lib_hdl, lib_dev);
+    lib_open_json = json_object();
+
+    rc = ldm_lib_open(lib_hdl, lib_dev, lib_open_json);
+    if (rc && json_object_size(lib_open_json) != 0) {
+        json_object_set_new(log->message, "Library open", lib_open_json);
+        log->error_number = rc;
+    } else {
+        destroy_json(lib_open_json);
+    }
+
+    return rc;
 }
 
 int lrs_dev_technology(const struct lrs_dev *dev, const char **techno)
