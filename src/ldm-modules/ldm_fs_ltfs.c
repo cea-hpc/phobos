@@ -55,10 +55,11 @@ enum pho_cfg_params_ltfs {
     PHO_CFG_LTFS_cmd_mount,
     PHO_CFG_LTFS_cmd_umount,
     PHO_CFG_LTFS_cmd_format,
+    PHO_CFG_LTFS_tape_full_threshold,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_LTFS_FIRST = PHO_CFG_LTFS_cmd_mount,
-    PHO_CFG_LTFS_LAST  = PHO_CFG_LTFS_cmd_format,
+    PHO_CFG_LTFS_LAST  = PHO_CFG_LTFS_tape_full_threshold,
 };
 
 /** Definition and default values of LTFS configuration parameters */
@@ -77,6 +78,11 @@ const struct pho_config_item cfg_ltfs[] = {
         .section = "ltfs",
         .name    = "cmd_format",
         .value   = PHO_LDM_HELPER" format_ltfs \"%s\" \"%s\""
+    },
+    [PHO_CFG_LTFS_tape_full_threshold] = {
+        .section = "ltfs",
+        .name = "tape_full_threshold",
+        .value = "5",
     },
 };
 
@@ -346,8 +352,11 @@ static int ltfs_mounted(const char *dev_path, char *mnt_path,
 
 static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc)
 {
+    int tape_full_threshold;
     ssize_t  avail;
-    int      rc;
+    ssize_t free;
+    ssize_t used;
+    int rc;
 
     /* Some LTFS doc says:
      * When the tape cartridge is almost full, further write operations will be
@@ -358,9 +367,8 @@ static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc)
      * Indeed, we state that LTFS return ENOSPC whereas the previous statfs()
      * call indicated there was enough space to write...
      * We found that this early ENOSPC occured 5% before the expected limit.
-     * For now, use an hardcoded value at 5% of the full tape space.
-     * A possible enhancement is to turn it to a configurable value.
      *
+     * For example, with a threshold of 5% :
      * reserved = 5% * total
      * total = used + free
      * avail_space = total - reserved - used
@@ -371,8 +379,15 @@ static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc)
     if (rc)
         return rc;
 
-    /** TODO make the 5% threshold configurable */
-    avail = (95 * fs_spc->spc_avail - 5 * fs_spc->spc_used) / 100;
+    /* get tape_full_threshold from conf */
+    tape_full_threshold = PHO_CFG_GET_INT(cfg_ltfs, PHO_CFG_LTFS,
+                                          tape_full_threshold, 5);
+    if (tape_full_threshold == 0)
+        LOG_RETURN(-EINVAL, "Unable to get tape_full_threshold from conf");
+
+    free = ((100 - tape_full_threshold) * fs_spc->spc_avail) / 100;
+    used = (tape_full_threshold * fs_spc->spc_used) / 100;
+    avail = free - used;
 
     fs_spc->spc_avail = avail > 0 ? avail : 0;
 
