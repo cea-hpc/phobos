@@ -622,13 +622,14 @@ static int get_free_slot(struct lib_descriptor *lib, uint16_t *slot_addr)
  */
 static int select_target_addr(struct lib_descriptor *lib,
                               const struct lib_item_addr *src_lia,
-                              uint16_t *tgt_addr, bool *to_origin)
+                              uint16_t *tgt_addr, bool *to_origin,
+                              json_t *message)
 {
     const struct element_status *element;
     int rc;
 
     /* load all info */
-    rc = lib_status_load(lib, SCSI_TYPE_ALL, NULL);
+    rc = lib_status_load(lib, SCSI_TYPE_ALL, message);
     if (rc)
         return rc;
 
@@ -674,7 +675,9 @@ static int lib_scsi_move(struct lib_handle *hdl,
                          json_t *message)
 {
     struct lib_descriptor *lib;
+    json_t *target_json;
     bool origin = false;
+    json_t *move_json;
     uint16_t tgt;
     int rc;
     ENTRY;
@@ -690,27 +693,52 @@ static int lib_scsi_move(struct lib_handle *hdl,
             && tgt_addr->lia_addr == 0)) {
         /* First try source slot. If not valid, try any free slot */
         origin = true;
-        rc = select_target_addr(lib, src_addr, &tgt, &origin);
-        if (rc)
-            goto unlock;
+        target_json = json_object();
+        rc = select_target_addr(lib, src_addr, &tgt, &origin, target_json);
+        if (rc) {
+            if (json_object_size(target_json) != 0)
+                json_object_set_new(message, "Target selection", target_json);
 
+            goto unlock;
+        }
+
+        destroy_json(target_json);
     } else {
         tgt = tgt_addr->lia_addr;
     }
 
+    move_json = json_object();
     /* arm = 0 for default transport element */
-    rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt, message);
+    rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt, move_json);
 
     /* was the source slot invalid? */
     if (rc == -EINVAL && origin) {
         pho_warn("Failed to move media to source slot, trying another one...");
-        origin = false;
-        rc = select_target_addr(lib, src_addr, &tgt, &origin);
-        if (rc)
-            goto unlock;
 
-        rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt, message);
+        if (json_object_size(move_json) != 0) {
+            json_object_set_new(message, "First failed move", move_json);
+            move_json = json_object();
+        }
+
+        origin = false;
+        target_json = json_object();
+        rc = select_target_addr(lib, src_addr, &tgt, &origin, target_json);
+        if (rc) {
+            if (json_object_size(target_json) != 0)
+                json_object_set_new(message, "Target selection", target_json);
+
+            goto unlock;
+        }
+
+        destroy_json(target_json);
+        json_object_clear(move_json);
+        rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt, move_json);
     }
+
+    if (json_object_size(move_json) != 0)
+        json_object_set_new(message, "Move action", move_json);
+    else
+        destroy_json(move_json);
 
 unlock:
     MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
