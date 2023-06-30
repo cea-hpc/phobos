@@ -185,6 +185,21 @@ ldconfig
 %endif
 
 %changelog
+* Thu Sep 21 2023 - Yoann Valeri <yoann.valeri@cea.fr> - 1.95-1
+- Release 1.95 (Tethys)
+- WARNING: the db schema moves from 1.93 to 1.95 and a migration is needed.
+- Added early locking when locating an object
+- Improved locate to check whether an object can be read with the current
+  resources (unlocked driver/tapes, driver/tape generation compatibility)
+- Creation of I/O schedulers for efficient request handling: FIFO, Group Read,
+  Fair Share.
+- Added the "sched fair_share" command to configure the Fair Share algorithm
+- Created library tests to certify Phobos can work on the target library
+- Calculate MD5 and/or XXH128 (if available) as extent checksum when putting
+  objects
+- Retrieve MD5 and XXH128 checksums at extent listing
+- Added SCSI logs into DSS
+
 * Mon Nov 7 2022 - Yoann Valeri <yoann.valeri@cea.fr> - 1.94.1-1
 - Added RADOS as data storage backend
 - Added module-loader to manage io, fs, dev, lib and layout adapters dynamically

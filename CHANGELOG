@@ -1,26 +1,32 @@
 # CHANGELOG UPDATES
 
-## Ongoing
+## 1.95
 * WARNING: the db schema moves from 1.93 to 1.95 and a migration is needed.
 * Unused 'disk' value is removed from media and device family.
-* Add SCSI logs.
-* TLC, Tape Library Controller, server is introduced to centralize all tape
-  library commands
 * compute XXH128 extent checksum in raid1 layout during put
 * compute MD5 extent checksum in raid1 layout during put
+* Retrieve MD5 and XXH128 checksums at extent listing
 * Phobos API has been changed. Any call to a Phobos function must be done after
   initializing its context using `phobos_init()`. To release the context, use
   `phobos_fini()`.
 * Add scripts and a binary to test tape library
 * The "phobos_admin_format" API function has been modified to be able to format
 media whose status is not blank. A "force" parameter is added to manage this.
-* Grouped read algorithm for tapes
 * Locate update for pre-locking
     - We add two new parameters to the "phobos_locate" API call: 'focus_host'
       and 'nb_new_lock'.
     - We add the '--focus-host' option to the "phobos locate obj" command.
 * Phobos CLI is updated. The options '--layout' and '--lyt-params' can also
   be respectively spelled '--lyt' and '--layout-params' for consistency.
+* Creation of I/O schedulers for efficient request handling by the LRS:
+    - FIFO and Group Read
+    - Fair Share
+* Added tape library certification tests to verify Phobos is usable with the
+  targeted library
+* Added designs for the media statistics, SCSI error management, Tape Library
+  Controler.
+* Add SCSI logs.
+* Add TLC daemon unused and incomplete draft version.
 
 ## 1.94.1
 
