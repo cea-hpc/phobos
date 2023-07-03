@@ -28,6 +28,16 @@
 #include "pho_types.h" /* struct layout_info */
 
 /**
+ * Extended attributes' names for RAID1 layout
+ */
+#define PHO_EA_ID_NAME              "id"
+#define PHO_EA_UMD_NAME             "user_md"
+#define PHO_EA_MD5_NAME             "md5"
+#define PHO_EA_XXH128_NAME          "xxh128"
+#define PHO_EA_OBJECT_SIZE_NAME     "raid1.obj_size"
+#define PHO_EA_EXTENT_OFFSET_NAME   "raid1.offset"
+
+/**
  * Replica count parameter comes from configuration.
  * It is saved in layout REPL_COUNT_ATTR_KEY attr in a char * value and in the
  * private raid1 encoder unsigned int repl_count value.

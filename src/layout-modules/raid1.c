@@ -47,10 +47,6 @@
 
 /* @FIXME: taken from store.c, will be needed in raid1 too */
 #define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
-#define PHO_EA_ID_NAME      "id"
-#define PHO_EA_UMD_NAME     "user_md"
-#define PHO_EA_MD5_NAME     "md5"
-#define PHO_EA_XXH128_NAME  "xxh128"
 
 #define PLUGIN_NAME     "raid1"
 #define PLUGIN_MAJOR    0
@@ -377,6 +373,8 @@ out:
  * @param[in,out]   iod         I/O descriptor to access the current object.
  * @param[in,out]   extent      Extent to write the xattrs to.
  * @param[in]       oid         Object descriptor.
+ * @param[in]       object_size Size of the object.
+ * @param[in]       offset      Offset of the extent.
  * @param[in]       user_md     User metadata.
  * @param[in,out]   ioa         I/O adapter to access the current storage
  *                              backend.
@@ -385,13 +383,17 @@ out:
  */
 static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
                                struct extent *extent, const char *oid,
-                               GString *user_md,
+                               GString *user_md, size_t object_size,
+                               size_t offset,
                                struct io_adapter_module **ioa)
 {
     int rc = 0;
     int i;
 
+    assert(object_size >= offset);
+
     for (i = 0; i < repl_count; ++i) {
+        char *str_buffer;
 
         iod[i].iod_flags = PHO_IO_MD_ONLY;
 
@@ -412,8 +414,7 @@ static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
             if (!md5_buffer)
                 LOG_GOTO(attrs, rc = -ENOMEM, "Unable to construct hex md5");
 
-            rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_MD5_NAME,
-                              md5_buffer);
+            rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_MD5_NAME, md5_buffer);
             free((char *)md5_buffer);
             if (rc)
                 LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d",
@@ -433,13 +434,36 @@ static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
                 LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d",
                          i);
         }
-    }
+
+        rc = asprintf(&str_buffer, "%lu", object_size);
+        if (rc < 0)
+            LOG_GOTO(attrs, -errno, "Unable to construct object size buffer");
+
+        rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_OBJECT_SIZE_NAME,
+                          str_buffer);
+        if (rc) {
+            free(str_buffer);
+            LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d", i);
+        }
+
+        /* No alloc issue because object_size > offset */
+        rc = sprintf(str_buffer, "%lu", offset);
+        if (rc < 0) {
+            free(str_buffer);
+            LOG_GOTO(attrs, -errno, "Unable to construct offset buffer");
+        }
+
+        rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_EXTENT_OFFSET_NAME,
+                          str_buffer);
+        free(str_buffer);
+        if (rc)
+            LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d", i);
+   }
 
     for (i = 0; i < repl_count; ++i) {
         rc = ioa_set_md(ioa[i], NULL, NULL, &iod[i]);
         if (rc)
-            LOG_RETURN(rc, "Unable to set md for extent number %i in raid1",
-                       i);
+            LOG_RETURN(rc, "Unable to set md for extent number %i in raid1", i);
     }
 
 attrs:
@@ -465,6 +489,7 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
                                     pho_resp_write_t *wresp,
                                     pho_req_release_t *rreq)
 {
+    size_t object_size = enc->xfer->xd_params.put.size;
     struct raid1_encoder *raid1 = enc->priv_enc;
 #define EXTENT_TAG_SIZE 128
     struct io_adapter_module **ioa = NULL;
@@ -481,7 +506,6 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
     GString *str;
     int rc = 0;
     int i;
-
 
     /* initial checks */
     if (wresp->n_media != raid1->repl_count)
@@ -641,7 +665,8 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
 
 
     rc = put_xattr_to_extent(raid1->repl_count, iod,
-                             extent, enc->xfer->xd_objid, str, ioa);
+                             extent, enc->xfer->xd_objid, str,
+                             object_size, object_size - raid1->to_write, ioa);
 
 close:
     for (i = 0; i < raid1->repl_count; ++i) {
