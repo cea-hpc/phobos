@@ -89,18 +89,17 @@ function get_media_path
 {
     local repl_count="$1"
     local family="$2"
-    local media_names="$3"
-    local repl_id="$4"
+    local media_name="$3"
 
     if [[ "$family" == "dir" ]]; then
-        echo $media_names | cut -d',' -f$repl_id
+        echo $media_name
     elif [[ "$family" == "tape" ]]; then
         # finding mount path for the corresponding extent
         for i in $(seq 1 $repl_count); do
             local drive_status="$($phobos drive status |
                 sed "$((2+i))q;d" | sed "s/[ ]//g")"
             if [[ "$(echo $drive_status | cut -d'|' -f5)" == \
-                  "$(echo $media_names | cut -d',' -f$repl_id)" ]]; then
+                  "$(echo $media_name)" ]]; then
                 echo $drive_status | cut -d'|' -f6
                 break
             fi
@@ -119,25 +118,23 @@ function test_raid1_repl_count
         repl_count=$repl_count /etc/hosts "oid_$family$oid_id" ||
         error "Object should be put"
 
-    local ext_req=$($phobos extent list --output \
+    local ext_req=$($phobos extent list --degroup --output \
         address,md5,xxh128,oid,uuid,version,media_name "oid_$family$oid_id" |
-        sed '3q;d' | sed "s/[][' ]//g")
-    local addresses=$(echo $ext_req | cut -d'|' -f2)
-    local md5=$(echo $ext_req | cut -d'|' -f3)
-    local xxh128=$(echo $ext_req | cut -d'|' -f4)
-    local oid=$(echo $ext_req | cut -d'|' -f5)
-    local uuid=$(echo $ext_req | cut -d'|' -f6)
-    local version=$(echo $ext_req | cut -d'|' -f7)
-    local media_names=$(echo $ext_req | cut -d'|' -f8)
-
+        tail -n $repl_count | sed "s/[][' ]//g" | sort -k1.8)
 
     for repl_id in $(seq 1 $repl_count); do
-        local address="$(echo $addresses | cut -d',' -f$repl_id)"
+        local row="$(echo $ext_req | cut -d' ' -f${repl_id})"
+        local address="$(echo $row | cut -d'|' -f2)"
+        local md5="$(echo $row | cut -d'|' -f3)"
+        local xxh128="$(echo $row | cut -d'|' -f4)"
+        local oid="$(echo $row | cut -d'|' -f5)"
+        local uuid="$(echo $row | cut -d'|' -f6)"
+        local version="$(echo $row | cut -d'|' -f7)"
+        local media="$(echo $row | cut -d'|' -f8)"
         local filename="$(basename $address)"
         local reconst_path="$oid.$version.r1-$repl_count""_$((repl_id-1)).$uuid"
 
-        local media_path="$(get_media_path $repl_count $family \
-                         $media_names $repl_id)"
+        local media_path="$(get_media_path $repl_count $family $media)"
 
         [[ -f "$media_path/$address" ]] ||
             error "File does not exist"

@@ -70,19 +70,24 @@ insert into media (family, model, id, adm_status, fs_type, address_type,
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
           "nb_errors":0,"last_load":0}', '["mytag"]');
 
-insert into object (oid, user_md)
-    values ('01230123ABC', '{}');
+insert into object (oid, user_md, lyt_info)
+    values ('01230123ABC', '{}',
+            '{"name":"raid1","major":0,"minor":1,"repl_count":1}');
 
-insert into deprecated_object (oid, uuid, version, user_md)
-    values ('01230123ABD', '00112233445566778899aabbccddeeff', 1, '{}');
+insert into deprecated_object (oid, object_uuid, version, user_md, lyt_info)
+    values ('01230123ABD', '00112233445566778899aabbccddeeff', 1, '{}',
+            '{"name":"raid1","major":0,"minor":1,"repl_count":1}');
 
-insert into extent (oid, uuid, state, lyt_info, extents)
-    values ('01230123ABC', (select uuid from object where oid = '01230123ABC'),
-            'pending', '{"name":"simple","major":0,"minor":1}',
-           '[{"media":"/tmp/pho_testdir1","addr":"test3",
-	   "sz":21123456,"fam":"dir"},\
-            {"media":"/tmp/pho_testdir2","addr":"test4",
-	   "sz":2112555,"fam":"dir"}]');
+insert into extent (state, size, medium_family, medium_id, address, hash)
+    values ('pending', 21123456, 'dir', '/tmp/pho_testdir1', 'test3', '{}'),
+           ('pending', 2112555, 'dir', '/tmp/pho_testdir2', 'test4', '{}');
+
+insert into layout (object_uuid, version, extent_uuid, layout_index)
+    values ((select object_uuid from object where oid = '01230123ABC'), 1,
+            (select extent_uuid from extent where address = 'test3'), 0),
+           ((select object_uuid from deprecated_object
+               where oid = '01230123ABD'), 1,
+            (select extent_uuid from extent where address = 'test4'), 0);
 EOF
 }
 

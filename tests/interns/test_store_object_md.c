@@ -146,13 +146,14 @@ do {                                                                           \
 } while (0)
 
 int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   const struct dss_filter *outer_filter,
                    struct layout_info **lyt_ls, int *lyt_cnt)
 {
     int rc = (int)mock();
     void *lyt_container;
     bool *ctn_bool;
 
-    (void)hdl; (void)filter;
+    (void)hdl; (void)filter; (void)outer_filter;
 
     if (rc != 0)
         return rc;

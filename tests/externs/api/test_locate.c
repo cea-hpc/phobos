@@ -124,6 +124,77 @@ static int local_teardown(void **state)
     return 0;
 }
 
+/**
+ * Retrieve media containing extents of an object from DSS
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  obj      object information
+ * @param[out] media    list of retrieved media, to be freed with dss_res_free()
+ * @param[out] cnt      number of media retrieved in the list
+ *
+ * @return 0 on success, -errno on failure
+ *                       -EINVAL if \p obj doesn't exist in the DSS
+ */
+static int media_of_object(struct dss_handle *hdl, struct object_info *obj,
+                           struct media_info **media, int *cnt)
+{
+    struct layout_info *layout;
+    struct dss_filter filter;
+    struct pho_id medium_id;
+    GString *filter_str;
+    int rc;
+    int i;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                            "{\"DSS::OBJ::oid\": \"%s\"}, "
+                            "{\"DSS::OBJ::uuid\": \"%s\"}, "
+                            "{\"DSS::OBJ::version\": \"%d\"}"
+                          "]}",
+                          obj->oid, obj->uuid, obj->version);
+    if (rc)
+        LOG_RETURN(rc, "Cannot build filter");
+
+    rc = dss_layout_get(hdl, &filter, NULL, &layout, cnt);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc, "Failed to retrieve layout of object '%s'", obj->oid);
+
+    if (*cnt == 0) {
+        dss_res_free(layout, 0);
+        LOG_RETURN(-EINVAL, "No extent found for object '%s'", obj->oid);
+    }
+
+    filter_str = g_string_new(NULL);
+    if (*cnt > 1)
+        g_string_append_printf(filter_str, "{\"OR\": [");
+
+    for (i = 0; i < *cnt; ++i) {
+        medium_id = layout[i].extents->media;
+        g_string_append_printf(filter_str,
+                               "{\"$AND\": ["
+                                 "{\"DSS::MDA::family\": \"%s\"}, "
+                                 "{\"DSS::MDA::id\": \"%s\"}"
+                               "]}%s",
+                               rsc_family2str(medium_id.family),
+                               medium_id.name, i + 1 < *cnt ? "," : "");
+    }
+
+    if (*cnt > 1)
+        g_string_append_printf(filter_str, "]}");
+
+    dss_res_free(layout, *cnt);
+
+    rc = dss_filter_build(&filter, "%s", filter_str->str);
+    g_string_free(filter_str, true);
+    if (rc)
+        LOG_RETURN(rc, "Cannot build filter");
+
+    rc = dss_media_get(hdl, &filter, media, cnt);
+    dss_filter_free(&filter);
+
+    return rc;
+}
+
 static void lock_medium(struct phobos_locate_state *pl_state,
                         struct media_info **medium, const char *hostname,
                         int *cnt)
@@ -131,7 +202,7 @@ static void lock_medium(struct phobos_locate_state *pl_state,
     struct object_info *obj = pl_state->objs;
     int rc;
 
-    rc = dss_media_of_object(pl_state->dss, obj, medium, cnt);
+    rc = media_of_object(pl_state->dss, obj, medium, cnt);
     assert_return_code(rc, -rc);
     assert_int_not_equal(*cnt, 0);
 

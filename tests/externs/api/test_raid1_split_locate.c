@@ -116,12 +116,12 @@ static int global_setup(void **state)
         GOTO(clean, rc = -1);
 
     /* get layout */
-    rc = dss_filter_build(&filter, "{\"DSS::EXT::oid\": \"%s\"}",
+    rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}",
                           rsl_state.oid);
     if (rc)
         GOTO(clean_dss, rc = -1);
 
-    rc = dss_layout_get(rsl_state.dss, &filter, &rsl_state.layout,
+    rc = dss_layout_get(rsl_state.dss, &filter, NULL, &rsl_state.layout,
                         &rsl_state.layout_cnt);
     dss_filter_free(&filter);
     if (rc)

@@ -371,6 +371,8 @@ struct pho_resource {
 
 /** describe a piece of data in a layout */
 #define MD5_BYTE_LENGTH 16
+#define PHO_HASH_MD5_KEY_NAME    "md5"
+#define PHO_HASH_XXH128_KEY_NAME "xxh128"
 
 struct extent {
     int                 layout_idx; /**< index of this extent in layout */

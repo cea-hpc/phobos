@@ -49,7 +49,7 @@
 #include <stdint.h>
 
 /* Necessary local function declaration
- * (first two declaration are swapped because of a checkpatch bug)
+ * (first two declarations are swapped because of a checkpatch bug)
  */
 static void dss_device_result_free(void *void_dev);
 static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
@@ -392,12 +392,38 @@ static const char * const select_query[] = {
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
                    " address_type, fs_type, fs_status, fs_label, stats, tags,"
                    " put, get, delete FROM media",
-    [DSS_LAYOUT] = "SELECT oid, uuid, version, state, lyt_info, extents"
-                   " FROM extent",
-    [DSS_OBJECT] = "SELECT oid, uuid, version, user_md FROM object",
-    [DSS_DEPREC] = "SELECT oid, uuid, version, user_md, deprec_time"
+    [DSS_LAYOUT] = "SELECT oid, object_uuid, version, lyt_info,"
+                   " json_agg(json_build_object("
+                   "  'extent_uuid', extent_uuid, 'sz', size,"
+                   "  'fam', medium_family, 'state', state,"
+                   "  'media', medium_id, 'addr', address, 'hash', hash,"
+                   "  'info', info))"
+                   " FROM extent"
+                   " RIGHT JOIN ("
+                   "  SELECT oid, object_uuid, version, lyt_info, extent_uuid"
+                   "   FROM layout"
+                   "   LEFT JOIN ("
+                   "    SELECT oid, object_uuid, version, lyt_info FROM object"
+                   "    UNION SELECT oid, object_uuid, version, lyt_info"
+                   "     FROM deprecated_object"
+                   "   ) AS inner_table USING (object_uuid, version)",
+    /* The layout query ends with select_inner_end_query and
+     * select_outer_end_query.
+     */
+    [DSS_OBJECT] = "SELECT oid, object_uuid, version, user_md FROM object",
+    [DSS_DEPREC] = "SELECT oid, object_uuid, version, user_md, deprec_time"
                    " FROM deprecated_object",
     [DSS_LOGS]   = DSS_LOGS_SELECT_QUERY,
+};
+
+static const char * const select_inner_end_query[] = {
+    [DSS_LAYOUT] = " ORDER BY layout_index)"
+                   " AS outer_table USING (extent_uuid)",
+};
+
+static const char * const select_outer_end_query[] = {
+    [DSS_LAYOUT] = " GROUP BY oid, object_uuid, version, lyt_info"
+                   " ORDER BY oid, version, object_uuid",
 };
 
 static const size_t res_size[] = {
@@ -437,22 +463,22 @@ static const char * const insert_query[] = {
                    " fs_type, address_type, fs_status, fs_label, stats, tags,"
                    " put, get, delete)"
                    " VALUES ",
-    [DSS_LAYOUT] = "INSERT INTO extent (oid, uuid, version, state, lyt_info,"
-                   " extents) VALUES ",
+    [DSS_EXTENT] = "INSERT INTO extent (state, size, medium_family, medium_id,"
+                   " address, hash) VALUES ",
+    [DSS_LAYOUT] = "INSERT INTO layout (object_uuid, version, extent_uuid,"
+                   " layout_index) VALUES ",
     [DSS_OBJECT] = "INSERT INTO object (oid, user_md) VALUES ",
-    [DSS_DEPREC] = "INSERT INTO deprecated_object (oid, uuid, version, user_md)"
-                   " VALUES ",
+    [DSS_DEPREC] = "INSERT INTO deprecated_object (oid, object_uuid, version,"
+                   " user_md) VALUES ",
 };
 
 static const char * const insert_full_query[] = {
-    [DSS_OBJECT] = "INSERT INTO object (oid, uuid, version, user_md) VALUES ",
+    [DSS_OBJECT] = "INSERT INTO object (oid, object_uuid, version, user_md)"
+                   " VALUES ",
 };
 
 static const char * const update_query[] = {
     [DSS_DEVICE] = "UPDATE device SET adm_status = '%s' WHERE id = '%s';",
-    [DSS_LAYOUT] = "UPDATE extent SET (state, lyt_info, extents) ="
-                   " ('%s', '%s', '%s')"
-                   " WHERE uuid = '%s' and version = %d;",
     [DSS_OBJECT] = "UPDATE object SET user_md = '%s' "
                    " WHERE oid = '%s';",
 };
@@ -460,22 +486,26 @@ static const char * const update_query[] = {
 static const char * const update_host_query =
     "UPDATE device SET host = '%s' WHERE id = '%s';";
 
+static const char * const update_layout_info_query =
+    "UPDATE object SET lyt_info = '%s' WHERE oid = '%s';";
+
 static const char * const delete_query[] = {
     [DSS_DEVICE] = "DELETE FROM device WHERE id = '%s'; ",
     [DSS_MEDIA]  = "DELETE FROM media WHERE id = '%s'; ",
-    [DSS_LAYOUT] = "DELETE FROM extent WHERE oid = '%s'; ",
     [DSS_OBJECT] = "DELETE FROM object WHERE oid = '%s'; ",
     [DSS_DEPREC] = "DELETE FROM deprecated_object"
-                   " WHERE uuid = '%s' AND version = '%d'; ",
+                   " WHERE object_uuid = '%s' AND version = '%d'; ",
 };
 
 static const char * const insert_query_values[] = {
     [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s')%s",
     [DSS_MEDIA]  = "('%s', %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s,"
                    " %s, %s, %s)%s",
-    [DSS_LAYOUT] = "('%s', (select uuid from object where oid = '%s'), "
-                   " (select version from object where oid = '%s'), '%s',"
-                   " '%s', '%s')%s",
+    [DSS_EXTENT] = "('%s', %d, '%s', '%s', '%s', '%s')%s",
+    [DSS_LAYOUT] = "((select object_uuid from object where oid = '%s'),"
+                   " (select version from object where oid = '%s'),"
+                   " (select extent_uuid from extent where address = '%s'),"
+                   " %d)%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
     [DSS_DEPREC] = "('%s', '%s', %d, '%s')%s",
 };
@@ -491,17 +521,21 @@ enum dss_move_queries {
 };
 
 static const char * const move_query[] = {
-    [DSS_MOVE_OBJECT_TO_DEPREC] = "WITH moved_object AS "
-                                  "(DELETE FROM object WHERE %s RETURNING "
-                                  "oid, uuid, version, user_md) "
-                                  "INSERT INTO deprecated_object (oid, uuid, "
-                                  "version, user_md)"
-                                  "SELECT * FROM moved_object",
-    [DSS_MOVE_DEPREC_TO_OBJECT] = "WITH risen_object AS "
-                                  "(DELETE FROM deprecated_object WHERE %s "
-                                  "RETURNING oid, uuid, version, user_md) "
-                                  "INSERT INTO object (oid, uuid, version, "
-                                  "user_md) SELECT * FROM risen_object",
+    [DSS_MOVE_OBJECT_TO_DEPREC] = "WITH moved_object AS"
+                                  " (DELETE FROM object WHERE %s RETURNING"
+                                  "  oid, object_uuid, version, user_md,"
+                                  "  lyt_info)"
+                                  " INSERT INTO deprecated_object"
+                                  "  (oid, object_uuid, version, user_md,"
+                                  "   lyt_info)"
+                                  " SELECT * FROM moved_object",
+    [DSS_MOVE_DEPREC_TO_OBJECT] = "WITH risen_object AS"
+                                  " (DELETE FROM deprecated_object WHERE %s"
+                                  "  RETURNING oid, object_uuid,"
+                                  "  version, user_md, lyt_info)"
+                                  " INSERT INTO object (oid, object_uuid, "
+                                  "  version, user_md, lyt_info)"
+                                  " SELECT * FROM risen_object",
 };
 
 /**
@@ -878,18 +912,19 @@ static int read_hex_buffer(unsigned char *digest, size_t size,
     return 0;
 }
 
+static int dss_extent_hash_decode(struct extent *extent, json_t *hash_field);
+
 /**
  * Extract extents from json
  *
  * \param[out] extents extent list
  * \param[out] count  number of extents decoded
- * \param[in]  state  global object state
  * \param[in]  json   String with json media stats
  *
  * \return 0 on success, negative error code on failure.
  */
 static int dss_layout_extents_decode(struct extent **extents, int *count,
-                                     enum extent_state state, const char *json)
+                                     const char *json)
 {
     json_t          *root;
     json_t          *child;
@@ -927,7 +962,11 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
 
         child = json_array_get(root, i);
         result[i].layout_idx = i;
-        result[i].state = state;
+        tmp = json_dict2tmp_str(child, "state");
+        if (!tmp)
+            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'state'");
+
+        result[i].state = str2extent_state(tmp);
         result[i].size = json_dict2ll(child, "sz");
         if (result[i].size < 0)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'sz'");
@@ -956,33 +995,9 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
         if (rc)
             LOG_GOTO(out_decref, rc = -EINVAL, "Failed to set media id");
 
-        /* xxh128 */
-        tmp = json_dict2tmp_str(child, "xxh128");
-        if (tmp) {
-            rc = read_hex_buffer(result[i].xxh128, sizeof(result[i].xxh128),
-                                 tmp);
-            if (rc)
-                LOG_GOTO(out_decref, rc,
-                         "Failed to decode xxh128 extent %d out of %d",
-                         i, *count);
-
-            result[i].with_xxh128 = true;
-        } else {
-            result[i].with_xxh128 = false;
-        }
-
-        /* md5 */
-        tmp = json_dict2tmp_str(child, "md5");
-        if (tmp) {
-            rc = read_hex_buffer(result[i].md5, sizeof(result[i].md5), tmp);
-            if (rc)
-                LOG_GOTO(out_decref, rc,
-                         "Failed to decode md5 extent %d out of %d", i, *count);
-
-            result[i].with_md5 = true;
-        } else {
-            result[i].with_md5 = false;
-        }
+        rc = dss_extent_hash_decode(&result[i], json_object_get(child, "hash"));
+        if (rc)
+            LOG_GOTO(out_decref, rc = -EINVAL, "Failed to set hash");
     }
 
     *extents = result;
@@ -995,142 +1010,95 @@ out_decref:
     return rc;
 }
 
-/**
- * Add a field to a json which is the hexadecimal notation of an input buffer
- *
- * @param[in,out]   json            Json into adding the new field
- * @param[in]       new_field_name  Name of the new field
- * @param[in]       buf             Buffer to encode in json
- * @param[in]       size            Size in bytes of the input buffer
- *
- * @return 0 on success, negative error code on failure.
- */
-static int fill_json_with_hex_buf(json_t *json, const char *new_field_name,
-                                  const unsigned char *buf, size_t size)
+static int dss_extent_hash_decode(struct extent *extent, json_t *hash_field)
 {
-    char *json_field_buf = uchar2hex(buf, size);
-    int rc;
-
-    if (!json_field_buf)
-        return -errno;
-
-    rc = json_object_set_new(json, new_field_name,
-                             json_string(json_field_buf));
-    free(json_field_buf);
-    if (rc)
-        return -EINVAL;
-
-    return 0;
-}
-
-/**
- * Encode extents to json
- *
- * \param[in]   extents extent list
- * \param[in]   count   number of extents
- * \param[out]  error   error count
- *
- * \return json as string
- */
-static char *dss_layout_extents_encode(struct extent *extents,
-                                       unsigned int count, int *error)
-{
-    int err_cnt = 0;
-    json_t *child;
-    json_t *root;
-    char *s;
-    int rc;
-    int i;
+    const char *tmp;
+    int rc = 0;
 
     ENTRY;
 
-    root = json_array();
-    if (!root) {
-        pho_error(-ENOMEM, "Failed to create json root object");
-        return NULL;
+    if (!json_is_object(hash_field))
+        LOG_RETURN(rc = -EINVAL, "Invalid module description");
+
+    tmp = json_dict2tmp_str(hash_field, "xxh128");
+    if (tmp) {
+        rc = read_hex_buffer(extent->xxh128, sizeof(extent->xxh128), tmp);
+        if (rc)
+            LOG_RETURN(rc, "Failed to decode xxh128 extent");
     }
+    extent->with_xxh128 = (tmp != NULL);
 
-    for (i = 0; i < count; i++) {
-        child = json_object();
-        if (!child) {
-            pho_error(-ENOMEM, "Failed to create json child object");
-            err_cnt++;
-            continue;
-        }
-
-        rc = json_object_set_new(child, "sz", json_integer(extents[i].size));
-        if (rc) {
-            pho_error(-EINVAL, "Failed to encode 'sz' (%zu)", extents[i].size);
-            err_cnt++;
-        }
-
-        /* We may have no address yet. */
-        if (extents[i].address.buff != NULL) {
-            rc = json_object_set_new(child, "addr",
-                                     json_string(extents[i].address.buff));
-            if (rc) {
-                pho_error(-EINVAL, "Failed to encode 'addr' (%s)",
-                          extents[i].address.buff);
-                err_cnt++;
-            }
-        }
-
-        rc = json_object_set_new(child, "fam",
-            json_string(rsc_family2str(extents[i].media.family)));
-        if (rc) {
-            pho_error(-EINVAL, "Failed to encode 'fam' (%d:%s)",
-                      extents[i].media.family,
-                      rsc_family2str(extents[i].media.family));
-            err_cnt++;
-        }
-
-        rc = json_object_set_new(child, "media",
-            json_string(extents[i].media.name));
-        if (rc) {
-            pho_error(-EINVAL, "Failed to encode 'media' (%s)",
-                      extents[i].media.name);
-            err_cnt++;
-        }
-
-        /* xxh128: 2 hex char per byte + final '\0' */
-        if (extents[i].with_xxh128) {
-            rc = fill_json_with_hex_buf(child, "xxh128", extents[i].xxh128,
-                                        sizeof(extents[i].xxh128));
-            if (rc) {
-                pho_error(rc, "Failed to encode 'xxh128' in layout");
-                err_cnt++;
-            }
-        }
-
-        /* md5: 2 hex char per byte + final '\0' */
-        if (extents[i].with_md5) {
-            rc = fill_json_with_hex_buf(child, "md5", extents[i].md5,
-                                        sizeof(extents[i].md5));
-            if (rc) {
-                pho_error(rc, "Failed to encode 'md5' in layout");
-                err_cnt++;
-            }
-        }
-
-        rc = json_array_append_new(root, child);
-        if (rc) {
-            pho_error(-EINVAL, "Failed to attach child to root object");
-            err_cnt++;
-        }
+    tmp = json_dict2tmp_str(hash_field, "md5");
+    if (tmp) {
+        rc = read_hex_buffer(extent->md5, sizeof(extent->md5), tmp);
+        if (rc)
+            LOG_RETURN(rc, "Failed to decode md5 extent");
     }
+    extent->with_md5 = (tmp != NULL);
 
-    *error = err_cnt;
-
-    s = json_dumps(root, 0);
-    json_decref(root);
-    if (!s) {
-        pho_error(-EINVAL, "Failed to dump JSON to ASCIIZ");
-        return NULL;
-    }
-
-    pho_debug("Created JSON representation for extents: '%s'", s);
-    return s;
+    return rc;
 }
+
+/**
+ * Encode a buffer in hexadecimal notation
+ *
+ * @param[out] output  Encoded output buffer
+ * @param[in]  input   Buffer to encode
+ * @param[in]  size    Size in bytes of the input buffer
+ */
+static void encode_hex_buffer(char *output, const unsigned char *input,
+                              size_t size)
+{
+    int j, k;
+
+    for (j = 0, k = 0; j < size; j++, k += 2)
+        sprintf(output + k, "%02x", input[j]);
+}
+
+static char *dss_extent_hash_encode(struct extent *extent)
+{
+    char *result = NULL;
+    json_t *root;
+    int rc;
+
+    ENTRY;
+
+    root = json_object();
+    if (!root) {
+        pho_error(-ENOMEM, "Failed to create json object");
+        return NULL;
+    }
+
+    if (extent->with_md5) {
+        char buf[64];
+
+        encode_hex_buffer(buf, extent->md5, sizeof(extent->md5));
+        rc = json_object_set_new(root, PHO_HASH_MD5_KEY_NAME,
+                                 json_string(buf));
+        if (rc)
+            LOG_GOTO(out_free, rc = -EINVAL, "Cannot set md5");
+    }
+
+    if (extent->with_xxh128) {
+        char buf[64];
+
+        encode_hex_buffer(buf, extent->xxh128, sizeof(extent->xxh128));
+        rc = json_object_set_new(root, PHO_HASH_XXH128_KEY_NAME,
+                                 json_string(buf));
+        if (rc)
+            LOG_GOTO(out_free, rc = -EINVAL, "Cannot set xxh128");
+    }
+
+    result = json_dumps(root, 0);
+
+    pho_debug("Created json representation for hash: '%s'",
+              result ? result : "(null)");
+
+out_free:
+    json_decref(root);
+    return result;
+}
+
 
 static int get_object_setrequest(PGconn *_conn, struct object_info *item_list,
                                  int item_cnt, enum dss_set_action action,
@@ -1199,6 +1167,40 @@ static int get_deprecated_object_setrequest(PGconn *_conn,
     return 0;
 }
 
+static int get_extent_setrequest(PGconn *_conn, struct layout_info *item_list,
+                                 int item_cnt, enum dss_set_action action,
+                                 GString *request)
+{
+    int rc = 0;
+    int i;
+
+    ENTRY;
+
+    if (action != DSS_SET_INSERT)
+        LOG_RETURN(-ENOTSUP, "Extents can only be inserted");
+
+    for (i = 0; i < item_cnt && rc == 0; i++) {
+        struct layout_info *p_layout = &item_list[i];
+        int j;
+
+        for (j = 0; j < p_layout->ext_count; ++j) {
+            struct extent *ext = &p_layout->extents[j];
+            char *hash = dss_extent_hash_encode(ext);
+
+            g_string_append_printf(request, insert_query_values[DSS_EXTENT],
+                                   extent_state2str(ext->state), ext->size,
+                                   rsc_family2str(ext->media.family),
+                                   ext->media.name, ext->address.buff, hash,
+                                   (i < item_cnt-1 ||
+                                    j < p_layout->ext_count - 1) ? "," : ";");
+
+            free(hash);
+        }
+    }
+
+    return rc;
+}
+
 static int get_layout_setrequest(PGconn *_conn, struct layout_info *item_list,
                                  int item_cnt, enum dss_set_action action,
                                  GString *request, int *error)
@@ -1209,40 +1211,33 @@ static int get_layout_setrequest(PGconn *_conn, struct layout_info *item_list,
 
     for (i = 0; i < item_cnt && rc == 0; i++) {
         struct layout_info  *p_layout = &item_list[i];
-        char                *layout = NULL;
-        char                *pres = NULL;
 
         if (p_layout->oid == NULL)
             LOG_RETURN(-EINVAL, "Extent oid cannot be NULL");
 
-        if (action == DSS_SET_DELETE) {
-            g_string_append_printf(request, delete_query[DSS_LAYOUT],
+        if (action == DSS_SET_INSERT) {
+            char *pres;
+            int j;
+
+            for (j = 0; j < p_layout->ext_count; ++j) {
+                struct extent *ext = &p_layout->extents[j];
+
+                g_string_append_printf(request, insert_query_values[DSS_LAYOUT],
+                                       p_layout->oid, p_layout->oid,
+                                       ext->address.buff, j,
+                                       (i < item_cnt - 1 ||
+                                        j < p_layout->ext_count - 1) ?
+                                       "," : ";");
+            }
+
+            pres = dss_layout_desc_encode(&p_layout->layout_desc);
+            if (!pres)
+                LOG_RETURN(-EINVAL, "JSON layout desc encoding error");
+
+            g_string_append_printf(request, update_layout_info_query, pres,
                                    p_layout->oid);
-            continue;
+            free(pres);
         }
-
-        layout = dss_layout_extents_encode(p_layout->extents,
-                                           p_layout->ext_count, error);
-        if (!layout)
-            LOG_GOTO(out_free, rc = -EINVAL, "JSON layout encoding error");
-
-        pres = dss_layout_desc_encode(&p_layout->layout_desc);
-        if (!pres)
-            LOG_GOTO(out_free, rc = -EINVAL, "JSON layout desc encoding error");
-
-        if (action == DSS_SET_INSERT)
-            g_string_append_printf(request, insert_query_values[DSS_LAYOUT],
-                                   p_layout->oid, p_layout->oid, p_layout->oid,
-                                   extent_state2str(p_layout->extents[0].state),
-                                   pres, layout, i < item_cnt-1 ? "," : ";");
-        else if (action == DSS_SET_UPDATE)
-            g_string_append_printf(request, update_query[DSS_LAYOUT],
-                                   extent_state2str(p_layout->extents[0].state),
-                                   pres, layout, p_layout->uuid,
-                                   p_layout->version);
-out_free:
-        free(layout);
-        free(pres);
     }
 
     return rc;
@@ -1845,7 +1840,7 @@ static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
     layout->uuid = PQgetvalue(res, row_num, 1);
     layout->version = atoi(PQgetvalue(res, row_num, 2));
     rc = dss_layout_desc_decode(&layout->layout_desc,
-                                PQgetvalue(res, row_num, 4));
+                                PQgetvalue(res, row_num, 3));
     if (rc) {
         pho_error(rc, "dss_layout_desc decode error");
         return rc;
@@ -1853,9 +1848,7 @@ static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
 
     rc = dss_layout_extents_decode(&layout->extents,
                                    &layout->ext_count,
-                                   str2extent_state(
-                                       PQgetvalue(res, row_num, 3)),
-                                   PQgetvalue(res, row_num, 5));
+                                   PQgetvalue(res, row_num, 4));
     if (rc) {
         pho_error(rc, "dss_extent tags decode error");
         return rc;
@@ -1946,8 +1939,8 @@ static void _dss_result_free(struct dss_result *dss_res, int item_cnt)
 }
 
 static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
-                           const struct dss_filter *filter, void **item_list,
-                           int *item_cnt)
+                           const struct dss_filter **filters,
+                           void **item_list, int *item_cnt)
 {
     PGconn              *conn = handle->dh_conn;
     size_t               dss_res_size;
@@ -1972,10 +1965,20 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     /* get everything if no criteria */
     clause = g_string_new(select_query[type]);
 
-    rc = clause_filter_convert(handle, clause, filter);
+    rc = clause_filter_convert(handle, clause, filters[0]);
     if (rc) {
         g_string_free(clause, true);
         return rc;
+    }
+
+    if (type == DSS_LAYOUT) {
+        g_string_append(clause, select_inner_end_query[DSS_LAYOUT]);
+        rc = clause_filter_convert(handle, clause, filters[1]);
+        if (rc) {
+            g_string_free(clause, true);
+            return rc;
+        }
+        g_string_append(clause, select_outer_end_query[DSS_LAYOUT]);
     }
 
     pho_debug("Executing request: '%s'", clause->str);
@@ -2075,6 +2078,11 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
     case DSS_LAYOUT:
         rc = get_layout_setrequest(conn, item_list, item_cnt, action, request,
                                    &error);
+        if (rc)
+            LOG_GOTO(out_cleanup, rc, "SQL layout request failed");
+        break;
+    case DSS_EXTENT:
+        rc = get_extent_setrequest(conn, item_list, item_cnt, action, request);
         if (rc)
             LOG_GOTO(out_cleanup, rc, "SQL extent request failed");
         break;
@@ -2188,7 +2196,7 @@ static int dss_prepare_uuid_version_list(PGconn *conn, GString *list,
                        "Cannot escape litteral %s: %s",
                        obj_list[i].uuid, PQerrorMessage(conn));
 
-        g_string_append_printf(list, "uuid=%s AND ", sql_uuid);
+        g_string_append_printf(list, "object_uuid=%s AND ", sql_uuid);
         PQfreemem(sql_uuid);
 
         /* version */
@@ -2303,38 +2311,51 @@ int dss_get_usable_devices(struct dss_handle *hdl, const enum rsc_family family,
 int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
                    struct dev_info **dev_ls, int *dev_cnt)
 {
-    return dss_generic_get(hdl, DSS_DEVICE, filter, (void **)dev_ls, dev_cnt);
+    return dss_generic_get(hdl, DSS_DEVICE,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)dev_ls, dev_cnt);
 }
 
 int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
                   struct media_info **med_ls, int *med_cnt)
 {
-    return dss_generic_get(hdl, DSS_MEDIA, filter, (void **)med_ls, med_cnt);
+    return dss_generic_get(hdl, DSS_MEDIA,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)med_ls, med_cnt);
 }
 
-int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct layout_info **lyt_ls, int *lyt_cnt)
+int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
+                   const struct dss_filter *media,
+                   struct layout_info **layouts, int *layout_count)
 {
-    return dss_generic_get(hdl, DSS_LAYOUT, filter, (void **)lyt_ls, lyt_cnt);
+    return dss_generic_get(hdl, DSS_LAYOUT,
+                           (const struct dss_filter*[]) {object, media},
+                           (void **)layouts, layout_count);
 }
 
 int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
                    struct object_info **obj_ls, int *obj_cnt)
 {
-    return dss_generic_get(hdl, DSS_OBJECT, filter, (void **)obj_ls, obj_cnt);
+    return dss_generic_get(hdl, DSS_OBJECT,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)obj_ls, obj_cnt);
 }
 
 int dss_deprecated_object_get(struct dss_handle *hdl,
                               const struct dss_filter *filter,
                               struct object_info **obj_ls, int *obj_cnt)
 {
-    return dss_generic_get(hdl, DSS_DEPREC, filter, (void **)obj_ls, obj_cnt);
+    return dss_generic_get(hdl, DSS_DEPREC,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)obj_ls, obj_cnt);
 }
 
 int dss_logs_get(struct dss_handle *hdl, const struct dss_filter *filter,
                  struct pho_log **logs_ls, int *logs_cnt)
 {
-    return dss_generic_get(hdl, DSS_LOGS, filter, (void **)logs_ls, logs_cnt);
+    return dss_generic_get(hdl, DSS_LOGS,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)logs_ls, logs_cnt);
 }
 
 int dss_device_insert(struct dss_handle *hdl, struct dev_info *dev_ls,
@@ -2516,10 +2537,18 @@ clean:
     return rc;
 }
 
-int dss_layout_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
-                   int lyt_cnt, enum dss_set_action action)
+int dss_extent_set(struct dss_handle *hdl, struct layout_info *layouts,
+                   int layout_count, enum dss_set_action action)
 {
-    return dss_generic_set(hdl, DSS_LAYOUT, (void *)lyt_ls, lyt_cnt, action, 0);
+    return dss_generic_set(hdl, DSS_EXTENT, (void *)layouts, layout_count,
+                           action, 0);
+}
+
+int dss_layout_set(struct dss_handle *hdl, struct layout_info *layouts,
+                   int layout_count, enum dss_set_action action)
+{
+    return dss_generic_set(hdl, DSS_LAYOUT, (void *)layouts, layout_count,
+                           action, 0);
 }
 
 int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
@@ -2796,67 +2825,6 @@ int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
 
 clean:
     dss_res_free(medium_info, 1);
-
-    return rc;
-}
-
-int dss_media_of_object(struct dss_handle *hdl, struct object_info *obj,
-                        struct media_info **media, int *cnt)
-{
-    struct layout_info *layout;
-    struct dss_filter filter;
-    struct pho_id medium_id;
-    GString *filter_str;
-    int rc;
-    int i;
-
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                            "{\"DSS::EXT::oid\": \"%s\"}, "
-                            "{\"DSS::EXT::uuid\": \"%s\"}, "
-                            "{\"DSS::EXT::version\": \"%d\"}"
-                          "]}",
-                          obj->oid, obj->uuid, obj->version);
-    if (rc)
-        LOG_RETURN(rc, "Cannot build filter");
-
-    rc = dss_layout_get(hdl, &filter, &layout, cnt);
-    dss_filter_free(&filter);
-    if (rc)
-        LOG_RETURN(rc, "Failed to retrieve layout of object '%s'", obj->oid);
-
-    if (*cnt == 0) {
-        dss_res_free(layout, 0);
-        LOG_RETURN(-EINVAL, "No extent found for object '%s'", obj->oid);
-    }
-
-    filter_str = g_string_new(NULL);
-    if (*cnt > 1)
-        g_string_append_printf(filter_str, "{\"OR\": [");
-
-    for (i = 0; i < *cnt; ++i) {
-        medium_id = layout[i].extents->media;
-        g_string_append_printf(filter_str,
-                              "{\"$AND\": ["
-                                "{\"DSS::MDA::family\": \"%s\"}, "
-                                "{\"DSS::MDA::id\": \"%s\"}"
-                              "]}%s",
-                              rsc_family2str(medium_id.family),
-                              medium_id.name, i + 1 < *cnt ? "," : "");
-    }
-
-    if (*cnt > 1)
-        g_string_append_printf(filter_str, "]}");
-
-    dss_res_free(layout, *cnt);
-
-    rc = dss_filter_build(&filter, "%s", filter_str->str);
-    g_string_free(filter_str, true);
-    if (rc)
-        LOG_RETURN(rc, "Cannot build filter");
-
-    rc = dss_media_get(hdl, &filter, media, cnt);
-    dss_filter_free(&filter);
 
     return rc;
 }

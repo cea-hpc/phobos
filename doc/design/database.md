@@ -59,8 +59,8 @@ The extent table stores extent metadata.
 | medium_id         | id of the medium on which the extent  |
 |                   | is stored                             |
 | address           | address of this extent on the medium  |
-| md5               | MD5 checksum or NULL                  |
-| xxh128            | XXH128 checksum or NULL               |
+| hash              | blob of hash checksums (JSON,         |
+|                   | currently can manage MD5 and XXH128)  |
 | info              | blob of miscellaneous info per extent |
 |                   | (JSON, currently not used, only for   |
 |                   |  future extension)                    |

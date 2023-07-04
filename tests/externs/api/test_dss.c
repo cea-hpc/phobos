@@ -45,24 +45,25 @@
 #define LOCK_OWNER "0"
 
 static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
-                           const struct dss_filter *filter, void **item_list,
-                           int *n)
+                           const struct dss_filter *inner_filter,
+                           const struct dss_filter *outer_filter,
+                           void **item_list, int *n)
 {
     switch (type) {
     case DSS_OBJECT:
-        return dss_object_get(handle, filter,
+        return dss_object_get(handle, inner_filter,
                               (struct object_info **)item_list, n);
     case DSS_DEPREC:
-        return dss_deprecated_object_get(handle, filter,
+        return dss_deprecated_object_get(handle, inner_filter,
                                      (struct object_info **)item_list, n);
     case DSS_LAYOUT:
-        return dss_layout_get(handle, filter,
+        return dss_layout_get(handle, inner_filter, outer_filter,
                               (struct layout_info **)item_list, n);
     case DSS_DEVICE:
-        return dss_device_get(handle, filter,
+        return dss_device_get(handle, inner_filter,
                               (struct dev_info **)item_list, n);
     case DSS_MEDIA:
-        return dss_media_get(handle, filter,
+        return dss_media_get(handle, inner_filter,
                              (struct media_info **)item_list, n);
     default:
         return -ENOTSUP;
@@ -123,6 +124,8 @@ static int convert_pid(const char *pid)
 
 int main(int argc, char **argv)
 {
+    bool with_outer_filter = false;
+    struct dss_filter outer_filter;
     struct dss_handle *dss_handle;
     const char *connect_string;
     enum dss_set_action action;
@@ -149,6 +152,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "       TYPE := "
                         "{ device | media | object | deprec | layout }\n");
         fprintf(stderr, "       [ \"CRIT\" ] := \"field cmp value\"\n");
+        fprintf(stderr, "         \"CRIT\" may start by '+' to specify an "
+                        "outer filter for layout get\n");
         fprintf(stderr, "Optional for get:\n");
         fprintf(stderr, "       nb item found\n");
         fprintf(stderr, "Optional for set:\n");
@@ -175,21 +180,33 @@ int main(int argc, char **argv)
         }
 
         if (argc >= 4) {
-            pho_info("Crit Filter: %s", argv[3]);
+            pho_info("Criteria Filter: %s", argv[3]);
             if (strcmp(argv[3], "all") != 0) {
-                with_filter = true;
-                rc = dss_filter_build(&filter, "%s", argv[3]);
-                if (rc) {
-                    pho_error(rc, "Cannot build DSS filter");
-                    exit(EXIT_FAILURE);
+                if (type == DSS_LAYOUT && strstr(argv[3], "DSS::EXT") != NULL) {
+                    with_outer_filter = true;
+                    rc = dss_filter_build(&outer_filter, "%s", argv[3]);
+                    if (rc) {
+                        pho_error(rc, "Cannot build DSS filter");
+                        exit(EXIT_FAILURE);
+                    }
+                } else {
+                    with_filter = true;
+                    rc = dss_filter_build(&filter, "%s", argv[3]);
+                    if (rc) {
+                        pho_error(rc, "Cannot build DSS filter");
+                        exit(EXIT_FAILURE);
+                    }
                 }
             }
         }
 
         rc = dss_generic_get(dss_handle, type, with_filter ? &filter : NULL,
+                             with_outer_filter ? &outer_filter : NULL,
                              &item_list, &item_cnt);
         if (with_filter)
             dss_filter_free(&filter);
+        if (with_outer_filter)
+            dss_filter_free(&outer_filter);
 
         if (rc) {
             pho_error(rc, "dss_get failed");
@@ -292,11 +309,15 @@ int main(int argc, char **argv)
                         pho_debug("Switch to oidtest mode (test null oid)");
                 }
 
-        rc = dss_generic_get(dss_handle, type, NULL, &item_list, &item_cnt);
+        rc = dss_generic_get(dss_handle, type, NULL, NULL, &item_list,
+                             &item_cnt);
+
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
         }
+
+        pho_info("Retrieved %d items", item_cnt);
 
         switch (type) {
         case DSS_DEVICE:
@@ -351,11 +372,20 @@ int main(int argc, char **argv)
         case DSS_LAYOUT:
             for (i = 0,  layout = item_list; i < item_cnt; i++, layout++) {
                 if (action == DSS_SET_INSERT) {
+                    /* Only the item from the object table is considered as the
+                     * insert request in DSS assumes a layout can be added only
+                     * if it comes from a living object
+                     */
                     char *s;
+
+                    if (strcmp(layout->oid, "01230123ABC"))
+                        continue;
 
                     rc = asprintf(&s, "%sCOPY", layout->oid);
                     assert(rc > 0);
                     layout->oid = s;
+                    item_list = layout;
+                    item_cnt = 1;
                 }
                 else if (action == DSS_SET_UPDATE)
                     layout->extents[0].size = 0;
@@ -385,7 +415,8 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_generic_get(dss_handle, type, NULL, &item_list, &item_cnt);
+        rc = dss_generic_get(dss_handle, type, NULL, NULL, &item_list,
+                             &item_cnt);
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);
@@ -409,7 +440,8 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        rc = dss_generic_get(dss_handle, type, NULL, &item_list, &item_cnt);
+        rc = dss_generic_get(dss_handle, type, NULL, NULL, &item_list,
+                             &item_cnt);
         if (rc) {
             pho_error(rc, "dss_get failed");
             exit(EXIT_FAILURE);

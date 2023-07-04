@@ -175,14 +175,14 @@ static int decoder_build(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
-                              "{\"DSS::EXT::uuid\": \"%s\"}, "
-                              "{\"DSS::EXT::version\": \"%d\"}"
+                              "{\"DSS::LYT::object_uuid\": \"%s\"}, "
+                              "{\"DSS::LYT::version\": \"%d\"}"
                           "]}",
                           xfer->xd_objuuid, xfer->xd_version);
     if (rc)
         LOG_RETURN(rc, "Cannot build filter");
 
-    rc = dss_layout_get(dss, &filter, &layout, &cnt);
+    rc = dss_layout_get(dss, &filter, NULL, &layout, &cnt);
     dss_filter_free(&filter);
     if (rc)
         GOTO(err, rc);
@@ -499,15 +499,15 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     /* Ensure the oid isn't used by an existing layout before deleting it */
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
-                          "  {\"DSS::EXT::uuid\": \"%s\"},"
-                          "  {\"DSS::EXT::version\": %d}"
+                          "  {\"DSS::LYT::object_uuid\": \"%s\"},"
+                          "  {\"DSS::LYT::version\": %d}"
                           "]}", obj->uuid, obj->version);
     if (rc)
         LOG_GOTO(out_prev, rc,
                  "Couldn't build filter in md_del for extent uuid:'%s'.",
                  obj->uuid);
 
-    rc = dss_layout_get(dss, &filter, &layout, &cnt);
+    rc = dss_layout_get(dss, &filter, NULL, &layout, &cnt);
     dss_filter_free(&filter);
     if (rc)
         LOG_GOTO(out_prev, rc, "dss_layout_get failed for uuid:'%s'",
@@ -912,10 +912,18 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     /* Once the encoder is done and successful, save the layout and metadata */
     if (!enc->is_decoder && xfer->xd_rc == 0 && rc == 0) {
         pho_debug("Saving layout for objid:'%s'", xfer->xd_objid);
-        rc = dss_layout_set(&pho->dss, enc->layout, 1, DSS_SET_INSERT);
-        if (rc)
-            pho_error(rc, "Error while saving layout for objid:'%s'",
+        rc = dss_extent_set(&pho->dss, enc->layout, 1, DSS_SET_INSERT);
+        if (rc) {
+            pho_error(rc, "Error while saving extents for objid: '%s'",
                       xfer->xd_objid);
+        } else {
+            rc = dss_layout_set(&pho->dss, enc->layout, 1, DSS_SET_INSERT);
+            if (rc) /* XXX: manage extent "rollback" by setting their
+                     * state to orphan
+                     */
+                pho_error(rc, "Error while saving layout for objid:'%s'",
+                          xfer->xd_objid);
+        }
     }
 
     /* Only overwrite xd_rc if it was 0 */
@@ -1496,17 +1504,16 @@ int phobos_locate(const char *oid, const char *uuid, int version,
     /* find layout to locate media */
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
-                              "{\"DSS::EXT::oid\": \"%s\"}, "
-                              "{\"DSS::EXT::uuid\": \"%s\"}, "
-                              "{\"DSS::EXT::version\": \"%d\"}"
+                              "{\"DSS::LYT::object_uuid\": \"%s\"}, "
+                              "{\"DSS::LYT::version\": \"%d\"}"
                           "]}",
-                          obj->oid, obj->uuid, obj->version);
+                          obj->uuid, obj->version);
     if (rc)
         LOG_GOTO(clean, rc,
                  "Unable to build filter oid %s uuid %s version %d to get "
                  "layout from extent", obj->oid, obj->uuid, obj->version);
 
-    rc = dss_layout_get(&dss, &filter, &layout, &cnt);
+    rc = dss_layout_get(&dss, &filter, NULL, &layout, &cnt);
     dss_filter_free(&filter);
     if (rc)
         GOTO(clean, rc);

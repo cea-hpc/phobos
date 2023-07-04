@@ -37,7 +37,7 @@ function setup
     setup_tables
 
     $PSQL << EOF
-    INSERT INTO object (oid, uuid, version, user_md) VALUES
+    INSERT INTO object (oid, object_uuid, version, user_md) VALUES
         ('test-oid1', '00112233445566778899aabbccddeef1', 1, '{}'),
         ('test-oid2', '00112233445566778899aabbccddeef2', 1, '{}'),
         ('test-oid3', '00112233445566778899aabbccddeef3', 1, '{}');

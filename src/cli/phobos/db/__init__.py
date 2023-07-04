@@ -30,8 +30,8 @@ import psycopg2
 
 from phobos.core import cfg
 
-ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92", "1.93", "1.95"]
-FUTURE_SCHEMAS = ["2.0"]
+ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92", "1.93", "1.95", "2.0"]
+FUTURE_SCHEMAS = []
 CURRENT_SCHEMA_VERSION = ORDERED_SCHEMAS[-1]
 AVAIL_SCHEMAS = set(ORDERED_SCHEMAS) | set(FUTURE_SCHEMAS)
 

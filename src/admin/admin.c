@@ -1253,9 +1253,7 @@ static void phobos_construct_medium(GString *medium_str, const char *medium)
      * We prefered putting this line in a separate function to ease a
      * possible future change that would allow for multiple medium selection.
      */
-    g_string_append_printf(medium_str,
-                           "{\"$INJSON\": "
-                             "{\"DSS::EXT::media_idx\": \"%s\"}}",
+    g_string_append_printf(medium_str, "{\"DSS::EXT::medium_id\": \"%s\"}",
                            medium);
 }
 
@@ -1295,8 +1293,10 @@ int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
                              int n_res, bool is_pattern, const char *medium,
                              struct layout_info **layouts, int *n_layouts)
 {
-    struct dss_filter *filter_ptr = NULL;
-    struct dss_filter filter;
+    struct dss_filter *ext_filter_ptr = NULL;
+    struct dss_filter *med_filter_ptr = NULL;
+    struct dss_filter ext_filter;
+    struct dss_filter med_filter;
     bool medium_is_valid;
     GString *extent_str;
     GString *medium_str;
@@ -1307,55 +1307,46 @@ int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
     medium_is_valid = (medium && strcmp(medium, ""));
 
     /**
-     * If a medium is specified, we construct a string to filter it.
+     * If a medium is specified, we construct its filter.
      */
-    if (medium_is_valid)
+    if (medium_is_valid) {
         phobos_construct_medium(medium_str, medium);
+        rc = dss_filter_build(&med_filter, "%s", medium_str->str);
+        if (rc)
+            goto release_extent;
+
+        med_filter_ptr = &med_filter;
+    }
 
     /**
      * If there are at least one resource, we construct a string containing
      * each request.
      */
-    if (n_res)
+    if (n_res) {
         phobos_construct_extent(extent_str, res, n_res, is_pattern);
+        rc = dss_filter_build(&ext_filter, "%s", extent_str->str);
+        if (rc)
+            goto release_extent;
 
-    if (n_res || medium_is_valid) {
-        /**
-         * Finally, if the request has at least a medium or one resource,
-         * we build the filter in the following way: if there is one
-         * medium and resource, then using an AND is necessary
-         * (which correspond to the first and last "%s").
-         * After that, we add to the filter the resource and medium
-         * if any is present, which are the second and fourth "%s".
-         * Finally, is both are present, a comma is necessary.
-         */
-        rc = dss_filter_build(&filter,
-                              "%s %s %s %s %s",
-                              n_res && medium_is_valid ? "{\"$AND\": [" : "",
-                              extent_str->str != NULL ? extent_str->str : "",
-                              n_res && medium_is_valid ? ", " : "",
-                              medium_str->str != NULL ? medium_str->str : "",
-                              n_res && medium_is_valid ? "]}" : "");
-
-        filter_ptr = &filter;
+        ext_filter_ptr = &ext_filter;
     }
 
-    g_string_free(extent_str, TRUE);
-    g_string_free(medium_str, TRUE);
-
-    if (rc)
-        return rc;
-
     /**
-     * If no resource or medium was asked for, then using a filter isn't
-     * necessary, thus passing it as NULL to dss_layout_get ensures
+     * If no resource or medium was asked for, then using filters isn't
+     * necessary, thus passing them as NULL to dss_layout_get ensures
      * the expected behaviour.
      */
-    rc = dss_layout_get(&adm->dss, filter_ptr, layouts, n_layouts);
+    rc = dss_layout_get(&adm->dss, ext_filter_ptr, med_filter_ptr, layouts,
+                        n_layouts);
     if (rc)
         pho_error(rc, "Cannot fetch layouts");
 
-    dss_filter_free(filter_ptr);
+release_extent:
+    g_string_free(extent_str, TRUE);
+    g_string_free(medium_str, TRUE);
+
+    dss_filter_free(ext_filter_ptr);
+    dss_filter_free(med_filter_ptr);
 
     return rc;
 }

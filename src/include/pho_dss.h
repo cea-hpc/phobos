@@ -45,6 +45,7 @@ enum dss_type {
     DSS_OBJECT =  0,
     DSS_DEPREC,
     DSS_LAYOUT,
+    DSS_EXTENT,
     DSS_DEVICE,
     DSS_MEDIA,
     DSS_MEDIA_UPDATE_LOCK,
@@ -56,6 +57,7 @@ static const char * const dss_type_names[] = {
     [DSS_OBJECT] = "object",
     [DSS_DEPREC] = "deprec",
     [DSS_LAYOUT] = "layout",
+    [DSS_EXTENT] = "extent",
     [DSS_DEVICE] = "device",
     [DSS_MEDIA]  = "media",
     [DSS_MEDIA_UPDATE_LOCK]  = "media_update",
@@ -107,12 +109,12 @@ enum dss_set_action {
 };
 
 static const char * const dss_set_actions_names[] = {
-    [DSS_SET_INSERT]            = "insert",
-    [DSS_SET_FULL_INSERT]       = "full-insert",
-    [DSS_SET_UPDATE]            = "update",
-    [DSS_SET_UPDATE_ADM_STATUS] = "update_adm_status",
-    [DSS_SET_UPDATE_HOST]       = "update_host",
-    [DSS_SET_DELETE]            = "delete",
+    [DSS_SET_INSERT]             = "insert",
+    [DSS_SET_FULL_INSERT]        = "full-insert",
+    [DSS_SET_UPDATE]             = "update",
+    [DSS_SET_UPDATE_ADM_STATUS]  = "update_adm_status",
+    [DSS_SET_UPDATE_HOST]        = "update_host",
+    [DSS_SET_DELETE]             = "delete",
 };
 
 /**
@@ -139,19 +141,27 @@ struct dss_field_def {
 static struct dss_field_def dss_fields_names[] = {
     /* Object related fields */
     {"DSS::OBJ::oid", "oid"},
-    {"DSS::OBJ::uuid", "uuid"},
+    {"DSS::OBJ::uuid", "object_uuid"},
     {"DSS::OBJ::version", "version"},
     {"DSS::OBJ::user_md", "user_md"},
+    {"DSS::OBJ::layout_info", "lyt_info"},
+    {"DSS::OBJ::layout_type", "lyt_info->>'name'"},
     {"DSS::OBJ::deprec_time", "deprec_time"},
+    /* Layout related fields */
+    {"DSS::LYT::object_uuid", "object_uuid"},
+    {"DSS::LYT::version", "version"},
+    {"DSS::LYT::extent_uuid", "extent_uuid"},
+    {"DSS::LYT::layout_index", "layout_index"},
     /* Extent related fields */
-    {"DSS::EXT::oid", "oid"},
-    {"DSS::EXT::uuid", "uuid"},
-    {"DSS::EXT::version", "version"},
+    {"DSS::EXT::uuid", "extent_uuid"},
     {"DSS::EXT::state", "state"},
-    {"DSS::EXT::layout_info", "lyt_info"},
-    {"DSS::EXT::layout_type", "lyt_info->>'name'"},
+    {"DSS::EXT::size", "size"},
+    {"DSS::EXT::medium_family", "medium_family"},
+    {"DSS::EXT::medium_id", "medium_id"},
+    {"DSS::EXT::address", "address"},
+    {"DSS::EXT::md5", "hash->>'md5'"},
+    {"DSS::EXT::xxh128", "hash->>'xxh128'"},
     {"DSS::EXT::info", "info"},
-    {"DSS::EXT::media_idx", "extents_mda_idx(extent.extents)"},
     /* Media related fields */
     {"DSS::MDA::family", "family"},
     {"DSS::MDA::model", "model"},
@@ -302,29 +312,19 @@ int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
                   struct media_info **med_ls, int *med_cnt);
 
 /**
- * Retrieve media containing extents of an object from DSS
- * @param[in]  hdl      valid connection handle
- * @param[in]  obj      object information
- * @param[out] media    list of retrieved media, to be freed with dss_res_free()
- * @param[out] cnt      number of media retrieved in the list
- *
- * @return 0 on success, -errno on failure
- *                       -EINVAL if \p obj doesn't exist in the DSS
- */
-int dss_media_of_object(struct dss_handle *hdl, struct object_info *obj,
-                        struct media_info **media, int *cnt);
-
-/**
  * Retrieve layout information from DSS
- * @param[in]  hdl      valid connection handle
- * @param[in]  filter   assembled DSS filtering criteria
- * @param[out] lyt_ls   list of retrieved items to be freed w/ dss_res_free()
- * @param[out] lyt_cnt  number of items retrieved in the list
+ * @param[in]  hdl           valid connection handle
+ * @param[in]  object        assembled DSS filtering criteria on objects
+ * @param[in]  media         assembled DSS filtering criteria on media
+ * @param[out] layouts       list of retrieved items to be freed with
+ *                           dss_res_free()
+ * @param[out] layout_count  number of items retrieved in the list
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct layout_info **lyt_ls, int *lyt_cnt);
+int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
+                   const struct dss_filter *media,
+                   struct layout_info **layouts, int *layout_count);
 
 /**
  * Retrieve object information from DSS
@@ -451,6 +451,18 @@ int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
  */
 int dss_layout_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
                    int lyt_cnt, enum dss_set_action action);
+
+/**
+ * Store information for one or many extents in DSS.
+ * @param[in]  hdl           valid connection handle
+ * @param[in]  layouts       array of entries to store
+ * @param[in]  layout_count  number of items in the list
+ * @param[in]  action        operation code (insert, update, delete)
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_extent_set(struct dss_handle *hdl, struct layout_info *layouts,
+                   int layout_count, enum dss_set_action action);
 
 /**
  * Store information for one or many objects in DSS.
