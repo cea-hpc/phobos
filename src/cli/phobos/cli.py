@@ -508,18 +508,6 @@ class ResourceDeleteOptHandler(DSSInteractHandler):
         parser.add_argument('res', nargs='+', help='Resource(s) to remove')
         parser.set_defaults(verb=cls.label)
 
-class CheckOptHandler(DSSInteractHandler):
-    """Issue a check command on the designated object(s)."""
-    label = 'check'
-    descr = 'check state / consistency of the selected resource(s).'
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(CheckOptHandler, cls).add_options(parser)
-        parser.add_argument('res', nargs='+', help='Resource(s) to check')
-
-
 class ListOptHandler(DSSInteractHandler):
     """List items of a specific type."""
     label = 'list'
