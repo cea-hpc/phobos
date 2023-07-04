@@ -1087,41 +1087,10 @@ static void fail_release_free_medium(struct lrs_dev *dev,
     }
 }
 
-/**
- * Load a medium into a drive or return -EBUSY to retry later
- *
- * The loaded medium is registered as dev->ld_dss_media_info. If
- * free_medium is true, medium is set to NULL.
- *
- * If an error occurs on a medium that is not registered to
- * dev->ld_dss_media_info, the medium is considered failed, marked as such in
- * the DSS, freed and set to NULL if free_medium is true. WARNING: if we
- * cannot set it to failed into the DSS, the medium DSS lock is not released.
- *
- * @param[in]   release_medium_on_dev_only_failure
- *                              If true, release the medium on a dev-only
- *                              failure. The medium is neither freed or set to
- *                              NULL.
- * @param[out]  failure_on_dev  Return false if no error or error not due to the
- *                              device, return true if there is an error due to
- *                              the device.
- * @param[out]  failure_on_medium
- *                              Return false if no error or error not due to the
- *                              medium, return true if there is an error due to
- *                              the medium.
- * @param[out]  can_retry       true if an error occured on the library and the
- *                              operation can be retried later.
- * @param[in]   free_medium     If false, medium is never freed and never set to
- *                              NULL.
- *
- * @return 0 on success, -error number on error. -EBUSY is returned when a
- * drive to drive medium movement was prevented by the library or if the device
- * is empty.
- */
-static int dev_load(struct lrs_dev *dev, struct media_info **medium,
-                    bool release_medium_on_dev_only_failure,
-                    bool *failure_on_dev, bool *failure_on_medium,
-                    bool *can_retry, bool free_medium)
+int dev_load(struct lrs_dev *dev, struct media_info **medium,
+             bool release_medium_on_dev_only_failure,
+             bool *failure_on_dev, bool *failure_on_medium,
+             bool *can_retry, bool free_medium)
 {
     struct lib_item_addr medium_addr;
     json_t *medium_lookup_json;

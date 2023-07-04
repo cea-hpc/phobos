@@ -40,8 +40,8 @@
 const char *med_location_string[] = {"unknown", "drive", "slot", "arm",
                                      "impexp"};
 
-static int dev_load(const struct lib_item_addr *dev_addr,
-                    const char *tape_name)
+static int device_load(const struct lib_item_addr *dev_addr,
+                       const char *tape_name)
 {
     struct lib_item_addr medium_addr;
     struct lib_handle lib_hdl;
@@ -139,7 +139,7 @@ static void *dev_load_unload(void *_dev_status)
 
     pho_info("Device %s begins to load/unload the tape %s",
              dev_status->dev_name, dev_status->tape_to_load_unload);
-    rc = dev_load(&dev_status->dev_addr, dev_status->tape_to_load_unload);
+    rc = device_load(&dev_status->dev_addr, dev_status->tape_to_load_unload);
     if (rc) {
         dev_status->failed = true;
         pho_error(rc, "Error device %s failed to load tape '%s'",

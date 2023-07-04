@@ -515,6 +515,10 @@ int scsi_element_status(int fd, enum element_type_code type,
             else
                 /* read next chunks */
                 break;
+        } else if (json_object_size(message) != 0) {
+            // XXX: haven't found a proper way to say that the library failed
+            // here yet, maybe check if the rc is -1, 0 or anything else ?
+            return rc;
         }
 
         if (max_element_status_chunk == -1) {

@@ -36,6 +36,7 @@
 #include "pho_types.h"
 
 struct lrs_sched;
+struct lrs_dev;
 
 /**
  * Structure handling thread devices used by the scheduler.
@@ -89,6 +90,42 @@ void sub_request_free(struct sub_request *sub_req);
  */
 bool locked_cancel_rwalloc_on_error(struct sub_request *sub_request,
                                     bool *ended);
+
+/**
+ * Load a medium into a drive or return -EBUSY to retry later
+ *
+ * The loaded medium is registered as dev->ld_dss_media_info. If
+ * free_medium is true, medium is set to NULL.
+ *
+ * If an error occurs on a medium that is not registered to
+ * dev->ld_dss_media_info, the medium is considered failed, marked as such in
+ * the DSS, freed and set to NULL if free_medium is true. WARNING: if we
+ * cannot set it to failed into the DSS, the medium DSS lock is not released.
+ *
+ * @param[in]   release_medium_on_dev_only_failure
+ *                              If true, release the medium on a dev-only
+ *                              failure. The medium is neither freed or set to
+ *                              NULL.
+ * @param[out]  failure_on_dev  Return false if no error or error not due to the
+ *                              device, return true if there is an error due to
+ *                              the device.
+ * @param[out]  failure_on_medium
+ *                              Return false if no error or error not due to the
+ *                              medium, return true if there is an error due to
+ *                              the medium.
+ * @param[out]  can_retry       true if an error occured on the library and the
+ *                              operation can be retried later.
+ * @param[in]   free_medium     If false, medium is never freed and never set to
+ *                              NULL.
+ *
+ * @return 0 on success, -error number on error. -EBUSY is returned when a
+ * drive to drive medium movement was prevented by the library or if the device
+ * is empty.
+ */
+int dev_load(struct lrs_dev *dev, struct media_info **medium,
+             bool release_medium_on_dev_only_failure,
+             bool *failure_on_dev, bool *failure_on_medium,
+             bool *can_retry, bool free_medium);
 
 /**
  * Parameters to check when a synchronization is required.

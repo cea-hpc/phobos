@@ -68,8 +68,6 @@ static int global_setup(void)
     if (rc == -ENOENT)
         rc = pho_cfg_init_local("../../phobos.conf");
 
-    atexit(pho_cfg_local_fini);
-
     if (rc && rc != -EALREADY)
         return rc;
 
@@ -87,6 +85,8 @@ static int global_teardown(void)
     int rc = setup_db_calls("drop_tables");
 
     unsetenv("PHOBOS_DSS_connect_string");
+
+    pho_cfg_local_fini();
 
     return rc;
 }

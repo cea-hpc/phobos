@@ -72,7 +72,6 @@ struct pho_logrec {
  */
 typedef void (*pho_log_callback_t)(const struct pho_logrec *);
 
-
 /**
  * Update log level. \a level must be any of PHO_LOG_* values or the
  * current level will be reset to PHO_LOG_DEFAULT.
@@ -438,6 +437,11 @@ struct config {
 };
 
 /**
+ * Callback function to mock an ioctl call as used in the SCSI library module
+ */
+typedef int (*mock_ioctl_t)(int fd, unsigned long request, void *sg_io_hdr);
+
+/**
  * Structure containing global information about Phobos. This structure is
  * shared between all threads and modules.
  *
@@ -452,7 +456,18 @@ struct phobos_global_context {
     bool log_dev_output;             /** Whether to display additional
                                        * information on each logs.
                                        */
+
     pthread_mutex_t ldm_lib_scsi_mutex;
+
+    /* TODO: change this field to a structure so that the callbacks are
+     * encapsulated better.
+     */
+    mock_ioctl_t mock_ioctl;         /** Callback to mock the ioctl call used
+                                       * by the ldm module "ldm_lib_scsi" to
+                                       * interact with the tape library.
+                                       *
+                                       * /!\ FOR TESTING PURPOSES ONLY /!\
+                                       */
 };
 
 /**

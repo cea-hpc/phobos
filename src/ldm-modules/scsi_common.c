@@ -265,6 +265,7 @@ int scsi_execute(struct scsi_error *err, int fd, enum scsi_direction direction,
                  int sb_len, void *dxferp, int dxfer_len,
                  unsigned int timeout_msec, json_t *message)
 {
+    struct phobos_global_context *context = phobos_context();
     struct sg_io_hdr hdr = {0};
     int rc;
 
@@ -280,7 +281,7 @@ int scsi_execute(struct scsi_error *err, int fd, enum scsi_direction direction,
     hdr.timeout = timeout_msec;
     /* hdr.flags = 0: default */
 
-    rc = ioctl(fd, SG_IO, &hdr);
+    rc = context->mock_ioctl(fd, SG_IO, &hdr);
     if (rc) {
         err->rc = -errno;
         err->status = SCSI_FATAL_ERROR;

@@ -129,13 +129,6 @@ static void mount_medium(struct lrs_dev *dev, struct media_info *medium)
     dev->ld_dss_media_info = medium;
 }
 
-__attribute__((unused))
-static void unmount_medium(struct lrs_dev *dev, struct media_info *medium)
-{
-    dev->ld_op_status = PHO_DEV_OP_ST_LOADED;
-    dev->ld_dss_media_info = medium;
-}
-
 static void unload_medium(struct lrs_dev *dev)
 {
     dev->ld_op_status = PHO_DEV_OP_ST_EMPTY;

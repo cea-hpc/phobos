@@ -269,6 +269,7 @@ static int global_teardown(void **state)
     }
 
     unsetenv("PHOBOS_DSS_connect_string");
+    pho_cfg_local_fini();
 
     return 0;
 }

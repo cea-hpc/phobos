@@ -9,12 +9,15 @@ ADMIN_LIB=$(TO_SRC)/admin/libphobos_admin.la
 CFG_LIB=$(TO_SRC)/cfg/libpho_cfg.la
 COMMON_LIB=$(TO_SRC)/common/libpho_common.la
 COMMUNICATION_LIB=$(TO_SRC)/communication/libpho_comm.la
+DAEMON_LIB=$(TO_SRC)/daemon/libpho_daemon.la
 DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
 MOD_LOAD_LIB=$(TO_SRC)/module-loader/libpho_module_loader.la
 IO_LIB=$(TO_SRC)/io/libpho_io.la $(MOD_LOAD_LIB)
 LAYOUT_LIB=$(TO_SRC)/layout/libpho_layout.la
 RAID1_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la $(MOD_LOAD_LIB)
+SCSI_LIB=$(TO_SRC)/ldm-modules/libpho_scsi.la
+LDM_SCSI_LIB=$(TO_SRC)/ldm-modules/libpho_lib_adapter_scsi.la
 SCSI_TAPE_LIB=$(TO_SRC)/ldm-modules/libpho_dev_adapter_scsi_tape.la
 FS_POSIX_LIB=$(TO_SRC)/ldm-modules/libpho_fs_adapter_posix.la
 IO_POSIX_LIB=$(TO_SRC)/io-modules/libpho_io_adapter_posix.la
@@ -51,6 +54,7 @@ check_PROGRAMS=test_attrs \
                test_mapper \
                test_phobos_admin_medium_locate \
                test_ping \
+               test_scsi_logs \
                test_store_alias \
                test_store_object_md \
                test_store_object_md_get \
@@ -135,6 +139,12 @@ test_lrs_scheduling_SOURCES=test_lrs_scheduling.c
 test_lrs_scheduling_LDADD=$(LRS_LIB) $(LDM_LIB) $(MOD_LOAD_LIB) $(DSS_LIB) \
                           $(SERIALIZER_LIB) $(CFG_LIB) $(IO_LIB) $(COMMON_LIB)
 test_lrs_scheduling_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
+
+test_scsi_logs_SOURCES=test_scsi_logs.c ../test_setup.c ../test_setup.h
+test_scsi_logs_LDADD=$(LRS_LIB) $(LDM_LIB) $(MOD_LOAD_LIB) $(DSS_LIB) \
+                     $(CFG_LIB) $(IO_LIB) $(COMMON_LIB) $(SCSI_LIB) \
+                     $(LDM_SCSI_LIB) $(ADMIN_LIB) $(DAEMON_LIB)
+test_scsi_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I$(TO_SRC)/ldm-modules
 
 test_mapper_SOURCES=test_mapper.c
 test_mapper_LDADD=$(STORE_LIB) $(MAPPER_LIB)

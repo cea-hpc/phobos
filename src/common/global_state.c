@@ -1,8 +1,14 @@
 #include "pho_common.h"
 
 #include <pthread.h>
+#include <sys/ioctl.h>
 
 struct phobos_global_context *PHO_CONTEXT;
+
+static int do_ioctl(int fd, unsigned long request, void *data)
+{
+    return ioctl(fd, request, data);
+}
 
 /* must be called before calling any other phobos function */
 int pho_context_init(void)
@@ -18,6 +24,7 @@ int pho_context_init(void)
     pho_log_callback_set(NULL); /* set default log callback */
     PHO_CONTEXT->log_dev_output = false;
     pthread_mutex_init(&PHO_CONTEXT->config.lock, NULL);
+    PHO_CONTEXT->mock_ioctl = do_ioctl;
 
     return 0;
 }
