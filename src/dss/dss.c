@@ -883,12 +883,13 @@ static int read_hex_buffer(unsigned char *digest, size_t size,
  *
  * \param[out] extents extent list
  * \param[out] count  number of extents decoded
+ * \param[in]  state  global object state
  * \param[in]  json   String with json media stats
  *
  * \return 0 on success, negative error code on failure.
  */
 static int dss_layout_extents_decode(struct extent **extents, int *count,
-                                     const char *json)
+                                     enum extent_state state, const char *json)
 {
     json_t          *root;
     json_t          *child;
@@ -926,6 +927,7 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
 
         child = json_array_get(root, i);
         result[i].layout_idx = i;
+        result[i].state = state;
         result[i].size = json_dict2ll(child, "sz");
         if (result[i].size < 0)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'sz'");
@@ -1231,12 +1233,13 @@ static int get_layout_setrequest(PGconn *_conn, struct layout_info *item_list,
         if (action == DSS_SET_INSERT)
             g_string_append_printf(request, insert_query_values[DSS_LAYOUT],
                                    p_layout->oid, p_layout->oid, p_layout->oid,
-                                   extent_state2str(p_layout->state),
+                                   extent_state2str(p_layout->extents[0].state),
                                    pres, layout, i < item_cnt-1 ? "," : ";");
         else if (action == DSS_SET_UPDATE)
             g_string_append_printf(request, update_query[DSS_LAYOUT],
-                                   extent_state2str(p_layout->state), pres,
-                                   layout, p_layout->uuid, p_layout->version);
+                                   extent_state2str(p_layout->extents[0].state),
+                                   pres, layout, p_layout->uuid,
+                                   p_layout->version);
 out_free:
         free(layout);
         free(pres);
@@ -1841,7 +1844,6 @@ static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
     layout->oid = PQgetvalue(res, row_num, 0);
     layout->uuid = PQgetvalue(res, row_num, 1);
     layout->version = atoi(PQgetvalue(res, row_num, 2));
-    layout->state = str2extent_state(PQgetvalue(res, row_num, 3));
     rc = dss_layout_desc_decode(&layout->layout_desc,
                                 PQgetvalue(res, row_num, 4));
     if (rc) {
@@ -1851,6 +1853,8 @@ static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
 
     rc = dss_layout_extents_decode(&layout->extents,
                                    &layout->ext_count,
+                                   str2extent_state(
+                                       PQgetvalue(res, row_num, 3)),
                                    PQgetvalue(res, row_num, 5));
     if (rc) {
         pho_error(rc, "dss_extent tags decode error");

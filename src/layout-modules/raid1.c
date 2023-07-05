@@ -273,14 +273,16 @@ int layout_repl_count(struct layout_info *layout, unsigned int *repl_count)
  * a future call to ioa_open.
  *
  * @param[out] extent      extent to fill
+ * @param[in]  state       state of the extent
  * @param[in]  media       media on which the extent is written
  * @param[in]  layout_idx  index of this extent in the layout
  * @param[in]  extent_size size of the extent in byte
  */
-static void set_extent_info(struct extent *extent,
+static void set_extent_info(struct extent *extent, enum extent_state state,
                             const pho_resp_write_elt_t *medium,
                             int layout_idx, ssize_t extent_size)
 {
+    extent->state = state;
     extent->layout_idx = layout_idx;
     extent->size = extent_size;
     extent->media.family = (enum rsc_family)medium->med_id->family;
@@ -559,7 +561,7 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
                  "Unable to alloc extent table in raid1 encode write");
 
     for (i = 0; i < raid1->repl_count; ++i)
-        set_extent_info(&extent[i], wresp->media[i],
+        set_extent_info(&extent[i], PHO_EXT_ST_PENDING, wresp->media[i],
                         raid1->cur_extent_idx * raid1->repl_count + i,
                         extent_size);
         /* extent[i]->address will be filled by ioa_open */
@@ -893,11 +895,12 @@ static int raid1_enc_handle_release_resp(struct pho_encoder *enc,
         enc->layout->ext_count = raid1->written_extents->len;
         enc->layout->extents =
             (struct extent *)g_array_free(raid1->written_extents, FALSE);
+        for (i = 0; i < enc->layout->ext_count; ++i)
+            enc->layout->extents[i].state = PHO_EXT_ST_SYNC;
         raid1->written_extents = NULL;
         raid1->n_released_media = 0;
         g_hash_table_destroy(raid1->to_release_media);
         raid1->to_release_media = NULL;
-        enc->layout->state = PHO_EXT_ST_SYNC;
 
         /* Switch to DONE state */
         enc->done = true;

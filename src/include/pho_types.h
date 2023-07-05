@@ -124,7 +124,6 @@ struct layout_info {
     char                *oid;           /**< Referenced object */
     char                *uuid;          /**< UUID of referenced object */
     int                  version;       /**< Object version */
-    enum extent_state    state;         /**< Object stability state */
     struct module_desc   layout_desc;   /**< Layout module used to write it */
     size_t               wr_size;       /**< Encoding write size */
     struct extent       *extents;       /**< List of data extents */
@@ -375,6 +374,7 @@ struct pho_resource {
 
 struct extent {
     int                 layout_idx; /**< index of this extent in layout */
+    enum extent_state   state;      /**< stability state */
     ssize_t             size;       /**< size of the extent */
     struct pho_id       media;      /**< identifier of the media */
     struct pho_buff     address;    /**< address on the media */

@@ -651,6 +651,7 @@ class ExtentInfo(Structure): # pylint: disable=too-few-public-methods
     """DSS extent descriptor."""
     _fields_ = [
         ('layout_idx', c_int),
+        ('state', c_int),
         ('size', c_ssize_t),
         ('media', Id),
         ('address', Buffer),
@@ -686,7 +687,6 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
         ('_oid', c_char_p),
         ('_uuid', c_char_p),
         ('version', c_int),
-        ('state', c_int),
         ('layout_desc', ModuleDesc),
         ('wr_size', c_size_t),
         ('extents', POINTER(ExtentInfo)),
@@ -699,7 +699,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
             'oid': None,
             'uuid': None,
             'version': None,
-            'state': extent_state2str,
+            'state': None,
             'ext_count': None,
             'media_name': None,
             'family': None,
@@ -719,6 +719,12 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     def uuid(self):
         """Wrapper to get uuid"""
         return self._uuid.decode('utf-8') if self._uuid else None
+
+    @property
+    def state(self):
+        """Wrapper to get state"""
+        return [extent_state2str(self.extents[i].state)
+                for i in range(self.ext_count)]
 
     @property
     def media_name(self):

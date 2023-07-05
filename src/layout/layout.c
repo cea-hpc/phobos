@@ -150,7 +150,6 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
         return -ENOMEM;
     enc->layout->oid = xfer->xd_objid;
     enc->layout->wr_size = xfer->xd_params.put.size;
-    enc->layout->state = PHO_EXT_ST_PENDING;
 
     /* get io_block_size from conf */
     rc = get_io_block_size(enc);

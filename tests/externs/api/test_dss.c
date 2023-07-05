@@ -235,17 +235,18 @@ int main(int argc, char **argv)
         case DSS_LAYOUT:
             for (i = 0,  layout = item_list; i < item_cnt; i++, layout++) {
                 pho_debug("Got layout: "
-                          "oid:%s ext_count:%u state:%s desc:%s-%d.%d",
+                          "oid:%s ext_count:%u desc:%s-%d.%d",
                           layout->oid, layout->ext_count,
-                          extent_state2str(layout->state),
                           layout->layout_desc.mod_name,
                           layout->layout_desc.mod_major,
                           layout->layout_desc.mod_minor);
                 extents = layout->extents;
                 for (j = 0; j < layout->ext_count; j++) {
-                    pho_debug("->Got extent: layout_idx:%d, size:%zu,"
+                    pho_debug("->Got extent: layout_idx:%d, state:%s size:%zu,"
                              " address:%s,media type:%s, media:%s",
-                             extents->layout_idx, extents->size,
+                             extents->layout_idx,
+                             extent_state2str(extents->state),
+                             extents->size,
                              extents->address.buff,
                              rsc_family2str(extents->media.family),
                              extents->media.name);
