@@ -474,3 +474,77 @@ struct timespec diff_timespec(const struct timespec *a,
             .tv_nsec = (a->tv_nsec + 1000000000) - b->tv_nsec,
         };
 }
+
+char **parse_str(char *str, char *delim, int field_nb)
+{
+    char **parse = malloc(field_nb * sizeof(char *));
+    char *str_buffer;
+    char *token;
+    int rc = 0;
+    int i;
+    int j;
+
+    if (!parse) {
+        pho_error(-ENOMEM, "Could not allocate parse fields");
+        return NULL;
+    }
+
+    str_buffer = strdup(str);
+    if (!str_buffer) {
+        pho_error(-errno, "Could not allocate str_buffer");
+        return NULL;
+    }
+
+    for (i = 0; i < field_nb; i++) {
+        token = strtok(i == 0 ? str_buffer : NULL, delim);
+        if (token == NULL) {
+            rc = -EINVAL;
+            pho_error(rc, "Could not parse str");
+            break;
+        }
+
+        parse[i] = strdup(token);
+        if (!parse[i]) {
+            rc = -ENOMEM;
+            pho_error(rc, "Could not allocate parse str");
+            break;
+        }
+    }
+    if (rc) {
+        for (j = i; j > 0; --j)
+            free(parse[j]);
+        free(parse);
+        parse = NULL;
+    }
+
+    free(str_buffer);
+    return parse;
+}
+
+int _get_ext_idx_from_filename(struct pho_buff filename)
+{
+    char **subgroups;
+    char *buffer;
+    int ext_idx;
+
+    subgroups = parse_str(filename.buff, ".", 4);
+    if (subgroups == NULL)
+        return -EINVAL;
+
+    buffer = subgroups[2];
+    free(subgroups[0]);
+    free(subgroups[1]);
+    free(subgroups[3]);
+    free(subgroups);
+    subgroups = parse_str(buffer, "-_", 3);
+    free(buffer);
+    if (subgroups == NULL)
+        return -EINVAL;
+
+    ext_idx = strtol(subgroups[2], NULL, 10);
+    free(subgroups[0]);
+    free(subgroups[1]);
+    free(subgroups[2]);
+    free(subgroups);
+    return ext_idx;
+}

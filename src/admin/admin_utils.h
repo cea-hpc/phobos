@@ -3,6 +3,8 @@
 
 #include "pho_srl_lrs.h"
 
+int _send(struct pho_comm_info *comm, pho_req_t *lrs_req);
+
 int _send_and_receive(struct pho_comm_info *comm, pho_req_t *req,
                       pho_resp_t **resp);
 

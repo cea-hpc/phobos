@@ -506,7 +506,6 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
 int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                         const struct pho_id *tape_id);
 
-
 /**
  * @param[in]  id        id of the medium locked by someone else
  * @param[in]  hostname  hostname of the LRS which holds the lock
@@ -548,4 +547,18 @@ int phobos_admin_notify_media_update(struct admin_handle *adm,
                                      struct pho_id *ids,
                                      size_t count,
                                      lock_conflict_handler_t on_conflict);
+
+/**
+ *  Imports the content of the medium
+ *
+ * @param[in] adm           Admin module handler.
+ * @param[in] medium        Medium to import the content of.
+ * @param[in] check_hash    Option to know if a recalculation of hashs has to
+ *                          be remade.
+ * @return 0                on success,
+ *                          -errno on failure.
+ */
+int pho_import_medium(struct admin_handle *adm, struct media_info medium,
+                      bool check_hash);
+
 #endif

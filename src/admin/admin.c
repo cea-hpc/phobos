@@ -65,7 +65,8 @@ const struct pho_config_item cfg_admin[] = {
 /* ****************************************************************************/
 /* Static Communication-related Functions *************************************/
 /* ****************************************************************************/
-static int _send(struct pho_comm_info *comm, pho_req_t *lrs_req)
+
+int _send(struct pho_comm_info *comm, pho_req_t *lrs_req)
 {
     struct pho_comm_data data_out;
     int rc;
@@ -1349,6 +1350,8 @@ int phobos_admin_media_import(struct admin_handle *adm,
         rc = dss_media_set(&adm->dss, med_ls + i, 1, DSS_SET_INSERT, 0);
         if (rc)
             LOG_RETURN(rc, "Unable to import medium %s", medium->name);
+
+        rc = pho_import_medium(adm, med_ls[i], check_hash);
     }
 
     return -ENOSYS;

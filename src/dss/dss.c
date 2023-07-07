@@ -991,6 +991,7 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'state'");
 
         result[i].state = str2extent_state(tmp);
+
         result[i].size = json_dict2ll(child, "sz");
         if (result[i].size < 0)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'sz'");
@@ -1000,6 +1001,8 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'addr'");
 
         result[i].address.size = strlen(result[i].address.buff) + 1;
+
+        result[i].layout_idx = _get_ext_idx_from_filename(result[i].address);
 
         tmp = json_dict2tmp_str(child, "fam");
         if (!tmp)

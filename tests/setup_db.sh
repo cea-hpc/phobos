@@ -79,15 +79,19 @@ insert into deprecated_object (oid, object_uuid, version, user_md, lyt_info)
             '{"name":"raid1","major":0,"minor":1,"repl_count":1}');
 
 insert into extent (state, size, medium_family, medium_id, address, hash)
-    values ('pending', 21123456, 'dir', '/tmp/pho_testdir1', 'test3', '{}'),
-           ('pending', 2112555, 'dir', '/tmp/pho_testdir2', 'test4', '{}');
+    values ('pending', 21123456, 'dir', '/tmp/pho_testdir1',
+            'test3/oid3.v3.lyt-0_3.uuid3', '{}'),
+           ('pending', 2112555, 'dir', '/tmp/pho_testdir2',
+            'test4/oid4.v4.lyt-0_4.uuid4', '{}');
 
 insert into layout (object_uuid, version, extent_uuid, layout_index)
     values ((select object_uuid from object where oid = '01230123ABC'), 1,
-            (select extent_uuid from extent where address = 'test3'), 0),
+            (select extent_uuid from extent where address =
+                'test3/oid3.v3.lyt-0_3.uuid3'), 0),
            ((select object_uuid from deprecated_object
                where oid = '01230123ABD'), 1,
-            (select extent_uuid from extent where address = 'test4'), 0);
+            (select extent_uuid from extent where address =
+                'test4/oid4.v4.lyt-0_4.uuid4'), 0);
 EOF
 }
 
