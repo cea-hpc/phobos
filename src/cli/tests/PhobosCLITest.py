@@ -85,6 +85,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['lib', '-h'])
         self.check_cmdline_exit(['object', '-h'])
         self.check_cmdline_exit(['extent', '-h'])
+        self.check_cmdline_exit(['logs', '-h'])
 
     def test_cli_basic(self): # pylint: disable=too-many-statements
         """test simple valid and invalid command lines."""
@@ -162,6 +163,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['put', '--lyt-params', 'a=b', 'src', 'oid'])
         self.check_cmdline_valid(['put', '--lyt-params', 'a=b,c=d', 'src',
                                   'oid'])
+        self.check_cmdline_valid(['logs', 'dump'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['get', '--version', 'nan', 'objid', 'file'],
@@ -181,6 +183,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['tape', 'locate'], code=2)
         self.check_cmdline_exit(['tape', 'locate', 'oid1', 'oid2'], code=2)
         self.check_cmdline_exit(['drive', 'delete'], code=2)
+        self.check_cmdline_exit(['logs'], code=2)
+        self.check_cmdline_exit(['logs', 'dump', '42'], code=2)
 
 
 class BasicExecutionTest(unittest.TestCase):

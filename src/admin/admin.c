@@ -1369,3 +1369,9 @@ out:
 
     return rc;
 }
+
+int phobos_admin_dump_logs(struct admin_handle *adm, int fd,
+                           struct pho_log_filter *log_filter)
+{
+    return -ENOTSUP;
+}

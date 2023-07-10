@@ -299,6 +299,13 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc, "Failed to clean lock(s)")
 
+    def dump_logs(self, fd):
+        """Dump all persistent logs to the given file"""
+        rc = LIBPHOBOS_ADMIN.phobos_admin_dump_logs(byref(self.handle), fd,
+                                                    None)
+        if rc:
+            raise EnvironmentError(rc, "Failed to dump logs")
+
     @staticmethod
     def layout_list_free(layouts, n_layouts):
         """Free a previously obtained layout list."""

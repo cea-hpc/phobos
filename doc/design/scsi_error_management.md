@@ -332,12 +332,12 @@ logs:
  * entries to dump.
  *
  * @param[in]   adm            Admin module handler.
- * @param[in]   file           File stream where the logs should be dumped.
+ * @param[in]   file           File descriptor where the logs should be dumped.
  * @param[in]   log_filter     Filter for the logs to clear.
  *
  * @return 0 if success, -errno if an error occurs
  */
-int phobos_admin_dump_logs(struct admin_handle *adm, FILE *file,
+int phobos_admin_dump_logs(struct admin_handle *adm, int fd,
                            struct pho_log_filter *log);
 
 /**
@@ -365,9 +365,6 @@ Alongside the admin API functions, we propose 2 similar CLI commands:
 ```
 usage: phobos logs dump [-h] [--device ID] [--medium ID] [-e ERRNO]
                         [--start TIMESTAMP] [--end TIMESTAMP] [-f path]
-
-positional arguments:
-  path                  file where the logs should be dumped to
 
 optional arguments:
   -h, --help            show this help message and exit

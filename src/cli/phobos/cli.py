@@ -1199,6 +1199,43 @@ class SchedOptHandler(BaseOptHandler):
             sys.exit(abs(err.errno))
 
 
+class LogsDumpOptHandler(BaseOptHandler):
+    """Handler for persistent logs dumping"""
+    label = "dump"
+    descr = "handler for persistent logs dumping"
+    epilog = """Will dump persistent logs recorded by Phobos to stdout or a file
+    if provided, according to given filters."""
+
+    @classmethod
+    def add_options(cls, parser):
+        super(LogsDumpOptHandler, cls).add_options(parser)
+
+
+class LogsOptHandler(BaseOptHandler):
+    """Handler of logs commands"""
+    label = "logs"
+    descr = "interact with the persistent logs recorded by Phobos"
+    verbs = [
+        LogsDumpOptHandler
+    ]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    def exec_dump(self):
+        """Dump logs to stdout"""
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                adm.dump_logs(sys.stdout.fileno())
+
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
+
 class DeviceOptHandler(BaseResourceOptHandler):
     """Shared interface for devices."""
     verbs = [
@@ -1892,6 +1929,7 @@ class PhobosActionContext(object):
         LocateOptHandler,
         LocksOptHandler,
         SchedOptHandler,
+        LogsOptHandler,
 
         # Store command interfaces
         StoreGetHandler,

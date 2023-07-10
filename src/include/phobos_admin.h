@@ -364,4 +364,20 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
 int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
                           json_t **lib_data);
 
+/**
+ * Dump a list of logs to a given file.
+ *
+ * If any field of \p log_filter is non-NULL, it will be used to filter the
+ * entries to dump.
+ *
+ * @param[in]   adm            Admin module handler.
+ * @param[in]   file           File descriptor where the logs should be dumped.
+ * @param[in]   log_filter     Filter for the logs to clear.
+ *
+ * @return 0 if success, -errno if an error occurs
+ */
+struct pho_log_filter; // Will be defined in another patch
+int phobos_admin_dump_logs(struct admin_handle *adm, int fd,
+                           struct pho_log_filter *log_filter);
+
 #endif

@@ -88,7 +88,17 @@ function test_device_load
     fi
 }
 
+function test_logs
+{
+    local ENOTSUP=95
+
+    # Check the logs dump errored out with ENOTSUP, and if not, fail the test
+    $phobos logs dump &&
+        error "Log dump should have failed" ||
+        [[ $? == $ENOTSUP ]] || error "Log dump shouldn't have errored out"
+}
+
 TEST_CLEANUP=cleanup
 TEST_SETUP=setup
 
-TESTS=("test_device_load")
+TESTS=("test_device_load" "test_logs")
