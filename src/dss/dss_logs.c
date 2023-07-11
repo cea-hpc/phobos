@@ -34,6 +34,7 @@
 
 #include <libpq-fe.h>
 
+#include "dss_logs.h"
 #include "dss_utils.h"
 #include "pho_common.h"
 #include "pho_dss.h"
@@ -44,9 +45,9 @@ enum log_query_idx {
 };
 
 static const char * const log_query[] = {
-    [DSS_EMIT_LOG] = "INSERT INTO logs "
-                     "(family, device, medium, errno, cause, message) "
-                     "VALUES ('%s', '%s', '%s', %d, '%s', '%s');",
+    [DSS_EMIT_LOG]  = "INSERT INTO logs "
+                      "(family, device, medium, errno, cause, message) "
+                      "VALUES ('%s', '%s', '%s', %d, '%s', '%s');",
 };
 
 int dss_emit_log(struct dss_handle *handle, struct pho_log *log)
@@ -75,4 +76,32 @@ free_request:
     g_string_free(request, true);
 
     return rc;
+}
+
+int dss_logs_from_pg_row(struct dss_handle *handle, void *item,
+                         PGresult *res, int row_num)
+{
+    struct pho_log *log = item;
+    int rc = 0;
+
+    (void)handle;
+
+    log->device.family = str2rsc_family(PQgetvalue(res, row_num, 0));
+    log->medium.family = log->device.family;
+    pho_id_name_set(&log->device, PQgetvalue(res, row_num, 1));
+    pho_id_name_set(&log->medium, PQgetvalue(res, row_num, 2));
+    log->error_number = atoi(PQgetvalue(res, row_num, 3));
+    log->cause = str2operation_type(PQgetvalue(res, row_num, 4));
+    log->message = json_loads(get_str_value(res, row_num, 5), 0, NULL);
+    if (log->message == NULL)
+        LOG_RETURN(rc = -ENOMEM, "Failed to convert message in log to json");
+
+    return str2timeval(get_str_value(res, row_num, 6), &log->time);
+}
+
+void dss_logs_result_free(void *item)
+{
+    struct pho_log *log = item;
+
+    destroy_json(log->message);
 }

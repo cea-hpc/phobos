@@ -47,6 +47,7 @@ enum dss_type {
     DSS_DEVICE,
     DSS_MEDIA,
     DSS_MEDIA_UPDATE_LOCK,
+    DSS_LOGS,
     DSS_LAST,
 };
 
@@ -57,6 +58,7 @@ static const char * const dss_type_names[] = {
     [DSS_DEVICE] = "device",
     [DSS_MEDIA]  = "media",
     [DSS_MEDIA_UPDATE_LOCK]  = "media_update",
+    [DSS_LOGS] = "logs",
 };
 
 #define MAX_UPDATE_LOCK_TRY 5
@@ -339,6 +341,19 @@ int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
 int dss_deprecated_object_get(struct dss_handle *hdl,
                               const struct dss_filter *filter,
                               struct object_info **obj_ls, int *obj_cnt);
+
+/**
+ * Retrieve logs information from DSS
+ *
+ * @param[in]   hdl      valid connection handle
+ * @param[in]   filter   assembled DSS filtering criteria
+ * @param[out]  logs_ls  list of retrieved items to be freed w/ dss_res_free()
+ * @param[out]  logs_cnt number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_logs_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                 struct pho_log **logs_ls, int *logs_cnt);
 
 /**
  *  Generic function: frees item_list that was allocated in dss_xxx_get()

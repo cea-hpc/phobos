@@ -26,6 +26,7 @@
 #include "config.h"
 #endif
 
+#include "dss_logs.h"
 #include "dss_utils.h"
 #include "pho_common.h"
 #include "pho_type_utils.h"
@@ -405,6 +406,7 @@ static const char * const select_query[] = {
     [DSS_OBJECT] = "SELECT oid, uuid, version, user_md FROM object",
     [DSS_DEPREC] = "SELECT oid, uuid, version, user_md, deprec_time"
                    " FROM deprecated_object",
+    [DSS_LOGS]   = DSS_LOGS_SELECT_QUERY,
 };
 
 static const size_t res_size[] = {
@@ -413,6 +415,7 @@ static const size_t res_size[] = {
     [DSS_LAYOUT] = sizeof(struct layout_info),
     [DSS_OBJECT] = sizeof(struct object_info),
     [DSS_DEPREC] = sizeof(struct object_info),
+    [DSS_LOGS]   = sizeof(struct pho_log),
 };
 
 typedef int (*res_pg_constructor_t)(struct dss_handle *handle, void *item,
@@ -423,6 +426,7 @@ static const res_pg_constructor_t res_pg_constructor[] = {
     [DSS_LAYOUT] = dss_layout_from_pg_row,
     [DSS_OBJECT] = dss_object_from_pg_row,
     [DSS_DEPREC] = dss_deprecated_object_from_pg_row,
+    [DSS_LOGS]   = dss_logs_from_pg_row,
 };
 
 typedef void (*res_destructor_t)(void *item);
@@ -432,6 +436,7 @@ static const res_destructor_t res_destructor[] = {
     [DSS_LAYOUT] = dss_layout_result_free,
     [DSS_OBJECT] = dss_object_result_free,
     [DSS_DEPREC] = dss_object_result_free,
+    [DSS_LOGS]   = dss_logs_result_free,
 };
 
 static const char * const insert_query[] = {
@@ -1513,24 +1518,12 @@ static inline bool is_type_supported(enum dss_type type)
     case DSS_LAYOUT:
     case DSS_DEVICE:
     case DSS_MEDIA:
+    case DSS_LOGS:
         return true;
 
     default:
         return false;
     }
-}
-
-/**
- * Unlike PQgetvalue that returns '' for NULL fields,
- * this function returns NULL for NULL fields.
- */
-static inline char *get_str_value(PGresult *res, int row_number,
-                                  int column_number)
-{
-    if (PQgetisnull(res, row_number, column_number))
-        return NULL;
-
-    return PQgetvalue(res, row_number, column_number);
 }
 
 static inline bool key_is_logical_op(const char *key)
@@ -2341,6 +2334,12 @@ int dss_deprecated_object_get(struct dss_handle *hdl,
                               struct object_info **obj_ls, int *obj_cnt)
 {
     return dss_generic_get(hdl, DSS_DEPREC, filter, (void **)obj_ls, obj_cnt);
+}
+
+int dss_logs_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                 struct pho_log **logs_ls, int *logs_cnt)
+{
+    return dss_generic_get(hdl, DSS_LOGS, filter, (void **)logs_ls, logs_cnt);
 }
 
 int dss_device_insert(struct dss_handle *hdl, struct dev_info *dev_ls,

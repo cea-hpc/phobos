@@ -290,8 +290,6 @@ int dss_emit_log(struct dss_handle *dss, struct pho_log *log);
  *
  * @param[in]   dss            DSS to request
  * @param[in]   log_filter     filter for the logs to dump
- * @param[in]   clear          whether the dumped logs should be cleared from
- *                             the DSS
  * @param[out]  logs           logs retrieved after filtering
  * @param[out]  n_logs         number of error logs error logs retrieved
  *
@@ -299,7 +297,6 @@ int dss_emit_log(struct dss_handle *dss, struct pho_log *log);
  */
 int dss_dump_logs(struct dss_handle *dss,
                   struct pho_log_filter *log_filter,
-                  bool clear,
                   struct pho_log **logs, size_t *n_logs);
 
 /**

@@ -53,4 +53,17 @@ int execute(PGconn *conn, GString *request, PGresult **res,
  */
 int psql_state2errno(const PGresult *res);
 
+/**
+ * Unlike PQgetvalue that returns '' for NULL fields,
+ * this function returns NULL for NULL fields.
+ */
+static inline char *get_str_value(PGresult *res, int row_number,
+                                  int column_number)
+{
+    if (PQgetisnull(res, row_number, column_number))
+        return NULL;
+
+    return PQgetvalue(res, row_number, column_number);
+}
+
 #endif

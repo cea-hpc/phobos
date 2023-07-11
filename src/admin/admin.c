@@ -1373,5 +1373,15 @@ out:
 int phobos_admin_dump_logs(struct admin_handle *adm, int fd,
                            struct pho_log_filter *log_filter)
 {
+    struct pho_log *logs;
+    int n_logs;
+    int rc;
+
+    rc = dss_logs_get(&adm->dss, NULL, &logs, &n_logs);
+    if (rc)
+        LOG_RETURN(rc, "Cannot fetch logs from the DSS");
+
+    dss_res_free(logs, n_logs);
+
     return -ENOTSUP;
 }
