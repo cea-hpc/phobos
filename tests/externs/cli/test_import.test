@@ -1,0 +1,338 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2023 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+### SETUP/CLEANUP FUNCTIONS
+function db_setup
+{
+    drain_all_drives
+    setup_tables
+    invoke_daemons
+}
+
+function db_cleanup
+{
+    waive_daemons
+    drop_tables
+    drain_all_drives
+}
+
+function dir_setup
+{
+    local oid="$1"
+    local version="$2"
+    local uuid="$3"
+    local dir_path="$(mktemp -d /tmp/test.pho.XXXX)"
+
+    $phobos dir add $dir_path
+    $phobos dir format --unlock $dir_path
+    $phobos put --family dir /etc/hosts "$oid"
+
+    if [[ $# -eq 3 ]]; then
+        $PSQL << EOF
+UPDATE object set object_uuid = '$uuid', version = '$version' WHERE oid = '$oid';
+EOF
+    elif [[ $# -eq 2 ]]; then
+        $PSQL << EOF
+UPDATE object set version = '$version' WHERE oid = '$oid';
+EOF
+    fi
+}
+
+function tapes_setup
+{
+    local drives="$1"
+    local tapes="$2"
+    local i=0
+
+    for drive in $(nodeset -e "${drives}"); do
+        $phobos drive add --unlock "$drive" ||
+            error "Drive ${drive} should have been added"
+    done
+
+    if [[ ! -z "$tapes" ]]; then
+        for tape in $(nodeset -e "${tapes}"); do
+            $phobos tape add -t lto5 --tags "$(($i/2))" "${tape}" ||
+                error "Tape ${tape} should have been added"
+            $phobos tape format --unlock "${tape}" ||
+                error "Tape ${tape} should have been formated"
+            i=$((i+1))
+         done
+    fi
+}
+
+function media_split_fill
+{
+    local oid="$1"
+    local family="tape"
+    local media_size=100
+    local repl_count=$2
+    local split_count=$3
+    local media="$4"
+    local IN_FILE="$5"
+    local OUT_FILE="$6"
+    local obj_size=$(($split_count*$media_size))
+
+    dd if=/dev/random of="$IN_FILE" count=$obj_size bs=1
+
+    waive_lrs
+    for medium in $(nodeset -e "${media}"); do
+        resize_medium $medium $media_size
+    done
+    export PHOBOS_LRS_sync_nb_req="dir=1,tape=5"
+    invoke_lrs
+    unset PHOBOS_LRS_sync_nb_req
+
+    $phobos put --family $family --layout raid1 --layout-params \
+        repl_count=$repl_count "$IN_FILE" "$oid" --overwrite ||
+        error "Object should be put"
+
+    $phobos get "$oid" "$OUT_FILE"
+}
+
+### COMPARE FUNCTIONS
+function generation_compare
+{
+    local i=$1
+    local ob=$($phobos object list -o version)
+    local depr_ob=$($phobos object list -d -o version | sort -n)
+    case $i in
+        0 | 1)
+            if [[ "$ob" == "2" && "$depr_ob" == "1" ]]; then
+                return 0
+            fi
+            ;;
+        2 | 3)
+            if [[ "$ob" == "3" ]]; then
+                IFS=$'\n' read -rd '' -a depr_list <<<"$depr_ob"
+                [[ ${depr_list[0]} == 1 && ${depr_list[1]} == 2 ]] && return 0
+            fi
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    return 1
+}
+
+function obj_status_compare
+{
+    local i=$1
+    local oid=$2
+    local ob=$($phobos object list -o status $oid)
+    case $i in
+        0 | 1)
+            [[ "$ob" == "incomplete" ]] && return 0 || return 1
+            ;;
+        2)
+            [[ "$ob" == "readable" ]] && return 0 || return 1
+            ;;
+        3)
+            [[ "$ob" == "complete" ]] && return 0 || return 1
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+function media_compare
+{
+    local tape=$1
+    local req=$($phobos tape list -o adm_status,fs.status $tape | sed '3q;d')
+    local adm_status="$(echo $req | sed "s/[ ]//g" | cut -d'|' -f2)"
+    local fs_status="$(echo $req | sed "s/[ ]//g" | cut -d'|' -f3)"
+
+    [[ $fs_status == "used" ]] ||
+        error "fs_status should be \"used\""
+
+    [[ $adm_status == "unlocked" ]] || error "tape should be unlocked"
+    return 0
+}
+
+### TESTS
+function test_import
+{
+    # Initialising an object via put, and after a db reset, have a phobos get
+    # and compare the two.
+    local oid="oid"
+    local repl_count=1
+    local split_count=3
+    local ext_count=$(($repl_count*$split_count))
+    local drives="$(get_lto_drives 5 $ext_count | nodeset -f)"
+    local tapes="$(get_tapes L5 $ext_count)"
+    local IN_FILE="$(mktemp /tmp/test.pho.XXXX)"
+    local OUT_FILE="$(mktemp -u /tmp/test.pho.XXXX)"
+    local OUT_FILE2="$(mktemp -u /tmp/test.pho.XXXX)"
+
+    tapes_setup "$drives" "$tapes"
+    media_split_fill "$oid" $repl_count $split_count "$tapes" \
+    "$IN_FILE" "$OUT_FILE"
+
+    db_cleanup
+    db_setup
+
+    tapes_setup "$drives"
+
+    for tape in $(nodeset -e "${tapes}"); do
+        $phobos tape import --unlock -t lto5 "${tape}" || error "import failed"
+    done
+
+    $phobos get "$oid" "$OUT_FILE2"
+    diff "$OUT_FILE" "$OUT_FILE2" || error "Files differ"
+    rm -f "$OUT_FILE" "$IN_FILE" "$OUT_FILE2"
+}
+
+function test_generation
+{
+    # Set objects of the same generation in the tapes, and compare in which
+    # of the `object` or `deprecated_object` table they are inserted to.
+    local family="tape"
+    local oid="oid"
+    local repl_count=2
+    local n_tapes=4
+    local drives="$(get_lto_drives 5 $n_tapes | nodeset -f)"
+    local tapes="$(get_tapes L5 $n_tapes)"
+    local IN_FILE="/etc/hosts"
+    local dir_path="$(mktemp -d /tmp/test.pho.XXXX)"
+    local i=0
+
+    tapes_setup "$drives" "$tapes"
+    $phobos dir add $dir_path
+    $phobos dir format --unlock $dir_path
+
+    $phobos put --family tape --layout raid1 --tags 0 --layout-params \
+        repl_count=$repl_count $IN_FILE "$oid" --overwrite ||
+        error "Object should be put"
+
+    $phobos put --family dir --layout raid1 --layout-params \
+        repl_count=1 $IN_FILE "$oid" --overwrite ||
+        error "Object should be put"
+
+    $phobos put --family tape --layout raid1 --tags 1 --layout-params \
+        repl_count=$repl_count $IN_FILE "$oid" --overwrite ||
+        error "Object should be put"
+
+    local uuid=$($phobos object list $oid -o uuid)
+    local version=$($phobos object list $oid -o version)
+
+    db_cleanup
+    db_setup
+
+    dir_setup "$oid" 2 "$uuid"
+
+    tapes_setup "$drives"
+
+    for tape in $(nodeset -e "${tapes}"); do
+        $phobos tape import --unlock -t lto5 "${tape}" || error "import failed"
+        generation_compare $i || error "Objects and deprecated objects are wrong"
+        i=$((i+1))
+    done
+
+    rm -rf "$dir_path"
+}
+
+function test_obj_status
+{
+    # The object is split in two different splits each copied twice. The test
+    # compares at each tape imported the obj_status of the imported object,
+    # which should be imported for the first and second tapes (one split only),
+    # then readable (two splits, one with two copies and one with one copy),
+    # and finally complete (all copies).
+    local oid="oid"
+    local i=0
+    local repl_count=2
+    local split_count=2
+    local ext_count=$(($repl_count*$split_count))
+    local drives="$(get_lto_drives 5 $ext_count | nodeset -f)"
+    local tapes="$(get_tapes L5 $ext_count)"
+    local IN_FILE="$(mktemp /tmp/test.pho.XXXX)"
+    local OUT_FILE="$(mktemp -u /tmp/test.pho.XXXX)"
+
+    tapes_setup "$drives" "$tapes"
+    media_split_fill "$oid" $repl_count $split_count "$tapes" \
+    "$IN_FILE" "$OUT_FILE"
+
+    db_cleanup
+    db_setup
+
+    tapes_setup "$drives"
+
+    for tape in $(nodeset -e "${tapes}"); do
+        $phobos tape import --unlock -t lto5 "${tape}" || error "import failed"
+        obj_status_compare $i "$oid" || error "Obj_status mismatch"
+        i=$(($i+1))
+    done
+}
+
+function test_media
+{
+    # The media fields that do not depend on the user's choice (such as the
+    # put,get,delete access, the tags) are compared before a db reset, and
+    # after an import
+    local oid="oid"
+    local repl_count=1
+    local split_count=3
+    local ext_count=$(($repl_count*$split_count))
+    local drives="$(get_lto_drives 5 $ext_count | nodeset -f)"
+    local tapes="$(get_tapes L5 $ext_count)"
+    local IN_FILE="$(mktemp /tmp/test.pho.XXXX)"
+    local OUT_FILE="$(mktemp -u /tmp/test.pho.XXXX)"
+
+    tapes_setup "$drives" "$tapes"
+    media_split_fill "$oid" $repl_count $split_count "$tapes" \
+    "$IN_FILE" "$OUT_FILE"
+
+    local req1="$($phobos tape list -o addr_type,adm_status,family,model,\
+name,fs.type,fs.status,fs.label,stats.nb_obj,stats.logc_spc_used,\
+stats.phys_spc_used)"
+
+    db_cleanup
+    db_setup
+
+    tapes_setup "$drives"
+
+    for tape in $(nodeset -e "${tapes}"); do
+        $phobos tape import --unlock -t lto5 "${tape}" || error "import failed"
+    done
+
+    local req2="$($phobos tape list -o addr_type,adm_status,family,model,\
+name,fs.type,fs.status,fs.label,stats.nb_obj,stats.logc_spc_used,\
+stats.phys_spc_used)"
+
+    [[ "$req1" == "$req2" ]] || error "Media data mismatch"
+    rm -f $OUT_FILE $IN_FILE
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Tapes are required for this test"
+fi
+
+export PHOBOS_LRS_families="dir,tape"
+
+TESTS=("db_setup; test_import; db_cleanup")
+TESTS+=("db_setup; test_generation; db_cleanup")
+TESTS+=("db_setup; test_obj_status; db_cleanup")
+TESTS+=("db_setup; test_media; db_cleanup")

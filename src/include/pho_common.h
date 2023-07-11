@@ -617,18 +617,6 @@ void pho_context_reset_scsi_ioctl(void);
 void pho_context_reset_mock_ltfs_functions(void);
 
 /**
- * This function returns the index of an extent using its filename. Previously,
- * this index was obtained by the relative position of the extent in the
- * extents json in the extent table of the DSS.
- *
- * @param[in]   filename    The filename
- *
- * @returns     the index of the extent on success,
- *              -EINVAL on failure.
- */
-int _get_ext_idx_from_filename(struct pho_buff filename);
-
-/**
  * This function parses a string using the strtok function according to
  * a specified delimiter, and returns an array of field_nb strings corresponding
  * to the field_nb first parts of the parsed string.
@@ -643,6 +631,6 @@ int _get_ext_idx_from_filename(struct pho_buff filename);
  *
  * The return value, if not NULL must be freed after use.
  */
-char **parse_str(char *str, char *delim, int field_nb);
+char **parse_str(const char *str, char *delim, int field_nb);
 
 #endif

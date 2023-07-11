@@ -32,6 +32,8 @@ function mtx_retry
 
 function drain_all_drives
 {
+    local i
+
     # TODO replace umount/mtx unload by a 'phobos drive drain' command
     # umount all ltfs
     mount | awk '/^ltfs/ {print $3}' | xargs -r umount

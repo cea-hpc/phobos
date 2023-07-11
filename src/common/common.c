@@ -498,7 +498,7 @@ struct timespec diff_timespec(const struct timespec *a,
         };
 }
 
-char **parse_str(char *str, char *delim, int field_nb)
+char **parse_str(const char *str, char *delim, int field_nb)
 {
     char **parse = malloc(field_nb * sizeof(char *));
     char *str_buffer;
@@ -542,32 +542,4 @@ char **parse_str(char *str, char *delim, int field_nb)
 
     free(str_buffer);
     return parse;
-}
-
-int _get_ext_idx_from_filename(struct pho_buff filename)
-{
-    char **subgroups;
-    char *buffer;
-    int ext_idx;
-
-    subgroups = parse_str(filename.buff, ".", 4);
-    if (subgroups == NULL)
-        return -EINVAL;
-
-    buffer = subgroups[2];
-    free(subgroups[0]);
-    free(subgroups[1]);
-    free(subgroups[3]);
-    free(subgroups);
-    subgroups = parse_str(buffer, "-_", 3);
-    free(buffer);
-    if (subgroups == NULL)
-        return -EINVAL;
-
-    ext_idx = strtol(subgroups[2], NULL, 10);
-    free(subgroups[0]);
-    free(subgroups[1]);
-    free(subgroups[2]);
-    free(subgroups);
-    return ext_idx;
 }

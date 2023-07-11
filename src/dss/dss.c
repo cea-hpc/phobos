@@ -402,10 +402,11 @@ static const char * const select_query[] = {
                    "  'extent_uuid', extent_uuid, 'sz', size,"
                    "  'offsetof', offsetof, 'fam', medium_family,"
                    "  'state', state, 'media', medium_id, 'addr', address,"
-                   "  'hash', hash, 'info', info))"
+                   "  'hash', hash, 'info', info, 'lyt_index', layout_index))"
                    " FROM extent"
                    " RIGHT JOIN ("
-                   "  SELECT oid, object_uuid, version, lyt_info, extent_uuid"
+                   "  SELECT oid, object_uuid, version, lyt_info, extent_uuid,"
+                   "         layout_index"
                    "   FROM layout"
                    "   LEFT JOIN ("
                    "    SELECT oid, object_uuid, version, lyt_info FROM object"
@@ -994,7 +995,10 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
             LOG_GOTO(out_decref, rc = -EINVAL,
                      "Missing attribute 'extent_uuid'");
 
-        result[i].layout_idx = i;
+        result[i].layout_idx = json_dict2ll(child, "lyt_index");
+        if (result[i].layout_idx < 0)
+            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'lyt_index'");
+
         tmp = json_dict2tmp_str(child, "state");
         if (!tmp)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'state'");
@@ -1010,8 +1014,6 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'addr'");
 
         result[i].address.size = strlen(result[i].address.buff) + 1;
-
-        result[i].layout_idx = _get_ext_idx_from_filename(result[i].address);
 
         tmp = json_dict2tmp_str(child, "fam");
         if (!tmp)
@@ -1308,7 +1310,7 @@ static int get_layout_setrequest(PGconn *_conn, struct layout_info *item_list,
 
                 g_string_append_printf(request, insert_query_values[DSS_LAYOUT],
                                        p_layout->oid, p_layout->oid,
-                                       ext->address.buff, j,
+                                       ext->address.buff, ext->layout_idx,
                                        (i < item_cnt - 1 ||
                                         j < p_layout->ext_count - 1) ?
                                        "," : ";");
