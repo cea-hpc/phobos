@@ -1373,15 +1373,53 @@ out:
 int phobos_admin_dump_logs(struct admin_handle *adm, int fd,
                            struct pho_log_filter *log_filter)
 {
+    char time_buf[PHO_TIMEVAL_MAX_LEN];
+    FILE *fp = fdopen(fd, "w");
     struct pho_log *logs;
     int n_logs;
+    int dup_fd;
     int rc;
+    int i;
+
+    dup_fd = dup(fd);
+    if (dup_fd == -1)
+        LOG_RETURN(rc = -errno, "Failed to duplicate file descriptor");
+
+    /* fdopen will keep the offset of the file descriptor used */
+    fp = fdopen(dup_fd, "w");
+    if (fp == NULL) {
+        rc = -errno;
+        close(dup_fd);
+        LOG_RETURN(rc, "Cannot open file descriptor as FILE*");
+    }
 
     rc = dss_logs_get(&adm->dss, NULL, &logs, &n_logs);
     if (rc)
-        LOG_RETURN(rc, "Cannot fetch logs from the DSS");
+        LOG_GOTO(out_close, rc, "Cannot fetch logs from the DSS");
+
+    for (i = 0; i < n_logs; ++i) {
+        char *json_buffer;
+
+        timeval2str(&logs[i].time, time_buf);
+        json_buffer = json_dumps(logs[i].message, 0);
+        fprintf(fp,
+                "<%s> Device '%s' with medium '%s' %s at '%s' (rc = %d): %s\n",
+                time_buf, logs[i].device.name, logs[i].medium.name,
+                logs[i].error_number != 0 ? "failed" : "succeeded",
+                operation_type2str(logs[i].cause), logs[i].error_number,
+                json_buffer);
+
+        free(json_buffer);
+    }
 
     dss_res_free(logs, n_logs);
+    rc = 0;
 
-    return -ENOTSUP;
+out_close:
+    /* fclose will close the file stream created here but also the underlying
+     * file descriptor.
+     */
+    fclose(fp);
+
+    return rc;
 }

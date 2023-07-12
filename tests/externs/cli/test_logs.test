@@ -60,45 +60,32 @@ function test_device_load
     $phobos tape add -t lto6 $lto6_tape ||
         error "Tape $lto6_tape should have been added"
 
-    $phobos tape format --unlock $lto6_tape ||
+    $valg_phobos tape format --unlock $lto6_tape ||
         error "Tape $lto6_tape should have been formated"
 
-    local psql_output=$($PSQL -t -c "SELECT COUNT(*) FROM logs;")
+    local logs=$($valg_phobos logs dump)
 
-    psql_output=$(echo "$psql_output" | xargs)
-    local psql_lines=$(echo "$psql_output" | wc -l)
+    if [[ $? != 0 ]]; then
+        error "Log dumping failed with '$?'"
+    fi
 
-    if (( psql_lines != 1 )); then
+    local logs_lines=$(echo "$logs" | wc -l)
+    if (( logs_lines != 1 )); then
         error "Only one log should have been recorded"
     fi
 
     lto6_drive=$($phobos drive list -o name "$lto6_drive")
+    logs=$(echo "$logs" | grep "${lto6_drive}" | grep "${lto6_tape}" |
+           grep "device_load")
 
-    local psql_output=$($PSQL -t -c "SELECT COUNT(*) FROM logs WHERE
-                            device = '${lto6_drive}' AND
-                            medium = '${lto6_tape}' AND
-                            cause = 'device_load';")
-
-    psql_output=$(echo "$psql_output" | xargs)
-    psql_lines=$(echo "$psql_output" | wc -l)
-
-    if (( psql_lines != 1 )); then
+    logs_lines=$(echo "$logs" | wc -l)
+    if (( logs_lines != 1 )); then
         error "A 'device_load' log concerning '$lto6_drive' and '$lto6_tape'" \
               "should have been recorded"
     fi
 }
 
-function test_logs
-{
-    local ENOTSUP=95
-
-    # Check the logs dump errored out with ENOTSUP, and if not, fail the test
-    $phobos logs dump &&
-        error "Log dump should have failed" ||
-        [[ $? == $ENOTSUP ]] || error "Log dump shouldn't have errored out"
-}
-
 TEST_CLEANUP=cleanup
 TEST_SETUP=setup
 
-TESTS=("test_device_load" "test_logs")
+TESTS=("test_device_load")
