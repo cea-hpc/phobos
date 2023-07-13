@@ -90,7 +90,7 @@ static int device_load(const struct lib_item_addr *dev_addr,
 }
 
 
-static int dev_unload(const struct lib_item_addr *dev_addr)
+static int device_unload(const struct lib_item_addr *dev_addr)
 {
     struct lib_item_addr free_slot = { .lia_type = MED_LOC_UNKNOWN };
     struct lib_handle lib_hdl;
@@ -147,7 +147,7 @@ static void *dev_load_unload(void *_dev_status)
         pthread_exit(NULL);
     }
 
-    rc = dev_unload(&dev_status->dev_addr);
+    rc = device_unload(&dev_status->dev_addr);
     if (rc) {
         dev_status->failed = true;
         pho_error(rc, "Error device %s failed to unload tape '%s'",

@@ -365,10 +365,8 @@ static int _scsi_element_status(int fd, enum element_type_code type,
     struct read_status_cdb req = {0};
     unsigned char *buffer = NULL;
     unsigned char *curr;
-    json_t *log_object;
     int curr_index;
     int byte_count;
-    char info[16];
     int len = 0;
     int rc, i;
     int count;
@@ -385,18 +383,8 @@ static int _scsi_element_status(int fd, enum element_type_code type,
     if (!buffer)
         return -ENOMEM;
 
-    log_object = json_object();
-
-    json_insert_element(log_object, "SCSI action",
-                        json_string("READ_ELEMENT_STATUS"));
     pho_debug("scsi_execute: READ_ELEMENT_STATUS, type=%#x, start_addr=%#hx, "
               "count=%hu, buffer_len=%u", type, start_addr, nb, len);
-
-    /* Use an intermediary buffer to keep the relevant information for logs */
-    sprintf(info, "%#x", type);
-    json_insert_element(log_object, "Type", json_string(info));
-    sprintf(info, "%hu", nb);
-    json_insert_element(log_object, "Count", json_string(info));
 
     req.opcode = READ_ELEMENT_STATUS;
     req.voltag = !!(flags & ESF_GET_LABEL); /* return volume bar-code */
@@ -410,9 +398,7 @@ static int _scsi_element_status(int fd, enum element_type_code type,
     PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
                    scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
                    sizeof(req), &error, sizeof(error), buffer, len,
-                   scsi_query_timeout_ms(), log_object);
-
-    json_object_set_new(message, "scsi_execute", log_object);
+                   scsi_query_timeout_ms(), message);
 
     if (rc)
         goto free_buff;
@@ -481,11 +467,23 @@ int scsi_element_status(int fd, enum element_type_code type,
                         struct element_status **elmt_list, int *elmt_count,
                         json_t *message)
 {
-    static int  max_element_status_chunk = -1;
-    uint16_t    req_size = nb;
-    int         rc;
+    static int max_element_status_chunk = -1;
+    uint16_t req_size = nb;
+    json_t *log_object;
+    char info[16];
+    int rc;
 
     *elmt_count = 0;
+
+    log_object = json_object();
+
+    json_insert_element(log_object, "SCSI action",
+                        json_string("READ_ELEMENT_STATUS"));
+
+    /* Use an intermediary buffer to keep the relevant information for logs */
+    sprintf(info, "%#x", type);
+    json_insert_element(log_object, "Type", json_string(info));
+    json_insert_element(log_object, "Count", json_integer(nb));
 
     /* check if there is a configured limitation */
     if (max_element_status_chunk == -1) {
@@ -507,18 +505,14 @@ int scsi_element_status(int fd, enum element_type_code type,
      * Start with nb, then try with smaller chunks in case of error. */
     do {
         rc = _scsi_element_status(fd, type, start_addr, req_size, flags,
-                                  *elmt_list, elmt_count, message);
+                                  *elmt_list, elmt_count, log_object);
         if (rc == 0) {
             if (*elmt_count < req_size)
                 /* end reached */
-                return 0;
+                goto out_log;
             else
                 /* read next chunks */
                 break;
-        } else if (json_object_size(message) != 0) {
-            // XXX: haven't found a proper way to say that the library failed
-            // here yet, maybe check if the rc is -1, 0 or anything else ?
-            return rc;
         }
 
         if (max_element_status_chunk == -1) {
@@ -542,17 +536,25 @@ int scsi_element_status(int fd, enum element_type_code type,
         }
 
         /* return the error */
-        return rc;
+        goto out_log;
     } while (1);
 
     while (*elmt_count < nb) {
         rc = _scsi_element_status(fd, type, start_addr + *elmt_count, req_size,
                                   flags, (*elmt_list) + *elmt_count,
-                                  elmt_count, message);
+                                  elmt_count, log_object);
         if (rc)
-            return rc;
+            goto out_log;
     }
+
     pho_debug("Read %u elements out of %u", *elmt_count, nb);
+
+out_log:
+    if (rc)
+        json_object_set_new(message, "scsi_execute", log_object);
+    else
+        destroy_json(log_object);
+
     return rc;
 }
 

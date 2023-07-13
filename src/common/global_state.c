@@ -45,3 +45,8 @@ void phobos_module_context_set(struct phobos_global_context *context)
 {
     PHO_CONTEXT = context;
 }
+
+void pho_context_reset_scsi_ioctl(void)
+{
+    PHO_CONTEXT->mock_ioctl = &do_ioctl;
+}

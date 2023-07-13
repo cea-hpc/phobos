@@ -958,13 +958,7 @@ static int dss_device_release(struct dss_handle *dss, struct dev_info *dev)
     return 0;
 }
 
-/**
- * Unload medium from device
- *
- * - DSS unlock the medium
- * - set drive's ld_op_status to PHO_DEV_OP_ST_EMPTY
- */
-static int dev_unload(struct lrs_dev *dev)
+int dev_unload(struct lrs_dev *dev)
 {
     /* let the library select the target location */
     struct lib_item_addr free_slot = { .lia_type = MED_LOC_UNKNOWN };

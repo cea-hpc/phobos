@@ -31,6 +31,33 @@
 
 #include <stdbool.h>
 
+enum scsi_operation_type {
+    LIBRARY_LOAD = 0,
+    ARMS_STATUS,
+    SLOTS_STATUS,
+    IMPEXP_STATUS,
+    DRIVES_STATUS,
+    LOAD_MEDIUM,
+};
+
+static const char * const SCSI_OPERATION_TYPE_NAMES[] = {
+    [LIBRARY_LOAD]        = "Library load",
+    [ARMS_STATUS]         = "Arms status",
+    [SLOTS_STATUS]        = "Slots status",
+    [IMPEXP_STATUS]       = "Impexp status",
+    [DRIVES_STATUS]       = "Drives status",
+    [LOAD_MEDIUM]         = "Move action",
+};
+
+static const char * const SCSI_ACTION_NAMES[] = {
+    [LIBRARY_LOAD]        = "MODE_SENSE",
+    [ARMS_STATUS]         = "READ_ELEMENT_STATUS",
+    [SLOTS_STATUS]        = "READ_ELEMENT_STATUS",
+    [IMPEXP_STATUS]       = "READ_ELEMENT_STATUS",
+    [DRIVES_STATUS]       = "READ_ELEMENT_STATUS",
+    [LOAD_MEDIUM]         = "MOVE_MEDIUM",
+};
+
 /* --------------- MODE SENSE API ------------------ */
 
 /** element descriptor information for each type (host endianess) */

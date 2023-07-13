@@ -509,4 +509,6 @@ struct phobos_global_context *phobos_context(void);
  */
 void phobos_module_context_set(struct phobos_global_context *context);
 
+void pho_context_reset_scsi_ioctl(void);
+
 #endif

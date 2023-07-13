@@ -128,6 +128,18 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
              bool *can_retry, bool free_medium);
 
 /**
+ * Unload medium from device
+ *
+ * - DSS unlock the medium
+ * - set drive's ld_op_status to PHO_DEV_OP_ST_EMPTY
+ *
+ * @param[in]   dev   The device to unload a medium from
+ *
+ * @return 0 on success, -error number on error.
+ */
+int dev_unload(struct lrs_dev *dev);
+
+/**
  * Parameters to check when a synchronization is required.
  */
 struct sync_params {
