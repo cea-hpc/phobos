@@ -127,8 +127,8 @@ def mput_file_line_parser(line):
     file_entry = list(line_parser) # [src_file, oid, user_md]
 
     if len(file_entry) != 3:
-        raise ValueError("Invalid number of values, only 3 expected "
-                         "(src_file, oid, metadata).")
+        raise ValueError("expecting 3 elements (src_file, oid, metadata), got "
+                         + str(len(file_entry)))
 
     return file_entry
 
@@ -442,8 +442,9 @@ class StoreMPutHandler(StoreGenericPutHandler):
 
             try:
                 match = mput_file_line_parser(line)
-            except ValueError:
-                self.logger.error("Format error on line %d: %s", i + 1, line)
+            except ValueError as e:
+                self.logger.error("Format error on line %d: %s: %s", i + 1,
+                                  str(e), line)
                 sys.exit(os.EX_DATAERR)
 
             src = match[0]
