@@ -38,13 +38,27 @@
 
 #include <cmocka.h>
 
+static void check_log_equal(struct pho_log emitted_log,
+                            struct pho_log dss_log)
+{
+    assert_int_equal(emitted_log.device.family, dss_log.device.family);
+    assert_int_equal(emitted_log.medium.family, dss_log.medium.family);
+    assert_string_equal(emitted_log.device.name, dss_log.device.name);
+    assert_string_equal(emitted_log.medium.name, dss_log.medium.name);
+    assert_int_equal(emitted_log.cause, dss_log.cause);
+    assert_true(json_equal(emitted_log.message, dss_log.message));
+}
+
 static void dss_emit_logs_ok(void **state)
 {
     struct dss_handle *handle = (struct dss_handle *)*state;
     struct pho_log log = { .error_number = 0 };
+    struct pho_log *logs;
+    int n_logs;
     int rc;
 
     log.device.family = PHO_RSC_TAPE;
+    log.medium.family = PHO_RSC_TAPE;
     strcpy(log.device.name, "dummy_device");
     strcpy(log.medium.name, "dummy_medium");
     log.cause = PHO_DEVICE_LOAD;
@@ -55,16 +69,25 @@ static void dss_emit_logs_ok(void **state)
     rc = dss_emit_log(handle, &log);
     assert_return_code(rc, -rc);
 
+    rc = dss_logs_get(handle, NULL, &logs, &n_logs);
+    assert_return_code(rc, -rc);
+
+    check_log_equal(log, logs[n_logs - 1]);
+
     json_decref(log.message);
+    dss_res_free(logs, n_logs);
 }
 
 static void dss_emit_logs_with_message_ok(void **state)
 {
     struct dss_handle *handle = (struct dss_handle *)*state;
     struct pho_log log = { .error_number = 1 };
+    struct pho_log *logs;
+    int n_logs;
     int rc;
 
     log.device.family = PHO_RSC_TAPE;
+    log.medium.family = PHO_RSC_TAPE;
     strcpy(log.device.name, "dummy_device");
     strcpy(log.medium.name, "dummy_medium");
     log.cause = PHO_DEVICE_LOAD;
@@ -76,7 +99,13 @@ static void dss_emit_logs_with_message_ok(void **state)
     rc = dss_emit_log(handle, &log);
     assert_return_code(rc, -rc);
 
+    rc = dss_logs_get(handle, NULL, &logs, &n_logs);
+    assert_return_code(rc, -rc);
+
+    check_log_equal(log, logs[n_logs - 1]);
+
     json_decref(log.message);
+    dss_res_free(logs, n_logs);
 }
 
 int main(void)
