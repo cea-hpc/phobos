@@ -76,7 +76,24 @@ function tlc_daemon_bad_port
     unset PHOBOS_TLC_port
 }
 
+function tlc_daemon_bad_lib_dev
+{
+    export PHOBOS_TLC_lib_device="/wrong/device/path"
+    if invoke_tlc; then
+        waive_tlc
+        unset PHOBOS_TLC_lib_device
+        error "TLC daemon start must fail with an invalid library device path"
+    fi
+
+    unset PHOBOS_TLC_lib_device
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "TLC tests need a tape library"
+fi
+
 TESTS=("tlc_interactive_sig SIGINT" \
        "tlc_interactive_sig SIGTERM" \
        "invoke_tlc; tlc_daemon_started; waive_tlc" \
-       "tlc_daemon_bad_port")
+       "tlc_daemon_bad_port" \
+       "tlc_daemon_bad_lib_dev")

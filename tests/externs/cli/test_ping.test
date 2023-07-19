@@ -63,5 +63,9 @@ function test_ping_tlc
 }
 
 TEST_SETUP=setup
-TESTS=(test_ping_phobosd test_ping_tlc)
+TESTS=(test_ping_phobosd)
+if [[ -w /dev/changer ]]; then
+    TESTS+=(test_ping_tlc)
+fi
+
 TEST_CLEANUP=cleanup

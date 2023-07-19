@@ -26,9 +26,12 @@
 #include "config.h"
 #endif
 
+#include <fcntl.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include "pho_cfg.h"
@@ -45,27 +48,53 @@ static bool should_tlc_stop(void)
 }
 
 struct tlc {
-    struct pho_comm_info comm; /*!< Communication handle */
+    struct pho_comm_info comm;  /*!< Communication handle */
+    int lib_fd;                 /*!< Tape Library File descriptor */
 };
 
 static int tlc_init(struct tlc *tlc)
 {
     union pho_comm_addr sock_addr;
+    const char *lib_dev;
     int rc;
 
+    /* open TLC lib file descriptor */
+    /* For now, one single configurable path to library device.
+     * This will have to be changed to manage multiple libraries or to manage
+     * one library through multiple "/dev/changer" paths to improve parallel
+     * usage depending on the library model.
+     */
+    lib_dev = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, lib_device);
+    if (!lib_dev)
+        LOG_RETURN(-EINVAL, "Failed to get default library device from config");
+
+    /*
+     * WARNING: lib_fd open will be migrated to the thread managing the library.
+     */
+    tlc->lib_fd = open(lib_dev, O_RDWR | O_NONBLOCK);
+    if (tlc->lib_fd < 0)
+        LOG_RETURN(-errno, "Failed to open library device '%s'", lib_dev);
+
+    /* open TLC communicator */
     sock_addr.tcp.hostname = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, hostname);
     sock_addr.tcp.port = PHO_CFG_GET_INT(cfg_tlc, PHO_CFG_TLC, port, -1);
     if (sock_addr.tcp.port == -1)
-        LOG_RETURN(-EINVAL, "Unable to get a valid integer TLC port value");
+        LOG_GOTO(clean_lib_fd, rc = -EINVAL,
+                 "Unable to get a valid integer TLC port value");
 
     if (sock_addr.tcp.port > 65535)
-        LOG_RETURN(-EINVAL, "TLC port value %d cannot be greater than 65535",
-                   sock_addr.tcp.port);
+        LOG_GOTO(clean_lib_fd, rc = -EINVAL,
+                 "TLC port value %d cannot be greater than 65535",
+                 sock_addr.tcp.port);
 
     rc = pho_comm_open(&tlc->comm, &sock_addr, PHO_COMM_TCP_SERVER);
     if (rc)
-        LOG_RETURN(rc, "Error while opening the TLC socket");
+        LOG_GOTO(clean_lib_fd, rc, "Error while opening the TLC socket");
 
+    return rc;
+
+clean_lib_fd:
+    close(tlc->lib_fd);
     return rc;
 }
 
@@ -81,6 +110,9 @@ static void tlc_fini(struct tlc *tlc)
     rc = pho_comm_close(&tlc->comm);
     if (rc)
         pho_error(rc, "Error on closing the TLC socket");
+
+    if (tlc->lib_fd >= 0)
+        close(tlc->lib_fd);
 }
 
 static int process_ping_request(struct tlc *tlc, pho_tlc_req_t *req,
