@@ -169,6 +169,19 @@ void element_status_list_free(struct element_status *elmt_list);
 int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
                      uint16_t tgt_addr, json_t *message);
 
+/**
+ * Call INQUIRY on the given device
+ *
+ * We do not return the response of the library since this function is currently
+ * only used for the TLC ping. We only need to know whether the request
+ * succeeded or not.
+ *
+ * @param[in] fd            File descriptor of device changer.
+ *
+ * @return 0 on success, error code < 0 on failure.
+ */
+int scsi_inquiry(int fd);
+
 /** function to handle scsi error codes in a PHO_RETRY_LOOP */
 void scsi_retry_func(const char *fnname, int rc, int *retry_cnt,
                      struct scsi_error *err);

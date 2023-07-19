@@ -39,6 +39,7 @@
 #include "pho_common.h"
 #include "pho_daemon.h"
 #include "pho_srl_tlc.h"
+#include "../ldm-modules/scsi_api.h"
 
 #include "tlc_cfg.h"
 
@@ -127,11 +128,12 @@ static int process_ping_request(struct tlc *tlc, pho_tlc_req_t *req,
         LOG_GOTO(out, rc, "TLC unable to alloc ping response");
 
     resp.req_id = req->id;
-    /**
-     *  TRUE LIBRARY PING, processed by TLC dispatcher,
-     *  WILL COME IN A NEXT PATCH.
-     */
-    resp.ping->library_is_up = true;
+
+    rc = scsi_inquiry(tlc->lib_fd);
+    if (rc)
+        resp.ping->library_is_up = false;
+    else
+        resp.ping->library_is_up = true;
 
     rc = pho_srl_tlc_response_pack(&resp, &msg.buf);
     if (rc)

@@ -244,6 +244,58 @@ struct move_medium_cdb {
 
 } __attribute__((packed));
 
+/*--------------------------------------
+ * INQUIRY TYPES
+ *--------------------------------------
+ */
+
+/** Inquiry CBD **/
+struct inquiry_cdb {
+    uint8_t opcode;       /* 12h */
+
+    uint8_t evpd:1;     /* 0 : Standard Inquiry Data page
+                         * 1 : Vital Product Data specific pages (based on Page
+                         *     Code Field)
+                         */
+    uint8_t cmddt:1;    /* 0 : Spectra library does not support returning
+                         *     optional command support data
+                         */
+    uint8_t reserved1:3;
+    uint8_t obsolete:3;
+
+    uint8_t page_code;  /* 00h : Supported Vital Product Data
+                         * 80h : Unit Serial Number
+                         * 83h : Device Identification
+                         * D0h : TAOS Serial Number Association (Supported by
+                         *       TFinity libraries running BlueScale12.8.0 or
+                         *       later)
+                         */
+
+    uint8_t reserved2;
+
+    uint8_t allocation_length;  /* 24h (36 bytes) : Standard Inquiry Data on a
+                                 *                  library is exported by a
+                                 *                  QIP, RIM, or Fibre Channel
+                                 *                  tape drive
+                                 * 3Ah (58 bytes) : Standard Inquiry Data on a
+                                 *                  library exported by a SCSI
+                                 *                  tape drive
+                                 * 08h (8 bytes) : Supported Vital Product Data
+                                 *                 Pages
+                                 * 0Eh (14 bytes) : Unit Serial Number
+                                 * 36h (54 bytes) : Device Identification
+                                 * 2Ah (42 bytes) : TAOS Serial Number
+                                 *                  Association
+                                 */
+    uint8_t reserved3;
+} __attribute__((packed));
+
+struct standard_inquiry_data_page {
+    uint8_t data[36]; /* We currently only use the inquiry command for ping
+                       * purpose. Phobos currently does not look at the content
+                       * of the inquiry response.
+                       */
+} __attribute__((packed));
 
 /*--------------------------------------
  *     SCSI command helper

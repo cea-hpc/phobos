@@ -56,6 +56,7 @@ enum pho_cfg_params_scsi {
                                           ELEMENT_STATUS request. */
     PHO_CFG_SCSI_query_timeout_ms, /**< Timeout of a SCSI query request */
     PHO_CFG_SCSI_move_timeout_ms, /**< Timeout of a SCSI move request */
+    PHO_CFG_SCSI_inquiry_timeout_ms, /**< Timeout of a SCSI inquiry request */
 
     /* Delimiters, update when modifying options */
     PHO_CFG_SCSI_FIRST = PHO_CFG_SCSI_retry_count,
@@ -66,6 +67,7 @@ enum pho_cfg_params_scsi {
 #define STR(X) _STR(X)
 #define DEFAULT_QUERY_TIMEOUT_MS     1000 /* 1 s */
 #define DEFAULT_MOVE_TIMEOUT_MS    300000 /* 5 min */
+#define DEFAULT_INQUIRY_TIMEOUT_MS     10 /* 10 ms */
 
 /** Definition and default values of SCSI configuration parameters */
 const struct pho_config_item cfg_scsi[] = {
@@ -98,6 +100,11 @@ const struct pho_config_item cfg_scsi[] = {
         .section = "scsi",
         .name    = "move_timeout_ms",
         .value   = STR(DEFAULT_MOVE_TIMEOUT_MS),
+    },
+    [PHO_CFG_SCSI_inquiry_timeout_ms] = {
+        .section = "scsi",
+        .name    = "inquiry_timeout_ms",
+        .value   = STR(DEFAULT_INQUIRY_TIMEOUT_MS),
     },
 };
 
@@ -170,6 +177,21 @@ static int scsi_move_timeout_ms(void)
                                       DEFAULT_MOVE_TIMEOUT_MS);
 
     return move_timeout_ms;
+}
+
+/** Return inquiry timeout ms (get it once) */
+static int scsi_inquiry_timeout_ms(void)
+{
+    static int inquiry_timeout_ms = -1;
+
+    if (inquiry_timeout_ms != -1)
+        return inquiry_timeout_ms;
+
+    inquiry_timeout_ms = PHO_CFG_GET_INT(cfg_scsi, PHO_CFG_SCSI,
+                                         inquiry_timeout_ms,
+                                         DEFAULT_INQUIRY_TIMEOUT_MS);
+
+    return inquiry_timeout_ms;
 }
 
 int scsi_mode_sense(int fd, struct mode_sense_info *info, json_t *message)
@@ -607,6 +629,27 @@ int scsi_move_medium(int fd, uint16_t arm_addr, uint16_t src_addr,
                    scsi_move_timeout_ms(), log_object);
 
     json_object_set_new(message, "scsi_execute", log_object);
+
+    return rc;
+}
+
+int scsi_inquiry(int fd)
+{
+    struct standard_inquiry_data_page inquiry_response;
+    struct scsi_req_sense error = {0};
+    struct scsi_error scsi_err = {0};
+    struct inquiry_cdb req = {0};
+    int rc;
+
+    pho_debug("scsi_execute: INQUIRY");
+
+    req.opcode = INQUIRY;
+    req.allocation_length = 36;
+
+    PHO_RETRY_LOOP(rc, scsi_retry_func, &scsi_err, scsi_retry_count(),
+                   scsi_execute, fd, SCSI_GET, (unsigned char *)&req,
+                   sizeof(req), &error, sizeof(error), &inquiry_response,
+                   sizeof(inquiry_response), scsi_inquiry_timeout_ms(), NULL);
 
     return rc;
 }

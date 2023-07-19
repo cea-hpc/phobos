@@ -38,7 +38,10 @@ function setup
 function cleanup
 {
     waive_lrs
-    waive_tlc
+    if [[ -w /dev/changer ]]; then
+        waive_tlc
+    fi
+
     drop_tables
 }
 
