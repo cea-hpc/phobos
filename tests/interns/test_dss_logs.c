@@ -72,10 +72,12 @@ static void dss_emit_logs_ok(void **state)
     rc = dss_logs_get(handle, NULL, &logs, &n_logs);
     assert_return_code(rc, -rc);
 
+    assert_int_equal(n_logs, 1);
     check_log_equal(log, logs[n_logs - 1]);
 
     json_decref(log.message);
     dss_res_free(logs, n_logs);
+    dss_logs_delete(handle, NULL);
 }
 
 static void dss_emit_logs_with_message_ok(void **state)
@@ -102,10 +104,12 @@ static void dss_emit_logs_with_message_ok(void **state)
     rc = dss_logs_get(handle, NULL, &logs, &n_logs);
     assert_return_code(rc, -rc);
 
+    assert_int_equal(n_logs, 1);
     check_log_equal(log, logs[n_logs - 1]);
 
     json_decref(log.message);
     dss_res_free(logs, n_logs);
+    dss_logs_delete(handle, NULL);
 }
 
 int main(void)

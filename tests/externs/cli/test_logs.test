@@ -83,6 +83,18 @@ function test_device_load
         error "A 'device_load' log concerning '$lto6_drive' and '$lto6_tape'" \
               "should have been recorded"
     fi
+
+    $valg_phobos logs clear || error "Logs clear should have succeeded"
+
+    logs=$($valg_phobos logs dump)
+    if [[ $? != 0 ]]; then
+        error "Log dumping failed with '$?'"
+    fi
+
+    if [[ ! -z "$logs" ]]; then
+        error "Zero log should be available after a clear"
+    fi
+
 }
 
 TEST_CLEANUP=cleanup

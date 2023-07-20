@@ -1211,12 +1211,25 @@ class LogsDumpOptHandler(BaseOptHandler):
         super(LogsDumpOptHandler, cls).add_options(parser)
 
 
+class LogsClearOptHandler(BaseOptHandler):
+    """Handler for persistent logs clearing"""
+    label = "clear"
+    descr = "handler for persistent logs clearing"
+    epilog = """Will clear persistent logs recorded by Phobos, according to
+    given filters."""
+
+    @classmethod
+    def add_options(cls, parser):
+        super(LogsClearOptHandler, cls).add_options(parser)
+
+
 class LogsOptHandler(BaseOptHandler):
     """Handler of logs commands"""
     label = "logs"
     descr = "interact with the persistent logs recorded by Phobos"
     verbs = [
-        LogsDumpOptHandler
+        LogsDumpOptHandler,
+        LogsClearOptHandler
     ]
 
     def __enter__(self):
@@ -1230,6 +1243,16 @@ class LogsOptHandler(BaseOptHandler):
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.dump_logs(sys.stdout.fileno())
+
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
+    def exec_clear(self):
+        """Clear logs"""
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                adm.clear_logs()
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

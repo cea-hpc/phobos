@@ -306,6 +306,13 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc, "Failed to dump logs")
 
+    def clear_logs(self):
+        """Clear all persistent logs"""
+        rc = LIBPHOBOS_ADMIN.phobos_admin_clear_logs(byref(self.handle),
+                                                     None, True)
+        if rc:
+            raise EnvironmentError(rc, "Failed to clear logs")
+
     @staticmethod
     def layout_list_free(layouts, n_layouts):
         """Free a previously obtained layout list."""

@@ -461,6 +461,7 @@ static void scsi_logs_check(struct dss_handle *handle,
     struct lrs_dev device;
     struct pho_log *logs;
     json_t *full_message;
+    struct pho_log log;
     int n_logs;
     bool fod;
     bool fom;
@@ -493,39 +494,30 @@ static void scsi_logs_check(struct dss_handle *handle,
     rc = dss_logs_get(handle, NULL, &logs, &n_logs);
     assert_return_code(rc, -rc);
 
-    /* The DB isn't reset between tests, and since we don't have a logs clear
-     * yet, just use the enum operation number + 1 to assert the number of logs
-     * retrieved. This will be changed when the function to clear logs is
-     * implemented.
-     */
-    assert_int_equal(n_logs, op + 1 + (should_fail ? 0 : 1));
+    assert_int_equal(n_logs, 1);
 
-    /* This is a temporary measure due to the lack of log clearing, don't be
-     * alarmed, it will go away very soon.
-     */
-    if (!should_fail)
-        op++;
+    log = logs[0];
 
-    assert_int_equal(PHO_RSC_TAPE, logs[op].medium.family);
-    assert_int_equal(PHO_RSC_TAPE, logs[op].device.family);
-    assert_string_equal(device_name, logs[op].device.name);
-    assert_string_equal(medium_name, logs[op].medium.name);
-    assert_int_equal(PHO_DEVICE_LOAD, logs[op].cause);
+    assert_int_equal(PHO_RSC_TAPE, log.medium.family);
+    assert_int_equal(PHO_RSC_TAPE, log.device.family);
+    assert_string_equal(device_name, log.device.name);
+    assert_string_equal(medium_name, log.medium.name);
+    assert_int_equal(PHO_DEVICE_LOAD, log.cause);
 
     if (should_fail)
-        assert_int_equal(EINVAL, -logs[op].error_number);
+        assert_int_equal(EINVAL, -log.error_number);
     else
-        assert_return_code(-logs[op].error_number, logs[op].error_number);
+        assert_return_code(-log.error_number, log.error_number);
 
-    /* I repeat, do not be alarmed */
-    full_message = create_log_message(op - (should_fail ? 0 : 1), should_fail,
-                               medium_name, device_name);
+    full_message = create_log_message(op, should_fail, medium_name,
+                                      device_name);
     assert_non_null(full_message);
 
-    assert_true(json_equal(full_message, logs[op].message));
+    assert_true(json_equal(full_message, log.message));
     destroy_json(full_message);
 
     dss_res_free(logs, n_logs);
+    dss_logs_delete(handle, NULL);
     cleanup_device(&device);
 }
 

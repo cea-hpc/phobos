@@ -380,4 +380,20 @@ struct pho_log_filter; // Will be defined in another patch
 int phobos_admin_dump_logs(struct admin_handle *adm, int fd,
                            struct pho_log_filter *log_filter);
 
+/**
+ * Clear a list of logs.
+ *
+ * If any field of \p log_filter is non-NULL, it will be used to filter the
+ * entries to clear.
+ *
+ * @param[in]   adm            Admin module handler.
+ * @param[in]   log_filter     Filter for the logs to clear.
+ * @param[in]   clear_all      True to clear every log, ignored if any of the
+ *                             other parameters except \p adm is given
+ *
+ * @return 0 if success, -errno if an error occurs
+ */
+int phobos_admin_clear_logs(struct admin_handle *adm,
+                            struct pho_log_filter *log_filter, bool clear_all);
+
 #endif

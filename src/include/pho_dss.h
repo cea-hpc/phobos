@@ -356,6 +356,17 @@ int dss_logs_get(struct dss_handle *hdl, const struct dss_filter *filter,
                  struct pho_log **logs_ls, int *logs_cnt);
 
 /**
+ * Clear logs information from DSS
+ *
+ * @param[in]   hdl      valid connection handle
+ * @param[in]   filter   assembled DSS filtering criteria, if NULL, will delete
+ *                       every log
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_logs_delete(struct dss_handle *hdl, const struct dss_filter *filter);
+
+/**
  *  Generic function: frees item_list that was allocated in dss_xxx_get()
  *  @param[in]  item_list   list of items to free
  *  @param[in]  item_cnt    number of items in item_list

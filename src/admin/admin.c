@@ -1423,3 +1423,18 @@ out_close:
 
     return rc;
 }
+
+int phobos_admin_clear_logs(struct admin_handle *adm,
+                            struct pho_log_filter *log_filter, bool clear_all)
+{
+    int rc;
+
+    if (!clear_all)
+        return -ENOTSUP;
+
+    rc = dss_logs_delete(&adm->dss, NULL);
+    if (rc)
+        LOG_RETURN(rc, "Failed to clear logs");
+
+    return 0;
+}
