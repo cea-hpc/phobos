@@ -1134,6 +1134,7 @@ static int layout_raid1_encode(struct pho_encoder *enc)
     const char *string_repl_count = NULL;
     const char *extent_xxh128 = NULL;
     const char *extent_md5 = NULL;
+    char *string_obj_size = NULL;
     int rc;
 
     /*
@@ -1185,6 +1186,18 @@ static int layout_raid1_encode(struct pho_encoder *enc)
                             "raid1 encoder");
 
     raid1->to_write = enc->xfer->xd_params.put.size;
+
+    /* set obj_size as char * in layout */
+    rc = asprintf(&string_obj_size, "%zu", raid1->to_write);
+    if (rc < 0)
+        LOG_RETURN(-ENOMEM, "Unable to allocate object_size buffer");
+
+    rc = pho_attr_set(&enc->layout->layout_desc.mod_attrs,
+                      PHO_EA_OBJECT_SIZE_NAME, string_obj_size);
+    free(string_obj_size);
+    if (rc)
+        LOG_RETURN(rc, "Unable to set layout obj_size attr in "
+                       "encoder built");
 
     /* Allocate the extent array */
     raid1->written_extents = g_array_new(FALSE, TRUE,

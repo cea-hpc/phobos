@@ -365,6 +365,7 @@ struct pho_resource {
 /** describe a piece of data in a layout */
 #define MD5_BYTE_LENGTH 16
 #define PHO_HASH_MD5_KEY_NAME    "md5"
+#define XXH128_BYTE_LENGTH 16
 #define PHO_HASH_XXH128_KEY_NAME "xxh128"
 
 struct extent {
@@ -376,7 +377,8 @@ struct extent {
     struct pho_buff     address;    /**< address on the media */
     bool                with_xxh128;
                                     /**< true if extent xxh128 field is set */
-    unsigned char       xxh128[16]; /**< canonical XXH128 checksum digest */
+    unsigned char       xxh128[XXH128_BYTE_LENGTH];
+                                    /**< canonical XXH128 checksum digest */
     bool                with_md5;   /**< true if extent md5 field is set */
     unsigned char       md5[MD5_BYTE_LENGTH];
                                     /**< MD5 checksum */

@@ -2218,7 +2218,8 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         LOG_RETURN(-EINVAL, "conn: %p, item_list: %p, item_cnt: %d",
                    conn, item_list, item_cnt);
 
-    if (action == DSS_SET_FULL_INSERT && type != DSS_OBJECT)
+    if (action == DSS_SET_FULL_INSERT &&
+        !(type == DSS_OBJECT || type == DSS_LAYOUT))
         LOG_RETURN(-ENOTSUP, "Full insert request is not supported for %s",
                    dss_type_names[type]);
 

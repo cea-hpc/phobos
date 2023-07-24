@@ -1354,7 +1354,7 @@ int phobos_admin_media_import(struct admin_handle *adm,
         rc = pho_import_medium(adm, med_ls[i], check_hash);
     }
 
-    return -ENOSYS;
+    return rc;
 }
 
 int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
