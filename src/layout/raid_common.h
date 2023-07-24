@@ -31,27 +31,29 @@
 #include "pho_type_utils.h"
 
 struct raid_io_context {
-    struct io_adapter_module **ioa;  /**< IO adapter to access the current
-                                       * storage backend
-                                       */
-    struct pho_io_descr *iod;        /**< IO decriptor to access the
-                                       * current object
-                                       */
+    int layout_number;
+    struct io_adapter_module **ioa;   /**< IO adapter to access the current
+                                        * storage backend
+                                        */
+    struct pho_io_descr *iod;         /**< IO decriptor to access the
+                                        * current object
 
+                                        */
     struct pho_ext_loc *ext_location; /**< Extent location */
     struct extent *extent;            /**< Extent to fill */
+    struct raid_ops *ops;             /**< Writing and reading operations */
+
     char *extent_tag;                 /**< Extent name */
     unsigned int cur_extent_idx;      /**< Current extent index */
-    bool requested_alloc;             /**< Whether an unanswer medium
+    bool requested_alloc;             /**< Whether an unanswered medium
                                         * allocation has been requested by
                                         * the encoder or not
                                         */
 
-    size_t to_write;                  /**< Amount of data to read/write */
-    size_t total_written;             /**< Amount of data written,
-                                        * only used when splicount > 0
+    int nb_needed_media;              /**< Number of media needed to write/read
                                         */
-
+    int repl_count;
+    size_t to_write;                  /**< Amount of data to read/write */
     char *parts[3];                   /**< Buffer used to write/read */
 
     /* The following two fields are only used when writing */
@@ -81,16 +83,54 @@ struct raid_io_context {
      size_t n_released_media;
 };
 
+struct raid_ops {
+    int (*write)(struct pho_encoder *enc, pho_resp_write_t *wresp,
+                 pho_req_release_t *rreq);
+};
+
 bool no_more_alloc(struct pho_encoder *enc);
 
 void raid_encoder_destroy(struct pho_encoder *enc);
 
 void raid_build_write_allocation_req(struct pho_encoder *enc,
-                                     pho_req_t *req, int repl_count);
+                                     pho_req_t *req);
 
 int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
-                       pho_req_t **reqs, size_t *n_reqs);
+                      pho_req_t **reqs, size_t *n_reqs);
 
 int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
-                          pho_req_t **reqs, size_t *n_reqs);
+                         pho_req_t **reqs, size_t *n_reqs);
+
+int raid_io_context_set_extent_info(struct raid_io_context *io_context,
+                                    PhoResponse__Write__Elt **medium,
+                                    int extent_idx, size_t extent_size);
+
+int raid_io_context_write_init(struct pho_encoder *enc,
+                               pho_resp_write_t *wresp, size_t *io_size,
+                               size_t extent_size);
+
+void raid_io_context_setmd(struct raid_io_context *io_context, char *xd_objid,
+                           const GString *str);
+
+int raid_io_context_open(struct raid_io_context *io_context,
+                         struct pho_encoder *enc);
+
+int raid_io_add_written_extent(struct raid_io_context *io_context,
+                               struct extent *extent);
+
+int add_new_to_release_media(struct raid_io_context *io_context,
+                             const char *media_id);
+
+int mark_written_medium_released(struct raid_io_context *io_context,
+                                 const char *medium);
+
+int raid_enc_handle_release_resp(struct pho_encoder *enc,
+                                  pho_resp_release_t *rel_resp);
+
+int raid_enc_handle_write_resp(struct pho_encoder *enc,
+                                pho_resp_t *resp, pho_req_t **reqs,
+                                size_t *n_reqs);
+
+void raid_io_context_fini(struct raid_io_context *io_context);
+
 #endif
