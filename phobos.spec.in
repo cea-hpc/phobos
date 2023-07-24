@@ -141,6 +141,7 @@ echo "%{_libdir}/phobos" > %{buildroot}/%{_sysconfdir}/ld.so.conf.d/phobos.conf
 %{_libdir}/phobos/libpho_*_ltfs.so*
 %{_libdir}/phobos/libpho_*_posix.so*
 %{_libdir}/phobos/libpho_*_raid1.so*
+%{_libdir}/phobos/libpho_*_raid5.so*
 %{_libdir}/phobos/libpho_*_dummy.so*
 %{_libdir}/phobos/libpho_*_scsi.so*
 %{_sbindir}/pho_*_helper
