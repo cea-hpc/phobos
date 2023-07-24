@@ -93,6 +93,28 @@ void raid_build_write_allocation_req(struct pho_encoder *enc, pho_req_t *req)
     }
 }
 
+/** Generate the next read allocation request for this decoder */
+void raid_build_read_allocation_req(struct pho_encoder *dec, pho_req_t *req)
+{
+    struct raid_io_context *io_context = dec->priv_enc;
+    int i;
+
+    pho_srl_request_read_alloc(req, io_context->repl_count);
+
+    req->ralloc->n_required = io_context->nb_needed_media;
+
+    for (i = 0; i < io_context->repl_count; ++i) {
+        unsigned int ext_idx;
+
+        ext_idx = i + io_context->cur_extent_idx * io_context->repl_count;
+
+        req->ralloc->med_ids[i]->family =
+            dec->layout->extents[ext_idx].media.family;
+        req->ralloc->med_ids[i]->name =
+            strdup(dec->layout->extents[ext_idx].media.name);
+    }
+}
+
 int raid_io_context_set_extent_info(struct raid_io_context *io_context,
                                     pho_resp_write_elt_t **medium,
                                     int extent_idx, size_t extent_size)
@@ -129,14 +151,21 @@ int raid_io_context_write_init(struct pho_encoder *enc, pho_resp_write_t *wresp,
         rc = get_io_adapter((enum fs_type)wresp->media[i]->fs_type,
                             &io_context->ioa[i]);
         if (rc)
-            LOG_RETURN(rc, "Unable to get io_adapter in raid encoder write");
+            LOG_RETURN(rc, "Unable to get io_adapter in raid encoder");
     }
 
     /* setup iod */
     io_context->iod = calloc(io_context->repl_count, sizeof(*io_context->iod));
     if (io_context->iod == NULL)
         LOG_RETURN(-ENOMEM,
-                   "Unable to alloc iod table for raid encoder write");
+                   "Unable to alloc iod table for raid encoder");
+
+    io_context->extent_tag = calloc(io_context->repl_count,
+                                    sizeof(*io_context->extent_tag) *
+                                    EXTENT_TAG_SIZE);
+    if (io_context->extent_tag == NULL)
+        LOG_RETURN(rc = -ENOMEM,
+                   "Unable to alloc extent_tag table in raid encoder");
 
     /* setup extents */
     io_context->extent = calloc(io_context->repl_count,
@@ -144,7 +173,7 @@ int raid_io_context_write_init(struct pho_encoder *enc, pho_resp_write_t *wresp,
 
     if (io_context->extent == NULL)
         LOG_RETURN(-ENOMEM,
-                   "Unable to alloc extent table in raid encode write");
+                   "Unable to alloc extent table in raid encoder");
 
     /* setup extent_tag */
     io_context->extent_tag = calloc(io_context->repl_count,
@@ -233,6 +262,26 @@ next:
     return 0;
 }
 
+int raid_io_context_read_init(struct pho_encoder *dec,
+                              pho_resp_read_elt_t **medium)
+{
+    struct raid_io_context *io_context = dec->priv_enc;
+    int rc;
+
+    io_context->ioa = calloc(1, sizeof(*io_context->ioa));
+    if (io_context->ioa == NULL)
+        return -ENOMEM;
+
+    rc = get_io_adapter((enum fs_type)medium[0]->fs_type, io_context->ioa);
+    if (rc)
+        return rc;
+
+    io_context->ext_location = xcalloc(2, sizeof(*io_context->ext_location));
+    io_context->iod = xcalloc(2, sizeof(*io_context->iod));
+
+    return 0;
+}
+
 int mark_written_medium_released(struct raid_io_context *io_context,
                                  const char *medium)
 {
@@ -266,7 +315,7 @@ int mark_written_medium_released(struct raid_io_context *io_context,
 }
 
 int raid_enc_handle_release_resp(struct pho_encoder *enc,
-                                  pho_resp_release_t *rel_resp)
+                                 pho_resp_release_t *rel_resp)
 {
     struct raid_io_context *io_context = enc->priv_enc;
     int rc = 0;
@@ -340,6 +389,31 @@ int raid_enc_handle_write_resp(struct pho_encoder *enc,
     return rc;
 }
 
+int raid_enc_handle_read_resp(struct pho_encoder *enc, pho_resp_t *resp,
+                               pho_req_t **reqs, size_t *n_reqs)
+{
+    struct raid_io_context *io_context = enc->priv_enc;
+    int rc;
+    int i;
+
+    pho_srl_request_release_alloc(*reqs + *n_reqs, resp->ralloc->n_media);
+
+    for (i = 0; i < io_context->nb_needed_media; i++)
+        rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
+                   resp->ralloc->media[i]->med_id);
+
+    rc = io_context->ops->read(enc, resp->ralloc->media);
+
+    for (i = 0; i < io_context->nb_needed_media; i++) {
+        (*reqs)[*n_reqs].release->media[i]->rc = rc;
+        (*reqs)[*n_reqs].release->media[i]->to_sync = false;
+    }
+
+    (*n_reqs)++;
+
+    return rc;
+}
+
 int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
                          pho_req_t **reqs, size_t *n_reqs)
 {
@@ -350,17 +424,31 @@ int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
         enc->xfer->xd_rc = resp->error->rc;
         enc->done = true;
         LOG_RETURN(enc->xfer->xd_rc,
-                  "%s for objid:'%s' received error %s to last request",
-                  enc->is_decoder ? "Decoder" : "Encoder", enc->xfer->xd_objid,
-                  pho_srl_error_kind_str(resp->error));
+                   "%s for objid:'%s' received error %s to last request",
+                   enc->is_decoder ? "Decoder" : "Encoder", enc->xfer->xd_objid,
+                   pho_srl_error_kind_str(resp->error));
 
     } else if (pho_response_is_write(resp)) {
-        /* Last requested allocation has now been fulfilled */
+
         io_context->requested_alloc = false;
         if (enc->is_decoder)
             return -EINVAL;
 
+        if (resp->walloc->n_media != io_context->repl_count)
+            return -EINVAL;
+
         return raid_enc_handle_write_resp(enc, resp, reqs, n_reqs);
+
+    } else if (pho_response_is_read(resp)) {
+
+        io_context->requested_alloc = false;
+        if (!enc->is_decoder)
+            return -EINVAL;
+
+        if (resp->ralloc->n_media != io_context->nb_needed_media)
+            return -EINVAL;
+
+        return raid_enc_handle_read_resp(enc, resp, reqs, n_reqs);
 
     } else if (pho_response_is_release(resp)) {
         if (!enc->is_decoder)
@@ -414,7 +502,9 @@ int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
         goto out;
 
     /* Build next request */
-    if (!enc->is_decoder)
+    if (enc->is_decoder)
+        raid_build_read_allocation_req(enc, *reqs + *n_reqs);
+    else
         raid_build_write_allocation_req(enc, *reqs + *n_reqs);
 
     (*n_reqs)++;
@@ -449,7 +539,7 @@ int raid_io_context_open(struct raid_io_context *io_context,
 {
     int i;
 
-    for (i = 0; i < 3; ++i) {
+    for (i = 0; i < io_context->repl_count; ++i) {
         int rc;
 
         rc = ioa_open(io_context->ioa[i], enc->xfer->xd_objid,
@@ -477,6 +567,7 @@ int add_new_to_release_media(struct raid_io_context *io_context,
         return -ENOMEM;
 
     *new_ref_count = 1;
+
     /* alloc new media_id */
     new_media_id = strdup(media_id);
     if (new_media_id == NULL) {

@@ -53,7 +53,11 @@ struct raid_io_context {
     int nb_needed_media;              /**< Number of media needed to write/read
                                         */
     int repl_count;
-    size_t to_write;                  /**< Amount of data to read/write */
+    size_t to_write;                  /**< Amount of data to write :
+                                        *  - Put : extent_size
+                                        *  - Get : reconstructed object size
+                                        */
+
     char *parts[3];                   /**< Buffer used to write/read */
 
     /* The following two fields are only used when writing */
@@ -86,6 +90,8 @@ struct raid_io_context {
 struct raid_ops {
     int (*write)(struct pho_encoder *enc, pho_resp_write_t *wresp,
                  pho_req_release_t *rreq);
+
+    int (*read)(struct pho_encoder *dec, pho_resp_read_elt_t **medium);
 };
 
 bool no_more_alloc(struct pho_encoder *enc);
@@ -125,12 +131,23 @@ int mark_written_medium_released(struct raid_io_context *io_context,
                                  const char *medium);
 
 int raid_enc_handle_release_resp(struct pho_encoder *enc,
-                                  pho_resp_release_t *rel_resp);
+                                 pho_resp_release_t *rel_resp);
 
 int raid_enc_handle_write_resp(struct pho_encoder *enc,
                                 pho_resp_t *resp, pho_req_t **reqs,
                                 size_t *n_reqs);
 
 void raid_io_context_fini(struct raid_io_context *io_context);
+
+int raid_io_context_init(struct pho_encoder *enc, pho_resp_write_t *wresp,
+                         size_t *buffer_size, size_t extent_size);
+
+int raid_io_context_read_init(struct pho_encoder *dec,
+                              pho_resp_read_elt_t **medium);
+
+int raid_enc_handle_read_resp(struct pho_encoder *enc, pho_resp_t *resp,
+                               pho_req_t **reqs, size_t *n_reqs);
+
+void raid_build_read_allocation_req(struct pho_encoder *dec, pho_req_t *req);
 
 #endif
