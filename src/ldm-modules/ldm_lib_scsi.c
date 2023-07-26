@@ -685,6 +685,7 @@ static int lib_scsi_move(struct lib_handle *hdl,
                          const struct lib_item_addr *tgt_addr,
                          json_t *message)
 {
+    enum scsi_operation_type type;
     struct lib_descriptor *lib;
     json_t *target_json;
     bool origin = false;
@@ -714,8 +715,10 @@ static int lib_scsi_move(struct lib_handle *hdl,
         }
 
         destroy_json(target_json);
+        type = UNLOAD_MEDIUM;
     } else {
         tgt = tgt_addr->lia_addr;
+        type = LOAD_MEDIUM;
     }
 
     move_json = json_object();
@@ -725,11 +728,6 @@ static int lib_scsi_move(struct lib_handle *hdl,
     /* was the source slot invalid? */
     if (rc == -EINVAL && origin) {
         pho_warn("Failed to move media to source slot, trying another one...");
-
-        if (json_object_size(move_json) != 0) {
-            json_object_set_new(message, "First failed move", move_json);
-            move_json = json_object();
-        }
 
         origin = false;
         target_json = json_object();
@@ -747,7 +745,7 @@ static int lib_scsi_move(struct lib_handle *hdl,
     }
 
     if (json_object_size(move_json) != 0)
-        json_object_set_new(message, SCSI_OPERATION_TYPE_NAMES[LOAD_MEDIUM],
+        json_object_set_new(message, SCSI_OPERATION_TYPE_NAMES[type],
                             move_json);
     else
         destroy_json(move_json);

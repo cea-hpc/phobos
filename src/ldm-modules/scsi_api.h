@@ -38,6 +38,7 @@ enum scsi_operation_type {
     IMPEXP_STATUS,
     DRIVES_STATUS,
     LOAD_MEDIUM,
+    UNLOAD_MEDIUM,
 };
 
 static const char * const SCSI_OPERATION_TYPE_NAMES[] = {
@@ -47,6 +48,7 @@ static const char * const SCSI_OPERATION_TYPE_NAMES[] = {
     [IMPEXP_STATUS]       = "Impexp status",
     [DRIVES_STATUS]       = "Drives status",
     [LOAD_MEDIUM]         = "Move action",
+    [UNLOAD_MEDIUM]       = "Move action",
 };
 
 static const char * const SCSI_ACTION_NAMES[] = {
@@ -56,6 +58,7 @@ static const char * const SCSI_ACTION_NAMES[] = {
     [IMPEXP_STATUS]       = "READ_ELEMENT_STATUS",
     [DRIVES_STATUS]       = "READ_ELEMENT_STATUS",
     [LOAD_MEDIUM]         = "MOVE_MEDIUM",
+    [UNLOAD_MEDIUM]       = "MOVE_MEDIUM",
 };
 
 /* --------------- MODE SENSE API ------------------ */

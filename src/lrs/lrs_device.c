@@ -963,6 +963,7 @@ int dev_unload(struct lrs_dev *dev)
     /* let the library select the target location */
     struct lib_item_addr free_slot = { .lia_type = MED_LOC_UNKNOWN };
     struct lib_handle lib_hdl;
+    struct pho_log log;
     int rc2;
     int rc;
 
@@ -971,7 +972,10 @@ int dev_unload(struct lrs_dev *dev)
     pho_verb("unload: '%s' from '%s'", dev->ld_dss_media_info->rsc.id.name,
              dev->ld_dev_path);
 
-    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl, NULL);
+    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
+                 dev->ld_dss_media_info->rsc.id, PHO_DEVICE_UNLOAD);
+
+    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl, &log);
     if (rc)
         LOG_GOTO(out, rc,
                  "Unable to open lib '%s' to unload medium '%s' from device "
@@ -979,7 +983,8 @@ int dev_unload(struct lrs_dev *dev)
                  dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
     rc = ldm_lib_media_move(&lib_hdl, &dev->ld_lib_dev_info.ldi_addr,
-                            &free_slot, NULL);
+                            &free_slot, log.message);
+    log.error_number = rc;
     if (rc != 0)
         /* Set operational failure state on this drive. It is incomplete since
          * the error can originate from a defective tape too...
@@ -1014,6 +1019,11 @@ out:
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         MUTEX_UNLOCK(&dev->ld_mutex);
     }
+
+    if (should_log(&log))
+        dss_emit_log(&dev->ld_device_thread.dss, &log);
+
+    destroy_json(log.message);
 
     return rc;
 }
@@ -1100,12 +1110,8 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
     *can_retry = false;
     pho_verb("load: '%s' into '%s'", (*medium)->rsc.id.name, dev->ld_dev_path);
 
-    strcpy(log.device.name, dev->ld_dss_dev_info->rsc.id.name);
-    log.device.family = dev->ld_dss_dev_info->rsc.id.family;
-    strcpy(log.medium.name, (*medium)->rsc.id.name);
-    log.medium.family = (*medium)->rsc.id.family;
-    log.cause = PHO_DEVICE_LOAD;
-    log.message = json_object();
+    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
+                 (*medium)->rsc.id, PHO_DEVICE_LOAD);
 
     /* get handle to the library depending on device type */
     rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl, &log);
