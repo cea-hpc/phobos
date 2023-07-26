@@ -49,6 +49,37 @@ function cleanup
     drain_all_drives
 }
 
+function clear_logs
+{
+    $valg_phobos logs clear || error "Logs clear should have succeeded"
+
+    local logs=$($valg_phobos logs dump)
+    if [[ $? != 0 ]]; then
+        error "Log dumping failed with '$?'"
+    fi
+
+    if [[ ! -z "$logs" ]]; then
+        error "Zero log should be available after a clear"
+    fi
+}
+
+function check_logs
+{
+    local logs="$1"
+    local drive_name="$2"
+    local tape_name="$3"
+    local cause="$4"
+
+    local logs=$(echo "$logs" | grep "$drive_name" | grep "$tape_name" |
+                 grep "$cause")
+
+    local logs_lines=$(echo "$logs" | wc -l)
+    if (( logs_lines != 1 )); then
+        error "A '$cause' log concerning '$drive_name' and '$tape_name'" \
+              "should have been recorded"
+    fi
+}
+
 function test_device_load
 {
     local lto6_tape=$(get_tapes L6 1)
@@ -64,7 +95,6 @@ function test_device_load
         error "Tape $lto6_tape should have been formated"
 
     local logs=$($valg_phobos logs dump)
-
     if [[ $? != 0 ]]; then
         error "Log dumping failed with '$?'"
     fi
@@ -75,29 +105,59 @@ function test_device_load
     fi
 
     lto6_drive=$($phobos drive list -o name "$lto6_drive")
-    logs=$(echo "$logs" | grep "${lto6_drive}" | grep "${lto6_tape}" |
-           grep "device_load")
+    local logs=$(echo "$logs" | grep "${lto6_drive}" | grep "${lto6_tape}" |
+                 grep "device_load")
 
-    logs_lines=$(echo "$logs" | wc -l)
+    local logs_lines=$(echo "$logs" | wc -l)
     if (( logs_lines != 1 )); then
         error "A 'device_load' log concerning '$lto6_drive' and '$lto6_tape'" \
               "should have been recorded"
     fi
 
-    $valg_phobos logs clear || error "Logs clear should have succeeded"
+    check_logs "$logs" "$lto6_drive" "$lto6_tape" "device_load"
 
-    logs=$($valg_phobos logs dump)
+    clear_logs
+}
+
+function test_device_unload
+{
+    local lto6_tapes=($(get_tapes L6 2 | nodeset -e))
+    local lto6_drive=$(get_lto_drives 6 1)
+    local first_tape=${lto6_tapes[0]}
+    local second_tape=${lto6_tapes[1]}
+
+    $phobos drive add --unlock $lto6_drive ||
+        error "Drive $lto6_drive should have been added"
+
+    $phobos tape add -t lto6 $first_tape $second_tape ||
+        error "Tape $first_tape should have been added"
+
+    $valg_phobos tape format --unlock $first_tape ||
+        error "Tape $first_tape should have been formated"
+
+    clear_logs
+
+    # This should generate a log for the unload and another for the load
+    $valg_phobos tape format --unlock $second_tape ||
+        error "Tape $second_tape should have been formated"
+
+    local logs=$($valg_phobos logs dump)
     if [[ $? != 0 ]]; then
         error "Log dumping failed with '$?'"
     fi
 
-    if [[ ! -z "$logs" ]]; then
-        error "Zero log should be available after a clear"
+    local logs_lines=$(echo "$logs" | wc -l)
+    if (( logs_lines != 2 )); then
+        error "Two logs should have been recorded"
     fi
 
+    lto6_drive=$($phobos drive list -o name "$lto6_drive")
+
+    check_logs "$logs" "$lto6_drive" "$first_tape" "device_unload"
+    check_logs "$logs" "$lto6_drive" "$second_tape" "device_load"
+
+    clear_logs
 }
 
-TEST_CLEANUP=cleanup
-TEST_SETUP=setup
-
-TESTS=("test_device_load")
+TESTS=("setup; test_device_load; cleanup"
+       "setup; test_device_unload; cleanup")
