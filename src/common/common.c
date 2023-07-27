@@ -327,6 +327,29 @@ char *uchar2hex(const unsigned char *buf, int buf_size)
     return hex;
 }
 
+unsigned char *hex2uchar(char *hex, int uchar_size)
+{
+    unsigned char *buff = xcalloc(uchar_size + 1, sizeof(char));
+    int i;
+    int j;
+
+    for (i = 0, j = 0; i < uchar_size; i++, j += 2) {
+        unsigned int temp = 0;
+        int rc = 0;
+
+        rc = sscanf(hex + j, "%02x", &temp);
+        if (rc < 0) {
+            free(buff);
+            errno = -EINVAL;
+            return NULL;
+        }
+        buff[i] = (unsigned char)temp;
+    }
+    buff[uchar_size] = '\0';
+
+    return buff;
+}
+
 /**
  * GLib HashTable iteration methods lack the ability for the callback to return
  * an error code, to stop the iteration on error and return it to the caller.

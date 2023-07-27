@@ -385,6 +385,17 @@ int64_t str2int64(const char *str);
  */
 char *uchar2hex(const unsigned char *str, int str_size);
 
+/**
+ * Converts an hex-encoded string to an unsigned char *.
+ *
+ * @param[in]   hex         hex string to decode.
+ * @param[in]   uchar_size  size of the uchar * to decode.
+ * @return hex encoded string on success, NULL on failure.
+ *         errno is set on error.
+ */
+unsigned char *hex2uchar(char *hex, int uchar_size);
+
+
 /* Number of items in a fixed-size array */
 #define ARRAY_SIZE(a)   (sizeof(a) / sizeof((a)[0]))
 
