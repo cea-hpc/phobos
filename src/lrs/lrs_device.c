@@ -53,19 +53,6 @@ static inline long ms2nsec(long ms)
     return (ms % 1000) * 1000000;
 }
 
-static inline bool should_log(struct pho_log *log)
-{
-    switch (log->cause) {
-    case PHO_DEVICE_LOAD:
-    case PHO_DEVICE_UNLOAD:
-        return log->error_number == 0 || json_object_size(log->message) != 0;
-    default:
-        return json_object_size(log->message) != 0;
-    }
-
-    __builtin_unreachable();
-}
-
 int lrs_dev_hdl_init(struct lrs_dev_hdl *handle, enum rsc_family family)
 {
     int rc;
@@ -1142,7 +1129,8 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
         fail_release_free_medium(dev, medium, free_medium);
 
         if (json_object_size(medium_lookup_json) != 0) {
-            json_object_set_new(log.message, "Media lookup",
+            json_object_set_new(log.message,
+                                OPERATION_TYPE_NAMES[PHO_MEDIUM_LOOKUP],
                                 medium_lookup_json);
             log.error_number = rc;
         }
@@ -2290,7 +2278,9 @@ int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl,
 
     rc = ldm_lib_open(lib_hdl, lib_dev, lib_open_json);
     if (rc && json_object_size(lib_open_json) != 0) {
-        json_object_set_new(log->message, "Library open", lib_open_json);
+        json_object_set_new(log->message,
+                            OPERATION_TYPE_NAMES[PHO_LIBRARY_OPEN],
+                            lib_open_json);
         log->error_number = rc;
     } else {
         destroy_json(lib_open_json);

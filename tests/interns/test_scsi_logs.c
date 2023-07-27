@@ -52,7 +52,15 @@
 
 #include <cmocka.h>
 
+/* This is necessary because lrs_sched.h includes io_sched.h which includes
+ * config.h which defines the macro RELEASE, but scsi/sg_io_linux.h also defines
+ * RELEASE, so there is a conflict. To solve this, just undefine it before
+ * including lrs_sched.h.
+ */
+#undef RELEASE
+
 #include "lrs_device.h"
+#include "lrs_sched.h"
 #include "scsi_api.h"
 #include "scsi_common.h"
 
@@ -91,6 +99,8 @@ static void create_device(struct lrs_dev *dev, char *path, char *model,
     dev->ld_dss_media_info = NULL;
     dev->ld_device_thread.state = THREAD_RUNNING;
     dev->ld_sys_dev_state.lds_family = PHO_RSC_TAPE;
+    dev->ld_sys_dev_state.lds_model = NULL;
+    dev->ld_sys_dev_state.lds_serial = NULL;
 
     dev->ld_dss_dev_info = calloc(1, sizeof(*dev->ld_dss_dev_info));
     assert_non_null(dev->ld_dss_dev_info);
@@ -112,7 +122,7 @@ static void create_device(struct lrs_dev *dev, char *path, char *model,
         assert_return_code(rc, -rc);
         get_serial_from_path(path, &serial);
         assert_int_equal(ldm_lib_drive_lookup(&lib_hdl, serial,
-                                              &dev->ld_lib_dev_info), 0);
+                                              &dev->ld_lib_dev_info, NULL), 0);
         free(serial);
         rc = ldm_lib_close(&lib_hdl);
         assert_return_code(rc, -rc);
@@ -123,6 +133,8 @@ static void cleanup_device(struct lrs_dev *dev)
 {
     free((void *)dev->ld_technology);
     free(dev->ld_dss_dev_info);
+    free(dev->ld_sys_dev_state.lds_model);
+    free(dev->ld_sys_dev_state.lds_serial);
 }
 
 static void medium_set_tags(struct media_info *medium,
@@ -400,11 +412,15 @@ static json_t *create_log_message(enum operation_type cause,
 
     switch (cause) {
     case PHO_DEVICE_LOAD:
-        assert_false(json_object_set_new(phobos_action, "Media lookup",
+        assert_false(json_object_set_new(phobos_action, "Medium lookup",
                                          scsi_logical_action));
         break;
     case PHO_DEVICE_UNLOAD:
         assert_false(json_object_set_new(phobos_action, "Target selection",
+                                         scsi_logical_action));
+        break;
+    case PHO_DEVICE_LOOKUP:
+        assert_false(json_object_set_new(phobos_action, "Device lookup",
                                          scsi_logical_action));
         break;
     default:
@@ -741,6 +757,93 @@ static void scsi_dev_unload_logs_move_medium_success(void **state)
                                "/dev/st0", "P00003L5");
 }
 
+static void scsi_dev_lookup_logs_check(struct dss_handle *handle,
+                                       enum scsi_operation_type op,
+                                       bool should_fail,
+                                       char *device_name)
+{
+    struct phobos_global_context *context = phobos_context();
+    struct lrs_sched sched = {0};
+    struct lib_handle lib_hdl;
+    struct lrs_dev device;
+    char hostname[256];
+    char *serial;
+    int rc;
+
+    assert_int_equal(gethostname(hostname, 256), 0);
+
+    sched.lock_handle.dss = handle;
+    sched.lock_handle.lock_hostname = hostname;
+    sched.lock_handle.lock_owner = getpid();
+    sched.sched_thread.dss = *handle;
+
+    assert_false(wrap_lib_open(PHO_RSC_TAPE, &lib_hdl, NULL));
+
+    create_device(&device, device_name, LTO5_MODEL, handle);
+
+    get_serial_from_path(device_name, &serial);
+    strcpy(device.ld_dss_dev_info->rsc.id.name, serial);
+    free(serial);
+
+    if (should_fail) {
+        context->mock_ioctl = &mock_ioctl;
+
+        will_return_always(mock_ioctl, op);
+    }
+
+    rc = sched_fill_dev_info(&sched, &lib_hdl, &device);
+
+    if (should_fail) {
+        json_t *full_message;
+
+        pho_context_reset_scsi_ioctl();
+        assert_int_equal(-rc, EINVAL);
+
+        full_message = create_log_message(PHO_DEVICE_LOOKUP, op, should_fail,
+                                          "", device_name);
+        assert_non_null(full_message);
+
+        check_log_is_valid(handle, device.ld_dss_dev_info->rsc.id.name, "",
+                           PHO_DEVICE_LOOKUP, op, should_fail, full_message);
+    } else {
+        struct pho_log *logs;
+        int n_logs;
+
+        assert_return_code(-rc, rc);
+
+        rc = dss_logs_get(handle, NULL, &logs, &n_logs);
+        assert_return_code(rc, -rc);
+
+        assert_int_equal(n_logs, 0);
+        dss_res_free(logs, n_logs);
+    }
+
+    assert_false(ldm_lib_close(&lib_hdl));
+    dss_logs_delete(handle, NULL);
+    cleanup_device(&device);
+}
+
+static void scsi_dev_lookup_logs_mode_sense_failure(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+
+    scsi_dev_lookup_logs_check(handle, LIBRARY_LOAD, true, "/dev/st0");
+}
+
+static void scsi_dev_lookup_logs_drives_status_failure(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+
+    scsi_dev_lookup_logs_check(handle, DRIVES_STATUS, true, "/dev/st0");
+}
+
+static void scsi_dev_lookup_logs_success(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+
+    scsi_dev_lookup_logs_check(handle, -1, false, "/dev/st0");
+}
+
 int main(void)
 {
     const struct CMUnitTest test_scsi_logs[] = {
@@ -759,6 +862,10 @@ int main(void)
         cmocka_unit_test(scsi_dev_unload_logs_drives_status_failure),
         cmocka_unit_test(scsi_dev_unload_logs_move_medium_failure),
         cmocka_unit_test(scsi_dev_unload_logs_move_medium_success),
+
+        cmocka_unit_test(scsi_dev_lookup_logs_mode_sense_failure),
+        cmocka_unit_test(scsi_dev_lookup_logs_drives_status_failure),
+        cmocka_unit_test(scsi_dev_lookup_logs_success),
     };
     struct stat dev_changer;
     int error_count;

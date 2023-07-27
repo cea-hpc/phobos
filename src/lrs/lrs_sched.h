@@ -325,6 +325,22 @@ int queue_error_response(struct tsqueue *response_queue, int req_rc,
                          struct req_container *reqc);
 
 /**
+ * Retrieve device information from system and complementary info from DB.
+ * - check DB device info is consistent with mtx output.
+ * - get operationnal status from system (loaded or not).
+ * - for loaded drives, the mounted volume + mount point, if mounted.
+ * - get media information from DB for loaded drives.
+ *
+ * \param[in]  dss  handle to dss connection.
+ * \param[in]  lib  library handler for tape devices.
+ * \param[out] dev  lrs_dev structure filled with all needed information.
+ *
+ * \return          0 on success, -1 * posix error code on failure.
+ */
+int sched_fill_dev_info(struct lrs_sched *sched, struct lib_handle *lib_hdl,
+                        struct lrs_dev *dev);
+
+/**
  * Initialize a new sched bound to a given DSS.
  *
  * \param[in]       sched       The sched to be initialized.

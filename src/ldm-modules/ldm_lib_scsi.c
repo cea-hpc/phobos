@@ -478,9 +478,8 @@ static inline enum med_location scsi2ldm_loc_type(enum element_type_code type)
 }
 
 /** Implements phobos LDM lib device lookup */
-static int lib_scsi_drive_info(struct lib_handle *hdl,
-                                   const char *drv_serial,
-                                   struct lib_drv_info *ldi)
+static int lib_scsi_drive_info(struct lib_handle *hdl, const char *drv_serial,
+                               struct lib_drv_info *ldi, json_t *message)
 {
     struct element_status *drv;
     int rc;
@@ -489,7 +488,7 @@ static int lib_scsi_drive_info(struct lib_handle *hdl,
     MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
 
     /* load status for drives */
-    rc = lib_status_load(hdl->lh_lib, SCSI_TYPE_DRIVE, NULL);
+    rc = lib_status_load(hdl->lh_lib, SCSI_TYPE_DRIVE, message);
     if (rc)
         goto unlock;
 

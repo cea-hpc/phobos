@@ -429,23 +429,14 @@ out_nores:
     return rc;
 }
 
-/**
- * Retrieve device information from system and complementary info from DB.
- * - check DB device info is consistent with mtx output.
- * - get operationnal status from system (loaded or not).
- * - for loaded drives, the mounted volume + LTFS mount point, if mounted.
- * - get media information from DB for loaded drives.
- *
- * @param[in]  dss  handle to dss connection.
- * @param[in]  lib  library handler for tape devices.
- * @param[out] dev  lrs_dev structure filled with all needed information.
- */
-static int sched_fill_dev_info(struct lrs_sched *sched,
-                               struct lib_handle *lib_hdl,
-                               struct lrs_dev *dev)
+int sched_fill_dev_info(struct lrs_sched *sched, struct lib_handle *lib_hdl,
+                        struct lrs_dev *dev)
 {
     struct dev_adapter_module *deva;
+    json_t *device_lookup_json;
     struct dev_info *devi;
+    struct pho_id medium;
+    struct pho_log log;
     int rc;
 
     ENTRY;
@@ -484,16 +475,37 @@ static int sched_fill_dev_info(struct lrs_sched *sched,
     if (rc)
         return rc;
 
+    medium.name[0] = 0;
+    medium.family = devi->rsc.id.family;
+    init_pho_log(&log, devi->rsc.id, medium, PHO_DEVICE_LOOKUP);
+
+    device_lookup_json = json_object();
+
     /* Query the library about the drive location and whether it contains
      * a media.
      */
     rc = ldm_lib_drive_lookup(lib_hdl, devi->rsc.id.name,
-                              &dev->ld_lib_dev_info);
+                              &dev->ld_lib_dev_info, device_lookup_json);
     if (rc) {
         pho_debug("Failed to query the library about device '%s'",
                   devi->rsc.id.name);
+
+        if (json_object_size(device_lookup_json) != 0) {
+            json_object_set_new(log.message,
+                                OPERATION_TYPE_NAMES[PHO_DEVICE_LOOKUP],
+                                device_lookup_json);
+            log.error_number = rc;
+            dss_emit_log(&dev->ld_device_thread.dss, &log);
+        } else {
+            destroy_json(device_lookup_json);
+        }
+
+        destroy_json(log.message);
         return rc;
     }
+
+    destroy_json(device_lookup_json);
+    destroy_json(log.message);
 
     if (dev->ld_lib_dev_info.ldi_full) {
         struct fs_adapter_module *fsa;

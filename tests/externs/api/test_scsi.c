@@ -204,7 +204,7 @@ static void test_lib_adapter(void)
     ASSERT_RC(ldm_lib_open(&lib_hdl, "/dev/changer", NULL));
 
     if (one_serial) {
-        ASSERT_RC(ldm_lib_drive_lookup(&lib_hdl, one_serial, &drv_info));
+        ASSERT_RC(ldm_lib_drive_lookup(&lib_hdl, one_serial, &drv_info, NULL));
         /* unload the drive to any slot if it's full */
         if (drv_info.ldi_full)
             ASSERT_RC(ldm_lib_media_move(&lib_hdl, &drv_info.ldi_addr,

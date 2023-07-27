@@ -163,12 +163,12 @@ enum operation_type {
 };
 
 static const char * const OPERATION_TYPE_NAMES[] = {
-    [PHO_LIBRARY_SCAN]  = "library_scan",
-    [PHO_LIBRARY_OPEN]  = "library_open",
-    [PHO_DEVICE_LOOKUP] = "device_lookup",
-    [PHO_MEDIUM_LOOKUP] = "medium_lookup",
-    [PHO_DEVICE_LOAD]   = "device_load",
-    [PHO_DEVICE_UNLOAD] = "device_unload",
+    [PHO_LIBRARY_SCAN]  = "Library scan",
+    [PHO_LIBRARY_OPEN]  = "Library open",
+    [PHO_DEVICE_LOOKUP] = "Device lookup",
+    [PHO_MEDIUM_LOOKUP] = "Medium lookup",
+    [PHO_DEVICE_LOAD]   = "Device load",
+    [PHO_DEVICE_UNLOAD] = "Device unload",
 };
 
 static inline const char *operation_type2str(enum operation_type op)
@@ -230,6 +230,19 @@ static inline void json_insert_element(json_t *json, const char *key,
         json_decref(value);
         pho_error(-ENOMEM, "Failed to set '%s' in json", key);
     }
+}
+
+static inline bool should_log(struct pho_log *log)
+{
+    switch (log->cause) {
+    case PHO_DEVICE_LOAD:
+    case PHO_DEVICE_UNLOAD:
+        return log->error_number == 0 || json_object_size(log->message) != 0;
+    default:
+        return json_object_size(log->message) != 0;
+    }
+
+    __builtin_unreachable();
 }
 
 static inline void destroy_json(json_t *json)

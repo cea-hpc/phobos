@@ -7,9 +7,9 @@ CREATE TYPE address_type AS ENUM ('PATH', 'HASH1', 'OPAQUE');
 CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used', 'full');
 CREATE TYPE extent_state AS ENUM ('pending','sync','orphan');
 CREATE TYPE lock_type AS ENUM('object', 'device', 'media', 'media_update');
-CREATE TYPE operation_type AS ENUM('library_scan', 'library_open',
-                                   'device_lookup', 'medium_lookup',
-                                   'device_load', 'device_unload');
+CREATE TYPE operation_type AS ENUM('Library scan', 'Library open',
+                                   'Device lookup', 'Medium lookup',
+                                   'Device load', 'Device unload');
 
 -- to extend enums: ALTER TYPE type ADD VALUE 'value'
 

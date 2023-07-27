@@ -213,7 +213,7 @@ int main(int argc, char **argv)
          dev_name = strtok_r(NULL, ",", &saveptr)) {
         struct lib_drv_info dev_info;
 
-        rc = ldm_lib_drive_lookup(&lib_hdl, dev_name, &dev_info);
+        rc = ldm_lib_drive_lookup(&lib_hdl, dev_name, &dev_info, NULL);
         if (rc) {
             pho_error(rc, "Error when tape library lookup of drive '%s'",
                       dev_name);
