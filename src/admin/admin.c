@@ -988,6 +988,8 @@ static int receive_format_response(struct admin_handle *adm,
                resp->error->req_kind == PHO_REQUEST_KIND__RQ_FORMAT) {
         pho_error(rc = resp->error->rc, "Format failed for medium '%s'",
                   ids[resp->req_id].name);
+
+        awaiting_resps[resp->req_id] = false;
     } else {
         pho_error(rc = -EPROTO, "Received invalid response");
     }
