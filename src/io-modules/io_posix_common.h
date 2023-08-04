@@ -57,4 +57,6 @@ int build_addr_path(const char *extent_key, const char *extent_desc,
 
 char *full_xattr_name(const char *name);
 
+int pho_getxattr(const char *path, int fd, const char *name, char **value);
+
 #endif

@@ -298,19 +298,28 @@ free_tmp:
 }
 
 /** Get a user extended attribute.
- * \param[in] path full path to the extent.
- * \param[in] name name of the extended attribute without the "user." prefix.
- * \param[out] value This buffer is allocated by the call if the attribute
- *                   exists. It must be freed by the caller. It is set to NULL
- *                   if the attribute doesn't exist.
+ * \param[in]   path    Full path to the extent.
+ * \param[in]   fd      File descriptor, if specified uses it over the path
+ *                      to get xattrs.
+ * \param[in]   name    Name of the extended attribute without the "user."
+ *                      prefix.
+ * \param[out]  value   This buffer is allocated by the call if the attribute
+ *                      exists. It must be freed by the caller. It is set to
+ *                      NULL if the attribute doesn't exist.
+ *
+ * \return              0 on success,
+ *                      -errno on failure.
  */
-static int pho_getxattr(const char *path, const char *name, char **value)
+int pho_getxattr(const char *path, int fd, const char *name, char **value)
 {
     char *tmp_name;
     char *buff;
     int rc;
 
     ENTRY;
+
+    if (fd < 0 && path == NULL)
+        return -EINVAL;
 
     if (value == NULL)
         return -EINVAL;
@@ -326,7 +335,11 @@ static int pho_getxattr(const char *path, const char *name, char **value)
 
     buff = xcalloc(1, ATTR_MAX_VALUELEN);
 
-    rc = getxattr(path, tmp_name, buff, ATTR_MAX_VALUELEN);
+    if (fd < 0)
+        rc = getxattr(path, tmp_name, buff, ATTR_MAX_VALUELEN);
+    else
+        rc = fgetxattr(fd, tmp_name, buff, ATTR_MAX_VALUELEN);
+
     if (rc <= 0) {
         if (errno == ENODATA || rc == 0)
             GOTO(free_buff, rc = 0);
@@ -405,7 +418,7 @@ static int getxattr_cb(const char *key, const char *value, void *udata)
     char *tmp_val;
     int rc;
 
-    rc = pho_getxattr(arg->mig_path, key, &tmp_val);
+    rc = pho_getxattr(arg->mig_path, -1, key, &tmp_val);
     if (rc != 0)
         return rc;
 
