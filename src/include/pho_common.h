@@ -58,7 +58,7 @@ enum pho_log_level {
  */
 struct pho_logrec {
     enum pho_log_level   plr_level; /**< Level of the log record */
-    pid_t                plr_pid;   /**< Pid of the logging process. */
+    pid_t                plr_tid;   /**< Pid of the logging process. */
     const char          *plr_file;  /**< Source file where this was emitted */
     const char          *plr_func;  /**< Function name where this was emitted */
     int                  plr_line;  /**< Line number in source code */

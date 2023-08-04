@@ -2503,8 +2503,6 @@ int sched_handle_requests(struct lrs_sched *sched)
     struct sub_request *sreq;
     int rc = 0;
 
-    ENTRY;
-
     /**
      * First try to re-run sub-request errors
      */
@@ -2574,8 +2572,6 @@ int lrs_schedule_work(struct lrs_sched *sched)
 {
     struct req_container *reqc;
     int rc = 0;
-
-    ENTRY;
 
     do {
         reqc = NULL;

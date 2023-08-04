@@ -79,7 +79,7 @@ def phobos_log_handler(log_record):
         'name': 'internals',
         'levelno': level,
         'levelname': LogControl.level_name(level),
-        'process': rec.plr_pid,
+        'process': rec.plr_tid,
         'filename': rec.plr_file,
         'funcName': rec.plr_func,
         'lineno': rec.plr_line,

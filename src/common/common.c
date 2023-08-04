@@ -156,7 +156,6 @@ static gboolean readline_cb(GIOChannel *channel, GIOCondition cond, gpointer ud)
     gchar               *line;
     gsize                size;
     GIOStatus            res;
-    ENTRY;
 
     /* The channel is closed, no more data to read */
     if (cond == G_IO_HUP) {

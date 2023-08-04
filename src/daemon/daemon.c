@@ -232,13 +232,13 @@ static void phobos_log_callback_def_with_sys(const struct pho_logrec *rec)
         syslog(pholog2syslog(rec->plr_level),
                "<%s> [%u/%s:%s:%d] %s: %s (%d)",
                pho_log_level2str(rec->plr_level),
-               rec->plr_pid, rec->plr_func, rec->plr_file, rec->plr_line,
+               rec->plr_tid, rec->plr_func, rec->plr_file, rec->plr_line,
                rstrip(rec->plr_msg), strerror(rec->plr_err), rec->plr_err);
     else
         syslog(pholog2syslog(rec->plr_level),
                "<%s> [%u/%s:%s:%d] %s",
                pho_log_level2str(rec->plr_level),
-               rec->plr_pid, rec->plr_func, rec->plr_file, rec->plr_line,
+               rec->plr_tid, rec->plr_func, rec->plr_file, rec->plr_line,
                rstrip(rec->plr_msg));
 
 }

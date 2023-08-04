@@ -768,7 +768,7 @@ class PhoLogRec(Structure):
     """Single log record."""
     _fields_ = [
         ('plr_level', c_int),
-        ('plr_pid', c_int),
+        ('plr_tid', c_int),
         ('_plr_file', c_char_p),
         ('_plr_func', c_char_p),
         ('plr_line', c_int),

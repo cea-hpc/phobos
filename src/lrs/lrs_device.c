@@ -917,7 +917,7 @@ static int dss_medium_release(struct dss_handle *dss, struct media_info *medium)
 {
     int rc;
 
-    pho_verb("unlock: medium '%s'", medium->rsc.id.name);
+    pho_debug("unlock: medium '%s'", medium->rsc.id.name);
     rc = dss_unlock(dss, DSS_MEDIA, medium, 1, false);
     if (rc)
         LOG_RETURN(rc,

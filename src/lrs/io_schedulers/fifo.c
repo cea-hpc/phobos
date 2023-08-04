@@ -137,10 +137,8 @@ static int fifo_requeue(struct io_scheduler *io_sched,
 static int fifo_peek_request(struct io_scheduler *io_sched,
                              struct req_container **reqc)
 {
-    int len = g_queue_get_length(io_sched->private_data);
     struct queue_element *elem;
 
-    pho_debug("fifo: nb requests %d", len);
     elem = g_queue_peek_tail((GQueue *) io_sched->private_data);
     if (!elem) {
         *reqc = NULL;

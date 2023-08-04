@@ -31,6 +31,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <unistd.h>
+#include <sys/syscall.h>
 
 
 static void phobos_log_callback_default(const struct pho_logrec *rec);
@@ -57,7 +58,7 @@ void phobos_log_callback_default(const struct pho_logrec *rec)
     if (phobos_context()->log_dev_output) {
         int rc;
 
-        rc = asprintf(&dev_buffer, " [%u/%s:%s:%d]", rec->plr_pid,
+        rc = asprintf(&dev_buffer, " [%u/%s:%s:%d]", rec->plr_tid,
                       rec->plr_func, rec->plr_file, rec->plr_line);
         if (rc < 0)
             dev_buffer = NULL;
@@ -130,7 +131,7 @@ void _log_emit(enum pho_log_level level, const char *file, int line,
     va_start(args, fmt);
 
     rec.plr_level = level;
-    rec.plr_pid   = getpid();
+    rec.plr_tid   = syscall(SYS_gettid);
     rec.plr_file  = file;
     rec.plr_func  = func;
     rec.plr_line  = line;
