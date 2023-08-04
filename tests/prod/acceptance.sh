@@ -26,9 +26,13 @@ if [[ ! -w /dev/changer ]]; then
     exit 77
 fi
 
+declare -A test_tapes
+eval test_tapes=$TEST_TAPES
+eval test_drives=\"$TEST_DRIVES\"
+
 test_dir=$(dirname $(readlink -e $0))
 
-if [[ -z ${EXEC_NONREGRESSION+x} ]]; then
+if [ ! -z ${EXEC_NONREGRESSION+x} ]; then
     . $test_dir/../test_env.sh
     . $test_dir/../setup_db.sh
     . $test_dir/../test_launch_daemon.sh
@@ -38,6 +42,7 @@ if [[ -z ${EXEC_NONREGRESSION+x} ]]; then
 
     start_phobosdb="setup_tables"
     stop_phobosdb="drop_tables"
+    exec_nonregression=true
 else
     phobos="phobos"
     start_phobosd="systemctl start phobosd"
@@ -45,20 +50,50 @@ else
 
     start_phobosdb="phobos_db setup_tables"
     stop_phobosdb="phobos_db drop_tables"
+    exec_nonregression=false
 fi
 
-$stop_phobosdb
+if [ -z ${DATABASE_ONLINE+x} ]; then
+    database_online=false
+else
+    database_online=true
+fi
+
+if [ -z ${DAEMON_ONLINE+x} ]; then
+    daemon_online=false
+else
+    daemon_online=true
+fi
+
+if [ -z ${KEEP_SETUP+x} ]; then
+    keep_setup=false
+else
+    keep_setup=true
+fi
 
 . $test_dir/../utils_generation.sh
 . $test_dir/../utils.sh
 . $test_dir/../tape_drive.sh
 
+function log()
+{
+    >&2 echo "$*"
+}
+
 function setup_test
 {
-    [ -z ${DAEMON_ONLINE+x} ] && [ -z ${DATABASE_ONLINE+x} ] &&
-        $start_phobosdb
-    [ -z ${DAEMON_ONLINE+x} ] && $start_phobosd
-    [ -z ${DAEMON_ONLINE+x} ] && [ -z ${DATABASE_ONLINE+x} ] && setup_tape
+    if ! $daemon_online; then
+        if ! $database_online; then
+            $start_phobosdb
+        fi
+
+        $start_phobosd
+        $phobos ping
+        if ! $database_online; then
+            setup_tape
+        fi
+    fi
+
     setup_test_dirs
     setup_dummy_files 30
 }
@@ -66,10 +101,44 @@ function setup_test
 function cleanup_test
 {
     cleanup_dummy_files
-    [ -z ${DAEMON_ONLINE+x} ] && $stop_phobosd
-    [ -z ${DAEMON_ONLINE+x} ] && [ -z ${DATABASE_ONLINE+x} ] &&
-        $stop_phobosdb
+    if ! $keep_setup && ! $daemon_online; then
+        $stop_phobosd
+        if ! $database_online; then
+            $stop_phobosdb
+        fi
+    fi
+
     cleanup_test_dirs
+}
+
+function get_test_tapes()
+{
+    local technology=$1
+    local count=$2
+
+    if $exec_nonregression; then
+        get_tapes $technology $count
+    else
+        if [ -z "${test_tapes[$technology]}" ]; then
+            log "No tapes available for technology $technology"
+            return 1
+        fi
+        echo ${test_tapes[$technology]} | cut -d' ' -f1-$count
+    fi
+}
+
+function get_test_drives()
+{
+    local count=$1
+
+    if $exec_nonregression; then
+        get_drives $count
+    else
+        if [ -z "${TEST_DRIVES}" ]; then
+            return 1
+        fi
+        echo ${TEST_DRIVES}
+    fi
 }
 
 function setup_tape
@@ -88,14 +157,22 @@ function setup_tape
     local N_DRIVES=8
 
     # get LTO5 tapes
-    local lto5_tapes="$(get_tapes L5 $N_TAPES)"
-    $phobos tape add --tags $TAGS,lto5 --type lto5 "$lto5_tapes"
+    local lto5_tapes="$(get_test_tapes L5 $N_TAPES)"
+    if [ ! -z "$lto5_tapes" ]; then
+        $phobos tape add --tags $TAGS,lto5 --type lto5 $lto5_tapes
+    fi
 
     # get LTO6 tapes
-    local lto6_tapes="$(get_tapes L6 $N_TAPES)"
-    $phobos tape add --tags $TAGS,lto6 --type lto6 "$lto6_tapes"
+    local lto6_tapes="$(get_test_tapes L6 $N_TAPES)"
+    if [ ! -z "$lto6_tapes" ]; then
+        $phobos tape add --tags $TAGS,lto6 --type lto6 $lto6_tapes
+    fi
 
-    export tapes="$lto5_tapes,$lto6_tapes"
+    if [[ -z "$lto5_tapes" && -z "$lto6_tapes" ]];then
+        exit_error "No tapes available for the tests, exit."
+    fi
+
+    local tapes="$lto5_tapes,$lto6_tapes"
 
     local out1=$($phobos tape list | sort)
     local out2=$(echo "$tapes" | nodeset -e | sort)
@@ -103,8 +180,12 @@ function setup_tape
         exit_error "Tapes are not all added"
 
     # get drives
-    local drives=$(get_drives $N_DRIVES)
-    N_DRIVES=$(echo $drives | wc -w)
+    local drives=$(get_test_drives $N_DRIVES)
+
+    local nb_drives=$(echo "$drives" | wc -w)
+    if (( nb_drives == 0 )); then
+        exit_error "No drives found for testing"
+    fi
     $phobos drive add $drives
 
     # unlock all drives
@@ -347,9 +428,14 @@ function test_lock
 
 trap cleanup_test EXIT
 setup_test
+
 test_put_get
-[ -z ${DATABASE_ONLINE+x} ] && test_put_with_tags
 test_put_delete
 test_mput
 test_concurrent_put_get_retry
-[ -z ${DAEMON_ONLINE+x} ] && test_lock
+
+if ! $database_online; then
+    # These tests can only work if setup_tape was called
+    test_put_with_tags
+    test_lock
+fi

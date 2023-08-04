@@ -19,12 +19,15 @@ function setup_dummy_files
 
     FILES=()
 
+    set +x
+    # do not display file creation commands to reduce the amount of logs
     while [ $i -lt $nb_files ]
     do
         FILES+=("$(mktemp $DIR_TEST_IN/XXXXXX)")
         dd if=/dev/urandom of=${FILES[$i]} bs=1k count=1 &>/dev/null
         i=$((i+1))
     done
+    set -x
 }
 
 function cleanup_dummy_files
