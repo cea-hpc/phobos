@@ -852,17 +852,29 @@ free_device_list:
 static int dispatch_shared_devices(struct io_scheduler *io_sched,
                                    GPtrArray *devices_to_give,
                                    size_t target,
-                                   enum io_request_type type)
+                                   enum io_request_type type,
+                                   const char *technology)
 {
+    size_t current_nb_devices;
     int i = 0;
 
-    while (io_sched->devices->len < target && i < devices_to_give->len) {
+    current_nb_devices = io_sched_count_device_per_techno(io_sched, technology);
+
+    while (current_nb_devices < target && i < devices_to_give->len) {
         struct lrs_dev *dev = g_ptr_array_index(devices_to_give, i++);
+        size_t count = io_sched->devices->len;
         int rc;
 
         rc = io_sched->ops.add_device(io_sched, dev);
         if (rc)
             return rc;
+
+        if (io_sched->devices->len > count)
+            /* We need to check the if the number of devices has increased after
+             * the add because the device may already be allocated to this I/O
+             * scheduler.
+             */
+            current_nb_devices++;
 
         dev->ld_io_request_type |= type;
     }
@@ -922,17 +934,20 @@ fair_share_number_of_requests_one_techno(struct io_sched_handle *io_sched_hdl,
 
     if (devices->len == 1 || devices->len == 2) {
         rc = dispatch_shared_devices(&io_sched_hdl->read, devices_to_give,
-                                     repartition.nb_reads, IO_REQ_READ);
+                                     repartition.nb_reads, IO_REQ_READ,
+                                     device_list->technology);
         if (rc)
             GOTO(free_devices, rc);
 
         rc = dispatch_shared_devices(&io_sched_hdl->write, devices_to_give,
-                                     repartition.nb_writes, IO_REQ_WRITE);
+                                     repartition.nb_writes, IO_REQ_WRITE,
+                                     device_list->technology);
         if (rc)
             GOTO(free_devices, rc);
 
         rc = dispatch_shared_devices(&io_sched_hdl->format, devices_to_give,
-                                     repartition.nb_formats, IO_REQ_FORMAT);
+                                     repartition.nb_formats, IO_REQ_FORMAT,
+                                     device_list->technology);
         if (rc)
             GOTO(free_devices, rc);
 

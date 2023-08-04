@@ -1744,6 +1744,20 @@ static void fair_share_multi_technologies(void **data)
     cleanup_devices(io_sched_hdl, devices, false);
 }
 
+static void fair_share_multi_technologies_not_enough_devices(void **data)
+{
+    struct io_sched_handle *io_sched_hdl = *data;
+    GPtrArray *devices;
+
+    devices = init_devices(NULL, 2, LTO5_MODEL);
+    devices = init_devices(devices, 2, LTO6_MODEL);
+    io_sched_hdl->global_device_list = devices;
+
+    log_test_dispatch(data, -1, 0, 0, 1, 0, 0, 4, devices);
+
+    cleanup_devices(io_sched_hdl, devices, false);
+}
+
 static void fair_share_ensure_min_max(void **data)
 {
     struct io_sched_handle *io_sched_hdl = *data;
@@ -2071,6 +2085,7 @@ int main(void)
         cmocka_unit_test(fair_share_add_device),
         cmocka_unit_test(fair_share_take_devices),
         cmocka_unit_test(fair_share_multi_technologies),
+        cmocka_unit_test(fair_share_multi_technologies_not_enough_devices),
         cmocka_unit_test(fair_share_ensure_min_max),
         cmocka_unit_test(fair_share_one_shared_device_before_add),
         cmocka_unit_test(fair_share_one_non_shared_device_before_add_shared),
