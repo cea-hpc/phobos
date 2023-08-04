@@ -189,44 +189,6 @@ static int check_dev_info(const struct lrs_dev *dev)
 }
 
 /**
- * Unlock a resource owned by the LRS from the DSS and clean the in-memory lock
- *
- * @param[in]   sched   current scheduler
- * @param[in]   type    DSS type of the resource to release
- * @param[in]   item    Resource to release
- * @param[out]  lock    lock to clean
- */
-static int lrs_resource_unlock(struct dss_handle *dss, enum dss_type type,
-                               void *item, struct pho_lock *lock)
-{
-    int rc;
-
-    ENTRY;
-
-    rc = dss_unlock(dss, type, item, 1, false);
-    if (rc)
-        LOG_RETURN(rc, "Cannot unlock a resource");
-
-    pho_lock_clean(lock);
-    return 0;
-}
-
-static int medium_unlock(struct dss_handle *dss, struct media_info *medium)
-{
-    int rc;
-
-    pho_verb("unlock: medium '%s'", medium->rsc.id.name);
-    rc = lrs_resource_unlock(dss, DSS_MEDIA, medium, &medium->lock);
-    if (rc)
-        pho_error(rc,
-                  "Error when releasing medium '%s' with current lock "
-                  "(hostname %s, owner %d)", medium->rsc.id.name,
-                  medium->lock.hostname, medium->lock.owner);
-
-    return rc;
-}
-
-/**
  * Lock the corresponding item into the global DSS and update the local lock
  *
  * @param[in]       dss     DSS handle
@@ -1062,13 +1024,13 @@ int sched_select_medium(struct io_scheduler *io_sched,
 {
     struct lock_handle *lock_handle = io_sched->io_sched_hdl->lock_handle;
     bool with_tags = tags != NULL && tags->n_tags > 0;
+    struct media_info *split_media_best = NULL;
+    struct media_info *whole_media_best = NULL;
+    struct media_info *chosen_media = NULL;
     struct media_info *pmedia_res = NULL;
-    struct media_info *split_media_best;
-    struct media_info *whole_media_best;
-    struct media_info *chosen_media;
     char *tag_filter_json = NULL;
     struct dss_filter filter;
-    size_t avail_size;
+    size_t avail_size = 0;
     int mcnt = 0;
     int rc;
     int i;
@@ -1128,12 +1090,6 @@ int sched_select_medium(struct io_scheduler *io_sched,
     dss_filter_free(&filter);
     if (rc)
         GOTO(err_nores, rc);
-
-lock_race_retry:
-    chosen_media = NULL;
-    whole_media_best = NULL;
-    split_media_best = NULL;
-    avail_size = 0;
 
     /* get the best fit */
     for (i = 0; i < mcnt; i++) {
@@ -1204,28 +1160,15 @@ lock_race_retry:
         GOTO(free_res, rc = -EAGAIN);
     }
 
-    if (!chosen_media->lock.hostname) {
-        pho_debug("Acquiring selected media '%s'", chosen_media->rsc.id.name);
-        rc = take_and_update_lock(lock_handle->dss, DSS_MEDIA,
-                                  chosen_media, &chosen_media->lock);
-        if (rc) {
-            pho_debug("Failed to lock media '%s', looking for another one",
-                      chosen_media->rsc.id.name);
-            goto lock_race_retry;
-        }
-    }
-
     pho_verb("Selected %s '%s': %zd bytes free", rsc_family2str(family),
              chosen_media->rsc.id.name,
              chosen_media->stats.phys_spc_free);
 
     *p_media = media_info_dup(chosen_media);
-    if (*p_media == NULL) {
-        medium_unlock(lock_handle->dss, chosen_media);
+    if (*p_media == NULL)
         LOG_GOTO(free_res, rc = -ENOMEM,
                  "Unable to duplicate chosen media '%s'",
                  chosen_media->rsc.id.name);
-    }
 
     rc = 0;
 
@@ -1785,6 +1728,7 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
     struct lrs_dev *dev;
     int rc;
 
+lock_race_retry:
     rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &dev,
                                          &index_to_alloc);
     if (rc)
@@ -1806,12 +1750,24 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
             goto notify_error;
         }
     } else if (dev) {
-        /* a new medium needs to be loaded in \p dev */
+        /* a new medium needs to be loaded in \p dev : lock it */
+        if (!(*alloc_medium)->lock.hostname) {
+            pho_debug("lock media '%s' for write",
+                      (*alloc_medium)->rsc.id.name);
+            rc = take_and_update_lock(sched->lock_handle.dss, DSS_MEDIA,
+                                      *alloc_medium, &(*alloc_medium)->lock);
+            if (rc) {
+                pho_debug("failed to lock media '%s' for write, looking for "
+                          "another one", (*alloc_medium)->rsc.id.name);
+                *alloc_medium = NULL;
+                dev = NULL;
+                goto lock_race_retry;
+            }
+        }
+
         goto select_device;
     }
 
-    /* dev == NULL: no device/medium pair could be found for this request */
-    medium_unlock(sched->lock_handle.dss, *alloc_medium);
     if (compatible_drive_exists(sched, *alloc_medium,
                                 reqc->params.rwalloc.respc->devices,
                                 handle_error ? wreq->n_media : index_to_alloc,
