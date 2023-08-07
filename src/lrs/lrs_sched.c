@@ -1489,7 +1489,7 @@ device_select_func_t get_dev_policy(void)
  */
 static bool compatible_drive_exists(struct lrs_sched *sched,
                                     struct media_info *pmedia,
-                                    struct lrs_dev *selected_devs,
+                                    struct lrs_dev **selected_devs,
                                     size_t n_selected_devs,
                                     size_t not_selected)
 {
@@ -1509,7 +1509,7 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
                 continue;
 
             if (!strcmp(dev->ld_dss_dev_info->rsc.id.name,
-                        selected_devs[j].ld_dss_dev_info->rsc.id.name)) {
+                        selected_devs[j]->ld_dss_dev_info->rsc.id.name)) {
                 is_already_selected = true;
                 break;
             }
@@ -1789,7 +1789,7 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
     /* dev == NULL: no device/medium pair could be found for this request */
     medium_unlock(sched->lock_handle.dss, *alloc_medium);
     if (compatible_drive_exists(sched, *alloc_medium,
-                                *reqc->params.rwalloc.respc->devices,
+                                reqc->params.rwalloc.respc->devices,
                                 handle_error ? wreq->n_media : index_to_alloc,
                                 index_to_alloc))
         rc = -EAGAIN;
@@ -2010,7 +2010,7 @@ find_read_device:
          */
         if (!*alloc_medium ||
             compatible_drive_exists(sched, *alloc_medium,
-                                    *reqc->params.rwalloc.respc->devices,
+                                    reqc->params.rwalloc.respc->devices,
                                     num_allocated, index_to_alloc))
             rc = -EAGAIN;
         else
