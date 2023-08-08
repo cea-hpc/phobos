@@ -776,6 +776,8 @@ static int lrs_dev_media_update(struct dss_handle *dss,
         pho_error(rc2,
                   "Invalid filesystem type for '%s' (database may be "
                   "corrupted)", fsroot);
+        pho_error(rc2, "setting medium '%s' to failed",
+                  media_info->rsc.id.name);
         media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
         fields |= ADM_STATUS;
     } else {
@@ -783,6 +785,8 @@ static int lrs_dev_media_update(struct dss_handle *dss,
         if (rc2) {
             rc = rc ? : rc2;
             pho_error(rc2, "Cannot retrieve media usage information");
+            pho_error(rc2, "setting medium '%s' to failed",
+                      media_info->rsc.id.name);
             media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
             fields |= ADM_STATUS;
         } else {
@@ -798,6 +802,8 @@ static int lrs_dev_media_update(struct dss_handle *dss,
 
     if (media_rc) {
         media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+        pho_error(media_rc, "setting medium '%s' to failed",
+                  media_info->rsc.id.name);
         fields |= ADM_STATUS;
     } else {
         if (nb_new_obj) {
@@ -868,8 +874,10 @@ static int dev_umount(struct lrs_dev *dev)
 
     ENTRY;
 
-    pho_info("umount: device '%s' mounted at '%s'",
-             dev->ld_dev_path, dev->ld_mnt_path);
+    pho_info("umount: medium '%s' in device '%s' mounted at '%s'",
+             dev->ld_dss_media_info->rsc.id.name,
+             dev->ld_dev_path,
+             dev->ld_mnt_path);
     rc = get_fs_adapter(dev->ld_dss_media_info->fs.type, &fsa);
     if (rc)
         LOG_GOTO(out, rc,
@@ -904,6 +912,7 @@ static int dss_medium_release(struct dss_handle *dss, struct media_info *medium)
 {
     int rc;
 
+    pho_verb("unlock: medium '%s'", medium->rsc.id.name);
     rc = dss_unlock(dss, DSS_MEDIA, medium, 1, false);
     if (rc)
         LOG_RETURN(rc,
@@ -919,6 +928,7 @@ static int dss_device_release(struct dss_handle *dss, struct dev_info *dev)
 {
     int rc;
 
+    pho_verb("unlock: device '%s'", dev->rsc.id.name);
     rc = dss_unlock(dss, DSS_DEVICE, dev, 1, false);
     if (rc)
         LOG_RETURN(rc,
@@ -946,7 +956,7 @@ static int dev_unload(struct lrs_dev *dev)
 
     ENTRY;
 
-    pho_verb("Unloading '%s' from '%s'", dev->ld_dss_media_info->rsc.id.name,
+    pho_verb("unload: '%s' from '%s'", dev->ld_dss_media_info->rsc.id.name,
              dev->ld_dev_path);
 
     rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl);
@@ -1021,6 +1031,7 @@ static int dev_empty(struct lrs_dev *dev)
 static int dss_set_medium_to_failed(struct dss_handle *dss,
                                     struct media_info *media_info)
 {
+    pho_error(0, "setting medium '%s' to failed", media_info->rsc.id.name);
     media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
     return dss_media_set(dss, media_info, 1, DSS_SET_UPDATE, ADM_STATUS);
 }
@@ -1090,7 +1101,7 @@ static int dev_load(struct lrs_dev *dev, struct media_info *medium,
     *failure_on_dev = false;
     *failure_on_medium = false;
     *can_retry = false;
-    pho_verb("Loading '%s' into '%s'", medium->rsc.id.name, dev->ld_dev_path);
+    pho_verb("load: '%s' into '%s'", medium->rsc.id.name, dev->ld_dev_path);
 
     /* get handle to the library depending on device type */
     rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl);
@@ -1208,7 +1219,8 @@ static int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa,
     fields |= FS_STATUS;
 
     if (unlock) {
-        pho_verb("Unlocking media '%s' after format", medium->rsc.id.name);
+        pho_verb("Removing admin lock on media '%s' after format as requested "
+                 "by client", medium->rsc.id.name);
         medium->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
         fields |= ADM_STATUS;
     }
@@ -1656,7 +1668,8 @@ static int dev_mount(struct lrs_dev *dev)
     pho_info("mount: medium '%s' in device '%s' ('%s') as '%s'",
              dev->ld_dss_media_info->rsc.id.name,
              dev->ld_dev_path,
-             dev->ld_dss_dev_info->rsc.id.name, mnt_root);
+             dev->ld_dss_dev_info->rsc.id.name,
+             mnt_root);
 
     rc = ldm_fs_mount(fsa, dev->ld_dev_path, mnt_root,
                       dev->ld_dss_media_info->fs.label);
@@ -1902,6 +1915,8 @@ static void cancel_pending_format(struct lrs_dev *device)
             rc = dss_medium_release(&device->ld_device_thread.dss,
                                     medium_to_format);
             if (rc) {
+                pho_error(rc, "setting medium '%s' to failed",
+                          medium_to_format->rsc.id.name);
                 medium_to_format->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
                 rc = dss_media_set(&device->ld_device_thread.dss,
                                    medium_to_format, 1, DSS_SET_UPDATE,
@@ -2052,6 +2067,8 @@ static void dev_thread_end_device(struct lrs_dev *device)
         device->ld_op_status = PHO_DEV_OP_ST_FAILED;
         if (device->ld_dss_dev_info) {
             device->ld_dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+            pho_error(0, "setting device '%s' to failed",
+                      device->ld_dss_dev_info->rsc.id.name);
             rc = dss_device_update_adm_status(dss, device->ld_dss_dev_info, 1);
             if (rc) {
                 pho_error(rc,

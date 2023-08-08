@@ -215,14 +215,13 @@ static int medium_unlock(struct dss_handle *dss, struct media_info *medium)
 {
     int rc;
 
+    pho_verb("unlock: medium '%s'", medium->rsc.id.name);
     rc = lrs_resource_unlock(dss, DSS_MEDIA, medium, &medium->lock);
     if (rc)
         pho_error(rc,
                   "Error when releasing medium '%s' with current lock "
                   "(hostname %s, owner %d)", medium->rsc.id.name,
                   medium->lock.hostname, medium->lock.owner);
-
-    pho_debug("unlock: medium %s\n", medium->rsc.id.name);
 
     return rc;
 }
@@ -242,16 +241,15 @@ static int take_and_update_lock(struct dss_handle *dss, enum dss_type type,
     int rc;
 
     pho_lock_clean(lock);
+    pho_verb("lock: %s '%s'", dss_type2str(type),
+             type == DSS_DEVICE ?
+             ((struct dev_info *)item)->rsc.id.name :
+             type == DSS_MEDIA ?
+             ((struct media_info *)item)->rsc.id.name :
+             "???");
     rc = dss_lock(dss, type, item, 1);
     if (rc)
         pho_error(rc, "Unable to get lock on item for refresh");
-
-    pho_debug("lock: %s %s\n", dss_type2str(type),
-              type == DSS_DEVICE ?
-              ((struct dev_info *)item)->rsc.id.name :
-              type == DSS_MEDIA ?
-              ((struct media_info *)item)->rsc.id.name :
-              "???");
 
     /* update lock values */
     rc2 = dss_lock_status(dss, type, item, 1, lock);
