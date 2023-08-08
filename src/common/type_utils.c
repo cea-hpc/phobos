@@ -463,6 +463,11 @@ int timeval2str(const struct timeval *tv, char *tv_str)
 {
     char buf[PHO_TIMEVAL_MAX_LEN - 7];
 
+    if (tv->tv_sec == 0 && tv->tv_usec == 0) {
+        strcpy(tv_str, "0");
+        return 0;
+    }
+
     strftime(buf, sizeof(buf), "%Y-%m-%d %T", localtime(&tv->tv_sec));
     snprintf(tv_str, PHO_TIMEVAL_MAX_LEN, "%s.%06ld", buf, tv->tv_usec);
 
