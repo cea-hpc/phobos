@@ -585,7 +585,8 @@ static int sched_load_dev_state(struct lrs_sched *sched)
     ENTRY;
 
     if (sched->devices.ldh_devices->len == 0) {
-        pho_verb("Try to load state of an empty list of devices");
+        pho_verb("No device of family '%s' to load",
+                 rsc_family2str(sched->family));
         return -ENXIO;
     }
 
@@ -1776,8 +1777,8 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
         if (dev_is_sched_ready(dev)) {
             goto select_device;
         } else {
-            pho_info("Selected medium for write is already loaded in a busy "
-                     "drive");
+            pho_debug("Selected medium for write is already loaded in a busy "
+                      "drive");
             rc = -EAGAIN;
             goto notify_error;
         }
