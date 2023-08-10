@@ -70,13 +70,14 @@ insert into media (family, model, id, adm_status, fs_type, address_type,
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
           "nb_errors":0,"last_load":0}', '["mytag"]');
 
-insert into object (oid, user_md, lyt_info)
+insert into object (oid, user_md, lyt_info, obj_status)
     values ('01230123ABC', '{}',
-            '{"name":"raid1","major":0,"minor":1,"repl_count":1}');
+            '{"name":"raid1","major":0,"minor":1,"repl_count":1}', 'complete');
 
-insert into deprecated_object (oid, object_uuid, version, user_md, lyt_info)
+insert into deprecated_object (oid, object_uuid, version, user_md, lyt_info,
+                               obj_status)
     values ('01230123ABD', '00112233445566778899aabbccddeeff', 1, '{}',
-            '{"name":"raid1","major":0,"minor":1,"repl_count":1}');
+            '{"name":"raid1","major":0,"minor":1,"repl_count":1}', 'complete');
 
 insert into extent (state, size, medium_family, medium_id, address, hash)
     values ('pending', 21123456, 'dir', '/tmp/pho_testdir1',

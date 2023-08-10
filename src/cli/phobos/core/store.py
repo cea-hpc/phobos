@@ -465,11 +465,13 @@ class UtilClient:
                                     oids if oids else uuids))
 
     @staticmethod
-    def object_list(res, is_pattern, metadata, deprecated):
+    def object_list(res, is_pattern, metadata, deprecated, status_number):
         """List objects."""
         n_objs = c_int(0)
         obj_type = ObjectInfo if not deprecated else DeprecatedObjectInfo
         objs = POINTER(obj_type)()
+
+        n_status_number = c_int(status_number)
 
         enc_res = [elt.encode('utf-8') for elt in res]
         c_res_strlist = c_char_p * len(enc_res)
@@ -483,6 +485,7 @@ class UtilClient:
                                                 c_md_strlist(*enc_metadata),
                                                 len(metadata),
                                                 deprecated,
+                                                n_status_number,
                                                 byref(objs),
                                                 byref(n_objs))
 

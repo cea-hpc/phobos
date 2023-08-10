@@ -98,6 +98,12 @@ function test_errors
     $phobos delete oid1
     $valg_phobos get --version 5 oid1 /tmp/out \
         && error "Get operation should fail on invalid version" || true
+
+    $PSQL << EOF
+UPDATE object SET obj_status = 'incomplete' WHERE oid = 'oid1';
+EOF
+    $valg_phobos get oid1 /tmp/out &&
+        error "Incomplete status of object should have failed the test" || true
 }
 
 trap cleanup EXIT

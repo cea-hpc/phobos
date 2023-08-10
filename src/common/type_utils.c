@@ -172,6 +172,9 @@ struct object_info *object_info_dup(const struct object_info *obj)
     /* dup uuid */
     obj_out->uuid = xstrdup_safe(obj->uuid);
 
+    /* obj_status */
+    obj_out->obj_status = obj->obj_status;
+
     /* version */
     obj_out->version = obj->version;
 

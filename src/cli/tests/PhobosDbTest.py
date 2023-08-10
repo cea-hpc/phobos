@@ -75,12 +75,17 @@ class MigratorTest(unittest.TestCase):
             self.migrator.migrate(ORDERED_SCHEMAS[0])
 
         with self.assertRaisesRegex(
-            ValueError,
-            "Cannot migrate to an older version"
+                ValueError,
+                "Cannot migrate to an older version"
         ):
             self.migrator.migrate(ORDERED_SCHEMAS[-2])
 
     def test_migration_integrity(self):
+        """
+        Check 2 databases that implement schema N, with one created from
+        scratch, and the second from migration of a database implementing schema
+        N-1, are equal
+        """
         for idx, version in enumerate(ORDERED_SCHEMAS):
             if idx == 0:
                 continue
@@ -153,7 +158,7 @@ class MigratorTest(unittest.TestCase):
                 'aries', {'test': '42'},
                 'dacfaeba-24ef-431b-a7b3-205dc1e8a34a', 1,
                 {"name": "raid1", "attrs": {"repl_count": "2"},
-                 "major": 0, "minor": 2}
+                 "major": 0, "minor": 2}, 'complete'
             )]
         )
         ext_uuids = self.migrator.execute(

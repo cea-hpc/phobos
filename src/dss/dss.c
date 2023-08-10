@@ -417,9 +417,10 @@ static const char * const select_query[] = {
      */
     [DSS_EXTENT] = "SELECT extent_uuid, size, medium_family, state, medium_id,"
                    " address, hash, info FROM extent",
-    [DSS_OBJECT] = "SELECT oid, object_uuid, version, user_md FROM object",
-    [DSS_DEPREC] = "SELECT oid, object_uuid, version, user_md, deprec_time"
-                   " FROM deprecated_object",
+    [DSS_OBJECT] = "SELECT oid, object_uuid, version, user_md, obj_status "
+                   "FROM object",
+    [DSS_DEPREC] = "SELECT oid, object_uuid, version, user_md, obj_status, "
+                   "deprec_time FROM deprecated_object",
     [DSS_LOGS]   = DSS_LOGS_SELECT_QUERY,
 };
 
@@ -481,23 +482,30 @@ static const char * const insert_query[] = {
                    " address, hash) VALUES ",
     [DSS_LAYOUT] = "INSERT INTO layout (object_uuid, version, extent_uuid,"
                    " layout_index) VALUES ",
-    [DSS_OBJECT] = "INSERT INTO object (oid, user_md) VALUES ",
+    [DSS_OBJECT] = "INSERT INTO object (oid, user_md, obj_status) VALUES ",
     [DSS_DEPREC] = "INSERT INTO deprecated_object (oid, object_uuid, version,"
-                   " user_md) VALUES ",
+                   " user_md, obj_status) VALUES ",
 };
 
 static const char * const insert_full_query[] = {
-    [DSS_OBJECT] = "INSERT INTO object (oid, object_uuid, version, user_md)"
-                   " VALUES ",
+    [DSS_OBJECT] = "INSERT INTO object (oid, object_uuid, version, user_md, "
+                   "obj_status) VALUES ",
+    [DSS_LAYOUT] = "INSERT INTO extent (oid, uuid, version, state, lyt_info,"
+                   " extents) VALUES ",
 };
 
 static const char * const update_query[] = {
     [DSS_DEVICE] = "UPDATE device SET adm_status = '%s' WHERE id = '%s';",
-    [DSS_OBJECT] = "UPDATE object SET user_md = '%s' "
+    [DSS_OBJECT] = "UPDATE object SET (user_md, obj_status) = ('%s', '%s')"
                    " WHERE oid = '%s';",
+    [DSS_DEPREC] = "UPDATE deprecated_object SET obj_status = '%s'"
+                   " WHERE uuid = '%s' and version = %d;",
     [DSS_EXTENT] = "UPDATE extent SET state = '%s', medium_family = '%s',"
                    " medium_id = '%s', address = '%s'"
                    " WHERE extent_uuid = '%s';",
+    [DSS_LAYOUT] = "UPDATE extent SET (state, lyt_info, extents) ="
+                   " ('%s', '%s', '%s')"
+                   " WHERE uuid = '%s' and version = %d;",
 };
 
 static const char * const update_host_query =
@@ -523,8 +531,8 @@ static const char * const insert_query_values[] = {
                    " (select version from object where oid = '%s'),"
                    " (select extent_uuid from extent where address = '%s'),"
                    " %d)%s",
-    [DSS_OBJECT] = "('%s', '%s')%s",
-    [DSS_DEPREC] = "('%s', '%s', %d, '%s')%s",
+    [DSS_OBJECT] = "('%s', '%s', '%s')%s",
+    [DSS_DEPREC] = "('%s', '%s', %d, '%s', '%s')%s",
 };
 
 static const char * const insert_query_end[] = {
@@ -532,7 +540,8 @@ static const char * const insert_query_end[] = {
 };
 
 static const char * const insert_full_query_values[] = {
-    [DSS_OBJECT] = "('%s', '%s', %d, '%s')%s",
+    [DSS_OBJECT] = "('%s', '%s', %d, '%s', '%s')%s",
+    [DSS_LAYOUT] = "('%s', '%s', %d, '%s', '%s', '%s')%s",
 };
 
 enum dss_move_queries {
@@ -545,17 +554,17 @@ static const char * const move_query[] = {
     [DSS_MOVE_OBJECT_TO_DEPREC] = "WITH moved_object AS"
                                   " (DELETE FROM object WHERE %s RETURNING"
                                   "  oid, object_uuid, version, user_md,"
-                                  "  lyt_info)"
+                                  "  lyt_info, obj_status)"
                                   " INSERT INTO deprecated_object"
                                   "  (oid, object_uuid, version, user_md,"
-                                  "   lyt_info)"
+                                  "   lyt_info, obj_status)"
                                   " SELECT * FROM moved_object",
     [DSS_MOVE_DEPREC_TO_OBJECT] = "WITH risen_object AS"
                                   " (DELETE FROM deprecated_object WHERE %s"
                                   "  RETURNING oid, object_uuid,"
-                                  "  version, user_md, lyt_info)"
+                                  "  version, user_md, lyt_info, obj_status)"
                                   " INSERT INTO object (oid, object_uuid, "
-                                  "  version, user_md, lyt_info)"
+                                  "  version, user_md, lyt_info, obj_status)"
                                   " SELECT * FROM risen_object",
 };
 
@@ -1137,23 +1146,48 @@ static int get_object_setrequest(PGconn *_conn, struct object_info *item_list,
 
         if (p_object->oid == NULL)
             LOG_RETURN(-EINVAL, "Object oid cannot be NULL");
+        if (p_object->obj_status <= PHO_OBJ_STATUS_INVAL ||
+            p_object->obj_status >= PHO_OBJ_STATUS_LAST)
+            LOG_RETURN(-EINVAL, "Object status %s invalid",
+                       obj_status2str(p_object->obj_status));
 
-        if (action == DSS_SET_DELETE) {
+        switch (action) {
+        case DSS_SET_DELETE:
             g_string_append_printf(request, delete_query[DSS_OBJECT],
                                    p_object->oid);
-        } else if (action == DSS_SET_INSERT) {
+            break;
+        case DSS_SET_INSERT:
             g_string_append_printf(request, insert_query_values[DSS_OBJECT],
-                                   p_object->oid, p_object->user_md,
+                                   p_object->oid,
+                                   p_object->user_md,
+                                   obj_status2str(p_object->obj_status),
                                    i < item_cnt-1 ? "," : ";");
-        } else if (action == DSS_SET_FULL_INSERT) {
+            break;
+        case DSS_SET_FULL_INSERT:
             g_string_append_printf(request,
                                    insert_full_query_values[DSS_OBJECT],
                                    p_object->oid, p_object->uuid,
-                                   p_object->version, p_object->user_md,
+                                   p_object->version,
+                                   p_object->user_md,
+                                   obj_status2str(p_object->obj_status),
                                    i < item_cnt-1 ? "," : ";");
-        } else if (action == DSS_SET_UPDATE) {
+            break;
+        case DSS_SET_UPDATE:
             g_string_append_printf(request, update_query[DSS_OBJECT],
-                                   p_object->user_md, p_object->oid);
+                                   p_object->user_md,
+                                   obj_status2str(p_object->obj_status),
+                                   p_object->oid);
+            break;
+        case DSS_SET_UPDATE_OBJ_STATUS:
+            g_string_append_printf(request,
+                                   "UPDATE object SET obj_status = '%s'"
+                                   " WHERE oid = '%s';",
+                                   obj_status2str(p_object->obj_status),
+                                   p_object->oid);
+            break;
+        default:
+            LOG_RETURN(-EINVAL, "Invalid action for object set request: '%s'",
+                       dss_set_actions_names[action]);
         }
     }
     return 0;
@@ -1176,6 +1210,10 @@ static int get_deprecated_object_setrequest(PGconn *_conn,
             LOG_RETURN(-EINVAL, "Object uuid cannot be NULL");
         if (p_object->version < 1)
             LOG_RETURN(-EINVAL, "Object version must be strictly positive");
+        if (p_object->obj_status <= PHO_OBJ_STATUS_INVAL ||
+            p_object->obj_status >= PHO_OBJ_STATUS_LAST)
+            LOG_RETURN(-EINVAL, "Object status %s invalid",
+                       obj_status2str(p_object->obj_status));
 
         if (action == DSS_SET_DELETE) {
             g_string_append_printf(request, delete_query[DSS_DEPREC],
@@ -1183,10 +1221,15 @@ static int get_deprecated_object_setrequest(PGconn *_conn,
         } else if (action == DSS_SET_INSERT) {
             g_string_append_printf(request, insert_query_values[DSS_DEPREC],
                                    p_object->oid, p_object->uuid,
-                                   p_object->version, p_object->user_md,
+                                   p_object->version,
+                                   p_object->user_md,
+                                   obj_status2str(p_object->obj_status),
                                    i < item_cnt-1 ? "," : ";");
         } else if (action == DSS_SET_UPDATE) {
-            LOG_RETURN(-ENOTSUP, "Deprecated object cannot be updated");
+            g_string_append_printf(request, update_query[DSS_DEPREC],
+                                   obj_status2str(p_object->obj_status),
+                                   p_object->uuid,
+                                   p_object->version);
         }
     }
     return 0;
@@ -2011,6 +2054,7 @@ static int dss_object_from_pg_row(struct dss_handle *handle, void *void_object,
     object->uuid        = get_str_value(res, row_num, 1);
     object->version     = atoi(PQgetvalue(res, row_num, 2));
     object->user_md     = get_str_value(res, row_num, 3);
+    object->obj_status  = str2obj_status(PQgetvalue(res, row_num, 4));
     object->deprec_time.tv_sec = 0;
     object->deprec_time.tv_usec = 0;
 
@@ -2029,7 +2073,7 @@ static int dss_deprecated_object_from_pg_row(struct dss_handle *handle,
     int rc;
 
     rc = dss_object_from_pg_row(handle, void_object, res, row_num);
-    rc = rc ? : str2timeval(get_str_value(res, row_num, 4),
+    rc = rc ? : str2timeval(get_str_value(res, row_num, 5),
                             &object->deprec_time);
 
     return rc;
@@ -2181,6 +2225,11 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
     if (action == DSS_SET_UPDATE_ADM_STATUS && type != DSS_DEVICE)
         LOG_RETURN(-ENOTSUP,
                    "Specific adm_status update is not supported for %s",
+                   dss_type_names[type]);
+
+    if (action == DSS_SET_UPDATE_OBJ_STATUS && type != DSS_OBJECT)
+        LOG_RETURN(-ENOTSUP,
+                   "Specific obj_status update is not supported for %s",
                    dss_type_names[type]);
 
     if (action == DSS_SET_UPDATE_HOST && type != DSS_DEVICE)
@@ -2686,6 +2735,13 @@ int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
                    int obj_cnt, enum dss_set_action action)
 {
     return dss_generic_set(hdl, DSS_OBJECT, (void *)obj_ls, obj_cnt, action, 0);
+}
+
+int dss_object_update_obj_status(struct dss_handle *hdl,
+                                 struct object_info *obj_ls, int obj_cnt)
+{
+    return dss_generic_set(hdl, DSS_OBJECT, (void *)obj_ls, obj_cnt,
+                           DSS_SET_UPDATE_OBJ_STATUS, 0);
 }
 
 int dss_deprecated_object_set(struct dss_handle *hdl,

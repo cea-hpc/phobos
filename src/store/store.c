@@ -331,6 +331,7 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         LOG_GOTO(out_md, rc, "Cannot convert attributes into JSON");
 
     obj.oid = xfer->xd_objid;
+    obj.obj_status = PHO_OBJ_STATUS_INCOMPLETE;
     obj.user_md = md_repr->str;
 
     rc = dss_lock(dss, DSS_OBJECT, &obj, 1);
@@ -385,6 +386,8 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         ++obj_res->version;
         if (!pho_attrs_is_empty(&xfer->xd_attrs))
             obj_res->user_md = md_repr->str;
+
+        obj_res->obj_status = obj.obj_status;
 
         rc = dss_object_set(dss, obj_res, 1, DSS_SET_FULL_INSERT);
         if (rc)
@@ -847,6 +850,15 @@ static int init_enc_or_dec(struct pho_encoder *enc, struct dss_handle *dss,
     if (rc)
         LOG_RETURN(rc, "Cannot find metadata for objid:'%s'",
                    xfer->xd_objid);
+
+    if (obj->obj_status == PHO_OBJ_STATUS_INCOMPLETE)
+        LOG_RETURN(-ENOENT, "Status of object '%s' is incomplete, "
+                   "cannot be reconstructed", obj->oid);
+
+    if (obj->obj_status != PHO_OBJ_STATUS_COMPLETE)
+        pho_warn("Object '%s' status is %s.", obj->oid,
+                 obj_status2str(obj->obj_status));
+
     rc = object_info_copy_into_xfer(obj, xfer);
     object_info_free(obj);
     if (rc)
@@ -918,6 +930,16 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
 
                 if (rc2)
                     pho_error(rc2, "Error while updating extents to orphan");
+            } else {
+                struct object_info obj = {
+                    .oid = xfer->xd_objid,
+                    .obj_status = PHO_OBJ_STATUS_COMPLETE,
+                };
+
+                rc = dss_object_update_obj_status(&pho->dss, &obj, 1);
+                if (rc)
+                    pho_error(rc,
+                              "Error while updating object status to complete");
             }
         }
     }

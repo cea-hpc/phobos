@@ -798,6 +798,11 @@ class ObjectListOptHandler(ListOptHandler):
         parser.add_argument('-p', '--pattern', action='store_true',
                             help="filter using POSIX regexp instead of exact "
                                  "objid")
+        parser.add_argument('-s', '--status', action='store',
+                            help="filter items according to their obj_status, "
+                                 "choose one or multiple letters from {i r c} "
+                                 "for respectively: incomplete, readable and "
+                                 "complete")
         parser.add_argument('-t', '--no-trunc', action='store_true',
                             help="do not truncate the user_md column (takes "
                                  "precedency over the 'max-width' argument)")
@@ -806,6 +811,12 @@ class ObjectListOptHandler(ListOptHandler):
                             help="max width of the user_md column keys and "
                                  "values, must be greater or equal to 5"
                                  "(default is 30)")
+        parser.epilog = """About the status of the object:
+        incomplete: the object cannot be rebuilt because it lacks some of its
+                    extents,
+        readable:   the object can be rebuilt, however some of its extents were
+                    not found,
+        complete:   the object is complete."""
 
 class DeleteOptHandler(BaseOptHandler):
     """Delete objects handler."""
@@ -1161,13 +1172,27 @@ class ObjectOptHandler(BaseResourceOptHandler):
                                       "'key=value'", elt)
                     sys.exit(os.EX_USAGE)
 
+        status_number = 0
+        if self.params.get('status'):
+            status_possibilities = {'i': 1, 'r': 2, 'c': 4}
+            status_str = self.params.get('status')
+            for letter in status_str:
+                if letter not in status_possibilities:
+                    self.logger.error("status parameter '%s' must be composed "
+                                      "excusively of i, r or c", status_str)
+                    sys.exit(os.EX_USAGE)
+                status_number += status_possibilities[x]
+        else:
+            status_number = 7
+
         client = UtilClient()
 
         try:
             objs = client.object_list(self.params.get('res'),
                                       self.params.get('pattern'),
                                       metadata,
-                                      self.params.get('deprecated'))
+                                      self.params.get('deprecated'),
+                                      status_number)
 
             if objs:
                 max_width = (None if self.params.get('no_trunc')

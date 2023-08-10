@@ -17,4 +17,5 @@ DROP TYPE IF EXISTS
     address_type,
     extent_state,
     lock_type,
-    operation_type CASCADE;
+    operation_type,
+    obj_status CASCADE;

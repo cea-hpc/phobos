@@ -37,7 +37,8 @@ from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable
                                PHO_FS_LTFS, PHO_FS_POSIX, PHO_FS_RADOS,
                                PHO_TIMEVAL_MAX_LEN, MD5_BYTE_LENGTH,
                                fs_type2str, fs_status2str, rsc_adm_status2str,
-                               rsc_family2str, extent_state2str)
+                               rsc_family2str, extent_state2str,
+                               obj_status2str)
 
 LIBPHOBOS_NAME = "libphobos_store.so"
 LIBPHOBOS = CDLL(LIBPHOBOS_NAME)
@@ -570,6 +571,7 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
         ('_oid', c_char_p),
         ('_uuid', c_char_p),
         ('version', c_int),
+        ('status', c_int),
         ('_user_md', c_char_p),
         ('deprec_time', Timeval),
     ]
@@ -580,6 +582,7 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
             'oid': None,
             'uuid': None,
             'version': None,
+            'status': obj_status2str,
             'user_md': (lambda obj, width=max_width: truncate_user_md(obj,
                                                                       width))
         }
@@ -626,6 +629,7 @@ class DeprecatedObjectInfo(ObjectInfo):
             'uuid': None,
             'version': None,
             'user_md': None,
+            'status': obj_status2str,
             'deprec_time': Timeval.to_string,
         }
 

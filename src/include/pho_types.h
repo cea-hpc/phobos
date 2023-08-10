@@ -500,10 +500,42 @@ struct media_info {
     struct operation_flags flags;        /**< Media operation flags */
 };
 
+enum obj_status {
+    PHO_OBJ_STATUS_INVAL = -1,
+    PHO_OBJ_STATUS_INCOMPLETE = 0,  /**< Object has not enough splits */
+    PHO_OBJ_STATUS_READABLE,        /**< Enough splits to reconstruct a copy */
+    PHO_OBJ_STATUS_COMPLETE,        /**< All copies */
+    PHO_OBJ_STATUS_LAST
+};
+
+static const char * const OBJ_STATUS_NAMES[] = {
+    [PHO_OBJ_STATUS_INCOMPLETE] = "incomplete",
+    [PHO_OBJ_STATUS_READABLE]   = "readable",
+    [PHO_OBJ_STATUS_COMPLETE]   = "complete"
+};
+
+static inline const char *obj_status2str(enum obj_status status)
+{
+    if (status >= PHO_OBJ_STATUS_LAST || status < 0)
+        return NULL;
+    return OBJ_STATUS_NAMES[status];
+}
+
+static inline enum obj_status str2obj_status(const char *str)
+{
+    int i;
+
+    for (i = 0; i < PHO_OBJ_STATUS_LAST; i++)
+        if (!strcmp(str, OBJ_STATUS_NAMES[i]))
+            return i;
+    return PHO_OBJ_STATUS_INVAL;
+}
+
 struct object_info {
     char *oid;
     char *uuid;
     int version;
+    enum obj_status obj_status;
     char *user_md;
     struct timeval deprec_time;
 };

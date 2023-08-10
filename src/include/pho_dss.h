@@ -105,6 +105,7 @@ enum dss_set_action {
                            */
     DSS_SET_UPDATE,
     DSS_SET_UPDATE_ADM_STATUS, /** Atomic update of adm_status column */
+    DSS_SET_UPDATE_OBJ_STATUS, /** Atomic update of obj_status column */
     DSS_SET_UPDATE_HOST,
     DSS_SET_DELETE,
     DSS_SET_LAST,
@@ -115,6 +116,7 @@ static const char * const dss_set_actions_names[] = {
     [DSS_SET_FULL_INSERT]        = "full-insert",
     [DSS_SET_UPDATE]             = "update",
     [DSS_SET_UPDATE_ADM_STATUS]  = "update_adm_status",
+    [DSS_SET_UPDATE_OBJ_STATUS]  = "update_obj_status",
     [DSS_SET_UPDATE_HOST]        = "update_host",
     [DSS_SET_DELETE]             = "delete",
 };
@@ -145,6 +147,7 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::OBJ::oid", "oid"},
     {"DSS::OBJ::uuid", "object_uuid"},
     {"DSS::OBJ::version", "version"},
+    {"DSS::OBJ::obj_status", "obj_status"},
     {"DSS::OBJ::user_md", "user_md"},
     {"DSS::OBJ::layout_info", "lyt_info"},
     {"DSS::OBJ::layout_type", "lyt_info->>'name'"},
@@ -517,6 +520,19 @@ int dss_extent_set(struct dss_handle *hdl, struct extent *extents,
  */
 int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
                    int obj_cnt, enum dss_set_action action);
+
+/**
+ * Update the object status of one or many objects in DSS.
+ *
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  obj_ls   array of entries to store
+ * @param[in]  obj_cnt  number of items in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_object_update_obj_status(struct dss_handle *hdl,
+                                 struct object_info *obj_ls,
+                                 int obj_cnt);
 
 /**
  * Store information for one or many deprecated objects in DSS.

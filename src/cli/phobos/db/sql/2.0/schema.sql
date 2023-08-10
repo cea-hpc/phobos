@@ -14,6 +14,7 @@ CREATE TYPE operation_type AS ENUM ('Library scan', 'Library open',
                                     'LTFS mount', 'LTFS umount',
                                     'LTFS format', 'LTFS df',
                                     'LTFS sync');
+CREATE TYPE obj_status AS ENUM ('incomplete', 'readable', 'complete');
 
 -- to extend enums: ALTER TYPE type ADD VALUE 'value'
 
@@ -62,6 +63,7 @@ CREATE TABLE object(
     object_uuid     varchar(36) UNIQUE DEFAULT uuid_generate_v4(),
     version         integer DEFAULT 1 NOT NULL,
     lyt_info        jsonb,
+    obj_status      obj_status DEFAULT 'incomplete',
 
     PRIMARY KEY (oid)
 );
@@ -73,6 +75,7 @@ CREATE TABLE deprecated_object(
     user_md         jsonb,
     deprec_time     timestamp DEFAULT now(),
     lyt_info        jsonb,
+    obj_status      obj_status DEFAULT 'incomplete',
 
     PRIMARY KEY (object_uuid, version)
 );

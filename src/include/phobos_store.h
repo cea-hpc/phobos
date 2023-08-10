@@ -347,6 +347,8 @@ void pho_xfer_desc_clean(struct pho_xfer_desc *xfer);
  * \param[in]       metadata        Metadata filter.
  * \param[in]       n_metadata      Number of requested metadata.
  * \param[in]       deprecated      true if search from deprecated objects.
+ * \param[in]       status_filter   Number corresponding to the obj_status
+ *                                  filter
  * \param[out]      objs            Retrieved objects.
  * \param[out]      n_objs          Number of retrieved items.
  *
@@ -357,8 +359,8 @@ void pho_xfer_desc_clean(struct pho_xfer_desc *xfer);
  */
 int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
                              const char **metadata, int n_metadata,
-                             bool deprecated, struct object_info **objs,
-                             int *n_objs);
+                             bool deprecated, int status_filter,
+                             struct object_info **objs, int *n_objs);
 
 /**
  * Release the list retrieved using phobos_store_object_list().

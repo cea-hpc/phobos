@@ -513,6 +513,21 @@ class Migrator:
             -- delete old_fs_status type
             DROP TYPE old_fs_status;
 
+            -- create enum obj_status
+            CREATE TYPE obj_status AS ENUM ('incomplete', 'readable',
+                                            'complete');
+
+            -- add obj_status attributes to object and deprecated object tables
+            -- with the default set to complete
+            ALTER TABLE object ADD obj_status obj_status DEFAULT 'complete';
+            ALTER TABLE deprecated_object ADD obj_status obj_status
+                DEFAULT 'complete';
+
+            -- set immediately change the defaults to incomplete
+            ALTER TABLE object ALTER COLUMN obj_status SET DEFAULT 'incomplete';
+            ALTER TABLE deprecated_object ALTER COLUMN obj_status SET
+                DEFAULT 'incomplete';
+
             -- update current schema version
             UPDATE schema_info SET version = '2.0';
         """)
