@@ -561,4 +561,19 @@ int phobos_admin_notify_media_update(struct admin_handle *adm,
 int pho_import_medium(struct admin_handle *adm, struct media_info medium,
                       bool check_hash);
 
+/**
+ * Reconstructs a (deprecated) object, which means updating its obj_status
+ * to either "incomplete", "readable" or "complete".
+ *
+ * @param[in]   adm         Admin handle,
+ * @param[in]   obj         (deprecated) object to reconstruct,
+ * @param[in]   deprecated  True if the object to reconstruct is in the
+ *                          deprecated_object table.
+ *
+ * @return      0 on success,
+ *              -errno on failure.
+ */
+int pho_reconstruct_obj(struct admin_handle *adm, struct object_info obj,
+                        bool deprecated);
+
 #endif

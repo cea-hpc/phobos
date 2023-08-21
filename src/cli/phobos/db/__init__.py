@@ -528,6 +528,11 @@ class Migrator:
             ALTER TABLE deprecated_object ALTER COLUMN obj_status SET
                 DEFAULT 'incomplete';
 
+            -- add offset to extent table
+            -- the name 'offset' is a reserved keyword
+            ALTER TABLE extent ADD COLUMN offsetof integer;
+            UPDATE extent SET offsetof = -1;
+
             -- update current schema version
             UPDATE schema_info SET version = '2.0';
         """)

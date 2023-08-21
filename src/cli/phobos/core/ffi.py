@@ -660,6 +660,7 @@ class ExtentInfo(Structure): # pylint: disable=too-few-public-methods
         ('size', c_ssize_t),
         ('media', Id),
         ('address', Buffer),
+        ('offset', c_ssize_t),
         ('with_xxh128', c_bool),
         ('xxh128', c_ubyte * 16),
         ('with_md5', c_bool),
@@ -711,6 +712,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
             'family': None,
             'address': None,
             'size': None,
+            'offset': None,
             'layout': None,
             'xxh128': None,
             'md5': None,
@@ -753,6 +755,11 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     def size(self):
         """Wrapper to get extent size."""
         return [self.extents[i].size for i in range(self.ext_count)]
+
+    @property
+    def offset(self):
+        """Wrapper to get extent offset."""
+        return [self.extents[i].offset for i in range(self.ext_count)]
 
     @property
     def address(self):

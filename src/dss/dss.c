@@ -400,9 +400,9 @@ static const char * const select_query[] = {
                    "SELECT oid, object_uuid, version, lyt_info,"
                    " json_agg(json_build_object("
                    "  'extent_uuid', extent_uuid, 'sz', size,"
-                   "  'fam', medium_family, 'state', state,"
-                   "  'media', medium_id, 'addr', address, 'hash', hash,"
-                   "  'info', info))"
+                   "  'offsetof', offsetof, 'fam', medium_family,"
+                   "  'state', state, 'media', medium_id, 'addr', address,"
+                   "  'hash', hash, 'info', info))"
                    " FROM extent"
                    " RIGHT JOIN ("
                    "  SELECT oid, object_uuid, version, lyt_info, extent_uuid"
@@ -415,8 +415,8 @@ static const char * const select_query[] = {
     /* The layout query ends with select_inner_end_query and
      * select_outer_end_query.
      */
-    [DSS_EXTENT] = "SELECT extent_uuid, size, medium_family, state, medium_id,"
-                   " address, hash, info FROM extent",
+    [DSS_EXTENT] = "SELECT extent_uuid, size, offsetof, medium_family, state, "
+                   " medium_id, address, hash, info FROM extent",
     [DSS_OBJECT] = "SELECT oid, object_uuid, version, user_md, obj_status "
                    "FROM object",
     [DSS_DEPREC] = "SELECT oid, object_uuid, version, user_md, obj_status, "
@@ -478,8 +478,8 @@ static const char * const insert_query[] = {
                    " fs_type, address_type, fs_status, fs_label, stats, tags,"
                    " put, get, delete)"
                    " VALUES ",
-    [DSS_EXTENT] = "INSERT INTO extent (state, size, medium_family, medium_id,"
-                   " address, hash) VALUES ",
+    [DSS_EXTENT] = "INSERT INTO extent (state, size, offsetof, medium_family,"
+                   " medium_id, address, hash) VALUES ",
     [DSS_LAYOUT] = "INSERT INTO layout (object_uuid, version, extent_uuid,"
                    " layout_index) VALUES ",
     [DSS_OBJECT] = "INSERT INTO object (oid, user_md, obj_status) VALUES ",
@@ -499,7 +499,7 @@ static const char * const update_query[] = {
     [DSS_OBJECT] = "UPDATE object SET (user_md, obj_status) = ('%s', '%s')"
                    " WHERE oid = '%s';",
     [DSS_DEPREC] = "UPDATE deprecated_object SET obj_status = '%s'"
-                   " WHERE uuid = '%s' and version = %d;",
+                   " WHERE object_uuid = '%s' and version = %d;",
     [DSS_EXTENT] = "UPDATE extent SET state = '%s', medium_family = '%s',"
                    " medium_id = '%s', address = '%s'"
                    " WHERE extent_uuid = '%s';",
@@ -526,7 +526,7 @@ static const char * const insert_query_values[] = {
     [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s')%s",
     [DSS_MEDIA]  = "('%s', %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s,"
                    " %s, %s, %s)%s",
-    [DSS_EXTENT] = "('%s', %d, '%s', '%s', '%s', '%s')%s",
+    [DSS_EXTENT] = "('%s', %d, %d, '%s', '%s', '%s', '%s')%s",
     [DSS_LAYOUT] = "((select object_uuid from object where oid = '%s'),"
                    " (select version from object where oid = '%s'),"
                    " (select extent_uuid from extent where address = '%s'),"
@@ -1019,6 +1019,11 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
 
         result[i].media.family = str2rsc_family(tmp);
 
+        /* offsetof */
+        result[i].offset = json_dict2ll(child, "offsetof");
+        if (result[i].offset < 0)
+            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'offsetof'");
+
         /*XXX fs_type & address_type retrieved from media info */
         if (result[i].media.family == PHO_RSC_INVAL)
             LOG_GOTO(out_decref, rc = -EINVAL, "Invalid medium family");
@@ -1257,6 +1262,7 @@ static int get_extent_setrequest(PGconn *_conn, struct extent *item_list,
 
             g_string_append_printf(request, insert_query_values[DSS_EXTENT],
                                    extent_state2str(ext->state), ext->size,
+                                   ext->offset,
                                    rsc_family2str(ext->media.family),
                                    ext->media.name, ext->address.buff, hash,
                                    (i < item_cnt-1) ? "," : " ");
@@ -2015,13 +2021,14 @@ static int dss_extent_from_pg_row(struct dss_handle *handle, void *void_extent,
     extent->uuid = get_str_value(res, row_num, 0);
     extent->layout_idx = -1;
     extent->size = atoll(PQgetvalue(res, row_num, 1));
-    extent->media.family = str2rsc_family(PQgetvalue(res, row_num, 2));
-    extent->state = str2extent_state(PQgetvalue(res, row_num, 3));
-    pho_id_name_set(&extent->media, PQgetvalue(res, row_num, 4));
-    extent->address.buff = get_str_value(res, row_num, 5);
+    extent->offset = atoll(PQgetvalue(res, row_num, 2));
+    extent->media.family = str2rsc_family(PQgetvalue(res, row_num, 3));
+    extent->state = str2extent_state(PQgetvalue(res, row_num, 4));
+    pho_id_name_set(&extent->media, PQgetvalue(res, row_num, 5));
+    extent->address.buff = get_str_value(res, row_num, 6);
     extent->address.size = strlen(extent->address.buff) + 1;
 
-    root = json_loads(PQgetvalue(res, row_num, 6), JSON_REJECT_DUPLICATES,
+    root = json_loads(PQgetvalue(res, row_num, 7), JSON_REJECT_DUPLICATES,
                       &json_error);
     if (!root)
         LOG_RETURN(-EINVAL, "Failed to parse json data: %s", json_error.text);

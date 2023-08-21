@@ -60,8 +60,9 @@ static int _dev_media_update(struct dss_handle *dss,
     uint64_t fields = 0;
     int rc2, rc = 0;
 
-    if (media_info->fs.status == PHO_FS_STATUS_EMPTY && !media_rc) {
-        media_info->fs.status = PHO_FS_STATUS_USED;
+    if (media_info->fs.status == PHO_FS_STATUS_IMPORTING && !media_rc) {
+        media_info->fs.status = (nb_new_obj == 0 ? PHO_FS_STATUS_EMPTY :
+                                                   PHO_FS_STATUS_USED);
         fields |= FS_STATUS;
     }
 
@@ -207,14 +208,12 @@ static int _get_info_from_filename(char *filename,
  * @param[out]  ext     Contains information about the extent to add.
  * @param[out]  obj     Contains information about the object related to the
  *                      extent to add.
- * @param[out]  offset  Offset reference of the extent relative to the object.
  *
  * @return      0 on success,
  *              -errno on failure.
  */
 static int _get_info_from_xattrs(int fd, struct layout_info *lyt,
-                                 struct extent *ext, struct object_info *obj,
-                                 int *offset)
+                                 struct extent *ext, struct object_info *obj)
 {
     unsigned char *hash_buffer;
     char *buffer;
@@ -274,7 +273,7 @@ static int _get_info_from_xattrs(int fd, struct layout_info *lyt,
         if (!buffer)
             LOG_RETURN(rc = -EINVAL, "raid 1 extent offset xattr not found");
 
-        *offset = strtol(buffer, NULL, 10);
+        ext->offset = strtol(buffer, NULL, 10);
         free(buffer);
     }
 
@@ -399,7 +398,6 @@ static int _add_extent_to_dss(struct dss_handle *dss,
 {
     struct layout_info *lyt_get;
     struct dss_filter filter;
-    struct extent *extents;
     int ext_cnt = 0;
     int ext_lines;
     int rc = 0;
@@ -407,11 +405,9 @@ static int _add_extent_to_dss(struct dss_handle *dss,
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
-                          " {\"DSS::LYT::object_uuid\": \"%s\"},"
-                          " {\"DSS::LYT::version\": %d}"
-                          "]}",
-                          lyt_insert.uuid,
-                          lyt_insert.version);
+                              "{\"DSS::LYT::object_uuid\": \"%s\"}, "
+                              "{\"DSS::LYT::version\": \"%d\"}"
+                          "]}", lyt_insert.uuid, lyt_insert.version);
     if (rc)
         LOG_RETURN(rc, "Could not construct filter for extent");
 
@@ -430,21 +426,17 @@ static int _add_extent_to_dss(struct dss_handle *dss,
     for (i = 0; i < ext_cnt; i++)
         if (lyt_get[0].extents[i].layout_idx == extent_to_insert.layout_idx)
             LOG_GOTO(lyt_info_get_free, rc = -EEXIST,
-                    "Already existing extent detected");
+                     "Already existing extent detected");
 
-    extents = xmalloc((ext_cnt + 1) * sizeof(struct extent));
+    lyt_insert.extents = &extent_to_insert;
+    lyt_insert.ext_count = 1;
 
-    for (i = 0; i < ext_cnt; i++) {
-        extents[i] = lyt_get[0].extents[i];
-        extents[i].state = PHO_EXT_ST_SYNC;
-    }
+    rc = dss_extent_set(dss, &extent_to_insert, 1, DSS_SET_INSERT);
+    if (rc)
+        LOG_GOTO(lyt_info_get_free, rc,
+                 "Failed to insert extent '%s'", extent_to_insert.uuid);
 
-    extents[ext_cnt] = extent_to_insert;
-    lyt_insert.extents = extents;
-    lyt_insert.ext_count = ext_cnt + 1;
-    rc = dss_layout_set(dss, &lyt_insert, 1,
-                        ext_cnt == 0 ? DSS_SET_FULL_INSERT : DSS_SET_UPDATE);
-    free(extents);
+    rc = dss_layout_set(dss, &lyt_insert, 1, DSS_SET_INSERT);
 
 lyt_info_get_free:
     dss_res_free(lyt_get, ext_lines);
@@ -487,11 +479,12 @@ static int _add_obj_to_dss(struct dss_handle *dss,
                    " version '%d'",
                    obj_to_insert.uuid, obj_to_insert.version);
 
-    if (in_obj || in_depr)
-        LOG_RETURN(rc = 0,
-                   "Object '%s' with uuid '%s' and version '%d' already in DSS",
-                   obj_to_insert.oid, obj_to_insert.uuid,
-                   obj_to_insert.version);
+    if (in_obj || in_depr) {
+        pho_verb("Object '%s' with uuid '%s' and version '%d' already in DSS",
+                 obj_to_insert.oid, obj_to_insert.uuid,
+                 obj_to_insert.version);
+        return 0;
+    }
 
     rc = _get_objects_with_oid(dss, obj_to_insert,
                                &obj_get, &obj_cnt,
@@ -583,7 +576,6 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
     struct layout_info lyt_to_insert;
     struct object_info obj_to_insert;
     struct extent ext_to_insert;
-    int offset;
     int rc = 0;
 
     // Get info from the extent name
@@ -598,10 +590,11 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
     ext_to_insert.media = med_id;
     ext_to_insert.address = PHO_BUFF_NULL;
     ext_to_insert.address.buff = rootpath;
+    ext_to_insert.state = PHO_EXT_ST_SYNC;
 
     // Get info from the extent's xattrs
     rc = _get_info_from_xattrs(fd, &lyt_to_insert, &ext_to_insert,
-                               &obj_to_insert, &offset);
+                               &obj_to_insert);
     if (rc)
         LOG_RETURN(rc, "Could not get info from xattrs");
 
@@ -760,6 +753,10 @@ int pho_import_medium(struct admin_handle *adm, struct media_info medium,
     medium.fs.label[label_length] = 0;
 
     rc = dss_media_set(&adm->dss, &medium, 1, DSS_SET_UPDATE, FS_LABEL);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Failed to update filesystem label of '%s' to '%s' in DSS",
+                   id.name, medium.fs.label);
 
     // One request to read the tape, one request to release it afterwards
     reqs = malloc(2 * sizeof(pho_req_t));
@@ -831,6 +828,76 @@ response_free:
 request_free:
     pho_srl_request_free(reqs, false);
     free(reqs);
+
+    return rc;
+}
+
+int pho_reconstruct_obj(struct admin_handle *adm, struct object_info obj,
+                        bool deprecated)
+{
+    struct dss_filter filter;
+    ssize_t extent_sizes = 0;
+    ssize_t replica_size = 0;
+    struct layout_info *lyt;
+    struct extent *extents;
+    const char *buffer;
+    int obj_size;
+    int repl_cnt;
+    int ext_cnt;
+    int lyt_cnt;
+    int rc = 0;
+    int i;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                              "{\"DSS::LYT::object_uuid\": \"%s\"}, "
+                              "{\"DSS::LYT::version\": \"%d\"}"
+                          "]}", obj.uuid, obj.version);
+    if (rc)
+        return rc;
+
+    rc = dss_full_layout_get(&adm->dss, &filter, NULL, &lyt, &lyt_cnt);
+    dss_filter_free(&filter);
+    if (rc)
+        return rc;
+
+    // Works like this in the current database version
+    assert(lyt_cnt <= 1);
+
+    if (lyt_cnt == 0) {
+        obj.obj_status = PHO_OBJ_STATUS_INCOMPLETE;
+        goto end;
+    }
+
+    // Recover repl_count and obj_size
+    buffer = pho_attr_get(&lyt->layout_desc.mod_attrs, "repl_count");
+    repl_cnt = strtol(buffer, NULL, 10);
+    ext_cnt = lyt->ext_count;
+    extents = lyt->extents;
+
+    buffer = pho_attr_get(&lyt->layout_desc.mod_attrs, "raid1.obj_size");
+    obj_size = strtol(buffer, NULL, 10);
+
+    for (i = 0; i < ext_cnt; i++) {
+        if (replica_size == extents[i].offset)
+            replica_size += extents[i].size;
+
+        extent_sizes += extents[i].size;
+    }
+
+    if (extent_sizes == repl_cnt * obj_size)
+        obj.obj_status = PHO_OBJ_STATUS_COMPLETE;
+    else if (replica_size == obj_size)
+        obj.obj_status = PHO_OBJ_STATUS_READABLE;
+    else
+        obj.obj_status = PHO_OBJ_STATUS_INCOMPLETE;
+
+end:
+    dss_res_free(lyt, lyt_cnt);
+    if (deprecated)
+        rc = dss_deprecated_object_set(&adm->dss, &obj, 1, DSS_SET_UPDATE);
+    else
+        rc = dss_object_set(&adm->dss, &obj, 1, DSS_SET_UPDATE);
 
     return rc;
 }

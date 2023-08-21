@@ -1332,12 +1332,16 @@ int phobos_admin_media_import(struct admin_handle *adm,
                               int med_cnt,
                               bool check_hash)
 {
+    struct object_info *depr;
+    struct dss_filter filter;
+    struct object_info *obj;
+    int depr_cnt;
+    int obj_cnt;
     int rc = 0;
+    int rc2;
     int i;
 
     ENTRY;
-
-    pho_debug("Options: check-hash:%s", check_hash ? "true" : "false");
 
     for (i = 0; i < med_cnt; i++) {
         const struct pho_id *medium = &med_ls[i].rsc.id;
@@ -1349,10 +1353,57 @@ int phobos_admin_media_import(struct admin_handle *adm,
 
         rc = dss_media_set(&adm->dss, med_ls + i, 1, DSS_SET_INSERT, 0);
         if (rc)
-            LOG_RETURN(rc, "Unable to import medium %s", medium->name);
+            LOG_RETURN(rc, "Unable to add medium '%s' to database",
+                       medium->name);
 
         rc = pho_import_medium(adm, med_ls[i], check_hash);
+        if (rc)
+            LOG_RETURN(rc, "Unable to import medium '%s' to database",
+                       medium->name);
     }
+
+    rc = dss_filter_build(&filter,
+                          "{\"$OR\": [ "
+                            "{\"DSS::OBJ::obj_status\": \"incomplete\"},"
+                            "{\"DSS::OBJ::obj_status\": \"readable\"}"
+                          "]}");
+    if (rc)
+        return rc;
+
+    rc = dss_object_get(&adm->dss, &filter, &obj, &obj_cnt);
+    if (rc) {
+        dss_filter_free(&filter);
+        return rc;
+    }
+
+    rc = dss_deprecated_object_get(&adm->dss, &filter, &depr, &depr_cnt);
+    dss_filter_free(&filter);
+    if (rc) {
+        dss_res_free(obj, obj_cnt);
+        return rc;
+    }
+
+    for (int i = 0; i < obj_cnt; i++) {
+        rc2 = pho_reconstruct_obj(adm, obj[i], false);
+        if (rc2) {
+            pho_error(rc2, "Failed to reconstruct object '%s', skipping it",
+                      obj[i].oid);
+            rc = rc ? : rc2;
+        }
+    }
+
+    dss_res_free(obj, obj_cnt);
+
+    for (int i = 0; i < depr_cnt; i++) {
+        rc2 = pho_reconstruct_obj(adm, depr[i], true);
+        if (rc2) {
+            pho_error(rc2, "Failed to reconstruct object '%s', skipping it",
+                      depr[i].oid);
+            rc = rc ? : rc2;
+        }
+    }
+
+    dss_res_free(depr, depr_cnt);
 
     return rc;
 }

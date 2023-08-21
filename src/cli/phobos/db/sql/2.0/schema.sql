@@ -89,6 +89,7 @@ CREATE TABLE extent(
     address         varchar(1024),
     hash            jsonb,
     info            jsonb,
+    offsetof        integer, -- the name 'offset' is a reserved keyword
 
     PRIMARY KEY (extent_uuid)
 );

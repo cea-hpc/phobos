@@ -263,12 +263,13 @@ int layout_repl_count(struct layout_info *layout, unsigned int *repl_count)
  * @param[in]  extent_size size of the extent in byte
  */
 static void set_extent_info(struct extent *extent, enum extent_state state,
-                            const pho_resp_write_elt_t *medium,
+                            const pho_resp_write_elt_t *medium, ssize_t offset,
                             int layout_idx, ssize_t extent_size)
 {
     extent->state = state;
     extent->layout_idx = layout_idx;
     extent->size = extent_size;
+    extent->offset = offset;
     extent->media.family = (enum rsc_family)medium->med_id->family;
     pho_id_name_set(&extent->media, medium->med_id->name);
 }
@@ -538,6 +539,7 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
 
     for (i = 0; i < raid1->repl_count; ++i)
         set_extent_info(&extent[i], PHO_EXT_ST_PENDING, wresp->media[i],
+                        (ssize_t) (object_size - raid1->to_write),
                         raid1->cur_extent_idx * raid1->repl_count + i,
                         extent_size);
         /* extent[i]->address will be filled by ioa_open */

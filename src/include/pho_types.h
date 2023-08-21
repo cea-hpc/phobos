@@ -375,6 +375,7 @@ struct extent {
     ssize_t             size;       /**< size of the extent */
     struct pho_id       media;      /**< identifier of the media */
     struct pho_buff     address;    /**< address on the media */
+    ssize_t             offset;     /**< offset of the extent */
     bool                with_xxh128;
                                     /**< true if extent xxh128 field is set */
     unsigned char       xxh128[XXH128_BYTE_LENGTH];
