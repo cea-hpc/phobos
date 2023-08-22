@@ -142,6 +142,7 @@ function tape_cleanup
 {
     waive_lrs
     drop_tables
+    drain_all_drives
 }
 
 function dir_setup

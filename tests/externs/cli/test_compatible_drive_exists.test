@@ -1,0 +1,78 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2023 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Test compatible_drive_exists returns ENODEV with a repl_count of 3 on 2 drives
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+function setup_2_drives_3_tapes()
+{
+    drain_all_drives
+    setup_tables
+    invoke_lrs
+
+    local tapes=$(get_tapes L6 3)
+    local drives=$(get_lto_drives 6 2)
+    $phobos drive add --unlock ${drives}
+    $phobos tape add --type lto6 ${tapes}
+    $phobos tape format --unlock ${tapes}
+}
+
+function cleanup()
+{
+    waive_lrs
+    drop_tables
+    drain_all_drives
+}
+
+function test_2_then_3_replica()
+{
+    local ENODEV=19
+
+    # put with replica count 2
+    $valg_phobos put --family tape \
+        --layout raid1 --lyt-params "repl_count=2" \
+        /etc/hosts host_1 ||
+        error "put raid1 repl_count of 2 should be successfull with 2 drives"
+
+    # put with replica count 3
+    $valg_phobos put --family tape \
+        --layout raid1 --lyt-params "repl_count=3" \
+        /etc/hosts host_2 &
+    put_3_repl_pid=$!
+    wait ${put_3_repl_pid} && true
+    rc=$?
+
+    test $rc -eq $ENODEV ||
+    error "put raid1 repl_count of 3 with only 2 drives must return ENODEV"
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Tapes required for this test"
+fi
+
+TESTS=("setup_2_drives_3_tapes; test_2_then_3_replica; cleanup")
+
