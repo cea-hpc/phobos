@@ -137,8 +137,7 @@ struct lrs_dev *search_in_use_medium(GPtrArray *devices,
         }
 
 check_load:
-        if (dev->ld_op_status == PHO_DEV_OP_ST_MOUNTED ||
-            dev->ld_op_status == PHO_DEV_OP_ST_LOADED) {
+        if (dev->ld_op_status != PHO_DEV_OP_ST_EMPTY) {
             /* The drive may contain a media unknown to phobos, skip it */
             if (dev->ld_dss_media_info == NULL)
                 goto err_continue;

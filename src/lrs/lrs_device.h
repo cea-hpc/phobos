@@ -183,6 +183,7 @@ static inline bool dev_is_sched_ready(struct lrs_dev *dev)
     return dev && thread_is_running(&dev->ld_device_thread) &&
            !dev->ld_ongoing_io && !dev->ld_needs_sync && !dev->ld_sub_request &&
            !dev->ld_ongoing_scheduled &&
+           dev->ld_op_status != PHO_DEV_OP_ST_FAILED &&
            (dev->ld_dss_dev_info->rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED);
 }
 
