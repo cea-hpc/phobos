@@ -1522,6 +1522,17 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
         if (pmedia) {
             bool is_compat;
 
+            /* DIR or RADOS resource */
+            if (pmedia->rsc.id.family == PHO_RSC_DIR ||
+                pmedia->rsc.id.family == PHO_RSC_RADOS_POOL) {
+                if (strcmp(dev->ld_dss_dev_info->rsc.id.name,
+                           pmedia->rsc.id.name))
+                    continue;
+
+                return true;
+            }
+
+            /* last existing resource type : tape */
             if (tape_drive_compat(pmedia, dev, &is_compat))
                 continue;
 
