@@ -423,6 +423,10 @@ static json_t *create_log_message(enum operation_type cause,
         assert_false(json_object_set_new(phobos_action, "Device lookup",
                                          scsi_logical_action));
         break;
+    case PHO_LIBRARY_SCAN:
+        assert_false(json_object_set_new(phobos_action, "Library scan",
+                                         scsi_logical_action));
+        break;
     default:
         fail();
     }
@@ -844,6 +848,94 @@ static void scsi_dev_lookup_logs_success(void **state)
     scsi_dev_lookup_logs_check(handle, -1, false, "/dev/st0");
 }
 
+static void scsi_lib_scan_logs_check(struct dss_handle *handle,
+                                     enum scsi_operation_type op,
+                                     bool should_fail)
+{
+    struct phobos_global_context *context = phobos_context();
+    json_t *lib_data;
+    int rc;
+
+    if (should_fail) {
+        context->mock_ioctl = &mock_ioctl;
+
+        will_return_always(mock_ioctl, op);
+    }
+
+    rc = phobos_admin_lib_scan(PHO_LIB_SCSI, "/dev/changer", &lib_data);
+
+    if (should_fail) {
+        json_t *full_message;
+
+        pho_context_reset_scsi_ioctl();
+        assert_int_equal(-rc, EINVAL);
+
+        full_message = create_log_message(PHO_LIBRARY_SCAN, op, should_fail,
+                                          NULL, NULL);
+        assert_non_null(full_message);
+
+        check_log_is_valid(handle, "", "", PHO_LIBRARY_SCAN, op,
+                           should_fail, full_message);
+    } else {
+        struct pho_log *logs;
+        int n_logs;
+
+        assert_return_code(-rc, rc);
+
+        rc = dss_logs_get(handle, NULL, &logs, &n_logs);
+        assert_return_code(rc, -rc);
+
+        assert_int_equal(n_logs, 0);
+        dss_res_free(logs, n_logs);
+
+        destroy_json(lib_data);
+    }
+
+    dss_logs_delete(handle, NULL);
+}
+
+static void scsi_lib_scan_logs_mode_sense_failure(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+
+    scsi_lib_scan_logs_check(handle, LIBRARY_LOAD, true);
+}
+
+static void scsi_lib_scan_logs_arms_status_failure(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+
+    scsi_lib_scan_logs_check(handle, ARMS_STATUS, true);
+}
+
+static void scsi_lib_scan_logs_slots_status_failure(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+
+    scsi_lib_scan_logs_check(handle, SLOTS_STATUS, true);
+}
+
+static void scsi_lib_scan_logs_impexp_status_failure(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+
+    scsi_lib_scan_logs_check(handle, IMPEXP_STATUS, true);
+}
+
+static void scsi_lib_scan_logs_drives_status_failure(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+
+    scsi_lib_scan_logs_check(handle, DRIVES_STATUS, true);
+}
+
+static void scsi_lib_scan_logs_success(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+
+    scsi_lib_scan_logs_check(handle, -1, false);
+}
+
 int main(void)
 {
     const struct CMUnitTest test_scsi_logs[] = {
@@ -866,6 +958,13 @@ int main(void)
         cmocka_unit_test(scsi_dev_lookup_logs_mode_sense_failure),
         cmocka_unit_test(scsi_dev_lookup_logs_drives_status_failure),
         cmocka_unit_test(scsi_dev_lookup_logs_success),
+
+        cmocka_unit_test(scsi_lib_scan_logs_mode_sense_failure),
+        cmocka_unit_test(scsi_lib_scan_logs_arms_status_failure),
+        cmocka_unit_test(scsi_lib_scan_logs_slots_status_failure),
+        cmocka_unit_test(scsi_lib_scan_logs_impexp_status_failure),
+        cmocka_unit_test(scsi_lib_scan_logs_drives_status_failure),
+        cmocka_unit_test(scsi_lib_scan_logs_success),
     };
     struct stat dev_changer;
     int error_count;

@@ -231,7 +231,7 @@ static void test_lib_scan(bool use_admin_function)
     } else {
         ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib_hdl.ld_module));
         ASSERT_RC(ldm_lib_open(&lib_hdl, "/dev/changer", NULL));
-        ASSERT_RC(ldm_lib_scan(&lib_hdl, &lib_data));
+        ASSERT_RC(ldm_lib_scan(&lib_hdl, &lib_data, NULL));
     }
 
     if (!json_array_size(lib_data)) {

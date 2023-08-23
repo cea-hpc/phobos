@@ -1337,6 +1337,12 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
 {
     const char *lib_type_name = lib_type2str(lib_type);
     struct lib_handle lib_hdl;
+    json_t *lib_open_json;
+    json_t *lib_scan_json;
+    struct dss_handle dss;
+    struct pho_id device;
+    struct pho_id medium;
+    struct pho_log log;
     int rc2;
     int rc;
 
@@ -1345,20 +1351,62 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
     if (!lib_type_name)
         LOG_RETURN(-EINVAL, "Invalid lib type '%d'", lib_type);
 
+    rc = dss_init(&dss);
+    if (rc)
+        LOG_RETURN(rc, "Failed to initialize DSS");
+
     rc = get_lib_adapter(lib_type, &lib_hdl.ld_module);
     if (rc)
         LOG_RETURN(rc, "Failed to get library adapter for type '%s'",
                    lib_type_name);
 
-    rc = ldm_lib_open(&lib_hdl, lib_dev, NULL);
-    if (rc)
+    medium.name[0] = 0;
+    medium.family = PHO_RSC_TAPE;
+    device.name[0] = 0;
+    device.family = PHO_RSC_TAPE;
+    init_pho_log(&log, device, medium, PHO_LIBRARY_SCAN);
+
+    lib_open_json = json_object();
+
+    rc = ldm_lib_open(&lib_hdl, lib_dev, lib_open_json);
+    if (rc) {
+        if (json_object_size(lib_open_json) != 0) {
+            json_object_set_new(log.message,
+                                OPERATION_TYPE_NAMES[PHO_LIBRARY_OPEN],
+                                lib_open_json);
+            log.error_number = rc;
+            dss_emit_log(&dss, &log);
+        } else {
+            destroy_json(lib_open_json);
+        }
+
+        destroy_json(log.message);
         LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
                    lib_type_name, lib_dev);
+    }
 
-    rc = ldm_lib_scan(&lib_hdl, lib_data);
-    if (rc)
+    destroy_json(lib_open_json);
+    lib_scan_json = json_object();
+
+    rc = ldm_lib_scan(&lib_hdl, lib_data, lib_scan_json);
+    if (rc) {
+        if (json_object_size(lib_scan_json) != 0) {
+            json_object_set_new(log.message,
+                                OPERATION_TYPE_NAMES[PHO_LIBRARY_SCAN],
+                                lib_scan_json);
+            log.error_number = rc;
+            dss_emit_log(&dss, &log);
+        } else {
+            destroy_json(lib_scan_json);
+        }
+
+        destroy_json(log.message);
         LOG_GOTO(out, rc, "Failed to scan library of type '%s' for path '%s'",
                  lib_type_name, lib_dev);
+    }
+
+    destroy_json(lib_scan_json);
+    destroy_json(log.message);
 
 out:
     rc2 = ldm_lib_close(&lib_hdl);
@@ -1366,6 +1414,8 @@ out:
         pho_error(rc2, "Failed to close library of type '%s'", lib_type_name);
 
     rc = rc ? : rc2;
+
+    dss_fini(&dss);
 
     return rc;
 }

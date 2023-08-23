@@ -229,7 +229,7 @@ struct pho_lib_adapter_module_ops {
                           const struct lib_item_addr *src_addr,
                           const struct lib_item_addr *tgt_addr,
                           json_t *message);
-    int (*lib_scan)(struct lib_handle *lib, json_t **lib_data);
+    int (*lib_scan)(struct lib_handle *lib, json_t **lib_data, json_t *message);
 };
 
 struct lib_adapter_module {
@@ -257,10 +257,14 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter_module **lib);
 
 /**
  * Open a library handler.
+ *
  * Library access may rely on a caching of item addresses.
- * A library should be closed and reopened to refresh this cache
- * in case a change or inconsistency is detected.
+ * A library should be closed and reopened to refresh this cache in case a
+ * change or inconsistency is detected.
+ *
  * @param[in,out] lib_hdl Library handle.
+ * @param[in]     dev     Device to open
+ * @param[out]    message Json message to fill in case of error
  *
  * @return 0 on success, negative error code on failure.
  */
@@ -276,7 +280,9 @@ static inline int ldm_lib_open(struct lib_handle *lib_hdl, const char *dev,
 
 /**
  * Close a library handler.
+ *
  * Close access to the library and clean address cache.
+ *
  * @param[in,out] lib_hdl      Lib handle holding an opened library adapter.
  *
  * @return 0 on success, negative error code on failure.
@@ -292,9 +298,11 @@ static inline int ldm_lib_close(struct lib_handle *lib_hdl)
 
 /**
  * Get the location of a device in library from its serial number.
+ *
  * @param[in,out] lib_hdl      Lib handle holding an opened library adapter.
  * @param[in]     drive_serial Serial number of the drive to lookup.
  * @param[out]    drv_info     Information about the drive.
+ * @param[out]    message      Json message to fill in case of error
  *
  * @return 0 on success, negative error code on failure.
  */
@@ -312,9 +320,11 @@ static inline int ldm_lib_drive_lookup(struct lib_handle *lib_hdl,
 
 /**
  * Get the location of a media in library from its label.
+ *
  * @param[in,out] Lib_hdl       Lib handle holding an opened library adapter.
  * @param[in]     media_label   Label of the media.
  * @param[out]    media_addr    Location of the media in library.
+ * @param[out]    message       Json message to fill in case of error
  *
  * @return 0 on success, negative error code on failure.
  */
@@ -332,9 +342,11 @@ static inline int ldm_lib_media_lookup(struct lib_handle *lib_hdl,
 
 /**
  * Move a media in library from a source location to a target location.
- * @param[in,out] lib_hdl       Lib handle holding an opened library adapter.
+ *
+ * @param[in,out] lib_hdl   Lib handle holding an opened library adapter.
  * @param[in]     src_addr  Source address of the move.
  * @param[in]     tgt_addr  Target address of the move.
+ * @param[out]    message   Json message to fill in case of error
  */
 static inline int ldm_lib_media_move(struct lib_handle *lib_hdl,
                                      const struct lib_item_addr *src_addr,
@@ -352,18 +364,20 @@ static inline int ldm_lib_media_move(struct lib_handle *lib_hdl,
 /**
  * Scan a library and generate a json array with unstructured information.
  * Output information may vary, depending on the library.
- * @param[in,out] lib_hdl       Lib handle holding an opened library adapter.
- * @param[in,out] lib_data  json object allocated by ldm_lib_scan, json_decref
+ *
+ * @param[in,out] lib_hdl   Lib handle holding an opened library adapter.
+ * @param[in,out] lib_data  Json object allocated by ldm_lib_scan, json_decref
  *                          must be called later on to deallocate it properly
+ * @param[out]    message   Json message to fill in case of error
  */
 static inline int ldm_lib_scan(struct lib_handle *lib_hdl,
-                               json_t **lib_data)
+                               json_t **lib_data, json_t *message)
 {
     assert(lib_hdl->ld_module != NULL);
     assert(lib_hdl->ld_module->ops != NULL);
     if (lib_hdl->ld_module->ops->lib_scan == NULL)
         return 0;
-    return lib_hdl->ld_module->ops->lib_scan(lib_hdl, lib_data);
+    return lib_hdl->ld_module->ops->lib_scan(lib_hdl, lib_data, message);
 }
 
 /** @}*/
