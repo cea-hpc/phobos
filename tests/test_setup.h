@@ -20,31 +20,55 @@
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
 /**
- * \brief  Cmocka unit test setup and teardown
+ * \brief  Test setup and teardown
  */
 
 #ifndef _TEST_SETUP_H
 #define _TEST_SETUP_H
 
+#include "stdbool.h"
+
 /**
- * Setup phobos db, PHOBOS_DSS_connect_string environnement variable and set
- * state to DSS handle
+ * Setup phobos DB, PHOBOS_DSS_connect_string environment variable and set state
+ * to DSS handle
+ */
+int global_setup_dss_with_dbinit(void **state);
+
+/*
+ * Setup PHOBOS_DSS_connect_string environment variable and set state to DSS
+ * handle
  */
 int global_setup_dss(void **state);
 
 /**
- * Free DSS handle state, drop phobos db and unset PHOBOS_DSS_connect_string
+ * Free DSS handle state, drop phobos DB and unset PHOBOS_DSS_connect_string
+ */
+int global_teardown_dss_with_dbdrop(void **state);
+
+/**
+ * Free DSS handle state and unset PHOBOS_DSS_connect_string
  */
 int global_teardown_dss(void **state);
 
 /**
- * Setup phobos db, PHOBOS_DSS_connect_string environnement variable and set
- * state to admin handle without lrs connection
+ * Setup phobos DB, PHOBOS_DSS_connect_string environnement variable and set
+ * state to admin handle without LRS connection
+ */
+int global_setup_admin_no_lrs_with_dbinit(void **state);
+
+/**
+ * Setup PHOBOS_DSS_connect_string environment variable and set state to admin
+ * handle without LRS connection
  */
 int global_setup_admin_no_lrs(void **state);
 
 /**
- * Free admin handle state, drop phobos db and unset PHOBOS_DSS_connect_string
+ * Free admin handle state, drop phobos DB and unset PHOBOS_DSS_connect_string
+ */
+int global_teardown_admin_with_dbdrop(void **state);
+
+/**
+ * Free admin handle state and unset PHOBOS_DSS_connect_string
  */
 int global_teardown_admin(void **state);
 

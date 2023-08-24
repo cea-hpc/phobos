@@ -57,7 +57,7 @@ static int setup(void **data)
 {
     int rc;
 
-    rc = global_setup_dss((void **)&dss);
+    rc = global_setup_dss_with_dbinit((void **)&dss);
     if (rc)
         return rc;
 
@@ -70,7 +70,7 @@ static int setup(void **data)
 
 static int teardown(void **data)
 {
-    return global_teardown_dss((void **)&dss);
+    return global_teardown_dss_with_dbdrop((void **)&dss);
 }
 
 /* Convert \p value into string up to UINT_MAX = 4,294,967,295 */

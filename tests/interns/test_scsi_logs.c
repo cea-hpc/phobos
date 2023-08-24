@@ -982,8 +982,9 @@ int main(void)
 
     pho_log_level_set(PHO_LOG_ERROR);
 
-    error_count = cmocka_run_group_tests(test_scsi_logs, global_setup_dss,
-                                         global_teardown_dss);
+    error_count = cmocka_run_group_tests(test_scsi_logs,
+                                         global_setup_dss_with_dbinit,
+                                         global_teardown_dss_with_dbdrop);
 
     pho_cfg_local_fini();
     pho_context_fini();

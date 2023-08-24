@@ -259,6 +259,6 @@ int main(void)
     atexit(pho_context_fini);
 
     return cmocka_run_group_tests(phobos_admin_medium_locate_cases,
-                                  global_setup_admin_no_lrs,
-                                  global_teardown_admin);
+                                  global_setup_admin_no_lrs_with_dbinit,
+                                  global_teardown_admin_with_dbdrop);
 }

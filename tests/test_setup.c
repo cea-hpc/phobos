@@ -59,7 +59,7 @@ static int setup_db_calls(char *action)
     return 0;
 }
 
-static int global_setup(void)
+static int setup(bool setup_db)
 {
     const char *connect_string;
     int rc;
@@ -77,12 +77,14 @@ static int global_setup(void)
 
     setenv("PHOBOS_DSS_connect_string", connect_string, 1);
 
-    return setup_db_calls("setup_tables");
+    if (setup_db)
+        return setup_db_calls("setup_tables");
+    return 0;
 }
 
-static int global_teardown(void)
+static int teardown(bool drop_db)
 {
-    int rc = setup_db_calls("drop_tables");
+    int rc = drop_db ? setup_db_calls("drop_tables") : 0;
 
     unsetenv("PHOBOS_DSS_connect_string");
 
@@ -91,7 +93,7 @@ static int global_teardown(void)
     return rc;
 }
 
-int global_setup_dss(void **state)
+static int setup_dss(void **state, bool setup_db)
 {
     struct dss_handle *handle;
     int rc;
@@ -100,7 +102,7 @@ int global_setup_dss(void **state)
     if (handle == NULL)
         return -1;
 
-    rc = global_setup();
+    rc = setup(setup_db);
     if (rc)
         return rc;
 
@@ -113,17 +115,37 @@ int global_setup_dss(void **state)
     return 0;
 }
 
-int global_teardown_dss(void **state)
+int global_setup_dss(void **state)
+{
+    return setup_dss(state, false);
+}
+
+int global_setup_dss_with_dbinit(void **state)
+{
+    return setup_dss(state, true);
+}
+
+static int teardown_dss(void **state, bool drop_db)
 {
     if (*state != NULL) {
         dss_fini(*state);
         free(*state);
     }
 
-    return global_teardown();
+    return teardown(drop_db);
 }
 
-int global_setup_admin_no_lrs(void **state)
+int global_teardown_dss(void **state)
+{
+    return teardown_dss(state, false);
+}
+
+int global_teardown_dss_with_dbdrop(void **state)
+{
+    return teardown_dss(state, true);
+}
+
+static int setup_admin_no_lrs(void **state, bool setup_db)
 {
     struct admin_handle *handle;
     int rc;
@@ -132,7 +154,7 @@ int global_setup_admin_no_lrs(void **state)
     if (handle == NULL)
         return -1;
 
-    rc = global_setup();
+    rc = setup(setup_db);
     if (rc)
         return rc;
 
@@ -145,12 +167,32 @@ int global_setup_admin_no_lrs(void **state)
     return 0;
 }
 
-int global_teardown_admin(void **state)
+int global_setup_admin_no_lrs(void **state)
+{
+    return setup_admin_no_lrs(state, false);
+}
+
+int global_setup_admin_no_lrs_with_dbinit(void **state)
+{
+    return setup_admin_no_lrs(state, true);
+}
+
+static int teardown_admin(void **state, bool drop_db)
 {
     if (*state != NULL) {
         phobos_admin_fini(*state);
         free(*state);
     }
 
-    return global_teardown();
+    return teardown(drop_db);
+}
+
+int global_teardown_admin(void **state)
+{
+    return teardown_admin(state, false);
+}
+
+int global_teardown_admin_with_dbdrop(void **state)
+{
+    return teardown_admin(state, true);
 }

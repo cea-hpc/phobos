@@ -82,7 +82,7 @@ static int dlfo_setup(void **state)
 
     *state = &global_state;
 
-    rc = global_setup_dss((void **)&global_state.dss);
+    rc = global_setup_dss_with_dbinit((void **)&global_state.dss);
     if (rc)
         return -1;
 
@@ -161,7 +161,7 @@ static int dlfo_teardown(void **void_state)
     struct test_state *state = (struct test_state *)*void_state;
     int rc;
 
-    rc = global_teardown_dss((void **)&state->dss);
+    rc = global_teardown_dss_with_dbdrop((void **)&state->dss);
     if (rc)
         return -1;
 

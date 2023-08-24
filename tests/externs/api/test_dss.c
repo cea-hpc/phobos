@@ -425,5 +425,9 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
+    rc = global_teardown_dss((void **)&dss_handle);
+    if (rc)
+        pho_error(rc, "teardown failed, will not fail the test");
+
     exit(EXIT_SUCCESS);
 }
