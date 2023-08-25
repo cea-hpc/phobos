@@ -200,6 +200,7 @@ struct csv_test_data {
 static int test_get_csv(void *param)
 {
     struct csv_test_data *td = param;
+    const char *csv_value;
     char **values;
     int rc = 0;
     size_t n;
@@ -210,7 +211,10 @@ static int test_get_csv(void *param)
         exit(EXIT_FAILURE);
     }
 
-    rc = pho_cfg_get_val_csv("CFG_TEST", "csvparam", &values, &n);
+    rc = pho_cfg_get_val("CFG_TEST", "csvparam", &csv_value);
+    if (!rc)
+        rc = get_val_csv(csv_value, &values, &n);
+
     if (rc) {
         pho_error(rc, "failed to get param");
         return -1;

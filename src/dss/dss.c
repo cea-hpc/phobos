@@ -67,16 +67,7 @@ static int dss_deprecated_object_from_pg_row(struct dss_handle *handle,
                                              int row_num);
 static void dss_object_result_free(void *void_object);
 
-/** List of configuration parameters for tape_model */
-enum pho_cfg_params_tape_model {
-    /* DSS parameters */
-    PHO_CFG_TAPE_MODEL_supported_list,
-
-    /* Delimiters, update when modifying options */
-    PHO_CFG_TAPE_MODEL_FIRST = PHO_CFG_TAPE_MODEL_supported_list,
-    PHO_CFG_TAPE_MODEL_LAST  = PHO_CFG_TAPE_MODEL_supported_list,
-};
-
+/* This config item is mutualized with lrs_device.c */
 const struct pho_config_item cfg_tape_model[] = {
     [PHO_CFG_TAPE_MODEL_supported_list] = {
         .section = "tape_model",

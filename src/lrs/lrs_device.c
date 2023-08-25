@@ -2291,6 +2291,7 @@ int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl,
 
 int lrs_dev_technology(const struct lrs_dev *dev, const char **techno)
 {
+    const char *supported_list_csv;
     size_t nb_technologies;
     char **supported_list;
     char **device_models;
@@ -2299,12 +2300,18 @@ int lrs_dev_technology(const struct lrs_dev *dev, const char **techno)
 
     ENTRY;
 
-    rc = pho_cfg_get_val_csv("tape_model", "supported_list",
-                             &supported_list, &nb_technologies);
+    supported_list_csv = PHO_CFG_GET(cfg_tape_model, PHO_CFG_TAPE_MODEL,
+                                     supported_list);
+    if (supported_list_csv != NULL)
+        rc = get_val_csv(supported_list_csv, &supported_list, &nb_technologies);
+    else
+        rc = -EINVAL;
+
     if (rc)
         LOG_RETURN(rc, "Failed to read 'supported_list' in 'tape_model'");
 
     for (i = 0; i < nb_technologies; i++) {
+        const char *device_model_csv;
         char *section_name;
         size_t nb_drives;
         size_t j;
@@ -2314,8 +2321,10 @@ int lrs_dev_technology(const struct lrs_dev *dev, const char **techno)
         if (rc == -1)
             goto free_supported_list;
 
-        rc = pho_cfg_get_val_csv(section_name, "models", &device_models,
-                                 &nb_drives);
+        rc = pho_cfg_get_val(section_name, "models", &device_model_csv);
+        if (!rc)
+            rc = get_val_csv(device_model_csv, &device_models, &nb_drives);
+
         if (rc) {
             free(section_name);
             if (rc == -ENODATA)

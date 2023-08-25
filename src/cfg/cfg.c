@@ -308,10 +308,8 @@ static size_t count_char(const char *s, char c)
     return n;
 }
 
-int pho_cfg_get_val_csv(const char *section, const char *name,
-                        char ***values, size_t *n)
+int get_val_csv(const char *csv_value, char ***values, size_t *n)
 {
-    const char *csv_value;
     char *csv_value_dup;
     size_t nb_values;
     char *saveptr;
@@ -323,10 +321,6 @@ int pho_cfg_get_val_csv(const char *section, const char *name,
 
     *n = 0;
     *values = NULL;
-
-    rc = pho_cfg_get_val(section, name, &csv_value);
-    if (rc)
-        return rc;
 
     csv_value_dup = strdup(csv_value);
     if (!csv_value)

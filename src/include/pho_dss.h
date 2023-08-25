@@ -26,6 +26,7 @@
 #define _PHO_DSS_H
 
 #include "pho_types.h"
+#include "pho_cfg.h"
 #include "pho_common.h"
 
 #include <stdint.h>
@@ -738,5 +739,21 @@ int dss_lock_clean_all(struct dss_handle *handle);
  * @return 0 if success, -errno if an error occurs
  */
 int dss_emit_log(struct dss_handle *dss, struct pho_log *log);
+
+/**
+ * List of valid configuration values for tape_model
+ *
+ * Mutualized between dss.c and lrs_device.c
+ */
+enum pho_cfg_params_tape_model {
+    /* parameters */
+    PHO_CFG_TAPE_MODEL_supported_list,
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_TAPE_MODEL_FIRST = PHO_CFG_TAPE_MODEL_supported_list,
+    PHO_CFG_TAPE_MODEL_LAST  = PHO_CFG_TAPE_MODEL_supported_list,
+};
+
+extern const struct pho_config_item cfg_tape_model[];
 
 #endif
