@@ -38,11 +38,13 @@
 #include <string.h>
 
 #include "pho_common.h"
+#include "pho_attrs.h"
 #include "pho_srl_lrs.h"
+#include "pho_layout.h"
 #include "pho_ldm.h"
-#include "admin_utils.h"
 #include "raid1.h"
 #include "io_posix_common.h"
+#include "admin_utils.h"
 
 
 /**
@@ -256,26 +258,7 @@ static int _get_info_from_xattrs(int fd, struct layout_info *lyt,
     if (!obj->user_md)
         LOG_RETURN(rc = -errno, "Could not duplicate user md");
 
-    if (!strcmp(lyt->layout_desc.mod_name, "raid1")) {
-        rc = pho_getxattr(NULL, fd, PHO_EA_OBJECT_SIZE_NAME, &buffer);
-        if (rc)
-            return rc;
-        if (!buffer)
-            LOG_RETURN(rc = -EINVAL, "raid 1 object size xattr not found");
-
-        pho_attr_set(&lyt->layout_desc.mod_attrs, "raid1.obj_size", buffer);
-        lyt->wr_size = strtol(buffer, NULL, 10);
-        free(buffer);
-
-        rc = pho_getxattr(NULL, fd, PHO_EA_EXTENT_OFFSET_NAME, &buffer);
-        if (rc)
-            return rc;
-        if (!buffer)
-            LOG_RETURN(rc = -EINVAL, "raid 1 extent offset xattr not found");
-
-        ext->offset = strtol(buffer, NULL, 10);
-        free(buffer);
-    }
+    rc = layout_get_info_from_xattrs(fd, lyt, obj, ext);
 
     return rc;
 }
@@ -836,17 +819,9 @@ int pho_reconstruct_obj(struct admin_handle *adm, struct object_info obj,
                         bool deprecated)
 {
     struct dss_filter filter;
-    ssize_t extent_sizes = 0;
-    ssize_t replica_size = 0;
     struct layout_info *lyt;
-    struct extent *extents;
-    const char *buffer;
-    int obj_size;
-    int repl_cnt;
-    int ext_cnt;
     int lyt_cnt;
     int rc = 0;
-    int i;
 
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
@@ -869,31 +844,13 @@ int pho_reconstruct_obj(struct admin_handle *adm, struct object_info obj,
         goto end;
     }
 
-    // Recover repl_count and obj_size
-    buffer = pho_attr_get(&lyt->layout_desc.mod_attrs, "repl_count");
-    repl_cnt = strtol(buffer, NULL, 10);
-    ext_cnt = lyt->ext_count;
-    extents = lyt->extents;
-
-    buffer = pho_attr_get(&lyt->layout_desc.mod_attrs, "raid1.obj_size");
-    obj_size = strtol(buffer, NULL, 10);
-
-    for (i = 0; i < ext_cnt; i++) {
-        if (replica_size == extents[i].offset)
-            replica_size += extents[i].size;
-
-        extent_sizes += extents[i].size;
-    }
-
-    if (extent_sizes == repl_cnt * obj_size)
-        obj.obj_status = PHO_OBJ_STATUS_COMPLETE;
-    else if (replica_size == obj_size)
-        obj.obj_status = PHO_OBJ_STATUS_READABLE;
-    else
-        obj.obj_status = PHO_OBJ_STATUS_INCOMPLETE;
+    rc = layout_reconstruct(lyt[0], &obj);
 
 end:
     dss_res_free(lyt, lyt_cnt);
+    if (rc)
+        return rc;
+
     if (deprecated)
         rc = dss_deprecated_object_set(&adm->dss, &obj, 1, DSS_SET_UPDATE);
     else

@@ -167,6 +167,46 @@ int layout_locate(struct dss_handle *dss, struct layout_info *layout,
     return mod->ops->locate(dss, layout, focus_host, hostname, nb_new_lock);
 }
 
+int layout_get_info_from_xattrs(int fd, struct layout_info *lyt,
+                                struct object_info *obj, struct extent *ext)
+{
+    char layout_name[NAME_MAX];
+    struct layout_module *mod;
+    int rc = 0;
+
+    rc = build_layout_name(lyt->layout_desc.mod_name, layout_name,
+                           sizeof(layout_name));
+    if (rc)
+        return rc;
+
+    rc = load_module(layout_name, sizeof(*mod), phobos_context(),
+                     (void **) &mod);
+    if (rc)
+        return rc;
+
+    return mod->ops->get_info_from_xattrs(fd, lyt, obj, ext);
+}
+
+int layout_reconstruct(struct layout_info lyt, struct object_info *obj)
+{
+    char layout_name[NAME_MAX];
+    struct layout_module *mod;
+    int rc;
+
+    rc = build_layout_name(lyt.layout_desc.mod_name, layout_name,
+                           sizeof(layout_name));
+    if (rc)
+        return rc;
+
+    /* Load new module if necessary */
+    rc = load_module(layout_name, sizeof(*mod), phobos_context(),
+                     (void **) &mod);
+    if (rc)
+        return rc;
+
+    return mod->ops->reconstruct(lyt, obj);
+}
+
 void layout_destroy(struct pho_encoder *enc)
 {
     /* Only encoders own their layout */

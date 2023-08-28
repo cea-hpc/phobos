@@ -10,4 +10,5 @@ libphobos_admin_la_LIBADD=../dss/libpho_dss.la ../cfg/libpho_cfg.la \
                           ../ldm/libpho_ldm.la \
                           ../import/libpho_import.la \
                           ../serializer/libpho_serializer.la \
-                          ../serializer/libpho_serializer_tlc.la
+                          ../serializer/libpho_serializer_tlc.la \
+                          ../layout-modules/libpho_layout_raid1.la

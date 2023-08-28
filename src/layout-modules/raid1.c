@@ -44,6 +44,7 @@
 #include "pho_srl_common.h"
 #include "pho_type_utils.h"
 #include "raid1.h"
+#include "io_posix_common.h"
 
 /* @FIXME: taken from store.c, will be needed in raid1 too */
 #define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
@@ -2123,10 +2124,83 @@ clean:
     return rc;
 }
 
+static int layout_raid1_get_info_from_xattrs(int fd, struct layout_info *lyt,
+                                             struct object_info *obj,
+                                             struct extent *ext)
+{
+    char *buffer;
+    int rc = 0;
+
+    if (!strcmp(lyt->layout_desc.mod_name, "raid1")) {
+        rc = pho_getxattr(NULL, fd, PHO_EA_OBJECT_SIZE_NAME, &buffer);
+        if (rc)
+            return rc;
+
+        if (!buffer)
+            LOG_RETURN(rc = -EINVAL, "raid 1 object size xattr not found");
+
+        pho_attr_set(&lyt->layout_desc.mod_attrs, "raid1.obj_size", buffer);
+        lyt->wr_size = strtol(buffer, NULL, 10);
+        free(buffer);
+
+        rc = pho_getxattr(NULL, fd, PHO_EA_EXTENT_OFFSET_NAME, &buffer);
+        if (rc)
+            return rc;
+
+        if (!buffer)
+            LOG_RETURN(rc = -EINVAL, "raid 1 extent offset xattr not found");
+
+        ext->offset = strtol(buffer, NULL, 10);
+        free(buffer);
+    }
+
+    return 0;
+}
+
+static int layout_raid1_reconstruct(struct layout_info lyt,
+                                    struct object_info *obj)
+{
+    ssize_t extent_sizes = 0;
+    ssize_t replica_size = 0;
+    struct extent *extents;
+    const char *buffer;
+    int obj_size;
+    int repl_cnt;
+    int ext_cnt;
+    int i;
+
+    // Recover repl_count and obj_size
+    buffer = pho_attr_get(&lyt.layout_desc.mod_attrs, "repl_count");
+    repl_cnt = strtol(buffer, NULL, 10);
+    ext_cnt = lyt.ext_count;
+    extents = lyt.extents;
+
+    buffer = pho_attr_get(&lyt.layout_desc.mod_attrs, "raid1.obj_size");
+    obj_size = strtol(buffer, NULL, 10);
+
+    for (i = 0; i < ext_cnt; i++) {
+        if (replica_size == extents[i].offset)
+            replica_size += extents[i].size;
+
+        extent_sizes += extents[i].size;
+    }
+
+    if (extent_sizes == repl_cnt * obj_size)
+        obj->obj_status = PHO_OBJ_STATUS_COMPLETE;
+    else if (replica_size == obj_size)
+        obj->obj_status = PHO_OBJ_STATUS_READABLE;
+    else
+        obj->obj_status = PHO_OBJ_STATUS_INCOMPLETE;
+
+    return 0;
+}
+
 static const struct pho_layout_module_ops LAYOUT_RAID1_OPS = {
     .encode = layout_raid1_encode,
     .decode = layout_raid1_decode,
     .locate = layout_raid1_locate,
+    .get_info_from_xattrs = layout_raid1_get_info_from_xattrs,
+    .reconstruct = layout_raid1_reconstruct,
 };
 
 /** Layout module registration entry point */

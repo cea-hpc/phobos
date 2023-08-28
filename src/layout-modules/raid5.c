@@ -63,6 +63,8 @@ static const struct pho_layout_module_ops LAYOUT_RAID5_OPS = {
     .encode = NULL,
     .decode = NULL,
     .locate = NULL,
+    .get_info_from_xattrs = NULL,
+    .reconstruct = NULL,
 };
 
 /** Layout module registration entry point */

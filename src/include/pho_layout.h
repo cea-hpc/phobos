@@ -61,6 +61,15 @@ struct pho_layout_module_ops {
     /** Retrieve one node name from which an object can be accessed */
     int (*locate)(struct dss_handle *dss, struct layout_info *layout,
                   const char *focus_host, char **hostname, int *nb_new_lock);
+
+    /** Updates the information of the layout, object and extent based on the
+     * medium's extent and the layout used.
+     */
+    int (*get_info_from_xattrs)(int fd, struct layout_info *lyt,
+                                struct object_info *obj, struct extent *ext);
+
+    /** Updates the status of an object based on its extents */
+    int (*reconstruct)(struct layout_info lyt, struct object_info *obj);
 };
 
 /**
@@ -218,6 +227,30 @@ static inline int layout_step(struct pho_encoder *enc, pho_resp_t *resp,
     CHECK_ENC_OP(enc, step);
     return enc->ops->step(enc, resp, reqs, n_reqs);
 }
+
+/**
+ * Updates the information of the layout, object and extent based on the
+ * medium's extent and the layout module.
+ *
+ * @param[in]       fd      File descriptor of the extent.
+ * @param[in/out]   lyt     The layout to update.
+ * @param[out]      obj     The object to update.
+ * @param[out]      ext     The extents to update.
+ *
+ * @return 0 on success, -errno on failure.
+ */
+int layout_get_info_from_xattrs(int fd, struct layout_info *lyt,
+                                struct object_info *obj, struct extent *ext);
+
+/**
+ * Updates the status of the object according to its detected extents
+ *
+ * @param[in]   lyt     The layout containing the extents.
+ * @param[out]  obj     The object to update.
+ *
+ * @return 0 on success, -errno on error.
+ */
+int layout_reconstruct(struct layout_info lyt, struct object_info *obj);
 
 /**
  * Destroy this encoder or decoder and all associated resources.
