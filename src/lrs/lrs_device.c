@@ -949,6 +949,7 @@ int dev_unload(struct lrs_dev *dev)
 {
     /* let the library select the target location */
     struct lib_item_addr free_slot = { .lia_type = MED_LOC_UNKNOWN };
+    struct media_info *medium_to_unlock_free = NULL;
     struct lib_handle lib_hdl;
     struct pho_log log;
     int rc2;
@@ -983,6 +984,8 @@ int dev_unload(struct lrs_dev *dev)
 
     MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_op_status = PHO_DEV_OP_ST_EMPTY;
+    medium_to_unlock_free = dev->ld_dss_media_info;
+    dev->ld_dss_media_info = NULL;
     MUTEX_UNLOCK(&dev->ld_mutex);
 
 out_close:
@@ -992,15 +995,9 @@ out_close:
 
 out:
     if (!rc) {
-        rc2 = dss_medium_release(&dev->ld_device_thread.dss,
-                                 dev->ld_dss_media_info);
-        if (rc2)
-            rc = rc ? : rc2;
-
-        MUTEX_LOCK(&dev->ld_mutex);
-        media_info_free(dev->ld_dss_media_info);
-        dev->ld_dss_media_info = NULL;
-        MUTEX_UNLOCK(&dev->ld_mutex);
+        rc = dss_medium_release(&dev->ld_device_thread.dss,
+                                medium_to_unlock_free);
+        media_info_free(medium_to_unlock_free);
     } else {
         MUTEX_LOCK(&dev->ld_mutex);
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
