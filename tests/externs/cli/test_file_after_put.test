@@ -99,9 +99,9 @@ function get_media_path
         for i in $(seq 1 $repl_count); do
             local drive_status="$($phobos drive status |
                 sed "$((2+i))q;d" | sed "s/[ ]//g")"
-            if [[ "$(echo $drive_status | cut -d'|' -f4)" == \
-            "$(echo $media_names | cut -d',' -f$repl_id)" ]]; then
-                echo $drive_status | cut -d'|' -f5
+            if [[ "$(echo $drive_status | cut -d'|' -f5)" == \
+                  "$(echo $media_names | cut -d',' -f$repl_id)" ]]; then
+                echo $drive_status | cut -d'|' -f6
                 break
             fi
         done
