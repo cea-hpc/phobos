@@ -52,13 +52,6 @@
 
 #include <cmocka.h>
 
-/* This is necessary because lrs_sched.h includes io_sched.h which includes
- * config.h which defines the macro RELEASE, but scsi/sg_io_linux.h also defines
- * RELEASE, so there is a conflict. To solve this, just undefine it before
- * including lrs_sched.h.
- */
-#undef RELEASE
-
 #include "lrs_device.h"
 #include "lrs_sched.h"
 #include "scsi_api.h"

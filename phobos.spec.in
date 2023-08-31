@@ -1,6 +1,6 @@
 Name:    @PACKAGE@
 Version: @VERSION@
-Release: @RELEASE@%{?dist}
+Release: @PHOBOS_RELEASE@%{?dist}
 Summary: Parallel Heterogeneous OBject-Oriented Storage
 
 Group:   Applications/System
