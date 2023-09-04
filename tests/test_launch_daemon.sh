@@ -48,7 +48,7 @@ function waive_daemon()
     fi
 
     kill ${!PID_VAR_NAME} &>/dev/null || \
-        echo "Daemon ${PID_VAR_NAME} was not running"
+        echo "Daemon ${!PID_VAR_NAME} was not running"
     # wait would not work here because ${!PID_VAR_NAME} is not an actual child
     # of this shell (created in invoke_daemon)
     timeout 10 tail --pid=${!PID_VAR_NAME} -f /dev/null
