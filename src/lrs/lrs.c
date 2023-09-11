@@ -273,6 +273,7 @@ static int request_kind_from_response(pho_resp_t *resp)
 
 static int convert_response_to_error(struct resp_container *respc)
 {
+    int response_kind = request_kind_from_response(respc->resp);
     int rc;
 
     pho_srl_response_free(respc->resp, false);
@@ -281,20 +282,28 @@ static int convert_response_to_error(struct resp_container *respc)
         return rc;
 
     respc->resp->error->rc = -ESHUTDOWN;
-    respc->resp->error->req_kind = request_kind_from_response(respc->resp);
+    respc->resp->error->req_kind = response_kind;
 
     return 0;
 }
 
-static int cancel_response(struct resp_container *respc)
+static inline bool cancel_read_write(struct resp_container *respc)
 {
-    pho_resp_t *resp = respc->resp;
+    if (pho_response_is_read(respc->resp) ||
+        pho_response_is_write(respc->resp)) {
+        notify_device_request_is_canceled(respc);
+        return true;
+    }
 
-    if (!pho_response_is_read(resp) && !pho_response_is_write(resp))
-        return 0;
+    return false;
+}
 
-    notify_device_request_is_canceled(respc);
-    return convert_response_to_error(respc);
+static inline int cancel_response(struct resp_container *respc)
+{
+    if (cancel_read_write(respc))
+        return convert_response_to_error(respc);
+
+    return 0;
 }
 
 static inline bool client_disconnected_error(int rc)
@@ -317,10 +326,11 @@ static int _send_message(struct pho_comm_info *comm,
     }
 
     rc = pho_srl_response_pack(respc->resp, &msg.buf);
-    if (rc) {
-        pho_error(rc, "Response cannot be packed");
-        return rc;
-    }
+    if (rc)
+        /* Do not block device's ongoing_io status if the client never receives
+         * the answer.
+         */
+        LOG_GOTO(cancel, rc, "Response cannot be packed");
 
     /* XXX: \p running could change just before the call to send.
      * Which means that new I/O responses would be sent with running = false
@@ -328,21 +338,25 @@ static int _send_message(struct pho_comm_info *comm,
     rc = pho_comm_send(&msg);
     free(msg.buf.buff);
     if (client_disconnected_error(rc)) {
-        pho_error(rc, "Failed to send %s response to client %d, not fatal",
-                  pho_srl_response_kind_str(respc->resp),
+        pho_error(rc,
+                  "Failed to send %s response to disconnected client %d, not "
+                  "fatal", pho_srl_response_kind_str(respc->resp),
                   respc->socket_id);
-        if (pho_response_is_read(respc->resp) ||
-            pho_response_is_write(respc->resp))
-            /* do not block device's ongoing_io status if the client disconnects
-             */
-            notify_device_request_is_canceled(respc);
-
         /* error not fatal for the LRS */
         rc = 0;
+        /* do not block device's ongoing_io status if the client disconnects */
+        goto cancel;
     } else if (rc) {
-        pho_error(rc, "Response cannot be sent");
+        /* Do not block device's ongoing_io status if the client never
+         * receives the answer.
+         */
+        LOG_GOTO(cancel, rc, "Response cannot be sent");
     }
 
+    return rc;
+
+cancel:
+    cancel_read_write(respc);
     return rc;
 }
 
