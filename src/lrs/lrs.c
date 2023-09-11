@@ -1156,19 +1156,31 @@ static int lrs_process(struct lrs *lrs)
     int rc = 0;
     int i;
 
+    /* check if some devices are still running */
+    for (i = 0; i < PHO_RSC_LAST; ++i) {
+        if (!lrs->sched[i])
+            continue;
+
+        if (running || sched_has_running_devices(lrs->sched[i]))
+            stopped = false;
+    }
+
     /* request reception and accept handling */
     rc = pho_comm_recv(&lrs->comm, &data, &n_data);
     if (rc) {
         for (i = 0; i < n_data; ++i)
             free(data[i].buf.buff);
         free(data);
-        LOG_RETURN(rc, "Error during request reception");
+        running = false;
+        LOG_GOTO(end, rc, "Error during request reception");
     }
 
     rc = _prepare_requests(lrs, schedulers_to_signal, n_data, data);
     free(data);
-    if (rc)
-        LOG_RETURN(rc, "Error during request enqueuing");
+    if (rc) {
+        running = false;
+        LOG_GOTO(end, rc, "Error during request enqueuing");
+    }
 
     /* response processing */
     for (i = 0; i < PHO_RSC_LAST; ++i) {
@@ -1182,9 +1194,10 @@ static int lrs_process(struct lrs *lrs)
             stopped = false;
     }
 
+end:
     rc = send_responses_from_queue(lrs);
     if (rc)
-        return rc;
+        running = false;
 
     if (!running)
         lrs->stopped = stopped;
@@ -1216,11 +1229,8 @@ int main(int argc, char **argv)
     if (rc)
         return -rc;
 
-    while (running || !lrs.stopped) {
-        rc = lrs_process(&lrs);
-        if (rc && rc != -EINTR)
-            break;
-    }
+    while (running || !lrs.stopped)
+        lrs_process(&lrs);
 
     lrs_fini(&lrs);
     return EXIT_SUCCESS;

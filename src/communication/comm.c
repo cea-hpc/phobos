@@ -645,11 +645,19 @@ static int _recv_server(struct pho_comm_info *ci, struct pho_comm_data **data,
 
     /* probing the socket poll */
     *nb_data = epoll_wait(ci->epoll_fd, ev, g_hash_table_size(ci->ev_tab), 100);
-    if (*nb_data == -1)
-        LOG_RETURN(-errno, "Socket poll probe failed");
+    rca = -errno;
     if (*nb_data == 0)
         return 0;
 
+    if (*nb_data == -1) {
+        *nb_data = 0;
+        if (rca == -EINTR)
+            return 0;
+
+        LOG_RETURN(rca, "Socket poll probe failed");
+    }
+
+    rca = 0;
     *data = malloc(*nb_data * sizeof(**data));
     if (!*data) {
         *nb_data = 0;
