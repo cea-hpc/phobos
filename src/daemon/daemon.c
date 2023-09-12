@@ -270,8 +270,20 @@ int daemon_init(struct daemon_params param)
 
 void daemon_notify_init_done(int pipefd_to_close, int *rc)
 {
-    if (write(pipefd_to_close, rc, sizeof(*rc)) != sizeof(*rc))
+    sighandler_t current_sigpipe_handler;
+
+    /* disable SIGPIPE */
+    current_sigpipe_handler = signal(SIGPIPE, SIG_IGN);
+    if (current_sigpipe_handler == SIG_ERR) {
+        *rc = -errno;
+    } else {
+        if (write(pipefd_to_close, rc, sizeof(*rc)) != sizeof(*rc))
             *rc = -errno;
+
+        current_sigpipe_handler = signal(SIGPIPE, current_sigpipe_handler);
+        if (current_sigpipe_handler == SIG_ERR)
+            *rc = -errno;
+    }
 
     close(pipefd_to_close);
 }

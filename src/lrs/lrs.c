@@ -62,6 +62,7 @@ struct lrs {
     struct dss_handle     dss;                 /*!< DSS handle of the
                                                 * communication thread
                                                 */
+    const char *lock_file;                     /*!< Daemon lock file path */
 };
 
 /* ****************************************************************************/
@@ -1034,7 +1035,6 @@ out_free:
  */
 static void lrs_fini(struct lrs *lrs)
 {
-    const char *lock_file;
     int rc = 0;
     int i;
 
@@ -1064,8 +1064,7 @@ static void lrs_fini(struct lrs *lrs)
     tsqueue_destroy(&lrs->response_queue, sched_resp_free_with_cont);
     dss_fini(&lrs->dss);
 
-    lock_file = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, lock_file);
-    _delete_lock_file(lock_file);
+    _delete_lock_file(lrs->lock_file);
 }
 
 /**
@@ -1082,16 +1081,18 @@ static void lrs_fini(struct lrs *lrs)
 static int lrs_init(struct lrs *lrs)
 {
     union pho_comm_addr sock_addr;
-    const char *lock_file;
     int rc;
 
     umask(0000);
 
-    lock_file = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, lock_file);
-    rc = _create_lock_file(lock_file);
+    lrs->lock_file = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, lock_file);
+    if (lrs->lock_file == NULL)
+        LOG_RETURN(-ENODATA, "PHO_CFG_LRS_lock_file is not defined");
+
+    rc = _create_lock_file(lrs->lock_file);
     if (rc)
         LOG_RETURN(rc, "Error while creating the daemon lock file %s",
-                   lock_file);
+                   lrs->lock_file);
 
     rc = tsqueue_init(&lrs->response_queue);
     if (rc)
@@ -1205,6 +1206,7 @@ int main(int argc, char **argv)
 {
     int write_pipe_from_child_to_father;
     struct daemon_params param;
+    bool lrs_init_done = false;
     struct lrs lrs = {};
     int rc;
 
@@ -1219,11 +1221,18 @@ int main(int argc, char **argv)
     if (!rc)
         rc = lrs_init(&lrs);
 
+    if (!rc)
+        lrs_init_done = true;
+
     if (param.is_daemon)
         daemon_notify_init_done(write_pipe_from_child_to_father, &rc);
 
-    if (rc)
+    if (rc) {
+        if (lrs_init_done)
+            lrs_fini(&lrs);
+
         return -rc;
+    }
 
     while (running || !lrs.stopped)
         lrs_process(&lrs);

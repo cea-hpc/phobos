@@ -631,6 +631,48 @@ function test_fair_share_max_reached()
     trap cleanup EXIT
 }
 
+function test_no_DAEMON_PID_FILEPATH_lock_cleaned()
+{
+    setup_tables
+
+    # Start LRS daemon without DAEMON_PID_FILEPATH
+set +e
+    $phobosd -v
+    rc=$?
+set -e
+
+    # Check that daemon starts fails returning EXIT_FAILURE == 1
+    if (( rc != 1 )); then
+        if (( rc == 0 )); then
+           pkill phobosd
+        fi
+
+        error "Daemon starts must return 1 with no DAEMON_PID_FILEPATH"
+    fi
+
+    # Wait (max 5s) for child end
+    for i in `seq 5`; do
+        if pgrep phobosd; then
+            sleep 1
+        else
+            break
+        fi
+    done
+
+    if [[ "${i}" == "5" ]]; then
+        if pkill phobosd; then
+            error "Child must fails when father has no DAEMON_PID_FILEPATH"
+        fi
+    fi
+
+    # Check lock file is cleaned
+    if [[ -f ${PHOBOS_LRS_lock_file} ]]; then
+        error "Lock file must be cleared when daemon start fails"
+    fi
+
+    drop_tables
+}
+
 trap cleanup EXIT
 
 test_invalid_lock_file
@@ -643,6 +685,7 @@ test_remove_invalid_media_locks
 test_wait_end_of_IO_before_shutdown
 test_cancel_waiting_requests_before_shutdown
 test_refuse_new_request_during_shutdown
+test_no_DAEMON_PID_FILEPATH_lock_cleaned
 
 # Tape tests are available only if /dev/changer exists, which is the entry
 # point for the tape library.
