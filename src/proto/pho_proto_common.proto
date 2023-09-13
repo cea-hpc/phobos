@@ -27,10 +27,9 @@ syntax = "proto2";
 
 /** Resource family. */
 enum PhoResourceFamily {
-    FM_DISK       = 0;    // Disk.
-    FM_TAPE       = 1;    // Tape.
-    FM_DIR        = 2;    // Directory.
-    FM_RADOS_POOL = 3;    // RADOS Pool.
+    FM_TAPE       = 0;    // Tape.
+    FM_DIR        = 1;    // Directory.
+    FM_RADOS_POOL = 2;    // RADOS Pool.
 }
 
 /** Configure operations. */

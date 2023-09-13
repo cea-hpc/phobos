@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TYPE dev_family AS ENUM ('disk', 'tape', 'dir', 'rados_pool');
+CREATE TYPE dev_family AS ENUM ('tape', 'dir', 'rados_pool');
 CREATE TYPE adm_status AS ENUM ('locked', 'unlocked', 'failed');
 CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS', 'RADOS');
 CREATE TYPE address_type AS ENUM ('PATH', 'HASH1', 'OPAQUE');
@@ -19,7 +19,7 @@ CREATE TABLE schema_info (
 );
 
 -- Insert current schema version
-INSERT INTO schema_info VALUES ('2.0');
+INSERT INTO schema_info VALUES ('1.95');
 
 CREATE TABLE device(
     family          dev_family,

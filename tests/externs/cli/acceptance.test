@@ -226,12 +226,25 @@ function put_get_test
 }
 
 # Test family based media selection
+function switch_family()
+{
+    if [[ "$1" == "dir" ]]; then
+        echo "tape"
+    else if [[ "$1" == "tape" ]]; then
+        echo "dir"
+    else if [[ "$1" == "rados_pool" ]]; then
+        echo "dir"
+    else
+        error "Unsupported family"
+    fi
+}
+
 function put_family
 {
     local id=test/hosts-fam.$$
 
     # phobos put
-    PHOBOS_STORE_default_family="disk" $valg_phobos put \
+    PHOBOS_STORE_default_family=$(switch_family "$1") $valg_phobos put \
         -f "$1" /etc/hosts "$id"
 
     # check the family is the correct one

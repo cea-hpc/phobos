@@ -55,30 +55,20 @@ values
 
 insert into device (family, model, id, host, adm_status,path)
 values
-        ('disk'::dev_family, NULL, '1',
-            'host1', 'locked'::adm_status, 'path1'),
         ('dir'::dev_family, NULL, '2',
             'host2', 'unlocked'::adm_status, 'path2'),
         ('tape'::dev_family, NULL, '3',
             'host3', 'locked'::adm_status, 'path3'),
-        ('disk'::dev_family, NULL, '4',
-            '$host', 'locked'::adm_status, 'path4');
 
 insert into media (family, model, id, adm_status, fs_type, fs_label,
                    address_type, fs_status, stats, tags)
 values
-        ('disk'::dev_family, NULL, '1', 'locked'::adm_status,
-            'POSIX'::fs_type, 'label1', 'PATH'::address_type,
-            'full'::fs_status, '{}', '{}'),
         ('dir'::dev_family, NULL, '2', 'unlocked'::adm_status,
             'POSIX'::fs_type, 'label2', 'PATH'::address_type,
             'empty'::fs_status, '{}', '{}'),
         ('tape'::dev_family, NULL, '3', 'locked'::adm_status,
             'POSIX'::fs_type, 'label3', 'PATH'::address_type,
             'blank'::fs_status, '{}', '{}'),
-        ('disk'::dev_family, NULL, '4', 'locked'::adm_status,
-            'POSIX'::fs_type, 'label4', 'PATH'::address_type,
-            'full'::fs_status, '{}', '{}');
 EOF
     waive_lrs
 }

@@ -282,16 +282,14 @@ struct pho_lock {
 enum rsc_family {
     PHO_RSC_NONE        = -2,
     PHO_RSC_INVAL       = -1,
-    PHO_RSC_DISK        =  0, /**< Not supported yet */
-    PHO_RSC_TAPE        =  1, /**< Tape, drive tape or tape library */
-    PHO_RSC_DIR         =  2, /**< Directory */
-    PHO_RSC_RADOS_POOL  =  3, /**< Ceph RADOS pools*/
+    PHO_RSC_TAPE        =  0, /**< Tape, drive tape or tape library */
+    PHO_RSC_DIR         =  1, /**< Directory */
+    PHO_RSC_RADOS_POOL  =  2, /**< Ceph RADOS pools*/
     PHO_RSC_LAST,
     PHO_RSC_UNSPEC      = PHO_RSC_LAST,
 };
 
 static const char * const rsc_family_names[] = {
-    [PHO_RSC_DISK] = "disk",
     [PHO_RSC_TAPE] = "tape",
     [PHO_RSC_DIR]  = "dir",
     [PHO_RSC_RADOS_POOL] = "rados_pool",

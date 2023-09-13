@@ -25,14 +25,11 @@ static void gcttv_valid_multiple_tokens(void **state)
 
     (void)state;
 
-    rc = setenv("PHOBOS_LRS_sync_time_ms", "dir=0,disk=1,tape=1000003", 1);
+    rc = setenv("PHOBOS_LRS_sync_time_ms", "dir=0,tape=1000003", 1);
     assert_int_equal(rc, -rc);
 
     rc = get_cfg_sync_time_ms_value(PHO_RSC_DIR, &res);
     ASSERT_VALID_GET_TIME(rc, res, 0, 0);
-
-    rc = get_cfg_sync_time_ms_value(PHO_RSC_DISK, &res);
-    ASSERT_VALID_GET_TIME(rc, res, 0, 1000000);
 
     rc = get_cfg_sync_time_ms_value(PHO_RSC_TAPE, &res);
     ASSERT_VALID_GET_TIME(rc, res, 1000, 3000000);
@@ -79,13 +76,10 @@ static void gcttv_invalid_strings(void **state)
 
     (void)state;
 
-    rc = setenv("PHOBOS_LRS_sync_time_ms", "dir=60p,disk=inval,tape=", 1);
+    rc = setenv("PHOBOS_LRS_sync_time_ms", "dir=60p,tape=", 1);
     assert_int_equal(rc, -rc);
 
     rc = get_cfg_sync_time_ms_value(PHO_RSC_DIR, &res);
-    assert_int_equal(rc, -EINVAL);
-
-    rc = get_cfg_sync_time_ms_value(PHO_RSC_DISK, &res);
     assert_int_equal(rc, -EINVAL);
 
     rc = get_cfg_sync_time_ms_value(PHO_RSC_TAPE, &res);
@@ -174,13 +168,10 @@ static void gcntv_invalid_strings(void **state)
 
     (void)state;
 
-    rc = setenv("PHOBOS_LRS_sync_nb_req", "dir=60p,disk=inval,tape=", 1);
+    rc = setenv("PHOBOS_LRS_sync_nb_req", "dir=60p,tape=", 1);
     assert_int_equal(rc, -rc);
 
     rc = get_cfg_sync_nb_req_value(PHO_RSC_DIR, &res);
-    assert_int_equal(rc, -EINVAL);
-
-    rc = get_cfg_sync_nb_req_value(PHO_RSC_DISK, &res);
     assert_int_equal(rc, -EINVAL);
 
     rc = get_cfg_sync_nb_req_value(PHO_RSC_TAPE, &res);
@@ -195,13 +186,10 @@ static void gcntv_invalid_numbers(void **state)
     (void)state;
 
     rc = setenv("PHOBOS_LRS_sync_nb_req",
-                "dir=-1,disk=0,tape=10000000000", 1);
+                "dir=-1,tape=10000000000", 1);
     assert_int_equal(rc, -rc);
 
     rc = get_cfg_sync_nb_req_value(PHO_RSC_DIR, &res);
-    assert_int_equal(rc, -ERANGE);
-
-    rc = get_cfg_sync_nb_req_value(PHO_RSC_DISK, &res);
     assert_int_equal(rc, -ERANGE);
 
     rc = get_cfg_sync_nb_req_value(PHO_RSC_TAPE, &res);
@@ -272,13 +260,10 @@ static void gcwtv_invalid_strings(void **state)
 
     (void)state;
 
-    rc = setenv("PHOBOS_LRS_sync_wsize_kb", "dir=60p,disk=inval,tape=", 1);
+    rc = setenv("PHOBOS_LRS_sync_wsize_kb", "dir=60p,tape=", 1);
     assert_int_equal(rc, -rc);
 
     rc = get_cfg_sync_wsize_value(PHO_RSC_DIR, &res);
-    assert_int_equal(rc, -EINVAL);
-
-    rc = get_cfg_sync_wsize_value(PHO_RSC_DISK, &res);
     assert_int_equal(rc, -EINVAL);
 
     rc = get_cfg_sync_wsize_value(PHO_RSC_TAPE, &res);
@@ -293,13 +278,10 @@ static void gcwtv_invalid_numbers(void **state)
     (void)state;
 
     rc = setenv("PHOBOS_LRS_sync_wsize_kb",
-                "dir=-1,disk=0,tape=20000000000000000", 1);
+                "dir=-1,tape=20000000000000000", 1);
     assert_int_equal(rc, -rc);
 
     rc = get_cfg_sync_wsize_value(PHO_RSC_DIR, &res);
-    assert_int_equal(rc, -ERANGE);
-
-    rc = get_cfg_sync_wsize_value(PHO_RSC_DISK, &res);
     assert_int_equal(rc, -ERANGE);
 
     rc = get_cfg_sync_wsize_value(PHO_RSC_TAPE, &res);

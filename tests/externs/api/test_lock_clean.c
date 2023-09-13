@@ -135,11 +135,6 @@ static void lc_test_family_param(void **state)
                                   PHO_RSC_DIR, NULL, 0);
     assert_int_equal(rc, -rc);
 
-    rc = phobos_admin_clean_locks(adm, false, false,
-                                  DSS_MEDIA_UPDATE_LOCK,
-                                  PHO_RSC_DISK, NULL, 0);
-    assert_int_equal(rc, -rc);
-
     rc = phobos_admin_clean_locks(adm, false, false, DSS_DEVICE,
                                   PHO_RSC_TAPE, NULL, 0);
     assert_int_equal(rc, -rc);

@@ -344,7 +344,7 @@ EOF
 
 TEST_CLEANUP=cleanup
 
-# test locate on disk
+# test locate on dir
 TESTS=("dir_setup; \
         test_medium_locate dir; \
         test_locate_cli dir; \

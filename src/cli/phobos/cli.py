@@ -1932,9 +1932,9 @@ class CleanOptHandler(BaseOptHandler):
                                      "object", "media_update"])
         parser.add_argument('-f', '--family',
                             help='Family of locked ressources to clean, '
-                                 'between [disk, dir, tape]; object type '
+                                 'between [dir, tape]; object type '
                                  'is not supported with this option',
-                            choices=["dir", "tape", "disk"])
+                            choices=["dir", "tape"])
         parser.add_argument('-i', '--ids', nargs='+', help='lock id(s)')
 
 class LocksOptHandler(BaseOptHandler):

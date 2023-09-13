@@ -54,7 +54,7 @@ class DSSClientTest(unittest.TestCase):
     def test_list_devices_by_family(self):
         """List devices family by family."""
         with Client() as client:
-            for fam in ('tape', 'disk', 'dir'):
+            for fam in ('tape', 'dir'):
                 for dev in client.devices.get(family=fam):
                     self.assertEqual(rsc_family2str(dev.family), fam)
 

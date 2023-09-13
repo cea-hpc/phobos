@@ -983,10 +983,6 @@ static int _load_schedulers(struct lrs *lrs)
         int family = str2rsc_family(item);
 
         switch (family) {
-        case PHO_RSC_DISK:
-            LOG_GOTO(out_free, rc = -ENOTSUP,
-                     "The family '%s' is not supported yet", item);
-            break;
         case PHO_RSC_RADOS_POOL:
         case PHO_RSC_TAPE:
         case PHO_RSC_DIR:

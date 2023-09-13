@@ -30,7 +30,7 @@ import psycopg2
 
 from phobos.core import cfg
 
-ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92", "1.93", "2.0"]
+ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92", "1.93", "1.95"]
 CURRENT_SCHEMA_VERSION = ORDERED_SCHEMAS[-1]
 AVAIL_SCHEMAS = set(ORDERED_SCHEMAS)
 
@@ -55,12 +55,12 @@ class Migrator:
 
         # { source_version: (target_version, migration_function) }
         self.convert_funcs = {
-            "0": ("2.0", lambda: self.create_schema("2.0")),
+            "0": ("1.95", lambda: self.create_schema("1.95")),
             "1.1": ("1.2", self.convert_1_to_2),
             "1.2": ("1.91", self.convert_2_to_3),
             "1.91": ("1.92", self.convert_3_to_4),
             "1.92": ("1.93", self.convert_4_to_5),
-            "1.93": ("2.0", self.convert_5_to_6),
+            "1.93": ("1.95", self.convert_1_93_to_1_95),
         }
 
         self.reachable_versions = set(
@@ -282,8 +282,8 @@ class Migrator:
         with self.connect():
             self.convert_schema_4_to_5()
 
-    def convert_schema_5_to_6(self):
-        """DB schema changes : create logs table"""
+    def convert_schema_1_93_to_1_95(self):
+        """DB schema changes : create logs table, remove disk from dev_family"""
         cur = self.conn.cursor()
         cur.execute("""
             -- create enum operation_type
@@ -306,16 +306,35 @@ class Migrator:
                 PRIMARY KEY (uuid)
             );
 
+            -- new dev_family type without the 'disk' value
+            ALTER TYPE dev_family RENAME TO old_dev_family;
+            CREATE TYPE dev_family AS ENUM ('tape', 'dir', 'rados_pool');
+
+            -- use new type in device table
+            ALTER TABLE device ALTER COLUMN family SET DATA TYPE dev_family
+                USING family::text::dev_family;
+
+            -- use new type in media table
+            ALTER TABLE media ALTER COLUMN family SET DATA TYPE dev_family
+                USING family::text::dev_family;
+
+            -- use new type in logs table
+            ALTER TABLE logs ALTER COLUMN family SET DATA TYPE dev_family
+                USING family::text::dev_family;
+
+            -- delete old_dev_family type
+            DROP TYPE old_dev_family;
+
             -- update current schema version
-            UPDATE schema_info SET version = '2.0';
+            UPDATE schema_info SET version = '1.95';
         """)
         self.conn.commit()
         cur.close()
 
-    def convert_5_to_6(self):
-        """Convert DB from model 5 (phobos v1.93) to 6 (phobos v2.0)"""
+    def convert_1_93_to_1_95(self):
+        """Convert DB from v1.93 to v1.95"""
         with self.connect():
-            self.convert_schema_5_to_6()
+            self.convert_schema_1_93_to_1_95()
 
     def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""

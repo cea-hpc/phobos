@@ -218,7 +218,6 @@ PyMODINIT_FUNC PyInit_const(void)
     /* enum rsc_family */
     PyModule_AddIntMacro(mod, PHO_RSC_NONE);
     PyModule_AddIntMacro(mod, PHO_RSC_INVAL);
-    PyModule_AddIntMacro(mod, PHO_RSC_DISK);
     PyModule_AddIntMacro(mod, PHO_RSC_TAPE);
     PyModule_AddIntMacro(mod, PHO_RSC_DIR);
     PyModule_AddIntMacro(mod, PHO_RSC_RADOS_POOL);

@@ -1,7 +1,9 @@
 # CHANGELOG UPDATES
 
 ## Ongoing
-
+* WARNING: the db schema moves from 1.93 to 1.95 and a migration is needed.
+* Unused 'disk' value is removed from media and device family.
+* Add SCSI logs.
 * TLC, Tape Library Controller, server is introduced to centralize all tape
   library commands
 * compute XXH128 extent checksum in raid1 layout during put
