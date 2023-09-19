@@ -810,6 +810,14 @@ class PhoLogRec(Structure):
         # pylint: disable=attribute-defined-outside-init
         self._plr_msg = val.encode('utf-8')
 
+
+class LogFilter(Structure):
+    """Logs filter structure description."""
+    _fields_ = [
+        ('device', Id),
+    ]
+
+
 def pho_rc_check(rc, func, args):
     """Helper to be set as errcheck for phobos functions returning rc"""
     if rc:

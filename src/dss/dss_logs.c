@@ -127,3 +127,44 @@ void dss_logs_result_free(void *item)
 
     destroy_json(log->message);
 }
+
+int create_logs_filter(struct pho_log_filter *log_filter,
+                       struct dss_filter **dss_log_filter)
+{
+    int remaining_criteria = 0;
+    GString *filter_str;
+    int rc;
+
+    if (log_filter == NULL) {
+        *dss_log_filter = NULL;
+        return 0;
+    }
+
+    /* Check if multiple conditions are demanded */
+    if (log_filter->device.family != PHO_RSC_NONE)
+        remaining_criteria++;
+
+    if (remaining_criteria == 0) {
+        *dss_log_filter = NULL;
+        return 0;
+    }
+
+    filter_str = g_string_new(NULL);
+    g_string_append_printf(filter_str, "{\"$AND\": [");
+
+    if (log_filter->device.family != PHO_RSC_NONE) {
+        remaining_criteria--;
+        g_string_append_printf(filter_str,
+                               "{\"DSS::LOG::family\": \"%s\"},"
+                               "{\"DSS::LOG::device\": \"%s\"}%s",
+                               rsc_family2str(log_filter->device.family),
+                               log_filter->device.name,
+                               remaining_criteria ? "," : "");
+    }
+
+    g_string_append_printf(filter_str, "]}");
+    rc = dss_filter_build(*dss_log_filter, "%s", filter_str->str);
+    g_string_free(filter_str, true);
+    return rc;
+}
+

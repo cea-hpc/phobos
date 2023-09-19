@@ -46,14 +46,16 @@ from ClusterShell.NodeSet import NodeSet
 
 from phobos.core.admin import Client as AdminClient
 import phobos.core.cfg as cfg
+from ctypes import byref
 from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
                                ADM_STATUS, TAGS, PUT_ACCESS, GET_ACCESS,
-                               DELETE_ACCESS, PHO_RSC_TAPE, fs_type2str)
+                               DELETE_ACCESS, PHO_RSC_TAPE, PHO_RSC_NONE,
+                               fs_type2str)
 from phobos.core.dss import Client as DSSClient
 from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
                              MediaInfo, ObjectInfo, ResourceFamily,
-                             CLIManagedResourceMixin, FSType)
+                             CLIManagedResourceMixin, FSType, Id, LogFilter)
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
 from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
@@ -1210,6 +1212,8 @@ class LogsDumpOptHandler(BaseOptHandler):
     @classmethod
     def add_options(cls, parser):
         super(LogsDumpOptHandler, cls).add_options(parser)
+        parser.add_argument('-D', '--drive',
+                            help='drive ID of the logs to dump')
 
 
 class LogsClearOptHandler(BaseOptHandler):
@@ -1241,9 +1245,14 @@ class LogsOptHandler(BaseOptHandler):
 
     def exec_dump(self):
         """Dump logs to stdout"""
+        device = self.params.get('drive')
+
+        device_id = (Id(PHO_RSC_TAPE, name=device) if device
+                     else Id(PHO_RSC_NONE, name=""))
+        log_filter = byref(LogFilter(device_id)) if device else None
         try:
             with AdminClient(lrs_required=False) as adm:
-                adm.dump_logs(sys.stdout.fileno())
+                adm.dump_logs(sys.stdout.fileno(), log_filter)
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

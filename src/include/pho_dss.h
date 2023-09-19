@@ -177,6 +177,9 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::DEV::model", "model"},
     {"DSS::DEV::path", "path"},
     {"DSS::DEV::lock", "lock"},
+    /* Logs related fields */
+    {"DSS::LOG::family", "family"},
+    {"DSS::LOG::device", "device"},
     {NULL, NULL}
 };
 
@@ -739,6 +742,18 @@ int dss_lock_clean_all(struct dss_handle *handle);
  * @return 0 if success, -errno if an error occurs
  */
 int dss_emit_log(struct dss_handle *dss, struct pho_log *log);
+
+/**
+ * Create a valid dss_filter based on the criteria given in \p log_filter.
+ *
+ * @param[in]   log_filter      Criteria which will be transformed into a
+ *                              dss_filter
+ * @param[out]  dss_log_filter  Filter corresponding to the given criteria
+ *
+ * @return 0 on success, -errno on failure
+ */
+int create_logs_filter(struct pho_log_filter *log_filter,
+                       struct dss_filter **dss_log_filter);
 
 /**
  * List of valid configuration values for tape_model

@@ -165,6 +165,9 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['put', '--lyt-params', 'a=b,c=d', 'src',
                                   'oid'])
         self.check_cmdline_valid(['logs', 'dump'])
+        self.check_cmdline_valid(['logs', 'dump', '--drive', '42'])
+        self.check_cmdline_valid(['logs', 'dump', '-D', '42'])
+        self.check_cmdline_valid(['logs', 'clear'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['get', '--version', 'nan', 'objid', 'file'],
@@ -185,7 +188,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['tape', 'locate', 'oid1', 'oid2'], code=2)
         self.check_cmdline_exit(['drive', 'delete'], code=2)
         self.check_cmdline_exit(['logs'], code=2)
-        self.check_cmdline_exit(['logs', 'dump', '42'], code=2)
+        self.check_cmdline_exit(['logs', 'dump', '42', '43'], code=2)
+        self.check_cmdline_exit(['logs', 'clear', '42'], code=2)
         self.check_cmdline_exit(['ping'], code=2)
         self.check_cmdline_exit(['ping', 'phobosd', 'tlc'], code=2)
         self.check_cmdline_exit(['ping', 'bad_target'], code=2)

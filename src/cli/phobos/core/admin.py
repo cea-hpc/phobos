@@ -37,7 +37,7 @@ from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-n
 from phobos.core.glue import admin_device_status, jansson_dumps  # pylint: disable=no-name-in-module
 from phobos.core.dss import DSSHandle
 from phobos.core.ffi import (CommInfo, ExtentInfo, LayoutInfo, LIBPHOBOS_ADMIN,
-                             Id)
+                             Id, LogFilter)
 
 def string_list2c_array(l, getter):
     c_string_list = (c_char_p * len(l))()
@@ -316,10 +316,10 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc, "Failed to clean lock(s)")
 
-    def dump_logs(self, fd):
+    def dump_logs(self, fd, log_filter):
         """Dump all persistent logs to the given file"""
         rc = LIBPHOBOS_ADMIN.phobos_admin_dump_logs(byref(self.handle), fd,
-                                                    None)
+                                                    log_filter)
         if rc:
             raise EnvironmentError(rc, "Failed to dump logs")
 

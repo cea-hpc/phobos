@@ -74,7 +74,7 @@ function check_logs
                  grep "$cause")
 
     local logs_lines=$(echo "$logs" | wc -l)
-    if (( logs_lines != 1 )); then
+    if [ -z "$logs" ] || (( logs_lines != 1 )); then
         error "A '$cause' log concerning '$drive_name' and '$tape_name'" \
               "should have been recorded"
     fi
@@ -100,21 +100,13 @@ function test_device_load
     fi
 
     local logs_lines=$(echo "$logs" | wc -l)
-    if (( logs_lines != 1 )); then
+    if [ -z "$logs" ] || (( logs_lines != 1 )); then
         error "Only one log should have been recorded"
     fi
 
     lto6_drive=$($phobos drive list -o name "$lto6_drive")
-    local logs=$(echo "$logs" | grep "${lto6_drive}" | grep "${lto6_tape}" |
-                 grep "device_load")
 
-    local logs_lines=$(echo "$logs" | wc -l)
-    if (( logs_lines != 1 )); then
-        error "A 'device_load' log concerning '$lto6_drive' and '$lto6_tape'" \
-              "should have been recorded"
-    fi
-
-    check_logs "$logs" "$lto6_drive" "$lto6_tape" "device_load"
+    check_logs "$logs" "$lto6_drive" "$lto6_tape" "Device load"
 
     clear_logs
 }
@@ -147,17 +139,54 @@ function test_device_unload
     fi
 
     local logs_lines=$(echo "$logs" | wc -l)
-    if (( logs_lines != 2 )); then
+    if [ -z "$logs" ] || (( logs_lines != 2 )); then
         error "Two logs should have been recorded"
     fi
 
     lto6_drive=$($phobos drive list -o name "$lto6_drive")
 
-    check_logs "$logs" "$lto6_drive" "$first_tape" "device_unload"
-    check_logs "$logs" "$lto6_drive" "$second_tape" "device_load"
+    check_logs "$logs" "$lto6_drive" "$first_tape" "Device unload"
+    check_logs "$logs" "$lto6_drive" "$second_tape" "Device load"
 
     clear_logs
 }
 
+function test_device_filter
+{
+    local lto6_tapes=($(get_tapes L6 2 | nodeset -e))
+    local lto6_drives=($(get_lto_drives 6 2 | nodeset -e))
+
+    $phobos drive add --unlock ${lto6_drives[0]} ${lto6_drives[1]} ||
+        error "Drives $lto6_drives should have been added"
+
+    $phobos tape add -t lto6 ${lto6_tapes[0]} ${lto6_tapes[1]} ||
+        error "Tapes $lto6_tapes should have been added"
+
+    $valg_phobos tape format --unlock ${lto6_tapes[0]} ${lto6_tapes[1]} ||
+        error "Tapes $lto6_tapes should have been formated"
+
+    local logs=$($valg_phobos logs dump)
+    if [[ $? != 0 ]]; then
+        error "Log dumping failed with '$?'"
+    fi
+
+    local logs_lines=$(echo "$logs" | wc -l)
+    if [ -z "$logs" ] || (( logs_lines != 2 )); then
+        error "Two logs should have been recorded"
+    fi
+
+    lto6_drive=$($phobos drive list -o name "${lto6_drives[0]}")
+    local logs=$($valg_phobos logs dump --drive $lto6_drive)
+    if [[ $? != 0 ]]; then
+        error "Log dumping failed with '$?'"
+    fi
+
+    local logs_lines=$(echo "$logs" | grep "$lto6_drive" | wc -l)
+    if [ -z "$logs" ] || (( logs_lines != 1 )); then
+        error "One log should have been recorded for drive $lto6_drive"
+    fi
+}
+
 TESTS=("setup; test_device_load; cleanup"
-       "setup; test_device_unload; cleanup")
+       "setup; test_device_unload; cleanup"
+       "setup; test_device_filter; cleanup")

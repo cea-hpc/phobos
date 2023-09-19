@@ -548,4 +548,11 @@ struct tsqueue {
     pthread_mutex_t     mutex;          /**< Mutex to protect the queue */
 };
 
+/**
+ * Filter structure for logs dumping and clearing.
+ */
+struct pho_log_filter {
+    struct pho_id device;
+};
+
 #endif

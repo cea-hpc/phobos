@@ -1534,16 +1534,25 @@ int phobos_admin_dump_logs(struct admin_handle *adm, int fd,
                            struct pho_log_filter *log_filter)
 {
     char time_buf[PHO_TIMEVAL_MAX_LEN];
-    FILE *fp = fdopen(fd, "w");
+    struct dss_filter dss_log_filter;
+    struct dss_filter *filter_ptr;
     struct pho_log *logs;
     int n_logs;
     int dup_fd;
+    FILE *fp;
     int rc;
     int i;
 
+    filter_ptr = &dss_log_filter;
+
+    rc = create_logs_filter(log_filter, &filter_ptr);
+    if (rc)
+        LOG_RETURN(rc, "Failed to create logs filter");
+
     dup_fd = dup(fd);
     if (dup_fd == -1)
-        LOG_RETURN(rc = -errno, "Failed to duplicate file descriptor");
+        LOG_GOTO(out_filter, rc = -errno,
+                 "Failed to duplicate file descriptor");
 
     /* fdopen will keep the offset of the file descriptor used */
     fp = fdopen(dup_fd, "w");
@@ -1553,7 +1562,7 @@ int phobos_admin_dump_logs(struct admin_handle *adm, int fd,
         LOG_RETURN(rc, "Cannot open file descriptor as FILE*");
     }
 
-    rc = dss_logs_get(&adm->dss, NULL, &logs, &n_logs);
+    rc = dss_logs_get(&adm->dss, filter_ptr, &logs, &n_logs);
     if (rc)
         LOG_GOTO(out_close, rc, "Cannot fetch logs from the DSS");
 
@@ -1580,6 +1589,9 @@ out_close:
      * file descriptor.
      */
     fclose(fp);
+
+out_filter:
+    dss_filter_free(filter_ptr);
 
     return rc;
 }

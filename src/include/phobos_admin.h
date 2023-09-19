@@ -395,7 +395,6 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
  *
  * @return 0 if success, -errno if an error occurs
  */
-struct pho_log_filter; // Will be defined in another patch
 int phobos_admin_dump_logs(struct admin_handle *adm, int fd,
                            struct pho_log_filter *log_filter);
 
