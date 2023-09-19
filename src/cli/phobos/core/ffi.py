@@ -815,6 +815,7 @@ class LogFilter(Structure):
     """Logs filter structure description."""
     _fields_ = [
         ('device', Id),
+        ('medium', Id),
     ]
 
 

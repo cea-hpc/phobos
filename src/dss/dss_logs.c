@@ -143,6 +143,8 @@ int create_logs_filter(struct pho_log_filter *log_filter,
     /* Check if multiple conditions are demanded */
     if (log_filter->device.family != PHO_RSC_NONE)
         remaining_criteria++;
+    if (log_filter->medium.family != PHO_RSC_NONE)
+        remaining_criteria++;
 
     if (remaining_criteria == 0) {
         *dss_log_filter = NULL;
@@ -152,13 +154,30 @@ int create_logs_filter(struct pho_log_filter *log_filter,
     filter_str = g_string_new(NULL);
     g_string_append_printf(filter_str, "{\"$AND\": [");
 
+    if (log_filter->device.family != PHO_RSC_NONE ||
+        log_filter->medium.family != PHO_RSC_NONE) {
+        const char *family = log_filter->device.family != PHO_RSC_NONE ?
+                             rsc_family2str(log_filter->device.family) :
+                             rsc_family2str(log_filter->medium.family);
+
+        g_string_append_printf(filter_str,
+                               "{\"DSS::LOG::family\": \"%s\"},",
+                               family);
+    }
+
     if (log_filter->device.family != PHO_RSC_NONE) {
         remaining_criteria--;
         g_string_append_printf(filter_str,
-                               "{\"DSS::LOG::family\": \"%s\"},"
                                "{\"DSS::LOG::device\": \"%s\"}%s",
-                               rsc_family2str(log_filter->device.family),
                                log_filter->device.name,
+                               remaining_criteria ? "," : "");
+    }
+
+    if (log_filter->medium.family != PHO_RSC_NONE) {
+        remaining_criteria--;
+        g_string_append_printf(filter_str,
+                               "{\"DSS::LOG::medium\": \"%s\"}%s",
+                               log_filter->medium.name,
                                remaining_criteria ? "," : "");
     }
 
@@ -167,4 +186,3 @@ int create_logs_filter(struct pho_log_filter *log_filter,
     g_string_free(filter_str, true);
     return rc;
 }
-

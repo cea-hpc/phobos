@@ -180,6 +180,7 @@ static struct dss_field_def dss_fields_names[] = {
     /* Logs related fields */
     {"DSS::LOG::family", "family"},
     {"DSS::LOG::device", "device"},
+    {"DSS::LOG::medium", "medium"},
     {NULL, NULL}
 };
 

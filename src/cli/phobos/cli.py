@@ -1214,6 +1214,8 @@ class LogsDumpOptHandler(BaseOptHandler):
         super(LogsDumpOptHandler, cls).add_options(parser)
         parser.add_argument('-D', '--drive',
                             help='drive ID of the logs to dump')
+        parser.add_argument('-T', '--tape',
+                            help='tape ID of the logs to dump')
 
 
 class LogsClearOptHandler(BaseOptHandler):
@@ -1226,6 +1228,15 @@ class LogsClearOptHandler(BaseOptHandler):
     @classmethod
     def add_options(cls, parser):
         super(LogsClearOptHandler, cls).add_options(parser)
+
+def create_log_filter(device, medium):
+    """Create a log filter structure with the given parameters."""
+    device_id = (Id(PHO_RSC_TAPE, name=device) if device
+                 else Id(PHO_RSC_NONE, name=""))
+    medium_id = (Id(PHO_RSC_TAPE, name=medium) if medium
+                 else Id(PHO_RSC_NONE, name=""))
+    return (byref(LogFilter(device_id, medium_id))
+            if device or medium else None)
 
 
 class LogsOptHandler(BaseOptHandler):
@@ -1246,10 +1257,9 @@ class LogsOptHandler(BaseOptHandler):
     def exec_dump(self):
         """Dump logs to stdout"""
         device = self.params.get('drive')
+        medium = self.params.get('tape')
 
-        device_id = (Id(PHO_RSC_TAPE, name=device) if device
-                     else Id(PHO_RSC_NONE, name=""))
-        log_filter = byref(LogFilter(device_id)) if device else None
+        log_filter = create_log_filter(device, medium)
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.dump_logs(sys.stdout.fileno(), log_filter)

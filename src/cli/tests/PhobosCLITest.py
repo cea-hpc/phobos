@@ -167,6 +167,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['logs', 'dump'])
         self.check_cmdline_valid(['logs', 'dump', '--drive', '42'])
         self.check_cmdline_valid(['logs', 'dump', '-D', '42'])
+        self.check_cmdline_valid(['logs', 'dump', '--tape', '42'])
+        self.check_cmdline_valid(['logs', 'dump', '-T', '42'])
         self.check_cmdline_valid(['logs', 'clear'])
 
         # Test invalid object and invalid verb

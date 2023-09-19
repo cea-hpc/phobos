@@ -44,7 +44,6 @@ def string_list2c_array(l, getter):
     c_string_list[:] = [getter(e).encode('utf-8') for e in l]
     return c_string_list
 
-
 class AdminHandle(Structure): # pylint: disable=too-few-public-methods
     """Admin handler"""
     _fields_ = [
