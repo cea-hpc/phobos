@@ -147,6 +147,8 @@ int create_logs_filter(struct pho_log_filter *log_filter,
         remaining_criteria++;
     if (log_filter->error_number != NULL)
         remaining_criteria++;
+    if (log_filter->cause != -1)
+        remaining_criteria++;
 
     if (remaining_criteria == 0) {
         *dss_log_filter = NULL;
@@ -188,6 +190,14 @@ int create_logs_filter(struct pho_log_filter *log_filter,
         g_string_append_printf(filter_str,
                                "{\"DSS::LOG::errno\": \"%d\"}%s",
                                *log_filter->error_number,
+                               remaining_criteria ? "," : "");
+    }
+
+    if (log_filter->cause != -1) {
+        remaining_criteria--;
+        g_string_append_printf(filter_str,
+                               "{\"DSS::LOG::cause\": \"%s\"}%s",
+                               operation_type2str(log_filter->cause),
                                remaining_criteria ? "," : "");
     }
 

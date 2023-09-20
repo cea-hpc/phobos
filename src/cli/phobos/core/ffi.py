@@ -817,6 +817,7 @@ class LogFilter(Structure):
         ('device', Id),
         ('medium', Id),
         ('errno', POINTER(c_int)),
+        ('cause', c_int),
     ]
 
 

@@ -182,6 +182,7 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::LOG::device", "device"},
     {"DSS::LOG::medium", "medium"},
     {"DSS::LOG::errno", "errno"},
+    {"DSS::LOG::cause", "cause"},
     {NULL, NULL}
 };
 

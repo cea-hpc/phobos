@@ -252,6 +252,16 @@ static inline void destroy_json(json_t *json)
 }
 
 /**
+ * Filter structure for logs dumping and clearing.
+ */
+struct pho_log_filter {
+    struct pho_id device;
+    struct pho_id medium;
+    int *error_number;
+    enum operation_type cause;
+};
+
+/**
  * Lighten the code by allowing to set rc and goto a label or return
  * in a single line of code.
  */

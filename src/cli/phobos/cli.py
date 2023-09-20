@@ -51,7 +51,8 @@ from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=n
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
                                ADM_STATUS, TAGS, PUT_ACCESS, GET_ACCESS,
                                DELETE_ACCESS, PHO_RSC_TAPE, PHO_RSC_NONE,
-                               fs_type2str)
+                               PHO_OPERATION_INVALID, fs_type2str,
+                               str2operation_type)
 from phobos.core.dss import Client as DSSClient
 from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
                              MediaInfo, ObjectInfo, ResourceFamily,
@@ -1218,6 +1219,11 @@ class LogsDumpOptHandler(BaseOptHandler):
                             help='tape ID of the logs to dump')
         parser.add_argument('-e', '--errno', type=int,
                             help='error number of the logs to dump')
+        parser.add_argument('-c', '--cause',
+                            help='cause of the logs to dump',
+                            choices=["library_scan", "library_open",
+                                     "device_lookup", "medium_lookup",
+                                     "device_load", "device_unload"])
 
 
 class LogsClearOptHandler(BaseOptHandler):
@@ -1231,16 +1237,18 @@ class LogsClearOptHandler(BaseOptHandler):
     def add_options(cls, parser):
         super(LogsClearOptHandler, cls).add_options(parser)
 
-def create_log_filter(device, medium, errno):
+def create_log_filter(device, medium, errno, cause):
     """Create a log filter structure with the given parameters."""
     device_id = (Id(PHO_RSC_TAPE, name=device) if device
                  else Id(PHO_RSC_NONE, name=""))
     medium_id = (Id(PHO_RSC_TAPE, name=medium) if medium
                  else Id(PHO_RSC_NONE, name=""))
     c_errno = (pointer(c_int(int(errno))) if errno else None)
+    c_cause = (c_int(str2operation_type(cause)) if cause else
+               c_int(PHO_OPERATION_INVALID))
 
-    return (byref(LogFilter(device_id, medium_id, c_errno))
-            if device or medium or errno else None)
+    return (byref(LogFilter(device_id, medium_id, c_errno, c_cause))
+            if device or medium or errno or cause else None)
 
 
 class LogsOptHandler(BaseOptHandler):
@@ -1263,8 +1271,9 @@ class LogsOptHandler(BaseOptHandler):
         device = self.params.get('drive')
         medium = self.params.get('tape')
         errno = self.params.get('errno')
+        cause = self.params.get('cause')
 
-        log_filter = create_log_filter(device, medium, errno)
+        log_filter = create_log_filter(device, medium, errno, cause)
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.dump_logs(sys.stdout.fileno(), log_filter)

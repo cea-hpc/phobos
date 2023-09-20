@@ -161,6 +161,32 @@ static PyObject *py_str2dss_type(PyObject *self, PyObject *args)
     return Py_BuildValue("i", type);
 }
 
+static PyObject *py_str2operation_type(PyObject *self, PyObject *args)
+{
+    const char *str_repr;
+    enum dss_type type;
+
+    if (!PyArg_ParseTuple(args, "s", &str_repr)) {
+        PyErr_SetString(ValueError, "Unrecognized type");
+        return Py_BuildValue("i", PHO_OPERATION_INVALID);
+    }
+
+    if (!strcmp(str_repr, "library_scan"))
+        return Py_BuildValue("i", PHO_LIBRARY_SCAN);
+    else if (!strcmp(str_repr, "library_open"))
+        return Py_BuildValue("i", PHO_LIBRARY_OPEN);
+    else if (!strcmp(str_repr, "device_lookup"))
+        return Py_BuildValue("i", PHO_DEVICE_LOOKUP);
+    else if (!strcmp(str_repr, "medium_lookup"))
+        return Py_BuildValue("i", PHO_MEDIUM_LOOKUP);
+    else if (!strcmp(str_repr, "device_load"))
+        return Py_BuildValue("i", PHO_DEVICE_LOAD);
+    else if (!strcmp(str_repr, "device_unload"))
+        return Py_BuildValue("i", PHO_DEVICE_UNLOAD);
+
+    return Py_BuildValue("i", PHO_OPERATION_INVALID);
+}
+
 /**
  * Exposed methods, with little docstring descriptors.
  */
@@ -181,6 +207,8 @@ static PyMethodDef ConstMethods[] = {
      "fs type enum value from name."},
     {"str2dss_type", py_str2dss_type, METH_VARARGS,
      "dss type enum value from name."},
+    {"str2operation_type", py_str2operation_type, METH_VARARGS,
+     "operation type enum value from name."},
     {NULL, NULL, 0, NULL}
 };
 
@@ -292,6 +320,9 @@ PyMODINIT_FUNC PyInit_const(void)
     PyModule_AddIntMacro(mod, PHO_XFER_OP_GET);
     PyModule_AddIntMacro(mod, PHO_XFER_OP_GETMD);
     PyModule_AddIntMacro(mod, PHO_XFER_OP_PUT);
+
+    /* enum operation_type */
+    PyModule_AddIntMacro(mod, PHO_OPERATION_INVALID);
 
     return mod;
 }

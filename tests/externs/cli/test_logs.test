@@ -153,7 +153,7 @@ function test_device_unload
 
 function test_filter
 {
-    local lto6_tapes=($(get_tapes L6 2 | nodeset -e))
+    local lto6_tapes=($(get_tapes L6 3 | nodeset -e))
     local lto6_drives=($(get_lto_drives 6 2 | nodeset -e))
 
     $phobos drive add --unlock ${lto6_drives[0]} ${lto6_drives[1]} ||
@@ -203,7 +203,23 @@ function test_filter
 
     local logs_lines=$(echo "$logs" | grep "succeeded" | wc -l)
     if [ -z "$logs" ] || (( logs_lines != 2 )); then
-        error "One log should have been recorded for tape ${lto6_tapes[0]}"
+        error "Two logs should have been recorded for errno '0'"
+    fi
+
+    $phobos tape add -t lto6 ${lto6_tapes[2]} ||
+        error "Tape ${lto6_tapes[2]} should have been added"
+
+    $phobos tape format --unlock ${lto6_tapes[2]} ||
+        error "Tape ${lto6_tapes[2]} should have been formated"
+
+    local logs=$($valg_phobos logs dump --cause device_unload)
+    if [[ $? != 0 ]]; then
+        error "Log dumping failed with '$?'"
+    fi
+
+    local logs_lines=$(echo "$logs" | grep "unload" | wc -l)
+    if [ -z "$logs" ] || (( logs_lines != 1 )); then
+        error "One log should have been recorded for operation 'unload'"
     fi
 }
 

@@ -171,6 +171,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['logs', 'dump', '-T', '42'])
         self.check_cmdline_valid(['logs', 'dump', '--errno', '42'])
         self.check_cmdline_valid(['logs', 'dump', '-e', '42'])
+        self.check_cmdline_valid(['logs', 'dump', '--cause', 'library_scan'])
+        self.check_cmdline_valid(['logs', 'dump', '-c', 'library_scan'])
         self.check_cmdline_valid(['logs', 'clear'])
 
         # Test invalid object and invalid verb
@@ -195,6 +197,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['logs', 'dump', '42', '43'], code=2)
         self.check_cmdline_exit(['logs', 'clear', '42'], code=2)
         self.check_cmdline_exit(['logs', 'dump', '--errno', 'blob'], code=2)
+        self.check_cmdline_exit(['logs', 'dump', '--cause', 'blob'], code=2)
         self.check_cmdline_exit(['ping'], code=2)
         self.check_cmdline_exit(['ping', 'phobosd', 'tlc'], code=2)
         self.check_cmdline_exit(['ping', 'bad_target'], code=2)
