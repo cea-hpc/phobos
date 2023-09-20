@@ -46,7 +46,7 @@ from ClusterShell.NodeSet import NodeSet
 
 from phobos.core.admin import Client as AdminClient
 import phobos.core.cfg as cfg
-from ctypes import byref
+from ctypes import (c_int, byref, POINTER, pointer)
 from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
                                ADM_STATUS, TAGS, PUT_ACCESS, GET_ACCESS,
@@ -1216,6 +1216,8 @@ class LogsDumpOptHandler(BaseOptHandler):
                             help='drive ID of the logs to dump')
         parser.add_argument('-T', '--tape',
                             help='tape ID of the logs to dump')
+        parser.add_argument('-e', '--errno', type=int,
+                            help='error number of the logs to dump')
 
 
 class LogsClearOptHandler(BaseOptHandler):
@@ -1229,14 +1231,16 @@ class LogsClearOptHandler(BaseOptHandler):
     def add_options(cls, parser):
         super(LogsClearOptHandler, cls).add_options(parser)
 
-def create_log_filter(device, medium):
+def create_log_filter(device, medium, errno):
     """Create a log filter structure with the given parameters."""
     device_id = (Id(PHO_RSC_TAPE, name=device) if device
                  else Id(PHO_RSC_NONE, name=""))
     medium_id = (Id(PHO_RSC_TAPE, name=medium) if medium
                  else Id(PHO_RSC_NONE, name=""))
-    return (byref(LogFilter(device_id, medium_id))
-            if device or medium else None)
+    c_errno = (pointer(c_int(int(errno))) if errno else None)
+
+    return (byref(LogFilter(device_id, medium_id, c_errno))
+            if device or medium or errno else None)
 
 
 class LogsOptHandler(BaseOptHandler):
@@ -1258,8 +1262,9 @@ class LogsOptHandler(BaseOptHandler):
         """Dump logs to stdout"""
         device = self.params.get('drive')
         medium = self.params.get('tape')
+        errno = self.params.get('errno')
 
-        log_filter = create_log_filter(device, medium)
+        log_filter = create_log_filter(device, medium, errno)
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.dump_logs(sys.stdout.fileno(), log_filter)

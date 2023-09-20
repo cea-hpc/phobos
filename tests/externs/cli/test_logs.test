@@ -195,6 +195,16 @@ function test_filter
     if [ -z "$logs" ] || (( logs_lines != 1 )); then
         error "One log should have been recorded for tape ${lto6_tapes[0]}"
     fi
+
+    local logs=$($valg_phobos logs dump --errno 0)
+    if [[ $? != 0 ]]; then
+        error "Log dumping failed with '$?'"
+    fi
+
+    local logs_lines=$(echo "$logs" | grep "succeeded" | wc -l)
+    if [ -z "$logs" ] || (( logs_lines != 2 )); then
+        error "One log should have been recorded for tape ${lto6_tapes[0]}"
+    fi
 }
 
 TESTS=("setup; test_device_load; cleanup"

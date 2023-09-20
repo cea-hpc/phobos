@@ -554,6 +554,7 @@ struct tsqueue {
 struct pho_log_filter {
     struct pho_id device;
     struct pho_id medium;
+    int *error_number;
 };
 
 #endif

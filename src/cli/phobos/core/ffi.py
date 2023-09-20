@@ -816,6 +816,7 @@ class LogFilter(Structure):
     _fields_ = [
         ('device', Id),
         ('medium', Id),
+        ('errno', POINTER(c_int)),
     ]
 
 
