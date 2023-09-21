@@ -27,7 +27,11 @@ if [[ ! -w /dev/changer ]]; then
 fi
 
 declare -A test_tapes
+# For preprod test, TEST_TAPES syntax example:
+# TEST_TAPES='(["L6"]="073206L6 073207L6")'
 eval test_tapes=$TEST_TAPES
+# For preprod test, TEST_DRIVES syntax example:
+# TEST_DRIVES="/dev/sg4 /dev/sg6"
 eval test_drives=\"$TEST_DRIVES\"
 
 test_dir=$(dirname $(readlink -e $0))
@@ -172,7 +176,13 @@ function setup_tape
         exit_error "No tapes available for the tests, exit."
     fi
 
-    local tapes="$lto5_tapes,$lto6_tapes"
+    if [[ -z "${lto5_tapes}" ]]; then
+        local tapes="$lto6_tapes"
+    elif [[ -z "${lto6_tapes}" ]]; then
+        local tapes="$lto5_tapes"
+    else
+        local tapes="$lto5_tapes,$lto6_tapes"
+    fi
 
     local out1=$($phobos tape list | sort)
     local out2=$(echo "$tapes" | nodeset -e | sort)
@@ -192,8 +202,12 @@ function setup_tape
     $phobos drive unlock $($phobos drive list)
 
     # format and unlock all tapes
-    $phobos tape format $lto5_tapes --unlock
-    $phobos tape format $lto6_tapes --unlock
+    if [[ ! -z "$lto5_tapes" ]]; then
+        $phobos tape format $lto5_tapes --unlock
+    fi
+    if [[ ! -z "$lto6_tapes" ]]; then
+        $phobos tape format $lto6_tapes --unlock
+    fi
 }
 
 function test_put_get
@@ -386,7 +400,16 @@ function test_lock
     local prefix=$(generate_prefix_id)
 
     local drive_model=ULT3580-TD5
+    if [[ "$($phobos drive list --model $drive_model)" == "" ]]; then
+        echo "No drive compatible with ${drive_model} to test lock"
+        return 0
+    fi
+
     local tape_model=lto5
+    if [[ "$(phobos tape list --tags $tape_model)" == "" ]]; then
+        echo "No tape compatible with model ${tape_model} to test lock"
+        return 0
+    fi
 
     $stop_phobosd
 
