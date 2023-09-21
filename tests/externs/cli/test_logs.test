@@ -221,6 +221,27 @@ function test_filter
     if [ -z "$logs" ] || (( logs_lines != 1 )); then
         error "One log should have been recorded for operation 'unload'"
     fi
+
+    local date=$($phobos logs dump | tail -n 2 | head -n 1 | cut -d'>' -f1 |
+                               cut -d'<' -f2 | cut -d'.' -f1)
+    local old_date=$(date +%s --date="$date")
+    local logs=$($valg_phobos logs dump --start "$date")
+    if [[ $? != 0 ]]; then
+        error "Log dumping failed with '$?'"
+    fi
+
+    local logs_lines=$(echo "$logs" | wc -l)
+    if [ -z "$logs" ] || (( logs_lines != 2 )); then
+        error "Two logs should have been recorded after date '$date'"
+    fi
+
+    local new_date=$(echo "$logs" | head -n 1 | cut -d'>' -f1 | cut -d'<' -f2)
+    new_date=$(date +%s --date="$new_date")
+
+    if [[ $new_date < $old_date ]]; then
+        error "Logs returned should be posterior to or at '$old_date', found " \
+              "them after $new_date"
+    fi
 }
 
 TESTS=("setup; test_device_load; cleanup"

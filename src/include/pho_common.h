@@ -259,6 +259,7 @@ struct pho_log_filter {
     struct pho_id medium;
     int *error_number;
     enum operation_type cause;
+    struct timeval start;
 };
 
 /**

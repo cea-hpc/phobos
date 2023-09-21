@@ -818,6 +818,7 @@ class LogFilter(Structure):
         ('medium', Id),
         ('errno', POINTER(c_int)),
         ('cause', c_int),
+        ('start', Timeval),
     ]
 
 

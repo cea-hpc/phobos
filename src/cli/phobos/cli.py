@@ -36,6 +36,8 @@ import logging
 from logging.handlers import SysLogHandler
 from shlex import shlex
 import sys
+import time
+import datetime
 
 import os
 import os.path
@@ -46,7 +48,7 @@ from ClusterShell.NodeSet import NodeSet
 
 from phobos.core.admin import Client as AdminClient
 import phobos.core.cfg as cfg
-from ctypes import (c_int, byref, POINTER, pointer)
+from ctypes import (c_int, c_long, byref, POINTER, pointer)
 from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
                                ADM_STATUS, TAGS, PUT_ACCESS, GET_ACCESS,
@@ -56,7 +58,8 @@ from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=n
 from phobos.core.dss import Client as DSSClient
 from phobos.core.ffi import (DeprecatedObjectInfo, DevInfo, LayoutInfo,
                              MediaInfo, ObjectInfo, ResourceFamily,
-                             CLIManagedResourceMixin, FSType, Id, LogFilter)
+                             CLIManagedResourceMixin, FSType, Id, LogFilter,
+                             Timeval)
 from phobos.core.log import LogControl, DISABLED, WARNING, INFO, VERBOSE, DEBUG
 from phobos.core.store import XferClient, UtilClient, attrs_as_dict, PutParams
 from phobos.output import dump_object_list
@@ -1203,6 +1206,25 @@ class SchedOptHandler(BaseOptHandler):
             sys.exit(abs(err.errno))
 
 
+def str_to_timestamp(value):
+    """
+    Check that the date 'value' has a correct format and return it as
+    timestamp
+    """
+    try:
+        if value.__contains__(' '):
+            element = datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        elif value.__contains__('-'):
+            element = datetime.datetime.strptime(value, "%Y-%m-%d")
+        else:
+            raise ValueError()
+    except ValueError as err:
+        raise argparse.ArgumentTypeError("%s is not a valid date format" %
+                                         value)
+
+    return datetime.datetime.timestamp(element)
+
+
 class LogsDumpOptHandler(BaseOptHandler):
     """Handler for persistent logs dumping"""
     label = "dump"
@@ -1224,6 +1246,9 @@ class LogsDumpOptHandler(BaseOptHandler):
                             choices=["library_scan", "library_open",
                                      "device_lookup", "medium_lookup",
                                      "device_load", "device_unload"])
+        parser.add_argument('--start', type=str_to_timestamp, default=0,
+                            help="timestamp of the oldest logs to dump,"
+                                 "in format 'YYYY-MM-DD [hh:mm:ss]'")
 
 
 class LogsClearOptHandler(BaseOptHandler):
@@ -1237,7 +1262,7 @@ class LogsClearOptHandler(BaseOptHandler):
     def add_options(cls, parser):
         super(LogsClearOptHandler, cls).add_options(parser)
 
-def create_log_filter(device, medium, errno, cause):
+def create_log_filter(device, medium, errno, cause, start):
     """Create a log filter structure with the given parameters."""
     device_id = (Id(PHO_RSC_TAPE, name=device) if device
                  else Id(PHO_RSC_NONE, name=""))
@@ -1246,9 +1271,10 @@ def create_log_filter(device, medium, errno, cause):
     c_errno = (pointer(c_int(int(errno))) if errno else None)
     c_cause = (c_int(str2operation_type(cause)) if cause else
                c_int(PHO_OPERATION_INVALID))
+    c_start = Timeval(c_long(int(start)), 0)
 
-    return (byref(LogFilter(device_id, medium_id, c_errno, c_cause))
-            if device or medium or errno or cause else None)
+    return (byref(LogFilter(device_id, medium_id, c_errno, c_cause, c_start))
+            if device or medium or errno or cause or start else None)
 
 
 class LogsOptHandler(BaseOptHandler):
@@ -1272,8 +1298,9 @@ class LogsOptHandler(BaseOptHandler):
         medium = self.params.get('tape')
         errno = self.params.get('errno')
         cause = self.params.get('cause')
+        start = self.params.get('start')
 
-        log_filter = create_log_filter(device, medium, errno, cause)
+        log_filter = create_log_filter(device, medium, errno, cause, start)
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.dump_logs(sys.stdout.fileno(), log_filter)

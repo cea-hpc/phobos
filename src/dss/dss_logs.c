@@ -149,6 +149,8 @@ int create_logs_filter(struct pho_log_filter *log_filter,
         remaining_criteria++;
     if (log_filter->cause != -1)
         remaining_criteria++;
+    if (log_filter->start.tv_sec != 0)
+        remaining_criteria++;
 
     if (remaining_criteria == 0) {
         *dss_log_filter = NULL;
@@ -199,6 +201,17 @@ int create_logs_filter(struct pho_log_filter *log_filter,
                                "{\"DSS::LOG::cause\": \"%s\"}%s",
                                operation_type2str(log_filter->cause),
                                remaining_criteria ? "," : "");
+    }
+
+    if (log_filter->start.tv_sec != 0) {
+        char time_str[32];
+
+        remaining_criteria--;
+        timeval2str(&log_filter->start, time_str);
+
+        g_string_append_printf(filter_str,
+                               "{\"$GTE\": {\"DSS::LOG::start\": \"%s\"}}%s",
+                               time_str, remaining_criteria ? "," : "");
     }
 
     g_string_append_printf(filter_str, "]}");
