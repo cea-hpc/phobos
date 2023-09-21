@@ -224,7 +224,7 @@ function test_filter
 
     local date=$($phobos logs dump | tail -n 2 | head -n 1 | cut -d'>' -f1 |
                                cut -d'<' -f2 | cut -d'.' -f1)
-    local old_date=$(date +%s --date="$date")
+    local old_date=$(date +%s --date="$date UTC")
     local logs=$($valg_phobos logs dump --start "$date")
     if [[ $? != 0 ]]; then
         error "Log dumping failed with '$?'"
@@ -236,11 +236,33 @@ function test_filter
     fi
 
     local new_date=$(echo "$logs" | head -n 1 | cut -d'>' -f1 | cut -d'<' -f2)
-    new_date=$(date +%s --date="$new_date")
-
+    new_date=$(date +%s --date="$new_date UTC")
     if [[ $new_date < $old_date ]]; then
         error "Logs returned should be posterior to or at '$old_date', found " \
               "them after $new_date"
+    fi
+
+    date=$($phobos logs dump | head -n 2 | tail -n 1 | cut -d'>' -f1 |
+                               cut -d'<' -f2 | cut -d'.' -f1)
+    local old_date=$(date +%s --date="$date UTC")
+    old_date=$(($old_date + 1))
+    date=$(date "+%Y-%m-%d %H:%M:%S" --date="@$old_date")
+    local logs=$($valg_phobos logs dump --end "$date")
+    if [[ $? != 0 ]]; then
+        error "Log dumping failed with '$?'"
+    fi
+
+    local logs_lines=$(echo "$logs" | wc -l)
+    if [ -z "$logs" ] || (( logs_lines != 2 )); then
+        error "Two logs should have been recorded before date '$date'"
+    fi
+
+    local new_date=$(echo "$logs" | tail -n 1 | cut -d'>' -f1 | cut -d'<' -f2)
+    new_date=$(date +%s --date="$new_date UTC")
+
+    if [[ $new_date > $old_date ]]; then
+        error "Logs returned should be prior to or at '$old_date', found " \
+              "them at '$new_date'"
     fi
 }
 

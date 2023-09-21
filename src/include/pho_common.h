@@ -260,6 +260,7 @@ struct pho_log_filter {
     int *error_number;
     enum operation_type cause;
     struct timeval start;
+    struct timeval end;
 };
 
 /**

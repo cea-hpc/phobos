@@ -1247,6 +1247,9 @@ class LogsDumpOptHandler(BaseOptHandler):
                                      "device_lookup", "medium_lookup",
                                      "device_load", "device_unload"])
         parser.add_argument('--start', type=str_to_timestamp, default=0,
+                            help="timestamp of the most recent logs to dump,"
+                                 "in format YYYY-MM-DD [hh:mm:ss]")
+        parser.add_argument('--end', type=str_to_timestamp, default=0,
                             help="timestamp of the oldest logs to dump,"
                                  "in format 'YYYY-MM-DD [hh:mm:ss]'")
 
@@ -1262,7 +1265,7 @@ class LogsClearOptHandler(BaseOptHandler):
     def add_options(cls, parser):
         super(LogsClearOptHandler, cls).add_options(parser)
 
-def create_log_filter(device, medium, errno, cause, start):
+def create_log_filter(device, medium, errno, cause, start, end):
     """Create a log filter structure with the given parameters."""
     device_id = (Id(PHO_RSC_TAPE, name=device) if device
                  else Id(PHO_RSC_NONE, name=""))
@@ -1272,9 +1275,11 @@ def create_log_filter(device, medium, errno, cause, start):
     c_cause = (c_int(str2operation_type(cause)) if cause else
                c_int(PHO_OPERATION_INVALID))
     c_start = Timeval(c_long(int(start)), 0)
+    c_end = Timeval(c_long(int(end)), 0)
 
-    return (byref(LogFilter(device_id, medium_id, c_errno, c_cause, c_start))
-            if device or medium or errno or cause or start else None)
+    return (byref(LogFilter(device_id, medium_id, c_errno, c_cause, c_start,
+                            c_end))
+            if device or medium or errno or cause or start or end else None)
 
 
 class LogsOptHandler(BaseOptHandler):
@@ -1299,8 +1304,9 @@ class LogsOptHandler(BaseOptHandler):
         errno = self.params.get('errno')
         cause = self.params.get('cause')
         start = self.params.get('start')
+        end = self.params.get('end')
 
-        log_filter = create_log_filter(device, medium, errno, cause, start)
+        log_filter = create_log_filter(device, medium, errno, cause, start, end)
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.dump_logs(sys.stdout.fileno(), log_filter)

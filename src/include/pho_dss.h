@@ -184,6 +184,7 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::LOG::errno", "errno"},
     {"DSS::LOG::cause", "cause"},
     {"DSS::LOG::start", "time"},
+    {"DSS::LOG::end", "time"},
     {NULL, NULL}
 };
 
