@@ -164,22 +164,6 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['put', '--lyt-params', 'a=b', 'src', 'oid'])
         self.check_cmdline_valid(['put', '--lyt-params', 'a=b,c=d', 'src',
                                   'oid'])
-        self.check_cmdline_valid(['logs', 'dump'])
-        self.check_cmdline_valid(['logs', 'dump', '--drive', '42'])
-        self.check_cmdline_valid(['logs', 'dump', '-D', '42'])
-        self.check_cmdline_valid(['logs', 'dump', '--tape', '42'])
-        self.check_cmdline_valid(['logs', 'dump', '-T', '42'])
-        self.check_cmdline_valid(['logs', 'dump', '--errno', '42'])
-        self.check_cmdline_valid(['logs', 'dump', '-e', '42'])
-        self.check_cmdline_valid(['logs', 'dump', '--cause', 'library_scan'])
-        self.check_cmdline_valid(['logs', 'dump', '-c', 'library_scan'])
-        self.check_cmdline_valid(['logs', 'dump', '--start', '1234-12-12'])
-        self.check_cmdline_valid(['logs', 'dump', '--start',
-                                  '1234-12-12 23:59:59'])
-        self.check_cmdline_valid(['logs', 'dump', '--end', '1234-12-12'])
-        self.check_cmdline_valid(['logs', 'dump', '--end',
-                                  '1234-12-12 23:59:59'])
-        self.check_cmdline_valid(['logs', 'clear'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['get', '--version', 'nan', 'objid', 'file'],
@@ -199,8 +183,33 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['tape', 'locate'], code=2)
         self.check_cmdline_exit(['tape', 'locate', 'oid1', 'oid2'], code=2)
         self.check_cmdline_exit(['drive', 'delete'], code=2)
+        self.check_cmdline_exit(['ping'], code=2)
+        self.check_cmdline_exit(['ping', 'phobosd', 'tlc'], code=2)
+        self.check_cmdline_exit(['ping', 'bad_target'], code=2)
+
+    def test_cli_logs_command(self):
+        self.check_cmdline_valid(['logs', 'clear'])
+
+        self.check_cmdline_valid(['logs', 'dump'])
+        self.check_cmdline_valid(['logs', 'dump', '--drive', '42'])
+        self.check_cmdline_valid(['logs', 'dump', '-D', '42'])
+        self.check_cmdline_valid(['logs', 'dump', '--tape', '42'])
+        self.check_cmdline_valid(['logs', 'dump', '-T', '42'])
+        self.check_cmdline_valid(['logs', 'dump', '--errno', '42'])
+        self.check_cmdline_valid(['logs', 'dump', '-e', '42'])
+        self.check_cmdline_valid(['logs', 'dump', '--cause', 'library_scan'])
+        self.check_cmdline_valid(['logs', 'dump', '-c', 'library_scan'])
+        self.check_cmdline_valid(['logs', 'dump', '--start', '1234-12-12'])
+        self.check_cmdline_valid(['logs', 'dump', '--start',
+                                  '1234-12-12 23:59:59'])
+        self.check_cmdline_valid(['logs', 'dump', '--end', '1234-12-12'])
+        self.check_cmdline_valid(['logs', 'dump', '--end',
+                                  '1234-12-12 23:59:59'])
+        self.check_cmdline_valid(['logs', 'dump', '--start', '1234-01-01',
+                                  '--end', '1234-01-01'])
+
         self.check_cmdline_exit(['logs'], code=2)
-        self.check_cmdline_exit(['logs', 'dump', '42', '43'], code=2)
+        self.check_cmdline_exit(['logs', 'dump', '42'], code=2)
         self.check_cmdline_exit(['logs', 'clear', '42'], code=2)
         self.check_cmdline_exit(['logs', 'dump', '--errno', 'blob'], code=2)
         self.check_cmdline_exit(['logs', 'dump', '--cause', 'blob'], code=2)
@@ -218,9 +227,8 @@ class CLIParametersTest(unittest.TestCase):
                                 code=2)
         self.check_cmdline_exit(['logs', 'dump', '--end',
                                  '1234-12-12 52:58:47:85'], code=2)
-        self.check_cmdline_exit(['ping'], code=2)
-        self.check_cmdline_exit(['ping', 'phobosd', 'tlc'], code=2)
-        self.check_cmdline_exit(['ping', 'bad_target'], code=2)
+        self.check_cmdline_exit(['logs', 'dump', '--start', '1234-01-01',
+                                '--end', '1234-01-'], code=2)
 
 
 class BasicExecutionTest(unittest.TestCase):

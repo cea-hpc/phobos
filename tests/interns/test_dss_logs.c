@@ -35,8 +35,59 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <time.h>
 
 #include <cmocka.h>
+
+#define LENGTH_DEVICES 2
+static struct pho_id devices[LENGTH_DEVICES] = {
+    { .family = PHO_RSC_TAPE, .name = "deviceA" },
+    { .family = PHO_RSC_TAPE, .name = "deviceB" },
+};
+
+#define LENGTH_MEDIA 2
+static struct pho_id media[LENGTH_MEDIA] = {
+    { .family = PHO_RSC_TAPE, .name = "mediumA" },
+    { .family = PHO_RSC_TAPE, .name = "mediumB" },
+};
+
+#define LENGTH_TYPES 2
+static enum operation_type types[LENGTH_TYPES] = {
+    PHO_LIBRARY_SCAN,
+    PHO_DEVICE_UNLOAD,
+};
+
+#define LENGTH_TIMES LENGTH_DEVICES
+
+static void generate_log(struct dss_handle *handle, int index_dev,
+                         int index_med, int index_type)
+{
+    struct pho_log log;
+    int rc;
+
+    init_pho_log(&log, devices[index_dev], media[index_med], types[index_type]);
+
+    rc = dss_emit_log(handle, &log);
+    assert_return_code(rc, -rc);
+    json_decref(log.message);
+}
+
+static void generate_logs(struct dss_handle *handle,
+                          struct timeval times[LENGTH_TIMES])
+{
+    int i, j, k;
+
+    for (i = 0; i < LENGTH_DEVICES; ++i) {
+        for (j = 0; j < LENGTH_MEDIA; ++j)
+            for (k = 0; k < LENGTH_TYPES; ++k)
+                generate_log(handle, i, j, k);
+
+        times[i].tv_sec = (unsigned long) time(NULL) + 1;
+        times[i].tv_usec = 0;
+        if (i < LENGTH_DEVICES - 1)
+            sleep(5);
+    }
+}
 
 static void check_log_equal(struct pho_log emitted_log,
                             struct pho_log dss_log)
@@ -112,11 +163,102 @@ static void dss_emit_logs_with_message_ok(void **state)
     dss_logs_delete(handle, NULL);
 }
 
+static void check_registered_logs(struct dss_handle *handle,
+                                  struct pho_id *device,
+                                  struct pho_id *medium,
+                                  enum operation_type *type,
+                                  struct timeval *start,
+                                  struct timeval *end,
+                                  int expected_log_number)
+{
+    struct pho_log_filter filter = { .error_number = NULL };
+    struct dss_filter *filter_ptr;
+    struct dss_filter log_filter;
+    struct pho_log *logs;
+    int n_logs;
+    int rc;
+
+    if (device) {
+        filter.device.family = device->family;
+        strcpy(filter.device.name, device->name);
+    } else {
+        filter.device.family = PHO_RSC_NONE;
+    }
+
+    if (medium) {
+        filter.medium.family = medium->family;
+        strcpy(filter.medium.name, medium->name);
+    } else {
+        filter.medium.family = PHO_RSC_NONE;
+    }
+
+    if (type)
+        filter.cause = *type;
+    else
+        filter.cause = PHO_OPERATION_INVALID;
+
+    if (start)
+        filter.start = *start;
+    else
+        filter.start.tv_sec = 0;
+
+    if (end)
+        filter.end = *end;
+    else
+        filter.end.tv_sec = 0;
+
+    filter_ptr = &log_filter;
+    rc = create_logs_filter(&filter, &filter_ptr);
+    assert_return_code(rc, -rc);
+
+    rc = dss_logs_get(handle, filter_ptr, &logs, &n_logs);
+    dss_filter_free(filter_ptr);
+    assert_return_code(rc, -rc);
+
+    assert_int_equal(n_logs, expected_log_number);
+    dss_res_free(logs, n_logs);
+}
+
+static void dss_logs_get_with_filters(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    int max_log_number = LENGTH_DEVICES * LENGTH_MEDIA *
+                         LENGTH_TYPES;
+    int expected_log_number = max_log_number;
+    struct timeval times[LENGTH_TIMES];
+
+    generate_logs(handle, times);
+
+    check_registered_logs(handle, NULL, NULL, NULL, NULL, NULL,
+                          expected_log_number);
+
+    expected_log_number = max_log_number / (LENGTH_DEVICES * LENGTH_MEDIA *
+                                            LENGTH_TYPES);
+    check_registered_logs(handle, &devices[0], &media[0], &types[0], NULL, NULL,
+                          expected_log_number);
+
+    expected_log_number = max_log_number / (LENGTH_DEVICES * LENGTH_TYPES);
+    check_registered_logs(handle, &devices[1], NULL, &types[1], &times[0], NULL,
+                          expected_log_number);
+
+    expected_log_number = max_log_number / (LENGTH_DEVICES);
+    check_registered_logs(handle, &devices[1], NULL, NULL, &times[0], &times[1],
+                          expected_log_number);
+
+    expected_log_number = max_log_number / (LENGTH_DEVICES * LENGTH_MEDIA *
+                                            LENGTH_TYPES);
+    check_registered_logs(handle, &devices[1], &media[1], &types[0], NULL,
+                          &times[1], expected_log_number);
+
+    dss_logs_delete(handle, NULL);
+}
+
 int main(void)
 {
     const struct CMUnitTest dss_logs_test_cases[] = {
         cmocka_unit_test(dss_emit_logs_ok),
         cmocka_unit_test(dss_emit_logs_with_message_ok),
+        cmocka_unit_test(dss_logs_get_with_filters),
     };
 
     pho_context_init();

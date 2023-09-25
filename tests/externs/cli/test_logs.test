@@ -151,6 +151,26 @@ function test_device_unload
     clear_logs
 }
 
+function _test_filter
+{
+    local verb="$1"
+    local value="$2"
+    local to_grep="$3"
+    local expected_lines="$4"
+
+    local logs=$($valg_phobos logs dump "$verb" "$value")
+    if [[ $? != 0 ]]; then
+        error "Log dumping failed with '$?'"
+    fi
+
+    local logs_lines=$(echo "$logs" | grep "$to_grep" | wc -l)
+    if [ -z "$logs" ] || (( $logs_lines != $expected_lines )); then
+        error "$expected_lines logs should have been recorded for $verb $value"
+    fi
+
+    echo "$logs"
+}
+
 function test_filter
 {
     local lto6_tapes=($(get_tapes L6 3 | nodeset -e))
@@ -175,36 +195,10 @@ function test_filter
         error "Two logs should have been recorded"
     fi
 
-    lto6_drive=$($phobos drive list -o name "${lto6_drives[0]}")
-    local logs=$($valg_phobos logs dump --drive $lto6_drive)
-    if [[ $? != 0 ]]; then
-        error "Log dumping failed with '$?'"
-    fi
-
-    local logs_lines=$(echo "$logs" | grep "$lto6_drive" | wc -l)
-    if [ -z "$logs" ] || (( logs_lines != 1 )); then
-        error "One log should have been recorded for drive $lto6_drive"
-    fi
-
-    local logs=$($valg_phobos logs dump --tape ${lto6_tapes[0]})
-    if [[ $? != 0 ]]; then
-        error "Log dumping failed with '$?'"
-    fi
-
-    local logs_lines=$(echo "$logs" | grep ${lto6_tapes[0]} | wc -l)
-    if [ -z "$logs" ] || (( logs_lines != 1 )); then
-        error "One log should have been recorded for tape ${lto6_tapes[0]}"
-    fi
-
-    local logs=$($valg_phobos logs dump --errno 0)
-    if [[ $? != 0 ]]; then
-        error "Log dumping failed with '$?'"
-    fi
-
-    local logs_lines=$(echo "$logs" | grep "succeeded" | wc -l)
-    if [ -z "$logs" ] || (( logs_lines != 2 )); then
-        error "Two logs should have been recorded for errno '0'"
-    fi
+    local lto6_drive=$($phobos drive list -o name "${lto6_drives[0]}")
+    _test_filter "--drive" "$lto6_drive" "$lto6_drive" 1
+    _test_filter "--tape" "${lto6_tapes[0]}" "${lto6_tapes[0]}" 1
+    _test_filter "--errno" 0 "succeeded" 2
 
     $phobos tape add -t lto6 ${lto6_tapes[2]} ||
         error "Tape ${lto6_tapes[2]} should have been added"
@@ -212,30 +206,17 @@ function test_filter
     $phobos tape format --unlock ${lto6_tapes[2]} ||
         error "Tape ${lto6_tapes[2]} should have been formated"
 
-    local logs=$($valg_phobos logs dump --cause device_unload)
-    if [[ $? != 0 ]]; then
-        error "Log dumping failed with '$?'"
-    fi
-
-    local logs_lines=$(echo "$logs" | grep "unload" | wc -l)
-    if [ -z "$logs" ] || (( logs_lines != 1 )); then
-        error "One log should have been recorded for operation 'unload'"
-    fi
+    _test_filter "--cause" "device_unload" "unload" 1
 
     local date=$($phobos logs dump | tail -n 2 | head -n 1 | cut -d'>' -f1 |
-                               cut -d'<' -f2 | cut -d'.' -f1)
+                                     cut -d'<' -f2 | cut -d'.' -f1)
     local old_date=$(date +%s --date="$date UTC")
-    local logs=$($valg_phobos logs dump --start "$date")
-    if [[ $? != 0 ]]; then
-        error "Log dumping failed with '$?'"
-    fi
 
-    local logs_lines=$(echo "$logs" | wc -l)
-    if [ -z "$logs" ] || (( logs_lines != 2 )); then
-        error "Two logs should have been recorded after date '$date'"
-    fi
+    _test_filter "--start" "$date" "" 2
 
-    local new_date=$(echo "$logs" | head -n 1 | cut -d'>' -f1 | cut -d'<' -f2)
+    local new_date=$($phobos logs dump --start "$date" | head -n 1 |
+                                                         cut -d'>' -f1 |
+                                                         cut -d'<' -f2)
     new_date=$(date +%s --date="$new_date UTC")
     if [[ $new_date < $old_date ]]; then
         error "Logs returned should be posterior to or at '$old_date', found " \
@@ -244,20 +225,14 @@ function test_filter
 
     date=$($phobos logs dump | head -n 2 | tail -n 1 | cut -d'>' -f1 |
                                cut -d'<' -f2 | cut -d'.' -f1)
-    local old_date=$(date +%s --date="$date UTC")
+    old_date=$(date +%s --date="$date UTC")
     old_date=$(($old_date + 1))
     date=$(date "+%Y-%m-%d %H:%M:%S" --date="@$old_date")
-    local logs=$($valg_phobos logs dump --end "$date")
-    if [[ $? != 0 ]]; then
-        error "Log dumping failed with '$?'"
-    fi
 
-    local logs_lines=$(echo "$logs" | wc -l)
-    if [ -z "$logs" ] || (( logs_lines != 2 )); then
-        error "Two logs should have been recorded before date '$date'"
-    fi
+    _test_filter "--end" "$date" "" 2
 
-    local new_date=$(echo "$logs" | tail -n 1 | cut -d'>' -f1 | cut -d'<' -f2)
+    new_date=$($phobos logs dump --end "$date" | tail -n 1 | cut -d'>' -f1 |
+                                                 cut -d'<' -f2)
     new_date=$(date +%s --date="$new_date UTC")
 
     if [[ $new_date > $old_date ]]; then
