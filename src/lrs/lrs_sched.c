@@ -315,6 +315,43 @@ int check_and_take_device_lock(struct lrs_sched *sched,
 }
 
 /**
+ * If a lock exists in the medium or in the DSS, check owner and renew it, else
+ * take the lock.
+ *
+ * @param[in]       lock_handle     DSS lock handle
+ * @param[in, out]  medium          medium to lock. The lock is updated if
+ *                                  needed.
+ * @return          0 if success, else a negative error code
+ */
+static int ensure_medium_lock(struct lock_handle *lock_handle,
+                              struct media_info *medium)
+{
+    int rc = 0;
+
+    /* check lock from DSS if it is not already filled */
+    if (!medium->lock.hostname) {
+        rc = dss_lock_status(lock_handle->dss, DSS_MEDIA, medium, 1,
+                             &medium->lock);
+        if (rc == -ENOLCK)
+            rc = 0;
+
+        if (rc)
+            LOG_RETURN(rc, "Unable to status lock");
+    }
+
+    /* Check lock if it exists */
+    if (medium->lock.hostname) {
+        rc = check_renew_lock(lock_handle, DSS_MEDIA, medium, &medium->lock);
+    } else {
+    /* Try to take lock */
+        rc = take_and_update_lock(lock_handle->dss, DSS_MEDIA, medium,
+                                  &medium->lock);
+    }
+
+    return rc;
+}
+
+/**
  * Retrieve media info from DSS for the given ID.
  * @param pmedia[out] returned pointer to a media_info structure
  *                    allocated by this function.
@@ -1164,6 +1201,9 @@ int sched_select_medium(struct io_scheduler *io_sched,
              chosen_media->rsc.id.name,
              chosen_media->stats.phys_spc_free);
 
+    /* Don't rely on existing lock for future use */
+    pho_lock_clean(&chosen_media->lock);
+
     *p_media = media_info_dup(chosen_media);
     if (*p_media == NULL)
         LOG_GOTO(free_res, rc = -ENOMEM,
@@ -1751,18 +1791,14 @@ lock_race_retry:
         }
     } else if (dev) {
         /* a new medium needs to be loaded in \p dev : lock it */
-        if (!(*alloc_medium)->lock.hostname) {
-            pho_debug("lock media '%s' for write",
-                      (*alloc_medium)->rsc.id.name);
-            rc = take_and_update_lock(sched->lock_handle.dss, DSS_MEDIA,
-                                      *alloc_medium, &(*alloc_medium)->lock);
-            if (rc) {
-                pho_debug("failed to lock media '%s' for write, looking for "
-                          "another one", (*alloc_medium)->rsc.id.name);
-                *alloc_medium = NULL;
-                dev = NULL;
-                goto lock_race_retry;
-            }
+        rc = ensure_medium_lock(&sched->lock_handle, *alloc_medium);
+
+        if (rc) {
+            pho_debug("failed to lock media '%s' for write, looking for "
+                      "another one", (*alloc_medium)->rsc.id.name);
+            *alloc_medium = NULL;
+            dev = NULL;
+            goto lock_race_retry;
         }
 
         goto select_device;
@@ -1925,6 +1961,8 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
         return rc;
     }
 
+    /* don't rely on existing lock for future use of this medium */
+    pho_lock_clean(&(*target_medium)->lock);
     return 0;
 }
 
@@ -2003,12 +2041,7 @@ find_read_device:
     }
 
     /* lock medium */
-    if ((*alloc_medium)->lock.hostname)
-        rc = check_renew_lock(&sched->lock_handle, DSS_MEDIA, *alloc_medium,
-                              &(*alloc_medium)->lock);
-    else
-        rc = take_and_update_lock(&sched->sched_thread.dss, DSS_MEDIA,
-                                  *alloc_medium, &(*alloc_medium)->lock);
+    rc = ensure_medium_lock(&sched->lock_handle, *alloc_medium);
 
     if (medium_is_loaded_in_device(dev, *alloc_medium)) {
         media_info_free(*alloc_medium);
@@ -2163,26 +2196,15 @@ static int sched_handle_format(struct lrs_sched *sched,
                  m.name, device->ld_dss_dev_info->rsc.id.name);
     }
 
-    if (!reqc->params.format.medium_to_format->lock.hostname) {
-        /* medium to format isn't already loaded into any drive, need lock */
-        rc = take_and_update_lock(&sched->sched_thread.dss, DSS_MEDIA,
-                                  reqc->params.format.medium_to_format,
-                                  &reqc->params.format.medium_to_format->lock);
-        if (rc == -EEXIST)
-            LOG_GOTO(remove_format_err_out, rc = -EBUSY,
-                     "Media '%s' is locked by an other LRS node", m.name);
-        else if (rc)
-            LOG_GOTO(remove_format_err_out, rc,
-                     "Unable to lock the media '%s' to format it", m.name);
-    } else {
-        rc = check_renew_lock(&sched->lock_handle, DSS_MEDIA,
-                              reqc->params.format.medium_to_format,
-                              &reqc->params.format.medium_to_format->lock);
-        if (rc)
-            LOG_GOTO(remove_format_err_out, rc,
-                     "Could not update the lock on '%s'",
-                     reqc->params.format.medium_to_format->rsc.id.name);
-    }
+    /* lock medium */
+    rc = ensure_medium_lock(&sched->lock_handle,
+                            reqc->params.format.medium_to_format);
+    if (rc == -EEXIST || rc == -EALREADY)
+        rc = -EBUSY;
+
+    if (rc)
+        LOG_GOTO(remove_format_err_out, rc,
+                 "Unable to lock the media '%s' to format it", m.name);
     /*
      * dev_picker set the ld_ongoing_scheduled flag to true when a device
      * is selected. This prevent selecting the same device again for an

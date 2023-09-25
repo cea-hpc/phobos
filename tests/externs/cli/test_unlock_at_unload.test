@@ -1,0 +1,121 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2023 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils.sh
+. $test_dir/utils_generation.sh
+. $test_dir/tape_drive.sh
+
+function setup()
+{
+    setup_test_dirs
+    setup_dummy_files 1
+    setup_tables
+    drain_all_drives
+    export PHOBOS_IO_SCHED_TAPE_read_algo="grouped_read"
+    invoke_lrs
+}
+
+function cleanup()
+{
+    cleanup_dummy_files
+    cleanup_test_dirs
+    waive_lrs
+    drop_tables
+    drain_all_drives
+}
+
+function test_unlock_at_unload()
+{
+    # 1 drive and 2 tagged tapes
+    local tapes="$(get_tapes L6 2)"
+    local drive="$(get_lto_drives 6 1)"
+
+    $phobos drive add --unlock ${drive}
+
+    $phobos tape add -t lto6 ${tapes}
+    i=0
+    for tape in $($phobos tape list)
+    do
+        $phobos tape update --tags ${i} ${tape}
+        $phobos tape format --unlock ${tape}
+        ((i=i+1))
+    done
+
+    # one file per tape
+    for i in `seq 0 1`
+    do
+        $phobos put -T ${i} ${FILES[0]} ${i}
+    done
+
+    waive_lrs
+
+    # Custom umount script that ask to get object 1 before the first umount only
+    local cmd="bash -c \"
+umount_count=\$(cat ${DIR_TEST_OUT}/umount_count)
+echo umount count: \$umount_count
+
+if (( umount_count == 0 )); then
+    $phobos get 1 ${DIR_TEST_OUT}/1 >${DIR_TEST_OUT}/get_1_out 2>&1 &
+    get_1_pid=\$!
+    echo \$get_1_pid > ${DIR_TEST_OUT}/get_1_pid
+fi
+
+((umount_count++))
+echo \$umount_count > ${DIR_TEST_OUT}/umount_count
+
+$ldm_helper umount_ltfs '%s' '%s'
+exit
+\""
+
+    echo 0 > ${DIR_TEST_OUT}/umount_count
+    local save_umount_cmd=$PHOBOS_LTFS_cmd_umount
+    export PHOBOS_LTFS_cmd_umount="$cmd"
+    invoke_lrs
+
+    # ensure second tape is mounted and locked
+    $phobos get 1 $DIR_TEST_OUT/1
+    rm $DIR_TEST_OUT/1
+
+    # get 0
+    $phobos get 0 ${DIR_TEST_OUT}/0
+    rm ${DIR_TEST_OUT}/0
+
+    # ensure background get 1 is successful
+    get_1_pid=$(cat ${DIR_TEST_OUT}/get_1_pid)
+    tail --pid=${get_1_pid} -f ${DIR_TEST_OUT}/get_1_out
+    rm ${DIR_TEST_OUT}/1
+
+    # ensure we can umount the second tape to get first file again
+    $phobos get 0 ${DIR_TEST_OUT}/0
+    rm ${DIR_TEST_OUT}/0
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Tapes required for this test"
+fi
+
+TEST_SETUP=setup
+TESTS=("test_unlock_at_unload;")
+TEST_CLEANUP=cleanup

@@ -66,7 +66,8 @@ check_SCRIPTS=acceptance.test \
               test_resource_availability.sh \
               test_resource_management.sh \
               test_tlc.test \
-              test_undelete.sh
+              test_undelete.sh \
+              test_unlock_at_unload.test
 
 if RADOS_ENABLED
 check_SCRIPTS+=test_store_rados_commands.sh test_locate_rados.test
