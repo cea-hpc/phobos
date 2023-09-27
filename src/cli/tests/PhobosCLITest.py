@@ -189,6 +189,22 @@ class CLIParametersTest(unittest.TestCase):
 
     def test_cli_logs_command(self):
         self.check_cmdline_valid(['logs', 'clear'])
+        self.check_cmdline_valid(['logs', 'clear', '--drive', '42'])
+        self.check_cmdline_valid(['logs', 'clear', '-D', '42'])
+        self.check_cmdline_valid(['logs', 'clear', '--tape', '42'])
+        self.check_cmdline_valid(['logs', 'clear', '-T', '42'])
+        self.check_cmdline_valid(['logs', 'clear', '--errno', '42'])
+        self.check_cmdline_valid(['logs', 'clear', '-e', '42'])
+        self.check_cmdline_valid(['logs', 'clear', '--cause', 'library_scan'])
+        self.check_cmdline_valid(['logs', 'clear', '-c', 'library_scan'])
+        self.check_cmdline_valid(['logs', 'clear', '--start', '1234-12-12'])
+        self.check_cmdline_valid(['logs', 'clear', '--start',
+                                  '1234-12-12 23:59:59'])
+        self.check_cmdline_valid(['logs', 'clear', '--end', '1234-12-12'])
+        self.check_cmdline_valid(['logs', 'clear', '--end',
+                                  '1234-12-12 23:59:59'])
+        self.check_cmdline_valid(['logs', 'clear', '--start', '1234-01-01',
+                                  '--end', '1234-01-01'])
 
         self.check_cmdline_valid(['logs', 'dump'])
         self.check_cmdline_valid(['logs', 'dump', '--drive', '42'])
@@ -209,8 +225,28 @@ class CLIParametersTest(unittest.TestCase):
                                   '--end', '1234-01-01'])
 
         self.check_cmdline_exit(['logs'], code=2)
-        self.check_cmdline_exit(['logs', 'dump', '42'], code=2)
+
         self.check_cmdline_exit(['logs', 'clear', '42'], code=2)
+        self.check_cmdline_exit(['logs', 'clear', '--errno', 'blob'], code=2)
+        self.check_cmdline_exit(['logs', 'clear', '--cause', 'blob'], code=2)
+        self.check_cmdline_exit(['logs', 'clear', '--start', 'blob'], code=2)
+        self.check_cmdline_exit(['logs', 'clear', '--start', '1234-12-'],
+                                code=2)
+        self.check_cmdline_exit(['logs', 'clear', '--start', '1234'],
+                                code=2)
+        self.check_cmdline_exit(['logs', 'clear', '--start',
+                                 '1234-12-12 52:58:47:85'], code=2)
+        self.check_cmdline_exit(['logs', 'clear', '--end', 'blob'], code=2)
+        self.check_cmdline_exit(['logs', 'clear', '--end', '1234-12-'],
+                                code=2)
+        self.check_cmdline_exit(['logs', 'clear', '--end', '1234'],
+                                code=2)
+        self.check_cmdline_exit(['logs', 'clear', '--end',
+                                 '1234-12-12 52:58:47:85'], code=2)
+        self.check_cmdline_exit(['logs', 'clear', '--start', '1234-01-01',
+                                 '--end', '1234-01-'], code=2)
+
+        self.check_cmdline_exit(['logs', 'dump', '42'], code=2)
         self.check_cmdline_exit(['logs', 'dump', '--errno', 'blob'], code=2)
         self.check_cmdline_exit(['logs', 'dump', '--cause', 'blob'], code=2)
         self.check_cmdline_exit(['logs', 'dump', '--start', 'blob'], code=2)
@@ -228,7 +264,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['logs', 'dump', '--end',
                                  '1234-12-12 52:58:47:85'], code=2)
         self.check_cmdline_exit(['logs', 'dump', '--start', '1234-01-01',
-                                '--end', '1234-01-'], code=2)
+                                 '--end', '1234-01-'], code=2)
 
 
 class BasicExecutionTest(unittest.TestCase):

@@ -63,6 +63,22 @@ function clear_logs
     fi
 }
 
+function check_number_of_logs
+{
+    local expected_number="$1"
+
+    local logs=$($valg_phobos logs dump)
+    if [[ $? != 0 ]]; then
+        error "Log dumping failed with '$?'"
+    fi
+
+    local logs_lines=$(echo "$logs" | wc -l)
+    if [ -z "$logs" ] || (( $logs_lines != $expected_number )); then
+        error "'$expected_number' logs should should be recorded, found only" \
+              "'$logs_lines'"
+    fi
+}
+
 function check_logs
 {
     local logs="$1"
@@ -91,19 +107,12 @@ function test_device_load
     $phobos tape add -t lto6 $lto6_tape ||
         error "Tape $lto6_tape should have been added"
 
-    $valg_phobos tape format --unlock $lto6_tape ||
+    $phobos tape format --unlock $lto6_tape ||
         error "Tape $lto6_tape should have been formated"
 
+    check_number_of_logs 1
+
     local logs=$($valg_phobos logs dump)
-    if [[ $? != 0 ]]; then
-        error "Log dumping failed with '$?'"
-    fi
-
-    local logs_lines=$(echo "$logs" | wc -l)
-    if [ -z "$logs" ] || (( logs_lines != 1 )); then
-        error "Only one log should have been recorded"
-    fi
-
     lto6_drive=$($phobos drive list -o name "$lto6_drive")
 
     check_logs "$logs" "$lto6_drive" "$lto6_tape" "Device load"
@@ -124,25 +133,18 @@ function test_device_unload
     $phobos tape add -t lto6 $first_tape $second_tape ||
         error "Tape $first_tape should have been added"
 
-    $valg_phobos tape format --unlock $first_tape ||
+    $phobos tape format --unlock $first_tape ||
         error "Tape $first_tape should have been formated"
 
     clear_logs
 
     # This should generate a log for the unload and another for the load
-    $valg_phobos tape format --unlock $second_tape ||
+    $phobos tape format --unlock $second_tape ||
         error "Tape $second_tape should have been formated"
 
+    check_number_of_logs 2
+
     local logs=$($valg_phobos logs dump)
-    if [[ $? != 0 ]]; then
-        error "Log dumping failed with '$?'"
-    fi
-
-    local logs_lines=$(echo "$logs" | wc -l)
-    if [ -z "$logs" ] || (( logs_lines != 2 )); then
-        error "Two logs should have been recorded"
-    fi
-
     lto6_drive=$($phobos drive list -o name "$lto6_drive")
 
     check_logs "$logs" "$lto6_drive" "$first_tape" "Device unload"
@@ -182,18 +184,10 @@ function test_dump_filters
     $phobos tape add -t lto6 ${lto6_tapes[0]} ${lto6_tapes[1]} ||
         error "Tapes $lto6_tapes should have been added"
 
-    $valg_phobos tape format --unlock ${lto6_tapes[0]} ${lto6_tapes[1]} ||
+    $phobos tape format --unlock ${lto6_tapes[0]} ${lto6_tapes[1]} ||
         error "Tapes $lto6_tapes should have been formated"
 
-    local logs=$($valg_phobos logs dump)
-    if [[ $? != 0 ]]; then
-        error "Log dumping failed with '$?'"
-    fi
-
-    local logs_lines=$(echo "$logs" | wc -l)
-    if [ -z "$logs" ] || (( logs_lines != 2 )); then
-        error "Two logs should have been recorded"
-    fi
+    check_number_of_logs 2
 
     local lto6_drive=$($phobos drive list -o name "${lto6_drives[0]}")
     _test_filter "--drive" "$lto6_drive" "$lto6_drive" 1
@@ -245,44 +239,58 @@ function test_dump_filters
 
 function test_clear_filters
 {
-    local lto6_tapes=($(get_tapes L6 2 | nodeset -e))
+    local lto6_tapes=($(get_tapes L6 3 | nodeset -e))
     local lto6_drives=($(get_lto_drives 6 1 | nodeset -e))
 
     $phobos drive add --unlock ${lto6_drives[0]} ||
-        error "Drives $lto6_drives should have been added"
+        error "Drive ${lto6_drives[0]} should have been added"
 
-    $phobos tape add -t lto6 ${lto6_tapes[0]} ${lto6_tapes[1]} ||
-        error "Tapes $lto6_tapes should have been added"
+    $phobos tape add -t lto6 ${lto6_tapes[0]} ${lto6_tapes[1]} \
+        ${lto6_tapes[2]} || error "Tapes $lto6_tapes should have been added"
 
-    $valg_phobos tape format --unlock ${lto6_tapes[0]} ||
-        error "Tapes $lto6_tapes should have been formated"
+    $phobos tape format --unlock ${lto6_tapes[0]} ||
+        error "Tape ${lto6_tapes[0]} should have been formated"
 
-    $valg_phobos tape format --unlock ${lto6_tapes[1]} ||
-        error "Tapes $lto6_tapes should have been formated"
+    $phobos tape format --unlock ${lto6_tapes[1]} ||
+        error "Tape ${lto6_tapes[1]} should have been formated"
 
-    local logs=$($valg_phobos logs dump)
-    if [[ $? != 0 ]]; then
-        error "Log dumping failed with '$?'"
+    # 3 logs are created, 2 load, 1 unload, 2 for tape lto6_tapes[0] and 1 for
+    # lto6_tapes[1]
+    check_number_of_logs 3
+
+    $valg_phobos logs clear --cause device_unload ||
+        error "Logs for cause 'device_unload' should have been cleared"
+
+    # The unload log has been cleared
+    check_number_of_logs 2
+
+    $valg_phobos logs clear --tape ${lto6_tapes[0]} ||
+        error "Logs for tape '${lto6_tapes[0]}' should have been cleared"
+
+    # The last log about lto6_tapes[0] has been cleared
+    check_number_of_logs 1
+
+    local now=$(date "+%Y-%m-%d %H:%M:%S")
+
+    sleep 2
+    $phobos tape format --unlock ${lto6_tapes[2]} ||
+        error "Tape ${lto6_tapes[2]} should have been formated"
+
+    # Back at 3 logs, same configuration as at the start but for lto6_tapes[1]
+    # and lto6_tapes[2]
+    $valg_phobos logs clear --end "$now" ||
+        error "Logs before '$now' should have been cleared"
+
+    # The load log about lto6_tapes[1] has been cleared
+    check_number_of_logs 2
+
+    $valg_phobos logs clear --start "$now" --errno 0 ||
+        error "Logs after '$now' and with errno '0' should have been cleared"
+
+    # The last two logs have been cleared
+    if [ ! -z "$($valg_phobos logs dump)" ]; then
+        error "No log should still be recorded"
     fi
-
-    local logs_lines=$(echo "$logs" | wc -l)
-    if [ -z "$logs" ] || (( logs_lines != 3 )); then
-        error "3 logs should have been recorded"
-    fi
-
-    $valg_phobos logs clear --cause device_unload
-
-    local logs=$($valg_phobos logs dump)
-    if [[ $? != 0 ]]; then
-        error "Log dumping failed with '$?'"
-    fi
-
-    local logs_lines=$(echo "$logs" | wc -l)
-    if [ -z "$logs" ] || (( logs_lines != 2 )); then
-        error "2 logs should still be recorded after clearing of an unload"
-    fi
-
-    clear_logs
 }
 
 TESTS=("setup; test_device_load; cleanup"

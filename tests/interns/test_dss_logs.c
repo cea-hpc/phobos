@@ -85,7 +85,7 @@ static void generate_logs(struct dss_handle *handle,
         times[i].tv_sec = (unsigned long) time(NULL) + 1;
         times[i].tv_usec = 0;
         if (i < LENGTH_DEVICES - 1)
-            sleep(5);
+            sleep(2);
     }
 }
 
@@ -163,13 +163,14 @@ static void dss_emit_logs_with_message_ok(void **state)
     dss_logs_delete(handle, NULL);
 }
 
-static void check_registered_logs(struct dss_handle *handle,
-                                  struct pho_id *device,
-                                  struct pho_id *medium,
-                                  enum operation_type *type,
-                                  struct timeval *start,
-                                  struct timeval *end,
-                                  int expected_log_number)
+static void check_logs_with_filter(struct dss_handle *handle,
+                                   struct pho_id *device,
+                                   struct pho_id *medium,
+                                   enum operation_type *type,
+                                   struct timeval *start,
+                                   struct timeval *end,
+                                   int expected_log_number,
+                                   bool action_is_clear)
 {
     struct pho_log_filter filter = { .error_number = NULL };
     struct dss_filter *filter_ptr;
@@ -211,15 +212,34 @@ static void check_registered_logs(struct dss_handle *handle,
     rc = create_logs_filter(&filter, &filter_ptr);
     assert_return_code(rc, -rc);
 
-    rc = dss_logs_get(handle, filter_ptr, &logs, &n_logs);
+    if (action_is_clear) {
+        rc = dss_logs_delete(handle, filter_ptr);
+        assert_return_code(rc, -rc);
+
+        rc = dss_logs_get(handle, NULL, &logs, &n_logs);
+    } else {
+        rc = dss_logs_get(handle, filter_ptr, &logs, &n_logs);
+    }
+
     dss_filter_free(filter_ptr);
     assert_return_code(rc, -rc);
-
     assert_int_equal(n_logs, expected_log_number);
     dss_res_free(logs, n_logs);
 }
 
-static void dss_logs_get_with_filters(void **state)
+static void check_logs_by_dump(struct dss_handle *handle,
+                               struct pho_id *device,
+                               struct pho_id *medium,
+                               enum operation_type *type,
+                               struct timeval *start,
+                               struct timeval *end,
+                               int expected_log_number)
+{
+    check_logs_with_filter(handle, device, medium, type, start, end,
+                           expected_log_number, false);
+}
+
+static void dss_logs_dump_with_filters(void **state)
 {
     struct dss_handle *handle = (struct dss_handle *)*state;
     int max_log_number = LENGTH_DEVICES * LENGTH_MEDIA *
@@ -229,28 +249,94 @@ static void dss_logs_get_with_filters(void **state)
 
     generate_logs(handle, times);
 
-    check_registered_logs(handle, NULL, NULL, NULL, NULL, NULL,
-                          expected_log_number);
+    check_logs_by_dump(handle, NULL, NULL, NULL, NULL, NULL,
+                       expected_log_number);
 
     expected_log_number = max_log_number / (LENGTH_DEVICES * LENGTH_MEDIA *
                                             LENGTH_TYPES);
-    check_registered_logs(handle, &devices[0], &media[0], &types[0], NULL, NULL,
-                          expected_log_number);
+    check_logs_by_dump(handle, &devices[0], &media[0], &types[0], NULL, NULL,
+                       expected_log_number);
 
     expected_log_number = max_log_number / (LENGTH_DEVICES * LENGTH_TYPES);
-    check_registered_logs(handle, &devices[1], NULL, &types[1], &times[0], NULL,
-                          expected_log_number);
+    check_logs_by_dump(handle, &devices[1], NULL, &types[1], &times[0], NULL,
+                       expected_log_number);
 
     expected_log_number = max_log_number / (LENGTH_DEVICES);
-    check_registered_logs(handle, &devices[1], NULL, NULL, &times[0], &times[1],
-                          expected_log_number);
+    check_logs_by_dump(handle, &devices[1], NULL, NULL, &times[0], &times[1],
+                       expected_log_number);
 
     expected_log_number = max_log_number / (LENGTH_DEVICES * LENGTH_MEDIA *
                                             LENGTH_TYPES);
-    check_registered_logs(handle, &devices[1], &media[1], &types[0], NULL,
-                          &times[1], expected_log_number);
+    check_logs_by_dump(handle, &devices[1], &media[1], &types[0], NULL,
+                       &times[1], expected_log_number);
 
     dss_logs_delete(handle, NULL);
+}
+
+static void check_logs_by_clear(struct dss_handle *handle,
+                                struct pho_id *device,
+                                struct pho_id *medium,
+                                enum operation_type *type,
+                                struct timeval *start,
+                                struct timeval *end,
+                                int expected_log_number)
+{
+    check_logs_with_filter(handle, device, medium, type, start, end,
+                           expected_log_number, true);
+}
+
+static void dss_logs_clear_with_filters(void **state)
+{
+    struct dss_handle *handle = (struct dss_handle *)*state;
+    struct timeval times[LENGTH_TIMES];
+
+    generate_logs(handle, times);
+
+    check_logs_by_clear(handle, NULL, NULL, NULL, NULL, NULL, 0);
+
+    generate_logs(handle, times);
+
+    /* Only one log should be removed for device[0], media[0] and type[0] */
+    check_logs_by_clear(handle, &devices[0], &media[0], &types[0], NULL, NULL,
+                        7);
+
+    /* All logs before time[1] should be removed, which amount to the 7 left */
+    check_logs_by_clear(handle, NULL, NULL, NULL, NULL, &times[1], 0);
+
+    generate_logs(handle, times);
+
+    check_logs_by_clear(handle, &devices[1], NULL, &types[1], &times[0], NULL,
+                        6);
+
+    /* All logs of device[1] and type[1] have been cleared, so the ones left
+     * are those of device[0] and device[1]/type[0], which amount to 6 logs.
+     * Clearing those of device[0] should remove 4 logs, leaving only two
+     */
+    check_logs_by_clear(handle, &devices[0], NULL, NULL, NULL, NULL, 2);
+
+    /* And clearing those with type[0] should remove all logs */
+    check_logs_by_clear(handle, NULL, NULL, &types[0], NULL, NULL, 0);
+
+    generate_logs(handle, times);
+
+    check_logs_by_clear(handle, &devices[1], NULL, NULL, &times[0], &times[1],
+                        4);
+
+    /* 4 logs after left after clearing those device[1], all of those concern
+     * device[0]
+     */
+
+    /* We clear the one about media[1] and type[0], leaving 3 behind */
+    check_logs_by_clear(handle, NULL, &media[1], &types[0], NULL, &times[1], 3);
+
+    /* Now clear the one with media[0], which should leave 1 log remaining */
+    check_logs_by_clear(handle, NULL, &media[0], NULL, NULL, &times[1], 1);
+
+    /* Clearing the logs with type[1] but after time[0] should remove no log */
+    check_logs_by_clear(handle, NULL, NULL, &types[1], &times[0], NULL, 1);
+
+    /* Finally, clearing the logs before time[1] should remove the last log */
+    check_logs_by_clear(handle, NULL, NULL, NULL, NULL, &times[1], 0);
 }
 
 int main(void)
@@ -258,7 +344,8 @@ int main(void)
     const struct CMUnitTest dss_logs_test_cases[] = {
         cmocka_unit_test(dss_emit_logs_ok),
         cmocka_unit_test(dss_emit_logs_with_message_ok),
-        cmocka_unit_test(dss_logs_get_with_filters),
+        cmocka_unit_test(dss_logs_dump_with_filters),
+        cmocka_unit_test(dss_logs_clear_with_filters),
     };
 
     pho_context_init();
