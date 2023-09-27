@@ -171,7 +171,7 @@ function _test_filter
     echo "$logs"
 }
 
-function test_filter
+function test_dump_filters
 {
     local lto6_tapes=($(get_tapes L6 3 | nodeset -e))
     local lto6_drives=($(get_lto_drives 6 2 | nodeset -e))
@@ -239,8 +239,53 @@ function test_filter
         error "Logs returned should be prior to or at '$old_date', found " \
               "them at '$new_date'"
     fi
+
+    clear_logs
+}
+
+function test_clear_filters
+{
+    local lto6_tapes=($(get_tapes L6 2 | nodeset -e))
+    local lto6_drives=($(get_lto_drives 6 1 | nodeset -e))
+
+    $phobos drive add --unlock ${lto6_drives[0]} ||
+        error "Drives $lto6_drives should have been added"
+
+    $phobos tape add -t lto6 ${lto6_tapes[0]} ${lto6_tapes[1]} ||
+        error "Tapes $lto6_tapes should have been added"
+
+    $valg_phobos tape format --unlock ${lto6_tapes[0]} ||
+        error "Tapes $lto6_tapes should have been formated"
+
+    $valg_phobos tape format --unlock ${lto6_tapes[1]} ||
+        error "Tapes $lto6_tapes should have been formated"
+
+    local logs=$($valg_phobos logs dump)
+    if [[ $? != 0 ]]; then
+        error "Log dumping failed with '$?'"
+    fi
+
+    local logs_lines=$(echo "$logs" | wc -l)
+    if [ -z "$logs" ] || (( logs_lines != 3 )); then
+        error "3 logs should have been recorded"
+    fi
+
+    $valg_phobos logs clear --cause device_unload
+
+    local logs=$($valg_phobos logs dump)
+    if [[ $? != 0 ]]; then
+        error "Log dumping failed with '$?'"
+    fi
+
+    local logs_lines=$(echo "$logs" | wc -l)
+    if [ -z "$logs" ] || (( logs_lines != 2 )); then
+        error "2 logs should still be recorded after clearing of an unload"
+    fi
+
+    clear_logs
 }
 
 TESTS=("setup; test_device_load; cleanup"
        "setup; test_device_unload; cleanup"
-       "setup; test_filter; cleanup")
+       "setup; test_dump_filters; cleanup"
+       "setup; test_clear_filters; cleanup")

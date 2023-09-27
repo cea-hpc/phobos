@@ -40,18 +40,6 @@
 #include "pho_dss.h"
 #include "pho_type_utils.h"
 
-enum log_query_idx {
-    DSS_EMIT_LOG,
-    DSS_DELETE_ALL_LOG,
-};
-
-static const char * const log_query[] = {
-    [DSS_EMIT_LOG]       = "INSERT INTO logs "
-                           "(family, device, medium, errno, cause, message) "
-                           "VALUES ('%s', '%s', '%s', %d, '%s', '%s');",
-    [DSS_DELETE_ALL_LOG] = "DELETE FROM logs;"
-};
-
 int dss_emit_log(struct dss_handle *handle, struct pho_log *log)
 {
     GString *request = g_string_new("");
@@ -99,26 +87,6 @@ int dss_logs_from_pg_row(struct dss_handle *handle, void *item,
         LOG_RETURN(rc = -ENOMEM, "Failed to convert message in log to json");
 
     return str2timeval(get_str_value(res, row_num, 6), &log->time);
-}
-
-int dss_logs_delete(struct dss_handle *handle, const struct dss_filter *filter)
-{
-    PGconn *conn = handle->dh_conn;
-    GString *request;
-    PGresult *res;
-    int rc;
-
-    if (filter)
-        return -ENOTSUP;
-
-    request = g_string_new(log_query[DSS_DELETE_ALL_LOG]);
-
-    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
-    PQclear(res);
-
-    g_string_free(request, true);
-
-    return rc;
 }
 
 void dss_logs_result_free(void *item)

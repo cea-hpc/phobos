@@ -39,6 +39,18 @@
 #define DSS_LOGS_SELECT_QUERY \
     "SELECT family, device, medium, errno, cause, message, time FROM logs"
 
+enum log_query_idx {
+    DSS_EMIT_LOG,
+    DSS_DELETE_LOGS,
+};
+
+static const char * const log_query[] = {
+    [DSS_EMIT_LOG]    = "INSERT INTO logs "
+                        "(family, device, medium, errno, cause, message) "
+                        "VALUES ('%s', '%s', '%s', %d, '%s', '%s');",
+    [DSS_DELETE_LOGS] = "DELETE FROM logs",
+};
+
 int dss_logs_from_pg_row(struct dss_handle *handle, void *item,
                          PGresult *res, int row_num);
 

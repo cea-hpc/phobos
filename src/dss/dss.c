@@ -2856,3 +2856,28 @@ int dss_media_of_object(struct dss_handle *hdl, struct object_info *obj,
 
     return rc;
 }
+
+int dss_logs_delete(struct dss_handle *handle, const struct dss_filter *filter)
+{
+    PGconn *conn = handle->dh_conn;
+    GString *clause;
+    PGresult *res;
+    int rc;
+
+    clause = g_string_new(log_query[DSS_DELETE_LOGS]);
+
+    rc = clause_filter_convert(handle, clause, filter);
+    if (rc) {
+        g_string_free(clause, true);
+        return rc;
+    }
+
+    pho_debug("Executing request: '%s'", clause->str);
+
+    rc = execute(conn, clause, &res, PGRES_COMMAND_OK);
+    PQclear(res);
+
+    g_string_free(clause, true);
+
+    return rc;
+}

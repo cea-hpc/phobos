@@ -1264,6 +1264,23 @@ class LogsClearOptHandler(BaseOptHandler):
     @classmethod
     def add_options(cls, parser):
         super(LogsClearOptHandler, cls).add_options(parser)
+        parser.add_argument('-D', '--drive',
+                            help='drive ID of the logs to dump')
+        parser.add_argument('-T', '--tape',
+                            help='tape ID of the logs to dump')
+        parser.add_argument('-e', '--errno', type=int,
+                            help='error number of the logs to dump')
+        parser.add_argument('-c', '--cause',
+                            help='cause of the logs to dump',
+                            choices=["library_scan", "library_open",
+                                     "device_lookup", "medium_lookup",
+                                     "device_load", "device_unload"])
+        parser.add_argument('--start', type=str_to_timestamp, default=0,
+                            help="timestamp of the most recent logs to dump,"
+                                 "in format YYYY-MM-DD [hh:mm:ss]")
+        parser.add_argument('--end', type=str_to_timestamp, default=0,
+                            help="timestamp of the oldest logs to dump,"
+                                 "in format 'YYYY-MM-DD [hh:mm:ss]'")
 
 def create_log_filter(device, medium, errno, cause, start, end):
     """Create a log filter structure with the given parameters."""
@@ -1317,9 +1334,17 @@ class LogsOptHandler(BaseOptHandler):
 
     def exec_clear(self):
         """Clear logs"""
+        device = self.params.get('drive')
+        medium = self.params.get('tape')
+        errno = self.params.get('errno')
+        cause = self.params.get('cause')
+        start = self.params.get('start')
+        end = self.params.get('end')
+
+        log_filter = create_log_filter(device, medium, errno, cause, start, end)
         try:
             with AdminClient(lrs_required=False) as adm:
-                adm.clear_logs()
+                adm.clear_logs(log_filter)
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
