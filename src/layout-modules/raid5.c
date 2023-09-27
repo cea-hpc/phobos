@@ -27,8 +27,7 @@
 #endif
 
 #include "raid5.h"
-
-#include <assert.h>
+#include "raid_common.h"
 #include <errno.h>
 #include <glib.h>
 #include <string.h>
@@ -54,25 +53,10 @@ static struct module_desc RAID5_MODULE_DESC = {
     .mod_minor = PLUGIN_MINOR,
 };
 
-static int raid5_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
-                              pho_req_t **reqs, size_t *n_reqs)
-{
-    (void) enc;
-    (void) resp;
-    (void) reqs;
-    (void) n_reqs;
-    return 0;
-}
-
-static void raid5_encoder_destroy(struct pho_encoder *enc)
-{
-    (void) enc;
-}
-
 __attribute__((unused))
 static const struct pho_enc_ops RAID5_ENCODER_OPS = {
-    .step       = raid5_encoder_step,
-    .destroy    = raid5_encoder_destroy,
+    .step       = raid_encoder_step,
+    .destroy    = raid_encoder_destroy,
 };
 
 static const struct pho_layout_module_ops LAYOUT_RAID5_OPS = {
