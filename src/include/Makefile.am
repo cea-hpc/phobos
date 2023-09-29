@@ -12,8 +12,8 @@ noinst_HEADERS=pho_cfg.h pho_comm.h pho_common.h pho_daemon.h pho_dss.h \
 #   - phobos_store.h  main program interface
 #   - phobos_admin.h  admin command interface
 #   - pho_attrs.h     access and manipulate object metadata
-include_HEADERS=pho_attrs.h pho_comm.h pho_common.h pho_dss.h pho_types.h \
-                phobos_store.h phobos_admin.h
+include_HEADERS=pho_attrs.h pho_cfg.h pho_comm.h pho_common.h pho_dss.h \
+                pho_types.h phobos_store.h phobos_admin.h
 
 $(proto_headers): $(protodir)/gen-proto.stamp
 
