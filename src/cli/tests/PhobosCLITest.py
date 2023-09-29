@@ -205,6 +205,7 @@ class CLIParametersTest(unittest.TestCase):
                                   '1234-12-12 23:59:59'])
         self.check_cmdline_valid(['logs', 'clear', '--start', '1234-01-01',
                                   '--end', '1234-01-01'])
+        self.check_cmdline_valid(['logs', 'clear', '--clear-all'])
 
         self.check_cmdline_valid(['logs', 'dump'])
         self.check_cmdline_valid(['logs', 'dump', '--drive', '42'])

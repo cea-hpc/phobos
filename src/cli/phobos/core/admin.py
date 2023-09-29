@@ -322,11 +322,11 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc, "Failed to dump logs")
 
-    def clear_logs(self, log_filter):
+    def clear_logs(self, log_filter, clear_all_log):
         """Clear all persistent logs"""
-        rc = LIBPHOBOS_ADMIN.phobos_admin_clear_logs(
-            byref(self.handle), log_filter, False if log_filter else True
-        )
+        rc = LIBPHOBOS_ADMIN.phobos_admin_clear_logs(byref(self.handle),
+                                                     log_filter,
+                                                     clear_all_log)
         if rc:
             raise EnvironmentError(rc, "Failed to clear logs")
 

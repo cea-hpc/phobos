@@ -1599,18 +1599,21 @@ out_filter:
 int phobos_admin_clear_logs(struct admin_handle *adm,
                             struct pho_log_filter *log_filter, bool clear_all)
 {
+    struct dss_filter *filter_ptr = NULL;
     struct dss_filter dss_log_filter;
-    struct dss_filter *filter_ptr;
     int rc;
 
     if (!log_filter && !clear_all)
-        return -ENOTSUP;
+        LOG_RETURN(rc = -EINVAL,
+                   "Cannot clear all logs without 'clear_all' option set");
 
-    filter_ptr = &dss_log_filter;
+    if (log_filter) {
+        filter_ptr = &dss_log_filter;
 
-    rc = create_logs_filter(log_filter, &filter_ptr);
-    if (rc)
-        LOG_RETURN(rc, "Failed to create logs filter");
+        rc = create_logs_filter(log_filter, &filter_ptr);
+        if (rc)
+            LOG_RETURN(rc, "Failed to create logs filter");
+    }
 
     rc = dss_logs_delete(&adm->dss, filter_ptr);
     dss_filter_free(filter_ptr);

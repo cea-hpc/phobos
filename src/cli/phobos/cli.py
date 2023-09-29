@@ -1281,6 +1281,10 @@ class LogsClearOptHandler(BaseOptHandler):
         parser.add_argument('--end', type=str_to_timestamp, default=0,
                             help="timestamp of the oldest logs to dump,"
                                  "in format 'YYYY-MM-DD [hh:mm:ss]'")
+        parser.add_argument('--clear-all', action='store_true',
+                            help='must be specified to clear all logs, will '
+                                 'have no effect, if any of the other '
+                                 'arguments is specified')
 
 def create_log_filter(device, medium, errno, cause, start, end):
     """Create a log filter structure with the given parameters."""
@@ -1344,7 +1348,7 @@ class LogsOptHandler(BaseOptHandler):
         log_filter = create_log_filter(device, medium, errno, cause, start, end)
         try:
             with AdminClient(lrs_required=False) as adm:
-                adm.clear_logs(log_filter)
+                adm.clear_logs(log_filter, self.params.get('clear_all'))
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

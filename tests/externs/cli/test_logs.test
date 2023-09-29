@@ -51,7 +51,8 @@ function cleanup
 
 function clear_logs
 {
-    $valg_phobos logs clear || error "Logs clear should have succeeded"
+    $valg_phobos logs clear --clear-all ||
+        error "Logs clear should have succeeded"
 
     local logs=$($valg_phobos logs dump)
     if [[ $? != 0 ]]; then
@@ -239,14 +240,15 @@ function test_dump_filters
 
 function test_clear_filters
 {
-    local lto6_tapes=($(get_tapes L6 3 | nodeset -e))
+    local lto6_tapes=($(get_tapes L6 4 | nodeset -e))
     local lto6_drives=($(get_lto_drives 6 1 | nodeset -e))
 
     $phobos drive add --unlock ${lto6_drives[0]} ||
         error "Drive ${lto6_drives[0]} should have been added"
 
     $phobos tape add -t lto6 ${lto6_tapes[0]} ${lto6_tapes[1]} \
-        ${lto6_tapes[2]} || error "Tapes $lto6_tapes should have been added"
+        ${lto6_tapes[2]} ${lto6_tapes[3]}||
+        error "Tapes $lto6_tapes should have been added"
 
     $phobos tape format --unlock ${lto6_tapes[0]} ||
         error "Tape ${lto6_tapes[0]} should have been formated"
@@ -288,6 +290,26 @@ function test_clear_filters
         error "Logs after '$now' and with errno '0' should have been cleared"
 
     # The last two logs have been cleared
+    if [ ! -z "$($valg_phobos logs dump)" ]; then
+        error "No log should still be recorded"
+    fi
+
+    $phobos tape format --unlock ${lto6_tapes[3]} ||
+        error "Tape ${lto6_tapes[3]} should have been formated"
+
+    check_number_of_logs 2
+
+    $valg_phobos logs clear --cause device_unload --clear-all ||
+        error "Logs for cause 'device_unload' should have been cleared"
+
+    # The unload log has been cleared, but not the other one, even though
+    # --clear-all is present
+    check_number_of_logs 1
+
+    $valg_phobos logs clear --clear-all ||
+        error "All logs should have been cleared using --clear-all"
+
+    # The last log has been cleared
     if [ ! -z "$($valg_phobos logs dump)" ]; then
         error "No log should still be recorded"
     fi
