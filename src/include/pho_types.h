@@ -32,7 +32,6 @@
 /* glib will be used to handle common structures (GList, GString, ...) */
 #include <glib.h>
 #include <limits.h>
-#include <openssl/evp.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
