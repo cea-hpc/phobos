@@ -121,8 +121,8 @@ static int global_setup(void **state)
     if (rc)
         GOTO(clean_dss, rc = -1);
 
-    rc = dss_layout_get(rsl_state.dss, &filter, NULL, &rsl_state.layout,
-                        &rsl_state.layout_cnt);
+    rc = dss_full_layout_get(rsl_state.dss, &filter, NULL, &rsl_state.layout,
+                             &rsl_state.layout_cnt);
     dss_filter_free(&filter);
     if (rc)
         GOTO(clean_dss, rc = -1);

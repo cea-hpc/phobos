@@ -50,6 +50,7 @@ enum dss_type {
     DSS_MEDIA,
     DSS_MEDIA_UPDATE_LOCK,
     DSS_LOGS,
+    DSS_FULL_LAYOUT,
     DSS_LAST,
 };
 
@@ -62,6 +63,7 @@ static const char * const dss_type_names[] = {
     [DSS_MEDIA]  = "media",
     [DSS_MEDIA_UPDATE_LOCK]  = "media_update",
     [DSS_LOGS] = "logs",
+    [DSS_FULL_LAYOUT] = "full_layout",
 };
 
 #define MAX_UPDATE_LOCK_TRY 5
@@ -312,7 +314,7 @@ int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
                   struct media_info **med_ls, int *med_cnt);
 
 /**
- * Retrieve layout information from DSS
+ * Retrieve layout + extents information from DSS
  * @param[in]  hdl           valid connection handle
  * @param[in]  object        assembled DSS filtering criteria on objects
  * @param[in]  media         assembled DSS filtering criteria on media
@@ -322,9 +324,9 @@ int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
-                   const struct dss_filter *media,
-                   struct layout_info **layouts, int *layout_count);
+int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
+                        const struct dss_filter *media,
+                        struct layout_info **layouts, int *layout_count);
 
 /**
  * Retrieve object information from DSS

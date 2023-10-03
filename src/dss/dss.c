@@ -57,9 +57,10 @@ static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
 static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
                                  PGresult *res, int row_num);
 static void dss_media_result_free(void *void_media);
-static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
-                                  PGresult *res, int row_num);
-static void dss_layout_result_free(void *void_layout);
+static int dss_full_layout_from_pg_row(struct dss_handle *handle,
+                                       void *void_layout, PGresult *res,
+                                       int row_num);
+static void dss_full_layout_result_free(void *void_layout);
 static int dss_object_from_pg_row(struct dss_handle *handle, void *void_object,
                                   PGresult *res, int row_num);
 static int dss_deprecated_object_from_pg_row(struct dss_handle *handle,
@@ -392,7 +393,8 @@ static const char * const select_query[] = {
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
                    " address_type, fs_type, fs_status, fs_label, stats, tags,"
                    " put, get, delete FROM media",
-    [DSS_LAYOUT] = "SELECT oid, object_uuid, version, lyt_info,"
+    [DSS_FULL_LAYOUT] =
+                   "SELECT oid, object_uuid, version, lyt_info,"
                    " json_agg(json_build_object("
                    "  'extent_uuid', extent_uuid, 'sz', size,"
                    "  'fam', medium_family, 'state', state,"
@@ -417,43 +419,43 @@ static const char * const select_query[] = {
 };
 
 static const char * const select_inner_end_query[] = {
-    [DSS_LAYOUT] = " ORDER BY layout_index)"
-                   " AS outer_table USING (extent_uuid)",
+    [DSS_FULL_LAYOUT] = " ORDER BY layout_index)"
+                        " AS outer_table USING (extent_uuid)",
 };
 
 static const char * const select_outer_end_query[] = {
-    [DSS_LAYOUT] = " GROUP BY oid, object_uuid, version, lyt_info"
-                   " ORDER BY oid, version, object_uuid",
+    [DSS_FULL_LAYOUT] = " GROUP BY oid, object_uuid, version, lyt_info"
+                        " ORDER BY oid, version, object_uuid",
 };
 
 static const size_t res_size[] = {
-    [DSS_DEVICE] = sizeof(struct dev_info),
-    [DSS_MEDIA]  = sizeof(struct media_info),
-    [DSS_LAYOUT] = sizeof(struct layout_info),
-    [DSS_OBJECT] = sizeof(struct object_info),
-    [DSS_DEPREC] = sizeof(struct object_info),
-    [DSS_LOGS]   = sizeof(struct pho_log),
+    [DSS_DEVICE]      = sizeof(struct dev_info),
+    [DSS_MEDIA]       = sizeof(struct media_info),
+    [DSS_FULL_LAYOUT] = sizeof(struct layout_info),
+    [DSS_OBJECT]      = sizeof(struct object_info),
+    [DSS_DEPREC]      = sizeof(struct object_info),
+    [DSS_LOGS]        = sizeof(struct pho_log),
 };
 
 typedef int (*res_pg_constructor_t)(struct dss_handle *handle, void *item,
                                     PGresult *res, int row_num);
 static const res_pg_constructor_t res_pg_constructor[] = {
-    [DSS_DEVICE] = dss_device_from_pg_row,
-    [DSS_MEDIA]  = dss_media_from_pg_row,
-    [DSS_LAYOUT] = dss_layout_from_pg_row,
-    [DSS_OBJECT] = dss_object_from_pg_row,
-    [DSS_DEPREC] = dss_deprecated_object_from_pg_row,
-    [DSS_LOGS]   = dss_logs_from_pg_row,
+    [DSS_DEVICE]      = dss_device_from_pg_row,
+    [DSS_MEDIA]       = dss_media_from_pg_row,
+    [DSS_FULL_LAYOUT] = dss_full_layout_from_pg_row,
+    [DSS_OBJECT]      = dss_object_from_pg_row,
+    [DSS_DEPREC]      = dss_deprecated_object_from_pg_row,
+    [DSS_LOGS]        = dss_logs_from_pg_row,
 };
 
 typedef void (*res_destructor_t)(void *item);
 static const res_destructor_t res_destructor[] = {
-    [DSS_DEVICE] = dss_device_result_free,
-    [DSS_MEDIA]  = dss_media_result_free,
-    [DSS_LAYOUT] = dss_layout_result_free,
-    [DSS_OBJECT] = dss_object_result_free,
-    [DSS_DEPREC] = dss_object_result_free,
-    [DSS_LOGS]   = dss_logs_result_free,
+    [DSS_DEVICE]      = dss_device_result_free,
+    [DSS_MEDIA]       = dss_media_result_free,
+    [DSS_FULL_LAYOUT] = dss_full_layout_result_free,
+    [DSS_OBJECT]      = dss_object_result_free,
+    [DSS_DEPREC]      = dss_object_result_free,
+    [DSS_LOGS]        = dss_logs_result_free,
 };
 
 static const char * const insert_query[] = {
@@ -1504,7 +1506,7 @@ static inline bool is_type_supported(enum dss_type type)
     switch (type) {
     case DSS_OBJECT:
     case DSS_DEPREC:
-    case DSS_LAYOUT:
+    case DSS_FULL_LAYOUT:
     case DSS_DEVICE:
     case DSS_MEDIA:
     case DSS_LOGS:
@@ -1826,10 +1828,12 @@ static void dss_media_result_free(void *void_media)
 }
 
 /**
- * Fill a layout_info from the information in the `row_num`th row of `res`.
+ * Fill a layout_info and its extents from the information in the `row_num`th
+ * row of `res`.
  */
-static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
-                                  PGresult *res, int row_num)
+static int dss_full_layout_from_pg_row(struct dss_handle *handle,
+                                       void *void_layout, PGresult *res,
+                                       int row_num)
 {
     struct layout_info *layout = void_layout;
     int rc;
@@ -1860,7 +1864,7 @@ static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
 /**
  * Free the resources associated with layout_info built from a PGresult.
  */
-static void dss_layout_result_free(void *void_layout)
+static void dss_full_layout_result_free(void *void_layout)
 {
     struct layout_info *layout = void_layout;
 
@@ -1971,14 +1975,14 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
         return rc;
     }
 
-    if (type == DSS_LAYOUT) {
-        g_string_append(clause, select_inner_end_query[DSS_LAYOUT]);
+    if (type == DSS_FULL_LAYOUT) {
+        g_string_append(clause, select_inner_end_query[DSS_FULL_LAYOUT]);
         rc = clause_filter_convert(handle, clause, filters[1]);
         if (rc) {
             g_string_free(clause, true);
             return rc;
         }
-        g_string_append(clause, select_outer_end_query[DSS_LAYOUT]);
+        g_string_append(clause, select_outer_end_query[DSS_FULL_LAYOUT]);
     }
 
     pho_debug("Executing request: '%s'", clause->str);
@@ -2324,11 +2328,11 @@ int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
                            (void **)med_ls, med_cnt);
 }
 
-int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
-                   const struct dss_filter *media,
-                   struct layout_info **layouts, int *layout_count)
+int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
+                        const struct dss_filter *media,
+                        struct layout_info **layouts, int *layout_count)
 {
-    return dss_generic_get(hdl, DSS_LAYOUT,
+    return dss_generic_get(hdl, DSS_FULL_LAYOUT,
                            (const struct dss_filter*[]) {object, media},
                            (void **)layouts, layout_count);
 }

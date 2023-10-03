@@ -145,9 +145,9 @@ do {                                                                           \
         will_return(dss_deprecated_object_get, _cnt);                          \
 } while (0)
 
-int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   const struct dss_filter *outer_filter,
-                   struct layout_info **lyt_ls, int *lyt_cnt)
+int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                        const struct dss_filter *outer_filter,
+                        struct layout_info **lyt_ls, int *lyt_cnt)
 {
     int rc = (int)mock();
     void *lyt_container;
@@ -176,9 +176,9 @@ int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
 
 #define MOCK_DSS_LAYOUT_GET(_rc, _cnt)                                         \
 do {                                                                           \
-    will_return(dss_layout_get, _rc);                                          \
+    will_return(dss_full_layout_get, _rc);                                     \
     if (_rc == 0)                                                              \
-        will_return(dss_layout_get, _cnt);                                     \
+        will_return(dss_full_layout_get, _cnt);                                \
 } while (0)
 
 int dss_object_move(struct dss_handle *handle, enum dss_type type_from,
@@ -569,7 +569,7 @@ static void omd_dss_filter_build_for_layout_failure(void **state)
     assert_int_equal(rc, -ENOMEM);
 }
 
-static void omd_dss_layout_get_failure(void **state)
+static void omd_dss_full_layout_get_failure(void **state)
 {
     struct pho_xfer_desc xfer = DEL_XFER;
     int rc;
@@ -716,7 +716,7 @@ int main(void)
         cmocka_unit_test(omd_dss_filter_build_for_deprec_failure),
         cmocka_unit_test(omd_dss_deprecated_object_get_failure),
         cmocka_unit_test(omd_dss_filter_build_for_layout_failure),
-        cmocka_unit_test(omd_dss_layout_get_failure),
+        cmocka_unit_test(omd_dss_full_layout_get_failure),
         cmocka_unit_test(omd_dss_object_set_failure),
         cmocka_unit_test(omd_dss_object_move_failure),
         cmocka_unit_test(omd_dss_unlock_failure),

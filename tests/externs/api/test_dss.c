@@ -56,9 +56,9 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     case DSS_DEPREC:
         return dss_deprecated_object_get(handle, inner_filter,
                                      (struct object_info **)item_list, n);
-    case DSS_LAYOUT:
-        return dss_layout_get(handle, inner_filter, outer_filter,
-                              (struct layout_info **)item_list, n);
+    case DSS_FULL_LAYOUT:
+        return dss_full_layout_get(handle, inner_filter, outer_filter,
+                                   (struct layout_info **)item_list, n);
     case DSS_DEVICE:
         return dss_device_get(handle, inner_filter,
                               (struct dev_info **)item_list, n);
@@ -182,7 +182,8 @@ int main(int argc, char **argv)
         if (argc >= 4) {
             pho_info("Criteria Filter: %s", argv[3]);
             if (strcmp(argv[3], "all") != 0) {
-                if (type == DSS_LAYOUT && strstr(argv[3], "DSS::EXT") != NULL) {
+                if (type == DSS_FULL_LAYOUT &&
+                    strstr(argv[3], "DSS::EXT") != NULL) {
                     with_outer_filter = true;
                     rc = dss_filter_build(&outer_filter, "%s", argv[3]);
                     if (rc) {
@@ -249,7 +250,7 @@ int main(int argc, char **argv)
             for (i = 0, object = item_list; i < item_cnt; i++, object++)
                 pho_debug("Got object: oid:%s", object->oid);
             break;
-        case DSS_LAYOUT:
+        case DSS_FULL_LAYOUT:
             for (i = 0,  layout = item_list; i < item_cnt; i++, layout++) {
                 pho_debug("Got layout: "
                           "oid:%s ext_count:%u desc:%s-%d.%d",
@@ -309,7 +310,9 @@ int main(int argc, char **argv)
                         pho_debug("Switch to oidtest mode (test null oid)");
                 }
 
-        rc = dss_generic_get(dss_handle, type, NULL, NULL, &item_list,
+        rc = dss_generic_get(dss_handle,
+                             type == DSS_LAYOUT ? DSS_FULL_LAYOUT : type,
+                             NULL, NULL, &item_list,
                              &item_cnt);
 
         if (rc) {

@@ -154,7 +154,7 @@ static int media_of_object(struct dss_handle *hdl, struct object_info *obj,
     if (rc)
         LOG_RETURN(rc, "Cannot build filter");
 
-    rc = dss_layout_get(hdl, &filter, NULL, &layout, cnt);
+    rc = dss_full_layout_get(hdl, &filter, NULL, &layout, cnt);
     dss_filter_free(&filter);
     if (rc)
         LOG_RETURN(rc, "Failed to retrieve layout of object '%s'", obj->oid);

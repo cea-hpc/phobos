@@ -1333,11 +1333,11 @@ int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
 
     /**
      * If no resource or medium was asked for, then using filters isn't
-     * necessary, thus passing them as NULL to dss_layout_get ensures
+     * necessary, thus passing them as NULL to dss_full_layout_get ensures
      * the expected behaviour.
      */
-    rc = dss_layout_get(&adm->dss, ext_filter_ptr, med_filter_ptr, layouts,
-                        n_layouts);
+    rc = dss_full_layout_get(&adm->dss, ext_filter_ptr, med_filter_ptr, layouts,
+                             n_layouts);
     if (rc)
         pho_error(rc, "Cannot fetch layouts");
 

@@ -160,17 +160,19 @@ test_check_get "deprec" '{"$KVINJSON": {"DSS::OBJ::user_md": "test=abc"}}'
 test_check_get "deprec" '{"DSS::OBJ::deprec_time": "1970-01-01 12:34:56"}'
 
 echo "**** TESTS: DSS_GET LAYOUT ****"
-test_check_get "layout" 'all'
-test_check_get "layout" '{"DSS::EXT::medium_id": "073221L6"}'
-test_check_get "layout" '{"$NOT": {"DSS::EXT::medium_id": "073221L6"}}'
-test_check_get "layout" '{"DSS::EXT::medium_id": "phobos1:/tmp/pho_testdir1"}'
-test_check_get "layout" '{"DSS::EXT::medium_id": "DOESNOTEXIST"}'
-test_check_get "layout" '{"DSS::EXT::medium_id": "phobos1:/tmp/doesnotexist"}'
-test_check_get "layout" '{"DSS::OBJ::oid": "QQQ6ASQDSQD"}'
-test_check_get "layout" '{"$NOR": [{"DSS::OBJ::oid": "QQQ6ASQDSQD"}]}'
-test_check_get "layout" '{"$LIKE": {"DSS::OBJ::oid": "Q%D"}}'
-test_check_get "layout" '{"DSS::EXT::state": "pending"}'
-test_check_get "layout" '{"DSS::OBJ::layout_type": "simple"}'
+test_check_get "full_layout" 'all'
+test_check_get "full_layout" '{"DSS::EXT::medium_id": "073221L6"}'
+test_check_get "full_layout" '{"$NOT": {"DSS::EXT::medium_id": "073221L6"}}'
+test_check_get "full_layout" \
+  '{"DSS::EXT::medium_id": "phobos1:/tmp/pho_testdir1"}'
+test_check_get "full_layout" '{"DSS::EXT::medium_id": "DOESNOTEXIST"}'
+test_check_get "full_layout" \
+  '{"DSS::EXT::medium_id": "phobos1:/tmp/doesnotexist"}'
+test_check_get "full_layout" '{"DSS::OBJ::oid": "QQQ6ASQDSQD"}'
+test_check_get "full_layout" '{"$NOR": [{"DSS::OBJ::oid": "QQQ6ASQDSQD"}]}'
+test_check_get "full_layout" '{"$LIKE": {"DSS::OBJ::oid": "Q%D"}}'
+test_check_get "full_layout" '{"DSS::EXT::state": "pending"}'
+test_check_get "full_layout" '{"DSS::OBJ::layout_type": "simple"}'
 
 echo "**** TEST: DSS_SET DEVICE ****"
 test_check_set "device" "insert"
@@ -200,14 +202,14 @@ test_check_set "layout" "insert"
 psql phobos_test phobos -c "update object set \
     lyt_info='{\"name\": \"simple\", \"major\": 0, \"minor\": 1}' \
     where oid = '01230123ABCCOPY'"
-test_check_get "layout" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
-test_check_get "layout" '{"$NOT": {"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}}'
+test_check_get "full_layout" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
+test_check_get "full_layout" '{"$NOT": {"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}}'
 test_check_set "layout" "update"
-test_check_get "layout" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
+test_check_get "full_layout" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
 test_check_set "layout" "delete" "oidtest" "FAIL"
 test_check_set "layout" "delete"
-test_check_get "layout" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
-test_check_get "layout" '{"$NOT": {"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}}'
+test_check_get "full_layout" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
+test_check_get "full_layout" '{"$NOT": {"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}}'
 test_check_set "object" "delete"
 test_check_get "object" '{"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}'
 test_check_get "object" '{"$NOT": {"$REGEXP": {"DSS::OBJ::oid": ".*COPY.*"}}}'
