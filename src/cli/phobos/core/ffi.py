@@ -650,6 +650,7 @@ class Buffer(Structure): # pylint: disable=too-few-public-methods
 class ExtentInfo(Structure): # pylint: disable=too-few-public-methods
     """DSS extent descriptor."""
     _fields_ = [
+        ('extent_uuid', c_char_p),
         ('layout_idx', c_int),
         ('state', c_int),
         ('size', c_ssize_t),

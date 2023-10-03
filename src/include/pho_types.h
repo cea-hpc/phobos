@@ -375,6 +375,7 @@ struct pho_resource {
 #define PHO_HASH_XXH128_KEY_NAME "xxh128"
 
 struct extent {
+    char               *uuid;       /**< extent UUID */
     int                 layout_idx; /**< index of this extent in layout */
     enum extent_state   state;      /**< stability state */
     ssize_t             size;       /**< size of the extent */

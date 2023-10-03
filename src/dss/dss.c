@@ -483,6 +483,7 @@ static const char * const update_query[] = {
     [DSS_DEVICE] = "UPDATE device SET adm_status = '%s' WHERE id = '%s';",
     [DSS_OBJECT] = "UPDATE object SET user_md = '%s' "
                    " WHERE oid = '%s';",
+    [DSS_EXTENT] = "UPDATE extent SET state = '%s' WHERE extent_uuid = '%s';",
 };
 
 static const char * const update_host_query =
@@ -510,6 +511,10 @@ static const char * const insert_query_values[] = {
                    " %d)%s",
     [DSS_OBJECT] = "('%s', '%s')%s",
     [DSS_DEPREC] = "('%s', '%s', %d, '%s')%s",
+};
+
+static const char * const insert_query_end[] = {
+    [DSS_EXTENT] = "RETURNING extent_uuid;",
 };
 
 static const char * const insert_full_query_values[] = {
@@ -1169,7 +1174,7 @@ static int get_deprecated_object_setrequest(PGconn *_conn,
     return 0;
 }
 
-static int get_extent_setrequest(PGconn *_conn, struct layout_info *item_list,
+static int get_extent_setrequest(PGconn *_conn, struct extent *item_list,
                                  int item_cnt, enum dss_set_action action,
                                  GString *request)
 {
@@ -1178,27 +1183,34 @@ static int get_extent_setrequest(PGconn *_conn, struct layout_info *item_list,
 
     ENTRY;
 
-    if (action != DSS_SET_INSERT)
-        LOG_RETURN(-ENOTSUP, "Extents can only be inserted");
+    if (action != DSS_SET_INSERT && action != DSS_SET_UPDATE)
+        LOG_RETURN(-ENOTSUP, "Extents can only be inserted or updated");
 
     for (i = 0; i < item_cnt && rc == 0; i++) {
-        struct layout_info *p_layout = &item_list[i];
-        int j;
+        struct extent *ext = &item_list[i];
+        char *hash;
 
-        for (j = 0; j < p_layout->ext_count; ++j) {
-            struct extent *ext = &p_layout->extents[j];
-            char *hash = dss_extent_hash_encode(ext);
+        switch (action) {
+        case DSS_SET_INSERT:
+            hash = dss_extent_hash_encode(ext);
 
             g_string_append_printf(request, insert_query_values[DSS_EXTENT],
                                    extent_state2str(ext->state), ext->size,
                                    rsc_family2str(ext->media.family),
                                    ext->media.name, ext->address.buff, hash,
-                                   (i < item_cnt-1 ||
-                                    j < p_layout->ext_count - 1) ? "," : ";");
+                                   (i < item_cnt-1) ? "," : " ");
 
             free(hash);
+            break;
+
+        default: /* DSS_SET_UPDATE */
+            g_string_append_printf(request, update_query[DSS_EXTENT],
+                                   extent_state2str(ext->state), ext->uuid);
         }
     }
+
+    if (action == DSS_SET_INSERT)
+        g_string_append(request, insert_query_end[DSS_EXTENT]);
 
     return rc;
 }
@@ -2029,6 +2041,23 @@ out:
     return rc;
 }
 
+static int _add_uuid_to_extents(void *extent_list, int nb_extents,
+                                PGresult *res)
+{
+    struct extent *extents = (struct extent *)extent_list;
+    int i;
+
+    assert(PQntuples(res) == nb_extents);
+
+    for (i = 0; i < nb_extents; ++i) {
+        extents[i].uuid = strdup(PQgetvalue(res, i, 0));
+        if (extents[i].uuid)
+            return -errno;
+    }
+
+    return 0;
+}
+
 /**
  * fields is only used by DSS_SET_UPDATE on DSS_MEDIA
  */
@@ -2115,7 +2144,8 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
     pho_debug("Executing request: '%s'", request->str);
 
     res = PQexec(conn, request->str);
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+    if ((type == DSS_EXTENT && PQresultStatus(res) != PGRES_TUPLES_OK) ||
+        (type != DSS_EXTENT && PQresultStatus(res) != PGRES_COMMAND_OK)) {
         rc = psql_state2errno(res);
         pho_error(rc, "Query '%s' failed: %s (%s)", request->str,
                   PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY),
@@ -2131,6 +2161,9 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
 
         goto out_cleanup;
     }
+
+    if (type == DSS_EXTENT && action == DSS_SET_INSERT)
+        _add_uuid_to_extents(item_list, item_cnt, res);
     PQclear(res);
 
     res = PQexec(conn, "COMMIT; ");
@@ -2541,10 +2574,10 @@ clean:
     return rc;
 }
 
-int dss_extent_set(struct dss_handle *hdl, struct layout_info *layouts,
-                   int layout_count, enum dss_set_action action)
+int dss_extent_set(struct dss_handle *hdl, struct extent *extents,
+                   int extent_count, enum dss_set_action action)
 {
-    return dss_generic_set(hdl, DSS_EXTENT, (void *)layouts, layout_count,
+    return dss_generic_set(hdl, DSS_EXTENT, (void *)extents, extent_count,
                            action, 0);
 }
 

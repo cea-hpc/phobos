@@ -899,6 +899,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
 {
     struct pho_encoder *enc = &pho->encoders[xfer_idx];
     struct pho_xfer_desc *xfer = &pho->xfers[xfer_idx];
+    int i;
 
     /* Don't end an encoder twice */
     if (pho->ended_xfers[xfer_idx])
@@ -912,18 +913,32 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     /* Once the encoder is done and successful, save the layout and metadata */
     if (!enc->is_decoder && xfer->xd_rc == 0 && rc == 0) {
         pho_debug("Saving layout for objid:'%s'", xfer->xd_objid);
-        rc = dss_extent_set(&pho->dss, enc->layout, 1, DSS_SET_INSERT);
+        rc = dss_extent_set(&pho->dss, enc->layout->extents,
+                            enc->layout->ext_count, DSS_SET_INSERT);
         if (rc) {
             pho_error(rc, "Error while saving extents for objid: '%s'",
                       xfer->xd_objid);
         } else {
             rc = dss_layout_set(&pho->dss, enc->layout, 1, DSS_SET_INSERT);
-            if (rc) /* XXX: manage extent "rollback" by setting their
-                     * state to orphan
-                     */
-                pho_error(rc, "Error while saving layout for objid:'%s'",
+            if (rc) {
+                int rc2;
+
+                pho_error(rc, "Error while saving layout for objid: '%s'",
                           xfer->xd_objid);
+
+                for (i = 0; i < enc->layout->ext_count; ++i)
+                    enc->layout->extents[i].state = PHO_EXT_ST_ORPHAN;
+
+                rc2 = dss_extent_set(&pho->dss, enc->layout->extents,
+                                     enc->layout->ext_count, DSS_SET_UPDATE);
+
+                if (rc2)
+                    pho_error(rc2, "Error while updating extents to orphan");
+            }
         }
+
+        for (i = 0; i < enc->layout->ext_count; ++i)
+            free(enc->layout->extents[i].uuid);
     }
 
     /* Only overwrite xd_rc if it was 0 */
