@@ -38,7 +38,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <errno.h>
-#include <xxhash.h>
 
 #include "pho_attrs.h"
 
