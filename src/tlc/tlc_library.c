@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2023 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -20,361 +20,297 @@
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
 /**
- * \brief  LDM functions for SCSI tape libraries.
- *
- * Implements SCSI calls to tape libraries.
+ * \brief  TLC library interface implementation
  */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#include <assert.h>
+#include <fcntl.h>
+#include <jansson.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include "pho_cfg.h"
+#include "pho_common.h"
+#include "../ldm-modules/scsi_api.h"
+#include "tlc_library.h"
+
+/** List of SCSI library configuration parameters */
+enum pho_cfg_params_libscsi {
+    /** Query the S/N of a drive in a separate ELEMENT_STATUS request
+     * (e.g. for IBM TS3500).
+     */
+    PHO_CFG_LIB_SCSI_sep_sn_query,
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_LIB_SCSI_FIRST = PHO_CFG_LIB_SCSI_sep_sn_query,
+    PHO_CFG_LIB_SCSI_LAST  = PHO_CFG_LIB_SCSI_sep_sn_query,
+};
+
+/** Definition and default values of SCSI library configuration parameters */
+const struct pho_config_item cfg_lib_scsi[] = {
+    [PHO_CFG_LIB_SCSI_sep_sn_query] = {
+        .section = "lib_scsi",
+        .name    = "sep_sn_query",
+        .value   = "0", /* no */
+    },
+};
+
+/** clear the cache of library element adresses */
+static void lib_addrs_clear(struct lib_descriptor *lib)
+{
+    memset(&lib->msi, 0, sizeof(lib->msi));
+    lib->msi_loaded = false;
+}
+
+/**
+ * Load addresses of elements in library.
+ * @return 0 if the mode sense info is successfully loaded, or already loaded.
+ */
+static int lib_addrs_load(struct lib_descriptor *lib, json_t *message)
+{
+    int rc;
+
+    /* msi is already loaded */
+    if (lib->msi_loaded)
+        return 0;
+
+    if (lib->fd < 0)
+        return -EBADF;
+
+    rc = scsi_mode_sense(lib->fd, &lib->msi, message);
+    if (rc)
+        LOG_RETURN(rc, "MODE_SENSE failed");
+
+    lib->msi_loaded = true;
+    return 0;
+}
+
+/** clear the cache of library elements status */
+static void lib_status_clear(struct lib_descriptor *lib)
+{
+    element_status_list_free(lib->arms.items);
+    element_status_list_free(lib->slots.items);
+    element_status_list_free(lib->impexp.items);
+    element_status_list_free(lib->drives.items);
+    memset(&lib->arms, 0, sizeof(lib->arms));
+    memset(&lib->slots, 0, sizeof(lib->slots));
+    memset(&lib->impexp, 0, sizeof(lib->impexp));
+    memset(&lib->drives, 0, sizeof(lib->drives));
+}
+
+/** Retrieve drive serial numbers in a separate ELEMENT_STATUS request. */
+static int query_drive_sn(struct lib_descriptor *lib, json_t *message)
+{
+    struct element_status   *items = NULL;
+    int                      count = 0;
+    int                      i;
+    int                      rc;
+
+    /* query for drive serial number */
+    rc = scsi_element_status(lib->fd, SCSI_TYPE_DRIVE,
+                             lib->msi.drives.first_addr, lib->msi.drives.nb,
+                             ESF_GET_DRV_ID, &items, &count, message);
+    if (rc)
+        LOG_GOTO(err_free, rc, "scsi_element_status() failed to get drive S/N");
+
+    if (count != lib->drives.count)
+        LOG_GOTO(err_free, rc = -EIO,
+                 "Wrong drive count returned by scsi_element_status()");
+
+    /* copy serial number to the library array (should be already allocated) */
+    assert(lib->drives.items != NULL);
+
+    for (i = 0; i < count; i++)
+        strncpy(lib->drives.items[i].dev_id, items[i].dev_id,
+                sizeof(lib->drives.items[i].dev_id));
+
+err_free:
+    free(items);
+    return rc;
+}
+
+/** load status of elements of the given type */
+static int lib_status_load(struct lib_descriptor *lib,
+                           enum element_type_code type, json_t *message)
+{
+    json_t *lib_load_json;
+    json_t *status_json;
+    int rc;
+
+    lib_load_json = json_object();
+
+    /* address of elements are required */
+    rc = lib_addrs_load(lib, lib_load_json);
+    if (rc) {
+        if (json_object_size(lib_load_json) != 0)
+            json_object_set_new(message,
+                                SCSI_OPERATION_TYPE_NAMES[LIBRARY_LOAD],
+                                lib_load_json);
+
+        return rc;
+    }
+
+    destroy_json(lib_load_json);
+    status_json = json_object();
+
+    if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_ARM) && !lib->arms.loaded) {
+        rc = scsi_element_status(lib->fd, SCSI_TYPE_ARM,
+                                 lib->msi.arms.first_addr, lib->msi.arms.nb,
+                                 /* to check if the arm holds a tape */
+                                 ESF_GET_LABEL,
+                                 &lib->arms.items, &lib->arms.count,
+                                 status_json);
+        if (rc) {
+            if (json_object_size(status_json) != 0)
+                json_object_set_new(message,
+                                    SCSI_OPERATION_TYPE_NAMES[ARMS_STATUS],
+                                    status_json);
+
+            LOG_RETURN(rc, "element_status failed for type 'arms'");
+        }
+
+        lib->arms.loaded = true;
+        json_object_clear(status_json);
+    }
+
+    if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_SLOT)
+        && !lib->slots.loaded) {
+        rc = scsi_element_status(lib->fd, SCSI_TYPE_SLOT,
+                                 lib->msi.slots.first_addr, lib->msi.slots.nb,
+                                 ESF_GET_LABEL,
+                                 &lib->slots.items, &lib->slots.count,
+                                 status_json);
+        if (rc) {
+            if (json_object_size(status_json) != 0)
+                json_object_set_new(message,
+                                    SCSI_OPERATION_TYPE_NAMES[SLOTS_STATUS],
+                                    status_json);
+
+            LOG_RETURN(rc, "element_status failed for type 'slots'");
+        }
+
+        lib->slots.loaded = true;
+        json_object_clear(status_json);
+    }
+
+    if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_IMPEXP)
+        && !lib->impexp.loaded) {
+        rc = scsi_element_status(lib->fd, SCSI_TYPE_IMPEXP,
+                                 lib->msi.impexp.first_addr, lib->msi.impexp.nb,
+                                 ESF_GET_LABEL,
+                                 &lib->impexp.items, &lib->impexp.count,
+                                 status_json);
+        if (rc) {
+            if (json_object_size(status_json) != 0)
+                json_object_set_new(message,
+                                    SCSI_OPERATION_TYPE_NAMES[IMPEXP_STATUS],
+                                    status_json);
+
+            LOG_RETURN(rc, "element_status failed for type 'impexp'");
+        }
+
+        lib->impexp.loaded = true;
+        json_object_clear(status_json);
+    }
+
+    if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_DRIVE)
+        && !lib->drives.loaded) {
+        enum elem_status_flags flags;
+        bool separate_query_sn;
+
+        /* separate S/N query? */
+        separate_query_sn = PHO_CFG_GET_INT(cfg_lib_scsi, PHO_CFG_LIB_SCSI,
+                                            sep_sn_query, 0);
+
+        /* IBM TS3500 can't get both volume label and drive in the same request.
+         * So, first get the tape label and 'full' indication, then query
+         * the drive ID.
+         */
+        if (separate_query_sn)
+            flags = ESF_GET_LABEL;
+        else /* default: get both */
+            flags = ESF_GET_LABEL | ESF_GET_DRV_ID;
+
+        rc = scsi_element_status(lib->fd, SCSI_TYPE_DRIVE,
+                                 lib->msi.drives.first_addr, lib->msi.drives.nb,
+                                 flags, &lib->drives.items, &lib->drives.count,
+                                 status_json);
+        if (rc) {
+            if (json_object_size(status_json) != 0)
+                json_object_set_new(message,
+                                    SCSI_OPERATION_TYPE_NAMES[DRIVES_STATUS],
+                                    status_json);
+
+            LOG_RETURN(rc, "element_status failed for type 'drives'");
+        }
+
+        json_object_clear(status_json);
+
+        if (separate_query_sn) {
+            /* query drive serial separately */
+            rc = query_drive_sn(lib, status_json);
+            if (rc) {
+                if (json_object_size(status_json) != 0)
+                    json_object_set_new(
+                        message, SCSI_OPERATION_TYPE_NAMES[DRIVES_STATUS],
+                        status_json);
+
+                return rc;
+            }
+            json_object_clear(status_json);
+        }
+
+        lib->drives.loaded = true;
+    }
+
+    destroy_json(status_json);
+
+    return 0;
+}
+
+int tlc_library_open(struct lib_descriptor *lib, const char *dev)
+{
+    json_t *status_load_message;
+    int rc;
+
+    lib->fd = open(dev, O_RDWR | O_NONBLOCK);
+    if (lib->fd < 0)
+        LOG_RETURN(rc = -errno, "Failed to open '%s'", dev);
+
+    status_load_message = json_object();
+    rc = lib_status_load(lib, SCSI_TYPE_ALL, status_load_message);
+    if (rc) {
+        char *error_message;
+
+        error_message = json_dumps(status_load_message, 0);
+        if (!error_message) {
+            pho_error(-ENOMEM,
+                      "Failed to dump library status load error message");
+            pho_error(rc, "Failed to load library status");
+        } else {
+            pho_error(rc, "Failed to load library status : '%s'",
+                      error_message);
+            free(error_message);
+        }
+    }
+
+    destroy_json(status_load_message);
+    return rc;
+}
+
+void tlc_library_close(struct lib_descriptor *lib)
+{
+    lib_status_clear(lib);
+    lib_addrs_clear(lib);
+    if (lib->fd >= 0)
+        close(lib->fd);
+}
+
 /*
- *#ifdef HAVE_CONFIG_H
- *#include "config.h"
- *#endif
- *
- *#include "scsi_api.h"
- *
- *#include "pho_common.h"
- *#include "pho_cfg.h"
- *#include "pho_ldm.h"
- *#include "pho_module_loader.h"
- *
- *#include <sys/types.h>
- *#include <sys/stat.h>
- *#include <fcntl.h>
- *#include <jansson.h>
- *#include <unistd.h>
- *
- *#define PLUGIN_NAME     "scsi"
- *#define PLUGIN_MAJOR    0
- *#define PLUGIN_MINOR    1
- *
- *static struct module_desc LA_SCSI_MODULE_DESC = {
- *    .mod_name  = PLUGIN_NAME,
- *    .mod_major = PLUGIN_MAJOR,
- *    .mod_minor = PLUGIN_MINOR,
- *};
- *
- *#** List of SCSI library configuration parameters *#
- *enum pho_cfg_params_libscsi {
- *    #** Query the S/N of a drive in a separate ELEMENT_STATUS request
- *     * (e.g. for IBM TS3500). *#
- *    PHO_CFG_LIB_SCSI_sep_sn_query,
- *
- *    #* Delimiters, update when modifying options *#
- *    PHO_CFG_LIB_SCSI_FIRST = PHO_CFG_LIB_SCSI_sep_sn_query,
- *    PHO_CFG_LIB_SCSI_LAST  = PHO_CFG_LIB_SCSI_sep_sn_query,
- *};
- *
- *#** Definition and default values of SCSI library configuration parameters *#
- *const struct pho_config_item cfg_lib_scsi[] = {
- *    [PHO_CFG_LIB_SCSI_sep_sn_query] = {
- *        .section = "lib_scsi",
- *        .name    = "sep_sn_query",
- *        .value   = "0", #* no *#
- *    },
- *};
- *
- *struct status_array {
- *    struct element_status *items;
- *    int  count;
- *    bool loaded;
- *};
- *
- *struct lib_descriptor {
- *    #* file descriptor to SCSI lib device *#
- *    int fd;
- *
- *    #* Cache of library element address *#
- *    struct mode_sense_info msi;
- *    bool msi_loaded;
- *
- *    #* Cache of library element status *#
- *    struct status_array arms;
- *    struct status_array slots;
- *    struct status_array impexp;
- *    struct status_array drives;
- *};
- *
- *#** clear the cache of library element adresses *#
- *static void lib_addrs_clear(struct lib_descriptor *lib)
- *{
- *    memset(&lib->msi, 0, sizeof(lib->msi));
- *    lib->msi_loaded = false;
- *}
- *
- *#**
- * * Load addresses of elements in library.
- * * @return 0 if the mode sense info is successfully loaded, or already loaded.
- * *#
- *static int lib_addrs_load(struct lib_descriptor *lib, json_t *message)
- *{
- *    int rc;
- *
- *    #* msi is already loaded *#
- *    if (lib->msi_loaded)
- *        return 0;
- *
- *    if (lib->fd < 0)
- *        return -EBADF;
- *
- *    rc = scsi_mode_sense(lib->fd, &lib->msi, message);
- *    if (rc)
- *        LOG_RETURN(rc, "MODE_SENSE failed");
- *
- *    lib->msi_loaded = true;
- *    return 0;
- *}
- *
- *#** clear the cache of library elements status *#
- *static void lib_status_clear(struct lib_descriptor *lib)
- *{
- *    element_status_list_free(lib->arms.items);
- *    element_status_list_free(lib->slots.items);
- *    element_status_list_free(lib->impexp.items);
- *    element_status_list_free(lib->drives.items);
- *    memset(&lib->arms, 0, sizeof(lib->arms));
- *    memset(&lib->slots, 0, sizeof(lib->slots));
- *    memset(&lib->impexp, 0, sizeof(lib->impexp));
- *    memset(&lib->drives, 0, sizeof(lib->drives));
- *}
- *
- *#** Retrieve drive serial numbers in a separate ELEMENT_STATUS request. *#
- *static int query_drive_sn(struct lib_descriptor *lib, json_t *message)
- *{
- *    struct element_status   *items = NULL;
- *    int                      count = 0;
- *    int                      i;
- *    int                      rc;
- *
- *    #* query for drive serial number *#
- *    rc = scsi_element_status(lib->fd, SCSI_TYPE_DRIVE,
- *                             lib->msi.drives.first_addr, lib->msi.drives.nb,
- *                             ESF_GET_DRV_ID, &items, &count, message);
- *    if (rc)
- *        LOG_GOTO(err_free, rc,
- *                 "scsi_element_status() failed to get drive S/N");
- *
- *    if (count != lib->drives.count)
- *        LOG_GOTO(err_free, rc = -EIO,
- *                 "Wrong drive count returned by scsi_element_status()");
- *
- *    #* copy serial number to the library array (should be already allocated)*#
- *    assert(lib->drives.items != NULL);
- *
- *    for (i = 0; i < count; i++)
- *        strncpy(lib->drives.items[i].dev_id, items[i].dev_id,
- *                sizeof(lib->drives.items[i].dev_id));
- *
- *err_free:
- *    free(items);
- *    return rc;
- *}
- *
- *#** load status of elements of the given type *#
- *static int lib_status_load(struct lib_descriptor *lib,
- *                           enum element_type_code type, json_t *message)
- *{
- *    json_t *lib_load_json;
- *    json_t *status_json;
- *    int rc;
- *
- *    lib_load_json = json_object();
- *
- *    #* address of elements are required *#
- *    rc = lib_addrs_load(lib, lib_load_json);
- *    if (rc) {
- *        if (json_object_size(lib_load_json) != 0)
- *            json_object_set_new(message,
- *                                SCSI_OPERATION_TYPE_NAMES[LIBRARY_LOAD],
- *                                lib_load_json);
- *
- *        return rc;
- *    }
- *
- *    destroy_json(lib_load_json);
- *    status_json = json_object();
- *
- *    if ((type == SCSI_TYPE_ALL ||
- *         type == SCSI_TYPE_ARM) && !lib->arms.loaded) {
- *        rc = scsi_element_status(lib->fd, SCSI_TYPE_ARM,
- *                                 lib->msi.arms.first_addr, lib->msi.arms.nb,
- *                                 ESF_GET_LABEL, #* to check if the arm holds
- *                                                   a tape *#
- *                                 &lib->arms.items, &lib->arms.count,
- *                                 status_json);
- *        if (rc) {
- *            if (json_object_size(status_json) != 0)
- *                json_object_set_new(message,
- *                                    SCSI_OPERATION_TYPE_NAMES[ARMS_STATUS],
- *                                    status_json);
- *
- *            LOG_RETURN(rc, "element_status failed for type 'arms'");
- *        }
- *
- *        lib->arms.loaded = true;
- *        json_object_clear(status_json);
- *    }
- *
- *    if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_SLOT)
- *        && !lib->slots.loaded) {
- *        rc = scsi_element_status(lib->fd, SCSI_TYPE_SLOT,
- *                                 lib->msi.slots.first_addr, lib->msi.slots.nb,
- *                                 ESF_GET_LABEL,
- *                                 &lib->slots.items, &lib->slots.count,
- *                                 status_json);
- *        if (rc) {
- *            if (json_object_size(status_json) != 0)
- *                json_object_set_new(message,
- *                                    SCSI_OPERATION_TYPE_NAMES[SLOTS_STATUS],
- *                                    status_json);
- *
- *            LOG_RETURN(rc, "element_status failed for type 'slots'");
- *        }
- *
- *        lib->slots.loaded = true;
- *        json_object_clear(status_json);
- *    }
- *
- *    if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_IMPEXP)
- *        && !lib->impexp.loaded) {
- *        rc = scsi_element_status(lib->fd, SCSI_TYPE_IMPEXP,
- *                                 lib->msi.impexp.first_addr,
- *                                 lib->msi.impexp.nb,
- *                                 ESF_GET_LABEL,
- *                                 &lib->impexp.items, &lib->impexp.count,
- *                                 status_json);
- *        if (rc) {
- *            if (json_object_size(status_json) != 0)
- *                json_object_set_new(message,
- *                                    SCSI_OPERATION_TYPE_NAMES[IMPEXP_STATUS],
- *                                    status_json);
- *
- *            LOG_RETURN(rc, "element_status failed for type 'impexp'");
- *        }
- *
- *        lib->impexp.loaded = true;
- *        json_object_clear(status_json);
- *    }
- *
- *    if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_DRIVE)
- *        && !lib->drives.loaded) {
- *        enum elem_status_flags flags;
- *        bool separate_query_sn;
- *
- *        #* separate S/N query? *#
- *        separate_query_sn = PHO_CFG_GET_INT(cfg_lib_scsi, PHO_CFG_LIB_SCSI,
- *                                            sep_sn_query, 0);
- *
- *        #* IBM TS3500 can't get both volume label and drive in the same
- *         * request.
- *         * So, first get the tape label and 'full' indication, then query
- *         * the drive ID.
- *         *#
- *        if (separate_query_sn)
- *            flags = ESF_GET_LABEL;
- *        else #* default: get both *#
- *            flags = ESF_GET_LABEL | ESF_GET_DRV_ID;
- *
- *        rc = scsi_element_status(lib->fd, SCSI_TYPE_DRIVE,
- *                                 lib->msi.drives.first_addr,
- *                                 lib->msi.drives.nb,
- *                                 flags, &lib->drives.items,
- *                                 &lib->drives.count,
- *                                 status_json);
- *        if (rc) {
- *            if (json_object_size(status_json) != 0)
- *                json_object_set_new(message,
- *                                    SCSI_OPERATION_TYPE_NAMES[DRIVES_STATUS],
- *                                    status_json);
- *
- *            LOG_RETURN(rc, "element_status failed for type 'drives'");
- *        }
- *
- *        json_object_clear(status_json);
- *
- *        if (separate_query_sn) {
- *            #* query drive serial separately *#
- *            rc = query_drive_sn(lib, status_json);
- *            if (rc) {
- *                if (json_object_size(status_json) != 0)
- *                    json_object_set_new(
- *                        message, SCSI_OPERATION_TYPE_NAMES[DRIVES_STATUS],
- *                        status_json);
- *
- *                return rc;
- *            }
- *            json_object_clear(status_json);
- *        }
- *
- *        lib->drives.loaded = true;
- *    }
- *
- *    destroy_json(status_json);
- *
- *    return 0;
- *}
- *
- *static int lib_scsi_open(struct lib_handle *hdl, const char *dev,
- *                         json_t *message)
- *{
- *    struct lib_descriptor *lib;
- *    int                    rc;
- *    ENTRY;
- *
- *    MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
- *
- *    lib = calloc(1, sizeof(struct lib_descriptor));
- *    if (!lib)
- *        GOTO(unlock, rc = -ENOMEM);
- *
- *    hdl->lh_lib = lib;
- *
- *    lib->fd = open(dev, O_RDWR | O_NONBLOCK);
- *    if (lib->fd < 0)
- *        LOG_GOTO(err_clean, rc = -errno, "Failed to open '%s'", dev);
- *
- *    GOTO(unlock, rc = 0);
- *
- *err_clean:
- *    free(lib);
- *    hdl->lh_lib = NULL;
- *    json_insert_element(message, "Action",
- *                        json_string("Open device controller"));
- *    json_insert_element(message, "Error",
- *                        json_string("Failed to open device controller"));
- *unlock:
- *    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
- *    return rc;
- *}
- *
- *static int lib_scsi_close(struct lib_handle *hdl)
- *{
- *    struct lib_descriptor *lib;
- *    int rc;
- *    ENTRY;
- *
- *    MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
- *
- *    if (!hdl)
- *        GOTO(unlock, rc = -EINVAL);
- *
- *    lib = hdl->lh_lib;
- *    if (!lib) #* already closed *#
- *        GOTO(unlock, rc = -EBADF);
- *
- *    lib_status_clear(lib);
- *    lib_addrs_clear(lib);
- *
- *    if (lib->fd >= 0)
- *        close(lib->fd);
- *
- *    free(lib);
- *    hdl->lh_lib = NULL;
- *    rc = 0;
- *
- *unlock:
- *    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
- *    return rc;
- *}
- *
  *#**
  * * Match a drive serial number vs. the requested S/N.
  * * @return true if serial matches, else false.

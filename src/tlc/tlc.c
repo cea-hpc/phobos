@@ -40,8 +40,11 @@
 #include "pho_daemon.h"
 #include "pho_srl_tlc.h"
 #include "../ldm-modules/scsi_api.h"
+#include "pho_types.h"
+#include "pho_type_utils.h"
 
 #include "tlc_cfg.h"
+#include "tlc_library.h"
 
 static bool should_tlc_stop(void)
 {
@@ -50,7 +53,7 @@ static bool should_tlc_stop(void)
 
 struct tlc {
     struct pho_comm_info comm;  /*!< Communication handle */
-    int lib_fd;                 /*!< Tape Library File descriptor */
+    struct lib_descriptor lib;  /*!< Library descriptor */
 };
 
 static int tlc_init(struct tlc *tlc)
@@ -59,7 +62,7 @@ static int tlc_init(struct tlc *tlc)
     const char *lib_dev;
     int rc;
 
-    /* open TLC lib file descriptor */
+    /* open TLC lib file descriptor and load library cache */
     /* For now, one single configurable path to library device.
      * This will have to be changed to manage multiple libraries or to manage
      * one library through multiple "/dev/changer" paths to improve parallel
@@ -70,32 +73,33 @@ static int tlc_init(struct tlc *tlc)
         LOG_RETURN(-EINVAL, "Failed to get default library device from config");
 
     /*
-     * WARNING: lib_fd open will be migrated to the thread managing the library.
+     * WARNING: tlc->lib will be migrated to the thread managing the
+     * library.
      */
-    tlc->lib_fd = open(lib_dev, O_RDWR | O_NONBLOCK);
-    if (tlc->lib_fd < 0)
+    rc = tlc_library_open(&tlc->lib, lib_dev);
+    if (rc)
         LOG_RETURN(-errno, "Failed to open library device '%s'", lib_dev);
 
     /* open TLC communicator */
     sock_addr.tcp.hostname = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, hostname);
     sock_addr.tcp.port = PHO_CFG_GET_INT(cfg_tlc, PHO_CFG_TLC, port, -1);
     if (sock_addr.tcp.port == -1)
-        LOG_GOTO(clean_lib_fd, rc = -EINVAL,
+        LOG_GOTO(close_lib, rc = -EINVAL,
                  "Unable to get a valid integer TLC port value");
 
     if (sock_addr.tcp.port > 65535)
-        LOG_GOTO(clean_lib_fd, rc = -EINVAL,
+        LOG_GOTO(close_lib, rc = -EINVAL,
                  "TLC port value %d cannot be greater than 65535",
                  sock_addr.tcp.port);
 
     rc = pho_comm_open(&tlc->comm, &sock_addr, PHO_COMM_TCP_SERVER);
     if (rc)
-        LOG_GOTO(clean_lib_fd, rc, "Error while opening the TLC socket");
+        LOG_GOTO(close_lib, rc, "Error while opening the TLC socket");
 
     return rc;
 
-clean_lib_fd:
-    close(tlc->lib_fd);
+close_lib:
+    tlc_library_close(&tlc->lib);
     return rc;
 }
 
@@ -112,8 +116,7 @@ static void tlc_fini(struct tlc *tlc)
     if (rc)
         pho_error(rc, "Error on closing the TLC socket");
 
-    if (tlc->lib_fd >= 0)
-        close(tlc->lib_fd);
+    tlc_library_close(&tlc->lib);
 }
 
 static int process_ping_request(struct tlc *tlc, pho_tlc_req_t *req,
@@ -129,7 +132,7 @@ static int process_ping_request(struct tlc *tlc, pho_tlc_req_t *req,
 
     resp.req_id = req->id;
 
-    rc = scsi_inquiry(tlc->lib_fd);
+    rc = scsi_inquiry(tlc->lib.fd);
     if (rc)
         resp.ping->library_is_up = false;
     else
