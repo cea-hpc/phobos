@@ -38,6 +38,17 @@ void pho_srl_tlc_request_ping_alloc(pho_tlc_req_t *req)
     req->ping = true;
 }
 
+int pho_srl_tlc_request_drive_lookup_alloc(pho_tlc_req_t *req)
+{
+    pho_tlc_request__init(req);
+    req->drive_lookup = malloc(sizeof(*req->drive_lookup));
+    if (!req->drive_lookup)
+        return -ENOMEM;
+
+    pho_tlc_request__drive_lookup__init(req->drive_lookup);
+    return 0;
+}
+
 void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack)
 {
     if (unpack) {
@@ -47,6 +58,12 @@ void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack)
 
     req->has_ping = false;
     req->ping = false;
+
+    if (req->drive_lookup) {
+        free(req->drive_lookup->serial);
+        free(req->drive_lookup);
+        req->drive_lookup = NULL;
+    }
 }
 
 int pho_srl_tlc_response_ping_alloc(pho_tlc_resp_t *resp)
@@ -61,6 +78,28 @@ int pho_srl_tlc_response_ping_alloc(pho_tlc_resp_t *resp)
     return 0;
 }
 
+int pho_srl_tlc_response_drive_lookup_alloc(pho_tlc_resp_t *resp)
+{
+    pho_tlc_response__init(resp);
+    resp->drive_lookup = malloc(sizeof(*resp->drive_lookup));
+    if (!resp->drive_lookup)
+        return -ENOMEM;
+
+    pho_tlc_response__drive_lookup__init(resp->drive_lookup);
+    return 0;
+}
+
+int pho_srl_tlc_response_error_alloc(pho_tlc_resp_t *resp)
+{
+    pho_tlc_response__init(resp);
+    resp->error = malloc(sizeof(*resp->error));
+    if (!resp->error)
+        return -ENOMEM;
+
+    pho_tlc_response__error__init(resp->error);
+    return 0;
+}
+
 void pho_srl_tlc_response_free(pho_tlc_resp_t *resp, bool unpack)
 {
     if (unpack) {
@@ -71,6 +110,18 @@ void pho_srl_tlc_response_free(pho_tlc_resp_t *resp, bool unpack)
     if (resp->ping) {
         free(resp->ping);
         resp->ping = NULL;
+    }
+
+    if (resp->drive_lookup) {
+        free(resp->drive_lookup->medium_name);
+        free(resp->drive_lookup);
+        resp->drive_lookup = NULL;
+    }
+
+    if (resp->error) {
+        free(resp->error->message);
+        free(resp->error);
+        resp->error = NULL;
     }
 }
 

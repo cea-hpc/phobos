@@ -28,7 +28,7 @@ object-oriented API to the rest of the CLI.
 
 from ctypes import (byref, cast, CDLL, CFUNCTYPE, c_bool, c_char, c_char_p,
                     c_int, c_long, c_longlong, c_size_t, c_ssize_t, c_ubyte,
-                    c_void_p, POINTER, Structure)
+                    c_uint64, c_void_p, POINTER, Structure)
 from enum import IntEnum
 
 from phobos.core.const import (PHO_LABEL_MAX_LEN, PHO_URI_MAX, # pylint: disable=no-name-in-module
@@ -861,3 +861,19 @@ def pho_rc_func(name, *args, **kwargs):
         def __str__(self):
             return name
     return _PhoRcFunc
+
+class LibItemAddr(Structure): # pylint: disable=too-few-public-methods
+    """Location descriptor in a library"""
+    _fields_ = [
+        ('lia_type', c_int),
+        ('lia_addr', c_uint64)
+    ]
+
+class LibDrvInfo(Structure): # pylint: disable=too-few-public-methods
+    """Device information in a library."""
+    _fields_ = [
+        ('ldi_addr', LibItemAddr),
+        ('ldi_first_addr', c_uint64),
+        ('ldi_full', c_bool),
+        ('ldi_medium_id', Id)
+    ]

@@ -27,6 +27,7 @@
 #define _PHO_TLC_LIBRARY_H
 
 #include "../ldm-modules/scsi_api.h"
+#include "pho_ldm.h"
 
 struct status_array {
     struct element_status *items;
@@ -65,5 +66,24 @@ int tlc_library_open(struct lib_descriptor *lib, const char *dev);
  * @param[in,out]   lib     Library to close and clean
  */
 void tlc_library_close(struct lib_descriptor *lib);
+
+/**
+ * Get the location and the loaded medium (if any) of a device in library
+ * from its serial number.
+ *
+ * @param[in]   lib             Lib handle holding an opened library adapter.
+ * @param[in]   drive_serial    Serial number of the drive to lookup.
+ * @param[out]  drv_info        Information about the drive.
+ * @param[out]  json_error_message  Set to NULL on success. On error, could be
+ *                                  set to a value different from NULL,
+ *                                  containing a message which describes the
+ *                                  error and must be decref by the caller.
+ *
+ * @return 0 on success, negative error code on failure.
+ */
+int tlc_library_drive_lookup(struct lib_descriptor *lib,
+                             const char *drive_serial,
+                             struct lib_drv_info *drv_info,
+                             json_t **json_error_message);
 
 #endif /* _PHO_TLC_LIBRARY_H */

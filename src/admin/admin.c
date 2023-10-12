@@ -1224,7 +1224,7 @@ int phobos_admin_ping_tlc(struct admin_handle *adm, bool *library_is_up)
     }
 
     resp = proto_resp.msg.tlc_resp;
-    /* expect ping response and set library_is_up, send error otherwise */
+    /* expect ping response and set library_is_up, no error response expected */
     if (!(pho_tlc_response_is_ping(resp) && resp->req_id == rid))
         pho_error(rc = -EBADMSG, "Bad response from TLC");
     else
@@ -1621,4 +1621,80 @@ int phobos_admin_clear_logs(struct admin_handle *adm,
         LOG_RETURN(rc, "Failed to clear logs");
 
     return 0;
+}
+
+int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
+                              struct lib_drv_info *drive_info)
+{
+    struct proto_resp proto_resp = {TLC_REQUEST};
+    struct proto_req proto_req = {TLC_REQUEST};
+    struct dev_info *dev_res;
+    pho_tlc_resp_t *resp;
+    pho_tlc_req_t req;
+    int rid = 1;
+    int rc;
+
+    if (id->family != PHO_RSC_TAPE)
+        LOG_RETURN(-EINVAL,
+                   "Ressource family for a drive lookup must be %s "
+                   "(PHO_RSC_TAPE), instead we got %s",
+                   rsc_family2str(PHO_RSC_TAPE), rsc_family2str(id->family));
+
+    /* fetch the serial number and store it in id */
+    rc = _get_device_by_path_or_serial(adm, id, &dev_res);
+    if (rc)
+        LOG_RETURN(rc, "Unable to find device %s into DSS", id->name);
+
+    dss_res_free(dev_res, 1);
+
+    proto_req.msg.tlc_req = &req;
+    rc = pho_srl_tlc_request_drive_lookup_alloc(&req);
+    if (rc)
+        LOG_RETURN(rc, "Unable to alloc drive lookup request");
+
+    req.id = rid;
+    req.drive_lookup->serial = strdup(id->name);
+    if (!req.drive_lookup->serial) {
+        pho_srl_tlc_request_free(&req, false);
+        LOG_RETURN(-ENOMEM,
+                   "Unable to copy serial number %s into drive lookup request",
+                   id->name);
+    }
+
+    rc = _send_and_receive(&adm->tlc_comm, proto_req, &proto_resp);
+    pho_srl_tlc_request_free(&req, false);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Error with TLC communication : %d , %s", rc, strerror(-rc));
+
+    resp = proto_resp.msg.tlc_resp;
+
+    if (pho_tlc_response_is_drive_lookup(resp) && resp->req_id == rid) {
+        drive_info->ldi_addr.lia_type = MED_LOC_DRIVE;
+        drive_info->ldi_addr.lia_addr = resp->drive_lookup->address;
+        drive_info->ldi_first_addr = resp->drive_lookup->first_address;
+        if (resp->drive_lookup->medium_name) {
+            drive_info->ldi_full = true;
+            drive_info->ldi_medium_id.family = PHO_RSC_TAPE;
+            rc = pho_id_name_set(&drive_info->ldi_medium_id,
+                                 resp->drive_lookup->medium_name);
+            LOG_GOTO(clean_response, rc,
+                     "Unable to copy medium name %s from drive lookup "
+                     "response", resp->drive_lookup->medium_name);
+        }
+    } else if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
+        rc = resp->error->rc;
+        if (resp->error->message)
+            LOG_GOTO(clean_response, rc, "TLC failed to lookup the drive: '%s'",
+                     resp->error->message);
+        else
+            LOG_GOTO(clean_response, rc, "TLC failed to lookup the drive");
+    } else {
+        LOG_GOTO(clean_response, -EPROTO,
+                 "TLC answers unexpected response to drive lookup");
+    }
+
+clean_response:
+    pho_srl_tlc_response_free(resp, true);
+    return rc;
 }

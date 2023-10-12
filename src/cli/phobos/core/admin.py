@@ -37,7 +37,7 @@ from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-n
 from phobos.core.glue import admin_device_status, jansson_dumps  # pylint: disable=no-name-in-module
 from phobos.core.dss import DSSHandle
 from phobos.core.ffi import (CommInfo, ExtentInfo, LayoutInfo, LIBPHOBOS_ADMIN,
-                             Id, LogFilter)
+                             Id, LogFilter, LibDrvInfo)
 
 def string_list2c_array(l, getter):
     c_string_list = (c_char_p * len(l))()
@@ -329,6 +329,19 @@ class Client(object):
                                                      clear_all_log)
         if rc:
             raise EnvironmentError(rc, "Failed to clear logs")
+
+    def drive_lookup(self, res):
+        """Lookup a drive"""
+        drive_info = LibDrvInfo()
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_drive_lookup(byref(self.handle),
+                                                       byref(Id(PHO_RSC_TAPE,
+                                                                name=res)),
+                                                       byref(drive_info));
+        if rc:
+            raise EnvironmentError(rc, f"Failed to lookup the drive {res}");
+
+        return drive_info
 
     @staticmethod
     def layout_list_free(layouts, n_layouts):

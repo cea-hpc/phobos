@@ -1,0 +1,139 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2022 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for "phobos drive lookup" feature
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+set -xe
+
+function setup
+{
+    setup_tables
+    drain_all_drives
+}
+
+function cleanup
+{
+    waive_lrs
+    waive_tlc
+    drop_tables
+    drain_all_drives
+}
+
+function test_lookup
+{
+    local tape="$(get_tapes L6 1)"
+    local drive="$(get_lto_drives 6 1)"
+
+    # no TLC
+    ECONNREFUSED=111
+    set +e
+    $phobos drive lookup ${drive}
+    rc=$?
+    set -e
+    if (( rc != ECONNREFUSED )); then
+        error "phobos drive lookup with no TLC must failed with ECONNREFUSED" \
+              "($ECONNREFUSED), instead we got ${rc}"
+    fi
+
+    # unknown drive
+    invoke_tlc
+    ENXIO=6
+    set +e
+    $phobos drive lookup ${drive}
+    rc=$?
+    set -e
+    if (( rc != ENXIO )); then
+        error "phobos drive lookup for DSS unknown drive must failed with"
+              "ENXIO ($ENXIO), instead we got ${rc}"
+    fi
+
+    # fake drive into dss but not on the TLC
+    $PSQL << EOF
+    INSERT INTO device (family, model, id, host, adm_status, path)
+           VALUES ('tape', NULL, 'serial', '$host', 'unlocked',
+                   'path');
+EOF
+
+    # by serial
+    ENOENT=2
+    set +e
+    $phobos drive lookup serial
+    rc=$?
+    set -e
+    if (( rc != ENOENT )); then
+        error "phobos drive lookup serial for TLC unknown drive must failed"
+              "with ENOENT ($ENOENT), instead we got ${rc}"
+    fi
+    # by path
+    set +e
+    $phobos drive lookup path
+    rc=$?
+    set -e
+    if (( rc != ENOENT )); then
+        error "phobos drive lookup path for TLC unknown drive must failed"
+              "with ENOENT ($ENOENT), instead we got ${rc}"
+    fi
+
+    $PSQL << EOF
+    DELETE FROM device WHERE id = 'serial';
+EOF
+
+    # lookup an existing drive from path
+    $phobos drive add --unlock ${drive}
+    $phobos drive lookup ${drive} 2>&1 | grep "State: empty"
+
+    # lookup an existing drive from serial
+    drive_serial=$($phobos drive list)
+    $phobos drive lookup ${drive_serial} 2>&1 | grep "State: empty"
+
+    # lookup an existing drive with a tape from path
+    $phobos tape add -t lto6 ${tape}
+    invoke_lrs
+    $phobos tape format ${tape}
+    # update state of the TLC
+    # (these two lines must be removed when the tlc will be used by the lrs)
+    waive_tlc
+    invoke_tlc
+    drive_lookup_out=$($phobos drive lookup ${drive} 2>&1)
+    echo ${drive_lookup_out} | grep "State: full"
+    echo ${drive_lookup_out} | grep "Loaded tape id: ${tape}"
+
+    # lookup an existing drive with a tape from serial
+    drive_lookup_out=$($phobos drive lookup ${drive_serial} 2>&1)
+    echo ${drive_lookup_out} | grep "State: full"
+    echo ${drive_lookup_out} | grep "Loaded tape id: ${tape}"
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Library required for this test"
+fi
+
+TEST_SETUP=setup
+TESTS=("test_lookup;")
+TEST_CLEANUP=cleanup

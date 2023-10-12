@@ -29,6 +29,7 @@
 
 #include "pho_comm.h"
 #include "pho_dss.h"
+#include "pho_ldm.h"
 
 /**
  * Phobos admin handle.
@@ -413,5 +414,19 @@ int phobos_admin_dump_logs(struct admin_handle *adm, int fd,
  */
 int phobos_admin_clear_logs(struct admin_handle *adm,
                             struct pho_log_filter *log_filter, bool clear_all);
+
+/**
+ * Lookup a drive from its serial number
+ *
+ * @param[in]       adm         Admin module handler.
+ * @param[in]       id          id.name could be serial number or path.
+ *                              id.family must be PHO_RSC_TAPE
+ * @param[in,out]   drive_info  Existing Drive info structure provided by the
+ *                              caller, filled by this call.
+ *
+ * @return 0 if success, -errno if an error occurs
+ */
+int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
+                              struct lib_drv_info *drive_info);
 
 #endif

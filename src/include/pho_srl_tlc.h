@@ -38,6 +38,7 @@ typedef PhoTlcRequest               pho_tlc_req_t;
 
 typedef PhoTlcResponse              pho_tlc_resp_t;
 typedef PhoTlcResponse__Ping        pho_tlc_resp_ping_t;
+typedef PhoTlcResponse__DriveLookup pho_tlc_resp_drive_lookup_t;
 
 /******************************************************************************/
 /* Macros & constants *********************************************************/
@@ -73,6 +74,19 @@ static inline bool pho_tlc_request_is_ping(const pho_tlc_req_t *req)
 }
 
 /**
+ * Request drive lookup checker.
+ *
+ * \param[in]       req         Request.
+ *
+ * \return                      true if the request is a drive lookup one,
+ *                              false otherwise.
+ */
+static inline bool pho_tlc_request_is_drive_lookup(const pho_tlc_req_t *req)
+{
+    return req->drive_lookup != NULL;
+}
+
+/**
  * Response ping checker.
  *
  * \param[in]       resp        Response.
@@ -83,6 +97,32 @@ static inline bool pho_tlc_request_is_ping(const pho_tlc_req_t *req)
 static inline bool pho_tlc_response_is_ping(const pho_tlc_resp_t *resp)
 {
     return resp->ping != NULL;
+}
+
+/**
+ * Response drive lookup checker.
+ *
+ * \param[in]       resp        Response.
+ *
+ * \return                      true if the response is a drive lookup one,
+ *                              false otherwise.
+ */
+static inline bool pho_tlc_response_is_drive_lookup(const pho_tlc_resp_t *resp)
+{
+    return resp->drive_lookup != NULL;
+}
+
+/**
+ * Response error checker.
+ *
+ * \param[in]       resp        Response.
+ *
+ * \return                      true if the response is an error one, false
+ *                              otherwise.
+ */
+static inline bool pho_tlc_response_is_error(const pho_tlc_resp_t *resp)
+{
+    return resp->error != NULL;
 }
 
 /******************************************************************************/
@@ -96,6 +136,15 @@ static inline bool pho_tlc_response_is_ping(const pho_tlc_resp_t *resp)
  * \return                      0 on success, -ENOMEM on failure.
  */
 void pho_srl_tlc_request_ping_alloc(pho_tlc_req_t *req);
+
+/**
+ * Allocation of drive lookup request contents.
+ *
+ * \param[out]      req         Pointer to the request data structure.
+ *
+ * \return                      0 on success, -ENOMEM on failure.
+ */
+int pho_srl_tlc_request_drive_lookup_alloc(pho_tlc_req_t *req);
 
 /**
  * Release of request contents.
@@ -112,6 +161,24 @@ void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack);
  * \param[out]      resp        Pointer to the response data structure.
  */
 int pho_srl_tlc_response_ping_alloc(pho_tlc_resp_t *resp);
+
+/**
+ * Allocation of drive lookup response content.
+ *
+ * \param[out]      resp        Pointer to the response data structure.
+ *
+ * \return                      0 on success, -ENOMEM on failure.
+ */
+int pho_srl_tlc_response_drive_lookup_alloc(pho_tlc_resp_t *resp);
+
+/**
+ * Allocation of error response content.
+ *
+ * \param[out]      resp        Pointer to the response data structure.
+ *
+ * \return                      0 on success, -ENOMEM on failure.
+ */
+int pho_srl_tlc_response_error_alloc(pho_tlc_resp_t *resp);
 
 /**
  * Release of response contents.

@@ -27,10 +27,16 @@ syntax = "proto2";
 
 /** TLC protocol request, emitted by layout modules. */
 message PhoTlcRequest {
+    /** Body of drive lookup request */
+    message DriveLookup {
+        required string serial = 1; // Serial number of the drive to lookup
+    }
+
     required uint32 id  = 1;    // Request ID to match its future
                                 // response.
 
     optional bool ping  = 2;    // Is the request a ping request ?
+    optional DriveLookup drive_lookup = 3;  // Drive lookup body
 
 }
 
@@ -43,8 +49,24 @@ message PhoTlcResponse {
                                          // otherwise
     }
 
-    required uint32 req_id  = 1;    // Request ID, to be matched with
-                                    // the corresponding request.
+    /** Body of drive lookup response. */
+    message DriveLookup {
+        required uint64 address = 1;    // Address of the drive in lib
+        required uint64 first_address = 2;  // Address of the first drive in
+                                            // lib
+        optional string medium_name = 3; // Loaded medium name (if any)
+    }
 
-    optional Ping ping      = 2;    // Ping body
+    /** Body of error response */
+    message Error {
+        required int32 rc = 1;  // Error code, -errno for homogeneity.
+        optional string message = 2 ; // JSON message describing the error
+    }
+
+    required uint32 req_id = 1; // Request ID, to be matched with
+                                // the corresponding request.
+
+    optional Ping ping = 2; // Ping body
+    optional DriveLookup drive_lookup = 3;  // Drive lookup response body
+    optional Error error = 4;   // Error body
 }

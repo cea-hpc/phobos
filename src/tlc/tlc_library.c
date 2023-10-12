@@ -31,6 +31,7 @@
 #include <jansson.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "pho_cfg.h"
@@ -310,52 +311,49 @@ void tlc_library_close(struct lib_descriptor *lib)
         close(lib->fd);
 }
 
+/**
+ * Match a drive serial number vs. the requested S/N.
+ * @return true if serial matches, else false.
+ */
+static inline bool match_serial(const char *drv_descr, const char *req_sn)
+{
+    const char *sn;
+
+    /* Matching depends on library type:
+     * some librairies only return the SN as drive id,
+     * whereas some return a full description like:
+     * "VENDOR   MODEL   SERIAL".
+     * To match both, we match the last part of the serial.
+     */
+    sn = strrchr(drv_descr, ' ');
+    if (!sn) /* only contains the SN */
+        sn = drv_descr;
+    else /* first char after last space */
+        sn++;
+
+    /* return true on match */
+    return !strcmp(sn, req_sn);
+}
+
+static struct element_status *drive_info_from_serial(struct lib_descriptor *lib,
+                                                     const char *serial)
+{
+    int i;
+
+    for (i = 0; i < lib->drives.count; i++) {
+        struct element_status *drv = &lib->drives.items[i];
+
+        if (match_serial(drv->dev_id, serial)) {
+            pho_debug("Found drive matching serial '%s': address=%#hx, id='%s'",
+                      serial, drv->address, drv->dev_id);
+            return drv;
+        }
+    }
+    pho_warn("No drive matching serial '%s'", serial);
+    return NULL;
+}
+
 /*
- *#**
- * * Match a drive serial number vs. the requested S/N.
- * * @return true if serial matches, else false.
- * *#
- *static inline bool match_serial(const char *drv_descr, const char *req_sn)
- *{
- *    const char *sn;
- *
- *    #* Matching depends on library type:
- *     * some librairies only return the SN as drive id,
- *     * whereas some return a full description like:
- *     * "VENDOR   MODEL   SERIAL".
- *     * To match both, we match the last part of the serial.
- *     *#
- *    sn = strrchr(drv_descr, ' ');
- *    if (!sn) #* only contains the SN *#
- *        sn = drv_descr;
- *    else #* first char after last space *#
- *        sn++;
- *
- *    #* return true on match *#
- *    return !strcmp(sn, req_sn);
- *}
- *
- *#** get drive info with the given serial number *#
- *static struct element_status *drive_info_from_serial(struct lib_descriptor
- *                                                           *lib,
- *                                                     const char *serial)
- *{
- *    int i;
- *
- *    for (i = 0; i < lib->drives.count; i++) {
- *        struct element_status *drv = &lib->drives.items[i];
- *
- *        if (match_serial(drv->dev_id, serial)) {
- *            pho_debug("Found drive matching serial '%s': "
- *                      "address=%#hx, id='%s'",
- *                      serial, drv->address, drv->dev_id);
- *            return drv;
- *        }
- *    }
- *    pho_warn("No drive matching serial '%s'", serial);
- *    return NULL;
- *}
- *
  *#** get media info with the given label *#
  *static struct element_status *media_info_from_label(struct lib_descriptor
  *                                                       *lib,
@@ -422,46 +420,40 @@ void tlc_library_close(struct lib_descriptor *lib)
  *    default:          return MED_LOC_UNKNOWN;
  *    }
  *}
- *
- *#** Implements phobos LDM lib device lookup *#
- *static int lib_scsi_drive_info(struct lib_handle *hdl, const char *drv_serial,
- *                               struct lib_drv_info *ldi, json_t *message)
- *{
- *    struct element_status *drv;
- *    int rc;
- *    ENTRY;
- *
- *    MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
- *
- *    #* load status for drives *#
- *    rc = lib_status_load(hdl->lh_lib, SCSI_TYPE_DRIVE, message);
- *    if (rc)
- *        goto unlock;
- *
- *    #* search for the given drive serial *#
- *    drv = drive_info_from_serial(hdl->lh_lib, drv_serial);
- *    if (!drv)
- *        GOTO(unlock, rc = -ENOENT);
- *
- *    memset(ldi, 0, sizeof(*ldi));
- *    ldi->ldi_addr.lia_type = MED_LOC_DRIVE;
- *    ldi->ldi_addr.lia_addr = drv->address;
- *    ldi->ldi_first_addr =
- *        ((struct lib_descriptor *)hdl->lh_lib)->msi.drives.first_addr;
- *    if (drv->full) {
- *        ldi->ldi_full = true;
- *        ldi->ldi_medium_id.family = PHO_RSC_TAPE;
- *        pho_id_name_set(&ldi->ldi_medium_id, drv->vol);
- *    }
- *
- *    rc = 0;
- *
- *unlock:
- *    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
- *    return rc;
- *}
- *
- *#** Implements phobos LDM lib media lookup *#
+ */
+
+int tlc_library_drive_lookup(struct lib_descriptor *lib,
+                             const char *drive_serial,
+                             struct lib_drv_info *ldi,
+                             json_t **json_error_message)
+{
+    struct element_status *drv;
+
+    *json_error_message = NULL;
+    /* search for the given drive serial */
+    drv = drive_info_from_serial(lib, drive_serial);
+    if (!drv) {
+        *json_error_message = json_pack("{s:s}",
+                                        "DRIVE_SERIAL_UNKNOWN", drive_serial);
+        return -ENOENT;
+    }
+
+    memset(ldi, 0, sizeof(*ldi));
+    ldi->ldi_addr.lia_type = MED_LOC_DRIVE;
+    ldi->ldi_addr.lia_addr = drv->address;
+    ldi->ldi_first_addr = lib->msi.drives.first_addr;
+    if (drv->full) {
+        ldi->ldi_full = true;
+        ldi->ldi_medium_id.family = PHO_RSC_TAPE;
+        pho_id_name_set(&ldi->ldi_medium_id, drv->vol);
+    } else {
+        ldi->ldi_full = false;
+    }
+
+    return 0;
+}
+
+/*#** Implements phobos LDM lib media lookup *#
  *static int lib_scsi_media_info(struct lib_handle *hdl, const char *med_label,
  *                               struct lib_item_addr *lia, json_t *message)
  *{

@@ -1763,6 +1763,17 @@ class DriveStatus(CLIManagedResourceMixin):
             'currently_dedicated_to': None,
         }
 
+class DriveLookupOptHandler(BaseOptHandler):
+    label = 'lookup'
+    descr = 'lookup a drive from library'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(DriveLookupOptHandler, cls).add_options(parser)
+        parser.add_argument('res',
+                            help='Drive to lookup (could be '
+                                 'the path or the serial number)')
 
 class DriveOptHandler(DeviceOptHandler):
     """Tape Drive options and actions."""
@@ -1777,6 +1788,7 @@ class DriveOptHandler(DeviceOptHandler):
         DeviceLockOptHandler,
         UnlockOptHandler,
         StatusOptHandler,
+        DriveLookupOptHandler,
     ]
 
     def exec_migrate(self):
@@ -1853,6 +1865,26 @@ class DriveOptHandler(DeviceOptHandler):
             sys.exit(abs(err.errno))
 
         self.logger.info("Removed %d device(s) successfully", count)
+
+    def exec_lookup(self):
+        """Lookup drive information from the library."""
+        res = self.params.get('res')
+
+        try:
+            with AdminClient(lrs_required=False, tlc_required=True) as adm:
+                drive_info = adm.drive_lookup(res)
+
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
+        relativ_address = drive_info.ldi_addr.lia_addr - \
+                          drive_info.ldi_first_addr
+        self.logger.info(f"Drive {relativ_address}: address "
+                         f"{hex(drive_info.ldi_addr.lia_addr)}")
+        self.logger.info(f'State: {"full" if drive_info.ldi_full else "empty"}')
+        if drive_info.ldi_full:
+            self.logger.info(f"Loaded tape id: {drive_info.ldi_medium_id.name}")
 
 class TapeOptHandler(MediaOptHandler):
     """Magnetic tape options and actions."""

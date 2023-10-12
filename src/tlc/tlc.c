@@ -38,6 +38,7 @@
 #include "pho_comm.h"
 #include "pho_common.h"
 #include "pho_daemon.h"
+#include "pho_ldm.h"
 #include "pho_srl_tlc.h"
 #include "../ldm-modules/scsi_api.h"
 #include "pho_types.h"
@@ -153,6 +154,89 @@ out:
     return rc;
 }
 
+static int process_drive_lookup_request(struct tlc *tlc, pho_tlc_req_t *req,
+                                        int client_socket)
+{
+    pho_tlc_resp_t drive_lookup_resp;
+    struct lib_drv_info drv_info;
+    pho_tlc_resp_t *resp = NULL;
+    json_t *json_error_message;
+    pho_tlc_resp_t error_resp;
+    struct pho_comm_data msg;
+    int rc;
+
+    rc = tlc_library_drive_lookup(&tlc->lib, req->drive_lookup->serial,
+                                  &drv_info, &json_error_message);
+    if (rc)
+        goto err;
+
+    rc = pho_srl_tlc_response_drive_lookup_alloc(&drive_lookup_resp);
+    if (rc) {
+        json_error_message = json_pack("{s:s}",
+                                       "ALLOC_ERROR",
+                                       "TLC was unable to alloc drive "
+                                       "lookup response");
+        LOG_GOTO(err, rc, "Unable to alloc drive lookup response");
+    }
+
+    drive_lookup_resp.req_id = req->id;
+    drive_lookup_resp.drive_lookup->address = drv_info.ldi_addr.lia_addr;
+    drive_lookup_resp.drive_lookup->first_address = drv_info.ldi_first_addr;
+    if (drv_info.ldi_full) {
+        drive_lookup_resp.drive_lookup->medium_name =
+            strdup(drv_info.ldi_medium_id.name);
+        if (!drive_lookup_resp.drive_lookup->medium_name) {
+            pho_srl_tlc_response_free(&drive_lookup_resp, false);
+            json_error_message = json_pack("{s:s}",
+                                           "ALLOC_MEDIUM_ID_ERROR",
+                                           "drv_info.ldi_medium_id.name");
+            LOG_GOTO(err, rc = -ENOMEM,
+                     "Unable to alloc medium id %s to answer drive lookup",
+                     drv_info.ldi_medium_id.name);
+        }
+    }
+
+    resp = &drive_lookup_resp;
+
+err:
+    if (rc) {
+        int rc2;
+
+        rc2 = pho_srl_tlc_response_error_alloc(&error_resp);
+        if (rc2) {
+            if (json_error_message)
+                json_decref(json_error_message);
+
+            LOG_RETURN(rc2,
+                       "TLC unable to alloc error response %d for drive lookup",
+                       rc);
+        }
+
+        error_resp.req_id = req->id;
+        error_resp.error->rc = rc;
+        if (json_error_message) {
+            error_resp.error->message = json_dumps(json_error_message, 0);
+            json_decref(json_error_message);
+        }
+
+        resp = &error_resp;
+    }
+
+    rc = pho_srl_tlc_response_pack(resp, &msg.buf);
+    if (rc)
+        LOG_GOTO(out, rc, "TLC drive lookup response cannot be packed");
+
+    msg.fd = client_socket;
+    rc = pho_comm_send(&msg);
+    if (rc)
+        pho_error(rc, "TLC error on sending drive lookup response");
+
+    free(msg.buf.buff);
+out:
+    pho_srl_tlc_response_free(resp, false);
+    return rc;
+}
+
 static int recv_work(struct tlc *tlc)
 {
     struct pho_comm_data *data = NULL;
@@ -180,6 +264,11 @@ static int recv_work(struct tlc *tlc)
 
         if (pho_tlc_request_is_ping(req)) {
             process_ping_request(tlc, req, data[i].fd);
+            goto out_request;
+        }
+
+        if (pho_tlc_request_is_drive_lookup(req)) {
+            process_drive_lookup_request(tlc, req, data[i].fd);
             goto out_request;
         }
 

@@ -164,7 +164,6 @@ static PyObject *py_str2dss_type(PyObject *self, PyObject *args)
 static PyObject *py_str2operation_type(PyObject *self, PyObject *args)
 {
     const char *str_repr;
-    enum dss_type type;
 
     if (!PyArg_ParseTuple(args, "s", &str_repr)) {
         PyErr_SetString(ValueError, "Unrecognized type");
