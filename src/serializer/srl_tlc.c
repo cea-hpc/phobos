@@ -49,6 +49,17 @@ int pho_srl_tlc_request_drive_lookup_alloc(pho_tlc_req_t *req)
     return 0;
 }
 
+int pho_srl_tlc_request_load_alloc(pho_tlc_req_t *req)
+{
+    pho_tlc_request__init(req);
+    req->load = malloc(sizeof(*req->load));
+    if (!req->load)
+        return -ENOMEM;
+
+    pho_tlc_request__load__init(req->load);
+    return 0;
+}
+
 void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack)
 {
     if (unpack) {
@@ -63,6 +74,13 @@ void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack)
         free(req->drive_lookup->serial);
         free(req->drive_lookup);
         req->drive_lookup = NULL;
+    }
+
+    if (req->load) {
+        free(req->load->drive_serial);
+        free(req->load->tape_label);
+        free(req->load);
+        req->load = NULL;
     }
 }
 
@@ -86,6 +104,17 @@ int pho_srl_tlc_response_drive_lookup_alloc(pho_tlc_resp_t *resp)
         return -ENOMEM;
 
     pho_tlc_response__drive_lookup__init(resp->drive_lookup);
+    return 0;
+}
+
+int pho_srl_tlc_response_load_alloc(pho_tlc_resp_t *resp)
+{
+    pho_tlc_response__init(resp);
+    resp->load = malloc(sizeof(*resp->load));
+    if (!resp->load)
+        return -ENOMEM;
+
+    pho_tlc_response__load__init(resp->load);
     return 0;
 }
 
@@ -122,6 +151,12 @@ void pho_srl_tlc_response_free(pho_tlc_resp_t *resp, bool unpack)
         free(resp->error->message);
         free(resp->error);
         resp->error = NULL;
+    }
+
+    if (resp->load) {
+        free(resp->load->message);
+        free(resp->load);
+        resp->load = NULL;
     }
 }
 

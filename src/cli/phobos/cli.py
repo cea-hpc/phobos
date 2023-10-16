@@ -1775,6 +1775,20 @@ class DriveLookupOptHandler(BaseOptHandler):
                             help='Drive to lookup (could be '
                                  'the path or the serial number)')
 
+class DriveLoadOptHandler(BaseOptHandler):
+    label = 'load'
+    descr = 'load a tape into a drive'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(DriveLoadOptHandler, cls).add_options(parser)
+        parser.add_argument('res',
+                            help='Target drive (could be the path or the '
+                                 'serial number)')
+        parser.add_argument('tape_label',
+                            help='Tape label to load')
+
 class DriveOptHandler(DeviceOptHandler):
     """Tape Drive options and actions."""
     label = 'drive'
@@ -1789,6 +1803,7 @@ class DriveOptHandler(DeviceOptHandler):
         UnlockOptHandler,
         StatusOptHandler,
         DriveLookupOptHandler,
+        DriveLoadOptHandler,
     ]
 
     def exec_migrate(self):
@@ -1885,6 +1900,19 @@ class DriveOptHandler(DeviceOptHandler):
         self.logger.info(f'State: {"full" if drive_info.ldi_full else "empty"}')
         if drive_info.ldi_full:
             self.logger.info(f"Loaded tape id: {drive_info.ldi_medium_id.name}")
+
+    def exec_load(self):
+        """Load a tape into a drive"""
+        res = self.params.get('res')
+        tape_label = self.params.get('tape_label')
+
+        try:
+            with AdminClient(lrs_required=False, tlc_required=True) as adm:
+                adm.load(res, tape_label)
+
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
 
 class TapeOptHandler(MediaOptHandler):
     """Magnetic tape options and actions."""

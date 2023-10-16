@@ -32,12 +32,18 @@ message PhoTlcRequest {
         required string serial = 1; // Serial number of the drive to lookup
     }
 
+    /** Body of the tlc load request */
+    message Load {
+        required string drive_serial = 1;   // Serial number of the target drive
+        required string tape_label = 2;     // Medium label to load
+    }
+
     required uint32 id  = 1;    // Request ID to match its future
                                 // response.
 
     optional bool ping  = 2;    // Is the request a ping request ?
     optional DriveLookup drive_lookup = 3;  // Drive lookup body
-
+    optional Load load = 4;     // Load body
 }
 
 /** TLC protocol response, emitted by the TLC. */
@@ -60,13 +66,19 @@ message PhoTlcResponse {
     /** Body of error response */
     message Error {
         required int32 rc = 1;  // Error code, -errno for homogeneity.
-        optional string message = 2 ; // JSON message describing the error
+        optional string message = 2; // JSON message describing the error
+    }
+
+    /** Body of load response */
+    message Load {
+        optional string message = 1; // JSON message describing the error
     }
 
     required uint32 req_id = 1; // Request ID, to be matched with
                                 // the corresponding request.
 
-    optional Ping ping = 2; // Ping body
+    optional Ping ping = 2;     // Ping body
     optional DriveLookup drive_lookup = 3;  // Drive lookup response body
     optional Error error = 4;   // Error body
+    optional Load load = 5;     // Load body
 }

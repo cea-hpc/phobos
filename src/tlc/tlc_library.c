@@ -36,6 +36,7 @@
 
 #include "pho_cfg.h"
 #include "pho_common.h"
+#include "pho_types.h"
 #include "../ldm-modules/scsi_api.h"
 #include "tlc_library.h"
 
@@ -335,8 +336,8 @@ static inline bool match_serial(const char *drv_descr, const char *req_sn)
     return !strcmp(sn, req_sn);
 }
 
-static struct element_status *drive_info_from_serial(struct lib_descriptor *lib,
-                                                     const char *serial)
+static struct element_status *
+drive_element_status_from_serial(struct lib_descriptor *lib, const char *serial)
 {
     int i;
 
@@ -349,78 +350,66 @@ static struct element_status *drive_info_from_serial(struct lib_descriptor *lib,
             return drv;
         }
     }
+
     pho_warn("No drive matching serial '%s'", serial);
     return NULL;
 }
 
-/*
- *#** get media info with the given label *#
- *static struct element_status *media_info_from_label(struct lib_descriptor
- *                                                       *lib,
- *                                                    const char *label)
- *{
- *    struct element_status *med;
- *    int                    i;
- *
- *    #* search in slots *#
- *    for (i = 0; i < lib->slots.count; i++) {
- *        med = &lib->slots.items[i];
- *
- *        if (med->full && !strcmp(med->vol, label)) {
- *            pho_debug("Found volume matching label '%s' in slot %#hx", label,
- *                      med->address);
- *            return med;
- *        }
- *    }
- *
- *    #* search in drives *#
- *    for (i = 0; i < lib->drives.count; i++) {
- *        med = &lib->drives.items[i];
- *
- *        if (med->full && !strcmp(med->vol, label)) {
- *            pho_debug("Found volume matching label '%s' in drive %#hx", label,
- *                      med->address);
- *            return med;
- *        }
- *    }
- *
- *    #* search in arm *#
- *    for (i = 0; i < lib->arms.count; i++) {
- *        med = &lib->arms.items[i];
- *
- *        if (med->full && !strcmp(med->vol, label)) {
- *            pho_debug("Found volume matching label '%s' in arm %#hx", label,
- *                      med->address);
- *            return med;
- *        }
- *    }
- *
- *    #* search in imp/exp slots *#
- *    for (i = 0; i < lib->impexp.count; i++) {
- *        med = &lib->impexp.items[i];
- *
- *        if (med->full && !strcmp(med->vol, label)) {
- *            pho_debug("Found volume matching label '%s' in import/export slot"
- *                      " %#hx", label, med->address);
- *            return med;
- *        }
- *    }
- *    pho_warn("No media matching label '%s'", label);
- *    return NULL;
- *}
- *
- *#** Convert SCSI element type to LDM media location type *#
- *static inline enum med_location scsi2ldm_loc_type(enum element_type_code type)
- *{
- *    switch (type) {
- *    case SCSI_TYPE_ARM:    return MED_LOC_ARM;
- *    case SCSI_TYPE_SLOT:   return MED_LOC_SLOT;
- *    case SCSI_TYPE_IMPEXP: return MED_LOC_IMPEXP;
- *    case SCSI_TYPE_DRIVE:  return MED_LOC_DRIVE;
- *    default:          return MED_LOC_UNKNOWN;
- *    }
- *}
- */
+/** get media info with the given label */
+static struct element_status *
+media_element_status_from_label(struct lib_descriptor *lib,
+                                const char *label)
+{
+    struct element_status *med;
+    int i;
+
+    /* search in slots */
+    for (i = 0; i < lib->slots.count; i++) {
+        med = &lib->slots.items[i];
+
+        if (med->full && !strcmp(med->vol, label)) {
+            pho_debug("Found volume matching label '%s' in slot %#hx", label,
+                      med->address);
+            return med;
+        }
+    }
+
+    /* search in drives */
+    for (i = 0; i < lib->drives.count; i++) {
+        med = &lib->drives.items[i];
+
+        if (med->full && !strcmp(med->vol, label)) {
+            pho_debug("Found volume matching label '%s' in drive %#hx", label,
+                      med->address);
+            return med;
+        }
+    }
+
+    /* search in arm */
+    for (i = 0; i < lib->arms.count; i++) {
+        med = &lib->arms.items[i];
+
+        if (med->full && !strcmp(med->vol, label)) {
+            pho_debug("Found volume matching label '%s' in arm %#hx", label,
+                      med->address);
+            return med;
+        }
+    }
+
+    /* search in imp/exp slots */
+    for (i = 0; i < lib->impexp.count; i++) {
+        med = &lib->impexp.items[i];
+
+        if (med->full && !strcmp(med->vol, label)) {
+            pho_debug("Found volume matching label '%s' in import/export slot"
+                      " %#hx", label, med->address);
+            return med;
+        }
+    }
+
+    pho_warn("No media matching label '%s'", label);
+    return NULL;
+}
 
 int tlc_library_drive_lookup(struct lib_descriptor *lib,
                              const char *drive_serial,
@@ -431,7 +420,7 @@ int tlc_library_drive_lookup(struct lib_descriptor *lib,
 
     *json_error_message = NULL;
     /* search for the given drive serial */
-    drv = drive_info_from_serial(lib, drive_serial);
+    drv = drive_element_status_from_serial(lib, drive_serial);
     if (!drv) {
         *json_error_message = json_pack("{s:s}",
                                         "DRIVE_SERIAL_UNKNOWN", drive_serial);
@@ -453,7 +442,19 @@ int tlc_library_drive_lookup(struct lib_descriptor *lib,
     return 0;
 }
 
-/*#** Implements phobos LDM lib media lookup *#
+/*#** Convert SCSI element type to LDM media location type *#
+ *static inline enum med_location scsi2ldm_loc_type(enum element_type_code type)
+ *{
+ *    switch (type) {
+ *    case SCSI_TYPE_ARM:    return MED_LOC_ARM;
+ *    case SCSI_TYPE_SLOT:   return MED_LOC_SLOT;
+ *    case SCSI_TYPE_IMPEXP: return MED_LOC_IMPEXP;
+ *    case SCSI_TYPE_DRIVE:  return MED_LOC_DRIVE;
+ *    default:          return MED_LOC_UNKNOWN;
+ *    }
+ *}
+ *
+ *#** Implements phobos LDM lib media lookup *#
  *static int lib_scsi_media_info(struct lib_handle *hdl, const char *med_label,
  *                               struct lib_item_addr *lia, json_t *message)
  *{
@@ -693,8 +694,102 @@ int tlc_library_drive_lookup(struct lib_descriptor *lib,
  *    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
  *    return rc;
  *}
- *
- *
+ */
+
+static void move_tape_between_element_status(struct element_status *source,
+                                             struct element_status *destination)
+{
+    source->full = false;
+    destination->full = true;
+    destination->src_addr_is_set = true;
+    destination->src_addr = source->address;
+    memcpy(destination->vol, source->vol, VOL_ID_LEN);
+}
+
+int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
+                     const char *drive_serial, const char *medium_label,
+                     json_t **json_message)
+{
+    struct element_status *source_element_status;
+    struct element_status *drive_element_status;
+    struct pho_id drive_id;
+    struct pho_id tape_id;
+    struct pho_log log;
+    int rc;
+
+    *json_message = NULL;
+
+    /* get device addr */
+    drive_element_status = drive_element_status_from_serial(lib, drive_serial);
+    if (!drive_element_status) {
+        *json_message = json_pack("{s:s}",
+                                  "DRIVE_SERIAL_UNKNOWN", drive_serial);
+        return -ENOENT;
+    }
+
+    /* get medium addr */
+    source_element_status = media_element_status_from_label(lib, medium_label);
+    if (!source_element_status) {
+        *json_message = json_pack("{s:s}",
+                                  "MEDIA_LABEL_UNKNOWN", medium_label);
+        return -ENOENT;
+    }
+
+    /* prepare SCSI log */
+    drive_id.family = PHO_RSC_TAPE;
+    tape_id.family = PHO_RSC_TAPE;
+    rc = pho_id_name_set(&drive_id, drive_serial);
+    if (!drive_element_status) {
+        *json_message = json_pack("{s:s}",
+                                  "DRIVE_ID_ERROR", drive_serial);
+        return -ENOENT;
+    }
+
+    rc = pho_id_name_set(&tape_id, medium_label);
+    if (rc) {
+        *json_message = json_pack("{s:s}",
+                                  "MEDIA_ID_ERROR", medium_label);
+        return rc;
+    }
+
+    init_pho_log(&log, drive_id, tape_id, PHO_DEVICE_LOAD);
+
+    /* move medium to device */
+    /* arm = 0 for default transport element */
+    rc = scsi_move_medium(lib->fd, 0, source_element_status->address,
+                          drive_element_status->address, log.message);
+
+    log.error_number = rc;
+    if (rc) {
+        char *error_message;
+
+        if (json_object_size(log.message) == 0)
+            LOG_GOTO(out_log, rc, "Can't move to load medium %s into drive %s",
+                     medium_label, drive_serial);
+
+        error_message = json_dumps(log.message, 0);
+        pho_error(rc, "Can't move to load medium %s into drive %s: %s",
+                  medium_label, drive_serial, error_message);
+        free(error_message);
+        goto out_log;
+    }
+
+    /* update element status lib cache */
+    move_tape_between_element_status(source_element_status,
+                                     drive_element_status);
+out_log:
+    if (should_log(&log))
+        dss_emit_log(dss, &log);
+
+    if (json_object_size(log.message) > 0)
+        *json_message = json_copy(log.message);
+
+    destroy_json(log.message);
+
+    return rc;
+}
+
+/*
  *#**
  * *  \defgroup lib scan (those items are related to lib_scan implementation)
  * *  @{

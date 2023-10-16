@@ -38,6 +38,7 @@
 #include "pho_comm.h"
 #include "pho_common.h"
 #include "pho_daemon.h"
+#include "pho_dss.h"
 #include "pho_ldm.h"
 #include "pho_srl_tlc.h"
 #include "../ldm-modules/scsi_api.h"
@@ -55,6 +56,7 @@ static bool should_tlc_stop(void)
 struct tlc {
     struct pho_comm_info comm;  /*!< Communication handle */
     struct lib_descriptor lib;  /*!< Library descriptor */
+    struct dss_handle dss;      /*!< DSS handle, configured from conf */
 };
 
 static int tlc_init(struct tlc *tlc)
@@ -73,10 +75,6 @@ static int tlc_init(struct tlc *tlc)
     if (!lib_dev)
         LOG_RETURN(-EINVAL, "Failed to get default library device from config");
 
-    /*
-     * WARNING: tlc->lib will be migrated to the thread managing the
-     * library.
-     */
     rc = tlc_library_open(&tlc->lib, lib_dev);
     if (rc)
         LOG_RETURN(-errno, "Failed to open library device '%s'", lib_dev);
@@ -96,6 +94,11 @@ static int tlc_init(struct tlc *tlc)
     rc = pho_comm_open(&tlc->comm, &sock_addr, PHO_COMM_TCP_SERVER);
     if (rc)
         LOG_GOTO(close_lib, rc, "Error while opening the TLC socket");
+
+    /* DSS handle init */
+    rc = dss_init(&tlc->dss);
+    if (rc)
+        LOG_GOTO(close_lib, rc, "Cannot initialize DSS");
 
     return rc;
 
@@ -118,6 +121,8 @@ static void tlc_fini(struct tlc *tlc)
         pho_error(rc, "Error on closing the TLC socket");
 
     tlc_library_close(&tlc->lib);
+
+    dss_fini(&tlc->dss);
 }
 
 static int process_ping_request(struct tlc *tlc, pho_tlc_req_t *req,
@@ -237,6 +242,78 @@ out:
     return rc;
 }
 
+static int process_load_request(struct tlc *tlc, pho_tlc_req_t *req,
+                                int client_socket)
+{
+    json_t *json_message = NULL;
+    pho_tlc_resp_t *resp = NULL;
+    pho_tlc_resp_t error_resp;
+    pho_tlc_resp_t load_resp;
+    struct pho_comm_data msg;
+    int rc;
+
+    rc = tlc_library_load(&tlc->dss, &tlc->lib, req->load->drive_serial,
+                          req->load->tape_label, &json_message);
+    if (rc)
+        goto err;
+
+    rc = pho_srl_tlc_response_load_alloc(&load_resp);
+    if (rc) {
+        if (json_message)
+            json_decref(json_message);
+
+        json_message = json_pack("{s:s}", "ALLOC_ERROR",
+                                 "TLC was unable to alloc load response");
+        LOG_GOTO(err, rc, "Unable to alloc load lookup response");
+    }
+
+    load_resp.req_id = req->id;
+    if (json_message) {
+        load_resp.load->message = json_dumps(json_message, 0);
+        json_decref(json_message);
+    }
+
+    resp = &load_resp;
+
+err:
+    if (rc) {
+        int rc2;
+
+        rc2 = pho_srl_tlc_response_error_alloc(&error_resp);
+        if (rc2) {
+            if (json_message)
+                json_decref(json_message);
+
+            LOG_RETURN(rc2,
+                       "TLC unable to alloc error response %d for load",
+                       rc);
+        }
+
+        error_resp.req_id = req->id;
+        error_resp.error->rc = rc;
+        if (json_message) {
+            error_resp.error->message = json_dumps(json_message, 0);
+            json_decref(json_message);
+        }
+
+        resp = &error_resp;
+    }
+
+    rc = pho_srl_tlc_response_pack(resp, &msg.buf);
+    if (rc)
+        LOG_GOTO(out, rc, "TLC load response cannot be packed");
+
+    msg.fd = client_socket;
+    rc = pho_comm_send(&msg);
+    if (rc)
+        pho_error(rc, "TLC error on sending response");
+
+    free(msg.buf.buff);
+out:
+    pho_srl_tlc_response_free(resp, false);
+    return rc;
+}
+
 static int recv_work(struct tlc *tlc)
 {
     struct pho_comm_data *data = NULL;
@@ -269,6 +346,11 @@ static int recv_work(struct tlc *tlc)
 
         if (pho_tlc_request_is_drive_lookup(req)) {
             process_drive_lookup_request(tlc, req, data[i].fd);
+            goto out_request;
+        }
+
+        if (pho_tlc_request_is_load(req)) {
+            process_load_request(tlc, req, data[i].fd);
             goto out_request;
         }
 

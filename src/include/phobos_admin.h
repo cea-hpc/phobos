@@ -429,4 +429,19 @@ int phobos_admin_clear_logs(struct admin_handle *adm,
 int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
                               struct lib_drv_info *drive_info);
 
+/**
+ * Load a tape in a drive
+ *
+ * @param[in]       adm             Admin module handler.
+ * @param[in,out]   drive_id        drive_id.name could be serial number or path
+ *                                  drive_id.family must be PHO_RSC_TAPE
+ *                                  (if success, drive_id.name is set to serial)
+ * @param[in]       tape_id         Tape to load (tape_id.family must be
+ *                                  PHO_RSC_TAPE)
+ *
+ * @return 0 if success, -errno if an error occurs
+ */
+int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
+                      const struct pho_id *tape_id);
+
 #endif

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2023 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -20,7 +20,7 @@
 #
 
 #
-# Integration test for "phobos drive lookup" feature
+# Integration test for "phobos drive load" feature
 #
 
 test_dir=$(dirname $(readlink -e $0))
@@ -44,7 +44,7 @@ function cleanup
     drain_all_drives
 }
 
-function test_lookup
+function test_load
 {
     local tape="$(get_tapes L6 1)"
     local drive="$(get_lto_drives 6 1)"
@@ -52,11 +52,11 @@ function test_lookup
     # no TLC
     ECONNREFUSED=111
     set +e
-    $phobos drive lookup ${drive}
+    $phobos drive load ${drive} ${tape}
     rc=$?
     set -e
     if (( rc != ECONNREFUSED )); then
-        error "phobos drive lookup with no TLC must failed with ECONNREFUSED" \
+        error "phobos drive load no TLC must failed with ECONNREFUSED" \
               "($ECONNREFUSED), instead we got ${rc}"
     fi
 
@@ -64,11 +64,11 @@ function test_lookup
     invoke_tlc
     ENXIO=6
     set +e
-    $phobos drive lookup ${drive}
+    $phobos drive load ${drive} ${tape}
     rc=$?
     set -e
     if (( rc != ENXIO )); then
-        error "phobos drive lookup for DSS unknown drive must failed with" \
+        error "phobos drive load for DSS unknown drive must failed with" \
               "ENXIO ($ENXIO), instead we got ${rc}"
     fi
 
@@ -82,20 +82,20 @@ EOF
     # by serial
     ENOENT=2
     set +e
-    $phobos drive lookup serial
+    $phobos drive load serial ${tape}
     rc=$?
     set -e
     if (( rc != ENOENT )); then
-        error "phobos drive lookup serial for TLC unknown drive must failed" \
+        error "phobos drive load serial for TLC unknown drive must failed" \
               "with ENOENT ($ENOENT), instead we got ${rc}"
     fi
     # by path
     set +e
-    $phobos drive lookup path
+    $phobos drive load path ${tape}
     rc=$?
     set -e
     if (( rc != ENOENT )); then
-        error "phobos drive lookup path for TLC unknown drive must failed" \
+        error "phobos drive load path for TLC unknown drive must failed" \
               "with ENOENT ($ENOENT), instead we got ${rc}"
     fi
 
@@ -103,22 +103,46 @@ EOF
     DELETE FROM device WHERE id = 'serial';
 EOF
 
-    # lookup an existing drive from path
+    # Load the drive
     $phobos drive add --unlock ${drive}
-    $phobos drive lookup ${drive} 2>&1 | grep "State: empty"
 
-    # lookup an existing drive from serial
-    drive_serial=$($phobos drive list)
-    $phobos drive lookup ${drive_serial} 2>&1 | grep "State: empty"
+    # unknown tape
+    ENOENT=2
+    set +e
+    $phobos drive load ${drive} unknown_tape
+    rc=$?
+    set -e
+    if (( rc != ENOENT )); then
+        error "phobos drive load for TLC unknown tape must failed" \
+              "with ENOENT ($ENOENT), instead we got ${rc}"
+    fi
 
-    # lookup an existing drive with a loaded tape
+    # load tape into drive
     $phobos drive load ${drive} ${tape}
     drive_lookup_out=$($phobos drive lookup ${drive} 2>&1)
     echo ${drive_lookup_out} | grep "State: full"
     echo ${drive_lookup_out} | grep "Loaded tape id: ${tape}"
+}
 
-    # lookup an existing drive with a tape from serial
-    drive_lookup_out=$($phobos drive lookup ${drive_serial} 2>&1)
+function test_load_drive_to_drive
+{
+    local tape="$(get_tapes L6 1)"
+    local drives=( $(get_lto_drives 6 2) )
+
+    invoke_tlc
+    $phobos drive add --unlock ${drives[0]}
+    $phobos drive add --unlock ${drives[1]}
+
+    # load tape into drives[0]
+    $phobos drive load ${drives[0]} ${tape}
+    drive_lookup_out=$($phobos drive lookup ${drives[0]} 2>&1)
+    echo ${drive_lookup_out} | grep "State: full"
+    echo ${drive_lookup_out} | grep "Loaded tape id: ${tape}"
+
+    # load tape into drives[1] from drives[1]
+    $phobos drive load ${drives[1]} ${tape}
+    $phobos drive lookup ${drives[0]} 2>&1 | grep "State: empty"
+    drive_lookup_out=$($phobos drive lookup ${drives[1]} 2>&1)
     echo ${drive_lookup_out} | grep "State: full"
     echo ${drive_lookup_out} | grep "Loaded tape id: ${tape}"
 }
@@ -127,6 +151,7 @@ if [[ ! -w /dev/changer ]]; then
     skip "Library required for this test"
 fi
 
-TEST_SETUP=setup
-TESTS=("test_lookup;")
-TEST_CLEANUP=cleanup
+TESTS=(
+    "setup; test_load; cleanup"
+    "setup; test_load_drive_to_drive; cleanup"
+)

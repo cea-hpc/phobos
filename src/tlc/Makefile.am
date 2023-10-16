@@ -5,7 +5,8 @@ sbin_PROGRAMS=tlc
 tlc_SOURCES=tlc.c tlc_cfg.h tlc_cfg.c tlc_library.h tlc_library.c \
             ../ldm-modules/scsi_api.h
 tlc_CFLAGS=$(AM_CFLAGS)
-tlc_LDADD=../cfg/libpho_cfg.la \
+tlc_LDADD=../dss/libpho_dss.la \
+          ../cfg/libpho_cfg.la \
           ../common/libpho_common.la \
           ../communication/libpho_comm.la \
           ../daemon/libpho_daemon.la \

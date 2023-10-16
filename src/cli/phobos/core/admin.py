@@ -337,11 +337,23 @@ class Client(object):
         rc = LIBPHOBOS_ADMIN.phobos_admin_drive_lookup(byref(self.handle),
                                                        byref(Id(PHO_RSC_TAPE,
                                                                 name=res)),
-                                                       byref(drive_info));
+                                                       byref(drive_info))
         if rc:
-            raise EnvironmentError(rc, f"Failed to lookup the drive {res}");
+            raise EnvironmentError(rc, f"Failed to lookup the drive {res}")
 
         return drive_info
+
+    def load(self, drive_serial_or_path, tape_label):
+        """Load a tape into a drive"""
+        rc =  LIBPHOBOS_ADMIN.phobos_admin_load(
+                                    byref(self.handle),
+                                    byref(Id(PHO_RSC_TAPE,
+                                             name=drive_serial_or_path)),
+                                    byref(Id(PHO_RSC_TAPE, name=tape_label)))
+
+        if rc:
+            raise EnvironmentError(rc, f"Failed to load {tape_label} into "
+                                       f"drive {drive_serial_or_path}")
 
     @staticmethod
     def layout_list_free(layouts, n_layouts):

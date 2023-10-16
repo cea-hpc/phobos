@@ -1636,7 +1636,7 @@ int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
 
     if (id->family != PHO_RSC_TAPE)
         LOG_RETURN(-EINVAL,
-                   "Ressource family for a drive lookup must be %s "
+                   "Resource family for a drive lookup must be %s "
                    "(PHO_RSC_TAPE), instead we got %s",
                    rsc_family2str(PHO_RSC_TAPE), rsc_family2str(id->family));
 
@@ -1678,9 +1678,10 @@ int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
             drive_info->ldi_medium_id.family = PHO_RSC_TAPE;
             rc = pho_id_name_set(&drive_info->ldi_medium_id,
                                  resp->drive_lookup->medium_name);
-            LOG_GOTO(clean_response, rc,
-                     "Unable to copy medium name %s from drive lookup "
-                     "response", resp->drive_lookup->medium_name);
+            if (rc)
+                LOG_GOTO(clean_response, rc,
+                         "Unable to copy medium name %s from drive lookup "
+                         "response", resp->drive_lookup->medium_name);
         }
     } else if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
         rc = resp->error->rc;
@@ -1690,11 +1691,91 @@ int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
         else
             LOG_GOTO(clean_response, rc, "TLC failed to lookup the drive");
     } else {
-        LOG_GOTO(clean_response, -EPROTO,
+        LOG_GOTO(clean_response, rc = -EPROTO,
                  "TLC answers unexpected response to drive lookup");
     }
 
 clean_response:
+    pho_srl_tlc_response_free(resp, true);
+    return rc;
+}
+
+int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
+                      const struct pho_id *tape_id)
+{
+    struct proto_resp proto_resp = {TLC_REQUEST};
+    struct proto_req proto_req = {TLC_REQUEST};
+    struct dev_info *dev_res;
+    pho_tlc_resp_t *resp;
+    pho_tlc_req_t req;
+    int rid = 1;
+    int rc;
+
+    if (drive_id->family != PHO_RSC_TAPE)
+        LOG_RETURN(-EINVAL,
+                   "Drive resource family for a load must be %s, instead we "
+                   "got %s", rsc_family2str(PHO_RSC_TAPE),
+                   rsc_family2str(drive_id->family));
+
+    if (tape_id->family != PHO_RSC_TAPE)
+        LOG_RETURN(-EINVAL,
+                   "Tape resource family for a load must be %s, instead we "
+                   "got %s", rsc_family2str(PHO_RSC_TAPE),
+                   rsc_family2str(tape_id->family));
+
+    /* fetch the serial number and store it in id */
+    rc = _get_device_by_path_or_serial(adm, drive_id, &dev_res);
+    if (rc)
+        LOG_RETURN(rc, "Unable to retrieve serial number from device name '%s' "
+                   "in DSS", drive_id->name);
+
+    dss_res_free(dev_res, 1);
+
+    proto_req.msg.tlc_req = &req;
+    rc = pho_srl_tlc_request_load_alloc(&req);
+    if (rc)
+        LOG_RETURN(rc, "Unable to alloc drive load request");
+
+    req.id = rid;
+    req.load->drive_serial = strdup(drive_id->name);
+    if (!req.load->drive_serial) {
+        pho_srl_tlc_request_free(&req, false);
+        LOG_RETURN(-ENOMEM,
+                   "Unable to copy drive serial number %s into load request",
+                   drive_id->name);
+    }
+
+    req.load->tape_label = strdup(tape_id->name);
+    if (!req.load->tape_label) {
+        pho_srl_tlc_request_free(&req, false);
+        LOG_RETURN(-ENOMEM,
+                   "Unable to copy tape label %s into load request",
+                   tape_id->name);
+    }
+
+    rc = _send_and_receive(&adm->tlc_comm, proto_req, &proto_resp);
+    pho_srl_tlc_request_free(&req, false);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Error with TLC communication : %d , %s", rc, strerror(-rc));
+
+    resp = proto_resp.msg.tlc_resp;
+    if (pho_tlc_response_is_load(resp) && resp->req_id == rid) {
+        if (resp->load->message)
+            pho_verb("Successful admin load: %s", resp->load->message);
+
+    } else if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
+        rc = resp->error->rc;
+        if (resp->error->message)
+            pho_error(rc, "TLC failed to load: '%s'", resp->error->message);
+        else
+            pho_error(rc, "TLC failed to load: '%s'", tape_id->name);
+
+    } else {
+        rc = -EPROTO;
+        pho_error(rc, "TLC answers unexpected response to load");
+    }
+
     pho_srl_tlc_response_free(resp, true);
     return rc;
 }
