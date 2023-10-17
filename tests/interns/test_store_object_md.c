@@ -145,40 +145,43 @@ do {                                                                           \
         will_return(dss_deprecated_object_get, _cnt);                          \
 } while (0)
 
-int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                        const struct dss_filter *outer_filter,
-                        struct layout_info **lyt_ls, int *lyt_cnt)
+int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct layout_info **layouts, int *layout_count)
 {
+    void *layout_container;
     int rc = (int)mock();
-    void *lyt_container;
     bool *ctn_bool;
 
-    (void)hdl; (void)filter; (void)outer_filter;
+    (void)hdl; (void)filter;
 
     if (rc != 0)
         return rc;
 
-    *lyt_cnt = (int)mock();
+    *layout_count = (int)mock();
 
-    if (*lyt_cnt == 0) {
-        *lyt_ls = NULL;
+    if (*layout_count == 0) {
+        layouts = NULL;
         return rc;
     }
 
-    lyt_container = malloc(*lyt_cnt * sizeof(**lyt_ls) + sizeof(*ctn_bool));
-    ctn_bool = (bool *)lyt_container;
+    /* allocate dss_result, which consists in a boolean and an array of
+     * pointers and return the array field as layouts
+     */
+    layout_container = xmalloc(
+        sizeof(*ctn_bool) + *layout_count * sizeof(**layouts));
+    ctn_bool = (bool *)layout_container;
     *ctn_bool = false; // true for object, false for layout
-    *lyt_ls = (struct layout_info *)(lyt_container + sizeof(*ctn_bool));
-    memset(*lyt_ls, 0, *lyt_cnt * sizeof(**lyt_ls));
+    *layouts = (struct layout_info *)(layout_container + sizeof(*ctn_bool));
+    memset(*layouts, 0, *layout_count * sizeof(**layouts));
 
     return rc;
 }
 
 #define MOCK_DSS_LAYOUT_GET(_rc, _cnt)                                         \
 do {                                                                           \
-    will_return(dss_full_layout_get, _rc);                                     \
+    will_return(dss_layout_get, _rc);                                          \
     if (_rc == 0)                                                              \
-        will_return(dss_full_layout_get, _cnt);                                \
+        will_return(dss_layout_get, _cnt);                                     \
 } while (0)
 
 int dss_object_move(struct dss_handle *handle, enum dss_type type_from,

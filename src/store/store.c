@@ -507,10 +507,10 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
                  "Couldn't build filter in md_del for extent uuid:'%s'.",
                  obj->uuid);
 
-    rc = dss_full_layout_get(dss, &filter, NULL, &layout, &cnt);
+    rc = dss_layout_get(dss, &filter, &layout, &cnt);
     dss_filter_free(&filter);
     if (rc)
-        LOG_GOTO(out_prev, rc, "dss_full_layout_get failed for uuid:'%s'",
+        LOG_GOTO(out_prev, rc, "dss_layout_get failed for uuid:'%s'",
                  xfer->xd_objuuid);
 
     dss_res_free(layout, cnt);

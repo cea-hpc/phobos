@@ -57,6 +57,8 @@ static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
 static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
                                  PGresult *res, int row_num);
 static void dss_media_result_free(void *void_media);
+static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
+                                  PGresult *res, int row_num);
 static int dss_full_layout_from_pg_row(struct dss_handle *handle,
                                        void *void_layout, PGresult *res,
                                        int row_num);
@@ -396,6 +398,14 @@ static const char * const select_query[] = {
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
                    " address_type, fs_type, fs_status, fs_label, stats, tags,"
                    " put, get, delete FROM media",
+    [DSS_LAYOUT] = "SELECT oid, object_uuid, version, lyt_info,"
+                   " json_agg(extent_uuid ORDER BY layout_index)"
+                   " FROM layout"
+                   " LEFT JOIN ("
+                   "  SELECT oid, object_uuid, version, lyt_info FROM object"
+                   "  UNION SELECT oid, object_uuid, version, lyt_info"
+                   "   FROM deprecated_object"
+                   " ) AS tmp USING (object_uuid, version)",
     [DSS_FULL_LAYOUT] =
                    "SELECT oid, object_uuid, version, lyt_info,"
                    " json_agg(json_build_object("
@@ -429,6 +439,7 @@ static const char * const select_inner_end_query[] = {
 };
 
 static const char * const select_outer_end_query[] = {
+    [DSS_LAYOUT] =      " GROUP BY oid, object_uuid, version, lyt_info",
     [DSS_FULL_LAYOUT] = " GROUP BY oid, object_uuid, version, lyt_info"
                         " ORDER BY oid, version, object_uuid",
 };
@@ -436,6 +447,7 @@ static const char * const select_outer_end_query[] = {
 static const size_t res_size[] = {
     [DSS_DEVICE]      = sizeof(struct dev_info),
     [DSS_MEDIA]       = sizeof(struct media_info),
+    [DSS_LAYOUT]      = sizeof(struct layout_info),
     [DSS_FULL_LAYOUT] = sizeof(struct layout_info),
     [DSS_EXTENT]      = sizeof(struct extent),
     [DSS_OBJECT]      = sizeof(struct object_info),
@@ -448,6 +460,7 @@ typedef int (*res_pg_constructor_t)(struct dss_handle *handle, void *item,
 static const res_pg_constructor_t res_pg_constructor[] = {
     [DSS_DEVICE]      = dss_device_from_pg_row,
     [DSS_MEDIA]       = dss_media_from_pg_row,
+    [DSS_LAYOUT]      = dss_layout_from_pg_row,
     [DSS_FULL_LAYOUT] = dss_full_layout_from_pg_row,
     [DSS_EXTENT]      = dss_extent_from_pg_row,
     [DSS_OBJECT]      = dss_object_from_pg_row,
@@ -459,6 +472,7 @@ typedef void (*res_destructor_t)(void *item);
 static const res_destructor_t res_destructor[] = {
     [DSS_DEVICE]      = dss_device_result_free,
     [DSS_MEDIA]       = dss_media_result_free,
+    [DSS_LAYOUT]      = dss_full_layout_result_free,
     [DSS_FULL_LAYOUT] = dss_full_layout_result_free,
     [DSS_EXTENT]      = dss_extent_result_free,
     [DSS_OBJECT]      = dss_object_result_free,
@@ -1531,6 +1545,7 @@ static inline bool is_type_supported(enum dss_type type)
     switch (type) {
     case DSS_OBJECT:
     case DSS_DEPREC:
+    case DSS_LAYOUT:
     case DSS_FULL_LAYOUT:
     case DSS_EXTENT:
     case DSS_DEVICE:
@@ -1854,6 +1869,56 @@ static void dss_media_result_free(void *void_media)
 }
 
 /**
+ * Fill a layout_info from the information in the `row_num`th row of `res`.
+ */
+static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
+                                  PGresult *res, int row_num)
+{
+    struct layout_info *layout = void_layout;
+    struct extent *extents = NULL;
+    json_error_t json_error;
+    size_t count = 0;
+    json_t *root;
+    int rc;
+    int i;
+
+    (void) handle;
+
+    layout->oid = PQgetvalue(res, row_num, 0);
+    layout->uuid = PQgetvalue(res, row_num, 1);
+    layout->version = atoi(PQgetvalue(res, row_num, 2));
+    rc = dss_layout_desc_decode(&layout->layout_desc,
+                                PQgetvalue(res, row_num, 3));
+    pho_debug("Decoding JSON representation for extents: '%s'",
+              PQgetvalue(res, row_num, 4));
+
+    root = json_loads(PQgetvalue(res, row_num, 4), JSON_REJECT_DUPLICATES,
+                      &json_error);
+    if (!root)
+        LOG_RETURN(-EINVAL, "Failed to parse json data: %s", json_error.text);
+
+    if (!json_is_array(root))
+        LOG_GOTO(out, rc = -EINVAL, "Invalid extents description");
+
+    count = json_array_size(root);
+    if (count == 0)
+        LOG_GOTO(out, rc = -EINVAL,
+                 "json parser: extents array is empty");
+
+    extents = xcalloc(count, sizeof(*extents));
+    for (i = 0; i < count; i++) {
+        extents[i].layout_idx = i;
+        extents[i].uuid = xstrdup(json_string_value(json_array_get(root, i)));
+    }
+
+out:
+    layout->ext_count = count;
+    layout->extents = extents;
+
+    return rc;
+}
+
+/**
  * Fill a layout_info and its extents from the information in the `row_num`th
  * row of `res`.
  */
@@ -2042,14 +2107,16 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
         return rc;
     }
 
-    if (type == DSS_FULL_LAYOUT) {
-        g_string_append(clause, select_inner_end_query[DSS_FULL_LAYOUT]);
-        rc = clause_filter_convert(handle, clause, filters[1]);
-        if (rc) {
-            g_string_free(clause, true);
-            return rc;
+    if (type == DSS_FULL_LAYOUT || type == DSS_LAYOUT) {
+        if (type == DSS_FULL_LAYOUT) {
+            g_string_append(clause, select_inner_end_query[DSS_FULL_LAYOUT]);
+            rc = clause_filter_convert(handle, clause, filters[1]);
+            if (rc) {
+                g_string_free(clause, true);
+                return rc;
+            }
         }
-        g_string_append(clause, select_outer_end_query[DSS_FULL_LAYOUT]);
+        g_string_append(clause, select_outer_end_query[type]);
     }
 
     pho_debug("Executing request: '%s'", clause->str);
@@ -2415,6 +2482,14 @@ int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
     return dss_generic_get(hdl, DSS_MEDIA,
                            (const struct dss_filter*[]) {filter, NULL},
                            (void **)med_ls, med_cnt);
+}
+
+int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct layout_info **layouts, int *layout_count)
+{
+    return dss_generic_get(hdl, DSS_LAYOUT,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)layouts, layout_count);
 }
 
 int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,

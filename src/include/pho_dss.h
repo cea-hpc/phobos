@@ -329,6 +329,19 @@ int dss_one_medium_get_from_id(struct dss_handle *dss,
                                struct media_info **medium_info);
 
 /**
+ * Retrieve layout information from DSS
+ * @param[in]  hdl          valid connection handle
+ * @param[in]  filter       assembled DSS filtering criteria
+ * @param[out] layouts      list of retrieved items to be freed w/
+ *                          dss_res_free()
+ * @param[out] layout_count number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct layout_info **layouts, int *layout_count);
+
+/**
  * Retrieve layout + extents information from DSS
  * @param[in]  hdl           valid connection handle
  * @param[in]  object        assembled DSS filtering criteria on objects
