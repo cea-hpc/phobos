@@ -47,7 +47,7 @@ typedef PhoRequest__Configure       pho_req_configure_t;
 typedef PhoResponse                 pho_resp_t;
 typedef PhoResponse__Write          pho_resp_write_t;
 typedef PhoResponse__Write__Elt     pho_resp_write_elt_t;
-typedef PhoResponse__Read__Elt      pho_resp_read_t;
+typedef PhoResponse__Read           pho_resp_read_t;
 typedef PhoResponse__Read__Elt      pho_resp_read_elt_t;
 typedef PhoResponse__Release        pho_resp_release_t;
 typedef PhoResponse__Format         pho_resp_format_t;
