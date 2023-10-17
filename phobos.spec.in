@@ -30,9 +30,9 @@ BuildRequires: %{postgres_prefix}-devel
 BuildRequires: glib2-devel >= 2.28
 BuildRequires: %{python_prefix}-devel
 BuildRequires: jansson-devel >= 2.5
+BuildRequires: libattr-devel
 BuildRequires: libini_config-devel
 BuildRequires: openssl-devel
-BuildRequires: libattr-devel
 BuildRequires: sg3_utils-devel
 BuildRequires: protobuf-c-devel
 BuildRequires: systemd
@@ -76,6 +76,7 @@ Summary: C API for Phobos Object Store.
 Requires: phobos
 Requires: glib2-devel >= 2.28
 Requires: jansson-devel >= 2.5
+Requires: libattr-devel
 
 %description devel
 This package contains header files and required libraries to access Phobos
