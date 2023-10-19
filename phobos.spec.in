@@ -186,6 +186,9 @@ ldconfig
 %endif
 
 %changelog
+* Thu Oct 19 2023 - Patrice Lucas <patrice.lucas@cea.fr> - 1.95-2
+- Phobos-devel requires libattr-devel
+
 * Thu Sep 21 2023 - Yoann Valeri <yoann.valeri@cea.fr> - 1.95-1
 - Release 1.95 (Tethys)
 - WARNING: the db schema moves from 1.93 to 1.95 and a migration is needed.
