@@ -125,16 +125,42 @@ static void tlc_fini(struct tlc *tlc)
     dss_fini(&tlc->dss);
 }
 
+/**
+ * Send a response message
+ *
+ * @param[in]   resp            response message to send
+ * @param[in]   client_socket   socket fd on which the response message must be
+ *                              sent
+ *
+ * @return 0 on success, else a negative error code
+ */
+static int tlc_response_send(pho_tlc_resp_t *resp, int client_socket)
+{
+    struct pho_comm_data msg;
+    int rc;
+
+    rc = pho_srl_tlc_response_pack(resp, &msg.buf);
+    if (rc)
+        LOG_RETURN(rc, "TLC response cannot be packed");
+
+    msg.fd = client_socket;
+    rc = pho_comm_send(&msg);
+    if (rc)
+        pho_error(rc, "TLC error on sending response");
+
+    free(msg.buf.buff);
+    return rc;
+}
+
 static int process_ping_request(struct tlc *tlc, pho_tlc_req_t *req,
                                  int client_socket)
 {
-    struct pho_comm_data msg;
     pho_tlc_resp_t resp;
     int rc;
 
     rc = pho_srl_tlc_response_ping_alloc(&resp);
     if (rc)
-        LOG_GOTO(out, rc, "TLC unable to alloc ping response");
+        LOG_RETURN(rc, "TLC unable to alloc ping response");
 
     resp.req_id = req->id;
 
@@ -144,19 +170,28 @@ static int process_ping_request(struct tlc *tlc, pho_tlc_req_t *req,
     else
         resp.ping->library_is_up = true;
 
-    rc = pho_srl_tlc_response_pack(&resp, &msg.buf);
-    if (rc)
-        LOG_GOTO(out, rc, "TLC ping response cannot be packed");
-
-    msg.fd = client_socket;
-    rc = pho_comm_send(&msg);
-    if (rc)
-        pho_error(rc, "TLC error on sending ping response");
-
-    free(msg.buf.buff);
-out:
+    rc = tlc_response_send(&resp, client_socket);
     pho_srl_tlc_response_free(&resp, false);
     return rc;
+}
+
+/**
+ * Allocate and fill an error response
+ *
+ * @param[in, out]  error_response  error response to alloc and fill
+ * @param[in]       id              request id
+ * @param[in]       rc              return code
+ * @param[in]       json_message    Dumped to the error response if not NULL,
+ *                                  ignored if NULL.
+ */
+static void tlc_build_response_error(pho_tlc_resp_t *error_resp, uint32_t id,
+                                     int rc, json_t *json_message)
+{
+    pho_srl_tlc_response_error_alloc(error_resp);
+    error_resp->req_id = id;
+    error_resp->error->rc = rc;
+    if (json_message)
+        error_resp->error->message = json_dumps(json_message, 0);
 }
 
 static int process_drive_lookup_request(struct tlc *tlc, pho_tlc_req_t *req,
@@ -167,8 +202,7 @@ static int process_drive_lookup_request(struct tlc *tlc, pho_tlc_req_t *req,
     pho_tlc_resp_t *resp = NULL;
     json_t *json_error_message;
     pho_tlc_resp_t error_resp;
-    struct pho_comm_data msg;
-    int rc;
+    int rc, rc2;
 
     rc = tlc_library_drive_lookup(&tlc->lib, req->drive_lookup->serial,
                                   &drv_info, &json_error_message);
@@ -205,39 +239,17 @@ static int process_drive_lookup_request(struct tlc *tlc, pho_tlc_req_t *req,
 
 err:
     if (rc) {
-        int rc2;
-
-        rc2 = pho_srl_tlc_response_error_alloc(&error_resp);
-        if (rc2) {
-            if (json_error_message)
-                json_decref(json_error_message);
-
-            LOG_RETURN(rc2,
-                       "TLC unable to alloc error response %d for drive lookup",
-                       rc);
-        }
-
-        error_resp.req_id = req->id;
-        error_resp.error->rc = rc;
-        if (json_error_message) {
-            error_resp.error->message = json_dumps(json_error_message, 0);
+        tlc_build_response_error(&error_resp, req->id, rc, json_error_message);
+        if (json_error_message)
             json_decref(json_error_message);
-        }
 
         resp = &error_resp;
     }
 
-    rc = pho_srl_tlc_response_pack(resp, &msg.buf);
-    if (rc)
-        LOG_GOTO(out, rc, "TLC drive lookup response cannot be packed");
+    rc2 = tlc_response_send(resp, client_socket);
+    if (rc2)
+        rc = rc ? : rc2;
 
-    msg.fd = client_socket;
-    rc = pho_comm_send(&msg);
-    if (rc)
-        pho_error(rc, "TLC error on sending drive lookup response");
-
-    free(msg.buf.buff);
-out:
     pho_srl_tlc_response_free(resp, false);
     return rc;
 }
@@ -249,67 +261,77 @@ static int process_load_request(struct tlc *tlc, pho_tlc_req_t *req,
     pho_tlc_resp_t *resp = NULL;
     pho_tlc_resp_t error_resp;
     pho_tlc_resp_t load_resp;
-    struct pho_comm_data msg;
-    int rc;
+    int rc, rc2;
 
     rc = tlc_library_load(&tlc->dss, &tlc->lib, req->load->drive_serial,
                           req->load->tape_label, &json_message);
-    if (rc)
-        goto err;
-
-    rc = pho_srl_tlc_response_load_alloc(&load_resp);
     if (rc) {
+        tlc_build_response_error(&error_resp, req->id, rc, json_message);
         if (json_message)
             json_decref(json_message);
 
-        json_message = json_pack("{s:s}", "ALLOC_ERROR",
-                                 "TLC was unable to alloc load response");
-        LOG_GOTO(err, rc, "Unable to alloc load lookup response");
-    }
-
-    load_resp.req_id = req->id;
-    if (json_message) {
-        load_resp.load->message = json_dumps(json_message, 0);
-        json_decref(json_message);
-    }
-
-    resp = &load_resp;
-
-err:
-    if (rc) {
-        int rc2;
-
-        rc2 = pho_srl_tlc_response_error_alloc(&error_resp);
-        if (rc2) {
-            if (json_message)
-                json_decref(json_message);
-
-            LOG_RETURN(rc2,
-                       "TLC unable to alloc error response %d for load",
-                       rc);
-        }
-
-        error_resp.req_id = req->id;
-        error_resp.error->rc = rc;
+        resp = &error_resp;
+    } else {
+        /* Build load response */
+        pho_srl_tlc_response_load_alloc(&load_resp);
+        load_resp.req_id = req->id;
         if (json_message) {
-            error_resp.error->message = json_dumps(json_message, 0);
+            load_resp.load->message = json_dumps(json_message, 0);
             json_decref(json_message);
         }
 
-        resp = &error_resp;
+        resp = &load_resp;
     }
 
-    rc = pho_srl_tlc_response_pack(resp, &msg.buf);
-    if (rc)
-        LOG_GOTO(out, rc, "TLC load response cannot be packed");
+    rc2 = tlc_response_send(resp, client_socket);
+    if (rc2)
+        rc = rc ? : rc2;
 
-    msg.fd = client_socket;
-    rc = pho_comm_send(&msg);
-    if (rc)
-        pho_error(rc, "TLC error on sending response");
+    pho_srl_tlc_response_free(resp, false);
+    return rc;
+}
 
-    free(msg.buf.buff);
-out:
+static int process_unload_request(struct tlc *tlc, pho_tlc_req_t *req,
+                                  int client_socket)
+{
+    struct lib_item_addr unload_addr;
+    json_t *json_message = NULL;
+    pho_tlc_resp_t *resp = NULL;
+    pho_tlc_resp_t unload_resp;
+    pho_tlc_resp_t error_resp;
+    char *unloaded_tape_label;
+    int rc, rc2;
+
+    rc = tlc_library_unload(&tlc->dss, &tlc->lib, req->unload->drive_serial,
+                            req->unload->tape_label, &unloaded_tape_label,
+                            &unload_addr, &json_message);
+    if (rc) {
+        tlc_build_response_error(&error_resp, req->id, rc, json_message);
+        if (json_message)
+            json_decref(json_message);
+
+        resp = &error_resp;
+    } else {
+        /* Build unload response */
+        pho_srl_tlc_response_unload_alloc(&unload_resp);
+        if (unloaded_tape_label)
+            unload_resp.unload->tape_label = xstrdup(unloaded_tape_label);
+
+        free(unloaded_tape_label);
+        unload_resp.unload->addr = unload_addr.lia_addr;
+        unload_resp.req_id = req->id;
+        if (json_message) {
+            unload_resp.unload->message = json_dumps(json_message, 0);
+            json_decref(json_message);
+        }
+
+        resp = &unload_resp;
+    }
+
+    rc2 = tlc_response_send(resp, client_socket);
+    if (rc2)
+        rc = rc ? : rc2;
+
     pho_srl_tlc_response_free(resp, false);
     return rc;
 }
@@ -351,6 +373,11 @@ static int recv_work(struct tlc *tlc)
 
         if (pho_tlc_request_is_load(req)) {
             process_load_request(tlc, req, data[i].fd);
+            goto out_request;
+        }
+
+        if (pho_tlc_request_is_unload(req)) {
+            process_unload_request(tlc, req, data[i].fd);
             goto out_request;
         }
 

@@ -60,6 +60,13 @@ int pho_srl_tlc_request_load_alloc(pho_tlc_req_t *req)
     return 0;
 }
 
+void pho_srl_tlc_request_unload_alloc(pho_tlc_req_t *req)
+{
+    pho_tlc_request__init(req);
+    req->unload = xmalloc(sizeof(*req->unload));
+    pho_tlc_request__unload__init(req->unload);
+}
+
 void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack)
 {
     if (unpack) {
@@ -81,6 +88,13 @@ void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack)
         free(req->load->tape_label);
         free(req->load);
         req->load = NULL;
+    }
+
+    if (req->unload) {
+        free(req->unload->drive_serial);
+        free(req->unload->tape_label);
+        free(req->unload);
+        req->unload = NULL;
     }
 }
 
@@ -107,26 +121,25 @@ int pho_srl_tlc_response_drive_lookup_alloc(pho_tlc_resp_t *resp)
     return 0;
 }
 
-int pho_srl_tlc_response_load_alloc(pho_tlc_resp_t *resp)
+void pho_srl_tlc_response_load_alloc(pho_tlc_resp_t *resp)
 {
     pho_tlc_response__init(resp);
-    resp->load = malloc(sizeof(*resp->load));
-    if (!resp->load)
-        return -ENOMEM;
-
+    resp->load = xmalloc(sizeof(*resp->load));
     pho_tlc_response__load__init(resp->load);
-    return 0;
 }
 
-int pho_srl_tlc_response_error_alloc(pho_tlc_resp_t *resp)
+void pho_srl_tlc_response_unload_alloc(pho_tlc_resp_t *resp)
 {
     pho_tlc_response__init(resp);
-    resp->error = malloc(sizeof(*resp->error));
-    if (!resp->error)
-        return -ENOMEM;
+    resp->unload = xmalloc(sizeof(*resp->unload));
+    pho_tlc_response__unload__init(resp->unload);
+}
 
+void pho_srl_tlc_response_error_alloc(pho_tlc_resp_t *resp)
+{
+    pho_tlc_response__init(resp);
+    resp->error = xmalloc(sizeof(*resp->error));
     pho_tlc_response__error__init(resp->error);
-    return 0;
 }
 
 void pho_srl_tlc_response_free(pho_tlc_resp_t *resp, bool unpack)
@@ -157,6 +170,13 @@ void pho_srl_tlc_response_free(pho_tlc_resp_t *resp, bool unpack)
         free(resp->load->message);
         free(resp->load);
         resp->load = NULL;
+    }
+
+    if (resp->unload) {
+        free(resp->unload->tape_label);
+        free(resp->unload->message);
+        free(resp->unload);
+        resp->unload = NULL;
     }
 }
 

@@ -30,6 +30,7 @@
 
 #include <errno.h>
 #include <glib.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <string.h>
 #include <unistd.h>
@@ -1769,6 +1770,85 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
     } else {
         rc = -EPROTO;
         pho_error(rc, "TLC answers unexpected response to load");
+    }
+
+    pho_srl_tlc_response_free(resp, true);
+    return rc;
+}
+
+int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
+                        const struct pho_id *tape_id)
+{
+    struct proto_resp proto_resp = {TLC_REQUEST};
+    struct proto_req proto_req = {TLC_REQUEST};
+    struct dev_info *dev_res;
+    pho_tlc_resp_t *resp;
+    pho_tlc_req_t req;
+    int rid = 1;
+    int rc;
+
+    if (drive_id->family != PHO_RSC_TAPE)
+        LOG_RETURN(-EINVAL,
+                   "Drive resource family for an unload must be %s, instead we "
+                   "got %s", rsc_family2str(PHO_RSC_TAPE),
+                   rsc_family2str(drive_id->family));
+
+    if (tape_id && tape_id->family != PHO_RSC_TAPE)
+        LOG_RETURN(-EINVAL,
+                   "Tape resource family for an unload must be %s, instead we "
+                   "got %s", rsc_family2str(PHO_RSC_TAPE),
+                   rsc_family2str(tape_id->family));
+
+    /* fetch the serial number and store it in id */
+    rc = _get_device_by_path_or_serial(adm, drive_id, &dev_res);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Unable to retrieve serial number from device name '%s' in "
+                   "DSS", drive_id->name);
+
+    dss_res_free(dev_res, 1);
+
+    proto_req.msg.tlc_req = &req;
+    pho_srl_tlc_request_unload_alloc(&req);
+    req.id = rid;
+    req.unload->drive_serial = xstrdup(drive_id->name);
+    if (tape_id)
+        req.unload->tape_label = xstrdup(tape_id->name);
+
+    rc = _send_and_receive(&adm->tlc_comm, proto_req, &proto_resp);
+    pho_srl_tlc_request_free(&req, false);
+    if (rc)
+        LOG_RETURN(rc, "Error with TLC communication");
+
+    resp = proto_resp.msg.tlc_resp;
+    if (pho_tlc_response_is_unload(resp) && resp->req_id == rid) {
+        if (resp->unload->tape_label) {
+            if (resp->unload->message) {
+                pho_verb("Successful admin unload of tape %s to addr "
+                         "%#lx: %s", resp->unload->tape_label,
+                         resp->unload->addr, resp->unload->message);
+            } else {
+                pho_verb("Successful admin unload of tape %s to addr %#lx",
+                          resp->unload->tape_label, resp->unload->addr);
+            }
+        } else {
+            if (resp->unload->message) {
+                pho_verb("Successful admin unload of an empty drive: %s",
+                         resp->unload->message);
+            } else {
+                pho_verb("Successful admin unload of an empty drive");
+            }
+        }
+    } else if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
+        rc = resp->error->rc;
+        if (resp->error->message)
+            pho_error(rc, "TLC failed to unload: '%s'", resp->error->message);
+        else
+            pho_error(rc, "TLC failed to unload: '%s'", tape_id->name);
+
+    } else {
+        rc = -EPROTO;
+        pho_error(rc, "TLC answers unexpected response to unload");
     }
 
     pho_srl_tlc_response_free(resp, true);

@@ -93,7 +93,7 @@ int tlc_library_drive_lookup(struct lib_descriptor *lib,
  * @param[in]   dss             DSS handle.
  * @param[in]   lib             Library descriptor.
  * @param[in]   drive_serial    Serial number of the target drive.
- * @param[in]   tape_label      Label of the target medium.
+ * @param[in]   tape_label      Label of the target tape.
  * @param[out]  json_message    Set to NULL, if no message. On error or success,
  *                              could be set to a value different from NULL,
  *                              containing a message which describes the actions
@@ -104,5 +104,33 @@ int tlc_library_drive_lookup(struct lib_descriptor *lib,
 int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
                      const char *drive_serial, const char *tape_label,
                      json_t **json_message);
+
+/**
+ * Unload a tape from a drive to a free slot
+ *
+ * If the source address is set and conforms to a free slot, we use it at
+ * unload_addr otherwise we use any existing free slot.
+ *
+ * @param[in]  lib              Library descriptor.
+ * @param[in]  drive_serial     Serial number of the target drive.
+ * @param[in]  loaded_tape_label    If not NULL, drive is unloaded only if the
+ *                                  loaded tape has this label
+ * @param[out] unloaded_tape_label  Allocated unloaded tape label on success,
+ *                                  must be freed by caller. NULL on error or
+ *                                  if the target drive was empty.
+ * @param[out] unload_addr      Returns on success the address where the
+ *                              tape is unloaded.
+ * @param[out] json_message     Set to NULL, if no message. On error or success,
+ *                              could be set to a value different from NULL,
+ *                              containing a message which describes the actions
+ *                              and must be decref by the caller.
+ *
+ * @return 0 on success, negative error code on failure.
+ */
+int tlc_library_unload(struct dss_handle *dss, struct lib_descriptor *lib,
+                       const char *drive_serial, const char *loaded_tape_label,
+                       char **unloaded_tape_label,
+                       struct lib_item_addr *unload_addr,
+                       json_t **json_message);
 
 #endif /* _PHO_TLC_LIBRARY_H */

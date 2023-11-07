@@ -446,4 +446,21 @@ int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
 int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
                       const struct pho_id *tape_id);
 
+/**
+ * Unload a tape from a drive
+ *
+ * @param[in]       adm             Admin module handler.
+ * @param[in,out]   drive_id        drive_id.name could be serial number or path
+ *                                  drive_id.family must be PHO_RSC_TAPE
+ *                                  (if success, drive_id.name is set to serial)
+ * @param[in]       tape_id         Tape to unload from the drive. Ignored if
+ *                                  NULL, otherwise the drive is unloaded only
+ *                                  if it contains this tape_id. (tape_id.family
+ *                                  must be PHO_RSC_TAPE)
+ *
+ * @return 0 if success, -errno if an error occurs
+ */
+int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
+                        const struct pho_id *tape_id);
+
 #endif

@@ -167,6 +167,9 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['drive', 'lookup', 'drive_serial_or_path'])
         self.check_cmdline_valid(['drive', 'load', 'drive_serial_or_path',
                                   'tape_label'])
+        self.check_cmdline_valid(['drive', 'unload', 'drive_serial_or_path'])
+        self.check_cmdline_valid(['drive', 'unload', '--tape-label',
+                                  'tape_label', 'drive_serial_or_path'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['get', '--version', 'nan', 'objid', 'file'],
@@ -192,6 +195,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['drive', 'lookup'], code=2)
         self.check_cmdline_exit(['drive', 'load'], code=2)
         self.check_cmdline_exit(['drive', 'load', 'only_drive_no_tape'], code=2)
+        self.check_cmdline_exit(['drive', 'unload', 'drive_serial_or_path',
+                                  'tape-label'], code=2)
 
     def test_cli_logs_command(self):
         self.check_cmdline_valid(['logs', 'clear'])

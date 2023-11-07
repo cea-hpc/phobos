@@ -38,12 +38,18 @@ message PhoTlcRequest {
         required string tape_label = 2;     // Medium label to load
     }
 
-    required uint32 id  = 1;    // Request ID to match its future
-                                // response.
+    /** Body of the tlc unload request */
+    message Unload {
+        required string drive_serial = 1;   // Serial number of the target drive
+        optional string tape_label = 2;     // Medium label to unload from drive
+    }
+
+    required uint32 id  = 1;    // Request ID to match its future response.
 
     optional bool ping  = 2;    // Is the request a ping request ?
     optional DriveLookup drive_lookup = 3;  // Drive lookup body
     optional Load load = 4;     // Load body
+    optional Unload unload = 5; // Unload body
 }
 
 /** TLC protocol response, emitted by the TLC. */
@@ -71,7 +77,14 @@ message PhoTlcResponse {
 
     /** Body of load response */
     message Load {
-        optional string message = 1; // JSON message describing the error
+        optional string message = 1; // JSON message describing the load
+    }
+
+    /** Body of unload response */
+    message Unload {
+        required string tape_label = 1; // Unloaded tape label
+        required uint64 addr = 2;       // Library addr where tape was unloaded
+        optional string message = 3;    // JSON message describing the unload
     }
 
     required uint32 req_id = 1; // Request ID, to be matched with
@@ -81,4 +94,5 @@ message PhoTlcResponse {
     optional DriveLookup drive_lookup = 3;  // Drive lookup response body
     optional Error error = 4;   // Error body
     optional Load load = 5;     // Load body
+    optional Unload unload = 6; // Unload body
 }

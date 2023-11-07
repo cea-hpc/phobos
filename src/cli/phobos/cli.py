@@ -1787,8 +1787,23 @@ class DriveLoadOptHandler(BaseOptHandler):
         parser.add_argument('res',
                             help='Target drive (could be the path or the '
                                  'serial number)')
-        parser.add_argument('tape_label',
-                            help='Tape label to load')
+        parser.add_argument('tape_label', help='Tape label to load')
+
+class DriveUnloadOptHandler(BaseOptHandler):
+    label = 'unload'
+    descr = 'unload a tape from a drive'
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(DriveUnloadOptHandler, cls).add_options(parser)
+        parser.add_argument('res',
+                            help='Target drive (could be the path or the '
+                                 'serial number)')
+        parser.add_argument('--tape-label',
+                            help='Tape label to unload (unload is done only if '
+                                 'the drive contains this label, any tape is '
+                                 'unloaded if this option is not set)')
 
 class DriveOptHandler(DeviceOptHandler):
     """Tape Drive options and actions."""
@@ -1805,6 +1820,7 @@ class DriveOptHandler(DeviceOptHandler):
         StatusOptHandler,
         DriveLookupOptHandler,
         DriveLoadOptHandler,
+        DriveUnloadOptHandler,
     ]
 
     def exec_migrate(self):
@@ -1910,6 +1926,19 @@ class DriveOptHandler(DeviceOptHandler):
         try:
             with AdminClient(lrs_required=False, tlc_required=True) as adm:
                 adm.load(res, tape_label)
+
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
+    def exec_unload(self):
+        """Unload a tape from a drive"""
+        res = self.params.get('res')
+        tape_label = self.params.get('tape_label')
+
+        try:
+            with AdminClient(lrs_required=False, tlc_required=True) as adm:
+                adm.unload(res, tape_label)
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

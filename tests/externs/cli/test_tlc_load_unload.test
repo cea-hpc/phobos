@@ -68,7 +68,7 @@ function test_load
     rc=$?
     set -e
     if (( rc != ENXIO )); then
-        error "phobos drive load for DSS unknown drive must failed with" \
+        error "phobos drive load for drive unknown by DSS must failed with" \
               "ENXIO ($ENXIO), instead we got ${rc}"
     fi
 
@@ -147,6 +147,82 @@ function test_load_drive_to_drive
     echo ${drive_lookup_out} | grep "Loaded tape id: ${tape}"
 }
 
+function test_unload
+{
+    local tape="$(get_tapes L6 1)"
+    local drive="$(get_lto_drives 6 1)"
+
+    # no TLC
+    ECONNREFUSED=111
+    set +e
+    $phobos drive unload ${drive}
+    rc=$?
+    set -e
+    if (( rc != ECONNREFUSED )); then
+        error "phobos drive unload no TLC must failed with ECONNREFUSED" \
+              "($ECONNREFUSED), instead we got ${rc}"
+    fi
+
+    # unknown drive
+    invoke_tlc
+    ENXIO=6
+    set +e
+    $phobos drive unload ${drive}
+    rc=$?
+    set -e
+    if (( rc != ENXIO )); then
+        error "phobos drive unload for drive unknown by DSS must failed with" \
+              "ENXIO ($ENXIO), instead we got ${rc}"
+    fi
+
+    # fake drive into dss but not on the TLC
+    $PSQL << EOF
+    INSERT INTO device (family, model, id, host, adm_status, path)
+           VALUES ('tape', NULL, 'serial', '$host', 'unlocked',
+                   'path');
+EOF
+
+    # by serial
+    ENOENT=2
+    set +e
+    $phobos drive unload serial
+    rc=$?
+    set -e
+    if (( rc != ENOENT )); then
+        error "phobos drive unload serial for TLC unknown drive must failed" \
+              "with ENOENT ($ENOENT), instead we got ${rc}"
+    fi
+
+    $PSQL << EOF
+    DELETE FROM device WHERE id = 'serial';
+EOF
+
+    # Add the drive
+    $phobos drive add --unlock ${drive}
+
+    # Unload an empty drive
+    $phobos drive unload ${drive}
+
+    # load tape into drive
+    $phobos drive load ${drive} ${tape}
+    drive_lookup_out=$($phobos drive lookup ${drive} 2>&1)
+    echo ${drive_lookup_out} | grep "State: full"
+    echo ${drive_lookup_out} | grep "Loaded tape id: ${tape}"
+
+    # unload drive
+    $phobos drive unload ${drive}
+    drive_lookup_out=$($phobos drive lookup ${drive} 2>&1)
+    echo ${drive_lookup_out} | grep "State: empty"
+
+    # load tape into drive
+    $phobos drive load ${drive} ${tape}
+
+    # unload drive with a tape label
+    $phobos drive unload --tape-label ${tape} ${drive}
+    drive_lookup_out=$($phobos drive lookup ${drive} 2>&1)
+    echo ${drive_lookup_out} | grep "State: empty"
+}
+
 if [[ ! -w /dev/changer ]]; then
     skip "Library required for this test"
 fi
@@ -154,4 +230,5 @@ fi
 TESTS=(
     "setup; test_load; cleanup"
     "setup; test_load_drive_to_drive; cleanup"
+    "setup; test_unload; cleanup"
 )

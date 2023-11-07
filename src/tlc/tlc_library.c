@@ -28,6 +28,7 @@
 
 #include <assert.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <jansson.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -484,217 +485,79 @@ int tlc_library_drive_lookup(struct lib_descriptor *lib,
  *    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
  *    return rc;
  *}
- *
- *#** return information about the element at the given address. *#
- *static const struct element_status *
- *    element_from_addr(const struct lib_descriptor *lib,
- *                      const struct lib_item_addr *addr)
- *{
- *    int i;
- *
- *    if (addr->lia_type == MED_LOC_UNKNOWN
- *        || addr->lia_type == MED_LOC_DRIVE) {
- *        #* search in drives *#
- *        for (i = 0; i < lib->drives.count; i++) {
- *            pho_debug("looking for %#lx: drive #%d (addr=%#hx)",
- *                      addr->lia_addr, i, lib->drives.items[i].address);
- *            if (lib->drives.items[i].address == addr->lia_addr)
- *                return &lib->drives.items[i];
- *        }
- *    }
- *
- *    if (addr->lia_type == MED_LOC_UNKNOWN
- *        || addr->lia_type == MED_LOC_SLOT) {
- *        #* search in slots *#
- *        for (i = 0; i < lib->slots.count; i++) {
- *            pho_debug("looking for %#lx: slot #%d (addr=%#hx)",
- *                      addr->lia_addr, i, lib->slots.items[i].address);
- *            if (lib->slots.items[i].address == addr->lia_addr)
- *                return &lib->slots.items[i];
- *        }
- *    }
- *
- *    if (addr->lia_type == MED_LOC_UNKNOWN
- *        || addr->lia_type == MED_LOC_IMPEXP) {
- *        #* search in import/export slots *#
- *        for (i = 0; i < lib->impexp.count; i++) {
- *            pho_debug("looking for %#lx: impexp #%d (addr=%#hx)",
- *                      addr->lia_addr, i, lib->impexp.items[i].address);
- *            if (lib->impexp.items[i].address == addr->lia_addr)
- *                return &lib->impexp.items[i];
- *        }
- *    }
- *
- *    if (addr->lia_type == MED_LOC_UNKNOWN
- *        || addr->lia_type == MED_LOC_ARM) {
- *        #* search in arms *#
- *        for (i = 0; i < lib->arms.count; i++) {
- *            pho_debug("looking for %#lx: arm #%d (addr=%#hx)",
- *                      addr->lia_addr, i, lib->arms.items[i].address);
- *            if (lib->arms.items[i].address == addr->lia_addr)
- *                return &lib->arms.items[i];
- *        }
- *    }
- *
- *    #* not found *#
- *    return NULL;
- *}
- *
- *#** Search for a free slot in the library *#
- *static int get_free_slot(struct lib_descriptor *lib, uint16_t *slot_addr)
- *{
- *    struct element_status *slot;
- *    int                    i;
- *
- *    for (i = 0; i < lib->slots.count; i++) {
- *        slot = &lib->slots.items[i];
- *
- *        if (!slot->full) {
- *            *slot_addr = slot->address;
- *            return 0;
- *        }
- *    }
- *    return -ENOENT;
- *}
- *
- *#**
- * * Select a target slot for move operation.
- * * @param[in,out] lib       Library handler.
- * * @param[in]     src_lia   Pointer to lib_item_addr of the source element.
- * * @param[out]    tgt_addr  Pointer to the address of the selected target.
- * * @param[in,out] to_origin As input, indicate whether to favor source slot.
- * *                          If false, try to get any free slot.
- * *                          As output, it indicates if the source slot was
- * *                          actually selected.
- * *
- * * @return 0 on success, -errno on failure.
- * *#
- *static int select_target_addr(struct lib_descriptor *lib,
- *                              const struct lib_item_addr *src_lia,
- *                              uint16_t *tgt_addr, bool *to_origin,
- *                              json_t *message)
- *{
- *    const struct element_status *element;
- *    int rc;
- *
- *    #* load all info *#
- *    rc = lib_status_load(lib, SCSI_TYPE_ALL, message);
- *    if (rc)
- *        return rc;
- *
- *    element = element_from_addr(lib, src_lia);
- *    if (!element)
- *        LOG_RETURN(-EINVAL, "No element at address %#lx",
- *                   src_lia->lia_addr);
- *
- *    #* if there is a source addr, use it *#
- *    if (*to_origin && element->src_addr_is_set) {
- *
- *        #* check the slot is not already full *#
- *        struct lib_item_addr slot_lia = {
- *            .lia_type = MED_LOC_SLOT,
- *            .lia_addr = element->src_addr,
- *        };
- *        const struct element_status *slot;
- *
- *        slot = element_from_addr(lib, &slot_lia);
- *        if (!slot->full) {
- *            *tgt_addr = element->src_addr;
- *            pho_debug("No target address specified. "
- *                      "Using element source address %#hx.", *tgt_addr);
- *            return 0;
- *        }
- *    }
- *
- *    #* search a free slot to target *#
- *    rc = get_free_slot(lib, tgt_addr);
- *    if (rc)
- *        LOG_RETURN(rc, "No Free slot to unload tape");
- *
- *    *to_origin = (element->src_addr_is_set && (element->src_addr ==
- *                                               *tgt_addr));
- *
- *    pho_verb("Unloading tape to free slot %#hx", *tgt_addr);
- *    return 0;
- *}
- *
- *#** Implements phobos LDM lib media move *#
- *static int lib_scsi_move(struct lib_handle *hdl,
- *                         const struct lib_item_addr *src_addr,
- *                         const struct lib_item_addr *tgt_addr,
- *                         json_t *message)
- *{
- *    enum scsi_operation_type type;
- *    struct lib_descriptor *lib;
- *    json_t *target_json;
- *    bool origin = false;
- *    json_t *move_json;
- *    uint16_t tgt;
- *    int rc;
- *    ENTRY;
- *
- *    MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
- *
- *    lib = hdl->lh_lib;
- *    if (!lib) #* already closed *#
- *        GOTO(unlock, rc = -EBADF);
- *
- *    if (tgt_addr == NULL
- *        || (tgt_addr->lia_type == MED_LOC_UNKNOWN
- *            && tgt_addr->lia_addr == 0)) {
- *        #* First try source slot. If not valid, try any free slot *#
- *        origin = true;
- *        target_json = json_object();
- *        rc = select_target_addr(lib, src_addr, &tgt, &origin, target_json);
- *        if (rc) {
- *            if (json_object_size(target_json) != 0)
- *                json_object_set_new(message, "Target selection", target_json);
- *
- *            goto unlock;
- *        }
- *
- *        destroy_json(target_json);
- *        type = UNLOAD_MEDIUM;
- *    } else {
- *        tgt = tgt_addr->lia_addr;
- *        type = LOAD_MEDIUM;
- *    }
- *
- *    move_json = json_object();
- *    #* arm = 0 for default transport element *#
- *    rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt, move_json);
- *
- *    #* was the source slot invalid? *#
- *    if (rc == -EINVAL && origin) {
- *        pho_warn("Failed to move media to source slot, trying another "
- *                 "one...");
- *
- *        origin = false;
- *        target_json = json_object();
- *        rc = select_target_addr(lib, src_addr, &tgt, &origin, target_json);
- *        if (rc) {
- *            if (json_object_size(target_json) != 0)
- *                json_object_set_new(message, "Target selection", target_json);
- *
- *            goto unlock;
- *        }
- *
- *        destroy_json(target_json);
- *        json_object_clear(move_json);
- *        rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt, move_json);
- *    }
- *
- *    if (json_object_size(move_json) != 0)
- *        json_object_set_new(message, SCSI_OPERATION_TYPE_NAMES[type],
- *                            move_json);
- *    else
- *        destroy_json(move_json);
- *
- *unlock:
- *    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
- *    return rc;
- *}
  */
+
+/** return information about the element at the given address. */
+static struct element_status *
+element_from_addr(const struct lib_descriptor *lib,
+                  const struct lib_item_addr *addr)
+{
+    int i;
+
+    if (addr->lia_type == MED_LOC_UNKNOWN ||
+        addr->lia_type == MED_LOC_DRIVE) {
+        /* search in drives */
+        for (i = 0; i < lib->drives.count; i++) {
+            pho_debug("looking for %#lx: drive #%d (addr=%#hx)",
+                      addr->lia_addr, i, lib->drives.items[i].address);
+            if (lib->drives.items[i].address == addr->lia_addr)
+                return &lib->drives.items[i];
+        }
+    }
+
+    if (addr->lia_type == MED_LOC_UNKNOWN
+        || addr->lia_type == MED_LOC_SLOT) {
+        /* search in slots */
+        for (i = 0; i < lib->slots.count; i++) {
+            pho_debug("looking for %#lx: slot #%d (addr=%#hx)",
+                      addr->lia_addr, i, lib->slots.items[i].address);
+            if (lib->slots.items[i].address == addr->lia_addr)
+                return &lib->slots.items[i];
+        }
+    }
+
+    if (addr->lia_type == MED_LOC_UNKNOWN
+        || addr->lia_type == MED_LOC_IMPEXP) {
+        /* search in import/export slots */
+        for (i = 0; i < lib->impexp.count; i++) {
+            pho_debug("looking for %#lx: impexp #%d (addr=%#hx)",
+                      addr->lia_addr, i, lib->impexp.items[i].address);
+            if (lib->impexp.items[i].address == addr->lia_addr)
+                return &lib->impexp.items[i];
+        }
+    }
+
+    if (addr->lia_type == MED_LOC_UNKNOWN
+        || addr->lia_type == MED_LOC_ARM) {
+        /* search in arms */
+        for (i = 0; i < lib->arms.count; i++) {
+            pho_debug("looking for %#lx: arm #%d (addr=%#hx)",
+                      addr->lia_addr, i, lib->arms.items[i].address);
+            if (lib->arms.items[i].address == addr->lia_addr)
+                return &lib->arms.items[i];
+        }
+    }
+
+    /* not found */
+    return NULL;
+}
+
+/**
+ * Convert a scsi element type code to a human readable string
+ * @param [in] code  element type code
+ *
+ * @return the converted result as a string
+ */
+static const char *type2str(enum element_type_code code)
+{
+    switch (code) {
+    case SCSI_TYPE_ARM:    return "arm";
+    case SCSI_TYPE_SLOT:   return "slot";
+    case SCSI_TYPE_IMPEXP: return "import/export";
+    case SCSI_TYPE_DRIVE:  return "drive";
+    default:               return "(unknown)";
+    }
+}
 
 static void move_tape_between_element_status(struct element_status *source,
                                              struct element_status *destination)
@@ -706,14 +569,40 @@ static void move_tape_between_element_status(struct element_status *source,
     memcpy(destination->vol, source->vol, VOL_ID_LEN);
 }
 
+static int tlc_log_init(const char *drive_serial, const char *tape_label,
+                        enum operation_type operation_type, struct pho_log *log,
+                        json_t **json_message)
+{
+    struct pho_id drive_id;
+    struct pho_id tape_id;
+    int rc;
+
+    drive_id.family = PHO_RSC_TAPE;
+    tape_id.family = PHO_RSC_TAPE;
+    rc = pho_id_name_set(&drive_id, drive_serial);
+    if (rc) {
+        pho_warn("We can't create a tlc log with drive serial '%s'",
+                 drive_serial);
+        return rc;
+    }
+
+    rc = pho_id_name_set(&tape_id, tape_label);
+    if (rc) {
+        pho_warn("We can't create a tlc log with a tape label '%s'",
+                 tape_label);
+        return rc;
+    }
+
+    init_pho_log(log, drive_id, tape_id, operation_type);
+    return 0;
+}
+
 int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
-                     const char *drive_serial, const char *medium_label,
+                     const char *drive_serial, const char *tape_label,
                      json_t **json_message)
 {
     struct element_status *source_element_status;
     struct element_status *drive_element_status;
-    struct pho_id drive_id;
-    struct pho_id tape_id;
     struct pho_log log;
     int rc;
 
@@ -728,31 +617,18 @@ int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
     }
 
     /* get medium addr */
-    source_element_status = media_element_status_from_label(lib, medium_label);
+    source_element_status = media_element_status_from_label(lib, tape_label);
     if (!source_element_status) {
         *json_message = json_pack("{s:s}",
-                                  "MEDIA_LABEL_UNKNOWN", medium_label);
+                                  "MEDIA_LABEL_UNKNOWN", tape_label);
         return -ENOENT;
     }
 
     /* prepare SCSI log */
-    drive_id.family = PHO_RSC_TAPE;
-    tape_id.family = PHO_RSC_TAPE;
-    rc = pho_id_name_set(&drive_id, drive_serial);
-    if (!drive_element_status) {
-        *json_message = json_pack("{s:s}",
-                                  "DRIVE_ID_ERROR", drive_serial);
-        return -ENOENT;
-    }
-
-    rc = pho_id_name_set(&tape_id, medium_label);
-    if (rc) {
-        *json_message = json_pack("{s:s}",
-                                  "MEDIA_ID_ERROR", medium_label);
+    rc = tlc_log_init(drive_serial, tape_label, PHO_DEVICE_LOAD,
+                      &log, json_message);
+    if (rc)
         return rc;
-    }
-
-    init_pho_log(&log, drive_id, tape_id, PHO_DEVICE_LOAD);
 
     /* move medium to device */
     /* arm = 0 for default transport element */
@@ -765,11 +641,11 @@ int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
 
         if (json_object_size(log.message) == 0)
             LOG_GOTO(out_log, rc, "Can't move to load medium %s into drive %s",
-                     medium_label, drive_serial);
+                     tape_label, drive_serial);
 
         error_message = json_dumps(log.message, 0);
         pho_error(rc, "Can't move to load medium %s into drive %s: %s",
-                  medium_label, drive_serial, error_message);
+                  tape_label, drive_serial, error_message);
         free(error_message);
         goto out_log;
     }
@@ -789,28 +665,205 @@ out_log:
     return rc;
 }
 
+/** Search for a free slot in the library */
+static struct element_status *get_free_slot(struct lib_descriptor *lib)
+{
+    struct element_status *slot;
+    int i;
+
+    for (i = 0; i < lib->slots.count; i++) {
+        slot = &lib->slots.items[i];
+
+        if (!slot->full)
+            return slot;
+    }
+
+    return NULL;
+}
+
+/**
+ * Find a free slot from source if set or any
+ *
+ * @param[in]   lib             lib handle
+ * @param[in]   drive           drive to unload
+ * @param[out]  target          selected target to unload
+ * @param[out]  unload_addr     selected addr to unload
+ * @param[out]  json_message    message describing action or error
+ *
+ * @return 0 if success, else a negative error code
+ */
+static int
+get_target_free_slot_from_source_or_any(struct lib_descriptor *lib,
+                                        struct element_status *drive,
+                                        struct element_status **target,
+                                        struct lib_item_addr *unload_addr,
+                                        json_t **json_message)
+{
+    unload_addr->lia_type = MED_LOC_UNKNOWN;
+    unload_addr->lia_addr = 0;
+    json_message = NULL;
+
+    /* check drive source */
+    if (drive->src_addr_is_set) {
+        *target = element_from_addr(lib, unload_addr);
+        if (!*target) {
+            pho_error(-EADDRNOTAVAIL, "Source address '%#hx' of %s element at "
+                      "address '%#hx' does not correspond to any existing "
+                      "element. We will search a free slot address to move.",
+                      drive->src_addr, type2str(drive->type), drive->address);
+        } else if ((*target)->type != SCSI_TYPE_SLOT) {
+            pho_warn("Source address of %s element at address '%#hx' "
+                     "corresponds to a %s element. We do not move to a source "
+                     "element different from %s. We will search a free slot "
+                     "address to move.",
+                     type2str(drive->type), drive->address,
+                     type2str((*target)->type), type2str(SCSI_TYPE_SLOT));
+        } else if (!(*target)->full) {
+            /*
+             * We change unload_addr->lia_type from UNKNOWN to SLOT to set we
+             * find a valid slot.
+             */
+            unload_addr->lia_type = MED_LOC_SLOT;
+            pho_debug("Using element source address '%#hx'.", drive->src_addr);
+        } else {
+            pho_verb("Source address '%#hx' of element %s at address '%#hx' "
+                     "is full. We will search a free address to move.",
+                     drive->src_addr, type2str(drive->type), drive->address);
+        }
+    }
+
+    if (unload_addr->lia_type != MED_LOC_SLOT) {
+        *target = get_free_slot(lib);
+        if (!*target) {
+            *json_message = json_pack("{s:s}",
+                                      "NO_FREE_SLOT",
+                                      "Unable to find a free slot to unload");
+            return -ENOENT;
+        }
+
+        unload_addr->lia_type = MED_LOC_SLOT;
+    }
+
+    unload_addr->lia_addr = (uint64_t) (*target)->address;
+    return 0;
+}
+
+int tlc_library_unload(struct dss_handle *dss, struct lib_descriptor *lib,
+                       const char *drive_serial, const char *expected_tape,
+                       char **unloaded_tape_label,
+                       struct lib_item_addr *unload_addr, json_t **json_message)
+{
+    struct element_status *target_element_status = NULL;
+    struct element_status *drive_element_status;
+    struct pho_log log;
+    int rc;
+
+    unload_addr->lia_type = MED_LOC_UNKNOWN;
+    unload_addr->lia_addr = 0;
+    *json_message = NULL;
+    *unloaded_tape_label = NULL;
+
+    /* get device addr */
+    drive_element_status = drive_element_status_from_serial(lib, drive_serial);
+    if (!drive_element_status) {
+        *json_message = json_pack("{s:s}",
+                                  "DRIVE_UNKNOWN_SERIAL", drive_serial);
+        return -ENOENT;
+    }
+
+    /* check if device is empty */
+    if (drive_element_status->full == false) {
+        if (expected_tape == NULL) {
+            pho_verb("Was asked to unload an empty drive %s", drive_serial);
+            return 0;
+        } else {
+            *json_message = json_pack("{s:s}",
+                                      "EMPTY_DRIVE_DOES_NOT_CONTAIN",
+                                      expected_tape);
+            return -EINVAL;
+        }
+    }
+
+    /* check or get loaded tape label */
+    if (expected_tape) {
+        if (strcmp(expected_tape, drive_element_status->vol)) {
+            *json_message = json_pack("{s:s, s:s}",
+                                      "EXPECTED_TAPE", expected_tape,
+                                      "LOADED_TAPE", drive_element_status->vol);
+            return -EINVAL;
+        }
+    }
+
+    *unloaded_tape_label = xmalloc(sizeof(drive_element_status->vol) + 1);
+    memcpy(*unloaded_tape_label, drive_element_status->vol,
+           sizeof(drive_element_status->vol));
+    (*unloaded_tape_label)[sizeof(drive_element_status->vol)] = 0;
+
+    /* get target free slot from drive source or any */
+    rc = get_target_free_slot_from_source_or_any(lib, drive_element_status,
+                                                 &target_element_status,
+                                                 unload_addr, json_message);
+    if (rc)
+        return rc;
+
+    /* prepare SCSI log */
+    rc = tlc_log_init(drive_serial, *unloaded_tape_label, PHO_DEVICE_UNLOAD,
+                      &log, json_message);
+    if (rc)
+        goto out_free;
+
+    /* move medium to device */
+    /* arm = 0 for default transport element */
+    rc = scsi_move_medium(lib->fd, 0, drive_element_status->address,
+                          target_element_status->address, log.message);
+    log.error_number = rc;
+    if (rc) {
+        char *error_message;
+
+        if (json_object_size(log.message) == 0)
+            LOG_GOTO(out_log, rc,
+                     "Can't move to unload medium %s from drive %s to address "
+                     "%#hx",
+                     drive_element_status->vol, drive_serial,
+                     target_element_status->address);
+
+        error_message = json_dumps(log.message, 0);
+        pho_error(rc,
+                  "Can't move to unload medium %s from drive %s to address "
+                  "%#hx : %s",
+                  drive_element_status->vol, drive_serial,
+                  target_element_status->address, error_message);
+        free(error_message);
+        goto out_log;
+    }
+
+    /* update element status lib cache */
+    move_tape_between_element_status(drive_element_status,
+                                     target_element_status);
+
+out_log:
+    if (should_log(&log))
+        dss_emit_log(dss, &log);
+
+    if (json_object_size(log.message) > 0)
+        *json_message = json_copy(log.message);
+
+    destroy_json(log.message);
+
+out_free:
+    if (rc) {
+        free(unloaded_tape_label);
+        *unloaded_tape_label = NULL;
+    }
+
+    return rc;
+}
+
 /*
  *#**
  * *  \defgroup lib scan (those items are related to lib_scan implementation)
  * *  @{
  * *#
- *
- *#**
- * * Convert a scsi element type code to a human readable string
- * * @param [in] code  element type code
- * *
- * * @return the converted result as a string
- * *#
- *static const char *type2str(enum element_type_code code)
- *{
- *    switch (code) {
- *    case SCSI_TYPE_ARM:    return "arm";
- *    case SCSI_TYPE_SLOT:   return "slot";
- *    case SCSI_TYPE_IMPEXP: return "import/export";
- *    case SCSI_TYPE_DRIVE:  return "drive";
- *    default:               return "(unknown)";
- *    }
- *}
  *
  *#**
  * * Type for a scan callback function.

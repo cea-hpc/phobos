@@ -40,6 +40,7 @@ typedef PhoTlcResponse              pho_tlc_resp_t;
 typedef PhoTlcResponse__Ping        pho_tlc_resp_ping_t;
 typedef PhoTlcResponse__DriveLookup pho_tlc_resp_drive_lookup_t;
 typedef PhoTlcResponse__Load        pho_tlc_resp_load_t;
+typedef PhoTlcResponse__Unload      pho_tlc_resp_unload_t;
 
 /******************************************************************************/
 /* Macros & constants *********************************************************/
@@ -92,12 +93,25 @@ static inline bool pho_tlc_request_is_drive_lookup(const pho_tlc_req_t *req)
  *
  * \param[in]       req         Request.
  *
- * \return                      true if the request is a drive lookup one,
+ * \return                      true if the request is a load one,
  *                              false otherwise.
  */
 static inline bool pho_tlc_request_is_load(const pho_tlc_req_t *req)
 {
     return req->load != NULL;
+}
+
+/**
+ * Request unload checker.
+ *
+ * \param[in]       req         Request.
+ *
+ * \return                      true if the request is an unload one,
+ *                              false otherwise.
+ */
+static inline bool pho_tlc_request_is_unload(const pho_tlc_req_t *req)
+{
+    return req->unload != NULL;
 }
 
 /**
@@ -144,12 +158,25 @@ static inline bool pho_tlc_response_is_error(const pho_tlc_resp_t *resp)
  *
  * \param[in]       resp        Response.
  *
- * \return                      true if the response is a drive lookup one,
+ * \return                      true if the response is a load one,
  *                              false otherwise.
  */
 static inline bool pho_tlc_response_is_load(const pho_tlc_resp_t *resp)
 {
     return resp->load != NULL;
+}
+
+/**
+ * Response unload checker.
+ *
+ * \param[in]       resp        Response.
+ *
+ * \return                      true if the response is an unload one, false
+ *                              otherwise.
+ */
+static inline bool pho_tlc_response_is_unload(const pho_tlc_resp_t *resp)
+{
+    return resp->unload != NULL;
 }
 
 /******************************************************************************/
@@ -183,6 +210,15 @@ int pho_srl_tlc_request_drive_lookup_alloc(pho_tlc_req_t *req);
 int pho_srl_tlc_request_load_alloc(pho_tlc_req_t *req);
 
 /**
+ * Allocation of unload request contents.
+ *
+ * \param[out]      req         Pointer to the request data structure.
+ *
+ * \return                      0 on success, -ENOMEM on failure.
+ */
+void pho_srl_tlc_request_unload_alloc(pho_tlc_req_t *req);
+
+/**
  * Release of request contents.
  *
  * \param[in]       req         Pointer to the request data structure.
@@ -211,19 +247,22 @@ int pho_srl_tlc_response_drive_lookup_alloc(pho_tlc_resp_t *resp);
  * Allocation of load response content.
  *
  * \param[out]      resp        Pointer to the response data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_tlc_response_load_alloc(pho_tlc_resp_t *resp);
+void pho_srl_tlc_response_load_alloc(pho_tlc_resp_t *resp);
+
+/**
+ * Allocation of unload response content.
+ *
+ * \param[out]      resp        Pointer to the response data structure.
+ */
+void pho_srl_tlc_response_unload_alloc(pho_tlc_resp_t *resp);
 
 /**
  * Allocation of error response content.
  *
  * \param[out]      resp        Pointer to the response data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_tlc_response_error_alloc(pho_tlc_resp_t *resp);
+void pho_srl_tlc_response_error_alloc(pho_tlc_resp_t *resp);
 
 /**
  * Release of response contents.

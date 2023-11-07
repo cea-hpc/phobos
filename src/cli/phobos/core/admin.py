@@ -359,6 +359,23 @@ class Client(object):
             raise EnvironmentError(rc, f"Failed to load {tape_label} into "
                                        f"drive {drive_serial_or_path}")
 
+    def unload(self, drive_serial_or_path, tape_label):
+        """Load a tape into a drive"""
+        rc =  LIBPHOBOS_ADMIN.phobos_admin_unload(
+                                    byref(self.handle),
+                                    byref(Id(PHO_RSC_TAPE,
+                                             name=drive_serial_or_path)),
+                                    byref(Id(PHO_RSC_TAPE, name=tape_label)) if
+                                          tape_label else None)
+
+        if rc:
+            if tape_label:
+                raise EnvironmentError(rc, f"Failed to unload {tape_label} "
+                                           f"from drive {drive_serial_or_path}")
+            else:
+                raise EnvironmentError(rc, f"Failed to unload drive "
+                                           f"{drive_serial_or_path}")
+
     @staticmethod
     def layout_list_free(layouts, n_layouts):
         """Free a previously obtained layout list."""
