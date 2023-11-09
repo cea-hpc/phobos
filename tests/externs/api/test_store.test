@@ -181,7 +181,7 @@ function test_put_tag()
                   "should have failed"
 
         # Ensure the right directory is chosen for this tag
-        $LOG_COMPILER $test_bin tag-put $f mytag |& tee /dev/stderr | grep -e \
+        $LOG_COMPILER $test_bin tag-put $f mytag |& grep -e \
             "/tmp/pho_testdir[245]"
     done
 }
