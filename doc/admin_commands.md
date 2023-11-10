@@ -122,15 +122,28 @@ I/Os, etc.) a query can be sent to the daemon through:
 
 ```
 phobos drive status
-|   address | device   | media    | mount_path      | name     | ongoing_io   |     serial |
-|-----------|----------|----------|-----------------|----------|--------------|------------|
-|         6 | /dev/sg7 |          |                 | /dev/st6 |              | 1933008059 |
-|         7 | /dev/sg8 | Q00000L6 | /mnt/phobos-sg8 | /dev/st7 | False        | 1291610660 |
+|   address | currently_dedicated_to   | device   | media    | mount_path       | name     | ongoing_io   |     serial |
+|-----------|--------------------------|----------|----------|------------------|----------|--------------|------------|
+|         6 | R                        | /dev/sg7 |          |                  | /dev/sg7 |              | 1843022660 |
+|         7 | W                        | /dev/sg8 | Q00000L6 | /mnt/phobos-sg8  | /dev/sg8 | False        | 1843022660 |
 ```
 
 `address` is the drive index as shown by `mtx status`. `ongoing_io` can be
 either true or false indicating whether an I/O is ongoing on the corresponding
 drive.
+
+`currently_dedicated_to` can be a combination of R (Read), W (Write) and F
+(Format). In the above example, we can see that the drive `/dev/sg7` only has
+ `R`. This means that this drive will only be used by Phobos to read objects. It
+won't be used for writing data or formating tapes. Similarly, the drive
+`/dev/sg8` will only write data. In this example, no drive will be used to
+format tapes. In such a case, you would expect any `phobos tape format` command
+to be blocking until a drive is dynamicaly allocated to the format request
+scheduler by the device fair share algorithm or by an admin configuration
+modification.
+
+This parameter is linked to the `dispatch_algo` that is documented in the
+configuration [template](doc/cfg/template.conf) under the `io_sched` section.
 
 # Locking resources
 A device or media can be locked. In this case it cannot be used for
