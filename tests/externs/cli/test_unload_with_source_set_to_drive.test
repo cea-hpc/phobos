@@ -1,0 +1,76 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2023 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for unloading a drive with a tape coming from an other drive
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+set -xe
+
+function setup
+{
+    setup_tables
+    drain_all_drives
+    invoke_lrs
+}
+
+function cleanup
+{
+    waive_lrs
+    drop_tables
+    drain_all_drives
+}
+
+function test_unload_drive_from_drive
+{
+    local tapes=( $(get_tapes L6 2 | nodeset -e) )
+    local drives=( $(get_lto_drives 6 2) )
+
+    # load tape 0 into drive 0
+    $phobos drive add --unlock ${drives[0]}
+    $phobos tape add -t lto6 ${tapes[0]}
+    $phobos tape format --unlock ${tapes[0]}
+
+    # load tape 0 into drive 1 from drive 0
+    $phobos drive lock ${drives[0]}
+    $phobos drive add --unlock ${drives[1]}
+    $phobos put -f tape /etc/hosts my_obj
+
+    # unload tape 0 from drive 1
+    $phobos tape add -t lto6 ${tapes[1]}
+    $phobos tape format ${tapes[1]}
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Library required for this test"
+fi
+
+TEST_SETUP=setup
+TEST_CLEANUP=cleanup
+TESTS=(
+    "test_unload_drive_from_drive"
+)

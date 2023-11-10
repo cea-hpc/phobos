@@ -35,6 +35,7 @@
 #include "pho_ldm.h"
 #include "pho_module_loader.h"
 
+#include <inttypes.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -619,6 +620,23 @@ static int get_free_slot(struct lib_descriptor *lib, uint16_t *slot_addr)
 }
 
 /**
+ * Convert a scsi element type code to a human readable string
+ * @param [in] code  element type code
+ *
+ * @return the converted result as a string
+ */
+static const char *type2str(enum element_type_code code)
+{
+    switch (code) {
+    case SCSI_TYPE_ARM:    return "arm";
+    case SCSI_TYPE_SLOT:   return "slot";
+    case SCSI_TYPE_IMPEXP: return "import/export";
+    case SCSI_TYPE_DRIVE:  return "drive";
+    default:               return "(unknown)";
+    }
+}
+
+/**
  * Select a target slot for move operation.
  * @param[in,out] lib       Library handler.
  * @param[in]     src_lia   Pointer to lib_item_addr of the source element.
@@ -653,17 +671,35 @@ static int select_target_addr(struct lib_descriptor *lib,
 
         /* check the slot is not already full */
         struct lib_item_addr slot_lia = {
-            .lia_type = MED_LOC_SLOT,
+            .lia_type = MED_LOC_UNKNOWN,
             .lia_addr = element->src_addr,
         };
         const struct element_status *slot;
 
         slot = element_from_addr(lib, &slot_lia);
-        if (!slot->full) {
+        if (!slot) {
+            pho_error(-EADDRNOTAVAIL, "Source address '%#hx' of %s element at "
+                      "address '%#hx' does not correspond to any existing "
+                      "element. We will search a free address to move.",
+                      element->src_addr, type2str(element->type),
+                      element->address);
+        } else if (slot->type != SCSI_TYPE_SLOT) {
+            pho_warn("Source address of %s element at address '%#hx' "
+                     "corresponds to a %s element. We do not move to a source "
+                     "element different from %s. We will search a free address "
+                     "to move.",
+                     type2str(element->type), element->address,
+                     type2str(slot->type), type2str(SCSI_TYPE_SLOT));
+        } else if (!slot->full) {
             *tgt_addr = element->src_addr;
-            pho_debug("No target address specified. "
-                      "Using element source address %#hx.", *tgt_addr);
+            pho_debug("No target address specified. Using element source "
+                      "address '%#hx'.", *tgt_addr);
             return 0;
+        } else {
+            pho_verb("Source address '%#hx' of element %s at address '%#hx' "
+                     "is full. We will search a free address to move.",
+                     element->src_addr, type2str(element->type),
+                     element->address);
         }
     }
 
@@ -759,23 +795,6 @@ unlock:
  *  \defgroup lib scan (those items are related to lib_scan implementation)
  *  @{
  */
-
-/**
- * Convert a scsi element type code to a human readable string
- * @param [in] code  element type code
- *
- * @return the converted result as a string
- */
-static const char *type2str(enum element_type_code code)
-{
-    switch (code) {
-    case SCSI_TYPE_ARM:    return "arm";
-    case SCSI_TYPE_SLOT:   return "slot";
-    case SCSI_TYPE_IMPEXP: return "import/export";
-    case SCSI_TYPE_DRIVE:  return "drive";
-    default:               return "(unknown)";
-    }
-}
 
 /**
  * Type for a scan callback function.
