@@ -329,6 +329,18 @@ int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
                         struct layout_info **layouts, int *layout_count);
 
 /**
+ * Retrieve extent information from DSS
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  filter   assembled DSS filtering criteria
+ * @param[out] extents  list of retrieved items to be freed w/ dss_res_free()
+ * @param[out] extent_count number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_extent_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct extent **extents, int *extent_count);
+
+/**
  * Retrieve object information from DSS
  * @param[in]  hdl      valid connection handle
  * @param[in]  filter   assembled DSS filtering criteria

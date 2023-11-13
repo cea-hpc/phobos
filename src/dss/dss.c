@@ -61,6 +61,9 @@ static int dss_full_layout_from_pg_row(struct dss_handle *handle,
                                        void *void_layout, PGresult *res,
                                        int row_num);
 static void dss_full_layout_result_free(void *void_layout);
+static int dss_extent_from_pg_row(struct dss_handle *handle, void *void_extent,
+                                  PGresult *res, int row_num);
+static void dss_extent_result_free(void *void_extent);
 static int dss_object_from_pg_row(struct dss_handle *handle, void *void_object,
                                   PGresult *res, int row_num);
 static int dss_deprecated_object_from_pg_row(struct dss_handle *handle,
@@ -412,6 +415,8 @@ static const char * const select_query[] = {
     /* The layout query ends with select_inner_end_query and
      * select_outer_end_query.
      */
+    [DSS_EXTENT] = "SELECT extent_uuid, size, medium_family, state, medium_id,"
+                   " address, hash, info FROM extent",
     [DSS_OBJECT] = "SELECT oid, object_uuid, version, user_md FROM object",
     [DSS_DEPREC] = "SELECT oid, object_uuid, version, user_md, deprec_time"
                    " FROM deprecated_object",
@@ -432,6 +437,7 @@ static const size_t res_size[] = {
     [DSS_DEVICE]      = sizeof(struct dev_info),
     [DSS_MEDIA]       = sizeof(struct media_info),
     [DSS_FULL_LAYOUT] = sizeof(struct layout_info),
+    [DSS_EXTENT]      = sizeof(struct extent),
     [DSS_OBJECT]      = sizeof(struct object_info),
     [DSS_DEPREC]      = sizeof(struct object_info),
     [DSS_LOGS]        = sizeof(struct pho_log),
@@ -443,6 +449,7 @@ static const res_pg_constructor_t res_pg_constructor[] = {
     [DSS_DEVICE]      = dss_device_from_pg_row,
     [DSS_MEDIA]       = dss_media_from_pg_row,
     [DSS_FULL_LAYOUT] = dss_full_layout_from_pg_row,
+    [DSS_EXTENT]      = dss_extent_from_pg_row,
     [DSS_OBJECT]      = dss_object_from_pg_row,
     [DSS_DEPREC]      = dss_deprecated_object_from_pg_row,
     [DSS_LOGS]        = dss_logs_from_pg_row,
@@ -453,6 +460,7 @@ static const res_destructor_t res_destructor[] = {
     [DSS_DEVICE]      = dss_device_result_free,
     [DSS_MEDIA]       = dss_media_result_free,
     [DSS_FULL_LAYOUT] = dss_full_layout_result_free,
+    [DSS_EXTENT]      = dss_extent_result_free,
     [DSS_OBJECT]      = dss_object_result_free,
     [DSS_DEPREC]      = dss_object_result_free,
     [DSS_LOGS]        = dss_logs_result_free,
@@ -483,7 +491,9 @@ static const char * const update_query[] = {
     [DSS_DEVICE] = "UPDATE device SET adm_status = '%s' WHERE id = '%s';",
     [DSS_OBJECT] = "UPDATE object SET user_md = '%s' "
                    " WHERE oid = '%s';",
-    [DSS_EXTENT] = "UPDATE extent SET state = '%s' WHERE extent_uuid = '%s';",
+    [DSS_EXTENT] = "UPDATE extent SET state = '%s', medium_family = '%s',"
+                   " medium_id = '%s', address = '%s'"
+                   " WHERE extent_uuid = '%s';",
 };
 
 static const char * const update_host_query =
@@ -1205,7 +1215,10 @@ static int get_extent_setrequest(PGconn *_conn, struct extent *item_list,
 
         default: /* DSS_SET_UPDATE */
             g_string_append_printf(request, update_query[DSS_EXTENT],
-                                   extent_state2str(ext->state), ext->uuid);
+                                   extent_state2str(ext->state),
+                                   rsc_family2str(ext->media.family),
+                                   ext->media.name, ext->address.buff,
+                                   ext->uuid);
         }
     }
 
@@ -1519,6 +1532,7 @@ static inline bool is_type_supported(enum dss_type type)
     case DSS_OBJECT:
     case DSS_DEPREC:
     case DSS_FULL_LAYOUT:
+    case DSS_EXTENT:
     case DSS_DEVICE:
     case DSS_MEDIA:
     case DSS_LOGS:
@@ -1892,6 +1906,47 @@ static void dss_full_layout_result_free(void *void_layout)
 }
 
 /**
+ * Fill an extent from the information in the `row_num`th row of `res`.
+ */
+static int dss_extent_from_pg_row(struct dss_handle *handle, void *void_extent,
+                                  PGresult *res, int row_num)
+{
+    struct extent *extent = void_extent;
+    json_error_t json_error;
+    json_t *root;
+    int rc;
+
+    (void)handle;
+
+    extent->uuid = get_str_value(res, row_num, 0);
+    extent->layout_idx = -1;
+    extent->size = atoll(PQgetvalue(res, row_num, 1));
+    extent->media.family = str2rsc_family(PQgetvalue(res, row_num, 2));
+    extent->state = str2extent_state(PQgetvalue(res, row_num, 3));
+    pho_id_name_set(&extent->media, PQgetvalue(res, row_num, 4));
+    extent->address.buff = get_str_value(res, row_num, 5);
+    extent->address.size = strlen(extent->address.buff) + 1;
+
+    root = json_loads(PQgetvalue(res, row_num, 6), JSON_REJECT_DUPLICATES,
+                      &json_error);
+    if (!root)
+        LOG_RETURN(-EINVAL, "Failed to parse json data: %s", json_error.text);
+
+    rc = dss_extent_hash_decode(extent, root);
+    json_decref(root);
+
+    return rc;
+}
+
+/**
+ * Free the resources associated with extent built from a PGresult.
+ */
+static void dss_extent_result_free(void *void_extent)
+{
+    (void)void_extent;
+}
+
+/**
  * Fill a object_info from the information in the `row_num`th row of `res`.
  */
 static int dss_object_from_pg_row(struct dss_handle *handle, void *void_object,
@@ -2144,7 +2199,8 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
     pho_debug("Executing request: '%s'", request->str);
 
     res = PQexec(conn, request->str);
-    if ((type == DSS_EXTENT && PQresultStatus(res) != PGRES_TUPLES_OK) ||
+    if ((type == DSS_EXTENT && action == DSS_SET_INSERT &&
+         PQresultStatus(res) != PGRES_TUPLES_OK) ||
         (type != DSS_EXTENT && PQresultStatus(res) != PGRES_COMMAND_OK)) {
         rc = psql_state2errno(res);
         pho_error(rc, "Query '%s' failed: %s (%s)", request->str,
@@ -2368,6 +2424,14 @@ int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
     return dss_generic_get(hdl, DSS_FULL_LAYOUT,
                            (const struct dss_filter*[]) {object, media},
                            (void **)layouts, layout_count);
+}
+
+int dss_extent_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct extent **extents, int *extent_count)
+{
+    return dss_generic_get(hdl, DSS_EXTENT,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)extents, extent_count);
 }
 
 int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
