@@ -121,3 +121,74 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter_module **ioa)
 
     return rc;
 }
+
+int copy_extent(struct io_adapter_module *ioa_source,
+                struct pho_io_descr *iod_source,
+                struct io_adapter_module *ioa_target,
+                struct pho_io_descr *iod_target)
+{
+    size_t left_to_read;
+    size_t buf_size;
+    char *buffer;
+    int rc2;
+    int rc;
+
+    /* retrieve the preferred IO size to allocate the buffer */
+    get_preferred_io_block_size(&buf_size, ioa_target, iod_target);
+
+    buffer = xcalloc(buf_size, sizeof(*buffer));
+
+    /* open source IO descriptor then copy address to the target */
+    rc = ioa_open(ioa_source, NULL, NULL, iod_source, false);
+    if (rc)
+        LOG_GOTO(memory, rc, "Unable to open source object");
+
+    iod_target->iod_loc->addr_type = iod_source->iod_loc->addr_type;
+    iod_target->iod_loc->extent->address.size =
+        iod_source->iod_loc->extent->address.size;
+    iod_target->iod_loc->extent->address.buff =
+        xstrdup(iod_source->iod_loc->extent->address.buff);
+    iod_target->iod_attrs = iod_source->iod_attrs;
+
+    left_to_read = iod_source->iod_size;
+
+    /* open target IO descriptor */
+    rc = ioa_open(ioa_target, NULL, NULL, iod_target, true);
+    if (rc)
+        LOG_GOTO(close_source, rc, "Unable to open target object");
+
+    /* do the actual copy */
+    while (left_to_read) {
+        size_t iter_size = buf_size < left_to_read ? buf_size : left_to_read;
+        ssize_t nb_read_bytes;
+
+        nb_read_bytes = ioa_read(ioa_source, iod_source, buffer, iter_size);
+        if (nb_read_bytes < 0)
+            LOG_GOTO(close, nb_read_bytes, "Unable to read %zu bytes",
+                     iter_size);
+
+        left_to_read -= nb_read_bytes;
+
+        rc = ioa_write(ioa_target, iod_target, buffer, nb_read_bytes);
+        if (rc != 0)
+            LOG_GOTO(close, rc, "Unable to write %zu bytes", nb_read_bytes);
+    }
+
+close:
+    rc2 = ioa_close(ioa_target, iod_target);
+    if (rc)
+        rc2 = ioa_del(ioa_target, iod_target);
+    if (!rc && rc2)
+        rc = rc2;
+
+close_source:
+    rc2 = ioa_close(ioa_source, iod_source);
+    if (!rc && rc2)
+        rc = rc2;
+
+memory:
+    free(buffer);
+
+    return rc;
+}
+

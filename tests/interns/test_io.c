@@ -117,6 +117,48 @@ clean:
     return rc;
 }
 
+static int check_files_are_equal(const char *fpath_a, const char *fpath_b)
+{
+    char buf_a[4096] = {0}, buf_b[4096] = {0};
+    FILE *stream_a, *stream_b;
+    int rc_a, rc_b;
+
+    stream_a = fopen(fpath_a, "r");
+    if (stream_a == NULL)
+        LOG_RETURN(-errno, "Cannot open source test file for comparison");
+    stream_b = fopen(fpath_b, "r");
+    if (stream_b == NULL) {
+        fclose(stream_a);
+        LOG_RETURN(-errno, "Cannot open target test file for comparison");
+    }
+
+    while (1) {
+        rc_a = fscanf(stream_a, "%4096c", buf_a);
+        rc_b = fscanf(stream_b, "%4096c", buf_b);
+
+        /* scans did not return the same number of items */
+        if (rc_a != rc_b)
+            return 1;
+
+        if (rc_a == EOF) {
+            /* both scans end without error */
+            if (ferror(stream_a) == 0 && ferror(stream_b) == 0)
+                break;
+
+            /* at least one scan failed */
+            errno = ferror(stream_a) == 0 ? ferror(stream_b) : ferror(stream_a);
+            LOG_RETURN(-errno, "Read error (err: %d, %d)",
+                       ferror(stream_a), ferror(stream_b));
+        }
+
+        /* buffers differ */
+        if (strncmp(buf_a, buf_b, 4096) != 0)
+            return 1;
+    }
+
+    return 0;
+}
+
 #define REPEAT_COUNT 3
 
 static int test_posix_open_write_close(void *hint)
@@ -276,6 +318,96 @@ static int test_posix_open_to_put_md(void *hint)
 static int test_posix_open_to_get_md(void *hint)
 */
 
+static int test_copy_extent(void *state)
+{
+    char test_dir_source[] = "/tmp/test_copy_extentXXXXXX";
+    char test_dir_target[] = "/tmp/test_copy_extentXXXXXX";
+    struct io_adapter_module *ioa_source = {0};
+    struct io_adapter_module *ioa_target = {0};
+    char copy_extent_address[] = "copy_extent";
+    struct pho_io_descr iod_source = {0};
+    struct pho_io_descr iod_target = {0};
+    struct pho_ext_loc loc_source = {0};
+    struct pho_ext_loc loc_target = {0};
+    char *fpath_source = NULL;
+    char *fpath_target = NULL;
+    struct extent ext = {0};
+    char command[256];
+    int rc = 0;
+
+    (void)state;
+
+    /* create test dirs */
+    if (mkdtemp(test_dir_source) == NULL)
+        LOG_RETURN(-errno, "Unable to create test dir source");
+    if (mkdtemp(test_dir_target) == NULL)
+        LOG_GOTO(clean_test_dir_source, -errno,
+                 "Unable to create test dir target");
+
+    /* build fpaths to test the value */
+    rc = asprintf(&fpath_source, "%s/%s", test_dir_source, copy_extent_address);
+    if (rc < 0)
+        LOG_GOTO(clean_test_dirs, rc = -ENOMEM,
+                 "Unable to allocate tested fpath source");
+    rc = asprintf(&fpath_target, "%s/%s", test_dir_target, copy_extent_address);
+    if (rc < 0)
+        LOG_GOTO(free_path, rc = -ENOMEM,
+                 "Unable to allocate tested fpath target");
+
+    /* get posix ioas */
+    rc = get_io_adapter(PHO_FS_POSIX, &ioa_source);
+    if (rc)
+        LOG_GOTO(free_path, rc, "Unable to get posix ioa source");
+    rc = get_io_adapter(PHO_FS_POSIX, &ioa_target);
+    if (rc)
+        LOG_GOTO(free_path, rc, "Unable to get posix ioa target");
+
+    /* init open contexts with an already set extent address */
+    ext.address.buff = copy_extent_address;
+    loc_source.extent = &ext;
+    loc_source.root_path = test_dir_source;
+    iod_source.iod_loc = &loc_source;
+    iod_source.iod_size = 10 * 1024;
+
+    loc_target.extent = &ext;
+    loc_target.root_path = test_dir_target;
+    iod_target.iod_loc = &loc_target;
+
+    /* create the test file in source directory */
+    sprintf(command, "dd bs=1k count=10 if=/dev/urandom of=%s", fpath_source);
+    rc = system(command);
+    if (rc)
+        LOG_GOTO(free_path, rc, "File creation failed");
+
+    /* copy and check */
+    rc = copy_extent(ioa_source, &iod_source, ioa_target, &iod_target);
+    if (rc)
+        LOG_GOTO(remove_source, rc, "Extent copy failed");
+
+    rc = check_files_are_equal(fpath_source, fpath_target);
+
+    free(loc_target.extent->address.buff);
+
+    remove(fpath_target);
+
+remove_source:
+    remove(fpath_source);
+
+free_path:
+    free(fpath_target);
+    free(fpath_source);
+
+clean_test_dirs:
+    if (rmdir(test_dir_target))
+        pho_error(rc = rc ? : -errno, "Unable to remove test dir target");
+
+clean_test_dir_source:
+    if (rmdir(test_dir_source))
+        pho_error(rc = rc ? : -errno, "Unable to remove test dir source");
+
+    return rc;
+}
+
 int main(int argc, char **argv)
 {
     test_env_initialize();
@@ -291,6 +423,9 @@ int main(int argc, char **argv)
     pho_run_test("Posix open to get only metadata",
              test_posix_open_to_get_md, NULL, PHO_TEST_SUCCESS);
     */
+
+    run_test("Posix copy",
+             test_copy_extent, NULL, PHO_TEST_SUCCESS);
 
     pho_info("Unit IO posix open/write/close: All tests succeeded");
     exit(EXIT_SUCCESS);

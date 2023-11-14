@@ -339,4 +339,26 @@ void get_preferred_io_block_size(size_t *io_size,
                                  const struct io_adapter_module *ioa,
                                  struct pho_io_descr *iod);
 
+/*
+ * Copy an extent from a medium to another.
+ *
+ * The source I/O descriptor must be filled as follows:
+ * iod_loc          Address and root path of the extent.
+ * iod_size         Size of the extent.
+ *
+ * The target I/O descriptor must be filled as follows:
+ * iod_loc          Root path of the extent.
+ *
+ * \param[in]       ioa_source  I/O adapter of the source medium.
+ * \param[in, out]  iod_source  I/O descriptor of the source object.
+ * \param[in]       ioa_target  I/O adapter of the target medium.
+ * \param[in, out]  iod_target  I/O descriptor of the target object.
+ *
+ * \return 0 on success, negative error code on failure.
+ */
+int copy_extent(struct io_adapter_module *ioa_source,
+                struct pho_io_descr *iod_source,
+                struct io_adapter_module *ioa_target,
+                struct pho_io_descr *iod_target);
+
 #endif
