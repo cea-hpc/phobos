@@ -77,6 +77,7 @@ struct pho_io_adapter_module_ops {
     int (*ioa_open)(const char *extent_key, const char *extent_desc,
                     struct pho_io_descr *iod, bool is_put);
     int (*ioa_write)(struct pho_io_descr *iod, const void *buf, size_t count);
+    ssize_t (*ioa_read)(struct pho_io_descr *iod, void *buf, size_t count);
     int (*ioa_close)(struct pho_io_descr *iod);
     int (*ioa_medium_sync)(const char *root_path);
     ssize_t (*ioa_preferred_io_size)(struct pho_io_descr *iod);
@@ -249,6 +250,27 @@ static inline int ioa_write(const struct io_adapter_module *ioa,
     assert(ioa->ops != NULL);
     assert(ioa->ops->ioa_write != NULL);
     return ioa->ops->ioa_write(iod, buf, count);
+}
+
+/**
+ * Read data from the IO adapter private context to the output buffer.
+ * All I/O adapters must implement this call for the extent copy/migration.
+ *
+ * \param[in]      ioa    Suitable I/O adapter for the media
+ * \param[in]      iod    I/O descriptor
+ * \param[in,out]  buf    Read data
+ * \param[in]      count  Size in byte of buf
+ * \return null or positive size on success, negative error code on failure;
+ *         if not equal to count, it means there is no more data to read
+ */
+static inline ssize_t ioa_read(const struct io_adapter_module *ioa,
+                               struct pho_io_descr *iod, void *buf,
+                               size_t count)
+{
+    assert(ioa != NULL);
+    assert(ioa->ops != NULL);
+    assert(ioa->ops->ioa_read != NULL);
+    return ioa->ops->ioa_read(iod, buf, count);
 }
 
 /**

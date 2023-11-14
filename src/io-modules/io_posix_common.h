@@ -43,6 +43,8 @@ int pho_posix_open(const char *extent_key, const char *extent_desc,
 
 int pho_posix_write(struct pho_io_descr *iod, const void *buf, size_t count);
 
+ssize_t pho_posix_read(struct pho_io_descr *iod, void *buf, size_t count);
+
 int pho_posix_close(struct pho_io_descr *iod);
 
 int pho_posix_set_md(const char *extent_key, const char *extent_desc,

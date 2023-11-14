@@ -62,6 +62,7 @@ static const struct pho_io_adapter_module_ops IO_ADAPTER_LTFS_OPS = {
     .ioa_del               = pho_posix_del,
     .ioa_open              = pho_posix_open,
     .ioa_write             = pho_posix_write,
+    .ioa_read              = pho_posix_read,
     .ioa_close             = pho_posix_close,
     .ioa_medium_sync       = pho_ltfs_sync,
     .ioa_preferred_io_size = pho_posix_preferred_io_size,

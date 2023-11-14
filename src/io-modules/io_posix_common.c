@@ -43,6 +43,7 @@
 #include <unistd.h>
 
 #define MAX_NULL_WRITE_TRY 10
+#define MAX_NULL_READ_TRY 10
 
 /**
  * Return a new null initialized posix_io_ctx.
@@ -690,8 +691,7 @@ int pho_posix_write(struct pho_io_descr *iod, const void *buf, size_t count)
         nb_written_bytes = write(io_ctx->fd, buf + written_size,
                                  count - written_size);
         if (nb_written_bytes < 0)
-            LOG_RETURN(rc = -errno, "Failed to write into %s : %s",
-                       io_ctx->fpath, strerror(errno));
+            LOG_RETURN(rc = -errno, "Failed to write into %s", io_ctx->fpath);
 
         /* handle partial write */
         if (nb_written_bytes < count - written_size) {
@@ -708,6 +708,39 @@ int pho_posix_write(struct pho_io_descr *iod, const void *buf, size_t count)
     }
 
     return rc;
+}
+
+ssize_t pho_posix_read(struct pho_io_descr *iod, void *buf, size_t count)
+{
+    struct posix_io_ctx *io_ctx;
+    ssize_t nb_read_bytes = 0;
+    int nb_null_try = 0;
+
+    io_ctx = iod->iod_ctx;
+
+    while (count > 0) {
+        ssize_t rc;
+
+        rc = read(io_ctx->fd, buf, count);
+        if (rc < 0)
+            LOG_RETURN(nb_read_bytes = -errno, "Failed to read from '%s'",
+                       io_ctx->fpath);
+
+        if (rc == 0) {
+            pho_verb("Read of zero byte from '%s', %zu are still missing",
+                     io_ctx->fpath, count);
+            ++nb_null_try;
+            if (nb_null_try > MAX_NULL_READ_TRY) {
+                pho_info("Too many reads of zero byte");
+                break;
+            }
+        }
+
+        nb_read_bytes += rc;
+        count -= rc;
+    }
+
+    return nb_read_bytes;
 }
 
 /**

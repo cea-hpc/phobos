@@ -547,6 +547,7 @@ static const struct pho_io_adapter_module_ops IO_ADAPTER_RADOS_OPS = {
     .ioa_del            = pho_rados_del,
     .ioa_open           = pho_rados_open,
     .ioa_write          = pho_rados_write,
+    .ioa_read           = NULL,
     .ioa_close          = pho_rados_close,
     .ioa_medium_sync    = pho_rados_sync,
     .ioa_preferred_io_size = NULL,
