@@ -39,6 +39,7 @@
 #include <ctype.h>
 
 #include <openssl/sha.h>
+#include <openssl/evp.h>
 
 /**
  * Implementation of extent objects mapping.
@@ -143,7 +144,7 @@ int pho_mapper_hash1(const char *ext_key, const char *ext_desc, char *dst_path,
 {
     unsigned char   hash[SHA_DIGEST_LENGTH];
     size_t          key_len;
-    SHA_CTX         ctx;
+    EVP_MD_CTX     *ctx;
     int             rc;
 
     if (ext_desc == NULL || ext_key == NULL || dst_path == NULL)
@@ -160,9 +161,18 @@ int pho_mapper_hash1(const char *ext_key, const char *ext_desc, char *dst_path,
     if (dst_size < PHO_MAPPER_PREFIX_LENGTH + key_len + 2)
         return -EINVAL;
 
-    SHA1_Init(&ctx);
-    SHA1_Update(&ctx, ext_key, key_len);
-    SHA1_Final(hash, &ctx);
+    /* Produce the SHA 1 hash */
+    ctx = EVP_MD_CTX_create();
+    if (EVP_DigestInit_ex(ctx, EVP_sha1(), NULL) == 0)
+        LOG_RETURN(-ENOMEM,
+                  "Unable to init SHA1 context to hash extent key into path");
+
+    EVP_DigestUpdate(ctx, ext_key, key_len);
+    if (EVP_DigestFinal_ex(ctx, hash, NULL) == 0)
+        LOG_RETURN(-ENOMEM,
+                  "Unable to produce SHA1 to hash extent key into path");
+
+    EVP_MD_CTX_destroy(ctx);
 
     rc = snprintf(dst_path, dst_size, "%02x/%02x/", hash[0], hash[1]);
 

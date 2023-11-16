@@ -456,8 +456,8 @@ static int _recv_client(struct pho_comm_info *ci, struct pho_comm_data **data,
                         int *nb_data)
 {
     struct _pho_comm_recv_info cri;
-    uint32_t rc = 0;
     uint32_t tlen;
+    int rc = 0;
 
     *nb_data = 0;
     *data = malloc(sizeof(**data));

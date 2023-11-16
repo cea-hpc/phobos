@@ -126,8 +126,8 @@ static int query_drive_sn(struct lib_descriptor *lib, json_t *message)
     assert(lib->drives.items != NULL);
 
     for (i = 0; i < count; i++)
-        strncpy(lib->drives.items[i].dev_id, items[i].dev_id,
-                sizeof(lib->drives.items[i].dev_id));
+        memcpy(lib->drives.items[i].dev_id, items[i].dev_id,
+               sizeof(lib->drives.items[i].dev_id));
 
 err_free:
     free(items);

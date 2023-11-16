@@ -567,11 +567,13 @@ free_io_ctx:
     /* unlink if failure occurs */
     if (file_created) {
         assert(io_ctx->fpath);
-        if (unlink(io_ctx->fpath))
+        if (unlink(io_ctx->fpath)) {
             if (!rc) /* keep the first reported error */
                 rc = -errno;
+
             pho_warn("Failed to clean extent '%s': %s", io_ctx->fpath,
                      strerror(-rc));
+        }
     }
 
     /* error cleaning by closing io_ctx */

@@ -270,7 +270,12 @@ static int read_scsi_generic(const char *st_devname, char *sg_devname,
     if (!is_sg_device(sg_name))
         LOG_RETURN(rc = -EINVAL, "'%s' is not a valid sg device", link);
 
-    strncpy(sg_devname, sg_name, sg_size);
+    if (strnlen(sg_name, sg_size) >= sg_size)
+        LOG_RETURN(rc = -EINVAL, "'%s' is a too long sg device string to be "
+                   "stored in %zu characters of the sg_devname",
+                   sg_name, sg_size);
+
+    strcpy(sg_devname, sg_name);
 
     pho_debug("Device '%s': SG='%s'", st_devname, sg_name);
     return 0;
