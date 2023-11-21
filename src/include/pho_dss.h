@@ -607,6 +607,25 @@ int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
 int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
                       char **hostname, struct media_info **medium_info);
 
+/**
+ * Return the health of a medium
+ *
+ * The health is computed as the number of errors encountered by the medium
+ * minus the number of successes since the first error.
+ *
+ * The health is always >= 0. A health of 0 implies that the medium is failed.
+ * It also has a maximum of \p max_health.
+ *
+ * @param[in]  dss         Valid DSS handle
+ * @param[in]  medium_id   Medium to query
+ * @param[in]  max_health  Maximum health that the medium can have
+ * @param[out] health      The returned health of the medium
+ *
+ * @return     0 on success, negative POSIX error code on error
+ */
+int dss_medium_health(struct dss_handle *dss, const struct pho_id *medium_id,
+                      size_t max_health, size_t *health);
+
 /* ****************************************************************************/
 /* Generic move ***************************************************************/
 /* ****************************************************************************/

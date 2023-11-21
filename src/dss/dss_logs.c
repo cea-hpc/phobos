@@ -40,6 +40,66 @@
 #include "pho_dss.h"
 #include "pho_type_utils.h"
 
+static ssize_t count_health(struct pho_log *logs, size_t count,
+                            size_t max_health)
+{
+    ssize_t health = max_health;
+    size_t i = 0;
+
+    if (count == 0)
+        /* no logs yet, new medium */
+        return max_health;
+
+    /* skip successes before first error, they should not count in the health */
+    while (i < count && !logs[i].error_number)
+        i++;
+
+    if (i == count)
+        /* no errors */
+        return max_health;
+
+    for (; i < count; i++) {
+        if (logs[i].error_number)
+            health--;
+        else
+            health++;
+
+        health = clamp(health, 0, max_health);
+    }
+
+    return health;
+}
+
+int dss_medium_health(struct dss_handle *dss, const struct pho_id *medium_id,
+                      size_t max_health, size_t *health)
+{
+    struct pho_log_filter log_filter = {0};
+    struct dss_filter *pfilter;
+    struct dss_filter filter;
+    struct pho_log *logs;
+    int count;
+    int rc;
+
+    pfilter = &filter;
+    log_filter.device.family = PHO_RSC_NONE;
+    log_filter.cause = PHO_OPERATION_INVALID;
+    pho_id_copy(&log_filter.medium, medium_id);
+
+    rc = create_logs_filter(&log_filter, &pfilter);
+    if (rc)
+        return rc;
+
+    rc = dss_logs_get(dss, &filter, &logs, &count);
+    dss_filter_free(&filter);
+    if (rc)
+        return rc;
+
+    *health = count_health(logs, count, max_health);
+    dss_res_free(logs, count);
+
+    return 0;
+}
+
 int dss_emit_log(struct dss_handle *handle, struct pho_log *log)
 {
     GString *request = g_string_new("");
@@ -123,7 +183,7 @@ int create_logs_filter(struct pho_log_filter *log_filter,
         remaining_criteria++;
     if (log_filter->error_number != NULL)
         remaining_criteria++;
-    if (log_filter->cause != -1)
+    if (log_filter->cause != PHO_OPERATION_INVALID)
         remaining_criteria++;
     if (log_filter->start.tv_sec != 0)
         remaining_criteria++;

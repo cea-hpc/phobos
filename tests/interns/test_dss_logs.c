@@ -341,6 +341,124 @@ static void dss_logs_clear_with_filters(void **state)
     check_logs_by_clear(handle, NULL, NULL, NULL, NULL, &times[1], 0);
 }
 
+static void emit(struct dss_handle *dss, int error)
+{
+    struct pho_log log = { .error_number = error };
+    int rc;
+
+    log.device.family = PHO_RSC_TAPE;
+    log.medium.family = PHO_RSC_TAPE;
+    strcpy(log.device.name, "dummy_device");
+    strcpy(log.medium.name, "dummy_medium");
+    log.cause = PHO_DEVICE_LOAD;
+
+    log.message = json_object();
+    assert_non_null(log.message);
+
+    rc = dss_emit_log(dss, &log);
+    assert_return_code(rc, -rc);
+    json_decref(log.message);
+}
+
+static void emit_ok(struct dss_handle *dss)
+{
+    emit(dss, 0);
+}
+
+static void emit_error(struct dss_handle *dss)
+{
+    emit(dss, 1);
+}
+
+static void dss_medium_health_0(void **state)
+{
+    struct dss_handle *dss = *state;
+    struct pho_id medium;
+    size_t health;
+    int rc;
+
+    medium.family = PHO_RSC_TAPE;
+    pho_id_name_set(&medium, "dummy_medium");
+
+    dss_logs_delete(dss, NULL);
+    emit_error(dss);
+    emit_error(dss);
+    emit_error(dss);
+    emit_error(dss);
+    emit_error(dss);
+    emit_ok(dss);
+    emit_error(dss);
+
+    rc = dss_medium_health(dss, &medium, 5, &health);
+    assert_return_code(rc, -rc);
+    assert_int_equal(health, 0);
+
+    dss_logs_delete(dss, NULL);
+}
+
+static void dss_medium_health_max(void **state)
+{
+    struct dss_handle *dss = *state;
+    struct pho_id medium;
+    size_t health;
+    int rc;
+
+    medium.family = PHO_RSC_TAPE;
+    pho_id_name_set(&medium, "dummy_medium");
+
+    dss_logs_delete(dss, NULL);
+    emit_error(dss);
+    emit_error(dss);
+    emit_error(dss);
+    emit_ok(dss);
+    emit_ok(dss);
+    emit_ok(dss);
+    emit_ok(dss);
+    emit_ok(dss);
+    emit_ok(dss);
+    emit_ok(dss);
+    emit_ok(dss);
+    emit_ok(dss);
+
+    rc = dss_medium_health(dss, &medium, 5, &health);
+    assert_return_code(rc, -rc);
+    assert_int_equal(health, 5);
+
+    dss_logs_delete(dss, NULL);
+}
+
+static void dss_medium_health_ok(void **state)
+{
+    struct dss_handle *dss = *state;
+    struct pho_id medium;
+    size_t health;
+    int rc;
+
+    medium.family = PHO_RSC_TAPE;
+    pho_id_name_set(&medium, "dummy_medium");
+
+    dss_logs_delete(dss, NULL);
+    emit_ok(dss);    // 5
+    emit_ok(dss);    // 5
+    emit_ok(dss);    // 5
+    emit_error(dss); // 4
+    emit_error(dss); // 3
+    emit_ok(dss);    // 4
+    emit_error(dss); // 3
+    emit_ok(dss);    // 4
+    emit_ok(dss);    // 5
+    emit_ok(dss);    // 5
+    emit_error(dss); // 4
+    emit_error(dss); // 3
+    emit_error(dss); // 2
+
+    rc = dss_medium_health(dss, &medium, 5, &health);
+    assert_return_code(rc, -rc);
+    assert_int_equal(health, 2);
+
+    dss_logs_delete(dss, NULL);
+}
+
 int main(void)
 {
     const struct CMUnitTest dss_logs_test_cases[] = {
@@ -348,6 +466,9 @@ int main(void)
         cmocka_unit_test(dss_emit_logs_with_message_ok),
         cmocka_unit_test(dss_logs_dump_with_filters),
         cmocka_unit_test(dss_logs_clear_with_filters),
+        cmocka_unit_test(dss_medium_health_0),
+        cmocka_unit_test(dss_medium_health_max),
+        cmocka_unit_test(dss_medium_health_ok),
     };
 
     pho_context_init();
