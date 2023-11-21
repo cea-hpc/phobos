@@ -37,7 +37,7 @@ from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-n
 from phobos.core.glue import admin_device_status, jansson_dumps  # pylint: disable=no-name-in-module
 from phobos.core.dss import DSSHandle
 from phobos.core.ffi import (CommInfo, ExtentInfo, LayoutInfo, LIBPHOBOS_ADMIN,
-                             Id, LogFilter, LibDrvInfo)
+                             Id, LogFilter, LibDrvInfo, LIBPHOBOS)
 
 def string_list2c_array(l, getter):
     c_string_list = (c_char_p * len(l))()
@@ -74,10 +74,14 @@ class Client(object):
             self.fini()
 
         self.handle = AdminHandle()
-
-        rc = LIBPHOBOS_ADMIN.phobos_admin_init(byref(self.handle),
-                                               lrs_required,
-                                               tlc_required)
+        phobos_context_func = LIBPHOBOS.phobos_context
+        phobos_context_func.restype = c_void_p
+        phobos_admin_init_func = LIBPHOBOS_ADMIN.phobos_admin_init
+        phobos_admin_init_func.argtypes = (c_void_p, c_bool, c_bool, c_void_p)
+        rc = phobos_admin_init_func(byref(self.handle),
+                                    lrs_required,
+                                    tlc_required,
+                                    phobos_context_func())
         if rc:
             raise EnvironmentError(rc, 'Admin initialization failed')
 
@@ -369,7 +373,11 @@ class Client(object):
         SCSI scan of a given device.
         """
         jansson_t = c_void_p(None)
-        LIBPHOBOS_ADMIN.phobos_admin_lib_scan(lib_type,
-                                              lib_dev_path.encode('utf-8'),
-                                              byref(jansson_t))
+        rc = LIBPHOBOS_ADMIN.phobos_admin_lib_scan(lib_type,
+                                                   lib_dev_path.encode('utf-8'),
+                                                   byref(jansson_t))
+        if rc:
+            raise EnvironmentError(rc, f"Failed to scan the library "
+                                       f"{lib_dev_path}")
+
         return json.loads(jansson_dumps(jansson_t.value))

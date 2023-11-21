@@ -58,9 +58,11 @@ void phobos_admin_fini(struct admin_handle *adm);
  *
  * The handler must be released using phobos_admin_fini.
  *
- * \param[out]      adm             Admin handler.
- * \param[in]       lrs_required    True if the LRS is required.
- * \param[in]       tlc_required    True if the TLC is required.
+ * \param[out]      adm                     Admin handler.
+ * \param[in]       lrs_required            True if the LRS is required.
+ * \param[in]       tlc_required            True if the TLC is required.
+ * \param[in]       phobos_context_handle   To set phobos_context (don't used
+ *                                          if NULL).
  *
  * \return                          0     on success,
  *                                 -errno on failure.
@@ -69,7 +71,7 @@ void phobos_admin_fini(struct admin_handle *adm);
  *   phobos_init -> phobos_admin_init -> ... -> phobos_admin_fini -> phobos_fini
  */
 int phobos_admin_init(struct admin_handle *adm, bool lrs_required,
-                      bool tlc_required);
+                      bool tlc_required, void *phobos_context_handle);
 
 /**
  * Add the given devices to the database and inform the LRS that it needs to
