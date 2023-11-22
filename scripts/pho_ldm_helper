@@ -49,8 +49,9 @@ function format_ltfs
 {
     local drive=$(readlink -m "$1") # convert link to the actual device path
     local label=$2
+    local serial=${label:0:6}
 
-    mkltfs -f -d "$drive" -n "$label" || exit 1
+    mkltfs -f -d "$drive" -n "$label" -s "$serial" || exit 1
 }
 
 function usage
