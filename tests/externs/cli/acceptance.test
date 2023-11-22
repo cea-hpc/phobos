@@ -230,9 +230,9 @@ function switch_family()
 {
     if [[ "$1" == "dir" ]]; then
         echo "tape"
-    else if [[ "$1" == "tape" ]]; then
+    elif [[ "$1" == "tape" ]]; then
         echo "dir"
-    else if [[ "$1" == "rados_pool" ]]; then
+    elif [[ "$1" == "rados_pool" ]]; then
         echo "dir"
     else
         error "Unsupported family"
