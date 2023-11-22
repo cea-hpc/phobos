@@ -223,7 +223,8 @@ static int ltfs_mount(const char *dev_path, const char *mnt_path,
         LOG_GOTO(out_free, rc, "Cannot retrieve fs label for '%s'", mnt_path);
 
     if (strcmp(vol_label, fs_label))
-        LOG_GOTO(out_free, rc, "FS label mismatch found:'%s' / expected:'%s'",
+        LOG_GOTO(out_free, rc = -EINVAL,
+                 "FS label mismatch found:'%s' / expected:'%s'",
                  vol_label, fs_label);
 
 out_free:
