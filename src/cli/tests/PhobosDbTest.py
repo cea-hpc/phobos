@@ -23,6 +23,8 @@
 Unit tests for database migration module
 """
 
+import os
+from subprocess import Popen, PIPE
 import unittest
 
 from phobos.db import Migrator, ORDERED_SCHEMAS, CURRENT_SCHEMA_VERSION
@@ -76,6 +78,37 @@ class MigratorTest(unittest.TestCase):
             "Cannot migrate to an older version"
         ):
             self.migrator.migrate(ORDERED_SCHEMAS[-2])
+
+    def test_migration_integrity(self):
+        for idx, version in enumerate(ORDERED_SCHEMAS):
+            if idx == 0:
+                continue
+            self.migrator.create_schema(version)
+            process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s',
+                             '-U', 'phobos', '-f', '/tmp/schema_dump',
+                             'phobos_test'])
+            process.wait()
+            self.migrator.drop_tables()
+
+            self.migrator.create_schema(ORDERED_SCHEMAS[idx - 1])
+            self.migrator.migrate(version)
+            process = Popen(['sudo', '-u', 'postgres', 'pg_dump', '-s',
+                             '-U', 'phobos', '-f', '/tmp/migrate_dump',
+                             'phobos_test'])
+            process.wait()
+            self.migrator.drop_tables()
+
+            process = Popen(['diff', '/tmp/schema_dump', '/tmp/migrate_dump'],
+                            stdout=PIPE)
+            out_diff, _ = process.communicate()
+
+            os.unlink("/tmp/schema_dump")
+            os.unlink("/tmp/migrate_dump")
+
+            if process.returncode:
+                print(out_diff.decode('utf-8'))
+                self.fail("DB is different between after a migrate and a new " +
+                     "schema creation")
 
 if __name__ == '__main__':
     unittest.main(buffer=True)

@@ -133,9 +133,6 @@ class Migrator:
             -- add the media.tags field
             ALTER TABLE media ADD COLUMN tags JSONB;
 
-            -- create index for faster tag filtering
-            CREATE INDEX ON media USING gin(tags);
-
             -- create schema_info table for version tracking
             CREATE TABLE schema_info (
                 version varchar(32) PRIMARY KEY
@@ -143,6 +140,7 @@ class Migrator:
 
             -- Insert current schema version
             INSERT INTO schema_info VALUES ('1.2');
+
         """)
         self.conn.commit()
         cur.close()
@@ -165,7 +163,7 @@ class Migrator:
             CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
             ALTER TABLE object ADD uuid varchar(36) UNIQUE
                 DEFAULT uuid_generate_v4();
-            ALTER TABLE extent ADD uuid varchar(36) UNIQUE;
+            ALTER TABLE extent ADD uuid varchar(36);
 
             -- copy uuid value from object table into extent table
             UPDATE extent SET uuid = object.uuid from object
@@ -177,6 +175,7 @@ class Migrator:
 
             -- move primary key of extent table from (oid) to (uuid, version)
             ALTER TABLE extent DROP CONSTRAINT extent_pkey;
+            ALTER TABLE extent ALTER COLUMN oid DROP NOT NULL;
             ALTER TABLE extent ADD PRIMARY KEY (uuid, version);
 
             -- create deprecated_object table as object table with deprec_time
@@ -271,6 +270,33 @@ class Migrator:
                                )::jsonb
                 WHERE lyt_info ->> 'name' = 'simple';
 
+            -- new dev_family type with the 'rados_pool' value
+            ALTER TYPE dev_family RENAME TO old_dev_family;
+            CREATE TYPE dev_family AS ENUM ('disk', 'tape', 'dir',
+                                            'rados_pool');
+
+            -- use new type in device table
+            ALTER TABLE device ALTER COLUMN family SET DATA TYPE dev_family
+                USING family::text::dev_family;
+
+            -- use new type in media table
+            ALTER TABLE media ALTER COLUMN family SET DATA TYPE dev_family
+                USING family::text::dev_family;
+
+            -- delete old_dev_family type
+            DROP TYPE old_dev_family;
+
+            -- new fs_type type with the 'RADOS' value
+            ALTER TYPE fs_type RENAME TO old_fs_type;
+            CREATE TYPE fs_type AS ENUM ('POSIX', 'LTFS', 'RADOS');
+
+            -- use new type in media table
+            ALTER TABLE media ALTER COLUMN fs_type SET DATA TYPE fs_type
+                USING fs_type::text::fs_type;
+
+            -- delete old_fs_type type
+            DROP TYPE old_fs_type;
+
             -- update current schema version
             UPDATE schema_info SET version = '1.93';
         """)
@@ -287,10 +313,10 @@ class Migrator:
         cur = self.conn.cursor()
         cur.execute("""
             -- create enum operation_type
-            CREATE TYPE operation_type AS ENUM ('library_scan', 'library_open',
-                                                'device_lookup',
-                                                'medium_lookup',
-                                                'device_load', 'device_unload');
+            CREATE TYPE operation_type AS ENUM ('Library scan', 'Library open',
+                                                'Device lookup',
+                                                'Medium lookup',
+                                                'Device load', 'Device unload');
 
             -- create logs table
             CREATE TABLE logs(

@@ -50,9 +50,9 @@ CREATE INDEX ON media((stats->>'phys_spc_free'));
 
 CREATE TABLE object(
     oid             varchar(1024),
+    user_md         jsonb,
     uuid            varchar(36) UNIQUE DEFAULT uuid_generate_v4(),
     version         integer DEFAULT 1 NOT NULL,
-    user_md         jsonb,
 
     PRIMARY KEY (oid)
 );
@@ -69,11 +69,11 @@ CREATE TABLE deprecated_object(
 
 CREATE TABLE extent(
     oid             varchar(1024),
-    uuid            varchar(36),
-    version         integer DEFAULT 1 NOT NULL,
     state           extent_state,
     lyt_info        jsonb,
     extents         jsonb,
+    uuid            varchar(36),
+    version         integer DEFAULT 1 NOT NULL,
 
     PRIMARY KEY (uuid, version)
 );

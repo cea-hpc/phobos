@@ -116,30 +116,23 @@ drop_tables() {
     $db_helper drop_tables
 }
 
+usage() {
+    echo "Usage: . $0"
+    echo "  OR   $0 ACTION [ACTION [ACTION...]]"
+    echo "where  ACTION := { setup_db | drop_db | setup_tables |"
+    echo "                   drop_tables | insert_examples }"
+    exit -1
+}
+
 # if we're being sourced, don't parse arguments
 [[ $(caller | cut -d' ' -f1) != "0" ]] && return 0
 
-usage() {
-	echo "Usage: . $0"
-	echo "  OR   $0 ACTION [ACTION [ACTION...]]"
-	echo "where  ACTION := { setup_db | drop_db | setup_tables |"
-	echo "                   drop_tables | insert_examples }"
-	exit -1
-}
-
 if [[ $# -eq 0 ]]; then
-	usage
+    usage
 fi
 
-while [[ $# -gt 0 ]]; do
-	case "$1" in
-	insert_examples)
-		insert_examples
-		;;
-	*)
-		# forward all other calls to the db helper
-		$db_helper "$1"
-		;;
-	esac
-	shift
-done
+if [ "$1" == "insert_examples" ]; then
+    insert_examples
+else
+    $db_helper $*
+fi

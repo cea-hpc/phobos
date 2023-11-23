@@ -215,7 +215,8 @@ int main(int argc, char **argv)
     char                   *default_family;
     char                    dst_path[256];
 
-    assert(system("../../setup_db.sh drop_tables setup_tables") == 0);
+    assert(system("../../setup_db.sh drop_tables") == 0);
+    assert(system("../../setup_db.sh setup_tables") == 0);
     test_env_initialize();
 
     reinit_xfer(&xfer, argv[0], argv[0], PHO_XFER_OP_PUT);
