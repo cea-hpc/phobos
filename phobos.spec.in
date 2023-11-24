@@ -186,6 +186,14 @@ ldconfig
 %endif
 
 %changelog
+* Fri Nov 24 2023 - Patrice Lucas <patrice.lucas@cea.fr> - 1.95.1-1
+- ltfs: improve ltfs log with serial number
+- ltfs: return an error if labels are different at mount operation
+- store, admin, cli: fix store and admin global context share
+- LRS : fix unloading a tape from a source which is not a slot
+- compilation : fix gcc compilation warning on RHEL 9 based system
+- doc : add documentation for the currently_dedicated_to option
+
 * Thu Oct 19 2023 - Patrice Lucas <patrice.lucas@cea.fr> - 1.95-2
 - Phobos-devel requires libattr-devel
 

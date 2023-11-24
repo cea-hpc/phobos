@@ -1,5 +1,20 @@
 # CHANGELOG UPDATES
 
+## 1.95.1
+* common: add xmalloc, xstrdup, xcalloc...
+* ltfs: improve ltfs log with serial number
+* ltfs: return an error if labels are different at mount operation
+* pho_srl_lrs : fixed typedef name that was already used
+* store, admin, cli: fix store and admin global context share
+* LRS : fix unloading a tape from a source which is not a slot
+* compilation : fix gcc compilation warning on RHEL 9 based system
+* doc : add documentation for the currently_dedicated_to option
+* tests: fix acceptance invalid bash syntax
+* tests: fix an issue between test_store and test-driver
+* tests: verify database after migration is as expected
+* TLC (Tape Library Controler): introduce first features of this component even
+  if the daemon is still unused (library open/close, drive_lookup, load)
+
 ## 1.95
 * WARNING: the db schema moves from 1.93 to 1.95 and a migration is needed.
 * Unused 'disk' value is removed from media and device family.
