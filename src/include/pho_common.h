@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <stddef.h>
 #include <time.h>
@@ -172,6 +173,7 @@ enum operation_type {
     PHO_MEDIUM_LOOKUP,
     PHO_DEVICE_LOAD,
     PHO_DEVICE_UNLOAD,
+    PHO_LTFS_MOUNT,
     PHO_OPERATION_LAST,
 };
 
@@ -182,6 +184,7 @@ static const char * const OPERATION_TYPE_NAMES[] = {
     [PHO_MEDIUM_LOOKUP] = "Medium lookup",
     [PHO_DEVICE_LOAD]   = "Device load",
     [PHO_DEVICE_UNLOAD] = "Device unload",
+    [PHO_LTFS_MOUNT]    = "LTFS mount",
 };
 
 static inline const char *operation_type2str(enum operation_type op)
@@ -248,6 +251,8 @@ static inline void json_insert_element(json_t *json, const char *key,
 static inline bool should_log(struct pho_log *log)
 {
     switch (log->cause) {
+    case PHO_LTFS_MOUNT:
+        return log->message != NULL;
     case PHO_DEVICE_LOAD:
     case PHO_DEVICE_UNLOAD:
         return log->error_number == 0 || json_object_size(log->message) != 0;
@@ -260,7 +265,6 @@ static inline bool should_log(struct pho_log *log)
 
 static inline void destroy_json(json_t *json)
 {
-    json_object_clear(json);
     json_decref(json);
 }
 
@@ -486,6 +490,17 @@ struct config {
                                          */
 };
 
+/* LTFS mocking structure */
+struct mock_ltfs {
+    /* These 2 functions are used by the "ltfs_mount" call */
+
+    /* Overrides default "mkdir" in tests. */
+    int (*mock_mkdir)(const char *path, mode_t mode);
+    /* Overrides default "command_call" in tests. */
+    int (*mock_command_call)(const char *cmd_line, parse_cb_t cb_func,
+                             void *cb_arg);
+};
+
 /**
  * Callback function to mock an ioctl call as used in the SCSI library module
  */
@@ -509,14 +524,18 @@ struct phobos_global_context {
 
     pthread_mutex_t ldm_lib_scsi_mutex;
 
+    /* /!\ The following fields are for testing purposes only /!\ */
+
+    struct mock_ltfs mock_ltfs; /* LTFS mocking functions used by the module
+                                 * "ldm_fs_ltfs".
+                                 */
+
     /* TODO: change this field to a structure so that the callbacks are
      * encapsulated better.
      */
     mock_ioctl_t mock_ioctl;         /** Callback to mock the ioctl call used
                                        * by the ldm module "ldm_lib_scsi" to
                                        * interact with the tape library.
-                                       *
-                                       * /!\ FOR TESTING PURPOSES ONLY /!\
                                        */
 };
 

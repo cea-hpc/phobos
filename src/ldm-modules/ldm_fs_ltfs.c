@@ -34,6 +34,7 @@
 #include "pho_ldm.h"
 #include "pho_module_loader.h"
 
+#include <jansson.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -145,10 +146,8 @@ static char *ltfs_format_cmd(const char *device, const char *label)
 
 static int ltfs_collect_output(void *arg, char *line, size_t size, int stream)
 {
-    if (stream == STDERR_FILENO) {
+    if (stream == STDERR_FILENO)
         pho_verb("%s", rstrip(line));
-        return 0;
-    }
 
     /* drop other streams for now */
     return 0;
@@ -193,11 +192,13 @@ static int ltfs_get_label(const char *mnt_path, char *fs_label, size_t llen)
 }
 
 static int ltfs_mount(const char *dev_path, const char *mnt_path,
-                      const char *fs_label)
+                      const char *fs_label, json_t **message)
 {
-    char     vol_label[PHO_LABEL_MAX_LEN + 1];
-    char    *cmd = NULL;
-    int      rc;
+    struct phobos_global_context *context = phobos_context();
+    char vol_label[PHO_LABEL_MAX_LEN + 1];
+    char *cmd = NULL;
+    int rc;
+
     ENTRY;
 
     cmd = ltfs_mount_cmd(dev_path, mnt_path);
@@ -205,27 +206,43 @@ static int ltfs_mount(const char *dev_path, const char *mnt_path,
         LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build LTFS mount command");
 
     /* create the mount point */
-    if (mkdir(mnt_path, 0750) != 0 && errno != EEXIST)
+    if (context->mock_ltfs.mock_mkdir(mnt_path, 0750) != 0 && errno != EEXIST) {
+        *message = json_pack("{s:s+}", "mkdir",
+                             "Failed to create mount point: ", mnt_path);
         LOG_GOTO(out_free, rc = -errno, "Failed to create mount point %s",
                  mnt_path);
+    }
 
     /* mount the filesystem */
-    rc = command_call(cmd, ltfs_collect_output, NULL);
-    if (rc)
+    /* XXX: we do not instrument the "ltfs_collect_output" function to retrieve
+     * errors to put into the DSS logs because LTFS writes everything to stderr,
+     * so we either have way too much logs to put into the DB, or not enough. So
+     * the compromise is to put the minimum in the DB (i.e. "we failed on this
+     * command") and have the rest of the log in the daemon log.
+     */
+    rc = context->mock_ltfs.mock_command_call(cmd, ltfs_collect_output, NULL);
+    if (rc) {
+        *message = json_pack("{s:s+}", "mount",
+                             "Mount command failed: ", cmd);
         LOG_GOTO(out_free, rc, "Mount command failed: '%s'", cmd);
+    }
 
     /* Checking filesystem label is optional, if fs_label is NULL we are done */
     if (!fs_label || !fs_label[0])
         goto out_free;
 
+    /* Errors on this call will be managed by the function itself later */
     rc = ltfs_get_label(mnt_path, vol_label, sizeof(vol_label));
     if (rc)
         LOG_GOTO(out_free, rc, "Cannot retrieve fs label for '%s'", mnt_path);
 
-    if (strcmp(vol_label, fs_label))
+    if (strcmp(vol_label, fs_label)) {
+        *message = json_pack("{s:s+++}", "label mismatch",
+                             "found: ", vol_label, ", expected: ", fs_label);
         LOG_GOTO(out_free, rc = -EINVAL,
                  "FS label mismatch found:'%s' / expected:'%s'",
                  vol_label, fs_label);
+    }
 
 out_free:
     free(cmd);

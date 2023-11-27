@@ -399,7 +399,7 @@ static inline int ldm_lib_scan(struct lib_handle *lib_hdl,
  */
 struct pho_fs_adapter_module_ops {
     int (*fs_mount)(const char *dev_path, const char *mnt_path,
-                    const char *label);
+                    const char *label, json_t **message);
     int (*fs_umount)(const char *dev_path, const char *mnt_path);
     int (*fs_format)(const char *dev_path, const char *label,
                      struct ldm_fs_space *fs_spc);
@@ -424,22 +424,26 @@ int get_fs_adapter(enum fs_type fs_type, struct fs_adapter_module **fsa);
 
 /**
  * Mount a device as a given filesystem type.
- * @param[in] fsa       File system adapter module.
- * @param[in] dev_path  Path to the device.
- * @param[in] mnt_path  Mount point for the filesystem.
- * @param[in] fs_label  Validation label.
+ * @param[in]  fsa       File system adapter module.
+ * @param[in]  dev_path  Path to the device.
+ * @param[in]  mnt_path  Mount point for the filesystem.
+ * @param[in]  fs_label  Validation label.
+ * @param[out] message   Json message allocated in case of error, NULL
+ *                       otherwise. Must be freed by the caller
  *
  * @return 0 on success, negative error code on failure.
  */
 static inline int ldm_fs_mount(const struct fs_adapter_module *fsa,
                                const char *dev_path, const char *mnt_point,
-                               const char *fs_label)
+                               const char *fs_label, json_t **message)
 {
+    *message = NULL;
+
     assert(fsa != NULL);
     assert(fsa->ops != NULL);
     if (fsa->ops->fs_mount == NULL)
         return 0;
-    return fsa->ops->fs_mount(dev_path, mnt_point, fs_label);
+    return fsa->ops->fs_mount(dev_path, mnt_point, fs_label, message);
 }
 
 /**

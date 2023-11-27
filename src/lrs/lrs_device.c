@@ -1200,17 +1200,7 @@ out_log:
     return rc;
 }
 
-/**
- * Format a medium to the given fs type.
- *
- * \param[in]   dev     Device with a loaded medium to format
- * \param[in]   fsa     Filesystem adapter module
- * \param[in]   unlock  Put admin status to "unlocked" on format success
- *
- * \return              0 on success, negative error code on failure
- */
-static int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa,
-                      bool unlock)
+int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
 {
     struct media_info *medium = dev->ld_dss_media_info;
     struct ldm_fs_space space = {0};
@@ -1632,14 +1622,7 @@ out_free:
     return rc;
 }
 
-/**
- * Build a mount path for the given identifier.
- *
- * @param[in] id    Unique drive identified on the host.
- *
- * @return The result must be released by the caller using free(3).
- */
-static char *mount_point(const char *id)
+char *mount_point(const char *id)
 {
     const char *mnt_cfg;
     char *mnt_out;
@@ -1655,19 +1638,17 @@ static char *mount_point(const char *id)
     return mnt_out;
 }
 
-/**
- * Mount the device's loaded medium
- *
- * @param[in] dev   Device already containing a loaded medium
- *
- * @return 0 on success, -error number on error.
- */
-static int dev_mount(struct lrs_dev *dev)
+int dev_mount(struct lrs_dev *dev)
 {
     struct fs_adapter_module *fsa;
+    struct pho_log log;
     char *mnt_root;
     const char *id;
     int rc;
+
+    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
+                 dev->ld_dss_media_info->rsc.id, PHO_LTFS_MOUNT);
+    destroy_json(log.message);
 
     rc = get_fs_adapter(dev->ld_dss_media_info->fs.type, &fsa);
     if (rc)
@@ -1703,7 +1684,8 @@ static int dev_mount(struct lrs_dev *dev)
              mnt_root);
 
     rc = ldm_fs_mount(fsa, dev->ld_dev_path, mnt_root,
-                      dev->ld_dss_media_info->fs.label);
+                      dev->ld_dss_media_info->fs.label,
+                      &log.message);
     if (rc)
         LOG_GOTO(out_free, rc, "Failed to mount '%s' in device '%s'",
                  dev->ld_dss_media_info->rsc.id.name,
@@ -1718,6 +1700,13 @@ static int dev_mount(struct lrs_dev *dev)
 
 out_free:
     free(mnt_root);
+
+    log.error_number = rc;
+    if (should_log(&log))
+        dss_emit_log(&dev->ld_device_thread.dss, &log);
+
+    destroy_json(log.message);
+
     return rc;
 }
 

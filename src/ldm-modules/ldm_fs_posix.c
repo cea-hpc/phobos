@@ -33,6 +33,7 @@
 #include "pho_ldm.h"
 #include "pho_module_loader.h"
 
+#include <jansson.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -160,10 +161,12 @@ out_free:
  * filesystem label, to comply with the behavior of other backends.
  */
 static int dir_labelled(const char *dev_path, const char *mnt_path,
-                        const char *fs_label)
+                        const char *fs_label, json_t **message)
 {
     char    mounted_label[PHO_LABEL_MAX_LEN + 1];
     int     rc;
+
+    (void) message;
 
     rc = dir_get_label(mnt_path, mounted_label, sizeof(mounted_label));
     if (rc)

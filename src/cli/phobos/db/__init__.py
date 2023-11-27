@@ -56,7 +56,8 @@ class Migrator:
 
         # { source_version: (target_version, migration_function) }
         self.convert_funcs = {
-            "0": ("1.95", lambda: self.create_schema("1.95")),
+            "0": (ORDERED_SCHEMAS[-1],
+                  lambda: self.create_schema(ORDERED_SCHEMAS[-1])),
             "1.1": ("1.2", self.convert_1_to_2),
             "1.2": ("1.91", self.convert_2_to_3),
             "1.91": ("1.92", self.convert_3_to_4),
@@ -478,6 +479,23 @@ class Migrator:
 
             -- remove outdated functions and indexes
             DROP FUNCTION IF EXISTS extents_mda_idx(jsonb) CASCADE;
+
+            -- new operation_type type with the 'Device mount' value
+            ALTER TYPE operation_type RENAME TO old_operation_type;
+            CREATE TYPE operation_type AS ENUM (
+                'Library scan', 'Library open',
+                'Device lookup', 'Medium lookup',
+                'Device load', 'Device unload',
+                'LTFS mount'
+            );
+
+            -- use new type in logs table
+            ALTER TABLE logs ALTER COLUMN cause
+                SET DATA TYPE operation_type
+                USING cause::text::operation_type;
+
+            -- delete old_operation_type type
+            DROP TYPE old_operation_type;
 
             -- update current schema version
             UPDATE schema_info SET version = '2.0';

@@ -52,6 +52,7 @@ check_PROGRAMS=test_attrs \
                test_lrs_cfg \
                test_lrs_device \
                test_lrs_scheduling \
+               test_ltfs_logs \
                test_mapper \
                test_phobos_admin_medium_locate \
                test_ping \
@@ -145,11 +146,11 @@ test_lrs_scheduling_LDADD=$(LRS_LIB) $(LDM_LIB) $(MOD_LOAD_LIB) $(DSS_LIB) \
                           $(SERIALIZER_LIB) $(CFG_LIB) $(IO_LIB) $(COMMON_LIB)
 test_lrs_scheduling_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
 
-test_scsi_logs_SOURCES=test_scsi_logs.c ../test_setup.c ../test_setup.h
-test_scsi_logs_LDADD=$(LRS_LIB) $(LDM_LIB) $(MOD_LOAD_LIB) $(DSS_LIB) \
+test_ltfs_logs_SOURCES=test_ltfs_logs.c ../test_setup.c ../test_setup.h
+test_ltfs_logs_LDADD=$(LRS_LIB) $(LDM_LIB) $(MOD_LOAD_LIB) $(DSS_LIB) \
                      $(CFG_LIB) $(IO_LIB) $(COMMON_LIB) $(SCSI_LIB) \
                      $(LDM_SCSI_LIB) $(ADMIN_LIB) $(DAEMON_LIB)
-test_scsi_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I$(TO_SRC)/ldm-modules
+test_ltfs_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I$(TO_SRC)/ldm-modules
 
 test_mapper_SOURCES=test_mapper.c
 test_mapper_LDADD=$(STORE_LIB) $(MAPPER_LIB)
@@ -164,6 +165,12 @@ test_phobos_admin_medium_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss
 test_ping_SOURCES=test_ping.c mock_communication.c
 test_ping_LDADD=$(ADMIN_LIB) $(COMMON_LIB) $(DSS_LIB) $(LDM_LIB)
 test_ping_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/admin
+
+test_scsi_logs_SOURCES=test_scsi_logs.c ../test_setup.c ../test_setup.h
+test_scsi_logs_LDADD=$(LRS_LIB) $(LDM_LIB) $(MOD_LOAD_LIB) $(DSS_LIB) \
+                     $(CFG_LIB) $(IO_LIB) $(COMMON_LIB) $(SCSI_LIB) \
+                     $(LDM_SCSI_LIB) $(ADMIN_LIB) $(DAEMON_LIB)
+test_scsi_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I$(TO_SRC)/ldm-modules
 
 # TODO: try to link against the phobos_store library instead of
 # the store_alias object file

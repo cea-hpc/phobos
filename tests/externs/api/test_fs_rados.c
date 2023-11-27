@@ -180,12 +180,14 @@ static void fsr_test_mount(void **state)
     struct fsr_data *test_data = (struct fsr_data *) *state;
     char buf[POOLNAME_SIZE + 1];
     struct ldm_fs_space fs_spc;
+    struct pho_log log;
     int rc;
 
     rc = ldm_fs_format(test_data->fsa, POOLNAME, RADOS_LABEL, &fs_spc);
     assert_int_equal(rc, -rc);
 
-    rc = ldm_fs_mount(test_data->fsa, POOLNAME, POOLNAME, RADOS_LABEL);
+    rc = ldm_fs_mount(test_data->fsa, POOLNAME, POOLNAME, RADOS_LABEL,
+                      &log.message);
     assert_int_equal(rc, -rc);
 
     rc = ldm_fs_mounted(test_data->fsa, POOLNAME, buf, POOLNAME_SIZE + 1);

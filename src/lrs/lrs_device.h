@@ -92,6 +92,15 @@ bool locked_cancel_rwalloc_on_error(struct sub_request *sub_request,
                                     bool *ended);
 
 /**
+ * Build a mount path for the given identifier.
+ *
+ * @param[in] id    Unique drive identified on the host.
+ *
+ * @return The result must be released by the caller using free(3).
+ */
+char *mount_point(const char *id);
+
+/**
  * Load a medium into a drive or return -EBUSY to retry later
  *
  * The loaded medium is registered as dev->ld_dss_media_info. If
@@ -126,6 +135,26 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
              bool release_medium_on_dev_only_failure,
              bool *failure_on_dev, bool *failure_on_medium,
              bool *can_retry, bool free_medium);
+
+/**
+ * Format a medium to the given fs type.
+ *
+ * \param[in]   dev     Device with a loaded medium to format
+ * \param[in]   fsa     Filesystem adapter module
+ * \param[in]   unlock  Put admin status to "unlocked" on format success
+ *
+ * \return              0 on success, negative error code on failure
+ */
+int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock);
+
+/**
+ * Mount the device's loaded medium
+ *
+ * @param[in] dev   Device already containing a loaded medium
+ *
+ * @return 0 on success, -error number on error.
+ */
+int dev_mount(struct lrs_dev *dev);
 
 /**
  * Unload medium from device

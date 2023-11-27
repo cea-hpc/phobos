@@ -8,9 +8,10 @@ CREATE TYPE fs_status AS ENUM ('blank', 'empty', 'used', 'full');
 CREATE TYPE extent_state AS ENUM ('pending','sync','orphan');
 CREATE TYPE lock_type AS ENUM('object', 'device', 'media', 'media_update',
                               'extent');
-CREATE TYPE operation_type AS ENUM('Library scan', 'Library open',
-                                   'Device lookup', 'Medium lookup',
-                                   'Device load', 'Device unload');
+CREATE TYPE operation_type AS ENUM ('Library scan', 'Library open',
+                                    'Device lookup', 'Medium lookup',
+                                    'Device load', 'Device unload',
+                                    'LTFS mount');
 
 -- to extend enums: ALTER TYPE type ADD VALUE 'value'
 

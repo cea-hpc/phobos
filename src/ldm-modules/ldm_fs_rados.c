@@ -34,6 +34,7 @@
 #include "pho_ldm.h"
 #include "pho_module_loader.h"
 
+#include <jansson.h>
 #include <fcntl.h>
 #include <rados/librados.h>
 #include <sys/types.h>
@@ -139,11 +140,13 @@ out:
  * the "poolname" variable is used here.
  */
 static int pho_rados_pool_labelled(const char *dev_path, const char *poolname,
-                                   const char *fs_label)
+                                   const char *fs_label, json_t **message)
 {
     char label_on_pool[PHO_LABEL_MAX_LEN + 1];
     (void) dev_path;
     int rc;
+
+    (void) message;
 
     ENTRY;
 

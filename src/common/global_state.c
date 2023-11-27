@@ -1,6 +1,8 @@
 #include "pho_common.h"
 
 #include <pthread.h>
+#include <string.h>
+#include <sys/stat.h>
 #include <sys/ioctl.h>
 
 struct phobos_global_context *PHO_CONTEXT;
@@ -8,6 +10,12 @@ struct phobos_global_context *PHO_CONTEXT;
 static int do_ioctl(int fd, unsigned long request, void *data)
 {
     return ioctl(fd, request, data);
+}
+
+static void reset_mock_ltfs(void)
+{
+    PHO_CONTEXT->mock_ltfs.mock_mkdir = mkdir;
+    PHO_CONTEXT->mock_ltfs.mock_command_call = command_call;
 }
 
 /* must be called before calling any other phobos function */
@@ -25,6 +33,7 @@ int pho_context_init(void)
     PHO_CONTEXT->log_dev_output = false;
     pthread_mutex_init(&PHO_CONTEXT->config.lock, NULL);
     PHO_CONTEXT->mock_ioctl = do_ioctl;
+    reset_mock_ltfs();
 
     return 0;
 }
