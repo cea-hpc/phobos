@@ -109,7 +109,7 @@ class MigratorTest(unittest.TestCase):
             if process.returncode:
                 print(out_diff.decode('utf-8'))
                 self.fail("DB is different between after a migrate and a new " +
-                     "schema creation")
+                          "schema creation for version " + version)
 
     def test_future_migrations(self):
         """Test migrations between current and future versions"""

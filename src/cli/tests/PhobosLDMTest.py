@@ -149,6 +149,8 @@ class LdmTest(unittest.TestCase):
         self.assertGreaterEqual(len(lib_elts.pop("arm")), 1)
         self.assertEqual(mtx_elts, lib_elts)
 
+        subprocess.call(["mtx", "-f", LIB_TEST_DEV, "unload", "1"])
+
 
 if __name__ == '__main__':
     unittest.main(buffer=True)
