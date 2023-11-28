@@ -35,6 +35,7 @@
 #include <string.h>
 #include <errno.h>
 #include <ctype.h>
+#include <assert.h>
 
 /* Long string, 249 * 'a' */
 #define _249_TIMES_A    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\
@@ -314,69 +315,71 @@ int main(int argc, char **argv)
 {
     test_env_initialize();
 
-    run_test("Test 0: Simple path crafting",
-             test0, NULL, PHO_TEST_SUCCESS);
+    pho_run_test("Test 0: Simple path crafting",
+                 test0, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 1: No key (empty) (INVALID)",
-             test1, NULL, PHO_TEST_FAILURE);
+    pho_run_test("Test 1: No key (empty) (INVALID)",
+                 test1, NULL, PHO_TEST_FAILURE);
 
-    run_test("Test 2: No key (null) (INVALID)",
-             test2, NULL, PHO_TEST_FAILURE);
+    pho_run_test("Test 2: No key (null) (INVALID)",
+                 test2, NULL, PHO_TEST_FAILURE);
 
-    run_test("Test 3: No desc (empty) (INVALID)",
-             test3, NULL, PHO_TEST_FAILURE);
+    pho_run_test("Test 3: No desc (empty) (INVALID)",
+                 test3, NULL, PHO_TEST_FAILURE);
 
-    run_test("Test 4: No desc (null) (INVALID)",
-             test4, NULL, PHO_TEST_FAILURE);
+    pho_run_test("Test 4: No desc (null) (INVALID)",
+                 test4, NULL, PHO_TEST_FAILURE);
 
-    run_test("Test 5: Long key (INVALID)",
-             test5, NULL, PHO_TEST_FAILURE);
+    pho_run_test("Test 5: Long key (INVALID)",
+                 test5, NULL, PHO_TEST_FAILURE);
 
-    run_test("Test 6a: Non-printable chars in desc (beginning)",
-             test6a, NULL, PHO_TEST_SUCCESS);
+    pho_run_test("Test 6a: Non-printable chars in desc (beginning)",
+                 test6a, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 6b: Non-printable chars in desc (middle)",
-             test6b, NULL, PHO_TEST_SUCCESS);
+    pho_run_test("Test 6b: Non-printable chars in desc (middle)",
+                 test6b, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 6c: Non-printable chars in desc (end)",
-             test6c, NULL, PHO_TEST_SUCCESS);
+    pho_run_test("Test 6c: Non-printable chars in desc (end)",
+                 test6c, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 7a: Annoying shell specials chars",
-             test7a, NULL, PHO_TEST_SUCCESS);
+    pho_run_test("Test 7a: Annoying shell specials chars",
+                 test7a, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 7b: clean multiple chars from desc",
-             test7b, NULL, PHO_TEST_SUCCESS);
+    pho_run_test("Test 7b: clean multiple chars from desc",
+                 test7b, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 7c: desc ending with '.' separator",
-             test7c, NULL, PHO_TEST_SUCCESS);
+    pho_run_test("Test 7c: desc ending with '.' separator",
+                 test7c, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 11: Long (truncated) desc",
-             test11, NULL, PHO_TEST_SUCCESS);
+    pho_run_test("Test 11: Long (truncated) desc",
+                 test11, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 13a: make sure fields do not collide unexpectedly (hash1)",
-             test13, pho_mapper_hash1, PHO_TEST_SUCCESS);
-    run_test("Test 13b: make sure fields do not collide unexpectedly (path)",
-             test13, pho_mapper_clean_path, PHO_TEST_SUCCESS);
+    pho_run_test("Test 13a: make sure fields do not collide "
+                 "unexpectedly (hash1)", test13, pho_mapper_hash1,
+                 PHO_TEST_SUCCESS);
+    pho_run_test("Test 13b: make sure fields do not collide "
+                 "unexpectedly (path)", test13, pho_mapper_clean_path,
+                 PHO_TEST_SUCCESS);
 
-    run_test("Test 14a: pass in NULL/0 destination buffer (hash1)",
-             test14, pho_mapper_hash1, PHO_TEST_FAILURE);
-    run_test("Test 14b: pass in NULL/0 destination buffer (path)",
-             test14, pho_mapper_clean_path, PHO_TEST_FAILURE);
+    pho_run_test("Test 14a: pass in NULL/0 destination buffer (hash1)",
+                 test14, pho_mapper_hash1, PHO_TEST_FAILURE);
+    pho_run_test("Test 14b: pass in NULL/0 destination buffer (path)",
+                 test14, pho_mapper_clean_path, PHO_TEST_FAILURE);
 
-    run_test("Test 15a: pass in NULL/<length> destination buffer (hash1)",
-             test15, pho_mapper_hash1, PHO_TEST_FAILURE);
-    run_test("Test 15b: pass in NULL/<length> destination buffer (path)",
-             test15, pho_mapper_clean_path, PHO_TEST_FAILURE);
+    pho_run_test("Test 15a: pass in NULL/<length> destination buffer (hash1)",
+                 test15, pho_mapper_hash1, PHO_TEST_FAILURE);
+    pho_run_test("Test 15b: pass in NULL/<length> destination buffer (path)",
+                 test15, pho_mapper_clean_path, PHO_TEST_FAILURE);
 
-    run_test("Test 16a: pass in small destination buffer (hash1)",
-             test16, pho_mapper_hash1, PHO_TEST_FAILURE);
-    run_test("Test 16b: pass in small destination buffer (path)",
-             test16, pho_mapper_clean_path, PHO_TEST_FAILURE);
+    pho_run_test("Test 16a: pass in small destination buffer (hash1)",
+                 test16, pho_mapper_hash1, PHO_TEST_FAILURE);
+    pho_run_test("Test 16b: pass in small destination buffer (path)",
+                 test16, pho_mapper_clean_path, PHO_TEST_FAILURE);
 
-    run_test("Test 17a: corner cases around NAME_MAX (hash1)",
-             test17, pho_mapper_hash1, PHO_TEST_SUCCESS);
-    run_test("Test 17b: corner cases around NAME_MAX (path)",
-             test17, pho_mapper_clean_path, PHO_TEST_SUCCESS);
+    pho_run_test("Test 17a: corner cases around NAME_MAX (hash1)",
+                 test17, pho_mapper_hash1, PHO_TEST_SUCCESS);
+    pho_run_test("Test 17b: corner cases around NAME_MAX (path)",
+                 test17, pho_mapper_clean_path, PHO_TEST_SUCCESS);
 
 
     pho_info("MAPPER: All tests succeeded");

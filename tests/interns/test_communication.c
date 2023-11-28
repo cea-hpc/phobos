@@ -30,6 +30,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <unistd.h>
 
 #include "pho_test_utils.h"
 #include "pho_comm.h"
@@ -452,49 +453,49 @@ int main(int argc, char **argv)
     addr_type.addr.af_unix.path = "/tmp/test_socklrs";
     addr_type.server_type = PHO_COMM_UNIX_SERVER;
     addr_type.client_type = PHO_COMM_UNIX_CLIENT;
-    run_test("Test: good AF_UNIX socket opening", test_open, &addr_type,
-             PHO_TEST_SUCCESS);
+    pho_run_test("Test: good AF_UNIX socket opening", test_open, &addr_type,
+                 PHO_TEST_SUCCESS);
     addr_type.addr.tcp.hostname = "localhost";
     addr_type.addr.tcp.port = TCP_PORT_TEST;
     addr_type.server_type = PHO_COMM_TCP_SERVER;
     addr_type.client_type = PHO_COMM_TCP_CLIENT;
-    run_test("Test: good AF_INET socket opening", test_open, &addr_type,
-             PHO_TEST_SUCCESS);
-    run_test("Test: socket opening (socket already exists)", test_open_ex,
-             "/tmp/test_socklrs", PHO_TEST_SUCCESS);
+    pho_run_test("Test: good AF_INET socket opening", test_open, &addr_type,
+                 PHO_TEST_SUCCESS);
+    pho_run_test("Test: socket opening (socket already exists)", test_open_ex,
+                 "/tmp/test_socklrs", PHO_TEST_SUCCESS);
     addr_type.addr.af_unix.path = NULL;
     addr_type.server_type = PHO_COMM_UNIX_SERVER;
     addr_type.client_type = PHO_COMM_UNIX_CLIENT;
-    run_test("Test: offline socket AF_UNIX addr NULL",
-             test_open_offline_addr_null, &addr_type, PHO_TEST_SUCCESS);
-    run_test("Test: offline socket path NULL", test_open_offline, &addr_type,
-             PHO_TEST_SUCCESS);
+    pho_run_test("Test: offline socket AF_UNIX addr NULL",
+                 test_open_offline_addr_null, &addr_type, PHO_TEST_SUCCESS);
+    pho_run_test("Test: offline socket path NULL", test_open_offline,
+                 &addr_type, PHO_TEST_SUCCESS);
     addr_type.addr.tcp.hostname = NULL;
     addr_type.addr.tcp.port = TCP_PORT_TEST;
     addr_type.server_type = PHO_COMM_TCP_SERVER;
     addr_type.client_type = PHO_COMM_TCP_CLIENT;
-    run_test("Test: offline socket AF_INET addr NULL",
-             test_open_offline_addr_null, &addr_type, PHO_TEST_SUCCESS);
-    run_test("Test: offline socket hostname NULL", test_open_offline,
-             &addr_type, PHO_TEST_SUCCESS);
+    pho_run_test("Test: offline socket AF_INET addr NULL",
+                 test_open_offline_addr_null, &addr_type, PHO_TEST_SUCCESS);
+    pho_run_test("Test: offline socket hostname NULL", test_open_offline,
+                 &addr_type, PHO_TEST_SUCCESS);
 
     addr_type.addr.af_unix.path = "/tmp/test_socklrs";
     addr_type.server_type = PHO_COMM_UNIX_SERVER;
     addr_type.client_type = PHO_COMM_UNIX_CLIENT;
-    run_test("Test: simple sending/receiving AF_UNIX", test_sendrecv_simple,
-             &addr_type, PHO_TEST_SUCCESS);
-    run_test("Test: multiple sending/receiving AF_UNIX", test_sendrecv_multiple,
-             &addr_type, PHO_TEST_SUCCESS);
+    pho_run_test("Test: simple sending/receiving AF_UNIX", test_sendrecv_simple,
+                 &addr_type, PHO_TEST_SUCCESS);
+    pho_run_test("Test: multiple sending/receiving AF_UNIX",
+                 test_sendrecv_multiple, &addr_type, PHO_TEST_SUCCESS);
     addr_type.addr.tcp.hostname = "localhost";
     addr_type.addr.tcp.port = TCP_PORT_TEST;
     addr_type.server_type = PHO_COMM_TCP_SERVER;
     addr_type.client_type = PHO_COMM_TCP_CLIENT;
-    run_test("Test: simple sending/receiving AF_INET", test_sendrecv_simple,
-             &addr_type, PHO_TEST_SUCCESS);
-    run_test("Test: multiple sending/receiving AF_INET", test_sendrecv_multiple,
-             &addr_type, PHO_TEST_SUCCESS);
-    run_test("Test: AF_INET bad hostname or port", test_bad_hostname_port, NULL,
-             PHO_TEST_SUCCESS);
+    pho_run_test("Test: simple sending/receiving AF_INET", test_sendrecv_simple,
+                 &addr_type, PHO_TEST_SUCCESS);
+    pho_run_test("Test: multiple sending/receiving AF_INET",
+                 test_sendrecv_multiple, &addr_type, PHO_TEST_SUCCESS);
+    pho_run_test("Test: AF_INET bad hostname or port", test_bad_hostname_port,
+                 NULL, PHO_TEST_SUCCESS);
 
     exit(EXIT_SUCCESS);
 }

@@ -26,14 +26,11 @@
 #ifndef _PHO_TEST_UTILS_H
 #define _PHO_TEST_UTILS_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <assert.h>
+#include "pho_dss.h"
+#include "pho_types.h"
 
-#include "pho_common.h"
-#include "pho_cfg.h"
+struct media_info;
+struct lrs_dev;
 
 typedef int (*pho_unit_test_t)(void *);
 
@@ -42,37 +39,22 @@ enum pho_test_result {
     PHO_TEST_FAILURE,
 };
 
-static inline void run_test(const char *descr, pho_unit_test_t test, void *hint,
-                            enum pho_test_result xres)
-{
-    int rc;
+void pho_run_test(const char *descr, pho_unit_test_t test, void *hint,
+                  enum pho_test_result xres);
 
-    assert(descr != NULL);
-    assert(test != NULL);
+void test_env_initialize(void);
 
-    pho_info("Starting %s...", descr);
+void get_serial_from_path(char *path, char **serial);
 
-    rc = test(hint);
-    if ((xres == PHO_TEST_SUCCESS) != (rc == 0)) {
-        pho_error(rc, "%s FAILED", descr);
-        exit(EXIT_FAILURE);
-    }
+void create_device(struct lrs_dev *dev, char *path, char *model,
+                   struct dss_handle *dss);
 
-    pho_info("%s OK", descr);
-}
+void cleanup_device(struct lrs_dev *dev);
 
-static inline void test_env_initialize(void)
-{
-    pho_context_init();
-    atexit(pho_context_fini);
+void medium_set_tags(struct media_info *medium, char **tags, size_t n_tags);
 
-    pho_cfg_init_local(NULL);
-    atexit(pho_cfg_local_fini);
+void create_medium(struct media_info *medium, const char *name);
 
-    if (getenv("DEBUG"))
-        pho_log_level_set(PHO_LOG_DEBUG);
-    else
-        pho_log_level_set(PHO_LOG_VERB);
-}
+char *get_mount_path(struct lrs_dev *dev);
 
 #endif

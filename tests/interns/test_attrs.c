@@ -195,29 +195,29 @@ int main(int argc, char **argv)
 
     test_env_initialize();
 
-    run_test("Test 1a: Set and get key values",
+    pho_run_test("Test 1a: Set and get key values",
              test1a, &attrs, PHO_TEST_SUCCESS);
 
-    run_test("Test 1b: Overwrite attrs",
+    pho_run_test("Test 1b: Overwrite attrs",
              test1b, &attrs, PHO_TEST_SUCCESS);
 
-    run_test("Test 1c: List attrs",
+    pho_run_test("Test 1c: List attrs",
              test1c, &attrs, PHO_TEST_SUCCESS);
 
-    run_test("Test 1d: Dump attrs (JSON)",
+    pho_run_test("Test 1d: Dump attrs (JSON)",
              test1d, &attrs, PHO_TEST_SUCCESS);
 
-    run_test("Test 1e: Get missing attribute",
+    pho_run_test("Test 1e: Get missing attribute",
              test1e, NULL, PHO_TEST_FAILURE);
 
-    run_test("Test 1f: Release attrs struct",
+    pho_run_test("Test 1f: Release attrs struct",
              test1f, &attrs, PHO_TEST_SUCCESS);
 
-    run_test("Test 2: Get attribute from NULL struct",
+    pho_run_test("Test 2: Get attribute from NULL struct",
              testget, NULL, PHO_TEST_FAILURE);
 
     memset(&attrs, 0, sizeof(attrs));
-    run_test("Test 3: Get attribute from zero-ed struct",
+    pho_run_test("Test 3: Get attribute from zero-ed struct",
              testget, &attrs, PHO_TEST_FAILURE);
 
     pho_info("ATTRS: All tests succeeded");

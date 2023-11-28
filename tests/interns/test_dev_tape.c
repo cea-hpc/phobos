@@ -37,6 +37,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <net/if.h>
+#include <unistd.h>
 
 #define TEST_MAX_DRIVES 32
 
@@ -160,7 +161,7 @@ int main(int argc, char **argv)
         snprintf(dev_name, sizeof(dev_name) - 1, "/dev/st%d", i);
         snprintf(test_name, sizeof(test_name) - 1,
                  "Test %da: get serial for drive %s", i, dev_name);
-        run_test(test_name, test_unit, dev_name, PHO_TEST_SUCCESS);
+        pho_run_test(test_name, test_unit, dev_name, PHO_TEST_SUCCESS);
     }
 
     for (i = 0; i < TEST_MAX_DRIVES; i++) {
@@ -169,7 +170,8 @@ int main(int argc, char **argv)
         snprintf(dev_name, sizeof(dev_name) - 1, "/dev/st%d", i);
         snprintf(test_name, sizeof(test_name) - 1,
                  "Test %dc: match name/serial for drive %s", i, dev_name);
-        run_test(test_name, test_name_serial_match, dev_name, PHO_TEST_SUCCESS);
+        pho_run_test(test_name, test_name_serial_match, dev_name,
+                     PHO_TEST_SUCCESS);
     }
 
     pho_info("LINTAPE MAPPER: All tests succeeded");

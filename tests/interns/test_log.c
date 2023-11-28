@@ -148,13 +148,13 @@ int main(int ac, char **av)
 {
     test_env_initialize();
 
-    run_test("Test 1: exercise default callback on all log levels",
+    pho_run_test("Test 1: exercise default callback on all log levels",
              test1, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 2: register custom callback",
+    pho_run_test("Test 2: register custom callback",
              test2, NULL, PHO_TEST_SUCCESS);
 
-    run_test("Test 3: emitting logs should not alter errno",
+    pho_run_test("Test 3: emitting logs should not alter errno",
              test3, NULL, PHO_TEST_SUCCESS);
 
     pho_info("MAPPER: All tests succeeded\n");

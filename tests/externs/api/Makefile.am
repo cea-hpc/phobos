@@ -21,6 +21,10 @@ SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 IO_LIB=$(TO_SRC)/io/libpho_io.la
 
+TESTS_LIB_DEPS=$(LRS_LIB) $(LDM_LIB) $(IO_LIB) $(DSS_LIB) $(SERIALIZER_LIB) \
+               $(CFG_LIB) $(COMMON_LIB)
+TESTS_LIB=../../libpho_test_utils.la
+
 if VALGRIND_ENABLED
 @VALGRIND_CHECK_RULES@
 VALGRIND_SUPPRESSIONS_FILES=$(TO_TEST)/supp-files/valgrind.supp $(TO_TEST)/supp-files/glib.supp
@@ -63,27 +67,27 @@ endif
 TESTS=$(check_SCRIPTS)
 
 test_bad_comm_SOURCES=test_bad_comm.c
-test_bad_comm_LDADD=$(DSS_LIB) $(CFG_LIB) $(COMMON_LIB) $(COMMUNICATION_LIB) \
-                    $(SERIALIZER_LIB)
+test_bad_comm_LDADD=$(COMMUNICATION_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_bad_comm_CFLAGS=-I$(TO_TEST)
 
 test_concurrency_SOURCES=test_concurrency.c
 test_concurrency_LDADD=$(STORE_LIB)
 
 test_delete_SOURCES=test_delete.c
-test_delete_LDADD=$(STORE_LIB)
+test_delete_LDADD=$(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_delete_CFLAGS=-I$(TO_TEST)
 
-test_dss_SOURCES=test_dss.c ../../test_setup.c
-test_dss_LDADD=$(ADMIN_LIB) $(DSS_LIB) $(CFG_LIB) $(COMMON_LIB)
+test_dss_SOURCES=test_dss.c
+test_dss_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_dss_CFLAGS=-I$(TO_TEST)
 
-test_locate_SOURCES=test_locate.c ../../test_setup.c
-test_locate_LDADD=$(STORE_LIB) $(ADMIN_LIB) $(DSS_LIB) $(LAYOUT_LIB)
+test_locate_SOURCES=test_locate.c
+test_locate_LDADD=$(STORE_LIB) $(ADMIN_LIB) $(LAYOUT_LIB) \
+                  $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I$(TO_TEST)
 
-test_lock_clean_SOURCES=test_lock_clean.c ../../test_setup.c
-test_lock_clean_LDADD=$(ADMIN_LIB) $(STORE_LIB)
+test_lock_clean_SOURCES=test_lock_clean.c
+test_lock_clean_LDADD=$(ADMIN_LIB) $(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_lock_clean_CFLAGS=-I$(TO_TEST)
 
 if RADOS_ENABLED
@@ -100,24 +104,24 @@ test_fs_rados_LDADD=$(ADMIN_LIB) $(LDM_LIB) -lrados
 test_fs_rados_CFLAGS=-I$(TO_TEST)
 endif
 
-test_raid1_split_locate_SOURCES=test_raid1_split_locate.c ../../test_setup.c
-test_raid1_split_locate_LDADD=$(ADMIN_LIB) $(CFG_LIB) $(COMMON_LIB) $(DSS_LIB) \
-                              $(RAID1_LIB)
+test_raid1_split_locate_SOURCES=test_raid1_split_locate.c
+test_raid1_split_locate_LDADD=$(ADMIN_LIB) $(RAID1_LIB) \
+                              $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_raid1_split_locate_CFLAGS=-I$(TO_TEST)
 
 test_scsi_SOURCES=test_scsi.c
-test_scsi_LDADD=$(LDM_LIB) $(CFG_LIB) $(COMMON_LIB) $(SCSI_LIB) $(ADMIN_LIB) \
-                $(MOD_LOAD_LIB)
+test_scsi_LDADD=$(SCSI_LIB) $(ADMIN_LIB) $(MOD_LOAD_LIB) \
+                $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_scsi_CFLAGS=-I$(TO_TEST)
 
 test_store_SOURCES=test_store.c
-test_store_LDADD=$(STORE_LIB)
+test_store_LDADD=$(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_store_CFLAGS=-I$(TO_TEST)
 
 test_store_retry_SOURCES=test_store_retry.c
-test_store_retry_LDADD=$(ADMIN_LIB) $(STORE_LIB)
+test_store_retry_LDADD=$(ADMIN_LIB) $(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_store_retry_CFLAGS=-I$(TO_TEST)
 
 test_undelete_SOURCES=test_undelete.c
-test_undelete_LDADD=$(STORE_LIB)
+test_undelete_LDADD=$(STORE_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_undelete_CFLAGS=-I$(TO_TEST)

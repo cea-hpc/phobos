@@ -649,19 +649,20 @@ int main(int argc, char **argv)
     addr.af_unix.path = "/tmp/socklrs";
     assert(!pho_comm_open(&ci, &addr, PHO_COMM_UNIX_CLIENT));
 
-    run_test("Test: bad ping", test_bad_ping, &ci, PHO_TEST_SUCCESS);
-    run_test("Test: bad put", test_bad_put, &ci, PHO_TEST_SUCCESS);
-    run_test("Test: bad mput", test_bad_mput, &ci, PHO_TEST_SUCCESS);
+    pho_run_test("Test: bad ping", test_bad_ping, &ci, PHO_TEST_SUCCESS);
+    pho_run_test("Test: bad put", test_bad_put, &ci, PHO_TEST_SUCCESS);
+    pho_run_test("Test: bad mput", test_bad_mput, &ci, PHO_TEST_SUCCESS);
 
-    run_test("Test: bad get", test_bad_get, &ci, PHO_TEST_SUCCESS);
-    run_test("Test: bad mget", test_bad_mget, &ci, PHO_TEST_SUCCESS);
-    run_test("Test: bad release", test_bad_release, &ci, PHO_TEST_SUCCESS);
-    run_test("Test: bad format", test_bad_format, &ci, PHO_TEST_SUCCESS);
+    pho_run_test("Test: bad get", test_bad_get, &ci, PHO_TEST_SUCCESS);
+    pho_run_test("Test: bad mget", test_bad_mget, &ci, PHO_TEST_SUCCESS);
+    pho_run_test("Test: bad release", test_bad_release, &ci, PHO_TEST_SUCCESS);
+    pho_run_test("Test: bad format", test_bad_format, &ci, PHO_TEST_SUCCESS);
 
-    run_test("Test: bad notify", test_bad_notify, &ci, PHO_TEST_SUCCESS);
+    pho_run_test("Test: bad notify", test_bad_notify, &ci, PHO_TEST_SUCCESS);
     /* run last as the state of the device used is set to failed at the end */
-    run_test("Test: put I/O error", test_put_io_error, &ci, PHO_TEST_SUCCESS);
-    run_test("Test: bad config", test_bad_configure, &ci, PHO_TEST_SUCCESS);
+    pho_run_test("Test: put I/O error", test_put_io_error, &ci,
+                 PHO_TEST_SUCCESS);
+    pho_run_test("Test: bad config", test_bad_configure, &ci, PHO_TEST_SUCCESS);
 
     pho_comm_close(&ci);
 }

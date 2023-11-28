@@ -340,8 +340,10 @@ int main(int argc, char **argv)
     test_env_initialize();
 
     /* tests of retry loop */
-    run_test("Test1: retry loop with success", test1, NULL, PHO_TEST_SUCCESS);
-    run_test("Test2: retry loop with failure", test2, NULL, PHO_TEST_SUCCESS);
+    pho_run_test("Test1: retry loop with success", test1, NULL,
+                 PHO_TEST_SUCCESS);
+    pho_run_test("Test2: retry loop with failure", test2, NULL,
+                 PHO_TEST_SUCCESS);
 
     fd = open("/dev/changer", O_RDWR | O_NONBLOCK);
     if (fd < 0) {

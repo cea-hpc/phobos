@@ -177,33 +177,34 @@ int main(int argc, char **argv)
     test_env_initialize();
 
     /* test commands */
-    run_test("Test1: command calls + output callback", test_cmd,
-             "cat /etc/passwd", PHO_TEST_SUCCESS);
-    run_test("Test2: failing command", test_cmd,
-             "cat /foo/bar", PHO_TEST_FAILURE);
+    pho_run_test("Test1: command calls + output callback", test_cmd,
+                 "cat /etc/passwd", PHO_TEST_SUCCESS);
+    pho_run_test("Test2: failing command", test_cmd,
+                 "cat /foo/bar", PHO_TEST_FAILURE);
 
     /* test str2int64 */
-    run_test("Test3a: str2int64 positive val", test_convert, "32",
-             PHO_TEST_SUCCESS);
-    run_test("Test3b: str2int64 negative val", test_convert, "-1",
-             PHO_TEST_SUCCESS);
-    run_test("Test3c: str2int64 positive 64", test_convert, "58000000000",
-             PHO_TEST_SUCCESS);
-    run_test("Test3d: str2int64 negative 64", test_convert, "-63000000000",
-             PHO_TEST_SUCCESS);
-    run_test("Test3e: str2int64 value over 2^64", test_convert,
-             "90000000000000000000", PHO_TEST_FAILURE);
-    run_test("Test3e: str2int64 value below -2^64", test_convert,
-             "-90000000000000000000", PHO_TEST_FAILURE);
-    run_test("Test3f: str2int64 value with prefix", test_convert, "dqs2167",
-             PHO_TEST_FAILURE);
-    run_test("Test3g: str2int64 value with suffix", test_convert, "2167s",
-             PHO_TEST_FAILURE);
+    pho_run_test("Test3a: str2int64 positive val", test_convert, "32",
+                 PHO_TEST_SUCCESS);
+    pho_run_test("Test3b: str2int64 negative val", test_convert, "-1",
+                 PHO_TEST_SUCCESS);
+    pho_run_test("Test3c: str2int64 positive 64", test_convert, "58000000000",
+                 PHO_TEST_SUCCESS);
+    pho_run_test("Test3d: str2int64 negative 64", test_convert, "-63000000000",
+                 PHO_TEST_SUCCESS);
+    pho_run_test("Test3e: str2int64 value over 2^64", test_convert,
+                 "90000000000000000000", PHO_TEST_FAILURE);
+    pho_run_test("Test3e: str2int64 value below -2^64", test_convert,
+                 "-90000000000000000000", PHO_TEST_FAILURE);
+    pho_run_test("Test3f: str2int64 value with prefix", test_convert, "dqs2167",
+                 PHO_TEST_FAILURE);
+    pho_run_test("Test3g: str2int64 value with suffix", test_convert, "2167s",
+                 PHO_TEST_FAILURE);
 
     /* test phobos custom iterators over GHashTable */
-    run_test("Test4: traverse ghashtable", test_iter, NULL, PHO_TEST_SUCCESS);
-    run_test("Test4: error stops ghashtable traversal", test_iter_err, NULL,
-             PHO_TEST_SUCCESS);
+    pho_run_test("Test4: traverse ghashtable", test_iter, NULL,
+                 PHO_TEST_SUCCESS);
+    pho_run_test("Test4: error stops ghashtable traversal", test_iter_err, NULL,
+                 PHO_TEST_SUCCESS);
 
     fprintf(stderr, "test_common: all tests successful\n");
     exit(EXIT_SUCCESS);

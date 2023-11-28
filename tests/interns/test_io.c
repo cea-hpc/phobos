@@ -280,15 +280,15 @@ int main(int argc, char **argv)
 {
     test_env_initialize();
 
-    run_test("Posix open, write and close",
+    pho_run_test("Posix open, write and close",
              test_posix_open_write_close, NULL, PHO_TEST_SUCCESS);
     /**
      * TO DO
-    run_test("Posix open to get and close",
+    pho_run_test("Posix open to get and close",
              test_posix_open_to_get_close, NULL, PHO_TEST_SUCCESS);
-    run_test("Posix open to put only metadata",
+    pho_run_test("Posix open to put only metadata",
              test_posix_open_to_put_md, NULL, PHO_TEST_SUCCESS);
-    run_test("Posix open to get only metadata",
+    pho_run_test("Posix open to get only metadata",
              test_posix_open_to_get_md, NULL, PHO_TEST_SUCCESS);
     */
 

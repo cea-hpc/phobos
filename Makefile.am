@@ -1,7 +1,7 @@
 ACLOCAL_AMFLAGS = -I autotools/m4
 
-SUBDIRS=. src tests/externs/api tests/externs/cli tests/interns tests/prod \
-        tape_library_certification
+SUBDIRS=. src tests tests/externs/api tests/externs/cli tests/interns \
+        tests/prod tape_library_certification
 
 rpm_dir=`pwd`/rpms
 

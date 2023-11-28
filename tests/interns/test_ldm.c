@@ -83,11 +83,11 @@ int main(int argc, char **argv)
 {
     test_env_initialize();
 
-    run_test("test mnttab", test_mnttab, NULL, PHO_TEST_SUCCESS);
+    pho_run_test("test mnttab", test_mnttab, NULL, PHO_TEST_SUCCESS);
 
-    run_test("test df (direct call)", test_df_0, NULL, PHO_TEST_SUCCESS);
-    run_test("test df (via fs_adapter)", test_df_1, NULL, PHO_TEST_SUCCESS);
-    run_test("test df (NULL path)", test_df_2, NULL, PHO_TEST_FAILURE);
+    pho_run_test("test df (direct call)", test_df_0, NULL, PHO_TEST_SUCCESS);
+    pho_run_test("test df (via fs_adapter)", test_df_1, NULL, PHO_TEST_SUCCESS);
+    pho_run_test("test df (NULL path)", test_df_2, NULL, PHO_TEST_FAILURE);
 
     pho_info("ldm_common: All tests succeeded");
     exit(EXIT_SUCCESS);

@@ -255,9 +255,9 @@ int main(int argc, char **argv)
 
     test_env_initialize();
 
-    run_test("Test 1: get variables before anything is set",
+    pho_run_test("Test 1: get variables before anything is set",
              test, test_env_items, PHO_TEST_FAILURE);
-    run_test("Test 2: get variables before anything is set",
+    pho_run_test("Test 2: get variables before anything is set",
              test, test_file_items, PHO_TEST_FAILURE);
 
     if (test_cfg_lvl(&test_env_items[1], PHO_CFG_LEVEL_PROCESS)) {
@@ -284,7 +284,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    run_test("Test 3: get variables from env", test, test_env_items,
+    pho_run_test("Test 3: get variables from env", test, test_env_items,
              PHO_TEST_SUCCESS);
 
     if (!test_cfg_lvl(&test_env_items[1], PHO_CFG_LEVEL_PROCESS)) {
@@ -293,7 +293,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    run_test("Test 4: get variables from config file (before init)", test,
+    pho_run_test("Test 4: get variables from config file (before init)", test,
              test_file_items, PHO_TEST_FAILURE);
 
     test_bin = strdup(argv[0]);
@@ -302,22 +302,22 @@ int main(int argc, char **argv)
     /* try with bad cfg first */
     if (asprintf(&test_file, "%s/bad.cfg", test_dir) == -1)
         exit(EXIT_FAILURE);
-    run_test("Test 5: test config parsing (bad syntax)",
+    pho_run_test("Test 5: test config parsing (bad syntax)",
              (pho_unit_test_t)pho_cfg_init_local, test_file, PHO_TEST_FAILURE);
     free(test_file);
 
     /* now the right cfg */
     if (asprintf(&test_file, "%s/test.cfg", test_dir) == -1)
         exit(EXIT_FAILURE);
-    run_test("Test 6: test config parsing (right syntax)",
+    pho_run_test("Test 6: test config parsing (right syntax)",
              (pho_unit_test_t)pho_cfg_init_local, test_file, PHO_TEST_SUCCESS);
 
     free(test_file);
     free(test_bin);
 
-    run_test("Test 7: get variables from config file (after init)",
+    pho_run_test("Test 7: get variables from config file (after init)",
              test, test_file_items, PHO_TEST_SUCCESS);
-    run_test("Test 8: get variables from env (after loading file)",
+    pho_run_test("Test 8: get variables from env (after loading file)",
              test, test_env_items, PHO_TEST_SUCCESS);
 
     if (!test_cfg_lvl(&test_file_items[1], PHO_CFG_LEVEL_LOCAL)) {
@@ -326,79 +326,79 @@ int main(int argc, char **argv)
     }
 
     /* test pho_cfg_get_int() */
-    run_test("Test 9: get numeric param", test_get_int,
+    pho_run_test("Test 9: get numeric param", test_get_int,
              (void *)PHO_CFG_TEST_param0, PHO_TEST_SUCCESS);
 
     if (setenv("PHOBOS_TEST_param1", "120", 1)) {
         pho_error(errno, "setenv failed");
         exit(EXIT_FAILURE);
     }
-    run_test("Test 10: get numeric param != 0", test_get_int,
+    pho_run_test("Test 10: get numeric param != 0", test_get_int,
              (void *)PHO_CFG_TEST_param1, PHO_TEST_SUCCESS);
 
     if (setenv("PHOBOS_TEST_param1", "-210", 1)) {
         pho_error(errno, "setenv failed");
         exit(EXIT_FAILURE);
     }
-    run_test("Test 11: get numeric param < 0", test_get_int,
+    pho_run_test("Test 11: get numeric param < 0", test_get_int,
              (void *)PHO_CFG_TEST_param1, PHO_TEST_SUCCESS);
 
     if (setenv("PHOBOS_TEST_param1", "5000000000", 1)) {
         pho_error(errno, "setenv failed");
         exit(EXIT_FAILURE);
     }
-    run_test("Test 12: get numeric param over int size", test_get_int,
+    pho_run_test("Test 12: get numeric param over int size", test_get_int,
              (void *)PHO_CFG_TEST_param1, PHO_TEST_FAILURE);
 
-    run_test("Test 13: get non-numeric param", test_get_int,
+    pho_run_test("Test 13: get non-numeric param", test_get_int,
              (void *)PHO_CFG_TEST_strparam, PHO_TEST_FAILURE);
 
     td.input = "param1";
     td.expected = expected_items;
     td.n = 1;
-    run_test("Test 14: get CSV param", test_get_csv,
+    pho_run_test("Test 14: get CSV param", test_get_csv,
              (void *)&td, PHO_TEST_SUCCESS);
 
     td.input = "param1,";
     td.expected = expected_items;
     td.n = 1;
-    run_test("Test 14: get CSV param", test_get_csv,
+    pho_run_test("Test 14: get CSV param", test_get_csv,
              (void *)&td, PHO_TEST_SUCCESS);
 
     td.input = "param1,param2";
     td.expected = expected_items;
     td.n = 2;
-    run_test("Test 14: get CSV param", test_get_csv,
+    pho_run_test("Test 14: get CSV param", test_get_csv,
              (void *)&td, PHO_TEST_SUCCESS);
 
     td.input = "param1,param2,";
     td.expected = expected_items;
     td.n = 2;
-    run_test("Test 14: get CSV param", test_get_csv,
+    pho_run_test("Test 14: get CSV param", test_get_csv,
              (void *)&td, PHO_TEST_SUCCESS);
 
     td.input = "param1,param2,param3";
     td.expected = expected_items;
     td.n = 3;
-    run_test("Test 14: get CSV param", test_get_csv,
+    pho_run_test("Test 14: get CSV param", test_get_csv,
              (void *)&td, PHO_TEST_SUCCESS);
 
     td.input = "param1,param2,param3,";
     td.expected = expected_items;
     td.n = 3;
-    run_test("Test 14: get CSV param", test_get_csv,
+    pho_run_test("Test 14: get CSV param", test_get_csv,
              (void *)&td, PHO_TEST_SUCCESS);
 
     td.input = "";
     td.expected = expected_items;
     td.n = 0;
-    run_test("Test 14: get CSV param", test_get_csv,
+    pho_run_test("Test 14: get CSV param", test_get_csv,
              (void *)&td, PHO_TEST_SUCCESS);
 
     td.input = ",";
     td.expected = expected_items;
     td.n = 0;
-    run_test("Test 14: get CSV param", test_get_csv,
+    pho_run_test("Test 14: get CSV param", test_get_csv,
              (void *)&td, PHO_TEST_SUCCESS);
 
     pho_info("CFG: All tests succeeded");

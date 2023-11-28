@@ -139,6 +139,7 @@ AC_CONFIG_FILES([Makefile
          src/cli/Makefile
          src/tlc/Makefile
          src/daemon/Makefile
+         tests/Makefile
          tests/interns/Makefile
          tests/externs/api/Makefile
          tests/externs/cli/Makefile
