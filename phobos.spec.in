@@ -168,6 +168,7 @@ echo "%{_libdir}/phobos" > %{buildroot}/%{_sysconfdir}/ld.so.conf.d/phobos.conf
 %{_includedir}/pho_comm.h
 %{_includedir}/pho_common.h
 %{_includedir}/pho_dss.h
+%{_includedir}/pho_ldm.h
 %{_includedir}/pho_types.h
 %{_includedir}/phobos_store.h
 %{_includedir}/phobos_admin.h

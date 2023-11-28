@@ -10,6 +10,29 @@
 
 set -xe
 
+function check_c_api()
+{
+    if command -v dnf; then
+        cmd=dnf
+    else
+        cmd=yum
+    fi
+
+    cd rpms/RPMS/x86_64
+    cat <<EOF > test_c_api.c
+#include <phobos_store.h>
+#include <phobos_admin.h>
+EOF
+
+    sudo $cmd -y install phobos-devel*
+    # Just compile, do not link. We just check the coherency between the headers
+    # and the specfile
+    gcc -c -o test_c_api.o test_c_api.c `pkg-config --cflags glib-2.0`
+    rm test_c_api.*
+    sudo $cmd -y remove phobos phobos-devel
+    cd -
+}
+
 #set phobos root as cwd from phobos/ci directory
 cur_dir=$(dirname $(readlink -m $0))
 cd "$cur_dir"/..
@@ -20,6 +43,7 @@ cd "$cur_dir"/..
 if [ "$1" != "check-valgrind" ]; then
     ./configure $1
     make rpm
+    check_c_api
     make clean || cat src/tests/test-suite.log
 else
     ./configure $2
