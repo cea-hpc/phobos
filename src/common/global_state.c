@@ -12,12 +12,6 @@ static int do_ioctl(int fd, unsigned long request, void *data)
     return ioctl(fd, request, data);
 }
 
-static void reset_mock_ltfs(void)
-{
-    PHO_CONTEXT->mock_ltfs.mock_mkdir = mkdir;
-    PHO_CONTEXT->mock_ltfs.mock_command_call = command_call;
-}
-
 /* must be called before calling any other phobos function */
 int pho_context_init(void)
 {
@@ -33,7 +27,7 @@ int pho_context_init(void)
     PHO_CONTEXT->log_dev_output = false;
     pthread_mutex_init(&PHO_CONTEXT->config.lock, NULL);
     PHO_CONTEXT->mock_ioctl = do_ioctl;
-    reset_mock_ltfs();
+    pho_context_reset_mock_ltfs_functions();
 
     return 0;
 }
@@ -58,4 +52,10 @@ void phobos_module_context_set(struct phobos_global_context *context)
 void pho_context_reset_scsi_ioctl(void)
 {
     PHO_CONTEXT->mock_ioctl = &do_ioctl;
+}
+
+void pho_context_reset_mock_ltfs_functions(void)
+{
+    PHO_CONTEXT->mock_ltfs.mock_mkdir = mkdir;
+    PHO_CONTEXT->mock_ltfs.mock_command_call = command_call;
 }

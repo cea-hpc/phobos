@@ -87,11 +87,7 @@ const struct pho_config_item cfg_ltfs[] = {
     },
 };
 
-/**
- * Build a command to mount a LTFS filesystem at a given path.
- * The result must be released by the caller using free(3).
- */
-static char *ltfs_mount_cmd(const char *device, const char *path)
+char *ltfs_mount_cmd(const char *device, const char *path)
 {
     const char          *cmd_cfg;
     char                *cmd_out;

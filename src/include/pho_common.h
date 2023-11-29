@@ -580,4 +580,6 @@ void phobos_module_context_set(struct phobos_global_context *context);
 
 void pho_context_reset_scsi_ioctl(void);
 
+void pho_context_reset_mock_ltfs_functions(void);
+
 #endif

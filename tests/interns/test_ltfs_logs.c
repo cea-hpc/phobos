@@ -56,6 +56,7 @@
 #include "lrs_device.h"
 #include "lrs_sched.h"
 #include "pho_test_utils.h"
+#include "ldm_common.h"
 
 // If there is a difference in the models, you may have to modify this macro
 #define LTO5_MODEL "ULT3580-TD5"
@@ -168,12 +169,59 @@ static void ltfs_mount_mkdir_failure(void **state)
     dev_unload(&device);
     dss_logs_delete(handle, NULL);
     cleanup_device(&device);
+    pho_context_reset_mock_ltfs_functions();
+}
+
+static int fail_command_call(const char *cmd_line, parse_cb_t cb_func,
+                             void *cb_arg)
+{
+    (void) cmd_line;
+    (void) cb_func;
+    (void) cb_arg;
+
+    return -2;
+}
+
+static void ltfs_mount_command_call_failure(void **state)
+{
+    struct phobos_global_context *context = phobos_context();
+    struct media_info *medium = xcalloc(1, sizeof(*medium));
+    struct dss_handle *handle = *state;
+    struct lrs_dev device;
+    char *mount_path;
+    json_t *message;
+    char *cmd;
+    int rc;
+
+    prepare_mount(handle, &device, medium);
+
+    context->mock_ltfs.mock_command_call = fail_command_call;
+
+    rc = dev_mount(&device);
+    assert_int_equal(rc, -2);
+
+    mount_path = get_mount_path(&device);
+    cmd = ltfs_mount_cmd(device.ld_dev_path, mount_path);
+
+    message = json_pack("{s:s+}", "mount",
+                        "Mount command failed: ", cmd);
+
+    check_log_is_valid(handle, DEVICE_NAME, MEDIUM_NAME, PHO_LTFS_MOUNT,
+                       2, message);
+
+    free(cmd);
+    free(mount_path);
+    dev_unload(&device);
+    dss_logs_delete(handle, NULL);
+    cleanup_device(&device);
+    pho_context_reset_mock_ltfs_functions();
 }
 
 int main(void)
 {
     const struct CMUnitTest test_ltfs_logs[] = {
         cmocka_unit_test(ltfs_mount_mkdir_failure),
+        cmocka_unit_test(ltfs_mount_command_call_failure),
     };
     int error_count;
     int rc;
