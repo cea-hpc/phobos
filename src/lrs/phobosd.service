@@ -1,5 +1,6 @@
 [Unit]
 Description=Phobos Local Resource Scheduler (LRS) daemon
+After=network-online.target
 
 [Service]
 Type=forking
