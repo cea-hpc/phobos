@@ -217,11 +217,60 @@ static void ltfs_mount_command_call_failure(void **state)
     pho_context_reset_mock_ltfs_functions();
 }
 
+static void ltfs_mount_label_mismatch(void **state)
+{
+    struct media_info *medium = xcalloc(1, sizeof(*medium));
+    char tape_label[PHO_LABEL_MAX_LEN + 1];
+    struct fs_adapter_module *fsa = NULL;
+    struct dss_handle *handle = *state;
+    struct lrs_dev device;
+    char *mount_path;
+    json_t *message;
+    int rc;
+
+    prepare_mount(handle, &device, medium);
+
+    strcpy(medium->fs.label, "fake_label");
+    setenv("PHOBOS_LTFS_cmd_mount",
+           "../../scripts/pho_ldm_helper mount_ltfs \"%s\" \"%s\"", 0);
+
+    rc = dev_mount(&device);
+    assert_int_equal(rc, -EINVAL);
+
+    rc = get_fs_adapter(PHO_FS_LTFS, &fsa);
+    assert_return_code(-rc, rc);
+
+    mount_path = get_mount_path(&device);
+    assert_non_null(mount_path);
+
+    rc = fsa->ops->fs_get_label(mount_path, tape_label, sizeof(tape_label));
+    assert_return_code(-rc, rc);
+
+    message = json_pack("{s:s++}", "label mismatch",
+                        "found: ", tape_label, ", expected: fake_label");
+
+    check_log_is_valid(handle, DEVICE_NAME, MEDIUM_NAME, PHO_LTFS_MOUNT,
+                       EINVAL, message);
+
+    setenv("PHOBOS_LTFS_cmd_umount",
+           "../../scripts/pho_ldm_helper umount_ltfs \"%s\" \"%s\"", 0);
+
+    rc = ldm_fs_umount(fsa, device.ld_dev_path, mount_path);
+    assert_return_code(-rc, rc);
+
+    dev_unload(&device);
+    free(mount_path);
+    dss_logs_delete(handle, NULL);
+    cleanup_device(&device);
+    pho_context_reset_mock_ltfs_functions();
+}
+
 int main(void)
 {
     const struct CMUnitTest test_ltfs_logs[] = {
         cmocka_unit_test(ltfs_mount_mkdir_failure),
         cmocka_unit_test(ltfs_mount_command_call_failure),
+        cmocka_unit_test(ltfs_mount_label_mismatch),
     };
     int error_count;
     int rc;
