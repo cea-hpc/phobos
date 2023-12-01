@@ -25,6 +25,8 @@
 #ifndef _PHO_ADMIN_H
 #define _PHO_ADMIN_H
 
+#include <jansson.h>
+
 #include "pho_types.h"
 
 #include "pho_comm.h"
@@ -385,6 +387,27 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
  */
 int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
                           json_t **lib_data);
+
+/**
+ * Generate a json array with unstructured information. Output information may
+ * vary, depending on the library.
+ *
+ * This function will be merged with phobos_admin_lib_scan when the TLC
+ * is fully integrated.
+ *
+ * @param[in]       adm         Admin module handler.
+ * @param[in]       bool        True if the TLC must reload its cached status
+ * @param[in,out]   lib_data    json object allocated by
+ *                              phobos_admin_tlc_status, json_decref must be
+ *                              called later on to deallocate it properly
+ *
+ * @return                      0 on success
+ *                              -errno on failure
+ *
+ * @return 0 if success, -errno if an error occurs
+ */
+int phobos_admin_tlc_lib_status(struct admin_handle *adm, bool reload,
+                                json_t **lib_data);
 
 /**
  * Dump a list of logs to a given file.

@@ -563,6 +563,7 @@ static void move_tape_between_element_status(struct element_status *source,
                                              struct element_status *destination)
 {
     source->full = false;
+    source->src_addr_is_set = false;
     destination->full = true;
     destination->src_addr_is_set = true;
     destination->src_addr = source->address;
@@ -859,162 +860,109 @@ out_free:
     return rc;
 }
 
-/*
- *#**
- * *  \defgroup lib scan (those items are related to lib_scan implementation)
- * *  @{
- * *#
+/**
+ * Type for a scan callback function.
  *
- *#**
- * * Type for a scan callback function.
- * *
- * * The first argument is the private data of the callback, the second a json_t
- * * object representing the lib element that has just been scanned.
- * *#
- *typedef void (*lib_scan_cb_t)(void *, json_t *);
- *
- *#**
- * * Calls a lib_scan_cb_t callback on a scsi element
- * *
- * * @param[in]     element   element to be scanned
- * * @param[in]     scan_cb   callback to be called on the element
- * * @param[in,out] udata     argument to be passed to scan_cb
- * *
- * * @return nothing (void function)
- * *#
- *static void scan_element(const struct element_status *element,
- *                         lib_scan_cb_t scan_cb, void *udata)
- *{
- *    json_t *root = json_object();
- *    if (!root) {
- *        pho_error(-ENOMEM, "Failed to create json root");
- *        return;
- *    }
- *
- *    json_insert_element(root, "type", json_string(type2str(element->type)));
- *    json_insert_element(root, "address", json_integer(element->address));
- *
- *    if (element->type & (SCSI_TYPE_ARM | SCSI_TYPE_DRIVE | SCSI_TYPE_SLOT))
- *        json_insert_element(root, "full", json_boolean(element->full));
- *
- *    if (element->full && element->vol[0])
- *        json_insert_element(root, "volume", json_string(element->vol));
- *
- *    if (element->src_addr_is_set)
- *        json_insert_element(root, "source_address",
- *                            json_integer(element->src_addr));
- *
- *    if (element->except) {
- *        json_insert_element(root, "error_code",
- *                            json_integer(element->error_code));
- *        json_insert_element(root, "error_code_qualifier",
- *                            json_integer(element->error_code_qualifier));
- *    }
- *
- *    if (element->dev_id[0])
- *        json_insert_element(root, "device_id", json_string(element->dev_id));
- *
- *    if (element->type == SCSI_TYPE_IMPEXP) {
- *        json_insert_element(root, "current_operation",
- *                       json_string(element->impexp ? "import" : "export"));
- *        json_insert_element(root, "exp_enabled",
- *                            json_boolean(element->exp_enabled));
- *        json_insert_element(root, "imp_enabled",
- *                            json_boolean(element->imp_enabled));
- *    }
- *
- *    #* Make "accessible" appear only when it is true *#
- *    if (element->accessible) {
- *        json_insert_element(root, "accessible", json_true());
- *    }
- *
- *    #* Inverted media is uncommon enough so that it can be omitted if false *#
- *    if (element->invert) {
- *        json_insert_element(root, "invert", json_true());
- *    }
- *
- *    scan_cb(udata, root);
- *    json_decref(root);
- *}
- *
- *#** Implements phobos LDM lib scan  *#
- *static int lib_scsi_scan(struct lib_handle *hdl, json_t **lib_data,
- *                         json_t *message)
- *{
- *    lib_scan_cb_t json_array_append_cb;
- *    struct lib_descriptor *lib;
- *    int i = 0;
- *    int rc;
- *
- *    MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
- *
- *    json_array_append_cb = (lib_scan_cb_t)json_array_append;
- *
- *    lib = hdl->lh_lib;
- *    if (!lib) #* closed or missing init *#
- *        GOTO(unlock, rc = -EBADF);
- *
- *    *lib_data = json_array();
- *
- *    #* Load everything *#
- *    rc = lib_status_load(lib, SCSI_TYPE_ALL, message);
- *    if (rc) {
- *        json_decref(*lib_data);
- *        *lib_data = NULL;
- *        LOG_GOTO(unlock, rc, "Error loading scsi library status");
- *    }
- *
- *    #* scan arms *#
- *    for (i = 0; i < lib->arms.count ; i++)
- *        scan_element(&lib->arms.items[i], json_array_append_cb, *lib_data);
- *
- *    #* scan slots *#
- *    for (i = 0; i < lib->slots.count ; i++)
- *        scan_element(&lib->slots.items[i], json_array_append_cb, *lib_data);
- *
- *    #* scan import exports *#
- *    for (i = 0; i < lib->impexp.count ; i++)
- *        scan_element(&lib->impexp.items[i], json_array_append_cb, *lib_data);
- *
- *    #* scan drives *#
- *    for (i = 0; i < lib->drives.count ; i++)
- *        scan_element(&lib->drives.items[i], json_array_append_cb, *lib_data);
- *
- *    rc = 0;
- *
- *unlock:
- *    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
- *    return rc;
- *}
- *
- *#** @}*#
- *
- *#** lib_scsi_adapter exported to upper layers *#
- *static struct pho_lib_adapter_module_ops LA_SCSI_OPS = {
- *    .lib_open         = lib_scsi_open,
- *    .lib_close        = lib_scsi_close,
- *    .lib_drive_lookup = lib_scsi_drive_info,
- *    .lib_media_lookup = lib_scsi_media_info,
- *    .lib_media_move   = lib_scsi_move,
- *    .lib_scan         = lib_scsi_scan,
- *};
- *
- *#** Lib adapter module registration entry point *#
- *int pho_module_register(void *module, void *context)
- *{
- *    struct lib_adapter_module *self = (struct lib_adapter_module *) module;
- *
- *    phobos_module_context_set(context);
- *
- *    self->desc = LA_SCSI_MODULE_DESC;
- *    self->ops = &LA_SCSI_OPS;
- *
- *    #*
- *     * WARNING : this mutex will never be freed because we have no cleaning at
- *     * module unload.
- *     *#
- *    pthread_mutex_init(&phobos_context()->ldm_lib_scsi_mutex, NULL);
- *
- *    return 0;
- *}
+ * The first argument is the private data of the callback, the second a json_t
+ * object representing the lib element that has just been scanned.
  */
+typedef void (*lib_scan_cb_t)(void *, json_t *);
+
+/**
+ * Calls a lib_scan_cb_t callback on a scsi element
+ *
+ * @param[in]     element   element to be scanned
+ * @param[in]     scan_cb   callback to be called on the element
+ * @param[in,out] udata     argument to be passed to scan_cb
+ */
+static void scan_element(const struct element_status *element,
+                         lib_scan_cb_t scan_cb, void *udata)
+{
+    json_t *root = json_object();
+
+    if (!root) {
+        pho_error(-ENOMEM, "Failed to create json root");
+        return;
+    }
+
+    json_insert_element(root, "type", json_string(type2str(element->type)));
+    json_insert_element(root, "address", json_integer(element->address));
+
+    if (element->type & (SCSI_TYPE_ARM | SCSI_TYPE_DRIVE | SCSI_TYPE_SLOT))
+        json_insert_element(root, "full", json_boolean(element->full));
+
+    if (element->full && element->vol[0])
+        json_insert_element(root, "volume", json_string(element->vol));
+
+    if (element->src_addr_is_set)
+        json_insert_element(root, "source_address",
+                            json_integer(element->src_addr));
+
+    if (element->except) {
+        json_insert_element(root, "error_code",
+                            json_integer(element->error_code));
+        json_insert_element(root, "error_code_qualifier",
+                            json_integer(element->error_code_qualifier));
+    }
+
+    if (element->dev_id[0])
+        json_insert_element(root, "device_id", json_string(element->dev_id));
+
+    if (element->type == SCSI_TYPE_IMPEXP) {
+        json_insert_element(root, "current_operation",
+                       json_string(element->impexp ? "import" : "export"));
+        json_insert_element(root, "exp_enabled",
+                            json_boolean(element->exp_enabled));
+        json_insert_element(root, "imp_enabled",
+                            json_boolean(element->imp_enabled));
+    }
+
+    /* Make "accessible" appear only when it is true */
+    if (element->accessible)
+        json_insert_element(root, "accessible", json_true());
+
+    /* Inverted media is uncommon enough so that it can be omitted if false */
+    if (element->invert)
+        json_insert_element(root, "invert", json_true());
+
+    scan_cb(udata, root);
+    json_decref(root);
+}
+
+int tlc_library_status(struct lib_descriptor *lib, json_t **lib_data,
+                       json_t **json_message)
+{
+    lib_scan_cb_t json_array_append_cb;
+    int i = 0;
+
+    *json_message = NULL;
+
+    *lib_data = json_array();
+    if (*lib_data == NULL) {
+        *json_message = json_pack("{s:s}",
+                                 "ALLOC_LIB_DATA",
+                                 "TLC library was unable to build lib_data "
+                                 "array");
+        return -ENOMEM;
+    }
+
+    json_array_append_cb = (lib_scan_cb_t)json_array_append;
+
+    /* scan arms */
+    for (i = 0; i < lib->arms.count ; i++)
+        scan_element(&lib->arms.items[i], json_array_append_cb, *lib_data);
+
+    /* scan slots */
+    for (i = 0; i < lib->slots.count ; i++)
+        scan_element(&lib->slots.items[i], json_array_append_cb, *lib_data);
+
+    /* scan import exports */
+    for (i = 0; i < lib->impexp.count ; i++)
+        scan_element(&lib->impexp.items[i], json_array_append_cb, *lib_data);
+
+    /* scan drives */
+    for (i = 0; i < lib->drives.count ; i++)
+        scan_element(&lib->drives.items[i], json_array_append_cb, *lib_data);
+
+    return 0;
+}

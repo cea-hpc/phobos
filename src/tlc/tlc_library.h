@@ -133,4 +133,21 @@ int tlc_library_unload(struct dss_handle *dss, struct lib_descriptor *lib,
                        struct lib_item_addr *unload_addr,
                        json_t **json_message);
 
+/**
+ * Build a json describing the library's current status
+ *
+ * @param[in]   lib             Library descriptor.
+ * @param[out]  lib_data        Json allocated and filled by tlc_library_status
+ *                              (must be decref by the caller). On error NULL is
+ *                              returned.
+ * @param[out] json_message     Set to NULL, if no message. On error or success,
+ *                              could be set to a value different from NULL,
+ *                              containing a message which describes the actions
+ *                              and must be decref by the caller.
+ *
+ * @return 0 on success, negative error code on failure
+ */
+int tlc_library_status(struct lib_descriptor *lib, json_t **lib_data,
+                       json_t **json_message);
+
 #endif /* _PHO_TLC_LIBRARY_H */

@@ -1854,3 +1854,46 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
     pho_srl_tlc_response_free(resp, true);
     return rc;
 }
+
+int phobos_admin_tlc_lib_status(struct admin_handle *adm, bool reload,
+                                json_t **lib_data)
+{
+    struct proto_resp proto_resp = {TLC_REQUEST};
+    struct proto_req proto_req = {TLC_REQUEST};
+    pho_tlc_resp_t *resp;
+    pho_tlc_req_t req;
+    int rid = 1;
+    int rc;
+
+    proto_req.msg.tlc_req = &req;
+    pho_srl_tlc_request_status_alloc(&req);
+    req.id = rid;
+    req.status->reload = reload;
+    rc = _send_and_receive(&adm->tlc_comm, proto_req, &proto_resp);
+    pho_srl_tlc_request_free(&req, false);
+    if (rc)
+        LOG_RETURN(rc, "Error with TLC communication");
+
+    resp = proto_resp.msg.tlc_resp;
+    if (pho_tlc_response_is_status(resp) && resp->req_id == rid) {
+        json_error_t json_error;
+
+        *lib_data = json_loads(resp->status->lib_data, 0, &json_error);
+        if (!*lib_data) {
+            rc = -EPROTO;
+            pho_error(-EPROTO, "Received lib_data seems invalid (%s): '%s'",
+                      json_error.text, resp->status->lib_data);
+        }
+
+    } else if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
+        rc = resp->error->rc;
+        pho_error(rc, "TLC failed to status: '%s'", resp->error->message);
+
+    } else {
+        rc = -EPROTO;
+        pho_error(rc, "TLC answers unexpected response to status");
+    }
+
+    pho_srl_tlc_response_free(resp, true);
+    return rc;
+}

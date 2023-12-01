@@ -376,6 +376,17 @@ class Client(object):
                 raise EnvironmentError(rc, f"Failed to unload drive "
                                            f"{drive_serial_or_path}")
 
+    def tlc_lib_status(self, with_reload):
+        """Get status library from the TLC"""
+        jansson_t = c_void_p(None)
+        rc = LIBPHOBOS_ADMIN.phobos_admin_tlc_lib_status(
+                                    byref(self.handle), with_reload,
+                                    byref(jansson_t))
+        if rc:
+            raise EnvironmentError(rc, f"Failed to status the library from TLC")
+
+        return json.loads(jansson_dumps(jansson_t.value))
+
     @staticmethod
     def layout_list_free(layouts, n_layouts):
         """Free a previously obtained layout list."""

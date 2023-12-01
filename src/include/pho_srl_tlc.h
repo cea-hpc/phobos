@@ -41,6 +41,7 @@ typedef PhoTlcResponse__Ping        pho_tlc_resp_ping_t;
 typedef PhoTlcResponse__DriveLookup pho_tlc_resp_drive_lookup_t;
 typedef PhoTlcResponse__Load        pho_tlc_resp_load_t;
 typedef PhoTlcResponse__Unload      pho_tlc_resp_unload_t;
+typedef PhoTlcResponse__Status      pho_tlc_resp_status_t;
 
 /******************************************************************************/
 /* Macros & constants *********************************************************/
@@ -115,6 +116,19 @@ static inline bool pho_tlc_request_is_unload(const pho_tlc_req_t *req)
 }
 
 /**
+ * Request status checker.
+ *
+ * \param[in]       req         Request.
+ *
+ * \return                      true if the request is a status one,
+ *                              false otherwise.
+ */
+static inline bool pho_tlc_request_is_status(const pho_tlc_req_t *req)
+{
+    return req->status != NULL;
+}
+
+/**
  * Response ping checker.
  *
  * \param[in]       resp        Response.
@@ -178,6 +192,18 @@ static inline bool pho_tlc_response_is_unload(const pho_tlc_resp_t *resp)
 {
     return resp->unload != NULL;
 }
+/**
+ * Response status checker.
+ *
+ * \param[in]       resp        Response.
+ *
+ * \return                      true if the response is a status one, false
+ *                              otherwise.
+ */
+static inline bool pho_tlc_response_is_status(const pho_tlc_resp_t *resp)
+{
+    return resp->status != NULL;
+}
 
 /******************************************************************************/
 /** Allocators & Deallocators *************************************************/
@@ -219,6 +245,13 @@ int pho_srl_tlc_request_load_alloc(pho_tlc_req_t *req);
 void pho_srl_tlc_request_unload_alloc(pho_tlc_req_t *req);
 
 /**
+ * Allocation of status request contents.
+ *
+ * \param[out]      req         Pointer to the request data structure.
+ */
+void pho_srl_tlc_request_status_alloc(pho_tlc_req_t *req);
+
+/**
  * Release of request contents.
  *
  * \param[in]       req         Pointer to the request data structure.
@@ -256,6 +289,13 @@ void pho_srl_tlc_response_load_alloc(pho_tlc_resp_t *resp);
  * \param[out]      resp        Pointer to the response data structure.
  */
 void pho_srl_tlc_response_unload_alloc(pho_tlc_resp_t *resp);
+
+/**
+ * Allocation of status response content.
+ *
+ * \param[out]      resp        Pointer to the response data structure.
+ */
+void pho_srl_tlc_response_status_alloc(pho_tlc_resp_t *resp);
 
 /**
  * Allocation of error response content.

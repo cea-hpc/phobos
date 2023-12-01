@@ -67,6 +67,13 @@ void pho_srl_tlc_request_unload_alloc(pho_tlc_req_t *req)
     pho_tlc_request__unload__init(req->unload);
 }
 
+void pho_srl_tlc_request_status_alloc(pho_tlc_req_t *req)
+{
+    pho_tlc_request__init(req);
+    req->status = xmalloc(sizeof(*req->status));
+    pho_tlc_request__status__init(req->status);
+}
+
 void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack)
 {
     if (unpack) {
@@ -95,6 +102,11 @@ void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack)
         free(req->unload->tape_label);
         free(req->unload);
         req->unload = NULL;
+    }
+
+    if (req->status) {
+        free(req->status);
+        req->status = NULL;
     }
 }
 
@@ -133,6 +145,13 @@ void pho_srl_tlc_response_unload_alloc(pho_tlc_resp_t *resp)
     pho_tlc_response__init(resp);
     resp->unload = xmalloc(sizeof(*resp->unload));
     pho_tlc_response__unload__init(resp->unload);
+}
+
+void pho_srl_tlc_response_status_alloc(pho_tlc_resp_t *resp)
+{
+    pho_tlc_response__init(resp);
+    resp->status = xmalloc(sizeof(*resp->status));
+    pho_tlc_response__status__init(resp->status);
 }
 
 void pho_srl_tlc_response_error_alloc(pho_tlc_resp_t *resp)
@@ -177,6 +196,13 @@ void pho_srl_tlc_response_free(pho_tlc_resp_t *resp, bool unpack)
         free(resp->unload->message);
         free(resp->unload);
         resp->unload = NULL;
+    }
+
+    if (resp->status) {
+        free(resp->status->lib_data);
+        free(resp->status->message);
+        free(resp->status);
+        resp->status = NULL;
     }
 }
 

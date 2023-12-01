@@ -44,12 +44,19 @@ message PhoTlcRequest {
         optional string tape_label = 2;     // Medium label to unload from drive
     }
 
+    /** Body of the tlc status request */
+    message Status {
+        optional bool reload = 1;   // If true, status cache is reloaded before
+                                    // building the response
+    }
+
     required uint32 id  = 1;    // Request ID to match its future response.
 
     optional bool ping  = 2;    // Is the request a ping request ?
     optional DriveLookup drive_lookup = 3;  // Drive lookup body
     optional Load load = 4;     // Load body
     optional Unload unload = 5; // Unload body
+    optional Status status = 6; // Status body
 }
 
 /** TLC protocol response, emitted by the TLC. */
@@ -87,6 +94,12 @@ message PhoTlcResponse {
         optional string message = 3;    // JSON message describing the unload
     }
 
+    /* Body of status response */
+    message Status {
+        required string lib_data = 1; // JSON array describing the library
+        optional string message = 2;  // JSON message describing the status
+    }
+
     required uint32 req_id = 1; // Request ID, to be matched with
                                 // the corresponding request.
 
@@ -95,4 +108,5 @@ message PhoTlcResponse {
     optional Error error = 4;   // Error body
     optional Load load = 5;     // Load body
     optional Unload unload = 6; // Unload body
+    optional Status status = 7; // Status body
 }

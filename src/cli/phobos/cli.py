@@ -585,7 +585,7 @@ class StatusOptHandler(BaseOptHandler):
                                   "(default: %(default)s)"))
 
     def __enter__(self):
-        pass
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         pass
@@ -672,7 +672,7 @@ class ScanOptHandler(BaseOptHandler):
     descr = 'scan a physical resource and display retrieved information'
 
     def __enter__(self):
-        pass
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         pass
@@ -685,6 +685,24 @@ class ScanOptHandler(BaseOptHandler):
                             help="Resource(s) or device(s) to scan. If not "
                                  "given, will fetch 'lib_device' path in "
                                  "configuration file instead")
+
+class LibStatusOptHandler(BaseOptHandler):
+    """Scan a physical resource and display retrieved information."""
+    label = 'status'
+    descr = 'Display status of the library managed by TLC'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(LibStatusOptHandler, cls).add_options(parser)
+        parser.add_argument('--reload', action='store_true',
+                            help="TLC reloads its library internal cache")
 
 class DriveListOptHandler(ListOptHandler):
     """
@@ -821,7 +839,7 @@ class UuidOptHandler(BaseOptHandler):
     descr = 'select uuids'
 
     def __enter__(self):
-        pass
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         pass
@@ -841,7 +859,7 @@ class OidOptHandler(BaseOptHandler):
     descr = 'select oids'
 
     def __enter__(self):
-        pass
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         pass
@@ -2039,6 +2057,7 @@ class LibOptHandler(BaseResourceOptHandler):
     family = ResourceFamily(ResourceFamily.RSC_TAPE)
     verbs = [
         ScanOptHandler,
+        LibStatusOptHandler,
     ]
 
     def exec_scan(self):
@@ -2061,6 +2080,19 @@ class LibOptHandler(BaseResourceOptHandler):
                     self._print_lib_data(lib_data)
         except EnvironmentError as err:
             self.logger.error(str(err) + ", will abort 'lib scan'")
+            sys.exit(abs(err.errno))
+
+    def exec_status(self):
+        """Get library status from the TLC"""
+        with_reload = self.params.get('reload')
+
+        try:
+            with AdminClient(lrs_required=False, tlc_required=True) as adm:
+                lib_data = adm.tlc_lib_status(with_reload)
+                self._print_lib_data(lib_data)
+
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
     @staticmethod
@@ -2095,7 +2127,7 @@ class CleanOptHandler(BaseOptHandler):
     descr = 'clean locks options'
 
     def __enter__(self):
-        pass
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         pass

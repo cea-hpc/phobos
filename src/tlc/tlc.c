@@ -336,6 +336,60 @@ static int process_unload_request(struct tlc *tlc, pho_tlc_req_t *req,
     return rc;
 }
 
+static int process_status_request(struct tlc *tlc, pho_tlc_req_t *req,
+                                  int client_socket)
+{
+    char *string_lib_data = NULL;
+    json_t *json_message = NULL;
+    pho_tlc_resp_t *resp = NULL;
+    pho_tlc_resp_t status_resp;
+    pho_tlc_resp_t error_resp;
+    json_t *json_lib_data;
+    int rc, rc2;
+
+    rc = tlc_library_status(&tlc->lib, &json_lib_data, &json_message);
+    if (!rc) {
+        string_lib_data = json_dumps(json_lib_data, JSON_COMPACT);
+        json_decref(json_lib_data);
+        if (!string_lib_data) {
+            if (json_message)
+                json_decref(json_message);
+
+            json_message = json_pack("{s:s}",
+                                     "TLC_LIB_DATA_DUMP_ERROR",
+                                     "TLC was unable to dump lib data to "
+                                     "response");
+            rc = -ENOMEM;
+        }
+    }
+
+    if (rc) {
+        tlc_build_response_error(&error_resp, req->id, rc, json_message);
+        if (json_message)
+            json_decref(json_message);
+
+        resp = &error_resp;
+    } else {
+        /* Build status response */
+        pho_srl_tlc_response_status_alloc(&status_resp);
+        status_resp.status->lib_data = string_lib_data;
+        status_resp.req_id = req->id;
+        if (json_message) {
+            status_resp.status->message = json_dumps(json_message, 0);
+            json_decref(json_message);
+        }
+
+        resp = &status_resp;
+    }
+
+    rc2 = tlc_response_send(resp, client_socket);
+    if (rc2)
+        rc = rc ? : rc2;
+
+    pho_srl_tlc_response_free(resp, false);
+    return rc;
+}
+
 static int recv_work(struct tlc *tlc)
 {
     struct pho_comm_data *data = NULL;
@@ -378,6 +432,11 @@ static int recv_work(struct tlc *tlc)
 
         if (pho_tlc_request_is_unload(req)) {
             process_unload_request(tlc, req, data[i].fd);
+            goto out_request;
+        }
+
+        if (pho_tlc_request_is_status(req)) {
+            process_status_request(tlc, req, data[i].fd);
             goto out_request;
         }
 

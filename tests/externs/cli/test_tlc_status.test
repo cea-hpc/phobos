@@ -1,0 +1,100 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2023 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for "phobos lib status" feature
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+set -xe
+
+function setup
+{
+    setup_tables
+    drain_all_drives
+    invoke_daemons
+}
+
+function cleanup
+{
+    waive_daemons
+    drop_tables
+    drain_all_drives
+}
+
+function test_status
+{
+    local tape="$(get_tapes L6 1)"
+    local drive="$(get_lto_drives 6 1)"
+
+    # initial status
+    lib_data=$($phobos lib status)
+    echo "${lib_data}" | grep "arm"
+    echo "${lib_data}" | grep "slot"
+    echo "${lib_data}" | grep "drive"
+    echo "${lib_data}" | grep "import/export"
+    # check any slot is full
+    set +e
+    nb_empty_slot=$(echo "$lib_data" | grep slot | grep -v full -c)
+    set -e
+    if (( nb_empty_slot != 0 )); then
+        error "Initial lib status find ${nb_empty_slot} instead of 0 empty slot"
+    fi
+    # check any drive is empty
+    set +e
+    nb_full_drive=$(echo "$lib_data" | grep drive | grep full -c)
+    set -e
+    if (( nb_empty_drive != 0 )); then
+        error "Initial lib status find ${nb_full_drive} instead of 0 full drive"
+    fi
+    initial_tape_slot_address=$(echo "$lib_data" | grep ${tape} |
+                                awk '{print $2}' | cut -d'=' -f 2)
+
+    # add a drive an load a tape
+    $phobos drive add ${drive}
+    drive_serial=$($phobos drive list)
+    $phobos drive load ${drive} ${tape}
+
+    # status with one loaded tape
+    lib_data=$($phobos lib status)
+    # check the initial tape slot is now empty
+    echo "$lib_data" | grep slot | grep ${initial_tape_slot_address} |
+        grep -v full
+    # check the drive has the loaded tape
+    echo "$lib_data" | grep ${drive_serial} | grep full | grep ${tape} |
+        grep ${initial_tape_slot_address}
+
+    # unload drive
+    $phobos drive unload ${drive}
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Library required for this test"
+fi
+
+TESTS=(
+    "setup; test_status; cleanup"
+)

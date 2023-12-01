@@ -31,6 +31,12 @@ function invoke_tlc()
    invoke_daemon ${TLC_PID_FILEPATH} $tlc PID_TLC "$*"
 }
 
+function invoke_daemons()
+{
+    invoke_tlc
+    invoke_lrs
+}
+
 function waive_daemon()
 {
     local PID_FILEPATH=$1
@@ -63,4 +69,10 @@ function waive_lrs()
 function waive_tlc()
 {
     waive_daemon ${TLC_PID_FILEPATH} PID_TLC
+}
+
+function waive_daemons()
+{
+    waive_lrs
+    waive_tlc
 }
