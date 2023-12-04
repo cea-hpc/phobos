@@ -283,7 +283,7 @@ static int check_renew_lock(struct lock_handle *lock_handle, enum dss_type type,
                             void *item, struct pho_lock *lock)
 {
     if (strcmp(lock->hostname, lock_handle->lock_hostname)) {
-        pho_warn("Resource already locked by host %s instead of %s",
+        pho_verb("Resource already locked by host %s instead of %s",
                  lock->hostname, lock_handle->lock_hostname);
         return -EALREADY;
     }
