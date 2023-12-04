@@ -1245,6 +1245,10 @@ typedef int (*device_select_func_t)(size_t required_size,
  *                       requests only).
  * @param pmedia         Media that should be used by the drive to check
  *                       compatibility (ignored if NULL)
+ * @param[in] is_write   Set to true if we want a device to write
+ * @param[out] one_drive_available  Return true if there is at least one drive
+ *                                  that is available to perform an action
+ *                                  (ignored if NULL)
  */
 struct lrs_dev *dev_picker(GPtrArray *devices,
                            enum dev_op_status op_st,
@@ -1252,7 +1256,7 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
                            size_t required_size,
                            const struct tags *media_tags,
                            struct media_info *pmedia,
-                           bool is_write)
+                           bool is_write, bool *one_drive_available)
 {
     struct lrs_dev *selected = NULL;
     int selected_i = -1;
@@ -1260,6 +1264,9 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
     int i;
 
     ENTRY;
+
+    if (one_drive_available)
+        *one_drive_available = false;
 
     for (i = 0; i < devices->len; i++) {
         struct lrs_dev *itr = g_ptr_array_index(devices, i);
@@ -1272,16 +1279,26 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
             goto unlock_continue;
         }
 
-        if ((itr->ld_op_status == PHO_DEV_OP_ST_FAILED) ||
-            (op_st != PHO_DEV_OP_ST_UNSPEC && itr->ld_op_status != op_st)) {
-            pho_debug("Skipping device '%s' with incompatible status %s",
-                      itr->ld_dev_path, op_status2str(itr->ld_op_status));
+        if (itr->ld_op_status == PHO_DEV_OP_ST_FAILED) {
+            pho_debug("Skipping device '%s' with status %s", itr->ld_dev_path,
+                      op_status2str(itr->ld_op_status));
             goto unlock_continue;
         }
 
         if (!thread_is_running(&itr->ld_device_thread)) {
-            pho_debug("Skipping ending or stopped device '%s'",
-                      itr->ld_dev_path);
+            pho_debug("Skipping device '%s' with thread '%s'",
+                      itr->ld_dev_path,
+                      thread_state2str(&itr->ld_device_thread));
+            goto unlock_continue;
+        }
+
+        if (one_drive_available)
+            *one_drive_available = true;
+
+        if (op_st != PHO_DEV_OP_ST_UNSPEC && itr->ld_op_status != op_st) {
+            pho_debug("Skipping device '%s' with incompatible status %s "
+                      "instead of %s", itr->ld_dev_path,
+                      op_status2str(itr->ld_op_status), op_status2str(op_st));
             goto unlock_continue;
         }
 
@@ -1533,6 +1550,8 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
 
             if (is_compat)
                 return true;
+        } else {
+            return true;
         }
     }
 
