@@ -418,7 +418,7 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
                            size_t required_size,
                            const struct tags *media_tags,
                            struct media_info *pmedia,
-                           bool is_write);
+                           bool is_write, bool *one_drive_available);
 
 device_select_func_t get_dev_policy(void);
 
