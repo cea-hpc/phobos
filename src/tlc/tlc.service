@@ -1,5 +1,6 @@
 [Unit]
 Description=Tape Library Controler (TLC) daemon
+After=network-online.target
 
 [Service]
 Type=forking

@@ -156,6 +156,7 @@ echo "%{_libdir}/phobos" > %{buildroot}/%{_sysconfdir}/ld.so.conf.d/phobos.conf
 %{_sbindir}/phobos_tape_library_test.bash
 %{_sbindir}/phobos_tape_library_mtx_test.bash
 %{_sbindir}/tlc
+%{_unitdir}/tlc.service
 
 %config(noreplace) %{_sysconfdir}/phobos.conf
 %dir %{phobosdocdir}
