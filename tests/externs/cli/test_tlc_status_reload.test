@@ -45,7 +45,7 @@ function cleanup
     drain_all_drives
 }
 
-function test_status
+function test_status_reload
 {
     local tape="$(get_tapes L6 1)"
     local drive="$(get_lto_drives 6 1)"
@@ -87,6 +87,41 @@ function test_status
     echo "$lib_data" | grep ${drive_serial} | grep full | grep ${tape} |
         grep ${initial_tape_slot_address}
 
+    # unload drives without using TLC to test status --reload option
+    drain_all_drives
+
+    # Check with a reload, TLC library cache is valid with one empty drive
+    lib_data=$($phobos lib status --reload)
+    set +e
+    nb_full_drive=$(echo "$lib_data" | grep drive | grep full -c)
+    set -e
+    if (( nb_empty_drive != 0 )); then
+        error "tlc lib status with --reload find ${nb_full_drive} instead of 0 "
+              "full drive"
+    fi
+
+    # load a drive one more time
+    $phobos drive load ${drive} ${tape}
+    # check drive is loaded
+    lib_data=$($phobos lib status)
+    echo "$lib_data" | grep ${drive_serial} | grep full | grep ${tape}
+
+    # unload drives without using TLC to test reload action
+    drain_all_drives
+
+    # reload TLC
+    $phobos lib reload
+
+    # Check with a prev reload, TLC library cache is valid with one empty drive
+    lib_data=$($phobos lib status)
+    set +e
+    nb_full_drive=$(echo "$lib_data" | grep drive | grep full -c)
+    set -e
+    if (( nb_empty_drive != 0 )); then
+        error "tlc lib status with a prev reload find ${nb_full_drive} instead "
+              "of 0 full drive"
+    fi
+
     # unload drive
     $phobos drive unload ${drive}
 }
@@ -96,5 +131,5 @@ if [[ ! -w /dev/changer ]]; then
 fi
 
 TESTS=(
-    "setup; test_status; cleanup"
+    "setup; test_status_reload; cleanup"
 )

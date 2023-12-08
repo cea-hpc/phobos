@@ -387,6 +387,13 @@ class Client(object):
 
         return json.loads(jansson_dumps(jansson_t.value))
 
+    def tlc_reload(self):
+        """Reload the library internal cache of the TLC"""
+        rc = LIBPHOBOS_ADMIN.phobos_admin_tlc_reload(byref(self.handle))
+        if rc:
+            raise EnvironmentError(rc, f"Failed to reload the library internal "
+                                       f"cache of the TLC")
+
     @staticmethod
     def layout_list_free(layouts, n_layouts):
         """Free a previously obtained layout list."""

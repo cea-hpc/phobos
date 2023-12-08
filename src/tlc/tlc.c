@@ -62,6 +62,7 @@ struct tlc {
 static int tlc_init(struct tlc *tlc)
 {
     union pho_comm_addr sock_addr;
+    json_t *json_message;
     const char *lib_dev;
     int rc;
 
@@ -75,9 +76,23 @@ static int tlc_init(struct tlc *tlc)
     if (!lib_dev)
         LOG_RETURN(-EINVAL, "Failed to get default library device from config");
 
-    rc = tlc_library_open(&tlc->lib, lib_dev);
-    if (rc)
-        LOG_RETURN(-errno, "Failed to open library device '%s'", lib_dev);
+    rc = tlc_library_open(&tlc->lib, lib_dev, &json_message);
+    if (rc) {
+        if (json_message) {
+            pho_error(rc, "Failed to open library device '%s': %s",
+                      lib_dev, json_dumps(json_message, 0));
+            json_decref(json_message);
+            return rc;
+        } else {
+            LOG_RETURN(-errno, "Failed to open library device '%s'", lib_dev);
+        }
+    }
+
+    if (json_message) {
+        pho_verb("Successfully open the library: %s",
+                 json_dumps(json_message, 0));
+        json_decref(json_message);
+    }
 
     /* open TLC communicator */
     sock_addr.tcp.hostname = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, hostname);
@@ -342,10 +357,40 @@ static int process_status_request(struct tlc *tlc, pho_tlc_req_t *req,
     char *string_lib_data = NULL;
     json_t *json_message = NULL;
     pho_tlc_resp_t *resp = NULL;
+    bool reload_failed = false;
     pho_tlc_resp_t status_resp;
     pho_tlc_resp_t error_resp;
     json_t *json_lib_data;
     int rc, rc2;
+
+    if (req->status->reload) {
+        const char *lib_dev;
+
+        /* For now, one single configurable path to library device.
+         * This will have to be changed to manage multiple libraries or to
+         * manage one library through multiple "/dev/changer" paths to improve
+         * parallel usage depending on the library model.
+         */
+        lib_dev = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, lib_device);
+        if (!lib_dev) {
+            pho_error(rc = -EINVAL, "Failed to get default library device from "
+                                    "config to reload");
+            json_message = json_pack("{s:s}", "LIB_DEV_CONF_ERROR",
+                                     "Failed to get default library device "
+                                     "from config to reload");
+            reload_failed = true;
+            goto error_response;
+        }
+
+        rc = tlc_library_reload(&tlc->lib, lib_dev, &json_message);
+        if (rc) {
+            reload_failed = true;
+            goto error_response;
+        }
+
+        if (json_message)
+            json_decref(json_message);
+    }
 
     rc = tlc_library_status(&tlc->lib, &json_lib_data, &json_message);
     if (!rc) {
@@ -364,6 +409,7 @@ static int process_status_request(struct tlc *tlc, pho_tlc_req_t *req,
     }
 
     if (rc) {
+error_response:
         tlc_build_response_error(&error_resp, req->id, rc, json_message);
         if (json_message)
             json_decref(json_message);
@@ -387,6 +433,73 @@ static int process_status_request(struct tlc *tlc, pho_tlc_req_t *req,
         rc = rc ? : rc2;
 
     pho_srl_tlc_response_free(resp, false);
+
+    if (reload_failed) {
+        pho_error(rc, "On reload failure, without any valid library cache, "
+                      "TLC commits suicide");
+        tlc_fini(tlc);
+        exit(EXIT_FAILURE);
+    }
+
+    return rc;
+}
+
+static int process_reload_request(struct tlc *tlc, pho_tlc_req_t *req,
+                                  int client_socket)
+{
+    json_t *json_message = NULL;
+    pho_tlc_resp_t *resp = NULL;
+    pho_tlc_resp_t error_resp;
+    pho_tlc_resp_t reload_resp;
+    const char *lib_dev;
+    int rc, rc2;
+
+    /* For now, one single configurable path to library device.
+     * This will have to be changed to manage multiple libraries or to manage
+     * one library through multiple "/dev/changer" paths to improve parallel
+     * usage depending on the library model.
+     */
+    lib_dev = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, lib_device);
+    if (!lib_dev) {
+        pho_error(rc = -EINVAL,
+                  "Failed to get default library device from config to reload");
+        json_message = json_pack("{s:s}", "LIB_DEV_CONF_ERROR",
+                                 "Failed to get default library device from "
+                                 "config to reload");
+        goto error_response;
+    }
+
+    rc = tlc_library_reload(&tlc->lib, lib_dev, &json_message);
+    if (rc) {
+error_response:
+        tlc_build_response_error(&error_resp, req->id, rc, json_message);
+        if (json_message)
+            json_decref(json_message);
+
+        resp = &error_resp;
+    } else {
+        /* Build load response */
+        pho_srl_tlc_response_reload_alloc(&reload_resp);
+        reload_resp.req_id = req->id;
+        if (json_message)
+            json_decref(json_message);
+
+        resp = &reload_resp;
+    }
+
+    rc2 = tlc_response_send(resp, client_socket);
+    if (rc2)
+        rc = rc ? : rc2;
+
+    pho_srl_tlc_response_free(resp, false);
+
+    if (rc) {
+        pho_error(rc, "On reload failure, without any valid library cache, "
+                      "TLC commits suicide");
+        tlc_fini(tlc);
+        exit(EXIT_FAILURE);
+    }
+
     return rc;
 }
 
@@ -437,6 +550,11 @@ static int recv_work(struct tlc *tlc)
 
         if (pho_tlc_request_is_status(req)) {
             process_status_request(tlc, req, data[i].fd);
+            goto out_request;
+        }
+
+        if (pho_tlc_request_is_reload(req)) {
+            process_reload_request(tlc, req, data[i].fd);
             goto out_request;
         }
 

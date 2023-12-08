@@ -54,12 +54,19 @@ struct lib_descriptor {
 /**
  * Open the library and load current status
  *
- * @param[in,out] lib   Already allocated library to fill with current status
- * @param[in]     dev   Device path of the library
+ * @param[in,out]   lib             Already allocated library to fill with
+ *                                  current status
+ * @param[in]       dev             Device path of the library
+ * @param[out]      json_message    Set to NULL, if no message. On error or
+ *                                  success, could be set to a value different
+ *                                  from NULL, containing a message which
+ *                                  describes the actions and must be decref by
+ *                                  the caller.
  *
  * @return              0 if success, else a negative error code
  */
-int tlc_library_open(struct lib_descriptor *lib, const char *dev);
+int tlc_library_open(struct lib_descriptor *lib, const char *dev,
+                     json_t **json_message);
 
 /**
  * Close and clean the library
@@ -148,6 +155,22 @@ int tlc_library_unload(struct dss_handle *dss, struct lib_descriptor *lib,
  * @return 0 on success, negative error code on failure
  */
 int tlc_library_status(struct lib_descriptor *lib, json_t **lib_data,
+                       json_t **json_message);
+
+/**
+ * Reload the library descriptor
+ *
+ * @param[in,out]   lib             Library descriptor.
+ * @param[in]       dev             Device path of the library
+ * @param[out]      json_message    Set to NULL, if no message. On error or
+ *                                  success, could be set to a value different
+ *                                  from NULL, containing a message which
+ *                                  describes the actions and must be decref by
+ *                                  the caller.
+ *
+ * @return 0 on success, negative error code on failure
+ */
+int tlc_library_reload(struct lib_descriptor *lib, const char *dev,
                        json_t **json_message);
 
 #endif /* _PHO_TLC_LIBRARY_H */

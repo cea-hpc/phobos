@@ -52,11 +52,12 @@ message PhoTlcRequest {
 
     required uint32 id  = 1;    // Request ID to match its future response.
 
-    optional bool ping  = 2;    // Is the request a ping request ?
+    optional bool ping  = 2;    // Is the request a ping one ?
     optional DriveLookup drive_lookup = 3;  // Drive lookup body
     optional Load load = 4;     // Load body
     optional Unload unload = 5; // Unload body
     optional Status status = 6; // Status body
+    optional bool reload = 7;   // Is the request a reload one ?
 }
 
 /** TLC protocol response, emitted by the TLC. */
@@ -109,4 +110,5 @@ message PhoTlcResponse {
     optional Load load = 5;     // Load body
     optional Unload unload = 6; // Unload body
     optional Status status = 7; // Status body
+    optional bool reload = 8;   // This response is a successful reload one
 }

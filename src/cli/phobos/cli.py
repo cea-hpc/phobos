@@ -704,6 +704,17 @@ class LibStatusOptHandler(BaseOptHandler):
         parser.add_argument('--reload', action='store_true',
                             help="TLC reloads its library internal cache")
 
+class LibReloadOptHandler(BaseOptHandler):
+    """Reload the library internal cache of the TLC"""
+    label = 'reload'
+    descr = 'Reload the library internal cache of the TLC'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
 class DriveListOptHandler(ListOptHandler):
     """
     Specific version of the 'list' command for tape drives, with a couple
@@ -2058,6 +2069,7 @@ class LibOptHandler(BaseResourceOptHandler):
     verbs = [
         ScanOptHandler,
         LibStatusOptHandler,
+        LibReloadOptHandler,
     ]
 
     def exec_scan(self):
@@ -2090,6 +2102,16 @@ class LibOptHandler(BaseResourceOptHandler):
             with AdminClient(lrs_required=False, tlc_required=True) as adm:
                 lib_data = adm.tlc_lib_status(with_reload)
                 self._print_lib_data(lib_data)
+
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
+    def exec_reload(self):
+        """Reload the library internal cache of the TLC"""
+        try:
+            with AdminClient(lrs_required=False, tlc_required=True) as adm:
+                adm.tlc_reload()
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

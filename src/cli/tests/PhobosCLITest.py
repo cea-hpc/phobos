@@ -86,6 +86,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['object', '-h'])
         self.check_cmdline_exit(['extent', '-h'])
         self.check_cmdline_exit(['logs', '-h'])
+        self.check_cmdline_exit(['ping', '-h'])
 
     def test_cli_basic(self): # pylint: disable=too-many-statements
         """test simple valid and invalid command lines."""
@@ -170,6 +171,9 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['drive', 'unload', 'drive_serial_or_path'])
         self.check_cmdline_valid(['drive', 'unload', '--tape-label',
                                   'tape_label', 'drive_serial_or_path'])
+        self.check_cmdline_valid(['lib', 'status'])
+        self.check_cmdline_valid(['lib', 'status', '--reload'])
+        self.check_cmdline_valid(['lib', 'reload'])
 
         # Test invalid object and invalid verb
         self.check_cmdline_exit(['get', '--version', 'nan', 'objid', 'file'],

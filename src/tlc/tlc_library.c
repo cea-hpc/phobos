@@ -138,26 +138,32 @@ err_free:
 
 /** load status of elements of the given type */
 static int lib_status_load(struct lib_descriptor *lib,
-                           enum element_type_code type, json_t *message)
+                           enum element_type_code type, json_t **message)
 {
     json_t *lib_load_json;
     json_t *status_json;
     int rc;
 
+    *message = NULL;
     lib_load_json = json_object();
 
     /* address of elements are required */
     rc = lib_addrs_load(lib, lib_load_json);
     if (rc) {
-        if (json_object_size(lib_load_json) != 0)
-            json_object_set_new(message,
-                                SCSI_OPERATION_TYPE_NAMES[LIBRARY_LOAD],
-                                lib_load_json);
+        if (json_object_size(lib_load_json) != 0) {
+            *message = json_object();
+            if (*message)
+                json_object_set_new(*message,
+                                    SCSI_OPERATION_TYPE_NAMES[LIBRARY_LOAD],
+                                    lib_load_json);
+            else
+                json_decref(lib_load_json);
+        }
 
         return rc;
     }
 
-    destroy_json(lib_load_json);
+    json_decref(lib_load_json);
     status_json = json_object();
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_ARM) && !lib->arms.loaded) {
@@ -168,10 +174,15 @@ static int lib_status_load(struct lib_descriptor *lib,
                                  &lib->arms.items, &lib->arms.count,
                                  status_json);
         if (rc) {
-            if (json_object_size(status_json) != 0)
-                json_object_set_new(message,
-                                    SCSI_OPERATION_TYPE_NAMES[ARMS_STATUS],
-                                    status_json);
+            if (json_object_size(status_json) != 0) {
+                *message = json_object();
+                if (*message)
+                    json_object_set_new(*message,
+                                        SCSI_OPERATION_TYPE_NAMES[ARMS_STATUS],
+                                        status_json);
+                else
+                    json_decref(status_json);
+            }
 
             LOG_RETURN(rc, "element_status failed for type 'arms'");
         }
@@ -188,10 +199,15 @@ static int lib_status_load(struct lib_descriptor *lib,
                                  &lib->slots.items, &lib->slots.count,
                                  status_json);
         if (rc) {
-            if (json_object_size(status_json) != 0)
-                json_object_set_new(message,
-                                    SCSI_OPERATION_TYPE_NAMES[SLOTS_STATUS],
-                                    status_json);
+            if (json_object_size(status_json) != 0) {
+                *message = json_object();
+                if (*message)
+                    json_object_set_new(*message,
+                                        SCSI_OPERATION_TYPE_NAMES[SLOTS_STATUS],
+                                        status_json);
+                else
+                    json_decref(status_json);
+            }
 
             LOG_RETURN(rc, "element_status failed for type 'slots'");
         }
@@ -208,10 +224,15 @@ static int lib_status_load(struct lib_descriptor *lib,
                                  &lib->impexp.items, &lib->impexp.count,
                                  status_json);
         if (rc) {
-            if (json_object_size(status_json) != 0)
-                json_object_set_new(message,
-                                    SCSI_OPERATION_TYPE_NAMES[IMPEXP_STATUS],
-                                    status_json);
+            if (json_object_size(status_json) != 0) {
+                *message = json_object();
+                if (*message)
+                    json_object_set_new(
+                        *message, SCSI_OPERATION_TYPE_NAMES[IMPEXP_STATUS],
+                        status_json);
+                else
+                    json_decref(status_json);
+            }
 
             LOG_RETURN(rc, "element_status failed for type 'impexp'");
         }
@@ -243,10 +264,15 @@ static int lib_status_load(struct lib_descriptor *lib,
                                  flags, &lib->drives.items, &lib->drives.count,
                                  status_json);
         if (rc) {
-            if (json_object_size(status_json) != 0)
-                json_object_set_new(message,
-                                    SCSI_OPERATION_TYPE_NAMES[DRIVES_STATUS],
-                                    status_json);
+            if (json_object_size(status_json) != 0) {
+                *message = json_object();
+                if (*message)
+                    json_object_set_new(
+                        *message, SCSI_OPERATION_TYPE_NAMES[DRIVES_STATUS],
+                        status_json);
+                else
+                    json_decref(status_json);
+            }
 
             LOG_RETURN(rc, "element_status failed for type 'drives'");
         }
@@ -257,10 +283,15 @@ static int lib_status_load(struct lib_descriptor *lib,
             /* query drive serial separately */
             rc = query_drive_sn(lib, status_json);
             if (rc) {
-                if (json_object_size(status_json) != 0)
-                    json_object_set_new(
-                        message, SCSI_OPERATION_TYPE_NAMES[DRIVES_STATUS],
-                        status_json);
+                if (json_object_size(status_json) != 0) {
+                    *message = json_object();
+                    if (*message)
+                        json_object_set_new(
+                            *message, SCSI_OPERATION_TYPE_NAMES[DRIVES_STATUS],
+                            status_json);
+                    else
+                        json_decref(status_json);
+                }
 
                 return rc;
             }
@@ -270,38 +301,26 @@ static int lib_status_load(struct lib_descriptor *lib,
         lib->drives.loaded = true;
     }
 
-    destroy_json(status_json);
-
+    json_decref(status_json);
     return 0;
 }
 
-int tlc_library_open(struct lib_descriptor *lib, const char *dev)
+int tlc_library_open(struct lib_descriptor *lib, const char *dev,
+                     json_t **json_message)
 {
-    json_t *status_load_message;
     int rc;
 
+    *json_message = NULL;
     lib->fd = open(dev, O_RDWR | O_NONBLOCK);
-    if (lib->fd < 0)
+    if (lib->fd < 0) {
+        *json_message = json_pack("{s:s}", "LIB_OPEN_FAILURE", dev);
         LOG_RETURN(rc = -errno, "Failed to open '%s'", dev);
-
-    status_load_message = json_object();
-    rc = lib_status_load(lib, SCSI_TYPE_ALL, status_load_message);
-    if (rc) {
-        char *error_message;
-
-        error_message = json_dumps(status_load_message, 0);
-        if (!error_message) {
-            pho_error(-ENOMEM,
-                      "Failed to dump library status load error message");
-            pho_error(rc, "Failed to load library status");
-        } else {
-            pho_error(rc, "Failed to load library status : '%s'",
-                      error_message);
-            free(error_message);
-        }
     }
 
-    destroy_json(status_load_message);
+    rc = lib_status_load(lib, SCSI_TYPE_ALL, json_message);
+    if (rc)
+        pho_error(rc, "Failed to load library status");
+
     return rc;
 }
 
@@ -309,8 +328,18 @@ void tlc_library_close(struct lib_descriptor *lib)
 {
     lib_status_clear(lib);
     lib_addrs_clear(lib);
-    if (lib->fd >= 0)
+    if (lib->fd >= 0) {
         close(lib->fd);
+        lib->fd = 0;
+    }
+}
+
+int tlc_library_reload(struct lib_descriptor *lib, const char *dev,
+                       json_t **json_message)
+{
+    *json_message = NULL;
+    tlc_library_close(lib);
+    return tlc_library_open(lib, dev, json_message);
 }
 
 /**

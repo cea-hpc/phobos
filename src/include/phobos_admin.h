@@ -389,6 +389,18 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
                           json_t **lib_data);
 
 /**
+ * Reload the library internal cache of the TLC
+ *
+ * @param[in]       adm         Admin module handler.
+ *
+ * @return                      0 on success
+ *                              -errno on failure
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
+ */
+int phobos_admin_tlc_reload(struct admin_handle *adm);
+
+/**
  * Generate a json array with unstructured information. Output information may
  * vary, depending on the library.
  *

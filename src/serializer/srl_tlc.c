@@ -74,6 +74,13 @@ void pho_srl_tlc_request_status_alloc(pho_tlc_req_t *req)
     pho_tlc_request__status__init(req->status);
 }
 
+void pho_srl_tlc_request_reload_alloc(pho_tlc_req_t *req)
+{
+    pho_tlc_request__init(req);
+    req->has_reload = true;
+    req->reload = true;
+}
+
 void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack)
 {
     if (unpack) {
@@ -108,6 +115,9 @@ void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack)
         free(req->status);
         req->status = NULL;
     }
+
+    req->has_reload = false;
+    req->reload = false;
 }
 
 int pho_srl_tlc_response_ping_alloc(pho_tlc_resp_t *resp)
@@ -152,6 +162,13 @@ void pho_srl_tlc_response_status_alloc(pho_tlc_resp_t *resp)
     pho_tlc_response__init(resp);
     resp->status = xmalloc(sizeof(*resp->status));
     pho_tlc_response__status__init(resp->status);
+}
+
+void pho_srl_tlc_response_reload_alloc(pho_tlc_resp_t *resp)
+{
+    pho_tlc_response__init(resp);
+    resp->has_reload = true;
+    resp->reload = true;
 }
 
 void pho_srl_tlc_response_error_alloc(pho_tlc_resp_t *resp)
@@ -204,6 +221,9 @@ void pho_srl_tlc_response_free(pho_tlc_resp_t *resp, bool unpack)
         free(resp->status);
         resp->status = NULL;
     }
+
+    resp->has_reload = false;
+    resp->reload = false;
 }
 
 int pho_srl_tlc_request_pack(pho_tlc_req_t *req, struct pho_buff *buf)

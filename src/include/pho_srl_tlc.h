@@ -129,6 +129,19 @@ static inline bool pho_tlc_request_is_status(const pho_tlc_req_t *req)
 }
 
 /**
+ * Request reload checker.
+ *
+ * \param[in]       req         Request.
+ *
+ * \return                      true if the request is a reload one,
+ *                              false otherwise.
+ */
+static inline bool pho_tlc_request_is_reload(const pho_tlc_req_t *req)
+{
+    return (req->has_reload && req->reload);
+}
+
+/**
  * Response ping checker.
  *
  * \param[in]       resp        Response.
@@ -205,6 +218,19 @@ static inline bool pho_tlc_response_is_status(const pho_tlc_resp_t *resp)
     return resp->status != NULL;
 }
 
+/**
+ * Response reload checker.
+ *
+ * \param[in]       resp        Response.
+ *
+ * \return                      true if the response is a reload one,
+ *                              false otherwise.
+ */
+static inline bool pho_tlc_response_is_reload(const pho_tlc_resp_t *resp)
+{
+    return (resp->has_reload && resp->reload);
+}
+
 /******************************************************************************/
 /** Allocators & Deallocators *************************************************/
 /******************************************************************************/
@@ -252,6 +278,13 @@ void pho_srl_tlc_request_unload_alloc(pho_tlc_req_t *req);
 void pho_srl_tlc_request_status_alloc(pho_tlc_req_t *req);
 
 /**
+ * Allocation of status reload contents.
+ *
+ * \param[out]      req         Pointer to the reload data structure.
+ */
+void pho_srl_tlc_request_reload_alloc(pho_tlc_req_t *req);
+
+/**
  * Release of request contents.
  *
  * \param[in]       req         Pointer to the request data structure.
@@ -296,6 +329,13 @@ void pho_srl_tlc_response_unload_alloc(pho_tlc_resp_t *resp);
  * \param[out]      resp        Pointer to the response data structure.
  */
 void pho_srl_tlc_response_status_alloc(pho_tlc_resp_t *resp);
+
+/**
+ * Allocation of reload response content.
+ *
+ * \param[out]      resp        Pointer to the response data structure.
+ */
+void pho_srl_tlc_response_reload_alloc(pho_tlc_resp_t *resp);
 
 /**
  * Allocation of error response content.
