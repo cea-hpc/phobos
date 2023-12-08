@@ -187,6 +187,12 @@ ldconfig
 %endif
 
 %changelog
+* Fri Dec 08 2023 - Guillaume Courrier <guillaume.courrier@cea.fr> - 1.95.2-1
+- reduce verbosity of check_renew_lock log
+- install pho_ldm.h with phobos-devel
+- add network-online After condition
+- do not attempt to find a new medium for a write if no drive is available
+
 * Fri Nov 24 2023 - Patrice Lucas <patrice.lucas@cea.fr> - 1.95.1-1
 - ltfs: improve ltfs log with serial number
 - ltfs: return an error if labels are different at mount operation

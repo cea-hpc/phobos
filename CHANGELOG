@@ -1,5 +1,11 @@
 # CHANGELOG UPDATES
 
+## 1.95.2
+* reduce verbosity of check_renew_lock log
+* install pho_ldm.h with phobos-devel
+* add network-online After condition
+* do not attempt to find a new medium for a write if no drive is available
+
 ## 1.95.1
 * common: add xmalloc, xstrdup, xcalloc...
 * ltfs: improve ltfs log with serial number
