@@ -2514,9 +2514,9 @@ static int media_update_lock_retry(struct dss_handle *hdl,
 /**
  * output medium_info must be cleaned by calling dss_res_free(medium_info, 1)
  */
-static int dss_one_medium_get_from_id(struct dss_handle *dss,
-                                      const struct pho_id *medium_id,
-                                      struct media_info **medium_info)
+int dss_one_medium_get_from_id(struct dss_handle *dss,
+                               const struct pho_id *medium_id,
+                               struct media_info **medium_info)
 {
     struct dss_filter filter;
     int cnt;

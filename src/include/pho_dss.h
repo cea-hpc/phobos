@@ -314,6 +314,21 @@ int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
                   struct media_info **med_ls, int *med_cnt);
 
 /**
+ * Get only one medium info from DSS
+ *
+ * @param[in]   dss         DSS handle
+ * @param[in]   medium_id   medium id to get from DSS
+ * @param[out]  medium_info medium info retrieved from DSS or NULL if failure
+ *                          (output medium_info must be cleaned by calling
+ *                           dss_res_free(medium_info, 1))
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_one_medium_get_from_id(struct dss_handle *dss,
+                               const struct pho_id *medium_id,
+                               struct media_info **medium_info);
+
+/**
  * Retrieve layout + extents information from DSS
  * @param[in]  hdl           valid connection handle
  * @param[in]  object        assembled DSS filtering criteria on objects

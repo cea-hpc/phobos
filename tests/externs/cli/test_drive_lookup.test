@@ -112,6 +112,7 @@ EOF
     $phobos drive lookup ${drive_serial} 2>&1 | grep "State: empty"
 
     # lookup an existing drive with a loaded tape
+    $phobos tape add -t lto6 ${tape}
     $phobos drive load ${drive} ${tape}
     drive_lookup_out=$($phobos drive lookup ${drive} 2>&1)
     echo ${drive_lookup_out} | grep "State: full"

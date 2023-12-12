@@ -49,15 +49,11 @@ int pho_srl_tlc_request_drive_lookup_alloc(pho_tlc_req_t *req)
     return 0;
 }
 
-int pho_srl_tlc_request_load_alloc(pho_tlc_req_t *req)
+void pho_srl_tlc_request_load_alloc(pho_tlc_req_t *req)
 {
     pho_tlc_request__init(req);
-    req->load = malloc(sizeof(*req->load));
-    if (!req->load)
-        return -ENOMEM;
-
+    req->load = xmalloc(sizeof(*req->load));
     pho_tlc_request__load__init(req->load);
-    return 0;
 }
 
 void pho_srl_tlc_request_unload_alloc(pho_tlc_req_t *req)

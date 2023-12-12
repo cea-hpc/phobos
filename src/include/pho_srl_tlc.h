@@ -256,10 +256,8 @@ int pho_srl_tlc_request_drive_lookup_alloc(pho_tlc_req_t *req);
  * Allocation of load request contents.
  *
  * \param[out]      req         Pointer to the request data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_tlc_request_load_alloc(pho_tlc_req_t *req);
+void pho_srl_tlc_request_load_alloc(pho_tlc_req_t *req);
 
 /**
  * Allocation of unload request contents.

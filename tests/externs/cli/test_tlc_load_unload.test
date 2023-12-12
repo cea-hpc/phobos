@@ -44,10 +44,18 @@ function cleanup
     drain_all_drives
 }
 
+function cleanup_also_lrs
+{
+    waive_lrs
+    cleanup
+}
+
 function test_load
 {
     local tape="$(get_tapes L6 1)"
     local drive="$(get_lto_drives 6 1)"
+
+    $phobos tape add -t lto6 ${tape}
 
     # no TLC
     ECONNREFUSED=111
@@ -103,17 +111,15 @@ EOF
     DELETE FROM device WHERE id = 'serial';
 EOF
 
-    # Load the drive
     $phobos drive add --unlock ${drive}
 
     # unknown tape
-    ENOENT=2
     set +e
     $phobos drive load ${drive} unknown_tape
     rc=$?
     set -e
     if (( rc != ENOENT )); then
-        error "phobos drive load for TLC unknown tape must failed" \
+        error "phobos drive load for unknown tape must failed" \
               "with ENOENT ($ENOENT), instead we got ${rc}"
     fi
 
@@ -130,6 +136,7 @@ function test_load_drive_to_drive
     local drives=( $(get_lto_drives 6 2) )
 
     invoke_tlc
+    $phobos tape add -t lto6 ${tape}
     $phobos drive add --unlock ${drives[0]}
     $phobos drive add --unlock ${drives[1]}
 
@@ -151,6 +158,8 @@ function test_unload
 {
     local tape="$(get_tapes L6 1)"
     local drive="$(get_lto_drives 6 1)"
+
+    $phobos tape add -t lto6 ${tape}
 
     # no TLC
     ECONNREFUSED=111
@@ -223,6 +232,33 @@ EOF
     echo ${drive_lookup_out} | grep "State: empty"
 }
 
+function test_load_lock
+{
+    local tape="$(get_tapes L6 1)"
+    local drive="$(get_lto_drives 6 1)"
+
+    # Add drive and tape
+    $phobos drive add --unlock ${drive}
+    $phobos tape add -t lto6 ${tape}
+
+    # start tlc
+    invoke_tlc
+
+    # start LRS to lock the drive
+    invoke_lrs
+
+    # load again tape into drive
+    EALREADY=114
+    set +e
+    $phobos drive load ${drive} ${tape}
+    rc=$?
+    set -e
+    if (( rc != EALREADY )); then
+        error "phobos drive load for TLC with drive lock by LRS must fail" \
+              "with EALREADY ($EALREADY), instead we got ${rc}"
+    fi
+}
+
 if [[ ! -w /dev/changer ]]; then
     skip "Library required for this test"
 fi
@@ -231,4 +267,5 @@ TESTS=(
     "setup; test_load; cleanup"
     "setup; test_load_drive_to_drive; cleanup"
     "setup; test_unload; cleanup"
+    "setup; test_load_lock; cleanup_also_lrs"
 )

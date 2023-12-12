@@ -1697,16 +1697,84 @@ clean_response:
     return rc;
 }
 
+static int check_take_drive_lock(struct dss_handle *dss,
+                                 struct dev_info *dev_res,
+                                 const char *hostname, int pid)
+{
+    int rc;
+
+    if (dev_res->lock.hostname) {
+        if (strcmp(dev_res->lock.hostname, hostname))
+            LOG_RETURN(-EALREADY,
+                       "drive (id: '%s', path: '%s') is already locked by host "
+                       "'%s', owner/pid '%d', admin host '%s' can not load it",
+                       dev_res->rsc.id.name, dev_res->path,
+                       dev_res->lock.hostname, dev_res->lock.owner, hostname);
+
+        if (dev_res->lock.owner != pid)
+            LOG_RETURN(-EALREADY,
+                       "drive (id: '%s', path: '%s') is already locked by host "
+                       "'%s', owner/pid '%d', admin host '%s' but owner/pid "
+                       "'%d' can not load it",
+                       dev_res->rsc.id.name, dev_res->path,
+                       dev_res->lock.hostname, dev_res->lock.owner, hostname,
+                       pid);
+    } else {
+        rc = dss_lock(dss, DSS_DEVICE, dev_res, 1);
+        if (rc)
+            LOG_RETURN(rc,
+                       "admin host '%s' owner/pid '%d' failed to lock the "
+                       "drive (id: '%s', path: '%s')",
+                       hostname, pid, dev_res->rsc.id.name, dev_res->path);
+    }
+
+    return 0;
+}
+
+static int check_take_tape_lock(struct dss_handle *dss,
+                                struct media_info *med_res,
+                                const char *hostname, int pid)
+{
+    int rc;
+
+    if (med_res->lock.hostname) {
+        if (strcmp(med_res->lock.hostname, hostname))
+            LOG_RETURN(-EALREADY,
+                       "tape '%s' is already locked by host '%s', owner/pid "
+                       "'%d', admin host '%s' can not load it",
+                       med_res->rsc.id.name, med_res->lock.hostname,
+                       med_res->lock.owner, hostname);
+
+        if (med_res->lock.owner != pid)
+            LOG_RETURN(-EALREADY,
+                       "tape '%s' is already locked by host '%s', owner/pid "
+                       "'%d', admin host '%s' but owner/pid '%d' can not load "
+                       "it", med_res->rsc.id.name, med_res->lock.hostname,
+                       med_res->lock.owner, hostname, pid);
+    } else {
+        rc = dss_lock(dss, DSS_MEDIA, med_res, 1);
+        if (rc)
+            LOG_RETURN(rc,
+                       "admin host '%s' owner/pid '%d' failed to lock the "
+                       "tape '%s'", hostname, pid, med_res->rsc.id.name);
+    }
+
+    return 0;
+}
+
 int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
                       const struct pho_id *tape_id)
 {
     struct proto_resp proto_resp = {TLC_REQUEST};
     struct proto_req proto_req = {TLC_REQUEST};
+    struct media_info *med_res;
     struct dev_info *dev_res;
+    const char *hostname;
     pho_tlc_resp_t *resp;
     pho_tlc_req_t req;
     int rid = 1;
-    int rc;
+    int rc, rc2;
+    int pid;
 
     if (drive_id->family != PHO_RSC_TAPE)
         LOG_RETURN(-EINVAL,
@@ -1720,42 +1788,48 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
                    "got %s", rsc_family2str(PHO_RSC_TAPE),
                    rsc_family2str(tape_id->family));
 
-    /* fetch the serial number and store it in id */
     rc = _get_device_by_path_or_serial(adm, drive_id, &dev_res);
     if (rc)
         LOG_RETURN(rc, "Unable to retrieve serial number from device name '%s' "
                    "in DSS", drive_id->name);
 
-    dss_res_free(dev_res, 1);
-
-    proto_req.msg.tlc_req = &req;
-    rc = pho_srl_tlc_request_load_alloc(&req);
+    /* Lock drive and medium */
+    rc = dss_one_medium_get_from_id(&adm->dss, tape_id, &med_res);
     if (rc)
-        LOG_RETURN(rc, "Unable to alloc drive load request");
+        LOG_GOTO(free_dev_res, rc,
+                 "Unable to get tape '%s' from DSS", tape_id->name);
 
+    rc = fill_host_owner(&hostname, &pid);
+    if (rc)
+        LOG_GOTO(free_med_res, rc,
+                 "Unable to retrieve hostname and pid to check drive and "
+                 "medium locks");
+
+    rc = check_take_drive_lock(&adm->dss, dev_res, hostname, pid);
+    if (rc)
+        LOG_GOTO(free_med_res, rc,
+                 "Unable to lock the drive (id: '%s', path: '%s')",
+                 dev_res->rsc.id.name, dev_res->path);
+
+    rc = check_take_tape_lock(&adm->dss, med_res, hostname, pid);
+    if (rc)
+        LOG_GOTO(unlock_drive, rc,
+                 "Unable to lock the tape '%s'", tape_id->name);
+
+    /* prepare and send load request to the tlc*/
+    proto_req.msg.tlc_req = &req;
+    pho_srl_tlc_request_load_alloc(&req);
     req.id = rid;
-    req.load->drive_serial = strdup(drive_id->name);
-    if (!req.load->drive_serial) {
-        pho_srl_tlc_request_free(&req, false);
-        LOG_RETURN(-ENOMEM,
-                   "Unable to copy drive serial number %s into load request",
-                   drive_id->name);
-    }
-
-    req.load->tape_label = strdup(tape_id->name);
-    if (!req.load->tape_label) {
-        pho_srl_tlc_request_free(&req, false);
-        LOG_RETURN(-ENOMEM,
-                   "Unable to copy tape label %s into load request",
-                   tape_id->name);
-    }
+    req.load->drive_serial = xstrdup(drive_id->name);
+    req.load->tape_label = xstrdup(tape_id->name);
 
     rc = _send_and_receive(&adm->tlc_comm, proto_req, &proto_resp);
     pho_srl_tlc_request_free(&req, false);
     if (rc)
-        LOG_RETURN(rc,
-                   "Error with TLC communication : %d , %s", rc, strerror(-rc));
+        LOG_GOTO(unlock_tape, rc,
+                 "Error with TLC communication : %d , %s", rc, strerror(-rc));
 
+    /* manage tlc load response */
     resp = proto_resp.msg.tlc_resp;
     if (pho_tlc_response_is_load(resp) && resp->req_id == rid) {
         if (resp->load->message)
@@ -1774,6 +1848,24 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
     }
 
     pho_srl_tlc_response_free(resp, true);
+unlock_tape:
+    rc2 = dss_unlock(&adm->dss, DSS_MEDIA, med_res, 1, false);
+    if (rc2) {
+        pho_error(rc2, "Unable to unlock tape '%s'", dev_res->rsc.id.name);
+        rc = rc ? : rc2;
+    }
+unlock_drive:
+    rc2 = dss_unlock(&adm->dss, DSS_DEVICE, dev_res, 1, false);
+    if (rc2) {
+        pho_error(rc2, "Unable to unlock drive (id: '%s', path: '%s')",
+                  dev_res->rsc.id.name, dev_res->path);
+        rc = rc ? : rc2;
+    }
+
+free_med_res:
+    dss_res_free(med_res, 1);
+free_dev_res:
+    dss_res_free(dev_res, 1);
     return rc;
 }
 

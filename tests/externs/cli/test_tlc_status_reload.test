@@ -35,12 +35,12 @@ function setup
 {
     setup_tables
     drain_all_drives
-    invoke_daemons
+    invoke_tlc
 }
 
 function cleanup
 {
-    waive_daemons
+    waive_tlc
     drop_tables
     drain_all_drives
 }
@@ -76,6 +76,7 @@ function test_status_reload
     # add a drive an load a tape
     $phobos drive add ${drive}
     drive_serial=$($phobos drive list)
+    $phobos tape add -t lto6 ${tape}
     $phobos drive load ${drive} ${tape}
 
     # status with one loaded tape
