@@ -1210,66 +1210,65 @@ static void queue_format_response(struct tsqueue *response_queue,
     tsqueue_push(response_queue, respc);
 }
 
+static bool medium_is_loaded(struct lrs_dev *dev, struct media_info *medium)
+{
+    return (dev->ld_op_status == PHO_DEV_OP_ST_LOADED) &&
+        !strcmp(dev->ld_dss_media_info->rsc.id.name,
+                medium->rsc.id.name);
+}
+
 static int dev_handle_format(struct lrs_dev *dev)
 {
     struct sub_request *subreq = dev->ld_sub_request;
     struct media_info *medium_to_format;
     struct req_container *reqc;
     bool can_retry = true;
+    bool failure_on_dev;
     int rc;
 
     reqc = dev->ld_sub_request->reqc;
     medium_to_format = reqc->params.format.medium_to_format;
-    if (dev->ld_op_status == PHO_DEV_OP_ST_LOADED &&
-        !strcmp(dev->ld_dss_media_info->rsc.id.name,
-                medium_to_format->rsc.id.name)) {
-        /*
-         * medium to format already loaded, use existing dev->ld_dss_media_info,
+
+    if (medium_is_loaded(dev, medium_to_format)) {
+        /* medium to format already loaded, use existing dev->ld_dss_media_info,
          * free reqc->params.format.medium_to_format
          */
         pho_info("medium %s to format is already loaded into device %s",
                  dev->ld_dss_media_info->rsc.id.name,
                  dev->ld_dss_dev_info->rsc.id.name);
-    } else {
-        bool failure_on_dev;
-
-        rc = dev_empty(dev);
-        if (rc) {
-            /* TODO: use sched retry queue */
-            tsqueue_push(dev->sched_req_queue, reqc);
-            dev->ld_sub_request->reqc = NULL;
-            LOG_GOTO(out, rc,
-                     "Unable to empty device '%s' to format medium '%s', "
-                     "format request is requeued",
-                     dev->ld_dss_dev_info->rsc.id.name,
-                     medium_to_format->rsc.id.name);
-        }
-
-        rc = dev_load(dev, &medium_to_format, true, &failure_on_dev,
-                      &can_retry, false);
-        if (rc == -EBUSY && can_retry) {
-            pho_warn("Trying to load a busy medium to format, try again later");
-            return 0;
-        }
-
-        MUTEX_LOCK(&dev->ld_mutex);
-        reqc->params.format.medium_to_format = NULL;
-        MUTEX_UNLOCK(&dev->ld_mutex);
-        if (rc) {
-            if (failure_on_dev) {
-                LOG_GOTO(out_response, rc, "Error when loading medium to "
-                         "format in device %s",
-                         dev->ld_dss_dev_info->rsc.id.name);
-            } else {
-                pho_error(rc, "Error on medium only when loading to format in "
-                          "device %s", dev->ld_dss_dev_info->rsc.id.name);
-                queue_error_response(dev->ld_response_queue, rc, reqc);
-
-                goto out;
-            }
-        }
+        goto format;
     }
 
+    rc = dev_empty(dev);
+    if (rc) {
+        /* TODO: use sched retry queue */
+        tsqueue_push(dev->sched_req_queue, reqc);
+        dev->ld_sub_request->reqc = NULL;
+        LOG_GOTO(out, rc,
+                 "Unable to empty device '%s' to format medium '%s', "
+                 "format request is requeued",
+                 dev->ld_dss_dev_info->rsc.id.name,
+                 medium_to_format->rsc.id.name);
+    }
+
+    rc = dev_load(dev, &medium_to_format, true, &failure_on_dev,
+                  &can_retry, false);
+    if (rc == -EBUSY && can_retry) {
+        pho_warn("Trying to load a busy medium to format, try again later");
+        return 0;
+    }
+
+    MUTEX_LOCK(&dev->ld_mutex);
+    reqc->params.format.medium_to_format = NULL;
+    MUTEX_UNLOCK(&dev->ld_mutex);
+    if (rc)
+        LOG_GOTO(out_response, rc, "Error when loading medium '%s' to "
+                 "format in device '%s'%s",
+                 dev->ld_dss_media_info->rsc.id.name,
+                 dev->ld_dss_dev_info->rsc.id.name,
+                 failure_on_dev ? "" : " (medium only failure)");
+
+format:
     rc = dev_format(dev, reqc->params.format.fsa, reqc->req->format->unlock);
 
 out_response:
