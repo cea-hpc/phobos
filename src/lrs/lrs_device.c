@@ -1019,8 +1019,9 @@ static void fail_release_free_medium(struct lrs_dev *dev,
 
 int dev_load(struct lrs_dev *dev, struct media_info **medium,
              bool release_medium_on_dev_only_failure,
-             bool *failure_on_dev, bool *failure_on_medium,
-             bool *can_retry, bool free_medium)
+             bool *failure_on_dev,
+             bool *can_retry,
+             bool free_medium)
 {
     struct lib_item_addr medium_addr;
     json_t *medium_lookup_json;
@@ -1031,8 +1032,8 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
 
     ENTRY;
 
+    dev->ld_sub_request->failure_on_medium = false;
     *failure_on_dev = false;
-    *failure_on_medium = false;
     *can_retry = false;
     pho_verb("load: '%s' into '%s'", (*medium)->rsc.id.name, dev->ld_dev_path);
 
@@ -1064,7 +1065,7 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
     rc = ldm_lib_media_lookup(&lib_hdl, (*medium)->rsc.id.name, &medium_addr,
                               medium_lookup_json);
     if (rc) {
-        *failure_on_medium = true;
+        dev->ld_sub_request->failure_on_medium = true;
         fail_release_free_medium(dev, medium, free_medium);
 
         if (json_object_size(medium_lookup_json) != 0) {
@@ -1108,7 +1109,7 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         MUTEX_UNLOCK(&dev->ld_mutex);
         *failure_on_dev = true;
-        *failure_on_medium = true;
+        dev->ld_sub_request->failure_on_medium = true;
         fail_release_free_medium(dev, medium, free_medium);
         LOG_GOTO(out_close, rc, "Media move failed");
     }
@@ -1245,8 +1246,7 @@ static int dev_handle_format(struct lrs_dev *dev)
         }
 
         rc = dev_load(dev, &medium_to_format, true, &failure_on_dev,
-                      &dev->ld_sub_request->failure_on_medium, &can_retry,
-                      false);
+                      &can_retry, false);
         if (rc == -EBUSY && can_retry) {
             pho_warn("Trying to load a busy medium to format, try again later");
             return 0;
@@ -1665,7 +1665,7 @@ static int dev_handle_read_write(struct lrs_dev *dev)
     pho_debug("Will load '%s' in device '%s'",
               medium_to_alloc->rsc.id.name, dev->ld_dss_dev_info->rsc.id.name);
     rc = dev_load(dev, &medium_to_alloc, false, &failure_on_device,
-                  &sub_request->failure_on_medium, &can_retry, true);
+                  &can_retry, true);
     if (rc == -EBUSY && can_retry) {
         pho_warn("Trying to load a busy medium to %s, try again later",
                  pho_srl_request_kind_str(reqc->req));

@@ -441,7 +441,6 @@ static void scsi_dev_load_logs_check(struct dss_handle *handle,
     struct lrs_dev device;
     json_t *full_message;
     bool fod;
-    bool fom;
     bool cr;
     int rc;
 
@@ -462,7 +461,8 @@ static void scsi_dev_load_logs_check(struct dss_handle *handle,
         will_return_always(mock_ioctl, op);
     }
 
-    rc = dev_load(&device, &medium, true, &fod, &fom, &cr, true);
+    device.ld_sub_request = xmalloc(sizeof(*device.ld_sub_request));
+    rc = dev_load(&device, &medium, true, &fod, &cr, true);
 
     if (should_fail) {
         pho_context_reset_scsi_ioctl();
@@ -559,7 +559,6 @@ static void scsi_dev_unload_logs_check(struct dss_handle *handle,
     struct lrs_dev device;
     json_t *full_message;
     bool fod;
-    bool fom;
     bool cr;
     int rc;
 
@@ -574,7 +573,8 @@ static void scsi_dev_unload_logs_check(struct dss_handle *handle,
                                       medium_name, device_name);
     assert_non_null(full_message);
 
-    rc = dev_load(&device, &medium, true, &fod, &fom, &cr, false);
+    device.ld_sub_request = xmalloc(sizeof(*device.ld_sub_request));
+    rc = dev_load(&device, &medium, true, &fod, &cr, false);
     assert_return_code(-rc, rc);
 
     dss_logs_delete(handle, NULL);

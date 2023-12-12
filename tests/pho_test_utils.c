@@ -145,6 +145,7 @@ void create_device(struct lrs_dev *dev, char *path, char *model,
 
 void cleanup_device(struct lrs_dev *dev)
 {
+    free(dev->ld_sub_request);
     free((void *)dev->ld_technology);
     free(dev->ld_dss_dev_info);
     free(dev->ld_sys_dev_state.lds_model);

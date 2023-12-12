@@ -117,7 +117,6 @@ static void prepare_mount(struct dss_handle *handle, struct lrs_dev *device,
 {
     struct fs_adapter_module *fsa = NULL;
     bool fod;
-    bool fom;
     bool cr;
     int rc;
 
@@ -127,7 +126,8 @@ static void prepare_mount(struct dss_handle *handle, struct lrs_dev *device,
     create_device(device, DEVICE_NAME, LTO5_MODEL, handle);
     create_medium(medium, MEDIUM_NAME);
 
-    rc = dev_load(device, &medium, true, &fod, &fom, &cr, false);
+    device->ld_sub_request = xmalloc(sizeof(*device->ld_sub_request));
+    rc = dev_load(device, &medium, true, &fod, &cr, false);
     assert_return_code(-rc, rc);
 
     dss_logs_delete(handle, NULL);
