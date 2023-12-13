@@ -259,6 +259,36 @@ function test_load_lock
     fi
 }
 
+function test_unload_lock
+{
+    local tape="$(get_tapes L6 1)"
+    local drive="$(get_lto_drives 6 1)"
+
+    # Add drive and tape
+    $phobos drive add --unlock ${drive}
+    $phobos tape add -t lto6 ${tape}
+
+    # start tlc
+    invoke_tlc
+
+    # load tape into drive
+    $phobos drive load ${drive} ${tape}
+
+    # start LRS to lock the drive
+    invoke_lrs
+
+    # unload drive
+    EALREADY=114
+    set +e
+    $phobos drive unload ${drive}
+    rc=$?
+    set -e
+    if (( rc != EALREADY )); then
+        error "phobos drive unload for TLC with drive lock by LRS must fail" \
+              "with EALREADY ($EALREADY), instead we got ${rc}"
+    fi
+}
+
 if [[ ! -w /dev/changer ]]; then
     skip "Library required for this test"
 fi
@@ -268,4 +298,5 @@ TESTS=(
     "setup; test_load_drive_to_drive; cleanup"
     "setup; test_unload; cleanup"
     "setup; test_load_lock; cleanup_also_lrs"
+    "setup; test_unload_lock; cleanup_also_lrs"
 )

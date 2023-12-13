@@ -1620,29 +1620,16 @@ int phobos_admin_clear_logs(struct admin_handle *adm,
     return 0;
 }
 
-int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
-                              struct lib_drv_info *drive_info)
+/* Mutualized between phobos_admin_drive_lookup and phobos_admin_unload */
+static int drive_lookup(struct admin_handle *adm, const char *drive_serial,
+                        struct lib_drv_info *drive_info)
 {
     struct proto_resp proto_resp = {TLC_REQUEST};
     struct proto_req proto_req = {TLC_REQUEST};
-    struct dev_info *dev_res;
     pho_tlc_resp_t *resp;
     pho_tlc_req_t req;
     int rid = 1;
     int rc;
-
-    if (id->family != PHO_RSC_TAPE)
-        LOG_RETURN(-EINVAL,
-                   "Resource family for a drive lookup must be %s "
-                   "(PHO_RSC_TAPE), instead we got %s",
-                   rsc_family2str(PHO_RSC_TAPE), rsc_family2str(id->family));
-
-    /* fetch the serial number and store it in id */
-    rc = _get_device_by_path_or_serial(adm, id, &dev_res);
-    if (rc)
-        LOG_RETURN(rc, "Unable to find device %s into DSS", id->name);
-
-    dss_res_free(dev_res, 1);
 
     proto_req.msg.tlc_req = &req;
     rc = pho_srl_tlc_request_drive_lookup_alloc(&req);
@@ -1650,19 +1637,12 @@ int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
         LOG_RETURN(rc, "Unable to alloc drive lookup request");
 
     req.id = rid;
-    req.drive_lookup->serial = strdup(id->name);
-    if (!req.drive_lookup->serial) {
-        pho_srl_tlc_request_free(&req, false);
-        LOG_RETURN(-ENOMEM,
-                   "Unable to copy serial number %s into drive lookup request",
-                   id->name);
-    }
+    req.drive_lookup->serial = xstrdup(drive_serial);
 
     rc = _send_and_receive(&adm->tlc_comm, proto_req, &proto_resp);
     pho_srl_tlc_request_free(&req, false);
     if (rc)
-        LOG_RETURN(rc,
-                   "Error with TLC communication : %d , %s", rc, strerror(-rc));
+        LOG_RETURN(rc, "Error with TLC communication");
 
     resp = proto_resp.msg.tlc_resp;
 
@@ -1670,6 +1650,7 @@ int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
         drive_info->ldi_addr.lia_type = MED_LOC_DRIVE;
         drive_info->ldi_addr.lia_addr = resp->drive_lookup->address;
         drive_info->ldi_first_addr = resp->drive_lookup->first_address;
+        drive_info->ldi_full = false;
         if (resp->drive_lookup->medium_name) {
             drive_info->ldi_full = true;
             drive_info->ldi_medium_id.family = PHO_RSC_TAPE;
@@ -1695,6 +1676,28 @@ int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
 clean_response:
     pho_srl_tlc_response_free(resp, true);
     return rc;
+}
+
+int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
+                              struct lib_drv_info *drive_info)
+{
+    struct dev_info *dev_res;
+    int rc;
+
+    if (id->family != PHO_RSC_TAPE)
+        LOG_RETURN(-EINVAL,
+                   "Resource family for a drive lookup must be %s "
+                   "(PHO_RSC_TAPE), instead we got %s",
+                   rsc_family2str(PHO_RSC_TAPE), rsc_family2str(id->family));
+
+    /* fetch the serial number and store it in id */
+    rc = _get_device_by_path_or_serial(adm, id, &dev_res);
+    if (rc)
+        LOG_RETURN(rc, "Unable to find device %s in DSS", id->name);
+
+    dss_res_free(dev_res, 1);
+
+    return drive_lookup(adm, id->name, drive_info);
 }
 
 static int check_take_drive_lock(struct dss_handle *dss,
@@ -1762,6 +1765,11 @@ static int check_take_tape_lock(struct dss_handle *dss,
     return 0;
 }
 
+/**
+ * To process the load, a lock is taken on the drive and on the tape to
+ * prevent any concurrent move on these resources. For example, if a drive
+ * is already used by a LRS, we do not want to change its state.
+ */
 int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
                       const struct pho_id *tape_id)
 {
@@ -1816,7 +1824,7 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
         LOG_GOTO(unlock_drive, rc,
                  "Unable to lock the tape '%s'", tape_id->name);
 
-    /* prepare and send load request to the tlc*/
+    /* load request with the tlc*/
     proto_req.msg.tlc_req = &req;
     pho_srl_tlc_request_load_alloc(&req);
     req.id = rid;
@@ -1851,7 +1859,7 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
 unlock_tape:
     rc2 = dss_unlock(&adm->dss, DSS_MEDIA, med_res, 1, false);
     if (rc2) {
-        pho_error(rc2, "Unable to unlock tape '%s'", dev_res->rsc.id.name);
+        pho_error(rc2, "Unable to unlock tape '%s'", med_res->rsc.id.name);
         rc = rc ? : rc2;
     }
 unlock_drive:
@@ -1869,16 +1877,25 @@ free_dev_res:
     return rc;
 }
 
+/**
+ * To unload, a lock is taken on the drive and on the tape to prevent any
+ * concurrent move on these resources. For example, if a drive is already used
+ * by a LRS, we do not want to change its state.
+ */
 int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                         const struct pho_id *tape_id)
 {
     struct proto_resp proto_resp = {TLC_REQUEST};
     struct proto_req proto_req = {TLC_REQUEST};
+    struct lib_drv_info drive_info;
+    struct media_info *med_res;
     struct dev_info *dev_res;
+    const char *hostname;
     pho_tlc_resp_t *resp;
     pho_tlc_req_t req;
     int rid = 1;
-    int rc;
+    int rc, rc2;
+    int pid;
 
     if (drive_id->family != PHO_RSC_TAPE)
         LOG_RETURN(-EINVAL,
@@ -1892,15 +1909,65 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                    "got %s", rsc_family2str(PHO_RSC_TAPE),
                    rsc_family2str(tape_id->family));
 
-    /* fetch the serial number and store it in id */
     rc = _get_device_by_path_or_serial(adm, drive_id, &dev_res);
     if (rc)
         LOG_RETURN(rc,
                    "Unable to retrieve serial number from device name '%s' in "
                    "DSS", drive_id->name);
 
-    dss_res_free(dev_res, 1);
+    /* get loaded tape and check drive status */
+    rc = drive_lookup(adm, drive_id->name, &drive_info);
+    if (rc)
+        LOG_GOTO(free_dev_res, rc,
+                   "Unable to lookup the drive '%s' to unload", drive_id->name);
 
+    if (drive_info.ldi_full == false) {
+        if (!tape_id) {
+            pho_verb("Was asked to unload an empty drive '%s', nothing to do",
+                     drive_id->name);
+            GOTO(free_dev_res, rc = 0);
+        } else {
+            LOG_GOTO(free_dev_res, rc = -EINVAL,
+                     "Empty drive '%s' does not contain expected tape '%s'",
+                     drive_id->name, tape_id->name);
+        }
+    }
+
+    if (tape_id) {
+        if (strcmp(tape_id->name, drive_info.ldi_medium_id.name)) {
+            LOG_GOTO(free_dev_res, rc = -EINVAL,
+                     "drive '%s' contains tape '%s' instead of expected tape "
+                     "to unload '%s'", drive_id->name,
+                     drive_info.ldi_medium_id.name, tape_id->name);
+        }
+    }
+
+    /* Lock drive and medium */
+    rc = dss_one_medium_get_from_id(&adm->dss, &drive_info.ldi_medium_id,
+                                    &med_res);
+    if (rc)
+        LOG_GOTO(free_dev_res, rc,
+                 "Unable to get tape '%s' from DSS",
+                 drive_info.ldi_medium_id.name);
+
+    rc = fill_host_owner(&hostname, &pid);
+    if (rc)
+        LOG_GOTO(free_med_res, rc,
+                 "Unable to retrieve hostname and pid to check drive and "
+                 "medium locks");
+
+    rc = check_take_drive_lock(&adm->dss, dev_res, hostname, pid);
+    if (rc)
+        LOG_GOTO(free_med_res, rc,
+                 "Unable to lock the drive (id: '%s', path: '%s')",
+                 dev_res->rsc.id.name, dev_res->path);
+
+    rc = check_take_tape_lock(&adm->dss, med_res, hostname, pid);
+    if (rc)
+        LOG_GOTO(unlock_drive, rc,
+                 "Unable to lock the tape '%s'", tape_id->name);
+
+    /* unload request with the tlc*/
     proto_req.msg.tlc_req = &req;
     pho_srl_tlc_request_unload_alloc(&req);
     req.id = rid;
@@ -1911,7 +1978,7 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
     rc = _send_and_receive(&adm->tlc_comm, proto_req, &proto_resp);
     pho_srl_tlc_request_free(&req, false);
     if (rc)
-        LOG_RETURN(rc, "Error with TLC communication");
+        LOG_GOTO(unlock_tape, rc, "Error with TLC communication");
 
     resp = proto_resp.msg.tlc_resp;
     if (pho_tlc_response_is_unload(resp) && resp->req_id == rid) {
@@ -1945,6 +2012,26 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
     }
 
     pho_srl_tlc_response_free(resp, true);
+
+unlock_tape:
+    rc2 = dss_unlock(&adm->dss, DSS_MEDIA, med_res, 1, false);
+    if (rc2) {
+        pho_error(rc2, "Unable to unlock tape '%s'", med_res->rsc.id.name);
+        rc = rc ? : rc2;
+    }
+
+unlock_drive:
+    rc2 = dss_unlock(&adm->dss, DSS_DEVICE, dev_res, 1, false);
+    if (rc2) {
+        pho_error(rc2, "Unable to unlock drive (id: '%s', path: '%s')",
+                  dev_res->rsc.id.name, dev_res->path);
+        rc = rc ? : rc2;
+    }
+
+free_med_res:
+    dss_res_free(med_res, 1);
+free_dev_res:
+    dss_res_free(dev_res, 1);
     return rc;
 }
 

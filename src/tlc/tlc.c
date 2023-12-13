@@ -236,18 +236,10 @@ static int process_drive_lookup_request(struct tlc *tlc, pho_tlc_req_t *req,
     drive_lookup_resp.req_id = req->id;
     drive_lookup_resp.drive_lookup->address = drv_info.ldi_addr.lia_addr;
     drive_lookup_resp.drive_lookup->first_address = drv_info.ldi_first_addr;
+    drive_lookup_resp.drive_lookup->medium_name = NULL;
     if (drv_info.ldi_full) {
         drive_lookup_resp.drive_lookup->medium_name =
-            strdup(drv_info.ldi_medium_id.name);
-        if (!drive_lookup_resp.drive_lookup->medium_name) {
-            pho_srl_tlc_response_free(&drive_lookup_resp, false);
-            json_error_message = json_pack("{s:s}",
-                                           "ALLOC_MEDIUM_ID_ERROR",
-                                           "drv_info.ldi_medium_id.name");
-            LOG_GOTO(err, rc = -ENOMEM,
-                     "Unable to alloc medium id %s to answer drive lookup",
-                     drv_info.ldi_medium_id.name);
-        }
+            xstrdup(drv_info.ldi_medium_id.name);
     }
 
     resp = &drive_lookup_resp;
