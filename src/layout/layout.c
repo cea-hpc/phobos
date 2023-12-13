@@ -32,7 +32,6 @@
 #include "pho_common.h"
 #include "pho_dss.h"
 #include "pho_type_utils.h"
-#include "pho_cfg.h"
 #include "pho_io.h"
 #include "pho_module_loader.h"
 
@@ -43,32 +42,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/**
- * Block size parameter read from configuration, only used when writting data
- * to multiple media in raid layout.
- */
-#define IO_BLOCK_SIZE_ATTR_KEY "io_block_size"
-
-/**
- * List of configuration parameters for this module
- */
-enum pho_cfg_params_lyt {
-    /* Actual parameters */
-    PHO_CFG_LYT_io_block_size,
-
-    /* Delimiters, update when modifying options */
-    PHO_CFG_LYT_FIRST = PHO_CFG_LYT_io_block_size,
-    PHO_CFG_LYT_LAST  = PHO_CFG_LYT_io_block_size,
-};
-
-const struct pho_config_item cfg_lyt[] = {
-    [PHO_CFG_LYT_io_block_size] = {
-        .section = "io",
-        .name    = IO_BLOCK_SIZE_ATTR_KEY,
-        .value   = "0" /** default value = not set. */
-    }
-};
-
 static int build_layout_name(const char *layout_name, char *path, size_t len)
 {
     int rc;
@@ -78,40 +51,6 @@ static int build_layout_name(const char *layout_name, char *path, size_t len)
         path[0] = '\0';
         return -EINVAL;
     }
-
-    return 0;
-}
-
-/**
- * Set size_t decoder/encoder value from config file
- *
- * 0 is not a valid write block size, -EINVAL will be returned.
- *
- * @param[out] enc      decoder/encoder with io_block_size to modify
- *
- * @return 0 if success, -error_code if failure
- */
-static int get_io_block_size(struct pho_encoder *enc)
-{
-    const char *string_io_block_size;
-    int64_t sz;
-
-    string_io_block_size = PHO_CFG_GET(cfg_lyt, PHO_CFG_LYT, io_block_size);
-    if (!string_io_block_size) {
-        /* If not forced by configuration, the io adapter will retrieve it
-         * from the backend storage system.
-         */
-        enc->io_block_size = 0;
-        return 0;
-    }
-
-    sz = str2int64(string_io_block_size);
-    if (sz < 0) {
-        enc->io_block_size = 0;
-        LOG_RETURN(-EINVAL, "Invalid value '%s' for parameter '%s'",
-                   string_io_block_size, IO_BLOCK_SIZE_ATTR_KEY);
-    }
-    enc->io_block_size = sz;
 
     return 0;
 }
@@ -152,7 +91,7 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
     enc->layout->wr_size = xfer->xd_params.put.size;
 
     /* get io_block_size from conf */
-    rc = get_io_block_size(enc);
+    rc = get_io_block_size(&enc->io_block_size);
     if (rc) {
         layout_destroy(enc);
         return rc;
@@ -192,7 +131,7 @@ int layout_decode(struct pho_encoder *enc, struct pho_xfer_desc *xfer,
     enc->layout = layout;
 
     /* get io_block_size from conf */
-    rc = get_io_block_size(enc);
+    rc = get_io_block_size(&enc->io_block_size);
     if (rc) {
         layout_destroy(enc);
         LOG_RETURN(rc, "Unable to get io_block_size");

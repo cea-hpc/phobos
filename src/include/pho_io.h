@@ -314,4 +314,29 @@ static inline int ioa_set_md(const struct io_adapter_module *ioa,
     return ioa->ops->ioa_set_md(extent_key, extent_desc, iod);
 }
 
+/**
+ * Retrieve io_block_size value from config file
+ *
+ * A negative value is not a valid write block size, -EINVAL will be returned.
+ * 0 is not a valid write block size, but can be used to indicate we want to
+ * get the size from the backend storage, so no error will be returned.
+ *
+ * \param[out]      size        io_block_size value.
+ *
+ * \return 0 on success, negative error code on failure.
+ */
+int get_io_block_size(size_t *size);
+
+/**
+ * Retrieve the preferred IO size from the backend storage
+ * if it was not set in the global "io" configuration.
+ *
+ * @param[out]    io_size   The IO size to be used.
+ * @param[in]     ioa       IO adapter to access the current storage backend.
+ * @param[in,out] iod       IO decriptor to access the current object.
+ */
+void get_preferred_io_block_size(size_t *io_size,
+                                 const struct io_adapter_module *ioa,
+                                 struct pho_io_descr *iod);
+
 #endif
