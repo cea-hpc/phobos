@@ -40,6 +40,21 @@
 #include "pho_srl_common.h"
 #include "pho_type_utils.h"
 
+struct medium_switch_context {
+    /** Whether the device is responsible for the error or not.  */
+    bool failure_on_device;
+    /** cf. release_medium_on_dev_only_failure in dev_load */
+    bool release_medium;
+    /** cf. free_medium in dev_load */
+    bool free_medium;
+};
+
+static int dev_medium_switch(struct lrs_dev *dev,
+                             struct media_info *medium_to_load,
+                             struct medium_switch_context *context);
+static int dev_medium_switch_mount(struct lrs_dev *dev,
+                                   struct media_info *medium_to_load,
+                                   struct medium_switch_context *context);
 static int dev_thread_init(struct lrs_dev *device);
 static void sync_params_init(struct sync_params *params);
 
@@ -1183,6 +1198,7 @@ static bool medium_is_loaded(struct lrs_dev *dev, struct media_info *medium)
 static int dev_handle_format(struct lrs_dev *dev)
 {
     struct sub_request *subreq = dev->ld_sub_request;
+    struct medium_switch_context context = {0};
     struct media_info *medium_to_format;
     struct req_container *reqc;
     bool loaded = false;
@@ -1190,6 +1206,8 @@ static int dev_handle_format(struct lrs_dev *dev)
 
     reqc = dev->ld_sub_request->reqc;
     medium_to_format = reqc->params.format.medium_to_format;
+    context.free_medium = false;
+    context.release_medium = true;
 
     if (medium_is_loaded(dev, medium_to_format)) {
         /* medium to format already loaded, use existing dev->ld_dss_media_info,
@@ -1201,32 +1219,23 @@ static int dev_handle_format(struct lrs_dev *dev)
         goto format;
     }
 
-    rc = dev_empty(dev);
-    if (rc) {
-        /* TODO: use sched retry queue */
-        tsqueue_push(dev->sched_req_queue, reqc);
-        dev->ld_sub_request->reqc = NULL;
-        LOG_GOTO(out, rc,
-                 "Unable to empty device '%s' to format medium '%s', "
-                 "format request is requeued",
-                 dev->ld_dss_dev_info->rsc.id.name,
-                 medium_to_format->rsc.id.name);
-    }
-
-    rc = dev_load(dev, &medium_to_format, true, false);
+    rc = dev_medium_switch(dev, medium_to_format, &context);
     if (rc == -EBUSY) {
         pho_warn("Trying to load a busy medium to format, try again later");
         return 0;
+    }
+    if (rc && !subreq->failure_on_medium) {
+        /* Push format request back if the error is not caused by the medium */
+        /* TODO: use sched retry queue */
+        tsqueue_push(dev->sched_req_queue, reqc);
+        goto out;
     }
 
     MUTEX_LOCK(&dev->ld_mutex);
     reqc->params.format.medium_to_format = NULL;
     MUTEX_UNLOCK(&dev->ld_mutex);
     if (rc)
-        LOG_GOTO(out_response, rc, "Error when loading medium '%s' to "
-                 "format in device '%s'",
-                 dev->ld_dss_media_info->rsc.id.name,
-                 dev->ld_dss_dev_info->rsc.id.name);
+        goto out_response;
 
     loaded = true;
 
@@ -1245,6 +1254,7 @@ out:
     format_medium_remove(dev->ld_ongoing_format, medium_to_format);
     /* free medium_to_format is not reused */
     if (rc && !loaded) {
+        /* free medium_to_format is not reused */
         media_info_free(medium_to_format);
         reqc->params.format.medium_to_format = NULL;
     }
@@ -1577,14 +1587,13 @@ static int dev_handle_read_write(struct lrs_dev *dev)
 {
     struct sub_request *sub_request = dev->ld_sub_request;
     struct req_container *reqc = sub_request->reqc;
+    struct medium_switch_context context = {0};
     struct media_info *medium_to_alloc;
     bool sub_request_requeued = false;
-    bool failure_on_device = false;
     bool io_ended = false;
     bool cancel = false;
     bool locked = false;
     int rc = 0;
-    int rc2;
 
     ENTRY;
 
@@ -1593,111 +1602,28 @@ static int dev_handle_read_write(struct lrs_dev *dev)
         goto out_free;
     }
 
-    medium_to_alloc =
-        reqc->params.rwalloc.media[sub_request->medium_index].alloc_medium;
-    /* using current medium */
-    if (!medium_to_alloc) {
-        pho_debug("medium_to_alloc for device '%s' is NULL",
-                  dev->ld_dss_dev_info->rsc.id.name);
-        if (dev->ld_op_status == PHO_DEV_OP_ST_MOUNTED) {
-            goto alloc_result;
-        } else if (dev->ld_op_status == PHO_DEV_OP_ST_LOADED) {
-            goto mount;
-        } else {
-            sub_request->failure_on_medium = true;
-            io_ended = true;
-            LOG_GOTO(alloc_result, rc = -EINVAL,
-                     "empty device '%s' received a %s request without medium",
-                     dev->ld_dss_dev_info->rsc.id.name,
-                     pho_srl_request_kind_str(reqc->req));
-        }
-    }
-
-    rc = dev_empty(dev);
-    if (rc) {
-        pho_error(rc, "Error when emptying device %s to %s on medium %s",
-                  dev->ld_dss_dev_info->rsc.id.name,
-                  pho_srl_request_kind_str(reqc->req),
-                  medium_to_alloc->rsc.id.name);
-        failure_on_device = true;
-        io_ended = true;
-        goto alloc_result;
-    }
-
     /*
      * We call dev_load with release_medium_on_dev_only_failure at false
      * because the request will be pushed to the retry queue of the sched
      * with an already locked medium ready to be use in a new device.
      */
-    pho_debug("Will load '%s' in device '%s'",
-              medium_to_alloc->rsc.id.name, dev->ld_dss_dev_info->rsc.id.name);
-    rc = dev_load(dev, &medium_to_alloc, false, true);
+    context.release_medium = false;
+    context.free_medium = true;
+    medium_to_alloc =
+        reqc->params.rwalloc.media[sub_request->medium_index].alloc_medium;
+
+    rc = dev_medium_switch_mount(dev, medium_to_alloc, &context);
     if (rc == -EBUSY) {
         pho_warn("Trying to load a busy medium to %s, try again later",
                  pho_srl_request_kind_str(reqc->req));
         return 0;
     }
-
     if (!rc || sub_request->failure_on_medium)
         reqc->params.rwalloc.media[sub_request->medium_index].alloc_medium =
             NULL;
-
     if (rc) {
         io_ended = true;
-        pho_error(rc, "Error when loading medium in device %s to %s it",
-                  dev->ld_dss_dev_info->rsc.id.name,
-                  pho_srl_request_kind_str(reqc->req));
-
-        failure_on_device = true;
         goto alloc_result;
-    }
-
-mount:
-    rc = dev_mount(dev);
-    if (rc) {
-        failure_on_device = true;
-        MUTEX_LOCK(&dev->ld_mutex);
-        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-        MUTEX_UNLOCK(&dev->ld_mutex);
-        sub_request->failure_on_medium = true;
-        io_ended = true;
-        pho_error(rc,
-                  "Error when mounting medium '%s' in device '%s' for %s, "
-                  "will try another medium if possible",
-                  dev->ld_dss_media_info->rsc.id.name,
-                  dev->ld_dss_dev_info->rsc.id.name,
-                  pho_srl_request_kind_str(reqc->req));
-        /* set the medium to failed early to be sure to not reuse it by sched */
-        fail_release_free_medium(dev, &dev->ld_dss_media_info, true);
-        LOG_GOTO(alloc_result, rc,
-                 "Error when mounting medium in device %s to %s it",
-                 dev->ld_dss_dev_info->rsc.id.name,
-                 pho_srl_request_kind_str(reqc->req));
-    }
-
-    /* LTFS can cunningly mount almost-full tapes as read-only, and so would
-     * damaged disks. Mark the media as full, let it be mounted and try to find
-     * a new one.
-     */
-    if (pho_request_is_write(reqc->req) && !dev_mount_is_writable(dev)) {
-        pho_warn("Media '%s' OK but mounted R/O, marking full and retrying...",
-                 dev->ld_dss_media_info->rsc.id.name);
-        sub_request->failure_on_medium = true;
-        io_ended = true;
-        rc = -ENOSPC;
-
-        MUTEX_LOCK(&dev->ld_mutex);
-        dev->ld_dss_media_info->fs.status = PHO_FS_STATUS_FULL;
-        MUTEX_UNLOCK(&dev->ld_mutex);
-        rc2 = dss_media_set(&dev->ld_device_thread.dss,
-                            dev->ld_dss_media_info, 1,
-                            DSS_SET_UPDATE, FS_STATUS);
-        if (rc2) {
-            rc = rc2;
-            failure_on_device = true;
-            LOG_RETURN(rc, "Unable to update DSS media '%s' status to FULL",
-                       dev->ld_dss_media_info->rsc.id.name);
-        }
     }
 
 alloc_result:
@@ -1724,10 +1650,10 @@ out_free:
 
     MUTEX_UNLOCK(&dev->ld_mutex);
 
-    if (!failure_on_device)
-        return 0;
-    else
+    if (context.failure_on_device)
         return rc;
+
+    return 0;
 }
 
 /**
@@ -2150,4 +2076,171 @@ free_supported_list:
     free(supported_list);
 
     return rc;
+}
+
+/* This function is only called when we expect a loaded device.
+ * Return 0 only if the device is loaded.
+ */
+static int check_device_state_for_load(struct lrs_dev *dev)
+{
+    if (dev_is_failed(dev))
+        LOG_RETURN(-EINVAL,
+                   "cannot use failed device '%s' to load a medium",
+                   lrs_dev_name(dev));
+
+    if (dev_is_empty(dev))
+        LOG_RETURN(-EINVAL,
+                   "device '%s' received a %s sub request with no medium but "
+                   "the device state is %s, abort",
+                   lrs_dev_name(dev),
+                   pho_srl_request_kind_str(dev->ld_sub_request->reqc->req),
+                   op_status2str(dev->ld_op_status));
+
+    return 0;
+}
+
+/**
+ * Load \p medium_to_load in \p dev
+ *
+ * This function makes sure that we unload any tape currently in \p dev by
+ * unmounting the medium first then unloading it.
+ *
+ * \param[in/out] dev            the device on which to load \p medium_to_load
+ * \param[in]     medium_to_load the medium to load into \p dev
+ *                               It can be NULL if we want to keep the same
+ *                               medium in the device but still make sure that
+ *                               it is in the proper state (eg. mount it if
+ *                               necessary).
+ * \param[in/out] context        Additional context to specify the actions to
+ *                               take and whether they where successful or not.
+ *
+ * \return                       0 on success, negative POSIX error code on
+ *                               error
+ *
+ */
+static int dev_medium_switch(struct lrs_dev *dev,
+                             struct media_info *medium_to_load,
+                             struct medium_switch_context *context)
+{
+    struct sub_request *sub_req;
+    struct req_container *reqc;
+    int rc;
+
+    sub_req = dev->ld_sub_request;
+    reqc = sub_req->reqc;
+
+    if (!medium_to_load) {
+        /* medium already loaded in device */
+        pho_debug("medium_to_alloc for device '%s' is NULL", lrs_dev_name(dev));
+        rc = check_device_state_for_load(dev);
+        if (rc) {
+            sub_req->failure_on_medium = true;
+            return rc;
+        }
+
+        return 0;
+    }
+
+    rc = dev_empty(dev);
+    if (rc) {
+        context->failure_on_device = true;
+        LOG_RETURN(rc, "failed to empty device '%s' to load medium '%s'"
+                   "for %s request",
+                   lrs_dev_name(dev), medium_to_load->rsc.id.name,
+                   pho_srl_request_kind_str(reqc->req));
+    }
+
+    pho_debug("Will load medium '%s' in device '%s'", lrs_dev_name(dev),
+              medium_to_load->rsc.id.name);
+    rc = dev_load(dev, &medium_to_load, context->release_medium,
+                  context->free_medium);
+    if (rc == -EBUSY)
+        return rc;
+
+    if (rc) {
+        context->failure_on_device = true;
+        LOG_RETURN(rc,
+                   "failed to load medium '%s' in device '%s' for %s request",
+                   medium_to_load->rsc.id.name,
+                   lrs_dev_name(dev),
+                   pho_srl_request_kind_str(reqc->req));
+    }
+
+    return 0;
+}
+
+/**
+ * Load and mount \p medium_to_mount in \p dev
+ *
+ * This fonction work in a similar way to dev_medium_switch but ensure that the
+ * medium is mounted after the load.
+ */
+static int dev_medium_switch_mount(struct lrs_dev *dev,
+                                   struct media_info *medium_to_mount,
+                                   struct medium_switch_context *context)
+{
+    struct sub_request *subreq;
+    struct req_container *reqc;
+    int rc;
+
+    subreq = dev->ld_sub_request;
+    reqc = subreq->reqc;
+
+    rc = dev_medium_switch(dev, medium_to_mount, context);
+    if (rc)
+        return rc;
+
+    if (dev_is_mounted(dev))
+        return 0;
+
+    rc = dev_mount(dev);
+    if (rc) {
+        context->failure_on_device = true;
+        subreq->failure_on_medium = true;
+        MUTEX_LOCK(&dev->ld_mutex);
+        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
+        MUTEX_UNLOCK(&dev->ld_mutex);
+        pho_error(rc,
+                  "failed to mount medium '%s' in device '%s' "
+                  "for %s request. Will try another medium if possible.",
+                  // FIXME use medium_to_mount when it no longer set to NULL
+                  dev->ld_dss_media_info->rsc.id.name,
+                  lrs_dev_name(dev),
+                  pho_srl_request_kind_str(reqc->req));
+        /* Set the medium to failed early to make sure that the scheduler won't
+         * reuse it.
+         */
+        fail_release_free_medium(dev, &dev->ld_dss_media_info, true);
+        return rc;
+    }
+
+    /* LTFS can cunningly mount almost-full tapes as read-only, and so would
+     * damaged disks. Mark the media as full, let it be mounted and try to find
+     * a new one.
+     */
+    if (pho_request_is_write(reqc->req) && !dev_mount_is_writable(dev)) {
+        int rc2;
+
+        pho_warn("Media '%s' OK but mounted R/O for %s request, "
+                 "marking full and retrying...",
+                 dev->ld_dss_media_info->rsc.id.name,
+                 pho_srl_request_kind_str(reqc->req));
+        subreq->failure_on_medium = true;
+        rc = -ENOSPC;
+
+        MUTEX_LOCK(&dev->ld_mutex);
+        dev->ld_dss_media_info->fs.status = PHO_FS_STATUS_FULL;
+        MUTEX_UNLOCK(&dev->ld_mutex);
+        rc2 = dss_media_set(&dev->ld_device_thread.dss,
+                            dev->ld_dss_media_info, 1,
+                            DSS_SET_UPDATE, FS_STATUS);
+        if (rc2) {
+            rc = rc2;
+            context->failure_on_device = true;
+            LOG_RETURN(rc, "Unable to update DSS media '%s' status to FULL",
+                       dev->ld_dss_media_info->rsc.id.name);
+        }
+    }
+
+    return 0;
 }

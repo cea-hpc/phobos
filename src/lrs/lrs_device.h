@@ -253,6 +253,26 @@ struct lrs_dev {
                                  */
 };
 
+static inline bool dev_is_failed(struct lrs_dev *dev)
+{
+    return dev->ld_op_status == PHO_DEV_OP_ST_FAILED;
+}
+
+static inline bool dev_is_loaded(struct lrs_dev *dev)
+{
+    return dev->ld_op_status == PHO_DEV_OP_ST_LOADED;
+}
+
+static inline bool dev_is_mounted(struct lrs_dev *dev)
+{
+    return dev->ld_op_status == PHO_DEV_OP_ST_MOUNTED;
+}
+
+static inline bool dev_is_empty(struct lrs_dev *dev)
+{
+    return dev->ld_op_status == PHO_DEV_OP_ST_EMPTY;
+}
+
 static inline bool dev_is_release_ready(struct lrs_dev *dev)
 {
     return dev && !thread_is_stopped(&dev->ld_device_thread);
@@ -433,5 +453,10 @@ int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl);
  *                     configuration
  */
 int lrs_dev_technology(const struct lrs_dev *dev, const char **techno);
+
+static inline const char *lrs_dev_name(struct lrs_dev *dev)
+{
+    return dev->ld_dss_dev_info->rsc.id.name;
+}
 
 #endif
