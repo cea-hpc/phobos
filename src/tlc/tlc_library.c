@@ -611,7 +611,7 @@ static void tlc_log_init(const char *drive_serial, const char *tape_label,
     pho_id_name_set(&drive_id, drive_serial);
     pho_id_name_set(&tape_id, tape_label);
 
-    init_pho_log(log, drive_id, tape_id, operation_type);
+    init_pho_log(log, &drive_id, &tape_id, operation_type);
 }
 
 int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,

@@ -1410,7 +1410,7 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
     medium.family = PHO_RSC_TAPE;
     device.name[0] = 0;
     device.family = PHO_RSC_TAPE;
-    init_pho_log(&log, device, medium, PHO_LIBRARY_SCAN);
+    init_pho_log(&log, &device, &medium, PHO_LIBRARY_SCAN);
 
     lib_open_json = json_object();
 

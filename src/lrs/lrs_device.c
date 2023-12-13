@@ -704,8 +704,8 @@ int medium_sync(struct lrs_dev *dev)
         LOG_RETURN(rc, "No suitable I/O adapter for filesystem type: '%s'",
                    fs_type2str(media_info->fs.type));
 
-    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
-                 dev->ld_dss_media_info->rsc.id, PHO_LTFS_SYNC);
+    init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
+                 &dev->ld_dss_media_info->rsc.id, PHO_LTFS_SYNC);
     destroy_log_message(&log);
 
     rc = ioa_medium_sync(ioa, fsroot, &log.message);
@@ -754,8 +754,8 @@ static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
     } else {
         struct pho_log log;
 
-        init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
-                     dev->ld_dss_media_info->rsc.id, PHO_LTFS_DF);
+        init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
+                     &dev->ld_dss_media_info->rsc.id, PHO_LTFS_DF);
         destroy_log_message(&log);
 
         rc2 = ldm_fs_df(fsa, fsroot, &space, &log.message);
@@ -849,8 +849,8 @@ int dev_umount(struct lrs_dev *dev)
 
     ENTRY;
 
-    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
-                 dev->ld_dss_media_info->rsc.id, PHO_LTFS_UMOUNT);
+    init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
+                 &dev->ld_dss_media_info->rsc.id, PHO_LTFS_UMOUNT);
     destroy_log_message(&log);
 
     pho_info("umount: medium '%s' in device '%s' mounted at '%s'",
@@ -939,8 +939,8 @@ int dev_unload(struct lrs_dev *dev)
     pho_verb("unload: '%s' from '%s'", dev->ld_dss_media_info->rsc.id.name,
              dev->ld_dev_path);
 
-    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
-                 dev->ld_dss_media_info->rsc.id, PHO_DEVICE_UNLOAD);
+    init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
+                 &dev->ld_dss_media_info->rsc.id, PHO_DEVICE_UNLOAD);
 
     rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl, &log);
     if (rc)
@@ -1074,8 +1074,8 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
     *can_retry = false;
     pho_verb("load: '%s' into '%s'", (*medium)->rsc.id.name, dev->ld_dev_path);
 
-    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
-                 (*medium)->rsc.id, PHO_DEVICE_LOAD);
+    init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
+                 &(*medium)->rsc.id, PHO_DEVICE_LOAD);
 
     /* get handle to the library depending on device type */
     rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl, &log);
@@ -1190,8 +1190,8 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
 
     ENTRY;
 
-    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
-                 dev->ld_dss_media_info->rsc.id, PHO_LTFS_FORMAT);
+    init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
+                 &dev->ld_dss_media_info->rsc.id, PHO_LTFS_FORMAT);
     destroy_log_message(&log);
 
     pho_verb("format: medium '%s'", medium->rsc.id.name);
@@ -1575,8 +1575,8 @@ int dev_mount(struct lrs_dev *dev)
     const char *id;
     int rc;
 
-    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
-                 dev->ld_dss_media_info->rsc.id, PHO_LTFS_MOUNT);
+    init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
+                 &dev->ld_dss_media_info->rsc.id, PHO_LTFS_MOUNT);
     destroy_log_message(&log);
 
     rc = get_fs_adapter(dev->ld_dss_media_info->fs.type, &fsa);
@@ -1648,8 +1648,8 @@ bool dev_mount_is_writable(struct lrs_dev *dev)
     struct pho_log log;
     int rc;
 
-    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
-                 dev->ld_dss_media_info->rsc.id, PHO_LTFS_DF);
+    init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
+                 &dev->ld_dss_media_info->rsc.id, PHO_LTFS_DF);
     destroy_log_message(&log);
 
     rc = get_fs_adapter(fs_type, &fsa);

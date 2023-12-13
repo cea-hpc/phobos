@@ -233,11 +233,13 @@ struct pho_log {
     struct timeval time;       /** time of the log */
 };
 
-static inline void init_pho_log(struct pho_log *log, struct pho_id device,
-                                struct pho_id medium, enum operation_type cause)
+static inline void init_pho_log(struct pho_log *log,
+                                struct pho_id *device,
+                                struct pho_id *medium,
+                                enum operation_type cause)
 {
-    pho_id_copy(&log->device, &device);
-    pho_id_copy(&log->medium, &medium);
+    pho_id_copy(&log->device, device);
+    pho_id_copy(&log->medium, medium);
     log->cause = cause;
     log->message = json_object();
     log->error_number = -1;

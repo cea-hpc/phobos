@@ -208,3 +208,69 @@ int create_logs_filter(struct pho_log_filter *log_filter,
     g_string_free(filter_str, true);
     return rc;
 }
+
+/* Return a string representation of \p log.
+ *
+ * \param[in]  log   Log to convert to string
+ *
+ * \return     Pointer to the string representation, must be passed to free(3)
+ *             Return NULL on allocation failure
+ */
+static const char *pho_log2str(struct pho_log *log)
+{
+    const char *message;
+    char *repr;
+    int rc;
+
+    message = json_dumps(log->message, 0);
+
+    rc = asprintf(&repr, "%s: '%s', '%s' (rc=%d): %s: %s",
+                  operation_type2str(log->cause),
+                  log->device.name,
+                  log->medium.name,
+                  log->error_number,
+                  strerror(log->error_number),
+                  message);
+    if (rc == -1)
+        return NULL;
+
+    free((void *) message);
+
+    return repr;
+}
+
+void emit_log_after_action(struct dss_handle *dss,
+                           struct pho_log *log,
+                           enum operation_type action,
+                           int rc)
+{
+    if (rc) {
+        log->error_number = rc;
+
+        if (log->message && json_object_size(log->message) != 0 &&
+            action != log->cause) {
+            json_t *message = json_object();
+
+            /* Add context only if operation != from intented action to
+             * avoid redundant data.
+             */
+            json_object_set_new(message, operation_type2str(action),
+                                log->message);
+            log->message = message;
+        }
+    }
+
+    if (should_log(log)) {
+        int rc2 = dss_emit_log(dss, log);
+
+        if (rc2) {
+            const char *log_str = pho_log2str(log);
+
+            pho_error(rc2, "Failed to emit log: %s", log_str);
+            free((void *) log_str);
+        }
+        /* Ignore emit errors */
+    }
+
+    json_decref(log->message);
+}

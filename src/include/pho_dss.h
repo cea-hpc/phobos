@@ -803,6 +803,25 @@ int dss_lock_clean_all(struct dss_handle *handle);
 int dss_emit_log(struct dss_handle *dss, struct pho_log *log);
 
 /**
+ * Emit a fully formated log to the DSS if necessary
+ *
+ * \param[in] dss      Valid DSS handle
+ * \param[in] log      Log to emit
+ * \param[in] action   Action performed that triggered the log emission
+ *                     If the action is different from log->cause, the cause is
+ *                     added to the log.
+ * \param[in] rc       Result of the action (can be 0 on success)
+ *
+ * This function will free the log message and message (if not NULL).
+ *
+ * If the emission of the log fails, a message is emitted to stderr instead
+ * containing the full log.
+ */
+void emit_log_after_action(struct dss_handle *dss,
+                           struct pho_log *log,
+                           enum operation_type action,
+                           int rc);
+/**
  * Create a valid dss_filter based on the criteria given in \p log_filter.
  *
  * @param[in]   log_filter      Criteria which will be transformed into a

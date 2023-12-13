@@ -474,7 +474,7 @@ int sched_fill_dev_info(struct lrs_sched *sched, struct lib_handle *lib_hdl,
 
     medium.name[0] = 0;
     medium.family = devi->rsc.id.family;
-    init_pho_log(&log, devi->rsc.id, medium, PHO_DEVICE_LOOKUP);
+    init_pho_log(&log, &devi->rsc.id, &medium, PHO_DEVICE_LOOKUP);
 
     device_lookup_json = json_object();
 
