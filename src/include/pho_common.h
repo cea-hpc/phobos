@@ -241,8 +241,8 @@ static inline void init_pho_log(struct pho_log *log,
     pho_id_copy(&log->device, device);
     pho_id_copy(&log->medium, medium);
     log->cause = cause;
-    log->message = json_object();
     log->error_number = -1;
+    log->message = NULL;
 }
 
 static inline void json_insert_element(json_t *json, const char *key,
@@ -259,9 +259,9 @@ static inline void json_insert_element(json_t *json, const char *key,
     }
 }
 
-static inline bool should_log(struct pho_log *log)
+static inline bool should_log(struct pho_log *log, enum operation_type action)
 {
-    switch (log->cause) {
+    switch (action) {
     case PHO_LTFS_MOUNT:
     case PHO_LTFS_UMOUNT:
     case PHO_LTFS_FORMAT:

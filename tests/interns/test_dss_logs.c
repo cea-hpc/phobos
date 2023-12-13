@@ -67,6 +67,7 @@ static void generate_log(struct dss_handle *handle, int index_dev,
 
     init_pho_log(&log, &devices[index_dev], &media[index_med],
                  types[index_type]);
+    log.message = json_object();
 
     rc = dss_emit_log(handle, &log);
     assert_return_code(rc, -rc);

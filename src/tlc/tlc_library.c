@@ -648,35 +648,15 @@ int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
     /* arm = 0 for default transport element */
     rc = scsi_move_medium(lib->fd, 0, source_element_status->address,
                           drive_element_status->address, log.message);
-
-    log.error_number = rc;
-    if (rc) {
-        char *error_message;
-
-        if (json_object_size(log.message) == 0)
-            LOG_GOTO(out_log, rc, "Can't move to load medium %s into drive %s",
-                     tape_label, drive_serial);
-
-        error_message = json_dumps(log.message, 0);
-        pho_error(rc, "Can't move to load medium %s into drive %s: %s",
-                  tape_label, drive_serial, error_message);
-        free(error_message);
-        goto out_log;
-    }
+    emit_log_after_action(dss, &log, PHO_DEVICE_LOAD, rc);
+    if (rc)
+        LOG_RETURN(rc, "SCSI move failed for load of tape '%s' in drive '%s'",
+                   tape_label, drive_serial);
 
     /* update element status lib cache */
     move_tape_between_element_status(source_element_status,
                                      drive_element_status);
-out_log:
-    if (should_log(&log))
-        dss_emit_log(dss, &log);
-
-    if (json_object_size(log.message) > 0)
-        *json_message = json_copy(log.message);
-
-    destroy_log_message(&log);
-
-    return rc;
+    return 0;
 }
 
 /** Search for a free slot in the library */
@@ -828,46 +808,21 @@ int tlc_library_unload(struct dss_handle *dss, struct lib_descriptor *lib,
     /* arm = 0 for default transport element */
     rc = scsi_move_medium(lib->fd, 0, drive_element_status->address,
                           target_element_status->address, log.message);
-    log.error_number = rc;
+    emit_log_after_action(dss, &log, PHO_DEVICE_UNLOAD, rc);
     if (rc) {
-        char *error_message;
-
-        if (json_object_size(log.message) == 0)
-            LOG_GOTO(out_log, rc,
-                     "Can't move to unload medium %s from drive %s to address "
-                     "%#hx",
-                     drive_element_status->vol, drive_serial,
-                     target_element_status->address);
-
-        error_message = json_dumps(log.message, 0);
-        pho_error(rc,
-                  "Can't move to unload medium %s from drive %s to address "
-                  "%#hx : %s",
-                  drive_element_status->vol, drive_serial,
-                  target_element_status->address, error_message);
-        free(error_message);
-        goto out_log;
+        free(unloaded_tape_label);
+        *unloaded_tape_label = NULL;
+        LOG_RETURN(rc,
+                   "SCSI move failed for unload of tape '%s' in drive '%s' to "
+                   "address %#hx",
+                   drive_element_status->vol, drive_serial,
+                   target_element_status->address);
     }
 
     /* update element status lib cache */
     move_tape_between_element_status(drive_element_status,
                                      target_element_status);
-
-out_log:
-    if (should_log(&log))
-        dss_emit_log(dss, &log);
-
-    if (json_object_size(log.message) > 0)
-        *json_message = json_copy(log.message);
-
-    destroy_log_message(&log);
-
-    if (rc) {
-        free(unloaded_tape_label);
-        *unloaded_tape_label = NULL;
-    }
-
-    return rc;
+    return 0;
 }
 
 /**

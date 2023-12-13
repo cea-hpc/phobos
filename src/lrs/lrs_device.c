@@ -694,6 +694,7 @@ int medium_sync(struct lrs_dev *dev)
     struct media_info *media_info = dev->ld_dss_media_info;
     const char *fsroot = dev->ld_mnt_path;
     struct io_adapter_module *ioa;
+    struct dss_handle *dss;
     struct pho_log log;
     int rc;
 
@@ -704,20 +705,14 @@ int medium_sync(struct lrs_dev *dev)
         LOG_RETURN(rc, "No suitable I/O adapter for filesystem type: '%s'",
                    fs_type2str(media_info->fs.type));
 
+    dss = &dev->ld_device_thread.dss;
     init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
                  &dev->ld_dss_media_info->rsc.id, PHO_LTFS_SYNC);
-    destroy_log_message(&log);
 
     rc = ioa_medium_sync(ioa, fsroot, &log.message);
-    log.error_number = rc;
+    emit_log_after_action(dss, &log, PHO_LTFS_SYNC, rc);
 
     pho_debug("sync: medium=%s rc=%d", media_info->rsc.id.name, rc);
-
-    if (should_log(&log))
-        dss_emit_log(&dev->ld_device_thread.dss, &log);
-
-    destroy_log_message(&log);
-
     if (rc)
         LOG_RETURN(rc, "Cannot flush media at: %s", fsroot);
 
@@ -756,10 +751,9 @@ static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
 
         init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
                      &dev->ld_dss_media_info->rsc.id, PHO_LTFS_DF);
-        destroy_log_message(&log);
 
         rc2 = ldm_fs_df(fsa, fsroot, &space, &log.message);
-        log.error_number = rc2;
+        emit_log_after_action(dss, &log, PHO_LTFS_DF, rc2);
         if (rc2) {
             rc = rc ? : rc2;
             pho_error(rc2, "Cannot retrieve media usage information");
@@ -776,11 +770,6 @@ static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
                 fields |= FS_STATUS;
             }
         }
-
-        if (should_log(&log))
-            dss_emit_log(&dev->ld_device_thread.dss, &log);
-
-        destroy_log_message(&log);
     }
 
     if (media_rc) {
@@ -844,14 +833,15 @@ static int dev_sync(struct lrs_dev *dev)
 int dev_umount(struct lrs_dev *dev)
 {
     struct fs_adapter_module *fsa;
+    struct dss_handle *dss;
     struct pho_log log;
     int rc;
 
     ENTRY;
 
+    dss = &dev->ld_device_thread.dss;
     init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
                  &dev->ld_dss_media_info->rsc.id, PHO_LTFS_UMOUNT);
-    destroy_log_message(&log);
 
     pho_info("umount: medium '%s' in device '%s' mounted at '%s'",
              dev->ld_dss_media_info->rsc.id.name,
@@ -859,15 +849,16 @@ int dev_umount(struct lrs_dev *dev)
              dev->ld_mnt_path);
     rc = get_fs_adapter(dev->ld_dss_media_info->fs.type, &fsa);
     if (rc)
-        LOG_GOTO(out, rc,
+        LOG_GOTO(out_err, rc,
                  "Unable to get fs adapter '%s' to unmount medium '%s' from "
                  "device '%s'", fs_type_names[dev->ld_dss_media_info->fs.type],
                  dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
     rc = ldm_fs_umount(fsa, dev->ld_dev_path, dev->ld_mnt_path, &log.message);
+    emit_log_after_action(dss, &log, PHO_LTFS_UMOUNT, rc);
     clean_tosync_array(dev, rc);
     if (rc)
-        LOG_GOTO(out, rc, "Failed to unmount device '%s' mounted at '%s'",
+        LOG_GOTO(out_err, rc, "Failed to unmount device '%s' mounted at '%s'",
                  dev->ld_dev_path, dev->ld_mnt_path);
 
     /* update device state and unset mount path */
@@ -876,18 +867,12 @@ int dev_umount(struct lrs_dev *dev)
     dev->ld_mnt_path[0] = '\0';
     MUTEX_UNLOCK(&dev->ld_mutex);
 
-out:
-    if (rc) {
-        MUTEX_LOCK(&dev->ld_mutex);
-        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-        MUTEX_UNLOCK(&dev->ld_mutex);
-    }
+    return 0;
 
-    log.error_number = rc;
-    if (should_log(&log))
-        dss_emit_log(&dev->ld_device_thread.dss, &log);
-
-    destroy_log_message(&log);
+out_err:
+    MUTEX_LOCK(&dev->ld_mutex);
+    dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
+    MUTEX_UNLOCK(&dev->ld_mutex);
 
     return rc;
 }
@@ -930,28 +915,37 @@ int dev_unload(struct lrs_dev *dev)
     struct lib_item_addr free_slot = { .lia_type = MED_LOC_UNKNOWN };
     struct media_info *medium_to_unlock_free = NULL;
     struct lib_handle lib_hdl;
+    struct dss_handle *dss;
     struct pho_log log;
     int rc2;
     int rc;
 
     ENTRY;
 
+    dss = &dev->ld_device_thread.dss;
+
     pho_verb("unload: '%s' from '%s'", dev->ld_dss_media_info->rsc.id.name,
              dev->ld_dev_path);
 
-    init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
-                 &dev->ld_dss_media_info->rsc.id, PHO_DEVICE_UNLOAD);
+    init_pho_log(&log,
+                 &dev->ld_dss_dev_info->rsc.id,
+                 &dev->ld_dss_media_info->rsc.id,
+                 PHO_DEVICE_UNLOAD);
 
-    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl, &log);
+    log.message = json_object();
+    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl,
+                       log.message);
+    emit_log_after_action(dss, &log, PHO_LIBRARY_OPEN, rc);
     if (rc)
         LOG_GOTO(out, rc,
                  "Unable to open lib '%s' to unload medium '%s' from device "
                  "'%s'", rsc_family_names[dev->ld_dss_dev_info->rsc.id.family],
                  dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
+    log.message = json_object();
     rc = ldm_lib_media_move(&lib_hdl, &dev->ld_lib_dev_info.ldi_addr,
                             &free_slot, log.message);
-    log.error_number = rc;
+    emit_log_after_action(dss, &log, PHO_DEVICE_UNLOAD, rc);
     if (rc != 0)
         /* Set operational failure state on this drive. It is incomplete since
          * the error can originate from a defective tape too...
@@ -982,11 +976,6 @@ out:
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         MUTEX_UNLOCK(&dev->ld_mutex);
     }
-
-    if (should_log(&log))
-        dss_emit_log(&dev->ld_device_thread.dss, &log);
-
-    destroy_log_message(&log);
 
     return rc;
 }
@@ -1061,8 +1050,8 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
              bool free_medium)
 {
     struct lib_item_addr medium_addr;
-    json_t *medium_lookup_json;
     struct lib_handle lib_hdl;
+    struct dss_handle *dss;
     struct pho_log log;
     int rc2;
     int rc;
@@ -1070,6 +1059,7 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
     ENTRY;
 
     dev->ld_sub_request->failure_on_medium = false;
+    dss = &dev->ld_device_thread.dss;
     *failure_on_dev = false;
     *can_retry = false;
     pho_verb("load: '%s' into '%s'", (*medium)->rsc.id.name, dev->ld_dev_path);
@@ -1078,7 +1068,10 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
                  &(*medium)->rsc.id, PHO_DEVICE_LOAD);
 
     /* get handle to the library depending on device type */
-    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl, &log);
+    log.message = json_object();
+    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl,
+                       log.message);
+    emit_log_after_action(dss, &log, PHO_LIBRARY_OPEN, rc);
     if (rc) {
         *failure_on_dev = true;
         MUTEX_LOCK(&dev->ld_mutex);
@@ -1093,33 +1086,25 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
                           "error");
         }
 
-        goto out_log;
+        return rc;
     }
 
-    medium_lookup_json = json_object();
-
     /* lookup the requested medium */
+    log.message = json_object();
     rc = ldm_lib_media_lookup(&lib_hdl, (*medium)->rsc.id.name, &medium_addr,
-                              medium_lookup_json);
+                              log.message);
+    emit_log_after_action(dss, &log, PHO_MEDIUM_LOOKUP, rc);
     if (rc) {
         dev->ld_sub_request->failure_on_medium = true;
         fail_release_free_medium(dev, medium, free_medium);
 
-        if (json_object_size(medium_lookup_json) != 0) {
-            json_object_set_new(log.message,
-                                OPERATION_TYPE_NAMES[PHO_MEDIUM_LOOKUP],
-                                medium_lookup_json);
-            log.error_number = rc;
-        }
-
         LOG_GOTO(out_close, rc, "Media lookup failed");
     }
 
-    json_decref(medium_lookup_json);
-
+    log.message = json_object();
     rc = ldm_lib_media_move(&lib_hdl, &medium_addr,
                             &dev->ld_lib_dev_info.ldi_addr, log.message);
-    log.error_number = rc;
+    emit_log_after_action(dss, &log, PHO_DEVICE_LOAD, rc);
     /* A movement from drive to drive can be prohibited by some libraries.
      * If a failure is encountered in such a situation, it probably means that
      * the state of the library has changed between the moment it has been
@@ -1171,12 +1156,6 @@ out_close:
         rc = rc ? : rc2;
     }
 
-out_log:
-    if (should_log(&log))
-        dss_emit_log(&dev->ld_device_thread.dss, &log);
-
-    destroy_log_message(&log);
-
     return rc;
 }
 
@@ -1184,22 +1163,24 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
 {
     struct media_info *medium = dev->ld_dss_media_info;
     struct ldm_fs_space space = {0};
+    struct dss_handle *dss;
     uint64_t fields = 0;
     struct pho_log log;
     int rc;
 
     ENTRY;
 
+    dss = &dev->ld_device_thread.dss;
     init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
                  &dev->ld_dss_media_info->rsc.id, PHO_LTFS_FORMAT);
-    destroy_log_message(&log);
 
     pho_verb("format: medium '%s'", medium->rsc.id.name);
 
     rc = ldm_fs_format(fsa, dev->ld_dev_path, medium->rsc.id.name, &space,
                        &log.message);
+    emit_log_after_action(dss, &log, PHO_LTFS_FORMAT, rc);
     if (rc)
-        LOG_GOTO(out_log, rc, "Cannot format medium '%s'", medium->rsc.id.name);
+        LOG_RETURN(rc, "Cannot format medium '%s'", medium->rsc.id.name);
 
     MUTEX_LOCK(&dev->ld_mutex);
     /* Systematically use the media ID as filesystem label */
@@ -1227,16 +1208,9 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
     MUTEX_UNLOCK(&dev->ld_mutex);
     rc = dss_media_set(&dev->ld_device_thread.dss, medium, 1, DSS_SET_UPDATE,
                        fields);
-    if (rc != 0)
+    if (!rc)
         LOG_RETURN(rc, "Failed to update state of media '%s' after format",
                    medium->rsc.id.name);
-
-out_log:
-    log.error_number = rc;
-    if (should_log(&log))
-        dss_emit_log(&dev->ld_device_thread.dss, &log);
-
-    destroy_log_message(&log);
 
     return rc;
 }
@@ -1569,6 +1543,7 @@ char *mount_point(const char *id)
 
 int dev_mount(struct lrs_dev *dev)
 {
+    struct dss_handle *dss = &dev->ld_device_thread.dss;
     struct fs_adapter_module *fsa;
     struct pho_log log;
     char *mnt_root;
@@ -1577,7 +1552,6 @@ int dev_mount(struct lrs_dev *dev)
 
     init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
                  &dev->ld_dss_media_info->rsc.id, PHO_LTFS_MOUNT);
-    destroy_log_message(&log);
 
     rc = get_fs_adapter(dev->ld_dss_media_info->fs.type, &fsa);
     if (rc)
@@ -1615,6 +1589,7 @@ int dev_mount(struct lrs_dev *dev)
     rc = ldm_fs_mount(fsa, dev->ld_dev_path, mnt_root,
                       dev->ld_dss_media_info->fs.label,
                       &log.message);
+    emit_log_after_action(dss, &log, PHO_LTFS_MOUNT, rc);
     if (rc)
         LOG_GOTO(out_free, rc, "Failed to mount '%s' in device '%s'",
                  dev->ld_dss_media_info->rsc.id.name,
@@ -1630,12 +1605,6 @@ int dev_mount(struct lrs_dev *dev)
 out_free:
     free(mnt_root);
 
-    log.error_number = rc;
-    if (should_log(&log))
-        dss_emit_log(&dev->ld_device_thread.dss, &log);
-
-    destroy_log_message(&log);
-
     return rc;
 }
 
@@ -1645,12 +1614,13 @@ bool dev_mount_is_writable(struct lrs_dev *dev)
     const char *fs_root = dev->ld_mnt_path;
     struct ldm_fs_space fs_info = {0};
     struct fs_adapter_module *fsa;
+    struct dss_handle *dss;
     struct pho_log log;
     int rc;
 
+    dss = &dev->ld_device_thread.dss;
     init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
                  &dev->ld_dss_media_info->rsc.id, PHO_LTFS_DF);
-    destroy_log_message(&log);
 
     rc = get_fs_adapter(fs_type, &fsa);
     if (rc) {
@@ -1660,17 +1630,11 @@ bool dev_mount_is_writable(struct lrs_dev *dev)
     }
 
     rc = ldm_fs_df(fsa, fs_root, &fs_info, &log.message);
-    log.error_number = rc;
+    emit_log_after_action(dss, &log, PHO_LTFS_DF, rc);
     if (rc) {
-        if (should_log(&log))
-            dss_emit_log(&dev->ld_device_thread.dss, &log);
-
-        destroy_log_message(&log);
         pho_error(rc, "Cannot retrieve media usage information");
         return false;
     }
-
-    destroy_log_message(&log);
 
     return !(fs_info.spc_flags & PHO_FS_READONLY);
 }
@@ -2156,9 +2120,8 @@ static int dev_thread_init(struct lrs_dev *device)
 }
 
 int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl,
-                  struct pho_log *log)
+                  json_t *message)
 {
-    json_t *lib_open_json;
     const char *lib_dev;
     int rc = -1;
 
@@ -2184,19 +2147,7 @@ int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl,
     if (!lib_dev)
         LOG_RETURN(rc, "Failed to get default library device from config");
 
-    lib_open_json = json_object();
-
-    rc = ldm_lib_open(lib_hdl, lib_dev, lib_open_json);
-    if (rc && json_object_size(lib_open_json) != 0) {
-        json_object_set_new(log->message,
-                            OPERATION_TYPE_NAMES[PHO_LIBRARY_OPEN],
-                            lib_open_json);
-        log->error_number = rc;
-    } else {
-        json_decref(lib_open_json);
-    }
-
-    return rc;
+    return ldm_lib_open(lib_hdl, lib_dev, message);
 }
 
 int lrs_dev_technology(const struct lrs_dev *dev, const char **techno)

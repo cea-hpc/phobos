@@ -244,9 +244,8 @@ void emit_log_after_action(struct dss_handle *dss,
                            enum operation_type action,
                            int rc)
 {
+    log->error_number = rc;
     if (rc) {
-        log->error_number = rc;
-
         if (log->message && json_object_size(log->message) != 0 &&
             action != log->cause) {
             json_t *message = json_object();
@@ -260,7 +259,7 @@ void emit_log_after_action(struct dss_handle *dss,
         }
     }
 
-    if (should_log(log)) {
+    if (should_log(log, action)) {
         int rc2 = dss_emit_log(dss, log);
 
         if (rc2) {
@@ -272,5 +271,6 @@ void emit_log_after_action(struct dss_handle *dss,
         /* Ignore emit errors */
     }
 
-    json_decref(log->message);
+    if (log->message)
+        json_decref(log->message);
 }

@@ -202,11 +202,11 @@ int daemon_creation(int argc, char **argv, struct daemon_params *param,
     if (param->is_daemon) {
         rc = pipe(pipefd);
         if (rc == -1)
-            LOG_RETURN(rc = -errno, "ERR: cannot init the communication pipe");
+            LOG_RETURN(rc = -errno, "cannot init the communication pipe");
 
         pid = fork();
         if (pid < 0)
-            LOG_RETURN(rc = -errno, "ERR: cannot create child process");
+            LOG_RETURN(rc = -errno, "cannot create child process");
 
         if (pid) {
             close(pipefd[1]);

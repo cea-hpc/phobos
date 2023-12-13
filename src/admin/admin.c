@@ -1383,8 +1383,6 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
 {
     const char *lib_type_name = lib_type2str(lib_type);
     struct lib_handle lib_hdl;
-    json_t *lib_open_json;
-    json_t *lib_scan_json;
     struct dss_handle dss;
     struct pho_id device;
     struct pho_id medium;
@@ -1412,47 +1410,19 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
     device.family = PHO_RSC_TAPE;
     init_pho_log(&log, &device, &medium, PHO_LIBRARY_SCAN);
 
-    lib_open_json = json_object();
-
-    rc = ldm_lib_open(&lib_hdl, lib_dev, lib_open_json);
-    if (rc) {
-        if (json_object_size(lib_open_json) != 0) {
-            json_object_set_new(log.message,
-                                OPERATION_TYPE_NAMES[PHO_LIBRARY_OPEN],
-                                lib_open_json);
-            log.error_number = rc;
-            dss_emit_log(&dss, &log);
-        } else {
-            json_decref(lib_open_json);
-        }
-
-        destroy_log_message(&log);
+    log.message = json_object();
+    rc = ldm_lib_open(&lib_hdl, lib_dev, log.message);
+    emit_log_after_action(&dss, &log, PHO_LIBRARY_OPEN, rc);
+    if (rc)
         LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
                    lib_type_name, lib_dev);
-    }
 
-    json_decref(lib_open_json);
-    lib_scan_json = json_object();
-
-    rc = ldm_lib_scan(&lib_hdl, lib_data, lib_scan_json);
-    if (rc) {
-        if (json_object_size(lib_scan_json) != 0) {
-            json_object_set_new(log.message,
-                                OPERATION_TYPE_NAMES[PHO_LIBRARY_SCAN],
-                                lib_scan_json);
-            log.error_number = rc;
-            dss_emit_log(&dss, &log);
-        } else {
-            json_decref(lib_scan_json);
-        }
-
-        destroy_log_message(&log);
+    log.message = json_object();
+    rc = ldm_lib_scan(&lib_hdl, lib_data, log.message);
+    emit_log_after_action(&dss, &log, PHO_LIBRARY_SCAN, rc);
+    if (rc)
         LOG_GOTO(out, rc, "Failed to scan library of type '%s' for path '%s'",
                  lib_type_name, lib_dev);
-    }
-
-    json_decref(lib_scan_json);
-    destroy_log_message(&log);
 
 out:
     rc2 = ldm_lib_close(&lib_hdl);
@@ -1508,10 +1478,13 @@ int phobos_admin_dump_logs(struct admin_handle *adm, int fd,
         timeval2str(&logs[i].time, time_buf);
         json_buffer = json_dumps(logs[i].message, 0);
         fprintf(fp,
-                "<%s> Device '%s' with medium '%s' %s at '%s' (rc = %d): %s\n",
-                time_buf, logs[i].device.name, logs[i].medium.name,
+                "<%s> Action '%s' with device '%s' and medium '%s' %s (rc = %d): %s\n",
+                time_buf,
+                operation_type2str(logs[i].cause),
+                logs[i].device.name,
+                logs[i].medium.name,
                 logs[i].error_number != 0 ? "failed" : "succeeded",
-                operation_type2str(logs[i].cause), logs[i].error_number,
+                logs[i].error_number,
                 json_buffer);
 
         free(json_buffer);

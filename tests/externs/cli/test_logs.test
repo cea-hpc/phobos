@@ -75,7 +75,7 @@ function check_number_of_logs
 
     local logs_lines=$(echo "$logs" | wc -l)
     if [ -z "$logs" ] || (( $logs_lines != $expected_number )); then
-        error "'$expected_number' logs should should be recorded, found only" \
+        error "'$expected_number' logs should should be recorded, found " \
               "'$logs_lines'"
     fi
 }
@@ -168,7 +168,8 @@ function _test_filter
 
     local logs_lines=$(echo "$logs" | grep "$to_grep" | wc -l)
     if [ -z "$logs" ] || (( $logs_lines != $expected_lines )); then
-        error "$expected_lines logs should have been recorded for $verb $value"
+        error "$expected_lines logs should have been recorded for $verb " \
+            "$value (found $(echo $log_lines | grep "$to_grep" | wc -l))"
     fi
 
     echo "$logs"

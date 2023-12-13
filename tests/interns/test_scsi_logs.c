@@ -320,12 +320,12 @@ static json_t *create_log_message(enum operation_type cause,
                                          scsi_logical_action));
         break;
     case PHO_DEVICE_LOOKUP:
-        assert_false(json_object_set_new(phobos_action, "Device lookup",
-                                         scsi_logical_action));
+        json_decref(phobos_action);
+        phobos_action = scsi_logical_action;
         break;
     case PHO_LIBRARY_SCAN:
-        assert_false(json_object_set_new(phobos_action, "Library scan",
-                                         scsi_logical_action));
+        json_decref(phobos_action);
+        phobos_action = scsi_logical_action;
         break;
     default:
         fail();
@@ -879,8 +879,6 @@ int main(void)
     rc = pho_cfg_init_local("../phobos.conf");
     if (rc)
         return rc;
-
-    pho_log_level_set(PHO_LOG_ERROR);
 
     error_count = cmocka_run_group_tests(test_scsi_logs,
                                          global_setup_dss_with_dbinit,
