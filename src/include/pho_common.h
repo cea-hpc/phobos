@@ -236,10 +236,8 @@ struct pho_log {
 static inline void init_pho_log(struct pho_log *log, struct pho_id device,
                                 struct pho_id medium, enum operation_type cause)
 {
-    strcpy(log->device.name, device.name);
-    log->device.family = device.family;
-    strcpy(log->medium.name, medium.name);
-    log->medium.family = medium.family;
+    pho_id_copy(&log->device, &device);
+    pho_id_copy(&log->medium, &medium);
     log->cause = cause;
     log->message = json_object();
     log->error_number = -1;

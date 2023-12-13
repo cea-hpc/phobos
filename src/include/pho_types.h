@@ -312,6 +312,12 @@ static inline void pho_id_name_set(struct pho_id *id, const char *name)
     id->name[PHO_URI_MAX - 1] = '\0';
 }
 
+static inline void pho_id_copy(struct pho_id *dst, const struct pho_id *src)
+{
+    dst->family = src->family;
+    pho_id_name_set(dst, src->name);
+}
+
 /** Resource administrative state */
 enum rsc_adm_status {
     PHO_RSC_ADM_ST_INVAL    = -1,
