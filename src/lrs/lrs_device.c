@@ -45,8 +45,6 @@
 struct medium_switch_context {
     /** Whether the device is responsible for the error or not.  */
     bool failure_on_device;
-    /** cf. release_medium_on_dev_only_failure in dev_load */
-    bool release_medium;
 };
 
 static int dev_medium_switch(struct lrs_dev *dev,
@@ -66,6 +64,16 @@ static inline long ms2sec(long ms)
 static inline long ms2nsec(long ms)
 {
     return (ms % 1000) * 1000000;
+}
+
+static const char *dev_request_kind(struct lrs_dev *dev)
+{
+    struct sub_request *subreq = dev->ld_sub_request;
+
+    if (!subreq)
+        return NULL;
+
+    return pho_srl_request_kind_str(subreq->reqc->req);
 }
 
 int lrs_dev_hdl_init(struct lrs_dev_hdl *handle, enum rsc_family family)
@@ -866,18 +874,20 @@ int dev_umount(struct lrs_dev *dev)
              dev->ld_mnt_path);
     rc = get_fs_adapter(dev->ld_dss_media_info->fs.type, &fsa);
     if (rc)
-        LOG_GOTO(out_err, rc,
-                 "Unable to get fs adapter '%s' to unmount medium '%s' from "
-                 "device '%s'",
-                 fs_type2str(dev->ld_dss_media_info->fs.type),
-                 dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
+        LOG_RETURN(rc,
+                   "Unable to get fs adapter '%s' to unmount medium '%s' from "
+                   "device '%s'",
+                   fs_type2str(dev->ld_dss_media_info->fs.type),
+                   dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
     rc = ldm_fs_umount(fsa, dev->ld_dev_path, dev->ld_mnt_path, &log.message);
     emit_log_after_action(dss, &log, PHO_LTFS_UMOUNT, rc);
     clean_tosync_array(dev, rc);
     if (rc)
-        LOG_GOTO(out_err, rc, "Failed to unmount device '%s' mounted at '%s'",
-                 dev->ld_dev_path, dev->ld_mnt_path);
+        LOG_RETURN(rc, "Failed to unmount medium '%s' mounted at '%s' "
+                       "on device '%s'",
+                   dev->ld_dss_media_info->rsc.id.name, dev->ld_mnt_path,
+                   lrs_dev_name(dev));
 
     /* update device state and unset mount path */
     MUTEX_LOCK(&dev->ld_mutex);
@@ -886,13 +896,6 @@ int dev_umount(struct lrs_dev *dev)
     MUTEX_UNLOCK(&dev->ld_mutex);
 
     return 0;
-
-out_err:
-    MUTEX_LOCK(&dev->ld_mutex);
-    dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-    MUTEX_UNLOCK(&dev->ld_mutex);
-
-    return rc;
 }
 
 static int dss_medium_release(struct dss_handle *dss, struct media_info *medium)
@@ -942,10 +945,13 @@ int dev_unload(struct lrs_dev *dev)
 
     rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl);
     if (rc)
-        LOG_GOTO(out, rc,
-                 "Unable to open lib '%s' to unload medium '%s' from device "
-                 "'%s'", rsc_family_names[dev->ld_dss_dev_info->rsc.id.family],
-                 dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
+        LOG_RETURN(rc,
+                   "Unable to open lib '%s' to unload medium '%s' from device "
+                   "'%s' for %s request",
+                   rsc_family_names[dev->ld_dss_dev_info->rsc.id.family],
+                   dev->ld_dss_media_info->rsc.id.name,
+                   lrs_dev_name(dev),
+                   dev_request_kind(dev));
 
     rc = ldm_lib_unload(&lib_hdl, dev->ld_dss_dev_info->rsc.id.name,
                         dev->ld_dss_media_info->rsc.id.name);
@@ -964,22 +970,13 @@ int dev_unload(struct lrs_dev *dev)
     dev->ld_dss_media_info = NULL;
     MUTEX_UNLOCK(&dev->ld_mutex);
 
+    rc = dss_medium_release(&dev->ld_device_thread.dss, unloaded_medium);
+    lrs_medium_release(unloaded_medium);
+
 out_close:
     rc2 = ldm_lib_close(&lib_hdl);
-    if (rc2)
-        rc = rc ? : rc2;
 
-out:
-    if (!rc) {
-        rc = dss_medium_release(&dev->ld_device_thread.dss, unloaded_medium);
-        lrs_medium_release(unloaded_medium);
-    } else {
-        MUTEX_LOCK(&dev->ld_mutex);
-        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-        MUTEX_UNLOCK(&dev->ld_mutex);
-    }
-
-    return rc;
+    return rc ? : rc2;
 }
 
 /**
@@ -1070,8 +1067,7 @@ static void fail_release_device(struct lrs_dev *dev)
                   lrs_dev_name(dev));
 }
 
-int dev_load(struct lrs_dev *dev, struct media_info **medium,
-             bool release_medium_on_dev_only_failure)
+int dev_load(struct lrs_dev *dev, struct media_info **medium)
 {
     struct lib_handle lib_hdl;
     int rc2;
@@ -1084,39 +1080,13 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
 
     /* get handle to the library depending on device type */
     rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl);
-    if (rc) {
-        MUTEX_LOCK(&dev->ld_mutex);
-        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-        MUTEX_UNLOCK(&dev->ld_mutex);
-
-        if (release_medium_on_dev_only_failure) {
-            rc2 = dss_medium_release(&dev->ld_device_thread.dss, *medium);
-            if (rc2)
-                pho_error(rc2,
-                          "Error when releasing a medium during device load "
-                          "error");
-        }
-
+    if (rc)
         return rc;
-    }
 
     rc = ldm_lib_load(&lib_hdl, dev->ld_dss_dev_info->rsc.id.name,
                       (*medium)->rsc.id.name);
     if (rc) {
-        /* Set operationnal failure state on this drive. It is incomplete since
-         * the error can originate from a defect tape too...
-         *  - consider marking both as failed.
-         *  - consider maintaining lists of errors to diagnose and decide who to
-         *    exclude from the cool game.
-         */
-        MUTEX_LOCK(&dev->ld_mutex);
-        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-        MUTEX_UNLOCK(&dev->ld_mutex);
         dev->ld_sub_request->failure_on_medium = true;
-        /* do not release the medium as it will be freed when all the
-         * sub-requests are managed (i.e. canceled since this one failed).
-         */
-        fail_release_free_medium(dev, medium, false);
         LOG_GOTO(out_close, rc, "Media load failed");
     }
 
@@ -1134,10 +1104,11 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
 out_close:
     rc2 = ldm_lib_close(&lib_hdl);
     if (rc2) {
-        MUTEX_LOCK(&dev->ld_mutex);
-        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-        MUTEX_UNLOCK(&dev->ld_mutex);
-        pho_error(rc2, "Unable to close lib");
+        pho_error(rc2, "device '%s' failed to close lib handle",
+                  lrs_dev_name(dev));
+        /* display rc2 in the logs as this is the error of the close but return
+         * rc if not nul.
+         */
         rc = rc ? : rc2;
     }
 
@@ -1243,7 +1214,6 @@ static int dev_handle_format(struct lrs_dev *dev)
 
     reqc = dev->ld_sub_request->reqc;
     medium_to_format = reqc->params.format.medium_to_format;
-    context.release_medium = true;
 
     if (medium_is_loaded(dev, medium_to_format)) {
         /* The medium to format is already loaded, use existing
@@ -1261,6 +1231,29 @@ static int dev_handle_format(struct lrs_dev *dev)
         pho_warn("Trying to load a busy medium to format, try again later");
         return 0;
     }
+
+    if (rc) {
+        if (context.failure_on_device) {
+            MUTEX_LOCK(&dev->ld_mutex);
+            dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
+            MUTEX_UNLOCK(&dev->ld_mutex);
+        }
+        if (!subreq->failure_on_medium) {
+            int rc2;
+
+            rc2 = dss_medium_release(&dev->ld_device_thread.dss,
+                                     medium_to_format);
+            if (rc2)
+                pho_error(rc2,
+                          "failed to release medium '%s' after device "
+                          "failure on '%s'",
+                          medium_to_format->rsc.id.name,
+                          lrs_dev_name(dev));
+        } else {
+            fail_release_free_medium(dev, &medium_to_format, false);
+        }
+    }
+
     if (rc && !subreq->failure_on_medium) {
         /* Push format request back if the error is not caused by the medium */
         /* TODO: use sched retry queue */
@@ -1567,9 +1560,7 @@ int dev_mount(struct lrs_dev *dev)
                       &log.message);
     emit_log_after_action(dss, &log, PHO_LTFS_MOUNT, rc);
     if (rc)
-        LOG_GOTO(out_free, rc, "Failed to mount '%s' in device '%s'",
-                 dev->ld_dss_media_info->rsc.id.name,
-                 dev->ld_dev_path);
+        goto out_free;
 
     /* update device state and set mount point */
     MUTEX_LOCK(&dev->ld_mutex);
@@ -1634,12 +1625,6 @@ static int dev_handle_read_write(struct lrs_dev *dev)
         goto out_free;
     }
 
-    /*
-     * We call dev_load with release_medium_on_dev_only_failure at false
-     * because the request will be pushed to the retry queue of the sched
-     * with an already locked medium ready to be use in a new device.
-     */
-    context.release_medium = false;
     medium_to_alloc =
         reqc->params.rwalloc.media[sub_request->medium_index].alloc_medium;
 
@@ -1649,8 +1634,26 @@ static int dev_handle_read_write(struct lrs_dev *dev)
                  pho_srl_request_kind_str(reqc->req));
         return 0;
     }
-    if (rc)
+    if (rc) {
+        if (context.failure_on_device) {
+            MUTEX_LOCK(&dev->ld_mutex);
+            dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
+            MUTEX_UNLOCK(&dev->ld_mutex);
+        }
+        if (dev->ld_sub_request->failure_on_medium) {
+            fail_release_free_medium(
+                dev, (struct media_info **)&dev->ld_dss_media_info, true);
+            MUTEX_LOCK(&dev->ld_mutex);
+            dev->ld_dss_media_info = NULL;
+            MUTEX_UNLOCK(&dev->ld_mutex);
+        }
+        /* else: We keep the medium locked on error so that the medium stays
+         * ready to be used in a new device since the medium didn't cause the
+         * error.
+         */
+
         io_ended = true;
+    }
 
     MUTEX_LOCK(&dev->ld_mutex);
     locked = true;
@@ -1841,6 +1844,8 @@ static void dev_cleanup_on_error(struct lrs_dev *device)
 
 static void dev_thread_end(struct lrs_dev *device)
 {
+    ENTRY;
+
     /* prevent any new scheduled request to this device */
     if (thread_is_running(&device->ld_device_thread)) {
         MUTEX_LOCK(&device->ld_mutex);
@@ -2125,6 +2130,7 @@ static int dev_medium_switch(struct lrs_dev *dev,
     rc = dev_empty(dev);
     if (rc) {
         context->failure_on_device = true;
+        dev->ld_sub_request->failure_on_medium = true;
         LOG_RETURN(rc, "failed to empty device '%s' to load medium '%s'"
                    "for %s request",
                    lrs_dev_name(dev), medium_to_load->rsc.id.name,
@@ -2133,7 +2139,7 @@ static int dev_medium_switch(struct lrs_dev *dev,
 
     pho_debug("Will load medium '%s' in device '%s'", lrs_dev_name(dev),
               medium_to_load->rsc.id.name);
-    rc = dev_load(dev, &medium_to_load, context->release_medium);
+    rc = dev_load(dev, &medium_to_load);
     if (rc == -EBUSY)
         return rc;
 
@@ -2175,31 +2181,14 @@ static int dev_medium_switch_mount(struct lrs_dev *dev,
 
     rc = dev_mount(dev);
     if (rc) {
-        struct media_info *tmp;
-
         context->failure_on_device = true;
         subreq->failure_on_medium = true;
-        pho_error(rc,
-                  "failed to mount medium '%s' in device '%s' "
-                  "for %s request. Will try another medium if possible.",
-                  // FIXME use medium_to_mount when it is no longer set to NULL
-                  dev->ld_dss_media_info->rsc.id.name,
-                  lrs_dev_name(dev),
-                  pho_srl_request_kind_str(reqc->req));
-        /* FIXME ld_dss_media_info is set to NULL to avoid a double free in
-         * dev_cleanup_on_error. This behavior will have to be updated with the
-         * media health management.
-         */
-        MUTEX_LOCK(&dev->ld_mutex);
-        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-        tmp = dev->ld_dss_media_info;
-        dev->ld_dss_media_info = NULL;
-        MUTEX_UNLOCK(&dev->ld_mutex);
-        /* Set the medium to failed early to make sure that the scheduler won't
-         * reuse it.
-         */
-        fail_release_free_medium(dev, &tmp, true);
-        return rc;
+        LOG_RETURN(rc,
+                   "failed to mount medium '%s' in device '%s' "
+                   "for %s request. Will try another medium if possible.",
+                   dev->ld_dss_media_info->rsc.id.name,
+                   lrs_dev_name(dev),
+                   pho_srl_request_kind_str(reqc->req));
     }
 
     /* LTFS can cunningly mount almost-full tapes as read-only, and so would

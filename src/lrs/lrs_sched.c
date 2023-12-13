@@ -1242,7 +1242,7 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
             goto unlock_continue;
         }
 
-        if (itr->ld_op_status == PHO_DEV_OP_ST_FAILED) {
+        if (dev_is_failed(itr)) {
             pho_debug("Skipping device '%s' with status %s", itr->ld_dev_path,
                       op_status2str(itr->ld_op_status));
             goto unlock_continue;
@@ -1448,7 +1448,7 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
         struct lrs_dev *dev = lrs_dev_hdl_get(&sched->devices, i);
         bool is_already_selected = false;
 
-        if (dev->ld_op_status == PHO_DEV_OP_ST_FAILED ||
+        if (dev_is_failed(dev) ||
             !thread_is_running(&dev->ld_device_thread))
             continue;
 
@@ -2099,7 +2099,7 @@ static int count_suitable_devices(struct lrs_sched *sched,
         struct lrs_dev *iter = lrs_dev_hdl_get(&sched->devices, i);
         bool is_compatible;
 
-        if (iter->ld_op_status == PHO_DEV_OP_ST_FAILED)
+        if (dev_is_failed(iter))
             continue;
 
         if (!thread_is_running(&iter->ld_device_thread))

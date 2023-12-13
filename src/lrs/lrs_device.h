@@ -111,16 +111,11 @@ char *mount_point(const char *id);
  * the DSS, freed and set to NULL if free_medium is true. WARNING: if we
  * cannot set it to failed into the DSS, the medium DSS lock is not released.
  *
- * @param[in]   release_medium_on_dev_only_failure
- *                              If true, release the medium on a dev-only
- *                              failure. The medium is neither freed or set to
- *                              NULL.
  * @return 0 on success, -error number on error. -EBUSY is returned when a
  * drive to drive medium movement was prevented by the library or if the device
  * is empty.
  */
-int dev_load(struct lrs_dev *dev, struct media_info **medium,
-             bool release_medium_on_dev_only_failure);
+int dev_load(struct lrs_dev *dev, struct media_info **medium);
 
 /**
  * Format a medium to the given fs type.
@@ -327,7 +322,7 @@ static inline bool dev_is_sched_ready(struct lrs_dev *dev)
     return dev && thread_is_running(&dev->ld_device_thread) &&
            !dev->ld_ongoing_io && !dev->ld_needs_sync && !dev->ld_sub_request &&
            !dev->ld_ongoing_scheduled &&
-           dev->ld_op_status != PHO_DEV_OP_ST_FAILED &&
+           !dev_is_failed(dev) &&
            (dev->ld_dss_dev_info->rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED);
 }
 
