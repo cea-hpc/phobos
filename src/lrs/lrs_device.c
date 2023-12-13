@@ -1485,17 +1485,16 @@ static bool rwalloc_can_be_requeued(struct sub_request *sub_request)
  *
  * @return  a negative error code on failure
  */
-static int handle_rwalloc_sub_request_result(struct lrs_dev *dev,
-                                             struct sub_request *sub_request,
-                                             int sub_request_rc,
-                                             bool *sub_request_requeued,
-                                             bool *canceled)
+static void handle_rwalloc_sub_request_result(struct lrs_dev *dev,
+                                              struct sub_request *sub_request,
+                                              int sub_request_rc,
+                                              bool *sub_request_requeued,
+                                              bool *canceled)
 {
     struct req_container *reqc = sub_request->reqc;
     struct rwalloc_medium  *rwalloc_medium;
     bool free_medium = true;
     bool ended = false;
-    int rc = 0;
 
     *sub_request_requeued = false;
     *canceled = false;
@@ -1550,8 +1549,6 @@ out_free:
         sched_req_free(reqc);
         sub_request->reqc = NULL;
     }
-
-    return rc;
 }
 
 char *mount_point(const char *id)
@@ -1806,22 +1803,14 @@ mount:
         }
     }
 
-
 alloc_result:
     MUTEX_LOCK(&dev->ld_mutex);
     locked = true;
-    rc2 = handle_rwalloc_sub_request_result(dev, sub_request, rc,
-                                            &sub_request_requeued,
-                                            &cancel);
+    handle_rwalloc_sub_request_result(dev, sub_request, rc,
+                                      &sub_request_requeued,
+                                      &cancel);
     if (cancel)
         io_ended = true;
-
-    if (rc2) {
-        if (!failure_on_device) {
-            failure_on_device = true;
-            rc = rc2;
-        }
-    }
 
 out_free:
     if (!locked)

@@ -2579,6 +2579,7 @@ int lrs_schedule_work(struct lrs_sched *sched)
             queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
 
             rc2 = io_sched_remove_request(&sched->io_sched_hdl, reqc);
+            /* overwrite EAGAIN, this failure is fatal */
             rc = rc2 ? : rc;
             sched_req_free(reqc);
             if (rc)

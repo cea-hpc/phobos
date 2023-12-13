@@ -353,10 +353,7 @@ static int _send_error(struct lrs *lrs, int req_rc,
 
     rc = _send_message(&lrs->comm, &resp_cont);
     pho_srl_response_free(resp_cont.resp, false);
-    if (rc)
-        LOG_GOTO(err_resp, rc, "Error during response sending");
 
-err_resp:
     free(resp_cont.resp);
 
     return rc;
