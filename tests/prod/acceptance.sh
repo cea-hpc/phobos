@@ -41,16 +41,20 @@ if [ ! -z ${EXEC_NONREGRESSION+x} ]; then
     . $test_dir/../setup_db.sh
     . $test_dir/../test_launch_daemon.sh
 
+    start_tlc="invoke_tlc"
     start_phobosd="invoke_lrs"
     stop_phobosd="waive_lrs"
+    stop_tlc="waive_tlc"
 
     start_phobosdb="setup_tables"
     stop_phobosdb="drop_tables"
     exec_nonregression=true
 else
     phobos="phobos"
+    start_tlc="systemctl start tlc"
     start_phobosd="systemctl start phobosd"
     stop_phobosd="systemctl stop phobosd"
+    stop_tlc="systemctl stop tlc"
 
     start_phobosdb="phobos_db setup_tables"
     stop_phobosdb="phobos_db drop_tables"
@@ -91,6 +95,7 @@ function setup_test
             $start_phobosdb
         fi
 
+        $start_tlc
         $start_phobosd
         $phobos ping phobosd
         if ! $database_online; then
@@ -107,6 +112,7 @@ function cleanup_test
     cleanup_dummy_files
     if ! $keep_setup && ! $daemon_online; then
         $stop_phobosd
+        $stop_tlc
         if ! $database_online; then
             $stop_phobosdb
         fi

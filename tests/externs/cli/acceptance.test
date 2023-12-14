@@ -62,7 +62,7 @@ function cleanup
 function tape_setup
 {
     setup_tables
-    invoke_lrs
+    invoke_daemons
 
     export PHOBOS_STORE_default_family="tape"
     echo "Tape test mode"
@@ -140,7 +140,7 @@ function tape_setup
 
 function tape_cleanup
 {
-    waive_lrs
+    waive_daemons
     drop_tables
     drain_all_drives
 }
@@ -562,9 +562,9 @@ function check_status
 
 function drain_all_drives_daemon
 {
+    waive_daemons
     drain_all_drives
-    waive_lrs
-    invoke_lrs
+    invoke_daemons
 }
 
 function lock_all_drives

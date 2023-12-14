@@ -32,7 +32,7 @@ function setup_2_drives_3_tapes()
 {
     drain_all_drives
     setup_tables
-    invoke_lrs
+    invoke_daemons
 
     local tapes=$(get_tapes L6 3)
     local drives=$(get_lto_drives 6 2)
@@ -43,7 +43,7 @@ function setup_2_drives_3_tapes()
 
 function cleanup()
 {
-    waive_lrs
+    waive_daemons
     drop_tables
     drain_all_drives
 }

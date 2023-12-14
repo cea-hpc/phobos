@@ -43,7 +43,7 @@ function setup
 
 function cleanup
 {
-    waive_lrs
+    waive_daemons
     drop_tables
 }
 
@@ -54,5 +54,6 @@ export PHOBOS_STORE_default_family="dir"
 $LOG_COMPILER $test_bin
 if [ -w /dev/changer ]; then
     export PHOBOS_STORE_default_family="tape"
+    invoke_tlc
     $LOG_COMPILER $test_bin
 fi

@@ -42,13 +42,14 @@ function test_drive_status_no_daemon()
 function setup()
 {
     setup_tables
-    invoke_lrs
+    invoke_daemons
 }
 
 function cleanup()
 {
-    waive_lrs
+    waive_daemons
     drop_tables
+    drain_all_drives
 }
 
 function st2sg()
@@ -103,7 +104,6 @@ setup
 test_drive_status
 
 cleanup
-drain_all_drives
 setup
 
 test_drive_status_with_ongoing_io

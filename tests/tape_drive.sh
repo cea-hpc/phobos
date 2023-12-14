@@ -37,10 +37,18 @@ function drain_all_drives
     mount | awk '/^ltfs/ {print $3}' | xargs -r umount
 
     # unload all tapes
-    mtx status | awk -F'[ :]' '/Data Transfer Element.*Full/ {print $8, $4}' |
-        while read slot drive; do
-            mtx_retry unload $slot $drive
+    local drive_full=( $(mtx status | \
+              awk -F'[ :]' '/Data Transfer Element.*Full/ {print $4}') )
+    local nb_drive_full=${#drive_full[@]}
+    if [[ "${nb_drive_full}" != 0 ]]; then
+        local slot_empty=( $(mtx status | grep "Storage Element" | \
+                             grep -v "IMPORT/EXPORT" | \
+                             grep Empty | awk '{print $3}' | cut -f 1 -d ':') )
+
+        for i in `seq 1 ${nb_drive_full}`; do
+            mtx_retry unload ${slot_empty[$i - 1]} ${drive_full[$i - 1]}
         done
+    fi
 }
 
 # list <count> tapes matching the given pattern

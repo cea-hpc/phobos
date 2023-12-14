@@ -34,14 +34,14 @@ function setup()
     setup_tables
     drain_all_drives
     export PHOBOS_IO_SCHED_TAPE_read_algo="grouped_read"
-    invoke_lrs
+    invoke_daemons
 }
 
 function cleanup()
 {
     cleanup_dummy_files
     cleanup_test_dirs
-    waive_lrs
+    waive_daemons
     drop_tables
     drain_all_drives
 }

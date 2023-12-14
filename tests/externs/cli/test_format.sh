@@ -34,12 +34,21 @@ set -xe
 function setup
 {
     setup_tables
-    invoke_lrs
+    if [[ -w /dev/changer ]]; then
+        invoke_daemons
+    else
+        invoke_lrs
+    fi
 }
 
 function cleanup
 {
-    waive_lrs
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+    else
+        waive_lrs
+    fi
+
     drop_tables
     if [[ -w /dev/changer ]]; then
         drain_all_drives

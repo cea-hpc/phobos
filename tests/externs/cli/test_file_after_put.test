@@ -63,15 +63,26 @@ function tapes_setup
 function setup
 {
     setup_tables
-    invoke_lrs
+    if [[ -w /dev/changer ]]; then
+        invoke_daemons
+    else
+        invoke_lrs
+    fi
 }
 
 function cleanup
 {
-    waive_lrs
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+    else
+        waive_lrs
+    fi
+
     drop_tables
     rm -rf $dirs
-    drain_all_drives
+    if [[ -w /dev/changer ]]; then
+        drain_all_drives
+    fi
 }
 
 function hash_compare

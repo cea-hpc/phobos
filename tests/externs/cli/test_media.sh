@@ -37,7 +37,12 @@ TEST_MNT="/tmp/pho_testdir1 /tmp/pho_testdir2 /tmp/pho_testdir3 \
 function setup()
 {
     setup_tables
-    invoke_lrs
+    if [[ -w /dev/changer ]]; then
+        invoke_daemons
+    else
+        invoke_lrs
+    fi
+
     rm -rf $TEST_MNT
     umask 000
     mkdir -p $TEST_MNT
@@ -46,7 +51,13 @@ function setup()
 }
 
 function cleanup() {
-    waive_lrs
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+        drain_all_drives
+    else
+        waive_lrs
+    fi
+
     drop_tables
     for d in $TEST_MNT; do
         rm -rf $d

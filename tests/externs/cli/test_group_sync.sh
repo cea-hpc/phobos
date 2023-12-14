@@ -48,7 +48,12 @@ function tape_setup
 function setup
 {
     setup_tables
-    invoke_lrs
+    if [[ -w /dev/changer ]]; then
+        invoke_daemons
+    else
+        invoke_lrs
+    fi
+
     dir_setup
     if [[ -w /dev/changer ]]; then
         tape_setup
@@ -57,7 +62,12 @@ function setup
 
 function cleanup
 {
-    waive_lrs
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+    else
+        waive_lrs
+    fi
+
     rm -rf $dir
     drop_tables
 
@@ -83,7 +93,8 @@ function test_sync_no_group
         ${phobos} put --family ${family} /etc/hosts \
                                          test_sync_no_group_${family} &
         pid=$!
-        sleep ${WAIT_PUT_S}
+        WAIT_ONE_PUT=3
+        sleep ${WAIT_ONE_PUT}
         if (ps --pid $pid); then
             error "Without any grouped sync ${family} put should be ended."
         fi

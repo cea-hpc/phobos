@@ -26,6 +26,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../test_env.sh
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
+. $test_dir/../../tape_drive.sh
 
 set -xe
 
@@ -41,12 +42,13 @@ function setup
     export PHOBOS_LRS_families="dir,tape"
 
     setup_tables
-    invoke_lrs
+    invoke_daemons
 }
 
 function cleanup
 {
-    waive_lrs
+    waive_daemons
+    drain_all_drives
     drop_tables
 }
 

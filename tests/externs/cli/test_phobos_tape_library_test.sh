@@ -39,8 +39,8 @@ tape_lib_script="${tape_lib_certif_dir}/phobos_tape_library_test.bash"
 function setup
 {
     setup_tables
-    invoke_lrs
     drain_all_drives
+    invoke_daemons
 
     for drive in $(nodeset -e "${drives_set}"); do
         $phobos drive add --unlock "${drive}" ||
@@ -55,20 +55,23 @@ function setup
 
 function cleanup
 {
-    waive_lrs
+    waive_daemons
     drop_tables
     drain_all_drives
 }
 
 # This tape library certification test needs an available tape library.
-if [[ -w /dev/changer ]]; then
-    trap cleanup EXIT
-    setup
-
-    # use the phobos client binary of the test tree
-    export phobos
-
-    ${tape_lib_script} "${drives_set}" "${tapes_set}" ||
-        error "Concurrent load/unload fails for '${drives_set}'" \
-              "and '${tapes_set}'"
+if [[ ! -w /dev/changer ]]; then
+    echo "Cannot access library: test skipped"
+    exit 77
 fi
+
+trap cleanup EXIT
+setup
+
+# use the phobos client binary of the test tree
+export phobos
+
+${tape_lib_script} "${drives_set}" "${tapes_set}" ||
+    error "Concurrent load/unload fails for '${drives_set}'" \
+          "and '${tapes_set}'"

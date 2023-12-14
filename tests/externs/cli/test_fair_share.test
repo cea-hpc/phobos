@@ -21,7 +21,7 @@ function setup()
 
     drain_all_drives
     setup_tables
-    invoke_lrs
+    invoke_daemons
 
     $phobos drive add --unlock $drives
     $phobos tape add --type LTO5 --unlock ${tapes[@]}
@@ -36,7 +36,9 @@ function setup()
 
 function cleanup()
 {
+    waive_daemons
     drop_tables
+    drain_all_drives
 }
 
 function test_fair_share_setup()

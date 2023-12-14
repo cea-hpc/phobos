@@ -58,11 +58,9 @@ check_PROGRAMS=test_attrs \
                test_lrs_cfg \
                test_lrs_device \
                test_lrs_scheduling \
-               test_ltfs_logs \
                test_mapper \
                test_phobos_admin_medium_locate \
                test_ping \
-               test_scsi_logs \
                test_store_alias \
                test_store_object_md \
                test_store_object_md_get \
@@ -148,12 +146,6 @@ test_lrs_scheduling_LDADD=$(LRS_LIB) $(LDM_LIB) $(MOD_LOAD_LIB) $(DSS_LIB) \
                           $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_lrs_scheduling_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I..
 
-test_ltfs_logs_SOURCES=test_ltfs_logs.c
-test_ltfs_logs_LDADD=$(MOD_LOAD_LIB) $(SCSI_LIB) $(LDM_SCSI_LIB) \
-                     $(IO_LTFS_LIB) $(FS_LTFS_LIB) $(ADMIN_LIB) $(TESTS_LIB) \
-                     $(TESTS_LIB_DEPS)
-test_ltfs_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I$(TO_SRC)/ldm-modules -I..
-
 test_mapper_SOURCES=test_mapper.c
 test_mapper_LDADD=$(STORE_LIB) $(MAPPER_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_mapper_CFLAGS=$(AM_CFLAGS) -I..
@@ -166,11 +158,6 @@ test_phobos_admin_medium_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I..
 test_ping_SOURCES=test_ping.c mock_communication.c
 test_ping_LDADD=$(ADMIN_LIB) $(COMMON_LIB) $(DSS_LIB) $(LDM_LIB)
 test_ping_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/admin
-
-test_scsi_logs_SOURCES=test_scsi_logs.c
-test_scsi_logs_LDADD=$(MOD_LOAD_LIB) $(SCSI_LIB) $(LDM_SCSI_LIB) $(ADMIN_LIB) \
-                     $(TESTS_LIB) $(TESTS_LIB_DEPS)
-test_scsi_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I$(TO_SRC)/ldm-modules -I..
 
 # TODO: try to link against the phobos_store library instead of
 # the store_alias object file

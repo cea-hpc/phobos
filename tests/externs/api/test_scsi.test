@@ -25,20 +25,32 @@
 # Wrapper to skip SCSI tests when /dev/changer is not writable
 #
 
-test_bin_dir=$(dirname $(readlink -e $0))
-test_bin="$test_bin_dir/test_scsi"
-. $test_bin_dir/../../test_env.sh
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/test_launch_daemon.sh
 
-if  [[ -w /dev/changer ]]; then
-    echo "library is accessible"
-    echo "changer:"
-    ls -ld /dev/changer
+test_bin="$test_dir/externs/api/test_scsi"
 
+set -xe
+
+function setup
+{
     # make sure no process uses the drive
     /usr/share/ltfs/ltfs stop || true
 
-    $LOG_COMPILER $test_bin
-else
-    echo "Cannot access library: test skipped"
-    exit 77 # special value to mark test as 'skipped'
+    invoke_tlc
+}
+
+function cleanup
+{
+    waive_tlc
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Library required for this test"
 fi
+
+TEST_SETUP=setup
+TESTS=("$LOG_COMPILER $test_bin;")
+TEST_CLEANUP=cleanup
+

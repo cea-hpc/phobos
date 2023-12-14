@@ -55,7 +55,7 @@ check_SCRIPTS=test_bad_comm.sh \
               test_locate.test \
               test_lock_clean.sh \
               test_raid1_split_locate.sh \
-              test_scsi.sh \
+              test_scsi.test \
               test_store_retry.sh \
               test_undelete.sh
 

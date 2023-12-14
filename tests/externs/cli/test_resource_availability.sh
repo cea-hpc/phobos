@@ -53,12 +53,21 @@ function setup
 
     setup_dir
     setup_tables
-    invoke_lrs
+    if [ -w /dev/changer ]; then
+        invoke_daemons
+    else
+        invoke_lrs
+    fi
 }
 
 function cleanup
 {
-    waive_lrs
+    if [ -w /dev/changer ]; then
+        waive_daemons
+    else
+        waive_lrs
+    fi
+
     drop_tables
     clean_dir
     if [[ -w /dev/changer ]]; then
@@ -280,9 +289,12 @@ get_dir_simple
 
 if [[ -w /dev/changer ]]; then
     # in case the previous test did not unload the drives
+    waive_daemons
     drain_all_drives
+    invoke_daemons
     put_tape_simple
     get_tape_simple
+    waive_daemons
     drain_all_drives
 fi
 
@@ -291,7 +303,11 @@ drop_tables
 clean_dir
 setup_dir
 setup_tables
-invoke_lrs
+if [[ -w /dev/changer ]]; then
+    invoke_daemons
+else
+    invoke_lrs
+fi
 
 # availability with raid layout
 put_dir_raid

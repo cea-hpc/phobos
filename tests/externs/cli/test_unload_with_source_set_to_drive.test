@@ -33,12 +33,12 @@ function setup
 {
     setup_tables
     drain_all_drives
-    invoke_lrs
+    invoke_daemons
 }
 
 function cleanup
 {
-    waive_lrs
+    waive_daemons
     drop_tables
     drain_all_drives
 }

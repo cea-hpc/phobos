@@ -124,7 +124,11 @@ EOF
 function setup
 {
     setup_tables
-    invoke_lrs
+    if [[ -w /dev/changer ]]; then
+        invoke_daemons
+    else
+        invoke_lrs
+    fi
 
     # set start context
     dd if=/dev/random of=$IN_FILE count=$FULL_SIZE  bs=1
@@ -132,6 +136,7 @@ function setup
     if [[ -w /dev/changer ]]; then
         tape_setup
     fi
+
     waive_lrs
     resize_medium "${dir_array[0]}" "$PART1_SIZE"
     resize_medium "${dir_array[1]}" "$PART1_SIZE"
@@ -148,7 +153,12 @@ function setup
 
 function cleanup
 {
-    waive_lrs
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+    else
+        waive_lrs
+    fi
+
     drain_all_drives
     drop_tables
     rm -rf ${dir_array[@]}

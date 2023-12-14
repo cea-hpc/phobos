@@ -912,7 +912,6 @@ static int dss_device_release(struct dss_handle *dss, struct dev_info *dev)
 int dev_unload(struct lrs_dev *dev)
 {
     /* let the library select the target location */
-    struct lib_item_addr free_slot = { .lia_type = MED_LOC_UNKNOWN };
     struct media_info *medium_to_unlock_free = NULL;
     struct lib_handle lib_hdl;
     struct dss_handle *dss;
@@ -942,10 +941,8 @@ int dev_unload(struct lrs_dev *dev)
                  "'%s'", rsc_family_names[dev->ld_dss_dev_info->rsc.id.family],
                  dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
-    log.message = json_object();
-    rc = ldm_lib_media_move(&lib_hdl, &dev->ld_lib_dev_info.ldi_addr,
-                            &free_slot, log.message);
-    emit_log_after_action(dss, &log, PHO_DEVICE_UNLOAD, rc);
+    rc = ldm_lib_unload(&lib_hdl, dev->ld_dss_dev_info->rsc.id.name,
+                        dev->ld_dss_media_info->rsc.id.name);
     if (rc != 0)
         /* Set operational failure state on this drive. It is incomplete since
          * the error can originate from a defective tape too...
@@ -1044,12 +1041,8 @@ static void fail_release_free_medium(struct lrs_dev *dev,
 }
 
 int dev_load(struct lrs_dev *dev, struct media_info **medium,
-             bool release_medium_on_dev_only_failure,
-             bool *failure_on_dev,
-             bool *can_retry,
-             bool free_medium)
+             bool release_medium_on_dev_only_failure, bool free_medium)
 {
-    struct lib_item_addr medium_addr;
     struct lib_handle lib_hdl;
     struct dss_handle *dss;
     struct pho_log log;
@@ -1058,14 +1051,12 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
 
     ENTRY;
 
-    dev->ld_sub_request->failure_on_medium = false;
     dss = &dev->ld_device_thread.dss;
-    *failure_on_dev = false;
-    *can_retry = false;
+    dev->ld_sub_request->failure_on_medium = false;
     pho_verb("load: '%s' into '%s'", (*medium)->rsc.id.name, dev->ld_dev_path);
 
-    init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
-                 &(*medium)->rsc.id, PHO_DEVICE_LOAD);
+    init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id, &(*medium)->rsc.id,
+                 PHO_DEVICE_LOAD);
 
     /* get handle to the library depending on device type */
     log.message = json_object();
@@ -1073,7 +1064,6 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
                        log.message);
     emit_log_after_action(dss, &log, PHO_LIBRARY_OPEN, rc);
     if (rc) {
-        *failure_on_dev = true;
         MUTEX_LOCK(&dev->ld_mutex);
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         MUTEX_UNLOCK(&dev->ld_mutex);
@@ -1089,38 +1079,9 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
         return rc;
     }
 
-    /* lookup the requested medium */
-    log.message = json_object();
-    rc = ldm_lib_media_lookup(&lib_hdl, (*medium)->rsc.id.name, &medium_addr,
-                              log.message);
-    emit_log_after_action(dss, &log, PHO_MEDIUM_LOOKUP, rc);
+    rc = ldm_lib_load(&lib_hdl, dev->ld_dss_dev_info->rsc.id.name,
+                      (*medium)->rsc.id.name);
     if (rc) {
-        dev->ld_sub_request->failure_on_medium = true;
-        fail_release_free_medium(dev, medium, free_medium);
-
-        LOG_GOTO(out_close, rc, "Media lookup failed");
-    }
-
-    log.message = json_object();
-    rc = ldm_lib_media_move(&lib_hdl, &medium_addr,
-                            &dev->ld_lib_dev_info.ldi_addr, log.message);
-    emit_log_after_action(dss, &log, PHO_DEVICE_LOAD, rc);
-    /* A movement from drive to drive can be prohibited by some libraries.
-     * If a failure is encountered in such a situation, it probably means that
-     * the state of the library has changed between the moment it has been
-     * scanned and the moment the medium and drive have been selected. The
-     * easiest solution is therefore to return EBUSY to signal this situation to
-     * the caller.
-     */
-    if (rc == -EINVAL
-            && medium_addr.lia_type == MED_LOC_DRIVE
-            && dev->ld_lib_dev_info.ldi_addr.lia_type == MED_LOC_DRIVE) {
-        pho_debug("Failed to move a medium from one drive to another, trying "
-                  "again later");
-        /* @TODO: acquire source drive on the fly? */
-        *can_retry = true;
-        GOTO(out_close, rc = -EBUSY);
-    } else if (rc) {
         /* Set operationnal failure state on this drive. It is incomplete since
          * the error can originate from a defect tape too...
          *  - consider marking both as failed.
@@ -1130,7 +1091,6 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
         MUTEX_LOCK(&dev->ld_mutex);
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         MUTEX_UNLOCK(&dev->ld_mutex);
-        *failure_on_dev = true;
         dev->ld_sub_request->failure_on_medium = true;
         fail_release_free_medium(dev, medium, free_medium);
         LOG_GOTO(out_close, rc, "Media move failed");
@@ -1148,7 +1108,6 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
 out_close:
     rc2 = ldm_lib_close(&lib_hdl);
     if (rc2) {
-        *failure_on_dev = true;
         MUTEX_LOCK(&dev->ld_mutex);
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         MUTEX_UNLOCK(&dev->ld_mutex);
@@ -1247,8 +1206,6 @@ static int dev_handle_format(struct lrs_dev *dev)
     struct sub_request *subreq = dev->ld_sub_request;
     struct media_info *medium_to_format;
     struct req_container *reqc;
-    bool can_retry = true;
-    bool failure_on_dev;
     bool loaded = false;
     int rc;
 
@@ -1277,9 +1234,8 @@ static int dev_handle_format(struct lrs_dev *dev)
                  medium_to_format->rsc.id.name);
     }
 
-    rc = dev_load(dev, &medium_to_format, true, &failure_on_dev,
-                  &can_retry, false);
-    if (rc == -EBUSY && can_retry) {
+    rc = dev_load(dev, &medium_to_format, true, false);
+    if (rc == -EBUSY) {
         pho_warn("Trying to load a busy medium to format, try again later");
         return 0;
     }
@@ -1289,10 +1245,9 @@ static int dev_handle_format(struct lrs_dev *dev)
     MUTEX_UNLOCK(&dev->ld_mutex);
     if (rc)
         LOG_GOTO(out_response, rc, "Error when loading medium '%s' to "
-                 "format in device '%s'%s",
+                 "format in device '%s'",
                  dev->ld_dss_media_info->rsc.id.name,
-                 dev->ld_dss_dev_info->rsc.id.name,
-                 failure_on_dev ? "" : " (medium only failure)");
+                 dev->ld_dss_dev_info->rsc.id.name);
 
     loaded = true;
 
@@ -1649,7 +1604,6 @@ static int dev_handle_read_write(struct lrs_dev *dev)
     bool io_ended = false;
     bool cancel = false;
     bool locked = false;
-    bool can_retry;
     int rc = 0;
     int rc2;
 
@@ -1698,9 +1652,8 @@ static int dev_handle_read_write(struct lrs_dev *dev)
      */
     pho_debug("Will load '%s' in device '%s'",
               medium_to_alloc->rsc.id.name, dev->ld_dss_dev_info->rsc.id.name);
-    rc = dev_load(dev, &medium_to_alloc, false, &failure_on_device,
-                  &can_retry, true);
-    if (rc == -EBUSY && can_retry) {
+    rc = dev_load(dev, &medium_to_alloc, false, true);
+    if (rc == -EBUSY) {
         pho_warn("Trying to load a busy medium to %s, try again later",
                  pho_srl_request_kind_str(reqc->req));
         return 0;
@@ -1716,6 +1669,7 @@ static int dev_handle_read_write(struct lrs_dev *dev)
                   dev->ld_dss_dev_info->rsc.id.name,
                   pho_srl_request_kind_str(reqc->req));
 
+        failure_on_device = true;
         goto alloc_result;
     }
 

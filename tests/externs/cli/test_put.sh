@@ -53,13 +53,23 @@ function setup
     export PHOBOS_STORE_default_family="dir"
 
     setup_tables
-    invoke_lrs
+    if [[ -w /dev/changer ]]; then
+        invoke_daemons
+    else
+        invoke_lrs
+    fi
+
     dir_setup
 }
 
 function cleanup
 {
-    waive_lrs
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+    else
+        waive_lrs
+    fi
+
     rm -rf $dirs
     drop_tables
 

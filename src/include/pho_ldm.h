@@ -230,6 +230,10 @@ struct pho_lib_adapter_module_ops {
                           const struct lib_item_addr *tgt_addr,
                           json_t *message);
     int (*lib_scan)(struct lib_handle *lib, json_t **lib_data, json_t *message);
+    int (*lib_load)(struct lib_handle *lib, const char *device_serial,
+                    const char *medium_label);
+    int (*lib_unload)(struct lib_handle *lib, const char *device_serial,
+                      const char *medium_label);
 };
 
 struct lib_adapter_module {
@@ -378,6 +382,52 @@ static inline int ldm_lib_scan(struct lib_handle *lib_hdl,
     if (lib_hdl->ld_module->ops->lib_scan == NULL)
         return 0;
     return lib_hdl->ld_module->ops->lib_scan(lib_hdl, lib_data, message);
+}
+
+/**
+ * Load a medium into a device
+ *
+ * @param[in,out]   lib_hdl         Lib handle holding an opened library
+ *                                  adapter.
+ * @param[in]       device_serial   Serial number of the target device
+ * @param[in]       medium_label    Label of the target medium
+ *
+ * @return 0 on success, negative error code on failure.
+ */
+static inline int ldm_lib_load(struct lib_handle *lib_hdl,
+                               const char *device_serial,
+                               const char *medium_label)
+{
+    assert(lib_hdl->ld_module != NULL);
+    assert(lib_hdl->ld_module->ops != NULL);
+    if (lib_hdl->ld_module->ops->lib_load == NULL)
+        return 0;
+    return lib_hdl->ld_module->ops->lib_load(lib_hdl, device_serial,
+                                             medium_label);
+}
+
+/**
+ * Unload a device
+ *
+ * @param[in,out]   lib_hdl         Lib handle holding an opened library
+ *                                  adapter.
+ * @param[in]       device_serial   Serial number of the target device
+ * @param[in]       medium_label    Label of the target medium (only used to
+ *                                  to check the content of the device, ignored
+ *                                  if NULL)
+ *
+ * @return 0 on success, negative error code on failure.
+ */
+static inline int ldm_lib_unload(struct lib_handle *lib_hdl,
+                                 const char *device_serial,
+                                 const char *medium_label)
+{
+    assert(lib_hdl->ld_module != NULL);
+    assert(lib_hdl->ld_module->ops != NULL);
+    if (lib_hdl->ld_module->ops->lib_unload == NULL)
+        return 0;
+    return lib_hdl->ld_module->ops->lib_unload(lib_hdl, device_serial,
+                                               medium_label);
 }
 
 /** @}*/

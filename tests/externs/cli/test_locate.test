@@ -33,15 +33,10 @@ test_dir=$(dirname $(readlink -e $0))
 HALF_SIZE=1024
 ((FULL_SIZE=HALF_SIZE * 2))
 
-function setup
+function dir_setup
 {
     setup_tables
     invoke_lrs
-}
-
-function dir_setup
-{
-    setup
 
     export PHOBOS_STORE_default_family="dir"
 
@@ -55,6 +50,12 @@ function dir_setup
     $phobos dir format --fs posix --unlock $dirs
 }
 
+function tape_init_setup
+{
+    setup_tables
+    invoke_daemons
+}
+
 function tape_setup
 {
     local N_TAPES=2
@@ -62,7 +63,7 @@ function tape_setup
     local LTO5_TAGS=$TAGS,lto5
     local LTO6_TAGS=$TAGS,lto6
 
-    setup
+    tape_init_setup
 
     export PHOBOS_STORE_default_family="tape"
 
@@ -147,7 +148,7 @@ function dir_cleanup
 
 function tape_cleanup
 {
-    waive_lrs
+    waive_daemons
     drop_tables
     drain_all_drives
     rm -rf /tmp/out*
@@ -207,10 +208,12 @@ function test_locate_compatibility
     $phobos put --lyt-params repl_count=2 --tags $LTO6_TAGS /etc/hosts $oid ||
         error "Error while putting $oid"
 
-    waive_lrs
+    waive_daemons
 
     # unload the tapes so that the daemon doesn't take any lock when waking up
     drain_all_drives
+
+    invoke_tlc
 
     # change the host of one lto5 and one lto6 drive to give them to
     # $other_hostname
@@ -321,7 +324,7 @@ if [[ -w /dev/changer ]]; then
              test_medium_locate tape; test_locate_cli tape; \
              test_get_locate_cli tape; \
              tape_cleanup")
-    TESTS+=("setup; \
+    TESTS+=("tape_init_setup; \
              test_locate_compatibility; \
              tape_cleanup")
 fi

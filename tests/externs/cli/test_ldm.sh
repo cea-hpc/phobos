@@ -32,6 +32,19 @@ if [[ ! -w /dev/changer ]]; then
     exit 77
 fi
 
+function setup
+{
+    invoke_tlc
+}
+
+function cleanup
+{
+    waive_tlc
+}
+
+trap cleanup EXIT
+setup
+
 function swap_back_lib_in_cfg
 {
     sed -i "s/\/blob/\/dev\/changer/g" $PHOBOS_CFG_FILE
@@ -56,7 +69,7 @@ function test_lib_scan
         sed -i "s/\[lrs\]/\[lrs\]\nlib_device = \/blob/g" $PHOBOS_CFG_FILE
     fi
 
-    trap "echo '$old_cfg' > $PHOBOS_CFG_FILE" EXIT
+    trap "echo '$old_cfg' > $PHOBOS_CFG_FILE; cleanup" EXIT
 
     $phobos lib scan &&
         error "Should have failed, '/blob' specified in cfg file doesn't exist"
@@ -75,7 +88,7 @@ function test_lib_scan
         error "Should have failed, no 'lib_device' specified in cfg file"
 
     echo "$old_cfg" > $PHOBOS_CFG_FILE
-    trap - EXIT
+    trap cleanup EXIT
 }
 
 test_lib_scan

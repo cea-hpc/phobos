@@ -38,12 +38,14 @@ function setup
 function cleanup
 {
     drop_tables
-    drain_all_drives
+    if [[ -w /dev/changer ]]; then
+        drain_all_drives
+    fi
 }
 
 function test_invalid_lock_file()
 {
-    trap "waive_lrs" EXIT
+    trap "waive_lrs; cleanup" EXIT
     drop_tables
     setup_tables
 
@@ -236,11 +238,16 @@ function test_recover_drive_old_locks
              ('device'::lock_type, '$dev_st1_id', '${host}other', $pid);"
 
     # Start and stop the lrs daemon
+    trap "waive_tlc; cleanup" EXIT
+    invoke_tlc
     PHOBOS_LRS_families="tape" timeout --preserve-status 10 $phobosd -i &
     daemon_process=$!
 
     wait $daemon_process && true
     rc=$?
+
+    trap cleanup EXIT
+    waive_tlc
 
     # check return status
     test $rc -eq 0 ||
@@ -279,11 +286,16 @@ function test_remove_invalid_device_locks
             values ('device'::lock_type, '$dev_st1_id', '$host', $pid);"
 
     # Start and stop the lrs daemon
+    trap "waive_tlc; cleanup" EXIT
+    invoke_tlc
     PHOBOS_LRS_families="tape" timeout --preserve-status 10 $phobosd -i &
     daemon_process=$!
 
     wait $daemon_process && true
     rc=$?
+
+    trap cleanup EXIT
+    waive_tlc
 
     # check return status
     test $rc -eq 0 ||
@@ -303,7 +315,7 @@ function test_wait_end_of_IO_before_shutdown()
 {
     local dir=$(mktemp -d)
 
-    trap "waive_lrs; drop_tables; rm -rf '$dir'" EXIT
+    trap "waive_lrs; drop_tables; rm -rf '$dir'; cleanup" EXIT
     setup_tables
     invoke_lrs -vv
 
@@ -349,7 +361,8 @@ function test_cancel_waiting_requests_before_shutdown()
     local file=$(mktemp)
     local res_file="res_file"
 
-    trap "waive_lrs; drop_tables; rm -rf '$dir' '$file' '$res_file'" EXIT
+    trap "waive_lrs; drop_tables; rm -rf '$dir' '$file' '$res_file'; cleanup" \
+        EXIT
     setup_tables
     invoke_lrs
 
@@ -394,7 +407,7 @@ function test_refuse_new_request_during_shutdown()
     local dir=$(mktemp -d)
     local file=$(mktemp)
 
-    trap "waive_lrs; drop_tables; rm -rf '$dir' '$file'" EXIT
+    trap "waive_lrs; drop_tables; rm -rf '$dir' '$file'; cleanup" EXIT
     setup_tables
     invoke_lrs
 
@@ -427,10 +440,10 @@ function test_mount_failure_during_read_response()
     local tape=$(get_tapes L6 1)
     local drive=$(get_lto_drives 6 1)
 
-    trap "waive_lrs; drop_tables; rm -f '$file'; \
-          unset PHOBOS_LTFS_cmd_mount" EXIT
+    trap "waive_daemons; drop_tables; rm -f '$file'; \
+          unset PHOBOS_LTFS_cmd_mount; cleanup" EXIT
     setup_tables
-    invoke_lrs
+    invoke_daemons
 
     dd if=/dev/urandom of="$file" bs=4096 count=5
 
@@ -453,10 +466,10 @@ function test_mount_failure_during_read_response()
 
     ps --pid "$PID_LRS"
 
+    trap cleanup EXIT
     export PHOBOS_LTFS_cmd_mount="$save_mount_cmd"
-    waive_lrs
+    waive_daemons
     drop_tables
-
     rm -f "$file"
 }
 
@@ -486,10 +499,10 @@ function test_format_fail_without_suitable_device()
     local drive=$(get_lto_drives 5 1)
     local tape=$(get_tapes L6 1)
 
-    trap "waive_lrs; drop_tables" EXIT
+    trap "waive_daemons; drop_tables; cleanup" EXIT
 
     setup_tables
-    invoke_lrs
+    invoke_daemons
 
     $phobos tape add --type lto6 "$tape"
     format_wait_and_check "$tape" "no device is available"
@@ -501,10 +514,10 @@ function test_format_fail_without_suitable_device()
     format_wait_and_check "$tape" \
                           "the drive '$drive' and tape '$tape' are incompatible"
 
-    waive_lrs
+    waive_daemons
     drop_tables
 
-    trap "cleanup" EXIT
+    trap cleanup EXIT
 }
 
 function test_retry_on_error_setup()
@@ -512,7 +525,7 @@ function test_retry_on_error_setup()
     drain_all_drives
     drop_tables
     setup_tables
-    invoke_lrs
+    invoke_daemons
 
     setup_test_dirs
     setup_dummy_files 2
@@ -520,7 +533,7 @@ function test_retry_on_error_setup()
 
 function test_retry_on_error_cleanup()
 {
-    waive_lrs
+    waive_daemons
     drain_all_drives
 
     cleanup_dummy_files
@@ -544,8 +557,9 @@ function test_retry_on_error_run()
 
     $phobos put --layout raid1 --lyt-params "repl_count=3" "$file" "$oid"
 
-    waive_lrs
+    waive_daemons
     drain_all_drives
+    invoke_tlc
 
     # Custom mount script that fails the first two mounts and succeeds on the
     # third attempt.
@@ -598,8 +612,8 @@ function test_fair_share_max_reached()
     drop_tables
     setup_tables
     export PHOBOS_IO_SCHED_TAPE_dispatch_algo=fair_share
-    trap "waive_lrs; cleanup" EXIT
-    invoke_lrs
+    trap "waive_daemons; cleanup" EXIT
+    invoke_daemons
 
     # With this setup, any get will wait
     $phobos sched fair_share --type LTO5 --min 0,0,0 --max 0,1,1
@@ -627,7 +641,7 @@ function test_fair_share_max_reached()
     ps $pid || error "phobos get process is not running"
     $phobos sched fair_share --type LTO5 --max 1,1,1
     wait || error "Get should have succeeded after setting max reads to 1"
-    waive_lrs
+    waive_daemons
     trap cleanup EXIT
 }
 

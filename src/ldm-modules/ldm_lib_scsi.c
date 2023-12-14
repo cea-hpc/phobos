@@ -30,10 +30,12 @@
 
 #include "scsi_api.h"
 
-#include "pho_common.h"
 #include "pho_cfg.h"
+#include "pho_comm.h"
+#include "pho_common.h"
 #include "pho_ldm.h"
 #include "pho_module_loader.h"
+#include "pho_srl_tlc.h"
 
 #include <inttypes.h>
 #include <sys/types.h>
@@ -57,10 +59,12 @@ enum pho_cfg_params_libscsi {
     /** Query the S/N of a drive in a separate ELEMENT_STATUS request
      * (e.g. for IBM TS3500). */
     PHO_CFG_LIB_SCSI_sep_sn_query,
+    PHO_CFG_LIB_SCSI_tlc_hostname,
+    PHO_CFG_LIB_SCSI_tlc_port,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_LIB_SCSI_FIRST = PHO_CFG_LIB_SCSI_sep_sn_query,
-    PHO_CFG_LIB_SCSI_LAST  = PHO_CFG_LIB_SCSI_sep_sn_query,
+    PHO_CFG_LIB_SCSI_LAST  = PHO_CFG_LIB_SCSI_tlc_port,
 };
 
 /** Definition and default values of SCSI library configuration parameters */
@@ -70,6 +74,8 @@ const struct pho_config_item cfg_lib_scsi[] = {
         .name    = "sep_sn_query",
         .value   = "0", /* no */
     },
+    [PHO_CFG_LIB_SCSI_tlc_hostname] = TLC_HOSTNAME_CFG_ITEM,
+    [PHO_CFG_LIB_SCSI_tlc_port] = TLC_PORT_CFG_ITEM,
 };
 
 struct status_array {
@@ -91,6 +97,8 @@ struct lib_descriptor {
     struct status_array slots;
     struct status_array impexp;
     struct status_array drives;
+
+    struct pho_comm_info tlc_comm;  /**< TLC Communication socket info. */
 };
 
 /** clear the cache of library element adresses */
@@ -309,8 +317,9 @@ static int lib_status_load(struct lib_descriptor *lib,
 static int lib_scsi_open(struct lib_handle *hdl, const char *dev,
                          json_t *message)
 {
+    union pho_comm_addr tlc_sock_addr;
     struct lib_descriptor *lib;
-    int                    rc;
+    int rc = 0;
     ENTRY;
 
     MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
@@ -320,18 +329,41 @@ static int lib_scsi_open(struct lib_handle *hdl, const char *dev,
     hdl->lh_lib = lib;
 
     lib->fd = open(dev, O_RDWR | O_NONBLOCK);
-    if (lib->fd < 0)
-        LOG_GOTO(err_clean, rc = -errno, "Failed to open '%s'", dev);
+    if (lib->fd < 0) {
+        rc = -errno;
+        json_insert_element(message, "Action",
+                            json_string("Open device controller"));
+        json_insert_element(message, "Error",
+                            json_string("Failed to open device controller"));
+        LOG_GOTO(free_lib, rc, "Failed to open '%s'", dev);
+    }
 
-    GOTO(unlock, rc = 0);
+    /* TLC client connection */
+    tlc_sock_addr.tcp.hostname = PHO_CFG_GET(cfg_lib_scsi, PHO_CFG_LIB_SCSI,
+                                             tlc_hostname);
+    tlc_sock_addr.tcp.port = PHO_CFG_GET_INT(cfg_lib_scsi, PHO_CFG_LIB_SCSI,
+                                             tlc_port, 0);
+    if (tlc_sock_addr.tcp.port == 0)
+        LOG_GOTO(close_fd, rc = -EINVAL,
+                 "Unable to get a valid integer TLC port value");
 
-err_clean:
+    if (tlc_sock_addr.tcp.port > 65536)
+        LOG_GOTO(close_fd, rc = -EINVAL,
+                 "TLC port value %d can not be greater than 65536",
+                 tlc_sock_addr.tcp.port);
+
+    rc = pho_comm_open(&lib->tlc_comm, &tlc_sock_addr, PHO_COMM_TCP_CLIENT);
+    if (rc)
+        LOG_GOTO(close_fd, rc, "Cannot contact 'TLC': will abort");
+
+    goto unlock;
+
+close_fd:
+    close(lib->fd);
+    lib->fd = -1;
+free_lib:
     free(lib);
     hdl->lh_lib = NULL;
-    json_insert_element(message, "Action",
-                        json_string("Open device controller"));
-    json_insert_element(message, "Error",
-                        json_string("Failed to open device controller"));
 unlock:
     MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
     return rc;
@@ -357,6 +389,10 @@ static int lib_scsi_close(struct lib_handle *hdl)
 
     if (lib->fd >= 0)
         close(lib->fd);
+
+    rc = pho_comm_close(&lib->tlc_comm);
+    if (rc)
+        pho_error(rc, "Cannot close the TLC communication socket");
 
     free(lib);
     hdl->lh_lib = NULL;
@@ -919,6 +955,141 @@ unlock:
     return rc;
 }
 
+static int tlc_send_recv(struct pho_comm_info *tlc_comm, pho_tlc_req_t *req,
+                         pho_tlc_resp_t **resp)
+{
+    struct pho_comm_data *data_resp = NULL;
+    struct pho_comm_data data;
+    int n_data_resp = 0;
+    int rc;
+
+    data = pho_comm_data_init(tlc_comm);
+    pho_srl_tlc_request_pack(req, &data.buf);
+
+    rc = pho_comm_send(&data);
+    free(data.buf.buff);
+    if (rc)
+        LOG_RETURN(rc, "Error while sending request to TLC");
+
+    rc = pho_comm_recv(tlc_comm, &data_resp, &n_data_resp);
+    if (rc || n_data_resp != 1) {
+        int i;
+
+        for (i = 0; i < n_data_resp; i++)
+                free(data_resp[i].buf.buff);
+
+        free(data_resp);
+
+        if (rc)
+            LOG_RETURN(rc, "Cannot receive response from TLC");
+        else
+            LOG_RETURN(-EINVAL, "Received %d responses (expected 1) from TLC",
+                       n_data_resp);
+    }
+
+    *resp = pho_srl_tlc_response_unpack(&data_resp->buf);
+    free(data_resp);
+    if (!*resp)
+        LOG_RETURN(-EINVAL, "The received TLC response cannot be deserialized");
+
+    return 0;
+}
+
+static int lib_tlc_load(struct lib_handle *hdl, const char *drive_serial,
+                        const char *tape_label)
+{
+    struct lib_descriptor *lib;
+    pho_tlc_resp_t *resp;
+    pho_tlc_req_t req;
+    int rid = 1;
+    int rc;
+
+    lib = hdl->lh_lib;
+
+    /* load request to the tlc */
+    pho_srl_tlc_request_load_alloc(&req);
+    req.id = rid;
+    req.load->drive_serial = xstrdup(drive_serial);
+    req.load->tape_label = xstrdup(tape_label);
+
+    rc = tlc_send_recv(&lib->tlc_comm, &req, &resp);
+    pho_srl_tlc_request_free(&req, false);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Unable to send/recv load request for drive '%s' (tape "
+                   "'%s') to tlc", drive_serial, tape_label);
+
+    /* manage tlc load response */
+    if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
+        rc = resp->error->rc;
+        if (resp->error->message)
+            LOG_GOTO(free_resp, rc,
+                     "TLC failed to load: '%s'", resp->error->message);
+        else
+            LOG_GOTO(free_resp, rc, "TLC failed to load: '%s'", tape_label);
+    } else if (!(pho_tlc_response_is_load(resp) && resp->req_id == rid)) {
+        LOG_GOTO(free_resp, rc = -EPROTO,
+                 "TLC answered an unexpected response (id %d) to load request "
+                 "for drive '%s' (tape '%s')",
+                 resp->req_id, drive_serial, tape_label);
+    }
+
+    pho_debug("Successful load of '%s' into '%s'", tape_label, drive_serial);
+
+free_resp:
+    pho_srl_tlc_response_free(resp, true);
+    return rc;
+}
+
+static int lib_tlc_unload(struct lib_handle *hdl, const char *drive_serial,
+                          const char *tape_label)
+{
+    struct lib_descriptor *lib;
+    pho_tlc_resp_t *resp;
+    pho_tlc_req_t req;
+    int rid = 1;
+    int rc;
+
+    lib = hdl->lh_lib;
+
+    /* unload request to the tlc */
+    pho_srl_tlc_request_unload_alloc(&req);
+    req.id = rid;
+    req.unload->drive_serial = xstrdup(drive_serial);
+    req.unload->tape_label = xstrdup_safe(tape_label);
+
+    rc = tlc_send_recv(&lib->tlc_comm, &req, &resp);
+    pho_srl_tlc_request_free(&req, false);
+    if (rc)
+        LOG_RETURN(rc, "Unable to send/recv unload request for drive '%s'",
+                   drive_serial);
+
+    /* manage tlc load response */
+    if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
+        rc = resp->error->rc;
+        if (resp->error->message)
+            LOG_GOTO(free_resp, rc,
+                     "TLC failed to unload: '%s'", resp->error->message);
+        else
+            LOG_GOTO(free_resp, rc,
+                     "TLC failed to unload drive '%s'", drive_serial);
+    } else if (!(pho_tlc_response_is_unload(resp) && resp->req_id == rid)) {
+        LOG_GOTO(free_resp, rc = -EPROTO,
+                 "TLC answered an unexpected response (id %d) to unload "
+                 "request for drive '%s'", resp->req_id, drive_serial);
+    }
+
+    if (tape_label)
+        pho_debug("Successful unload of '%s' from '%s'",
+                  tape_label, drive_serial);
+    else
+        pho_debug("Successful unload of drive '%s'", drive_serial);
+
+free_resp:
+    pho_srl_tlc_response_free(resp, true);
+    return rc;
+}
+
 /** @}*/
 
 /** lib_scsi_adapter exported to upper layers */
@@ -929,6 +1100,8 @@ static struct pho_lib_adapter_module_ops LA_SCSI_OPS = {
     .lib_media_lookup = lib_scsi_media_info,
     .lib_media_move   = lib_scsi_move,
     .lib_scan         = lib_scsi_scan,
+    .lib_load         = lib_tlc_load,
+    .lib_unload       = lib_tlc_unload,
 };
 
 /** Lib adapter module registration entry point */

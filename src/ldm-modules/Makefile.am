@@ -19,7 +19,10 @@ libpho_lib_adapter_dummy_la_LDFLAGS=-version-info 0:0:0
 libpho_lib_adapter_scsi_la_SOURCES=ldm_lib_scsi.c
 libpho_lib_adapter_scsi_la_CFLAGS=-fPIC $(AM_CFLAGS)
 libpho_lib_adapter_scsi_la_LIBADD=../common/libpho_common.la \
-                                  ../cfg/libpho_cfg.la libpho_scsi.la
+                                  ../cfg/libpho_cfg.la \
+                                  ../communication/libpho_comm.la \
+                                  ../serializer/libpho_serializer_tlc.la \
+                                  libpho_scsi.la
 libpho_lib_adapter_scsi_la_LDFLAGS=-version-info 0:0:0
 
 libpho_dev_adapter_dir_la_SOURCES=ldm_dev_dir.c
@@ -40,7 +43,7 @@ libpho_fs_adapter_posix_la_LDFLAGS=-version-info 0:0:0
 libpho_fs_adapter_ltfs_la_SOURCES=ldm_fs_ltfs.c ldm_common.c
 libpho_fs_adapter_ltfs_la_CFLAGS=-fPIC $(AM_CFLAGS)
 libpho_fs_adapter_ltfs_la_LIBADD=../common/libpho_common.la \
-                                  ../cfg/libpho_cfg.la
+                                 ../cfg/libpho_cfg.la
 libpho_fs_adapter_ltfs_la_LDFLAGS=-version-info 0:0:0
 
 if RADOS_ENABLED

@@ -115,11 +115,6 @@ char *mount_point(const char *id);
  *                              If true, release the medium on a dev-only
  *                              failure. The medium is neither freed or set to
  *                              NULL.
- * @param[out]  failure_on_dev  Return false if no error or error not due to the
- *                              device, return true if there is an error due to
- *                              the device.
- * @param[out]  can_retry       true if an error occured on the library and the
- *                              operation can be retried later.
  * @param[in]   free_medium     If false, medium is never freed and never set to
  *                              NULL.
  *
@@ -128,8 +123,7 @@ char *mount_point(const char *id);
  * is empty.
  */
 int dev_load(struct lrs_dev *dev, struct media_info **medium,
-             bool release_medium_on_dev_only_failure,
-             bool *failure_on_dev, bool *can_retry, bool free_medium);
+             bool release_medium_on_dev_only_failure, bool free_medium);
 
 /**
  * Format a medium to the given fs type.

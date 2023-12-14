@@ -1720,8 +1720,7 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
     rc = _send_and_receive(&adm->tlc_comm, proto_req, &proto_resp);
     pho_srl_tlc_request_free(&req, false);
     if (rc)
-        LOG_GOTO(unlock_tape, rc,
-                 "Error with TLC communication : %d , %s", rc, strerror(-rc));
+        LOG_GOTO(unlock_tape, rc, "Error with TLC communication");
 
     /* manage tlc load response */
     resp = proto_resp.msg.tlc_resp;

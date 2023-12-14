@@ -72,7 +72,7 @@ function tape_setup
     local other_hostname="hostname" # fetched from test_locate.c
 
     setup_tables
-    invoke_lrs
+    invoke_daemons
 
     # get LTO5 tapes
     local lto5_tapes="$(get_tapes L5 $N_TAPES)"
@@ -124,7 +124,7 @@ EOF
 function cleanup
 {
     hostname $SELF_HOST
-    waive_lrs
+    waive_daemons
     drain_all_drives
     drop_tables
     rm -rf $dirs
