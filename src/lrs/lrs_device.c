@@ -1043,6 +1043,32 @@ static void fail_release_free_medium(struct lrs_dev *dev,
     }
 }
 
+static void fail_release_device(struct lrs_dev *dev)
+{
+    int rc;
+
+    dev->ld_dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
+    pho_error(0, "setting device '%s' to failed",
+              lrs_dev_name(dev));
+
+    rc = dss_device_update_adm_status(&dev->ld_device_thread.dss,
+                                      dev->ld_dss_dev_info, 1);
+    if (rc) {
+        pho_error(rc,
+                  "unable to set device '%s' status to '%s' in DSS, "
+                  "we won't release the corresponding DSS lock",
+                  lrs_dev_name(dev),
+                  rsc_adm_status2str(PHO_RSC_ADM_ST_FAILED));
+        return;
+    }
+
+    rc = dss_device_release(&dev->ld_device_thread.dss,
+                            dev->ld_dss_dev_info);
+    if (rc)
+        pho_error(rc, "unable to release DSS lock of device '%s'",
+                  lrs_dev_name(dev));
+}
+
 int dev_load(struct lrs_dev *dev, struct media_info **medium,
              bool release_medium_on_dev_only_failure, bool free_medium)
 {
@@ -1734,143 +1760,76 @@ static void cancel_pending_format(struct lrs_dev *device)
 }
 
 /**
- * Manage a mounted medium at device thread end.
+ * Cleanup medium when the device thread stops without error
+ * - no medium: nothing to do
+ * - mounted: umount and release medium
+ * - loaded: simply release the medium
  *
- * If mounted medium:
- *     if no error:
- *         umount mounted medium. The umount cleans tosync requests,
- *     if error:
- *         set mounted medium as FAILED into DSS and release corresponding
- *         DSS lock except if we failed to set the DSS status to FAILED,
- *         clean tosync requests by sending errors.
+ * We don't unload the tape when stopping the LRS.
+ *
+ * Finaly, we release the lock on the device.
  */
-static void dev_thread_end_mounted_medium(struct lrs_dev *device)
+static int dev_cleanup_medium_at_stop(struct lrs_dev *device)
 {
-    int rc = 0;
+    int rc;
 
-    if (device->ld_op_status != PHO_DEV_OP_ST_MOUNTED)
-        return;
-
-    if (!device->ld_device_thread.status) {
+    if (dev_is_mounted(device)) {
         rc = dev_umount(device);
-        if (rc) {
-            pho_error(rc, "Unable to umount medium '%s' in device '%s' exit",
-                      device->ld_dss_media_info->rsc.id.name,
-                      device->ld_dss_dev_info->rsc.id.name);
-            MUTEX_LOCK(&device->ld_mutex);
-            device->ld_device_thread.status = rc;
-            MUTEX_UNLOCK(&device->ld_mutex);
-        }
+        if (rc)
+            LOG_RETURN(rc,
+                       "unable to unmount medium '%s' in device '%s' during "
+                       "regular exit",
+                       device->ld_dss_media_info->rsc.id.name,
+                       lrs_dev_name(device));
     }
 
-    if (device->ld_device_thread.status && device->ld_dss_media_info)
-        fail_release_free_medium(device, &device->ld_dss_media_info, true);
-}
-
-/**
- * Manage a loaded medium at device thread end
- *
- * If loaded medium:
- *     if no error:
- *         let the medium loaded but release medium DSS lock,
- *     if error:
- *         set loaded medium as FAILED into DSS and release corresponding,
- *         DSS lock except if we failed to set the DSS status to FAILED.
- */
-static void dev_thread_end_loaded_medium(struct lrs_dev *device)
-{
-    if (device->ld_op_status != PHO_DEV_OP_ST_LOADED)
-        return;
-
-    if (!device->ld_device_thread.status) {
-        int rc;
-
+    if (dev_is_loaded(device)) {
         rc = dss_medium_release(&device->ld_device_thread.dss,
                                 device->ld_dss_media_info);
-        if (rc) {
-            pho_error(rc,
-                      "Unable to release DSS lock of medium '%s' of device "
-                      "'%s' at device exit",
-                      device->ld_dss_media_info->rsc.id.name,
-                      device->ld_dss_dev_info->rsc.id.name);
-            MUTEX_LOCK(&device->ld_mutex);
-            device->ld_device_thread.status = rc;
-            MUTEX_UNLOCK(&device->ld_mutex);
-        } else {
-            MUTEX_LOCK(&device->ld_mutex);
-            media_info_free(device->ld_dss_media_info);
-            device->ld_dss_media_info = NULL;
-            MUTEX_UNLOCK(&device->ld_mutex);
-        }
-    }
+        if (rc)
+            LOG_RETURN(rc,
+                       "unable to release DSS lock of medium '%s' in device "
+                       "'%s' during regular exit",
+                       device->ld_dss_media_info->rsc.id.name,
+                       lrs_dev_name(device));
 
-    if (device->ld_device_thread.status && device->ld_dss_media_info) {
-        fail_release_free_medium(device, &device->ld_dss_media_info, true);
-    } else {
         MUTEX_LOCK(&device->ld_mutex);
+        media_info_free(device->ld_dss_media_info);
         device->ld_dss_media_info = NULL;
         MUTEX_UNLOCK(&device->ld_mutex);
     }
+
+    rc = dss_device_release(&device->ld_device_thread.dss,
+                            device->ld_dss_dev_info);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Unable to release DSS lock of device '%s' during "
+                   "regular exit",
+                   lrs_dev_name(device));
+
+    return 0;
 }
 
 /**
- * Manage device and tosync_array at device thread end.
+ * Cleanup the device thread on error. Since we are in an error, do not touch
+ * the medium (i.e. do not unmount).
  *
- * If no error:
- *     release device DSS lock.
- *
- * If error:
- *     - clean tosync array,
- *     - set device op_status to FAILED,
- *     - set device adm_status to FAILED into DSS and release corresponding
- *       DSS lock except if we failed to set the DSS status to FAILED.
- *
- * Set device->ld_ongoing_io to false.
+ * We simply fail the medium and remove its lock if the device is loaded.
+ * Then we fail the device.
  */
-static void dev_thread_end_device(struct lrs_dev *device)
+static void dev_cleanup_on_error(struct lrs_dev *device)
 {
-    struct dss_handle *dss = &device->ld_device_thread.dss;
-    int rc;
+    if (device->ld_dss_media_info)
+        fail_release_free_medium(device, &device->ld_dss_media_info, true);
 
-    if (!device->ld_device_thread.status) {
-        rc = dss_device_release(dss, device->ld_dss_dev_info);
-        if (rc) {
-            pho_error(rc, "Unable to release DSS lock of device '%s' at exit",
-                      device->ld_dss_dev_info->rsc.id.name);
-            MUTEX_LOCK(&device->ld_mutex);
-            device->ld_device_thread.status = rc;
-            MUTEX_UNLOCK(&device->ld_mutex);
-        }
-    }
+    clean_tosync_array(device, device->ld_device_thread.status);
 
-    if (device->ld_device_thread.status) {
-        clean_tosync_array(device, device->ld_device_thread.status);
+    MUTEX_LOCK(&device->ld_mutex);
+    device->ld_op_status = PHO_DEV_OP_ST_FAILED;
+    MUTEX_UNLOCK(&device->ld_mutex);
 
-        MUTEX_LOCK(&device->ld_mutex);
-        device->ld_op_status = PHO_DEV_OP_ST_FAILED;
-        MUTEX_UNLOCK(&device->ld_mutex);
-        if (device->ld_dss_dev_info) {
-            device->ld_dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-            pho_error(0, "setting device '%s' to failed",
-                      device->ld_dss_dev_info->rsc.id.name);
-            rc = dss_device_update_adm_status(dss, device->ld_dss_dev_info, 1);
-            if (rc) {
-                pho_error(rc,
-                          "Unable to set device '%s' as PHO_RSC_ADM_ST_FAILED "
-                          "into DSS, we don't release the corresponding DSS "
-                          "lock", device->ld_dss_dev_info->rsc.id.name);
-            } else {
-                rc = dss_device_release(dss, device->ld_dss_dev_info);
-                if (rc)
-                    pho_error(rc,
-                              "Unable to release DSS lock of device '%s' at "
-                              "device exit",
-                              device->ld_dss_dev_info->rsc.id.name);
-            }
-        }
-    }
-
-    device->ld_ongoing_io = false;
+    if (device->ld_dss_dev_info)
+        fail_release_device(device);
 }
 
 static void dev_thread_end(struct lrs_dev *device)
@@ -1883,9 +1842,23 @@ static void dev_thread_end(struct lrs_dev *device)
     }
 
     cancel_pending_format(device);
-    dev_thread_end_mounted_medium(device);
-    dev_thread_end_loaded_medium(device);
-    dev_thread_end_device(device);
+
+    if (!device->ld_device_thread.status) {
+        int rc = dev_cleanup_medium_at_stop(device);
+
+        if (rc) {
+            pho_error(rc, "failed to cleanup stopping device '%s'",
+                      lrs_dev_name(device));
+            MUTEX_LOCK(&device->ld_mutex);
+            device->ld_device_thread.status = rc;
+            MUTEX_UNLOCK(&device->ld_mutex);
+        }
+    }
+
+    if (device->ld_device_thread.status)
+        dev_cleanup_on_error(device);
+
+    device->ld_ongoing_io = false;
 }
 
 /**
