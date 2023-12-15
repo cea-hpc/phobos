@@ -1776,11 +1776,14 @@ static bool medium_is_loaded_in_device(struct lrs_dev *dev,
 }
 
 static int sched_write_alloc_one_medium(struct lrs_sched *sched,
-                                        struct req_container *reqc,
+                                        struct allocation *alloc,
                                         size_t index_to_alloc,
                                         device_select_func_t dev_select_policy,
                                         bool handle_error)
 {
+    struct req_container *reqc = alloc->is_sub_request ?
+        alloc->u.sub_req->reqc :
+        alloc->u.req.reqc;
     struct media_info **alloc_medium =
         &reqc->params.rwalloc.media[index_to_alloc].alloc_medium;
     pho_req_write_t *wreq = reqc->req->walloc;
@@ -1788,8 +1791,12 @@ static int sched_write_alloc_one_medium(struct lrs_sched *sched,
     int rc;
 
 lock_race_retry:
-    rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &dev,
-                                         &index_to_alloc);
+    if (!alloc->is_sub_request)
+        rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &dev,
+                                             &index_to_alloc);
+    else
+        rc = io_sched_retry(&sched->io_sched_hdl, alloc->u.sub_req, &dev);
+
     if (rc)
         GOTO(notify_error, rc);
 
@@ -1870,7 +1877,16 @@ static int sched_handle_write_alloc(struct lrs_sched *sched,
 
     for (next_medium_index = 0; next_medium_index < wreq->n_media;
          next_medium_index++) {
-        rc = sched_write_alloc_one_medium(sched, reqc, next_medium_index,
+        struct allocation alloc = {
+            .is_sub_request = false,
+            .u = {
+                .req = {
+                    .reqc = reqc,
+                    .index = next_medium_index,
+                },
+            },
+        };
+        rc = sched_write_alloc_one_medium(sched, &alloc, next_medium_index,
                                           dev_select_policy, false);
         if (rc)
             break;
@@ -2460,7 +2476,14 @@ static int sched_handle_read_or_write_error(struct lrs_sched *sched,
             pho_error(rc = -EINVAL,
                       "Unable to get device select policy at write error");
         } else {
-            rc = sched_write_alloc_one_medium(sched, sreq->reqc,
+            struct allocation alloc = {
+                .is_sub_request = true,
+                .u = {
+                    .sub_req = sreq,
+                },
+            };
+
+            rc = sched_write_alloc_one_medium(sched, &alloc,
                                               sreq->medium_index,
                                               dev_select_policy, true);
         }
@@ -2500,6 +2523,8 @@ static int sched_handle_error(struct lrs_sched *sched, struct sub_request *sreq)
     bool sreq_pushed_or_requeued = false;
     bool req_ended = false;
     int rc = 0;
+
+    ENTRY;
 
     MUTEX_LOCK(&reqc->mutex);
     if (locked_cancel_rwalloc_on_error(sreq, &req_ended))

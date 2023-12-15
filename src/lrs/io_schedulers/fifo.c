@@ -82,6 +82,9 @@ static int fifo_push_request(struct io_scheduler *io_sched,
 
     g_queue_push_head((GQueue *)io_sched->private_data, elem);
 
+    pho_debug("Request %p pushed to fifo '%s' scheduler",
+              reqc, pho_srl_request_kind_str(reqc->req));
+
     return 0;
 }
 
@@ -102,6 +105,9 @@ static int fifo_remove_request(struct io_scheduler *io_sched,
     struct queue_element *elem;
     GQueue *queue;
 
+    pho_debug("Request %p will be removed from fifo '%s' scheduler",
+              reqc, pho_srl_request_kind_str(reqc->req));
+
     queue = (GQueue *) io_sched->private_data;
 
     if (!is_reqc_the_first_element(queue, reqc))
@@ -119,6 +125,9 @@ static int fifo_requeue(struct io_scheduler *io_sched,
 {
     struct queue_element *elem;
     GQueue *queue;
+
+    pho_debug("Request %p will be requeued from fifo '%s' scheduler",
+              reqc, pho_srl_request_kind_str(reqc->req));
 
     queue = (GQueue *) io_sched->private_data;
     if (!is_reqc_the_first_element(queue, reqc))
@@ -386,8 +395,9 @@ static int generic_get_device_medium_pair(struct io_scheduler *io_sched,
         elem = g_queue_peek_tail(queue);
         if (!is_reqc_the_first_element(queue, reqc))
             LOG_RETURN(-EINVAL,
-                       "Request '%p' is not the first element of the queue",
-                       reqc);
+                       "Request '%p' is not the first element of the queue, "
+                       "got %p instead",
+                       reqc, elem ? elem->reqc : NULL);
 
         if (pho_request_is_read(reqc->req)) {
             if (elem->num_media_allocated >= reqc->req->ralloc->n_med_ids)
@@ -461,6 +471,10 @@ static int fifo_retry(struct io_scheduler *io_sched,
                       struct sub_request *sreq,
                       struct lrs_dev **dev)
 {
+    pho_debug("Try to reschedule sub request %lu for request %p "
+              "in fifo %s scheduler",
+              sreq->medium_index, sreq->reqc,
+              pho_srl_request_kind_str(sreq->reqc->req));
     return generic_get_device_medium_pair(io_sched, sreq, dev, true);
 }
 

@@ -1589,6 +1589,8 @@ static int handle_rwalloc_sub_request_result(struct lrs_dev *dev,
         if (!sub_request->failure_on_medium)
             free_medium = false;
 
+        pho_debug("Requeuing %p (%s) on error", sub_request->reqc,
+                  pho_srl_request_kind_str(sub_request->reqc->req));
         tsqueue_push(dev->sched_retry_queue, sub_request);
         goto out_free;
     } else {

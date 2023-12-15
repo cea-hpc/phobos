@@ -913,6 +913,8 @@ static int grouped_push_request(struct io_scheduler *io_sched,
         elem->pair->used = NULL;
     }
 
+    pho_debug("Request %p pushed to grouped read scheduler", reqc);
+
     return 0;
 
 free_elems:
@@ -965,6 +967,8 @@ static int grouped_remove_request(struct io_scheduler *io_sched,
     const char *name;
     GList *link;
 
+    pho_debug("Request %p will be removed from grouped read scheduler", reqc);
+
     if (data->current_elem && data->current_elem->reqc != reqc)
         /* We should only call remove for requests that just have been returned
          * by peek_request.
@@ -997,6 +1001,8 @@ static int grouped_requeue(struct io_scheduler *io_sched,
 {
     struct grouped_data *data = io_sched->private_data;
     int i;
+
+    pho_debug("Request %p will be requeued from grouped read scheduler", reqc);
 
     if (data->current_elem && data->current_elem->reqc != reqc)
         /* We should only call requeue for requests that just have been returned
@@ -1269,6 +1275,10 @@ static int grouped_retry(struct io_scheduler *io_sched,
     const char *name;
     int rc;
     int i;
+
+    pho_debug("Try to reschedule sub request %lu for request %p "
+              "in grouped read scheduler",
+              sreq->medium_index, sreq->reqc);
 
     *dev = NULL;
 
