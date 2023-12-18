@@ -698,10 +698,11 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
         """Return a dict of available fields and optional display formatters."""
         return {
             'oid': None,
-            'uuid': None,
+            'object_uuid': None,
             'version': None,
             'state': None,
             'ext_count': None,
+            'ext_uuid': None,
             'media_name': None,
             'family': None,
             'address': None,
@@ -717,7 +718,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
         return self._oid.decode('utf-8') if self._oid else None
 
     @property
-    def uuid(self):
+    def object_uuid(self):
         """Wrapper to get uuid"""
         return self._uuid.decode('utf-8') if self._uuid else None
 
@@ -725,6 +726,12 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     def state(self):
         """Wrapper to get state"""
         return [extent_state2str(self.extents[i].state)
+                for i in range(self.ext_count)]
+
+    @property
+    def ext_uuid(self):
+        """Wrapper to get extent UUIDs"""
+        return [self.extents[i].extent_uuid.decode('utf-8')
                 for i in range(self.ext_count)]
 
     @property

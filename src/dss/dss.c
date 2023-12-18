@@ -983,15 +983,18 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
     }
 
     extents_res_size = sizeof(struct extent) * (*count);
-    result = malloc(extents_res_size);
-    if (result == NULL)
-        LOG_GOTO(out_decref, rc = -ENOMEM,
-                 "Memory allocation of size %zu failed", extents_res_size);
+    result = xcalloc(1, extents_res_size);
 
     for (i = 0; i < *count; i++) {
         const char *tmp;
 
         child = json_array_get(root, i);
+
+        result[i].uuid = json_dict2str(child, "extent_uuid");
+        if (!result[i].uuid)
+            LOG_GOTO(out_decref, rc = -EINVAL,
+                     "Missing attribute 'extent_uuid'");
+
         result[i].layout_idx = i;
         tmp = json_dict2tmp_str(child, "state");
         if (!tmp)

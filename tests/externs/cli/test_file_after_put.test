@@ -119,7 +119,8 @@ function test_raid1_repl_count
         error "Object should be put"
 
     local ext_req=$($phobos extent list --degroup --output \
-        address,md5,xxh128,oid,uuid,version,media_name "oid_$family$oid_id" |
+        address,md5,xxh128,oid,object_uuid,version,media_name \
+        "oid_$family$oid_id" |
         tail -n $repl_count | sed "s/[][' ]//g" | sort -k1.8)
 
     for repl_id in $(seq 1 $repl_count); do

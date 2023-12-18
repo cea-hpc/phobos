@@ -936,9 +936,6 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
                     pho_error(rc2, "Error while updating extents to orphan");
             }
         }
-
-        for (i = 0; i < enc->layout->ext_count; ++i)
-            free(enc->layout->extents[i].uuid);
     }
 
     /* Only overwrite xd_rc if it was 0 */
