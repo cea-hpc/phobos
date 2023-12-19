@@ -138,6 +138,10 @@ int copy_extent(struct io_adapter_module *ioa_source,
 
     buffer = xcalloc(buf_size, sizeof(*buffer));
 
+    /* prepare the retrieval of source xattrs */
+    pho_json_to_attrs(&iod_source->iod_attrs,
+                      "{\"id\":\"\", \"user_md\":\"\", \"md5\":\"\"}");
+
     /* open source IO descriptor then copy address to the target */
     rc = ioa_open(ioa_source, NULL, NULL, iod_source, false);
     if (rc)
@@ -156,6 +160,10 @@ int copy_extent(struct io_adapter_module *ioa_source,
     rc = ioa_open(ioa_target, NULL, NULL, iod_target, true);
     if (rc)
         LOG_GOTO(close_source, rc, "Unable to open target object");
+
+    rc = ioa_set_md(ioa_target, NULL, NULL, iod_target);
+    if (rc)
+        LOG_GOTO(close_source, rc, "Unable to set attrs to target object");
 
     /* do the actual copy */
     while (left_to_read) {
