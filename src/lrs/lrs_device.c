@@ -1015,30 +1015,24 @@ static int dss_set_medium_to_failed(struct dss_handle *dss,
     return dss_media_set(dss, media_info, 1, DSS_SET_UPDATE, ADM_STATUS);
 }
 
-static void fail_release_free_medium(struct lrs_dev *dev,
-                                     struct media_info **medium,
-                                     bool free_medium)
+static void fail_release_medium(struct lrs_dev *dev,
+                                struct media_info *medium)
 {
     int rc;
 
-    rc = dss_set_medium_to_failed(&dev->ld_device_thread.dss, *medium);
+    rc = dss_set_medium_to_failed(&dev->ld_device_thread.dss, medium);
     if (rc) {
         pho_error(rc,
                   "Warning we keep medium %s locked because we can't set it to "
-                  "failed into DSS", (*medium)->rsc.id.name);
-    } else {
-        rc = dss_medium_release(&dev->ld_device_thread.dss, *medium);
-        if (rc)
-            pho_error(rc,
-                      "Error when releasing medium %s after setting it to "
-                      "status failed", (*medium)->rsc.id.name);
+                  "failed into DSS", medium->rsc.id.name);
+        return;
     }
 
-    if (free_medium) {
-        MUTEX_LOCK(&dev->ld_mutex);
-        lrs_medium_release(*medium);
-        MUTEX_UNLOCK(&dev->ld_mutex);
-    }
+    rc = dss_medium_release(&dev->ld_device_thread.dss, medium);
+    if (rc)
+        pho_error(rc,
+                  "Error when releasing medium %s after setting it to "
+                  "status failed", medium->rsc.id.name);
 }
 
 static void fail_release_device(struct lrs_dev *dev)
@@ -1250,7 +1244,7 @@ static int dev_handle_format(struct lrs_dev *dev)
                           medium_to_format->rsc.id.name,
                           lrs_dev_name(dev));
         } else {
-            fail_release_free_medium(dev, &medium_to_format, false);
+            fail_release_medium(dev, medium_to_format);
         }
     }
 
@@ -1641,8 +1635,8 @@ static int dev_handle_read_write(struct lrs_dev *dev)
             MUTEX_UNLOCK(&dev->ld_mutex);
         }
         if (dev->ld_sub_request->failure_on_medium) {
-            fail_release_free_medium(
-                dev, (struct media_info **)&dev->ld_dss_media_info, true);
+            fail_release_medium(dev, dev->ld_dss_media_info);
+            lrs_medium_release(medium_to_alloc);
             MUTEX_LOCK(&dev->ld_mutex);
             dev->ld_dss_media_info = NULL;
             MUTEX_UNLOCK(&dev->ld_mutex);
@@ -1829,7 +1823,7 @@ static void dev_cleanup_on_error(struct lrs_dev *device)
         device->ld_dss_media_info = NULL;
         MUTEX_UNLOCK(&device->ld_mutex);
 
-        fail_release_free_medium(device, &medium, true);
+        fail_release_medium(device, medium);
     }
 
     clean_tosync_array(device, device->ld_device_thread.status);
