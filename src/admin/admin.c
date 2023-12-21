@@ -1700,40 +1700,6 @@ int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
     return drive_lookup(adm, id->name, drive_info);
 }
 
-static int check_take_drive_lock(struct dss_handle *dss,
-                                 struct dev_info *dev_res,
-                                 const char *hostname, int pid)
-{
-    int rc;
-
-    if (dev_res->lock.hostname) {
-        if (strcmp(dev_res->lock.hostname, hostname))
-            LOG_RETURN(-EALREADY,
-                       "drive (id: '%s', path: '%s') is already locked by host "
-                       "'%s', owner/pid '%d', admin host '%s' can not load it",
-                       dev_res->rsc.id.name, dev_res->path,
-                       dev_res->lock.hostname, dev_res->lock.owner, hostname);
-
-        if (dev_res->lock.owner != pid)
-            LOG_RETURN(-EALREADY,
-                       "drive (id: '%s', path: '%s') is already locked by host "
-                       "'%s', owner/pid '%d', admin host '%s' but owner/pid "
-                       "'%d' can not load it",
-                       dev_res->rsc.id.name, dev_res->path,
-                       dev_res->lock.hostname, dev_res->lock.owner, hostname,
-                       pid);
-    } else {
-        rc = dss_lock(dss, DSS_DEVICE, dev_res, 1);
-        if (rc)
-            LOG_RETURN(rc,
-                       "admin host '%s' owner/pid '%d' failed to lock the "
-                       "drive (id: '%s', path: '%s')",
-                       hostname, pid, dev_res->rsc.id.name, dev_res->path);
-    }
-
-    return 0;
-}
-
 static int check_take_tape_lock(struct dss_handle *dss,
                                 struct media_info *med_res,
                                 const char *hostname, int pid)
@@ -1744,15 +1710,15 @@ static int check_take_tape_lock(struct dss_handle *dss,
         if (strcmp(med_res->lock.hostname, hostname))
             LOG_RETURN(-EALREADY,
                        "tape '%s' is already locked by host '%s', owner/pid "
-                       "'%d', admin host '%s' can not load it",
+                       "'%d', admin host '%s'",
                        med_res->rsc.id.name, med_res->lock.hostname,
                        med_res->lock.owner, hostname);
 
         if (med_res->lock.owner != pid)
             LOG_RETURN(-EALREADY,
                        "tape '%s' is already locked by host '%s', owner/pid "
-                       "'%d', admin host '%s' but owner/pid '%d' can not load "
-                       "it", med_res->rsc.id.name, med_res->lock.hostname,
+                       "'%d', admin host '%s' but owner/pid '%d'",
+                       med_res->rsc.id.name, med_res->lock.hostname,
                        med_res->lock.owner, hostname, pid);
     } else {
         rc = dss_lock(dss, DSS_MEDIA, med_res, 1);
@@ -1766,15 +1732,18 @@ static int check_take_tape_lock(struct dss_handle *dss,
 }
 
 /**
- * To process the load, a lock is taken on the drive and on the tape to
- * prevent any concurrent move on these resources. For example, if a drive
- * is already used by a LRS, we do not want to change its state.
+ * To load, a lock is taken on the drive and on the tape to
+ * prevent any concurrent move on these resources.
+ *
+ * If it is not failed or already admin locked, we set the status of the drive
+ * to "admin locked" during the load.
  */
 int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
                       const struct pho_id *tape_id)
 {
     struct proto_resp proto_resp = {TLC_REQUEST};
     struct proto_req proto_req = {TLC_REQUEST};
+    bool drive_was_unlocked = false;
     struct media_info *med_res;
     struct dev_info *dev_res;
     const char *hostname;
@@ -1801,10 +1770,20 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
         LOG_RETURN(rc, "Unable to retrieve serial number from device name '%s' "
                    "in DSS", drive_id->name);
 
+    /* No need to admin lock a failed drive because, it is an unused one. */
+    if (dev_res->rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED) {
+        drive_was_unlocked = true;
+        rc = phobos_admin_device_lock(adm, drive_id, 1, true);
+        if (rc)
+            LOG_GOTO(free_dev_res, rc,
+                     "Unable to admin lock the drive '%s' before loading",
+                     drive_id->name);
+    }
+
     /* Lock drive and medium */
     rc = dss_one_medium_get_from_id(&adm->dss, tape_id, &med_res);
     if (rc)
-        LOG_GOTO(free_dev_res, rc,
+        LOG_GOTO(admin_unlock, rc,
                  "Unable to get tape '%s' from DSS", tape_id->name);
 
     rc = fill_host_owner(&hostname, &pid);
@@ -1813,11 +1792,12 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
                  "Unable to retrieve hostname and pid to check drive and "
                  "medium locks");
 
-    rc = check_take_drive_lock(&adm->dss, dev_res, hostname, pid);
+    rc = dss_lock(&adm->dss, DSS_DEVICE, dev_res, 1);
     if (rc)
         LOG_GOTO(free_med_res, rc,
-                 "Unable to lock the drive (id: '%s', path: '%s')",
-                 dev_res->rsc.id.name, dev_res->path);
+                 "admin host '%s' owner/pid '%d' failed to lock the "
+                 "drive (id: '%s', path: '%s') to load",
+                 hostname, pid, dev_res->rsc.id.name, dev_res->path);
 
     rc = check_take_tape_lock(&adm->dss, med_res, hostname, pid);
     if (rc)
@@ -1872,21 +1852,36 @@ unlock_drive:
 
 free_med_res:
     dss_res_free(med_res, 1);
+
+admin_unlock:
+    if (drive_was_unlocked) {
+        rc2 = phobos_admin_device_unlock(adm, drive_id, 1, true);
+        if (rc2) {
+            pho_error(rc2,
+                      "Unable to admin unlock the drive '%s' after loading",
+                      drive_id->name);
+            rc = rc ? : rc2;
+        }
+    }
+
 free_dev_res:
     dss_res_free(dev_res, 1);
     return rc;
 }
 
 /**
- * To unload, a lock is taken on the drive and on the tape to prevent any
- * concurrent move on these resources. For example, if a drive is already used
- * by a LRS, we do not want to change its state.
+ * To unload, a lock is taken on the drive and on the tape to
+ * prevent any concurrent move on these resources.
+ *
+ * If it is not failed or already admin locked, we set the status of the drive
+ * to "admin locked" during the unload.
  */
 int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                         const struct pho_id *tape_id)
 {
     struct proto_resp proto_resp = {TLC_REQUEST};
     struct proto_req proto_req = {TLC_REQUEST};
+    bool drive_was_unlocked = false;
     struct lib_drv_info drive_info;
     struct media_info *med_res;
     struct dev_info *dev_res;
@@ -1942,11 +1937,21 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
         }
     }
 
+    /* No need to admin lock a failed drive because, it is an unused one. */
+    if (dev_res->rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED) {
+        drive_was_unlocked = true;
+        rc = phobos_admin_device_lock(adm, drive_id, 1, true);
+        if (rc)
+            LOG_GOTO(free_dev_res, rc,
+                     "Unable to admin lock the drive '%s' before unloading",
+                     drive_id->name);
+    }
+
     /* Lock drive and medium */
     rc = dss_one_medium_get_from_id(&adm->dss, &drive_info.ldi_medium_id,
                                     &med_res);
     if (rc)
-        LOG_GOTO(free_dev_res, rc,
+        LOG_GOTO(admin_unlock, rc,
                  "Unable to get tape '%s' from DSS",
                  drive_info.ldi_medium_id.name);
 
@@ -1956,11 +1961,12 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                  "Unable to retrieve hostname and pid to check drive and "
                  "medium locks");
 
-    rc = check_take_drive_lock(&adm->dss, dev_res, hostname, pid);
+    rc = dss_lock(&adm->dss, DSS_DEVICE, dev_res, 1);
     if (rc)
         LOG_GOTO(free_med_res, rc,
-                 "Unable to lock the drive (id: '%s', path: '%s')",
-                 dev_res->rsc.id.name, dev_res->path);
+                 "admin host '%s' owner/pid '%d' failed to lock the "
+                 "drive (id: '%s', path: '%s') to unload",
+                 hostname, pid, dev_res->rsc.id.name, dev_res->path);
 
     rc = check_take_tape_lock(&adm->dss, med_res, hostname, pid);
     if (rc)
@@ -2030,6 +2036,18 @@ unlock_drive:
 
 free_med_res:
     dss_res_free(med_res, 1);
+
+admin_unlock:
+    if (drive_was_unlocked) {
+        rc2 = phobos_admin_device_unlock(adm, drive_id, 1, true);
+        if (rc2) {
+            pho_error(rc2,
+                      "Unable to admin unlock the drive '%s' after unloading",
+                      drive_id->name);
+            rc = rc ? : rc2;
+        }
+    }
+
 free_dev_res:
     dss_res_free(dev_res, 1);
     return rc;

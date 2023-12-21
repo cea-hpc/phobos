@@ -232,61 +232,109 @@ EOF
     echo ${drive_lookup_out} | grep "State: empty"
 }
 
-function test_load_lock
+function test_load_unload_lock
 {
     local tape="$(get_tapes L6 1)"
     local drive="$(get_lto_drives 6 1)"
 
     # Add drive and tape
-    $phobos drive add --unlock ${drive}
+    $phobos drive add ${drive}
     $phobos tape add -t lto6 ${tape}
 
     # start tlc
     invoke_tlc
 
+    # load/unload with locked adm_status
+    $phobos drive load ${drive} ${tape}
+    drive_adm_status=$($phobos drive list -o adm_status ${drive})
+    if [[ ${drive_adm_status} != "locked" ]]; then
+        error "load a drive with status locked must let it locked and not" \
+              "${drive_status}"
+    fi
+
+    $phobos drive unload --tape-label ${tape} ${drive}
+    drive_adm_status=$($phobos drive list -o adm_status ${drive})
+    if [[ ${drive_adm_status} != "locked" ]]; then
+        error "unload a drive with status locked must let it locked and" \
+              "not ${drive_status}"
+    fi
+
+    # load/unload with unlocked adm_status
+    $phobos drive unlock ${drive}
+    $phobos drive load ${drive} ${tape}
+    drive_adm_status=$($phobos drive list -o adm_status ${drive})
+    if [[ ${drive_adm_status} != "unlocked" ]]; then
+        error "load a drive with status unlocked must let it unlocked and not" \
+              "${drive_status}"
+    fi
+
+    $phobos drive unload --tape-label ${tape} ${drive}
+    drive_adm_status=$($phobos drive list -o adm_status ${drive})
+    if [[ ${drive_adm_status} != "unlocked" ]]; then
+        error "unload a drive with status unlocked must let it unlocked and" \
+              "not ${drive_status}"
+    fi
+
     # start LRS to lock the drive
     invoke_lrs
 
-    # load again tape into drive
-    EALREADY=114
-    set +e
+    # load/unload  again tape into drive
     $phobos drive load ${drive} ${tape}
-    rc=$?
-    set -e
-    if (( rc != EALREADY )); then
-        error "phobos drive load for TLC with drive lock by LRS must fail" \
-              "with EALREADY ($EALREADY), instead we got ${rc}"
-    fi
+    $phobos drive unload --tape-label ${tape} ${drive}
+
+    # format to check we can still use the drive
+    $phobos tape format ${tape}
+
+    $phobos drive unload ${drive}
 }
 
-function test_unload_lock
+function test_unload_put_concurrent
 {
-    local tape="$(get_tapes L6 1)"
-    local drive="$(get_lto_drives 6 1)"
+    local NB_PUT=10
+    local tapes=( $(get_tapes L6 2 | nodeset -e) )
+    local drives=( $(get_lto_drives 6 2) )
 
-    # Add drive and tape
-    $phobos drive add --unlock ${drive}
-    $phobos tape add -t lto6 ${tape}
-
-    # start tlc
+    # start lrs and tlc
     invoke_tlc
-
-    # load tape into drive
-    $phobos drive load ${drive} ${tape}
-
-    # start LRS to lock the drive
     invoke_lrs
 
-    # unload drive
-    EALREADY=114
-    set +e
-    $phobos drive unload ${drive}
-    rc=$?
-    set -e
-    if (( rc != EALREADY )); then
-        error "phobos drive unload for TLC with drive lock by LRS must fail" \
-              "with EALREADY ($EALREADY), instead we got ${rc}"
-    fi
+    # Add drives and tapes
+    $phobos drive add --unlock ${drives[0]}
+    $phobos drive add --unlock ${drives[1]}
+    $phobos tape add -t lto6 ${tapes[0]}
+    $phobos tape add -t lto6 ${tapes[1]}
+    $phobos tape format --unlock ${tapes[0]}
+    $phobos tape format --unlock ${tapes[1]}
+
+
+    # launch concurrent unload/put
+    local -a put_file
+    local -a put_pid
+    for i in `seq ${NB_PUT}`; do
+        put_file[$i]=$(mktemp /tmp/test.pho.XXXX)
+        dd if=/dev/urandom of=${put_file[$i]} bs=1024 count=1
+    done
+
+    for i in `seq ${NB_PUT}`; do
+        $phobos put ${put_file[$i]} $i &
+        put_pid[$i]=$!
+    done
+
+    $phobos drive unload ${drives[0]}
+    local unload_drive0_pid=$!
+    $phobos drive unload ${drives[1]}
+    local unload_drive1_pid=$!
+
+    # check concurrent unload/put
+    for i in `seq ${NB_PUT}`; do
+        wait ${put_pid[$i]}
+    done
+
+    wait ${unload_drive0_pid}
+    wait ${unload_drive1_pid}
+
+    $phobos drive unload ${drives[0]}
+    $phobos drive unload ${drives[1]}
 }
 
 if [[ ! -w /dev/changer ]]; then
@@ -297,6 +345,6 @@ TESTS=(
     "setup; test_load; cleanup"
     "setup; test_load_drive_to_drive; cleanup"
     "setup; test_unload; cleanup"
-    "setup; test_load_lock; cleanup_also_lrs"
-    "setup; test_unload_lock; cleanup_also_lrs"
+    "setup; test_load_unload_lock; cleanup_also_lrs"
+    "setup; test_unload_put_concurrent; cleanup_also_lrs"
 )
