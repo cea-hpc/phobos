@@ -413,7 +413,7 @@ int main(int argc, char **argv)
     test_env_initialize();
 
     pho_run_test("Posix open, write and close",
-             test_posix_open_write_close, NULL, PHO_TEST_SUCCESS);
+                 test_posix_open_write_close, NULL, PHO_TEST_SUCCESS);
     /**
      * TO DO
     pho_run_test("Posix open to get and close",
@@ -424,8 +424,8 @@ int main(int argc, char **argv)
              test_posix_open_to_get_md, NULL, PHO_TEST_SUCCESS);
     */
 
-    run_test("Posix copy",
-             test_copy_extent, NULL, PHO_TEST_SUCCESS);
+    pho_run_test("Posix copy",
+                 test_copy_extent, NULL, PHO_TEST_SUCCESS);
 
     pho_info("Unit IO posix open/write/close: All tests succeeded");
     exit(EXIT_SUCCESS);
