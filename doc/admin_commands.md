@@ -44,7 +44,13 @@ phobos drive migrate host2 /dev/mapper/LT06-012345
 
 # Removing drives
 Use the `phobos drive delete` command line to remove tape drives from phobos
-system.
+system. Drives will only be removed from the phobos database. No specific
+operations are done. For instance, you will still need to perform a SCSI release
+command to change the host of a drive:
+
+```
+ltfs -o release_device -o devname=/dev/mapper/LT06-012345
+```
 
 Drives will be removed only if they are not currently used by the system
 i.e. no daemon is using them.

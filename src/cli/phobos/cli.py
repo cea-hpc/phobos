@@ -2,7 +2,7 @@
 # pylint: disable=too-many-lines
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -509,6 +509,9 @@ class ResourceDeleteOptHandler(DSSInteractHandler):
     label = 'delete'
     alias = ['del']
     descr = 'remove resource(s) from the system'
+    epilog = "Resources are only removed from the database, and so will not "\
+             "be available through Phobos anymore. No other operations are "\
+             "executed."
 
     @classmethod
     def add_options(cls, parser):
