@@ -246,7 +246,7 @@ static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
                     dss_type_names[lock_type], lock_id, lock_owner,
                     lock_hostname);
 
-    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
+    rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
 
     PQclear(res);
     g_string_free(request, true);
@@ -267,7 +267,7 @@ static int basic_refresh(struct dss_handle *handle, enum dss_type lock_type,
                     dss_type_names[lock_type], lock_id, lock_owner,
                     lock_hostname);
 
-    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
+    rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
 
     PQclear(res);
     g_string_free(request, true);
@@ -292,7 +292,7 @@ static int basic_unlock(struct dss_handle *handle, enum dss_type lock_type,
         g_string_printf(request, lock_query[DSS_UNLOCK_FORCE_QUERY],
                         dss_type_names[lock_type], lock_id);
 
-    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
+    rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
 
     PQclear(res);
     g_string_free(request, true);
@@ -312,7 +312,7 @@ static int basic_status(struct dss_handle *handle, enum dss_type lock_type,
     g_string_printf(request, lock_query[DSS_STATUS_QUERY],
                     dss_type_names[lock_type], lock_id);
 
-    rc = execute(conn, request, &res, PGRES_TUPLES_OK);
+    rc = execute(conn, request->str, &res, PGRES_TUPLES_OK);
     if (rc)
         goto out_cleanup;
 
@@ -552,7 +552,7 @@ int dss_lock_device_clean(struct dss_handle *handle, const char *lock_family,
 
     g_string_printf(request, lock_query[DSS_CLEAN_DEVICE_QUERY],
                     lock_family, lock_hostname, lock_owner);
-    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
+    rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
 
     PQclear(res);
     g_string_free(request, true);
@@ -585,7 +585,7 @@ int dss_lock_media_clean(struct dss_handle *handle,
 
     g_string_printf(request, lock_query[DSS_CLEAN_MEDIA_QUERY],
                     lock_hostname, lock_owner, ids->str);
-    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
+    rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
 
     PQclear(res);
     g_string_free(request, true);
@@ -640,7 +640,7 @@ int dss_lock_clean_select(struct dss_handle *handle,
     }
 
     g_string_append_printf(request, " RETURNING *;");
-    rc = execute(conn, request, &res, PGRES_TUPLES_OK);
+    rc = execute(conn, request->str, &res, PGRES_TUPLES_OK);
 
     pho_info("%d lock(s) cleaned.", PQntuples(res));
 
@@ -660,7 +660,7 @@ int dss_lock_clean_all(struct dss_handle *handle)
     ENTRY;
 
     g_string_printf(request, "%s", lock_query[DSS_PURGE_ALL_LOCKS_QUERY]);
-    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
+    rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
 
     PQclear(res);
     g_string_free(request, true);

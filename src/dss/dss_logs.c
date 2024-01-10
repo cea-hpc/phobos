@@ -59,7 +59,7 @@ int dss_emit_log(struct dss_handle *handle, struct pho_log *log)
                     operation_type2str(log->cause), message);
     free(message);
 
-    rc = execute(conn, request, &res, PGRES_COMMAND_OK);
+    rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
     PQclear(res);
 
 free_request:

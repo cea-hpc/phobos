@@ -830,4 +830,19 @@ enum pho_cfg_params_tape_model {
 
 extern const struct pho_config_item cfg_tape_model[];
 
+/**
+ * Update the layout and extent databases following an extent migrate action:
+ * - all \p old_uuid occurences will be replaced by \p new_uuid in layout;
+ * - \p old_uuid and \p new_uuid states will be respectively changed to orphan
+ *   and sync in extent.
+ *
+ * @param[in]   handle          DSS handle
+ * @param[in]   old_uuid        Old extent UUID
+ * @param[in]   new_uuid        New extent UUID
+ *
+ * @return 0 on success, -errno on failure
+ */
+int dss_update_extent_migrate(struct dss_handle *handle, const char *old_uuid,
+                              const char *new_uuid);
+
 #endif

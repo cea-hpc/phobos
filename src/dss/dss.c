@@ -2192,7 +2192,6 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
 {
     PGconn      *conn = handle->dh_conn;
     GString     *request;
-    PGresult    *res = NULL;
     int          error = 0;
     int          rc = 0;
     ENTRY;
@@ -2266,41 +2265,20 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         LOG_GOTO(out_cleanup, rc = -EINVAL,
                  "JSON parsing failed: %d errors found", error);
 
-    pho_debug("Executing request: '%s'", request->str);
+    if ((type == DSS_EXTENT && action == DSS_SET_INSERT)) {
+        PGresult    *res = NULL;
 
-    res = PQexec(conn, request->str);
-    if ((type == DSS_EXTENT && action == DSS_SET_INSERT &&
-         PQresultStatus(res) != PGRES_TUPLES_OK) ||
-        (type != DSS_EXTENT && PQresultStatus(res) != PGRES_COMMAND_OK)) {
-        rc = psql_state2errno(res);
-        pho_error(rc, "Query '%s' failed: %s (%s)", request->str,
-                  PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY),
-                  PQresultErrorField(res, PG_DIAG_SQLSTATE));
+        rc = execute_and_commit_or_rollback(conn, request, &res,
+                                            PGRES_TUPLES_OK);
+        if (!rc)
+            _add_uuid_to_extents(item_list, item_cnt, res);
         PQclear(res);
-
-        pho_info("Attempting to rollback after transaction failure");
-
-        res = PQexec(conn, "ROLLBACK; ");
-        if (PQresultStatus(res) != PGRES_COMMAND_OK)
-            pho_error(rc, "Rollback failed: %s",
-                      PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
-
-        goto out_cleanup;
-    }
-
-    if (type == DSS_EXTENT && action == DSS_SET_INSERT)
-        _add_uuid_to_extents(item_list, item_cnt, res);
-    PQclear(res);
-
-    res = PQexec(conn, "COMMIT; ");
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-        rc = psql_state2errno(res);
-        pho_error(rc, "Request failed: %s",
-                  PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
+    } else {
+        rc = execute_and_commit_or_rollback(conn, request, NULL,
+                                            PGRES_COMMAND_OK);
     }
 
 out_cleanup:
-    PQclear(res);
     g_string_free(request, true);
     return rc;
 }
@@ -3025,7 +3003,7 @@ int dss_logs_delete(struct dss_handle *handle, const struct dss_filter *filter)
 
     pho_debug("Executing request: '%s'", clause->str);
 
-    rc = execute(conn, clause, &res, PGRES_COMMAND_OK);
+    rc = execute(conn, clause->str, &res, PGRES_COMMAND_OK);
     PQclear(res);
 
     g_string_free(clause, true);

@@ -64,12 +64,12 @@ static const struct sqlerr_map_item sqlerr_map[] = {
     {"", -ECOMM}
 };
 
-int execute(PGconn *conn, GString *request, PGresult **res,
+int execute(PGconn *conn, const char *request, PGresult **res,
             ExecStatusType tested)
 {
-    pho_debug("Executing request: '%s'", request->str);
+    pho_debug("Executing request: '%s'", request);
 
-    *res = PQexec(conn, request->str);
+    *res = PQexec(conn, request);
     if (PQresultStatus(*res) != tested)
         LOG_RETURN(psql_state2errno(*res), "Request failed: %s",
                    PQresultErrorField(*res, PG_DIAG_MESSAGE_PRIMARY));
@@ -94,4 +94,35 @@ int psql_state2errno(const PGresult *res)
 
     /* sqlerr_map must contain a catch-all entry */
     UNREACHED();
+}
+
+int execute_and_commit_or_rollback(PGconn *conn, GString *request,
+                                   PGresult **res, ExecStatusType tested)
+{
+    PGresult *tmp_res = NULL;
+    int rc = 0;
+
+    if (res) {
+        rc = execute(conn, request->str, res, tested);
+    } else {
+        rc = execute(conn, request->str, &tmp_res, tested);
+        PQclear(tmp_res);
+    }
+
+    if (rc) {
+        if (res)
+            PQclear(*res);
+
+        pho_info("Attempting to rollback after transaction failure");
+
+        execute(conn, "ROLLBACK;", &tmp_res, PGRES_COMMAND_OK);
+
+        goto cleanup;
+    }
+
+    rc = execute(conn, "COMMIT;", &tmp_res, PGRES_COMMAND_OK);
+
+cleanup:
+    PQclear(tmp_res);
+    return rc;
 }

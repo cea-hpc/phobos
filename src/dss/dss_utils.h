@@ -43,7 +43,7 @@
  *
  * \return            0 on success, or the error as returned by PSQL
  */
-int execute(PGconn *conn, GString *request, PGresult **res,
+int execute(PGconn *conn, const char *request, PGresult **res,
             ExecStatusType tested);
 
 /**
@@ -52,6 +52,22 @@ int execute(PGconn *conn, GString *request, PGresult **res,
  * \return                  Negated errno value corresponding to the error
  */
 int psql_state2errno(const PGresult *res);
+
+/**
+ * Execute a PSQL \p request, verify the result is as expected with \p tested,
+ * and put the result in \p res if not NULL.
+ *
+ * In case the request failed, a 'rollback' request is sent to the database.
+ *
+ * \param conn[in]      The connection to the database
+ * \param request[in]   Request to execute
+ * \param res[out]      If not NULL, result of the request
+ * \param tested[in]    The expected result of the request
+ *
+ * \return              0 on success, or the error as returned by PSQL
+ */
+int execute_and_commit_or_rollback(PGconn *conn, GString *request,
+                                   PGresult **res, ExecStatusType tested);
 
 /**
  * Unlike PQgetvalue that returns '' for NULL fields,
