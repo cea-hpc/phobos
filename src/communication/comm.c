@@ -333,8 +333,8 @@ int pho_comm_close(struct pho_comm_info *ci)
 {
     int rc = 0;
 
-    /* offline mode */
-    if (ci->socket_fd < 0)
+    /* offline mode or not initialized */
+    if (ci->socket_fd <= 0)
         return 0;
 
     if (ci->type == PHO_COMM_UNIX_CLIENT || ci->type == PHO_COMM_TCP_CLIENT) {
