@@ -173,4 +173,16 @@ int tlc_library_status(struct lib_descriptor *lib, json_t **lib_data,
 int tlc_library_reload(struct lib_descriptor *lib, const char *dev,
                        json_t **json_message);
 
+
+/**
+ * Only exported for internal test purpose
+ */
+struct element_status *
+drive_element_status_from_serial(struct lib_descriptor *lib,
+                                 const char *serial);
+
+struct element_status *
+media_element_status_from_label(struct lib_descriptor *lib,
+                                const char *label);
+
 #endif /* _PHO_TLC_LIBRARY_H */

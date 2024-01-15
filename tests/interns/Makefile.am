@@ -27,10 +27,12 @@ MAPPER_LIB=$(TO_SRC)/io-modules/libpho_mapper.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
+TLC_LIB=$(TO_SRC)/tlc/libpho_tlc.la
 
 TESTS_LIB_DEPS=$(LRS_LIB) $(LDM_LIB) $(IO_LIB) $(DSS_LIB) $(SERIALIZER_LIB) \
-               $(CFG_LIB) $(COMMON_LIB) $(DAEMON_LIB)
+               $(CFG_LIB) $(COMMON_LIB) $(DAEMON_LIB) $(TLC_LIB)
 TESTS_LIB=../libpho_test_utils.la
+TESTS_LIB_INCLUDES=-I$(TO_SRC)/tlc -I..
 
 if VALGRIND_ENABLED
 @VALGRIND_CHECK_RULES@
@@ -61,6 +63,7 @@ check_PROGRAMS=test_attrs \
                test_mapper \
                test_phobos_admin_medium_locate \
                test_ping \
+               test_scsi_logs \
                test_store_alias \
                test_store_object_md \
                test_store_object_md_get \
@@ -90,27 +93,28 @@ test_dev_tape_CFLAGS=$(AM_CFLAGS) -I..
 
 test_dss_extent_SOURCES=test_dss_extent.c
 test_dss_extent_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
-tess_dss_extent_CFLAGS=$(AM_CFLAGS)
+test_dss_extent_CFLAGS=$(AM_CFLAGS) $(TESTS_LIB_INCLUDES)
 
 test_dss_lazy_find_object_SOURCES=test_dss_lazy_find_object.c
 test_dss_lazy_find_object_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
-test_dss_lazy_find_object_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/store
+test_dss_lazy_find_object_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/store \
+                                 $(TESTS_LIB_INCLUDES)
 
 test_dss_lock_SOURCES=test_dss_lock.c
 test_dss_lock_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
-test_dss_lock_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I..
+test_dss_lock_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss $(TESTS_LIB_INCLUDES)
 
 test_dss_logs_SOURCES=test_dss_logs.c
 test_dss_logs_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
-test_dss_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I..
+test_dss_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss $(TESTS_LIB_INCLUDES)
 
 test_dss_medium_locate_SOURCES=test_dss_medium_locate.c
 test_dss_medium_locate_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
-test_dss_medium_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I..
+test_dss_medium_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss $(TESTS_LIB_INCLUDES)
 
 test_dss_object_move_SOURCES=test_dss_object_move.c
 test_dss_object_move_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
-test_dss_object_move_CFLAGS=$(AM_CFLAGS) -I..
+test_dss_object_move_CFLAGS=$(AM_CFLAGS) $(TESTS_LIB_INCLUDES)
 
 test_io_SOURCES=test_io.c
 test_io_LDADD=$(IO_POSIX_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
@@ -138,7 +142,7 @@ test_lrs_cfg_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
 
 test_lrs_device_SOURCES=test_lrs_device.c
 test_lrs_device_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
-test_lrs_device_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I..
+test_lrs_device_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs $(TESTS_LIB_INCLUDES)
 
 test_lrs_scheduling_SOURCES=test_lrs_scheduling.c
 test_lrs_scheduling_LDADD=$(LRS_LIB) $(LDM_LIB) $(MOD_LOAD_LIB) $(DSS_LIB) \
@@ -153,11 +157,18 @@ test_mapper_CFLAGS=$(AM_CFLAGS) -I..
 test_phobos_admin_medium_locate_SOURCES=test_phobos_admin_medium_locate.c
 test_phobos_admin_medium_locate_LDADD=$(ADMIN_LIB) $(TESTS_LIB) \
                                       $(TESTS_LIB_DEPS)
-test_phobos_admin_medium_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I..
+test_phobos_admin_medium_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss \
+                                       $(TESTS_LIB_INCLUDES)
 
 test_ping_SOURCES=test_ping.c mock_communication.c
 test_ping_LDADD=$(ADMIN_LIB) $(COMMON_LIB) $(DSS_LIB) $(LDM_LIB)
 test_ping_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/admin
+
+test_scsi_logs_SOURCES=test_scsi_logs.c
+test_scsi_logs_LDADD=$(MOD_LOAD_LIB) $(SCSI_LIB) $(LDM_SCSI_LIB) $(ADMIN_LIB) \
+                     $(TESTS_LIB) $(TESTS_LIB_DEPS) $(TLC_LIB)
+test_scsi_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I$(TO_SRC)/ldm-modules \
+                      $(TESTS_LIB_INCLUDES)
 
 # TODO: try to link against the phobos_store library instead of
 # the store_alias object file
@@ -173,7 +184,8 @@ test_store_object_md_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I$(TO_SRC)/store
 test_store_object_md_get_SOURCES=test_store_object_md_get.c
 test_store_object_md_get_LDADD=$(STORE_LIB) $(ADMIN_LIB) $(TESTS_LIB) \
                                $(TESTS_LIB_DEPS)
-test_store_object_md_get_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/store -I..
+test_store_object_md_get_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/store \
+                                $(TESTS_LIB_INCLUDES)
 
 test_type_utils_SOURCES=test_type_utils.c
 test_type_utils_LDADD=$(TESTS_LIB) $(TESTS_LIB_DEPS)

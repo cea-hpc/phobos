@@ -24,7 +24,7 @@
  */
 
 /* phobos stuff */
-#include "../test_setup.h"
+#include "test_setup.h"
 #include "pho_dss.h"
 #include "pho_types.h"
 

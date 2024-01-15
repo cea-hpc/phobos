@@ -38,7 +38,7 @@
 #include "pho_cfg.h"
 #include "pho_common.h"
 #include "pho_types.h"
-#include "../ldm-modules/scsi_api.h"
+#include "scsi_api.h"
 #include "tlc_library.h"
 
 /** List of SCSI library configuration parameters */
@@ -366,8 +366,8 @@ static inline bool match_serial(const char *drv_descr, const char *req_sn)
     return !strcmp(sn, req_sn);
 }
 
-static struct element_status *
-drive_element_status_from_serial(struct lib_descriptor *lib, const char *serial)
+struct element_status *drive_element_status_from_serial(
+    struct lib_descriptor *lib, const char *serial)
 {
     int i;
 
@@ -386,9 +386,8 @@ drive_element_status_from_serial(struct lib_descriptor *lib, const char *serial)
 }
 
 /** get media info with the given label */
-static struct element_status *
-media_element_status_from_label(struct lib_descriptor *lib,
-                                const char *label)
+struct element_status *media_element_status_from_label(
+    struct lib_descriptor *lib, const char *label)
 {
     struct element_status *med;
     int i;
@@ -811,7 +810,7 @@ int tlc_library_unload(struct dss_handle *dss, struct lib_descriptor *lib,
                           target_element_status->address, log.message);
     emit_log_after_action(dss, &log, PHO_DEVICE_UNLOAD, rc);
     if (rc) {
-        free(unloaded_tape_label);
+        free(*unloaded_tape_label);
         *unloaded_tape_label = NULL;
         LOG_RETURN(rc,
                    "SCSI move failed for unload of tape '%s' in drive '%s' to "

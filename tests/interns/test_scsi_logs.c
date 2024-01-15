@@ -42,7 +42,7 @@
 #include <scsi/scsi.h>
 #include <fcntl.h>
 
-#include "../test_setup.h"
+#include "test_setup.h"
 #include "pho_cfg.h"
 #include "pho_common.h"
 #include "pho_daemon.h"
@@ -61,156 +61,28 @@
 // If there is a difference in the models, you may have to modify this macro
 #define LTO5_MODEL "ULT3580-TD5"
 
-static bool check_item_type(json_t *item, const char *rsc)
-{
-    json_t *rsc_str;
-    json_t *type;
-    bool ret;
-
-    type = json_object_get(item, "type");
-    assert_non_null(type);
-
-    rsc_str = json_string(rsc);
-    assert_non_null(rsc_str);
-
-    ret = json_equal(type, rsc_str);
-    json_decref(rsc_str);
-
-    return ret;
-}
-
-static void get_arm_load_address(json_t *item, char **arm_address)
-{
-    // Assume we only have one arm, otherwise we can't know in
-    // advance which one is going to be used
-    asprintf(arm_address, "%" JSON_INTEGER_FORMAT,
-             json_integer_value(json_object_get(item, "address")));
-    assert_non_null(*arm_address);
-}
-
-static void get_slot_load_address(json_t *item, char **medium_address,
-                                  char *medium_name)
-{
-    char *medium_address_tmp;
-    json_t *volume;
-
-    volume = json_object_get(item, "volume");
-    assert_non_null(volume);
-
-    if (strcmp(json_string_value(volume), medium_name) != 0)
-        return;
-
-    asprintf(&medium_address_tmp, "%" JSON_INTEGER_FORMAT,
-             json_integer_value(json_object_get(item, "address")));
-    assert_non_null(medium_address_tmp);
-
-    asprintf(medium_address, "%#hx", atoi(medium_address_tmp));
-    free(medium_address_tmp);
-    assert_non_null(*medium_address);
-}
-
-static void get_drive_load_address(json_t *item, char **device_address,
-                                   char *device_name)
-{
-    char *serial;
-    json_t *id;
-
-    id = json_object_get(item, "device_id");
-    assert_non_null(id);
-
-    get_serial_from_path(device_name, &serial);
-
-    if (strstr(json_string_value(id), serial) != NULL) {
-        char *device_address_tmp;
-
-        asprintf(&device_address_tmp, "%" JSON_INTEGER_FORMAT,
-                 json_integer_value(json_object_get(item, "address")));
-        assert_non_null(device_address_tmp);
-
-        asprintf(device_address, "%#hx", atoi(device_address_tmp));
-        free(device_address_tmp);
-        assert_non_null(*device_address);
-    }
-
-    free(serial);
-}
-
-static void get_load_addresses(json_t *item, char **arm_address,
-                               char **medium_address, char *medium_name,
-                               char **device_address, char *device_name)
-{
-    json_t *json_type;
-    const char *type;
-
-    (void) device_name;
-
-    json_type = json_object_get(item, "type");
-    assert_non_null(json_type);
-
-    type = json_string_value(json_type);
-    assert_non_null(type);
-
-    if (strcmp(type, "arm") == 0)
-        get_arm_load_address(item, arm_address);
-    else if (strcmp(type, "slot") == 0)
-        get_slot_load_address(item, medium_address, medium_name);
-    else if (strcmp(type, "drive") == 0)
-        get_drive_load_address(item, device_address, device_name);
-}
-
 static json_t *create_log_message(enum operation_type cause,
                                   enum scsi_operation_type op, bool should_fail,
-                                  char *medium_name, char *device_name)
+                                  char *medium_name, char *device_name,
+                                  char *device_serial,
+                                  struct lib_descriptor *lib)
 {
-    int arms_nb, slots_nb, impexp_nb, drives_nb;
-    json_t *scsi_logical_action;
+    struct element_status *medium_element_status;
+    struct element_status *drive_element_status;
     json_t *scsi_operation;
-    json_t *phobos_action;
     json_t *scsi_execute;
     char *medium_address;
     char *device_address;
     json_t *scsi_error;
-    char *arm_address;
-    json_t *lib_data;
 
-    arms_nb = slots_nb = impexp_nb = drives_nb = 0;
-
-    if (op >= ARMS_STATUS && op <= UNLOAD_MEDIUM) {
-        json_t *value;
-        size_t index;
-
-        arms_nb = slots_nb = impexp_nb = drives_nb = 0;
-
-        assert_false(phobos_admin_lib_scan(PHO_LIB_SCSI, "/dev/changer",
-                                           &lib_data));
-
-        json_array_foreach(lib_data, index, value) {
-            switch (op) {
-            case ARMS_STATUS:
-                arms_nb += (check_item_type(value, "arm") ? 1 : 0);
-                break;
-            case SLOTS_STATUS:
-                slots_nb += (check_item_type(value, "slot") ? 1 : 0);
-                break;
-            case IMPEXP_STATUS:
-                impexp_nb += (check_item_type(value, "import/export") ? 1 : 0);
-                break;
-            case DRIVES_STATUS:
-                drives_nb += (check_item_type(value, "drive") ? 1 : 0);
-                break;
-            case LOAD_MEDIUM:
-            case UNLOAD_MEDIUM:
-                get_load_addresses(value, &arm_address,
-                                   &medium_address, medium_name,
-                                   &device_address, device_name);
-                break;
-            default:
-                fail();
-            }
-        }
-
-        json_decref(lib_data);
-    }
+    drive_element_status = drive_element_status_from_serial(lib, device_serial);
+    medium_element_status = media_element_status_from_label(lib, medium_name);
+    assert_return_code(asprintf(&medium_address, "%#hx",
+                                medium_element_status->address),
+                       0);
+    assert_return_code(asprintf(&device_address, "%#hx",
+                                drive_element_status->address),
+                       0);
 
     scsi_execute = json_object();
     assert_non_null(scsi_execute);
@@ -239,36 +111,9 @@ static json_t *create_log_message(enum operation_type cause,
                                      json_string(SCSI_ACTION_NAMES[op])));
 
     switch (op) {
-    case LIBRARY_LOAD:
-        break;
-    case ARMS_STATUS:
-        assert_false(json_object_set_new(scsi_execute, "Type",
-                                         json_string("0x1")));
-        assert_false(json_object_set_new(scsi_execute, "Count",
-                                         json_integer(arms_nb)));
-        break;
-    case SLOTS_STATUS:
-        assert_false(json_object_set_new(scsi_execute, "Type",
-                                         json_string("0x2")));
-        assert_false(json_object_set_new(scsi_execute, "Count",
-                                         json_integer(slots_nb)));
-        break;
-    case IMPEXP_STATUS:
-        assert_false(json_object_set_new(scsi_execute, "Type",
-                                         json_string("0x3")));
-        assert_false(json_object_set_new(scsi_execute, "Count",
-                                         json_integer(impexp_nb)));
-        break;
-    case DRIVES_STATUS:
-        assert_false(json_object_set_new(scsi_execute, "Type",
-                                         json_string("0x4")));
-        assert_false(json_object_set_new(scsi_execute, "Count",
-                                         json_integer(drives_nb)));
-        break;
     case LOAD_MEDIUM:
         assert_false(json_object_set_new(scsi_execute, "Arm address",
-                                         json_string(arm_address)));
-        free(arm_address);
+                                         json_string("0")));
         assert_false(json_object_set_new(scsi_execute, "Source address",
                                          json_string(medium_address)));
         free(medium_address);
@@ -278,8 +123,7 @@ static json_t *create_log_message(enum operation_type cause,
         break;
     case UNLOAD_MEDIUM:
         assert_false(json_object_set_new(scsi_execute, "Arm address",
-                                         json_string(arm_address)));
-        free(arm_address);
+                                         json_string("0")));
         assert_false(json_object_set_new(scsi_execute, "Target address",
                                          json_string(medium_address)));
         free(medium_address);
@@ -296,46 +140,11 @@ static json_t *create_log_message(enum operation_type cause,
 
     assert_false(json_object_set_new(scsi_operation, "scsi_execute",
                                      scsi_execute));
-
-    scsi_logical_action = json_object();
-    assert_non_null(scsi_logical_action);
-
-    assert_false(json_object_set_new(scsi_logical_action,
-                                     SCSI_OPERATION_TYPE_NAMES[op],
-                                     scsi_operation));
-
-    if (op == LOAD_MEDIUM || op == UNLOAD_MEDIUM)
-        return scsi_logical_action;
-
-    phobos_action = json_object();
-    assert_non_null(phobos_action);
-
-    switch (cause) {
-    case PHO_DEVICE_LOAD:
-        assert_false(json_object_set_new(phobos_action, "Medium lookup",
-                                         scsi_logical_action));
-        break;
-    case PHO_DEVICE_UNLOAD:
-        assert_false(json_object_set_new(phobos_action, "Target selection",
-                                         scsi_logical_action));
-        break;
-    case PHO_DEVICE_LOOKUP:
-        json_decref(phobos_action);
-        phobos_action = scsi_logical_action;
-        break;
-    case PHO_LIBRARY_SCAN:
-        json_decref(phobos_action);
-        phobos_action = scsi_logical_action;
-        break;
-    default:
-        fail();
-    }
-
-    return phobos_action;
+    return scsi_operation;
 }
 
 static void check_log_is_valid(struct dss_handle *handle,
-                               char *device_name, char *medium_name,
+                               char *device_serial, char *medium_name,
                                enum operation_type cause,
                                enum scsi_operation_type op, bool should_fail,
                                json_t *json_message)
@@ -354,7 +163,7 @@ static void check_log_is_valid(struct dss_handle *handle,
 
     assert_int_equal(PHO_RSC_TAPE, log.medium.family);
     assert_int_equal(PHO_RSC_TAPE, log.device.family);
-    assert_string_equal(device_name, log.device.name);
+    assert_string_equal(device_serial, log.device.name);
     assert_string_equal(medium_name, log.medium.name);
     assert_int_equal(cause, log.cause);
 
@@ -428,31 +237,25 @@ static int mock_ioctl(int fd, unsigned long request, void *sg_io_hdr)
     return 0;
 }
 
-static void scsi_dev_load_logs_check(struct dss_handle *handle,
+static void scsi_dev_load_logs_check(struct dss_and_tlc_lib *dss_and_tlc_lib,
                                      enum scsi_operation_type op,
                                      bool should_fail,
                                      char *device_name, char *medium_name)
 {
     struct phobos_global_context *context = phobos_context();
-    /* The calloc here is necessary because if the dev_fails, it will free the
-     * given medium.
-     */
-    struct media_info *medium = xcalloc(1, sizeof(*medium));
-    struct lrs_dev device;
-    json_t *full_message;
-    bool fod;
-    bool cr;
+    json_t *full_message = NULL;
+    json_t *json_message = NULL;
+    char *device_serial;
     int rc;
 
-    create_device(&device, device_name, LTO5_MODEL, handle);
-
-    create_medium(medium, medium_name);
+    get_serial_from_path(device_name, &device_serial);
 
     /* The log must be created before the actual load because we need the
      * original address of the medium and its destination.
      */
     full_message = create_log_message(PHO_DEVICE_LOAD, op, should_fail,
-                                      medium_name, device_name);
+                                      medium_name, device_name, device_serial,
+                                      &dss_and_tlc_lib->tlc_lib);
     assert_non_null(full_message);
 
     if (should_fail) {
@@ -461,8 +264,13 @@ static void scsi_dev_load_logs_check(struct dss_handle *handle,
         will_return_always(mock_ioctl, op);
     }
 
-    device.ld_sub_request = xmalloc(sizeof(*device.ld_sub_request));
-    rc = dev_load(&device, &medium, true, &fod, &cr, true);
+    rc = tlc_library_load(&dss_and_tlc_lib->dss, &dss_and_tlc_lib->tlc_lib,
+                          device_serial, medium_name, &json_message);
+
+    if (json_message) {
+        json_decref(json_message);
+        json_message = NULL;
+    }
 
     if (should_fail) {
         pho_context_reset_scsi_ioctl();
@@ -471,114 +279,79 @@ static void scsi_dev_load_logs_check(struct dss_handle *handle,
         assert_return_code(-rc, rc);
     }
 
-    check_log_is_valid(handle, device_name, medium_name, PHO_DEVICE_LOAD, op,
-                       should_fail, full_message);
+    check_log_is_valid(&dss_and_tlc_lib->dss, device_serial, medium_name,
+                       PHO_DEVICE_LOAD, op, should_fail, full_message);
 
-    if (!should_fail)
-        dev_unload(&device);
+    if (!should_fail) {
+        struct lib_item_addr unload_addr;
+        char *unloaded_tape_label;
 
-    dss_logs_delete(handle, NULL);
-    cleanup_device(&device);
-}
+        tlc_library_unload(&dss_and_tlc_lib->dss, &dss_and_tlc_lib->tlc_lib,
+                           device_serial, medium_name, &unloaded_tape_label,
+                           &unload_addr, &json_message);
+        if (json_message) {
+            json_decref(json_message);
+            json_message = NULL;
+        }
 
-static void scsi_dev_load_logs_mode_sense_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
+        free(unloaded_tape_label);
+    }
 
-    /* The device and medium names used in the following tests are nonsensical
-     * because they are unecessary. Since the tests will not actually load
-     * anything, the "dev_load" will fail before the device/medium are
-     * relevant.
-     */
-    scsi_dev_load_logs_check(handle, LIBRARY_LOAD, true,
-                             "test_mode_sense_failure_device",
-                             "test_mode_sense_failure_medium");
-}
-
-static void scsi_dev_load_logs_arms_status_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_dev_load_logs_check(handle, ARMS_STATUS, true,
-                             "test_arms_status_failure_device",
-                             "test_arms_status_failure_medium");
-}
-
-static void scsi_dev_load_logs_slots_status_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_dev_load_logs_check(handle, SLOTS_STATUS, true,
-                             "test_slots_status_failure_device",
-                             "test_slots_status_failure_medium");
-}
-
-static void scsi_dev_load_logs_impexp_status_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_dev_load_logs_check(handle, IMPEXP_STATUS, true,
-                             "test_impexp_status_failure_device",
-                             "test_impexp_status_failure_medium");
-}
-
-static void scsi_dev_load_logs_drives_status_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_dev_load_logs_check(handle, DRIVES_STATUS, true,
-                             "test_drives_status_failure_device",
-                             "test_drives_status_failure_medium");
+    dss_logs_delete(&dss_and_tlc_lib->dss, NULL);
+    free(device_serial);
 }
 
 static void scsi_dev_load_logs_move_medium_failure(void **state)
 {
-    struct dss_handle *handle = (struct dss_handle *)*state;
+    struct dss_and_tlc_lib *dss_and_tlc_lib = *state;
 
     /* The device and medium name here and in the following test are relevant
      * because we get to the actual load part of the dev_load function.
      */
-    scsi_dev_load_logs_check(handle, LOAD_MEDIUM, true, "/dev/st0", "P00003L5");
+    scsi_dev_load_logs_check(dss_and_tlc_lib, LOAD_MEDIUM, true, "/dev/st0",
+                             "P00003L5");
 }
 
 static void scsi_dev_load_logs_move_medium_success(void **state)
 {
-    struct dss_handle *handle = (struct dss_handle *)*state;
+    struct dss_and_tlc_lib *dss_and_tlc_lib = *state;
 
-    scsi_dev_load_logs_check(handle, LOAD_MEDIUM, false,
-                             "/dev/st0", "P00003L5");
+    scsi_dev_load_logs_check(dss_and_tlc_lib, LOAD_MEDIUM, false, "/dev/st0",
+                             "P00003L5");
 }
 
-static void scsi_dev_unload_logs_check(struct dss_handle *handle,
+static void scsi_dev_unload_logs_check(struct dss_and_tlc_lib *dss_and_tlc_lib,
                                        enum scsi_operation_type op,
                                        bool should_fail,
                                        char *device_name, char *medium_name)
 {
     struct phobos_global_context *context = phobos_context();
-    struct media_info *medium = xcalloc(1, sizeof(*medium));
-    struct lrs_dev device;
-    json_t *full_message;
-    bool fod;
-    bool cr;
+    struct lib_item_addr unload_addr;
+    json_t *full_message = NULL;
+    json_t *json_message = NULL;
+    char *unloaded_tape_label;
+    char *device_serial;
     int rc;
 
-    create_device(&device, device_name, LTO5_MODEL, handle);
-
-    create_medium(medium, medium_name);
+    get_serial_from_path(device_name, &device_serial);
 
     /* The log must be created before the actual load/unload because we need the
      * original address of the medium and its destination.
      */
     full_message = create_log_message(PHO_DEVICE_UNLOAD, op, should_fail,
-                                      medium_name, device_name);
+                                      medium_name, device_name, device_serial,
+                                      &dss_and_tlc_lib->tlc_lib);
     assert_non_null(full_message);
 
-    device.ld_sub_request = xmalloc(sizeof(*device.ld_sub_request));
-    rc = dev_load(&device, &medium, true, &fod, &cr, false);
+    rc = tlc_library_load(&dss_and_tlc_lib->dss, &dss_and_tlc_lib->tlc_lib,
+                          device_serial, medium_name, &json_message);
     assert_return_code(-rc, rc);
+    if (json_message) {
+        json_decref(json_message);
+        json_message = NULL;
+    }
 
-    dss_logs_delete(handle, NULL);
-    assert_ptr_equal(device.ld_dss_media_info, medium);
+    dss_logs_delete(&dss_and_tlc_lib->dss, NULL);
 
     if (should_fail) {
         context->mock_ioctl = &mock_ioctl;
@@ -586,285 +359,67 @@ static void scsi_dev_unload_logs_check(struct dss_handle *handle,
         will_return_always(mock_ioctl, op);
     }
 
-    rc = dev_unload(&device);
+    rc = tlc_library_unload(&dss_and_tlc_lib->dss, &dss_and_tlc_lib->tlc_lib,
+                            device_serial, medium_name, &unloaded_tape_label,
+                            &unload_addr, &json_message);
+    if (json_message) {
+        json_decref(json_message);
+        json_message = NULL;
+    }
 
     if (should_fail) {
         pho_context_reset_scsi_ioctl();
         assert_int_equal(-rc, EINVAL);
     } else {
         assert_return_code(-rc, rc);
+        assert_string_equal(unloaded_tape_label, medium_name);
+        free(unloaded_tape_label);
     }
 
-    check_log_is_valid(handle, device_name, medium_name, PHO_DEVICE_UNLOAD, op,
-                       should_fail, full_message);
 
-    if (should_fail)
-        dev_unload(&device);
+    check_log_is_valid(&dss_and_tlc_lib->dss, device_serial, medium_name,
+                       PHO_DEVICE_UNLOAD, op, should_fail, full_message);
 
-    dss_logs_delete(handle, NULL);
-    cleanup_device(&device);
-}
+    if (should_fail) {
+        tlc_library_unload(&dss_and_tlc_lib->dss, &dss_and_tlc_lib->tlc_lib,
+                           device_serial, medium_name, &unloaded_tape_label,
+                           &unload_addr, &json_message);
+        if (json_message) {
+            json_decref(json_message);
+            json_message = NULL;
+        }
 
-static void scsi_dev_unload_logs_mode_sense_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
+        free(unloaded_tape_label);
+    }
 
-    scsi_dev_unload_logs_check(handle, LIBRARY_LOAD, true,
-                               "/dev/st0", "P00003L5");
-}
-
-static void scsi_dev_unload_logs_arms_status_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_dev_unload_logs_check(handle, ARMS_STATUS, true,
-                               "/dev/st0", "P00003L5");
-}
-
-static void scsi_dev_unload_logs_slots_status_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_dev_unload_logs_check(handle, SLOTS_STATUS, true,
-                               "/dev/st0", "P00003L5");
-}
-
-static void scsi_dev_unload_logs_impexp_status_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_dev_unload_logs_check(handle, IMPEXP_STATUS, true,
-                               "/dev/st0", "P00003L5");
-}
-
-static void scsi_dev_unload_logs_drives_status_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_dev_unload_logs_check(handle, DRIVES_STATUS, true,
-                               "/dev/st0", "P00003L5");
+    dss_logs_delete(&dss_and_tlc_lib->dss, NULL);
+    free(device_serial);
 }
 
 static void scsi_dev_unload_logs_move_medium_failure(void **state)
 {
-    struct dss_handle *handle = (struct dss_handle *)*state;
+    struct dss_and_tlc_lib *dss_and_tlc_lib = *state;
 
-    scsi_dev_unload_logs_check(handle, UNLOAD_MEDIUM, true,
+    scsi_dev_unload_logs_check(dss_and_tlc_lib, UNLOAD_MEDIUM, true,
                                "/dev/st0", "P00003L5");
 }
 
 static void scsi_dev_unload_logs_move_medium_success(void **state)
 {
-    struct dss_handle *handle = (struct dss_handle *)*state;
+    struct dss_and_tlc_lib *dss_and_tlc_lib = *state;
 
-    scsi_dev_unload_logs_check(handle, UNLOAD_MEDIUM, false,
+    scsi_dev_unload_logs_check(dss_and_tlc_lib, UNLOAD_MEDIUM, false,
                                "/dev/st0", "P00003L5");
-}
-
-static void scsi_dev_lookup_logs_check(struct dss_handle *handle,
-                                       enum scsi_operation_type op,
-                                       bool should_fail,
-                                       char *device_name)
-{
-    struct phobos_global_context *context = phobos_context();
-    struct lrs_sched sched = {0};
-    struct lib_handle lib_hdl;
-    struct lrs_dev device;
-    char hostname[256];
-    char *serial;
-    int rc;
-
-    assert_int_equal(gethostname(hostname, 256), 0);
-
-    sched.lock_handle.dss = handle;
-    sched.lock_handle.lock_hostname = hostname;
-    sched.lock_handle.lock_owner = getpid();
-    sched.sched_thread.dss = *handle;
-
-    assert_false(wrap_lib_open(PHO_RSC_TAPE, &lib_hdl, NULL));
-
-    create_device(&device, device_name, LTO5_MODEL, handle);
-
-    get_serial_from_path(device_name, &serial);
-    strcpy(device.ld_dss_dev_info->rsc.id.name, serial);
-    free(serial);
-
-    if (should_fail) {
-        context->mock_ioctl = &mock_ioctl;
-
-        will_return_always(mock_ioctl, op);
-    }
-
-    rc = sched_fill_dev_info(&sched, &lib_hdl, &device);
-
-    if (should_fail) {
-        json_t *full_message;
-
-        pho_context_reset_scsi_ioctl();
-        assert_int_equal(-rc, EINVAL);
-
-        full_message = create_log_message(PHO_DEVICE_LOOKUP, op, should_fail,
-                                          "", device_name);
-        assert_non_null(full_message);
-
-        check_log_is_valid(handle, device.ld_dss_dev_info->rsc.id.name, "",
-                           PHO_DEVICE_LOOKUP, op, should_fail, full_message);
-    } else {
-        struct pho_log *logs;
-        int n_logs;
-
-        assert_return_code(-rc, rc);
-
-        rc = dss_logs_get(handle, NULL, &logs, &n_logs);
-        assert_return_code(rc, -rc);
-
-        assert_int_equal(n_logs, 0);
-        dss_res_free(logs, n_logs);
-    }
-
-    assert_false(ldm_lib_close(&lib_hdl));
-    dss_logs_delete(handle, NULL);
-    cleanup_device(&device);
-}
-
-static void scsi_dev_lookup_logs_mode_sense_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_dev_lookup_logs_check(handle, LIBRARY_LOAD, true, "/dev/st0");
-}
-
-static void scsi_dev_lookup_logs_drives_status_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_dev_lookup_logs_check(handle, DRIVES_STATUS, true, "/dev/st0");
-}
-
-static void scsi_dev_lookup_logs_success(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_dev_lookup_logs_check(handle, -1, false, "/dev/st0");
-}
-
-static void scsi_lib_scan_logs_check(struct dss_handle *handle,
-                                     enum scsi_operation_type op,
-                                     bool should_fail)
-{
-    struct phobos_global_context *context = phobos_context();
-    json_t *lib_data;
-    int rc;
-
-    if (should_fail) {
-        context->mock_ioctl = &mock_ioctl;
-
-        will_return_always(mock_ioctl, op);
-    }
-
-    rc = phobos_admin_lib_scan(PHO_LIB_SCSI, "/dev/changer", &lib_data);
-
-    if (should_fail) {
-        json_t *full_message;
-
-        pho_context_reset_scsi_ioctl();
-        assert_int_equal(-rc, EINVAL);
-
-        full_message = create_log_message(PHO_LIBRARY_SCAN, op, should_fail,
-                                          NULL, NULL);
-        assert_non_null(full_message);
-
-        check_log_is_valid(handle, "", "", PHO_LIBRARY_SCAN, op,
-                           should_fail, full_message);
-    } else {
-        struct pho_log *logs;
-        int n_logs;
-
-        assert_return_code(-rc, rc);
-
-        rc = dss_logs_get(handle, NULL, &logs, &n_logs);
-        assert_return_code(rc, -rc);
-
-        assert_int_equal(n_logs, 0);
-        dss_res_free(logs, n_logs);
-
-        json_decref(lib_data);
-    }
-
-    dss_logs_delete(handle, NULL);
-}
-
-static void scsi_lib_scan_logs_mode_sense_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_lib_scan_logs_check(handle, LIBRARY_LOAD, true);
-}
-
-static void scsi_lib_scan_logs_arms_status_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_lib_scan_logs_check(handle, ARMS_STATUS, true);
-}
-
-static void scsi_lib_scan_logs_slots_status_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_lib_scan_logs_check(handle, SLOTS_STATUS, true);
-}
-
-static void scsi_lib_scan_logs_impexp_status_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_lib_scan_logs_check(handle, IMPEXP_STATUS, true);
-}
-
-static void scsi_lib_scan_logs_drives_status_failure(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_lib_scan_logs_check(handle, DRIVES_STATUS, true);
-}
-
-static void scsi_lib_scan_logs_success(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-
-    scsi_lib_scan_logs_check(handle, -1, false);
 }
 
 int main(void)
 {
     const struct CMUnitTest test_scsi_logs[] = {
-        cmocka_unit_test(scsi_dev_load_logs_mode_sense_failure),
-        cmocka_unit_test(scsi_dev_load_logs_arms_status_failure),
-        cmocka_unit_test(scsi_dev_load_logs_slots_status_failure),
-        cmocka_unit_test(scsi_dev_load_logs_impexp_status_failure),
-        cmocka_unit_test(scsi_dev_load_logs_drives_status_failure),
         cmocka_unit_test(scsi_dev_load_logs_move_medium_failure),
         cmocka_unit_test(scsi_dev_load_logs_move_medium_success),
 
-        cmocka_unit_test(scsi_dev_unload_logs_mode_sense_failure),
-        cmocka_unit_test(scsi_dev_unload_logs_arms_status_failure),
-        cmocka_unit_test(scsi_dev_unload_logs_slots_status_failure),
-        cmocka_unit_test(scsi_dev_unload_logs_impexp_status_failure),
-        cmocka_unit_test(scsi_dev_unload_logs_drives_status_failure),
         cmocka_unit_test(scsi_dev_unload_logs_move_medium_failure),
         cmocka_unit_test(scsi_dev_unload_logs_move_medium_success),
-
-        cmocka_unit_test(scsi_dev_lookup_logs_mode_sense_failure),
-        cmocka_unit_test(scsi_dev_lookup_logs_drives_status_failure),
-        cmocka_unit_test(scsi_dev_lookup_logs_success),
-
-        cmocka_unit_test(scsi_lib_scan_logs_mode_sense_failure),
-        cmocka_unit_test(scsi_lib_scan_logs_arms_status_failure),
-        cmocka_unit_test(scsi_lib_scan_logs_slots_status_failure),
-        cmocka_unit_test(scsi_lib_scan_logs_impexp_status_failure),
-        cmocka_unit_test(scsi_lib_scan_logs_drives_status_failure),
-        cmocka_unit_test(scsi_lib_scan_logs_success),
     };
     struct stat dev_changer;
     int error_count;
@@ -880,9 +435,12 @@ int main(void)
     if (rc)
         return rc;
 
-    error_count = cmocka_run_group_tests(test_scsi_logs,
-                                         global_setup_dss_with_dbinit,
-                                         global_teardown_dss_with_dbdrop);
+    pho_log_level_set(PHO_LOG_INFO);
+
+    error_count = cmocka_run_group_tests(
+                      test_scsi_logs,
+                      global_setup_dss_and_tlc_lib_with_dbinit,
+                      global_teardown_dss_and_tlc_lib_with_dbdrop);
 
     pho_cfg_local_fini();
     pho_context_fini();

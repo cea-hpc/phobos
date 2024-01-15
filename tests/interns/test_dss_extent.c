@@ -20,7 +20,7 @@
  * \brief  Tests for dss_extent_update function
  */
 
-#include "../test_setup.h"
+#include "test_setup.h"
 #include "pho_dss.h"
 #include "pho_types.h"
 

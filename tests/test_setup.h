@@ -28,11 +28,25 @@
 
 #include "stdbool.h"
 
+#include "pho_dss.h"
+#include "tlc_library.h"
+
+struct dss_and_tlc_lib {
+    struct dss_handle dss;
+    struct lib_descriptor tlc_lib;
+};
+
 /**
  * Setup phobos DB, PHOBOS_DSS_connect_string environment variable and set state
  * to DSS handle
  */
 int global_setup_dss_with_dbinit(void **state);
+
+/**
+ * Setup phobos DB, PHOBOS_DSS_connect_string environment variable, set
+ * state to a "struct dss_and_tlc_lib" (DSS handle and TLC lib descriptor)
+ */
+int global_setup_dss_and_tlc_lib_with_dbinit(void **state);
 
 /*
  * Setup PHOBOS_DSS_connect_string environment variable and set state to DSS
@@ -44,6 +58,12 @@ int global_setup_dss(void **state);
  * Free DSS handle state, drop phobos DB and unset PHOBOS_DSS_connect_string
  */
 int global_teardown_dss_with_dbdrop(void **state);
+
+/**
+ * Free DSS and TLC lib descriptor state, drop phobos DB and unset
+ * PHOBOS_DSS_connect_string
+ */
+int global_teardown_dss_and_tlc_lib_with_dbdrop(void **state);
 
 /**
  * Free DSS handle state and unset PHOBOS_DSS_connect_string
