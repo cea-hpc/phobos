@@ -304,7 +304,7 @@ int object_md_get(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         LOG_GOTO(out_free, rc, "Cannot convert attributes of objid:'%s'",
                  xfer->xd_objid);
 
-    xfer->xd_objuuid = strdup(obj->uuid);
+    xfer->xd_objuuid = xstrdup(obj->uuid);
     xfer->xd_version = obj->version;
 
 out_free:
@@ -408,9 +408,7 @@ out_update:
         LOG_GOTO(out_filt, rc, "Cannot fetch objid:'%s'", xfer->xd_objid);
 
     xfer->xd_version = obj_res->version;
-    xfer->xd_objuuid = strdup(obj_res->uuid);
-    if (xfer->xd_objuuid == NULL)
-        rc = -ENOMEM;
+    xfer->xd_objuuid = xstrdup(obj_res->uuid);
 
 out_res:
     dss_res_free(obj_res, 1);
@@ -660,11 +658,8 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         }
 
         /* obj.oid is necessary for the unlock later, so we keep a copy */
-        buf_oid = strdup(obj.oid);
+        buf_oid = xstrdup(obj.oid);
         dss_res_free(objs, n_objs);
-        if (!buf_oid)
-            LOG_GOTO(out, rc = -ENOMEM,
-                     "Unable to allocate buf_oid for oid:'%s'", obj.oid);
 
         obj.oid = buf_oid;
     }
@@ -738,11 +733,7 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         }
 
         /* obj.uuid is necessary for the unlock later, so we keep a copy */
-        buf_uuid = strdup(obj.uuid);
-        if (!buf_uuid)
-            LOG_GOTO(out, rc = -ENOMEM,
-                     "Unable to allocate buf_uuid for uuid:'%s'", obj.uuid);
-
+        buf_uuid = xstrdup(obj.uuid);
         obj.uuid = buf_uuid;
     } else {
     /* if uuid: get latest version and check oid */
@@ -811,13 +802,9 @@ static int object_info_copy_into_xfer(struct object_info *obj,
     if (rc)
         LOG_RETURN(rc, "Cannot convert attributes of objid: '%s'", obj->oid);
 
-    rc = strdup_safe(&xfer->xd_objuuid, obj->uuid);
-    if (rc) {
-        pho_attrs_free(&xfer->xd_attrs);
-        LOG_RETURN(rc, "Unable to duplicate object uuid: %s", obj->uuid);
-    }
-
+    xfer->xd_objuuid = xstrdup_safe(obj->uuid);
     xfer->xd_version = obj->version;
+
     return 0;
 }
 
@@ -1057,22 +1044,16 @@ static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
         LOG_GOTO(out, rc, "Cannot contact 'phobosd': will abort");
 
     /* Allocate memory for the encoders */
-    pho->encoders = calloc(n_xfers, sizeof(*pho->encoders));
-    if (pho->encoders == NULL)
-        GOTO(out, rc = -ENOMEM);
+    pho->encoders = xcalloc(n_xfers, sizeof(*pho->encoders));
 
     /* Allocate array of ended encoders for completion tracking */
-    pho->ended_xfers = calloc(n_xfers, sizeof(*pho->ended_xfers));
-    if (pho->ended_xfers == NULL)
-        GOTO(out, rc = -ENOMEM);
+    pho->ended_xfers = xcalloc(n_xfers, sizeof(*pho->ended_xfers));
 
     /*
      * Allocate array of booleans to track which encoders had their metadata
      * created.
      */
-    pho->md_created = calloc(n_xfers, sizeof(*pho->md_created));
-    if (pho->md_created == NULL)
-        GOTO(out, rc = -ENOMEM);
+    pho->md_created = xcalloc(n_xfers, sizeof(*pho->md_created));
 
     /* Initialize all the encoders */
     for (i = 0; i < n_xfers; i++) {
@@ -1138,11 +1119,7 @@ static int store_dispatch_loop(struct phobos_handle *pho)
 
     /* Deserialize LRS responses */
     if (n_responses) {
-        resps = malloc(n_responses * sizeof(*resps));
-        if (resps == NULL) {
-            free(responses);
-            return -ENOMEM;
-        }
+        resps = xmalloc(n_responses * sizeof(*resps));
 
         for (i = 0; i < n_responses; ++i)
             resps[i] = pho_srl_response_unpack(&responses[i].buf);
@@ -1344,20 +1321,8 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
          * For the Python CLI, the garbage collector will take care of
          * this pointer.
          */
-        if (xfers[i].xd_objuuid) {
-            xfers[i].xd_objuuid = strdup(xfers[i].xd_objuuid);
-            if (!xfers[i].xd_objuuid) {
-                size_t j;
-
-                for (j = 0; j < i; j++)
-                    free(xfers[j].xd_objuuid);
-
-                for (i = 0; i < n; ++i)
-                    xfers[i].xd_rc = -ENOMEM;
-
-                LOG_RETURN(-ENOMEM, "Cannot duplicate uuid before get");
-            }
-        }
+        if (xfers[i].xd_objuuid)
+            xfers[i].xd_objuuid = xstrdup(xfers[i].xd_objuuid);
 
         if (xfers[i].xd_flags & PHO_XFER_OBJ_BEST_HOST) {
             int nb_new_lock;
@@ -1407,9 +1372,7 @@ int phobos_get(struct pho_xfer_desc *xfers, size_t n,
     if (n_xfers_to_get == n)
         return phobos_xfer(xfers, n, cb, udata);
 
-    xfers_to_get = malloc(n_xfers_to_get * sizeof(*xfers_to_get));
-    if (!xfers_to_get)
-        LOG_RETURN(-ENOMEM, "Couldn't allocate xfers_to_get");
+    xfers_to_get = xmalloc(n_xfers_to_get * sizeof(*xfers_to_get));
 
     for (i = 0; i < n; ++i)
         if (xfers[i].xd_rc == 0)
