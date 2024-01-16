@@ -46,11 +46,10 @@ typedef PhoResourceId pho_rsc_id_t;
  * \param[out] dest  Resource ID to set conforming to \provided model
  * \param[in]  model Resource ID to copy
  */
-static inline void rsc_id_cpy(pho_rsc_id_t *dest,
-                              const pho_rsc_id_t *model)
+static inline void rsc_id_cpy(pho_rsc_id_t *dest, const pho_rsc_id_t *model)
 {
     dest->family = model->family;
-    dest->name = strdup(model->name);
+    dest->name = xstrdup(model->name);
 }
 
 static inline void med_ids_switch(pho_rsc_id_t **med_ids, size_t first_index,
