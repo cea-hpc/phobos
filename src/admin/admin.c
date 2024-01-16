@@ -174,7 +174,7 @@ static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
     req.id = rid;
     req.notify->op = op;
     req.notify->rsrc_id->family = id->family;
-    req.notify->rsrc_id->name = strdup(id->name);
+    req.notify->rsrc_id->name = xstrdup(id->name);
     req.notify->wait = need_to_wait;
 
     rc = _send(&adm->phobosd_comm, proto_req);
@@ -232,16 +232,14 @@ static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
     if (rc)
         LOG_RETURN(rc, "Cannot get device adapter");
 
-    devices = calloc(num_dev, sizeof(*devices));
-    if (!devices)
-        LOG_RETURN(-errno, "Device info allocation failed");
+    devices = xcalloc(num_dev, sizeof(*devices));
 
     for (i = 0; i < num_dev; ++i) {
         struct dev_info *devi = devices + i;
 
         /* Pools do not have a real path */
         if (dev_ids[i].family == PHO_RSC_RADOS_POOL)
-            path = strdup(dev_ids[i].name);
+            path = xstrdup(dev_ids[i].name);
         else
             path = realpath(dev_ids[i].name, NULL);
 
@@ -265,15 +263,8 @@ static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
         if (rc)
             LOG_GOTO(out_free, rc, "Failed to retrieve hostname");
 
-        if (lds.lds_model) {
-            devi->rsc.model = strdup(lds.lds_model);
-            if (!devi->rsc.model)
-                LOG_GOTO(out_free, rc = -errno, "Allocation failed");
-        }
-
-        devi->path = strdup(dev_ids[i].name);
-        if (!devi->path)
-            LOG_GOTO(out_free, rc = -errno, "Allocation failed");
+        devi->rsc.model = xstrdup_safe(lds.lds_model);
+        devi->path = xstrdup(dev_ids[i].name);
 
         ldm_dev_state_fini(&lds);
 
@@ -358,9 +349,7 @@ static int _device_update_adm_status(struct admin_handle *adm,
     int rc;
     int i;
 
-    devices = calloc(num_dev, sizeof(*devices));
-    if (!devices)
-        LOG_RETURN(-ENOMEM, "Device info allocation failed");
+    devices = xcalloc(num_dev, sizeof(*devices));
 
     for (i = 0; i < num_dev; ++i) {
         struct dev_info *dev_res;
@@ -621,10 +610,7 @@ static int send_configure(struct admin_handle *adm,
 
         rc = 0;
         if (res)
-            *res = strdup(resp->configure->configuration);
-
-        if (res && !*res)
-            rc = -errno;
+            *res = xstrdup(resp->configure->configuration);
     } else if (resp->req_id != req.id) {
         rc = -EINVAL;
         pho_error(rc, "Received response does not answer emitted request");
@@ -727,13 +713,7 @@ int phobos_admin_sched_conf_get(struct admin_handle *adm,
             continue;
         }
 
-        values[index] = strdup(json_string_value(value));
-        if (!values[index]) {
-            for (; index >= 0; index--)
-                free((void *)values[index]);
-
-            break;
-        }
+        values[index] = xstrdup(json_string_value(value));
     }
 
 free_result:
@@ -782,9 +762,7 @@ int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
 
     *num_removed_dev = 0;
 
-    devices = calloc(num_dev, sizeof(*devices));
-    if (!devices)
-        LOG_RETURN(-ENOMEM, "Device info allocation failed");
+    devices = xcalloc(num_dev, sizeof(*devices));
 
     for (i = 0; i < num_dev; ++i) {
         rc = _get_device_by_path_or_serial(adm, dev_ids + i, &dev_res);
@@ -910,9 +888,7 @@ int phobos_admin_device_status(struct admin_handle *adm,
 
     resp = proto_resp.msg.lrs_resp;
     if (pho_response_is_monitor(resp)) {
-        *status = strdup(resp->monitor->status);
-        if (!*status)
-            rc = -ENOMEM;
+        *status = xstrdup(resp->monitor->status);
     } else if (pho_response_is_error(resp)) {
         rc = resp->error->rc;
     } else {
@@ -938,15 +914,8 @@ int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
 
     *num_migrated_dev = 0;
 
-    rc = strdup_safe(&host_cpy, host);
-    if (rc)
-        LOG_RETURN(rc, "Couldn't copy host name");
-
-    devices = calloc(num_dev, sizeof(*devices));
-    if (!devices) {
-        free(host_cpy);
-        LOG_RETURN(-ENOMEM, "Device info allocation failed");
-    }
+    host_cpy = xstrdup_safe(host);
+    devices = xcalloc(num_dev, sizeof(*devices));
 
     for (i = 0; i < num_dev; ++i) {
         char *old_host;
@@ -1102,9 +1071,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
         }
     }
 
-    awaiting_resps = malloc(n_ids * sizeof(*awaiting_resps));
-    if (awaiting_resps == NULL)
-        LOG_RETURN(-ENOMEM, "Failed to allocate awaiting_resps array");
+    awaiting_resps = xmalloc(n_ids * sizeof(*awaiting_resps));
 
     for (i = 0; i < n_ids; i++) {
         awaiting_resps[i] = false;
@@ -1115,12 +1082,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
                      "Cannot create format request for medium '%s', will skip",
                      ids[i].name);
 
-        req.format->med_id->name = strdup(ids[i].name);
-        if (req.format->med_id->name == NULL)
-            LOG_GOTO(format_req_free, rc2 = -ENOMEM,
-                     "Failed to duplicate medium name '%s', will skip",
-                     ids[i].name);
-
+        req.format->med_id->name = xstrdup(ids[i].name);
         req.format->fs = fs;
         req.format->unlock = unlock;
         req.format->force = force;
@@ -1148,8 +1110,6 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
 
         continue;
 
-format_req_free:
-        pho_srl_request_free(&req, false);
 req_fail:
         rc = rc ? : rc2;
     }
