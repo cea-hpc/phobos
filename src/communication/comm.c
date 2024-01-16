@@ -148,13 +148,8 @@ static int af_unix_set_socket_addr_path(const union pho_comm_addr *addr,
     socka_un->sun_path[sizeof(socka_un->sun_path)-1] = '\0';
     *socka = (struct sockaddr *)socka_un;
     *address_len = sizeof(*socka_un);
-    *path = strdup(addr->af_unix.path);
-    if (!*path) {
-        pho_error(-ENOMEM, "Unable to alloc AF_UNIX PATH");
-        close(*socket_fd);
-        *socket_fd = -1;
-        return -ENOMEM;
-    }
+    *path = xstrdup(addr->af_unix.path);
+
     return 0;
 }
 
@@ -259,10 +254,8 @@ int pho_comm_open(struct pho_comm_info *ci, const union pho_comm_addr *addr,
     }
 
     /* server: bind / listen / epoll */
-    cri = malloc(sizeof(*cri));
-    if (!cri)
-        LOG_GOTO(out_err, rc = -ENOMEM,
-                "Socket poll main event allocation failed");
+    cri = xmalloc(sizeof(*cri));
+
     /* only initialize the fd field here: the other ones are not used for
      * accepting new clients.
      */
@@ -460,9 +453,8 @@ static int _recv_client(struct pho_comm_info *ci, struct pho_comm_data **data,
     int rc = 0;
 
     *nb_data = 0;
-    *data = malloc(sizeof(**data));
-    if (!*data)
-        LOG_RETURN(-ENOMEM, "Socket response alloc failed");
+
+    *data = xmalloc(sizeof(**data));
 
     /* receiving buffer size */
     _init_comm_recv_info(&cri, ci->socket_fd, PHO_CRI_MSG_SIZE, sizeof(tlen),
@@ -481,10 +473,8 @@ static int _recv_client(struct pho_comm_info *ci, struct pho_comm_data **data,
     if ((*data)->buf.size > MAX_RECV_BUF_SIZE)
         LOG_GOTO(err, rc = -EBADMSG, "Requested buffer size is too large");
 
-    (*data)->buf.buff = malloc((*data)->buf.size *
+    (*data)->buf.buff = xmalloc((*data)->buf.size *
                                 sizeof(*(*data)->buf.buff));
-    if (!(*data)->buf.buff)
-        LOG_GOTO(err, rc = -ENOMEM, "Buffer allocation failed");
 
     /* receiving buffer contents */
     _init_comm_recv_info(&cri, ci->socket_fd, PHO_CRI_MSG_BUFF,
@@ -541,11 +531,7 @@ static int _process_accept(struct pho_comm_info *ci,
         LOG_RETURN(-errno, "Socket config. setter failed");
     }
 
-    n_cri = malloc(sizeof(*n_cri));
-    if (!n_cri) {
-        close(sfd);
-        LOG_RETURN(-errno, "Socket poll ev. allocation failed");
-    }
+    n_cri = xmalloc(sizeof(*n_cri));
     _init_comm_recv_info(n_cri, sfd, PHO_CRI_MSG_SIZE, 0, 0, NULL);
 
     ev.data.ptr = n_cri;
@@ -598,10 +584,10 @@ static int _process_recv_size(struct pho_comm_info *ci,
     int rc;
 
     if (!cri->buf) { /* not resuming, allocate the size buffer */
+        char *buf = xmalloc(sizeof(tlen));
+
         _init_comm_recv_info(cri, cri->fd, PHO_CRI_MSG_SIZE, sizeof(tlen), 0,
-                             (char *)malloc(sizeof(tlen)));
-        if (!cri->buf)
-            LOG_RETURN(rc = -ENOMEM, "Size buffer allocation failed");
+                             buf);
     }
 
     rc = _recv_partial(cri);
@@ -624,10 +610,9 @@ static int _process_recv_contents(struct pho_comm_info *ci,
                                   struct pho_comm_data *data)
 {
     if (!cri->buf) { /* not resuming, allocate the msg buffer */
-        _init_comm_recv_info(cri, cri->fd, PHO_CRI_MSG_BUFF, cri->len, 0,
-                             (char *)malloc(cri->len));
-        if (!cri->buf)
-            LOG_RETURN(-ENOMEM, "Message buffer allocation failed");
+        char *buf = xmalloc(cri->len);
+
+        _init_comm_recv_info(cri, cri->fd, PHO_CRI_MSG_BUFF, cri->len, 0, buf);
     }
 
     return _recv_partial(cri);
@@ -658,11 +643,7 @@ static int _recv_server(struct pho_comm_info *ci, struct pho_comm_data **data,
     }
 
     rca = 0;
-    *data = malloc(*nb_data * sizeof(**data));
-    if (!*data) {
-        *nb_data = 0;
-        LOG_RETURN(-ENOMEM, "Buffer allocation failed");
-    }
+    *data = xmalloc(*nb_data * sizeof(**data));
 
     /* processing the socket poll events */
     for (idx_event = 0; idx_event < *nb_data; ++idx_event) {
