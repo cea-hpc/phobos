@@ -54,11 +54,9 @@ static struct posix_io_ctx *alloc_posix_io_ctx(void)
 {
     struct posix_io_ctx *io_ctx;
 
-    io_ctx = malloc(sizeof(struct posix_io_ctx));
-    if (io_ctx) {
-        io_ctx->fd = -1;
-        io_ctx->fpath = NULL;
-    }
+    io_ctx = xmalloc(sizeof(struct posix_io_ctx));
+    io_ctx->fd = -1;
+    io_ctx->fpath = NULL;
 
     return io_ctx;
 }
@@ -106,9 +104,7 @@ static int pho_posix_make_parent_of(const char *root, const char *fullpath)
         LOG_RETURN(-EINVAL, "Path '%s' is not under '%s'", fullpath, root);
 
     /* copy to tokenize */
-    tmp = strdup(fullpath);
-    if (tmp == NULL)
-        return -ENOMEM;
+    tmp = xstrdup(fullpath);
 
     /* report c offset in fullpath to tmp */
     c = tmp + (c - fullpath);
@@ -149,9 +145,7 @@ int build_addr_path(const char *extent_key, const char *extent_desc,
     if (addr->size > PATH_MAX)
         addr->size = PATH_MAX;
 
-    addr->buff = calloc(1, addr->size);
-    if (addr->buff == NULL)
-        return -ENOMEM;
+    addr->buff = xcalloc(1, addr->size);
 
     rc = pho_mapper_clean_path(extent_key, extent_desc, addr->buff, addr->size);
     if (rc) {
@@ -170,9 +164,7 @@ static int build_addr_hash1(const char *extent_key, const char *extent_desc,
 
     /* portable everywhere... even on windows */
     addr->size = NAME_MAX + 1;
-    addr->buff = calloc(1, addr->size);
-    if (addr->buff == NULL)
-        return -ENOMEM;
+    addr->buff = xcalloc(1, addr->size);
 
     rc = pho_mapper_hash1(extent_key, extent_desc, addr->buff, addr->size);
     if (rc) {
@@ -332,9 +324,7 @@ static int pho_getxattr(const char *path, const char *name, char **value)
     if (tmp_name == NULL)
         return -ENOMEM;
 
-    buff = calloc(1, ATTR_MAX_VALUELEN);
-    if (buff == NULL)
-        GOTO(free_tmp, rc = -ENOMEM);
+    buff = xcalloc(1, ATTR_MAX_VALUELEN);
 
     rc = getxattr(path, tmp_name, buff, ATTR_MAX_VALUELEN);
     if (rc <= 0) {
@@ -345,12 +335,11 @@ static int pho_getxattr(const char *path, const char *name, char **value)
     }
     pho_debug("%s=%s", tmp_name, buff);
 
-    *value = strndup(buff, rc);
+    *value = xstrndup(buff, rc);
     rc = 0;
 
 free_buff:
     free(buff);
-free_tmp:
     free(tmp_name);
     return rc;
 }

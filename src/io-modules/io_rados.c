@@ -60,9 +60,7 @@ static struct pho_rados_io_ctx *alloc_pho_rados_io_ctx(void)
 {
     struct pho_rados_io_ctx *io_ctx;
 
-    io_ctx = malloc(sizeof(*io_ctx));
-    if (io_ctx == NULL)
-        return NULL;
+    io_ctx = xmalloc(sizeof(*io_ctx));
 
     io_ctx->pool_io_ctx = NULL;
     io_ctx->lib_hdl.lh_lib = NULL;
@@ -130,9 +128,7 @@ static int pho_rados_getxattr(rados_ioctx_t pool_io_ctx, const char *extentname,
     if (tmp_name == NULL)
         return -ENOMEM;
 
-    buff = calloc(1, ATTR_MAX_VALUELEN);
-    if (buff == NULL)
-        GOTO(free_tmp, rc = -ENOMEM);
+    buff = xcalloc(1, ATTR_MAX_VALUELEN);
 
     rc = rados_getxattr(pool_io_ctx, extentname, tmp_name, buff,
                         ATTR_MAX_VALUELEN);
@@ -339,9 +335,6 @@ static int pho_rados_open(const char *extent_key, const char *extent_desc,
     }
     /* allocate io_ctx */
     rados_io_ctx = alloc_pho_rados_io_ctx();
-    if (!rados_io_ctx)
-        return -ENOMEM;
-
     iod->iod_ctx = rados_io_ctx;
 
     /* Connect to cluster */
@@ -433,9 +426,7 @@ static int pho_rados_copy(struct pho_io_descr *iod)
     rados_object_name = iod->iod_loc->extent->address.buff;
     rados_io_ctx = iod->iod_ctx;
     count = iod->iod_size;
-    buf_read = malloc(chunk_size);
-    if (!buf_read)
-        LOG_GOTO(clean, -ENOMEM, "Unable to allocate buf_read");
+    buf_read = xmalloc(chunk_size);
 
     while (count > 0) {
         nb_read_bytes = rados_read(rados_io_ctx->pool_io_ctx,
