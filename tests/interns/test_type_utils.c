@@ -64,10 +64,10 @@ static void test_tags_various(void)
     tags_ab.n_tags = 2;
 
     /* Dynamic allocations */
-    assert(!tags_init(&tags_ab2, (char **)T_AB, 2));
+    tags_init(&tags_ab2, (char **)T_AB, 2);
     assert(tags_ab2.tags != NULL);
     assert(tags_ab2.n_tags == 2);
-    assert(!tags_dup(&tags_ab3, &tags_ab2));
+    tags_dup(&tags_ab3, &tags_ab2);
     assert(tags_ab3.tags != NULL);
     assert(tags_ab3.n_tags == 2);
 
@@ -121,15 +121,15 @@ static void test_tags_dup(void)
     tags_src.n_tags = 2;
 
     /* Should not segfault */
-    assert(!tags_dup(NULL, NULL));
-    assert(!tags_dup(NULL, &tags_src));
+    tags_dup(NULL, NULL);
+    tags_dup(NULL, &tags_src);
 
     /* tags_dst should be equal to NO_TAGS */
-    assert(!tags_dup(&tags_dst, NULL));
+    tags_dup(&tags_dst, NULL);
     assert(tags_eq(&tags_dst, &NO_TAGS));
 
     /* Standard dup */
-    assert(!tags_dup(&tags_dst, &tags_src));
+    tags_dup(&tags_dst, &tags_src);
     assert(tags_eq(&tags_dst, &tags_dst));
     assert(!tags_eq(&tags_dst, &NO_TAGS));
 
@@ -143,7 +143,7 @@ static void test_str2tags(void)
     char *tags_as_string = "";
 
     /* empty string */
-    assert(str2tags(tags_as_string, &tags_new) == 0);
+    str2tags(tags_as_string, &tags_new);
     assert(tags_eq(&tags_abc, &tags_new));
 
     /* 3 tags */
@@ -151,7 +151,7 @@ static void test_str2tags(void)
     tags_abc.n_tags = 3;
 
     tags_as_string = "a,b,c";
-    assert(str2tags(tags_as_string, &tags_new) == 0);
+    str2tags(tags_as_string, &tags_new);
     assert(tags_eq(&tags_abc, &tags_new));
 
     tags_free(&tags_new);

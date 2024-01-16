@@ -329,9 +329,9 @@ static int basic_status(struct dss_handle *handle, enum dss_type lock_type,
 
     if (lock) {
         str2timeval(PQgetvalue(res, 0, 2), &lock_timestamp);
-        rc = init_pho_lock(lock, PQgetvalue(res, 0, 0),
-                           (int) strtoll(PQgetvalue(res, 0, 1), NULL, 10),
-                           &lock_timestamp);
+        init_pho_lock(lock, PQgetvalue(res, 0, 0),
+                      (int) strtoll(PQgetvalue(res, 0, 1), NULL, 10),
+                      &lock_timestamp);
     }
 
 out_cleanup:

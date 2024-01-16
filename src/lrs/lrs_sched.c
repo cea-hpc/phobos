@@ -398,8 +398,6 @@ static int sched_fill_media_info(struct lock_handle *lock_handle,
     tmp = *pmedia;
     *pmedia = media_info_dup(media_res);
     media_info_free(tmp);
-    if (!*pmedia)
-        LOG_GOTO(out_free, rc = -ENOMEM, "Couldn't duplicate media info");
 
     if ((*pmedia)->lock.hostname != NULL) {
         rc = check_renew_lock(lock_handle, DSS_MEDIA, *pmedia,
@@ -1205,10 +1203,6 @@ int sched_select_medium(struct io_scheduler *io_sched,
     pho_lock_clean(&chosen_media->lock);
 
     *p_media = media_info_dup(chosen_media);
-    if (*p_media == NULL)
-        LOG_GOTO(free_res, rc = -ENOMEM,
-                 "Unable to duplicate chosen media '%s'",
-                 chosen_media->rsc.id.name);
 
     rc = 0;
 

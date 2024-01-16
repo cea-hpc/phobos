@@ -308,17 +308,9 @@ int64_t str2int64(const char *str)
 
 char *uchar2hex(const unsigned char *buf, int buf_size)
 {
-    char *hex = calloc(buf_size * 2 + 1, sizeof(char));
+    char *hex = xcalloc(buf_size * 2 + 1, sizeof(char));
     int j;
     int k;
-
-    if (!hex) {
-        int save_errno = errno;
-
-        pho_error(-errno, "Failed to allocate hex buffer");
-        errno = save_errno;
-        return NULL;
-    }
 
     for (j = 0, k = 0; j < buf_size; j++, k += 2) {
         int rc = 0;
@@ -395,10 +387,7 @@ int get_allocated_hostname(char **hostname)
     if (!self_hostname)
         LOG_RETURN(-EADDRNOTAVAIL, "Unable to get self hostname");
 
-    *hostname = strdup(self_hostname);
-    if (!*hostname)
-        LOG_RETURN(-errno, "Unable to duplicate self_hostname %s",
-                   self_hostname);
+    *hostname = xstrdup(self_hostname);
 
     return 0;
 }

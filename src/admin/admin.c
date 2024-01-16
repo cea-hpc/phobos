@@ -405,10 +405,8 @@ static int _device_update_adm_status(struct admin_handle *adm,
         }
 
         dev_res->rsc.adm_status = status;
-        rc = dev_info_cpy(&devices[avail_devices], dev_res);
+        dev_info_cpy(&devices[avail_devices], dev_res);
         dss_res_free(dev_res, 1);
-        if (rc)
-            LOG_GOTO(out_free, rc, "Couldn't copy device data");
 
         avail_devices++;
     }
@@ -801,9 +799,7 @@ int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
             continue;
         }
 
-        rc = dev_info_cpy(&devices[avail_devices], dev_res);
-        if (rc)
-            LOG_GOTO(out_free, rc, "Couldn't copy device data");
+        dev_info_cpy(&devices[avail_devices], dev_res);
 
         dss_res_free(dev_res, 1);
         avail_devices++;
@@ -980,10 +976,8 @@ int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
 
         old_host = dev_res->host;
         dev_res->host = host_cpy;
-        rc2 = dev_info_cpy(&devices[avail_devices], dev_res);
+        dev_info_cpy(&devices[avail_devices], dev_res);
         dev_res->host = old_host;
-        if (rc2)
-            LOG_GOTO(out_free, rc2, "Couldn't copy device data");
 
         dss_res_free(dev_res, 1);
         avail_devices++;

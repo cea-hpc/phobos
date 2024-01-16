@@ -64,33 +64,19 @@ int build_extent_key(const char *uuid, int version, const char *extent_tag,
     return 0;
 }
 
-int init_pho_lock(struct pho_lock *lock, char *hostname, int owner,
-                  struct timeval *timestamp)
+void init_pho_lock(struct pho_lock *lock, char *hostname, int owner,
+                   struct timeval *timestamp)
 {
-    int rc;
-
-    rc = strdup_safe(&lock->hostname, hostname);
-    if (rc)
-        return rc;
-
+    lock->hostname = xstrdup_safe(hostname);
     lock->owner = owner;
     lock->timestamp = *timestamp;
-
-    return 0;
 }
 
-int pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src)
+void pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src)
 {
-    int rc;
-
-    rc = strdup_safe(&lock_dst->hostname, lock_src->hostname);
-    if (rc)
-        return rc;
-
+    lock_dst->hostname = xstrdup_safe(lock_src->hostname);
     lock_dst->owner = lock_src->owner;
     lock_dst->timestamp = lock_src->timestamp;
-
-    return 0;
 }
 
 void pho_lock_clean(struct pho_lock *lock)
@@ -103,58 +89,23 @@ void pho_lock_clean(struct pho_lock *lock)
     lock->owner = 0;
 }
 
-int dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src)
+void dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src)
 {
-    int rc;
-
-    if (!dev_dst)
-        return -EINVAL;
-
     assert(dev_src);
     dev_dst->rsc.id = dev_src->rsc.id;
-    rc = strdup_safe(&dev_dst->rsc.model, dev_src->rsc.model);
-    if (rc)
-        return rc;
-
+    dev_dst->rsc.model = xstrdup_safe(dev_src->rsc.model);
     dev_dst->rsc.adm_status = dev_src->rsc.adm_status;
-    rc = strdup_safe(&dev_dst->path, dev_src->path);
-    if (rc)
-        goto free_model;
-
-    rc = strdup_safe(&dev_dst->host, dev_src->host);
-    if (rc)
-        goto free_path;
-
-    rc = pho_lock_cpy(&dev_dst->lock, &dev_src->lock);
-    if (rc)
-        goto free_host;
-
-    return 0;
-
-free_host:
-    free(dev_dst->host);
-free_path:
-    free(dev_dst->path);
-free_model:
-    free(dev_dst->rsc.model);
-
-    return rc;
+    dev_dst->path = xstrdup_safe(dev_src->path);
+    dev_dst->host = xstrdup_safe(dev_src->host);
+    pho_lock_cpy(&dev_dst->lock, &dev_src->lock);
 }
 
 struct dev_info *dev_info_dup(const struct dev_info *dev)
 {
     struct dev_info *dev_out;
-    int rc;
 
-    dev_out = malloc(sizeof(*dev_out));
-    if (!dev_out)
-        return NULL;
-
-    rc = dev_info_cpy(dev_out, dev);
-    if (rc) {
-        free(dev_out);
-        return NULL;
-    }
+    dev_out = xmalloc(sizeof(*dev_out));
+    dev_info_cpy(dev_out, dev);
 
     return dev_out;
 }
@@ -174,35 +125,17 @@ void dev_info_free(struct dev_info *dev, bool free_top_struct)
 struct media_info *media_info_dup(const struct media_info *mda)
 {
     struct media_info *media_out;
-    int rc;
 
-    media_out = malloc(sizeof(*media_out));
-    if (!media_out)
-        return NULL;
+    media_out = xmalloc(sizeof(*media_out));
 
     memcpy(media_out, mda, sizeof(*media_out));
-    rc = strdup_safe(&media_out->rsc.model, mda->rsc.model);
-    if (rc)
-        goto free_media;
+    media_out->rsc.model = xstrdup_safe(mda->rsc.model);
 
-    rc = tags_dup(&media_out->tags, &mda->tags);
-    if (rc)
-        goto free_model;
+    tags_dup(&media_out->tags, &mda->tags);
 
-    rc = pho_lock_cpy(&media_out->lock, &mda->lock);
-    if (rc)
-        goto free_tags;
+    pho_lock_cpy(&media_out->lock, &mda->lock);
 
     return media_out;
-
-free_tags:
-    tags_free(&media_out->tags);
-free_model:
-    free(media_out->rsc.model);
-free_media:
-    free(media_out);
-
-    return NULL;
 }
 
 void media_info_free(struct media_info *mda)
@@ -219,43 +152,27 @@ void media_info_free(struct media_info *mda)
 struct object_info *object_info_dup(const struct object_info *obj)
 {
     struct object_info *obj_out = NULL;
-    int rc;
 
-    if (!obj)
-        return NULL;
-
-    /* use calloc to set memory to 0 */
-    obj_out = calloc(sizeof(*obj_out), 1);
-    if (!obj_out)
-        return NULL;
+    /* use xcalloc to set memory to 0 */
+    obj_out = xcalloc(sizeof(*obj_out), 1);
 
     /* dup oid */
-    rc = strdup_safe(&obj_out->oid, obj->oid);
-    if (rc)
-        goto clean_error;
+    obj_out->oid = xstrdup_safe(obj->oid);
 
     /* dup uuid */
-    rc = strdup_safe(&obj_out->uuid, obj->uuid);
-    if (rc)
-        goto clean_error;
+    obj_out->uuid = xstrdup_safe(obj->uuid);
 
     /* version */
     obj_out->version = obj->version;
 
     /* dup user_md */
-    rc = strdup_safe(&obj_out->user_md, obj->user_md);
-    if (rc)
-        goto clean_error;
+    obj_out->user_md = xstrdup_safe(obj->user_md);
 
     /* timeval deprec_time */
     obj_out->deprec_time = obj->deprec_time;
 
     /* success */
     return obj_out;
-
-clean_error:
-    object_info_free(obj_out);
-    return NULL;
 }
 
 void object_info_free(struct object_info *obj)
@@ -269,42 +186,33 @@ void object_info_free(struct object_info *obj)
     free(obj);
 }
 
-int tags_dup(struct tags *tags_dst, const struct tags *tags_src)
+void tags_dup(struct tags *tags_dst, const struct tags *tags_src)
 {
     if (!tags_dst)
-        return 0;
+        return;
 
     if (!tags_src) {
         *tags_dst = NO_TAGS;
-        return 0;
+        return;
     }
 
-    return tags_init(tags_dst, tags_src->tags, tags_src->n_tags);
+    tags_init(tags_dst, tags_src->tags, tags_src->n_tags);
 }
 
-int tags_init(struct tags *tags, char **tag_values, size_t n_tags)
+void tags_init(struct tags *tags, char **tag_values, size_t n_tags)
 {
     ssize_t i;
-    int rc;
 
     tags->n_tags = n_tags;
     if (tags->n_tags == 0) {
         tags->tags = NULL;
-        return 0;
+        return;
     }
 
-    tags->tags = calloc(n_tags, sizeof(*tags->tags));
-    if (!tags->tags)
-        return -ENOMEM;
+    tags->tags = xcalloc(n_tags, sizeof(*tags->tags));
 
-    for (i = 0; i < n_tags; i++) {
-        rc = strdup_safe(&tags->tags[i], tag_values[i]);
-        if (rc) {
-            tags_free(tags);
-            return -ENOMEM;
-        }
-    }
-    return 0;
+    for (i = 0; i < n_tags; i++)
+        tags->tags[i] = xstrdup_safe(tag_values[i]);
 }
 
 void tags_free(struct tags *tags)
@@ -371,7 +279,7 @@ bool tags_in(const struct tags *haystack, const struct tags *needle)
     return true;
 }
 
-int str2tags(const char *tag_str, struct tags *tags)
+void str2tags(const char *tag_str, struct tags *tags)
 {
     size_t n_alias_tags = 0;
     char *parse_tag_str;
@@ -380,17 +288,15 @@ int str2tags(const char *tag_str, struct tags *tags)
     size_t i;
 
     if (tag_str == NULL || tags == NULL)
-        return 0;
+        return;
 
     i = tags->n_tags;
 
     if (strcmp(tag_str, "") == 0)
-        return 0;
+        return;
 
     /* copy the tags list to tokenize it */
-    parse_tag_str = strdup(tag_str);
-    if (parse_tag_str == NULL)
-        return -errno;
+    parse_tag_str = xstrdup(tag_str);
 
     /* count number of tags in alias */
     single_tag = strtok_r(parse_tag_str, ",", &saveptr);
@@ -401,24 +307,17 @@ int str2tags(const char *tag_str, struct tags *tags)
     free(parse_tag_str);
 
     if (n_alias_tags == 0)
-        return 0;
+        return;
 
     /* allocate space for new tags */
-    if (tags->n_tags > 0) {
-        tags->tags = realloc(tags->tags,
-            (tags->n_tags + n_alias_tags) * sizeof(char *));
-        if (tags->tags == NULL)
-            return -ENOMEM;
-    } else {
-        tags->tags = calloc(n_alias_tags, sizeof(char *));
-        if (tags->tags == NULL)
-            return -ENOMEM;
-    }
+    if (tags->n_tags > 0)
+        tags->tags = xrealloc(tags->tags,
+                              (tags->n_tags + n_alias_tags) * sizeof(char *));
+    else
+        tags->tags = xcalloc(n_alias_tags, sizeof(char *));
 
     /* fill tags */
-    parse_tag_str = strdup(tag_str);
-    if (parse_tag_str == NULL)
-        return -errno;
+    parse_tag_str = xstrdup(tag_str);
 
     for (single_tag = strtok_r(parse_tag_str, ",", &saveptr);
          single_tag != NULL;
@@ -426,17 +325,11 @@ int str2tags(const char *tag_str, struct tags *tags)
         if (tag_exists(tags, single_tag))
             continue;
 
-        tags->tags[i] = strdup(single_tag);
-        if (tags->tags[i] == NULL) {
-            free(parse_tag_str);
-            return -errno;
-        }
+        tags->tags[i] = xstrdup(single_tag);
         tags->n_tags++;
     }
 
     free(parse_tag_str);
-
-    return 0;
 }
 
 int str2timeval(const char *tv_str, struct timeval *tv)

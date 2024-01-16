@@ -18,9 +18,7 @@ int pho_context_init(void)
     if (PHO_CONTEXT)
         LOG_RETURN(-EALREADY, "global state already initialized");
 
-    PHO_CONTEXT = calloc(1, sizeof(*PHO_CONTEXT));
-    if (!PHO_CONTEXT)
-        return -errno;
+    PHO_CONTEXT = xcalloc(1, sizeof(*PHO_CONTEXT));
 
     PHO_CONTEXT->log_level = PHO_LOG_DEFAULT;
     pho_log_callback_set(NULL); /* set default log callback */

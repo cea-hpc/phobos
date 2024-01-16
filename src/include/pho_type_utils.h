@@ -51,11 +51,11 @@ int build_extent_key(const char *uuid, int version, const char *extent_tag,
                      char **key);
 
 /** initialize a pho_lock structure */
-int init_pho_lock(struct pho_lock *lock, char *hostname, int owner,
-                  struct timeval *lock_timestamp);
+void init_pho_lock(struct pho_lock *lock, char *hostname, int owner,
+                   struct timeval *lock_timestamp);
 
 /** copy a pho_lock structure */
-int pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src);
+void pho_lock_cpy(struct pho_lock *lock_dst, const struct pho_lock *lock_src);
 
 /** free a pho_lock structure's contents */
 void pho_lock_clean(struct pho_lock *lock);
@@ -64,7 +64,7 @@ void pho_lock_clean(struct pho_lock *lock);
 struct dev_info *dev_info_dup(const struct dev_info *dev);
 
 /** copy a dev_info structure in an already allocated one */
-int dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src);
+void dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src);
 
 /**
  * Free a dev_info structure
@@ -74,22 +74,22 @@ int dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src);
  */
 void dev_info_free(struct dev_info *dev, bool free_top_struct);
 
-/** duplicate a media_info structure */
+/** duplicate a media_info structure, cannot return NULL */
 struct media_info *media_info_dup(const struct media_info *mda);
 
 /** free a media_info structure */
 void media_info_free(struct media_info *mda);
 
-/** duplicate an object_info structure */
+/** duplicate an object_info structure, cannot return NULL */
 struct object_info *object_info_dup(const struct object_info *obj);
 
 /** free an object_info structure */
 void object_info_free(struct object_info *obj);
 
 /**
- * Init tags by strdup'ing tag_values. Return 0 or -ENOMEM.
+ * Init tags by strdup'ing tag_values.
  */
-int tags_init(struct tags *tags, char **tag_values, size_t n_tags);
+void tags_init(struct tags *tags, char **tag_values, size_t n_tags);
 
 /**
  * Free a tags structure where the tag list and tag strings have been malloc'd
@@ -97,7 +97,7 @@ int tags_init(struct tags *tags, char **tag_values, size_t n_tags);
 void tags_free(struct tags *tags);
 
 /** duplicate a tags structure. Return 0 or -ENOMEM. */
-int tags_dup(struct tags *tags_dst, const struct tags *tags_src);
+void tags_dup(struct tags *tags_dst, const struct tags *tags_src);
 
 /**
  * Return true if the two tags are equal, false otherwise. The order of tags
@@ -122,10 +122,8 @@ bool tag_exists(const struct tags *tags, const char *tag_str);
  *
  * @param[in]   tag_str the string to extract the tags from
  * @param[in,out]  tags    the tags struct to fill
- *
- * @return 0 on success, -errno on error.
  */
-int str2tags(const char *tag_str, struct tags *tags);
+void str2tags(const char *tag_str, struct tags *tags);
 
 /**
  * Convert a string of the form "YYYY-mm-dd HH:MM:SS.uuuuuu" into a

@@ -54,7 +54,7 @@ int pho_attr_set(struct pho_attrs *md, const char *key,
                  const char *value)
 {
     char *safe_value;
-    int rc;
+    char *safe_key;
 
     if (md->attr_set == NULL) {
         md->attr_set = g_hash_table_new_full(g_str_hash, g_str_equal, free,
@@ -63,12 +63,11 @@ int pho_attr_set(struct pho_attrs *md, const char *key,
             return -ENOMEM;
     }
 
-    rc = strdup_safe(&safe_value, value);
-    if (rc)
-        LOG_RETURN(rc, "Couldn't copy value");
+    safe_value = xstrdup_safe(value);
+    safe_key = xstrdup(key);
 
     /* use ght_replace, so that previous key and values are freed */
-    g_hash_table_replace(md->attr_set, strdup(key), safe_value);
+    g_hash_table_replace(md->attr_set, safe_key, safe_value);
 
     return 0;
 }

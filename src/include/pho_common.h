@@ -118,12 +118,13 @@ do {                                                                    \
 #define pho_verb(_fmt...)       _PHO_LOG_INTERNAL(PHO_LOG_VERB, 0, _fmt)
 #define pho_debug(_fmt...)      _PHO_LOG_INTERNAL(PHO_LOG_DEBUG, 0, _fmt)
 
-#define XWRAPPER(func, args...) ({                  \
-    void *ptr = func(args);                         \
-    if (!ptr) {                                     \
-        pho_error(-errno, #func " failed, abort."); \
-        abort();                                    \
-    }                                               \
+#define XWRAPPER(func, args...) ({                                  \
+    void *ptr = func(args);                                         \
+    if (!ptr) {                                                     \
+        pho_error(-errno, #func " failed in '%s', line %d, abort.", \
+                  __FILE__, __LINE__);                              \
+        abort();                                                    \
+    }                                                               \
     ptr; })
 
 #define xmalloc(size)                   XWRAPPER(malloc, size)
@@ -131,6 +132,7 @@ do {                                                                    \
 #define xstrdup(str)                    XWRAPPER(strdup, str)
 #define xstrndup(str, n)                XWRAPPER(strndup, str, n)
 #define xrealloc(ptr, size)             XWRAPPER(realloc, ptr, size)
+#define xstrdup_safe(str)               ({ str ? xstrdup(str) : NULL; })
 
 static inline const char *pho_log_level2str(enum pho_log_level level)
 {

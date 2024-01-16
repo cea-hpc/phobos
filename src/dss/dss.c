@@ -2842,10 +2842,6 @@ static int lazy_find_deprecated_object(struct dss_handle *hdl,
         LOG_GOTO(out_free, rc = -ENOENT, "No matching version found");
 
     *obj = object_info_dup(curr);
-    if (!*obj)
-        pho_error(rc = -ENOMEM, "Unable to duplicate found object (oid %s, "
-                                "uuid %s, version %d)",
-                  obj_list->oid, obj_list->uuid, obj_list->version);
 
 out_free:
     dss_res_free(obj_list, obj_cnt);
@@ -2896,11 +2892,6 @@ int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
          (oid && (!version || version == obj_list->version)))) {
 
         *obj = object_info_dup(obj_list);
-        if (!*obj)
-            LOG_GOTO(out_free, rc = -ENOMEM,
-                     "Unable to duplicate found object (oid %s, "
-                     "uuid %s, version %d)",
-                     obj_list->oid, obj_list->uuid, obj_list->version);
     } else {
         if (obj_cnt == 1) {
             /* Target the current generation if uuid not provided.
@@ -2952,14 +2943,8 @@ int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
         GOTO(clean, rc = -EPERM);
     }
 
-    if (_medium_info != NULL) {
+    if (_medium_info != NULL)
         *_medium_info = media_info_dup(medium_info);
-        if (*_medium_info == NULL) {
-            rc = -errno;
-            pho_warn("Unable to duplicate medium info of %s, error : %d, %s",
-                     medium_info->rsc.id.name, errno, strerror(errno));
-        }
-    }
 
     /* medium without any lock */
     if (!medium_info->lock.owner) {

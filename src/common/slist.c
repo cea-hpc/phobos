@@ -28,6 +28,7 @@
 #endif
 
 #include "slist.h"
+#include "pho_common.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -41,9 +42,7 @@ struct slist_entry *list_prepend(struct slist_entry *list, void *item)
 {
     struct slist_entry *slot;
 
-    slot = malloc(sizeof(*slot));
-    if (!slot)
-        return NULL;
+    slot = xmalloc(sizeof(*slot));
 
     slot->data = item;
     slot->next = list;

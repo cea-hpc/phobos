@@ -196,14 +196,9 @@ static int apply_alias_to_put_params(struct pho_xfer_desc *xfer)
 
     // tags
     rc = pho_cfg_get_val(section_name, ALIAS_TAGS_CFG_PARAM, &cfg_val);
-    if (!rc) {
-        rc = str2tags(cfg_val, &xfer->xd_params.put.tags);
-        if (rc) {
-            pho_error(rc, "Unable to load tags from \"%s\" tag string \"%s\"",
-                      xfer->xd_params.put.alias, cfg_val);
-            goto out;
-        }
-    } else if (rc != -ENODATA)
+    if (rc == 0)
+        str2tags(cfg_val, &xfer->xd_params.put.tags);
+    else if (rc != -ENODATA)
         goto out;
 
     free(section_name);
