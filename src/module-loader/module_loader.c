@@ -133,9 +133,7 @@ static int module_open(const char *mod_name, const ssize_t mod_size,
     if (hdl == NULL)
         LOG_RETURN(-EINVAL, "Cannot load module '%s': %s", mod_name, dlerror());
 
-    *mod = calloc(1, mod_size);
-    if (*mod == NULL)
-        GOTO(out_err, rc = -ENOMEM);
+    *mod = xcalloc(1, mod_size);
 
     op_init = dlsym(hdl, PM_OP_INIT);
     if (!op_init)
@@ -208,7 +206,7 @@ static int mod_lazy_load(const char *mod_name, const ssize_t mod_size,
                      mod_name);
 
         /* Insert the module into the module table */
-        g_hash_table_insert(modules, strdup(mod_name), *module);
+        g_hash_table_insert(modules, xstrdup(mod_name), *module);
 
         /* Write lock is released in function final cleanup */
     }
