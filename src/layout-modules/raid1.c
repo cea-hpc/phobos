@@ -184,39 +184,29 @@ const struct pho_config_item cfg_lyt_raid1[] = {
 /**
  * Add a media to release with an initial refcount of 1
  */
-static int add_new_to_release_media(struct raid1_encoder *raid1,
-                                    const char *media_id)
+static void add_new_to_release_media(struct raid1_encoder *raid1,
+                                     const char *media_id)
 {
     size_t *new_ref_count;
     gboolean was_not_in;
     char *new_media_id;
 
     /* alloc and set new ref count */
-    new_ref_count = malloc(sizeof(*new_ref_count));
-    if (new_ref_count == NULL)
-        return -ENOMEM;
-
+    new_ref_count = xmalloc(sizeof(*new_ref_count));
     *new_ref_count = 1;
 
     /* alloc new media_id */
-    new_media_id = strdup(media_id);
-    if (new_media_id == NULL) {
-        free(new_ref_count);
-        return -ENOMEM;
-    }
+    new_media_id = xstrdup(media_id);
 
     was_not_in = g_hash_table_insert(raid1->to_release_media, new_media_id,
                                      new_ref_count);
     assert(was_not_in);
-    return 0;
 }
 
 /**
  * Add a written extent to the raid1 encoder and add the medium to release
- *
- * @return 0 if success, else a negative error code if a failure occurs
  */
-static int add_written_extent(struct raid1_encoder *raid1,
+static void add_written_extent(struct raid1_encoder *raid1,
                               struct extent *extent)
 {
     size_t *to_release_refcount;
@@ -230,13 +220,11 @@ static int add_written_extent(struct raid1_encoder *raid1,
     to_release_refcount = g_hash_table_lookup(raid1->to_release_media,
                                               media_id);
     /* existing media_id to release */
-    if (to_release_refcount != NULL) {
+    if (to_release_refcount != NULL)
         ++(*to_release_refcount);
-        return 0;
-    }
-
-    /* new media_id to release */
-    return add_new_to_release_media(raid1, media_id);
+    else
+        /* new media_id to release */
+        add_new_to_release_media(raid1, media_id);
 }
 
 /**
@@ -322,9 +310,7 @@ static int write_all_chunks(int input_fd, struct io_adapter_module **ioa,
     int rc = 0;
 
     /* alloc buffer */
-    buffer = malloc(buffer_size);
-    if (buffer == NULL)
-        LOG_RETURN(-ENOMEM, "Unable to alloc buffer for raid1 encoder write");
+    buffer = xmalloc(buffer_size);
 
     while (to_write > 0) {
         ssize_t buf_size;
@@ -508,9 +494,7 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
                             "raid1 encoder");
 
     /* get all ioa */
-    ioa = calloc(raid1->repl_count, sizeof(*ioa));
-    if (ioa == NULL)
-        LOG_RETURN(-ENOMEM, "Unable to alloc ioa table in raid1 encoder write");
+    ioa = xcalloc(raid1->repl_count, sizeof(*ioa));
 
     for (i = 0; i < raid1->repl_count; ++i) {
         rc = get_io_adapter((enum fs_type)wresp->media[i]->fs_type, &ioa[i]);
@@ -526,10 +510,7 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
             extent_size = wresp->media[i]->avail_size;
 
     /* prepare all extents */
-    extent = calloc(raid1->repl_count, sizeof(*extent));
-    if (extent == NULL)
-        LOG_GOTO(out, rc = -ENOMEM,
-                 "Unable to alloc extent table in raid1 encode write");
+    extent = xcalloc(raid1->repl_count, sizeof(*extent));
 
     for (i = 0; i < raid1->repl_count; ++i)
         set_extent_info(&extent[i], PHO_EXT_ST_PENDING, wresp->media[i],
@@ -538,11 +519,8 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
         /* extent[i]->address will be filled by ioa_open */
 
     /* prepare all extent_tag */
-    extent_tag = calloc(raid1->repl_count,
-                        sizeof(*extent_tag) * EXTENT_TAG_SIZE);
-    if (extent_tag == NULL)
-        LOG_GOTO(out, rc = -ENOMEM,
-                 "Unable to alloc extent_tag table in raid1 write");
+    extent_tag = xcalloc(raid1->repl_count,
+                         sizeof(*extent_tag) * EXTENT_TAG_SIZE);
 
     for (i = 0; i < raid1->repl_count; ++i) {
         rc = snprintf(&extent_tag[i * EXTENT_TAG_SIZE], EXTENT_TAG_SIZE,
@@ -552,16 +530,10 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
 
     /* prepare all iod and loc */
     /* alloc iod */
-    iod = calloc(raid1->repl_count, sizeof(*iod));
-    if (iod == NULL)
-        LOG_GOTO(out, rc = -ENOMEM,
-                 "Unable to alloc iod table in raid1 encoder write");
+    iod = xcalloc(raid1->repl_count, sizeof(*iod));
 
     /* alloc loc */
-    loc = calloc(raid1->repl_count, sizeof(*loc));
-    if (loc == NULL)
-        LOG_GOTO(out, rc = -ENOMEM,
-                 "Unable to alloc loc table in raid1 encoder write");
+    loc = xcalloc(raid1->repl_count, sizeof(*loc));
 
     /**
      * Build the extent attributes from the object ID and the user provided
@@ -889,10 +861,7 @@ static int raid1_enc_next_write_req(struct pho_encoder *enc, pho_req_t *req)
     int rc = 0, i, j;
 
     /* n_tags array */
-    n_tags = calloc(raid1->repl_count, sizeof(*n_tags));
-    if (n_tags == NULL)
-        LOG_RETURN(-ENOMEM, "unable to alloc n_tags array in raid1 layout "
-                            "write alloc");
+    n_tags = xcalloc(raid1->repl_count, sizeof(*n_tags));
 
     for (i = 0; i < raid1->repl_count; ++i)
         n_tags[i] = enc->xfer->xd_params.put.tags.n_tags;
@@ -907,7 +876,7 @@ static int raid1_enc_next_write_req(struct pho_encoder *enc, pho_req_t *req)
 
         for (j = 0; j < enc->xfer->xd_params.put.tags.n_tags; ++j)
             req->walloc->media[i]->tags[j] =
-                strdup(enc->xfer->xd_params.put.tags.tags[j]);
+                xstrdup(enc->xfer->xd_params.put.tags.tags[j]);
     }
 
     return rc;
@@ -936,7 +905,7 @@ static int raid1_dec_next_read_req(struct pho_encoder *dec, pho_req_t *req)
         req->ralloc->med_ids[i]->family =
             dec->layout->extents[ext_idx].media.family;
         req->ralloc->med_ids[i]->name =
-            strdup(dec->layout->extents[ext_idx].media.name);
+            xstrdup(dec->layout->extents[ext_idx].media.name);
     }
 
     return 0;
@@ -1059,9 +1028,7 @@ static int raid1_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
     int rc = 0;
 
     /* At max 2 requests will be emitted, allocate optimistically */
-    *reqs = calloc(2, sizeof(**reqs));
-    if (*reqs == NULL)
-        return -ENOMEM;
+    *reqs = xcalloc(2, sizeof(**reqs));
     *n_reqs = 0;
 
     /* Handle a possible response */
@@ -1156,14 +1123,11 @@ static const struct pho_enc_ops RAID1_ENCODER_OPS = {
  */
 static int layout_raid1_encode(struct pho_encoder *enc)
 {
-    struct raid1_encoder *raid1 = calloc(1, sizeof(*raid1));
+    struct raid1_encoder *raid1 = xcalloc(1, sizeof(*raid1));
     const char *string_repl_count = NULL;
     const char *extent_xxh128 = NULL;
     const char *extent_md5 = NULL;
     int rc;
-
-    if (raid1 == NULL)
-        LOG_RETURN(-ENOMEM, "Unable to calloc raid1 encoder");
 
     /*
      * The ops field is set early to allow the caller to call the destroy
@@ -1266,9 +1230,7 @@ static int layout_raid1_decode(struct pho_encoder *enc)
     if (!enc->is_decoder)
         LOG_RETURN(-EINVAL, "ask to create a decoder on an encoder");
 
-    raid1 = calloc(1, sizeof(*raid1));
-    if (raid1 == NULL)
-        return -ENOMEM;
+    raid1 = xcalloc(1, sizeof(*raid1));
 
     /*
      * The ops field is set early to allow the caller to call the destroy
@@ -1385,29 +1347,14 @@ struct object_location {
     struct split_access_info *split_accesses;
 };
 
-static int init_split_access_info(struct split_access_info *split,
-                                  unsigned int repl_count)
+static void init_split_access_info(struct split_access_info *split,
+                                   unsigned int repl_count)
 {
     split->repl_count = repl_count;
     split->nb_hosts = 0;
-    split->usable = calloc(repl_count, sizeof(*split->usable));
-    if (!split->usable)
-        return -ENOMEM;
-
-    split->hostnames = calloc(repl_count, sizeof(*split->hostnames));
-    if (!split->hostnames) {
-        free(split->usable);
-        return -ENOMEM;
-    }
-
-    split->tape_model = calloc(repl_count, sizeof(*split->tape_model));
-    if (!split->tape_model) {
-        free(split->usable);
-        free(split->hostnames);
-        return -ENOMEM;
-    }
-
-    return 0;
+    split->usable = xcalloc(repl_count, sizeof(*split->usable));
+    split->hostnames = xcalloc(repl_count, sizeof(*split->hostnames));
+    split->tape_model = xcalloc(repl_count, sizeof(*split->tape_model));
 }
 
 /*
@@ -1506,16 +1453,11 @@ static int init_object_location(struct dss_handle *dss,
     object_location->repl_count = repl_count;
 
     object_location->split_accesses =
-        calloc(split_count, sizeof(*object_location->split_accesses));
-    if (!object_location->split_accesses)
-        GOTO(clean, rc = -ENOMEM);
+        xcalloc(split_count, sizeof(*object_location->split_accesses));
 
-    for (i = 0; i < object_location->split_count; i++) {
-        rc = init_split_access_info(&object_location->split_accesses[i],
-                                    object_location->repl_count);
-        if (rc)
-            GOTO(clean, rc = -ENOMEM);
-    }
+    for (i = 0; i < object_location->split_count; i++)
+        init_split_access_info(&object_location->split_accesses[i],
+                               object_location->repl_count);
 
     /* Retrieve all the unlocked devices of the correct family in the DB */
     rc = dss_get_usable_devices(dss, family, NULL, &devs, &dev_count);
@@ -1548,15 +1490,11 @@ static int init_object_location(struct dss_handle *dss,
     }
 
     /* Allocate as many hosts as we found */
-    object_location->hosts = calloc(object_location->nb_hosts,
-                                    sizeof(*object_location->hosts));
-    if (!object_location->hosts)
-        GOTO(clean, rc = -ENOMEM);
+    object_location->hosts = xcalloc(object_location->nb_hosts,
+                                     sizeof(*object_location->hosts));
 
     /* Consider the first known host to be focus_host */
-    object_location->hosts[0].hostname = strdup(focus_host);
-    if (!object_location->hosts[0].hostname)
-        GOTO(clean, rc = -ENOMEM);
+    object_location->hosts[0].hostname = xstrdup(focus_host);
     object_location->hosts[0].dev_count = 0;
     object_location->hosts[0].dev_models = NULL;
 
@@ -1590,10 +1528,7 @@ static int init_object_location(struct dss_handle *dss,
          * the latter, and consider it has one device
          */
         if (!seen) {
-            host_to_add->hostname = strdup(drive_host);
-            if (host_to_add == NULL)
-                GOTO(clean, rc = -errno);
-
+            host_to_add->hostname = xstrdup(drive_host);
             host_to_add->dev_count = 1;
             object_location->nb_hosts++;
         }
@@ -1609,17 +1544,15 @@ static int init_object_location(struct dss_handle *dss,
 
         /* If a known host doesn't have any device, skip it (this can only be
          * the case for focus_host, as we are not sure it has any device
-         * available
+         * available).
          */
         if (host_to_update->dev_count == 0)
             continue;
 
         /* Allocate the correct amount of devices for that host */
         host_to_update->dev_models =
-            malloc(host_to_update->dev_count *
-                   sizeof(*host_to_update->dev_models));
-        if (!host_to_update->dev_models)
-            GOTO(clean, rc = -ENOMEM);
+            xmalloc(host_to_update->dev_count *
+                    sizeof(*host_to_update->dev_models));
 
         /* Reset their number of devices just for proper filling of devices in
          * the next loop
@@ -1643,14 +1576,11 @@ static int init_object_location(struct dss_handle *dss,
         }
 
         /* For that host, if the device has a known model, duplicate it */
-        if (devs[i].rsc.model == NULL) {
+        if (devs[i].rsc.model == NULL)
             host_to_update->dev_models[host_to_update->dev_count] = NULL;
-        } else {
+        else
             host_to_update->dev_models[host_to_update->dev_count] =
-                strdup(devs[i].rsc.model);
-            if (!host_to_update->dev_models[host_to_update->dev_count])
-                GOTO(clean, rc = -ENOMEM);
-        }
+                xstrdup(devs[i].rsc.model);
 
         /* And increase its device counter by 1 */
         host_to_update->dev_count++;
@@ -1769,7 +1699,7 @@ static void get_best_object_location(
     /* This bool array will keep track of which host can access the current
      * split.
      */
-    has_access = malloc(object_location->nb_hosts * sizeof(*has_access));
+    has_access = xmalloc(object_location->nb_hosts * sizeof(*has_access));
 
     /* The following loop aims to properly update the nb_unreachable_splits of
      * each host by going through each split, and checking which host can access
@@ -2085,11 +2015,8 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
     if (rc)
         LOG_RETURN(rc, "Unable to allocate first object_location");
 
-    split_known_by_host = malloc(object_location.nb_hosts *
-                                 sizeof(*split_known_by_host));
-    if (split_known_by_host == NULL)
-        LOG_GOTO(clean, rc = -errno,
-                 "Failed to allocate split_known_by_host");
+    split_known_by_host = xmalloc(object_location.nb_hosts *
+                                  sizeof(*split_known_by_host));
 
     /* update object_location for each split */
     for (split_index = 0; split_index < nb_split; split_index++) {
@@ -2125,13 +2052,8 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
                 enodev = false;
 
                 if (medium_info->rsc.id.family == PHO_RSC_TAPE &&
-                    medium_info->rsc.model != NULL) {
-                    tape_model = strdup(medium_info->rsc.model);
-                    if (tape_model == NULL) {
-                        dss_res_free(medium_info, 1);
-                        continue;
-                    }
-                }
+                    medium_info->rsc.model != NULL)
+                    tape_model = xstrdup(medium_info->rsc.model);
             }
 
             rc2 = add_host_to_object_location(&object_location, dss,
@@ -2171,11 +2093,7 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
                  best_location->hostname);
 
     /* allocate the returned best_location hostname */
-    *hostname = strdup(best_location->hostname);
-    if (!*hostname)
-        LOG_GOTO(clean, rc = -errno,
-                 "Unable to duplicate best locate hostname %s",
-                 best_location->hostname);
+    *hostname = xstrdup(best_location->hostname);
 
 clean:
     free(split_known_by_host);

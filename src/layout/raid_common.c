@@ -75,10 +75,7 @@ int raid_build_write_allocation_req(struct pho_encoder *enc,
     int i;
     int j;
 
-    n_tags = calloc(repl_count, sizeof(*n_tags));
-    if (n_tags == NULL)
-        LOG_RETURN(-errno, "unable to alloc n_tags array in raid layout "
-                           "write alloc");
+    n_tags = xcalloc(repl_count, sizeof(*n_tags));
 
     for (i = 0; i < repl_count; ++i)
         n_tags[i] = enc->xfer->xd_params.put.tags.n_tags;
@@ -91,15 +88,9 @@ int raid_build_write_allocation_req(struct pho_encoder *enc,
     for (i = 0; i < repl_count; ++i) {
         req->walloc->media[i]->size = io_context->to_write;
 
-        for (j = 0; j < enc->xfer->xd_params.put.tags.n_tags; ++j) {
+        for (j = 0; j < enc->xfer->xd_params.put.tags.n_tags; ++j)
             req->walloc->media[i]->tags[j] =
-                strdup(enc->xfer->xd_params.put.tags.tags[j]);
-            if (req->walloc->media[i]->tags[j] == NULL) {
-                pho_srl_request_free(req, false);
-                LOG_RETURN(-errno, "unable to alloc tags in raid layout "
-                                   "write alloc");
-            }
-        }
+                xstrdup(enc->xfer->xd_params.put.tags.tags[j]);
     }
 
     return 0;
@@ -155,9 +146,7 @@ int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
     int rc = 0;
 
     /* At most 2 requests will be emitted, allocate optimistically */
-    *reqs = calloc(2, sizeof(**reqs));
-    if (*reqs == NULL)
-        return -ENOMEM;
+    *reqs = xcalloc(2, sizeof(**reqs));
     *n_reqs = 0;
 
     /* Handle a possible response */

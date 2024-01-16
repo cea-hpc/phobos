@@ -84,9 +84,7 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
     enc->is_decoder = false;
     enc->done = false;
     enc->xfer = xfer;
-    enc->layout = calloc(1, sizeof(*enc->layout));
-    if (enc->layout == NULL)
-        return -ENOMEM;
+    enc->layout = xcalloc(1, sizeof(*enc->layout));
     enc->layout->oid = xfer->xd_objid;
     enc->layout->wr_size = xfer->xd_params.put.size;
 
