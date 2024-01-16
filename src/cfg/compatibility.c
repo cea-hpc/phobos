@@ -98,34 +98,30 @@ static int rw_drive_types_for_tape(const char *tape_model, const char **list)
  * @param[in]  str      Item to find in the list.
  * @param[out] res      true of the string is found, false else.
  *
- * @return 0 on success. A negative POSIX error code on error.
+ * @return true if the item is in the list, false otherwise
  */
-static int search_in_list(const char *list, const char *str, bool *res)
+static bool is_item_in_list(const char *list, const char *str)
 {
+    bool res = false;
     char *parse_list;
-    char *item;
     char *saveptr;
-
-    *res = false;
+    char *item;
 
     /* copy input list to parse it */
-    parse_list = strdup(list);
-    if (parse_list == NULL)
-        return -errno;
+    parse_list = xstrdup(list);
 
     /* check if the string is in the list */
     for (item = strtok_r(parse_list, ",", &saveptr);
          item != NULL;
          item = strtok_r(NULL, ",", &saveptr)) {
         if (strcmp(item, str) == 0) {
-            *res = true;
-            goto out_free;
+            res = true;
+            break;
         }
     }
 
-out_free:
     free(parse_list);
-    return 0;
+    return res;
 }
 
 __attribute__((weak)) /* this attribute is useful for mocking in tests */
@@ -150,9 +146,7 @@ int tape_drive_compat_models(const char *tape_model, const char *drive_model,
         return rc;
 
     /* copy the rw_drives list to tokenize it */
-    parse_rw_drives = strdup(rw_drives);
-    if (parse_rw_drives == NULL)
-        return -errno;
+    parse_rw_drives = xstrdup(rw_drives);
 
     /* For each compatible drive type, get list of associated drive models
      * and search the current drive model in it.
@@ -166,9 +160,7 @@ int tape_drive_compat_models(const char *tape_model, const char *drive_model,
         if (rc)
             goto out_free;
 
-        rc = search_in_list(drive_model_list, drive_model, res);
-        if (rc)
-            goto out_free;
+        *res = is_item_in_list(drive_model_list, drive_model);
         /* drive model found: media is compatible */
         if (*res)
             break;

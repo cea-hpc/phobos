@@ -212,13 +212,12 @@ static int test_get_csv(void *param)
     }
 
     rc = pho_cfg_get_val("CFG_TEST", "csvparam", &csv_value);
-    if (!rc)
-        rc = get_val_csv(csv_value, &values, &n);
-
     if (rc) {
         pho_error(rc, "failed to get param");
         return -1;
     }
+
+    get_val_csv(csv_value, &values, &n);
 
     if (n != td->n) {
         pho_info("Invalid number of items returned. Expected: %lu, got: %lu",

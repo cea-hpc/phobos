@@ -149,25 +149,19 @@ int pho_cfg_set_thread_conn(void *dss_handle)
  * @param[out] env       string allocated by the function that contains the
  *                       environement variable name. It must be free()'d by the
  *                       caller.
- * @return 0 on success, a negative errno value on error.
  */
-static int build_env_name(const char *section, const char *name, char **env)
+static void build_env_name(const char *section, const char *name, char **env)
 {
     char  *env_var, *curr;
     size_t strsize;
-
-    if (section == NULL || name == NULL)
-        return -EINVAL;
 
     /* sizeof returns length + 1, which makes room for first '_'.
      * Add 2 for 2nd '_' and final '\0'
      */
     strsize = sizeof(PHO_ENV_PREFIX) + strlen(section) + strlen(name) + 2;
-    env_var = malloc(strsize);
-    if (env_var == NULL)
-        return -ENOMEM;
+    env_var = xmalloc(strsize);
 
-    /* copy prefix (strcpy is safe as the malloc() is properly sized) */
+    /* copy prefix (strcpy is safe as the xmalloc() is properly sized) */
     strcpy(env_var, PHO_ENV_PREFIX"_");
     curr = end_of_string(env_var);
 
@@ -183,7 +177,6 @@ static int build_env_name(const char *section, const char *name, char **env)
     lowerstr(curr);
 
     *env = env_var;
-    return 0;
 }
 
 /**
@@ -195,12 +188,9 @@ static int build_env_name(const char *section, const char *name, char **env)
 static int pho_cfg_get_env(const char *section, const char *name,
                            const char **value)
 {
-    int   rc;
     char *env, *val;
 
-    rc = build_env_name(section, name, &env);
-    if (rc != 0)
-        return rc;
+    build_env_name(section, name, &env);
 
     val = getenv(env);
     pho_debug("environment: %s=%s", env, val ? val : "<NULL>");
@@ -219,9 +209,7 @@ int pho_cfg_set_val_local(const char *section, const char *name,
     char *env;
     int rc;
 
-    rc = build_env_name(section, name, &env);
-    if (rc)
-        return rc;
+    build_env_name(section, name, &env);
 
     rc = setenv(env, value, 1); /* 1 for overwrite */
     free(env);
@@ -308,7 +296,7 @@ static size_t count_char(const char *s, char c)
     return n;
 }
 
-int get_val_csv(const char *csv_value, char ***values, size_t *n)
+void get_val_csv(const char *csv_value, char ***values, size_t *n)
 {
     char *csv_value_dup;
     size_t nb_values;
@@ -316,29 +304,21 @@ int get_val_csv(const char *csv_value, char ***values, size_t *n)
     char **array;
     char **iter;
     char *token;
-    int rc = 0;
-    int i;
 
     *n = 0;
     *values = NULL;
 
-    csv_value_dup = strdup(csv_value);
-    if (!csv_value)
-        return -errno;
+    csv_value_dup = xstrdup(csv_value);
 
     nb_values = count_char(csv_value, ',');
-    array = malloc(sizeof(*array) * (nb_values + 1));
-    if (!array)
-        GOTO(free_dup, rc = -errno);
+    array = xmalloc(sizeof(*array) * (nb_values + 1));
 
     iter = array;
     for (token = strtok_r(csv_value_dup, ",", &saveptr);
          token != NULL;
          token = strtok_r(NULL, ",", &saveptr)) {
 
-        *iter = strdup(token);
-        if (!*iter)
-            GOTO(free_values, rc = -errno);
+        *iter = xstrdup(token);
 
         iter++;
         (*n)++;
@@ -347,16 +327,6 @@ int get_val_csv(const char *csv_value, char ***values, size_t *n)
     *values = array;
 
     free(csv_value_dup);
-    return 0;
-
-free_values:
-    for (i = 0; i < *n; i++)
-        free(values[i]);
-
-free_dup:
-    free(csv_value_dup);
-
-    return rc;
 }
 
 int pho_cfg_get_val(const char *section, const char *name, const char **value)

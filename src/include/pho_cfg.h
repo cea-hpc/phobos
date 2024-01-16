@@ -146,10 +146,8 @@ int pho_cfg_set_val_local(const char *section, const char *name,
  *                      must be passed to free() as well as each string of the
  *                      list.
  * \param[out] n        Number of values returned
- *
- * \return 0 on success, negative error code on failure (value is set to NULL)
  */
-int get_val_csv(const char *csv_value, char ***value, size_t *n);
+void get_val_csv(const char *csv_value, char ***value, size_t *n);
 
 /**
  * Helper to get a numeric configuration parameter.
