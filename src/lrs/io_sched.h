@@ -129,11 +129,8 @@ struct io_scheduler_ops {
      *
      * \param[in]  io_sched a valid io_scheduler
      * \param[in]  device   the device to add
-     *
-     * \return             0 on success, negative POSIX error code on failure
      */
-    int (*add_device)(struct io_scheduler *io_sched,
-                      struct lrs_dev *device);
+    void (*add_device)(struct io_scheduler *io_sched, struct lrs_dev *device);
 
     /* Return the i-th element of io_scheduler::devices. This function does no
      * bound checking. It is undefined behavior to call this function with \p i

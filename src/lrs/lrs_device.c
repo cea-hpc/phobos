@@ -86,9 +86,7 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
 {
     int rc;
 
-    *dev = calloc(1, sizeof(**dev));
-    if (!*dev)
-        return -errno;
+    *dev = xcalloc(1, sizeof(**dev));
 
     (*dev)->ld_dss_dev_info = dev_info_dup(info);
     if (!(*dev)->ld_dss_dev_info)
@@ -454,14 +452,9 @@ int queue_release_response(struct tsqueue *response_queue,
     size_t i;
     int rc;
 
-    respc = malloc(sizeof(*respc));
-    if (!respc)
-        LOG_GOTO(err, rc = -ENOMEM, "Unable to allocate respc");
-
+    respc = xmalloc(sizeof(*respc));
     respc->socket_id = reqc->socket_id;
-    respc->resp = malloc(sizeof(*respc->resp));
-    if (!respc->resp)
-        LOG_GOTO(err_respc, rc = -ENOMEM, "Unable to allocate respc->resp");
+    respc->resp = xmalloc(sizeof(*respc->resp));
 
     rc = pho_srl_response_release_alloc(respc->resp, n_tosync_media);
     if (rc)
@@ -472,30 +465,18 @@ int queue_release_response(struct tsqueue *response_queue,
     resp_release = respc->resp->release;
     for (i = 0; i < n_tosync_media; i++) {
         resp_release->med_ids[i]->family = tosync_media[i].medium.family;
-        rc = strdup_safe(&resp_release->med_ids[i]->name,
-                         tosync_media[i].medium.name);
-        if (rc) {
-            int j;
-
-            for (j = i; j < n_tosync_media; j++)
-                resp_release->med_ids[j]->name = NULL;
-
-            LOG_GOTO(err_release, rc,
-                     "Unable to duplicate resp_release->med_ids[%zu]->name", i);
-        }
+        resp_release->med_ids[i]->name =
+            xstrdup_safe(tosync_media[i].medium.name);
     }
 
     tsqueue_push(response_queue, respc);
 
     return 0;
 
-err_release:
-    pho_srl_response_free(respc->resp, false);
 err_respc_resp:
     free(respc->resp);
-err_respc:
     free(respc);
-err:
+
     return queue_error_response(response_queue, rc, reqc);
 }
 
@@ -603,18 +584,15 @@ static int tosync_rc(struct req_container *reqc, int index)
     return reqc->params.release.tosync_media[index].client_rc;
 }
 
-int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
-                            size_t medium_index)
+void push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
+                             size_t medium_index)
 {
     struct sync_params *sync_params = &dev->ld_sync_params;
     struct sub_request *req_tosync;
 
     ENTRY;
 
-    req_tosync = malloc(sizeof(*req_tosync));
-    if (!req_tosync)
-        LOG_RETURN(-ENOMEM, "Unable to allocate req_tosync");
-
+    req_tosync = xmalloc(sizeof(*req_tosync));
     req_tosync->reqc = reqc;
     req_tosync->medium_index = medium_index;
 
@@ -630,8 +608,6 @@ int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
     MUTEX_UNLOCK(&dev->ld_mutex);
 
     thread_signal(&dev->ld_device_thread);
-
-    return 0;
 }
 
 /**
@@ -1253,15 +1229,9 @@ static int queue_format_response(struct tsqueue *response_queue,
     struct resp_container *respc = NULL;
     int rc;
 
-    respc = malloc(sizeof(*respc));
-    if (!respc)
-        LOG_GOTO(send_err, rc = -ENOMEM, "Unable to allocate format respc");
-
+    respc = xmalloc(sizeof(*respc));
     respc->socket_id = reqc->socket_id;
-    respc->resp = malloc(sizeof(*respc->resp));
-    if (!respc->resp)
-        LOG_GOTO(err_respc, rc = -ENOMEM,
-                 "Unable to allocate format respc->resp");
+    respc->resp = xmalloc(sizeof(*respc->resp));
 
     rc = pho_srl_response_format_alloc(respc->resp);
     if (rc)
@@ -1270,22 +1240,16 @@ static int queue_format_response(struct tsqueue *response_queue,
     /* Build the answer */
     respc->resp->req_id = reqc->req->id;
     respc->resp->format->med_id->family = reqc->req->format->med_id->family;
-    rc = strdup_safe(&respc->resp->format->med_id->name,
-                     reqc->req->format->med_id->name);
-    if (rc)
-        LOG_GOTO(err_format, rc,
-                 "Error on duplicating medium name in format response");
+    respc->resp->format->med_id->name =
+        xstrdup_safe(reqc->req->format->med_id->name);
 
     tsqueue_push(response_queue, respc);
     return 0;
 
-err_format:
-    pho_srl_response_free(respc->resp, false);
 err_respc_resp:
     free(respc->resp);
-err_respc:
     free(respc);
-send_err:
+
     return queue_error_response(response_queue, rc, reqc);
 }
 
@@ -1446,15 +1410,12 @@ static bool cancel_subrequest_on_error(struct sub_request *sub_request)
  *
  * @param[in]   dev         device in charge of this sub request
  * @param[in]   sub_request rwalloc sub request
- *
- * @return 0 on success, a negative error code on failure
  */
-static int fill_rwalloc_resp_container(struct lrs_dev *dev,
-                                       struct sub_request *sub_request)
+static void fill_rwalloc_resp_container(struct lrs_dev *dev,
+                                        struct sub_request *sub_request)
 {
     struct resp_container *respc = sub_request->reqc->params.rwalloc.respc;
     pho_resp_t *resp = respc->resp;
-    int rc = 0;
 
     if (pho_request_is_read(sub_request->reqc->req)) {
         pho_resp_read_elt_t *rresp;
@@ -1462,22 +1423,8 @@ static int fill_rwalloc_resp_container(struct lrs_dev *dev,
         rresp = resp->ralloc->media[sub_request->medium_index];
         rresp->fs_type = dev->ld_dss_media_info->fs.type;
         rresp->addr_type = dev->ld_dss_media_info->addr_type;
-        rresp->root_path = strdup(dev->ld_mnt_path);
-        if (!rresp->root_path)
-            LOG_RETURN(rc = -errno,
-                       "Unable to duplicate rresp root path to fill rwalloc "
-                       "resp container");
-
-        rresp->med_id->name = strdup(dev->ld_dss_media_info->rsc.id.name);
-        if (!rresp->med_id->name) {
-            rc = -errno;
-            free(rresp->root_path);
-            rresp->root_path = NULL;
-            LOG_RETURN(rc,
-                       "Unable to duplicate rresp med_id name to fill rwalloc "
-                       "resp container");
-        }
-
+        rresp->root_path = xstrdup(dev->ld_mnt_path);
+        rresp->med_id->name = xstrdup(dev->ld_dss_media_info->rsc.id.name);
         rresp->med_id->family = dev->ld_dss_media_info->rsc.id.family;
     } else {
         pho_resp_write_elt_t *wresp;
@@ -1485,27 +1432,11 @@ static int fill_rwalloc_resp_container(struct lrs_dev *dev,
         wresp = resp->walloc->media[sub_request->medium_index];
         wresp->avail_size = dev->ld_dss_media_info->stats.phys_spc_free;
         wresp->med_id->family = dev->ld_dss_media_info->rsc.id.family;
-        wresp->root_path = strdup(dev->ld_mnt_path);
-        if (!wresp->root_path)
-            LOG_RETURN(rc = -errno,
-                       "Unable to duplicate wresp root path to fill rwalloc "
-                       "resp container");
-
-        wresp->med_id->name = strdup(dev->ld_dss_media_info->rsc.id.name);
-        if (!wresp->med_id->name) {
-            rc = -errno;
-            free(wresp->root_path);
-            wresp->root_path = NULL;
-            LOG_RETURN(rc,
-                       "Unable to duplicate wresp med_id name to fill rwalloc "
-                       "resp container");
-        }
-
+        wresp->root_path = xstrdup(dev->ld_mnt_path);
+        wresp->med_id->name = xstrdup(dev->ld_dss_media_info->rsc.id.name);
         wresp->fs_type = dev->ld_dss_media_info->fs.type;
         wresp->addr_type = dev->ld_dss_media_info->addr_type;
     }
-
-    return 0;
 }
 
 static bool rwalloc_can_be_requeued(struct sub_request *sub_request)
@@ -1574,12 +1505,9 @@ static int handle_rwalloc_sub_request_result(struct lrs_dev *dev,
 
     if (!sub_request_rc) {
         rwalloc_medium->status = SUB_REQUEST_DONE;
-        rc = fill_rwalloc_resp_container(dev, sub_request);
-        if (!rc)
-            goto try_send_response;
+        fill_rwalloc_resp_container(dev, sub_request);
 
-        rwalloc_medium->status = SUB_REQUEST_TODO;
-        sub_request_rc = rc;
+        goto try_send_response;
     }
 
     /* sub_request_rc is not null */

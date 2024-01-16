@@ -186,9 +186,7 @@ static int grouped_init(struct io_scheduler *io_sched)
     struct grouped_data *data;
     int rc;
 
-    data = malloc(sizeof(*data));
-    if (!data)
-        return -errno;
+    data = xmalloc(sizeof(*data));
 
     data->request_queues = g_hash_table_new(g_str_hash, g_str_equal);
     if (!data->request_queues)
@@ -356,16 +354,11 @@ static int request_queue_alloc(struct io_scheduler *io_sched,
     struct request_queue *tmp;
     int rc;
 
-    tmp = malloc(sizeof(*tmp));
-    if (!tmp)
-        return -errno;
+    tmp = xmalloc(sizeof(*tmp));
 
     tmp->device = NULL;
     tmp->medium_info = NULL;
-    tmp->name = strdup(name);
-    if (!tmp->name)
-        GOTO(free_queue, rc = -errno);
-
+    tmp->name = xstrdup(name);
     tmp->queue = g_queue_new();
     if (!tmp->queue)
         GOTO(free_name, rc = -errno);
@@ -385,7 +378,6 @@ free_g_queue:
     g_queue_free(tmp->queue);
 free_name:
     free((char *)tmp->name);
-free_queue:
     free(tmp);
 
     return rc;
@@ -673,12 +665,7 @@ static bool request_can_be_allocated(struct io_scheduler *io_sched,
     if (available_devices >= n_required)
         return true;
 
-    extra_devices = malloc(sizeof(*extra_devices) * n_required);
-    if (!extra_devices) {
-        pho_error(-errno, "Failed to allocate memory");
-        return false;
-    }
-
+    extra_devices = xmalloc(sizeof(*extra_devices) * n_required);
     dev_iter = extra_devices;
 
     for (i = 0; i < reqc->req->ralloc->n_med_ids; i++) {
@@ -875,18 +862,14 @@ static int grouped_push_request(struct io_scheduler *io_sched,
     int rc = 0;
     int i;
 
-    pair = malloc(sizeof(*pair));
-    if (!pair)
-        return -errno;
+    pair = xmalloc(sizeof(*pair));
 
     for (i = 0; i < reqc->req->ralloc->n_med_ids; i++) {
         struct queue_element *elem;
         const char *name;
         int rc;
 
-        elem = malloc(sizeof(*elem));
-        if (!elem)
-            GOTO(free_elems, rc = -errno);
+        elem = xmalloc(sizeof(*elem));
 
         elem->reqc = reqc;
         elem->pair = pair;
@@ -1285,9 +1268,7 @@ static int grouped_retry(struct io_scheduler *io_sched,
     n_medium_indices = (sreq->failure_on_medium ? 0 : 1) +
         (reqc->req->ralloc->n_med_ids - reqc->req->ralloc->n_required);
 
-    medium_indices = malloc(n_medium_indices * sizeof(*medium_indices));
-    if (!medium_indices)
-        return -errno;
+    medium_indices = xmalloc(n_medium_indices * sizeof(*medium_indices));
 
     if (!sreq->failure_on_medium) {
         medium_indices[0] = sreq->medium_index;
@@ -1381,11 +1362,10 @@ static int grouped_retry(struct io_scheduler *io_sched,
     return 0;
 }
 
-static int grouped_add_device(struct io_scheduler *io_sched,
-                              struct lrs_dev *new_device)
+static void grouped_add_device(struct io_scheduler *io_sched,
+                               struct lrs_dev *new_device)
 {
     struct device *device;
-    bool found = false;
     int i;
 
     for (i = 0; i < io_sched->devices->len; i++) {
@@ -1393,22 +1373,15 @@ static int grouped_add_device(struct io_scheduler *io_sched,
 
         dev = g_ptr_array_index(io_sched->devices, i);
         if (new_device == dev->device)
-            found = true;
+            return;
     }
 
-    if (found)
-        return 0;
-
-    device = malloc(sizeof(*device));
-    if (!device)
-        return -errno;
+    device = xmalloc(sizeof(*device));
 
     device->device = new_device;
     device->queue = NULL;
 
     g_ptr_array_add(io_sched->devices, device);
-
-    return 0;
 }
 
 static struct lrs_dev **grouped_get_device(struct io_scheduler *io_sched,

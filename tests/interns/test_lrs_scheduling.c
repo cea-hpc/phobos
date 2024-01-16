@@ -544,12 +544,10 @@ static void io_sched_add_device_twice(void **data)
         return;
     }
 
-    rc = handler->ops.add_device(handler, &device);
-    assert_return_code(rc, -rc);
+    handler->ops.add_device(handler, &device);
     assert_int_equal(handler->devices->len, 1);
 
-    rc = handler->ops.add_device(handler, &device);
-    assert_return_code(rc, -rc);
+    handler->ops.add_device(handler, &device);
     assert_int_equal(handler->devices->len, 1);
 
     rc = handler->ops.remove_device(handler, &device);
@@ -582,8 +580,7 @@ static void io_sched_remove_non_existing_device(void **data)
         return;
     }
 
-    rc = handler->ops.add_device(handler, &devices[0]);
-    assert_return_code(rc, -rc);
+    handler->ops.add_device(handler, &devices[0]);
     assert_int_equal(handler->devices->len, 1);
 
     rc = handler->ops.remove_device(handler, &devices[1]);

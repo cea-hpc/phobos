@@ -304,12 +304,10 @@ int io_sched_claim_device(struct io_scheduler *io_sched,
          * will be corrected by the fair_share algorithm on the next iteration
          * of the scheduler thread.
          */
-        rc = io_sched->ops.add_device(io_sched,
-                                      args->exchange.desired_device);
-        if (!rc)
-            args->exchange.desired_device->ld_io_request_type |= io_sched->type;
+        io_sched->ops.add_device(io_sched, args->exchange.desired_device);
+        args->exchange.desired_device->ld_io_request_type |= io_sched->type;
 
-        return rc;
+        return 0;
     }
 
     target_sched = io_type2scheduler(io_sched->io_sched_hdl, target_type);

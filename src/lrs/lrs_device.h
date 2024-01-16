@@ -288,11 +288,9 @@ int clean_tosync_array(struct lrs_dev *dev, int rc);
  * \param[in,out]   dev     device to add the sync request
  * \param[in]       reqc    sync request to add
  * \param[in]       medium  index in reqc of the medium to sync
- *
- * \return                0 on success, -errno on failure
  */
-int push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
-                            size_t medium_index);
+void push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
+                             size_t medium_index);
 
 /**
  * Initialize an lrs_dev_hdl to manipulate devices from the scheduler

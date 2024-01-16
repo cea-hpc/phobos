@@ -676,9 +676,7 @@ static int sched_clean_medium_locks(struct lrs_sched *sched)
 
     ENTRY;
 
-    media = malloc(sched->devices.ldh_devices->len * sizeof(*media));
-    if (!media)
-        LOG_RETURN(-errno, "Failed to allocate media list");
+    media = xmalloc(sched->devices.ldh_devices->len * sizeof(*media));
 
     for (i = 0; i < sched->devices.ldh_devices->len; i++) {
         struct media_info *mda;
@@ -817,14 +815,8 @@ int queue_error_response(struct tsqueue *response_queue, int req_rc,
     struct resp_container *resp_cont;
     int rc;
 
-    resp_cont = malloc(sizeof(*resp_cont));
-    if (!resp_cont)
-        LOG_RETURN(-ENOMEM, "Unable to allocate resp_cont");
-
-    resp_cont->resp = malloc(sizeof(*resp_cont->resp));
-    if (!resp_cont->resp)
-        LOG_GOTO(clean_resp_cont, rc = -ENOMEM,
-                 "Unable to allocate resp_cont->resp");
+    resp_cont = xmalloc(sizeof(*resp_cont));
+    resp_cont->resp = xmalloc(sizeof(*resp_cont->resp));
 
     rc = prepare_error(resp_cont, req_rc, reqc);
     if (rc)
@@ -836,8 +828,8 @@ int queue_error_response(struct tsqueue *response_queue, int req_rc,
 
 clean:
     free(resp_cont->resp);
-clean_resp_cont:
     free(resp_cont);
+
     return rc;
 }
 
@@ -1676,22 +1668,17 @@ static int sched_device_unlock(struct lrs_sched *sched, const char *name)
 }
 
 /** remove written_size from phys_spc_free in media_info and DSS */
-static int push_sub_request_to_device(struct req_container *reqc)
+static void push_sub_request_to_device(struct req_container *reqc)
 {
     struct lrs_dev **devices = reqc->params.rwalloc.respc->devices;
     size_t devices_len = reqc->params.rwalloc.respc->devices_len;
     struct sub_request **sub_requests;
-    size_t i, j;
+    size_t i;
 
-    sub_requests = malloc(sizeof(*sub_requests) * devices_len);
-    if (!sub_requests)
-        LOG_RETURN(-ENOMEM, "Unable to allocate sub_requests array to publish");
+    sub_requests = xmalloc(sizeof(*sub_requests) * devices_len);
 
     for (i = 0; i < devices_len; i++) {
-        sub_requests[i] = malloc(sizeof(*sub_requests[i]));
-        if (!sub_requests[i])
-            LOG_GOTO(sub_request_alloc_error, -ENOMEM,
-                     "Unable to allocate a sub request to publish");
+        sub_requests[i] = xmalloc(sizeof(*sub_requests[i]));
 
         sub_requests[i]->medium_index = i;
         sub_requests[i]->reqc = reqc;
@@ -1706,14 +1693,6 @@ static int push_sub_request_to_device(struct req_container *reqc)
     }
 
     free(sub_requests);
-    return 0;
-
-sub_request_alloc_error:
-    for (j = 0; j < i; j++)
-        free(sub_requests[i]);
-
-    free(sub_requests);
-    return -ENOMEM;
 }
 
 static int publish_or_cancel(struct lrs_sched *sched,
@@ -1734,7 +1713,7 @@ static int publish_or_cancel(struct lrs_sched *sched,
     }
 
     if (!reqc_rc && !rc)
-        rc = push_sub_request_to_device(reqc);
+        push_sub_request_to_device(reqc);
 
     if (reqc_rc || rc) {
         for (i = 0; i < n_selected; i++)
@@ -2244,10 +2223,7 @@ static int sched_handle_format(struct lrs_sched *sched,
      */
     device->ld_ongoing_scheduled = false;
 
-    format_sub_request = malloc(sizeof(*format_sub_request));
-    if (!format_sub_request)
-        LOG_GOTO(remove_format_err_out, rc = -ENOMEM,
-                 "Unable to alloc format sub_request of medium '%s'", m.name);
+    format_sub_request = xmalloc(sizeof(*format_sub_request));
 
     format_sub_request->medium_index = 0;
     format_sub_request->reqc = reqc;
@@ -2312,18 +2288,10 @@ static int queue_notify_response(struct lrs_sched *sched,
     pho_resp_t *resp;
     int rc;
 
-    respc = malloc(sizeof(*respc));
-    if (respc == NULL)
-        return -errno;
+    respc = xmalloc(sizeof(*respc));
 
     respc->socket_id = reqc->socket_id;
-
-    respc->resp = malloc(sizeof(*respc->resp));
-    if (respc->resp == NULL) {
-        rc = -errno;
-        free(respc);
-        return rc;
-    }
+    respc->resp = xmalloc(sizeof(*respc->resp));
 
     rc = pho_srl_response_notify_alloc(respc->resp);
     if (rc) {
@@ -2336,7 +2304,7 @@ static int queue_notify_response(struct lrs_sched *sched,
 
     resp->req_id = reqc->req->id;
     resp->notify->rsrc_id->family = nreq->rsrc_id->family;
-    resp->notify->rsrc_id->name = strdup(nreq->rsrc_id->name);
+    resp->notify->rsrc_id->name = xstrdup(nreq->rsrc_id->name);
 
     tsqueue_push(sched->response_queue, respc);
 

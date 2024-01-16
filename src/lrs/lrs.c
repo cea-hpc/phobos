@@ -88,10 +88,7 @@ static int _create_lock_file(const char *lock_file)
     int rc;
     int fd;
 
-    path_copy = strdup(lock_file);
-    if (path_copy == NULL)
-        LOG_RETURN(-errno, "Unable to copy '%s'", lock_file);
-
+    path_copy = xstrdup(lock_file);
     folder = dirname(path_copy);
 
     rc = stat(folder, &sb);
@@ -192,19 +189,13 @@ static int init_release_container(struct req_container *req_cont)
 
     n_media_per_release(req_cont);
 
-    if (req_cont->params.release.n_tosync_media) {
-        tosync_media = calloc(req_cont->params.release.n_tosync_media,
-                              sizeof(*tosync_media));
-        if (tosync_media == NULL)
-            GOTO(clean_on_error, rc = -errno);
-    }
+    if (req_cont->params.release.n_tosync_media)
+        tosync_media = xcalloc(req_cont->params.release.n_tosync_media,
+                               sizeof(*tosync_media));
 
-    if (req_cont->params.release.n_nosync_media) {
-        nosync_media = calloc(req_cont->params.release.n_nosync_media,
-                              sizeof(*nosync_media));
-        if (nosync_media == NULL)
-            GOTO(clean_on_error, rc = -errno);
-    }
+    if (req_cont->params.release.n_nosync_media)
+        nosync_media = xcalloc(req_cont->params.release.n_nosync_media,
+                               sizeof(*nosync_media));
 
     for (i = 0; i < req_cont->req->release->n_media; ++i) {
         media = req_cont->req->release->media[i];
@@ -382,9 +373,7 @@ static int _send_error(struct lrs *lrs, int req_rc,
     struct resp_container resp_cont;
     int rc;
 
-    resp_cont.resp = malloc(sizeof(*resp_cont.resp));
-    if (!resp_cont.resp)
-        LOG_RETURN(-ENOMEM, "Cannot allocate error response");
+    resp_cont.resp = xmalloc(sizeof(*resp_cont.resp));
 
     rc = prepare_error(&resp_cont, req_rc, req_cont);
     if (rc)
@@ -407,9 +396,7 @@ static int _process_ping_request(struct lrs *lrs,
     struct resp_container resp_cont;
     int rc;
 
-    resp_cont.resp = malloc(sizeof(*resp_cont.resp));
-    if (!resp_cont.resp)
-        LOG_RETURN(-ENOMEM, "Cannot allocate ping response");
+    resp_cont.resp = xmalloc(sizeof(*resp_cont.resp));
 
     resp_cont.socket_id = req_cont->socket_id;
     pho_srl_response_ping_alloc(resp_cont.resp);
@@ -440,10 +427,7 @@ static int _process_monitor_request(struct lrs *lrs,
         LOG_GOTO(send_error, rc = -EINVAL,
                  "Requested family is not handled by the daemon");
 
-    resp_cont.resp = malloc(sizeof(*resp_cont.resp));
-    if (!resp_cont.resp)
-        LOG_GOTO(send_error, rc = -ENOMEM,
-                 "Failed to allocate monitor response");
+    resp_cont.resp = xmalloc(sizeof(*resp_cont.resp));
 
     status = json_array();
     if (!status)
@@ -495,23 +479,17 @@ static int init_rwalloc_container(struct req_container *reqc)
         rwalloc_params->original_n_req_media = reqc->req->ralloc->n_med_ids;
     }
 
-    rwalloc_params->media = calloc(rwalloc_params->n_media,
-                                   sizeof(*rwalloc_params->media));
-    if (!rwalloc_params->media)
-        return -ENOMEM;
+    rwalloc_params->media = xcalloc(rwalloc_params->n_media,
+                                    sizeof(*rwalloc_params->media));
 
     for (i = 0; i < rwalloc_params->n_media; i++)
         rwalloc_params->media[i].status = SUB_REQUEST_TODO;
 
-    rwalloc_params->respc = calloc(1, sizeof(*rwalloc_params->respc));
-    if (!rwalloc_params->respc)
-        GOTO(out_free_media, rc = -ENOMEM);
+    rwalloc_params->respc = xcalloc(1, sizeof(*rwalloc_params->respc));
 
     rwalloc_params->respc->socket_id = reqc->socket_id;
-    rwalloc_params->respc->resp = calloc(1,
-                                         sizeof(*rwalloc_params->respc->resp));
-    if (!rwalloc_params->respc->resp)
-        GOTO(out_free_respc, rc = -ENOMEM);
+    rwalloc_params->respc->resp = xcalloc(1,
+                                          sizeof(*rwalloc_params->respc->resp));
 
     if (is_write)
         rc = pho_srl_response_write_alloc(rwalloc_params->respc->resp,
@@ -526,23 +504,19 @@ static int init_rwalloc_container(struct req_container *reqc)
     rwalloc_params->respc->resp->req_id = reqc->req->id;
     rwalloc_params->respc->devices_len = rwalloc_params->n_media;
     rwalloc_params->respc->devices =
-        calloc(rwalloc_params->respc->devices_len,
-               sizeof(*rwalloc_params->respc->devices));
-    if (!rwalloc_params->respc->devices)
-        GOTO(out_free, rc = -ENOMEM);
+        xcalloc(rwalloc_params->respc->devices_len,
+                sizeof(*rwalloc_params->respc->devices));
 
     return 0;
-out_free:
-    pho_srl_response_free(rwalloc_params->respc->resp, false);
+
 out_free_resp:
     free(rwalloc_params->respc->resp);
     rwalloc_params->respc->resp = NULL;
-out_free_respc:
     free(rwalloc_params->respc);
     rwalloc_params->respc = NULL;
-out_free_media:
     free(rwalloc_params->media);
     rwalloc_params->media = NULL;
+
     return rc;
 }
 
@@ -625,13 +599,9 @@ static int release_medium(struct lrs_sched *sched,
     dev->ld_ongoing_io = false;
     MUTEX_UNLOCK(&dev->ld_mutex);
 
-    if (release->to_sync) {
+    if (release->to_sync)
         /* Queue sync request */
-        int rc2 = push_new_sync_to_device(dev, reqc, medium_index);
-
-        if (rc2)
-            rc = rc ? : rc2;
-    }
+        push_new_sync_to_device(dev, reqc, medium_index);
 
     return rc;
 }
@@ -891,9 +861,7 @@ static int _prepare_requests(struct lrs *lrs, bool *schedulers_to_signal,
         if (data[i].buf.size == -1) /* close notification, ignore */
             continue;
 
-        req_cont = calloc(1, sizeof(*req_cont));
-        if (!req_cont)
-            LOG_RETURN(-ENOMEM, "Cannot allocate request structure");
+        req_cont = xcalloc(1, sizeof(*req_cont));
 
         /* request processing */
         req_cont->socket_id = data[i].fd;
@@ -973,9 +941,7 @@ static int _load_schedulers(struct lrs *lrs)
     for (i = 0; i < PHO_RSC_LAST; ++i)
         lrs->sched[i] = NULL;
 
-    parse_list = strdup(list);
-    if (!parse_list)
-        LOG_RETURN(-errno, "Error on family list duplication");
+    parse_list = xstrdup(list);
 
     /* Initialize a scheduler for each requested family */
     for (item = strtok_r(parse_list, ",", &saveptr);
@@ -993,10 +959,8 @@ static int _load_schedulers(struct lrs *lrs)
                 continue;
             }
 
-            lrs->sched[family] = calloc(1, sizeof(*lrs->sched[family]));
-            if (!lrs->sched[family])
-                LOG_GOTO(out_free, rc = -ENOMEM,
-                         "Error on lrs scheduler allocation");
+            lrs->sched[family] = xcalloc(1, sizeof(*lrs->sched[family]));
+
             rc = sched_init(lrs->sched[family], family, &lrs->response_queue);
             if (rc) {
                 free(lrs->sched[family]);

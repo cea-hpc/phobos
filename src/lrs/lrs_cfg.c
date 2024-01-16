@@ -27,6 +27,7 @@
 #endif
 
 #include "lrs_cfg.h"
+#include "pho_common.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -93,9 +94,7 @@ static int _get_substring_value_from_token(const char *cfg_param,
     if (rc)
         return rc;
 
-    token_dup = strdup(cfg_val);
-    if (token_dup == NULL)
-        return -errno;
+    token_dup = xstrdup(cfg_val);
 
     key = strtok_r(token_dup, ",", &save_ptr);
     if (key == NULL)
@@ -115,9 +114,7 @@ static int _get_substring_value_from_token(const char *cfg_param,
 
         rc = 0;
 
-        *substring = strdup(value);
-        if (*substring == NULL)
-            rc = -errno;
+        *substring = xstrdup(value);
 
         break;
     } while ((key = strtok_r(NULL, ",", &save_ptr)) != NULL);

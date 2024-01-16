@@ -4,7 +4,7 @@
 
 #include <math.h>
 
-static int io_scheduler_no_dispatch(struct io_scheduler *io_sched,
+static void io_scheduler_no_dispatch(struct io_scheduler *io_sched,
                                     GPtrArray *devices)
 {
     int i;
@@ -19,26 +19,14 @@ static int io_scheduler_no_dispatch(struct io_scheduler *io_sched,
 
         io_sched->ops.add_device(io_sched, device);
     }
-
-    return 0;
 }
 
 int no_dispatch(struct io_sched_handle *io_sched_hdl,
                 GPtrArray *devices)
 {
-    int rc;
-
-    rc = io_scheduler_no_dispatch(&io_sched_hdl->read, devices);
-    if (rc)
-        return rc;
-
-    rc = io_scheduler_no_dispatch(&io_sched_hdl->write, devices);
-    if (rc)
-        return rc;
-
-    rc = io_scheduler_no_dispatch(&io_sched_hdl->format, devices);
-    if (rc)
-        return rc;
+    io_scheduler_no_dispatch(&io_sched_hdl->read, devices);
+    io_scheduler_no_dispatch(&io_sched_hdl->write, devices);
+    io_scheduler_no_dispatch(&io_sched_hdl->format, devices);
 
     return 0;
 }
@@ -135,17 +123,10 @@ static int give_devices(struct io_scheduler *io_sched,
 
     while (io_sched->devices->len < target) {
         struct lrs_dev *device;
-        int rc;
 
         device = g_ptr_array_index(devices, 0);
         g_ptr_array_remove_index(devices, 0);
-        rc = io_sched->ops.add_device(io_sched, device);
-        if (rc)
-            /* Only fatal errors are reported here. The scheduler thread will be
-             * stopped, no need to give the devices back to their original
-             * schedulers.
-             */
-            return rc;
+        io_sched->ops.add_device(io_sched, device);
 
         device->ld_io_request_type |= type;
     }
@@ -627,7 +608,7 @@ static int csv2ints(const char *_input, int values[3])
     int rc = 0;
     int i;
 
-    input = strdup(_input);
+    input = xstrdup(_input);
 
     for (i = 0; i < 3; i++) {
         char *token = strtok_r(i == 0 ? input : NULL, ",", &saveptr);
@@ -849,11 +830,11 @@ free_device_list:
     return rc;
 }
 
-static int dispatch_shared_devices(struct io_scheduler *io_sched,
-                                   GPtrArray *devices_to_give,
-                                   size_t target,
-                                   enum io_request_type type,
-                                   const char *technology)
+static void dispatch_shared_devices(struct io_scheduler *io_sched,
+                                    GPtrArray *devices_to_give,
+                                    size_t target,
+                                    enum io_request_type type,
+                                    const char *technology)
 {
     size_t current_nb_devices;
     int i = 0;
@@ -863,12 +844,8 @@ static int dispatch_shared_devices(struct io_scheduler *io_sched,
     while (current_nb_devices < target && i < devices_to_give->len) {
         struct lrs_dev *dev = g_ptr_array_index(devices_to_give, i++);
         size_t count = io_sched->devices->len;
-        int rc;
 
-        rc = io_sched->ops.add_device(io_sched, dev);
-        if (rc)
-            return rc;
-
+        io_sched->ops.add_device(io_sched, dev);
         if (io_sched->devices->len > count)
             /* We need to check the if the number of devices has increased after
              * the add because the device may already be allocated to this I/O
@@ -878,8 +855,6 @@ static int dispatch_shared_devices(struct io_scheduler *io_sched,
 
         dev->ld_io_request_type |= type;
     }
-
-    return 0;
 }
 
 static int
@@ -933,24 +908,17 @@ fair_share_number_of_requests_one_techno(struct io_sched_handle *io_sched_hdl,
         GOTO(free_devices, rc = 0);
 
     if (devices->len == 1 || devices->len == 2) {
-        rc = dispatch_shared_devices(&io_sched_hdl->read, devices_to_give,
-                                     repartition.nb_reads, IO_REQ_READ,
-                                     device_list->technology);
-        if (rc)
-            GOTO(free_devices, rc);
+        dispatch_shared_devices(&io_sched_hdl->read, devices_to_give,
+                                repartition.nb_reads, IO_REQ_READ,
+                                device_list->technology);
 
-        rc = dispatch_shared_devices(&io_sched_hdl->write, devices_to_give,
-                                     repartition.nb_writes, IO_REQ_WRITE,
-                                     device_list->technology);
-        if (rc)
-            GOTO(free_devices, rc);
+        dispatch_shared_devices(&io_sched_hdl->write, devices_to_give,
+                                repartition.nb_writes, IO_REQ_WRITE,
+                                device_list->technology);
 
-        rc = dispatch_shared_devices(&io_sched_hdl->format, devices_to_give,
-                                     repartition.nb_formats, IO_REQ_FORMAT,
-                                     device_list->technology);
-        if (rc)
-            GOTO(free_devices, rc);
-
+        dispatch_shared_devices(&io_sched_hdl->format, devices_to_give,
+                                repartition.nb_formats, IO_REQ_FORMAT,
+                                device_list->technology);
     } else {
         rc = dispatch_devices(io_sched_hdl, devices_to_give, &repartition,
                               device_list->technology);

@@ -73,9 +73,7 @@ static int fifo_push_request(struct io_scheduler *io_sched,
 {
     struct queue_element *elem;
 
-    elem = malloc(sizeof(*elem));
-    if (!elem)
-        return -errno;
+    elem = xmalloc(sizeof(*elem));
 
     elem->reqc = reqc;
     elem->num_media_allocated = 0;
@@ -478,10 +476,9 @@ static int fifo_retry(struct io_scheduler *io_sched,
     return generic_get_device_medium_pair(io_sched, sreq, dev, true);
 }
 
-static int fifo_add_device(struct io_scheduler *io_sched,
-                           struct lrs_dev *new_device)
+static void fifo_add_device(struct io_scheduler *io_sched,
+                            struct lrs_dev *new_device)
 {
-    bool found = false;
     int i;
 
     for (i = 0; i < io_sched->devices->len; i++) {
@@ -489,13 +486,10 @@ static int fifo_add_device(struct io_scheduler *io_sched,
 
         dev = g_ptr_array_index(io_sched->devices, i);
         if (new_device == dev)
-            found = true;
+            return;
     }
 
-    if (!found)
-        g_ptr_array_add(io_sched->devices, new_device);
-
-    return 0;
+    g_ptr_array_add(io_sched->devices, new_device);
 }
 
 static struct lrs_dev **fifo_get_device(struct io_scheduler *io_sched,
