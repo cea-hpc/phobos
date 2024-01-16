@@ -113,9 +113,7 @@ static int parse_supported_tape_models(void)
         LOG_RETURN(-EINVAL, "no supported_list tape model found in config");
 
     /* duplicate supported model to parse it */
-    parsed_config_list = strdup(config_list);
-    if (!parsed_config_list)
-        LOG_RETURN(-errno, "Error on duplicating list of tape models");
+    parsed_config_list = xstrdup(config_list);
 
     /* allocate built_supported_tape_models */
     built_supported_tape_models = g_ptr_array_new_with_free_func(free);
@@ -131,15 +129,7 @@ static int parse_supported_tape_models(void)
         char *new_model;
 
         /* dup tape model */
-        new_model = strdup(conf_model);
-        if (!new_model) {
-            int rc;
-
-            rc = -errno;
-            g_ptr_array_unref(built_supported_tape_models);
-            free(parsed_config_list);
-            LOG_RETURN(rc, "Error on duplicating parsed tape model");
-        }
+        new_model = xstrdup(conf_model);
 
         /* store tape model */
         g_ptr_array_add(built_supported_tape_models, new_model);
@@ -291,7 +281,7 @@ static char *json_dict2str(const struct json_t *obj, const char *key)
 {
     const char *res = json_dict2tmp_str(obj, key);
 
-    return res ? strdup(res) : NULL;
+    return xstrdup_safe(res);
 }
 
 /**
@@ -746,15 +736,15 @@ static int dss_tags_decode(struct tags *tags, const char *json)
         goto out_free;
     }
 
-    tags->tags = calloc(tags->n_tags, sizeof(*tags->tags));
+    tags->tags = xcalloc(tags->n_tags, sizeof(*tags->tags));
     for (i = 0; i < tags->n_tags; i++) {
         array_entry = json_array_get(tag_array, i);
         tag = json_string_value(array_entry);
         if (tag) {
-            tags->tags[i] = strdup(tag);
+            tags->tags[i] = xstrdup(tag);
         } else {
             /* Fallback to empty string to avoid unexpected NULL */
-            tags->tags[i] = strdup("");
+            tags->tags[i] = xstrdup("");
             pho_warn("Non string tag in media tags");
         }
     }
@@ -1579,18 +1569,14 @@ enum strvalue_type {
     STRVAL_KEYVAL  = 2  /* key/value pair in an array */
 };
 
-static int insert_string(struct dss_handle *handle, GString *qry,
-                         const char *strval, enum strvalue_type type)
+static void insert_string(struct dss_handle *handle, GString *qry,
+                          const char *strval, enum strvalue_type type)
 {
-    size_t   esc_len = strlen(strval) * 2 + 1;
-    char    *esc_str;
-    char    *esc_val;
-    int      rc = 0;
+    size_t esc_len = strlen(strval) * 2 + 1;
+    char *esc_str;
+    char *esc_val;
 
-    esc_str = malloc(esc_len);
-    if (!esc_str)
-        return -ENOMEM;
-
+    esc_str = xmalloc(esc_len);
     PQescapeStringConn(handle->dh_conn, esc_str, strval, esc_len, NULL);
 
     switch (type) {
@@ -1609,18 +1595,16 @@ static int insert_string(struct dss_handle *handle, GString *qry,
     }
 
     free(esc_str);
-    return rc;
 }
 
 static int json2sql_object_begin(struct saj_parser *parser, const char *key,
                                  json_t *value, void *priv)
 {
-    const char         *current_key = saj_parser_key(parser);
-    struct dss_handle  *handle = (struct dss_handle *)parser->sp_handle;
-    enum strvalue_type  type = STRVAL_DEFAULT;
-    const char         *field_impl;
-    GString            *str = priv;
-    int                 rc;
+    struct dss_handle *handle = (struct dss_handle *)parser->sp_handle;
+    const char *current_key = saj_parser_key(parser);
+    enum strvalue_type type = STRVAL_DEFAULT;
+    const char *field_impl;
+    GString *str = priv;
 
     /* out-of-context: nothing to do */
     if (!key)
@@ -1667,9 +1651,7 @@ static int json2sql_object_begin(struct saj_parser *parser, const char *key,
 
     switch (json_typeof(value)) {
     case JSON_STRING:
-        rc = insert_string(handle, str, json_string_value(value), type);
-        if (rc)
-            LOG_RETURN(rc, "Cannot insert string into SQL query");
+        insert_string(handle, str, json_string_value(value), type);
         break;
     case JSON_INTEGER:
         g_string_append_printf(str, "%"JSON_INTEGER_FORMAT,
@@ -2138,11 +2120,7 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
 
     item_size = res_size[type];
     dss_res_size = sizeof(struct dss_result) + PQntuples(res) * item_size;
-    dss_res = calloc(1, dss_res_size);
-    if (dss_res == NULL) {
-        PQclear(res);
-        LOG_RETURN(-ENOMEM, "malloc of size %zu failed", dss_res_size);
-    }
+    dss_res = xcalloc(1, dss_res_size);
 
     dss_res->item_type = type;
     dss_res->pg_res = res;
@@ -2166,7 +2144,7 @@ out:
     return rc;
 }
 
-static int _add_uuid_to_extents(void *extent_list, int nb_extents,
+static void _add_uuid_to_extents(void *extent_list, int nb_extents,
                                 PGresult *res)
 {
     struct extent *extents = (struct extent *)extent_list;
@@ -2174,13 +2152,8 @@ static int _add_uuid_to_extents(void *extent_list, int nb_extents,
 
     assert(PQntuples(res) == nb_extents);
 
-    for (i = 0; i < nb_extents; ++i) {
-        extents[i].uuid = strdup(PQgetvalue(res, i, 0));
-        if (extents[i].uuid)
-            return -errno;
-    }
-
-    return 0;
+    for (i = 0; i < nb_extents; ++i)
+        extents[i].uuid = xstrdup(PQgetvalue(res, i, 0));
 }
 
 /**
@@ -2956,14 +2929,7 @@ int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
     }
 
     /* get lock hostname */
-    *hostname = strdup(medium_info->lock.hostname);
-    if (!*hostname) {
-        rc = -errno;
-        pho_warn("Unable to duplicate hostname %s, error : %d, %s",
-                 medium_info->lock.hostname, errno, strerror(errno));
-        if (_medium_info != NULL && *_medium_info != NULL)
-            dss_res_free(*_medium_info, 1);
-    }
+    *hostname = xstrdup(medium_info->lock.hostname);
 
 clean:
     dss_res_free(medium_info, 1);

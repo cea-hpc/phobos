@@ -41,10 +41,7 @@
 
 #define LOCK_ID_LIST_ALLOCATE(_ids, _item_cnt)        \
 do {                                                  \
-    (_ids) = malloc((_item_cnt) * sizeof(*(_ids)));   \
-    if (!(_ids))                                      \
-        LOG_RETURN(-ENOMEM, "Couldn't allocate ids"); \
-                                                      \
+    (_ids) = xmalloc((_item_cnt) * sizeof(*(_ids)));  \
     for (i = 0; i < (_item_cnt); ++i)                 \
         (_ids)[i] = g_string_new("");                 \
 } while (0)
@@ -214,9 +211,7 @@ static int dss_build_lock_id_list(PGconn *conn, const void *item_list,
             return -EINVAL;
 
         escape_len = strlen(name) * 2 + 1;
-        escape_string = malloc(escape_len);
-        if (!escape_string)
-            LOG_GOTO(cleanup, rc = -ENOMEM, "Memory allocation failed");
+        escape_string = xmalloc(escape_len);
 
         PQescapeStringConn(conn, escape_string, name, escape_len, NULL);
         g_string_append(ids[i], escape_string);
