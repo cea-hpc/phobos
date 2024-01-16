@@ -315,9 +315,7 @@ static int lib_scsi_open(struct lib_handle *hdl, const char *dev,
 
     MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
 
-    lib = calloc(1, sizeof(struct lib_descriptor));
-    if (!lib)
-        GOTO(unlock, rc = -ENOMEM);
+    lib = xcalloc(1, sizeof(struct lib_descriptor));
 
     hdl->lh_lib = lib;
 

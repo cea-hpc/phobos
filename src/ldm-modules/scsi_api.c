@@ -401,9 +401,7 @@ static int _scsi_element_status(int fd, enum element_type_code type,
           + nb * sizeof(struct element_status_page)
           + nb * READ_STATUS_MAX_ELT_LEN;
 
-    buffer = calloc(1, len);
-    if (!buffer)
-        return -ENOMEM;
+    buffer = xcalloc(1, len);
 
     pho_debug("scsi_execute: READ_ELEMENT_STATUS, type=%#x, start_addr=%#hx, "
               "count=%hu, buffer_len=%u", type, start_addr, nb, len);
@@ -519,9 +517,7 @@ int scsi_element_status(int fd, enum element_type_code type,
         req_size = max_element_status_chunk;
 
     /* allocate the element list according to the requested count */
-    *elmt_list = calloc(nb, sizeof(struct element_status));
-    if (*elmt_list == NULL)
-        return -ENOMEM;
+    *elmt_list = xcalloc(nb, sizeof(struct element_status));
 
     /* handle limitation of ELEMENT_STATUS request size:
      * Start with nb, then try with smaller chunks in case of error. */

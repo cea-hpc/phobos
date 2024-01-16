@@ -183,9 +183,7 @@ static int read_page80_serial(const char *st_devname, const char *attrname,
      */
 
     /* Allocate a temporary buffer to read the page 0x80. */
-    buffer = calloc(1, BUFF_SIZE);
-    if (!buffer)
-        return -ENOMEM;
+    buffer = xcalloc(1, BUFF_SIZE);
 
     build_sys_path(st_devname, attrname, spath, sizeof(spath));
 
@@ -298,9 +296,7 @@ static int cache_load_from_name(const char *st_devname)
         LOG_RETURN(-ENOBUFS, "Device name '%s' exceeds expected size %d",
                    st_devname, IFNAMSIZ);
 
-    dinfo = calloc(1, sizeof(*dinfo));
-    if (dinfo == NULL)
-        LOG_RETURN(-ENOMEM, "Cannot allocate cache node for '%s'", st_devname);
+    dinfo = xcalloc(1, sizeof(*dinfo));
 
     memcpy(dinfo->st_devname, st_devname, namelen + 1);
 
@@ -570,8 +566,8 @@ static int scsi_tape_dev_query(const char *dev_path, struct ldm_dev_state *lds)
 
     memset(lds, 0, sizeof(*lds));
     lds->lds_family = PHO_RSC_TAPE;
-    lds->lds_model = strdup(dme->model);
-    lds->lds_serial = strdup(dme->serial);
+    lds->lds_model = xstrdup(dme->model);
+    lds->lds_serial = xstrdup(dme->serial);
 
     return 0;
 }
