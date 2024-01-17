@@ -41,7 +41,7 @@
 
 static char *concat(char *path, char *suffix)
 {
-    char *tmp = malloc((strlen(path) + strlen(suffix) + 1) * sizeof(*tmp));
+    char *tmp = xmalloc((strlen(path) + strlen(suffix) + 1) * sizeof(*tmp));
 
     strcpy(tmp, path);
     strcpy(tmp + strlen(path), suffix);
@@ -69,27 +69,17 @@ static void free_tags(char **tags, int size)
     free(tags);
 }
 
-static int duplicate_tags(char **argv, char ***tags, int size)
+static void duplicate_tags(char **argv, char ***tags, int size)
 {
     char **tmp;
     int i;
 
-    tmp = malloc(size * sizeof(*tags));
-    if (!tmp)
-        return -errno;
+    tmp = xmalloc(size * sizeof(*tags));
 
-    for (i = 0; i < size; i++) {
-        tmp[i] = strdup(argv[i]);
-        if (!tmp[i]) {
-            free_tags(tmp, i);
-
-            return -errno;
-        }
-    }
+    for (i = 0; i < size; i++)
+        tmp[i] = xstrdup(argv[i]);
 
     *tags = tmp;
-
-    return 0;
 }
 
 int main(int argc, char **argv)
@@ -144,8 +134,7 @@ int main(int argc, char **argv)
         int xfer_cnt = argc - 2;
         int j;
 
-        xfer = calloc(xfer_cnt, sizeof(*xfer));
-        assert(xfer != NULL);
+        xfer = xcalloc(xfer_cnt, sizeof(*xfer));
 
         for (i = 2, j = 0; i < argc; i++, j++) {
             char *path = realpath(argv[i], NULL);
@@ -184,9 +173,7 @@ out_free_mput:
         char **tags;
         char *path;
 
-        rc = duplicate_tags(argv + 3, &tags, argc - 3);
-        if (rc)
-            goto out_attrs;
+        duplicate_tags(argv + 3, &tags, argc - 3);
 
         path = realpath(argv[2], NULL);
         if (path == NULL) {

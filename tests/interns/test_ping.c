@@ -26,9 +26,7 @@ static int setup(void **state)
 {
     struct resp_state *resp_state;
 
-    resp_state = malloc(sizeof(*resp_state));
-    if (!resp_state)
-        return -1;
+    resp_state = xmalloc(sizeof(*resp_state));
 
     pho_srl_response_ping_alloc(&resp_state->lrs_resp);
     resp_state->lrs_resp.req_id = 1;

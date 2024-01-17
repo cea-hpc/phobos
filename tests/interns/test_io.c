@@ -54,9 +54,7 @@ static int check_file_content(const char *fpath, const unsigned char *ibuff,
     int fd = -1;
     int rc = 0;
 
-    obuff = malloc(size);
-    if (!obuff)
-        LOG_RETURN(rc = -ENOMEM, "Unable to allocate output buff");
+    obuff = xmalloc(size);
 
     /* stat extent file to check size */
     if (stat(fpath, &extent_file_stat))
@@ -220,9 +218,7 @@ static int test_posix_open_write_close(void *hint)
         LOG_GOTO(clean_extent, -EINVAL, "Invalid or inconsistent IO size");
 
     /* init buffers */
-    ibuff = malloc(count);
-    if (!ibuff)
-        LOG_GOTO(clean_extent, -ENOMEM, "Unable to allocate input buff");
+    ibuff = xmalloc(count);
 
     for (i = 0; i < count; i++)
         ibuff[i] = (unsigned char)i;

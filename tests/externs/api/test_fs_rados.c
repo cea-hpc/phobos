@@ -70,9 +70,7 @@ static int fsr_setup(void **state)
     rados_t cluster_hdl;
     int rc;
 
-    test_data = malloc(sizeof(*test_data));
-    if (test_data == NULL)
-        return -1;
+    test_data = xmalloc(sizeof(*test_data));
 
     test_data->pool_io_ctx = NULL;
     test_data->lib_hdl.lh_lib = NULL;

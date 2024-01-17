@@ -54,7 +54,7 @@ static void rm_tmp_dir(void)
 
 static char *setup_tmp_dir(void)
 {
-    TMP_DIR = malloc(sizeof(PHO_TMP_DIR_TEMPLATE));
+    TMP_DIR = xmalloc(sizeof(PHO_TMP_DIR_TEMPLATE));
     strcpy(TMP_DIR, PHO_TMP_DIR_TEMPLATE);
     assert(mkdtemp(TMP_DIR) != NULL);
     atexit(rm_tmp_dir);
@@ -106,7 +106,7 @@ static void add_dir_or_drive(struct admin_handle *adm, struct dss_handle *dss,
 
     pho_id_name_set(&dev->rsc.id, dev_st.lds_serial ? : "");
     dev->rsc.id.family = dev_st.lds_family;
-    dev->rsc.model = dev_st.lds_model ? strdup(dev_st.lds_model) : NULL;
+    dev->rsc.model = dev_st.lds_model ? xstrdup(dev_st.lds_model) : NULL;
     dev->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
     dev->path = (char *) path;
     dev->host = hostname;
@@ -131,7 +131,7 @@ static void add_tape(struct admin_handle *adm, struct dss_handle *dss,
     /* Add dir media */
     pho_id_name_set(&media->rsc.id, tape_id);
     media->rsc.id.family = PHO_RSC_TAPE;
-    media->rsc.model = strdup(model);
+    media->rsc.model = xstrdup(model);
     media->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
     media->fs.type = PHO_FS_LTFS;
     media->addr_type = PHO_ADDR_HASH1;

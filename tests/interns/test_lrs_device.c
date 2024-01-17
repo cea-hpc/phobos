@@ -82,7 +82,7 @@ static char *uint2str(unsigned int value)
 
     snprintf(str, sizeof(str), "%u", value);
 
-    return strdup(str);
+    return xstrdup(str);
 }
 
 static char *make_sync_value(unsigned int value)
@@ -96,8 +96,7 @@ static char *make_sync_value(unsigned int value)
     len = strlen(val);
 
     /* dir= + len + '\0' */
-    res = calloc(4 + len + 1, sizeof(char));
-    assert_non_null(res);
+    res = xcalloc(4 + len + 1, sizeof(char));
 
     strcpy(res, "dir=");
     strcat(res, val);
@@ -187,7 +186,7 @@ static int insert_device(struct dss_handle *dss, char *device)
     int rc;
 
     strcpy(dev.rsc.id.name, device);
-    dev.host = strdup(get_hostname());
+    dev.host = xstrdup(get_hostname());
 
     rc = dss_device_insert(dss, &dev, 1);
 
@@ -201,9 +200,7 @@ static int test_setup_one_device(void **data)
     struct lrs_dev_hdl *handle;
     int rc;
 
-    handle = malloc(sizeof(*handle));
-    if (!handle)
-        return errno;
+    handle = xmalloc(sizeof(*handle));
 
     set_sync_params(1000, 3, 20);
 
@@ -257,9 +254,7 @@ static int test_setup_three_devices(void **data)
     struct lrs_dev_hdl *handle;
     int rc;
 
-    handle = malloc(sizeof(*handle));
-    if (!handle)
-        return errno;
+    handle = xmalloc(sizeof(*handle));
 
     set_sync_params(1000, 3, 20);
 

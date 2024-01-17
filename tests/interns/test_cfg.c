@@ -71,8 +71,8 @@ static int populate_env(void)
             char *sec;
             char *var;
 
-            sec = strdup(item->section);
-            var = strdup(item->variable);
+            sec = xstrdup(item->section);
+            var = xstrdup(item->variable);
             upperstr(sec);
             lowerstr(var);
             rc = asprintf(&key, "PHOBOS_%s_%s", sec, var);
@@ -295,7 +295,7 @@ int main(int argc, char **argv)
     pho_run_test("Test 4: get variables from config file (before init)", test,
              test_file_items, PHO_TEST_FAILURE);
 
-    test_bin = strdup(argv[0]);
+    test_bin = xstrdup(argv[0]);
     test_dir = dirname(test_bin);
 
     /* try with bad cfg first */

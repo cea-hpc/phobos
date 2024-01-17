@@ -198,7 +198,7 @@ static void build_read_request(struct context *context)
     pho_srl_request_read_alloc(&req.req, 1);
 
 
-    req.req.ralloc->med_ids[0]->name = strdup(medium->rsc.id.name);
+    req.req.ralloc->med_ids[0]->name = xstrdup(medium->rsc.id.name);
     req.req.ralloc->med_ids[0]->family = PHO_RSC_TAPE;
     req.req.ralloc->n_required = 1;
     req.req.id = context->requests.reads->len;
@@ -240,7 +240,7 @@ static void build_format_request(struct context *context)
     req.req.format->unlock = false;
     req.req.format->force = true;
     req.req.format->med_id->family = PHO_RSC_TAPE;
-    req.req.format->med_id->name = strdup(medium->rsc.id.name);
+    req.req.format->med_id->name = xstrdup(medium->rsc.id.name);
     req.req.id = context->requests.formats->len;
 
     g_array_append_val(context->requests.formats, req);
@@ -334,9 +334,7 @@ static void *send_requests(void *data)
     union pho_comm_addr addr;
     int rc;
 
-    context->comm = malloc(sizeof(*context->comm));
-    if (!context->comm)
-        pthread_exit(NULL);
+    context->comm = xmalloc(sizeof(*context->comm));
 
     addr.af_unix.path = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, server_socket);
     rc = pho_comm_open(context->comm, &addr, PHO_COMM_UNIX_CLIENT);
@@ -401,16 +399,8 @@ struct splitter *make_splitter(const char *str, char c)
     char delim[2] = { c, '\0' };
     struct splitter *splitter;
 
-    splitter = malloc(sizeof(*splitter));
-    if (!splitter)
-        return NULL;
-
-    splitter->str = strdup(str);
-    if (!splitter->str) {
-        free(splitter);
-        return NULL;
-    }
-
+    splitter = xmalloc(sizeof(*splitter));
+    splitter->str = xstrdup(str);
     splitter->split_char = c;
     splitter->token = strtok_r(splitter->str, delim, &splitter->saveptr);
 

@@ -164,10 +164,8 @@ static int global_setup(void **state)
     }
 
     /* alloc media */
-    rsl_state.media = calloc(rsl_state.layout->ext_count,
-                             sizeof(*rsl_state.media));
-    if (!rsl_state.media)
-        GOTO(clean_layout, rc = -1);
+    rsl_state.media = xcalloc(rsl_state.layout->ext_count,
+                              sizeof(*rsl_state.media));
 
     /* get media */
     for (i = 0; i < rsl_state.layout->ext_count; i++) {

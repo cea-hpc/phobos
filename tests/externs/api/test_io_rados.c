@@ -50,17 +50,9 @@ static int ior_setup(void **state)
     struct pho_io_descr *iod;
     struct extent *extent;
 
-    iod = calloc(1, sizeof(*iod));
-    if (iod == NULL)
-        return -1;
-
-    iod_loc = malloc(sizeof(*iod_loc));
-    if (iod_loc == NULL)
-        return -1;
-
-    extent = malloc(sizeof(*extent));
-    if (extent == NULL)
-        return -1;
+    iod = xcalloc(1, sizeof(*iod));
+    iod_loc = xmalloc(sizeof(*iod_loc));
+    extent = xmalloc(sizeof(*extent));
 
     extent->layout_idx = 1;
     extent->size = 2;
@@ -404,7 +396,7 @@ void fill_buffer_with_random_data(struct pho_buff *buffer)
     urandom_fd = open("/dev/urandom", O_RDONLY);
     assert(urandom_fd >= 0);
 
-    buffer->buff = malloc(buffer->size);
+    buffer->buff = xmalloc(buffer->size);
     assert_non_null(buffer->buff);
 
     bytes_written = read(urandom_fd, buffer->buff, buffer->size);
@@ -433,8 +425,7 @@ static void ior_test_write_object_with_chunks(void **state)
     assert_int_equal(rc, -rc);
 
     fill_buffer_with_random_data(&buf_in);
-    buf_out.buff = calloc(buf_out.size, 1);
-    assert_non_null(buf_out.buff);
+    buf_out.buff = xcalloc(buf_out.size, 1);
 
     rc = ioa_open(ioa, "pho_obj_chunks", "pho_io", iod, true);
     assert_int_equal(rc, -rc);

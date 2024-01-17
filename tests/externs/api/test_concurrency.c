@@ -181,9 +181,7 @@ static char *make_oid(char *file, int i)
         exit(ERANGE);
 
     /* 5: 9999\0 */
-    oid = calloc(filelength + 5, sizeof(*oid));
-    if (!oid)
-        exit(errno);
+    oid = xcalloc(filelength + 5, sizeof(*oid));
 
     strcpy(oid, file);
     sz = snprintf(oid + filelength, 5, "%d", i);
@@ -223,9 +221,7 @@ int main(int argc, char **argv)
     if (rc)
         return rc;
 
-    threads = calloc(conf.num_threads, sizeof(*threads));
-    if (!threads)
-        return errno;
+    threads = xcalloc(conf.num_threads, sizeof(*threads));
 
     pthread_barrier_init(&barrier, NULL, conf.num_threads + 1);
     printf("Will perform %d concurrent %ss...\n",

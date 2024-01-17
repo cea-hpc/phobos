@@ -372,8 +372,7 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
     else
         return -EINVAL;
 
-    *target_medium = calloc(1, sizeof(**target_medium));
-    assert_non_null(*target_medium);
+    *target_medium = xcalloc(1, sizeof(**target_medium));
 
     strcpy((*target_medium)->rsc.id.name, medium_id->name);
 
@@ -409,8 +408,7 @@ static void create_request(struct req_container *reqc,
 {
     int rc = 0;
 
-    reqc->req = calloc(1, sizeof(*reqc->req));
-    assert_non_null(reqc->req);
+    reqc->req = xcalloc(1, sizeof(*reqc->req));
 
     switch (IO_REQ_TYPE) {
     case IO_REQ_WRITE: {
@@ -418,12 +416,10 @@ static void create_request(struct req_container *reqc,
         size_t *n_tags;
         int i;
 
-        n_tags = calloc(n, sizeof(*n_tags));
-        assert_non_null(n_tags);
+        n_tags = xcalloc(n, sizeof(*n_tags));
 
         params->n_media = n;
-        params->media = calloc(n, sizeof(*params->media));
-        assert_non_null(params->media);
+        params->media = xcalloc(n, sizeof(*params->media));
 
         pho_srl_request_write_alloc(reqc->req, n, n_tags);
         free(n_tags);
@@ -441,11 +437,10 @@ static void create_request(struct req_container *reqc,
         reqc->req->ralloc->n_required = n_required;
 
         params->n_media = n_required;
-        params->media = calloc(n_required, sizeof(*params->media));
-        assert_non_null(params->media);
+        params->media = xcalloc(n_required, sizeof(*params->media));
 
         for (i = 0; i < n; i++) {
-            reqc->req->ralloc->med_ids[i]->name = strdup(media_names[i]);
+            reqc->req->ralloc->med_ids[i]->name = xstrdup(media_names[i]);
             reqc->req->ralloc->med_ids[i]->family = PHO_RSC_DIR;
         }
         break;
@@ -454,8 +449,7 @@ static void create_request(struct req_container *reqc,
 
         pho_srl_request_format_alloc(reqc->req);
 
-        reqc->req->format->med_id->name = strdup(media_names[0]);
-        assert_non_null(reqc->req->format->med_id->name);
+        reqc->req->format->med_id->name = xstrdup(media_names[0]);
         reqc->req->format->med_id->family = PHO_RSC_DIR;
 
         rc = fetch_and_check_medium_info(lock_handle, reqc, &m, 0,
@@ -497,8 +491,7 @@ static int io_sched_setup(void **data)
     struct io_sched_handle *io_sched;
     int rc;
 
-    io_sched = malloc(sizeof(*io_sched));
-    assert_non_null(io_sched);
+    io_sched = xmalloc(sizeof(*io_sched));
 
     *data = io_sched;
 
@@ -1334,8 +1327,7 @@ static int set_fair_share_minmax(const char *_model,
            sizeof(key) - strlen("PHOBOS_IO_SCHED_TAPE_fair_share_") -
            strlen("_min"));
 
-    model = strdup(_model);
-    assert_non_null(model);
+    model = xstrdup(_model);
     /* pho_cfg_get_val will search for a lower case value in the environment */
     lowerstr(model);
 
@@ -1394,8 +1386,7 @@ static GPtrArray *init_devices(GPtrArray *devices, size_t n, char *model)
         name = make_name(i);
         assert_non_null(name);
 
-        dev = malloc(sizeof(*dev));
-        assert_non_null(dev);
+        dev = xmalloc(sizeof(*dev));
 
         create_device(dev, name, model, NULL);
         free(name);

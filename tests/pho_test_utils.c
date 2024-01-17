@@ -86,8 +86,7 @@ void get_serial_from_path(char *path, char **serial)
     rc = ldm_dev_query(deva, path, &lds);
     assert_return_code(rc, -rc);
 
-    *serial = strdup(lds.lds_serial);
-    assert_non_null(*serial);
+    *serial = xstrdup(lds.lds_serial);
 
     free(lds.lds_serial);
     free(lds.lds_model);
@@ -111,8 +110,7 @@ void create_device(struct lrs_dev *dev, char *path, char *model,
     dev->ld_sys_dev_state.lds_model = NULL;
     dev->ld_sys_dev_state.lds_serial = NULL;
 
-    dev->ld_dss_dev_info = calloc(1, sizeof(*dev->ld_dss_dev_info));
-    assert_non_null(dev->ld_dss_dev_info);
+    dev->ld_dss_dev_info = xcalloc(1, sizeof(*dev->ld_dss_dev_info));
 
     if (dss)
         dev->ld_device_thread.dss = *dss;

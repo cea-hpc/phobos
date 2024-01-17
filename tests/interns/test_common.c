@@ -51,7 +51,7 @@ static int parse_line(void *arg, char *line, size_t size, int stream)
     if ((len > 0) && (line[len - 1] == '\n'))
         line[len - 1] = '\0';
 
-    *ctx = g_list_append(*ctx, strdup(line));
+    *ctx = g_list_append(*ctx, xstrdup(line));
     return 0;
 }
 

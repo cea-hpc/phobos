@@ -98,9 +98,7 @@ static int setup_dss(void **state, bool setup_db)
     struct dss_handle *handle;
     int rc;
 
-    handle = malloc(sizeof(*handle));
-    if (handle == NULL)
-        return -1;
+    handle = xmalloc(sizeof(*handle));
 
     rc = setup(setup_db);
     if (rc)
@@ -150,9 +148,7 @@ static int setup_admin_no_lrs(void **state, bool setup_db)
     struct admin_handle *handle;
     int rc;
 
-    handle = malloc(sizeof(*handle));
-    if (handle == NULL)
-        return -1;
+    handle = xmalloc(sizeof(*handle));
 
     rc = setup(setup_db);
     if (rc)

@@ -87,7 +87,7 @@ int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
         return rc;
     }
 
-    obj_container = malloc(*obj_cnt * sizeof(**obj_ls) + sizeof(*ctn_bool));
+    obj_container = xmalloc(*obj_cnt * sizeof(**obj_ls) + sizeof(*ctn_bool));
     ctn_bool = (bool *)obj_container;
     *ctn_bool = true; // true for object, false for layout
     *obj_ls = (struct object_info *)(obj_container + sizeof(*ctn_bool));
@@ -96,7 +96,7 @@ int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
 
     for (i = 0; i < *obj_cnt; ++i) {
         (*obj_ls)[i].version = 7;
-        (*obj_ls)[i].uuid = strdup("abcdefgh12345678");
+        (*obj_ls)[i].uuid = xstrdup("abcdefgh12345678");
     }
 
     return rc;
@@ -129,7 +129,7 @@ int dss_deprecated_object_get(struct dss_handle *hdl,
         return rc;
     }
 
-    obj_container = malloc(*obj_cnt * sizeof(**obj_ls) + sizeof(*ctn_bool));
+    obj_container = xmalloc(*obj_cnt * sizeof(**obj_ls) + sizeof(*ctn_bool));
     ctn_bool = (bool *)obj_container;
     *ctn_bool = true; // true for object, false for layout
     *obj_ls = (struct object_info *)(obj_container + sizeof(*ctn_bool));

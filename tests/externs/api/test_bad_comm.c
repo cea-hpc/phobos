@@ -109,7 +109,7 @@ static int test_bad_put(void *arg)
     req.id = 0;
     req.walloc->family = PHO_RSC_INVAL;
     req.walloc->media[0]->size = 1;
-    req.walloc->media[0]->tags[0] = strdup("ratatouille");
+    req.walloc->media[0]->tags[0] = xstrdup("ratatouille");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Walloc -- bad resource family", -EINVAL);
     if (rc)
@@ -212,7 +212,7 @@ static int send_write_and_release_with_rc(struct pho_comm_info *ci,
     pho_srl_request_release_alloc(&req, 1);
     req.release->media[0]->med_id->family = PHO_RSC_DIR;
     req.release->media[0]->med_id->name =
-        strdup(resp->walloc->media[0]->med_id->name);
+        xstrdup(resp->walloc->media[0]->med_id->name);
     req.release->media[0]->to_sync = true;
     req.release->media[0]->size_written = size;
     req.release->media[0]->rc = client_rc;
@@ -284,7 +284,7 @@ static int test_bad_mput(void *arg)
     pho_srl_request_write_alloc(&reqs[1], 1, tags);
 
     reqs[0].walloc->media[0]->tags = NULL;
-    reqs[1].walloc->media[0]->tags[0] = strdup("invalid-tag");
+    reqs[1].walloc->media[0]->tags[0] = xstrdup("invalid-tag");
 
     for (i = 0; i < 2; i++) {
         reqs[i].id = i;
@@ -307,7 +307,7 @@ static int test_bad_mput(void *arg)
     reqs[0].id = 0;
     reqs[0].release->media[0]->med_id->family = PHO_RSC_DIR;
     reqs[0].release->media[0]->med_id->name =
-        strdup(resps[0]->walloc->media[0]->med_id->name);
+        xstrdup(resps[0]->walloc->media[0]->med_id->name);
     reqs[0].release->media[0]->to_sync = false;
 
     rc = _send_request(ci, &reqs[0]);
@@ -333,7 +333,7 @@ static int test_bad_get(void *arg)
     req.id = 0;
     req.ralloc->n_required = 1;
     req.ralloc->med_ids[0]->family = PHO_RSC_INVAL;
-    req.ralloc->med_ids[0]->name = strdup("/tmp/test.pho.1");
+    req.ralloc->med_ids[0]->name = xstrdup("/tmp/test.pho.1");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Get -- bad resource family", -EINVAL);
     if (rc)
@@ -344,7 +344,7 @@ static int test_bad_get(void *arg)
     ++req.id;
     req.ralloc->med_ids[0]->family = PHO_RSC_DIR;
     free(req.ralloc->med_ids[0]->name);
-    req.ralloc->med_ids[0]->name = strdup("/tmp/not/a/med");
+    req.ralloc->med_ids[0]->name = xstrdup("/tmp/not/a/med");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Get -- bad resource name", -ENXIO);
 
@@ -366,8 +366,8 @@ static int test_bad_mget(void *arg)
     pho_srl_request_read_alloc(&reqs[0], 1);
     pho_srl_request_read_alloc(&reqs[1], 1);
 
-    reqs[0].ralloc->med_ids[0]->name = strdup("/tmp/test.pho.1");
-    reqs[1].ralloc->med_ids[0]->name = strdup("/not/a/dir");
+    reqs[0].ralloc->med_ids[0]->name = xstrdup("/tmp/test.pho.1");
+    reqs[1].ralloc->med_ids[0]->name = xstrdup("/not/a/dir");
 
     for (i = 0; i < 2; i++) {
         reqs[i].id = i;
@@ -390,7 +390,7 @@ static int test_bad_mget(void *arg)
     reqs[0].id = 0;
     reqs[0].release->media[0]->med_id->family = PHO_RSC_DIR;
     reqs[0].release->media[0]->med_id->name =
-        strdup(resps[0]->ralloc->media[0]->med_id->name);
+        xstrdup(resps[0]->ralloc->media[0]->med_id->name);
     reqs[0].release->media[0]->to_sync = false;
 
     rc = _send_request(ci, &reqs[0]);
@@ -415,7 +415,7 @@ static int test_bad_release(void *arg)
     pho_srl_request_release_alloc(&req, 1);
     req.id = 0;
     req.release->media[0]->med_id->family = PHO_RSC_DIR;
-    req.release->media[0]->med_id->name = strdup("/tmp/not/a/med");
+    req.release->media[0]->med_id->name = xstrdup("/tmp/not/a/med");
     req.release->media[0]->to_sync = true;
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Release -- bad resource name", -ENODEV);
@@ -438,7 +438,7 @@ static int test_bad_format(void *arg)
     req.id = 0;
     req.format->fs = PHO_FS_INVAL;
     req.format->med_id->family = PHO_RSC_DIR;
-    req.format->med_id->name = strdup("/tmp/test.pho.3");
+    req.format->med_id->name = xstrdup("/tmp/test.pho.3");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Format -- bad file system", -ENOTSUP);
     if (rc)
@@ -459,7 +459,7 @@ static int test_bad_format(void *arg)
     ++req.id;
     req.format->med_id->family = PHO_RSC_DIR;
     free(req.format->med_id->name);
-    req.format->med_id->name = strdup("/tmp/not/a/med");
+    req.format->med_id->name = xstrdup("/tmp/not/a/med");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Format -- bad resource name", -ENXIO);
 
@@ -501,7 +501,7 @@ static int test_bad_notify(void *arg)
     pho_srl_response_free(resp, true);
     ++req.id;
     req.notify->rsrc_id->family = PHO_RSC_DIR;
-    req.notify->rsrc_id->name = strdup("/tmp/not/a/dev");
+    req.notify->rsrc_id->name = xstrdup("/tmp/not/a/dev");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Notify -- bad resource name", -ENXIO);
     if (rc)
@@ -534,7 +534,7 @@ static int test_bad_configure(void *arg)
     // Invalid JSON string
     pho_srl_response_free(resp, true);
     ++req.id;
-    req.configure->configuration = strdup("this is not JSON");
+    req.configure->configuration = xstrdup("this is not JSON");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Configure -- invalid JSON string", -EINVAL);
     if (rc)
@@ -544,7 +544,7 @@ static int test_bad_configure(void *arg)
     free(req.configure->configuration);
     pho_srl_response_free(resp, true);
     ++req.id;
-    req.configure->configuration = strdup("{}");
+    req.configure->configuration = xstrdup("{}");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Configure -- not a JSON array", -EINVAL);
     if (rc)
@@ -554,7 +554,7 @@ static int test_bad_configure(void *arg)
     free(req.configure->configuration);
     pho_srl_response_free(resp, true);
     ++req.id;
-    req.configure->configuration = strdup("[ 1 ]");
+    req.configure->configuration = xstrdup("[ 1 ]");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Configure -- not an object", -EINVAL);
     if (rc)
@@ -565,7 +565,7 @@ static int test_bad_configure(void *arg)
     pho_srl_response_free(resp, true);
     ++req.id;
     req.configure->configuration =
-        strdup("[{\"section\": \"s\", \"key\": \"k\"}]");
+        xstrdup("[{\"section\": \"s\", \"key\": \"k\"}]");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Configure -- missing key 'value'", -EINVAL);
     if (rc)
@@ -576,7 +576,7 @@ static int test_bad_configure(void *arg)
     pho_srl_response_free(resp, true);
     ++req.id;
     req.configure->configuration =
-        strdup("[{\"key\": \"k\", \"section\": 1, \"value\": \"v\"}]");
+        xstrdup("[{\"key\": \"k\", \"section\": 1, \"value\": \"v\"}]");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Configure -- invalid value for 'section'",
                       -EINVAL);
@@ -588,10 +588,10 @@ static int test_bad_configure(void *arg)
     pho_srl_response_free(resp, true);
     ++req.id;
     req.configure->configuration =
-        strdup("["
-               "    {\"section\": \"s\", \"key\": \"k\", \"value\": \"v\"}, "
-               "    {\"section\": \"s\", \"value\": \"v\"} "
-               "]");
+        xstrdup("["
+                "    {\"section\": \"s\", \"key\": \"k\", \"value\": \"v\"}, "
+                "    {\"section\": \"s\", \"value\": \"v\"} "
+                "]");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Configure -- second value missing 'key'", -EINVAL);
     if (rc)

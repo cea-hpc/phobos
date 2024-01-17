@@ -67,9 +67,9 @@ static char *dup_serial(const char *id)
 {
     char *c = strrchr(id, ' ');
     if (c)
-        return strdup(c + 1);
+        return xstrdup(c + 1);
 
-    return strdup(id);
+    return xstrdup(id);
 }
 
 
@@ -77,7 +77,7 @@ static char *dup_serial(const char *id)
 static void save_test_elements(const struct element_status *element)
 {
     if (element->full && one_label == NULL)
-        one_label = strdup(element->vol);
+        one_label = xstrdup(element->vol);
 
     switch (element->type) {
     case SCSI_TYPE_DRIVE:

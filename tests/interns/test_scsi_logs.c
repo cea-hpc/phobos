@@ -437,7 +437,7 @@ static void scsi_dev_load_logs_check(struct dss_handle *handle,
     /* The calloc here is necessary because if the dev_fails, it will free the
      * given medium.
      */
-    struct media_info *medium = calloc(1, sizeof(*medium));
+    struct media_info *medium = xcalloc(1, sizeof(*medium));
     struct lrs_dev device;
     json_t *full_message;
     bool fod;
@@ -555,7 +555,7 @@ static void scsi_dev_unload_logs_check(struct dss_handle *handle,
                                        char *device_name, char *medium_name)
 {
     struct phobos_global_context *context = phobos_context();
-    struct media_info *medium = calloc(1, sizeof(*medium));
+    struct media_info *medium = xcalloc(1, sizeof(*medium));
     struct lrs_dev device;
     json_t *full_message;
     bool fod;

@@ -141,9 +141,7 @@ static void load_config(char *execution_filename)
     char *test_bin, *test_dir, *test_file;
     int rc;
 
-    test_bin = strdup(execution_filename);
-    if (test_bin == NULL)
-        exit(EXIT_FAILURE);
+    test_bin = xstrdup(execution_filename);
     test_dir = dirname(test_bin);
 
     rc = asprintf(&test_file, "%s/../phobos.conf", test_dir);

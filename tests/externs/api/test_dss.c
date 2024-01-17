@@ -333,7 +333,7 @@ int main(int argc, char **argv)
                 if (action == DSS_SET_UPDATE_ADM_STATUS)
                     dev->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
                 if (action == DSS_SET_UPDATE_HOST)
-                    dev->host = strdup("h0st");
+                    dev->host = xstrdup("h0st");
             }
             break;
         case DSS_MEDIA:

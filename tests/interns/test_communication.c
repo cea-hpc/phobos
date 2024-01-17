@@ -206,10 +206,10 @@ static int test_sendrecv_simple(void *arg)
     free(data);
 
     send_data_client = pho_comm_data_init(&ci_client);
-    send_data_client.buf.buff = strdup("Hello?");
+    send_data_client.buf.buff = xstrdup("Hello?");
     send_data_client.buf.size = strlen(send_data_client.buf.buff);
 
-    send_data_server.buf.buff = strdup("World!");
+    send_data_server.buf.buff = xstrdup("World!");
     send_data_server.buf.size = strlen(send_data_server.buf.buff);
 
     rc = pho_comm_send(&send_data_client);
@@ -329,8 +329,7 @@ static int test_sendrecv_multiple(void *arg)
     // sending from clients
     for (i = 0; i < TOTAL; ++i) {
         send_data_client[i] = pho_comm_data_init(ci_client + i % NCLIENT);
-        send_data_client[i].buf.buff = malloc(sizeof(i));
-        assert(send_data_client[i].buf.buff != NULL);
+        send_data_client[i].buf.buff = xmalloc(sizeof(i));
         memcpy(send_data_client[i].buf.buff, &i, 4);
         send_data_client[i].buf.size = sizeof(i);
         assert(!pho_comm_send(send_data_client + i));
@@ -338,8 +337,7 @@ static int test_sendrecv_multiple(void *arg)
 
     // server side
     assert(!pho_comm_recv(&ci_server, &data, &nb_data));
-    send_data_server.buf.buff = malloc(sizeof(i));
-    assert(send_data_server.buf.buff != NULL);
+    send_data_server.buf.buff = xmalloc(sizeof(i));
     send_data_server.buf.size = sizeof(i);
     while (cnt) {
         for (i = 0; i < nb_data; ++i) {
