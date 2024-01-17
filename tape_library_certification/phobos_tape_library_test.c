@@ -230,15 +230,8 @@ int main(int argc, char **argv)
         }
 
         nb_devices++;
-        devices_status = realloc(devices_status,
-                                 sizeof(*devices_status) * nb_devices);
-        if (devices_status == NULL) {
-            pho_error(-ENOMEM,
-                      "Error when reallocating devices_status for %s, nb '%u'",
-                      dev_name, nb_devices);
-            final_status = ENOMEM;
-            goto clean;
-        }
+        devices_status = xrealloc(devices_status,
+                                  sizeof(*devices_status) * nb_devices);
 
         devices_status[nb_devices - 1].dev_name = dev_name;
         devices_status[nb_devices - 1].dev_addr = dev_info.ldi_addr;
@@ -254,15 +247,7 @@ int main(int argc, char **argv)
          tape_name != NULL;
          tape_name = strtok_r(NULL, ",", &saveptr)) {
         nb_tapes++;
-        tapes_name = realloc(tapes_name, sizeof(*tapes_name) * nb_tapes);
-        if (tapes_name == NULL) {
-            pho_error(-ENOMEM,
-                      "Error when reallocating tapes_name for %s, nb '%u'",
-                      tape_name, nb_tapes);
-            final_status = ENOMEM;
-            goto clean;
-        }
-
+        tapes_name = xrealloc(tapes_name, sizeof(*tapes_name) * nb_tapes);
         tapes_name[nb_tapes - 1] = tape_name;
     }
 
