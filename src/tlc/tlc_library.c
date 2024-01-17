@@ -599,32 +599,19 @@ static void move_tape_between_element_status(struct element_status *source,
     memcpy(destination->vol, source->vol, VOL_ID_LEN);
 }
 
-static int tlc_log_init(const char *drive_serial, const char *tape_label,
-                        enum operation_type operation_type, struct pho_log *log,
-                        json_t **json_message)
+static void tlc_log_init(const char *drive_serial, const char *tape_label,
+                         enum operation_type operation_type,
+                         struct pho_log *log, json_t **json_message)
 {
     struct pho_id drive_id;
     struct pho_id tape_id;
-    int rc;
 
     drive_id.family = PHO_RSC_TAPE;
     tape_id.family = PHO_RSC_TAPE;
-    rc = pho_id_name_set(&drive_id, drive_serial);
-    if (rc) {
-        pho_warn("We can't create a tlc log with drive serial '%s'",
-                 drive_serial);
-        return rc;
-    }
-
-    rc = pho_id_name_set(&tape_id, tape_label);
-    if (rc) {
-        pho_warn("We can't create a tlc log with a tape label '%s'",
-                 tape_label);
-        return rc;
-    }
+    pho_id_name_set(&drive_id, drive_serial);
+    pho_id_name_set(&tape_id, tape_label);
 
     init_pho_log(log, drive_id, tape_id, operation_type);
-    return 0;
 }
 
 int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
@@ -655,10 +642,7 @@ int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
     }
 
     /* prepare SCSI log */
-    rc = tlc_log_init(drive_serial, tape_label, PHO_DEVICE_LOAD,
-                      &log, json_message);
-    if (rc)
-        return rc;
+    tlc_log_init(drive_serial, tape_label, PHO_DEVICE_LOAD, &log, json_message);
 
     /* move medium to device */
     /* arm = 0 for default transport element */
@@ -837,10 +821,8 @@ int tlc_library_unload(struct dss_handle *dss, struct lib_descriptor *lib,
         return rc;
 
     /* prepare SCSI log */
-    rc = tlc_log_init(drive_serial, *unloaded_tape_label, PHO_DEVICE_UNLOAD,
-                      &log, json_message);
-    if (rc)
-        goto out_free;
+    tlc_log_init(drive_serial, *unloaded_tape_label, PHO_DEVICE_UNLOAD,
+                 &log, json_message);
 
     /* move medium to device */
     /* arm = 0 for default transport element */
@@ -880,7 +862,6 @@ out_log:
 
     destroy_json(log.message);
 
-out_free:
     if (rc) {
         free(unloaded_tape_label);
         *unloaded_tape_label = NULL;

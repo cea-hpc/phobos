@@ -66,9 +66,7 @@ static int send_request(struct context *context,
         pho_debug("format: %s", request->req.format->med_id->name);
 
     msg = pho_comm_data_init(context->comm);
-    rc = pho_srl_request_pack(&request->req, &msg.buf);
-    if (rc)
-        return rc;
+    pho_srl_request_pack(&request->req, &msg.buf);
 
     rc = pho_comm_send(&msg);
     free(msg.buf.buff);
@@ -79,20 +77,17 @@ static int send_request(struct context *context,
     return 0;
 }
 
-static int handle_read_response(struct context *context,
-                                struct pho_comm_info *comm,
-                                pho_resp_t *resp)
+static void handle_read_response(struct context *context,
+                                 struct pho_comm_info *comm,
+                                 pho_resp_t *resp)
 {
     struct request *read_req;
     struct request request;
-    int rc;
 
     context->stats.responses++;
     pho_debug("read: %s", resp->ralloc->media[0]->med_id->name);
 
-    rc = pho_srl_request_release_alloc(&request.req, 1);
-    if (rc)
-        return rc;
+    pho_srl_request_release_alloc(&request.req, 1);
 
     request.req.id = resp->req_id;
     request.req.release->media[0]->med_id->family = PHO_RSC_TAPE;
@@ -107,13 +102,11 @@ static int handle_read_response(struct context *context,
                               struct request,
                               resp->req_id);
     read_req->status = READY;
-
-    return 0;
 }
 
-static int handle_write_response(struct context *context,
-                                 struct pho_comm_info *comm,
-                                 pho_resp_t *resp)
+static void handle_write_response(struct context *context,
+                                  struct pho_comm_info *comm,
+                                  pho_resp_t *resp)
 {
     struct request *write_req;
     struct request request;
@@ -121,9 +114,7 @@ static int handle_write_response(struct context *context,
 
     context->stats.responses++;
     pho_debug("write: %s", resp->walloc->media[0]->med_id->name);
-    rc = pho_srl_request_release_alloc(&request.req, 1);
-    if (rc)
-        return rc;
+    pho_srl_request_release_alloc(&request.req, 1);
 
     request.req.id = resp->req_id;
     request.req.release->media[0]->med_id->family = PHO_RSC_TAPE;
@@ -138,8 +129,6 @@ static int handle_write_response(struct context *context,
                                struct request,
                                resp->req_id);
     write_req->status = READY;
-
-    return 0;
 }
 
 static int handle_format_response(struct context *context,
@@ -190,7 +179,7 @@ static int handle_format_response(struct context *context,
     return 0;
 }
 
-static int build_read_request(struct context *context)
+static void build_read_request(struct context *context)
 {
     struct media_info *medium;
     struct request req;
@@ -206,9 +195,8 @@ static int build_read_request(struct context *context)
                                context->requests.reads->len %
                                context->tapes_to_read->len);
 
-    rc = pho_srl_request_read_alloc(&req.req, 1);
-    if (rc)
-        return rc;
+    pho_srl_request_read_alloc(&req.req, 1);
+
 
     req.req.ralloc->med_ids[0]->name = strdup(medium->rsc.id.name);
     req.req.ralloc->med_ids[0]->family = PHO_RSC_TAPE;
@@ -217,19 +205,15 @@ static int build_read_request(struct context *context)
     req.status = READY;
 
     g_array_append_val(context->requests.reads, req);
-
-    return 0;
 }
 
-static int build_write_request(struct context *context)
+static void build_write_request(struct context *context)
 {
     struct request req;
     size_t n = 0;
     int rc;
 
-    rc = pho_srl_request_write_alloc(&req.req, 1, &n);
-    if (rc)
-        return rc;
+    pho_srl_request_write_alloc(&req.req, 1, &n);
 
     req.req.walloc->media[0]->size = 0;
     req.req.walloc->family = PHO_RSC_TAPE;
@@ -237,11 +221,9 @@ static int build_write_request(struct context *context)
     req.status = READY;
 
     g_array_append_val(context->requests.writes, req);
-
-    return 0;
 }
 
-static int build_format_request(struct context *context)
+static void build_format_request(struct context *context)
 {
     struct media_info *medium;
     struct request req;
@@ -252,9 +234,7 @@ static int build_format_request(struct context *context)
                                context->requests.reads->len %
                                context->tapes_to_format->len);
 
-    rc = pho_srl_request_format_alloc(&req.req);
-    if (rc)
-        return rc;
+    pho_srl_request_format_alloc(&req.req);
 
     req.req.format->fs = PHO_FS_LTFS;
     req.req.format->unlock = false;
@@ -264,33 +244,21 @@ static int build_format_request(struct context *context)
     req.req.id = context->requests.formats->len;
 
     g_array_append_val(context->requests.formats, req);
-
-    return 0;
 }
 
-static int build_and_send_requests(struct context *context,
-                                   struct pho_comm_info *comm)
+static void build_and_send_requests(struct context *context,
+                                    struct pho_comm_info *comm)
 {
-    int rc;
     int i;
 
-    while (context->nb_reads > context->requests.reads->len) {
-        rc = build_read_request(context);
-        if (rc)
-            return rc;
-    }
+    while (context->nb_reads > context->requests.reads->len)
+        build_read_request(context);
 
-    while (context->nb_writes > context->requests.writes->len) {
-        rc = build_write_request(context);
-        if (rc)
-            return rc;
-    }
+    while (context->nb_writes > context->requests.writes->len)
+        build_write_request(context);
 
-    while (context->nb_formats > context->requests.formats->len) {
-        rc = build_format_request(context);
-        if (rc)
-            return rc;
-    }
+    while (context->nb_formats > context->requests.formats->len)
+        build_format_request(context);
 
     for (i = 0; i < context->requests.reads->len && context->nb_reads;
          i++) {
@@ -330,8 +298,6 @@ static int build_and_send_requests(struct context *context,
             req->status = SENT;
         }
     }
-
-    return 0;
 }
 
 static void handle_error(struct context *context,
@@ -384,9 +350,7 @@ static void *send_requests(void *data)
         int n_responses = 0;
         int i;
 
-        rc = build_and_send_requests(context, context->comm);
-        if (rc)
-            pthread_exit(NULL);
+        build_and_send_requests(context, context->comm);
 
         if (context->inflight == 0) {
             /* Do not call receive as client receive is blocking */

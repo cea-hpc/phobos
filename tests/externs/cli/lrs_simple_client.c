@@ -121,12 +121,8 @@ static void send_and_receive(struct pho_comm_info *comm,
     int rc;
 
     data = pho_comm_data_init(comm);
-    rc = pho_srl_request_pack(req, &data.buf);
+    pho_srl_request_pack(req, &data.buf);
     pho_srl_request_free(req, false);
-    if (rc) {
-        pho_srl_request_free(req, false);
-        error(__func__, strerror(-rc));
-    }
 
     rc = pho_comm_send(&data);
     free(data.buf.buff);
@@ -158,11 +154,8 @@ static void send_read(struct pho_comm_info *comm,
 {
     pho_resp_t *resp = NULL;
     pho_req_t req;
-    int rc;
 
-    rc = pho_srl_request_read_alloc(&req, 1);
-    if (rc)
-        error(__func__, strerror(-rc));
+    pho_srl_request_read_alloc(&req, 1);
     req.ralloc->med_ids[0]->name = strdup(medium_name);
     req.ralloc->med_ids[0]->family = family;
 
@@ -176,11 +169,8 @@ static void send_write(struct pho_comm_info *comm,
     pho_resp_t *resp = NULL;
     pho_req_t req;
     size_t n = 0;
-    int rc;
 
-    rc = pho_srl_request_write_alloc(&req, 1, &n);
-    if (rc)
-        error(__func__, strerror(-rc));
+    pho_srl_request_write_alloc(&req, 1, &n);
     req.walloc->media[0]->size = 0;
     req.walloc->family = family;
 
@@ -195,11 +185,8 @@ static void send_release(struct pho_comm_info *comm,
 {
     pho_resp_t *resp = NULL;
     pho_req_t req;
-    int rc;
 
-    rc = pho_srl_request_release_alloc(&req, 1);
-    if (rc)
-        error(__func__, strerror(-rc));
+    pho_srl_request_release_alloc(&req, 1);
 
     req.release->media[0]->med_id->family = family;
     req.release->media[0]->med_id->name = strdup(medium_name);
@@ -215,7 +202,6 @@ static void send_format(struct pho_comm_info *comm,
     pho_resp_t *resp = NULL;
     enum fs_type fs;
     pho_req_t req;
-    int rc;
 
     switch (family) {
     case PHO_RSC_DIR:
@@ -229,9 +215,7 @@ static void send_format(struct pho_comm_info *comm,
         break;
     }
 
-    rc = pho_srl_request_format_alloc(&req);
-    if (rc)
-        error(__func__, strerror(-rc));
+    pho_srl_request_format_alloc(&req);
 
     req.format->fs = fs;
     req.format->unlock = false;

@@ -177,7 +177,7 @@ static void n_media_per_release(struct req_container *req_cont)
         rel->n_media - req_cont->params.release.n_tosync_media;
 }
 
-static int init_release_container(struct req_container *req_cont)
+static void init_release_container(struct req_container *req_cont)
 {
     struct tosync_medium *tosync_media = NULL;
     struct nosync_medium *nosync_media = NULL;
@@ -185,7 +185,6 @@ static int init_release_container(struct req_container *req_cont)
     size_t nosync_media_index = 0;
     pho_req_release_elt_t *media;
     size_t i;
-    int rc;
 
     n_media_per_release(req_cont);
 
@@ -205,20 +204,16 @@ static int init_release_container(struct req_container *req_cont)
                 (enum rsc_family)media->med_id->family;
             tosync_media[tosync_media_index].written_size = media->size_written;
             tosync_media[tosync_media_index].client_rc = media->rc;
-            rc = pho_id_name_set(&tosync_media[tosync_media_index].medium,
-                                 media->med_id->name);
-            if (rc)
-                GOTO(clean_on_error, rc);
+            pho_id_name_set(&tosync_media[tosync_media_index].medium,
+                            media->med_id->name);
 
             tosync_media_index++;
         } else {
             nosync_media[nosync_media_index].medium.family =
                 (enum rsc_family)media->med_id->family;
             nosync_media[tosync_media_index].written_size = media->size_written;
-            rc = pho_id_name_set(&nosync_media[nosync_media_index].medium,
-                                 media->med_id->name);
-            if (rc)
-                GOTO(clean_on_error, rc);
+            pho_id_name_set(&nosync_media[nosync_media_index].medium,
+                            media->med_id->name);
 
             nosync_media_index++;
         }
@@ -226,12 +221,6 @@ static int init_release_container(struct req_container *req_cont)
 
     req_cont->params.release.tosync_media = tosync_media;
     req_cont->params.release.nosync_media = nosync_media;
-    return 0;
-
-clean_on_error:
-    free(tosync_media);
-    free(nosync_media);
-    return rc;
 }
 
 static void notify_device_request_is_canceled(struct resp_container *respc)
@@ -263,20 +252,15 @@ static int request_kind_from_response(pho_resp_t *resp)
         return -1;
 }
 
-static int convert_response_to_error(struct resp_container *respc)
+static void convert_response_to_error(struct resp_container *respc)
 {
     int response_kind = request_kind_from_response(respc->resp);
-    int rc;
 
     pho_srl_response_free(respc->resp, false);
-    rc = pho_srl_response_error_alloc(respc->resp);
-    if (rc)
-        return rc;
+    pho_srl_response_error_alloc(respc->resp);
 
     respc->resp->error->rc = -ESHUTDOWN;
     respc->resp->error->req_kind = response_kind;
-
-    return 0;
 }
 
 static inline bool cancel_read_write(struct resp_container *respc)
@@ -290,12 +274,10 @@ static inline bool cancel_read_write(struct resp_container *respc)
     return false;
 }
 
-static inline int cancel_response(struct resp_container *respc)
+static inline void cancel_response(struct resp_container *respc)
 {
     if (cancel_read_write(respc))
-        return convert_response_to_error(respc);
-
-    return 0;
+        convert_response_to_error(respc);
 }
 
 static inline bool client_disconnected_error(int rc)
@@ -311,18 +293,10 @@ static int _send_message(struct pho_comm_info *comm,
 
     msg = pho_comm_data_init(comm);
     msg.fd = respc->socket_id;
-    if (!running) {
-        rc = cancel_response(respc);
-        if (rc)
-            return rc;
-    }
+    if (!running)
+        cancel_response(respc);
 
-    rc = pho_srl_response_pack(respc->resp, &msg.buf);
-    if (rc)
-        /* Do not block device's ongoing_io status if the client never receives
-         * the answer.
-         */
-        LOG_GOTO(cancel, rc, "Response cannot be packed");
+    pho_srl_response_pack(respc->resp, &msg.buf);
 
     /* XXX: \p running could change just before the call to send.
      * Which means that new I/O responses would be sent with running = false
@@ -375,9 +349,7 @@ static int _send_error(struct lrs *lrs, int req_rc,
 
     resp_cont.resp = xmalloc(sizeof(*resp_cont.resp));
 
-    rc = prepare_error(&resp_cont, req_rc, req_cont);
-    if (rc)
-        LOG_GOTO(err_resp, rc, "Cannot prepare error response");
+    prepare_error(&resp_cont, req_rc, req_cont);
 
     rc = _send_message(&lrs->comm, &resp_cont);
     pho_srl_response_free(resp_cont.resp, false);
@@ -464,12 +436,11 @@ send_error:
     return rc;
 }
 
-static int init_rwalloc_container(struct req_container *reqc)
+static void init_rwalloc_container(struct req_container *reqc)
 {
     struct rwalloc_params *rwalloc_params = &reqc->params.rwalloc;
     bool is_write = pho_request_is_write(reqc->req);
     size_t i;
-    int rc;
 
     if (is_write) {
         rwalloc_params->n_media = reqc->req->walloc->n_media;
@@ -492,46 +463,27 @@ static int init_rwalloc_container(struct req_container *reqc)
                                           sizeof(*rwalloc_params->respc->resp));
 
     if (is_write)
-        rc = pho_srl_response_write_alloc(rwalloc_params->respc->resp,
-                                          rwalloc_params->n_media);
+        pho_srl_response_write_alloc(rwalloc_params->respc->resp,
+                                     rwalloc_params->n_media);
     else
-        rc = pho_srl_response_read_alloc(rwalloc_params->respc->resp,
-                                         rwalloc_params->n_media);
-
-    if (rc)
-        goto out_free_resp;
+        pho_srl_response_read_alloc(rwalloc_params->respc->resp,
+                                    rwalloc_params->n_media);
 
     rwalloc_params->respc->resp->req_id = reqc->req->id;
     rwalloc_params->respc->devices_len = rwalloc_params->n_media;
     rwalloc_params->respc->devices =
         xcalloc(rwalloc_params->respc->devices_len,
                 sizeof(*rwalloc_params->respc->devices));
-
-    return 0;
-
-out_free_resp:
-    free(rwalloc_params->respc->resp);
-    rwalloc_params->respc->resp = NULL;
-    free(rwalloc_params->respc);
-    rwalloc_params->respc = NULL;
-    free(rwalloc_params->media);
-    rwalloc_params->media = NULL;
-
-    return rc;
 }
 
-static int init_request_container_param(struct req_container *reqc)
+static void init_request_container_param(struct req_container *reqc)
 {
     if (pho_request_is_release(reqc->req))
-        return init_release_container(reqc);
-
-    if (pho_request_is_write(reqc->req) || pho_request_is_read(reqc->req))
-        return init_rwalloc_container(reqc);
-
-    if (pho_request_is_notify(reqc->req))
+        init_release_container(reqc);
+    else if (pho_request_is_write(reqc->req) || pho_request_is_read(reqc->req))
+        init_rwalloc_container(reqc);
+    else if (pho_request_is_notify(reqc->req))
         reqc->params.notify.notified_device = NULL;
-
-    return 0;
 }
 
 static int update_phys_spc_free(struct dss_handle *dss,
@@ -658,9 +610,7 @@ static int process_release_request(struct lrs_sched *sched,
     reqc->params.release.rc = rc ? : client_err;
     reqc->params.release.tosync_media[release_index].status =
         SUB_REQUEST_ERROR;
-    rc = queue_error_response(sched->response_queue,
-                              reqc->params.release.rc,
-                              reqc);
+    queue_error_response(sched->response_queue, reqc->params.release.rc, reqc);
 
     for (j = 0; j < reqc->params.release.n_tosync_media; j++) {
         if (j == release_index)
@@ -898,10 +848,7 @@ static int _prepare_requests(struct lrs *lrs, bool *schedulers_to_signal,
             LOG_GOTO(send_err, rc2 = -EINVAL,
                      "Requested family is not handled by the daemon");
 
-        rc2 = init_request_container_param(req_cont);
-        if (rc2)
-            LOG_GOTO(send_err, rc2, "Cannot init request container");
-
+        init_request_container_param(req_cont);
         if (pho_request_is_release(req_cont->req)) {
             rc2 = process_release_request(lrs->sched[fam], &lrs->dss, req_cont);
             rc = rc ? : rc2;

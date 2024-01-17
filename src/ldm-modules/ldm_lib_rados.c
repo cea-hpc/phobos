@@ -152,15 +152,13 @@ static int lib_rados_drive_lookup(struct lib_handle *lib_hdl,
 
     (void) message;
 
-    if (!lib_hdl->lh_lib || !sep)
+    if (!lib_hdl->lh_lib || !sep || (strlen(sep + 1) + 1) > PHO_URI_MAX)
         return -EBADF;
 
     drv_info->ldi_medium_id.family = PHO_RSC_RADOS_POOL;
     drv_info->ldi_addr.lia_addr = 0;
 
-    rc = pho_id_name_set(&drv_info->ldi_medium_id, sep + 1);
-    if (rc)
-        return rc;
+    pho_id_name_set(&drv_info->ldi_medium_id, sep + 1);
 
     rc = pho_rados_pool_exists(lib_hdl->lh_lib, drv_info->ldi_medium_id.name);
     if (rc < 0) {

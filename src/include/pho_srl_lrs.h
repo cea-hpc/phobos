@@ -335,75 +335,60 @@ const char *pho_srl_error_kind_str(pho_resp_error_t *err);
  * \param[in]       n_media     Number of media targeted by the request.
  * \param[in]       n_tags      Array which contains, for each medium,
  *                              the number of tags it is defined by.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_request_write_alloc(pho_req_t *req, size_t n_media, size_t *n_tags);
+void pho_srl_request_write_alloc(pho_req_t *req, size_t n_media,
+                                 size_t *n_tags);
 
 /**
  * Allocation of read request contents.
  *
  * \param[out]      req         Pointer to the request data structure.
  * \param[in]       n_media     Number of media targeted by the request.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_request_read_alloc(pho_req_t *req, size_t n_media);
+void pho_srl_request_read_alloc(pho_req_t *req, size_t n_media);
 
 /**
  * Allocation of release request contents.
  *
  * \param[out]      req         Pointer to the request data structure.
  * \param[in]       n_media     Number of media targeted by the request.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_request_release_alloc(pho_req_t *req, size_t n_media);
+void pho_srl_request_release_alloc(pho_req_t *req, size_t n_media);
 
 /**
  * Allocation of format request contents.
  *
  * \param[out]      req         Pointer to the request data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_request_format_alloc(pho_req_t *req);
+void pho_srl_request_format_alloc(pho_req_t *req);
 
 /**
  * Allocation of ping request contents.
  *
  * \param[out]      req         Pointer to the request data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_request_ping_alloc(pho_req_t *req);
+void pho_srl_request_ping_alloc(pho_req_t *req);
 
 /**
  * Allocation of configure request contents.
  *
  * \param[out]      req         Pointer to the request data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_request_configure_alloc(pho_req_t *req);
+void pho_srl_request_configure_alloc(pho_req_t *req);
 
 /**
  * Allocation of notify request contents.
  *
  * \param[out]      req         Pointer to the request data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_request_notify_alloc(pho_req_t *req);
+void pho_srl_request_notify_alloc(pho_req_t *req);
 
 /**
  * Allocation of monitor request contents.
  *
  * \param[out]   req   request
- *
- * \return             0 on succes, -ENOMEM on failure.
  */
-int pho_srl_request_monitor_alloc(pho_req_t *req);
+void pho_srl_request_monitor_alloc(pho_req_t *req);
 
 /**
  * Release of request contents.
@@ -419,39 +404,31 @@ void pho_srl_request_free(pho_req_t *req, bool unpack);
  *
  * \param[out]      resp        Pointer to the response data structure.
  * \param[in]       n_media     Number of media targeted by the response.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_response_write_alloc(pho_resp_t *resp, size_t n_media);
+void pho_srl_response_write_alloc(pho_resp_t *resp, size_t n_media);
 
 /**
  * Allocation of read response contents.
  *
  * \param[out]      resp        Pointer to the response data structure.
  * \param[in]       n_media     Number of media targeted by the response.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_response_read_alloc(pho_resp_t *resp, size_t n_media);
+void pho_srl_response_read_alloc(pho_resp_t *resp, size_t n_media);
 
 /**
  * Allocation of release response contents.
  *
  * \param[out]      resp        Pointer to the response data structure.
  * \param[in]       n_media     Number of media targeted by the response.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_response_release_alloc(pho_resp_t *resp, size_t n_media);
+void pho_srl_response_release_alloc(pho_resp_t *resp, size_t n_media);
 
 /**
  * Allocation of format response contents.
  *
  * \param[out]      resp        Pointer to the response data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_response_format_alloc(pho_resp_t *resp);
+void pho_srl_response_format_alloc(pho_resp_t *resp);
 
 /**
  * Allocation of ping response contents.
@@ -465,33 +442,27 @@ void pho_srl_response_ping_alloc(pho_resp_t *resp);
  *
  * \param[out]      resp        Pointer to the response data structure.
  */
-int pho_srl_response_configure_alloc(pho_resp_t *resp);
+void pho_srl_response_configure_alloc(pho_resp_t *resp);
 
 /**
  * Allocation of notify response contents.
  *
  * \param[out]      resp        Pointer to the response data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_response_notify_alloc(pho_resp_t *resp);
+void pho_srl_response_notify_alloc(pho_resp_t *resp);
 
 /** Allocation of monitor response contents.
  *
  * \param[out]    resp   Pointer to the response data structure.
- *
- * \return               0 on success, -ENOMEM on failure.
  */
-int pho_srl_response_monitor_alloc(pho_resp_t *resp);
+void pho_srl_response_monitor_alloc(pho_resp_t *resp);
 
 /**
  * Allocation of error response contents.
  *
  * \param[out]      resp        Pointer to the response data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_response_error_alloc(pho_resp_t *resp);
+void pho_srl_response_error_alloc(pho_resp_t *resp);
 
 /**
  * Release of response contents.
@@ -513,10 +484,8 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack);
  *
  * \param[in]       req         Request data structure.
  * \param[out]      buf         Serialized buffer data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_request_pack(pho_req_t *req, struct pho_buff *buf);
+void pho_srl_request_pack(pho_req_t *req, struct pho_buff *buf);
 
 /**
  * Deserialization of a request.
@@ -537,10 +506,8 @@ pho_req_t *pho_srl_request_unpack(struct pho_buff *buf);
  *
  * \param[in]       resp        Response data structure.
  * \param[out]      buf         Serialized buffer data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_response_pack(pho_resp_t *resp, struct pho_buff *buf);
+void pho_srl_response_pack(pho_resp_t *resp, struct pho_buff *buf);
 
 /**
  * Deserialization of a response.

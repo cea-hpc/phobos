@@ -442,23 +442,20 @@ static int dev_wait_for_signal(struct lrs_dev *dev)
     return thread_signal_timed_wait(&dev->ld_device_thread, &time);
 }
 
-int queue_release_response(struct tsqueue *response_queue,
-                           struct req_container *reqc)
+void queue_release_response(struct tsqueue *response_queue,
+                            struct req_container *reqc)
 {
     struct tosync_medium *tosync_media = reqc->params.release.tosync_media;
     size_t n_tosync_media = reqc->params.release.n_tosync_media;
     struct resp_container *respc = NULL;
     pho_resp_release_t *resp_release;
     size_t i;
-    int rc;
 
     respc = xmalloc(sizeof(*respc));
     respc->socket_id = reqc->socket_id;
     respc->resp = xmalloc(sizeof(*respc->resp));
 
-    rc = pho_srl_response_release_alloc(respc->resp, n_tosync_media);
-    if (rc)
-        goto err_respc_resp;
+    pho_srl_response_release_alloc(respc->resp, n_tosync_media);
 
     /* Build the answer */
     respc->resp->req_id = reqc->req->id;
@@ -470,14 +467,6 @@ int queue_release_response(struct tsqueue *response_queue,
     }
 
     tsqueue_push(response_queue, respc);
-
-    return 0;
-
-err_respc_resp:
-    free(respc->resp);
-    free(respc);
-
-    return queue_error_response(response_queue, rc, reqc);
 }
 
 /* This function MUST be called with a lock on \p req */
@@ -496,10 +485,9 @@ bool is_request_tosync_ended(struct req_container *req)
  *  TODO: will become a device thread static function when all media operations
  *  will be moved to device thread
  */
-int clean_tosync_array(struct lrs_dev *dev, int rc)
+void clean_tosync_array(struct lrs_dev *dev, int rc)
 {
     GPtrArray *tosync_array = dev->ld_sync_params.tosync_array;
-    int internal_rc = 0;
 
     MUTEX_LOCK(&dev->ld_mutex);
     while (tosync_array->len) {
@@ -508,7 +496,6 @@ int clean_tosync_array(struct lrs_dev *dev, int rc)
             &req->reqc->params.release.tosync_media[req->medium_index];
         bool should_send_error = false;
         bool is_tosync_ended = false;
-        int rc2;
 
         g_ptr_array_remove_index(tosync_array, tosync_array->len - 1);
 
@@ -530,18 +517,12 @@ int clean_tosync_array(struct lrs_dev *dev, int rc)
 
         MUTEX_UNLOCK(&req->reqc->mutex);
 
-        if (should_send_error) {
-            rc2 = queue_error_response(dev->ld_response_queue, rc, req->reqc);
-            if (rc2)
-                internal_rc = internal_rc ? : rc2;
-        }
+        if (should_send_error)
+            queue_error_response(dev->ld_response_queue, rc, req->reqc);
 
         if (is_tosync_ended) {
-            if (!req->reqc->params.release.rc) {
-                rc2 = queue_release_response(dev->ld_response_queue, req->reqc);
-                if (rc2)
-                    internal_rc = internal_rc ? : rc2;
-            }
+            if (!req->reqc->params.release.rc)
+                queue_release_response(dev->ld_response_queue, req->reqc);
         } else {
             req->reqc = NULL;   /* only the last device free reqc */
         }
@@ -555,8 +536,6 @@ int clean_tosync_array(struct lrs_dev *dev, int rc)
     dev->ld_sync_params.oldest_tosync.tv_nsec = 0;
     dev->ld_needs_sync = false;
     MUTEX_UNLOCK(&dev->ld_mutex);
-
-    return internal_rc;
 }
 
 /**
@@ -831,11 +810,7 @@ static int dev_sync(struct lrs_dev *dev)
         pho_error(rc2, "Cannot update media information");
     }
 
-    rc2 = clean_tosync_array(dev, rc);
-    if (rc2) {
-        rc = rc ? : rc2;
-        pho_error(rc2, "Cannot clean tosync array");
-    }
+    clean_tosync_array(dev, rc);
 
     return rc;
 }
@@ -846,7 +821,7 @@ static int dev_sync(struct lrs_dev *dev)
 static int dev_umount(struct lrs_dev *dev)
 {
     struct fs_adapter_module *fsa;
-    int rc, rc2;
+    int rc;
 
     ENTRY;
 
@@ -862,22 +837,13 @@ static int dev_umount(struct lrs_dev *dev)
                  dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
     rc = ldm_fs_umount(fsa, dev->ld_dev_path, dev->ld_mnt_path);
-    rc2 = clean_tosync_array(dev, rc);
-    if (rc)
-        LOG_GOTO(out, rc, "Failed to unmount device '%s' mounted at '%s'",
-                 dev->ld_dev_path, dev->ld_mnt_path);
+    clean_tosync_array(dev, rc);
 
     /* update device state and unset mount path */
     MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_op_status = PHO_DEV_OP_ST_LOADED;
     dev->ld_mnt_path[0] = '\0';
     MUTEX_UNLOCK(&dev->ld_mutex);
-
-    if (rc2)
-        LOG_GOTO(out, rc = rc2,
-                 "Failed to clean tosync array after having unmounted device "
-                 "'%s' mounted at '%s'",
-                 dev->ld_dev_path, dev->ld_mnt_path);
 
 out:
     if (rc) {
@@ -1223,19 +1189,16 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
     return rc;
 }
 
-static int queue_format_response(struct tsqueue *response_queue,
-                                 struct req_container *reqc)
+static void queue_format_response(struct tsqueue *response_queue,
+                                  struct req_container *reqc)
 {
     struct resp_container *respc = NULL;
-    int rc;
 
     respc = xmalloc(sizeof(*respc));
     respc->socket_id = reqc->socket_id;
     respc->resp = xmalloc(sizeof(*respc->resp));
 
-    rc = pho_srl_response_format_alloc(respc->resp);
-    if (rc)
-        goto err_respc_resp;
+    pho_srl_response_format_alloc(respc->resp);
 
     /* Build the answer */
     respc->resp->req_id = reqc->req->id;
@@ -1244,13 +1207,6 @@ static int queue_format_response(struct tsqueue *response_queue,
         xstrdup_safe(reqc->req->format->med_id->name);
 
     tsqueue_push(response_queue, respc);
-    return 0;
-
-err_respc_resp:
-    free(respc->resp);
-    free(respc);
-
-    return queue_error_response(response_queue, rc, reqc);
 }
 
 static int dev_handle_format(struct lrs_dev *dev)
@@ -1307,9 +1263,7 @@ static int dev_handle_format(struct lrs_dev *dev)
             } else {
                 pho_error(rc, "Error on medium only when loading to format in "
                           "device %s", dev->ld_dss_dev_info->rsc.id.name);
-                rc = queue_error_response(dev->ld_response_queue, rc, reqc);
-                if (rc)
-                    pho_error(rc, "Unable to queue format error response");
+                queue_error_response(dev->ld_response_queue, rc, reqc);
 
                 goto out;
             }
@@ -1319,17 +1273,10 @@ static int dev_handle_format(struct lrs_dev *dev)
     rc = dev_format(dev, reqc->params.format.fsa, reqc->req->format->unlock);
 
 out_response:
-    if (rc) {
-        int rc2;
-
-        rc2 = queue_error_response(dev->ld_response_queue, rc, reqc);
-        if (rc2)
-            pho_error(rc2, "Unable to queue format error response");
-    } else {
-        rc = queue_format_response(dev->ld_response_queue, reqc);
-        if (rc)
-            pho_error(rc, "Unable to queue format response");
-    }
+    if (rc)
+        queue_error_response(dev->ld_response_queue, rc, reqc);
+    else
+        queue_format_response(dev->ld_response_queue, reqc);
 
 out:
     MUTEX_LOCK(&dev->ld_mutex);
@@ -1525,8 +1472,8 @@ static int handle_rwalloc_sub_request_result(struct lrs_dev *dev,
         /* First fatal error on rwalloc */
         reqc->params.rwalloc.rc = sub_request_rc;
         rwalloc_medium->status = SUB_REQUEST_ERROR;
-        rc = queue_error_response(dev->ld_response_queue, sub_request_rc,
-                                  sub_request->reqc);
+        queue_error_response(dev->ld_response_queue, sub_request_rc,
+                             sub_request->reqc);
         rwalloc_cancel_DONE_devices(reqc);
     }
 
@@ -1854,13 +1801,9 @@ static void cancel_pending_format(struct lrs_dev *device)
          */
         format_medium_remove(device->ld_ongoing_format,
                              device->ld_dss_media_info);
-        rc = queue_error_response(device->ld_response_queue,
-                                  device->ld_device_thread.status,
-                                  format_request);
-        if (rc)
-            pho_error(rc,
-                      "Unable to send error for format request of medium '%s'",
-                      format_request->req->format->med_id->name);
+        queue_error_response(device->ld_response_queue,
+                             device->ld_device_thread.status,
+                             format_request);
 
         sub_request_free(device->ld_sub_request);
     } else {
@@ -1898,12 +1841,7 @@ static void cancel_pending_format(struct lrs_dev *device)
             tsqueue_push(device->sched_req_queue, format_request);
             free(device->ld_sub_request);
         } else {
-            rc = queue_error_response(device->ld_response_queue, rc,
-                                      format_request);
-            if (rc)
-                pho_error(rc,
-                          "Unable to send error to format request of medium "
-                          "'%s'", format_request->req->format->med_id->name);
+            queue_error_response(device->ld_response_queue, rc, format_request);
 
             sub_request_free(device->ld_sub_request);
         }
@@ -2023,11 +1961,7 @@ static void dev_thread_end_device(struct lrs_dev *device)
     }
 
     if (device->ld_device_thread.status) {
-        rc = clean_tosync_array(device, device->ld_device_thread.status);
-        if (rc)
-            pho_error(rc,
-                      "Failed to clean tosync array of device '%s' at exit",
-                      device->ld_dss_dev_info->rsc.id.name);
+        clean_tosync_array(device, device->ld_device_thread.status);
 
         MUTEX_LOCK(&device->ld_mutex);
         device->ld_op_status = PHO_DEV_OP_ST_FAILED;

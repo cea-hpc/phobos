@@ -782,15 +782,11 @@ err_format_media:
     return rc;
 }
 
-int prepare_error(struct resp_container *resp_cont, int req_rc,
-                  const struct req_container *req_cont)
+void prepare_error(struct resp_container *resp_cont, int req_rc,
+                   const struct req_container *req_cont)
 {
-    int rc;
-
     resp_cont->socket_id = req_cont->socket_id;
-    rc = pho_srl_response_error_alloc(resp_cont->resp);
-    if (rc)
-        LOG_RETURN(rc, "Failed to allocate response");
+    pho_srl_response_error_alloc(resp_cont->resp);
 
     resp_cont->resp->error->rc = req_rc;
 
@@ -805,32 +801,19 @@ int prepare_error(struct resp_container *resp_cont, int req_rc,
         resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_FORMAT;
     else if (pho_request_is_notify(req_cont->req))
         resp_cont->resp->error->req_kind = PHO_REQUEST_KIND__RQ_NOTIFY;
-
-    return 0;
 }
 
-int queue_error_response(struct tsqueue *response_queue, int req_rc,
-                         struct req_container *reqc)
+void queue_error_response(struct tsqueue *response_queue, int req_rc,
+                          struct req_container *reqc)
 {
     struct resp_container *resp_cont;
-    int rc;
 
     resp_cont = xmalloc(sizeof(*resp_cont));
     resp_cont->resp = xmalloc(sizeof(*resp_cont->resp));
 
-    rc = prepare_error(resp_cont, req_rc, reqc);
-    if (rc)
-        goto clean;
+    prepare_error(resp_cont, req_rc, reqc);
 
     tsqueue_push(response_queue, resp_cont);
-
-    return 0;
-
-clean:
-    free(resp_cont->resp);
-    free(resp_cont);
-
-    return rc;
 }
 
 void sched_resp_free(void *_respc)
@@ -1721,11 +1704,10 @@ static int publish_or_cancel(struct lrs_sched *sched,
                                                                         false;
 
         if (reqc_rc != -EAGAIN || rc) {
-            int rc2 = queue_error_response(sched->response_queue,
-                                           reqc_rc != -EAGAIN ? reqc_rc : rc,
-                                           reqc);
+            queue_error_response(sched->response_queue,
+                                 reqc_rc != -EAGAIN ? reqc_rc : rc,
+                                 reqc);
             sched_req_free(reqc);
-            rc = rc ? : rc2;
         }
     }
 
@@ -1954,9 +1936,7 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
         return -EINVAL;
 
     m_id->family = (enum rsc_family) medium_id->family;
-    rc = pho_id_name_set(m_id, medium_id->name);
-    if (rc)
-        return rc;
+    pho_id_name_set(m_id, medium_id->name);
 
     rc = sched_fill_media_info(lock_handle, target_medium, m_id);
     if (rc)
@@ -2244,25 +2224,12 @@ remove_format_err_out:
 
 err_out:
     if (rc != -EAGAIN) {
-        int rc2;
-
         pho_error(rc, "format: failed to schedule format for medium '%s'",
                   m.name);
-        rc2 = queue_error_response(sched->response_queue, rc, reqc);
-        if (rc2)
-            pho_error(rc2, "Error on sending format error response");
+        queue_error_response(sched->response_queue, rc, reqc);
 
-        /*
-         * LRS global error only if we face a response error.
-         * If there is no response error, rc2 is equal to zero and we set rc to
-         * the no error zero value, else we track the response error rc2 into
-         * rc.
-         */
-        rc = rc2;
-
-        rc2 = io_sched_remove_request(&sched->io_sched_hdl, reqc);
+        rc = io_sched_remove_request(&sched->io_sched_hdl, reqc);
         sched_req_free(reqc);
-        rc = rc ? : rc2;
     }
 
     return rc;
@@ -2280,25 +2247,19 @@ err_out:
  * @return                  0 if success,
  *                         -errno if failure
  */
-static int queue_notify_response(struct lrs_sched *sched,
-                                 struct req_container *reqc)
+static void queue_notify_response(struct lrs_sched *sched,
+                                  struct req_container *reqc)
 {
     pho_req_notify_t *nreq = reqc->req->notify;
     struct resp_container *respc;
     pho_resp_t *resp;
-    int rc;
 
     respc = xmalloc(sizeof(*respc));
 
     respc->socket_id = reqc->socket_id;
     respc->resp = xmalloc(sizeof(*respc->resp));
 
-    rc = pho_srl_response_notify_alloc(respc->resp);
-    if (rc) {
-        free(respc->resp);
-        free(respc);
-        return rc;
-    }
+    pho_srl_response_notify_alloc(respc->resp);
 
     resp = respc->resp;
 
@@ -2307,8 +2268,6 @@ static int queue_notify_response(struct lrs_sched *sched,
     resp->notify->rsrc_id->name = xstrdup(nreq->rsrc_id->name);
 
     tsqueue_push(sched->response_queue, respc);
-
-    return 0;
 }
 
 /* reqc is freed unless -EAGAIN is returned */
@@ -2357,20 +2316,19 @@ static int sched_handle_notify(struct lrs_sched *sched,
     if (rc)
         goto err;
 
-    rc = queue_notify_response(sched, reqc);
-    if (rc)
-        goto err;
+    queue_notify_response(sched, reqc);
 
     sched_req_free(reqc);
     return 0;
 
 err:
-    if (rc != -EAGAIN) {
-        rc = queue_error_response(sched->response_queue, rc, reqc);
-        sched_req_free(reqc);
-    }
+    if (rc == -EAGAIN)
+        return -EAGAIN;
 
-    return rc;
+    queue_error_response(sched->response_queue, rc, reqc);
+    sched_req_free(reqc);
+
+    return 0;
 }
 
 void rwalloc_cancel_DONE_devices(struct req_container *reqc)
@@ -2410,10 +2368,10 @@ void rwalloc_cancel_DONE_devices(struct req_container *reqc)
 /**
  * Called with a lock on sreq->reqc
  */
-static int sched_handle_read_or_write_error(struct lrs_sched *sched,
-                                            struct sub_request *sreq,
-                                            bool *sreq_pushed_or_requeued,
-                                            bool *req_ended)
+static void sched_handle_read_or_write_error(struct lrs_sched *sched,
+                                             struct sub_request *sreq,
+                                             bool *sreq_pushed_or_requeued,
+                                             bool *req_ended)
 {
     struct rwalloc_params *rwalloc = &sreq->reqc->params.rwalloc;
     int rc = 0;
@@ -2463,28 +2421,24 @@ static int sched_handle_read_or_write_error(struct lrs_sched *sched,
     } else {
         if (rc == -EAGAIN) {
             tsqueue_push(&sched->retry_queue, sreq);
-            rc = 0;
             *sreq_pushed_or_requeued = true;
         } else {
             *sreq_pushed_or_requeued = false;
             rwalloc->rc = rc;
             rwalloc->media[sreq->medium_index].status = SUB_REQUEST_ERROR;
-            rc = queue_error_response(sched->response_queue, rc,
-                                      sreq->reqc);
+            queue_error_response(sched->response_queue, rc, sreq->reqc);
             rwalloc_cancel_DONE_devices(sreq->reqc);
             *req_ended = is_rwalloc_ended(sreq->reqc);
         }
     }
-
-    return rc;
 }
 
-static int sched_handle_error(struct lrs_sched *sched, struct sub_request *sreq)
+static void sched_handle_error(struct lrs_sched *sched,
+                               struct sub_request *sreq)
 {
     struct req_container *reqc = sreq->reqc;
     bool sreq_pushed_or_requeued = false;
     bool req_ended = false;
-    int rc = 0;
 
     ENTRY;
 
@@ -2500,7 +2454,7 @@ static int sched_handle_error(struct lrs_sched *sched, struct sub_request *sreq)
         rwalloc_medium->status = SUB_REQUEST_ERROR;
         media_info_free(rwalloc_medium->alloc_medium);
         rwalloc_medium->alloc_medium = NULL;
-        rc = queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
+        queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
         rwalloc_cancel_DONE_devices(reqc);
         req_ended = is_rwalloc_ended(reqc);
         goto end_handle_error;
@@ -2511,8 +2465,8 @@ static int sched_handle_error(struct lrs_sched *sched, struct sub_request *sreq)
      * Format are still requeued through the request_requeue and must be
      * requeued through the retry_queue.
      */
-    rc = sched_handle_read_or_write_error(sched, sreq, &sreq_pushed_or_requeued,
-                                          &req_ended);
+    sched_handle_read_or_write_error(sched, sreq, &sreq_pushed_or_requeued,
+                                     &req_ended);
 end_handle_error:
     MUTEX_UNLOCK(&reqc->mutex);
     if (!sreq_pushed_or_requeued) {
@@ -2521,8 +2475,6 @@ end_handle_error:
 
         sub_request_free(sreq);
     }
-
-    return rc;
 }
 
 int sched_handle_requests(struct lrs_sched *sched)
@@ -2534,11 +2486,8 @@ int sched_handle_requests(struct lrs_sched *sched)
     /**
      * First try to re-run sub-request errors
      */
-    while ((sreq = tsqueue_pop(&sched->retry_queue)) != NULL) {
-        rc = sched_handle_error(sched, sreq);
-        if (rc)
-            return rc;
-    }
+    while ((sreq = tsqueue_pop(&sched->retry_queue)) != NULL)
+        sched_handle_error(sched, sreq);
 
     /**
      * push new request in the I/O scheduler
@@ -2547,10 +2496,8 @@ int sched_handle_requests(struct lrs_sched *sched)
         pho_req_t *req = reqc->req;
 
         if (!running) {
-            rc = queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
+            queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
             sched_req_free(reqc);
-            if (rc)
-                break;
         } else if (pho_request_is_format(req) ||
                    pho_request_is_read(req) ||
                    pho_request_is_write(req)) {
@@ -2575,20 +2522,15 @@ int sched_handle_requests(struct lrs_sched *sched)
             continue;
 
         if (running) {
-            /* Requeue last request on -EAGAIN and running */
+            /* Requeue last notify on -EAGAIN and running */
             tsqueue_push(&sched->incoming, reqc);
             rc = 0;
             break;
         }
 
         /* create an -ESHUTDOWN error on -EAGAIN and !running */
-        if (!pho_request_is_notify(reqc->req) || reqc->req->notify->wait) {
-            rc = queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
-            if (rc) {
-                sched_req_free(reqc);
-                break;
-            }
-        }
+        if (!pho_request_is_notify(reqc->req) || reqc->req->notify->wait)
+            queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
 
         sched_req_free(reqc);
     }
@@ -2634,7 +2576,7 @@ int lrs_schedule_work(struct lrs_sched *sched)
             int rc2;
 
             /* create an -ESHUTDOWN error on -EAGAIN and !running */
-            rc = queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
+            queue_error_response(sched->response_queue, -ESHUTDOWN, reqc);
 
             rc2 = io_sched_remove_request(&sched->io_sched_hdl, reqc);
             rc = rc2 ? : rc;

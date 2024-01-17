@@ -246,10 +246,7 @@ static int encoder_communicate(struct pho_encoder *enc,
             req->walloc->family = enc->xfer->xd_params.put.family;
 
         data = pho_comm_data_init(comm);
-        if (pho_srl_request_pack(req, &data.buf)) {
-            pho_srl_request_free(req, false);
-            return -ENOMEM;
-        }
+        pho_srl_request_pack(req, &data.buf);
         pho_srl_request_free(req, false);
 
         /* Send the request to the socket */

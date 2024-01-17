@@ -47,7 +47,7 @@ static int _send_and_receive(struct pho_comm_info *ci, pho_req_t *req,
     int i;
 
     data_out = pho_comm_data_init(ci);
-    assert(!pho_srl_request_pack(req, &data_out.buf));
+    pho_srl_request_pack(req, &data_out.buf);
     rc = pho_comm_send(&data_out);
     free(data_out.buf.buff);
     if (rc)
@@ -77,7 +77,7 @@ static int _send_request(struct pho_comm_info *ci, pho_req_t *req)
     int rc;
 
     data = pho_comm_data_init(ci);
-    assert(!pho_srl_request_pack(req, &data.buf));
+    pho_srl_request_pack(req, &data.buf);
     rc = pho_comm_send(&data);
     free(data.buf.buff);
 
@@ -105,7 +105,7 @@ static int test_bad_put(void *arg)
     int rc = 0;
 
     // Bad resource family
-    assert(!pho_srl_request_write_alloc(&req, 1, n_tags));
+    pho_srl_request_write_alloc(&req, 1, n_tags);
     req.id = 0;
     req.walloc->family = PHO_RSC_INVAL;
     req.walloc->media[0]->size = 1;
@@ -195,7 +195,7 @@ static int send_write_and_release_with_rc(struct pho_comm_info *ci,
     pho_req_t req;
 
     // Bad resource family
-    assert(!pho_srl_request_write_alloc(&req, 1, n_tags));
+    pho_srl_request_write_alloc(&req, 1, n_tags);
     req.id = 0;
     req.walloc->family = PHO_RSC_DIR;
     req.walloc->media[0]->size = size;
@@ -209,7 +209,7 @@ static int send_write_and_release_with_rc(struct pho_comm_info *ci,
         goto out;
 
     pho_srl_request_free(&req, false);
-    assert(!pho_srl_request_release_alloc(&req, 1));
+    pho_srl_request_release_alloc(&req, 1);
     req.release->media[0]->med_id->family = PHO_RSC_DIR;
     req.release->media[0]->med_id->name =
         strdup(resp->walloc->media[0]->med_id->name);
@@ -279,9 +279,9 @@ static int test_bad_mput(void *arg)
     int i;
 
     tags[0] = 0;
-    assert(!pho_srl_request_write_alloc(&reqs[0], 1, tags));
+    pho_srl_request_write_alloc(&reqs[0], 1, tags);
     tags[0] = 1;
-    assert(!pho_srl_request_write_alloc(&reqs[1], 1, tags));
+    pho_srl_request_write_alloc(&reqs[1], 1, tags);
 
     reqs[0].walloc->media[0]->tags = NULL;
     reqs[1].walloc->media[0]->tags[0] = strdup("invalid-tag");
@@ -303,7 +303,7 @@ static int test_bad_mput(void *arg)
 
     pho_srl_request_free(&reqs[0], false);
 
-    assert(!pho_srl_request_release_alloc(&reqs[0], 1));
+    pho_srl_request_release_alloc(&reqs[0], 1);
     reqs[0].id = 0;
     reqs[0].release->media[0]->med_id->family = PHO_RSC_DIR;
     reqs[0].release->media[0]->med_id->name =
@@ -329,7 +329,7 @@ static int test_bad_get(void *arg)
     int rc = 0;
 
     // Bad resource family
-    assert(!pho_srl_request_read_alloc(&req, 1));
+    pho_srl_request_read_alloc(&req, 1);
     req.id = 0;
     req.ralloc->n_required = 1;
     req.ralloc->med_ids[0]->family = PHO_RSC_INVAL;
@@ -363,8 +363,8 @@ static int test_bad_mget(void *arg)
     int rc;
     int i;
 
-    assert(!pho_srl_request_read_alloc(&reqs[0], 1));
-    assert(!pho_srl_request_read_alloc(&reqs[1], 1));
+    pho_srl_request_read_alloc(&reqs[0], 1);
+    pho_srl_request_read_alloc(&reqs[1], 1);
 
     reqs[0].ralloc->med_ids[0]->name = strdup("/tmp/test.pho.1");
     reqs[1].ralloc->med_ids[0]->name = strdup("/not/a/dir");
@@ -386,7 +386,7 @@ static int test_bad_mget(void *arg)
 
     pho_srl_request_free(&reqs[0], false);
 
-    assert(!pho_srl_request_release_alloc(&reqs[0], 1));
+    pho_srl_request_release_alloc(&reqs[0], 1);
     reqs[0].id = 0;
     reqs[0].release->media[0]->med_id->family = PHO_RSC_DIR;
     reqs[0].release->media[0]->med_id->name =
@@ -412,7 +412,7 @@ static int test_bad_release(void *arg)
     int rc = 0;
 
     // Bad resource name
-    assert(!pho_srl_request_release_alloc(&req, 1));
+    pho_srl_request_release_alloc(&req, 1);
     req.id = 0;
     req.release->media[0]->med_id->family = PHO_RSC_DIR;
     req.release->media[0]->med_id->name = strdup("/tmp/not/a/med");
@@ -434,7 +434,7 @@ static int test_bad_format(void *arg)
     int rc = 0;
 
     // Bad file system
-    assert(!pho_srl_request_format_alloc(&req));
+    pho_srl_request_format_alloc(&req);
     req.id = 0;
     req.format->fs = PHO_FS_INVAL;
     req.format->med_id->family = PHO_RSC_DIR;
@@ -478,7 +478,7 @@ static int test_bad_notify(void *arg)
     int rc = 0;
 
     // Bad operation
-    assert(!pho_srl_request_notify_alloc(&req));
+    pho_srl_request_notify_alloc(&req);
     req.id = 0;
     req.notify->op = PHO_NTFY_OP_INVAL;
     req.notify->wait = true;
@@ -522,7 +522,7 @@ static int test_bad_configure(void *arg)
     int rc = 0;
 
     // No configuration
-    assert(!pho_srl_request_configure_alloc(&req));
+    pho_srl_request_configure_alloc(&req);
     req.id = 0;
     req.configure->op = PHO_CONF_OP_SET;
     req.configure->configuration = NULL;
@@ -612,7 +612,7 @@ static int test_bad_ping(void *arg)
     pho_req_t req;
     int rc = 0;
 
-    assert(!pho_srl_request_ping_alloc(&req));
+    pho_srl_request_ping_alloc(&req);
     req.id = 0;
     assert(!_send_request(ci, &req));
     pho_comm_close(ci);

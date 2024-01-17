@@ -496,6 +496,9 @@ static int lib_scsi_drive_info(struct lib_handle *hdl, const char *drv_serial,
     if (!drv)
         GOTO(unlock, rc = -ENOENT);
 
+    if ((strlen(drv->vol) + 1) > PHO_URI_MAX)
+        GOTO(unlock, rc = -EINVAL);
+
     memset(ldi, 0, sizeof(*ldi));
     ldi->ldi_addr.lia_type = MED_LOC_DRIVE;
     ldi->ldi_addr.lia_addr = drv->address;

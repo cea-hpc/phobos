@@ -425,9 +425,8 @@ static void create_request(struct req_container *reqc,
         params->media = calloc(n, sizeof(*params->media));
         assert_non_null(params->media);
 
-        rc = pho_srl_request_write_alloc(reqc->req, n, n_tags);
+        pho_srl_request_write_alloc(reqc->req, n, n_tags);
         free(n_tags);
-        assert_return_code(rc, -rc);
 
         for (i = 0; i < n; i++)
             reqc->req->walloc->media[i]->size = 0;
@@ -437,8 +436,7 @@ static void create_request(struct req_container *reqc,
         struct rwalloc_params *params = &reqc->params.rwalloc;
         int i;
 
-        rc = pho_srl_request_read_alloc(reqc->req, n);
-        assert_return_code(rc, -rc);
+        pho_srl_request_read_alloc(reqc->req, n);
 
         reqc->req->ralloc->n_required = n_required;
 
@@ -454,8 +452,7 @@ static void create_request(struct req_container *reqc,
     } case IO_REQ_FORMAT: {
         struct pho_id m;
 
-        rc = pho_srl_request_format_alloc(reqc->req);
-        assert_return_code(rc, -rc);
+        pho_srl_request_format_alloc(reqc->req);
 
         reqc->req->format->med_id->name = strdup(media_names[0]);
         assert_non_null(reqc->req->format->med_id->name);

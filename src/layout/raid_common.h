@@ -86,8 +86,8 @@ bool no_more_alloc(struct pho_encoder *enc);
 
 void raid_encoder_destroy(struct pho_encoder *enc);
 
-int raid_build_write_allocation_req(struct pho_encoder *enc,
-                                    pho_req_t *req, int repl_count);
+void raid_build_write_allocation_req(struct pho_encoder *enc,
+                                     pho_req_t *req, int repl_count);
 
 int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
                        pho_req_t **reqs, size_t *n_reqs);

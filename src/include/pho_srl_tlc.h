@@ -238,8 +238,6 @@ static inline bool pho_tlc_response_is_reload(const pho_tlc_resp_t *resp)
  * Allocation of ping request contents.
  *
  * \param[out]      req         Pointer to the request data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
 void pho_srl_tlc_request_ping_alloc(pho_tlc_req_t *req);
 
@@ -247,10 +245,8 @@ void pho_srl_tlc_request_ping_alloc(pho_tlc_req_t *req);
  * Allocation of drive lookup request contents.
  *
  * \param[out]      req         Pointer to the request data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_tlc_request_drive_lookup_alloc(pho_tlc_req_t *req);
+void pho_srl_tlc_request_drive_lookup_alloc(pho_tlc_req_t *req);
 
 /**
  * Allocation of load request contents.
@@ -296,16 +292,14 @@ void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack);
  *
  * \param[out]      resp        Pointer to the response data structure.
  */
-int pho_srl_tlc_response_ping_alloc(pho_tlc_resp_t *resp);
+void pho_srl_tlc_response_ping_alloc(pho_tlc_resp_t *resp);
 
 /**
  * Allocation of drive lookup response content.
  *
  * \param[out]      resp        Pointer to the response data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_tlc_response_drive_lookup_alloc(pho_tlc_resp_t *resp);
+void pho_srl_tlc_response_drive_lookup_alloc(pho_tlc_resp_t *resp);
 
 /**
  * Allocation of load response content.
@@ -363,10 +357,8 @@ void pho_srl_tlc_response_free(pho_tlc_resp_t *resp, bool unpack);
  *
  * \param[in]       req         Request data structure.
  * \param[out]      buf         Serialized buffer data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_tlc_request_pack(pho_tlc_req_t *req, struct pho_buff *buf);
+void pho_srl_tlc_request_pack(pho_tlc_req_t *req, struct pho_buff *buf);
 
 /**
  * Deserialization of a request.
@@ -388,10 +380,8 @@ pho_tlc_req_t *pho_srl_tlc_request_unpack(struct pho_buff *buf);
  *
  * \param[in]       resp        Response data structure.
  * \param[out]      buf         Serialized buffer data structure.
- *
- * \return                      0 on success, -ENOMEM on failure.
  */
-int pho_srl_tlc_response_pack(pho_tlc_resp_t *resp, struct pho_buff *buf);
+void pho_srl_tlc_response_pack(pho_tlc_resp_t *resp, struct pho_buff *buf);
 
 /**
  * Deserialization of a response.

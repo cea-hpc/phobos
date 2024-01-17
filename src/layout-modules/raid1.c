@@ -854,11 +854,11 @@ static int raid1_enc_handle_release_resp(struct pho_encoder *enc,
 }
 
 /** Generate the next write allocation request for this encoder */
-static int raid1_enc_next_write_req(struct pho_encoder *enc, pho_req_t *req)
+static void raid1_enc_next_write_req(struct pho_encoder *enc, pho_req_t *req)
 {
     struct raid1_encoder *raid1 = enc->priv_enc;
     size_t *n_tags;
-    int rc = 0, i, j;
+    int i, j;
 
     /* n_tags array */
     n_tags = xcalloc(raid1->repl_count, sizeof(*n_tags));
@@ -866,10 +866,8 @@ static int raid1_enc_next_write_req(struct pho_encoder *enc, pho_req_t *req)
     for (i = 0; i < raid1->repl_count; ++i)
         n_tags[i] = enc->xfer->xd_params.put.tags.n_tags;
 
-    rc = pho_srl_request_write_alloc(req, raid1->repl_count, n_tags);
+    pho_srl_request_write_alloc(req, raid1->repl_count, n_tags);
     free(n_tags);
-    if (rc)
-        return rc;
 
     for (i = 0; i < raid1->repl_count; ++i) {
         req->walloc->media[i]->size = raid1->to_write;
@@ -878,20 +876,15 @@ static int raid1_enc_next_write_req(struct pho_encoder *enc, pho_req_t *req)
             req->walloc->media[i]->tags[j] =
                 xstrdup(enc->xfer->xd_params.put.tags.tags[j]);
     }
-
-    return rc;
 }
 
 /** Generate the next read allocation request for this decoder */
-static int raid1_dec_next_read_req(struct pho_encoder *dec, pho_req_t *req)
+static void raid1_dec_next_read_req(struct pho_encoder *dec, pho_req_t *req)
 {
     struct raid1_encoder *raid1 = dec->priv_enc;
-    int rc = 0;
     int i;
 
-    rc = pho_srl_request_read_alloc(req, raid1->repl_count);
-    if (rc)
-        return rc;
+    pho_srl_request_read_alloc(req, raid1->repl_count);
 
     /* To read, raid1 needs only one among all copies */
     req->ralloc->n_required = 1;
@@ -907,8 +900,6 @@ static int raid1_dec_next_read_req(struct pho_encoder *dec, pho_req_t *req)
         req->ralloc->med_ids[i]->name =
             xstrdup(dec->layout->extents[ext_idx].media.name);
     }
-
-    return 0;
 }
 
 /**
@@ -941,10 +932,7 @@ static int raid1_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
          * request will be emitted after the IO has been performed. Any
          * allocated medium must be released.
          */
-        rc = pho_srl_request_release_alloc(*reqs + *n_reqs,
-                                           resp->walloc->n_media);
-        if (rc)
-            return rc;
+        pho_srl_request_release_alloc(*reqs + *n_reqs, resp->walloc->n_media);
 
         for (i = 0; i < resp->walloc->n_media; ++i) {
             rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
@@ -967,10 +955,7 @@ static int raid1_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
             return -EINVAL;
 
         /* Build release req matching this allocation response */
-        rc = pho_srl_request_release_alloc(*reqs + *n_reqs,
-                                           resp->ralloc->n_media);
-        if (rc)
-            return rc;
+        pho_srl_request_release_alloc(*reqs + *n_reqs, resp->ralloc->n_media);
 
         /* copy medium id from allocation response to release request */
         rsc_id_cpy((*reqs)[*n_reqs].release->media[0]->med_id,
@@ -1043,12 +1028,9 @@ static int raid1_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
 
     /* Build next request */
     if (enc->is_decoder)
-        rc = raid1_dec_next_read_req(enc, *reqs + *n_reqs);
+        raid1_dec_next_read_req(enc, *reqs + *n_reqs);
     else
-        rc = raid1_enc_next_write_req(enc, *reqs + *n_reqs);
-
-    if (rc)
-        return rc;
+        raid1_enc_next_write_req(enc, *reqs + *n_reqs);
 
     (*n_reqs)++;
     raid1->requested_alloc = true;

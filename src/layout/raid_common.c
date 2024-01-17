@@ -66,12 +66,11 @@ bool no_more_alloc(struct pho_encoder *enc)
     return false;
 }
 
-int raid_build_write_allocation_req(struct pho_encoder *enc,
+void raid_build_write_allocation_req(struct pho_encoder *enc,
                                     pho_req_t *req, int repl_count)
 {
     struct raid_io_context *io_context = enc->priv_enc;
     size_t *n_tags;
-    int rc;
     int i;
     int j;
 
@@ -80,10 +79,8 @@ int raid_build_write_allocation_req(struct pho_encoder *enc,
     for (i = 0; i < repl_count; ++i)
         n_tags[i] = enc->xfer->xd_params.put.tags.n_tags;
 
-    rc = pho_srl_request_write_alloc(req, repl_count, n_tags);
+    pho_srl_request_write_alloc(req, repl_count, n_tags);
     free(n_tags);
-    if (rc)
-        return rc;
 
     for (i = 0; i < repl_count; ++i) {
         req->walloc->media[i]->size = io_context->to_write;
@@ -92,8 +89,6 @@ int raid_build_write_allocation_req(struct pho_encoder *enc,
             req->walloc->media[i]->tags[j] =
                 xstrdup(enc->xfer->xd_params.put.tags.tags[j]);
     }
-
-    return 0;
 }
 
 int raid_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
@@ -161,10 +156,7 @@ int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
 
     /* Build next request */
     if (!enc->is_decoder)
-        rc = raid_build_write_allocation_req(enc, *reqs + *n_reqs, 3);
-
-    if (rc)
-        return rc;
+        raid_build_write_allocation_req(enc, *reqs + *n_reqs, 3);
 
     (*n_reqs)++;
     io_context->requested_alloc = true;

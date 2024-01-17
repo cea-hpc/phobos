@@ -1015,9 +1015,7 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
         if (!tmp)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'media'");
 
-        rc = pho_id_name_set(&result[i].media, tmp);
-        if (rc)
-            LOG_GOTO(out_decref, rc = -EINVAL, "Failed to set media id");
+        pho_id_name_set(&result[i].media, tmp);
 
         rc = dss_extent_hash_decode(&result[i], json_object_get(child, "hash"));
         if (rc)

@@ -38,15 +38,12 @@ void pho_srl_tlc_request_ping_alloc(pho_tlc_req_t *req)
     req->ping = true;
 }
 
-int pho_srl_tlc_request_drive_lookup_alloc(pho_tlc_req_t *req)
+void pho_srl_tlc_request_drive_lookup_alloc(pho_tlc_req_t *req)
 {
     pho_tlc_request__init(req);
-    req->drive_lookup = malloc(sizeof(*req->drive_lookup));
-    if (!req->drive_lookup)
-        return -ENOMEM;
+    req->drive_lookup = xmalloc(sizeof(*req->drive_lookup));
 
     pho_tlc_request__drive_lookup__init(req->drive_lookup);
-    return 0;
 }
 
 void pho_srl_tlc_request_load_alloc(pho_tlc_req_t *req)
@@ -116,27 +113,20 @@ void pho_srl_tlc_request_free(pho_tlc_req_t *req, bool unpack)
     req->reload = false;
 }
 
-int pho_srl_tlc_response_ping_alloc(pho_tlc_resp_t *resp)
+void pho_srl_tlc_response_ping_alloc(pho_tlc_resp_t *resp)
 {
     pho_tlc_response__init(resp);
-    resp->ping = malloc(sizeof(*resp->ping));
-    if (!resp->ping)
-        return -ENOMEM;
+    resp->ping = xmalloc(sizeof(*resp->ping));
 
     pho_tlc_response__ping__init(resp->ping);
-
-    return 0;
 }
 
-int pho_srl_tlc_response_drive_lookup_alloc(pho_tlc_resp_t *resp)
+void pho_srl_tlc_response_drive_lookup_alloc(pho_tlc_resp_t *resp)
 {
     pho_tlc_response__init(resp);
-    resp->drive_lookup = malloc(sizeof(*resp->drive_lookup));
-    if (!resp->drive_lookup)
-        return -ENOMEM;
+    resp->drive_lookup = xmalloc(sizeof(*resp->drive_lookup));
 
     pho_tlc_response__drive_lookup__init(resp->drive_lookup);
-    return 0;
 }
 
 void pho_srl_tlc_response_load_alloc(pho_tlc_resp_t *resp)
@@ -222,19 +212,15 @@ void pho_srl_tlc_response_free(pho_tlc_resp_t *resp, bool unpack)
     resp->reload = false;
 }
 
-int pho_srl_tlc_request_pack(pho_tlc_req_t *req, struct pho_buff *buf)
+void pho_srl_tlc_request_pack(pho_tlc_req_t *req, struct pho_buff *buf)
 {
     buf->size = pho_tlc_request__get_packed_size(req) +
                PHO_TLC_PROTOCOL_VERSION_SIZE;
-    buf->buff = malloc(buf->size);
-    if (!buf->buff)
-        return -ENOMEM;
+    buf->buff = xmalloc(buf->size);
 
     buf->buff[0] = PHO_TLC_PROTOCOL_VERSION;
     pho_tlc_request__pack(req,
                           (uint8_t *)buf->buff + PHO_TLC_PROTOCOL_VERSION_SIZE);
-
-    return 0;
 }
 
 pho_tlc_req_t *pho_srl_tlc_request_unpack(struct pho_buff *buf)
@@ -259,20 +245,16 @@ out_free:
     return req;
 }
 
-int pho_srl_tlc_response_pack(pho_tlc_resp_t *resp, struct pho_buff *buf)
+void pho_srl_tlc_response_pack(pho_tlc_resp_t *resp, struct pho_buff *buf)
 {
     buf->size = pho_tlc_response__get_packed_size(resp) +
                 PHO_TLC_PROTOCOL_VERSION_SIZE;
-    buf->buff = malloc(buf->size);
-    if (!buf->buff)
-        return -ENOMEM;
+    buf->buff = xmalloc(buf->size);
 
     buf->buff[0] = PHO_TLC_PROTOCOL_VERSION;
     pho_tlc_response__pack(resp,
                            (uint8_t *)buf->buff +
                                PHO_TLC_PROTOCOL_VERSION_SIZE);
-
-    return 0;
 }
 
 pho_tlc_resp_t *pho_srl_tlc_response_unpack(struct pho_buff *buf)

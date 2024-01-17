@@ -154,9 +154,7 @@ static int tlc_response_send(pho_tlc_resp_t *resp, int client_socket)
     struct pho_comm_data msg;
     int rc;
 
-    rc = pho_srl_tlc_response_pack(resp, &msg.buf);
-    if (rc)
-        LOG_RETURN(rc, "TLC response cannot be packed");
+    pho_srl_tlc_response_pack(resp, &msg.buf);
 
     msg.fd = client_socket;
     rc = pho_comm_send(&msg);
@@ -173,9 +171,7 @@ static int process_ping_request(struct tlc *tlc, pho_tlc_req_t *req,
     pho_tlc_resp_t resp;
     int rc;
 
-    rc = pho_srl_tlc_response_ping_alloc(&resp);
-    if (rc)
-        LOG_RETURN(rc, "TLC unable to alloc ping response");
+    pho_srl_tlc_response_ping_alloc(&resp);
 
     resp.req_id = req->id;
 
@@ -224,14 +220,7 @@ static int process_drive_lookup_request(struct tlc *tlc, pho_tlc_req_t *req,
     if (rc)
         goto err;
 
-    rc = pho_srl_tlc_response_drive_lookup_alloc(&drive_lookup_resp);
-    if (rc) {
-        json_error_message = json_pack("{s:s}",
-                                       "ALLOC_ERROR",
-                                       "TLC was unable to alloc drive "
-                                       "lookup response");
-        LOG_GOTO(err, rc, "Unable to alloc drive lookup response");
-    }
+    pho_srl_tlc_response_drive_lookup_alloc(&drive_lookup_resp);
 
     drive_lookup_resp.req_id = req->id;
     drive_lookup_resp.drive_lookup->address = drv_info.ldi_addr.lia_addr;

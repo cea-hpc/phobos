@@ -54,7 +54,7 @@ static int dummy_drive_lookup(struct lib_handle *lib, const char *drive_serial,
 
     (void) message;
 
-    if (sep == NULL)
+    if (sep == NULL || (strlen(sep + 1) + 1) > PHO_URI_MAX)
         return -EINVAL;
 
     drv_info->ldi_addr.lia_type = MED_LOC_DRIVE;
@@ -63,7 +63,9 @@ static int dummy_drive_lookup(struct lib_handle *lib, const char *drive_serial,
 
     drv_info->ldi_medium_id.family = PHO_RSC_DIR;
 
-    return pho_id_name_set(&drv_info->ldi_medium_id, sep + 1);
+    pho_id_name_set(&drv_info->ldi_medium_id, sep + 1);
+
+    return 0;
 }
 
 /**

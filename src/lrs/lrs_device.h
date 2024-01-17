@@ -253,8 +253,8 @@ static inline bool dev_is_release_ready(struct lrs_dev *dev)
 
 bool is_request_tosync_ended(struct req_container *req);
 
-int queue_release_response(struct tsqueue *response_queue,
-                           struct req_container *reqc);
+void queue_release_response(struct tsqueue *response_queue,
+                            struct req_container *reqc);
 
 static inline bool dev_is_sched_ready(struct lrs_dev *dev)
 {
@@ -280,7 +280,7 @@ static inline bool is_device_shared_between_schedulers(struct lrs_dev *dev)
  *  TODO: will become a device thread static function when all media operations
  *  will be moved to device thread
  */
-int clean_tosync_array(struct lrs_dev *dev, int rc);
+void clean_tosync_array(struct lrs_dev *dev, int rc);
 
 /**
  * Add a new sync request to a device

@@ -306,11 +306,9 @@ struct resp_container {
  * \param[in, out]  resp_cont   Response container filled by prepare_error
  * \param[in]       req_rc      Error code of the response
  * \param[in]       req_cont    Request to answer the response
- *
- * \return                      0 on success, -1 * posix error code on failure.
  */
-int prepare_error(struct resp_container *resp_cont, int req_rc,
-                  const struct req_container *req_cont);
+void prepare_error(struct resp_container *resp_cont, int req_rc,
+                   const struct req_container *req_cont);
 
 /**
  * Build and queue an error response
@@ -318,11 +316,9 @@ int prepare_error(struct resp_container *resp_cont, int req_rc,
  * @param[in,out]   response_queue  Response queue
  * @param[in]       req_rc          Error code
  * @param[in]       reqc            Request to response an error
- *
- * @return  0 on success, -1 * posix error code on failure.
  */
-int queue_error_response(struct tsqueue *response_queue, int req_rc,
-                         struct req_container *reqc);
+void queue_error_response(struct tsqueue *response_queue, int req_rc,
+                          struct req_container *reqc);
 
 /**
  * Retrieve device information from system and complementary info from DB.

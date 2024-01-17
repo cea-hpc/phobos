@@ -112,227 +112,117 @@ const char *pho_srl_error_kind_str(pho_resp_error_t *err)
     return SRL_REQ_KIND_STRS[err->req_kind];
 }
 
-int pho_srl_request_write_alloc(pho_req_t *req, size_t n_media,
-                                size_t *n_tags)
+void pho_srl_request_write_alloc(pho_req_t *req, size_t n_media,
+                                 size_t *n_tags)
 {
     int i;
 
     pho_request__init(req);
 
-    req->walloc = malloc(sizeof(*req->walloc));
-    if (!req->walloc)
-        goto err_walloc;
+    req->walloc = xmalloc(sizeof(*req->walloc));
     pho_request__write__init(req->walloc);
 
     req->walloc->n_media = n_media;
-    req->walloc->media = malloc(n_media * sizeof(*req->walloc->media));
-    if (!req->walloc->media)
-        goto err_media;
+    req->walloc->media = xmalloc(n_media * sizeof(*req->walloc->media));
 
     for (i = 0; i < n_media; ++i) {
-        req->walloc->media[i] = malloc(sizeof(*req->walloc->media[i]));
-        if (!req->walloc->media[i])
-            goto err_media_i;
+        req->walloc->media[i] = xmalloc(sizeof(*req->walloc->media[i]));
         pho_request__write__elt__init(req->walloc->media[i]);
 
         req->walloc->media[i]->n_tags = n_tags[i];
         req->walloc->media[i]->tags = NULL;
         if (n_tags[i] > 0) {
             req->walloc->media[i]->tags =
-                calloc(n_tags[i], sizeof(*req->walloc->media[i]->tags));
-            if (!req->walloc->media[i]->tags)
-                goto err_tags;
+                xcalloc(n_tags[i], sizeof(*req->walloc->media[i]->tags));
         }
     }
-
-    return 0;
-
-err_tags:
-    free(req->walloc->media[i]);
-
-err_media_i:
-    for (--i; i >= 0; --i) {
-        free(req->walloc->media[i]->tags);
-        free(req->walloc->media[i]);
-    }
-    free(req->walloc->media);
-
-err_media:
-    free(req->walloc);
-    req->walloc = NULL;
-
-err_walloc:
-    return -ENOMEM;
 }
 
-int pho_srl_request_read_alloc(pho_req_t *req, size_t n_media)
+void pho_srl_request_read_alloc(pho_req_t *req, size_t n_media)
 {
     int i;
 
     pho_request__init(req);
 
-    req->ralloc = malloc(sizeof(*req->ralloc));
-    if (!req->ralloc)
-        goto err_ralloc;
+    req->ralloc = xmalloc(sizeof(*req->ralloc));
     pho_request__read__init(req->ralloc);
 
     req->ralloc->n_med_ids = n_media;
-    req->ralloc->med_ids = malloc(n_media * sizeof(*req->ralloc->med_ids));
-    if (!req->ralloc->med_ids)
-        goto err_media;
+    req->ralloc->med_ids = xmalloc(n_media * sizeof(*req->ralloc->med_ids));
 
     for (i = 0; i < n_media; ++i) {
-        req->ralloc->med_ids[i] = malloc(sizeof(*req->ralloc->med_ids[i]));
-        if (!req->ralloc->med_ids[i])
-            goto err_media_i;
+        req->ralloc->med_ids[i] = xmalloc(sizeof(*req->ralloc->med_ids[i]));
         pho_resource_id__init(req->ralloc->med_ids[i]);
     }
-
-    return 0;
-
-err_media_i:
-    for (--i; i >= 0; --i)
-        free(req->ralloc->med_ids[i]);
-    free(req->ralloc->med_ids);
-
-err_media:
-    free(req->ralloc);
-    req->ralloc = NULL;
-
-err_ralloc:
-    return -ENOMEM;
 }
 
-int pho_srl_request_release_alloc(pho_req_t *req, size_t n_media)
+void pho_srl_request_release_alloc(pho_req_t *req, size_t n_media)
 {
     int i;
 
     pho_request__init(req);
 
-    req->release = malloc(sizeof(*req->release));
-    if (!req->release)
-        goto err_release;
+    req->release = xmalloc(sizeof(*req->release));
     pho_request__release__init(req->release);
 
     req->release->n_media = n_media;
-    req->release->media = malloc(n_media * sizeof(*req->release->media));
-    if (!req->release->media)
-        goto err_media;
+    req->release->media = xmalloc(n_media * sizeof(*req->release->media));
 
     for (i = 0; i < n_media; ++i) {
-        req->release->media[i] = malloc(sizeof(*req->release->media[i]));
-        if (!req->release->media[i])
-            goto err_media_i;
+        req->release->media[i] = xmalloc(sizeof(*req->release->media[i]));
         pho_request__release__elt__init(req->release->media[i]);
 
         req->release->media[i]->med_id =
-            malloc(sizeof(*req->release->media[i]->med_id));
-        if (!req->release->media[i]->med_id)
-            goto err_id;
+            xmalloc(sizeof(*req->release->media[i]->med_id));
         pho_resource_id__init(req->release->media[i]->med_id);
     }
-
-    return 0;
-
-err_id:
-    free(req->release->media[i]);
-
-err_media_i:
-    for (--i; i >= 0; --i) {
-        free(req->release->media[i]->med_id);
-        free(req->release->media[i]);
-    }
-    free(req->release->media);
-
-err_media:
-    free(req->release);
-    req->release = NULL;
-
-err_release:
-    return -ENOMEM;
 }
 
-int pho_srl_request_format_alloc(pho_req_t *req)
+void pho_srl_request_format_alloc(pho_req_t *req)
 {
     pho_request__init(req);
 
-    req->format = malloc(sizeof(*req->format));
-    if (!req->format)
-        goto err_format;
+    req->format = xmalloc(sizeof(*req->format));
     pho_request__format__init(req->format);
 
-    req->format->med_id = malloc(sizeof(*req->format->med_id));
-    if (!req->format->med_id)
-        goto err_media;
+    req->format->med_id = xmalloc(sizeof(*req->format->med_id));
     pho_resource_id__init(req->format->med_id);
-
-    return 0;
-
-err_media:
-    free(req->format);
-    req->format = NULL;
-
-err_format:
-    return -ENOMEM;
 }
 
-int pho_srl_request_ping_alloc(pho_req_t *req)
+void pho_srl_request_ping_alloc(pho_req_t *req)
 {
     pho_request__init(req);
     req->has_ping = true;
-
-    return 0;
 }
 
-int pho_srl_request_configure_alloc(pho_req_t *req)
+void pho_srl_request_configure_alloc(pho_req_t *req)
 {
     pho_request__init(req);
-    req->configure = malloc(sizeof(*req->configure));
-    if (!req->configure)
-        return -ENOMEM;
+    req->configure = xmalloc(sizeof(*req->configure));
 
     pho_request__configure__init(req->configure);
-
-    return 0;
 }
 
-int pho_srl_request_notify_alloc(pho_req_t *req)
+void pho_srl_request_notify_alloc(pho_req_t *req)
 {
     pho_request__init(req);
 
-    req->notify = malloc(sizeof(*req->notify));
-    if (!req->notify)
-        goto err_notify;
+    req->notify = xmalloc(sizeof(*req->notify));
     pho_request__notify__init(req->notify);
 
-    req->notify->rsrc_id = malloc(sizeof(*req->notify->rsrc_id));
-    if (!req->notify->rsrc_id)
-        goto err_rsrc;
+    req->notify->rsrc_id = xmalloc(sizeof(*req->notify->rsrc_id));
     pho_resource_id__init(req->notify->rsrc_id);
 
     req->notify->wait = true;
-
-    return 0;
-
-err_rsrc:
-    free(req->notify);
-    req->notify = NULL;
-
-err_notify:
-    return -ENOMEM;
 }
 
-int pho_srl_request_monitor_alloc(pho_req_t *req)
+void pho_srl_request_monitor_alloc(pho_req_t *req)
 {
     pho_request__init(req);
 
-    req->monitor = malloc(sizeof(*req->monitor));
-    if (!req->monitor)
-        return -ENOMEM;
+    req->monitor = xmalloc(sizeof(*req->monitor));
 
     pho_request__monitor__init(req->monitor);
-
-    return 0;
 }
 
 void pho_srl_request_free(pho_req_t *req, bool unpack)
@@ -404,162 +294,76 @@ void pho_srl_request_free(pho_req_t *req, bool unpack)
     }
 }
 
-int pho_srl_response_write_alloc(pho_resp_t *resp, size_t n_media)
+void pho_srl_response_write_alloc(pho_resp_t *resp, size_t n_media)
 {
     int i;
 
     pho_response__init(resp);
 
-    resp->walloc = malloc(sizeof(*resp->walloc));
-    if (!resp->walloc)
-        goto err_walloc;
+    resp->walloc = xmalloc(sizeof(*resp->walloc));
     pho_response__write__init(resp->walloc);
 
     resp->walloc->n_media = n_media;
-    resp->walloc->media = malloc(n_media * sizeof(*resp->walloc->media));
-    if (!resp->walloc->media)
-        goto err_media;
+    resp->walloc->media = xmalloc(n_media * sizeof(*resp->walloc->media));
 
     for (i = 0; i < n_media; ++i) {
-        resp->walloc->media[i] = malloc(sizeof(*resp->walloc->media[i]));
-        if (!resp->walloc->media[i])
-            goto err_media_i;
+        resp->walloc->media[i] = xmalloc(sizeof(*resp->walloc->media[i]));
         pho_response__write__elt__init(resp->walloc->media[i]);
 
         resp->walloc->media[i]->med_id =
-            malloc(sizeof(*resp->walloc->media[i]->med_id));
-        if (!resp->walloc->media[i]->med_id)
-            goto err_id;
+            xmalloc(sizeof(*resp->walloc->media[i]->med_id));
         pho_resource_id__init(resp->walloc->media[i]->med_id);
     }
-
-    return 0;
-
-err_id:
-    free(resp->walloc->media[i]);
-
-err_media_i:
-    for (--i; i >= 0; --i) {
-        free(resp->walloc->media[i]->med_id);
-        free(resp->walloc->media[i]);
-    }
-    free(resp->walloc->media);
-
-err_media:
-    free(resp->walloc);
-    resp->walloc = NULL;
-
-err_walloc:
-    return -ENOMEM;
 }
 
-int pho_srl_response_read_alloc(pho_resp_t *resp, size_t n_media)
+void pho_srl_response_read_alloc(pho_resp_t *resp, size_t n_media)
 {
     int i;
 
     pho_response__init(resp);
 
-    resp->ralloc = malloc(sizeof(*resp->ralloc));
-    if (!resp->ralloc)
-        goto err_ralloc;
+    resp->ralloc = xmalloc(sizeof(*resp->ralloc));
     pho_response__read__init(resp->ralloc);
 
     resp->ralloc->n_media = n_media;
-    resp->ralloc->media = malloc(n_media * sizeof(*resp->ralloc->media));
-    if (!resp->ralloc->media)
-        goto err_media;
+    resp->ralloc->media = xmalloc(n_media * sizeof(*resp->ralloc->media));
 
     for (i = 0; i < n_media; ++i) {
-        resp->ralloc->media[i] = malloc(sizeof(*resp->ralloc->media[i]));
-        if (!resp->ralloc->media[i])
-            goto err_media_i;
+        resp->ralloc->media[i] = xmalloc(sizeof(*resp->ralloc->media[i]));
         pho_response__read__elt__init(resp->ralloc->media[i]);
 
         resp->ralloc->media[i]->med_id =
-            malloc(sizeof(*resp->ralloc->media[i]->med_id));
-        if (!resp->ralloc->media[i]->med_id)
-            goto err_id;
+            xmalloc(sizeof(*resp->ralloc->media[i]->med_id));
         pho_resource_id__init(resp->ralloc->media[i]->med_id);
     }
-
-    return 0;
-
-err_id:
-    free(resp->ralloc->media[i]);
-
-err_media_i:
-    for (--i; i >= 0; --i) {
-        free(resp->ralloc->media[i]->med_id);
-        free(resp->ralloc->media[i]);
-    }
-    free(resp->ralloc->media);
-
-err_media:
-    free(resp->ralloc);
-    resp->ralloc = NULL;
-
-err_ralloc:
-    return -ENOMEM;
 }
 
-int pho_srl_response_release_alloc(pho_resp_t *resp, size_t n_media)
+void pho_srl_response_release_alloc(pho_resp_t *resp, size_t n_media)
 {
     int i;
 
     pho_response__init(resp);
-    resp->release = malloc(sizeof(*resp->release));
-    if (!resp->release)
-        LOG_RETURN(-ENOMEM, "Unable to allocate resp->release");
+    resp->release = xmalloc(sizeof(*resp->release));
 
     pho_response__release__init(resp->release);
     resp->release->n_med_ids = n_media;
-    resp->release->med_ids = malloc(n_media * sizeof(*resp->release->med_ids));
-    if (!resp->release->med_ids) {
-        free(resp->release);
-        LOG_RETURN(-ENOMEM, "Unable to allocate resp->release->med_ids");
-    }
+    resp->release->med_ids = xmalloc(n_media * sizeof(*resp->release->med_ids));
 
     for (i = 0; i < n_media; ++i) {
-        resp->release->med_ids[i] = malloc(sizeof(*resp->release->med_ids[i]));
-        if (!resp->release->med_ids[i]) {
-            int j;
-
-            for (j = 0; j < i; j++)
-                free(resp->release->med_ids[j]);
-
-            free(resp->release->med_ids);
-            free(resp->release);
-            LOG_RETURN(-ENOMEM,
-                       "Unable to allocate resp->release->med_ids[%d]", i);
-        }
+        resp->release->med_ids[i] = xmalloc(sizeof(*resp->release->med_ids[i]));
         pho_resource_id__init(resp->release->med_ids[i]);
     }
-
-    return 0;
 }
 
-int pho_srl_response_format_alloc(pho_resp_t *resp)
+void pho_srl_response_format_alloc(pho_resp_t *resp)
 {
     pho_response__init(resp);
 
-    resp->format = malloc(sizeof(*resp->format));
-    if (!resp->format)
-        goto err_format;
+    resp->format = xmalloc(sizeof(*resp->format));
     pho_response__format__init(resp->format);
 
-    resp->format->med_id = malloc(sizeof(*resp->format->med_id));
-    if (!resp->format->med_id)
-        goto err_media;
+    resp->format->med_id = xmalloc(sizeof(*resp->format->med_id));
     pho_resource_id__init(resp->format->med_id);
-
-    return 0;
-
-err_media:
-    free(resp->format);
-    resp->format = NULL;
-
-err_format:
-    return -ENOMEM;
 }
 
 void pho_srl_response_ping_alloc(pho_resp_t *resp)
@@ -568,66 +372,42 @@ void pho_srl_response_ping_alloc(pho_resp_t *resp)
     resp->has_ping = true;
 }
 
-int pho_srl_response_configure_alloc(pho_resp_t *resp)
+void pho_srl_response_configure_alloc(pho_resp_t *resp)
 {
     pho_response__init(resp);
-    resp->configure = malloc(sizeof(*resp->configure));
-    if (!resp->configure)
-        return -ENOMEM;
+    resp->configure = xmalloc(sizeof(*resp->configure));
 
     pho_response__configure__init(resp->configure);
-
-    return 0;
 }
 
-int pho_srl_response_notify_alloc(pho_resp_t *resp)
+void pho_srl_response_notify_alloc(pho_resp_t *resp)
 {
     pho_response__init(resp);
 
-    resp->notify = malloc(sizeof(*resp->notify));
-    if (!resp->notify)
-        goto err_notify;
+    resp->notify = xmalloc(sizeof(*resp->notify));
     pho_response__notify__init(resp->notify);
 
-    resp->notify->rsrc_id = malloc(sizeof(*resp->notify->rsrc_id));
-    if (!resp->notify->rsrc_id)
-        goto err_rsrc;
+    resp->notify->rsrc_id = xmalloc(sizeof(*resp->notify->rsrc_id));
     pho_resource_id__init(resp->notify->rsrc_id);
-
-    return 0;
-
-err_rsrc:
-    free(resp->notify);
-    resp->notify = NULL;
-
-err_notify:
-    return -ENOMEM;
 }
 
-int pho_srl_response_monitor_alloc(pho_resp_t *resp)
+void pho_srl_response_monitor_alloc(pho_resp_t *resp)
 {
     pho_response__init(resp);
 
-    resp->monitor = malloc(sizeof(*resp->monitor));
-    if (!resp->monitor)
-        return -ENOMEM;
+    resp->monitor = xmalloc(sizeof(*resp->monitor));
 
     pho_response__monitor__init(resp->monitor);
     resp->monitor->status = NULL;
-
-    return 0;
 }
 
-int pho_srl_response_error_alloc(pho_resp_t *resp)
+void pho_srl_response_error_alloc(pho_resp_t *resp)
 {
     pho_response__init(resp);
 
-    resp->error = malloc(sizeof(*resp->error));
-    if (!resp->error)
-        return -ENOMEM;
+    resp->error = xmalloc(sizeof(*resp->error));
 
     pho_response__error__init(resp->error);
-    return 0;
 }
 
 void pho_srl_response_free(pho_resp_t *resp, bool unpack)
@@ -708,17 +488,13 @@ void pho_srl_response_free(pho_resp_t *resp, bool unpack)
     }
 }
 
-int pho_srl_request_pack(pho_req_t *req, struct pho_buff *buf)
+void pho_srl_request_pack(pho_req_t *req, struct pho_buff *buf)
 {
     buf->size = pho_request__get_packed_size(req) + PHO_PROTOCOL_VERSION_SIZE;
-    buf->buff = malloc(buf->size);
-    if (!buf->buff)
-        return -ENOMEM;
+    buf->buff = xmalloc(buf->size);
 
     buf->buff[0] = PHO_PROTOCOL_VERSION;
     pho_request__pack(req, (uint8_t *)buf->buff + PHO_PROTOCOL_VERSION_SIZE);
-
-    return 0;
 }
 
 pho_req_t *pho_srl_request_unpack(struct pho_buff *buf)
@@ -742,17 +518,13 @@ pho_req_t *pho_srl_request_unpack(struct pho_buff *buf)
     return req;
 }
 
-int pho_srl_response_pack(pho_resp_t *resp, struct pho_buff *buf)
+void pho_srl_response_pack(pho_resp_t *resp, struct pho_buff *buf)
 {
     buf->size = pho_response__get_packed_size(resp) + PHO_PROTOCOL_VERSION_SIZE;
-    buf->buff = malloc(buf->size);
-    if (!buf->buff)
-        return -ENOMEM;
+    buf->buff = xmalloc(buf->size);
 
     buf->buff[0] = PHO_PROTOCOL_VERSION;
     pho_response__pack(resp, (uint8_t *)buf->buff + PHO_PROTOCOL_VERSION_SIZE);
-
-    return 0;
 }
 
 pho_resp_t *pho_srl_response_unpack(struct pho_buff *buf)

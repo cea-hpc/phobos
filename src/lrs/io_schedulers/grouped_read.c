@@ -442,15 +442,12 @@ static void cancel_request(struct io_scheduler *io_sched,
                            struct queue_element *elem)
 {
     struct grouped_data *data = io_sched->private_data;
-    int rc;
 
     /* we send a ENODEV error since this function is called when there are not
      * enough devices to handle a request.
      */
-    rc = queue_error_response(io_sched->io_sched_hdl->response_queue,
-                              -ENODEV, elem->reqc);
-    if (rc)
-        pho_error(rc, "Failed to queue error");
+    queue_error_response(io_sched->io_sched_hdl->response_queue, -ENODEV,
+                         elem->reqc);
 
     /* remove each element from the its queue */
     delete_elements_in_list(data, elem->pair->used, elem);

@@ -73,15 +73,11 @@ static int _send(struct pho_comm_info *comm, struct proto_req proto_req)
 
     data_out = pho_comm_data_init(comm);
     if (proto_req.type == LRS_REQUEST) {
-        rc = pho_srl_request_pack(proto_req.msg.lrs_req, &data_out.buf);
+        pho_srl_request_pack(proto_req.msg.lrs_req, &data_out.buf);
         pho_srl_request_free(proto_req.msg.lrs_req, false);
-        if (rc)
-            LOG_RETURN(rc, "Cannot serialize LRS request");
     } else if (proto_req.type == TLC_REQUEST) {
-        rc = pho_srl_tlc_request_pack(proto_req.msg.tlc_req, &data_out.buf);
+        pho_srl_tlc_request_pack(proto_req.msg.tlc_req, &data_out.buf);
         pho_srl_tlc_request_free(proto_req.msg.tlc_req, false);
-        if (rc)
-            LOG_RETURN(rc, "Cannot serialize TLC request");
     } else {
         LOG_RETURN(-EINVAL,
                    "Admin module must only send LRS or TLC request");
@@ -167,9 +163,7 @@ static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
     if (op <= PHO_NTFY_OP_INVAL || op >= PHO_NTFY_OP_LAST)
         LOG_RETURN(-ENOTSUP, "Operation not supported");
 
-    rc = pho_srl_request_notify_alloc(&req);
-    if (rc)
-        LOG_RETURN(rc, "Cannot create notify request");
+    pho_srl_request_notify_alloc(&req);
 
     req.id = rid;
     req.notify->op = op;
@@ -257,6 +251,10 @@ static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
         status = keep_locked ? PHO_RSC_ADM_ST_LOCKED : PHO_RSC_ADM_ST_UNLOCKED;
 
         devi->rsc.id.family = dev_ids[i].family;
+
+        if ((strlen(lds.lds_serial) + 1) > PHO_URI_MAX)
+            LOG_GOTO(out_free, rc = -EINVAL, "Drive serial is too long");
+
         pho_id_name_set(&devi->rsc.id, lds.lds_serial);
         devi->rsc.adm_status = status;
         rc = get_allocated_hostname(&devi->host);
@@ -581,9 +579,7 @@ static int send_configure(struct admin_handle *adm,
     int rc;
 
     proto_req.msg.lrs_req = &req;
-    rc = pho_srl_request_configure_alloc(&req);
-    if (rc)
-        LOG_RETURN(rc, "Cannot create configure request");
+    pho_srl_request_configure_alloc(&req);
 
     req.id = 1;
     req.configure->op = op;
@@ -875,9 +871,7 @@ int phobos_admin_device_status(struct admin_handle *adm,
     if (family < 0 || family >= PHO_RSC_LAST)
         LOG_RETURN(-EINVAL, "Invalid family %d", family);
 
-    rc = pho_srl_request_monitor_alloc(&req);
-    if (rc)
-        LOG_RETURN(rc, "Failed to allocate monitor request");
+    pho_srl_request_monitor_alloc(&req);
 
     req.id = 0;
     req.monitor->family = family;
@@ -1076,11 +1070,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
     for (i = 0; i < n_ids; i++) {
         awaiting_resps[i] = false;
 
-        rc2 = pho_srl_request_format_alloc(&req);
-        if (rc2)
-            LOG_GOTO(req_fail, rc2,
-                     "Cannot create format request for medium '%s', will skip",
-                     ids[i].name);
+        pho_srl_request_format_alloc(&req);
 
         req.format->med_id->name = xstrdup(ids[i].name);
         req.format->fs = fs;
@@ -1109,9 +1099,6 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
         }
 
         continue;
-
-req_fail:
-        rc = rc ? : rc2;
     }
 
     for (i = 0; i < n_rq_to_recv; ++i) {
@@ -1143,9 +1130,7 @@ int phobos_admin_ping_lrs(struct admin_handle *adm)
     int rc;
 
     proto_req.msg.lrs_req = &req;
-    rc = pho_srl_request_ping_alloc(&req);
-    if (rc)
-        LOG_RETURN(rc, "Cannot create LRS ping request");
+    pho_srl_request_ping_alloc(&req);
 
     req.id = rid;
 
@@ -1586,9 +1571,7 @@ static int drive_lookup(struct admin_handle *adm, const char *drive_serial,
     int rc;
 
     proto_req.msg.tlc_req = &req;
-    rc = pho_srl_tlc_request_drive_lookup_alloc(&req);
-    if (rc)
-        LOG_RETURN(rc, "Unable to alloc drive lookup request");
+    pho_srl_tlc_request_drive_lookup_alloc(&req);
 
     req.id = rid;
     req.drive_lookup->serial = xstrdup(drive_serial);
@@ -1608,12 +1591,8 @@ static int drive_lookup(struct admin_handle *adm, const char *drive_serial,
         if (resp->drive_lookup->medium_name) {
             drive_info->ldi_full = true;
             drive_info->ldi_medium_id.family = PHO_RSC_TAPE;
-            rc = pho_id_name_set(&drive_info->ldi_medium_id,
-                                 resp->drive_lookup->medium_name);
-            if (rc)
-                LOG_GOTO(clean_response, rc,
-                         "Unable to copy medium name %s from drive lookup "
-                         "response", resp->drive_lookup->medium_name);
+            pho_id_name_set(&drive_info->ldi_medium_id,
+                            resp->drive_lookup->medium_name);
         }
     } else if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
         rc = resp->error->rc;
