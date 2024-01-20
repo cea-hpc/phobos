@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "92fd0e09_1781a4b6",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1003556
+      },
+      "writtenOn": "2024-01-20T13:01:45Z",
+      "side": 1,
+      "message": "Hello!\nJust a few drive by fixes of things I noticed earlier\n\n- It looks like you\u0027re developing in ocre (are Reviewed-on urls left on purpose?), so gerrithub\u0027s repo wasn\u0027t up to date.. I\u0027m not sure why I have permission but thanks to that I could update the repo and push this; but normal forks would not have been able to (PRs on github might be better at this point?) (by the way Augustin doesn\u0027t seem to have registered to gerrithub, so couldn\u0027t add him to Ccs)\n\n- For this particular patch: I\u0027m not sure why nobody else seems to have had this problem?\nand\n- We\u0027re starting to have quite a few headers in /usr/include, perhaps time to make a /usr/include/phobos directory?",
+      "revId": "0523ef28705a56ad740332e2ca71a3b18670e7bc",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    }
+  ]
+}
