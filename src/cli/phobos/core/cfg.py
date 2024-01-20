@@ -34,8 +34,7 @@ def load_file(path=None):
     ret = LIBPHOBOS.pho_cfg_init_local(path.encode('utf-8') if path else None)
     ret = abs(ret)
     if ret not in (0, errno.EALREADY):
-        raise IOError(ret, "Failed to load configuration file '%s': %d" %
-                      (path, os.strerror(ret)))
+        raise IOError(ret, "Phobos config init failed: %s" % os.strerror(ret))
 
 
 # Singleton to differenciate cases where default was not provided and
