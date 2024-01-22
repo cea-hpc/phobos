@@ -44,6 +44,8 @@ int dss_emit_log(struct dss_handle *handle, struct pho_log *log)
 {
     GString *request = g_string_new("");
     PGconn *conn = handle->dh_conn;
+    unsigned int escape_len;
+    char *escape_string;
     char *message;
     PGresult *res;
     int rc;
@@ -53,11 +55,17 @@ int dss_emit_log(struct dss_handle *handle, struct pho_log *log)
         LOG_GOTO(free_request, rc = -ENOMEM,
                  "Failed to dump log message as json");
 
+    escape_len = strlen(message) * 2 + 1;
+    escape_string = xmalloc(escape_len);
+
+    PQescapeStringConn(conn, escape_string, message, escape_len, NULL);
+
     g_string_printf(request, log_query[DSS_EMIT_LOG],
                     rsc_family2str(log->device.family), log->device.name,
                     log->medium.name, log->error_number,
-                    operation_type2str(log->cause), message);
+                    operation_type2str(log->cause), escape_string);
     free(message);
+    free(escape_string);
 
     rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
     PQclear(res);

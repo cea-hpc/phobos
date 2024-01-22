@@ -29,10 +29,11 @@
 #include "pho_common.h"
 #include "ldm_common.h"
 
-#include <sys/user.h>
 #include <assert.h>
-#include <sys/statfs.h>
 #include <inttypes.h>
+#include <jansson.h>
+#include <sys/user.h>
+#include <sys/statfs.h>
 
 int mnttab_foreach(mntent_cb_t cb_func, void *cb_data)
 {
@@ -73,17 +74,9 @@ static inline size_t statfs_spc_free(const struct statfs *stfs)
     return stfs->f_bavail * stfs->f_bsize;
 }
 
-int common_statfs(const char *path, struct ldm_fs_space *fs_spc)
+static int compute_available_space(const char *path, struct statfs stfs,
+                                   struct ldm_fs_space *fs_spc)
 {
-    struct statfs  stfs;
-    ENTRY;
-
-    if (path == NULL)
-        return -EINVAL;
-
-    if (statfs(path, &stfs) != 0)
-        LOG_RETURN(-errno, "statfs(%s) failed", path);
-
     /* check df consistency:
      * used = total - free = f_blocks - f_bfree
      * if used + available < 0, there's something wrong
@@ -118,4 +111,40 @@ int common_statfs(const char *path, struct ldm_fs_space *fs_spc)
               path, statfs_spc_used(&stfs), statfs_spc_free(&stfs));
 
     return 0;
+}
+
+int logged_statfs(const char *path, struct ldm_fs_space *fs_spc,
+                  json_t **message)
+{
+    struct phobos_global_context *context = phobos_context();
+    struct statfs stfs;
+
+    ENTRY;
+
+    *message = NULL;
+
+    if (path == NULL)
+        return -EINVAL;
+
+    if (context->mock_ltfs.mock_statfs(path, &stfs) != 0) {
+        *message = json_pack("s++", "statfs('", path, "') failed");
+        LOG_RETURN(-errno, "statfs('%s') failed", path);
+    }
+
+    return compute_available_space(path, stfs, fs_spc);
+}
+
+int simple_statfs(const char *path, struct ldm_fs_space *fs_spc)
+{
+    struct statfs stfs;
+
+    ENTRY;
+
+    if (path == NULL)
+        return -EINVAL;
+
+    if (statfs(path, &stfs) != 0)
+        LOG_RETURN(-errno, "statfs('%s') failed", path);
+
+    return compute_available_space(path, stfs, fs_spc);
 }

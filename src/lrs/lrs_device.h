@@ -152,6 +152,15 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock);
 int dev_mount(struct lrs_dev *dev);
 
 /**
+ * Verify the mounted medium is writable
+ *
+ * @param[in] dev   Device containing a mounted medium
+ *
+ * @return true if the medium is writable, false otherwise
+ */
+bool dev_mount_is_writable(struct lrs_dev *dev);
+
+/**
  * Umount the device's loaded medium, but let it loaded and locked
  *
  * @param[in] dev   Device already containing a loaded medium

@@ -31,6 +31,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
 #include <sys/time.h>
 #include <stddef.h>
 #include <time.h>
@@ -178,6 +179,7 @@ enum operation_type {
     PHO_LTFS_MOUNT,
     PHO_LTFS_UMOUNT,
     PHO_LTFS_FORMAT,
+    PHO_LTFS_DF,
     PHO_OPERATION_LAST,
 };
 
@@ -191,6 +193,7 @@ static const char * const OPERATION_TYPE_NAMES[] = {
     [PHO_LTFS_MOUNT]    = "LTFS mount",
     [PHO_LTFS_UMOUNT]   = "LTFS umount",
     [PHO_LTFS_FORMAT]   = "LTFS format",
+    [PHO_LTFS_DF]       = "LTFS df",
 };
 
 static inline const char *operation_type2str(enum operation_type op)
@@ -260,6 +263,7 @@ static inline bool should_log(struct pho_log *log)
     case PHO_LTFS_MOUNT:
     case PHO_LTFS_UMOUNT:
     case PHO_LTFS_FORMAT:
+    case PHO_LTFS_DF:
         return log->message != NULL;
     case PHO_DEVICE_LOAD:
     case PHO_DEVICE_UNLOAD:
@@ -508,13 +512,13 @@ struct config {
 
 /* LTFS mocking structure */
 struct mock_ltfs {
-    /* These 2 functions are used by the "ltfs_mount" call */
-
     /* Overrides default "mkdir" in tests. */
     int (*mock_mkdir)(const char *path, mode_t mode);
     /* Overrides default "command_call" in tests. */
     int (*mock_command_call)(const char *cmd_line, parse_cb_t cb_func,
                              void *cb_arg);
+    /* Overrides default "statfs" in tests. */
+    int (*mock_statfs)(const char *file, struct statfs *buf);
 };
 
 /**

@@ -710,11 +710,12 @@ static int medium_sync(struct media_info *media_info, const char *fsroot)
 }
 
 /** Update media_info stats and push its new state to the DSS */
-static int lrs_dev_media_update(struct dss_handle *dss,
-                                struct media_info *media_info,
-                                size_t size_written, int media_rc,
-                                const char *fsroot, long long nb_new_obj)
+static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
+                                int media_rc, long long nb_new_obj)
 {
+    struct media_info *media_info = dev->ld_dss_media_info;
+    struct dss_handle *dss = &dev->ld_device_thread.dss;
+    const char *fsroot = dev->ld_mnt_path;
     struct ldm_fs_space space = {0};
     struct fs_adapter_module *fsa;
     uint64_t fields = 0;
@@ -736,7 +737,14 @@ static int lrs_dev_media_update(struct dss_handle *dss,
         media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
         fields |= ADM_STATUS;
     } else {
-        rc2 = ldm_fs_df(fsa, fsroot, &space);
+        struct pho_log log;
+
+        init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
+                     dev->ld_dss_media_info->rsc.id, PHO_LTFS_DF);
+        destroy_log_message(&log);
+
+        rc2 = ldm_fs_df(fsa, fsroot, &space, &log.message);
+        log.error_number = rc2;
         if (rc2) {
             rc = rc ? : rc2;
             pho_error(rc2, "Cannot retrieve media usage information");
@@ -753,6 +761,11 @@ static int lrs_dev_media_update(struct dss_handle *dss,
                 fields |= FS_STATUS;
             }
         }
+
+        if (should_log(&log))
+            dss_emit_log(&dev->ld_device_thread.dss, &log);
+
+        destroy_log_message(&log);
     }
 
     if (media_rc) {
@@ -798,9 +811,7 @@ static int dev_sync(struct lrs_dev *dev)
         /* this will cause the device thread to stop */
         rc = dev->ld_last_client_rc;
 
-    rc2 = lrs_dev_media_update(&dev->ld_device_thread.dss,
-                               dev->ld_dss_media_info,
-                               sync_params->tosync_size, rc, dev->ld_mnt_path,
+    rc2 = lrs_dev_media_update(dev, sync_params->tosync_size, rc,
                                sync_params->tosync_array->len);
     dev->ld_last_client_rc = 0;
 
@@ -1616,20 +1627,38 @@ out_free:
     return rc;
 }
 
-static bool dev_mount_is_writable(const char *fs_root, enum fs_type fs_type)
+bool dev_mount_is_writable(struct lrs_dev *dev)
 {
+    enum fs_type fs_type = dev->ld_dss_media_info->fs.type;
+    const char *fs_root = dev->ld_mnt_path;
     struct ldm_fs_space fs_info = {0};
     struct fs_adapter_module *fsa;
+    struct pho_log log;
     int rc;
 
-    rc = get_fs_adapter(fs_type, &fsa);
-    if (rc)
-        LOG_RETURN(rc, "No FS adapter found for '%s' (type %d)",
-                   fs_root, fs_type);
+    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
+                 dev->ld_dss_media_info->rsc.id, PHO_LTFS_DF);
+    destroy_log_message(&log);
 
-    rc = ldm_fs_df(fsa, fs_root, &fs_info);
-    if (rc)
-        LOG_RETURN(rc, "Cannot retrieve media usage information");
+    rc = get_fs_adapter(fs_type, &fsa);
+    if (rc) {
+        pho_error(rc, "No FS adapter found for '%s' (type %d)",
+                  fs_root, fs_type);
+        return false;
+    }
+
+    rc = ldm_fs_df(fsa, fs_root, &fs_info, &log.message);
+    log.error_number = rc;
+    if (rc) {
+        if (should_log(&log))
+            dss_emit_log(&dev->ld_device_thread.dss, &log);
+
+        destroy_log_message(&log);
+        pho_error(rc, "Cannot retrieve media usage information");
+        return false;
+    }
+
+    destroy_log_message(&log);
 
     return !(fs_info.spc_flags & PHO_FS_READONLY);
 }
@@ -1741,9 +1770,7 @@ mount:
      * damaged disks. Mark the media as full, let it be mounted and try to find
      * a new one.
      */
-    if (pho_request_is_write(reqc->req) &&
-        !dev_mount_is_writable(dev->ld_mnt_path,
-                               dev->ld_dss_media_info->fs.type)) {
+    if (pho_request_is_write(reqc->req) && !dev_mount_is_writable(dev)) {
         pho_warn("Media '%s' OK but mounted R/O, marking full and retrying...",
                  dev->ld_dss_media_info->rsc.id.name);
         sub_request->failure_on_medium = true;

@@ -49,6 +49,16 @@ static struct module_desc FS_ADAPTER_POSIX_MODULE_DESC = {
     .mod_minor = PLUGIN_MINOR,
 };
 
+static int common_statfs_wrapper(const char *mnt_path,
+                                 struct ldm_fs_space *fs_spc,
+                                 json_t **message)
+{
+    if (message)
+        *message = NULL;
+
+    return simple_statfs(mnt_path, fs_spc);
+}
+
 static char *get_label_path(const char *dir_path)
 {
     char    *res;
@@ -149,7 +159,7 @@ static int dir_format(const char *dev_path, const char *label,
 
     if (fs_spc) {
         memset(fs_spc, 0, sizeof(*fs_spc));
-        rc = common_statfs(dev_path, fs_spc);
+        rc = simple_statfs(dev_path, fs_spc);
     }
 
 out_close:
@@ -191,7 +201,7 @@ struct pho_fs_adapter_module_ops FS_ADAPTER_POSIX_OPS = {
     .fs_umount    = NULL,
     .fs_format    = dir_format,
     .fs_mounted   = dir_present,
-    .fs_df        = common_statfs,
+    .fs_df        = common_statfs_wrapper,
     .fs_get_label = dir_get_label,
 };
 

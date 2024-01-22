@@ -406,7 +406,8 @@ struct pho_fs_adapter_module_ops {
                      struct ldm_fs_space *fs_spc, json_t **message);
     int (*fs_mounted)(const char *dev_path, char *mnt_path,
                       size_t mnt_path_size);
-    int (*fs_df)(const char *mnt_path, struct ldm_fs_space *fs_spc);
+    int (*fs_df)(const char *mnt_path, struct ldm_fs_space *fs_spc,
+                 json_t **message);
     int (*fs_get_label)(const char *mnt_path, char *fs_label, size_t llen);
 };
 
@@ -520,16 +521,19 @@ static inline int ldm_fs_mounted(const struct fs_adapter_module *fsa,
  * @param[in] fsa        File system adapter module.
  * @param[in] mnt_path   Mount point of the filesystem.
  * @param[out] fs_spc    Filesystem space information.
+ * @param[out] message   Json message allocated in case of error, NULL
+ *                       otherwise. Must be freed by the caller
  *
  * @return 0 on success, negative error code on failure.
  */
 static inline int ldm_fs_df(const struct fs_adapter_module *fsa,
-                            const char *mnt_path, struct ldm_fs_space *fs_spc)
+                            const char *mnt_path, struct ldm_fs_space *fs_spc,
+                            json_t **message)
 {
     assert(fsa != NULL);
     assert(fsa->ops != NULL);
     assert(fsa->ops->fs_df != NULL);
-    return fsa->ops->fs_df(mnt_path, fs_spc);
+    return fsa->ops->fs_df(mnt_path, fs_spc, message);
 }
 
 /**

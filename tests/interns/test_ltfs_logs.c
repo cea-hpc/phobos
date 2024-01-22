@@ -38,6 +38,7 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
 #include <scsi/sg.h>
 #include <scsi/sg_io_linux.h>
 #include <scsi/scsi.h>
@@ -348,6 +349,48 @@ static void ltfs_format_command_call_failure(void **state)
     pho_context_reset_mock_ltfs_functions();
 }
 
+static int fail_statfs(const char *file, struct statfs *buf)
+{
+    (void) file;
+    (void) buf;
+
+    errno = 3;
+    return -3;
+}
+
+static void ltfs_df_statfs_failure(void **state)
+{
+    struct phobos_global_context *context = phobos_context();
+    struct media_info *medium = xcalloc(1, sizeof(*medium));
+    struct dss_handle *handle = *state;
+    struct lrs_dev device;
+    json_t *message;
+    bool result;
+    int rc;
+
+    prepare_mount(handle, &device, medium);
+
+    rc = dev_mount(&device);
+    assert_return_code(rc, -rc);
+
+    context->mock_ltfs.mock_statfs = fail_statfs;
+
+    result = dev_mount_is_writable(&device);
+    assert_false(result);
+
+    message = json_pack("{s:s++}", "df",
+                        "statfs('", device.ld_mnt_path, "') failed");
+
+    check_log_is_valid(handle, DEVICE_NAME, MEDIUM_NAME, PHO_LTFS_DF,
+                       3, message);
+
+    dev_umount(&device);
+    dev_unload(&device);
+    dss_logs_delete(handle, NULL);
+    cleanup_device(&device);
+    pho_context_reset_mock_ltfs_functions();
+}
+
 int main(void)
 {
     const struct CMUnitTest test_ltfs_logs[] = {
@@ -358,6 +401,8 @@ int main(void)
         cmocka_unit_test(ltfs_umount_command_call_failure),
 
         cmocka_unit_test(ltfs_format_command_call_failure),
+
+        cmocka_unit_test(ltfs_df_statfs_failure),
     };
     int error_count;
     int rc;

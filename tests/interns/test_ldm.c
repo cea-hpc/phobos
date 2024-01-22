@@ -56,7 +56,7 @@ static int test_df_0(void *arg)
 {
     struct ldm_fs_space spc;
 
-    return common_statfs("/tmp", &spc);
+    return simple_statfs("/tmp", &spc);
 }
 
 static int test_df_1(void *arg)
@@ -69,14 +69,14 @@ static int test_df_1(void *arg)
     if (rc)
         return rc;
 
-    return ldm_fs_df(fsa, "/tmp", &spc);
+    return ldm_fs_df(fsa, "/tmp", &spc, NULL);
 }
 
 static int test_df_2(void *arg)
 {
     struct ldm_fs_space spc;
 
-    return common_statfs(NULL, &spc);
+    return simple_statfs(NULL, &spc);
 }
 
 int main(int argc, char **argv)

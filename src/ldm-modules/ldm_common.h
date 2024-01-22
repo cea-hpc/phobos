@@ -32,6 +32,7 @@
 #include "pho_ldm.h"
 
 #include <mntent.h>
+#include <jansson.h>
 
 #define PHO_LDM_HELPER "/usr/sbin/pho_ldm_helper"
 
@@ -57,7 +58,14 @@ int mnttab_foreach(mntent_cb_t cb_func, void *cb_data);
 /**
  * Standard implementation of 'df' using statfs().
  */
-int common_statfs(const char *path, struct ldm_fs_space *fs_spc);
+int simple_statfs(const char *path, struct ldm_fs_space *fs_spc);
+
+/*
+ * Same as simple_statfs, but will log an error to \p message if the statfs
+ * fails
+ */
+int logged_statfs(const char *path, struct ldm_fs_space *fs_spc,
+                  json_t **message);
 
 /**
  * Build a command to mount a LTFS filesystem at a given path.

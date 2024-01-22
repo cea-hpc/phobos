@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sys/statfs.h>
 
 struct phobos_global_context *PHO_CONTEXT;
 
@@ -56,4 +57,5 @@ void pho_context_reset_mock_ltfs_functions(void)
 {
     PHO_CONTEXT->mock_ltfs.mock_mkdir = mkdir;
     PHO_CONTEXT->mock_ltfs.mock_command_call = command_call;
+    PHO_CONTEXT->mock_ltfs.mock_statfs = statfs;
 }

@@ -382,13 +382,18 @@ static int ltfs_mounted(const char *dev_path, char *mnt_path,
     }
 }
 
-static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc)
+static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc,
+                   json_t **message)
 {
+    json_t *statfs_message = NULL;
     int tape_full_threshold;
     ssize_t  avail;
     ssize_t free;
     ssize_t used;
     int rc;
+
+    if (message)
+        *message = NULL;
 
     /* Some LTFS doc says:
      * When the tape cartridge is almost full, further write operations will be
@@ -407,9 +412,13 @@ static int ltfs_df(const char *path, struct ldm_fs_space *fs_spc)
      *             = (used + free) - 5% * (used + free) - used
      *             = 95% free - 5% * used
      */
-    rc = common_statfs(path, fs_spc);
-    if (rc)
+    rc = logged_statfs(path, fs_spc, &statfs_message);
+    if (rc) {
+        if (statfs_message && message)
+            *message = json_pack("{s:o}", "df", statfs_message);
+
         return rc;
+    }
 
     /* get tape_full_threshold from conf */
     tape_full_threshold = PHO_CFG_GET_INT(cfg_ltfs, PHO_CFG_LTFS,

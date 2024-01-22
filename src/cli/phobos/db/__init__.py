@@ -487,7 +487,7 @@ class Migrator:
                 'Device lookup', 'Medium lookup',
                 'Device load', 'Device unload',
                 'LTFS mount', 'LTFS umount',
-                'LTFS format'
+                'LTFS format', 'LTFS df'
             );
 
             -- use new type in logs table

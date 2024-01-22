@@ -213,7 +213,7 @@ static void fsr_test_df(void **state)
     rc = rados_ioctx_pool_stat(test_data->pool_io_ctx, &pool_stats);
     assert_int_equal(rc, -rc);
 
-    rc = ldm_fs_df(test_data->fsa, POOLNAME, &fs_spc);
+    rc = ldm_fs_df(test_data->fsa, POOLNAME, &fs_spc, NULL);
     assert_int_equal(rc, -rc);
 
     assert(fs_spc.spc_used == pool_stats.num_bytes);

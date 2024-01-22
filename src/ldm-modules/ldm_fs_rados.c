@@ -165,7 +165,8 @@ static int pho_rados_pool_labelled(const char *dev_path, const char *poolname,
 }
 
 static int pho_rados_pool_stats(const char *poolname,
-                                struct ldm_fs_space *fs_spc)
+                                struct ldm_fs_space *fs_spc,
+                                json_t **message)
 {
     struct rados_cluster_stat_t cluster_stats;
     struct rados_pool_stat_t pool_stats;
@@ -174,6 +175,9 @@ static int pho_rados_pool_stats(const char *poolname,
     rados_t cluster_hdl;
     int rc2 = 0;
     int rc = 0;
+
+    if (message)
+        *message = NULL;
 
     ENTRY;
 
@@ -235,7 +239,7 @@ static int pho_rados_pool_format(const char *poolname, const char *label,
 
     if (fs_spc) {
         memset(fs_spc, 0, sizeof(*fs_spc));
-        rc = pho_rados_pool_stats(poolname, fs_spc);
+        rc = pho_rados_pool_stats(poolname, fs_spc, NULL);
     }
 
 out:
