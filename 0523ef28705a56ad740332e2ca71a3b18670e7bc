@@ -34,6 +34,24 @@
       "parentUuid": "92fd0e09_1781a4b6",
       "revId": "0523ef28705a56ad740332e2ca71a3b18670e7bc",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "6a743640_3e56310c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1003556
+      },
+      "writtenOn": "2024-01-22T09:52:54Z",
+      "side": 1,
+      "message": "I see github\u0027s master just got updated; thanks. I\u0027ll abandon this and let you deal with the cleanup as you can.",
+      "parentUuid": "6c6bed39_fc141f53",
+      "revId": "0523ef28705a56ad740332e2ca71a3b18670e7bc",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
     }
   ]
 }
