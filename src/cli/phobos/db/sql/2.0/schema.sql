@@ -11,7 +11,7 @@ CREATE TYPE lock_type AS ENUM('object', 'device', 'media', 'media_update',
 CREATE TYPE operation_type AS ENUM ('Library scan', 'Library open',
                                     'Device lookup', 'Medium lookup',
                                     'Device load', 'Device unload',
-                                    'LTFS mount', 'LTFS umount');
+                                    'LTFS mount', 'LTFS umount', 'LTFS format');
 
 -- to extend enums: ALTER TYPE type ADD VALUE 'value'
 

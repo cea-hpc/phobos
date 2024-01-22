@@ -112,16 +112,12 @@ static int fail_mkdir(const char *path, mode_t mode)
     return 1;
 }
 
-static void prepare_mount(struct dss_handle *handle, struct lrs_dev *device,
-                          struct media_info *medium)
+static void create_and_load(struct dss_handle *handle, struct lrs_dev *device,
+                            struct media_info *medium)
 {
-    struct fs_adapter_module *fsa = NULL;
     bool fod;
     bool cr;
     int rc;
-
-    rc = get_fs_adapter(PHO_FS_LTFS, &fsa);
-    assert_return_code(-rc, rc);
 
     create_device(device, DEVICE_NAME, LTO5_MODEL, handle);
     create_medium(medium, MEDIUM_NAME);
@@ -132,6 +128,18 @@ static void prepare_mount(struct dss_handle *handle, struct lrs_dev *device,
 
     dss_logs_delete(handle, NULL);
     assert_ptr_equal(device->ld_dss_media_info, medium);
+}
+
+static void prepare_mount(struct dss_handle *handle, struct lrs_dev *device,
+                          struct media_info *medium)
+{
+    struct fs_adapter_module *fsa = NULL;
+    int rc;
+
+    rc = get_fs_adapter(PHO_FS_LTFS, &fsa);
+    assert_return_code(-rc, rc);
+
+    create_and_load(handle, device, medium);
 
     setenv("PHOBOS_LTFS_cmd_format",
            "../../scripts/pho_ldm_helper format_ltfs \"%s\" \"%s\"", 0);
@@ -304,6 +312,42 @@ static void ltfs_umount_command_call_failure(void **state)
     cleanup_device(&device);
 }
 
+static void ltfs_format_command_call_failure(void **state)
+{
+    struct phobos_global_context *context = phobos_context();
+    struct media_info *medium = xcalloc(1, sizeof(*medium));
+    struct fs_adapter_module *fsa = NULL;
+    struct dss_handle *handle = *state;
+    struct lrs_dev device;
+    json_t *message;
+    char *cmd;
+    int rc;
+
+    rc = get_fs_adapter(PHO_FS_LTFS, &fsa);
+    assert_return_code(-rc, rc);
+
+    create_and_load(handle, &device, medium);
+
+    context->mock_ltfs.mock_command_call = fail_command_call;
+
+    rc = dev_format(&device, fsa, false);
+    assert_int_equal(rc, -2);
+
+    cmd = ltfs_format_cmd(device.ld_dev_path, medium->rsc.id.name);
+
+    message = json_pack("{s:s+}", "format",
+                        "Format command failed: ", cmd);
+
+    check_log_is_valid(handle, DEVICE_NAME, MEDIUM_NAME, PHO_LTFS_FORMAT,
+                       2, message);
+
+    free(cmd);
+    dev_unload(&device);
+    dss_logs_delete(handle, NULL);
+    cleanup_device(&device);
+    pho_context_reset_mock_ltfs_functions();
+}
+
 int main(void)
 {
     const struct CMUnitTest test_ltfs_logs[] = {
@@ -312,6 +356,8 @@ int main(void)
         cmocka_unit_test(ltfs_mount_label_mismatch),
 
         cmocka_unit_test(ltfs_umount_command_call_failure),
+
+        cmocka_unit_test(ltfs_format_command_call_failure),
     };
     int error_count;
     int rc;

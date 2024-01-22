@@ -117,11 +117,7 @@ char *ltfs_umount_cmd(const char *device, const char *path)
     return cmd_out;
 }
 
-/**
- * Build a command to format a LTFS filesystem with the given label.
- * The result must be released by the caller using free(3).
- */
-static char *ltfs_format_cmd(const char *device, const char *label)
+char *ltfs_format_cmd(const char *device, const char *label)
 {
     const char          *cmd_cfg;
     char                *cmd_out;
@@ -279,11 +275,16 @@ out_free:
 }
 
 static int ltfs_format(const char *dev_path, const char *label,
-                       struct ldm_fs_space *fs_spc)
+                       struct ldm_fs_space *fs_spc, json_t **message)
 {
-    char    *cmd = NULL;
-    int      rc;
+    struct phobos_global_context *context = phobos_context();
+    char *cmd = NULL;
+    int rc;
+
     ENTRY;
+
+    if (message)
+        *message = NULL;
 
     cmd = ltfs_format_cmd(dev_path, label);
     if (!cmd)
@@ -293,9 +294,13 @@ static int ltfs_format(const char *dev_path, const char *label,
         memset(fs_spc, 0, sizeof(*fs_spc));
 
     /* Format the media */
-    rc = command_call(cmd, ltfs_format_filter, fs_spc);
-    if (rc)
-        LOG_GOTO(out_free, rc, "ltfs_format command failed: '%s'", cmd);
+    rc = context->mock_ltfs.mock_command_call(cmd, ltfs_format_filter, fs_spc);
+    if (rc) {
+        if (message)
+            *message = json_pack("{s:s+}", "format",
+                                 "Format command failed: ", cmd);
+        LOG_GOTO(out_free, rc, "Format command failed: '%s'", cmd);
+    }
 
 out_free:
     free(cmd);

@@ -177,6 +177,7 @@ enum operation_type {
     PHO_DEVICE_UNLOAD,
     PHO_LTFS_MOUNT,
     PHO_LTFS_UMOUNT,
+    PHO_LTFS_FORMAT,
     PHO_OPERATION_LAST,
 };
 
@@ -189,6 +190,7 @@ static const char * const OPERATION_TYPE_NAMES[] = {
     [PHO_DEVICE_UNLOAD] = "Device unload",
     [PHO_LTFS_MOUNT]    = "LTFS mount",
     [PHO_LTFS_UMOUNT]   = "LTFS umount",
+    [PHO_LTFS_FORMAT]   = "LTFS format",
 };
 
 static inline const char *operation_type2str(enum operation_type op)
@@ -257,6 +259,7 @@ static inline bool should_log(struct pho_log *log)
     switch (log->cause) {
     case PHO_LTFS_MOUNT:
     case PHO_LTFS_UMOUNT:
+    case PHO_LTFS_FORMAT:
         return log->message != NULL;
     case PHO_DEVICE_LOAD:
     case PHO_DEVICE_UNLOAD:

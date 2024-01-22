@@ -125,12 +125,16 @@ static int dir_present(const char *dev_path, char *mnt_path,
  *   - Fill the used/free space structure.
  */
 static int dir_format(const char *dev_path, const char *label,
-                      struct ldm_fs_space *fs_spc)
+                      struct ldm_fs_space *fs_spc, json_t **message)
 {
     char    *label_path = get_label_path(dev_path);
     int      fd;
     ssize_t  rc;
+
     ENTRY;
+
+    if (message)
+        *message = NULL;
 
     if (!label_path)
         LOG_RETURN(-ENOMEM, "Cannot create filesystem label at '%s'", dev_path);

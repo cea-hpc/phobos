@@ -486,7 +486,8 @@ class Migrator:
                 'Library scan', 'Library open',
                 'Device lookup', 'Medium lookup',
                 'Device load', 'Device unload',
-                'LTFS mount', 'LTFS umount'
+                'LTFS mount', 'LTFS umount',
+                'LTFS format'
             );
 
             -- use new type in logs table

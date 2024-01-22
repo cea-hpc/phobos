@@ -105,7 +105,7 @@ static void fsr_test_format(void **state)
                     sizeof(buf), 0);
     assert_int_equal(rc, -ENOENT);
 
-    rc = ldm_fs_format(test_data->fsa, POOLNAME, RADOS_LABEL, &fs_spc);
+    rc = ldm_fs_format(test_data->fsa, POOLNAME, RADOS_LABEL, &fs_spc, NULL);
     assert_int_equal(rc, -rc);
 
     rc = rados_read(test_data->pool_io_ctx, RADOS_LABEL_PATH, buf,
@@ -123,10 +123,10 @@ static void fsr_test_format_again(void **state)
     struct ldm_fs_space fs_spc;
     int rc;
 
-    rc = ldm_fs_format(test_data->fsa, POOLNAME, RADOS_LABEL, &fs_spc);
+    rc = ldm_fs_format(test_data->fsa, POOLNAME, RADOS_LABEL, &fs_spc, NULL);
     assert_int_equal(rc, -rc);
 
-    rc = ldm_fs_format(test_data->fsa, POOLNAME, RADOS_LABEL, &fs_spc);
+    rc = ldm_fs_format(test_data->fsa, POOLNAME, RADOS_LABEL, &fs_spc, NULL);
     assert_int_equal(rc, -EEXIST);
 
     rc = rados_remove(test_data->pool_io_ctx, RADOS_LABEL_PATH);
@@ -140,7 +140,7 @@ static void fsr_test_get_label(void **state)
     struct ldm_fs_space fs_spc;
     int rc;
 
-    rc = ldm_fs_format(test_data->fsa, POOLNAME, RADOS_LABEL, &fs_spc);
+    rc = ldm_fs_format(test_data->fsa, POOLNAME, RADOS_LABEL, &fs_spc, NULL);
     assert_int_equal(rc, -rc);
 
     rc = ldm_fs_get_label(test_data->fsa, POOLNAME, buf, sizeof(buf));
@@ -181,7 +181,7 @@ static void fsr_test_mount(void **state)
     struct pho_log log;
     int rc;
 
-    rc = ldm_fs_format(test_data->fsa, POOLNAME, RADOS_LABEL, &fs_spc);
+    rc = ldm_fs_format(test_data->fsa, POOLNAME, RADOS_LABEL, &fs_spc, NULL);
     assert_int_equal(rc, -rc);
 
     rc = ldm_fs_mount(test_data->fsa, POOLNAME, POOLNAME, RADOS_LABEL,

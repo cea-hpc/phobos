@@ -1159,15 +1159,21 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
     struct media_info *medium = dev->ld_dss_media_info;
     struct ldm_fs_space space = {0};
     uint64_t fields = 0;
+    struct pho_log log;
     int rc;
 
     ENTRY;
 
+    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
+                 dev->ld_dss_media_info->rsc.id, PHO_LTFS_FORMAT);
+    destroy_log_message(&log);
+
     pho_verb("format: medium '%s'", medium->rsc.id.name);
 
-    rc = ldm_fs_format(fsa, dev->ld_dev_path, medium->rsc.id.name, &space);
+    rc = ldm_fs_format(fsa, dev->ld_dev_path, medium->rsc.id.name, &space,
+                       &log.message);
     if (rc)
-        LOG_RETURN(rc, "Cannot format medium '%s'", medium->rsc.id.name);
+        LOG_GOTO(out_log, rc, "Cannot format medium '%s'", medium->rsc.id.name);
 
     MUTEX_LOCK(&dev->ld_mutex);
     /* Systematically use the media ID as filesystem label */
@@ -1198,6 +1204,14 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
     if (rc != 0)
         LOG_RETURN(rc, "Failed to update state of media '%s' after format",
                    medium->rsc.id.name);
+
+out_log:
+    log.error_number = rc;
+    if (should_log(&log))
+        dss_emit_log(&dev->ld_device_thread.dss, &log);
+
+    destroy_log_message(&log);
+
     return rc;
 }
 

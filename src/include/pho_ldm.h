@@ -403,7 +403,7 @@ struct pho_fs_adapter_module_ops {
     int (*fs_umount)(const char *dev_path, const char *mnt_path,
                      json_t **message);
     int (*fs_format)(const char *dev_path, const char *label,
-                     struct ldm_fs_space *fs_spc);
+                     struct ldm_fs_space *fs_spc, json_t **message);
     int (*fs_mounted)(const char *dev_path, char *mnt_path,
                       size_t mnt_path_size);
     int (*fs_df)(const char *mnt_path, struct ldm_fs_space *fs_spc);
@@ -475,12 +475,14 @@ static inline int ldm_fs_umount(const struct fs_adapter_module *fsa,
  * @param[in]  label     Media label to apply.
  * @param[out] fs_spc    Filesystem space information.
  *                       Set to zero if fs provides no such operation.
+ * @param[out] message   Json message allocated in case of error, NULL
+ *                       otherwise. Must be freed by the caller
  *
  * @return 0 on success, negative error code on failure.
  */
 static inline int ldm_fs_format(const struct fs_adapter_module *fsa,
                                 const char *dev_path, const char *label,
-                                struct ldm_fs_space *fs_spc)
+                                struct ldm_fs_space *fs_spc, json_t **message)
 {
     assert(fsa != NULL);
     assert(fsa->ops != NULL);
@@ -488,7 +490,7 @@ static inline int ldm_fs_format(const struct fs_adapter_module *fsa,
         memset(fs_spc, 0, sizeof(*fs_spc));
         return 0;
     }
-    return fsa->ops->fs_format(dev_path, label, fs_spc);
+    return fsa->ops->fs_format(dev_path, label, fs_spc, message);
 }
 
 /**

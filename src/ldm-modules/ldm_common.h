@@ -71,4 +71,10 @@ char *ltfs_mount_cmd(const char *device, const char *path);
  */
 char *ltfs_umount_cmd(const char *device, const char *path);
 
+/**
+ * Build a command to format a LTFS filesystem with the given label.
+ * The result must be released by the caller using free(3).
+ */
+char *ltfs_format_cmd(const char *device, const char *label);
+
 #endif

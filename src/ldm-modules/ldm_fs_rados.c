@@ -201,7 +201,7 @@ out:
 }
 
 static int pho_rados_pool_format(const char *poolname, const char *label,
-                                 struct ldm_fs_space *fs_spc)
+                                 struct ldm_fs_space *fs_spc, json_t **message)
 {
     char *label_path = RADOS_LABEL_PATH;
     struct lib_handle lib_hdl;
@@ -210,6 +210,9 @@ static int pho_rados_pool_format(const char *poolname, const char *label,
     int rc2, rc;
 
     ENTRY;
+
+    if (message)
+        *message = NULL;
 
     rc = pho_rados_pool_connect(&lib_hdl, &pool_io_ctx, poolname);
     if (rc)
