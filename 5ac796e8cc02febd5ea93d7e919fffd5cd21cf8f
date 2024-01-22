@@ -16,6 +16,24 @@
       "message": "Dominique, do you get this updated version from an already existing one ? Do we have other files to update ?",
       "revId": "5ac796e8cc02febd5ea93d7e919fffd5cd21cf8f",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a7f41034_4123a31c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1003556
+      },
+      "writtenOn": "2024-01-22T21:34:56Z",
+      "side": 1,
+      "message": "This files comes from the autoconf-archive-2023.02.20-2.fc39.noarch package on my laptop. I didn\u0027t update the other files because it wasn\u0027t needed to build on this fedora 39.\n\nLooking at the other files the swig files have some minor update to handle swig3.0 binary (not needed on fedora because it\u0027s keeping the \u0027swig\u0027 name, even as it\u0027s already swig4...) and valgrind (looks like some conflict with automake rules somewhere perhaps? they renamed check-valgrind-$(1)-am to check-valgrind-$(1)-local and changed an add-prefix to addprefix...)\n\nHappy to update the other files if you\u0027d like, but that\u0027ll require testing on other distros so I think it\u0027s better to only upgrade what\u0027s needed. I\u0027ll submit them in another commit to separate \"fix update\" to \"update for the sake of it\"",
+      "parentUuid": "f3cc7a15_66413b64",
+      "revId": "5ac796e8cc02febd5ea93d7e919fffd5cd21cf8f",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
     }
   ]
 }
