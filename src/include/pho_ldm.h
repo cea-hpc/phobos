@@ -400,7 +400,8 @@ static inline int ldm_lib_scan(struct lib_handle *lib_hdl,
 struct pho_fs_adapter_module_ops {
     int (*fs_mount)(const char *dev_path, const char *mnt_path,
                     const char *label, json_t **message);
-    int (*fs_umount)(const char *dev_path, const char *mnt_path);
+    int (*fs_umount)(const char *dev_path, const char *mnt_path,
+                     json_t **message);
     int (*fs_format)(const char *dev_path, const char *label,
                      struct ldm_fs_space *fs_spc);
     int (*fs_mounted)(const char *dev_path, char *mnt_path,
@@ -451,17 +452,20 @@ static inline int ldm_fs_mount(const struct fs_adapter_module *fsa,
  * @param[in] fsa       File system adapter module.
  * @param[in] dev_path  Path to the device.
  * @param[in] mnt_path  Mount point for the filesystem.
+ * @param[out] message  Json message allocated in case of error, NULL
+ *                      otherwise. Must be freed by the caller
  *
  * @return 0 on success, negative error code on failure.
  */
 static inline int ldm_fs_umount(const struct fs_adapter_module *fsa,
-                                const char *dev_path, const char *mnt_point)
+                                const char *dev_path, const char *mnt_point,
+                                json_t **message)
 {
     assert(fsa != NULL);
     assert(fsa->ops != NULL);
     if (fsa->ops->fs_umount == NULL)
         return 0;
-    return fsa->ops->fs_umount(dev_path, mnt_point);
+    return fsa->ops->fs_umount(dev_path, mnt_point, message);
 }
 
 /**

@@ -102,11 +102,7 @@ char *ltfs_mount_cmd(const char *device, const char *path)
     return cmd_out;
 }
 
-/**
- * Build a command to unmount a LTFS filesystem at a given path.
- * The result must be released by the caller using free(3).
- */
-static char *ltfs_umount_cmd(const char *device, const char *path)
+char *ltfs_umount_cmd(const char *device, const char *path)
 {
     const char          *cmd_cfg;
     char                *cmd_out;
@@ -197,14 +193,18 @@ static int ltfs_mount(const char *dev_path, const char *mnt_path,
 
     ENTRY;
 
+    if (message)
+        *message = NULL;
+
     cmd = ltfs_mount_cmd(dev_path, mnt_path);
     if (!cmd)
         LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build LTFS mount command");
 
     /* create the mount point */
     if (context->mock_ltfs.mock_mkdir(mnt_path, 0750) != 0 && errno != EEXIST) {
-        *message = json_pack("{s:s+}", "mkdir",
-                             "Failed to create mount point: ", mnt_path);
+        if (message)
+            *message = json_pack("{s:s+}", "mkdir",
+                                 "Failed to create mount point: ", mnt_path);
         LOG_GOTO(out_free, rc = -errno, "Failed to create mount point %s",
                  mnt_path);
     }
@@ -218,8 +218,9 @@ static int ltfs_mount(const char *dev_path, const char *mnt_path,
      */
     rc = context->mock_ltfs.mock_command_call(cmd, ltfs_collect_output, NULL);
     if (rc) {
-        *message = json_pack("{s:s+}", "mount",
-                             "Mount command failed: ", cmd);
+        if (message)
+            *message = json_pack("{s:s+}", "mount",
+                                 "Mount command failed: ", cmd);
         LOG_GOTO(out_free, rc, "Mount command failed: '%s'", cmd);
     }
 
@@ -233,8 +234,10 @@ static int ltfs_mount(const char *dev_path, const char *mnt_path,
         LOG_GOTO(out_free, rc, "Cannot retrieve fs label for '%s'", mnt_path);
 
     if (strcmp(vol_label, fs_label)) {
-        *message = json_pack("{s:s+++}", "label mismatch",
-                             "found: ", vol_label, ", expected: ", fs_label);
+        if (message)
+            *message = json_pack("{s:s+++}", "label mismatch",
+                                 "found: ", vol_label, ", expected: ",
+                                 fs_label);
         LOG_GOTO(out_free, rc = -EINVAL,
                  "FS label mismatch found:'%s' / expected:'%s'",
                  vol_label, fs_label);
@@ -245,20 +248,30 @@ out_free:
     return rc;
 }
 
-static int ltfs_umount(const char *dev_path, const char *mnt_path)
+static int ltfs_umount(const char *dev_path, const char *mnt_path,
+                       json_t **message)
 {
-    char    *cmd = NULL;
-    int      rc;
+    struct phobos_global_context *context = phobos_context();
+    char *cmd = NULL;
+    int rc;
+
     ENTRY;
+
+    if (message)
+        *message = NULL;
 
     cmd = ltfs_umount_cmd(dev_path, mnt_path);
     if (!cmd)
         LOG_GOTO(out_free, rc = -ENOMEM, "Failed to build LTFS umount command");
 
     /* unmount the filesystem */
-    rc = command_call(cmd, ltfs_collect_output, NULL);
-    if (rc)
+    rc = context->mock_ltfs.mock_command_call(cmd, ltfs_collect_output, NULL);
+    if (rc) {
+        if (message)
+            *message = json_pack("{s:s+}", "umount",
+                                 "Umount command failed: ", cmd);
         LOG_GOTO(out_free, rc, "Umount command failed: '%s'", cmd);
+    }
 
 out_free:
     free(cmd);

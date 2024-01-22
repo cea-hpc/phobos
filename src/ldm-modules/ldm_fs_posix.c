@@ -166,7 +166,8 @@ static int dir_labelled(const char *dev_path, const char *mnt_path,
     char    mounted_label[PHO_LABEL_MAX_LEN + 1];
     int     rc;
 
-    (void) message;
+    if (message)
+        *message = NULL;
 
     rc = dir_get_label(mnt_path, mounted_label, sizeof(mounted_label));
     if (rc)

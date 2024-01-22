@@ -65,4 +65,10 @@ int common_statfs(const char *path, struct ldm_fs_space *fs_spc);
  */
 char *ltfs_mount_cmd(const char *device, const char *path);
 
+/**
+ * Build a command to unmount a LTFS filesystem at a given path.
+ * The result must be released by the caller using free(3).
+ */
+char *ltfs_umount_cmd(const char *device, const char *path);
+
 #endif

@@ -815,15 +815,17 @@ static int dev_sync(struct lrs_dev *dev)
     return rc;
 }
 
-/**
- * Umount medium of device but let it loaded and locked.
- */
-static int dev_umount(struct lrs_dev *dev)
+int dev_umount(struct lrs_dev *dev)
 {
     struct fs_adapter_module *fsa;
+    struct pho_log log;
     int rc;
 
     ENTRY;
+
+    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
+                 dev->ld_dss_media_info->rsc.id, PHO_LTFS_UMOUNT);
+    destroy_log_message(&log);
 
     pho_info("umount: medium '%s' in device '%s' mounted at '%s'",
              dev->ld_dss_media_info->rsc.id.name,
@@ -836,8 +838,11 @@ static int dev_umount(struct lrs_dev *dev)
                  "device '%s'", fs_type_names[dev->ld_dss_media_info->fs.type],
                  dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
-    rc = ldm_fs_umount(fsa, dev->ld_dev_path, dev->ld_mnt_path);
+    rc = ldm_fs_umount(fsa, dev->ld_dev_path, dev->ld_mnt_path, &log.message);
     clean_tosync_array(dev, rc);
+    if (rc)
+        LOG_GOTO(out, rc, "Failed to unmount device '%s' mounted at '%s'",
+                 dev->ld_dev_path, dev->ld_mnt_path);
 
     /* update device state and unset mount path */
     MUTEX_LOCK(&dev->ld_mutex);
@@ -851,6 +856,12 @@ out:
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         MUTEX_UNLOCK(&dev->ld_mutex);
     }
+
+    log.error_number = rc;
+    if (should_log(&log))
+        dss_emit_log(&dev->ld_device_thread.dss, &log);
+
+    destroy_log_message(&log);
 
     return rc;
 }

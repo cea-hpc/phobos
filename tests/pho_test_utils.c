@@ -112,6 +112,8 @@ void create_device(struct lrs_dev *dev, char *path, char *model,
 
     dev->ld_dss_dev_info = xcalloc(1, sizeof(*dev->ld_dss_dev_info));
 
+    dev->ld_sync_params.tosync_array = g_ptr_array_new();
+
     if (dss)
         dev->ld_device_thread.dss = *dss;
 
@@ -150,6 +152,7 @@ void cleanup_device(struct lrs_dev *dev)
     free(dev->ld_dss_dev_info);
     free(dev->ld_sys_dev_state.lds_model);
     free(dev->ld_sys_dev_state.lds_serial);
+    g_ptr_array_free(dev->ld_sync_params.tosync_array, true);
 }
 
 void medium_set_tags(struct media_info *medium,

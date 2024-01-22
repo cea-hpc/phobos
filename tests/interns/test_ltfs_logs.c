@@ -255,8 +255,8 @@ static void ltfs_mount_label_mismatch(void **state)
     setenv("PHOBOS_LTFS_cmd_umount",
            "../../scripts/pho_ldm_helper umount_ltfs \"%s\" \"%s\"", 0);
 
-    rc = ldm_fs_umount(fsa, device.ld_dev_path, mount_path);
-    assert_return_code(-rc, rc);
+    rc = ldm_fs_umount(fsa, device.ld_dev_path, mount_path, NULL);
+    assert_return_code(rc, -rc);
 
     dev_unload(&device);
     free(mount_path);
@@ -265,12 +265,53 @@ static void ltfs_mount_label_mismatch(void **state)
     pho_context_reset_mock_ltfs_functions();
 }
 
+static void ltfs_umount_command_call_failure(void **state)
+{
+    struct phobos_global_context *context = phobos_context();
+    struct media_info *medium = xcalloc(1, sizeof(*medium));
+    struct dss_handle *handle = *state;
+    struct lrs_dev device;
+    char *mount_path;
+    json_t *message;
+    char *cmd;
+    int rc;
+
+    prepare_mount(handle, &device, medium);
+
+    rc = dev_mount(&device);
+    assert_return_code(rc, -rc);
+
+    context->mock_ltfs.mock_command_call = fail_command_call;
+
+    rc = dev_umount(&device);
+    assert_int_equal(rc, -2);
+
+    mount_path = get_mount_path(&device);
+    cmd = ltfs_umount_cmd(device.ld_dev_path, mount_path);
+
+    message = json_pack("{s:s+}", "umount",
+                        "Umount command failed: ", cmd);
+
+    check_log_is_valid(handle, DEVICE_NAME, MEDIUM_NAME, PHO_LTFS_UMOUNT,
+                       2, message);
+
+    free(cmd);
+    free(mount_path);
+    pho_context_reset_mock_ltfs_functions();
+    dev_umount(&device);
+    dev_unload(&device);
+    dss_logs_delete(handle, NULL);
+    cleanup_device(&device);
+}
+
 int main(void)
 {
     const struct CMUnitTest test_ltfs_logs[] = {
         cmocka_unit_test(ltfs_mount_mkdir_failure),
         cmocka_unit_test(ltfs_mount_command_call_failure),
         cmocka_unit_test(ltfs_mount_label_mismatch),
+
+        cmocka_unit_test(ltfs_umount_command_call_failure),
     };
     int error_count;
     int rc;

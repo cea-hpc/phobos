@@ -146,7 +146,8 @@ static int pho_rados_pool_labelled(const char *dev_path, const char *poolname,
     (void) dev_path;
     int rc;
 
-    (void) message;
+    if (message)
+        *message = NULL;
 
     ENTRY;
 

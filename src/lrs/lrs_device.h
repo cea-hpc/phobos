@@ -152,6 +152,15 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock);
 int dev_mount(struct lrs_dev *dev);
 
 /**
+ * Umount the device's loaded medium, but let it loaded and locked
+ *
+ * @param[in] dev   Device already containing a loaded medium
+ *
+ * @return 0 on success, -error number on error.
+ */
+int dev_umount(struct lrs_dev *dev);
+
+/**
  * Unload medium from device
  *
  * - DSS unlock the medium
