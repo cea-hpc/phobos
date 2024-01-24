@@ -161,9 +161,14 @@ static int ltfs_format_filter(void *arg, char *line, size_t size, int stream)
 
 #define LTFS_VNAME_XATTR    "user.ltfs.volumeName"
 
-static int ltfs_get_label(const char *mnt_path, char *fs_label, size_t llen)
+static int ltfs_get_label(const char *mnt_path, char *fs_label, size_t llen,
+                          json_t **message)
 {
+    struct phobos_global_context *context = phobos_context();
     ssize_t rc;
+
+    if (message)
+        *message = NULL;
 
     /* labels can (theorically) be as big as PHO_LABEL_MAX_LEN, add one byte */
     if (llen <= PHO_LABEL_MAX_LEN)
@@ -172,9 +177,15 @@ static int ltfs_get_label(const char *mnt_path, char *fs_label, size_t llen)
     memset(fs_label, 0, llen);
 
     /* We really want null-termination */
-    rc = getxattr(mnt_path, LTFS_VNAME_XATTR, fs_label, llen - 1);
-    if (rc < 0)
+    rc = context->mock_ltfs.mock_getxattr(mnt_path, LTFS_VNAME_XATTR, fs_label,
+                                          llen - 1);
+    if (rc < 0) {
+        if (message)
+            *message = json_pack(
+                "{s:s}", "get_label",
+                "Failed to get volume name '" LTFS_VNAME_XATTR "'");
         return -errno;
+    }
 
     return 0;
 }
@@ -224,8 +235,7 @@ static int ltfs_mount(const char *dev_path, const char *mnt_path,
     if (!fs_label || !fs_label[0])
         goto out_free;
 
-    /* Errors on this call will be managed by the function itself later */
-    rc = ltfs_get_label(mnt_path, vol_label, sizeof(vol_label));
+    rc = ltfs_get_label(mnt_path, vol_label, sizeof(vol_label), message);
     if (rc)
         LOG_GOTO(out_free, rc, "Cannot retrieve fs label for '%s'", mnt_path);
 

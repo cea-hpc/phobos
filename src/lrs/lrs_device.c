@@ -1622,7 +1622,7 @@ out_free:
     if (should_log(&log))
         dss_emit_log(&dev->ld_device_thread.dss, &log);
 
-    destroy_json(log.message);
+    destroy_log_message(&log);
 
     return rc;
 }

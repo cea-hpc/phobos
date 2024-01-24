@@ -106,13 +106,16 @@ out_err:
  * should only contain llen-1 characters
  */
 static int pho_rados_pool_get_label(const char *poolname, char *fs_label,
-                                    size_t llen)
+                                    size_t llen, json_t **message)
 {
     char *label_path = RADOS_LABEL_PATH;
     rados_ioctx_t pool_io_ctx;
     struct lib_handle lib_hdl;
     int rc2;
     int rc;
+
+    if (message)
+        *message = NULL;
 
     ENTRY;
 
@@ -152,7 +155,7 @@ static int pho_rados_pool_labelled(const char *dev_path, const char *poolname,
     ENTRY;
 
     rc = pho_rados_pool_get_label(poolname, label_on_pool,
-                                  sizeof(label_on_pool));
+                                  sizeof(label_on_pool), NULL);
     if (rc)
         LOG_RETURN(rc, "Cannot retrieve label on '%s'", poolname);
 
@@ -270,7 +273,7 @@ static int pho_rados_pool_exists(const char *poolname, char *mnt_path,
         LOG_GOTO(out, rc, "Could not find a pool named %s", poolname);
 
     rc = pho_rados_pool_get_label(poolname, mounted_label,
-                                  sizeof(mounted_label));
+                                  sizeof(mounted_label), NULL);
     if (rc) {
         pho_info("The pool %s is present but we can't get any label", poolname);
         return -ENOENT;

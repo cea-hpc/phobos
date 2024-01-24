@@ -408,7 +408,8 @@ struct pho_fs_adapter_module_ops {
                       size_t mnt_path_size);
     int (*fs_df)(const char *mnt_path, struct ldm_fs_space *fs_spc,
                  json_t **message);
-    int (*fs_get_label)(const char *mnt_path, char *fs_label, size_t llen);
+    int (*fs_get_label)(const char *mnt_path, char *fs_label, size_t llen,
+                        json_t **message);
 };
 
 struct fs_adapter_module {
@@ -542,17 +543,19 @@ static inline int ldm_fs_df(const struct fs_adapter_module *fsa,
  * @param[in] mnt_path  Mount point of the filesystem.
  * @param[out] label    Buffer of at least PHO_LABEL_MAX_LEN + 1 bytes.
  * @param[in]  llen     Label buffer length in bytes.
+ * @param[out] message   Json message allocated in case of error, NULL
+ *                       otherwise. Must be freed by the caller
  *
  * @return 0 on success, negative error code on failure.
  */
 static inline int ldm_fs_get_label(const struct fs_adapter_module *fsa,
                                    const char *mnt_path, char *fs_label,
-                                   size_t llen)
+                                   size_t llen, json_t **message)
 {
     assert(fsa != NULL);
     assert(fsa->ops != NULL);
     assert(fsa->ops->fs_get_label != NULL);
-    return fsa->ops->fs_get_label(mnt_path, fs_label, llen);
+    return fsa->ops->fs_get_label(mnt_path, fs_label, llen, message);
 }
 
 /** @}*/

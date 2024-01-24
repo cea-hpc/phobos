@@ -71,11 +71,15 @@ static char *get_label_path(const char *dir_path)
     return res;
 }
 
-static int dir_get_label(const char *mnt_path, char *fs_label, size_t llen)
+static int dir_get_label(const char *mnt_path, char *fs_label, size_t llen,
+                         json_t **message)
 {
     char    *label_path = get_label_path(mnt_path);
     int      fd;
     ssize_t  rc;
+
+    if (message)
+        *message = NULL;
 
     if (!label_path)
         LOG_RETURN(-ENOMEM, "Cannot lookup filesystem label at '%s'", mnt_path);
@@ -113,7 +117,7 @@ static int dir_present(const char *dev_path, char *mnt_path,
     if (!S_ISDIR(st.st_mode))
         LOG_RETURN(-ENOTDIR, "'%s' is not a directory", dev_path);
 
-    rc = dir_get_label(dev_path, mounted_label, sizeof(mounted_label));
+    rc = dir_get_label(dev_path, mounted_label, sizeof(mounted_label), NULL);
     if (rc) {
         pho_info("dir is present but we can't get any label");
         return -ENOENT;
@@ -183,7 +187,7 @@ static int dir_labelled(const char *dev_path, const char *mnt_path,
     if (message)
         *message = NULL;
 
-    rc = dir_get_label(mnt_path, mounted_label, sizeof(mounted_label));
+    rc = dir_get_label(mnt_path, mounted_label, sizeof(mounted_label), NULL);
     if (rc)
         LOG_RETURN(rc, "Cannot retrieve label on '%s'", mnt_path);
 

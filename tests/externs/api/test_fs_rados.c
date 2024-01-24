@@ -143,7 +143,7 @@ static void fsr_test_get_label(void **state)
     rc = ldm_fs_format(test_data->fsa, POOLNAME, RADOS_LABEL, &fs_spc, NULL);
     assert_int_equal(rc, -rc);
 
-    rc = ldm_fs_get_label(test_data->fsa, POOLNAME, buf, sizeof(buf));
+    rc = ldm_fs_get_label(test_data->fsa, POOLNAME, buf, sizeof(buf), NULL);
     assert_int_equal(rc, -rc);
     assert_string_equal(buf, RADOS_LABEL);
 

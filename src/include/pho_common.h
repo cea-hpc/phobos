@@ -519,6 +519,9 @@ struct mock_ltfs {
                              void *cb_arg);
     /* Overrides default "statfs" in tests. */
     int (*mock_statfs)(const char *file, struct statfs *buf);
+    /* Overrides default "getxattr" in tests. */
+    ssize_t (*mock_getxattr)(const char *path, const char *name, void *value,
+                             size_t size);
 };
 
 /**
