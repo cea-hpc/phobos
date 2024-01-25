@@ -236,7 +236,7 @@ int scsi_mode_sense(int fd, struct mode_sense_info *info, json_t *message)
         return rc;
     }
 
-    destroy_json(log_object);
+    json_decref(log_object);
 
     res_hdr = (struct mode_sense_result_header *)buffer;
     if (res_hdr->mode_data_length < sizeof(struct mode_sense_result_header) +
@@ -571,7 +571,7 @@ out_log:
     if (rc)
         json_object_set_new(message, "scsi_execute", log_object);
     else
-        destroy_json(log_object);
+        json_decref(log_object);
 
     return rc;
 }

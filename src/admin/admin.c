@@ -1423,15 +1423,15 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
             log.error_number = rc;
             dss_emit_log(&dss, &log);
         } else {
-            destroy_json(lib_open_json);
+            json_decref(lib_open_json);
         }
 
-        destroy_json(log.message);
+        destroy_log_message(&log);
         LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
                    lib_type_name, lib_dev);
     }
 
-    destroy_json(lib_open_json);
+    json_decref(lib_open_json);
     lib_scan_json = json_object();
 
     rc = ldm_lib_scan(&lib_hdl, lib_data, lib_scan_json);
@@ -1443,16 +1443,16 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
             log.error_number = rc;
             dss_emit_log(&dss, &log);
         } else {
-            destroy_json(lib_scan_json);
+            json_decref(lib_scan_json);
         }
 
-        destroy_json(log.message);
+        destroy_log_message(&log);
         LOG_GOTO(out, rc, "Failed to scan library of type '%s' for path '%s'",
                  lib_type_name, lib_dev);
     }
 
-    destroy_json(lib_scan_json);
-    destroy_json(log.message);
+    json_decref(lib_scan_json);
+    destroy_log_message(&log);
 
 out:
     rc2 = ldm_lib_close(&lib_hdl);

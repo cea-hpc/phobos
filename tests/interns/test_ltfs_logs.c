@@ -99,7 +99,7 @@ static void check_log_is_valid(struct dss_handle *handle,
         fail();
     }
 
-    destroy_json(json_message);
+    json_decref(json_message);
 
     dss_res_free(logs, n_logs);
 }

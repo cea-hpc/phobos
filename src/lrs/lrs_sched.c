@@ -494,15 +494,15 @@ int sched_fill_dev_info(struct lrs_sched *sched, struct lib_handle *lib_hdl,
             log.error_number = rc;
             dss_emit_log(&dev->ld_device_thread.dss, &log);
         } else {
-            destroy_json(device_lookup_json);
+            json_decref(device_lookup_json);
         }
 
-        destroy_json(log.message);
+        destroy_log_message(&log);
         return rc;
     }
 
-    destroy_json(device_lookup_json);
-    destroy_json(log.message);
+    json_decref(device_lookup_json);
+    destroy_log_message(&log);
 
     if (dev->ld_lib_dev_info.ldi_full) {
         struct fs_adapter_module *fsa;

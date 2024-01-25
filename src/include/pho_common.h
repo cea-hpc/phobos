@@ -275,11 +275,6 @@ static inline bool should_log(struct pho_log *log)
     __builtin_unreachable();
 }
 
-static inline void destroy_json(json_t *json)
-{
-    json_decref(json);
-}
-
 static inline void destroy_log_message(struct pho_log *log)
 {
     if (log->message)

@@ -674,7 +674,7 @@ out_log:
     if (json_object_size(log.message) > 0)
         *json_message = json_copy(log.message);
 
-    destroy_json(log.message);
+    destroy_log_message(&log);
 
     return rc;
 }
@@ -860,7 +860,7 @@ out_log:
     if (json_object_size(log.message) > 0)
         *json_message = json_copy(log.message);
 
-    destroy_json(log.message);
+    destroy_log_message(&log);
 
     if (rc) {
         free(unloaded_tape_label);

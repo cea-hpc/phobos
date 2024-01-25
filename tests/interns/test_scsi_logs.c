@@ -209,7 +209,7 @@ static json_t *create_log_message(enum operation_type cause,
             }
         }
 
-        destroy_json(lib_data);
+        json_decref(lib_data);
     }
 
     scsi_execute = json_object();
@@ -364,7 +364,7 @@ static void check_log_is_valid(struct dss_handle *handle,
         assert_return_code(-log.error_number, log.error_number);
 
     assert_true(json_equal(json_message, log.message));
-    destroy_json(json_message);
+    json_decref(json_message);
 
     dss_res_free(logs, n_logs);
 }
@@ -788,7 +788,7 @@ static void scsi_lib_scan_logs_check(struct dss_handle *handle,
         assert_int_equal(n_logs, 0);
         dss_res_free(logs, n_logs);
 
-        destroy_json(lib_data);
+        json_decref(lib_data);
     }
 
     dss_logs_delete(handle, NULL);

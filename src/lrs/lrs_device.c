@@ -971,7 +971,7 @@ out:
     if (should_log(&log))
         dss_emit_log(&dev->ld_device_thread.dss, &log);
 
-    destroy_json(log.message);
+    destroy_log_message(&log);
 
     return rc;
 }
@@ -1100,7 +1100,7 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
         LOG_GOTO(out_close, rc, "Media lookup failed");
     }
 
-    destroy_json(medium_lookup_json);
+    json_decref(medium_lookup_json);
 
     rc = ldm_lib_media_move(&lib_hdl, &medium_addr,
                             &dev->ld_lib_dev_info.ldi_addr, log.message);
@@ -1160,7 +1160,7 @@ out_log:
     if (should_log(&log))
         dss_emit_log(&dev->ld_device_thread.dss, &log);
 
-    destroy_json(log.message);
+    destroy_log_message(&log);
 
     return rc;
 }
@@ -1565,7 +1565,7 @@ int dev_mount(struct lrs_dev *dev)
 
     init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
                  dev->ld_dss_media_info->rsc.id, PHO_LTFS_MOUNT);
-    destroy_json(log.message);
+    destroy_log_message(&log);
 
     rc = get_fs_adapter(dev->ld_dss_media_info->fs.type, &fsa);
     if (rc)
@@ -2189,7 +2189,7 @@ int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl,
                             lib_open_json);
         log->error_number = rc;
     } else {
-        destroy_json(lib_open_json);
+        json_decref(lib_open_json);
     }
 
     return rc;

@@ -101,7 +101,7 @@ void dss_logs_result_free(void *item)
 {
     struct pho_log *log = item;
 
-    destroy_json(log->message);
+    destroy_log_message(log);
 }
 
 int create_logs_filter(struct pho_log_filter *log_filter,

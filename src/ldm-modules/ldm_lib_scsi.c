@@ -188,7 +188,7 @@ static int lib_status_load(struct lib_descriptor *lib,
         return rc;
     }
 
-    destroy_json(lib_load_json);
+    json_decref(lib_load_json);
     status_json = json_object();
 
     if ((type == SCSI_TYPE_ALL || type == SCSI_TYPE_ARM) && !lib->arms.loaded) {
@@ -301,7 +301,7 @@ static int lib_status_load(struct lib_descriptor *lib,
         lib->drives.loaded = true;
     }
 
-    destroy_json(status_json);
+    json_decref(status_json);
 
     return 0;
 }
@@ -750,7 +750,7 @@ static int lib_scsi_move(struct lib_handle *hdl,
             goto unlock;
         }
 
-        destroy_json(target_json);
+        json_decref(target_json);
         type = UNLOAD_MEDIUM;
     } else {
         tgt = tgt_addr->lia_addr;
@@ -775,7 +775,7 @@ static int lib_scsi_move(struct lib_handle *hdl,
             goto unlock;
         }
 
-        destroy_json(target_json);
+        json_decref(target_json);
         json_object_clear(move_json);
         rc = scsi_move_medium(lib->fd, 0, src_addr->lia_addr, tgt, move_json);
     }
@@ -784,7 +784,7 @@ static int lib_scsi_move(struct lib_handle *hdl,
         json_object_set_new(message, SCSI_OPERATION_TYPE_NAMES[type],
                             move_json);
     else
-        destroy_json(move_json);
+        json_decref(move_json);
 
 unlock:
     MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
