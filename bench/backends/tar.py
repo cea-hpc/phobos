@@ -42,7 +42,7 @@ class TarTape:
 
     def put(self, oid, drive):
         self.move_to_index(len(self.objects), drive)
-        run("tar", "cf", drive.nst(), oid)
+        run("tar", "chf", drive.nst(), oid)
         self.objects[oid] = len(self.objects)
         self.current_index = len(self.objects) # ready to write next index
 
