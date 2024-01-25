@@ -419,6 +419,10 @@ def main(args):
                         else:
                             logging.info(f"{out} == {action.path}")
 
+        # clean cache before test
+        run("sync")
+        run("bash", "-c", "echo 3 > /proc/sys/vm/drop_caches")
+
         with Benchmark("Benchmark", args.source_file, args.backend):
             for action in actions:
                 if action.is_put():
