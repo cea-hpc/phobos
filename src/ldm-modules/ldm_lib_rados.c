@@ -142,15 +142,12 @@ static int pho_rados_pool_exists(rados_t cluster_hdl, const char *poolname)
  */
 static int lib_rados_drive_lookup(struct lib_handle *lib_hdl,
                                   const char *drive_serial,
-                                  struct lib_drv_info *drv_info,
-                                  json_t *message)
+                                  struct lib_drv_info *drv_info)
 {
     const char *sep = strchr(drive_serial, ':');
     int rc;
 
     ENTRY;
-
-    (void) message;
 
     if (!lib_hdl->lh_lib || !sep || (strlen(sep + 1) + 1) > PHO_URI_MAX)
         return -EBADF;

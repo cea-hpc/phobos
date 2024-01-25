@@ -25,6 +25,7 @@ test_bin="$test_bin_dir/test_store_retry"
 . $test_bin_dir/../../test_env.sh
 . $test_bin_dir/setup_db.sh
 . $test_bin_dir/test_launch_daemon.sh
+. $test_bin_dir/tape_drive.sh
 
 set -xe
 
@@ -34,6 +35,7 @@ function setup
 
     if [ -w /dev/changer ]; then
         export PHOBOS_LRS_families="dir,tape"
+        drain_all_drives
     else
         export PHOBOS_LRS_families="dir"
     fi
@@ -44,6 +46,10 @@ function setup
 function cleanup
 {
     waive_daemons
+    if [ -w /dev/changer ]; then
+        drain_all_drives
+    fi
+
     drop_tables
 }
 

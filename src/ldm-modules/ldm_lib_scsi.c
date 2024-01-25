@@ -403,49 +403,6 @@ unlock:
     return rc;
 }
 
-/**
- * Match a drive serial number vs. the requested S/N.
- * @return true if serial matches, else false.
- */
-static inline bool match_serial(const char *drv_descr, const char *req_sn)
-{
-    const char *sn;
-
-    /* Matching depends on library type:
-     * some librairies only return the SN as drive id,
-     * whereas some return a full description like:
-     * "VENDOR   MODEL   SERIAL".
-     * To match both, we match the last part of the serial.
-     */
-    sn = strrchr(drv_descr, ' ');
-    if (!sn) /* only contains the SN */
-        sn = drv_descr;
-    else /* first char after last space */
-        sn++;
-
-    /* return true on match */
-    return !strcmp(sn, req_sn);
-}
-
-/** get drive info with the given serial number */
-static struct element_status *drive_info_from_serial(struct lib_descriptor *lib,
-                                                     const char *serial)
-{
-    int i;
-
-    for (i = 0; i < lib->drives.count; i++) {
-        struct element_status *drv = &lib->drives.items[i];
-
-        if (match_serial(drv->dev_id, serial)) {
-            pho_debug("Found drive matching serial '%s': address=%#hx, id='%s'",
-                      serial, drv->address, drv->dev_id);
-            return drv;
-        }
-    }
-    pho_warn("No drive matching serial '%s'", serial);
-    return NULL;
-}
-
 /** get media info with the given label */
 static struct element_status *media_info_from_label(struct lib_descriptor *lib,
                                                     const char *label)
@@ -513,43 +470,100 @@ static inline enum med_location scsi2ldm_loc_type(enum element_type_code type)
 }
 
 /** Implements phobos LDM lib device lookup */
-static int lib_scsi_drive_info(struct lib_handle *hdl, const char *drv_serial,
-                               struct lib_drv_info *ldi, json_t *message)
+static int tlc_send_recv(struct pho_comm_info *tlc_comm, pho_tlc_req_t *req,
+                         pho_tlc_resp_t **resp)
 {
-    struct element_status *drv;
+    struct pho_comm_data *data_resp = NULL;
+    struct pho_comm_data data;
+    int n_data_resp = 0;
     int rc;
+
+    data = pho_comm_data_init(tlc_comm);
+    pho_srl_tlc_request_pack(req, &data.buf);
+
+    rc = pho_comm_send(&data);
+    free(data.buf.buff);
+    if (rc)
+        LOG_RETURN(rc, "Error while sending request to TLC");
+
+    rc = pho_comm_recv(tlc_comm, &data_resp, &n_data_resp);
+    if (rc || n_data_resp != 1) {
+        int i;
+
+        for (i = 0; i < n_data_resp; i++)
+                free(data_resp[i].buf.buff);
+
+        free(data_resp);
+
+        if (rc)
+            LOG_RETURN(rc, "Cannot receive response from TLC");
+        else
+            LOG_RETURN(-EINVAL, "Received %d responses (expected 1) from TLC",
+                       n_data_resp);
+    }
+
+    *resp = pho_srl_tlc_response_unpack(&data_resp->buf);
+    free(data_resp);
+    if (!*resp)
+        LOG_RETURN(-EINVAL, "The received TLC response cannot be deserialized");
+
+    return 0;
+}
+
+static int lib_tlc_drive_info(struct lib_handle *hdl, const char *drv_serial,
+                              struct lib_drv_info *ldi)
+{
+    struct lib_descriptor *lib = hdl->lh_lib;
+    pho_tlc_resp_t *resp;
+    pho_tlc_req_t req;
+    int rid = 1;
+    int rc;
+
     ENTRY;
 
-    MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
-
-    /* load status for drives */
-    rc = lib_status_load(hdl->lh_lib, SCSI_TYPE_DRIVE, message);
+    /* drive lookup request to the tlc */
+    pho_srl_tlc_request_drive_lookup_alloc(&req);
+    req.id = rid;
+    req.drive_lookup->serial = xstrdup(drv_serial);
+    rc = tlc_send_recv(&lib->tlc_comm, &req, &resp);
+    pho_srl_tlc_request_free(&req, false);
     if (rc)
-        goto unlock;
+        LOG_RETURN(rc,
+                   "Unable to send/recv drive lookup request for drive '%s' to "
+                   "tlc", drv_serial);
 
-    /* search for the given drive serial */
-    drv = drive_info_from_serial(hdl->lh_lib, drv_serial);
-    if (!drv)
-        GOTO(unlock, rc = -ENOENT);
+    /* manage tlc drive lookup response */
+    if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
+        rc = resp->error->rc;
+        if (resp->error->message)
+            LOG_GOTO(free_resp, rc,
+                     "TLC failed to lookup the drive '%s': '%s'", drv_serial,
+                     resp->error->message);
+        else
+            LOG_GOTO(free_resp, rc,
+                     "TLC failed to lookup the drive '%s'", drv_serial);
+    } else if (!(pho_tlc_response_is_drive_lookup(resp) &&
+                 resp->req_id == rid)) {
+        LOG_GOTO(free_resp, rc = -EPROTO,
+                 "TLC answered an unexpected response (id %d) to drive lookup "
+                 "load request for drive '%s'", resp->req_id, drv_serial);
+    }
 
-    if ((strlen(drv->vol) + 1) > PHO_URI_MAX)
-        GOTO(unlock, rc = -EINVAL);
-
+    /* update drive info */
     memset(ldi, 0, sizeof(*ldi));
     ldi->ldi_addr.lia_type = MED_LOC_DRIVE;
-    ldi->ldi_addr.lia_addr = drv->address;
-    ldi->ldi_first_addr =
-        ((struct lib_descriptor *)hdl->lh_lib)->msi.drives.first_addr;
-    if (drv->full) {
+    ldi->ldi_addr.lia_addr = resp->drive_lookup->address;
+    ldi->ldi_first_addr = resp->drive_lookup->first_address;
+    if (resp->drive_lookup->medium_name) {
         ldi->ldi_full = true;
         ldi->ldi_medium_id.family = PHO_RSC_TAPE;
-        pho_id_name_set(&ldi->ldi_medium_id, drv->vol);
+        pho_id_name_set(&ldi->ldi_medium_id, resp->drive_lookup->medium_name);
     }
 
     rc = 0;
 
-unlock:
-    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
+free_resp:
+    pho_srl_tlc_response_free(resp, true);
     return rc;
 }
 
@@ -955,46 +969,6 @@ unlock:
     return rc;
 }
 
-static int tlc_send_recv(struct pho_comm_info *tlc_comm, pho_tlc_req_t *req,
-                         pho_tlc_resp_t **resp)
-{
-    struct pho_comm_data *data_resp = NULL;
-    struct pho_comm_data data;
-    int n_data_resp = 0;
-    int rc;
-
-    data = pho_comm_data_init(tlc_comm);
-    pho_srl_tlc_request_pack(req, &data.buf);
-
-    rc = pho_comm_send(&data);
-    free(data.buf.buff);
-    if (rc)
-        LOG_RETURN(rc, "Error while sending request to TLC");
-
-    rc = pho_comm_recv(tlc_comm, &data_resp, &n_data_resp);
-    if (rc || n_data_resp != 1) {
-        int i;
-
-        for (i = 0; i < n_data_resp; i++)
-                free(data_resp[i].buf.buff);
-
-        free(data_resp);
-
-        if (rc)
-            LOG_RETURN(rc, "Cannot receive response from TLC");
-        else
-            LOG_RETURN(-EINVAL, "Received %d responses (expected 1) from TLC",
-                       n_data_resp);
-    }
-
-    *resp = pho_srl_tlc_response_unpack(&data_resp->buf);
-    free(data_resp);
-    if (!*resp)
-        LOG_RETURN(-EINVAL, "The received TLC response cannot be deserialized");
-
-    return 0;
-}
-
 static int lib_tlc_load(struct lib_handle *hdl, const char *drive_serial,
                         const char *tape_label)
 {
@@ -1096,7 +1070,7 @@ free_resp:
 static struct pho_lib_adapter_module_ops LA_SCSI_OPS = {
     .lib_open         = lib_scsi_open,
     .lib_close        = lib_scsi_close,
-    .lib_drive_lookup = lib_scsi_drive_info,
+    .lib_drive_lookup = lib_tlc_drive_info,
     .lib_media_lookup = lib_scsi_media_info,
     .lib_media_move   = lib_scsi_move,
     .lib_scan         = lib_scsi_scan,

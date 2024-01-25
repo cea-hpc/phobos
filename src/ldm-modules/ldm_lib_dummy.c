@@ -46,13 +46,11 @@ static struct module_desc LIB_ADAPTER_DUMMY_MODULE_DESC = {
  * Return drive info for an online device.
  */
 static int dummy_drive_lookup(struct lib_handle *lib, const char *drive_serial,
-                              struct lib_drv_info *drv_info, json_t *message)
+                              struct lib_drv_info *drv_info)
 {
     const char  *sep = strchr(drive_serial, ':');
 
     ENTRY;
-
-    (void) message;
 
     if (sep == NULL || (strlen(sep + 1) + 1) > PHO_URI_MAX)
         return -EINVAL;

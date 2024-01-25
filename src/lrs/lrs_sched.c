@@ -431,8 +431,6 @@ int sched_fill_dev_info(struct lrs_sched *sched, struct lib_handle *lib_hdl,
 {
     struct dev_adapter_module *deva;
     struct dev_info *devi;
-    struct pho_id medium;
-    struct pho_log log;
     int rc;
 
     ENTRY;
@@ -471,22 +469,16 @@ int sched_fill_dev_info(struct lrs_sched *sched, struct lib_handle *lib_hdl,
     if (rc)
         return rc;
 
-    medium.name[0] = 0;
-    medium.family = devi->rsc.id.family;
-    init_pho_log(&log, &devi->rsc.id, &medium, PHO_DEVICE_LOOKUP);
-
-    log.message = json_object();
-
     /* Query the library about the drive location and whether it contains
      * a media.
      */
     rc = ldm_lib_drive_lookup(lib_hdl, devi->rsc.id.name,
-                              &dev->ld_lib_dev_info, log.message);
-    emit_log_after_action(&dev->ld_device_thread.dss, &log,
-                          PHO_DEVICE_LOOKUP, rc);
-    if (rc)
-        LOG_RETURN(rc, "failed to query drive '%s' status from library",
-                   dev->ld_dss_dev_info->rsc.id.name);
+                              &dev->ld_lib_dev_info);
+    if (rc) {
+        pho_warn("Failed to query the library about device '%s'",
+                 devi->rsc.id.name);
+        return rc;
+    }
 
     if (dev->ld_lib_dev_info.ldi_full) {
         struct fs_adapter_module *fsa;

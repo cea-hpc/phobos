@@ -222,7 +222,7 @@ struct pho_lib_adapter_module_ops {
     int (*lib_open)(struct lib_handle *lib, const char *dev, json_t *message);
     int (*lib_close)(struct lib_handle *lib);
     int (*lib_drive_lookup)(struct lib_handle *lib, const char *drive_serial,
-                            struct lib_drv_info *drv_info, json_t *message);
+                            struct lib_drv_info *drv_info);
     int (*lib_media_lookup)(struct lib_handle *lib, const char *media_label,
                             struct lib_item_addr *med_addr, json_t *message);
     int (*lib_media_move)(struct lib_handle *lib,
@@ -306,20 +306,18 @@ static inline int ldm_lib_close(struct lib_handle *lib_hdl)
  * @param[in,out] lib_hdl      Lib handle holding an opened library adapter.
  * @param[in]     drive_serial Serial number of the drive to lookup.
  * @param[out]    drv_info     Information about the drive.
- * @param[out]    message      Json message to fill in case of error
  *
  * @return 0 on success, negative error code on failure.
  */
 static inline int ldm_lib_drive_lookup(struct lib_handle *lib_hdl,
                                        const char *drive_serial,
-                                       struct lib_drv_info *drv_info,
-                                       json_t *message)
+                                       struct lib_drv_info *drv_info)
 {
     assert(lib_hdl->ld_module != NULL);
     assert(lib_hdl->ld_module->ops != NULL);
     assert(lib_hdl->ld_module->ops->lib_drive_lookup != NULL);
     return lib_hdl->ld_module->ops->lib_drive_lookup(lib_hdl, drive_serial,
-                                                     drv_info, message);
+                                                     drv_info);
 }
 
 /**

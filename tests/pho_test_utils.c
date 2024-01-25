@@ -135,7 +135,7 @@ void create_device(struct lrs_dev *dev, char *path, char *model,
         get_serial_from_path(path, &serial);
         assert_int_equal(get_dev_adapter(PHO_RSC_TAPE, &deva), 0);
         assert_int_equal(ldm_lib_drive_lookup(&lib_hdl, serial,
-                                              &dev->ld_lib_dev_info, NULL), 0);
+                                              &dev->ld_lib_dev_info), 0);
         assert_int_equal(ldm_dev_lookup(deva, serial,
                                         dev->ld_dev_path,
                                         sizeof(dev->ld_dev_path)), 0);
