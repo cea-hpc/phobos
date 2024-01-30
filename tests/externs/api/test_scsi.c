@@ -61,7 +61,6 @@ static int16_t free_slot = UNSET;
 static int16_t arm_addr = UNSET;
 
 static char *one_serial;
-static char *one_label;
 
 static char *dup_serial(const char *id)
 {
@@ -76,9 +75,6 @@ static char *dup_serial(const char *id)
 /** Fill the previous variables for next test scenarios */
 static void save_test_elements(const struct element_status *element)
 {
-    if (element->full && one_label == NULL)
-        one_label = xstrdup(element->vol);
-
     switch (element->type) {
     case SCSI_TYPE_DRIVE:
         if (element->dev_id[0] != '\0' && element->full) {
@@ -210,9 +206,6 @@ static void test_lib_adapter(void)
             ASSERT_RC(ldm_lib_media_move(&lib_hdl, &drv_info.ldi_addr,
                       NULL, NULL));
     }
-
-    if (one_label)
-        ASSERT_RC(ldm_lib_media_lookup(&lib_hdl, one_label, &med_addr, NULL));
 
     ldm_lib_close(&lib_hdl);
 }

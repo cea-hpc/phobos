@@ -40,49 +40,31 @@
 const char *med_location_string[] = {"unknown", "drive", "slot", "arm",
                                      "impexp"};
 
-static int device_load(const struct lib_item_addr *dev_addr,
-                       const char *tape_name)
+static int device_load(const char *dev_serial, const char *tape_name)
 {
-    struct lib_item_addr medium_addr;
     struct lib_handle lib_hdl;
     int rc;
 
     rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl, NULL);
     if (rc) {
         pho_error(rc,
-                  "Error when opening tape library module before loading tape %s "
-                  "into drive address '%" PRIu64 "'",
-                  tape_name, dev_addr->lia_addr);
+                  "Error when opening tape library module before loading tape "
+                  "%s into drive %s", tape_name, dev_serial);
         return rc;
     }
 
-    rc = ldm_lib_media_lookup(&lib_hdl, tape_name, &medium_addr, NULL);
+    rc = ldm_lib_load(&lib_hdl, dev_serial, tape_name);
     if (rc) {
-        pho_error(rc, "Error when looking for tape %s address", tape_name);
-        return rc;
-    }
-
-    if (medium_addr.lia_type != MED_LOC_SLOT) {
-        pho_error(-EINVAL,
-                  "Error tape %s is not located in a slot (instead we got %s). "
-                  "This test runs only with tape initially into slot.",
-                  tape_name, med_location_string[medium_addr.lia_type]);
-        return -EINVAL;
-    }
-
-    rc = ldm_lib_media_move(&lib_hdl, &medium_addr, dev_addr, NULL);
-    if (rc) {
-        pho_error(rc, "Error when moving tape %s into drive addr '%" PRIu64 "'",
-                  tape_name, dev_addr->lia_addr);
+        pho_error(rc, "Error when loading tape %s into drive %s",
+                  tape_name, dev_serial);
         return rc;
     }
 
     rc = ldm_lib_close(&lib_hdl);
     if (rc) {
         pho_error(rc,
-                  "Error when closing tape library handler after loading tape %s "
-                  "into drive addr '%" PRIu64 "'",
-                  tape_name, dev_addr->lia_addr);
+                  "Error when closing tape library handler after loading tape "
+                  "%s into drive %s", tape_name, dev_serial);
         return rc;
     }
 
@@ -90,9 +72,8 @@ static int device_load(const struct lib_item_addr *dev_addr,
 }
 
 
-static int device_unload(const struct lib_item_addr *dev_addr)
+static int device_unload(const char *dev_serial, const char *tape_name)
 {
-    struct lib_item_addr free_slot = { .lia_type = MED_LOC_UNKNOWN };
     struct lib_handle lib_hdl;
     int rc;
 
@@ -100,23 +81,23 @@ static int device_unload(const struct lib_item_addr *dev_addr)
     if (rc) {
         pho_error(rc,
                   "Error when opening tape library module before unloading "
-                  "drive address '%" PRIu64 "'", dev_addr->lia_addr);
+                  "tape %s from drive %s", tape_name, dev_serial);
         return rc;
     }
 
-    rc = ldm_lib_media_move(&lib_hdl, dev_addr, &free_slot, NULL);
+    rc = ldm_lib_unload(&lib_hdl, dev_serial, tape_name);
     if (rc) {
         pho_error(rc,
-                  "Error when moving tape from drive addr '%" PRIu64 "' to "
-                  "unload it", dev_addr->lia_addr);
+                  "Error when unloading tape %s from drive %s",
+                  tape_name, dev_serial);
         return rc;
     }
 
     rc = ldm_lib_close(&lib_hdl);
     if (rc) {
         pho_error(rc,
-                  "Error when closing tape library handler after unloading drive "
-                  " at addr '%" PRIu64 "'", dev_addr->lia_addr);
+                  "Error when closing tape library handler after unloading "
+                  "tape %s from drive %s", tape_name, dev_serial);
         return rc;
     }
 
@@ -139,7 +120,7 @@ static void *dev_load_unload(void *_dev_status)
 
     pho_info("Device %s begins to load/unload the tape %s",
              dev_status->dev_name, dev_status->tape_to_load_unload);
-    rc = device_load(&dev_status->dev_addr, dev_status->tape_to_load_unload);
+    rc = device_load(dev_status->dev_name, dev_status->tape_to_load_unload);
     if (rc) {
         dev_status->failed = true;
         pho_error(rc, "Error device %s failed to load tape '%s'",
@@ -147,7 +128,7 @@ static void *dev_load_unload(void *_dev_status)
         pthread_exit(NULL);
     }
 
-    rc = device_unload(&dev_status->dev_addr);
+    rc = device_unload(dev_status->dev_name, dev_status->tape_to_load_unload);
     if (rc) {
         dev_status->failed = true;
         pho_error(rc, "Error device %s failed to unload tape '%s'",

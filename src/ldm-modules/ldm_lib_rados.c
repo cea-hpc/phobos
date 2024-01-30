@@ -169,40 +169,11 @@ static int lib_rados_drive_lookup(struct lib_handle *lib_hdl,
     return 0;
 }
 
-/**
- * Extract path from drive identifier which consists of <host>:<path>.
- */
-static int lib_rados_media_lookup(struct lib_handle *lib_hdl,
-                                  const char *media_label,
-                                  struct lib_item_addr *med_addr,
-                                  json_t *message)
-{
-    int rc = 0;
-
-    (void) message;
-
-    ENTRY;
-
-    if (!lib_hdl->lh_lib)
-        return -EBADF;
-
-    rc = pho_rados_pool_exists(lib_hdl->lh_lib, media_label);
-    med_addr->lia_addr = 0;
-    if (rc < 0) {
-        med_addr->lia_type = MED_LOC_UNKNOWN;
-        return rc;
-    }
-
-    med_addr->lia_type = MED_LOC_DRIVE; /* always in drive */
-    return 0;
-}
-
 /** Exported library adapater */
 static struct pho_lib_adapter_module_ops LIB_ADAPTER_RADOS_OPS = {
     .lib_open  = lib_rados_open,
     .lib_close = lib_rados_close,
     .lib_drive_lookup = lib_rados_drive_lookup,
-    .lib_media_lookup = lib_rados_media_lookup,
     .lib_media_move = NULL,
 };
 

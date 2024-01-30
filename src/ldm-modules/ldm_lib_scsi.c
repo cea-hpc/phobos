@@ -403,60 +403,6 @@ unlock:
     return rc;
 }
 
-/** get media info with the given label */
-static struct element_status *media_info_from_label(struct lib_descriptor *lib,
-                                                    const char *label)
-{
-    struct element_status *med;
-    int                    i;
-
-    /* search in slots */
-    for (i = 0; i < lib->slots.count; i++) {
-        med = &lib->slots.items[i];
-
-        if (med->full && !strcmp(med->vol, label)) {
-            pho_debug("Found volume matching label '%s' in slot %#hx", label,
-                      med->address);
-            return med;
-        }
-    }
-
-    /* search in drives */
-    for (i = 0; i < lib->drives.count; i++) {
-        med = &lib->drives.items[i];
-
-        if (med->full && !strcmp(med->vol, label)) {
-            pho_debug("Found volume matching label '%s' in drive %#hx", label,
-                      med->address);
-            return med;
-        }
-    }
-
-    /* search in arm */
-    for (i = 0; i < lib->arms.count; i++) {
-        med = &lib->arms.items[i];
-
-        if (med->full && !strcmp(med->vol, label)) {
-            pho_debug("Found volume matching label '%s' in arm %#hx", label,
-                      med->address);
-            return med;
-        }
-    }
-
-    /* search in imp/exp slots */
-    for (i = 0; i < lib->impexp.count; i++) {
-        med = &lib->impexp.items[i];
-
-        if (med->full && !strcmp(med->vol, label)) {
-            pho_debug("Found volume matching label '%s' in import/export slot"
-                      " %#hx", label, med->address);
-            return med;
-        }
-    }
-    pho_warn("No media matching label '%s'", label);
-    return NULL;
-}
-
 /** Convert SCSI element type to LDM media location type */
 static inline enum med_location scsi2ldm_loc_type(enum element_type_code type)
 {
@@ -564,37 +510,6 @@ static int lib_tlc_drive_info(struct lib_handle *hdl, const char *drv_serial,
 
 free_resp:
     pho_srl_tlc_response_free(resp, true);
-    return rc;
-}
-
-/** Implements phobos LDM lib media lookup */
-static int lib_scsi_media_info(struct lib_handle *hdl, const char *med_label,
-                               struct lib_item_addr *lia, json_t *message)
-{
-    struct element_status *tape;
-    int rc;
-    ENTRY;
-
-    MUTEX_LOCK(&phobos_context()->ldm_lib_scsi_mutex);
-
-    /* load all possible tape locations */
-    rc = lib_status_load(hdl->lh_lib, SCSI_TYPE_ALL, message);
-    if (rc)
-        goto unlock;
-
-    /* search for the given tape */
-    tape = media_info_from_label(hdl->lh_lib, med_label);
-    if (!tape)
-        GOTO(unlock, rc = -ENOENT);
-
-    memset(lia, 0, sizeof(*lia));
-    lia->lia_type = scsi2ldm_loc_type(tape->type);
-    lia->lia_addr = tape->address;
-
-    rc = 0;
-
-unlock:
-    MUTEX_UNLOCK(&phobos_context()->ldm_lib_scsi_mutex);
     return rc;
 }
 
@@ -1071,7 +986,6 @@ static struct pho_lib_adapter_module_ops LA_SCSI_OPS = {
     .lib_open         = lib_scsi_open,
     .lib_close        = lib_scsi_close,
     .lib_drive_lookup = lib_tlc_drive_info,
-    .lib_media_lookup = lib_scsi_media_info,
     .lib_media_move   = lib_scsi_move,
     .lib_scan         = lib_scsi_scan,
     .lib_load         = lib_tlc_load,

@@ -214,7 +214,7 @@ struct lib_handle;
  * They should be invoked via their corresponding wrappers. Refer to
  * them for more precise explanation about each call.
  *
- * lib_drive_lookup and lib_media_lookup are mandatory.
+ * lib_drive_lookup is mandatory.
  * lib_open, lib_close, lib_media_move and lib_scan do noop if they are NULL.
  */
 struct pho_lib_adapter_module_ops {
@@ -223,8 +223,6 @@ struct pho_lib_adapter_module_ops {
     int (*lib_close)(struct lib_handle *lib);
     int (*lib_drive_lookup)(struct lib_handle *lib, const char *drive_serial,
                             struct lib_drv_info *drv_info);
-    int (*lib_media_lookup)(struct lib_handle *lib, const char *media_label,
-                            struct lib_item_addr *med_addr, json_t *message);
     int (*lib_media_move)(struct lib_handle *lib,
                           const struct lib_item_addr *src_addr,
                           const struct lib_item_addr *tgt_addr,
@@ -318,28 +316,6 @@ static inline int ldm_lib_drive_lookup(struct lib_handle *lib_hdl,
     assert(lib_hdl->ld_module->ops->lib_drive_lookup != NULL);
     return lib_hdl->ld_module->ops->lib_drive_lookup(lib_hdl, drive_serial,
                                                      drv_info);
-}
-
-/**
- * Get the location of a media in library from its label.
- *
- * @param[in,out] Lib_hdl       Lib handle holding an opened library adapter.
- * @param[in]     media_label   Label of the media.
- * @param[out]    media_addr    Location of the media in library.
- * @param[out]    message       Json message to fill in case of error
- *
- * @return 0 on success, negative error code on failure.
- */
-static inline int ldm_lib_media_lookup(struct lib_handle *lib_hdl,
-                                       const char *media_label,
-                                       struct lib_item_addr *med_addr,
-                                       json_t *message)
-{
-    assert(lib_hdl->ld_module != NULL);
-    assert(lib_hdl->ld_module->ops != NULL);
-    assert(lib_hdl->ld_module->ops->lib_media_lookup != NULL);
-    return lib_hdl->ld_module->ops->lib_media_lookup(lib_hdl, media_label,
-                                                     med_addr, message);
 }
 
 /**

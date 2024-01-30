@@ -77,13 +77,7 @@ static void ldr_test_lib_adapter_with_conf(void **state)
     rc = ldm_lib_drive_lookup(&lib_hdl, "host:pho_pool_valid", &drv_info);
     assert_int_equal(rc, -rc);
 
-    rc = ldm_lib_media_lookup(&lib_hdl, "pho_pool_valid", &med_addr, NULL);
-    assert_int_equal(rc, -rc);
-
     rc = ldm_lib_drive_lookup(&lib_hdl, "host:pho_pool_invalid", &drv_info);
-    assert_int_equal(rc, -ENODEV);
-
-    rc = ldm_lib_media_lookup(&lib_hdl, "pho_pool_invalid", &med_addr, NULL);
     assert_int_equal(rc, -ENODEV);
 
     rc = ldm_lib_close(&lib_hdl);
@@ -121,9 +115,6 @@ static void ldr_test_lib_adapter_without_conf(void **state)
     assert_int_equal(rc, -ENOENT);
 
     rc = ldm_lib_drive_lookup(&lib_hdl, "host:pho_pool_valid", &drv_info);
-    assert_int_equal(rc, -EBADF);
-
-    rc = ldm_lib_media_lookup(&lib_hdl, "pho_pool_valid", &med_addr, NULL);
     assert_int_equal(rc, -EBADF);
 
     rc = ldm_lib_close(&lib_hdl);
