@@ -215,7 +215,8 @@ struct lib_handle;
  * them for more precise explanation about each call.
  *
  * lib_drive_lookup is mandatory.
- * lib_open, lib_close, lib_media_move and lib_scan do noop if they are NULL.
+ * lib_open, lib_close, lib_load, lib_unload and lib_scan do noop if they are
+ * NULL.
  */
 struct pho_lib_adapter_module_ops {
     /* adapter functions */
@@ -223,10 +224,6 @@ struct pho_lib_adapter_module_ops {
     int (*lib_close)(struct lib_handle *lib);
     int (*lib_drive_lookup)(struct lib_handle *lib, const char *drive_serial,
                             struct lib_drv_info *drv_info);
-    int (*lib_media_move)(struct lib_handle *lib,
-                          const struct lib_item_addr *src_addr,
-                          const struct lib_item_addr *tgt_addr,
-                          json_t *message);
     int (*lib_scan)(struct lib_handle *lib, json_t **lib_data, json_t *message);
     int (*lib_load)(struct lib_handle *lib, const char *device_serial,
                     const char *medium_label);
@@ -316,27 +313,6 @@ static inline int ldm_lib_drive_lookup(struct lib_handle *lib_hdl,
     assert(lib_hdl->ld_module->ops->lib_drive_lookup != NULL);
     return lib_hdl->ld_module->ops->lib_drive_lookup(lib_hdl, drive_serial,
                                                      drv_info);
-}
-
-/**
- * Move a media in library from a source location to a target location.
- *
- * @param[in,out] lib_hdl   Lib handle holding an opened library adapter.
- * @param[in]     src_addr  Source address of the move.
- * @param[in]     tgt_addr  Target address of the move.
- * @param[out]    message   Json message to fill in case of error
- */
-static inline int ldm_lib_media_move(struct lib_handle *lib_hdl,
-                                     const struct lib_item_addr *src_addr,
-                                     const struct lib_item_addr *tgt_addr,
-                                     json_t *message)
-{
-    assert(lib_hdl->ld_module != NULL);
-    assert(lib_hdl->ld_module->ops != NULL);
-    if (lib_hdl->ld_module->ops->lib_media_move == NULL)
-        return 0;
-    return lib_hdl->ld_module->ops->lib_media_move(lib_hdl, src_addr, tgt_addr,
-                                                   message);
 }
 
 /**

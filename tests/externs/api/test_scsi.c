@@ -192,7 +192,6 @@ static int single_element_status(int fd, uint16_t addr, bool expect_full)
 /** tests of the lib adapter API */
 static void test_lib_adapter(void)
 {
-    struct lib_item_addr med_addr;
     struct lib_drv_info drv_info;
     struct lib_handle lib_hdl;
 
@@ -203,8 +202,7 @@ static void test_lib_adapter(void)
         ASSERT_RC(ldm_lib_drive_lookup(&lib_hdl, one_serial, &drv_info));
         /* unload the drive to any slot if it's full */
         if (drv_info.ldi_full)
-            ASSERT_RC(ldm_lib_media_move(&lib_hdl, &drv_info.ldi_addr,
-                      NULL, NULL));
+            ASSERT_RC(ldm_lib_unload(&lib_hdl, one_serial, NULL));
     }
 
     ldm_lib_close(&lib_hdl);

@@ -71,8 +71,9 @@ static struct pho_lib_adapter_module_ops LIB_ADAPTER_DUMMY_OPS = {
     .lib_open         = NULL,
     .lib_close        = NULL,
     .lib_drive_lookup = dummy_drive_lookup,
-    .lib_media_move   = NULL,
     .lib_scan         = NULL,
+    .lib_load         = NULL,
+    .lib_unload       = NULL,
 };
 
 /** Lib adapter module registration entry point */
