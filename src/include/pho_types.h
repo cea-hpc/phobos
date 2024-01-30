@@ -306,15 +306,10 @@ struct pho_id {
     char            name[PHO_URI_MAX];  /**< Resource name. */
 };
 
-static inline int pho_id_name_set(struct pho_id *id, const char *name)
+static inline void pho_id_name_set(struct pho_id *id, const char *name)
 {
-    size_t length = strlen(name) + 1;
-
-    if (length > PHO_URI_MAX)
-        return -EINVAL;
-
-    memcpy(id->name, name, length);
-    return 0;
+    strncpy(id->name, name, PHO_URI_MAX - 1);
+    id->name[PHO_URI_MAX - 1] = '\0';
 }
 
 /** Resource administrative state */
