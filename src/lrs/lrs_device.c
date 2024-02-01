@@ -1224,6 +1224,7 @@ static int dev_handle_format(struct lrs_dev *dev)
     struct req_container *reqc;
     bool can_retry = true;
     bool failure_on_dev;
+    bool loaded = false;
     int rc;
 
     reqc = dev->ld_sub_request->reqc;
@@ -1268,6 +1269,8 @@ static int dev_handle_format(struct lrs_dev *dev)
                  dev->ld_dss_dev_info->rsc.id.name,
                  failure_on_dev ? "" : " (medium only failure)");
 
+    loaded = true;
+
 format:
     rc = dev_format(dev, reqc->params.format.fsa, reqc->req->format->unlock);
 
@@ -1282,8 +1285,10 @@ out:
     dev->ld_sub_request = NULL;
     format_medium_remove(dev->ld_ongoing_format, medium_to_format);
     /* free medium_to_format is not reused */
-    if (rc && !(rc == -EBUSY && can_retry))
+    if (rc && !(rc == -EBUSY && can_retry) && !loaded) {
         media_info_free(medium_to_format);
+        reqc->params.format.medium_to_format = NULL;
+    }
 
     sub_request_free(subreq);
     MUTEX_UNLOCK(&dev->ld_mutex);
