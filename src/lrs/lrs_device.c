@@ -1285,7 +1285,7 @@ out:
     dev->ld_sub_request = NULL;
     format_medium_remove(dev->ld_ongoing_format, medium_to_format);
     /* free medium_to_format is not reused */
-    if (rc && !(rc == -EBUSY && can_retry) && !loaded) {
+    if (rc && !loaded) {
         media_info_free(medium_to_format);
         reqc->params.format.medium_to_format = NULL;
     }
