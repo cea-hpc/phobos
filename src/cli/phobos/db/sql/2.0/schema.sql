@@ -12,7 +12,8 @@ CREATE TYPE operation_type AS ENUM ('Library scan', 'Library open',
                                     'Device lookup', 'Medium lookup',
                                     'Device load', 'Device unload',
                                     'LTFS mount', 'LTFS umount',
-                                    'LTFS format', 'LTFS df');
+                                    'LTFS format', 'LTFS df',
+                                    'LTFS sync');
 
 -- to extend enums: ALTER TYPE type ADD VALUE 'value'
 

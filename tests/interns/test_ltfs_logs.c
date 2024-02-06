@@ -457,6 +457,50 @@ static void ltfs_df_statfs_failure(void **state)
     pho_context_reset_mock_ltfs_functions();
 }
 
+static int fail_setxattr(const char *path, const char *name, const void *value,
+                         size_t size, int flags)
+{
+    (void) path;
+    (void) name;
+    (void) value;
+    (void) size;
+    (void) flags;
+
+    errno = 4;
+    return 1;
+}
+
+/* Taken from 'src/io-modules/io_ltfs.c' */
+#define LTFS_SYNC_ATTR_NAME "user.ltfs.sync"
+
+static void ltfs_sync_setxattr_failure(void **state)
+{
+    struct phobos_global_context *context = phobos_context();
+    struct media_info *medium = xcalloc(1, sizeof(*medium));
+    struct dss_handle *handle = *state;
+    struct lrs_dev device;
+    json_t *message;
+    int rc;
+
+    create_and_load(handle, &device, medium);
+
+    context->mock_ltfs.mock_setxattr = fail_setxattr;
+    rc = medium_sync(&device);
+    pho_context_reset_mock_ltfs_functions();
+
+    assert_int_equal(rc, -4);
+
+    message = json_pack("{s:s}", "sync",
+                        "Failed to set LTFS special xattr" LTFS_SYNC_ATTR_NAME);
+
+    check_log_is_valid(handle, DEVICE_NAME, MEDIUM_NAME, PHO_LTFS_SYNC,
+                       4, message);
+
+    dev_unload(&device);
+    dss_logs_delete(handle, NULL);
+    cleanup_device(&device);
+}
+
 int main(void)
 {
     const struct CMUnitTest test_ltfs_logs[] = {
@@ -470,6 +514,8 @@ int main(void)
         cmocka_unit_test(ltfs_format_command_call_failure),
 
         cmocka_unit_test(ltfs_df_statfs_failure),
+
+        cmocka_unit_test(ltfs_sync_setxattr_failure),
     };
     int error_count;
     int rc;

@@ -45,12 +45,15 @@ static struct module_desc IO_ADAPTER_POSIX_MODULE_DESC = {
     .mod_minor = PLUGIN_MINOR,
 };
 
-static int pho_posix_medium_sync(const char *root_path)
+static int pho_posix_medium_sync(const char *root_path, json_t **message)
 {
     int rc = 0;
     int fd;
 
     ENTRY;
+
+    if (message)
+        *message = NULL;
 
     fd = open(root_path, O_RDONLY);
     if (fd == -1)

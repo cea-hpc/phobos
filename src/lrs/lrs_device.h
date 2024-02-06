@@ -306,6 +306,13 @@ void push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
                              size_t medium_index);
 
 /**
+ * Synchronize the medium of a device
+ *
+ * \param[in]   dev    device containing the medium to synchronize
+ */
+int medium_sync(struct lrs_dev *dev);
+
+/**
  * Initialize an lrs_dev_hdl to manipulate devices from the scheduler
  *
  * \param[out]   handle   pointer to an uninitialized handle

@@ -525,9 +525,12 @@ static int pho_rados_del(struct pho_io_descr *iod)
 /* This function only simulates a correct sync because it is not necessary
  * with RADOS
  */
-static int pho_rados_sync(const char *root_path)
+static int pho_rados_sync(const char *root_path, json_t **message)
 {
     ENTRY;
+
+    if (message)
+        *message = NULL;
 
     return 0;
 }

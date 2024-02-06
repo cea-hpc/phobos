@@ -60,4 +60,5 @@ void pho_context_reset_mock_ltfs_functions(void)
     PHO_CONTEXT->mock_ltfs.mock_command_call = command_call;
     PHO_CONTEXT->mock_ltfs.mock_statfs = statfs;
     PHO_CONTEXT->mock_ltfs.mock_getxattr = getxattr;
+    PHO_CONTEXT->mock_ltfs.mock_setxattr = setxattr;
 }

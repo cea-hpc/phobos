@@ -180,6 +180,7 @@ enum operation_type {
     PHO_LTFS_UMOUNT,
     PHO_LTFS_FORMAT,
     PHO_LTFS_DF,
+    PHO_LTFS_SYNC,
     PHO_OPERATION_LAST,
 };
 
@@ -194,6 +195,7 @@ static const char * const OPERATION_TYPE_NAMES[] = {
     [PHO_LTFS_UMOUNT]   = "LTFS umount",
     [PHO_LTFS_FORMAT]   = "LTFS format",
     [PHO_LTFS_DF]       = "LTFS df",
+    [PHO_LTFS_SYNC]     = "LTFS sync",
 };
 
 static inline const char *operation_type2str(enum operation_type op)
@@ -517,6 +519,9 @@ struct mock_ltfs {
     /* Overrides default "getxattr" in tests. */
     ssize_t (*mock_getxattr)(const char *path, const char *name, void *value,
                              size_t size);
+    /* Overrides default "setxattr" in tests. */
+    int (*mock_setxattr)(const char *path, const char *name, const void *value,
+                         size_t size, int flags);
 };
 
 /**

@@ -41,17 +41,26 @@ static struct module_desc IO_ADAPTER_LTFS_MODULE_DESC = {
 
 #define LTFS_SYNC_ATTR_NAME "user.ltfs.sync"
 
-static int pho_ltfs_sync(const char *root_path)
+static int pho_ltfs_sync(const char *root_path, json_t **message)
 {
+    struct phobos_global_context *context = phobos_context();
     int one = 1;
 
     ENTRY;
 
+    if (message)
+        *message = NULL;
+
     /* flush the LTFS partition to tape */
-    if (setxattr(root_path, LTFS_SYNC_ATTR_NAME, (void *)&one,
-                 sizeof(one), 0) != 0)
+    if (context->mock_ltfs.mock_setxattr(root_path, LTFS_SYNC_ATTR_NAME,
+                                         (void *)&one, sizeof(one), 0) != 0) {
+        if (message)
+            *message = json_pack(
+                "{s:s}", "sync",
+                "Failed to set LTFS special xattr" LTFS_SYNC_ATTR_NAME);
         LOG_RETURN(-errno, "failed to set LTFS special xattr "
                    LTFS_SYNC_ATTR_NAME);
+    }
 
     return 0;
 }

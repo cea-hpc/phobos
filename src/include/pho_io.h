@@ -79,7 +79,7 @@ struct pho_io_adapter_module_ops {
     int (*ioa_write)(struct pho_io_descr *iod, const void *buf, size_t count);
     ssize_t (*ioa_read)(struct pho_io_descr *iod, void *buf, size_t count);
     int (*ioa_close)(struct pho_io_descr *iod);
-    int (*ioa_medium_sync)(const char *root_path);
+    int (*ioa_medium_sync)(const char *root_path, json_t **message);
     ssize_t (*ioa_preferred_io_size)(struct pho_io_descr *iod);
     int (*ioa_set_md)(const char *extent_key, const char *extent_desc,
                       struct pho_io_descr *iod);
@@ -155,19 +155,21 @@ static inline int ioa_del(const struct io_adapter_module *ioa,
  *
  * \param[in]   ioa         Suitable I/O adapter for the media
  * \param[in]   root_path   Root path of the mounted medium to flush
+ * \param[out]  message     Json message allocated in case of error, NULL
+ *                          otherwise. Must be freed by the caller
  *
  * \retval -ENOTSUP the I/O adapter does not provide this function
  * \return 0 on success, negative error code on failure
  */
 static inline int ioa_medium_sync(const struct io_adapter_module *ioa,
-                                  const char *root_path)
+                                  const char *root_path, json_t **message)
 {
     assert(ioa != NULL);
     assert(ioa->ops != NULL);
     if (ioa->ops->ioa_medium_sync == NULL)
         return -ENOTSUP;
 
-    return ioa->ops->ioa_medium_sync(root_path);
+    return ioa->ops->ioa_medium_sync(root_path, message);
 }
 
 /**

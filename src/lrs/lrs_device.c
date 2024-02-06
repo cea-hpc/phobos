@@ -689,9 +689,12 @@ static void check_needs_sync(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
-static int medium_sync(struct media_info *media_info, const char *fsroot)
+int medium_sync(struct lrs_dev *dev)
 {
+    struct media_info *media_info = dev->ld_dss_media_info;
+    const char *fsroot = dev->ld_mnt_path;
     struct io_adapter_module *ioa;
+    struct pho_log log;
     int rc;
 
     ENTRY;
@@ -701,8 +704,20 @@ static int medium_sync(struct media_info *media_info, const char *fsroot)
         LOG_RETURN(rc, "No suitable I/O adapter for filesystem type: '%s'",
                    fs_type2str(media_info->fs.type));
 
-    rc = ioa_medium_sync(ioa, fsroot);
+    init_pho_log(&log, dev->ld_dss_dev_info->rsc.id,
+                 dev->ld_dss_media_info->rsc.id, PHO_LTFS_SYNC);
+    destroy_log_message(&log);
+
+    rc = ioa_medium_sync(ioa, fsroot, &log.message);
+    log.error_number = rc;
+
     pho_debug("sync: medium=%s rc=%d", media_info->rsc.id.name, rc);
+
+    if (should_log(&log))
+        dss_emit_log(&dev->ld_device_thread.dss, &log);
+
+    destroy_log_message(&log);
+
     if (rc)
         LOG_RETURN(rc, "Cannot flush media at: %s", fsroot);
 
@@ -806,7 +821,7 @@ static int dev_sync(struct lrs_dev *dev)
 
     /* Do not sync on error as we don't know what happened on the tape. */
     if (dev->ld_last_client_rc == 0)
-        rc = medium_sync(dev->ld_dss_media_info, dev->ld_mnt_path);
+        rc = medium_sync(dev);
     else
         /* this will cause the device thread to stop */
         rc = dev->ld_last_client_rc;

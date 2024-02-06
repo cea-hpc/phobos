@@ -22,6 +22,7 @@ SCSI_TAPE_LIB=$(TO_SRC)/ldm-modules/libpho_dev_adapter_scsi_tape.la
 FS_POSIX_LIB=$(TO_SRC)/ldm-modules/libpho_fs_adapter_posix.la
 FS_LTFS_LIB=$(TO_SRC)/ldm-modules/libpho_fs_adapter_ltfs.la
 IO_POSIX_LIB=$(TO_SRC)/io-modules/libpho_io_adapter_posix.la
+IO_LTFS_LIB=$(TO_SRC)/io-modules/libpho_io_adapter_ltfs.la
 MAPPER_LIB=$(TO_SRC)/io-modules/libpho_mapper.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
@@ -149,7 +150,8 @@ test_lrs_scheduling_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I..
 
 test_ltfs_logs_SOURCES=test_ltfs_logs.c
 test_ltfs_logs_LDADD=$(MOD_LOAD_LIB) $(SCSI_LIB) $(LDM_SCSI_LIB) \
-                     $(FS_LTFS_LIB) $(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
+                     $(IO_LTFS_LIB) $(FS_LTFS_LIB) $(ADMIN_LIB) $(TESTS_LIB) \
+                     $(TESTS_LIB_DEPS)
 test_ltfs_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I$(TO_SRC)/ldm-modules -I..
 
 test_mapper_SOURCES=test_mapper.c
