@@ -222,7 +222,7 @@ static int find_read_device(struct io_scheduler *io_sched,
     if (!*dev) {
         *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
                           select_empty_loaded_mount, 0, &NO_TAGS, medium,
-                          false, NULL);
+                          false, false, NULL);
 
         return 0;
     }
@@ -276,7 +276,7 @@ static int find_write_device(struct io_scheduler *io_sched,
     /* 1a) is there a mounted filesystem with enough room? */
     *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_MOUNTED,
                       dev_select_policy, size, &tags, NULL, true,
-                      &one_drive_available);
+                      wreq->media[index]->empty_medium, &one_drive_available);
     /* If we find a dev, we exit. */
     /* If there is no chance to find a device, we also exit right now. */
     if (*dev || !one_drive_available)
@@ -285,7 +285,7 @@ static int find_write_device(struct io_scheduler *io_sched,
     /* 1b) is there a loaded media with enough room? */
     *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_LOADED,
                       dev_select_policy, size, &tags, NULL, true,
-                      &one_drive_available);
+                      wreq->media[index]->empty_medium, &one_drive_available);
     if (*dev || !one_drive_available)
         return 0;
 
@@ -320,7 +320,7 @@ static int find_write_device(struct io_scheduler *io_sched,
 find_device:
     *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
                       select_empty_loaded_mount, 0, &NO_TAGS, *medium, true,
-                      NULL);
+                      false, NULL);
     if (*dev)
         return 0;
 
@@ -350,7 +350,7 @@ static int find_format_device(struct io_scheduler *io_sched,
         *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
                           select_empty_loaded_mount,
                           0, &NO_TAGS, reqc->params.format.medium_to_format,
-                          false, NULL);
+                          false, false, NULL);
 
         return 0;
     }

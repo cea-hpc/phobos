@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -1012,34 +1012,49 @@ int sched_select_medium(struct io_scheduler *io_sched,
             LOG_GOTO(err_nores, rc = -ENOMEM, "while building tags dss filter");
     }
 
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                          /* Basic criteria */
-                          "  {\"DSS::MDA::family\": \"%s\"},"
-                          /* Check put media operation flags */
-                          "  {\"DSS::MDA::put\": \"t\"},"
-                          /* Exclude media locked by admin */
-                          "  {\"DSS::MDA::adm_status\": \"%s\"},"
-                          "  {\"$NOR\": ["
-                               /* Exclude non-formatted media */
-                          "    {\"DSS::MDA::fs_status\": \"%s\"},"
-                               /* Exclude full media */
-                          "    {\"DSS::MDA::fs_status\": \"%s\"}"
-                          "  ]}"
-                          "  %s%s"
-                          "]}",
-                          rsc_family2str(family),
-                          rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
-                          /**
-                           * @TODO add criteria to limit the maximum number of
-                           * data fragments:
-                           * vol_free >= required_size/max_fragments
-                           * with a configurable max_fragments of 4 for example)
-                           */
-                          fs_status2str(PHO_FS_STATUS_BLANK),
-                          fs_status2str(PHO_FS_STATUS_FULL),
-                          with_tags ? ", " : "",
-                          with_tags ? tag_filter_json : "");
+    if (reqc->req->walloc->media[0]->empty_medium)
+        rc = dss_filter_build(&filter,
+                              "{\"$AND\": ["
+                              "  {\"DSS::MDA::family\": \"%s\"},"
+                              "  {\"DSS::MDA::put\": \"t\"},"
+                              "  {\"DSS::MDA::adm_status\": \"%s\"},"
+                              "  {\"DSS::MDA::fs_status\": \"%s\"}"
+                              "  %s%s"
+                              "]}",
+                              rsc_family2str(family),
+                              rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
+                              fs_status2str(PHO_FS_STATUS_EMPTY),
+                              with_tags ? ", " : "",
+                              with_tags ? tag_filter_json : "");
+    else
+        rc = dss_filter_build(&filter,
+                              "{\"$AND\": ["
+                              /* Basic criteria */
+                              "  {\"DSS::MDA::family\": \"%s\"},"
+                              /* Check put media operation flags */
+                              "  {\"DSS::MDA::put\": \"t\"},"
+                              /* Exclude media locked by admin */
+                              "  {\"DSS::MDA::adm_status\": \"%s\"},"
+                              "  {\"$OR\": ["
+                                   /* Include used media */
+                              "    {\"DSS::MDA::fs_status\": \"%s\"},"
+                                   /* Include empty media */
+                              "    {\"DSS::MDA::fs_status\": \"%s\"}"
+                              "  ]}"
+                              "  %s%s"
+                              "]}",
+                              rsc_family2str(family),
+                              rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
+                              /**
+                               * @TODO add criteria to limit the maximum number
+                               * of data fragments:
+                               * vol_free >= required_size/max_fragments with a
+                               * configurable max_fragments of 4 for example)
+                               */
+                              fs_status2str(PHO_FS_STATUS_USED),
+                              fs_status2str(PHO_FS_STATUS_EMPTY),
+                              with_tags ? ", " : "",
+                              with_tags ? tag_filter_json : "");
 
     free(tag_filter_json);
     if (rc)
@@ -1160,12 +1175,18 @@ err_nores:
  * requested tags
  */
 static bool medium_is_write_compatible(struct media_info *medium,
-                                       const struct tags *required_tags)
+                                       const struct tags *required_tags,
+                                       bool empty_medium)
 {
     if (medium->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED) {
         pho_debug("Media '%s' is not unlocked but '%s'",
                   medium->rsc.id.name,
                   rsc_adm_status2str(medium->rsc.adm_status));
+        return false;
+    }
+
+    if (empty_medium && medium->fs.status != PHO_FS_STATUS_EMPTY) {
+        pho_debug("Media '%s' is not empty", medium->rsc.id.name);
         return false;
     }
 
@@ -1216,6 +1237,7 @@ typedef int (*device_select_func_t)(size_t required_size,
  * @param pmedia         Media that should be used by the drive to check
  *                       compatibility (ignored if NULL)
  * @param[in] is_write   Set to true if we want a device to write
+ * @param[in] empty_medium   Set to true if we want an empty medium
  * @param[out] one_drive_available  Return true if there is at least one drive
  *                                  that is available to perform an action
  *                                  (ignored if NULL)
@@ -1226,7 +1248,8 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
                            size_t required_size,
                            const struct tags *media_tags,
                            struct media_info *pmedia,
-                           bool is_write, bool *one_drive_available)
+                           bool is_write, bool empty_medium,
+                           bool *one_drive_available)
 {
     struct lrs_dev *selected = NULL;
     int selected_i = -1;
@@ -1274,7 +1297,9 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
 
         /* if pmedia is set, we don't want to use the medium currently loaded */
         if (is_write && !pmedia && itr->ld_dss_media_info &&
-            !medium_is_write_compatible(itr->ld_dss_media_info, media_tags))
+            !medium_is_write_compatible(itr->ld_dss_media_info, media_tags,
+                                        empty_medium)
+            )
             goto unlock_continue;
 
         /* check tape / drive compat */
@@ -1282,7 +1307,8 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
             bool compatible;
             int rc;
 
-            if (is_write && !medium_is_write_compatible(pmedia, media_tags))
+            if (is_write &&
+                !medium_is_write_compatible(pmedia, media_tags, empty_medium))
                 goto unlock_continue;
 
             rc = tape_drive_compat(pmedia, itr, &compatible);
