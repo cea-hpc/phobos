@@ -965,6 +965,22 @@ class LocateOptHandler(BaseOptHandler):
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
+class RepackOptHandler(BaseOptHandler):
+    """Repack a medium."""
+    label = 'repack'
+    descr = 'Repack a medium, by copying its alive extents to another one'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    @classmethod
+    def add_options(cls, parser):
+        super(RepackOptHandler, cls).add_options(parser)
+        parser.add_argument('res', help='Resource(s) to add')
+
 class ExtentListOptHandler(ListOptHandler):
     """
     Specific version of the 'list' command for extent, with a couple
@@ -1181,7 +1197,7 @@ class ObjectOptHandler(BaseResourceOptHandler):
                     self.logger.error("status parameter '%s' must be composed "
                                       "excusively of i, r or c", status_str)
                     sys.exit(os.EX_USAGE)
-                status_number += status_possibilities[x]
+                status_number += status_possibilities[letter]
         else:
             status_number = 7
 
@@ -1765,6 +1781,15 @@ class MediaOptHandler(BaseResourceOptHandler):
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
+    def exec_repack(self):
+        """Repack a medium"""
+        try:
+            with AdminClient(lrs_required=True) as adm:
+                adm.repack(self.family, self.params.get('res'))
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
 class PhobosdPingOptHandler(BaseOptHandler):
     """Phobosd ping"""
     label = 'phobosd'
@@ -2116,6 +2141,7 @@ class TapeOptHandler(MediaOptHandler):
         TapeSetAccessOptHandler,
         MediumLocateOptHandler,
         TapeImportOptHandler,
+        RepackOptHandler,
     ]
 
 class RadosPoolOptHandler(MediaOptHandler):

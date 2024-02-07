@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -429,6 +429,14 @@ class Client: # pylint: disable=too-many-public-methods
 
             raise EnvironmentError(rc, f"Failed to unload drive "
                                        f"{drive_serial_or_path}")
+
+    def repack(self, family, medium):
+        """Repack a tape"""
+        rc = LIBPHOBOS_ADMIN.phobos_admin_repack(
+            byref(self.handle), byref(Id(family, name=medium)))
+
+        if rc:
+            raise EnvironmentError(rc, f"Failed to repack {medium}")
 
     @staticmethod
     def layout_list_free(layouts, n_layouts):

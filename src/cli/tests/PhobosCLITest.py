@@ -104,6 +104,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o', '*'])
         self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o',
                                   'name,family'])
+        self.check_cmdline_valid(['tape', 'repack', 'A'])
         self.check_cmdline_valid(['object', 'list'])
         self.check_cmdline_valid(['object', 'list', '"obj.*"'])
         self.check_cmdline_valid(['object', 'list', '"obj.?2"'])
@@ -196,6 +197,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_exit(['dir', 'locate', 'oid1', 'oid2'], code=2)
         self.check_cmdline_exit(['tape', 'locate'], code=2)
         self.check_cmdline_exit(['tape', 'locate', 'oid1', 'oid2'], code=2)
+        self.check_cmdline_exit(['tape', 'repack', 'A', 'B'], code=2)
         self.check_cmdline_exit(['drive', 'delete'], code=2)
         self.check_cmdline_exit(['ping'], code=2)
         self.check_cmdline_exit(['ping', 'phobosd', 'tlc'], code=2)
