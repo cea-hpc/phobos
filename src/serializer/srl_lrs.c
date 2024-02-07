@@ -131,10 +131,11 @@ void pho_srl_request_write_alloc(pho_req_t *req, size_t n_media,
 
         req->walloc->media[i]->n_tags = n_tags[i];
         req->walloc->media[i]->tags = NULL;
-        if (n_tags[i] > 0) {
+        if (n_tags[i] > 0)
             req->walloc->media[i]->tags =
                 xcalloc(n_tags[i], sizeof(*req->walloc->media[i]->tags));
-        }
+
+        req->walloc->media[i]->empty_medium = false;
     }
 }
 

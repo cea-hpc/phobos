@@ -36,6 +36,9 @@ message PhoRequest {
             required uint64 size = 1;          // Amount of data to be written
                                                // on the medium.
             repeated string tags = 2;          // Tags to be satisfied.
+            required bool empty_medium = 3;    // Whether the client requires an
+                                               // empty medium for the operation
+                                               // (REPACK for instead)
         }
 
         repeated Elt media = 1;                // Write allocation requests.
