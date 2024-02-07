@@ -1275,7 +1275,9 @@ class LogsDumpOptHandler(BaseOptHandler):
                             help='cause of the logs to dump',
                             choices=["library_scan", "library_open",
                                      "device_lookup", "medium_lookup",
-                                     "device_load", "device_unload"])
+                                     "device_load", "device_unload",
+                                     "ltfs_mount", "ltfs_umount", "ltfs_format",
+                                     "ltfs_df", "ltfs_sync"])
         parser.add_argument('--start', type=str_to_timestamp, default=0,
                             help="timestamp of the most recent logs to dump,"
                                  "in format YYYY-MM-DD [hh:mm:ss]")
@@ -1304,7 +1306,9 @@ class LogsClearOptHandler(BaseOptHandler):
                             help='cause of the logs to dump',
                             choices=["library_scan", "library_open",
                                      "device_lookup", "medium_lookup",
-                                     "device_load", "device_unload"])
+                                     "device_load", "device_unload",
+                                     "ltfs_mount", "ltfs_umount", "ltfs_format",
+                                     "ltfs_df", "ltfs_sync"])
         parser.add_argument('--start', type=str_to_timestamp, default=0,
                             help="timestamp of the most recent logs to dump,"
                                  "in format YYYY-MM-DD [hh:mm:ss]")

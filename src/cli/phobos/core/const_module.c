@@ -182,6 +182,16 @@ static PyObject *py_str2operation_type(PyObject *self, PyObject *args)
         return Py_BuildValue("i", PHO_DEVICE_LOAD);
     else if (!strcmp(str_repr, "device_unload"))
         return Py_BuildValue("i", PHO_DEVICE_UNLOAD);
+    else if (!strcmp(str_repr, "ltfs_mount"))
+        return Py_BuildValue("i", PHO_LTFS_MOUNT);
+    else if (!strcmp(str_repr, "ltfs_umount"))
+        return Py_BuildValue("i", PHO_LTFS_UMOUNT);
+    else if (!strcmp(str_repr, "ltfs_format"))
+        return Py_BuildValue("i", PHO_LTFS_FORMAT);
+    else if (!strcmp(str_repr, "ltfs_df"))
+        return Py_BuildValue("i", PHO_LTFS_DF);
+    else if (!strcmp(str_repr, "ltfs_sync"))
+        return Py_BuildValue("i", PHO_LTFS_SYNC);
 
     return Py_BuildValue("i", PHO_OPERATION_INVALID);
 }
