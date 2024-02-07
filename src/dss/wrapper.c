@@ -539,4 +539,28 @@ int dss_update_extent_migrate(struct dss_handle *handle, const char *old_uuid,
     return rc;
 }
 
+int dss_update_extent_state(struct dss_handle *handle, const char **uuids,
+                            int num_uuids, enum extent_state state)
+{
+    GString *request = g_string_new("BEGIN;");
+    PGresult *res;
+    int rc = 0;
+    int i;
 
+    if (num_uuids < 1)
+        goto req_free;
+
+    g_string_append_printf(request, "UPDATE extent SET state = '%s' WHERE ",
+                           extent_state2str(state));
+
+    for (i = 0; i < num_uuids; ++i)
+        g_string_append_printf(request, "extent_uuid = '%s'%s", uuids[i],
+                               i == num_uuids - 1 ? ";" : " OR ");
+
+    rc = execute_and_commit_or_rollback(handle->dh_conn, request, &res,
+                                        PGRES_COMMAND_OK);
+
+req_free:
+    g_string_free(request, true);
+    return rc;
+}

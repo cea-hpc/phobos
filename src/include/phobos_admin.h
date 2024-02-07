@@ -252,6 +252,22 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
                         int n_ids, int nb_streams, enum fs_type fs,
                         bool unlock, bool force);
 
+/**
+ * Repack a tape.
+ *
+ * Live extents of the source medium are copied to another medium.
+ * Source extents state are set to ORPHAN.
+ *
+ * \param[in]       adm             Admin module handle.
+ * \param[in]       source          Source medium ID.
+ *
+ * \return                          0     on success,
+ *                                 -errno on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
+ */
+int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source);
+
 /*
  * Ping the lrs phobosd daemon to check if it is online or not.
  *

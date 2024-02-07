@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -40,6 +40,7 @@
 #include "pho_common.h"
 #include "pho_dss.h"
 #include "pho_dss_wrapper.h"
+#include "pho_io.h"
 #include "pho_ldm.h"
 #include "pho_srl_lrs.h"
 #include "pho_types.h"
@@ -1109,6 +1110,311 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
     free(awaiting_resps);
 
     return rc;
+}
+
+static int _get_extents_to_repack(struct admin_handle *adm,
+                                  const struct pho_id *source,
+                                  struct extent **extents, int *count)
+{
+    struct dss_filter filter;
+    int rc;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::EXT::medium_family\": \"%s\"},"
+                          "  {\"DSS::EXT::medium_id\": \"%s\"},"
+                          "  {\"$NOR\": [{\"DSS::EXT::state\": \"%s\"}]}"
+                          "]}", rsc_family2str(source->family), source->name,
+                          extent_state2str(PHO_EXT_ST_ORPHAN));
+    if (rc)
+        LOG_RETURN(rc, "Failed to build filter for extent retrieval");
+
+    rc = dss_extent_get(&adm->dss, &filter, extents, count);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc, "Failed to retrieve '%s:%s' extents",
+                   rsc_family2str(source->family), source->name);
+
+    return rc;
+}
+
+static ssize_t _sum_extent_size(struct extent *extents, int count)
+{
+    ssize_t total_size = 0;
+    int i;
+
+    for (i = 0; i < count; ++i)
+        total_size += extents[i].size;
+
+    return total_size;
+}
+
+static int _get_source_medium(struct admin_handle *adm,
+                              const struct pho_id *source,
+                              struct pho_ext_loc *loc,
+                              struct pho_io_descr *iod,
+                              struct io_adapter_module **ioa)
+{
+    pho_resp_t *resp;
+    pho_req_t req;
+    int rc;
+
+    pho_srl_request_read_alloc(&req, 1);
+    req.id = 1;
+    req.ralloc->n_required = 1;
+    req.ralloc->med_ids[0]->family = source->family;
+    req.ralloc->med_ids[0]->name = xstrdup(source->name);
+
+    rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
+    if (rc)
+        return rc;
+
+    if (pho_response_is_error(resp) && resp->req_id == 1)
+        LOG_RETURN(resp->error->rc, "Error for read allocation");
+
+    if (!(pho_response_is_read(resp) && resp->req_id == 1))
+        LOG_RETURN(-EBADMSG, "Bad response for read allocation: ID #%d - '%s'",
+                   resp->req_id, pho_srl_response_kind_str(resp));
+
+    rc = get_io_adapter((enum fs_type)resp->ralloc->media[0]->fs_type, ioa);
+    if (rc)
+        LOG_GOTO(free_resp, rc, "Failed to init read IO adapter");
+
+    loc->root_path = xstrdup(resp->ralloc->media[0]->root_path);
+    loc->addr_type = (enum address_type)resp->ralloc->media[0]->addr_type;
+    iod->iod_loc = loc;
+
+free_resp:
+    pho_srl_response_free(resp, true);
+
+    return rc;
+}
+
+static int _get_target_medium(struct admin_handle *adm,
+                              const struct pho_id *source,
+                              ssize_t total_size,
+                              struct pho_ext_loc *loc,
+                              struct pho_io_descr *iod,
+                              struct pho_id *target)
+{
+    size_t n_tags = 0;
+    pho_resp_t *resp;
+    pho_req_t req;
+    int rc;
+
+    pho_srl_request_write_alloc(&req, 1, &n_tags);
+    req.id = 2;
+    req.walloc->family = source->family;
+    req.walloc->prevent_duplicate = true;
+    req.walloc->media[0]->size = total_size;
+    req.walloc->media[0]->empty_medium = true;
+
+    rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
+    if (rc)
+        return rc;
+
+    if (pho_response_is_error(resp) && resp->req_id == 2)
+        LOG_RETURN(resp->error->rc, "Error for write allocation");
+
+    if (!(pho_response_is_write(resp) && resp->req_id == 2))
+        LOG_RETURN(-EBADMSG, "Bad response for write allocation: ID #%d - '%s'",
+                   resp->req_id, pho_srl_response_kind_str(resp));
+
+    loc->root_path = xstrdup(resp->walloc->media[0]->root_path);
+    loc->addr_type =
+        (enum address_type)resp->walloc->media[0]->addr_type;
+    iod->iod_flags = PHO_IO_REPLACE | PHO_IO_NO_REUSE;
+    iod->iod_loc = loc;
+
+    target->family = resp->walloc->media[0]->med_id->family;
+    strcpy(target->name, resp->walloc->media[0]->med_id->name);
+
+    pho_srl_response_free(resp, true);
+
+    return rc;
+}
+
+static int _send_and_recv_release(struct admin_handle *adm,
+                                  const struct pho_id *source,
+                                  const struct pho_io_descr *iod_source,
+                                  int req_id, const struct pho_id *target,
+                                  const struct pho_io_descr *iod_target,
+                                  ssize_t total_size_written)
+{
+    pho_resp_t *resp;
+    pho_req_t req;
+    int rc;
+
+    if (target != NULL)
+        pho_srl_request_release_alloc(&req, 2);
+    else
+        pho_srl_request_release_alloc(&req, 1);
+    req.id = req_id;
+    req.release->media[0]->med_id->family = source->family;
+    req.release->media[0]->med_id->name = xstrdup(source->name);
+    req.release->media[0]->rc = iod_source->iod_rc;
+    req.release->media[0]->size_written = 0;
+    req.release->media[0]->to_sync = false;
+
+    if (target == NULL) {
+        rc = _send(&adm->phobosd_comm, &req);
+
+        return rc;
+    }
+
+    req.release->media[1]->med_id->family = target->family;
+    req.release->media[1]->med_id->name = xstrdup(target->name);
+    req.release->media[1]->rc = iod_target->iod_rc;
+    req.release->media[1]->size_written = total_size_written;
+    req.release->media[1]->to_sync = true;
+
+    rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
+    if (rc)
+        return rc;
+
+    if (pho_response_is_error(resp) && resp->req_id == req_id)
+        LOG_RETURN(resp->error->rc, "Error for release request");
+
+    if (!(pho_response_is_release(resp) && resp->req_id == req_id))
+        LOG_RETURN(-EBADMSG, "Bad response for release request: ID #%d - '%s'",
+                   resp->req_id, pho_srl_response_kind_str(resp));
+
+    return rc;
+}
+
+static void _build_new_extent(const struct pho_id *target,
+                              struct extent *old_extent,
+                              struct extent *new_extent,
+                              struct pho_io_descr *iod_source,
+                              struct pho_io_descr *iod_target)
+{
+    new_extent->uuid = generate_uuid();
+    new_extent->state = PHO_EXT_ST_PENDING;
+    new_extent->size = old_extent->size;
+    new_extent->address.size = old_extent->address.size;
+    new_extent->address.buff = xstrdup(old_extent->address.buff);
+    new_extent->media.family = target->family;
+    strcpy(new_extent->media.name, target->name);
+    new_extent->with_xxh128 = old_extent->with_xxh128;
+    if (new_extent->with_xxh128)
+        memcpy(new_extent->xxh128, old_extent->xxh128,
+               sizeof(old_extent->xxh128));
+    new_extent->with_md5 = old_extent->with_md5;
+    if (new_extent->with_md5)
+        memcpy(new_extent->md5, old_extent->md5, sizeof(old_extent->md5));
+    iod_source->iod_loc->extent = old_extent;
+    iod_source->iod_size = old_extent->size;
+    iod_target->iod_loc->extent = new_extent;
+}
+
+int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source)
+{
+    struct pho_io_descr iod_source = {0};
+    struct pho_io_descr iod_target = {0};
+    struct pho_ext_loc loc_source = {0};
+    struct pho_ext_loc loc_target = {0};
+    struct io_adapter_module *ioa = {0};
+    struct extent *ext_res = NULL;
+    GArray *new_ext_uuids;
+    int ext_cnt_done = 0;
+    struct pho_id target;
+    ssize_t total_size;
+    int ext_cnt;
+    int rc;
+    int i;
+
+    /* Determine total size of live objects */
+    rc = _get_extents_to_repack(adm, source, &ext_res, &ext_cnt);
+    if (rc)
+        return rc;
+
+    total_size = _sum_extent_size(ext_res, ext_cnt);
+    if (total_size == 0) {
+        dss_res_free(ext_res, ext_cnt);
+        return 0;
+    }
+
+    new_ext_uuids = g_array_new(FALSE, TRUE, sizeof(ext_res[0].uuid));
+
+    /* Prepare read allocation */
+    rc = _get_source_medium(adm, source, &loc_source, &iod_source, &ioa);
+    if (rc)
+        goto free_ext;
+
+    /* Prepare write allocation */
+    rc = _get_target_medium(adm, source, total_size, &loc_target, &iod_target,
+                            &target);
+    if (rc) {
+        free(loc_source.root_path);
+        _send_and_recv_release(adm, source, &iod_source, 3, NULL, NULL, 0);
+        goto free_ext;
+    }
+
+    /* Copy loop */
+    for (i = 0; i < ext_cnt; ++i, ++ext_cnt_done) {
+        struct extent ext_new = {0};
+
+        _build_new_extent(&target, &ext_res[i], &ext_new, &iod_source,
+                          &iod_target);
+
+        rc = copy_extent(ioa, &iod_source, ioa, &iod_target);
+        if (rc) {
+            pho_error(rc, "Failed to copy extent '%s'", ext_res[i].uuid);
+            break;
+        }
+
+        rc = dss_extent_insert(&adm->dss, &ext_new, 1);
+        if (rc) {
+            pho_error(rc, "Failed to add extent '%s' information in DSS",
+                      ext_res[i].uuid);
+            break;
+        }
+
+        g_array_append_val(new_ext_uuids, ext_new.uuid);
+
+        free(ext_new.address.buff);
+    }
+    free(loc_target.root_path);
+    free(loc_source.root_path);
+
+    if (rc) {
+        pho_error(rc, "Error encountered, repack is interrupted");
+        goto free_ext;
+    }
+
+    rc = _send_and_recv_release(adm, source, &iod_source, 3,
+                                &target, &iod_target,
+                                ext_cnt_done == ext_cnt ?
+                                    total_size :
+                                    _sum_extent_size(ext_res, ext_cnt_done));
+    if (rc)
+        LOG_GOTO(free_ext, rc, "Failed to send/receive release");
+
+    /* Database update: swap new and old extents */
+    for (i = 0; i < ext_cnt_done; ++i) {
+        rc = dss_update_extent_migrate(&adm->dss, ext_res[i].uuid,
+                                       g_array_index(new_ext_uuids, char *, i));
+        if (rc)
+            LOG_GOTO(free_ext, rc, "Failed to update layouts in DSS");
+    }
+
+    g_array_free(new_ext_uuids, TRUE);
+    new_ext_uuids = NULL;
+
+free_ext:
+    if (new_ext_uuids) {
+        rc = dss_update_extent_state(&adm->dss,
+                                     (const char **)new_ext_uuids->data,
+                                     (int)new_ext_uuids->len,
+                                     PHO_EXT_ST_ORPHAN);
+        g_array_free(new_ext_uuids, TRUE);
+        if (rc)
+            pho_error(rc, "Failed to update state of new extents to orphan");
+
+    }
+    dss_res_free(ext_res, ext_cnt);
+
+    return 0;
 }
 
 int phobos_admin_ping_lrs(struct admin_handle *adm)

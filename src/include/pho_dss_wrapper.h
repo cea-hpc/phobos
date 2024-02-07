@@ -202,4 +202,17 @@ int dss_move_deprecated_to_object(struct dss_handle *handle,
 int dss_update_extent_migrate(struct dss_handle *handle, const char *old_uuid,
                               const char *new_uuid);
 
+/**
+ * Update state of given extents
+ *
+ * @param[in]   handle          DSS handle
+ * @param[in]   uuids           UUIDs of to-update extents
+ * @param[in]   num_uuids       Number of to-update extents
+ * @param[in]   state           New extents state
+ *
+ * @return 0 on success, -errno on failure
+ */
+int dss_update_extent_state(struct dss_handle *handle, const char **uuids,
+                            int num_uuids, enum extent_state state);
+
 #endif
