@@ -441,24 +441,33 @@ function mput
     rm ${filenames[@]}
 }
 
+function nb_media_unlocked()
+{
+    local family=$1
+
+    $phobos $family list -o adm_status | grep unlocked | wc -l
+}
+
 # make sure there are at least N available dir/drives
-function ensure_nb_drives
+function ensure_nb_drives()
 {
     local count=$1
-    local name
+    local family
     local d
 
     if [[ $PHOBOS_STORE_default_family == "tape" ]]; then
-        name=drive
+        family=drive
     else
-        name=dir
+        family=dir
     fi
 
-    local nb=0
-    for d in $($phobos $name list); do
+
+    local nb=$(nb_media_unlocked $family)
+
+    for d in $($phobos $family list); do
         if (( $nb < $count )); then
-            $phobos $name unlock $d
-            ((nb++)) || true
+            $phobos $family unlock $d
+            nb=$(nb_media_unlocked $family) || true
         fi
     done
 
@@ -467,7 +476,7 @@ function ensure_nb_drives
 
 # Execute a phobos command but sleep on pho_posix_put for 1 second before
 # checking the number of locks taken on devices and media then sleep again.
-function phobos_delayed_dev_release
+function phobos_delayed_dev_release()
 {
     (
         tmp_gdb_script=$(mktemp)
@@ -486,12 +495,13 @@ EOF
     )
 }
 
-function concurrent_put
+function concurrent_put()
 {
     local md="a=1,b=2,c=3"
     local tmp="/tmp/data.$$"
     local key=data.$(date +%s).$$
     local single=0
+    local pid2
 
     # this test needs 2 drives
     ensure_nb_drives 2 || single=1
@@ -502,18 +512,19 @@ function concurrent_put
     # 2 simultaneous put
     phobos_delayed_dev_release put --metadata $md $tmp $key.1 &
     local pid1=$!
-    (( single==0 )) && phobos_delayed_dev_release put --metadata $md $tmp \
-                            $key.2 &
-    local pid2=$!
+    if (( single == 0 )); then
+        phobos_delayed_dev_release put --metadata $md $tmp $key.2 &
+        pid2=$!
+    fi
 
     wait $pid1
-    wait $pid2
+    ((single == 0)) && wait $pid2
 
     rm -f $tmp
 
     # check they are both in DB
     $phobos getmd $key.1
-    if (( single==0 )); then
+    if (( single == 0 )); then
         $phobos getmd $key.2
     fi
 }
