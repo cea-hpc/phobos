@@ -217,12 +217,12 @@ static void test_lib_scan(bool use_admin_function)
     size_t index;
 
     if (use_admin_function) {
-        ASSERT_RC(phobos_admin_lib_scan(PHO_LIB_SCSI, "/dev/changer",
+        ASSERT_RC(phobos_admin_lib_scan(PHO_LIB_SCSI, "/dev/changer", false,
                                         &lib_data));
     } else {
         ASSERT_RC(get_lib_adapter(PHO_LIB_SCSI, &lib_hdl.ld_module));
         ASSERT_RC(ldm_lib_open(&lib_hdl, "/dev/changer", NULL));
-        ASSERT_RC(ldm_lib_scan(&lib_hdl, &lib_data, NULL));
+        ASSERT_RC(ldm_lib_scan(&lib_hdl, false, &lib_data, NULL));
     }
 
     if (!json_array_size(lib_data)) {

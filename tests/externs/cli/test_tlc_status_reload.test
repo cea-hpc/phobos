@@ -43,13 +43,13 @@ function cleanup
     drain_all_drives
 }
 
-function test_status_reload
+function test_scan_reload
 {
     local tape="$(get_tapes L6 1)"
     local drive="$(get_lto_drives 6 1)"
 
-    # initial status
-    lib_data=$($phobos lib status)
+    # initial scan
+    lib_data=$($phobos lib scan /dev/changer)
     echo "${lib_data}" | grep "arm"
     echo "${lib_data}" | grep "slot"
     echo "${lib_data}" | grep "drive"
@@ -59,14 +59,14 @@ function test_status_reload
     nb_empty_slot=$(echo "$lib_data" | grep slot | grep -v full -c)
     set -e
     if (( nb_empty_slot != 0 )); then
-        error "Initial lib status find ${nb_empty_slot} instead of 0 empty slot"
+        error "Initial lib scan find ${nb_empty_slot} instead of 0 empty slot"
     fi
     # check any drive is empty
     set +e
     nb_full_drive=$(echo "$lib_data" | grep drive | grep full -c)
     set -e
     if (( nb_empty_drive != 0 )); then
-        error "Initial lib status find ${nb_full_drive} instead of 0 full drive"
+        error "Initial lib scan find ${nb_full_drive} instead of 0 full drive"
     fi
     initial_tape_slot_address=$(echo "$lib_data" | grep ${tape} |
                                 awk '{print $2}' | cut -d'=' -f 2)
@@ -77,8 +77,8 @@ function test_status_reload
     $phobos tape add -t lto6 ${tape}
     $phobos drive load ${drive} ${tape}
 
-    # status with one loaded tape
-    lib_data=$($phobos lib status)
+    # scan with one loaded tape
+    lib_data=$($phobos lib scan /dev/changer)
     # check the initial tape slot is now empty
     echo "$lib_data" | grep slot | grep ${initial_tape_slot_address} |
         grep -v full
@@ -86,23 +86,23 @@ function test_status_reload
     echo "$lib_data" | grep ${drive_serial} | grep full | grep ${tape} |
         grep ${initial_tape_slot_address}
 
-    # unload drives without using TLC to test status --reload option
+    # unload drives without using TLC to test scan --reload option
     drain_all_drives
 
     # Check with a reload, TLC library cache is valid with one empty drive
-    lib_data=$($phobos lib status --reload)
+    lib_data=$($phobos lib scan --reload /dev/changer)
     set +e
     nb_full_drive=$(echo "$lib_data" | grep drive | grep full -c)
     set -e
     if (( nb_empty_drive != 0 )); then
-        error "tlc lib status with --reload find ${nb_full_drive} instead of 0 "
+        error "tlc lib scan with --reload find ${nb_full_drive} instead of 0 "
               "full drive"
     fi
 
     # load a drive one more time
     $phobos drive load ${drive} ${tape}
     # check drive is loaded
-    lib_data=$($phobos lib status)
+    lib_data=$($phobos lib scan /dev/changer)
     echo "$lib_data" | grep ${drive_serial} | grep full | grep ${tape}
 
     # unload drives without using TLC to test reload action
@@ -112,12 +112,12 @@ function test_status_reload
     $phobos lib reload
 
     # Check with a prev reload, TLC library cache is valid with one empty drive
-    lib_data=$($phobos lib status)
+    lib_data=$($phobos lib scan /dev/changer)
     set +e
     nb_full_drive=$(echo "$lib_data" | grep drive | grep full -c)
     set -e
     if (( nb_empty_drive != 0 )); then
-        error "tlc lib status with a prev reload find ${nb_full_drive} instead "
+        error "tlc lib scan with a prev reload find ${nb_full_drive} instead "
               "of 0 full drive"
     fi
 
@@ -130,5 +130,5 @@ if [[ ! -w /dev/changer ]]; then
 fi
 
 TESTS=(
-    "setup; test_status_reload; cleanup"
+    "setup; test_scan_reload; cleanup"
 )

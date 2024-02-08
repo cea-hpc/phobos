@@ -52,43 +52,11 @@ function swap_back_lib_in_cfg
 
 function test_lib_scan
 {
-    local no_dir="/blob"
-    $phobos lib scan "$no_dir" &&
-        error "Should have failed, '$no_dir' doesn't exists"
-
     dev_changer_scan=$($phobos lib scan /dev/changer)
     echo "$dev_changer_scan" | grep "arm"
     echo "$dev_changer_scan" | grep "slot"
     echo "$dev_changer_scan" | grep "import/export"
     echo "$dev_changer_scan" | grep "drive"
-
-    old_cfg=$(cat $PHOBOS_CFG_FILE)
-    if grep "lib_device" $PHOBOS_CFG_FILE; then
-        sed -i "s/$old_lib_device/\/blob/g" $PHOBOS_CFG_FILE
-    else
-        sed -i "s/\[lrs\]/\[lrs\]\nlib_device = \/blob/g" $PHOBOS_CFG_FILE
-    fi
-
-    trap "echo '$old_cfg' > $PHOBOS_CFG_FILE; cleanup" EXIT
-
-    $phobos lib scan &&
-        error "Should have failed, '/blob' specified in cfg file doesn't exist"
-
-    sed -i "s/\/blob/\/dev\/changer/g" $PHOBOS_CFG_FILE
-
-    no_arg_scan=$($phobos lib scan)
-    if [[ "$dev_changer_scan" != "$no_arg_scan" ]]; then
-        error "Lib scan with no arg returned different result than lib scan " \
-              "with arg '/dev/changer'"
-    fi
-
-    sed -i "/lib_device/d" $PHOBOS_CFG_FILE
-
-    $phobos lib scan &&
-        error "Should have failed, no 'lib_device' specified in cfg file"
-
-    echo "$old_cfg" > $PHOBOS_CFG_FILE
-    trap cleanup EXIT
 }
 
 test_lib_scan

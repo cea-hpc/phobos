@@ -224,7 +224,8 @@ struct pho_lib_adapter_module_ops {
     int (*lib_close)(struct lib_handle *lib);
     int (*lib_drive_lookup)(struct lib_handle *lib, const char *drive_serial,
                             struct lib_drv_info *drv_info);
-    int (*lib_scan)(struct lib_handle *lib, json_t **lib_data, json_t *message);
+    int (*lib_scan)(struct lib_handle *lib, bool reload, json_t **lib_data,
+                    json_t *message);
     int (*lib_load)(struct lib_handle *lib, const char *device_serial,
                     const char *medium_label);
     int (*lib_unload)(struct lib_handle *lib, const char *device_serial,
@@ -320,18 +321,21 @@ static inline int ldm_lib_drive_lookup(struct lib_handle *lib_hdl,
  * Output information may vary, depending on the library.
  *
  * @param[in,out] lib_hdl   Lib handle holding an opened library adapter.
+ * @param[in]     reload    If true, the library module must reload its cache
+ *                          from the library before answering the scan
  * @param[in,out] lib_data  Json object allocated by ldm_lib_scan, json_decref
  *                          must be called later on to deallocate it properly
  * @param[out]    message   Json message to fill in case of error
  */
-static inline int ldm_lib_scan(struct lib_handle *lib_hdl,
+static inline int ldm_lib_scan(struct lib_handle *lib_hdl, bool reload,
                                json_t **lib_data, json_t *message)
 {
     assert(lib_hdl->ld_module != NULL);
     assert(lib_hdl->ld_module->ops != NULL);
     if (lib_hdl->ld_module->ops->lib_scan == NULL)
         return 0;
-    return lib_hdl->ld_module->ops->lib_scan(lib_hdl, lib_data, message);
+    return lib_hdl->ld_module->ops->lib_scan(lib_hdl, reload, lib_data,
+                                             message);
 }
 
 /**

@@ -329,7 +329,7 @@ class LibCache:
 
     def reload_cache(self):
         with AdminClient(lrs_required=False) as adm:
-            lib_data = adm.lib_scan(PHO_LIB_SCSI, "/dev/changer")
+            lib_data = adm.lib_scan(PHO_LIB_SCSI, "/dev/changer", True)
             self.load_cache(lib_data)
 
     def unloadall(self):
@@ -386,7 +386,7 @@ def main(args):
         )
 
     with AdminClient(lrs_required=False) as adm:
-        lib_data = adm.lib_scan(PHO_LIB_SCSI, "/dev/changer")
+        lib_data = adm.lib_scan(PHO_LIB_SCSI, "/dev/changer", True)
         lib_cache = LibCache(lib_data)
 
     # fetch list of unique tapes in the action list to format

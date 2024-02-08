@@ -376,17 +376,6 @@ class Client(object):
                 raise EnvironmentError(rc, f"Failed to unload drive "
                                            f"{drive_serial_or_path}")
 
-    def tlc_lib_status(self, with_reload):
-        """Get status library from the TLC"""
-        jansson_t = c_void_p(None)
-        rc = LIBPHOBOS_ADMIN.phobos_admin_tlc_lib_status(
-                                    byref(self.handle), with_reload,
-                                    byref(jansson_t))
-        if rc:
-            raise EnvironmentError(rc, f"Failed to status the library from TLC")
-
-        return json.loads(jansson_dumps(jansson_t.value))
-
     def tlc_reload(self):
         """Reload the library internal cache of the TLC"""
         rc = LIBPHOBOS_ADMIN.phobos_admin_tlc_reload(byref(self.handle))
@@ -400,16 +389,16 @@ class Client(object):
         LIBPHOBOS_ADMIN.phobos_admin_layout_list_free(layouts, n_layouts)
 
     @staticmethod
-    def lib_scan(lib_type, lib_dev_path):
+    def lib_scan(lib_type, lib_dev_path, with_reload):
         """Scan and return a list of dictionnaries representing the properties
         of elements in a library of type lib_type.
 
-        The only working implementation is for PHO_LIB_SCSI, which performs a
-        SCSI scan of a given device.
+        The only working implementation is for PHO_LIB_SCSI through the TLC.
         """
         jansson_t = c_void_p(None)
         rc = LIBPHOBOS_ADMIN.phobos_admin_lib_scan(lib_type,
                                                    lib_dev_path.encode('utf-8'),
+                                                   with_reload,
                                                    byref(jansson_t))
         if rc:
             raise EnvironmentError(rc, f"Failed to scan the library "

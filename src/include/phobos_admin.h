@@ -375,6 +375,8 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
  * information. Output information may vary, depending on the library.
  *
  * @param[in] lib_type          Type of the library to scan
+ * @param[in] reload            If true, the library module must reload its
+ *                              cache from the library before answering the scan
  * @param[in] lib_dev           Path of the library to scan
  * @param[in,out] lib_data      json object allocated by ldm_lib_scan,
  *                              json_decref must be called later on to
@@ -386,7 +388,7 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
  * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
-                          json_t **lib_data);
+                          bool reload, json_t **lib_data);
 
 /**
  * Reload the library internal cache of the TLC
@@ -399,27 +401,6 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
  * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_tlc_reload(struct admin_handle *adm);
-
-/**
- * Generate a json array with unstructured information. Output information may
- * vary, depending on the library.
- *
- * This function will be merged with phobos_admin_lib_scan when the TLC
- * is fully integrated.
- *
- * @param[in]       adm         Admin module handler.
- * @param[in]       bool        True if the TLC must reload its cached status
- * @param[in,out]   lib_data    json object allocated by
- *                              phobos_admin_tlc_status, json_decref must be
- *                              called later on to deallocate it properly
- *
- * @return                      0 on success
- *                              -errno on failure
- *
- * @return 0 if success, -errno if an error occurs
- */
-int phobos_admin_tlc_lib_status(struct admin_handle *adm, bool reload,
-                                json_t **lib_data);
 
 /**
  * Dump a list of logs to a given file.

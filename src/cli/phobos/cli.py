@@ -669,10 +669,10 @@ class RadosPoolSetAccessOptHandler(MediaSetAccessOptHandler):
     """Set media operation flags to rados_pool media."""
     epilog = setaccess_epilog("rados_pool")
 
-class ScanOptHandler(BaseOptHandler):
+class LibScanOptHandler(BaseOptHandler):
     """Scan a physical resource and display retrieved information."""
     label = 'scan'
-    descr = 'scan a physical resource and display retrieved information'
+    descr = 'Display the physical resources status of the library'
 
     def __enter__(self):
         return self
@@ -683,29 +683,14 @@ class ScanOptHandler(BaseOptHandler):
     @classmethod
     def add_options(cls, parser):
         """Add resource-specific options."""
-        super(ScanOptHandler, cls).add_options(parser)
+        super(LibScanOptHandler, cls).add_options(parser)
         parser.add_argument('res', nargs='*',
                             help="Resource(s) or device(s) to scan. If not "
                                  "given, will fetch 'lib_device' path in "
                                  "configuration file instead")
-
-class LibStatusOptHandler(BaseOptHandler):
-    """Scan a physical resource and display retrieved information."""
-    label = 'status'
-    descr = 'Display status of the library managed by TLC'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        pass
-
-    @classmethod
-    def add_options(cls, parser):
-        """Add resource-specific options."""
-        super(LibStatusOptHandler, cls).add_options(parser)
         parser.add_argument('--reload', action='store_true',
-                            help="TLC reloads its library internal cache")
+                            help="The library module reloads its internal "
+                                 "cache before sending the data")
 
 class LibReloadOptHandler(BaseOptHandler):
     """Reload the library internal cache of the TLC"""
@@ -2074,8 +2059,7 @@ class LibOptHandler(BaseResourceOptHandler):
     # it is used for other families, set family as None
     family = ResourceFamily(ResourceFamily.RSC_TAPE)
     verbs = [
-        ScanOptHandler,
-        LibStatusOptHandler,
+        LibScanOptHandler,
         LibReloadOptHandler,
     ]
 
@@ -2090,28 +2074,17 @@ class LibOptHandler(BaseResourceOptHandler):
                 self.logger.error(str(err) + ", will abort 'lib scan'")
                 sys.exit(os.EX_DATAERR)
 
+        with_reload = self.params.get('reload')
+
         try:
             with AdminClient(lrs_required=False) as adm:
                 for lib_dev in libs:
-                    lib_data = adm.lib_scan(PHO_LIB_SCSI, lib_dev)
+                    lib_data = adm.lib_scan(PHO_LIB_SCSI, lib_dev, with_reload)
                     # FIXME: can't use dump_object_list yet as it does not play
                     # well with unstructured dict-like data (relies on getattr)
                     self._print_lib_data(lib_data)
         except EnvironmentError as err:
             self.logger.error(str(err) + ", will abort 'lib scan'")
-            sys.exit(abs(err.errno))
-
-    def exec_status(self):
-        """Get library status from the TLC"""
-        with_reload = self.params.get('reload')
-
-        try:
-            with AdminClient(lrs_required=False, tlc_required=True) as adm:
-                lib_data = adm.tlc_lib_status(with_reload)
-                self._print_lib_data(lib_data)
-
-        except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
     def exec_reload(self):

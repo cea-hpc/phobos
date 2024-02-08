@@ -171,8 +171,8 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['drive', 'unload', 'drive_serial_or_path'])
         self.check_cmdline_valid(['drive', 'unload', '--tape-label',
                                   'tape_label', 'drive_serial_or_path'])
-        self.check_cmdline_valid(['lib', 'status'])
-        self.check_cmdline_valid(['lib', 'status', '--reload'])
+        self.check_cmdline_valid(['lib', 'scan'])
+        self.check_cmdline_valid(['lib', 'scan', '--reload'])
         self.check_cmdline_valid(['lib', 'reload'])
 
         # Test invalid object and invalid verb
