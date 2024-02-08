@@ -149,7 +149,8 @@ function test_force_format
 
     $phobos tape format ${tape} &&
         error "Formatting without force should have failed"
-    $valg_phobos tape format --force ${tape}
+    $valg_phobos tape format --force ${tape} ||
+        error "Failed to format $tape with --force option"
     local output="$($phobos tape list -o all)"
     assert_formated "$output" "${tape}"
 

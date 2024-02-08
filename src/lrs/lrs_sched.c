@@ -1748,12 +1748,11 @@ lock_race_retry:
      * allocation with the current medium.
      */
     if (dev && !*alloc_medium) {
+        *alloc_medium = dev->ld_dss_media_info;
+        lrs_medium_acquire(&(*alloc_medium)->rsc.id);
         /* a device containing a medium with enough space was found */
         goto select_device;
     } else if (dev && medium_is_loaded(dev, *alloc_medium)) {
-        lrs_medium_release(*alloc_medium);
-        *alloc_medium = NULL;
-
         if (dev_is_sched_ready(dev)) {
             goto select_device;
         } else {
@@ -2023,12 +2022,6 @@ find_read_device:
 
     /* lock medium */
     rc = ensure_medium_lock(&sched->lock_handle, *alloc_medium);
-
-    if (medium_is_loaded(dev, *alloc_medium)) {
-        lrs_medium_release(*alloc_medium);
-        *alloc_medium = NULL;
-    }
-
     if (rc)
         goto free_skip_medium;
 

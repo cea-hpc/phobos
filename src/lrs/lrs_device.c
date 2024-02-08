@@ -33,6 +33,7 @@
 #include "lrs_cfg.h"
 #include "lrs_device.h"
 #include "lrs_sched.h"
+#include "lrs_utils.h"
 
 #include "pho_common.h"
 #include "pho_daemon.h"
@@ -1194,7 +1195,7 @@ static void queue_format_response(struct tsqueue *response_queue,
 /* must be called with a reference on lrs_dev::ld_dss_media_info */
 static bool medium_is_loaded(struct lrs_dev *dev, struct media_info *medium)
 {
-    return (dev->ld_op_status == PHO_DEV_OP_ST_LOADED) &&
+    return (dev_is_loaded(dev) || dev_is_mounted(dev)) &&
         !strcmp(dev->ld_dss_media_info->rsc.id.name, medium->rsc.id.name);
 }
 
@@ -1217,6 +1218,12 @@ static int dev_handle_format(struct lrs_dev *dev)
         pho_info("medium %s to format is already loaded into device %s",
                  dev->ld_dss_media_info->rsc.id.name,
                  dev->ld_dss_dev_info->rsc.id.name);
+        if (dev_is_mounted(dev)) {
+            /* LTFS cannot reformat a mounted filesystem */
+            rc = dev_umount(dev);
+            if (rc)
+                goto check_health;
+        }
         goto format;
     }
 
@@ -1226,6 +1233,7 @@ static int dev_handle_format(struct lrs_dev *dev)
         return 0;
     }
 
+check_health:
     if (rc) {
         if (context.failure_on_device) {
             MUTEX_LOCK(&dev->ld_mutex);
@@ -2109,7 +2117,7 @@ static int dev_medium_switch(struct lrs_dev *dev,
     sub_req = dev->ld_sub_request;
     reqc = sub_req->reqc;
 
-    if (!medium_to_load) {
+    if (medium_is_loaded(dev, medium_to_load)) {
         /* medium already loaded in device */
         pho_debug("medium_to_alloc for device '%s' is NULL", lrs_dev_name(dev));
         rc = check_device_state_for_load(dev);

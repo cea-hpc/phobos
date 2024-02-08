@@ -194,7 +194,6 @@ static int send_write_and_release_with_rc(struct pho_comm_info *ci,
     size_t size = 1;
     pho_req_t req;
 
-    // Bad resource family
     pho_srl_request_write_alloc(&req, 1, n_tags);
     req.id = 0;
     req.walloc->family = PHO_RSC_DIR;
