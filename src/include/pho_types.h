@@ -131,6 +131,7 @@ enum lib_type {
 static const char * const lib_type_names[] = {
     [PHO_LIB_DUMMY] = "DUMMY",
     [PHO_LIB_SCSI]  = "SCSI",
+    [PHO_LIB_RADOS] = "RADOS",
 };
 
 static inline const char *lib_type2str(enum lib_type type)
