@@ -2199,6 +2199,7 @@ static int sched_handle_format(struct lrs_sched *sched,
     MUTEX_LOCK(&device->ld_mutex);
     device->ld_sub_request = format_sub_request;
     MUTEX_UNLOCK(&device->ld_mutex);
+    thread_signal(&device->ld_device_thread);
 
     return 0;
 
