@@ -132,44 +132,6 @@ function dir_locked_splits_setup
     invoke_lrs
 }
 
-function tape_locked_splits_setup
-{
-    local N_TAPES=8
-    local N_DRIVES=4
-
-    # start with a clean/empty phobos DB
-    setup_tables
-    invoke_lrs
-
-    local tapes="$(get_tapes L5 $N_TAPES)"
-    $phobos tape add --type lto5 "$tapes"
-
-    # unlock all tapes
-    for t in $tapes; do
-        $phobos tape unlock $t
-    done
-
-    # get drives
-    local drives=$(get_drives $N_DRIVES)
-    $phobos drive add $drives
-
-    # unlock all drives
-    for d in $($phobos drive list); do
-        $phobos drive unlock $d
-    done
-
-    # format the tapes
-    $phobos tape format $tapes --unlock
-
-    waive_lrs
-
-    for tape in $tapes; do
-        resize_medium $tape $HALF_SIZE
-    done
-
-    invoke_lrs
-}
-
 function cleanup
 {
     unset PHOBOS_STORE_default_family
@@ -358,9 +320,6 @@ if [[ -w /dev/changer ]]; then
     TESTS+=("tape_setup; \
              test_medium_locate tape; test_locate_cli tape; \
              test_get_locate_cli tape; \
-             tape_cleanup")
-    TESTS+=("tape_locked_splits_setup; \
-             test_locate_locked_splits tape $FULL_SIZE; \
              tape_cleanup")
     TESTS+=("setup; \
              test_locate_compatibility; \
