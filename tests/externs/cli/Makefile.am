@@ -67,6 +67,7 @@ check_SCRIPTS=acceptance.test \
               test_ping.test \
               test_put.sh \
               test_raid1_split.sh \
+              test_repack.test \
               test_resource_availability.test \
               test_resource_management.sh \
               test_tlc.test \

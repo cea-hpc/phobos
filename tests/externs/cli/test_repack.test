@@ -1,0 +1,232 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2024 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for repack feature
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+function setup
+{
+    setup_tables
+    invoke_lrs
+    invoke_tlc
+}
+
+function cleanup
+{
+    waive_lrs
+    waive_tlc
+    drop_tables
+    rm -f /tmp/oid-repack*
+}
+
+function obj_setup
+{
+    $phobos put -T origin /etc/hosts oid-repack-1
+    $phobos put -T origin /etc/hosts oid-repack-2
+    $phobos put -T origin /etc/hosts oid-repack-3
+    $phobos put -T origin /etc/hosts oid-repack-4
+
+    # Delete an object to let it be considered by the garbage collector
+    $phobos del oid-repack-2
+}
+
+function obj_check
+{
+    $phobos get oid-repack-1 /tmp/oid-repack-1 ||
+        error "get oid-repack-1 should have succeed"
+    $phobos get oid-repack-3 /tmp/oid-repack-3 ||
+        error "get oid-repack-3 should have succeed"
+    $phobos get oid-repack-4 /tmp/oid-repack-4 ||
+        error "get oid-repack-4 should have succeed"
+
+    $phobos undel oid oid-repack-2 &&
+        error "undel oid-repack-2 should have failed"
+
+    diff /etc/hosts /tmp/oid-repack-1 ||
+        error "file oid-repack-1 is not correctly retrieved"
+    diff /etc/hosts /tmp/oid-repack-3 ||
+        error "file oid-repack-3 is not correctly retrieved"
+    diff /etc/hosts /tmp/oid-repack-4 ||
+        error "file oid-repack-4 is not correctly retrieved"
+}
+
+function tape_setup
+{
+    setup
+
+    export drives="$(get_drives 2)"
+    export media="$(get_tapes L5 3 | nodeset -e)"
+
+    $phobos drive add --unlock $drives
+    $phobos tape add -t lto5 -T origin $(echo $media | cut -d' ' -f1)
+    $phobos tape add -t lto5 -T alt $(echo $media | cut -d' ' -f2)
+    $phobos tape add -t lto5 $(echo $media | cut -d' ' -f3)
+
+    $phobos tape format --unlock $media
+
+    obj_setup
+}
+
+function tape_cleanup
+{
+    cleanup
+    drain_all_drives
+}
+
+function test_simple_repack
+{
+    local family=$1
+
+    # Make 'alt' medium not empty to prevent its selection for repack
+    $phobos put -T alt /etc/hosts oid5
+
+    $phobos $family repack $(echo $media | cut -d' ' -f1)
+
+    nb=$($phobos extent list --name $(echo $media | cut -d' ' -f2) | wc -l)
+    if [ $nb -ne 1 ]; then
+        error "repack should not have selected a used medium"
+    fi
+
+    nb=$($phobos extent list --name $(echo $media | cut -d' ' -f3) | wc -l)
+    if [ $nb -ne 3 ]; then
+        error "repack should have copied 3 extents to the empty medium"
+    fi
+
+    nb=$($phobos object list --deprecated | wc -l)
+    if [ $nb -ne 0 ]; then
+        error "repack should have deleted deprecated objects"
+    fi
+
+    obj_check
+}
+
+function test_raid1_repack_setup
+{
+    setup
+
+    export drives="$(get_drives 2)"
+    export media="$(get_tapes L5 3 | nodeset -e)"
+
+    $phobos drive add --unlock $drives
+    $phobos tape add -t lto5 -T origin $(echo $media | cut -d' ' -f1) \
+                                       $(echo $media | cut -d' ' -f2)
+    $phobos tape add -t lto5 $(echo $media | cut -d' ' -f3)
+
+    $phobos tape format --unlock $media
+
+    $phobos put -T origin -p repl_count=2 /etc/hosts oid-mirror
+
+    $phobos del oid-mirror
+}
+
+function test_raid1_repack
+{
+    local family=$1
+
+    $phobos $family repack $(echo $media | cut -d' ' -f1)
+
+    nb=$($phobos object list --deprecated | wc -l)
+    if [ $nb -ne 0 ]; then
+        error "repack should have deleted deprecated objects"
+    fi
+
+    $phobos get oid-mirror /tmp/oid-repack-bad &&
+        error "oid-mirror should not be available"
+
+    return 0
+}
+
+function test_dedup_repack_setup
+{
+    setup
+
+    export drives="$(get_drives 2)"
+    export media="$(get_tapes L5 2 | nodeset -e)"
+
+    $phobos drive add --unlock $drives
+    $phobos tape add -t lto5 -T origin $(echo $media | cut -d' ' -f1)
+    $phobos tape add -t lto5 $(echo $media | cut -d' ' -f2)
+
+    $phobos tape format --unlock $media
+
+    $phobos put -T origin /etc/hosts oid-1
+    $phobos put -T origin /etc/hosts oid-2
+
+    object_uuid1=$($phobos object list -o uuid oid-1)
+    extent_uuid1=$($phobos extent list --degroup -o ext_uuid oid-1)
+    extent_uuid1=${extent_uuid1//[\[\]\']}
+    extent_uuid2=$($phobos extent list --degroup -o ext_uuid oid-2)
+    extent_uuid2=${extent_uuid2//[\[\]\']}
+
+    size=$(stat --printf="%s" /etc/hosts)
+    $PSQL << EOF
+INSERT INTO object(oid, user_md, obj_status, lyt_info)
+  VALUES ('oid-3', '{}', 'complete',
+    '{"name":"raid1","major":0,"minor":2,
+      "attrs":{"raid1.repl_count":"1","raid1.object_size":"$size"}}');
+INSERT INTO layout(object_uuid, version, extent_uuid, layout_index)
+  VALUES ('${object_uuid1}', '1', '${extent_uuid1}', '1'),
+         ((SELECT object_uuid FROM object WHERE oid='oid-3'), '1',
+          '${extent_uuid2}', '0');
+EOF
+
+    $phobos del oid-1
+    $phobos del oid-2
+}
+
+function test_dedup_repack
+{
+    local family=$1
+
+    $phobos $family repack $(echo $media | cut -d' ' -f1)
+    nb=$($phobos extent list --name $(echo $media | cut -d' ' -f2) | wc -l)
+    if [ $nb -ne 1 ]; then
+        error "repack should have copied 1 extent to the tagged medium"
+    fi
+
+    nb=$($phobos object list --deprecated | wc -l)
+    if [ $nb -ne 0 ]; then
+        error "repack should have deleted deprecated objects"
+    fi
+
+    $phobos get oid-3 /tmp/oid-repack-dedup ||
+        error "get oid-3 should have succeed"
+
+    diff /etc/hosts /tmp/oid-repack-dedup ||
+        error "file oid-repack-dedup is not correctly retrieved"
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Library required for this test"
+fi
+
+TEST_CLEANUP=cleanup
+TESTS=("tape_setup;test_simple_repack tape;tape_cleanup")
+TESTS+=("test_raid1_repack_setup;test_raid1_repack tape;tape_cleanup")
+TESTS+=("test_dedup_repack_setup;test_dedup_repack tape;tape_cleanup")
+
