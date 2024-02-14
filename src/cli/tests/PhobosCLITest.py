@@ -105,6 +105,7 @@ class CLIParametersTest(unittest.TestCase):
         self.check_cmdline_valid(['tape', 'list', 'I,J,K', '-o',
                                   'name,family'])
         self.check_cmdline_valid(['tape', 'repack', 'A'])
+        self.check_cmdline_valid(['tape', 'repack', '-T', 't1,t2', 'A'])
         self.check_cmdline_valid(['object', 'list'])
         self.check_cmdline_valid(['object', 'list', '"obj.*"'])
         self.check_cmdline_valid(['object', 'list', '"obj.?2"'])

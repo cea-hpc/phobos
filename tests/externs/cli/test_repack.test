@@ -221,6 +221,25 @@ function test_dedup_repack
         error "file oid-repack-dedup is not correctly retrieved"
 }
 
+function test_tagged_repack
+{
+    local family=$1
+
+    $phobos $family repack -T alt $(echo $media | cut -d' ' -f1)
+
+    nb=$($phobos extent list --name $(echo $media | cut -d' ' -f2) | wc -l)
+    if [ $nb -ne 3 ]; then
+        error "repack should have copied 3 extents to the tagged medium"
+    fi
+
+    nb=$($phobos object list --deprecated | wc -l)
+    if [ $nb -ne 0 ]; then
+        error "repack should have deleted deprecated objects"
+    fi
+
+    obj_check
+}
+
 if [[ ! -w /dev/changer ]]; then
     skip "Library required for this test"
 fi
@@ -229,4 +248,5 @@ TEST_CLEANUP=cleanup
 TESTS=("tape_setup;test_simple_repack tape;tape_cleanup")
 TESTS+=("test_raid1_repack_setup;test_raid1_repack tape;tape_cleanup")
 TESTS+=("test_dedup_repack_setup;test_dedup_repack tape;tape_cleanup")
+TESTS+=("tape_setup;test_tagged_repack tape;tape_cleanup")
 

@@ -260,13 +260,15 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
  *
  * \param[in]       adm             Admin module handle.
  * \param[in]       source          Source medium ID.
+ * \param[in]       tags            Tags for the destination medium.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
  *
  * This must be called with an admin_handle initialized with phobos_admin_init.
  */
-int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source);
+int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
+                        struct tags *tags);
 
 /*
  * Ping the lrs phobosd daemon to check if it is online or not.

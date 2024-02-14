@@ -1193,21 +1193,24 @@ free_resp:
 static int _get_target_medium(struct admin_handle *adm,
                               const struct pho_id *source,
                               ssize_t total_size,
+                              struct tags *tags,
                               struct pho_ext_loc *loc,
                               struct pho_io_descr *iod,
                               struct pho_id *target)
 {
-    size_t n_tags = 0;
     pho_resp_t *resp;
     pho_req_t req;
     int rc;
+    int i;
 
-    pho_srl_request_write_alloc(&req, 1, &n_tags);
+    pho_srl_request_write_alloc(&req, 1, &tags->n_tags);
     req.id = 2;
     req.walloc->family = source->family;
     req.walloc->prevent_duplicate = true;
     req.walloc->media[0]->size = total_size;
     req.walloc->media[0]->empty_medium = true;
+    for (i = 0; i < tags->n_tags; ++i)
+        req.walloc->media[0]->tags[i] = xstrdup(tags->tags[i]);
 
     rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
     if (rc)
@@ -1307,7 +1310,8 @@ static void _build_new_extent(const struct pho_id *target,
     iod_target->iod_loc->extent = new_extent;
 }
 
-int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source)
+int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
+                        struct tags *tags)
 {
     struct pho_io_descr iod_source = {0};
     struct pho_io_descr iod_target = {0};
@@ -1347,8 +1351,8 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source)
         goto free_ext;
 
     /* Prepare write allocation */
-    rc = _get_target_medium(adm, source, total_size, &loc_target, &iod_target,
-                            &target);
+    rc = _get_target_medium(adm, source, total_size, tags, &loc_target,
+                            &iod_target, &target);
     if (rc) {
         free(loc_source.root_path);
         _send_and_recv_release(adm, source, &iod_source, 3, NULL, NULL, 0);

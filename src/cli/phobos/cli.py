@@ -979,6 +979,9 @@ class RepackOptHandler(BaseOptHandler):
     @classmethod
     def add_options(cls, parser):
         super(RepackOptHandler, cls).add_options(parser)
+        parser.add_argument('-T', '--tags', type=lambda t: t.split(','),
+                            help='Only use a medium that contain this set of '
+                                 'tags (comma-separated: foo,bar)')
         parser.add_argument('res', help='Resource(s) to add')
 
 class ExtentListOptHandler(ListOptHandler):
@@ -1785,7 +1788,8 @@ class MediaOptHandler(BaseResourceOptHandler):
         """Repack a medium"""
         try:
             with AdminClient(lrs_required=True) as adm:
-                adm.repack(self.family, self.params.get('res'))
+                tags = self.params.get('tags', [])
+                adm.repack(self.family, self.params.get('res'), tags)
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))

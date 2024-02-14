@@ -38,9 +38,10 @@ from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-n
                                str2fs_type)
 from phobos.core.glue import admin_device_status, jansson_dumps  # pylint: disable=no-name-in-module
 from phobos.core.dss import DSSHandle
-from phobos.core.ffi import (CommInfo, LayoutInfo, LIBPHOBOS_ADMIN, MediaInfo,
-                             MediaStats, OperationFlags, Id, LibDrvInfo,
-                             LIBPHOBOS)
+from phobos.core.ffi import (CommInfo, Id, LayoutInfo, LibDrvInfo, LIBPHOBOS,
+                             LIBPHOBOS_ADMIN, MediaInfo, MediaStats,
+                             OperationFlags, Tags)
+
 
 def string_list2c_array(str_list, getter):
     """Convert a Python list into a C list. A getter can be used to select
@@ -430,10 +431,12 @@ class Client: # pylint: disable=too-many-public-methods
             raise EnvironmentError(rc, f"Failed to unload drive "
                                        f"{drive_serial_or_path}")
 
-    def repack(self, family, medium):
+    def repack(self, family, medium, tags):
         """Repack a tape"""
+        tags = Tags(tags)
         rc = LIBPHOBOS_ADMIN.phobos_admin_repack(
-            byref(self.handle), byref(Id(family, name=medium)))
+            byref(self.handle), byref(Id(family, name=medium)),
+            byref(tags))
 
         if rc:
             raise EnvironmentError(rc, f"Failed to repack {medium}")
