@@ -95,6 +95,22 @@ phobos tape format --force 073200L6
 ```
 The option is not yet available for directories and rados pools.
 
+# Repack media
+To repack a medium, use the following command:
+```
+phobos tape repack 073200L6
+```
+
+The operation will copy any alive extent from the 073200L6 tape to another empty
+tape and format the old one.
+
+You can provide tags to define the empty tape:
+```
+phobos tape repack --tags repack_target 073200L6
+```
+
+The repack operation is available for tapes only.
+
 # Listing resources
 Any device or media can be listed using the 'list' operation. For instance,
 the following will list all the existing tape identifiers:
