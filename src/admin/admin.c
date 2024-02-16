@@ -1153,7 +1153,8 @@ static int _get_source_medium(struct admin_handle *adm,
                               const struct pho_id *source,
                               struct pho_ext_loc *loc,
                               struct pho_io_descr *iod,
-                              struct io_adapter_module **ioa)
+                              struct io_adapter_module **ioa,
+                              enum fs_type *fs_type)
 {
     pho_resp_t *resp;
     pho_req_t req;
@@ -1176,7 +1177,8 @@ static int _get_source_medium(struct admin_handle *adm,
         LOG_RETURN(-EBADMSG, "Bad response for read allocation: ID #%d - '%s'",
                    resp->req_id, pho_srl_response_kind_str(resp));
 
-    rc = get_io_adapter((enum fs_type)resp->ralloc->media[0]->fs_type, ioa);
+    *fs_type = (enum fs_type)resp->ralloc->media[0]->fs_type;
+    rc = get_io_adapter(*fs_type, ioa);
     if (rc)
         LOG_GOTO(free_resp, rc, "Failed to init read IO adapter");
 
@@ -1310,22 +1312,95 @@ static void _build_new_extent(const struct pho_id *target,
     iod_target->iod_loc->extent = new_extent;
 }
 
+static int _clean_database_following_format(struct admin_handle *adm,
+                                            const struct pho_id *source)
+{
+    struct dss_filter filter;
+    struct extent *extents;
+    int count;
+    int rc;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::EXT::medium_family\": \"%s\"},"
+                          "  {\"DSS::EXT::medium_id\": \"%s\"}"
+                          "]}", rsc_family2str(source->family), source->name);
+    if (rc)
+        LOG_RETURN(rc, "Failed to build orphan extents retrieval filter");
+
+    rc = dss_extent_get(&adm->dss, &filter, &extents, &count);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_GOTO(free_ext, rc,
+                 "Failed to retrieve orphan extents of source medium");
+
+    if (count == 0)
+        goto free_ext;
+
+    rc = dss_extent_delete(&adm->dss, extents, count);
+    if (rc)
+        pho_error(rc, "Failed to remove orphan extents of source medium");
+
+free_ext:
+    dss_res_free(extents, count);
+
+    return rc;
+}
+
+static int _retrieve_fstype_from_medium(struct admin_handle *adm,
+                                        const struct pho_id *medium,
+                                        enum fs_type *fstype)
+{
+    struct dss_filter filter;
+    struct media_info *media;
+    int count;
+    int rc;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::MDA::family\": \"%s\"},"
+                          "  {\"DSS::MDA::id\": \"%s\"}"
+                          "]}", rsc_family2str(medium->family), medium->name);
+    if (rc)
+        LOG_RETURN(rc, "Failed to build medium filter");
+
+    rc = dss_media_get(&adm->dss, &filter, &media, &count);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc, "Failed to retrieve medium '%s:%s' info from DSS",
+                   rsc_family2str(medium->family), medium->name);
+
+    if (count != 1) {
+        dss_res_free(media, count);
+        LOG_RETURN(-EINVAL, "Did not retrieve one medium, %d instead", count);
+    }
+
+    *fstype = media->fs.type;
+    dss_res_free(media, count);
+
+    return 0;
+}
+
 int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
                         struct tags *tags)
 {
+    enum fs_type source_fs_type = PHO_FS_INVAL;
     struct pho_io_descr iod_source = {0};
     struct pho_io_descr iod_target = {0};
     struct pho_ext_loc loc_source = {0};
     struct pho_ext_loc loc_target = {0};
     struct io_adapter_module *ioa = {0};
     struct extent *ext_res = NULL;
-    GArray *new_ext_uuids;
+    GArray *new_ext_uuids = NULL;
     int ext_cnt_done = 0;
     struct pho_id target;
     ssize_t total_size;
     int ext_cnt;
     int rc;
     int i;
+
+    if (source->family != PHO_RSC_TAPE)
+        LOG_RETURN(-ENOTSUP, "Repack operation is only available for tapes");
 
     /* Invoke garbage collector for source tape */
     rc = dss_update_gc_for_tape(&adm->dss, source);
@@ -1338,15 +1413,14 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
         return rc;
 
     total_size = _sum_extent_size(ext_res, ext_cnt);
-    if (total_size == 0) {
-        dss_res_free(ext_res, ext_cnt);
-        return 0;
-    }
+    if (total_size == 0)
+        goto format;
 
     new_ext_uuids = g_array_new(FALSE, TRUE, sizeof(ext_res[0].uuid));
 
     /* Prepare read allocation */
-    rc = _get_source_medium(adm, source, &loc_source, &iod_source, &ioa);
+    rc = _get_source_medium(adm, source, &loc_source, &iod_source, &ioa,
+                            &source_fs_type);
     if (rc)
         goto free_ext;
 
@@ -1410,6 +1484,20 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
     g_array_free(new_ext_uuids, TRUE);
     new_ext_uuids = NULL;
 
+format:
+    if (source_fs_type == PHO_FS_INVAL) {
+        rc = _retrieve_fstype_from_medium(adm, source, &source_fs_type);
+        if (rc)
+            LOG_GOTO(free_ext, rc, "Failed to retrieve FS type for '%s'",
+                     source->name);
+    }
+
+    rc = phobos_admin_format(adm, source, 1, 1, source_fs_type, true, true);
+    if (rc)
+        LOG_GOTO(free_ext, rc, "Failed to format '%s'", source->name);
+
+    rc = _clean_database_following_format(adm, source);
+
 free_ext:
     if (new_ext_uuids) {
         rc = dss_update_extent_state(&adm->dss,
@@ -1423,7 +1511,7 @@ free_ext:
     }
     dss_res_free(ext_res, ext_cnt);
 
-    return 0;
+    return rc;
 }
 
 int phobos_admin_ping_lrs(struct admin_handle *adm)

@@ -187,6 +187,20 @@ static int extent_select_query(GString **conditions, int n_conditions,
     return 0;
 }
 
+static int extent_delete_query(void *void_extent, int item_cnt,
+                               GString *request)
+{
+    for (int i = 0; i < item_cnt; ++i) {
+        struct extent *extent = ((struct extent *) void_extent) + i;
+
+        g_string_append_printf(request,
+                               "DELETE FROM extent WHERE extent_uuid = '%s';",
+                               extent->uuid);
+    }
+
+    return 0;
+}
+
 /**
  * Read size bytes into digest from hexbuf buffer of hexadecimal characters
  *
@@ -283,7 +297,7 @@ const struct dss_resource_ops extent_ops = {
     .insert_query = extent_insert_query,
     .update_query = extent_update_query,
     .select_query = extent_select_query,
-    .delete_query = NULL,
+    .delete_query = extent_delete_query,
     .create       = extent_from_pg_row,
     .free         = extent_result_free,
     .size         = sizeof(struct extent),

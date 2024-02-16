@@ -123,6 +123,12 @@ function test_simple_repack
     fi
 
     obj_check
+
+    state=$($phobos $family list -o fs.status \
+        $(echo $media | cut -d' ' -f1))
+    if [ "$state" != "empty" ]; then
+        error "repack should format source medium"
+    fi
 }
 
 function test_raid1_repack_setup
@@ -159,6 +165,28 @@ function test_raid1_repack
         error "oid-mirror should not be available"
 
     return 0
+}
+
+function test_orphan_repack
+{
+    local family=$1
+
+    uuid=$($phobos object list -o uuid oid-repack-1)
+    $PSQL -qc "DELETE FROM object WHERE object_uuid='${uuid}';"
+    ext_uuid=$($PSQL -qtc \
+        "DELETE FROM layout WHERE object_uuid='${uuid}' RETURNING extent_uuid;")
+
+    $phobos $family repack $(echo $media | cut -d' ' -f1)
+
+    nb=$($PSQL -qtc "SELECT COUNT(*) FROM extent")
+    if [ $nb -ne 2 ]; then
+        error "repack should have removed the 'orphan' extent"
+    fi
+
+    nb=$($phobos object list --deprecated | wc -l)
+    if [ $nb -ne 0 ]; then
+        error "repack should have deleted deprecated objects"
+    fi
 }
 
 function test_dedup_repack_setup
@@ -238,6 +266,12 @@ function test_tagged_repack
     fi
 
     obj_check
+
+    state=$($phobos $family list -o fs.status \
+        $(echo $media | cut -d' ' -f1))
+    if [ "$state" != "empty" ]; then
+        error "repack should format source medium"
+    fi
 }
 
 if [[ ! -w /dev/changer ]]; then
@@ -247,6 +281,7 @@ fi
 TEST_CLEANUP=cleanup
 TESTS=("tape_setup;test_simple_repack tape;tape_cleanup")
 TESTS+=("test_raid1_repack_setup;test_raid1_repack tape;tape_cleanup")
+TESTS+=("tape_setup;test_orphan_repack tape;tape_cleanup")
 TESTS+=("test_dedup_repack_setup;test_dedup_repack tape;tape_cleanup")
 TESTS+=("tape_setup;test_tagged_repack tape;tape_cleanup")
 
