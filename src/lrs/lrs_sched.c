@@ -2238,7 +2238,7 @@ static int sched_handle_format(struct lrs_sched *sched,
                  "Unable to lock the media '%s' to format it", m.name);
     /*
      * dev_picker set the ld_ongoing_scheduled flag to true when a device
-     * is selected. This prevent selecting the same device again for an
+     * is selected. This prevents selecting the same device again for an
      * other medium of a request that needs several media.
      * For a format request, only one device is needed. We can directly
      * try to push the subrequest to the selected device and clear this
@@ -2252,7 +2252,7 @@ static int sched_handle_format(struct lrs_sched *sched,
     format_sub_request->reqc = reqc;
     rc = io_sched_remove_request(&sched->io_sched_hdl, reqc);
     if (rc)
-        LOG_GOTO(remove_format_err_out, rc,
+        LOG_GOTO(free_sub_request, rc,
                  "Failed to remove request from I/O scheduler");
 
     MUTEX_LOCK(&device->ld_mutex);
@@ -2262,6 +2262,8 @@ static int sched_handle_format(struct lrs_sched *sched,
 
     return 0;
 
+free_sub_request:
+    free(format_sub_request);
 remove_format_err_out:
     format_medium_remove(&sched->ongoing_format,
                          reqc->params.format.medium_to_format);
