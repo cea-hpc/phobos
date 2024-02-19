@@ -113,53 +113,67 @@ static int fail_mkdir(const char *path, mode_t mode)
     return 1;
 }
 
-static void create_and_load(struct dss_handle *handle, struct lrs_dev *device,
-                            struct media_info *medium)
+static struct media_info *
+create_and_load(struct dss_handle *handle, struct lrs_dev *device)
 {
+    struct media_info *medium_ptr;
+    struct media_info medium;
     bool fod;
     bool cr;
     int rc;
 
     create_device(device, DEVICE_NAME, LTO5_MODEL, handle);
-    create_medium(medium, MEDIUM_NAME);
+    create_medium(&medium, MEDIUM_NAME);
+    rc = dss_media_set(handle, &medium, 1, DSS_SET_INSERT, 0);
+    assert_return_code(rc, -rc);
 
     device->ld_sub_request = xmalloc(sizeof(*device->ld_sub_request));
-    rc = dev_load(device, &medium, true, &fod, &cr, false);
+    medium_ptr = &medium;
+    rc = dev_load(device, &medium_ptr, true);
     assert_return_code(-rc, rc);
 
     dss_logs_delete(handle, NULL);
-    assert_ptr_equal(device->ld_dss_media_info, medium);
+    assert_ptr_equal(device->ld_dss_media_info, medium_ptr);
+
+    /* Take a reference for the test. This avoids dev_unload from freeing the
+     * media_info.
+     */
+    return lrs_medium_acquire(&medium.rsc.id);
 }
 
-static void prepare_mount(struct dss_handle *handle, struct lrs_dev *device,
-                          struct media_info *medium)
+static struct media_info *
+prepare_mount(struct dss_handle *handle, struct lrs_dev *device)
 {
     struct fs_adapter_module *fsa = NULL;
+    struct media_info *medium;
     int rc;
 
     rc = get_fs_adapter(PHO_FS_LTFS, &fsa);
     assert_return_code(-rc, rc);
 
-    create_and_load(handle, device, medium);
+    medium = create_and_load(handle, device);
 
     setenv("PHOBOS_LTFS_cmd_format",
            "../../scripts/pho_ldm_helper format_ltfs \"%s\" \"%s\"", 0);
 
     rc = dev_format(device, fsa, true);
     assert_return_code(-rc, rc);
+
+    /* create and load already has taken a reference for us */
+    return medium;
 }
 
 static void ltfs_mount_mkdir_failure(void **state)
 {
     struct phobos_global_context *context = phobos_context();
-    struct media_info *medium = xcalloc(1, sizeof(*medium));
     struct dss_handle *handle = *state;
+    struct media_info *medium;
     struct lrs_dev device;
     char *mount_path;
     json_t *message;
     int rc;
 
-    prepare_mount(handle, &device, medium);
+    medium = prepare_mount(handle, &device);
 
     context->mock_ltfs.mock_mkdir = fail_mkdir;
 
@@ -179,6 +193,9 @@ static void ltfs_mount_mkdir_failure(void **state)
     dss_logs_delete(handle, NULL);
     cleanup_device(&device);
     pho_context_reset_mock_ltfs_functions();
+    rc = dss_media_delete(handle, medium, 1);
+    assert_return_code(rc, -rc);
+    lrs_medium_release(medium);
 }
 
 static int fail_command_call(const char *cmd_line, parse_cb_t cb_func,
@@ -194,15 +211,15 @@ static int fail_command_call(const char *cmd_line, parse_cb_t cb_func,
 static void ltfs_mount_command_call_failure(void **state)
 {
     struct phobos_global_context *context = phobos_context();
-    struct media_info *medium = xcalloc(1, sizeof(*medium));
     struct dss_handle *handle = *state;
+    struct media_info *medium;
     struct lrs_dev device;
     char *mount_path;
     json_t *message;
     char *cmd;
     int rc;
 
-    prepare_mount(handle, &device, medium);
+    medium = prepare_mount(handle, &device);
 
     context->mock_ltfs.mock_command_call = fail_command_call;
 
@@ -224,20 +241,23 @@ static void ltfs_mount_command_call_failure(void **state)
     dss_logs_delete(handle, NULL);
     cleanup_device(&device);
     pho_context_reset_mock_ltfs_functions();
+    rc = dss_media_delete(handle, medium, 1);
+    assert_return_code(rc, -rc);
+    lrs_medium_release(medium);
 }
 
 static void ltfs_mount_label_mismatch(void **state)
 {
-    struct media_info *medium = xcalloc(1, sizeof(*medium));
     char tape_label[PHO_LABEL_MAX_LEN + 1];
     struct fs_adapter_module *fsa = NULL;
     struct dss_handle *handle = *state;
+    struct media_info *medium;
     struct lrs_dev device;
     char *mount_path;
     json_t *message;
     int rc;
 
-    prepare_mount(handle, &device, medium);
+    medium = prepare_mount(handle, &device);
 
     strcpy(medium->fs.label, "fake_label");
     setenv("PHOBOS_LTFS_cmd_mount",
@@ -273,6 +293,9 @@ static void ltfs_mount_label_mismatch(void **state)
     dss_logs_delete(handle, NULL);
     cleanup_device(&device);
     pho_context_reset_mock_ltfs_functions();
+    rc = dss_media_delete(handle, medium, 1);
+    assert_return_code(rc, -rc);
+    lrs_medium_release(medium);
 }
 
 /* Taken from 'src/ldm-modules/ldm_fs_ltfs.c' */
@@ -293,16 +316,16 @@ static ssize_t fail_getxattr(const char *path, const char *name, void *value,
 static void ltfs_mount_get_label_failure(void **state)
 {
     struct phobos_global_context *context = phobos_context();
-    struct media_info *medium = xcalloc(1, sizeof(*medium));
     char tape_label[PHO_LABEL_MAX_LEN + 1];
     struct fs_adapter_module *fsa = NULL;
     struct dss_handle *handle = *state;
+    struct media_info *medium;
     struct lrs_dev device;
     char *mount_path;
     json_t *message;
     int rc;
 
-    prepare_mount(handle, &device, medium);
+    medium = prepare_mount(handle, &device);
 
     strcpy(medium->fs.label, "fake_label");
     setenv("PHOBOS_LTFS_cmd_mount",
@@ -338,20 +361,23 @@ static void ltfs_mount_get_label_failure(void **state)
     dev_unload(&device);
     dss_logs_delete(handle, NULL);
     cleanup_device(&device);
+    rc = dss_media_delete(handle, medium, 1);
+    assert_return_code(rc, -rc);
+    lrs_medium_release(medium);
 }
 
 static void ltfs_umount_command_call_failure(void **state)
 {
     struct phobos_global_context *context = phobos_context();
-    struct media_info *medium = xcalloc(1, sizeof(*medium));
     struct dss_handle *handle = *state;
+    struct media_info *medium;
     struct lrs_dev device;
     char *mount_path;
     json_t *message;
     char *cmd;
     int rc;
 
-    prepare_mount(handle, &device, medium);
+    medium = prepare_mount(handle, &device);
 
     rc = dev_mount(&device);
     assert_return_code(rc, -rc);
@@ -377,14 +403,15 @@ static void ltfs_umount_command_call_failure(void **state)
     dev_unload(&device);
     dss_logs_delete(handle, NULL);
     cleanup_device(&device);
+    lrs_medium_release(medium);
 }
 
 static void ltfs_format_command_call_failure(void **state)
 {
     struct phobos_global_context *context = phobos_context();
-    struct media_info *medium = xcalloc(1, sizeof(*medium));
     struct fs_adapter_module *fsa = NULL;
     struct dss_handle *handle = *state;
+    struct media_info *medium;
     struct lrs_dev device;
     json_t *message;
     char *cmd;
@@ -393,7 +420,7 @@ static void ltfs_format_command_call_failure(void **state)
     rc = get_fs_adapter(PHO_FS_LTFS, &fsa);
     assert_return_code(-rc, rc);
 
-    create_and_load(handle, &device, medium);
+    medium = create_and_load(handle, &device);
 
     context->mock_ltfs.mock_command_call = fail_command_call;
 
@@ -409,6 +436,8 @@ static void ltfs_format_command_call_failure(void **state)
                        2, message);
 
     free(cmd);
+    rc = dss_media_delete(handle, medium, 1);
+    assert_return_code(rc, -rc);
     dev_unload(&device);
     dss_logs_delete(handle, NULL);
     cleanup_device(&device);
@@ -427,14 +456,14 @@ static int fail_statfs(const char *file, struct statfs *buf)
 static void ltfs_df_statfs_failure(void **state)
 {
     struct phobos_global_context *context = phobos_context();
-    struct media_info *medium = xcalloc(1, sizeof(*medium));
+    struct media_info *medium;
     struct dss_handle *handle = *state;
     struct lrs_dev device;
     json_t *message;
     bool result;
     int rc;
 
-    prepare_mount(handle, &device, medium);
+    medium = prepare_mount(handle, &device);
 
     rc = dev_mount(&device);
     assert_return_code(rc, -rc);
@@ -455,6 +484,9 @@ static void ltfs_df_statfs_failure(void **state)
     dss_logs_delete(handle, NULL);
     cleanup_device(&device);
     pho_context_reset_mock_ltfs_functions();
+    rc = dss_media_delete(handle, medium, 1);
+    assert_return_code(rc, -rc);
+    lrs_medium_release(medium);
 }
 
 static int fail_setxattr(const char *path, const char *name, const void *value,
@@ -476,13 +508,13 @@ static int fail_setxattr(const char *path, const char *name, const void *value,
 static void ltfs_sync_setxattr_failure(void **state)
 {
     struct phobos_global_context *context = phobos_context();
-    struct media_info *medium = xcalloc(1, sizeof(*medium));
+    struct media_info *medium;
     struct dss_handle *handle = *state;
     struct lrs_dev device;
     json_t *message;
     int rc;
 
-    create_and_load(handle, &device, medium);
+    medium = create_and_load(handle, &device);
 
     context->mock_ltfs.mock_setxattr = fail_setxattr;
     rc = medium_sync(&device);
@@ -499,6 +531,31 @@ static void ltfs_sync_setxattr_failure(void **state)
     dev_unload(&device);
     dss_logs_delete(handle, NULL);
     cleanup_device(&device);
+    rc = dss_media_delete(handle, medium, 1);
+    assert_return_code(rc, -rc);
+    lrs_medium_release(medium);
+}
+
+static int test_ltfs_logs_setup(void **state)
+{
+    int rc = global_setup_dss_with_dbinit(state);
+
+    if (rc)
+        return rc;
+
+    lrs_cache_setup(PHO_RSC_TAPE);
+    return 0;
+}
+
+static int test_ltfs_logs_teardown(void **state)
+{
+    int rc = global_teardown_dss_with_dbdrop(state);
+
+    if (rc)
+        return rc;
+
+    lrs_cache_cleanup(PHO_RSC_TAPE);
+    return 0;
 }
 
 int main(void)
@@ -533,8 +590,8 @@ int main(void)
     pho_log_level_set(PHO_LOG_ERROR);
 
     error_count = cmocka_run_group_tests(test_ltfs_logs,
-                                         global_setup_dss_with_dbinit,
-                                         global_teardown_dss_with_dbdrop);
+                                         test_ltfs_logs_setup,
+                                         test_ltfs_logs_teardown);
 
     pho_cfg_local_fini();
     pho_context_fini();

@@ -83,6 +83,22 @@ static void unload_medium(struct lrs_dev *dev)
     dev->ld_dss_media_info = NULL;
 }
 
+enum io_request_type IO_REQ_TYPE;
+
+static void wrap_create_medium(struct media_info *medium, const char *name)
+{
+    create_medium(medium, name);
+    switch (IO_REQ_TYPE) {
+    case IO_REQ_READ:
+    case IO_REQ_WRITE:
+        medium->fs.status = PHO_FS_STATUS_EMPTY;
+        break;
+    case IO_REQ_FORMAT:
+        medium->fs.status = PHO_FS_STATUS_BLANK;
+        break;
+    }
+}
+
 static void gptr_array_from_list(GPtrArray *array,
                                  void *data, guint len,
                                  size_t elem_size)
@@ -352,33 +368,6 @@ static void dev_picker_flags(void **data)
     cleanup_device(&device[1]);
 }
 
-enum io_request_type IO_REQ_TYPE;
-
-int fetch_and_check_medium_info(struct lock_handle *lock_handle,
-                                struct req_container *reqc,
-                                struct pho_id *m_id,
-                                size_t index,
-                                struct media_info **target_medium)
-{
-    PhoResourceId *medium_id;
-
-    assert_true(pho_request_is_format(reqc->req) ||
-                pho_request_is_read(reqc->req));
-
-    if (pho_request_is_format(reqc->req))
-        medium_id = reqc->req->format->med_id;
-    else if (pho_request_is_read(reqc->req))
-        medium_id = reqc->req->ralloc->med_ids[index];
-    else
-        return -EINVAL;
-
-    *target_medium = xcalloc(1, sizeof(**target_medium));
-
-    strcpy((*target_medium)->rsc.id.name, medium_id->name);
-
-    return 0;
-}
-
 int tape_drive_compat_models(const char *tape_model, const char *drive_model,
                              bool *res)
 {
@@ -399,6 +388,87 @@ int sched_select_medium(struct io_scheduler *io_sched,
     *p_media = mock_ptr_type(struct media_info *);
 
     return mock();
+}
+
+static GHashTable * fake_dss;
+
+static void fake_dss_setup(void)
+{
+    fake_dss = g_hash_table_new(g_str_hash, g_str_equal);
+}
+
+static void fake_dss_add(struct media_info *medium)
+{
+    g_hash_table_insert(fake_dss, medium->rsc.id.name, medium);
+    /* take a reference for the tests */
+    medium = lrs_medium_acquire(&medium->rsc.id);
+    /* Update the medium to store the in cache value in the fake DSS
+     * This hack makes the implementation of remove_media easier.
+     */
+    g_hash_table_insert(fake_dss, medium->rsc.id.name, medium);
+}
+
+static void fake_dss_remove(struct media_info *medium)
+{
+    medium = g_hash_table_lookup(fake_dss, medium->rsc.id.name);
+    assert_non_null(medium);
+    g_hash_table_remove(fake_dss, medium->rsc.id.name);
+    lrs_medium_release(medium);
+}
+
+static void add_media(struct media_info *media, size_t count)
+{
+    size_t i;
+
+    for (i = 0; i < count; i++)
+        fake_dss_add(&media[i]);
+}
+
+static void remove_media(struct media_info *media, size_t count)
+{
+    size_t i;
+
+    for (i = 0; i < count; i++)
+        fake_dss_remove(&media[i]);
+}
+
+static void fake_dss_cleanup(void)
+{
+    g_hash_table_unref(fake_dss);
+}
+
+int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                  struct media_info **med_ls, int *med_cnt)
+{
+    json_t *value;
+    size_t index;
+    json_t *and;
+
+    and = json_object_get(filter->df_json, "$AND");
+    json_array_foreach(and, index, value) {
+        json_t *id;
+
+        if (!json_is_object(value))
+            continue;
+
+        id = json_object_get(value, "DSS::MDA::id");
+        if (!id || !json_is_string(id))
+            continue;
+
+        *med_ls = g_hash_table_lookup(fake_dss, json_string_value(id));
+        assert_non_null(*med_ls);
+        *med_cnt = 1;
+
+        return 0;
+    }
+
+    return -ENOENT;
+}
+
+void dss_res_free(void *item_list, int item_cnt)
+{
+    (void) item_list;
+    (void) item_cnt;
 }
 
 static void create_request(struct req_container *reqc,
@@ -441,7 +511,7 @@ static void create_request(struct req_container *reqc,
 
         for (i = 0; i < n; i++) {
             reqc->req->ralloc->med_ids[i]->name = xstrdup(media_names[i]);
-            reqc->req->ralloc->med_ids[i]->family = PHO_RSC_DIR;
+            reqc->req->ralloc->med_ids[i]->family = PHO_RSC_TAPE;
         }
         break;
     } case IO_REQ_FORMAT: {
@@ -450,7 +520,7 @@ static void create_request(struct req_container *reqc,
         pho_srl_request_format_alloc(reqc->req);
 
         reqc->req->format->med_id->name = xstrdup(media_names[0]);
-        reqc->req->format->med_id->family = PHO_RSC_DIR;
+        reqc->req->format->med_id->family = PHO_RSC_TAPE;
 
         rc = fetch_and_check_medium_info(lock_handle, reqc, &m, 0,
                                          reqc_get_medium_to_alloc(reqc, 0));
@@ -467,7 +537,7 @@ static void destroy_request(struct req_container *reqc)
     else if (pho_request_is_read(reqc->req))
         free(reqc->params.rwalloc.media);
     else if (pho_request_is_format(reqc->req))
-        free(*reqc_get_medium_to_alloc(reqc, 0));
+        lrs_medium_release(*reqc_get_medium_to_alloc(reqc, 0));
 
     pho_srl_request_free(reqc->req, false);
     free(reqc->req);
@@ -482,7 +552,7 @@ static void free_medium_to_alloc(struct req_container *reqc, size_t i)
 
     target_medium = &reqc->params.rwalloc.media[i].alloc_medium;
 
-    media_info_free(*target_medium);
+    lrs_medium_release(*target_medium);
     *target_medium = NULL;
 }
 
@@ -495,6 +565,10 @@ static int io_sched_setup(void **data)
 
     *data = io_sched;
 
+    fake_dss_setup();
+    rc = lrs_cache_setup(PHO_RSC_TAPE);
+    assert_return_code(rc, -rc);
+
     rc = io_sched_handle_load_from_config(io_sched, PHO_RSC_TAPE);
     assert_return_code(rc, -rc);
 
@@ -505,8 +579,10 @@ static int io_sched_teardown(void **data)
 {
     struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
 
+    lrs_cache_cleanup(PHO_RSC_TAPE);
     io_sched_fini(io_sched);
     free(io_sched);
+    fake_dss_cleanup();
 
     return 0;
 }
@@ -605,6 +681,7 @@ static void io_sched_one_request(void **data)
     static const char * const media_names[] = {
         "M1", "M2",
     };
+    struct media_info media[2];
     struct req_container reqc;
     struct lrs_dev dev;
     int rc;
@@ -612,6 +689,9 @@ static void io_sched_one_request(void **data)
     io_sched->global_device_list = devices;
     create_device(&dev, "test", LTO5_MODEL, NULL);
     gptr_array_from_list(devices, &dev, 1, sizeof(dev));
+    wrap_create_medium(&media[0], media_names[0]);
+    wrap_create_medium(&media[1], media_names[1]);
+    add_media(media, 2);
     create_request(&reqc, media_names, 2, 1, io_sched->lock_handle);
 
     rc = io_sched_push_request(io_sched, &reqc);
@@ -636,6 +716,7 @@ static void io_sched_one_request(void **data)
     cleanup_device(&dev);
     assert_return_code(rc, -rc);
 
+    remove_media(media, 2);
     destroy_request(&reqc);
     g_ptr_array_free(devices, true);
 }
@@ -643,20 +724,23 @@ static void io_sched_one_request(void **data)
 static void io_sched_one_medium_no_device(void **data)
 {
     struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
-    GPtrArray *devices = g_ptr_array_new();
-    struct req_container *new_reqc;
     static const char * const media_names[] = {
         "M1", "M2", "M3",
     };
+    GPtrArray *devices = g_ptr_array_new();
+    struct req_container *new_reqc;
+    struct media_info media[3];
     struct req_container reqc;
-    struct media_info M1;
     struct lrs_dev *dev;
     size_t index;
     int rc;
+    int i;
 
     io_sched->global_device_list = devices;
+    for (i = 0; i < 3; i++)
+        wrap_create_medium(&media[i], media_names[i]);
+    add_media(media, 3);
     create_request(&reqc, media_names, 3, 2, io_sched->lock_handle);
-    create_medium(&M1, media_names[0]);
 
     rc = io_sched_push_request(io_sched, &reqc);
     assert_return_code(rc, -rc);
@@ -669,6 +753,7 @@ static void io_sched_one_medium_no_device(void **data)
 
     if (new_reqc == NULL) {
         rc = io_sched_remove_request(io_sched, &reqc);
+        remove_media(media, 3);
         destroy_request(&reqc);
         assert_return_code(rc, -rc);
         g_ptr_array_free(devices, true);
@@ -687,6 +772,7 @@ static void io_sched_one_medium_no_device(void **data)
     rc = io_sched_remove_request(io_sched, &reqc);
     assert_return_code(rc, -rc);
 
+    remove_media(media, 3);
     destroy_request(&reqc);
     g_ptr_array_free(devices, true);
 }
@@ -699,18 +785,22 @@ static void io_sched_one_medium_no_device_available(void **data)
         "M1", "M2", "M3",
     };
     struct req_container *new_reqc;
-    struct media_info media[2];
+    struct media_info media[3];
     struct req_container reqc;
     struct lrs_dev devices[2];
     struct lrs_dev *dev;
     size_t index;
     int rc;
+    int i;
 
     io_sched->global_device_list = device_array;
     create_device(&devices[0], "D1", LTO5_MODEL, NULL);
     create_device(&devices[1], "D2", LTO5_MODEL, NULL);
-    create_medium(&media[0], media_names[0]);
-    create_medium(&media[1], media_names[1]);
+
+    for (i = 0; i < 3; i++)
+        wrap_create_medium(&media[i], media_names[i]);
+    add_media(media, 3);
+
     create_request(&reqc, media_names, 3, 2, io_sched->lock_handle);
     mount_medium(&devices[0], &media[0]);
     mount_medium(&devices[1], &media[1]);
@@ -747,6 +837,7 @@ static void io_sched_one_medium_no_device_available(void **data)
     cleanup_device(&devices[1]);
     assert_return_code(rc, -rc);
 
+    remove_media(media, 3);
     destroy_request(&reqc);
     g_ptr_array_free(device_array, true);
 }
@@ -768,7 +859,8 @@ static void io_sched_one_medium(void **data)
 
     io_sched->global_device_list = devices;
     create_device(&device, "test", LTO5_MODEL, NULL);
-    create_medium(&M1, media_names[0]);
+    wrap_create_medium(&M1, media_names[0]);
+    add_media(&M1, 1);
     create_request(&reqc, media_names, 1, 1, io_sched->lock_handle);
 
     mount_medium(&device, &M1);
@@ -797,6 +889,7 @@ static void io_sched_one_medium(void **data)
     cleanup_device(&device);
     assert_return_code(rc, -rc);
 
+    remove_media(&M1, 1);
     destroy_request(&reqc);
     g_ptr_array_free(devices, true);
 }
@@ -827,7 +920,8 @@ static void io_sched_4_medium(void **data)
     create_device(&devices[3], "D4", LTO5_MODEL, NULL);
 
     for (i = 0; i < 4; i++)
-        create_medium(&media[i], media_names[i]);
+        wrap_create_medium(&media[i], media_names[i]);
+    add_media(media, 4);
 
     create_request(&reqc, media_names, 4, 2, io_sched->lock_handle);
 
@@ -908,6 +1002,7 @@ test_end:
         assert_return_code(rc, -rc);
     }
 
+    remove_media(media, 4);
     destroy_request(&reqc);
     g_ptr_array_free(device_array, true);
 }
@@ -935,8 +1030,9 @@ static void io_sched_not_enough_devices(void **data)
     io_sched->global_device_list = device_array;
     create_device(&devices[0], "D1", LTO5_MODEL, NULL);
     create_device(&devices[1], "D2", LTO5_MODEL, NULL);
-    create_medium(&media[0], media_names[0]);
-    create_medium(&media[1], media_names[1]);
+    wrap_create_medium(&media[0], media_names[0]);
+    wrap_create_medium(&media[1], media_names[1]);
+    add_media(media, 2);
     create_request(&reqc, media_names, 2, 2, io_sched->lock_handle);
 
     mount_medium(&devices[0], &media[0]);
@@ -989,6 +1085,7 @@ test_end:
     cleanup_device(&devices[1]);
     assert_return_code(rc, -rc);
 
+    remove_media(media, 2);
     destroy_request(&reqc);
     g_ptr_array_free(device_array, true);
 }
@@ -1001,19 +1098,22 @@ static void io_sched_requeue_one_request(void **data)
     static const char * const media_names[] = {
         "M1", "M2",
     };
+    struct media_info media[2];
     struct req_container reqc;
     struct lrs_dev device;
-    struct media_info M1;
     struct lrs_dev *dev;
     size_t index;
     int rc;
+    int i;
 
     io_sched->global_device_list = devices;
     create_device(&device, "test", LTO5_MODEL, NULL);
     gptr_array_from_list(devices, &device, 1, sizeof(device));
 
-    create_medium(&M1, media_names[0]);
-    mount_medium(&device, &M1);
+    for (i = 0; i < 2; i++)
+        wrap_create_medium(&media[i], media_names[i]);
+    add_media(media, 2);
+    mount_medium(&device, &media[0]);
 
     create_request(&reqc, media_names, 2, 1, io_sched->lock_handle);
 
@@ -1039,7 +1139,8 @@ static void io_sched_requeue_one_request(void **data)
 
     index = 0;
     /* reset alloc medium */
-    reqc.params.rwalloc.media[0].alloc_medium = NULL;
+    if (IO_REQ_TYPE != IO_REQ_FORMAT)
+        reqc.params.rwalloc.media[0].alloc_medium = NULL;
     /* the device is not scheduled */
     dev->ld_ongoing_scheduled = false;
 
@@ -1060,6 +1161,7 @@ static void io_sched_requeue_one_request(void **data)
     rc = io_sched_remove_request(io_sched, &reqc);
     assert_return_code(rc, -rc);
 
+    remove_media(media, 2);
     destroy_request(&reqc);
     g_ptr_array_free(devices, true);
 }
@@ -1091,8 +1193,9 @@ static void test_io_sched_error(void **data, bool free_device)
     create_device(&devices[2], "D3", LTO5_MODEL, NULL);
 
     for (i = 0; i < 4; i++)
-        create_medium(&media[i], media_names[i]);
+        wrap_create_medium(&media[i], media_names[i]);
 
+    add_media(media, 4);
     create_request(&reqc, media_names, 4, 3, io_sched->lock_handle);
 
     mount_medium(&devices[0], &media[0]);
@@ -1188,6 +1291,7 @@ static void test_io_sched_error(void **data, bool free_device)
         assert_return_code(rc, -rc);
     }
 
+    remove_media(media, 4);
     destroy_request(&reqc);
     g_ptr_array_free(device_array, true);
 }
@@ -1230,8 +1334,9 @@ static void io_sched_eagain(void **data)
     create_device(&device, "D1", LTO5_MODEL, NULL);
 
     for (i = 0; i < 3; i++)
-        create_medium(&media[i], media_names[i]);
+        wrap_create_medium(&media[i], media_names[i]);
 
+    add_media(media, 3);
     create_request(&reqc, media_names, 3, 1, io_sched->lock_handle);
 
     gptr_array_from_list(device_array, &device, 1, sizeof(device));
@@ -1285,6 +1390,7 @@ static void io_sched_eagain(void **data)
     cleanup_device(&device);
     assert_return_code(rc, -rc);
 
+    remove_media(media, 3);
     destroy_request(&reqc);
     g_ptr_array_free(device_array, true);
 }
@@ -2039,7 +2145,7 @@ int main(void)
     if (rc)
         return rc;
 
-    pho_log_level_set(PHO_LOG_INFO);
+    pho_log_level_set(PHO_LOG_DEBUG);
     /* TODO the initial state of the devices can be a parameter (mounted,
      * loaded, empty)
      */

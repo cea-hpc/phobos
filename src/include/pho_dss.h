@@ -313,6 +313,7 @@ int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
  *
  * @return 0 on success, negated errno on failure
  */
+mockable
 int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
                   struct media_info **med_ls, int *med_cnt);
 
@@ -425,6 +426,7 @@ int dss_logs_delete(struct dss_handle *hdl, const struct dss_filter *filter);
  *  @param[in]  item_list   list of items to free
  *  @param[in]  item_cnt    number of items in item_list
  */
+mockable
 void dss_res_free(void *item_list, int item_cnt);
 
 /**

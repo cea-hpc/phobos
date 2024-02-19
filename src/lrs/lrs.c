@@ -530,15 +530,6 @@ static int release_medium(struct lrs_sched *sched,
     }
 
     /* update media phys_spc_free stats in advance, before next sync */
-    /**
-     * TODO: we can save media status into DSS but we can also use local cached
-     * values.
-     *
-     * Many modifications are needed:
-     * - remove sched_load_dev_state from format/read/write
-     * - take into account current cached value for loaded media into
-     *   sched_select_medium
-     */
     MUTEX_LOCK(&dev->ld_mutex);
     if (release->rc == 0)
         rc = update_phys_spc_free(comm_dss, dev->ld_dss_media_info,

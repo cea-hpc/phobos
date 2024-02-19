@@ -304,6 +304,9 @@ static int find_write_device(struct io_scheduler *io_sched,
     *dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
                                (*medium)->rsc.id.name, &sched_ready);
     if (*dev && sched_ready) {
+        /* Update the device's medium with *medium which is fresh from the DSS.
+         */
+        atomic_dev_medium_swap(*dev, *medium);
         if (!((*dev)->ld_io_request_type & IO_REQ_WRITE)) {
             rc = exchange_device(io_sched, IO_REQ_WRITE, *dev);
             if (rc)
@@ -384,8 +387,10 @@ static int generic_get_device_medium_pair(struct io_scheduler *io_sched,
 
     if (pho_request_is_read(reqc->req) &&
         *reqc_get_medium_to_alloc(reqc, sreq->medium_index)) {
-        /* This is a retry on a medium previously allocated for this request. */
-        media_info_free(*reqc_get_medium_to_alloc(reqc, sreq->medium_index));
+        /* This is a retry on a medium previously allocated for this request.
+         * Release the reference in the request container.
+         */
+        lrs_medium_release(*reqc_get_medium_to_alloc(reqc, sreq->medium_index));
         *reqc_get_medium_to_alloc(reqc, sreq->medium_index) = NULL;
     }
 
@@ -423,7 +428,6 @@ static int generic_get_device_medium_pair(struct io_scheduler *io_sched,
 
         rc = find_read_device(io_sched, reqc, device, index,
                               sreq->medium_index);
-
         if (!is_error)
             /* On error, elem is NULL since the request has already been removed
              */

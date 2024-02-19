@@ -168,10 +168,10 @@ void create_medium(struct media_info *medium, const char *name)
 
     medium->fs.status = PHO_FS_STATUS_BLANK;
     medium->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
-    medium->rsc.model = NULL;
+    medium->rsc.model = "LTO5";
     medium->rsc.id.family = PHO_RSC_TAPE;
     medium->fs.type = PHO_FS_LTFS;
-    strcpy(medium->rsc.id.name, name);
+    pho_id_name_set(&medium->rsc.id, name);
 
     medium->flags.put = true;
     medium->flags.get = true;

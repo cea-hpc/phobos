@@ -27,7 +27,9 @@
 #endif
 
 #include <assert.h>
+#include <stdatomic.h>
 
+#include "lrs_cache.h"
 #include "lrs_cfg.h"
 #include "lrs_device.h"
 #include "lrs_sched.h"
@@ -45,8 +47,6 @@ struct medium_switch_context {
     bool failure_on_device;
     /** cf. release_medium_on_dev_only_failure in dev_load */
     bool release_medium;
-    /** cf. free_medium in dev_load */
-    bool free_medium;
 };
 
 static int dev_medium_switch(struct lrs_dev *dev,
@@ -182,7 +182,7 @@ static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
                                struct lrs_dev *dev)
 {
     free((void *)dev->ld_technology);
-    media_info_free(dev->ld_dss_media_info);
+    lrs_medium_release(dev->ld_dss_media_info);
     dev->ld_dss_media_info = NULL;
 
     ldm_dev_state_fini(&dev->ld_sys_dev_state);
@@ -499,11 +499,7 @@ bool is_request_tosync_ended(struct req_container *req)
     return true;
 }
 
-/**
- *  TODO: will become a device thread static function when all media operations
- *  will be moved to device thread
- */
-void clean_tosync_array(struct lrs_dev *dev, int rc)
+static void clean_tosync_array(struct lrs_dev *dev, int rc)
 {
     GPtrArray *tosync_array = dev->ld_sync_params.tosync_array;
 
@@ -707,6 +703,7 @@ static void check_needs_sync(struct lrs_dev_hdl *handle, struct lrs_dev *dev)
     MUTEX_UNLOCK(&dev->ld_mutex);
 }
 
+/* called with a lock on \p dev */
 int medium_sync(struct lrs_dev *dev)
 {
     struct media_info *media_info = dev->ld_dss_media_info;
@@ -737,7 +734,9 @@ int medium_sync(struct lrs_dev *dev)
     return rc;
 }
 
-/** Update media_info stats and push its new state to the DSS */
+/** Update media_info stats and push its new state to the DSS. Called with a
+ * lock on \p dev.
+ */
 static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
                                 int media_rc, long long nb_new_obj)
 {
@@ -869,7 +868,8 @@ int dev_umount(struct lrs_dev *dev)
     if (rc)
         LOG_GOTO(out_err, rc,
                  "Unable to get fs adapter '%s' to unmount medium '%s' from "
-                 "device '%s'", fs_type_names[dev->ld_dss_media_info->fs.type],
+                 "device '%s'",
+                 fs_type2str(dev->ld_dss_media_info->fs.type),
                  dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
 
     rc = ldm_fs_umount(fsa, dev->ld_dev_path, dev->ld_mnt_path, &log.message);
@@ -930,7 +930,7 @@ static int dss_device_release(struct dss_handle *dss, struct dev_info *dev)
 int dev_unload(struct lrs_dev *dev)
 {
     /* let the library select the target location */
-    struct media_info *medium_to_unlock_free = NULL;
+    struct media_info *unloaded_medium = NULL;
     struct lib_handle lib_hdl;
     int rc2;
     int rc;
@@ -956,11 +956,11 @@ int dev_unload(struct lrs_dev *dev)
          *  - consider maintaining lists of errors to diagnose and decide who to
          *    exclude from the cool game.
          */
-        LOG_GOTO(out_close, rc, "Media move failed");
+        LOG_GOTO(out_close, rc, "Media unload failed");
 
     MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_op_status = PHO_DEV_OP_ST_EMPTY;
-    medium_to_unlock_free = dev->ld_dss_media_info;
+    unloaded_medium = dev->ld_dss_media_info;
     dev->ld_dss_media_info = NULL;
     MUTEX_UNLOCK(&dev->ld_mutex);
 
@@ -971,9 +971,8 @@ out_close:
 
 out:
     if (!rc) {
-        rc = dss_medium_release(&dev->ld_device_thread.dss,
-                                medium_to_unlock_free);
-        media_info_free(medium_to_unlock_free);
+        rc = dss_medium_release(&dev->ld_device_thread.dss, unloaded_medium);
+        lrs_medium_release(unloaded_medium);
     } else {
         MUTEX_LOCK(&dev->ld_mutex);
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
@@ -1040,8 +1039,7 @@ static void fail_release_free_medium(struct lrs_dev *dev,
 
     if (free_medium) {
         MUTEX_LOCK(&dev->ld_mutex);
-        media_info_free(*medium);
-        *medium = NULL;
+        lrs_medium_release(*medium);
         MUTEX_UNLOCK(&dev->ld_mutex);
     }
 }
@@ -1073,7 +1071,7 @@ static void fail_release_device(struct lrs_dev *dev)
 }
 
 int dev_load(struct lrs_dev *dev, struct media_info **medium,
-             bool release_medium_on_dev_only_failure, bool free_medium)
+             bool release_medium_on_dev_only_failure)
 {
     struct lib_handle lib_hdl;
     int rc2;
@@ -1115,16 +1113,21 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium,
         dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
         MUTEX_UNLOCK(&dev->ld_mutex);
         dev->ld_sub_request->failure_on_medium = true;
-        fail_release_free_medium(dev, medium, free_medium);
-        LOG_GOTO(out_close, rc, "Media move failed");
+        /* do not release the medium as it will be freed when all the
+         * sub-requests are managed (i.e. canceled since this one failed).
+         */
+        fail_release_free_medium(dev, medium, false);
+        LOG_GOTO(out_close, rc, "Media load failed");
     }
+
+    *medium = lrs_medium_acquire(&(*medium)->rsc.id);
+    if (!*medium)
+        GOTO(out_close, rc = -errno);
 
     /* update device status */
     MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_op_status = PHO_DEV_OP_ST_LOADED;
     dev->ld_dss_media_info = *medium;
-    if (free_medium)
-        *medium = NULL;
     MUTEX_UNLOCK(&dev->ld_mutex);
     rc = 0;
 
@@ -1153,8 +1156,8 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
     ENTRY;
 
     dss = &dev->ld_device_thread.dss;
-    init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
-                 &dev->ld_dss_media_info->rsc.id, PHO_LTFS_FORMAT);
+    init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id, &medium->rsc.id,
+                 PHO_LTFS_FORMAT);
 
     pho_verb("format: medium '%s'", medium->rsc.id.name);
 
@@ -1188,6 +1191,11 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
     }
 
     MUTEX_UNLOCK(&dev->ld_mutex);
+    /* The only concurrent modification (i.e. outside of the device thread) is
+     * done when receiving a release. Since the medium has just been formatted,
+     * no concurrent modifications can be done. So this is thread safe since we
+     * have a reference on the medium.
+     */
     rc = dss_media_set(&dev->ld_device_thread.dss, medium, 1, DSS_SET_UPDATE,
                        fields);
     if (rc)
@@ -1218,11 +1226,11 @@ static void queue_format_response(struct tsqueue *response_queue,
     tsqueue_push(response_queue, respc);
 }
 
+/* must be called with a reference on lrs_dev::ld_dss_media_info */
 static bool medium_is_loaded(struct lrs_dev *dev, struct media_info *medium)
 {
     return (dev->ld_op_status == PHO_DEV_OP_ST_LOADED) &&
-        !strcmp(dev->ld_dss_media_info->rsc.id.name,
-                medium->rsc.id.name);
+        !strcmp(dev->ld_dss_media_info->rsc.id.name, medium->rsc.id.name);
 }
 
 static int dev_handle_format(struct lrs_dev *dev)
@@ -1231,17 +1239,16 @@ static int dev_handle_format(struct lrs_dev *dev)
     struct medium_switch_context context = {0};
     struct media_info *medium_to_format;
     struct req_container *reqc;
-    bool loaded = false;
     int rc;
 
     reqc = dev->ld_sub_request->reqc;
     medium_to_format = reqc->params.format.medium_to_format;
-    context.free_medium = false;
     context.release_medium = true;
 
     if (medium_is_loaded(dev, medium_to_format)) {
-        /* medium to format already loaded, use existing dev->ld_dss_media_info,
-         * free reqc->params.format.medium_to_format
+        /* The medium to format is already loaded, use existing
+         * dev->ld_dss_media_info. Keep the reference of the sub_request as it
+         * will be released with the sub_request.
          */
         pho_info("medium %s to format is already loaded into device %s",
                  dev->ld_dss_media_info->rsc.id.name,
@@ -1259,15 +1266,9 @@ static int dev_handle_format(struct lrs_dev *dev)
         /* TODO: use sched retry queue */
         tsqueue_push(dev->sched_req_queue, reqc);
         goto out;
-    }
-
-    MUTEX_LOCK(&dev->ld_mutex);
-    reqc->params.format.medium_to_format = NULL;
-    MUTEX_UNLOCK(&dev->ld_mutex);
-    if (rc)
+    } else if (rc) {
         goto out_response;
-
-    loaded = true;
+    }
 
 format:
     rc = dev_format(dev, reqc->params.format.fsa, reqc->req->format->unlock);
@@ -1282,13 +1283,6 @@ out:
     MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_sub_request = NULL;
     format_medium_remove(dev->ld_ongoing_format, medium_to_format);
-    /* free medium_to_format is not reused */
-    if (rc && !loaded) {
-        /* free medium_to_format is not reused */
-        media_info_free(medium_to_format);
-        reqc->params.format.medium_to_format = NULL;
-    }
-
     sub_request_free(subreq);
     MUTEX_UNLOCK(&dev->ld_mutex);
     return rc;
@@ -1306,8 +1300,6 @@ bool locked_cancel_rwalloc_on_error(struct sub_request *sub_request,
 
     rwalloc_medium = &reqc->params.rwalloc.media[sub_request->medium_index];
     rwalloc_medium->status = SUB_REQUEST_CANCEL;
-    media_info_free(rwalloc_medium->alloc_medium);
-    rwalloc_medium->alloc_medium = NULL;
     *ended = is_rwalloc_ended(reqc);
     return true;
 }
@@ -1343,6 +1335,7 @@ static bool cancel_subrequest_on_error(struct sub_request *sub_request)
         if (ended)
             sched_req_free(sub_request->reqc);
 
+        /* do not free reqc when sub_request_free is called */
         sub_request->reqc = NULL;
     }
 
@@ -1380,7 +1373,16 @@ static void fill_rwalloc_resp_container(struct lrs_dev *dev,
         pho_resp_write_elt_t *wresp;
 
         wresp = resp->walloc->media[sub_request->medium_index];
+
+        /* phys_spc_free is also updated by the communication thread on release.
+         * But since we are about to send an allocation response to the client,
+         * we know that no concurrent release can occur. No need to lock.
+         *
+         * /!\ when families other than tape are allowed multiple concurrent
+         * requests, the device mutex must be taken here.
+         */
         wresp->avail_size = dev->ld_dss_media_info->stats.phys_spc_free;
+
         wresp->med_id->family = dev->ld_dss_media_info->rsc.id.family;
         wresp->root_path = xstrdup(dev->ld_mnt_path);
         wresp->med_id->name = xstrdup(dev->ld_dss_media_info->rsc.id.name);
@@ -1409,7 +1411,7 @@ static bool rwalloc_can_be_requeued(struct sub_request *sub_request)
 }
 
 /**
- * Set sub_request result in request
+ * Set sub_request result in request. Called with lock on \p dev.
  *
  * If request is ended, a response is queued and the request is freed and set
  * to NULL.
@@ -1440,14 +1442,14 @@ static void handle_rwalloc_sub_request_result(struct lrs_dev *dev,
                                               bool *canceled)
 {
     struct req_container *reqc = sub_request->reqc;
-    struct rwalloc_medium  *rwalloc_medium;
-    bool free_medium = true;
+    struct rwalloc_medium *rwalloc_medium;
     bool ended = false;
 
     *sub_request_requeued = false;
     *canceled = false;
     MUTEX_LOCK(&reqc->mutex);
     rwalloc_medium = &reqc->params.rwalloc.media[sub_request->medium_index];
+
     *canceled = locked_cancel_rwalloc_on_error(sub_request, &ended);
     if (*canceled)
         goto out_free;
@@ -1463,8 +1465,6 @@ static void handle_rwalloc_sub_request_result(struct lrs_dev *dev,
     if (rwalloc_can_be_requeued(sub_request)) {
         /* requeue failed request in the scheduler */
         *sub_request_requeued = true;
-        if (!sub_request->failure_on_medium)
-            free_medium = false;
 
         pho_debug("Requeuing %p (%s) on error", sub_request->reqc,
                   pho_srl_request_kind_str(sub_request->reqc->req));
@@ -1483,18 +1483,20 @@ try_send_response:
     ended = is_rwalloc_ended(reqc);
     if (!sub_request_rc && ended) {
         tsqueue_push(dev->ld_response_queue, reqc->params.rwalloc.respc);
+        /* do not free the response in sched_req_free */
         reqc->params.rwalloc.respc = NULL;
     }
 
 out_free:
-    if (free_medium) {
-        media_info_free(rwalloc_medium->alloc_medium);
-        rwalloc_medium->alloc_medium = NULL;
-    }
-
     MUTEX_UNLOCK(&reqc->mutex);
     if (ended) {
+        /* free the req_container and all the allocated media when we have
+         * managed all the sub requests.
+         */
         sched_req_free(reqc);
+        /* do not free reqc again when sub_request_free is called to free
+         * the other sub-requests
+         */
         sub_request->reqc = NULL;
     }
 }
@@ -1638,7 +1640,6 @@ static int dev_handle_read_write(struct lrs_dev *dev)
      * with an already locked medium ready to be use in a new device.
      */
     context.release_medium = false;
-    context.free_medium = true;
     medium_to_alloc =
         reqc->params.rwalloc.media[sub_request->medium_index].alloc_medium;
 
@@ -1648,15 +1649,9 @@ static int dev_handle_read_write(struct lrs_dev *dev)
                  pho_srl_request_kind_str(reqc->req));
         return 0;
     }
-    if (!rc || sub_request->failure_on_medium)
-        reqc->params.rwalloc.media[sub_request->medium_index].alloc_medium =
-            NULL;
-    if (rc) {
+    if (rc)
         io_ended = true;
-        goto alloc_result;
-    }
 
-alloc_result:
     MUTEX_LOCK(&dev->ld_mutex);
     locked = true;
     handle_rwalloc_sub_request_result(dev, sub_request, rc,
@@ -1674,7 +1669,7 @@ out_free:
 
     dev->ld_sub_request = NULL;
     if (!sub_request_requeued) {
-        sub_request->reqc = NULL;
+        sub_request->reqc = NULL; /* do not free reqc in sub_request_free */
         sub_request_free(sub_request);
     }
 
@@ -1742,7 +1737,7 @@ static void cancel_pending_format(struct lrs_dev *device)
                               medium_to_format->rsc.id.name);
             }
 
-            media_info_free(medium_to_format);
+            lrs_medium_release(medium_to_format);
             format_request->params.format.medium_to_format = NULL;
         } else {
             format_medium_remove(device->ld_ongoing_format,
@@ -1798,7 +1793,7 @@ static int dev_cleanup_medium_at_stop(struct lrs_dev *device)
                        lrs_dev_name(device));
 
         MUTEX_LOCK(&device->ld_mutex);
-        media_info_free(device->ld_dss_media_info);
+        lrs_medium_release(device->ld_dss_media_info);
         device->ld_dss_media_info = NULL;
         MUTEX_UNLOCK(&device->ld_mutex);
     }
@@ -1823,8 +1818,16 @@ static int dev_cleanup_medium_at_stop(struct lrs_dev *device)
  */
 static void dev_cleanup_on_error(struct lrs_dev *device)
 {
-    if (device->ld_dss_media_info)
-        fail_release_free_medium(device, &device->ld_dss_media_info, true);
+    if (device->ld_dss_media_info) {
+        struct media_info *medium;
+
+        MUTEX_LOCK(&device->ld_mutex);
+        medium = device->ld_dss_media_info;
+        device->ld_dss_media_info = NULL;
+        MUTEX_UNLOCK(&device->ld_mutex);
+
+        fail_release_free_medium(device, &medium, true);
+    }
 
     clean_tosync_array(device, device->ld_device_thread.status);
 
@@ -1880,6 +1883,7 @@ static void *lrs_dev_thread(void *tdata)
 
         if (device->ld_sub_request &&
             cancel_subrequest_on_error(device->ld_sub_request)) {
+
             MUTEX_LOCK(&device->ld_mutex);
             sub_request_free(device->ld_sub_request);
             device->ld_sub_request = NULL;
@@ -2129,8 +2133,7 @@ static int dev_medium_switch(struct lrs_dev *dev,
 
     pho_debug("Will load medium '%s' in device '%s'", lrs_dev_name(dev),
               medium_to_load->rsc.id.name);
-    rc = dev_load(dev, &medium_to_load, context->release_medium,
-                  context->free_medium);
+    rc = dev_load(dev, &medium_to_load, context->release_medium);
     if (rc == -EBUSY)
         return rc;
 
@@ -2172,22 +2175,30 @@ static int dev_medium_switch_mount(struct lrs_dev *dev,
 
     rc = dev_mount(dev);
     if (rc) {
+        struct media_info *tmp;
+
         context->failure_on_device = true;
         subreq->failure_on_medium = true;
-        MUTEX_LOCK(&dev->ld_mutex);
-        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
-        MUTEX_UNLOCK(&dev->ld_mutex);
         pho_error(rc,
                   "failed to mount medium '%s' in device '%s' "
                   "for %s request. Will try another medium if possible.",
-                  // FIXME use medium_to_mount when it no longer set to NULL
+                  // FIXME use medium_to_mount when it is no longer set to NULL
                   dev->ld_dss_media_info->rsc.id.name,
                   lrs_dev_name(dev),
                   pho_srl_request_kind_str(reqc->req));
+        /* FIXME ld_dss_media_info is set to NULL to avoid a double free in
+         * dev_cleanup_on_error. This behavior will have to be updated with the
+         * media health management.
+         */
+        MUTEX_LOCK(&dev->ld_mutex);
+        dev->ld_op_status = PHO_DEV_OP_ST_FAILED;
+        tmp = dev->ld_dss_media_info;
+        dev->ld_dss_media_info = NULL;
+        MUTEX_UNLOCK(&dev->ld_mutex);
         /* Set the medium to failed early to make sure that the scheduler won't
          * reuse it.
          */
-        fail_release_free_medium(dev, &dev->ld_dss_media_info, true);
+        fail_release_free_medium(dev, &tmp, true);
         return rc;
     }
 
@@ -2220,4 +2231,49 @@ static int dev_medium_switch_mount(struct lrs_dev *dev,
     }
 
     return 0;
+}
+
+void atomic_dev_medium_swap(struct lrs_dev *device, struct media_info *medium)
+{
+    struct media_info *new;
+    struct media_info *old;
+
+    MUTEX_LOCK(&device->ld_mutex);
+
+    /* take a new reference for the device thread */
+    new = lrs_medium_acquire(&medium->rsc.id);
+    old = atomic_exchange(&device->ld_dss_media_info, new);
+
+    MUTEX_UNLOCK(&device->ld_mutex);
+
+    /* release the old reference of the device thread */
+    lrs_medium_release(old);
+}
+
+struct media_info *atomic_dev_medium_get(struct lrs_dev *device)
+{
+    struct media_info *medium;
+
+    MUTEX_LOCK(&device->ld_mutex);
+    medium = device->ld_dss_media_info;
+    if (medium)
+        medium = lrs_medium_acquire(&medium->rsc.id);
+    MUTEX_UNLOCK(&device->ld_mutex);
+
+    return medium;
+}
+
+ssize_t atomic_dev_medium_phys_space_free(struct lrs_dev *dev)
+{
+    struct media_info *medium;
+    ssize_t space_free;
+
+    medium = atomic_dev_medium_get(dev);
+    if (!medium)
+        return -1;
+
+    space_free = medium->stats.phys_spc_free;
+    lrs_medium_release(medium);
+
+    return space_free;
 }

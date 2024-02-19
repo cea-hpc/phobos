@@ -56,6 +56,9 @@ struct lrs_dev *search_loaded_medium(GPtrArray *devices,
 struct lrs_dev *search_loaded_medium_keep_lock(GPtrArray *devices,
                                                const char *name);
 
+void reqc_pho_id_from_index(struct req_container *reqc, size_t index,
+                            struct pho_id *id);
+
 /**
  * This structure holds a reference to req_container::req::ralloc::med_ids.
  * The list is ordered as follow:

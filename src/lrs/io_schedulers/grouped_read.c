@@ -344,41 +344,35 @@ static gboolean glib_stop_at_first_compatible(gpointer _queue_name,
     return ctxt->device != NULL;
 }
 
-static int request_queue_alloc(struct io_scheduler *io_sched,
-                               struct request_queue **queue,
-                               const char *name,
-                               struct queue_element *elem,
-                               size_t index)
+static int
+request_queue_alloc(struct io_scheduler *io_sched,
+                    const char *name,
+                    struct queue_element *elem,
+                    size_t index,
+                    struct request_queue **queue)
 {
     struct grouped_data *data = io_sched->private_data;
-    struct request_queue *tmp;
     int rc;
 
-    tmp = xmalloc(sizeof(*tmp));
-
-    tmp->device = NULL;
-    tmp->medium_info = NULL;
-    tmp->name = xstrdup(name);
-    tmp->queue = g_queue_new();
-    if (!tmp->queue)
-        GOTO(free_name, rc = -errno);
+    *queue = xmalloc(sizeof(**queue));
 
     rc = fetch_and_check_medium_info(io_sched->io_sched_hdl->lock_handle,
                                      elem->reqc, NULL, index,
-                                     &tmp->medium_info);
+                                     &(*queue)->medium_info);
     if (rc)
         GOTO(free_g_queue, rc);
 
-    g_hash_table_insert(data->request_queues, (gpointer *)tmp->name, tmp);
-    *queue = tmp;
+    (*queue)->device = NULL;
+    (*queue)->name = xstrdup(name);
+    (*queue)->queue = g_queue_new();
+
+    g_hash_table_insert(data->request_queues, (gpointer *)(*queue)->name,
+                        *queue);
 
     return 0;
 
 free_g_queue:
-    g_queue_free(tmp->queue);
-free_name:
-    free((char *)tmp->name);
-    free(tmp);
+    free(*queue);
 
     return rc;
 }
@@ -392,7 +386,7 @@ static void delete_queue(struct grouped_data *data,
         remove_queue_from_device(queue->device, queue);
 
     free((char *)queue->name);
-    media_info_free(queue->medium_info);
+    lrs_medium_release(queue->medium_info);
     g_queue_free(queue->queue);
     free(queue);
 }
@@ -618,16 +612,24 @@ static int try_exchange_extra_devices(struct io_scheduler *io_sched,
         }
 
         if (extra_devices[i]->ld_io_request_type & IO_REQ_READ) {
+            struct media_info *medium;
             struct device *d;
 
             /* do not increment available_devices since we exchange a free
              * device with a device that we can use.
              */
             d = find_device(io_sched, extra_devices[i]);
-            d->queue = g_hash_table_lookup(
-                data->request_queues,
-                d->device->ld_dss_media_info->rsc.id.name);
+            medium = atomic_dev_medium_get(d->device);
+            if (!medium)
+                /* Race with device thread, the medium was probably just
+                 * unloaded. Just ignore this device.
+                 */
+                continue;
+
+            d->queue = g_hash_table_lookup(data->request_queues,
+                                           medium->rsc.id.name);
             d->queue->device = d;
+            lrs_medium_release(medium);
         }
     }
 
@@ -722,17 +724,19 @@ static int grouped_peek_request(struct io_scheduler *io_sched,
      */
     for (i = 0; i < io_sched->devices->len; i++) {
         struct queue_element *elem;
+        struct media_info *medium;
         struct device *device;
 
         device = g_ptr_array_index(io_sched->devices, i);
-        if (device->device->ld_dss_media_info && !device->queue) {
+        medium = atomic_dev_medium_get(device->device);
+        if (medium && !device->queue) {
             struct request_queue *queue;
             const char *name;
 
             /* If a device moves from one scheduler to another, it can contain
              * a medium that was not found when the request was first pushed.
              */
-            name = device->device->ld_dss_media_info->rsc.id.name;
+            name = medium->rsc.id.name;
             queue = g_hash_table_lookup(data->request_queues, name);
             if (queue)
                 /* queue can be NULL if, for example, a medium is already loaded
@@ -742,6 +746,7 @@ static int grouped_peek_request(struct io_scheduler *io_sched,
                  */
                 associate_queue_to_device(device, queue);
         }
+        lrs_medium_release(medium);
 
         if (!dev_is_sched_ready(device->device) || !device->queue)
             continue;
@@ -833,11 +838,12 @@ static int insert_request_in_medium_queue(struct io_scheduler *io_sched,
 {
     struct grouped_data *data = io_sched->private_data;
     struct request_queue *queue;
-    int rc;
 
     queue = g_hash_table_lookup(data->request_queues, name);
     if (!queue) {
-        rc = request_queue_alloc(io_sched, &queue, name, elem, index);
+        int rc;
+
+        rc = request_queue_alloc(io_sched, name, elem, index, &queue);
         if (rc)
             return rc;
 
@@ -1191,7 +1197,7 @@ static int grouped_get_device_medium_pair(struct io_scheduler *io_sched,
             if (elem && elem->reqc == reqc)
                 remove_queue_from_device(device, device->queue);
         }
-        media_info_free(reqc->params.rwalloc.media[*index].alloc_medium);
+        lrs_medium_release(reqc->params.rwalloc.media[*index].alloc_medium);
         reqc->params.rwalloc.media[*index].alloc_medium = NULL;
     }
 
@@ -1212,7 +1218,7 @@ static int grouped_get_device_medium_pair(struct io_scheduler *io_sched,
 
     elem = g_queue_peek_tail(queue->queue);
     *reqc_get_medium_to_alloc(elem->reqc, *index) =
-        media_info_dup(queue->medium_info);
+        lrs_medium_acquire(&queue->medium_info->rsc.id);
 
     queue_element_set_used(data->current_elem, elem);
     assert(elem && elem->reqc == reqc);
@@ -1309,12 +1315,19 @@ static int grouped_retry(struct io_scheduler *io_sched,
          * medium or the one that was just tried if no error occured on the
          * medium.
          */
-        if (sreq->failure_on_medium)
+        if (sreq->failure_on_medium) {
+            /* release the previous reference in the request container */
+            lrs_medium_release(*medium);
             sreq->medium_index = reqc->req->ralloc->n_required;
+        }
         /* else: we use sreq->medium_index i.e. the index of the medium that we
          * failed to load.
          */
     } else {
+        if (strcmp(queue_to_use->name, (*medium)->rsc.id.name))
+            /* release the previous reference in the request container */
+            lrs_medium_release(*medium);
+
         sreq->medium_index = read_req_get_medium_index(reqc,
                                                        queue_to_use->name);
     }
@@ -1331,7 +1344,6 @@ static int grouped_retry(struct io_scheduler *io_sched,
                                 name, NULL);
     if (*dev) {
         if (!((*dev)->ld_io_request_type & IO_REQ_READ)) {
-            pho_info("exchange device");
             rc = exchange_device(io_sched, IO_REQ_READ, *dev);
             if (rc)
                 return rc;
@@ -1346,10 +1358,10 @@ static int grouped_retry(struct io_scheduler *io_sched,
     /* On error, always fetch DSS information since the caller doesn't know if
      * the \p medium was just allocated or not. It cannot free it.
      */
-    rc = fetch_and_check_medium_info(io_sched->io_sched_hdl->lock_handle,
-                                     reqc, &m_id, sreq->medium_index, medium);
-    if (rc)
-        return rc;
+    reqc_pho_id_from_index(reqc, sreq->medium_index, &m_id);
+    *medium = lrs_medium_acquire(&m_id);
+    if (!*medium)
+        return -errno;
 
     device = find_compatible_device(io_sched->devices, *medium,
                                     &compatible_device_found);

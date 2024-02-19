@@ -56,6 +56,29 @@ static char *get_sub_request_medium_name(struct sub_request *sub_request)
     }
 }
 
+void reqc_pho_id_from_index(struct req_container *reqc, size_t index,
+                            struct pho_id *id)
+{
+    PhoResourceId *res_id;
+
+    if (pho_request_is_read(reqc->req))
+        res_id = reqc->req->ralloc->med_ids[index];
+    else if (pho_request_is_format(reqc->req))
+        res_id = reqc->req->format->med_id;
+    else
+        res_id = NULL;
+
+    if (!res_id) {
+        pho_error(-EINVAL,
+                  "%s call for a %s request, abort", __func__,
+                  pho_srl_request_kind_str(reqc->req));
+        abort();
+    }
+
+    id->family = res_id->family;
+    pho_id_name_set(id, res_id->name);
+}
+
 static struct lrs_dev *__search_loaded_medium(GPtrArray *devices,
                                               const char *name,
                                               bool keep_lock)

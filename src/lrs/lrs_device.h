@@ -115,15 +115,12 @@ char *mount_point(const char *id);
  *                              If true, release the medium on a dev-only
  *                              failure. The medium is neither freed or set to
  *                              NULL.
- * @param[in]   free_medium     If false, medium is never freed and never set to
- *                              NULL.
- *
  * @return 0 on success, -error number on error. -EBUSY is returned when a
  * drive to drive medium movement was prevented by the library or if the device
  * is empty.
  */
 int dev_load(struct lrs_dev *dev, struct media_info **medium,
-             bool release_medium_on_dev_only_failure, bool free_medium);
+             bool release_medium_on_dev_only_failure);
 
 /**
  * Format a medium to the given fs type.
@@ -192,6 +189,49 @@ struct sync_params {
 
 /**
  * Data specific to the device thread.
+ *
+ * Note on thread safety:
+ *
+ * ld_dss_media_info: this field is often accessed from the scheduler or
+ * communication thread to check whether a device is available and if it has a
+ * medium loaded. Since struct media_info is cached across threads with
+ * phobos_global_context::lrs_media_cache, extra care must be taken when
+ * accessing it.
+ *
+ * The cache has been built so that several references to the same medium can be
+ * kept in memory. This means that a thread may have an old reference to a
+ * struct media_info, but as long as the reference count is not 0, the structure
+ * is still valid and wont be leaked (provided that the structure is released to
+ * the cache at some point). In practice, this means that as long as a piece of
+ * code is interested in constant information in the media_info (e.g.
+ * media_info::rsc::id::name), it will be thread safe to access it without any
+ * lock as long as it has a reference on the struct media_info.
+ *
+ * The struct media_info has 3 main lifetimes:
+ * - between the moment a medium is loaded and unloaded, this reference is
+ *   associated to lrs_dev::ld_dss_media_info;
+ * - the media associated to a request;
+ *   For example: req_container::params::format::medium_to_format.
+ * - the I/O scheduler: some algorithms may need to keep a reference to some
+ *   data in the media_info.
+ *   For example: in the grouped read algorithm, the life time of a queue is
+ *   tied to the life time of the loaded medium: lrs_dev::ld_dss_media_info.
+ *
+ * Some values in struct media_info can be modified from different threads.
+ * This is only true for a struct media_info that is loaded on a device (i.e. a
+ * reference is stored on lrs_dev::ld_dss_media_info). Fields of this struct
+ * must be modified with the device lock held. Therefore, the following fields
+ * must be manipulated with extra care:
+ *
+ * - media_info::stats
+ *
+ * lrs_dev::ld_dss_media_info is set to NULL when unloading the medium. The
+ * device lock is held during this operation. Another thread that wants to
+ * access this pointer must take the device lock then a reference on the medium
+ * after checking that it is not NULL. atomic_dev_medium_get does this operation
+ * and returns a pointer to the media_info. This pointer may be NULL if the
+ * medium was unloaded. The returned medium has an increased reference count so
+ * that it is still in the cache for use by the caller.
  */
 struct lrs_dev {
     pthread_mutex_t      ld_mutex;              /**< exclusive access */
@@ -205,9 +245,8 @@ struct lrs_dev {
                                                   * device
                                                   */
     char                 ld_dev_path[PATH_MAX]; /**< path to the device */
-    struct media_info   *ld_dss_media_info;     /**< loaded media info
-                                                  *  from DSS, if any
-                                                  */
+    /** loaded media info from DSS, if any */
+    struct media_info   *_Atomic ld_dss_media_info;
     char                 ld_mnt_path[PATH_MAX]; /**< mount path of the
                                                   * filesystem
                                                   */
@@ -302,12 +341,6 @@ static inline bool is_device_shared_between_schedulers(struct lrs_dev *dev)
 {
     return __builtin_popcount(dev->ld_io_request_type & 0b111) != 0;
 }
-
-/**
- *  TODO: will become a device thread static function when all media operations
- *  will be moved to device thread
- */
-void clean_tosync_array(struct lrs_dev *dev, int rc);
 
 /**
  * Add a new sync request to a device
@@ -461,5 +494,21 @@ static inline const char *lrs_dev_name(struct lrs_dev *dev)
 {
     return dev->ld_dss_dev_info->rsc.id.name;
 }
+
+/* Swap the medium lrs_dev::ld_dss_media_info with \p medium while holding the
+ * device lock.
+ *
+ * Release the reference of the old lrs_dev::ld_dss_media_info.
+ */
+void atomic_dev_medium_swap(struct lrs_dev *device, struct media_info *medium);
+
+/* Update the value of lrs_dev::ld_dss_media_info in the medium cache and put it
+ * in the device atomically
+ */
+void atomic_dev_update_loaded_medium(struct lrs_dev *device);
+
+struct media_info *atomic_dev_medium_get(struct lrs_dev *device);
+
+ssize_t atomic_dev_medium_phys_space_free(struct lrs_dev *dev);
 
 #endif
