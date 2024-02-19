@@ -537,14 +537,15 @@ typedef int (*mock_ioctl_t)(int fd, unsigned long request, void *sg_io_hdr);
  * thread safe.
  */
 struct phobos_global_context {
-    struct config config;            /** Content of Phobos' configuration file
-                                       */
-    enum pho_log_level log_level;    /** Minimum level of logs to display */
-    pho_log_callback_t log_callback; /** Callback used when writing logs */
-    bool log_dev_output;             /** Whether to display additional
-                                       * information on each logs.
-                                       */
-
+    /** Content of Phobos' configuration file */
+    struct config config;
+    /** Minimum level of logs to display */
+    enum pho_log_level log_level;
+    /** Callback used when writing logs */
+    pho_log_callback_t log_callback;
+    /** Whether to display additional information on each logs.  */
+    bool log_dev_output;
+    /** Mutex to serialize library SCSI requests */
     pthread_mutex_t ldm_lib_scsi_mutex;
     /** Media cache used by the LRS to share the media between threads and avoid
      * too many DSS requests.
@@ -553,17 +554,12 @@ struct phobos_global_context {
 
     /* /!\ The following fields are for testing purposes only /!\ */
 
-    struct mock_ltfs mock_ltfs; /* LTFS mocking functions used by the module
-                                 * "ldm_fs_ltfs".
-                                 */
-
-    /* TODO: change this field to a structure so that the callbacks are
-     * encapsulated better.
+    /** LTFS mocking functions used by the module "ldm_fs_ltfs".  */
+    struct mock_ltfs mock_ltfs;
+    /** Callback to mock the ioctl call used by the ldm module "ldm_lib_scsi" to
+     * interact with the tape library.
      */
-    mock_ioctl_t mock_ioctl;         /** Callback to mock the ioctl call used
-                                       * by the ldm module "ldm_lib_scsi" to
-                                       * interact with the tape library.
-                                       */
+    mock_ioctl_t mock_ioctl;
 };
 
 /**
