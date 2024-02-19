@@ -183,12 +183,18 @@ static size_t rml_last_unavailable(struct read_media_list *list)
     return list->rml_size - 1 - list->rml_errors;
 }
 
+static size_t rml_last_free(struct read_media_list *list)
+{
+    return list->rml_size - list->rml_errors - 1;
+}
+
 /**
  * Swap the medium ID at \p index with the last available medium.
  */
 static void rml_move_medium_to_unavailable(struct read_media_list *list,
                                            size_t index)
 {
+    assert(list->rml_available != 0);
     list->rml_available--;
     if (index < list->rml_available)
         /* move index to first unavailable slot, the last available item will
@@ -243,6 +249,33 @@ size_t rml_medium_update(struct read_media_list *list, size_t index,
     return list->rml_available;
 }
 
+void rml_medium_realloc_failed(struct read_media_list *list,
+                               size_t free_index,
+                               size_t failed_index)
+{
+    /* This function must not be called with unavailable medium */
+    assert(list->rml_available + list->rml_errors + list->rml_allocated
+           == list->rml_size);
+
+    /* Move the newly allocated medium to the last free position */
+    med_ids_switch(list->rml_media, free_index, rml_last_free(list));
+
+    /* Swap the allocated medium with the failed one */
+    med_ids_switch(list->rml_media, failed_index, rml_last_free(list));
+
+    /* increase the size of the error section making the last free an error */
+    list->rml_errors++;
+    /* decrease the number of free media */
+    list->rml_available--;
+}
+
+void rml_medium_realloc(struct read_media_list *list,
+                        size_t free_index,
+                        size_t allocated_index)
+{
+    med_ids_switch(list->rml_media, free_index, allocated_index);
+}
+
 size_t rml_nb_usable_media(struct read_media_list *list)
 {
     return list->rml_size - list->rml_errors;
@@ -250,6 +283,13 @@ size_t rml_nb_usable_media(struct read_media_list *list)
 
 void rml_reset(struct read_media_list *list)
 {
-    list->rml_available = list->rml_size - list->rml_errors;
+    list->rml_available =
+        list->rml_size - list->rml_errors - list->rml_allocated;
     list->rml_reset_done = true;
+}
+
+void rml_requeue(struct read_media_list *list)
+{
+    list->rml_available = list->rml_size - list->rml_errors;
+    list->rml_allocated = 0;
 }

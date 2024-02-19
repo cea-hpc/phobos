@@ -66,7 +66,7 @@ struct lrs_dev *search_loaded_medium(GPtrArray *devices,
  * - The size of the Allocated sections is rml_allocated
  * - The size of the Free sections is (rml_available - rml_allocated)
  * - The size of the Unavailable section is:
- *   rml_size - (rml_errors + rml_available)
+ *   rml_size - (rml_errors + rml_available + rml_allocated)
  *
  * The allocated section contains medium IDs that are already allocated to a
  * device for this request.
@@ -139,6 +139,23 @@ size_t rml_medium_update(struct read_media_list *list, size_t index,
                          enum read_medium_allocation_status status);
 
 /**
+ * Swap the newly allocated medium at \p free_index with the failed medium at
+ * \p failed_index. The medium at \p failed_index is moved in the failed section
+ * of the list.
+ */
+void rml_medium_realloc_failed(struct read_media_list *list,
+                               size_t free_index,
+                               size_t failed_index);
+
+/**
+ * Swap the newly allocated medium at \p free_index with the already allocated
+ * medium at \p allocated_index.
+ */
+void rml_medium_realloc(struct read_media_list *list,
+                        size_t free_index,
+                        size_t allocated_index);
+
+/**
  * Return the number of media that can still be used for an allocation including
  * temporarily unavailable ones.
  */
@@ -148,6 +165,12 @@ size_t rml_nb_usable_media(struct read_media_list *list);
  * Reset the state of temporarily unavailable media
  */
 void rml_reset(struct read_media_list *list);
+
+/**
+ * Reset the state of the list when the request is requeued for later processing
+ * by the scheduler
+ */
+void rml_requeue(struct read_media_list *list);
 
 /**
  * Convert negative return code \p rc to read_medium_allocation_status

@@ -189,10 +189,8 @@ struct rwalloc_params {
                                       *  kept.
                                       */
     struct resp_container *respc;   /**< Response container */
-    size_t original_n_req_media;    /**< Number of media in the request when it
-                                      *  is first received.
-                                      */
-
+    /** State of the allocation of the media for this request */
+    struct read_media_list media_list;
 };
 
 /**

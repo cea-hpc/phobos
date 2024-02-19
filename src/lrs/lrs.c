@@ -439,13 +439,10 @@ static void init_rwalloc_container(struct req_container *reqc)
     bool is_write = pho_request_is_write(reqc->req);
     size_t i;
 
-    if (is_write) {
+    if (is_write)
         rwalloc_params->n_media = reqc->req->walloc->n_media;
-        rwalloc_params->original_n_req_media = reqc->req->walloc->n_media;
-    } else {
+    else
         rwalloc_params->n_media = reqc->req->ralloc->n_required;
-        rwalloc_params->original_n_req_media = reqc->req->ralloc->n_med_ids;
-    }
 
     rwalloc_params->media = xcalloc(rwalloc_params->n_media,
                                     sizeof(*rwalloc_params->media));
@@ -471,6 +468,9 @@ static void init_rwalloc_container(struct req_container *reqc)
     rwalloc_params->respc->devices =
         xcalloc(rwalloc_params->respc->devices_len,
                 sizeof(*rwalloc_params->respc->devices));
+
+    if (pho_request_is_read(reqc->req))
+        rml_init(&rwalloc_params->media_list, reqc);
 }
 
 static void init_request_container_param(struct req_container *reqc)

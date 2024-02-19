@@ -115,15 +115,6 @@ void sched_req_free(void *reqc)
     if (!cont)
         return;
 
-    if (pho_request_is_read(cont->req)
-        && cont->req->ralloc->n_med_ids <
-            cont->params.rwalloc.original_n_req_media)
-        /* On failure, n_med_ids may be reduced, we need to set it back to its
-         * orignal value to free the whole list.
-         */
-        cont->req->ralloc->n_med_ids =
-            cont->params.rwalloc.original_n_req_media;
-
     if (cont->req) {
         /* this function frees request specific memory, therefore needs to check
          * the request type internally and dereferences the cont->req
@@ -1661,6 +1652,13 @@ static int publish_or_cancel(struct lrs_sched *sched,
     int rc = 0;
     size_t i;
 
+    if (pho_request_is_read(reqc->req)) {
+        if (reqc_rc == -EAGAIN)
+            rml_requeue(&reqc->params.rwalloc.media_list);
+        else if (reqc_rc)
+            rml_reset(&reqc->params.rwalloc.media_list);
+    }
+
     if (reqc_rc == -EAGAIN && !running)
         return reqc_rc;
 
@@ -1828,34 +1826,22 @@ end:
 }
 
 static int skip_read_alloc_medium(int rc, struct req_container *reqc,
-                                  size_t index_to_alloc,
-                                  size_t *nb_already_eagain)
+                                  size_t index_to_alloc)
 {
-    pho_rsc_id_t **med_ids = reqc->req->ralloc->med_ids;
-    size_t n_required = reqc->req->ralloc->n_required;
-    size_t *n_med_ids = &reqc->req->ralloc->n_med_ids;
+    struct read_media_list *list;
+    size_t n_required;
+    size_t available;
 
-    if (rc == -EAGAIN) {
-        (*nb_already_eagain)++;
-    } else {
-        if (*n_med_ids > 0)
-            (*n_med_ids)--;
-        /* Extend failed media by switching the last eagain with the failed */
-        if (*nb_already_eagain > 0)
-            med_ids_switch(med_ids, index_to_alloc, *n_med_ids - 1);
-    }
+    n_required = reqc->req->ralloc->n_required;
+    list = &reqc->params.rwalloc.media_list;
 
-    /* Extend eagain and failed medium by switching current with last avail */
-    if ((*n_med_ids - *nb_already_eagain) > index_to_alloc)
-        med_ids_switch(med_ids, index_to_alloc,
-                       *n_med_ids - 1 - *nb_already_eagain);
-
-    /* test if we still have enough candidate */
-    if (n_required > (*n_med_ids - *nb_already_eagain)) {
-        /* any future chance ? */
-        if (*n_med_ids >= n_required)
+    available = rml_medium_update(list, index_to_alloc, rml_errno2status(rc));
+    if (available < n_required) {
+        if (list->rml_size - list->rml_errors >= n_required)
+            /* We can retry later with the media unavailable now */
             return -EAGAIN;
         else
+            /* Not enough media remaining to allocate the request later  */
             return rc;
     }
 
@@ -1934,19 +1920,23 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
  * Alloc one more medium to a device in a read alloc request
  */
 static int sched_read_alloc_one_medium(struct lrs_sched *sched,
-                                       struct allocation *alloc,
-                                       size_t *nb_already_eagain)
+                                       struct allocation *alloc)
 {
     struct req_container *reqc = alloc->is_sub_request ?
         alloc->u.sub_req->reqc :
         alloc->u.req.reqc;
-    pho_rsc_id_t **med_ids = reqc->req->ralloc->med_ids;
+    /* on error, num_allocated stores the position of the failed medium that
+     * will be updated by io_sched_retry
+     */
     size_t num_allocated = alloc->is_sub_request ?
         alloc->u.sub_req->medium_index : alloc->u.req.index;
     size_t index_to_alloc = num_allocated;
     struct media_info **alloc_medium;
+    struct read_media_list *list;
     struct lrs_dev *dev = NULL;
     int rc = 0;
+
+    list = &reqc->params.rwalloc.media_list;
 
 find_read_device:
     if (alloc->is_sub_request)
@@ -1954,33 +1944,36 @@ find_read_device:
     else
         rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &dev,
                                              &index_to_alloc);
-    pho_debug("%s: rc=%d, index=%lu, dev=%s",
-              "io_sched_get_device_medium_pair", rc,
+    pho_debug("I/O sched pair: rc=%d, index=%lu, dev=%s",
+              rc,
               alloc->is_sub_request ?
-                alloc->u.sub_req->medium_index :
-                index_to_alloc, dev ? dev->ld_dev_path : "none");
-
+                  alloc->u.sub_req->medium_index :
+                  index_to_alloc,
+              dev ? dev->ld_dss_dev_info->rsc.id.name : "none");
     if (rc)
         GOTO(skip_medium, rc);
 
     assert(index_to_alloc >= num_allocated);
-    if (dev && alloc->is_sub_request && alloc->u.sub_req->failure_on_medium) {
-        med_ids_switch(med_ids, num_allocated,
-                       reqc->req->ralloc->n_med_ids - 1);
-        if (reqc->req->ralloc->n_med_ids > 0)
-            reqc->req->ralloc->n_med_ids--;
-
-        index_to_alloc = alloc->u.sub_req->medium_index;
-    }
-
-    if (dev) {
-        med_ids_switch(med_ids, index_to_alloc, num_allocated);
-        index_to_alloc = num_allocated;
-        if (alloc->is_sub_request)
-            /* On retry, we want sreq->medium_index to point to the position of
-             * the medium in
+    if (dev && alloc->is_sub_request) {
+        if (alloc->u.sub_req->failure_on_medium)
+            /* Move the failed medium (index_to_alloc) in the error section.
+             * Swap it with the medium selected by the I/O scheduler
+             * (medium_index).
              */
-            alloc->u.sub_req->medium_index = index_to_alloc;
+            rml_medium_realloc_failed(list, alloc->u.sub_req->medium_index,
+                                      index_to_alloc);
+        else
+            rml_medium_realloc(list, alloc->u.sub_req->medium_index,
+                               index_to_alloc);
+
+        /* At this point, index_to_alloc already points to the new medium to
+         * allocate. We need medium_index to point to the old medium index now
+         * that the were switched.
+         */
+        alloc->u.sub_req->medium_index = index_to_alloc;
+    } else if (dev) {
+        rml_medium_update(list, index_to_alloc, RMAS_OK);
+        index_to_alloc = num_allocated;
     }
 
     alloc_medium =
@@ -2025,7 +2018,7 @@ free_skip_medium:
 skip_medium:
     if (dev)
         dev->ld_ongoing_scheduled = false;
-    rc = skip_read_alloc_medium(rc, reqc, index_to_alloc, nb_already_eagain);
+    rc = skip_read_alloc_medium(rc, reqc, index_to_alloc);
     if (rc)
         return rc;
 
@@ -2039,7 +2032,6 @@ skip_medium:
 static int sched_handle_read_alloc(struct lrs_sched *sched,
                                    struct req_container *reqc)
 {
-    size_t nb_already_eagain = 0;
     int rc = 0;
     size_t i;
 
@@ -2057,7 +2049,7 @@ static int sched_handle_read_alloc(struct lrs_sched *sched,
             },
         };
 
-        rc = sched_read_alloc_one_medium(sched, &alloc, &nb_already_eagain);
+        rc = sched_read_alloc_one_medium(sched, &alloc);
         if (rc)
             break;
     }
@@ -2356,7 +2348,6 @@ static void sched_handle_read_or_write_error(struct lrs_sched *sched,
     *sreq_pushed_or_requeued = false;
     *req_ended = false;
     if (pho_request_is_read(sreq->reqc->req)) {
-        size_t nb_already_eagain = 0;
         struct allocation alloc = {
             .is_sub_request = true,
             .u = {
@@ -2364,7 +2355,8 @@ static void sched_handle_read_or_write_error(struct lrs_sched *sched,
             },
         };
 
-        rc = sched_read_alloc_one_medium(sched, &alloc, &nb_already_eagain);
+        rml_reset(&sreq->reqc->params.rwalloc.media_list);
+        rc = sched_read_alloc_one_medium(sched, &alloc);
     } else {
         device_select_func_t dev_select_policy;
 

@@ -124,7 +124,7 @@ static int fifo_requeue(struct io_scheduler *io_sched,
     struct queue_element *elem;
     GQueue *queue;
 
-    pho_debug("Request %p will be requeued from fifo '%s' scheduler",
+    pho_debug("Request %p will be requeued into fifo '%s' scheduler",
               reqc, pho_srl_request_kind_str(reqc->req));
 
     queue = (GQueue *) io_sched->private_data;

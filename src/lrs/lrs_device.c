@@ -1352,6 +1352,7 @@ static void fill_rwalloc_resp_container(struct lrs_dev *dev,
 static bool rwalloc_can_be_requeued(struct sub_request *sub_request)
 {
     struct req_container *reqc = sub_request->reqc;
+    struct read_media_list *list;
     pho_req_read_t *ralloc;
 
     if (pho_request_is_write(reqc->req))
@@ -1361,11 +1362,10 @@ static bool rwalloc_can_be_requeued(struct sub_request *sub_request)
         return true;
 
     ralloc = reqc->req->ralloc;
-    /* if possible : prepare a new candidate medium and requeue */
-    if (ralloc->n_med_ids > ralloc->n_required)
-        return true;
+    list = &reqc->params.rwalloc.media_list;
 
-    return false;
+    /* if possible: prepare a new candidate medium and requeue. */
+    return rml_nb_usable_media(list) > ralloc->n_required;
 }
 
 /**
