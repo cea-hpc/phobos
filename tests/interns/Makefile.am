@@ -62,6 +62,7 @@ check_PROGRAMS=test_attrs \
                test_lrs_scheduling \
                test_mapper \
                test_phobos_admin_medium_locate \
+               test_pho_cache \
                test_ping \
                test_scsi_logs \
                test_store_alias \
@@ -159,6 +160,10 @@ test_phobos_admin_medium_locate_LDADD=$(ADMIN_LIB) $(TESTS_LIB) \
                                       $(TESTS_LIB_DEPS)
 test_phobos_admin_medium_locate_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss \
                                        $(TESTS_LIB_INCLUDES)
+
+test_pho_cache_SOURCES=test_pho_cache.c
+test_pho_cache_LDADD=$(ADMIN_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)
+test_pho_cache_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/dss -I..
 
 test_ping_SOURCES=test_ping.c mock_communication.c
 test_ping_LDADD=$(ADMIN_LIB) $(COMMON_LIB) $(DSS_LIB) $(LDM_LIB)
