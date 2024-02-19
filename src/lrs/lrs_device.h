@@ -115,7 +115,7 @@ char *mount_point(const char *id);
  * drive to drive medium movement was prevented by the library or if the device
  * is empty.
  */
-int dev_load(struct lrs_dev *dev, struct media_info **medium);
+int dev_load(struct lrs_dev *dev, struct media_info *medium);
 
 /**
  * Format a medium to the given fs type.

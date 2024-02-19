@@ -421,12 +421,11 @@ int main(void)
         cmocka_unit_test(scsi_dev_unload_logs_move_medium_failure),
         cmocka_unit_test(scsi_dev_unload_logs_move_medium_success),
     };
-    struct stat dev_changer;
     int error_count;
     int rc;
 
-    rc = stat("/dev/changer", &dev_changer);
-    if (rc)
+    rc = access("/dev/changer", F_OK);
+    if (rc == -1)
         /* Exit code for skipping the test */
         return 77;
 

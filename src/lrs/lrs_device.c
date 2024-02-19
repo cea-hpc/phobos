@@ -1062,7 +1062,7 @@ static void fail_release_device(struct lrs_dev *dev)
                   lrs_dev_name(dev));
 }
 
-int dev_load(struct lrs_dev *dev, struct media_info **medium)
+int dev_load(struct lrs_dev *dev, struct media_info *medium)
 {
     struct lib_handle lib_hdl;
     int rc2;
@@ -1071,7 +1071,7 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium)
     ENTRY;
 
     dev->ld_sub_request->failure_on_medium = false;
-    pho_verb("load: '%s' into '%s'", (*medium)->rsc.id.name, dev->ld_dev_path);
+    pho_verb("load: '%s' into '%s'", medium->rsc.id.name, dev->ld_dev_path);
 
     /* get handle to the library depending on device type */
     rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl);
@@ -1079,20 +1079,20 @@ int dev_load(struct lrs_dev *dev, struct media_info **medium)
         return rc;
 
     rc = ldm_lib_load(&lib_hdl, dev->ld_dss_dev_info->rsc.id.name,
-                      (*medium)->rsc.id.name);
+                      medium->rsc.id.name);
     if (rc) {
         dev->ld_sub_request->failure_on_medium = true;
         LOG_GOTO(out_close, rc, "Media load failed");
     }
 
-    *medium = lrs_medium_acquire(&(*medium)->rsc.id);
-    if (!*medium)
+    medium = lrs_medium_acquire(&medium->rsc.id);
+    if (!medium)
         GOTO(out_close, rc = -errno);
 
     /* update device status */
     MUTEX_LOCK(&dev->ld_mutex);
     dev->ld_op_status = PHO_DEV_OP_ST_LOADED;
-    dev->ld_dss_media_info = *medium;
+    dev->ld_dss_media_info = medium;
     MUTEX_UNLOCK(&dev->ld_mutex);
     rc = 0;
 
@@ -2141,11 +2141,12 @@ static int dev_medium_switch(struct lrs_dev *dev,
 
     pho_debug("Will load medium '%s' in device '%s'", lrs_dev_name(dev),
               medium_to_load->rsc.id.name);
-    rc = dev_load(dev, &medium_to_load);
+    rc = dev_load(dev, medium_to_load);
     if (rc == -EBUSY)
         return rc;
 
     if (rc) {
+        // FIXME what to do about this?
         context->failure_on_device = true;
         LOG_RETURN(rc,
                    "failed to load medium '%s' in device '%s' for %s request",

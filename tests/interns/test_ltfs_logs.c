@@ -127,7 +127,7 @@ create_and_load(struct dss_handle *handle, struct lrs_dev *device)
 
     device->ld_sub_request = xmalloc(sizeof(*device->ld_sub_request));
     medium_ptr = &medium;
-    rc = dev_load(device, &medium_ptr);
+    rc = dev_load(device, medium_ptr);
     assert_return_code(-rc, rc);
 
     dss_logs_delete(handle, NULL);
