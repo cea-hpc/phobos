@@ -6,6 +6,7 @@ libpho_common_la_SOURCES=attrs.c \
                          common.c \
                          global_state.c \
                          log.c \
+                         pho_cache.c \
                          pho_ref.c \
                          saj.c \
                          slist.c \
