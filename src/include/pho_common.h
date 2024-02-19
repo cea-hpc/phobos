@@ -546,6 +546,10 @@ struct phobos_global_context {
                                        */
 
     pthread_mutex_t ldm_lib_scsi_mutex;
+    /** Media cache used by the LRS to share the media between threads and avoid
+     * too many DSS requests.
+     */
+    struct pho_cache *lrs_media_cache[PHO_RSC_LAST];
 
     /* /!\ The following fields are for testing purposes only /!\ */
 
