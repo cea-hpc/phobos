@@ -168,3 +168,88 @@ err_continue:
 
     return NULL;
 }
+
+void rml_init(struct read_media_list *list, struct req_container *reqc)
+{
+    list->rml_media = reqc->req->ralloc->med_ids;
+    list->rml_size = reqc->req->ralloc->n_med_ids;
+    list->rml_available = list->rml_size;
+    list->rml_allocated = 0;
+    list->rml_errors = 0;
+}
+
+static size_t rml_last_unavailable(struct read_media_list *list)
+{
+    return list->rml_size - 1 - list->rml_errors;
+}
+
+/**
+ * Swap the medium ID at \p index with the last available medium.
+ */
+static void rml_move_medium_to_unavailable(struct read_media_list *list,
+                                           size_t index)
+{
+    list->rml_available--;
+    if (index < list->rml_available)
+        /* move index to first unavailable slot, the last available item will
+         * take the place of index
+         */
+        med_ids_switch(list->rml_media, index, list->rml_available);
+}
+
+enum read_medium_allocation_status rml_errno2status(int rc)
+{
+    switch (rc) {
+    case 0:
+        return RMAS_OK;
+    case -EAGAIN:
+        return RMAS_UNAVAILABLE;
+    default:
+        return RMAS_ERROR;
+    }
+}
+
+size_t rml_medium_update(struct read_media_list *list, size_t index,
+                         enum read_medium_allocation_status status)
+{
+    switch (status) {
+    case RMAS_OK:
+        /* Move the medium ID at the end of the allocated list */
+        med_ids_switch(list->rml_media, index, list->rml_allocated++);
+        break;
+    case RMAS_ERROR:
+        if ((list->rml_size - list->rml_errors) != list->rml_available)
+            /* Some media are temporarily unavailable, move the error at index
+             * to last unavailable slot which then becomes the first error.
+             * The previous last unavailable is now at index and will be swapped
+             * next.
+             */
+            med_ids_switch(list->rml_media, index, rml_last_unavailable(list));
+
+        list->rml_errors++;
+        if (list->rml_reset_done)
+            /* After the reset, all the media required have been allocated once.
+             * An error means that an already allocated medium has failed,
+             * decrease rml_allocated.
+             */
+            list->rml_allocated--;
+
+        /* fallthrough */
+    case RMAS_UNAVAILABLE:
+        rml_move_medium_to_unavailable(list, index);
+        break;
+    }
+
+    return list->rml_available;
+}
+
+size_t rml_nb_usable_media(struct read_media_list *list)
+{
+    return list->rml_size - list->rml_errors;
+}
+
+void rml_reset(struct read_media_list *list)
+{
+    list->rml_available = list->rml_size - list->rml_errors;
+    list->rml_reset_done = true;
+}

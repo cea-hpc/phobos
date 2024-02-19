@@ -26,6 +26,7 @@
 #define _PHO_LRS_UTILS_H
 
 #include <stddef.h>
+#include <pho_srl_common.h>
 
 struct req_container;
 
@@ -51,5 +52,109 @@ struct lrs_dev *search_in_use_medium(GPtrArray *devices,
 
 struct lrs_dev *search_loaded_medium(GPtrArray *devices,
                                      const char *name);
+
+/**
+ * This structure holds a reference to req_container::req::ralloc::med_ids.
+ * The list is ordered as follow:
+ *
+ * +-----------+------+-------------+-------+
+ * | Allocated | Free | Unavailable | Error |
+ * +-----------+------+-------------+-------+
+ *
+ * - The size of the list is rml_size
+ * - The size of the Error section is rml_errors
+ * - The size of the Allocated sections is rml_allocated
+ * - The size of the Free sections is (rml_available - rml_allocated)
+ * - The size of the Unavailable section is:
+ *   rml_size - (rml_errors + rml_available)
+ *
+ * The allocated section contains medium IDs that are already allocated to a
+ * device for this request.
+ *
+ * The free section contains medium IDs that are free to be allocated to a new
+ * device.
+ *
+ * The unavailable section contains medium IDs that are temporarily unavailable
+ * (e.g. ongoing I/O, lock...). They cannot be used for the current allocation
+ * but can be retried later if necessary.
+ *
+ * The error section contains medium IDs that cannot be used (e.g. failed, admin
+ * lock...).
+ *
+ * During the first allocation of a request, media are selected from the free
+ * section. If they can be sent to a device thread, they are put at the
+ * beginning of the list (at the end of the allocated section). If they cannot
+ * be allocated at all (e.g. administratively locked), they are put in the error
+ * section. If they cannot be allocated right now but may be allocated later
+ * (e.g. loaded on a busy drive), they are put in the unavailable section.
+ *
+ * If a device thread encounters an error while loading its allocated medium,
+ * the request is pushed back into the scheduler thread. The unavailable section
+ * is emptied with rml_reset. In this case, the medium at the index associated
+ * with the sub request of the device may be failed. If so, the medium is put
+ * into the error section, otherwise it can be reused for an allocation.
+ *
+ * In the case it is failed, the allocated section will contain one failed
+ * medium. This medium will be swapped to the error section by the scheduler
+ * thread when it manages the error.
+ */
+struct read_media_list {
+    /** list of media to choose from (points to ralloc->med_ids) */
+    pho_rsc_id_t **rml_media;
+    /** size of rml_media */
+    size_t rml_size;
+
+    /** number of media currently available for allocation that the scheduler
+     *  can choose from. Temporarily unavailable and failed media are not
+     *  counted.
+     */
+    size_t rml_available;
+    /** number of media currently allocated for the request */
+    size_t rml_allocated;
+    /** number of media that encountered an error during allocation */
+    size_t rml_errors;
+    /** set to true on the first call to rml_reset */
+    bool rml_reset_done;
+};
+
+enum read_medium_allocation_status {
+    /** The medium was allocated successfully */
+    RMAS_OK,
+    /** The medium is temporarily unavailable */
+    RMAS_UNAVAILABLE,
+    /** An error occurred during allocation */
+    RMAS_ERROR,
+};
+
+/** Initialize \p list for request \p reqc */
+void rml_init(struct read_media_list *list, struct req_container *reqc);
+
+/**
+ * Update the status of the medium at \p index by moving it to the right place.
+ * /!\ this function modifies the order of list->rml_media.
+ *
+ * \return the number of available media after the update (allocated + free)
+ */
+size_t rml_medium_update(struct read_media_list *list, size_t index,
+                         enum read_medium_allocation_status status);
+
+/**
+ * Return the number of media that can still be used for an allocation including
+ * temporarily unavailable ones.
+ */
+size_t rml_nb_usable_media(struct read_media_list *list);
+
+/**
+ * Reset the state of temporarily unavailable media
+ */
+void rml_reset(struct read_media_list *list);
+
+/**
+ * Convert negative return code \p rc to read_medium_allocation_status
+ *       0 -> RMAS_OK
+ * -EAGAIN -> RMAS_UNAVAILABLE
+ *    rest -> RMAS_ERROR
+ */
+enum read_medium_allocation_status rml_errno2status(int rc);
 
 #endif
