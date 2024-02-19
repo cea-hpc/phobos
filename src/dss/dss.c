@@ -1811,6 +1811,7 @@ static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
     dev->rsc.adm_status = str2rsc_adm_status(PQgetvalue(res, row_num, 3));
     dev->host           = get_str_value(res, row_num, 4);
     dev->path           = get_str_value(res, row_num, 5);
+    dev->health         = 0;
 
     rc = dss_lock_status(handle, DSS_DEVICE, dev, 1, &dev->lock);
     if (rc == -ENOLCK)
@@ -1860,6 +1861,7 @@ static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
     medium->flags.put      = psqlstrbool2bool(*PQgetvalue(res, row_num, 10));
     medium->flags.get      = psqlstrbool2bool(*PQgetvalue(res, row_num, 11));
     medium->flags.delete   = psqlstrbool2bool(*PQgetvalue(res, row_num, 12));
+    medium->health         = 0;
 
     /* No dynamic allocation here */
     rc = dss_media_stats_decode(&medium->stats, PQgetvalue(res, row_num, 8));

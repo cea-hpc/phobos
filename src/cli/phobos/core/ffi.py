@@ -210,7 +210,8 @@ class DevInfo(Structure, CLIManagedResourceMixin):
         ('rsc', Resource),
         ('_path', c_char_p),
         ('_host', c_char_p),
-        ('lock', DSSLock)
+        ('lock', DSSLock),
+        ('health', c_size_t)
     ]
 
     def get_display_fields(self, max_width=None):
@@ -385,7 +386,8 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         ('stats', MediaStats),
         ('_tags', Tags),
         ('lock', DSSLock),
-        ('flags', OperationFlags)
+        ('flags', OperationFlags),
+        ('health', c_size_t)
     ]
 
     def get_display_fields(self, max_width=None):

@@ -445,7 +445,7 @@ struct dev_info {
     char                *path;
     char                *host;
     struct pho_lock      lock;
-
+    size_t               health; /**< Current health of the device */
 };
 
 /**
@@ -501,6 +501,7 @@ struct media_info {
     struct tags            tags;         /**< Tags used for filtering */
     struct pho_lock        lock;         /**< Distributed access lock */
     struct operation_flags flags;        /**< Media operation flags */
+    size_t                 health;       /**< Current health of the medium */
 };
 
 enum obj_status {
