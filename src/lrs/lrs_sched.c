@@ -1930,11 +1930,9 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
         return rc;
 
     rc = check_medium_permission_and_status(reqc, medium);
-    if (rc) {
-        lrs_medium_release(medium);
-        return rc;
-    }
     *target_medium = medium;
+    if (rc)
+        return rc;
 
     /* don't rely on existing lock for future use of this medium */
     pho_lock_clean(&(*target_medium)->lock);
@@ -2016,6 +2014,8 @@ static int sched_handle_read_alloc_error(struct lrs_sched *sched,
     int alloc_status;
     int rc;
 
+    ENTRY;
+
     list = &sreq->reqc->params.rwalloc.media_list;
     rml_reset(list);
 
@@ -2024,8 +2024,11 @@ retry:
     pho_debug("I/O sched pair: rc=%d, index=%lu, dev=%s",
               rc, sreq->medium_index,
               dev ? dev->ld_dss_dev_info->rsc.id.name : "none");
-    if (rc)
+    if (rc) {
+        rml_medium_realloc_failed(list, sreq->medium_index, index_of_failed);
+        sreq->medium_index = index_of_failed;
         GOTO(try_alloc, rc);
+    }
 
     if (dev) {
         if (sreq->failure_on_medium)
@@ -2072,6 +2075,8 @@ static int sched_read_alloc_one_medium(struct lrs_sched *sched,
     struct lrs_dev *dev = NULL;
     int alloc_status;
     int rc = 0;
+
+    ENTRY;
 
     list = &reqc->params.rwalloc.media_list;
 

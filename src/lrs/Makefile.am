@@ -15,7 +15,8 @@ IO_SCHEDULERS=io_schedulers/fifo.c \
               io_schedulers/schedulers.h \
               io_schedulers/scheduler_priority_algorithms.c
 
-phobosd_SOURCES=lrs.c \
+phobosd_SOURCES=health.h health.c \
+                lrs.c \
                 lrs_cache.h lrs_cache.c \
                 lrs_cfg.h lrs_cfg.c \
                 lrs_device.h lrs_device.c \
@@ -38,7 +39,8 @@ phobosd_LDADD=../dss/libpho_dss.la \
 
 phobosd_LDFLAGS=-Wl,-rpath=$(libdir) -Wl,-rpath=$(pkglibdir)
 
-libpho_lrs_la_SOURCES=io_sched.c \
+libpho_lrs_la_SOURCES=health.c \
+                      io_sched.c \
                       lrs_cache.c \
                       lrs_cfg.c \
                       lrs_device.c \

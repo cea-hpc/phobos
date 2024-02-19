@@ -506,4 +506,6 @@ struct media_info *atomic_dev_medium_get(struct lrs_dev *device);
 
 ssize_t atomic_dev_medium_phys_space_free(struct lrs_dev *dev);
 
+void fail_release_medium(struct lrs_dev *dev, struct media_info *medium);
+
 #endif

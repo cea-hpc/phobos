@@ -109,6 +109,8 @@ struct read_media_list {
     pho_rsc_id_t **rml_media;
     /** size of rml_media */
     size_t rml_size;
+    /** reference to the req_container of this request */
+    struct req_container *rml_reqc;
 
     /** number of media currently available for allocation that the scheduler
      *  can choose from. Temporarily unavailable and failed media are not
@@ -185,5 +187,7 @@ void rml_requeue(struct read_media_list *list);
  *    rest -> RMAS_ERROR
  */
 enum read_medium_allocation_status rml_errno2status(int rc);
+
+void rml_display(struct read_media_list *list);
 
 #endif
