@@ -1167,11 +1167,11 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
     MUTEX_UNLOCK(&dev->ld_mutex);
     rc = dss_media_set(&dev->ld_device_thread.dss, medium, 1, DSS_SET_UPDATE,
                        fields);
-    if (!rc)
+    if (rc)
         LOG_RETURN(rc, "Failed to update state of media '%s' after format",
                    medium->rsc.id.name);
 
-    return rc;
+    return 0;
 }
 
 static void queue_format_response(struct tsqueue *response_queue,
