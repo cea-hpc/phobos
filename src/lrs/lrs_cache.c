@@ -29,6 +29,7 @@
 #include "lrs_cache.h"
 #include "pho_common.h"
 #include "pho_dss.h"
+#include "pho_type_utils.h"
 
 struct media_cache_env {
     struct dss_handle dss;
@@ -146,10 +147,15 @@ static struct key_value *lrs_media_cache_build(const void *key, void *env)
 
 static struct key_value *lrs_media_cache_value2kv(void *key, void *value)
 {
-    (void)key;
-    (void)value;
+    struct media_info *medium = value;
+    struct key_value *kv;
 
-    return NULL;
+    kv = key_value_alloc(NULL, NULL, sizeof(*medium));
+    media_info_copy((struct media_info *)kv->value, medium);
+
+    kv->key = &((struct media_info *)kv->value)->rsc.id;
+
+    return kv;
 }
 
 static void lrs_media_cache_destroy(struct key_value *kv, void *env)

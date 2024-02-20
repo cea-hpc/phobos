@@ -80,6 +80,9 @@ void dev_info_free(struct dev_info *dev, bool free_top_struct);
  */
 void media_info_cleanup(struct media_info *medium);
 
+/** copy the a media_info structure in an already allocated one  */
+void media_info_copy(struct media_info *dst, const struct media_info *src);
+
 /** duplicate a media_info structure, cannot return NULL */
 struct media_info *media_info_dup(const struct media_info *mda);
 

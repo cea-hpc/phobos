@@ -122,6 +122,14 @@ void dev_info_free(struct dev_info *dev, bool free_top_struct)
         free(dev);
 }
 
+void media_info_copy(struct media_info *dst, const struct media_info *src)
+{
+    memcpy(dst, src, sizeof(*dst));
+    dst->rsc.model = xstrdup_safe(src->rsc.model);
+    tags_dup(&dst->tags, &src->tags);
+    pho_lock_cpy(&dst->lock, &src->lock);
+}
+
 struct media_info *media_info_dup(const struct media_info *mda)
 {
     struct media_info *media_out;
