@@ -26,6 +26,8 @@
 #include "config.h"
 #endif
 
+#include <assert.h>
+
 #include "lrs_cache.h"
 #include "pho_common.h"
 #include "pho_dss.h"
@@ -37,7 +39,7 @@ struct media_cache_env {
 
 static guint lrs_media_cache_hash(gconstpointer key);
 static gboolean lrs_media_cache_equal(gconstpointer lhs, gconstpointer rhs);
-static struct key_value *lrs_media_cache_build(const void *key, void *env);
+static struct key_value *lrs_media_cache_build(const void *key, void *_env);
 static struct key_value *lrs_media_cache_value2kv(void *key, void *value);
 static void lrs_media_cache_destroy(struct key_value *kv, void *env);
 static void lrs_media_cache_display(void *key, void *value, int ref_count);
@@ -136,13 +138,47 @@ static gboolean lrs_media_cache_equal(gconstpointer _lhs, gconstpointer _rhs)
     return g_str_equal(lhs->name, rhs->name);
 }
 
-
-static struct key_value *lrs_media_cache_build(const void *key, void *env)
+static struct key_value *lrs_media_cache_build(const void *key, void *_env)
 {
-    (void)key;
-    (void)env;
+    struct media_cache_env *env = _env;
+    const struct pho_id *id = key;
+    struct media_info *medium;
+    struct dss_filter filter;
+    struct key_value *kv;
+    int count;
+    int rc;
 
-    return NULL;
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                              "{\"DSS::MDA::family\": \"%s\"}, "
+                              "{\"DSS::MDA::id\": \"%s\"}"
+                          "]}",
+                          rsc_family2str(id->family),
+                          id->name);
+    if (rc) {
+        errno = -rc;
+        return NULL;
+    }
+
+    rc = dss_media_get(&env->dss, &filter, &medium, &count);
+    dss_filter_free(&filter);
+    if (rc) {
+        errno = -rc;
+        return NULL;
+    }
+    assert(count <= 1);
+    if (count == 0) {
+        dss_res_free(medium, count);
+        errno = ENXIO;
+        return NULL;
+    }
+
+    kv = key_value_alloc(NULL, NULL, sizeof(*medium));
+    media_info_copy((struct media_info *)kv->value, medium);
+    dss_res_free(medium, count);
+    kv->key = &((struct media_info *)kv->value)->rsc.id;
+
+    return kv;
 }
 
 static struct key_value *lrs_media_cache_value2kv(void *key, void *value)
@@ -160,8 +196,10 @@ static struct key_value *lrs_media_cache_value2kv(void *key, void *value)
 
 static void lrs_media_cache_destroy(struct key_value *kv, void *env)
 {
-    (void)kv;
-    (void)env;
+    (void) env;
+
+    media_info_cleanup((struct media_info *)kv->value);
+    free(kv);
 }
 
 static void lrs_media_cache_display(void *key, void *value, int ref_count)
