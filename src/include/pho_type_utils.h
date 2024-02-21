@@ -74,6 +74,12 @@ void dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src);
  */
 void dev_info_free(struct dev_info *dev, bool free_top_struct);
 
+/**
+ * Free the internals of struct media_info. Do not free \p medium.
+ * To free \p medium as well, use media_info_free.
+ */
+void media_info_cleanup(struct media_info *medium);
+
 /** duplicate a media_info structure, cannot return NULL */
 struct media_info *media_info_dup(const struct media_info *mda);
 

@@ -138,6 +138,16 @@ struct media_info *media_info_dup(const struct media_info *mda)
     return media_out;
 }
 
+void media_info_cleanup(struct media_info *medium)
+{
+    if (!medium)
+        return;
+
+    pho_lock_clean(&medium->lock);
+    free(medium->rsc.model);
+    tags_free(&medium->tags);
+}
+
 void media_info_free(struct media_info *mda)
 {
     if (!mda)
