@@ -433,3 +433,12 @@ unsigned int tsqueue_get_length(struct tsqueue *tsq)
 
     return length;
 }
+
+struct pho_id *pho_id_dup(const struct pho_id *src)
+{
+    struct pho_id *dup;
+
+    dup = xmalloc(sizeof(*dup));
+    pho_id_copy(dup, src);
+    return dup;
+}

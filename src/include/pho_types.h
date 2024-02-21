@@ -313,6 +313,8 @@ static inline void pho_id_name_set(struct pho_id *id, const char *name)
     id->name[PHO_URI_MAX - 1] = '\0';
 }
 
+struct pho_id *pho_id_dup(const struct pho_id *src);
+
 static inline void pho_id_copy(struct pho_id *dst, const struct pho_id *src)
 {
     dst->family = src->family;
