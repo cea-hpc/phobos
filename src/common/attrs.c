@@ -28,6 +28,7 @@
 
 #include "pho_attrs.h"
 #include "pho_common.h"
+#include "assert.h"
 #include <malloc.h>
 #include <string.h>
 #include <errno.h>
@@ -50,8 +51,7 @@ const char *pho_attr_get(struct pho_attrs *md, const char *key)
     return g_hash_table_lookup(md->attr_set, key);
 }
 
-int pho_attr_set(struct pho_attrs *md, const char *key,
-                 const char *value)
+void pho_attr_set(struct pho_attrs *md, const char *key, const char *value)
 {
     char *safe_value;
     char *safe_key;
@@ -59,8 +59,7 @@ int pho_attr_set(struct pho_attrs *md, const char *key,
     if (md->attr_set == NULL) {
         md->attr_set = g_hash_table_new_full(g_str_hash, g_str_equal, free,
                                              free);
-        if (md->attr_set == NULL)
-            return -ENOMEM;
+        assert(md->attr_set);
     }
 
     safe_value = xstrdup_safe(value);
@@ -68,8 +67,6 @@ int pho_attr_set(struct pho_attrs *md, const char *key,
 
     /* use ght_replace, so that previous key and values are freed */
     g_hash_table_replace(md->attr_set, safe_key, safe_value);
-
-    return 0;
 }
 
 /** callback function to dump a JSON to a GString
@@ -132,10 +129,9 @@ out_nojson:
     return (rc != 0) ? -EINVAL : 0;
 }
 
-int pho_json_raw_to_attrs(struct pho_attrs *md, json_t *obj)
+void pho_json_raw_to_attrs(struct pho_attrs *md, json_t *obj)
 {
-    void    *iter;
-    int      rc = 0;
+    void *iter;
 
     for (iter = json_object_iter(obj);
          iter != NULL;
@@ -143,19 +139,14 @@ int pho_json_raw_to_attrs(struct pho_attrs *md, json_t *obj)
         const char  *key = json_object_iter_key(iter);
         json_t      *val = json_object_iter_value(iter);
 
-        rc = pho_attr_set(md, key, json_string_value(val));
-        if (rc)
-            break;
+        pho_attr_set(md, key, json_string_value(val));
     }
-
-    return rc;
 }
 
 int pho_json_to_attrs(struct pho_attrs *md, const char *str)
 {
-    json_error_t     jerror;
-    json_t          *jdata;
-    int              rc;
+    json_error_t jerror;
+    json_t *jdata;
 
     if (str == NULL)
         return -EINVAL;
@@ -165,10 +156,10 @@ int pho_json_to_attrs(struct pho_attrs *md, const char *str)
         LOG_RETURN(-EINVAL, "JSON parsing error: %s at position %d",
                    jerror.text, jerror.position);
 
-    rc = pho_json_raw_to_attrs(md, jdata);
+    pho_json_raw_to_attrs(md, jdata);
 
     json_decref(jdata);
-    return rc;
+    return 0;
 }
 
 int pho_attrs_foreach(const struct pho_attrs *md, pho_attrs_iter_t cb,

@@ -81,14 +81,10 @@ static int test1a(void *arg)
     struct pho_attrs *attrs = (struct pho_attrs *)arg;
     const struct key_value *kv;
     const char *val;
-    int rc;
 
     /* set attributes in an attribute set */
-    for (kv = &kvs[0]; kv->key != NULL; kv++) {
-        rc = pho_attr_set(attrs, kv->key, kv->value);
-        if (rc)
-            LOG_RETURN(rc, "pho_attr_set failed");
-    }
+    for (kv = &kvs[0]; kv->key != NULL; kv++)
+        pho_attr_set(attrs, kv->key, kv->value);
 
     /* get attributes */
     for (kv = &kvs[0]; kv->key != NULL; kv++) {
@@ -108,14 +104,10 @@ static int test1b(void *arg)
     struct pho_attrs *attrs = (struct pho_attrs *)arg;
     const struct key_value *kv;
     const char *val;
-    int rc;
 
     /* set attributes again (values from kvs2) */
-    for (kv = &kvs2[0]; kv->key != NULL; kv++) {
-        rc = pho_attr_set(attrs, kv->key, kv->value);
-        if (rc)
-            LOG_RETURN(rc, "pho_attr_set failed");
-    }
+    for (kv = &kvs2[0]; kv->key != NULL; kv++)
+        pho_attr_set(attrs, kv->key, kv->value);
 
     /* check attributes */
     for (kv = &kvs2[0]; kv->key != NULL; kv++) {

@@ -42,8 +42,7 @@ static inline bool pho_attrs_is_empty(const struct pho_attrs *attrs)
 }
 
 /** create or update a key-value item in the attribute set */
-int pho_attr_set(struct pho_attrs *md, const char *key,
-                 const char *value);
+void pho_attr_set(struct pho_attrs *md, const char *key, const char *value);
 
 /** get a key-value item by key name */
 const char *pho_attr_get(struct pho_attrs *md, const char *key);
@@ -78,7 +77,7 @@ int pho_json_to_attrs(struct pho_attrs *md, const char *str);
  * @param md  key-value set to fill.
  * @param str json object to decode.
  */
-int pho_json_raw_to_attrs(struct pho_attrs *md, json_t *obj);
+void pho_json_raw_to_attrs(struct pho_attrs *md, json_t *obj);
 
 /**
  * Invoke a callback on all items of the attribute set.

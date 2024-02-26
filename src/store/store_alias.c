@@ -138,9 +138,7 @@ static int set_lyt_params(char *section_name, struct pho_attrs *attrs)
                 LOG_GOTO(out, rc = -EINVAL, "Missing value for key '%s' "
                                             "in %s", key, cfg_val);
 
-            rc = pho_attr_set(attrs, key, value);
-            if (rc)
-                LOG_GOTO(out, rc, "Unable to allocate new hashtable");
+            pho_attr_set(attrs, key, value);
         }
 out:
         free(str_cpy);

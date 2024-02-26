@@ -81,12 +81,9 @@ class XferPutParams(Structure): # pylint: disable=too-few-public-methods, too-ma
         """Insert key/values attributes in Xfer's layout params"""
         if val:
             for k, v in val.items():
-                rc = LIBPHOBOS.pho_attr_set(byref(self.lyt_params),
-                                            str(k).encode('utf8'),
-                                            str(v).encode('utf8'))
-                if rc:
-                    raise EnvironmentError(
-                        rc, "Cannot add lyt_params to xfer '%s':'%s'" % (k, v))
+                LIBPHOBOS.pho_attr_set(byref(self.lyt_params),
+                                       str(k).encode('utf8'),
+                                       str(v).encode('utf8'))
 
     def __init__(self, put_params):
         super().__init__()
@@ -268,12 +265,9 @@ class XferDescriptor(Structure): # pylint: disable=too-many-instance-attributes
 
         if desc[2]:
             for k, v in desc[2].items():
-                rc = LIBPHOBOS.pho_attr_set(byref(self.xd_attrs),
-                                            str(k).encode('utf8'),
-                                            str(v).encode('utf8'))
-                if rc:
-                    raise EnvironmentError(
-                        rc, "Cannot add attr to xfer objid:'%s'" % (desc[0],))
+                LIBPHOBOS.pho_attr_set(byref(self.xd_attrs),
+                                       str(k).encode('utf8'),
+                                       str(v).encode('utf8'))
 
         self.open_file(desc[1])
 

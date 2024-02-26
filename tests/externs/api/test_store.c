@@ -99,9 +99,7 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    rc = pho_attr_set(&attrs, "program", argv[0]);
-    if (rc)
-        exit(EXIT_FAILURE);
+    pho_attr_set(&attrs, "program", argv[0]);
 
     if (!strcmp(argv[1], "put")) {
         struct pho_xfer_desc xfer = {0};

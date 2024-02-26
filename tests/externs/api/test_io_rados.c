@@ -140,19 +140,16 @@ static void ior_test_set_new_xattr(void **state)
 {
     struct pho_io_descr *iod = (struct pho_io_descr *) *state;
     struct io_adapter_module ioa;
-    int rc;
 
     pho_attrs_free(&iod->iod_attrs);
 
-    rc = pho_attr_set(&iod->iod_attrs, "pho_io_new_xattr", "pho_io");
-    assert_int_equal(rc, -rc);
+    pho_attr_set(&iod->iod_attrs, "pho_io_new_xattr", "pho_io");
 
     iod->iod_flags = PHO_IO_MD_ONLY;
 
     ior_io_adapter_open_close(&ioa, true, state, 0);
 
-    rc = pho_attr_set(&iod->iod_attrs, "pho_io_new_xattr", "invalid");
-    assert_int_equal(rc, -rc);
+    pho_attr_set(&iod->iod_attrs, "pho_io_new_xattr", "invalid");
     assert_string_equal("invalid",
                         pho_attr_get(&iod->iod_attrs, "pho_io_new_xattr"));
 
@@ -166,26 +163,22 @@ static void ior_test_replace_xattr(void **state)
 {
     struct pho_io_descr *iod = (struct pho_io_descr *) *state;
     struct io_adapter_module ioa;
-    int rc;
 
     pho_attrs_free(&iod->iod_attrs);
 
     iod->iod_flags = PHO_IO_MD_ONLY;
 
-    rc = pho_attr_set(&iod->iod_attrs, "pho_io_replace_xattr", "pho_io_first");
-    assert_int_equal(rc, -rc);
+    pho_attr_set(&iod->iod_attrs, "pho_io_replace_xattr", "pho_io_first");
 
     ior_io_adapter_open_close(&ioa, true, state, 0);
 
     iod->iod_flags = PHO_IO_REPLACE;
 
-    rc = pho_attr_set(&iod->iod_attrs, "pho_io_replace_xattr", "pho_io_second");
-    assert_int_equal(rc, -rc);
+    pho_attr_set(&iod->iod_attrs, "pho_io_replace_xattr", "pho_io_second");
 
     ior_io_adapter_open_close(&ioa, true, state, 0);
 
-    rc = pho_attr_set(&iod->iod_attrs, "pho_io_replace_xattr", "invalid");
-    assert_int_equal(rc, -rc);
+    pho_attr_set(&iod->iod_attrs, "pho_io_replace_xattr", "invalid");
 
     ior_io_adapter_open_close(&ioa, false, state, 0);
 
@@ -197,18 +190,15 @@ static void ior_test_set_new_xattr_with_existing_xattr(void **state)
 {
     struct pho_io_descr *iod = (struct pho_io_descr *) *state;
     struct io_adapter_module ioa;
-    int rc;
 
     pho_attrs_free(&iod->iod_attrs);
 
     iod->iod_flags = PHO_IO_MD_ONLY;
-    rc = pho_attr_set(&iod->iod_attrs, "pho_io_exist_xattr", "pho_io");
-    assert_int_equal(rc, -rc);
+    pho_attr_set(&iod->iod_attrs, "pho_io_exist_xattr", "pho_io");
 
     ior_io_adapter_open_close(&ioa, true, state, 0);
 
-    rc = pho_attr_set(&iod->iod_attrs, "pho_io_exist_xattr", "pho_io");
-    assert_int_equal(rc, -rc);
+    pho_attr_set(&iod->iod_attrs, "pho_io_exist_xattr", "pho_io");
 
     ior_io_adapter_open_close(&ioa, true, state, -EEXIST);
 }
@@ -217,14 +207,12 @@ static void ior_test_remove_xattr(void **state)
 {
     struct pho_io_descr *iod = (struct pho_io_descr *) *state;
     struct io_adapter_module ioa;
-    int rc;
 
     pho_attrs_free(&iod->iod_attrs);
 
     iod->iod_flags = PHO_IO_REPLACE;
 
-    rc = pho_attr_set(&iod->iod_attrs, "pho_io_remove_xattr", "pho_io");
-    assert_int_equal(rc, -rc);
+    pho_attr_set(&iod->iod_attrs, "pho_io_remove_xattr", "pho_io");
 
     ior_io_adapter_open_close(&ioa, true, state, 0);
 

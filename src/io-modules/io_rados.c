@@ -194,9 +194,7 @@ static int getxattr_cb(const char *key, const char *value, void *udata)
     if (rc != 0)
         return rc;
 
-    rc = pho_attr_set(arg->attrs, key, tmp_val);
-    if (rc != 0)
-        return rc;
+    pho_attr_set(arg->attrs, key, tmp_val);
 
     free(tmp_val);
 

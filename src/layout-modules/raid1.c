@@ -399,16 +399,10 @@ static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
 
         iod[i].iod_flags = PHO_IO_MD_ONLY;
 
-        rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_ID_NAME, oid);
-        if (rc)
-            LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d", i);
+        pho_attr_set(&iod[i].iod_attrs, PHO_EA_ID_NAME, oid);
 
-        if (!gstring_empty(user_md)) {
-            rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_UMD_NAME, user_md->str);
-            if (rc)
-                LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d",
-                         i);
-        }
+        if (!gstring_empty(user_md))
+            pho_attr_set(&iod[i].iod_attrs, PHO_EA_UMD_NAME, user_md->str);
 
         if (extent[i].with_md5) {
             const char *md5_buffer = uchar2hex(extent[i].md5, MD5_BYTE_LENGTH);
@@ -416,11 +410,8 @@ static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
             if (!md5_buffer)
                 LOG_GOTO(attrs, rc = -ENOMEM, "Unable to construct hex md5");
 
-            rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_MD5_NAME, md5_buffer);
+            pho_attr_set(&iod[i].iod_attrs, PHO_EA_MD5_NAME, md5_buffer);
             free((char *)md5_buffer);
-            if (rc)
-                LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d",
-                         i);
         }
 
         if (extent[i].with_xxh128) {
@@ -429,24 +420,15 @@ static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
             if (!xxh128_buffer)
                 LOG_GOTO(attrs, rc = -ENOMEM, "Unable to construct hex xxh128");
 
-            rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_XXH128_NAME,
-                              xxh128_buffer);
+            pho_attr_set(&iod[i].iod_attrs, PHO_EA_XXH128_NAME, xxh128_buffer);
             free((char *)xxh128_buffer);
-            if (rc)
-                LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d",
-                         i);
         }
 
         rc = asprintf(&str_buffer, "%lu", object_size);
         if (rc < 0)
             LOG_GOTO(attrs, -errno, "Unable to construct object size buffer");
 
-        rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_OBJECT_SIZE_NAME,
-                          str_buffer);
-        if (rc) {
-            free(str_buffer);
-            LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d", i);
-        }
+        pho_attr_set(&iod[i].iod_attrs, PHO_EA_OBJECT_SIZE_NAME, str_buffer);
 
         /* No alloc issue because object_size > offset */
         rc = sprintf(str_buffer, "%lu", offset);
@@ -455,11 +437,8 @@ static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
             LOG_GOTO(attrs, -errno, "Unable to construct offset buffer");
         }
 
-        rc = pho_attr_set(&iod[i].iod_attrs, PHO_EA_EXTENT_OFFSET_NAME,
-                          str_buffer);
+        pho_attr_set(&iod[i].iod_attrs, PHO_EA_EXTENT_OFFSET_NAME, str_buffer);
         free(str_buffer);
-        if (rc)
-            LOG_GOTO(attrs, rc, "Unable to set iod_attrs for extent %d", i);
    }
 
     for (i = 0; i < repl_count; ++i) {
@@ -1168,11 +1147,8 @@ static int layout_raid1_encode(struct pho_encoder *enc)
     }
 
     /* set repl_count as char * in layout */
-    rc = pho_attr_set(&enc->layout->layout_desc.mod_attrs,
-                      PHO_EA_REPL_COUNT_NAME, string_repl_count);
-    if (rc)
-        LOG_RETURN(rc, "Unable to set raid1 layout repl_count attr in "
-                       "encoder built");
+    pho_attr_set(&enc->layout->layout_desc.mod_attrs,
+                 PHO_EA_REPL_COUNT_NAME, string_repl_count);
 
     /* set repl_count in encoder */
     rc = layout_repl_count(enc->layout, &raid1->repl_count);
@@ -1195,12 +1171,9 @@ static int layout_raid1_encode(struct pho_encoder *enc)
     if (rc < 0)
         LOG_RETURN(-ENOMEM, "Unable to allocate object_size buffer");
 
-    rc = pho_attr_set(&enc->layout->layout_desc.mod_attrs,
-                      PHO_EA_OBJECT_SIZE_NAME, string_obj_size);
+    pho_attr_set(&enc->layout->layout_desc.mod_attrs,
+                 PHO_EA_OBJECT_SIZE_NAME, string_obj_size);
     free(string_obj_size);
-    if (rc)
-        LOG_RETURN(rc, "Unable to set layout obj_size attr in "
-                       "encoder built");
 
     /* Allocate the extent array */
     raid1->written_extents = g_array_new(FALSE, TRUE,

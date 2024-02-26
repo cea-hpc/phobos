@@ -806,10 +806,11 @@ out_free:
  */
 static int dss_layout_desc_decode(struct module_desc *desc, const char *json)
 {
-    json_t          *root;
-    json_t          *attrs;
-    json_error_t     json_error;
-    int              rc;
+    json_error_t json_error;
+    json_t *attrs;
+    json_t *root;
+    int rc = 0;
+
     ENTRY;
 
     pho_debug("Decoding JSON representation for module desc: '%s'", json);
@@ -849,9 +850,7 @@ static int dss_layout_desc_decode(struct module_desc *desc, const char *json)
     if (!json_is_object(attrs))
         LOG_GOTO(out_free, rc = -EINVAL, "Invalid attributes format");
 
-    rc = pho_json_raw_to_attrs(&desc->mod_attrs, attrs);
-    if (rc)
-        LOG_GOTO(out_free, rc, "Cannot decode module attributes");
+    pho_json_raw_to_attrs(&desc->mod_attrs, attrs);
 
 out_free:
     if (rc) {
