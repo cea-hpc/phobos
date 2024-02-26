@@ -229,7 +229,7 @@ static void add_written_extent(struct raid1_encoder *raid1,
  *
  * 0 is not a valid replica count, -EINVAL will be returned.
  *
- * @param[in]  layout     layout with a REPL_COUNT_ATTR_KEY
+ * @param[in]  layout     layout with a PHO_EA_REPL_COUNT_NAME
  * @param[out] repl_count replica count value to set
  *
  * @return 0 if success,
@@ -238,12 +238,12 @@ static void add_written_extent(struct raid1_encoder *raid1,
 int layout_repl_count(struct layout_info *layout, unsigned int *repl_count)
 {
     const char *string_repl_count = pho_attr_get(&layout->layout_desc.mod_attrs,
-                                                 REPL_COUNT_ATTR_KEY);
+                                                 PHO_EA_REPL_COUNT_NAME);
     if (string_repl_count == NULL)
         LOG_RETURN(-EINVAL, "Unable to get replica count from layout attrs");
 
     errno = 0;
-    *repl_count = strtoul(string_repl_count, NULL, REPL_COUNT_ATTR_VALUE_BASE);
+    *repl_count = strtoul(string_repl_count, NULL, 10);
     if (errno != 0)
         return -errno;
 
@@ -1169,7 +1169,7 @@ static int layout_raid1_encode(struct pho_encoder *enc)
 
     /* set repl_count as char * in layout */
     rc = pho_attr_set(&enc->layout->layout_desc.mod_attrs,
-                      REPL_COUNT_ATTR_KEY, string_repl_count);
+                      PHO_EA_REPL_COUNT_NAME, string_repl_count);
     if (rc)
         LOG_RETURN(rc, "Unable to set raid1 layout repl_count attr in "
                        "encoder built");
@@ -2163,19 +2163,23 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
     ssize_t extent_sizes = 0;
     ssize_t replica_size = 0;
     struct extent *extents;
+    unsigned int repl_cnt;
     const char *buffer;
     int obj_size;
-    int repl_cnt;
     int ext_cnt;
+    int rc;
     int i;
 
     // Recover repl_count and obj_size
-    buffer = pho_attr_get(&lyt.layout_desc.mod_attrs, "repl_count");
-    repl_cnt = strtol(buffer, NULL, 10);
+    rc = layout_repl_count(&lyt, &repl_cnt);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Failed to get replica count for reconstruction of object"
+                   " '%s'", obj->oid);
     ext_cnt = lyt.ext_count;
     extents = lyt.extents;
 
-    buffer = pho_attr_get(&lyt.layout_desc.mod_attrs, "raid1.obj_size");
+    buffer = pho_attr_get(&lyt.layout_desc.mod_attrs, PHO_EA_OBJECT_SIZE_NAME);
     obj_size = strtol(buffer, NULL, 10);
 
     for (i = 0; i < ext_cnt; i++) {

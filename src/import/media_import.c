@@ -187,7 +187,7 @@ static int _get_info_from_filename(char *filename,
 
     static struct pho_attrs md;
 
-    pho_attr_set(&md, "repl_count", repl_count);
+    pho_attr_set(&md, "raid1.repl_count", repl_count);
     struct module_desc mod = {
         .mod_name = !strcmp(lyt_name, "r1") ? "raid1" : "inconnu",
         .mod_major = 0,
