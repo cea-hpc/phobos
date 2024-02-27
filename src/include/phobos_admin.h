@@ -500,7 +500,7 @@ default_conflict_handler(const struct pho_id *id,
  * Send a notification to inform the update of a list of media.
  *
  * @param[in] adm          Valid admin handle
- * @param[in] media        The list of media that where updated
+ * @param[in] ids          The list of media that where updated
  * @param[in] count        The number of media in \p media
  * @param[in] on_conflict  Callback run for each media that is locked by another
  *                         host and cannot be updated
@@ -514,7 +514,7 @@ default_conflict_handler(const struct pho_id *id,
  *                    negative POSIX error code on error
  */
 int phobos_admin_notify_media_update(struct admin_handle *adm,
-                                     struct pho_id *media,
+                                     struct pho_id *ids,
                                      size_t count,
                                      lock_conflict_handler_t on_conflict);
 #endif

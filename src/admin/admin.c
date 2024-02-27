@@ -1833,11 +1833,75 @@ out:
     return rc;
 }
 
+static struct media_info *media_from_id_list(struct pho_id *ids, size_t count)
+{
+    struct media_info *media;
+    size_t i;
+
+    media = xcalloc(count, sizeof(*media));
+
+    for (i = 0; i < count; i++)
+        pho_id_copy(&media[i].rsc.id, &ids[i]);
+
+    return media;
+}
+
 int phobos_admin_notify_media_update(struct admin_handle *adm,
-                                     struct pho_id *media,
+                                     struct pho_id *ids,
                                      size_t count,
                                      lock_conflict_handler_t on_conflict)
 {
+    struct media_info *media;
+    const char *myhostname;
+    struct pho_lock *locks;
     // TODO
-    return 0;
+    // int nrc = 0;
+    int crc = 0;
+    size_t i;
+    int rc;
+
+    myhostname = get_hostname();
+    if (!myhostname)
+        return -errno;
+
+    if (!on_conflict)
+        on_conflict = default_conflict_handler;
+
+    media = media_from_id_list(ids, count);
+    locks = xmalloc(sizeof(*locks) * count);
+
+    rc = dss_lock_status(&adm->dss, DSS_MEDIA, media, count, locks);
+    if (rc && rc != -ENOLCK)
+        goto out_free;
+
+    if (rc == -ENOLCK)
+        /* this means that some elements are not locked, ignore this */
+        rc = 0;
+
+    for (i = 0; i < count; i++) {
+        if (!locks[i].hostname)
+            /* not locked, can safely be updated without notification */
+            continue;
+
+        if (!strcmp(myhostname, locks[i].hostname)) {
+            /* wait for the reply as the update should be quick */
+            // TODO
+            // nrc = _admin_notify(adm, &ids[i], PHO_NTFY_OP_MEDIUM_UPDATE,
+            // true);
+            // rc = rc ? : nrc;
+        } else {
+            int rc2;
+
+            rc2 = on_conflict(&ids[i], locks[i].hostname);
+            crc = rc2 ? : crc;
+        }
+    }
+
+    rc = rc ? : crc;
+
+out_free:
+    free(media);
+    free(locks);
+
+    return rc;
 }
