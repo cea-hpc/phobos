@@ -2239,6 +2239,39 @@ static void queue_notify_response(struct lrs_sched *sched,
     tsqueue_push(sched->response_queue, respc);
 }
 
+static int sched_medium_update(struct lrs_sched *sched,
+                               const char *name)
+{
+    struct media_info *medium = NULL;
+    struct media_info *old_medium;
+    struct lrs_dev *device;
+    struct pho_id id;
+    int rc;
+
+    id.family = sched->family;
+    pho_id_name_set(&id, name);
+
+    rc = sched_fill_media_info(&sched->lock_handle, &medium, &id);
+    if (rc)
+        return rc;
+
+    device = search_loaded_medium_keep_lock(sched->devices.ldh_devices,
+                                            name);
+    if (!device) {
+        media_info_free(medium);
+        return 0;
+    }
+
+    old_medium = device->ld_dss_media_info;
+    device->ld_dss_media_info = medium;
+
+    MUTEX_UNLOCK(&device->ld_mutex);
+
+    media_info_free(old_medium);
+
+    return 0;
+}
+
 /* reqc is freed unless -EAGAIN is returned */
 static int sched_handle_notify(struct lrs_sched *sched,
                                struct req_container *reqc)
@@ -2267,6 +2300,9 @@ static int sched_handle_notify(struct lrs_sched *sched,
         break;
     case PHO_NTFY_OP_DEVICE_UNLOCK:
         rc = sched_device_unlock(sched, nreq->rsrc_id->name);
+        break;
+    case PHO_NTFY_OP_MEDIUM_UPDATE:
+        rc = sched_medium_update(sched, nreq->rsrc_id->name);
         break;
     default:
         LOG_GOTO(err, rc = -EINVAL, "The requested operation is not "

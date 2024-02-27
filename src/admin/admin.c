@@ -1854,8 +1854,7 @@ int phobos_admin_notify_media_update(struct admin_handle *adm,
     struct media_info *media;
     const char *myhostname;
     struct pho_lock *locks;
-    // TODO
-    // int nrc = 0;
+    int nrc = 0;
     int crc = 0;
     size_t i;
     int rc;
@@ -1885,10 +1884,8 @@ int phobos_admin_notify_media_update(struct admin_handle *adm,
 
         if (!strcmp(myhostname, locks[i].hostname)) {
             /* wait for the reply as the update should be quick */
-            // TODO
-            // nrc = _admin_notify(adm, &ids[i], PHO_NTFY_OP_MEDIUM_UPDATE,
-            // true);
-            // rc = rc ? : nrc;
+            nrc = _admin_notify(adm, &ids[i], PHO_NTFY_OP_MEDIUM_UPDATE, true);
+            rc = rc ? : nrc;
         } else {
             int rc2;
 

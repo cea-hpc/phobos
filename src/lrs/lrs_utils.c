@@ -56,8 +56,9 @@ static char *get_sub_request_medium_name(struct sub_request *sub_request)
     }
 }
 
-struct lrs_dev *search_loaded_medium(GPtrArray *devices,
-                                     const char *name)
+static struct lrs_dev *__search_loaded_medium(GPtrArray *devices,
+                                              const char *name,
+                                              bool keep_lock)
 {
     int i;
 
@@ -87,7 +88,9 @@ struct lrs_dev *search_loaded_medium(GPtrArray *devices,
         }
 
         if (!strcmp(name, media_id)) {
-            MUTEX_UNLOCK(&dev->ld_mutex);
+            if (!keep_lock)
+                MUTEX_UNLOCK(&dev->ld_mutex);
+
             pho_debug("Found loaded medium '%s' in '%s'",
                       name, dev->ld_dss_dev_info->rsc.id.name);
             return dev;
@@ -99,6 +102,18 @@ err_continue:
 
     pho_debug("Did not find loaded medium '%s'", name);
     return NULL;
+}
+
+struct lrs_dev *search_loaded_medium(GPtrArray *devices,
+                                     const char *name)
+{
+    return __search_loaded_medium(devices, name, false);
+}
+
+struct lrs_dev *search_loaded_medium_keep_lock(GPtrArray *devices,
+                                               const char *name)
+{
+    return __search_loaded_medium(devices, name, true);
 }
 
 struct lrs_dev *search_in_use_medium(GPtrArray *devices,
