@@ -1551,6 +1551,9 @@ class MediaOptHandler(BaseResourceOptHandler):
         """Calling client.media.update"""
         try:
             self.client.media.update(media, fields)
+            with AdminClient(lrs_required=False) as adm:
+                adm.notify_media_update(media)
+
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))

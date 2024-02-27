@@ -338,6 +338,18 @@ class Client: # pylint: disable=too-many-public-methods
         if rc:
             raise EnvironmentError(rc, "Failed to clear logs")
 
+    def notify_media_update(self, media):
+        """Send a notification that the information of some media was updated"""
+
+        c_id = Id * len(media)
+        ids = [medium.rsc.id for medium in media]
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_notify_media_update(
+            byref(self.handle), c_id(*ids), len(media), None
+        )
+        if rc:
+            raise EnvironmentError(rc, "Failed to notify media update")
+
     def drive_lookup(self, res):
         """Lookup a drive"""
         drive_info = LibDrvInfo()

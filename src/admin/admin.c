@@ -1832,3 +1832,12 @@ out:
 
     return rc;
 }
+
+int phobos_admin_notify_media_update(struct admin_handle *adm,
+                                     struct pho_id *media,
+                                     size_t count,
+                                     lock_conflict_handler_t on_conflict)
+{
+    // TODO
+    return 0;
+}

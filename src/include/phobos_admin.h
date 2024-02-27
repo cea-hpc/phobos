@@ -475,4 +475,46 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
 int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                         const struct pho_id *tape_id);
 
+
+/**
+ * @param[in]  id        id of the medium locked by someone else
+ * @param[in]  hostname  hostname of the LRS which holds the lock
+ *
+ * @return               0 on success
+ *                       negative error code on error
+ */
+typedef int (*lock_conflict_handler_t)(const struct pho_id *id,
+                                       const char *hostname);
+
+static inline int
+default_conflict_handler(const struct pho_id *id,
+                         const char *hostname)
+{
+    pho_warn("Medium '%s' is locked by '%s', "
+             "it will not be notified of the change",
+             id->name, hostname);
+    return 0;
+}
+
+/**
+ * Send a notification to inform the update of a list of media.
+ *
+ * @param[in] adm          Valid admin handle
+ * @param[in] media        The list of media that where updated
+ * @param[in] count        The number of media in \p media
+ * @param[in] on_conflict  Callback run for each media that is locked by another
+ *                         host and cannot be updated
+ *
+ * \p on_conflict will be called on all the conflicting media even if it fails
+ * at some point to make sure that the caller is notified of all the conflicts.
+ *
+ * If \p on_conflict is NULL, use default_conflict_handler
+ *
+ * @return            0 on success,
+ *                    negative POSIX error code on error
+ */
+int phobos_admin_notify_media_update(struct admin_handle *adm,
+                                     struct pho_id *media,
+                                     size_t count,
+                                     lock_conflict_handler_t on_conflict);
 #endif
