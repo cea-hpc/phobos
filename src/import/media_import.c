@@ -126,81 +126,6 @@ static int _dev_media_update(struct dss_handle *dss,
 }
 
 /**
- * This function takes a file name, and parses it several times to retrieve
- * data contained in an extent's file name.
- *
- * @param[in]   filename            Name of the file to extract info.
- * @param[out]  lyt_info            Contains information about the layout of
- *                                  the extent to add.
- * @param[out]  extent_to_insert    Contains information about the extent to
- *                                  add.
- * @param[out]  obj_info            Contains information about the object
- *                                  related to the extent to add.
- *
- * @return      0 on success,
- *              -EINVAL on failure.
- */
-
-static int _get_info_from_filename(char *filename,
-                                   struct layout_info *lyt_info,
-                                   struct extent *extent_to_insert,
-                                   struct object_info *obj_info)
-{
-    char **subgroups;
-    char *repl_count;
-    char *lyt_name;
-    char *ext_idx;
-    char *version;
-    char *buffer;
-    char *uuid;
-    char *oid;
-
-    /* A typical filename looks like:
-     * oid.version.r1-1_0.uuid for raid1
-     */
-    subgroups = parse_str(filename, ".", 4);
-    if (subgroups == NULL)
-        return -EINVAL;
-
-    oid = subgroups[0];
-    version = subgroups[1];
-    buffer = subgroups[2];
-    uuid = subgroups[3];
-    free(subgroups);
-    subgroups = parse_str(buffer, "-_", 3);
-    if (subgroups == NULL)
-        return -EINVAL;
-
-    lyt_name = subgroups[0];
-    repl_count = subgroups[1];
-    ext_idx = subgroups[2];
-    free(subgroups);
-    pho_debug("oid:%s, vers:%s, lyt-name:%s, repl_count:%s,"
-              "extent_index=%s, uuid:%s",
-              oid, version, lyt_name, repl_count, ext_idx, uuid);
-    lyt_info->oid = oid;
-    obj_info->oid = oid;
-    lyt_info->uuid = uuid;
-    obj_info->uuid = uuid;
-    lyt_info->version = strtol(version, NULL, 10);
-    obj_info->version = strtol(version, NULL, 10);
-
-    static struct pho_attrs md;
-
-    pho_attr_set(&md, "raid1.repl_count", repl_count);
-    struct module_desc mod = {
-        .mod_name = !strcmp(lyt_name, "r1") ? "raid1" : "inconnu",
-        .mod_major = 0,
-        .mod_minor = 2,
-        .mod_attrs = md,
-    };
-
-    lyt_info->layout_desc = mod;
-    extent_to_insert->layout_idx = strtol(ext_idx, NULL, 10);
-    return 0;
-}
-
-/**
  * This function initializes the layout and extent information contained in
  * the extended attributes of a file whose file descriptor is given
  *
@@ -558,12 +483,28 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
 {
     struct layout_info lyt_to_insert;
     struct object_info obj_to_insert;
+    struct io_adapter_module *ioa;
     struct extent ext_to_insert;
+    struct pho_io_descr iod;
+    struct pho_ext_loc loc;
     int rc = 0;
 
+    rc = get_io_adapter(PHO_FS_LTFS, &ioa);
+    if (rc)
+        LOG_RETURN(rc, "Failed to get LTFS I/O adapter to import tape '%s'",
+                   med_id.name);
+
+    iod.iod_size = fsize;
+    iod.iod_fd = fd;
+    loc.addr_type = PHO_ADDR_PATH;
+    loc.root_path = rootpath;
+    loc.extent = &ext_to_insert;
+    iod.iod_loc = &loc;
+    ext_to_insert.address.buff = filename;
+
     // Get info from the extent name
-    rc = _get_info_from_filename(filename, &lyt_to_insert, &ext_to_insert,
-                                 &obj_to_insert);
+    rc = ioa_info_from_extent(ioa, &iod, &lyt_to_insert, &ext_to_insert,
+                              &obj_to_insert);
     if (rc)
         LOG_RETURN(rc, "Could not get info from filename");
 
@@ -572,7 +513,7 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
     ext_to_insert.size = fsize;
     ext_to_insert.media = med_id;
     ext_to_insert.address = PHO_BUFF_NULL;
-    ext_to_insert.address.buff = rootpath;
+    ext_to_insert.address.buff = xstrdup(rootpath);
     ext_to_insert.state = PHO_EXT_ST_SYNC;
 
     // Get info from the extent's xattrs

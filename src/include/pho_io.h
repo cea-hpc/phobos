@@ -83,6 +83,10 @@ struct pho_io_adapter_module_ops {
     ssize_t (*ioa_preferred_io_size)(struct pho_io_descr *iod);
     int (*ioa_set_md)(const char *extent_key, const char *extent_desc,
                       struct pho_io_descr *iod);
+    int (*ioa_info_from_extent)(struct pho_io_descr *iod,
+                                struct layout_info *lyt_info,
+                                struct extent *extent_to_insert,
+                                struct object_info *obj_info);
 };
 
 struct io_adapter_module {
@@ -314,6 +318,36 @@ static inline int ioa_set_md(const struct io_adapter_module *ioa,
     assert(ioa->ops != NULL);
     assert(ioa->ops->ioa_set_md != NULL);
     return ioa->ops->ioa_set_md(extent_key, extent_desc, iod);
+}
+
+/**
+ * This function takes a file name, and parses it several times to retrieve
+ * data contained in an extent's file name.
+ *
+ * @param[in]   ioa                 Suitable I/O adapter for the media.
+ * @param[in]   iod                 I/O descriptor of the extent, must have
+ *                                  at least the location set
+ * @param[out]  lyt_info            Contains information about the layout of
+ *                                  the extent to add.
+ * @param[out]  extent_to_insert    Contains information about the extent to
+ *                                  add.
+ * @param[out]  obj_info            Contains information about the object
+ *                                  related to the extent to add.
+ *
+ * @return      0 on success,
+ *              -EINVAL on failure.
+ */
+static inline int ioa_info_from_extent(const struct io_adapter_module *ioa,
+                                       struct pho_io_descr *iod,
+                                       struct layout_info *lyt_info,
+                                       struct extent *extent_to_insert,
+                                       struct object_info *obj_info)
+{
+    assert(ioa != NULL);
+    assert(ioa->ops != NULL);
+    assert(ioa->ops->ioa_info_from_extent != NULL);
+    return ioa->ops->ioa_info_from_extent(iod, lyt_info, extent_to_insert,
+                                          obj_info);
 }
 
 /**

@@ -786,3 +786,58 @@ ssize_t pho_posix_preferred_io_size(struct pho_io_descr *iod)
 
     return sfs.f_bsize;
 }
+
+int pho_posix_info_from_extent(struct pho_io_descr *iod,
+                               struct layout_info *lyt_info,
+                               struct extent *extent_to_insert,
+                               struct object_info *obj_info)
+{
+    struct module_desc mod;
+    char tmp_repl_count[4];
+    char tmp_lyt_name[16];
+    struct pho_attrs md;
+    char tmp_uuid[64];
+    char tmp_oid[64];
+    char *repl_count;
+    int extent_index;
+    char *lyt_name;
+    int version;
+    char *uuid;
+    char *oid;
+    int count;
+
+    count = sscanf(iod->iod_loc->extent->address.buff,
+                   "%64[^.].%d.%16[^-]-%4[^_]_%d.%s",
+                   tmp_oid, &version, tmp_lyt_name, tmp_repl_count,
+                   &extent_index, tmp_uuid);
+    if (count == EOF)
+        return -EINVAL;
+
+    oid = xstrdup(tmp_oid);
+    lyt_name = xstrdup(tmp_lyt_name);
+    repl_count = xstrdup(tmp_repl_count);
+    uuid = xstrdup(tmp_uuid);
+
+    pho_info("oid:%s, vers:%d, lyt-name:%s, repl_count:%s,"
+              "extent_index=%d, uuid:%s",
+              oid, version, lyt_name, repl_count, extent_index, uuid);
+    lyt_info->oid = oid;
+    obj_info->oid = oid;
+    lyt_info->uuid = uuid;
+    obj_info->uuid = uuid;
+    lyt_info->version = version;
+    obj_info->version = version;
+
+    mod.mod_name = !strcmp(lyt_name, "r1") ? "raid1" : "inconnu";
+    mod.mod_major = 0;
+    mod.mod_minor = 2;
+
+    md.attr_set = NULL;
+    pho_attr_set(&md, "raid1.repl_count", repl_count);
+    mod.mod_attrs = md;
+
+    lyt_info->layout_desc = mod;
+    extent_to_insert->layout_idx = extent_index;
+
+    return 0;
+}

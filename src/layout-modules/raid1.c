@@ -2149,6 +2149,7 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
         LOG_RETURN(rc,
                    "Failed to get replica count for reconstruction of object"
                    " '%s'", obj->oid);
+
     ext_cnt = lyt.ext_count;
     extents = lyt.extents;
 

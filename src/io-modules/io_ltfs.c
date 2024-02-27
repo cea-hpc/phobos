@@ -57,9 +57,9 @@ static int pho_ltfs_sync(const char *root_path, json_t **message)
         if (message)
             *message = json_pack(
                 "{s:s}", "sync",
-                "Failed to set LTFS special xattr" LTFS_SYNC_ATTR_NAME);
-        LOG_RETURN(-errno, "failed to set LTFS special xattr "
-                   LTFS_SYNC_ATTR_NAME);
+                "Failed to set LTFS special xattr " LTFS_SYNC_ATTR_NAME);
+        LOG_RETURN(-errno,
+                   "failed to set LTFS special xattr " LTFS_SYNC_ATTR_NAME);
     }
 
     return 0;
@@ -76,6 +76,7 @@ static const struct pho_io_adapter_module_ops IO_ADAPTER_LTFS_OPS = {
     .ioa_medium_sync       = pho_ltfs_sync,
     .ioa_preferred_io_size = pho_posix_preferred_io_size,
     .ioa_set_md            = pho_posix_set_md,
+    .ioa_info_from_extent  = pho_posix_info_from_extent,
 };
 
 /** IO adapter module registration entry point */

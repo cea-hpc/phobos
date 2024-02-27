@@ -539,6 +539,7 @@ static const struct pho_io_adapter_module_ops IO_ADAPTER_RADOS_OPS = {
     .ioa_medium_sync    = pho_rados_sync,
     .ioa_preferred_io_size = NULL,
     .ioa_set_md         = pho_rados_set_md,
+    .ioa_info_from_extent  = NULL,
 };
 
 /** IO adapter module registration entry point */
