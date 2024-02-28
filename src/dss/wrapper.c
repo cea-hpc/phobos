@@ -564,3 +564,58 @@ req_free:
     g_string_free(request, true);
     return rc;
 }
+
+static int check_orphan(struct dss_handle *handle, const struct pho_id *tape)
+{
+    GString *request = g_string_new("BEGIN;");
+    PGresult *res;
+    int rc = 0;
+
+    g_string_append_printf(request,
+        "UPDATE extent SET state = 'orphan' "
+        "WHERE extent_uuid NOT IN ("
+        "  SELECT extent_uuid FROM layout"
+        ")"
+        " AND medium_id = '%s' AND medium_family = '%s'"
+        ";", tape->name, rsc_family2str(tape->family));
+
+    rc = execute_and_commit_or_rollback(handle->dh_conn, request, &res,
+                                        PGRES_COMMAND_OK);
+    g_string_free(request, true);
+    return rc;
+}
+
+int dss_update_gc_for_tape(struct dss_handle *handle, const struct pho_id *tape)
+{
+    GString *request = g_string_new("BEGIN;");
+    PGresult *res;
+    int rc = 0;
+
+    g_string_append_printf(request,
+        "WITH objects AS ("
+        "  DELETE FROM deprecated_object"
+        "  WHERE EXISTS ("
+        "    SELECT 1 FROM layout"
+        "    INNER JOIN ("
+        "      SELECT extent_uuid FROM extent"
+        "      WHERE medium_id = '%s' AND medium_family = '%s'"
+        "    ) AS inner_table USING (extent_uuid)"
+        "    WHERE object_uuid = layout.object_uuid"
+        "     AND version = layout.version"
+        "  ) RETURNING object_uuid, version"
+        ") "
+        "DELETE FROM layout "
+        "WHERE EXISTS ("
+        "  SELECT 1 FROM objects"
+        "  WHERE object_uuid = layout.object_uuid"
+        "   AND version = layout.version"
+        ");", tape->name, rsc_family2str(tape->family));
+
+    rc = execute_and_commit_or_rollback(handle->dh_conn, request, &res,
+                                        PGRES_COMMAND_OK);
+    g_string_free(request, true);
+    if (rc)
+        return rc;
+
+    return check_orphan(handle, tape);
+}

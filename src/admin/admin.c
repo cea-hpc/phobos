@@ -1323,6 +1323,11 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source)
     int rc;
     int i;
 
+    /* Invoke garbage collector for source tape */
+    rc = dss_update_gc_for_tape(&adm->dss, source);
+    if (rc)
+        return rc;
+
     /* Determine total size of live objects */
     rc = _get_extents_to_repack(adm, source, &ext_res, &ext_cnt);
     if (rc)

@@ -215,4 +215,18 @@ int dss_update_extent_migrate(struct dss_handle *handle, const char *old_uuid,
 int dss_update_extent_state(struct dss_handle *handle, const char **uuids,
                             int num_uuids, enum extent_state state);
 
+/**
+ * Update the deprecated_object, layout and extent tables following a garbage
+ * collection invocation on a given \p tape:
+ * - deprecated objects are removed from deprecated_object and layout tables;
+ * - deprecated extents state is changed to orphan in the extent table.
+ *
+ * @param[in]   handle          DSS handle
+ * @param[in]   tape            Tape targeted by the garbage collector
+ *
+ * @return 0 on success, -errno on failure
+ */
+int dss_update_gc_for_tape(struct dss_handle *handle,
+                           const struct pho_id *tape);
+
 #endif
