@@ -127,7 +127,7 @@ function test_check_put() # verb, source_file
         diff -q $f $out && echo "$f: contents OK"
 
         # check the 'id' xattr attached to this extent
-        local id=$(getfattr --only-values --absolute-names -n "user.id" $out)
+        local id=$(getfattr --only-values --absolute-names -n "user.oid" $out)
         [ -z "$id" ] && error "saved file has no 'id' xattr"
         [ $id != "${f}_$verb" ] && error "unexpected id value in xattr"
 
@@ -149,7 +149,7 @@ function test_check_get()
     local arch=$1
 
     # get the id from the extent
-    id=$(getfattr --only-values --absolute-names -n "user.id" $arch)
+    id=$(getfattr --only-values --absolute-names -n "user.oid" $arch)
     [ -z "$id" ] && error "saved file has no 'id' xattr"
 
     # split the path into <mount_point> / <relative_path>

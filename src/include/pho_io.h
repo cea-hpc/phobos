@@ -33,6 +33,11 @@
 #include <unistd.h>
 #include <assert.h>
 
+#define PHO_EA_ID_NAME              "oid"
+#define PHO_EA_UMD_NAME             "user_md"
+#define PHO_EA_MD5_NAME             "md5"
+#define PHO_EA_XXH128_NAME          "xxh128"
+
 /* FIXME: only 2 combinations are used: REPLACE | NO_REUSE and DELETE */
 enum pho_io_flags {
     PHO_IO_MD_ONLY    = (1 << 0),   /**< Only operate on object MD */

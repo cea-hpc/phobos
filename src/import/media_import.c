@@ -143,45 +143,35 @@ static int _get_info_from_xattrs(int fd, struct layout_info *lyt,
                                  struct extent *ext, struct object_info *obj)
 {
     unsigned char *hash_buffer;
-    char *buffer;
+    const char *buffer;
     int rc = 0;
 
-    rc = pho_getxattr(NULL, fd, PHO_EA_MD5_NAME, &buffer);
-    if (rc)
-        return rc;
+    buffer = pho_attr_get(&lyt->layout_desc.mod_attrs, PHO_EA_MD5_NAME);
     if (!buffer) {
         ext->with_md5 = false;
     } else {
         hash_buffer = hex2uchar(buffer, MD5_BYTE_LENGTH);
         memcpy(ext->md5, hash_buffer, (MD5_BYTE_LENGTH + 1) * sizeof(char));
-        free(buffer);
         free(hash_buffer);
         ext->with_md5 = true;
     }
 
-    rc = pho_getxattr(NULL, fd, PHO_EA_XXH128_NAME, &buffer);
-    if (rc)
-        return rc;
+    buffer = pho_attr_get(&lyt->layout_desc.mod_attrs, PHO_EA_XXH128_NAME);
     if (!buffer) {
         ext->with_xxh128 = false;
     } else {
         hash_buffer = hex2uchar(buffer, XXH128_BYTE_LENGTH);
         memcpy(ext->xxh128, hash_buffer,
                (XXH128_BYTE_LENGTH + 1) * sizeof(char));
-        free(buffer);
         free(hash_buffer);
         ext->with_xxh128 = true;
     }
 
-    rc = pho_getxattr(NULL, fd, PHO_EA_UMD_NAME, &buffer);
-    if (rc)
-        return rc;
+    buffer = pho_attr_get(&lyt->layout_desc.mod_attrs, PHO_EA_UMD_NAME);
     if (!buffer)
         LOG_RETURN(rc = -EINVAL, "Could not read user md");
-    obj->user_md = strdup(buffer);
-    free(buffer);
-    if (!obj->user_md)
-        LOG_RETURN(rc = -errno, "Could not duplicate user md");
+
+    obj->user_md = xstrdup(buffer);
 
     rc = layout_get_info_from_xattrs(fd, lyt, obj, ext);
 

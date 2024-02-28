@@ -327,7 +327,7 @@ char *uchar2hex(const unsigned char *buf, int buf_size)
     return hex;
 }
 
-unsigned char *hex2uchar(char *hex, int uchar_size)
+unsigned char *hex2uchar(const char *hex, int uchar_size)
 {
     unsigned char *buff = xcalloc(uchar_size + 1, sizeof(char));
     int i;

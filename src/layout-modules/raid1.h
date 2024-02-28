@@ -26,14 +26,11 @@
 #define _PHO_RAID1_H
 
 #include "pho_types.h" /* struct layout_info */
+#include "pho_io.h"
 
 /**
  * Extended attributes' names for RAID1 layout
  */
-#define PHO_EA_ID_NAME              "id"
-#define PHO_EA_UMD_NAME             "user_md"
-#define PHO_EA_MD5_NAME             "md5"
-#define PHO_EA_XXH128_NAME          "xxh128"
 #define PHO_EA_OBJECT_SIZE_NAME     "raid1.obj_size"
 #define PHO_EA_EXTENT_OFFSET_NAME   "raid1.offset"
 #define PHO_EA_REPL_COUNT_NAME      "raid1.repl_count"

@@ -182,3 +182,19 @@ int pho_attrs_foreach(const struct pho_attrs *md, pho_attrs_iter_t cb,
 
     return rc;
 }
+
+static gboolean remove_null_attr(gpointer key, gpointer value, gpointer udata)
+{
+    if (value == NULL)
+        return TRUE;
+
+    return FALSE;
+}
+
+void pho_attrs_remove_null(struct pho_attrs *md)
+{
+    if (md == NULL || md->attr_set == NULL)
+        return;
+
+    g_hash_table_foreach_remove(md->attr_set, remove_null_attr, NULL);
+}

@@ -93,4 +93,11 @@ void pho_json_raw_to_attrs(struct pho_attrs *md, json_t *obj);
 int pho_attrs_foreach(const struct pho_attrs *md, pho_attrs_iter_t cb,
                       void *udata);
 
+/**
+ * Remove all key/value pairs if the value is NULL
+ *
+ * @param[in]       md      The attribute set to check.
+ */
+void pho_attrs_remove_null(struct pho_attrs *md);
+
 #endif

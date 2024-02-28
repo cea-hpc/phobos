@@ -346,7 +346,8 @@ int pho_getxattr(const char *path, int fd, const char *name, char **value)
 
         LOG_GOTO(free_buff, rc = -errno, "getxattr failed");
     }
-    pho_debug("%s=%s", tmp_name, buff);
+
+    pho_debug("'%s' = '%s'", tmp_name, buff);
 
     *value = xstrndup(buff, rc);
     rc = 0;
@@ -410,6 +411,7 @@ static inline int pho_posix_md_set(const char *path,
 struct md_iter_gx {
     struct pho_attrs *mig_attrs;
     const char *mig_path;
+    int mig_fd;
 };
 
 static int getxattr_cb(const char *key, const char *value, void *udata)
@@ -418,7 +420,7 @@ static int getxattr_cb(const char *key, const char *value, void *udata)
     char *tmp_val;
     int rc;
 
-    rc = pho_getxattr(arg->mig_path, -1, key, &tmp_val);
+    rc = pho_getxattr(arg->mig_path, arg->mig_fd, key, &tmp_val);
     if (rc != 0)
         return rc;
 
@@ -427,7 +429,7 @@ static int getxattr_cb(const char *key, const char *value, void *udata)
     return 0;
 }
 
-static int pho_posix_md_get(const char *path, struct pho_attrs *attrs)
+static int pho_posix_md_get(const char *path, int fd, struct pho_attrs *attrs)
 {
     struct md_iter_gx args;
     int rc;
@@ -436,6 +438,7 @@ static int pho_posix_md_get(const char *path, struct pho_attrs *attrs)
 
     args.mig_path  = path;
     args.mig_attrs = attrs;
+    args.mig_fd = fd;
 
     rc = pho_attrs_foreach(attrs, getxattr_cb, &args);
     if (rc != 0)
@@ -590,7 +593,7 @@ static int pho_posix_open_get(struct pho_io_descr *iod)
     io_ctx = iod->iod_ctx;
 
     /* get entry MD, if requested */
-    rc = pho_posix_md_get(io_ctx->fpath, &iod->iod_attrs);
+    rc = pho_posix_md_get(io_ctx->fpath, -1, &iod->iod_attrs);
     if (rc != 0 || (iod->iod_flags & PHO_IO_MD_ONLY))
         goto free_io_ctx;
 
@@ -805,6 +808,7 @@ int pho_posix_info_from_extent(struct pho_io_descr *iod,
     char *uuid;
     char *oid;
     int count;
+    int rc;
 
     count = sscanf(iod->iod_loc->extent->address.buff,
                    "%64[^.].%d.%16[^-]-%4[^_]_%d.%s",
@@ -833,7 +837,18 @@ int pho_posix_info_from_extent(struct pho_io_descr *iod,
     mod.mod_minor = 2;
 
     md.attr_set = NULL;
+    pho_attr_set(&md, PHO_EA_ID_NAME, NULL);
+    pho_attr_set(&md, PHO_EA_UMD_NAME, NULL);
+    pho_attr_set(&md, PHO_EA_MD5_NAME, NULL);
+    pho_attr_set(&md, PHO_EA_XXH128_NAME, NULL);
+
+    rc = pho_posix_md_get(NULL, iod->iod_fd, &md);
+    if (rc)
+        return rc;
+
     pho_attr_set(&md, "raid1.repl_count", repl_count);
+    pho_attrs_remove_null(&md);
+
     mod.mod_attrs = md;
 
     lyt_info->layout_desc = mod;

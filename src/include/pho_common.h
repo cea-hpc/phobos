@@ -393,7 +393,7 @@ char *uchar2hex(const unsigned char *str, int str_size);
  * @return hex encoded string on success, NULL on failure.
  *         errno is set on error.
  */
-unsigned char *hex2uchar(char *hex, int uchar_size);
+unsigned char *hex2uchar(const char *hex, int uchar_size);
 
 
 /* Number of items in a fixed-size array */
