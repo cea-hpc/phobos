@@ -54,7 +54,7 @@ void pho_run_test(const char *descr, pho_unit_test_t test, void *hint,
 
     rc = test(hint);
     if ((xres == PHO_TEST_SUCCESS) != (rc == 0)) {
-        pho_error(rc, "%s FAILED", descr);
+        pho_error(rc == PHO_TEST_FAILURE ? 0 : rc, "%s FAILED", descr);
         exit(EXIT_FAILURE);
     }
 

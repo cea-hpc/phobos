@@ -35,8 +35,8 @@ struct lrs_dev;
 typedef int (*pho_unit_test_t)(void *);
 
 enum pho_test_result {
-    PHO_TEST_SUCCESS,
-    PHO_TEST_FAILURE,
+    PHO_TEST_SUCCESS = 0,
+    PHO_TEST_FAILURE = 1,
 };
 
 void pho_run_test(const char *descr, pho_unit_test_t test, void *hint,
