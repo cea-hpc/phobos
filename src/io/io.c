@@ -144,8 +144,10 @@ int copy_extent(struct io_adapter_module *ioa_source,
 
     /* open source IO descriptor then copy address to the target */
     rc = ioa_open(ioa_source, NULL, iod_source, false);
-    if (rc)
+    if (rc) {
+        iod_source->iod_rc = rc;
         LOG_GOTO(memory, rc, "Unable to open source object");
+    }
 
     iod_target->iod_loc->addr_type = iod_source->iod_loc->addr_type;
     iod_target->iod_loc->extent->address.size =
@@ -158,12 +160,16 @@ int copy_extent(struct io_adapter_module *ioa_source,
 
     /* open target IO descriptor */
     rc = ioa_open(ioa_target, NULL, iod_target, true);
-    if (rc)
+    if (rc) {
+        iod_target->iod_rc = rc;
         LOG_GOTO(close_source, rc, "Unable to open target object");
+    }
 
     rc = ioa_set_md(ioa_target, NULL, iod_target);
-    if (rc)
+    if (rc) {
+        iod_target->iod_rc = rc;
         LOG_GOTO(close_source, rc, "Unable to set attrs to target object");
+    }
 
     /* do the actual copy */
     while (left_to_read) {
@@ -171,28 +177,36 @@ int copy_extent(struct io_adapter_module *ioa_source,
         ssize_t nb_read_bytes;
 
         nb_read_bytes = ioa_read(ioa_source, iod_source, buffer, iter_size);
-        if (nb_read_bytes < 0)
+        if (nb_read_bytes < 0) {
+            iod_source->iod_rc = rc;
             LOG_GOTO(close, nb_read_bytes, "Unable to read %zu bytes",
                      iter_size);
+        }
 
         left_to_read -= nb_read_bytes;
 
         rc = ioa_write(ioa_target, iod_target, buffer, nb_read_bytes);
-        if (rc != 0)
+        if (rc != 0) {
+            iod_target->iod_rc = rc;
             LOG_GOTO(close, rc, "Unable to write %zu bytes", nb_read_bytes);
+        }
     }
 
 close:
     rc2 = ioa_close(ioa_target, iod_target);
     if (rc)
         rc2 = ioa_del(ioa_target, iod_target);
-    if (!rc && rc2)
+    if (!rc && rc2) {
+        iod_target->iod_rc = rc;
         rc = rc2;
+    }
 
 close_source:
     rc2 = ioa_close(ioa_source, iod_source);
-    if (!rc && rc2)
+    if (!rc && rc2) {
+        iod_source->iod_rc = rc;
         rc = rc2;
+    }
 
 memory:
     free(buffer);

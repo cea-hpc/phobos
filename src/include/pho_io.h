@@ -69,6 +69,7 @@ struct pho_io_descr {
     struct pho_ext_loc  *iod_loc;      /**< Extent location */
     struct pho_attrs     iod_attrs;    /**< In/Out metadata operations buffer */
     void                *iod_ctx;      /**< IO adapter private context */
+    int                  iod_rc;       /**< Return code of IO operation */
 };
 
 struct object_metadata {
