@@ -50,6 +50,9 @@ const char *pho_attr_get(struct pho_attrs *md, const char *key);
 /** empty the attribute list and release memory */
 void pho_attrs_free(struct pho_attrs *md);
 
+/** remove an attr from the an attribute set */
+void pho_attr_remove(struct pho_attrs *md, const char *key);
+
 /**
  * Serialize an attribute set by converting it to JSON.
  * @param md key-value set.

@@ -31,8 +31,10 @@
 /**
  * Extended attributes' names for RAID1 layout
  */
+#define PHO_EA_RAID1_LAYOUT         "raid1"
 #define PHO_EA_OBJECT_SIZE_NAME     "raid1.obj_size"
-#define PHO_EA_EXTENT_OFFSET_NAME   "raid1.offset"
+#define PHO_EA_EXTENT_OFFSET_NAME   "raid1.extent_offset"
+#define PHO_EA_EXTENT_INDEX_NAME    "raid1.extent_index"
 #define PHO_EA_REPL_COUNT_NAME      "raid1.repl_count"
 
 /**

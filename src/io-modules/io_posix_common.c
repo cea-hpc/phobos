@@ -795,6 +795,7 @@ int pho_posix_info_from_extent(struct pho_io_descr *iod,
                                struct extent *extent_to_insert,
                                struct object_info *obj_info)
 {
+    const char *tmp_layout_name;
     struct module_desc mod;
     char tmp_repl_count[4];
     char tmp_lyt_name[16];
@@ -832,19 +833,26 @@ int pho_posix_info_from_extent(struct pho_io_descr *iod,
     lyt_info->version = version;
     obj_info->version = version;
 
-    mod.mod_name = !strcmp(lyt_name, "r1") ? "raid1" : "inconnu";
-    mod.mod_major = 0;
-    mod.mod_minor = 2;
-
     md.attr_set = NULL;
-    pho_attr_set(&md, PHO_EA_ID_NAME, NULL);
+    pho_attr_set(&md, PHO_EA_LAYOUT_NAME, NULL);
     pho_attr_set(&md, PHO_EA_UMD_NAME, NULL);
     pho_attr_set(&md, PHO_EA_MD5_NAME, NULL);
     pho_attr_set(&md, PHO_EA_XXH128_NAME, NULL);
+    pho_attr_set(&md, "raid1.extent_offset", NULL);
+    pho_attr_set(&md, "raid1.extent_index", NULL);
+    pho_attr_set(&md, "raid1.repl_count", NULL);
 
     rc = pho_posix_md_get(NULL, iod->iod_fd, &md);
     if (rc)
         return rc;
+
+    tmp_layout_name = pho_attr_get(&md, PHO_EA_LAYOUT_NAME);
+    assert(tmp_layout_name);
+
+    mod.mod_name = xstrdup(tmp_layout_name);
+    mod.mod_major = 0;
+    mod.mod_minor = 2;
+    pho_attr_remove(&md, PHO_EA_LAYOUT_NAME);
 
     pho_attr_set(&md, "raid1.repl_count", repl_count);
     pho_attrs_remove_null(&md);

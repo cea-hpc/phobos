@@ -399,8 +399,6 @@ static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
 
         iod[i].iod_flags = PHO_IO_MD_ONLY;
 
-        pho_attr_set(&iod[i].iod_attrs, PHO_EA_ID_NAME, oid);
-
         if (!gstring_empty(user_md))
             pho_attr_set(&iod[i].iod_attrs, PHO_EA_UMD_NAME, user_md->str);
 
@@ -438,7 +436,26 @@ static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
         }
 
         pho_attr_set(&iod[i].iod_attrs, PHO_EA_EXTENT_OFFSET_NAME, str_buffer);
+
+        rc = sprintf(str_buffer, "%d", i);
+        if (rc < 0) {
+            free(str_buffer);
+            LOG_GOTO(attrs, -errno, "Unable to construct extent index buffer");
+        }
+
+        pho_attr_set(&iod[i].iod_attrs, PHO_EA_EXTENT_INDEX_NAME, str_buffer);
+
+        rc = sprintf(str_buffer, "%d", repl_count);
+        if (rc < 0) {
+            free(str_buffer);
+            LOG_GOTO(attrs, -errno, "Unable to construct replica count buffer");
+        }
+
+        pho_attr_set(&iod[i].iod_attrs, PHO_EA_REPL_COUNT_NAME, str_buffer);
         free(str_buffer);
+
+        pho_attr_set(&iod[i].iod_attrs, PHO_EA_LAYOUT_NAME,
+                     PHO_EA_RAID1_LAYOUT);
    }
 
     for (i = 0; i < repl_count; ++i) {

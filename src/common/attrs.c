@@ -43,6 +43,14 @@ void pho_attrs_free(struct pho_attrs *md)
     md->attr_set = NULL;
 }
 
+void pho_attr_remove(struct pho_attrs *md, const char *key)
+{
+    if (md == NULL || md->attr_set == NULL)
+        return;
+
+    g_hash_table_remove(md->attr_set, key);
+}
+
 const char *pho_attr_get(struct pho_attrs *md, const char *key)
 {
     if (md == NULL || md->attr_set == NULL)

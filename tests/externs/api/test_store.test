@@ -126,11 +126,6 @@ function test_check_put() # verb, source_file
         [ -z "$out" ] && error "*$f* not found in backend"
         diff -q $f $out && echo "$f: contents OK"
 
-        # check the 'id' xattr attached to this extent
-        local id=$(getfattr --only-values --absolute-names -n "user.oid" $out)
-        [ -z "$id" ] && error "saved file has no 'id' xattr"
-        [ $id != "${f}_$verb" ] && error "unexpected id value in xattr"
-
         # check user_md xattr attached to this extent
         local umd=$(getfattr --only-values --absolute-names \
                     -n "user.user_md" $out)
@@ -147,19 +142,16 @@ function test_check_put() # verb, source_file
 function test_check_get()
 {
     local arch=$1
-
-    # get the id from the extent
-    id=$(getfattr --only-values --absolute-names -n "user.oid" $arch)
-    [ -z "$id" ] && error "saved file has no 'id' xattr"
+    local oid=$2
 
     # split the path into <mount_point> / <relative_path>
     # however, the mount_point may not be real in the case of
     # a "directory device" (e.g. subdirectory of an existing filesystem)
     # XXX the following code relies on the fact mount points have depth 2...
-    tgt="$TEST_RECOV_DIR/$id"
+    tgt="$TEST_RECOV_DIR/$oid"
     mkdir -p $(dirname "$tgt")
 
-    $LOG_COMPILER $test_bin get "$id" "$tgt"
+    $LOG_COMPILER $test_bin get "$oid" "$tgt"
 
     diff -q "$arch" "$tgt"
 
@@ -201,8 +193,13 @@ function test_put_get()
     fi
 
     # retrieve all files from the backend, get and check them
-    find $TEST_MNT -type f -not -path '*/\.*' | while read f; do
-        test_check_get "$f"
+    for test_file in $TEST_FILES; do
+        local name=$(echo $test_file | tr './!<>{}#"' '_')
+
+        find $TEST_MNT -type f -not -path '*/\.*' -name "*$name*" |
+            while read f; do
+            test_check_get "$f" "${test_file}_$1"
+        done
     done
 
     # check that object info can be retrieved using phobos_store_object_list()
