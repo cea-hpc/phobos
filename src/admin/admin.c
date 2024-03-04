@@ -1786,16 +1786,13 @@ free_dev_res:
 int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                         const struct pho_id *tape_id)
 {
-    struct proto_resp proto_resp = {TLC_REQUEST};
-    struct proto_req proto_req = {TLC_REQUEST};
     bool drive_was_unlocked = false;
     struct lib_drv_info drive_info;
     struct media_info *med_res;
+    struct lib_handle lib_hdl;
     struct dev_info *dev_res;
+    json_t *lib_open_json;
     const char *hostname;
-    pho_tlc_resp_t *resp;
-    pho_tlc_req_t req;
-    int rid = 1;
     int rc, rc2;
     int pid;
 
@@ -1881,50 +1878,39 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                  "Unable to lock the tape '%s'", tape_id->name);
 
     /* unload request with the tlc*/
-    proto_req.msg.tlc_req = &req;
-    pho_srl_tlc_request_unload_alloc(&req);
-    req.id = rid;
-    req.unload->drive_serial = xstrdup(drive_id->name);
-    if (tape_id)
-        req.unload->tape_label = xstrdup(tape_id->name);
-
-    rc = _send_and_receive(&adm->tlc_comm, proto_req, &proto_resp);
-    pho_srl_tlc_request_free(&req, false);
+    rc = get_lib_adapter(PHO_LIB_SCSI, &lib_hdl.ld_module);
     if (rc)
-        LOG_GOTO(unlock_tape, rc, "Error with TLC communication");
+        LOG_GOTO(unlock_tape, rc,
+                 "Failed to get library adapter for type '%s'",
+                 lib_type2str(PHO_LIB_SCSI));
 
-    resp = proto_resp.msg.tlc_resp;
-    if (pho_tlc_response_is_unload(resp) && resp->req_id == rid) {
-        if (resp->unload->tape_label) {
-            if (resp->unload->message) {
-                pho_verb("Successful admin unload of tape %s to addr "
-                         "%#lx: %s", resp->unload->tape_label,
-                         resp->unload->addr, resp->unload->message);
-            } else {
-                pho_verb("Successful admin unload of tape %s to addr %#lx",
-                          resp->unload->tape_label, resp->unload->addr);
-            }
+    lib_open_json = json_object();
+    rc = ldm_lib_open(&lib_hdl, NULL, lib_open_json);
+    if (rc) {
+        if (json_object_size(lib_open_json) != 0) {
+            pho_error(rc, "Unable to open library: '%s'",
+                      json_dumps(lib_open_json, 0));
         } else {
-            if (resp->unload->message) {
-                pho_verb("Successful admin unload of an empty drive: %s",
-                         resp->unload->message);
-            } else {
-                pho_verb("Successful admin unload of an empty drive");
-            }
+            pho_error(rc, "Unable to open library");
         }
-    } else if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
-        rc = resp->error->rc;
-        if (resp->error->message)
-            pho_error(rc, "TLC failed to unload: '%s'", resp->error->message);
-        else
-            pho_error(rc, "TLC failed to unload: '%s'", tape_id->name);
 
-    } else {
-        rc = -EPROTO;
-        pho_error(rc, "TLC answers unexpected response to unload");
+        json_decref(lib_open_json);
+        goto unlock_tape;
     }
 
-    pho_srl_tlc_response_free(resp, true);
+    json_decref(lib_open_json);
+
+    rc = ldm_lib_unload(&lib_hdl, dev_res->rsc.id.name, med_res->rsc.id.name);
+    if (rc)
+        pho_error(rc, "Admin failed to unload '%s' from '%s'('%s')",
+                  med_res->rsc.id.name, dev_res->rsc.id.name, dev_res->path);
+
+    rc2 = ldm_lib_close(&lib_hdl);
+    if (rc2) {
+        pho_error(rc2, "Failed to close library of type '%s'",
+                  lib_type2str(PHO_LIB_SCSI));
+        rc = rc ? : rc2;
+    }
 
 unlock_tape:
     rc2 = dss_unlock(&adm->dss, DSS_MEDIA, med_res, 1, false);
