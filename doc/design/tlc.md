@@ -110,7 +110,7 @@ The TLC should be able to:
 - unload a tape;
 - query the status of a drive;
 - query the state of the library;
-- reload the cache on demand.
+- refresh the cache on demand.
 
 To prevent programming errors, the TLC should check the status of a tape or
 drive before loading or unloading a tape. An administrator should not be able to
@@ -144,7 +144,7 @@ libraries.
 **Lib scan:** (cf. function `ldm_lib_scan`) scan the content of the library.
 
 - arguments:
-    - boolean indicating whether the TLC should reload its state or not
+    - boolean indicating whether the TLC should refresh its state or not
 - response:
     - status of the operation: 0 on success, an error code otherwise
     - the state of the library: currently, we return it as a `json_t` element
@@ -152,8 +152,8 @@ libraries.
       use Protobuf to serialize the `struct element_status`. The second option
       is more complex but more efficient for the data transfer.
 
-**Reload cache:** ask the TLC to reload its internal cache. This will be useful
-to notify the TLC when tapes are added to the library.
+**Refresh cache:** ask the TLC to refresh its internal cache. This will be
+useful to notify the TLC when tapes are added to the library.
 
 - arguments:
     - none
@@ -215,17 +215,17 @@ Note2: when supporting multiple libraries, these commands will need to have a
 parameter to specify which library is concerned.
 
 `phobos lib scan` will query the TLC's internal state. An option can be added to
-ask the TLC to reload its internal state:
+ask the TLC to refresh its internal state:
 
 ```
-# Reload the state before sending it to the client
-$ phobos lib scan --reload
+# Refresh the state before sending it to the client
+$ phobos lib scan --refresh
 
-# Simply reload the state of the library
-$ phobos lib reload
+# Simply refresh the state of the library
+$ phobos lib refresh
 ```
 
-Note: `phobos lib reload` may not be necessary. A request to reload the cache
+Note: `phobos lib refresh` may not be necessary. A request to refresh the cache
 can be sent to the TLC after a `phobos tape add` for example but this can lead
 to more queries than necessary if several `phobos tape add` are executed. This
 may not be an issue if the TLC is able to deduplicate these requests.
@@ -400,7 +400,7 @@ cache.
 
 Since the state of the library is only loaded at startup or when explicitly
 asked by a request, we may receive a request to load a tape that is not in the
-cache. In this case, the TLC can choose to reload the whole cache and then see
+cache. In this case, the TLC can choose to refresh the whole cache and then see
 if the tape has been added.
 
 Extra functions can be executed when an unknown tape is requested to notify the

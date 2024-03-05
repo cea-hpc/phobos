@@ -72,7 +72,7 @@ enum PhoRequestKind {
     RQ_RELEASE   = 2; // Media release and flush. The IO is considered
                       // complete once the release and flush are done.
     RQ_FORMAT    = 3; // Medium format.
-    RQ_NOTIFY    = 4; // LRS notification to reload device/medium information.
+    RQ_NOTIFY    = 4; // LRS notification to refresh device/medium information.
     RQ_MONITOR   = 5; // Query information about the current status of the LRS.
     RQ_CONFIGURE = 6; // Get/Set configuration information from the LRS
 }

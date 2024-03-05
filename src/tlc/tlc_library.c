@@ -334,8 +334,8 @@ void tlc_library_close(struct lib_descriptor *lib)
     }
 }
 
-int tlc_library_reload(struct lib_descriptor *lib, const char *dev,
-                       json_t **json_message)
+int tlc_library_refresh(struct lib_descriptor *lib, const char *dev,
+                        json_t **json_message)
 {
     *json_message = NULL;
     tlc_library_close(lib);

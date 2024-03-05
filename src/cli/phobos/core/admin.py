@@ -376,20 +376,13 @@ class Client(object):
                 raise EnvironmentError(rc, f"Failed to unload drive "
                                            f"{drive_serial_or_path}")
 
-    def tlc_reload(self):
-        """Reload the library internal cache of the TLC"""
-        rc = LIBPHOBOS_ADMIN.phobos_admin_tlc_reload(byref(self.handle))
-        if rc:
-            raise EnvironmentError(rc, f"Failed to reload the library internal "
-                                       f"cache of the TLC")
-
     @staticmethod
     def layout_list_free(layouts, n_layouts):
         """Free a previously obtained layout list."""
         LIBPHOBOS_ADMIN.phobos_admin_layout_list_free(layouts, n_layouts)
 
     @staticmethod
-    def lib_scan(lib_type, lib_dev_path, with_reload):
+    def lib_scan(lib_type, lib_dev_path, with_refresh):
         """Scan and return a list of dictionnaries representing the properties
         of elements in a library of type lib_type.
 
@@ -398,10 +391,20 @@ class Client(object):
         jansson_t = c_void_p(None)
         rc = LIBPHOBOS_ADMIN.phobos_admin_lib_scan(lib_type,
                                                    lib_dev_path.encode('utf-8'),
-                                                   with_reload,
+                                                   with_refresh,
                                                    byref(jansson_t))
         if rc:
             raise EnvironmentError(rc, f"Failed to scan the library "
                                        f"{lib_dev_path}")
 
         return json.loads(jansson_dumps(jansson_t.value))
+
+    @staticmethod
+    def lib_refresh(lib_type, lib_dev_path):
+        """Reload the library internal cache of the TLC"""
+        rc = LIBPHOBOS_ADMIN.phobos_admin_lib_refresh(
+                                 lib_type, lib_dev_path.encode('utf-8'))
+        if rc:
+            raise EnvironmentError(rc,
+                                   f"Failed to refresh the cache of the "
+                                   f"library {lib_dev_path}")

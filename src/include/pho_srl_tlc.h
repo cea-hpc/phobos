@@ -129,16 +129,16 @@ static inline bool pho_tlc_request_is_status(const pho_tlc_req_t *req)
 }
 
 /**
- * Request reload checker.
+ * Request refresh checker.
  *
  * \param[in]       req         Request.
  *
- * \return                      true if the request is a reload one,
+ * \return                      true if the request is a refresh one,
  *                              false otherwise.
  */
-static inline bool pho_tlc_request_is_reload(const pho_tlc_req_t *req)
+static inline bool pho_tlc_request_is_refresh(const pho_tlc_req_t *req)
 {
-    return (req->has_reload && req->reload);
+    return (req->has_refresh && req->refresh);
 }
 
 /**
@@ -219,16 +219,16 @@ static inline bool pho_tlc_response_is_status(const pho_tlc_resp_t *resp)
 }
 
 /**
- * Response reload checker.
+ * Response refresh checker.
  *
  * \param[in]       resp        Response.
  *
- * \return                      true if the response is a reload one,
+ * \return                      true if the response is a refresh one,
  *                              false otherwise.
  */
-static inline bool pho_tlc_response_is_reload(const pho_tlc_resp_t *resp)
+static inline bool pho_tlc_response_is_refresh(const pho_tlc_resp_t *resp)
 {
-    return (resp->has_reload && resp->reload);
+    return (resp->has_refresh && resp->refresh);
 }
 
 /******************************************************************************/
@@ -272,11 +272,11 @@ void pho_srl_tlc_request_unload_alloc(pho_tlc_req_t *req);
 void pho_srl_tlc_request_status_alloc(pho_tlc_req_t *req);
 
 /**
- * Allocation of status reload contents.
+ * Allocation of status refresh contents.
  *
- * \param[out]      req         Pointer to the reload data structure.
+ * \param[out]      req         Pointer to the refresh data structure.
  */
-void pho_srl_tlc_request_reload_alloc(pho_tlc_req_t *req);
+void pho_srl_tlc_request_refresh_alloc(pho_tlc_req_t *req);
 
 /**
  * Release of request contents.
@@ -323,11 +323,11 @@ void pho_srl_tlc_response_unload_alloc(pho_tlc_resp_t *resp);
 void pho_srl_tlc_response_status_alloc(pho_tlc_resp_t *resp);
 
 /**
- * Allocation of reload response content.
+ * Allocation of refresh response content.
  *
  * \param[out]      resp        Pointer to the response data structure.
  */
-void pho_srl_tlc_response_reload_alloc(pho_tlc_resp_t *resp);
+void pho_srl_tlc_response_refresh_alloc(pho_tlc_resp_t *resp);
 
 /**
  * Allocation of error response content.

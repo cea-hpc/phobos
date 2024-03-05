@@ -688,20 +688,29 @@ class LibScanOptHandler(BaseOptHandler):
                             help="Resource(s) or device(s) to scan. If not "
                                  "given, will fetch 'lib_device' path in "
                                  "configuration file instead")
-        parser.add_argument('--reload', action='store_true',
-                            help="The library module reloads its internal "
+        parser.add_argument('--refresh', action='store_true',
+                            help="The library module refreshes its internal "
                                  "cache before sending the data")
 
-class LibReloadOptHandler(BaseOptHandler):
-    """Reload the library internal cache of the TLC"""
-    label = 'reload'
-    descr = 'Reload the library internal cache of the TLC'
+class LibRefreshOptHandler(BaseOptHandler):
+    """Refresh the library internal cache"""
+    label = 'refresh'
+    descr = 'Refresh the library internal cache'
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         pass
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(LibRefreshOptHandler, cls).add_options(parser)
+        parser.add_argument('res', nargs='*',
+                            help="Resource(s) or device(s) to refresh. If not "
+                                 "given, will fetch 'lib_device' path in "
+                                 "configuration file instead")
 
 class DriveListOptHandler(ListOptHandler):
     """
@@ -2060,7 +2069,7 @@ class LibOptHandler(BaseResourceOptHandler):
     family = ResourceFamily(ResourceFamily.RSC_TAPE)
     verbs = [
         LibScanOptHandler,
-        LibReloadOptHandler,
+        LibRefreshOptHandler,
     ]
 
     def exec_scan(self):
@@ -2074,12 +2083,12 @@ class LibOptHandler(BaseResourceOptHandler):
                 self.logger.error(str(err) + ", will abort 'lib scan'")
                 sys.exit(os.EX_DATAERR)
 
-        with_reload = self.params.get('reload')
+        with_refresh = self.params.get('refresh')
 
         try:
             with AdminClient(lrs_required=False) as adm:
                 for lib_dev in libs:
-                    lib_data = adm.lib_scan(PHO_LIB_SCSI, lib_dev, with_reload)
+                    lib_data = adm.lib_scan(PHO_LIB_SCSI, lib_dev, with_refresh)
                     # FIXME: can't use dump_object_list yet as it does not play
                     # well with unstructured dict-like data (relies on getattr)
                     self._print_lib_data(lib_data)
@@ -2087,14 +2096,23 @@ class LibOptHandler(BaseResourceOptHandler):
             self.logger.error(str(err) + ", will abort 'lib scan'")
             sys.exit(abs(err.errno))
 
-    def exec_reload(self):
-        """Reload the library internal cache of the TLC"""
-        try:
-            with AdminClient(lrs_required=False, tlc_required=True) as adm:
-                adm.tlc_reload()
+    def exec_refresh(self):
+        """Refresh the library internal cache"""
+        libs = self.params.get("res")
+        if not libs:
+            try:
+                lib_dev_path_from_cfg = cfg.get_val("lrs", "lib_device")
+                libs.append(lib_dev_path_from_cfg)
+            except KeyError as err:
+                self.logger.error(str(err) + ", will abort 'lib refresh'")
+                sys.exit(os.EX_DATAERR)
 
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                for lib_dev in libs:
+                    adm.lib_refresh(PHO_LIB_SCSI, lib_dev)
         except EnvironmentError as err:
-            self.logger.error(env_error_format(err))
+            self.logger.error(str(err) + ", will abort 'lib refresh'")
             sys.exit(abs(err.errno))
 
     @staticmethod

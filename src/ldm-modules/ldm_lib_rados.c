@@ -176,6 +176,7 @@ static struct pho_lib_adapter_module_ops LIB_ADAPTER_RADOS_OPS = {
     .lib_drive_lookup = lib_rados_drive_lookup,
     .lib_load = NULL,
     .lib_unload = NULL,
+    .lib_refresh = NULL,
 };
 
 /** Lib adapter module registration entry point */

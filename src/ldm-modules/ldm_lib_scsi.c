@@ -248,7 +248,7 @@ free_resp:
     return rc;
 }
 
-static int lib_tlc_scan(struct lib_handle *hdl, bool reload, json_t **lib_data,
+static int lib_tlc_scan(struct lib_handle *hdl, bool refresh, json_t **lib_data,
                         json_t *message)
 {
     struct lib_descriptor *lib;
@@ -264,7 +264,7 @@ static int lib_tlc_scan(struct lib_handle *hdl, bool reload, json_t **lib_data,
 
     pho_srl_tlc_request_status_alloc(&req);
     req.id = rid;
-    req.status->reload = reload;
+    req.status->refresh = refresh;
     rc = tlc_send_recv(&lib->tlc_comm, &req, &resp);
     pho_srl_tlc_request_free(&req, false);
     if (rc)
@@ -366,7 +366,7 @@ static int lib_tlc_unload(struct lib_handle *hdl, const char *drive_serial,
         LOG_RETURN(rc, "Unable to send/recv unload request for drive '%s'",
                    drive_serial);
 
-    /* manage tlc load response */
+    /* manage tlc unload response */
     if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
         rc = resp->error->rc;
         if (resp->error->message)
@@ -392,6 +392,47 @@ free_resp:
     return rc;
 }
 
+static int lib_tlc_refresh(struct lib_handle *hdl)
+{
+    struct lib_descriptor *lib;
+    pho_tlc_resp_t *resp;
+    pho_tlc_req_t req;
+    int rid = 1;
+    int rc;
+
+    lib = hdl->lh_lib;
+
+    /* refresh request to the tlc */
+    pho_srl_tlc_request_refresh_alloc(&req);
+    req.id = rid;
+
+    rc = tlc_send_recv(&lib->tlc_comm, &req, &resp);
+    pho_srl_tlc_request_free(&req, false);
+    if (rc)
+        LOG_RETURN(rc, "Unable to send/recv refresh request");
+
+    /* manage tlc refresh response */
+    if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
+        rc = resp->error->rc;
+        if (resp->error->message)
+            LOG_GOTO(free_resp, rc,
+                     "TLC failed to refresh: '%s'", resp->error->message);
+        else
+            LOG_GOTO(free_resp, rc,
+                     "TLC failed to refresh");
+    } else if (!(pho_tlc_response_is_refresh(resp) && resp->req_id == rid)) {
+        LOG_GOTO(free_resp, rc = -EPROTO,
+                 "TLC answered an unexpected response (id %d) to refresh",
+                 resp->req_id);
+    }
+
+    pho_debug("Successful refresh of TLC");
+
+free_resp:
+    pho_srl_tlc_response_free(resp, true);
+    return rc;
+}
+
 /** @}*/
 
 /** lib_scsi_adapter exported to upper layers */
@@ -402,6 +443,7 @@ static struct pho_lib_adapter_module_ops LA_SCSI_OPS = {
     .lib_scan         = lib_tlc_scan,
     .lib_load         = lib_tlc_load,
     .lib_unload       = lib_tlc_unload,
+    .lib_refresh      = lib_tlc_refresh,
 };
 
 /** Lib adapter module registration entry point */

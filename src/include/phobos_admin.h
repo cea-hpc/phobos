@@ -375,7 +375,7 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
  * information. Output information may vary, depending on the library.
  *
  * @param[in] lib_type          Type of the library to scan
- * @param[in] reload            If true, the library module must reload its
+ * @param[in] refresh           If true, the library module must refresh its
  *                              cache from the library before answering the scan
  * @param[in] lib_dev           Path of the library to scan
  * @param[in,out] lib_data      json object allocated by ldm_lib_scan,
@@ -388,19 +388,18 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
  * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
-                          bool reload, json_t **lib_data);
+                          bool refresh, json_t **lib_data);
 
 /**
- * Reload the library internal cache of the TLC
+ * Refresh the library internal cache
  *
- * @param[in]       adm         Admin module handler.
+ * @param[in] lib_type          Type of the library to refresh
+ * @param[in] lib_dev           Path of the library to refresh
  *
  * @return                      0 on success
  *                              -errno on failure
- *
- * This must be called with an admin_handle initialized with phobos_admin_init.
  */
-int phobos_admin_tlc_reload(struct admin_handle *adm);
+int phobos_admin_lib_refresh(enum lib_type lib_type, const char *lib_dev);
 
 /**
  * Dump a list of logs to a given file.

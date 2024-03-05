@@ -1379,7 +1379,7 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
 }
 
 int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
-                          bool reload, json_t **lib_data)
+                          bool refresh, json_t **lib_data)
 {
     const char *lib_type_name = lib_type2str(lib_type);
     struct lib_handle lib_hdl;
@@ -1418,7 +1418,7 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
                    lib_type_name, lib_dev);
 
     log.message = json_object();
-    rc = ldm_lib_scan(&lib_hdl, reload, lib_data, log.message);
+    rc = ldm_lib_scan(&lib_hdl, refresh, lib_data, log.message);
     emit_log_after_action(&dss, &log, PHO_LIBRARY_SCAN, rc);
     if (rc)
         LOG_GOTO(out, rc, "Failed to scan library of type '%s' for path '%s'",
@@ -1946,35 +1946,58 @@ free_dev_res:
     return rc;
 }
 
-int phobos_admin_tlc_reload(struct admin_handle *adm)
+int phobos_admin_lib_refresh(enum lib_type lib_type, const char *lib_dev)
 {
-    struct proto_resp proto_resp = {TLC_REQUEST};
-    struct proto_req proto_req = {TLC_REQUEST};
-    pho_tlc_resp_t *resp;
-    pho_tlc_req_t req;
-    int rid = 1;
+    const char *lib_type_name = lib_type2str(lib_type);
+    struct lib_handle lib_hdl;
+    struct dss_handle dss;
+    struct pho_id device;
+    struct pho_id medium;
+    struct pho_log log;
+    int rc2;
     int rc;
 
-    proto_req.msg.tlc_req = &req;
-    pho_srl_tlc_request_reload_alloc(&req);
-    req.id = rid;
+    ENTRY;
 
-    rc = _send_and_receive(&adm->tlc_comm, proto_req, &proto_resp);
-    pho_srl_tlc_request_free(&req, false);
+    if (!lib_type_name)
+        LOG_RETURN(-EINVAL, "Invalid lib type '%d'", lib_type);
+
+    rc = dss_init(&dss);
     if (rc)
-        LOG_RETURN(rc, "Error with TLC communication");
+        LOG_RETURN(rc, "Failed to initialize DSS");
 
-    resp = proto_resp.msg.tlc_resp;
-    if (pho_tlc_response_is_reload(resp) && resp->req_id == rid) {
-        pho_verb("Successful admin reload");
-    } else if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
-        rc = resp->error->rc;
-        pho_error(rc, "TLC failed to reload: '%s'", resp->error->message);
-    } else {
-        rc = -EPROTO;
-        pho_error(rc, "TLC answers unexpected response to reload");
-    }
+    rc = get_lib_adapter(lib_type, &lib_hdl.ld_module);
+    if (rc)
+        LOG_RETURN(rc, "Failed to get library adapter for type '%s'",
+                   lib_type_name);
 
-    pho_srl_tlc_response_free(resp, true);
+    medium.name[0] = 0;
+    medium.family = PHO_RSC_TAPE;
+    device.name[0] = 0;
+    device.family = PHO_RSC_TAPE;
+    init_pho_log(&log, &device, &medium, PHO_LIBRARY_SCAN);
+
+    log.message = json_object();
+    rc = ldm_lib_open(&lib_hdl, lib_dev, log.message);
+    emit_log_after_action(&dss, &log, PHO_LIBRARY_OPEN, rc);
+    if (rc)
+        LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
+                   lib_type_name, lib_dev);
+
+    rc = ldm_lib_refresh(&lib_hdl);
+    if (rc)
+        LOG_GOTO(out, rc,
+                 "Failed to refresh library of type '%s' for path '%s'",
+                 lib_type_name, lib_dev);
+
+out:
+    rc2 = ldm_lib_close(&lib_hdl);
+    if (rc2)
+        pho_error(rc2, "Failed to close library of type '%s'", lib_type_name);
+
+    rc = rc ? : rc2;
+
+    dss_fini(&dss);
+
     return rc;
 }

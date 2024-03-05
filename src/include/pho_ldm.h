@@ -215,8 +215,8 @@ struct lib_handle;
  * them for more precise explanation about each call.
  *
  * lib_drive_lookup is mandatory.
- * lib_open, lib_close, lib_load, lib_unload and lib_scan do noop if they are
- * NULL.
+ * lib_open, lib_close, lib_scan, lib_load, lib_unload and lib_refresh do noop
+ * if they are NULL.
  */
 struct pho_lib_adapter_module_ops {
     /* adapter functions */
@@ -224,12 +224,13 @@ struct pho_lib_adapter_module_ops {
     int (*lib_close)(struct lib_handle *lib);
     int (*lib_drive_lookup)(struct lib_handle *lib, const char *drive_serial,
                             struct lib_drv_info *drv_info);
-    int (*lib_scan)(struct lib_handle *lib, bool reload, json_t **lib_data,
+    int (*lib_scan)(struct lib_handle *lib, bool refresh, json_t **lib_data,
                     json_t *message);
     int (*lib_load)(struct lib_handle *lib, const char *device_serial,
                     const char *medium_label);
     int (*lib_unload)(struct lib_handle *lib, const char *device_serial,
                       const char *medium_label);
+    int (*lib_refresh)(struct lib_handle *lib);
 };
 
 struct lib_adapter_module {
@@ -321,20 +322,20 @@ static inline int ldm_lib_drive_lookup(struct lib_handle *lib_hdl,
  * Output information may vary, depending on the library.
  *
  * @param[in,out] lib_hdl   Lib handle holding an opened library adapter.
- * @param[in]     reload    If true, the library module must reload its cache
+ * @param[in]     refresh   If true, the library module must refresh its cache
  *                          from the library before answering the scan
  * @param[in,out] lib_data  Json object allocated by ldm_lib_scan, json_decref
  *                          must be called later on to deallocate it properly
  * @param[out]    message   Json message to fill in case of error
  */
-static inline int ldm_lib_scan(struct lib_handle *lib_hdl, bool reload,
+static inline int ldm_lib_scan(struct lib_handle *lib_hdl, bool refresh,
                                json_t **lib_data, json_t *message)
 {
     assert(lib_hdl->ld_module != NULL);
     assert(lib_hdl->ld_module->ops != NULL);
     if (lib_hdl->ld_module->ops->lib_scan == NULL)
         return 0;
-    return lib_hdl->ld_module->ops->lib_scan(lib_hdl, reload, lib_data,
+    return lib_hdl->ld_module->ops->lib_scan(lib_hdl, refresh, lib_data,
                                              message);
 }
 
@@ -382,6 +383,15 @@ static inline int ldm_lib_unload(struct lib_handle *lib_hdl,
         return 0;
     return lib_hdl->ld_module->ops->lib_unload(lib_hdl, device_serial,
                                                medium_label);
+}
+
+static inline int ldm_lib_refresh(struct lib_handle *lib_hdl)
+{
+    assert(lib_hdl->ld_module != NULL);
+    assert(lib_hdl->ld_module->ops != NULL);
+    if (lib_hdl->ld_module->ops->lib_refresh == NULL)
+        return 0;
+    return lib_hdl->ld_module->ops->lib_refresh(lib_hdl);
 }
 
 /** @}*/

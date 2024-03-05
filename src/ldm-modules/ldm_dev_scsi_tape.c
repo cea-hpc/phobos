@@ -424,7 +424,7 @@ static int scsi_tape_map_load(void)
     int              count = 0;
     int              rc;
 
-    /* Is this a reload? */
+    /* Is this a refresh? */
     if (drive_cache != NULL)
         scsi_tape_map_free();
 

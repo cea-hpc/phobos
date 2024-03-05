@@ -70,7 +70,7 @@ check_SCRIPTS=acceptance.test \
               test_resource_management.sh \
               test_tlc.test \
               test_tlc_load_unload.test \
-              test_tlc_status_reload.test \
+              test_tlc_status_refresh.test \
               test_undelete.sh \
               test_unload_with_source_set_to_drive.test \
               test_unlock_at_unload.test

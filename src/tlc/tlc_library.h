@@ -158,7 +158,7 @@ int tlc_library_status(struct lib_descriptor *lib, json_t **lib_data,
                        json_t **json_message);
 
 /**
- * Reload the library descriptor
+ * Refresh the library descriptor
  *
  * @param[in,out]   lib             Library descriptor.
  * @param[in]       dev             Device path of the library
@@ -170,8 +170,8 @@ int tlc_library_status(struct lib_descriptor *lib, json_t **lib_data,
  *
  * @return 0 on success, negative error code on failure
  */
-int tlc_library_reload(struct lib_descriptor *lib, const char *dev,
-                       json_t **json_message);
+int tlc_library_refresh(struct lib_descriptor *lib, const char *dev,
+                        json_t **json_message);
 
 
 /**

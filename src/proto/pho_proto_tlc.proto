@@ -46,7 +46,7 @@ message PhoTlcRequest {
 
     /** Body of the tlc status request */
     message Status {
-        optional bool reload = 1;   // If true, status cache is reloaded before
+        optional bool refresh = 1;  // If true, status cache is refreshed before
                                     // building the response
     }
 
@@ -57,7 +57,7 @@ message PhoTlcRequest {
     optional Load load = 4;     // Load body
     optional Unload unload = 5; // Unload body
     optional Status status = 6; // Status body
-    optional bool reload = 7;   // Is the request a reload one ?
+    optional bool refresh = 7;  // Is the request a refresh one ?
 }
 
 /** TLC protocol response, emitted by the TLC. */
@@ -110,5 +110,5 @@ message PhoTlcResponse {
     optional Load load = 5;     // Load body
     optional Unload unload = 6; // Unload body
     optional Status status = 7; // Status body
-    optional bool reload = 8;   // This response is a successful reload one
+    optional bool refresh = 8;  // This response is a successful refresh one
 }

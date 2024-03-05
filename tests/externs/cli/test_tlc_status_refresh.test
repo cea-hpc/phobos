@@ -43,7 +43,7 @@ function cleanup
     drain_all_drives
 }
 
-function test_scan_reload
+function test_scan_refresh
 {
     local tape="$(get_tapes L6 1)"
     local drive="$(get_lto_drives 6 1)"
@@ -86,16 +86,16 @@ function test_scan_reload
     echo "$lib_data" | grep ${drive_serial} | grep full | grep ${tape} |
         grep ${initial_tape_slot_address}
 
-    # unload drives without using TLC to test scan --reload option
+    # unload drives without using TLC to test scan --refresh option
     drain_all_drives
 
-    # Check with a reload, TLC library cache is valid with one empty drive
-    lib_data=$($phobos lib scan --reload /dev/changer)
+    # Check with a refresh, TLC library cache is valid with one empty drive
+    lib_data=$($phobos lib scan --refresh /dev/changer)
     set +e
     nb_full_drive=$(echo "$lib_data" | grep drive | grep full -c)
     set -e
     if (( nb_empty_drive != 0 )); then
-        error "tlc lib scan with --reload find ${nb_full_drive} instead of 0 "
+        error "tlc lib scan with --refresh find ${nb_full_drive} instead of 0 "
               "full drive"
     fi
 
@@ -105,19 +105,19 @@ function test_scan_reload
     lib_data=$($phobos lib scan /dev/changer)
     echo "$lib_data" | grep ${drive_serial} | grep full | grep ${tape}
 
-    # unload drives without using TLC to test reload action
+    # unload drives without using TLC to test refresh action
     drain_all_drives
 
-    # reload TLC
-    $phobos lib reload
+    # refresh TLC
+    $phobos lib refresh
 
-    # Check with a prev reload, TLC library cache is valid with one empty drive
+    # Check with a prev refresh, TLC library cache is valid with one empty drive
     lib_data=$($phobos lib scan /dev/changer)
     set +e
     nb_full_drive=$(echo "$lib_data" | grep drive | grep full -c)
     set -e
     if (( nb_empty_drive != 0 )); then
-        error "tlc lib scan with a prev reload find ${nb_full_drive} instead "
+        error "tlc lib scan with a prev refresh find ${nb_full_drive} instead "
               "of 0 full drive"
     fi
 
@@ -130,5 +130,5 @@ if [[ ! -w /dev/changer ]]; then
 fi
 
 TESTS=(
-    "setup; test_scan_reload; cleanup"
+    "setup; test_scan_refresh; cleanup"
 )
