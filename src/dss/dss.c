@@ -479,8 +479,8 @@ static const char * const insert_query[] = {
                    " fs_type, address_type, fs_status, fs_label, stats, tags,"
                    " put, get, delete)"
                    " VALUES ",
-    [DSS_EXTENT] = "INSERT INTO extent (state, size, offsetof, medium_family,"
-                   " medium_id, address, hash) VALUES ",
+    [DSS_EXTENT] = "INSERT INTO extent (extent_uuid, state, size, offsetof,"
+                   " medium_family, medium_id, address, hash) VALUES ",
     [DSS_LAYOUT] = "INSERT INTO layout (object_uuid, version, extent_uuid,"
                    " layout_index) VALUES ",
     [DSS_OBJECT] = "INSERT INTO object (oid, user_md, obj_status) VALUES ",
@@ -527,17 +527,13 @@ static const char * const insert_query_values[] = {
     [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s')%s",
     [DSS_MEDIA]  = "('%s', %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s,"
                    " %s, %s, %s)%s",
-    [DSS_EXTENT] = "('%s', %d, %d, '%s', '%s', '%s', '%s')%s",
+    [DSS_EXTENT] = "('%s', '%s', %d, %d, '%s', '%s', '%s', '%s')%s",
     [DSS_LAYOUT] = "((select object_uuid from object where oid = '%s'),"
                    " (select version from object where oid = '%s'),"
                    " (select extent_uuid from extent where address = '%s'),"
                    " %d)%s",
     [DSS_OBJECT] = "('%s', '%s', '%s')%s",
     [DSS_DEPREC] = "('%s', '%s', %d, '%s', '%s')%s",
-};
-
-static const char * const insert_query_end[] = {
-    [DSS_EXTENT] = "RETURNING extent_uuid;",
 };
 
 static const char * const insert_full_query_values[] = {
@@ -1262,11 +1258,11 @@ static int get_extent_setrequest(PGconn *_conn, struct extent *item_list,
             hash = dss_extent_hash_encode(ext);
 
             g_string_append_printf(request, insert_query_values[DSS_EXTENT],
-                                   extent_state2str(ext->state), ext->size,
-                                   ext->offset,
+                                   ext->uuid, extent_state2str(ext->state),
+                                   ext->size, ext->offset,
                                    rsc_family2str(ext->media.family),
                                    ext->media.name, ext->address.buff, hash,
-                                   (i < item_cnt-1) ? "," : " ");
+                                   (i < item_cnt-1) ? "," : ";");
 
             free(hash);
             break;
@@ -1279,9 +1275,6 @@ static int get_extent_setrequest(PGconn *_conn, struct extent *item_list,
                                    ext->uuid);
         }
     }
-
-    if (action == DSS_SET_INSERT)
-        g_string_append(request, insert_query_end[DSS_EXTENT]);
 
     return rc;
 }
@@ -2197,18 +2190,6 @@ out:
     return rc;
 }
 
-static void _add_uuid_to_extents(void *extent_list, int nb_extents,
-                                PGresult *res)
-{
-    struct extent *extents = (struct extent *)extent_list;
-    int i;
-
-    assert(PQntuples(res) == nb_extents);
-
-    for (i = 0; i < nb_extents; ++i)
-        extents[i].uuid = xstrdup(PQgetvalue(res, i, 0));
-}
-
 /**
  * fields is only used by DSS_SET_UPDATE on DSS_MEDIA
  */
@@ -2297,18 +2278,7 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         LOG_GOTO(out_cleanup, rc = -EINVAL,
                  "JSON parsing failed: %d errors found", error);
 
-    if ((type == DSS_EXTENT && action == DSS_SET_INSERT)) {
-        PGresult    *res = NULL;
-
-        rc = execute_and_commit_or_rollback(conn, request, &res,
-                                            PGRES_TUPLES_OK);
-        if (!rc)
-            _add_uuid_to_extents(item_list, item_cnt, res);
-        PQclear(res);
-    } else {
-        rc = execute_and_commit_or_rollback(conn, request, NULL,
-                                            PGRES_COMMAND_OK);
-    }
+    rc = execute_and_commit_or_rollback(conn, request, NULL, PGRES_COMMAND_OK);
 
 out_cleanup:
     g_string_free(request, true);

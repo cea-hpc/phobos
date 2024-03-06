@@ -101,8 +101,9 @@ function test_extent_path
     addr_ext2b=$($phobos extent list --output address oid2 | cut -d, -f2 | \
                 tr -d ' ' | tr -d \' | tr -d [ | tr -d ])
 
-    uuid_ext1=$($phobos object list --output uuid oid1)
-    uuid_ext2=$($phobos object list --output uuid oid2)
+    uuid_ext1=$($phobos extent list --output ext_uuid oid1 | cut -d"'" -f2)
+    uuid_ext2a=$($phobos extent list --output ext_uuid oid2 | cut -d"'" -f2)
+    uuid_ext2b=$($phobos extent list --output ext_uuid oid2 | cut -d"'" -f4)
     ver_ext1=$($phobos object list --output version oid1)
     ver_ext2=$($phobos object list --output version oid2)
 
@@ -113,17 +114,11 @@ function test_extent_path
     [[ "$addr_ext2b" =~ "/oid2." ]] ||
         error "oid2 extent path (pt2) should contain object id"
     [[ "$addr_ext1" =~ ".$uuid_ext1"$ ]] ||
-        error "oid1 extent path should contain object uuid"
-    [[ "$addr_ext2a" =~ ".$uuid_ext2"$ ]] ||
-        error "oid2 extent path (pt1) should contain object uuid"
-    [[ "$addr_ext2b" =~ ".$uuid_ext2"$ ]] ||
-        error "oid2 extent path (pt2) should contain object uuid"
-    [[ "$addr_ext1" =~ ".${ver_ext1}." ]] ||
-        error "oid1 extent path should contain object version"
-    [[ "$addr_ext2a" =~ ".${ver_ext2}." ]] ||
-        error "oid2 extent path (pt1) should contain object version"
-    [[ "$addr_ext2b" =~ ".${ver_ext2}." ]] ||
-        error "oid2 extent path (pt2) should contain object version"
+        error "oid1 extent path should contain extent uuid"
+    [[ "$addr_ext2a" =~ ".$uuid_ext2a"$ ]] ||
+        error "oid2 extent path (pt1) should contain extent uuid"
+    [[ "$addr_ext2b" =~ ".$uuid_ext2b"$ ]] ||
+        error "oid2 extent path (pt2) should contain extent uuid"
 }
 
 test_extent_path

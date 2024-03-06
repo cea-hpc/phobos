@@ -795,45 +795,45 @@ int pho_posix_info_from_extent(struct pho_io_descr *iod,
                                struct extent *extent_to_insert,
                                struct object_info *obj_info)
 {
+    const char *tmp_object_uuid;
     const char *tmp_layout_name;
+    const char *extent_index;
+    const char *tmp_version;
     struct module_desc mod;
-    char tmp_repl_count[4];
-    char tmp_lyt_name[16];
     struct pho_attrs md;
-    char tmp_uuid[64];
-    char tmp_oid[64];
-    char *repl_count;
-    int extent_index;
-    char *lyt_name;
+    char *filename;
+    char *tmp_uuid;
+    char *tmp_oid;
     int version;
     char *uuid;
     char *oid;
-    int count;
     int rc;
 
-    count = sscanf(iod->iod_loc->extent->address.buff,
-                   "%64[^.].%d.%16[^-]-%4[^_]_%d.%s",
-                   tmp_oid, &version, tmp_lyt_name, tmp_repl_count,
-                   &extent_index, tmp_uuid);
-    if (count == EOF)
-        return -EINVAL;
+    filename = xstrdup(iod->iod_loc->extent->address.buff);
+
+    tmp_oid = filename;
+    tmp_uuid = strrchr(filename, '.');
+    if (tmp_uuid == NULL)
+        LOG_GOTO(free_filename, rc = -EINVAL,
+                 "Failed to read uuid from filename '%s'", filename);
+
+    *tmp_uuid = 0;
+    tmp_uuid += 1;
+    if (strlen(tmp_uuid) != (UUID_LEN - 1))
+        LOG_GOTO(free_filename, rc = -EINVAL,
+                 "Uuid is not of correct length in filename '%s': expected '%d', length found '%lu'",
+                 filename, (UUID_LEN - 1), strlen(tmp_uuid));
 
     oid = xstrdup(tmp_oid);
-    lyt_name = xstrdup(tmp_lyt_name);
-    repl_count = xstrdup(tmp_repl_count);
     uuid = xstrdup(tmp_uuid);
 
-    pho_info("oid:%s, vers:%d, lyt-name:%s, repl_count:%s,"
-              "extent_index=%d, uuid:%s",
-              oid, version, lyt_name, repl_count, extent_index, uuid);
     lyt_info->oid = oid;
     obj_info->oid = oid;
-    lyt_info->uuid = uuid;
-    obj_info->uuid = uuid;
-    lyt_info->version = version;
-    obj_info->version = version;
+    extent_to_insert->uuid = uuid;
 
     md.attr_set = NULL;
+    pho_attr_set(&md, PHO_EA_OBJECT_UUID_NAME, NULL);
+    pho_attr_set(&md, PHO_EA_VERSION_NAME, NULL);
     pho_attr_set(&md, PHO_EA_LAYOUT_NAME, NULL);
     pho_attr_set(&md, PHO_EA_UMD_NAME, NULL);
     pho_attr_set(&md, PHO_EA_MD5_NAME, NULL);
@@ -844,23 +844,60 @@ int pho_posix_info_from_extent(struct pho_io_descr *iod,
 
     rc = pho_posix_md_get(NULL, iod->iod_fd, &md);
     if (rc)
-        return rc;
+        LOG_GOTO(free_oid_uuid, rc,
+                 "Failed to read extended attributes of file '%s'", filename);
+
+    tmp_version = pho_attr_get(&md, PHO_EA_VERSION_NAME);
+    if (tmp_version == NULL)
+        LOG_GOTO(free_oid_uuid, rc,
+                 "Failed to retrieve object version of file '%s'", filename);
+
+    tmp_object_uuid = pho_attr_get(&md, PHO_EA_OBJECT_UUID_NAME);
+    if (tmp_object_uuid == NULL)
+        LOG_GOTO(free_oid_uuid, rc,
+                 "Failed to retrieve object uuid of file '%s'", filename);
+
+    version = str2int64(tmp_version);
+    assert(version >= 1);
+    lyt_info->uuid = xstrdup(tmp_object_uuid);
+    obj_info->uuid = xstrdup(tmp_object_uuid);
+    lyt_info->version = version;
+    obj_info->version = version;
 
     tmp_layout_name = pho_attr_get(&md, PHO_EA_LAYOUT_NAME);
-    assert(tmp_layout_name);
+    if (tmp_layout_name == NULL)
+        LOG_GOTO(free_uuids, rc = -EINVAL,
+                 "Failed to retrieve layout name of file '%s'",
+                 iod->iod_loc->extent->address.buff);
 
     mod.mod_name = xstrdup(tmp_layout_name);
     mod.mod_major = 0;
     mod.mod_minor = 2;
     pho_attr_remove(&md, PHO_EA_LAYOUT_NAME);
 
-    pho_attr_set(&md, "raid1.repl_count", repl_count);
     pho_attrs_remove_null(&md);
 
     mod.mod_attrs = md;
-
     lyt_info->layout_desc = mod;
-    extent_to_insert->layout_idx = extent_index;
+
+    extent_index = pho_attr_get(&md, "raid1.extent_index");
+    assert(extent_index);
+    extent_to_insert->layout_idx = strtol(extent_index, NULL, 10);
+
+    free(filename);
 
     return 0;
+
+free_uuids:
+    free(lyt_info->uuid);
+    free(obj_info->uuid);
+
+free_oid_uuid:
+    free(oid);
+    free(uuid);
+
+free_filename:
+    free(filename);
+
+    return rc;
 }

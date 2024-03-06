@@ -130,7 +130,7 @@ function test_raid1_repl_count
         error "Object should be put"
 
     local ext_req=$($phobos extent list --degroup --output \
-        address,md5,xxh128,oid,object_uuid,version,media_name \
+        address,md5,xxh128,oid,media_name,ext_uuid \
         "oid_$family$oid_id" |
         tail -n $repl_count | sed "s/[][' ]//g" | sort -k1.8)
 
@@ -140,11 +140,10 @@ function test_raid1_repl_count
         local md5="$(echo $row | cut -d'|' -f3)"
         local xxh128="$(echo $row | cut -d'|' -f4)"
         local oid="$(echo $row | cut -d'|' -f5)"
-        local uuid="$(echo $row | cut -d'|' -f6)"
-        local version="$(echo $row | cut -d'|' -f7)"
-        local media="$(echo $row | cut -d'|' -f8)"
+        local media="$(echo $row | cut -d'|' -f6)"
+        local extent_uuid="$(echo $row | cut -d'|' -f7 | cut -d"'" -f2)"
         local filename="$(basename $address)"
-        local reconst_path="$oid.$version.r1-$repl_count""_$((repl_id-1)).$uuid"
+        local reconst_path="$oid.$extent_uuid"
 
         local media_path="$(get_media_path $repl_count $family $media)"
 

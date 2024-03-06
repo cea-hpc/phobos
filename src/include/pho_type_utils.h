@@ -40,15 +40,13 @@ int storage_info_to_json(const struct layout_info *layout,
 bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2);
 
 /**
- * Build a unique extent identifier (used for path generation) from object uuid,
- * version and extent tag.
+ * Build a unique extent identifier (used for path generation) from extent uuid
  *
- * This is the caller responsability to free key.
+ * This is the caller responsability to free the key.
  *
  * The function returns 0 if success, -ENOMEM if failure and key is NULL.
  */
-int build_extent_key(const char *uuid, int version, const char *extent_tag,
-                     char **key);
+int build_extent_key(const char *uuid, char **key);
 
 /** initialize a pho_lock structure */
 void init_pho_lock(struct pho_lock *lock, char *hostname, int owner,

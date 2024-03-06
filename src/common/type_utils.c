@@ -50,12 +50,11 @@ bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2)
     return true;
 }
 
-int build_extent_key(const char *uuid, int version, const char *extent_tag,
-                     char **key)
+int build_extent_key(const char *uuid, char **key)
 {
     int rc;
 
-    rc = asprintf(key, "%d.%s.%s", version, extent_tag, uuid);
+    rc = asprintf(key, "%s", uuid);
     if (rc < 0) {
         *key = NULL;
         return -ENOMEM;

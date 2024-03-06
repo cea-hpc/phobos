@@ -637,21 +637,4 @@ void pho_context_reset_scsi_ioctl(void);
 
 void pho_context_reset_mock_ltfs_functions(void);
 
-/**
- * This function parses a string using the strtok function according to
- * a specified delimiter, and returns an array of field_nb strings corresponding
- * to the field_nb first parts of the parsed string.
- *
- * @param[in] str       String to parse,
- * @param[in] delim     String delimiter,
- * @param[in] field_nb  Number of elements to parse.
- *
- * @return              An array of strings that represents the different parts
- *                      of the parsing,
- *                      NULL on failure.
- *
- * The return value, if not NULL must be freed after use.
- */
-char **parse_str(const char *str, char *delim, int field_nb);
-
 #endif

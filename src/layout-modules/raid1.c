@@ -273,6 +273,8 @@ static void set_extent_info(struct extent *extent, enum extent_state state,
     extent->offset = offset;
     extent->media.family = (enum rsc_family)medium->med_id->family;
     pho_id_name_set(&extent->media, medium->med_id->name);
+
+    extent->uuid = generate_uuid();
 }
 
 /**
@@ -385,6 +387,7 @@ out:
  */
 static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
                                struct extent *extent, const char *oid,
+                               const char *object_uuid, int version,
                                GString *user_md, size_t object_size,
                                size_t offset,
                                struct io_adapter_module **ioa)
@@ -429,7 +432,7 @@ static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
         pho_attr_set(&iod[i].iod_attrs, PHO_EA_OBJECT_SIZE_NAME, str_buffer);
 
         /* No alloc issue because object_size > offset */
-        rc = sprintf(str_buffer, "%lu", offset);
+        rc = sprintf(str_buffer, "%lu", extent[i].offset);
         if (rc < 0) {
             free(str_buffer);
             LOG_GOTO(attrs, -errno, "Unable to construct offset buffer");
@@ -437,7 +440,7 @@ static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
 
         pho_attr_set(&iod[i].iod_attrs, PHO_EA_EXTENT_OFFSET_NAME, str_buffer);
 
-        rc = sprintf(str_buffer, "%d", i);
+        rc = sprintf(str_buffer, "%d", extent[i].layout_idx);
         if (rc < 0) {
             free(str_buffer);
             LOG_GOTO(attrs, -errno, "Unable to construct extent index buffer");
@@ -452,10 +455,20 @@ static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
         }
 
         pho_attr_set(&iod[i].iod_attrs, PHO_EA_REPL_COUNT_NAME, str_buffer);
+
+        rc = sprintf(str_buffer, "%d", version);
+        if (rc < 0) {
+            free(str_buffer);
+            LOG_GOTO(attrs, -errno, "Unable to construct replica count buffer");
+        }
+
+        pho_attr_set(&iod[i].iod_attrs, PHO_EA_VERSION_NAME, str_buffer);
         free(str_buffer);
 
         pho_attr_set(&iod[i].iod_attrs, PHO_EA_LAYOUT_NAME,
                      PHO_EA_RAID1_LAYOUT);
+
+        pho_attr_set(&iod[i].iod_attrs, PHO_EA_OBJECT_UUID_NAME, object_uuid);
    }
 
     for (i = 0; i < repl_count; ++i) {
@@ -586,8 +599,7 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
 
     /* open all iod */
     for (i = 0; i < raid1->repl_count; ++i) {
-        rc = build_extent_key(enc->xfer->xd_objuuid, enc->xfer->xd_version,
-                              &extent_tag[i * EXTENT_TAG_SIZE], &extent_key);
+        rc = build_extent_key(extent[i].uuid, &extent_key);
         if (rc)
             LOG_GOTO(close, rc, "Extent key build failed");
 
@@ -664,7 +676,8 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
 
 
     rc = put_xattr_to_extent(raid1->repl_count, iod,
-                             extent, enc->xfer->xd_objid, str,
+                             extent, enc->xfer->xd_objid, enc->xfer->xd_objuuid,
+                             enc->xfer->xd_version, str,
                              object_size, object_size - raid1->to_write, ioa);
 
 close:
@@ -770,8 +783,7 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
     pho_debug("Reading %ld bytes from medium %s", extent->size,
               extent->media.name);
 
-    rc = build_extent_key(dec->xfer->xd_objuuid, dec->xfer->xd_version, NULL,
-                          &extent_key);
+    rc = build_extent_key(extent->uuid, &extent_key);
     if (rc)
         LOG_RETURN(rc, "Extent key build failed");
 

@@ -139,6 +139,11 @@ struct pho_encoder {
  */
 int pho_layout_mod_register(struct layout_module *self);
 
+/**
+ * Generate a unparsed UUID and return it as a string
+ */
+char *generate_uuid(void);
+
 /** @} end of pho_layout_mod group */
 
 #define CHECK_ENC_OP(_enc, _func) do { \

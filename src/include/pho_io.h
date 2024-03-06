@@ -33,10 +33,14 @@
 #include <unistd.h>
 #include <assert.h>
 
+#define PHO_EA_OBJECT_UUID_NAME     "object_uuid"
+#define PHO_EA_VERSION_NAME         "version"
 #define PHO_EA_UMD_NAME             "user_md"
 #define PHO_EA_MD5_NAME             "md5"
 #define PHO_EA_XXH128_NAME          "xxh128"
 #define PHO_EA_LAYOUT_NAME          "layout"
+
+#define UUID_LEN 37   // 36 + 1 for the '\0'
 
 /* FIXME: only 2 combinations are used: REPLACE | NO_REUSE and DELETE */
 enum pho_io_flags {
