@@ -69,7 +69,7 @@ The extent table stores extent metadata.
 This layout table stores the link between phobos objects and their extents.
 
 This table is composed of the following fields: __object_uuid__,
-__version__, __extent_uuid__, __layout_index__.
+__version__, extent_uuid, __layout_index__.
 
 | field             | description                           |
 |-------------------|---------------------------------------|

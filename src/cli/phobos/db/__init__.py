@@ -390,7 +390,7 @@ class Migrator:
                 extent_uuid     varchar(36),
                 layout_index    integer,
 
-                PRIMARY KEY (object_uuid, version, extent_uuid, layout_index)
+                PRIMARY KEY (object_uuid, version, layout_index)
             );
 
             -- update object table
