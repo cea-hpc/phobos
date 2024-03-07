@@ -472,7 +472,7 @@ static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
    }
 
     for (i = 0; i < repl_count; ++i) {
-        rc = ioa_set_md(ioa[i], NULL, NULL, &iod[i]);
+        rc = ioa_set_md(ioa[i], NULL, &iod[i]);
         if (rc)
             LOG_RETURN(rc, "Unable to set md for extent number %i in raid1", i);
     }
@@ -586,8 +586,7 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
 
     /* open all iod */
     for (i = 0; i < raid1->repl_count; ++i) {
-        rc = ioa_open(ioa[i], extent[i].uuid, enc->xfer->xd_objid, &iod[i],
-                      true);
+        rc = ioa_open(ioa[i], enc->xfer->xd_objid, &iod[i], true);
         if (rc)
             LOG_GOTO(close, rc, "Unable to open extent %s in raid1 write",
                      extent[i].address.buff);
@@ -764,7 +763,7 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
     pho_debug("Reading %ld bytes from medium %s", extent->size,
               extent->media.name);
 
-    rc = ioa_get(ioa, extent->uuid, dec->xfer->xd_objid, &iod);
+    rc = ioa_get(ioa, dec->xfer->xd_objid, &iod);
     if (rc == 0) {
         raid1->to_write -= extent->size;
         raid1->cur_extent_idx++;

@@ -33,13 +33,12 @@ struct posix_io_ctx {
     int fd;
 };
 
-int pho_posix_get(const char *extent_key, const char *extent_desc,
-                  struct pho_io_descr *iod);
+int pho_posix_get(const char *extent_desc, struct pho_io_descr *iod);
 
 int pho_posix_del(struct pho_io_descr *iod);
 
-int pho_posix_open(const char *extent_key, const char *extent_desc,
-                   struct pho_io_descr *iod, bool is_put);
+int pho_posix_open(const char *extent_desc, struct pho_io_descr *iod,
+                   bool is_put);
 
 int pho_posix_write(struct pho_io_descr *iod, const void *buf, size_t count);
 
@@ -47,8 +46,7 @@ ssize_t pho_posix_read(struct pho_io_descr *iod, void *buf, size_t count);
 
 int pho_posix_close(struct pho_io_descr *iod);
 
-int pho_posix_set_md(const char *extent_key, const char *extent_desc,
-                     struct pho_io_descr *iod);
+int pho_posix_set_md(const char *extent_desc, struct pho_io_descr *iod);
 
 ssize_t pho_posix_preferred_io_size(struct pho_io_descr *iod);
 

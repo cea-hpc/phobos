@@ -80,18 +80,16 @@ struct pho_io_descr {
  * returned by the functions.
  */
 struct pho_io_adapter_module_ops {
-    int (*ioa_get)(const char *extent_key, const char *extent_desc,
-                   struct pho_io_descr *iod);
+    int (*ioa_get)(const char *extent_desc, struct pho_io_descr *iod);
     int (*ioa_del)(struct pho_io_descr *iod);
-    int (*ioa_open)(const char *extent_key, const char *extent_desc,
-                    struct pho_io_descr *iod, bool is_put);
+    int (*ioa_open)(const char *extent_desc, struct pho_io_descr *iod,
+                    bool is_put);
     int (*ioa_write)(struct pho_io_descr *iod, const void *buf, size_t count);
     ssize_t (*ioa_read)(struct pho_io_descr *iod, void *buf, size_t count);
     int (*ioa_close)(struct pho_io_descr *iod);
     int (*ioa_medium_sync)(const char *root_path, json_t **message);
     ssize_t (*ioa_preferred_io_size)(struct pho_io_descr *iod);
-    int (*ioa_set_md)(const char *extent_key, const char *extent_desc,
-                      struct pho_io_descr *iod);
+    int (*ioa_set_md)(const char *extent_desc, struct pho_io_descr *iod);
     int (*ioa_info_from_extent)(struct pho_io_descr *iod,
                                 struct layout_info *lyt_info,
                                 struct extent *extent_to_insert,
@@ -125,22 +123,19 @@ int get_io_adapter(enum fs_type fstype, struct io_adapter_module **ioa);
  *
  *
  * \param[in]       ioa         Suitable I/O adapter for the media
- * \param[in]       extent_key  Null-terminated extent key, composed as
- *                              "version.extent_tag.uuid"
  * \param[in]       extent_desc Null-terminated extent description
  * \param[in,out]   iod         I/O descriptor (see above)
  *
  * \return 0 on success, negative error code on failure
  */
 static inline int ioa_get(const struct io_adapter_module *ioa,
-                          const char *extent_key,
                           const char *extent_desc,
                           struct pho_io_descr *iod)
 {
     assert(ioa != NULL);
     assert(ioa->ops != NULL);
     assert(ioa->ops->ioa_get != NULL);
-    return ioa->ops->ioa_get(extent_key, extent_desc, iod);
+    return ioa->ops->ioa_get(extent_desc, iod);
 }
 
 /**
@@ -223,8 +218,6 @@ static inline ssize_t ioa_preferred_io_size(const struct io_adapter_module *ioa,
  *
  *
  * \param[in]       ioa         Suitable I/O adapter for the media
- * \param[in]       extent_key  Null-terminated extent key, composed as
- *                              "version.extent_tag.uuid"
  * \param[in]       extent_desc Null-terminated extent description
  * \param[in,out]   iod         I/O descriptor (see above)
  * \param[in]       is_put      Must be true when opening for a put/write and
@@ -233,13 +226,13 @@ static inline ssize_t ioa_preferred_io_size(const struct io_adapter_module *ioa,
  * \return 0 on success, negative error code on failure
  */
 static inline int ioa_open(const struct io_adapter_module *ioa,
-                           const char *extent_key, const char *extent_desc,
-                           struct pho_io_descr *iod, bool is_put)
+                           const char *extent_desc, struct pho_io_descr *iod,
+                           bool is_put)
 {
     assert(ioa != NULL);
     assert(ioa->ops != NULL);
     assert(ioa->ops->ioa_open != NULL);
-    return ioa->ops->ioa_open(extent_key, extent_desc, iod, is_put);
+    return ioa->ops->ioa_open(extent_desc, iod, is_put);
 }
 
 /**
@@ -312,21 +305,18 @@ static inline int ioa_close(const struct io_adapter_module *ioa,
  * PHO_IO_MD_ONLY and call ioa_open.
  *
  * \param[in]       ioa         Suitable I/O adapter for the media.
- * \param[in]       extent_key  Null-terminated extent key, composed as
- *                              "version.extent_tag.uuid".
  * \param[in]       extent_desc Null-terminated extent description.
  * \param[in,out]   iod         I/O descriptor (see above).
  *
  * \return 0 on success, negative error code on failure.
  */
 static inline int ioa_set_md(const struct io_adapter_module *ioa,
-                             const char *extent_key, const char *extent_desc,
-                             struct pho_io_descr *iod)
+                             const char *extent_desc, struct pho_io_descr *iod)
 {
     assert(ioa != NULL);
     assert(ioa->ops != NULL);
     assert(ioa->ops->ioa_set_md != NULL);
-    return ioa->ops->ioa_set_md(extent_key, extent_desc, iod);
+    return ioa->ops->ioa_set_md(extent_desc, iod);
 }
 
 /**

@@ -171,7 +171,6 @@ static int test_posix_open_write_close(void *hint)
     unsigned char *ibuff = NULL;
     struct extent ext = {0};
     char *fpath = NULL;
-    char *tag = NULL;
     char *id = NULL;
     size_t count;
     int rc;
@@ -205,7 +204,7 @@ static int test_posix_open_write_close(void *hint)
      *  OPEN
      */
     /* try to open for put with pho_posix_open */
-    rc = ioa_open(ioa, id, tag, &iod, true);
+    rc = ioa_open(ioa, id, &iod, true);
     if (rc)
         LOG_GOTO(free_path, rc, "Error on opening extent");
 

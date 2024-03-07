@@ -310,9 +310,10 @@ static int pho_rados_set_addr(const char *extent_key, const char *extent_desc,
     }
 }
 
-static int pho_rados_open(const char *extent_key, const char *extent_desc,
-                          struct pho_io_descr *iod, bool is_put)
+static int pho_rados_open(const char *extent_desc, struct pho_io_descr *iod,
+                          bool is_put)
 {
+    struct extent *extent = iod->iod_loc->extent;
     struct pho_rados_io_ctx *rados_io_ctx;
     rados_t cluster_hdl;
     int rc2 = 0;
@@ -325,7 +326,7 @@ static int pho_rados_open(const char *extent_key, const char *extent_desc,
         if (!is_put)
             LOG_RETURN(-EINVAL, "Object has no address stored in database");
 
-        rc = pho_rados_set_addr(extent_key, extent_desc,
+        rc = pho_rados_set_addr(extent->uuid, extent_desc,
                                 iod->iod_loc->addr_type,
                                 &iod->iod_loc->extent->address);
         if (rc)
@@ -361,11 +362,10 @@ out:
 /* On rados, no function like fsetxattr, so just a simple call to
  * the pho_rados_open with the corresponding flag
  **/
-static int pho_rados_set_md(const char *extent_key, const char *extent_desc,
-                            struct pho_io_descr *iod)
+static int pho_rados_set_md(const char *extent_desc, struct pho_io_descr *iod)
 {
     iod->iod_flags = PHO_IO_MD_ONLY;
-    return pho_rados_open(extent_key, extent_desc, iod, true);
+    return pho_rados_open(extent_desc, iod, true);
 }
 
 static int pho_rados_write(struct pho_io_descr *iod, const void *buf,
@@ -449,8 +449,7 @@ clean:
     return (nb_written_bytes > 0) ? 0 : nb_written_bytes;
 }
 
-static int pho_rados_get(const char *extent_key, const char *extent_desc,
-                         struct pho_io_descr *iod)
+static int pho_rados_get(const char *extent_desc, struct pho_io_descr *iod)
 {
     struct pho_rados_io_ctx *rados_io_ctx;
     char *rados_object_name;
@@ -460,7 +459,7 @@ static int pho_rados_get(const char *extent_key, const char *extent_desc,
 
     ENTRY;
 
-    rc = pho_rados_open(extent_key, extent_desc, iod, false);
+    rc = pho_rados_open(extent_desc, iod, false);
     if (rc || iod->iod_flags & PHO_IO_MD_ONLY)
         return rc;
 

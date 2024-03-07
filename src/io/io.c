@@ -143,7 +143,7 @@ int copy_extent(struct io_adapter_module *ioa_source,
                       "{\"id\":\"\", \"user_md\":\"\", \"md5\":\"\"}");
 
     /* open source IO descriptor then copy address to the target */
-    rc = ioa_open(ioa_source, NULL, NULL, iod_source, false);
+    rc = ioa_open(ioa_source, NULL, iod_source, false);
     if (rc)
         LOG_GOTO(memory, rc, "Unable to open source object");
 
@@ -157,11 +157,11 @@ int copy_extent(struct io_adapter_module *ioa_source,
     left_to_read = iod_source->iod_size;
 
     /* open target IO descriptor */
-    rc = ioa_open(ioa_target, NULL, NULL, iod_target, true);
+    rc = ioa_open(ioa_target, NULL, iod_target, true);
     if (rc)
         LOG_GOTO(close_source, rc, "Unable to open target object");
 
-    rc = ioa_set_md(ioa_target, NULL, NULL, iod_target);
+    rc = ioa_set_md(ioa_target, NULL, iod_target);
     if (rc)
         LOG_GOTO(close_source, rc, "Unable to set attrs to target object");
 

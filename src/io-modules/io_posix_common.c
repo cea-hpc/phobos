@@ -447,8 +447,7 @@ static int pho_posix_md_get(const char *path, int fd, struct pho_attrs *attrs)
     return rc;
 }
 
-int pho_posix_get(const char *extent_key, const char *extent_desc,
-                  struct pho_io_descr *iod)
+int pho_posix_get(const char *extent_desc, struct pho_io_descr *iod)
 {
     struct posix_io_ctx *io_ctx;
     int rc2 = 0;
@@ -456,7 +455,7 @@ int pho_posix_get(const char *extent_key, const char *extent_desc,
 
     ENTRY;
 
-    rc = pho_posix_open(extent_key, extent_desc, iod, false);
+    rc = pho_posix_open(extent_desc, iod, false);
     if (rc || iod->iod_flags & PHO_IO_MD_ONLY)
         return rc;
 
@@ -617,9 +616,10 @@ free_io_ctx:
  * If (iod->iod_flags & PHO_IO_MD_ONLY), we only get/set attr, no iod_ctx is
  * allocated and there is no need to close.
  */
-int pho_posix_open(const char *extent_key, const char *extent_desc,
-                   struct pho_io_descr *iod, bool is_put)
+int pho_posix_open(const char *extent_desc, struct pho_io_descr *iod,
+                   bool is_put)
 {
+    struct extent *extent = iod->iod_loc->extent;
     struct posix_io_ctx *io_ctx;
     int rc = 0;
 
@@ -630,7 +630,7 @@ int pho_posix_open(const char *extent_key, const char *extent_desc,
         if (!is_put)
             LOG_RETURN(-EINVAL, "Object has no address stored in database");
 
-        rc = pho_posix_set_addr(extent_key, extent_desc,
+        rc = pho_posix_set_addr(extent->uuid, extent_desc,
                                 iod->iod_loc->addr_type,
                                 &iod->iod_loc->extent->address);
         if (rc)
@@ -657,7 +657,7 @@ int pho_posix_open(const char *extent_key, const char *extent_desc,
     return is_put ? pho_posix_open_put(iod) : pho_posix_open_get(iod);
 }
 
-int pho_posix_set_md(const char *extent_key, const char *extent_desc,
+int pho_posix_set_md(const char *extent_desc,
                      struct pho_io_descr *iod)
 {
     struct posix_io_ctx *io_ctx = iod->iod_ctx;
@@ -670,7 +670,7 @@ int pho_posix_set_md(const char *extent_key, const char *extent_desc,
          * we don't need a 'pho_posix_close' statement.
          */
         iod->iod_flags = PHO_IO_MD_ONLY;
-        rc = pho_posix_open(extent_key, extent_desc, iod, true);
+        rc = pho_posix_open(extent_desc, iod, true);
     } else {
         rc = pho_posix_md_fset(io_ctx->fd, &iod->iod_attrs, iod->iod_flags);
     }

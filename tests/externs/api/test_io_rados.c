@@ -96,7 +96,7 @@ static void ior_io_adapter_open_close(struct io_adapter_module *ioa,
     /* Opening I/O adapter with pool "pho_io", extent key "obj" and extent
      * description "pho_io"
      */
-    rc = ioa_open(ioa, "obj", "pho_io", iod, is_put);
+    rc = ioa_open(ioa, "pho_io", iod, is_put);
     assert_int_equal(rc, rc_goal);
 
     rc = ioa_close(ioa, iod);
@@ -238,7 +238,7 @@ static void ior_test_write_new_object(void **state)
     rc = get_io_adapter(PHO_FS_RADOS, &ioa);
     assert_int_equal(rc, -rc);
 
-    rc = ioa_open(ioa, "pho_new_obj", "pho_io", iod, true);
+    rc = ioa_open(ioa, "pho_io", iod, true);
     assert_int_equal(rc, -rc);
     rados_io_ctx = iod->iod_ctx;
 
@@ -274,7 +274,7 @@ static void ior_test_replace_object(void **state)
     rc = get_io_adapter(PHO_FS_RADOS, &ioa);
     assert_int_equal(rc, -rc);
 
-    rc = ioa_open(ioa, "pho_replace_obj", "pho_io", iod, true);
+    rc = ioa_open(ioa, "pho_io", iod, true);
     assert_int_equal(rc, -rc);
 
     rados_io_ctx = iod->iod_ctx;
@@ -325,7 +325,7 @@ static void ior_test_write_existing_object(void **state)
     /* Open succeeds because object 'pho_io.pho_existing_obj' did not exist
      * before call
      */
-    rc = ioa_open(ioa, "pho_existing_obj", "pho_io", iod, true);
+    rc = ioa_open(ioa, "pho_io", iod, true);
     assert_int_equal(rc, -rc);
 
     rc = ioa_write(ioa, iod, "existing_obj", strlen("existing_obj"));
@@ -341,7 +341,7 @@ static void ior_test_write_existing_object(void **state)
     assert_int_equal(rc, -rc);
 
     /* open fails because object already exists and replace flag is not set */
-    rc = ioa_open(ioa, "pho_existing_obj", "pho_io", iod, true);
+    rc = ioa_open(ioa, "pho_io", iod, true);
     assert_int_equal(rc, -EEXIST);
 
     rc = ioa_close(ioa, iod);
@@ -362,7 +362,7 @@ static void ior_test_write_object_too_big(void **state)
     rc = get_io_adapter(PHO_FS_RADOS, &ioa);
     assert_int_equal(rc, -rc);
 
-    rc = ioa_open(ioa, "pho_obj_too_big", "pho_io", iod, true);
+    rc = ioa_open(ioa, "pho_io", iod, true);
     assert_int_equal(rc, -rc);
 
     rc = ioa_write(ioa, iod, "obj_too_big", UINT_MAX);
@@ -415,7 +415,7 @@ static void ior_test_write_object_with_chunks(void **state)
     fill_buffer_with_random_data(&buf_in);
     buf_out.buff = xcalloc(buf_out.size, 1);
 
-    rc = ioa_open(ioa, "pho_obj_chunks", "pho_io", iod, true);
+    rc = ioa_open(ioa, "pho_io", iod, true);
     assert_int_equal(rc, -rc);
 
     to_write = buf_in.size;
@@ -464,7 +464,7 @@ static void ior_get_object(struct pho_io_descr *iod, char *object_name,
     rc = get_io_adapter(PHO_FS_RADOS, &ioa);
     assert_int_equal(rc, -rc);
 
-    rc = ioa_open(ioa, object_name, "pho_io", iod, true);
+    rc = ioa_open(ioa, "pho_io", iod, true);
     assert_int_equal(rc, -rc);
 
     rc = ioa_write(ioa, iod, input.buff, input_size);
@@ -541,7 +541,7 @@ static void ior_test_delete_object(void **state)
 
     rc = get_io_adapter(PHO_FS_RADOS, &ioa);
 
-    rc = ioa_open(ioa, "pho_delete_obj", "pho_io", iod, true);
+    rc = ioa_open(ioa, "pho_io", iod, true);
     assert_int_equal(rc, -rc);
 
     rc = ioa_write(ioa, iod, "delete_obj", strlen("delete_obj"));
@@ -570,7 +570,7 @@ static void ior_test_delete_invalid_object(void **state)
 
     rc = get_io_adapter(PHO_FS_RADOS, &ioa);
 
-    rc = ioa_open(ioa, "pho_invalid_obj", "pho_io", iod, true);
+    rc = ioa_open(ioa, "pho_io", iod, true);
     assert_int_equal(rc, -rc);
 
     rc = ioa_del(ioa, iod);
