@@ -502,14 +502,11 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
 {
     size_t object_size = enc->xfer->xd_params.put.size;
     struct raid1_encoder *raid1 = enc->priv_enc;
-#define EXTENT_TAG_SIZE 128
     struct io_adapter_module **ioa = NULL;
     unsigned char md5[MD5_BYTE_LENGTH];
     struct pho_io_descr *iod = NULL;
     struct pho_ext_loc *loc = NULL;
     struct extent *extent = NULL;
-    char *extent_tag = NULL;
-    char *extent_key = NULL;
 #ifdef HAVE_XXH128
     XXH128_hash_t xxh128;
 #endif
@@ -554,16 +551,6 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
                         extent_size);
         /* extent[i]->address will be filled by ioa_open */
 
-    /* prepare all extent_tag */
-    extent_tag = xcalloc(raid1->repl_count,
-                         sizeof(*extent_tag) * EXTENT_TAG_SIZE);
-
-    for (i = 0; i < raid1->repl_count; ++i) {
-        rc = snprintf(&extent_tag[i * EXTENT_TAG_SIZE], EXTENT_TAG_SIZE,
-                      "r1-%u_%d", raid1->repl_count, extent[i].layout_idx);
-        assert(rc < EXTENT_TAG_SIZE);
-    }
-
     /* prepare all iod and loc */
     /* alloc iod */
     iod = xcalloc(raid1->repl_count, sizeof(*iod));
@@ -599,15 +586,11 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
 
     /* open all iod */
     for (i = 0; i < raid1->repl_count; ++i) {
-        rc = build_extent_key(extent[i].uuid, &extent_key);
-        if (rc)
-            LOG_GOTO(close, rc, "Extent key build failed");
-
-        rc = ioa_open(ioa[i], extent_key, enc->xfer->xd_objid, &iod[i], true);
-        free(extent_key);
+        rc = ioa_open(ioa[i], extent[i].uuid, enc->xfer->xd_objid, &iod[i],
+                      true);
         if (rc)
             LOG_GOTO(close, rc, "Unable to open extent %s in raid1 write",
-                     &extent_tag[i * EXTENT_TAG_SIZE]);
+                     extent[i].address.buff);
 
         get_preferred_io_block_size(&enc->io_block_size, ioa[i], &iod[i]);
         pho_debug("I/O size for replicate %d: %zu", i, enc->io_block_size);
@@ -713,7 +696,6 @@ free_values:
 out:
     free(loc);
     free(iod);
-    free(extent_tag);
     free(extent);
     free(ioa);
     return rc;
@@ -731,7 +713,6 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
     struct pho_io_descr iod = {0};
     struct extent *extent = NULL;
     struct pho_ext_loc loc = {0};
-    char *extent_key = NULL;
     int rc;
     int i;
 
@@ -783,12 +764,7 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
     pho_debug("Reading %ld bytes from medium %s", extent->size,
               extent->media.name);
 
-    rc = build_extent_key(extent->uuid, &extent_key);
-    if (rc)
-        LOG_RETURN(rc, "Extent key build failed");
-
-    rc = ioa_get(ioa, extent_key, dec->xfer->xd_objid, &iod);
-    free(extent_key);
+    rc = ioa_get(ioa, extent->uuid, dec->xfer->xd_objid, &iod);
     if (rc == 0) {
         raid1->to_write -= extent->size;
         raid1->cur_extent_idx++;

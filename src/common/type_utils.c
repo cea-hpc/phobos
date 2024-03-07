@@ -50,19 +50,6 @@ bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2)
     return true;
 }
 
-int build_extent_key(const char *uuid, char **key)
-{
-    int rc;
-
-    rc = asprintf(key, "%s", uuid);
-    if (rc < 0) {
-        *key = NULL;
-        return -ENOMEM;
-    }
-
-    return 0;
-}
-
 void init_pho_lock(struct pho_lock *lock, char *hostname, int owner,
                    struct timeval *timestamp)
 {

@@ -29,7 +29,6 @@
 #include "pho_module_loader.h"
 #include "pho_srl_common.h"
 #include "pho_type_utils.h"
-#define EXTENT_TAG_SIZE 128
 
 struct raid_io_context {
     struct io_adapter_module **ioa;  /**< IO adapter to access the current
