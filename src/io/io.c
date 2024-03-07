@@ -200,3 +200,74 @@ memory:
     return rc;
 }
 
+int set_object_md(const struct io_adapter_module *ioa, struct pho_io_descr *iod,
+                  struct object_metadata *object_md)
+{
+    struct extent *extent = iod->iod_loc->extent;
+    char str_buffer[64];
+    GString *user_md;
+    int rc = 0;
+
+    /**
+     * Build the extent attributes from the object ID and the user provided
+     * attributes. This information will be attached to backend objects for
+     * "self-description"/"rebuild" purpose.
+     */
+    user_md = g_string_new(NULL);
+    rc = pho_attrs_to_json(&object_md->object_attrs, user_md,
+                           PHO_ATTR_BACKUP_JSON_FLAGS);
+    if (rc)
+        LOG_RETURN(rc, "Unable to construct user attrs");
+
+    pho_attr_set(&iod->iod_attrs, PHO_EA_UMD_NAME, user_md->str);
+
+    if (extent->with_md5) {
+        const char *md5_buffer = uchar2hex(extent->md5, MD5_BYTE_LENGTH);
+
+        if (!md5_buffer)
+            LOG_RETURN(rc = -ENOMEM, "Unable to construct hex md5");
+
+        pho_attr_set(&iod->iod_attrs, PHO_EA_MD5_NAME, md5_buffer);
+        free((char *)md5_buffer);
+    }
+
+    if (extent->with_xxh128) {
+        const char *xxh128_buffer = uchar2hex(extent->xxh128,
+                                              sizeof(extent->xxh128));
+        if (!xxh128_buffer)
+            LOG_RETURN(rc = -ENOMEM, "Unable to construct hex xxh128");
+
+        pho_attr_set(&iod->iod_attrs, PHO_EA_XXH128_NAME, xxh128_buffer);
+        free((char *)xxh128_buffer);
+    }
+
+    rc = snprintf(str_buffer, sizeof(str_buffer),
+                  "%lu", object_md->object_size);
+    if (rc < 0)
+        LOG_RETURN(-errno, "Unable to construct object size buffer");
+
+    pho_attr_set(&iod->iod_attrs, PHO_EA_OBJECT_SIZE_NAME, str_buffer);
+
+    rc = snprintf(str_buffer, sizeof(str_buffer), "%lu", extent->offset);
+    if (rc < 0)
+        LOG_RETURN(-errno, "Unable to construct offset buffer");
+
+    pho_attr_set(&iod->iod_attrs, PHO_EA_EXTENT_OFFSET_NAME, str_buffer);
+
+    rc = snprintf(str_buffer, sizeof(str_buffer),
+                  "%d", object_md->object_version);
+    if (rc < 0)
+        LOG_RETURN(-errno, "Unable to construct version buffer");
+
+    pho_attr_set(&iod->iod_attrs, PHO_EA_VERSION_NAME, str_buffer);
+
+    pho_attr_set(&iod->iod_attrs, PHO_EA_LAYOUT_NAME, object_md->layout_name);
+    pho_attr_set(&iod->iod_attrs, PHO_EA_OBJECT_UUID_NAME,
+                 object_md->object_uuid);
+
+
+    rc = ioa_set_md(ioa, NULL, iod);
+    pho_attrs_free(&iod->iod_attrs);
+
+    return rc;
+}

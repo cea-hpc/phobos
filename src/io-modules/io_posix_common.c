@@ -833,12 +833,14 @@ int pho_posix_info_from_extent(struct pho_io_descr *iod,
 
     md.attr_set = NULL;
     pho_attr_set(&md, PHO_EA_OBJECT_UUID_NAME, NULL);
+    pho_attr_set(&md, PHO_EA_OBJECT_SIZE_NAME, NULL);
     pho_attr_set(&md, PHO_EA_VERSION_NAME, NULL);
     pho_attr_set(&md, PHO_EA_LAYOUT_NAME, NULL);
     pho_attr_set(&md, PHO_EA_UMD_NAME, NULL);
     pho_attr_set(&md, PHO_EA_MD5_NAME, NULL);
     pho_attr_set(&md, PHO_EA_XXH128_NAME, NULL);
-    pho_attr_set(&md, "raid1.extent_offset", NULL);
+    pho_attr_set(&md, PHO_EA_LAYOUT_NAME, NULL);
+    pho_attr_set(&md, PHO_EA_EXTENT_OFFSET_NAME, NULL);
     pho_attr_set(&md, "raid1.extent_index", NULL);
     pho_attr_set(&md, "raid1.repl_count", NULL);
 

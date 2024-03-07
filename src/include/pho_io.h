@@ -34,11 +34,15 @@
 #include <assert.h>
 
 #define PHO_EA_OBJECT_UUID_NAME     "object_uuid"
+#define PHO_EA_OBJECT_SIZE_NAME     "object_size"
 #define PHO_EA_VERSION_NAME         "version"
 #define PHO_EA_UMD_NAME             "user_md"
 #define PHO_EA_MD5_NAME             "md5"
 #define PHO_EA_XXH128_NAME          "xxh128"
 #define PHO_EA_LAYOUT_NAME          "layout"
+#define PHO_EA_EXTENT_OFFSET_NAME   "extent_offset"
+
+#define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
 
 #define UUID_LEN 37   // 36 + 1 for the '\0'
 
@@ -65,6 +69,14 @@ struct pho_io_descr {
     struct pho_ext_loc  *iod_loc;      /**< Extent location */
     struct pho_attrs     iod_attrs;    /**< In/Out metadata operations buffer */
     void                *iod_ctx;      /**< IO adapter private context */
+};
+
+struct object_metadata {
+    struct pho_attrs object_attrs;
+    ssize_t object_size;
+    int object_version;
+    char *layout_name;
+    char *object_uuid;
 };
 
 /**
@@ -395,5 +407,20 @@ int copy_extent(struct io_adapter_module *ioa_source,
                 struct pho_io_descr *iod_source,
                 struct io_adapter_module *ioa_target,
                 struct pho_io_descr *iod_target);
+
+/**
+ * Set the common information regarding an object and the extent being
+ * processed to the io adapter.
+ *
+ * \param[in]   ioa                 Suitable I/O adapter for the medium.
+ * \param[in]   iod                 I/O descriptor containg the extent's
+ *                                  general information
+ * \param[in]   object_md           General object metadata
+ *
+ * @return      0 on success,
+ *              -EINVAL on failure.
+ */
+int set_object_md(const struct io_adapter_module *ioa, struct pho_io_descr *iod,
+                  struct object_metadata *object_md);
 
 #endif

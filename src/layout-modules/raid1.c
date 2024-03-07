@@ -46,9 +46,6 @@
 #include "raid1.h"
 #include "io_posix_common.h"
 
-/* @FIXME: taken from store.c, will be needed in raid1 too */
-#define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
-
 #define PLUGIN_NAME     "raid1"
 #define PLUGIN_MAJOR    0
 #define PLUGIN_MINOR    2
@@ -364,122 +361,31 @@ out:
     return rc;
 }
 
-/**
- * Write xattrs to a split and all of its replicates, here the oid, user md,
- * md5/xxh128 if available.
- *
- * Uses function ioa_set_md to use the same file descriptor already contained
- * in the I/O descriptor without initializing a new file context.
- * In order to have md5/xxh128, the function ioa_open must be called before
- * this function.
- *
- * @param[in]       repl_count  Number of replicates of the extent.
- * @param[in,out]   iod         I/O descriptor to access the current object.
- * @param[in,out]   extent      Extent to write the xattrs to.
- * @param[in]       oid         Object descriptor.
- * @param[in]       object_size Size of the object.
- * @param[in]       offset      Offset of the extent.
- * @param[in]       user_md     User metadata.
- * @param[in,out]   ioa         I/O adapter to access the current storage
- *                              backend.
- *
- * @return 0 if success, else a negative error code.
- */
-static int put_xattr_to_extent(int repl_count, struct pho_io_descr *iod,
-                               struct extent *extent, const char *oid,
-                               const char *object_uuid, int version,
-                               GString *user_md, size_t object_size,
-                               size_t offset,
-                               struct io_adapter_module **ioa)
+static int set_layout_specific_md(int layout_index, int replica_count,
+                                  struct pho_io_descr *iod)
 {
+    char str_buffer[16];
     int rc = 0;
-    int i;
 
-    assert(object_size >= offset);
+    rc = sprintf(str_buffer, "%d", layout_index);
+    if (rc < 0)
+        LOG_GOTO(attrs_free, rc = -errno,
+                 "Unable to construct extent index buffer");
 
-    for (i = 0; i < repl_count; ++i) {
-        char *str_buffer;
+    pho_attr_set(&iod->iod_attrs, PHO_EA_EXTENT_INDEX_NAME, str_buffer);
 
-        iod[i].iod_flags = PHO_IO_MD_ONLY;
+    rc = sprintf(str_buffer, "%d", replica_count);
+    if (rc < 0)
+        LOG_GOTO(attrs_free, rc = -errno,
+                 "Unable to construct replica count buffer");
 
-        if (!gstring_empty(user_md))
-            pho_attr_set(&iod[i].iod_attrs, PHO_EA_UMD_NAME, user_md->str);
+    pho_attr_set(&iod->iod_attrs, PHO_EA_REPL_COUNT_NAME, str_buffer);
 
-        if (extent[i].with_md5) {
-            const char *md5_buffer = uchar2hex(extent[i].md5, MD5_BYTE_LENGTH);
+    rc = pho_posix_set_md(NULL, iod);
 
-            if (!md5_buffer)
-                LOG_GOTO(attrs, rc = -ENOMEM, "Unable to construct hex md5");
+attrs_free:
+    pho_attrs_free(&iod->iod_attrs);
 
-            pho_attr_set(&iod[i].iod_attrs, PHO_EA_MD5_NAME, md5_buffer);
-            free((char *)md5_buffer);
-        }
-
-        if (extent[i].with_xxh128) {
-            const char *xxh128_buffer = uchar2hex(extent[i].xxh128,
-                                                  sizeof(extent[i].xxh128));
-            if (!xxh128_buffer)
-                LOG_GOTO(attrs, rc = -ENOMEM, "Unable to construct hex xxh128");
-
-            pho_attr_set(&iod[i].iod_attrs, PHO_EA_XXH128_NAME, xxh128_buffer);
-            free((char *)xxh128_buffer);
-        }
-
-        rc = asprintf(&str_buffer, "%lu", object_size);
-        if (rc < 0)
-            LOG_GOTO(attrs, -errno, "Unable to construct object size buffer");
-
-        pho_attr_set(&iod[i].iod_attrs, PHO_EA_OBJECT_SIZE_NAME, str_buffer);
-
-        /* No alloc issue because object_size > offset */
-        rc = sprintf(str_buffer, "%lu", extent[i].offset);
-        if (rc < 0) {
-            free(str_buffer);
-            LOG_GOTO(attrs, -errno, "Unable to construct offset buffer");
-        }
-
-        pho_attr_set(&iod[i].iod_attrs, PHO_EA_EXTENT_OFFSET_NAME, str_buffer);
-
-        rc = sprintf(str_buffer, "%d", extent[i].layout_idx);
-        if (rc < 0) {
-            free(str_buffer);
-            LOG_GOTO(attrs, -errno, "Unable to construct extent index buffer");
-        }
-
-        pho_attr_set(&iod[i].iod_attrs, PHO_EA_EXTENT_INDEX_NAME, str_buffer);
-
-        rc = sprintf(str_buffer, "%d", repl_count);
-        if (rc < 0) {
-            free(str_buffer);
-            LOG_GOTO(attrs, -errno, "Unable to construct replica count buffer");
-        }
-
-        pho_attr_set(&iod[i].iod_attrs, PHO_EA_REPL_COUNT_NAME, str_buffer);
-
-        rc = sprintf(str_buffer, "%d", version);
-        if (rc < 0) {
-            free(str_buffer);
-            LOG_GOTO(attrs, -errno, "Unable to construct replica count buffer");
-        }
-
-        pho_attr_set(&iod[i].iod_attrs, PHO_EA_VERSION_NAME, str_buffer);
-        free(str_buffer);
-
-        pho_attr_set(&iod[i].iod_attrs, PHO_EA_LAYOUT_NAME,
-                     PHO_EA_RAID1_LAYOUT);
-
-        pho_attr_set(&iod[i].iod_attrs, PHO_EA_OBJECT_UUID_NAME, object_uuid);
-   }
-
-    for (i = 0; i < repl_count; ++i) {
-        rc = ioa_set_md(ioa[i], NULL, &iod[i]);
-        if (rc)
-            LOG_RETURN(rc, "Unable to set md for extent number %i in raid1", i);
-    }
-
-attrs:
-    for (i = 0; i < repl_count; ++i)
-        pho_attrs_free(&iod[i].iod_attrs);
     return rc;
 }
 
@@ -511,7 +417,6 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
     XXH128_hash_t xxh128;
 #endif
     size_t extent_size;
-    GString *str;
     int rc = 0;
     int i;
 
@@ -557,17 +462,6 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
 
     /* alloc loc */
     loc = xcalloc(raid1->repl_count, sizeof(*loc));
-
-    /**
-     * Build the extent attributes from the object ID and the user provided
-     * attributes. This information will be attached to backend objects for
-     * "self-description"/"rebuild" purpose.
-     */
-    str = g_string_new(NULL);
-    rc = pho_attrs_to_json(&enc->xfer->xd_attrs, str,
-                           PHO_ATTR_BACKUP_JSON_FLAGS);
-    if (rc)
-        goto free_values;
 
     for (i = 0; i < raid1->repl_count; ++i) {
         /* set loc */
@@ -656,11 +550,28 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
         }
     }
 
+    for (i = 0; i < raid1->repl_count; ++i) {
+        struct object_metadata object_md = {
+            .object_attrs = enc->xfer->xd_attrs,
+            .object_size = enc->xfer->xd_params.put.size,
+            .object_version = enc->xfer->xd_version,
+            .layout_name = "raid1",
+            .object_uuid = enc->xfer->xd_objuuid,
+        };
 
-    rc = put_xattr_to_extent(raid1->repl_count, iod,
-                             extent, enc->xfer->xd_objid, enc->xfer->xd_objuuid,
-                             enc->xfer->xd_version, str,
-                             object_size, object_size - raid1->to_write, ioa);
+        rc = set_object_md(ioa[i], &iod[i], &object_md);
+        if (rc)
+            LOG_GOTO(close, rc,
+                     "Failed to set general attributes to extent '%s'",
+                     extent[i].uuid);
+
+        rc = set_layout_specific_md(extent[i].layout_idx, raid1->repl_count,
+                                    &iod[i]);
+        if (rc)
+            LOG_GOTO(close, rc,
+                     "Failed to set layout specific attributes to extent '%s'",
+                     extent[i].uuid);
+    }
 
 close:
     for (i = 0; i < raid1->repl_count; ++i) {
@@ -687,10 +598,6 @@ close:
     if (!rc)
         for (i = 0; i < raid1->repl_count; ++i)
             add_written_extent(raid1, &extent[i]);
-
-
-free_values:
-    g_string_free(str, TRUE);
 
 out:
     free(loc);
