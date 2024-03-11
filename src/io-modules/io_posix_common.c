@@ -436,7 +436,7 @@ static int pho_posix_md_get(const char *path, int fd, struct pho_attrs *attrs)
 
     ENTRY;
 
-    args.mig_path  = path;
+    args.mig_path = path;
     args.mig_attrs = attrs;
     args.mig_fd = fd;
 
@@ -592,7 +592,7 @@ static int pho_posix_open_get(struct pho_io_descr *iod)
     io_ctx = iod->iod_ctx;
 
     /* get entry MD, if requested */
-    rc = pho_posix_md_get(io_ctx->fpath, -1, &iod->iod_attrs);
+    rc = pho_posix_md_get(io_ctx->fpath, iod->iod_fd, &iod->iod_attrs);
     if (rc != 0 || (iod->iod_flags & PHO_IO_MD_ONLY))
         goto free_io_ctx;
 
@@ -790,14 +790,15 @@ ssize_t pho_posix_preferred_io_size(struct pho_io_descr *iod)
     return sfs.f_bsize;
 }
 
-int pho_posix_info_from_extent(struct pho_io_descr *iod,
-                               struct layout_info *lyt_info,
-                               struct extent *extent_to_insert,
-                               struct object_info *obj_info)
+int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
+                                      struct layout_info *lyt_info,
+                                      struct extent *extent_to_insert,
+                                      struct object_info *obj_info)
 {
+    const char *tmp_extent_offset;
     const char *tmp_object_uuid;
     const char *tmp_layout_name;
-    const char *extent_index;
+    const char *tmp_user_md;
     const char *tmp_version;
     struct module_desc mod;
     struct pho_attrs md;
@@ -839,10 +840,7 @@ int pho_posix_info_from_extent(struct pho_io_descr *iod,
     pho_attr_set(&md, PHO_EA_UMD_NAME, NULL);
     pho_attr_set(&md, PHO_EA_MD5_NAME, NULL);
     pho_attr_set(&md, PHO_EA_XXH128_NAME, NULL);
-    pho_attr_set(&md, PHO_EA_LAYOUT_NAME, NULL);
     pho_attr_set(&md, PHO_EA_EXTENT_OFFSET_NAME, NULL);
-    pho_attr_set(&md, "raid1.extent_index", NULL);
-    pho_attr_set(&md, "raid1.repl_count", NULL);
 
     rc = pho_posix_md_get(NULL, iod->iod_fd, &md);
     if (rc)
@@ -851,48 +849,65 @@ int pho_posix_info_from_extent(struct pho_io_descr *iod,
 
     tmp_version = pho_attr_get(&md, PHO_EA_VERSION_NAME);
     if (tmp_version == NULL)
-        LOG_GOTO(free_oid_uuid, rc,
+        LOG_GOTO(free_oid_uuid, rc = -EINVAL,
                  "Failed to retrieve object version of file '%s'", filename);
+
+    version = str2int64(tmp_version);
+    if (version <= 0)
+        LOG_GOTO(free_oid_uuid, rc = -EINVAL,
+                 "Invalid object version found on '%s': '%d'",
+                 filename, version);
+
+    tmp_user_md = pho_attr_get(&md, PHO_EA_UMD_NAME);
+    if (tmp_user_md == NULL)
+        LOG_GOTO(free_oid_uuid, rc = -EINVAL,
+                 "Failed to retrieve object uuid of file '%s'", filename);
 
     tmp_object_uuid = pho_attr_get(&md, PHO_EA_OBJECT_UUID_NAME);
     if (tmp_object_uuid == NULL)
-        LOG_GOTO(free_oid_uuid, rc,
+        LOG_GOTO(free_oid_uuid, rc = -EINVAL,
                  "Failed to retrieve object uuid of file '%s'", filename);
-
-    version = str2int64(tmp_version);
-    assert(version >= 1);
-    lyt_info->uuid = xstrdup(tmp_object_uuid);
-    obj_info->uuid = xstrdup(tmp_object_uuid);
-    lyt_info->version = version;
-    obj_info->version = version;
 
     tmp_layout_name = pho_attr_get(&md, PHO_EA_LAYOUT_NAME);
     if (tmp_layout_name == NULL)
-        LOG_GOTO(free_uuids, rc = -EINVAL,
+        LOG_GOTO(free_oid_uuid, rc = -EINVAL,
                  "Failed to retrieve layout name of file '%s'",
                  iod->iod_loc->extent->address.buff);
 
+    tmp_extent_offset = pho_attr_get(&md, PHO_EA_EXTENT_OFFSET_NAME);
+    if (tmp_extent_offset == NULL)
+        LOG_GOTO(free_oid_uuid, rc = -EINVAL,
+                 "Failed to retrieve layout name of file '%s'",
+                 iod->iod_loc->extent->address.buff);
+
+    extent_to_insert->offset = str2int64(tmp_extent_offset);
+    if (extent_to_insert->offset < 0)
+        LOG_GOTO(free_oid_uuid, rc = -EINVAL,
+                 "Invalid extent offset found on '%s': '%ld'",
+                 filename, extent_to_insert->offset);
+
+    lyt_info->version = version;
+    obj_info->version = version;
+
+    lyt_info->uuid = xstrdup(tmp_object_uuid);
+    obj_info->uuid = xstrdup(tmp_object_uuid);
+
     mod.mod_name = xstrdup(tmp_layout_name);
+
     mod.mod_major = 0;
     mod.mod_minor = 2;
     pho_attr_remove(&md, PHO_EA_LAYOUT_NAME);
+
+    obj_info->user_md = xstrdup(tmp_user_md);
 
     pho_attrs_remove_null(&md);
 
     mod.mod_attrs = md;
     lyt_info->layout_desc = mod;
 
-    extent_index = pho_attr_get(&md, "raid1.extent_index");
-    assert(extent_index);
-    extent_to_insert->layout_idx = strtol(extent_index, NULL, 10);
-
     free(filename);
 
     return 0;
-
-free_uuids:
-    free(lyt_info->uuid);
-    free(obj_info->uuid);
 
 free_oid_uuid:
     free(oid);

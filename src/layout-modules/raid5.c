@@ -63,7 +63,7 @@ static const struct pho_layout_module_ops LAYOUT_RAID5_OPS = {
     .encode = NULL,
     .decode = NULL,
     .locate = NULL,
-    .get_info_from_xattrs = NULL,
+    .get_specific_attrs = NULL,
     .reconstruct = NULL,
 };
 

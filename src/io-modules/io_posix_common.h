@@ -57,9 +57,9 @@ char *full_xattr_name(const char *name);
 
 int pho_getxattr(const char *path, int fd, const char *name, char **value);
 
-int pho_posix_info_from_extent(struct pho_io_descr *iod,
-                               struct layout_info *lyt_info,
-                               struct extent *extent_to_insert,
-                               struct object_info *obj_info);
+int pho_get_common_xattrs_from_extent(struct pho_io_descr *iod,
+                                      struct layout_info *lyt_info,
+                                      struct extent *extent_to_insert,
+                                      struct object_info *obj_info);
 
 #endif

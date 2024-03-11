@@ -125,59 +125,6 @@ static int _dev_media_update(struct dss_handle *dss,
     return rc;
 }
 
-/**
- * This function initializes the layout and extent information contained in
- * the extended attributes of a file whose file descriptor is given
- *
- * @param[in]   fd      File descriptor of the extent.
- * @param[out]  lyt     Contains information about the layout of the extent
- *                      to add.
- * @param[out]  ext     Contains information about the extent to add.
- * @param[out]  obj     Contains information about the object related to the
- *                      extent to add.
- *
- * @return      0 on success,
- *              -errno on failure.
- */
-static int _get_info_from_xattrs(int fd, struct layout_info *lyt,
-                                 struct extent *ext, struct object_info *obj)
-{
-    unsigned char *hash_buffer;
-    const char *buffer;
-    int rc = 0;
-
-    buffer = pho_attr_get(&lyt->layout_desc.mod_attrs, PHO_EA_MD5_NAME);
-    if (!buffer) {
-        ext->with_md5 = false;
-    } else {
-        hash_buffer = hex2uchar(buffer, MD5_BYTE_LENGTH);
-        memcpy(ext->md5, hash_buffer, (MD5_BYTE_LENGTH + 1) * sizeof(char));
-        free(hash_buffer);
-        ext->with_md5 = true;
-    }
-
-    buffer = pho_attr_get(&lyt->layout_desc.mod_attrs, PHO_EA_XXH128_NAME);
-    if (!buffer) {
-        ext->with_xxh128 = false;
-    } else {
-        hash_buffer = hex2uchar(buffer, XXH128_BYTE_LENGTH);
-        memcpy(ext->xxh128, hash_buffer,
-               (XXH128_BYTE_LENGTH + 1) * sizeof(char));
-        free(hash_buffer);
-        ext->with_xxh128 = true;
-    }
-
-    buffer = pho_attr_get(&lyt->layout_desc.mod_attrs, PHO_EA_UMD_NAME);
-    if (!buffer)
-        LOG_RETURN(rc = -EINVAL, "Could not read user md");
-
-    obj->user_md = xstrdup(buffer);
-
-    rc = layout_get_info_from_xattrs(fd, lyt, obj, ext);
-
-    return rc;
-}
-
 /*
  * Gives the list of the objects and deprecated objects matching a given uuid
  * and version.
@@ -493,10 +440,21 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
     ext_to_insert.address.buff = filename;
 
     // Get info from the extent name
-    rc = ioa_info_from_extent(ioa, &iod, &lyt_to_insert, &ext_to_insert,
-                              &obj_to_insert);
+    rc = ioa_get_common_xattrs_from_extent(ioa, &iod, &lyt_to_insert,
+                                           &ext_to_insert, &obj_to_insert);
     if (rc)
-        LOG_RETURN(rc, "Could not get info from filename");
+        LOG_RETURN(rc,
+                   "Failed to retrieve every common xattrs from file '%s/%s', "
+                   "the object and extent will not be added to the DSS",
+                   rootpath, filename);
+
+    rc = layout_get_specific_attrs(&iod, ioa, &ext_to_insert, &lyt_to_insert);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Failed to retrieve every layout specific xattrs from file "
+                   "'%s/%s', the object and extent will not be added to the "
+                   "DSS",
+                   rootpath, filename);
 
     *nb_new_obj += 1;
     *size_written += fsize;
@@ -505,12 +463,6 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
     ext_to_insert.address = PHO_BUFF_NULL;
     ext_to_insert.address.buff = xstrdup(rootpath);
     ext_to_insert.state = PHO_EXT_ST_SYNC;
-
-    // Get info from the extent's xattrs
-    rc = _get_info_from_xattrs(fd, &lyt_to_insert, &ext_to_insert,
-                               &obj_to_insert);
-    if (rc)
-        LOG_RETURN(rc, "Could not get info from xattrs");
 
     obj_to_insert.obj_status = PHO_OBJ_STATUS_INCOMPLETE;
 

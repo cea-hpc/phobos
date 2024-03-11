@@ -31,9 +31,9 @@
 /**
  * Extended attributes' names for RAID1 layout
  */
-#define PHO_EA_RAID1_LAYOUT         "raid1"
-#define PHO_EA_EXTENT_INDEX_NAME    "raid1.extent_index"
-#define PHO_EA_REPL_COUNT_NAME      "raid1.repl_count"
+#define PHO_EA_RAID1_LAYOUT               "raid1"
+#define PHO_EA_RAID1_EXTENT_INDEX_NAME    "raid1.extent_index"
+#define PHO_EA_RAID1_REPL_COUNT_NAME      "raid1.repl_count"
 
 /**
  * Replica count parameter that comes from configuration or CLI.

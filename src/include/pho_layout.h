@@ -32,6 +32,7 @@
 #include "phobos_store.h"
 #include "pho_dss.h"
 #include "pho_srl_lrs.h"
+#include "pho_io.h"
 
 /**
  * Operation names for dynamic loading with dlsym()
@@ -65,8 +66,10 @@ struct pho_layout_module_ops {
     /** Updates the information of the layout, object and extent based on the
      * medium's extent and the layout used.
      */
-    int (*get_info_from_xattrs)(int fd, struct layout_info *lyt,
-                                struct object_info *obj, struct extent *ext);
+    int (*get_specific_attrs)(struct pho_io_descr *iod,
+                              struct io_adapter_module *ioa,
+                              struct extent *extent,
+                              struct pho_attrs *layout_md);
 
     /** Updates the status of an object based on its extents */
     int (*reconstruct)(struct layout_info lyt, struct object_info *obj);
@@ -234,18 +237,21 @@ static inline int layout_step(struct pho_encoder *enc, pho_resp_t *resp,
 }
 
 /**
- * Updates the information of the layout, object and extent based on the
- * medium's extent and the layout module.
+ * Update extent and layout metadata without attributes retrieved from the
+ * extent using the io adapter provided.
  *
- * @param[in]       fd      File descriptor of the extent.
- * @param[in/out]   lyt     The layout to update.
- * @param[out]      obj     The object to update.
- * @param[out]      ext     The extents to update.
+ * @param[in]      iod         The I/O descriptor of the entry
+ * @param[in]      ioa         I/O adapter to use to get metadata.
+ * @param[out]     ext         The extent to update.
+ * @param[in,out]  lyt         The layout to retrieve the info from, and the
+ *                             attributes to update.
  *
  * @return 0 on success, -errno on failure.
  */
-int layout_get_info_from_xattrs(int fd, struct layout_info *lyt,
-                                struct object_info *obj, struct extent *ext);
+int layout_get_specific_attrs(struct pho_io_descr *iod,
+                              struct io_adapter_module *ioa,
+                              struct extent *extent,
+                              struct layout_info *layout);
 
 /**
  * Updates the status of the object according to its detected extents

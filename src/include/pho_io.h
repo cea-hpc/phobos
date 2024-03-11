@@ -102,10 +102,10 @@ struct pho_io_adapter_module_ops {
     int (*ioa_medium_sync)(const char *root_path, json_t **message);
     ssize_t (*ioa_preferred_io_size)(struct pho_io_descr *iod);
     int (*ioa_set_md)(const char *extent_desc, struct pho_io_descr *iod);
-    int (*ioa_info_from_extent)(struct pho_io_descr *iod,
-                                struct layout_info *lyt_info,
-                                struct extent *extent_to_insert,
-                                struct object_info *obj_info);
+    int (*ioa_get_common_xattrs_from_extent)(struct pho_io_descr *iod,
+                                             struct layout_info *lyt_info,
+                                             struct extent *extent_to_insert,
+                                             struct object_info *obj_info);
 };
 
 struct io_adapter_module {
@@ -348,17 +348,19 @@ static inline int ioa_set_md(const struct io_adapter_module *ioa,
  * @return      0 on success,
  *              -EINVAL on failure.
  */
-static inline int ioa_info_from_extent(const struct io_adapter_module *ioa,
-                                       struct pho_io_descr *iod,
-                                       struct layout_info *lyt_info,
-                                       struct extent *extent_to_insert,
-                                       struct object_info *obj_info)
+static inline int
+ioa_get_common_xattrs_from_extent(const struct io_adapter_module *ioa,
+                                  struct pho_io_descr *iod,
+                                  struct layout_info *lyt_info,
+                                  struct extent *extent_to_insert,
+                                  struct object_info *obj_info)
 {
     assert(ioa != NULL);
     assert(ioa->ops != NULL);
-    assert(ioa->ops->ioa_info_from_extent != NULL);
-    return ioa->ops->ioa_info_from_extent(iod, lyt_info, extent_to_insert,
-                                          obj_info);
+    assert(ioa->ops->ioa_get_common_xattrs_from_extent != NULL);
+    return ioa->ops->ioa_get_common_xattrs_from_extent(iod, lyt_info,
+                                                       extent_to_insert,
+                                                       obj_info);
 }
 
 /**

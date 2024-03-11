@@ -330,12 +330,12 @@ static long long json_dict2ll(const struct json_t *obj, const char *key)
     current_obj = json_object_get(obj, key);
     if (!current_obj) {
         pho_debug("Cannot retrieve object '%s'", key);
-        return -1LL;
+        return INT64_MIN;
     }
 
     if (!json_is_integer(current_obj)) {
         pho_debug("JSON attribute '%s' is not an integer", key);
-        return -1LL;
+        return INT64_MIN;
     }
 
     return json_integer_value(current_obj);
@@ -1018,7 +1018,7 @@ static int dss_layout_extents_decode(struct extent **extents, int *count,
 
         /* offsetof */
         result[i].offset = json_dict2ll(child, "offsetof");
-        if (result[i].offset < 0)
+        if (result[i].offset == INT64_MIN)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'offsetof'");
 
         /*XXX fs_type & address_type retrieved from media info */

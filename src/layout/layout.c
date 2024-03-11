@@ -180,14 +180,15 @@ int layout_locate(struct dss_handle *dss, struct layout_info *layout,
     return mod->ops->locate(dss, layout, focus_host, hostname, nb_new_lock);
 }
 
-int layout_get_info_from_xattrs(int fd, struct layout_info *lyt,
-                                struct object_info *obj, struct extent *ext)
+int layout_get_specific_attrs(struct pho_io_descr *iod,
+                              struct io_adapter_module *ioa,
+                              struct extent *extent, struct layout_info *layout)
 {
     char layout_name[NAME_MAX];
     struct layout_module *mod;
     int rc = 0;
 
-    rc = build_layout_name(lyt->layout_desc.mod_name, layout_name,
+    rc = build_layout_name(layout->layout_desc.mod_name, layout_name,
                            sizeof(layout_name));
     if (rc)
         return rc;
@@ -197,7 +198,8 @@ int layout_get_info_from_xattrs(int fd, struct layout_info *lyt,
     if (rc)
         return rc;
 
-    return mod->ops->get_info_from_xattrs(fd, lyt, obj, ext);
+    return mod->ops->get_specific_attrs(iod, ioa, extent,
+                                        &layout->layout_desc.mod_attrs);
 }
 
 int layout_reconstruct(struct layout_info lyt, struct object_info *obj)

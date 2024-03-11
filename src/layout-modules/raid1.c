@@ -226,7 +226,7 @@ static void add_written_extent(struct raid1_encoder *raid1,
  *
  * 0 is not a valid replica count, -EINVAL will be returned.
  *
- * @param[in]  layout     layout with a PHO_EA_REPL_COUNT_NAME
+ * @param[in]  layout     layout with a PHO_EA_RAID1_REPL_COUNT_NAME
  * @param[out] repl_count replica count value to set
  *
  * @return 0 if success,
@@ -235,7 +235,14 @@ static void add_written_extent(struct raid1_encoder *raid1,
 int layout_repl_count(struct layout_info *layout, unsigned int *repl_count)
 {
     const char *string_repl_count = pho_attr_get(&layout->layout_desc.mod_attrs,
-                                                 PHO_EA_REPL_COUNT_NAME);
+                                                 PHO_EA_RAID1_REPL_COUNT_NAME);
+    if (string_repl_count == NULL)
+        /* Ensure we can read objects from the old schema, which have the
+         * replica count under the name 'repl_count' and not 'raid1.repl_count'
+         */
+        string_repl_count = pho_attr_get(&layout->layout_desc.mod_attrs,
+                                         "repl_count");
+
     if (string_repl_count == NULL)
         LOG_RETURN(-EINVAL, "Unable to get replica count from layout attrs");
 
@@ -372,14 +379,14 @@ static int set_layout_specific_md(int layout_index, int replica_count,
         LOG_GOTO(attrs_free, rc = -errno,
                  "Unable to construct extent index buffer");
 
-    pho_attr_set(&iod->iod_attrs, PHO_EA_EXTENT_INDEX_NAME, str_buffer);
+    pho_attr_set(&iod->iod_attrs, PHO_EA_RAID1_EXTENT_INDEX_NAME, str_buffer);
 
     rc = sprintf(str_buffer, "%d", replica_count);
     if (rc < 0)
         LOG_GOTO(attrs_free, rc = -errno,
                  "Unable to construct replica count buffer");
 
-    pho_attr_set(&iod->iod_attrs, PHO_EA_REPL_COUNT_NAME, str_buffer);
+    pho_attr_set(&iod->iod_attrs, PHO_EA_RAID1_REPL_COUNT_NAME, str_buffer);
 
     rc = pho_posix_set_md(NULL, iod);
 
@@ -555,7 +562,7 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
             .object_attrs = enc->xfer->xd_attrs,
             .object_size = enc->xfer->xd_params.put.size,
             .object_version = enc->xfer->xd_version,
-            .layout_name = "raid1",
+            .layout_name = PHO_EA_RAID1_LAYOUT,
             .object_uuid = enc->xfer->xd_objuuid,
         };
 
@@ -1059,7 +1066,7 @@ static int layout_raid1_encode(struct pho_encoder *enc)
 
     /* set repl_count as char * in layout */
     pho_attr_set(&enc->layout->layout_desc.mod_attrs,
-                 PHO_EA_REPL_COUNT_NAME, string_repl_count);
+                 PHO_EA_RAID1_REPL_COUNT_NAME, string_repl_count);
 
     /* set repl_count in encoder */
     rc = layout_repl_count(enc->layout, &raid1->repl_count);
@@ -2008,39 +2015,6 @@ clean:
     return rc;
 }
 
-static int layout_raid1_get_info_from_xattrs(int fd, struct layout_info *lyt,
-                                             struct object_info *obj,
-                                             struct extent *ext)
-{
-    char *buffer;
-    int rc = 0;
-
-    if (!strcmp(lyt->layout_desc.mod_name, "raid1")) {
-        rc = pho_getxattr(NULL, fd, PHO_EA_OBJECT_SIZE_NAME, &buffer);
-        if (rc)
-            return rc;
-
-        if (!buffer)
-            LOG_RETURN(rc = -EINVAL, "raid 1 object size xattr not found");
-
-        pho_attr_set(&lyt->layout_desc.mod_attrs, "raid1.obj_size", buffer);
-        lyt->wr_size = strtol(buffer, NULL, 10);
-        free(buffer);
-
-        rc = pho_getxattr(NULL, fd, PHO_EA_EXTENT_OFFSET_NAME, &buffer);
-        if (rc)
-            return rc;
-
-        if (!buffer)
-            LOG_RETURN(rc = -EINVAL, "raid 1 extent offset xattr not found");
-
-        ext->offset = strtol(buffer, NULL, 10);
-        free(buffer);
-    }
-
-    return 0;
-}
-
 static int layout_raid1_reconstruct(struct layout_info lyt,
                                     struct object_info *obj)
 {
@@ -2084,11 +2058,58 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
     return 0;
 }
 
+static int layout_raid1_get_specific_attrs(struct pho_io_descr *iod,
+                                           struct io_adapter_module *ioa,
+                                           struct extent *extent,
+                                           struct pho_attrs *layout_md)
+{
+    const char *tmp_extent_index;
+    const char *tmp_repl_count;
+    struct pho_attrs md;
+    int rc;
+
+    md.attr_set = NULL;
+    pho_attr_set(&md, PHO_EA_RAID1_EXTENT_INDEX_NAME, NULL);
+    pho_attr_set(&md, PHO_EA_RAID1_REPL_COUNT_NAME, NULL);
+
+    iod->iod_attrs = md;
+    iod->iod_flags = PHO_IO_MD_ONLY;
+
+    rc = ioa_open(ioa, NULL, iod, false);
+    if (rc)
+        goto end;
+
+    tmp_repl_count = pho_attr_get(&md, PHO_EA_RAID1_REPL_COUNT_NAME);
+    if (tmp_repl_count == NULL)
+        LOG_GOTO(end, rc = -EINVAL,
+                 "Failed to retrieve replica count of file '%s'",
+                 iod->iod_loc->extent->address.buff);
+
+    tmp_extent_index = pho_attr_get(&md, PHO_EA_RAID1_EXTENT_INDEX_NAME);
+    if (tmp_extent_index == NULL)
+        LOG_GOTO(end, rc = -EINVAL,
+                 "Failed to retrieve extent index of file '%s'",
+                 iod->iod_loc->extent->address.buff);
+
+    extent->layout_idx = str2int64(tmp_extent_index);
+    if (extent->layout_idx < 0)
+        LOG_GOTO(end, rc = -EINVAL,
+                 "Invalid extent index found on '%s': '%d'",
+                 iod->iod_loc->extent->address.buff, extent->layout_idx);
+
+    pho_attr_set(layout_md, PHO_EA_RAID1_REPL_COUNT_NAME, tmp_repl_count);
+
+end:
+    pho_attrs_free(&md);
+
+    return rc;
+}
+
 static const struct pho_layout_module_ops LAYOUT_RAID1_OPS = {
     .encode = layout_raid1_encode,
     .decode = layout_raid1_decode,
     .locate = layout_raid1_locate,
-    .get_info_from_xattrs = layout_raid1_get_info_from_xattrs,
+    .get_specific_attrs = layout_raid1_get_specific_attrs,
     .reconstruct = layout_raid1_reconstruct,
 };
 
