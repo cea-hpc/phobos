@@ -520,8 +520,8 @@ static inline int
 default_conflict_handler(const struct pho_id *id,
                          const char *hostname)
 {
-    pho_warn("Medium '%s' is locked by '%s', "
-             "it will not be notified of the change",
+    pho_warn("Medium '%s' is locked by '%s', it will not be notified of the "
+             "change",
              id->name, hostname);
     return 0;
 }
@@ -547,33 +547,5 @@ int phobos_admin_notify_media_update(struct admin_handle *adm,
                                      struct pho_id *ids,
                                      size_t count,
                                      lock_conflict_handler_t on_conflict);
-
-/**
- *  Imports the content of the medium
- *
- * @param[in] adm           Admin module handler.
- * @param[in] medium        Medium to import the content of.
- * @param[in] check_hash    Option to know if a recalculation of hashs has to
- *                          be remade.
- * @return 0                on success,
- *                          -errno on failure.
- */
-int pho_import_medium(struct admin_handle *adm, struct media_info medium,
-                      bool check_hash);
-
-/**
- * Reconstructs a (deprecated) object, which means updating its obj_status
- * to either "incomplete", "readable" or "complete".
- *
- * @param[in]   adm         Admin handle,
- * @param[in]   obj         (deprecated) object to reconstruct,
- * @param[in]   deprecated  True if the object to reconstruct is in the
- *                          deprecated_object table.
- *
- * @return      0 on success,
- *              -errno on failure.
- */
-int pho_reconstruct_obj(struct admin_handle *adm, struct object_info obj,
-                        bool deprecated);
 
 #endif

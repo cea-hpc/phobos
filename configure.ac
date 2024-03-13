@@ -133,7 +133,6 @@ AC_CONFIG_FILES([Makefile
          src/communication/Makefile
          src/store/Makefile
          src/io-modules/Makefile
-         src/import/Makefile
          src/layout-modules/Makefile
          src/ldm-modules/Makefile
          src/admin/Makefile

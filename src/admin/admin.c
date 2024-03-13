@@ -43,7 +43,9 @@
 #include "pho_srl_lrs.h"
 #include "pho_types.h"
 #include "pho_type_utils.h"
+
 #include "admin_utils.h"
+#include "import.h"
 
 enum pho_cfg_params_admin {
     /* Actual admin parameters */
@@ -1356,7 +1358,7 @@ int phobos_admin_media_import(struct admin_handle *adm,
             LOG_RETURN(rc, "Unable to add medium '%s' to database",
                        medium->name);
 
-        rc = pho_import_medium(adm, med_ls[i], check_hash);
+        rc = import_medium(adm, &med_ls[i], check_hash);
         if (rc)
             LOG_RETURN(rc, "Unable to import medium '%s' to database",
                        medium->name);
@@ -1384,7 +1386,7 @@ int phobos_admin_media_import(struct admin_handle *adm,
     }
 
     for (int i = 0; i < obj_cnt; i++) {
-        rc2 = pho_reconstruct_obj(adm, obj[i], false);
+        rc2 = reconstruct_object(adm, &obj[i], false);
         if (rc2) {
             pho_error(rc2, "Failed to reconstruct object '%s', skipping it",
                       obj[i].oid);
@@ -1395,7 +1397,7 @@ int phobos_admin_media_import(struct admin_handle *adm,
     dss_res_free(obj, obj_cnt);
 
     for (int i = 0; i < depr_cnt; i++) {
-        rc2 = pho_reconstruct_obj(adm, depr[i], true);
+        rc2 = reconstruct_object(adm, &depr[i], true);
         if (rc2) {
             pho_error(rc2, "Failed to reconstruct object '%s', skipping it",
                       depr[i].oid);

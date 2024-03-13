@@ -42,10 +42,11 @@
 #include "pho_srl_lrs.h"
 #include "pho_layout.h"
 #include "pho_ldm.h"
-#include "raid1.h"
-#include "io_posix_common.h"
-#include "admin_utils.h"
 
+#include "admin_utils.h"
+#include "import.h"
+#include "io_posix_common.h"
+#include "raid1.h"
 
 /**
  * Update media_info stats and push its new state to the DSS
@@ -598,10 +599,10 @@ static int explore_from_path(struct admin_handle *adm, char *root_path,
                                  size_written, nb_new_obj);
 }
 
-int pho_import_medium(struct admin_handle *adm, struct media_info medium,
-                      bool check_hash)
+int import_medium(struct admin_handle *adm, struct media_info *medium,
+                  bool check_hash)
 {
-    struct pho_id id = medium.rsc.id;
+    struct pho_id id = medium->rsc.id;
     enum address_type addr_type;
     long long nb_new_obj = 0;
     size_t size_written = 0;
@@ -615,14 +616,14 @@ int pho_import_medium(struct admin_handle *adm, struct media_info medium,
     // fs.label field of the tape
     label_length = (strlen(id.name) < PHO_LABEL_MAX_LEN ? strlen(id.name) :
                                                           PHO_LABEL_MAX_LEN);
-    memcpy(medium.fs.label, id.name, label_length);
-    medium.fs.label[label_length] = 0;
+    memcpy(medium->fs.label, id.name, label_length);
+    medium->fs.label[label_length] = 0;
 
-    rc = dss_media_set(&adm->dss, &medium, 1, DSS_SET_UPDATE, FS_LABEL);
+    rc = dss_media_set(&adm->dss, medium, 1, DSS_SET_UPDATE, FS_LABEL);
     if (rc)
         LOG_RETURN(rc,
                    "Failed to update filesystem label of '%s' to '%s' in DSS",
-                   id.name, medium.fs.label);
+                   id.name, medium->fs.label);
 
     // One request to read the tape, one request to release it afterwards
     reqs = malloc(2 * sizeof(pho_req_t));
@@ -670,7 +671,7 @@ int pho_import_medium(struct admin_handle *adm, struct media_info medium,
                            &size_written, &nb_new_obj);
 
     // fs_df to actualize the stats of the tape
-    rc = _dev_media_update(&adm->dss, &medium, size_written, rc, root_path,
+    rc = _dev_media_update(&adm->dss, medium, size_written, rc, root_path,
                            nb_new_obj);
 
     // Release of the medium
@@ -698,8 +699,8 @@ request_free:
     return rc;
 }
 
-int pho_reconstruct_obj(struct admin_handle *adm, struct object_info obj,
-                        bool deprecated)
+int reconstruct_object(struct admin_handle *adm, struct object_info *obj,
+                       bool deprecated)
 {
     struct dss_filter filter;
     struct layout_info *lyt;
@@ -710,7 +711,7 @@ int pho_reconstruct_obj(struct admin_handle *adm, struct object_info obj,
                           "{\"$AND\": ["
                               "{\"DSS::LYT::object_uuid\": \"%s\"}, "
                               "{\"DSS::LYT::version\": \"%d\"}"
-                          "]}", obj.uuid, obj.version);
+                          "]}", obj->uuid, obj->version);
     if (rc)
         return rc;
 
@@ -723,11 +724,11 @@ int pho_reconstruct_obj(struct admin_handle *adm, struct object_info obj,
     assert(lyt_cnt <= 1);
 
     if (lyt_cnt == 0) {
-        obj.obj_status = PHO_OBJ_STATUS_INCOMPLETE;
+        obj->obj_status = PHO_OBJ_STATUS_INCOMPLETE;
         goto end;
     }
 
-    rc = layout_reconstruct(lyt[0], &obj);
+    rc = layout_reconstruct(lyt[0], obj);
 
 end:
     dss_res_free(lyt, lyt_cnt);
@@ -735,9 +736,9 @@ end:
         return rc;
 
     if (deprecated)
-        rc = dss_deprecated_object_set(&adm->dss, &obj, 1, DSS_SET_UPDATE);
+        rc = dss_deprecated_object_set(&adm->dss, obj, 1, DSS_SET_UPDATE);
     else
-        rc = dss_object_set(&adm->dss, &obj, 1, DSS_SET_UPDATE);
+        rc = dss_object_set(&adm->dss, obj, 1, DSS_SET_UPDATE);
 
     return rc;
 }
