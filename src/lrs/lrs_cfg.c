@@ -78,6 +78,11 @@ const struct pho_config_item cfg_lrs[] = {
         .name    = "sync_wsize_kb",
         .value   = "tape=1048576,dir=1048576,rados_pool=1048576"
     },
+    [PHO_CFG_LRS_max_health] = {
+        .section = "lrs",
+        .name    = "max_health",
+        .value   = "1",
+    },
 };
 
 static int _get_substring_value_from_token(const char *cfg_param,

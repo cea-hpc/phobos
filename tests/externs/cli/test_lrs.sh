@@ -559,6 +559,7 @@ function test_retry_on_error_run()
 
     waive_daemons
     drain_all_drives
+    export PHOBOS_LRS_max_health=1
     invoke_tlc
 
     # Custom mount script that fails the first two mounts and succeeds on the

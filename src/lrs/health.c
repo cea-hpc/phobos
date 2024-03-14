@@ -30,6 +30,7 @@
 
 #include "health.h"
 #include "lrs_device.h"
+#include "lrs_cfg.h"
 
 size_t increase_medium_health(struct media_info *medium)
 {
@@ -76,8 +77,11 @@ size_t decrease_device_health(struct lrs_dev *device)
 
 size_t max_health(void)
 {
-    /* TODO for now this is hard coded, this will be taken from the
-     * configuration later.
-     */
-    return 1;
+    static int max = -1;
+
+    if (max == -1)
+        /* Health of 1 by default */
+        max = PHO_CFG_GET_INT(cfg_lrs, PHO_CFG_LRS, max_health, 1);
+
+    return max;
 }
