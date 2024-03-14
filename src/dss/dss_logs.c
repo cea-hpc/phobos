@@ -70,8 +70,10 @@ static ssize_t count_health(struct pho_log *logs, size_t count,
     return health;
 }
 
-int dss_medium_health(struct dss_handle *dss, const struct pho_id *medium_id,
-                      size_t max_health, size_t *health)
+static int dss_resource_health(struct dss_handle *dss,
+                               const struct pho_id *medium_id,
+                               enum dss_type resource, size_t max_health,
+                               size_t *health)
 {
     struct pho_log_filter log_filter = {0};
     struct dss_filter *pfilter;
@@ -81,9 +83,21 @@ int dss_medium_health(struct dss_handle *dss, const struct pho_id *medium_id,
     int rc;
 
     pfilter = &filter;
-    log_filter.device.family = PHO_RSC_NONE;
+    switch (resource) {
+    case DSS_MEDIA:
+        log_filter.device.family = PHO_RSC_NONE;
+        pho_id_copy(&log_filter.medium, medium_id);
+        break;
+    case DSS_DEVICE:
+        log_filter.medium.family = PHO_RSC_NONE;
+        pho_id_copy(&log_filter.device, medium_id);
+        break;
+    default:
+        LOG_RETURN(-EINVAL, "Ressource type %s does not have a health counter",
+                   dss_type2str(resource));
+    }
+
     log_filter.cause = PHO_OPERATION_INVALID;
-    pho_id_copy(&log_filter.medium, medium_id);
 
     rc = create_logs_filter(&log_filter, &pfilter);
     if (rc)
@@ -98,6 +112,18 @@ int dss_medium_health(struct dss_handle *dss, const struct pho_id *medium_id,
     dss_res_free(logs, count);
 
     return 0;
+}
+
+int dss_medium_health(struct dss_handle *dss, const struct pho_id *medium_id,
+                      size_t max_health, size_t *health)
+{
+    return dss_resource_health(dss, medium_id, DSS_MEDIA, max_health, health);
+}
+
+int dss_device_health(struct dss_handle *dss, const struct pho_id *device_id,
+                      size_t max_health, size_t *health)
+{
+    return dss_resource_health(dss, device_id, DSS_DEVICE, max_health, health);
 }
 
 int dss_emit_log(struct dss_handle *handle, struct pho_log *log)

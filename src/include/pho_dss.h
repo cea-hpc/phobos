@@ -626,6 +626,25 @@ int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
 int dss_medium_health(struct dss_handle *dss, const struct pho_id *medium_id,
                       size_t max_health, size_t *health);
 
+/**
+ * Return the health of a device
+ *
+ * The health is computed as the number of errors encountered by the device
+ * minus the number of successes since the first error.
+ *
+ * The health is always >= 0. A health of 0 implies that the device is failed.
+ * It also has a maximum of \p max_health.
+ *
+ * @param[in]  dss         Valid DSS handle
+ * @param[in]  device_id   Device to query
+ * @param[in]  max_health  Maximum health that the device can have
+ * @param[out] health      The returned health of the device
+ *
+ * @return     0 on success, negative POSIX error code on error
+ */
+int dss_device_health(struct dss_handle *dss, const struct pho_id *device_id,
+                      size_t max_health, size_t *health);
+
 /* ****************************************************************************/
 /* Generic move ***************************************************************/
 /* ****************************************************************************/
