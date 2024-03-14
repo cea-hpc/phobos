@@ -28,6 +28,7 @@
 
 #include <assert.h>
 
+#include "health.h"
 #include "lrs_cache.h"
 #include "pho_common.h"
 #include "pho_dss.h"
@@ -170,6 +171,14 @@ static struct key_value *lrs_media_cache_build(const void *key, void *_env)
     if (count == 0) {
         dss_res_free(medium, count);
         errno = ENXIO;
+        return NULL;
+    }
+
+    rc = dss_medium_health(&env->dss, id, max_health(),
+                           &medium->health);
+    if (rc) {
+        dss_res_free(medium, count);
+        errno = -rc;
         return NULL;
     }
 

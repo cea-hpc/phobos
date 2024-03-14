@@ -31,12 +31,9 @@
 #include "health.h"
 #include "lrs_device.h"
 
-/* XXX for now, this is hard coded at 5 */
-#define MAX_HEALTH 5
-
 size_t increase_medium_health(struct media_info *medium)
 {
-    if (medium->health < MAX_HEALTH)
+    if (medium->health < max_health())
         medium->health++;
 
     return medium->health;
@@ -56,7 +53,7 @@ size_t decrease_medium_health(struct lrs_dev *dev, struct media_info *medium)
 
 size_t increase_device_health(struct lrs_dev *device)
 {
-    if (device->ld_dss_dev_info->health < MAX_HEALTH)
+    if (device->ld_dss_dev_info->health < max_health())
         device->ld_dss_dev_info->health++;
 
     return device->ld_dss_dev_info->health;
@@ -75,4 +72,12 @@ size_t decrease_device_health(struct lrs_dev *device)
     }
 
     return device->ld_dss_dev_info->health;
+}
+
+size_t max_health(void)
+{
+    /* TODO for now this is hard coded, this will be taken from the
+     * configuration later.
+     */
+    return 1;
 }

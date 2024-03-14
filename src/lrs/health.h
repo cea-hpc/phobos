@@ -66,4 +66,7 @@ size_t increase_device_health(struct lrs_dev *device);
  */
 size_t decrease_device_health(struct lrs_dev *device);
 
+/** Return the maximum health of a device or medium from the configuration */
+size_t max_health(void);
+
 #endif

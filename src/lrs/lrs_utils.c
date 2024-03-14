@@ -210,7 +210,6 @@ err_continue:
 void rml_init(struct read_media_list *list, struct req_container *reqc)
 {
     list->rml_media = reqc->req->ralloc->med_ids;
-    list->rml_reqc = reqc;
     list->rml_size = reqc->req->ralloc->n_med_ids;
     list->rml_available = list->rml_size;
     list->rml_allocated = 0;
@@ -257,14 +256,6 @@ enum read_medium_allocation_status rml_errno2status(int rc)
 size_t rml_medium_update(struct read_media_list *list, size_t index,
                          enum read_medium_allocation_status status)
 {
-    struct media_info *medium;
-
-    medium = *reqc_get_medium_to_alloc(list->rml_reqc, index);
-    if (status == RMAS_ERROR &&
-        medium && medium->health > 0)
-        /* temporary error since the medium is not failed yet */
-        status = RMAS_UNAVAILABLE;
-
     switch (status) {
     case RMAS_OK:
         /* Move the medium ID at the end of the allocated list */

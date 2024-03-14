@@ -623,6 +623,7 @@ int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
  *
  * @return     0 on success, negative POSIX error code on error
  */
+mockable
 int dss_medium_health(struct dss_handle *dss, const struct pho_id *medium_id,
                       size_t max_health, size_t *health);
 

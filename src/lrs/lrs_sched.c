@@ -26,9 +26,12 @@
 #include "config.h"
 #endif
 
+#include "health.h"
 #include "lrs_cache.h"
 #include "lrs_cfg.h"
+#include "lrs_device.h"
 #include "lrs_sched.h"
+#include "lrs_utils.h"
 #include "pho_common.h"
 #include "pho_daemon.h"
 #include "pho_dss.h"
@@ -36,8 +39,6 @@
 #include "pho_ldm.h"
 #include "pho_srl_common.h"
 #include "pho_type_utils.h"
-#include "lrs_device.h"
-#include "lrs_utils.h"
 
 #include <stdatomic.h>
 #include <assert.h>
@@ -1082,6 +1083,11 @@ int sched_select_medium(struct io_scheduler *io_sched,
                                  &curr->lock))
                 /* not locked by myself */
                 continue;
+
+        rc = dss_medium_health(lock_handle->dss, &curr->rsc.id, max_health(),
+                               &curr->health);
+        if (rc)
+            continue;
 
         /* already loaded and in use ? */
         dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,

@@ -465,6 +465,18 @@ int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
     return -ENOENT;
 }
 
+int dss_medium_health(struct dss_handle *dss, const struct pho_id *medium_id,
+                      size_t max_health, size_t *health)
+{
+    (void) dss;
+    (void) medium_id;
+    (void) max_health;
+    (void) health;
+
+    *health = 1;
+    return 0;
+}
+
 void dss_res_free(void *item_list, int item_cnt)
 {
     (void) item_list;

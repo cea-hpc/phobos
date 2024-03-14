@@ -143,6 +143,13 @@ static int lrs_dev_init_from_info(struct lrs_dev_hdl *handle,
         rc = 0; /* -ENODATA is not an error here */
     }
 
+    rc = dss_device_health(&(*dev)->ld_device_thread.dss,
+                           &(*dev)->ld_dss_dev_info->rsc.id,
+                           max_health(),
+                           &(*dev)->ld_dss_dev_info->health);
+    if (rc)
+        GOTO(err_techno, rc);
+
     rc = dev_thread_init(*dev);
     if (rc)
         GOTO(err_techno, rc);
