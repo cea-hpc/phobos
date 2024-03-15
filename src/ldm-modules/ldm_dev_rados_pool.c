@@ -76,17 +76,12 @@ static int pho_rados_pool_exists(const char *dev_id)
 
     ENTRY;
 
-    rc = get_lib_adapter(PHO_LIB_RADOS, &lib_hdl.ld_module);
+    rc = get_lib_adapter_and_open(PHO_LIB_RADOS, &lib_hdl, dev_id);
     if (rc)
-        return rc;
-
-    rc = ldm_lib_open(&lib_hdl, dev_id);
-    if (rc)
-        LOG_GOTO(out, rc, "Could not connect to Ceph cluster");
+        LOG_RETURN(rc, "Could not connect to Ceph cluster");
 
     rc = ldm_lib_drive_lookup(&lib_hdl, dev_id, &drv_info);
 
-out:
     rc2 = ldm_lib_close(&lib_hdl);
     if (rc2)
         pho_error(rc2, "Closing RADOS library failed");

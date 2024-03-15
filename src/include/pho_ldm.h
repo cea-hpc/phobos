@@ -278,6 +278,38 @@ static inline int ldm_lib_open(struct lib_handle *lib_hdl, const char *dev)
 }
 
 /**
+ * Retrieve library adapter and open a library handler
+ *
+ * @param[in]       lib_type    Family of library.
+ * @param[in,out]   lib_hdl     Library handle.
+ * @param[in]       dev         Device to open
+ *
+ * @return 0 on success, negative error code on failure.
+ */
+static inline int get_lib_adapter_and_open(enum lib_type lib_type,
+                                           struct lib_handle *lib_hdl,
+                                           const char *dev)
+{
+    const char *lib_type_name = lib_type2str(lib_type);
+    int rc;
+
+    if (!lib_type_name)
+        LOG_RETURN(-EINVAL, "Invalid lib type '%d'", lib_type);
+
+    rc = get_lib_adapter(lib_type, &lib_hdl->ld_module);
+    if (rc)
+        LOG_RETURN(rc, "Failed to get library adapter for type '%s'",
+                   lib_type_name);
+
+    rc = ldm_lib_open(lib_hdl, dev);
+    if (rc)
+        LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
+                   lib_type_name, dev);
+
+    return 0;
+}
+
+/**
  * Close a library handler.
  *
  * Close access to the library and clean address cache.

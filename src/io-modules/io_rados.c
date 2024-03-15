@@ -338,14 +338,9 @@ static int pho_rados_open(const char *extent_key, const char *extent_desc,
     iod->iod_ctx = rados_io_ctx;
 
     /* Connect to cluster */
-    rc = get_lib_adapter(PHO_LIB_RADOS, &rados_io_ctx->lib_hdl.ld_module);
+    rc = get_lib_adapter_and_open(PHO_LIB_RADOS, &rados_io_ctx->lib_hdl, "");
     if (rc)
-        LOG_GOTO(out, rc, "Could not get RADOS library adapter");
-
-    rc = ldm_lib_open(&rados_io_ctx->lib_hdl, "");
-    if (rc)
-        LOG_GOTO(out, rc, "Could not connect to Ceph cluster");
-
+        LOG_RETURN(rc, "Could not connect to Ceph cluster");
 
     cluster_hdl = rados_io_ctx->lib_hdl.lh_lib;
 

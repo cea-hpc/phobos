@@ -1381,7 +1381,6 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
 int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
                           bool refresh, json_t **lib_data)
 {
-    const char *lib_type_name = lib_type2str(lib_type);
     struct lib_handle lib_hdl;
     struct dss_handle dss;
     struct pho_id device;
@@ -1392,40 +1391,29 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
 
     ENTRY;
 
-    if (!lib_type_name)
-        LOG_RETURN(-EINVAL, "Invalid lib type '%d'", lib_type);
+    rc = get_lib_adapter_and_open(lib_type, &lib_hdl, lib_dev);
+    if (rc)
+        return rc;
 
     rc = dss_init(&dss);
     if (rc)
         LOG_RETURN(rc, "Failed to initialize DSS");
 
-    rc = get_lib_adapter(lib_type, &lib_hdl.ld_module);
-    if (rc)
-        LOG_RETURN(rc, "Failed to get library adapter for type '%s'",
-                   lib_type_name);
-
     medium.name[0] = 0;
     medium.family = PHO_RSC_TAPE;
     device.name[0] = 0;
     device.family = PHO_RSC_TAPE;
-
-    rc = ldm_lib_open(&lib_hdl, lib_dev);
-    if (rc)
-        LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
-                   lib_type_name, lib_dev);
-
     init_pho_log(&log, &device, &medium, PHO_LIBRARY_SCAN);
     log.message = json_object();
     rc = ldm_lib_scan(&lib_hdl, refresh, lib_data, log.message);
     emit_log_after_action(&dss, &log, PHO_LIBRARY_SCAN, rc);
     if (rc)
-        LOG_GOTO(out, rc, "Failed to scan library of type '%s' for path '%s'",
-                 lib_type_name, lib_dev);
+        LOG_GOTO(out, rc, "Failed to scan library for path '%s'", lib_dev);
 
 out:
     rc2 = ldm_lib_close(&lib_hdl);
     if (rc2)
-        pho_error(rc2, "Failed to close library of type '%s'", lib_type_name);
+        pho_error(rc2, "Failed to close library");
 
     rc = rc ? : rc2;
 
@@ -1705,15 +1693,9 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
                  "Unable to lock the tape '%s'", tape_id->name);
 
     /* load request with the tlc*/
-    rc = get_lib_adapter(PHO_LIB_SCSI, &lib_hdl.ld_module);
+    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl, NULL);
     if (rc)
-        LOG_GOTO(unlock_tape, rc,
-                 "Failed to get library adapter for type '%s'",
-                 lib_type2str(PHO_LIB_SCSI));
-
-    rc = ldm_lib_open(&lib_hdl, NULL);
-    if (rc)
-        LOG_GOTO(unlock_tape, rc, "Unable to open library");
+        goto unlock_tape;
 
     rc = ldm_lib_load(&lib_hdl, dev_res->rsc.id.name, med_res->rsc.id.name);
     if (rc)
@@ -1862,15 +1844,9 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                  "Unable to lock the tape '%s'", tape_id->name);
 
     /* unload request with the tlc*/
-    rc = get_lib_adapter(PHO_LIB_SCSI, &lib_hdl.ld_module);
+    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl, NULL);
     if (rc)
-        LOG_GOTO(unlock_tape, rc,
-                 "Failed to get library adapter for type '%s'",
-                 lib_type2str(PHO_LIB_SCSI));
-
-    rc = ldm_lib_open(&lib_hdl, NULL);
-    if (rc)
-        LOG_GOTO(unlock_tape, rc, "Unable to open library");
+        goto unlock_tape;
 
     rc = ldm_lib_unload(&lib_hdl, dev_res->rsc.id.name, med_res->rsc.id.name);
     if (rc)
@@ -1920,45 +1896,27 @@ free_dev_res:
 
 int phobos_admin_lib_refresh(enum lib_type lib_type, const char *lib_dev)
 {
-    const char *lib_type_name = lib_type2str(lib_type);
     struct lib_handle lib_hdl;
-    struct dss_handle dss;
     int rc2;
     int rc;
 
     ENTRY;
 
-    if (!lib_type_name)
-        LOG_RETURN(-EINVAL, "Invalid lib type '%d'", lib_type);
-
-    rc = dss_init(&dss);
+    rc = get_lib_adapter_and_open(lib_type, &lib_hdl, lib_dev);
     if (rc)
-        LOG_RETURN(rc, "Failed to initialize DSS");
-
-    rc = get_lib_adapter(lib_type, &lib_hdl.ld_module);
-    if (rc)
-        LOG_RETURN(rc, "Failed to get library adapter for type '%s'",
-                   lib_type_name);
-
-    rc = ldm_lib_open(&lib_hdl, lib_dev);
-    if (rc)
-        LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
-                   lib_type_name, lib_dev);
+        return rc;
 
     rc = ldm_lib_refresh(&lib_hdl);
     if (rc)
         LOG_GOTO(out, rc,
-                 "Failed to refresh library of type '%s' for path '%s'",
-                 lib_type_name, lib_dev);
+                 "Failed to refresh library for path '%s'", lib_dev);
 
 out:
     rc2 = ldm_lib_close(&lib_hdl);
     if (rc2)
-        pho_error(rc2, "Failed to close library of type '%s'", lib_type_name);
+        pho_error(rc2, "Failed to close library");
 
     rc = rc ? : rc2;
-
-    dss_fini(&dss);
 
     return rc;
 }
