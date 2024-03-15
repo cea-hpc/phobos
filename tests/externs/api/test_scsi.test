@@ -31,8 +31,6 @@ test_dir=$(dirname $(readlink -e $0))
 
 test_bin="$test_dir/externs/api/test_scsi"
 
-set -xe
-
 function setup
 {
     # make sure no process uses the drive
