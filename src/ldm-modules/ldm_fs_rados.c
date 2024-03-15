@@ -81,7 +81,7 @@ static int pho_rados_pool_connect(struct lib_handle *lib_hdl,
     if (rc)
         return rc;
 
-    rc = ldm_lib_open(lib_hdl, poolname, NULL);
+    rc = ldm_lib_open(lib_hdl, poolname);
     if (rc)
         LOG_GOTO(out_err, rc, "Could not connect to Ceph cluster");
 

@@ -127,7 +127,7 @@ static void ior_test_io_adapter_open_close_with_lib_adapter_opened(void **state)
     rc = get_lib_adapter(PHO_LIB_RADOS, &lib_hdl.ld_module);
     assert_int_equal(rc, -rc);
 
-    rc = ldm_lib_open(&lib_hdl, "", NULL);
+    rc = ldm_lib_open(&lib_hdl, "");
     assert_int_equal(rc, -rc);
 
     ior_io_adapter_open_close(&ioa, false, state, 0);

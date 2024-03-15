@@ -1408,15 +1408,13 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
     medium.family = PHO_RSC_TAPE;
     device.name[0] = 0;
     device.family = PHO_RSC_TAPE;
-    init_pho_log(&log, &device, &medium, PHO_LIBRARY_SCAN);
 
-    log.message = json_object();
-    rc = ldm_lib_open(&lib_hdl, lib_dev, log.message);
-    emit_log_after_action(&dss, &log, PHO_LIBRARY_OPEN, rc);
+    rc = ldm_lib_open(&lib_hdl, lib_dev);
     if (rc)
         LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
                    lib_type_name, lib_dev);
 
+    init_pho_log(&log, &device, &medium, PHO_LIBRARY_SCAN);
     log.message = json_object();
     rc = ldm_lib_scan(&lib_hdl, refresh, lib_data, log.message);
     emit_log_after_action(&dss, &log, PHO_LIBRARY_SCAN, rc);
@@ -1651,7 +1649,6 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
     struct media_info *med_res;
     struct lib_handle lib_hdl;
     struct dev_info *dev_res;
-    json_t *lib_open_json;
     const char *hostname;
     int rc, rc2;
     int pid;
@@ -1714,21 +1711,9 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
                  "Failed to get library adapter for type '%s'",
                  lib_type2str(PHO_LIB_SCSI));
 
-    lib_open_json = json_object();
-    rc = ldm_lib_open(&lib_hdl, NULL, lib_open_json);
-    if (rc) {
-        if (json_object_size(lib_open_json) != 0) {
-            pho_error(rc, "Unable to open library: '%s'",
-                      json_dumps(lib_open_json, 0));
-        } else {
-            pho_error(rc, "Unable to open library");
-        }
-
-        json_decref(lib_open_json);
-        goto unlock_tape;
-    }
-
-    json_decref(lib_open_json);
+    rc = ldm_lib_open(&lib_hdl, NULL);
+    if (rc)
+        LOG_GOTO(unlock_tape, rc, "Unable to open library");
 
     rc = ldm_lib_load(&lib_hdl, dev_res->rsc.id.name, med_res->rsc.id.name);
     if (rc)
@@ -1791,7 +1776,6 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
     struct media_info *med_res;
     struct lib_handle lib_hdl;
     struct dev_info *dev_res;
-    json_t *lib_open_json;
     const char *hostname;
     int rc, rc2;
     int pid;
@@ -1884,21 +1868,9 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                  "Failed to get library adapter for type '%s'",
                  lib_type2str(PHO_LIB_SCSI));
 
-    lib_open_json = json_object();
-    rc = ldm_lib_open(&lib_hdl, NULL, lib_open_json);
-    if (rc) {
-        if (json_object_size(lib_open_json) != 0) {
-            pho_error(rc, "Unable to open library: '%s'",
-                      json_dumps(lib_open_json, 0));
-        } else {
-            pho_error(rc, "Unable to open library");
-        }
-
-        json_decref(lib_open_json);
-        goto unlock_tape;
-    }
-
-    json_decref(lib_open_json);
+    rc = ldm_lib_open(&lib_hdl, NULL);
+    if (rc)
+        LOG_GOTO(unlock_tape, rc, "Unable to open library");
 
     rc = ldm_lib_unload(&lib_hdl, dev_res->rsc.id.name, med_res->rsc.id.name);
     if (rc)
@@ -1951,9 +1923,6 @@ int phobos_admin_lib_refresh(enum lib_type lib_type, const char *lib_dev)
     const char *lib_type_name = lib_type2str(lib_type);
     struct lib_handle lib_hdl;
     struct dss_handle dss;
-    struct pho_id device;
-    struct pho_id medium;
-    struct pho_log log;
     int rc2;
     int rc;
 
@@ -1971,15 +1940,7 @@ int phobos_admin_lib_refresh(enum lib_type lib_type, const char *lib_dev)
         LOG_RETURN(rc, "Failed to get library adapter for type '%s'",
                    lib_type_name);
 
-    medium.name[0] = 0;
-    medium.family = PHO_RSC_TAPE;
-    device.name[0] = 0;
-    device.family = PHO_RSC_TAPE;
-    init_pho_log(&log, &device, &medium, PHO_LIBRARY_SCAN);
-
-    log.message = json_object();
-    rc = ldm_lib_open(&lib_hdl, lib_dev, log.message);
-    emit_log_after_action(&dss, &log, PHO_LIBRARY_OPEN, rc);
+    rc = ldm_lib_open(&lib_hdl, lib_dev);
     if (rc)
         LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
                    lib_type_name, lib_dev);

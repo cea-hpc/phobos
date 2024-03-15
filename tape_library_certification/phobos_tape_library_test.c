@@ -45,13 +45,11 @@ static int device_load(const char *dev_serial, const char *tape_name)
     struct lib_handle lib_hdl;
     int rc;
 
-    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl, NULL);
-    if (rc) {
-        pho_error(rc,
-                  "Error when opening tape library module before loading tape "
-                  "%s into drive %s", tape_name, dev_serial);
-        return rc;
-    }
+    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Error when opening tape library module before loading tape "
+                   "%s into drive %s", tape_name, dev_serial);
 
     rc = ldm_lib_load(&lib_hdl, dev_serial, tape_name);
     if (rc) {
@@ -77,13 +75,11 @@ static int device_unload(const char *dev_serial, const char *tape_name)
     struct lib_handle lib_hdl;
     int rc;
 
-    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl, NULL);
-    if (rc) {
-        pho_error(rc,
-                  "Error when opening tape library module before unloading "
-                  "tape %s from drive %s", tape_name, dev_serial);
-        return rc;
-    }
+    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl);
+    if (rc)
+        LOG_RETURN(rc,
+                   "Error when opening tape library module before unloading "
+                   "tape %s from drive %s", tape_name, dev_serial);
 
     rc = ldm_lib_unload(&lib_hdl, dev_serial, tape_name);
     if (rc) {
@@ -181,8 +177,7 @@ int main(int argc, char **argv)
     if (argc == 4)
         pho_log_level_set(atoi(argv[3]));
 
-    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl, NULL);
-
+    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl);
     if (rc) {
         pho_error(rc, "Error when opening tape library module");
         exit(-rc);

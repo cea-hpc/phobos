@@ -82,8 +82,7 @@ struct lib_descriptor {
     struct pho_comm_info tlc_comm;  /**< TLC Communication socket info. */
 };
 
-static int lib_scsi_open(struct lib_handle *hdl, const char *dev,
-                         json_t *message)
+static int lib_scsi_open(struct lib_handle *hdl, const char *dev)
 {
     union pho_comm_addr tlc_sock_addr;
     struct lib_descriptor *lib;

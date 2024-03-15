@@ -342,7 +342,7 @@ static int pho_rados_open(const char *extent_key, const char *extent_desc,
     if (rc)
         LOG_GOTO(out, rc, "Could not get RADOS library adapter");
 
-    rc = ldm_lib_open(&rados_io_ctx->lib_hdl, "", NULL);
+    rc = ldm_lib_open(&rados_io_ctx->lib_hdl, "");
     if (rc)
         LOG_GOTO(out, rc, "Could not connect to Ceph cluster");
 

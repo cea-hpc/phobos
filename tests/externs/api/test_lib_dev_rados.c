@@ -71,7 +71,7 @@ static void ldr_test_lib_adapter_with_conf(void **state)
     rc = get_lib_adapter(PHO_LIB_RADOS, &lib_hdl.ld_module);
     assert_int_equal(rc, -rc);
 
-    rc = ldm_lib_open(&lib_hdl, "", NULL);
+    rc = ldm_lib_open(&lib_hdl, "");
     assert_int_equal(rc, -rc);
 
     rc = ldm_lib_drive_lookup(&lib_hdl, "host:pho_pool_valid", &drv_info);
@@ -111,7 +111,7 @@ static void ldr_test_lib_adapter_without_conf(void **state)
     rc = get_lib_adapter(PHO_LIB_RADOS, &lib_hdl.ld_module);
     assert_int_equal(rc, -rc);
 
-    rc = ldm_lib_open(&lib_hdl, "", NULL);
+    rc = ldm_lib_open(&lib_hdl, "");
     assert_int_equal(rc, -ENOENT);
 
     rc = ldm_lib_drive_lookup(&lib_hdl, "host:pho_pool_valid", &drv_info);

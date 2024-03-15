@@ -130,7 +130,7 @@ void create_device(struct lrs_dev *dev, char *path, char *model,
         struct lib_handle lib_hdl;
         char *serial;
 
-        rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl, NULL);
+        rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl);
         assert_return_code(rc, -rc);
         get_serial_from_path(path, &serial);
         assert_int_equal(get_dev_adapter(PHO_RSC_TAPE, &deva), 0);

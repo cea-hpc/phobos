@@ -80,7 +80,7 @@ static int pho_rados_pool_exists(const char *dev_id)
     if (rc)
         return rc;
 
-    rc = ldm_lib_open(&lib_hdl, dev_id, NULL);
+    rc = ldm_lib_open(&lib_hdl, dev_id);
     if (rc)
         LOG_GOTO(out, rc, "Could not connect to Ceph cluster");
 
