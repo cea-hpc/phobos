@@ -432,6 +432,51 @@ free_resp:
     return rc;
 }
 
+static int lib_tlc_ping(struct lib_handle *hdl, bool *library_is_up)
+{
+    struct lib_descriptor *lib;
+    pho_tlc_resp_t *resp;
+    pho_tlc_req_t req;
+    int rid = 1;
+    int rc;
+
+    lib = hdl->lh_lib;
+
+    /* refresh request to the tlc */
+    pho_srl_tlc_request_ping_alloc(&req);
+    req.id = rid;
+
+    rc = tlc_send_recv(&lib->tlc_comm, &req, &resp);
+    pho_srl_tlc_request_free(&req, false);
+    if (rc)
+        LOG_RETURN(rc, "Unable to send/recv ping request");
+
+    /* manage tlc ping response */
+    if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
+        rc = resp->error->rc;
+        if (resp->error->message)
+            LOG_GOTO(free_resp, rc,
+                     "TLC failed to ping: '%s'", resp->error->message);
+        else
+            LOG_GOTO(free_resp, rc,
+                     "TLC failed to ping");
+    } else if (!(pho_tlc_response_is_ping(resp) && resp->req_id == rid)) {
+        LOG_GOTO(free_resp, rc = -EPROTO,
+                 "TLC answered an unexpected response (id %d) to ping",
+                 resp->req_id);
+    }
+
+    *library_is_up = resp->ping->library_is_up;
+    if (*library_is_up)
+        pho_debug("Successful ping of TLC");
+    else
+        pho_debug("TLC answers negatively to a ping");
+
+free_resp:
+    pho_srl_tlc_response_free(resp, true);
+    return rc;
+}
+
 /** @}*/
 
 /** lib_scsi_adapter exported to upper layers */
@@ -443,6 +488,7 @@ static struct pho_lib_adapter_module_ops LA_SCSI_OPS = {
     .lib_load         = lib_tlc_load,
     .lib_unload       = lib_tlc_unload,
     .lib_refresh      = lib_tlc_refresh,
+    .lib_ping         = lib_tlc_ping,
 };
 
 /** Lib adapter module registration entry point */

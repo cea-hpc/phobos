@@ -215,8 +215,8 @@ struct lib_handle;
  * them for more precise explanation about each call.
  *
  * lib_drive_lookup is mandatory.
- * lib_open, lib_close, lib_scan, lib_load, lib_unload and lib_refresh do noop
- * if they are NULL.
+ * lib_open, lib_close, lib_scan, lib_load, lib_unload, lib_refresh and
+ * lib_ping do noop if they are NULL.
  */
 struct pho_lib_adapter_module_ops {
     /* adapter functions */
@@ -231,6 +231,7 @@ struct pho_lib_adapter_module_ops {
     int (*lib_unload)(struct lib_handle *lib, const char *device_serial,
                       const char *medium_label);
     int (*lib_refresh)(struct lib_handle *lib);
+    int (*lib_ping)(struct lib_handle *lib, bool *library_is_up);
 };
 
 struct lib_adapter_module {
@@ -422,6 +423,24 @@ static inline int ldm_lib_refresh(struct lib_handle *lib_hdl)
     if (lib_hdl->ld_module->ops->lib_refresh == NULL)
         return 0;
     return lib_hdl->ld_module->ops->lib_refresh(lib_hdl);
+}
+
+/**
+ * Ping a library to see if it is still up
+ *
+ * @param[in]   lib_hdl         Lib handle holding an opened library adapter.
+ * @param[out]  library_is_up   Set to true if library is successfully pinged,
+ *                              set to false otherwise.
+ *
+ * @return 0 on success, negative error code on failure.
+ */
+static inline int ldm_lib_ping(struct lib_handle *lib_hdl, bool *library_is_up)
+{
+    assert(lib_hdl->ld_module != NULL);
+    assert(lib_hdl->ld_module->ops != NULL);
+    if (lib_hdl->ld_module->ops->lib_ping == NULL)
+        return 0;
+    return lib_hdl->ld_module->ops->lib_ping(lib_hdl, library_is_up);
 }
 
 /** @}*/

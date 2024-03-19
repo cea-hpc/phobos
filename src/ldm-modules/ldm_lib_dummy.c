@@ -75,6 +75,7 @@ static struct pho_lib_adapter_module_ops LIB_ADAPTER_DUMMY_OPS = {
     .lib_load         = NULL,
     .lib_unload       = NULL,
     .lib_refresh      = NULL,
+    .lib_ping         = NULL,
 };
 
 /** Lib adapter module registration entry point */

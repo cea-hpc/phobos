@@ -207,8 +207,7 @@ class Client(object):
     def ping_tlc(self):
         """Ping the TLC daemon."""
         library_is_up = c_bool(False)
-        rc = LIBPHOBOS_ADMIN.phobos_admin_ping_tlc(byref(self.handle),
-                                                   byref(library_is_up))
+        rc = LIBPHOBOS_ADMIN.phobos_admin_ping_tlc(byref(library_is_up))
 
         if rc:
             raise EnvironmentError(rc, "Failed to ping TLC")

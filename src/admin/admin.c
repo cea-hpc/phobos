@@ -1148,34 +1148,24 @@ int phobos_admin_ping_lrs(struct admin_handle *adm)
     return rc;
 }
 
-int phobos_admin_ping_tlc(struct admin_handle *adm, bool *library_is_up)
+int phobos_admin_ping_tlc(bool *library_is_up)
 {
-    struct proto_resp proto_resp = {TLC_REQUEST};
-    struct proto_req proto_req = {TLC_REQUEST};
-    pho_tlc_resp_t *resp;
-    pho_tlc_req_t req;
-    int rid = 1;
+    struct lib_handle lib_hdl;
+    int rc2;
     int rc;
 
-    proto_req.msg.tlc_req = &req;
-    pho_srl_tlc_request_ping_alloc(&req);
-    req.id = rid;
+    ENTRY;
 
-    rc = _send_and_receive(&adm->tlc_comm, proto_req, &proto_resp);
-    pho_srl_tlc_request_free(&req, false);
-    if (rc) {
-        pho_verb("Error with TLC communication : %d , %s", rc, strerror(-rc));
+    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl, NULL);
+    if (rc)
         return rc;
-    }
 
-    resp = proto_resp.msg.tlc_resp;
-    /* expect ping response and set library_is_up, no error response expected */
-    if (!(pho_tlc_response_is_ping(resp) && resp->req_id == rid))
-        pho_error(rc = -EBADMSG, "Bad response from TLC");
-    else
-        *library_is_up = resp->ping->library_is_up;
+    rc = ldm_lib_ping(&lib_hdl, library_is_up);
+    rc2 = ldm_lib_close(&lib_hdl);
+    if (rc2)
+        pho_error(rc2, "Failed to close library");
 
-    pho_srl_tlc_response_free(resp, false);
+    rc = rc ? : rc2;
 
     return rc;
 }
