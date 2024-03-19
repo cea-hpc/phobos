@@ -24,7 +24,7 @@ function check_c_api()
 #include <phobos_admin.h>
 EOF
 
-    sudo $cmd -y install phobos-devel*
+    sudo $cmd -y install phobos-[1-9]* phobos-devel*
     # Just compile, do not link. We just check the coherency between the headers
     # and the specfile
     gcc -c -o test_c_api.o test_c_api.c `pkg-config --cflags glib-2.0`
