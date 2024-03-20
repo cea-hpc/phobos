@@ -87,13 +87,9 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
                               action);
     case DSS_DEVICE:
         switch (action) {
-        case DSS_SET_UPDATE_ADM_STATUS:
-            return dss_device_update_adm_status(handle,
-                                                (struct dev_info *)item_list,
-                                                n);
-        case DSS_SET_UPDATE_HOST:
-            return dss_device_update_host(handle, (struct dev_info *)item_list,
-                                          n);
+        case DSS_SET_UPDATE:
+            return dss_device_update(handle, (struct dev_info *)item_list, n,
+                                     fields);
         case DSS_SET_INSERT:
             return dss_device_insert(handle, (struct dev_info *)item_list, n);
         case DSS_SET_DELETE:
@@ -304,11 +300,23 @@ int main(int argc, char **argv)
         }
 
         action = str2dss_set_action(argv[3]);
-        if (argc == 5)
-                if (strcmp(argv[4], "oidtest") == 0) {
-                        oidtest = true;
-                        pho_debug("Switch to oidtest mode (test null oid)");
+        if (argc == 5) {
+            if (type == DSS_DEVICE && action == DSS_SET_UPDATE) {
+                if (strcmp(argv[4], "adm_status") == 0) {
+                    fields = DSS_DEVICE_UPDATE_ADM_STATUS;
+                } else if (strcmp(argv[4], "host") == 0) {
+                    fields = DSS_DEVICE_UPDATE_HOST;
+                } else {
+                    pho_error(EINVAL,
+                              "invalid update of a device requested, expected adm_status|host, got '%s'",
+                              argv[4]);
+                    exit(EXIT_FAILURE);
                 }
+            } else if (strcmp(argv[4], "oidtest") == 0) {
+                oidtest = true;
+                pho_debug("Switch to oidtest mode (test null oid)");
+            }
+        }
 
         rc = dss_generic_get(dss_handle,
                              type == DSS_LAYOUT ? DSS_FULL_LAYOUT : type,
@@ -330,9 +338,9 @@ int main(int argc, char **argv)
                            PHO_URI_MAX);
                     strcat(dev->rsc.id.name, "COPY");
                 }
-                if (action == DSS_SET_UPDATE_ADM_STATUS)
+                if (fields == DSS_DEVICE_UPDATE_ADM_STATUS)
                     dev->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-                if (action == DSS_SET_UPDATE_HOST)
+                if (fields == DSS_DEVICE_UPDATE_HOST)
                     dev->host = xstrdup("h0st");
             }
             break;

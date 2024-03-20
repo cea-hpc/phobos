@@ -126,3 +126,20 @@ cleanup:
     PQclear(tmp_res);
     return rc;
 }
+
+void update_fields(void *resource, int64_t fields_to_update,
+                   struct dss_field *fields, int fields_count, GString *request)
+{
+    for (int j = 0; j < fields_count; ++j) {
+        struct dss_field *field = &fields[j];
+
+        if (fields_to_update & field->byte_value) {
+            g_string_append_printf(request, field->query_value,
+                                   field->get_value(resource));
+
+            fields_to_update ^= field->byte_value;
+            if (fields_to_update != 0)
+                g_string_append(request, ",");
+        }
+    }
+}

@@ -48,12 +48,12 @@
 #include <gmodule.h>
 #include <stdint.h>
 
+#include "resources.h"
+#include "device.h"
+
 /* Necessary local function declaration
  * (first two declarations are swapped because of a checkpatch bug)
  */
-static void dss_device_result_free(void *void_dev);
-static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
-                                  PGresult *res, int row_num);
 static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
                                  PGresult *res, int row_num);
 static void dss_media_result_free(void *void_media);
@@ -383,8 +383,6 @@ out_free:
  * helper arrays to build SQL query
  */
 static const char * const select_query[] = {
-    [DSS_DEVICE] = "SELECT family, model, id, adm_status,"
-                   " host, path FROM device",
     [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
                    " address_type, fs_type, fs_status, fs_label, stats, tags,"
                    " put, get, delete FROM media",
@@ -437,7 +435,6 @@ static const char * const select_outer_end_query[] = {
 };
 
 static const size_t res_size[] = {
-    [DSS_DEVICE]      = sizeof(struct dev_info),
     [DSS_MEDIA]       = sizeof(struct media_info),
     [DSS_LAYOUT]      = sizeof(struct layout_info),
     [DSS_FULL_LAYOUT] = sizeof(struct layout_info),
@@ -450,7 +447,6 @@ static const size_t res_size[] = {
 typedef int (*res_pg_constructor_t)(struct dss_handle *handle, void *item,
                                     PGresult *res, int row_num);
 static const res_pg_constructor_t res_pg_constructor[] = {
-    [DSS_DEVICE]      = dss_device_from_pg_row,
     [DSS_MEDIA]       = dss_media_from_pg_row,
     [DSS_LAYOUT]      = dss_layout_from_pg_row,
     [DSS_FULL_LAYOUT] = dss_full_layout_from_pg_row,
@@ -462,7 +458,6 @@ static const res_pg_constructor_t res_pg_constructor[] = {
 
 typedef void (*res_destructor_t)(void *item);
 static const res_destructor_t res_destructor[] = {
-    [DSS_DEVICE]      = dss_device_result_free,
     [DSS_MEDIA]       = dss_media_result_free,
     [DSS_LAYOUT]      = dss_full_layout_result_free,
     [DSS_FULL_LAYOUT] = dss_full_layout_result_free,
@@ -473,8 +468,6 @@ static const res_destructor_t res_destructor[] = {
 };
 
 static const char * const insert_query[] = {
-    [DSS_DEVICE] = "INSERT INTO device (family, model, id, host, adm_status,"
-                   " path) VALUES ",
     [DSS_MEDIA]  = "INSERT INTO media (family, model, id, adm_status,"
                    " fs_type, address_type, fs_status, fs_label, stats, tags,"
                    " put, get, delete)"
@@ -496,7 +489,6 @@ static const char * const insert_full_query[] = {
 };
 
 static const char * const update_query[] = {
-    [DSS_DEVICE] = "UPDATE device SET adm_status = '%s' WHERE id = '%s';",
     [DSS_OBJECT] = "UPDATE object SET (user_md, obj_status) = ('%s', '%s')"
                    " WHERE oid = '%s';",
     [DSS_DEPREC] = "UPDATE deprecated_object SET obj_status = '%s'"
@@ -509,14 +501,10 @@ static const char * const update_query[] = {
                    " WHERE uuid = '%s' and version = %d;",
 };
 
-static const char * const update_host_query =
-    "UPDATE device SET host = '%s' WHERE id = '%s';";
-
 static const char * const update_layout_info_query =
     "UPDATE object SET lyt_info = '%s' WHERE oid = '%s';";
 
 static const char * const delete_query[] = {
-    [DSS_DEVICE] = "DELETE FROM device WHERE id = '%s'; ",
     [DSS_MEDIA]  = "DELETE FROM media WHERE id = '%s'; ",
     [DSS_OBJECT] = "DELETE FROM object WHERE oid = '%s'; ",
     [DSS_DEPREC] = "DELETE FROM deprecated_object"
@@ -524,7 +512,6 @@ static const char * const delete_query[] = {
 };
 
 static const char * const insert_query_values[] = {
-    [DSS_DEVICE] = "('%s', %s, '%s', '%s', '%s', '%s')%s",
     [DSS_MEDIA]  = "('%s', %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s,"
                    " %s, %s, %s)%s",
     [DSS_EXTENT] = "('%s', '%s', %d, %d, '%s', '%s', '%s', '%s')%s",
@@ -1188,8 +1175,7 @@ static int get_object_setrequest(PGconn *_conn, struct object_info *item_list,
                                    p_object->oid);
             break;
         default:
-            LOG_RETURN(-EINVAL, "Invalid action for object set request: '%s'",
-                       dss_set_actions_names[action]);
+            UNREACHED();
         }
     }
     return 0;
@@ -1537,46 +1523,6 @@ static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
     return 0;
 }
 
-static int get_device_setrequest(PGconn *conn, struct dev_info *item_list,
-                                 int item_cnt, enum dss_set_action action,
-                                 GString *request)
-{
-    int i;
-    ENTRY;
-
-    for (i = 0; i < item_cnt; i++) {
-        struct dev_info *p_dev = &item_list[i];
-        char            *model;
-
-        if (action == DSS_SET_DELETE) {
-            g_string_append_printf(request, delete_query[DSS_DEVICE],
-                                   p_dev->rsc.id.name);
-        } else if (action == DSS_SET_INSERT) {
-            model = dss_char4sql(conn, p_dev->rsc.model);
-            if (!model)
-                LOG_RETURN(-ENOMEM, "memory allocation failed");
-
-            g_string_append_printf(request, insert_query_values[DSS_DEVICE],
-                                   rsc_family2str(p_dev->rsc.id.family), model,
-                                   p_dev->rsc.id.name, p_dev->host,
-                                   rsc_adm_status2str(p_dev->rsc.adm_status),
-                                   p_dev->path, i < item_cnt-1 ? "," : ";");
-            free_dss_char4sql(model);
-        } else if (action == DSS_SET_UPDATE_ADM_STATUS) {
-            g_string_append_printf(request, update_query[DSS_DEVICE],
-                                   rsc_adm_status2str(p_dev->rsc.adm_status),
-                                   p_dev->rsc.id.name);
-        } else if (action == DSS_SET_UPDATE_HOST) {
-            g_string_append_printf(request, update_host_query, p_dev->host,
-                                   p_dev->rsc.id.name);
-        } else if (action == DSS_SET_UPDATE) {
-            LOG_RETURN(-ENOTSUP, "No generic update on device");
-        }
-    }
-
-    return 0;
-}
-
 static inline bool is_type_supported(enum dss_type type)
 {
     switch (type) {
@@ -1794,40 +1740,6 @@ static int clause_filter_convert(struct dss_handle *handle, GString *qry,
 out_free:
     saj_parser_free(&json2sql);
     return rc;
-}
-
-/**
- * Fill a dev_info from the information in the `row_num`th row of `res`.
- */
-static int dss_device_from_pg_row(struct dss_handle *handle, void *void_dev,
-                                  PGresult *res, int row_num)
-{
-    struct dev_info *dev = void_dev;
-    int rc;
-
-    dev->rsc.id.family  = str2rsc_family(PQgetvalue(res, row_num, 0));
-    dev->rsc.model      = get_str_value(res, row_num, 1);
-    pho_id_name_set(&dev->rsc.id, get_str_value(res, row_num, 2));
-    dev->rsc.adm_status = str2rsc_adm_status(PQgetvalue(res, row_num, 3));
-    dev->host           = get_str_value(res, row_num, 4);
-    dev->path           = get_str_value(res, row_num, 5);
-    dev->health         = 0;
-
-    rc = dss_lock_status(handle, DSS_DEVICE, dev, 1, &dev->lock);
-    if (rc == -ENOLCK)
-        rc = 0;
-
-    return rc;
-}
-
-/**
- * Free the resources associated with a dev_info built from a PGresult.
- */
-static void dss_device_result_free(void *void_dev)
-{
-    struct dev_info *dev = void_dev;
-
-    pho_lock_clean(&dev->lock);
 }
 
 static inline bool psqlstrbool2bool(char psql_str_bool)
@@ -2096,8 +2008,13 @@ static void _dss_result_free(struct dss_result *dss_res, int item_cnt)
     size_t item_size;
     int i;
 
-    item_size = res_size[dss_res->item_type];
-    dtor = res_destructor[dss_res->item_type];
+    if (dss_res->item_type == DSS_DEVICE) {
+        item_size = device_ops.size;
+        dtor = device_ops.free;
+    } else {
+        item_size = res_size[dss_res->item_type];
+        dtor = res_destructor[dss_res->item_type];
+    }
 
     for (i = 0; i < item_cnt; i++)
         dtor(dss_res->items.raw + i * item_size);
@@ -2131,6 +2048,29 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     if (!is_type_supported(type))
         LOG_RETURN(-ENOTSUP, "Unsupported DSS request type %#x", type);
 
+    if (type == DSS_DEVICE) {
+        GString *request = NULL;
+
+        clause = g_string_new(NULL);
+
+        rc = clause_filter_convert(handle, clause, filters[0]);
+        if (rc) {
+            g_string_free(clause, true);
+            return rc;
+        }
+
+        request = g_string_new(NULL);
+        rc = device_ops.select_query(clause, request);
+        g_string_free(clause, true);
+        if (rc) {
+            g_string_free(request, true);
+            return rc;
+        }
+
+        clause = request;
+        goto exec_request;
+    }
+
     /* get everything if no criteria */
     clause = g_string_new(select_query[type]);
 
@@ -2152,6 +2092,7 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
         g_string_append(clause, select_outer_end_query[type]);
     }
 
+exec_request:
     pho_debug("Executing request: '%s'", clause->str);
 
     res = PQexec(conn, clause->str);
@@ -2166,7 +2107,10 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
 
     g_string_free(clause, true);
 
-    item_size = res_size[type];
+    if (type == DSS_DEVICE)
+        item_size = device_ops.size;
+    else
+        item_size = res_size[type];
     dss_res_size = sizeof(struct dss_result) + PQntuples(res) * item_size;
     dss_res = xcalloc(1, dss_res_size);
 
@@ -2176,9 +2120,15 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     for (i = 0; i < PQntuples(res); i++) {
         void *item_ptr = (char *)&dss_res->items.raw + i * item_size;
 
-        rc = res_pg_constructor[type](handle, item_ptr, res, i);
-        if (rc)
-            goto out;
+        if (type == DSS_DEVICE) {
+            rc = device_ops.create(handle, item_ptr, res, i);
+            if (rc)
+                goto out;
+        } else {
+            rc = res_pg_constructor[type](handle, item_ptr, res, i);
+            if (rc)
+                goto out;
+        }
     }
 
     *item_list = &dss_res->items.raw;
@@ -2214,21 +2164,35 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         LOG_RETURN(-ENOTSUP, "Full insert request is not supported for %s",
                    dss_type_names[type]);
 
-    if (action == DSS_SET_UPDATE_ADM_STATUS && type != DSS_DEVICE)
-        LOG_RETURN(-ENOTSUP,
-                   "Specific adm_status update is not supported for %s",
-                   dss_type_names[type]);
-
     if (action == DSS_SET_UPDATE_OBJ_STATUS && type != DSS_OBJECT)
         LOG_RETURN(-ENOTSUP,
                    "Specific obj_status update is not supported for %s",
                    dss_type_names[type]);
 
-    if (action == DSS_SET_UPDATE_HOST && type != DSS_DEVICE)
-        LOG_RETURN(-ENOTSUP, "Specific host update is not supported for %s",
-                   dss_type_names[type]);
-
     request = g_string_new("BEGIN;");
+
+    if (type == DSS_DEVICE) {
+        switch (action) {
+        case DSS_SET_INSERT:
+            rc = device_ops.insert_query(conn, item_list, item_cnt,
+                                         request);
+            break;
+        case DSS_SET_UPDATE:
+            rc = device_ops.update_query(item_list, item_cnt, fields, request);
+            break;
+        case DSS_SET_DELETE:
+            rc = device_ops.delete_query(item_list, item_cnt,
+                                         request);
+            break;
+        default:
+            UNREACHED();
+        }
+
+        if (rc)
+            LOG_GOTO(out_cleanup, rc, "SQL device request failed");
+
+        goto exec_request;
+    }
 
     if (action == DSS_SET_INSERT)
         g_string_append(request, insert_query[type]);
@@ -2236,11 +2200,6 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         g_string_append(request, insert_full_query[type]);
 
     switch (type) {
-    case DSS_DEVICE:
-        rc = get_device_setrequest(conn, item_list, item_cnt, action, request);
-        if (rc)
-            LOG_GOTO(out_cleanup, rc, "SQL device request failed");
-        break;
     case DSS_MEDIA:
         rc = get_media_setrequest(conn, item_list, item_cnt, action, fields,
                                   request);
@@ -2280,6 +2239,7 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         LOG_GOTO(out_cleanup, rc = -EINVAL,
                  "JSON parsing failed: %d errors found", error);
 
+exec_request:
     rc = execute_and_commit_or_rollback(conn, request, NULL, PGRES_COMMAND_OK);
 
 out_cleanup:
@@ -2421,38 +2381,6 @@ void dss_res_free(void *item_list, int item_cnt)
     _dss_result_free(dss_res, item_cnt);
 }
 
-int dss_get_usable_devices(struct dss_handle *hdl, const enum rsc_family family,
-                           const char *host, struct dev_info **dev_ls,
-                           int *dev_cnt)
-{
-    struct dss_filter filter;
-    char *host_filter = NULL;
-    int rc;
-
-    if (host) {
-        rc = asprintf(&host_filter, "{\"DSS::DEV::host\": \"%s\"},", host);
-        if (rc < 0)
-            return -ENOMEM;
-    }
-
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                          "  %s"
-                          "  {\"DSS::DEV::adm_status\": \"%s\"},"
-                          "  {\"DSS::DEV::family\": \"%s\"}"
-                          "]}",
-                          host ? host_filter : "",
-                          rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
-                          rsc_family2str(family));
-    free(host_filter);
-    if (rc)
-        return rc;
-
-    rc = dss_device_get(hdl, &filter, dev_ls, dev_cnt);
-    dss_filter_free(&filter);
-    return rc;
-}
-
 int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
                    struct dev_info **dev_ls, int *dev_cnt)
 {
@@ -2533,22 +2461,11 @@ int dss_device_delete(struct dss_handle *hdl, struct dev_info *dev_ls,
                            DSS_SET_DELETE, 0);
 }
 
-int dss_device_update_adm_status(struct dss_handle *hdl,
-                                 struct dev_info *dev_ls, int dev_cnt)
-{
-    /**
-     * No need to protect the update by a lock.
-     * This update of one field is a SQL atomic one.
-     */
-    return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
-                           DSS_SET_UPDATE_ADM_STATUS, 0);
-}
-
-int dss_device_update_host(struct dss_handle *hdl, struct dev_info *dev_ls,
-                           int dev_cnt)
+int dss_device_update(struct dss_handle *hdl, struct dev_info *dev_ls,
+                      int dev_cnt, int64_t fields)
 {
     return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
-                           DSS_SET_UPDATE_HOST, 0);
+                           DSS_SET_UPDATE, fields);
 }
 
 static int media_update_lock_retry(struct dss_handle *hdl,

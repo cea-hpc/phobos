@@ -1816,8 +1816,8 @@ static void fail_release_device(struct lrs_dev *dev)
     pho_error(0, "setting device '%s' to failed",
               lrs_dev_name(dev));
 
-    rc = dss_device_update_adm_status(&dev->ld_device_thread.dss,
-                                      dev->ld_dss_dev_info, 1);
+    rc = dss_device_update(&dev->ld_device_thread.dss, dev->ld_dss_dev_info, 1,
+                           DSS_DEVICE_UPDATE_ADM_STATUS);
     if (rc) {
         pho_error(rc,
                   "unable to set device '%s' status to '%s' in DSS, "

@@ -178,9 +178,9 @@ echo "**** TEST: DSS_SET DEVICE ****"
 test_check_set "device" "insert"
 test_check_get "device" '{"$LIKE": {"DSS::DEV::serial": "%COPY%"}}'
 test_check_get "device" '{"$NOT": {"$LIKE": {"DSS::DEV::serial": "%COPY%"}}}'
-test_check_set "device" "update_adm_status"
+test_check_set "device" "update" "adm_status"
 test_check_get "device" '{"DSS::DEV::adm_status": "failed"}'
-test_check_set "device" "update_host"
+test_check_set "device" "update" "host"
 test_check_get "device" '{"DSS::DEV::host": "h0st"}'
 test_check_set "device" "delete"
 test_check_get "device" '{"$LIKE": {"DSS::DEV::serial": "%COPY%"}}'

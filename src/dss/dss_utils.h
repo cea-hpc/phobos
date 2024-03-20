@@ -82,4 +82,14 @@ static inline char *get_str_value(PGresult *res, int row_number,
     return PQgetvalue(res, row_number, column_number);
 }
 
+struct dss_field {
+    int byte_value;
+    const char *query_value;
+    const char *(*get_value)(void *resource);
+};
+
+void update_fields(void *resource, int64_t fields_to_update,
+                   struct dss_field *fields, int fields_count,
+                   GString *request);
+
 #endif

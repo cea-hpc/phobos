@@ -69,6 +69,12 @@ static const char * const dss_type_names[] = {
 #define MAX_UPDATE_LOCK_TRY 5
 #define UPDATE_LOCK_SLEEP_MICRO_SECONDS 5000
 
+/** The different types of update allowed for devices */
+enum dss_device_operations {
+    DSS_DEVICE_UPDATE_ADM_STATUS = (1 << 0),
+    DSS_DEVICE_UPDATE_HOST = (1 << 1),
+};
+
 /**
  * get dss_type enum from string
  * @param[in]  str  dss_type string representation.
@@ -104,9 +110,7 @@ enum dss_set_action {
                            *  default DSS values.
                            */
     DSS_SET_UPDATE,
-    DSS_SET_UPDATE_ADM_STATUS, /** Atomic update of adm_status column */
     DSS_SET_UPDATE_OBJ_STATUS, /** Atomic update of obj_status column */
-    DSS_SET_UPDATE_HOST,
     DSS_SET_DELETE,
     DSS_SET_LAST,
 };
@@ -115,9 +119,7 @@ static const char * const dss_set_actions_names[] = {
     [DSS_SET_INSERT]             = "insert",
     [DSS_SET_FULL_INSERT]        = "full-insert",
     [DSS_SET_UPDATE]             = "update",
-    [DSS_SET_UPDATE_ADM_STATUS]  = "update_adm_status",
     [DSS_SET_UPDATE_OBJ_STATUS]  = "update_obj_status",
-    [DSS_SET_UPDATE_HOST]        = "update_host",
     [DSS_SET_DELETE]             = "delete",
 };
 
@@ -451,28 +453,9 @@ int dss_device_insert(struct dss_handle *hdl, struct dev_info *dev_ls,
 int dss_device_delete(struct dss_handle *hdl, struct dev_info *dev_ls,
                       int dev_cnt);
 
-/**
- * Update adm_status of one or many devices in DSS.
- * @param[in]  hdl      valid connection handle
- * @param[in]  dev_ls   array of entries to update with new adm_status
- * @param[in]  dev_cnt  number of items in the list
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_device_update_adm_status(struct dss_handle *hdl,
-                                 struct dev_info *dev_ls,
-                                 int dev_cnt);
 
-/**
- * Update host of one or many devices in DSS.
- * @param[in]  hdl      valid connection handle
- * @param[in]  dev_ls   array of entries to update with new host
- * @param[in]  dev_cnt  number of items in the list
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_device_update_host(struct dss_handle *hdl, struct dev_info *dev_ls,
-                           int dev_cnt);
+int dss_device_update(struct dss_handle *hdl, struct dev_info *dev_ls,
+                      int dev_cnt, int64_t fields);
 
 /**
  * Store information for one or many media in DSS.

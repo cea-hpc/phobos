@@ -389,7 +389,8 @@ static int _device_update_adm_status(struct admin_handle *adm,
                  "At least one device is in use and cannot be notified");
 
     if (avail_devices) {
-        rc = dss_device_update_adm_status(&adm->dss, devices, avail_devices);
+        rc = dss_device_update(&adm->dss, devices, avail_devices,
+                               DSS_DEVICE_UPDATE_ADM_STATUS);
         if (rc)
             goto out_free;
     }
@@ -941,7 +942,8 @@ int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
     if (avail_devices == 0)
         LOG_GOTO(out_free, rc, "There are no available devices to migrate");
 
-    rc2 = dss_device_update_host(&adm->dss, devices, avail_devices);
+    rc2 = dss_device_update(&adm->dss, devices, avail_devices,
+                            DSS_DEVICE_UPDATE_HOST);
     if (rc2)
         pho_error(rc2, "Failed to migrate devices");
     else
