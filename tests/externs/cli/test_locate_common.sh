@@ -47,7 +47,7 @@ function test_locate_cli
         error "Error while overwriting $obj"
 
     locate_hostname=$($valg_phobos locate $obj)
-    self_hostname=$(uname -n)
+    self_hostname=$(hostname -s)
     if [ "$locate_hostname" != "$self_hostname" ]; then
         error "Cli locate returned $locate_hostname instead of $self_hostname"
     fi
@@ -79,7 +79,7 @@ function test_medium_locate
 {
     local family=$1
     local media_name="${family}s"
-    local self_hostname=$(uname -n)
+    local self_hostname=$(hostname -s)
     local fake_hostname="fake_hostname"
     local locate_hostname=""
     local was_locked="false"
@@ -151,7 +151,7 @@ function test_get_locate_cli
     local pid="12345"
     local media_name="${family}s"
     local media=$(echo ${!media_name} | nodeset -e)
-    local self_hostname=$(uname -n)
+    local self_hostname=$(hostname -s)
     declare -A was_locked
     for med in ${media}; do
         was_locked[${med}]="false"
@@ -208,7 +208,7 @@ function test_locate_locked_splits
     local oid="oid_tlfs"
     local family=$1
     local pid="12345"
-    local self_host=$(uname -n)
+    local self_host=$(hostname -s)
     local other_host="blob"
     local size="$2"
     local IN_FILE=$(mktemp /tmp/test.pho.XXXX)

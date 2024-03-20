@@ -160,7 +160,7 @@ function test_locate_compatibility
     local N_DRIVES=2
     local LTO5_TAGS="lto5"
     local LTO6_TAGS="lto6"
-    local self_hostname="$(uname -n)"
+    local self_hostname="$(hostname -s)"
     local other_hostname="blob"
     local family="tape"
 

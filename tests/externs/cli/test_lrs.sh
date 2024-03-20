@@ -118,7 +118,7 @@ function test_recover_dir_old_locks
     dir3=$(mktemp -d /tmp/test_recover_dir_old_locksXXX)
     $phobos dir add --unlock ${dir0} ${dir1} ${dir2} ${dir3}
 
-    host=$(hostname)
+    host=$(hostname -s)
     pid=$BASHPID
 
     # Update media to lock them by a 'daemon instance'
@@ -166,7 +166,7 @@ function test_remove_invalid_media_locks
     dir0=$(mktemp -d /tmp/test_remove_invalid_media_locksXXX)
     dir1=$(mktemp -d /tmp/test_remove_invalid_media_locksXXX)
 
-    host=$(hostname)
+    host=$(hostname -s)
     pid=$BASHPID
 
     # Update media to lock them by a 'daemon instance'
@@ -222,7 +222,7 @@ function test_recover_drive_old_locks
 
     $phobos drive add --unlock /dev/st[0-1]
 
-    host=`hostname`
+    host=$(hostname -s)
     pid=$BASHPID
 
     # Inserting directly into the lock table requires the
@@ -269,7 +269,7 @@ function test_remove_invalid_device_locks
 
     $phobos drive add --unlock /dev/st0
 
-    host=`hostname`
+    host=$(hostname -s)
     pid=$BASHPID
     fake_host="blob"
 
