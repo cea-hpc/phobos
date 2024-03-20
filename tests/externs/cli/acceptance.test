@@ -491,7 +491,7 @@ end
 run $phobos $*
 EOF
 
-        gdb -batch -x "$tmp_gdb_script" -q python3
+        DEBUGINFOD_URLS="" gdb -batch -x "$tmp_gdb_script" -q python3
     )
 }
 
