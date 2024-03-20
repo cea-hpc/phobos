@@ -1509,54 +1509,24 @@ int phobos_admin_clear_logs(struct admin_handle *adm,
 }
 
 /* Mutualized between phobos_admin_drive_lookup and phobos_admin_unload */
-static int drive_lookup(struct admin_handle *adm, const char *drive_serial,
+static int drive_lookup(const char *drive_serial,
                         struct lib_drv_info *drive_info)
 {
-    struct proto_resp proto_resp = {TLC_REQUEST};
-    struct proto_req proto_req = {TLC_REQUEST};
-    pho_tlc_resp_t *resp;
-    pho_tlc_req_t req;
-    int rid = 1;
+    struct lib_handle lib_hdl;
+    int rc2;
     int rc;
 
-    proto_req.msg.tlc_req = &req;
-    pho_srl_tlc_request_drive_lookup_alloc(&req);
-
-    req.id = rid;
-    req.drive_lookup->serial = xstrdup(drive_serial);
-
-    rc = _send_and_receive(&adm->tlc_comm, proto_req, &proto_resp);
-    pho_srl_tlc_request_free(&req, false);
+    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl, NULL);
     if (rc)
-        LOG_RETURN(rc, "Error with TLC communication");
+        return rc;
 
-    resp = proto_resp.msg.tlc_resp;
+    rc = ldm_lib_drive_lookup(&lib_hdl, drive_serial, drive_info);
+    rc2 = ldm_lib_close(&lib_hdl);
+    if (rc2)
+        pho_error(rc2, "Failed to close library");
 
-    if (pho_tlc_response_is_drive_lookup(resp) && resp->req_id == rid) {
-        drive_info->ldi_addr.lia_type = MED_LOC_DRIVE;
-        drive_info->ldi_addr.lia_addr = resp->drive_lookup->address;
-        drive_info->ldi_first_addr = resp->drive_lookup->first_address;
-        drive_info->ldi_full = false;
-        if (resp->drive_lookup->medium_name) {
-            drive_info->ldi_full = true;
-            drive_info->ldi_medium_id.family = PHO_RSC_TAPE;
-            pho_id_name_set(&drive_info->ldi_medium_id,
-                            resp->drive_lookup->medium_name);
-        }
-    } else if (pho_tlc_response_is_error(resp) && resp->req_id == rid) {
-        rc = resp->error->rc;
-        if (resp->error->message)
-            LOG_GOTO(clean_response, rc, "TLC failed to lookup the drive: '%s'",
-                     resp->error->message);
-        else
-            LOG_GOTO(clean_response, rc, "TLC failed to lookup the drive");
-    } else {
-        LOG_GOTO(clean_response, rc = -EPROTO,
-                 "TLC answers unexpected response to drive lookup");
-    }
+    rc = rc ? : rc2;
 
-clean_response:
-    pho_srl_tlc_response_free(resp, true);
     return rc;
 }
 
@@ -1579,7 +1549,7 @@ int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
 
     dss_res_free(dev_res, 1);
 
-    return drive_lookup(adm, id->name, drive_info);
+    return drive_lookup(id->name, drive_info);
 }
 
 static int check_take_tape_lock(struct dss_handle *dss,
@@ -1771,7 +1741,7 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                    "DSS", drive_id->name);
 
     /* get loaded tape and check drive status */
-    rc = drive_lookup(adm, drive_id->name, &drive_info);
+    rc = drive_lookup(drive_id->name, &drive_info);
     if (rc)
         LOG_GOTO(free_dev_res, rc,
                    "Unable to lookup the drive '%s' to unload", drive_id->name);
