@@ -134,10 +134,11 @@ function do_setup
     local test_setup=$(echo "$1" | xargs)
     declare rc
 
-    echo -e "SETUP: $test_setup\n" >> $log_file
+    echo -e "SETUP: $test_setup" >> $log_file
     echo -n "    $test_setup: "
     set -x
     $test_setup >> $log_file 2>&1
+    echo "" >> $log_file
     rc=$?
     set +x
 
@@ -152,10 +153,11 @@ function do_test
     local test_func=$(echo "$1" | xargs)
     declare rc
 
-    echo -e "FUNCTION: $test_func\n" >> $log_file
+    echo -e "FUNCTION: $test_func" >> $log_file
     echo -n "$2    $test_func: "
     before=$(date +%s.%N)
     (set -xe; $test_func >>$log_file 2>&1)
+    echo "" >> $log_file
     rc=$?
     after=$(date +%s.%N)
     taken=$(echo "($(echo "$after - $before" | bc))")
@@ -170,10 +172,11 @@ function do_cleanup
     local test_cleanup=$(echo "$1" | xargs)
     declare rc
 
-    echo -e "CLEANUP: $test_cleanup\n" >> $log_file
+    echo -e "CLEANUP: $test_cleanup" >> $log_file
     echo -n "    $test_cleanup: "
     set -x
     $test_cleanup >> $log_file 2>&1
+    echo "" >> "$log_file"
     rc=$?
     set +x
 
