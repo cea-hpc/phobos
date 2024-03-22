@@ -36,6 +36,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <time.h>
 
 #include "pho_common.h"
 #include "pho_attrs.h"
@@ -142,9 +143,10 @@ static int _dev_media_update(struct dss_handle *dss,
  * @return       0 on success,
  *               -errno on error.
  */
-static int _get_objects_with_same_uuid_version(struct dss_handle *dss,
-                                               struct object_info obj_to_insert,
-                                               bool *in_obj, bool *in_depr)
+static int
+_get_objects_with_same_uuid_version(struct dss_handle *dss,
+                                    struct object_info *obj_to_insert,
+                                    bool *in_obj, bool *in_depr)
 {
     struct object_info *objects;
     struct dss_filter filter;
@@ -156,8 +158,8 @@ static int _get_objects_with_same_uuid_version(struct dss_handle *dss,
                           " {\"DSS::OBJ::uuid\": \"%s\"},"
                           " {\"DSS::OBJ::version\": %d}"
                           "]}",
-                          obj_to_insert.uuid,
-                          obj_to_insert.version);
+                          obj_to_insert->uuid,
+                          obj_to_insert->version);
     if (rc)
         return rc;
 
@@ -168,6 +170,9 @@ static int _get_objects_with_same_uuid_version(struct dss_handle *dss,
     }
 
     *in_obj = (objects_count > 0);
+    if (*in_obj)
+        obj_to_insert->oid = xstrdup(objects[0].oid);
+
     dss_res_free(objects, objects_count);
 
     rc = dss_deprecated_object_get(dss, &filter, &objects, &objects_count);
@@ -176,6 +181,9 @@ static int _get_objects_with_same_uuid_version(struct dss_handle *dss,
         return rc;
 
     *in_depr = (objects_count > 0);
+    if (*in_depr)
+        obj_to_insert->oid = xstrdup(objects[0].oid);
+
     dss_res_free(objects, objects_count);
 
     return 0;
@@ -199,11 +207,11 @@ static int _get_objects_with_same_uuid_version(struct dss_handle *dss,
  *               -errno on error.
  */
 static int _get_objects_with_oid(struct dss_handle *dss,
-                                 struct object_info obj_to_insert,
+                                 struct object_info *obj_to_insert,
                                  struct object_info **obj_get, int *obj_cnt,
                                  struct object_info **depr_get, int *depr_cnt)
 {
-    char *oid = obj_to_insert.oid;
+    char *oid = obj_to_insert->oid;
     struct dss_filter filter;
     int rc = 0;
 
@@ -239,8 +247,8 @@ static int _get_objects_with_oid(struct dss_handle *dss,
  *              -errno on failure.
  */
 static int _add_extent_to_dss(struct dss_handle *dss,
-                              struct layout_info lyt_insert,
-                              struct extent extent_to_insert)
+                              struct layout_info *lyt_insert,
+                              struct extent *extent_to_insert)
 {
     struct layout_info *lyt_get;
     struct dss_filter filter;
@@ -253,14 +261,14 @@ static int _add_extent_to_dss(struct dss_handle *dss,
                           "{\"$AND\": ["
                               "{\"DSS::LYT::object_uuid\": \"%s\"}, "
                               "{\"DSS::LYT::version\": \"%d\"}"
-                          "]}", lyt_insert.uuid, lyt_insert.version);
+                          "]}", lyt_insert->uuid, lyt_insert->version);
     if (rc)
         LOG_RETURN(rc, "Could not construct filter for extent");
 
     rc = dss_full_layout_get(dss, &filter, NULL, &lyt_get, &ext_lines);
     dss_filter_free(&filter);
     if (rc)
-        LOG_RETURN(rc, "Could not get extent '%s'", lyt_insert.oid);
+        LOG_RETURN(rc, "Could not get extent '%s'", lyt_insert->oid);
 
     if (ext_lines > 1)
         LOG_GOTO(lyt_info_get_free, rc = -ENOTSUP,
@@ -270,22 +278,65 @@ static int _add_extent_to_dss(struct dss_handle *dss,
         ext_cnt = lyt_get[0].ext_count;
 
     for (i = 0; i < ext_cnt; i++)
-        if (lyt_get[0].extents[i].layout_idx == extent_to_insert.layout_idx)
+        if (lyt_get[0].extents[i].layout_idx == extent_to_insert->layout_idx)
             LOG_GOTO(lyt_info_get_free, rc = -EEXIST,
                      "Already existing extent detected");
 
-    lyt_insert.extents = &extent_to_insert;
-    lyt_insert.ext_count = 1;
+    lyt_insert->extents = extent_to_insert;
+    lyt_insert->ext_count = 1;
 
-    rc = dss_extent_set(dss, &extent_to_insert, 1, DSS_SET_INSERT);
+    rc = dss_extent_set(dss, extent_to_insert, 1, DSS_SET_INSERT);
     if (rc)
         LOG_GOTO(lyt_info_get_free, rc,
-                 "Failed to insert extent '%s'", extent_to_insert.uuid);
+                 "Failed to insert extent '%s'", extent_to_insert->uuid);
 
-    rc = dss_layout_set(dss, &lyt_insert, 1, DSS_SET_INSERT);
+    rc = dss_layout_set(dss, lyt_insert, 1, DSS_SET_INSERT);
 
 lyt_info_get_free:
     dss_res_free(lyt_get, ext_lines);
+    return rc;
+}
+
+static int
+insert_object_with_different_uuid(struct dss_handle *dss,
+                                  struct object_info *obj_to_insert,
+                                  struct object_info *depr_obj_get,
+                                  int depr_obj_cnt)
+{
+    time_t current_time = time(NULL);
+    bool found_in_depr = false;
+    char *modified_oid = NULL;
+    int rc;
+    int i;
+
+    for (i = 0; i < depr_obj_cnt; ++i) {
+        if (strcmp(obj_to_insert->uuid, depr_obj_get[i].uuid) == 0) {
+            found_in_depr = true;
+            break;
+        }
+    }
+
+    if (found_in_depr) {
+        rc = dss_deprecated_object_set(dss, obj_to_insert, 1, DSS_SET_INSERT);
+        if (rc)
+            pho_error(rc, "Could not set deprecated object");
+
+        return rc;
+    }
+
+    // This will be freed after the extent is inserted
+    rc = asprintf(&modified_oid, "%s.import-%ld",
+                  obj_to_insert->oid, (intmax_t) current_time);
+    if (rc < 1)
+        LOG_RETURN(rc = -ENOMEM, "Could not create new object name");
+
+    // This will be changed back after the extent is inserted
+    obj_to_insert->oid = modified_oid;
+
+    rc = dss_object_set(dss, obj_to_insert, 1, DSS_SET_FULL_INSERT);
+    if (rc)
+        pho_error(rc, "Could not create new object");
+
     return rc;
 }
 
@@ -304,18 +355,15 @@ lyt_info_get_free:
  *              -errno on failure.
  */
 static int _add_obj_to_dss(struct dss_handle *dss,
-                           struct object_info obj_to_insert)
+                           struct object_info *obj_to_insert)
 {
     struct object_info *depr_obj_get = NULL;
     struct object_info *obj_get = NULL;
-    bool is_already_inserted = false;
     int depr_obj_cnt = 0;
     int obj_cnt = 0;
     bool in_depr;
     bool in_obj;
     int rc = 0;
-    int i;
-    int j;
 
     rc = _get_objects_with_same_uuid_version(dss, obj_to_insert,
                                              &in_obj, &in_depr);
@@ -323,12 +371,12 @@ static int _add_obj_to_dss(struct dss_handle *dss,
         LOG_RETURN(rc,
                    "Could not get object and depr_objects for uuid '%s' and"
                    " version '%d'",
-                   obj_to_insert.uuid, obj_to_insert.version);
+                   obj_to_insert->uuid, obj_to_insert->version);
 
     if (in_obj || in_depr) {
         pho_verb("Object '%s' with uuid '%s' and version '%d' already in DSS",
-                 obj_to_insert.oid, obj_to_insert.uuid,
-                 obj_to_insert.version);
+                 obj_to_insert->oid, obj_to_insert->uuid,
+                 obj_to_insert->version);
         return 0;
     }
 
@@ -337,71 +385,51 @@ static int _add_obj_to_dss(struct dss_handle *dss,
                                &depr_obj_get, &depr_obj_cnt);
     if (rc)
         LOG_RETURN(rc, "Could not get object and depr_objects for oid '%s'",
-                   obj_to_insert.oid);
+                   obj_to_insert->oid);
 
     if (obj_cnt == 0 && depr_obj_cnt == 0) {
-        rc = dss_object_set(dss, &obj_to_insert, 1, DSS_SET_FULL_INSERT);
+        rc = dss_object_set(dss, obj_to_insert, 1, DSS_SET_FULL_INSERT);
         if (rc)
-            LOG_GOTO(obj_get_free, rc = rc, "Could not set object");
-    } else  {
-        for (i = 0; i < obj_cnt; i++) {
-            if (strcmp(obj_to_insert.uuid, obj_get[i].uuid))
-                LOG_GOTO(obj_get_free, rc = -EINVAL, "An object with the same "
-                         "oid but of a different generation already exists in "
-                         "the object table");
+            pho_error(rc, "Could not set object");
 
-            if (obj_to_insert.version > obj_get[i].version) {
-                rc = dss_object_move(dss,
-                                     DSS_OBJECT, DSS_DEPREC, obj_get + i, 1);
+        goto obj_get_free;
+    }
+
+    if (obj_cnt == 1) {
+        if (strcmp(obj_to_insert->uuid, obj_get->uuid)) {
+            rc = insert_object_with_different_uuid(dss, obj_to_insert,
+                                                   depr_obj_get, depr_obj_cnt);
+            if (rc)
+                LOG_GOTO(obj_get_free, rc,
+                         "Could not insert object with different uuid");
+        } else {
+            if (obj_to_insert->version > obj_get->version) {
+                rc = dss_object_move(dss, DSS_OBJECT, DSS_DEPREC, obj_get, 1);
                 if (rc)
-                    LOG_GOTO(obj_get_free, rc = rc, "Could not move the "
-                             "old object to the deprecated_object table");
+                    LOG_GOTO(obj_get_free, rc,
+                             "Could not move the old object to the deprecated");
 
-                rc = dss_object_set(dss, &obj_to_insert, 1,
+                rc = dss_object_set(dss, obj_to_insert, 1,
                                     DSS_SET_FULL_INSERT);
                 if (rc)
-                    LOG_GOTO(obj_get_free, rc = rc, "Could not set object");
-            } else if (obj_to_insert.version < obj_get[i].version) {
-                rc = dss_deprecated_object_set(dss, &obj_to_insert, 1,
+                    LOG_GOTO(obj_get_free, rc, "Could not set object");
+            } else {
+                rc = dss_deprecated_object_set(dss, obj_to_insert, 1,
                                                DSS_SET_INSERT);
                 if (rc)
-                    LOG_GOTO(obj_get_free, rc = rc, "Could not set deprecated "
-                             "object");
-            } else {
-                pho_error(rc = 0, "should not happen");
-            }
-
-            is_already_inserted = true;
-        }
-
-        for (j = 0; j < depr_obj_cnt; j++) {
-            if (obj_to_insert.version > depr_obj_get[j].version) {
-                if (!is_already_inserted) {
-                    rc = dss_object_set(dss, &obj_to_insert, 1,
-                                        DSS_SET_FULL_INSERT);
-                    if (rc)
-                        LOG_GOTO(obj_get_free, rc = rc, "Could not set object");
-                }
-            } else if (obj_to_insert.version < depr_obj_get[j].version) {
-                if (is_already_inserted) {
-                    rc = dss_object_move(dss, DSS_OBJECT, DSS_DEPREC,
-                                         &obj_to_insert, 1);
-                    if (rc)
-                        LOG_GOTO(obj_get_free, rc = rc,
-                                 "Could not move object to deprecated table");
-
-                } else {
-                    rc = dss_deprecated_object_set(dss, &obj_to_insert, 1,
-                                                   DSS_SET_INSERT);
-                    if (rc)
-                        LOG_GOTO(obj_get_free, rc = rc,
-                                 "Could not set object to deprecated table");
-                }
-            } else {
-                pho_error(rc = 0, "should not happen");
+                    LOG_GOTO(obj_get_free, rc,
+                             "Could not set deprecated object");
             }
         }
+
+        goto obj_get_free;
     }
+
+    assert(obj_cnt == 0);
+
+    rc = dss_object_set(dss, obj_to_insert, 1, DSS_SET_INSERT);
+    if (rc)
+        LOG_GOTO(obj_get_free, rc, "Could not set deprecated object");
 
 obj_get_free:
     dss_res_free(obj_get, obj_cnt);
@@ -425,6 +453,7 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
     struct extent ext_to_insert;
     struct pho_io_descr iod;
     struct pho_ext_loc loc;
+    char *save_oid;
     int rc = 0;
 
     rc = get_io_adapter(PHO_FS_LTFS, &ioa);
@@ -440,7 +469,6 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
     iod.iod_loc = &loc;
     ext_to_insert.address.buff = filename;
 
-    // Get info from the extent name
     rc = ioa_get_common_xattrs_from_extent(ioa, &iod, &lyt_to_insert,
                                            &ext_to_insert, &obj_to_insert);
     if (rc)
@@ -471,20 +499,28 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
     if (rc)
         LOG_RETURN(rc, "Unable to lock object objid: '%s'", obj_to_insert.oid);
 
-    // Add the object to the DSS
-    rc = _add_obj_to_dss(&adm->dss, obj_to_insert);
+    save_oid = obj_to_insert.oid;
+
+    rc = _add_obj_to_dss(&adm->dss, &obj_to_insert);
     if (rc)
         LOG_RETURN(rc, "Could not add object to DSS");
+
+    lyt_to_insert.oid = obj_to_insert.oid;
+
+    rc = _add_extent_to_dss(&adm->dss, &lyt_to_insert, &ext_to_insert);
+    if (rc)
+        LOG_RETURN(rc, "Could not add extent to DSS");
+
+    if (obj_to_insert.oid != save_oid) {
+        free(obj_to_insert.oid);
+        obj_to_insert.oid = save_oid;
+        lyt_to_insert.oid = obj_to_insert.oid;
+    }
 
     rc = dss_unlock(&adm->dss, DSS_OBJECT, &obj_to_insert, 1, false);
     if (rc)
         LOG_RETURN(rc, "Unable to unlock object objid: '%s'",
                    obj_to_insert.oid);
-
-    // Add the extent to the DSS
-    rc = _add_extent_to_dss(&adm->dss, lyt_to_insert, ext_to_insert);
-    if (rc)
-        LOG_RETURN(rc, "Could not add extent to DSS");
 
     return rc;
 }

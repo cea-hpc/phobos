@@ -326,6 +326,58 @@ stats.phys_spc_used)"
     rm -f $OUT_FILE $IN_FILE
 }
 
+function test_import_with_live
+{
+    # Set objects of the same generation in the tapes, and compare in which
+    # of the `object` or `deprecated_object` table they are inserted to.
+    local family="tape"
+    local oid="oid"
+    local repl_count=2
+    local n_tapes=2
+    local drives="$(get_lto_drives 5 $n_tapes | nodeset -f)"
+    local tapes="$(get_tapes L5 $(($n_tapes + 1)))"
+    local IN_FILE="/etc/hosts"
+    local OUT_FILE="/tmp/test_import_with_live_output"
+    local i=0
+
+    local tapes_for_first_put=$(nodeset --pick=$n_tapes -f $tapes)
+    tapes_setup "$drives" "$tapes_for_first_put"
+
+    $phobos put --family tape --layout raid1 --layout-params \
+        repl_count=$repl_count $IN_FILE "$oid" --overwrite ||
+        error "Object should be put"
+
+    local uuid=$($phobos object list $oid -o uuid)
+    local version=$($phobos object list $oid -o version)
+
+    db_cleanup
+    db_setup
+
+    local tapes_for_second_put=$(nodeset -f $tapes -X $tapes_for_first_put)
+    tapes_setup "$drives" "$tapes_for_second_put"
+
+    $phobos put --family tape --layout raid1 --layout-params \
+        repl_count=1 $IN_FILE "$oid" ||
+        error "Object should be put"
+
+    local uuid2=$($phobos object list $oid -o uuid)
+    local version2=$($phobos object list $oid -o version)
+
+    for tape in $(nodeset -e "${tapes_for_first_put}"); do
+        $phobos tape import --unlock -t lto5 "${tape}" || error "import failed"
+    done
+
+    $phobos object list -o all
+    $phobos object list -o all | grep $uuid2 | grep $version2
+    $phobos object list -o all | grep ${oid}.import | grep $uuid | grep $version
+
+    local oid_to_get="$($phobos object list -o oid | grep ${oid}.import)"
+
+    $phobos get "$oid_to_get" "$OUT_FILE"
+    diff "$OUT_FILE" "$IN_FILE" || error "Files differ"
+    rm -f "$OUT_FILE"
+}
+
 if [[ ! -w /dev/changer ]]; then
     skip "Tapes are required for this test"
 fi
@@ -336,3 +388,4 @@ TESTS=("db_setup; test_import; db_cleanup")
 TESTS+=("db_setup; test_generation; db_cleanup")
 TESTS+=("db_setup; test_obj_status; db_cleanup")
 TESTS+=("db_setup; test_media; db_cleanup")
+TESTS+=("db_setup; test_import_with_live; db_cleanup")
