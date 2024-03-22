@@ -456,10 +456,9 @@ static int lib_tlc_ping(struct lib_handle *hdl, bool *library_is_up)
         rc = resp->error->rc;
         if (resp->error->message)
             LOG_GOTO(free_resp, rc,
-                     "TLC failed to ping: '%s'", resp->error->message);
+                     "Failed to ping TLC: '%s'", resp->error->message);
         else
-            LOG_GOTO(free_resp, rc,
-                     "TLC failed to ping");
+            LOG_GOTO(free_resp, rc, "Failed to ping TLC");
     } else if (!(pho_tlc_response_is_ping(resp) && resp->req_id == rid)) {
         LOG_GOTO(free_resp, rc = -EPROTO,
                  "TLC answered an unexpected response (id %d) to ping",
@@ -470,7 +469,7 @@ static int lib_tlc_ping(struct lib_handle *hdl, bool *library_is_up)
     if (*library_is_up)
         pho_debug("Successful ping of TLC");
     else
-        pho_debug("TLC answers negatively to a ping");
+        pho_debug("TLC cannot contact (or communicate with) tape library");
 
 free_resp:
     pho_srl_tlc_response_free(resp, true);
