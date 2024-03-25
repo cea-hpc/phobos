@@ -305,7 +305,7 @@ static inline int get_lib_adapter_and_open(enum lib_type lib_type,
     rc = ldm_lib_open(lib_hdl, dev);
     if (rc)
         LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
-                   lib_type_name, dev);
+                   lib_type_name, dev ? : "NULL");
 
     return 0;
 }
