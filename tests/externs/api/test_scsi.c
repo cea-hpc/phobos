@@ -22,8 +22,8 @@
 #define _GNU_SOURCE
 #include "phobos_admin.h"
 #include "pho_test_utils.h"
-#include "../ldm-modules/scsi_api.h"
 #include "pho_ldm.h"
+#include "scsi_api.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>

@@ -41,9 +41,9 @@
 #include "pho_dss.h"
 #include "pho_ldm.h"
 #include "pho_srl_tlc.h"
-#include "../ldm-modules/scsi_api.h"
 #include "pho_types.h"
 #include "pho_type_utils.h"
+#include "scsi_api.h"
 
 #include "tlc_cfg.h"
 #include "tlc_library.h"

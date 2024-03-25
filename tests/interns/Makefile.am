@@ -16,7 +16,6 @@ IO_LIB=$(TO_SRC)/io/libpho_io.la $(MOD_LOAD_LIB)
 LAYOUT_LIB=$(TO_SRC)/layout/libpho_layout.la
 RAID1_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
 LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la $(MOD_LOAD_LIB)
-SCSI_LIB=$(TO_SRC)/ldm-modules/libpho_scsi.la
 LDM_SCSI_LIB=$(TO_SRC)/ldm-modules/libpho_lib_adapter_scsi.la
 SCSI_TAPE_LIB=$(TO_SRC)/ldm-modules/libpho_dev_adapter_scsi_tape.la
 FS_POSIX_LIB=$(TO_SRC)/ldm-modules/libpho_fs_adapter_posix.la
@@ -27,12 +26,13 @@ MAPPER_LIB=$(TO_SRC)/io-modules/libpho_mapper.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
+SCSI_LIB=$(TO_SRC)/tlc/scsi/libpho_scsi.la
 TLC_LIB=$(TO_SRC)/tlc/libpho_tlc.la
 
 TESTS_LIB_DEPS=$(LRS_LIB) $(LDM_LIB) $(IO_LIB) $(DSS_LIB) $(SERIALIZER_LIB) \
                $(CFG_LIB) $(COMMON_LIB) $(DAEMON_LIB) $(TLC_LIB)
 TESTS_LIB=../libpho_test_utils.la
-TESTS_LIB_INCLUDES=-I$(TO_SRC)/tlc -I..
+TESTS_LIB_INCLUDES=-I$(TO_SRC)/tlc -I$(TO_SRC)/tlc/scsi -I..
 
 if VALGRIND_ENABLED
 @VALGRIND_CHECK_RULES@

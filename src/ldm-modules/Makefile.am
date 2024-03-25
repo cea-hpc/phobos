@@ -1,11 +1,6 @@
 AM_CFLAGS= $(CC_OPT)
 
-noinst_LTLIBRARIES=libpho_scsi.la
-
-noinst_HEADERS=ldm_common.h scsi_common.h scsi_api.h
-
-libpho_scsi_la_SOURCES=scsi_common.c scsi_api.c
-libpho_scsi_la_LIBADD=-lsgutils2
+noinst_HEADERS=ldm_common.h
 
 pkglib_LTLIBRARIES=libpho_lib_adapter_dummy.la libpho_lib_adapter_scsi.la \
                    libpho_dev_adapter_dir.la libpho_dev_adapter_scsi_tape.la \
@@ -21,8 +16,7 @@ libpho_lib_adapter_scsi_la_CFLAGS=-fPIC $(AM_CFLAGS)
 libpho_lib_adapter_scsi_la_LIBADD=../common/libpho_common.la \
                                   ../cfg/libpho_cfg.la \
                                   ../communication/libpho_comm.la \
-                                  ../serializer/libpho_serializer_tlc.la \
-                                  libpho_scsi.la
+                                  ../serializer/libpho_serializer_tlc.la
 libpho_lib_adapter_scsi_la_LDFLAGS=-version-info 0:0:0
 
 libpho_dev_adapter_dir_la_SOURCES=ldm_dev_dir.c

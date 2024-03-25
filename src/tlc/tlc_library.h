@@ -26,9 +26,9 @@
 #ifndef _PHO_TLC_LIBRARY_H
 #define _PHO_TLC_LIBRARY_H
 
-#include "../ldm-modules/scsi_api.h"
 #include "pho_dss.h"
 #include "pho_ldm.h"
+#include "scsi_api.h"
 
 struct status_array {
     struct element_status *items;

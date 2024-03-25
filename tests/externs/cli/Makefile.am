@@ -14,7 +14,7 @@ DSS_LIB=$(TO_SRC)/dss/libpho_dss.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
-SCSI_LIB=$(TO_SRC)/ldm-modules/libpho_scsi.la
+SCSI_LIB=$(TO_SRC)/tlc/scsi/libpho_scsi.la
 TLC_LIB=$(TO_SRC)/tlc/libpho_tlc.la
 
 if VALGRIND_ENABLED
@@ -94,4 +94,5 @@ lrs_simple_client_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs
 
 medium_locker_SOURCES=medium_locker.c ../../test_setup.c
 medium_locker_LDADD=$(TLC_LIB) $(SCSI_LIB) $(ADMIN_LIB) $(DSS_LIB) $(STORE_LIB)
-medium_locker_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/ldm-modules -I$(TO_SRC)/tlc -I$(TO_SRC)/dss -I$(TO_TEST)
+medium_locker_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/tlc -I$(TO_SRC)/tlc/scsi \
+                     -I$(TO_SRC)/dss -I$(TO_TEST)

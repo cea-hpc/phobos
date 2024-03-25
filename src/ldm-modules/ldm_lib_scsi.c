@@ -28,8 +28,6 @@
 #include "config.h"
 #endif
 
-#include "scsi_api.h"
-
 #include "pho_cfg.h"
 #include "pho_comm.h"
 #include "pho_common.h"

@@ -14,7 +14,7 @@ LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
 COMM_LIB=$(TO_SRC)/communication/libpho_comm.la
 SERIALIZER_TLC_LIB=$(TO_SRC)/serializer/libpho_serializer_tlc.la
-SCSI_LIB=$(TO_SRC)/ldm-modules/libpho_scsi.la
+SCSI_LIB=$(TO_SRC)/tlc/scsi/libpho_scsi.la
 TLC_LIB=$(TO_SRC)/tlc/libpho_tlc.la
 
 noinst_LTLIBRARIES=libpho_test_utils.la
@@ -26,4 +26,5 @@ libpho_test_utils_la_LIBADD=$(LRS_LIB) $(LDM_LIB) $(IO_LIB) $(DSS_LIB) \
                             $(DAEMON_LIB) $(COMM_LIB) $(SERIALIZER_TLC_LIB) \
                             $(SCSI_LIB) $(TLC_LIB)
 libpho_test_utils_la_CFLAGS=${AM_CFLAGS} -I$(TO_SRC)/lrs \
-                            -I$(TO_SRC)/ldm-modules -I$(TO_SRC)/tlc
+                            -I$(TO_SRC)/ldm-modules -I$(TO_SRC)/tlc \
+                            -I$(TO_SRC)/tlc/scsi

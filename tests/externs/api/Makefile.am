@@ -16,7 +16,7 @@ LDM_LIB=$(TO_SRC)/ldm/libpho_ldm.la
 LRS_LIB=$(TO_SRC)/lrs/libpho_lrs.la
 MOD_LOAD_LIB=$(TO_SRC)/module-loader/libpho_module_loader.la
 RAID1_LIB=$(TO_SRC)/layout-modules/libpho_layout_raid1.la
-SCSI_LIB=$(TO_SRC)/ldm-modules/libpho_scsi.la
+SCSI_LIB=$(TO_SRC)/tlc/scsi/libpho_scsi.la
 SERIALIZER_LIB=$(TO_SRC)/serializer/libpho_serializer.la
 STORE_LIB=$(TO_SRC)/store/libphobos_store.la
 IO_LIB=$(TO_SRC)/io/libpho_io.la
@@ -25,7 +25,7 @@ TESTS_LIB_DEPS=$(LRS_LIB) $(LDM_LIB) $(IO_LIB) $(DSS_LIB) $(SERIALIZER_LIB) \
                $(CFG_LIB) $(COMMON_LIB)
 TESTS_LIB=../../libpho_test_utils.la
 
-TESTS_INCLUDE=-I$(TO_SRC)/dss -I$(TO_SRC)/tlc -I$(TO_TEST)
+TESTS_INCLUDE=-I$(TO_SRC)/dss -I$(TO_SRC)/tlc -I$(TO_SRC)/tlc/scsi -I$(TO_TEST)
 
 if VALGRIND_ENABLED
 @VALGRIND_CHECK_RULES@
