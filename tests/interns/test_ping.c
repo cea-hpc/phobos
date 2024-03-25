@@ -8,7 +8,6 @@
 #include <unistd.h>
 
 #include "pho_srl_lrs.h"
-#include "pho_srl_tlc.h"
 #include "phobos_admin.h"
 
 #include "admin_utils.h"
@@ -52,7 +51,6 @@ static void phobos_admin_ping_lrs_success(void **state)
     int rc;
 
     will_return(_send_and_receive, 0);
-    will_return(_send_and_receive, LRS_REQUEST);
     will_return(_send_and_receive, lrs_resp);
     rc = phobos_admin_ping_lrs(&handle);
     assert_int_equal(rc, 0);
@@ -87,7 +85,6 @@ static void phobos_admin_ping_lrs_bad_response(void **state)
 
     lrs_resp->has_ping = false;
     will_return(_send_and_receive, 0);
-    will_return(_send_and_receive, LRS_REQUEST);
     will_return(_send_and_receive, lrs_resp);
     rc = phobos_admin_ping_lrs(&handle);
     assert_int_equal(rc, -EBADMSG);
