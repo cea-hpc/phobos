@@ -19,9 +19,11 @@
  *  You should have received a copy of the GNU Lesser General Public License
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
+
 /**
- * \brief  Phobos Distributed State Service API.
+ * \brief  Resource header of Phobos's Distributed State Service API.
  */
+
 #ifndef _PHO_DSS_RESOURCES_H
 #define _PHO_DSS_RESOURCES_H
 
@@ -44,5 +46,24 @@ struct dss_resource_ops {
 
     size_t size;
 };
+
+int get_insert_query(enum dss_type type, PGconn *conn, void *void_resource,
+                     int item_count, GString *request);
+
+int get_update_query(enum dss_type type, void *void_resource, int item_count,
+                     int64_t fields, GString *request);
+
+int get_select_query(enum dss_type type, GString *conditions, GString *request);
+
+int get_delete_query(enum dss_type type, void *void_resource, int item_count,
+                     GString *request);
+
+int create_resource(enum dss_type type, struct dss_handle *handle,
+                    void *void_resource, PGresult *res, int row_num);
+
+typedef void (*res_destructor_t)(void *item);
+res_destructor_t get_free_function(enum dss_type type);
+
+size_t get_resource_size(enum dss_type type);
 
 #endif

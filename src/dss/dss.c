@@ -2008,13 +2008,13 @@ static void _dss_result_free(struct dss_result *dss_res, int item_cnt)
     size_t item_size;
     int i;
 
-    if (dss_res->item_type == DSS_DEVICE) {
-        item_size = device_ops.size;
-        dtor = device_ops.free;
-    } else {
+    item_size = get_resource_size(dss_res->item_type);
+    if (item_size == -ENOTSUP)
         item_size = res_size[dss_res->item_type];
+
+    dtor = get_free_function(dss_res->item_type);
+    if (dtor == NULL)
         dtor = res_destructor[dss_res->item_type];
-    }
 
     for (i = 0; i < item_cnt; i++)
         dtor(dss_res->items.raw + i * item_size);
@@ -2028,14 +2028,16 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
                            const struct dss_filter **filters,
                            void **item_list, int *item_cnt)
 {
-    PGconn              *conn = handle->dh_conn;
-    size_t               dss_res_size;
-    size_t               item_size;
-    struct dss_result   *dss_res;
-    GString             *clause;
-    int                  rc = 0;
-    int                  i = 0;
-    PGresult            *res;
+    PGconn *conn = handle->dh_conn;
+    struct dss_result *dss_res;
+    GString *conditions = NULL;
+    GString *clause = NULL;
+    size_t dss_res_size;
+    size_t item_size;
+    PGresult *res;
+    int rc = 0;
+    int i = 0;
+
     ENTRY;
 
     if (conn == NULL || item_list == NULL || item_cnt == NULL)
@@ -2048,33 +2050,22 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     if (!is_type_supported(type))
         LOG_RETURN(-ENOTSUP, "Unsupported DSS request type %#x", type);
 
-    if (type == DSS_DEVICE) {
-        GString *request = NULL;
-
-        clause = g_string_new(NULL);
-
-        rc = clause_filter_convert(handle, clause, filters[0]);
-        if (rc) {
-            g_string_free(clause, true);
-            return rc;
-        }
-
-        request = g_string_new(NULL);
-        rc = device_ops.select_query(clause, request);
-        g_string_free(clause, true);
-        if (rc) {
-            g_string_free(request, true);
-            return rc;
-        }
-
-        clause = request;
-        goto exec_request;
+    conditions = g_string_new(NULL);
+    rc = clause_filter_convert(handle, conditions, filters[0]);
+    if (rc) {
+        g_string_free(conditions, true);
+        return rc;
     }
 
-    /* get everything if no criteria */
-    clause = g_string_new(select_query[type]);
+    clause = g_string_new(NULL);
+    rc = get_select_query(type, conditions, clause);
+    if (rc == -ENOTSUP) {
+        g_string_append(clause, select_query[type]);
+        g_string_append(clause, conditions->str);
+        rc = 0;
+    }
 
-    rc = clause_filter_convert(handle, clause, filters[0]);
+    g_string_free(conditions, true);
     if (rc) {
         g_string_free(clause, true);
         return rc;
@@ -2092,7 +2083,6 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
         g_string_append(clause, select_outer_end_query[type]);
     }
 
-exec_request:
     pho_debug("Executing request: '%s'", clause->str);
 
     res = PQexec(conn, clause->str);
@@ -2107,10 +2097,10 @@ exec_request:
 
     g_string_free(clause, true);
 
-    if (type == DSS_DEVICE)
-        item_size = device_ops.size;
-    else
+    item_size = get_resource_size(type);
+    if (item_size == -ENOTSUP)
         item_size = res_size[type];
+
     dss_res_size = sizeof(struct dss_result) + PQntuples(res) * item_size;
     dss_res = xcalloc(1, dss_res_size);
 
@@ -2120,15 +2110,12 @@ exec_request:
     for (i = 0; i < PQntuples(res); i++) {
         void *item_ptr = (char *)&dss_res->items.raw + i * item_size;
 
-        if (type == DSS_DEVICE) {
-            rc = device_ops.create(handle, item_ptr, res, i);
-            if (rc)
-                goto out;
-        } else {
+        rc = create_resource(type, handle, item_ptr, res, i);
+        if (rc == -ENOTSUP)
             rc = res_pg_constructor[type](handle, item_ptr, res, i);
-            if (rc)
-                goto out;
-        }
+
+        if (rc)
+            goto out;
     }
 
     *item_list = &dss_res->items.raw;
@@ -2171,27 +2158,29 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
 
     request = g_string_new("BEGIN;");
 
-    if (type == DSS_DEVICE) {
-        switch (action) {
-        case DSS_SET_INSERT:
-            rc = device_ops.insert_query(conn, item_list, item_cnt,
-                                         request);
-            break;
-        case DSS_SET_UPDATE:
-            rc = device_ops.update_query(item_list, item_cnt, fields, request);
-            break;
-        case DSS_SET_DELETE:
-            rc = device_ops.delete_query(item_list, item_cnt,
-                                         request);
-            break;
-        default:
-            UNREACHED();
-        }
+    switch (action) {
+    case DSS_SET_INSERT:
+        rc = get_insert_query(type, conn, item_list, item_cnt, request);
+        break;
+    case DSS_SET_UPDATE:
+        rc = get_update_query(type, item_list, item_cnt,
+                              fields, request);
+        break;
+    case DSS_SET_DELETE:
+        rc = get_delete_query(type, item_list, item_cnt, request);
+        break;
+    default:
+        rc = -ENOTSUP;
+    }
 
+    // XXX: This will be removed when every resource type has its own file
+    if (rc != -ENOTSUP) {
         if (rc)
-            LOG_GOTO(out_cleanup, rc, "SQL device request failed");
+            LOG_GOTO(out_cleanup, rc, "SQL request failed");
 
         goto exec_request;
+    } else {
+        rc = 0;
     }
 
     if (action == DSS_SET_INSERT)
