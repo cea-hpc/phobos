@@ -26,8 +26,8 @@ Provide access to admin commands with the right level (tm) of abstraction.
 import errno
 import json
 
-from ctypes import (addressof, byref, c_int, c_char_p, c_void_p, cast, pointer,
-                    POINTER, Structure, c_size_t, c_bool)
+from ctypes import (addressof, byref, c_int, c_char_p, c_void_p, pointer,
+                    Structure, c_size_t, c_bool)
 
 from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-name-in-module
                                PHO_FS_RADOS, PHO_RSC_DIR,
@@ -36,12 +36,14 @@ from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-n
                                str2rsc_family, str2dss_type)
 from phobos.core.glue import admin_device_status, jansson_dumps  # pylint: disable=no-name-in-module
 from phobos.core.dss import DSSHandle
-from phobos.core.ffi import (CommInfo, ExtentInfo, LayoutInfo, LIBPHOBOS_ADMIN,
-                             Id, LogFilter, LibDrvInfo, LIBPHOBOS)
+from phobos.core.ffi import (CommInfo, LayoutInfo, LIBPHOBOS_ADMIN,
+                             Id, LibDrvInfo, LIBPHOBOS)
 
-def string_list2c_array(l, getter):
-    c_string_list = (c_char_p * len(l))()
-    c_string_list[:] = [getter(e).encode('utf-8') for e in l]
+def string_list2c_array(str_list, getter):
+    """Convert a Python list into a C list. A getter can be used to select
+    elements from the list"""
+    c_string_list = (c_char_p * len(str_list))()
+    c_string_list[:] = [getter(e).encode('utf-8') for e in str_list]
     return c_string_list
 
 class AdminHandle(Structure): # pylint: disable=too-few-public-methods
@@ -53,7 +55,7 @@ class AdminHandle(Structure): # pylint: disable=too-few-public-methods
         ('phobosd_is_online', c_int),
     ]
 
-class Client(object):
+class Client: # pylint: disable=too-many-public-methods
     """Wrapper on the phobos admin client"""
     def __init__(self, lrs_required=True, tlc_required=False):
         super(Client, self).__init__()
@@ -169,6 +171,7 @@ class Client(object):
         return count.value
 
     def sched_conf_get(self, config_items):
+        """Query LRS configuration"""
         values = (c_char_p * len(config_items))()
 
         rc = LIBPHOBOS_ADMIN.phobos_admin_sched_conf_get(
@@ -181,11 +184,12 @@ class Client(object):
             raise EnvironmentError(rc,
                                    "Failed to query scheduler configuration")
 
-        for i in range(len(config_items)):
-            print(f"{config_items[i].key}: {values[i].decode('utf-8')}")
+        for cfg, value in zip(config_items, values):
+            print(f"{cfg.key}: {value.decode('utf-8')}")
 
 
     def sched_conf_set(self, config_items):
+        """Update LRS configuration"""
         rc = LIBPHOBOS_ADMIN.phobos_admin_sched_conf_set(
             byref(self.handle),
             string_list2c_array(config_items, lambda c: c.section),
@@ -204,7 +208,8 @@ class Client(object):
         if rc:
             raise EnvironmentError(rc, "Failed to ping phobosd")
 
-    def ping_tlc(self):
+    @staticmethod
+    def ping_tlc():
         """Ping the TLC daemon."""
         library_is_up = c_bool(False)
         rc = LIBPHOBOS_ADMIN.phobos_admin_ping_tlc(byref(library_is_up))
@@ -348,11 +353,10 @@ class Client(object):
 
     def load(self, drive_serial_or_path, tape_label):
         """Load a tape into a drive"""
-        rc =  LIBPHOBOS_ADMIN.phobos_admin_load(
-                                    byref(self.handle),
-                                    byref(Id(PHO_RSC_TAPE,
-                                             name=drive_serial_or_path)),
-                                    byref(Id(PHO_RSC_TAPE, name=tape_label)))
+        rc = LIBPHOBOS_ADMIN.phobos_admin_load(
+            byref(self.handle),
+            byref(Id(PHO_RSC_TAPE, name=drive_serial_or_path)),
+            byref(Id(PHO_RSC_TAPE, name=tape_label)))
 
         if rc:
             raise EnvironmentError(rc, f"Failed to load {tape_label} into "
@@ -360,20 +364,19 @@ class Client(object):
 
     def unload(self, drive_serial_or_path, tape_label):
         """Load a tape into a drive"""
-        rc =  LIBPHOBOS_ADMIN.phobos_admin_unload(
-                                    byref(self.handle),
-                                    byref(Id(PHO_RSC_TAPE,
-                                             name=drive_serial_or_path)),
-                                    byref(Id(PHO_RSC_TAPE, name=tape_label)) if
-                                          tape_label else None)
+        rc = LIBPHOBOS_ADMIN.phobos_admin_unload(
+            byref(self.handle),
+            byref(Id(PHO_RSC_TAPE,
+                     name=drive_serial_or_path)),
+            byref(Id(PHO_RSC_TAPE, name=tape_label)) if tape_label else None)
 
         if rc:
             if tape_label:
                 raise EnvironmentError(rc, f"Failed to unload {tape_label} "
                                            f"from drive {drive_serial_or_path}")
-            else:
-                raise EnvironmentError(rc, f"Failed to unload drive "
-                                           f"{drive_serial_or_path}")
+
+            raise EnvironmentError(rc, f"Failed to unload drive "
+                                       f"{drive_serial_or_path}")
 
     @staticmethod
     def layout_list_free(layouts, n_layouts):
@@ -402,7 +405,7 @@ class Client(object):
     def lib_refresh(lib_type, lib_dev_path):
         """Reload the library internal cache of the TLC"""
         rc = LIBPHOBOS_ADMIN.phobos_admin_lib_refresh(
-                                 lib_type, lib_dev_path.encode('utf-8'))
+            lib_type, lib_dev_path.encode('utf-8'))
         if rc:
             raise EnvironmentError(rc,
                                    f"Failed to refresh the cache of the "

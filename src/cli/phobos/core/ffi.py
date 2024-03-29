@@ -26,7 +26,7 @@ This module wraps calls from the library and expose them under an
 object-oriented API to the rest of the CLI.
 """
 
-from ctypes import (byref, cast, CDLL, CFUNCTYPE, c_bool, c_char, c_char_p,
+from ctypes import (byref, CDLL, CFUNCTYPE, c_bool, c_char, c_char_p,
                     c_int, c_long, c_longlong, c_size_t, c_ssize_t, c_ubyte,
                     c_uint64, c_void_p, POINTER, Structure)
 from enum import IntEnum
@@ -49,7 +49,7 @@ LIBPHOBOS.phobos_init()
 LIBPHOBOS_ADMIN_NAME = "libphobos_admin.so"
 LIBPHOBOS_ADMIN = CDLL(LIBPHOBOS_ADMIN_NAME)
 
-class CLIManagedResourceMixin(object):
+class CLIManagedResourceMixin:
     """Interface for objects directly exposed/manipulated by the CLI."""
     def get_display_fields(self, max_width):
         """Return a dict of available fields and optional display formatters."""
@@ -758,19 +758,19 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     @property
     def xxh128(self):
         """Wrapper to get extent xxh128."""
-        return [ ''.join('%02x' % one_byte
-                         for one_byte in self.extents[i].xxh128)
-                    if self.extents[i].with_xxh128
-                    else None
+        return [''.join('%02x' % one_byte
+                        for one_byte in self.extents[i].xxh128)
+                if self.extents[i].with_xxh128
+                else None
                 for i in range(self.ext_count)]
 
     @property
     def md5(self):
         """Wrapper to get extent md5."""
-        return [ ''.join('%02x' % one_byte
-                         for one_byte in self.extents[i].md5)
-                    if self.extents[i].with_md5
-                    else None
+        return [''.join('%02x' % one_byte
+                        for one_byte in self.extents[i].md5)
+                if self.extents[i].with_md5
+                else None
                 for i in range(self.ext_count)]
 
     @property

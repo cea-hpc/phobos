@@ -36,19 +36,18 @@ import logging
 from logging.handlers import SysLogHandler
 from shlex import shlex
 import sys
-import time
 import datetime
 
 import os
 import os.path
 
 from abc import ABCMeta, abstractmethod
+from ctypes import (c_int, c_long, byref, pointer)
 
 from ClusterShell.NodeSet import NodeSet
 
 from phobos.core.admin import Client as AdminClient
 import phobos.core.cfg as cfg
-from ctypes import (c_int, c_long, byref, POINTER, pointer)
 from phobos.core.const import (PHO_LIB_SCSI, rsc_family2str, # pylint: disable=no-name-in-module
                                PHO_RSC_ADM_ST_LOCKED, PHO_RSC_ADM_ST_UNLOCKED,
                                ADM_STATUS, TAGS, PUT_ACCESS, GET_ACCESS,
@@ -139,7 +138,7 @@ def mput_file_line_parser(line):
     return file_entry
 
 
-class BaseOptHandler(object):
+class BaseOptHandler:
     """
     Skeleton for action handlers. It can register a corresponding argument
     subparser to a top-level one, with targeted object, description and
@@ -449,9 +448,9 @@ class StoreMPutHandler(StoreGenericPutHandler):
 
             try:
                 match = mput_file_line_parser(line)
-            except ValueError as e:
+            except ValueError as err:
                 self.logger.error("Format error on line %d: %s: %s", i + 1,
-                                  str(e), line)
+                                  str(err), line)
                 sys.exit(os.EX_DATAERR)
 
             src = match[0]
@@ -1162,6 +1161,12 @@ class FairShareOptHandler(BaseOptHandler):
     configuration information from the local daemon and output them to
     stdout."""
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
     @classmethod
     def add_options(cls, parser):
         super(FairShareOptHandler, cls).add_options(parser)
@@ -1179,6 +1184,7 @@ class FairShareOptHandler(BaseOptHandler):
                             "write and format schedulers respectively")
 
 class ConfigItem:
+    """Element in Phobos' configuration"""
 
     def __init__(self, section, key, value):
         self.section = section
@@ -1201,7 +1207,8 @@ class SchedOptHandler(BaseOptHandler):
         pass
 
     def exec_fair_share(self):
-        t = self.params.get("type")
+        """Run the fair share command"""
+        _type = self.params.get("type")
         mins = self.params.get("min")
         maxs = self.params.get("max")
 
@@ -1209,22 +1216,24 @@ class SchedOptHandler(BaseOptHandler):
 
         if mins:
             config_items.append(ConfigItem("io_sched_tape",
-                                           "fair_share_" + t + "_min",
+                                           "fair_share_" + _type + "_min",
                                            mins))
         if maxs:
             config_items.append(ConfigItem("io_sched_tape",
-                                           "fair_share_" + t + "_max",
+                                           "fair_share_" + _type + "_max",
                                            maxs))
 
         try:
             with AdminClient(lrs_required=True) as adm:
                 if not mins and not maxs:
-                    config_items.append(ConfigItem("io_sched_tape",
-                                                   "fair_share_" + t + "_min",
-                                                   None))
-                    config_items.append(ConfigItem("io_sched_tape",
-                                                   "fair_share_" + t + "_max",
-                                                   None))
+                    config_items.append(
+                        ConfigItem("io_sched_tape",
+                                   "fair_share_" + _type + "_min",
+                                   None))
+                    config_items.append(
+                        ConfigItem("io_sched_tape",
+                                   "fair_share_" + _type + "_max",
+                                   None))
                     adm.sched_conf_get(config_items)
                 else:
                     adm.sched_conf_set(config_items)
@@ -1245,7 +1254,7 @@ def str_to_timestamp(value):
             element = datetime.datetime.strptime(value, "%Y-%m-%d")
         else:
             raise ValueError()
-    except ValueError as err:
+    except ValueError:
         raise argparse.ArgumentTypeError("%s is not a valid date format" %
                                          value)
 
@@ -1258,6 +1267,12 @@ class LogsDumpOptHandler(BaseOptHandler):
     descr = "handler for persistent logs dumping"
     epilog = """Will dump persistent logs recorded by Phobos to stdout or a file
     if provided, according to given filters."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
 
     @classmethod
     def add_options(cls, parser):
@@ -1290,6 +1305,12 @@ class LogsClearOptHandler(BaseOptHandler):
     epilog = """Will clear persistent logs recorded by Phobos, according to
     given filters."""
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
     @classmethod
     def add_options(cls, parser):
         super(LogsClearOptHandler, cls).add_options(parser)
@@ -1317,13 +1338,13 @@ class LogsClearOptHandler(BaseOptHandler):
                                  'have no effect, if any of the other '
                                  'arguments is specified')
 
-def create_log_filter(device, medium, errno, cause, start, end):
+def create_log_filter(device, medium, _errno, cause, start, end): # pylint: disable=too-many-arguments
     """Create a log filter structure with the given parameters."""
     device_id = (Id(PHO_RSC_TAPE, name=device) if device
                  else Id(PHO_RSC_NONE, name=""))
     medium_id = (Id(PHO_RSC_TAPE, name=medium) if medium
                  else Id(PHO_RSC_NONE, name=""))
-    c_errno = (pointer(c_int(int(errno))) if errno else None)
+    c_errno = (pointer(c_int(int(_errno))) if _errno else None)
     c_cause = (c_int(str2operation_type(cause)) if cause else
                c_int(PHO_OPERATION_INVALID))
     c_start = Timeval(c_long(int(start)), 0)
@@ -1331,7 +1352,7 @@ def create_log_filter(device, medium, errno, cause, start, end):
 
     return (byref(LogFilter(device_id, medium_id, c_errno, c_cause, c_start,
                             c_end))
-            if device or medium or errno or cause or start or end else None)
+            if device or medium or _errno or cause or start or end else None)
 
 
 class LogsOptHandler(BaseOptHandler):
@@ -1353,12 +1374,13 @@ class LogsOptHandler(BaseOptHandler):
         """Dump logs to stdout"""
         device = self.params.get('drive')
         medium = self.params.get('tape')
-        errno = self.params.get('errno')
+        _errno = self.params.get('errno')
         cause = self.params.get('cause')
         start = self.params.get('start')
         end = self.params.get('end')
 
-        log_filter = create_log_filter(device, medium, errno, cause, start, end)
+        log_filter = create_log_filter(device, medium, _errno, cause, start,
+                                       end)
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.dump_logs(sys.stdout.fileno(), log_filter)
@@ -1371,12 +1393,13 @@ class LogsOptHandler(BaseOptHandler):
         """Clear logs"""
         device = self.params.get('drive')
         medium = self.params.get('tape')
-        errno = self.params.get('errno')
+        _errno = self.params.get('errno')
         cause = self.params.get('cause')
         start = self.params.get('start')
         end = self.params.get('end')
 
-        log_filter = create_log_filter(device, medium, errno, cause, start, end)
+        log_filter = create_log_filter(device, medium, _errno, cause, start,
+                                       end)
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.clear_logs(log_filter, self.params.get('clear_all'))
@@ -1468,7 +1491,6 @@ class MediaOptHandler(BaseResourceOptHandler):
 
     def add_medium(self, medium, tags):
         """Add media method"""
-        pass
 
     def add_medium_and_device(self):
         """Add a new medium and a new device at once"""
@@ -1765,7 +1787,7 @@ class DirOptHandler(MediaOptHandler):
                               nb_dev_to_add - nb_dev_added, nb_dev_to_add)
             sys.exit(abs(rc))
 
-class DriveStatus(CLIManagedResourceMixin):
+class DriveStatus(CLIManagedResourceMixin): #pylint: disable=too-many-instance-attributes
     """Wrapper class to use dump_object_list"""
 
     def __init__(self, values=None):
@@ -1795,8 +1817,16 @@ class DriveStatus(CLIManagedResourceMixin):
         }
 
 class DriveLookupOptHandler(BaseOptHandler):
+    """Drive lookp sub-parser"""
+
     label = 'lookup'
     descr = 'lookup a drive from library'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
 
     @classmethod
     def add_options(cls, parser):
@@ -1807,8 +1837,16 @@ class DriveLookupOptHandler(BaseOptHandler):
                                  'the path or the serial number)')
 
 class DriveLoadOptHandler(BaseOptHandler):
+    """Drive load sub-parser"""
+
     label = 'load'
     descr = 'load a tape into a drive'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
 
     @classmethod
     def add_options(cls, parser):
@@ -1820,8 +1858,16 @@ class DriveLoadOptHandler(BaseOptHandler):
         parser.add_argument('tape_label', help='Tape label to load')
 
 class DriveUnloadOptHandler(BaseOptHandler):
+    """Drive unload sub-parser"""
+
     label = 'unload'
     descr = 'unload a tape from a drive'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
 
     @classmethod
     def add_options(cls, parser):
@@ -1942,11 +1988,13 @@ class DriveOptHandler(DeviceOptHandler):
 
         relativ_address = drive_info.ldi_addr.lia_addr - \
                           drive_info.ldi_first_addr
-        self.logger.info(f"Drive {relativ_address}: address "
-                         f"{hex(drive_info.ldi_addr.lia_addr)}")
-        self.logger.info(f'State: {"full" if drive_info.ldi_full else "empty"}')
+        self.logger.info("Drive %d: address %s", relativ_address,
+                         hex(drive_info.ldi_addr.lia_addr))
+        self.logger.info("State: %s",
+                         "full" if drive_info.ldi_full else "empty")
         if drive_info.ldi_full:
-            self.logger.info(f"Loaded tape id: {drive_info.ldi_medium_id.name}")
+            self.logger.info("Loaded tape id: %s",
+                             drive_info.ldi_medium_id.name)
 
     def exec_load(self):
         """Load a tape into a drive"""
@@ -2080,7 +2128,7 @@ class LibOptHandler(BaseResourceOptHandler):
                 lib_dev_path_from_cfg = cfg.get_val("lrs", "lib_device")
                 libs.append(lib_dev_path_from_cfg)
             except KeyError as err:
-                self.logger.error(str(err) + ", will abort 'lib scan'")
+                self.logger.error("%s, will abort 'lib scan'", err)
                 sys.exit(os.EX_DATAERR)
 
         with_refresh = self.params.get('refresh')
@@ -2093,7 +2141,7 @@ class LibOptHandler(BaseResourceOptHandler):
                     # well with unstructured dict-like data (relies on getattr)
                     self._print_lib_data(lib_data)
         except EnvironmentError as err:
-            self.logger.error(str(err) + ", will abort 'lib scan'")
+            self.logger.error("%s, will abort 'lib scan'", err)
             sys.exit(abs(err.errno))
 
     def exec_refresh(self):
@@ -2104,7 +2152,7 @@ class LibOptHandler(BaseResourceOptHandler):
                 lib_dev_path_from_cfg = cfg.get_val("lrs", "lib_device")
                 libs.append(lib_dev_path_from_cfg)
             except KeyError as err:
-                self.logger.error(str(err) + ", will abort 'lib refresh'")
+                self.logger.error("%s, will abort 'lib refresh'", err)
                 sys.exit(os.EX_DATAERR)
 
         try:
@@ -2112,7 +2160,7 @@ class LibOptHandler(BaseResourceOptHandler):
                 for lib_dev in libs:
                     adm.lib_refresh(PHO_LIB_SCSI, lib_dev)
         except EnvironmentError as err:
-            self.logger.error(str(err) + ", will abort 'lib refresh'")
+            self.logger.error("%s, will abort 'lib refresh'", err)
             sys.exit(abs(err.errno))
 
     @staticmethod
@@ -2204,7 +2252,7 @@ class LocksOptHandler(BaseOptHandler):
 
 SYSLOG_LOG_LEVELS = ["critical", "error", "warning", "info", "debug"]
 
-class PhobosActionContext(object):
+class PhobosActionContext:
     """
     Find, initialize and operate an appropriate action execution context for the
     specified command line.
