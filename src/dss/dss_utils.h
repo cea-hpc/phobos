@@ -29,6 +29,7 @@
 #include "config.h"
 #endif
 
+#include <stdbool.h>
 #include <glib.h>
 #include <jansson.h>
 #include <libpq-fe.h>
@@ -141,5 +142,55 @@ long long json_dict2ll(const struct json_t *obj, const char *key);
         else                                                    \
             json_object_set_new((_j), #_f, _tmp);               \
     } while (0)
+
+static inline const char *bool2sqlbool(bool b)
+{
+    return b ? "TRUE" : "FALSE";
+}
+
+static inline bool psqlstrbool2bool(char psql_str_bool)
+{
+    return psql_str_bool == 't';
+}
+
+/**
+ * Load long long integer value from JSON object and zero-out the field on error
+ * Caller is responsible for using the macro on a compatible type, a signed 64
+ * integer preferrably or anything compatible with the expected range of value
+ * for the given field.
+ * If 'optional' is true and the field is missing, we use 0 as a default value.
+ * Updates the rc variable (_rc) in case of error.
+ */
+#define LOAD_CHECK64(_rc, _j, _s, _f, optional)  do {           \
+                            long long _tmp;                     \
+                            _tmp  = json_dict2ll((_j), #_f);    \
+                            if (_tmp < 0) {                     \
+                                (_s)->_f = 0LL;                 \
+                                if (!optional)                  \
+                                    _rc = -EINVAL;              \
+                            } else {                            \
+                                (_s)->_f = _tmp;                \
+                            }                                   \
+                        } while (0)
+
+/**
+ * Load integer value from JSON object and zero-out the field on error
+ * Caller is responsible for using the macro on a compatible type, a signed 32
+ * integer preferrably or anything compatible with the expected range of value
+ * for the given field.
+ * If 'optional' is true and the field is missing, we use 0 as a default value.
+ * Updates the rc variable (_rc) in case of error.
+ */
+#define LOAD_CHECK32(_rc, _j, _s, _f, optional)    do {         \
+                            int _tmp;                           \
+                            _tmp = json_dict2int((_j), #_f);    \
+                            if (_tmp < 0) {                     \
+                                (_s)->_f = 0;                   \
+                                if (!optional)                  \
+                                    _rc = -EINVAL;              \
+                            } else {                            \
+                                (_s)->_f = _tmp;                \
+                            }                                   \
+                        } while (0)
 
 #endif

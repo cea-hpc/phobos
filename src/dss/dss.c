@@ -51,13 +51,11 @@
 #include "dss_config.h"
 #include "resources.h"
 #include "device.h"
+#include "media.h"
 
 /* Necessary local function declaration
  * (first two declarations are swapped because of a checkpatch bug)
  */
-static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
-                                 PGresult *res, int row_num);
-static void dss_media_result_free(void *void_media);
 static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
                                   PGresult *res, int row_num);
 static int dss_full_layout_from_pg_row(struct dss_handle *handle,
@@ -180,9 +178,6 @@ out_free:
  * helper arrays to build SQL query
  */
 static const char * const select_query[] = {
-    [DSS_MEDIA]  = "SELECT family, model, id, adm_status,"
-                   " address_type, fs_type, fs_status, fs_label, stats, tags,"
-                   " put, get, delete FROM media",
     [DSS_LAYOUT] = "SELECT oid, object_uuid, version, lyt_info,"
                    " json_agg(extent_uuid ORDER BY layout_index)"
                    " FROM layout"
@@ -232,7 +227,6 @@ static const char * const select_outer_end_query[] = {
 };
 
 static const size_t res_size[] = {
-    [DSS_MEDIA]       = sizeof(struct media_info),
     [DSS_LAYOUT]      = sizeof(struct layout_info),
     [DSS_FULL_LAYOUT] = sizeof(struct layout_info),
     [DSS_EXTENT]      = sizeof(struct extent),
@@ -244,7 +238,6 @@ static const size_t res_size[] = {
 typedef int (*res_pg_constructor_t)(struct dss_handle *handle, void *item,
                                     PGresult *res, int row_num);
 static const res_pg_constructor_t res_pg_constructor[] = {
-    [DSS_MEDIA]       = dss_media_from_pg_row,
     [DSS_LAYOUT]      = dss_layout_from_pg_row,
     [DSS_FULL_LAYOUT] = dss_full_layout_from_pg_row,
     [DSS_EXTENT]      = dss_extent_from_pg_row,
@@ -255,7 +248,6 @@ static const res_pg_constructor_t res_pg_constructor[] = {
 
 typedef void (*res_destructor_t)(void *item);
 static const res_destructor_t res_destructor[] = {
-    [DSS_MEDIA]       = dss_media_result_free,
     [DSS_LAYOUT]      = dss_full_layout_result_free,
     [DSS_FULL_LAYOUT] = dss_full_layout_result_free,
     [DSS_EXTENT]      = dss_extent_result_free,
@@ -265,10 +257,6 @@ static const res_destructor_t res_destructor[] = {
 };
 
 static const char * const insert_query[] = {
-    [DSS_MEDIA]  = "INSERT INTO media (family, model, id, adm_status,"
-                   " fs_type, address_type, fs_status, fs_label, stats, tags,"
-                   " put, get, delete)"
-                   " VALUES ",
     [DSS_EXTENT] = "INSERT INTO extent (extent_uuid, state, size, offsetof,"
                    " medium_family, medium_id, address, hash) VALUES ",
     [DSS_LAYOUT] = "INSERT INTO layout (object_uuid, version, extent_uuid,"
@@ -302,7 +290,6 @@ static const char * const update_layout_info_query =
     "UPDATE object SET lyt_info = '%s' WHERE oid = '%s';";
 
 static const char * const delete_query[] = {
-    [DSS_MEDIA]  = "DELETE FROM media WHERE id = '%s'; ",
     [DSS_OBJECT] = "DELETE FROM object WHERE oid = '%s'; ",
     [DSS_DEPREC] = "DELETE FROM deprecated_object"
                    " WHERE object_uuid = '%s' AND version = '%d'; ",
@@ -348,227 +335,6 @@ static const char * const move_query[] = {
                                   "  version, user_md, lyt_info, obj_status)"
                                   " SELECT * FROM risen_object",
 };
-
-/**
- * Load long long integer value from JSON object and zero-out the field on error
- * Caller is responsible for using the macro on a compatible type, a signed 64
- * integer preferrably or anything compatible with the expected range of value
- * for the given field.
- * If 'optional' is true and the field is missing, we use 0 as a default value.
- * Updates the rc variable (_rc) in case of error.
- */
-#define LOAD_CHECK64(_rc, _j, _s, _f, optional)  do {           \
-                            long long _tmp;                     \
-                            _tmp  = json_dict2ll((_j), #_f);    \
-                            if (_tmp < 0) {                     \
-                                (_s)->_f = 0LL;                 \
-                                if (!optional)                  \
-                                    _rc = -EINVAL;              \
-                            } else {                            \
-                                (_s)->_f = _tmp;                \
-                            }                                   \
-                        } while (0)
-
-/**
- * Load integer value from JSON object and zero-out the field on error
- * Caller is responsible for using the macro on a compatible type, a signed 32
- * integer preferrably or anything compatible with the expected range of value
- * for the given field.
- * If 'optional' is true and the field is missing, we use 0 as a default value.
- * Updates the rc variable (_rc) in case of error.
- */
-#define LOAD_CHECK32(_rc, _j, _s, _f, optional)    do {         \
-                            int _tmp;                           \
-                            _tmp = json_dict2int((_j), #_f);    \
-                            if (_tmp < 0) {                     \
-                                (_s)->_f = 0;                   \
-                                if (!optional)                  \
-                                    _rc = -EINVAL;              \
-                            } else {                            \
-                                (_s)->_f = _tmp;                \
-                            }                                   \
-                        } while (0)
-
-/**
- * Extract media statistics from json
- *
- * \param[out]  stats  media stats to be filled with stats
- * \param[in]  json   String with json media stats
- *
- * \return 0 on success, negative error code on failure.
- */
-static int dss_media_stats_decode(struct media_stats *stats, const char *json)
-{
-    json_t          *root;
-    json_error_t     json_error;
-    int              rc = 0;
-    ENTRY;
-
-    root = json_loads(json, JSON_REJECT_DUPLICATES, &json_error);
-    if (!root)
-        LOG_RETURN(-EINVAL, "Failed to parse json data: %s", json_error.text);
-
-    if (!json_is_object(root))
-        LOG_GOTO(out_decref, rc = -EINVAL, "Invalid stats description");
-
-    pho_debug("STATS: '%s'", json);
-
-    LOAD_CHECK64(rc, root, stats, nb_obj, false);
-    LOAD_CHECK64(rc, root, stats, logc_spc_used, false);
-    LOAD_CHECK64(rc, root, stats, phys_spc_used, false);
-    LOAD_CHECK64(rc, root, stats, phys_spc_free, false);
-    LOAD_CHECK32(rc, root, stats, nb_load, true);
-    LOAD_CHECK32(rc, root, stats, nb_errors, true);
-    LOAD_CHECK32(rc, root, stats, last_load, true);
-
-out_decref:
-    /* Most of the values above are not used to make decisions, so don't
-     * break the whole dss_get because of missing values in media stats
-     * (from previous phobos version).
-     *
-     * The only important field is phys_spc_free, which is used to check if
-     * a media has enough room to write data. In case this field is
-     * invalid, this function set it to 0, so the media won't be selected
-     * (as in the case we would return an error here).
-     */
-    if (rc)
-        pho_debug("Json parser: missing/invalid fields in media stats");
-
-    json_decref(root);
-    return rc;
-}
-
-/**
- * Encode media statistics to json
- *
- * \param[in]  stats  media stats to be encoded
- *
- * \return Return a string json object
- */
-static char *dss_media_stats_encode(struct media_stats stats)
-{
-    json_t  *root;
-    char    *res = NULL;
-    ENTRY;
-
-    root = json_object();
-    if (!root) {
-        pho_error(-ENOMEM, "Failed to create json object");
-        return NULL;
-    }
-
-    JSON_INTEGER_SET_NEW(root, stats, nb_obj);
-    JSON_INTEGER_SET_NEW(root, stats, logc_spc_used);
-    JSON_INTEGER_SET_NEW(root, stats, phys_spc_used);
-    JSON_INTEGER_SET_NEW(root, stats, phys_spc_free);
-    JSON_INTEGER_SET_NEW(root, stats, nb_load);
-    JSON_INTEGER_SET_NEW(root, stats, nb_errors);
-    JSON_INTEGER_SET_NEW(root, stats, last_load);
-
-    res = json_dumps(root, 0);
-    if (!res)
-        pho_error(EINVAL, "Failed to dump JSON to ASCIIZ");
-
-    json_decref(root);
-
-    pho_debug("Created JSON representation for stats: '%s'",
-              res ? res : "(null)");
-    return res;
-}
-
-/**
- * Extract media tags from json
- *
- * \param[out] tags   pointer to an array of tags (char**) to allocate in this
- *                    function
- * \param[out] n_tags size of tags
- * \param[in]  json   String with json media tags
- *
- * \return 0 on success, negative error code on failure.
- */
-static int dss_tags_decode(struct tags *tags, const char *json)
-{
-    json_error_t     json_error;
-    json_t          *array_entry;
-    json_t          *tag_array;
-    const char      *tag;
-    size_t           i;
-    int              rc = 0;
-    ENTRY;
-
-    if (!json || json[0] == '\0') {
-        memset(tags, 0, sizeof(*tags));
-        return 0;
-    }
-
-    tag_array = json_loads(json, JSON_REJECT_DUPLICATES, &json_error);
-    if (!tag_array)
-        LOG_RETURN(-EINVAL, "Failed to parse media tags json data '%s': %s",
-                   json, json_error.text);
-
-    if (!(json_is_array(tag_array) || json_is_null(tag_array)))
-        pho_warn("media tags json is not an array");
-
-    /* No tags (not an array or empty array), set table to NULL */
-    tags->n_tags = json_array_size(tag_array);
-    if (tags->n_tags == 0) {
-        tags->tags = NULL;
-        goto out_free;
-    }
-
-    tags->tags = xcalloc(tags->n_tags, sizeof(*tags->tags));
-    for (i = 0; i < tags->n_tags; i++) {
-        array_entry = json_array_get(tag_array, i);
-        tag = json_string_value(array_entry);
-        if (tag) {
-            tags->tags[i] = xstrdup(tag);
-        } else {
-            /* Fallback to empty string to avoid unexpected NULL */
-            tags->tags[i] = xstrdup("");
-            pho_warn("Non string tag in media tags");
-        }
-    }
-
-out_free:
-    json_decref(tag_array);
-    return rc;
-}
-
-/**
- * Encode media tags to json
- *
- * \param[in]  tags    media tags to be encoded
- * \param[in]  n_tags  size of the tags array
- *
- * \return Return a string json object allocated with malloc. The caller must
- *     free() this string.
- */
-static char *dss_tags_encode(const struct tags *tags)
-{
-    json_t  *tag_array;
-    size_t   i;
-    char    *res = NULL;
-    ENTRY;
-
-    tag_array = json_array();
-    if (!tag_array) {
-        pho_error(-ENOMEM, "Failed to create json object");
-        return NULL;
-    }
-
-    for (i = 0; i < tags->n_tags; i++) {
-        if (json_array_append_new(tag_array, json_string(tags->tags[i]))) {
-            res = NULL;
-            LOG_GOTO(out_free, -ENOMEM,
-                     "Could not append media tag to json tag array");
-        }
-    }
-    res = json_dumps(tag_array, 0);
-
-out_free:
-    json_decref(tag_array);
-    return res;
-}
 
 /**
  * Extract layout type and parameters from json
@@ -1094,196 +860,6 @@ static int get_layout_setrequest(PGconn *_conn, struct layout_info *item_list,
     return rc;
 }
 
-static inline const char *bool2sqlbool(bool b)
-{
-   return b ? "TRUE" : "FALSE";
-}
-
-static void append_media_update_request(GString *request, const char *field,
-                                        const char *field_value,
-                                        bool *first_field)
-{
-    if (!*first_field)
-        g_string_append_printf(request, " , ");
-
-    g_string_append_printf(request, field, field_value);
-    *first_field = false;
-}
-
-static int get_media_setrequest(PGconn *conn, struct media_info *item_list,
-                                int item_cnt, enum dss_set_action action,
-                                uint64_t fields, GString *request)
-{
-    int i;
-    ENTRY;
-
-    for (i = 0; i < item_cnt; i++) {
-        struct media_info   *p_media = &item_list[i];
-
-        if (action == DSS_SET_DELETE) {
-            g_string_append_printf(request, delete_query[DSS_MEDIA],
-                                   p_media->rsc.id.name);
-        } else if (action == DSS_SET_INSERT) {
-            char *medium_name = NULL;
-            char *fs_label = NULL;
-            char *model = NULL;
-            char *stats = NULL;
-            char *tags = NULL;
-            char *tmp_stats = NULL;
-            char *tmp_tags = NULL;
-            bool put_flag, get_flag, delete_flag;
-
-            /* check tape model validity */
-            if (p_media->rsc.id.family == PHO_RSC_TAPE &&
-                    !dss_tape_model_check(p_media->rsc.model))
-                LOG_RETURN(-EINVAL, "invalid media tape model '%s'",
-                           p_media->rsc.model);
-
-            medium_name = dss_char4sql(conn, p_media->rsc.id.name);
-            fs_label = dss_char4sql(conn, p_media->fs.label);
-            model = dss_char4sql(conn, p_media->rsc.model);
-
-            tmp_stats = dss_media_stats_encode(p_media->stats);
-            stats = dss_char4sql(conn, tmp_stats);
-            free(tmp_stats);
-
-            tmp_tags = dss_tags_encode(&p_media->tags);
-            tags = dss_char4sql(conn, tmp_tags);
-            free(tmp_tags);
-            put_flag = p_media->flags.put;
-            get_flag = p_media->flags.get;
-            delete_flag = p_media->flags.delete;
-
-            if (!medium_name || !fs_label || !model || !stats || !tags) {
-                free_dss_char4sql(medium_name);
-                free_dss_char4sql(fs_label);
-                free_dss_char4sql(model);
-                free_dss_char4sql(stats);
-                free_dss_char4sql(tags);
-                LOG_RETURN(-ENOMEM, "memory allocation failed");
-            }
-
-            g_string_append_printf(
-                request,
-                insert_query_values[DSS_MEDIA],
-                rsc_family2str(p_media->rsc.id.family),
-                model,
-                medium_name,
-                rsc_adm_status2str(p_media->rsc.adm_status),
-                fs_type2str(p_media->fs.type),
-                address_type2str(p_media->addr_type),
-                fs_status2str(p_media->fs.status),
-                fs_label,
-                stats,
-                tags,
-                bool2sqlbool(put_flag),
-                bool2sqlbool(get_flag),
-                bool2sqlbool(delete_flag),
-                i < item_cnt-1 ? "," : ";"
-            );
-
-            free_dss_char4sql(medium_name);
-            free_dss_char4sql(fs_label);
-            free_dss_char4sql(model);
-            free_dss_char4sql(stats);
-            free_dss_char4sql(tags);
-        } else if (action == DSS_SET_UPDATE) {
-            bool first_field = true;
-
-            g_string_append_printf(request, "UPDATE media SET ");
-
-            /* we check the fields parameter to select updated columns */
-            if (ADM_STATUS & fields)
-                append_media_update_request(request, "adm_status = '%s'",
-                    rsc_adm_status2str(p_media->rsc.adm_status), &first_field);
-
-            if (FS_STATUS & fields)
-                append_media_update_request(request, "fs_status = '%s'",
-                                            fs_status2str(p_media->fs.status),
-                                            &first_field);
-
-            if (FS_LABEL & fields) {
-                char *fs_label = NULL;
-
-                fs_label = dss_char4sql(conn, p_media->fs.label);
-                if (!fs_label)
-                    LOG_RETURN(-EINVAL,
-                               "Failed to build FS_LABEL (%s) media update SQL "
-                               "request", p_media->fs.label);
-
-                append_media_update_request(request, "fs_label = %s", fs_label,
-                                            &first_field);
-                free_dss_char4sql(fs_label);
-            }
-
-            if (IS_STAT(fields)) {
-                char *tmp_stats = NULL;
-                char *stats = NULL;
-
-                tmp_stats = dss_media_stats_encode(p_media->stats);
-                if (!tmp_stats)
-                    LOG_RETURN(-EINVAL,
-                               "Failed to encode stats for media update");
-
-                stats = dss_char4sql(conn, tmp_stats);
-                free(tmp_stats);
-
-                if (!stats)
-                    LOG_RETURN(-EINVAL,
-                               "Failed to build stats media update SQL "
-                               "request");
-
-                append_media_update_request(request, "stats = %s", stats,
-                                            &first_field);
-                free_dss_char4sql(stats);
-            }
-
-            if (TAGS & fields) {
-                char *tmp_tags = NULL;
-                char *tags = NULL;
-
-                tmp_tags = dss_tags_encode(&p_media->tags);
-                if (!tmp_tags)
-                    LOG_RETURN(-EINVAL,
-                               "Failed to encode tags for media update");
-
-                tags = dss_char4sql(conn, tmp_tags);
-                free(tmp_tags);
-
-                if (!tags)
-                    LOG_RETURN(-EINVAL,
-                               "Failed to build tags media update SQL request");
-
-                append_media_update_request(request, "tags = %s", tags,
-                                            &first_field);
-                free_dss_char4sql(tags);
-            }
-
-            if (PUT_ACCESS & fields)
-                append_media_update_request(request, "put = %s",
-                                            bool2sqlbool(p_media->flags.put),
-                                            &first_field);
-
-            if (GET_ACCESS & fields)
-                append_media_update_request(request, "get = %s",
-                                            bool2sqlbool(p_media->flags.get),
-                                            &first_field);
-
-            if (DELETE_ACCESS & fields)
-                append_media_update_request(request, "delete = %s",
-                                            bool2sqlbool(p_media->flags.delete),
-                                            &first_field);
-
-            g_string_append_printf(request,
-                                   " WHERE family = '%s' AND id = '%s';",
-                                   rsc_family2str(p_media->rsc.id.family),
-                                   p_media->rsc.id.name);
-        }
-    }
-
-    return 0;
-}
-
 static inline bool is_type_supported(enum dss_type type)
 {
     switch (type) {
@@ -1501,75 +1077,6 @@ static int clause_filter_convert(struct dss_handle *handle, GString *qry,
 out_free:
     saj_parser_free(&json2sql);
     return rc;
-}
-
-static inline bool psqlstrbool2bool(char psql_str_bool)
-{
-    if (psql_str_bool == 't')
-        return true;
-
-    return false;
-}
-
-/**
- * Fill a media_info from the information in the `row_num`th row of `res`.
- */
-static int dss_media_from_pg_row(struct dss_handle *handle, void *void_media,
-                                 PGresult *res, int row_num)
-{
-    struct media_info *medium = void_media;
-    int rc;
-
-    medium->rsc.id.family  = str2rsc_family(PQgetvalue(res, row_num, 0));
-    medium->rsc.model      = get_str_value(res, row_num, 1);
-    pho_id_name_set(&medium->rsc.id, PQgetvalue(res, row_num, 2));
-    medium->rsc.adm_status = str2rsc_adm_status(PQgetvalue(res, row_num, 3));
-    medium->addr_type      = str2address_type(PQgetvalue(res, row_num, 4));
-    medium->fs.type        = str2fs_type(PQgetvalue(res, row_num, 5));
-    medium->fs.status      = str2fs_status(PQgetvalue(res, row_num, 6));
-    strncpy(medium->fs.label, PQgetvalue(res, row_num, 7),
-            sizeof(medium->fs.label));
-    /* make sure the label is zero-terminated */
-    medium->fs.label[sizeof(medium->fs.label) - 1] = '\0';
-    medium->flags.put      = psqlstrbool2bool(*PQgetvalue(res, row_num, 10));
-    medium->flags.get      = psqlstrbool2bool(*PQgetvalue(res, row_num, 11));
-    medium->flags.delete   = psqlstrbool2bool(*PQgetvalue(res, row_num, 12));
-    medium->health         = 0;
-
-    /* No dynamic allocation here */
-    rc = dss_media_stats_decode(&medium->stats, PQgetvalue(res, row_num, 8));
-    if (rc) {
-        pho_error(rc, "dss_media stats decode error");
-        return rc;
-    }
-
-    rc = dss_tags_decode(&medium->tags, PQgetvalue(res, row_num, 9));
-    if (rc) {
-        pho_error(rc, "dss_media tags decode error");
-        return rc;
-    }
-    pho_debug("Decoded %lu tags (%s)",
-              medium->tags.n_tags, PQgetvalue(res, row_num, 9));
-
-    rc = dss_lock_status(handle, DSS_MEDIA, medium, 1, &medium->lock);
-    if (rc == -ENOLCK)
-        rc = 0;
-
-    return rc;
-}
-
-/**
- * Free the resources associated with media_info built from a PGresult.
- */
-static void dss_media_result_free(void *void_media)
-{
-    struct media_info *media = void_media;
-
-    if (!media)
-        return;
-
-    pho_lock_clean(&media->lock);
-    tags_free(&media->tags);
 }
 
 /**
@@ -1924,8 +1431,7 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         rc = get_insert_query(type, conn, item_list, item_cnt, request);
         break;
     case DSS_SET_UPDATE:
-        rc = get_update_query(type, item_list, item_cnt,
-                              fields, request);
+        rc = get_update_query(type, conn, item_list, item_cnt, fields, request);
         break;
     case DSS_SET_DELETE:
         rc = get_delete_query(type, item_list, item_cnt, request);
@@ -1950,12 +1456,6 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         g_string_append(request, insert_full_query[type]);
 
     switch (type) {
-    case DSS_MEDIA:
-        rc = get_media_setrequest(conn, item_list, item_cnt, action, fields,
-                                  request);
-        if (rc)
-            LOG_GOTO(out_cleanup, rc, "SQL media request failed");
-        break;
     case DSS_LAYOUT:
         rc = get_layout_setrequest(conn, item_list, item_cnt, action, request,
                                    &error);

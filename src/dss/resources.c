@@ -27,6 +27,7 @@
 #include "pho_common.h"
 
 #include "device.h"
+#include "media.h"
 #include "resources.h"
 
 static const struct dss_resource_ops *get_resource_ops(enum dss_type type)
@@ -34,6 +35,8 @@ static const struct dss_resource_ops *get_resource_ops(enum dss_type type)
     switch (type) {
     case DSS_DEVICE:
         return &device_ops;
+    case DSS_MEDIA:
+        return &media_ops;
     default:
         return NULL;
     }
@@ -52,15 +55,15 @@ int get_insert_query(enum dss_type type, PGconn *conn, void *void_resource,
     return resource_ops->insert_query(conn, void_resource, item_count, request);
 }
 
-int get_update_query(enum dss_type type, void *void_resource, int item_count,
-                     int64_t fields, GString *request)
+int get_update_query(enum dss_type type, PGconn *conn, void *void_resource,
+                     int item_count, int64_t fields, GString *request)
 {
     const struct dss_resource_ops *resource_ops = get_resource_ops(type);
 
     if (resource_ops == NULL)
         return -ENOTSUP;
 
-    return resource_ops->update_query(void_resource, item_count, fields,
+    return resource_ops->update_query(conn, void_resource, item_count, fields,
                                       request);
 }
 

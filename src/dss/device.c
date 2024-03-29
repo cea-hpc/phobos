@@ -93,9 +93,11 @@ static struct dss_field FIELDS[] = {
     { DSS_DEVICE_UPDATE_HOST, "host = '%s'", _get_host }
 };
 
-static int device_update_query(void *void_dev, int item_cnt, int64_t fields,
-                               GString *request)
+static int device_update_query(PGconn *conn, void *void_dev, int item_cnt,
+                               int64_t fields, GString *request)
 {
+    (void) conn;
+
     for (int i = 0; i < item_cnt; ++i) {
         struct dev_info *device = ((struct dev_info *) void_dev) + i;
         enum dss_device_operations _fields = fields;
