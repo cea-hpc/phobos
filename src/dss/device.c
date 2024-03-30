@@ -41,33 +41,6 @@
 #include "device.h"
 #include "dss_utils.h"
 
-static const char NULL_STR[] = "NULL";
-
-static inline void free_dss_char4sql(char *s)
-{
-    if (s != NULL_STR)
-        PQfreemem(s);
-}
-
-static inline char *dss_char4sql(PGconn *conn, const char *s)
-{
-    char *ns;
-
-    if (s != NULL && s[0] != '\0') {
-        ns = PQescapeLiteral(conn, s, strlen(s));
-        if (ns == NULL) {
-            pho_error(
-                EINVAL, "Cannot escape litteral %s: %s", s, PQerrorMessage(conn)
-            );
-            return NULL;
-        }
-    } else {
-        ns = (char *)NULL_STR;
-    }
-
-    return ns;
-}
-
 static int device_insert_query(PGconn *conn, void *void_dev, int item_cnt,
                                GString *request)
 {

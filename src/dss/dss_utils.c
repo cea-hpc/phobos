@@ -143,3 +143,87 @@ void update_fields(void *resource, int64_t fields_to_update,
         }
     }
 }
+
+const char *json_dict2tmp_str(const struct json_t *obj, const char *key)
+{
+    struct json_t *current_obj;
+
+    current_obj = json_object_get(obj, key);
+    if (!current_obj) {
+        pho_debug("Cannot retrieve object '%s'", key);
+        return NULL;
+    }
+
+    return json_string_value(current_obj);
+}
+
+char *json_dict2str(const struct json_t *obj, const char *key)
+{
+    const char *res = json_dict2tmp_str(obj, key);
+
+    return xstrdup_safe(res);
+}
+
+int json_dict2int(const struct json_t *obj, const char *key)
+{
+    struct json_t   *current_obj;
+    json_int_t       val;
+
+    current_obj = json_object_get(obj, key);
+    if (!current_obj) {
+        pho_debug("Cannot retrieve object '%s'", key);
+        return -1;
+    }
+
+    if (!json_is_integer(current_obj)) {
+        pho_debug("JSON attribute '%s' not an integer", key);
+        return -1;
+    }
+
+    val = json_integer_value(current_obj);
+    if (val > INT_MAX) {
+        pho_error(EOVERFLOW, "Cannot cast value from DSS for '%s'", key);
+        return -1;
+    }
+
+    return val;
+}
+
+long long json_dict2ll(const struct json_t *obj, const char *key)
+{
+    struct json_t   *current_obj;
+
+    current_obj = json_object_get(obj, key);
+    if (!current_obj) {
+        pho_debug("Cannot retrieve object '%s'", key);
+        return -1LL;
+    }
+
+    if (!json_is_integer(current_obj)) {
+        pho_debug("JSON attribute '%s' is not an integer", key);
+        return -1LL;
+    }
+
+    return json_integer_value(current_obj);
+}
+
+char *dss_char4sql(PGconn *conn, const char *s)
+{
+    char *ns;
+
+    if (s == NULL || s[0] == '\0')
+        return "NULL";
+
+    ns = PQescapeLiteral(conn, s, strlen(s));
+    if (ns == NULL)
+        pho_error(EINVAL,
+                  "Cannot escape litteral %s: %s", s, PQerrorMessage(conn));
+
+    return ns;
+}
+
+void free_dss_char4sql(char *s)
+{
+    if (s != NULL && strcmp(s, "NULL"))
+        PQfreemem(s);
+}

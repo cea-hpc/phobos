@@ -187,33 +187,6 @@ static void dss_pg_logger(void *arg, const char *message)
     pho_info("%*s", (int)mlen, message);
 }
 
-static const char NULL_STR[] = "NULL";
-
-static inline char *dss_char4sql(PGconn *conn, const char *s)
-{
-    char *ns;
-
-    if (s != NULL && s[0] != '\0') {
-        ns = PQescapeLiteral(conn, s, strlen(s));
-        if (ns == NULL) {
-            pho_error(
-                EINVAL, "Cannot escape litteral %s: %s", s, PQerrorMessage(conn)
-            );
-            return NULL;
-        }
-    } else {
-        ns = (char *)NULL_STR;
-    }
-
-    return ns;
-}
-
-static inline void free_dss_char4sql(char *s)
-{
-    if (s != NULL_STR)
-        PQfreemem(s);
-}
-
 int dss_init(struct dss_handle *handle)
 {
     const char *conn_str;
@@ -247,98 +220,6 @@ int dss_init(struct dss_handle *handle)
 void dss_fini(struct dss_handle *handle)
 {
     PQfinish(handle->dh_conn);
-}
-
-
-/**
- * Retrieve a string contained in a JSON object under a given key.
- *
- * The result string should not be kept in a data structure. To keep a
- * copy of the targeted string, use json_dict2str() instead.
- *
- * \return The targeted string value on success, or NULL on error.
- */
-static const char *json_dict2tmp_str(const struct json_t *obj, const char *key)
-{
-    struct json_t *current_obj;
-
-    current_obj = json_object_get(obj, key);
-    if (!current_obj) {
-        pho_debug("Cannot retrieve object '%s'", key);
-        return NULL;
-    }
-
-    return json_string_value(current_obj);
-}
-
-/**
- * Retrieve a copy of a string contained in a JSON object under a given key.
- * The caller is responsible for freeing the result after use.
- *
- * \return a newly allocated copy of the string on success or NULL on error.
- */
-static char *json_dict2str(const struct json_t *obj, const char *key)
-{
-    const char *res = json_dict2tmp_str(obj, key);
-
-    return xstrdup_safe(res);
-}
-
-/**
- * Retrieve a signed but positive integer contained in a JSON object under a
- * given key.
- * An error is returned if no integer was found at this location.
- *
- * \retval the value on success and -1 on error.
- */
-static int json_dict2int(const struct json_t *obj, const char *key)
-{
-    struct json_t   *current_obj;
-    json_int_t       val;
-
-    current_obj = json_object_get(obj, key);
-    if (!current_obj) {
-        pho_debug("Cannot retrieve object '%s'", key);
-        return -1;
-    }
-
-    if (!json_is_integer(current_obj)) {
-        pho_debug("JSON attribute '%s' not an integer", key);
-        return -1;
-    }
-
-    val = json_integer_value(current_obj);
-    if (val > INT_MAX) {
-        pho_error(EOVERFLOW, "Cannot cast value from DSS for '%s'", key);
-        return -1;
-    }
-
-    return val;
-}
-
-/**
- * Retrieve a signed but positive long long integer contained in a JSON object
- * under a given key.
- * An error is returned if no long long integer was found at this location.
- *
- * \retval the value on success and -1LL on error.
- */
-static long long json_dict2ll(const struct json_t *obj, const char *key)
-{
-    struct json_t   *current_obj;
-
-    current_obj = json_object_get(obj, key);
-    if (!current_obj) {
-        pho_debug("Cannot retrieve object '%s'", key);
-        return INT64_MIN;
-    }
-
-    if (!json_is_integer(current_obj)) {
-        pho_debug("JSON attribute '%s' is not an integer", key);
-        return INT64_MIN;
-    }
-
-    return json_integer_value(current_obj);
 }
 
 void dss_filter_free(struct dss_filter *filter)
@@ -640,16 +521,6 @@ out_decref:
     json_decref(root);
     return rc;
 }
-
-#define JSON_INTEGER_SET_NEW(_j, _s, _f)                        \
-    do {                                                        \
-        json_t  *_tmp = json_integer((_s)._f);                  \
-        if (!_tmp)                                              \
-            pho_error(-ENOMEM, "Failed to encode '%s'", #_f);   \
-        else                                                    \
-            json_object_set_new((_j), #_f, _tmp);               \
-    } while (0)
-
 
 /**
  * Encode media statistics to json

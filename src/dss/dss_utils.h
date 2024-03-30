@@ -30,7 +30,12 @@
 #endif
 
 #include <glib.h>
+#include <jansson.h>
 #include <libpq-fe.h>
+
+char *dss_char4sql(PGconn *conn, const char *s);
+
+void free_dss_char4sql(char *s);
 
 /**
  * Execute a PSQL \p request, verify the result is as expected with \p tested
@@ -91,5 +96,50 @@ struct dss_field {
 void update_fields(void *resource, int64_t fields_to_update,
                    struct dss_field *fields, int fields_count,
                    GString *request);
+
+/**
+ * Retrieve a string contained in a JSON object under a given key.
+ *
+ * The result string should not be kept in a data structure. To keep a
+ * copy of the targeted string, use json_dict2str() instead.
+ *
+ * \return The targeted string value on success, or NULL on error.
+ */
+const char *json_dict2tmp_str(const struct json_t *obj, const char *key);
+
+/**
+ * Retrieve a copy of a string contained in a JSON object under a given key.
+ * The caller is responsible for freeing the result after use.
+ *
+ * \return a newly allocated copy of the string on success or NULL on error.
+ */
+char *json_dict2str(const struct json_t *obj, const char *key);
+
+/**
+ * Retrieve a signed but positive integer contained in a JSON object under a
+ * given key.
+ * An error is returned if no integer was found at this location.
+ *
+ * \retval the value on success and -1 on error.
+ */
+int json_dict2int(const struct json_t *obj, const char *key);
+
+/**
+ * Retrieve a signed but positive long long integer contained in a JSON object
+ * under a given key.
+ * An error is returned if no long long integer was found at this location.
+ *
+ * \retval the value on success and -1LL on error.
+ */
+long long json_dict2ll(const struct json_t *obj, const char *key);
+
+#define JSON_INTEGER_SET_NEW(_j, _s, _f)                        \
+    do {                                                        \
+        json_t  *_tmp = json_integer((_s)._f);                  \
+        if (!_tmp)                                              \
+            pho_error(-ENOMEM, "Failed to encode '%s'", #_f);   \
+        else                                                    \
+            json_object_set_new((_j), #_f, _tmp);               \
+    } while (0)
 
 #endif
