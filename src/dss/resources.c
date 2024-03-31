@@ -32,6 +32,7 @@
 #include "device.h"
 #include "extent.h"
 #include "media.h"
+#include "object.h"
 #include "resources.h"
 
 static const struct dss_resource_ops *get_resource_ops(enum dss_type type)
@@ -45,6 +46,8 @@ static const struct dss_resource_ops *get_resource_ops(enum dss_type type)
         return &extent_ops;
     case DSS_MEDIA:
         return &media_ops;
+    case DSS_OBJECT:
+        return &object_ops;
     default:
         return NULL;
     }
@@ -53,14 +56,15 @@ static const struct dss_resource_ops *get_resource_ops(enum dss_type type)
 }
 
 int get_insert_query(enum dss_type type, PGconn *conn, void *void_resource,
-                     int item_count, GString *request)
+                     int item_count, int64_t fields, GString *request)
 {
     const struct dss_resource_ops *resource_ops = get_resource_ops(type);
 
     if (resource_ops == NULL)
         return -ENOTSUP;
 
-    return resource_ops->insert_query(conn, void_resource, item_count, request);
+    return resource_ops->insert_query(conn, void_resource, item_count, fields,
+                                      request);
 }
 
 int get_update_query(enum dss_type type, PGconn *conn, void *void_resource,

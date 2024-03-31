@@ -215,8 +215,10 @@ out_free:
 }
 
 static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
-                              GString *request)
+                              int64_t fields, GString *request)
 {
+    (void) fields;
+
     g_string_append(
         request,
         "INSERT INTO media (family, model, id, adm_status, fs_type, "

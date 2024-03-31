@@ -101,8 +101,10 @@ out_free:
 }
 
 static int extent_insert_query(PGconn *conn, void *void_extent, int item_cnt,
-                               GString *request)
+                               int64_t fields, GString *request)
 {
+    (void) fields;
+
     g_string_append(
         request,
         "INSERT INTO extent (extent_uuid, state, size, offsetof, "

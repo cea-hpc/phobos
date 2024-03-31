@@ -936,7 +936,8 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
                     .obj_status = PHO_OBJ_STATUS_COMPLETE,
                 };
 
-                rc = dss_object_update_obj_status(&pho->dss, &obj, 1);
+                rc = dss_object_update(&pho->dss, &obj, 1,
+                                       DSS_OBJECT_UPDATE_OBJ_STATUS);
                 if (rc)
                     pho_error(rc,
                               "Error while updating object status to complete");

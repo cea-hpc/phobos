@@ -75,6 +75,12 @@ enum dss_device_operations {
     DSS_DEVICE_UPDATE_HOST = (1 << 1),
 };
 
+/** The different types of update allowed for objects */
+enum dss_object_operations {
+    DSS_OBJECT_UPDATE_USER_MD = (1 << 0),
+    DSS_OBJECT_UPDATE_OBJ_STATUS = (1 << 1),
+};
+
 /**
  * get dss_type enum from string
  * @param[in]  str  dss_type string representation.
@@ -507,7 +513,7 @@ int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
                    int obj_cnt, enum dss_set_action action);
 
 /**
- * Update the object status of one or many objects in DSS.
+ * Update the information of one or many objects in DSS.
  *
  * @param[in]  hdl      valid connection handle
  * @param[in]  obj_ls   array of entries to store
@@ -515,9 +521,8 @@ int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_object_update_obj_status(struct dss_handle *hdl,
-                                 struct object_info *obj_ls,
-                                 int obj_cnt);
+int dss_object_update(struct dss_handle *hdl, struct object_info *obj_ls,
+                      int obj_cnt, int64_t fields);
 
 /**
  * Store information for one or many deprecated objects in DSS.

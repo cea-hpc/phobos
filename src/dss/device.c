@@ -42,8 +42,10 @@
 #include "dss_utils.h"
 
 static int device_insert_query(PGconn *conn, void *void_dev, int item_cnt,
-                               GString *request)
+                               int64_t fields, GString *request)
 {
+    (void) fields;
+
     g_string_append(
         request,
         "INSERT INTO device (family, model, id, host, adm_status, path) "

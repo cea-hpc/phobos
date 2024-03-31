@@ -35,7 +35,7 @@
 
 struct dss_resource_ops {
     int (*insert_query)(PGconn *conn, void *void_resource, int item_count,
-                        GString *request);
+                        int64_t fields, GString *request);
     int (*update_query)(PGconn *conn, void *void_resource, int item_count,
                         int64_t fields, GString *request);
     int (*select_query)(GString *conditions, GString *request);
@@ -48,7 +48,7 @@ struct dss_resource_ops {
 };
 
 int get_insert_query(enum dss_type type, PGconn *conn, void *void_resource,
-                     int item_count, GString *request);
+                     int item_count, int64_t fields, GString *request);
 
 int get_update_query(enum dss_type type, PGconn *conn, void *void_resource,
                      int item_count, int64_t fields, GString *request);

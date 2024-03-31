@@ -791,7 +791,7 @@ end:
     if (deprecated)
         rc = dss_deprecated_object_set(&adm->dss, obj, 1, DSS_SET_UPDATE);
     else
-        rc = dss_object_set(&adm->dss, obj, 1, DSS_SET_UPDATE);
+        rc = dss_object_update(&adm->dss, obj, 1, DSS_OBJECT_UPDATE_OBJ_STATUS);
 
     return rc;
 }

@@ -39,8 +39,11 @@
 #include "filters.h"
 
 static int deprecated_insert_query(PGconn *conn, void *void_deprecated,
-                                   int item_cnt, GString *request)
+                                   int item_cnt, int64_t fields,
+                                   GString *request)
 {
+    (void) fields;
+
     g_string_append(
         request,
         "INSERT INTO deprecated_object (oid, object_uuid, version, user_md,"

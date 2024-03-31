@@ -52,6 +52,8 @@
 #include "dss_config.h"
 #include "extent.h"
 #include "filters.h"
+#include "media.h"
+#include "object.h"
 #include "resources.h"
 
 /* Necessary local function declaration
@@ -63,9 +65,6 @@ static int dss_full_layout_from_pg_row(struct dss_handle *handle,
                                        void *void_layout, PGresult *res,
                                        int row_num);
 static void dss_full_layout_result_free(void *void_layout);
-static int dss_object_from_pg_row(struct dss_handle *handle, void *void_object,
-                                  PGresult *res, int row_num);
-static void dss_object_result_free(void *void_object);
 
 struct dss_result {
     PGresult *pg_res;
@@ -163,8 +162,6 @@ static const char * const select_query[] = {
     /* The layout query ends with select_inner_end_query and
      * select_outer_end_query.
      */
-    [DSS_OBJECT] = "SELECT oid, object_uuid, version, user_md, obj_status"
-                   " FROM object",
     [DSS_LOGS]   = DSS_LOGS_SELECT_QUERY,
 };
 
@@ -182,7 +179,6 @@ static const char * const select_outer_end_query[] = {
 static const size_t res_size[] = {
     [DSS_LAYOUT]      = sizeof(struct layout_info),
     [DSS_FULL_LAYOUT] = sizeof(struct layout_info),
-    [DSS_OBJECT]      = sizeof(struct object_info),
     [DSS_LOGS]        = sizeof(struct pho_log),
 };
 
@@ -191,7 +187,6 @@ typedef int (*res_pg_constructor_t)(struct dss_handle *handle, void *item,
 static const res_pg_constructor_t res_pg_constructor[] = {
     [DSS_LAYOUT]      = dss_layout_from_pg_row,
     [DSS_FULL_LAYOUT] = dss_full_layout_from_pg_row,
-    [DSS_OBJECT]      = dss_object_from_pg_row,
     [DSS_LOGS]        = dss_logs_from_pg_row,
 };
 
@@ -199,51 +194,22 @@ typedef void (*res_destructor_t)(void *item);
 static const res_destructor_t res_destructor[] = {
     [DSS_LAYOUT]      = dss_full_layout_result_free,
     [DSS_FULL_LAYOUT] = dss_full_layout_result_free,
-    [DSS_OBJECT]      = dss_object_result_free,
     [DSS_LOGS]        = dss_logs_result_free,
 };
 
 static const char * const insert_query[] = {
     [DSS_LAYOUT] = "INSERT INTO layout (object_uuid, version, extent_uuid,"
                    " layout_index) VALUES ",
-    [DSS_OBJECT] = "INSERT INTO object (oid, user_md, obj_status) VALUES ",
-};
-
-static const char * const insert_full_query[] = {
-    [DSS_OBJECT] = "INSERT INTO object (oid, object_uuid, version, user_md, "
-                   "obj_status) VALUES ",
-    [DSS_LAYOUT] = "INSERT INTO extent (oid, uuid, version, state, lyt_info,"
-                   " extents) VALUES ",
-};
-
-static const char * const update_query[] = {
-    [DSS_OBJECT] = "UPDATE object SET (user_md, obj_status) = ('%s', '%s')"
-                   " WHERE oid = '%s';",
-    [DSS_DEPREC] = "UPDATE deprecated_object SET obj_status = '%s'"
-                   " WHERE object_uuid = '%s' and version = %d;",
-    [DSS_LAYOUT] = "UPDATE extent SET (state, lyt_info, extents) ="
-                   " ('%s', '%s', '%s')"
-                   " WHERE uuid = '%s' and version = %d;",
 };
 
 static const char * const update_layout_info_query =
     "UPDATE object SET lyt_info = '%s' WHERE oid = '%s';";
-
-static const char * const delete_query[] = {
-    [DSS_OBJECT] = "DELETE FROM object WHERE oid = '%s'; ",
-};
 
 static const char * const insert_query_values[] = {
     [DSS_LAYOUT] = "((select object_uuid from object where oid = '%s'),"
                    " (select version from object where oid = '%s'),"
                    " (select extent_uuid from extent where address = '%s'),"
                    " %d)%s",
-    [DSS_OBJECT] = "('%s', '%s', '%s')%s",
-};
-
-static const char * const insert_full_query_values[] = {
-    [DSS_OBJECT] = "('%s', '%s', %d, '%s', '%s')%s",
-    [DSS_LAYOUT] = "('%s', '%s', %d, '%s', '%s', '%s')%s",
 };
 
 enum dss_move_queries {
@@ -491,64 +457,6 @@ out_decref:
     return rc;
 }
 
-static int get_object_setrequest(PGconn *_conn, struct object_info *item_list,
-                                 int item_cnt, enum dss_set_action action,
-                                 GString *request)
-{
-    int i;
-    ENTRY;
-
-    for (i = 0; i < item_cnt; i++) {
-        struct object_info *p_object = &item_list[i];
-
-        if (p_object->oid == NULL)
-            LOG_RETURN(-EINVAL, "Object oid cannot be NULL");
-        if (p_object->obj_status <= PHO_OBJ_STATUS_INVAL ||
-            p_object->obj_status >= PHO_OBJ_STATUS_LAST)
-            LOG_RETURN(-EINVAL, "Object status %s invalid",
-                       obj_status2str(p_object->obj_status));
-
-        switch (action) {
-        case DSS_SET_DELETE:
-            g_string_append_printf(request, delete_query[DSS_OBJECT],
-                                   p_object->oid);
-            break;
-        case DSS_SET_INSERT:
-            g_string_append_printf(request, insert_query_values[DSS_OBJECT],
-                                   p_object->oid,
-                                   p_object->user_md,
-                                   obj_status2str(p_object->obj_status),
-                                   i < item_cnt-1 ? "," : ";");
-            break;
-        case DSS_SET_FULL_INSERT:
-            g_string_append_printf(request,
-                                   insert_full_query_values[DSS_OBJECT],
-                                   p_object->oid, p_object->uuid,
-                                   p_object->version,
-                                   p_object->user_md,
-                                   obj_status2str(p_object->obj_status),
-                                   i < item_cnt-1 ? "," : ";");
-            break;
-        case DSS_SET_UPDATE:
-            g_string_append_printf(request, update_query[DSS_OBJECT],
-                                   p_object->user_md,
-                                   obj_status2str(p_object->obj_status),
-                                   p_object->oid);
-            break;
-        case DSS_SET_UPDATE_OBJ_STATUS:
-            g_string_append_printf(request,
-                                   "UPDATE object SET obj_status = '%s'"
-                                   " WHERE oid = '%s';",
-                                   obj_status2str(p_object->obj_status),
-                                   p_object->oid);
-            break;
-        default:
-            UNREACHED();
-        }
-    }
-    return 0;
-}
-
 static int get_layout_setrequest(PGconn *_conn, struct layout_info *item_list,
                                  int item_cnt, enum dss_set_action action,
                                  GString *request, int *error)
@@ -711,35 +619,6 @@ static void dss_full_layout_result_free(void *void_layout)
     layout_info_free_extents(layout);
 }
 
-/**
- * Fill a object_info from the information in the `row_num`th row of `res`.
- */
-static int dss_object_from_pg_row(struct dss_handle *handle, void *void_object,
-                                  PGresult *res, int row_num)
-{
-    struct object_info *object = void_object;
-
-    (void)handle;
-
-    object->oid         = get_str_value(res, row_num, 0);
-    object->uuid        = get_str_value(res, row_num, 1);
-    object->version     = atoi(PQgetvalue(res, row_num, 2));
-    object->user_md     = get_str_value(res, row_num, 3);
-    object->obj_status  = str2obj_status(PQgetvalue(res, row_num, 4));
-    object->deprec_time.tv_sec = 0;
-    object->deprec_time.tv_usec = 0;
-
-    return 0;
-}
-
-/**
- * Free the resources associated with object_info built from a PGresult.
- */
-static void dss_object_result_free(void *void_object)
-{
-    (void)void_object;
-}
-
 static void _dss_result_free(struct dss_result *dss_res, int item_cnt)
 {
     res_destructor_t dtor;
@@ -898,7 +777,12 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
 
     switch (action) {
     case DSS_SET_INSERT:
-        rc = get_insert_query(type, conn, item_list, item_cnt, request);
+        rc = get_insert_query(type, conn, item_list, item_cnt, INSERT_OBJECT,
+                              request);
+        break;
+    case DSS_SET_FULL_INSERT:
+        rc = get_insert_query(type, conn, item_list, item_cnt,
+                              INSERT_FULL_OBJECT, request);
         break;
     case DSS_SET_UPDATE:
         rc = get_update_query(type, conn, item_list, item_cnt, fields, request);
@@ -922,8 +806,6 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
 
     if (action == DSS_SET_INSERT)
         g_string_append(request, insert_query[type]);
-    else if (action == DSS_SET_FULL_INSERT)
-        g_string_append(request, insert_full_query[type]);
 
     switch (type) {
     case DSS_LAYOUT:
@@ -931,11 +813,6 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
                                    &error);
         if (rc)
             LOG_GOTO(out_cleanup, rc, "SQL layout request failed");
-        break;
-    case DSS_OBJECT:
-        rc = get_object_setrequest(conn, item_list, item_cnt, action, request);
-        if (rc)
-            LOG_GOTO(out_cleanup, rc, "SQL object request failed");
         break;
 
     default:
@@ -1344,11 +1221,11 @@ int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
     return dss_generic_set(hdl, DSS_OBJECT, (void *)obj_ls, obj_cnt, action, 0);
 }
 
-int dss_object_update_obj_status(struct dss_handle *hdl,
-                                 struct object_info *obj_ls, int obj_cnt)
+int dss_object_update(struct dss_handle *hdl, struct object_info *obj_ls,
+                      int obj_cnt, int64_t fields)
 {
     return dss_generic_set(hdl, DSS_OBJECT, (void *)obj_ls, obj_cnt,
-                           DSS_SET_UPDATE_OBJ_STATUS, 0);
+                           DSS_SET_UPDATE, fields);
 }
 
 int dss_deprecated_object_set(struct dss_handle *hdl,
