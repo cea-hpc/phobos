@@ -37,6 +37,7 @@
 #include "deprecated.h"
 #include "dss_utils.h"
 #include "filters.h"
+#include "resources.h"
 
 static int deprecated_insert_query(PGconn *conn, void *void_deprecated,
                                    int item_cnt, int64_t fields,
@@ -129,33 +130,13 @@ static int deprecated_delete_query(void *void_deprecated, int item_cnt,
     return 0;
 }
 
-// XXX: will be removed to instead have a call to the create function of the
-// object resource file
-static int dss_object_from_pg_row(struct dss_handle *handle, void *void_object,
-                                  PGresult *res, int row_num)
-{
-    struct object_info *object = void_object;
-
-    (void) handle;
-
-    object->oid         = get_str_value(res, row_num, 0);
-    object->uuid        = get_str_value(res, row_num, 1);
-    object->version     = atoi(PQgetvalue(res, row_num, 2));
-    object->user_md     = get_str_value(res, row_num, 3);
-    object->obj_status  = str2obj_status(PQgetvalue(res, row_num, 4));
-    object->deprec_time.tv_sec = 0;
-    object->deprec_time.tv_usec = 0;
-
-    return 0;
-}
-
 static int deprecated_from_pg_row(struct dss_handle *handle, void *void_object,
                                   PGresult *res, int row_num)
 {
     struct object_info *object = void_object;
     int rc;
 
-    rc = dss_object_from_pg_row(handle, void_object, res, row_num);
+    rc = create_resource(DSS_OBJECT, handle, void_object, res, row_num);
     rc = rc ? : str2timeval(get_str_value(res, row_num, 5),
                             &object->deprec_time);
 
