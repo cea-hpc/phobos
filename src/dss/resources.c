@@ -28,6 +28,7 @@
 
 #include "pho_common.h"
 
+#include "deprecated.h"
 #include "device.h"
 #include "extent.h"
 #include "media.h"
@@ -36,6 +37,8 @@
 static const struct dss_resource_ops *get_resource_ops(enum dss_type type)
 {
     switch (type) {
+    case DSS_DEPREC:
+        return &deprecated_ops;
     case DSS_DEVICE:
         return &device_ops;
     case DSS_EXTENT:
@@ -67,6 +70,8 @@ int get_update_query(enum dss_type type, PGconn *conn, void *void_resource,
 
     if (resource_ops == NULL)
         return -ENOTSUP;
+
+    assert(resource_ops->update_query != NULL);
 
     return resource_ops->update_query(conn, void_resource, item_count, fields,
                                       request);
