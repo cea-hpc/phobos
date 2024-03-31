@@ -24,9 +24,12 @@
  * \brief  Resource file of Phobos's Distributed State Service.
  */
 
+#include <assert.h>
+
 #include "pho_common.h"
 
 #include "device.h"
+#include "extent.h"
 #include "media.h"
 #include "resources.h"
 
@@ -35,6 +38,8 @@ static const struct dss_resource_ops *get_resource_ops(enum dss_type type)
     switch (type) {
     case DSS_DEVICE:
         return &device_ops;
+    case DSS_EXTENT:
+        return &extent_ops;
     case DSS_MEDIA:
         return &media_ops;
     default:
@@ -84,6 +89,8 @@ int get_delete_query(enum dss_type type, void *void_resource, int item_count,
 
     if (resource_ops == NULL)
         return -ENOTSUP;
+
+    assert(resource_ops->delete_query != NULL);
 
     return resource_ops->delete_query(void_resource, item_count, request);
 }
