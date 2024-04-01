@@ -38,7 +38,8 @@ struct dss_resource_ops {
                         int64_t fields, GString *request);
     int (*update_query)(PGconn *conn, void *void_resource, int item_count,
                         int64_t fields, GString *request);
-    int (*select_query)(GString *conditions, GString *request);
+    int (*select_query)(GString **conditions, int n_conditions,
+                        GString *request);
     int (*delete_query)(void *void_resource, int item_count, GString *request);
     int (*create)(struct dss_handle *handle, void *void_resource,
                   PGresult *res, int row_num);
@@ -53,7 +54,8 @@ int get_insert_query(enum dss_type type, PGconn *conn, void *void_resource,
 int get_update_query(enum dss_type type, PGconn *conn, void *void_resource,
                      int item_count, int64_t fields, GString *request);
 
-int get_select_query(enum dss_type type, GString *conditions, GString *request);
+int get_select_query(enum dss_type type, GString **conditions, int n_conditions,
+                     GString *request);
 
 int get_delete_query(enum dss_type type, void *void_resource, int item_count,
                      GString *request);

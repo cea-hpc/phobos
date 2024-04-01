@@ -142,7 +142,8 @@ static int layout_insert_query(PGconn *conn, void *void_layout, int item_cnt,
     return 0;
 }
 
-static int layout_select_query(GString *conditions, GString *request)
+static int layout_select_query(GString **conditions, int n_conditions,
+                               GString *request)
 {
     g_string_append(request,
                     "SELECT oid, object_uuid, version, lyt_info,"
@@ -154,8 +155,10 @@ static int layout_select_query(GString *conditions, GString *request)
                     "   FROM deprecated_object"
                     " ) AS tmp USING (object_uuid, version)");
 
-    if (conditions)
-        g_string_append(request, conditions->str);
+    if (n_conditions == 1)
+        g_string_append(request, conditions[0]->str);
+    else if (n_conditions >= 2)
+        return -ENOTSUP;
 
     g_string_append(request, " GROUP BY oid, object_uuid, version, lyt_info;");
 
@@ -166,7 +169,7 @@ static int layout_select_query(GString *conditions, GString *request)
  * Extract layout type and parameters from json
  *
  */
-static int dss_layout_desc_decode(struct module_desc *desc, const char *json)
+int layout_desc_decode(struct module_desc *desc, const char *json)
 {
     json_error_t json_error;
     json_t *attrs;
@@ -240,8 +243,7 @@ static int layout_from_pg_row(struct dss_handle *handle, void *void_layout,
     layout->oid = PQgetvalue(res, row_num, 0);
     layout->uuid = PQgetvalue(res, row_num, 1);
     layout->version = atoi(PQgetvalue(res, row_num, 2));
-    rc = dss_layout_desc_decode(&layout->layout_desc,
-                                PQgetvalue(res, row_num, 3));
+    rc = layout_desc_decode(&layout->layout_desc, PQgetvalue(res, row_num, 3));
     pho_debug("Decoding JSON representation for extents: '%s'",
               PQgetvalue(res, row_num, 4));
 

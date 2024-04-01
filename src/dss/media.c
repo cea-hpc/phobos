@@ -466,15 +466,18 @@ static int media_update_query(PGconn *conn, void *void_med, int item_cnt,
     return 0;
 }
 
-static int media_select_query(GString *conditions, GString *request)
+static int media_select_query(GString **conditions, int n_conditions,
+                              GString *request)
 {
     g_string_append(request,
                     "SELECT family, model, id, adm_status, address_type,"
                     " fs_type, fs_status, fs_label, stats, tags, put, get, "
                     " delete FROM media");
 
-    if (conditions)
-        g_string_append(request, conditions->str);
+    if (n_conditions == 1)
+        g_string_append(request, conditions[0]->str);
+    else if (n_conditions >= 2)
+        return -ENOTSUP;
 
     g_string_append(request, ";");
 

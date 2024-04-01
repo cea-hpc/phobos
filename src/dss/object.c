@@ -112,14 +112,17 @@ static int object_update_query(PGconn *conn, void *void_object, int item_cnt,
     return 0;
 }
 
-static int object_select_query(GString *conditions, GString *request)
+static int object_select_query(GString **conditions, int n_conditions,
+                               GString *request)
 {
     g_string_append(request,
                     "SELECT oid, object_uuid, version, user_md, obj_status"
                     " FROM object");
 
-    if (conditions)
-        g_string_append(request, conditions->str);
+    if (n_conditions == 1)
+        g_string_append(request, conditions[0]->str);
+    else if (n_conditions >= 2)
+        return -ENOTSUP;
 
     g_string_append(request, ";");
 

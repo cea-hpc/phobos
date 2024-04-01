@@ -91,14 +91,17 @@ static int logs_insert_query(PGconn *conn, void *void_log, int item_cnt,
     return 0;
 }
 
-static int logs_select_query(GString *conditions, GString *request)
+static int logs_select_query(GString **conditions, int n_conditions,
+                             GString *request)
 {
     g_string_append(request,
                     "SELECT family, device, medium, errno, cause, message, time"
                     " FROM logs");
 
-    if (conditions)
-        g_string_append(request, conditions->str);
+    if (n_conditions == 1)
+        g_string_append(request, conditions[0]->str);
+    else if (n_conditions >= 2)
+        return -ENOTSUP;
 
     g_string_append(request, ";");
 

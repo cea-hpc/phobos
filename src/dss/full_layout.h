@@ -21,16 +21,14 @@
  */
 
 /**
- * \brief  Layout resource header of Phobos's Distributed State Service.
+ * \brief  Full layout resource header of Phobos's Distributed State Service.
  */
 
-#ifndef _PHO_DSS_LAYOUT_H
-#define _PHO_DSS_LAYOUT_H
+#ifndef _PHO_DSS_FULL_LAYOUT_H
+#define _PHO_DSS_FULL_LAYOUT_H
 
 #include "resources.h"
 
-extern const struct dss_resource_ops layout_ops;
-
-int layout_desc_decode(struct module_desc *desc, const char *json);
+extern const struct dss_resource_ops full_layout_ops;
 
 #endif

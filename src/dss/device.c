@@ -120,14 +120,17 @@ static int device_update_query(PGconn *conn, void *void_dev, int item_cnt,
     return 0;
 }
 
-static int device_select_query(GString *conditions, GString *request)
+static int device_select_query(GString **conditions, int n_conditions,
+                               GString *request)
 {
     g_string_append(request,
                     "SELECT family, model, id, adm_status, host, path"
                     " FROM device");
 
-    if (conditions)
-        g_string_append(request, conditions->str);
+    if (n_conditions == 1)
+        g_string_append(request, conditions[0]->str);
+    else if (n_conditions >= 2)
+        return -ENOTSUP;
 
     g_string_append(request, ";");
 

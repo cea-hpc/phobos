@@ -31,6 +31,7 @@
 #include "deprecated.h"
 #include "device.h"
 #include "extent.h"
+#include "full_layout.h"
 #include "layout.h"
 #include "logs.h"
 #include "media.h"
@@ -46,6 +47,8 @@ static const struct dss_resource_ops *get_resource_ops(enum dss_type type)
         return &device_ops;
     case DSS_EXTENT:
         return &extent_ops;
+    case DSS_FULL_LAYOUT:
+        return &full_layout_ops;
     case DSS_LAYOUT:
         return &layout_ops;
     case DSS_LOGS:
@@ -69,6 +72,8 @@ int get_insert_query(enum dss_type type, PGconn *conn, void *void_resource,
     if (resource_ops == NULL)
         return -ENOTSUP;
 
+    assert(resource_ops->insert_query != NULL);
+
     return resource_ops->insert_query(conn, void_resource, item_count, fields,
                                       request);
 }
@@ -87,14 +92,15 @@ int get_update_query(enum dss_type type, PGconn *conn, void *void_resource,
                                       request);
 }
 
-int get_select_query(enum dss_type type, GString *conditions, GString *request)
+int get_select_query(enum dss_type type, GString **conditions, int n_conditions,
+                     GString *request)
 {
     const struct dss_resource_ops *resource_ops = get_resource_ops(type);
 
     if (resource_ops == NULL)
         return -ENOTSUP;
 
-    return resource_ops->select_query(conditions, request);
+    return resource_ops->select_query(conditions, n_conditions, request);
 }
 
 int get_delete_query(enum dss_type type, void *void_resource, int item_count,

@@ -161,14 +161,17 @@ static int extent_update_query(PGconn *conn, void *void_extent, int item_cnt,
     return 0;
 }
 
-static int extent_select_query(GString *conditions, GString *request)
+static int extent_select_query(GString **conditions, int n_conditions,
+                               GString *request)
 {
     g_string_append(request,
                     "SELECT extent_uuid, size, offsetof, medium_family, state,"
                     "medium_id, address, hash, info FROM extent");
 
-    if (conditions)
-        g_string_append(request, conditions->str);
+    if (n_conditions == 1)
+        g_string_append(request, conditions[0]->str);
+    else if (n_conditions >= 2)
+        return -ENOTSUP;
 
     g_string_append(request, ";");
 

@@ -56,11 +56,6 @@
 #include "object.h"
 #include "resources.h"
 
-static int dss_full_layout_from_pg_row(struct dss_handle *handle,
-                                       void *void_layout, PGresult *res,
-                                       int row_num);
-static void dss_full_layout_result_free(void *void_layout);
-
 struct dss_result {
     PGresult *pg_res;
     enum dss_type item_type;
@@ -125,57 +120,6 @@ void dss_fini(struct dss_handle *handle)
     PQfinish(handle->dh_conn);
 }
 
-/**
- * helper arrays to build SQL query
- */
-static const char * const select_query[] = {
-    [DSS_FULL_LAYOUT] =
-                   "SELECT oid, object_uuid, version, lyt_info,"
-                   " json_agg(json_build_object("
-                   "  'extent_uuid', extent_uuid, 'sz', size,"
-                   "  'offsetof', offsetof, 'fam', medium_family,"
-                   "  'state', state, 'media', medium_id, 'addr', address,"
-                   "  'hash', hash, 'info', info, 'lyt_index', layout_index))"
-                   " FROM extent"
-                   " RIGHT JOIN ("
-                   "  SELECT oid, object_uuid, version, lyt_info, extent_uuid,"
-                   "         layout_index"
-                   "   FROM layout"
-                   "   LEFT JOIN ("
-                   "    SELECT oid, object_uuid, version, lyt_info FROM object"
-                   "    UNION SELECT oid, object_uuid, version, lyt_info"
-                   "     FROM deprecated_object"
-                   "   ) AS inner_table USING (object_uuid, version)",
-    /* The layout query ends with select_inner_end_query and
-     * select_outer_end_query.
-     */
-};
-
-static const char * const select_inner_end_query[] = {
-    [DSS_FULL_LAYOUT] = " ORDER BY layout_index)"
-                        " AS outer_table USING (extent_uuid)",
-};
-
-static const char * const select_outer_end_query[] = {
-    [DSS_FULL_LAYOUT] = " GROUP BY oid, object_uuid, version, lyt_info"
-                        " ORDER BY oid, version, object_uuid",
-};
-
-static const size_t res_size[] = {
-    [DSS_FULL_LAYOUT] = sizeof(struct layout_info),
-};
-
-typedef int (*res_pg_constructor_t)(struct dss_handle *handle, void *item,
-                                    PGresult *res, int row_num);
-static const res_pg_constructor_t res_pg_constructor[] = {
-    [DSS_FULL_LAYOUT] = dss_full_layout_from_pg_row,
-};
-
-typedef void (*res_destructor_t)(void *item);
-static const res_destructor_t res_destructor[] = {
-    [DSS_FULL_LAYOUT] = dss_full_layout_result_free,
-};
-
 enum dss_move_queries {
     DSS_MOVE_INVAL = -1,
     DSS_MOVE_OBJECT_TO_DEPREC = 0,
@@ -200,174 +144,6 @@ static const char * const move_query[] = {
                                   " SELECT * FROM risen_object",
 };
 
-/**
- * Extract layout type and parameters from json
- *
- */
-static int dss_layout_desc_decode(struct module_desc *desc, const char *json)
-{
-    json_error_t json_error;
-    json_t *attrs;
-    json_t *root;
-    int rc = 0;
-
-    ENTRY;
-
-    pho_debug("Decoding JSON representation for module desc: '%s'", json);
-
-    memset(desc, 0, sizeof(*desc));
-
-    root = json_loads(json, JSON_REJECT_DUPLICATES, &json_error);
-    if (!root)
-        LOG_RETURN(-EINVAL, "Failed to parse json data: %s", json_error.text);
-
-    if (!json_is_object(root))
-        LOG_GOTO(out_free, rc = -EINVAL, "Invalid module description");
-
-    /* Mandatory fields */
-    desc->mod_name  = json_dict2str(root, PHO_MOD_DESC_KEY_NAME);
-    if (!desc->mod_name)
-        LOG_GOTO(out_free, rc = -EINVAL, "Missing attribute %s",
-                 PHO_MOD_DESC_KEY_NAME);
-
-    desc->mod_major = json_dict2int(root, PHO_MOD_DESC_KEY_MAJOR);
-    if (desc->mod_major < 0)
-        LOG_GOTO(out_free, rc = -EINVAL, "Missing attribute %s",
-                 PHO_MOD_DESC_KEY_MAJOR);
-
-    desc->mod_minor = json_dict2int(root, PHO_MOD_DESC_KEY_MINOR);
-    if (desc->mod_minor < 0)
-        LOG_GOTO(out_free, rc = -EINVAL, "Missing attribute %s",
-                 PHO_MOD_DESC_KEY_MINOR);
-
-    /* Optional attributes */
-    attrs = json_object_get(root, PHO_MOD_DESC_KEY_ATTRS);
-    if (!attrs) {
-        rc = 0;
-        goto out_free;  /* no attributes, nothing else to do */
-    }
-
-    if (!json_is_object(attrs))
-        LOG_GOTO(out_free, rc = -EINVAL, "Invalid attributes format");
-
-    pho_json_raw_to_attrs(&desc->mod_attrs, attrs);
-
-out_free:
-    if (rc) {
-        free(desc->mod_name);
-        memset(desc, 0, sizeof(*desc));
-    }
-
-    json_decref(root);
-    return rc;
-}
-
-/**
- * Extract extents from json
- *
- * \param[out] extents extent list
- * \param[out] count  number of extents decoded
- * \param[in]  json   String with json media stats
- *
- * \return 0 on success, negative error code on failure.
- */
-static int dss_layout_extents_decode(struct extent **extents, int *count,
-                                     const char *json)
-{
-    json_t          *root;
-    json_t          *child;
-    json_error_t     json_error;
-    struct extent   *result = NULL;
-    size_t           extents_res_size;
-    int              rc;
-    int              i;
-    ENTRY;
-
-    pho_debug("Decoding JSON representation for extents: '%s'", json);
-
-    root = json_loads(json, JSON_REJECT_DUPLICATES, &json_error);
-    if (!root)
-        LOG_RETURN(-EINVAL, "Failed to parse json data: %s", json_error.text);
-
-    if (!json_is_array(root))
-        LOG_GOTO(out_decref, rc = -EINVAL, "Invalid extents description");
-
-    *count = json_array_size(root);
-    if (*count == 0) {
-        extents = NULL;
-        LOG_GOTO(out_decref, rc = -EINVAL,
-                 "json parser: extents array is empty");
-    }
-
-    extents_res_size = sizeof(struct extent) * (*count);
-    result = xcalloc(1, extents_res_size);
-
-    for (i = 0; i < *count; i++) {
-        const char *tmp;
-
-        child = json_array_get(root, i);
-
-        result[i].uuid = json_dict2str(child, "extent_uuid");
-        if (!result[i].uuid)
-            LOG_GOTO(out_decref, rc = -EINVAL,
-                     "Missing attribute 'extent_uuid'");
-
-        result[i].layout_idx = json_dict2ll(child, "lyt_index");
-        if (result[i].layout_idx < 0)
-            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'lyt_index'");
-
-        tmp = json_dict2tmp_str(child, "state");
-        if (!tmp)
-            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'state'");
-
-        result[i].state = str2extent_state(tmp);
-
-        result[i].size = json_dict2ll(child, "sz");
-        if (result[i].size < 0)
-            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'sz'");
-
-        result[i].address.buff = json_dict2str(child, "addr");
-        if (!result[i].address.buff)
-            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'addr'");
-
-        result[i].address.size = strlen(result[i].address.buff) + 1;
-
-        tmp = json_dict2tmp_str(child, "fam");
-        if (!tmp)
-            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'fam'");
-
-        result[i].media.family = str2rsc_family(tmp);
-
-        /* offsetof */
-        result[i].offset = json_dict2ll(child, "offsetof");
-        if (result[i].offset == INT64_MIN)
-            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'offsetof'");
-
-        /*XXX fs_type & address_type retrieved from media info */
-        if (result[i].media.family == PHO_RSC_INVAL)
-            LOG_GOTO(out_decref, rc = -EINVAL, "Invalid medium family");
-
-        tmp = json_dict2tmp_str(child, "media");
-        if (!tmp)
-            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'media'");
-
-        pho_id_name_set(&result[i].media, tmp);
-
-        rc = dss_extent_hash_decode(&result[i], json_object_get(child, "hash"));
-        if (rc)
-            LOG_GOTO(out_decref, rc = -EINVAL, "Failed to set hash");
-    }
-
-    *extents = result;
-    rc = 0;
-
-out_decref:
-    if (rc)
-        free(result);
-    json_decref(root);
-    return rc;
-}
-
 static inline bool is_type_supported(enum dss_type type)
 {
     switch (type) {
@@ -386,58 +162,6 @@ static inline bool is_type_supported(enum dss_type type)
     }
 }
 
-/**
- * Fill a layout_info and its extents from the information in the `row_num`th
- * row of `res`.
- */
-static int dss_full_layout_from_pg_row(struct dss_handle *handle,
-                                       void *void_layout, PGresult *res,
-                                       int row_num)
-{
-    struct layout_info *layout = void_layout;
-    int rc;
-
-    (void)handle;
-
-    layout->oid = PQgetvalue(res, row_num, 0);
-    layout->uuid = PQgetvalue(res, row_num, 1);
-    layout->version = atoi(PQgetvalue(res, row_num, 2));
-    rc = dss_layout_desc_decode(&layout->layout_desc,
-                                PQgetvalue(res, row_num, 3));
-    if (rc) {
-        pho_error(rc, "dss_layout_desc decode error");
-        return rc;
-    }
-
-    rc = dss_layout_extents_decode(&layout->extents,
-                                   &layout->ext_count,
-                                   PQgetvalue(res, row_num, 4));
-    if (rc) {
-        pho_error(rc, "dss_extent tags decode error");
-        return rc;
-    }
-
-    return 0;
-}
-
-/**
- * Free the resources associated with layout_info built from a PGresult.
- */
-static void dss_full_layout_result_free(void *void_layout)
-{
-    struct layout_info *layout = void_layout;
-
-    if (!layout)
-        return;
-
-    /* Undo dss_layout_desc_decode */
-    free(layout->layout_desc.mod_name);
-    pho_attrs_free(&layout->layout_desc.mod_attrs);
-
-    /* Undo dss_layout_extents_decode */
-    layout_info_free_extents(layout);
-}
-
 static void _dss_result_free(struct dss_result *dss_res, int item_cnt)
 {
     res_destructor_t dtor;
@@ -445,12 +169,7 @@ static void _dss_result_free(struct dss_result *dss_res, int item_cnt)
     int i;
 
     item_size = get_resource_size(dss_res->item_type);
-    if (item_size == -ENOTSUP)
-        item_size = res_size[dss_res->item_type];
-
     dtor = get_free_function(dss_res->item_type);
-    if (dtor == NULL)
-        dtor = res_destructor[dss_res->item_type];
 
     for (i = 0; i < item_cnt; i++)
         dtor(dss_res->items.raw + i * item_size);
@@ -466,9 +185,10 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
 {
     PGconn *conn = handle->dh_conn;
     struct dss_result *dss_res;
-    GString *conditions = NULL;
     GString *clause = NULL;
+    GString **conditions;
     size_t dss_res_size;
+    int n_conditions;
     size_t item_size;
     PGresult *res;
     int rc = 0;
@@ -486,35 +206,39 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     if (!is_type_supported(type))
         LOG_RETURN(-ENOTSUP, "Unsupported DSS request type %#x", type);
 
-    conditions = g_string_new(NULL);
-    rc = clause_filter_convert(handle, conditions, filters[0]);
+    conditions = xmalloc(sizeof(*conditions) * 2);
+    conditions[0] = g_string_new(NULL);
+    rc = clause_filter_convert(handle, conditions[0], filters[0]);
     if (rc) {
-        g_string_free(conditions, true);
-        return rc;
-    }
-
-    clause = g_string_new(NULL);
-    rc = get_select_query(type, conditions, clause);
-    if (rc == -ENOTSUP) {
-        g_string_append(clause, select_query[type]);
-        g_string_append(clause, conditions->str);
-        rc = 0;
-    }
-
-    g_string_free(conditions, true);
-    if (rc) {
-        g_string_free(clause, true);
+        g_string_free(conditions[0], true);
         return rc;
     }
 
     if (type == DSS_FULL_LAYOUT) {
-        g_string_append(clause, select_inner_end_query[DSS_FULL_LAYOUT]);
-        rc = clause_filter_convert(handle, clause, filters[1]);
+        conditions[1] = g_string_new(NULL);
+        rc = clause_filter_convert(handle, conditions[1], filters[1]);
         if (rc) {
-            g_string_free(clause, true);
+            g_string_free(conditions[0], true);
+            g_string_free(conditions[1], true);
             return rc;
         }
-        g_string_append(clause, select_outer_end_query[type]);
+
+        n_conditions = 2;
+    } else {
+        n_conditions = 1;
+    }
+
+    clause = g_string_new(NULL);
+    rc = get_select_query(type, conditions, n_conditions, clause);
+    g_string_free(conditions[0], true);
+
+    if (type == DSS_FULL_LAYOUT)
+        g_string_free(conditions[1], true);
+
+    free(conditions);
+    if (rc) {
+        g_string_free(clause, true);
+        return rc;
     }
 
     pho_debug("Executing request: '%s'", clause->str);
@@ -532,8 +256,6 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     g_string_free(clause, true);
 
     item_size = get_resource_size(type);
-    if (item_size == -ENOTSUP)
-        item_size = res_size[type];
 
     dss_res_size = sizeof(struct dss_result) + PQntuples(res) * item_size;
     dss_res = xcalloc(1, dss_res_size);
@@ -545,9 +267,6 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
         void *item_ptr = (char *)&dss_res->items.raw + i * item_size;
 
         rc = create_resource(type, handle, item_ptr, res, i);
-        if (rc == -ENOTSUP)
-            rc = res_pg_constructor[type](handle, item_ptr, res, i);
-
         if (rc)
             goto out;
     }
@@ -570,10 +289,10 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
                            void *item_list, int item_cnt,
                            enum dss_set_action action, uint64_t fields)
 {
-    PGconn      *conn = handle->dh_conn;
-    GString     *request;
-    int          error = 0;
-    int          rc = 0;
+    PGconn *conn = handle->dh_conn;
+    GString *request;
+    int rc = 0;
+
     ENTRY;
 
     if (conn == NULL ||
@@ -609,32 +328,13 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         rc = get_delete_query(type, item_list, item_cnt, request);
         break;
     default:
-        rc = -ENOTSUP;
-    }
-
-    // XXX: This will be removed when every resource type has its own file
-    if (rc != -ENOTSUP) {
-        if (rc)
-            LOG_GOTO(out_cleanup, rc, "SQL request failed");
-
-        goto exec_request;
-    } else {
-        rc = 0;
-    }
-
-    switch (type) {
-    // XXX: will be removed in the cleanup patch
-    default:
         LOG_GOTO(out_cleanup, rc = -ENOTSUP,
-                 "unsupported DSS request type %#x", type);
-
+                 "unsupported DSS request action %#x", action);
     }
 
-    if (error)
-        LOG_GOTO(out_cleanup, rc = -EINVAL,
-                 "JSON parsing failed: %d errors found", error);
+    if (rc)
+        LOG_GOTO(out_cleanup, rc, "SQL request failed");
 
-exec_request:
     rc = execute_and_commit_or_rollback(conn, request, NULL, PGRES_COMMAND_OK);
 
 out_cleanup:
