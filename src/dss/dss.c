@@ -26,7 +26,6 @@
 #include "config.h"
 #endif
 
-#include "dss_logs.h"
 #include "dss_utils.h"
 #include "pho_common.h"
 #include "pho_type_utils.h"
@@ -52,6 +51,7 @@
 #include "dss_config.h"
 #include "extent.h"
 #include "filters.h"
+#include "logs.h"
 #include "media.h"
 #include "object.h"
 #include "resources.h"
@@ -162,7 +162,6 @@ static const char * const select_query[] = {
     /* The layout query ends with select_inner_end_query and
      * select_outer_end_query.
      */
-    [DSS_LOGS]   = DSS_LOGS_SELECT_QUERY,
 };
 
 static const char * const select_inner_end_query[] = {
@@ -179,7 +178,6 @@ static const char * const select_outer_end_query[] = {
 static const size_t res_size[] = {
     [DSS_LAYOUT]      = sizeof(struct layout_info),
     [DSS_FULL_LAYOUT] = sizeof(struct layout_info),
-    [DSS_LOGS]        = sizeof(struct pho_log),
 };
 
 typedef int (*res_pg_constructor_t)(struct dss_handle *handle, void *item,
@@ -187,14 +185,12 @@ typedef int (*res_pg_constructor_t)(struct dss_handle *handle, void *item,
 static const res_pg_constructor_t res_pg_constructor[] = {
     [DSS_LAYOUT]      = dss_layout_from_pg_row,
     [DSS_FULL_LAYOUT] = dss_full_layout_from_pg_row,
-    [DSS_LOGS]        = dss_logs_from_pg_row,
 };
 
 typedef void (*res_destructor_t)(void *item);
 static const res_destructor_t res_destructor[] = {
     [DSS_LAYOUT]      = dss_full_layout_result_free,
     [DSS_FULL_LAYOUT] = dss_full_layout_result_free,
-    [DSS_LOGS]        = dss_logs_result_free,
 };
 
 static const char * const insert_query[] = {
@@ -759,7 +755,8 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
     int          rc = 0;
     ENTRY;
 
-    if (conn == NULL || item_list == NULL || item_cnt == 0)
+    if (conn == NULL ||
+        (type != DSS_LOGS && (item_list == NULL || item_cnt == 0)))
         LOG_RETURN(-EINVAL, "conn: %p, item_list: %p, item_cnt: %d",
                    conn, item_list, item_cnt);
 
@@ -1478,14 +1475,21 @@ clean:
     return rc;
 }
 
+int dss_logs_insert(struct dss_handle *hdl, struct pho_log *logs, int log_cnt)
+{
+    return dss_generic_set(hdl, DSS_LOGS, (void *) logs, log_cnt,
+                           DSS_SET_INSERT, 0);
+}
+
 int dss_logs_delete(struct dss_handle *handle, const struct dss_filter *filter)
 {
-    PGconn *conn = handle->dh_conn;
-    GString *clause;
-    PGresult *res;
+    GString *clause = NULL;
     int rc;
 
-    clause = g_string_new(log_query[DSS_DELETE_LOGS]);
+    if (filter == NULL)
+        return dss_generic_set(handle, DSS_LOGS, NULL, 0, DSS_SET_DELETE, 0);
+
+    clause = g_string_new(NULL);
 
     rc = clause_filter_convert(handle, clause, filter);
     if (rc) {
@@ -1493,11 +1497,8 @@ int dss_logs_delete(struct dss_handle *handle, const struct dss_filter *filter)
         return rc;
     }
 
-    pho_debug("Executing request: '%s'", clause->str);
-
-    rc = execute(conn, clause->str, &res, PGRES_COMMAND_OK);
-    PQclear(res);
-
+    rc = dss_generic_set(handle, DSS_LOGS, (void *) clause, 0, DSS_SET_DELETE,
+                         0);
     g_string_free(clause, true);
 
     return rc;

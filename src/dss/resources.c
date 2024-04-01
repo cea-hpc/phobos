@@ -31,6 +31,7 @@
 #include "deprecated.h"
 #include "device.h"
 #include "extent.h"
+#include "logs.h"
 #include "media.h"
 #include "object.h"
 #include "resources.h"
@@ -44,6 +45,8 @@ static const struct dss_resource_ops *get_resource_ops(enum dss_type type)
         return &device_ops;
     case DSS_EXTENT:
         return &extent_ops;
+    case DSS_LOGS:
+        return &logs_ops;
     case DSS_MEDIA:
         return &media_ops;
     case DSS_OBJECT:

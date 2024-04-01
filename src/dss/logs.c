@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2023 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -19,9 +19,11 @@
  *  You should have received a copy of the GNU Lesser General Public License
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
+
 /**
- * \brief  Phobos Distributed State Service API for logging.
+ * \brief  Object resource file of Phobos's Distributed State Service.
  */
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -34,136 +36,98 @@
 
 #include <libpq-fe.h>
 
-#include "dss_logs.h"
 #include "dss_utils.h"
 #include "pho_common.h"
 #include "pho_dss.h"
 #include "pho_type_utils.h"
 
-static ssize_t count_health(struct pho_log *logs, size_t count,
-                            size_t max_health)
+#include "logs.h"
+
+static int logs_insert_query(PGconn *conn, void *void_log, int item_cnt,
+                             int64_t fields, GString *request)
 {
-    ssize_t health = max_health;
-    size_t i = 0;
-
-    if (count == 0)
-        /* no logs yet, new medium */
-        return max_health;
-
-    /* skip successes before first error, they should not count in the health */
-    while (i < count && !logs[i].error_number)
-        i++;
-
-    if (i == count)
-        /* no errors */
-        return max_health;
-
-    for (; i < count; i++) {
-        if (logs[i].error_number)
-            health--;
-        else
-            health++;
-
-        health = clamp(health, 0, max_health);
-    }
-
-    return health;
-}
-
-static int dss_resource_health(struct dss_handle *dss,
-                               const struct pho_id *medium_id,
-                               enum dss_type resource, size_t max_health,
-                               size_t *health)
-{
-    struct pho_log_filter log_filter = {0};
-    struct dss_filter *pfilter;
-    struct dss_filter filter;
-    struct pho_log *logs;
-    int count;
+    unsigned int escape_len;
+    char *escape_string;
+    char *message;
     int rc;
 
-    pfilter = &filter;
-    switch (resource) {
-    case DSS_MEDIA:
-        log_filter.device.family = PHO_RSC_NONE;
-        pho_id_copy(&log_filter.medium, medium_id);
-        break;
-    case DSS_DEVICE:
-        log_filter.medium.family = PHO_RSC_NONE;
-        pho_id_copy(&log_filter.device, medium_id);
-        break;
-    default:
-        LOG_RETURN(-EINVAL, "Ressource type %s does not have a health counter",
-                   dss_type2str(resource));
+    (void) fields;
+
+    g_string_append_printf(
+        request,
+        "INSERT INTO logs (family, device, medium, errno, cause, message)"
+        " VALUES "
+    );
+
+    for (int i = 0; i < item_cnt; ++i) {
+        struct pho_log *log = ((struct pho_log *) void_log) + i;
+
+        message = json_dumps(log->message, 0);
+        if (!message)
+            LOG_RETURN(rc = -ENOMEM, "Failed to dump log message as json");
+
+        escape_len = strlen(message) * 2 + 1;
+        escape_string = xmalloc(escape_len);
+
+        PQescapeStringConn(conn, escape_string, message, escape_len, NULL);
+
+        g_string_append_printf(
+            request,
+            "('%s', '%s', '%s', %d, '%s', '%s')",
+            rsc_family2str(log->device.family), log->device.name,
+            log->medium.name, log->error_number,
+            operation_type2str(log->cause), escape_string
+        );
+
+        free(message);
+        free(escape_string);
+
+        if (i < item_cnt - 1)
+            g_string_append(request, ", ");
     }
 
-    log_filter.cause = PHO_OPERATION_INVALID;
-
-    rc = create_logs_filter(&log_filter, &pfilter);
-    if (rc)
-        return rc;
-
-    rc = dss_logs_get(dss, &filter, &logs, &count);
-    dss_filter_free(&filter);
-    if (rc)
-        return rc;
-
-    *health = count_health(logs, count, max_health);
-    dss_res_free(logs, count);
+    g_string_append(request, ";");
 
     return 0;
 }
 
-int dss_medium_health(struct dss_handle *dss, const struct pho_id *medium_id,
-                      size_t max_health, size_t *health)
+static int logs_select_query(GString *conditions, GString *request)
 {
-    return dss_resource_health(dss, medium_id, DSS_MEDIA, max_health, health);
+    g_string_append(request,
+                    "SELECT family, device, medium, errno, cause, message, time"
+                    " FROM logs");
+
+    if (conditions)
+        g_string_append(request, conditions->str);
+
+    g_string_append(request, ";");
+
+    return 0;
 }
 
-int dss_device_health(struct dss_handle *dss, const struct pho_id *device_id,
-                      size_t max_health, size_t *health)
+static int logs_delete_query(void *void_log_filter, int item_cnt,
+                             GString *request)
 {
-    return dss_resource_health(dss, device_id, DSS_DEVICE, max_health, health);
+    /* The delete can be conditionned on multiple fields which are only known
+     * at run-time, so instead of a taking a specific filter to delete here, we
+     * take a GString representing the conditions to use.
+     */
+    GString *conditions = void_log_filter;
+
+    (void) item_cnt;
+
+    g_string_append(request, "DELETE FROM logs");
+
+    if (conditions != NULL)
+        g_string_append(request, conditions->str);
+
+    g_string_append(request, ";");
+
+    return 0;
 }
 
-int dss_emit_log(struct dss_handle *handle, struct pho_log *log)
-{
-    GString *request = g_string_new("");
-    PGconn *conn = handle->dh_conn;
-    unsigned int escape_len;
-    char *escape_string;
-    char *message;
-    PGresult *res;
-    int rc;
-
-    message = json_dumps(log->message, 0);
-    if (!message)
-        LOG_GOTO(free_request, rc = -ENOMEM,
-                 "Failed to dump log message as json");
-
-    escape_len = strlen(message) * 2 + 1;
-    escape_string = xmalloc(escape_len);
-
-    PQescapeStringConn(conn, escape_string, message, escape_len, NULL);
-
-    g_string_printf(request, log_query[DSS_EMIT_LOG],
-                    rsc_family2str(log->device.family), log->device.name,
-                    log->medium.name, log->error_number,
-                    operation_type2str(log->cause), escape_string);
-    free(message);
-    free(escape_string);
-
-    rc = execute(conn, request->str, &res, PGRES_COMMAND_OK);
-    PQclear(res);
-
-free_request:
-    g_string_free(request, true);
-
-    return rc;
-}
-
-int dss_logs_from_pg_row(struct dss_handle *handle, void *item,
-                         PGresult *res, int row_num)
+static int logs_from_pg_row(struct dss_handle *handle, void *item,
+                            PGresult *res, int row_num)
 {
     struct pho_log *log = item;
     int rc = 0;
@@ -183,12 +147,22 @@ int dss_logs_from_pg_row(struct dss_handle *handle, void *item,
     return str2timeval(get_str_value(res, row_num, 6), &log->time);
 }
 
-void dss_logs_result_free(void *item)
+static void logs_result_free(void *item)
 {
     struct pho_log *log = item;
 
     destroy_log_message(log);
 }
+
+const struct dss_resource_ops logs_ops = {
+    .insert_query = logs_insert_query,
+    .update_query = NULL,
+    .select_query = logs_select_query,
+    .delete_query = logs_delete_query,
+    .create       = logs_from_pg_row,
+    .free         = logs_result_free,
+    .size         = sizeof(struct pho_log),
+};
 
 int create_logs_filter(struct pho_log_filter *log_filter,
                        struct dss_filter **dss_log_filter)
@@ -346,7 +320,14 @@ void emit_log_after_action(struct dss_handle *dss,
     }
 
     if (should_log(log, action)) {
-        int rc2 = dss_emit_log(dss, log);
+        GString *request;
+        int rc2;
+
+        request = g_string_new("BEGIN;");
+
+        logs_insert_query(dss->dh_conn, log, 1, 0, request);
+        rc2 = execute_and_commit_or_rollback(dss->dh_conn, request, NULL,
+                                             PGRES_COMMAND_OK);
 
         if (rc2) {
             const char *log_str = pho_log2str(log);
@@ -359,4 +340,78 @@ void emit_log_after_action(struct dss_handle *dss,
 
     if (log->message)
         json_decref(log->message);
+}
+
+static ssize_t count_health(struct pho_log *logs, size_t count,
+                            size_t max_health)
+{
+    ssize_t health = max_health;
+    size_t i = 0;
+
+    if (count == 0)
+        /* no logs yet, new medium */
+        return max_health;
+
+    /* skip successes before first error, they should not count in the health */
+    while (i < count && !logs[i].error_number)
+        i++;
+
+    if (i == count)
+        /* no errors */
+        return max_health;
+
+    for (; i < count; i++) {
+        if (logs[i].error_number)
+            health--;
+        else
+            health++;
+
+        health = clamp(health, 0, max_health);
+    }
+
+    return health;
+}
+
+int dss_resource_health(struct dss_handle *dss,
+                        const struct pho_id *medium_id,
+                        enum dss_type resource, size_t max_health,
+                        size_t *health)
+{
+    struct pho_log_filter log_filter = {0};
+    struct dss_filter *pfilter;
+    struct dss_filter filter;
+    struct pho_log *logs;
+    int count;
+    int rc;
+
+    pfilter = &filter;
+    switch (resource) {
+    case DSS_MEDIA:
+        log_filter.device.family = PHO_RSC_NONE;
+        pho_id_copy(&log_filter.medium, medium_id);
+        break;
+    case DSS_DEVICE:
+        log_filter.medium.family = PHO_RSC_NONE;
+        pho_id_copy(&log_filter.device, medium_id);
+        break;
+    default:
+        LOG_RETURN(-EINVAL, "Ressource type %s does not have a health counter",
+                   dss_type2str(resource));
+    }
+
+    log_filter.cause = PHO_OPERATION_INVALID;
+
+    rc = create_logs_filter(&log_filter, &pfilter);
+    if (rc)
+        return rc;
+
+    rc = dss_logs_get(dss, &filter, &logs, &count);
+    dss_filter_free(&filter);
+    if (rc)
+        return rc;
+
+    *health = count_health(logs, count, max_health);
+    dss_res_free(logs, count);
+
+    return 0;
 }

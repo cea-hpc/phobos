@@ -40,6 +40,7 @@
 
 #include "device.h"
 #include "dss_utils.h"
+#include "logs.h"
 
 static int device_insert_query(PGconn *conn, void *void_dev, int item_cnt,
                                int64_t fields, GString *request)
@@ -213,4 +214,10 @@ int dss_get_usable_devices(struct dss_handle *hdl, const enum rsc_family family,
     rc = dss_device_get(hdl, &filter, dev_ls, dev_cnt);
     dss_filter_free(&filter);
     return rc;
+}
+
+int dss_device_health(struct dss_handle *dss, const struct pho_id *device_id,
+                      size_t max_health, size_t *health)
+{
+    return dss_resource_health(dss, device_id, DSS_DEVICE, max_health, health);
 }

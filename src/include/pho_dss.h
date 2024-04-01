@@ -406,6 +406,18 @@ int dss_deprecated_object_get(struct dss_handle *hdl,
                               struct object_info **obj_ls, int *obj_cnt);
 
 /**
+ * Insert logs into the DSS
+ *
+ * @param[in]   hdl       valid connection handle
+ * @param[out]  logs      list of logs to insert
+ * @param[out]  logs_cnt  number of logs to insert
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_logs_insert(struct dss_handle *hdl, struct pho_log *logss,
+                    int logs_cnt);
+
+/**
  * Retrieve logs information from DSS
  *
  * @param[in]   hdl      valid connection handle
@@ -536,6 +548,9 @@ int dss_object_update(struct dss_handle *hdl, struct object_info *obj_ls,
 int dss_deprecated_object_set(struct dss_handle *hdl,
                               struct object_info *obj_ls,
                               int obj_cnt, enum dss_set_action action);
+
+int dss_logs_set(struct dss_handle *hdl, struct pho_log *logs,
+                 int logs_cnt, enum dss_set_action action);
 
 /**
  * Find the corresponding object

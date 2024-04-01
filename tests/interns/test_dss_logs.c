@@ -69,7 +69,7 @@ static void generate_log(struct dss_handle *handle, int index_dev,
                  types[index_type]);
     log.message = json_object();
 
-    rc = dss_emit_log(handle, &log);
+    rc = dss_logs_insert(handle, &log, 1);
     assert_return_code(rc, -rc);
     json_decref(log.message);
 }
@@ -119,7 +119,7 @@ static void dss_emit_logs_ok(void **state)
     log.message = json_object();
     assert_non_null(log.message);
 
-    rc = dss_emit_log(handle, &log);
+    rc = dss_logs_insert(handle, &log, 1);
     assert_return_code(rc, -rc);
 
     rc = dss_logs_get(handle, NULL, &logs, &n_logs);
@@ -151,7 +151,7 @@ static void dss_emit_logs_with_message_ok(void **state)
                              0, NULL);
     assert_non_null(log.message);
 
-    rc = dss_emit_log(handle, &log);
+    rc = dss_logs_insert(handle, &log, 1);
     assert_return_code(rc, -rc);
 
     rc = dss_logs_get(handle, NULL, &logs, &n_logs);
@@ -355,7 +355,7 @@ static void emit(struct dss_handle *dss, int error)
     log.message = json_object();
     assert_non_null(log.message);
 
-    rc = dss_emit_log(dss, &log);
+    rc = dss_logs_insert(dss, &log, 1);
     assert_return_code(rc, -rc);
     json_decref(log.message);
 }
