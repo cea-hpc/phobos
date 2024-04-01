@@ -204,10 +204,8 @@ psql phobos_test phobos -c "update object set \
     where oid = '01230123ABCCOPY'"
 test_check_get "full_layout" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
 test_check_get "full_layout" '{"$NOT": {"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}}'
-test_check_set "layout" "update"
 test_check_get "full_layout" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
 test_check_set "layout" "delete" "oidtest" "FAIL"
-test_check_set "layout" "delete"
 test_check_get "full_layout" '{"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}'
 test_check_get "full_layout" '{"$NOT": {"$LIKE": {"DSS::OBJ::oid": "%COPY%"}}}'
 test_check_set "object" "delete"

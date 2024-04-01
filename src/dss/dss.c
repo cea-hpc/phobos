@@ -56,11 +56,6 @@
 #include "object.h"
 #include "resources.h"
 
-/* Necessary local function declaration
- * (first two declarations are swapped because of a checkpatch bug)
- */
-static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
-                                  PGresult *res, int row_num);
 static int dss_full_layout_from_pg_row(struct dss_handle *handle,
                                        void *void_layout, PGresult *res,
                                        int row_num);
@@ -134,14 +129,6 @@ void dss_fini(struct dss_handle *handle)
  * helper arrays to build SQL query
  */
 static const char * const select_query[] = {
-    [DSS_LAYOUT] = "SELECT oid, object_uuid, version, lyt_info,"
-                   " json_agg(extent_uuid ORDER BY layout_index)"
-                   " FROM layout"
-                   " LEFT JOIN ("
-                   "  SELECT oid, object_uuid, version, lyt_info FROM object"
-                   "  UNION SELECT oid, object_uuid, version, lyt_info"
-                   "   FROM deprecated_object"
-                   " ) AS tmp USING (object_uuid, version)",
     [DSS_FULL_LAYOUT] =
                    "SELECT oid, object_uuid, version, lyt_info,"
                    " json_agg(json_build_object("
@@ -170,42 +157,23 @@ static const char * const select_inner_end_query[] = {
 };
 
 static const char * const select_outer_end_query[] = {
-    [DSS_LAYOUT] =      " GROUP BY oid, object_uuid, version, lyt_info",
     [DSS_FULL_LAYOUT] = " GROUP BY oid, object_uuid, version, lyt_info"
                         " ORDER BY oid, version, object_uuid",
 };
 
 static const size_t res_size[] = {
-    [DSS_LAYOUT]      = sizeof(struct layout_info),
     [DSS_FULL_LAYOUT] = sizeof(struct layout_info),
 };
 
 typedef int (*res_pg_constructor_t)(struct dss_handle *handle, void *item,
                                     PGresult *res, int row_num);
 static const res_pg_constructor_t res_pg_constructor[] = {
-    [DSS_LAYOUT]      = dss_layout_from_pg_row,
     [DSS_FULL_LAYOUT] = dss_full_layout_from_pg_row,
 };
 
 typedef void (*res_destructor_t)(void *item);
 static const res_destructor_t res_destructor[] = {
-    [DSS_LAYOUT]      = dss_full_layout_result_free,
     [DSS_FULL_LAYOUT] = dss_full_layout_result_free,
-};
-
-static const char * const insert_query[] = {
-    [DSS_LAYOUT] = "INSERT INTO layout (object_uuid, version, extent_uuid,"
-                   " layout_index) VALUES ",
-};
-
-static const char * const update_layout_info_query =
-    "UPDATE object SET lyt_info = '%s' WHERE oid = '%s';";
-
-static const char * const insert_query_values[] = {
-    [DSS_LAYOUT] = "((select object_uuid from object where oid = '%s'),"
-                   " (select version from object where oid = '%s'),"
-                   " (select extent_uuid from extent where address = '%s'),"
-                   " %d)%s",
 };
 
 enum dss_move_queries {
@@ -292,59 +260,6 @@ out_free:
 
     json_decref(root);
     return rc;
-}
-
-static char *dss_layout_desc_encode(struct module_desc *desc)
-{
-    char    *result = NULL;
-    json_t  *attrs  = NULL;
-    json_t  *root;
-    int      rc;
-    ENTRY;
-
-    root = json_object();
-    if (!root) {
-        pho_error(-ENOMEM, "Failed to create json object");
-        return NULL;
-    }
-
-    rc = json_object_set_new(root, PHO_MOD_DESC_KEY_NAME,
-                             json_string(desc->mod_name));
-    if (rc)
-        LOG_GOTO(out_free, rc = -EINVAL, "Cannot set layout name");
-
-    rc = json_object_set_new(root, PHO_MOD_DESC_KEY_MAJOR,
-                             json_integer(desc->mod_major));
-    if (rc)
-        LOG_GOTO(out_free, rc = -EINVAL, "Cannot set layout major number");
-
-    rc = json_object_set_new(root, PHO_MOD_DESC_KEY_MINOR,
-                             json_integer(desc->mod_minor));
-    if (rc)
-        LOG_GOTO(out_free, rc = -EINVAL, "Cannot set layout minor number");
-
-    if (!pho_attrs_is_empty(&desc->mod_attrs)) {
-        attrs = json_object();
-        if (!attrs)
-            LOG_GOTO(out_free, rc = -ENOMEM, "Cannot set layout attributes");
-
-        rc = pho_attrs_to_json_raw(&desc->mod_attrs, attrs);
-        if (rc)
-            LOG_GOTO(out_free, rc, "Cannot convert layout attributes");
-
-        rc = json_object_set_new(root, PHO_MOD_DESC_KEY_ATTRS, attrs);
-        if (rc)
-            LOG_GOTO(out_free, rc = -EINVAL, "Cannot set layout attributes");
-    }
-
-    result = json_dumps(root, 0);
-
-    pho_debug("Created json representation for layout type: '%s'",
-              result ? result : "(null)");
-
-out_free:
-    json_decref(root); /* if attrs, it is included in root */
-    return result;
 }
 
 /**
@@ -453,48 +368,6 @@ out_decref:
     return rc;
 }
 
-static int get_layout_setrequest(PGconn *_conn, struct layout_info *item_list,
-                                 int item_cnt, enum dss_set_action action,
-                                 GString *request, int *error)
-{
-    int rc = 0;
-    int i;
-    ENTRY;
-
-    for (i = 0; i < item_cnt && rc == 0; i++) {
-        struct layout_info  *p_layout = &item_list[i];
-
-        if (p_layout->oid == NULL)
-            LOG_RETURN(-EINVAL, "Extent oid cannot be NULL");
-
-        if (action == DSS_SET_INSERT) {
-            char *pres;
-            int j;
-
-            for (j = 0; j < p_layout->ext_count; ++j) {
-                struct extent *ext = &p_layout->extents[j];
-
-                g_string_append_printf(request, insert_query_values[DSS_LAYOUT],
-                                       p_layout->oid, p_layout->oid,
-                                       ext->address.buff, ext->layout_idx,
-                                       (i < item_cnt - 1 ||
-                                        j < p_layout->ext_count - 1) ?
-                                       "," : ";");
-            }
-
-            pres = dss_layout_desc_encode(&p_layout->layout_desc);
-            if (!pres)
-                LOG_RETURN(-EINVAL, "JSON layout desc encoding error");
-
-            g_string_append_printf(request, update_layout_info_query, pres,
-                                   p_layout->oid);
-            free(pres);
-        }
-    }
-
-    return rc;
-}
-
 static inline bool is_type_supported(enum dss_type type)
 {
     switch (type) {
@@ -511,56 +384,6 @@ static inline bool is_type_supported(enum dss_type type)
     default:
         return false;
     }
-}
-
-/**
- * Fill a layout_info from the information in the `row_num`th row of `res`.
- */
-static int dss_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
-                                  PGresult *res, int row_num)
-{
-    struct layout_info *layout = void_layout;
-    struct extent *extents = NULL;
-    json_error_t json_error;
-    size_t count = 0;
-    json_t *root;
-    int rc;
-    int i;
-
-    (void) handle;
-
-    layout->oid = PQgetvalue(res, row_num, 0);
-    layout->uuid = PQgetvalue(res, row_num, 1);
-    layout->version = atoi(PQgetvalue(res, row_num, 2));
-    rc = dss_layout_desc_decode(&layout->layout_desc,
-                                PQgetvalue(res, row_num, 3));
-    pho_debug("Decoding JSON representation for extents: '%s'",
-              PQgetvalue(res, row_num, 4));
-
-    root = json_loads(PQgetvalue(res, row_num, 4), JSON_REJECT_DUPLICATES,
-                      &json_error);
-    if (!root)
-        LOG_RETURN(-EINVAL, "Failed to parse json data: %s", json_error.text);
-
-    if (!json_is_array(root))
-        LOG_GOTO(out, rc = -EINVAL, "Invalid extents description");
-
-    count = json_array_size(root);
-    if (count == 0)
-        LOG_GOTO(out, rc = -EINVAL,
-                 "json parser: extents array is empty");
-
-    extents = xcalloc(count, sizeof(*extents));
-    for (i = 0; i < count; i++) {
-        extents[i].layout_idx = i;
-        extents[i].uuid = xstrdup(json_string_value(json_array_get(root, i)));
-    }
-
-out:
-    layout->ext_count = count;
-    layout->extents = extents;
-
-    return rc;
 }
 
 /**
@@ -684,14 +507,12 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
         return rc;
     }
 
-    if (type == DSS_FULL_LAYOUT || type == DSS_LAYOUT) {
-        if (type == DSS_FULL_LAYOUT) {
-            g_string_append(clause, select_inner_end_query[DSS_FULL_LAYOUT]);
-            rc = clause_filter_convert(handle, clause, filters[1]);
-            if (rc) {
-                g_string_free(clause, true);
-                return rc;
-            }
+    if (type == DSS_FULL_LAYOUT) {
+        g_string_append(clause, select_inner_end_query[DSS_FULL_LAYOUT]);
+        rc = clause_filter_convert(handle, clause, filters[1]);
+        if (rc) {
+            g_string_free(clause, true);
+            return rc;
         }
         g_string_append(clause, select_outer_end_query[type]);
     }
@@ -801,17 +622,8 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         rc = 0;
     }
 
-    if (action == DSS_SET_INSERT)
-        g_string_append(request, insert_query[type]);
-
     switch (type) {
-    case DSS_LAYOUT:
-        rc = get_layout_setrequest(conn, item_list, item_cnt, action, request,
-                                   &error);
-        if (rc)
-            LOG_GOTO(out_cleanup, rc, "SQL layout request failed");
-        break;
-
+    // XXX: will be removed in the cleanup patch
     default:
         LOG_GOTO(out_cleanup, rc = -ENOTSUP,
                  "unsupported DSS request type %#x", type);
