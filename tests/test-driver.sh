@@ -138,8 +138,8 @@ function do_setup
     echo -n "    $test_setup: "
     set -x
     $test_setup >> $log_file 2>&1
-    echo "" >> $log_file
     rc=$?
+    echo "" >> $log_file
     set +x
 
     print_status $rc
@@ -157,8 +157,8 @@ function do_test
     echo -n "$2    $test_func: "
     before=$(date +%s.%N)
     (set -xe; $test_func >>$log_file 2>&1)
-    echo "" >> $log_file
     rc=$?
+    echo "" >> $log_file
     after=$(date +%s.%N)
     taken=$(echo "($(echo "$after - $before" | bc))")
 
@@ -176,8 +176,8 @@ function do_cleanup
     echo -n "    $test_cleanup: "
     set -x
     $test_cleanup >> $log_file 2>&1
-    echo "" >> "$log_file"
     rc=$?
+    echo "" >> "$log_file"
     set +x
 
     print_status $rc
