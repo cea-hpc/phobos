@@ -2032,14 +2032,23 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
     rc = layout_repl_count(&lyt, &repl_cnt);
     if (rc)
         LOG_RETURN(rc,
-                   "Failed to get replica count for reconstruction of object"
-                   " '%s'", obj->oid);
+                   "Failed to get replica count for reconstruction of object '%s'",
+                   obj->oid);
 
     ext_cnt = lyt.ext_count;
     extents = lyt.extents;
 
     buffer = pho_attr_get(&lyt.layout_desc.mod_attrs, PHO_EA_OBJECT_SIZE_NAME);
-    obj_size = strtol(buffer, NULL, 10);
+    if (buffer == NULL)
+        LOG_RETURN(-EINVAL,
+                   "Failed to get object size for reconstruction of object '%s'",
+                   obj->oid);
+
+    obj_size = str2int64(buffer);
+    if (obj_size < 0)
+        LOG_RETURN(-EINVAL,
+                   "Invalid object size for reconstruction of object '%s': '%d'",
+                   obj->oid, obj_size);
 
     for (i = 0; i < ext_cnt; i++) {
         if (replica_size == extents[i].offset)

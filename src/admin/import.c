@@ -51,8 +51,16 @@
 
 /**
  * Update media_info stats and push its new state to the DSS
- * This function was copied from lrs_device.c, but it should be put in a
- * separated file common to both dss and ldm
+ *
+ * \param[in] dss           DSS's handle
+ * \param[in] media_info    Medium with the stats to update
+ * \param[in] size_written  Size written on the medium
+ * \param[in] media_rc      If non-zero, the medium should be marked as failed
+ * \param[in] fsroot        Root of the medium's filesystem
+ * \param[in] nb_new_obj    Number of objects on the medium
+ *
+ * \return 0 if the stat retrieval and update were successfull,
+ *         non-zero otherwise
  */
 static int _dev_media_update(struct dss_handle *dss,
                              struct media_info *media_info,
@@ -70,10 +78,9 @@ static int _dev_media_update(struct dss_handle *dss,
         fields |= FS_STATUS;
     }
 
-    rc2 = get_fs_adapter(media_info->fs.type, &fsa);
-    if (rc2) {
-        rc = rc ? : rc2;
-        pho_error(rc2,
+    rc = get_fs_adapter(media_info->fs.type, &fsa);
+    if (rc) {
+        pho_error(rc,
                   "Invalid filesystem type for '%s' (database may be "
                   "corrupted)", fsroot);
         media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
@@ -84,11 +91,10 @@ static int _dev_media_update(struct dss_handle *dss,
 
         init_pho_log(&log, &dev, &media_info->rsc.id, PHO_LTFS_DF);
 
-        rc2 = ldm_fs_df(fsa, fsroot, &space, &log.message);
-        emit_log_after_action(dss, &log, PHO_LTFS_DF, rc2);
-        if (rc2) {
-            rc = rc ? : rc2;
-            pho_error(rc2, "Cannot retrieve media usage information");
+        rc = ldm_fs_df(fsa, fsroot, &space, &log.message);
+        emit_log_after_action(dss, &log, PHO_LTFS_DF, rc);
+        if (rc) {
+            pho_error(rc, "Cannot retrieve media usage information");
             media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
             fields |= ADM_STATUS;
         } else {
@@ -144,9 +150,9 @@ static int _dev_media_update(struct dss_handle *dss,
  *               -errno on error.
  */
 static int
-_get_objects_with_same_uuid_version(struct dss_handle *dss,
-                                    struct object_info *obj_to_insert,
-                                    bool *in_obj, bool *in_depr)
+_objects_with_same_uuid_version_exist(struct dss_handle *dss,
+                                      struct object_info *object_to_find,
+                                      bool *in_obj, bool *in_depr)
 {
     struct object_info *objects;
     struct dss_filter filter;
@@ -158,8 +164,8 @@ _get_objects_with_same_uuid_version(struct dss_handle *dss,
                           " {\"DSS::OBJ::uuid\": \"%s\"},"
                           " {\"DSS::OBJ::version\": %d}"
                           "]}",
-                          obj_to_insert->uuid,
-                          obj_to_insert->version);
+                          object_to_find->uuid,
+                          object_to_find->version);
     if (rc)
         return rc;
 
@@ -171,7 +177,7 @@ _get_objects_with_same_uuid_version(struct dss_handle *dss,
 
     *in_obj = (objects_count > 0);
     if (*in_obj)
-        obj_to_insert->oid = xstrdup(objects[0].oid);
+        object_to_find->oid = xstrdup(objects[0].oid);
 
     dss_res_free(objects, objects_count);
 
@@ -182,7 +188,7 @@ _get_objects_with_same_uuid_version(struct dss_handle *dss,
 
     *in_depr = (objects_count > 0);
     if (*in_depr)
-        obj_to_insert->oid = xstrdup(objects[0].oid);
+        object_to_find->oid = xstrdup(objects[0].oid);
 
     dss_res_free(objects, objects_count);
 
@@ -252,8 +258,8 @@ static int _add_extent_to_dss(struct dss_handle *dss,
 {
     struct layout_info *lyt_get;
     struct dss_filter filter;
+    int layout_count;
     int ext_cnt = 0;
-    int ext_lines;
     int rc = 0;
     int i;
 
@@ -265,16 +271,18 @@ static int _add_extent_to_dss(struct dss_handle *dss,
     if (rc)
         LOG_RETURN(rc, "Could not construct filter for extent");
 
-    rc = dss_full_layout_get(dss, &filter, NULL, &lyt_get, &ext_lines);
+    rc = dss_full_layout_get(dss, &filter, NULL, &lyt_get, &layout_count);
     dss_filter_free(&filter);
     if (rc)
         LOG_RETURN(rc, "Could not get extent '%s'", lyt_insert->oid);
 
-    if (ext_lines > 1)
+    if (layout_count > 1)
         LOG_GOTO(lyt_info_get_free, rc = -ENOTSUP,
-                 "Should not occur with current database version");
+                 "UUID '%s' and version '%d' should uniquely identify a layout,"
+                 " found '%d' layouts matching",
+                 lyt_insert->uuid, lyt_insert->version, layout_count);
 
-    if (ext_lines == 1)
+    if (layout_count == 1)
         ext_cnt = lyt_get[0].ext_count;
 
     for (i = 0; i < ext_cnt; i++)
@@ -293,7 +301,7 @@ static int _add_extent_to_dss(struct dss_handle *dss,
     rc = dss_layout_set(dss, lyt_insert, 1, DSS_SET_INSERT);
 
 lyt_info_get_free:
-    dss_res_free(lyt_get, ext_lines);
+    dss_res_free(lyt_get, layout_count);
     return rc;
 }
 
@@ -346,94 +354,103 @@ insert_object_with_different_uuid(struct dss_handle *dss,
  *
  * @param[in]   dss             DSS handler,
  * @param[in]   obj_to_insert   The object to insert,
- * @param[in]   in_obj          True if another object with same oid, uuid and
- *                              version was detected in the DSS,
- * @param[in]   in_depr         True if another deprecated object with same
- *                              oid, uuid and version was detected in the DSS.
  *
  * @return      0 on success,
  *              -errno on failure.
  */
-static int _add_obj_to_dss(struct dss_handle *dss,
-                           struct object_info *obj_to_insert)
+static int _add_object_to_dss(struct dss_handle *dss,
+                              struct object_info *object_to_insert)
 {
-    struct object_info *depr_obj_get = NULL;
-    struct object_info *obj_get = NULL;
-    int depr_obj_cnt = 0;
-    int obj_cnt = 0;
+    struct object_info *deprecated_objects = NULL;
+    struct object_info *objects = NULL;
+    int deprecated_objects_count = 0;
+    int objects_count = 0;
     bool in_depr;
     bool in_obj;
     int rc = 0;
 
-    rc = _get_objects_with_same_uuid_version(dss, obj_to_insert,
-                                             &in_obj, &in_depr);
+    rc = _objects_with_same_uuid_version_exist(dss, object_to_insert,
+                                               &in_obj, &in_depr);
     if (rc)
         LOG_RETURN(rc,
                    "Could not get object and depr_objects for uuid '%s' and"
                    " version '%d'",
-                   obj_to_insert->uuid, obj_to_insert->version);
+                   object_to_insert->uuid, object_to_insert->version);
 
     if (in_obj || in_depr) {
         pho_verb("Object '%s' with uuid '%s' and version '%d' already in DSS",
-                 obj_to_insert->oid, obj_to_insert->uuid,
-                 obj_to_insert->version);
+                 object_to_insert->oid, object_to_insert->uuid,
+                 object_to_insert->version);
         return 0;
     }
 
-    rc = _get_objects_with_oid(dss, obj_to_insert,
-                               &obj_get, &obj_cnt,
-                               &depr_obj_get, &depr_obj_cnt);
+    rc = _get_objects_with_oid(dss, object_to_insert,
+                               &objects, &objects_count,
+                               &deprecated_objects, &deprecated_objects_count);
     if (rc)
         LOG_RETURN(rc, "Could not get object and depr_objects for oid '%s'",
-                   obj_to_insert->oid);
+                   object_to_insert->oid);
 
-    if (obj_cnt == 0 && depr_obj_cnt == 0) {
-        rc = dss_object_set(dss, obj_to_insert, 1, DSS_SET_FULL_INSERT);
+    if (objects_count == 0 && deprecated_objects_count == 0) {
+        rc = dss_object_set(dss, object_to_insert, 1, DSS_SET_FULL_INSERT);
         if (rc)
-            pho_error(rc, "Could not set object");
+            pho_error(rc,
+                      "Could not insert object with oid '%s', uuid '%s' and "
+                      "version '%d'", object_to_insert->oid,
+                      object_to_insert->uuid, object_to_insert->version);
 
-        goto obj_get_free;
+        goto objects_free;
     }
 
-    if (obj_cnt == 1) {
-        if (strcmp(obj_to_insert->uuid, obj_get->uuid)) {
-            rc = insert_object_with_different_uuid(dss, obj_to_insert,
-                                                   depr_obj_get, depr_obj_cnt);
+    if (objects_count == 1) {
+        if (strcmp(object_to_insert->uuid, objects->uuid)) {
+            rc = insert_object_with_different_uuid(dss, object_to_insert,
+                                                   deprecated_objects,
+                                                   deprecated_objects_count);
             if (rc)
-                LOG_GOTO(obj_get_free, rc,
-                         "Could not insert object with different uuid");
+                LOG_GOTO(objects_free, rc,
+                         "Could not insert object '%s' with different uuid: "
+                         "uuid to insert = '%s' vs uuid of object = '%s'",
+                         object_to_insert->oid, object_to_insert->uuid,
+                         objects->uuid);
         } else {
-            if (obj_to_insert->version > obj_get->version) {
-                rc = dss_object_move(dss, DSS_OBJECT, DSS_DEPREC, obj_get, 1);
+            if (object_to_insert->version > objects->version) {
+                rc = dss_object_move(dss, DSS_OBJECT, DSS_DEPREC, objects, 1);
                 if (rc)
-                    LOG_GOTO(obj_get_free, rc,
-                             "Could not move the old object to the deprecated");
+                    LOG_GOTO(objects_free, rc,
+                             "Could not move old object '%s' to deprecated",
+                             objects->oid);
 
-                rc = dss_object_set(dss, obj_to_insert, 1,
+                rc = dss_object_set(dss, object_to_insert, 1,
                                     DSS_SET_FULL_INSERT);
                 if (rc)
-                    LOG_GOTO(obj_get_free, rc, "Could not set object");
+                    LOG_GOTO(objects_free, rc,
+                             "Could not insert object '%s' after moving one "
+                             "with same oid to deprecated",
+                             object_to_insert->oid);
             } else {
-                rc = dss_deprecated_object_set(dss, obj_to_insert, 1,
+                rc = dss_deprecated_object_set(dss, object_to_insert, 1,
                                                DSS_SET_INSERT);
                 if (rc)
-                    LOG_GOTO(obj_get_free, rc,
-                             "Could not set deprecated object");
+                    LOG_GOTO(objects_free, rc,
+                             "Could not insert deprecated object '%s'",
+                             object_to_insert->oid);
             }
         }
 
-        goto obj_get_free;
+        goto objects_free;
     }
 
-    assert(obj_cnt == 0);
+    assert(objects_count == 0);
 
-    rc = dss_object_set(dss, obj_to_insert, 1, DSS_SET_INSERT);
+    rc = dss_object_set(dss, object_to_insert, 1, DSS_SET_INSERT);
     if (rc)
-        LOG_GOTO(obj_get_free, rc, "Could not set deprecated object");
+        LOG_GOTO(objects_free, rc, "Could not insert deprecated object '%s'",
+                 object_to_insert->oid);
 
-obj_get_free:
-    dss_res_free(obj_get, obj_cnt);
-    dss_res_free(depr_obj_get, depr_obj_cnt);
+objects_free:
+    dss_res_free(objects, objects_count);
+    dss_res_free(deprecated_objects, deprecated_objects_count);
     return rc;
 }
 
@@ -501,7 +518,7 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
 
     save_oid = obj_to_insert.oid;
 
-    rc = _add_obj_to_dss(&adm->dss, &obj_to_insert);
+    rc = _add_object_to_dss(&adm->dss, &obj_to_insert);
     if (rc)
         LOG_RETURN(rc, "Could not add object to DSS");
 
@@ -522,7 +539,7 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
         LOG_RETURN(rc, "Unable to unlock object objid: '%s'",
                    obj_to_insert.oid);
 
-    return rc;
+    return 0;
 }
 
 /**
