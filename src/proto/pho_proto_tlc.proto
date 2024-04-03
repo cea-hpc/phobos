@@ -46,7 +46,7 @@ message PhoTlcRequest {
 
     /** Body of the tlc status request */
     message Status {
-        optional bool refresh = 1;  // If true, status cache is refreshed before
+        required bool refresh = 1;  // If true, status cache is refreshed before
                                     // building the response
     }
 
