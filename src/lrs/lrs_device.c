@@ -1191,7 +1191,8 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
     rc = dss_media_set(&dev->ld_device_thread.dss, medium, 1, DSS_SET_UPDATE,
                        fields);
     if (rc)
-        LOG_RETURN(rc, "Failed to update state of media '%s' after format",
+        LOG_RETURN(rc,
+                   "Successful format of medium '%s' but failed to initialize its state in DSS",
                    medium->rsc.id.name);
 
     return 0;
