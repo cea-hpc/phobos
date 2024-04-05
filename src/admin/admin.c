@@ -187,8 +187,20 @@ out:
 /* Static Database-related Functions ******************************************/
 /* ****************************************************************************/
 
+static void _free_dev_info(struct dev_info *devices, unsigned int num_dev)
+{
+    for (int i = 0; i < num_dev; ++i) {
+        free(devices[i].host);
+        free(devices[i].rsc.model);
+        free(devices[i].path);
+    }
+
+    free(devices);
+}
+
 static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
-                              unsigned int num_dev, bool keep_locked)
+                              unsigned int num_dev, bool keep_locked,
+                              struct dev_info **_devices)
 {
     struct dev_adapter_module *deva;
     struct ldm_dev_state lds = {};
@@ -256,14 +268,12 @@ static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
     if (rc)
         LOG_GOTO(out_free, rc, "Cannot add devices");
 
+    *_devices = devices;
+
+    return 0;
 
 out_free:
-    for (i = 0; i < num_dev; ++i) {
-        free(devices[i].host);
-        free(devices[i].rsc.model);
-        free(devices[i].path);
-    }
-    free(devices);
+    _free_dev_info(devices, num_dev);
 
     return rc;
 }
@@ -479,6 +489,7 @@ out:
 int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
                             unsigned int num_dev, bool keep_locked)
 {
+    struct dev_info *devices = NULL;
     int rc;
     int i;
 
@@ -498,27 +509,32 @@ int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
         }
     }
 
-    rc = _add_device_in_dss(adm, dev_ids, num_dev, keep_locked);
+    rc = _add_device_in_dss(adm, dev_ids, num_dev, keep_locked, &devices);
     if (rc)
         return rc;
 
     if (keep_locked)
         // do not need to inform the daemon because it does not
         // consider locked devices
-        return 0;
+        goto free_devices;
 
     if (!adm->phobosd_is_online)
-        return 0;
+        goto free_devices;
 
     for (i = 0; i < num_dev; ++i) {
         int rc2;
 
         rc2 = _admin_notify(adm, dev_ids + i, PHO_NTFY_OP_DEVICE_ADD, true);
-        if (rc2)
+        if (rc2) {
+            rc = rc ? : rc2;
             pho_error(rc2, "Failure during daemon notification for '%s'",
                       dev_ids[i].name);
-        rc = rc ? : rc2;
+            dss_device_delete(&adm->dss, &devices[i], 1);
+        }
     }
+
+free_devices:
+    _free_dev_info(devices, num_dev);
 
     return rc;
 }

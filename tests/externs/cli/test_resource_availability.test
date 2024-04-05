@@ -307,6 +307,27 @@ function dir_is_removed_on_failure
     rm -rf $almost_a_dir
 }
 
+function drive_is_removed_on_failure
+{
+    waive_daemons
+    drop_tables
+    setup_tables
+    invoke_lrs
+
+    $valg_phobos drive add --unlock ${DRIVE_ARRAY[0]} &&
+        error "Drive add should fail without the TLC started"
+
+    local number_of_drives=$($phobos drive list | wc -l)
+    if [ "$number_of_drives" != "0" ]; then
+        error "Failed drive add shouldn't leave anything in the drive list"
+    fi
+
+    invoke_tlc
+
+    $valg_phobos drive add --unlock ${DRIVE_ARRAY[0]} ||
+        error "Drive add should succeed with the daemons started"
+}
+
 TEST_SETUP=setup
 TEST_CLEANUP=cleanup
 
@@ -316,5 +337,6 @@ TESTS=("setup_dir; put_dir_simple; get_dir_simple; cleanup_dir"
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("setup_tape; put_tape_simple; get_tape_simple; cleanup_tape"
-            "setup_tape; put_tape_raid; get_tape_raid; cleanup_tape")
+            "setup_tape; put_tape_raid; get_tape_raid; cleanup_tape"
+            "setup_tape; drive_is_removed_on_failure; cleanup_tape")
 fi
