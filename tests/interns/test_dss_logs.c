@@ -25,6 +25,7 @@
 
 #include "test_setup.h"
 #include "pho_dss.h"
+#include "pho_dss_wrapper.h"
 #include "pho_type_utils.h"
 
 #include <assert.h>

@@ -32,6 +32,7 @@
 #include "pho_comm.h"
 #include "pho_common.h"
 #include "pho_dss.h"
+#include "pho_dss_wrapper.h"
 #include "pho_io.h"
 #include "pho_layout.h"
 #include "pho_srl_lrs.h"
@@ -378,7 +379,7 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
             goto out_update;
         }
 
-        rc = dss_object_move(dss, DSS_OBJECT, DSS_DEPREC, obj_res, 1);
+        rc = dss_move_object_to_deprecated(dss, obj_res, 1);
         if (rc)
             LOG_GOTO(out_res, rc, "object_move failed for objid:'%s'",
                      xfer->xd_objid);
@@ -527,7 +528,7 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
                  xfer->xd_objid);
 
     if (need_undelete) {
-        rc = dss_object_move(dss, DSS_DEPREC, DSS_OBJECT, prev_obj, prev_cnt);
+        rc = dss_move_deprecated_to_object(dss, prev_obj, prev_cnt);
         if (rc)
             LOG_GOTO(out_prev, rc, "dss_object_move failed for uuid:'%s'",
                      obj->uuid);
@@ -585,7 +586,7 @@ static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     }
 
     /* move from object table to deprecated object table */
-    rc = dss_object_move(dss, DSS_OBJECT, DSS_DEPREC, &obj, 1);
+    rc = dss_move_object_to_deprecated(dss, &obj, 1);
     if (rc)
         LOG_GOTO(out_free, rc, "Unable to move from object to deprecated in "
                                "object delete, for oid: '%s'", obj.oid);
@@ -758,9 +759,7 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         }
     }
 
-    /* MOVE */
-    /* move from deprecated_object to object table */
-    rc = dss_object_move(dss, DSS_DEPREC, DSS_OBJECT, &obj, 1);
+    rc = dss_move_deprecated_to_object(dss, &obj, 1);
     if (rc)
         LOG_GOTO(out_free, rc,
                  "Unable to move from deprecated_object to object in object "

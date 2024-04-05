@@ -617,9 +617,3 @@ const struct dss_resource_ops media_ops = {
     .free         = media_result_free,
     .size         = sizeof(struct media_info),
 };
-
-int dss_medium_health(struct dss_handle *dss, const struct pho_id *medium_id,
-                      size_t max_health, size_t *health)
-{
-    return dss_resource_health(dss, medium_id, DSS_MEDIA, max_health, health);
-}

@@ -39,6 +39,7 @@
 #include "pho_comm.h"
 #include "pho_common.h"
 #include "pho_dss.h"
+#include "pho_dss_wrapper.h"
 #include "pho_ldm.h"
 #include "pho_srl_lrs.h"
 #include "pho_types.h"

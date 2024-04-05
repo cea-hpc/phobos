@@ -32,6 +32,7 @@
 #include "lrs_cache.h"
 #include "pho_common.h"
 #include "pho_dss.h"
+#include "pho_dss_wrapper.h"
 #include "pho_type_utils.h"
 
 struct media_cache_env {
@@ -174,8 +175,7 @@ static struct key_value *lrs_media_cache_build(const void *key, void *_env)
         return NULL;
     }
 
-    rc = dss_medium_health(&env->dss, id, max_health(),
-                           &medium->health);
+    rc = dss_medium_health(&env->dss, id, max_health(), &medium->health);
     if (rc) {
         dss_res_free(medium, count);
         errno = -rc;

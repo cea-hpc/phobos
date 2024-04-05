@@ -38,6 +38,7 @@
 #include "pho_cfg.h"
 #include "pho_common.h"
 #include "pho_dss.h"
+#include "pho_dss_wrapper.h"
 #include "pho_io.h"
 #include "pho_layout.h"
 #include "pho_module_loader.h"

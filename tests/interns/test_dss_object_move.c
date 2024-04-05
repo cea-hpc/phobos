@@ -26,6 +26,7 @@
 /* phobos stuff */
 #include "test_setup.h"
 #include "pho_dss.h"
+#include "pho_dss_wrapper.h"
 #include "pho_types.h"
 
 /* standard stuff */
@@ -67,7 +68,7 @@ static void dom_simple_ok(void **state)
     int rc;
 
     /* move to deprecated_object */
-    rc = dss_object_move(handle, DSS_OBJECT, DSS_DEPREC, &OBJ, 1);
+    rc = dss_move_object_to_deprecated(handle, &OBJ, 1);
     assert_return_code(rc, -rc);
 
     /* check the object was moved from object to deprecated table */
@@ -84,7 +85,7 @@ static void dom_simple_ok(void **state)
     assert_int_equal(obj_cnt, 1);
 
     /* move back from deprecated_object to object */
-    rc = dss_object_move(handle, DSS_DEPREC, DSS_OBJECT, obj_res, 1);
+    rc = dss_move_deprecated_to_object(handle, obj_res, 1);
     dss_res_free(obj_res, obj_cnt);
     assert_return_code(rc, -rc);
 
@@ -144,7 +145,7 @@ static void dom_3_ok(void **state)
     int rc;
 
     /* move to deprecated_object */
-    rc = dss_object_move(handle, DSS_OBJECT, DSS_DEPREC, OBJ_3, 3);
+    rc = dss_move_object_to_deprecated(handle, OBJ_3, 3);
     assert_return_code(rc, -rc);
 
     /* check objects are moved from object to deprecated table */
@@ -163,7 +164,7 @@ static void dom_3_ok(void **state)
     assert_int_equal(obj_cnt, 3);
 
     /* move back from deprecated_object to object */
-    rc = dss_object_move(handle, DSS_DEPREC, DSS_OBJECT, obj_res, 3);
+    rc = dss_move_deprecated_to_object(handle, obj_res, 3);
     dss_res_free(obj_res, obj_cnt);
     assert_return_code(rc, -rc);
 
@@ -193,20 +194,6 @@ static int dom_3_ok_teardown(void **state)
     return 0;
 }
 
-/* dom_type_einval */
-static void dom_type_einval(void **state)
-{
-    struct dss_handle *handle = (struct dss_handle *)*state;
-    struct object_info obj;
-    int rc;
-
-    /* move to invalid type */
-    obj.oid = "object_to_move";
-    obj.user_md = "{}";
-    rc = dss_object_move(handle, DSS_OBJECT, DSS_MEDIA, &obj, 1);
-    assert_int_equal(rc, -EINVAL);
-}
-
 /* dom_simple_already_exist */
 
 /* setup is mutualized with dom_simple_ok as dom_simple_setup */
@@ -220,7 +207,7 @@ static void dom_simple_already_exist(void **state)
     int rc;
 
     /* move to deprecated_object */
-    rc = dss_object_move(handle, DSS_OBJECT, DSS_DEPREC, &OBJ, 1);
+    rc = dss_move_object_to_deprecated(handle, &OBJ, 1);
     assert_return_code(rc, -rc);
 
     /* check the deprecated_object */
@@ -236,7 +223,7 @@ static void dom_simple_already_exist(void **state)
     assert_return_code(rc, -rc);
 
     /* trying to move back from deprecated_object to object */
-    rc = dss_object_move(handle, DSS_DEPREC, DSS_OBJECT, obj_res, 1);
+    rc = dss_move_deprecated_to_object(handle, obj_res, 1);
     dss_res_free(obj_res, obj_cnt);
     assert_int_equal(rc, -EEXIST);
 }
@@ -281,7 +268,6 @@ int main(void)
                                         dom_simple_ok_teardown),
         cmocka_unit_test_setup_teardown(dom_3_ok, dom_3_ok_setup,
                                         dom_3_ok_teardown),
-        cmocka_unit_test(dom_type_einval),
         cmocka_unit_test_setup_teardown(dom_simple_already_exist,
                                         dom_simple_setup,
                                         dom_simple_already_exist_teardown),

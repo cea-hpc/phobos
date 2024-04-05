@@ -40,6 +40,7 @@
 
 #include "pho_common.h"
 #include "pho_attrs.h"
+#include "pho_dss_wrapper.h"
 #include "pho_srl_lrs.h"
 #include "pho_layout.h"
 #include "pho_ldm.h"
@@ -415,7 +416,7 @@ static int _add_object_to_dss(struct dss_handle *dss,
                          objects->uuid);
         } else {
             if (object_to_insert->version > objects->version) {
-                rc = dss_object_move(dss, DSS_OBJECT, DSS_DEPREC, objects, 1);
+                rc = dss_move_object_to_deprecated(dss, objects, 1);
                 if (rc)
                     LOG_GOTO(objects_free, rc,
                              "Could not move old object '%s' to deprecated",

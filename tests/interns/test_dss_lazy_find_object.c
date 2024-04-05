@@ -33,6 +33,7 @@
 
 #include "pho_dss.h"
 #include "pho_type_utils.h"
+#include "pho_dss_wrapper.h"
 
 #include "store_utils.h"
 
@@ -69,7 +70,7 @@ static int move_state_object_to_deprecated(struct test_state *state, int index)
     struct object_info *obj = state->obj + index;
     int rc;
 
-    rc = dss_object_move(state->dss, DSS_OBJECT, DSS_DEPREC, obj, 1);
+    rc = dss_move_object_to_deprecated(state->dss, obj, 1);
     if (rc)
         return -1;
 

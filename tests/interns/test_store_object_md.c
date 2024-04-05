@@ -30,6 +30,7 @@
 #include <stddef.h>
 
 #include "dss_lock.h"
+#include "pho_dss_wrapper.h"
 #include "store_utils.h"
 
 #include <cmocka.h>
@@ -184,11 +185,20 @@ do {                                                                           \
         will_return(dss_layout_get, _cnt);                                     \
 } while (0)
 
-int dss_object_move(struct dss_handle *handle, enum dss_type type_from,
-                    enum dss_type type_to, struct object_info *obj_list,
-                    int obj_cnt)
+int dss_move_object_to_deprecated(struct dss_handle *handle,
+                                  struct object_info *obj_list,
+                                  int obj_cnt)
 {
-    (void)handle; (void)type_from; (void)type_to; (void)obj_list; (void)obj_cnt;
+    (void)handle; (void)obj_list; (void)obj_cnt;
+
+    return (int)mock();
+}
+
+int dss_move_deprecated_to_object(struct dss_handle *handle,
+                                  struct object_info *obj_list,
+                                  int obj_cnt)
+{
+    (void)handle; (void)obj_list; (void)obj_cnt;
 
     return (int)mock();
 }
@@ -330,7 +340,7 @@ static void oms_dss_object_move_failure_with_overwrite(void **state)
     will_return(dss_lock, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
-    will_return(dss_object_move, -ENOENT);
+    will_return(dss_move_object_to_deprecated, -ENOENT);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, &xfer);
     assert_int_equal(rc, -ENOENT);
@@ -347,7 +357,7 @@ static void oms_dss_object_set_failure_with_overwrite(void **state)
     will_return(dss_lock, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
-    will_return(dss_object_move, 0);
+    will_return(dss_move_object_to_deprecated, 0);
     will_return(dss_object_set, -EINVAL);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, &xfer);
@@ -457,7 +467,7 @@ static void oms_success_with_overwrite(void **state)
     will_return(dss_lock, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
-    will_return(dss_object_move, 0);
+    will_return(dss_move_object_to_deprecated, 0);
     will_return(dss_object_set, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
@@ -637,7 +647,7 @@ static void omd_dss_object_move_failure(void **state)
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 0);
     will_return(dss_object_set, 0);
-    will_return(dss_object_move, -ENOENT);
+    will_return(dss_move_deprecated_to_object, -ENOENT);
     will_return(dss_unlock, 0);
     rc = object_md_del(NULL, &xfer);
     assert_int_equal(rc, -ENOENT);
@@ -678,7 +688,7 @@ static void omd_success(void **state)
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 0);
     will_return(dss_object_set, 0);
-    will_return(dss_object_move, 0);
+    will_return(dss_move_deprecated_to_object, 0);
     will_return(dss_unlock, 0);
     rc = object_md_del(NULL, &xfer);
     assert_int_equal(rc, 0);

@@ -26,6 +26,7 @@
 /* phobos stuff */
 #include "dss_lock.h"
 #include "pho_dss.h"
+#include "pho_dss_wrapper.h"
 #include "test_setup.h"
 
 /* standard stuff */
