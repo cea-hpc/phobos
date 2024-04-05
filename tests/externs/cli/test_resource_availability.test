@@ -3,7 +3,7 @@
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -23,12 +23,10 @@
 
 # set python and phobos environment
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
-. $test_dir/../../tape_drive.sh
-
-set -xe
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
 
 DRIVE_ARRAY=( /dev/st0 /dev/st1 )
 TAPE_ARRAY=( P00000L5 P00001L5 )
@@ -36,11 +34,29 @@ TAPE_ARRAY=( P00000L5 P00001L5 )
 function setup_dir
 {
     DIR_ARRAY=($(mktemp -d /tmp/test.pho.XXXX) $(mktemp -d /tmp/test.pho.XXXX))
+    setup_tables
+    invoke_lrs
 }
 
-function clean_dir
+function cleanup_dir
 {
+    waive_lrs
+    drop_tables
     rm -rf ${DIR_ARRAY[@]}
+}
+
+function setup_tape
+{
+    drain_all_drives
+    setup_tables
+    invoke_daemons
+}
+
+function cleanup_tape
+{
+    waive_daemons
+    drop_tables
+    drain_all_drives
 }
 
 function setup
@@ -50,29 +66,11 @@ function setup
     else
         export PHOBOS_LRS_families="dir"
     fi
-
-    setup_dir
-    setup_tables
-    if [ -w /dev/changer ]; then
-        invoke_daemons
-    else
-        invoke_lrs
-    fi
 }
 
 function cleanup
 {
-    if [ -w /dev/changer ]; then
-        waive_daemons
-    else
-        waive_lrs
-    fi
-
-    drop_tables
-    clean_dir
-    if [[ -w /dev/changer ]]; then
-        drain_all_drives
-    fi
+    unset PHOBOS_LRS_families
 }
 
 function put_tape_simple
@@ -132,7 +130,8 @@ function put_tape_raid
 {
     local id=test/tape.raid
 
-    $valg_phobos drive add --unlock ${DRIVE_ARRAY[@]}
+    $valg_phobos drive add --unlock ${DRIVE_ARRAY[0]}
+    $valg_phobos drive add --unlock ${DRIVE_ARRAY[1]}
     $valg_phobos tape add --type lto5 ${TAPE_ARRAY[1]}
     $valg_phobos tape format --unlock ${TAPE_ARRAY[1]}
 
@@ -280,40 +279,42 @@ function get_dir_raid
     return 0
 }
 
-trap cleanup EXIT
-setup
+function dir_is_removed_on_failure
+{
+    waive_lrs
+    drop_tables
+    setup_tables
 
-# availability with simple layout
-put_dir_simple
-get_dir_simple
+    local almost_a_dir="/tmp/test.pho.dir_is_removed_on_failure"
+    touch $almost_a_dir
 
-if [[ -w /dev/changer ]]; then
-    # in case the previous test did not unload the drives
-    waive_daemons
-    drain_all_drives
-    invoke_daemons
-    put_tape_simple
-    get_tape_simple
-    waive_daemons
-    drain_all_drives
-fi
+    $valg_phobos dir add --unlock $almost_a_dir &&
+        error "Dir add should fail because '$almost_a_dir' is not a directory"
 
-waive_lrs
-drop_tables
-clean_dir
-setup_dir
-setup_tables
-if [[ -w /dev/changer ]]; then
-    invoke_daemons
-else
+    local number_of_dir=$($phobos dir list | wc -l)
+    if [ "$number_of_dir" != "0" ]; then
+        error "Failed dir add shouldn't leave anything in the dir list"
+    fi
+
+    rm -f $almost_a_dir
+    mkdir $almost_a_dir
+
     invoke_lrs
-fi
 
-# availability with raid layout
-put_dir_raid
-get_dir_raid
+    $valg_phobos dir add $almost_a_dir --unlock ||
+        error "Dir add should have succeeded"
+
+    rm -rf $almost_a_dir
+}
+
+TEST_SETUP=setup
+TEST_CLEANUP=cleanup
+
+TESTS=("setup_dir; put_dir_simple; get_dir_simple; cleanup_dir"
+       "setup_dir; put_dir_raid; get_dir_raid; cleanup_dir"
+       "setup_dir; dir_is_removed_on_failure; cleanup_dir")
 
 if [[ -w /dev/changer ]]; then
-    put_tape_raid
-    get_tape_raid
+    TESTS+=("setup_tape; put_tape_simple; get_tape_simple; cleanup_tape"
+            "setup_tape; put_tape_raid; get_tape_raid; cleanup_tape")
 fi

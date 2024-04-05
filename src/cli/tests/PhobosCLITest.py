@@ -505,7 +505,7 @@ class DeviceAddTest(BasicExecutionTest):
         """Test adding directories. Simple case."""
         flist = []
         for _ in range(5):
-            file = tempfile.NamedTemporaryFile()
+            file = tempfile.TemporaryDirectory()
             self.pho_execute(['-v', 'dir', 'add', file.name])
             flist.append(file)
 
@@ -515,7 +515,7 @@ class DeviceAddTest(BasicExecutionTest):
 
     def test_dir_tags(self):
         """Test adding a directory with tags."""
-        tmp_f = tempfile.NamedTemporaryFile()
+        tmp_f = tempfile.TemporaryDirectory()
         tmp_path = tmp_f.name
         self.pho_execute(['dir', 'add', tmp_path, '--tags', 'tag-foo,tag-bar'])
         output, _ = self.pho_execute_capture(['dir', 'list', '-o', 'all',
@@ -524,7 +524,7 @@ class DeviceAddTest(BasicExecutionTest):
 
     def test_dir_update(self):
         """Test updating a directory."""
-        tmp_f = tempfile.NamedTemporaryFile()
+        tmp_f = tempfile.TemporaryDirectory()
         tmp_path = tmp_f.name
         self.pho_execute(['dir', 'add', tmp_path, '--tags', 'tag-baz'])
 
@@ -550,7 +550,7 @@ class DeviceAddTest(BasicExecutionTest):
 
     def test_dir_add_double(self):
         """Adding a directory twice should raise an error."""
-        file = tempfile.NamedTemporaryFile()
+        file = tempfile.TemporaryDirectory()
         self.pho_execute(['-v', 'dir', 'add', file.name])
         self.pho_execute(['-v', 'dir', 'add', file.name], code=errno.EEXIST)
 
@@ -559,8 +559,8 @@ class DeviceAddTest(BasicExecutionTest):
         Adding existing and a non-existent directories should add the correct
         directories and raise an error because of the missing one.
         """
-        file1 = tempfile.NamedTemporaryFile()
-        file2 = tempfile.NamedTemporaryFile()
+        file1 = tempfile.TemporaryDirectory()
+        file2 = tempfile.TemporaryDirectory()
 
         self.pho_execute(['-v', 'dir', 'add', file1.name, '/tmp/notfileAA',
                           file2.name],

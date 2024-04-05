@@ -485,6 +485,19 @@ int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
     if (!num_dev)
         LOG_RETURN(-EINVAL, "No device were given");
 
+    if (dev_ids[0].family == PHO_RSC_DIR) {
+        for (i = 0; i < num_dev; i++) {
+            struct stat st;
+
+            if (stat(dev_ids[i].name, &st) != 0)
+                LOG_RETURN(-errno, "stat() failed on '%s'", dev_ids[i].name);
+
+            if (!S_ISDIR(st.st_mode))
+                LOG_RETURN(-ENOTDIR, "'%s' is not a directory",
+                           dev_ids[i].name);
+        }
+    }
+
     rc = _add_device_in_dss(adm, dev_ids, num_dev, keep_locked);
     if (rc)
         return rc;
