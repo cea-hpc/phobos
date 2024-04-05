@@ -121,7 +121,7 @@ function test_eagain_format
     sleep 1
 
     # Release the put request
-    $lrs_simple_client release $release_medium_name tape
+    $lrs_simple_client release 1 $release_medium_name tape
 
     # Check format successfully end
     wait ${format_pid}

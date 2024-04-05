@@ -91,7 +91,7 @@ function test_drive_status_with_ongoing_io()
         grep "$tape"
 
     # send release request
-    $lrs_simple_client release $release_medium_name tape
+    $lrs_simple_client release 1 $release_medium_name tape
 }
 
 trap cleanup EXIT

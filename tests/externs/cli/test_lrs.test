@@ -328,7 +328,7 @@ function test_wait_end_of_IO_before_shutdown()
     ps --pid $PID_LRS || error "Daemon should still be online"
 
     # send release request
-    $lrs_simple_client release $release_medium_name dir
+    $lrs_simple_client release 1 $release_medium_name dir
 
     timeout 10 tail --pid=$PID_LRS -f /dev/null
     if [[ $? != 0 ]]; then
@@ -386,7 +386,7 @@ function test_cancel_waiting_requests_before_shutdown()
     fi
 
     # send the release request
-    $lrs_simple_client release $release_medium_name dir
+    $lrs_simple_client release 1 $release_medium_name dir
 
     timeout 10 tail --pid=$PID_LRS -f /dev/null
     if [[ $? != 0 ]]; then
@@ -416,7 +416,7 @@ function test_refuse_new_request_during_shutdown()
         error "New put should have failed during shutdown"
 
     # send the release request
-    $lrs_simple_client release $release_medium_name dir
+    $lrs_simple_client release 1 $release_medium_name dir
 
     timeout 10 tail --pid=$PID_LRS -f /dev/null
     if [[ $? != 0 ]]; then
