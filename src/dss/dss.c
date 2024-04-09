@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -19,6 +19,7 @@
  *  You should have received a copy of the GNU Lesser General Public License
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
+
 /**
  * \brief  Phobos Distributed State Service API.
  */
@@ -26,35 +27,23 @@
 #include "config.h"
 #endif
 
-#include "dss_utils.h"
-#include "pho_common.h"
-#include "pho_type_utils.h"
-#include "pho_dss.h"
-#include "pho_cfg.h"
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <inttypes.h>
-#include <string.h>
-#include <glib.h>
-#include <libpq-fe.h>
-#include <jansson.h>
-#include <stdbool.h>
-#include <string.h>
-#include <strings.h>
 #include <assert.h>
 #include <gmodule.h>
-#include <stdint.h>
+#include <libpq-fe.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <unistd.h>
+
+#include "pho_dss.h"
+#include "pho_types.h"
+#include "pho_type_utils.h"
 
 #include "device.h"
 #include "dss_config.h"
-#include "extent.h"
+#include "dss_utils.h"
 #include "filters.h"
-#include "logs.h"
-#include "media.h"
-#include "object.h"
 #include "resources.h"
+#include "object.h"
 
 struct dss_result {
     PGresult *pg_res;
@@ -164,15 +153,13 @@ static inline bool is_type_supported(enum dss_type type)
 
 static void _dss_result_free(struct dss_result *dss_res, int item_cnt)
 {
-    res_destructor_t dtor;
     size_t item_size;
     int i;
 
     item_size = get_resource_size(dss_res->item_type);
-    dtor = get_free_function(dss_res->item_type);
 
     for (i = 0; i < item_cnt; i++)
-        dtor(dss_res->items.raw + i * item_size);
+        free_resource(dss_res->item_type, dss_res->items.raw + i * item_size);
 
     PQclear(dss_res->pg_res);
     free(dss_res);

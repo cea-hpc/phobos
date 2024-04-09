@@ -63,8 +63,7 @@ int get_delete_query(enum dss_type type, void *void_resource, int item_count,
 int create_resource(enum dss_type type, struct dss_handle *handle,
                     void *void_resource, PGresult *res, int row_num);
 
-typedef void (*res_destructor_t)(void *item);
-res_destructor_t get_free_function(enum dss_type type);
+void free_resource(enum dss_type type, void *void_resource);
 
 size_t get_resource_size(enum dss_type type);
 

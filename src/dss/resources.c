@@ -127,16 +127,14 @@ int create_resource(enum dss_type type, struct dss_handle *handle,
     return resource_ops->create(handle, void_resource, res, row_num);
 }
 
-// XXX: this will be changed a simple "free" function when all resources are
-// managed
-res_destructor_t get_free_function(enum dss_type type)
+void free_resource(enum dss_type type, void *void_resource)
 {
     const struct dss_resource_ops *resource_ops = get_resource_ops(type);
 
     if (resource_ops == NULL)
-        return NULL;
+        return;
 
-    return resource_ops->free;
+    resource_ops->free(void_resource);
 }
 
 size_t get_resource_size(enum dss_type type)
