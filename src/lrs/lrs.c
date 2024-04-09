@@ -549,7 +549,7 @@ static int release_medium(struct lrs_sched *sched,
     MUTEX_UNLOCK(&dev->ld_mutex);
 
     if (release->to_sync)
-        /* Queue sync request */
+        /* ownership of reqc is passed to the device thread, no free here */
         push_new_sync_to_device(dev, reqc, medium_index);
 
     return rc;
@@ -582,7 +582,7 @@ static int process_release_request(struct lrs_sched *sched,
         int req_rc = 0;
 
         rc = release_medium(sched, comm_dss, reqc, release_elt,
-                             release_index + 1, &req_rc);
+                            release_index + 1, &req_rc);
         if (rc)
             /* system error, stop */
             break;
@@ -593,8 +593,12 @@ static int process_release_request(struct lrs_sched *sched,
         }
     }
 
-    if (!rc && !client_err)
+    if (!rc && !client_err) {
+        if (reqc->params.release.n_tosync_media == 0)
+            sched_req_free(reqc);
+
         return 0;
+    }
 
     if (reqc->params.release.n_tosync_media == 0) {
         /* the client will not wait for the reponse, do not send one */
