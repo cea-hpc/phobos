@@ -819,8 +819,8 @@ void sched_fini(struct lrs_sched *sched)
     if (sched == NULL)
         return;
 
+    lrs_dev_hdl_clear(&sched->devices, sched);
     io_sched_fini(&sched->io_sched_hdl);
-    lrs_dev_hdl_clear(&sched->devices);
     lrs_dev_hdl_fini(&sched->devices);
     dss_fini(&sched->sched_thread.dss);
     tsqueue_destroy(&sched->incoming, sched_req_free);
@@ -1527,7 +1527,8 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
     return 0;
 
 dev_del:
-    lrs_dev_hdl_del(&sched->devices, sched->devices.ldh_devices->len - 1, rc);
+    lrs_dev_hdl_del(&sched->devices, sched->devices.ldh_devices->len - 1, rc,
+                    sched);
 
     return rc;
 }

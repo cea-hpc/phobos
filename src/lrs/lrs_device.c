@@ -240,14 +240,15 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
 
     rc = check_and_take_device_lock(sched, dev_list);
     if (rc)
-        lrs_dev_hdl_del(handle, handle->ldh_devices->len, rc);
+        lrs_dev_hdl_del(handle, handle->ldh_devices->len, rc, sched);
 
 free_list:
     dss_res_free(dev_list, dev_count);
     return rc;
 }
 
-int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc)
+int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc,
+                    struct lrs_sched *sched)
 {
     struct lrs_dev *dev;
 
@@ -263,6 +264,7 @@ int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc)
         pho_error(rc, "device thread '%s' terminated with error",
                   dev->ld_dss_dev_info->rsc.id.name);
 
+    io_sched_remove_device(&sched->io_sched_hdl, dev);
     lrs_dev_info_clean(handle, dev);
 
     return 0;
@@ -360,7 +362,7 @@ int lrs_dev_hdl_load(struct lrs_sched *sched, struct lrs_dev_hdl *handle)
 
         rc2 = check_and_take_device_lock(sched, &dev_list[i]);
         if (rc2) {
-            lrs_dev_hdl_del(handle, handle->ldh_devices->len - 1, rc2);
+            lrs_dev_hdl_del(handle, handle->ldh_devices->len - 1, rc2, sched);
             rc = rc ? : rc2;
         }
     }
@@ -372,7 +374,7 @@ int lrs_dev_hdl_load(struct lrs_sched *sched, struct lrs_dev_hdl *handle)
     return rc;
 }
 
-void lrs_dev_hdl_clear(struct lrs_dev_hdl *handle)
+void lrs_dev_hdl_clear(struct lrs_dev_hdl *handle, struct lrs_sched *sched)
 {
     int rc;
     int i;
@@ -393,6 +395,7 @@ void lrs_dev_hdl_clear(struct lrs_dev_hdl *handle)
         if (rc < 0)
             pho_error(rc, "device thread '%s' terminated with error",
                       dev->ld_dss_dev_info->rsc.id.name);
+        io_sched_remove_device(&sched->io_sched_hdl, dev);
         lrs_dev_info_clean(handle, dev);
     }
 }

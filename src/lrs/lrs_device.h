@@ -364,10 +364,12 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
  * \param[in]    handle   initialized device handle
  * \param[in]    index    index of the device to remove from the list
  * \param[in]    rc       error which caused the thread to stop
+ * \param[in]    sched    reference to the scheduler that owns the device handle
  *
  * \return                0 on success, -errno no failure
  */
-int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc);
+int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc,
+                    struct lrs_sched *sched);
 
 /**
  * Will try to remove a device thread context.
@@ -416,8 +418,9 @@ int lrs_dev_hdl_load(struct lrs_sched *sched,
  * concurrently.
  *
  * \param[in]  handle  pointer to an initialized handle to clear
+ * \param[in]  sched   reference to the scheduler that owns the device handle
  */
-void lrs_dev_hdl_clear(struct lrs_dev_hdl *handle);
+void lrs_dev_hdl_clear(struct lrs_dev_hdl *handle, struct lrs_sched *sched);
 
 /**
  * Wrapper arround GLib's getter to retrive devices' structures

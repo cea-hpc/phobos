@@ -63,6 +63,10 @@ static int setup(void **data)
 
     scheduler.sched_thread.dss = *dss;
     scheduler.family = PHO_RSC_DIR;
+    rc = io_sched_handle_load_from_config(&scheduler.io_sched_hdl,
+                                          PHO_RSC_TAPE);
+    assert_return_code(rc, -rc);
+
     rc = lock_handle_init(&scheduler.lock_handle, dss);
 
     return rc;
@@ -70,6 +74,7 @@ static int setup(void **data)
 
 static int teardown(void **data)
 {
+    io_sched_fini(&scheduler.io_sched_hdl);
     return global_teardown_dss_with_dbdrop((void **)&dss);
 }
 
@@ -231,7 +236,7 @@ static void test_ldh_add_one_device(void **data)
     assert_non_null(dev);
     assert_string_equal(dev->ld_dss_dev_info->rsc.id.name, "test");
 
-    rc = lrs_dev_hdl_del(handle, 0, 0);
+    rc = lrs_dev_hdl_del(handle, 0, 0, &scheduler);
     assert_return_code(rc, -rc);
     assert_int_equal(handle->ldh_devices->len, 0);
 }
@@ -303,7 +308,7 @@ static void test_ldh_add_three_devices(void **data)
         assert_string_equal(dev->ld_dss_dev_info->rsc.id.name, names[i]);
     }
 
-    lrs_dev_hdl_clear(handle);
+    lrs_dev_hdl_clear(handle, &scheduler);
     assert_int_equal(handle->ldh_devices->len, 0);
 }
 
