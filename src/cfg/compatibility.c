@@ -124,7 +124,7 @@ static bool is_item_in_list(const char *list, const char *str)
     return res;
 }
 
-__attribute__((weak)) /* this attribute is useful for mocking in tests */
+mockable
 int tape_drive_compat_models(const char *tape_model, const char *drive_model,
                              bool *res)
 {

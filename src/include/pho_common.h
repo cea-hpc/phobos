@@ -135,6 +135,27 @@ do {                                                                    \
 #define xrealloc(ptr, size)             XWRAPPER(realloc, ptr, size)
 #define xstrdup_safe(str)               ({ str ? xstrdup(str) : NULL; })
 
+/* This attribute allows functions redefined in tests to have higher priority
+ * when the linker chooses which one to use in the final executable.
+ *
+ * Example:
+ *
+ * In lib.c:
+ *
+ * mockable
+ * void myfunc(int a);
+ *
+ * In test.c
+ *
+ * void myfunc(int a)
+ * {
+ * }
+ *
+ * The function myfunc in test.c will be in the final executable test. Not the
+ * one in lib.c
+ */
+#define mockable  __attribute__((weak))
+
 static inline const char *pho_log_level2str(enum pho_log_level level)
 {
     switch (level) {

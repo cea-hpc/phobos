@@ -989,7 +989,7 @@ static int medium_in_devices(const struct media_info *medium,
  *                           be set to n_med or more if every already allocated
  *                           media should be taken into account)
  */
-__attribute__((weak)) /* this attribute is useful for mocking in tests */
+mockable
 int sched_select_medium(struct io_scheduler *io_sched,
                         struct media_info **p_media,
                         size_t required_size,
@@ -1884,7 +1884,7 @@ static int check_medium_permission_and_status(struct req_container *reqc,
     return 0;
 }
 
-__attribute__((weak)) /* this attribute is useful for mocking in tests */
+mockable
 int fetch_and_check_medium_info(struct lock_handle *lock_handle,
                                 struct req_container *reqc,
                                 struct pho_id *m_id,
