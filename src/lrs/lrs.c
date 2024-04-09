@@ -759,13 +759,15 @@ static int _process_configure_request(struct lrs *lrs,
                      "Failed to dump JSON configuration");
     }
 
+    json_decref(queried_elements);
+
     rc = _send_message(&lrs->comm, &respc);
     pho_srl_response_free(&resp, false);
-    if (rc) {
-        json_decref(queried_elements);
+    if (rc)
         /* No need to try to send an error if the sending response failed */
         LOG_RETURN(rc, "Failed to send configure response");
-    }
+
+    return 0;
 
 free_array:
     json_decref(queried_elements);
