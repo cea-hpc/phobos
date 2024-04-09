@@ -544,6 +544,8 @@ out_request:
         pho_srl_tlc_request_free(req, true);
     }
 
+    free(data);
+
     return rc;
 }
 
