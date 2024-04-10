@@ -34,8 +34,27 @@
 #include <jansson.h>
 #include <libpq-fe.h>
 
+/**
+ * Escape a string for use in a database query.
+ *
+ * The escape is done using PSQL's "PQescapeLiteral" function.
+ * If \p is NULL or empty, return the string "NULL".
+ *
+ * \param[in] conn  The connection to the database
+ * \param[in] s     The string to escape, can be NULL or empty
+ *
+ * \return NULL on error, the string "NULL" if \p s is NULL or empty
+ *                        the escaped string otherwise
+ */
 char *dss_char4sql(PGconn *conn, const char *s);
 
+/**
+ * Free a string that was escaped using "dss_char4sql".
+ *
+ * If \p s is NULL or the string "NULL", does nothing.
+ *
+ * \param[in] s     The string to free, can be NULL or the string "NULL"
+ */
 void free_dss_char4sql(char *s);
 
 /**

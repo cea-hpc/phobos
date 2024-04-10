@@ -38,6 +38,15 @@
 #include "object.h"
 #include "resources.h"
 
+/**
+ * Get the dss_resource_ops structure appropriate for managing resources of
+ * \p type.
+ *
+ * \param[in] type  The type of resource to manage
+ *
+ * \return A pointer to the dss_resource_ops of the type to handle, or NULL is
+ *         the type is unknown
+ */
 static const struct dss_resource_ops *get_resource_ops(enum dss_type type)
 {
     switch (type) {

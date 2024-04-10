@@ -29,8 +29,21 @@
 
 #include "resources.h"
 
+/**
+ * The "extent" operations structure.
+ * Implements every function of the structure except "delete_query".
+ */
 extern const struct dss_resource_ops extent_ops;
 
+/**
+ * Decode the extent hash from a given json and store the result in \p extent.
+ *
+ * \param[out] extent      The extent in which to store the MD5 and XXH128 hash
+ * \param[in]  hash_field  The json field in which to search the hashes
+ *
+ * \return 0 on success, -EINVAL if \p hash_field is not a json object
+ *                       negative error code otherwise
+ */
 int dss_extent_hash_decode(struct extent *extent, json_t *hash_field);
 
 #endif

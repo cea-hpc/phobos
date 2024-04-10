@@ -61,12 +61,23 @@ struct dss_result {
     container_of((_list), struct dss_result, items)
 
 /**
- * Handle notices from PostgreSQL. Strip the trailing newline and re-emit them
- * through phobos log API.
+ * Handle notices from PostgreSQL. These are messages sent in or by PSQL, which
+ * can be handled by a client application, like the DSS.
+ *
+ * This handler takes in the message, strip the trailing newline and re-emit
+ * it as a Phobos log.
+ *
+ * https://www.postgresql.org/docs/current/libpq-notice-processing.html
+ *
+ * \param[in] arg      An optional argument given the client application (NULL
+ *                     in our case)
+ * \param[in] message  The notice to handle
  */
 static void dss_pg_logger(void *arg, const char *message)
 {
     size_t mlen = strlen(message);
+
+    (void) arg;
 
     if (message[mlen - 1] == '\n')
         mlen -= 1;

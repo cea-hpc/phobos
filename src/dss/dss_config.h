@@ -29,10 +29,29 @@
 
 #include <stdbool.h>
 
+/**
+ * Parse Phobos's configuration file to initialize the list of supported tape
+ * models.
+ *
+ * \return 0 if success, -EALREADY if list is already initialized already done
+ *                       a negative error code otherwise
+ */
 int parse_supported_tape_models(void);
 
+/**
+ * Check if a given tape \p model is supported by Phobos.
+ *
+ * \param[in] model  The tape model to check
+ *
+ * \return true if the model is supported, false otherwise
+ */
 bool dss_tape_model_check(const char *model);
 
+/**
+ * Retrieve the connection string to the DSS from Phobos's configuration file.
+ *
+ * \return the connection string, default is "dbname=phobos host=localhost"
+ */
 const char *get_connection_string(void);
 
 #endif

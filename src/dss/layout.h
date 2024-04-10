@@ -29,8 +29,26 @@
 
 #include "resources.h"
 
+/**
+ * The "layout" operations structure.
+ * Implements every function of the structure except "update_query" and
+ * "delete_query".
+ */
 extern const struct dss_resource_ops layout_ops;
 
+/**
+ * Decode the layout description from a given \p json.
+ *
+ * The description encompass the layout name, major and minor version numbers,
+ * and optionnally, any additional attributes.
+ *
+ * \param[out] desc        The layout module description to fill
+ * \param[in]  hash_field  The json field in which to search the fields listed
+ *                         above
+ *
+ * \return 0 on success, -EINVAL if \p json is not a json object
+ *                       negative error code otherwise
+ */
 int layout_desc_decode(struct module_desc *desc, const char *json);
 
 #endif

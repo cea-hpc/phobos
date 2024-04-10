@@ -64,17 +64,14 @@ const struct pho_config_item cfg_tape_model[] = {
 
 /* init by parse_supported_tape_models function called at config init */
 static GPtrArray *supported_tape_models;
-__attribute__((destructor)) static void _destroy_supported_tape_models(void)
+
+__attribute__((destructor))
+static void _destroy_supported_tape_models(void)
 {
     if (supported_tape_models)
         g_ptr_array_free(supported_tape_models, TRUE);
 }
 
-/**
- * Parse config to init supported model for media of tape type
- *
- * @return 0 if success, -EALREADY if job already done or a negative error code
- */
 int parse_supported_tape_models(void)
 {
     const char *config_list;
@@ -120,15 +117,6 @@ int parse_supported_tape_models(void)
     return 0;
 }
 
-/**
- * Check if tape model is listed in config.
- * -EINVAL is returned if given model is not listed as supported in the conf.
- * Match between model and supported conf list is case insensitive.
- *
- * @param[in] model
- *
- * @return true if model is on supported config list, else return false.
- */
 bool dss_tape_model_check(const char *model)
 {
     int index;

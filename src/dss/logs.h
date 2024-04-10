@@ -29,6 +29,10 @@
 
 #include "resources.h"
 
+/**
+ * The "logs" operations structure.
+ * Implements every function of the structure except "update_query".
+ */
 extern const struct dss_resource_ops logs_ops;
 
 int dss_resource_health(struct dss_handle *dss,

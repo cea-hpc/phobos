@@ -30,6 +30,10 @@
 
 #include "resources.h"
 
+/**
+ * The "deprecated object" operations structure.
+ * Implements every function of the structure except "update_query".
+ */
 extern const struct dss_resource_ops deprecated_ops;
 
 #endif

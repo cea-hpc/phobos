@@ -29,6 +29,10 @@
 
 #include "resources.h"
 
+/**
+ * The "device" operations structure.
+ * Implements every function of the structure.
+ */
 extern const struct dss_resource_ops device_ops;
 
 #endif

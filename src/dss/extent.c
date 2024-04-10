@@ -50,6 +50,15 @@ static void encode_hex_buffer(char *output, const unsigned char *input,
         sprintf(output + k, "%02x", input[j]);
 }
 
+/**
+ * Encode the MD5 and XXH128 hashes as a json from a given \p extent.
+ *
+ * \param[in] extent      The extent with the MD5 and XXH128 to encode
+ *
+ * \return The json representation of the hashes on success (should be free by
+ *         the caller)
+ *         NULL on error
+ */
 static char *dss_extent_hash_encode(struct extent *extent)
 {
     char *result = NULL;

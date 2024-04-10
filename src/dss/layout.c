@@ -30,6 +30,18 @@
 #include "dss_utils.h"
 #include "layout.h"
 
+/**
+ * Encode a layout description to JSON.
+ *
+ * The description encompass the layout name, major and minor version numbers,
+ * and optionnally, any additional attributes.
+ *
+ * \param[in] desc        The layout module description to encode
+ *
+ * \return The encoded layout description as JSON on success (the result should
+ *         be freed by the caller)
+ *         NULL on error
+ */
 static char *dss_layout_desc_encode(struct module_desc *desc)
 {
     json_t *attrs  = NULL;
@@ -165,10 +177,6 @@ static int layout_select_query(GString **conditions, int n_conditions,
     return 0;
 }
 
-/**
- * Extract layout type and parameters from json
- *
- */
 int layout_desc_decode(struct module_desc *desc, const char *json)
 {
     json_error_t json_error;

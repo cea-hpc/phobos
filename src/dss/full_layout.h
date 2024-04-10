@@ -29,6 +29,11 @@
 
 #include "resources.h"
 
+/**
+ * The "full layout" operations structure.
+ * Implements every function of the structure except "insert_query",
+ * "update_query" and "delete_query".
+ */
 extern const struct dss_resource_ops full_layout_ops;
 
 #endif

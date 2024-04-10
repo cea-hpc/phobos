@@ -133,6 +133,10 @@ static int deprecated_delete_query(void *void_deprecated, int item_cnt,
     return 0;
 }
 
+/**
+ * The creation of a deprecated object is the exact same process as for a
+ * regular object, but with the "deprecated time" added.
+ */
 static int deprecated_from_pg_row(struct dss_handle *handle, void *void_object,
                                   PGresult *res, int row_num)
 {
@@ -151,6 +155,10 @@ static void deprecated_result_free(void *void_object)
     (void) void_object;
 }
 
+/**
+ * The update query function is NULL because a deprecated object cannot be
+ * updated
+ */
 const struct dss_resource_ops deprecated_ops = {
     .insert_query = deprecated_insert_query,
     .update_query = deprecated_update_query,

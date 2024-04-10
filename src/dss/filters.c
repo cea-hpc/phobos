@@ -86,29 +86,38 @@ enum strvalue_type {
     STRVAL_KEYVAL  = 2  /* key/value pair in an array */
 };
 
-static void insert_string(struct dss_handle *handle, GString *qry,
-                          const char *strval, enum strvalue_type type)
+/**
+ * Insert a given \p string into \p query after escaping it and formatting it to
+ * follow the format specified by \p type.
+ *
+ * \param[in]  handle  A valid handle to the DSS
+ * \param[out] query   The query in which the string should be inserted
+ * \param[in]  string  The string to escape and insert
+ * \param[in]  type    The type of \p string
+ */
+static void insert_string(struct dss_handle *handle, GString *query,
+                          const char *string, enum strvalue_type type)
 {
-    size_t esc_len = strlen(strval) * 2 + 1;
+    size_t esc_len = strlen(string) * 2 + 1;
     char *esc_str;
     char *esc_val;
 
     esc_str = xmalloc(esc_len);
-    PQescapeStringConn(handle->dh_conn, esc_str, strval, esc_len, NULL);
+    PQescapeStringConn(handle->dh_conn, esc_str, string, esc_len, NULL);
 
     switch (type) {
     case STRVAL_INDEX:
-        g_string_append_printf(qry, "array['%s']", esc_str);
+        g_string_append_printf(query, "array['%s']", esc_str);
         break;
     case STRVAL_KEYVAL:
         esc_val = strchr(esc_str, '=');
         assert(esc_val);
 
         *esc_val++ = '\0';
-        g_string_append_printf(qry, "'{\"%s\": \"%s\"}'", esc_str, esc_val);
+        g_string_append_printf(query, "'{\"%s\": \"%s\"}'", esc_str, esc_val);
         break;
     default:
-        g_string_append_printf(qry, "'%s'", esc_str);
+        g_string_append_printf(query, "'%s'", esc_str);
     }
 
     free(esc_str);

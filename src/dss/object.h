@@ -32,6 +32,10 @@
 #define INSERT_OBJECT (1 << 0)
 #define INSERT_FULL_OBJECT (1 << 1)
 
+/**
+ * The "object" operations structure.
+ * Implements every function of the structure.
+ */
 extern const struct dss_resource_ops object_ops;
 
 #endif

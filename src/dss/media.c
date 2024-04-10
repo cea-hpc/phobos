@@ -74,8 +74,14 @@ static char *dss_media_stats_encode(struct media_stats stats)
     return res;
 }
 
-/*
- * \return 0 on success, negative error code on failure.
+/**
+ * Decode the stats of a medium from a given \p json.
+ *
+ * \param[out] stats  The stats in which to store the decoded JSON values
+ * \param[in]  json   The JSON string to decode
+ *
+ * \return 0 on success, -EINVAL if \p json is not a valid JSON object
+ *                       negative error code otherwise
  */
 static int dss_media_stats_decode(struct media_stats *stats, const char *json)
 {
@@ -309,18 +315,44 @@ free_info:
     return 0;
 }
 
+/**
+ * Append the strings \p field and \p field_value to the GString \p request,
+ * and adds an additional comma if there are other fields that will be inserted
+ * later.
+ *
+ * \param[out] request      The request in which to append the key/values and
+ *                          comma
+ * \param[in]  field        The string to insert, should contain a '%s' for a
+ *                          printf call
+ * \param[in]  field_value  The string that will replace the format identifier
+ *                          '%s' of \p field
+ * \param[in]  add_comma    Whether a comma and space should be added in \p
+ *                          request
+ */
 static void append_update_request(GString *request, const char *field,
                                   const char *field_value,
-                                  int64_t update_fields)
+                                  bool add_comma)
 {
     g_string_append_printf(request, field, field_value);
-    if (update_fields)
+    if (add_comma)
         g_string_append(request, ", ");
 }
 
+/**
+ * Append an escaped label update to the GString \p request.
+ *
+ * \param[in]  conn       The connection to the database, used to escape the
+ *                        label
+ * \param[out] request    The request in which to add the label update
+ * \param[in]  medium     The medium to extract the label from
+ * \param[in]  add_comma  Whether a comma and space should be added in \p
+ *                        request
+ *
+ * \return 0 on success, -EINVAL if the label escaping fails
+ */
 static int append_label_update_request(PGconn *conn, GString *request,
                                        struct media_info *medium,
-                                       int64_t update_fields)
+                                       bool add_comma)
 {
     char *fs_label = NULL;
 
@@ -330,15 +362,26 @@ static int append_label_update_request(PGconn *conn, GString *request,
                    "Failed to build FS_LABEL (%s) media update SQL "
                    "request", medium->fs.label);
 
-    append_update_request(request, "fs_label = %s", fs_label, update_fields);
+    append_update_request(request, "fs_label = %s", fs_label, add_comma);
     free_dss_char4sql(fs_label);
 
     return 0;
 }
 
+/**
+ * Append an escaped tags update to the GString \p request.
+ *
+ * \param[in]  conn       The connection to the database, used to escape the
+ *                        tags
+ * \param[out] request    The request in which to add the tags update
+ * \param[in]  medium     The medium to extract the tags from
+ * \param[in]  add_comma  Whether a comma and space should be added in \p
+ *                        request
+ *
+ * \return 0 on success, -EINVAL if the tags encoding or escaping fail
+ */
 static int append_tags_update_request(PGconn *conn, GString *request,
-                                      struct media_info *medium,
-                                      int64_t update_fields)
+                                      struct media_info *medium, bool add_comma)
 {
     char *tmp_tags = NULL;
     char *tags = NULL;
@@ -355,15 +398,26 @@ static int append_tags_update_request(PGconn *conn, GString *request,
         LOG_RETURN(-EINVAL,
                    "Failed to build tags media update SQL request");
 
-    append_update_request(request, "tags = %s", tags, update_fields);
+    append_update_request(request, "tags = %s", tags, add_comma);
     free_dss_char4sql(tags);
 
     return 0;
 }
 
+/**
+ * Append an escaped stats string update to the GString \p request.
+ *
+ * \param[in]  conn       The connection to the database, used to escape the
+ *                        stats
+ * \param[out] request    The request in which to add the stats update
+ * \param[in]  medium     The medium to extract the stats from
+ * \param[in]  add_comma  Whether a comma and space should be added in \p
+ *                        request
+ *
+ * \return 0 on success, -EINVAL if the stats encoding or escaping fail
+ */
 static int append_stat_update_request(PGconn *conn, GString *request,
-                                      struct media_info *medium,
-                                      int64_t update_fields)
+                                      struct media_info *medium, bool add_comma)
 {
     char *tmp_stats = NULL;
     char *stats = NULL;
@@ -379,7 +433,7 @@ static int append_stat_update_request(PGconn *conn, GString *request,
         LOG_RETURN(-EINVAL,
                    "Failed to build stats media update SQL request");
 
-    append_update_request(request, "stats = %s", stats, update_fields);
+    append_update_request(request, "stats = %s", stats, add_comma);
     free_dss_char4sql(stats);
 
     return 0;
@@ -406,24 +460,24 @@ static int media_update_query(PGconn *conn, void *void_med, int item_cnt,
             append_update_request(sub_request,
                                   "adm_status = '%s'",
                                   rsc_adm_status2str(medium->rsc.adm_status),
-                                  fields ^= ADM_STATUS);
+                                  (fields ^= ADM_STATUS) != 0);
 
         if (FS_STATUS & fields)
             append_update_request(sub_request,
                                   "fs_status = '%s'",
                                   fs_status2str(medium->fs.status),
-                                  fields ^= FS_STATUS);
+                                  (fields ^= FS_STATUS) != 0);
 
         if (FS_LABEL & fields) {
             rc = append_label_update_request(conn, sub_request, medium,
-                                             fields ^= FS_LABEL);
+                                             (fields ^= FS_LABEL) != 0);
             if (rc)
                 return rc;
         }
 
         if (TAGS & fields) {
             rc = append_tags_update_request(conn, sub_request, medium,
-                                            fields ^= TAGS);
+                                            (fields ^= TAGS) != 0);
             if (rc)
                 return rc;
         }
@@ -432,25 +486,26 @@ static int media_update_query(PGconn *conn, void *void_med, int item_cnt,
             append_update_request(sub_request,
                                   "put = %s",
                                   bool2sqlbool(medium->flags.put),
-                                  fields ^= PUT_ACCESS);
+                                  (fields ^= PUT_ACCESS) != 0);
 
         if (GET_ACCESS & fields)
             append_update_request(sub_request,
                                   "get = %s",
                                   bool2sqlbool(medium->flags.get),
-                                  fields ^= GET_ACCESS);
+                                  (fields ^= GET_ACCESS) != 0);
 
         if (DELETE_ACCESS & fields)
             append_update_request(sub_request,
                                   "delete = %s",
                                   bool2sqlbool(medium->flags.delete),
-                                  fields ^= DELETE_ACCESS);
+                                  (fields ^= DELETE_ACCESS) != 0);
 
         if (IS_STAT(fields)) {
-            rc = append_stat_update_request(conn, sub_request, medium,
-                                            fields = 0);
+            rc = append_stat_update_request(conn, sub_request, medium, false);
             if (rc)
                 return rc;
+
+            fields = 0;
         }
 
 

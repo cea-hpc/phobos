@@ -32,6 +32,15 @@
 
 #include "pho_dss.h"
 
+/**
+ * Check if a given key corresponds to a logical SQL operation.
+ * These include "$AND", "$OR", "$NOR" and "$NOT".
+ *
+ * \param[in] key  The key to check
+ *
+ * \return true if \p key is one of the listed logical operation, false
+ *         otherwise
+ */
 static inline bool key_is_logical_op(const char *key)
 {
     return !g_ascii_strcasecmp(key, "$AND") ||
@@ -40,7 +49,30 @@ static inline bool key_is_logical_op(const char *key)
            !g_ascii_strcasecmp(key, "$NOT");
 }
 
-int clause_filter_convert(struct dss_handle *handle, GString *qry,
+/**
+ * Convert a DSS \p filter to a \p query.
+ *
+ * \param[in] handle  A handle to the DSS, used to escape the strings of the
+ *                    filter
+ * \param[out] query  The query in which the converted filter should be placed
+ * \param[in] filter  The filter to convert
+ *
+ * \return 0 on success or if \p filter is NULL, a negative error code otherwise
+ */
+int clause_filter_convert(struct dss_handle *handle, GString *query,
                           const struct dss_filter *filter);
+
+/**
+ * Build a string \p filter using the given \p oid, \p uuid and \p version.
+ *
+ * \param[out] filter   The constructed filter
+ * \param[in]  oid      The oid to filter on, can be NULL
+ * \param[in]  uuid     The uuid to filter on, can be NULL
+ * \param[in]  version  The version to filter on, can be 0
+ *
+ * \return the length of the created \p filter, as created using asprintf.
+ */
+int build_object_json_filter(char **filter, const char *oid, const char *uuid,
+                             int version);
 
 #endif
