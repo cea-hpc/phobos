@@ -1654,6 +1654,8 @@ class MediaOptHandler(BaseResourceOptHandler):
                 adm.fs_format(media_list, nb_streams, fs_type, unlock=unlock,
                               force=force)
 
+            self.logger.info("Media '%s' have been formatted", media_list)
+
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))

@@ -706,12 +706,12 @@ get_target_free_slot_from_source_or_any(struct lib_descriptor *lib,
                       "element. We will search a free slot address to move.",
                       drive->src_addr, type2str(drive->type), drive->address);
         } else if ((*target)->type != SCSI_TYPE_SLOT) {
-            pho_warn("Source address of %s element at address '%#hx' "
-                     "corresponds to a %s element. We do not move to a source "
-                     "element different from %s. We will search a free slot "
-                     "address to move.",
-                     type2str(drive->type), drive->address,
-                     type2str((*target)->type), type2str(SCSI_TYPE_SLOT));
+            pho_debug("Source address of %s element at address '%#hx' "
+                      "corresponds to a %s element. We do not move to a source "
+                      "element different from %s. We will search a free slot "
+                      "address to move.",
+                      type2str(drive->type), drive->address,
+                      type2str((*target)->type), type2str(SCSI_TYPE_SLOT));
         } else if (!(*target)->full) {
             /*
              * We change unload_addr->lia_type from UNKNOWN to SLOT to set we
