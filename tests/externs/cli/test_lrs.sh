@@ -543,6 +543,27 @@ function test_retry_on_error_cleanup()
     drop_tables
 }
 
+# Custom mount script that fails the first two mounts and succeeds on the
+# third attempt.
+function mount_failure_cmd()
+{
+    local nb_retries=$1
+
+    echo 0 > /tmp/mount_count
+    echo "bash -c \"
+mount_count=\$(cat /tmp/mount_count)
+echo mount count: \$mount_count
+
+if (( mount_count == $nb_retries )); then
+    $pho_ldm_helper mount_ltfs '%s' '%s'
+    exit
+fi
+((mount_count++))
+echo \$mount_count > /tmp/mount_count
+exit 1
+\""
+}
+
 function test_retry_on_error_run()
 {
     local drives=$(get_lto_drives 6 3)
@@ -562,20 +583,7 @@ function test_retry_on_error_run()
     export PHOBOS_LRS_max_health=1
     invoke_tlc
 
-    # Custom mount script that fails the first two mounts and succeeds on the
-    # third attempt.
-    local cmd="bash -c \"
-mount_count=\$(cat /tmp/mount_count)
-echo mount count: \$mount_count
-
-if (( mount_count == 2 )); then
-    $pho_ldm_helper mount_ltfs '%s' '%s'
-    exit
-fi
-((mount_count++))
-echo \$mount_count > /tmp/mount_count
-exit 1
-\""
+    local cmd=$(mount_failure_cmd 2)
 
     echo 0 > /tmp/mount_count
     local save_mount_cmd=$PHOBOS_LTFS_cmd_mount
@@ -585,6 +593,7 @@ exit 1
 
     $phobos get "$oid" "$DIR_TEST_OUT"/"$oid"
     export PHOBOS_LTFS_cmd_mount="$save_mount_cmd"
+    unset PHOBOS_LRS_max_health
 }
 
 function test_retry_on_error()
@@ -642,7 +651,12 @@ function test_fair_share_max_reached()
     ps $pid || error "phobos get process is not running"
     $phobos sched fair_share --type LTO5 --max 1,1,1
     wait || error "Get should have succeeded after setting max reads to 1"
+
+    export PHOBOS_IO_SCHED_TAPE_dispatch_algo=none
     waive_daemons
+    drop_tables
+    drain_all_drives
+
     trap cleanup EXIT
 }
 
@@ -688,6 +702,52 @@ set -e
     drop_tables
 }
 
+function test_health()
+{
+    local drive=$(get_lto_drives 5 1)
+    local tape=$(get_tapes L5 1)
+
+    trap "drop_tables; cleanup" EXIT
+    setup_tables
+
+    $phobos drive add --unlock "$drive"
+    $phobos tape add --type LTO5 "$tape"
+
+    export PHOBOS_LRS_max_health=3
+
+    local cmd=$(mount_failure_cmd 2)
+    export PHOBOS_LTFS_cmd_mount=$cmd
+
+    trap "waive_daemons; drop_tables; cleanup" EXIT
+    invoke_daemons
+
+    $phobos tape format --unlock "$tape"
+    $phobos put /etc/hosts oid ||
+        error "Put should have succeeded after 2 failures"
+
+    # unmount LTFS
+    waive_lrs
+    invoke_lrs -vv
+
+    # Reset error count for mount script
+    echo 0 > /tmp/mount_count
+    $phobos put --overwrite /etc/hosts oid &&
+        error "Put shoud have failed after 4 errors"
+    $phobos tape list -o adm_status | grep failed ||
+        error "Tape should be set to failed once the max error is reached"
+    $phobos drive list -o adm_status | grep failed ||
+        error "Drive should be set to failed once the max error is reached"
+
+    waive_daemons
+    drop_tables
+    drain_all_drives
+    # Reset error count for mount script
+    echo 0 > /tmp/mount_count
+    unset PHOBOS_LRS_max_health
+    unset PHOBOS_LTFS_cmd_mount
+    trap cleanup EXIT
+}
+
 trap cleanup EXIT
 
 test_invalid_lock_file
@@ -711,4 +771,5 @@ if [[ -w /dev/changer ]]; then
     test_mount_failure_during_read_response
     test_format_fail_without_suitable_device
     test_fair_share_max_reached
+    test_health
 fi
