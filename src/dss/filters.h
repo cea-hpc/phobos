@@ -72,7 +72,7 @@ int clause_filter_convert(struct dss_handle *handle, GString *query,
  *
  * \return the length of the created \p filter, as created using asprintf.
  */
-int build_object_json_filter(char **filter, const char *oid, const char *uuid,
-                             int version);
+void build_object_json_filter(char **filter, const char *oid, const char *uuid,
+                              int version);
 
 #endif

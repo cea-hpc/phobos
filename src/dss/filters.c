@@ -277,3 +277,33 @@ out_free:
     saj_parser_free(&json2sql);
     return rc;
 }
+
+void build_object_json_filter(char **filter, const char *oid, const char *uuid,
+                              int version)
+{
+    GString *str = g_string_new(NULL);
+    int count = 0;
+
+    count += (oid ? 1 : 0);
+    count += (uuid ? 1 : 0);
+    count += (version && uuid ? 1 : 0);
+
+    g_string_append(str, "{\"$AND\": [");
+
+    if (oid)
+        g_string_append_printf(str, "{\"DSS::OBJ::oid\": \"%s\"}%s",
+                               oid, --count != 0 ? ", " : "");
+
+    if (uuid)
+        g_string_append_printf(str, "{\"DSS::OBJ::uuid\": \"%s\"}%s",
+                               uuid, --count != 0 ? ", " : "");
+
+    if (version && uuid)
+        g_string_append_printf(str, "{\"DSS::OBJ::version\": \"%d\"}",
+                               version);
+
+    g_string_append(str, "]}");
+
+    *filter = xstrdup(str->str);
+    g_string_free(str, true);
+}
