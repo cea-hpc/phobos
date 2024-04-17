@@ -469,7 +469,7 @@ static void init_rwalloc_container(struct req_container *reqc)
         xcalloc(rwalloc_params->respc->devices_len,
                 sizeof(*rwalloc_params->respc->devices));
 
-    if (pho_request_is_read(reqc->req))
+    if (!is_write)
         rml_init(&rwalloc_params->media_list, reqc);
 }
 

@@ -1941,6 +1941,72 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
     return 0;
 }
 
+enum allocation_status {
+    AS_ALLOCATED,
+    AS_RETRY,
+};
+
+/*
+ * \return   < 0 an error occured for this allocation
+ *           AS_ALLOCATED: the medium can be allocated to the device
+ *           AS_RETRY:     the caller should try to allocate another medium
+ *
+ */
+static int sched_try_alloc_medium(struct lrs_sched *sched,
+                                  struct lrs_dev *dev,
+                                  struct req_container *reqc,
+                                  size_t n_already_allocated,
+                                  size_t index_to_alloc,
+                                  int alloc_rc)
+{
+    struct media_info **medium_to_alloc;
+    int rc;
+
+    if (alloc_rc)
+        GOTO(skip_medium, rc = alloc_rc);
+
+    medium_to_alloc = reqc_get_medium_to_alloc(reqc, index_to_alloc);
+    if (!dev) {
+        /* an I/O scheduler may not set *medium_to_alloc if it doesn't find a
+         * suitable medium. Return EAGAIN in this case.
+         */
+        if (!*medium_to_alloc ||
+            compatible_drive_exists(sched, *medium_to_alloc,
+                                    reqc->params.rwalloc.respc->devices,
+                                    n_already_allocated, index_to_alloc))
+            rc = -EAGAIN;
+        else
+            rc = -ENODEV;
+
+        goto skip_medium;
+    } else if (!dev_is_sched_ready(dev)) {
+        rc = -EAGAIN;
+        goto skip_medium;
+    }
+
+    /* lock medium */
+    rc = ensure_medium_lock(&sched->lock_handle, *medium_to_alloc);
+    if (rc)
+        goto release_skip_medium;
+
+    dev->ld_ongoing_scheduled = true;
+    reqc->params.rwalloc.respc->devices[index_to_alloc] = dev;
+    return AS_ALLOCATED;
+
+release_skip_medium:
+    lrs_medium_release(*medium_to_alloc);
+    *medium_to_alloc = NULL;
+skip_medium:
+    if (dev)
+        dev->ld_ongoing_scheduled = false;
+
+    rc = skip_read_alloc_medium(rc, reqc, index_to_alloc);
+    if (rc)
+        return rc;
+
+    return AS_RETRY;
+}
+
 /**
  * Alloc one more medium to a device in a read alloc request
  */
@@ -1956,9 +2022,9 @@ static int sched_read_alloc_one_medium(struct lrs_sched *sched,
     size_t num_allocated = alloc->is_sub_request ?
         alloc->u.sub_req->medium_index : alloc->u.req.index;
     size_t index_to_alloc = num_allocated;
-    struct media_info **alloc_medium;
     struct read_media_list *list;
     struct lrs_dev *dev = NULL;
+    int alloc_status;
     int rc = 0;
 
     list = &reqc->params.rwalloc.media_list;
@@ -1976,7 +2042,7 @@ find_read_device:
                   index_to_alloc,
               dev ? dev->ld_dss_dev_info->rsc.id.name : "none");
     if (rc)
-        GOTO(skip_medium, rc);
+        GOTO(try_alloc, rc);
 
     assert(index_to_alloc >= num_allocated);
     if (dev && alloc->is_sub_request) {
@@ -2001,45 +2067,19 @@ find_read_device:
         index_to_alloc = num_allocated;
     }
 
-    alloc_medium = &reqc->params.rwalloc.media[index_to_alloc].alloc_medium;
-    if (!dev) {
-        /* an I/O scheduler may not set *alloc_medium if it doesn't find a
-         * suitable medium. Return EAGAIN in this case.
-         */
-        if (!*alloc_medium ||
-            compatible_drive_exists(sched, *alloc_medium,
-                                    reqc->params.rwalloc.respc->devices,
-                                    num_allocated, index_to_alloc))
-            rc = -EAGAIN;
-        else
-            rc = -ENODEV;
-
-        goto skip_medium;
-    } else if (!dev_is_sched_ready(dev)) {
-        rc = -EAGAIN;
-        goto skip_medium;
+try_alloc:
+    alloc_status = sched_try_alloc_medium(sched, dev, reqc, num_allocated,
+                                          index_to_alloc, rc);
+    switch (alloc_status) {
+    case AS_ALLOCATED:
+        return 0;
+    case AS_RETRY:
+        goto find_read_device;
+    default:
+        assert(alloc_status < 0);
+        return alloc_status;
     }
-
-    /* lock medium */
-    rc = ensure_medium_lock(&sched->lock_handle, *alloc_medium);
-    if (rc)
-        goto free_skip_medium;
-
-    dev->ld_ongoing_scheduled = true;
-    reqc->params.rwalloc.respc->devices[index_to_alloc] = dev;
-    return 0;
-
-free_skip_medium:
-    lrs_medium_release(*alloc_medium);
-    *alloc_medium = NULL;
-skip_medium:
-    if (dev)
-        dev->ld_ongoing_scheduled = false;
-    rc = skip_read_alloc_medium(rc, reqc, index_to_alloc);
-    if (rc)
-        return rc;
-
-    goto find_read_device;
+    __builtin_unreachable();
 }
 
 /**
