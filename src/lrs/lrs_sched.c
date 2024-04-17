@@ -2007,21 +2007,67 @@ skip_medium:
     return AS_RETRY;
 }
 
+static int sched_handle_read_alloc_error(struct lrs_sched *sched,
+                                         struct sub_request *sreq)
+{
+    size_t index_of_failed = sreq->medium_index;
+    struct read_media_list *list;
+    struct lrs_dev *dev = NULL;
+    int alloc_status;
+    int rc;
+
+    list = &sreq->reqc->params.rwalloc.media_list;
+    rml_reset(list);
+
+retry:
+    rc = io_sched_retry(&sched->io_sched_hdl, sreq, &dev);
+    pho_debug("I/O sched pair: rc=%d, index=%lu, dev=%s",
+              rc, sreq->medium_index,
+              dev ? dev->ld_dss_dev_info->rsc.id.name : "none");
+    if (rc)
+        GOTO(try_alloc, rc);
+
+    if (dev) {
+        if (sreq->failure_on_medium)
+            /* Move the failed medium (index_of_failed) in the error section.
+             * Swap it with the medium selected by the I/O scheduler
+             * (medium_index).
+             */
+            rml_medium_realloc_failed(list, sreq->medium_index,
+                                      index_of_failed);
+        else
+            rml_medium_realloc(list, sreq->medium_index, index_of_failed);
+
+        /* The newly allocated medium has been moved to index_of_failed to
+         * replace the previous one. Update medium_index accordingly.
+         */
+        sreq->medium_index = index_of_failed;
+    }
+
+try_alloc:
+    alloc_status = sched_try_alloc_medium(sched, dev, sreq->reqc,
+                                          sreq->reqc->req->ralloc->n_required,
+                                          sreq->medium_index,
+                                          rc);
+    switch (alloc_status) {
+    case AS_ALLOCATED:
+        return 0;
+    case AS_RETRY:
+        goto retry;
+    default:
+        assert(alloc_status < 0);
+        return alloc_status;
+    }
+}
+
 /**
  * Alloc one more medium to a device in a read alloc request
  */
 static int sched_read_alloc_one_medium(struct lrs_sched *sched,
-                                       struct allocation *alloc)
+                                       struct req_container *reqc,
+                                       size_t index_to_alloc,
+                                       size_t num_allocated)
 {
-    struct req_container *reqc = alloc->is_sub_request ?
-        alloc->u.sub_req->reqc :
-        alloc->u.req.reqc;
-    /* on error, num_allocated stores the position of the failed medium that
-     * will be updated by io_sched_retry
-     */
-    size_t num_allocated = alloc->is_sub_request ?
-        alloc->u.sub_req->medium_index : alloc->u.req.index;
-    size_t index_to_alloc = num_allocated;
     struct read_media_list *list;
     struct lrs_dev *dev = NULL;
     int alloc_status;
@@ -2030,39 +2076,16 @@ static int sched_read_alloc_one_medium(struct lrs_sched *sched,
     list = &reqc->params.rwalloc.media_list;
 
 find_read_device:
-    if (alloc->is_sub_request)
-        rc = io_sched_retry(&sched->io_sched_hdl, alloc->u.sub_req, &dev);
-    else
-        rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &dev,
-                                             &index_to_alloc);
+    rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &dev,
+                                         &index_to_alloc);
     pho_debug("I/O sched pair: rc=%d, index=%lu, dev=%s",
-              rc,
-              alloc->is_sub_request ?
-                  alloc->u.sub_req->medium_index :
-                  index_to_alloc,
+              rc, index_to_alloc,
               dev ? dev->ld_dss_dev_info->rsc.id.name : "none");
     if (rc)
         GOTO(try_alloc, rc);
 
     assert(index_to_alloc >= num_allocated);
-    if (dev && alloc->is_sub_request) {
-        if (alloc->u.sub_req->failure_on_medium)
-            /* Move the failed medium (index_to_alloc) in the error section.
-             * Swap it with the medium selected by the I/O scheduler
-             * (medium_index).
-             */
-            rml_medium_realloc_failed(list, alloc->u.sub_req->medium_index,
-                                      index_to_alloc);
-        else
-            rml_medium_realloc(list, alloc->u.sub_req->medium_index,
-                               index_to_alloc);
-
-        /* At this point, index_to_alloc already points to the new medium to
-         * allocate. We need medium_index to point to the old medium index now
-         * that the were switched.
-         */
-        alloc->u.sub_req->medium_index = index_to_alloc;
-    } else if (dev) {
+    if (dev) {
         rml_medium_update(list, index_to_alloc, RMAS_OK);
         index_to_alloc = num_allocated;
     }
@@ -2096,17 +2119,7 @@ static int sched_handle_read_alloc(struct lrs_sched *sched,
               reqc->req->ralloc->n_med_ids);
 
     for (i = 0; i < reqc->req->ralloc->n_required; i++) {
-        struct allocation alloc = {
-            .is_sub_request = false,
-            .u = {
-                .req = {
-                    .reqc = reqc,
-                    .index = i,
-                },
-            },
-        };
-
-        rc = sched_read_alloc_one_medium(sched, &alloc);
+        rc = sched_read_alloc_one_medium(sched, reqc, i, i);
         if (rc)
             break;
     }
@@ -2444,15 +2457,7 @@ static void sched_handle_read_or_write_error(struct lrs_sched *sched,
     *sreq_pushed_or_requeued = false;
     *req_ended = false;
     if (pho_request_is_read(sreq->reqc->req)) {
-        struct allocation alloc = {
-            .is_sub_request = true,
-            .u = {
-                .sub_req = sreq,
-            },
-        };
-
-        rml_reset(&sreq->reqc->params.rwalloc.media_list);
-        rc = sched_read_alloc_one_medium(sched, &alloc);
+        rc = sched_handle_read_alloc_error(sched, sreq);
     } else {
         device_select_func_t dev_select_policy;
 
