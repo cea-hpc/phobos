@@ -748,6 +748,54 @@ function test_health()
     trap cleanup EXIT
 }
 
+function test_health_medium_failure()
+{
+    local drives=($(get_lto_drives 5 2))
+    local tape=$(get_tapes L5 1)
+    local cmd=$(mount_failure_cmd 2)
+
+    export PHOBOS_LRS_max_health=3
+    export PHOBOS_LTFS_cmd_mount=$cmd
+
+    trap "waive_daemons; drop_tables; cleanup" EXIT
+    setup_tables
+    invoke_daemons
+
+    $phobos drive add --unlock ${drives[0]}
+    $phobos drive add ${drives[1]}
+    $phobos tape add --type LTO5 "$tape"
+
+    $phobos tape format --unlock "$tape"
+    $phobos put /etc/hosts oid ||
+        error "Put should have succeeded after 2 failures"
+
+    # unmount LTFS
+    waive_lrs
+
+    $phobos drive lock ${drives[0]}
+    $phobos drive unlock ${drives[1]}
+    invoke_lrs -vv
+
+    # Reset error count for mount script
+    echo 0 > /tmp/mount_count
+    $phobos put --overwrite /etc/hosts oid &&
+        error "Put shoud have failed after 4 errors on the medium"
+
+    $phobos tape list -o adm_status | grep failed ||
+        error "Tape should be set to failed once the max error is reached"
+    $phobos drive list -o adm_status | grep failed &&
+        error "No drive should be failed as their health should be one"
+
+    waive_daemons
+    drop_tables
+    drain_all_drives
+    # Reset error count for mount script
+    echo 0 > /tmp/mount_count
+    unset PHOBOS_LRS_max_health
+    unset PHOBOS_LTFS_cmd_mount
+    trap cleanup EXIT
+}
+
 trap cleanup EXIT
 
 test_invalid_lock_file
@@ -772,4 +820,5 @@ if [[ -w /dev/changer ]]; then
     test_format_fail_without_suitable_device
     test_fair_share_max_reached
     test_health
+    test_health_medium_failure
 fi
