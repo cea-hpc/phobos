@@ -316,7 +316,7 @@ static int find_write_device(struct io_scheduler *io_sched,
 
 find_device:
     *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
-                      select_empty_loaded_mount, 0, &NO_TAGS, *medium, false,
+                      select_empty_loaded_mount, 0, &NO_TAGS, *medium, true,
                       NULL);
     if (*dev)
         return 0;

@@ -1155,6 +1155,41 @@ err_nores:
     return rc;
 }
 
+/*
+ * The intent is to write: exclude media that are administratively
+ * locked, full, do not have the put operation flag and do not have the
+ * requested tags
+ */
+static bool medium_is_write_compatible(struct media_info *medium,
+                                       const struct tags *required_tags)
+{
+    if (medium->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED) {
+        pho_debug("Media '%s' is not unlocked but '%s'",
+                  medium->rsc.id.name,
+                  rsc_adm_status2str(medium->rsc.adm_status));
+        return false;
+    }
+
+    if (medium->fs.status == PHO_FS_STATUS_FULL) {
+        pho_debug("Media '%s' is full", medium->rsc.id.name);
+        return false;
+    }
+
+    if (!medium->flags.put) {
+        pho_debug("Media '%s' has a false put operation flag",
+                  medium->rsc.id.name);
+        return false;
+    }
+
+    if (required_tags->n_tags > 0 && !tags_in(&medium->tags, required_tags)) {
+        pho_debug("Media '%s' does not match required tags",
+                  medium->rsc.id.name);
+        return false;
+    }
+
+    return true;
+}
+
 /**
  * Device selection policy prototype.
  * @param[in]     required_size required space to perform the write operation.
@@ -1238,45 +1273,18 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
             goto unlock_continue;
         }
 
-        /*
-         * The intent is to write: exclude media that are administratively
-         * locked, full, do not have the put operation flag and do not have the
-         * requested tags
-         */
-        if (is_write && itr->ld_dss_media_info) {
-            if (itr->ld_dss_media_info->rsc.adm_status !=
-                    PHO_RSC_ADM_ST_UNLOCKED) {
-                pho_debug("Media '%s' is not unlocked but '%s'",
-                          itr->ld_dss_media_info->rsc.id.name,
-                          rsc_adm_status2str(
-                              itr->ld_dss_media_info->rsc.adm_status));
-                goto unlock_continue;
-            }
-
-            if (itr->ld_dss_media_info->fs.status == PHO_FS_STATUS_FULL) {
-                pho_debug("Media '%s' is full",
-                          itr->ld_dss_media_info->rsc.id.name);
-                goto unlock_continue;
-            }
-
-            if (!itr->ld_dss_media_info->flags.put) {
-                pho_debug("Media '%s' has a false put operation flag",
-                          itr->ld_dss_media_info->rsc.id.name);
-                goto unlock_continue;
-            }
-
-            if (media_tags->n_tags > 0 &&
-                !tags_in(&itr->ld_dss_media_info->tags, media_tags)) {
-                pho_debug("Media '%s' does not match required tags",
-                          itr->ld_dss_media_info->rsc.id.name);
-                goto unlock_continue;
-            }
-        }
+        /* if pmedia is set, we don't want to use the medium currently loaded */
+        if (is_write && !pmedia && itr->ld_dss_media_info &&
+            !medium_is_write_compatible(itr->ld_dss_media_info, media_tags))
+            goto unlock_continue;
 
         /* check tape / drive compat */
         if (pmedia) {
             bool compatible;
             int rc;
+
+            if (is_write && !medium_is_write_compatible(pmedia, media_tags))
+                goto unlock_continue;
 
             rc = tape_drive_compat(pmedia, itr, &compatible);
             if (rc) {
