@@ -30,14 +30,15 @@
 #endif
 
 /* glib will be used to handle common structures (GList, GString, ...) */
+#include <assert.h>
+#include <errno.h>
 #include <glib.h>
 #include <limits.h>
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <errno.h>
 
 #include "pho_attrs.h"
 
@@ -311,8 +312,11 @@ struct pho_id {
 
 static inline void pho_id_name_set(struct pho_id *id, const char *name)
 {
-    strncpy(id->name, name, PHO_URI_MAX - 1);
-    id->name[PHO_URI_MAX - 1] = '\0';
+    size_t len = strlen(name);
+
+    assert(len < PHO_URI_MAX);
+    memcpy(id->name, name, len);
+    id->name[len] = '\0';
 }
 
 struct pho_id *pho_id_dup(const struct pho_id *src);
