@@ -1220,10 +1220,6 @@ static int dev_handle_format(struct lrs_dev *dev)
     }
 
     rc = dev_medium_switch(dev, medium_to_format, &context);
-    if (rc == -EBUSY) {
-        pho_warn("Trying to load a busy medium to format, try again later");
-        return 0;
-    }
 
 check_health:
     if (rc) {
@@ -1636,11 +1632,6 @@ static int dev_handle_read_write(struct lrs_dev *dev)
         reqc->params.rwalloc.media[sub_request->medium_index].alloc_medium;
 
     rc = dev_medium_switch_mount(dev, medium_to_alloc, &context);
-    if (rc == -EBUSY) {
-        pho_warn("Trying to load a busy medium to %s, try again later",
-                 pho_srl_request_kind_str(reqc->req));
-        return 0;
-    }
     if (rc) {
         if (context.failure_on_device)
             decrease_device_health(dev);
@@ -2174,9 +2165,6 @@ static int dev_medium_switch(struct lrs_dev *dev,
     pho_debug("Will load medium '%s' in device '%s'", lrs_dev_name(dev),
               medium_to_load->rsc.id.name);
     rc = dev_load(dev, medium_to_load);
-    if (rc == -EBUSY)
-        return rc;
-
     if (rc) {
         // FIXME what to do about this?
         context->failure_on_device = true;
