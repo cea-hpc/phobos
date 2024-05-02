@@ -83,13 +83,13 @@ CREATE TABLE deprecated_object(
 CREATE TABLE extent(
     extent_uuid     varchar(36) UNIQUE DEFAULT uuid_generate_v4(),
     state           extent_state,
-    size            integer,
+    size            bigint,
     medium_family   dev_family,
     medium_id       varchar(255),
     address         varchar(1024),
     hash            jsonb,
     info            jsonb,
-    offsetof        integer, -- the name 'offset' is a reserved keyword
+    offsetof        bigint, -- the name 'offset' is a reserved keyword
 
     PRIMARY KEY (extent_uuid)
 );
