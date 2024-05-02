@@ -16,25 +16,25 @@ function invoke_daemon()
     shift 3
 
     DAEMON_PID_FILEPATH=${PID_FILEPATH} $LOG_COMPILER $LOG_FLAGS \
-        ${daemon_bin} "$*" &
+        ${daemon_bin} "$@" &
     wait $! || { echo "failed to start ${daemon_bin}"; return 1; }
     eval ${PID_VAR_NAME}=`cat ${PID_FILEPATH}`
 }
 
 function invoke_lrs()
 {
-   invoke_daemon ${LRS_PID_FILEPATH} $phobosd PID_LRS "$*"
+   invoke_daemon ${LRS_PID_FILEPATH} $phobosd PID_LRS "$@"
 }
 
 function invoke_tlc()
 {
-   invoke_daemon ${TLC_PID_FILEPATH} $tlc PID_TLC "$*"
+   invoke_daemon ${TLC_PID_FILEPATH} $tlc PID_TLC "$@"
 }
 
 function invoke_daemons()
 {
-    invoke_tlc
-    invoke_lrs
+    invoke_tlc "$@"
+    invoke_lrs "$@"
 }
 
 function waive_daemon()
