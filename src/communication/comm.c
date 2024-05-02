@@ -45,7 +45,7 @@
 #include "pho_common.h"
 
 /** Used to limit the received buffer size and avoid large allocations. */
-#define MAX_RECV_BUF_SIZE (16*1024LL)
+#define MAX_RECV_BUF_SIZE (2*1024*1024LL)
 
 enum _pho_comm_cri_msg_kind {
     PHO_CRI_MSG_SIZE,
