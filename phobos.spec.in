@@ -42,6 +42,7 @@ BuildRequires: libtool
 BuildRequires: make
 BuildRequires: openssl-devel >= 0.9.7
 BuildRequires: xxhash-devel
+BuildRequires: libcmocka-devel
 
 Requires: %{postgres_prefix}-server
 Requires: %{postgres_prefix}-contrib
