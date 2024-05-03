@@ -449,6 +449,7 @@ function test_mount_failure_during_read_response()
     # Force mount to fail
     local save_mount_cmd=$PHOBOS_LTFS_cmd_mount
     export PHOBOS_LTFS_cmd_mount="sh -c 'exit 1'"
+    export PHOBOS_LRS_max_health=3
     waive_lrs
     invoke_lrs
 
