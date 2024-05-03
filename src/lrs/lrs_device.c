@@ -1052,6 +1052,7 @@ void fail_release_medium(struct lrs_dev *dev, struct media_info *medium)
         pho_error(rc,
                   "Error when releasing medium %s after setting it to "
                   "status failed", medium->rsc.id.name);
+    pho_lock_clean(&medium->lock);
 }
 
 int dev_load(struct lrs_dev *dev, struct media_info *medium)
@@ -1845,11 +1846,13 @@ static void dev_cleanup_on_error(struct lrs_dev *device)
     if (device->ld_dss_media_info) {
         int rc;
 
-        rc = dss_medium_release(&device->ld_device_thread.dss,
-                                device->ld_dss_media_info);
-        if (rc)
-            pho_error(rc, "Error when releasing medium '%s' at cleanup",
-                      device->ld_dss_media_info->rsc.id.name);
+        if (device->ld_dss_media_info->lock.hostname) {
+            rc = dss_medium_release(&device->ld_device_thread.dss,
+                                    device->ld_dss_media_info);
+            if (rc)
+                pho_error(rc, "Error when releasing medium '%s' at cleanup",
+                          device->ld_dss_media_info->rsc.id.name);
+        }
 
         MUTEX_LOCK(&device->ld_mutex);
         lrs_medium_release(device->ld_dss_media_info);
@@ -2142,7 +2145,8 @@ static int dev_medium_switch(struct lrs_dev *dev,
 
     if (medium_is_loaded(dev, medium_to_load)) {
         /* medium already loaded in device */
-        pho_debug("medium_to_alloc for device '%s' is NULL", lrs_dev_name(dev));
+        pho_debug("medium_to_alloc for device '%s' is already loaded",
+                  lrs_dev_name(dev));
         rc = check_device_state_for_load(dev);
         if (rc) {
             sub_req->failure_on_medium = true;
