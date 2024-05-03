@@ -1239,7 +1239,7 @@ static void test_io_sched_error(void **data, bool free_device)
 
     index = 1;
     rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
-    free_medium_to_alloc(&reqc, 1);
+    /* media_info at this index will be free by io_sched_retry */
     assert_return_code(rc, -rc);
     assert_ptr_equal(dev, &devices[1]);
     if (IO_REQ_TYPE == IO_REQ_READ)

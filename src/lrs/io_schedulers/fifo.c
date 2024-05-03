@@ -372,59 +372,54 @@ static int find_format_device(struct io_scheduler *io_sched,
     return 0;
 }
 
-static int generic_get_device_medium_pair(struct io_scheduler *io_sched,
-                                          struct sub_request *sreq,
-                                          struct lrs_dev **device,
-                                          bool is_error)
+static size_t get_read_index(struct sub_request *sreq,
+                             struct queue_element *elem,
+                             bool is_error, bool is_retry)
 {
     struct req_container *reqc = sreq->reqc;
-    struct queue_element *elem;
-    bool is_retry = false;
-    GQueue *queue;
+    size_t health;
+    size_t index;
+
+
+    if (is_error) {
+        health = (*reqc_get_medium_to_alloc(reqc, sreq->medium_index))->health;
+        index = (sreq->failure_on_medium && health == 0) ?
+            /* Select the first non-failed medium. */
+            reqc->req->ralloc->n_required :
+            /* No failure on the medium, it can be reused. */
+            sreq->medium_index;
+    } else if (is_retry) {
+        /* On retry, use the same index. */
+        index = sreq->medium_index;
+    } else {
+        /* Otherwise, take the next medium. */
+        index = elem->num_media_allocated;
+    }
+
+    return index;
+}
+
+static int generic_get_device_medium_pair(struct io_scheduler *io_sched,
+                                          struct sub_request *sreq,
+                                          struct queue_element *elem,
+                                          struct lrs_dev **device,
+                                          bool is_error,
+                                          bool is_retry)
+{
+    struct req_container *reqc = sreq->reqc;
     int rc;
 
-    queue = (GQueue *) io_sched->private_data;
-
-    if (pho_request_is_read(reqc->req) &&
-        *reqc_get_medium_to_alloc(reqc, sreq->medium_index)) {
-        /* This is a retry on a medium previously allocated for this request.
-         * Release the reference in the request container.
-         */
-        lrs_medium_release(*reqc_get_medium_to_alloc(reqc, sreq->medium_index));
-        *reqc_get_medium_to_alloc(reqc, sreq->medium_index) = NULL;
-    }
-
-    if (!is_error) {
-        elem = g_queue_peek_tail(queue);
-        if (!is_reqc_the_first_element(queue, reqc))
-            LOG_RETURN(-EINVAL,
-                       "Request '%p' is not the first element of the queue, "
-                       "got %p instead",
-                       reqc, elem ? elem->reqc : NULL);
-
-        if (pho_request_is_read(reqc->req)) {
-            if (elem->num_media_allocated >= reqc->req->ralloc->n_med_ids)
-                LOG_RETURN(-ERANGE, "get_device_medium_pair called too many "
-                                    "times on the same request");
-
-
-            if (elem->num_media_allocated != sreq->medium_index)
-                is_retry = true;
-        }
-    }
-
     if (pho_request_is_read(reqc->req)) {
-        size_t index = is_error ?
-            /* Select the first non-failed medium. */
-            (sreq->failure_on_medium ? reqc->req->ralloc->n_required :
-                                       /* No failure on the medium, it can be
-                                        * reused.
-                                        */
-                                       sreq->medium_index) :
-            /* On retry, use the same index. */
-            is_retry ? sreq->medium_index :
-                       /* Otherwise, take the next medium. */
-                       elem->num_media_allocated;
+        size_t index = get_read_index(sreq, elem, is_error, is_retry);
+
+        if (is_error) {
+            struct media_info **previous_medium;
+
+            previous_medium = reqc_get_medium_to_alloc(reqc,
+                                                       sreq->medium_index);
+            lrs_medium_release(*previous_medium);
+            *previous_medium = NULL;
+        }
 
         rc = find_read_device(io_sched, reqc, device, index,
                               sreq->medium_index);
@@ -457,9 +452,41 @@ static int fifo_get_device_medium_pair(struct io_scheduler *io_sched,
         .medium_index = index ? *index : 0,
         .failure_on_medium = false,
     };
+    struct queue_element *elem;
+    bool is_retry = false;
+    GQueue *queue;
     int rc;
 
-    rc = generic_get_device_medium_pair(io_sched, &sreq, device, false);
+    queue = (GQueue *) io_sched->private_data;
+
+    if (pho_request_is_read(reqc->req) &&
+        *reqc_get_medium_to_alloc(reqc, sreq.medium_index)) {
+        /* This is a retry on a medium previously allocated for this request.
+         * Release the reference in the request container.
+         */
+        lrs_medium_release(*reqc_get_medium_to_alloc(reqc, sreq.medium_index));
+        *reqc_get_medium_to_alloc(reqc, sreq.medium_index) = NULL;
+    }
+
+    elem = g_queue_peek_tail(queue);
+    if (!is_reqc_the_first_element(queue, reqc))
+        LOG_RETURN(-EINVAL,
+                   "Request '%p' is not the first element of the queue, "
+                   "got %p instead",
+                   reqc, elem ? elem->reqc : NULL);
+
+    if (pho_request_is_read(reqc->req)) {
+        if (elem->num_media_allocated >= reqc->req->ralloc->n_med_ids)
+            LOG_RETURN(-ERANGE, "get_device_medium_pair called too many "
+                                "times on the same request");
+
+
+        if (elem->num_media_allocated != sreq.medium_index)
+            is_retry = true;
+    }
+
+    rc = generic_get_device_medium_pair(io_sched, &sreq, elem, device, false,
+                                        is_retry);
     if (rc)
         return rc;
 
@@ -477,7 +504,9 @@ static int fifo_retry(struct io_scheduler *io_sched,
               "in fifo %s scheduler",
               sreq->medium_index, sreq->reqc,
               pho_srl_request_kind_str(sreq->reqc->req));
-    return generic_get_device_medium_pair(io_sched, sreq, dev, true);
+
+    return generic_get_device_medium_pair(io_sched, sreq, NULL, dev, true,
+                                          false);
 }
 
 static void fifo_add_device(struct io_scheduler *io_sched,
