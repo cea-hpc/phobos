@@ -20,15 +20,14 @@
 #
 
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
-. $test_dir/../../utils_generation.sh
-. $test_dir/../../tape_drive.sh
-lrs_simple_client="$test_dir/lrs_simple_client"
-pho_ldm_helper="$test_dir/../../../scripts/pho_ldm_helper"
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
 
-set -xe
+lrs_simple_client="$test_dir/externs/cli/lrs_simple_client"
+pho_ldm_helper="$test_dir/../scripts/pho_ldm_helper"
 
 function setup
 {
@@ -315,7 +314,7 @@ function test_wait_end_of_IO_before_shutdown()
 {
     local dir=$(mktemp -d)
 
-    trap "waive_lrs; drop_tables; rm -rf '$dir'; cleanup" EXIT
+    trap "waive_lrs; rm -rf '$dir'; cleanup" EXIT
     setup_tables
     invoke_lrs -vv
 
@@ -336,9 +335,7 @@ function test_wait_end_of_IO_before_shutdown()
         error "Daemon not stopped after 10 seconds"
     fi
     PID_LRS=0
-
-    drop_tables
-    rm -rf '$dir'
+    trap "rm -rf '$dir'; cleanup" EXIT
 }
 
 function wait_for_process_end()
@@ -361,8 +358,7 @@ function test_cancel_waiting_requests_before_shutdown()
     local file=$(mktemp)
     local res_file="res_file"
 
-    trap "waive_lrs; drop_tables; rm -rf '$dir' '$file' '$res_file'; cleanup" \
-        EXIT
+    trap "waive_lrs; rm -rf '$dir' '$file' '$res_file'; cleanup" EXIT
     setup_tables
     invoke_lrs
 
@@ -397,9 +393,7 @@ function test_cancel_waiting_requests_before_shutdown()
         error "Daemon not stopped after 10 seconds"
     fi
     PID_LRS=0
-
-    drop_tables
-    rm -rf "$dir" "$file" "$res_file"
+    trap "rm -rf '$dir' '$file' '$res_file'; cleanup" EXIT
 }
 
 function test_refuse_new_request_during_shutdown()
@@ -407,7 +401,7 @@ function test_refuse_new_request_during_shutdown()
     local dir=$(mktemp -d)
     local file=$(mktemp)
 
-    trap "waive_lrs; drop_tables; rm -rf '$dir' '$file'; cleanup" EXIT
+    trap "waive_lrs; rm -rf '$dir' '$file'; cleanup" EXIT
     setup_tables
     invoke_lrs
 
@@ -429,9 +423,7 @@ function test_refuse_new_request_during_shutdown()
         error "Daemon not stopped after 10 seconds"
     fi
     PID_LRS=0
-
-    drop_tables
-    rm -rf "$dir" "$file"
+    trap "rm -rf '$dir' '$file'; cleanup" EXIT
 }
 
 function test_mount_failure_during_read_response()
@@ -440,8 +432,7 @@ function test_mount_failure_during_read_response()
     local tape=$(get_tapes L6 1)
     local drive=$(get_lto_drives 6 1)
 
-    trap "waive_daemons; drop_tables; rm -f '$file'; \
-          unset PHOBOS_LTFS_cmd_mount; cleanup" EXIT
+    trap "waive_daemons; rm -f '$file'; cleanup" EXIT
     setup_tables
     invoke_daemons
 
@@ -466,11 +457,10 @@ function test_mount_failure_during_read_response()
 
     ps --pid "$PID_LRS"
 
-    trap cleanup EXIT
     export PHOBOS_LTFS_cmd_mount="$save_mount_cmd"
     waive_daemons
-    drop_tables
     rm -f "$file"
+    cleanup
 }
 
 function format_wait_and_check()
@@ -522,6 +512,10 @@ function test_format_fail_without_suitable_device()
 
 function test_retry_on_error_setup()
 {
+    local algo=$1
+
+    export PHOBOS_IO_SCHED_TAPE_read_algo="$algo"
+
     drain_all_drives
     drop_tables
     setup_tables
@@ -543,8 +537,8 @@ function test_retry_on_error_cleanup()
     drop_tables
 }
 
-# Custom mount script that fails the first two mounts and succeeds on the
-# third attempt.
+# Custom mount script that fails the first nb_retries=$1 mounts and succeeds on
+# the third attempt.
 function mount_failure_cmd()
 {
     local nb_retries=$1
@@ -564,7 +558,7 @@ exit 1
 \""
 }
 
-function test_retry_on_error_run()
+function test_retry_on_error()
 {
     local drives=$(get_lto_drives 6 3)
     local tapes=$(get_tapes L6 3)
@@ -594,23 +588,6 @@ function test_retry_on_error_run()
     $phobos get "$oid" "$DIR_TEST_OUT"/"$oid"
     export PHOBOS_LTFS_cmd_mount="$save_mount_cmd"
     unset PHOBOS_LRS_max_health
-}
-
-function test_retry_on_error()
-{
-    for algo in fifo grouped_read; do
-        (
-         # This test is only executed for tapes
-         export PHOBOS_IO_SCHED_TAPE_read_algo="$algo"
-         set -xe
-
-         trap test_retry_on_error_cleanup EXIT
-         test_retry_on_error_setup
-         test_retry_on_error_run
-
-         unset PHOBOS_IO_SCHED_TAPE_read_algo
-        )
-    done
 }
 
 function test_fair_share_max_reached()
@@ -845,30 +822,38 @@ function test_health_device_failure()
     trap cleanup EXIT
 }
 
-trap cleanup EXIT
+TEST_SETUP=setup
+TEST_CLEANUP=cleanup
 
-test_invalid_lock_file
+TESTS=(
+    test_invalid_lock_file
+    test_multiple_instances
+    test_recover_dir_old_locks
+    test_remove_invalid_media_locks
+    test_wait_end_of_IO_before_shutdown
+    test_cancel_waiting_requests_before_shutdown
+    test_refuse_new_request_during_shutdown
+    test_no_DAEMON_PID_FILEPATH_lock_cleaned
+)
 
-setup
-
-test_multiple_instances
-test_recover_dir_old_locks
-test_remove_invalid_media_locks
-test_wait_end_of_IO_before_shutdown
-test_cancel_waiting_requests_before_shutdown
-test_refuse_new_request_during_shutdown
-test_no_DAEMON_PID_FILEPATH_lock_cleaned
 
 # Tape tests are available only if /dev/changer exists, which is the entry
 # point for the tape library.
 if [[ -w /dev/changer ]]; then
-    test_retry_on_error
-    test_recover_drive_old_locks
-    test_remove_invalid_device_locks
-    test_mount_failure_during_read_response
-    test_format_fail_without_suitable_device
-    test_fair_share_max_reached
-    test_health
-    test_health_medium_failure
-    test_health_device_failure
+    TESTS+=(
+        "test_retry_on_error_setup grouped_read; \
+         test_retry_on_error; \
+         test_retry_on_error_cleanup"
+        "test_retry_on_error_setup fifo; \
+         test_retry_on_error; \
+         test_retry_on_error_cleanup"
+        test_recover_drive_old_locks
+        test_remove_invalid_device_locks
+        test_mount_failure_during_read_response
+        test_format_fail_without_suitable_device
+        test_fair_share_max_reached
+        test_health
+        test_health_medium_failure
+        test_health_device_failure
+    )
 fi
