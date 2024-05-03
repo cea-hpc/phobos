@@ -16,6 +16,23 @@
       "message": "On Rhel8 and Rhel9, the package seems to be \"libcmocka-devel\" instead of the \"cmocka-devel\" one you added.\n\nDominique, on which OS/version did you find the \"cmocka-devel\" package ?",
       "revId": "89b1bfa65325cbb881be2ca73939bf576612fe23",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5f361dc1_34754892",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2024-05-03T13:55:25Z",
+      "side": 1,
+      "message": "I also wonder why we need to add cmocka as build requirement because we only use it for testing purpose ?",
+      "revId": "89b1bfa65325cbb881be2ca73939bf576612fe23",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
     }
   ]
 }
