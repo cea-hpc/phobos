@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ec92bb4a_50adf6f1",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2024-05-03T13:52:51Z",
+      "side": 1,
+      "message": "On Rhel8 and Rhel9, the package seems to be \"libcmocka-devel\" instead of the \"cmocka-devel\" one you added.\n\nDominique, on which OS/version did you find the \"cmocka-devel\" package ?",
+      "revId": "89b1bfa65325cbb881be2ca73939bf576612fe23",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    }
+  ]
+}
