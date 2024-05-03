@@ -2017,11 +2017,14 @@ static int sched_handle_read_alloc_error(struct lrs_sched *sched,
     size_t index_of_failed = sreq->medium_index;
     struct read_media_list *list;
     struct lrs_dev *dev = NULL;
+    size_t health_of_failed;
     int alloc_status;
     int rc;
 
     ENTRY;
 
+    health_of_failed =
+        (*reqc_get_medium_to_alloc(sreq->reqc, index_of_failed))->health;
     list = &sreq->reqc->params.rwalloc.media_list;
     rml_reset(list);
 
@@ -2037,7 +2040,7 @@ retry:
     }
 
     if (dev) {
-        if (sreq->failure_on_medium)
+        if (sreq->failure_on_medium && health_of_failed == 0)
             /* Move the failed medium (index_of_failed) in the error section.
              * Swap it with the medium selected by the I/O scheduler
              * (medium_index).
