@@ -431,8 +431,10 @@ function test_mount_failure_during_read_response()
     local file=$(mktemp)
     local tape=$(get_tapes L6 1)
     local drive=$(get_lto_drives 6 1)
+    local algo=$1
 
     trap "waive_daemons; rm -f '$file'; cleanup" EXIT
+    export PHOBOS_IO_SCHED_TAPE_read_algo="$algo"
     setup_tables
     invoke_daemons
 
@@ -850,7 +852,8 @@ if [[ -w /dev/changer ]]; then
          test_retry_on_error_cleanup"
         test_recover_drive_old_locks
         test_remove_invalid_device_locks
-        test_mount_failure_during_read_response
+        "test_mount_failure_during_read_response fifo"
+        "test_mount_failure_during_read_response grouped_read"
         test_format_fail_without_suitable_device
         test_fair_share_max_reached
         test_health

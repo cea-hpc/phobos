@@ -1268,12 +1268,12 @@ static int grouped_retry(struct io_scheduler *io_sched,
 
     *dev = NULL;
 
-    n_medium_indices = (sreq->failure_on_medium ? 0 : 1) +
+    n_medium_indices = ((*medium)->health == 0 ? 0 : 1) +
         (reqc->req->ralloc->n_med_ids - reqc->req->ralloc->n_required);
 
     medium_indices = xmalloc(n_medium_indices * sizeof(*medium_indices));
 
-    if (!sreq->failure_on_medium) {
+    if ((*medium)->health > 0) {
         medium_indices[0] = sreq->medium_index;
         for (i = 1; i < n_medium_indices; i++)
             medium_indices[i] = reqc->req->ralloc->n_required + (i - 1);
@@ -1315,7 +1315,7 @@ static int grouped_retry(struct io_scheduler *io_sched,
          * medium or the one that was just tried if no error occured on the
          * medium.
          */
-        if (sreq->failure_on_medium) {
+        if ((*medium)->health == 0) {
             /* release the previous reference in the request container */
             lrs_medium_release(*medium);
             sreq->medium_index = reqc->req->ralloc->n_required;
@@ -1350,7 +1350,7 @@ static int grouped_retry(struct io_scheduler *io_sched,
         }
 
         if ((*dev)->ld_io_request_type & IO_REQ_READ) {
-            *dev = NULL;
+            *dev = dev_is_sched_ready(*dev) ? *dev : NULL;
             return 0;
         }
     }

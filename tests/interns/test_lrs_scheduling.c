@@ -1272,17 +1272,22 @@ static void test_io_sched_error(void **data, bool free_device)
         will_return(sched_select_medium, 0);
     }
 
-    index = 1;
     /* device D2 will be chosen as it is free */
     if (free_device)
         devices[1].ld_ongoing_scheduled = false;
     unload_medium(&devices[1]);
 
+    index = 1;
     struct sub_request sreq = {
         .reqc = &reqc,
         .medium_index = index,
         .failure_on_medium = true,
     };
+
+    /* In case of READ, the health of the failed medium must be decreased. */
+    if (IO_REQ_TYPE == IO_REQ_READ)
+        reqc.params.rwalloc.media[index].alloc_medium->health -= 1;
+
     rc = io_sched_retry(io_sched, &sreq, &dev);
     free_medium_to_alloc(&reqc, 1);
     assert_return_code(rc, -rc);
