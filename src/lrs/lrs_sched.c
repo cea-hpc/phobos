@@ -2503,6 +2503,7 @@ static void sched_handle_read_or_write_error(struct lrs_sched *sched,
         selected_device->ld_sub_request = sreq;
         selected_device->ld_ongoing_scheduled = false;
         MUTEX_UNLOCK(&selected_device->ld_mutex);
+        thread_signal(&selected_device->ld_device_thread);
         *sreq_pushed_or_requeued = true;
     } else {
         if (rc == -EAGAIN) {
