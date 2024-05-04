@@ -33,6 +33,42 @@
       "message": "I also wonder why we need to add cmocka as build requirement because we only use it for testing purpose ?",
       "revId": "89b1bfa65325cbb881be2ca73939bf576612fe23",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "4feb7c23_e1a114a1",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1003556
+      },
+      "writtenOn": "2024-05-04T00:12:41Z",
+      "side": 1,
+      "message": "Sorry, I got confused with all the other packages that don\u0027t have lib- on el, shouldn\u0027t commit at 2AM.\nGood catch!",
+      "parentUuid": "ec92bb4a_50adf6f1",
+      "revId": "89b1bfa65325cbb881be2ca73939bf576612fe23",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "c2d017ee_bc14f2eb",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1003556
+      },
+      "writtenOn": "2024-05-04T00:12:41Z",
+      "side": 1,
+      "message": "rpmbuild should run tests, so this is required for build.\n\nIt doesn\u0027t add any actual require to the resulting package for runtime, so I think it\u0027s fine to add build requires.",
+      "parentUuid": "5f361dc1_34754892",
+      "revId": "89b1bfa65325cbb881be2ca73939bf576612fe23",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
     }
   ]
 }
