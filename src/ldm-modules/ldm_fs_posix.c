@@ -85,8 +85,11 @@ static int dir_get_label(const char *mnt_path, char *fs_label, size_t llen,
         LOG_RETURN(-ENOMEM, "Cannot lookup filesystem label at '%s'", mnt_path);
 
     fd = open(label_path, O_RDONLY);
-    if (fd < 0)
-        LOG_GOTO(out_free, rc = -errno, "Cannot open label: '%s'", label_path);
+    if (fd < 0) {
+        rc = -errno;
+        pho_verb("Cannot open label: '%s'", label_path);
+        goto out_free;
+    }
 
     rc = read(fd, fs_label, llen - 1);
     if (rc < 0)
@@ -119,7 +122,7 @@ static int dir_present(const char *dev_path, char *mnt_path,
 
     rc = dir_get_label(dev_path, mounted_label, sizeof(mounted_label), NULL);
     if (rc) {
-        pho_info("dir is present but we can't get any label");
+        pho_verb("dir is present but we can't get any label");
         return -ENOENT;
     }
 
