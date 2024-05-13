@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "58fdf6a7_2c7deea4",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2024-05-13T12:14:05Z",
+      "side": 1,
+      "message": "Thanks Dominique for this new version. I cherrypeeked your patch to our internal CI process to integrate it (to preserve you authorship :-) !!! ). I will let you know as soon as the corresponding patch is integrated to master.",
+      "revId": "a79f222b7e4173ae978f7d4c700aabebeb6853f2",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    }
+  ]
+}
