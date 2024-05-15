@@ -60,6 +60,7 @@ check_PROGRAMS=test_attrs \
                test_lrs_cfg \
                test_lrs_device \
                test_lrs_scheduling \
+               test_ltfs_logs \
                test_mapper \
                test_phobos_admin_medium_locate \
                test_pho_cache \
@@ -150,6 +151,13 @@ test_lrs_scheduling_LDADD=$(LRS_LIB) $(LDM_LIB) $(MOD_LOAD_LIB) $(DSS_LIB) \
                           $(SERIALIZER_LIB) $(CFG_LIB) $(IO_LIB) $(COMMON_LIB) \
                           $(TESTS_LIB) $(TESTS_LIB_DEPS)
 test_lrs_scheduling_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I..
+
+test_ltfs_logs_SOURCES=test_ltfs_logs.c
+test_ltfs_logs_LDADD=$(MOD_LOAD_LIB) $(SCSI_LIB) $(LDM_SCSI_LIB) \
+                     $(IO_LTFS_LIB) $(FS_LTFS_LIB) $(ADMIN_LIB) $(TESTS_LIB) \
+                     $(TESTS_LIB_DEPS) $(TLC_LIB)
+test_ltfs_logs_CFLAGS=$(AM_CFLAGS) -I$(TO_SRC)/lrs -I$(TO_SRC)/ldm-modules \
+                      -I..  $(TESTS_LIB_INCLUDES)
 
 test_mapper_SOURCES=test_mapper.c
 test_mapper_LDADD=$(STORE_LIB) $(MAPPER_LIB) $(TESTS_LIB) $(TESTS_LIB_DEPS)

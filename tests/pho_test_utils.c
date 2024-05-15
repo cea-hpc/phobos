@@ -124,25 +124,6 @@ void create_device(struct lrs_dev *dev, char *path, char *model,
     dev->ld_dss_dev_info->path = path;
     rc = lrs_dev_technology(dev, &dev->ld_technology);
     assert_return_code(rc, -rc);
-
-    if (path[0] == '/') {
-        struct dev_adapter_module *deva;
-        struct lib_handle lib_hdl;
-        char *serial;
-
-        rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl);
-        assert_return_code(rc, -rc);
-        get_serial_from_path(path, &serial);
-        assert_int_equal(get_dev_adapter(PHO_RSC_TAPE, &deva), 0);
-        assert_int_equal(ldm_lib_drive_lookup(&lib_hdl, serial,
-                                              &dev->ld_lib_dev_info), 0);
-        assert_int_equal(ldm_dev_lookup(deva, serial,
-                                        dev->ld_dev_path,
-                                        sizeof(dev->ld_dev_path)), 0);
-        free(serial);
-        rc = ldm_lib_close(&lib_hdl);
-        assert_return_code(rc, -rc);
-    }
 }
 
 void cleanup_device(struct lrs_dev *dev)
