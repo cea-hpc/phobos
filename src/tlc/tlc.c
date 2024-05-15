@@ -95,8 +95,12 @@ static int tlc_init(struct tlc *tlc)
     }
 
     /* open TLC communicator */
-    sock_addr.tcp.hostname = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, hostname);
-    sock_addr.tcp.port = PHO_CFG_GET_INT(cfg_tlc, PHO_CFG_TLC, port, -1);
+    sock_addr.tcp.hostname = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, listen_hostname);
+    if (!sock_addr.tcp.hostname)
+        sock_addr.tcp.hostname = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, hostname);
+    sock_addr.tcp.port = PHO_CFG_GET_INT(cfg_tlc, PHO_CFG_TLC, listen_port, -1);
+    if (sock_addr.tcp.port == -1)
+        sock_addr.tcp.port = PHO_CFG_GET_INT(cfg_tlc, PHO_CFG_TLC, port, -1);
     if (sock_addr.tcp.port == -1)
         LOG_GOTO(close_lib, rc = -EINVAL,
                  "Unable to get a valid integer TLC port value");
