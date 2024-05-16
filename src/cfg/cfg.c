@@ -384,7 +384,7 @@ int _pho_cfg_get_int(int first_index, int last_index, int param_index,
 
     opt = _pho_cfg_get(first_index, last_index, param_index, module_params);
     if (opt == NULL) {
-        pho_warn("Failed to retrieve config parameter #%d", param_index);
+        pho_debug("Failed to retrieve config parameter #%d", param_index);
         return fail_val;
     }
 
