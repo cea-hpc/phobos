@@ -33,6 +33,41 @@
       "message": "As minimal documentation of your new options, you can add both of them to the doc/cfg/template.conf file with few comments.\n\nIf you add these lines to the doc template file, it will be +1 for me.",
       "revId": "eaf29587b6b31b18fb4e5d07204286ef488d5218",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0e622242_f98b5f6e",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1003556
+      },
+      "writtenOn": "2024-05-16T12:18:46Z",
+      "side": 1,
+      "message": "Thanks for the pointer to the example config, will do tomorrow/this weekend.\n\nI still haven\u0027t run this myself either, I\u0027d like to test at least once too.",
+      "parentUuid": "9f5232ae_a420cd2d",
+      "revId": "eaf29587b6b31b18fb4e5d07204286ef488d5218",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "ef3e4d58_b8cdfa6c",
+        "filename": "src/tlc/tlc.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 101,
+      "author": {
+        "id": 1003556
+      },
+      "writtenOn": "2024-05-16T12:18:46Z",
+      "side": 1,
+      "message": "I was told by Stéphane that this triggers a warning on start if listen_port is not set: `_pho_cfg_get_int()` prints \"Failed to retrieve config parameter #2\" in this case.\nI\u0027m not sure the warning is useful (both because \"parameter #2\" is cryptic to users and because getting the default value isn\u0027t an error depending on where it is used ; e.g. tlc.c will print _another_ error right after this if port isn\u0027t set either so the PHO_CFG_GET_INT() log is redundant)\n\nWhat do you think? Can/should we remove the log messages in _pho_cfg_get_int or do you have a better idea?",
+      "revId": "eaf29587b6b31b18fb4e5d07204286ef488d5218",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
     }
   ]
 }
