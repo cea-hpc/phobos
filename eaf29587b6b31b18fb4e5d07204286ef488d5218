@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "75679922_60b749eb",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 1
+      },
+      "lineNbr": 10,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2024-05-16T09:46:26Z",
+      "side": 1,
+      "message": "nitpick: sentence dot",
+      "revId": "eaf29587b6b31b18fb4e5d07204286ef488d5218",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "9f5232ae_a420cd2d",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2024-05-16T09:46:26Z",
+      "side": 1,
+      "message": "As minimal documentation of your new options, you can add both of them to the doc/cfg/template.conf file with few comments.\n\nIf you add these lines to the doc template file, it will be +1 for me.",
+      "revId": "eaf29587b6b31b18fb4e5d07204286ef488d5218",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    }
+  ]
+}
