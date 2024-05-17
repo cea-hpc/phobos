@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ddf24777_65840e0b",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1008040
+      },
+      "writtenOn": "2024-05-17T07:11:22Z",
+      "side": 1,
+      "message": "Sounds good for me.\n\nI download this patch to our local integration repository for running continuous integration tests.",
+      "revId": "5e85a26b6a8af9c30d26925ba493c8889e833625",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    }
+  ]
+}
