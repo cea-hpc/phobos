@@ -190,6 +190,16 @@ ldconfig
 %endif
 
 %changelog
+* Fri May 17 2024 - Patrice Lucas <patrice.lucas@cea.fr> - 2.0.0-1
+- WARNING: the db schema moves from 1.95 to 2.0 and a migration is needed
+- Device, medium: errors are now logged into the DSS and managed through a
+  health counter
+- TLC: Library is now accessed through the Tape Library Controler
+- Extent migration between tapes is now ready and paves the road for the future
+  tape repack feature.
+- Tape import: we can now import into a Phobos system a tape from an other
+  Phobos system (recovery or transfer).
+
 * Fri Nov 24 2023 - Patrice Lucas <patrice.lucas@cea.fr> - 1.95.1-1
 - ltfs: improve ltfs log with serial number
 - ltfs: return an error if labels are different at mount operation

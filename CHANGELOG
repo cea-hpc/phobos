@@ -1,5 +1,18 @@
 # CHANGELOG UPDATES
 
+## 2.0.0
+* WARNING: the db schema moves from 1.95 to 2.0 and a migration is needed
+* Device, medium: errors are now logged into the DSS and managed through a
+  health counter
+* TLC: Library is now accessed through the Tape Library Controler
+* Extent migration between tapes is now ready and paves the road for the future
+  tape repack feature.
+* Tape import: we can now import into a Phobos system a tape from an other
+  Phobos system (recovery or transfer).
+* Phobosd media cache: to improve concurrency management, all components of the
+  phobosd daemon (scheduler or device threads) share media info through a media
+  cache.
+
 ## 1.95.1
 * common: add xmalloc, xstrdup, xcalloc...
 * ltfs: improve ltfs log with serial number
