@@ -197,7 +197,8 @@ static int tcp_set_socket_addr_path(const union pho_comm_addr *addr,
     return 0;
 
 out_err:
-    freeaddrinfo(*addr_res);
+    if (*addr_res)
+        freeaddrinfo(*addr_res);
     *addr_res = NULL;
     *socka = NULL;
     close(*socket_fd);
@@ -247,7 +248,7 @@ int pho_comm_open(struct pho_comm_info *ci, const union pho_comm_addr *addr,
             LOG_GOTO(out_err, rc = -errno,
                      "Socket connection(%s) failed", ci->path);
 
-        if (type == PHO_COMM_TCP_CLIENT)
+        if (addr_res)
             freeaddrinfo(addr_res);
 
         return 0;
@@ -268,7 +269,10 @@ int pho_comm_open(struct pho_comm_info *ci, const union pho_comm_addr *addr,
         LOG_GOTO(out_err, rc = -errno,
                  "Socket binding(%s) failed", ci->path);
 
-    freeaddrinfo(addr_res);
+    if (addr_res) {
+        freeaddrinfo(addr_res);
+        addr_res = NULL;
+    }
 
     if (listen(ci->socket_fd, n_max_listen))
         LOG_GOTO(out_err, rc = -errno, "Socket listening failed");
@@ -287,7 +291,8 @@ int pho_comm_open(struct pho_comm_info *ci, const union pho_comm_addr *addr,
     return 0;
 
 out_err:
-    freeaddrinfo(addr_res);
+    if (addr_res)
+        freeaddrinfo(addr_res);
     if (ci->epoll_fd != -1) {
         close(ci->epoll_fd);
         ci->epoll_fd = -1;
