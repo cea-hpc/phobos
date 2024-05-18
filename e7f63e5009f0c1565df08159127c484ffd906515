@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "fd18b31c_4281daf9",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1003524
+      },
+      "writtenOn": "2024-05-18T18:58:17Z",
+      "side": 1,
+      "message": "Tested the following config and it seems to work well with a virtual IP on the specified interface. Confirmed the tlc is not listening on the other interfaces  in that case (great!):\n\n    [tlc]\n    hostname \u003d elm-ent-tlc\n    listen_hostname \u003d 0.0.0.0\n    listen_interface \u003d eno8303\n    port \u003d 20123\n    lib_device \u003d ...",
+      "revId": "e7f63e5009f0c1565df08159127c484ffd906515",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    }
+  ]
+}
