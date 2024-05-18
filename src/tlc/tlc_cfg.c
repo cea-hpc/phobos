@@ -45,6 +45,11 @@ const struct pho_config_item cfg_tlc[] = {
         .value = NULL
     },
     [PHO_CFG_TLC_port] = TLC_PORT_CFG_ITEM,
+    [PHO_CFG_TLC_listen_interface] = {
+        .section = "tlc",
+        .name = "listen_interface",
+        .value = NULL
+    },
     [PHO_CFG_TLC_lib_device] = {
         .section = "tlc",
         .name    = "lib_device",

@@ -109,6 +109,8 @@ static int tlc_init(struct tlc *tlc)
         LOG_GOTO(close_lib, rc = -EINVAL,
                  "TLC port value %d cannot be greater than 65535",
                  sock_addr.tcp.port);
+    sock_addr.tcp.interface = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC,
+                                          listen_interface);
 
     rc = pho_comm_open(&tlc->comm, &sock_addr, PHO_COMM_TCP_SERVER);
     if (rc)
