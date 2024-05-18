@@ -45,11 +45,13 @@
 #define DEFAULT_TLC_HOSTNAME "localhost"
 #define TLC_PORT_CFG_PARAM "port"
 #define DEFAULT_TLC_PORT 20123
+#define DEFAULT_TLC_LISTEN_INTERFACE NULL
 /* listen_hostname/hostname and port are failover settings:
  * if listen_hostname is not set, hostame is used
  */
 #define TLC_LISTEN_HOSTNAME_CFG_PARAM "listen_hostname"
 #define TLC_LISTEN_PORT_CFG_PARAM "listen_port"
+#define TLC_LISTEN_INTERFACE_CFG_PARAM "listen_interface"
 #define TLC_LIB_DEVICE_CFG_PARAM "lib_device"
 #define DEFAULT_TLC_LIB_DEVICE "/dev/changer"
 
@@ -183,6 +185,17 @@ int tlc_port_from_cfg(const char *library, int *tlc_port);
  * \return                      0 on success, negative POSIX error on failure
  */
 int tlc_listen_port_from_cfg(const char *library, int *tlc_listen_port);
+
+/**
+ * Get tlc listen interface from config
+ *
+ * \param[in]       library             Targeted library
+ * \param[out]      tlc_listen_interface     TLC listen interface
+ *
+ * \return                      0 on success, negative POSIX error on failure
+ */
+int tlc_listen_interface_from_cfg(const char *library,
+                                  const char **tlc_listen_interface);
 
 /**
  * Get TLC library device from config

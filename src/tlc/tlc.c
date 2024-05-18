@@ -122,6 +122,13 @@ static int tlc_init(struct tlc *tlc, const char *library)
                  "Unable to get TLC listen port from config for library %s",
                  tlc->lib.name);
 
+    rc = tlc_listen_interface_from_cfg(tlc->lib.name,
+                                       &sock_addr.tcp.interface);
+    if (rc)
+        LOG_GOTO(close_lib, rc,
+                 "Unable to get TLC listen interface from config for library %s",
+                 tlc->lib.name);
+
     rc = pho_comm_open(&tlc->comm, &sock_addr, PHO_COMM_TCP_SERVER);
     if (rc)
         LOG_GOTO(close_lib, rc, "Error while opening the TLC socket");

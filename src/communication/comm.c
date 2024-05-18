@@ -198,6 +198,27 @@ out:
     return rc;
 }
 
+int tlc_listen_interface_from_cfg(const char *library,
+                                  const char **tlc_listen_interface)
+{
+    char *section_name;
+    int rc;
+
+    rc = asprintf(&section_name, TLC_SECTION_CFG, library);
+    if (rc < 0)
+        return -ENOMEM;
+
+    rc = pho_cfg_get_val(section_name, TLC_LISTEN_INTERFACE_CFG_PARAM,
+                         tlc_listen_interface);
+    if (rc == -ENODATA) {
+        *tlc_listen_interface = DEFAULT_TLC_LISTEN_INTERFACE;
+        rc = 0;
+    }
+
+    free(section_name);
+    return rc;
+}
+
 int tlc_lib_device_from_cfg(const char *library, const char **tlc_lib_device)
 {
     char *section_name;
