@@ -33,6 +33,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <net/if.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/epoll.h>
@@ -206,6 +207,28 @@ out_err:
     return rc;
 }
 
+static int tcp_set_socket_listen_interface(int socket_fd,
+                                           const union pho_comm_addr *addr)
+{
+    int rc;
+    struct ifreq interface;
+
+    if (!addr->tcp.interface)
+        return 0;
+
+    rc = snprintf(interface.ifr_name, IFNAMSIZ, "%s", addr->tcp.interface);
+    if (rc >= IFNAMSIZ)
+        LOG_RETURN(-ERANGE, "Interface name '%s' deos not fit in %d bytes",
+                   addr->tcp.interface, IFNAMSIZ);
+
+    rc = setsockopt(socket_fd, SOL_SOCKET, SO_BINDTODEVICE, &interface,
+                    sizeof(interface));
+    if (rc < 0)
+        LOG_RETURN(-errno, "Could not bind socket to interface '%s'",
+                   addr->tcp.interface);
+    return 0;
+}
+
 int pho_comm_open(struct pho_comm_info *ci, const union pho_comm_addr *addr,
                   enum pho_comm_socket_type type)
 {
@@ -273,6 +296,9 @@ int pho_comm_open(struct pho_comm_info *ci, const union pho_comm_addr *addr,
         freeaddrinfo(addr_res);
         addr_res = NULL;
     }
+
+    /* ignore errors */
+    tcp_set_socket_listen_interface(ci->socket_fd, addr);
 
     if (listen(ci->socket_fd, n_max_listen))
         LOG_GOTO(out_err, rc = -errno, "Socket listening failed");
