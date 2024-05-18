@@ -16,6 +16,29 @@
       "message": "I wasn\u0027t sure if you\u0027d prefer extending pho_comm_addr or adding a new pho_comm_tcp_bind_interface() separate call that servers could use (or just using socket_fd directly);\n\nI\u0027m pretty sure using socket_fd outside of src/communication would get me burned and there wasn\u0027t any other pho_comm_tcp or other type-specific calls so I went with the struct, but feel free to tell me otherwise and it\u0027s easy to rework; this is easy to move around.",
       "revId": "166f565fe9ed22f25d9dc25a642256b212d17028",
       "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "0ef7666e_d8915f87",
+        "filename": "src/communication/comm.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 221,
+      "author": {
+        "id": 1003524
+      },
+      "writtenOn": "2024-05-18T18:29:26Z",
+      "side": 1,
+      "message": "(typo) does",
+      "range": {
+        "startLine": 221,
+        "startChar": 49,
+        "endLine": 221,
+        "endChar": 53
+      },
+      "revId": "166f565fe9ed22f25d9dc25a642256b212d17028",
+      "serverId": "d5d70762-12d0-45a1-890d-524b12d3f735"
     }
   ]
 }
