@@ -42,3 +42,11 @@ phobos-*.tar.gz
 phobos.spec
 *.orig
 *.rej
+gen-proto.stamp
+.dirstamp
+*.pb-c.c
+*.pb-c.h
+/src/cli/build/
+/src/lrs/phobosd
+/src/tlc/tlc
+/tape_library_certification/phobos_tape_library_test
