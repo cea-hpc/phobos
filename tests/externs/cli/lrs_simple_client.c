@@ -276,7 +276,7 @@ static void send_format(struct pho_comm_info *comm,
 
 int main(int argc, char **argv)
 {
-    union pho_comm_addr addr;
+    union pho_comm_addr addr = {0};
     struct pho_comm_info comm;
     struct option option;
     int rc;

@@ -62,7 +62,7 @@ struct tlc {
 
 static int tlc_init(struct tlc *tlc, const char *library)
 {
-    union pho_comm_addr sock_addr;
+    union pho_comm_addr sock_addr = {0};
     json_t *json_message;
     const char *lib_dev;
     size_t len_library;

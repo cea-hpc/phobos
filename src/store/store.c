@@ -1156,7 +1156,7 @@ static void store_fini(struct phobos_handle *pho, int rc)
 static int store_init(struct phobos_handle *pho, struct pho_xfer_desc *xfers,
                       size_t n_xfers, pho_completion_cb_t cb, void *udata)
 {
-    union pho_comm_addr sock_addr;
+    union pho_comm_addr sock_addr = {0};
     size_t i;
     int rc;
 

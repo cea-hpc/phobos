@@ -63,6 +63,7 @@ union pho_comm_addr {
     struct {
         const char *hostname;
         int port;
+        const char *interface;
     } tcp;
 };
 

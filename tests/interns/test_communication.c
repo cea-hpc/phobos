@@ -96,7 +96,7 @@ static int test_open(void *arg)
 
 static int test_open_ex(void *arg)
 {
-    struct pho_comm_addr_type addr_type;
+    struct pho_comm_addr_type addr_type = {0};
     char *path = (char *)arg;
     struct sockaddr_un socka;
     int fd, rc = 0;
@@ -387,7 +387,7 @@ static int test_bad_hostname_port(void *arg)
 {
     struct pho_comm_info ci_client;
     struct pho_comm_info ci_server;
-    union pho_comm_addr addr;
+    union pho_comm_addr addr = {0};
     int rc;
 
     /* bad hostname */
@@ -445,7 +445,7 @@ static int test_bad_hostname_port(void *arg)
 
 int main(int argc, char **argv)
 {
-    struct pho_comm_addr_type addr_type;
+    struct pho_comm_addr_type addr_type = {0};
     test_env_initialize();
 
     addr_type.addr.af_unix.path = "/tmp/test_socklrs";

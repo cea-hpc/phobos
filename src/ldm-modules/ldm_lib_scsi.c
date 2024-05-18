@@ -57,7 +57,7 @@ struct lib_descriptor {
 
 static int lib_scsi_open(struct lib_handle *hdl)
 {
-    union pho_comm_addr tlc_sock_addr;
+    union pho_comm_addr tlc_sock_addr = {0};
     struct lib_descriptor *lib;
     int rc = 0;
     ENTRY;

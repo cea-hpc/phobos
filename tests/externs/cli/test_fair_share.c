@@ -335,7 +335,7 @@ static void handle_error(struct context *context,
 static void *send_requests(void *data)
 {
     struct context *context = data;
-    union pho_comm_addr addr;
+    union pho_comm_addr addr = {0};
     int rc;
 
     context->comm = xmalloc(sizeof(*context->comm));

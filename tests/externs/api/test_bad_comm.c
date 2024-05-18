@@ -626,7 +626,7 @@ out_fail:
 static int test_bad_ping(void *arg)
 {
     struct pho_comm_info *ci = (struct pho_comm_info *)arg;
-    union pho_comm_addr addr;
+    union pho_comm_addr addr = {0};
     pho_resp_t *resp;
     pho_req_t req;
     int rc = 0;
@@ -656,7 +656,7 @@ static int test_bad_ping(void *arg)
 
 int main(int argc, char **argv)
 {
-    union pho_comm_addr addr;
+    union pho_comm_addr addr = {0};
     struct pho_comm_info ci;
 
     pho_context_init();

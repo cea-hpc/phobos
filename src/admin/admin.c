@@ -369,7 +369,7 @@ void phobos_admin_fini(struct admin_handle *adm)
 int phobos_admin_init(struct admin_handle *adm, bool lrs_required,
                       void *phobos_context_handle)
 {
-    union pho_comm_addr lrs_sock_addr;
+    union pho_comm_addr lrs_sock_addr = {0};
     int rc;
 
     if (phobos_context_handle)

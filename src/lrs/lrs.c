@@ -989,7 +989,7 @@ static void lrs_fini(struct lrs *lrs)
  */
 static int lrs_init(struct lrs *lrs)
 {
-    union pho_comm_addr sock_addr;
+    union pho_comm_addr sock_addr = {0};
     int rc;
 
     umask(0000);
