@@ -133,7 +133,7 @@ class Client: # pylint: disable=too-many-public-methods
                                                  force)
         if rc:
             raise EnvironmentError(rc,
-                                   "Failed to format every medium in '%s'" %
+                                   "Failed to format some medium in '%s'" %
                                    str(media_list))
 
     def device_add(self, dev_family, dev_names, keep_locked):
