@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -34,7 +34,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <assert.h>
-
+#include <uuid/uuid.h>
 
 /**
  * When executing an external processes, two I/O channels are open on its
@@ -496,4 +496,16 @@ struct timespec diff_timespec(const struct timespec *a,
             .tv_sec = a->tv_sec - (b->tv_sec + 1),
             .tv_nsec = (a->tv_nsec + 1000000000) - b->tv_nsec,
         };
+}
+
+char *generate_uuid(void)
+{
+    uuid_t binary_uuid;
+    char *uuid;
+
+    uuid = xmalloc(UUID_LEN);
+    uuid_generate_random(binary_uuid);
+    uuid_unparse(binary_uuid, uuid);
+
+    return uuid;
 }

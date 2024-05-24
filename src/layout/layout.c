@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -41,19 +41,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <uuid/uuid.h>
-
-char *generate_uuid(void)
-{
-    uuid_t binary_uuid;
-    char *uuid;
-
-    uuid = xmalloc(UUID_LEN);
-    uuid_generate_random(binary_uuid);
-    uuid_unparse(binary_uuid, uuid);
-
-    return uuid;
-}
 
 static int build_layout_name(const char *layout_name, char *path, size_t len)
 {

@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -141,11 +141,6 @@ struct pho_encoder {
  * Global initialization operations can be performed here if need be.
  */
 int pho_layout_mod_register(struct layout_module *self);
-
-/**
- * Generate a unparsed UUID and return it as a string
- */
-char *generate_uuid(void);
 
 /** @} end of pho_layout_mod group */
 

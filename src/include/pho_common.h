@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -39,6 +39,8 @@
 #include <glib.h>
 #include <jansson.h>
 #include "pho_types.h"
+
+#define UUID_LEN 37   // 36 + 1 for the '\0'
 
 enum pho_log_level {
     PHO_LOG_DISABLED = 0,
@@ -636,5 +638,10 @@ void phobos_module_context_set(struct phobos_global_context *context);
 void pho_context_reset_scsi_ioctl(void);
 
 void pho_context_reset_mock_ltfs_functions(void);
+
+/**
+ * Generate a unparsed UUID and return it as a string
+ */
+char *generate_uuid(void);
 
 #endif

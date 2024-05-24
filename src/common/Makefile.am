@@ -11,4 +11,4 @@ libpho_common_la_SOURCES=attrs.c \
                          saj.c \
                          slist.c \
                          type_utils.c
-libpho_common_la_LIBADD=-ljansson -lm
+libpho_common_la_LIBADD=-ljansson -lm -luuid

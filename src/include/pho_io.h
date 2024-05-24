@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -43,8 +43,6 @@
 #define PHO_EA_EXTENT_OFFSET_NAME   "extent_offset"
 
 #define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
-
-#define UUID_LEN 37   // 36 + 1 for the '\0'
 
 /* FIXME: only 2 combinations are used: REPLACE | NO_REUSE and DELETE */
 enum pho_io_flags {
