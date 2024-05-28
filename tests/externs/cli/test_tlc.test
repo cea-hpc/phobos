@@ -3,7 +3,7 @@
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2023 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -25,6 +25,7 @@
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
 . $test_dir/test_launch_daemon.sh
+. $test_dir/setup_db.sh
 
 function tlc_interactive_sig
 {
@@ -92,8 +93,10 @@ if [[ ! -w /dev/changer ]]; then
     skip "TLC tests need a tape library"
 fi
 
+TEST_SETUP=setup_tables
 TESTS=("tlc_interactive_sig SIGINT" \
        "tlc_interactive_sig SIGTERM" \
        "invoke_tlc; tlc_daemon_started; waive_tlc" \
        "tlc_daemon_bad_port" \
        "tlc_daemon_bad_lib_dev")
+TEST_CLEANUP=drop_tables

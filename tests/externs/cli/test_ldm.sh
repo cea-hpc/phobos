@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -34,12 +34,14 @@ fi
 
 function setup
 {
+    setup_tables
     invoke_tlc
 }
 
 function cleanup
 {
     waive_tlc
+    drop_tables
 }
 
 trap cleanup EXIT

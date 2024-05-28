@@ -48,6 +48,8 @@
 #include "resources.h"
 #include "object.h"
 
+#define SCHEMA_INFO "2.0"
+
 struct dss_result {
     PGresult *pg_res;
     enum dss_type item_type;
@@ -88,6 +90,26 @@ static void dss_pg_logger(void *arg, const char *message)
     pho_info("%*s", (int)mlen, message);
 }
 
+static inline int check_db_version(struct dss_handle *handle)
+{
+    const char *query = "SELECT * "
+                        "FROM schema_info "
+                        "WHERE version = '"SCHEMA_INFO"';";
+    PGresult *res;
+    int rc = 0;
+
+    rc = execute(handle->dh_conn, query, &res, PGRES_TUPLES_OK);
+
+    if (!rc && PQntuples(res) != 1) {
+        pho_error(rc ? rc : (rc = -EINVAL),
+                  "Database schema version is not correct, "
+                  "version '%s' is requested", SCHEMA_INFO);
+    }
+    PQclear(res);
+
+    return rc;
+}
+
 int dss_init(struct dss_handle *handle)
 {
     const char *conn_str;
@@ -115,7 +137,7 @@ int dss_init(struct dss_handle *handle)
 
     (void)PQsetNoticeProcessor(handle->dh_conn, dss_pg_logger, NULL);
 
-    return 0;
+    return check_db_version(handle);
 }
 
 void dss_fini(struct dss_handle *handle)

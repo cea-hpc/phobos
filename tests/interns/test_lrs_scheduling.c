@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -33,6 +33,8 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #include "pho_cfg.h"
 #include "pho_common.h"
@@ -393,8 +395,34 @@ int sched_select_medium(struct io_scheduler *io_sched,
 
 static GHashTable * fake_dss;
 
+static int setup_db_calls(char *action)
+{
+    int rc;
+
+    rc = fork();
+    if (rc == 0) {
+        execl("../setup_db.sh", "setup_db.sh", action, NULL);
+        perror("execl");
+        exit(EXIT_FAILURE);
+    } else if (rc == -1) {
+        perror("fork");
+        return -1;
+    }
+
+    wait(&rc);
+    if (rc)
+        return -1;
+
+    return 0;
+}
+
 static void fake_dss_setup(void)
 {
+    int rc;
+
+    rc = setup_db_calls("setup_tables");
+    assert_return_code(rc, -rc);
+
     fake_dss = g_hash_table_new(g_str_hash, g_str_equal);
 }
 
@@ -435,7 +463,11 @@ static void remove_media(struct media_info *media, size_t count)
 
 static void fake_dss_cleanup(void)
 {
+    int rc;
+
     g_hash_table_unref(fake_dss);
+    rc = setup_db_calls("drop_tables");
+    assert_return_code(rc, -rc);
 }
 
 int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,

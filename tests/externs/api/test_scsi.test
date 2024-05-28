@@ -3,7 +3,7 @@
 # vim:expandtab:shiftwidth=4:tabstop=4:
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -27,12 +27,15 @@
 
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
+. $test_dir/setup_db.sh
 . $test_dir/test_launch_daemon.sh
 
 test_bin="$test_dir/externs/api/test_scsi"
 
 function setup
 {
+    setup_tables
+
     # make sure no process uses the drive
     /usr/share/ltfs/ltfs stop || true
 
@@ -42,6 +45,8 @@ function setup
 function cleanup
 {
     waive_tlc
+
+    drop_tables
 }
 
 if [[ ! -w /dev/changer ]]; then
