@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -545,6 +545,8 @@ struct object_info {
     int version;
     enum obj_status obj_status;
     char *user_md;
+    struct timeval creation_time;
+    struct timeval access_time;
     struct timeval deprec_time;
 };
 

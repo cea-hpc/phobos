@@ -116,7 +116,8 @@ static int object_select_query(GString **conditions, int n_conditions,
                                GString *request)
 {
     g_string_append(request,
-                    "SELECT oid, object_uuid, version, user_md, obj_status"
+                    "SELECT oid, object_uuid, version, user_md, obj_status,"
+                    " creation_time, access_time"
                     " FROM object");
 
     if (n_conditions == 1)
@@ -146,6 +147,7 @@ static int object_from_pg_row(struct dss_handle *handle, void *void_object,
                               PGresult *res, int row_num)
 {
     struct object_info *object = void_object;
+    int rc;
 
     (void)handle;
 
@@ -156,8 +158,11 @@ static int object_from_pg_row(struct dss_handle *handle, void *void_object,
     object->obj_status  = str2obj_status(PQgetvalue(res, row_num, 4));
     object->deprec_time.tv_sec = 0;
     object->deprec_time.tv_usec = 0;
+    rc = str2timeval(get_str_value(res, row_num, 5), &object->creation_time);
+    rc = rc ? : str2timeval(get_str_value(res, row_num, 6),
+                            &object->access_time);
 
-    return 0;
+    return rc;
 }
 
 static void object_result_free(void *void_object)

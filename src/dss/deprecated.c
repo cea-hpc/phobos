@@ -105,7 +105,8 @@ static int deprecated_select_query(GString **conditions, int n_conditions,
 {
     g_string_append(request,
                     "SELECT oid, object_uuid, version, user_md, obj_status,"
-                    " deprec_time FROM deprecated_object");
+                    " creation_time, access_time, deprec_time"
+                    " FROM deprecated_object");
 
     if (n_conditions == 1)
         g_string_append(request, conditions[0]->str);
@@ -144,7 +145,7 @@ static int deprecated_from_pg_row(struct dss_handle *handle, void *void_object,
     int rc;
 
     rc = create_resource(DSS_OBJECT, handle, void_object, res, row_num);
-    rc = rc ? : str2timeval(get_str_value(res, row_num, 5),
+    rc = rc ? : str2timeval(get_str_value(res, row_num, 7),
                             &object->deprec_time);
 
     return rc;

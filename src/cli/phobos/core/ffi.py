@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -575,6 +575,8 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
         ('version', c_int),
         ('status', c_int),
         ('_user_md', c_char_p),
+        ('creation_time', Timeval),
+        ('access_time', Timeval),
         ('deprec_time', Timeval),
     ]
 
@@ -585,6 +587,8 @@ class ObjectInfo(Structure, CLIManagedResourceMixin):
             'uuid': None,
             'version': None,
             'status': obj_status2str,
+            'creation_time': Timeval.to_string,
+            'access_time': Timeval.to_string,
             'user_md': (lambda obj, width=max_width: truncate_user_md(obj,
                                                                       width))
         }
@@ -631,6 +635,8 @@ class DeprecatedObjectInfo(ObjectInfo):
             'uuid': None,
             'version': None,
             'user_md': None,
+            'creation_time': Timeval.to_string,
+            'access_time': Timeval.to_string,
             'status': obj_status2str,
             'deprec_time': Timeval.to_string,
         }
