@@ -1,5 +1,5 @@
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -30,7 +30,7 @@ import psycopg2
 
 from phobos.core import cfg
 
-ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92", "1.93", "1.95", "2.0"]
+ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92", "1.93", "1.95", "2.0", "2.1"]
 FUTURE_SCHEMAS = []
 CURRENT_SCHEMA_VERSION = ORDERED_SCHEMAS[-1]
 AVAIL_SCHEMAS = set(ORDERED_SCHEMAS) | set(FUTURE_SCHEMAS)
@@ -64,6 +64,7 @@ class Migrator:
             "1.92": ("1.93", self.convert_4_to_5),
             "1.93": ("1.95", self.convert_1_93_to_1_95),
             "1.95": ("2.0", self.convert_1_95_to_2_0),
+            "2.0": ("2.1", self.convert_2_0_to_2_1),
         }
 
         self.reachable_versions = set(
@@ -543,6 +544,30 @@ class Migrator:
         """Convert DB from v1.95 to v2.0"""
         with self.connect():
             self.convert_schema_1_95_to_2_0()
+
+    def convert_schema_2_0_to_2_1(self):
+        """DB schema changes: add times to object tables"""
+        cur = self.conn.cursor()
+        cur.execute("""
+            -- add times to object tables
+            ALTER TABLE object
+                ADD creation_time timestamp DEFAULT now(),
+                ADD access_time timestamp DEFAULT now();
+
+            ALTER TABLE deprecated_object
+                ADD creation_time timestamp DEFAULT now(),
+                ADD access_time timestamp DEFAULT now();
+
+            -- update current schema version
+            UPDATE schema_info SET version = '2.1';
+        """)
+        self.conn.commit()
+        cur.close()
+
+    def convert_2_0_to_2_1(self):
+        """Convert DB from v2.0 to v2.1"""
+        with self.connect():
+            self.convert_schema_2_0_to_2_1()
 
     def migrate(self, target_version=None):
         """Convert DB schema up to a given phobos version"""

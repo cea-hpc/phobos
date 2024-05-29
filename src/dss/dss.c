@@ -48,7 +48,7 @@
 #include "resources.h"
 #include "object.h"
 
-#define SCHEMA_INFO "2.0"
+#define SCHEMA_INFO "2.1"
 
 struct dss_result {
     PGresult *pg_res;
