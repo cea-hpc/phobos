@@ -576,6 +576,14 @@ int dss_deprecated_object_set(struct dss_handle *hdl,
     return dss_generic_set(hdl, DSS_DEPREC, (void *)obj_ls, obj_cnt, action, 0);
 }
 
+int dss_deprecated_object_update(struct dss_handle *hdl,
+                                 struct object_info *obj_ls, int obj_cnt,
+                                 int64_t fields)
+{
+    return dss_generic_set(hdl, DSS_DEPREC, (void *)obj_ls, obj_cnt,
+                           DSS_SET_UPDATE, fields);
+}
+
 int dss_logs_insert(struct dss_handle *hdl, struct pho_log *logs, int log_cnt)
 {
     return dss_generic_set(hdl, DSS_LOGS, (void *) logs, log_cnt,

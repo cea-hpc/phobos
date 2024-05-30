@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -77,8 +77,9 @@ enum dss_device_operations {
 
 /** The different types of update allowed for objects */
 enum dss_object_operations {
-    DSS_OBJECT_UPDATE_USER_MD = (1 << 0),
+    DSS_OBJECT_UPDATE_ACCESS_TIME = (1 << 0),
     DSS_OBJECT_UPDATE_OBJ_STATUS = (1 << 1),
+    DSS_OBJECT_UPDATE_USER_MD = (1 << 2),
 };
 
 /**
@@ -159,6 +160,8 @@ static struct dss_field_def dss_fields_names[] = {
     {"DSS::OBJ::user_md", "user_md"},
     {"DSS::OBJ::layout_info", "lyt_info"},
     {"DSS::OBJ::layout_type", "lyt_info->>'name'"},
+    {"DSS::OBJ::creation_time", "creation_time"},
+    {"DSS::OBJ::access_time", "access_time"},
     {"DSS::OBJ::deprec_time", "deprec_time"},
     /* Layout related fields */
     {"DSS::LYT::object_uuid", "object_uuid"},
@@ -516,6 +519,20 @@ int dss_object_update(struct dss_handle *hdl, struct object_info *obj_ls,
 int dss_deprecated_object_set(struct dss_handle *hdl,
                               struct object_info *obj_ls,
                               int obj_cnt, enum dss_set_action action);
+
+/**
+ * Update the information of one or many deprecated objects in DSS.
+ *
+ * @param[in]   hdl     valid connection handle
+ * @param[in]   obj_ls  array of entries to update
+ * @param[in]   obj_cnt number of items in the list
+ * @param[in]   fields  fields to update
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_deprecated_object_update(struct dss_handle *hdl,
+                                 struct object_info *obj_lst,
+                                 int obj_cnt, int64_t fields);
 
 int dss_logs_set(struct dss_handle *hdl, struct pho_log *logs,
                  int logs_cnt, enum dss_set_action action);

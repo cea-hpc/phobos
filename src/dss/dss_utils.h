@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -33,6 +33,9 @@
 #include <glib.h>
 #include <jansson.h>
 #include <libpq-fe.h>
+
+#include "pho_type_utils.h"
+#include "pho_types.h"
 
 /**
  * Escape a string for use in a database query.
@@ -112,6 +115,20 @@ struct dss_field {
     const char *query_value;
     const char *(*get_value)(void *resource);
 };
+
+static inline const char *get_access_time(void *object)
+{
+    static __thread char str[PHO_TIMEVAL_MAX_LEN] = "";
+
+    timeval2str(&((struct object_info *) object)->access_time, str);
+
+    return (const char *)str;
+}
+
+static inline const char *get_obj_status(void *object)
+{
+    return obj_status2str(((struct object_info *) object)->obj_status);
+}
 
 void update_fields(void *resource, int64_t fields_to_update,
                    struct dss_field *fields, int fields_count,

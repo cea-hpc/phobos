@@ -79,14 +79,10 @@ static inline const char *_get_user_md(void *object)
     return ((struct object_info *) object)->user_md;
 }
 
-static inline const char *_get_obj_status(void *object)
-{
-    return obj_status2str(((struct object_info *) object)->obj_status);
-}
-
 static struct dss_field FIELDS[] = {
+    { DSS_OBJECT_UPDATE_ACCESS_TIME, "access_time = '%s'", get_access_time },
+    { DSS_OBJECT_UPDATE_OBJ_STATUS, "obj_status = '%s'", get_obj_status },
     { DSS_OBJECT_UPDATE_USER_MD, "user_md = '%s'", _get_user_md },
-    { DSS_OBJECT_UPDATE_OBJ_STATUS, "obj_status = '%s'", _get_obj_status }
 };
 
 static int object_update_query(PGconn *conn, void *void_object, int item_cnt,
@@ -101,9 +97,9 @@ static int object_update_query(PGconn *conn, void *void_object, int item_cnt,
 
         g_string_append(sub_request, "UPDATE object SET ");
 
-        update_fields(object, _fields, FIELDS, 2, sub_request);
+        update_fields(object, _fields, FIELDS, 3, sub_request);
 
-        g_string_append_printf(sub_request, "WHERE oid = '%s'; ", object->oid);
+        g_string_append_printf(sub_request, " WHERE oid = '%s'; ", object->oid);
 
         g_string_append(request, sub_request->str);
         g_string_free(sub_request, true);

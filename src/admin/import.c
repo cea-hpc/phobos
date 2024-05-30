@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2023 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -790,7 +790,8 @@ end:
         return rc;
 
     if (deprecated)
-        rc = dss_deprecated_object_set(&adm->dss, obj, 1, DSS_SET_UPDATE);
+        rc = dss_deprecated_object_update(&adm->dss, obj, 1,
+                                          DSS_OBJECT_UPDATE_OBJ_STATUS);
     else
         rc = dss_object_update(&adm->dss, obj, 1, DSS_OBJECT_UPDATE_OBJ_STATUS);
 

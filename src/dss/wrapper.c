@@ -413,10 +413,11 @@ int dss_move_object_to_deprecated(struct dss_handle *handle,
                            "WITH moved_object AS"
                            " (DELETE FROM object WHERE %s RETURNING"
                            "  oid, object_uuid, version, user_md,"
-                           "  lyt_info, obj_status)"
+                           "  lyt_info, obj_status, creation_time, access_time)"
                            " INSERT INTO deprecated_object"
                            "  (oid, object_uuid, version, user_md,"
-                           "   lyt_info, obj_status)"
+                           "   lyt_info, obj_status, creation_time,"
+                           "   access_time)"
                            " SELECT * FROM moved_object",
                            oid_list->str);
 
@@ -492,9 +493,11 @@ int dss_move_deprecated_to_object(struct dss_handle *handle,
                            "WITH risen_object AS"
                            " (DELETE FROM deprecated_object WHERE %s"
                            "  RETURNING oid, object_uuid,"
-                           "  version, user_md, lyt_info, obj_status)"
+                           "  version, user_md, lyt_info, obj_status,"
+                           "  creation_time, access_time)"
                            " INSERT INTO object (oid, object_uuid, "
-                           "  version, user_md, lyt_info, obj_status)"
+                           "  version, user_md, lyt_info, obj_status,"
+                           "  creation_time, access_time)"
                            " SELECT * FROM risen_object",
                            oid_list->str);
 

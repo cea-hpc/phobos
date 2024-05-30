@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -944,6 +944,38 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
         }
     }
 
+
+    if (xfer->xd_rc == 0 && rc == 0 && xfer->xd_op == PHO_XFER_OP_GET) {
+        struct object_info *obj;
+
+        rc = dss_lazy_find_object(&pho->dss, xfer->xd_objid,
+                                  xfer->xd_objuuid, xfer->xd_version, &obj);
+        if (rc)
+            LOG_GOTO(cont, rc,
+                     "Error while retrieving object info, "
+                     "will skip access time update");
+
+        rc = gettimeofday(&obj->access_time, NULL);
+        if (rc) {
+            object_info_free(obj);
+            LOG_GOTO(cont, rc,
+                     "Error while retrieving current time, "
+                     "will skip access time update");
+        }
+
+        if (obj->deprec_time.tv_sec == 0 && obj->deprec_time.tv_usec == 0)
+            rc = dss_object_update(&pho->dss, obj, 1,
+                                   DSS_OBJECT_UPDATE_ACCESS_TIME);
+        else
+            rc = dss_deprecated_object_update(&pho->dss, obj, 1,
+                                              DSS_OBJECT_UPDATE_ACCESS_TIME);
+
+        object_info_free(obj);
+        if (rc)
+            pho_error(rc, "Error while updating object access time");
+    }
+
+cont:
     /* Only overwrite xd_rc if it was 0 */
     if (xfer->xd_rc == 0 && rc != 0)
         xfer->xd_rc = rc;
