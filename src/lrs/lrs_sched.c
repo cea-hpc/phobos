@@ -1862,7 +1862,6 @@ static bool medium_is_loaded(struct lrs_dev *dev, struct media_info *medium)
 static int sched_write_alloc_one_medium(struct lrs_sched *sched,
                                         struct allocation *alloc,
                                         size_t index_to_alloc,
-                                        device_select_func_t dev_select_policy,
                                         bool handle_error)
 {
     struct req_container *reqc = alloc->is_sub_request ?
@@ -1970,16 +1969,10 @@ static int sched_handle_write_alloc(struct lrs_sched *sched,
                                     struct req_container *reqc)
 {
     pho_req_write_t *wreq = reqc->req->walloc;
-    device_select_func_t dev_select_policy;
     size_t next_medium_index = 0;
     int rc = 0;
 
     pho_debug("write: allocation request (%ld medias)", wreq->n_media);
-
-    dev_select_policy = get_dev_policy();
-    if (!dev_select_policy)
-        LOG_GOTO(end, rc = -EINVAL,
-                 "Unable to get device select policy during write alloc");
 
     for (next_medium_index = 0; next_medium_index < wreq->n_media;
          next_medium_index++) {
@@ -1993,7 +1986,7 @@ static int sched_handle_write_alloc(struct lrs_sched *sched,
             },
         };
         rc = sched_write_alloc_one_medium(sched, &alloc, next_medium_index,
-                                          dev_select_policy, false);
+                                          false);
         if (rc)
             break;
     }
@@ -2003,7 +1996,6 @@ static int sched_handle_write_alloc(struct lrs_sched *sched,
      */
     if (wreq->no_split)
         sched_write_alloc_add_threshold(sched, reqc->params.rwalloc.respc);
-end:
     return publish_or_cancel(sched, reqc, rc, next_medium_index);
 }
 
@@ -2707,24 +2699,16 @@ static void sched_handle_read_or_write_error(struct lrs_sched *sched,
     if (pho_request_is_read(sreq->reqc->req)) {
         rc = sched_handle_read_alloc_error(sched, sreq);
     } else {
-        device_select_func_t dev_select_policy;
+        struct allocation alloc = {
+            .is_sub_request = true,
+            .u = {
+                .sub_req = sreq,
+            },
+        };
 
-        dev_select_policy = get_dev_policy();
-        if (!dev_select_policy) {
-            pho_error(rc = -EINVAL,
-                      "Unable to get device select policy at write error");
-        } else {
-            struct allocation alloc = {
-                .is_sub_request = true,
-                .u = {
-                    .sub_req = sreq,
-                },
-            };
-
-            rc = sched_write_alloc_one_medium(sched, &alloc,
-                                              sreq->medium_index,
-                                              dev_select_policy, true);
-        }
+        rc = sched_write_alloc_one_medium(sched, &alloc,
+                                          sreq->medium_index,
+                                          true);
     }
 
     if (!rc) {
