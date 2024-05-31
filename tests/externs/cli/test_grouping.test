@@ -45,6 +45,12 @@ function setup()
     fi
 
     DIR1=$(make_tmp_fs 300M)
+
+    local rc=$?
+    if ((rc != 0)); then
+        return $rc
+    fi
+
     DIR2=$(make_tmp_fs 300M)
     setup_dummy_files 1 1M 100
 }

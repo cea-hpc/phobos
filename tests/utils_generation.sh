@@ -59,7 +59,15 @@ function make_tmp_fs()
 
     dd if=/dev/zero of=$file_path count=$count bs=1$unit 2>/dev/null
 
+    set +e
     loop_device=$(losetup -f)
+    local rc=$?
+    set -e
+
+    if ((rc != 0)); then
+        skip
+    fi
+
     losetup $loop_device $file_path
 
     mkfs.ext4 $loop_device >/dev/null 2>&1
@@ -74,7 +82,18 @@ cleanup_tmp_fs()
 {
     local mount_point=$1
     local loop_device=$(df $mount_point | tail -n 1 | awk '{print $1}')
-    local back_file=$(losetup -l -O BACK-FILE $loop_device | tail -n 1)
+    local back_file
+
+    set +e
+    back_file=$(losetup -l -O BACK-FILE $loop_device)
+    local rc=$?
+    set -e
+
+    if ((rc != 0)); then
+        skip
+    fi
+
+    back_file=$(echo "$back_file" | tail -n 1)
 
     umount $mount_point
     rmdir $mount_point

@@ -139,8 +139,8 @@ function do_setup
     set -x
     $test_setup >> $log_file 2>&1
     rc=$?
-    echo "" >> $log_file
     set +x
+    echo "" >> $log_file
 
     print_status $rc
     return $rc
@@ -175,10 +175,10 @@ function do_cleanup
     echo -e "CLEANUP: $test_cleanup" >> $log_file
     echo -n "    $test_cleanup: "
     set -x
-    $test_cleanup >> $log_file 2>&1
+    ($test_cleanup >> $log_file 2>&1)
     rc=$?
-    echo "" >> "$log_file"
     set +x
+    echo "" >> "$log_file"
 
     print_status $rc
     return $rc

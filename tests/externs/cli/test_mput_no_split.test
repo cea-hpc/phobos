@@ -96,6 +96,11 @@ function setup_dir_raid1()
           $(make_tmp_fs 1M)
          )
 
+    local rc=$?
+    if ((rc != 0)); then
+        return $rc
+    fi
+
     export PHOBOS_STORE_default_layout="raid1"
     export PHOBOS_LAYOUT_RAID1_repl_count=1
 
@@ -116,6 +121,12 @@ function setup_dir_raid1_sync()
     setup_sync
 
     DIR=$(make_tmp_fs 1M)
+
+    local rc=$?
+    if ((rc != 0)); then
+        return $rc
+    fi
+
 
     export PHOBOS_STORE_default_layout="raid1"
     export PHOBOS_LAYOUT_RAID1_repl_count=1
@@ -141,6 +152,12 @@ function setup_dir_raid1_overhead()
           $(make_tmp_fs 1M)
          )
 
+    local rc=$?
+    if ((rc != 0)); then
+        return $rc
+    fi
+
+
     export PHOBOS_STORE_default_layout="raid1"
     export PHOBOS_LAYOUT_RAID1_repl_count=1
 
@@ -161,6 +178,12 @@ function setup_2dir_raid1()
           $(make_tmp_fs 1M)
           $(make_tmp_fs 1M)
          )
+
+    local rc=$?
+    if ((rc != 0)); then
+        return $rc
+    fi
+
 
     export PHOBOS_STORE_default_layout="raid1"
     export PHOBOS_LAYOUT_RAID1_repl_count=2
@@ -183,6 +206,11 @@ function setup_dir_raid4()
          $(make_tmp_fs 1M)
          $(make_tmp_fs 1M)
         )
+
+    local rc=$?
+    if ((rc != 0)); then
+        return $rc
+    fi
 
     export PHOBOS_STORE_default_layout="raid4"
 

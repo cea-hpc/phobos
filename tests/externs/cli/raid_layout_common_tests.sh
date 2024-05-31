@@ -386,6 +386,11 @@ function setup_dir_split()
         $(make_tmp_fs 1M)
     )
 
+    local rc=$?
+    if ((rc != 0)); then
+        return $rc
+    fi
+
     setup_tables
     export PHOBOS_LRS_families="dir"
     export PHOBOS_STORE_default_family="dir"
