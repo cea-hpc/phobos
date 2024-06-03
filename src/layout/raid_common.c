@@ -28,7 +28,6 @@
 #include <openssl/evp.h>
 #include <string.h>
 #include <unistd.h>
-#include <xxhash.h>
 
 #include "pho_attrs.h"
 #include "pho_cfg.h"

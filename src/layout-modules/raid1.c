@@ -32,7 +32,9 @@
 #include <openssl/evp.h>
 #include <string.h>
 #include <unistd.h>
+#ifdef HAVE_XXH128
 #include <xxhash.h>
+#endif
 
 #include "pho_attrs.h"
 #include "pho_cfg.h"
@@ -465,10 +467,7 @@ static int multiple_enc_write_chunk(struct pho_encoder *enc,
         /* extent[i]->address will be filled by ioa_open */
 
     /* prepare all iod and loc */
-    /* alloc iod */
     iod = xcalloc(raid1->repl_count, sizeof(*iod));
-
-    /* alloc loc */
     loc = xcalloc(raid1->repl_count, sizeof(*loc));
 
     for (i = 0; i < raid1->repl_count; ++i) {

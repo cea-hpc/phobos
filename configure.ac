@@ -94,6 +94,9 @@ AC_CHECK_LIB([xxhash], [XXH3_128bits_reset],
                         [XXH128 is available since xxhash 0.8.0])],
              [AC_SUBST(HAVE_XXH128, 'no')])
 
+AM_CONDITIONAL([USE_XXHASH],
+               [test "x$ac_cv_lib_xxhash_XXH3_128bits_reset" = "xyes"])
+
 # Checks for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADERS([string.h sys/param.h limits.h])
