@@ -202,6 +202,9 @@ ldconfig
 - Tape import: we can now import into a Phobos system a tape from an other
   Phobos system (recovery or transfer).
 
+* Wed Nov 29 2023 - Guillaume Courrier <guillaume.courrier@cea.fr> - 1.95.1-2
+- Add missing pho_ldm.h in installed headers
+
 * Fri Nov 24 2023 - Patrice Lucas <patrice.lucas@cea.fr> - 1.95.1-1
 - ltfs: improve ltfs log with serial number
 - ltfs: return an error if labels are different at mount operation
