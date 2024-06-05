@@ -43,6 +43,7 @@ BuildRequires: make
 BuildRequires: openssl-devel >= 0.9.7
 BuildRequires: xxhash-devel
 BuildRequires: libcmocka-devel
+BuildRequires: libuuid-devel
 
 Requires: %{postgres_prefix}-server
 Requires: %{postgres_prefix}-contrib
@@ -64,6 +65,7 @@ Requires: protobuf
 Requires: protobuf-c
 Requires: openssl >= 0.9.7
 Requires: xxhash-libs
+Requires: libuuid
 
 %description
 Phobos aims to implement high performance distributed object storage on a wide
