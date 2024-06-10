@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-#  All rights reserved (c) 2014-2023 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -196,6 +196,7 @@ function test_dump_filters
     _test_filter "--tape" "${lto6_tapes[0]}" "${lto6_tapes[0]}" 1
     _test_filter "--errno" 0 "succeeded" 2
 
+    sleep 1
     $phobos tape add -t lto6 ${lto6_tapes[2]} ||
         error "Tape ${lto6_tapes[2]} should have been added"
 
@@ -222,7 +223,6 @@ function test_dump_filters
     date=$($phobos logs dump | head -n 2 | tail -n 1 | cut -d'>' -f1 |
                                cut -d'<' -f2 | cut -d'.' -f1)
     old_date=$(date +%s --date="$date UTC")
-    old_date=$(($old_date + 1))
     date=$(date "+%Y-%m-%d %H:%M:%S" --date="@$old_date")
 
     _test_filter "--end" "$date" "" 2
@@ -275,7 +275,7 @@ function test_clear_filters
 
     local now=$(date "+%Y-%m-%d %H:%M:%S")
 
-    sleep 2
+    sleep 1
     $phobos tape format --unlock ${lto6_tapes[2]} ||
         error "Tape ${lto6_tapes[2]} should have been formated"
 

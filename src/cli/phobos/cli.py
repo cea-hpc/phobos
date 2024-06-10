@@ -1402,7 +1402,7 @@ def create_log_filter(device, medium, _errno, cause, start, end): # pylint: disa
     c_cause = (c_int(str2operation_type(cause)) if cause else
                c_int(PHO_OPERATION_INVALID))
     c_start = Timeval(c_long(int(start)), 0)
-    c_end = Timeval(c_long(int(end)), 0)
+    c_end = Timeval(c_long(int(end)), 999999)
 
     return (byref(LogFilter(device_id, medium_id, c_errno, c_cause, c_start,
                             c_end))
