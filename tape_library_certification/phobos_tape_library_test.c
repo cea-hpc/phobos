@@ -45,7 +45,7 @@ static int device_load(const char *dev_serial, const char *tape_name)
     struct lib_handle lib_hdl;
     int rc;
 
-    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl);
+    rc = wrap_lib_open(PHO_RSC_TAPE, "legacy", &lib_hdl);
     if (rc)
         LOG_RETURN(rc,
                    "Error when opening tape library module before loading tape "
@@ -75,7 +75,7 @@ static int device_unload(const char *dev_serial, const char *tape_name)
     struct lib_handle lib_hdl;
     int rc;
 
-    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl);
+    rc = wrap_lib_open(PHO_RSC_TAPE, "legacy", &lib_hdl);
     if (rc)
         LOG_RETURN(rc,
                    "Error when opening tape library module before unloading "
@@ -177,7 +177,7 @@ int main(int argc, char **argv)
     if (argc == 4)
         pho_log_level_set(atoi(argv[3]));
 
-    rc = wrap_lib_open(PHO_RSC_TAPE, &lib_hdl);
+    rc = wrap_lib_open(PHO_RSC_TAPE, "legacy", &lib_hdl);
     if (rc) {
         pho_error(rc, "Error when opening tape library module");
         exit(-rc);

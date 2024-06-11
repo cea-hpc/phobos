@@ -50,4 +50,9 @@ const struct pho_config_item cfg_tlc[] = {
         .name    = "lib_device",
         .value   = "/dev/changer"
     },
+    [PHO_CFG_TLC_default_library] = {
+        .section = "store",
+        .name    = "default_tape_library",
+        .value   = NULL
+    },
 };

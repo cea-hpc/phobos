@@ -176,10 +176,12 @@ static int global_setup(void **state)
         rc = dss_filter_build(&filter,
                               "{\"$AND\": ["
                                   "{\"DSS::MDA::family\": \"%s\"}, "
-                                  "{\"DSS::MDA::id\": \"%s\"}"
+                                  "{\"DSS::MDA::id\": \"%s\"}, "
+                                  "{\"DSS::MDA::library\": \"%s\"}"
                               "]}",
                               rsc_family2str(medium_id->family),
-                              medium_id->name);
+                              medium_id->name,
+                              medium_id->library);
         if (rc)
             GOTO(clean_media, rc = -1);
 
@@ -196,27 +198,37 @@ static int global_setup(void **state)
 
         /* check all media are different */
         for (j = 0; j < i; j++) {
-            if (!strcmp(rsl_state.media[i]->rsc.id.name,
-                        rsl_state.media[j]->rsc.id.name)) {
-                fprintf(stderr, "Two medium are identical: %s, %d, %d\n",
-                        rsl_state.media[i]->rsc.id.name, j, i);
+            if (pho_id_equal(&rsl_state.media[i]->rsc.id,
+                             &rsl_state.media[j]->rsc.id)) {
+                fprintf(stderr,
+                        "Two medium are identical: (family '%s', name '%s', "
+                        "library '%s'), %d, %d\n",
+                        rsc_family2str(rsl_state.media[i]->rsc.id.family),
+                        rsl_state.media[i]->rsc.id.name,
+                        rsl_state.media[i]->rsc.id.library, j, i);
                 GOTO(clean_media, rc = -1);
             }
         }
 
         /* check medium is admin unlocked */
         if (rsl_state.media[i]->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED) {
-            fprintf(stderr, "A medium is not PHO_RSC_ADM_ST_UNLOCKED (%s, %s)",
+            fprintf(stderr,
+                    "A medium is not PHO_RSC_ADM_ST_UNLOCKED (family '%s', "
+                    "name '%s', library '%s')",
                     rsc_family2str(rsl_state.media[i]->rsc.id.family),
-                    rsl_state.media[i]->rsc.id.name);
+                    rsl_state.media[i]->rsc.id.name,
+                    rsl_state.media[i]->rsc.id.library);
             GOTO(clean_media, rc = -1);
         }
 
         /* check medium get operation flag is "true" */
         if (!rsl_state.media[i]->flags.get) {
-            fprintf(stderr, "A medium has not get operation flag (%s, %s)",
+            fprintf(stderr,
+                    "A medium has not get operation flag (family '%s', name "
+                    "'%s', library '%s')",
                     rsc_family2str(rsl_state.media[i]->rsc.id.family),
-                    rsl_state.media[i]->rsc.id.name);
+                    rsl_state.media[i]->rsc.id.name,
+                    rsl_state.media[i]->rsc.id.library);
             GOTO(clean_media, rc = -1);
         }
     }

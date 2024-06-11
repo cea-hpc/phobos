@@ -41,6 +41,11 @@ class MigratorTest(unittest.TestCase):
         self.migrator.drop_tables()
         self.assertEqual(self.migrator.schema_version(), "0")
 
+        # From 2.1, the new 'library' column needs a default value from conf
+        os.environ["PHOBOS_STORE_default_tape_library"] = "legacy"
+        os.environ["PHOBOS_STORE_default_dir_library"] = "legacy"
+        os.environ["PHOBOS_STORE_default_rados_library"] = "legacy"
+
     def test_setup_drop_tables(self):
         """Test setting up and dropping the schema"""
         self.assertEqual(self.migrator.schema_version(), "0")

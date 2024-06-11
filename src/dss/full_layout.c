@@ -42,7 +42,8 @@ static int full_layout_select_query(GString **conditions, int n_conditions,
                     " json_agg(json_build_object("
                     "  'extent_uuid', extent_uuid, 'sz', size,"
                     "  'offsetof', offsetof, 'fam', medium_family,"
-                    "  'state', state, 'media', medium_id, 'addr', address,"
+                    "  'state', state, 'media', medium_id,"
+                    "  'library', medium_library, 'addr', address,"
                     "  'hash', hash, 'info', info, 'lyt_index', layout_index))"
                     " FROM extent"
                     " RIGHT JOIN ("
@@ -115,6 +116,7 @@ static int layout_extents_decode(struct extent **extents, int *count,
 
     for (i = 0; i < *count; i++) {
         const char *tmp;
+        const char *tmp2;
 
         child = json_array_get(root, i);
 
@@ -160,7 +162,11 @@ static int layout_extents_decode(struct extent **extents, int *count,
         if (!tmp)
             LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'media'");
 
-        pho_id_name_set(&result[i].media, tmp);
+        tmp2 = json_dict2tmp_str(child, "library");
+        if (!tmp2)
+            LOG_GOTO(out_decref, rc = -EINVAL, "Missing attribute 'library'");
+
+        pho_id_name_set(&result[i].media, tmp, tmp2);
 
         rc = dss_extent_hash_decode(&result[i], json_object_get(child, "hash"));
         if (rc)

@@ -173,10 +173,12 @@ static int media_of_object(struct dss_handle *hdl, struct object_info *obj,
         g_string_append_printf(filter_str,
                                "{\"$AND\": ["
                                  "{\"DSS::MDA::family\": \"%s\"}, "
-                                 "{\"DSS::MDA::id\": \"%s\"}"
+                                 "{\"DSS::MDA::id\": \"%s\"}, "
+                                 "{\"DSS::MDA::library\": \"%s\"}"
                                "]}%s",
                                rsc_family2str(medium_id.family),
-                               medium_id.name, i + 1 < *cnt ? "," : "");
+                               medium_id.name, medium_id.library,
+                               i + 1 < *cnt ? "," : "");
     }
 
     if (*cnt > 1)

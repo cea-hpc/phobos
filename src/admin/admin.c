@@ -148,6 +148,7 @@ static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
     req.notify->op = op;
     req.notify->rsrc_id->family = id->family;
     req.notify->rsrc_id->name = xstrdup(id->name);
+    req.notify->rsrc_id->library = xstrdup(id->library);
     req.notify->wait = need_to_wait;
 
     rc = _send(&adm->phobosd_comm, &req);
@@ -164,7 +165,8 @@ static int _admin_notify(struct admin_handle *adm, struct pho_id *id,
     if (pho_response_is_notify(resp)) {
         if (resp->req_id == rid &&
             (int) id->family == (int) resp->notify->rsrc_id->family &&
-            !strcmp(resp->notify->rsrc_id->name, id->name)) {
+            !strcmp(resp->notify->rsrc_id->name, id->name) &&
+            !strcmp(resp->notify->rsrc_id->library, id->library)) {
             pho_debug("Notify request succeeded");
             goto out;
         }
@@ -202,7 +204,7 @@ static void _free_dev_info(struct dev_info *devices, unsigned int num_dev)
 
 static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
                               unsigned int num_dev, bool keep_locked,
-                              struct dev_info **_devices)
+                              const char *library, struct dev_info **_devices)
 {
     struct dev_adapter_module *deva;
     struct ldm_dev_state lds = {};
@@ -245,7 +247,7 @@ static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
         if ((strlen(lds.lds_serial) + 1) > PHO_URI_MAX)
             LOG_GOTO(out_free, rc = -EINVAL, "Drive serial is too long");
 
-        pho_id_name_set(&devi->rsc.id, lds.lds_serial);
+        pho_id_name_set(&devi->rsc.id, lds.lds_serial, library);
         devi->rsc.adm_status = status;
         rc = get_allocated_hostname(&devi->host);
         if (rc)
@@ -256,9 +258,10 @@ static int _add_device_in_dss(struct admin_handle *adm, struct pho_id *dev_ids,
 
         ldm_dev_state_fini(&lds);
 
-        pho_info("Will add device '%s:%s' to the database: "
-                 "model=%s serial=%s (%s)", rsc_family2str(devi->rsc.id.family),
-                 dev_ids[i].name, devi->rsc.model, devi->rsc.id.name,
+        pho_info("Will add device (family '%s', name '%s', library '%s') to "
+                 "the database: model=%s serial=%s (%s)",
+                 rsc_family2str(devi->rsc.id.family), devi->rsc.id.name,
+                 devi->rsc.id.library, devi->rsc.model, devi->rsc.id.name,
                  rsc_adm_status2str(devi->rsc.adm_status));
 
         /* in case the name given by the user is not the device ID name */
@@ -300,10 +303,11 @@ static int _get_device_by_path_or_serial(struct admin_handle *adm,
                           "  {\"$OR\": ["
                           "    {\"DSS::DEV::serial\": \"%s\"},"
                           "    {\"DSS::DEV::path\": \"%s\"}"
-                          "  ]}"
+                          "  ]},"
+                          "  {\"DSS::DEV::library\": \"%s\"}"
                           "]}",
                           rsc_family2str(dev_id->family),
-                          dev_id->name, dev_id->name);
+                          dev_id->name, dev_id->name, dev_id->library);
     if (rc)
         return rc;
 
@@ -313,7 +317,10 @@ static int _get_device_by_path_or_serial(struct admin_handle *adm,
         return rc;
 
     if (dcnt == 0)
-        LOG_RETURN(-ENXIO, "Device '%s' not found", dev_id->name);
+        LOG_RETURN(-ENXIO,
+                   "Device (family '%s', serial '%s', library '%s') not found",
+                   rsc_family2str(dev_id->family), dev_id->name,
+                   dev_id->library);
 
     assert(dcnt == 1);
 
@@ -490,7 +497,8 @@ out:
 }
 
 int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
-                            unsigned int num_dev, bool keep_locked)
+                            unsigned int num_dev, bool keep_locked,
+                            const char *library)
 {
     struct dev_info *devices = NULL;
     int rc;
@@ -512,7 +520,8 @@ int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
         }
     }
 
-    rc = _add_device_in_dss(adm, dev_ids, num_dev, keep_locked, &devices);
+    rc = _add_device_in_dss(adm, dev_ids, num_dev, keep_locked, library,
+                            &devices);
     if (rc)
         return rc;
 
@@ -766,8 +775,10 @@ int phobos_admin_device_delete(struct admin_handle *adm, struct pho_id *dev_ids,
 
         rc = dss_lock(&adm->dss, DSS_DEVICE, dev_res, 1);
         if (rc) {
-            pho_warn("Device '%s' cannot be locked, so cannot be removed",
-                     dev_ids[i].name);
+            pho_warn("Device (family '%s', name '%s', library '%s') cannot be "
+                     "locked, so cannot be removed",
+                     rsc_family2str(dev_ids[i].family), dev_ids[i].name,
+                     dev_ids[i].library);
             dss_res_free(dev_res, 1);
             continue;
         }
@@ -820,8 +831,11 @@ int phobos_admin_device_lock(struct admin_handle *adm, struct pho_id *dev_ids,
         rc2 = _admin_notify(adm, dev_ids + i, PHO_NTFY_OP_DEVICE_LOCK,
                             need_to_wait);
         if (rc2) {
-            pho_error(rc2, "Failure during daemon notification for '%s'",
-                      dev_ids[i].name);
+            pho_error(rc2,
+                      "Failure during daemon notification for (family '%s', "
+                      "name '%s', library '%s')",
+                      rsc_family2str(dev_ids[i].family), dev_ids[i].name,
+                      dev_ids[i].library);
             rc = rc ? : rc2;
         }
     }
@@ -848,8 +862,11 @@ int phobos_admin_device_unlock(struct admin_handle *adm, struct pho_id *dev_ids,
 
         rc2 = _admin_notify(adm, dev_ids + i, PHO_NTFY_OP_DEVICE_UNLOCK, true);
         if (rc2)
-            pho_error(rc2, "Failure during daemon notification for '%s'",
-                      dev_ids[i].name);
+            pho_error(rc2,
+                      "Failure during daemon notification for (family '%s', "
+                      "name '%s', library '%s')",
+                      rsc_family2str(dev_ids[i].family), dev_ids[i].name,
+                      dev_ids[i].library);
         rc = rc ? : rc2;
     }
 
@@ -916,8 +933,10 @@ int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
         }
 
         if (strcmp(host_cpy, dev_res->host) == 0) {
-            pho_info("Device '%s' is already located on '%s'", dev_ids[i].name,
-                                                               host_cpy);
+            pho_info("Device (family '%s', name '%s', library '%s') is already "
+                     "located on '%s'",
+                     rsc_family2str(dev_ids[i].family), dev_ids[i].name,
+                     dev_ids[i].library, host_cpy);
             dss_res_free(dev_res, 1);
             continue;
         }
@@ -925,8 +944,10 @@ int phobos_admin_drive_migrate(struct admin_handle *adm, struct pho_id *dev_ids,
         rc2 = dss_lock(&adm->dss, DSS_DEVICE, dev_res, 1);
         if (rc2) {
             pho_error(rc2,
-                      "Device '%s' cannot be locked, so cannot be migrated",
-                      dev_ids[i].name);
+                      "Device (family '%s', name '%s', library '%s') cannot be "
+                      "locked, so cannot be migrated",
+                      rsc_family2str(dev_ids[i].family), dev_ids[i].name,
+                      dev_ids[i].library);
             dss_res_free(dev_res, 1);
             rc = rc ? : (rc2 == -EEXIST ? -EBUSY : rc2);
             continue;
@@ -993,28 +1014,35 @@ static int receive_format_response(struct admin_handle *adm,
         awaiting_resps[resp->req_id] = false;
 
         if (resp->req_id < n_ids) {
-            int resp_family = (int) resp->format->med_id->family;
-            char *resp_name = resp->format->med_id->name;
+            struct pho_id resp_id;
 
-            if (resp_family == ids[resp->req_id].family &&
-                !strcmp(resp_name, ids[resp->req_id].name))
-                pho_debug("Format request for medium '%s' succeeded",
-                          resp_name);
+            resp_id.family = (int) resp->format->med_id->family;
+            pho_id_name_set(&resp_id, resp->format->med_id->name,
+                            resp->format->med_id->library);
+
+            if (pho_id_equal(&resp_id, &ids[resp->req_id]))
+                pho_debug("Format request for medium (family '%s', name '%s', "
+                          "library '%s') succeeded",
+                          rsc_family2str(resp_id.family), resp_id.name,
+                          resp_id.library);
             else
                 pho_error(rc = -EPROTO,
                           "Received response does not answer emitted request, "
-                          "expected '%s' (%s), "
-                          "got '%s' (%s) (invalid req_id %d)",
-                          ids[resp->req_id].name,
-                          fs_type2str(ids[resp->req_id].family),
-                          resp_name,
-                          fs_type2str(resp_family),
-                          resp->req_id);
+                          "expected (family '%s', name '%s', library '%s'), "
+                          "got (family '%s', name '%s', library '%s') "
+                          "(invalid req_id %d)",
+                          rsc_family2str(ids[resp->req_id].family),
+                          ids[resp->req_id].name, ids[resp->req_id].library,
+                          rsc_family2str(resp_id.family), resp_id.name,
+                          resp_id.library, resp->req_id);
         }
     } else if (pho_response_is_error(resp) &&
                resp->error->req_kind == PHO_REQUEST_KIND__RQ_FORMAT) {
-        pho_error(rc = resp->error->rc, "Format failed for medium '%s'",
-                  ids[resp->req_id].name);
+        pho_error(rc = resp->error->rc,
+                  "Format failed for medium (family '%s', name '%s', "
+                  "library '%s')",
+                  rsc_family2str(ids[resp->req_id].family),
+                  ids[resp->req_id].name, ids[resp->req_id].library);
 
         awaiting_resps[resp->req_id] = false;
     } else {
@@ -1065,6 +1093,7 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
         pho_srl_request_format_alloc(&req);
 
         req.format->med_id->name = xstrdup(ids[i].name);
+        req.format->med_id->library = xstrdup(ids[i].library);
         req.format->fs = fs;
         req.format->unlock = unlock;
         req.format->force = force;
@@ -1075,8 +1104,11 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
         rc2 = _send(&adm->phobosd_comm, &req);
         if (rc2) {
             rc = rc ? : rc2;
-            pho_error(rc2, "Failed to send format request for medium '%s', "
-                           "will skip", ids[i].name);
+            pho_error(rc2,
+                      "Failed to send format request for medium (family '%s', "
+                      "name '%s', library '%s'), will skip",
+                      rsc_family2str(ids[i].family), ids[i].name,
+                      ids[i].library);
         } else {
             awaiting_resps[i] = true;
             n_rq_to_recv++;
@@ -1102,8 +1134,11 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
     for (i = 0; i < n_ids; i++) {
         if (awaiting_resps[i] == true) {
             rc = rc ? : -ENODATA;
-            pho_error(-ENODATA, "Did not receive a response for medium '%s'",
-                      ids[i].name);
+            pho_error(-ENODATA,
+                      "Did not receive a response for medium (family '%s', "
+                      "name '%s', library '%s')",
+                      rsc_family2str(ids[i].family), ids[i].name,
+                      ids[i].library);
         }
     }
 
@@ -1123,17 +1158,21 @@ static int _get_extents_to_repack(struct admin_handle *adm,
                           "{\"$AND\": ["
                           "  {\"DSS::EXT::medium_family\": \"%s\"},"
                           "  {\"DSS::EXT::medium_id\": \"%s\"},"
+                          "  {\"DSS::EXT::medium_library\": \"%s\"},"
                           "  {\"$NOR\": [{\"DSS::EXT::state\": \"%s\"}]}"
                           "]}", rsc_family2str(source->family), source->name,
-                          extent_state2str(PHO_EXT_ST_ORPHAN));
+                          source->library, extent_state2str(PHO_EXT_ST_ORPHAN));
     if (rc)
         LOG_RETURN(rc, "Failed to build filter for extent retrieval");
 
     rc = dss_extent_get(&adm->dss, &filter, extents, count);
     dss_filter_free(&filter);
     if (rc)
-        LOG_RETURN(rc, "Failed to retrieve '%s:%s' extents",
-                   rsc_family2str(source->family), source->name);
+        LOG_RETURN(rc,
+                   "Failed to retrieve (family '%s', name '%s', library '%s') "
+                   "extents",
+                   rsc_family2str(source->family), source->name,
+                   source->library);
 
     return rc;
 }
@@ -1165,6 +1204,7 @@ static int _get_source_medium(struct admin_handle *adm,
     req.ralloc->n_required = 1;
     req.ralloc->med_ids[0]->family = source->family;
     req.ralloc->med_ids[0]->name = xstrdup(source->name);
+    req.ralloc->med_ids[0]->library = xstrdup(source->library);
 
     rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
     if (rc)
@@ -1232,7 +1272,8 @@ static int _get_target_medium(struct admin_handle *adm,
     iod->iod_loc = loc;
 
     target->family = resp->walloc->media[0]->med_id->family;
-    strcpy(target->name, resp->walloc->media[0]->med_id->name);
+    pho_id_name_set(target, resp->walloc->media[0]->med_id->name,
+                    resp->walloc->media[0]->med_id->library);
 
     pho_srl_response_free(resp, true);
 
@@ -1257,6 +1298,7 @@ static int _send_and_recv_release(struct admin_handle *adm,
     req.id = req_id;
     req.release->media[0]->med_id->family = source->family;
     req.release->media[0]->med_id->name = xstrdup(source->name);
+    req.release->media[0]->med_id->library = xstrdup(source->library);
     req.release->media[0]->rc = iod_source->iod_rc;
     req.release->media[0]->size_written = 0;
     req.release->media[0]->to_sync = false;
@@ -1269,6 +1311,7 @@ static int _send_and_recv_release(struct admin_handle *adm,
 
     req.release->media[1]->med_id->family = target->family;
     req.release->media[1]->med_id->name = xstrdup(target->name);
+    req.release->media[1]->med_id->library = xstrdup(target->library);
     req.release->media[1]->rc = iod_target->iod_rc;
     req.release->media[1]->size_written = total_size_written;
     req.release->media[1]->to_sync = true;
@@ -1298,8 +1341,7 @@ static void _build_new_extent(const struct pho_id *target,
     new_extent->size = old_extent->size;
     new_extent->address.size = old_extent->address.size;
     new_extent->address.buff = xstrdup(old_extent->address.buff);
-    new_extent->media.family = target->family;
-    strcpy(new_extent->media.name, target->name);
+    pho_id_copy(&new_extent->media, target);
     new_extent->with_xxh128 = old_extent->with_xxh128;
     if (new_extent->with_xxh128)
         memcpy(new_extent->xxh128, old_extent->xxh128,
@@ -1323,8 +1365,10 @@ static int _clean_database_following_format(struct admin_handle *adm,
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                           "  {\"DSS::EXT::medium_family\": \"%s\"},"
-                          "  {\"DSS::EXT::medium_id\": \"%s\"}"
-                          "]}", rsc_family2str(source->family), source->name);
+                          "  {\"DSS::EXT::medium_id\": \"%s\"},"
+                          "  {\"DSS::EXT::medium_library\": \"%s\"}"
+                          "]}", rsc_family2str(source->family), source->name,
+                          source->library);
     if (rc)
         LOG_RETURN(rc, "Failed to build orphan extents retrieval filter");
 
@@ -1359,16 +1403,20 @@ static int _retrieve_fstype_from_medium(struct admin_handle *adm,
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                           "  {\"DSS::MDA::family\": \"%s\"},"
-                          "  {\"DSS::MDA::id\": \"%s\"}"
-                          "]}", rsc_family2str(medium->family), medium->name);
+                          "  {\"DSS::MDA::id\": \"%s\"},"
+                          "  {\"DSS::MDA::library\": \"%s\"}"
+                          "]}", rsc_family2str(medium->family), medium->name,
+                          medium->library);
     if (rc)
         LOG_RETURN(rc, "Failed to build medium filter");
 
     rc = dss_media_get(&adm->dss, &filter, &media, &count);
     dss_filter_free(&filter);
     if (rc)
-        LOG_RETURN(rc, "Failed to retrieve medium '%s:%s' info from DSS",
-                   rsc_family2str(medium->family), medium->name);
+        LOG_RETURN(rc,
+                   "Failed to retrieve medium (family '%s', name '%s', library "
+                   "'%s') info from DSS", rsc_family2str(medium->family),
+                   medium->name, medium->library);
 
     if (count != 1) {
         dss_res_free(media, count);
@@ -1488,13 +1536,17 @@ format:
     if (source_fs_type == PHO_FS_INVAL) {
         rc = _retrieve_fstype_from_medium(adm, source, &source_fs_type);
         if (rc)
-            LOG_GOTO(free_ext, rc, "Failed to retrieve FS type for '%s'",
-                     source->name);
+            LOG_GOTO(free_ext, rc,
+                     "Failed to retrieve FS type for (family '%s', name '%s', "
+                     "library '%s')", rsc_family2str(source->family),
+                     source->name, source->library);
     }
 
     rc = phobos_admin_format(adm, source, 1, 1, source_fs_type, true, true);
     if (rc)
-        LOG_GOTO(free_ext, rc, "Failed to format '%s'", source->name);
+        LOG_GOTO(free_ext, rc,
+                 "Failed to format (family '%s', name '%s', library '%s')",
+                 rsc_family2str(source->family), source->name, source->library);
 
     rc = _clean_database_following_format(adm, source);
 
@@ -1546,7 +1598,7 @@ int phobos_admin_ping_tlc(bool *library_is_up)
 
     ENTRY;
 
-    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl, NULL);
+    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl, "legacy");
     if (rc)
         return rc;
 
@@ -1785,18 +1837,23 @@ int phobos_admin_media_import(struct admin_handle *adm,
 
         med_ls[i].fs.status = PHO_FS_STATUS_IMPORTING;
 
-        pho_verb("Starting import of %s %s", rsc_family2str(medium->family),
-                 medium->name);
+        pho_verb("Starting import of (family '%s', name '%s', library '%s')",
+                 rsc_family2str(medium->family), medium->name, medium->library);
 
         rc = dss_media_insert(&adm->dss, med_ls + i, 1);
         if (rc)
-            LOG_RETURN(rc, "Unable to add medium '%s' to database",
-                       medium->name);
+            LOG_RETURN(rc,
+                       "Unable to add medium (family '%s', name '%s', library "
+                       "'%s') to database", rsc_family2str(medium->family),
+                       medium->name, medium->library);
 
         rc = import_medium(adm, &med_ls[i], check_hash);
         if (rc)
-            LOG_RETURN(rc, "Unable to import medium '%s' to database",
-                       medium->name);
+            LOG_RETURN(rc,
+                       "Unable to import medium (family '%s', name '%s', "
+                       "library '%s') to database",
+                       rsc_family2str(medium->family), medium->name,
+                       medium->library);
     }
 
     rc = dss_filter_build(&filter,
@@ -1867,8 +1924,10 @@ int phobos_admin_lib_scan(enum lib_type lib_type, const char *lib_dev,
         LOG_RETURN(rc, "Failed to initialize DSS");
 
     medium.name[0] = 0;
+    medium.library[0] = 0;
     medium.family = PHO_RSC_TAPE;
     device.name[0] = 0;
+    device.library[0] = 0;
     device.family = PHO_RSC_TAPE;
     init_pho_log(&log, &device, &medium, PHO_LIBRARY_SCAN);
     log.message = json_object();
@@ -1931,11 +1990,17 @@ int phobos_admin_dump_logs(struct admin_handle *adm, int fd,
         timeval2str(&logs[i].time, time_buf);
         json_buffer = json_dumps(logs[i].message, 0);
         fprintf(fp,
-                "<%s> Action '%s' with device '%s' and medium '%s' %s (rc = %d): %s\n",
+                "<%s> Action '%s' with device (family '%s', name '%s', library "
+                "'%s') and medium (family '%s', name '%s', library '%s') %s "
+                "(rc = %d): %s\n",
                 time_buf,
                 operation_type2str(logs[i].cause),
+                rsc_family2str(logs[i].device.family),
                 logs[i].device.name,
+                logs[i].device.library,
+                rsc_family2str(logs[i].medium.family),
                 logs[i].medium.name,
+                logs[i].medium.library,
                 logs[i].error_number != 0 ? "failed" : "succeeded",
                 logs[i].error_number,
                 json_buffer);
@@ -1986,14 +2051,14 @@ int phobos_admin_clear_logs(struct admin_handle *adm,
 }
 
 /* Mutualized between phobos_admin_drive_lookup and phobos_admin_unload */
-static int drive_lookup(const char *drive_serial,
+static int drive_lookup(const char *drive_serial, const char *library,
                         struct lib_drv_info *drive_info)
 {
     struct lib_handle lib_hdl;
     int rc2;
     int rc;
 
-    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl, NULL);
+    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl, library);
     if (rc)
         return rc;
 
@@ -2022,11 +2087,14 @@ int phobos_admin_drive_lookup(struct admin_handle *adm, struct pho_id *id,
     /* fetch the serial number and store it in id */
     rc = _get_device_by_path_or_serial(adm, id, &dev_res);
     if (rc)
-        LOG_RETURN(rc, "Unable to find device %s in DSS", id->name);
+        LOG_RETURN(rc,
+                   "Unable to find device (family '%s', name '%s', library "
+                   "'%s') in DSS", rsc_family2str(id->family), id->name,
+                   id->library);
 
     dss_res_free(dev_res, 1);
 
-    return drive_lookup(id->name, drive_info);
+    return drive_lookup(id->name, id->library, drive_info);
 }
 
 static int check_take_tape_lock(struct dss_handle *dss,
@@ -2038,23 +2106,27 @@ static int check_take_tape_lock(struct dss_handle *dss,
     if (med_res->lock.hostname) {
         if (strcmp(med_res->lock.hostname, hostname))
             LOG_RETURN(-EALREADY,
-                       "tape '%s' is already locked by host '%s', owner/pid "
-                       "'%d', admin host '%s'",
-                       med_res->rsc.id.name, med_res->lock.hostname,
-                       med_res->lock.owner, hostname);
+                       "tape (name '%s', library '%s') is already locked by "
+                       "host '%s', owner/pid '%d', admin host '%s'",
+                       med_res->rsc.id.name, med_res->rsc.id.library,
+                       med_res->lock.hostname, med_res->lock.owner, hostname);
 
         if (med_res->lock.owner != pid)
             LOG_RETURN(-EALREADY,
-                       "tape '%s' is already locked by host '%s', owner/pid "
-                       "'%d', admin host '%s' but owner/pid '%d'",
-                       med_res->rsc.id.name, med_res->lock.hostname,
-                       med_res->lock.owner, hostname, pid);
+                       "tape (name '%s', library '%s') is already locked by "
+                       "host '%s', owner/pid '%d', admin host '%s' but "
+                       "owner/pid '%d'",
+                       med_res->rsc.id.name, med_res->rsc.id.library,
+                       med_res->lock.hostname, med_res->lock.owner, hostname,
+                       pid);
     } else {
         rc = dss_lock(dss, DSS_MEDIA, med_res, 1);
         if (rc)
             LOG_RETURN(rc,
                        "admin host '%s' owner/pid '%d' failed to lock the "
-                       "tape '%s'", hostname, pid, med_res->rsc.id.name);
+                       "tape (name '%s', library '%s')",
+                       hostname, pid, med_res->rsc.id.name,
+                       med_res->rsc.id.library);
     }
 
     return 0;
@@ -2092,8 +2164,9 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
 
     rc = _get_device_by_path_or_serial(adm, drive_id, &dev_res);
     if (rc)
-        LOG_RETURN(rc, "Unable to retrieve serial number from device name '%s' "
-                   "in DSS", drive_id->name);
+        LOG_RETURN(rc,
+                   "Unable to retrieve serial number from device (name '%s', "
+                   "library '%s') in DSS", drive_id->name, drive_id->library);
 
     /* No need to admin lock a failed drive because, it is an unused one. */
     if (dev_res->rsc.adm_status == PHO_RSC_ADM_ST_UNLOCKED) {
@@ -2101,15 +2174,17 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
         rc = phobos_admin_device_lock(adm, drive_id, 1, true);
         if (rc)
             LOG_GOTO(free_dev_res, rc,
-                     "Unable to admin lock the drive '%s' before loading",
-                     drive_id->name);
+                     "Unable to admin lock the drive (name '%s', library '%s') "
+                     "before loading",
+                     drive_id->name, drive_id->library);
     }
 
     /* Lock drive and medium */
     rc = dss_one_medium_get_from_id(&adm->dss, tape_id, &med_res);
     if (rc)
         LOG_GOTO(admin_unlock, rc,
-                 "Unable to get tape '%s' from DSS", tape_id->name);
+                 "Unable to get tape (name '%s', library '%s') from DSS",
+                 tape_id->name, tape_id->library);
 
     rc = fill_host_owner(&hostname, &pid);
     if (rc)
@@ -2121,23 +2196,29 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
     if (rc)
         LOG_GOTO(free_med_res, rc,
                  "admin host '%s' owner/pid '%d' failed to lock the "
-                 "drive (id: '%s', path: '%s') to load",
-                 hostname, pid, dev_res->rsc.id.name, dev_res->path);
+                 "drive (name: '%s', library '%s', path: '%s') to load",
+                 hostname, pid, dev_res->rsc.id.name, dev_res->rsc.id.library,
+                 dev_res->path);
 
     rc = check_take_tape_lock(&adm->dss, med_res, hostname, pid);
     if (rc)
         LOG_GOTO(unlock_drive, rc,
-                 "Unable to lock the tape '%s'", tape_id->name);
+                 "Unable to lock the tape (name '%s', library '%s')",
+                 tape_id->name, tape_id->library);
 
     /* load request with the tlc*/
-    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl, NULL);
+    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl,
+                                  dev_res->rsc.id.library);
     if (rc)
         goto unlock_tape;
 
     rc = ldm_lib_load(&lib_hdl, dev_res->rsc.id.name, med_res->rsc.id.name);
     if (rc)
-        pho_error(rc, "Admin failed to load '%s' into '%s'('%s')",
-                  med_res->rsc.id.name, dev_res->rsc.id.name, dev_res->path);
+        pho_error(rc,
+                  "Admin failed to load the tape (name '%s', library '%s') "
+                  "into the drive (name '%s', library '%s', path '%s')",
+                  med_res->rsc.id.name, med_res->rsc.id.library,
+                  dev_res->rsc.id.name, dev_res->rsc.id.library, dev_res->path);
 
     rc2 = ldm_lib_close(&lib_hdl);
     if (rc2) {
@@ -2149,15 +2230,17 @@ int phobos_admin_load(struct admin_handle *adm, struct pho_id *drive_id,
 unlock_tape:
     rc2 = dss_unlock(&adm->dss, DSS_MEDIA, med_res, 1, false);
     if (rc2) {
-        pho_error(rc2, "Unable to unlock tape '%s'", med_res->rsc.id.name);
+        pho_error(rc2, "Unable to unlock tape (name '%s', family '%s')",
+                  med_res->rsc.id.name, med_res->rsc.id.library);
         rc = rc ? : rc2;
     }
 
 unlock_drive:
     rc2 = dss_unlock(&adm->dss, DSS_DEVICE, dev_res, 1, false);
     if (rc2) {
-        pho_error(rc2, "Unable to unlock drive (id: '%s', path: '%s')",
-                  dev_res->rsc.id.name, dev_res->path);
+        pho_error(rc2,
+                  "Unable to unlock drive (id: '%s', library '%s', path: '%s')",
+                  dev_res->rsc.id.name, dev_res->rsc.id.library, dev_res->path);
         rc = rc ? : rc2;
     }
 
@@ -2169,8 +2252,9 @@ admin_unlock:
         rc2 = phobos_admin_device_unlock(adm, drive_id, 1, true);
         if (rc2) {
             pho_error(rc2,
-                      "Unable to admin unlock the drive '%s' after loading",
-                      drive_id->name);
+                      "Unable to admin unlock the drive (name '%s', library "
+                      "'%s) after loading",
+                      drive_id->name, drive_id->library);
             rc = rc ? : rc2;
         }
     }
@@ -2214,33 +2298,39 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
     rc = _get_device_by_path_or_serial(adm, drive_id, &dev_res);
     if (rc)
         LOG_RETURN(rc,
-                   "Unable to retrieve serial number from device name '%s' in "
-                   "DSS", drive_id->name);
+                   "Unable to retrieve serial number from drive (name '%s', "
+                   "library '%s') in DSS", drive_id->name, drive_id->library);
 
     /* get loaded tape and check drive status */
-    rc = drive_lookup(drive_id->name, &drive_info);
+    rc = drive_lookup(drive_id->name, drive_id->library, &drive_info);
     if (rc)
         LOG_GOTO(free_dev_res, rc,
-                   "Unable to lookup the drive '%s' to unload", drive_id->name);
+                 "Unable to lookup the drive (name '%s', library '%s') to "
+                 "unload", drive_id->name, drive_id->library);
 
     if (drive_info.ldi_full == false) {
         if (!tape_id) {
-            pho_verb("Was asked to unload an empty drive '%s', nothing to do",
-                     drive_id->name);
+            pho_verb("Was asked to unload an empty drive (name '%s', library "
+                     "'%s'), nothing to do", drive_id->name, drive_id->library);
             GOTO(free_dev_res, rc = 0);
         } else {
             LOG_GOTO(free_dev_res, rc = -EINVAL,
-                     "Empty drive '%s' does not contain expected tape '%s'",
-                     drive_id->name, tape_id->name);
+                     "Empty drive (name '%s', library '%s') does not contain "
+                     "expected tape (name '%s', library '%s')", drive_id->name,
+                     drive_id->library, tape_id->name, tape_id->library);
         }
     }
 
     if (tape_id) {
-        if (strcmp(tape_id->name, drive_info.ldi_medium_id.name)) {
+        if (!pho_id_equal(tape_id, &drive_info.ldi_medium_id)) {
             LOG_GOTO(free_dev_res, rc = -EINVAL,
-                     "drive '%s' contains tape '%s' instead of expected tape "
-                     "to unload '%s'", drive_id->name,
-                     drive_info.ldi_medium_id.name, tape_id->name);
+                     "drive (name '%s', library '%s') contains tape (name "
+                     "'%s', library '%s') instead of expected tape to unload "
+                     "(name '%s', library '%s')",
+                     drive_id->name, drive_id->library,
+                     drive_info.ldi_medium_id.name,
+                     drive_info.ldi_medium_id.library,
+                     tape_id->name, tape_id->library);
         }
     }
 
@@ -2250,8 +2340,8 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
         rc = phobos_admin_device_lock(adm, drive_id, 1, true);
         if (rc)
             LOG_GOTO(free_dev_res, rc,
-                     "Unable to admin lock the drive '%s' before unloading",
-                     drive_id->name);
+                     "Unable to admin lock the drive (name '%s', library '%s') "
+                     "before unloading", drive_id->name, drive_id->library);
     }
 
     /* Lock drive and medium */
@@ -2259,8 +2349,9 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
                                     &med_res);
     if (rc)
         LOG_GOTO(admin_unlock, rc,
-                 "Unable to get tape '%s' from DSS",
-                 drive_info.ldi_medium_id.name);
+                 "Unable to get tape (name '%s', library '%s') from DSS",
+                 drive_info.ldi_medium_id.name,
+                 drive_info.ldi_medium_id.library);
 
     rc = fill_host_owner(&hostname, &pid);
     if (rc)
@@ -2272,23 +2363,29 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
     if (rc)
         LOG_GOTO(free_med_res, rc,
                  "admin host '%s' owner/pid '%d' failed to lock the "
-                 "drive (id: '%s', path: '%s') to unload",
-                 hostname, pid, dev_res->rsc.id.name, dev_res->path);
+                 "drive (id: '%s', library '%s', path: '%s') to unload",
+                 hostname, pid, dev_res->rsc.id.name, dev_res->rsc.id.library,
+                 dev_res->path);
 
     rc = check_take_tape_lock(&adm->dss, med_res, hostname, pid);
     if (rc)
         LOG_GOTO(unlock_drive, rc,
-                 "Unable to lock the tape '%s'", tape_id->name);
+                 "Unable to lock the tape (name '%s', library '%s')",
+                 tape_id->name, tape_id->library);
 
     /* unload request with the tlc*/
-    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl, NULL);
+    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl,
+                                  dev_res->rsc.id.library);
     if (rc)
         goto unlock_tape;
 
     rc = ldm_lib_unload(&lib_hdl, dev_res->rsc.id.name, med_res->rsc.id.name);
     if (rc)
-        pho_error(rc, "Admin failed to unload '%s' from '%s'('%s')",
-                  med_res->rsc.id.name, dev_res->rsc.id.name, dev_res->path);
+        pho_error(rc,
+                  "Admin failed to unload tape (name '%s', library '%s') from "
+                  "drive (name '%s', library '%s', path '%s')",
+                  med_res->rsc.id.name, med_res->rsc.id.library,
+                  dev_res->rsc.id.name, dev_res->rsc.id.library, dev_res->path);
 
     rc2 = ldm_lib_close(&lib_hdl);
     if (rc2) {
@@ -2300,15 +2397,17 @@ int phobos_admin_unload(struct admin_handle *adm, struct pho_id *drive_id,
 unlock_tape:
     rc2 = dss_unlock(&adm->dss, DSS_MEDIA, med_res, 1, false);
     if (rc2) {
-        pho_error(rc2, "Unable to unlock tape '%s'", med_res->rsc.id.name);
+        pho_error(rc2, "Unable to unlock tape (name '%s', library '%s')",
+                  med_res->rsc.id.name, med_res->rsc.id.library);
         rc = rc ? : rc2;
     }
 
 unlock_drive:
     rc2 = dss_unlock(&adm->dss, DSS_DEVICE, dev_res, 1, false);
     if (rc2) {
-        pho_error(rc2, "Unable to unlock drive (id: '%s', path: '%s')",
-                  dev_res->rsc.id.name, dev_res->path);
+        pho_error(rc2,
+                  "Unable to unlock drive (id: '%s', library '%s', path: '%s')",
+                  dev_res->rsc.id.name, dev_res->rsc.id.library, dev_res->path);
         rc = rc ? : rc2;
     }
 
@@ -2320,8 +2419,9 @@ admin_unlock:
         rc2 = phobos_admin_device_unlock(adm, drive_id, 1, true);
         if (rc2) {
             pho_error(rc2,
-                      "Unable to admin unlock the drive '%s' after unloading",
-                      drive_id->name);
+                      "Unable to admin unlock the drive (name '%s', library "
+                      "'%s') after unloading",
+                      drive_id->name, drive_id->library);
             rc = rc ? : rc2;
         }
     }

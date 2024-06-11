@@ -132,6 +132,8 @@ static int setup_dss_and_tlc_lib(void **state, bool setup_db)
     if (rc)
         return -1;
 
+    strcpy(dss_and_tlc_lib->tlc_lib.name, "legacy");
+
     lib_dev = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, lib_device);
     if (!lib_dev) {
         dss_fini(&dss_and_tlc_lib->dss);

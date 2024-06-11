@@ -73,6 +73,7 @@ static void paml_enoent(void **state)
     struct pho_id medium_id = {
         .family = PHO_RSC_TAPE,
         .name = "unexisting_medium_name",
+        .library = "legacy",
     };
     char *hostname;
     int rc;
@@ -89,6 +90,7 @@ static void paml_enoent(void **state)
 static struct pho_id admin_locked_medium = {
     .family = PHO_RSC_DIR,
     .name = "admin_locked_medium",
+    .library = "legacy",
 };
 
 static int paml_eacces_setup(void **state)
@@ -124,6 +126,7 @@ static void paml_eacces(void **state)
 static struct pho_id false_get_medium = {
     .family = PHO_RSC_DIR,
     .name = "false_get_medium",
+    .library = "legacy",
 };
 
 static int paml_eperm_setup(void **state)
@@ -159,11 +162,13 @@ static void paml_eperm(void **state)
 static struct pho_id dir_free_medium = {
     .family = PHO_RSC_DIR,
     .name = "dir_free_medium",
+    .library = "legacy",
 };
 
 static struct pho_id tape_free_medium = {
     .family = PHO_RSC_TAPE,
     .name = "tape_free_medium",
+    .library = "legacy",
 };
 
 static int paml_ok_free_setup(void **state)
@@ -209,6 +214,7 @@ static void paml_ok_free(void **state)
 static struct pho_id locked_medium = {
     .family = PHO_RSC_DIR,
     .name = "locked_medium",
+    .library = "legacy",
 };
 
 #define HOSTNAME "hostname"

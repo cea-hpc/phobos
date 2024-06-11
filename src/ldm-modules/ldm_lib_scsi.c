@@ -80,7 +80,7 @@ struct lib_descriptor {
     struct pho_comm_info tlc_comm;  /**< TLC Communication socket info. */
 };
 
-static int lib_scsi_open(struct lib_handle *hdl, const char *dev)
+static int lib_scsi_open(struct lib_handle *hdl)
 {
     union pho_comm_addr tlc_sock_addr;
     struct lib_descriptor *lib;
@@ -235,7 +235,8 @@ static int lib_tlc_drive_info(struct lib_handle *hdl, const char *drv_serial,
     if (resp->drive_lookup->medium_name) {
         ldi->ldi_full = true;
         ldi->ldi_medium_id.family = PHO_RSC_TAPE;
-        pho_id_name_set(&ldi->ldi_medium_id, resp->drive_lookup->medium_name);
+        pho_id_name_set(&ldi->ldi_medium_id, resp->drive_lookup->medium_name,
+                        hdl->library);
     }
 
     rc = 0;

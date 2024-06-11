@@ -42,6 +42,7 @@ enum PhoConfigureOp {
 message PhoResourceId {
     required PhoResourceFamily family = 1; // Family type.
     required string name              = 2; // Resource name.
+    required string library           = 3; // Resource library.
 }
 
 /** Notify operation. */

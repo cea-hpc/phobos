@@ -36,6 +36,7 @@ static struct extent EXT = {
     .state = PHO_EXT_ST_PENDING,
     .media.family = PHO_RSC_DIR,
     .media.name = "/mnt/source",
+    .media.library = "legacy",
     .address.buff = "blablabla",
     .with_xxh128 = false,
     .with_md5 = false,
@@ -71,6 +72,8 @@ static void de_simple_ok(void **state)
     assert_int_equal(ext_res->media.family, PHO_RSC_DIR);
     assert_memory_equal(ext_res->media.name, EXT.media.name,
                         strlen(EXT.media.name));
+    assert_memory_equal(ext_res->media.library, EXT.media.library,
+                        strlen(EXT.media.library));
     assert_memory_equal(ext_res->address.buff, EXT.address.buff,
                         strlen(EXT.address.buff));
 

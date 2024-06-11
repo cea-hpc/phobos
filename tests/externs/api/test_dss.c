@@ -240,22 +240,24 @@ int main(int argc, char **argv)
         case DSS_DEVICE:
             for (i = 0, dev = item_list; i < item_cnt; i++, dev++) {
                 pho_debug("Got device: family:%s host:%s model:%s path:%s "
-                          "serial:%s adm_st:%s",
+                          "serial:%s adm_st:%s library:%s",
                           rsc_family2str(dev->rsc.id.family), dev->host,
                           dev->rsc.model, dev->path, dev->rsc.id.name,
-                          rsc_adm_status2str(dev->rsc.adm_status));
+                          rsc_adm_status2str(dev->rsc.adm_status),
+                          dev->rsc.id.library);
             }
             break;
         case DSS_MEDIA:
             for (i = 0, media = item_list; i < item_cnt; i++, media++) {
                 pho_debug("Got Media: name:%s model:%s adm_st:%s "
-                          "address_type:%s fs_type:%s fs_status:%s",
+                          "address_type:%s fs_type:%s fs_status:%s library:%s",
                           media->rsc.id.name,
                           media->rsc.model,
                           rsc_adm_status2str(media->rsc.adm_status),
                           address_type2str(media->addr_type),
                           fs_type2str(media->fs.type),
-                          fs_status2str(media->fs.status));
+                          fs_status2str(media->fs.status),
+                          media->rsc.id.library);
                 pho_debug("Got Media Stats: nb_obj:%lld logc_spc_used:%zd"
                           " phys_spc_used:%zd phys_spc_free:%zd:nb_errors:%ld:"
                           "last_load:%ld",
@@ -283,13 +285,13 @@ int main(int argc, char **argv)
                 extents = layout->extents;
                 for (j = 0; j < layout->ext_count; j++) {
                     pho_debug("->Got extent: layout_idx:%d, state:%s size:%zu,"
-                             " address:%s,media type:%s, media:%s",
+                             " address:%s,media type:%s, name:%s, library:%s",
                              extents->layout_idx,
                              extent_state2str(extents->state),
                              extents->size,
                              extents->address.buff,
                              rsc_family2str(extents->media.family),
-                             extents->media.name);
+                             extents->media.name, extents->media.library);
                     extents++;
                 }
             }
@@ -379,7 +381,7 @@ int main(int argc, char **argv)
                     id = media->rsc.id.name;
                     rc = asprintf(&s, "%sCOPY", id);
                     assert(rc > 0);
-                    pho_id_name_set(&media->rsc.id, s);
+                    pho_id_name_set(&media->rsc.id, s, "legacy");
                     free(s);
                 } else if (action == DSS_SET_UPDATE) {
                     media->stats.nb_obj = 1000;

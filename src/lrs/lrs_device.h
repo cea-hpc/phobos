@@ -377,12 +377,13 @@ void lrs_dev_hdl_fini(struct lrs_dev_hdl *handle);
  * \param[in]    sched    scheduler managing the device
  * \param[in]    handle   initialized device handle
  * \param[in]    name     serial number of the device
+ * \param[in]    library  library of the device
  *
  * \return                0 on success, -errno no failure
  */
 int lrs_dev_hdl_add(struct lrs_sched *sched,
                     struct lrs_dev_hdl *handle,
-                    const char *name);
+                    const char *name, const char *library);
 
 /**
  * Undo the work done by lrs_dev_hdl_add
@@ -465,11 +466,13 @@ struct lrs_dev *lrs_dev_hdl_get(struct lrs_dev_hdl *handle, int index);
  * Wrap library open operations
  *
  * @param[in]   dev_type    Device type
+ * @param[in]   library     Library
  * @param[out]  lib_hdl     Library handle
  *
  * @return          0 on success, -1 * posix error code on failure.
  */
-int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl);
+int wrap_lib_open(enum rsc_family dev_type, const char *library,
+                  struct lib_handle *lib_hdl);
 
 /**
  * Returns the technology of a drive from its model using the configuration for
@@ -488,6 +491,16 @@ int lrs_dev_technology(const struct lrs_dev *dev, const char **techno);
 static inline const char *lrs_dev_name(struct lrs_dev *dev)
 {
     return dev->ld_dss_dev_info->rsc.id.name;
+}
+
+static inline const struct pho_id *lrs_dev_id(struct lrs_dev *dev)
+{
+    return &dev->ld_dss_dev_info->rsc.id;
+}
+
+static inline const struct pho_id *lrs_dev_med_id(struct lrs_dev *dev)
+{
+    return &dev->ld_dss_media_info->rsc.id;
 }
 
 /* Swap the medium lrs_dev::ld_dss_media_info with \p medium while holding the

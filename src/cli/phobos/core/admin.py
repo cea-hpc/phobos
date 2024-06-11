@@ -124,7 +124,8 @@ class Client: # pylint: disable=too-many-public-methods
                                    "Unknown filesystem type '%s'" % fs_type)
 
         c_id = Id * len(media_list)
-        mstruct = [Id(rsc_family, name=medium_id) for medium_id in media_list]
+        mstruct = [Id(rsc_family, name=medium_id, library="legacy")
+                   for medium_id in media_list]
         rc = LIBPHOBOS_ADMIN.phobos_admin_format(byref(self.handle),
                                                  c_id(*mstruct),
                                                  len(media_list),
@@ -137,14 +138,17 @@ class Client: # pylint: disable=too-many-public-methods
                                    "Failed to format some medium in '%s'" %
                                    str(media_list))
 
-    def device_add(self, dev_family, dev_names, keep_locked):
+    def device_add(self, dev_family, dev_names, keep_locked, library):
         """Add devices to the LRS."""
         c_id = Id * len(dev_names)
-        dev_ids = [Id(dev_family, name=name) for name in dev_names]
+        dev_ids = [Id(dev_family, name=name, library=library)
+                   for name in dev_names]
+        c_library = c_char_p(library.encode('utf-8'))
 
         rc = LIBPHOBOS_ADMIN.phobos_admin_device_add(byref(self.handle),
                                                      c_id(*dev_ids),
-                                                     len(dev_ids), keep_locked)
+                                                     len(dev_ids), keep_locked,
+                                                     c_library)
         if rc:
             raise EnvironmentError(rc, "Failed to add device(s) '%s'" %
                                    dev_names)
@@ -152,7 +156,8 @@ class Client: # pylint: disable=too-many-public-methods
     def device_migrate(self, dev_names, host):
         """Migrate devices (for now, only tape drives)."""
         c_id = Id * len(dev_names)
-        dev_ids = [Id(PHO_RSC_TAPE, name=name) for name in dev_names]
+        dev_ids = [Id(PHO_RSC_TAPE, name=name, library="legacy")
+                   for name in dev_names]
         c_host = c_char_p(host.encode('utf-8'))
         count = c_int(0)
 
@@ -166,10 +171,11 @@ class Client: # pylint: disable=too-many-public-methods
 
         return count.value
 
-    def device_delete(self, dev_family, dev_names):
+    def device_delete(self, dev_family, dev_names, library):
         """Remove devices to phobos system."""
         c_id = Id * len(dev_names)
-        dev_ids = [Id(dev_family, name=name) for name in dev_names]
+        dev_ids = [Id(dev_family, name=name, library=library)
+                   for name in dev_names]
         count = c_int(0)
 
         rc = LIBPHOBOS_ADMIN.phobos_admin_device_delete(byref(self.handle),
@@ -237,7 +243,8 @@ class Client: # pylint: disable=too-many-public-methods
     def device_lock(self, dev_family, dev_names, is_forced):
         """Wrapper for the device lock command."""
         c_id = Id * len(dev_names)
-        dev_ids = [Id(dev_family, name=name) for name in dev_names]
+        dev_ids = [Id(dev_family, name=name, library="legacy")
+                   for name in dev_names]
 
         rc = LIBPHOBOS_ADMIN.phobos_admin_device_lock(byref(self.handle),
                                                       c_id(*dev_ids),
@@ -249,7 +256,8 @@ class Client: # pylint: disable=too-many-public-methods
     def device_unlock(self, dev_family, dev_names, is_forced):
         """Wrapper for the device unlock command."""
         c_id = Id * len(dev_names)
-        dev_ids = [Id(dev_family, name=name) for name in dev_names]
+        dev_ids = [Id(dev_family, name=name, library="legacy")
+                   for name in dev_names]
 
         rc = LIBPHOBOS_ADMIN.phobos_admin_device_unlock(byref(self.handle),
                                                         c_id(*dev_ids),
@@ -308,7 +316,7 @@ class Client: # pylint: disable=too-many-public-methods
         hostname = c_char_p(None)
         rc = LIBPHOBOS_ADMIN.phobos_admin_medium_locate(
             byref(self.handle),
-            byref(Id(rsc_family, name=medium_id)),
+            byref(Id(rsc_family, name=medium_id, library="legacy")),
             byref(hostname))
         if rc:
             raise EnvironmentError(rc, "Failed to locate medium '%s'" %
@@ -395,10 +403,10 @@ class Client: # pylint: disable=too-many-public-methods
         """Lookup a drive"""
         drive_info = LibDrvInfo()
 
-        rc = LIBPHOBOS_ADMIN.phobos_admin_drive_lookup(byref(self.handle),
-                                                       byref(Id(PHO_RSC_TAPE,
-                                                                name=res)),
-                                                       byref(drive_info))
+        rc = LIBPHOBOS_ADMIN.phobos_admin_drive_lookup(
+            byref(self.handle),
+            byref(Id(PHO_RSC_TAPE, name=res, library="legacy")),
+            byref(drive_info))
         if rc:
             raise EnvironmentError(rc, f"Failed to lookup the drive {res}")
 
@@ -408,8 +416,9 @@ class Client: # pylint: disable=too-many-public-methods
         """Load a tape into a drive"""
         rc = LIBPHOBOS_ADMIN.phobos_admin_load(
             byref(self.handle),
-            byref(Id(PHO_RSC_TAPE, name=drive_serial_or_path)),
-            byref(Id(PHO_RSC_TAPE, name=tape_label)))
+            byref(Id(PHO_RSC_TAPE, name=drive_serial_or_path,
+                     library="legacy")),
+            byref(Id(PHO_RSC_TAPE, name=tape_label, library="legacy")))
 
         if rc:
             raise EnvironmentError(rc, f"Failed to load {tape_label} into "
@@ -419,9 +428,10 @@ class Client: # pylint: disable=too-many-public-methods
         """Load a tape into a drive"""
         rc = LIBPHOBOS_ADMIN.phobos_admin_unload(
             byref(self.handle),
-            byref(Id(PHO_RSC_TAPE,
-                     name=drive_serial_or_path)),
-            byref(Id(PHO_RSC_TAPE, name=tape_label)) if tape_label else None)
+            byref(Id(PHO_RSC_TAPE, name=drive_serial_or_path,
+                     library="legacy")),
+            byref(Id(PHO_RSC_TAPE, name=tape_label, library="legacy"))
+            if tape_label else None)
 
         if rc:
             if tape_label:
@@ -435,7 +445,8 @@ class Client: # pylint: disable=too-many-public-methods
         """Repack a tape"""
         tags = Tags(tags)
         rc = LIBPHOBOS_ADMIN.phobos_admin_repack(
-            byref(self.handle), byref(Id(family, name=medium)),
+            byref(self.handle), byref(Id(family, name=medium,
+                                         library="legacy")),
             byref(tags))
 
         if rc:

@@ -47,14 +47,15 @@ struct media_info **reqc_get_medium_to_alloc(struct req_container *reqc,
                                              size_t index);
 
 struct lrs_dev *search_in_use_medium(GPtrArray *devices,
-                                     const char *name,
+                                     const char *name, const char *library,
                                      bool *sched_ready);
 
 struct lrs_dev *search_loaded_medium(GPtrArray *devices,
-                                     const char *name);
+                                     const char *name, const char *library);
 
 struct lrs_dev *search_loaded_medium_keep_lock(GPtrArray *devices,
-                                               const char *name);
+                                               const char *name,
+                                               const char *library);
 
 void reqc_pho_id_from_index(struct req_container *reqc, size_t index,
                             struct pho_id *id);

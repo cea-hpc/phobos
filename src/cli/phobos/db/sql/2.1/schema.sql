@@ -29,19 +29,20 @@ INSERT INTO schema_info VALUES ('2.1');
 CREATE TABLE device(
     family          dev_family,
     model           varchar(32),
-    id              varchar(255) UNIQUE,
+    id              varchar(255),
     host            varchar(128),
     adm_status      adm_status,
     path            varchar(256),
+    library         varchar(255) NOT NULL,
 
-    PRIMARY KEY (family, id)
+    PRIMARY KEY (family, id, library)
 );
 CREATE INDEX ON device USING gin(host);
 
 CREATE TABLE media(
     family          dev_family,
     model           varchar(32),
-    id              varchar(255) UNIQUE,
+    id              varchar(255),
     adm_status      adm_status,
     fs_type         fs_type,
     fs_label        varchar(32),
@@ -52,8 +53,9 @@ CREATE TABLE media(
     put             boolean DEFAULT TRUE,
     get             boolean DEFAULT TRUE,
     delete          boolean DEFAULT TRUE,
+    library         varchar(255) NOT NULL,
 
-    PRIMARY KEY (family, id)
+    PRIMARY KEY (family, id, library)
 );
 CREATE INDEX ON media((stats->>'phys_spc_free'));
 
@@ -94,6 +96,7 @@ CREATE TABLE extent(
     hash            jsonb,
     info            jsonb,
     offsetof        bigint, -- the name 'offset' is a reserved keyword
+    medium_library  varchar(255) NOT NULL,
 
     PRIMARY KEY (extent_uuid)
 );
@@ -119,13 +122,14 @@ CREATE TABLE lock(
 
 CREATE TABLE logs(
     family    dev_family,
-    device    varchar(2048),
-    medium    varchar(2048),
+    device    varchar(255),
+    medium    varchar(255),
     uuid      varchar(36) UNIQUE DEFAULT uuid_generate_v4(),
     errno     integer NOT NULL,
     cause     operation_type,
     message   jsonb,
     time      timestamp DEFAULT now(),
+    library   varchar(255) NOT NULL,
 
     PRIMARY KEY (uuid)
 );

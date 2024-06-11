@@ -38,8 +38,9 @@ enum pho_cfg_params_tlc {
     PHO_CFG_TLC_listen_port,
     PHO_CFG_TLC_port,
     PHO_CFG_TLC_lib_device,
+    PHO_CFG_TLC_default_library,
 
-    PHO_CFG_TLC_LAST = PHO_CFG_TLC_lib_device
+    PHO_CFG_TLC_LAST = PHO_CFG_TLC_default_library,
 };
 
 extern const struct pho_config_item cfg_tlc[];

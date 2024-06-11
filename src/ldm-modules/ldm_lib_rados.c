@@ -72,7 +72,7 @@ const struct pho_config_item cfg_ceph_rados[] = {
     },
 };
 
-static int lib_rados_open(struct lib_handle *hdl, const char *dev)
+static int lib_rados_open(struct lib_handle *hdl)
 {
     const char *ceph_conf_path;
     const char *userid;
@@ -152,7 +152,7 @@ static int lib_rados_drive_lookup(struct lib_handle *lib_hdl,
     drv_info->ldi_medium_id.family = PHO_RSC_RADOS_POOL;
     drv_info->ldi_addr.lia_addr = 0;
 
-    pho_id_name_set(&drv_info->ldi_medium_id, sep + 1);
+    pho_id_name_set(&drv_info->ldi_medium_id, sep + 1, lib_hdl->library);
 
     rc = pho_rados_pool_exists(lib_hdl->lh_lib, drv_info->ldi_medium_id.name);
     if (rc < 0) {

@@ -487,6 +487,8 @@ class AddOptHandler(DSSInteractHandler):
         super(AddOptHandler, cls).add_options(parser)
         parser.add_argument('--unlock', action='store_true',
                             help='Unlock resource on success')
+        parser.add_argument('--library',
+                            help="Library containing added resources")
         parser.add_argument('res', nargs='+', help='Resource(s) to add')
 
 
@@ -515,6 +517,8 @@ class ResourceDeleteOptHandler(DSSInteractHandler):
     @classmethod
     def add_options(cls, parser):
         super(ResourceDeleteOptHandler, cls).add_options(parser)
+        parser.add_argument('--library',
+                            help="Library containing deleted resources")
         parser.add_argument('res', nargs='+', help='Resource(s) to remove')
         parser.set_defaults(verb=cls.label)
 
@@ -1048,6 +1052,7 @@ class MediumImportOptHandler(XferOptHandler):
                                  "with the hashes of the extent")
         parser.add_argument('--unlock', action='store_true',
                             help="unlocks the tape after the import")
+        parser.add_argument('--library', help="Library containing each medium")
 
 class TapeImportOptHandler(MediumImportOptHandler):
     """Specific version of the 'import' command for tapes"""
@@ -1413,10 +1418,10 @@ class LogsClearOptHandler(BaseOptHandler):
 
 def create_log_filter(device, medium, _errno, cause, start, end): # pylint: disable=too-many-arguments
     """Create a log filter structure with the given parameters."""
-    device_id = (Id(PHO_RSC_TAPE, name=device) if device
-                 else Id(PHO_RSC_NONE, name=""))
-    medium_id = (Id(PHO_RSC_TAPE, name=medium) if medium
-                 else Id(PHO_RSC_NONE, name=""))
+    device_id = (Id(PHO_RSC_TAPE, name=device, library="legacy") if device
+                 else Id(PHO_RSC_NONE, name="", library="legacy"))
+    medium_id = (Id(PHO_RSC_TAPE, name=medium, library="legacy") if medium
+                 else Id(PHO_RSC_NONE, name="", library="legacy"))
     c_errno = (pointer(c_int(int(_errno))) if _errno else None)
     c_cause = (c_int(str2operation_type(cause)) if cause else
                c_int(PHO_OPERATION_INVALID))
@@ -1482,15 +1487,21 @@ class LogsOptHandler(BaseOptHandler):
             sys.exit(abs(err.errno))
 
 
+def set_library(obj):
+    """Set the library of obj first from its 'library' param, then its family"""
+    obj.library = obj.params.get('library')
+    if not obj.library:
+        obj.library = cfg.get_default_library(obj.family)
+
 class DeviceOptHandler(BaseResourceOptHandler):
     """Shared interface for devices."""
     verbs = [
-        AddOptHandler,
         ResourceDeleteOptHandler,
         ListOptHandler,
         DeviceLockOptHandler,
         UnlockOptHandler
     ]
+    library = None
 
     def filter(self, ident, **kwargs):
         """
@@ -1509,11 +1520,12 @@ class DeviceOptHandler(BaseResourceOptHandler):
     def exec_add(self):
         """Add a new device"""
         resources = self.params.get('res')
+        set_library(self)
 
         try:
             with AdminClient(lrs_required=False) as adm:
                 adm.device_add(self.family, resources,
-                               not self.params.get('unlock'))
+                               not self.params.get('unlock'), self.library)
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
@@ -1561,6 +1573,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         MediaSetAccessOptHandler,
         MediumLocateOptHandler
     ]
+    library = None
 
     def add_medium(self, adm, medium, tags):
         """Add media method"""
@@ -1570,6 +1583,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         resources = self.params.get('res')
         keep_locked = not self.params.get('unlock')
         tags = self.params.get('tags', [])
+        set_library(self)
         valid_count = 0
         rc = 0
 
@@ -1583,17 +1597,20 @@ class MediaOptHandler(BaseResourceOptHandler):
                     try:
                         medium = MediaInfo(family=self.family, name=path,
                                            model=None,
-                                           is_adm_locked=keep_locked)
+                                           is_adm_locked=keep_locked,
+                                           library=self.library)
 
                         self.add_medium(adm, [medium], tags)
                         medium_is_added = True
-                        adm.device_add(self.family, [path], False)
+                        adm.device_add(self.family, [path], False,
+                                       self.library)
                         valid_count += 1
                     except EnvironmentError as err:
                         self.logger.error(env_error_format(err))
                         rc = (err.errno if not rc else rc)
                         if medium_is_added:
-                            self.client.media.remove(self.family, path)
+                            self.client.media.remove(self.family, path,
+                                                     self.library)
                         continue
 
         except EnvironmentError as err:
@@ -1609,9 +1626,11 @@ class MediaOptHandler(BaseResourceOptHandler):
         techno = self.params.get('type', '').upper()
         tags = self.params.get('tags', [])
         keep_locked = not self.params.get('unlock')
+        set_library(self)
 
         media = [MediaInfo(family=self.family, name=name,
-                           model=techno, is_adm_locked=keep_locked)
+                           model=techno, is_adm_locked=keep_locked,
+                           library=self.library)
                  for name in names]
         try:
             with AdminClient(lrs_required=False) as adm:
@@ -1634,6 +1653,7 @@ class MediaOptHandler(BaseResourceOptHandler):
 
     def exec_update(self):
         """Update tags of an existing media"""
+        set_library(self)
         tags = self.params.get('tags')
         if tags is None:
             self.logger.info("No update to be performed")
@@ -1644,7 +1664,8 @@ class MediaOptHandler(BaseResourceOptHandler):
             tags = []
 
         uids = NodeSet.fromlist(self.params.get('res'))
-        media = [MediaInfo(family=self.family, name=uid, tags=tags)
+        media = [MediaInfo(family=self.family, name=uid, tags=tags,
+                           library=self.library)
                  for uid in uids]
         self._media_update(media, TAGS)
 
@@ -1713,21 +1734,24 @@ class MediaOptHandler(BaseResourceOptHandler):
     def _set_adm_status(self, adm_status):
         """Update media.adm_status"""
         uids = NodeSet.fromlist(self.params.get('res'))
-        media = [MediaInfo(family=self.family, name=uid,
-                           adm_status=adm_status)
+        media = [MediaInfo(family=self.family, name=uid, adm_status=adm_status,
+                           library=self.library)
                  for uid in uids]
         self._media_update(media, ADM_STATUS)
 
     def exec_lock(self):
         """Lock media"""
+        set_library(self)
         self._set_adm_status(PHO_RSC_ADM_ST_LOCKED)
 
     def exec_unlock(self):
         """Unlock media"""
+        set_library(self)
         self._set_adm_status(PHO_RSC_ADM_ST_UNLOCKED)
 
     def exec_set_access(self):
         """Update media operations flags"""
+        set_library(self)
         fields = 0
         flags = self.params.get('flags')
         if 'put' in flags:
@@ -1751,7 +1775,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         uids = NodeSet.fromlist(self.params.get('res'))
         media = [MediaInfo(family=self.family, name=uid,
                            put_access=put_access, get_access=get_access,
-                           delete_access=delete_access)
+                           delete_access=delete_access, library=self.library)
                  for uid in uids]
         self._media_update(media, fields)
 
@@ -1772,11 +1796,13 @@ class MediaOptHandler(BaseResourceOptHandler):
         adm_locked = not self.params.get('unlock')
         techno = self.params.get('type', '').upper()
         fstype = self.params.get('fs').upper()
+        set_library(self)
 
         media = (MediaInfo * len(media_names))()
         for index, medium_name in enumerate(media_names):
             media[index] = MediaInfo(family=self.family, name=medium_name,
-                                     model=techno, is_adm_locked=adm_locked)
+                                     model=techno, is_adm_locked=adm_locked,
+                                     library=self.library)
         try:
             with AdminClient(lrs_required=True) as adm:
                 adm.medium_import(fstype, media, check_hash)
@@ -2072,10 +2098,11 @@ class DriveOptHandler(DeviceOptHandler):
     def exec_delete(self):
         """Remove a device"""
         resources = self.params.get('res')
+        set_library(self)
 
         try:
             with AdminClient(lrs_required=False) as adm:
-                count = adm.device_delete(self.family, resources)
+                count = adm.device_delete(self.family, resources, self.library)
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))

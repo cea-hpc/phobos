@@ -30,7 +30,7 @@ import logging
 from ctypes import byref, c_int, c_void_p, POINTER, Structure
 from abc import ABCMeta, abstractmethod, abstractproperty
 
-from phobos.core.const import DSS_MEDIA
+from phobos.core.const import DSS_MEDIA # pylint: disable=no-name-in-module
 from phobos.core.ffi import (DevInfo, MediaInfo, LIBPHOBOS)
 
 # Valid filter suffix and associated operators.
@@ -273,11 +273,13 @@ class MediaManager(BaseEntityManager):
         if rc:
             raise EnvironmentError(rc, err_message)
 
-    def remove(self, family, name):
+    def remove(self, family, name, library):
         """Delete media from DSS."""
-        media = MediaInfo(family=family, name=name)
+        media = MediaInfo(family=family, name=name, library=library)
         self.delete([media])
-        self.logger.debug("Media '%s' successfully deleted: ", name)
+        self.logger.debug("Media (family '%s', name '%s', library '%s') "
+                          "successfully deleted: ",
+                          family, name, library)
 
     def lock(self, objects):
         """Lock all the media associated with a given list of MediaInfo"""

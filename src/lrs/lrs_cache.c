@@ -39,16 +39,14 @@ struct media_cache_env {
     struct dss_handle dss;
 } lrs_media_cache_env[PHO_RSC_LAST];
 
-static guint lrs_media_cache_hash(gconstpointer key);
-static gboolean lrs_media_cache_equal(gconstpointer lhs, gconstpointer rhs);
 static struct key_value *lrs_media_cache_build(const void *key, void *_env);
 static struct key_value *lrs_media_cache_value2kv(void *key, void *value);
 static void lrs_media_cache_destroy(struct key_value *kv, void *env);
 static void lrs_media_cache_display(void *key, void *value, int ref_count);
 
 struct pho_cache_operations lrs_media_cache_ops = {
-    .pco_hash     = lrs_media_cache_hash,
-    .pco_equal    = lrs_media_cache_equal,
+    .pco_hash     = g_pho_id_hash,
+    .pco_equal    = g_pho_id_equal,
     .pco_build    = lrs_media_cache_build,
     .pco_value2kv = lrs_media_cache_value2kv,
     .pco_destroy  = lrs_media_cache_destroy,
@@ -89,7 +87,8 @@ void lrs_cache_cleanup(enum rsc_family family)
 
 struct media_info *lrs_medium_acquire(const struct pho_id *id)
 {
-    pho_debug("cache acquire: %s (%p)", id->name, id);
+    pho_debug("cache acquire: (family '%s', name '%s', library '%s') (%p)",
+              rsc_family2str(id->family), id->name, id->library, id);
     return pho_cache_acquire(phobos_context()->lrs_media_cache[id->family], id);
 }
 
@@ -125,21 +124,6 @@ void lrs_media_cache_dump(enum rsc_family family)
     pho_cache_dump(phobos_context()->lrs_media_cache[family]);
 }
 
-static guint lrs_media_cache_hash(gconstpointer key)
-{
-    const struct pho_id *id = key;
-
-    return g_str_hash(id->name);
-}
-
-static gboolean lrs_media_cache_equal(gconstpointer _lhs, gconstpointer _rhs)
-{
-    const struct pho_id *lhs = _lhs;
-    const struct pho_id *rhs = _rhs;
-
-    return g_str_equal(lhs->name, rhs->name);
-}
-
 static struct key_value *lrs_media_cache_build(const void *key, void *_env)
 {
     struct media_cache_env *env = _env;
@@ -153,10 +137,12 @@ static struct key_value *lrs_media_cache_build(const void *key, void *_env)
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                               "{\"DSS::MDA::family\": \"%s\"}, "
-                              "{\"DSS::MDA::id\": \"%s\"}"
+                              "{\"DSS::MDA::id\": \"%s\"}, "
+                              "{\"DSS::MDA::library\": \"%s\"}"
                           "]}",
                           rsc_family2str(id->family),
-                          id->name);
+                          id->name,
+                          id->library);
     if (rc) {
         errno = -rc;
         return NULL;
@@ -215,5 +201,7 @@ static void lrs_media_cache_display(void *key, void *value, int ref_count)
 {
     struct pho_id *id = key;
 
-    pho_debug("%s: %p (ref count: %d)", id->name, value, ref_count);
+    pho_debug("(family '%s', name '%s', library '%s'): %p (ref count: %d)",
+              rsc_family2str(id->family), id->name, id->library, value,
+              ref_count);
 }

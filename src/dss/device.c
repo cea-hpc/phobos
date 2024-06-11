@@ -49,8 +49,8 @@ static int device_insert_query(PGconn *conn, void *void_dev, int item_cnt,
 
     g_string_append(
         request,
-        "INSERT INTO device (family, model, id, host, adm_status, path) "
-        " VALUES "
+        "INSERT INTO device (family, model, id, library, host, adm_status, "
+        "path) VALUES "
     );
 
     for (int i = 0; i < item_cnt; ++i) {
@@ -62,10 +62,10 @@ static int device_insert_query(PGconn *conn, void *void_dev, int item_cnt,
             return -EINVAL;
 
         g_string_append_printf(request,
-                               "('%s', %s, '%s', '%s', '%s', '%s')",
+                               "('%s', %s, '%s', '%s', '%s', '%s', '%s')",
                                rsc_family2str(device->rsc.id.family),
                                model,
-                               device->rsc.id.name,
+                               device->rsc.id.name, device->rsc.id.library,
                                device->host,
                                rsc_adm_status2str(device->rsc.adm_status),
                                device->path);
@@ -110,8 +110,12 @@ static int device_update_query(PGconn *conn, void *void_dev, int item_cnt,
 
         update_fields(device, _fields, FIELDS, 2, sub_request);
 
-        g_string_append_printf(sub_request, "WHERE id = '%s'; ",
-                               device->rsc.id.name);
+        g_string_append_printf(sub_request,
+                               "WHERE family = '%s' AND id = '%s' AND "
+                               "library = '%s'; ",
+                               rsc_family2str(device->rsc.id.family),
+                               device->rsc.id.name,
+                               device->rsc.id.library);
 
         g_string_append(request, sub_request->str);
         g_string_free(sub_request, true);
@@ -124,7 +128,7 @@ static int device_select_query(GString **conditions, int n_conditions,
                                GString *request)
 {
     g_string_append(request,
-                    "SELECT family, model, id, adm_status, host, path"
+                    "SELECT family, model, id, library, adm_status, host, path"
                     " FROM device");
 
     if (n_conditions == 1)
@@ -142,8 +146,12 @@ static int device_delete_query(void *void_dev, int item_cnt, GString *request)
     for (int i = 0; i < item_cnt; ++i) {
         struct dev_info *device = ((struct dev_info *) void_dev) + i;
 
-        g_string_append_printf(request, "DELETE FROM device WHERE id = '%s'; ",
-                               device->rsc.id.name);
+        g_string_append_printf(request,
+                               "DELETE FROM device WHERE family = '%s' AND "
+                               "id = '%s' AND library = '%s'; ",
+                               rsc_family2str(device->rsc.id.family),
+                               device->rsc.id.name,
+                               device->rsc.id.library);
     }
 
     return 0;
@@ -157,10 +165,11 @@ static int device_from_pg_row(struct dss_handle *handle, void *void_dev,
 
     dev->rsc.id.family  = str2rsc_family(PQgetvalue(res, row_num, 0));
     dev->rsc.model      = get_str_value(res, row_num, 1);
-    pho_id_name_set(&dev->rsc.id, get_str_value(res, row_num, 2));
-    dev->rsc.adm_status = str2rsc_adm_status(PQgetvalue(res, row_num, 3));
-    dev->host           = get_str_value(res, row_num, 4);
-    dev->path           = get_str_value(res, row_num, 5);
+    pho_id_name_set(&dev->rsc.id, get_str_value(res, row_num, 2),
+                    get_str_value(res, row_num, 3));
+    dev->rsc.adm_status = str2rsc_adm_status(PQgetvalue(res, row_num, 4));
+    dev->host           = get_str_value(res, row_num, 5);
+    dev->path           = get_str_value(res, row_num, 6);
     dev->health         = 0;
 
     rc = dss_lock_status(handle, DSS_DEVICE, dev, 1, &dev->lock);

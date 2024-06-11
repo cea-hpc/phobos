@@ -217,7 +217,7 @@ static void lrs_dev_info_clean(struct lrs_dev_hdl *handle,
 
 int lrs_dev_hdl_add(struct lrs_sched *sched,
                     struct lrs_dev_hdl *handle,
-                    const char *name)
+                    const char *name, const char *library)
 {
     struct dev_info *dev_list = NULL;
     struct dss_filter filter;
@@ -230,11 +230,12 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
                           "  {\"DSS::DEV::host\": \"%s\"},"
                           "  {\"DSS::DEV::family\": \"%s\"},"
                           "  {\"DSS::DEV::serial\": \"%s\"},"
+                          "  {\"DSS::DEV::library\": \"%s\"},"
                           "  {\"DSS::DEV::adm_status\": \"%s\"}"
                           "]}",
                           sched->lock_handle.lock_hostname,
                           rsc_family2str(sched->family),
-                          name,
+                          name, library,
                           rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED));
     if (rc)
         return rc;
@@ -246,8 +247,9 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
         return rc;
 
     if (dev_count == 0) {
-        pho_info("Device (%s:%s) not found: check device status and host",
-                 rsc_family2str(sched->family), name);
+        pho_info("Device (family '%s', name '%s', library '%s') not found: "
+                 "check device status and host",
+                 rsc_family2str(sched->family), name, library);
         rc = -ENXIO;
         goto free_list;
     }
@@ -279,8 +281,12 @@ int lrs_dev_hdl_del(struct lrs_dev_hdl *handle, int index, int rc,
     thread_signal_stop_on_error(&dev->ld_device_thread, rc);
     rc = thread_wait_end(&dev->ld_device_thread);
     if (rc < 0)
-        pho_error(rc, "device thread '%s' terminated with error",
-                  dev->ld_dss_dev_info->rsc.id.name);
+        pho_error(rc,
+                  "device thread (family '%s', name '%s', library '%s') "
+                  "terminated with error",
+                  rsc_family2str(dev->ld_dss_dev_info->rsc.id.family),
+                  dev->ld_dss_dev_info->rsc.id.name,
+                  dev->ld_dss_dev_info->rsc.id.library);
 
     io_sched_remove_device(&sched->io_sched_hdl, dev);
     lrs_dev_info_clean(handle, dev);
@@ -323,8 +329,12 @@ int lrs_dev_hdl_trydel(struct lrs_dev_hdl *handle, int index)
         return -rc;
 
     if (*threadrc < 0)
-        pho_error(*threadrc, "device thread '%s' terminated with error",
-                  dev->ld_dss_dev_info->rsc.id.name);
+        pho_error(*threadrc,
+                  "device thread (family '%s', name '%s', library '%s') "
+                  "terminated with error",
+                  rsc_family2str(dev->ld_dss_dev_info->rsc.id.family),
+                  dev->ld_dss_dev_info->rsc.id.name,
+                  dev->ld_dss_dev_info->rsc.id.library);
 
     g_ptr_array_remove_fast(handle->ldh_devices, dev);
     lrs_dev_info_clean(handle, dev);
@@ -411,8 +421,12 @@ void lrs_dev_hdl_clear(struct lrs_dev_hdl *handle, struct lrs_sched *sched)
                                                          i);
         rc = thread_wait_end(&dev->ld_device_thread);
         if (rc < 0)
-            pho_error(rc, "device thread '%s' terminated with error",
-                      dev->ld_dss_dev_info->rsc.id.name);
+            pho_error(rc,
+                      "device thread (family '%s', name '%s', library '%s') "
+                      "terminated with error",
+                      rsc_family2str(dev->ld_dss_dev_info->rsc.id.family),
+                      dev->ld_dss_dev_info->rsc.id.name,
+                      dev->ld_dss_dev_info->rsc.id.library);
         io_sched_remove_device(&sched->io_sched_hdl, dev);
         lrs_dev_info_clean(handle, dev);
     }
@@ -500,6 +514,8 @@ void queue_release_response(struct tsqueue *response_queue,
         resp_release->med_ids[i]->family = tosync_media[i].medium.family;
         resp_release->med_ids[i]->name =
             xstrdup_safe(tosync_media[i].medium.name);
+        resp_release->med_ids[i]->library =
+            xstrdup_safe(tosync_media[i].medium.library);
     }
 
     tsqueue_push(response_queue, respc);
@@ -777,8 +793,10 @@ static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
         pho_error(rc2,
                   "Invalid filesystem type for '%s' (database may be "
                   "corrupted)", fsroot);
-        pho_error(rc2, "setting medium '%s' to failed",
-                  media_info->rsc.id.name);
+        pho_error(rc2,
+                  "setting medium (family '%s', name '%s', library '%s') to "
+                  "failed", rsc_family2str(media_info->rsc.id.family),
+                  media_info->rsc.id.name, media_info->rsc.id.library);
         media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
         fields |= ADM_STATUS;
     } else {
@@ -792,8 +810,10 @@ static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
         if (rc2) {
             rc = rc ? : rc2;
             pho_error(rc2, "Cannot retrieve media usage information");
-            pho_error(rc2, "setting medium '%s' to failed",
-                      media_info->rsc.id.name);
+            pho_error(rc2,
+                      "setting medium (family '%s', name '%s', library '%s') "
+                      "to failed", rsc_family2str(media_info->rsc.id.family),
+                      media_info->rsc.id.name, media_info->rsc.id.library);
             media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
             fields |= ADM_STATUS;
         } else {
@@ -809,8 +829,10 @@ static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
 
     if (media_rc) {
         media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-        pho_error(media_rc, "setting medium '%s' to failed",
-                  media_info->rsc.id.name);
+        pho_error(media_rc,
+                  "setting medium (family '%s', name '%s', library '%s') to "
+                  "failed", rsc_family2str(media_info->rsc.id.family),
+                  media_info->rsc.id.name, media_info->rsc.id.library);
         fields |= ADM_STATUS;
     } else {
         if (nb_new_obj) {
@@ -867,8 +889,12 @@ static int dev_sync(struct lrs_dev *dev)
     }
     if (rc2) {
         rc = rc ? : rc2;
-        pho_error(rc2, "Failed to update media information of '%s'",
-                  dev->ld_dss_media_info->rsc.id.name);
+        pho_error(rc2,
+                  "Failed to update media information of (family '%s', name "
+                  "'%s', library '%s')",
+                  rsc_family2str(dev->ld_dss_media_info->rsc.id.family),
+                  dev->ld_dss_media_info->rsc.id.name,
+                  dev->ld_dss_media_info->rsc.id.library);
     }
 
     clean_tosync_array(dev, rc);
@@ -889,26 +915,34 @@ int dev_umount(struct lrs_dev *dev)
     init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id,
                  &dev->ld_dss_media_info->rsc.id, PHO_LTFS_UMOUNT);
 
-    pho_info("umount: medium '%s' in device '%s' mounted at '%s'",
+    pho_info("umount: medium (family '%s', name '%s', library '%s') in device "
+             "'%s' mounted at '%s'",
+             rsc_family2str(dev->ld_dss_media_info->rsc.id.family),
              dev->ld_dss_media_info->rsc.id.name,
+             dev->ld_dss_media_info->rsc.id.library,
              dev->ld_dev_path,
              dev->ld_mnt_path);
     rc = get_fs_adapter(dev->ld_dss_media_info->fs.type, &fsa);
     if (rc)
         LOG_RETURN(rc,
-                   "Unable to get fs adapter '%s' to unmount medium '%s' from "
-                   "device '%s'",
+                   "Unable to get fs adapter '%s' to unmount medium (family "
+                   "'%s', name '%s', library '%s') from device '%s'",
                    fs_type2str(dev->ld_dss_media_info->fs.type),
-                   dev->ld_dss_media_info->rsc.id.name, dev->ld_dev_path);
+                   rsc_family2str(dev->ld_dss_media_info->rsc.id.family),
+                   dev->ld_dss_media_info->rsc.id.name,
+                   dev->ld_dss_media_info->rsc.id.library, dev->ld_dev_path);
 
     rc = ldm_fs_umount(fsa, dev->ld_dev_path, dev->ld_mnt_path, &log.message);
     emit_log_after_action(dss, &log, PHO_LTFS_UMOUNT, rc);
     clean_tosync_array(dev, rc);
     if (rc)
-        LOG_RETURN(rc, "Failed to unmount medium '%s' mounted at '%s' "
-                       "on device '%s'",
-                   dev->ld_dss_media_info->rsc.id.name, dev->ld_mnt_path,
-                   lrs_dev_name(dev));
+        LOG_RETURN(rc,
+                   "Failed to unmount medium (family '%s', name '%s', library "
+                   "'%s') mounted at '%s' on device '%s'",
+                   rsc_family2str(dev->ld_dss_media_info->rsc.id.family),
+                   dev->ld_dss_media_info->rsc.id.name,
+                   dev->ld_dss_media_info->rsc.id.library,
+                   dev->ld_mnt_path, lrs_dev_name(dev));
 
     /* update device state and unset mount path */
     MUTEX_LOCK(&dev->ld_mutex);
@@ -927,9 +961,11 @@ static int dss_medium_release(struct dss_handle *dss, struct media_info *medium)
     rc = dss_unlock(dss, DSS_MEDIA, medium, 1, false);
     if (rc)
         LOG_RETURN(rc,
-                   "Error when releasing medium '%s' with current lock "
-                   "(hostname %s, owner %d)", medium->rsc.id.name,
-                   medium->lock.hostname, medium->lock.owner);
+                   "Error when releasing medium (family '%s', name '%s', "
+                   "library '%s') with current lock (hostname %s, owner %d)",
+                   rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
+                   medium->rsc.id.library, medium->lock.hostname,
+                   medium->lock.owner);
 
     pho_lock_clean(&medium->lock);
     return 0;
@@ -939,13 +975,16 @@ static int dss_device_release(struct dss_handle *dss, struct dev_info *dev)
 {
     int rc;
 
-    pho_verb("unlock: device '%s'", dev->rsc.id.name);
+    pho_verb("unlock: device (family '%s', name '%s', library '%s')",
+             rsc_family2str(dev->rsc.id.family), dev->rsc.id.name,
+             dev->rsc.id.library);
     rc = dss_unlock(dss, DSS_DEVICE, dev, 1, false);
     if (rc)
         LOG_RETURN(rc,
-                   "Error when releasing device '%s' with current lock "
-                   "(hostname %s, owner %d)", dev->rsc.id.name,
-                   dev->lock.hostname, dev->lock.owner);
+                   "Error when releasing device (family '%s', name '%s', "
+                   "library '%s') with current lock (hostname %s, owner %d)",
+                   rsc_family2str(dev->rsc.id.family), dev->rsc.id.name,
+                   dev->rsc.id.library, dev->lock.hostname, dev->lock.owner);
 
     pho_lock_clean(&dev->lock);
     return 0;
@@ -961,16 +1000,20 @@ int dev_unload(struct lrs_dev *dev)
 
     ENTRY;
 
-    pho_verb("unload: '%s' from '%s'", dev->ld_dss_media_info->rsc.id.name,
-             dev->ld_dev_path);
+    pho_verb("unload: medium (family '%s', name '%s', library '%s') from '%s'",
+             rsc_family2str(dev->ld_dss_media_info->rsc.id.family),
+             dev->ld_dss_media_info->rsc.id.name,
+             dev->ld_dss_media_info->rsc.id.library, dev->ld_dev_path);
 
-    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl);
+    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family,
+                       dev->ld_dss_dev_info->rsc.id.library, &lib_hdl);
     if (rc)
         LOG_RETURN(rc,
-                   "Unable to open lib '%s' to unload medium '%s' from device "
-                   "'%s' for %s request",
+                   "Unable to open lib to unload medium (family '%s', name "
+                   "'%s', library '%s') from device '%s' for %s request",
                    rsc_family_names[dev->ld_dss_dev_info->rsc.id.family],
                    dev->ld_dss_media_info->rsc.id.name,
+                   dev->ld_dss_media_info->rsc.id.library,
                    lrs_dev_name(dev),
                    dev_request_kind(dev));
 
@@ -1031,7 +1074,10 @@ static int dev_empty(struct lrs_dev *dev)
 static int dss_set_medium_to_failed(struct dss_handle *dss,
                                     struct media_info *media_info)
 {
-    pho_error(0, "setting medium '%s' to failed", media_info->rsc.id.name);
+    pho_error(0,
+              "setting medium (family '%s', name '%s', library '%s') to failed",
+              rsc_family2str(media_info->rsc.id.family),
+              media_info->rsc.id.name, media_info->rsc.id.library);
     media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
     return dss_media_update(dss, media_info, 1, ADM_STATUS);
 }
@@ -1043,16 +1089,20 @@ void fail_release_medium(struct lrs_dev *dev, struct media_info *medium)
     rc = dss_set_medium_to_failed(&dev->ld_device_thread.dss, medium);
     if (rc) {
         pho_error(rc,
-                  "Warning we keep medium %s locked because we can't set it to "
-                  "failed into DSS", medium->rsc.id.name);
+                  "Warning we keep medium (family '%s', name '%s', library "
+                  "'%s') locked because we can't set it to failed into DSS",
+                  rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
+                  medium->rsc.id.library);
         return;
     }
 
     rc = dss_medium_release(&dev->ld_device_thread.dss, medium);
     if (rc)
         pho_error(rc,
-                  "Error when releasing medium %s after setting it to "
-                  "status failed", medium->rsc.id.name);
+                  "Error when releasing medium (family '%s', name '%s', "
+                  "library '%s') after setting it to status failed",
+                  rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
+                  medium->rsc.id.library);
     pho_lock_clean(&medium->lock);
 }
 
@@ -1065,10 +1115,14 @@ int dev_load(struct lrs_dev *dev, struct media_info *medium)
     ENTRY;
 
     dev->ld_sub_request->failure_on_medium = false;
-    pho_verb("load: '%s' into '%s'", medium->rsc.id.name, dev->ld_dev_path);
+    pho_verb("load: medium (family '%s', name '%s', library '%s') into '%s'",
+             rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
+             medium->rsc.id.library, dev->ld_dev_path);
 
     /* get handle to the library depending on device type */
-    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family, &lib_hdl);
+    rc = wrap_lib_open(dev->ld_dss_dev_info->rsc.id.family,
+                       dev->ld_dss_dev_info->rsc.id.library,
+                       &lib_hdl);
     if (rc)
         return rc;
 
@@ -1093,8 +1147,12 @@ int dev_load(struct lrs_dev *dev, struct media_info *medium)
 out_close:
     rc2 = ldm_lib_close(&lib_hdl);
     if (rc2) {
-        pho_error(rc2, "device '%s' failed to close lib handle",
-                  lrs_dev_name(dev));
+        const struct pho_id *dev_id = lrs_dev_id(dev);
+
+        pho_error(rc2,
+                  "device (family '%s', name '%s', library '%s') failed to "
+                  "close lib handle", rsc_family2str(dev_id->family),
+                  dev_id->name, dev_id->library);
         /* display rc2 in the logs as this is the error of the close but return
          * rc if not nul.
          */
@@ -1119,13 +1177,18 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
     init_pho_log(&log, &dev->ld_dss_dev_info->rsc.id, &medium->rsc.id,
                  PHO_LTFS_FORMAT);
 
-    pho_verb("format: medium '%s'", medium->rsc.id.name);
+    pho_verb("format: medium (family '%s', name '%s', library '%s')",
+             rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
+             medium->rsc.id.library);
 
     rc = ldm_fs_format(fsa, dev->ld_dev_path, medium->rsc.id.name, &space,
                        &log.message);
     emit_log_after_action(dss, &log, PHO_LTFS_FORMAT, rc);
     if (rc)
-        LOG_RETURN(rc, "Cannot format medium '%s'", medium->rsc.id.name);
+        LOG_RETURN(rc,
+                   "Cannot format medium (family '%s', name '%s', library "
+                   "'%s')", rsc_family2str(medium->rsc.id.family),
+                   medium->rsc.id.name, medium->rsc.id.library);
 
     MUTEX_LOCK(&dev->ld_mutex);
     /* Systematically use the media ID as filesystem label */
@@ -1144,8 +1207,10 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
     fields |= FS_STATUS;
 
     if (unlock) {
-        pho_verb("Removing admin lock on media '%s' after format as requested "
-                 "by client", medium->rsc.id.name);
+        pho_verb("Removing admin lock on medium (family '%s', name '%s', "
+                 "library '%s') after format as requested by client",
+                 rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
+                 medium->rsc.id.library);
         medium->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
         fields |= ADM_STATUS;
     }
@@ -1159,8 +1224,10 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
     rc = dss_media_update(&dev->ld_device_thread.dss, medium, 1, fields);
     if (rc)
         LOG_RETURN(rc,
-                   "Successful format of medium '%s' but failed to initialize its state in DSS",
-                   medium->rsc.id.name);
+                   "Successful format of medium (family '%s', name '%s', "
+                   "library '%s') but failed to initialize its state in DSS",
+                   rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
+                   medium->rsc.id.library);
 
     return 0;
 }
@@ -1181,6 +1248,8 @@ static void queue_format_response(struct tsqueue *response_queue,
     respc->resp->format->med_id->family = reqc->req->format->med_id->family;
     respc->resp->format->med_id->name =
         xstrdup_safe(reqc->req->format->med_id->name);
+    respc->resp->format->med_id->library =
+        xstrdup_safe(reqc->req->format->med_id->library);
 
     tsqueue_push(response_queue, respc);
 }
@@ -1189,7 +1258,7 @@ static void queue_format_response(struct tsqueue *response_queue,
 static bool medium_is_loaded(struct lrs_dev *dev, struct media_info *medium)
 {
     return (dev_is_loaded(dev) || dev_is_mounted(dev)) &&
-        !strcmp(dev->ld_dss_media_info->rsc.id.name, medium->rsc.id.name);
+            pho_id_equal(&dev->ld_dss_media_info->rsc.id, &medium->rsc.id);
 }
 
 static int dev_handle_format(struct lrs_dev *dev)
@@ -1208,9 +1277,15 @@ static int dev_handle_format(struct lrs_dev *dev)
          * dev->ld_dss_media_info. Keep the reference of the sub_request as it
          * will be released with the sub_request.
          */
-        pho_info("medium %s to format is already loaded into device %s",
+        pho_info("medium (family '%s', name '%s', library '%s') to format is "
+                 "already loaded into device (family '%s', name '%s', library "
+                 "'%s')",
+                 rsc_family2str(dev->ld_dss_media_info->rsc.id.family),
                  dev->ld_dss_media_info->rsc.id.name,
-                 dev->ld_dss_dev_info->rsc.id.name);
+                 dev->ld_dss_media_info->rsc.id.library,
+                 rsc_family2str(dev->ld_dss_dev_info->rsc.id.family),
+                 dev->ld_dss_dev_info->rsc.id.name,
+                 dev->ld_dss_dev_info->rsc.id.library);
         if (dev_is_mounted(dev)) {
             /* LTFS cannot reformat a mounted filesystem */
             rc = dev_umount(dev);
@@ -1230,16 +1305,21 @@ check_health:
         if (subreq->failure_on_medium) {
             decrease_medium_health(dev, medium_to_format);
         } else if (dev_is_failed(dev)) {
+            const struct pho_id *dev_id = lrs_dev_id(dev);
             int rc2;
 
             rc2 = dss_medium_release(&dev->ld_device_thread.dss,
                                          medium_to_format);
             if (rc2)
                 pho_error(rc2,
-                          "failed to release lock of medium '%s' after a "
-                          "failure on device '%s'",
+                          "failed to release lock of medium (family '%s', name "
+                          "'%s', library '%s') after a failure on device "
+                          "(family '%s', name '%s', library '%s')",
+                          rsc_family2str(medium_to_format->rsc.id.family),
                           medium_to_format->rsc.id.name,
-                          lrs_dev_name(dev));
+                          medium_to_format->rsc.id.library,
+                          rsc_family2str(dev_id->family), dev_id->name,
+                          dev_id->library);
         } else {
             fail_release_medium(dev, medium_to_format);
         }
@@ -1358,6 +1438,8 @@ static void fill_rwalloc_resp_container(struct lrs_dev *dev,
         rresp->addr_type = dev->ld_dss_media_info->addr_type;
         rresp->root_path = xstrdup(dev->ld_mnt_path);
         rresp->med_id->name = xstrdup(dev->ld_dss_media_info->rsc.id.name);
+        rresp->med_id->library =
+            xstrdup(dev->ld_dss_media_info->rsc.id.library);
         rresp->med_id->family = dev->ld_dss_media_info->rsc.id.family;
     } else {
         pho_resp_write_elt_t *wresp;
@@ -1376,6 +1458,8 @@ static void fill_rwalloc_resp_container(struct lrs_dev *dev,
         wresp->med_id->family = dev->ld_dss_media_info->rsc.id.family;
         wresp->root_path = xstrdup(dev->ld_mnt_path);
         wresp->med_id->name = xstrdup(dev->ld_dss_media_info->rsc.id.name);
+        wresp->med_id->library =
+            xstrdup(dev->ld_dss_media_info->rsc.id.library);
         wresp->fs_type = dev->ld_dss_media_info->fs.type;
         wresp->addr_type = dev->ld_dss_media_info->addr_type;
     }
@@ -1553,10 +1637,15 @@ int dev_mount(struct lrs_dev *dev)
     if (!mnt_root)
         LOG_RETURN(-ENOMEM, "Unable to get mount point of %s", id);
 
-    pho_info("mount: medium '%s' in device '%s' ('%s') as '%s'",
+    pho_info("mount: medium (family '%s', name '%s', library '%s') in device "
+             "'%s' (family '%s', name '%s', library '%s') as '%s'",
+             rsc_family2str(dev->ld_dss_media_info->rsc.id.family),
              dev->ld_dss_media_info->rsc.id.name,
+             dev->ld_dss_media_info->rsc.id.library,
              dev->ld_dev_path,
+             rsc_family2str(dev->ld_dss_dev_info->rsc.id.family),
              dev->ld_dss_dev_info->rsc.id.name,
+             dev->ld_dss_dev_info->rsc.id.library,
              mnt_root);
 
     rc = ldm_fs_mount(fsa, dev->ld_dev_path, mnt_root,
@@ -1722,17 +1811,24 @@ static void cancel_pending_format(struct lrs_dev *device)
             rc = dss_medium_release(&device->ld_device_thread.dss,
                                     medium_to_format);
             if (rc) {
-                pho_error(rc, "setting medium '%s' to failed",
-                          medium_to_format->rsc.id.name);
+                pho_error(rc,
+                          "setting medium (family '%s', name '%s', library "
+                          "'%s') to failed",
+                          rsc_family2str(medium_to_format->rsc.id.family),
+                          medium_to_format->rsc.id.name,
+                          medium_to_format->rsc.id.library);
                 medium_to_format->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
                 rc = dss_media_update(&device->ld_device_thread.dss,
                                       medium_to_format, 1, ADM_STATUS);
                 if (rc)
                     pho_error(rc,
-                              "Unable to set medium '%s' into DSS as "
-                              "PHO_RSC_ADM_ST_FAILED although we failed to "
-                              "release the corresponding lock",
-                              medium_to_format->rsc.id.name);
+                              "Unable to set medium (family '%s', name '%s', "
+                              "library '%s') into DSS as PHO_RSC_ADM_ST_FAILED "
+                              "although we failed to release the corresponding "
+                              "lock",
+                              rsc_family2str(medium_to_format->rsc.id.family),
+                              medium_to_format->rsc.id.name,
+                              medium_to_format->rsc.id.library);
             }
 
             lrs_medium_release(medium_to_format);
@@ -1771,24 +1867,37 @@ static int dev_cleanup_medium_at_stop(struct lrs_dev *device)
     int rc;
 
     if (dev_is_mounted(device)) {
+        const struct pho_id *med_id = lrs_dev_med_id(device);
+        const struct pho_id *dev_id = lrs_dev_id(device);
+
         rc = dev_umount(device);
         if (rc)
             LOG_RETURN(rc,
-                       "unable to unmount medium '%s' in device '%s' during "
-                       "regular exit",
-                       device->ld_dss_media_info->rsc.id.name,
-                       lrs_dev_name(device));
+                       "unable to unmount medium (family '%s', name '%s', "
+                       "library '%s') in device (family '%s', name '%s', "
+                       "library '%s') during regular exit",
+                       rsc_family2str(med_id->family), med_id->name,
+                       med_id->library,
+                       rsc_family2str(dev_id->family), dev_id->name,
+                       dev_id->library);
     }
 
     if (dev_is_loaded(device)) {
         rc = dss_medium_release(&device->ld_device_thread.dss,
                                 device->ld_dss_media_info);
-        if (rc)
+        if (rc) {
+            const struct pho_id *med_id = lrs_dev_med_id(device);
+            const struct pho_id *dev_id = lrs_dev_id(device);
+
             LOG_RETURN(rc,
-                       "unable to release DSS lock of medium '%s' in device "
-                       "'%s' during regular exit",
-                       device->ld_dss_media_info->rsc.id.name,
-                       lrs_dev_name(device));
+                       "unable to release DSS lock of medium (family '%s', "
+                       "name '%s', library '%s') in device (family '%s', name "
+                       "'%s', library '%s') during regular exit",
+                       rsc_family2str(med_id->family), med_id->name,
+                       med_id->library,
+                       rsc_family2str(dev_id->family), dev_id->name,
+                       dev_id->library);
+        }
 
         MUTEX_LOCK(&device->ld_mutex);
         lrs_medium_release(device->ld_dss_media_info);
@@ -1798,39 +1907,52 @@ static int dev_cleanup_medium_at_stop(struct lrs_dev *device)
 
     rc = dss_device_release(&device->ld_device_thread.dss,
                             device->ld_dss_dev_info);
-    if (rc)
+    if (rc) {
+        const struct pho_id *dev_id = lrs_dev_id(device);
+
         LOG_RETURN(rc,
-                   "Unable to release DSS lock of device '%s' during "
-                   "regular exit",
-                   lrs_dev_name(device));
+                   "Unable to release DSS lock of device (family '%s', name "
+                   "'%s', library '%s') during regular exit",
+                   rsc_family2str(dev_id->family), dev_id->name,
+                   dev_id->library);
+    }
 
     return 0;
 }
 
 static void fail_release_device(struct lrs_dev *dev)
 {
+    const struct pho_id *dev_id = lrs_dev_id(dev);
     int rc;
 
     dev->ld_dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-    pho_error(0, "setting device '%s' to failed",
-              lrs_dev_name(dev));
+    pho_error(0,
+              "setting device (family '%s', name '%s', library '%s') to failed",
+              rsc_family2str(dev_id->family), dev_id->name, dev_id->library);
 
     rc = dss_device_update(&dev->ld_device_thread.dss, dev->ld_dss_dev_info, 1,
                            DSS_DEVICE_UPDATE_ADM_STATUS);
     if (rc) {
+        const struct pho_id *dev_id = lrs_dev_id(dev);
+
         pho_error(rc,
-                  "unable to set device '%s' status to '%s' in DSS, "
-                  "we won't release the corresponding DSS lock",
-                  lrs_dev_name(dev),
-                  rsc_adm_status2str(PHO_RSC_ADM_ST_FAILED));
+                  "unable to set device (family '%s', name '%s', library '%s') "
+                  "status to '%s' in DSS, we won't release the corresponding "
+                  "DSS lock", rsc_family2str(dev_id->family), dev_id->name,
+                  dev_id->library, rsc_adm_status2str(PHO_RSC_ADM_ST_FAILED));
         return;
     }
 
     rc = dss_device_release(&dev->ld_device_thread.dss,
                             dev->ld_dss_dev_info);
-    if (rc)
-        pho_error(rc, "unable to release DSS lock of device '%s'",
-                  lrs_dev_name(dev));
+    if (rc) {
+        const struct pho_id *dev_id = lrs_dev_id(dev);
+
+        pho_error(rc,
+                  "unable to release DSS lock of device (family '%s', name "
+                  "'%s', library '%s')", rsc_family2str(dev_id->family),
+                  dev_id->name, dev_id->library);
+    }
 }
 
 /**
@@ -1848,9 +1970,15 @@ static void dev_cleanup_on_error(struct lrs_dev *device)
         if (device->ld_dss_media_info->lock.hostname) {
             rc = dss_medium_release(&device->ld_device_thread.dss,
                                     device->ld_dss_media_info);
-            if (rc)
-                pho_error(rc, "Error when releasing medium '%s' at cleanup",
-                          device->ld_dss_media_info->rsc.id.name);
+            if (rc) {
+                const struct pho_id *med_id = lrs_dev_med_id(device);
+
+                pho_error(rc,
+                          "Error when releasing medium (family '%s', name "
+                          "'%s', library '%s') at cleanup",
+                          rsc_family2str(med_id->family), med_id->name,
+                          med_id->library);
+            }
         }
 
         MUTEX_LOCK(&device->ld_mutex);
@@ -1886,8 +2014,12 @@ static void dev_thread_end(struct lrs_dev *device)
         int rc = dev_cleanup_medium_at_stop(device);
 
         if (rc) {
-            pho_error(rc, "failed to cleanup stopping device '%s'",
-                      lrs_dev_name(device));
+            const struct pho_id *dev_id = lrs_dev_id(device);
+
+            pho_error(rc,
+                      "failed to cleanup stopping device (family '%s', name "
+                      "'%s', library '%s')", rsc_family2str(dev_id->family),
+                      dev_id->name, dev_id->library);
             MUTEX_LOCK(&device->ld_mutex);
             device->ld_device_thread.status = rc;
             MUTEX_UNLOCK(&device->ld_mutex);
@@ -1936,10 +2068,15 @@ static void *lrs_dev_thread(void *tdata)
         if (!device->ld_ongoing_io) {
             if (device->ld_needs_sync) {
                 rc = dev_sync(device);
-                if (rc)
+                if (rc) {
+                    const struct pho_id *dev_id = lrs_dev_id(device);
+
                     LOG_GOTO(end_thread, thread->status = rc,
-                             "device thread '%s': fatal error syncing device",
-                             device->ld_dss_dev_info->rsc.id.name);
+                             "device thread (family '%s', name '%s', library "
+                             "'%s'): fatal error syncing device",
+                             rsc_family2str(dev_id->family), dev_id->name,
+                             dev_id->library);
+                }
             }
 
             if (device->ld_sub_request) {
@@ -1949,27 +2086,39 @@ static void *lrs_dev_thread(void *tdata)
                     rc = dev_handle_format(device);
                 else if (pho_request_is_read(req) || pho_request_is_write(req))
                     rc = dev_handle_read_write(device);
-                else
-                    pho_error(rc = -EINVAL,
-                              "device thread '%s': "
-                              "invalid type (%s) in ld_sub_request",
-                              device->ld_dss_dev_info->rsc.id.name,
-                              pho_srl_request_kind_str(req));
+                else {
+                    const struct pho_id *dev_id = lrs_dev_id(device);
 
-                if (rc)
+                    pho_error(rc = -EINVAL,
+                              "device thread (family '%s', name '%s', library "
+                              "'%s'): invalid type (%s) in ld_sub_request",
+                              rsc_family2str(dev_id->family), dev_id->name,
+                              dev_id->library, pho_srl_request_kind_str(req));
+                }
+
+                if (rc) {
+                    const struct pho_id *dev_id = lrs_dev_id(device);
+
                     LOG_GOTO(end_thread, thread->status = rc,
-                             "device thread '%s': fatal error handling "
-                             "ld_sub_request",
-                             device->ld_dss_dev_info->rsc.id.name);
+                             "device thread (family '%s', name '%s', library "
+                             "'%s'): fatal error handling ld_sub_request",
+                             rsc_family2str(dev_id->family), dev_id->name,
+                             dev_id->library);
+                }
             }
         }
 
         if (!thread_is_stopped(thread)) {
             rc = dev_wait_for_signal(device);
-            if (rc < 0)
+            if (rc < 0) {
+                const struct pho_id *dev_id = lrs_dev_id(device);
+
                 LOG_GOTO(end_thread, thread->status = rc,
-                         "device thread '%s': fatal error",
-                         device->ld_dss_dev_info->rsc.id.name);
+                         "device thread (family '%s', name '%s', library "
+                         "'%s'): fatal error",
+                         rsc_family2str(dev_id->family), dev_id->name,
+                         dev_id->library);
+            }
         }
     }
 
@@ -1991,14 +2140,14 @@ static int dev_thread_init(struct lrs_dev *device)
     return 0;
 }
 
-int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl)
+int wrap_lib_open(enum rsc_family dev_type, const char *library,
+                  struct lib_handle *lib_hdl)
 {
-    const char *lib_dev;
     int rc = -1;
 
     /* non-tape/RADOS cases: dummy lib adapter (no open required) */
     if (dev_type != PHO_RSC_TAPE && dev_type != PHO_RSC_RADOS_POOL)
-        return get_lib_adapter(PHO_LIB_DUMMY, &lib_hdl->ld_module);
+        rc = get_lib_adapter(PHO_LIB_DUMMY, &lib_hdl->ld_module);
 
     /* tape case */
     if (dev_type == PHO_RSC_TAPE)
@@ -2011,14 +2160,7 @@ int wrap_lib_open(enum rsc_family dev_type, struct lib_handle *lib_hdl)
     if (rc)
         LOG_RETURN(rc, "Failed to get library adapter");
 
-    /* For now, one single configurable path to library device.
-     * This will have to be changed to manage multiple libraries.
-     */
-    lib_dev = PHO_CFG_GET(cfg_lrs, PHO_CFG_LRS, lib_device);
-    if (!lib_dev)
-        LOG_RETURN(rc, "Failed to get default library device from config");
-
-    return ldm_lib_open(lib_hdl, lib_dev);
+    return ldm_lib_open(lib_hdl, library);
 }
 
 int lrs_dev_technology(const struct lrs_dev *dev, const char **techno)
@@ -2096,16 +2238,22 @@ free_supported_list:
  */
 static int check_device_state_for_load(struct lrs_dev *dev)
 {
+    const struct pho_id *dev_id = lrs_dev_id(dev);
+
     if (dev_is_failed(dev))
         LOG_RETURN(-EINVAL,
-                   "cannot use failed device '%s' to load a medium",
-                   lrs_dev_name(dev));
+                   "cannot use failed device (family '%s', name '%s', library "
+                   "'%s') to load a medium",
+                   rsc_family2str(dev_id->family), dev_id->name,
+                   dev_id->library);
 
     if (dev_is_empty(dev))
         LOG_RETURN(-EINVAL,
-                   "device '%s' received a %s sub request with no medium but "
-                   "the device state is %s, abort",
-                   lrs_dev_name(dev),
+                   "device (family '%s', name '%s', library '%s') received a "
+                   "%s sub request with no medium but the device state is %s, "
+                   "abort",
+                   rsc_family2str(dev_id->family), dev_id->name,
+                   dev_id->library,
                    pho_srl_request_kind_str(dev->ld_sub_request->reqc->req),
                    op_status2str(dev->ld_op_status));
 
@@ -2135,6 +2283,7 @@ static int dev_medium_switch(struct lrs_dev *dev,
                              struct media_info *medium_to_load,
                              struct medium_switch_context *context)
 {
+    const struct pho_id *dev_id;
     struct sub_request *sub_req;
     struct req_container *reqc;
     int rc;
@@ -2143,9 +2292,12 @@ static int dev_medium_switch(struct lrs_dev *dev,
     reqc = sub_req->reqc;
 
     if (medium_is_loaded(dev, medium_to_load)) {
+        dev_id = lrs_dev_id(dev);
         /* medium already loaded in device */
-        pho_debug("medium_to_alloc for device '%s' is already loaded",
-                  lrs_dev_name(dev));
+        pho_debug("medium_to_alloc for device (family '%s', name '%s', library "
+                  "'%s') is already loaded",
+                  rsc_family2str(dev_id->family), dev_id->name,
+                  dev_id->library);
         rc = check_device_state_for_load(dev);
         if (rc) {
             sub_req->failure_on_medium = true;
@@ -2157,25 +2309,40 @@ static int dev_medium_switch(struct lrs_dev *dev,
 
     rc = dev_empty(dev);
     if (rc) {
+        dev_id = lrs_dev_id(dev);
         context->failure_on_device = true;
         dev->ld_sub_request->failure_on_medium = true;
-        LOG_RETURN(rc, "failed to empty device '%s' to load medium '%s'"
-                   "for %s request",
-                   lrs_dev_name(dev), medium_to_load->rsc.id.name,
+        LOG_RETURN(rc,
+                   "failed to empty device (family '%s', name '%s', library "
+                   "'%s') to load medium (family '%s', name '%s', library "
+                   "'%s') for %s request",
+                   rsc_family2str(dev_id->family), dev_id->name,
+                   dev_id->library,
+                   rsc_family2str(medium_to_load->rsc.id.family),
+                   medium_to_load->rsc.id.name, medium_to_load->rsc.id.library,
                    pho_srl_request_kind_str(reqc->req));
     }
 
-    pho_debug("Will load medium '%s' in device '%s'", lrs_dev_name(dev),
-              medium_to_load->rsc.id.name);
+    dev_id = lrs_dev_id(dev);
+    pho_debug("Will load medium (family '%s', name '%s', library '%s') in "
+              "device (family '%s', name '%s', library '%s')",
+              rsc_family2str(medium_to_load->rsc.id.family),
+              medium_to_load->rsc.id.name, medium_to_load->rsc.id.library,
+              rsc_family2str(dev_id->family), dev_id->name,
+              dev_id->library);
     rc = dev_load(dev, medium_to_load);
     if (rc) {
+        dev_id = lrs_dev_id(dev);
         // FIXME what to do about this?
         context->failure_on_device = true;
         LOG_RETURN(rc,
-                   "failed to load medium '%s' in device '%s' for %s request",
-                   medium_to_load->rsc.id.name,
-                   lrs_dev_name(dev),
-                   pho_srl_request_kind_str(reqc->req));
+                   "failed to load medium (family '%s', name '%s', library "
+                   "'%s') in device (family '%s', name '%s', library '%s') for "
+                   "%s request",
+                   rsc_family2str(medium_to_load->rsc.id.family),
+                   medium_to_load->rsc.id.name, medium_to_load->rsc.id.library,
+                   rsc_family2str(dev_id->family), dev_id->name,
+                   dev_id->library, pho_srl_request_kind_str(reqc->req));
     }
 
     return 0;
@@ -2191,6 +2358,7 @@ static int dev_medium_switch_mount(struct lrs_dev *dev,
                                    struct media_info *medium_to_mount,
                                    struct medium_switch_context *context)
 {
+    const struct pho_id *med_id;
     struct sub_request *subreq;
     struct req_container *reqc;
     int rc;
@@ -2207,14 +2375,19 @@ static int dev_medium_switch_mount(struct lrs_dev *dev,
 
     rc = dev_mount(dev);
     if (rc) {
+        const struct pho_id *dev_id = lrs_dev_id(dev);
+
         context->failure_on_device = true;
         subreq->failure_on_medium = true;
+        med_id = lrs_dev_med_id(dev);
         LOG_RETURN(rc,
-                   "failed to mount medium '%s' in device '%s' "
+                   "failed to mount medium (family '%s', name '%s', library "
+                   "'%s') in device (family '%s', name '%s', library '%s') "
                    "for %s request. Will try another medium if possible",
-                   dev->ld_dss_media_info->rsc.id.name,
-                   lrs_dev_name(dev),
-                   pho_srl_request_kind_str(reqc->req));
+                   rsc_family2str(med_id->family), med_id->name,
+                   med_id->library,
+                   rsc_family2str(dev_id->family), dev_id->name,
+                   dev_id->library, pho_srl_request_kind_str(reqc->req));
     }
 
     /* LTFS can cunningly mount almost-full tapes as read-only, and so would
@@ -2224,10 +2397,11 @@ static int dev_medium_switch_mount(struct lrs_dev *dev,
     if (pho_request_is_write(reqc->req) && !dev_mount_is_writable(dev)) {
         int rc2;
 
-        pho_warn("Media '%s' OK but mounted R/O for %s request, "
-                 "marking full and retrying...",
-                 dev->ld_dss_media_info->rsc.id.name,
-                 pho_srl_request_kind_str(reqc->req));
+        med_id = lrs_dev_med_id(dev);
+        pho_warn("Media (family '%s', name '%s', library '%s') OK but mounted "
+                 "R/O for %s request, marking full and retrying...",
+                 rsc_family2str(med_id->family), med_id->name,
+                 med_id->library, pho_srl_request_kind_str(reqc->req));
         subreq->failure_on_medium = true;
         rc = -ENOSPC;
 
@@ -2239,8 +2413,12 @@ static int dev_medium_switch_mount(struct lrs_dev *dev,
         if (rc2) {
             rc = rc2;
             context->failure_on_device = true;
-            LOG_RETURN(rc, "Unable to update DSS media '%s' status to FULL",
-                       dev->ld_dss_media_info->rsc.id.name);
+            med_id = lrs_dev_med_id(dev);
+            LOG_RETURN(rc,
+                       "Unable to update DSS media (family '%s', name '%s', "
+                       "library '%s') status to FULL",
+                       rsc_family2str(med_id->family), med_id->name,
+                       med_id->library);
         }
     }
 

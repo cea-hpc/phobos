@@ -90,7 +90,8 @@ int phobos_admin_init(struct admin_handle *adm, bool lrs_required,
  * This must be called with an admin_handle initialized with phobos_admin_init.
  */
 int phobos_admin_device_add(struct admin_handle *adm, struct pho_id *dev_ids,
-                            unsigned int num_dev, bool keep_locked);
+                            unsigned int num_dev, bool keep_locked,
+                            const char *library);
 
 /**
  * Remove the given devices from the database.
@@ -538,9 +539,9 @@ static inline int
 default_conflict_handler(const struct pho_id *id,
                          const char *hostname)
 {
-    pho_warn("Medium '%s' is locked by '%s', it will not be notified of the "
-             "change",
-             id->name, hostname);
+    pho_warn("Medium (family '%s', name '%s', library '%s') is locked by '%s', "
+             "it will not be notified of the change",
+             rsc_family2str(id->family), id->name, id->library, hostname);
     return 0;
 }
 

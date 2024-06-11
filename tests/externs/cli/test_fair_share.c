@@ -149,9 +149,11 @@ static int handle_format_response(struct context *context,
                           "{\"$AND\": ["
                           "  {\"DSS::MDA::family\": \"%s\"},"
                           "  {\"DSS::MDA::id\": \"%s\"}"
+                          "  {\"DSS::MDA::library\": \"%s\"}"
                           "]}",
                           rsc_family2str(resp->format->med_id->family),
-                          resp->format->med_id->name);
+                          resp->format->med_id->name,
+                          resp->format->med_id->library);
     if (rc)
         return rc;
 
@@ -199,6 +201,7 @@ static void build_read_request(struct context *context)
 
 
     req.req.ralloc->med_ids[0]->name = xstrdup(medium->rsc.id.name);
+    req.req.ralloc->med_ids[0]->library = xstrdup(medium->rsc.id.library);
     req.req.ralloc->med_ids[0]->family = PHO_RSC_TAPE;
     req.req.ralloc->n_required = 1;
     req.req.id = context->requests.reads->len;
@@ -241,6 +244,7 @@ static void build_format_request(struct context *context)
     req.req.format->force = true;
     req.req.format->med_id->family = PHO_RSC_TAPE;
     req.req.format->med_id->name = xstrdup(medium->rsc.id.name);
+    req.req.format->med_id->library = xstrdup(medium->rsc.id.library);
     req.req.id = context->requests.formats->len;
 
     g_array_append_val(context->requests.formats, req);

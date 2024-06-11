@@ -164,7 +164,8 @@ class Id(Structure): # pylint: disable=too-few-public-methods
     """Resource Identifier."""
     _fields_ = [
         ('family', c_int),
-        ('_name', c_char * PHO_URI_MAX)
+        ('_name', c_char * PHO_URI_MAX),
+        ('_library', c_char * PHO_URI_MAX)
     ]
 
     @property
@@ -177,6 +178,17 @@ class Id(Structure): # pylint: disable=too-few-public-methods
         """Wrapper to set name"""
         # pylint: disable=attribute-defined-outside-init
         self._name = val.encode('utf-8')
+
+    @property
+    def library(self):
+        """Wrapper to get library"""
+        return self._library.decode('utf-8')
+
+    @library.setter
+    def library(self, val):
+        """Wrapper to set library"""
+        # pylint: disable=attribute-defined-outside-init
+        self._library = val.encode('utf-8')
 
 class Resource(Structure): # pylint: disable=too-few-public-methods
     """Resource."""
@@ -213,7 +225,7 @@ class DevInfo(Structure, CLIManagedResourceMixin):
         ('_path', c_char_p),
         ('_host', c_char_p),
         ('lock', DSSLock),
-        ('health', c_size_t)
+        ('health', c_size_t),
     ]
 
     def get_display_fields(self, max_width=None):
@@ -227,7 +239,8 @@ class DevInfo(Structure, CLIManagedResourceMixin):
             'name': None,
             'lock_hostname': None,
             'lock_owner': None,
-            'lock_ts': Timeval.to_string
+            'lock_ts': Timeval.to_string,
+            'library': None
         }
 
     @property
@@ -239,6 +252,16 @@ class DevInfo(Structure, CLIManagedResourceMixin):
     def name(self, val):
         """Wrapper to set name"""
         self.rsc.id.name = val
+
+    @property
+    def library(self):
+        """Wrapper to get library"""
+        return self.rsc.id.library
+
+    @library.setter
+    def library(self, val):
+        """Wrapper to set library"""
+        self.rsc.id.library = val
 
     @property
     def family(self):
@@ -389,7 +412,7 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
         ('_tags', Tags),
         ('lock', DSSLock),
         ('flags', OperationFlags),
-        ('health', c_size_t)
+        ('health', c_size_t),
     ]
 
     def get_display_fields(self, max_width=None):
@@ -406,7 +429,8 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'lock_ts': Timeval.to_string,
             'put_access': None,
             'get_access': None,
-            'delete_access': None
+            'delete_access': None,
+            'library': None
         }
 
     def get_display_dict(self, numeric=False, max_width=None, fmt=None):
@@ -455,6 +479,16 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
     def name(self, val):
         """Wrapper to set medium name"""
         self.rsc.id.name = val
+
+    @property
+    def library(self):
+        """Wrapper to get library"""
+        return self.rsc.id.library
+
+    @library.setter
+    def library(self, val):
+        """Wrapper to set library"""
+        self.rsc.id.library = val
 
     @property
     def model(self):

@@ -54,7 +54,7 @@ static inline void sa_sigterm(int signum)
     running = false;
 }
 
-#define DAEMON_PARAMS_DEFAULT {PHO_LOG_INFO, true, false, NULL}
+#define DAEMON_PARAMS_DEFAULT {PHO_LOG_INFO, true, false, NULL, NULL}
 
 static void print_usage(const char *daemon_name)
 {
@@ -64,6 +64,8 @@ static void print_usage(const char *daemon_name)
            "    -i,--interactive        execute the daemon in foreground\n"
            "    -c,--config cfg_file    "
                 "use cfg_file as the daemon configuration file\n"
+           "    -l,--library lib_name   set the library to use (relevant only\n"
+           "                            for tlc daemon)\n"
            "    -v,--verbose            increase verbose level\n"
            "    -q,--quiet              decrease verbose level\n"
            "    -s,--syslog             print the daemon logs to syslog\n",
@@ -77,6 +79,7 @@ static struct daemon_params parse_args(int argc, char **argv,
         {"help",        no_argument,       0,  'h'},
         {"interactive", no_argument,       0,  'i'},
         {"config",      required_argument, 0,  'c'},
+        {"library",     required_argument, 0,  'l'},
         {"verbose",     no_argument,       0,  'v'},
         {"quiet",       no_argument,       0,  'q'},
         {"syslog",      no_argument,       0,  's'},
@@ -87,7 +90,7 @@ static struct daemon_params parse_args(int argc, char **argv,
     while (1) {
         int c;
 
-        c = getopt_long(argc, argv, "hic:vqs", long_options, NULL);
+        c = getopt_long(argc, argv, "hic:l:vqs", long_options, NULL);
         if (c == -1)
             break;
 
@@ -100,6 +103,9 @@ static struct daemon_params parse_args(int argc, char **argv,
             break;
         case 'c':
             param.cfg_path = optarg;
+            break;
+        case 'l':
+            param.library = optarg;
             break;
         case 'v':
             ++param.log_level;

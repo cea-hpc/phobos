@@ -28,10 +28,13 @@ We will add one field per medium family to the `[store]` section:
 - `default_rados_library = default_rados_cluster_name`,
 - `default_tape_library = default_tape_library_name`.
 
-## Media and device structures and DSS tables
-We add one `varchar(255) NOT NULL` library column in the media and the device
-tables. We will add this new `library` field to the primary key of the
-media and device tables in addition to the existing `family` and `id` ones.
+## Media, device, extent and logs DSS tables and the pho_id structure
+We add one `varchar(255) NOT NULL` library column in the media, the device,
+the extent and the logs tables. We will add this new `library` field to the
+primary key of the media and device tables in addition to the existing
+`family` and `id` ones. The id column of the device and media table are no more
+'UNIQUE' because we consider that we can have the same medium id in two
+different libraries.
 
 
 We also add the corresponding `char *` library field in the `struct pho_id`

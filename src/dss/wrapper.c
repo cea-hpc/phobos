@@ -89,28 +89,32 @@ int dss_one_medium_get_from_id(struct dss_handle *dss,
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                               "{\"DSS::MDA::family\": \"%s\"}, "
-                              "{\"DSS::MDA::id\": \"%s\"}"
+                              "{\"DSS::MDA::id\": \"%s\"}, "
+                              "{\"DSS::MDA::library\": \"%s\"}"
                           "]}",
                           rsc_family2str(medium_id->family),
-                          medium_id->name);
+                          medium_id->name, medium_id->library);
     if (rc)
         LOG_RETURN(rc,
-                   "Unable to build filter for media family %s and name %s",
-                   rsc_family2str(medium_id->family), medium_id->name);
+                   "Unable to build filter for media family %s, name %s and "
+                   "library %s", rsc_family2str(medium_id->family),
+                   medium_id->name, medium_id->library);
 
     rc = dss_media_get(dss, &filter, medium_info, &cnt);
     dss_filter_free(&filter);
     if (rc)
         LOG_RETURN(rc,
-                   "Error while getting medium info for family %s and name %s",
-                   rsc_family2str(medium_id->family), medium_id->name);
+                   "Error while getting medium info for family %s, name %s "
+                   "and library %s", rsc_family2str(medium_id->family),
+                   medium_id->name, medium_id->library);
 
     /* (family, id) is the primary key of the media table */
     assert(cnt <= 1);
 
     if (cnt == 0) {
-        pho_warn("Medium (family %s, name %s) is absent from media table",
-                 rsc_family2str(medium_id->family), medium_id->name);
+        pho_warn("Medium (family %s, name %s, library %s) is absent from media "
+                 "table", rsc_family2str(medium_id->family), medium_id->name,
+                 medium_id->library);
         dss_res_free(*medium_info, cnt);
         return(-ENOENT);
     }
@@ -131,15 +135,17 @@ int dss_medium_locate(struct dss_handle *dss, const struct pho_id *medium_id,
 
     /* check ADMIN STATUS to see if the medium is available */
     if (medium_info->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED) {
-        pho_warn("Medium (family %s, name %s) is admin locked",
-                 rsc_family2str(medium_id->family), medium_id->name);
+        pho_warn("Medium (family %s, name %s, library %s) is admin locked",
+                 rsc_family2str(medium_id->family), medium_id->name,
+                 medium_id->library);
         GOTO(clean, rc = -EACCES);
     }
 
     if (!medium_info->flags.get) {
         pho_warn("Get are prevented by operation flag on this medium "
-                 "(family %s, name %s)",
-                 rsc_family2str(medium_id->family), medium_id->name);
+                 "(family %s, name %s, library %s)",
+                 rsc_family2str(medium_id->family), medium_id->name,
+                 medium_id->library);
         GOTO(clean, rc = -EPERM);
     }
 
@@ -576,8 +582,9 @@ static int check_orphan(struct dss_handle *handle, const struct pho_id *tape)
         "WHERE extent_uuid NOT IN ("
         "  SELECT extent_uuid FROM layout"
         ")"
-        " AND medium_id = '%s' AND medium_family = '%s'"
-        ";", tape->name, rsc_family2str(tape->family));
+        " AND medium_id = '%s' AND medium_family = '%s' AND"
+        " medium_library = '%s'"
+        ";", tape->name, rsc_family2str(tape->family), tape->library);
 
     rc = execute_and_commit_or_rollback(handle->dh_conn, request, &res,
                                         PGRES_COMMAND_OK);
@@ -598,7 +605,8 @@ int dss_update_gc_for_tape(struct dss_handle *handle, const struct pho_id *tape)
         "    SELECT 1 FROM layout"
         "    INNER JOIN ("
         "      SELECT extent_uuid FROM extent"
-        "      WHERE medium_id = '%s' AND medium_family = '%s'"
+        "      WHERE medium_id = '%s' AND medium_family = '%s' AND"
+        "            medium_library = '%s'"
         "    ) AS inner_table USING (extent_uuid)"
         "    WHERE object_uuid = layout.object_uuid"
         "     AND version = layout.version"
@@ -609,7 +617,7 @@ int dss_update_gc_for_tape(struct dss_handle *handle, const struct pho_id *tape)
         "  SELECT 1 FROM objects"
         "  WHERE object_uuid = layout.object_uuid"
         "   AND version = layout.version"
-        ");", tape->name, rsc_family2str(tape->family));
+        ");", tape->name, rsc_family2str(tape->family), tape->library);
 
     rc = execute_and_commit_or_rollback(handle->dh_conn, request, &res,
                                         PGRES_COMMAND_OK);

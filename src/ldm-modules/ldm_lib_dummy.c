@@ -61,7 +61,7 @@ static int dummy_drive_lookup(struct lib_handle *lib, const char *drive_serial,
 
     drv_info->ldi_medium_id.family = PHO_RSC_DIR;
 
-    pho_id_name_set(&drv_info->ldi_medium_id, sep + 1);
+    pho_id_name_set(&drv_info->ldi_medium_id, sep + 1, lib->library);
 
     return 0;
 }

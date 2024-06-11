@@ -58,6 +58,7 @@ static int ior_setup(void **state)
     extent->size = 2;
     extent->media.family = PHO_RSC_RADOS_POOL;
     strcpy(extent->media.name, "pho_io");
+    strcpy(extent->media.library, "legacy");
     extent->address.buff = NULL;
     extent->address.size = 0;
 

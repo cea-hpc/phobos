@@ -36,7 +36,12 @@ struct status_array {
     bool loaded;
 };
 
+#include "pho_types.h"
+
 struct lib_descriptor {
+    /* library name */
+    char name[PHO_URI_MAX];
+
     /* file descriptor to SCSI lib device */
     int fd;
 

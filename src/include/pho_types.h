@@ -308,15 +308,22 @@ struct pho_id {
      * So, an id_type enum may be required here in a later version.
      */
     char            name[PHO_URI_MAX];  /**< Resource name. */
+    char            library[PHO_URI_MAX]; /**< Library owning the resource */
 };
 
-static inline void pho_id_name_set(struct pho_id *id, const char *name)
+static inline void pho_id_name_set(struct pho_id *id, const char *name,
+                                   const char *library)
 {
-    size_t len = strlen(name);
+    size_t len_library = strlen(library);
+    size_t len_name = strlen(name);
 
-    assert(len < PHO_URI_MAX);
-    memcpy(id->name, name, len);
-    id->name[len] = '\0';
+    assert(len_name < PHO_URI_MAX);
+    memcpy(id->name, name, len_name);
+    id->name[len_name] = '\0';
+
+    assert(len_library < PHO_URI_MAX);
+    memcpy(id->library, library, len_library);
+    id->library[len_library] = '\0';
 }
 
 struct pho_id *pho_id_dup(const struct pho_id *src);
@@ -324,7 +331,7 @@ struct pho_id *pho_id_dup(const struct pho_id *src);
 static inline void pho_id_copy(struct pho_id *dst, const struct pho_id *src)
 {
     dst->family = src->family;
-    pho_id_name_set(dst, src->name);
+    pho_id_name_set(dst, src->name, src->library);
 }
 
 /** Resource administrative state */
@@ -451,7 +458,7 @@ struct dev_info {
     char                *path;
     char                *host;
     struct pho_lock      lock;
-    size_t               health; /**< Current health of the device */
+    size_t               health;    /**< Current health of the device */
 };
 
 /**

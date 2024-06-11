@@ -76,16 +76,18 @@ int main(int argc, char **argv)
         GOTO(clean, rc = -1);
 
     if (strcmp(argv[3], "all")) {
-        pho_id_name_set(&medium_id, argv[3]);
+        pho_id_name_set(&medium_id, argv[3], "legacy");
 
         /* get medium info */
         rc = dss_filter_build(&filter,
                               "{\"$AND\": ["
                                 "{\"DSS::MDA::family\": \"%s\"}, "
-                                "{\"DSS::MDA::id\": \"%s\"}"
+                                "{\"DSS::MDA::id\": \"%s\"}, "
+                                "{\"DSS::MDA::library\": \"%s\"}"
                               "]}",
                               rsc_family2str(medium_id.family),
-                              medium_id.name);
+                              medium_id.name,
+                              medium_id.library);
         if (rc)
             LOG_GOTO(clean, rc, "Error while building filter");
 

@@ -164,7 +164,9 @@ static void check_log_is_valid(struct dss_handle *handle,
     assert_int_equal(PHO_RSC_TAPE, log.medium.family);
     assert_int_equal(PHO_RSC_TAPE, log.device.family);
     assert_string_equal(device_serial, log.device.name);
+    assert_string_equal("legacy", log.device.library);
     assert_string_equal(medium_name, log.medium.name);
+    assert_string_equal("legacy", log.medium.library);
     assert_int_equal(cause, log.cause);
 
     if (should_fail)

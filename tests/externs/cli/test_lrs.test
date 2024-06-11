@@ -189,23 +189,24 @@ function test_remove_invalid_media_locks
     # Update media to lock them by a 'daemon instance'
     # Only one is locked by this host
     $PSQL -c \
-        "insert into device (family, model, id, host, adm_status, path)
-            values ('dir', NULL, 'blob:${dir0}', 'blob', 'unlocked', '${dir0}'),
+        "insert into device (family, model, id, host, adm_status, path, library)
+            values ('dir', NULL, 'blob:${dir0}', 'blob', 'unlocked', '${dir0}',
+                    'legacy'),
                    ('dir', NULL, 'blob:${dir1}', 'blob', 'unlocked',
-                    '${dir1}');"
+                    '${dir1}', 'legacy');"
     $PSQL -c \
         "insert into media (family, model, id, adm_status, fs_type,
-                            address_type, fs_status, stats, tags)
+                            address_type, fs_status, stats, tags, library)
             values ('dir', NULL, '${dir0}', 'unlocked', 'POSIX', 'HASH1',
                     'blank', '{\"nb_obj\":0, \"logc_spc_used\":0, \
                                \"phys_spc_used\":0, \"phys_spc_free\":1024, \
                                \"nb_load\":0, \"nb_errors\":0, \
-                               \"last_load\":0}', '[]'),
+                               \"last_load\":0}', '[]', 'legacy'),
                    ('dir', NULL, '${dir1}', 'unlocked', 'POSIX', 'HASH1',
                     'blank', '{\"nb_obj\":0, \"logc_spc_used\":0, \
                                \"phys_spc_used\":0, \"phys_spc_free\":1024, \
                                \"nb_load\":0, \"nb_errors\":0, \
-                               \"last_load\":0}', '[]');"
+                               \"last_load\":0}', '[]', 'legacy');"
     $PSQL -c \
         "insert into lock (type, id, hostname, owner)
             values ('media'::lock_type, '${dir0}', '$host', $pid),
@@ -295,9 +296,9 @@ function test_remove_invalid_device_locks
     dev_st1_id="fake_id_remove_invalid_device_locks"
 
     $PSQL -c \
-        "insert into device (family, model, id, host, adm_status, path)
+        "insert into device (family, model, id, host, adm_status, path, library)
             values ('tape', '$dev_st1_model', '$dev_st1_id', '$fake_host',
-                    'unlocked', '/dev/st1');"
+                    'unlocked', '/dev/st1', 'legacy');"
     $PSQL -c \
         "insert into lock (type, id, hostname, owner)
             values ('device'::lock_type, '$dev_st1_id', '$host', $pid);"

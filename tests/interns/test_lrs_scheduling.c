@@ -556,6 +556,7 @@ static void create_request(struct req_container *reqc,
 
         for (i = 0; i < n; i++) {
             reqc->req->ralloc->med_ids[i]->name = xstrdup(media_names[i]);
+            reqc->req->ralloc->med_ids[i]->library = xstrdup("legacy");
             reqc->req->ralloc->med_ids[i]->family = PHO_RSC_TAPE;
         }
         rml_init(&reqc->params.rwalloc.media_list, reqc);
@@ -566,6 +567,7 @@ static void create_request(struct req_container *reqc,
         pho_srl_request_format_alloc(reqc->req);
 
         reqc->req->format->med_id->name = xstrdup(media_names[0]);
+        reqc->req->format->med_id->library = xstrdup("legacy");
         reqc->req->format->med_id->family = PHO_RSC_TAPE;
 
         rc = fetch_and_check_medium_info(lock_handle, reqc, &m, 0,

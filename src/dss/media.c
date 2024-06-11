@@ -228,7 +228,7 @@ static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
 
     g_string_append(
         request,
-        "INSERT INTO media (family, model, id, adm_status, fs_type, "
+        "INSERT INTO media (family, model, id, library, adm_status, fs_type, "
                            "address_type, fs_status, fs_label, stats, tags, "
                            "put, get, delete) VALUES "
     );
@@ -240,6 +240,7 @@ static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
         char *tmp_stats = NULL;
         char *fs_label = NULL;
         char *tmp_tags = NULL;
+        char *library = NULL;
         char *model = NULL;
         char *stats = NULL;
         char *tags = NULL;
@@ -252,6 +253,10 @@ static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
 
         medium_name = dss_char4sql(conn, medium->rsc.id.name);
         if (medium_name == NULL)
+            goto free_info;
+
+        library = dss_char4sql(conn, medium->rsc.id.library);
+        if (library == NULL)
             goto free_info;
 
         fs_label = dss_char4sql(conn, medium->fs.label);
@@ -280,10 +285,12 @@ static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
 
         g_string_append_printf(
             sub_request,
-            "('%s', %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s, %s, %s, %s)",
+            "('%s', %s, %s, %s, '%s', '%s', '%s', '%s', '%s', %s, %s, %s, %s, "
+            "%s)",
             rsc_family2str(medium->rsc.id.family),
             model,
             medium_name,
+            library,
             rsc_adm_status2str(medium->rsc.adm_status),
             fs_type2str(medium->fs.type),
             address_type2str(medium->addr_type),
@@ -302,6 +309,7 @@ static int media_insert_query(PGconn *conn, void *void_med, int item_cnt,
 
 free_info:
         free_dss_char4sql(medium_name);
+        free_dss_char4sql(library);
         free_dss_char4sql(fs_label);
         free_dss_char4sql(model);
         free(stats);
@@ -510,9 +518,10 @@ static int media_update_query(PGconn *conn, void *void_med, int item_cnt,
 
 
         g_string_append_printf(sub_request,
-                               " WHERE family = '%s' AND id = '%s';",
+                               " WHERE family = '%s' AND id = '%s' AND "
+                               "library = '%s';",
                                rsc_family2str(medium->rsc.id.family),
-                               medium->rsc.id.name);
+                               medium->rsc.id.name, medium->rsc.id.library);
 
         g_string_append(request, sub_request->str);
         g_string_free(sub_request, true);
@@ -525,9 +534,9 @@ static int media_select_query(GString **conditions, int n_conditions,
                               GString *request)
 {
     g_string_append(request,
-                    "SELECT family, model, id, adm_status, address_type,"
-                    " fs_type, fs_status, fs_label, stats, tags, put, get, "
-                    " delete FROM media");
+                    "SELECT family, model, id, library, adm_status, "
+                    " address_type, fs_type, fs_status, fs_label, stats, tags, "
+                    " put, get, delete FROM media");
 
     if (n_conditions == 1)
         g_string_append(request, conditions[0]->str);
@@ -544,8 +553,11 @@ static int media_delete_query(void *void_med, int item_cnt, GString *request)
     for (int i = 0; i < item_cnt; ++i) {
         struct media_info *medium = ((struct media_info *) void_med) + i;
 
-        g_string_append_printf(request, "DELETE FROM media WHERE id = '%s'; ",
-                               medium->rsc.id.name);
+        g_string_append_printf(request,
+                               "DELETE FROM media WHERE family = '%s' AND "
+                               "id = '%s' AND library = '%s'; ",
+                               rsc_family2str(medium->rsc.id.family),
+                               medium->rsc.id.name, medium->rsc.id.library);
     }
 
     return 0;
@@ -559,34 +571,35 @@ static int media_from_pg_row(struct dss_handle *handle, void *void_media,
 
     medium->rsc.id.family  = str2rsc_family(PQgetvalue(res, row_num, 0));
     medium->rsc.model      = get_str_value(res, row_num, 1);
-    pho_id_name_set(&medium->rsc.id, PQgetvalue(res, row_num, 2));
-    medium->rsc.adm_status = str2rsc_adm_status(PQgetvalue(res, row_num, 3));
-    medium->addr_type      = str2address_type(PQgetvalue(res, row_num, 4));
-    medium->fs.type        = str2fs_type(PQgetvalue(res, row_num, 5));
-    medium->fs.status      = str2fs_status(PQgetvalue(res, row_num, 6));
-    memcpy(medium->fs.label, PQgetvalue(res, row_num, 7),
+    pho_id_name_set(&medium->rsc.id, PQgetvalue(res, row_num, 2),
+                    get_str_value(res, row_num, 3));
+    medium->rsc.adm_status = str2rsc_adm_status(PQgetvalue(res, row_num, 4));
+    medium->addr_type      = str2address_type(PQgetvalue(res, row_num, 5));
+    medium->fs.type        = str2fs_type(PQgetvalue(res, row_num, 6));
+    medium->fs.status      = str2fs_status(PQgetvalue(res, row_num, 7));
+    memcpy(medium->fs.label, PQgetvalue(res, row_num, 8),
             sizeof(medium->fs.label));
     /* make sure the label is zero-terminated */
     medium->fs.label[sizeof(medium->fs.label) - 1] = '\0';
-    medium->flags.put      = psqlstrbool2bool(*PQgetvalue(res, row_num, 10));
-    medium->flags.get      = psqlstrbool2bool(*PQgetvalue(res, row_num, 11));
-    medium->flags.delete   = psqlstrbool2bool(*PQgetvalue(res, row_num, 12));
+    medium->flags.put      = psqlstrbool2bool(*PQgetvalue(res, row_num, 11));
+    medium->flags.get      = psqlstrbool2bool(*PQgetvalue(res, row_num, 12));
+    medium->flags.delete   = psqlstrbool2bool(*PQgetvalue(res, row_num, 13));
     medium->health         = 0;
 
     /* No dynamic allocation here */
-    rc = dss_media_stats_decode(&medium->stats, PQgetvalue(res, row_num, 8));
+    rc = dss_media_stats_decode(&medium->stats, PQgetvalue(res, row_num, 9));
     if (rc) {
         pho_error(rc, "dss_media stats decode error");
         return rc;
     }
 
-    rc = dss_tags_decode(&medium->tags, PQgetvalue(res, row_num, 9));
+    rc = dss_tags_decode(&medium->tags, PQgetvalue(res, row_num, 10));
     if (rc) {
         pho_error(rc, "dss_media tags decode error");
         return rc;
     }
     pho_debug("Decoded %lu tags (%s)",
-              medium->tags.n_tags, PQgetvalue(res, row_num, 9));
+              medium->tags.n_tags, PQgetvalue(res, row_num, 10));
 
     rc = dss_lock_status(handle, DSS_MEDIA, medium, 1, &medium->lock);
     if (rc == -ENOLCK) {

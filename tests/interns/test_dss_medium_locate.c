@@ -73,6 +73,8 @@ static void check_medium_info_correctly_filled(struct media_info *medium_info,
     fill_medium_info(&filled_medium, id);
 
     assert_string_equal(medium_info->rsc.id.name, filled_medium.rsc.id.name);
+    assert_string_equal(medium_info->rsc.id.library,
+                        filled_medium.rsc.id.library);
     assert_int_equal(medium_info->rsc.id.family, filled_medium.rsc.id.family);
     assert_string_equal(medium_info->rsc.model, filled_medium.rsc.model);
     assert_int_equal(medium_info->rsc.adm_status, filled_medium.rsc.adm_status);
@@ -109,6 +111,7 @@ static void dml_enoent(void **state)
     struct pho_id medium_id = {
         .family = PHO_RSC_TAPE,
         .name = "unexisting_medium_name",
+        .library = "legacy",
     };
     char *hostname;
     int rc;
@@ -123,6 +126,7 @@ static void dml_enoent(void **state)
 static struct pho_id admin_locked_medium = {
     .family = PHO_RSC_DIR,
     .name = "admin_locked_medium",
+    .library = "legacy",
 };
 
 static int dml_eacces_setup(void **state)
@@ -156,6 +160,7 @@ static void dml_eacces(void **state)
 static struct pho_id false_get_medium = {
     .family = PHO_RSC_DIR,
     .name = "false_get_medium",
+    .library = "legacy",
 };
 
 static int dml_eperm_setup(void **state)
@@ -189,11 +194,13 @@ static void dml_eperm(void **state)
 static struct pho_id dir_free_medium = {
     .family = PHO_RSC_DIR,
     .name = "dir_free_medium",
+    .library = "legacy",
 };
 
 static struct pho_id tape_free_medium = {
     .family = PHO_RSC_TAPE,
     .name = "tape_free_medium",
+    .library = "legacy",
 };
 
 static int dml_ok_free_setup(void **state)
@@ -240,6 +247,7 @@ static void dml_ok_free(void **state)
 static struct pho_id locked_medium = {
     .family = PHO_RSC_DIR,
     .name = "locked_medium",
+    .library = "legacy",
 };
 
 #define HOSTNAME "hostname"

@@ -279,7 +279,8 @@ static void set_extent_info(struct extent *extent, enum extent_state state,
     extent->size = extent_size;
     extent->offset = offset;
     extent->media.family = (enum rsc_family)medium->med_id->family;
-    pho_id_name_set(&extent->media, medium->med_id->name);
+    pho_id_name_set(&extent->media, medium->med_id->name,
+                    medium->med_id->library);
 
     extent->uuid = generate_uuid();
 }
@@ -642,7 +643,9 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
                                 "layout_idx %d",
                                 extent_index, candidate_extent->layout_idx);
         assert(candidate_extent->layout_idx == extent_index);
-        if (strcmp(medium->med_id->name, candidate_extent->media.name) == 0) {
+        if (strcmp(medium->med_id->name, candidate_extent->media.name) == 0 &&
+            strcmp(medium->med_id->library,
+                   candidate_extent->media.library) == 0) {
             extent = candidate_extent;
             break;
         }
@@ -674,8 +677,9 @@ static int simple_dec_read_chunk(struct pho_encoder *dec,
     iod.iod_size = loc.extent->size;
     iod.iod_loc = &loc;
 
-    pho_debug("Reading %ld bytes from medium %s", extent->size,
-              extent->media.name);
+    pho_debug("Reading %ld bytes from medium (family '%s', name '%s', library "
+              "'%s')", extent->size, rsc_family2str(extent->media.family),
+              extent->media.name, extent->media.library);
 
     rc = ioa_get(ioa, dec->xfer->xd_objid, &iod);
     if (rc == 0) {
@@ -743,7 +747,9 @@ static int raid1_enc_handle_release_resp(struct pho_encoder *enc,
     for (i = 0; i < rel_resp->n_med_ids; i++) {
         int rc2;
 
-        pho_debug("Marking medium %s as released", rel_resp->med_ids[i]->name);
+        pho_debug("Marking medium (family %s, name %s, library %s) as released",
+                  rsc_family2str(rel_resp->med_ids[i]->family),
+                  rel_resp->med_ids[i]->name, rel_resp->med_ids[i]->library);
         /* If the media_id is unexpected, -EINVAL will be returned */
         rc2 = mark_written_medium_released(raid1, rel_resp->med_ids[i]->name);
         if (rc2 && !rc)
@@ -817,13 +823,18 @@ static void raid1_dec_next_read_req(struct pho_encoder *dec, pho_req_t *req)
     for (i = 0; i < raid1->repl_count; ++i) {
         unsigned int ext_idx = raid1->cur_extent_idx * raid1->repl_count + i;
 
-        pho_debug("Requesting medium %s to read copy %d of extent %d",
+        pho_debug("Requesting medium (family '%s', name '%s', library '%s') to "
+                  "read copy %d of extent %d",
+                  rsc_family2str(dec->layout->extents[ext_idx].media.family),
                   dec->layout->extents[ext_idx].media.name,
+                  dec->layout->extents[ext_idx].media.library,
                   i, raid1->cur_extent_idx);
         req->ralloc->med_ids[i]->family =
             dec->layout->extents[ext_idx].media.family;
         req->ralloc->med_ids[i]->name =
             xstrdup(dec->layout->extents[ext_idx].media.name);
+        req->ralloc->med_ids[i]->library =
+            xstrdup(dec->layout->extents[ext_idx].media.library);
     }
 }
 
@@ -1802,11 +1813,11 @@ static int raid1_lock_at_locate(struct dss_handle *dss,
             rc2 = dss_medium_locate(dss, medium_id, &extent_hostname, NULL);
             if (rc2) {
                 pho_warn("Error %d (%s) at early locking when trying to dss "
-                         "locate medium at early lock (family %s, name %s) of "
-                         "with extent %d raid1 layout early locking leans on "
-                         "other extents", -rc2, strerror(-rc2),
+                         "locate medium at early lock (family %s, name %s, "
+                         "library %s) of with extent %d raid1 layout early "
+                         "locking leans on other extents", -rc2, strerror(-rc2),
                          rsc_family2str(medium_id->family), medium_id->name,
-                         extent_index);
+                         medium_id->library, extent_index);
                 continue;
             }
 
@@ -1821,11 +1832,11 @@ static int raid1_lock_at_locate(struct dss_handle *dss,
                     continue;
                 } else if (rc2) {
                     pho_warn("Error (%d) %s when trying to lock the medium "
-                             "(family %s, name %s) at locate on extent %d "
-                             "raid1 layout, early locking leans on other "
-                             "extents", -rc2, strerror(-rc2),
+                             "(family %s, name %s, library %s) at locate on "
+                             "extent %d raid1 layout, early locking leans on "
+                             "other extents", -rc2, strerror(-rc2),
                              rsc_family2str(medium_id->family),
-                             medium_id->name, extent_index);
+                             medium_id->name, medium_id->library, extent_index);
                     continue;
                 }
 
@@ -1864,19 +1875,21 @@ static int raid1_lock_at_locate(struct dss_handle *dss,
             if (rc2 == -ENOLCK || rc2 == -EACCES) {
                 pho_warn("Early lock was concurrently updated %d (%s) before "
                          "we try to unlock it when dealing with an early lock "
-                         "locate split starvation, medium (family %s, name %s) "
-                         "with extent %d raid1 layout",
+                         "locate split starvation, medium (family '%s', name "
+                         "'%s', library '%s') with extent %d raid1 layout",
                          -rc2, strerror(-rc2),
                          rsc_family2str(target_medium.rsc.id.family),
                          target_medium.rsc.id.name,
+                         target_medium.rsc.id.library,
                          new_lock_extent_index[new_lock_index]);
             } else {
                 pho_warn("Unlock error %d (%s) when dealing with an early lock "
-                         "locate split starvation, medium (family %s, name %s) "
-                         "with extent %d raid1 layout",
+                         "locate split starvation, medium (family '%s', name "
+                         "'%s', library '%s') with extent %d raid1 layout",
                          -rc2, strerror(-rc2),
                          rsc_family2str(target_medium.rsc.id.family),
                          target_medium.rsc.id.name,
+                         target_medium.rsc.id.library,
                          new_lock_extent_index[new_lock_index]);
             }
         }
@@ -1955,9 +1968,11 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
                                     &medium_info);
             if (rc2) {
                 pho_warn("Error %d (%s) when trying to dss locate medium "
-                         "(family %s, name %s) of with extent %d raid1 layout "
-                         "locate leans on other extents", -rc2, strerror(-rc2),
-                         rsc_family2str(medium_id->family), medium_id->name, i);
+                         "(family %s, name %s, library %s) of with extent %d "
+                         "raid1 layout locate leans on other extents",
+                         -rc2, strerror(-rc2),
+                         rsc_family2str(medium_id->family), medium_id->name,
+                         medium_id->library, i);
                 /* If the locate failed, consider the medium unusable for that
                  * locate.
                  */

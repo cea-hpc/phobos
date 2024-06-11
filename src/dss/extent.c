@@ -117,7 +117,7 @@ static int extent_insert_query(PGconn *conn, void *void_extent, int item_cnt,
     g_string_append(
         request,
         "INSERT INTO extent (extent_uuid, state, size, offsetof, "
-        "medium_family, medium_id, address, hash, info) VALUES "
+        "medium_family, medium_id, medium_library, address, hash, info) VALUES "
     );
 
     for (int i = 0; i < item_cnt; ++i) {
@@ -134,14 +134,14 @@ static int extent_insert_query(PGconn *conn, void *void_extent, int item_cnt,
             return -EINVAL;
         }
 
-        g_string_append_printf(
-            request,
-            "('%s', '%s', %ld, %ld, '%s', '%s', '%s', '%s', '%s')",
-            extent->uuid, extent_state2str(extent->state),
-            extent->size, extent->offset,
-            rsc_family2str(extent->media.family),
-            extent->media.name, extent->address.buff, hash,
-            info->str);
+        g_string_append_printf(request,
+                               "('%s', '%s', %ld, %ld, '%s', '%s', '%s', '%s', "
+                               "'%s', '%s')",
+                               extent->uuid, extent_state2str(extent->state),
+                               extent->size, extent->offset,
+                               rsc_family2str(extent->media.family),
+                               extent->media.name, extent->media.library,
+                               extent->address.buff, hash, info->str);
 
         if (i < item_cnt - 1)
             g_string_append(request, ", ");
@@ -166,11 +166,13 @@ static int extent_update_query(PGconn *conn, void *void_extent, int item_cnt,
 
         g_string_append_printf(
             request,
-            "UPDATE extent SET state = '%s', medium_family = '%s',"
-            " medium_id = '%s', address = '%s' WHERE extent_uuid = '%s';",
+            "UPDATE extent SET state = '%s', medium_family = '%s', "
+            "medium_id = '%s', medium_library = '%s', address = '%s' "
+            "WHERE extent_uuid = '%s';",
             extent_state2str(extent->state),
             rsc_family2str(extent->media.family),
             extent->media.name,
+            extent->media.library,
             extent->address.buff,
             extent->uuid
         );
@@ -184,7 +186,8 @@ static int extent_select_query(GString **conditions, int n_conditions,
 {
     g_string_append(request,
                     "SELECT extent_uuid, size, offsetof, medium_family, state,"
-                    "medium_id, address, hash, info FROM extent");
+                    "medium_id, medium_library, address, hash, info FROM "
+                    "extent");
 
     if (n_conditions == 1)
         g_string_append(request, conditions[0]->str);
@@ -282,11 +285,12 @@ static int extent_from_pg_row(struct dss_handle *handle, void *void_extent,
     extent->offset = atoll(PQgetvalue(res, row_num, 2));
     extent->media.family = str2rsc_family(PQgetvalue(res, row_num, 3));
     extent->state = str2extent_state(PQgetvalue(res, row_num, 4));
-    pho_id_name_set(&extent->media, PQgetvalue(res, row_num, 5));
-    extent->address.buff = get_str_value(res, row_num, 6);
+    pho_id_name_set(&extent->media, PQgetvalue(res, row_num, 5),
+                    PQgetvalue(res, row_num, 6));
+    extent->address.buff = get_str_value(res, row_num, 7);
     extent->address.size = strlen(extent->address.buff) + 1;
 
-    root = json_loads(PQgetvalue(res, row_num, 7), JSON_REJECT_DUPLICATES,
+    root = json_loads(PQgetvalue(res, row_num, 8), JSON_REJECT_DUPLICATES,
                       &json_error);
     if (!root)
         LOG_RETURN(-EINVAL, "Failed to parse json data for hash values: %s",

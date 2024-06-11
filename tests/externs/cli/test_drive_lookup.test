@@ -72,9 +72,9 @@ function test_lookup
 
     # fake drive into dss but not on the TLC
     $PSQL << EOF
-    INSERT INTO device (family, model, id, host, adm_status, path)
+    INSERT INTO device (family, model, id, host, adm_status, path, library)
            VALUES ('tape', NULL, 'serial', '$host', 'unlocked',
-                   'path');
+                   'path', 'legacy');
 EOF
 
     # by serial

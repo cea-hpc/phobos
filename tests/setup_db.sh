@@ -36,39 +36,39 @@ insert_examples() {
 
 #  initially mounted tapes don't have enough room to store a big file
 	$PSQL << EOF
-insert into device (family, model, id, host, adm_status, path)
+insert into device (family, model, id, host, adm_status, path, library)
     values ('dir', NULL, '$host:/tmp/pho_testdir1', '$host',
-	    'unlocked', '/tmp/pho_testdir1'),
+	    'unlocked', '/tmp/pho_testdir1', 'legacy'),
            ('dir', NULL, '$host:/tmp/pho_testdir2', '$host',
-	    'unlocked', '/tmp/pho_testdir2'),
+	    'unlocked', '/tmp/pho_testdir2', 'legacy'),
            ('dir', NULL, '$host:/tmp/pho_testdir3', '$host',
-	    'unlocked', '/tmp/pho_testdir3'),
+	    'unlocked', '/tmp/pho_testdir3', 'legacy'),
            ('dir', NULL, '$host:/tmp/pho_testdir4', '$host',
-	    'unlocked', '/tmp/pho_testdir4'),
+	    'unlocked', '/tmp/pho_testdir4', 'legacy'),
            ('dir', NULL, '$host:/tmp/pho_testdir5', '$host',
-	    'unlocked', '/tmp/pho_testdir5');
+	    'unlocked', '/tmp/pho_testdir5', 'legacy');
 insert into media (family, model, id, adm_status, fs_type, address_type,
-		   fs_status, stats, tags)
+		   fs_status, stats, tags, library)
     values ('dir', NULL, '/tmp/pho_testdir1', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":5, "logc_spc_used":3668841456,\
 	      "phys_spc_used":3668841456,"phys_spc_free":12857675776,\
-          "nb_errors":0,"last_load":0}', '[]'),
+          "nb_errors":0,"last_load":0}', '[]', 'legacy'),
            ('dir', NULL, '/tmp/pho_testdir2', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":6,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
-          "nb_errors":0,"last_load":0}', '["mytag"]'),
+          "nb_errors":0,"last_load":0}', '["mytag"]', 'legacy'),
            ('dir', NULL, '/tmp/pho_testdir3', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":0,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
-          "nb_errors":0,"last_load":0}', '[]'),
+          "nb_errors":0,"last_load":0}', '[]', 'legacy'),
            ('dir', NULL, '/tmp/pho_testdir4', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":7,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
-          "nb_errors":0,"last_load":0}', '["mytag"]'),
+          "nb_errors":0,"last_load":0}', '["mytag"]', 'legacy'),
            ('dir', NULL, '/tmp/pho_testdir5', 'unlocked', 'POSIX',
 	    'HASH1', 'empty', '{"nb_obj":7,"logc_spc_used":4868841472,\
 	      "phys_spc_used":4868841472,"phys_spc_free":12857675776,\
-          "nb_errors":0,"last_load":0}', '["mytag"]');
+          "nb_errors":0,"last_load":0}', '["mytag"]', 'legacy');
 
 insert into object (oid, user_md, lyt_info, obj_status)
     values ('01230123ABC', '{}',
@@ -79,11 +79,11 @@ insert into deprecated_object (oid, object_uuid, version, user_md, lyt_info,
     values ('01230123ABD', '00112233445566778899aabbccddeeff', 1, '{}',
             '{"name":"raid1","major":0,"minor":1,"repl_count":1}', 'complete');
 
-insert into extent (state, size, offsetof, medium_family, medium_id, address,
-                    hash)
-    values ('pending', 21123456, 0, 'dir', '/tmp/pho_testdir1',
+insert into extent (state, size, offsetof, medium_family, medium_id,
+                    medium_library, address, hash)
+    values ('pending', 21123456, 0, 'dir', '/tmp/pho_testdir1', 'legacy',
             'test3/oid3.v3.lyt-0_3.uuid3', '{}'),
-           ('pending', 2112555, 0, 'dir', '/tmp/pho_testdir2',
+           ('pending', 2112555, 0, 'dir', '/tmp/pho_testdir2', 'legacy',
             'test4/oid4.v4.lyt-0_4.uuid4', '{}');
 
 insert into layout (object_uuid, version, extent_uuid, layout_index)

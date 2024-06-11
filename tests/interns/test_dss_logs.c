@@ -42,14 +42,14 @@
 
 #define LENGTH_DEVICES 2
 static struct pho_id devices[LENGTH_DEVICES] = {
-    { .family = PHO_RSC_TAPE, .name = "deviceA" },
-    { .family = PHO_RSC_TAPE, .name = "deviceB" },
+    { .family = PHO_RSC_TAPE, .name = "deviceA", .library = "legacy" },
+    { .family = PHO_RSC_TAPE, .name = "deviceB", .library = "legacy" },
 };
 
 #define LENGTH_MEDIA 2
 static struct pho_id media[LENGTH_MEDIA] = {
-    { .family = PHO_RSC_TAPE, .name = "mediumA" },
-    { .family = PHO_RSC_TAPE, .name = "mediumB" },
+    { .family = PHO_RSC_TAPE, .name = "mediumA", .library = "legacy" },
+    { .family = PHO_RSC_TAPE, .name = "mediumB", .library = "legacy" },
 };
 
 #define LENGTH_TYPES 2
@@ -98,7 +98,9 @@ static void check_log_equal(struct pho_log emitted_log,
     assert_int_equal(emitted_log.device.family, dss_log.device.family);
     assert_int_equal(emitted_log.medium.family, dss_log.medium.family);
     assert_string_equal(emitted_log.device.name, dss_log.device.name);
+    assert_string_equal(emitted_log.device.library, dss_log.device.library);
     assert_string_equal(emitted_log.medium.name, dss_log.medium.name);
+    assert_string_equal(emitted_log.medium.library, dss_log.medium.library);
     assert_int_equal(emitted_log.cause, dss_log.cause);
     assert_true(json_equal(emitted_log.message, dss_log.message));
 }
@@ -113,8 +115,8 @@ static void dss_emit_logs_ok(void **state)
 
     log.device.family = PHO_RSC_TAPE;
     log.medium.family = PHO_RSC_TAPE;
-    strcpy(log.device.name, "dummy_device");
-    strcpy(log.medium.name, "dummy_medium");
+    pho_id_name_set(&log.device, "dummy_device", "legacy");
+    pho_id_name_set(&log.medium, "dummy_medium", "legacy");
     log.cause = PHO_DEVICE_LOAD;
 
     log.message = json_object();
@@ -144,8 +146,8 @@ static void dss_emit_logs_with_message_ok(void **state)
 
     log.device.family = PHO_RSC_TAPE;
     log.medium.family = PHO_RSC_TAPE;
-    strcpy(log.device.name, "dummy_device");
-    strcpy(log.medium.name, "dummy_medium");
+    pho_id_name_set(&log.device, "dummy_device", "legacy");
+    pho_id_name_set(&log.medium, "dummy_medium", "legacy");
     log.cause = PHO_DEVICE_LOAD;
 
     log.message = json_loads("[\"foo\", {\"bar\":[\"baz\", null, 1.0, 2]}]",
@@ -183,15 +185,13 @@ static void check_logs_with_filter(struct dss_handle *handle,
     int rc;
 
     if (device) {
-        filter.device.family = device->family;
-        strcpy(filter.device.name, device->name);
+        pho_id_copy(&filter.device, device);
     } else {
         filter.device.family = PHO_RSC_NONE;
     }
 
     if (medium) {
-        filter.medium.family = medium->family;
-        strcpy(filter.medium.name, medium->name);
+        pho_id_copy(&filter.medium, medium);
     } else {
         filter.medium.family = PHO_RSC_NONE;
     }
@@ -349,8 +349,8 @@ static void emit(struct dss_handle *dss, int error)
 
     log.device.family = PHO_RSC_TAPE;
     log.medium.family = PHO_RSC_TAPE;
-    strcpy(log.device.name, "dummy_device");
-    strcpy(log.medium.name, "dummy_medium");
+    pho_id_name_set(&log.device, "dummy_device", "legacy");
+    pho_id_name_set(&log.medium, "dummy_medium", "legacy");
     log.cause = PHO_DEVICE_LOAD;
 
     log.message = json_object();
@@ -379,7 +379,7 @@ static void dss_medium_health_0(void **state)
     int rc;
 
     medium.family = PHO_RSC_TAPE;
-    pho_id_name_set(&medium, "dummy_medium");
+    pho_id_name_set(&medium, "dummy_medium", "legacy");
 
     dss_logs_delete(dss, NULL);
     emit_error(dss);
@@ -405,7 +405,7 @@ static void dss_medium_health_max(void **state)
     int rc;
 
     medium.family = PHO_RSC_TAPE;
-    pho_id_name_set(&medium, "dummy_medium");
+    pho_id_name_set(&medium, "dummy_medium", "legacy");
 
     dss_logs_delete(dss, NULL);
     emit_error(dss);
@@ -436,7 +436,7 @@ static void dss_medium_health_ok(void **state)
     int rc;
 
     medium.family = PHO_RSC_TAPE;
-    pho_id_name_set(&medium, "dummy_medium");
+    pho_id_name_set(&medium, "dummy_medium", "legacy");
 
     dss_logs_delete(dss, NULL);
     emit_ok(dss);    // 5

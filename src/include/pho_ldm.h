@@ -220,7 +220,7 @@ struct lib_handle;
  */
 struct pho_lib_adapter_module_ops {
     /* adapter functions */
-    int (*lib_open)(struct lib_handle *lib, const char *dev);
+    int (*lib_open)(struct lib_handle *lib);
     int (*lib_close)(struct lib_handle *lib);
     int (*lib_drive_lookup)(struct lib_handle *lib, const char *drive_serial,
                             struct lib_drv_info *drv_info);
@@ -244,6 +244,7 @@ struct lib_adapter_module {
  * Library handle.
  */
 struct lib_handle {
+    char library[PHO_URI_MAX]; /**< Library name */
     void *lh_lib; /**< Opaque library handler */
     struct lib_adapter_module *ld_module; /**< Library adapter */
 };
@@ -264,18 +265,32 @@ int get_lib_adapter(enum lib_type lib_type, struct lib_adapter_module **lib);
  * A library should be closed and reopened to refresh this cache in case a
  * change or inconsistency is detected.
  *
- * @param[in,out] lib_hdl Library handle.
- * @param[in]     dev     Device to open
+ * @param[in,out] lib_hdl   Library handle.
+ * @param[in]     library   Library to open (stored into lib_hdl->library)
  *
  * @return 0 on success, negative error code on failure.
  */
-static inline int ldm_lib_open(struct lib_handle *lib_hdl, const char *dev)
+static inline int ldm_lib_open(struct lib_handle *lib_hdl, const char *library)
 {
+    size_t len_library;
+
+    if (!library)
+        LOG_RETURN(-EINVAL, "input library name is not set");
+
+    len_library = strlen(library);
+    if (len_library > PHO_URI_MAX)
+        LOG_RETURN(-EINVAL, "library name '%s' is too long (> %d)",
+                   library, PHO_URI_MAX);
+
+    memcpy(lib_hdl->library, library, len_library);
+    lib_hdl->library[len_library] = '\0';
+
     assert(lib_hdl->ld_module != NULL);
     assert(lib_hdl->ld_module->ops != NULL);
     if (lib_hdl->ld_module->ops->lib_open == NULL)
         return 0;
-    return lib_hdl->ld_module->ops->lib_open(lib_hdl, dev);
+
+    return lib_hdl->ld_module->ops->lib_open(lib_hdl);
 }
 
 /**
@@ -283,13 +298,13 @@ static inline int ldm_lib_open(struct lib_handle *lib_hdl, const char *dev)
  *
  * @param[in]       lib_type    Family of library.
  * @param[in,out]   lib_hdl     Library handle.
- * @param[in]       dev         Device to open
+ * @param[in]       library     Library to open
  *
  * @return 0 on success, negative error code on failure.
  */
 static inline int get_lib_adapter_and_open(enum lib_type lib_type,
                                            struct lib_handle *lib_hdl,
-                                           const char *dev)
+                                           const char *library)
 {
     const char *lib_type_name = lib_type2str(lib_type);
     int rc;
@@ -302,10 +317,10 @@ static inline int get_lib_adapter_and_open(enum lib_type lib_type,
         LOG_RETURN(rc, "Failed to get library adapter for type '%s'",
                    lib_type_name);
 
-    rc = ldm_lib_open(lib_hdl, dev);
+    rc = ldm_lib_open(lib_hdl, library);
     if (rc)
         LOG_RETURN(rc, "Failed to open library of type '%s' for path '%s'",
-                   lib_type_name, dev ? : "NULL");
+                   lib_type_name, library ? : "NULL");
 
     return 0;
 }

@@ -55,7 +55,8 @@ static int logs_insert_query(PGconn *conn, void *void_log, int item_cnt,
 
     g_string_append_printf(
         request,
-        "INSERT INTO logs (family, device, medium, errno, cause, message)"
+        "INSERT INTO logs (family, device, medium, library, errno, cause,"
+        "                  message)"
         " VALUES "
     );
 
@@ -73,9 +74,9 @@ static int logs_insert_query(PGconn *conn, void *void_log, int item_cnt,
 
         g_string_append_printf(
             request,
-            "('%s', '%s', '%s', %d, '%s', '%s')",
+            "('%s', '%s', '%s', '%s', %d, '%s', '%s')",
             rsc_family2str(log->device.family), log->device.name,
-            log->medium.name, log->error_number,
+            log->medium.name, log->device.library, log->error_number,
             operation_type2str(log->cause), escape_string
         );
 
@@ -95,7 +96,8 @@ static int logs_select_query(GString **conditions, int n_conditions,
                              GString *request)
 {
     g_string_append(request,
-                    "SELECT family, device, medium, errno, cause, message, time"
+                    "SELECT family, device, medium, library, errno, cause,"
+                    "       message, time"
                     " FROM logs");
 
     if (n_conditions == 1)
@@ -139,15 +141,17 @@ static int logs_from_pg_row(struct dss_handle *handle, void *item,
 
     log->device.family = str2rsc_family(PQgetvalue(res, row_num, 0));
     log->medium.family = log->device.family;
-    pho_id_name_set(&log->device, PQgetvalue(res, row_num, 1));
-    pho_id_name_set(&log->medium, PQgetvalue(res, row_num, 2));
-    log->error_number = atoi(PQgetvalue(res, row_num, 3));
-    log->cause = str2operation_type(PQgetvalue(res, row_num, 4));
-    log->message = json_loads(get_str_value(res, row_num, 5), 0, NULL);
+    pho_id_name_set(&log->device, PQgetvalue(res, row_num, 1),
+                    PQgetvalue(res, row_num, 3));
+    pho_id_name_set(&log->medium, PQgetvalue(res, row_num, 2),
+                    PQgetvalue(res, row_num, 3));
+    log->error_number = atoi(PQgetvalue(res, row_num, 4));
+    log->cause = str2operation_type(PQgetvalue(res, row_num, 5));
+    log->message = json_loads(get_str_value(res, row_num, 6), 0, NULL);
     if (log->message == NULL)
         LOG_RETURN(rc = -ENOMEM, "Failed to convert message in log to json");
 
-    return str2timeval(get_str_value(res, row_num, 6), &log->time);
+    return str2timeval(get_str_value(res, row_num, 7), &log->time);
 }
 
 static void logs_result_free(void *item)

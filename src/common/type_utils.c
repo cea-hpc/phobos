@@ -41,13 +41,29 @@
 
 bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2)
 {
-    if (id1->family != id2->family)
-        return false;
-
     if (strcmp(id1->name, id2->name))
         return false;
 
+    if (strcmp(id1->library, id2->library))
+        return false;
+
+    if (id1->family != id2->family)
+        return false;
+
     return true;
+}
+
+guint g_pho_id_hash(gconstpointer v)
+{
+    const struct pho_id *pho_id = (const struct pho_id *) v;
+
+    return g_str_hash(pho_id->name) ^ g_str_hash(pho_id->library) ^
+           g_int_hash(&pho_id->family);
+}
+
+gboolean g_pho_id_equal(gconstpointer p_pho_id_1, gconstpointer p_pho_id_2)
+{
+    return pho_id_equal(p_pho_id_1, p_pho_id_2);
 }
 
 void init_pho_lock(struct pho_lock *lock, char *hostname, int owner,
@@ -78,7 +94,7 @@ void pho_lock_clean(struct pho_lock *lock)
 void dev_info_cpy(struct dev_info *dev_dst, const struct dev_info *dev_src)
 {
     assert(dev_src);
-    dev_dst->rsc.id = dev_src->rsc.id;
+    pho_id_copy(&dev_dst->rsc.id, &dev_src->rsc.id);
     dev_dst->rsc.model = xstrdup_safe(dev_src->rsc.model);
     dev_dst->rsc.adm_status = dev_src->rsc.adm_status;
     dev_dst->path = xstrdup_safe(dev_src->path);

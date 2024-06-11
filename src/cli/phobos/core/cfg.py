@@ -27,13 +27,13 @@ from ctypes import byref, c_char_p
 import errno
 import os
 
-from phobos.core.ffi import LIBPHOBOS
+from phobos.core.ffi import (LIBPHOBOS, ResourceFamily)
 
 def load_file(path=None):
     """Load a configuration file from path"""
     ret = LIBPHOBOS.pho_cfg_init_local(path.encode('utf-8') if path else None)
     ret = abs(ret)
-    if ret != 0 and ret != errno.EALREADY:
+    if ret not in (0, errno.EALREADY):
         raise IOError(ret, "Failed to load configuration file '%s': %d" %
                       (path, os.strerror(ret)))
 
@@ -57,3 +57,18 @@ def get_val(section, name, default=RAISE_ERROR):
                            % (section, name, os.strerror(-ret)))
         return default
     return cfg_value.value.decode('utf-8')
+
+def get_default_library(family):
+    """Return the default library of family"""
+    try:
+        if family == ResourceFamily.RSC_TAPE:
+            return get_val("store", "default_tape_library")
+        elif family == ResourceFamily.RSC_DIR:
+            return get_val("store", "default_dir_library")
+        elif family == ResourceFamily.RSC_RADOS_POOL:
+            return get_val("store", "default_rados_library")
+        else:
+            raise ValueError(f"bad ResourceFamily value {family}")
+    except KeyError:
+        raise KeyError("Default library is not set for '%s', must be defined "
+                       "in Phobos configuration" % family)

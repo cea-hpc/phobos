@@ -89,7 +89,7 @@ static void add_dir_or_drive(struct admin_handle *adm, struct dss_handle *dss,
 
     /* Add dir media */
     if (media) {
-        pho_id_name_set(&media->rsc.id, path);
+        pho_id_name_set(&media->rsc.id, path, "legacy");
         media->rsc.id.family = PHO_RSC_DIR;
         media->rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
         media->fs.type = PHO_FS_POSIX;
@@ -104,7 +104,7 @@ static void add_dir_or_drive(struct admin_handle *adm, struct dss_handle *dss,
     get_dev_adapter(media ? PHO_RSC_DIR : PHO_RSC_TAPE, &adapter);
     ASSERT_RC(ldm_dev_query(adapter, path, &dev_st));
 
-    pho_id_name_set(&dev->rsc.id, dev_st.lds_serial ? : "");
+    pho_id_name_set(&dev->rsc.id, dev_st.lds_serial ? : "", "legacy");
     dev->rsc.id.family = dev_st.lds_family;
     dev->rsc.model = dev_st.lds_model ? xstrdup(dev_st.lds_model) : NULL;
     dev->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
@@ -114,9 +114,9 @@ static void add_dir_or_drive(struct admin_handle *adm, struct dss_handle *dss,
     ldm_dev_state_fini(&dev_st);
 
     /* Add dir device */
-    pho_id_name_set(&dev_id, path);
+    pho_id_name_set(&dev_id, path, "legacy");
     dev_id.family = dev->rsc.id.family;
-    ASSERT_RC(phobos_admin_device_add(adm, &dev_id, 1, false));
+    ASSERT_RC(phobos_admin_device_add(adm, &dev_id, 1, false, "legacy"));
 
     /* Format and unlock media */
     if (media)
@@ -129,7 +129,7 @@ static void add_tape(struct admin_handle *adm, struct dss_handle *dss,
                      struct media_info *media)
 {
     /* Add dir media */
-    pho_id_name_set(&media->rsc.id, tape_id);
+    pho_id_name_set(&media->rsc.id, tape_id, "legacy");
     media->rsc.id.family = PHO_RSC_TAPE;
     media->rsc.model = xstrdup(model);
     media->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;

@@ -38,6 +38,7 @@ struct daemon_params {
     bool is_daemon;                     /*!< True if executed as a daemon. */
     bool use_syslog;                    /*!< True if syslog is requested. */
     char *cfg_path;                     /*!< Configuration file path. */
+    char *library;                      /*!< Targeted library (only for TLC). */
 };
 
 /**

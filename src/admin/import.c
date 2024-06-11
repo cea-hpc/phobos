@@ -88,7 +88,8 @@ static int _dev_media_update(struct dss_handle *dss,
         fields |= ADM_STATUS;
     } else {
         struct pho_log log;
-        struct pho_id dev = { .family = PHO_RSC_TAPE, .name = "" };
+        struct pho_id dev = { .family = PHO_RSC_TAPE, .name = "",
+                              .library = ""};
 
         init_pho_log(&log, &dev, &media_info->rsc.id, PHO_LTFS_DF);
 
@@ -475,8 +476,10 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
 
     rc = get_io_adapter(PHO_FS_LTFS, &ioa);
     if (rc)
-        LOG_RETURN(rc, "Failed to get LTFS I/O adapter to import tape '%s'",
-                   med_id.name);
+        LOG_RETURN(rc,
+                   "Failed to get LTFS I/O adapter to import tape (name '%s', "
+                   "library '%s')",
+                   med_id.name, med_id.library);
 
     iod.iod_size = fsize;
     iod.iod_fd = fd;
@@ -685,8 +688,9 @@ int import_medium(struct admin_handle *adm, struct media_info *medium,
     rc = dss_media_update(&adm->dss, medium, 1, FS_LABEL);
     if (rc)
         LOG_RETURN(rc,
-                   "Failed to update filesystem label of '%s' to '%s' in DSS",
-                   id.name, medium->fs.label);
+                   "Failed to update filesystem label of the tape (name '%s', "
+                   "library '%s') to '%s' in DSS",
+                   id.name, id.library, medium->fs.label);
 
     // One request to read the tape, one request to release it afterwards
     reqs = malloc(2 * sizeof(pho_req_t));
@@ -699,12 +703,14 @@ int import_medium(struct admin_handle *adm, struct media_info *medium,
     reqs[0].ralloc->n_required = 1;
     reqs[0].ralloc->med_ids[0]->family = id.family;
     reqs[0].ralloc->med_ids[0]->name = strdup(id.name);
+    reqs[0].ralloc->med_ids[0]->library = strdup(id.library);
 
     rc = _send_and_receive(&adm->phobosd_comm, &reqs[0], &resp);
     if (rc)
         LOG_GOTO(request_free, rc,
-                 "Failed to send or receive read request for %s",
-                 id.name);
+                 "Failed to send or receive read request for medium (family "
+                 "'%s', name '%s', library '%s')",
+                 rsc_family2str(id.family), id.name, id.library);
 
     if (pho_response_is_error(resp)) {
         rc = resp->error->rc;
@@ -722,11 +728,12 @@ int import_medium(struct admin_handle *adm, struct media_info *medium,
     fs_type = resp->ralloc->media[0]->fs_type;
     addr_type = resp->ralloc->media[0]->addr_type;
 
-    pho_verb("Successfully mounted tape %s to %s",
-             id.name, root_path);
-    pho_debug("fs_type:%s, med_id:%s, addr_type:%s",
+    pho_verb("Successfully mounted tape (name '%s', library '%s') to %s",
+             id.name, id.library, root_path);
+    pho_debug("fs_type:%s, med_id:%s, library:%s, addr_type:%s",
               fs_type2str(fs_type),
               resp->ralloc->media[0]->med_id->name,
+              resp->ralloc->media[0]->med_id->library,
               address_type2str(addr_type));
 
     // Exploration of the tape
@@ -743,6 +750,7 @@ int import_medium(struct admin_handle *adm, struct media_info *medium,
     reqs[1].id = 1;
     reqs[1].release->media[0]->med_id->family = id.family;
     reqs[1].release->media[0]->med_id->name = strdup(id.name);
+    reqs[1].release->media[0]->med_id->library = strdup(id.library);
     reqs[1].release->media[0]->size_written = 0;
     reqs[1].release->media[0]->rc = 0;
     reqs[1].release->media[0]->to_sync = false;

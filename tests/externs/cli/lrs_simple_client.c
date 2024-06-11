@@ -193,6 +193,7 @@ static void send_read(struct pho_comm_info *comm,
     req.ralloc->n_required = n_required;
     for (i = 0; i < n_media; i++) {
         req.ralloc->med_ids[i]->name = xstrdup(medium_name[i]);
+        req.ralloc->med_ids[i]->library = xstrdup("legacy");
         req.ralloc->med_ids[i]->family = family;
     }
 
@@ -233,6 +234,7 @@ static void send_release(struct pho_comm_info *comm,
     for (i = 0; i < n_media; i++) {
         req.release->media[i]->med_id->family = family;
         req.release->media[i]->med_id->name = xstrdup(medium_name[i]);
+        req.release->media[i]->med_id->library = xstrdup("legacy");
         req.release->media[i]->to_sync = true;
     }
 
@@ -267,6 +269,7 @@ static void send_format(struct pho_comm_info *comm,
     req.format->unlock = false;
     req.format->med_id->family = family;
     req.format->med_id->name = xstrdup(medium_name);
+    req.format->med_id->library = xstrdup("legacy");
     send_and_receive(comm, &req, &resp);
     pho_srl_response_free(resp, true);
 }

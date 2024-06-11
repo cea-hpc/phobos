@@ -201,7 +201,6 @@ static int find_read_device(struct io_scheduler *io_sched,
 {
     struct media_info *medium;
     struct pho_id medium_id;
-    const char *name;
     bool sched_ready;
     int rc;
 
@@ -215,10 +214,10 @@ static int find_read_device(struct io_scheduler *io_sched,
      * fetch_and_check_medium_info
      */
     medium = reqc->params.rwalloc.media[index].alloc_medium;
-    name = medium->rsc.id.name;
 
     *dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
-                                name, &sched_ready);
+                                medium->rsc.id.name, medium->rsc.id.library,
+                                &sched_ready);
     if (!*dev) {
         *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
                           select_empty_loaded_mount, 0, &NO_TAGS, medium,
@@ -302,7 +301,8 @@ static int find_write_device(struct io_scheduler *io_sched,
         return rc;
 
     *dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
-                               (*medium)->rsc.id.name, &sched_ready);
+                               (*medium)->rsc.id.name,
+                               (*medium)->rsc.id.library, &sched_ready);
     if (*dev && sched_ready) {
         /* Update the device's medium with *medium which is fresh from the DSS.
          */
@@ -341,11 +341,11 @@ static int find_format_device(struct io_scheduler *io_sched,
                               struct req_container *reqc,
                               struct lrs_dev **dev)
 {
-    const char *name = reqc->req->format->med_id->name;
+    pho_rsc_id_t *med_id = reqc->req->format->med_id;
     bool sched_ready;
 
     *dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
-                                name, &sched_ready);
+                                med_id->name, med_id->library, &sched_ready);
     if (!*dev) {
         *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
                           select_empty_loaded_mount,

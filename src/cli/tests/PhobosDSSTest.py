@@ -74,7 +74,8 @@ class DSSClientTest(unittest.TestCase):
     def test_list_media_by_tags(self):
         """List media with tags."""
         with AdminClient(lrs_required=False) as admclient:
-            blank_medium = MediaInfo(family=PHO_RSC_DIR, name='m0', model=None)
+            blank_medium = MediaInfo(family=PHO_RSC_DIR, name='m0', model=None,
+                                     library='legacy')
             admclient.medium_add([blank_medium], 'POSIX')
             blank_medium.name = 'm1'
             admclient.medium_add([blank_medium], 'POSIX', tags=['foo'])
@@ -112,7 +113,7 @@ class DSSClientTest(unittest.TestCase):
             for _ in range(10):
                 medium = MediaInfo(name='/tmp/test_%d' % randint(0, 1000000),
                                    family=PHO_RSC_DIR, model=None,
-                                   is_adm_locked=False)
+                                   is_adm_locked=False, library='legacy')
 
                 insert_list.append(medium)
 
@@ -133,7 +134,7 @@ class DSSClientTest(unittest.TestCase):
         # Not the best place to test SQL escaping, but most convenient one.
         with AdminClient(lrs_required=False) as admclient:
             medium = MediaInfo(family=PHO_RSC_TAPE, name="TAPE_SQLI_0'; <sqli>",
-                               model="lto8")
+                               model="lto8", library='legacy')
             admclient.medium_add([medium], "LTFS")
 
     def test_manipulate_empty(self): # pylint: disable=no-self-use
@@ -150,7 +151,7 @@ class DSSClientTest(unittest.TestCase):
             # Create a dummy media in db
             medium = MediaInfo(name='/some/path_%d' % randint(0, 1000000),
                                family=PHO_RSC_DIR, model=None,
-                               is_adm_locked=False)
+                               is_adm_locked=False, library='legacy')
             admclient.medium_add([medium], 'POSIX')
 
         with Client() as client:

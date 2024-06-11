@@ -46,8 +46,9 @@ static int ldr_test_dev_adapter_add_pool(void **state)
 
     dev_ids.family = PHO_RSC_RADOS_POOL;
     strcpy(dev_ids.name, "pho_pool_valid");
+    strcpy(dev_ids.library, "legacy");
 
-    rc = phobos_admin_device_add(&adm, &dev_ids, 1, false);
+    rc = phobos_admin_device_add(&adm, &dev_ids, 1, false, "legacy");
 
     phobos_admin_fini(&adm);
 

@@ -30,6 +30,7 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -59,12 +60,27 @@ struct tlc {
     struct dss_handle dss;      /*!< DSS handle, configured from conf */
 };
 
-static int tlc_init(struct tlc *tlc)
+static int tlc_init(struct tlc *tlc, const char *library)
 {
     union pho_comm_addr sock_addr;
     json_t *json_message;
     const char *lib_dev;
+    size_t len_library;
     int rc;
+
+    if (!library)
+        library = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, default_library);
+
+    if (!library)
+        LOG_RETURN(-EINVAL, "No default tape library defined in config");
+
+    len_library = strlen(library);
+    if (len_library > PHO_URI_MAX)
+        LOG_RETURN(-EINVAL, "library name '%s' is too long (> %d)",
+                   library, PHO_URI_MAX);
+
+    memcpy(tlc->lib.name, library, len_library);
+    tlc->lib.name[len_library] = '\0';
 
     /* open TLC lib file descriptor and load library cache */
     /* For now, one single configurable path to library device.
@@ -568,7 +584,7 @@ int main(int argc, char **argv)
     rc = daemon_init(param);
 
     if (!rc)
-        rc = tlc_init(&tlc);
+        rc = tlc_init(&tlc, param.library);
 
     if (param.is_daemon)
         daemon_notify_init_done(write_pipe_from_child_to_father, &rc);

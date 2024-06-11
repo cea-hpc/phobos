@@ -29,6 +29,7 @@ import os
 import psycopg2
 
 from phobos.core import cfg
+from phobos.core.ffi import (LIBPHOBOS, ResourceFamily)
 
 ORDERED_SCHEMAS = ["1.1", "1.2", "1.91", "1.92", "1.93", "1.95", "2.0", "2.1"]
 FUTURE_SCHEMAS = []
@@ -546,9 +547,14 @@ class Migrator:
             self.convert_schema_1_95_to_2_0()
 
     def convert_schema_2_0_to_2_1(self):
-        """DB schema changes: add times to object tables"""
+        """DB schema changes: add times to object tables and library to
+           device and media"""
+        default_tape_library = cfg.get_default_library(ResourceFamily.RSC_TAPE)
+        default_dir_library = cfg.get_default_library(ResourceFamily.RSC_DIR)
+        default_rados_library = cfg.get_default_library(
+            ResourceFamily.RSC_RADOS_POOL)
         cur = self.conn.cursor()
-        cur.execute("""
+        cur.execute(f"""
             -- add times to object tables
             ALTER TABLE object
                 ADD creation_time timestamp DEFAULT now(),
@@ -557,6 +563,59 @@ class Migrator:
             ALTER TABLE deprecated_object
                 ADD creation_time timestamp DEFAULT now(),
                 ADD access_time timestamp DEFAULT now();
+
+            -- add 'library' column to device table
+            ALTER TABLE device ADD library varchar(255) NOT NULL
+                default 'legacy';
+            UPDATE device SET library = '{default_tape_library}'
+                WHERE family = 'tape';
+            UPDATE device SET library = '{default_dir_library}'
+                WHERE family = 'dir';
+            UPDATE device SET library = '{default_rados_library}'
+                WHERE family = 'rados_pool';
+            ALTER TABLE device ALTER COLUMN library DROP DEFAULT;
+            ALTER TABLE device DROP CONSTRAINT device_id_key;
+            ALTER TABLE device DROP CONSTRAINT device_pkey;
+            ALTER TABLE device ADD PRIMARY KEY (family, id, library);
+
+            -- add 'library' column to media table
+            ALTER TABLE media ADD library varchar(255) NOT NULL
+                default 'legacy';
+            UPDATE media SET library = '{default_tape_library}'
+                WHERE family = 'tape';
+            UPDATE media SET library = '{default_dir_library}'
+                WHERE family = 'dir';
+            UPDATE media SET library = '{default_rados_library}'
+                WHERE family = 'rados_pool';
+            ALTER TABLE media ALTER COLUMN library DROP DEFAULT;
+            ALTER TABLE media DROP CONSTRAINT media_id_key;
+            ALTER TABLE media DROP CONSTRAINT media_pkey;
+            ALTER TABLE media ADD PRIMARY KEY (family, id, library);
+
+            -- add 'library' column to extent table
+            ALTER TABLE extent ADD medium_library varchar(255) NOT NULL
+                default 'legacy';
+            UPDATE extent SET medium_library = '{default_tape_library}'
+                WHERE medium_family = 'tape';
+            UPDATE extent SET medium_library = '{default_dir_library}'
+                WHERE medium_family = 'dir';
+            UPDATE extent SET medium_library = '{default_rados_library}'
+                WHERE medium_family = 'rados_pool';
+            ALTER TABLE extent ALTER COLUMN medium_library DROP DEFAULT;
+
+            -- add 'library' column to log table
+            ALTER TABLE logs ADD library varchar(255) NOT NULL default 'legacy';
+            UPDATE logs SET library = '{default_tape_library}'
+                WHERE family = 'tape';
+            UPDATE logs SET library = '{default_dir_library}'
+                WHERE family = 'dir';
+            UPDATE logs SET library = '{default_rados_library}'
+                WHERE family = 'rados_pool';
+            ALTER TABLE logs ALTER COLUMN library DROP DEFAULT;
+
+            -- resize 'device' and 'medium' to 255 into logs
+            ALTER TABLE logs ALTER COLUMN device TYPE varchar(255);
+            ALTER TABLE logs ALTER COLUMN medium TYPE varchar(255);
 
             -- update current schema version
             UPDATE schema_info SET version = '2.1';

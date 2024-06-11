@@ -205,7 +205,7 @@ static void init_release_container(struct req_container *req_cont)
             tosync_media[tosync_media_index].written_size = media->size_written;
             tosync_media[tosync_media_index].client_rc = media->rc;
             pho_id_name_set(&tosync_media[tosync_media_index].medium,
-                            media->med_id->name);
+                            media->med_id->name, media->med_id->library);
 
             tosync_media_index++;
         } else {
@@ -213,7 +213,7 @@ static void init_release_container(struct req_container *req_cont)
                 (enum rsc_family)media->med_id->family;
             nosync_media[tosync_media_index].written_size = media->size_written;
             pho_id_name_set(&nosync_media[nosync_media_index].medium,
-                            media->med_id->name);
+                            media->med_id->name, media->med_id->library);
 
             nosync_media_index++;
         }
@@ -509,21 +509,22 @@ static int release_medium(struct lrs_sched *sched,
 
     /* find the corresponding device */
     dev = search_loaded_medium(sched->devices.ldh_devices,
-                               release->med_id->name);
+                               release->med_id->name, release->med_id->library);
     if (!dev) {
         *req_rc = -ENODEV;
         pho_error(*req_rc,
-                  "Unable to find loaded device of the medium '%s' to release",
-                  release->med_id->name);
+                  "Unable to find loaded device of the medium (name '%s', "
+                  "library '%s') to release",
+                  release->med_id->name, release->med_id->library);
         return 0;
     } else if (!dev_is_release_ready(dev)) {
         pho_error(0, /* Do not display a POSIX error in the logs, as it would
                       * be confusing to see.
                       */
-                  "device '%s' was stopped before the medium '%s' was "
-                  "released",
+                  "device '%s' was stopped before the medium (name '%s', "
+                  "library '%s') was released",
                   dev->ld_dss_dev_info->rsc.id.name,
-                  release->med_id->name);
+                  release->med_id->name, release->med_id->library);
         *req_rc = -ESHUTDOWN;
         return 0;
     }

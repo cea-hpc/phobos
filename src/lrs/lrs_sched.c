@@ -358,8 +358,9 @@ static int sched_fill_media_info(struct lock_handle *lock_handle,
 {
     int rc;
 
-    pho_debug("Retrieving media info for %s '%s'",
-              rsc_family2str(id->family), id->name);
+    pho_debug("Retrieving media info for (family '%s', name '%s', library "
+              "'%s')",
+              rsc_family2str(id->family), id->name, id->library);
 
     *pmedia = lrs_medium_acquire(id);
     if (!*pmedia)
@@ -373,15 +374,16 @@ static int sched_fill_media_info(struct lock_handle *lock_handle,
     if (rc) {
         if (rc == -EALREADY)
             pho_error(rc,
-                      "Media '%s' is locked by (hostname: %s, owner: %d)",
-                      id->name, (*pmedia)->lock.hostname,
-                      (*pmedia)->lock.owner);
+                      "Media (family '%s', name '%s', library '%s') is locked "
+                      "by (hostname: %s, owner: %d)",
+                      rsc_family2str(id->family), id->name, id->library,
+                      (*pmedia)->lock.hostname, (*pmedia)->lock.owner);
         else
             pho_error(rc,
-                      "Error while checking media '%s' locked with hostname "
-                      "'%s' and owner '%d'",
-                      id->name, (*pmedia)->lock.hostname,
-                      (*pmedia)->lock.owner);
+                      "Error while checking media (family '%s', name '%s', "
+                      "library '%s') locked with hostname '%s' and owner '%d'",
+                      rsc_family2str(id->family), id->name, id->library,
+                      (*pmedia)->lock.hostname, (*pmedia)->lock.owner);
     }
 
 log:
@@ -440,8 +442,10 @@ int sched_fill_dev_info(struct lrs_sched *sched, struct lib_handle *lib_hdl,
     rc = ldm_lib_drive_lookup(lib_hdl, devi->rsc.id.name,
                               &dev->ld_lib_dev_info);
     if (rc) {
-        pho_warn("Failed to query the library about device '%s'",
-                 devi->rsc.id.name);
+        pho_warn("Failed to query the library about device (family '%s', name "
+                 "'%s', library '%s')",
+                 rsc_family2str(devi->rsc.id.family), devi->rsc.id.name,
+                 devi->rsc.id.library);
         return rc;
     }
 
@@ -453,25 +457,31 @@ int sched_fill_dev_info(struct lrs_sched *sched, struct lib_handle *lib_hdl,
         dev->ld_op_status = PHO_DEV_OP_ST_LOADED;
         medium_id = &dev->ld_lib_dev_info.ldi_medium_id;
 
-        pho_debug("Device '%s' (S/N '%s') contains medium '%s'",
-                  dev->ld_dev_path, devi->rsc.id.name, medium_id->name);
+        pho_debug("Device '%s' (S/N '%s') contains medium (family '%s', name "
+                  "'%s', library '%s')", dev->ld_dev_path, devi->rsc.id.name,
+                  rsc_family2str(medium_id->family), medium_id->name,
+                  medium_id->library);
 
         /* get media info for loaded drives */
         rc = sched_fill_media_info(&sched->lock_handle, &medium, medium_id);
         if (rc) {
             if (rc == -ENXIO)
                 pho_error(rc,
-                          "Device '%s' (S/N '%s') contains medium '%s', but "
-                          "this medium cannot be found", dev->ld_dev_path,
-                          devi->rsc.id.name, medium_id->name);
+                          "Device '%s' (S/N '%s') contains medium (family "
+                          "'%s', name '%s', library '%s'), but this medium "
+                          "cannot be found",
+                          dev->ld_dev_path, devi->rsc.id.name,
+                          rsc_family2str(medium_id->family), medium_id->name,
+                          medium_id->library);
 
             else if (rc == -EALREADY)
                 pho_error(rc,
                           "Device '%s' (S/N '%s') is owned by host %s but "
-                          "contains medium '%s' which is locked by an other "
-                          "hostname %s", dev->ld_dev_path, devi->rsc.id.name,
-                           devi->host, medium_id->name,
-                           medium->lock.hostname);
+                          "contains medium (family '%s', name '%s', library "
+                          "'%s') which is locked by an other hostname %s",
+                          dev->ld_dev_path, devi->rsc.id.name, devi->host,
+                          rsc_family2str(medium_id->family), medium_id->name,
+                          medium_id->library, medium->lock.hostname);
 
             lrs_medium_release(medium);
             return rc;
@@ -483,11 +493,15 @@ int sched_fill_dev_info(struct lrs_sched *sched, struct lib_handle *lib_hdl,
             rc = take_and_update_lock(&sched->sched_thread.dss, DSS_MEDIA,
                                       dev->ld_dss_media_info,
                                       &dev->ld_dss_media_info->lock);
-            if (rc)
+            if (rc) {
+                const struct pho_id *med_id = lrs_dev_med_id(dev);
+
                 LOG_RETURN(rc,
-                           "Unable to lock the media '%s' loaded in an owned "
-                           "device '%s'", dev->ld_dss_media_info->rsc.id.name,
-                           dev->ld_dev_path);
+                           "Unable to lock the media (family '%s', name '%s', "
+                           "library '%s') loaded in an owned device '%s'",
+                           rsc_family2str(med_id->family), med_id->name,
+                           med_id->library, dev->ld_dev_path);
+            }
         }
 
         /* See if the device is currently mounted */
@@ -527,7 +541,6 @@ int sched_fill_dev_info(struct lrs_sched *sched, struct lib_handle *lib_hdl,
 static int sched_load_dev_state(struct lrs_sched *sched)
 {
     bool clean_devices = false;
-    struct lib_handle lib_hdl;
     int rc;
     int i;
 
@@ -539,15 +552,20 @@ static int sched_load_dev_state(struct lrs_sched *sched)
         return -ENXIO;
     }
 
-    /* get a handle to the library to query it */
-    rc = wrap_lib_open(sched->family, &lib_hdl);
-    if (rc)
-        LOG_RETURN(rc, "Error while loading devices when opening library");
-
     for (i = 0 ; i < sched->devices.ldh_devices->len; i++) {
+        struct lib_handle lib_hdl;
         struct lrs_dev *dev;
 
+
         dev = lrs_dev_hdl_get(&sched->devices, i);
+
+        /* get a handle to the library to query it */
+        rc = wrap_lib_open(sched->family, dev->ld_dss_dev_info->rsc.id.library,
+                           &lib_hdl);
+        if (rc) {
+            pho_error(rc, "Error while loading devices when opening library");
+            continue;
+        }
 
         MUTEX_LOCK(&dev->ld_mutex);
         rc = sched_fill_dev_info(sched, &lib_hdl, dev);
@@ -559,15 +577,17 @@ static int sched_load_dev_state(struct lrs_sched *sched)
         } else {
             clean_devices = true;
         }
+
+        /* close handle to the library */
+        rc = ldm_lib_close(&lib_hdl);
+        if (rc)
+            pho_error(rc,
+                      "Error while closing the library handle after loading "
+                      "device state");
+
         MUTEX_UNLOCK(&dev->ld_mutex);
     }
 
-    /* close handle to the library */
-    rc = ldm_lib_close(&lib_hdl);
-    if (rc)
-        LOG_RETURN(rc,
-                   "Error while closing the library handle after loading "
-                   "device state");
 
     if (!clean_devices)
         LOG_RETURN(-ENXIO, "No functional device found");
@@ -1107,7 +1127,7 @@ int sched_select_medium(struct io_scheduler *io_sched,
 
         /* already loaded and in use ? */
         dev = search_in_use_medium(io_sched->io_sched_hdl->global_device_list,
-                                   curr->rsc.id.name,
+                                   curr->rsc.id.name, curr->rsc.id.library,
                                    &sched_ready);
         if (dev && (!sched_ready ||
                     /* we cannot use a medium that doesn't belong to the write
@@ -1141,17 +1161,19 @@ int sched_select_medium(struct io_scheduler *io_sched,
         chosen_media = whole_media_best;
     } else if (split_media_best != NULL) {
         chosen_media = split_media_best;
-        pho_info("Split %zd required_size on %zd avail size on %s medium",
+        pho_info("Split %zd required_size on %zd avail size on medium (family "
+                 "'%s', name '%s', library '%s')",
                  required_size, chosen_media->stats.phys_spc_free,
-                 chosen_media->rsc.id.name);
+                 rsc_family2str(chosen_media->rsc.id.family),
+                 chosen_media->rsc.id.name, chosen_media->rsc.id.library);
     } else {
         pho_debug("No medium available, wait for one");
         GOTO(free_res, rc = -EAGAIN);
     }
 
-    pho_verb("Selected %s '%s': %zd bytes free", rsc_family2str(family),
-             chosen_media->rsc.id.name,
-             chosen_media->stats.phys_spc_free);
+    pho_verb("Selected medium (family '%s', name '%s', library '%s'): %zd "
+             "bytes free", rsc_family2str(family), chosen_media->rsc.id.name,
+             chosen_media->rsc.id.library, chosen_media->stats.phys_spc_free);
 
     /* Don't rely on existing lock for future use */
     pho_lock_clean(&chosen_media->lock);
@@ -1179,31 +1201,41 @@ static bool medium_is_write_compatible(struct media_info *medium,
                                        bool empty_medium)
 {
     if (medium->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED) {
-        pho_debug("Media '%s' is not unlocked but '%s'",
-                  medium->rsc.id.name,
+        pho_debug("Media (family '%s', name '%s', library '%s') is not "
+                  "unlocked but '%s'",
+                  rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
+                  medium->rsc.id.library,
                   rsc_adm_status2str(medium->rsc.adm_status));
         return false;
     }
 
     if (empty_medium && medium->fs.status != PHO_FS_STATUS_EMPTY) {
-        pho_debug("Media '%s' is not empty", medium->rsc.id.name);
+        pho_debug("Media (family '%s', name '%s', library '%s') is not empty",
+                  rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
+                  medium->rsc.id.library);
         return false;
     }
 
     if (medium->fs.status == PHO_FS_STATUS_FULL) {
-        pho_debug("Media '%s' is full", medium->rsc.id.name);
+        pho_debug("Media (family '%s', name '%s', library '%s') is full",
+                  rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
+                  medium->rsc.id.library);
         return false;
     }
 
     if (!medium->flags.put) {
-        pho_debug("Media '%s' has a false put operation flag",
-                  medium->rsc.id.name);
+        pho_debug("Media (family '%s', name '%s', library '%s') has a false "
+                  "put operation flag",
+                  rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
+                  medium->rsc.id.library);
         return false;
     }
 
     if (required_tags->n_tags > 0 && !tags_in(&medium->tags, required_tags)) {
-        pho_debug("Media '%s' does not match required tags",
-                  medium->rsc.id.name);
+        pho_debug("Media (family '%s', name '%s', library '%s') does not match "
+                  "required tags",
+                  rsc_family2str(medium->rsc.id.family), medium->rsc.id.name,
+                  medium->rsc.id.library);
         return false;
     }
 
@@ -1498,8 +1530,8 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
             if (j == not_selected)
                 continue;
 
-            if (!strcmp(dev->ld_dss_dev_info->rsc.id.name,
-                        selected_devs[j]->ld_dss_dev_info->rsc.id.name)) {
+            if (pho_id_equal(&dev->ld_dss_dev_info->rsc.id,
+                             &selected_devs[j]->ld_dss_dev_info->rsc.id)) {
                 is_already_selected = true;
                 break;
             }
@@ -1514,8 +1546,8 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
             /* DIR or RADOS resource */
             if (pmedia->rsc.id.family == PHO_RSC_DIR ||
                 pmedia->rsc.id.family == PHO_RSC_RADOS_POOL) {
-                if (strcmp(dev->ld_dss_dev_info->rsc.id.name,
-                           pmedia->rsc.id.name))
+                if (pho_id_equal(&dev->ld_dss_dev_info->rsc.id,
+                                 &pmedia->rsc.id))
                     continue;
 
                 return true;
@@ -1540,13 +1572,13 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
 /******************************************************************************/
 
 static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
-                            const char *name)
+                            const char *name, const char *library)
 {
     struct lrs_dev *device = NULL;
     struct lib_handle lib_hdl;
     int rc = 0;
 
-    rc = lrs_dev_hdl_add(sched, &sched->devices, name);
+    rc = lrs_dev_hdl_add(sched, &sched->devices, name, library);
     if (rc)
         return rc;
 
@@ -1554,7 +1586,7 @@ static int sched_device_add(struct lrs_sched *sched, enum rsc_family family,
                              sched->devices.ldh_devices->len - 1);
 
     /* get a handle to the library to query it */
-    rc = wrap_lib_open(family, &lib_hdl);
+    rc = wrap_lib_open(family, library, &lib_hdl);
     if (rc)
         goto dev_del;
 
@@ -1580,7 +1612,7 @@ dev_del:
  * If the device cannont be removed, will try again later by returning -EAGAIN.
  */
 static int sched_device_retry_lock(struct lrs_sched *sched, const char *name,
-                                   struct lrs_dev *dev_ptr)
+                                   const char *library, struct lrs_dev *dev_ptr)
 {
     int rc;
 
@@ -1590,7 +1622,8 @@ static int sched_device_retry_lock(struct lrs_sched *sched, const char *name,
 
     io_sched_remove_device(&sched->io_sched_hdl, dev_ptr);
 
-    pho_verb("Removed locked device '%s' from the local memory", name);
+    pho_verb("Removed locked device (name '%s', library '%s') from the local "
+             "memory", name, library);
 
     return 0;
 }
@@ -1603,7 +1636,7 @@ static int sched_device_retry_lock(struct lrs_sched *sched, const char *name,
  * will try again later, by returning -EAGAIN.
  */
 static int sched_device_lock(struct lrs_sched *sched, const char *name,
-                             struct lrs_dev **dev_ptr)
+                             const char *library, struct lrs_dev **dev_ptr)
 {
     struct lrs_dev *dev;
     int rc;
@@ -1612,7 +1645,8 @@ static int sched_device_lock(struct lrs_sched *sched, const char *name,
     for (i = 0; i < sched->devices.ldh_devices->len; ++i) {
         dev = lrs_dev_hdl_get(&sched->devices, i);
 
-        if (!strcmp(name, dev->ld_dss_dev_info->rsc.id.name)) {
+        if (!strcmp(name, dev->ld_dss_dev_info->rsc.id.name) &&
+            !strcmp(library, dev->ld_dss_dev_info->rsc.id.library)) {
             rc = lrs_dev_hdl_trydel(&sched->devices, i);
             if (rc == -EAGAIN) {
                 *dev_ptr = dev;
@@ -1621,8 +1655,8 @@ static int sched_device_lock(struct lrs_sched *sched, const char *name,
             io_sched_remove_device(&sched->io_sched_hdl, dev);
 
             if (!rc)
-                pho_verb("Removed locked device '%s' from the local memory",
-                         name);
+                pho_verb("Removed locked device (name '%s', library '%s') from "
+                         "the local memory", name, library);
 
             return rc;
         }
@@ -1638,7 +1672,8 @@ static int sched_device_lock(struct lrs_sched *sched, const char *name,
  * Update local admin status of device to 'unlocked',
  * or fetch it from the database if unknown
  */
-static int sched_device_unlock(struct lrs_sched *sched, const char *name)
+static int sched_device_unlock(struct lrs_sched *sched, const char *name,
+                               const char *library)
 {
     struct lrs_dev *dev;
     int i;
@@ -1646,17 +1681,18 @@ static int sched_device_unlock(struct lrs_sched *sched, const char *name)
     for (i = 0; i < sched->devices.ldh_devices->len; ++i) {
         dev = lrs_dev_hdl_get(&sched->devices, i);
 
-        if (!strcmp(name, dev->ld_dss_dev_info->rsc.id.name)) {
+        if (!strcmp(name, dev->ld_dss_dev_info->rsc.id.name) &&
+            !strcmp(library, dev->ld_dss_dev_info->rsc.id.library)) {
             pho_verb("Updating device '%s' state to unlocked", name);
             dev->ld_dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
             return 0;
         }
     }
 
-    pho_verb("Cannot find local device info for '%s', will fetch it "
-             "from the database", name);
+    pho_verb("Cannot find local device info for (name '%s', library '%s', will "
+             "fetch it from the database", name, library);
 
-    return sched_device_add(sched, sched->family, name);
+    return sched_device_add(sched, sched->family, name, library);
 }
 
 /** remove written_size from phys_spc_free in media_info and DSS */
@@ -1751,7 +1787,7 @@ static bool medium_is_loaded(struct lrs_dev *dev, struct media_info *medium)
     MUTEX_UNLOCK(&dev->ld_mutex);
 
     loaded = loaded_medium && (dev_is_loaded(dev) || dev_is_mounted(dev)) &&
-        !strcmp(loaded_medium->rsc.id.name, medium->rsc.id.name);
+             pho_id_equal(&loaded_medium->rsc.id, &medium->rsc.id);
 
     if (loaded_medium)
         lrs_medium_release(loaded_medium);
@@ -1807,8 +1843,11 @@ lock_race_retry:
         rc = ensure_medium_lock(&sched->lock_handle, *alloc_medium);
 
         if (rc) {
-            pho_debug("failed to lock media '%s' for write, looking for "
-                      "another one", (*alloc_medium)->rsc.id.name);
+            pho_debug("failed to lock media (family '%s', name '%s', library "
+                      "'%s') for write, looking for another one",
+                      rsc_family2str((*alloc_medium)->rsc.id.family),
+                      (*alloc_medium)->rsc.id.name,
+                      (*alloc_medium)->rsc.id.library);
             *alloc_medium = NULL;
             dev = NULL;
             goto lock_race_retry;
@@ -1914,30 +1953,42 @@ static int check_medium_permission_and_status(struct req_container *reqc,
     if (medium->fs.status == PHO_FS_STATUS_IMPORTING &&
         !pho_request_is_read(reqc->req))
         LOG_RETURN(-EINVAL,
-                   "Medium %s is being imported. Can only read from it.",
-                   medium->rsc.id.name);
+                   "Medium (family '%s', name '%s', library '%s') is being "
+                   "imported. Can only read from it.",
+                   rsc_family2str(medium->rsc.id.family),
+                   medium->rsc.id.name, medium->rsc.id.library);
 
     if (medium->fs.status != PHO_FS_STATUS_IMPORTING &&
         pho_request_is_read(reqc->req)) {
         if (!medium->flags.get)
-            LOG_RETURN(-EPERM, "'%s' get flag is false",
-                       medium->rsc.id.name);
+            LOG_RETURN(-EPERM, "medium (family '%s', name '%s', library '%s') "
+                       "get flag is false",
+                       rsc_family2str(medium->rsc.id.family),
+                       medium->rsc.id.name, medium->rsc.id.library);
         if (medium->fs.status == PHO_FS_STATUS_BLANK)
-            LOG_RETURN(-EINVAL, "Cannot do I/O on unformatted medium '%s'",
-                       medium->rsc.id.name);
+            LOG_RETURN(-EINVAL,
+                       "Cannot do I/O on unformatted medium (family '%s', name "
+                       "'%s', library '%s')",
+                       rsc_family2str(medium->rsc.id.family),
+                       medium->rsc.id.name, medium->rsc.id.library);
         if (medium->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
             LOG_RETURN(-EPERM,
-                       "Cannot read on medium '%s' with adm_status '%s'",
-                       medium->rsc.id.name,
+                       "Cannot read on medium (family '%s', name '%s', library "
+                       "'%s') with adm_status '%s'",
+                       rsc_family2str(medium->rsc.id.family),
+                       medium->rsc.id.name, medium->rsc.id.library,
                        rsc_adm_status2str(medium->rsc.adm_status));
     } else if (pho_request_is_format(reqc->req) &&
                (medium->rsc.id.family != PHO_RSC_TAPE ||
                 !reqc->req->format->force)) {
         if (medium->fs.status != PHO_FS_STATUS_BLANK)
             LOG_RETURN(-EINVAL,
-                       "Medium '%s' has a fs.status '%s', expected "
-                       "PHO_FS_STATUS_BLANK to be formatted.",
-                       medium->rsc.id.name, fs_status2str(medium->fs.status));
+                       "Medium (family '%s', name '%s', library '%s') has a "
+                       "fs.status '%s', expected PHO_FS_STATUS_BLANK to be "
+                       "formatted.",
+                       rsc_family2str(medium->rsc.id.family),
+                       medium->rsc.id.name, medium->rsc.id.library,
+                       fs_status2str(medium->fs.status));
     }
 
     return 0;
@@ -1951,23 +2002,13 @@ int fetch_and_check_medium_info(struct lock_handle *lock_handle,
                                 struct media_info **target_medium)
 {
     struct media_info *medium;
-    PhoResourceId *medium_id;
     struct pho_id sm_id;
     int rc;
 
     if (!m_id)
         m_id = &sm_id;
 
-    if (pho_request_is_format(reqc->req))
-        medium_id = reqc->req->format->med_id;
-    else if (pho_request_is_read(reqc->req))
-        medium_id = reqc->req->ralloc->med_ids[index];
-    else
-        return -EINVAL;
-
-    m_id->family = (enum rsc_family) medium_id->family;
-    pho_id_name_set(m_id, medium_id->name);
-
+    reqc_pho_id_from_index(reqc, index, m_id);
     rc = sched_fill_media_info(lock_handle, &medium, m_id);
     if (rc)
         return rc;
@@ -2231,8 +2272,11 @@ static int sched_handle_format(struct lrs_sched *sched,
                                      reqc_get_medium_to_alloc(reqc, 0));
     if (rc == -EALREADY)
         LOG_GOTO(err_out, rc = -EBUSY,
-                 "Medium to format '%s' is already locked",
-                 reqc->req->format->med_id->name);
+                 "Medium to format (family '%s', name '%s', library '%s') is "
+                 "already locked",
+                 rsc_family2str(reqc->req->format->med_id->family),
+                 reqc->req->format->med_id->name,
+                 reqc->req->format->med_id->library);
     if (rc)
         goto err_out;
 
@@ -2243,8 +2287,9 @@ static int sched_handle_format(struct lrs_sched *sched,
     if (!format_medium_add(&sched->ongoing_format,
                            reqc->params.format.medium_to_format))
         LOG_GOTO(err_out, rc = -EINVAL,
-                 "trying to format the medium '%s' while it is already being "
-                 "formatted", m.name);
+                 "trying to format the medium (family '%s', name '%s', library "
+                 "'%s', while it is already being formatted",
+                 rsc_family2str(m.family), m.name, m.library);
 
     rc = io_sched_get_device_medium_pair(&sched->io_sched_hdl, reqc, &device,
                                          NULL);
@@ -2258,20 +2303,26 @@ static int sched_handle_format(struct lrs_sched *sched,
               reqc->params.format.medium_to_format);
         if (!suitable_devices)
             LOG_GOTO(remove_format_err_out, rc = -ENODEV,
-                     "No device can format medium '%s', will abort request",
-                     m.name);
+                     "No device can format medium (family '%s', name '%s', "
+                     "library '%s'), will abort request",
+                     rsc_family2str(m.family), m.name, m.library);
 
-        pho_verb("No device available to format '%s', will try again later",
-                 m.name);
+        pho_verb("No device available to format medium (family '%s', name "
+                 "'%s', library '%s'), will try again later",
+                 rsc_family2str(m.family), m.name, m.library);
         format_medium_remove(&sched->ongoing_format,
                              reqc->params.format.medium_to_format);
 
         return -EAGAIN;
     } else if (!dev_is_sched_ready(device)) {
         LOG_GOTO(remove_format_err_out, rc = -EINVAL,
-                 "medium %s is already loaded into a busy device %s, "
-                 "unexpected state, will abort request",
-                 m.name, device->ld_dss_dev_info->rsc.id.name);
+                 "medium (family '%s', name '%s', library '%s') is already "
+                 "loaded into a busy device (family '%s', name '%s', library "
+                 "'%s'), unexpected state, will abort request",
+                 rsc_family2str(m.family), m.name, m.library,
+                 rsc_family2str(device->ld_dss_dev_info->rsc.id.family),
+                 device->ld_dss_dev_info->rsc.id.name,
+                 device->ld_dss_dev_info->rsc.id.library);
     }
 
     /* lock medium */
@@ -2282,7 +2333,9 @@ static int sched_handle_format(struct lrs_sched *sched,
 
     if (rc)
         LOG_GOTO(remove_format_err_out, rc,
-                 "Unable to lock the media '%s' to format it", m.name);
+                 "Unable to lock the medium (family '%s', name '%s', library "
+                 "'%s') to format it",
+                 rsc_family2str(m.family), m.name, m.library);
     /*
      * dev_picker set the ld_ongoing_scheduled flag to true when a device
      * is selected. This prevents selecting the same device again for an
@@ -2317,8 +2370,9 @@ remove_format_err_out:
 
 err_out:
     if (rc != -EAGAIN) {
-        pho_error(rc, "format: failed to schedule format for medium '%s'",
-                  m.name);
+        pho_error(rc, "format: failed to schedule format for medium (family "
+                  "'%s', name '%s', library '%s')",
+                  rsc_family2str(m.family), m.name, m.library);
         queue_error_response(sched->response_queue, rc, reqc);
 
         rc = io_sched_remove_request(&sched->io_sched_hdl, reqc);
@@ -2359,12 +2413,13 @@ static void queue_notify_response(struct lrs_sched *sched,
     resp->req_id = reqc->req->id;
     resp->notify->rsrc_id->family = nreq->rsrc_id->family;
     resp->notify->rsrc_id->name = xstrdup(nreq->rsrc_id->name);
+    resp->notify->rsrc_id->library = xstrdup(nreq->rsrc_id->library);
 
     tsqueue_push(sched->response_queue, respc);
 }
 
 static int sched_medium_update(struct lrs_sched *sched,
-                               const char *name)
+                               const char *name, const char *library)
 {
     struct media_info *medium = NULL;
     struct media_info *old_medium;
@@ -2373,13 +2428,14 @@ static int sched_medium_update(struct lrs_sched *sched,
     int rc;
 
     id.family = sched->family;
-    pho_id_name_set(&id, name);
+    pho_id_name_set(&id, name, library);
 
     medium = lrs_medium_update(&id);
     if (!medium)
         return -errno;
 
-    device = search_loaded_medium_keep_lock(sched->devices.ldh_devices, name);
+    device = search_loaded_medium_keep_lock(sched->devices.ldh_devices, name,
+                                            library);
     if (!device)
         GOTO(release, rc = 0);
 
@@ -2407,29 +2463,34 @@ static int sched_handle_notify(struct lrs_sched *sched,
     struct lrs_dev *dev;
     int rc = 0;
 
-    pho_debug("Notify: device '%s'", nreq->rsrc_id->name);
+    pho_debug("Notify: device (name '%s', library '%s')",
+              nreq->rsrc_id->name, nreq->rsrc_id->library);
 
     switch (nreq->op) {
     case PHO_NTFY_OP_DEVICE_ADD:
         rc = sched_device_add(sched, (enum rsc_family)nreq->rsrc_id->family,
-                              nreq->rsrc_id->name);
+                              nreq->rsrc_id->name, nreq->rsrc_id->library);
         break;
     case PHO_NTFY_OP_DEVICE_LOCK:
         dev = reqc->params.notify.notified_device;
 
         if (dev == NULL) {
-            rc = sched_device_lock(sched, nreq->rsrc_id->name, &dev);
+            rc = sched_device_lock(sched, nreq->rsrc_id->name,
+                                   nreq->rsrc_id->library, &dev);
             if (rc == -EAGAIN)
                 reqc->params.notify.notified_device = dev;
         } else {
-            rc = sched_device_retry_lock(sched, nreq->rsrc_id->name, dev);
+            rc = sched_device_retry_lock(sched, nreq->rsrc_id->name,
+                                         nreq->rsrc_id->library, dev);
         }
         break;
     case PHO_NTFY_OP_DEVICE_UNLOCK:
-        rc = sched_device_unlock(sched, nreq->rsrc_id->name);
+        rc = sched_device_unlock(sched, nreq->rsrc_id->name,
+                                 nreq->rsrc_id->library);
         break;
     case PHO_NTFY_OP_MEDIUM_UPDATE:
-        rc = sched_medium_update(sched, nreq->rsrc_id->name);
+        rc = sched_medium_update(sched, nreq->rsrc_id->name,
+                                 nreq->rsrc_id->library);
         break;
     default:
         LOG_GOTO(err, rc = -EINVAL, "The requested operation is not "
@@ -2438,7 +2499,8 @@ static int sched_handle_notify(struct lrs_sched *sched,
 
     if (!nreq->wait) {
         if (rc != 0 && rc != -EAGAIN) {
-            pho_error(rc, "Notify failed for '%s'", nreq->rsrc_id->name);
+            pho_error(rc, "Notify failed for (name '%s', library '%s')",
+                      nreq->rsrc_id->name, nreq->rsrc_id->library);
             rc = 0;
         }
 
@@ -2485,6 +2547,8 @@ void rwalloc_cancel_DONE_devices(struct req_container *reqc)
                 wresp->root_path = NULL;
                 free(wresp->med_id->name);
                 wresp->med_id->name = NULL;
+                free(wresp->med_id->library);
+                wresp->med_id->library = NULL;
             } else {
                 pho_resp_read_elt_t *rresp = resp->ralloc->media[i];
 
@@ -2492,6 +2556,8 @@ void rwalloc_cancel_DONE_devices(struct req_container *reqc)
                 rresp->root_path = NULL;
                 free(rresp->med_id->name);
                 rresp->med_id->name = NULL;
+                free(rresp->med_id->library);
+                rresp->med_id->library = NULL;
             }
         }
     }

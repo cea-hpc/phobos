@@ -1,3 +1,25 @@
+/* -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+ * vim:expandtab:shiftwidth=4:tabstop=4:
+ */
+/*
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
+ *
+ *  This file is part of Phobos.
+ *
+ *  Phobos is free software: you can redistribute it and/or modify it under
+ *  the terms of the GNU Lesser General Public License as published by
+ *  the Free Software Foundation, either version 2.1 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Phobos is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Lesser General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Lesser General Public License
+ *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "lrs_sched.h"
 #include "lrs_utils.h"
 #include "pho_common.h"
@@ -30,7 +52,7 @@ struct media_info **reqc_get_medium_to_alloc(struct req_container *reqc,
     return NULL;
 }
 
-static char *get_sub_request_medium_name(struct sub_request *sub_request)
+static struct pho_id *get_sub_request_medium(struct sub_request *sub_request)
 {
     size_t medium_index = sub_request->medium_index;
 
@@ -45,14 +67,14 @@ static char *get_sub_request_medium_name(struct sub_request *sub_request)
         if (!params->media[medium_index].alloc_medium)
             return NULL;
 
-        return params->media[medium_index].alloc_medium->rsc.id.name;
+        return &(params->media[medium_index].alloc_medium->rsc.id);
     } else {
         struct format_params *params = &sub_request->reqc->params.format;
 
         if (!params->medium_to_format)
             return NULL;
 
-        return params->medium_to_format->rsc.id.name;
+        return &(params->medium_to_format->rsc.id);
     }
 }
 
@@ -76,18 +98,20 @@ void reqc_pho_id_from_index(struct req_container *reqc, size_t index,
     }
 
     id->family = res_id->family;
-    pho_id_name_set(id, res_id->name);
+    pho_id_name_set(id, res_id->name, res_id->library);
 }
 
 static struct lrs_dev *__search_loaded_medium(GPtrArray *devices,
                                               const char *name,
+                                              const char *library,
                                               bool keep_lock)
 {
     int i;
 
     ENTRY;
 
-    pho_debug("Searching loaded medium '%s'", name);
+    pho_debug("Searching loaded medium (name '%s', library '%s')",
+              name, library);
 
     for (i = 0; i < devices->len; i++) {
         struct lrs_dev *dev = NULL;
@@ -110,12 +134,13 @@ static struct lrs_dev *__search_loaded_medium(GPtrArray *devices,
             goto err_continue;
         }
 
-        if (!strcmp(name, media_id)) {
+        if (!strcmp(name, media_id) &&
+            !strcmp(library, dev->ld_dss_media_info->rsc.id.library)) {
             if (!keep_lock)
                 MUTEX_UNLOCK(&dev->ld_mutex);
 
-            pho_debug("Found loaded medium '%s' in '%s'",
-                      name, dev->ld_dss_dev_info->rsc.id.name);
+            pho_debug("Found loaded medium (name '%s', library '%s') in '%s'",
+                      name, library, dev->ld_dss_dev_info->rsc.id.name);
             return dev;
         }
 
@@ -123,50 +148,54 @@ err_continue:
         MUTEX_UNLOCK(&dev->ld_mutex);
     }
 
-    pho_debug("Did not find loaded medium '%s'", name);
+    pho_debug("Did not find loaded medium (name '%s', library '%s')",
+              name, library);
     return NULL;
 }
 
 struct lrs_dev *search_loaded_medium(GPtrArray *devices,
-                                     const char *name)
+                                     const char *name,
+                                     const char *library)
 {
-    return __search_loaded_medium(devices, name, false);
+    return __search_loaded_medium(devices, name, library, false);
 }
 
 struct lrs_dev *search_loaded_medium_keep_lock(GPtrArray *devices,
-                                               const char *name)
+                                               const char *name,
+                                               const char *library)
 {
-    return __search_loaded_medium(devices, name, true);
+    return __search_loaded_medium(devices, name, library, true);
 }
 
-struct lrs_dev *search_in_use_medium(GPtrArray *devices,
-                                     const char *name,
-                                     bool *sched_ready)
+struct lrs_dev *search_in_use_medium(GPtrArray *devices, const char *name,
+                                     const char *library, bool *sched_ready)
 {
     int i;
 
     ENTRY;
 
-    pho_debug("Searching in-use medium '%s'", name);
+    pho_debug("Searching in-use medium (name '%s', library '%s')",
+              name, library);
     if (sched_ready)
         *sched_ready = false;
 
     for (i = 0; i < devices->len; i++) {
         struct lrs_dev *dev = NULL;
-        const char *media_id;
+        const struct pho_id *media_id;
 
         dev = g_ptr_array_index(devices, i);
         MUTEX_LOCK(&dev->ld_mutex);
 
         if (dev->ld_sub_request != NULL) {
-            media_id = get_sub_request_medium_name(dev->ld_sub_request);
+            media_id = get_sub_request_medium(dev->ld_sub_request);
             if (media_id == NULL) {
                 pho_debug("Cannot retrieve medium ID from device '%s' sub_req",
                           dev->ld_dev_path);
                 goto check_load;
             }
 
-            if (!strcmp(name, media_id)) {
+            if (!strcmp(name, media_id->name) &&
+                !strcmp(library, media_id->library)) {
                 MUTEX_UNLOCK(&dev->ld_mutex);
                 pho_debug("Found '%s' in '%s' sub_request",
                           name, dev->ld_dss_dev_info->rsc.id.name);
@@ -180,20 +209,16 @@ check_load:
             if (dev->ld_dss_media_info == NULL)
                 goto err_continue;
 
-            media_id = dev->ld_dss_media_info->rsc.id.name;
-            if (media_id == NULL) {
-                pho_warn("Cannot retrieve media ID from device '%s'",
-                         dev->ld_dev_path);
-
-                goto err_continue;
-            }
-
-            if (!strcmp(name, media_id)) {
+            media_id = &(dev->ld_dss_media_info->rsc.id);
+            if (!strcmp(name, media_id->name) &&
+                !strcmp(library, media_id->library)) {
                 if (sched_ready)
                     *sched_ready = dev_is_sched_ready(dev);
+
                 MUTEX_UNLOCK(&dev->ld_mutex);
-                pho_debug("Found loaded medium '%s' in '%s'",
-                          name, dev->ld_dss_dev_info->rsc.id.name);
+                pho_debug("Found loaded medium (name '%s', library '%s') in "
+                          "'%s'",
+                          name, library, dev->ld_dss_dev_info->rsc.id.name);
                 return dev;
             }
         }
@@ -202,7 +227,8 @@ err_continue:
         MUTEX_UNLOCK(&dev->ld_mutex);
     }
 
-    pho_debug("Did not find in-use medium '%s'", name);
+    pho_debug("Did not find in-use medium (name '%s', library '%s')",
+              name, library);
 
     return NULL;
 }
@@ -337,6 +363,7 @@ void rml_display(struct read_media_list *list)
     size_t i;
 
     for (i = 0; i < list->rml_size; i++)
-        pho_debug("rml %lu: %s", i, list->rml_media[i]->name);
+        pho_debug("rml %lu: (name %s, library %s)",
+                  i, list->rml_media[i]->name, list->rml_media[i]->library);
 }
 

@@ -160,6 +160,7 @@ static int remove_device(struct dss_handle *dss, char *device)
         .rsc = {
             .id = {
                 .family = PHO_RSC_DIR,
+                .library = "legacy",
             },
             .model = "",
             .adm_status = PHO_RSC_ADM_ST_UNLOCKED,
@@ -182,6 +183,7 @@ static int insert_device(struct dss_handle *dss, char *device)
         .rsc = {
             .id = {
                 .family = PHO_RSC_DIR,
+                .library = "legacy",
             },
             .model = "",
             .adm_status = PHO_RSC_ADM_ST_UNLOCKED,
@@ -228,7 +230,7 @@ static void test_ldh_add_one_device(void **data)
     struct lrs_dev *dev;
     int rc;
 
-    rc = lrs_dev_hdl_add(&scheduler, handle, "test");
+    rc = lrs_dev_hdl_add(&scheduler, handle, "test", "legacy");
     assert_return_code(rc, -rc);
     assert_int_equal(handle->ldh_devices->len, 1);
 

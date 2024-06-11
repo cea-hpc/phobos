@@ -25,6 +25,7 @@
 #ifndef _PHO_TYPE_UTILS_H
 #define _PHO_TYPE_UTILS_H
 
+#include "pho_srl_common.h"
 #include "pho_types.h"
 #include <jansson.h>
 #include <glib.h>
@@ -38,6 +39,13 @@ int storage_info_to_json(const struct layout_info *layout,
 
 /** check if two pho_id are equal */
 bool pho_id_equal(const struct pho_id *id1, const struct pho_id *id2);
+
+/** hash a pho_id key for a g_hash_table */
+guint g_pho_id_hash(gconstpointer p_pho_id);
+
+/** identity test for g_hash_table */
+gboolean g_pho_id_equal(gconstpointer p_pho_id_1, gconstpointer p_pho_id_2);
+
 
 /** initialize a pho_lock structure */
 void init_pho_lock(struct pho_lock *lock, char *hostname, int owner,

@@ -151,8 +151,10 @@ static int fetch_medium_info(struct media_info **medium,
     rc = dss_filter_build(&filter,
                           "{\"$AND\": ["
                           "  {\"DSS::MDA::family\": \"%s\"},"
-                          "  {\"DSS::MDA::id\": \"%s\"}"
-                          "]}", rsc_family2str(id->family), id->name);
+                          "  {\"DSS::MDA::id\": \"%s\"},"
+                          "  {\"DSS::MDA::library\": \"%s\"}"
+                          "]}",
+                          rsc_family2str(id->family), id->name, id->library);
     if (rc)
         return rc;
 
@@ -179,7 +181,8 @@ static void fill_pho_id(struct pho_id *id, pho_resp_t *write_resp)
     assert(pho_response_is_write(write_resp));
 
     id->family = write_resp->walloc->media[0]->med_id->family;
-    pho_id_name_set(id, write_resp->walloc->media[0]->med_id->name);
+    pho_id_name_set(id, write_resp->walloc->media[0]->med_id->name,
+                    write_resp->walloc->media[0]->med_id->library);
 }
 
 static int send_write_and_release_with_rc(struct pho_comm_info *ci,
@@ -212,6 +215,8 @@ static int send_write_and_release_with_rc(struct pho_comm_info *ci,
     req.release->media[0]->med_id->family = PHO_RSC_DIR;
     req.release->media[0]->med_id->name =
         xstrdup(resp->walloc->media[0]->med_id->name);
+    req.release->media[0]->med_id->library =
+        xstrdup(resp->walloc->media[0]->med_id->library);
     req.release->media[0]->to_sync = true;
     req.release->media[0]->size_written = size;
     req.release->media[0]->rc = client_rc;
@@ -307,6 +312,8 @@ static int test_bad_mput(void *arg)
     reqs[0].release->media[0]->med_id->family = PHO_RSC_DIR;
     reqs[0].release->media[0]->med_id->name =
         xstrdup(resps[0]->walloc->media[0]->med_id->name);
+    reqs[0].release->media[0]->med_id->library =
+        xstrdup(resps[0]->walloc->media[0]->med_id->library);
     reqs[0].release->media[0]->to_sync = false;
 
     rc = _send_request(ci, &reqs[0]);
@@ -333,6 +340,7 @@ static int test_bad_get(void *arg)
     req.ralloc->n_required = 1;
     req.ralloc->med_ids[0]->family = PHO_RSC_INVAL;
     req.ralloc->med_ids[0]->name = xstrdup("/tmp/test.pho.1");
+    req.ralloc->med_ids[0]->library = xstrdup("legacy");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Get -- bad resource family", -EINVAL);
     if (rc)
@@ -343,7 +351,9 @@ static int test_bad_get(void *arg)
     ++req.id;
     req.ralloc->med_ids[0]->family = PHO_RSC_DIR;
     free(req.ralloc->med_ids[0]->name);
+    free(req.ralloc->med_ids[0]->library);
     req.ralloc->med_ids[0]->name = xstrdup("/tmp/not/a/med");
+    req.ralloc->med_ids[0]->library = xstrdup("legacy");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Get -- bad resource name", -ENXIO);
 
@@ -366,7 +376,9 @@ static int test_bad_mget(void *arg)
     pho_srl_request_read_alloc(&reqs[1], 1);
 
     reqs[0].ralloc->med_ids[0]->name = xstrdup("/tmp/test.pho.1");
+    reqs[0].ralloc->med_ids[0]->library = xstrdup("legacy");
     reqs[1].ralloc->med_ids[0]->name = xstrdup("/not/a/dir");
+    reqs[1].ralloc->med_ids[0]->library = xstrdup("legacy");
 
     for (i = 0; i < 2; i++) {
         reqs[i].id = i;
@@ -390,6 +402,8 @@ static int test_bad_mget(void *arg)
     reqs[0].release->media[0]->med_id->family = PHO_RSC_DIR;
     reqs[0].release->media[0]->med_id->name =
         xstrdup(resps[0]->ralloc->media[0]->med_id->name);
+    reqs[0].release->media[0]->med_id->library =
+        xstrdup(resps[0]->ralloc->media[0]->med_id->library);
     reqs[0].release->media[0]->to_sync = false;
 
     rc = _send_request(ci, &reqs[0]);
@@ -415,6 +429,7 @@ static int test_bad_release(void *arg)
     req.id = 0;
     req.release->media[0]->med_id->family = PHO_RSC_DIR;
     req.release->media[0]->med_id->name = xstrdup("/tmp/not/a/med");
+    req.release->media[0]->med_id->library = xstrdup("legacy");
     req.release->media[0]->to_sync = true;
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Release -- bad resource name", -ENODEV);
@@ -438,6 +453,7 @@ static int test_bad_format(void *arg)
     req.format->fs = PHO_FS_INVAL;
     req.format->med_id->family = PHO_RSC_DIR;
     req.format->med_id->name = xstrdup("/tmp/test.pho.3");
+    req.format->med_id->library = xstrdup("legacy");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Format -- bad file system", -ENOTSUP);
     if (rc)
@@ -458,7 +474,9 @@ static int test_bad_format(void *arg)
     ++req.id;
     req.format->med_id->family = PHO_RSC_DIR;
     free(req.format->med_id->name);
+    free(req.format->med_id->library);
     req.format->med_id->name = xstrdup("/tmp/not/a/med");
+    req.format->med_id->library = xstrdup("legacy");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Format -- bad resource name", -ENXIO);
 
@@ -501,6 +519,7 @@ static int test_bad_notify(void *arg)
     ++req.id;
     req.notify->rsrc_id->family = PHO_RSC_DIR;
     req.notify->rsrc_id->name = xstrdup("/tmp/not/a/dev");
+    req.notify->rsrc_id->library = xstrdup("legacy");
     assert(!_send_and_receive(ci, &req, &resp));
     rc = _check_error(resp, "Notify -- bad resource name", -ENXIO);
     if (rc)

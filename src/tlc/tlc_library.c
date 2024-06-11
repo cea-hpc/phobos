@@ -463,7 +463,7 @@ int tlc_library_drive_lookup(struct lib_descriptor *lib,
     if (drv->full) {
         ldi->ldi_full = true;
         ldi->ldi_medium_id.family = PHO_RSC_TAPE;
-        pho_id_name_set(&ldi->ldi_medium_id, drv->vol);
+        pho_id_name_set(&ldi->ldi_medium_id, drv->vol, lib->name);
     } else {
         ldi->ldi_full = false;
     }
@@ -599,6 +599,7 @@ static void move_tape_between_element_status(struct element_status *source,
 }
 
 static void tlc_log_init(const char *drive_serial, const char *tape_label,
+                         const char *library,
                          enum operation_type operation_type,
                          struct pho_log *log, json_t **json_message)
 {
@@ -607,8 +608,8 @@ static void tlc_log_init(const char *drive_serial, const char *tape_label,
 
     drive_id.family = PHO_RSC_TAPE;
     tape_id.family = PHO_RSC_TAPE;
-    pho_id_name_set(&drive_id, drive_serial);
-    pho_id_name_set(&tape_id, tape_label);
+    pho_id_name_set(&drive_id, drive_serial, library);
+    pho_id_name_set(&tape_id, tape_label, library);
 
     init_pho_log(log, &drive_id, &tape_id, operation_type);
     log->message = json_object();
@@ -642,7 +643,8 @@ int tlc_library_load(struct dss_handle *dss, struct lib_descriptor *lib,
     }
 
     /* prepare SCSI log */
-    tlc_log_init(drive_serial, tape_label, PHO_DEVICE_LOAD, &log, json_message);
+    tlc_log_init(drive_serial, tape_label, lib->name, PHO_DEVICE_LOAD, &log,
+                 json_message);
 
     /* move medium to device */
     /* arm = 0 for default transport element */
@@ -805,8 +807,8 @@ int tlc_library_unload(struct dss_handle *dss, struct lib_descriptor *lib,
         return rc;
 
     /* prepare SCSI log */
-    tlc_log_init(drive_serial, *unloaded_tape_label, PHO_DEVICE_UNLOAD,
-                 &log, json_message);
+    tlc_log_init(drive_serial, *unloaded_tape_label, lib->name,
+                 PHO_DEVICE_UNLOAD, &log, json_message);
 
     /* move medium to device */
     /* arm = 0 for default transport element */

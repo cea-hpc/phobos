@@ -120,7 +120,7 @@ void create_device(struct lrs_dev *dev, char *path, char *model,
     dev->ld_dss_dev_info->rsc.adm_status = PHO_RSC_ADM_ST_UNLOCKED;
     dev->ld_dss_dev_info->rsc.model = model;
     dev->ld_dss_dev_info->rsc.id.family = PHO_RSC_TAPE;
-    strcpy(dev->ld_dss_dev_info->rsc.id.name, path);
+    pho_id_name_set(&dev->ld_dss_dev_info->rsc.id, path, "legacy");
     dev->ld_dss_dev_info->path = path;
     rc = lrs_dev_technology(dev, &dev->ld_technology);
     assert_return_code(rc, -rc);
@@ -152,7 +152,7 @@ void create_medium(struct media_info *medium, const char *name)
     medium->rsc.model = "LTO5";
     medium->rsc.id.family = PHO_RSC_TAPE;
     medium->fs.type = PHO_FS_LTFS;
-    pho_id_name_set(&medium->rsc.id, name);
+    pho_id_name_set(&medium->rsc.id, name, "legacy");
 
     medium->flags.put = true;
     medium->flags.get = true;
