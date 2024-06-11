@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -38,7 +38,10 @@ import yaml
 def csv_dump(data):
     """Convert a list of dictionaries to a csv string"""
     outbuf = StringIO()
-    writer = csv.DictWriter(outbuf, data[0].keys())
+    dialect = csv.excel
+    dialect.doublequote = False
+    dialect.escapechar = '\\'
+    writer = csv.DictWriter(outbuf, data[0].keys(), dialect=dialect)
     if hasattr(writer, 'writeheader'):
         #pylint: disable=no-member
         writer.writeheader()
