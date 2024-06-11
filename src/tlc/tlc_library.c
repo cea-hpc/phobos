@@ -699,12 +699,14 @@ get_target_free_slot_from_source_or_any(struct lib_descriptor *lib,
 
     /* check drive source */
     if (drive->src_addr_is_set) {
+        unload_addr->lia_addr = (uint64_t) drive->src_addr;
         *target = element_from_addr(lib, unload_addr);
         if (!*target) {
             pho_error(-EADDRNOTAVAIL, "Source address '%#hx' of %s element at "
                       "address '%#hx' does not correspond to any existing "
                       "element. We will search a free slot address to move.",
                       drive->src_addr, type2str(drive->type), drive->address);
+            unload_addr->lia_addr = 0;
         } else if ((*target)->type != SCSI_TYPE_SLOT) {
             pho_debug("Source address of %s element at address '%#hx' "
                       "corresponds to a %s element. We do not move to a source "
@@ -712,6 +714,7 @@ get_target_free_slot_from_source_or_any(struct lib_descriptor *lib,
                       "address to move.",
                       type2str(drive->type), drive->address,
                       type2str((*target)->type), type2str(SCSI_TYPE_SLOT));
+            unload_addr->lia_addr = 0;
         } else if (!(*target)->full) {
             /*
              * We change unload_addr->lia_type from UNKNOWN to SLOT to set we
@@ -723,6 +726,7 @@ get_target_free_slot_from_source_or_any(struct lib_descriptor *lib,
             pho_verb("Source address '%#hx' of element %s at address '%#hx' "
                      "is full. We will search a free address to move.",
                      drive->src_addr, type2str(drive->type), drive->address);
+            unload_addr->lia_addr = 0;
         }
     }
 
