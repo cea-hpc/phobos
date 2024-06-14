@@ -356,33 +356,33 @@ void dss_res_free(void *item_list, int item_cnt)
  * DEVICE FUNCTIONS
  */
 
-int dss_device_insert(struct dss_handle *hdl, struct dev_info *dev_ls,
-                      int dev_cnt)
+int dss_device_insert(struct dss_handle *handle, struct dev_info *device_list,
+                      int device_count)
 {
-    return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
-                           DSS_SET_INSERT, 0);
+    return dss_generic_set(handle, DSS_DEVICE, (void *) device_list,
+                           device_count, DSS_SET_INSERT, 0);
 }
 
-int dss_device_update(struct dss_handle *hdl, struct dev_info *dev_ls,
-                      int dev_cnt, int64_t fields)
+int dss_device_update(struct dss_handle *handle, struct dev_info *device_list,
+                      int device_count, int64_t fields)
 {
-    return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
-                           DSS_SET_UPDATE, fields);
+    return dss_generic_set(handle, DSS_DEVICE, (void *) device_list,
+                           device_count, DSS_SET_UPDATE, fields);
 }
 
-int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct dev_info **dev_ls, int *dev_cnt)
+int dss_device_get(struct dss_handle *handle, const struct dss_filter *filter,
+                   struct dev_info **device_list, int *device_count)
 {
-    return dss_generic_get(hdl, DSS_DEVICE,
+    return dss_generic_get(handle, DSS_DEVICE,
                            (const struct dss_filter*[]) {filter, NULL},
-                           (void **)dev_ls, dev_cnt);
+                           (void **)device_list, device_count);
 }
 
-int dss_device_delete(struct dss_handle *hdl, struct dev_info *dev_ls,
-                      int dev_cnt)
+int dss_device_delete(struct dss_handle *handle, struct dev_info *device_list,
+                      int device_count)
 {
-    return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
-                           DSS_SET_DELETE, 0);
+    return dss_generic_set(handle, DSS_DEVICE, (void *)device_list,
+                           device_count, DSS_SET_DELETE, 0);
 }
 
 /*

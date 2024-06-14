@@ -296,40 +296,50 @@ void dss_res_free(void *item_list, int item_cnt);
 
 /**
  * Insert information of one or many devices in DSS.
- * @param[in]  hdl      valid connection handle
- * @param[in]  dev_ls   array of entries to store
- * @param[in]  dev_cnt  number of items in the list
+ * @param[in]  handle        valid connection handle
+ * @param[in]  device_list   array of entries to store
+ * @param[in]  device_count  number of items in the list
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_device_insert(struct dss_handle *hdl, struct dev_info *dev_ls,
-                      int dev_cnt);
+int dss_device_insert(struct dss_handle *handle, struct dev_info *device_list,
+                      int device_count);
 
-int dss_device_update(struct dss_handle *hdl, struct dev_info *dev_ls,
-                      int dev_cnt, int64_t fields);
+/**
+ * Update the information of one or many devices in DSS.
+ *
+ * @param[in]  handle        valid connection handle
+ * @param[in]  device_list   array of entries to update
+ * @param[in]  device_count  number of items in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_device_update(struct dss_handle *handle, struct dev_info *device_list,
+                      int device_count, int64_t fields);
 
 /**
  * Retrieve devices information from DSS
- * @param[in]  hdl      valid connection handle
- * @param[in]  filter   assembled DSS filtering criteria
- * @param[out] dev_ls   list of retrieved items to be freed w/ dss_res_free()
- * @param[out] dev_cnt  number of items retrieved in the list
+ * @param[in]  handle        valid connection handle
+ * @param[in]  filter        assembled DSS filtering criteria
+ * @param[out] device_list   list of retrieved items to be
+ *                           freed w/ dss_res_free()
+ * @param[out] device_count  number of items retrieved in the list
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct dev_info **dev_ls, int *dev_cnt);
+int dss_device_get(struct dss_handle *handle, const struct dss_filter *filter,
+                   struct dev_info **device_list, int *device_count);
 
 /**
  * Delete information of one or many devices in DSS.
- * @param[in]  hdl      valid connection handle
- * @param[in]  dev_ls   array of entries to delete
- * @param[in]  dev_cnt  number of items in the list
+ * @param[in]  handle        valid connection handle
+ * @param[in]  device_list   array of entries to delete
+ * @param[in]  device_count  number of items in the list
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_device_delete(struct dss_handle *hdl, struct dev_info *dev_ls,
-                      int dev_cnt);
+int dss_device_delete(struct dss_handle *handle, struct dev_info *device_list,
+                      int device_count);
 
 /**
  * Store information for one or many media in DSS.
