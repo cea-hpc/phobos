@@ -30,8 +30,7 @@ import logging
 from ctypes import byref, c_int, c_void_p, POINTER, Structure
 from abc import ABCMeta, abstractmethod, abstractproperty
 
-from phobos.core.const import (DSS_SET_DELETE, DSS_SET_INSERT, DSS_SET_UPDATE, # pylint: disable=no-name-in-module
-                               DSS_MEDIA)
+from phobos.core.const import DSS_MEDIA
 from phobos.core.ffi import (DevInfo, MediaInfo, LIBPHOBOS)
 
 # Valid filter suffix and associated operators.
@@ -217,37 +216,45 @@ class MediaManager(BaseEntityManager):
         """Invoke media-specific DSS get method."""
         return LIBPHOBOS.dss_media_get(hdl, qry_filter, res, res_cnt)
 
-    def _dss_set(self, hdl, media, media_cnt, opcode, fields):
-        #pylint: disable=too-many-arguments,no-self-use
-        """Invoke media-specific DSS set method."""
-        return LIBPHOBOS.dss_media_set(hdl, media, media_cnt, opcode, fields)
-
-    def _generic_set(self, media, opcode, fields=0):
-        """Common operation to wrap dss_media_set()"""
-        if not media:
-            return
-
+    def _generic_set(self, media):
+        """Common operation to wrap dss_media functions"""
         med_cnt = len(media)
         med = (self.wrapped_class * med_cnt)()
         for i, elt in enumerate(media):
             med[i] = elt
 
-        rc = self._dss_set(byref(self.client.handle), med, med_cnt, opcode,
-                           fields)
-        if rc:
-            raise EnvironmentError(rc, "Cannot issue set request")
+        return med, med_cnt
 
     def insert(self, media):
         """Insert media into DSS"""
-        self._generic_set(media, DSS_SET_INSERT)
+        if not media:
+            return
+
+        med, med_cnt = self._generic_set(media)
+        rc = LIBPHOBOS.dss_media_insert(byref(self.client.handle), med, med_cnt)
+        if rc:
+            raise EnvironmentError(rc, "Cannot issue insert request")
 
     def update(self, media, fields):
         """Update media in DSS"""
-        self._generic_set(media, DSS_SET_UPDATE, fields)
+        if not media:
+            return
+
+        med, med_cnt = self._generic_set(media)
+        rc = LIBPHOBOS.dss_media_update(byref(self.client.handle), med, med_cnt,
+                                        fields)
+        if rc:
+            raise EnvironmentError(rc, "Cannot issue update request")
 
     def delete(self, media):
         """Delete media from DSS"""
-        self._generic_set(media, DSS_SET_DELETE)
+        if not media:
+            return
+
+        med, med_cnt = self._generic_set(media)
+        rc = LIBPHOBOS.dss_media_delete(byref(self.client.handle), med, med_cnt)
+        if rc:
+            raise EnvironmentError(rc, "Cannot issue delete request")
 
     def _generic_lock_unlock(self, objects, lock_c_func, err_message,
                              lock_type, force=None):

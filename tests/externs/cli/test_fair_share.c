@@ -165,7 +165,7 @@ static int handle_format_response(struct context *context,
     /* set the medium back to blank to keep the state of the system */
     medium->fs.status = PHO_FS_STATUS_BLANK;
 
-    rc = dss_media_set(&context->dss, medium, 1, DSS_SET_UPDATE, FS_STATUS);
+    rc = dss_media_update(&context->dss, medium, 1, FS_STATUS);
     if (rc)
         return rc;
 

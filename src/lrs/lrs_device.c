@@ -827,7 +827,7 @@ static int lrs_dev_media_update(struct lrs_dev *dev, size_t size_written,
     /* TODO update nb_load, nb_errors, last_load */
 
     assert(fields);
-    rc2 = dss_media_set(dss, media_info, 1, DSS_SET_UPDATE, fields);
+    rc2 = dss_media_update(dss, media_info, 1, fields);
     if (rc2)
         rc = rc ? : rc2;
 
@@ -1033,7 +1033,7 @@ static int dss_set_medium_to_failed(struct dss_handle *dss,
 {
     pho_error(0, "setting medium '%s' to failed", media_info->rsc.id.name);
     media_info->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-    return dss_media_set(dss, media_info, 1, DSS_SET_UPDATE, ADM_STATUS);
+    return dss_media_update(dss, media_info, 1, ADM_STATUS);
 }
 
 void fail_release_medium(struct lrs_dev *dev, struct media_info *medium)
@@ -1156,8 +1156,7 @@ int dev_format(struct lrs_dev *dev, struct fs_adapter_module *fsa, bool unlock)
      * no concurrent modifications can be done. So this is thread safe since we
      * have a reference on the medium.
      */
-    rc = dss_media_set(&dev->ld_device_thread.dss, medium, 1, DSS_SET_UPDATE,
-                       fields);
+    rc = dss_media_update(&dev->ld_device_thread.dss, medium, 1, fields);
     if (rc)
         LOG_RETURN(rc,
                    "Successful format of medium '%s' but failed to initialize its state in DSS",
@@ -1726,9 +1725,8 @@ static void cancel_pending_format(struct lrs_dev *device)
                 pho_error(rc, "setting medium '%s' to failed",
                           medium_to_format->rsc.id.name);
                 medium_to_format->rsc.adm_status = PHO_RSC_ADM_ST_FAILED;
-                rc = dss_media_set(&device->ld_device_thread.dss,
-                                   medium_to_format, 1, DSS_SET_UPDATE,
-                                   ADM_STATUS);
+                rc = dss_media_update(&device->ld_device_thread.dss,
+                                      medium_to_format, 1, ADM_STATUS);
                 if (rc)
                     pho_error(rc,
                               "Unable to set medium '%s' into DSS as "
@@ -2236,9 +2234,8 @@ static int dev_medium_switch_mount(struct lrs_dev *dev,
         MUTEX_LOCK(&dev->ld_mutex);
         dev->ld_dss_media_info->fs.status = PHO_FS_STATUS_FULL;
         MUTEX_UNLOCK(&dev->ld_mutex);
-        rc2 = dss_media_set(&dev->ld_device_thread.dss,
-                            dev->ld_dss_media_info, 1,
-                            DSS_SET_UPDATE, FS_STATUS);
+        rc2 = dss_media_update(&dev->ld_device_thread.dss,
+                               dev->ld_dss_media_info, 1, FS_STATUS);
         if (rc2) {
             rc = rc2;
             context->failure_on_device = true;

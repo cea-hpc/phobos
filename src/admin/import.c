@@ -127,7 +127,7 @@ static int _dev_media_update(struct dss_handle *dss,
     /* TODO update nb_load, nb_errors, last_load */
 
     assert(fields);
-    rc2 = dss_media_set(dss, media_info, 1, DSS_SET_UPDATE, fields);
+    rc2 = dss_media_update(dss, media_info, 1, fields);
     if (rc2)
         rc = rc ? : rc2;
 
@@ -673,7 +673,7 @@ int import_medium(struct admin_handle *adm, struct media_info *medium,
     memcpy(medium->fs.label, id.name, label_length);
     medium->fs.label[label_length] = 0;
 
-    rc = dss_media_set(&adm->dss, medium, 1, DSS_SET_UPDATE, FS_LABEL);
+    rc = dss_media_update(&adm->dss, medium, 1, FS_LABEL);
     if (rc)
         LOG_RETURN(rc,
                    "Failed to update filesystem label of '%s' to '%s' in DSS",

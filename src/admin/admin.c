@@ -1358,7 +1358,7 @@ int phobos_admin_clean_locks(struct admin_handle *adm, bool global,
 int phobos_admin_media_add(struct admin_handle *adm, struct media_info *med_ls,
                            int med_cnt)
 {
-    return dss_media_set(&adm->dss, med_ls, med_cnt, DSS_SET_INSERT, 0);
+    return dss_media_insert(&adm->dss, med_ls, med_cnt);
 }
 
 int phobos_admin_media_import(struct admin_handle *adm,
@@ -1385,7 +1385,7 @@ int phobos_admin_media_import(struct admin_handle *adm,
         pho_verb("Starting import of %s %s", rsc_family2str(medium->family),
                  medium->name);
 
-        rc = dss_media_set(&adm->dss, med_ls + i, 1, DSS_SET_INSERT, 0);
+        rc = dss_media_insert(&adm->dss, med_ls + i, 1);
         if (rc)
             LOG_RETURN(rc, "Unable to add medium '%s' to database",
                        medium->name);

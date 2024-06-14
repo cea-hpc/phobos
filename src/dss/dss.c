@@ -409,12 +409,19 @@ static int media_update_lock_retry(struct dss_handle *hdl,
     return rc;
 }
 
-int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
-                  int med_cnt, enum dss_set_action action, uint64_t fields)
+int dss_media_insert(struct dss_handle *handle, struct media_info *media_list,
+                     int media_count)
+{
+    return dss_generic_set(handle, DSS_MEDIA, (void *) media_list,
+                           media_count, DSS_SET_INSERT, 0);
+}
+
+int dss_media_update(struct dss_handle *handle, struct media_info *media_list,
+                     int media_count, uint64_t fields)
 {
     int rc;
 
-    if (action == DSS_SET_UPDATE && !fields) {
+    if (!fields) {
         pho_warn("Tried updating media without specifying any field");
         return 0;
     }
@@ -427,64 +434,65 @@ int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
      * All other set actions (insert, delete, or update of other fields) are
      * atomic SQL requests and don't need any lock and prefetch.
      */
-    if (action == DSS_SET_UPDATE && IS_STAT(fields)) {
+    if (IS_STAT(fields)) {
         int i;
 
-        rc = media_update_lock_retry(hdl, med_ls, med_cnt);
+        rc = media_update_lock_retry(handle, media_list, media_count);
         if (rc)
             LOG_RETURN(rc, "Error when locking media to %s",
-                       dss_set_actions_names[action]);
+                       dss_set_actions_names[DSS_SET_UPDATE]);
 
-        for (i = 0; i < med_cnt; i++) {
+        for (i = 0; i < media_count; i++) {
             struct media_info *medium_info;
 
-            rc = dss_one_medium_get_from_id(hdl, &med_ls[i].rsc.id,
+            rc = dss_one_medium_get_from_id(handle, &media_list[i].rsc.id,
                                             &medium_info);
             if (rc)
                 LOG_GOTO(clean, rc,
                          "Error on getting medium_info (family %s, name %s) to "
                          "update stats",
-                         rsc_family2str(med_ls[i].rsc.id.family),
-                         med_ls[i].rsc.id.name);
+                         rsc_family2str(media_list[i].rsc.id.family),
+                         media_list[i].rsc.id.name);
 
             if (NB_OBJ & fields)
-                medium_info->stats.nb_obj = med_ls[i].stats.nb_obj;
+                medium_info->stats.nb_obj = media_list[i].stats.nb_obj;
 
             if (NB_OBJ_ADD & fields)
-                medium_info->stats.nb_obj += med_ls[i].stats.nb_obj;
+                medium_info->stats.nb_obj += media_list[i].stats.nb_obj;
 
             if (LOGC_SPC_USED & fields)
                 medium_info->stats.logc_spc_used =
-                    med_ls[i].stats.logc_spc_used;
+                    media_list[i].stats.logc_spc_used;
 
             if (LOGC_SPC_USED_ADD & fields)
                 medium_info->stats.logc_spc_used +=
-                    med_ls[i].stats.logc_spc_used;
+                    media_list[i].stats.logc_spc_used;
 
             if (PHYS_SPC_USED & fields)
                 medium_info->stats.phys_spc_used =
-                    med_ls[i].stats.phys_spc_used;
+                    media_list[i].stats.phys_spc_used;
 
             if (PHYS_SPC_FREE & fields)
                 medium_info->stats.phys_spc_free =
-                    med_ls[i].stats.phys_spc_free;
+                    media_list[i].stats.phys_spc_free;
 
-            med_ls[i].stats = medium_info->stats;
+            media_list[i].stats = medium_info->stats;
             dss_res_free(medium_info, 1);
         }
     }
 
-    rc = dss_generic_set(hdl, DSS_MEDIA, (void *)med_ls, med_cnt, action,
-                         fields);
+    rc = dss_generic_set(handle, DSS_MEDIA, (void *)media_list, media_count,
+                         DSS_SET_UPDATE, fields);
 
 clean:
-    if (action == DSS_SET_UPDATE && IS_STAT(fields)) {
+    if (IS_STAT(fields)) {
         int rc2;
 
-        rc2 = dss_unlock(hdl, DSS_MEDIA_UPDATE_LOCK, med_ls, med_cnt, false);
+        rc2 = dss_unlock(handle, DSS_MEDIA_UPDATE_LOCK, media_list, media_count,
+                         false);
         if (rc2) {
             pho_error(rc2, "Error when unlocking media at end of %s",
-                      dss_set_actions_names[action]);
+                      dss_set_actions_names[DSS_SET_UPDATE]);
             rc = rc ? : rc2;
         }
     }
@@ -492,12 +500,19 @@ clean:
     return rc;
 }
 
-int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                  struct media_info **med_ls, int *med_cnt)
+int dss_media_get(struct dss_handle *handle, const struct dss_filter *filter,
+                  struct media_info **media_list, int *media_count)
 {
-    return dss_generic_get(hdl, DSS_MEDIA,
+    return dss_generic_get(handle, DSS_MEDIA,
                            (const struct dss_filter*[]) {filter, NULL},
-                           (void **)med_ls, med_cnt);
+                           (void **) media_list, media_count);
+}
+
+int dss_media_delete(struct dss_handle *handle, struct media_info *media_list,
+                     int media_count)
+{
+    return dss_generic_set(handle, DSS_MEDIA, (void *) media_list,
+                           media_count, DSS_SET_DELETE, 0);
 }
 
 /*

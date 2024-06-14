@@ -104,8 +104,17 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
             return -ENOTSUP;
         }
     case DSS_MEDIA:
-        return dss_media_set(handle, (struct media_info *)item_list, n,
-                             action, fields);
+        switch (action) {
+        case DSS_SET_UPDATE:
+            return dss_media_update(handle, (struct media_info *)item_list, n,
+                                    fields);
+        case DSS_SET_INSERT:
+            return dss_media_insert(handle, (struct media_info *)item_list, n);
+        case DSS_SET_DELETE:
+            return dss_media_delete(handle, (struct media_info *)item_list, n);
+        default:
+            return -ENOTSUP;
+        }
     default:
         return -ENOTSUP;
     }

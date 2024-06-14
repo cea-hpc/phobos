@@ -296,6 +296,7 @@ void dss_res_free(void *item_list, int item_cnt);
 
 /**
  * Insert information of one or many devices in DSS.
+ *
  * @param[in]  handle        valid connection handle
  * @param[in]  device_list   array of entries to store
  * @param[in]  device_count  number of items in the list
@@ -318,7 +319,8 @@ int dss_device_update(struct dss_handle *handle, struct dev_info *device_list,
                       int device_count, int64_t fields);
 
 /**
- * Retrieve devices information from DSS
+ * Retrieve devices information from DSS.
+ *
  * @param[in]  handle        valid connection handle
  * @param[in]  filter        assembled DSS filtering criteria
  * @param[out] device_list   list of retrieved items to be
@@ -332,6 +334,7 @@ int dss_device_get(struct dss_handle *handle, const struct dss_filter *filter,
 
 /**
  * Delete information of one or many devices in DSS.
+ *
  * @param[in]  handle        valid connection handle
  * @param[in]  device_list   array of entries to delete
  * @param[in]  device_count  number of items in the list
@@ -343,29 +346,55 @@ int dss_device_delete(struct dss_handle *handle, struct dev_info *device_list,
 
 /**
  * Store information for one or many media in DSS.
- * @param[in]  hdl      valid connection handle
- * @param[in]  med_ls   array of entries to store
- * @param[in]  med_cnt  number of items in the list
- * @param[in]  action   operation code (insert, update, delete)
- * @param[in]  fields   fields to update (ignored for insert and delete)
+ *
+ * @param[in]  handle       valid connection handle
+ * @param[in]  media_list   array of entries to store
+ * @param[in]  media_count  number of items in the list
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
-                  int med_cnt, enum dss_set_action action, uint64_t fields);
+int dss_media_insert(struct dss_handle *handle, struct media_info *media_list,
+                     int media_count);
 
 /**
- * Retrieve media information from DSS
- * @param[in]  hdl      valid connection handle
- * @param[in]  filter   assembled DSS filtering criteria
- * @param[out] med_ls   list of retrieved items to be freed w/ dss_res_free()
- * @param[out] med_cnt  number of items retrieved in the list
+ * Update information for one or many media in DSS.
+ *
+ * @param[in]  handle       valid connection handle
+ * @param[in]  media_list   array of entries to update
+ * @param[in]  media_count  number of items in the list
+ * @param[in]  fields       fields to update (ignored for insert and delete)
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_media_update(struct dss_handle *handle, struct media_info *media_list,
+                     int media_count, uint64_t fields);
+
+/**
+ * Retrieve media information from DSS.
+ *
+ * @param[in]  handle       valid connection handle
+ * @param[in]  filter       assembled DSS filtering criteria
+ * @param[out] media_list   list of retrieved items to be freed
+ *                          w/ dss_res_free()
+ * @param[out] media_count  number of items retrieved in the list
  *
  * @return 0 on success, negated errno on failure
  */
 mockable
-int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                  struct media_info **med_ls, int *med_cnt);
+int dss_media_get(struct dss_handle *handle, const struct dss_filter *filter,
+                  struct media_info **media_list, int *media_count);
+
+/**
+ * Delete information for one or many media in DSS.
+ *
+ * @param[in]  handle       valid connection handle
+ * @param[in]  media_list   array of entries to delete
+ * @param[in]  media_count  number of items in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_media_delete(struct dss_handle *handle, struct media_info *media_list,
+                     int media_count);
 
 /**
  * Retrieve extent information from DSS

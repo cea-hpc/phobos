@@ -89,7 +89,7 @@ static void cleanup_tests(struct dss_and_tlc_lib *handle,
     assert_return_code(rc, -rc);
     cleanup_device(device);
     pho_context_reset_mock_ltfs_functions();
-    rc = dss_media_set(&handle->dss, medium, 1, DSS_SET_DELETE, 0);
+    rc = dss_media_delete(&handle->dss, medium, 1);
     assert_return_code(rc, -rc);
     lrs_medium_release(medium);
     lrs_cache_cleanup(family);
@@ -160,7 +160,7 @@ create_and_load(struct dss_and_tlc_lib *handle, struct lrs_dev *device)
 
     create_device(device, DEVICE_NAME, LTO5_MODEL, &handle->dss);
     create_medium(&medium, MEDIUM_NAME);
-    rc = dss_media_set(&handle->dss, &medium, 1, DSS_SET_INSERT, 0);
+    rc = dss_media_insert(&handle->dss, &medium, 1);
     assert_return_code(rc, -rc);
 
     assert_int_equal(get_dev_adapter(PHO_RSC_TAPE, &deva), 0);

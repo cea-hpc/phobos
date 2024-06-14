@@ -134,7 +134,7 @@ static int dml_eacces_setup(void **state)
     medium_info.rsc.adm_status = PHO_RSC_ADM_ST_LOCKED;
 
     /* insert medium */
-    if (dss_media_set(dss, &medium_info, 1, DSS_SET_INSERT, 0))
+    if (dss_media_insert(dss, &medium_info, 1))
         return -1;
 
     return 0;
@@ -167,7 +167,7 @@ static int dml_eperm_setup(void **state)
     medium_info.flags.get = false;
 
     /* insert medium */
-    if (dss_media_set(dss, &medium_info, 1, DSS_SET_INSERT, 0))
+    if (dss_media_insert(dss, &medium_info, 1))
         return -1;
 
     return 0;
@@ -204,12 +204,12 @@ static int dml_ok_free_setup(void **state)
 
     /* insert dir medium */
     fill_medium_info(&dir_medium_info, dir_free_medium);
-    if (dss_media_set(dss, &dir_medium_info, 1, DSS_SET_INSERT, 0))
+    if (dss_media_insert(dss, &dir_medium_info, 1))
         return -1;
 
     /* insert tape medium */
     fill_medium_info(&tape_medium_info, tape_free_medium);
-    if (dss_media_set(dss, &tape_medium_info, 1, DSS_SET_INSERT, 0))
+    if (dss_media_insert(dss, &tape_medium_info, 1))
         return -1;
 
     return 0;
@@ -252,7 +252,7 @@ static int dml_ok_lock_setup(void **state)
     fill_medium_info(&medium_info, locked_medium);
 
     /* insert medium */
-    if (dss_media_set(dss, &medium_info, 1, DSS_SET_INSERT, 0))
+    if (dss_media_insert(dss, &medium_info, 1))
         return -1;
 
     /* lock medium */

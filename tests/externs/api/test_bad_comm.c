@@ -243,7 +243,7 @@ static int send_write_and_release_with_rc(struct pho_comm_info *ci,
 
         /* set the status back to make other tests pass */
         new_info->rsc.adm_status = current_info->rsc.adm_status;
-        rc = dss_media_set(&dss, new_info, 1, DSS_SET_UPDATE, ADM_STATUS);
+        rc = dss_media_update(&dss, new_info, 1, ADM_STATUS);
         dss_fini(&dss);
     }
 
