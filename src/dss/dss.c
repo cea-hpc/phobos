@@ -352,77 +352,30 @@ void dss_res_free(void *item_list, int item_cnt)
     _dss_result_free(dss_res, item_cnt);
 }
 
-int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct dev_info **dev_ls, int *dev_cnt)
-{
-    return dss_generic_get(hdl, DSS_DEVICE,
-                           (const struct dss_filter*[]) {filter, NULL},
-                           (void **)dev_ls, dev_cnt);
-}
-
-int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                  struct media_info **med_ls, int *med_cnt)
-{
-    return dss_generic_get(hdl, DSS_MEDIA,
-                           (const struct dss_filter*[]) {filter, NULL},
-                           (void **)med_ls, med_cnt);
-}
-
-int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct layout_info **layouts, int *layout_count)
-{
-    return dss_generic_get(hdl, DSS_LAYOUT,
-                           (const struct dss_filter*[]) {filter, NULL},
-                           (void **)layouts, layout_count);
-}
-
-int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
-                        const struct dss_filter *media,
-                        struct layout_info **layouts, int *layout_count)
-{
-    return dss_generic_get(hdl, DSS_FULL_LAYOUT,
-                           (const struct dss_filter*[]) {object, media},
-                           (void **)layouts, layout_count);
-}
-
-int dss_extent_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct extent **extents, int *extent_count)
-{
-    return dss_generic_get(hdl, DSS_EXTENT,
-                           (const struct dss_filter*[]) {filter, NULL},
-                           (void **)extents, extent_count);
-}
-
-int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct object_info **obj_ls, int *obj_cnt)
-{
-    return dss_generic_get(hdl, DSS_OBJECT,
-                           (const struct dss_filter*[]) {filter, NULL},
-                           (void **)obj_ls, obj_cnt);
-}
-
-int dss_deprecated_object_get(struct dss_handle *hdl,
-                              const struct dss_filter *filter,
-                              struct object_info **obj_ls, int *obj_cnt)
-{
-    return dss_generic_get(hdl, DSS_DEPREC,
-                           (const struct dss_filter*[]) {filter, NULL},
-                           (void **)obj_ls, obj_cnt);
-}
-
-int dss_logs_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                 struct pho_log **logs_ls, int *logs_cnt)
-{
-    return dss_generic_get(hdl, DSS_LOGS,
-                           (const struct dss_filter*[]) {filter, NULL},
-                           (void **)logs_ls, logs_cnt);
-}
+/*
+ * DEVICE FUNCTIONS
+ */
 
 int dss_device_insert(struct dss_handle *hdl, struct dev_info *dev_ls,
                       int dev_cnt)
 {
     return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
                            DSS_SET_INSERT, 0);
+}
+
+int dss_device_update(struct dss_handle *hdl, struct dev_info *dev_ls,
+                      int dev_cnt, int64_t fields)
+{
+    return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
+                           DSS_SET_UPDATE, fields);
+}
+
+int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct dev_info **dev_ls, int *dev_cnt)
+{
+    return dss_generic_get(hdl, DSS_DEVICE,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)dev_ls, dev_cnt);
 }
 
 int dss_device_delete(struct dss_handle *hdl, struct dev_info *dev_ls,
@@ -432,12 +385,9 @@ int dss_device_delete(struct dss_handle *hdl, struct dev_info *dev_ls,
                            DSS_SET_DELETE, 0);
 }
 
-int dss_device_update(struct dss_handle *hdl, struct dev_info *dev_ls,
-                      int dev_cnt, int64_t fields)
-{
-    return dss_generic_set(hdl, DSS_DEVICE, (void *)dev_ls, dev_cnt,
-                           DSS_SET_UPDATE, fields);
-}
+/*
+ * MEDIA FUNCTIONS
+ */
 
 static int media_update_lock_retry(struct dss_handle *hdl,
                                    struct media_info *med_ls, int med_cnt)
@@ -542,11 +492,24 @@ clean:
     return rc;
 }
 
-int dss_extent_set(struct dss_handle *hdl, struct extent *extents,
-                   int extent_count, enum dss_set_action action)
+int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                  struct media_info **med_ls, int *med_cnt)
 {
-    return dss_generic_set(hdl, DSS_EXTENT, (void *)extents, extent_count,
-                           action, 0);
+    return dss_generic_get(hdl, DSS_MEDIA,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)med_ls, med_cnt);
+}
+
+/*
+ * LAYOUT FUNCTIONS
+ */
+
+int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct layout_info **layouts, int *layout_count)
+{
+    return dss_generic_get(hdl, DSS_LAYOUT,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)layouts, layout_count);
 }
 
 int dss_layout_set(struct dss_handle *hdl, struct layout_info *layouts,
@@ -554,6 +517,50 @@ int dss_layout_set(struct dss_handle *hdl, struct layout_info *layouts,
 {
     return dss_generic_set(hdl, DSS_LAYOUT, (void *)layouts, layout_count,
                            action, 0);
+}
+
+/*
+ * FULL LAYOUT FUNCTIONS
+ */
+
+int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
+                        const struct dss_filter *media,
+                        struct layout_info **layouts, int *layout_count)
+{
+    return dss_generic_get(hdl, DSS_FULL_LAYOUT,
+                           (const struct dss_filter*[]) {object, media},
+                           (void **)layouts, layout_count);
+}
+
+/*
+ * EXTENT FUNCTIONS
+ */
+
+int dss_extent_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct extent **extents, int *extent_count)
+{
+    return dss_generic_get(hdl, DSS_EXTENT,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)extents, extent_count);
+}
+
+int dss_extent_set(struct dss_handle *hdl, struct extent *extents,
+                   int extent_count, enum dss_set_action action)
+{
+    return dss_generic_set(hdl, DSS_EXTENT, (void *)extents, extent_count,
+                           action, 0);
+}
+
+/*
+ * OBJECT FUNCTION
+ */
+
+int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct object_info **obj_ls, int *obj_cnt)
+{
+    return dss_generic_get(hdl, DSS_OBJECT,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)obj_ls, obj_cnt);
 }
 
 int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
@@ -569,6 +576,19 @@ int dss_object_update(struct dss_handle *hdl, struct object_info *obj_ls,
                            DSS_SET_UPDATE, fields);
 }
 
+/*
+ * DEPRECATED FUNCTION
+ */
+
+int dss_deprecated_object_get(struct dss_handle *hdl,
+                              const struct dss_filter *filter,
+                              struct object_info **obj_ls, int *obj_cnt)
+{
+    return dss_generic_get(hdl, DSS_DEPREC,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)obj_ls, obj_cnt);
+}
+
 int dss_deprecated_object_set(struct dss_handle *hdl,
                               struct object_info *obj_ls, int obj_cnt,
                               enum dss_set_action action)
@@ -582,6 +602,18 @@ int dss_deprecated_object_update(struct dss_handle *hdl,
 {
     return dss_generic_set(hdl, DSS_DEPREC, (void *)obj_ls, obj_cnt,
                            DSS_SET_UPDATE, fields);
+}
+
+/*
+ * LOGS FUNCTION
+ */
+
+int dss_logs_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                 struct pho_log **logs_ls, int *logs_cnt)
+{
+    return dss_generic_get(hdl, DSS_LOGS,
+                           (const struct dss_filter*[]) {filter, NULL},
+                           (void **)logs_ls, logs_cnt);
 }
 
 int dss_logs_insert(struct dss_handle *hdl, struct pho_log *logs, int log_cnt)

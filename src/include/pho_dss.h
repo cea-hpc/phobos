@@ -287,132 +287,6 @@ int dss_init(struct dss_handle *handle);
 void dss_fini(struct dss_handle *handle);
 
 /**
- * Retrieve devices information from DSS
- * @param[in]  hdl      valid connection handle
- * @param[in]  filter   assembled DSS filtering criteria
- * @param[out] dev_ls   list of retrieved items to be freed w/ dss_res_free()
- * @param[out] dev_cnt  number of items retrieved in the list
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct dev_info **dev_ls, int *dev_cnt);
-
-/**
- * Retrieve media information from DSS
- * @param[in]  hdl      valid connection handle
- * @param[in]  filter   assembled DSS filtering criteria
- * @param[out] med_ls   list of retrieved items to be freed w/ dss_res_free()
- * @param[out] med_cnt  number of items retrieved in the list
- *
- * @return 0 on success, negated errno on failure
- */
-mockable
-int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                  struct media_info **med_ls, int *med_cnt);
-
-/**
- * Retrieve layout information from DSS
- * @param[in]  hdl          valid connection handle
- * @param[in]  filter       assembled DSS filtering criteria
- * @param[out] layouts      list of retrieved items to be freed w/
- *                          dss_res_free()
- * @param[out] layout_count number of items retrieved in the list
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct layout_info **layouts, int *layout_count);
-
-/**
- * Retrieve layout + extents information from DSS
- * @param[in]  hdl           valid connection handle
- * @param[in]  object        assembled DSS filtering criteria on objects
- * @param[in]  media         assembled DSS filtering criteria on media
- * @param[out] layouts       list of retrieved items to be freed with
- *                           dss_res_free()
- * @param[out] layout_count  number of items retrieved in the list
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
-                        const struct dss_filter *media,
-                        struct layout_info **layouts, int *layout_count);
-
-/**
- * Retrieve extent information from DSS
- * @param[in]  hdl      valid connection handle
- * @param[in]  filter   assembled DSS filtering criteria
- * @param[out] extents  list of retrieved items to be freed w/ dss_res_free()
- * @param[out] extent_count number of items retrieved in the list
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_extent_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct extent **extents, int *extent_count);
-
-/**
- * Retrieve object information from DSS
- * @param[in]  hdl      valid connection handle
- * @param[in]  filter   assembled DSS filtering criteria
- * @param[out] obj_ls   list of retrieved items to be freed w/ dss_res_free()
- * @param[out] obj_cnt  number of items retrieved in the list
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct object_info **obj_ls, int *obj_cnt);
-
-/**
- * Retrieve deprecated object information from DSS
- * @param[in]   hdl     valid connection handle
- * @param[in]   filter  assembled DSS filtering criteria
- * @param[out]  obj_ls  list of retrieved items to be freed w/ dss_res_free()
- * @param[out]  obj_cnt number of items retrieved in the list
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_deprecated_object_get(struct dss_handle *hdl,
-                              const struct dss_filter *filter,
-                              struct object_info **obj_ls, int *obj_cnt);
-
-/**
- * Insert logs into the DSS
- *
- * @param[in]   hdl       valid connection handle
- * @param[out]  logs      list of logs to insert
- * @param[out]  logs_cnt  number of logs to insert
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_logs_insert(struct dss_handle *hdl, struct pho_log *logss,
-                    int logs_cnt);
-
-/**
- * Retrieve logs information from DSS
- *
- * @param[in]   hdl      valid connection handle
- * @param[in]   filter   assembled DSS filtering criteria
- * @param[out]  logs_ls  list of retrieved items to be freed w/ dss_res_free()
- * @param[out]  logs_cnt number of items retrieved in the list
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_logs_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                 struct pho_log **logs_ls, int *logs_cnt);
-
-/**
- * Clear logs information from DSS
- *
- * @param[in]   hdl      valid connection handle
- * @param[in]   filter   assembled DSS filtering criteria, if NULL, will delete
- *                       every log
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_logs_delete(struct dss_handle *hdl, const struct dss_filter *filter);
-
-/**
  *  Generic function: frees item_list that was allocated in dss_xxx_get()
  *  @param[in]  item_list   list of items to free
  *  @param[in]  item_cnt    number of items in item_list
@@ -431,6 +305,21 @@ void dss_res_free(void *item_list, int item_cnt);
 int dss_device_insert(struct dss_handle *hdl, struct dev_info *dev_ls,
                       int dev_cnt);
 
+int dss_device_update(struct dss_handle *hdl, struct dev_info *dev_ls,
+                      int dev_cnt, int64_t fields);
+
+/**
+ * Retrieve devices information from DSS
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  filter   assembled DSS filtering criteria
+ * @param[out] dev_ls   list of retrieved items to be freed w/ dss_res_free()
+ * @param[out] dev_cnt  number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_device_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct dev_info **dev_ls, int *dev_cnt);
+
 /**
  * Delete information of one or many devices in DSS.
  * @param[in]  hdl      valid connection handle
@@ -441,10 +330,6 @@ int dss_device_insert(struct dss_handle *hdl, struct dev_info *dev_ls,
  */
 int dss_device_delete(struct dss_handle *hdl, struct dev_info *dev_ls,
                       int dev_cnt);
-
-
-int dss_device_update(struct dss_handle *hdl, struct dev_info *dev_ls,
-                      int dev_cnt, int64_t fields);
 
 /**
  * Store information for one or many media in DSS.
@@ -460,16 +345,29 @@ int dss_media_set(struct dss_handle *hdl, struct media_info *med_ls,
                   int med_cnt, enum dss_set_action action, uint64_t fields);
 
 /**
- * Store information for one or many layouts in DSS.
+ * Retrieve media information from DSS
  * @param[in]  hdl      valid connection handle
- * @param[in]  lyt_ls   array of entries to store
- * @param[in]  lyt_cnt  number of items in the list
- * @param[in]  action   operation code (insert, update, delete)
+ * @param[in]  filter   assembled DSS filtering criteria
+ * @param[out] med_ls   list of retrieved items to be freed w/ dss_res_free()
+ * @param[out] med_cnt  number of items retrieved in the list
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_layout_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
-                   int lyt_cnt, enum dss_set_action action);
+mockable
+int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                  struct media_info **med_ls, int *med_cnt);
+
+/**
+ * Retrieve extent information from DSS
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  filter   assembled DSS filtering criteria
+ * @param[out] extents  list of retrieved items to be freed w/ dss_res_free()
+ * @param[out] extent_count number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_extent_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct extent **extents, int *extent_count);
 
 /**
  * Store information for one or many extents in DSS.
@@ -482,6 +380,58 @@ int dss_layout_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
  */
 int dss_extent_set(struct dss_handle *hdl, struct extent *extents,
                    int extent_count, enum dss_set_action action);
+
+/**
+ * Retrieve layout information from DSS
+ * @param[in]  hdl          valid connection handle
+ * @param[in]  filter       assembled DSS filtering criteria
+ * @param[out] layouts      list of retrieved items to be freed w/
+ *                          dss_res_free()
+ * @param[out] layout_count number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct layout_info **layouts, int *layout_count);
+
+/**
+ * Store information for one or many layouts in DSS.
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  lyt_ls   array of entries to store
+ * @param[in]  lyt_cnt  number of items in the list
+ * @param[in]  action   operation code (insert, update, delete)
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_layout_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
+                   int lyt_cnt, enum dss_set_action action);
+
+/**
+ * Retrieve layout + extents information from DSS
+ * @param[in]  hdl           valid connection handle
+ * @param[in]  object        assembled DSS filtering criteria on objects
+ * @param[in]  media         assembled DSS filtering criteria on media
+ * @param[out] layouts       list of retrieved items to be freed with
+ *                           dss_res_free()
+ * @param[out] layout_count  number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
+                        const struct dss_filter *media,
+                        struct layout_info **layouts, int *layout_count);
+
+/**
+ * Retrieve object information from DSS
+ * @param[in]  hdl      valid connection handle
+ * @param[in]  filter   assembled DSS filtering criteria
+ * @param[out] obj_ls   list of retrieved items to be freed w/ dss_res_free()
+ * @param[out] obj_cnt  number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                   struct object_info **obj_ls, int *obj_cnt);
 
 /**
  * Store information for one or many objects in DSS.
@@ -506,6 +456,19 @@ int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
  */
 int dss_object_update(struct dss_handle *hdl, struct object_info *obj_ls,
                       int obj_cnt, int64_t fields);
+
+/**
+ * Retrieve deprecated object information from DSS
+ * @param[in]   hdl     valid connection handle
+ * @param[in]   filter  assembled DSS filtering criteria
+ * @param[out]  obj_ls  list of retrieved items to be freed w/ dss_res_free()
+ * @param[out]  obj_cnt number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_deprecated_object_get(struct dss_handle *hdl,
+                              const struct dss_filter *filter,
+                              struct object_info **obj_ls, int *obj_cnt);
 
 /**
  * Store information for one or many deprecated objects in DSS.
@@ -534,8 +497,41 @@ int dss_deprecated_object_update(struct dss_handle *hdl,
                                  struct object_info *obj_lst,
                                  int obj_cnt, int64_t fields);
 
-int dss_logs_set(struct dss_handle *hdl, struct pho_log *logs,
-                 int logs_cnt, enum dss_set_action action);
+/**
+ * Retrieve logs information from DSS
+ *
+ * @param[in]   hdl      valid connection handle
+ * @param[in]   filter   assembled DSS filtering criteria
+ * @param[out]  logs_ls  list of retrieved items to be freed w/ dss_res_free()
+ * @param[out]  logs_cnt number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_logs_get(struct dss_handle *hdl, const struct dss_filter *filter,
+                 struct pho_log **logs_ls, int *logs_cnt);
+
+/**
+ * Insert logs into the DSS
+ *
+ * @param[in]   hdl       valid connection handle
+ * @param[out]  logs      list of logs to insert
+ * @param[out]  logs_cnt  number of logs to insert
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_logs_insert(struct dss_handle *hdl, struct pho_log *logss,
+                    int logs_cnt);
+
+/**
+ * Clear logs information from DSS
+ *
+ * @param[in]   hdl      valid connection handle
+ * @param[in]   filter   assembled DSS filtering criteria, if NULL, will delete
+ *                       every log
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_logs_delete(struct dss_handle *hdl, const struct dss_filter *filter);
 
 /* ****************************************************************************/
 /* Generic lock ***************************************************************/
