@@ -63,7 +63,7 @@ static char *dss_extent_hash_encode(struct extent *extent)
 {
     char *result = NULL;
     json_t *root;
-    int rc;
+    int rc = 0;
 
     ENTRY;
 
