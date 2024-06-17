@@ -397,28 +397,42 @@ int dss_media_delete(struct dss_handle *handle, struct media_info *media_list,
                      int media_count);
 
 /**
- * Retrieve extent information from DSS
- * @param[in]  hdl      valid connection handle
- * @param[in]  filter   assembled DSS filtering criteria
- * @param[out] extents  list of retrieved items to be freed w/ dss_res_free()
- * @param[out] extent_count number of items retrieved in the list
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_extent_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct extent **extents, int *extent_count);
-
-/**
  * Store information for one or many extents in DSS.
- * @param[in]  hdl           valid connection handle
+ *
+ * @param[in]  handle        valid connection handle
  * @param[in]  extents       array of entries to store
  * @param[in]  extent_count  number of items in the list
- * @param[in]  action        operation code (insert, update, delete)
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_extent_set(struct dss_handle *hdl, struct extent *extents,
-                   int extent_count, enum dss_set_action action);
+int dss_extent_insert(struct dss_handle *handle, struct extent *extents,
+                      int extent_count);
+
+/**
+ * Update information for one or many extents in DSS.
+ *
+ * @param[in]  handle        valid connection handle
+ * @param[in]  extents       array of entries to update
+ * @param[in]  extent_count  number of items in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_extent_update(struct dss_handle *handle, struct extent *extents,
+                      int extent_count);
+
+/**
+ * Retrieve extent information from DSS.
+ *
+ * @param[in]  handle        valid connection handle
+ * @param[in]  filter        assembled DSS filtering criteria
+ * @param[out] extents       list of retrieved items to be freed
+ *                           w/ dss_res_free()
+ * @param[out] extent_count  number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_extent_get(struct dss_handle *handle, const struct dss_filter *filter,
+                   struct extent **extents, int *extent_count);
 
 /**
  * Store information for one or many layouts in DSS.

@@ -908,8 +908,8 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
     /* Once the encoder is done and successful, save the layout and metadata */
     if (!enc->is_decoder && xfer->xd_rc == 0 && rc == 0) {
         pho_debug("Saving layout for objid:'%s'", xfer->xd_objid);
-        rc = dss_extent_set(&pho->dss, enc->layout->extents,
-                            enc->layout->ext_count, DSS_SET_INSERT);
+        rc = dss_extent_insert(&pho->dss, enc->layout->extents,
+                            enc->layout->ext_count);
         if (rc) {
             pho_error(rc, "Error while saving extents for objid: '%s'",
                       xfer->xd_objid);
@@ -924,8 +924,8 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
                 for (i = 0; i < enc->layout->ext_count; ++i)
                     enc->layout->extents[i].state = PHO_EXT_ST_ORPHAN;
 
-                rc2 = dss_extent_set(&pho->dss, enc->layout->extents,
-                                     enc->layout->ext_count, DSS_SET_UPDATE);
+                rc2 = dss_extent_update(&pho->dss, enc->layout->extents,
+                                     enc->layout->ext_count);
 
                 if (rc2)
                     pho_error(rc2, "Error while updating extents to orphan");

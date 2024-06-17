@@ -47,7 +47,7 @@ static int de_simple_setup(void **state)
     int rc;
 
     /* insert the extent */
-    rc = dss_extent_set(handle, &EXT, 1, DSS_SET_INSERT);
+    rc = dss_extent_insert(handle, &EXT, 1);
     if (rc)
         return -1;
 
@@ -80,7 +80,7 @@ static void de_simple_ok(void **state)
     /* media.name is a buffer larger than the size of check_media_name */
     ext_res->media.name[strlen(ext_res->media.name)] = '2';
     ext_res->address.buff[0] = 'c';
-    rc = dss_extent_set(handle, ext_res, ext_cnt, DSS_SET_UPDATE);
+    rc = dss_extent_update(handle, ext_res, ext_cnt);
     assert_return_code(rc, -rc);
     dss_res_free(ext_res, ext_cnt);
 

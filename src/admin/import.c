@@ -294,7 +294,7 @@ static int _add_extent_to_dss(struct dss_handle *dss,
     lyt_insert->extents = extent_to_insert;
     lyt_insert->ext_count = 1;
 
-    rc = dss_extent_set(dss, extent_to_insert, 1, DSS_SET_INSERT);
+    rc = dss_extent_insert(dss, extent_to_insert, 1);
     if (rc)
         LOG_GOTO(lyt_info_get_free, rc,
                  "Failed to insert extent '%s'", extent_to_insert->uuid);

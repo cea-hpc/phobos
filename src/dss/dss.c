@@ -552,19 +552,26 @@ int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
  * EXTENT FUNCTIONS
  */
 
-int dss_extent_get(struct dss_handle *hdl, const struct dss_filter *filter,
+int dss_extent_get(struct dss_handle *handle, const struct dss_filter *filter,
                    struct extent **extents, int *extent_count)
 {
-    return dss_generic_get(hdl, DSS_EXTENT,
+    return dss_generic_get(handle, DSS_EXTENT,
                            (const struct dss_filter*[]) {filter, NULL},
                            (void **)extents, extent_count);
 }
 
-int dss_extent_set(struct dss_handle *hdl, struct extent *extents,
-                   int extent_count, enum dss_set_action action)
+int dss_extent_insert(struct dss_handle *handle, struct extent *extents,
+                   int extent_count)
 {
-    return dss_generic_set(hdl, DSS_EXTENT, (void *)extents, extent_count,
-                           action, 0);
+    return dss_generic_set(handle, DSS_EXTENT, (void *)extents, extent_count,
+                           DSS_SET_INSERT, 0);
+}
+
+int dss_extent_update(struct dss_handle *handle, struct extent *extents,
+                   int extent_count)
+{
+    return dss_generic_set(handle, DSS_EXTENT, (void *)extents, extent_count,
+                           DSS_SET_UPDATE, 0);
 }
 
 /*
