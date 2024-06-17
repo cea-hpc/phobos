@@ -161,7 +161,7 @@ static void _dss_result_free(struct dss_result *dss_res, int item_cnt)
 }
 
 static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
-                           const struct dss_filter **filters,
+                           const struct dss_filter **filters, int filters_count,
                            void **item_list, int *item_cnt)
 {
     PGconn *conn = handle->dh_conn;
@@ -169,7 +169,6 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     GString *clause = NULL;
     GString **conditions;
     size_t dss_res_size;
-    int n_conditions;
     size_t item_size;
     PGresult *res;
     int rc = 0;
@@ -184,34 +183,23 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     *item_list = NULL;
     *item_cnt  = 0;
 
-    conditions = xmalloc(sizeof(*conditions) * 2);
-    conditions[0] = g_string_new(NULL);
-    rc = clause_filter_convert(handle, conditions[0], filters[0]);
-    if (rc) {
-        g_string_free(conditions[0], true);
-        return rc;
-    }
-
-    if (type == DSS_FULL_LAYOUT) {
-        conditions[1] = g_string_new(NULL);
-        rc = clause_filter_convert(handle, conditions[1], filters[1]);
+    conditions = xmalloc(sizeof(*conditions) * filters_count);
+    for (i = 0; i < filters_count; ++i) {
+        conditions[i] = g_string_new(NULL);
+        rc = clause_filter_convert(handle, conditions[i], filters[i]);
         if (rc) {
-            g_string_free(conditions[0], true);
-            g_string_free(conditions[1], true);
+            for (; i >= 0; --i)
+                g_string_free(conditions[i], true);
+
+            free(conditions);
             return rc;
         }
-
-        n_conditions = 2;
-    } else {
-        n_conditions = 1;
     }
 
     clause = g_string_new(NULL);
-    rc = get_select_query(type, conditions, n_conditions, clause);
-    g_string_free(conditions[0], true);
-
-    if (type == DSS_FULL_LAYOUT)
-        g_string_free(conditions[1], true);
+    rc = get_select_query(type, conditions, filters_count, clause);
+    for (i = 0; i < filters_count; ++i)
+        g_string_free(conditions[i], true);
 
     free(conditions);
     if (rc) {
@@ -336,7 +324,7 @@ int dss_device_get(struct dss_handle *handle, const struct dss_filter *filter,
                    struct dev_info **device_list, int *device_count)
 {
     return dss_generic_get(handle, DSS_DEVICE,
-                           (const struct dss_filter*[]) {filter, NULL},
+                           (const struct dss_filter*[]) {filter, NULL}, 1,
                            (void **)device_list, device_count);
 }
 
@@ -466,7 +454,7 @@ int dss_media_get(struct dss_handle *handle, const struct dss_filter *filter,
                   struct media_info **media_list, int *media_count)
 {
     return dss_generic_get(handle, DSS_MEDIA,
-                           (const struct dss_filter*[]) {filter, NULL},
+                           (const struct dss_filter*[]) {filter, NULL}, 1,
                            (void **) media_list, media_count);
 }
 
@@ -485,7 +473,7 @@ int dss_layout_get(struct dss_handle *handle, const struct dss_filter *filter,
                    struct layout_info **layouts, int *layout_count)
 {
     return dss_generic_get(handle, DSS_LAYOUT,
-                           (const struct dss_filter*[]) {filter, NULL},
+                           (const struct dss_filter*[]) {filter, NULL}, 1,
                            (void **)layouts, layout_count);
 }
 
@@ -506,7 +494,7 @@ int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
                         struct layout_info **layouts, int *layout_count)
 {
     return dss_generic_get(hdl, DSS_FULL_LAYOUT,
-                           (const struct dss_filter*[]) {object, media},
+                           (const struct dss_filter*[]) {object, media}, 2,
                            (void **)layouts, layout_count);
 }
 
@@ -518,7 +506,7 @@ int dss_extent_get(struct dss_handle *handle, const struct dss_filter *filter,
                    struct extent **extents, int *extent_count)
 {
     return dss_generic_get(handle, DSS_EXTENT,
-                           (const struct dss_filter*[]) {filter, NULL},
+                           (const struct dss_filter*[]) {filter, NULL}, 1,
                            (void **)extents, extent_count);
 }
 
@@ -565,7 +553,7 @@ int dss_object_get(struct dss_handle *handle, const struct dss_filter *filter,
                    struct object_info **object_list, int *object_count)
 {
     return dss_generic_get(handle, DSS_OBJECT,
-                           (const struct dss_filter*[]) {filter, NULL},
+                           (const struct dss_filter*[]) {filter, NULL}, 1,
                            (void **)object_list, object_count);
 }
 
@@ -603,7 +591,7 @@ int dss_deprecated_object_get(struct dss_handle *handle,
                               int *object_count)
 {
     return dss_generic_get(handle, DSS_DEPREC,
-                           (const struct dss_filter*[]) {filter, NULL},
+                           (const struct dss_filter*[]) {filter, NULL}, 1,
                            (void **)object_list, object_count);
 }
 
@@ -623,7 +611,7 @@ int dss_logs_get(struct dss_handle *hdl, const struct dss_filter *filter,
                  struct pho_log **logs_ls, int *logs_cnt)
 {
     return dss_generic_get(hdl, DSS_LOGS,
-                           (const struct dss_filter*[]) {filter, NULL},
+                           (const struct dss_filter*[]) {filter, NULL}, 1,
                            (void **)logs_ls, logs_cnt);
 }
 
