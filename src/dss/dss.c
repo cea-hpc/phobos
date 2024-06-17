@@ -145,24 +145,6 @@ void dss_fini(struct dss_handle *handle)
     PQfinish(handle->dh_conn);
 }
 
-static inline bool is_type_supported(enum dss_type type)
-{
-    switch (type) {
-    case DSS_OBJECT:
-    case DSS_DEPREC:
-    case DSS_LAYOUT:
-    case DSS_FULL_LAYOUT:
-    case DSS_EXTENT:
-    case DSS_DEVICE:
-    case DSS_MEDIA:
-    case DSS_LOGS:
-        return true;
-
-    default:
-        return false;
-    }
-}
-
 static void _dss_result_free(struct dss_result *dss_res, int item_cnt)
 {
     size_t item_size;
@@ -202,9 +184,6 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     *item_list = NULL;
     *item_cnt  = 0;
 
-    if (!is_type_supported(type))
-        LOG_RETURN(-ENOTSUP, "Unsupported DSS request type %#x", type);
-
     conditions = xmalloc(sizeof(*conditions) * 2);
     conditions[0] = g_string_new(NULL);
     rc = clause_filter_convert(handle, conditions[0], filters[0]);
@@ -242,17 +221,10 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
 
     pho_debug("Executing request: '%s'", clause->str);
 
-    res = PQexec(conn, clause->str);
-    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-        rc = psql_state2errno(res);
-        pho_error(rc, "Query '%s' failed: %s", clause->str,
-                  PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
-        PQclear(res);
-        g_string_free(clause, true);
-        return rc;
-    }
-
+    rc = execute_and_commit_or_rollback(conn, clause, &res, PGRES_TUPLES_OK);
     g_string_free(clause, true);
+    if (rc)
+        return rc;
 
     item_size = get_resource_size(type);
 
@@ -298,16 +270,6 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
         (type != DSS_LOGS && (item_list == NULL || item_cnt == 0)))
         LOG_RETURN(-EINVAL, "conn: %p, item_list: %p, item_cnt: %d",
                    conn, item_list, item_cnt);
-
-    if (action == DSS_SET_FULL_INSERT &&
-        !(type == DSS_OBJECT || type == DSS_LAYOUT))
-        LOG_RETURN(-ENOTSUP, "Full insert request is not supported for %s",
-                   dss_type_names[type]);
-
-    if (action == DSS_SET_UPDATE_OBJ_STATUS && type != DSS_OBJECT)
-        LOG_RETURN(-ENOTSUP,
-                   "Specific obj_status update is not supported for %s",
-                   dss_type_names[type]);
 
     request = g_string_new("BEGIN;");
 
@@ -582,6 +544,11 @@ int dss_object_insert(struct dss_handle *handle,
                       struct object_info *object_list,
                       int object_count, enum dss_set_action action)
 {
+    if (action != DSS_SET_INSERT && action != DSS_SET_FULL_INSERT)
+        LOG_RETURN(-ENOTSUP,
+                   "Only actions available for object insert are normal insert "
+                   "and full insert");
+
     return dss_generic_set(handle, DSS_OBJECT, (void *)object_list,
                            object_count, action, 0);
 }

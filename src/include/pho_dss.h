@@ -117,7 +117,6 @@ enum dss_set_action {
                            *  default DSS values.
                            */
     DSS_SET_UPDATE,
-    DSS_SET_UPDATE_OBJ_STATUS, /** Atomic update of obj_status column */
     DSS_SET_DELETE,
     DSS_SET_LAST,
 };
@@ -126,7 +125,6 @@ static const char * const dss_set_actions_names[] = {
     [DSS_SET_INSERT]             = "insert",
     [DSS_SET_FULL_INSERT]        = "full-insert",
     [DSS_SET_UPDATE]             = "update",
-    [DSS_SET_UPDATE_OBJ_STATUS]  = "update_obj_status",
     [DSS_SET_DELETE]             = "delete",
 };
 
