@@ -576,6 +576,8 @@ static int layout_raid4_encode(struct pho_encoder *enc)
 {
     struct raid_io_context *io_context = xcalloc(1, sizeof(*io_context));
 
+    ENTRY;
+
     enc->ops = &RAID4_ENCODER_OPS;
     enc->priv_enc = io_context;
 
@@ -625,6 +627,8 @@ static int layout_raid4_decode(struct pho_encoder *dec)
 {
     struct raid_io_context *io_context;
     int i;
+
+    ENTRY;
 
     if (!dec->is_decoder)
         LOG_RETURN(-EINVAL, "ask to create a decoder on an encoder");

@@ -1,0 +1,167 @@
+#!/bin/bash
+# -*- mode: c; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+# vim:expandtab:shiftwidth=4:tabstop=4:
+
+#
+#  All rights reserved (c) 2014-2024 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
+
+function setup_dir
+{
+    DIRS=(
+        $(mktemp -d)
+        $(mktemp -d)
+        $(mktemp -d)
+    )
+
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_STORE_default_family="dir"
+
+    setup_tables
+    invoke_lrs
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
+function cleanup_dir
+{
+    waive_lrs
+    rm -r ${DIRS[@]}
+    drop_tables
+}
+
+function test_put_get()
+{
+    local oid=$FUNCNAME
+
+    $valg_phobos put -l raid4 /etc/hosts $oid
+    $valg_phobos get $oid /tmp/out.$$
+
+    diff /etc/hosts /tmp/out.$$
+    rm /tmp/out.$$
+}
+
+# FIXME this test doesn't pass for now, it will be fixed later in the stack
+function test_read_with_missing_extent()
+{
+    local oid=$FUNCNAME
+
+    $valg_phobos put -l raid4 /etc/hosts $oid
+
+    for d in $($phobos dir list); do
+        $phobos dir lock $d
+
+        $valg_phobos get $oid /tmp/out.$$
+        diff /etc/hosts /tmp/out.$$
+        rm /tmp/out.$$
+
+        $phobos dir unlock $d
+    done
+}
+
+function setup_dir_split()
+{
+    DIRS=(
+        $(make_tmp_fs 1M)
+        $(make_tmp_fs 1M)
+        $(make_tmp_fs 1M)
+        $(make_tmp_fs 1M)
+        $(make_tmp_fs 1M)
+        $(make_tmp_fs 1M)
+    )
+
+    setup_tables
+    export PHOBOS_LRS_families="dir"
+    export PHOBOS_STORE_default_family="dir"
+
+    invoke_lrs
+
+    $phobos dir add ${DIRS[@]}
+    $phobos dir format --unlock ${DIRS[@]}
+}
+
+function cleanup_dir_split()
+{
+    waive_lrs
+    drop_tables
+    for dir in ${DIRS[@]}; do
+        cleanup_tmp_fs $dir
+    done
+}
+
+function test_put_get_split()
+{
+    local file=$(mktemp)
+    local oid=$FUNCNAME
+    local out=/tmp/out.$$
+
+    dd if=/dev/urandom of="$file" bs=3M count=1
+
+    $valg_phobos put -l raid4 "$file" $oid
+    $valg_phobos get $oid "$out"
+    diff "$out" "$file"
+    rm "$out" "$file"
+}
+
+# FIXME this test doesn't pass for now, it will be fixed later in the stack
+function test_put_get_split_with_missing_extents()
+{
+    local file=$(mktemp)
+    local oid=$FUNCNAME
+    local out=/tmp/out.$$
+
+    dd if=/dev/urandom of="$file" bs=3M count=1
+
+    $valg_phobos put -l raid4 "$file" $oid
+
+    for d in $($phobos dir list); do
+        $phobos dir lock $d
+
+        $valg_phobos get $oid "$out"
+        diff "$file" "$out"
+        rm "$out"
+
+        $phobos dir unlock $d
+    done
+
+    rm "$file"
+}
+
+TESTS=(
+    "setup_dir; \
+     test_put_get; \
+     cleanup_dir"
+    "setup_dir_split; \
+     test_put_get_split; \
+     cleanup_dir_split"
+    # "setup_dir_split; \
+    #  test_put_get_split_with_missing_extents; \
+    #  cleanup_dir_split"
+)
+
+if  [[ -w /dev/changer ]]; then
+    TESTS+=()
+fi
