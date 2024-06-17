@@ -348,7 +348,7 @@ class StoreGenericPutHandler(XferOptHandler):
                             choices=list(map(rsc_family2str, ResourceFamily)),
                             help='Targeted storage family')
         parser.add_argument('-l', '--layout', '--lyt',
-                            choices=["raid1", "raid5"],
+                            choices=["raid1", "raid4"],
                             help='Desired storage layout')
         parser.add_argument('-a', '--alias',
                             help='Desired alias for family, tags and layout. '

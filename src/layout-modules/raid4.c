@@ -20,13 +20,13 @@
  *  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
  */
 /**
- * \brief  Phobos Raid5 Layout plugin
+ * \brief  Phobos Raid4 Layout plugin
  */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
-#include "raid5.h"
+#include "raid4.h"
 #include "raid_common.h"
 #include <errno.h>
 #include <glib.h>
@@ -43,23 +43,23 @@
 #include "pho_srl_common.h"
 #include "pho_type_utils.h"
 
-#define PLUGIN_NAME     "raid5"
+#define PLUGIN_NAME     "raid4"
 #define PLUGIN_MAJOR    0
 #define PLUGIN_MINOR    1
 
-static struct module_desc RAID5_MODULE_DESC = {
+static struct module_desc RAID4_MODULE_DESC = {
     .mod_name  = PLUGIN_NAME,
     .mod_major = PLUGIN_MAJOR,
     .mod_minor = PLUGIN_MINOR,
 };
 
 __attribute__((unused))
-static const struct pho_enc_ops RAID5_ENCODER_OPS = {
+static const struct pho_enc_ops RAID4_ENCODER_OPS = {
     .step       = raid_encoder_step,
     .destroy    = raid_encoder_destroy,
 };
 
-static const struct pho_layout_module_ops LAYOUT_RAID5_OPS = {
+static const struct pho_layout_module_ops LAYOUT_RAID4_OPS = {
     .encode = NULL,
     .decode = NULL,
     .locate = NULL,
@@ -74,8 +74,8 @@ int pho_module_register(void *module, void *context)
 
     phobos_module_context_set(context);
 
-    self->desc = RAID5_MODULE_DESC;
-    self->ops = &LAYOUT_RAID5_OPS;
+    self->desc = RAID4_MODULE_DESC;
+    self->ops = &LAYOUT_RAID4_OPS;
 
     return 0;
 }
