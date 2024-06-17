@@ -614,28 +614,38 @@ int dss_object_delete(struct dss_handle *handle,
  * DEPRECATED FUNCTION
  */
 
-int dss_deprecated_object_get(struct dss_handle *hdl,
+int dss_deprecated_object_insert(struct dss_handle *handle,
+                                 struct object_info *object_list,
+                                 int object_count)
+{
+    return dss_generic_set(handle, DSS_DEPREC, (void *) object_list,
+                           object_count, DSS_SET_INSERT, 0);
+}
+
+int dss_deprecated_object_update(struct dss_handle *handle,
+                                 struct object_info *object_list,
+                                 int object_count, int64_t fields)
+{
+    return dss_generic_set(handle, DSS_DEPREC, (void *) object_list,
+                           object_count, DSS_SET_UPDATE, fields);
+}
+
+int dss_deprecated_object_get(struct dss_handle *handle,
                               const struct dss_filter *filter,
-                              struct object_info **obj_ls, int *obj_cnt)
+                              struct object_info **object_list,
+                              int *object_count)
 {
-    return dss_generic_get(hdl, DSS_DEPREC,
+    return dss_generic_get(handle, DSS_DEPREC,
                            (const struct dss_filter*[]) {filter, NULL},
-                           (void **)obj_ls, obj_cnt);
+                           (void **)object_list, object_count);
 }
 
-int dss_deprecated_object_set(struct dss_handle *hdl,
-                              struct object_info *obj_ls, int obj_cnt,
-                              enum dss_set_action action)
+int dss_deprecated_object_delete(struct dss_handle *handle,
+                                 struct object_info *object_list,
+                                 int object_count)
 {
-    return dss_generic_set(hdl, DSS_DEPREC, (void *)obj_ls, obj_cnt, action, 0);
-}
-
-int dss_deprecated_object_update(struct dss_handle *hdl,
-                                 struct object_info *obj_ls, int obj_cnt,
-                                 int64_t fields)
-{
-    return dss_generic_set(hdl, DSS_DEPREC, (void *)obj_ls, obj_cnt,
-                           DSS_SET_UPDATE, fields);
+    return dss_generic_set(handle, DSS_DEPREC, (void *)object_list,
+                           object_count, DSS_SET_DELETE, 0);
 }
 
 /*

@@ -252,7 +252,7 @@ static int dom_simple_already_exist_teardown(void **state)
     if (rc)
         return -1;
 
-    rc = dss_deprecated_object_set(handle, obj_res, obj_cnt, DSS_SET_DELETE);
+    rc = dss_deprecated_object_delete(handle, obj_res, obj_cnt);
     dss_res_free(obj_res, obj_cnt);
     if (rc)
         return -1;

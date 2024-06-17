@@ -326,7 +326,7 @@ insert_object_with_different_uuid(struct dss_handle *dss,
     }
 
     if (found_in_depr) {
-        rc = dss_deprecated_object_set(dss, obj_to_insert, 1, DSS_SET_INSERT);
+        rc = dss_deprecated_object_insert(dss, obj_to_insert, 1);
         if (rc)
             pho_error(rc, "Could not set deprecated object");
 
@@ -430,8 +430,7 @@ static int _add_object_to_dss(struct dss_handle *dss,
                              "with same oid to deprecated",
                              object_to_insert->oid);
             } else {
-                rc = dss_deprecated_object_set(dss, object_to_insert, 1,
-                                               DSS_SET_INSERT);
+                rc = dss_deprecated_object_insert(dss, object_to_insert, 1);
                 if (rc)
                     LOG_GOTO(objects_free, rc,
                              "Could not insert deprecated object '%s'",
