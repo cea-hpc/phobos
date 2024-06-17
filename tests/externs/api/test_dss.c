@@ -77,12 +77,16 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
     switch (type) {
     case DSS_OBJECT:
         switch (action) {
+        case DSS_SET_INSERT:
+            return dss_object_insert(handle, (struct object_info *)item_list, n,
+                                     DSS_SET_INSERT);
         case DSS_SET_UPDATE:
             return dss_object_update(handle, (struct object_info *)item_list, n,
                                      DSS_OBJECT_UPDATE_USER_MD);
+        case DSS_SET_DELETE:
         default:
-            return dss_object_set(handle, (struct object_info *)item_list, n,
-                                  action);
+            return dss_object_delete(handle, (struct object_info *)item_list,
+                                     n);
         }
     case DSS_DEPREC:
         return dss_deprecated_object_set(handle,

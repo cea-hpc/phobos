@@ -52,7 +52,7 @@ static int dom_simple_setup(void **state)
     int rc;
 
     /* insert the object */
-    rc = dss_object_set(handle, &OBJ, 1, DSS_SET_INSERT);
+    rc = dss_object_insert(handle, &OBJ, 1, DSS_SET_INSERT);
     if (rc)
         return -1;
 
@@ -108,7 +108,7 @@ static int dom_simple_ok_teardown(void **state)
     int rc;
 
     /* delete the object */
-    rc = dss_object_set(handle, &OBJ, 1, DSS_SET_DELETE);
+    rc = dss_object_delete(handle, &OBJ, 1);
     if (rc)
         return -1;
 
@@ -129,7 +129,7 @@ static int dom_3_ok_setup(void **state)
     int rc;
 
     /* insert the objects */
-    rc = dss_object_set(handle, OBJ_3, 3, DSS_SET_INSERT);
+    rc = dss_object_insert(handle, OBJ_3, 3, DSS_SET_INSERT);
     if (rc)
         return -1;
 
@@ -187,7 +187,7 @@ static int dom_3_ok_teardown(void **state)
     int rc;
 
     /* delete the objects */
-    rc = dss_object_set(handle, OBJ_3, 3, DSS_SET_DELETE);
+    rc = dss_object_delete(handle, OBJ_3, 3);
     if (rc)
         return -1;
 
@@ -219,7 +219,7 @@ static void dom_simple_already_exist(void **state)
     assert_int_equal(obj_cnt, 1);
 
     /* insert again object before moving back */
-    rc = dss_object_set(handle, &OBJ, 1, DSS_SET_INSERT);
+    rc = dss_object_insert(handle, &OBJ, 1, DSS_SET_INSERT);
     assert_return_code(rc, -rc);
 
     /* trying to move back from deprecated_object to object */
@@ -237,7 +237,7 @@ static int dom_simple_already_exist_teardown(void **state)
     int rc;
 
     /* delete the object */
-    rc = dss_object_set(handle, &OBJ, 1, DSS_SET_DELETE);
+    rc = dss_object_delete(handle, &OBJ, 1);
     if (rc)
         return -1;
 

@@ -342,7 +342,7 @@ insert_object_with_different_uuid(struct dss_handle *dss,
     // This will be changed back after the extent is inserted
     obj_to_insert->oid = modified_oid;
 
-    rc = dss_object_set(dss, obj_to_insert, 1, DSS_SET_FULL_INSERT);
+    rc = dss_object_insert(dss, obj_to_insert, 1, DSS_SET_FULL_INSERT);
     if (rc)
         pho_error(rc, "Could not create new object");
 
@@ -393,7 +393,7 @@ static int _add_object_to_dss(struct dss_handle *dss,
                    object_to_insert->oid);
 
     if (objects_count == 0 && deprecated_objects_count == 0) {
-        rc = dss_object_set(dss, object_to_insert, 1, DSS_SET_FULL_INSERT);
+        rc = dss_object_insert(dss, object_to_insert, 1, DSS_SET_FULL_INSERT);
         if (rc)
             pho_error(rc,
                       "Could not insert object with oid '%s', uuid '%s' and "
@@ -422,7 +422,7 @@ static int _add_object_to_dss(struct dss_handle *dss,
                              "Could not move old object '%s' to deprecated",
                              objects->oid);
 
-                rc = dss_object_set(dss, object_to_insert, 1,
+                rc = dss_object_insert(dss, object_to_insert, 1,
                                     DSS_SET_FULL_INSERT);
                 if (rc)
                     LOG_GOTO(objects_free, rc,
@@ -444,7 +444,7 @@ static int _add_object_to_dss(struct dss_handle *dss,
 
     assert(objects_count == 0);
 
-    rc = dss_object_set(dss, object_to_insert, 1, DSS_SET_INSERT);
+    rc = dss_object_insert(dss, object_to_insert, 1, DSS_SET_INSERT);
     if (rc)
         LOG_GOTO(objects_free, rc, "Could not insert deprecated object '%s'",
                  object_to_insert->oid);

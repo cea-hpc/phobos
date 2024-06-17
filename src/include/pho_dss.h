@@ -477,40 +477,58 @@ int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
                         struct layout_info **layouts, int *layout_count);
 
 /**
- * Retrieve object information from DSS
- * @param[in]  hdl      valid connection handle
- * @param[in]  filter   assembled DSS filtering criteria
- * @param[out] obj_ls   list of retrieved items to be freed w/ dss_res_free()
- * @param[out] obj_cnt  number of items retrieved in the list
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct object_info **obj_ls, int *obj_cnt);
-
-/**
  * Store information for one or many objects in DSS.
- * @param[in]  hdl      valid connection handle
- * @param[in]  obj_ls   array of entries to store
- * @param[in]  obj_cnt  number of items in the list
- * @param[in]  action   operation code (insert, update, delete)
+ *
+ * @param[in]  handle        valid connection handle
+ * @param[in]  object_list   array of entries to store
+ * @param[in]  object_count  number of items in the list
+ * @param[in]  action        operation code (insert or full_insert)
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_object_set(struct dss_handle *hdl, struct object_info *obj_ls,
-                   int obj_cnt, enum dss_set_action action);
+int dss_object_insert(struct dss_handle *handle,
+                      struct object_info *object_list,
+                      int object_count, enum dss_set_action action);
 
 /**
  * Update the information of one or many objects in DSS.
  *
- * @param[in]  hdl      valid connection handle
- * @param[in]  obj_ls   array of entries to store
- * @param[in]  obj_cnt  number of items in the list
+ * @param[in]  handle        valid connection handle
+ * @param[in]  object_list   array of entries to update
+ * @param[in]  object_count  number of items in the list
+ * @param[in]  fields        fields to update
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_object_update(struct dss_handle *hdl, struct object_info *obj_ls,
-                      int obj_cnt, int64_t fields);
+int dss_object_update(struct dss_handle *handle,
+                      struct object_info *object_list,
+                      int object_count, int64_t fields);
+
+/**
+ * Retrieve object information from DSS.
+ *
+ * @param[in]  handle        valid connection handle
+ * @param[in]  filter        assembled DSS filtering criteria
+ * @param[out] object_list   list of retrieved items to be freed
+ *                           w/ dss_res_free()
+ * @param[out] object_count  number of items retrieved in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_object_get(struct dss_handle *handle, const struct dss_filter *filter,
+                   struct object_info **object_list, int *object_count);
+
+/**
+ * Delete information for one or many objects in DSS.
+ *
+ * @param[in]  handle        valid connection handle
+ * @param[in]  object_list   array of entries to delete
+ * @param[in]  object_count  number of items in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_object_delete(struct dss_handle *handle,
+                      struct object_info *object_list, int object_count);
 
 /**
  * Retrieve deprecated object information from DSS

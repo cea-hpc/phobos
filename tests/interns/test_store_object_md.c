@@ -60,10 +60,18 @@ int dss_unlock(struct dss_handle *handle, enum dss_type type,
     return (int)mock();
 }
 
-int dss_object_set(struct dss_handle *hdl, struct object_info *obj_lst,
-                   int obj_cnt, enum dss_set_action action)
+int dss_object_insert(struct dss_handle *hdl, struct object_info *obj_lst,
+                      int obj_cnt, enum dss_set_action action)
 {
     (void)hdl; (void)obj_lst; (void)obj_cnt; (void)action;
+
+    return (int)mock();
+}
+
+int dss_object_delete(struct dss_handle *hdl, struct object_info *obj_lst,
+                      int obj_cnt)
+{
+    (void)hdl; (void)obj_lst; (void)obj_cnt;
 
     return (int)mock();
 }
@@ -268,7 +276,7 @@ static void oms_dss_lock_failure(void **state)
     assert_int_equal(rc, -EINVAL);
 }
 
-static void oms_dss_object_set_failure_without_overwrite(void **state)
+static void oms_dss_object_insert_failure_without_overwrite(void **state)
 {
     struct pho_xfer_desc xfer = PUT_XFER;
     int rc;
@@ -277,7 +285,7 @@ static void oms_dss_object_set_failure_without_overwrite(void **state)
 
     will_return(pho_attrs_to_json, 0);
     will_return(dss_lock, 0);
-    will_return(dss_object_set, -EINVAL);
+    will_return(dss_object_insert, -EINVAL);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, &xfer);
     assert_int_equal(rc, -EINVAL);
@@ -303,7 +311,7 @@ static void oms_dss_filter_build_failure_with_overwrite(void **state)
     assert_int_equal(rc, -ENOMEM);
 }
 
-static void oms_dss_object_set_failure_with_fake_overwrite(void **state)
+static void oms_dss_object_insert_failure_with_fake_overwrite(void **state)
 {
     struct pho_xfer_desc xfer = OVERWRITE_XFER;
     int rc;
@@ -314,7 +322,7 @@ static void oms_dss_object_set_failure_with_fake_overwrite(void **state)
     will_return(dss_lock, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 0);
-    will_return(dss_object_set, -EINVAL);
+    will_return(dss_object_insert, -EINVAL);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, &xfer);
     assert_int_equal(rc, -EINVAL);
@@ -323,7 +331,7 @@ static void oms_dss_object_set_failure_with_fake_overwrite(void **state)
     will_return(dss_lock, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(-ENOENT, 0);
-    will_return(dss_object_set, -EINVAL);
+    will_return(dss_object_insert, -EINVAL);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, &xfer);
     assert_int_equal(rc, -EINVAL);
@@ -346,7 +354,7 @@ static void oms_dss_object_move_failure_with_overwrite(void **state)
     assert_int_equal(rc, -ENOENT);
 }
 
-static void oms_dss_object_set_failure_with_overwrite(void **state)
+static void oms_dss_object_insert_failure_with_overwrite(void **state)
 {
     struct pho_xfer_desc xfer = OVERWRITE_XFER;
     int rc;
@@ -358,7 +366,7 @@ static void oms_dss_object_set_failure_with_overwrite(void **state)
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_move_object_to_deprecated, 0);
-    will_return(dss_object_set, -EINVAL);
+    will_return(dss_object_insert, -EINVAL);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, &xfer);
     assert_int_equal(rc, -EINVAL);
@@ -373,7 +381,7 @@ static void oms_dss_filter_build_failure(void **state)
 
     will_return(pho_attrs_to_json, 0);
     will_return(dss_lock, 0);
-    will_return(dss_object_set, 0);
+    will_return(dss_object_insert, 0);
     will_return(dss_filter_build, -ENOMEM);
     will_return(dss_unlock, 0);
     rc = object_md_save(NULL, &xfer);
@@ -389,7 +397,7 @@ static void oms_dss_object_get_failure(void **state)
 
     will_return(pho_attrs_to_json, 0);
     will_return(dss_lock, 0);
-    will_return(dss_object_set, 0);
+    will_return(dss_object_insert, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(-EINVAL, 0);
     will_return(dss_unlock, 0);
@@ -406,7 +414,7 @@ static void oms_dss_unlock_failure(void **state)
 
     will_return(pho_attrs_to_json, 0);
     will_return(dss_lock, 0);
-    will_return(dss_object_set, 0);
+    will_return(dss_object_insert, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_unlock, -ENOLCK);
@@ -425,7 +433,7 @@ static void oms_success_without_overwrite(void **state)
 
     will_return(pho_attrs_to_json, 0);
     will_return(dss_lock, 0);
-    will_return(dss_object_set, 0);
+    will_return(dss_object_insert, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_unlock, 0);
@@ -446,7 +454,7 @@ static void oms_success_with_fake_overwrite(void **state)
     will_return(dss_lock, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(-ENOENT, 0);
-    will_return(dss_object_set, 0);
+    will_return(dss_object_insert, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_unlock, 0);
@@ -468,7 +476,7 @@ static void oms_success_with_overwrite(void **state)
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_move_object_to_deprecated, 0);
-    will_return(dss_object_set, 0);
+    will_return(dss_object_insert, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_OBJECT_GET(0, 1);
     will_return(dss_unlock, 0);
@@ -612,7 +620,7 @@ static void omd_dss_full_layout_get_failure(void **state)
     assert_int_equal(rc, -EEXIST);
 }
 
-static void omd_dss_object_set_failure(void **state)
+static void omd_dss_object_delete_failure(void **state)
 {
     struct pho_xfer_desc xfer = DEL_XFER;
     int rc;
@@ -626,7 +634,7 @@ static void omd_dss_object_set_failure(void **state)
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 0);
-    will_return(dss_object_set, -EINVAL);
+    will_return(dss_object_delete, -EINVAL);
     will_return(dss_unlock, 0);
     rc = object_md_del(NULL, &xfer);
     assert_int_equal(rc, -EINVAL);
@@ -646,7 +654,7 @@ static void omd_dss_object_move_failure(void **state)
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 0);
-    will_return(dss_object_set, 0);
+    will_return(dss_object_delete, 0);
     will_return(dss_move_deprecated_to_object, -ENOENT);
     will_return(dss_unlock, 0);
     rc = object_md_del(NULL, &xfer);
@@ -667,7 +675,7 @@ static void omd_dss_unlock_failure(void **state)
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 0);
-    will_return(dss_object_set, 0);
+    will_return(dss_object_delete, 0);
     will_return(dss_unlock, -ENOLCK);
     rc = object_md_del(NULL, &xfer);
     assert_int_equal(rc, -ENOLCK);
@@ -687,7 +695,7 @@ static void omd_success(void **state)
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 1);
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 0);
-    will_return(dss_object_set, 0);
+    will_return(dss_object_delete, 0);
     will_return(dss_move_deprecated_to_object, 0);
     will_return(dss_unlock, 0);
     rc = object_md_del(NULL, &xfer);
@@ -700,7 +708,7 @@ static void omd_success(void **state)
     MOCK_DSS_DEPRECATED_OBJECT_GET(0, 0);
     will_return(dss_filter_build, 0);
     MOCK_DSS_LAYOUT_GET(0, 0);
-    will_return(dss_object_set, 0);
+    will_return(dss_object_delete, 0);
     will_return(dss_unlock, 0);
     rc = object_md_del(NULL, &xfer);
     assert_int_equal(rc, 0);
@@ -711,11 +719,11 @@ int main(void)
     const struct CMUnitTest object_md_test_cases[] = {
         cmocka_unit_test(oms_attrs_to_json_failure),
         cmocka_unit_test(oms_dss_lock_failure),
-        cmocka_unit_test(oms_dss_object_set_failure_without_overwrite),
+        cmocka_unit_test(oms_dss_object_insert_failure_without_overwrite),
         cmocka_unit_test(oms_dss_filter_build_failure_with_overwrite),
-        cmocka_unit_test(oms_dss_object_set_failure_with_fake_overwrite),
+        cmocka_unit_test(oms_dss_object_insert_failure_with_fake_overwrite),
         cmocka_unit_test(oms_dss_object_move_failure_with_overwrite),
-        cmocka_unit_test(oms_dss_object_set_failure_with_overwrite),
+        cmocka_unit_test(oms_dss_object_insert_failure_with_overwrite),
         cmocka_unit_test(oms_dss_filter_build_failure),
         cmocka_unit_test(oms_dss_object_get_failure),
         cmocka_unit_test(oms_dss_unlock_failure),
@@ -730,7 +738,7 @@ int main(void)
         cmocka_unit_test(omd_dss_deprecated_object_get_failure),
         cmocka_unit_test(omd_dss_filter_build_for_layout_failure),
         cmocka_unit_test(omd_dss_full_layout_get_failure),
-        cmocka_unit_test(omd_dss_object_set_failure),
+        cmocka_unit_test(omd_dss_object_delete_failure),
         cmocka_unit_test(omd_dss_object_move_failure),
         cmocka_unit_test(omd_dss_unlock_failure),
         cmocka_unit_test(omd_success),

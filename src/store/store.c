@@ -344,9 +344,9 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         pho_debug("Storing object objid:'%s' (transient) with attributes: %s",
                   xfer->xd_objid, md_repr->str);
 
-        rc = dss_object_set(dss, &obj, 1, DSS_SET_INSERT);
+        rc = dss_object_insert(dss, &obj, 1, DSS_SET_INSERT);
         if (rc)
-            LOG_GOTO(out_unlock, rc, "dss_object_set failed for objid:'%s'",
+            LOG_GOTO(out_unlock, rc, "dss_object_insert failed for objid:'%s'",
                      obj.oid);
 
         goto out_update;
@@ -371,9 +371,10 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
                 pho_debug("Can't overwrite unexisting object:'%s'",
                          xfer->xd_objid);
 
-            rc = dss_object_set(dss, &obj, 1, DSS_SET_INSERT);
+            rc = dss_object_insert(dss, &obj, 1, DSS_SET_INSERT);
             if (rc)
-                LOG_GOTO(out_filt, rc, "dss_object_set failed for objid:'%s'",
+                LOG_GOTO(out_filt, rc,
+                         "dss_object_insert failed for objid:'%s'",
                          xfer->xd_objid);
 
             goto out_update;
@@ -390,9 +391,9 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 
         obj_res->obj_status = obj.obj_status;
 
-        rc = dss_object_set(dss, obj_res, 1, DSS_SET_FULL_INSERT);
+        rc = dss_object_insert(dss, obj_res, 1, DSS_SET_FULL_INSERT);
         if (rc)
-            LOG_GOTO(out_res, rc, "object_set failed for objid:'%s'",
+            LOG_GOTO(out_res, rc, "object_insert failed for objid:'%s'",
                      xfer->xd_objid);
     }
 
@@ -522,9 +523,9 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     /* Then the rollback can safely happen */
     pho_verb("Rolling back obj oid:'%s', obj uuid:'%s' and obj version:'%d' "
              "from DSS", obj->oid, obj->uuid, obj->version);
-    rc = dss_object_set(dss, obj, 1, DSS_SET_DELETE);
+    rc = dss_object_delete(dss, obj, 1);
     if (rc)
-        LOG_GOTO(out_prev, rc, "dss_object_set failed for objid:'%s'",
+        LOG_GOTO(out_prev, rc, "dss_object_insert failed for objid:'%s'",
                  xfer->xd_objid);
 
     if (need_undelete) {

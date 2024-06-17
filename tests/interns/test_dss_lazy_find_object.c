@@ -58,7 +58,7 @@ static int insert_state_obj(struct test_state *state, int index,
     obj->version = version;
     obj->user_md = user_md;
 
-    rc = dss_object_set(state->dss, obj, 1, DSS_SET_FULL_INSERT);
+    rc = dss_object_insert(state->dss, obj, 1, DSS_SET_FULL_INSERT);
     if (rc)
         return -1;
 
