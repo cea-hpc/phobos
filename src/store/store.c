@@ -914,7 +914,7 @@ static void store_end_xfer(struct phobos_handle *pho, size_t xfer_idx, int rc)
             pho_error(rc, "Error while saving extents for objid: '%s'",
                       xfer->xd_objid);
         } else {
-            rc = dss_layout_set(&pho->dss, enc->layout, 1, DSS_SET_INSERT);
+            rc = dss_layout_insert(&pho->dss, enc->layout, 1);
             if (rc) {
                 int rc2;
 

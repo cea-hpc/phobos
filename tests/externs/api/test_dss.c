@@ -89,8 +89,7 @@ static int dss_generic_set(struct dss_handle *handle, enum dss_type type,
                                          (struct object_info *)item_list, n,
                                          action);
     case DSS_LAYOUT:
-        return dss_layout_set(handle, (struct layout_info *)item_list, n,
-                              action);
+        return dss_layout_insert(handle, (struct layout_info *)item_list, n);
     case DSS_DEVICE:
         switch (action) {
         case DSS_SET_UPDATE:

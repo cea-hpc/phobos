@@ -519,19 +519,20 @@ int dss_media_delete(struct dss_handle *handle, struct media_info *media_list,
  * LAYOUT FUNCTIONS
  */
 
-int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
+int dss_layout_get(struct dss_handle *handle, const struct dss_filter *filter,
                    struct layout_info **layouts, int *layout_count)
 {
-    return dss_generic_get(hdl, DSS_LAYOUT,
+    return dss_generic_get(handle, DSS_LAYOUT,
                            (const struct dss_filter*[]) {filter, NULL},
                            (void **)layouts, layout_count);
 }
 
-int dss_layout_set(struct dss_handle *hdl, struct layout_info *layouts,
-                   int layout_count, enum dss_set_action action)
+int dss_layout_insert(struct dss_handle *handle,
+                      struct layout_info *layout_list,
+                      int layout_count)
 {
-    return dss_generic_set(hdl, DSS_LAYOUT, (void *)layouts, layout_count,
-                           action, 0);
+    return dss_generic_set(handle, DSS_LAYOUT, (void *)layout_list,
+                           layout_count, DSS_SET_INSERT, 0);
 }
 
 /*

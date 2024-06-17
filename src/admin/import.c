@@ -299,7 +299,7 @@ static int _add_extent_to_dss(struct dss_handle *dss,
         LOG_GOTO(lyt_info_get_free, rc,
                  "Failed to insert extent '%s'", extent_to_insert->uuid);
 
-    rc = dss_layout_set(dss, lyt_insert, 1, DSS_SET_INSERT);
+    rc = dss_layout_insert(dss, lyt_insert, 1);
 
 lyt_info_get_free:
     dss_res_free(lyt_get, layout_count);

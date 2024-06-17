@@ -421,8 +421,22 @@ int dss_extent_set(struct dss_handle *hdl, struct extent *extents,
                    int extent_count, enum dss_set_action action);
 
 /**
- * Retrieve layout information from DSS
- * @param[in]  hdl          valid connection handle
+ * Store information for one or many layouts in DSS.
+ *
+ * @param[in]  handle        valid connection handle
+ * @param[in]  layout_list   array of entries to store
+ * @param[in]  layout_count  number of items in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_layout_insert(struct dss_handle *handle,
+                      struct layout_info *layout_list,
+                      int layout_count);
+
+/**
+ * Retrieve layout information from DSS.
+ *
+ * @param[in]  handle       valid connection handle
  * @param[in]  filter       assembled DSS filtering criteria
  * @param[out] layouts      list of retrieved items to be freed w/
  *                          dss_res_free()
@@ -430,20 +444,8 @@ int dss_extent_set(struct dss_handle *hdl, struct extent *extents,
  *
  * @return 0 on success, negated errno on failure
  */
-int dss_layout_get(struct dss_handle *hdl, const struct dss_filter *filter,
+int dss_layout_get(struct dss_handle *handle, const struct dss_filter *filter,
                    struct layout_info **layouts, int *layout_count);
-
-/**
- * Store information for one or many layouts in DSS.
- * @param[in]  hdl      valid connection handle
- * @param[in]  lyt_ls   array of entries to store
- * @param[in]  lyt_cnt  number of items in the list
- * @param[in]  action   operation code (insert, update, delete)
- *
- * @return 0 on success, negated errno on failure
- */
-int dss_layout_set(struct dss_handle *hdl, struct layout_info *lyt_ls,
-                   int lyt_cnt, enum dss_set_action action);
 
 /**
  * Retrieve layout + extents information from DSS
