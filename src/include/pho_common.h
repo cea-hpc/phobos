@@ -355,6 +355,14 @@ static inline bool gstring_empty(const GString *s)
 #define min(_a, _b) ((_a) < (_b) ? (_a) : (_b))
 #define max(_a, _b) ((_a) > (_b) ? (_a) : (_b))
 #define clamp(_a, _min, _max) min(max((_a), (_min)), (_max))
+#define swap(a, b)  \
+    ({              \
+     typeof(a) tmp; \
+     tmp = a;       \
+     a = b;         \
+     b = tmp;       \
+     })
+
 
 #define abs(_a)     ((_a) < 0 ? -(_a) : (_a))
 
