@@ -61,6 +61,8 @@ enum pho_io_flags {
  * ones.
  */
 struct pho_io_descr {
+    /** Reference to the I/O adapter for this I/O decriptor */
+    struct io_adapter_module *iod_ioa;
     enum pho_io_flags    iod_flags;    /**< PHO_IO_* flags */
     int                  iod_fd;       /**< Local FD */
     size_t               iod_size;     /**< Operation size */
