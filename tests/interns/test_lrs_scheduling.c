@@ -558,6 +558,7 @@ static void create_request(struct req_container *reqc,
             reqc->req->ralloc->med_ids[i]->name = xstrdup(media_names[i]);
             reqc->req->ralloc->med_ids[i]->family = PHO_RSC_TAPE;
         }
+        rml_init(&reqc->params.rwalloc.media_list, reqc);
         break;
     } case IO_REQ_FORMAT: {
         struct pho_id m;
@@ -1357,6 +1358,27 @@ static void io_sched_one_error_no_device_available(void **data)
     test_io_sched_error(data, false);
 }
 
+static void saw_medium(GHashTable *media, struct req_container *reqc,
+                       size_t index)
+{
+    char *name;
+
+    name = reqc->req->ralloc->med_ids[index]->name;
+    g_hash_table_insert(media, name, name);
+}
+
+static bool has_not_seen_media(GHashTable *media, struct req_container *reqc,
+                               size_t index)
+{
+    char *data;
+    char *name;
+
+    name = reqc->req->ralloc->med_ids[index]->name;
+    data = g_hash_table_lookup(media, name);
+
+    return data == NULL;
+}
+
 static void io_sched_eagain(void **data)
 {
     struct io_sched_handle *io_sched = (struct io_sched_handle *) *data;
@@ -1364,13 +1386,12 @@ static void io_sched_eagain(void **data)
         "M1", "M2", "M3",
     };
     struct req_container *new_reqc;
+    struct read_media_list *list;
     struct media_info media[3];
     struct req_container reqc;
     GPtrArray *device_array;
+    GHashTable *seen_media;
     struct lrs_dev device;
-    bool index_seen[] = {
-        false, false, false,
-    };
     struct lrs_dev *dev;
     size_t index = 0;
     int rc;
@@ -1379,6 +1400,7 @@ static void io_sched_eagain(void **data)
     if (IO_REQ_TYPE != IO_REQ_READ)
         skip();
 
+    seen_media = g_hash_table_new(g_str_hash, g_str_equal);
     device_array = g_ptr_array_new();
     io_sched->global_device_list = device_array;
     create_device(&device, "D1", LTO5_MODEL, NULL);
@@ -1388,6 +1410,7 @@ static void io_sched_eagain(void **data)
 
     add_media(media, 3);
     create_request(&reqc, media_names, 3, 1, io_sched->lock_handle);
+    list = &reqc.params.rwalloc.media_list;
 
     gptr_array_from_list(device_array, &device, 1, sizeof(device));
 
@@ -1407,8 +1430,10 @@ static void io_sched_eagain(void **data)
     assert_ptr_equal(dev, &device);
     dev->ld_ongoing_scheduled = false;
     assert_true(index < 3);
-    assert_false(index_seen[index]);
-    index_seen[index] = true;
+    assert_true(has_not_seen_media(seen_media, &reqc, index));
+
+    saw_medium(seen_media, &reqc, index);
+    rml_medium_update(list, index, RMAS_UNAVAILABLE);
 
     index = 0;
     rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
@@ -1416,8 +1441,10 @@ static void io_sched_eagain(void **data)
     assert_ptr_equal(dev, &device);
     dev->ld_ongoing_scheduled = false;
     assert_true(index < 3);
-    assert_false(index_seen[index]);
-    index_seen[index] = true;
+    assert_true(has_not_seen_media(seen_media, &reqc, index));
+
+    saw_medium(seen_media, &reqc, index);
+    rml_medium_update(list, index, RMAS_UNAVAILABLE);
 
     index = 0;
     rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
@@ -1426,8 +1453,9 @@ static void io_sched_eagain(void **data)
     assert_ptr_equal(dev, &device);
     dev->ld_ongoing_scheduled = false;
     assert_true(index < 3);
-    assert_false(index_seen[index]);
-    index_seen[index] = true;
+    assert_true(has_not_seen_media(seen_media, &reqc, index));
+
+    rml_medium_update(list, index, RMAS_UNAVAILABLE);
 
     index = 0;
     rc = io_sched_get_device_medium_pair(io_sched, &reqc, &dev, &index);
@@ -1443,6 +1471,7 @@ static void io_sched_eagain(void **data)
     remove_media(media, 3);
     destroy_request(&reqc);
     g_ptr_array_free(device_array, true);
+    g_hash_table_destroy(seen_media);
 }
 
 static int set_schedulers(const char *read_algo,

@@ -476,13 +476,20 @@ static int fifo_get_device_medium_pair(struct io_scheduler *io_sched,
                    reqc, elem ? elem->reqc : NULL);
 
     if (pho_request_is_read(reqc->req)) {
-        if (elem->num_media_allocated >= reqc->req->ralloc->n_med_ids)
+        struct read_media_list *list = &reqc->params.rwalloc.media_list;
+
+        if (list->rml_available == 0)
             LOG_RETURN(-ERANGE, "get_device_medium_pair called too many "
                                 "times on the same request");
 
 
-        if (elem->num_media_allocated != sreq.medium_index)
+        if (elem->num_media_allocated != sreq.medium_index) {
             is_retry = true;
+            /* On retry, the previous medium returned was not allocated,
+             * decrease num_media_allocated
+             */
+            elem->num_media_allocated--;
+        }
     }
 
     rc = generic_get_device_medium_pair(io_sched, &sreq, elem, device, false,
