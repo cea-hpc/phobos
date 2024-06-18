@@ -373,7 +373,7 @@ ioa_get_common_xattrs_from_extent(const struct io_adapter_module *ioa,
  *
  * \return 0 on success, negative error code on failure.
  */
-int get_io_block_size(size_t *size);
+int get_cfg_io_block_size(size_t *size);
 
 /**
  * Retrieve the preferred IO size from the backend storage

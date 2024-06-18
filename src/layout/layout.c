@@ -89,7 +89,7 @@ int layout_encode(struct pho_encoder *enc, struct pho_xfer_desc *xfer)
     enc->layout->wr_size = xfer->xd_params.put.size;
 
     /* get io_block_size from conf */
-    rc = get_io_block_size(&enc->io_block_size);
+    rc = get_cfg_io_block_size(&enc->io_block_size);
     if (rc) {
         layout_destroy(enc);
         return rc;
@@ -129,7 +129,7 @@ int layout_decode(struct pho_encoder *enc, struct pho_xfer_desc *xfer,
     enc->layout = layout;
 
     /* get io_block_size from conf */
-    rc = get_io_block_size(&enc->io_block_size);
+    rc = get_cfg_io_block_size(&enc->io_block_size);
     if (rc) {
         layout_destroy(enc);
         LOG_RETURN(rc, "Unable to get io_block_size");

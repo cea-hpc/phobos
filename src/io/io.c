@@ -51,7 +51,7 @@ const struct pho_config_item cfg_io[] = {
     },
 };
 
-int get_io_block_size(size_t *size)
+int get_cfg_io_block_size(size_t *size)
 {
     const char *string_io_block_size;
     int64_t sz;
@@ -82,7 +82,7 @@ void get_preferred_io_block_size(size_t *io_size,
 {
     ssize_t sz;
 
-    get_io_block_size(io_size);
+    get_cfg_io_block_size(io_size);
     if (*io_size != 0)
         return;
 
