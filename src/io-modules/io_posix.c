@@ -73,6 +73,7 @@ static const struct pho_io_adapter_module_ops IO_ADAPTER_POSIX_OPS = {
     .ioa_get               = pho_posix_get,
     .ioa_del               = pho_posix_del,
     .ioa_open              = pho_posix_open,
+    .iod_from_fd           = pho_posix_iod_from_fd,
     .ioa_write             = pho_posix_write,
     .ioa_read              = pho_posix_read,
     .ioa_close             = pho_posix_close,

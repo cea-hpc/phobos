@@ -40,6 +40,8 @@ int pho_posix_del(struct pho_io_descr *iod);
 int pho_posix_open(const char *extent_desc, struct pho_io_descr *iod,
                    bool is_put);
 
+int pho_posix_iod_from_fd(struct pho_io_descr *iod, int fd);
+
 int pho_posix_write(struct pho_io_descr *iod, const void *buf, size_t count);
 
 ssize_t pho_posix_read(struct pho_io_descr *iod, void *buf, size_t count);

@@ -95,6 +95,7 @@ struct object_metadata {
 struct pho_io_adapter_module_ops {
     int (*ioa_get)(const char *extent_desc, struct pho_io_descr *iod);
     int (*ioa_del)(struct pho_io_descr *iod);
+    int (*iod_from_fd)(struct pho_io_descr *iod, int fd);
     int (*ioa_open)(const char *extent_desc, struct pho_io_descr *iod,
                     bool is_put);
     int (*ioa_write)(struct pho_io_descr *iod, const void *buf, size_t count);
@@ -246,6 +247,17 @@ static inline int ioa_open(const struct io_adapter_module *ioa,
     assert(ioa->ops != NULL);
     assert(ioa->ops->ioa_open != NULL);
     return ioa->ops->ioa_open(extent_desc, iod, is_put);
+}
+
+static inline int iod_from_fd(const struct io_adapter_module *ioa,
+                              struct pho_io_descr *iod, int fd)
+{
+    assert(ioa);
+    assert(ioa->ops);
+    if (!ioa->ops->iod_from_fd)
+        return -ENOTSUP;
+
+    return ioa->ops->iod_from_fd(iod, fd);
 }
 
 /**

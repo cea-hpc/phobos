@@ -644,9 +644,6 @@ int pho_posix_open(const char *extent_desc, struct pho_io_descr *iod,
 
     /* allocate io_ctx */
     io_ctx = alloc_posix_io_ctx();
-    if (!io_ctx)
-        return -ENOMEM;
-
     iod->iod_ctx = io_ctx;
 
     /* build full path */
@@ -660,6 +657,59 @@ int pho_posix_open(const char *extent_desc, struct pho_io_descr *iod,
     pho_verb("extent location: '%s'", io_ctx->fpath);
 
     return is_put ? pho_posix_open_put(iod) : pho_posix_open_get(iod);
+}
+
+static int path_from_fd(int fd, char **path)
+{
+    struct stat stat;
+    char *fd_path;
+    int rc;
+
+    rc = asprintf(&fd_path, "/proc/self/fd/%d", fd);
+    if (rc == -1)
+        return -errno;
+
+    rc = lstat(fd_path, &stat);
+    if (rc == -1)
+        GOTO(free_fd_path, rc = -errno);
+
+    *path = xmalloc(stat.st_size);
+
+    rc = readlink(fd_path, *path, stat.st_size);
+    if (rc == -1)
+        GOTO(free_path, rc = -errno);
+
+    (*path)[rc] = '\0';
+    rc = 0;
+    goto free_fd_path;
+
+free_path:
+    free(*path);
+free_fd_path:
+    free(fd_path);
+
+    return rc;
+}
+
+int pho_posix_iod_from_fd(struct pho_io_descr *iod, int fd)
+{
+    struct posix_io_ctx *io_ctx;
+    int rc;
+
+    iod->iod_flags = 0;
+    iod->iod_size = 0;
+    iod->iod_loc = NULL;
+    iod->iod_fd = -1;
+
+    io_ctx = alloc_posix_io_ctx();
+    iod->iod_ctx = io_ctx;
+
+    io_ctx->fd = fd;
+    rc = path_from_fd(fd, &io_ctx->fpath);
+    if (rc)
+        return rc;
+
+    return 0;
 }
 
 int pho_posix_set_md(const char *extent_desc,
