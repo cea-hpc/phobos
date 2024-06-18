@@ -13,7 +13,10 @@ if USE_XXHASH
 libpho_layout_raid1_la_LDFLAGS+=-lxxhash
 endif
 
-libpho_layout_raid4_la_SOURCES=raid4/raid4.c
+libpho_layout_raid4_la_SOURCES=raid4/raid4.c \
+                               raid4/read.c \
+                               raid4/write.c \
+                               raid4/xor.c
 libpho_layout_raid4_la_CFLAGS=-fPIC $(AM_CFLAGS) -I ../layout
 libpho_layout_raid4_la_LIBADD=../store/libphobos_store.la \
                               ../layout/libpho_layout_common.la

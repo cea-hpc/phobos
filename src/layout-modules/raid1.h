@@ -55,17 +55,17 @@
 #define EXTENT_MD5_ATTR_KEY "extent_md5"
 
 /**
- * Set unsigned int replica count value from char * layout attr
+ * Set unsigned int replica count value from layout attributes
  *
  * 0 is not a valid replica count, -EINVAL will be returned.
  *
  * @param[in]  layout     layout with a REPL_COUNT_ATTR_KEY
  * @param[out] repl_count replica count value to set
  *
- * @return 0 if success,
- *         -error_code if failure and \p repl_count value is irrelevant
+ * @return     0 on success, negative POSIX error code on error
+ *             and \p repl_count value is irrelevant
  */
-int layout_repl_count(struct layout_info *layout, unsigned int *repl_count);
+int raid1_repl_count(struct layout_info *layout, unsigned int *repl_count);
 
 /**
  * Retrieve one node name from which an object can be accessed

@@ -73,11 +73,11 @@ static struct module_desc RAID1_MODULE_DESC = {
  * available space on media provided by lrs. There are repl_count copies of each
  * extent.
  *
- * In the layout all extents copies are flattened as different extent :
+ * In the layout all extents copies are flattened as different extents:
  * - extents with index from 0 to repl_count - 1 are the repl_count copies of
- *   the first extent,
+ *   the first split,
  * - extents with index from repl_count to 2*repl_count - 1 are the
- *   repl_count copies of the second extent,
+ *   repl_count copies of the second split,
  * - ...
  *
  * With replica_id from 0 to repl_count - 1, the flattened layout extent index
@@ -204,7 +204,7 @@ static void add_new_to_release_media(struct raid1_encoder *raid1,
  * Add a written extent to the raid1 encoder and add the medium to release
  */
 static void add_written_extent(struct raid1_encoder *raid1,
-                              struct extent *extent)
+                               struct extent *extent)
 {
     size_t *to_release_refcount;
     const char *media_id;
@@ -224,18 +224,7 @@ static void add_written_extent(struct raid1_encoder *raid1,
         add_new_to_release_media(raid1, media_id);
 }
 
-/**
- * Set unsigned int replica count value from char * layout attr
- *
- * 0 is not a valid replica count, -EINVAL will be returned.
- *
- * @param[in]  layout     layout with a PHO_EA_RAID1_REPL_COUNT_NAME
- * @param[out] repl_count replica count value to set
- *
- * @return 0 if success,
- *         -error_code if failure and \p repl_count value is irrelevant
- */
-int layout_repl_count(struct layout_info *layout, unsigned int *repl_count)
+int raid1_repl_count(struct layout_info *layout, unsigned int *repl_count)
 {
     const char *string_repl_count = pho_attr_get(&layout->layout_desc.mod_attrs,
                                                  PHO_EA_RAID1_REPL_COUNT_NAME);
@@ -1081,7 +1070,7 @@ static int layout_raid1_encode(struct pho_encoder *enc)
                  PHO_EA_RAID1_REPL_COUNT_NAME, string_repl_count);
 
     /* set repl_count in encoder */
-    rc = layout_repl_count(enc->layout, &raid1->repl_count);
+    rc = raid1_repl_count(enc->layout, &raid1->repl_count);
     if (rc)
         LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
                        "encoder");
@@ -1174,7 +1163,7 @@ static int layout_raid1_decode(struct pho_encoder *enc)
 
     /* Fill out the encoder appropriately */
     /* set decoder repl_count */
-    rc = layout_repl_count(enc->layout, &raid1->repl_count);
+    rc = raid1_repl_count(enc->layout, &raid1->repl_count);
     if (rc)
         LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
                        "decoder");
@@ -1929,7 +1918,7 @@ int layout_raid1_locate(struct dss_handle *dss, struct layout_info *layout,
     }
 
     /* get repl_count from layout */
-    rc = layout_repl_count(layout, &repl_count);
+    rc = raid1_repl_count(layout, &repl_count);
     if (rc)
         LOG_RETURN(rc, "Invalid replica count from layout to locate");
 
@@ -2045,7 +2034,7 @@ static int layout_raid1_reconstruct(struct layout_info lyt,
     int i;
 
     // Recover repl_count and obj_size
-    rc = layout_repl_count(&lyt, &repl_cnt);
+    rc = raid1_repl_count(&lyt, &repl_cnt);
     if (rc)
         LOG_RETURN(rc,
                    "Failed to get replica count for reconstruction of object '%s'",

@@ -139,7 +139,7 @@ static int global_setup(void **state)
     }
 
     /* get repl_count */
-    rc = layout_repl_count(rsl_state.layout, &rsl_state.repl_count);
+    rc = raid1_repl_count(rsl_state.layout, &rsl_state.repl_count);
     if (rc) {
         fprintf(stderr, "Unable to get replica count from layout");
         GOTO(clean_layout, rc = -1);

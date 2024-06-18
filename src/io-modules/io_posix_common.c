@@ -449,15 +449,18 @@ static int pho_posix_md_get(const char *path, int fd, struct pho_attrs *attrs)
 
 int pho_posix_get(const char *extent_desc, struct pho_io_descr *iod)
 {
+    bool already_opened = (iod->iod_ctx != NULL);
     struct posix_io_ctx *io_ctx;
     int rc2 = 0;
     int rc = 0;
 
     ENTRY;
 
-    rc = pho_posix_open(extent_desc, iod, false);
-    if (rc || iod->iod_flags & PHO_IO_MD_ONLY)
-        return rc;
+    if (!already_opened) {
+        rc = pho_posix_open(extent_desc, iod, false);
+        if (rc || iod->iod_flags & PHO_IO_MD_ONLY)
+            return rc;
+    }
 
     io_ctx = (struct posix_io_ctx *) iod->iod_ctx;
 
@@ -492,9 +495,11 @@ clean:
     if (rc != 0)
         pho_attrs_free(&iod->iod_attrs);
 
-    rc2 = pho_posix_close(iod);
-    if (rc2 && rc == 0) /* keep the first reported error */
-        rc = rc2;
+    if (!already_opened) {
+        rc2 = pho_posix_close(iod);
+        if (rc2 && rc == 0) /* keep the first reported error */
+            rc = rc2;
+    }
 
     return rc;
 }
