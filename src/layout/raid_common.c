@@ -59,6 +59,34 @@ static void free_extent_address_buff(void *void_extent)
     free(extent->address.buff);
 }
 
+static int init_posix_iod(struct pho_encoder *enc)
+{
+    struct raid_io_context *io_context = enc->priv_enc;
+    int rc;
+    int fd;
+
+    rc = get_io_adapter(PHO_FS_POSIX, &io_context->posix.iod_ioa);
+    if (rc)
+        return rc;
+
+    /* We duplicate the file descriptor so that ioa_close doesn't close the file
+     * descriptor of the Xfer. This file descriptor is managed by Python in the
+     * CLI for example.
+     */
+    fd = dup(enc->xfer->xd_fd);
+    if (fd == -1)
+        return -errno;
+
+    return iod_from_fd(io_context->posix.iod_ioa, &io_context->posix, fd);
+}
+
+static void close_posix_iod(struct pho_encoder *enc)
+{
+    struct raid_io_context *io_context = enc->priv_enc;
+
+    ioa_close(io_context->posix.iod_ioa, &io_context->posix);
+}
+
 int raid_encoder_init(struct pho_encoder *enc,
                       const struct module_desc *module,
                       const struct pho_enc_ops *enc_ops,
@@ -93,6 +121,12 @@ int raid_encoder_init(struct pho_encoder *enc,
         LOG_RETURN(rc, "Failed to convert attributes to JSON");
     }
 
+    rc = init_posix_iod(enc);
+    if (rc) {
+        free(io_context);
+        return rc;
+    }
+
     io_context->write.written_extents = g_array_new(FALSE, TRUE,
                                                     sizeof(struct extent));
     g_array_set_clear_func(io_context->write.written_extents,
@@ -117,6 +151,8 @@ void raid_encoder_destroy(struct pho_encoder *enc)
 
     if (!io_context)
         return;
+
+    close_posix_iod(enc);
 
     if (!enc->is_decoder) {
         if (io_context->write.written_extents)
@@ -148,6 +184,7 @@ int raid_decoder_init(struct pho_encoder *dec,
 {
     struct raid_io_context *io_context = dec->priv_enc;
     size_t n_extents = n_total_extents(io_context);
+    int rc;
 
     assert(dec->is_decoder);
 
@@ -159,6 +196,12 @@ int raid_decoder_init(struct pho_encoder *dec,
     io_context->read.extents = xcalloc(io_context->n_data_extents,
                                        sizeof(*io_context->read.extents));
     io_context->buffers = xmalloc(n_extents * sizeof(*io_context->buffers));
+
+    rc = init_posix_iod(dec);
+    if (rc) {
+        free(io_context);
+        return rc;
+    }
 
     return 0;
 }
