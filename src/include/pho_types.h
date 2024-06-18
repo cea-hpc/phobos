@@ -255,6 +255,10 @@ struct pho_buff {
     char   *buff;
 };
 
+void pho_buff_alloc(struct pho_buff *buffer, size_t size);
+
+void pho_buff_free(struct pho_buff *buffer);
+
 static const struct pho_buff PHO_BUFF_NULL = { .size = 0, .buff = NULL };
 
 struct pho_lock {
