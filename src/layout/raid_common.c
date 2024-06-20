@@ -490,6 +490,13 @@ static int write_split_fini(struct pho_encoder *enc, int io_rc,
 {
     struct raid_io_context *io_context = enc->priv_enc;
     size_t n_extents = n_total_extents(io_context);
+    struct object_metadata object_md = {
+        .object_attrs = enc->xfer->xd_attrs,
+        .object_size = enc->xfer->xd_params.put.size,
+        .object_version = enc->xfer->xd_version,
+        .layout_name = io_context->name,
+        .object_uuid = enc->xfer->xd_objuuid,
+    };
     size_t total_written = 0;
     int rc = 0;
     size_t i;
@@ -500,6 +507,9 @@ static int write_split_fini(struct pho_encoder *enc, int io_rc,
         int rc2;
 
         iod->iod_loc = &ext_location;
+        rc2 = set_object_md(iod->iod_ioa, iod, &object_md);
+        rc = rc ? : rc2;
+
         rc2 = ioa_close(iod->iod_ioa, iod);
         rc = rc ? : rc2;
 

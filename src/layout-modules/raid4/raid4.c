@@ -64,6 +64,7 @@ static int layout_raid4_encode(struct pho_encoder *enc)
 
     io_context = xcalloc(1, sizeof(*io_context));
     enc->priv_enc = io_context;
+    io_context->name = PLUGIN_NAME;
     io_context->n_data_extents = 2;
     io_context->n_parity_extents = 1;
     io_context->write.to_write = enc->xfer->xd_params.put.size;
@@ -90,6 +91,7 @@ static int layout_raid4_decode(struct pho_encoder *dec)
 
     io_context = xcalloc(1, sizeof(*io_context));
     dec->priv_enc = io_context;
+    io_context->name = PLUGIN_NAME;
     io_context->n_data_extents = 2;
     io_context->n_parity_extents = 1;
     rc = raid_decoder_init(dec, &RAID4_MODULE_DESC, &RAID4_ENCODER_OPS,

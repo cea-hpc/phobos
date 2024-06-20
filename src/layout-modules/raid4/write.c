@@ -30,6 +30,41 @@
 
 #include <unistd.h>
 
+static int set_extent_extra_attrs(struct extent *extent,
+                                  struct pho_io_descr *iod,
+                                  size_t chunk_size)
+{
+    char buff[64];
+    int rc;
+
+    rc = sprintf(buff, "%lu", chunk_size);
+    if (rc < 0)
+        LOG_RETURN(rc = -errno, "Unable to convert extent index to string");
+
+    pho_attr_set(&extent->info, "raid4.chunk_size", buff);
+    pho_attr_set(&iod->iod_attrs, "raid4.chunk_size", buff);
+
+    return ioa_set_md(iod->iod_ioa, NULL, iod);
+}
+
+static int set_raid4_md(struct raid_io_context *io_context, size_t chunk_size)
+{
+    struct extent *extents = io_context->write.extents;
+    size_t n_extents = io_context->n_data_extents +
+        io_context->n_parity_extents;
+    struct pho_io_descr *iods = io_context->iods;
+    int rc = 0;
+    size_t i;
+    int rc2;
+
+    for (i = 0; i < n_extents; i++) {
+        rc2 = set_extent_extra_attrs(&extents[i], &iods[i], chunk_size);
+        rc = rc ? : rc2;
+    }
+
+    return rc;
+}
+
 static int read_buffer(int in_fd, struct pho_buff *buffer, size_t buf_size,
                        ssize_t *bytes_read, size_t *left_to_read,
                        bool *eof)
@@ -64,6 +99,10 @@ int raid4_write_split(struct pho_encoder *enc, int in_fd,
     int rc = 0;
 
     ENTRY;
+
+    rc = set_raid4_md(io_context, buf_size);
+    if (rc)
+        return rc;
 
     while (!eof) {
         ssize_t bytes_read1 = 0;

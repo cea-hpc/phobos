@@ -76,8 +76,8 @@ struct object_metadata {
     struct pho_attrs object_attrs;
     ssize_t object_size;
     int object_version;
-    char *layout_name;
-    char *object_uuid;
+    const char *layout_name;
+    const char *object_uuid;
 };
 
 /**

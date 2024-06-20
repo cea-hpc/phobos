@@ -28,6 +28,29 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/tape_drive.sh
 . $test_dir/utils_generation.sh
 
+function get_extent_info()
+{
+    local oid=$1
+    local column=$2
+
+    $phobos extent list -f json -o "$column" "$oid" | jq -r ".[0].$column[]"
+}
+
+function foreach_dir_extent()
+{
+    local oid=$1
+    local addresses=($(get_extent_info "$oid" address))
+    local media=($(get_extent_info "$oid" media_name))
+    local ext_uuid=($(get_extent_info "$oid" ext_uuid))
+
+    $PSQL -c "select * from extent;"
+    for (( i = 0; i < ${#addresses[@]}; i++ )); do
+        getfattr -d -m '.*' -e text "${media[i]}/${addresses[i]}"
+        $PSQL -c \
+            "select info from extent where extent_uuid = '${ext_uuid[i]}';"
+    done
+}
+
 function setup_dir
 {
     DIRS=(
@@ -58,6 +81,7 @@ function test_put_get()
     local oid=$FUNCNAME
 
     $valg_phobos put -l raid4 /etc/hosts $oid
+    foreach_dir_extent $oid
     $valg_phobos get $oid /tmp/out.$$
 
     diff /etc/hosts /tmp/out.$$

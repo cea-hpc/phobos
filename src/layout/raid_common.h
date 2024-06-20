@@ -60,6 +60,8 @@ struct write_io_context {
 };
 
 struct raid_io_context {
+    /** Name of the RAID layout (stored on the medium) */
+    const char *name;
     /** Writing and reading operations */
     const struct raid_ops *ops;
     /** Whether an unanswered medium allocation has been requested by the
