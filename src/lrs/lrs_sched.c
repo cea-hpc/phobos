@@ -1467,13 +1467,17 @@ device_select_func_t get_dev_policy(void)
  * @param[in] not_selected    Index to ignore from selected_devs (can be set to
  *                            n_selected_devs or more if all selected_devs
  *                            should be taken into account)
+ * @param[in] prevent_duplicate Check the allocation requester of the medium.
+ * @param[in] allocation_seeker Allocation requester.
  * @return                    True if one compatible drive is found, else false.
  */
 static bool compatible_drive_exists(struct lrs_sched *sched,
                                     struct media_info *pmedia,
                                     struct lrs_dev **selected_devs,
                                     size_t n_selected_devs,
-                                    size_t not_selected)
+                                    size_t not_selected,
+                                    bool prevent_duplicate,
+                                    int allocation_requester)
 {
     int i, j;
 
@@ -1483,6 +1487,10 @@ static bool compatible_drive_exists(struct lrs_sched *sched,
 
         if (dev_is_failed(dev) ||
             !thread_is_running(&dev->ld_device_thread))
+            continue;
+
+        if (prevent_duplicate && dev->ld_sub_request != NULL &&
+            dev->ld_sub_request->reqc->socket_id == allocation_requester)
             continue;
 
         /* check the device is not already selected */
@@ -1812,7 +1820,9 @@ lock_race_retry:
     if (compatible_drive_exists(sched, *alloc_medium,
                                 reqc->params.rwalloc.respc->devices,
                                 handle_error ? wreq->n_media : index_to_alloc,
-                                index_to_alloc))
+                                index_to_alloc,
+                                reqc->req->walloc->prevent_duplicate,
+                                reqc->socket_id))
         rc = -EAGAIN;
     else
         pho_error(rc = -ENODEV, "No compatible device found for write alloc");
@@ -2004,7 +2014,8 @@ static int sched_try_alloc_medium(struct lrs_sched *sched,
         if (!*medium_to_alloc ||
             compatible_drive_exists(sched, *medium_to_alloc,
                                     reqc->params.rwalloc.respc->devices,
-                                    n_already_allocated, index_to_alloc))
+                                    n_already_allocated, index_to_alloc,
+                                    false, reqc->socket_id))
             rc = -EAGAIN;
         else
             rc = -ENODEV;

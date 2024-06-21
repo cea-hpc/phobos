@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -124,6 +124,7 @@ void pho_srl_request_write_alloc(pho_req_t *req, size_t n_media,
 
     req->walloc->n_media = n_media;
     req->walloc->media = xmalloc(n_media * sizeof(*req->walloc->media));
+    req->walloc->prevent_duplicate = false;
 
     for (i = 0; i < n_media; ++i) {
         req->walloc->media[i] = xmalloc(sizeof(*req->walloc->media[i]));
