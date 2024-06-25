@@ -433,6 +433,18 @@ int dss_extent_get(struct dss_handle *handle, const struct dss_filter *filter,
                    struct extent **extents, int *extent_count);
 
 /**
+ * Delete information for one or many extent in DSS.
+ *
+ * @param[in]  handle       valid connection handle
+ * @param[in]  extents      array of entries to delete
+ * @param[in]  extent_count number of items in the list
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_extent_delete(struct dss_handle *handle, struct extent *extents,
+                      int extent_count);
+
+/**
  * Store information for one or many layouts in DSS.
  *
  * @param[in]  handle        valid connection handle

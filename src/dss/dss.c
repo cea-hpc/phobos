@@ -524,6 +524,13 @@ int dss_extent_update(struct dss_handle *handle, struct extent *extents,
                            DSS_SET_UPDATE, 0);
 }
 
+int dss_extent_delete(struct dss_handle *handle, struct extent *extents,
+                      int extent_count)
+{
+    return dss_generic_set(handle, DSS_EXTENT, (void *)extents, extent_count,
+                           DSS_SET_DELETE, 0);
+}
+
 /*
  * OBJECT FUNCTION
  */
