@@ -56,7 +56,7 @@ class CLIManagedResourceMixin:
         """Return a dict of available fields and optional display formatters."""
         raise NotImplementedError("Abstract method subclasses must implement.")
 
-    def get_display_dict(self, numeric=False, max_width=None):
+    def get_display_dict(self, numeric=False, max_width=None, fmt=None):
         """
         Return a dict representing the structure as we want it to be displayed,
         i.e.: w/ only the desired fields and w/ conversion methods applied.
@@ -67,7 +67,9 @@ class CLIManagedResourceMixin:
             if not numeric and disp_fields[key]:
                 conv = disp_fields.get(key, str)
             else:
-                conv = str
+                # Some formats (e.g. JSON) need a specific convertion function,
+                # Converting to a string too early would result in invalid JSON.
+                conv = fmt if fmt is not None else str
             export[key] = conv(getattr(self, key))
         return export
 
@@ -407,9 +409,10 @@ class MediaInfo(Structure, CLIManagedResourceMixin):
             'delete_access': None
         }
 
-    def get_display_dict(self, numeric=False, max_width=None):
+    def get_display_dict(self, numeric=False, max_width=None, fmt=None):
         """Update level0 representation with nested structures content."""
-        export = super(MediaInfo, self).get_display_dict()
+        export = super(MediaInfo, self).get_display_dict(numeric, max_width,
+                                                         fmt)
         export.update(self.expanded_fs_info)
         export.update(self.expanded_stats)
         return export
