@@ -209,7 +209,7 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
 
     pho_debug("Executing request: '%s'", clause->str);
 
-    rc = execute_and_commit_or_rollback(conn, clause, &res, PGRES_TUPLES_OK);
+    rc = execute(conn, clause->str, &res, PGRES_TUPLES_OK);
     g_string_free(clause, true);
     if (rc)
         return rc;
