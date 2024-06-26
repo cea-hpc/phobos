@@ -557,11 +557,21 @@ static int _explore_from_path_aux(struct admin_handle *adm,
     struct dirent *entry;
     int rc2 = 0;
     int rc = 0;
+    int fddir;
     DIR *dir;
 
-    dir = opendir(root_path);
-    if (!dir)
+    fddir = open(root_path, O_NOATIME);
+    if (fddir == -1)
         return -errno;
+
+    dir = fdopendir(fddir);
+    if (!dir) {
+        rc = -errno;
+        rc2 = close(fddir);
+        if (rc2)
+            pho_error(-errno, "Could not close dir fd");
+        return rc;
+    }
 
     while ((entry = readdir(dir)) != NULL) {
         struct stat stat_buf;
@@ -618,7 +628,7 @@ free_dirent:
     rc = rc ? : rc2;
     rc2 = closedir(dir);
     if (rc2) {
-        rc2 = rc2 ? : -errno;
+        rc2 = -errno;
         pho_error(rc2, "Could not close dir");
     }
 
