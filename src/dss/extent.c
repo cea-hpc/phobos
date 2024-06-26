@@ -117,27 +117,36 @@ static int extent_insert_query(PGconn *conn, void *void_extent, int item_cnt,
     g_string_append(
         request,
         "INSERT INTO extent (extent_uuid, state, size, offsetof, "
-        "medium_family, medium_id, address, hash) VALUES "
+        "medium_family, medium_id, address, hash, info) VALUES "
     );
 
     for (int i = 0; i < item_cnt; ++i) {
         struct extent *extent = ((struct extent *) void_extent) + i;
+        GString *info;
         char *hash;
 
-        hash = dss_extent_hash_encode(extent);
-        if (hash == NULL)
-            return -EINVAL;
+        info = g_string_new("");
+        pho_attrs_to_json(&extent->info, info, JSON_COMPACT);
 
-        g_string_append_printf(request,
-                               "('%s', '%s', %ld, %ld, '%s', '%s', '%s', '%s')",
-                               extent->uuid, extent_state2str(extent->state),
-                               extent->size, extent->offset,
-                               rsc_family2str(extent->media.family),
-                               extent->media.name, extent->address.buff, hash);
+        hash = dss_extent_hash_encode(extent);
+        if (hash == NULL) {
+            g_string_free(info, TRUE);
+            return -EINVAL;
+        }
+
+        g_string_append_printf(
+            request,
+            "('%s', '%s', %ld, %ld, '%s', '%s', '%s', '%s', '%s')",
+            extent->uuid, extent_state2str(extent->state),
+            extent->size, extent->offset,
+            rsc_family2str(extent->media.family),
+            extent->media.name, extent->address.buff, hash,
+            info->str);
 
         if (i < item_cnt - 1)
             g_string_append(request, ", ");
 
+        g_string_free(info, TRUE);
         free(hash);
     }
 
@@ -236,7 +245,7 @@ int dss_extent_hash_decode(struct extent *extent, json_t *hash_field)
     ENTRY;
 
     if (!json_is_object(hash_field))
-        LOG_RETURN(rc = -EINVAL, "Invalid module description");
+        LOG_RETURN(rc = -EINVAL, "Invalid JSON hash");
 
     tmp = json_dict2tmp_str(hash_field, "xxh128");
     if (tmp) {
@@ -280,17 +289,27 @@ static int extent_from_pg_row(struct dss_handle *handle, void *void_extent,
     root = json_loads(PQgetvalue(res, row_num, 7), JSON_REJECT_DUPLICATES,
                       &json_error);
     if (!root)
-        LOG_RETURN(-EINVAL, "Failed to parse json data: %s", json_error.text);
+        LOG_RETURN(-EINVAL, "Failed to parse json data for hash values: %s",
+                   json_error.text);
 
     rc = dss_extent_hash_decode(extent, root);
     json_decref(root);
+    if (rc)
+        return rc;
 
-    return rc;
+    rc = pho_json_to_attrs(&extent->info, PQgetvalue(res, row_num, 8));
+    if (rc)
+        LOG_RETURN(rc, "Failed to parse json data for extra attrs: %s",
+                   json_error.text);
+
+    return 0;
 }
 
 static void extent_result_free(void *void_extent)
 {
-    (void) void_extent;
+    struct extent *extent = void_extent;
+
+    pho_attrs_free(&extent->info);
 }
 
 const struct dss_resource_ops extent_ops = {

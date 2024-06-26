@@ -387,6 +387,8 @@ struct extent {
     bool                with_md5;   /**< true if extent md5 field is set */
     unsigned char       md5[MD5_BYTE_LENGTH];
                                     /**< MD5 checksum */
+    /** Extra attributes specific to the layout which wrote the extent */
+    struct pho_attrs    info;
 };
 
 /**

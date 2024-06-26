@@ -165,6 +165,9 @@ static int layout_extents_decode(struct extent **extents, int *count,
         rc = dss_extent_hash_decode(&result[i], json_object_get(child, "hash"));
         if (rc)
             LOG_GOTO(out_decref, rc = -EINVAL, "Failed to set hash");
+
+        pho_json_raw_to_attrs(&result[i].info,
+                              json_object_get(child, "info"));
     }
 
     *extents = result;

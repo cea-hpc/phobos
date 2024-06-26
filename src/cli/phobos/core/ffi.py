@@ -662,6 +662,12 @@ class Buffer(Structure): # pylint: disable=too-few-public-methods
         # pylint: disable=attribute-defined-outside-init
         self._buff = val.encode('utf-8')
 
+class PhoAttrs(Structure): # pylint: disable=too-few-public-methods
+    """Attribute set."""
+    _fields_ = [
+        ('attr_set', c_void_p)
+    ]
+
 class ExtentInfo(Structure): # pylint: disable=too-few-public-methods
     """DSS extent descriptor."""
     _fields_ = [
@@ -675,13 +681,8 @@ class ExtentInfo(Structure): # pylint: disable=too-few-public-methods
         ('with_xxh128', c_bool),
         ('xxh128', c_ubyte * 16),
         ('with_md5', c_bool),
-        ('md5', c_ubyte * MD5_BYTE_LENGTH)
-    ]
-
-class PhoAttrs(Structure): # pylint: disable=too-few-public-methods
-    """Attribute set."""
-    _fields_ = [
-        ('attr_set', c_void_p)
+        ('md5', c_ubyte * MD5_BYTE_LENGTH),
+        ('info', PhoAttrs)
     ]
 
 class ModuleDesc(Structure): # pylint: disable=too-few-public-methods

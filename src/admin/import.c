@@ -464,10 +464,10 @@ static int _import_file_to_dss(struct admin_handle *adm, int fd,
                                int height, struct pho_id med_id,
                                size_t *size_written, long long *nb_new_obj)
 {
+    struct extent ext_to_insert = {0};
     struct layout_info lyt_to_insert;
     struct object_info obj_to_insert;
     struct io_adapter_module *ioa;
-    struct extent ext_to_insert;
     struct pho_io_descr iod;
     struct pho_ext_loc loc;
     char *save_oid;
