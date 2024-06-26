@@ -58,7 +58,7 @@ const struct pho_config_item cfg_tape_model[] = {
     [PHO_CFG_TAPE_MODEL_supported_list] = {
         .section = "tape_model",
         .name    = "supported_list",
-        .value   = "LTO5,LTO6,LTO7,LTO8,T10KB,T10KC,T10KD"
+        .value   = "LTO5,LTO6,LTO7,LTO8,LTO9,T10KB,T10KC,T10KD"
     },
 };
 
