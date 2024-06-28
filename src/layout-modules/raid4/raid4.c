@@ -46,8 +46,9 @@ static struct module_desc RAID4_MODULE_DESC = {
 };
 
 static struct raid_ops RAID4_OPS = {
-    .write_split = raid4_write_split,
-    .read_split  = raid4_read_split,
+    .write_split    = raid4_write_split,
+    .read_split     = raid4_read_split,
+    .get_block_size = raid4_get_block_size,
 };
 
 static const struct pho_enc_ops RAID4_ENCODER_OPS = {
@@ -134,6 +135,33 @@ int pho_module_register(void *module, void *context)
 
     self->desc = RAID4_MODULE_DESC;
     self->ops = &LAYOUT_RAID4_OPS;
+
+    return 0;
+}
+
+int raid4_get_block_size(struct pho_encoder *enc, size_t *block_size)
+{
+    struct extent *extent;
+    const char *attr;
+    int64_t value;
+
+    extent = &enc->layout->extents[0];
+    attr = pho_attr_get(&extent->info, "raid4.chunk_size");
+    if (!attr)
+        LOG_RETURN(-EINVAL,
+                   "'raid4.chunk_size' attribute not found on extent '%s'",
+                   extent->uuid);
+
+    pho_debug("raid4: found block size '%s' for extent '%s'", attr,
+              extent->uuid);
+    value = str2int64(attr);
+    if (value <= 0)
+        LOG_RETURN(-EINVAL,
+                   "Invalid block size '%s' found in 'raid4.chunk_size' on "
+                   "extent '%s'. Expected a positive integer",
+                   attr, extent->uuid);
+
+    *block_size = value;
 
     return 0;
 }

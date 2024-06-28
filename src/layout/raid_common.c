@@ -674,6 +674,10 @@ static int raid_io_context_read_init(struct pho_encoder *dec,
     if (*split_size < buffer_size)
         buffer_size = *split_size;
 
+    rc = io_context->ops->get_block_size(dec, &buffer_size);
+    if (rc)
+        return rc;
+
     for (i = 0; i < n_extents; i++)
         pho_buff_alloc(&io_context->buffers[i], buffer_size);
 

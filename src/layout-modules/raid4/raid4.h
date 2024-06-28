@@ -12,6 +12,8 @@ int raid4_write_split(struct pho_encoder *enc, int input_fd,
 
 int raid4_read_split(struct pho_encoder *dec, int out_fd);
 
+int raid4_get_block_size(struct pho_encoder *enc, size_t *block_size);
+
 void buffer_xor(struct pho_buff *buff1, struct pho_buff *buff2,
                 struct pho_buff *xor, size_t count);
 

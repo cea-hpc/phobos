@@ -95,6 +95,7 @@ struct raid_ops {
                        size_t split_size);
 
     int (*read_split)(struct pho_encoder *enc, int out_fd);
+    int (*get_block_size)(struct pho_encoder *enc, size_t *block_size);
 };
 
 int raid_encoder_init(struct pho_encoder *enc,
