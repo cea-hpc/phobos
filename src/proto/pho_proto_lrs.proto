@@ -69,7 +69,11 @@ message PhoRequest {
             required uint64 size_written  = 3;  // Amount of bytes written
                                                 // on this medium (0 if the
                                                 // medium was only read).
-            required bool to_sync         = 4;  // Whether the client requires
+            required uint64 nb_extents_written = 4;
+                                                // Number of objects written
+                                                // on this medium (0 if the
+                                                // medium was only read).
+            required bool to_sync         = 5;  // Whether the client requires
                                                 // the LRS to perform a sync or
                                                 // not.
         }

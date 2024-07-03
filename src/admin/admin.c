@@ -1285,7 +1285,8 @@ static int _send_and_recv_release(struct admin_handle *adm,
                                   const struct pho_io_descr *iod_source,
                                   int req_id, const struct pho_id *target,
                                   const struct pho_io_descr *iod_target,
-                                  ssize_t total_size_written)
+                                  ssize_t total_size_written,
+                                  ssize_t nb_extents_written)
 {
     pho_resp_t *resp;
     pho_req_t req;
@@ -1301,6 +1302,7 @@ static int _send_and_recv_release(struct admin_handle *adm,
     req.release->media[0]->med_id->library = xstrdup(source->library);
     req.release->media[0]->rc = iod_source->iod_rc;
     req.release->media[0]->size_written = 0;
+    req.release->media[0]->nb_extents_written = 0;
     req.release->media[0]->to_sync = false;
 
     if (target == NULL) {
@@ -1314,6 +1316,7 @@ static int _send_and_recv_release(struct admin_handle *adm,
     req.release->media[1]->med_id->library = xstrdup(target->library);
     req.release->media[1]->rc = iod_target->iod_rc;
     req.release->media[1]->size_written = total_size_written;
+    req.release->media[1]->nb_extents_written = nb_extents_written;
     req.release->media[1]->to_sync = true;
 
     rc = _send_and_receive(&adm->phobosd_comm, &req, &resp);
@@ -1477,7 +1480,7 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
                             &iod_target, &target);
     if (rc) {
         free(loc_source.root_path);
-        _send_and_recv_release(adm, source, &iod_source, 3, NULL, NULL, 0);
+        _send_and_recv_release(adm, source, &iod_source, 3, NULL, NULL, 0, 0);
         goto free_ext;
     }
 
@@ -1517,7 +1520,8 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
                                 &target, &iod_target,
                                 ext_cnt_done == ext_cnt ?
                                     total_size :
-                                    _sum_extent_size(ext_res, ext_cnt_done));
+                                    _sum_extent_size(ext_res, ext_cnt_done),
+                                ext_cnt_done);
     if (rc)
         LOG_GOTO(free_ext, rc, "Failed to send/receive release");
 

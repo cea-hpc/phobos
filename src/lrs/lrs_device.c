@@ -443,6 +443,7 @@ static void sync_params_init(struct sync_params *params)
     params->oldest_tosync.tv_sec = 0;
     params->oldest_tosync.tv_nsec = 0;
     params->tosync_size = 0;
+    params->tosync_nb_extents = 0;
 }
 
 static const struct timespec MINSLEEP = {
@@ -580,6 +581,7 @@ static void clean_tosync_array(struct lrs_dev *dev, int rc)
 
     /* sync operation acknowledgement */
     dev->ld_sync_params.tosync_size = 0;
+    dev->ld_sync_params.tosync_nb_extents = 0;
     dev->ld_sync_params.oldest_tosync.tv_sec = 0;
     dev->ld_sync_params.oldest_tosync.tv_nsec = 0;
     dev->ld_needs_sync = false;
@@ -630,6 +632,8 @@ void push_new_sync_to_device(struct lrs_dev *dev, struct req_container *reqc,
     g_ptr_array_add(sync_params->tosync_array, req_tosync);
     sync_params->tosync_size +=
         reqc->params.release.tosync_media[medium_index].written_size;
+    sync_params->tosync_nb_extents +=
+        reqc->params.release.tosync_media[medium_index].nb_extents_written;
     update_oldest_tosync(&sync_params->oldest_tosync, reqc->received_at);
 
     MUTEX_UNLOCK(&dev->ld_mutex);
@@ -684,6 +688,8 @@ static void remove_canceled_sync(struct lrs_dev *dev)
             tosync_medium =
                 &release_params->tosync_media[req_tosync->medium_index];
 
+            dev->ld_sync_params.tosync_nb_extents -=
+                tosync_medium->nb_extents_written;
             dev->ld_sync_params.tosync_size -= tosync_medium->written_size;
             need_oldest_update = true;
 
@@ -873,7 +879,7 @@ static int dev_sync(struct lrs_dev *dev)
         rc = dev->ld_last_client_rc;
 
     rc2 = lrs_dev_media_update(dev, sync_params->tosync_size, rc,
-                               sync_params->tosync_array->len);
+                               sync_params->tosync_nb_extents);
     dev->ld_last_client_rc = 0;
 
     MUTEX_UNLOCK(&dev->ld_mutex);

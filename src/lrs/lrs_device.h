@@ -180,6 +180,10 @@ struct sync_params {
     size_t           tosync_size;   /**< total size of release requests in
                                       *  \p tosync_array
                                       */
+    size_t           tosync_nb_extents;
+                                    /**< total number of extents written in
+                                     *   \p tosync_array
+                                     */
 };
 
 /**

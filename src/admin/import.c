@@ -752,6 +752,7 @@ int import_medium(struct admin_handle *adm, struct media_info *medium,
     reqs[1].release->media[0]->med_id->name = strdup(id.name);
     reqs[1].release->media[0]->med_id->library = strdup(id.library);
     reqs[1].release->media[0]->size_written = 0;
+    reqs[1].release->media[0]->nb_extents_written = 0;
     reqs[1].release->media[0]->rc = 0;
     reqs[1].release->media[0]->to_sync = false;
 

@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -119,6 +119,9 @@ struct tosync_medium {
     enum sub_request_status status; /**< Medium synchronization status. */
     struct pho_id medium;           /**< Medium ID. */
     size_t written_size;            /**< Written size on the medium to sync. */
+    size_t nb_extents_written;      /**< Number of written extents on the medium
+                                      *  to sync.
+                                      */
     int client_rc;                  /**< Error encontered by the client during
                                       *  I/O.
                                       */

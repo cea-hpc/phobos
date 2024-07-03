@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -218,6 +218,7 @@ static int send_write_and_release_with_rc(struct pho_comm_info *ci,
     req.release->media[0]->med_id->library =
         xstrdup(resp->walloc->media[0]->med_id->library);
     req.release->media[0]->to_sync = true;
+    req.release->media[0]->nb_extents_written = 1;
     req.release->media[0]->size_written = size;
     req.release->media[0]->rc = client_rc;
 

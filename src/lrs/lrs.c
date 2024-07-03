@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -203,6 +203,8 @@ static void init_release_container(struct req_container *req_cont)
             tosync_media[tosync_media_index].medium.family =
                 (enum rsc_family)media->med_id->family;
             tosync_media[tosync_media_index].written_size = media->size_written;
+            tosync_media[tosync_media_index].nb_extents_written =
+                media->nb_extents_written;
             tosync_media[tosync_media_index].client_rc = media->rc;
             pho_id_name_set(&tosync_media[tosync_media_index].medium,
                             media->med_id->name, media->med_id->library);

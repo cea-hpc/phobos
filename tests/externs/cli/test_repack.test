@@ -117,6 +117,11 @@ function test_simple_repack
         error "repack should have copied 3 extents to the empty medium"
     fi
 
+    nb=$($phobos tape list -o stats.nb_obj $(echo $media | cut -d' ' -f3))
+    if [ $nb -ne 3 ]; then
+        error "tape stats should have said 3 extents were copied"
+    fi
+
     nb=$($phobos object list --deprecated | wc -l)
     if [ $nb -ne 0 ]; then
         error "repack should have deleted deprecated objects"
