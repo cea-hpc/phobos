@@ -12,24 +12,18 @@ set -xe
 
 function check_c_api()
 {
-    if command -v dnf; then
-        cmd=dnf
-    else
-        cmd=yum
-    fi
-
     cd rpms/RPMS/x86_64
     cat <<EOF > test_c_api.c
 #include <phobos_store.h>
 #include <phobos_admin.h>
 EOF
 
-    sudo $cmd -y install phobos-[1-9]* phobos-devel*
+    sudo dnf --cacheonly -y install phobos-[1-9]* phobos-devel*
     # Just compile, do not link. We just check the coherency between the headers
     # and the specfile
     gcc -c -o test_c_api.o test_c_api.c `pkg-config --cflags glib-2.0`
     rm test_c_api.*
-    sudo $cmd -y remove phobos phobos-devel
+    sudo dnf --cacheonly -y remove phobos phobos-devel
     cd -
 }
 

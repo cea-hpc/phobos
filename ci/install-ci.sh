@@ -23,14 +23,15 @@ make rpm
 
 # (re-)install RPM
 if [ ! -z `type -t phobos` ]; then
-    sudo yum -y remove phobos
-    sudo yum -y remove phobos-debuginfo
+    sudo dnf --cacheonly -y remove phobos
+    sudo dnf --cacheonly -y remove phobos-debuginfo
 fi
-sudo yum -y install rpms/RPMS/x86_64/phobos-[1-9]*
+sudo dnf --cacheonly -y install rpms/RPMS/x86_64/phobos-[1-9]*
 if [ "$1" = "--enable-rados" ]; then
-    sudo yum -y install rpms/RPMS/x86_64/phobos-rados-adapters-[1-9]*
+    sudo dnf --cacheonly -y install \
+        rpms/RPMS/x86_64/phobos-rados-adapters-[1-9]*
 fi
-sudo yum -y install rpms/RPMS/x86_64/phobos-debug*
+sudo dnf --cacheonly -y install rpms/RPMS/x86_64/phobos-debug*
 
 # clean phobos compilation directory
 cd ..
