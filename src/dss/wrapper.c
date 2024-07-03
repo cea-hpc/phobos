@@ -601,8 +601,8 @@ int dss_update_gc_for_tape(struct dss_handle *handle, const struct pho_id *tape)
     g_string_append_printf(request,
         "WITH objects AS ("
         "  DELETE FROM deprecated_object"
-        "  WHERE EXISTS ("
-        "    SELECT 1 FROM layout"
+        "  WHERE object_uuid IN ("
+        "    SELECT object_uuid FROM layout"
         "    INNER JOIN ("
         "      SELECT extent_uuid FROM extent"
         "      WHERE medium_id = '%s' AND medium_family = '%s' AND"
