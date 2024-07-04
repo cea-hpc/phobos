@@ -125,17 +125,27 @@ static int device_update_query(PGconn *conn, void *void_dev, int item_cnt,
 }
 
 static int device_select_query(GString **conditions, int n_conditions,
-                               GString *request)
+                               GString *request, struct dss_sort *sort)
 {
     g_string_append(request,
-                    "SELECT family, model, id, library, adm_status, host, path"
+                    "SELECT family, model, device.id, library, adm_status, "
+                    "       host, path"
                     " FROM device");
+
+    /* If we want to sort with a column from the "lock" table, we need to
+     * retrieve the "lock" table because the information is not in the "device"
+     * table
+     */
+    if (sort && sort->is_lock)
+        g_string_append(request,
+                        " LEFT JOIN lock ON lock.id = device.id");
 
     if (n_conditions == 1)
         g_string_append(request, conditions[0]->str);
     else if (n_conditions >= 2)
         return -ENOTSUP;
 
+    dss_sort2sql(request, sort);
     g_string_append(request, ";");
 
     return 0;

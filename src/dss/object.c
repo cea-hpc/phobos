@@ -109,7 +109,7 @@ static int object_update_query(PGconn *conn, void *void_object, int item_cnt,
 }
 
 static int object_select_query(GString **conditions, int n_conditions,
-                               GString *request)
+                               GString *request, struct dss_sort *sort)
 {
     g_string_append(request,
                     "SELECT oid, object_uuid, version, user_md, obj_status,"

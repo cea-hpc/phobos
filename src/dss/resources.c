@@ -102,14 +102,14 @@ int get_update_query(enum dss_type type, PGconn *conn, void *void_resource,
 }
 
 int get_select_query(enum dss_type type, GString **conditions, int n_conditions,
-                     GString *request)
+                     GString *request, struct dss_sort *sort)
 {
     const struct dss_resource_ops *resource_ops = get_resource_ops(type);
 
     if (resource_ops == NULL)
         return -ENOTSUP;
 
-    return resource_ops->select_query(conditions, n_conditions, request);
+    return resource_ops->select_query(conditions, n_conditions, request, sort);
 }
 
 int get_delete_query(enum dss_type type, void *void_resource, int item_count,

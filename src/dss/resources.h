@@ -50,7 +50,7 @@ struct dss_resource_ops {
     int (*update_query)(PGconn *conn, void *void_resource, int item_count,
                         int64_t fields, GString *request);
     int (*select_query)(GString **conditions, int n_conditions,
-                        GString *request);
+                        GString *request, struct dss_sort *sort);
     int (*delete_query)(void *void_resource, int item_count, GString *request);
     int (*create)(struct dss_handle *handle, void *void_resource,
                   PGresult *res, int row_num);
@@ -115,7 +115,7 @@ int get_update_query(enum dss_type type, PGconn *conn, void *void_resource,
  *                       negative error code otherwise
  */
 int get_select_query(enum dss_type type, GString **conditions, int n_conditions,
-                     GString *request);
+                     GString *request, struct dss_sort *sort);
 
 /**
  * Get the delete query of a resource into \p request.

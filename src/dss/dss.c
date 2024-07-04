@@ -162,7 +162,8 @@ static void _dss_result_free(struct dss_result *dss_res, int item_cnt)
 
 static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
                            const struct dss_filter **filters, int filters_count,
-                           void **item_list, int *item_cnt)
+                           void **item_list, int *item_cnt,
+                           struct dss_sort *sort)
 {
     PGconn *conn = handle->dh_conn;
     struct dss_result *dss_res;
@@ -197,7 +198,7 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     }
 
     clause = g_string_new(NULL);
-    rc = get_select_query(type, conditions, filters_count, clause);
+    rc = get_select_query(type, conditions, filters_count, clause, sort);
     for (i = 0; i < filters_count; ++i)
         g_string_free(conditions[i], true);
 
@@ -321,11 +322,12 @@ int dss_device_update(struct dss_handle *handle, struct dev_info *device_list,
 }
 
 int dss_device_get(struct dss_handle *handle, const struct dss_filter *filter,
-                   struct dev_info **device_list, int *device_count)
+                   struct dev_info **device_list, int *device_count,
+                   struct dss_sort *sort)
 {
     return dss_generic_get(handle, DSS_DEVICE,
                            (const struct dss_filter*[]) {filter, NULL}, 1,
-                           (void **)device_list, device_count);
+                           (void **)device_list, device_count, sort);
 }
 
 int dss_device_delete(struct dss_handle *handle, struct dev_info *device_list,
@@ -455,7 +457,7 @@ int dss_media_get(struct dss_handle *handle, const struct dss_filter *filter,
 {
     return dss_generic_get(handle, DSS_MEDIA,
                            (const struct dss_filter*[]) {filter, NULL}, 1,
-                           (void **) media_list, media_count);
+                           (void **) media_list, media_count, NULL);
 }
 
 int dss_media_delete(struct dss_handle *handle, struct media_info *media_list,
@@ -474,7 +476,7 @@ int dss_layout_get(struct dss_handle *handle, const struct dss_filter *filter,
 {
     return dss_generic_get(handle, DSS_LAYOUT,
                            (const struct dss_filter*[]) {filter, NULL}, 1,
-                           (void **)layouts, layout_count);
+                           (void **)layouts, layout_count, NULL);
 }
 
 int dss_layout_insert(struct dss_handle *handle,
@@ -495,7 +497,7 @@ int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
 {
     return dss_generic_get(hdl, DSS_FULL_LAYOUT,
                            (const struct dss_filter*[]) {object, media}, 2,
-                           (void **)layouts, layout_count);
+                           (void **)layouts, layout_count, NULL);
 }
 
 /*
@@ -507,7 +509,7 @@ int dss_extent_get(struct dss_handle *handle, const struct dss_filter *filter,
 {
     return dss_generic_get(handle, DSS_EXTENT,
                            (const struct dss_filter*[]) {filter, NULL}, 1,
-                           (void **)extents, extent_count);
+                           (void **)extents, extent_count, NULL);
 }
 
 int dss_extent_insert(struct dss_handle *handle, struct extent *extents,
@@ -561,7 +563,7 @@ int dss_object_get(struct dss_handle *handle, const struct dss_filter *filter,
 {
     return dss_generic_get(handle, DSS_OBJECT,
                            (const struct dss_filter*[]) {filter, NULL}, 1,
-                           (void **)object_list, object_count);
+                           (void **)object_list, object_count, NULL);
 }
 
 int dss_object_delete(struct dss_handle *handle,
@@ -599,7 +601,7 @@ int dss_deprecated_object_get(struct dss_handle *handle,
 {
     return dss_generic_get(handle, DSS_DEPREC,
                            (const struct dss_filter*[]) {filter, NULL}, 1,
-                           (void **)object_list, object_count);
+                           (void **)object_list, object_count, NULL);
 }
 
 int dss_deprecated_object_delete(struct dss_handle *handle,
@@ -619,7 +621,7 @@ int dss_logs_get(struct dss_handle *hdl, const struct dss_filter *filter,
 {
     return dss_generic_get(hdl, DSS_LOGS,
                            (const struct dss_filter*[]) {filter, NULL}, 1,
-                           (void **)logs_ls, logs_cnt);
+                           (void **)logs_ls, logs_cnt, NULL);
 }
 
 int dss_logs_insert(struct dss_handle *hdl, struct pho_log *logs, int log_cnt)

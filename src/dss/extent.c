@@ -182,7 +182,7 @@ static int extent_update_query(PGconn *conn, void *void_extent, int item_cnt,
 }
 
 static int extent_select_query(GString **conditions, int n_conditions,
-                               GString *request)
+                               GString *request, struct dss_sort *sort)
 {
     g_string_append(request,
                     "SELECT extent_uuid, size, offsetof, medium_family, state,"

@@ -311,7 +311,7 @@ static int _get_device_by_path_or_serial(struct admin_handle *adm,
     if (rc)
         return rc;
 
-    rc = dss_device_get(&adm->dss, &filter, dev_res, &dcnt);
+    rc = dss_device_get(&adm->dss, &filter, dev_res, &dcnt, NULL);
     dss_filter_free(&filter);
     if (rc)
         return rc;

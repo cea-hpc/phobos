@@ -27,7 +27,7 @@ clean API to access it.
 
 import json
 import logging
-from ctypes import byref, c_int, c_void_p, POINTER, Structure
+from ctypes import byref, c_int, c_void_p, c_char_p, c_bool, POINTER, Structure
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 from phobos.core.const import DSS_MEDIA # pylint: disable=no-name-in-module
@@ -51,6 +51,13 @@ OBJECT_PREFIXES = {
     'device': 'DSS::DEV::',
     'layout': 'DSS::EXT::',
     'media':  'DSS::MDA::',
+}
+
+ATTRS_SORTING = {
+    'name': 'id',
+    'lock_hostname': 'hostname',
+    'lock_owner': 'owner',
+    'lock_ts': 'timestamp',
 }
 
 class JSONFilter(Structure): # pylint: disable=too-few-public-methods
@@ -131,6 +138,40 @@ class DSSResult: # pylint: disable=too-few-public-methods
         item._dss_result_parent_link = self # pylint: disable=protected-access
         return item
 
+class SortFilter(Structure): # pylint: disable=too-few-public-methods
+    """DSS sort filter"""
+    _fields_ = [
+        ('attr', c_char_p),
+        ('reverse', c_bool),
+        ('is_lock', c_bool)
+    ]
+
+def dss_sort(**kwargs):
+    """Convert a sort filter into a DSS-compatible sort filter"""
+    sort = None
+    for key in ['sort', 'rsort']:
+        if kwargs.get(key):
+            is_lock = False
+            reverse = False
+            if key == 'rsort':
+                reverse = True
+
+            # Check if the sort is on the "lock" table to know whether we
+            # need to get the "lock" table in the select query
+            if 'lock_' in kwargs[key]:
+                is_lock = True
+
+            # Check if the attribute is in "ATTRS_SORTING" because some
+            # attributes displayed by "list" are not the same to those in
+            # postgresql
+            if ATTRS_SORTING.get(kwargs[key]):
+                kwargs[key] = ATTRS_SORTING[kwargs[key]]
+
+            sort = SortFilter(kwargs[key].encode('utf-8'), reverse, is_lock)
+            kwargs.pop(key)
+            break
+    return sort, kwargs
+
 class BaseEntityManager:
     """Proxy to manipulate (CRUD) objects in DSS."""
     __metaclass__ = ABCMeta
@@ -142,7 +183,7 @@ class BaseEntityManager:
         self.client = client
 
     @abstractmethod
-    def _dss_get(self, hdl, qry_filter, res, res_cnt):
+    def _dss_get(self, hdl, qry_filter, res, res_cnt, qry_sort): #pylint: disable=too-many-arguments
         """Return DSS specialized GET method for this type of object."""
 
     @abstractproperty
@@ -178,15 +219,15 @@ class BaseEntityManager:
         kwargs = self.convert_kwargs('pattern', 'oid__regexp', **kwargs)
         kwargs = self.convert_kwargs('metadata', 'user_md__jkeyval', **kwargs)
 
+        sort, kwargs = dss_sort(**kwargs)
+        sref = byref(sort) if sort else None
+
         filt = dss_filter(self.wrapped_ident, **kwargs)
-        if filt is not None:
-            fref = byref(filt)
-        else:
-            fref = None
+        fref = byref(filt) if filt else None
 
         try:
             rc = self._dss_get(byref(self.client.handle), fref, byref(res),
-                               byref(res_cnt))
+                               byref(res_cnt), sref)
         finally:
             LIBPHOBOS.dss_filter_free(fref)
 
@@ -203,18 +244,20 @@ class DeviceManager(BaseEntityManager):
     wrapped_class = DevInfo
     wrapped_ident = 'device'
 
-    def _dss_get(self, hdl, qry_filter, res, res_cnt):
+    def _dss_get(self, hdl, qry_filter, res, res_cnt, qry_sort):
         """Invoke device-specific DSS get method."""
-        return LIBPHOBOS.dss_device_get(hdl, qry_filter, res, res_cnt)
+        #pylint: disable=too-many-arguments
+        return LIBPHOBOS.dss_device_get(hdl, qry_filter, res, res_cnt, qry_sort)
 
 class MediaManager(BaseEntityManager):
     """Proxy to manipulate media."""
     wrapped_class = MediaInfo
     wrapped_ident = 'media'
 
-    def _dss_get(self, hdl, qry_filter, res, res_cnt):
+    def _dss_get(self, hdl, qry_filter, res, res_cnt, qry_sort):
         """Invoke media-specific DSS get method."""
-        return LIBPHOBOS.dss_media_get(hdl, qry_filter, res, res_cnt)
+        #pylint: disable=too-many-arguments
+        return LIBPHOBOS.dss_media_get(hdl, qry_filter, res, res_cnt, qry_sort)
 
     def _generic_set(self, media):
         """Common operation to wrap dss_media functions"""

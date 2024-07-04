@@ -66,7 +66,7 @@ int dss_get_usable_devices(struct dss_handle *hdl, const enum rsc_family family,
     if (rc)
         return rc;
 
-    rc = dss_device_get(hdl, &filter, dev_ls, dev_cnt);
+    rc = dss_device_get(hdl, &filter, dev_ls, dev_cnt, NULL);
     dss_filter_free(&filter);
     return rc;
 }

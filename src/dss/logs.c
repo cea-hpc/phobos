@@ -93,7 +93,7 @@ static int logs_insert_query(PGconn *conn, void *void_log, int item_cnt,
 }
 
 static int logs_select_query(GString **conditions, int n_conditions,
-                             GString *request)
+                             GString *request, struct dss_sort *sort)
 {
     g_string_append(request,
                     "SELECT family, device, medium, library, errno, cause,"
