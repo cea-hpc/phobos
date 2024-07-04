@@ -30,30 +30,13 @@
 
 #include <unistd.h>
 
-static int write_buffer(int fd, char *buffer, size_t to_write)
-{
-    ssize_t written = 0;
-    ssize_t rc;
-
-    while (written < to_write) {
-        rc = write(fd, buffer + written, to_write - written);
-        if (rc < 0)
-            // FIXME handle EINTR
-            LOG_RETURN(-errno, "Failed to write in file");
-
-        written += rc;
-    }
-
-   return 0;
-}
-
 static int write_with_xor(struct pho_encoder *dec,
                           struct pho_io_descr *iod1,
                           struct pho_io_descr *iod2,
-                          bool second_part_missing,
-                          int out_fd)
+                          bool second_part_missing)
 {
     struct raid_io_context *io_context = dec->priv_enc;
+    struct pho_io_descr *posix = &io_context->posix;
     size_t buf_size = io_context->buffers[0].size;
     struct extent *split_extents;
     size_t written = 0;
@@ -98,24 +81,24 @@ static int write_with_xor(struct pho_encoder *dec,
         buffer_xor(&io_context->buffers[0], &io_context->buffers[1],
                    &io_context->buffers[2], buf_size);
 
-        rc = write_buffer(out_fd,
-                          second_part_missing ?
-                              io_context->buffers[0].buff :
-                              io_context->buffers[2].buff,
-                          second_part_missing ?
-                              part1_size :
-                              part2_size);
+        rc = ioa_write(posix->iod_ioa, posix,
+                       second_part_missing ?
+                           io_context->buffers[0].buff :
+                           io_context->buffers[2].buff,
+                       second_part_missing ?
+                           part1_size :
+                           part2_size);
         if (rc)
             return rc;
 
         written += second_part_missing ?  part1_size : part2_size;
-        rc = write_buffer(out_fd,
-                          second_part_missing ?
-                              io_context->buffers[2].buff :
-                              io_context->buffers[0].buff,
-                          second_part_missing ?
-                              min(part1_size, split_size - written) :
-                              part1_size);
+        rc = ioa_write(posix->iod_ioa, posix,
+                       second_part_missing ?
+                           io_context->buffers[2].buff :
+                           io_context->buffers[0].buff,
+                       second_part_missing ?
+                           min(part1_size, split_size - written) :
+                           part1_size);
         if (rc)
             return rc;
 
@@ -132,10 +115,9 @@ static int write_with_xor(struct pho_encoder *dec,
 
 static int write_without_xor(struct raid_io_context *io_context,
                              struct pho_io_descr *iod1,
-                             struct pho_io_descr *iod2,
-                             int out_fd) // FIXME will be changed with a posix
-                                         // ioa
+                             struct pho_io_descr *iod2)
 {
+    struct pho_io_descr *posix = &io_context->posix;
     size_t written = 0;
     ssize_t data_read;
     size_t read_size;
@@ -156,8 +138,8 @@ static int write_without_xor(struct raid_io_context *io_context,
         if (data_read < 0)
             LOG_RETURN(-errno, "Failed to read file");
 
-        rc = write_buffer(out_fd, io_context->buffers[0].buff,
-                          data_read);
+        rc = ioa_write(posix->iod_ioa, posix, io_context->buffers[0].buff,
+                       data_read);
         if (rc < 0)
             LOG_RETURN(-errno, "Failed to write in file");
 
@@ -168,7 +150,8 @@ static int write_without_xor(struct raid_io_context *io_context,
         if (data_read < 0)
             LOG_RETURN(-errno, "Failed to read file");
 
-        rc = write_buffer(out_fd, io_context->buffers[0].buff, data_read);
+        rc = ioa_write(posix->iod_ioa, posix, io_context->buffers[0].buff,
+                       data_read);
         if (rc < 0)
             LOG_RETURN(-errno, "Failed to write in file");
 
@@ -190,7 +173,7 @@ static int write_without_xor(struct raid_io_context *io_context,
  * necessarily in the first position of the list. The same way, if the xor is
  * present, it is necessarily in the second position.
  */
-int raid4_read_split(struct pho_encoder *dec, int out_fd)
+int raid4_read_split(struct pho_encoder *dec)
 {
     struct raid_io_context *io_context = dec->priv_enc;
     struct pho_io_descr *iods = io_context->iods;
@@ -201,11 +184,11 @@ int raid4_read_split(struct pho_encoder *dec, int out_fd)
     ENTRY;
 
     if (has_part1 && has_part2)
-        return write_without_xor(io_context, &iods[0], &iods[1], out_fd);
+        return write_without_xor(io_context, &iods[0], &iods[1]);
     else if (has_part1 && has_xor)
-        return write_with_xor(dec, &iods[0], &iods[1], !has_part2, out_fd);
+        return write_with_xor(dec, &iods[0], &iods[1], !has_part2);
     else if (has_part2 && has_xor)
-        return write_with_xor(dec, &iods[0], &iods[1], !has_part2, out_fd);
+        return write_with_xor(dec, &iods[0], &iods[1], !has_part2);
 
     pho_error(0, "%s: unexpected split combination, abort.", __func__);
     abort();

@@ -91,7 +91,7 @@ struct raid_io_context {
 
 struct raid_ops {
     int (*write_split)(struct pho_encoder *enc, size_t split_size);
-    int (*read_split)(struct pho_encoder *enc, int out_fd);
+    int (*read_split)(struct pho_encoder *enc);
     int (*get_block_size)(struct pho_encoder *enc, size_t *block_size);
 };
 

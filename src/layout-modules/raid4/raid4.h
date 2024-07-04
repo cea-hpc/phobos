@@ -9,7 +9,7 @@
  */
 int raid4_write_split(struct pho_encoder *enc, size_t split_size);
 
-int raid4_read_split(struct pho_encoder *dec, int out_fd);
+int raid4_read_split(struct pho_encoder *dec);
 
 int raid4_get_block_size(struct pho_encoder *enc, size_t *block_size);
 

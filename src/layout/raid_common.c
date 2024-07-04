@@ -876,7 +876,7 @@ static int raid_enc_handle_read_resp(struct pho_encoder *dec, pho_resp_t *resp,
     if (rc)
         return rc;
 
-    rc = io_context->ops->read_split(dec, dec->xfer->xd_fd);
+    rc = io_context->ops->read_split(dec);
 
     for (i = 0; i < resp->ralloc->n_media; i++) {
         (*reqs)[*n_reqs].release->media[i]->rc = rc;
