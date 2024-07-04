@@ -241,7 +241,7 @@ int lrs_dev_hdl_add(struct lrs_sched *sched,
         return rc;
 
     rc = dss_device_get(&sched->sched_thread.dss, &filter, &dev_list,
-                        &dev_count);
+                        &dev_count, NULL);
     dss_filter_free(&filter);
     if (rc)
         return rc;

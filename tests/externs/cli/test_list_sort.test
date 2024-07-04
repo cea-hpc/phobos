@@ -1,0 +1,134 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2024 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Test sorting option with drive list
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+function setup
+{
+    setup_tables
+    if [[ -w /dev/changer ]]; then
+        invoke_daemons
+    else
+        invoke_lrs
+    fi
+}
+
+function cleanup
+{
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+    else
+        waive_lrs
+    fi
+
+    drop_tables
+    if [[ -w /dev/changer ]]; then
+        drain_all_drives
+    fi
+}
+
+function exp_sort
+{
+    local type=$1
+    local attr=$2
+    local operator=$3
+
+    if [[ $operator == "--sort" ]]; then
+        $phobos $type list -o $attr | sort
+    else
+        $phobos $type list -o $attr | sort -r
+    fi
+}
+
+function drives_setup
+{
+    setup
+    local drives_lto5="$(get_lto_drives 5 2)"
+    local drives_lto6="$(get_lto_drives 6 2)"
+
+    $phobos drive add ${drives_lto5} ${drives_lto6}
+
+    $phobos drive unlock ${drives_lto5}
+    sleep 1
+    $phobos drive unlock ${drives_lto6}
+}
+
+function test_drive
+{
+    local operator=$1
+
+    # by name
+    local exp=$(exp_sort "drive" "name" "$operator")
+    local res=$($phobos drive list -o name $operator name)
+    if [ "$res" != "$exp" ]; then
+        error "phobos drive list -o name $operator name output is different" \
+              "than expected: $exp"
+    fi
+
+    # by path
+    exp=$(exp_sort "drive" "path" "$operator")
+    res=$($phobos drive list -o path $operator path)
+    if [ "$res" != "$exp" ]; then
+        error "phobos drive list -o path $operator path output is different" \
+              "than expected: $exp"
+    fi
+
+    # by lock_timestamp
+    exp=$(exp_sort "drive" "lock_ts" "$operator")
+    res=$($phobos drive list -o lock_ts $operator lock_ts)
+    if [ "$res" != "$exp" ]; then
+        error "phobos drive list -o lock_ts $operator lock_ts output is" \
+              "different than expected: $exp"
+    fi
+
+    # compare sort result with different ouput
+    exp=$($phobos drive list -f xml -o model,name,path $operator path)
+    res=$($phobos drive list -f xml -o path,name,model $operator path)
+    if [ "$res" != "$exp" ]; then
+        error "phobos drive list -o model,name,path $operator path output is" \
+              "different than phobos drive list -o path,name,model $operator" \
+              "path"
+    fi
+}
+
+function test_drive_list_sort
+{
+    test_drive "--sort"
+}
+
+function test_drive_list_rsort
+{
+    test_drive "--rsort"
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Library required for this test"
+fi
+
+TESTS=("drives_setup; test_drive_list_sort; cleanup"
+       "drives_setup; test_drive_list_rsort; cleanup")

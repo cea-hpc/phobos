@@ -109,7 +109,7 @@ static int deprecated_update_query(PGconn *conn, void *void_deprecated,
 }
 
 static int deprecated_select_query(GString **conditions, int n_conditions,
-                                   GString *request)
+                                   GString *request, struct dss_sort *sort)
 {
     g_string_append(request,
                     "SELECT oid, object_uuid, version, user_md, obj_status,"

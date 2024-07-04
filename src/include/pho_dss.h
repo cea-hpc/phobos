@@ -254,6 +254,23 @@ struct dss_filter {
     json_t  *df_json;
 };
 
+struct dss_sort {
+    /**
+     * The attribute to sort the list on
+     */
+    const char *attr;
+
+    /**
+     * Boolean to indicate if it's a reverse sort or not
+     */
+    bool reverse;
+
+    /**
+     * Boolean to indicate if the column is in the "lock" table
+     */
+    bool is_lock;
+};
+
 /**
  * Generate a dss filter from a text (JSON) query.
  * @param[out] filter  Destination filter to use in dss_*_get().
@@ -332,7 +349,8 @@ int dss_device_update(struct dss_handle *handle, struct dev_info *device_list,
  * @return 0 on success, negated errno on failure
  */
 int dss_device_get(struct dss_handle *handle, const struct dss_filter *filter,
-                   struct dev_info **device_list, int *device_count);
+                   struct dev_info **device_list, int *device_count,
+                   struct dss_sort *sort);
 
 /**
  * Delete information of one or many devices in DSS.

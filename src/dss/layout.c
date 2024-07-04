@@ -155,7 +155,7 @@ static int layout_insert_query(PGconn *conn, void *void_layout, int item_cnt,
 }
 
 static int layout_select_query(GString **conditions, int n_conditions,
-                               GString *request)
+                               GString *request, struct dss_sort *sort)
 {
     g_string_append(request,
                     "SELECT oid, object_uuid, version, lyt_info,"

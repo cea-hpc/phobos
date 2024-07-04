@@ -55,6 +55,7 @@ check_SCRIPTS=acceptance.test \
               test_group_sync.sh \
               test_import.test \
               test_ldm.sh \
+              test_list_sort.test \
               test_locate.test \
               test_lock_clean.sh \
               test_logs.test \

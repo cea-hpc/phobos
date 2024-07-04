@@ -734,7 +734,13 @@ class DriveListOptHandler(ListOptHandler):
                             help=("attributes to output, comma-separated, "
                                   "choose from {" + " ".join(attr) + "} "
                                   "(default: %(default)s)"))
-
+        parser.add_argument('--sort',
+                            help=("attribute to sort the output with, "
+                                  "choose from {" + " ".join(attr) + "} "))
+        parser.add_argument('--rsort',
+                            help=("attribute to sort the output in descending "
+                                  "order, choose from {" + " ".join(attr) + "} "
+                                  ))
 class MediaListOptHandler(ListOptHandler):
     """
     Specific version of the 'list' command for media, with a couple
@@ -1159,6 +1165,24 @@ class RadosPoolFormatOptHandler(FormatOptHandler):
                             choices=list(map(fs_type2str, FSType)),
                             type=uncase_fstype(list(map(fs_type2str, FSType))),
                             help=argparse.SUPPRESS)
+
+def handle_sort_option(params, resource, logger, **kwargs):
+    """Handle the sort/rsort option"""
+
+    if params.get('sort') and params.get('rsort'):
+        logger.error("The option --sort and --rsort cannot be used together")
+        sys.exit(os.EX_USAGE)
+
+    for key in ['sort', 'rsort']:
+        if params.get(key):
+            attrs_sort = list(resource.get_display_dict().keys())
+            sort_attr = params.get(key)
+            if sort_attr not in attrs_sort:
+                logger.error("Bad sorting attributes: %s", sort_attr)
+                sys.exit(os.EX_USAGE)
+            kwargs[key] = sort_attr
+    return kwargs
+
 
 class BaseResourceOptHandler(DSSInteractHandler):
     """Generic interface for resources manipulation."""
@@ -2062,6 +2086,9 @@ class DriveOptHandler(DeviceOptHandler):
         kwargs = {}
         if self.params.get('model'):
             kwargs['model'] = self.params.get('model')
+
+        kwargs = handle_sort_option(self.params, DevInfo(), self.logger,
+                                    **kwargs)
 
         objs = []
         if self.params.get('res'):

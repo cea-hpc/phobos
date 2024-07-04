@@ -227,3 +227,13 @@ void free_dss_char4sql(char *s)
     if (s != NULL && strcmp(s, "NULL"))
         PQfreemem(s);
 }
+
+void dss_sort2sql(GString *request, struct dss_sort *sort)
+{
+    if (sort != NULL) {
+        g_string_append(request, " ORDER BY ");
+        g_string_append(request, sort->attr);
+        if (sort->reverse)
+            g_string_append(request, " DESC ");
+    }
+}

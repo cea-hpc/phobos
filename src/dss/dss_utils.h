@@ -36,6 +36,7 @@
 
 #include "pho_type_utils.h"
 #include "pho_types.h"
+#include "pho_dss.h"
 
 /**
  * Escape a string for use in a database query.
@@ -59,6 +60,16 @@ char *dss_char4sql(PGconn *conn, const char *s);
  * \param[in] s     The string to free, can be NULL or the string "NULL"
  */
 void free_dss_char4sql(char *s);
+
+/**
+ * Convert dss_sort structure to a SQL query.
+ *
+ *  If \p sort is NULL, does nothing.
+ *
+ * \param request[in/out]
+ * \param sort[in]
+ */
+void dss_sort2sql(GString *request, struct dss_sort *sort);
 
 /**
  * Execute a PSQL \p request, verify the result is as expected with \p tested
