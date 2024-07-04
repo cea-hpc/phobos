@@ -65,40 +65,19 @@ static int set_raid4_md(struct raid_io_context *io_context, size_t chunk_size)
     return rc;
 }
 
-static int read_buffer(int in_fd, struct pho_buff *buffer, size_t buf_size,
-                       ssize_t *bytes_read, size_t *left_to_read,
-                       bool *eof)
-{
-    int rc = 0;
-
-    while (*bytes_read < buf_size) {
-        rc = read(in_fd, buffer->buff + *bytes_read,
-                  buf_size - *bytes_read);
-        if (rc < 0)
-            LOG_RETURN(rc = -errno, "Error on loading buffer in raid4 write");
-
-        *bytes_read += rc;
-        *left_to_read -= rc;
-        if (rc == 0 || *left_to_read == 0) {
-            *eof = true;
-            break;
-        }
-    }
-
-    return rc;
-}
-
-int raid4_write_split(struct pho_encoder *enc, int in_fd,
-                      size_t split_size)
+int raid4_write_split(struct pho_encoder *enc, size_t split_size)
 {
     struct raid_io_context *io_context = enc->priv_enc;
+    struct pho_io_descr *posix = &io_context->posix;
     size_t buf_size = io_context->buffers[0].size;
     struct pho_io_descr *iods = io_context->iods;
-    size_t left_to_read = min(split_size * 2, io_context->write.to_write);
+    size_t left_to_read;
     bool eof = false;
     int rc = 0;
 
     ENTRY;
+
+    left_to_read = min(split_size * 2, io_context->write.to_write);
 
     rc = set_raid4_md(io_context, buf_size);
     if (rc)
@@ -114,15 +93,21 @@ int raid4_write_split(struct pho_encoder *enc, int in_fd,
              */
             buf_size = (left_to_read + 1) / 2;
 
-        rc = read_buffer(in_fd, &io_context->buffers[0], buf_size,
-                         &bytes_read1, &left_to_read, &eof);
-        if (rc < 0)
+        bytes_read1 = ioa_read(posix->iod_ioa, posix,
+                               io_context->buffers[0].buff,
+                               buf_size);
+        if (bytes_read1 < 0)
             goto out;
 
-        rc = read_buffer(in_fd, &io_context->buffers[1], buf_size,
-                         &bytes_read2, &left_to_read, &eof);
-        if (rc < 0)
+        bytes_read2 = ioa_read(posix->iod_ioa, posix,
+                               io_context->buffers[1].buff,
+                               buf_size);
+        if (bytes_read2 < 0)
             goto out;
+
+        left_to_read -= bytes_read1;
+        left_to_read -= bytes_read2;
+        eof = (left_to_read == 0);
 
         rc = ioa_write(iods[0].iod_ioa, &iods[0], io_context->buffers[0].buff,
                        bytes_read1);

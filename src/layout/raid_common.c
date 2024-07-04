@@ -843,7 +843,7 @@ static int raid_enc_handle_write_resp(struct pho_encoder *enc,
         return rc;
 
     /* Perform IO and populate release request with the outcome */
-    rc = io_context->ops->write_split(enc, enc->xfer->xd_fd, split_size);
+    rc = io_context->ops->write_split(enc, split_size);
 
     rc = write_split_fini(enc, rc, (*reqs)[*n_reqs].release, split_size);
     if (rc)
