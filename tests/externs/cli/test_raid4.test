@@ -28,6 +28,19 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/tape_drive.sh
 . $test_dir/utils_generation.sh
 
+function make_file()
+{
+    local size=$1
+    local file=$(mktemp)
+
+    dd if=/dev/urandom of="$file" bs=$size count=1
+    if (( ODD_FILE_SIZE )); then
+        echo -n 1 >> "$file" # Make the file with an even size
+    fi
+
+    echo "$file"
+}
+
 function get_extent_info()
 {
     local oid=$1
@@ -46,6 +59,7 @@ function foreach_dir_extent()
     $PSQL -c "select * from extent;"
     for (( i = 0; i < ${#addresses[@]}; i++ )); do
         getfattr -d -m '.*' -e text "${media[i]}/${addresses[i]}"
+        stat "${media[i]}/${addresses[i]}"
         $PSQL -c \
             "select info from extent where extent_uuid = '${ext_uuid[i]}';"
     done
@@ -61,6 +75,14 @@ function setup_dir
 
     export PHOBOS_LRS_families="dir"
     export PHOBOS_STORE_default_family="dir"
+
+    if [[ "$1" == "odd" ]]; then
+        export ODD_FILE_SIZE=1
+    elif [[ "$1" == "even" ]]; then
+        export ODD_FILE_SIZE=0
+    else
+        error "Invalid argument $1: expected 'even' or 'odd'"
+    fi
 
     setup_tables
     invoke_lrs
@@ -79,46 +101,51 @@ function cleanup_dir
 function test_put_get()
 {
     local oid=$FUNCNAME
+    local file=$(make_file 512k)
 
-    $valg_phobos put -l raid4 /etc/hosts $oid
+    $valg_phobos put -l raid4 "$file" $oid
     foreach_dir_extent $oid
     $valg_phobos get $oid /tmp/out.$$
 
-    diff /etc/hosts /tmp/out.$$
-    rm /tmp/out.$$
+    diff "$file" /tmp/out.$$
+    rm /tmp/out.$$ "$file"
 }
 
 function test_read_with_missing_extent()
 {
     local oid=$FUNCNAME
+    local file=$(make_file 512K)
 
-    $valg_phobos put -l raid4 /etc/hosts $oid
+    $valg_phobos put -l raid4 "$file" $oid
     foreach_dir_extent $oid
 
     for d in $($phobos dir list); do
         $phobos dir lock $d
 
         $valg_phobos get $oid /tmp/out.$$
-        diff /etc/hosts /tmp/out.$$
+        diff "$file" /tmp/out.$$
         rm /tmp/out.$$
 
         $phobos dir unlock $d
     done
+
+    rm "$file"
 }
 
 function test_with_different_block_size()
 {
     local oid=$FUNCNAME
+    local file=$(make_file 512k)
 
     export PHOBOS_IO_io_block_size=$(( 2 << 14 ))
 
-    $valg_phobos put -l raid4 /etc/hosts $oid
+    $valg_phobos put -l raid4 "$file" $oid
     foreach_dir_extent $oid
     unset PHOBOS_IO_io_block_size
     $valg_phobos get $oid /tmp/out.$$
 
-    diff /etc/hosts /tmp/out.$$
-    rm /tmp/out.$$
+    diff "$file" /tmp/out.$$
+    rm /tmp/out.$$ "$file"
 }
 
 function setup_dir_split()
@@ -135,6 +162,14 @@ function setup_dir_split()
     setup_tables
     export PHOBOS_LRS_families="dir"
     export PHOBOS_STORE_default_family="dir"
+
+    if [[ "$1" == "odd" ]]; then
+        export ODD_FILE_SIZE=1
+    elif [[ "$1" == "even" ]]; then
+        export ODD_FILE_SIZE=0
+    else
+        error "Invalid argument $1: expected 'even' or 'odd'"
+    fi
 
     invoke_lrs
 
@@ -153,11 +188,9 @@ function cleanup_dir_split()
 
 function test_put_get_split()
 {
-    local file=$(mktemp)
+    local file=$(make_file 3M)
     local oid=$FUNCNAME
     local out=/tmp/out.$$
-
-    dd if=/dev/urandom of="$file" bs=3M count=1
 
     $valg_phobos put -l raid4 "$file" $oid
     foreach_dir_extent "$oid"
@@ -168,11 +201,9 @@ function test_put_get_split()
 
 function test_put_get_split_different_block_size()
 {
-    local file=$(mktemp)
+    local file=$(make_file 3M)
     local oid=$FUNCNAME
     local out=/tmp/out.$$
-
-    dd if=/dev/urandom of="$file" bs=3M count=1
 
     export PHOBOS_IO_io_block_size=$(( 2 << 14 ))
     $valg_phobos put -l raid4 "$file" $oid
@@ -185,11 +216,9 @@ function test_put_get_split_different_block_size()
 
 function test_put_get_split_with_missing_extents()
 {
-    local file=$(mktemp)
+    local file=$(make_file 3M)
     local oid=$FUNCNAME
     local out=/tmp/out.$$
-
-    dd if=/dev/urandom of="$file" bs=3M count=1
 
     $valg_phobos put -l raid4 "$file" $oid
     foreach_dir_extent "$oid"
@@ -208,18 +237,33 @@ function test_put_get_split_with_missing_extents()
 }
 
 TESTS=(
-    "setup_dir; \
+    "setup_dir even; \
      test_put_get; \
      test_read_with_missing_extent; \
      test_with_different_block_size; \
      cleanup_dir"
-    "setup_dir_split; \
+    "setup_dir_split even; \
      test_put_get_split; \
      cleanup_dir_split"
-    "setup_dir_split; \
+    "setup_dir_split even; \
      test_put_get_split_different_block_size; \
      cleanup_dir_split"
-    "setup_dir_split; \
+    "setup_dir_split even; \
+     test_put_get_split_with_missing_extents; \
+     cleanup_dir_split"
+
+    "setup_dir odd; \
+     test_put_get; \
+     test_read_with_missing_extent; \
+     test_with_different_block_size; \
+     cleanup_dir"
+    "setup_dir_split odd; \
+     test_put_get_split; \
+     cleanup_dir_split"
+    "setup_dir_split odd; \
+     test_put_get_split_different_block_size; \
+     cleanup_dir_split"
+    "setup_dir_split odd; \
      test_put_get_split_with_missing_extents; \
      cleanup_dir_split"
 )
