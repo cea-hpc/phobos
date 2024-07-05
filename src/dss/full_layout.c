@@ -44,7 +44,8 @@ static int full_layout_select_query(GString **conditions, int n_conditions,
                     "  'offsetof', offsetof, 'fam', medium_family,"
                     "  'state', state, 'media', medium_id,"
                     "  'library', medium_library, 'addr', address,"
-                    "  'hash', hash, 'info', info, 'lyt_index', layout_index))"
+                    "  'hash', hash, 'info', info, 'lyt_index', layout_index"
+                    " ) ORDER BY layout_index)"
                     " FROM extent"
                     " RIGHT JOIN ("
                     "  SELECT oid, object_uuid, version, lyt_info, extent_uuid,"
@@ -60,8 +61,7 @@ static int full_layout_select_query(GString **conditions, int n_conditions,
         g_string_append(request, conditions[0]->str);
 
     g_string_append(request,
-                    " ORDER BY layout_index)"
-                    " AS outer_table USING (extent_uuid)");
+                    " ) AS outer_table USING (extent_uuid)");
 
     if (n_conditions >= 2)
         g_string_append(request, conditions[1]->str);
