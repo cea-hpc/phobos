@@ -164,6 +164,23 @@ int _pho_cfg_get_int(int first_index, int last_index, int param_index,
                 _cfg_namespace ## _ ##_name, (_params_list), (_fail_val))
 
 /**
+ * Helper to get a boolean (true/false) configuration parameter.
+ *
+ * @param[in] param          Parameter to be retrieved.
+ * @param[in] default_value  Returned value if parsing fails.
+ *
+ * @return parameter value, or default_value on error.
+ */
+bool _pho_cfg_get_bool(int first_index, int last_index, int param_index,
+                       const struct pho_config_item *module_params,
+                       bool default_val);
+
+#define PHO_CFG_GET_BOOL(_params_list, _cfg_namespace, _name, _default_val)  \
+        _pho_cfg_get_bool(_cfg_namespace ## _FIRST, _cfg_namespace ## _LAST, \
+                _cfg_namespace ## _ ##_name, (_params_list), (_default_val))
+
+
+/**
  * Check the compatibility between a given \p tape_model and \p drive_model
  * using the different rules defined in the configuration file.
  *

@@ -150,6 +150,7 @@ enum pho_cfg_params_test {
     PHO_CFG_TEST_param0,
     PHO_CFG_TEST_param1,
     PHO_CFG_TEST_strparam,
+    PHO_CFG_TEST_boolparam,
 
     PHO_CFG_TEST_LAST,
 };
@@ -172,6 +173,12 @@ const struct pho_config_item cfg_test[] = {
         .section = "test",
         .name    = "strparam",
         .value   = "foo bar",
+    },
+
+    [PHO_CFG_TEST_boolparam] = {
+        .section = "test",
+        .name    = "boolparam",
+        .value   = "true",
     },
 
 };
@@ -237,6 +244,41 @@ static int test_get_csv(void *param)
     free(values);
 
     return rc;
+}
+
+static int test_get_bool(void *param)
+{
+    bool res;
+
+    res = PHO_CFG_GET_BOOL(cfg_test, PHO_CFG_TEST, boolparam, false);
+    if (!res) {
+        pho_error(0, "Default boolean should exist and be true");
+        return -1;
+    }
+
+    if (setenv("PHOBOS_TEST_boolparam", "false", 1)) {
+        pho_error(errno, "setenv failed");
+        exit(EXIT_FAILURE);
+    }
+
+    res = PHO_CFG_GET_BOOL(cfg_test, PHO_CFG_TEST, boolparam, true);
+    if (res) {
+        pho_error(0, "Env should overwrite boolean to false");
+        return -1;
+    }
+
+    if (setenv("PHOBOS_TEST_boolparam", "invalid", 1)) {
+        pho_error(errno, "setenv failed");
+        exit(EXIT_FAILURE);
+    }
+
+    res = PHO_CFG_GET_BOOL(cfg_test, PHO_CFG_TEST, boolparam, false);
+    if (res) {
+        pho_error(0, "Invalid value should default to false");
+        return -1;
+    }
+
+    return 0;
 }
 
 int main(int argc, char **argv)
@@ -399,6 +441,9 @@ int main(int argc, char **argv)
     td.n = 0;
     pho_run_test("Test 14: get CSV param", test_get_csv,
              (void *)&td, PHO_TEST_SUCCESS);
+
+    pho_run_test("Test 15: get boolean param", test_get_bool, NULL,
+                 PHO_TEST_SUCCESS);
 
     pho_info("CFG: All tests succeeded");
     exit(EXIT_SUCCESS);

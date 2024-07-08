@@ -398,6 +398,26 @@ int _pho_cfg_get_int(int first_index, int last_index, int param_index,
     return val;
 }
 
+bool _pho_cfg_get_bool(int first_index, int last_index, int param_index,
+                       const struct pho_config_item *module_params,
+                       bool default_val)
+{
+    const char *value;
+
+    value = _pho_cfg_get(first_index, last_index, param_index, module_params);
+    if (!value) {
+        pho_debug("Failed to retrieve config parameter #%d", param_index);
+        return default_val;
+    }
+
+    if (!strcmp(value, "true"))
+        return true;
+    else if (!strcmp(value, "false"))
+        return false;
+    else
+        return default_val;
+}
+
 /** @TODO to be implemented
 int pho_cfg_match(const char *section_pattern, const char *name_pattern,
                   struct pho_config_item *items, int *count);
