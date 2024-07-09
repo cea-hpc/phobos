@@ -1413,7 +1413,7 @@ static int _retrieve_fstype_from_medium(struct admin_handle *adm,
     if (rc)
         LOG_RETURN(rc, "Failed to build medium filter");
 
-    rc = dss_media_get(&adm->dss, &filter, &media, &count);
+    rc = dss_media_get(&adm->dss, &filter, &media, &count, NULL);
     dss_filter_free(&filter);
     if (rc)
         LOG_RETURN(rc,

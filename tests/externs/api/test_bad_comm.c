@@ -162,7 +162,7 @@ static int fetch_medium_info(struct media_info **medium,
     if (rc)
         return rc;
 
-    rc = dss_media_get(&dss, &filter, &res, &count);
+    rc = dss_media_get(&dss, &filter, &res, &count, NULL);
     dss_filter_free(&filter);
     dss_fini(&dss);
     if (rc)

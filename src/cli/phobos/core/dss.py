@@ -53,11 +53,29 @@ OBJECT_PREFIXES = {
     'media':  'DSS::MDA::',
 }
 
-ATTRS_SORTING = {
-    'name': 'id',
-    'lock_hostname': 'hostname',
-    'lock_owner': 'owner',
-    'lock_ts': 'timestamp',
+ATTRS2DSS = {
+    'addr_type'           : 'address_type',
+    'delete_access'       : 'delete',
+    'fs.label'            : 'fs_label',
+    'fs.status'           : 'fs_status',
+    'fs.type'             : 'fs_type',
+    'get_access'          : 'get',
+    'name'                : 'id',
+    'put_access'          : 'put',
+
+    # "stats" col in media table
+    'stats.last_load'     : 'stats -> \'last_load\'',
+    'stats.logc_spc_used' : 'stats -> \'logc_spc_used\'',
+    'stats.nb_errors'     : 'stats -> \'nb_errors\'',
+    'stats.nb_load'       : 'stats -> \'nb_load\'',
+    'stats.nb_obj'        : 'stats -> \'nb_obj\'',
+    'stats.phys_spc_free' : 'stats -> \'phys_spc_free\'',
+    'stats.phys_spc_used' : 'stats -> \'phys_spc_used\'',
+
+    # "Lock" table
+    'lock_hostname'       : 'hostname',
+    'lock_owner'          : 'owner',
+    'lock_ts'             : 'timestamp',
 }
 
 class JSONFilter(Structure): # pylint: disable=too-few-public-methods
@@ -164,8 +182,8 @@ def dss_sort(**kwargs):
             # Check if the attribute is in "ATTRS_SORTING" because some
             # attributes displayed by "list" are not the same to those in
             # postgresql
-            if ATTRS_SORTING.get(kwargs[key]):
-                kwargs[key] = ATTRS_SORTING[kwargs[key]]
+            if ATTRS2DSS.get(kwargs[key]):
+                kwargs[key] = ATTRS2DSS[kwargs[key]]
 
             sort = SortFilter(kwargs[key].encode('utf-8'), reverse, is_lock)
             kwargs.pop(key)

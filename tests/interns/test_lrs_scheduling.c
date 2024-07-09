@@ -471,7 +471,8 @@ static void fake_dss_cleanup(void)
 }
 
 int dss_media_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                  struct media_info **med_ls, int *med_cnt)
+                  struct media_info **med_ls, int *med_cnt,
+                  struct dss_sort *sort)
 {
     json_t *value;
     size_t index;

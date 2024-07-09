@@ -191,7 +191,7 @@ static int media_of_object(struct dss_handle *hdl, struct object_info *obj,
     if (rc)
         LOG_RETURN(rc, "Cannot build filter");
 
-    rc = dss_media_get(hdl, &filter, media, cnt);
+    rc = dss_media_get(hdl, &filter, media, cnt, NULL);
     dss_filter_free(&filter);
 
     return rc;

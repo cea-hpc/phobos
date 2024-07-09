@@ -157,7 +157,7 @@ static int handle_format_response(struct context *context,
     if (rc)
         return rc;
 
-    rc = dss_media_get(&context->dss, &filter, &medium, &count);
+    rc = dss_media_get(&context->dss, &filter, &medium, &count, NULL);
     dss_filter_free(&filter);
     if (rc)
         return rc;
@@ -494,7 +494,7 @@ static int fetch_tapes(struct context *context)
     if (rc)
         return rc;
 
-    rc = dss_media_get(&context->dss, &filter, &media, &count);
+    rc = dss_media_get(&context->dss, &filter, &media, &count, NULL);
     dss_filter_free(&filter);
     if (rc)
         return rc;

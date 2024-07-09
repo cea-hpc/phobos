@@ -185,7 +185,8 @@ static int global_setup(void **state)
         if (rc)
             GOTO(clean_media, rc = -1);
 
-        rc = dss_media_get(rsl_state.dss, &filter, &rsl_state.media[i], &cnt);
+        rc = dss_media_get(rsl_state.dss, &filter, &rsl_state.media[i], &cnt,
+                           NULL);
         dss_filter_free(&filter);
         if (rc)
             GOTO(clean_media, rc = -1);

@@ -64,7 +64,7 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
                               (struct dev_info **)item_list, n, NULL);
     case DSS_MEDIA:
         return dss_media_get(handle, inner_filter,
-                             (struct media_info **)item_list, n);
+                             (struct media_info **)item_list, n, NULL);
     default:
         return -ENOTSUP;
     }

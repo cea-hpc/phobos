@@ -148,7 +148,7 @@ static struct key_value *lrs_media_cache_build(const void *key, void *_env)
         return NULL;
     }
 
-    rc = dss_media_get(&env->dss, &filter, &medium, &count);
+    rc = dss_media_get(&env->dss, &filter, &medium, &count, NULL);
     dss_filter_free(&filter);
     if (rc) {
         errno = -rc;

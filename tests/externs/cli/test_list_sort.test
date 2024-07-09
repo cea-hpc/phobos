@@ -28,6 +28,9 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_launch_daemon.sh
 . $test_dir/tape_drive.sh
 
+DIR="/tmp/pho_testdir1 /tmp/pho_testdir2 /tmp/pho_testdir3 \
+     /tmp/pho_testdir4 /tmp/pho_testdir5"
+
 function setup
 {
     setup_tables
@@ -78,57 +81,119 @@ function drives_setup
     $phobos drive unlock ${drives_lto6}
 }
 
-function test_drive
+function media_setup
 {
-    local operator=$1
+    setup
 
-    # by name
-    local exp=$(exp_sort "drive" "name" "$operator")
-    local res=$($phobos drive list -o name $operator name)
-    if [ "$res" != "$exp" ]; then
-        error "phobos drive list -o name $operator name output is different" \
-              "than expected: $exp"
-    fi
+    mkdir -p $DIR
+    $phobos dir add $DIR
+    $phobos dir unlock "/tmp/pho_testdir1" "/tmp/pho_testdir2"
+    sleep 1
+    $phobos dir unlock "/tmp/pho_testdir3" "/tmp/pho_testdir4" \
+                       "/tmp/pho_testdir5"
+    $PSQL << EOF
+UPDATE media SET stats = '{"nb_obj":5, "logc_spc_used":0, "phys_spc_used":0,\
+                           "phys_spc_free":0, "nb_load":0, "nb_errors":0,\
+                           "last_load":0}'
+    WHERE id = '/tmp/pho_testdir1';
+EOF
 
-    # by path
-    exp=$(exp_sort "drive" "path" "$operator")
-    res=$($phobos drive list -o path $operator path)
-    if [ "$res" != "$exp" ]; then
-        error "phobos drive list -o path $operator path output is different" \
-              "than expected: $exp"
-    fi
+    $PSQL << EOF
+UPDATE media SET stats = '{"nb_obj":1, "logc_spc_used":0, "phys_spc_used":0,\
+                           "phys_spc_free":0, "nb_load":0, "nb_errors":0,\
+                           "last_load":0}'
+    WHERE id = '/tmp/pho_testdir2';
+EOF
 
-    # by lock_timestamp
-    exp=$(exp_sort "drive" "lock_ts" "$operator")
-    res=$($phobos drive list -o lock_ts $operator lock_ts)
+    $PSQL << EOF
+UPDATE media SET stats = '{"nb_obj":9, "logc_spc_used":0, "phys_spc_used":0,\
+                           "phys_spc_free":0, "nb_load":0, "nb_errors":0,\
+                           "last_load":0}'
+    WHERE id = '/tmp/pho_testdir5';
+EOF
+
+}
+
+function media_cleanup
+{
+    cleanup
+    for d in $DIR; do
+        rm -rf $d
+    done
+}
+
+function test_sort
+{
+    local resource=$1
+    local operator=$2
+    local attr=$3
+
+    local exp=$(exp_sort "$resource" "$attr" "$operator")
+    local res=$($phobos $resource list -o $attr $operator $attr)
     if [ "$res" != "$exp" ]; then
-        error "phobos drive list -o lock_ts $operator lock_ts output is" \
+        error "phobos $resource list -o $attr $operator $attr output is" \
               "different than expected: $exp"
     fi
+}
 
-    # compare sort result with different ouput
-    exp=$($phobos drive list -f xml -o model,name,path $operator path)
-    res=$($phobos drive list -f xml -o path,name,model $operator path)
+function test_multiple_output
+{
+    local resource=$1
+    local operator=$2
+    local output_1=$4
+    local output_2=$5
+    local attr=$3
+
+    local res_1=$($phobos $resource list -f xml -o $output_1 $operator $attr)
+    local res_2=$($phobos $resource list -f xml -o $output_2 $operator $attr)
+
     if [ "$res" != "$exp" ]; then
-        error "phobos drive list -o model,name,path $operator path output is" \
-              "different than phobos drive list -o path,name,model $operator" \
-              "path"
+        error "phobos $resource list -o $output_1 $operator $attr output is" \
+              "different than phobos $resource list -o $ouput_2 $operator $attr"
     fi
 }
 
 function test_drive_list_sort
 {
-    test_drive "--sort"
+    test_sort "drive" "--sort" "name"
+    test_sort "drive" "--sort" "path"
+    test_sort "drive" "--sort" "lock_ts"
+    test_multiple_output "drive" "--sort" "path" "name,model,path" \
+                         "path,name,model"
 }
 
 function test_drive_list_rsort
 {
-    test_drive "--rsort"
+    test_sort "drive" "--rsort" "name"
+    test_sort "drive" "--rsort" "path"
+    test_sort "drive" "--rsort" "lock_ts"
+    test_multiple_output "drive" "--rsort" "path" "name,model,path" \
+                         "path,name,model"
 }
 
-if [[ ! -w /dev/changer ]]; then
-    skip "Library required for this test"
-fi
+function test_media_list_sort
+{
+    test_sort "dir" "--sort" "name"
+    test_sort "dir" "--sort" "lock_ts"
+    test_sort "dir" "--sort" "stats.nb_obj"
+    test_multiple_output "dir" "--sort" "name" "name,lock_ts,stats.nb_obj" \
+                         "stats.nb_obj,name,lock_ts"
+}
 
-TESTS=("drives_setup; test_drive_list_sort; cleanup"
-       "drives_setup; test_drive_list_rsort; cleanup")
+function test_media_list_rsort
+{
+    test_sort "dir" "--rsort" "name"
+    test_sort "dir" "--rsort" "lock_ts"
+    test_sort "dir" "--rsort" "stats.nb_obj"
+    test_multiple_output "dir" "--rsort" "name" "name,lock_ts,stats.nb_obj" \
+                         "stats.nb_obj,name,lock_ts"
+}
+
+TESTS=("media_setup; \
+            test_media_list_sort; test_media_list_rsort; \
+        media_cleanup")
+
+if [[ -w /dev/changer ]]; then
+    TESTS+=("drives_setup; test_drive_list_sort; cleanup"
+            "drives_setup; test_drive_list_rsort; cleanup")
+fi

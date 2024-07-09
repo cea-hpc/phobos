@@ -1081,7 +1081,7 @@ int sched_select_medium(struct io_scheduler *io_sched,
         return rc;
 
     rc = dss_media_get(lock_handle->dss, &filter, &pmedia_res,
-                       &mcnt);
+                       &mcnt, NULL);
     if (mcnt == 0) {
         char *dump = json_dumps(filter.df_json, JSON_COMPACT);
 

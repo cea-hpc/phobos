@@ -453,11 +453,12 @@ clean:
 }
 
 int dss_media_get(struct dss_handle *handle, const struct dss_filter *filter,
-                  struct media_info **media_list, int *media_count)
+                  struct media_info **media_list, int *media_count,
+                  struct dss_sort *sort)
 {
     return dss_generic_get(handle, DSS_MEDIA,
                            (const struct dss_filter*[]) {filter, NULL}, 1,
-                           (void **) media_list, media_count, NULL);
+                           (void **) media_list, media_count, sort);
 }
 
 int dss_media_delete(struct dss_handle *handle, struct media_info *media_list,

@@ -402,7 +402,8 @@ int dss_media_update(struct dss_handle *handle, struct media_info *media_list,
  */
 mockable
 int dss_media_get(struct dss_handle *handle, const struct dss_filter *filter,
-                  struct media_info **media_list, int *media_count);
+                  struct media_info **media_list, int *media_count,
+                  struct dss_sort *sort);
 
 /**
  * Delete information for one or many media in DSS.

@@ -91,7 +91,7 @@ int main(int argc, char **argv)
         if (rc)
             LOG_GOTO(clean, rc, "Error while building filter");
 
-        rc = dss_media_get(dss, &filter, &medium, &cnt);
+        rc = dss_media_get(dss, &filter, &medium, &cnt, NULL);
         dss_filter_free(&filter);
         if (rc)
             LOG_GOTO(clean, rc, "Error while getting medium from dss");
@@ -100,7 +100,7 @@ int main(int argc, char **argv)
             LOG_GOTO(clean_medium, rc = -EINVAL,
                     "Error: multiple media found when targeting unique medium");
     } else {
-        rc = dss_media_get(dss, NULL, &medium, &cnt);
+        rc = dss_media_get(dss, NULL, &medium, &cnt, NULL);
         if (rc)
             LOG_GOTO(clean, rc, "Error on getting medium from dss");
     }

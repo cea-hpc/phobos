@@ -761,6 +761,13 @@ class MediaListOptHandler(ListOptHandler):
                             help=("attributes to output, comma-separated, "
                                   "choose from {" + " ".join(attr) + "} "
                                   "(default: %(default)s)"))
+        parser.add_argument('--sort',
+                            help=("attribute to sort the output with, "
+                                  "choose from {" + " ".join(attr) + "} "))
+        parser.add_argument('--rsort',
+                            help=("attribute to sort the output in descending "
+                                  "order, choose from {" + " ".join(attr) + "} "
+                                 ))
         parser.formatter_class = argparse.RawDescriptionHelpFormatter
         parser.epilog = """About file system status `fs.status`:
     blank: medium is not formatted
@@ -1737,6 +1744,9 @@ class MediaOptHandler(BaseResourceOptHandler):
         kwargs = {}
         if self.params.get('tags'):
             kwargs["tags"] = self.params.get('tags')
+
+        kwargs = handle_sort_option(self.params, MediaInfo(), self.logger,
+                                    **kwargs)
 
         objs = []
         if self.params.get('res'):

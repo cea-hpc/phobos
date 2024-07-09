@@ -100,7 +100,7 @@ int dss_one_medium_get_from_id(struct dss_handle *dss,
                    "library %s", rsc_family2str(medium_id->family),
                    medium_id->name, medium_id->library);
 
-    rc = dss_media_get(dss, &filter, medium_info, &cnt);
+    rc = dss_media_get(dss, &filter, medium_info, &cnt, NULL);
     dss_filter_free(&filter);
     if (rc)
         LOG_RETURN(rc,
