@@ -21,6 +21,20 @@
 
 #include "pho_layout.h"
 
+#include <openssl/evp.h>
+#if HAVE_XXH128
+#include <xxhash.h>
+#endif
+
+struct extent_hash {
+#if HAVE_XXH128
+    XXH128_hash_t xxh128;
+    XXH3_state_t *xxh128context;
+#endif
+    unsigned char md5[MD5_BYTE_LENGTH];
+    EVP_MD_CTX   *md5context;
+};
+
 struct read_io_context {
     pho_resp_read_t *resp;
     size_t to_read;
@@ -87,6 +101,17 @@ struct raid_io_context {
         struct read_io_context read;
         struct write_io_context write;
     };
+
+    /**
+     * A list of hashes that are computed while the extent is written.
+     * The number of elements in this list is layout specific. The list
+     * must be allocated by the encoder. For now, this is only used for writes
+     * but may be useful in the future when hashes are recomputed during read to
+     * check for consistency.
+     */
+    struct extent_hash *hashes;
+    /** Size of \p hashes, initialized by the layout */
+    size_t nb_hashes;
 };
 
 struct raid_ops {
@@ -111,5 +136,17 @@ int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
 void raid_encoder_destroy(struct pho_encoder *enc);
 
 size_t n_total_extents(struct raid_io_context *io_context);
+
+int extent_hash_init(struct extent_hash *hash, bool use_md5, bool use_xxhash);
+
+int extent_hash_reset(struct extent_hash *hash);
+
+void extent_hash_fini(struct extent_hash *hash);
+
+int extent_hash_update(struct extent_hash *hash, char *buffer, size_t size);
+
+int extent_hash_digest(struct extent_hash *hash);
+
+int extent_hash_copy(struct extent_hash *hash, struct extent *extent);
 
 #endif

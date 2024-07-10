@@ -44,7 +44,7 @@ static int set_extent_extra_attrs(struct extent *extent,
     pho_attr_set(&extent->info, "raid4.chunk_size", buff);
     pho_attr_set(&iod->iod_attrs, "raid4.chunk_size", buff);
 
-    return ioa_set_md(iod->iod_ioa, NULL, iod);
+    return 0;
 }
 
 static int set_raid4_md(struct raid_io_context *io_context, size_t chunk_size)
@@ -74,6 +74,7 @@ int raid4_write_split(struct pho_encoder *enc, size_t split_size)
     size_t left_to_read;
     bool eof = false;
     int rc = 0;
+    int i;
 
     ENTRY;
 
@@ -115,6 +116,12 @@ int raid4_write_split(struct pho_encoder *enc, size_t split_size)
             LOG_GOTO(out, rc, "Unable to write %zu bytes in raid4 write",
                      bytes_read1);
 
+        rc = extent_hash_update(&io_context->hashes[0],
+                                io_context->buffers[0].buff,
+                                bytes_read1);
+        if (rc)
+            return rc;
+
         iods[0].iod_size += bytes_read1;
 
         rc = ioa_write(iods[1].iod_ioa, &iods[1], io_context->buffers[1].buff,
@@ -122,6 +129,12 @@ int raid4_write_split(struct pho_encoder *enc, size_t split_size)
         if (rc)
             LOG_GOTO(out, rc, "Unable to write %zu bytes in raid4 write",
                      bytes_read2);
+
+        rc = extent_hash_update(&io_context->hashes[1],
+                                io_context->buffers[1].buff,
+                                bytes_read2);
+        if (rc)
+            return rc;
 
         iods[1].iod_size += bytes_read2;
 
@@ -141,7 +154,25 @@ int raid4_write_split(struct pho_encoder *enc, size_t split_size)
             LOG_GOTO(out, rc, "Unable to write %zu bytes in raid4 write",
                      bytes_read1);
 
+        rc = extent_hash_update(&io_context->hashes[2],
+                                io_context->buffers[2].buff,
+                                bytes_read1);
+        if (rc)
+            return rc;
+
         iods[2].iod_size += bytes_read1;
+
+    }
+
+    for (i = 0; i < io_context->nb_hashes; i++) {
+        rc = extent_hash_digest(&io_context->hashes[i]);
+        if (rc)
+            return rc;
+
+        rc = extent_hash_copy(&io_context->hashes[i],
+                              &io_context->write.extents[i]);
+        if (rc)
+            return rc;
     }
 
 out:

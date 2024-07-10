@@ -62,6 +62,8 @@ function foreach_dir_extent()
         stat "${media[i]}/${addresses[i]}"
         $PSQL -c \
             "select info from extent where extent_uuid = '${ext_uuid[i]}';"
+        md5sum "${media[i]}/${addresses[i]}"
+        xxh128sum "${media[i]}/${addresses[i]}"
     done
 }
 
@@ -75,6 +77,8 @@ function setup_dir
 
     export PHOBOS_LRS_families="dir"
     export PHOBOS_STORE_default_family="dir"
+    export PHOBOS_LAYOUT_RAID4_extent_md5="true"
+    export PHOBOS_LAYOUT_RAID4_extent_xxh128="true"
 
     if [[ "$1" == "odd" ]]; then
         export ODD_FILE_SIZE=1

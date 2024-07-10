@@ -29,6 +29,9 @@
 #include <openssl/evp.h>
 #include <string.h>
 #include <unistd.h>
+#ifdef HAVE_XXH128
+#include <xxhash.h>
+#endif
 
 #include "pho_attrs.h"
 #include "pho_cfg.h"
@@ -140,14 +143,13 @@ int raid_encoder_init(struct pho_encoder *enc,
                                         sizeof(*io_context->write.extents));
     io_context->buffers = xmalloc(n_extents * sizeof(*io_context->buffers));
 
-    // TODO hash
-
     return 0;
 }
 
 void raid_encoder_destroy(struct pho_encoder *enc)
 {
     struct raid_io_context *io_context = enc->priv_enc;
+    int i;
 
     if (!io_context)
         return;
@@ -172,6 +174,10 @@ void raid_encoder_destroy(struct pho_encoder *enc)
         free(io_context->iods);
     }
 
+    for (i = 0; i < io_context->nb_hashes; i++)
+        extent_hash_fini(&io_context->hashes[i]);
+
+    free(io_context->hashes);
     free(io_context->buffers);
     free(io_context);
     enc->priv_enc = NULL;
@@ -467,7 +473,6 @@ static int write_split_setup(struct pho_encoder *enc, pho_resp_write_t *wresp,
     raid_io_context_set_extent_info(io_context, wresp->media,
                                     io_context->current_split * n_extents,
                                     split_size);
-
     rc = raid_io_context_open(io_context, enc, n_extents);
     if (rc)
         return rc;
@@ -481,6 +486,12 @@ static int write_split_setup(struct pho_encoder *enc, pho_resp_write_t *wresp,
 
     for (i = 0; i < n_extents; i++)
         pho_buff_alloc(&io_context->buffers[i], buffer_size);
+
+    for (i = 0; i < io_context->nb_hashes; i++) {
+        rc = extent_hash_reset(&io_context->hashes[i]);
+        if (rc)
+            return rc;
+    }
 
     return 0;
 }
@@ -1005,4 +1016,101 @@ out:
 
     /* For now, orphaned extents are not cleaned up on failure */
     return rc;
+}
+
+int extent_hash_init(struct extent_hash *hash, bool use_md5, bool use_xxhash)
+{
+    if (use_md5) {
+        hash->md5context = EVP_MD_CTX_create();
+        if (!hash->md5context)
+            LOG_RETURN(-ENOMEM, "Failed to create MD5 context");
+    }
+
+#if HAVE_XXH128
+    if (use_xxhash) {
+        hash->xxh128context = XXH3_createState();
+        if (!hash->xxh128context)
+            LOG_RETURN(-ENOMEM, "Failed to create XXHASH128 context");
+    }
+#else
+    (void) use_xxhash;
+#endif
+
+    return 0;
+}
+
+int extent_hash_reset(struct extent_hash *hash)
+{
+    if (hash->md5context) {
+        if (EVP_DigestInit_ex(hash->md5context, EVP_md5(), NULL) == 0)
+            LOG_RETURN(-ENOMEM, " ");
+    }
+
+#if HAVE_XXH128
+    if (hash->xxh128context) {
+        if (XXH3_128bits_reset(hash->xxh128context) == XXH_ERROR)
+            LOG_RETURN(-ENOMEM, "Failed to initialize XXHASH128 context");
+    }
+#endif
+
+    return 0;
+}
+
+void extent_hash_fini(struct extent_hash *hash)
+{
+    if (hash->md5context)
+        EVP_MD_CTX_destroy(hash->md5context);
+#if HAVE_XXH128
+    if (hash->xxh128context)
+        XXH3_freeState(hash->xxh128context);
+#endif
+}
+
+int extent_hash_update(struct extent_hash *hash, char *buffer, size_t size)
+{
+    if (hash->md5context &&
+        EVP_DigestUpdate(hash->md5context, buffer, size) == 0) {
+        LOG_RETURN(-ENOMEM, "Unable to update MD5");
+    }
+#if HAVE_XXH128
+    if (hash->xxh128context &&
+        XXH3_128bits_update(hash->xxh128context, buffer, size) == XXH_ERROR) {
+        LOG_RETURN(-ENOMEM, "Unable to update XXHASH128");
+    }
+#endif
+
+    return 0;
+}
+
+int extent_hash_digest(struct extent_hash *hash)
+{
+    if (hash->md5context) {
+        if (EVP_DigestFinal_ex(hash->md5context, hash->md5, NULL) == 0)
+            LOG_RETURN(-ENOMEM, "Unable to produce MD5 hash");
+    }
+#if HAVE_XXH128
+    if (hash->xxh128context)
+        hash->xxh128 = XXH3_128bits_digest(hash->xxh128context);
+#endif
+    return 0;
+}
+
+int extent_hash_copy(struct extent_hash *hash, struct extent *extent)
+{
+    if (hash->md5context) {
+        memcpy(extent->md5, hash->md5, MD5_BYTE_LENGTH);
+        extent->with_md5 = true;
+    }
+
+#if HAVE_XXH128
+    if (hash->xxh128context) {
+        XXH128_canonical_t canonical;
+
+        XXH128_canonicalFromHash(&canonical, hash->xxh128);
+        memcpy(extent->xxh128, canonical.digest, sizeof(extent->xxh128));
+        extent->with_xxh128 = true;
+    }
+#endif
+
+    return 0;
 }

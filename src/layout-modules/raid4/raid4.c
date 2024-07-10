@@ -56,10 +56,45 @@ static const struct pho_enc_ops RAID4_ENCODER_OPS = {
     .destroy    = raid_encoder_destroy,
 };
 
+/**
+ * List of configuration parameters for this module
+ */
+enum pho_cfg_params_raid4 {
+    /* Actual parameters */
+    PHO_CFG_LYT_RAID4_extent_xxh128,
+    PHO_CFG_LYT_RAID4_extent_md5,
+
+    /* Delimiters, update when modifying options */
+    PHO_CFG_LYT_RAID4_FIRST = PHO_CFG_LYT_RAID4_extent_xxh128,
+    PHO_CFG_LYT_RAID4_LAST  = PHO_CFG_LYT_RAID4_extent_md5,
+};
+
+#if HAVE_XXH128
+#define DEFAULT_XXH128 "true"
+#define DEFAULT_MD5    "false"
+#else
+#define DEFAULT_XXH128 "false"
+#define DEFAULT_MD5    "true"
+#endif
+
+const struct pho_config_item raid4_cfg_items[] = {
+    [PHO_CFG_LYT_RAID4_extent_xxh128] = {
+        .section = "layout_raid4",
+        .name    = "extent_xxh128",
+        .value   = DEFAULT_XXH128,
+    },
+    [PHO_CFG_LYT_RAID4_extent_md5] = {
+        .section = "layout_raid4",
+        .name    = "extent_md5",
+        .value   = DEFAULT_MD5,
+    },
+};
+
 static int layout_raid4_encode(struct pho_encoder *enc)
 {
     struct raid_io_context *io_context;
     int rc;
+    int i;
 
     ENTRY;
 
@@ -69,6 +104,21 @@ static int layout_raid4_encode(struct pho_encoder *enc)
     io_context->n_data_extents = 2;
     io_context->n_parity_extents = 1;
     io_context->write.to_write = enc->xfer->xd_params.put.size;
+    io_context->nb_hashes = 3;
+    io_context->hashes = xcalloc(io_context->nb_hashes,
+                                 sizeof(*io_context->hashes));
+
+    for (i = 0; i < io_context->nb_hashes; i++) {
+        rc = extent_hash_init(&io_context->hashes[i],
+                              PHO_CFG_GET_BOOL(raid4_cfg_items,
+                                               PHO_CFG_LYT_RAID4,
+                                               extent_md5,
+                                               false),
+                              PHO_CFG_GET_BOOL(raid4_cfg_items,
+                                               PHO_CFG_LYT_RAID4,
+                                               extent_xxh128,
+                                               false));
+    }
 
     rc = raid_encoder_init(enc, &RAID4_MODULE_DESC, &RAID4_ENCODER_OPS,
                            &RAID4_OPS);

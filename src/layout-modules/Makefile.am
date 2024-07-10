@@ -21,3 +21,6 @@ libpho_layout_raid4_la_CFLAGS=-fPIC $(AM_CFLAGS) -I ../layout
 libpho_layout_raid4_la_LIBADD=../store/libphobos_store.la \
                               ../layout/libpho_layout_common.la
 libpho_layout_raid4_la_LDFLAGS=-version-info 0:0:0
+if USE_XXHASH
+libpho_layout_raid4_la_LDFLAGS+=-lxxhash
+endif
