@@ -1868,13 +1868,13 @@ int phobos_admin_media_import(struct admin_handle *adm,
     if (rc)
         return rc;
 
-    rc = dss_object_get(&adm->dss, &filter, &obj, &obj_cnt);
+    rc = dss_object_get(&adm->dss, &filter, &obj, &obj_cnt, NULL);
     if (rc) {
         dss_filter_free(&filter);
         return rc;
     }
 
-    rc = dss_deprecated_object_get(&adm->dss, &filter, &depr, &depr_cnt);
+    rc = dss_deprecated_object_get(&adm->dss, &filter, &depr, &depr_cnt, NULL);
     dss_filter_free(&filter);
     if (rc) {
         dss_res_free(obj, obj_cnt);

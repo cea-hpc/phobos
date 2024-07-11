@@ -76,6 +76,10 @@ ATTRS2DSS = {
     'lock_hostname'       : 'hostname',
     'lock_owner'          : 'owner',
     'lock_ts'             : 'timestamp',
+
+    # "Object" table
+    'uuid'                : 'object_uuid',
+    'status'              : 'obj_status',
 }
 
 class JSONFilter(Structure): # pylint: disable=too-few-public-methods

@@ -287,7 +287,7 @@ int object_md_get(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     if (rc)
         return rc;
 
-    rc = dss_object_get(dss, &filter, &obj, &obj_cnt);
+    rc = dss_object_get(dss, &filter, &obj, &obj_cnt, NULL);
     if (rc)
         LOG_GOTO(filt_free, rc, "Cannot fetch objid:'%s'", xfer->xd_objid);
 
@@ -356,7 +356,7 @@ int object_md_save(struct dss_handle *dss, struct pho_xfer_desc *xfer)
             LOG_GOTO(out_unlock, rc,
                      "Unable to build filter in object md save");
 
-        rc = dss_object_get(dss, &filter, &obj_res, &obj_cnt);
+        rc = dss_object_get(dss, &filter, &obj_res, &obj_cnt, NULL);
         dss_filter_free(&filter);
         if (rc || obj_cnt == 0) {
             pho_verb("dss_object_get failed for objid:'%s'", xfer->xd_objid);
@@ -405,7 +405,7 @@ out_update:
     if (rc)
         LOG_GOTO(out_unlock, rc, "dss_filter_build failed");
 
-    rc = dss_object_get(dss, &filter, &obj_res, &obj_cnt);
+    rc = dss_object_get(dss, &filter, &obj_res, &obj_cnt, NULL);
     if (rc)
         LOG_GOTO(out_filt, rc, "Cannot fetch objid:'%s'", xfer->xd_objid);
 
@@ -465,7 +465,7 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
         LOG_RETURN(rc, "Unable to lock object objid: '%s'", xfer->xd_objid);
     }
 
-    rc = dss_object_get(dss, &filter, &obj, &obj_cnt);
+    rc = dss_object_get(dss, &filter, &obj, &obj_cnt, NULL);
     dss_filter_free(&filter);
     if (rc)
         LOG_GOTO(out_unlock, rc, "dss_object_get failed for objid:'%s'",
@@ -487,7 +487,7 @@ int object_md_del(struct dss_handle *dss, struct pho_xfer_desc *xfer)
                  "Couldn't build filter in md_del for object uuid:'%s'.",
                  obj->uuid);
 
-    rc = dss_deprecated_object_get(dss, &filter, &prev_obj, &prev_cnt);
+    rc = dss_deprecated_object_get(dss, &filter, &prev_obj, &prev_cnt, NULL);
     dss_filter_free(&filter);
     if (rc)
         LOG_GOTO(out_res, rc, "dss_deprecated_object_get failed for uuid:'%s'",
@@ -575,7 +575,7 @@ static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     if (rc)
         LOG_GOTO(out_unlock, rc, "Unable to build oid filter in object delete");
 
-    rc = dss_object_get(dss, &filter, &objs, &obj_cnt);
+    rc = dss_object_get(dss, &filter, &objs, &obj_cnt, NULL);
     if (rc)
         LOG_GOTO(out_filter, rc, "Cannot fetch objid in object delete:'%s'",
                                  obj.oid);
@@ -639,7 +639,8 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
     /* if oid is NULL: we get it from uuid */
     if (!obj.oid) {
         /* obj.oid == NULL => obj.uuid != NULL, we have the filter */
-        rc = dss_deprecated_object_get(dss, p_filter_uuid, &objs, &n_objs);
+        rc = dss_deprecated_object_get(dss, p_filter_uuid, &objs, &n_objs,
+                                       NULL);
         if (rc)
             LOG_GOTO(out, rc, "To undelete, unable to get oid from deprecated "
                               "object with uuid %s", obj.uuid);
@@ -682,7 +683,7 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 
     /* CHECK */
     /* check oid does not already exists in object table */
-    rc = dss_object_get(dss, p_filter_oid, &objs, &n_objs);
+    rc = dss_object_get(dss, p_filter_oid, &objs, &n_objs, NULL);
     if (rc)
         LOG_GOTO(out_unlock, rc,
                  "To undelete, unable to get existing oid from object "
@@ -698,7 +699,7 @@ static int object_undelete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
 
     /* check oid/uuid/version in deprecated_object table */
     rc = dss_deprecated_object_get(dss, obj.uuid ? p_filter_uuid : p_filter_oid,
-                                   &objs, &n_objs);
+                                   &objs, &n_objs, NULL);
     if (rc)
         LOG_GOTO(out_unlock, rc,
                  "To undelete, unable to get %s from deprecated object with "

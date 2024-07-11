@@ -27,6 +27,7 @@
 
 #include "pho_attrs.h"
 #include "pho_types.h"
+#include "pho_dss.h"
 #include <stdlib.h>
 
 struct pho_xfer_desc;
@@ -360,7 +361,8 @@ void pho_xfer_desc_clean(struct pho_xfer_desc *xfer);
 int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
                              const char **metadata, int n_metadata,
                              bool deprecated, int status_filter,
-                             struct object_info **objs, int *n_objs);
+                             struct object_info **objs, int *n_objs,
+                             struct dss_sort *sort);
 
 /**
  * Release the list retrieved using phobos_store_object_list().

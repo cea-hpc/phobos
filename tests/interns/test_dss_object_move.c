@@ -75,12 +75,12 @@ static void dom_simple_ok(void **state)
     rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}", OBJ.oid);
     assert_return_code(rc, -rc);
     /* check object is no more into object table */
-    rc = dss_object_get(handle, &filter, &obj_res, &obj_cnt);
+    rc = dss_object_get(handle, &filter, &obj_res, &obj_cnt, NULL);
     assert_return_code(rc, -rc);
     assert_int_equal(obj_cnt, 0);
     dss_res_free(obj_res, obj_cnt);
     /* check object is now into the object table */
-    rc = dss_deprecated_object_get(handle, &filter, &obj_res, &obj_cnt);
+    rc = dss_deprecated_object_get(handle, &filter, &obj_res, &obj_cnt, NULL);
     assert_return_code(rc, -rc);
     assert_int_equal(obj_cnt, 1);
 
@@ -90,12 +90,12 @@ static void dom_simple_ok(void **state)
     assert_return_code(rc, -rc);
 
     /* check the object is no more into deprecated table */
-    rc = dss_deprecated_object_get(handle, &filter, &obj_res, &obj_cnt);
+    rc = dss_deprecated_object_get(handle, &filter, &obj_res, &obj_cnt, NULL);
     assert_return_code(rc, -rc);
     assert_int_equal(obj_cnt, 0);
     dss_res_free(obj_res, obj_cnt);
     /* check the object is back into the object table */
-    rc = dss_object_get(handle, &filter, &obj_res, &obj_cnt);
+    rc = dss_object_get(handle, &filter, &obj_res, &obj_cnt, NULL);
     dss_filter_free(&filter);
     dss_res_free(obj_res, obj_cnt);
     assert_return_code(rc, -rc);
@@ -154,12 +154,12 @@ static void dom_3_ok(void **state)
                           OBJ_3_OID_REGEXP);
     assert_return_code(rc, -rc);
     /* check objects are no more into the object table */
-    rc = dss_object_get(handle, &filter, &obj_res, &obj_cnt);
+    rc = dss_object_get(handle, &filter, &obj_res, &obj_cnt, NULL);
     assert_return_code(rc, -rc);
     assert_int_equal(obj_cnt, 0);
     dss_res_free(obj_res, obj_cnt);
     /* check objects are now into the deprectad_object table */
-    rc = dss_deprecated_object_get(handle, &filter, &obj_res, &obj_cnt);
+    rc = dss_deprecated_object_get(handle, &filter, &obj_res, &obj_cnt, NULL);
     assert_return_code(rc, -rc);
     assert_int_equal(obj_cnt, 3);
 
@@ -169,12 +169,12 @@ static void dom_3_ok(void **state)
     assert_return_code(rc, -rc);
 
     /* check objects are no more into the deprecated_object table */
-    rc = dss_deprecated_object_get(handle, &filter, &obj_res, &obj_cnt);
+    rc = dss_deprecated_object_get(handle, &filter, &obj_res, &obj_cnt, NULL);
     assert_return_code(rc, -rc);
     assert_int_equal(obj_cnt, 0);
     dss_res_free(obj_res, obj_cnt);
     /* check the objects are back */
-    rc = dss_object_get(handle, &filter, &obj_res, &obj_cnt);
+    rc = dss_object_get(handle, &filter, &obj_res, &obj_cnt, NULL);
     dss_filter_free(&filter);
     dss_res_free(obj_res, obj_cnt);
     assert_return_code(rc, -rc);
@@ -213,7 +213,7 @@ static void dom_simple_already_exist(void **state)
     /* check the deprecated_object */
     rc = dss_filter_build(&filter, "{\"DSS::OBJ::oid\": \"%s\"}", OBJ.oid);
     assert_return_code(rc, -rc);
-    rc = dss_deprecated_object_get(handle, &filter, &obj_res, &obj_cnt);
+    rc = dss_deprecated_object_get(handle, &filter, &obj_res, &obj_cnt, NULL);
     dss_filter_free(&filter);
     assert_return_code(rc, -rc);
     assert_int_equal(obj_cnt, 1);
@@ -247,7 +247,7 @@ static int dom_simple_already_exist_teardown(void **state)
     if (rc)
         return -1;
 
-    rc = dss_deprecated_object_get(handle, &filter, &obj_res, &obj_cnt);
+    rc = dss_deprecated_object_get(handle, &filter, &obj_res, &obj_cnt, NULL);
     dss_filter_free(&filter);
     if (rc)
         return -1;

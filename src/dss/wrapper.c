@@ -250,7 +250,7 @@ static int lazy_find_deprecated_object(struct dss_handle *hdl, const char *oid,
     if (rc)
         LOG_RETURN(rc, "Cannot build filter");
 
-    rc = dss_deprecated_object_get(hdl, &filter, &obj_list, &obj_cnt);
+    rc = dss_deprecated_object_get(hdl, &filter, &obj_list, &obj_cnt, NULL);
     dss_filter_free(&filter);
     if (rc) {
         pho_error_oid_uuid_version(rc, "Unable to get deprecated object",
@@ -313,7 +313,7 @@ int dss_lazy_find_object(struct dss_handle *hdl, const char *oid,
     if (rc)
         LOG_RETURN(rc, "Cannot build filter");
 
-    rc = dss_object_get(hdl, &filter, &obj_list, &obj_cnt);
+    rc = dss_object_get(hdl, &filter, &obj_list, &obj_cnt, NULL);
     dss_filter_free(&filter);
     if (rc)
         LOG_RETURN(rc, "Cannot fetch objid: '%s'", oid);

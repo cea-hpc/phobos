@@ -828,6 +828,14 @@ class ObjectListOptHandler(ListOptHandler):
                             help="max width of the user_md column keys and "
                                  "values, must be greater or equal to 5"
                                  "(default is 30)")
+        parser.add_argument('--sort',
+                            help=("attribute to sort the output with, "
+                                  "choose from {" + " ".join(base_attrs) + "} "
+                                  ))
+        parser.add_argument('--rsort',
+                            help=("attribute to sort the output in descending "
+                                  "order, choose from "
+                                  "{" + " ".join(base_attrs)+ "} "))
         parser.epilog = """About the status of the object:
         incomplete: the object cannot be rebuilt because it lacks some of its
                     extents,
@@ -1240,6 +1248,14 @@ class ObjectOptHandler(BaseResourceOptHandler):
         else:
             status_number = 7
 
+        kwargs = {}
+        if self.params.get('deprecated'):
+            kwargs = handle_sort_option(self.params, DeprecatedObjectInfo(),
+                                        self.logger, **kwargs)
+        else:
+            kwargs = handle_sort_option(self.params, ObjectInfo(), self.logger,
+                                        **kwargs)
+
         client = UtilClient()
 
         try:
@@ -1247,7 +1263,8 @@ class ObjectOptHandler(BaseResourceOptHandler):
                                       self.params.get('pattern'),
                                       metadata,
                                       self.params.get('deprecated'),
-                                      status_number)
+                                      status_number,
+                                      **kwargs)
 
             if objs:
                 max_width = (None if self.params.get('no_trunc')

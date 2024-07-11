@@ -77,7 +77,8 @@ int dss_object_delete(struct dss_handle *hdl, struct object_info *obj_lst,
 }
 
 int dss_object_get(struct dss_handle *hdl, const struct dss_filter *filter,
-                   struct object_info **obj_ls, int *obj_cnt)
+                   struct object_info **obj_ls, int *obj_cnt,
+                   struct dss_sort *sort)
 {
     int rc = (int)mock();
     void *obj_container;
@@ -120,7 +121,8 @@ do {                                                                           \
 
 int dss_deprecated_object_get(struct dss_handle *hdl,
                               const struct dss_filter *filter,
-                              struct object_info **obj_ls, int *obj_cnt)
+                              struct object_info **obj_ls, int *obj_cnt,
+                              struct dss_sort *sort)
 {
     int rc = (int)mock();
     void *obj_container;

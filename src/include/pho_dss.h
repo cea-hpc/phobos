@@ -545,11 +545,12 @@ int dss_object_update(struct dss_handle *handle,
  * @param[out] object_list   list of retrieved items to be freed
  *                           w/ dss_res_free()
  * @param[out] object_count  number of items retrieved in the list
- *
+ * @param[in]  sort          sort filter
  * @return 0 on success, negated errno on failure
  */
 int dss_object_get(struct dss_handle *handle, const struct dss_filter *filter,
-                   struct object_info **object_list, int *object_count);
+                   struct object_info **object_list, int *object_count,
+                   struct dss_sort *sort);
 
 /**
  * Delete information for one or many objects in DSS.
@@ -599,13 +600,13 @@ int dss_deprecated_object_update(struct dss_handle *handle,
  * @param[out] object_list   list of retrieved items to be freed
  *                            w/ dss_res_free()
  * @param[out] object_count  number of items retrieved in the list
- *
+ * @param[in]  sort          sort filter
  * @return 0 on success, negated errno on failure
  */
 int dss_deprecated_object_get(struct dss_handle *handle,
                               const struct dss_filter *filter,
                               struct object_info **object_list,
-                              int *object_count);
+                              int *object_count, struct dss_sort *sort);
 
 /**
  * Delete information for one or many deprecated objects in DSS.

@@ -122,7 +122,8 @@ static void phobos_construct_status(GString *status_str, int status_filter)
 int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
                              const char **metadata, int n_metadata,
                              bool deprecated, int status_filter,
-                             struct object_info **objs, int *n_objs)
+                             struct object_info **objs, int *n_objs,
+                             struct dss_sort *sort)
 {
     struct dss_filter *filter_ptr = NULL;
     struct dss_filter filter;
@@ -205,9 +206,9 @@ int phobos_store_object_list(const char **res, int n_res, bool is_pattern,
     }
 
     if (deprecated)
-        rc = dss_deprecated_object_get(&dss, filter_ptr, objs, n_objs);
+        rc = dss_deprecated_object_get(&dss, filter_ptr, objs, n_objs, sort);
     else
-        rc = dss_object_get(&dss, filter_ptr, objs, n_objs);
+        rc = dss_object_get(&dss, filter_ptr, objs, n_objs, sort);
 
     if (rc)
         pho_error(rc, "Cannot fetch objects");

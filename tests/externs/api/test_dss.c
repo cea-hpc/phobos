@@ -52,10 +52,10 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
     switch (type) {
     case DSS_OBJECT:
         return dss_object_get(handle, inner_filter,
-                              (struct object_info **)item_list, n);
+                              (struct object_info **)item_list, n, NULL);
     case DSS_DEPREC:
         return dss_deprecated_object_get(handle, inner_filter,
-                                     (struct object_info **)item_list, n);
+                                     (struct object_info **)item_list, n, NULL);
     case DSS_FULL_LAYOUT:
         return dss_full_layout_get(handle, inner_filter, outer_filter,
                                    (struct layout_info **)item_list, n);

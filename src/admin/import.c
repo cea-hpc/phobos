@@ -170,7 +170,7 @@ _objects_with_same_uuid_version_exist(struct dss_handle *dss,
     if (rc)
         return rc;
 
-    rc = dss_object_get(dss, &filter, &objects, &objects_count);
+    rc = dss_object_get(dss, &filter, &objects, &objects_count, NULL);
     if (rc) {
         dss_filter_free(&filter);
         return rc;
@@ -182,7 +182,8 @@ _objects_with_same_uuid_version_exist(struct dss_handle *dss,
 
     dss_res_free(objects, objects_count);
 
-    rc = dss_deprecated_object_get(dss, &filter, &objects, &objects_count);
+    rc = dss_deprecated_object_get(dss, &filter, &objects, &objects_count,
+                                   NULL);
     dss_filter_free(&filter);
     if (rc)
         return rc;
@@ -226,13 +227,13 @@ static int _get_objects_with_oid(struct dss_handle *dss,
     if (rc)
         return rc;
 
-    rc = dss_object_get(dss, &filter, obj_get, obj_cnt);
+    rc = dss_object_get(dss, &filter, obj_get, obj_cnt, NULL);
     if (rc) {
         dss_filter_free(&filter);
         LOG_RETURN(rc, "Could not get object based on oid '%s'", oid);
     }
 
-    rc = dss_deprecated_object_get(dss, &filter, depr_get, depr_cnt);
+    rc = dss_deprecated_object_get(dss, &filter, depr_get, depr_cnt, NULL);
     dss_filter_free(&filter);
     if (rc) {
         dss_res_free(*obj_get, *obj_cnt);

@@ -35,6 +35,7 @@ from phobos.core.ffi import LIBPHOBOS, DeprecatedObjectInfo, ObjectInfo, Tags
 from phobos.core.const import (PHO_XFER_OBJ_REPLACE, PHO_XFER_OBJ_BEST_HOST, # pylint: disable=no-name-in-module
                                PHO_XFER_OP_GET, PHO_XFER_OP_GETMD,
                                PHO_XFER_OP_PUT, PHO_RSC_INVAL, str2rsc_family)
+from phobos.core.dss import dss_sort
 
 ATTRS_FOREACH_CB_TYPE = CFUNCTYPE(c_int, c_char_p, c_char_p, c_void_p)
 
@@ -459,7 +460,8 @@ class UtilClient:
                                     oids if oids else uuids))
 
     @staticmethod
-    def object_list(res, is_pattern, metadata, deprecated, status_number):
+    def object_list(res, is_pattern, metadata, deprecated, status_number,
+                    **kwargs): # pylint: disable=too-many-arguments
         """List objects."""
         n_objs = c_int(0)
         obj_type = ObjectInfo if not deprecated else DeprecatedObjectInfo
@@ -473,6 +475,9 @@ class UtilClient:
         enc_metadata = [md.encode('utf-8') for md in metadata]
         c_md_strlist = c_char_p * len(metadata)
 
+        sort, kwargs = dss_sort(**kwargs)
+        sref = byref(sort) if sort else None
+
         rc = LIBPHOBOS.phobos_store_object_list(c_res_strlist(*enc_res),
                                                 len(enc_res),
                                                 is_pattern,
@@ -481,7 +486,8 @@ class UtilClient:
                                                 deprecated,
                                                 n_status_number,
                                                 byref(objs),
-                                                byref(n_objs))
+                                                byref(n_objs),
+                                                sref)
 
         if rc:
             raise EnvironmentError(rc, "Failed to list %s" %

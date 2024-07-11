@@ -122,6 +122,25 @@ function media_cleanup
     done
 }
 
+function object_setup
+{
+    setup
+
+    mkdir "/tmp/pho_testdir"
+    $phobos dir add "/tmp/pho_testdir"
+    $phobos dir format --unlock "/tmp/pho_testdir"
+
+    $phobos put -f dir /etc/hosts oid1
+    $phobos put -f dir /etc/hosts oid2
+    $phobos put -f dir /etc/hosts oid3
+}
+
+function object_cleanup
+{
+    cleanup
+    rm -rf "/tmp/pho_testdir"
+}
+
 function test_sort
 {
     local resource=$1
@@ -189,9 +208,30 @@ function test_media_list_rsort
                          "stats.nb_obj,name,lock_ts"
 }
 
+function test_object_list_sort
+{
+    test_sort "object" "--sort" "uuid"
+    test_sort "object" "--sort" "oid"
+    test_sort "object" "--sort" "creation_time"
+    test_multiple_output "object" "--sort" "oid" "oid,uuid,creation_time" \
+                         "creation_time,oid,uuid"
+}
+
+function test_object_list_rsort
+{
+    test_sort "object" "--rsort" "uuid"
+    test_sort "object" "--rsort" "oid"
+    test_sort "object" "--rsort" "creation_time"
+    test_multiple_output "object" "--rsort" "oid" "oid,uuid,creation_time" \
+                         "creation_time,oid,uuid"
+}
+
 TESTS=("media_setup; \
             test_media_list_sort; test_media_list_rsort; \
-        media_cleanup")
+        media_cleanup"
+       "object_setup; \
+            test_object_list_sort; test_object_list_rsort; \
+        object_cleanup")
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("drives_setup; test_drive_list_sort; cleanup"

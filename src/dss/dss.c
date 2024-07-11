@@ -560,11 +560,12 @@ int dss_object_update(struct dss_handle *handle,
 }
 
 int dss_object_get(struct dss_handle *handle, const struct dss_filter *filter,
-                   struct object_info **object_list, int *object_count)
+                   struct object_info **object_list, int *object_count,
+                   struct dss_sort *sort)
 {
     return dss_generic_get(handle, DSS_OBJECT,
                            (const struct dss_filter*[]) {filter, NULL}, 1,
-                           (void **)object_list, object_count, NULL);
+                           (void **)object_list, object_count, sort);
 }
 
 int dss_object_delete(struct dss_handle *handle,
@@ -598,11 +599,11 @@ int dss_deprecated_object_update(struct dss_handle *handle,
 int dss_deprecated_object_get(struct dss_handle *handle,
                               const struct dss_filter *filter,
                               struct object_info **object_list,
-                              int *object_count)
+                              int *object_count, struct dss_sort *sort)
 {
     return dss_generic_get(handle, DSS_DEPREC,
                            (const struct dss_filter*[]) {filter, NULL}, 1,
-                           (void **)object_list, object_count, NULL);
+                           (void **)object_list, object_count, sort);
 }
 
 int dss_deprecated_object_delete(struct dss_handle *handle,
