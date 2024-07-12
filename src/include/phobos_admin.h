@@ -315,7 +315,8 @@ int phobos_admin_ping_tlc(bool *library_is_up);
  */
 int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
                              int n_res, bool is_pattern, const char *medium,
-                             struct layout_info **layouts, int *n_layouts);
+                             struct layout_info **layouts, int *n_layouts,
+                             struct dss_sort *sort);
 
 /**
  * Release the list of layouts retrieved using phobos_admin_layout_list().

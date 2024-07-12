@@ -273,7 +273,7 @@ static int _add_extent_to_dss(struct dss_handle *dss,
     if (rc)
         LOG_RETURN(rc, "Could not construct filter for extent");
 
-    rc = dss_full_layout_get(dss, &filter, NULL, &lyt_get, &layout_count);
+    rc = dss_full_layout_get(dss, &filter, NULL, &lyt_get, &layout_count, NULL);
     dss_filter_free(&filter);
     if (rc)
         LOG_RETURN(rc, "Could not get extent '%s'", lyt_insert->oid);
@@ -787,7 +787,7 @@ int reconstruct_object(struct admin_handle *adm, struct object_info *obj,
     if (rc)
         return rc;
 
-    rc = dss_full_layout_get(&adm->dss, &filter, NULL, &lyt, &lyt_cnt);
+    rc = dss_full_layout_get(&adm->dss, &filter, NULL, &lyt, &lyt_cnt, NULL);
     dss_filter_free(&filter);
     if (rc)
         return rc;

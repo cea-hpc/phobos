@@ -37,7 +37,7 @@ from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-n
                                PHO_ADDR_HASH1, PHO_ADDR_PATH,
                                str2fs_type)
 from phobos.core.glue import admin_device_status, jansson_dumps  # pylint: disable=no-name-in-module
-from phobos.core.dss import DSSHandle
+from phobos.core.dss import DSSHandle, dss_sort
 from phobos.core.ffi import (CommInfo, Id, LayoutInfo, LibDrvInfo, LIBPHOBOS,
                              LIBPHOBOS_ADMIN, MediaInfo, MediaStats,
                              OperationFlags, Tags)
@@ -271,7 +271,7 @@ class Client: # pylint: disable=too-many-public-methods
         """Query the status of the local devices"""
         return admin_device_status(addressof(self.handle), family)
 
-    def layout_list(self, res, is_pattern, medium, degroup): # pylint: disable=too-many-locals
+    def layout_list(self, res, is_pattern, medium, degroup, **kwargs): # pylint: disable=too-many-locals
         """List layouts."""
         n_layouts = c_int(0)
         layouts = pointer(LayoutInfo())
@@ -281,13 +281,17 @@ class Client: # pylint: disable=too-many-public-methods
         enc_res = [elt.encode('utf-8') for elt in res]
         c_res_strlist = c_char_p * len(enc_res)
 
+        sort, kwargs = dss_sort('layout', **kwargs)
+        sref = byref(sort) if sort else None
+
         rc = LIBPHOBOS_ADMIN.phobos_admin_layout_list(byref(self.handle),
                                                       c_res_strlist(*enc_res),
                                                       len(enc_res),
                                                       is_pattern,
                                                       enc_medium,
                                                       byref(layouts),
-                                                      byref(n_layouts))
+                                                      byref(n_layouts),
+                                                      sref)
         if rc:
             raise EnvironmentError(rc, "Failed to list the extent(s) '%s'" %
                                    res)

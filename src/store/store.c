@@ -183,7 +183,7 @@ static int decoder_build(struct pho_encoder *dec, struct pho_xfer_desc *xfer,
     if (rc)
         LOG_RETURN(rc, "Cannot build filter");
 
-    rc = dss_full_layout_get(dss, &filter, NULL, &layout, &cnt);
+    rc = dss_full_layout_get(dss, &filter, NULL, &layout, &cnt, NULL);
     dss_filter_free(&filter);
     if (rc)
         GOTO(err, rc);
@@ -1541,7 +1541,7 @@ int phobos_locate(const char *oid, const char *uuid, int version,
                  "Unable to build filter oid %s uuid %s version %d to get "
                  "layout from extent", obj->oid, obj->uuid, obj->version);
 
-    rc = dss_full_layout_get(&dss, &filter, NULL, &layout, &cnt);
+    rc = dss_full_layout_get(&dss, &filter, NULL, &layout, &cnt, NULL);
     dss_filter_free(&filter);
     if (rc)
         GOTO(clean, rc);

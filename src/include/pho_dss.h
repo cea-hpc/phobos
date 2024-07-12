@@ -269,6 +269,11 @@ struct dss_sort {
      * Boolean to indicate if the column is in the "lock" table
      */
     bool is_lock;
+
+    /**
+     * Boolean to indicate if the sort is in psql
+     */
+    bool psql_sort;
 };
 
 /**
@@ -507,7 +512,8 @@ int dss_layout_get(struct dss_handle *handle, const struct dss_filter *filter,
  */
 int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
                         const struct dss_filter *media,
-                        struct layout_info **layouts, int *layout_count);
+                        struct layout_info **layouts, int *layout_count,
+                        struct dss_sort *sort);
 
 /**
  * Store information for one or many objects in DSS.

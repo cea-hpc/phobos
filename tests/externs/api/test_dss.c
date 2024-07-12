@@ -58,7 +58,7 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
                                      (struct object_info **)item_list, n, NULL);
     case DSS_FULL_LAYOUT:
         return dss_full_layout_get(handle, inner_filter, outer_filter,
-                                   (struct layout_info **)item_list, n);
+                                   (struct layout_info **)item_list, n, NULL);
     case DSS_DEVICE:
         return dss_device_get(handle, inner_filter,
                               (struct dev_info **)item_list, n, NULL);

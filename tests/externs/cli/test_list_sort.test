@@ -141,13 +141,44 @@ function object_cleanup
     rm -rf "/tmp/pho_testdir"
 }
 
+function extent_setup
+{
+    setup
+    mkdir -p $DIR
+
+    truncate --size 1k /tmp/1K
+    truncate --size 2k /tmp/2K
+    truncate --size 3K /tmp/3K
+    truncate --size 1M /tmp/1M
+
+    $phobos dir add $DIR
+    $phobos dir format --unlock $DIR
+
+    $phobos put -f dir /tmp/1K 1K
+    $phobos put -f dir /tmp/3K 3K
+    $phobos put -f dir --lyt-param repl_count=2 /tmp/2K 2K
+    $phobos put -f dir /tmp/1M 1M
+}
+
+function extent_cleanup
+{
+    media_cleanup
+    for f in "/tmp/1K" "/tmp/2K" "/tmp/3K" "/tmp/1M"; do
+        rm -f "$f"
+    done
+}
+
 function test_sort
 {
     local resource=$1
     local operator=$2
     local attr=$3
+    local exp=$4
 
-    local exp=$(exp_sort "$resource" "$attr" "$operator")
+    if [ -z "$exp" ]; then
+        exp=$(exp_sort "$resource" "$attr" "$operator")
+    fi
+
     local res=$($phobos $resource list -o $attr $operator $attr)
     if [ "$res" != "$exp" ]; then
         error "phobos $resource list -o $attr $operator $attr output is" \
@@ -226,12 +257,33 @@ function test_object_list_rsort
                          "creation_time,oid,uuid"
 }
 
+function test_extent_list_sort
+{
+    test_sort "extent" "--sort" "oid"
+    test_sort "extent" "--sort" "ext_count"
+    test_sort "extent" "--sort" "size" $'[1024]\n[3072]\n[2048, 2048]\n[1048576]'
+    test_multiple_output "extent" "--sort" "size" "oid,ext_count,size" \
+                         "size,oid,ext_count"
+}
+
+function test_extent_list_rsort
+{
+    test_sort "extent" "--rsort" "oid"
+    test_sort "extent" "--rsort" "ext_count"
+    test_sort "extent" "--rsort" "size" $'[1048576]\n[2048, 2048]\n[3072]\n[1024]'
+    test_multiple_output "extent" "--rsort" "size" "oid,ext_count,size" \
+                         "size,oid,ext_count"
+}
+
 TESTS=("media_setup; \
             test_media_list_sort; test_media_list_rsort; \
         media_cleanup"
        "object_setup; \
             test_object_list_sort; test_object_list_rsort; \
-        object_cleanup")
+        object_cleanup"
+       "extent_setup; \
+            test_extent_list_sort; test_extent_list_rsort; \
+        extent_cleanup")
 
 if [[ -w /dev/changer ]]; then
     TESTS+=("drives_setup; test_drive_list_sort; cleanup"

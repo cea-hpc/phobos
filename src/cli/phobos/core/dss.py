@@ -80,6 +80,10 @@ ATTRS2DSS = {
     # "Object" table
     'uuid'                : 'object_uuid',
     'status'              : 'obj_status',
+
+    # "Extent"
+    'ext_count'           : 'count(\'json_agg\')',
+    'layout'              : 'lyt_info -> \'name\'',
 }
 
 class JSONFilter(Structure): # pylint: disable=too-few-public-methods
@@ -165,16 +169,18 @@ class SortFilter(Structure): # pylint: disable=too-few-public-methods
     _fields_ = [
         ('attr', c_char_p),
         ('reverse', c_bool),
-        ('is_lock', c_bool)
+        ('is_lock', c_bool),
+        ('psql_sort', c_bool)
     ]
 
-def dss_sort(**kwargs):
+def dss_sort(obj_type, **kwargs):
     """Convert a sort filter into a DSS-compatible sort filter"""
     sort = None
     for key in ['sort', 'rsort']:
         if kwargs.get(key):
             is_lock = False
             reverse = False
+            psql_sort = True
             if key == 'rsort':
                 reverse = True
 
@@ -189,7 +195,13 @@ def dss_sort(**kwargs):
             if ATTRS2DSS.get(kwargs[key]):
                 kwargs[key] = ATTRS2DSS[kwargs[key]]
 
-            sort = SortFilter(kwargs[key].encode('utf-8'), reverse, is_lock)
+            # special case where the sorting of extents by size is done in the
+            # C API
+            if kwargs[key] == 'size' and obj_type == 'layout':
+                psql_sort = False
+
+            sort = SortFilter(kwargs[key].encode('utf-8'), reverse, is_lock,
+                              psql_sort)
             kwargs.pop(key)
             break
     return sort, kwargs
@@ -241,7 +253,7 @@ class BaseEntityManager:
         kwargs = self.convert_kwargs('pattern', 'oid__regexp', **kwargs)
         kwargs = self.convert_kwargs('metadata', 'user_md__jkeyval', **kwargs)
 
-        sort, kwargs = dss_sort(**kwargs)
+        sort, kwargs = dss_sort(self.wrapped_ident, **kwargs)
         sref = byref(sort) if sort else None
 
         filt = dss_filter(self.wrapped_ident, **kwargs)

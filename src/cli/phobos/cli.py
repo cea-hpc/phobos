@@ -1034,6 +1034,15 @@ class ExtentListOptHandler(ListOptHandler):
         parser.add_argument('-p', '--pattern', action='store_true',
                             help="filter using POSIX regexp instead of "
                                  "exact extent")
+        attr_sort = list(LayoutInfo().get_sort_fields().keys())
+        attr_sort.sort()
+        parser.add_argument('--sort',
+                            help=("attribute to sort the output with, "
+                                  "choose from {" + " ".join(attr_sort) + "} "))
+        parser.add_argument('--rsort',
+                            help=("attribute to sort the output in descending "
+                                  "order, choose from {" + " ".join(attr_sort)
+                                  + "} "))
 
 def uncase_fstype(choices):
     """Check if an uncase FS type is a valid choice."""
@@ -1190,9 +1199,19 @@ def handle_sort_option(params, resource, logger, **kwargs):
 
     for key in ['sort', 'rsort']:
         if params.get(key):
-            attrs_sort = list(resource.get_display_dict().keys())
+            if isinstance(resource, LayoutInfo):
+                attrs_sort = list(resource.get_sort_fields().keys())
+            else:
+                attrs_sort = list(resource.get_display_dict().keys())
+
             sort_attr = params.get(key)
             if sort_attr not in attrs_sort:
+                if isinstance(resource, LayoutInfo):
+                    attrs = list(resource.get_display_dict().keys())
+                    if sort_attr in attrs:
+                        logger.error("Sorting attributes not supported: %s",
+                                     sort_attr)
+                        sys.exit(os.EX_USAGE)
                 logger.error("Bad sorting attributes: %s", sort_attr)
                 sys.exit(os.EX_USAGE)
             kwargs[key] = sort_attr
@@ -2281,13 +2300,18 @@ class ExtentOptHandler(BaseResourceOptHandler):
             self.logger.error("Bad output attributes: %s", " ".join(bad_attrs))
             sys.exit(os.EX_USAGE)
 
+        kwargs = {}
+        kwargs = handle_sort_option(self.params, LayoutInfo(), self.logger,
+                                    **kwargs)
+
         try:
             with AdminClient(lrs_required=False) as adm:
                 obj_list, p_objs, n_objs = adm.layout_list(
                     self.params.get('res'),
                     self.params.get('pattern'),
                     self.params.get('name'),
-                    self.params.get('degroup'))
+                    self.params.get('degroup'),
+                    **kwargs)
 
                 if len(obj_list) > 0:
                     dump_object_list(obj_list, attr=out_attrs,

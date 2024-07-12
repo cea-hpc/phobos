@@ -38,6 +38,7 @@
 #include "pho_dss_wrapper.h"
 #include "pho_types.h"
 #include "pho_type_utils.h"
+#include "dss_utils.h"
 
 #include "deprecated.h"
 #include "device.h"
@@ -233,6 +234,13 @@ static int dss_generic_get(struct dss_handle *handle, enum dss_type type,
 
     *item_list = &dss_res->items.raw;
     *item_cnt = PQntuples(res);
+
+    if (sort && !sort->psql_sort) {
+        if (type == DSS_FULL_LAYOUT && !strcmp(sort->attr, "size")) {
+            quicksort(item_list, 0, *item_cnt - 1, item_size, sort->reverse,
+                      cmp_size);
+        }
+    }
 
 out:
     if (rc)
@@ -494,11 +502,12 @@ int dss_layout_insert(struct dss_handle *handle,
 
 int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
                         const struct dss_filter *media,
-                        struct layout_info **layouts, int *layout_count)
+                        struct layout_info **layouts, int *layout_count,
+                        struct dss_sort *sort)
 {
     return dss_generic_get(hdl, DSS_FULL_LAYOUT,
                            (const struct dss_filter*[]) {object, media}, 2,
-                           (void **)layouts, layout_count, NULL);
+                           (void **)layouts, layout_count, sort);
 }
 
 /*

@@ -230,10 +230,80 @@ void free_dss_char4sql(char *s)
 
 void dss_sort2sql(GString *request, struct dss_sort *sort)
 {
-    if (sort != NULL) {
+    if (sort != NULL && sort->psql_sort == true) {
         g_string_append(request, " ORDER BY ");
         g_string_append(request, sort->attr);
         if (sort->reverse)
             g_string_append(request, " DESC ");
     }
+}
+
+static size_t
+compute_size(void *item)
+{
+    struct layout_info *layout = (struct layout_info *) item;
+    size_t size = 0;
+
+    for (int i = 0; i < layout->ext_count; i++)
+        size += layout->extents[i].size;
+    return size;
+}
+
+int
+cmp_size(void *first_extent, void *second_extent)
+{
+    size_t second_size = compute_size(second_extent);
+    size_t first_size = compute_size(first_extent);
+
+    if (first_size < second_size)
+        return -1;
+    if (first_size > second_size)
+        return 1;
+
+    return 0;
+}
+
+static void
+swap_list(void **list, int a, int b, size_t item_size)
+{
+    void *buffer = xmalloc(item_size);
+
+    memcpy(buffer, *list + a * item_size, item_size);
+    memcpy(*list + a * item_size, *list + b * item_size, item_size);
+    memcpy(*list + b * item_size, buffer, item_size);
+    free(buffer);
+}
+
+static int
+partition(void **list, int low, int high, size_t item_size, bool reverse,
+          cmp_func func)
+{
+    void *pivot_item = *list + high * item_size;
+    void *j_item;
+    int i = low;
+    int rc;
+
+    for (int j = low; j <= high - 1; j++) {
+        j_item = *list + j * item_size;
+        rc = func(j_item, pivot_item);
+        if ((rc == -1 && !reverse) || (rc == 1 && reverse)) {
+            swap_list(list, i, j, item_size);
+            i++;
+        }
+    }
+    swap_list(list, i, high, item_size);
+    return i;
+}
+
+void
+quicksort(void **list, int low, int high, size_t item_size, bool reverse,
+          cmp_func func)
+{
+    if (low >= high || low < 0)
+        return;
+
+    int partitionIdx = partition(list, low, high, item_size, reverse, func);
+
+    quicksort(list, low, partitionIdx - 1, item_size, reverse, func);
+    quicksort(list, partitionIdx + 1, high, item_size, reverse, func);
 }

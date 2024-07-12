@@ -1668,7 +1668,8 @@ static void phobos_construct_extent(GString *extent_str, const char **res,
 
 int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
                              int n_res, bool is_pattern, const char *medium,
-                             struct layout_info **layouts, int *n_layouts)
+                             struct layout_info **layouts, int *n_layouts,
+                             struct dss_sort *sort)
 {
     struct dss_filter *ext_filter_ptr = NULL;
     struct dss_filter *med_filter_ptr = NULL;
@@ -1714,7 +1715,7 @@ int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
      * the expected behaviour.
      */
     rc = dss_full_layout_get(&adm->dss, ext_filter_ptr, med_filter_ptr, layouts,
-                             n_layouts);
+                             n_layouts, sort);
     if (rc)
         pho_error(rc, "Cannot fetch layouts");
 

@@ -67,8 +67,11 @@ static int full_layout_select_query(GString **conditions, int n_conditions,
         g_string_append(request, conditions[1]->str);
 
     g_string_append(request,
-                    " GROUP BY oid, object_uuid, version, lyt_info"
-                    " ORDER BY oid, version, object_uuid");
+                    " GROUP BY oid, object_uuid, version, lyt_info");
+    if (sort)
+        dss_sort2sql(request, sort);
+    else
+        g_string_append(request, " ORDER BY oid, version, object_uuid");
 
     return 0;
 }
@@ -200,7 +203,6 @@ static int full_layout_from_pg_row(struct dss_handle *handle, void *void_layout,
     rc = layout_desc_decode(&layout->layout_desc, PQgetvalue(res, row_num, 3));
     if (rc)
         LOG_RETURN(rc, "dss_layout_desc decode error");
-
     rc = layout_extents_decode(&layout->extents, &layout->ext_count,
                                PQgetvalue(res, row_num, 4));
     if (rc)

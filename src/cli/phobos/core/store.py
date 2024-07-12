@@ -461,7 +461,7 @@ class UtilClient:
 
     @staticmethod
     def object_list(res, is_pattern, metadata, deprecated, status_number,
-                    **kwargs): # pylint: disable=too-many-arguments
+                    **kwargs): # pylint: disable=too-many-arguments,too-many-locals
         """List objects."""
         n_objs = c_int(0)
         obj_type = ObjectInfo if not deprecated else DeprecatedObjectInfo
@@ -475,7 +475,7 @@ class UtilClient:
         enc_metadata = [md.encode('utf-8') for md in metadata]
         c_md_strlist = c_char_p * len(metadata)
 
-        sort, kwargs = dss_sort(**kwargs)
+        sort, kwargs = dss_sort('object', **kwargs)
         sref = byref(sort) if sort else None
 
         rc = LIBPHOBOS.phobos_store_object_list(c_res_strlist(*enc_res),

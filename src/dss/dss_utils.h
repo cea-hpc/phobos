@@ -240,4 +240,33 @@ static inline bool psqlstrbool2bool(char psql_str_bool)
                             }                                   \
                         } while (0)
 
+typedef int (*cmp_func)(void *, void *);
+
+/**
+ * Sort the list in ascending or descending order.
+ *
+ * \param list[in/out]      The data to sort
+ * \param low[in]           First index of list
+ * \param high[out]         Last index of list
+ * \param item_size[in]     The size of elements in list
+ * \param reverse[in]       Boolean to indicate the sorting direction
+ * \param func[in]          Comparison function used
+ */
+void
+quicksort(void **list, int low, int high, size_t item_size, bool reverse,
+          cmp_func func);
+
+/**
+ * Comparison function to compare the size of extents, the size is the sum of
+ * all the extents's size
+ *
+ * \param first_extent[in]      The first extent
+ * \param second_extent[in]     The second extent
+ *
+ * \return -1, 0 or 1 if the size of first_extent is smaller, equal of bigger
+ *  than the size of second_extent
+ */
+int
+cmp_size(void *first_extent, void *second_extent);
+
 #endif

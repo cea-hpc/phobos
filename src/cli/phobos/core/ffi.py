@@ -764,6 +764,17 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
             'md5': None,
         }
 
+    def get_sort_fields(self): # pylint: disable=no-self-use
+        """Return a dict of available fields"""
+        return {
+            'ext_count': None,
+            'layout': None,
+            'object_uuid': None,
+            'oid': None,
+            'version': None,
+            'size': None,
+        }
+
     @property
     def oid(self):
         """Wrapper to get oid"""
