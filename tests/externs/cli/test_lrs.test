@@ -44,7 +44,7 @@ function cleanup
 
 function test_invalid_lock_file()
 {
-    trap "waive_lrs; cleanup" EXIT
+    trap waive_lrs EXIT
     drop_tables
     setup_tables
 
@@ -77,14 +77,13 @@ set +e
 set -e
 
     unset PHOBOS_LRS_lock_file
-    drop_tables
-
-    trap cleanup EXIT
+    cleanup
+    trap - EXIT
 }
 
 function test_invalid_db_schema_version
 {
-    trap "waive_lrs; cleanup" EXIT
+    trap waive_lrs EXIT
     setup_tables
 
 set +e
@@ -95,9 +94,9 @@ set +e
 set -e
 
     $PSQL -c "UPDATE schema_info SET version = '$VERSION';"
-    drop_tables
-
-    trap cleanup EXIT
+    trap - EXIT
+    waive_lrs
+    cleanup
 }
 
 function test_multiple_instances
@@ -256,7 +255,7 @@ function test_recover_drive_old_locks
              ('device'::lock_type, '$dev_st1_id', '${host}other', $pid);"
 
     # Start and stop the lrs daemon
-    trap "waive_tlc; cleanup" EXIT
+    trap waive_tlc EXIT
     invoke_tlc
     PHOBOS_LRS_families="tape" timeout --preserve-status 10 $phobosd -i &
     daemon_process=$!
@@ -264,7 +263,7 @@ function test_recover_drive_old_locks
     wait $daemon_process && true
     rc=$?
 
-    trap cleanup EXIT
+    trap - EXIT
     waive_tlc
 
     # check return status
@@ -304,7 +303,7 @@ function test_remove_invalid_device_locks
             values ('device'::lock_type, '$dev_st1_id', '$host', $pid);"
 
     # Start and stop the lrs daemon
-    trap "waive_tlc; cleanup" EXIT
+    trap waive_tlc EXIT
     invoke_tlc
     PHOBOS_LRS_families="tape" timeout --preserve-status 10 $phobosd -i &
     daemon_process=$!
@@ -312,7 +311,7 @@ function test_remove_invalid_device_locks
     wait $daemon_process && true
     rc=$?
 
-    trap cleanup EXIT
+    trap - EXIT
     waive_tlc
 
     # check return status
@@ -333,7 +332,7 @@ function test_wait_end_of_IO_before_shutdown()
 {
     local dir=$(mktemp -d)
 
-    trap "waive_lrs; rm -rf '$dir'; cleanup" EXIT
+    trap "waive_lrs; rm -rf '$dir'" EXIT
     setup_tables
     invoke_lrs -vv
 
@@ -354,7 +353,9 @@ function test_wait_end_of_IO_before_shutdown()
         error "Daemon not stopped after 10 seconds"
     fi
     PID_LRS=0
-    trap "rm -rf '$dir'; cleanup" EXIT
+    trap - EXIT
+    rm -rf '$dir'
+    cleanup
 }
 
 function wait_for_process_end()
@@ -377,7 +378,7 @@ function test_cancel_waiting_requests_before_shutdown()
     local file=$(mktemp)
     local res_file="res_file"
 
-    trap "waive_lrs; rm -rf '$dir' '$file' '$res_file'; cleanup" EXIT
+    trap "waive_lrs; rm -rf '$dir' '$file' '$res_file'" EXIT
     setup_tables
     invoke_lrs
 
@@ -412,7 +413,9 @@ function test_cancel_waiting_requests_before_shutdown()
         error "Daemon not stopped after 10 seconds"
     fi
     PID_LRS=0
-    trap "rm -rf '$dir' '$file' '$res_file'; cleanup" EXIT
+    trap - EXIT
+    rm -rf '$dir' '$file' '$res_file'
+    cleanup
 }
 
 function test_refuse_new_request_during_shutdown()
@@ -420,7 +423,7 @@ function test_refuse_new_request_during_shutdown()
     local dir=$(mktemp -d)
     local file=$(mktemp)
 
-    trap "waive_lrs; rm -rf '$dir' '$file'; cleanup" EXIT
+    trap "waive_lrs; rm -rf '$dir' '$file'" EXIT
     setup_tables
     invoke_lrs
 
@@ -442,7 +445,9 @@ function test_refuse_new_request_during_shutdown()
         error "Daemon not stopped after 10 seconds"
     fi
     PID_LRS=0
-    trap "rm -rf '$dir' '$file'; cleanup" EXIT
+    trap - EXIT
+    rm -rf '$dir' '$file'
+    cleanup
 }
 
 function test_mount_failure_during_read_response()
@@ -452,7 +457,7 @@ function test_mount_failure_during_read_response()
     local drive=$(get_lto_drives 6 1)
     local algo=$1
 
-    trap "waive_daemons; rm -f '$file'; cleanup" EXIT
+    trap "waive_daemons; rm -f '$file'" EXIT
     export PHOBOS_IO_SCHED_TAPE_read_algo="$algo"
     setup_tables
     invoke_daemons
@@ -481,6 +486,7 @@ function test_mount_failure_during_read_response()
 
     export PHOBOS_LTFS_cmd_mount="$save_mount_cmd"
     waive_daemons
+    trap - EXIT
     rm -f "$file"
     cleanup
 }
@@ -511,7 +517,7 @@ function test_format_fail_without_suitable_device()
     local drive=$(get_lto_drives 5 1)
     local tape=$(get_tapes L6 1)
 
-    trap "waive_daemons; drop_tables; cleanup" EXIT
+    trap waive_daemons EXIT
 
     setup_tables
     invoke_daemons
@@ -526,10 +532,9 @@ function test_format_fail_without_suitable_device()
     format_wait_and_check "$tape" \
                           "the drive '$drive' and tape '$tape' are incompatible"
 
+    trap - EXIT
     waive_daemons
-    drop_tables
-
-    trap cleanup EXIT
+    cleanup
 }
 
 function test_retry_on_error_setup()
@@ -621,7 +626,7 @@ function test_fair_share_max_reached()
     drop_tables
     setup_tables
     export PHOBOS_IO_SCHED_TAPE_dispatch_algo=fair_share
-    trap "waive_daemons; cleanup" EXIT
+    trap waive_daemons EXIT
     invoke_daemons
 
     # With this setup, any get will wait
@@ -652,11 +657,9 @@ function test_fair_share_max_reached()
     wait || error "Get should have succeeded after setting max reads to 1"
 
     export PHOBOS_IO_SCHED_TAPE_dispatch_algo=none
+    trap - EXIT
     waive_daemons
-    drop_tables
-    drain_all_drives
-
-    trap cleanup EXIT
+    cleanup
 }
 
 function test_no_DAEMON_PID_FILEPATH_lock_cleaned()
@@ -706,7 +709,6 @@ function test_health()
     local drive=$(get_lto_drives 5 1)
     local tape=$(get_tapes L5 1)
 
-    trap "drop_tables; cleanup" EXIT
     setup_tables
 
     $phobos drive add --unlock "$drive"
@@ -717,7 +719,7 @@ function test_health()
     local cmd=$(mount_failure_cmd 2)
     export PHOBOS_LTFS_cmd_mount=$cmd
 
-    trap "waive_daemons; drop_tables; cleanup" EXIT
+    trap waive_daemons EXIT
     invoke_daemons
 
     $phobos tape format --unlock "$tape"
@@ -737,14 +739,13 @@ function test_health()
     $phobos drive list -o adm_status | grep failed ||
         error "Drive should be set to failed once the max error is reached"
 
+    trap - EXIT
     waive_daemons
-    drop_tables
-    drain_all_drives
+    cleanup
     # Reset error count for mount script
     echo 0 > /tmp/mount_count
     unset PHOBOS_LRS_max_health
     unset PHOBOS_LTFS_cmd_mount
-    trap cleanup EXIT
 }
 
 function test_health_medium_failure()
@@ -756,7 +757,7 @@ function test_health_medium_failure()
     export PHOBOS_LRS_max_health=3
     export PHOBOS_LTFS_cmd_mount=$cmd
 
-    trap "waive_daemons; drop_tables; cleanup" EXIT
+    trap waive_daemons EXIT
     setup_tables
     invoke_daemons
 
@@ -785,14 +786,13 @@ function test_health_medium_failure()
     $phobos drive list -o adm_status | grep failed &&
         error "No drive should be failed as their health should be one"
 
+    trap - EXIT
     waive_daemons
-    drop_tables
-    drain_all_drives
+    cleanup
     # Reset error count for mount script
     echo 0 > /tmp/mount_count
     unset PHOBOS_LRS_max_health
     unset PHOBOS_LTFS_cmd_mount
-    trap cleanup EXIT
 }
 
 function test_health_device_failure()
@@ -804,7 +804,7 @@ function test_health_device_failure()
     export PHOBOS_LRS_max_health=3
     export PHOBOS_LTFS_cmd_mount=$cmd
 
-    trap "waive_daemons; drop_tables; cleanup" EXIT
+    trap waive_daemons EXIT
     setup_tables
     invoke_daemons
 
@@ -833,15 +833,13 @@ function test_health_device_failure()
     $phobos tape list -o adm_status | grep failed &&
         error "No tape should be failed as their health should be one"
 
+    trap - EXIT
     waive_daemons
-    drop_tables
-    drop_tables
-    drain_all_drives
+    cleanup
     # Reset error count for mount script
     echo 0 > /tmp/mount_count
     unset PHOBOS_LRS_max_health
     unset PHOBOS_LTFS_cmd_mount
-    trap cleanup EXIT
 }
 
 function test_ralloc_2_of_3_dir()
@@ -850,7 +848,7 @@ function test_ralloc_2_of_3_dir()
     local dir2=$(mktemp -d)
     local dir3=$(mktemp -d)
 
-    trap "waive_lrs; rm -rf '${dir1}' '${dir2}' '${dir3}'; cleanup" EXIT
+    trap "waive_lrs; rm -rf '${dir1}' '${dir2}' '${dir3}'" EXIT
     setup_tables
     invoke_lrs -vv
 
@@ -872,7 +870,9 @@ function test_ralloc_2_of_3_dir()
         error "Daemon not stopped after 10 seconds"
     fi
     PID_LRS=0
-    trap "rm -rf '${dir1}' '${dir2}' '${dir3}'; cleanup" EXIT
+    rm -rf '${dir1}' '${dir2}' '${dir3}'
+    cleanup
+    trap - EXIT
 }
 
 function test_ralloc_2_of_3_tape()
@@ -880,7 +880,7 @@ function test_ralloc_2_of_3_tape()
     local drives=$(get_lto_drives 6 2)
     local tapes=$(get_tapes L6 3 | nodeset -e)
 
-    trap "waive_daemons; drop_tables; cleanup" EXIT
+    trap "waive_daemons; drop_tables" EXIT
     setup_tables
     invoke_daemons
 
@@ -902,7 +902,9 @@ function test_ralloc_2_of_3_tape()
         error "Daemon not stopped after 10 seconds"
     fi
     PID_LRS=0
-    trap "waive_tlc; cleanup" EXIT
+    waive_tlc
+    cleanup
+    trap - EXIT
 }
 
 TEST_SETUP=setup
