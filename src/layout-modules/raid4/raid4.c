@@ -139,6 +139,10 @@ static int layout_raid4_decode(struct pho_encoder *dec)
     io_context->name = PLUGIN_NAME;
     io_context->n_data_extents = 2;
     io_context->n_parity_extents = 1;
+    io_context->nb_hashes = io_context->n_data_extents;
+    io_context->hashes = xcalloc(io_context->nb_hashes,
+                                 sizeof(*io_context->hashes));
+
     rc = raid_decoder_init(dec, &RAID4_MODULE_DESC, &RAID4_ENCODER_OPS,
                            &RAID4_OPS);
     if (rc)

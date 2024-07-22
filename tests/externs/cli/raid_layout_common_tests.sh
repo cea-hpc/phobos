@@ -74,7 +74,6 @@ function check_hash()
     local expected_hash=$(${algo}sum "$file" | awk '{print $1}')
 
     # Check the hash is correct in the DSS
-    $phobos extent list --degroup -o "$algo",address "$oid"
     $phobos extent list --degroup -o "$algo",address "$oid" |
         grep "$(basename "$file")" |
         grep "$expected_hash"
@@ -93,8 +92,12 @@ function check_phobos_xattr()
     getxattr "$extent" user.object_size | grep "$(stat -c %s "$input_file")"
     getxattr "$extent" user.object_uuid | grep "$object_uuid"
     getxattr "$extent" user.layout | grep $RAID_LAYOUT
-    check_hash md5 "$extent" "$oid"
-    check_hash xxh128 "$extent" "$oid"
+    if [[ $PHOBOS_LAYOUT_RAID4_extent_md5 == "true" ]] ; then
+        check_hash md5 "$extent" "$oid"
+    fi
+    if [[ $PHOBOS_LAYOUT_RAID4_extent_xxh128 == "true" ]] ; then
+        check_hash xxh128 "$extent" "$oid"
+    fi
 }
 
 function check_extent_count()
@@ -219,9 +222,9 @@ function test_put_get()
     local oid=$FUNCNAME
     local file=$(make_file 512K)
 
-    $valg_phobos -vv put "$file" $oid
+    $valg_phobos put "$file" $oid
     check_extent_md $oid "$file"
-    $valg_phobos -vv get $oid /tmp/out.$$
+    $valg_phobos get $oid /tmp/out.$$
 
     diff "$file" /tmp/out.$$
     rm /tmp/out.$$ "$file"
@@ -245,6 +248,7 @@ function test_read_with_missing_extent()
     local oid=$FUNCNAME
     local file=$(make_file 512K)
 
+    echo "layout: $RAID_LAYOUT"
     $valg_phobos put "$file" $oid
     check_extent_md $oid "$file"
 
@@ -324,10 +328,10 @@ function test_put_get_split()
     local oid=$FUNCNAME
     local out=/tmp/out.$$
 
-    $valg_phobos -vv put "$file" $oid
+    $valg_phobos put "$file" $oid
     check_extent_count "$oid" 6
     check_extent_md "$oid" "$file"
-    $valg_phobos -vv get $oid "$out"
+    $valg_phobos get $oid "$out"
     diff "$out" "$file"
     rm "$out" "$file"
 }
@@ -371,6 +375,186 @@ function test_put_get_split_with_missing_extents()
     rm "$file"
 }
 
+function test_put_get_without_xxh128()
+{
+    local oid=$FUNCNAME
+    local file=$(make_file 512k)
+    export PHOBOS_LAYOUT_RAID4_extent_md5="false"
+    export PHOBOS_LAYOUT_RAID4_extent_xxh128="true"
+
+    $valg_phobos put "$file" $oid
+    check_extent_md $oid "$file"
+
+    local addresses=($(get_extent_info "$oid" address))
+    local media=($(get_extent_info "$oid" media_name))
+
+    # We disable the use of the hash during the get, but the hash should still
+    # be calculated relative to the hash calculated during the put and detect
+    # the corruption
+    export PHOBOS_LAYOUT_RAID4_extent_md5="false"
+    export PHOBOS_LAYOUT_RAID4_extent_xxh128="false"
+
+    for (( i = 0; i < ${#addresses[@]} - 1; i++ )); do
+        local copy=$(mktemp)
+        local extent="${media[i]}/${addresses[i]}"
+
+        cp "$extent" "$copy"
+
+        # Corrupt the extent
+        echo -ne \\xFF | dd conv=notrunc bs=1 count=1 of="$extent"
+        $valg_phobos get $oid /tmp/out.$$ &&
+            error "phobos get $oid should have failed"
+
+        cp "$copy" "$extent"
+        rm "$copy"
+    done
+
+    rm "$file"
+}
+
+function test_put_get_corrupted()
+{
+    local oid=$FUNCNAME
+    local file=$(make_file 512k)
+
+    $valg_phobos put "$file" $oid
+    check_extent_md $oid "$file"
+
+    local addresses=($(get_extent_info "$oid" address))
+    local media=($(get_extent_info "$oid" media_name))
+
+    # We test here only for the two halves of the object
+    for (( i = 0; i < ${#addresses[@]} - 1; i++ )); do
+        local copy=$(mktemp)
+        local extent="${media[i]}/${addresses[i]}"
+
+        cp "$extent" "$copy"
+
+        # Corrupt the extent
+        echo -ne \\xFF | dd conv=notrunc bs=1 count=1 of="$extent"
+        $valg_phobos get $oid /tmp/out.$$ &&
+            error "phobos get $oid should have failed"
+
+        cp "$copy" "$extent"
+        rm "$copy"
+    done
+
+    rm "$file"
+}
+
+function test_read_with_missing_extent_corrupted()
+{
+    local oid=$FUNCNAME
+    local file=$(make_file 512K)
+
+    $valg_phobos put "$file" $oid
+    check_extent_md $oid "$file"
+
+    local addresses=($(get_extent_info "$oid" address))
+    local media=($(get_extent_info "$oid" media_name))
+
+    for (( i = 0; i < ${#media[@]}; i++ )); do
+        local copy=$(mktemp)
+        $phobos dir lock ${media[i]}
+
+        for j in 1 2; do
+            local idx_corrup=$(((i + $j) % 3))
+            local extent="${media[$idx_corrup]}/${addresses[$idx_corrup]}"
+
+            cp "$extent" "$copy"
+
+            # Corrupt one extent available
+            echo -ne \\xFF | dd conv=notrunc bs=1 count=1 of="$extent"
+            $valg_phobos get $oid /tmp/out.$$ &&
+                error "phobos get $oid should have failed"
+
+            cp "$copy" "$extent"
+        done
+
+        $phobos dir unlock ${media[i]}
+        rm "$copy"
+    done
+
+    rm "$file"
+}
+
+function test_put_get_split_corrupted()
+{
+    local file=$(make_file 3M)
+    local oid=$FUNCNAME
+    local out=/tmp/out.$$
+
+    $valg_phobos put "$file" $oid
+    check_extent_md "$oid" "$file"
+
+    local addresses=($(get_extent_info "$oid" address))
+    local media=($(get_extent_info "$oid" media_name))
+
+    # Corrupt only the two halves of the object
+    local idx=(0 1 3 4)
+    for i in ${idx[@]}; do
+        local copy=$(mktemp)
+        local extent="${media[i]}/${addresses[i]}"
+
+        cp "$extent" "$copy"
+
+        # Corrupt the extent
+        echo -ne \\xFF | dd conv=notrunc bs=1 count=1 of="$extent"
+        $valg_phobos get "$oid" "$out" &&
+            error "phobos get $oid should have failed"
+
+        cp "$copy" "$extent"
+        rm "$copy"
+    done
+
+    rm "$file"
+}
+
+function test_put_get_split_with_missing_extents_corrupted()
+{
+    local file=$(make_file 3M)
+    local oid=$FUNCNAME
+    local out=/tmp/out.$$
+
+    $valg_phobos put "$file" $oid
+    check_extent_md "$oid" "$file"
+
+    local addresses=($(get_extent_info "$oid" address))
+    local media=($(get_extent_info "$oid" media_name))
+
+    for (( i = 0; i < ${#media[@]}; i++ )); do
+        local copy=$(mktemp)
+        $phobos dir lock ${media[i]}
+
+        for j in {1..5}; do
+            local idx_corrup=$(((i + $j) % 6))
+            # We skip the case where we corrupt the xor in the split which does
+            # not contain a lock because the layout will use part 1 and 2 and
+            # not the xor and succeed
+            if [[ ($i -le 2 && $idx_corrup -eq 5) ||
+                  ($i -ge 3 && $idx_corrup -eq 2) ]]; then
+                continue
+            fi
+
+            local extent="${media[$idx_corrup]}/${addresses[$idx_corrup]}"
+
+            cp "$extent" "$copy"
+
+            # Corrupt one extent available
+            echo -ne \\xFF | dd conv=notrunc bs=1 count=1 of="$extent"
+            $valg_phobos get $oid $out &&
+                error "phobos get $oid should have failed"
+
+            cp "$copy" "$extent"
+        done
+
+        $phobos dir unlock ${media[i]}
+        rm "$copy"
+    done
+
+    rm "$file"
+}
+
 TESTS=(
     "setup_dir even; \
      test_put_get; \
@@ -403,6 +587,34 @@ TESTS=(
      test_put_get_split_with_missing_extents; \
      cleanup_dir_split"
 )
+
+if [[ $RAID_LAYOUT == "raid4" ]]; then
+    TESTS+=(
+        "setup_dir even; \
+         test_put_get_corrupted; \
+         test_put_get_without_xxh128; \
+         test_read_with_missing_extent_corrupted; \
+         cleanup_dir"
+        "setup_dir_split even; \
+         test_put_get_split_corrupted; \
+         cleanup_dir"
+        "setup_dir_split even; \
+         test_put_get_split_with_missing_extents_corrupted; \
+         cleanup_dir"
+
+        "setup_dir odd; \
+         test_put_get_corrupted; \
+         test_put_get_without_xxh128; \
+         test_read_with_missing_extent_corrupted; \
+         cleanup_dir"
+        "setup_dir_split odd; \
+         test_put_get_split_corrupted; \
+         cleanup_dir"
+        "setup_dir_split odd; \
+         test_put_get_split_with_missing_extents_corrupted; \
+         cleanup_dir"
+    )
+fi
 
 if  [[ -w /dev/changer ]]; then
     TESTS+=()

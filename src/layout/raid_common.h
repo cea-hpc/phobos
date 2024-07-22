@@ -157,6 +157,8 @@ int extent_hash_digest(struct extent_hash *hash);
 
 int extent_hash_copy(struct extent_hash *hash, struct extent *extent);
 
+int extent_hash_compare(struct extent_hash *hash, struct extent *extent);
+
 struct pho_ext_loc make_ext_location(struct pho_encoder *enc, size_t i);
 
 #endif

@@ -805,6 +805,18 @@ static int read_split_setup(struct pho_encoder *dec,
     for (i = 0; i < n_extents; i++)
         pho_buff_alloc(&io_context->buffers[i], dec->io_block_size);
 
+    for (i = 0; i < io_context->nb_hashes; i++) {
+        rc = extent_hash_init(&io_context->hashes[i],
+                              io_context->read.extents[i]->with_md5,
+                              io_context->read.extents[i]->with_xxh128);
+        if (rc)
+            return rc;
+
+        rc = extent_hash_reset(&io_context->hashes[i]);
+        if (rc)
+            return rc;
+    }
+
     return 0;
 }
 
@@ -1196,4 +1208,32 @@ int extent_hash_copy(struct extent_hash *hash, struct extent *extent)
 #endif
 
     return 0;
+}
+
+int extent_hash_compare(struct extent_hash *hash, struct extent *extent)
+{
+    int rc;
+
+    if (hash->md5context && extent->with_md5) {
+        rc = memcmp(hash->md5, extent->md5, MD5_BYTE_LENGTH);
+        if (rc)
+            goto log_err;
+    }
+
+#if HAVE_XXH128
+    if (hash->xxh128context && extent->with_xxh128) {
+        XXH128_canonical_t canonical;
+
+        XXH128_canonicalFromHash(&canonical, hash->xxh128);
+        rc = memcmp(canonical.digest, extent->xxh128, XXH128_BYTE_LENGTH);
+        if (rc)
+            goto log_err;
+    }
+#endif
+    return 0;
+
+log_err:
+    LOG_RETURN(-EINVAL,
+               "Hash mismatch: the data in the extent %s/%s has been corrupted",
+               extent->media.name, extent->address.buff);
 }
