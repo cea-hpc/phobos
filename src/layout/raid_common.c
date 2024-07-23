@@ -47,7 +47,6 @@
 
 #define EXTENT_TAG_SIZE 128
 #define PHO_ATTR_BACKUP_JSON_FLAGS (JSON_COMPACT | JSON_SORT_KEYS)
-#define PHO_EA_ID_NAME      "id"
 #define PHO_EA_UMD_NAME     "user_md"
 
 size_t n_total_extents(struct raid_io_context *io_context)
@@ -438,8 +437,6 @@ static void raid_io_context_setmd(struct raid_io_context *io_context,
      int i;
 
      for (i = 0; i < n_total_extents(io_context); ++i) {
-        pho_attr_set(&iods[i].iod_attrs, PHO_EA_ID_NAME, xd_objid);
-
         if (!gstring_empty(str))
             pho_attr_set(&iods[i].iod_attrs, PHO_EA_UMD_NAME, str->str);
     }

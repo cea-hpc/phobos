@@ -28,6 +28,13 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/tape_drive.sh
 . $test_dir/utils_generation.sh
 
+function set_extent_opt()
+{
+    local layout=$(echo $RAID_LAYOUT | awk '{print toupper($0)}')
+
+    eval "export PHOBOS_LAYOUT_${layout}_extent_$1=true"
+}
+
 function make_file()
 {
     local size=$1
@@ -67,6 +74,7 @@ function check_hash()
     local expected_hash=$(${algo}sum "$file" | awk '{print $1}')
 
     # Check the hash is correct in the DSS
+    $phobos extent list --degroup -o "$algo",address "$oid"
     $phobos extent list --degroup -o "$algo",address "$oid" |
         grep "$(basename "$file")" |
         grep "$expected_hash"
@@ -84,10 +92,19 @@ function check_phobos_xattr()
 
     getxattr "$extent" user.object_size | grep "$(stat -c %s "$input_file")"
     getxattr "$extent" user.object_uuid | grep "$object_uuid"
-    getxattr "$extent" user.id | grep "$oid"
     getxattr "$extent" user.layout | grep $RAID_LAYOUT
     check_hash md5 "$extent" "$oid"
     check_hash xxh128 "$extent" "$oid"
+}
+
+function check_extent_count()
+{
+    local nb_extents=$($phobos extent list --degroup "$1" | wc -l)
+    local expected=$2
+
+    if (( nb_extents != expected )); then
+        error "We where expecting splits in the test"
+    fi
 }
 
 function check_extent_md()
@@ -116,8 +133,8 @@ function setup_dir
     export PHOBOS_LRS_families="dir"
     export PHOBOS_STORE_default_family="dir"
     export PHOBOS_STORE_default_layout="$RAID_LAYOUT"
-    export PHOBOS_LAYOUT_RAID4_extent_md5="true"
-    export PHOBOS_LAYOUT_RAID4_extent_xxh128="true"
+    set_extent_opt md5
+    set_extent_opt xxh128
 
     if [[ "$1" == "odd" ]]; then
         export ODD_FILE_SIZE=1
@@ -144,7 +161,7 @@ function cleanup_dir
 function test_put_get()
 {
     local oid=$FUNCNAME
-    local file=$(make_file 512k)
+    local file=$(make_file 512K)
 
     $valg_phobos put "$file" $oid
     check_extent_md $oid "$file"
@@ -178,7 +195,7 @@ function test_read_with_missing_extent()
 function test_with_different_block_size()
 {
     local oid=$FUNCNAME
-    local file=$(make_file 512k)
+    local file=$(make_file 512K)
 
     export PHOBOS_IO_io_block_size=$(( 2 << 14 ))
 
@@ -206,8 +223,8 @@ function setup_dir_split()
     export PHOBOS_LRS_families="dir"
     export PHOBOS_STORE_default_family="dir"
     export PHOBOS_STORE_default_layout="$RAID_LAYOUT"
-    export PHOBOS_LAYOUT_RAID4_extent_md5="true"
-    export PHOBOS_LAYOUT_RAID4_extent_xxh128="true"
+    set_extent_opt md5
+    set_extent_opt xxh128
 
     if [[ "$1" == "odd" ]]; then
         export ODD_FILE_SIZE=1
@@ -234,11 +251,12 @@ function cleanup_dir_split()
 
 function test_put_get_split()
 {
-    local file=$(make_file 3M)
+    local file=$(make_file 2740KB)
     local oid=$FUNCNAME
     local out=/tmp/out.$$
 
     $valg_phobos put "$file" $oid
+    check_extent_count "$oid" 6
     check_extent_md "$oid" "$file"
     $valg_phobos get $oid "$out"
     diff "$out" "$file"
@@ -247,12 +265,13 @@ function test_put_get_split()
 
 function test_put_get_split_different_block_size()
 {
-    local file=$(make_file 3M)
+    local file=$(make_file 2740KB)
     local oid=$FUNCNAME
     local out=/tmp/out.$$
 
     export PHOBOS_IO_io_block_size=$(( 2 << 14 ))
     $valg_phobos put "$file" $oid
+    check_extent_count "$oid" 6
     check_extent_md "$oid" "$file"
     unset PHOBOS_IO_io_block_size
     $valg_phobos get $oid "$out"
@@ -262,11 +281,12 @@ function test_put_get_split_different_block_size()
 
 function test_put_get_split_with_missing_extents()
 {
-    local file=$(make_file 3M)
+    local file=$(make_file 2740KB)
     local oid=$FUNCNAME
     local out=/tmp/out.$$
 
     $valg_phobos put "$file" $oid
+    check_extent_count "$oid" 6
     check_extent_md "$oid" "$file"
 
     for d in $($phobos dir list); do
