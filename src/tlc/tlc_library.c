@@ -58,7 +58,7 @@ const struct pho_config_item cfg_lib_scsi[] = {
     [PHO_CFG_LIB_SCSI_sep_sn_query] = {
         .section = "lib_scsi",
         .name    = "sep_sn_query",
-        .value   = "0", /* no */
+        .value   = "false",
     },
 };
 
@@ -247,8 +247,8 @@ static int lib_status_load(struct lib_descriptor *lib,
         bool separate_query_sn;
 
         /* separate S/N query? */
-        separate_query_sn = PHO_CFG_GET_INT(cfg_lib_scsi, PHO_CFG_LIB_SCSI,
-                                            sep_sn_query, 0);
+        separate_query_sn = PHO_CFG_GET_BOOL(cfg_lib_scsi, PHO_CFG_LIB_SCSI,
+                                             sep_sn_query, false);
 
         /* IBM TS3500 can't get both volume label and drive in the same request.
          * So, first get the tape label and 'full' indication, then query

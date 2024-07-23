@@ -435,8 +435,8 @@ int main(int argc, char **argv)
     test_lib_scan(false);
     test_lib_scan(true);
 
-    /* same test with PHO_CFG_LIB_SCSI_sep_sn_query=1 */
-    ASSERT_RC(setenv("PHOBOS_LIB_SCSI_sep_sn_query", "1", 1));
+    /* same test with PHO_CFG_LIB_SCSI_sep_sn_query=true */
+    ASSERT_RC(setenv("PHOBOS_LIB_SCSI_sep_sn_query", "true", 1));
     test_lib_adapter();
 
     exit(EXIT_SUCCESS);

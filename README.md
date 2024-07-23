@@ -104,7 +104,7 @@ instance IBM libraries, one can't query a drive's serial number and it's volume
 label in the same request. To prevent this, phobos can separate the query in two
 by activating the parameter 'sep_sn_query' in the section 'lib_scsi', as shown
 [here](doc/cfg/template.conf#L63), or as the environment variable
-'PHOBOS_LIB_SCSI_sep_sn_query=1'.
+'PHOBOS_LIB_SCSI_sep_sn_query=true'.
 
 ### Device and media management
 #### Adding drives

@@ -70,7 +70,7 @@ const struct pho_config_item cfg_lib_scsi[] = {
     [PHO_CFG_LIB_SCSI_sep_sn_query] = {
         .section = "lib_scsi",
         .name    = "sep_sn_query",
-        .value   = "0", /* no */
+        .value   = "false",
     },
     [PHO_CFG_LIB_SCSI_tlc_hostname] = TLC_HOSTNAME_CFG_ITEM,
     [PHO_CFG_LIB_SCSI_tlc_port] = TLC_PORT_CFG_ITEM,
