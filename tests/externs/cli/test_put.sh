@@ -126,8 +126,8 @@ test_extent_path
 function test_xxh128_checksum
 {
     # enable extent xxh128
-    PHOBOS_LAYOUT_RAID1_extent_xxh128="yes" \
-        $valg_phobos put --family dir /etc/hosts object_with_xxh128 ||
+    PHOBOS_LAYOUT_RAID1_extent_xxh128="true" \
+        $valg_phobos -vv put --family dir /etc/hosts object_with_xxh128 ||
             error "failed to put 'object_with_xxh128' object"
 
     local xxh128_value=$(xxh128sum /etc/hosts | awk '{print $1}')
@@ -144,7 +144,7 @@ function test_xxh128_checksum
     fi
 
     # disable extent xxh128
-    PHOBOS_LAYOUT_RAID1_extent_xxh128="no" \
+    PHOBOS_LAYOUT_RAID1_extent_xxh128="false" \
         $valg_phobos put --family dir /etc/hosts object_no_xxh128 ||
             error "failed to put 'object_no_xxh128' object"
 
@@ -166,7 +166,7 @@ fi
 function test_md5_checksum
 {
     # enable extent md5
-    PHOBOS_LAYOUT_RAID1_extent_md5="yes" \
+    PHOBOS_LAYOUT_RAID1_extent_md5="true" \
         $valg_phobos put --family dir /etc/hosts object_with_md5 ||
             error "failed to put 'object_with_md5' object"
 
@@ -182,7 +182,7 @@ function test_md5_checksum
     fi
 
     # disable extent md5
-    PHOBOS_LAYOUT_RAID1_extent_md5="no" \
+    PHOBOS_LAYOUT_RAID1_extent_md5="false" \
         $valg_phobos put --family dir /etc/hosts object_no_md5 ||
             error "failed to put 'object_no_md5' object"
 

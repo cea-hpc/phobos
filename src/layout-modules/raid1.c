@@ -162,18 +162,19 @@ const struct pho_config_item cfg_lyt_raid1[] = {
         .section = "layout_raid1",
         .name    = EXTENT_XXH128_ATTR_KEY,
 #ifdef HAVE_XXH128
-        .value   = "yes" /* extent XXH128 calculation is set by default */
+        .value   = "true" /* extent XXH128 calculation is set by default */
 #else
-        .value   = "no"  /* extent XXH128 calculation is unset if unavailable */
+        .value   = "false" /* extent XXH128 calculation is unset if unavailable
+                            */
 #endif
     },
     [PHO_CFG_LYT_RAID1_extent_md5] = {
         .section = "layout_raid1",
         .name    = EXTENT_MD5_ATTR_KEY,
 #ifdef HAVE_XXH128
-        .value   = "no"  /* extent MD5 calculation is unset by default */
+        .value   = "false"  /* extent MD5 calculation is unset by default */
 #else
-        .value   = "yes" /* extent MD5 calculation is set if XXH128 is unset */
+        .value   = "true" /* extent MD5 calculation is set if XXH128 is unset */
 #endif
     },
 };
@@ -1033,8 +1034,6 @@ static int layout_raid1_encode(struct pho_encoder *enc)
 {
     struct raid1_encoder *raid1 = xcalloc(1, sizeof(*raid1));
     const char *string_repl_count = NULL;
-    const char *extent_xxh128 = NULL;
-    const char *extent_md5 = NULL;
     char *string_obj_size = NULL;
     int rc;
 
@@ -1104,9 +1103,8 @@ static int layout_raid1_encode(struct pho_encoder *enc)
     raid1->n_released_media = 0;
 
     /* init XXH3 state */
-    extent_xxh128 = PHO_CFG_GET(cfg_lyt_raid1, PHO_CFG_LYT_RAID1,
-                                extent_xxh128);
-    if (extent_xxh128 && !strcmp(extent_xxh128, "yes")) {
+    if (PHO_CFG_GET_BOOL(cfg_lyt_raid1, PHO_CFG_LYT_RAID1, extent_xxh128,
+                         false)) {
 #ifdef HAVE_XXH128
         raid1->xxh128state = XXH3_createState();
         if (raid1->xxh128state == NULL)
@@ -1114,15 +1112,14 @@ static int layout_raid1_encode(struct pho_encoder *enc)
                        "Unable to create XXH128 state when creating raid1 "
                        "encoder");
 #else
-        pho_warn("extent_xxh128 is set to 'yes' in config for raid1 layout but "
+        pho_warn("extent_xxh128 is set to 'true' in config for raid1 layout but "
                  "xxhash-devel does not contain 128-bit XXH3 algorithm "
                  "(required xxhash-devel >= 0.8.0)");
 #endif
     }
 
     /* init EVP_MD_CTX */
-    extent_md5 = PHO_CFG_GET(cfg_lyt_raid1, PHO_CFG_LYT_RAID1, extent_md5);
-    if (extent_md5 && !strcmp(extent_md5, "yes"))
+    if (PHO_CFG_GET_BOOL(cfg_lyt_raid1, PHO_CFG_LYT_RAID1, extent_md5, false))
         raid1->md5ctx = EVP_MD_CTX_create();
 
     return 0;
