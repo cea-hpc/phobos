@@ -48,7 +48,6 @@
 #include "admin_utils.h"
 #include "import.h"
 #include "io_posix_common.h"
-#include "raid1.h"
 
 /**
  * Update media_info stats and push its new state to the DSS

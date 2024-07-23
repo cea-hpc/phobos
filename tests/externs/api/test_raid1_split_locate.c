@@ -31,7 +31,7 @@
 #include "pho_common.h" /* get_hostname */
 #include "pho_dss.h"
 #include "pho_types.h"
-#include "../layout-modules/raid1.h"
+#include "../layout-modules/raid1/raid1.h"
 #include "../dss/dss_lock.h"
 #include "test_setup.h"
 

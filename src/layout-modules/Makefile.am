@@ -1,10 +1,10 @@
 AM_CFLAGS= $(CC_OPT)
 
-noinst_HEADERS=raid1.h raid4/raid4.h
+noinst_HEADERS=raid1/raid1.h raid4/raid4.h
 
 pkglib_LTLIBRARIES=libpho_layout_raid1.la libpho_layout_raid4.la
 
-libpho_layout_raid1_la_SOURCES=raid1.c
+libpho_layout_raid1_la_SOURCES=raid1/raid1.c
 libpho_layout_raid1_la_CFLAGS=-fPIC $(AM_CFLAGS) -I../io-modules
 libpho_layout_raid1_la_LIBADD=../store/libphobos_store.la \
                               ../io-modules/libpho_io_adapter_posix.la
