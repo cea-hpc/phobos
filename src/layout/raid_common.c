@@ -387,9 +387,9 @@ static void raid_build_read_allocation_req(struct pho_encoder *dec,
         req->ralloc->med_ids[i]->family =
             dec->layout->extents[ext_idx].media.family;
         req->ralloc->med_ids[i]->name =
-            strdup(dec->layout->extents[ext_idx].media.name);
+            xstrdup(dec->layout->extents[ext_idx].media.name);
         req->ralloc->med_ids[i]->library =
-            strdup(dec->layout->extents[ext_idx].media.library);
+            xstrdup(dec->layout->extents[ext_idx].media.library);
     }
 }
 

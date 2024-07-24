@@ -171,6 +171,19 @@ function test_put_get()
     rm /tmp/out.$$ "$file"
 }
 
+function test_empty_put()
+{
+    local oid=$FUNCNAME
+    local file=$(mktemp)
+
+    $valg_phobos put "$file" $oid
+    check_extent_md $oid "$file"
+    $valg_phobos get $oid /tmp/out.$$
+
+    diff "$file" /tmp/out.$$
+    rm /tmp/out.$$ "$file"
+}
+
 function test_read_with_missing_extent()
 {
     local oid=$FUNCNAME
@@ -305,6 +318,7 @@ function test_put_get_split_with_missing_extents()
 TESTS=(
     "setup_dir even; \
      test_put_get; \
+     test_empty_put; \
      test_read_with_missing_extent; \
      test_with_different_block_size; \
      cleanup_dir"

@@ -118,18 +118,20 @@ static int layout_raid4_encode(struct pho_encoder *enc)
                                                PHO_CFG_LYT_RAID4,
                                                extent_xxh128,
                                                false));
+        if (rc)
+            goto out_hash;
     }
 
-    rc = raid_encoder_init(enc, &RAID4_MODULE_DESC, &RAID4_ENCODER_OPS,
-                           &RAID4_OPS);
-    if (rc)
-        return rc;
+    return raid_encoder_init(enc, &RAID4_MODULE_DESC, &RAID4_ENCODER_OPS,
+                             &RAID4_OPS);
 
-    /* Empty PUT does not need any IO */
-    if (io_context->write.to_write == 0)
-        enc->done = true;
+out_hash:
+    for (i -= 1; i >= 0; i--)
+        extent_hash_fini(&io_context->hashes[i]);
+    io_context->nb_hashes = 0;
 
-    return 0;
+    /* The rest will be free'd by layout_destroy */
+    return rc;
 }
 
 static int layout_raid4_decode(struct pho_encoder *dec)
