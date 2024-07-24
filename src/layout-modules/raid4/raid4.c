@@ -63,10 +63,11 @@ enum pho_cfg_params_raid4 {
     /* Actual parameters */
     PHO_CFG_LYT_RAID4_extent_xxh128,
     PHO_CFG_LYT_RAID4_extent_md5,
+    PHO_CFG_LYT_RAID4_check_hash,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_LYT_RAID4_FIRST = PHO_CFG_LYT_RAID4_extent_xxh128,
-    PHO_CFG_LYT_RAID4_LAST  = PHO_CFG_LYT_RAID4_extent_md5,
+    PHO_CFG_LYT_RAID4_LAST  = PHO_CFG_LYT_RAID4_check_hash,
 };
 
 const struct pho_config_item raid4_cfg_items[] = {
@@ -79,6 +80,11 @@ const struct pho_config_item raid4_cfg_items[] = {
         .section = "layout_raid4",
         .name    = "extent_md5",
         .value   = DEFAULT_MD5,
+    },
+    [PHO_CFG_LYT_RAID4_check_hash] = {
+        .section = "layout_raid4",
+        .name    = "check_hash",
+        .value   = DEFAULT_CHECK_HASH,
     },
 };
 
@@ -139,9 +145,16 @@ static int layout_raid4_decode(struct pho_encoder *dec)
     io_context->name = PLUGIN_NAME;
     io_context->n_data_extents = 2;
     io_context->n_parity_extents = 1;
-    io_context->nb_hashes = io_context->n_data_extents;
-    io_context->hashes = xcalloc(io_context->nb_hashes,
-                                 sizeof(*io_context->hashes));
+
+    io_context->read.check_hash = PHO_CFG_GET_BOOL(raid4_cfg_items,
+                                                   PHO_CFG_LYT_RAID4,
+                                                   check_hash, true);
+
+    if (io_context->read.check_hash) {
+        io_context->nb_hashes = io_context->n_data_extents;
+        io_context->hashes = xcalloc(io_context->nb_hashes,
+                                     sizeof(*io_context->hashes));
+    }
 
     rc = raid_decoder_init(dec, &RAID4_MODULE_DESC, &RAID4_ENCODER_OPS,
                            &RAID4_OPS);

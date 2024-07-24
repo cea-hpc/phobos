@@ -542,7 +542,7 @@ function test_put_get_split_with_missing_extents_corrupted()
 
             # Corrupt one extent available
             echo -ne \\xFF | dd conv=notrunc bs=1 count=1 of="$extent"
-            $valg_phobos get $oid $out &&
+            $phobos get $oid $out &&
                 error "phobos get $oid should have failed"
 
             cp "$copy" "$extent"
@@ -552,6 +552,51 @@ function test_put_get_split_with_missing_extents_corrupted()
         rm "$copy"
     done
 
+    rm "$file"
+}
+
+function test_put_get_without_check_hash()
+{
+    local oid=$FUNCNAME
+    local file=$(make_file 512k)
+
+    $valg_phobos put "$file" $oid
+    check_extent_md $oid "$file"
+
+    local addresses=($(get_extent_info "$oid" address))
+    local media=($(get_extent_info "$oid" media_name))
+
+    # We disable the check of the hash, the get should succeed
+    export PHOBOS_LAYOUT_RAID4_check_hash="false"
+
+    for (( i = 0; i < ${#addresses[@]}; i++ )); do
+        local copy=$(mktemp)
+        local extent="${media[i]}/${addresses[i]}"
+
+        # Lock the first dir to force the layout to use the xor when we corrupt
+        # it
+        if [[ $i -eq 2 ]]; then
+            $phobos dir lock "${media[0]}"
+        fi
+
+        cp "$extent" "$copy"
+
+        # Corrupt the extent
+        echo -ne \\xFF | dd conv=notrunc bs=1 count=1 of="$extent"
+        $phobos get $oid /tmp/out.$$
+
+        diff "$file" /tmp/out.$$ &&
+            error "$file and /tmp/out.$$ should be different"
+
+        if [[ $i -eq 2 ]]; then
+            $phobos dir unlock "${media[0]}"
+        fi
+
+        cp "$copy" "$extent"
+        rm "$copy" /tmp/out.$$
+    done
+
+    unset PHOBOS_LAYOUT_RAID4_check_hash
     rm "$file"
 }
 
@@ -588,12 +633,15 @@ TESTS=(
      cleanup_dir_split"
 )
 
+# FIXME when raid1 can compute the hash of extents at get, these tests can be
+# merged with the tests above
 if [[ $RAID_LAYOUT == "raid4" ]]; then
     TESTS+=(
         "setup_dir even; \
          test_put_get_corrupted; \
          test_put_get_without_xxh128; \
          test_read_with_missing_extent_corrupted; \
+         test_put_get_without_check_hash; \
          cleanup_dir"
         "setup_dir_split even; \
          test_put_get_split_corrupted; \
@@ -606,6 +654,7 @@ if [[ $RAID_LAYOUT == "raid4" ]]; then
          test_put_get_corrupted; \
          test_put_get_without_xxh128; \
          test_read_with_missing_extent_corrupted; \
+         test_put_get_without_check_hash; \
          cleanup_dir"
         "setup_dir_split odd; \
          test_put_get_split_corrupted; \

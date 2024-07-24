@@ -61,10 +61,12 @@ static int write_with_xor(struct pho_encoder *dec,
             LOG_RETURN(-errno, "Failed to read file");
         pho_debug("part1_size: %ld", part1_size);
 
-        rc = extent_hash_update(&io_context->hashes[0],
-                                io_context->buffers[0].buff, part1_size);
-        if (rc)
-            return rc;
+        if (io_context->read.check_hash) {
+            rc = extent_hash_update(&io_context->hashes[0],
+                                    io_context->buffers[0].buff, part1_size);
+            if (rc)
+                return rc;
+        }
 
         // XOR
         part2_size = ioa_read(iod2->iod_ioa, iod2,
@@ -75,10 +77,12 @@ static int write_with_xor(struct pho_encoder *dec,
 
         pho_debug("part2_size: %ld", part2_size);
 
-        rc = extent_hash_update(&io_context->hashes[1],
-                                io_context->buffers[1].buff, part2_size);
-        if (rc)
-            return rc;
+        if (io_context->read.check_hash) {
+            rc = extent_hash_update(&io_context->hashes[1],
+                                    io_context->buffers[1].buff, part2_size);
+            if (rc)
+                return rc;
+        }
 
         if (part1_size != part2_size) {
             /* Since the xor is always associated with iod2 and each buffer is
@@ -122,15 +126,17 @@ static int write_with_xor(struct pho_encoder *dec,
             break;
     }
 
-    for (i = 0; i < io_context->n_data_extents; i++) {
-        rc = extent_hash_digest(&io_context->hashes[i]);
-        if (rc)
-            return rc;
+    if (io_context->read.check_hash) {
+        for (i = 0; i < io_context->n_data_extents; i++) {
+            rc = extent_hash_digest(&io_context->hashes[i]);
+            if (rc)
+                return rc;
 
-        rc = extent_hash_compare(&io_context->hashes[i],
-                                 io_context->read.extents[i]);
-        if (rc)
-            return rc;
+            rc = extent_hash_compare(&io_context->hashes[i],
+                                     io_context->read.extents[i]);
+            if (rc)
+                return rc;
+        }
     }
 
     return 0;
@@ -168,11 +174,13 @@ static int write_without_xor(struct pho_encoder *dec,
         if (rc < 0)
             LOG_RETURN(-errno, "Failed to write in file");
 
-        rc = extent_hash_update(&io_context->hashes[0],
-                                io_context->buffers[0].buff,
-                                data_read);
-        if (rc)
-            return rc;
+        if (io_context->read.check_hash) {
+            rc = extent_hash_update(&io_context->hashes[0],
+                                    io_context->buffers[0].buff,
+                                    data_read);
+            if (rc)
+                return rc;
+        }
 
         written += data_read;
         data_read = ioa_read(iod2->iod_ioa, iod2,
@@ -186,24 +194,28 @@ static int write_without_xor(struct pho_encoder *dec,
         if (rc < 0)
             LOG_RETURN(-errno, "Failed to write in file");
 
-        rc = extent_hash_update(&io_context->hashes[1],
-                                io_context->buffers[0].buff,
-                                data_read);
-        if (rc)
-            return rc;
+        if (io_context->read.check_hash) {
+            rc = extent_hash_update(&io_context->hashes[1],
+                                    io_context->buffers[0].buff,
+                                    data_read);
+            if (rc)
+                return rc;
+        }
 
         written += data_read;
     }
 
-    for (i = 0; i < io_context->n_data_extents; i++) {
-        rc = extent_hash_digest(&io_context->hashes[i]);
-        if (rc)
-            return rc;
+    if (io_context->read.check_hash) {
+        for (i = 0; i < io_context->n_data_extents; i++) {
+            rc = extent_hash_digest(&io_context->hashes[i]);
+            if (rc)
+                return rc;
 
-        rc = extent_hash_compare(&io_context->hashes[i],
-                                 io_context->read.extents[i]);
-        if (rc)
-            return rc;
+            rc = extent_hash_compare(&io_context->hashes[i],
+                                     io_context->read.extents[i]);
+            if (rc)
+                return rc;
+        }
     }
 
     return 0;

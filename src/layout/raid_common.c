@@ -805,16 +805,18 @@ static int read_split_setup(struct pho_encoder *dec,
     for (i = 0; i < n_extents; i++)
         pho_buff_alloc(&io_context->buffers[i], dec->io_block_size);
 
-    for (i = 0; i < io_context->nb_hashes; i++) {
-        rc = extent_hash_init(&io_context->hashes[i],
-                              io_context->read.extents[i]->with_md5,
-                              io_context->read.extents[i]->with_xxh128);
-        if (rc)
-            return rc;
+    if (io_context->read.check_hash) {
+        for (i = 0; i < io_context->nb_hashes; i++) {
+            rc = extent_hash_init(&io_context->hashes[i],
+                                  io_context->read.extents[i]->with_md5,
+                                  io_context->read.extents[i]->with_xxh128);
+            if (rc)
+                return rc;
 
-        rc = extent_hash_reset(&io_context->hashes[i]);
-        if (rc)
-            return rc;
+            rc = extent_hash_reset(&io_context->hashes[i]);
+            if (rc)
+                return rc;
+        }
     }
 
     return 0;

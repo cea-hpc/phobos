@@ -33,6 +33,7 @@
 #define DEFAULT_XXH128 "false"
 #define DEFAULT_MD5    "true"
 #endif
+#define DEFAULT_CHECK_HASH "true"
 
 struct extent_hash {
 #if HAVE_XXH128
@@ -47,6 +48,7 @@ struct read_io_context {
     pho_resp_read_t *resp;
     size_t to_read;
     struct extent **extents;
+    bool check_hash;
 };
 
 struct write_io_context {
@@ -113,9 +115,10 @@ struct raid_io_context {
     /**
      * A list of hashes that are computed while the extent is written.
      * The number of elements in this list is layout specific. The list
-     * must be allocated by the encoder. For now, this is only used for writes
-     * but may be useful in the future when hashes are recomputed during read to
-     * check for consistency.
+     * must be allocated by the encoder.
+     *
+     * When reading an extent, the hash can be recomputed and checked with the
+     * hash in the DSS.
      */
     struct extent_hash *hashes;
     /** Size of \p hashes, initialized by the layout */
