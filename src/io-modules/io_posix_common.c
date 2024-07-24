@@ -673,7 +673,7 @@ static int path_from_fd(int fd, char **path)
     if (rc == -1)
         GOTO(free_fd_path, rc = -errno);
 
-    *path = xmalloc(stat.st_size);
+    *path = xmalloc(stat.st_size + 1);
 
     rc = readlink(fd_path, *path, stat.st_size);
     if (rc == -1)

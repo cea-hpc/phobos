@@ -126,8 +126,8 @@ test_io_LDADD+=$(ADMIN_LIB)
 endif
 
 test_layout_module_SOURCES=test_layout_module.c
-test_layout_module_LDADD=$(LAYOUT_LIB) $(RAID1_LIB) $(CFG_LIB) $(COMMON_LIB) \
-                         -ldl
+test_layout_module_LDADD=$(LAYOUT_LIB) $(IO_POSIX_LIB) $(RAID1_LIB) $(CFG_LIB) \
+                         $(COMMON_LIB) -ldl
 test_layout_module_CFLAGS=$(AM_CFLAGS) -I..
 
 test_ldm_SOURCES=test_ldm.c

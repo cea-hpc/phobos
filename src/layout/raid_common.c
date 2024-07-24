@@ -86,7 +86,8 @@ static void close_posix_iod(struct pho_encoder *enc)
 {
     struct raid_io_context *io_context = enc->priv_enc;
 
-    ioa_close(io_context->posix.iod_ioa, &io_context->posix);
+    if (io_context->posix.iod_ioa)
+        ioa_close(io_context->posix.iod_ioa, &io_context->posix);
 }
 
 int raid_encoder_init(struct pho_encoder *enc,
@@ -108,7 +109,12 @@ int raid_encoder_init(struct pho_encoder *enc,
      * function on error.
      */
     enc->ops = enc_ops;
-    enc->layout->layout_desc = *module;
+    /* Do not copy mod_attrs as it may have been modified by the caller before
+     * this function is called.
+     */
+    enc->layout->layout_desc.mod_name = module->mod_name;
+    enc->layout->layout_desc.mod_minor = module->mod_minor;
+    enc->layout->layout_desc.mod_major = module->mod_major;
     io_context->ops = raid_ops;
 
     /* Build the extent attributes from the object ID and the user provided
@@ -124,10 +130,9 @@ int raid_encoder_init(struct pho_encoder *enc,
     }
 
     rc = init_posix_iod(enc);
-    if (rc) {
-        free(io_context);
+    if (rc)
+        /* io_context is free'd by layout_destroy */
         return rc;
-    }
 
     io_context->write.written_extents = g_array_new(FALSE, TRUE,
                                                     sizeof(struct extent));
@@ -190,6 +195,9 @@ int raid_decoder_init(struct pho_encoder *dec,
     struct raid_io_context *io_context = dec->priv_enc;
     size_t n_extents = n_total_extents(io_context);
     int rc;
+
+    if (dec->xfer->xd_fd < 0)
+        LOG_RETURN(rc = -EBADF, "Invalid decoder xfer file descriptor");
 
     assert(dec->is_decoder);
 
@@ -285,8 +293,7 @@ static struct pho_io_descr *raid_enc_iod(struct pho_encoder *enc, size_t i)
     return &io_context->iods[i];
 }
 
-static struct pho_ext_loc make_ext_location(struct pho_encoder *enc,
-                                            size_t i)
+struct pho_ext_loc make_ext_location(struct pho_encoder *enc, size_t i)
 {
     return (struct pho_ext_loc) {
         .root_path = raid_enc_root_path(enc, i),
@@ -320,8 +327,11 @@ static int raid_io_context_open(struct raid_io_context *io_context,
     return 0;
 
 out_close:
-    for (i = i - 1; i >= 0; i--) {
-        struct pho_io_descr *iod = raid_enc_iod(enc, i);
+    while (i > 0) {
+        struct pho_io_descr *iod;
+
+        i--;
+        iod = raid_enc_iod(enc, i);
 
         ioa_close(iod->iod_ioa, iod);
     }
@@ -395,7 +405,8 @@ static void raid_build_read_allocation_req(struct pho_encoder *dec,
 
 static void raid_io_context_set_extent_info(struct raid_io_context *io_context,
                                             pho_resp_write_elt_t **medium,
-                                            int extent_idx, size_t extent_size)
+                                            int extent_idx, size_t extent_size,
+                                            size_t offset)
 {
     struct extent *extents = io_context->write.extents;
     int i;
@@ -404,6 +415,7 @@ static void raid_io_context_set_extent_info(struct raid_io_context *io_context,
         extents[i].uuid = generate_uuid();
         extents[i].layout_idx = extent_idx + i;
         extents[i].size = extent_size;
+        extents[i].offset = offset;
         extents[i].media.family = (enum rsc_family)medium[i]->med_id->family;
 
         pho_id_name_set(&extents[i].media, medium[i]->med_id->name,
@@ -447,10 +459,15 @@ static int write_split_setup(struct pho_encoder *enc, pho_resp_write_t *wresp,
 {
     struct raid_io_context *io_context = enc->priv_enc;
     struct pho_io_descr *iods;
+    size_t left_to_write;
+    size_t object_size;
     size_t buffer_size;
     size_t n_extents;
     int rc;
     int i;
+
+    object_size = enc->xfer->xd_params.put.size;
+    left_to_write = io_context->write.to_write;
 
     n_extents = n_total_extents(io_context);
     iods = io_context->iods;
@@ -469,7 +486,8 @@ static int write_split_setup(struct pho_encoder *enc, pho_resp_write_t *wresp,
                           io_context->write.user_md);
     raid_io_context_set_extent_info(io_context, wresp->media,
                                     io_context->current_split * n_extents,
-                                    split_size);
+                                    split_size,
+                                    object_size - left_to_write);
     rc = raid_io_context_open(io_context, enc, n_extents);
     if (rc)
         return rc;
@@ -840,6 +858,8 @@ static int raid_enc_handle_write_resp(struct pho_encoder *enc,
         rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
                    resp->walloc->media[i]->med_id);
         (*reqs)[*n_reqs].release->media[i]->to_sync = true;
+        (*reqs)[*n_reqs].release->media[i]->size_written = 0;
+        (*reqs)[*n_reqs].release->media[i]->nb_extents_written = 0;
 
         if (resp->walloc->media[i]->avail_size < split_size)
             split_size = resp->walloc->media[i]->avail_size;
@@ -848,14 +868,13 @@ static int raid_enc_handle_write_resp(struct pho_encoder *enc,
     io_context->write.resp = resp->walloc;
     rc = write_split_setup(enc, resp->walloc, split_size);
     if (rc)
-        return rc;
+        goto skip_io;
 
     /* Perform IO and populate release request with the outcome */
     rc = io_context->ops->write_split(enc, split_size);
 
+skip_io:
     rc = write_split_fini(enc, rc, (*reqs)[*n_reqs].release, split_size);
-    if (rc)
-        return rc;
 
     (*n_reqs)++;
 
@@ -882,19 +901,20 @@ static int raid_enc_handle_read_resp(struct pho_encoder *dec, pho_resp_t *resp,
                                    resp->ralloc->n_media,
                                    &split_size);
     if (rc)
-        return rc;
+        goto skip_io;
 
     rc = io_context->ops->read_split(dec);
-
-    for (i = 0; i < resp->ralloc->n_media; i++) {
-        (*reqs)[*n_reqs].release->media[i]->rc = rc;
-        (*reqs)[*n_reqs].release->media[i]->to_sync = false;
-    }
 
     for (i = 0; i < io_context->n_data_extents; i++) {
         struct pho_io_descr *iod = &io_context->iods[i];
 
         ioa_close(iod->iod_ioa, iod);
+    }
+
+skip_io:
+    for (i = 0; i < resp->ralloc->n_media; i++) {
+        (*reqs)[*n_reqs].release->media[i]->rc = rc;
+        (*reqs)[*n_reqs].release->media[i]->to_sync = false;
     }
 
     for (i = 0; i < n_total_extents(io_context); i++)

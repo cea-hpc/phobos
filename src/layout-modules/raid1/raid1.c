@@ -47,7 +47,7 @@
 #include "pho_srl_common.h"
 #include "pho_type_utils.h"
 #include "raid1.h"
-#include "io_posix_common.h"
+#include "raid_common.h"
 
 #define PLUGIN_NAME     "raid1"
 #define PLUGIN_MAJOR    0
@@ -57,85 +57,6 @@ static struct module_desc RAID1_MODULE_DESC = {
     .mod_name  = PLUGIN_NAME,
     .mod_major = PLUGIN_MAJOR,
     .mod_minor = PLUGIN_MINOR,
-};
-
-/**
- * Raid1 layout specific data.
- *
- * A raid1 layout writes repl_count copies of the data.
- *
- * This value is the number of data replicas, so a replica count of 1 means
- * that there is only one copy of the data (the original), and 0 additional
- * copies of it. Therefore, a replica count of 2 means the original copy of the
- * data, plus 1 additional copy.
- *
- * It potentially splits it on several extents if there is no convenient
- * available space on media provided by lrs. There are repl_count copies of each
- * extent.
- *
- * In the layout all extents copies are flattened as different extents:
- * - extents with index from 0 to repl_count - 1 are the repl_count copies of
- *   the first split,
- * - extents with index from repl_count to 2*repl_count - 1 are the
- *   repl_count copies of the second split,
- * - ...
- *
- * With replica_id from 0 to repl_count - 1, the flattened layout extent index
- * is : raid1_encoder.cur_extent_idx * raid1_encoder.repl_count + repl_id .
- *
- * To put an object of a written size of 0, we create an extent of null size to
- * really have a residual null size object on media.
- */
-struct raid1_encoder {
-    unsigned int repl_count;
-    size_t       to_write;          /**< Amount of data to read/write */
-    unsigned int cur_extent_idx;    /**< Current extent index */
-    bool         requested_alloc;   /**< Whether an unanswer medium allocation
-                                      *  has been requested by the encoder
-                                      *  or not
-                                      */
-
-    /* The following two fields are only used when writing */
-    /** Extents written (appended as they are written) */
-    GArray *written_extents;
-
-    /**
-     * Set of media to release (key: media_id str, value: refcount), used to
-     * ensure that all written media have also been released (and therefore
-     * flushed) when writing.
-     *
-     * We use a refcount as value to manage multiple extents written on same
-     * medium.
-     */
-    GHashTable *to_release_media;
-
-    /**
-     * Nb media released
-     *
-     * We increment for each medium release response. Same medium used two
-     * different times for two different extents will increment two times this
-     * counter.
-     *
-     * Except from null sized put, the end of the write is checked by
-     * nb_released_media == written_extents->len .
-     */
-    size_t n_released_media;
-
-    /**
-     *  A ready to use context to compute XXH128 when needed.
-     *  NULL if not used.
-     */
-    #ifdef HAVE_XXH128
-        XXH3_state_t *xxh128state;
-    #else
-        void *xxh128state;
-    #endif
-
-    /**
-     *  A ready to use context to compute MD5 when needed.
-     *  NULL if not used.
-     */
-    EVP_MD_CTX *md5ctx;
 };
 
 /**
@@ -161,74 +82,20 @@ const struct pho_config_item cfg_lyt_raid1[] = {
     [PHO_CFG_LYT_RAID1_extent_xxh128] = {
         .section = "layout_raid1",
         .name    = EXTENT_XXH128_ATTR_KEY,
-#ifdef HAVE_XXH128
-        .value   = "true" /* extent XXH128 calculation is set by default */
-#else
-        .value   = "false" /* extent XXH128 calculation is unset if unavailable
-                            */
-#endif
+        .value   = DEFAULT_XXH128,
     },
     [PHO_CFG_LYT_RAID1_extent_md5] = {
         .section = "layout_raid1",
         .name    = EXTENT_MD5_ATTR_KEY,
-#ifdef HAVE_XXH128
-        .value   = "false"  /* extent MD5 calculation is unset by default */
-#else
-        .value   = "true" /* extent MD5 calculation is set if XXH128 is unset */
-#endif
+        .value   = DEFAULT_MD5
     },
 };
-
-/**
- * Add a media to release with an initial refcount of 1
- */
-static void add_new_to_release_media(struct raid1_encoder *raid1,
-                                     const char *media_id)
-{
-    size_t *new_ref_count;
-    gboolean was_not_in;
-    char *new_media_id;
-
-    /* alloc and set new ref count */
-    new_ref_count = xmalloc(sizeof(*new_ref_count));
-    *new_ref_count = 1;
-
-    /* alloc new media_id */
-    new_media_id = xstrdup(media_id);
-
-    was_not_in = g_hash_table_insert(raid1->to_release_media, new_media_id,
-                                     new_ref_count);
-    assert(was_not_in);
-}
-
-/**
- * Add a written extent to the raid1 encoder and add the medium to release
- */
-static void add_written_extent(struct raid1_encoder *raid1,
-                               struct extent *extent)
-{
-    size_t *to_release_refcount;
-    const char *media_id;
-
-    /* add extent to written ones */
-    g_array_append_val(raid1->written_extents, *extent);
-
-    /* add medium to be released */
-    media_id = extent->media.name;
-    to_release_refcount = g_hash_table_lookup(raid1->to_release_media,
-                                              media_id);
-    /* existing media_id to release */
-    if (to_release_refcount != NULL)
-        ++(*to_release_refcount);
-    else
-        /* new media_id to release */
-        add_new_to_release_media(raid1, media_id);
-}
 
 int raid1_repl_count(struct layout_info *layout, unsigned int *repl_count)
 {
     const char *string_repl_count = pho_attr_get(&layout->layout_desc.mod_attrs,
                                                  PHO_EA_RAID1_REPL_COUNT_NAME);
+
     if (string_repl_count == NULL)
         /* Ensure we can read objects from the old schema, which have the
          * replica count under the name 'repl_count' and not 'raid1.repl_count'
@@ -237,128 +104,64 @@ int raid1_repl_count(struct layout_info *layout, unsigned int *repl_count)
                                          "repl_count");
 
     if (string_repl_count == NULL)
-        LOG_RETURN(-EINVAL, "Unable to get replica count from layout attrs");
+        LOG_RETURN(-ENOENT, "Unable to get replica count from layout attrs");
 
     errno = 0;
     *repl_count = strtoul(string_repl_count, NULL, 10);
-    if (errno != 0)
-        return -errno;
-
-    if (!*repl_count)
-        LOG_RETURN(-EINVAL, "invalid 0 replica count");
+    if (errno != 0 || *repl_count == 0)
+        LOG_RETURN(-EINVAL, "Invalid replica count '%s'", string_repl_count);
 
     return 0;
 }
 
-/**
- * Fill an extent structure, except the adress field, which is usually set by
- * a future call to ioa_open.
- *
- * @param[out] extent      extent to fill
- * @param[in]  state       state of the extent
- * @param[in]  media       media on which the extent is written
- * @param[in]  layout_idx  index of this extent in the layout
- * @param[in]  extent_size size of the extent in byte
- */
-static void set_extent_info(struct extent *extent, enum extent_state state,
-                            const pho_resp_write_elt_t *medium, ssize_t offset,
-                            int layout_idx, ssize_t extent_size)
+static int write_all_chunks(struct raid_io_context *io_context,
+                            size_t split_size)
 {
-    extent->state = state;
-    extent->layout_idx = layout_idx;
-    extent->size = extent_size;
-    extent->offset = offset;
-    extent->media.family = (enum rsc_family)medium->med_id->family;
-    pho_id_name_set(&extent->media, medium->med_id->name,
-                    medium->med_id->library);
-
-    extent->uuid = generate_uuid();
-}
-
-/**
- * Write count bytes from input_fd in each iod and update corresponding
- * checksum if needed
- *
- * Bytes are read from input_fd and stored to an intermediate buffer before
- * being written into each iod.
- *
- * @input[in,out]   xxh128state     XXH128 context to update if not NULL
- * @input[in,out]   md5ctx          MD5 context to update if not NULL
- *
- * @return 0 if success, else a negative error code
- */
-#ifdef HAVE_XXH128
-static int write_all_chunks(int input_fd, struct io_adapter_module **ioa,
-                            struct pho_io_descr *iod,
-                            unsigned int replica_count, size_t buffer_size,
-                            size_t count, XXH3_state_t *xxh128state,
-                            EVP_MD_CTX *md5ctx)
-#else
-static int write_all_chunks(int input_fd, struct io_adapter_module **ioa,
-                            struct pho_io_descr *iod,
-                            unsigned int replica_count, size_t buffer_size,
-                            size_t count, void *xxh128state,
-                            EVP_MD_CTX *md5ctx)
-#endif
-{
-#define MAX_NULL_READ_TRY 10
-    int nb_null_read_try = 0;
-    size_t to_write = count;
+    struct pho_io_descr *posix = &io_context->posix;
+    size_t to_write = split_size;
+    struct pho_io_descr *iods;
+    size_t buffer_size;
+    size_t repl_count;
     char *buffer;
     int rc = 0;
 
-    /* alloc buffer */
-    buffer = xmalloc(buffer_size);
+    buffer = io_context->buffers[0].buff;
+    buffer_size = io_context->buffers[0].size;
+    repl_count = io_context->n_data_extents + io_context->n_parity_extents;
+    iods = io_context->iods;
 
     while (to_write > 0) {
-        ssize_t buf_size;
+        ssize_t read_size;
         int i;
 
-        buf_size = read(input_fd, buffer,
-                        to_write > buffer_size ? buffer_size : to_write);
-        if (buf_size < 0)
-            LOG_GOTO(out, rc = -errno, "Error on loading buffer in raid1 write,"
-                                       " %zu remaning bytes", to_write);
-
-        if (buf_size == 0) {
-            ++nb_null_read_try;
-            if (nb_null_read_try > MAX_NULL_READ_TRY)
-                LOG_GOTO(out, rc = -EIO, "Too many null read in raid1 write, "
-                                         "%zu remaining bytes", to_write);
-
-            continue;
-        }
+        read_size = ioa_read(posix->iod_ioa, posix, buffer,
+                             to_write > buffer_size ? buffer_size : to_write);
+        if (read_size < 0)
+            LOG_RETURN(rc,
+                       "Error when read buffer in raid1 write, "
+                       "%zu remaning bytes",
+                       to_write);
 
         /* TODO manage as async/parallel IO */
-        for (i = 0; i < replica_count; ++i) {
-            rc = ioa_write(ioa[i], &iod[i], buffer, buf_size);
+        for (i = 0; i < repl_count; ++i) {
+            rc = ioa_write(iods[i].iod_ioa, &iods[i], buffer, read_size);
             if (rc)
-                LOG_GOTO(out, rc, "Unable to write %zu bytes in replica %d "
-                                  "in raid1 write, %zu remaining bytes",
-                                  buf_size, i, to_write);
+                LOG_RETURN(rc,
+                           "RAID1 write: unable to write %zu bytes in replica "
+                           "%d, %zu remaining bytes",
+                           read_size, i, to_write);
 
             /* update written iod size */
-            iod[i].iod_size += buf_size;
+            iods[i].iod_size += read_size;
         }
 
-#ifdef HAVE_XXH128
-        if (xxh128state &&
-            XXH3_128bits_update(xxh128state, buffer, buf_size) == XXH_ERROR)
-            LOG_GOTO(out, rc = -ENOMEM,
-                     "Unable to update XXH128 in raid1 write, buffer of %zu "
-                     "bytes with %zu remaining bytes", buf_size, to_write);
-#endif
+        rc = extent_hash_update(&io_context->hashes[0], buffer, read_size);
+        if (rc)
+            return rc;
 
-        if (md5ctx && EVP_DigestUpdate(md5ctx, buffer, buf_size) == 0)
-            LOG_GOTO(out, rc = -ENOMEM,
-                     "Unable to update MD5 in raid1 write, buffer of %zu bytes "
-                     "with %zu remaining bytes", buf_size, to_write);
-
-        to_write -= buf_size;
+        to_write -= read_size;
     }
 
-out:
-    free(buffer);
     return rc;
 }
 
@@ -382,7 +185,7 @@ static int set_layout_specific_md(int layout_index, int replica_count,
 
     pho_attr_set(&iod->iod_attrs, PHO_EA_RAID1_REPL_COUNT_NAME, str_buffer);
 
-    rc = pho_posix_set_md(NULL, iod);
+    return 0;
 
 attrs_free:
     pho_attrs_free(&iod->iod_attrs);
@@ -390,219 +193,51 @@ attrs_free:
     return rc;
 }
 
-/**
- * Write extents in media provided by \a wresp and fill \a rreq release requests
- *
- * As many extents as \a enc repl_count. One per medium.
- * All written extents will have the same size limited by the minimum of
- * \a enc size to write and the minimum available size of media.
- *
- * @param[in/out] enc   raid1 encoder
- * @param[in]     wresp write media allocation response
- * @param[in/out] rreq  release requests
- *
- * @return 0 if success, else a negative error code
- */
-static int multiple_enc_write_chunk(struct pho_encoder *enc,
-                                    pho_resp_write_t *wresp,
-                                    pho_req_release_t *rreq)
+static int raid1_write_split(struct pho_encoder *enc, size_t split_size)
 {
-    size_t object_size = enc->xfer->xd_params.put.size;
-    struct raid1_encoder *raid1 = enc->priv_enc;
-    struct io_adapter_module **ioa = NULL;
-    unsigned char md5[MD5_BYTE_LENGTH];
-    struct pho_io_descr *iod = NULL;
-    struct pho_ext_loc *loc = NULL;
-    struct extent *extent = NULL;
-#ifdef HAVE_XXH128
-    XXH128_hash_t xxh128;
-#endif
-    size_t extent_size;
+    struct raid_io_context *io_context = enc->priv_enc;
+    size_t repl_count = io_context->n_data_extents +
+        io_context->n_parity_extents;
+    struct pho_io_descr *iods;
     int rc = 0;
     int i;
 
-    /* initial checks */
-    if (wresp->n_media != raid1->repl_count)
-        LOG_RETURN(-EINVAL, "Received %zu media but %u were needed in write "
-                            "raid1 encoder",
-                            wresp->n_media, raid1->repl_count);
+    iods = io_context->iods;
 
-    if (enc->xfer->xd_fd < 0)
-        LOG_RETURN(-EBADF, "Invalid encoder xfer file descriptor in write "
-                            "raid1 encoder");
-
-    /* get all ioa */
-    ioa = xcalloc(raid1->repl_count, sizeof(*ioa));
-
-    for (i = 0; i < raid1->repl_count; ++i) {
-        rc = get_io_adapter((enum fs_type)wresp->media[i]->fs_type, &ioa[i]);
-        if (rc)
-            LOG_GOTO(out, rc,
-                     "Unable to get io_adapter in raid1 encoder write");
-    }
-
-    /* write size is limited by the smallest available place on all media */
-    extent_size = raid1->to_write;
-    for (i = 0; i < raid1->repl_count; ++i)
-        if (wresp->media[i]->avail_size < extent_size)
-            extent_size = wresp->media[i]->avail_size;
-
-    /* prepare all extents */
-    extent = xcalloc(raid1->repl_count, sizeof(*extent));
-
-    for (i = 0; i < raid1->repl_count; ++i)
-        set_extent_info(&extent[i], PHO_EXT_ST_PENDING, wresp->media[i],
-                        (ssize_t) (object_size - raid1->to_write),
-                        raid1->cur_extent_idx * raid1->repl_count + i,
-                        extent_size);
-        /* extent[i]->address will be filled by ioa_open */
-
-    /* prepare all iod and loc */
-    iod = xcalloc(raid1->repl_count, sizeof(*iod));
-    loc = xcalloc(raid1->repl_count, sizeof(*loc));
-
-    for (i = 0; i < raid1->repl_count; ++i) {
-        /* set loc */
-        loc[i].root_path = wresp->media[i]->root_path;
-        loc[i].extent = &extent[i];
-        loc[i].addr_type = (enum address_type)wresp->media[i]->addr_type;
-        /* set iod */
-        iod[i].iod_flags = PHO_IO_REPLACE | PHO_IO_NO_REUSE;
-        /* iod[i].iod_fd is replaced by a buffer in open/write/close api */
-        /* iod[i].iod_size starts from 0 and will be updated by each write */
-        iod[i].iod_size = 0;
-        iod[i].iod_loc = &loc[i];
-
-        /* iod_ctx will be set by open */
-    }
-
-    /* open all iod */
-    for (i = 0; i < raid1->repl_count; ++i) {
-        rc = ioa_open(ioa[i], enc->xfer->xd_objid, &iod[i], true);
-        if (rc)
-            LOG_GOTO(close, rc, "Unable to open extent %s in raid1 write",
-                     extent[i].address.buff);
-
-        get_preferred_io_block_size(&enc->io_block_size, ioa[i], &iod[i]);
-        pho_debug("I/O size for replicate %d: %zu", i, enc->io_block_size);
-    }
-
-#ifdef HAVE_XXH128
-    /* Init xxh128state */
-    if (raid1->xxh128state) {
-        if (XXH3_128bits_reset(raid1->xxh128state) == XXH_ERROR)
-            LOG_GOTO(close, rc = -ENOMEM,
-                     "Unable to init XXH128 state in raid1 encoder write");
-    }
-#endif
-
-    /* Init md5ctx */
-    if (raid1->md5ctx) {
-        if (EVP_DigestInit_ex(raid1->md5ctx, EVP_md5(), NULL) == 0)
-            LOG_GOTO(close, rc = -ENOMEM,
-                     "Unable to init MD5 context in raid1 encoder write");
+    for (i = 0; i < repl_count; ++i) {
+        get_preferred_io_block_size(&enc->io_block_size,
+                                    iods[i].iod_ioa,
+                                    &iods[i]);
     }
 
     /* write all extents by chunk of buffer size*/
-    rc = write_all_chunks(enc->xfer->xd_fd, ioa, iod,
-                          raid1->repl_count, enc->io_block_size,
-                          extent_size, raid1->xxh128state, raid1->md5ctx);
+    rc = write_all_chunks(io_context, split_size);
     if (rc)
-        LOG_GOTO(close, rc, "Unable to write in raid1 encoder write");
+        LOG_RETURN(rc, "Unable to write in raid1 encoder write");
 
-#ifdef HAVE_XXH128
-    /* compute extent XXH128 */
-    if (raid1->xxh128state)
-        xxh128 = XXH3_128bits_digest(raid1->xxh128state);
-#endif
-
-    /* compute extent MD5 */
-    if (raid1->md5ctx) {
-        if (EVP_DigestFinal_ex(raid1->md5ctx, md5, NULL) == 0)
-            LOG_GOTO(close, rc = -ENOMEM,
-                     "Unable to produce MD5 in raid1 encoder write");
-    }
+    rc = extent_hash_digest(&io_context->hashes[0]);
+    if (rc)
+        return rc;
 
     if (rc == 0) {
-        /* copy XXH128 into extent */
-        for (i = 0; i < raid1->repl_count; i++) {
-#ifdef HAVE_XXH128
-            if (raid1->xxh128state) {
-                XXH128_canonical_t xxh128_canonical;
-
-                XXH128_canonicalFromHash(&xxh128_canonical, xxh128);
-                memcpy(&extent[i].xxh128[0], &xxh128_canonical.digest[0],
-                       sizeof(extent[i].xxh128));
-            }
-#endif
-
-            extent[i].with_xxh128 = raid1->xxh128state;
-        }
-
-        /* copy MD5 into extent */
-        for (i = 0; i < raid1->repl_count; i++) {
-            if (raid1->md5ctx)
-                memcpy(&extent[i].md5[0], &md5[0], MD5_BYTE_LENGTH);
-
-            extent[i].with_md5 = raid1->md5ctx;
+        for (i = 0; i < repl_count; i++) {
+            rc = extent_hash_copy(&io_context->hashes[0],
+                                  &io_context->write.extents[i]);
+            if (rc)
+                return rc;
         }
     }
 
-    for (i = 0; i < raid1->repl_count; ++i) {
-        struct object_metadata object_md = {
-            .object_attrs = enc->xfer->xd_attrs,
-            .object_size = enc->xfer->xd_params.put.size,
-            .object_version = enc->xfer->xd_version,
-            .layout_name = PHO_EA_RAID1_LAYOUT,
-            .object_uuid = enc->xfer->xd_objuuid,
-        };
+    for (i = 0; i < repl_count; ++i) {
+        struct extent *extent = &io_context->write.extents[i];
 
-        rc = set_object_md(ioa[i], &iod[i], &object_md);
+        rc = set_layout_specific_md(extent->layout_idx, repl_count, &iods[i]);
         if (rc)
-            LOG_GOTO(close, rc,
-                     "Failed to set general attributes to extent '%s'",
-                     extent[i].uuid);
-
-        rc = set_layout_specific_md(extent[i].layout_idx, raid1->repl_count,
-                                    &iod[i]);
-        if (rc)
-            LOG_GOTO(close, rc,
-                     "Failed to set layout specific attributes to extent '%s'",
-                     extent[i].uuid);
+            LOG_RETURN(rc,
+                       "Failed to set layout specific attributes on extent "
+                       "'%s'", extent[i].uuid);
     }
 
-close:
-    for (i = 0; i < raid1->repl_count; ++i) {
-        int rc2;
-
-        rc2 = ioa_close(ioa[i], &iod[i]);
-        if (!rc && rc2)
-            rc = rc2;
-    }
-
-    /* update size in write encoder */
-    if (rc == 0) {
-        raid1->to_write -= extent_size;
-        raid1->cur_extent_idx++;
-    }
-
-    /* update all release requests */
-    for (i = 0; i < raid1->repl_count; ++i) {
-        rreq->media[i]->rc = rc;
-        rreq->media[i]->size_written = iod[i].iod_size;
-        rreq->media[i]->nb_extents_written = 1;
-    }
-
-    /* add all written extents */
-    if (!rc)
-        for (i = 0; i < raid1->repl_count; ++i)
-            add_written_extent(raid1, &extent[i]);
-
-out:
-    free(loc);
-    free(iod);
-    free(extent);
-    free(ioa);
     return rc;
 }
 
@@ -610,417 +245,81 @@ out:
  * Read the data specified by \a extent from \a medium into the output fd of
  * dec->xfer.
  */
-static int simple_dec_read_chunk(struct pho_encoder *dec,
-                                 const pho_resp_read_elt_t *medium)
+static int raid1_read_split(struct pho_encoder *dec)
 {
-    struct raid1_encoder *raid1 = dec->priv_enc;
-    struct io_adapter_module *ioa;
-    struct pho_io_descr iod = {0};
-    struct extent *extent = NULL;
-    struct pho_ext_loc loc = {0};
-    int rc;
-    int i;
+    struct raid_io_context *io_context = dec->priv_enc;
+    struct pho_io_descr *iod;
+    struct pho_ext_loc loc;
 
+    iod = &io_context->iods[0];
+    loc = make_ext_location(dec, 0);
 
-    /* find good extent among replica count */
-    for (i = 0; i < raid1->repl_count ; i++) {
-        int extent_index = raid1->cur_extent_idx * raid1->repl_count + i;
-        struct extent *candidate_extent = &dec->layout->extents[extent_index];
+    iod->iod_fd = dec->xfer->xd_fd;
+    iod->iod_size = loc.extent->size;
+    iod->iod_loc = &loc;
 
-        /* layout extents should be well ordered */
-        if (candidate_extent->layout_idx != extent_index)
-            LOG_RETURN(-EINVAL, "In raid1 layout decoder read, layout extents "
-                                "must be ordered, layout extent %d has "
-                                "layout_idx %d",
-                                extent_index, candidate_extent->layout_idx);
-        assert(candidate_extent->layout_idx == extent_index);
-        if (strcmp(medium->med_id->name, candidate_extent->media.name) == 0 &&
-            strcmp(medium->med_id->library,
-                   candidate_extent->media.library) == 0) {
-            extent = candidate_extent;
-            break;
-        }
-    }
-
-    /* No matching extent ? */
-    if (extent == NULL)
-        LOG_RETURN(-EINVAL, "raid1 layout received a medium to read not in "
-                            "layout extents list");
-
-    /*
-     * NOTE: fs_type is not stored as an extent attribute in db, therefore it
-     * is not retrieved when retrieving a layout either. It is currently a field
-     * of a medium, this is why the LRS provides it in its response. This may be
-     * intentional, or to be fixed later.
-     */
-    rc = get_io_adapter((enum fs_type)medium->fs_type, &ioa);
-    if (rc)
-        return rc;
-
-    loc.root_path = medium->root_path;
-    loc.extent = extent;
-    loc.addr_type = (enum address_type)medium->addr_type;
-
-    iod.iod_fd = dec->xfer->xd_fd;
-    if (iod.iod_fd < 0)
-        LOG_RETURN(rc = -EBADF, "Invalid decoder xfer file descriptor");
-
-    iod.iod_size = loc.extent->size;
-    iod.iod_loc = &loc;
-
-    pho_debug("Reading %ld bytes from medium (family '%s', name '%s', library "
-              "'%s')", extent->size, rsc_family2str(extent->media.family),
-              extent->media.name, extent->media.library);
-
-    rc = ioa_get(ioa, dec->xfer->xd_objid, &iod);
-    if (rc == 0) {
-        raid1->to_write -= extent->size;
-        raid1->cur_extent_idx++;
-    }
-
-    /* Nothing more to write: the decoder is done */
-    if (raid1->to_write <= 0) {
-        pho_debug("Decoder for '%s' is now done", dec->xfer->xd_objid);
-        dec->done = true;
-    }
-
-    return rc;
+    return ioa_get(iod->iod_ioa, dec->xfer->xd_objid, iod);
 }
 
-/**
- * When receiving a release response, check from raid1->to_release_media that
- * we expected this response. Decrement refcount and increment
- * raid1->n_released_media.
- */
-static int mark_written_medium_released(struct raid1_encoder *raid1,
-                                       const char *medium)
+static int raid1_get_block_size(struct pho_encoder *enc,
+                                size_t *block_size)
 {
-    size_t *to_release_refcount;
+    struct raid_io_context *io_context = enc->priv_enc;
+    struct pho_io_descr *iod;
 
-    to_release_refcount = g_hash_table_lookup(raid1->to_release_media, medium);
+    iod = &io_context->iods[0];
 
-    if (to_release_refcount == NULL)
-        return -EINVAL;
+    get_preferred_io_block_size(block_size, iod->iod_ioa, iod);
 
-    /* media id with refcount of zero must be removed from the hash table */
-    assert(*to_release_refcount > 0);
-
-    /* one medium was released */
-    raid1->n_released_media++;
-
-    /* only one release was ongoing for this medium: remove from the table */
-    if (*to_release_refcount == 1) {
-        gboolean was_in_table;
-
-        was_in_table = g_hash_table_remove(raid1->to_release_media, medium);
-        assert(was_in_table);
-        return 0;
-    }
-
-    /* several current releases: only decrement refcount */
-    --(*to_release_refcount);
     return 0;
 }
 
-/**
- * Handle a release response for an encoder (unrelevent for a decoder) by
- * remembering that these particular media have been released. If all data has
- * been written and all written media have been released, mark the encoder as
- * done.
- */
-static int raid1_enc_handle_release_resp(struct pho_encoder *enc,
-                                         pho_resp_release_t *rel_resp)
-{
-    struct raid1_encoder *raid1 = enc->priv_enc;
-    int rc = 0;
-    int i;
-
-    for (i = 0; i < rel_resp->n_med_ids; i++) {
-        int rc2;
-
-        pho_debug("Marking medium (family %s, name %s, library %s) as released",
-                  rsc_family2str(rel_resp->med_ids[i]->family),
-                  rel_resp->med_ids[i]->name, rel_resp->med_ids[i]->library);
-        /* If the media_id is unexpected, -EINVAL will be returned */
-        rc2 = mark_written_medium_released(raid1, rel_resp->med_ids[i]->name);
-        if (rc2 && !rc)
-            rc = rc2;
-    }
-
-    /*
-     * If we wrote everything and all the releases have been received, mark the
-     * encoder as done.
-     */
-    if (raid1->to_write == 0 && /* no more data to write */
-            /* at least one extent is created, special test for null size put */
-            raid1->written_extents->len > 0 &&
-            /* we got releases of all extents */
-            raid1->written_extents->len == raid1->n_released_media) {
-        /* Fill the layout with the extents */
-        enc->layout->ext_count = raid1->written_extents->len;
-        enc->layout->extents =
-            (struct extent *)g_array_free(raid1->written_extents, FALSE);
-        for (i = 0; i < enc->layout->ext_count; ++i)
-            enc->layout->extents[i].state = PHO_EXT_ST_SYNC;
-        raid1->written_extents = NULL;
-        raid1->n_released_media = 0;
-        g_hash_table_destroy(raid1->to_release_media);
-        raid1->to_release_media = NULL;
-
-        /* Switch to DONE state */
-        enc->done = true;
-        return 0;
-    }
-
-    return rc;
-}
-
-/** Generate the next write allocation request for this encoder */
-static void raid1_enc_next_write_req(struct pho_encoder *enc, pho_req_t *req)
-{
-    struct raid1_encoder *raid1 = enc->priv_enc;
-    size_t *n_tags;
-    int i, j;
-
-    /* n_tags array */
-    n_tags = xcalloc(raid1->repl_count, sizeof(*n_tags));
-
-    for (i = 0; i < raid1->repl_count; ++i)
-        n_tags[i] = enc->xfer->xd_params.put.tags.n_tags;
-
-    pho_srl_request_write_alloc(req, raid1->repl_count, n_tags);
-    free(n_tags);
-
-    for (i = 0; i < raid1->repl_count; ++i) {
-        req->walloc->media[i]->size = raid1->to_write;
-
-        for (j = 0; j < enc->xfer->xd_params.put.tags.n_tags; ++j)
-            req->walloc->media[i]->tags[j] =
-                xstrdup(enc->xfer->xd_params.put.tags.tags[j]);
-    }
-}
-
-/** Generate the next read allocation request for this decoder */
-static void raid1_dec_next_read_req(struct pho_encoder *dec, pho_req_t *req)
-{
-    struct raid1_encoder *raid1 = dec->priv_enc;
-    int i;
-
-    pho_srl_request_read_alloc(req, raid1->repl_count);
-
-    /* To read, raid1 needs only one among all copies */
-    req->ralloc->n_required = 1;
-
-    for (i = 0; i < raid1->repl_count; ++i) {
-        unsigned int ext_idx = raid1->cur_extent_idx * raid1->repl_count + i;
-
-        pho_debug("Requesting medium (family '%s', name '%s', library '%s') to "
-                  "read copy %d of extent %d",
-                  rsc_family2str(dec->layout->extents[ext_idx].media.family),
-                  dec->layout->extents[ext_idx].media.name,
-                  dec->layout->extents[ext_idx].media.library,
-                  i, raid1->cur_extent_idx);
-        req->ralloc->med_ids[i]->family =
-            dec->layout->extents[ext_idx].media.family;
-        req->ralloc->med_ids[i]->name =
-            xstrdup(dec->layout->extents[ext_idx].media.name);
-        req->ralloc->med_ids[i]->library =
-            xstrdup(dec->layout->extents[ext_idx].media.library);
-    }
-}
-
-/**
- * Handle one response from the LRS and potentially generate one response.
- */
-static int raid1_enc_handle_resp(struct pho_encoder *enc, pho_resp_t *resp,
-                                 pho_req_t **reqs, size_t *n_reqs)
-{
-    struct raid1_encoder *raid1 = enc->priv_enc;
-    int rc = 0, i;
-
-    if (pho_response_is_error(resp)) {
-        enc->xfer->xd_rc = resp->error->rc;
-        enc->done = true;
-        pho_error(enc->xfer->xd_rc,
-                  "%s for objid:'%s' received error %s to last request",
-                  enc->is_decoder ? "Decoder" : "Encoder", enc->xfer->xd_objid,
-                  pho_srl_error_kind_str(resp->error));
-    } else if (pho_response_is_write(resp)) {
-        /* Last requested allocation has now been fulfilled */
-        raid1->requested_alloc = false;
-        if (enc->is_decoder)
-            return -EINVAL;
-
-        if (resp->walloc->n_media != raid1->repl_count)
-            return -EINVAL;
-
-        /*
-         * Build release req matching this allocation response, this release
-         * request will be emitted after the IO has been performed. Any
-         * allocated medium must be released.
-         */
-        pho_srl_request_release_alloc(*reqs + *n_reqs, resp->walloc->n_media);
-
-        for (i = 0; i < resp->walloc->n_media; ++i) {
-            rsc_id_cpy((*reqs)[*n_reqs].release->media[i]->med_id,
-                       resp->walloc->media[i]->med_id);
-            (*reqs)[*n_reqs].release->media[i]->to_sync = true;
-        }
-
-        /* XXX we can set to_sync to false when an error occurs here */
-        /* Perform IO and populate release request with the outcome */
-        rc = multiple_enc_write_chunk(enc, resp->walloc,
-                                      (*reqs)[*n_reqs].release);
-        (*n_reqs)++;
-    } else if (pho_response_is_read(resp)) {
-        /* Last requested allocation has now been fulfilled */
-        raid1->requested_alloc = false;
-        if (!enc->is_decoder)
-            return -EINVAL;
-
-        if (resp->ralloc->n_media != 1)
-            return -EINVAL;
-
-        /* Build release req matching this allocation response */
-        pho_srl_request_release_alloc(*reqs + *n_reqs, resp->ralloc->n_media);
-
-        /* copy medium id from allocation response to release request */
-        rsc_id_cpy((*reqs)[*n_reqs].release->media[0]->med_id,
-                   resp->ralloc->media[0]->med_id);
-
-        /* Perform IO and populate release request with the outcome */
-        rc = simple_dec_read_chunk(enc, resp->ralloc->media[0]);
-        (*reqs)[*n_reqs].release->media[0]->rc = rc;
-        (*reqs)[*n_reqs].release->media[0]->to_sync = false;
-        (*n_reqs)++;
-    } else if (pho_response_is_release(resp)) {
-        /* Decoders don't need to keep track of medium releases */
-        if (!enc->is_decoder)
-            rc = raid1_enc_handle_release_resp(enc, resp->release);
-
-    } else {
-        LOG_RETURN(rc = -EPROTO, "Invalid response type");
-    }
-
-    return rc;
-}
-
-static bool no_more_alloc(const struct pho_encoder *enc)
-{
-    const struct raid1_encoder *raid1 = enc->priv_enc;
-
-    /* ended encoder */
-    if (enc->done)
-        return true;
-
-    /* still something to write */
-    if (raid1->to_write > 0)
-        return false;
-
-    /* decoder with no more to read */
-    if (enc->is_decoder)
-        return true;
-
-    /* encoder with no more to write and at least one written extent */
-    if (raid1->written_extents->len > 0)
-        return true;
-
-    /* encoder with no more to write but needing to write at least one extent */
-    return false;
-}
-
-/**
- * Raid1 layout implementation of the `step` method.
- * (See `layout_step` doc)
- */
-static int raid1_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
-                              pho_req_t **reqs, size_t *n_reqs)
-{
-    struct raid1_encoder *raid1 = enc->priv_enc;
-    int rc = 0;
-
-    /* At max 2 requests will be emitted, allocate optimistically */
-    *reqs = xcalloc(2, sizeof(**reqs));
-    *n_reqs = 0;
-
-    /* Handle a possible response */
-    if (resp != NULL)
-        rc = raid1_enc_handle_resp(enc, resp, reqs, n_reqs);
-
-    /* Do we need to generate a new alloc ? */
-    if (rc || /* an error happened */
-        raid1->requested_alloc || /* an alloc was already requested */
-        no_more_alloc(enc))
-        goto out;
-
-    /* Build next request */
-    if (enc->is_decoder)
-        raid1_dec_next_read_req(enc, *reqs + *n_reqs);
-    else
-        raid1_enc_next_write_req(enc, *reqs + *n_reqs);
-
-    (*n_reqs)++;
-    raid1->requested_alloc = true;
-
-out:
-    if (*n_reqs == 0) {
-        free(*reqs);
-        *reqs = NULL;
-    }
-
-    /* For now, orphaned extents are not cleaned up on failure */
-    return rc;
-}
-
-
-static void free_extent_address_buff(void *void_extent)
-{
-    struct extent *extent = void_extent;
-
-    free(extent->address.buff);
-}
-
-/**
- * Simple layout implementation of the `destroy` method.
- * (See `layout_destroy` doc)
- */
-static void raid1_encoder_destroy(struct pho_encoder *enc)
-{
-    struct raid1_encoder *raid1 = enc->priv_enc;
-
-    if (raid1 == NULL)
-        return;
-
-    if (raid1->written_extents != NULL) {
-        g_array_free(raid1->written_extents, TRUE);
-        raid1->written_extents = NULL;
-    }
-
-    if (raid1->to_release_media != NULL) {
-        g_hash_table_destroy(raid1->to_release_media);
-        raid1->to_release_media = NULL;
-    }
-
-#ifdef HAVE_XXH128
-    if (raid1->xxh128state != NULL) {
-        XXH3_freeState(raid1->xxh128state);
-        raid1->xxh128state = NULL;
-    }
-#endif
-
-    if (raid1->md5ctx != NULL) {
-        EVP_MD_CTX_destroy(raid1->md5ctx);
-        raid1->md5ctx = NULL;
-    }
-
-    free(raid1);
-    enc->priv_enc = NULL;
-}
-
 static const struct pho_enc_ops RAID1_ENCODER_OPS = {
-    .step       = raid1_encoder_step,
-    .destroy    = raid1_encoder_destroy,
+    .step       = raid_encoder_step,
+    .destroy    = raid_encoder_destroy,
 };
+
+static const struct raid_ops RAID1_OPS = {
+    .write_split    = raid1_write_split,
+    .read_split     = raid1_read_split,
+    .get_block_size = raid1_get_block_size,
+};
+
+static int raid1_get_repl_count(struct pho_encoder *enc,
+                                unsigned int *repl_count)
+{
+    const char *string_repl_count;
+    int rc;
+
+    *repl_count = 0;
+
+    if (pho_attrs_is_empty(&enc->xfer->xd_params.put.lyt_params))
+        string_repl_count = PHO_CFG_GET(cfg_lyt_raid1, PHO_CFG_LYT_RAID1,
+                                        repl_count);
+    else
+        string_repl_count = pho_attr_get(&enc->xfer->xd_params.put.lyt_params,
+                                         REPL_COUNT_ATTR_KEY);
+
+    if (string_repl_count == NULL)
+        LOG_RETURN(-EINVAL, "Unable to get replica count from conf to "
+                            "build a raid1 encoder");
+
+    /* set repl_count as char * in layout */
+    pho_attr_set(&enc->layout->layout_desc.mod_attrs,
+                 PHO_EA_RAID1_REPL_COUNT_NAME, string_repl_count);
+
+    /* set repl_count in encoder */
+    rc = raid1_repl_count(enc->layout, repl_count);
+    if (rc)
+        LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
+                       "encoder");
+
+    /* set write size */
+    if (*repl_count <= 0)
+        LOG_RETURN(-EINVAL, "Invalid # of replica (%d)", *repl_count);
+
+    return 0;
+}
 
 /**
  * Create an encoder.
@@ -1032,160 +331,93 @@ static const struct pho_enc_ops RAID1_ENCODER_OPS = {
  */
 static int layout_raid1_encode(struct pho_encoder *enc)
 {
-    struct raid1_encoder *raid1 = xcalloc(1, sizeof(*raid1));
-    const char *string_repl_count = NULL;
-    char *string_obj_size = NULL;
+    struct raid_io_context *io_context;
+    unsigned int repl_count;
+    size_t i;
     int rc;
 
-    /*
-     * The ops field is set early to allow the caller to call the destroy
-     * function on error.
-     */
-    enc->ops = &RAID1_ENCODER_OPS;
-    enc->priv_enc = raid1;
-
-    /* Initialize raid1-specific state */
-    raid1->cur_extent_idx = 0;
-    raid1->requested_alloc = false;
-
-    /* The layout description has to be set on encoding */
-    enc->layout->layout_desc = RAID1_MODULE_DESC;
-
-    if (!pho_attrs_is_empty(&enc->xfer->xd_params.put.lyt_params))
-        string_repl_count = pho_attr_get(&enc->xfer->xd_params.put.lyt_params,
-                                         REPL_COUNT_ATTR_KEY);
-
-    if (string_repl_count == NULL) {
-        /* get repl_count from conf */
-        string_repl_count = PHO_CFG_GET(cfg_lyt_raid1, PHO_CFG_LYT_RAID1,
-                                        repl_count);
-        if (string_repl_count == NULL)
-            LOG_RETURN(-EINVAL, "Unable to get replica count from conf to "
-                                "build a raid1 encoder");
-    }
-
-    /* set repl_count as char * in layout */
-    pho_attr_set(&enc->layout->layout_desc.mod_attrs,
-                 PHO_EA_RAID1_REPL_COUNT_NAME, string_repl_count);
-
-    /* set repl_count in encoder */
-    rc = raid1_repl_count(enc->layout, &raid1->repl_count);
+    rc = raid1_get_repl_count(enc, &repl_count);
     if (rc)
-        LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
-                       "encoder");
+        return rc;
 
-    /* set write size */
-    if (raid1->repl_count <= 0)
-        LOG_RETURN(-EINVAL, "Invalid # of replica (%d)", raid1->repl_count);
+    io_context = xcalloc(1, sizeof(*io_context));
+    enc->priv_enc = io_context;
+    io_context->name = PLUGIN_NAME;
+    io_context->n_data_extents = 1;
+    io_context->n_parity_extents = repl_count - 1;
+    io_context->write.to_write = enc->xfer->xd_params.put.size;
+    io_context->nb_hashes = repl_count;
+    io_context->hashes = xcalloc(io_context->nb_hashes,
+                                 sizeof(*io_context->hashes));
 
-    if (enc->xfer->xd_params.put.size < 0)
-        LOG_RETURN(-EINVAL, "bad input encoder size to write when building "
-                            "raid1 encoder");
-
-    raid1->to_write = enc->xfer->xd_params.put.size;
-
-    /* set obj_size as char * in layout */
-    rc = asprintf(&string_obj_size, "%zu", raid1->to_write);
-    if (rc < 0)
-        LOG_RETURN(-ENOMEM, "Unable to allocate object_size buffer");
-
-    pho_attr_set(&enc->layout->layout_desc.mod_attrs,
-                 PHO_EA_OBJECT_SIZE_NAME, string_obj_size);
-    free(string_obj_size);
-
-    /* Allocate the extent array */
-    raid1->written_extents = g_array_new(FALSE, TRUE,
-                                         sizeof(struct extent));
-    g_array_set_clear_func(raid1->written_extents,
-                           free_extent_address_buff);
-    raid1->to_release_media = g_hash_table_new_full(g_str_hash, g_str_equal,
-                                                    free, free);
-    raid1->n_released_media = 0;
-
-    /* init XXH3 state */
-    if (PHO_CFG_GET_BOOL(cfg_lyt_raid1, PHO_CFG_LYT_RAID1, extent_xxh128,
-                         false)) {
-#ifdef HAVE_XXH128
-        raid1->xxh128state = XXH3_createState();
-        if (raid1->xxh128state == NULL)
-            LOG_RETURN(-ENOMEM,
-                       "Unable to create XXH128 state when creating raid1 "
-                       "encoder");
-#else
-        pho_warn("extent_xxh128 is set to 'true' in config for raid1 layout but "
-                 "xxhash-devel does not contain 128-bit XXH3 algorithm "
-                 "(required xxhash-devel >= 0.8.0)");
-#endif
+    for (i = 0; i < io_context->nb_hashes; i++) {
+        rc = extent_hash_init(&io_context->hashes[i],
+                              PHO_CFG_GET_BOOL(cfg_lyt_raid1,
+                                               PHO_CFG_LYT_RAID1,
+                                               extent_md5,
+                                               false),
+                              PHO_CFG_GET_BOOL(cfg_lyt_raid1,
+                                               PHO_CFG_LYT_RAID1,
+                                               extent_xxh128,
+                                               false));
+        if (rc)
+            goto out_hash;
     }
 
-    /* init EVP_MD_CTX */
-    if (PHO_CFG_GET_BOOL(cfg_lyt_raid1, PHO_CFG_LYT_RAID1, extent_md5, false))
-        raid1->md5ctx = EVP_MD_CTX_create();
+    return raid_encoder_init(enc, &RAID1_MODULE_DESC, &RAID1_ENCODER_OPS,
+                             &RAID1_OPS);
 
-    return 0;
+out_hash:
+    for (i -= 1; i >= 0; i--)
+        extent_hash_fini(&io_context->hashes[i]);
+
+    /* The rest will be free'd by layout destroy */
+    return rc;
 }
 
-/**
- * Create a decoder.
- *
- * This function initializes the internal raid1_encoder based on enc->xfer and
- * enc->layout.
- *
- * Implements layout_decode layout module methods.
- */
-static int layout_raid1_decode(struct pho_encoder *enc)
+/** Implements layout_decode layout module methods. */
+static int layout_raid1_decode(struct pho_encoder *dec)
 {
-    struct raid1_encoder *raid1;
+    struct raid_io_context *io_context;
+    unsigned int repl_count;
     int rc;
     int i;
 
-    if (!enc->is_decoder)
-        LOG_RETURN(-EINVAL, "ask to create a decoder on an encoder");
+    ENTRY;
 
-    raid1 = xcalloc(1, sizeof(*raid1));
-
-    /*
-     * The ops field is set early to allow the caller to call the destroy
-     * function on error.
-     */
-    enc->ops = &RAID1_ENCODER_OPS;
-    enc->priv_enc = raid1;
-
-    /* Initialize raid1-specific state */
-    raid1->cur_extent_idx = 0;
-    raid1->requested_alloc = false;
-    raid1->written_extents = NULL;
-    raid1->to_release_media = NULL;
-    raid1->n_released_media = 0;
-
-    /* Fill out the encoder appropriately */
-    /* set decoder repl_count */
-    rc = raid1_repl_count(enc->layout, &raid1->repl_count);
+    rc = raid1_repl_count(dec->layout, &repl_count);
     if (rc)
         LOG_RETURN(rc, "Invalid replica count from layout to build raid1 "
                        "decoder");
 
-    /*
-     * Size is the sum of the extent sizes, enc->layout->wr_size is not
-     * positioned properly by the dss
-     */
-    if (enc->layout->ext_count % raid1->repl_count != 0)
+    if (dec->layout->ext_count % repl_count != 0)
         LOG_RETURN(-EINVAL, "layout extents count (%d) is not a multiple "
                    "of replica count (%u)",
-                   enc->layout->ext_count, raid1->repl_count);
+                   dec->layout->ext_count, repl_count);
 
-    /* set read size  : badly named "to_write" */
-    raid1->to_write = 0;
-    for (i = 0; i < enc->layout->ext_count / raid1->repl_count; i++)
-        raid1->to_write += enc->layout->extents[i * raid1->repl_count].size;
+    io_context = xcalloc(1, sizeof(*io_context));
+    dec->priv_enc = io_context;
+    io_context->name = PLUGIN_NAME;
+    io_context->n_data_extents = 1;
+    io_context->n_parity_extents = repl_count - 1;
+    rc = raid_decoder_init(dec, &RAID1_MODULE_DESC, &RAID1_ENCODER_OPS,
+                           &RAID1_OPS);
+    if (rc) {
+        dec->priv_enc = NULL;
+        free(io_context);
+        return rc;
+    }
+
+    io_context->read.to_read = 0;
+    for (i = 0; i < dec->layout->ext_count / repl_count; i++) {
+        struct extent *extent = &dec->layout->extents[i * repl_count];
+
+        io_context->read.to_read += extent->size;
+    }
 
     /* Empty GET does not need any IO */
-    if (raid1->to_write == 0) {
-        enc->done = true;
-        if (enc->xfer->xd_fd < 0)
-            LOG_RETURN(-EBADF, "Invalid encoder xfer file descriptor in empty "
-                               "GET decode create");
-    }
+    if (io_context->read.to_read == 0)
+        dec->done = true;
 
     return 0;
 }

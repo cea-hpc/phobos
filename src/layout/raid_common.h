@@ -26,6 +26,14 @@
 #include <xxhash.h>
 #endif
 
+#if HAVE_XXH128
+#define DEFAULT_XXH128 "true"
+#define DEFAULT_MD5    "false"
+#else
+#define DEFAULT_XXH128 "false"
+#define DEFAULT_MD5    "true"
+#endif
+
 struct extent_hash {
 #if HAVE_XXH128
     XXH128_hash_t xxh128;
@@ -148,5 +156,7 @@ int extent_hash_update(struct extent_hash *hash, char *buffer, size_t size);
 int extent_hash_digest(struct extent_hash *hash);
 
 int extent_hash_copy(struct extent_hash *hash, struct extent *extent);
+
+struct pho_ext_loc make_ext_location(struct pho_encoder *enc, size_t i);
 
 #endif

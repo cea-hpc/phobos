@@ -69,14 +69,6 @@ enum pho_cfg_params_raid4 {
     PHO_CFG_LYT_RAID4_LAST  = PHO_CFG_LYT_RAID4_extent_md5,
 };
 
-#if HAVE_XXH128
-#define DEFAULT_XXH128 "true"
-#define DEFAULT_MD5    "false"
-#else
-#define DEFAULT_XXH128 "false"
-#define DEFAULT_MD5    "true"
-#endif
-
 const struct pho_config_item raid4_cfg_items[] = {
     [PHO_CFG_LYT_RAID4_extent_xxh128] = {
         .section = "layout_raid4",
