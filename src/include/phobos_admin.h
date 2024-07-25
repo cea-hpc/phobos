@@ -400,6 +400,26 @@ int phobos_admin_media_add(struct admin_handle *adm, struct media_info *med_ls,
                            int med_cnt);
 
 /**
+ * Removes a list of media from the database.
+ *
+ * All requested media which are not currently used by a daemon or does not
+ * contain any extents will be removed from the phobos system.
+ *
+ * The first encountered error is returned once all media are processed.
+ *
+ * \param[in]      adm             Admin module handler.
+ * \param[in]      med_ids         List of media to remove.
+ * \param[in]      num_med         Number of media to remove.
+ * \param[out]     num_removed_med Number of removed media.
+ *
+ * \return                         0      on success,
+ *                                 -errno on failure.
+ *
+ * This must be called with an admin_handle initialized with phobos_admin_init.
+ */
+int phobos_admin_media_delete(struct admin_handle *adm, struct pho_id *med_ids,
+                              int num_med, int *num_removed_med);
+/**
  * Imports non-empty media into the DSS without formatting them thus preserving
  * the data on the device.
  *

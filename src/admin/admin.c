@@ -1791,6 +1791,61 @@ int phobos_admin_media_add(struct admin_handle *adm, struct media_info *med_ls,
     return dss_media_insert(&adm->dss, med_ls, med_cnt);
 }
 
+int phobos_admin_media_delete(struct admin_handle *adm, struct pho_id *med_ids,
+                              int num_med, int *num_removed_med)
+{
+    struct media_info *media_res;
+    struct media_info *media;
+    int avail_media = 0;
+    int rc;
+    int i;
+
+    *num_removed_med = 0;
+
+    media = xcalloc(num_med, sizeof(*media));
+
+    for (i = 0; i < num_med; ++i) {
+        rc = dss_one_medium_get_from_id(&adm->dss, med_ids + i, &media_res);
+        if (rc)
+            goto out_free;
+
+        rc = dss_lock(&adm->dss, DSS_MEDIA, media_res, 1);
+        if (rc) {
+            pho_warn("Media (family '%s', name '%s', library '%s') cannot be "
+                     "locked, so cannot be removed",
+                     rsc_family2str(med_ids[i].family), med_ids[i].name,
+                     med_ids[i].library);
+            dss_res_free(media_res, 1);
+            continue;
+        }
+
+        // TODO : check if there are extent on the media
+        media_info_copy(&media[avail_media], media_res);
+
+        dss_res_free(media_res, 1);
+        avail_media++;
+    }
+
+    if (avail_media == 0)
+        LOG_GOTO(out_free, rc = -ENODEV,
+                 "There are no available media to remove");
+
+    rc = dss_media_delete(&adm->dss, media, avail_media);
+    if (rc)
+        pho_error(rc, "Medium cannot be removed");
+
+    *num_removed_med = avail_media;
+
+out_free:
+    dss_unlock(&adm->dss, DSS_MEDIA, media, avail_media, false);
+    for (i = 0; i < avail_media; ++i)
+        media_info_cleanup(media + i);
+
+    free(media);
+
+    return rc;
+}
+
 int phobos_admin_media_import(struct admin_handle *adm,
                               struct media_info *med_ls,
                               int med_cnt,
