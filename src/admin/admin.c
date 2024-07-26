@@ -1117,21 +1117,31 @@ int phobos_admin_format(struct admin_handle *adm, const struct pho_id *ids,
     return rc;
 }
 
-static int _get_extents_to_repack(struct admin_handle *adm,
-                                  const struct pho_id *source,
-                                  struct extent **extents, int *count)
+static int _get_extents(struct admin_handle *adm,
+                        const struct pho_id *source,
+                        struct extent **extents, int *count, bool repack)
 {
     struct dss_filter filter;
     int rc;
 
-    rc = dss_filter_build(&filter,
-                          "{\"$AND\": ["
-                          "  {\"DSS::EXT::medium_family\": \"%s\"},"
-                          "  {\"DSS::EXT::medium_id\": \"%s\"},"
-                          "  {\"DSS::EXT::medium_library\": \"%s\"},"
-                          "  {\"$NOR\": [{\"DSS::EXT::state\": \"%s\"}]}"
-                          "]}", rsc_family2str(source->family), source->name,
-                          source->library, extent_state2str(PHO_EXT_ST_ORPHAN));
+    if (repack)
+        rc = dss_filter_build(&filter,
+                              "{\"$AND\": ["
+                              "  {\"DSS::EXT::medium_family\": \"%s\"},"
+                              "  {\"DSS::EXT::medium_id\": \"%s\"},"
+                              "  {\"DSS::EXT::medium_library\": \"%s\"},"
+                              "  {\"$NOR\": [{\"DSS::EXT::state\": \"%s\"}]}"
+                              "]}", rsc_family2str(source->family),
+                              source->name, source->library,
+                              extent_state2str(PHO_EXT_ST_ORPHAN));
+    else
+        rc = dss_filter_build(&filter,
+                              "{\"$AND\": ["
+                              "  {\"DSS::EXT::medium_family\": \"%s\"},"
+                              "  {\"DSS::EXT::medium_id\": \"%s\"},"
+                              "  {\"DSS::EXT::medium_library\": \"%s\"}"
+                              "]}", rsc_family2str(source->family),
+                              source->name, source->library);
     if (rc)
         LOG_RETURN(rc, "Failed to build filter for extent retrieval");
 
@@ -1429,7 +1439,7 @@ int phobos_admin_repack(struct admin_handle *adm, const struct pho_id *source,
         return rc;
 
     /* Determine total size of live objects */
-    rc = _get_extents_to_repack(adm, source, &ext_res, &ext_cnt);
+    rc = _get_extents(adm, source, &ext_res, &ext_cnt, true);
     if (rc)
         return rc;
 
@@ -1796,7 +1806,9 @@ int phobos_admin_media_delete(struct admin_handle *adm, struct pho_id *med_ids,
 {
     struct media_info *media_res;
     struct media_info *media;
+    struct extent *ext_res;
     int avail_media = 0;
+    int ext_cnt;
     int rc;
     int i;
 
@@ -1819,11 +1831,25 @@ int phobos_admin_media_delete(struct admin_handle *adm, struct pho_id *med_ids,
             continue;
         }
 
-        // TODO : check if there are extent on the media
+        rc = _get_extents(adm, med_ids + i, &ext_res, &ext_cnt, false);
+        if (rc)
+            goto out_free;
+
+        dss_res_free(ext_res, ext_cnt);
+        if (ext_cnt > 0) {
+            pho_warn("Media (family '%s', name '%s', library '%s') contains "
+                     "extents, so cannot be removed",
+                     rsc_family2str(med_ids[i].family), med_ids[i].name,
+                     med_ids[i].library);
+            dss_unlock(&adm->dss, DSS_MEDIA, media_res, 1, false);
+            dss_res_free(media_res, 1);
+            continue;
+        }
+
         media_info_copy(&media[avail_media], media_res);
+        avail_media++;
 
         dss_res_free(media_res, 1);
-        avail_media++;
     }
 
     if (avail_media == 0)
