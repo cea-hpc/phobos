@@ -1,0 +1,89 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2024 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Test media delete
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+function setup()
+{
+    setup_tables
+    invoke_daemons
+}
+
+function test_tape_delete()
+{
+    local tape=$(get_tapes L5 1)
+    local drive=$(get_lto_drives 5 1)
+
+    $phobos drive add --unlock $drive
+    $phobos tape add -t lto5 $tape
+
+    # Delete a tape
+    $phobos tape delete $tape
+    if [[ ! -z $($phobos tape list) ]]; then
+        error "database should be empty"
+    fi
+
+    # With a wrong tape
+    $phobos tape add -t lto5 $tape
+    $phobos tape delete wrong &&
+        error "phobos tape delete wrong should have failed"
+    if [[ -z $($phobos tape list) ]]; then
+        error "phobos tape list should contains $tape"
+    fi
+
+    # Delete a tape which is used
+    $phobos drive load $drive $tape
+    $phobos tape delete $tape &&
+        error "phobos tape delete $tape should have failed, already lock"
+    if [[ -z $($phobos tape list) ]]; then
+        error "phobos tape list should contains $tape"
+    fi
+
+    # Delete a tape which contains extents
+    $phobos tape format --unlock $tape
+    $phobos put -f tape /etc/hosts blob
+    $phobos drive unload $drive
+    $phobos tape delete $tape &&
+        error "phobos tape delete $tape should have failed (contains extents)"
+    if [[ -z $($phobos tape list) ]]; then
+        error "phobos tape list should contains $tape"
+    fi
+}
+
+function cleanup()
+{
+    waive_daemons
+    drop_tables
+    drain_all_drives
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Tapes required for this test"
+fi
+
+TESTS=("setup; test_tape_delete; cleanup")

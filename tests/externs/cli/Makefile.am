@@ -63,6 +63,7 @@ check_SCRIPTS=acceptance.test \
               test_lrs_drive_status.sh \
               test_lrs_scheduling.test \
               test_media.sh \
+              test_media_delete.test \
               test_multilibrary.test \
               test_object_list.sh \
               test_phobos_tape_library_test.sh \
