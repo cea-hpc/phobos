@@ -1660,7 +1660,8 @@ class MediaOptHandler(BaseResourceOptHandler):
         LockOptHandler,
         UnlockOptHandler,
         MediaSetAccessOptHandler,
-        MediumLocateOptHandler
+        MediumLocateOptHandler,
+        ResourceDeleteOptHandler,
     ]
     library = None
 
@@ -1919,6 +1920,29 @@ class MediaOptHandler(BaseResourceOptHandler):
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
+
+    def exec_delete(self):
+        """Delete a medium"""
+        resources = self.params.get('res')
+        set_library(self)
+
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                num_deleted, num2delete = adm.medium_delete(self.family,
+                                                            resources,
+                                                            self.library)
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
+        if num_deleted == num2delete:
+            self.logger.info("Deleted %d media(s) successfully", num_deleted)
+        elif num_deleted == 0:
+            self.logger.error("No media deleted: %d/%d", num_deleted,
+                              num2delete)
+        else:
+            self.logger.warning("Failed to delete %d/%d media(s)",
+                                num2delete - num_deleted, num2delete)
 
 class PhobosdPingOptHandler(BaseOptHandler):
     """Phobosd ping"""
@@ -2297,6 +2321,7 @@ class TapeOptHandler(MediaOptHandler):
         MediumLocateOptHandler,
         TapeImportOptHandler,
         RepackOptHandler,
+        ResourceDeleteOptHandler,
     ]
 
 class RadosPoolOptHandler(MediaOptHandler):

@@ -356,6 +356,22 @@ class Client: # pylint: disable=too-many-public-methods
         if rc:
             raise EnvironmentError(rc, "Failed to add media")
 
+    def medium_delete(self, med_family, med_names, library):
+        """Remove mediums to phobos system."""
+        c_id = Id * len(med_names)
+        med_ids = [Id(med_family, name=name, library=library)
+                   for name in med_names]
+        count = c_int(0)
+
+        rc = LIBPHOBOS_ADMIN.phobos_admin_media_delete(byref(self.handle),
+                                                       c_id(*med_ids),
+                                                       len(med_ids),
+                                                       byref(count))
+        if rc:
+            raise EnvironmentError(rc, "Failed to delete media(s) '%s'" %
+                                   med_names)
+        return count.value, len(med_ids)
+
     def medium_import(self, fstype, media, check_hash, tags=None):
         """Import a new medium"""
         for med in media:
