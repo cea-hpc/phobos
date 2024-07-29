@@ -140,7 +140,7 @@ int raid_encoder_init(struct pho_encoder *enc,
                            free_extent_address_buff);
 
     io_context->write.to_release_media =
-        g_hash_table_new_full(g_str_hash, g_str_equal, free, free);
+        g_hash_table_new_full(g_pho_id_hash, g_pho_id_equal, free, free);
 
     io_context->iods = xcalloc(n_extents, sizeof(*io_context->iods));
     io_context->write.extents = xcalloc(n_extents,
@@ -318,8 +318,10 @@ static int raid_io_context_open(struct raid_io_context *io_context,
         rc = ioa_open(iod->iod_ioa, enc->xfer->xd_objid, iod, !enc->is_decoder);
         if (rc)
             LOG_GOTO(out_close, rc,
-                     "raid: unable to open extent for '%s' on '%s'",
-                     enc->xfer->xd_objid, ext_location.extent->media.name);
+                     "raid: unable to open extent for '%s' on '%s':'%s'",
+                     enc->xfer->xd_objid,
+                     ext_location.extent->media.library,
+                     ext_location.extent->media.name);
 
         pho_debug("I/O size for replicate %lu: %zu", i, enc->io_block_size);
     }
@@ -512,18 +514,16 @@ static int write_split_setup(struct pho_encoder *enc, pho_resp_write_t *wresp,
 }
 
 static void add_new_to_release_media(struct raid_io_context *io_context,
-                                     const char *media_id)
+                                     const struct pho_id *media_id)
 {
-    size_t *new_ref_count;
     gboolean was_not_in;
-    char *new_media_id;
+    size_t *ref_count;
 
-    new_ref_count = xmalloc(sizeof(*new_ref_count));
-    new_media_id = xstrdup(media_id);
+    ref_count = xmalloc(sizeof(*ref_count));
+    *ref_count = 1;
 
-    *new_ref_count = 1;
     was_not_in = g_hash_table_insert(io_context->write.to_release_media,
-                                     new_media_id, new_ref_count);
+                                     pho_id_dup(media_id), ref_count);
     assert(was_not_in);
 }
 
@@ -531,26 +531,23 @@ static void raid_io_add_written_extent(struct raid_io_context *io_context,
                                        struct extent *extent)
 {
     size_t *to_release_refcount;
-    const char *media_id;
 
     /* add extent to written ones */
     g_array_append_val(io_context->write.written_extents, *extent);
 
     /* add medium to be released */
-    media_id = extent->media.name;
     to_release_refcount =
-        g_hash_table_lookup(io_context->write.to_release_media, media_id);
+        g_hash_table_lookup(io_context->write.to_release_media, &extent->media);
 
     if (to_release_refcount) /* existing media_id to release */
         ++(*to_release_refcount);
     else                     /* new media_id to release */
-        add_new_to_release_media(io_context, media_id);
+        add_new_to_release_media(io_context, &extent->media);
 
     /* Since we make a copy of the extent, reset this one to avoid reusing
      * internal pointers somewhere else in the code.
      */
     memset(extent, 0, sizeof(*extent));
-
 }
 
 static int write_split_fini(struct pho_encoder *enc, int io_rc,
@@ -613,12 +610,13 @@ static int write_split_fini(struct pho_encoder *enc, int io_rc,
 }
 
 static ssize_t extent_index(struct layout_info *layout,
-                           const char *medium)
+                            const pho_rsc_id_t *medium)
 {
     size_t i;
 
     for (i = 0; i < layout->ext_count; i++) {
-        if (!strcmp(layout->extents[i].media.name, medium))
+        if (!strcmp(layout->extents[i].media.name, medium->name) &&
+            !strcmp(layout->extents[i].media.library, medium->library))
             return i;
     }
 
@@ -638,12 +636,14 @@ struct extent_list {
     size_t count;
 };
 
-static ssize_t find_extent(struct extent_list *list, const char *name)
+static ssize_t find_extent(struct extent_list *list,
+                           const pho_rsc_id_t *medium)
 {
     ssize_t i;
 
     for (i = 0; i < list->count; i++) {
-        if (!strcmp(list->extents[i]->media.name, name))
+        if (!strcmp(list->extents[i]->media.name, medium->name) &&
+            !strcmp(list->extents[i]->media.library, medium->library))
             return i;
     }
 
@@ -660,18 +660,18 @@ static int read_media_cmp(const void *_lhs, const void *_rhs, void *arg)
     ssize_t lhs_index;
     ssize_t rhs_index;
 
-    lhs_index = find_extent(list, (*lhs)->med_id->name);
-    rhs_index = find_extent(list, (*rhs)->med_id->name);
+    lhs_index = find_extent(list, (*lhs)->med_id);
+    rhs_index = find_extent(list, (*rhs)->med_id);
 
     if (lhs_index == -1 || rhs_index == -1) {
         /* the extent list is built from the media list. They must contain the
          * same elements. Otherwise, this is a bug.
          */
         pho_error(0,
-                  "Unexpected medium in response ('%s' at index %ld, "
-                  "'%s' at index %ld), abort.",
-                  (*lhs)->med_id->name, lhs_index,
-                  (*rhs)->med_id->name, rhs_index);
+                  "Unexpected medium in response ('%s':'%s' at index %ld, "
+                  "'%s':'%s' at index %ld), abort.",
+                  (*lhs)->med_id->library, (*lhs)->med_id->name, lhs_index,
+                  (*rhs)->med_id->library, (*rhs)->med_id->name, rhs_index);
         abort();
     }
 
@@ -692,10 +692,10 @@ static void sort_extents_by_layout_index(pho_resp_read_t *resp,
             read_media_cmp, &list);
 }
 
-static int raid_io_context_read_init(struct pho_encoder *dec,
-                                     pho_resp_read_elt_t **medium,
-                                     size_t n_media,
-                                     size_t *split_size)
+static int read_split_setup(struct pho_encoder *dec,
+                            pho_resp_read_elt_t **medium,
+                            size_t n_media,
+                            size_t *split_size)
 {
     struct raid_io_context *io_context = dec->priv_enc;
     size_t n_extents = n_total_extents(io_context);
@@ -719,10 +719,13 @@ static int raid_io_context_read_init(struct pho_encoder *dec,
         if (rc)
             return rc;
 
-        ext_index = extent_index(dec->layout, medium[i]->med_id->name);
+        ext_index = extent_index(dec->layout, medium[i]->med_id);
         if (ext_index == -1)
-            LOG_RETURN(-ENOMEDIUM, "Did not find medium '%s' in layout of '%s'",
-                       medium[i]->med_id->name, dec->xfer->xd_objid);
+            LOG_RETURN(-ENOMEDIUM,
+                       "Did not find medium '%s':'%s' in layout of '%s'",
+                       medium[i]->med_id->library,
+                       medium[i]->med_id->name,
+                       dec->xfer->xd_objid);
 
         io_context->read.extents[i] = &dec->layout->extents[ext_index];
         if (io_context->read.extents[i]->size > *split_size)
@@ -753,18 +756,27 @@ static int raid_io_context_read_init(struct pho_encoder *dec,
     return 0;
 }
 
+static void pho_id_from_rsc_id(const pho_rsc_id_t *medium, struct pho_id *dst)
+{
+    dst->family = medium->family;
+    pho_id_name_set(dst, medium->name, medium->library);
+}
+
 static int mark_written_medium_released(struct raid_io_context *io_context,
-                                        const char *medium)
+                                        const pho_rsc_id_t *medium)
 {
     size_t *to_release_refcount;
+    struct pho_id copy;
 
+    pho_id_from_rsc_id(medium, &copy);
     to_release_refcount =
-        g_hash_table_lookup(io_context->write.to_release_media, medium);
+        g_hash_table_lookup(io_context->write.to_release_media, &copy);
 
     if (to_release_refcount == NULL)
         LOG_RETURN(-EINVAL,
-                   "Got a release response for medium '%s' but it is was in "
-                   "the release list", medium);
+                   "Got a release response for medium '%s':'%s' but it is was "
+                   "not in the release list",
+                   medium->library, medium->name);
 
     /* media id with refcount of zero must be removed from the hash table */
     assert(*to_release_refcount > 0);
@@ -777,7 +789,7 @@ static int mark_written_medium_released(struct raid_io_context *io_context,
         gboolean was_in_table;
 
         was_in_table = g_hash_table_remove(io_context->write.to_release_media,
-                                           medium);
+                                           &copy);
         assert(was_in_table);
         return 0;
     }
@@ -797,10 +809,12 @@ static int raid_write_handle_release_resp(struct pho_encoder *enc,
     for (i = 0; i < rel_resp->n_med_ids; i++) {
         int rc2;
 
-        pho_debug("Marking medium %s as released", rel_resp->med_ids[i]->name);
+        pho_debug("Marking medium '%s':'%s' as released",
+                  rel_resp->med_ids[i]->name,
+                  rel_resp->med_ids[i]->library);
         /* If the media_id is unexpected, -EINVAL will be returned */
         rc2 = mark_written_medium_released(io_context,
-                                           rel_resp->med_ids[i]->name);
+                                           rel_resp->med_ids[i]);
         if (rc2 && !rc)
             rc = rc2;
     }
@@ -890,6 +904,7 @@ static int raid_enc_handle_read_resp(struct pho_encoder *dec, pho_resp_t *resp,
     int i;
 
     ENTRY;
+
     pho_srl_request_release_alloc(*reqs + *n_reqs, resp->ralloc->n_media);
 
     for (i = 0; i < resp->ralloc->n_media; i++)
@@ -897,9 +912,8 @@ static int raid_enc_handle_read_resp(struct pho_encoder *dec, pho_resp_t *resp,
                    resp->ralloc->media[i]->med_id);
 
     io_context->read.resp = resp->ralloc;
-    rc = raid_io_context_read_init(dec, resp->ralloc->media,
-                                   resp->ralloc->n_media,
-                                   &split_size);
+    rc = read_split_setup(dec, resp->ralloc->media, resp->ralloc->n_media,
+                          &split_size);
     if (rc)
         goto skip_io;
 
