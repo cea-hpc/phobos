@@ -779,6 +779,7 @@ out_free:
     dss_unlock(&adm->dss, DSS_DEVICE, devices, avail_devices, false);
     for (i = 0; i < avail_devices; ++i)
         dev_info_free(devices + i, false);
+
     free(devices);
 
     return rc;

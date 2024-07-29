@@ -1730,6 +1730,41 @@ class MediaOptHandler(BaseResourceOptHandler):
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
+    def del_medium(self, adm, family, resources, library):
+        """Delete medium method"""
+
+    def delete_medium_and_device(self):
+        """Delete a medium and device at once"""
+        resources = self.params.get('res')
+        set_library(self)
+        valid_count = 0
+        rc = 0
+
+        try:
+            with AdminClient(lrs_required=False) as adm:
+                for path in resources:
+                    # Remove any trailing slash
+                    path = path.rstrip('/')
+                    device_is_del = False
+                    try:
+                        rc = adm.device_delete(self.family, [path],
+                                               self.library)
+                        device_is_del = True
+                        self.del_medium(adm, self.family, [path], self.library)
+                        valid_count += 1
+                    except EnvironmentError as err:
+                        self.logger.error(env_error_format(err))
+                        rc = (err.errno if not rc else rc)
+                        if device_is_del:
+                            adm.device_add(self.family, [path], False,
+                                           self.library)
+                        continue
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
+        return (rc, len(resources), valid_count)
+
     def _media_update(self, media, fields):
         """Calling client.media.update"""
         try:
@@ -2036,6 +2071,7 @@ class DirOptHandler(MediaOptHandler):
         UnlockOptHandler,
         DirSetAccessOptHandler,
         MediumLocateOptHandler,
+        ResourceDeleteOptHandler,
     ]
 
     def add_medium(self, adm, medium, tags):
@@ -2054,6 +2090,24 @@ class DirOptHandler(MediaOptHandler):
         else:
             self.logger.error("Failed to add %d/%d dir(s)",
                               nb_dev_to_add - nb_dev_added, nb_dev_to_add)
+            sys.exit(abs(rc))
+
+    def del_medium(self, adm, family, resources, library):
+        adm.medium_delete(family, resources, library)
+
+    def exec_delete(self):
+        """
+        Delete a directory
+        Note that this is a special case where we delete both a media (storage)
+        and a device (mean to access it).
+        """
+        rc, nb_dev_to_del, nb_dev_del = self.delete_medium_and_device()
+
+        if nb_dev_del == nb_dev_to_del:
+            self.logger.info("Deleted %d dir(s) successfully", nb_dev_del)
+        else:
+            self.logger.error("Failed to delete %d/%d dir(s)",
+                              nb_dev_to_del - nb_dev_del, nb_dev_to_del)
             sys.exit(abs(rc))
 
 class DriveStatus(CLIManagedResourceMixin): #pylint: disable=too-many-instance-attributes
