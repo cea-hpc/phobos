@@ -83,7 +83,8 @@ check_SCRIPTS=acceptance.test \
               test_unlock_at_unload.test
 
 if RADOS_ENABLED
-check_SCRIPTS+=test_store_rados_commands.sh test_locate_rados.test
+check_SCRIPTS+=test_store_rados_commands.sh test_locate_rados.test \
+               test_media_delete_rados.test
 endif
 
 TESTS_ENVIRONMENT = HAVE_XXH128="@HAVE_XXH128@"

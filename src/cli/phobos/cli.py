@@ -2399,6 +2399,7 @@ class RadosPoolOptHandler(MediaOptHandler):
         RadosPoolSetAccessOptHandler,
         RadosPoolFormatOptHandler,
         MediumLocateOptHandler,
+        ResourceDeleteOptHandler,
     ]
 
     def add_medium(self, adm, medium, tags):
@@ -2417,6 +2418,25 @@ class RadosPoolOptHandler(MediaOptHandler):
         else:
             self.logger.error("Failed to add %d/%d RADOS pools",
                               nb_dev_to_add - nb_dev_added, nb_dev_to_add)
+            sys.exit(abs(rc))
+
+    def del_medium(self, adm, family, resources, library):
+        adm.medium_delete(family, resources, library)
+
+    def exec_delete(self):
+        """
+        Delete a RADOS pool.
+        Note that this is a special case where we delete both a media (storage)
+        and a device (mean to access it).
+        """
+        rc, nb_dev_to_del, nb_dev_del = self.delete_medium_and_device()
+
+        if nb_dev_del == nb_dev_to_del:
+            self.logger.info("Deleted %d RADOS pool(s) successfully",
+                             nb_dev_del)
+        else:
+            self.logger.error("Failed to delete %d/%d RADOS pools",
+                              nb_dev_to_del - nb_dev_del, nb_dev_to_del)
             sys.exit(abs(rc))
 
 class ExtentOptHandler(BaseResourceOptHandler):

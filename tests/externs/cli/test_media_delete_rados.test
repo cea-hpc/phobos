@@ -1,0 +1,74 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2024 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Test media delete with rados
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+function setup()
+{
+    setup_tables
+    sudo ceph osd pool create pho_test
+}
+
+function cleanup()
+{
+    sudo ceph osd pool rm pho_test pho_test --yes-i-really-really-mean-it
+    drop_tables
+}
+
+function test_rados_media_delete()
+{
+    # Without LRS: delete without extents
+    $valg_phobos rados_pool add --unlock pho_test
+    $valg_phobos rados_pool format pho_test
+    $valg_phobos rados_pool delete pho_test
+    if [[ ! -z $($valg_phobos rados_pool list) ]]; then
+        error "phobos rados_pool list shoud be empty"
+    fi
+
+    # With LRS
+    invoke_lrs
+    $valg_phobos rados_pool add --unlock pho_test
+    $valg_phobos rados_pool format pho_test
+    $valg_phobos rados_pool delete pho_test && error "phobos rados_pool" \
+        "delete pho_test should have failed, already lock by the LRS"
+    if [[ -z $($valg_phobos rados_pool list) ]]; then
+        error "phobos rados_pool list should contains pho_test"
+    fi
+
+    $valg_phobos put -f rados_pool /etc/hosts blob
+
+    # Without LRS: delete with extents
+    waive_lrs
+    $valg_phobos rados_pool delete pho_test && error "phobos rados_pool" \
+        "delete pho_test should have failed (contains extent)"
+    if [[ -z $($valg_phobos rados_pool list) ]]; then
+        error "phobos rados_pool list should contains pho_test"
+    fi
+}
+
+TESTS=("setup; test_rados_media_delete; cleanup")
