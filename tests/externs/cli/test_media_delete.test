@@ -31,7 +31,25 @@ test_dir=$(dirname $(readlink -e $0))
 function setup()
 {
     setup_tables
-    invoke_daemons
+    if [[ -w /dev/changer ]]; then
+        invoke_daemons
+    else
+        invoke_lrs
+    fi
+}
+
+function cleanup()
+{
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+    else
+        waive_lrs
+    fi
+
+    drop_tables
+    if [[ -w /dev/changer ]]; then
+        drain_all_drives
+    fi
 }
 
 function test_tape_delete()
@@ -43,14 +61,14 @@ function test_tape_delete()
     $phobos tape add -t lto5 $tape
 
     # Delete a tape
-    $phobos tape delete $tape
+    $valg_phobos tape delete $tape
     if [[ ! -z $($phobos tape list) ]]; then
         error "database should be empty"
     fi
 
     # With a wrong tape
     $phobos tape add -t lto5 $tape
-    $phobos tape delete wrong &&
+    $valg_phobos tape delete wrong &&
         error "phobos tape delete wrong should have failed"
     if [[ -z $($phobos tape list) ]]; then
         error "phobos tape list should contains $tape"
@@ -58,7 +76,7 @@ function test_tape_delete()
 
     # Delete a tape which is used
     $phobos drive load $drive $tape
-    $phobos tape delete $tape &&
+    $valg_phobos tape delete $tape &&
         error "phobos tape delete $tape should have failed, already lock"
     if [[ -z $($phobos tape list) ]]; then
         error "phobos tape list should contains $tape"
@@ -68,22 +86,59 @@ function test_tape_delete()
     $phobos tape format --unlock $tape
     $phobos put -f tape /etc/hosts blob
     $phobos drive unload $drive
-    $phobos tape delete $tape &&
+    $valg_phobos tape delete $tape &&
         error "phobos tape delete $tape should have failed (contains extents)"
     if [[ -z $($phobos tape list) ]]; then
         error "phobos tape list should contains $tape"
     fi
 }
 
-function cleanup()
+function setup_dir()
 {
-    waive_daemons
-    drop_tables
-    drain_all_drives
+    setup_tables
+
+    DIR=$(mktemp -d /tmp/test.pho.XXXX)
 }
 
-if [[ ! -w /dev/changer ]]; then
-    skip "Tapes required for this test"
-fi
+function cleanup_dir()
+{
+    drop_tables
 
-TESTS=("setup; test_tape_delete; cleanup")
+    rm -rf "$DIR"
+}
+
+function test_dir_delete()
+{
+    # Without LRS: delete without extents
+    $valg_phobos dir add --unlock $DIR
+    $valg_phobos dir delete $DIR
+    if [[ ! -z $($valg_phobos dir list) ]]; then
+        error "phobos dir list shoud be empty"
+    fi
+
+    # With LRS
+    invoke_lrs
+    $valg_phobos dir add --unlock $DIR
+    $valg_phobos dir format $DIR
+    $valg_phobos dir delete $DIR && error "phobos dir delete $DIR should have" \
+        "failed, already lock by the LRS"
+    if [[ -z $($valg_phobos dir list) ]]; then
+        error "phobos dir list should contains $DIR"
+    fi
+
+    $valg_phobos put -f dir /etc/hosts blob
+
+    # Without LRS: delete with extents
+    waive_lrs
+    $valg_phobos dir delete $DIR && error "phobos dir delete $DIR should have" \
+        "failed (contains extent)"
+    if [[ -z $($valg_phobos dir list) ]]; then
+        error "phobos dir list should contains $DIR"
+    fi
+}
+
+TESTS=("setup_dir; test_dir_delete; cleanup_dir")
+
+if [[ -w /dev/changer ]]; then
+    TESTS+=("setup; test_tape_delete; cleanup")
+fi
