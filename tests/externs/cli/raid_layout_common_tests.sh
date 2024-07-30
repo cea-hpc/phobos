@@ -107,6 +107,61 @@ function check_extent_count()
     fi
 }
 
+function raid1_extent_offset()
+{
+    local n1=$1[@]
+    local media=(${!n1})
+    local n2=$2[@]
+    local addresses=(${!n2})
+    local extent_index=$3
+    local extent="${media[$extent_index]}/${addresses[$extent_index]}"
+    local repl_count=$(getxattr "$extent" user.raid1.repl_count |
+                       cut -d'=' -f2 |
+                       sed 's/"//g')
+    local total=0
+    local i
+
+    for ((i = 0; i < $extent_index / $repl_count; i++)); do
+        (( total += $(stat -c %s "${media[2 * i]}/${addresses[2 * i]}") ))
+    done
+
+    echo $total
+}
+
+function raid4_extent_offset()
+{
+    local n1=$1[@]
+    local media=(${!n1})
+    local n2=$2[@]
+    local addresses=(${!n2})
+    local extent_index=$3
+    local extent="${media[$extent_index]}/${addresses[$extent_index]}"
+    local repl_count=$(getxattr "$extent" user.raid1.repl_count |
+                       cut -d'=' -f2 |
+                       sed 's/"//g')
+    local total=0
+    local i
+
+    for ((i = 0; i < $extent_index / 3; i++)); do
+        ((total += $(stat -c %s "${media[3 * i]}/${addresses[3 * i]}")))
+        ((total += $(stat -c %s "${media[3 * i + 1]}/${addresses[3 * i + 1]}")))
+    done
+
+    echo $total
+}
+
+function check_offset()
+{
+    local n1=$1[@]
+    local media=(${!n1})
+    local n2=$2[@]
+    local addresses=(${!n2})
+    local layout_index=$3
+
+    getxattr "$extent" user.extent_offset |
+        grep $(${RAID_LAYOUT}_extent_offset media addresses $layout_index)
+}
+
 function check_extent_md()
 {
     local oid=$1
@@ -119,6 +174,7 @@ function check_extent_md()
         local extent="${media[i]}/${addresses[i]}"
 
         check_phobos_xattr "$input_file" "$extent" "$oid"
+        check_offset media addresses $i
     done
 }
 
