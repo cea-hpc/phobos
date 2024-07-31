@@ -842,6 +842,7 @@ ssize_t pho_posix_preferred_io_size(struct pho_io_descr *iod)
     if (fstatfs(io_ctx->fd, &sfs) != 0)
         return -errno;
 
+    pho_debug("prefered I/O size %ld", sfs.f_bsize);
     return sfs.f_bsize;
 }
 

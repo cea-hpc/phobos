@@ -219,9 +219,9 @@ function test_put_get()
     local oid=$FUNCNAME
     local file=$(make_file 512K)
 
-    $valg_phobos put "$file" $oid
+    $valg_phobos -vv put "$file" $oid
     check_extent_md $oid "$file"
-    $valg_phobos get $oid /tmp/out.$$
+    $valg_phobos -vv get $oid /tmp/out.$$
 
     diff "$file" /tmp/out.$$
     rm /tmp/out.$$ "$file"
@@ -324,10 +324,10 @@ function test_put_get_split()
     local oid=$FUNCNAME
     local out=/tmp/out.$$
 
-    $valg_phobos put "$file" $oid
+    $valg_phobos -vv put "$file" $oid
     check_extent_count "$oid" 6
     check_extent_md "$oid" "$file"
-    $valg_phobos get $oid "$out"
+    $valg_phobos -vv get $oid "$out"
     diff "$out" "$file"
     rm "$out" "$file"
 }

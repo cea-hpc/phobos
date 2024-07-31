@@ -198,6 +198,7 @@ int raid4_get_block_size(struct pho_encoder *enc, size_t *block_size)
 
     pho_debug("raid4: found block size '%s' for extent '%s'", attr,
               extent->uuid);
+
     value = str2int64(attr);
     if (value <= 0)
         LOG_RETURN(-EINVAL,

@@ -425,22 +425,16 @@ static void raid_io_context_set_extent_info(struct raid_io_context *io_context,
     }
 }
 
-static void get_io_size(struct io_adapter_module *ioa,
-                        struct pho_io_descr *iod,
-                        size_t *block_size,
-                        size_t *buffer_size)
+static void get_io_size(struct pho_io_descr *iod, size_t *io_size)
 {
-    if (*block_size != 0)
+    if (*io_size != 0)
         /* io_size already specified in the configuration */
-        goto next;
+        return;
 
-    *block_size = ioa_preferred_io_size(ioa, iod);
-    if (*block_size <= 0)
+    *io_size = ioa_preferred_io_size(iod->iod_ioa, iod);
+    if (*io_size <= 0)
         /* fallback: get the system page size */
-        *block_size = sysconf(_SC_PAGESIZE);
-
-next:
-    *buffer_size = *block_size;
+        *io_size = sysconf(_SC_PAGESIZE);
 }
 
 static void raid_io_context_setmd(struct raid_io_context *io_context,
@@ -456,6 +450,64 @@ static void raid_io_context_setmd(struct raid_io_context *io_context,
     }
 }
 
+static size_t gcd(size_t a, size_t b)
+{
+    size_t tmp;
+
+    while (b != 0) {
+        tmp = a % b;
+
+        a = b;
+        b = tmp;
+    }
+
+    return a;
+}
+
+static size_t lcm(size_t a, size_t b)
+{
+    return a / gcd(a, b) * b;
+}
+
+/**
+ * Make sure the I/O size is optimal for all I/O descriptors by using the LCM
+ * of all the I/O descriptor optimal sizes. If the I/O size is already set in
+ * the config, simply return it.
+ */
+static size_t best_io_size(struct pho_encoder *enc)
+{
+    struct raid_io_context *io_context = enc->priv_enc;
+    size_t nb_extents;
+    size_t best = 0;
+    int i;
+
+    if (enc->io_block_size > 0)
+        /* This serves 2 purposes. First, if the I/O size is setup in the
+         * configuration, we don't want to overwrite it. Second, we only want to
+         * find the optimal I/O size on the first split and reuse the same on
+         * the subsequent splits. It seems overkill to update the I/O block size
+         * for each split.
+         */
+        return enc->io_block_size;
+
+    if (enc->is_decoder)
+        nb_extents = io_context->n_data_extents;
+    else
+        nb_extents = n_total_extents(io_context);
+
+    get_io_size(&io_context->posix, &best);
+
+    for (i = 0; i < nb_extents; i++) {
+        size_t io_size = 0;
+
+        get_io_size(raid_enc_iod(enc, i), &io_size);
+
+        best = lcm(best, io_size);
+    }
+
+    return best;
+}
+
 static int write_split_setup(struct pho_encoder *enc, pho_resp_write_t *wresp,
                              size_t split_size)
 {
@@ -463,7 +515,6 @@ static int write_split_setup(struct pho_encoder *enc, pho_resp_write_t *wresp,
     struct pho_io_descr *iods;
     size_t left_to_write;
     size_t object_size;
-    size_t buffer_size;
     size_t n_extents;
     int rc;
     int i;
@@ -494,15 +545,12 @@ static int write_split_setup(struct pho_encoder *enc, pho_resp_write_t *wresp,
     if (rc)
         return rc;
 
-    get_io_size(raid_enc_iod(enc, 0)->iod_ioa,
-                raid_enc_iod(enc, 0),
-                &enc->io_block_size,
-                &buffer_size);
-    if (split_size < buffer_size)
-        buffer_size = split_size;
+    enc->io_block_size = best_io_size(enc);
+    if (split_size < enc->io_block_size)
+        enc->io_block_size = split_size;
 
     for (i = 0; i < n_extents; i++)
-        pho_buff_alloc(&io_context->buffers[i], buffer_size);
+        pho_buff_alloc(&io_context->buffers[i], enc->io_block_size);
 
     for (i = 0; i < io_context->nb_hashes; i++) {
         rc = extent_hash_reset(&io_context->hashes[i]);
@@ -699,7 +747,6 @@ static int read_split_setup(struct pho_encoder *dec,
 {
     struct raid_io_context *io_context = dec->priv_enc;
     size_t n_extents = n_total_extents(io_context);
-    size_t buffer_size;
     size_t i;
     int rc;
 
@@ -739,19 +786,24 @@ static int read_split_setup(struct pho_encoder *dec,
     if (rc)
         return rc;
 
-    get_io_size(raid_enc_iod(dec, 0)->iod_ioa,
-                raid_enc_iod(dec, 0),
-                &dec->io_block_size,
-                &buffer_size);
-    if (*split_size < buffer_size)
-        buffer_size = *split_size;
-
-    rc = io_context->ops->get_block_size(dec, &buffer_size);
+    rc = io_context->ops->get_block_size(dec, &dec->io_block_size);
     if (rc)
         return rc;
 
+    if (dec->io_block_size == 0) {
+        /* If the layout does not have a prefered I/O size, set it to the best
+         * one. For example, RAID1 can use any I/O size.
+         */
+        dec->io_block_size = best_io_size(dec);
+        if (*split_size < dec->io_block_size)
+            dec->io_block_size = *split_size;
+
+        pho_debug("%s: setting I/O size to %lu", io_context->name,
+                  dec->io_block_size);
+    }
+
     for (i = 0; i < n_extents; i++)
-        pho_buff_alloc(&io_context->buffers[i], buffer_size);
+        pho_buff_alloc(&io_context->buffers[i], dec->io_block_size);
 
     return 0;
 }

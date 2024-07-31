@@ -125,7 +125,9 @@ function cleanup
 {
     hostname $SELF_HOST
     waive_daemons
-    drain_all_drives
+    if [[ -w /dev/changer ]]; then
+        drain_all_drives
+    fi
     drop_tables
     rm -rf $dirs
     rm -f /tmp/out*

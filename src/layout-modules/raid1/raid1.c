@@ -204,12 +204,6 @@ static int raid1_write_split(struct pho_encoder *enc, size_t split_size)
 
     iods = io_context->iods;
 
-    for (i = 0; i < repl_count; ++i) {
-        get_preferred_io_block_size(&enc->io_block_size,
-                                    iods[i].iod_ioa,
-                                    &iods[i]);
-    }
-
     /* write all extents by chunk of buffer size*/
     rc = write_all_chunks(io_context, split_size);
     if (rc)
@@ -264,12 +258,8 @@ static int raid1_read_split(struct pho_encoder *dec)
 static int raid1_get_block_size(struct pho_encoder *enc,
                                 size_t *block_size)
 {
-    struct raid_io_context *io_context = enc->priv_enc;
-    struct pho_io_descr *iod;
-
-    iod = &io_context->iods[0];
-
-    get_preferred_io_block_size(block_size, iod->iod_ioa, iod);
+    (void) enc;
+    (void) block_size;
 
     return 0;
 }
