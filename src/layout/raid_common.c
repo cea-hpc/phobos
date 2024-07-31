@@ -112,6 +112,8 @@ void raid_build_read_allocation_req(struct pho_encoder *dec, pho_req_t *req)
             dec->layout->extents[ext_idx].media.family;
         req->ralloc->med_ids[i]->name =
             strdup(dec->layout->extents[ext_idx].media.name);
+        req->ralloc->med_ids[i]->library =
+            strdup(dec->layout->extents[ext_idx].media.library);
     }
 }
 
@@ -127,7 +129,8 @@ int raid_io_context_set_extent_info(struct raid_io_context *io_context,
         io_context->extent[i].size = extent_size;
         io_context->extent[i].media.family =
                                 (enum rsc_family)medium[i]->med_id->family;
-        pho_id_name_set(&io_context->extent[i].media, medium[i]->med_id->name);
+        pho_id_name_set(&io_context->extent[i].media, medium[i]->med_id->name,
+                        medium[i]->med_id->library);
     }
 
     return 0;
