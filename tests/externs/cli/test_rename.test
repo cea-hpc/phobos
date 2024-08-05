@@ -1,0 +1,656 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2024 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the Licence, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for rename commands
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
+rename=$test_dir/externs/cli/test_rename
+
+set -xe
+
+################################################################################
+#                               SETUP / CLEANUP                                #
+################################################################################
+function setup
+{
+    setup_tables
+    invoke_lrs
+
+    dir=$(mktemp -d /tmp/test.pho.XXXX)
+    $phobos dir add $dir || \
+        error "Dir should have been added"
+    $phobos dir format --fs posix --unlock $dir || \
+        error "Dir should have been formated"
+
+    n_tests=${#TESTS[@]}
+
+    n_files=$((2*n_tests+1))
+    setup_dummy_files $n_files
+}
+
+function cleanup
+{
+    waive_lrs
+    drop_tables
+    rm -rf $dir
+    rm -f $counter
+}
+
+################################################################################
+#                             ASSERTION FUNCTIONS                              #
+################################################################################
+
+function assert_living_exists
+{
+    if [[ "$($phobos object list oid$1)" != "oid$1" ]]; then
+        error "Object 'oid$1' should exist"
+    fi
+}
+
+function assert_living_doesnt_exist
+{
+    if [[ ! -z "$($phobos object list oid$1)" ]]; then
+        error "Object 'oid$1' shouldn't exist"
+    fi
+}
+
+function assert_deprecs_exist
+{
+    local nb_deps=$($phobos object list --deprecated oid$1 | grep oid$1 | wc -l)
+    if [[ "$nb_deps" != "$2" ]]; then
+        error "Incorrect number of deprecated object 'oid$1', $2 expected"
+    fi
+}
+
+function assert_deprec_doesnt_exist
+{
+    if [[ ! -z "$($phobos object list --deprecated oid$1)" ]]; then
+        error "Deprecated object 'oid$1' shouldn't exist"
+    fi
+}
+
+function assert_extents_exist
+{
+    local nb_exts=$($phobos extent list oid$1 | grep oid$1 | wc -l)
+    if [[ "$nb_exts" != "$2" ]]; then
+        error "Incorrect number of extents for object 'oid$1', $2 expected"
+    fi
+}
+
+function assert_extent_doesnt_exist
+{
+    if [[ ! -z "$($phobos extent list oid$1)" ]]; then
+        error "Extent for object 'oid$1' shoudln't exist"
+    fi
+}
+
+function assert_object_didnt_change_uuid
+{
+    if [[ "$($phobos object list oid$1 --output uuid)" != "$2" ]]; then
+        error "UUID of 'oid$1' changed during rename"
+    fi
+}
+
+function assert_deprecated_didnt_change_uuid
+{
+    if [[ "$($phobos object list --deprecated oid$1 --output uuid)" != \
+        "$2" ]]; then
+        error "UUID of 'oid$1' changed during rename"
+    fi
+}
+
+################################################################################
+#                              OIDS RENAME TESTS                               #
+################################################################################
+
+function test_rename_oid_alive_to_nonexistant
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+
+    $phobos put --family dir /etc/hosts oid${c1}  # Alive
+    $valg_phobos rename --oid oid${c1} oid${c2} || \
+        error "Rename operation failed"
+
+    assert_living_doesnt_exist $c1
+    assert_living_exists $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprec_doesnt_exist $c2
+
+    assert_extent_doesnt_exist $c1
+    assert_extents_exist $c2 1
+}
+
+function test_rename_oid_alive_to_deleted
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+
+    $phobos put --family dir /etc/hosts oid${c1} # Alive
+    $phobos put --family dir /etc/hosts oid${c2} # Deleted
+    $phobos delete oid${c2}
+    $valg_phobos rename --oid oid${c1} oid${c2} ||
+        error "Rename operation failed"
+
+    assert_living_doesnt_exist $c1
+    assert_living_exists $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprecs_exist $c2 1
+
+    assert_extent_doesnt_exist $c1
+    assert_extents_exist $c2 2
+}
+
+function test_rename_oid_alive_to_alive
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+
+    $phobos put --family dir /etc/hosts oid${c1} # Alive
+    $phobos put --family dir /etc/hosts oid${c2} # Alive
+    $valg_phobos rename --oid oid${c1} oid${c2} &&
+        error "Rename operation should have failed" || true
+
+    assert_living_exists $c1
+    assert_living_exists $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprec_doesnt_exist $c2
+
+    assert_extents_exist $c1 1
+    assert_extents_exist $c2 1
+}
+
+function test_rename_oid_updated_to_nonexistant
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+
+    $phobos put --family dir /etc/hosts oid${c1}  # Updated
+    $phobos put --family dir --overwrite /etc/hosts oid${c1}
+    $valg_phobos rename --oid oid${c1} oid${c2} || \
+        error "Rename operation failed"
+
+    assert_living_doesnt_exist $c1
+    assert_living_exists $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprecs_exist $c2 1
+
+    assert_extent_doesnt_exist $c1
+    assert_extents_exist $c2 2
+}
+
+function test_rename_oid_updated_to_deleted
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+
+    $phobos put --family dir /etc/hosts oid${c1} # Updated
+    $phobos put --family dir /etc/hosts oid${c2} # Deleted
+    $phobos put --family dir --overwrite /etc/hosts oid${c1}
+    $phobos delete oid${c2}
+    $valg_phobos rename --oid oid${c1} oid${c2} || \
+        error "Rename operation failed"
+
+    assert_living_doesnt_exist $c1
+    assert_living_exists $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprecs_exist $c2 2
+
+    assert_extent_doesnt_exist $c1
+    assert_extents_exist $c2 3
+}
+
+function test_rename_oid_updated_to_alive
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+
+    $phobos put --family dir /etc/hosts oid${c1} # Updated
+    $phobos put --family dir /etc/hosts oid${c2} # Alive
+    $phobos put --family dir --overwrite /etc/hosts oid${c1}
+    $valg_phobos rename --oid oid${c1} oid${c2} &&
+        error "Rename operation should have failed" || true
+
+    assert_living_exists $c1
+    assert_living_exists $c2
+
+    assert_deprecs_exist $c1 1
+    assert_deprec_doesnt_exist $c2
+
+    assert_extents_exist $c1 2
+    assert_extents_exist $c2 1
+}
+
+function test_rename_oid_deleted_to_nonexistant
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+
+    $phobos put --family dir /etc/hosts oid${c1}  # Deleted
+    $phobos delete oid${c1}
+
+    $valg_phobos rename --oid oid${c1} oid${c2} &&
+        error "Rename operation should have failed" || true
+
+    assert_living_doesnt_exist $c1
+    assert_living_doesnt_exist $c2
+
+    assert_deprecs_exist $c1 1
+    assert_deprec_doesnt_exist $c2
+
+    assert_extents_exist $c1 1
+    assert_extent_doesnt_exist $c2
+}
+
+function test_rename_oid_nonexistant_to_nonexistant
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+
+    $valg_phobos rename --oid oid${c1} oid${c2} &&
+        error "Rename operation should have failed" || true
+
+    assert_extent_doesnt_exist $c1
+    assert_extent_doesnt_exist $c2
+}
+
+################################################################################
+#                              UUIDS RENAME TESTS                              #
+################################################################################
+
+function test_rename_uuid_alive_to_nonexistant
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+    local uuid1
+
+    $phobos put --family dir /etc/hosts oid${c1}  # Alive
+    uuid1=$($phobos object list oid${c1} --output uuid)
+    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+        error "Rename operation failed"
+
+    assert_living_doesnt_exist $c1
+    assert_living_exists $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprec_doesnt_exist $c2
+
+    assert_extent_doesnt_exist $c1
+    assert_extents_exist $c2 1
+
+    assert_object_didnt_change_uuid $c2 $uuid1
+}
+
+function test_rename_uuid_alive_to_deleted
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+    local uuid1
+    local uuid2
+    local output
+    local c_uuid1
+    local c_uuid2
+    local o_lines
+
+    $phobos put --family dir /etc/hosts oid${c1} # Alive
+    $phobos put --family dir /etc/hosts oid${c2} # Deleted
+    $phobos delete oid${c2}
+    uuid1=$($phobos object list oid${c1} --output uuid)
+    uuid2=$($phobos object list --deprecated oid${c2} --output uuid)
+    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+        error "Rename operation failed"
+
+    assert_living_doesnt_exist $c1
+    assert_living_exists $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprecs_exist $c2 1
+
+    assert_extent_doesnt_exist $c1
+    assert_extents_exist $c2 2
+
+    output=$($phobos extent list oid${c2} --output object_uuid)
+    c_uuid1=$(echo "${output}" | grep -c "^${uuid1}$")
+    c_uuid2=$(echo "${output}" | grep -c "^${uuid2}$")
+    o_lines=$(echo "${output}" | wc -l)
+    if [[ $c_uuid1 -ne 1 || $c_uuid2 -ne 1 || $o_lines -ne 2 ]]; then
+        error "UUID of some objects has been modified"
+    fi
+}
+
+function test_rename_uuid_alive_to_alive
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+    local uuid1
+    local uuid2
+
+    $phobos put --family dir /etc/hosts oid${c1} # Alive
+    $phobos put --family dir /etc/hosts oid${c2} # Alive
+    uuid1=$($phobos object list oid${c1} --output uuid)
+    uuid2=$($phobos object list oid${c2} --output uuid)
+    $valg_phobos rename --uuid ${uuid1} oid${c2} &&
+        error "Rename operation should have failed" || true
+
+    assert_living_exists $c1
+    assert_living_exists $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprec_doesnt_exist $c2
+
+    assert_extents_exist $c1 1
+    assert_extents_exist $c2 1
+
+    assert_object_didnt_change_uuid $c1 $uuid1
+    assert_object_didnt_change_uuid $c2 $uuid2
+}
+
+function test_rename_uuid_updated_to_nonexistant
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+    local uuid1
+    local output
+    local c_uuid1
+    local o_lines
+
+    $phobos put --family dir /etc/hosts oid${c1}  # Updated
+    $phobos put --family dir --overwrite /etc/hosts oid${c1}
+    uuid1=$($phobos object list oid${c1} --output uuid)
+    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+        error "Rename operation failed"
+
+    assert_living_doesnt_exist $c1
+    assert_living_exists $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprecs_exist $c2 1
+
+    assert_extent_doesnt_exist $c1
+    assert_extents_exist $c2 2
+
+    output=$($phobos extent list oid${c2} --output object_uuid)
+    c_uuid1=$(echo "${output}" | grep -c "^${uuid1}$")
+    o_lines=$(echo "${output}" | wc -l)
+    if [[ $c_uuid1 -ne 2 || $o_lines -ne 2 ]]; then
+        error "UUID of 'oid${c1}' changed while renaming to 'oid${c2}'"
+    fi
+}
+
+function test_rename_uuid_updated_to_deleted
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+    local uuid1
+    local uuid2
+    local output
+    local c_uuid1
+    local c_uuid2
+    local o_lines
+
+    $phobos put --family dir /etc/hosts oid${c1} # Updated
+    $phobos put --family dir /etc/hosts oid${c2} # Deleted
+    $phobos put --family dir --overwrite /etc/hosts oid${c1}
+    $phobos delete oid${c2}
+    uuid1=$($phobos object list oid${c1} --output uuid)
+    uuid2=$($phobos object list --deprecated oid${c2} --output uuid)
+    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+        error "Rename operation failed"
+
+    assert_living_doesnt_exist $c1
+    assert_living_exists $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprecs_exist $c2 2
+
+    assert_extent_doesnt_exist $c1
+    assert_extents_exist $c2 3
+
+    output=$($phobos object list --deprecated oid${c2} --output uuid)
+    c_uuid1=$(echo "${output}" | grep -c "^${uuid1}$")
+    c_uuid2=$(echo "${output}" | grep -c "^${uuid2}$")
+    o_lines=$(echo "${output}" | wc -l)
+    if [[ $c_uuid1 -ne 1 || $c_uuid2 -ne 1 || $o_lines -ne 2 ]]; then
+        error "UUID of some deprecated object has been modified"
+    fi
+}
+
+function test_rename_uuid_updated_to_updated
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+    local uuid1
+    local uuid2
+
+    $phobos put --family dir /etc/hosts oid${c1} # Updated
+    $phobos put --family dir /etc/hosts oid${c2} # Updated
+    $phobos put --family dir --overwrite /etc/hosts oid${c1}
+    $phobos put --family dir --overwrite /etc/hosts oid${c2}
+    uuid1=$($phobos object list oid${c1} --output uuid)
+    uuid2=$($phobos object list oid${c2} --output uuid)
+    $valg_phobos rename --uuid ${uuid1} oid${c2} &&
+        error "Rename operation should have failed" || true
+
+    assert_living_exists $c1
+    assert_living_exists $c2
+
+    assert_deprecs_exist $c1 1
+    assert_deprecs_exist $c2 1
+
+    assert_extents_exist $c1 2
+    assert_extents_exist $c2 2
+
+    if [[ "$($phobos extent list oid${c1} --output object_uuid)" != \
+        "${uuid1}"$'\n'"${uuid1}" ]]; then
+        error "UUID of 'oid$c1' has been changed while renaming to 'oid$c2'"
+    fi
+    if [[ "$($phobos extent list oid${c2} --output object_uuid)" != \
+        "${uuid2}"$'\n'"${uuid2}" ]]; then
+        error "UUID of 'oid${c2}' has been changed during process"
+    fi
+}
+
+function test_rename_uuid_updated_to_alive
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+    local uuid1
+    local uuid2
+
+    $phobos put --family dir /etc/hosts oid${c1} # Updated
+    $phobos put --family dir /etc/hosts oid${c2} # Alive
+    $phobos put --family dir --overwrite /etc/hosts oid${c1}
+    uuid1=$($phobos object list oid${c1} --output uuid)
+    uuid2=$($phobos object list oid${c2} --output uuid)
+    $valg_phobos rename --uuid ${uuid1} oid${c2} &&
+        error "Rename operation should have failed" || true
+
+    assert_living_exists $c1
+    assert_living_exists $c2
+
+    assert_deprecs_exist $c1 1
+    assert_deprec_doesnt_exist $c2
+
+    assert_extents_exist $c1 2
+    assert_extents_exist $c2 1
+
+    if [[ "$($phobos extent list oid${c1} --output object_uuid)" != \
+        "${uuid1}"$'\n'"${uuid1}" ]]; then
+        error "UUID of 'oid$c1' has been changed while renaming to 'oid$c2'"
+    fi
+    assert_object_didnt_change_uuid $c2 $uuid2
+}
+
+function test_rename_uuid_deleted_to_nonexistant
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+    local uuid1
+
+    $phobos put --family dir /etc/hosts oid${c1}  # Deleted
+    $phobos delete oid${c1}
+    uuid1="$($phobos object list --deprecated oid${c1} --output uuid)"
+    $valg_phobos rename --uuid ${uuid1} oid${c2} ||
+        error "Rename operation failed"
+
+    assert_living_doesnt_exist $c1
+    assert_living_doesnt_exist $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprecs_exist $c2 1
+
+    assert_extent_doesnt_exist $c1
+    assert_extents_exist $c2 1
+
+    assert_deprecated_didnt_change_uuid $c2 $uuid1
+}
+
+function test_rename_uuid_deleted_to_deleted
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+    local uuid1
+    local uuid2
+
+    $phobos put --family dir /etc/hosts oid${c1} # Deleted
+    $phobos put --family dir /etc/hosts oid${c2} # Deleted
+    $phobos delete oid${c1}
+    $phobos delete oid${c2}
+    uuid1=$($phobos object list --deprecated oid${c1} --output uuid)
+    uuid2=$($phobos object list --deprecated oid${c2} --output uuid)
+    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+        error "Rename operation failed"
+
+    assert_living_doesnt_exist $c1
+    assert_living_doesnt_exist $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprecs_exist $c2 2
+
+    assert_extent_doesnt_exist $c1
+    assert_extents_exist $c2 2
+
+    output=$($phobos object list --deprecated oid${c2} --output uuid)
+    if [[ "${output}" != "${uuid1}"$'\n'"${uuid2}" && \
+        "${output}" != "${uuid2}"$'\n'"${uuid1}" ]]; then
+        error "UUID of some deprecated objects has been modified"
+    fi
+}
+
+function test_rename_uuid_deleted_to_updated
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+    local uuid1
+    local uuid2
+
+    $phobos put --family dir /etc/hosts oid${c1} # Deleted
+    $phobos put --family dir /etc/hosts oid${c2} # Updated
+    $phobos delete oid${c1}
+    $phobos put --family dir --overwrite /etc/hosts oid${c2}
+    uuid1=$($phobos object list --deprecated oid${c1} --output uuid)
+    uuid2=$($phobos object list --deprecated oid${c2} --output uuid)
+    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+        error "Rename operation failed"
+
+    assert_living_doesnt_exist $c1
+    assert_living_exists $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprecs_exist $c2 2
+
+    assert_extent_doesnt_exist $c1
+    assert_extents_exist $c2 3
+
+    assert_object_didnt_change_uuid $c2 $uuid2
+    output=$($phobos object list --deprecated oid${c2} --output uuid)
+    if [[ "${output}" != "${uuid1}"$'\n'"${uuid2}" && \
+        "${output}" != "${uuid2}"$'\n'"${uuid1}" ]]; then
+        error "UUID of some deprecated objects has been modified"
+    fi
+}
+
+function test_rename_uuid_deleted_to_alive
+{
+    local c1=$FUNCNAME
+    local c2=$FUNCNAME.bis
+    local uuid1
+    local uuid2
+
+    $phobos put --family dir /etc/hosts oid${c1} # Deleted
+    $phobos put --family dir /etc/hosts oid${c2} # Alive
+    $phobos delete oid${c1}
+    uuid1=$($phobos object list --deprecated oid${c1} --output uuid)
+    uuid2=$($phobos object list oid${c2} --output uuid)
+    $valg_phobos rename --uuid ${uuid1} oid${c2} || \
+        error "Rename operation failed"
+
+    assert_living_doesnt_exist $c1
+    assert_living_exists $c2
+
+    assert_deprec_doesnt_exist $c1
+    assert_deprecs_exist $c2 1
+
+    assert_extent_doesnt_exist $c1
+    assert_extents_exist $c2 2
+
+    assert_object_didnt_change_uuid $c2 $uuid2
+    assert_deprecated_didnt_change_uuid $c2 $uuid1
+}
+
+################################################################################
+#                                  EXECUTION                                   #
+################################################################################
+
+TEST_SETUP=setup
+TESTS=("test_rename_oid_alive_to_deleted"
+       "test_rename_oid_alive_to_nonexistant"
+       "test_rename_oid_alive_to_alive"
+       "test_rename_oid_updated_to_nonexistant"
+       "test_rename_oid_updated_to_deleted"
+       "test_rename_oid_updated_to_alive"
+       "test_rename_oid_deleted_to_nonexistant"
+       "test_rename_oid_nonexistant_to_nonexistant"
+       "test_rename_uuid_alive_to_nonexistant"
+       "test_rename_uuid_alive_to_deleted"
+       "test_rename_uuid_alive_to_alive"
+       "test_rename_uuid_updated_to_nonexistant"
+       "test_rename_uuid_updated_to_deleted"
+       "test_rename_uuid_updated_to_updated"
+       "test_rename_uuid_updated_to_alive"
+       "test_rename_uuid_deleted_to_nonexistant"
+       "test_rename_uuid_deleted_to_deleted"
+       "test_rename_uuid_deleted_to_updated"
+       "test_rename_uuid_deleted_to_alive"
+)
+TEST_CLEANUP=cleanup
+

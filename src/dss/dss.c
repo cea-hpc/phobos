@@ -585,6 +585,73 @@ int dss_object_delete(struct dss_handle *handle,
                            object_count, DSS_SET_DELETE, 0);
 }
 
+int dss_object_rename(struct dss_handle *handle,
+                      struct object_info *objects, int objects_count,
+                      struct object_info *deprec_objects, int deprec_count,
+                      char *new_oid)
+{
+    GString *request = g_string_new("BEGIN;");
+    struct object_info old_object_name = {
+        .oid = (objects_count ? objects[0].oid : deprec_objects[0].oid)
+    };
+    struct object_info new_object_name = {
+        .oid = new_oid
+    };
+    int rc2 = 0;
+    int rc = 0;
+
+    rc = dss_lock(handle, DSS_OBJECT, &old_object_name, 1);
+    if (rc)
+        LOG_RETURN(rc, "Unable to lock objects with name '%s'",
+                   old_object_name.oid);
+
+    rc = dss_lock(handle, DSS_OBJECT, &new_object_name, 1);
+    if (rc)
+        LOG_RETURN(rc, "Unable to lock objects with name '%s'",
+                   new_object_name.oid);
+
+    /* Set new_oid as the oid field of object lists */
+    for (int i = 0; i < objects_count; i++)
+        objects[i].oid = strdup(new_oid);
+    for (int i = 0; i < deprec_count; i++)
+        deprec_objects[i].oid = strdup(new_oid);
+
+    rc = get_update_query(DSS_OBJECT, handle->dh_conn, objects, objects_count,
+                          DSS_OBJECT_UPDATE_OID, request);
+    if (rc)
+        LOG_GOTO(out_unlock, rc,
+                 "Failed to create update query for '%d' object(s)",
+                 objects_count);
+
+    rc = get_update_query(DSS_DEPREC, handle->dh_conn, deprec_objects,
+                          deprec_count, DSS_OBJECT_UPDATE_OID, request);
+    if (rc)
+        LOG_GOTO(out_unlock, rc,
+                 "Failed to create update query for '%d' deprec object(s)",
+                 deprec_count);
+
+    rc = execute_and_commit_or_rollback(handle->dh_conn, request, NULL,
+                                        PGRES_COMMAND_OK);
+    if (rc)
+        LOG_RETURN(rc, "Unable to rename objects from '%s' to '%s'",
+                   old_object_name.oid, new_object_name.oid);
+
+out_unlock:
+    rc = dss_unlock(handle, DSS_OBJECT, &old_object_name, 1, true);
+    if (rc)
+        LOG_RETURN(rc, "Unable to lock objects with name '%s'",
+                   old_object_name.oid);
+
+    rc = dss_unlock(handle, DSS_OBJECT, &new_object_name, 1, true);
+    if (rc)
+        LOG_RETURN(rc, "Unable to lock objects with name '%s'",
+                   new_object_name.oid);
+
+    g_string_free(request, true);
+
+    return rc ? rc : rc2;
+}
+
 /*
  * DEPRECATED FUNCTION
  */

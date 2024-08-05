@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+#include <string.h>
 
 #include <libpq-fe.h>
 
@@ -191,6 +192,11 @@ static const char *dss_translate_prefix(enum dss_type type,
 
         return obj_ls[pos].oid;
     }
+    case DSS_DEPREC: {
+        const struct object_info *obj_ls = item_list;
+
+        return obj_ls[pos].uuid;
+    }
     default:
         return NULL;
     }
@@ -269,6 +275,9 @@ static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
     PGconn *conn = handle->dh_conn;
     PGresult *res;
     int rc;
+
+    if (lock_type == DSS_DEPREC)
+        lock_type = DSS_OBJECT;
 
     g_string_printf(request, lock_query[DSS_LOCK_QUERY],
                     dss_type_names[lock_type], lock_id, lock_owner,

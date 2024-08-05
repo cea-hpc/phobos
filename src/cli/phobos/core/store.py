@@ -519,6 +519,19 @@ class UtilClient:
         LIBPHOBOS.phobos_store_object_list_free(objs, n_objs)
 
     @staticmethod
+    def object_rename(old_oid, uuid, new_oid):
+        """Rename an object"""
+        rc = LIBPHOBOS.phobos_rename(
+            old_oid.encode('utf-8') if old_oid else None,
+            uuid.encode('utf-8') if uuid else None,
+            new_oid.encode('utf-8'))
+        if rc:
+            raise EnvironmentError(rc, "Failed to rename object of %s" %
+                                   ("%s = '%s' to '%s'" %
+                                    ("oid" if old_oid else "uuid",
+                                     old_oid if old_oid else uuid, new_oid)))
+
+    @staticmethod
     def object_locate(oid, uuid, version, focus_host):
         """Locate an object"""
         hostname = c_char_p(None)

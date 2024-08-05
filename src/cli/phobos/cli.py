@@ -965,6 +965,42 @@ class UndeleteOptHandler(BaseOptHandler):
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
+class RenameOptHandler(BaseOptHandler):
+    """Rename object handler"""
+
+    label = 'rename'
+    descr = 'Change the oid of an object generation, '\
+            'among living or deprecated objects tables. At least one of '\
+            '\'--oid\' or \'--uid\' must be specified.'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    @classmethod
+    def add_options(cls, parser):
+        """Add command options for object rename."""
+        super(RenameOptHandler, cls).add_options(parser)
+        parser.set_defaults(verb=cls.label)
+        parser.add_argument('--oid', help='Object ID to be renamed')
+        parser.add_argument('--uuid', help='UUID of the object to rename')
+        parser.add_argument('new_oid', help='New name for the object')
+
+    def exec_rename(self):
+        """Rename object"""
+        client = UtilClient()
+        old_oid = self.params.get('oid')
+        uuid = self.params.get('uuid')
+        new_oid = self.params.get('new_oid')
+
+        try:
+            client.object_rename(old_oid, uuid, new_oid)
+        except EnvironmentError as err:
+            self.logger.error(env_error_format(err))
+            sys.exit(abs(err.errno))
+
 class LocateOptHandler(BaseOptHandler):
     """Locate object handler."""
 
@@ -2651,6 +2687,7 @@ class PhobosActionContext:
         DeleteOptHandler,
         UndeleteOptHandler,
         PingOptHandler,
+        RenameOptHandler,
         LocateOptHandler,
         LocksOptHandler,
         SchedOptHandler,

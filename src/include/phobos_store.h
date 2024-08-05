@@ -325,6 +325,27 @@ int phobos_locate(const char *obj_id, const char *uuid, int version,
                   const char *focus_host, char **hostname, int *nb_new_lock);
 
 /**
+ * Rename an object in the object store.
+ *
+ * If the object to rename is alive, it can be found using either its
+ * \p old_oid or its \p uuid.
+ * Otherwise, it must be identified using its \p uuid.
+ * Thus, this function can only rename one generation of an object at a time.
+ *
+ * @param[in]   old_oid OID of the object to rename (ignored if NULL and
+ *                      \p uuid must not be NULL)
+ * @param[in]   uuid    UUID of the object to rename (ignored if NULL and
+ *                      \p old_oid must not be NULL)
+ * @param[in]   new_oid The new name to give to the object. It must be
+ *                      different from any oid from the object table.
+ *
+ * @return              0 on success or -errno on failure.
+ *
+ * This must be called after phobos_init.
+ */
+int phobos_rename(const char *old_oid, const char *uuid, char *new_oid);
+
+/**
  * Clean a pho_xfer_desc structure by freeing the uuid and attributes, and
  * the tags in case the xfer corresponds to a PUT operation.
  *

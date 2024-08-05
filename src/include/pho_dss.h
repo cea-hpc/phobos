@@ -80,6 +80,7 @@ enum dss_object_operations {
     DSS_OBJECT_UPDATE_ACCESS_TIME = (1 << 0),
     DSS_OBJECT_UPDATE_OBJ_STATUS = (1 << 1),
     DSS_OBJECT_UPDATE_USER_MD = (1 << 2),
+    DSS_OBJECT_UPDATE_OID = (1 << 3),
 };
 
 /**
@@ -570,6 +571,25 @@ int dss_object_get(struct dss_handle *handle, const struct dss_filter *filter,
 int dss_object_delete(struct dss_handle *handle,
                       struct object_info *object_list, int object_count);
 
+/**
+ * Rename the information of one or many objects in DSS.
+ *
+ * /!\ Warning: this function must be called with a \p living_list and \p
+ * deprec_list that have the same OID.
+ *
+ * @param[in]  handle       valid connection handle
+ * @param[in]  living_list  array of living objects to update
+ * @param[in]  living_count number of items in the living objects list (0 or 1)
+ * @param[in]  deprec_list  array of deprecated objects to update
+ * @param[in]  deprec_count number of items in the deprecated objects list
+ * @param[in]  new_oid      new oid of the living and deprecated objects
+ *
+ * @return 0 on success, negated errno on failure
+ */
+int dss_object_rename(struct dss_handle *handle,
+                      struct object_info *living_list, int living_count,
+                      struct object_info *deprec_list, int deprec_count,
+                      char *new_oid);
 
 /**
  * Store information for one or many deprecated objects in DSS.

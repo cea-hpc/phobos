@@ -83,6 +83,7 @@ static struct dss_field FIELDS[] = {
     { DSS_OBJECT_UPDATE_ACCESS_TIME, "access_time = '%s'", get_access_time },
     { DSS_OBJECT_UPDATE_OBJ_STATUS, "obj_status = '%s'", get_obj_status },
     { DSS_OBJECT_UPDATE_USER_MD, "user_md = '%s'", _get_user_md },
+    { DSS_OBJECT_UPDATE_OID, "oid = '%s'", get_oid },
 };
 
 static int object_update_query(PGconn *conn, void *void_object, int item_cnt,
@@ -95,11 +96,16 @@ static int object_update_query(PGconn *conn, void *void_object, int item_cnt,
         enum dss_object_operations _fields = fields;
         GString *sub_request = g_string_new(NULL);
 
-        g_string_append(sub_request, "UPDATE object SET ");
+        g_string_append(sub_request, " UPDATE object SET ");
 
-        update_fields(object, _fields, FIELDS, 3, sub_request);
+        update_fields(object, _fields, FIELDS, 4, sub_request);
 
-        g_string_append_printf(sub_request, " WHERE oid = '%s'; ", object->oid);
+        if (fields == DSS_OBJECT_UPDATE_OID)
+            g_string_append_printf(sub_request, " WHERE object_uuid = '%s';",
+                                   object->uuid);
+        else
+            g_string_append_printf(sub_request, " WHERE oid = '%s';",
+                                   object->oid);
 
         g_string_append(request, sub_request->str);
         g_string_free(sub_request, true);

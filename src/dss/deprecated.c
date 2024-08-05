@@ -79,6 +79,7 @@ static int deprecated_insert_query(PGconn *conn, void *void_deprecated,
 static struct dss_field FIELDS[] = {
     { DSS_OBJECT_UPDATE_ACCESS_TIME, "access_time = '%s'", get_access_time },
     { DSS_OBJECT_UPDATE_OBJ_STATUS, "obj_status = '%s'", get_obj_status },
+    { DSS_OBJECT_UPDATE_OID, "oid = '%s'", get_oid },
 };
 
 static int deprecated_update_query(PGconn *conn, void *void_deprecated,
@@ -95,7 +96,7 @@ static int deprecated_update_query(PGconn *conn, void *void_deprecated,
 
         g_string_append(sub_request, "UPDATE deprecated_object SET ");
 
-        update_fields(deprecated, _fields, FIELDS, 2, sub_request);
+        update_fields(deprecated, _fields, FIELDS, 3, sub_request);
 
         g_string_append_printf(sub_request,
                                " WHERE object_uuid = '%s' AND version = %d;",

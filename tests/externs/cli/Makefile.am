@@ -73,6 +73,7 @@ check_SCRIPTS=acceptance.test \
               test_put.sh \
               test_raid1.test \
               test_raid4.test \
+              test_rename.test \
               test_repack.test \
               test_resource_availability.test \
               test_resource_management.sh \
