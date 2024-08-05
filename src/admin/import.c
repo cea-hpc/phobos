@@ -701,6 +701,7 @@ int import_medium(struct admin_handle *adm, struct media_info *medium,
 
     reqs[0].id = 0;
     reqs[0].ralloc->n_required = 1;
+    reqs[0].ralloc->operation = PHO_READ_TARGET_ALLOC_OP_READ;
     reqs[0].ralloc->med_ids[0]->family = id.family;
     reqs[0].ralloc->med_ids[0]->name = strdup(id.name);
     reqs[0].ralloc->med_ids[0]->library = strdup(id.library);

@@ -2,7 +2,7 @@
  * vim:expandtab:shiftwidth=4:tabstop=4:
  */
 /*
- *  All rights reserved (c) 2014-2022 CEA/DAM.
+ *  All rights reserved (c) 2014-2024 CEA/DAM.
  *
  *  This file is part of Phobos.
  *
@@ -43,6 +43,14 @@ message PhoResourceId {
     required PhoResourceFamily family = 1; // Family type.
     required string name              = 2; // Resource name.
     required string library           = 3; // Resource library.
+}
+
+/** Target allocation operation. For now, those allocations are named 'READ'
+  * allocations.
+  */
+enum PhoReadTargetAllocOp {
+    OP_READ   = 0; // Read allocation.
+    OP_DELETE = 1; // Delete allocation.
 }
 
 /** Notify operation. */

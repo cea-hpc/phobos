@@ -564,6 +564,16 @@ struct object_info {
 };
 
 /**
+ *
+ */
+enum read_target_allocation_op {
+    PHO_READ_TARGET_ALLOC_OP_INVAL = -1,
+    PHO_READ_TARGET_ALLOC_OP_READ,
+    PHO_READ_TARGET_ALLOC_OP_DELETE,
+    PHO_READ_TARGET_ALLOC_OP_LAST,
+};
+
+/**
  * Kind of notify operations
  */
 enum notify_op {

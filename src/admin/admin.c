@@ -1177,6 +1177,7 @@ static int _get_source_medium(struct admin_handle *adm,
     pho_srl_request_read_alloc(&req, 1);
     req.id = 1;
     req.ralloc->n_required = 1;
+    req.ralloc->operation = PHO_READ_TARGET_ALLOC_OP_READ;
     req.ralloc->med_ids[0]->family = source->family;
     req.ralloc->med_ids[0]->name = xstrdup(source->name);
     req.ralloc->med_ids[0]->library = xstrdup(source->library);

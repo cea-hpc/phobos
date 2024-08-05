@@ -390,6 +390,7 @@ static void raid_build_read_allocation_req(struct pho_encoder *dec,
     pho_srl_request_read_alloc(req, n_extents);
 
     req->ralloc->n_required = io_context->n_data_extents;
+    req->ralloc->operation = PHO_READ_TARGET_ALLOC_OP_READ;
 
     for (i = 0; i < n_extents; ++i) {
         unsigned int ext_idx;

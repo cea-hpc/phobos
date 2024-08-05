@@ -58,6 +58,9 @@ message PhoRequest {
                                             // allocate among the ones
                                             // specified in med_ids.
         repeated PhoResourceId med_ids = 2; // IDs of the requested media.
+        required PhoReadTargetAllocOp operation = 3;
+                                            // Operation done on the
+                                            // allocation.
     }
 
     /** Body of the release request. */
