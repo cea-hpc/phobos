@@ -374,7 +374,7 @@ int phobos_admin_medium_locate(struct admin_handle *adm,
  * @param[in]   lock_hostname   Hostname owning the locks to clean.
  * @param[in]   lock_type       Type of the ressources to clean.
  * @param[in]   dev_family      Family of the devices to clean.
- * @param[in]   lock_ids        List of ids of the ressources to clean.
+ * @param[in]   lock_ids        List of ids of the locks to clean.
  * @param[in]   n_ids           Number of ids.
  *
  * @return                      0 on success

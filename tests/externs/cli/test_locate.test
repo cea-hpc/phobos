@@ -246,7 +246,7 @@ EOF
     local tapes_to_unlock=$($phobos tape list -o name,lock_hostname |
                             grep $self_hostname | cut -d '|' -f2 | xargs)
     IFS=' ' read -r -a tapes_to_unlock <<< "$tapes_to_unlock"
-    $phobos lock clean --force -f tape -t media -i ${tapes_to_unlock[@]}
+    $phobos lock clean --force -f tape -t media
 
     locate_hostname=$($valg_phobos locate --focus-host $other_hostname $oid)
     if [ "$locate_hostname" != "$other_hostname" ]; then

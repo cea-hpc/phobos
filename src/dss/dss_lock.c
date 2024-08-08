@@ -144,7 +144,9 @@ static const char * const lock_query[] = {
                                "END $$;",
     [DSS_STATUS_QUERY]       = "SELECT hostname, owner, timestamp FROM lock "
                                "  WHERE type = '%s'::lock_type AND id = '%s';",
-    [DSS_CLEAN_DEVICE_QUERY] = "WITH id_host AS (SELECT id, host FROM device "
+    [DSS_CLEAN_DEVICE_QUERY] = "WITH id_host AS (SELECT id || '_' || library "
+                               "                        AS id, host "
+                               "                     FROM device "
                                "                   WHERE family = '%s') "
                                "DELETE FROM lock "
                                "  WHERE type = 'device'::lock_type "
@@ -168,8 +170,9 @@ static const char * const lock_query[] = {
     [DSS_PURGE_ALL_LOCKS_QUERY] = "TRUNCATE TABLE lock; "
 };
 
-static const char *dss_translate(enum dss_type type, const void *item_list,
-                                 int pos)
+static const char *dss_translate_prefix(enum dss_type type,
+                                        const void *item_list,
+                                        int pos)
 {
     switch (type) {
     case DSS_DEVICE: {
@@ -195,37 +198,67 @@ static const char *dss_translate(enum dss_type type, const void *item_list,
     return NULL;
 }
 
+static const char *dss_translate_suffix(enum dss_type type,
+                                        const void *item_list,
+                                        int pos)
+{
+    switch (type) {
+    case DSS_DEVICE: {
+        const struct dev_info *dev_ls = item_list;
+
+        return dev_ls[pos].rsc.id.library;
+    }
+    case DSS_MEDIA:
+    case DSS_MEDIA_UPDATE_LOCK: {
+        const struct media_info *mda_ls = item_list;
+
+        return mda_ls[pos].rsc.id.library;
+    }
+    default:
+        return NULL;
+    }
+
+    return NULL;
+}
+
+static void append_escaped_to_id(PGconn *conn, const char *string, GString *id)
+{
+    unsigned int escape_len;
+    char *escape_string;
+
+    escape_len = strlen(string) * 2 + 1;
+    escape_string = xmalloc(escape_len);
+
+    PQescapeStringConn(conn, escape_string, string, escape_len, NULL);
+    g_string_append(id, escape_string);
+    free(escape_string);
+}
+
 static int dss_build_lock_id_list(PGconn *conn, const void *item_list,
                                   int item_cnt, enum dss_type type,
                                   GString **ids)
 {
-    char         *escape_string;
-    unsigned int  escape_len;
-    int           rc = 0;
     const char   *name;
     int           i;
 
     for (i = 0; i < item_cnt; i++) {
-        name = dss_translate(type, item_list, i);
+        name = dss_translate_prefix(type, item_list, i);
         if (!name)
-            return -EINVAL;
+            LOG_RETURN(-EINVAL, "no lock id prefix found");
 
-        escape_len = strlen(name) * 2 + 1;
-        escape_string = xmalloc(escape_len);
+        append_escaped_to_id(conn, name, ids[i]);
 
-        PQescapeStringConn(conn, escape_string, name, escape_len, NULL);
-        g_string_append(ids[i], escape_string);
+        name = dss_translate_suffix(type, item_list, i);
+        if (name) {
+            g_string_append(ids[i], "_");
+            append_escaped_to_id(conn, name, ids[i]);
+        }
 
         if (ids[i]->len > PHO_DSS_MAX_LOCK_ID_LEN)
-            LOG_GOTO(cleanup, rc = -EINVAL, "lock_id name too long");
-
-cleanup:
-        free(escape_string);
-        if (rc)
-            break;
+            LOG_RETURN(-EINVAL, "lock_id name too long");
     }
 
-    return rc;
+    return 0;
 }
 
 static int basic_lock(struct dss_handle *handle, enum dss_type lock_type,
@@ -620,8 +653,10 @@ int dss_lock_clean_select(struct dss_handle *handle,
         if (dev_family) {
             lock_type = (strcmp(lock_type, "media_update") == 0) ? "media"
                                                                  : lock_type;
-            g_string_append_printf(request, " AND id IN (SELECT id FROM %s"
-                                            " WHERE family = '%s')",
+            g_string_append_printf(request, " AND id IN "
+                                            "         (SELECT id || '_' || "
+                                            "                 library FROM %s "
+                                            "          WHERE family = '%s')",
                                             lock_type, dev_family);
         }
         and_clause = true;

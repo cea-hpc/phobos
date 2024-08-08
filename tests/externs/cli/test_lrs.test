@@ -141,10 +141,11 @@ function test_recover_dir_old_locks
     # Only one is locked by this host
     $PSQL -c \
         "insert into lock (type, id, hostname, owner) values
-             ('media'::lock_type, '${dir0}', '$host', $pid),
-             ('media_update'::lock_type, '${dir1}', '$host', $pid),
-             ('media'::lock_type, '${dir2}', '${host}other', $pid),
-             ('media_update'::lock_type, '${dir3}', '${host}other', $pid);"
+             ('media'::lock_type, '${dir0}_legacy', '$host', $pid),
+             ('media_update'::lock_type, '${dir1}_legacy', '$host', $pid),
+             ('media'::lock_type, '${dir2}_legacy', '${host}other', $pid),
+             ('media_update'::lock_type, '${dir3}_legacy', '${host}other',
+              $pid);"
 
     # Start and stop the lrs daemon
     PHOBOS_LRS_families="dir" timeout --preserve-status 10 $phobosd -vv -i &
@@ -168,7 +169,8 @@ function test_recover_dir_old_locks
     lock=$($phobos dir list -o lock_hostname ${dir2})
     [ "${host}other" == "$lock" ] || error "${dir2} should be locked"
 
-    lock=$($PSQL -t -c "select hostname from lock where id = '${dir3}';" |
+    lock=$($PSQL -t -c "select hostname from lock
+                         where id = '${dir3}_legacy';" |
            xargs)
     [ "${host}other" == "$lock" ] || error "${dir3} should be locked"
 
@@ -208,8 +210,9 @@ function test_remove_invalid_media_locks
                                \"last_load\":0}', '[]', 'legacy');"
     $PSQL -c \
         "insert into lock (type, id, hostname, owner)
-            values ('media'::lock_type, '${dir0}', '$host', $pid),
-                   ('media_update'::lock_type, '${dir1}', '$host', $pid);"
+            values ('media'::lock_type, '${dir0}_legacy', '$host', $pid),
+                   ('media_update'::lock_type, '${dir1}_legacy', '$host',
+                    $pid);"
 
     # Start and stop the lrs daemon
     PHOBOS_LRS_families="dir" timeout --preserve-status 10 $phobosd -i &
@@ -226,7 +229,8 @@ function test_remove_invalid_media_locks
     # Check only the locks of the correct hostname are released
     lock=$($phobos dir list -o lock_hostname ${dir0})
     [ "None" == "$lock" ] || error "${dir0} should be unlocked"
-    lock=$($PSQL -t -c "select hostname from lock where id = '${dir1}';" |
+    lock=$($PSQL -t -c \
+               "select hostname from lock where id = '${dir1}_legacy';" |
            xargs)
     [ -z $lock ] || error "${dir1} should be unlocked"
 
@@ -251,8 +255,8 @@ function test_recover_drive_old_locks
     # Only one is locked by this host
     $PSQL -c \
         "insert into lock (type, id, hostname, owner) values
-             ('device'::lock_type, '$dev_st0_id', '$host', $pid),
-             ('device'::lock_type, '$dev_st1_id', '${host}other', $pid);"
+             ('device'::lock_type, '${dev_st0_id}_legacy', '$host', $pid),
+             ('device'::lock_type, '${dev_st1_id}_legacy', '${host}other', $pid);"
 
     # Start and stop the lrs daemon
     trap waive_tlc EXIT
@@ -300,7 +304,12 @@ function test_remove_invalid_device_locks
                     'unlocked', '/dev/st1', 'legacy');"
     $PSQL -c \
         "insert into lock (type, id, hostname, owner)
-            values ('device'::lock_type, '$dev_st1_id', '$host', $pid);"
+            values ('device'::lock_type, '${dev_st0_id}_legacy',
+                    '$host',$pid);"
+     $PSQL -c \
+         "insert into lock (type, id, hostname, owner)
+            values ('device'::lock_type, '${dev_st1_id}_legacy',
+                     '$host',$pid);"
 
     # Start and stop the lrs daemon
     trap waive_tlc EXIT
@@ -320,10 +329,11 @@ function test_remove_invalid_device_locks
 
     # Check only the lock of the correct hostname is released
     lock=$($phobos drive list -o lock_hostname /dev/st0)
-    [ "None" == "$lock" ] || error "Dir should be unlocked"
+    [ "None" == "$lock" ] || error "Dir /dev/st0 should be unlocked"
 
     lock=$($phobos drive list -o lock_hostname /dev/st1)
-    [ "None" == "$lock" ] || error "Dir should be unlocked"
+    [ "None" == "$lock" ] || error "Dir /dev/st1 should be unlocked"
+
 
     drop_tables
 }

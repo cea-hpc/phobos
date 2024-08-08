@@ -534,13 +534,14 @@ static int media_select_query(GString **conditions, int n_conditions,
                               GString *request, struct dss_sort *sort)
 {
     g_string_append(request,
-                    "SELECT family, model, media.id, library, adm_status, "
+                    "SELECT family, model, media.id, media.library, adm_status,"
                     " address_type, fs_type, fs_status, fs_label, stats, tags, "
                     " put, get, delete FROM media");
 
     if (sort && sort->is_lock)
         g_string_append(request,
-                        " LEFT JOIN lock ON lock.id = media.id");
+                        " LEFT JOIN lock ON lock.id = media.id || '_' || "
+                        "                             media.library");
     if (n_conditions == 1)
         g_string_append(request, conditions[0]->str);
     else if (n_conditions >= 2)
