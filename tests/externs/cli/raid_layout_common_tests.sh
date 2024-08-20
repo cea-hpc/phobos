@@ -56,6 +56,19 @@ function get_extent_info()
     $phobos extent list -f json -o "$column" "$oid" | jq -r ".[0].$column[]"
 }
 
+function get_extent_mount_point()
+{
+    local media=($(get_extent_info "$1" media_name))
+
+    if [[ "$PHOBOS_STORE_default_family" == "tape" ]]; then
+        for (( i = 0; i < ${#media[@]}; i++ )); do
+            media[i]=$($phobos drive status -o media,mount_path |
+                       grep ${media[i]} | awk '{print $4}')
+        done
+    fi
+    echo "${media[@]}"
+}
+
 function getxattr()
 {
     local file="$1"
@@ -170,7 +183,7 @@ function check_extent_md()
     local oid=$1
     local input_file=$2
     local addresses=($(get_extent_info "$oid" address))
-    local media=($(get_extent_info "$oid" media_name))
+    local media=($(get_extent_mount_point "$oid"))
     local ext_uuid=($(get_extent_info "$oid" ext_uuid))
 
     for (( i = 0; i < ${#addresses[@]}; i++ )); do
@@ -217,6 +230,42 @@ function cleanup_dir
     drop_tables
 }
 
+function setup_tape
+{
+    local tapes=($(get_tapes L5 3 | nodeset -e))
+    local drives=($(get_lto_drives 5 3))
+
+    export PHOBOS_LRS_families="tape"
+    export PHOBOS_STORE_default_family="tape"
+    export PHOBOS_STORE_default_layout="$RAID_LAYOUT"
+    set_extent_opt md5
+    set_extent_opt xxh128
+
+    if [[ "$1" == "odd" ]]; then
+        export ODD_FILE_SIZE=1
+    elif [[ "$1" == "even" ]]; then
+        export ODD_FILE_SIZE=0
+    else
+        error "Invalid argument $1: expected 'even' or 'odd'"
+    fi
+
+    setup_tables
+    invoke_tlc
+    invoke_lrs
+
+    $phobos drive add --unlock ${drives[@]}
+    $phobos tape add --type LTO5 --unlock ${tapes[@]}
+    $phobos tape format ${tapes[@]}
+}
+
+function cleanup_tape
+{
+    waive_lrs
+    waive_tlc
+    drop_tables
+    drain_all_drives
+}
+
 function test_put_get()
 {
     local oid=$FUNCNAME
@@ -247,19 +296,20 @@ function test_read_with_missing_extent()
 {
     local oid=$FUNCNAME
     local file=$(make_file 512K)
+    local family=$PHOBOS_STORE_default_family
 
     echo "layout: $RAID_LAYOUT"
     $valg_phobos put "$file" $oid
     check_extent_md $oid "$file"
 
-    for d in $($phobos dir list); do
-        $phobos dir lock $d
+    for d in $($phobos $family list); do
+        $phobos $family lock $d
 
         $valg_phobos get $oid /tmp/out.$$
         diff "$file" /tmp/out.$$
         rm /tmp/out.$$
 
-        $phobos dir unlock $d
+        $phobos $family unlock $d
     done
 
     rm "$file"
@@ -386,7 +436,7 @@ function test_put_get_without_xxh128()
     check_extent_md $oid "$file"
 
     local addresses=($(get_extent_info "$oid" address))
-    local media=($(get_extent_info "$oid" media_name))
+    local media=($(get_extent_mount_point "$oid"))
 
     # We disable the use of the hash during the get, but the hash should still
     # be calculated relative to the hash calculated during the put and detect
@@ -421,7 +471,7 @@ function test_put_get_corrupted()
     check_extent_md $oid "$file"
 
     local addresses=($(get_extent_info "$oid" address))
-    local media=($(get_extent_info "$oid" media_name))
+    local media=($(get_extent_mount_point "$oid"))
 
     # We test here only for the two halves of the object
     for (( i = 0; i < ${#addresses[@]} - 1; i++ )); do
@@ -451,7 +501,7 @@ function test_read_with_missing_extent_corrupted()
     check_extent_md $oid "$file"
 
     local addresses=($(get_extent_info "$oid" address))
-    local media=($(get_extent_info "$oid" media_name))
+    local media=($(get_extent_mount_point "$oid"))
 
     for (( i = 0; i < ${#media[@]}; i++ )); do
         local copy=$(mktemp)
@@ -488,7 +538,7 @@ function test_put_get_split_corrupted()
     check_extent_md "$oid" "$file"
 
     local addresses=($(get_extent_info "$oid" address))
-    local media=($(get_extent_info "$oid" media_name))
+    local media=($(get_extent_mount_point "$oid"))
 
     # Corrupt only the two halves of the object
     local idx=(0 1 3 4)
@@ -520,7 +570,7 @@ function test_put_get_split_with_missing_extents_corrupted()
     check_extent_md "$oid" "$file"
 
     local addresses=($(get_extent_info "$oid" address))
-    local media=($(get_extent_info "$oid" media_name))
+    local media=($(get_extent_mount_point "$oid"))
 
     for (( i = 0; i < ${#media[@]}; i++ )); do
         local copy=$(mktemp)
@@ -564,7 +614,7 @@ function test_put_get_without_check_hash()
     check_extent_md $oid "$file"
 
     local addresses=($(get_extent_info "$oid" address))
-    local media=($(get_extent_info "$oid" media_name))
+    local media=($(get_extent_mount_point "$oid"))
 
     # We disable the check of the hash, the get should succeed
     export PHOBOS_LAYOUT_RAID4_check_hash="false"
@@ -666,5 +716,18 @@ if [[ $RAID_LAYOUT == "raid4" ]]; then
 fi
 
 if  [[ -w /dev/changer ]]; then
-    TESTS+=()
+    TESTS+=(
+        "setup_tape even; \
+         test_put_get; \
+         test_empty_put; \
+         test_read_with_missing_extent; \
+         test_with_different_block_size; \
+         cleanup_tape"
+        "setup_tape odd; \
+         test_put_get; \
+         test_empty_put; \
+         test_read_with_missing_extent; \
+         test_with_different_block_size; \
+         cleanup_tape"
+    )
 fi
