@@ -67,10 +67,11 @@ enum pho_cfg_params_raid1 {
     PHO_CFG_LYT_RAID1_repl_count,
     PHO_CFG_LYT_RAID1_extent_xxh128,
     PHO_CFG_LYT_RAID1_extent_md5,
+    PHO_CFG_LYT_RAID1_check_hash,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_LYT_RAID1_FIRST = PHO_CFG_LYT_RAID1_repl_count,
-    PHO_CFG_LYT_RAID1_LAST  = PHO_CFG_LYT_RAID1_extent_md5,
+    PHO_CFG_LYT_RAID1_LAST  = PHO_CFG_LYT_RAID1_check_hash,
 };
 
 const struct pho_config_item cfg_lyt_raid1[] = {
@@ -88,6 +89,11 @@ const struct pho_config_item cfg_lyt_raid1[] = {
         .section = "layout_raid1",
         .name    = EXTENT_MD5_ATTR_KEY,
         .value   = DEFAULT_MD5
+    },
+    [PHO_CFG_LYT_RAID1_check_hash] = {
+        .section = "layout_raid1",
+        .name    = "check_hash",
+        .value   = DEFAULT_CHECK_HASH,
     },
 };
 
@@ -235,6 +241,52 @@ static int raid1_write_split(struct pho_encoder *enc, size_t split_size)
     return rc;
 }
 
+static int checked_read(struct pho_encoder *dec)
+{
+    struct raid_io_context *io_context = dec->priv_enc;
+    struct pho_io_descr *iod;
+    size_t written = 0;
+    size_t read_size;
+    size_t to_write;
+    int rc;
+
+    iod = &io_context->iods[0];
+    read_size = io_context->buffers[0].size;
+    to_write = io_context->read.extents[0]->size;
+
+    while (written < to_write) {
+        ssize_t data_written;
+        ssize_t data_read;
+
+        data_read = ioa_read(iod->iod_ioa, iod, io_context->buffers[0].buff,
+                             read_size);
+        if (data_read < 0)
+            return data_read;
+
+        data_written = ioa_write(io_context->posix.iod_ioa,
+                                 &io_context->posix,
+                                 io_context->buffers[0].buff,
+                                 data_read);
+        if (data_written < 0)
+            return data_written;
+
+        written += data_read;
+
+        rc = extent_hash_update(&io_context->hashes[0],
+                                io_context->buffers[0].buff,
+                                data_read);
+        if (rc)
+            return rc;
+    }
+
+    rc = extent_hash_digest(&io_context->hashes[0]);
+    if (rc)
+        return rc;
+
+    return extent_hash_compare(&io_context->hashes[0],
+                               io_context->read.extents[0]);
+}
+
 /**
  * Read the data specified by \a extent from \a medium into the output fd of
  * dec->xfer.
@@ -244,6 +296,9 @@ static int raid1_read_split(struct pho_encoder *dec)
     struct raid_io_context *io_context = dec->priv_enc;
     struct pho_io_descr *iod;
     struct pho_ext_loc loc;
+
+    if (io_context->read.check_hash)
+        return checked_read(dec);
 
     iod = &io_context->iods[0];
     loc = make_ext_location(dec, 0);
@@ -390,6 +445,15 @@ static int layout_raid1_decode(struct pho_encoder *dec)
     io_context->name = PLUGIN_NAME;
     io_context->n_data_extents = 1;
     io_context->n_parity_extents = repl_count - 1;
+    io_context->read.check_hash = PHO_CFG_GET_BOOL(cfg_lyt_raid1,
+                                                   PHO_CFG_LYT_RAID1,
+                                                   check_hash, true);
+    if (io_context->read.check_hash) {
+        io_context->nb_hashes = io_context->n_data_extents;
+        io_context->hashes = xcalloc(io_context->nb_hashes,
+                                     sizeof(*io_context->hashes));
+    }
+
     rc = raid_decoder_init(dec, &RAID1_MODULE_DESC, &RAID1_ENCODER_OPS,
                            &RAID1_OPS);
     if (rc) {

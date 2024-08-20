@@ -58,7 +58,7 @@ static int write_with_xor(struct pho_encoder *dec,
         part1_size = ioa_read(iod1->iod_ioa, iod1,
                               io_context->buffers[0].buff, buf_size);
         if (part1_size < 0)
-            LOG_RETURN(-errno, "Failed to read file");
+            LOG_RETURN(part1_size, "Failed to read file");
         pho_debug("part1_size: %ld", part1_size);
 
         if (io_context->read.check_hash) {
@@ -73,7 +73,7 @@ static int write_with_xor(struct pho_encoder *dec,
                               io_context->buffers[1].buff,
                               buf_size);
         if (part2_size < 0)
-            LOG_RETURN(-errno, "Failed to read file");
+            LOG_RETURN(part2_size, "Failed to read file");
 
         pho_debug("part2_size: %ld", part2_size);
 
@@ -167,12 +167,12 @@ static int write_without_xor(struct pho_encoder *dec,
                              io_context->buffers[0].buff,
                              read_size);
         if (data_read < 0)
-            LOG_RETURN(-errno, "Failed to read file");
+            LOG_RETURN(data_read, "Failed to read file");
 
         rc = ioa_write(posix->iod_ioa, posix, io_context->buffers[0].buff,
                        data_read);
         if (rc < 0)
-            LOG_RETURN(-errno, "Failed to write in file");
+            LOG_RETURN(rc, "Failed to write in file");
 
         if (io_context->read.check_hash) {
             rc = extent_hash_update(&io_context->hashes[0],
@@ -187,12 +187,12 @@ static int write_without_xor(struct pho_encoder *dec,
                              io_context->buffers[0].buff,
                              read_size);
         if (data_read < 0)
-            LOG_RETURN(-errno, "Failed to read file");
+            LOG_RETURN(data_read, "Failed to read file");
 
         rc = ioa_write(posix->iod_ioa, posix, io_context->buffers[0].buff,
                        data_read);
         if (rc < 0)
-            LOG_RETURN(-errno, "Failed to write in file");
+            LOG_RETURN(rc, "Failed to write in file");
 
         if (io_context->read.check_hash) {
             rc = extent_hash_update(&io_context->hashes[1],
