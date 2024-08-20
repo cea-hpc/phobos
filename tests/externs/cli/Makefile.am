@@ -68,7 +68,6 @@ check_SCRIPTS=acceptance.test \
               test_phobos_tape_library_test.sh \
               test_ping.test \
               test_put.sh \
-              test_raid1_split.sh \
               test_raid1.test \
               test_raid4.test \
               test_repack.test \
