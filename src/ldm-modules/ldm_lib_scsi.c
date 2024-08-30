@@ -54,24 +54,16 @@ static struct module_desc LA_SCSI_MODULE_DESC = {
 
 /** List of SCSI library configuration parameters */
 enum pho_cfg_params_libscsi {
-    /** Query the S/N of a drive in a separate ELEMENT_STATUS request
-     * (e.g. for IBM TS3500). */
-    PHO_CFG_LIB_SCSI_sep_sn_query,
     PHO_CFG_LIB_SCSI_tlc_hostname,
     PHO_CFG_LIB_SCSI_tlc_port,
 
     /* Delimiters, update when modifying options */
-    PHO_CFG_LIB_SCSI_FIRST = PHO_CFG_LIB_SCSI_sep_sn_query,
+    PHO_CFG_LIB_SCSI_FIRST = PHO_CFG_LIB_SCSI_tlc_hostname,
     PHO_CFG_LIB_SCSI_LAST  = PHO_CFG_LIB_SCSI_tlc_port,
 };
 
 /** Definition and default values of SCSI library configuration parameters */
 const struct pho_config_item cfg_lib_scsi[] = {
-    [PHO_CFG_LIB_SCSI_sep_sn_query] = {
-        .section = "lib_scsi",
-        .name    = "sep_sn_query",
-        .value   = "false",
-    },
     [PHO_CFG_LIB_SCSI_tlc_hostname] = TLC_HOSTNAME_CFG_ITEM,
     [PHO_CFG_LIB_SCSI_tlc_port] = TLC_PORT_CFG_ITEM,
 };
