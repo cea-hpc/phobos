@@ -33,6 +33,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/epoll.h>
@@ -42,6 +43,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include "pho_cfg.h"
 #include "pho_common.h"
 
 /** Used to limit the received buffer size and avoid large allocations. */
@@ -63,6 +65,157 @@ struct _pho_comm_recv_info {
     size_t cur;     /*!< Current size of received data. */
     char *buf;      /*!< Buffer. */
 };
+
+int tlc_hostname_from_cfg(const char *library, const char **tlc_hostname)
+{
+    char *section_name;
+    int rc;
+
+    rc = asprintf(&section_name, TLC_SECTION_CFG, library);
+    if (rc < 0)
+        return -ENOMEM;
+
+    rc = pho_cfg_get_val(section_name, TLC_HOSTNAME_CFG_PARAM, tlc_hostname);
+    if (rc == -ENODATA) {
+        *tlc_hostname = DEFAULT_TLC_HOSTNAME;
+        rc = 0;
+    }
+
+    free(section_name);
+    return rc;
+}
+
+int tlc_listen_hostname_from_cfg(const char *library,
+                                 const char **tlc_listen_hostname)
+{
+    char *section_name;
+    int rc;
+
+    rc = asprintf(&section_name, TLC_SECTION_CFG, library);
+    if (rc < 0)
+        return -ENOMEM;
+
+    rc = pho_cfg_get_val(section_name, TLC_LISTEN_HOSTNAME_CFG_PARAM,
+                         tlc_listen_hostname);
+    if (rc == -ENODATA) {
+        rc = pho_cfg_get_val(section_name, TLC_HOSTNAME_CFG_PARAM,
+                             tlc_listen_hostname);
+        if (rc == -ENODATA) {
+            *tlc_listen_hostname = DEFAULT_TLC_HOSTNAME;
+            rc = 0;
+        }
+    }
+
+    free(section_name);
+    return rc;
+}
+
+int tlc_port_from_cfg(const char *library, int *tlc_port)
+{
+    const char *tlc_port_string;
+    int64_t tlc_port_64;
+    char *section_name;
+    int rc;
+
+    rc = asprintf(&section_name, TLC_SECTION_CFG, library);
+    if (rc < 0)
+        return -ENOMEM;
+
+    rc = pho_cfg_get_val(section_name, TLC_PORT_CFG_PARAM, &tlc_port_string);
+    if (rc == 0) {
+        tlc_port_64 = str2int64(tlc_port_string);
+        if (tlc_port_64 == INT64_MIN)
+            LOG_GOTO(out, rc = -EINVAL,
+                     "Invalid value for tlc port of library '%s'", library);
+
+        if (tlc_port_64 <= 0)
+            LOG_GOTO(out, rc = -EINVAL,
+                     "TLC port value %ld is not valid for library '%s'",
+                     tlc_port_64, library);
+
+        if (tlc_port_64 > 65535)
+            LOG_GOTO(out, rc = -EINVAL,
+                     "TLC port value %ld for library '%s' can not be greater "
+                     "than 65535", tlc_port_64, library);
+
+        *tlc_port = tlc_port_64;
+    } else if (rc == -ENODATA) {
+        *tlc_port = DEFAULT_TLC_PORT;
+        rc = 0;
+    }
+
+out:
+    free(section_name);
+    return rc;
+}
+
+int tlc_listen_port_from_cfg(const char *library, int *tlc_listen_port)
+{
+    const char *tlc_port_string;
+    int64_t tlc_port_64;
+    char *section_name;
+    int rc;
+
+    rc = asprintf(&section_name, TLC_SECTION_CFG, library);
+    if (rc < 0)
+        return -ENOMEM;
+
+    rc = pho_cfg_get_val(section_name, TLC_LISTEN_PORT_CFG_PARAM,
+                         &tlc_port_string);
+    if (rc == -ENODATA) {
+        rc = pho_cfg_get_val(section_name, TLC_PORT_CFG_PARAM,
+                             &tlc_port_string);
+        if (rc == -ENODATA) {
+            *tlc_listen_port = DEFAULT_TLC_PORT;
+            rc = 0;
+            goto out;
+        }
+    }
+
+    if (rc == 0) {
+        tlc_port_64 = str2int64(tlc_port_string);
+        if (tlc_port_64 == INT64_MIN)
+            LOG_GOTO(out, rc = -EINVAL,
+                     "Invalid value for tlc listen port of library '%s'",
+                     library);
+
+        if (tlc_port_64 <= 0)
+            LOG_GOTO(out, rc = -EINVAL,
+                     "TLC listen port value %ld is not valid for library '%s'",
+                     tlc_port_64, library);
+
+        if (tlc_port_64 > 65535)
+            LOG_GOTO(out, rc = -EINVAL,
+                     "TLC listen port value %ld for library '%s' can not be "
+                     "greater than 65535", tlc_port_64, library);
+
+        *tlc_listen_port = tlc_port_64;
+    }
+
+out:
+    free(section_name);
+    return rc;
+}
+
+int tlc_lib_device_from_cfg(const char *library, const char **tlc_lib_device)
+{
+    char *section_name;
+    int rc;
+
+    rc = asprintf(&section_name, TLC_SECTION_CFG, library);
+    if (rc < 0)
+        return -ENOMEM;
+
+    rc = pho_cfg_get_val(section_name, TLC_LIB_DEVICE_CFG_PARAM,
+                         tlc_lib_device);
+    if (rc == -ENODATA) {
+        *tlc_lib_device = DEFAULT_TLC_LIB_DEVICE;
+        rc = 0;
+    }
+
+    free(section_name);
+    return rc;
+}
 
 static inline void _init_comm_recv_info(struct _pho_comm_recv_info *cri,
                                         const int fd,

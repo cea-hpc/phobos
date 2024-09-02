@@ -33,11 +33,7 @@ enum pho_cfg_params_tlc {
     PHO_CFG_TLC_FIRST,
 
     /* tlc parameters */
-    PHO_CFG_TLC_listen_hostname = PHO_CFG_TLC_FIRST,
-    PHO_CFG_TLC_hostname,
-    PHO_CFG_TLC_listen_port,
-    PHO_CFG_TLC_port,
-    PHO_CFG_TLC_lib_device,
+    PHO_CFG_TLC_lib_device = PHO_CFG_TLC_FIRST,
     PHO_CFG_TLC_default_library,
 
     PHO_CFG_TLC_LAST = PHO_CFG_TLC_default_library,

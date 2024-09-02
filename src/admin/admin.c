@@ -52,18 +52,14 @@
 enum pho_cfg_params_admin {
     /* Actual admin parameters */
     PHO_CFG_ADMIN_lrs_socket,
-    PHO_CFG_ADMIN_tlc_hostname,
-    PHO_CFG_ADMIN_tlc_port,
 
     /* Delimiters, update when modifying options */
     PHO_CFG_ADMIN_FIRST = PHO_CFG_ADMIN_lrs_socket,
-    PHO_CFG_ADMIN_LAST  = PHO_CFG_ADMIN_tlc_port
+    PHO_CFG_ADMIN_LAST  = PHO_CFG_ADMIN_lrs_socket
 };
 
 const struct pho_config_item cfg_admin[] = {
     [PHO_CFG_ADMIN_lrs_socket] = LRS_SOCKET_CFG_ITEM,
-    [PHO_CFG_ADMIN_tlc_hostname] = TLC_HOSTNAME_CFG_ITEM,
-    [PHO_CFG_ADMIN_tlc_port] = TLC_PORT_CFG_ITEM,
 };
 
 /* ****************************************************************************/
@@ -469,18 +465,15 @@ int phobos_admin_init(struct admin_handle *adm, bool lrs_required,
 
     /* TLC client connection */
     if (tlc_required) {
-        tlc_sock_addr.tcp.hostname = PHO_CFG_GET(cfg_admin, PHO_CFG_ADMIN,
-                                                 tlc_hostname);
-        tlc_sock_addr.tcp.port = PHO_CFG_GET_INT(cfg_admin, PHO_CFG_ADMIN,
-                                                 tlc_port, 0);
-        if (tlc_sock_addr.tcp.port == 0)
-            LOG_GOTO(out, rc = -EINVAL,
-                     "Unable to get a valid integer TLC port value");
+        rc = tlc_hostname_from_cfg("legacy", &tlc_sock_addr.tcp.hostname);
+        if (rc)
+            LOG_GOTO(out, rc, "Unable to get TLC hostname for library '%s'",
+                     "legacy");
 
-        if (tlc_sock_addr.tcp.port > 65536)
-            LOG_GOTO(out, rc = -EINVAL,
-                     "TLC port value %d can not be greater than 65536",
-                     tlc_sock_addr.tcp.port);
+        rc = tlc_port_from_cfg("legacy", &tlc_sock_addr.tcp.port);
+        if (rc)
+            LOG_GOTO(out, rc, "Unable to get TLC port for library '%s'",
+                     "legacy");
 
         rc = pho_comm_open(&adm->tlc_comm, &tlc_sock_addr, PHO_COMM_TCP_CLIENT);
         if (rc)

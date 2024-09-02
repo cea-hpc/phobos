@@ -11,11 +11,11 @@ relevant for any medium family.
 
 ## Configuration
 Because one tlc must run per library, we will replace the `[tlc]` section by as
-many `[tlc "library name"]` sections as there are existing libraries, where
+many `[tlc_library_name]` sections as there are existing libraries, where
 `"library_name"` must match the value of the corresponding library field of
 media and devices.
 
-Each `[tlc "library name"]` section will contain the same field as the
+Each `[tlc_library_name]` section will contain the same field as the
 former `[tlc]` section:
 - `hostname`,
 - `port`,

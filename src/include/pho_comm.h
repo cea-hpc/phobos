@@ -39,6 +39,20 @@
                            .name = "port", \
                            .value = "20123"}
 
+
+#define TLC_SECTION_CFG "tlc_%s"
+#define TLC_HOSTNAME_CFG_PARAM "hostname"
+#define DEFAULT_TLC_HOSTNAME "localhost"
+#define TLC_PORT_CFG_PARAM "port"
+#define DEFAULT_TLC_PORT 20123
+/* listen_hostname/hostname and port are failover settings:
+ * if listen_hostname is not set, hostame is used
+ */
+#define TLC_LISTEN_HOSTNAME_CFG_PARAM "listen_hostname"
+#define TLC_LISTEN_PORT_CFG_PARAM "listen_port"
+#define TLC_LIB_DEVICE_CFG_PARAM "lib_device"
+#define DEFAULT_TLC_LIB_DEVICE "/dev/changer"
+
 /**
  * Address of an AF_UNIX or AF_INET socket
  */
@@ -127,6 +141,58 @@ static inline struct pho_comm_data pho_comm_data_init(struct pho_comm_info *ci)
 
     return dt;
 }
+
+/**
+ * Get TLC hostname from config
+ *
+ * \param[in]       library         Targeted library
+ * \param[out]      tlc_hostname    TLC hostname
+ *
+ * \return                      0 on success, negative POSIX error on failure
+ */
+int tlc_hostname_from_cfg(const char *library, const char **tlc_hostname);
+
+/**
+ * Get TLC listen hostname from config
+ *
+ * \param[in]       library                 Targeted library
+ * \param[out]      tlc_listen_hostname     TLC listen hostname
+ *
+ * \return                      0 on success, negative POSIX error on failure
+ */
+int tlc_listen_hostname_from_cfg(const char *library,
+                                 const char **tlc_listen_hostname);
+
+/**
+ * Get tlc port from config
+ *
+ * \param[in]       library     Targeted library
+ * \param[out]      tlc_port    TLC port
+ *
+ * \return                      0 on success, negative POSIX error on failure
+ */
+int tlc_port_from_cfg(const char *library, int *tlc_port);
+
+/**
+ * Get tlc listen port from config
+ *
+ * \param[in]       library             Targeted library
+ * \param[out]      tlc_listen_port     TLC listen port
+ *
+ * \return                      0 on success, negative POSIX error on failure
+ */
+int tlc_listen_port_from_cfg(const char *library, int *tlc_listen_port);
+
+/**
+ * Get TLC library device from config
+ *
+ * \param[in]       library         Targeted library
+ * \param[out]      tlc_lib_device  TLC library device
+ *
+ * \return                      0 on success, negative POSIX error on failure
+ */
+int tlc_lib_device_from_cfg(const char *library,
+                            const char **tlc_library_device);
 
 /**
  * Open a socket

@@ -52,41 +52,41 @@ function tlc_daemon_started
 
 function tlc_daemon_bad_port
 {
-    export PHOBOS_TLC_port="65536"
+    export PHOBOS_TLC_LEGACY_port="65536"
     if invoke_tlc; then
         waive_tlc
-        unset PHOBOS_TLC_port
+        unset PHOBOS_TLC_LEGACY_port
         error "TLC daemon start must fail with a port greater than 65535"
     fi
 
-    export PHOBOS_TLC_port="-1"
+    export PHOBOS_TLC_LEGACY_port="-1"
     if invoke_tlc; then
         waive_tlc
-        unset PHOBOS_TLC_port
+        unset PHOBOS_TLC_LEGACY_port
         error "TLC daemon start must fail with a port value of -1"
     fi
 
     # Test the port number 22, already used by sshd
-    export PHOBOS_TLC_port="22"
+    export PHOBOS_TLC_LEGACY_port="22"
     if invoke_tlc; then
         waive_tlc
-        unset PHOBOS_TLC_port
+        unset PHOBOS_TLC_LEGACY_port
         error "TLC daemon start must fail with a port 22 already used by sshd"
     fi
 
-    unset PHOBOS_TLC_port
+    unset PHOBOS_TLC_LEGACY_port
 }
 
 function tlc_daemon_bad_lib_dev
 {
-    export PHOBOS_TLC_lib_device="/wrong/device/path"
+    export PHOBOS_TLC_LEGACY_lib_device="/wrong/device/path"
     if invoke_tlc; then
         waive_tlc
-        unset PHOBOS_TLC_lib_device
+        unset PHOBOS_TLC_LEGACY_lib_device
         error "TLC daemon start must fail with an invalid library device path"
     fi
 
-    unset PHOBOS_TLC_lib_device
+    unset PHOBOS_TLC_LEGACY_lib_device
 }
 
 if [[ ! -w /dev/changer ]]; then

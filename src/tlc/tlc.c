@@ -83,14 +83,11 @@ static int tlc_init(struct tlc *tlc, const char *library)
     tlc->lib.name[len_library] = '\0';
 
     /* open TLC lib file descriptor and load library cache */
-    /* For now, one single configurable path to library device.
-     * This will have to be changed to manage multiple libraries or to manage
-     * one library through multiple "/dev/changer" paths to improve parallel
-     * usage depending on the library model.
-     */
-    lib_dev = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, lib_device);
-    if (!lib_dev)
-        LOG_RETURN(-EINVAL, "Failed to get default library device from config");
+    rc = tlc_lib_device_from_cfg(tlc->lib.name, &lib_dev);
+    if (rc)
+        LOG_RETURN(-EINVAL,
+                   "Failed to get TLC lib device from config for library %s",
+                   tlc->lib.name);
 
     rc = tlc_library_open(&tlc->lib, lib_dev, &json_message);
     if (rc) {
@@ -100,7 +97,8 @@ static int tlc_init(struct tlc *tlc, const char *library)
             json_decref(json_message);
             return rc;
         } else {
-            LOG_RETURN(-errno, "Failed to open library device '%s'", lib_dev);
+            LOG_RETURN(-errno,
+                       "Failed to open library device '%s'", lib_dev);
         }
     }
 
@@ -111,20 +109,18 @@ static int tlc_init(struct tlc *tlc, const char *library)
     }
 
     /* open TLC communicator */
-    sock_addr.tcp.hostname = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, listen_hostname);
-    if (!sock_addr.tcp.hostname)
-        sock_addr.tcp.hostname = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, hostname);
-    sock_addr.tcp.port = PHO_CFG_GET_INT(cfg_tlc, PHO_CFG_TLC, listen_port, -1);
-    if (sock_addr.tcp.port == -1)
-        sock_addr.tcp.port = PHO_CFG_GET_INT(cfg_tlc, PHO_CFG_TLC, port, -1);
-    if (sock_addr.tcp.port == -1)
-        LOG_GOTO(close_lib, rc = -EINVAL,
-                 "Unable to get a valid integer TLC port value");
+    rc = tlc_listen_hostname_from_cfg(tlc->lib.name,
+                                      &sock_addr.tcp.hostname);
+    if (rc)
+        LOG_GOTO(close_lib, rc,
+                 "Unable to get TLC listen hostname from config for "
+                 "library %s", tlc->lib.name);
 
-    if (sock_addr.tcp.port > 65535)
-        LOG_GOTO(close_lib, rc = -EINVAL,
-                 "TLC port value %d cannot be greater than 65535",
-                 sock_addr.tcp.port);
+    rc = tlc_listen_port_from_cfg(tlc->lib.name, &sock_addr.tcp.port);
+    if (rc)
+        LOG_GOTO(close_lib, rc,
+                 "Unable to get TLC listen port from config for library %s",
+                 tlc->lib.name);
 
     rc = pho_comm_open(&tlc->comm, &sock_addr, PHO_COMM_TCP_SERVER);
     if (rc)
@@ -367,15 +363,11 @@ static int process_status_request(struct tlc *tlc, pho_tlc_req_t *req,
     if (req->status->refresh) {
         const char *lib_dev;
 
-        /* For now, one single configurable path to library device.
-         * This will have to be changed to manage multiple libraries or to
-         * manage one library through multiple "/dev/changer" paths to improve
-         * parallel usage depending on the library model.
-         */
-        lib_dev = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, lib_device);
-        if (!lib_dev) {
-            pho_error(rc = -EINVAL, "Failed to get default library device from "
-                                    "config to refresh");
+        rc = tlc_lib_device_from_cfg(tlc->lib.name, &lib_dev);
+        if (rc) {
+            pho_error(rc,
+                      "Failed to get default library device from config to "
+                      "refresh for library %s", tlc->lib.name);
             json_message = json_pack("{s:s}", "LIB_DEV_CONF_ERROR",
                                      "Failed to get default library device "
                                      "from config to refresh");
@@ -455,16 +447,11 @@ static int process_refresh_request(struct tlc *tlc, pho_tlc_req_t *req,
     const char *lib_dev;
     int rc, rc2;
 
-    /* For now, one single configurable path to library device.
-     * This will have to be changed to manage multiple libraries or to manage
-     * one library through multiple "/dev/changer" paths to improve parallel
-     * usage depending on the library model.
-     */
-    lib_dev = PHO_CFG_GET(cfg_tlc, PHO_CFG_TLC, lib_device);
-    if (!lib_dev) {
-        pho_error(rc = -EINVAL,
-                  "Failed to get default library device from config to "
-                  "refresh");
+    rc = tlc_lib_device_from_cfg(tlc->lib.name, &lib_dev);
+    if (rc) {
+        pho_error(rc,
+                  "Failed to get default library device from config to refresh "
+                  "for library %s", tlc->lib.name);
         json_message = json_pack("{s:s}", "LIB_DEV_CONF_ERROR",
                                  "Failed to get default library device from "
                                  "config to refresh");
