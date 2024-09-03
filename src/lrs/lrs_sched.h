@@ -44,6 +44,10 @@
 static inline int tape_drive_compat(const struct media_info *tape,
                                     const struct lrs_dev *drive, bool *res)
 {
+    if (strncmp(tape->rsc.id.library, drive->ld_dss_dev_info->rsc.id.library,
+                sizeof(tape->rsc.id.library)))
+        return false;
+
     return tape_drive_compat_models(tape->rsc.model,
                                     drive->ld_dss_dev_info->rsc.model, res);
 }
