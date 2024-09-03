@@ -25,6 +25,7 @@
 
 test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_env.sh
+. $test_dir/test_launch_daemon.sh
 . $test_dir/setup_db.sh
 . $test_dir/tape_drive.sh
 
@@ -84,10 +85,20 @@ function test_tape_add_library
     fi
 }
 
+function tlc_daemon_bad_library
+{
+    if invoke_tlc -l bad_library; then
+        waive_tlc
+        error "TLC daemon start must fail if we set a bad library parameter"
+    fi
+}
+
 if [[ ! -w /dev/changer ]]; then
     skip "Tapes are required for this test"
 fi
 
 TEST_SETUP=setup
-TESTS=("test_device_add_library" "test_tape_add_library")
+TESTS=("test_device_add_library"
+       "test_tape_add_library"
+       "tlc_daemon_bad_library")
 TEST_CLEANUP=cleanup
