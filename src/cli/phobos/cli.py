@@ -1149,6 +1149,8 @@ class FormatOptHandler(DSSInteractHandler):
                                  ' 0 means no limitation (default is 0)')
         parser.add_argument('--unlock', action='store_true',
                             help='Unlock media once it is ready to be written')
+        parser.add_argument('--library',
+                            help="Library containing added resources")
         parser.add_argument('res', nargs='+', help='Resource(s) to format')
 
 class TapeFormatOptHandler(FormatOptHandler):
@@ -1742,6 +1744,7 @@ class MediaOptHandler(BaseResourceOptHandler):
         nb_streams = self.params.get('nb_streams')
         fs_type = self.params.get('fs')
         unlock = self.params.get('unlock')
+        set_library(self)
         if self.family == ResourceFamily.RSC_TAPE:
             force = self.params.get('force')
         else:
@@ -1758,8 +1761,8 @@ class MediaOptHandler(BaseResourceOptHandler):
                         "This format may imply some orphan extents or lost "
                         "objects. Hoping you know what you are doing!")
 
-                adm.fs_format(media_list, nb_streams, fs_type, unlock=unlock,
-                              force=force)
+                adm.fs_format(media_list, self.family, self.library,
+                              nb_streams, fs_type, unlock=unlock, force=force)
 
             self.logger.info("Media '%s' have been formatted", media_list)
 

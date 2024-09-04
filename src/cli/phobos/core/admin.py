@@ -30,8 +30,7 @@ from ctypes import (addressof, byref, c_int, c_char_p, c_void_p, pointer,
                     Structure, c_size_t, c_bool)
 
 from phobos.core.const import (PHO_FS_LTFS, PHO_FS_POSIX, # pylint: disable=no-name-in-module
-                               PHO_FS_RADOS, PHO_RSC_DIR,
-                               PHO_RSC_TAPE, PHO_RSC_RADOS_POOL,
+                               PHO_FS_RADOS, PHO_RSC_TAPE,
                                PHO_RSC_NONE, DSS_NONE,
                                str2rsc_family, str2dss_type,
                                PHO_ADDR_HASH1, PHO_ADDR_PATH,
@@ -106,25 +105,22 @@ class Client: # pylint: disable=too-many-public-methods
             LIBPHOBOS_ADMIN.phobos_admin_fini(byref(self.handle))
             self.handle = None
 
-    def fs_format(self, media_list, nb_streams, fs_type, unlock=False, # pylint: disable=too-many-arguments
-                  force=False):
+    def fs_format(self, media_list, rsc_family, library, nb_streams, fs_type, # pylint: disable=too-many-arguments
+                  unlock=False, force=False):
         """Format media through the LRS layer."""
         fs_type = fs_type.lower()
         if fs_type == 'ltfs':
-            rsc_family = PHO_RSC_TAPE
             fs_type_enum = PHO_FS_LTFS
         elif fs_type == 'posix':
-            rsc_family = PHO_RSC_DIR
             fs_type_enum = PHO_FS_POSIX
         elif fs_type == 'rados':
-            rsc_family = PHO_RSC_RADOS_POOL
             fs_type_enum = PHO_FS_RADOS
         else:
             raise EnvironmentError(errno.EOPNOTSUPP,
                                    "Unknown filesystem type '%s'" % fs_type)
 
         c_id = Id * len(media_list)
-        mstruct = [Id(rsc_family, name=medium_id, library="legacy")
+        mstruct = [Id(rsc_family, name=medium_id, library=library)
                    for medium_id in media_list]
         rc = LIBPHOBOS_ADMIN.phobos_admin_format(byref(self.handle),
                                                  c_id(*mstruct),
