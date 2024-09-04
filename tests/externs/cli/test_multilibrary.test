@@ -28,15 +28,26 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/test_launch_daemon.sh
 . $test_dir/setup_db.sh
 . $test_dir/tape_drive.sh
+. $test_dir/utils_generation.sh
 
-function setup
+function cleanup_daemons
 {
-    setup_tables
+    waive_lrs
+    waive_tlc
+    waive_tlc_bis
+    drop_tables
+    drain_all_drives
+    cleanup_dummy_files
 }
 
-function cleanup
+function setup_daemons
 {
-    drop_tables
+    drain_all_drives
+    setup_tables
+    invoke_tlc
+    invoke_tlc_bis
+    invoke_lrs
+    setup_dummy_files 2
 }
 
 function test_device_add_library
@@ -85,7 +96,7 @@ function test_tape_add_library
     fi
 }
 
-function tlc_daemon_bad_library
+function test_tlc_daemon_bad_library
 {
     if invoke_tlc -l bad_library; then
         waive_tlc
@@ -93,12 +104,35 @@ function tlc_daemon_bad_library
     fi
 }
 
+function test_tape_drive_library_compat
+{
+    local tape=$(get_tapes L6 1)
+    local tape_bis=$(get_tapes_bis L6 1)
+    local drive="$(get_lto_drives 6 1)"
+    local drive_bis="$(get_lto_drives_bis 6 1)"
+
+    # put/get on library_bis different from legacy
+    $phobos drive add --unlock --library library_bis ${drive_bis} ||
+        error "Adding drive ${drive_bis} on library_bis must not fail"
+    $phobos tape add -t lto6 --library library_bis ${tape_bis} ||
+        error "Adding tape ${tape_bis} on library_bis must not fail"
+    $phobos tape format --unlock --library library_bis ${tape_bis} ||
+        error "Formatting tape ${tape_bis} on library_bis must no fail"
+    $phobos put ${FILES[0]} obj_on_bis ||
+        error "Put on library_bis must not fail"
+    rm ${FILES[1]}
+    $phobos get obj_on_bis ${FILES[1]} ||
+        error "Get on library_bis must not fail"
+    if ! diff ${FILES[0]} ${FILES[1]}; then
+        error "put/get on library_bis produces different files"
+    fi
+}
+
 if [[ ! -w /dev/changer ]]; then
     skip "Tapes are required for this test"
 fi
 
-TEST_SETUP=setup
-TESTS=("test_device_add_library"
-       "test_tape_add_library"
-       "tlc_daemon_bad_library")
-TEST_CLEANUP=cleanup
+TESTS=("setup_tables; test_device_add_library; drop_tables"
+       "setup_tables; test_tape_add_library; drop_tables"
+       "setup_tables; test_tlc_daemon_bad_library; drop_tables"
+       "setup_daemons; test_tape_drive_library_compat; cleanup_daemons")

@@ -59,7 +59,8 @@ function tape_init_setup
 function tape_setup
 {
     local N_TAPES=2
-    local N_DRIVES=8
+    local N_DRIVES_L5=4
+    local N_DRIVES_L6=4
     local LTO5_TAGS=$TAGS,lto5
     local LTO6_TAGS=$TAGS,lto6
 
@@ -84,7 +85,8 @@ function tape_setup
     done
 
     # get drives
-    local drives=$(get_drives $N_DRIVES)
+    local drives="$(get_lto_drives 5 ${N_DRIVES_L5}) \
+                  $(get_lto_drives 6 ${N_DRIVES_L6})"
     $phobos drive add $drives
 
     # show a drive info

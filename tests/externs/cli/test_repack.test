@@ -79,7 +79,7 @@ function tape_setup
 {
     setup
 
-    export drives="$(get_drives 2)"
+    export drives="$(get_lto_drives 5 2)"
     export media="$(get_tapes L5 3 | nodeset -e)"
 
     export medium_origin="$(echo $media | cut -d' ' -f1)"
@@ -160,7 +160,7 @@ function test_raid1_repack_setup
 {
     setup
 
-    export drives="$(get_drives 2)"
+    export drives="$(get_lto_drives 5 2)"
     export media="$(get_tapes L5 3 | nodeset -e)"
 
     export medium_origin1="$(echo $media | cut -d' ' -f1)"
@@ -221,7 +221,7 @@ function test_dedup_repack_setup
 {
     setup
 
-    export drives="$(get_drives 2)"
+    export drives="$(get_lto_drives 5 2)"
     export media="$(get_tapes L5 2 | nodeset -e)"
 
     export medium_origin="$(echo $media | cut -d' ' -f1)"

@@ -137,20 +137,6 @@ function get_test_tapes()
     fi
 }
 
-function get_test_drives()
-{
-    local count=$1
-
-    if $exec_nonregression; then
-        get_drives $count
-    else
-        if [ -z "${TEST_DRIVES}" ]; then
-            return 1
-        fi
-        echo ${TEST_DRIVES}
-    fi
-}
-
 function setup_tape
 {
     ENTRY
@@ -163,17 +149,19 @@ function setup_tape
     # make sure all drives are empty
     drain_all_drives
 
-    local N_TAPES=2
-    local N_DRIVES=8
+    local N_TAPES_L5=2
+    local N_TAPES_L6=2
+    local N_DRIVES_L5=4
+    local N_DRIVES_L6=4
 
     # get LTO5 tapes
-    local lto5_tapes="$(get_test_tapes L5 $N_TAPES)"
+    local lto5_tapes="$(get_test_tapes L5 $N_TAPES_L5)"
     if [ ! -z "$lto5_tapes" ]; then
         $phobos tape add --tags $TAGS,lto5 --type lto5 $lto5_tapes
     fi
 
     # get LTO6 tapes
-    local lto6_tapes="$(get_test_tapes L6 $N_TAPES)"
+    local lto6_tapes="$(get_test_tapes L6 $N_TAPES_L6)"
     if [ ! -z "$lto6_tapes" ]; then
         $phobos tape add --tags $TAGS,lto6 --type lto6 $lto6_tapes
     fi
@@ -196,7 +184,8 @@ function setup_tape
         exit_error "Tapes are not all added"
 
     # get drives
-    local drives=$(get_test_drives $N_DRIVES)
+    local drives="$(get_lto_drives 5 ${N_DRIVES_L5}) \
+                  $(get_lto_drives 6 ${N_DRIVES_L6})"
 
     local nb_drives=$(echo "$drives" | wc -w)
     if (( nb_drives == 0 )); then

@@ -14,7 +14,7 @@ set -xe
 
 # Create a loopback device for storage
 VTL_STORAGE=/tmp/vtl_storage
-dd if=/dev/zero of=$VTL_STORAGE bs=1M count=12k
+dd if=/dev/zero of=$VTL_STORAGE bs=1M count=14k
 losetup /dev/loop0 $VTL_STORAGE
 mdadm --create /dev/md0 --level=linear --force --raid-devices=1 /dev/loop0
 systemctl restart quadstorvtl
@@ -35,6 +35,8 @@ systemctl restart quadstorvtl
 /quadstorvtl/bin/vtconfig --add --vtl=phobos-ibm \
     --type=09 --slots=20 --ieports=4 --drive-type=20 --drive-count=4 \
     --drive-type=21 --drive-count=4
+/quadstorvtl/bin/vtconfig --add --vtl=phobos-ibm-bis \
+    --type=09 --slots=20 --ieports=4 --drive-type=21 --drive-count=1
 
 # Add 20 cartridges (tapes), types:
 # 12      LTO 5 1500GB
@@ -44,6 +46,9 @@ systemctl restart quadstorvtl
     --type 12 --pool=phobos-pool --label=P00000 --count=10
 /quadstorvtl/bin/vcconfig --add --vtl=phobos-ibm \
     --type 13 --pool=phobos-pool --label=Q00000 --count=10
+/quadstorvtl/bin/vcconfig --add --vtl=phobos-ibm-bis \
+    --type 13 --pool=phobos-pool --label=BISQ00L6 --count=1
 
 # Symlink for phobos tests
 ln -s /dev/sg9 /dev/changer
+ln -s /dev/sg11 /dev/changer_bis

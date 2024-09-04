@@ -61,7 +61,7 @@ function st2sg()
 
 function test_drive_status()
 {
-    local drives=($(get_drives 2))
+    local drives=($(get_lto_drives 6 2))
 
     $phobos drive add ${drives[@]}
     $phobos drive unlock ${drives[@]}

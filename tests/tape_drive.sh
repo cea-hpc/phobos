@@ -30,8 +30,9 @@ function mtx_retry
     done
 }
 
-function drain_all_drives
+function drain_all_drives_changer
 {
+    local dev_changer=$1
     local i
 
     # TODO replace umount/mtx unload by a 'phobos drive drain' command
@@ -39,18 +40,26 @@ function drain_all_drives
     mount | awk '/^ltfs/ {print $3}' | xargs -r umount
 
     # unload all tapes
-    local drive_full=( $(mtx status | \
+    local drive_full=( $(mtx -f ${dev_changer} status | \
               awk -F'[ :]' '/Data Transfer Element.*Full/ {print $4}') )
     local nb_drive_full=${#drive_full[@]}
     if [[ "${nb_drive_full}" != 0 ]]; then
-        local slot_empty=( $(mtx status | grep "Storage Element" | \
+        local slot_empty=( $(mtx -f ${dev_changer} status | \
+                             grep "Storage Element" | \
                              grep -v "IMPORT/EXPORT" | \
                              grep Empty | awk '{print $3}' | cut -f 1 -d ':') )
 
         for i in `seq 1 ${nb_drive_full}`; do
-            mtx_retry unload ${slot_empty[$i - 1]} ${drive_full[$i - 1]}
+            mtx_retry -f ${dev_changer} unload ${slot_empty[$i - 1]} \
+                      ${drive_full[$i - 1]}
         done
     fi
+}
+
+function drain_all_drives
+{
+    drain_all_drives_changer /dev/changer
+    drain_all_drives_changer /dev/changer_bis
 }
 
 # list <count> tapes matching the given pattern
@@ -63,11 +72,15 @@ function get_tapes {
         grep "$pattern" | head -n $count | nodeset -f
 }
 
-# get <count> drives
-function get_drives {
-    local count=$1
+# list <count> tapes from the secnd library matching the given pattern
+# returns nodeset range
+function get_tapes_bis {
+    local pattern=$1
+    local count=$2
 
-    find /dev -regex "/dev/st[0-9]+$" | head -n $count | xargs
+    mtx -f /dev/changer_bis status |
+        sed -n 's/.*:VolumeTag\s\?=\s\?\(.*\)/\1/p' |
+        grep "$pattern" | head -n $count | nodeset -f
 }
 
 # get LTO<5|6> <count> drives
@@ -76,4 +89,12 @@ function get_lto_drives {
     local count=$2
 
     lsscsi | grep TD${generation} | awk '{print $6}' | head -n $count | xargs
+}
+
+# get LTO<5|6> <count> drives from the second library
+function get_lto_drives_bis {
+    local generation=$1
+    local count=$2
+
+    lsscsi | grep TD${generation} | awk '{print $6}' | tail -n $count | xargs
 }
