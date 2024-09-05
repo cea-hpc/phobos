@@ -548,6 +548,8 @@ class LockOptHandler(DSSInteractHandler):
         parser.add_argument('res', nargs='+',
                             help='Resource(s) to lock (for a device, could be '
                                  'the path or the id name)')
+        parser.add_argument('--library',
+                            help="Library containing resources to lock")
 
 class DeviceLockOptHandler(LockOptHandler):
     """Lock device."""
@@ -1605,10 +1607,12 @@ class DeviceOptHandler(BaseResourceOptHandler):
     def exec_lock(self):
         """Device lock"""
         names = self.params.get('res')
+        set_library(self)
 
         try:
             with AdminClient(lrs_required=False) as adm:
-                adm.device_lock(self.family, names, self.params.get('wait'))
+                adm.device_lock(self.family, names, self.library,
+                                self.params.get('wait'))
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
