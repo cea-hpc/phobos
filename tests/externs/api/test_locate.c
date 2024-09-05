@@ -509,6 +509,7 @@ int main(int argc, char **argv)
     }
 
     family = str2rsc_family(argv[1]);
+
     switch (family) {
     case PHO_RSC_TAPE:
     case PHO_RSC_DIR:

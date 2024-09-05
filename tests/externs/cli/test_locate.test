@@ -232,8 +232,8 @@ EOF
 
     local locate_hostname=$($valg_phobos locate $oid)
     if [ "$locate_hostname" != "$self_hostname" ]; then
-        error "locate on $oid returned $locate_hostname instead of " \
-              "$self_hostname when every medium is unlocked and " \
+        error "locate on $oid returned $locate_hostname instead of" \
+              "$self_hostname when every medium is unlocked and" \
               "$self_hostname has compatible devices"
     fi
 
@@ -241,8 +241,8 @@ EOF
     # $self_hostname, so --focus-host $other_hostname should be ignored here
     locate_hostname=$($valg_phobos locate --focus-host $other_hostname $oid)
     if [ "$locate_hostname" != "$self_hostname" ]; then
-        error "locate on $oid returned $locate_hostname instead of " \
-              "$self_hostname even though it has a lock on a replica "
+        error "locate on $oid returned $locate_hostname instead of" \
+              "$self_hostname even though it has a lock on a replica"
     fi
 
     local tapes_to_unlock=$($phobos tape list -o name,lock_hostname |
@@ -252,8 +252,8 @@ EOF
 
     locate_hostname=$($valg_phobos locate --focus-host $other_hostname $oid)
     if [ "$locate_hostname" != "$other_hostname" ]; then
-        error "locate on $oid returned $locate_hostname instead of " \
-              "$other_hostname when every medium and drive is unlocked and " \
+        error "locate on $oid returned $locate_hostname instead of" \
+              "$other_hostname when every medium and drive is unlocked and" \
               "--focus-host is set to $other_hostname"
     fi
 
@@ -268,8 +268,8 @@ EOF
 
     locate_hostname=$($valg_phobos locate --focus-host $other_hostname $oid)
     if [ "$locate_hostname" != "$other_hostname" ]; then
-        error "locate on $oid returned $locate_hostname instead of " \
-              "$other_hostname when $self_hostname has no compatible " \
+        error "locate on $oid returned $locate_hostname instead of" \
+              "$other_hostname when $self_hostname has no compatible" \
               "unlocked device"
     fi
 
@@ -279,8 +279,8 @@ EOF
 
     locate_hostname=$($valg_phobos locate --focus-host $self_hostname $oid)
     if [ "$locate_hostname" != "$other_hostname" ]; then
-        error "locate on $oid returned $locate_hostname instead of " \
-              "$other_hostname when $self_hostname has no compatible " \
+        error "locate on $oid returned $locate_hostname instead of" \
+              "$other_hostname when $self_hostname has no compatible" \
               "unlocked device but $other_hostname does"
     fi
 
@@ -296,15 +296,15 @@ EOF
 
     locate_hostname=$($valg_phobos locate --focus-host $self_hostname $oid)
     if [ "$locate_hostname" != "$self_hostname" ]; then
-        error "locate on $oid returned $locate_hostname instead of " \
+        error "locate on $oid returned $locate_hostname instead of" \
               "$self_hostname when focus-host is set to $self_hostname and" \
               "$other_hostname has no usable device"
     fi
 
     locate_hostname=$($valg_phobos locate --focus-host $other_hostname $oid)
     if [ "$locate_hostname" != "$self_hostname" ]; then
-        error "locate on $oid returned $locate_hostname instead of " \
-              "$self_hostname even though $other_hostname has no usable " \
+        error "locate on $oid returned $locate_hostname instead of" \
+              "$self_hostname even though $other_hostname has no usable" \
               "device and $self_hostname has a lock on a replica"
     fi
 }

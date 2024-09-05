@@ -144,6 +144,19 @@ int raid_decoder_init(struct pho_encoder *dec,
 int raid_encoder_step(struct pho_encoder *enc, pho_resp_t *resp,
                       pho_req_t **reqs, size_t *n_reqs);
 
+/**
+ * Generic implementation of pho_layout_module_ops::locate
+ *
+ * This function takes 2 additional parameters: n_data_extents and
+ * n_parity_extents. It will locate an object whose layout requires
+ * n_data_extents to be available on the host to be read. The total number of
+ * extents of this object per split is n_data_extents + n_parity_extents.
+ */
+int raid_locate(struct dss_handle *dss, struct layout_info *layout,
+                size_t n_data_extents, size_t n_parity_extents,
+                const char *focus_host, char **hostname,
+                int *nb_new_lock);
+
 void raid_encoder_destroy(struct pho_encoder *enc);
 
 size_t n_total_extents(struct raid_io_context *io_context);

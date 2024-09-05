@@ -120,6 +120,14 @@ do {                                                                    \
 #define pho_info(_fmt...)       _PHO_LOG_INTERNAL(PHO_LOG_INFO, 0, _fmt)
 #define pho_verb(_fmt...)       _PHO_LOG_INTERNAL(PHO_LOG_VERB, 0, _fmt)
 #define pho_debug(_fmt...)      _PHO_LOG_INTERNAL(PHO_LOG_DEBUG, 0, _fmt)
+#define pho_assert(condition, fmt...) \
+    do {                              \
+        if (!(condition)) {           \
+            pho_error(0, fmt);        \
+            abort();                  \
+        }                             \
+    } while (0)
+
 
 #define XWRAPPER(func, args...) ({                                  \
     void *ptr = func(args);                                         \

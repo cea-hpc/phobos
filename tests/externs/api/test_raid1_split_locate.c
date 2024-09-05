@@ -342,7 +342,7 @@ static void rsl_loss(void **state)
     assert_int_equal(nb_new_lock, 0);
     free(hostname);
 
-    /* locate with get false flag on first extent of second split */
+    /* locate with no get permission on the first extent of the second split */
     rsl_state->media[rsl_state->repl_count]->flags.get = false;
     rc = dss_media_update(rsl_state->dss,
                           rsl_state->media[rsl_state->repl_count],

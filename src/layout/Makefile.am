@@ -7,4 +7,4 @@ noinst_HEADERS=raid_common.h
 
 libpho_layout_la_SOURCES=layout.c
 
-libpho_layout_common_la_SOURCES=raid_common.c
+libpho_layout_common_la_SOURCES=raid_common.c raid_common_locate.c

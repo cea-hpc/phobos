@@ -179,10 +179,19 @@ static int layout_raid4_decode(struct pho_encoder *dec)
     return 0;
 }
 
+static int layout_raid4_locate(struct dss_handle *dss,
+                               struct layout_info *layout,
+                               const char *focus_host,
+                               char **hostname,
+                               int *nb_new_lock)
+{
+    return raid_locate(dss, layout, 2, 1, focus_host, hostname, nb_new_lock);
+}
+
 static const struct pho_layout_module_ops LAYOUT_RAID4_OPS = {
     .encode = layout_raid4_encode,
     .decode = layout_raid4_decode,
-    .locate = NULL,
+    .locate = layout_raid4_locate,
     .get_specific_attrs = NULL,
     .reconstruct = NULL,
 };
