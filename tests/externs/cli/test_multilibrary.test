@@ -111,20 +111,29 @@ function test_tape_drive_library_compat
     local drive="$(get_lto_drives 6 1)"
     local drive_bis="$(get_lto_drives_bis 6 1)"
 
+    set -e
+
     # put/get on library_bis different from legacy
-    $phobos drive add --unlock --library library_bis ${drive_bis} ||
-        error "Adding drive ${drive_bis} on library_bis must not fail"
-    $phobos tape add -t lto6 --library library_bis ${tape_bis} ||
-        error "Adding tape ${tape_bis} on library_bis must not fail"
-    $phobos tape format --unlock --library library_bis ${tape_bis} ||
-        error "Formatting tape ${tape_bis} on library_bis must no fail"
-    $phobos put ${FILES[0]} obj_on_bis ||
-        error "Put on library_bis must not fail"
+    $phobos drive add --unlock --library library_bis ${drive_bis}
+    $phobos tape add -t lto6 --library library_bis ${tape_bis}
+    $phobos tape format --unlock --library library_bis ${tape_bis}
+    $phobos put ${FILES[0]} obj_on_bis
     rm ${FILES[1]}
-    $phobos get obj_on_bis ${FILES[1]} ||
-        error "Get on library_bis must not fail"
+    $phobos get obj_on_bis ${FILES[1]}
     if ! diff ${FILES[0]} ${FILES[1]}; then
         error "put/get on library_bis produces different files"
+    fi
+
+    # check get from a library_bis tape from a legacy drive
+    $phobos drive lock --wait --library library_bis ${drive_bis}
+    $phobos drive add --unlock ${drive}
+    rm ${FILES[1]}
+    set +e
+    $phobos get obj_on_bis ${FILES[1]}
+    rc=$?
+    if [[ ${rc} != "19" ]]; then
+        error "Getting on library bis with only a drive on legacy must fail "\
+"with ENODEV"
     fi
 }
 
