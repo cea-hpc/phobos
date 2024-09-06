@@ -1006,6 +1006,7 @@ int sched_select_medium(struct io_scheduler *io_sched,
                         struct media_info **p_media,
                         size_t required_size,
                         enum rsc_family family,
+                        const char *library,
                         const struct tags *tags,
                         struct req_container *reqc,
                         size_t n_med,
@@ -1039,11 +1040,15 @@ int sched_select_medium(struct io_scheduler *io_sched,
                               "  {\"DSS::MDA::put\": \"t\"},"
                               "  {\"DSS::MDA::adm_status\": \"%s\"},"
                               "  {\"DSS::MDA::fs_status\": \"%s\"}"
+                              "  %s%s%s"
                               "  %s%s"
                               "]}",
                               rsc_family2str(family),
                               rsc_adm_status2str(PHO_RSC_ADM_ST_UNLOCKED),
                               fs_status2str(PHO_FS_STATUS_EMPTY),
+                              library ? ", {\"DSS::MDA::library\": \"" : "",
+                              library ? library : "",
+                              library ? "\"}" : "",
                               with_tags ? ", " : "",
                               with_tags ? tag_filter_json : "");
     else
@@ -1061,6 +1066,7 @@ int sched_select_medium(struct io_scheduler *io_sched,
                                    /* Include empty media */
                               "    {\"DSS::MDA::fs_status\": \"%s\"}"
                               "  ]}"
+                              "  %s%s%s"
                               "  %s%s"
                               "]}",
                               rsc_family2str(family),
@@ -1073,6 +1079,9 @@ int sched_select_medium(struct io_scheduler *io_sched,
                                */
                               fs_status2str(PHO_FS_STATUS_USED),
                               fs_status2str(PHO_FS_STATUS_EMPTY),
+                              library ? ", {\"DSS::MDA::library\": \"" : "",
+                              library ? library : "",
+                              library ? "\"}" : "",
                               with_tags ? ", " : "",
                               with_tags ? tag_filter_json : "");
 

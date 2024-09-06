@@ -46,6 +46,7 @@ message PhoRequest {
         required bool prevent_duplicate = 3;   // True if the client does not
                                                // want a medium it already
                                                // allocated
+        optional string library = 4;           // Targeted library
     }
 
     /**

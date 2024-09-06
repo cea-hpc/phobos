@@ -293,10 +293,9 @@ static int find_write_device(struct io_scheduler *io_sched,
      * Note: sched_select_medium locks the medium.
      */
     pho_verb("No loaded media with enough space found: selecting another one");
-    rc = sched_select_medium(io_sched, medium, size,
-                             wreq->family, &tags, reqc,
-                             handle_error ? wreq->n_media : index,
-                             index);
+    rc = sched_select_medium(io_sched, medium, size, wreq->family,
+                             wreq->library, &tags, reqc,
+                             handle_error ? wreq->n_media : index, index);
     if (rc)
         return rc;
 

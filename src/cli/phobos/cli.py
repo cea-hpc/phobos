@@ -347,6 +347,9 @@ class StoreGenericPutHandler(XferOptHandler):
         parser.add_argument('-f', '--family',
                             choices=list(map(rsc_family2str, ResourceFamily)),
                             help='Targeted storage family')
+        parser.add_argument('--library',
+                            help='Desired library (if not set, any available '
+                            'library will be used)')
         parser.add_argument('-l', '--layout', '--lyt',
                             choices=["raid1", "raid4"],
                             help='Desired storage layout')
@@ -392,6 +395,7 @@ class StorePutHandler(StoreGenericPutHandler):
 
         put_params = PutParams(alias=self.params.get('alias'),
                                family=self.params.get('family'),
+                               library=self.params.get('library'),
                                layout=self.params.get('layout'),
                                lyt_params=lyt_attrs,
                                overwrite=self.params.get('overwrite'),
@@ -435,6 +439,7 @@ class StoreMPutHandler(StoreGenericPutHandler):
 
         put_params = PutParams(alias=self.params.get('alias'),
                                family=self.params.get('family'),
+                               library=self.params.get('library'),
                                layout=self.params.get('layout'),
                                lyt_params=lyt_attrs,
                                overwrite=self.params.get('overwrite'),

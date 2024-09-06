@@ -243,8 +243,11 @@ static int encoder_communicate(struct pho_encoder *enc,
 
         /* req_id is used to route responses to the appropriate encoder */
         req->id = enc_id;
-        if (pho_request_is_write(req))
+        if (pho_request_is_write(req)) {
             req->walloc->family = enc->xfer->xd_params.put.family;
+            req->walloc->library =
+                xstrdup_safe(enc->xfer->xd_params.put.library);
+        }
 
         data = pho_comm_data_init(comm);
         pho_srl_request_pack(req, &data.buf);

@@ -124,16 +124,37 @@ function test_tape_drive_library_compat
         error "put/get on library_bis produces different files"
     fi
 
-    # check get from a library_bis tape from a legacy drive
+    # get from a library_bis tape from a legacy drive
     $phobos drive lock --wait --library library_bis ${drive_bis}
-    $phobos drive add --unlock ${drive}
+    $phobos drive add --unlock --library legacy ${drive}
     rm ${FILES[1]}
     set +e
     $phobos get obj_on_bis ${FILES[1]}
     rc=$?
-    if [[ ${rc} != "19" ]]; then
+    ENODEV="19"
+    if [[ ${rc} != ${ENODEV} ]]; then
         error "Getting on library bis with only a drive on legacy must fail "\
-"with ENODEV"
+"with ENODEV (${ENODEV}), instead we got ${rc}."
+    fi
+
+    # put on legacy with a legacy drive but without any library medium
+    # with a library_bis tape and an empty library_bis drive
+    set -e
+    waive_lrs
+    waive_tlc
+    waive_tlc_bis
+    drain_all_drives
+    invoke_tlc
+    invoke_tlc_bis
+    invoke_lrs
+    $phobos drive unlock --library library_bis ${drive_bis}
+    set +e
+    $phobos put --library legacy ${FILES[0]} obj_on_legacy
+    rc=$?
+    ENOSPC="28"
+    if [[ ${rc} != ${ENOSPC} ]]; then
+        error "Putting on legacy with no medium must fail with ENOSPC "\
+"(${ENOSPC}), instead we got ${rc}."
     fi
 }
 

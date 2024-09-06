@@ -245,6 +245,7 @@ void pho_srl_request_free(pho_req_t *req, bool unpack)
             free(req->walloc->media[i]);
         }
         free(req->walloc->media);
+        free(req->walloc->library);
         free(req->walloc);
         req->walloc = NULL;
     }
