@@ -104,16 +104,11 @@ function test_tlc_daemon_bad_library
     fi
 }
 
-function test_tape_drive_library_compat
+function test_put_library_bis
 {
-    local tape=$(get_tapes L6 1)
     local tape_bis=$(get_tapes_bis L6 1)
-    local drive="$(get_lto_drives 6 1)"
     local drive_bis="$(get_lto_drives_bis 6 1)"
 
-    set -e
-
-    # put/get on library_bis different from legacy
     $phobos drive add --unlock --library library_bis ${drive_bis}
     $phobos tape add -t lto6 --library library_bis ${tape_bis}
     $phobos tape format --unlock --library library_bis ${tape_bis}
@@ -123,23 +118,45 @@ function test_tape_drive_library_compat
     if ! diff ${FILES[0]} ${FILES[1]}; then
         error "put/get on library_bis produces different files"
     fi
+}
 
-    # get from a library_bis tape from a legacy drive
+function test_get_lib_bis_tape_on_legacy_drive
+{
+    local tape_bis=$(get_tapes_bis L6 1)
+    local drive="$(get_lto_drives 6 1)"
+    local drive_bis="$(get_lto_drives_bis 6 1)"
+
+    $phobos drive add --unlock --library library_bis ${drive_bis}
+    $phobos tape add -t lto6 --library library_bis ${tape_bis}
+    $phobos tape format --unlock --library library_bis ${tape_bis}
+    $phobos put ${FILES[0]} obj_on_bis
+    rm ${FILES[1]}
+    $phobos get obj_on_bis ${FILES[1]}
+
     $phobos drive lock --wait --library library_bis ${drive_bis}
     $phobos drive add --unlock --library legacy ${drive}
     rm ${FILES[1]}
     set +e
     $phobos get obj_on_bis ${FILES[1]}
     rc=$?
+    set -e
     ENODEV="19"
     if [[ ${rc} != ${ENODEV} ]]; then
         error "Getting on library bis with only a drive on legacy must fail "\
 "with ENODEV (${ENODEV}), instead we got ${rc}."
     fi
+}
 
-    # put on legacy with a legacy drive but without any library medium
-    # with a library_bis tape and an empty library_bis drive
-    set -e
+function test_put_legacy_with_lib_bis_drive_umounted_medium
+{
+    local tape_bis=$(get_tapes_bis L6 1)
+    local drive="$(get_lto_drives 6 1)"
+    local drive_bis="$(get_lto_drives_bis 6 1)"
+
+    $phobos drive add --unlock --library library_bis ${drive_bis}
+    $phobos tape add -t lto6 --library library_bis ${tape_bis}
+    $phobos tape format --unlock --library library_bis ${tape_bis}
+    $phobos drive add --unlock --library legacy ${drive}
     waive_lrs
     waive_tlc
     waive_tlc_bis
@@ -147,14 +164,41 @@ function test_tape_drive_library_compat
     invoke_tlc
     invoke_tlc_bis
     invoke_lrs
-    $phobos drive unlock --library library_bis ${drive_bis}
+    # put on legacy with a legacy drive but without any library medium
+    # with a library_bis tape and an empty library_bis drive
     set +e
     $phobos put --library legacy ${FILES[0]} obj_on_legacy
     rc=$?
+    set -e
     ENOSPC="28"
     if [[ ${rc} != ${ENOSPC} ]]; then
-        error "Putting on legacy with no medium must fail with ENOSPC "\
-"(${ENOSPC}), instead we got ${rc}."
+        error "Putting on legacy with no legacy medium and no other mounted "\
+"medium must fail with ENOSPC (${ENOSPC}), instead we got ${rc}."
+    fi
+}
+
+function test_put_legacy_with_lib_bis_drive_mounted_medium
+{
+    local tape_bis=$(get_tapes_bis L6 1)
+    local drive="$(get_lto_drives 6 1)"
+    local drive_bis="$(get_lto_drives_bis 6 1)"
+
+    $phobos drive add --unlock --library library_bis ${drive_bis}
+    $phobos tape add -t lto6 --library library_bis ${tape_bis}
+    $phobos tape format --unlock --library library_bis ${tape_bis}
+    $phobos drive add --unlock --library legacy ${drive}
+    $phobos put --library library_bis ${FILES[0]} obj_on_library_bis
+    # put on legacy with a legacy drive but without any legacy medium
+    # with a library_bis tape and an empty library_bis drive
+    set +e
+    $phobos put --library legacy ${FILES[0]} obj_on_legacy
+    rc=$?
+    set -e
+    ENOSPC="28"
+    if [[ ${rc} != ${ENOSPC} ]]; then
+        error "Putting on legacy drive with no legacy medium and an other "\
+"mounted library_bis medium must fail with ENOSPC (${ENOSPC}), instead we "\
+"got ${rc}."
     fi
 }
 
@@ -165,4 +209,9 @@ fi
 TESTS=("setup_tables; test_device_add_library; drop_tables"
        "setup_tables; test_tape_add_library; drop_tables"
        "setup_tables; test_tlc_daemon_bad_library; drop_tables"
-       "setup_daemons; test_tape_drive_library_compat; cleanup_daemons")
+       "setup_daemons; test_put_library_bis; cleanup_daemons"
+       "setup_daemons; test_get_lib_bis_tape_on_legacy_drive; cleanup_daemons"
+       "setup_daemons; test_put_legacy_with_lib_bis_drive_umounted_medium; "\
+           "cleanup_daemons"
+       "setup_daemons; test_put_legacy_with_lib_bis_drive_mounted_medium; "\
+           "cleanup_daemons")

@@ -220,8 +220,8 @@ static int find_read_device(struct io_scheduler *io_sched,
                                 &sched_ready);
     if (!*dev) {
         *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
-                          select_empty_loaded_mount, 0, &NO_TAGS, medium,
-                          false, false, NULL);
+                          medium->rsc.id.library, select_empty_loaded_mount, 0,
+                          &NO_TAGS, medium, false, false, NULL);
 
         return 0;
     }
@@ -273,7 +273,7 @@ static int find_write_device(struct io_scheduler *io_sched,
     size = wreq->media[index]->size;
 
     /* 1a) is there a mounted filesystem with enough room? */
-    *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_MOUNTED,
+    *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_MOUNTED, wreq->library,
                       dev_select_policy, size, &tags, NULL, true,
                       wreq->media[index]->empty_medium, &one_drive_available);
     /* If we find a dev, we exit. */
@@ -282,7 +282,7 @@ static int find_write_device(struct io_scheduler *io_sched,
         return 0;
 
     /* 1b) is there a loaded media with enough room? */
-    *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_LOADED,
+    *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_LOADED, wreq->library,
                       dev_select_policy, size, &tags, NULL, true,
                       wreq->media[index]->empty_medium, &one_drive_available);
     if (*dev || !one_drive_available)
@@ -317,7 +317,7 @@ static int find_write_device(struct io_scheduler *io_sched,
     }
 
 find_device:
-    *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
+    *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC, wreq->library,
                       select_empty_loaded_mount, 0, &NO_TAGS, *medium, true,
                       false, NULL);
     if (*dev)
@@ -347,7 +347,7 @@ static int find_format_device(struct io_scheduler *io_sched,
                                 med_id->name, med_id->library, &sched_ready);
     if (!*dev) {
         *dev = dev_picker(io_sched->devices, PHO_DEV_OP_ST_UNSPEC,
-                          select_empty_loaded_mount,
+                          med_id->library, select_empty_loaded_mount,
                           0, &NO_TAGS, reqc->params.format.medium_to_format,
                           false, false, NULL);
 

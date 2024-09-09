@@ -416,6 +416,7 @@ int select_first_fit(size_t required_size,
 
 struct lrs_dev *dev_picker(GPtrArray *devices,
                            enum dev_op_status op_st,
+                           const char *library,
                            device_select_func_t select_func,
                            size_t required_size,
                            const struct tags *media_tags,

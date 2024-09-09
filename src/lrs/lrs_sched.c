@@ -1271,6 +1271,7 @@ typedef int (*device_select_func_t)(size_t required_size,
  * @param dss     DSS handle.
  * @param op_st   Filter devices by the given operational status.
  *                No filtering is op_st is PHO_DEV_OP_ST_UNSPEC.
+ * @param library        If set, selected device must be from library
  * @param select_func    Drive selection function.
  * @param required_size  Required size for the operation.
  * @param media_tags     Mandatory tags for the contained media (for write
@@ -1285,6 +1286,7 @@ typedef int (*device_select_func_t)(size_t required_size,
  */
 struct lrs_dev *dev_picker(GPtrArray *devices,
                            enum dev_op_status op_st,
+                           const char *library,
                            device_select_func_t select_func,
                            size_t required_size,
                            const struct tags *media_tags,
@@ -1333,6 +1335,13 @@ struct lrs_dev *dev_picker(GPtrArray *devices,
             pho_debug("Skipping device '%s' with incompatible status %s "
                       "instead of %s", itr->ld_dev_path,
                       op_status2str(itr->ld_op_status), op_status2str(op_st));
+            goto unlock_continue;
+        }
+
+        if (library && strcmp(library, itr->ld_dss_dev_info->rsc.id.library)) {
+            pho_debug("Skipping device '%s' with incompatible library '%s' "
+                      "instead of '%s'", itr->ld_dev_path,
+                      itr->ld_dss_dev_info->rsc.id.library, library);
             goto unlock_continue;
         }
 
