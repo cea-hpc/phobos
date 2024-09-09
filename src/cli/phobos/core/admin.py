@@ -249,10 +249,10 @@ class Client: # pylint: disable=too-many-public-methods
             raise EnvironmentError(rc, "Failed to lock device(s) '%s'" %
                                    dev_names)
 
-    def device_unlock(self, dev_family, dev_names, is_forced):
+    def device_unlock(self, dev_family, dev_names, dev_library, is_forced):
         """Wrapper for the device unlock command."""
         c_id = Id * len(dev_names)
-        dev_ids = [Id(dev_family, name=name, library="legacy")
+        dev_ids = [Id(dev_family, name=name, library=dev_library)
                    for name in dev_names]
 
         rc = LIBPHOBOS_ADMIN.phobos_admin_device_unlock(byref(self.handle),

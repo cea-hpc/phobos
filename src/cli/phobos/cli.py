@@ -574,6 +574,8 @@ class UnlockOptHandler(DSSInteractHandler):
         parser.add_argument('res', nargs='+', help='Resource(s) to unlock')
         parser.add_argument('--force', action='store_true',
                             help='Do not check the current lock state')
+        parser.add_argument('--library',
+                            help="Library containing resources to unlock")
 
 class StatusOptHandler(BaseOptHandler):
     """Display I/O and drive status"""
@@ -1623,10 +1625,12 @@ class DeviceOptHandler(BaseResourceOptHandler):
     def exec_unlock(self):
         """Device unlock"""
         names = self.params.get('res')
+        set_library(self)
 
         try:
             with AdminClient(lrs_required=False) as adm:
-                adm.device_unlock(self.family, names, self.params.get('force'))
+                adm.device_unlock(self.family, names, self.library,
+                                  self.params.get('force'))
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
