@@ -284,6 +284,15 @@ function cleanup_tape
     drain_all_drives
 }
 
+function corrupt_the_extent
+{
+    local extent=$1
+    local first_byte_hex=$(hexdump -n 1 -e \"%X\" ${extent})
+
+    first_byte_hex=$(printf "%X\n" $(( (0X${first_byte_hex} + 0X1) % 0XFF)) )
+    echo -ne \\x${first_byte_hex} | dd conv=notrunc bs=1 count=1 of="${extent}"
+}
+
 function test_put_get()
 {
     local oid=$FUNCNAME
@@ -468,8 +477,7 @@ function test_put_get_without_xxh128()
 
         cp "$extent" "$copy"
 
-        # Corrupt the extent
-        echo -ne \\xFF | dd conv=notrunc bs=1 count=1 of="$extent"
+        corrupt_the_extent $extent
         $valg_phobos get $oid /tmp/out.$$ &&
             error "phobos get $oid should have failed"
 
@@ -498,8 +506,7 @@ function test_put_get_corrupted()
 
         cp "$extent" "$copy"
 
-        # Corrupt the extent
-        echo -ne \\xFF | dd conv=notrunc bs=1 count=1 of="$extent"
+        corrupt_the_extent $extent
         $valg_phobos get $oid /tmp/out.$$ &&
             error "phobos get $oid should have failed"
 
@@ -532,8 +539,7 @@ function test_read_with_missing_extent_corrupted()
 
             cp "$extent" "$copy"
 
-            # Corrupt one extent available
-            echo -ne \\xFF | dd conv=notrunc bs=1 count=1 of="$extent"
+            corrupt_the_extent $extent
             $valg_phobos get $oid /tmp/out.$$ &&
                 error "phobos get $oid should have failed"
 
@@ -567,8 +573,7 @@ function test_put_get_split_corrupted()
 
         cp "$extent" "$copy"
 
-        # Corrupt the extent
-        echo -ne \\xFF | dd conv=notrunc bs=1 count=1 of="$extent"
+        corrupt_the_extent $extent
         $valg_phobos get "$oid" "$out" &&
             error "phobos get $oid should have failed"
 
@@ -609,8 +614,7 @@ function test_put_get_split_with_missing_extents_corrupted()
 
             cp "$extent" "$copy"
 
-            # Corrupt one extent available
-            echo -ne \\xFF | dd conv=notrunc bs=1 count=1 of="$extent"
+            corrupt_the_extent $extent
             $phobos get $oid $out &&
                 error "phobos get $oid should have failed"
 
@@ -656,8 +660,7 @@ function test_put_get_without_check_hash()
 
         cp "$extent" "$copy"
 
-        # Corrupt the extent
-        echo -ne \\xFF | dd conv=notrunc bs=1 count=1 of="$extent"
+        corrupt_the_extent $extent
         $phobos -vv get $oid /tmp/out.$$
 
         diff "$file" /tmp/out.$$ &&
