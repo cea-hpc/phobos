@@ -284,13 +284,14 @@ int phobos_admin_ping_lrs(struct admin_handle *adm);
 /*
  * Ping the TLC daemon to check if it is online or not.
  *
+ * \param[in]       library         TLC library to ping
  * \param[out]      library_is_up   Set to true if TLC successfully requests the
  *                                  library, set to false otherwise.
  *
  * \return                          0     on success,
  *                                 -errno on failure.
  */
-int phobos_admin_ping_tlc(bool *library_is_up);
+int phobos_admin_ping_tlc(const char *library, bool *library_is_up);
 
 /**
  * Retrieve layouts of objects whose IDs match the given name or pattern.

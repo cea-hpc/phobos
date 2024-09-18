@@ -1564,7 +1564,7 @@ int phobos_admin_ping_lrs(struct admin_handle *adm)
     return rc;
 }
 
-int phobos_admin_ping_tlc(bool *library_is_up)
+int phobos_admin_ping_tlc(const char *library, bool *library_is_up)
 {
     struct lib_handle lib_hdl;
     int rc2;
@@ -1572,7 +1572,7 @@ int phobos_admin_ping_tlc(bool *library_is_up)
 
     ENTRY;
 
-    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl, "legacy");
+    rc = get_lib_adapter_and_open(PHO_LIB_SCSI, &lib_hdl, library);
     if (rc)
         return rc;
 

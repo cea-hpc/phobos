@@ -221,10 +221,12 @@ class Client: # pylint: disable=too-many-public-methods
             raise EnvironmentError(rc, "Failed to ping phobosd")
 
     @staticmethod
-    def ping_tlc():
+    def ping_tlc(library):
         """Ping the TLC daemon."""
         library_is_up = c_bool(False)
-        rc = LIBPHOBOS_ADMIN.phobos_admin_ping_tlc(byref(library_is_up))
+        c_library = c_char_p(library.encode('utf-8'))
+        rc = LIBPHOBOS_ADMIN.phobos_admin_ping_tlc(c_library,
+                                                   byref(library_is_up))
 
         if rc:
             raise EnvironmentError(rc, "Failed to ping TLC")

@@ -1922,6 +1922,12 @@ class TLCPingOptHandler(BaseOptHandler):
     label = 'tlc'
     descr = 'ping the Tape Library Controler'
 
+    @classmethod
+    def add_options(cls, parser):
+        """Add resource-specific options."""
+        super(TLCPingOptHandler, cls).add_options(parser)
+        parser.add_argument('--library', help="Library of the TLC to ping")
+
     def __enter__(self):
         return self
 
@@ -1936,6 +1942,8 @@ class PingOptHandler(BaseOptHandler):
         PhobosdPingOptHandler,
         TLCPingOptHandler,
     ]
+    family = None
+    library = None
 
     @classmethod
     def add_options(cls, parser):
@@ -1963,15 +1971,18 @@ class PingOptHandler(BaseOptHandler):
 
     def exec_tlc(self):
         """Ping the TLC daemon to check if it is online."""
+        self.family = ResourceFamily(ResourceFamily.RSC_TAPE)
+        set_library(self)
+
         try:
             with AdminClient(lrs_required=False) as adm:
-                adm.ping_tlc()
+                adm.ping_tlc(self.library)
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
             sys.exit(abs(err.errno))
 
-        self.logger.info("Ping sent to TLC successfully")
+        self.logger.info("Ping sent to TLC %s successfully", self.library)
 
 class DirOptHandler(MediaOptHandler):
     """Directory-related options and actions."""
