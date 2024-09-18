@@ -1964,7 +1964,7 @@ class PingOptHandler(BaseOptHandler):
     def exec_tlc(self):
         """Ping the TLC daemon to check if it is online."""
         try:
-            with AdminClient(lrs_required=False, tlc_required=True) as adm:
+            with AdminClient(lrs_required=False) as adm:
                 adm.ping_tlc()
 
         except EnvironmentError as err:
@@ -2203,7 +2203,7 @@ class DriveOptHandler(DeviceOptHandler):
         res = self.params.get('res')
 
         try:
-            with AdminClient(lrs_required=False, tlc_required=True) as adm:
+            with AdminClient(lrs_required=False) as adm:
                 drive_info = adm.drive_lookup(res)
 
         except EnvironmentError as err:
@@ -2226,7 +2226,7 @@ class DriveOptHandler(DeviceOptHandler):
         tape_label = self.params.get('tape_label')
 
         try:
-            with AdminClient(lrs_required=False, tlc_required=True) as adm:
+            with AdminClient(lrs_required=False) as adm:
                 adm.load(res, tape_label)
 
         except EnvironmentError as err:
@@ -2239,7 +2239,7 @@ class DriveOptHandler(DeviceOptHandler):
         tape_label = self.params.get('tape_label')
 
         try:
-            with AdminClient(lrs_required=False, tlc_required=True) as adm:
+            with AdminClient(lrs_required=False) as adm:
                 adm.unload(res, tape_label)
 
         except EnvironmentError as err:

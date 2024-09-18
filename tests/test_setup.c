@@ -215,7 +215,7 @@ static int setup_admin_no_lrs(void **state, bool setup_db)
     if (rc)
         return rc;
 
-    rc = phobos_admin_init(handle, false, false, NULL);
+    rc = phobos_admin_init(handle, false, NULL);
     if (rc)
         return -1;
 

@@ -41,7 +41,7 @@ static int ldr_test_dev_adapter_add_pool(void **state)
     struct pho_id dev_ids;
     int rc;
 
-    rc = phobos_admin_init(&adm, false, false, NULL);
+    rc = phobos_admin_init(&adm, false, NULL);
     assert_int_equal(rc, -rc);
 
     dev_ids.family = PHO_RSC_RADOS_POOL;

@@ -420,18 +420,13 @@ void phobos_admin_fini(struct admin_handle *adm)
     if (rc)
         pho_error(rc, "Cannot close the LRS communication socket");
 
-    rc = pho_comm_close(&adm->tlc_comm);
-    if (rc)
-        pho_error(rc, "Cannot close the TLC communication socket");
-
     dss_fini(&adm->dss);
 }
 
 int phobos_admin_init(struct admin_handle *adm, bool lrs_required,
-                      bool tlc_required, void *phobos_context_handle)
+                      void *phobos_context_handle)
 {
     union pho_comm_addr lrs_sock_addr;
-    union pho_comm_addr tlc_sock_addr;
     int rc;
 
     if (phobos_context_handle)
@@ -440,7 +435,6 @@ int phobos_admin_init(struct admin_handle *adm, bool lrs_required,
 
     memset(adm, 0, sizeof(*adm));
     adm->phobosd_comm = pho_comm_info_init();
-    adm->tlc_comm = pho_comm_info_init();
 
     rc = pho_cfg_init_local(NULL);
     if (rc && rc != -EALREADY)
@@ -462,23 +456,6 @@ int phobos_admin_init(struct admin_handle *adm, bool lrs_required,
 
     if (!lrs_required)
         rc = 0;
-
-    /* TLC client connection */
-    if (tlc_required) {
-        rc = tlc_hostname_from_cfg("legacy", &tlc_sock_addr.tcp.hostname);
-        if (rc)
-            LOG_GOTO(out, rc, "Unable to get TLC hostname for library '%s'",
-                     "legacy");
-
-        rc = tlc_port_from_cfg("legacy", &tlc_sock_addr.tcp.port);
-        if (rc)
-            LOG_GOTO(out, rc, "Unable to get TLC port for library '%s'",
-                     "legacy");
-
-        rc = pho_comm_open(&adm->tlc_comm, &tlc_sock_addr, PHO_COMM_TCP_CLIENT);
-        if (rc)
-            LOG_GOTO(out, rc, "Cannot contact 'TLC': will abort");
-    }
 
 out:
     if (rc) {

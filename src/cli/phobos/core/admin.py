@@ -53,7 +53,6 @@ class AdminHandle(Structure): # pylint: disable=too-few-public-methods
     """Admin handler"""
     _fields_ = [
         ('phobosd_comm', CommInfo),
-        ('tlc_comm', CommInfo),
         ('dss', DSSHandle),
         ('phobosd_is_online', c_int),
     ]
@@ -69,20 +68,19 @@ def init_medium(media, fstype, tags):
 
 class Client: # pylint: disable=too-many-public-methods
     """Wrapper on the phobos admin client"""
-    def __init__(self, lrs_required=True, tlc_required=False):
+    def __init__(self, lrs_required=True):
         super(Client, self).__init__()
         self.lrs_required = lrs_required
-        self.tlc_required = tlc_required
         self.handle = None
 
     def __enter__(self):
-        self.init(self.lrs_required, self.tlc_required)
+        self.init(self.lrs_required)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.fini()
 
-    def init(self, lrs_required, tlc_required):
+    def init(self, lrs_required):
         """Admin client initialization."""
         if self.handle is not None:
             self.fini()
@@ -91,10 +89,9 @@ class Client: # pylint: disable=too-many-public-methods
         phobos_context_func = LIBPHOBOS.phobos_context
         phobos_context_func.restype = c_void_p
         phobos_admin_init_func = LIBPHOBOS_ADMIN.phobos_admin_init
-        phobos_admin_init_func.argtypes = (c_void_p, c_bool, c_bool, c_void_p)
+        phobos_admin_init_func.argtypes = (c_void_p, c_bool, c_void_p)
         rc = phobos_admin_init_func(byref(self.handle),
                                     lrs_required,
-                                    tlc_required,
                                     phobos_context_func())
         if rc:
             raise EnvironmentError(rc, 'Admin initialization failed')

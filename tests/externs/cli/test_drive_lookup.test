@@ -48,19 +48,18 @@ function test_lookup
     local drive="$(get_lto_drives 6 1)"
 
     # no TLC
-    ECONNREFUSED=111
+    ENXIO=6
     set +e
     $phobos drive lookup ${drive}
     rc=$?
     set -e
-    if (( rc != ECONNREFUSED )); then
-        error "phobos drive lookup with no TLC must failed with ECONNREFUSED" \
-              "($ECONNREFUSED), instead we got ${rc}"
+    if (( rc != ENXIO )); then
+        error "phobos drive lookup with no TLC must failed with ENXIO" \
+              "($ENXIO), instead we got ${rc}"
     fi
 
     # unknown drive
     invoke_tlc
-    ENXIO=6
     set +e
     $phobos drive lookup ${drive}
     rc=$?
