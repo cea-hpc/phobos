@@ -107,11 +107,11 @@ function get_media_path
     elif [[ "$family" == "tape" ]]; then
         # finding mount path for the corresponding extent
         for i in $(seq 1 $repl_count); do
-            local drive_status="$($phobos drive status |
+            local drive_status="$($phobos drive status -o media,mount_path |
                 sed "$((2+i))q;d" | sed "s/[ ]//g")"
-            if [[ "$(echo $drive_status | cut -d'|' -f5)" == \
+            if [[ "$(echo $drive_status | cut -d'|' -f2)" == \
                   "$(echo $media_name)" ]]; then
-                echo $drive_status | cut -d'|' -f6
+                echo $drive_status | cut -d'|' -f3
                 break
             fi
         done

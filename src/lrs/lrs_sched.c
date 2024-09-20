@@ -2843,6 +2843,8 @@ static void sched_fetch_device_status(struct lrs_dev *device,
     memset(request_type, 0, sizeof(request_type));
 
     _json_object_set_str(device_status, "name", device->ld_dss_dev_info->path);
+    _json_object_set_str(device_status, "library",
+                         device->ld_dss_dev_info->rsc.id.library);
     _json_object_set_str(device_status, "device", device->ld_dev_path);
     _json_object_set_str(device_status, "serial",
                          device->ld_sys_dev_state.lds_serial);

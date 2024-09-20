@@ -2026,6 +2026,7 @@ class DriveStatus(CLIManagedResourceMixin): #pylint: disable=too-many-instance-a
             return
 
         self.name = values.get("name", "")
+        self.library = values.get("library", "")
         self.device = values.get("device", "")
         self.serial = values.get("serial", "")
         self.address = values.get("address", "")
@@ -2038,6 +2039,7 @@ class DriveStatus(CLIManagedResourceMixin): #pylint: disable=too-many-instance-a
         """Return a dict of available fields and optional display formatters."""
         return {
             'name': None,
+            'library': None,
             'device': None,
             'address': None,
             'serial': None,
