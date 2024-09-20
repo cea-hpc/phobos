@@ -1141,14 +1141,20 @@ class MediaUpdateOptHandler(DSSInteractHandler):
 class DriveMigrateOptHandler(DSSInteractHandler):
     """Migrate an existing drive"""
     label = 'migrate'
-    descr = 'migrate existing drive to another host'
+    descr = 'migrate existing drive to another host (only the DSS is modified)'
 
     @classmethod
     def add_options(cls, parser):
         """Add resource-specific options."""
         super(DriveMigrateOptHandler, cls).add_options(parser)
         parser.add_argument('host', help='New host for these drives')
-        parser.add_argument('res', nargs='+', help='Resource(s) to update')
+        parser.add_argument('res', nargs='+', help='Drive(s) to update')
+        parser.add_argument('--library',
+                            help="Library containing migrated drive(s) "
+                                 "(This option is to target the good drive(s) "
+                                 "among the existing libraries, not to set a "
+                                 "new library. We can here only change the "
+                                 "host.)")
 
 class FormatOptHandler(DSSInteractHandler):
     """Format a resource."""
@@ -2234,10 +2240,11 @@ class DriveOptHandler(DeviceOptHandler):
         """Migrate devices host"""
         resources = self.params.get('res')
         host = self.params.get('host')
+        set_library(self)
 
         try:
             with AdminClient(lrs_required=False) as adm:
-                count = adm.device_migrate(resources, host)
+                count = adm.device_migrate(resources, self.library, host)
 
         except EnvironmentError as err:
             self.logger.error("%s", env_error_format(err))

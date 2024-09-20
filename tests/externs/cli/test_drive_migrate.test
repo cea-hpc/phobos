@@ -1,0 +1,114 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2024 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for drive migrate feature
+#
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+function setup
+{
+    setup_tables # necessary for the daemon's initialization
+    drain_all_drives
+    drive=$(get_lto_drives 6 1)
+    drive_bis=$(get_lto_drives_bis 6 1)
+    $phobos drive add --unlock ${drive}
+    $phobos drive add --library library_bis --unlock ${drive_bis}
+}
+
+function cleanup
+{
+    waive_lrs
+    waive_tlc
+    waive_tlc_bis
+    drain_all_drives
+    drop_tables
+}
+
+function test_drive_migrate
+{
+    local myself=$(hostname)
+    local new_host="new_host"
+
+    invoke_tlc
+    invoke_tlc_bis
+    invoke_lrs
+
+    set +e
+    $valg_phobos drive migrate other_host ${drive}
+    rc=$?
+    set -e
+    EBUSY="16"
+    if [[ ${rc} != ${EBUSY} ]]; then
+        error "Drive migrate should fail with EBUSY ${EBUSY} when drive is" \
+              "locked, instead we got ${rc}."
+    fi
+
+    $valg_phobos drive migrate ${myself} ${drive} || \
+        error "Drive migrate should be successful even if locked when we set" \
+              "existing hostname"
+
+    waive_tlc_bis
+    waive_tlc
+    waive_lrs
+
+    $valg_phobos drive migrate ${new_host} ${drive} || \
+        error "Drive migrate should be successful."
+
+    local seen_new_host=$($phobos drive list -o host ${drive})
+    if [[ ${seen_new_host} != ${new_host} ]]; then
+        error "After drive migration, host must be ${new_host}, instead we" \
+              "got ${seen_new_host}"
+    fi
+}
+
+function test_drive_migrate_library
+{
+    local new_host="new_host"
+
+    set +e
+    $valg_phobos drive migrate ${new_host} --library library_bis ${drive}
+    rc=$?
+    set -e
+    ENXIO=6
+    if [[ ${rc} != ${ENXIO} ]]; then
+        error "Drive migrate should fail with ENXIO ${ENXIO} when drive is" \
+              "not in the asked library, instead we got ${rc}."
+    fi
+
+    $valg_phobos drive migrate ${new_host} --library library_bis \
+        ${drive_bis} || \
+        error "Drive migrate should be successful when setting the good other" \
+              "library"
+}
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Tapes required for this test"
+fi
+
+TEST_SETUP=setup
+TESTS=("test_drive_migrate" "test_drive_migrate_library")
+TEST_CLEANUP=cleanup

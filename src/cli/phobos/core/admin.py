@@ -146,10 +146,10 @@ class Client: # pylint: disable=too-many-public-methods
             raise EnvironmentError(rc, "Failed to add device(s) '%s'" %
                                    dev_names)
 
-    def device_migrate(self, dev_names, host):
+    def device_migrate(self, dev_names, library, host):
         """Migrate devices (for now, only tape drives)."""
         c_id = Id * len(dev_names)
-        dev_ids = [Id(PHO_RSC_TAPE, name=name, library="legacy")
+        dev_ids = [Id(PHO_RSC_TAPE, name=name, library=library)
                    for name in dev_names]
         c_host = c_char_p(host.encode('utf-8'))
         count = c_int(0)
