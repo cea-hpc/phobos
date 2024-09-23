@@ -1115,6 +1115,8 @@ class MediumLocateOptHandler(DSSInteractHandler):
     def add_options(cls, parser):
         super(MediumLocateOptHandler, cls).add_options(parser)
         parser.add_argument('res', help='medium to locate')
+        parser.add_argument('--library',
+                            help="Library containing the medium to locate")
 
 class MediaUpdateOptHandler(DSSInteractHandler):
     """Update an existing media"""
@@ -1867,9 +1869,11 @@ class MediaOptHandler(BaseResourceOptHandler):
 
     def exec_locate(self):
         """Locate a medium"""
+        set_library(self)
         try:
             with AdminClient(lrs_required=False) as adm:
-                print(adm.medium_locate(self.family, self.params.get('res')))
+                print(adm.medium_locate(self.family, self.params.get('res'),
+                                        self.library))
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

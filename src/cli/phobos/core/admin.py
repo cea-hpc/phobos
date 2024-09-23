@@ -310,12 +310,12 @@ class Client: # pylint: disable=too-many-public-methods
 
         return list_lyts, layouts, n_layouts
 
-    def medium_locate(self, rsc_family, medium_id):
+    def medium_locate(self, rsc_family, medium_id, library):
         """Locate a medium by calling phobos_admin_medium_locate API"""
         hostname = c_char_p(None)
         rc = LIBPHOBOS_ADMIN.phobos_admin_medium_locate(
             byref(self.handle),
-            byref(Id(rsc_family, name=medium_id, library="legacy")),
+            byref(Id(rsc_family, name=medium_id, library=library)),
             byref(hostname))
         if rc:
             raise EnvironmentError(rc, "Failed to locate medium '%s'" %

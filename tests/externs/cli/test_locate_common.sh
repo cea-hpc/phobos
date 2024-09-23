@@ -131,6 +131,15 @@ function test_medium_locate
               "$fake_hostname on a locked medium"
     fi
 
+    locate_hostname=$($valg_phobos $family locate --library legacy $medium)
+    if [ "$locate_hostname" != "$fake_hostname" ]; then
+        error "$family locate --library legacy returned $locate_hostname " \
+              "instead of $fake_hostname on a locked medium"
+    fi
+
+    $valg_phobos $family locate --library bad_library $medium &&
+        error "Locating a medium in an unexisting library must fail"
+
     # We remove the lock
     $medium_locker_bin unlock $family $medium $fake_hostname $PID_LRS ||
         error "Error while unlocking medium after locate"
