@@ -1965,9 +1965,55 @@ static int skip_read_alloc_medium(int rc, struct req_container *reqc,
     return 0;
 }
 
+static int _check_medium_status(struct req_container *reqc,
+                                struct media_info *medium)
+{
+    if (medium->fs.status == PHO_FS_STATUS_BLANK)
+        LOG_RETURN(-EINVAL,
+                   "Cannot do I/O on unformatted medium (family '%s', name "
+                   "'%s', library '%s')",
+                   rsc_family2str(medium->rsc.id.family),
+                   medium->rsc.id.name, medium->rsc.id.library);
+
+    if (medium->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
+        LOG_RETURN(-EPERM,
+                   "Cannot read on medium (family '%s', name '%s', library "
+                   "'%s') with adm_status '%s'",
+                   rsc_family2str(medium->rsc.id.family),
+                   medium->rsc.id.name, medium->rsc.id.library,
+                   rsc_adm_status2str(medium->rsc.adm_status));
+
+    return 0;
+}
+
+static int _check_medium_on_read_alloc(struct req_container *reqc,
+                                       struct media_info *medium)
+{
+    if (!medium->flags.get)
+        LOG_RETURN(-EPERM, "medium (family '%s', name '%s', library '%s') "
+                   "get flag is false",
+                   rsc_family2str(medium->rsc.id.family),
+                   medium->rsc.id.name, medium->rsc.id.library);
+
+    return 0;
+}
+
+static int _check_medium_on_delete_alloc(struct req_container *reqc,
+                                         struct media_info *medium)
+{
+    if (!medium->flags.delete)
+        LOG_RETURN(-EPERM, "medium (family '%s', name '%s', library '%s') "
+                   "delete flag is false",
+                   rsc_family2str(medium->rsc.id.family),
+                   medium->rsc.id.name, medium->rsc.id.library);
+
+    return 0;
+}
+
 static int check_medium_permission_and_status(struct req_container *reqc,
                                               struct media_info *medium)
 {
+
     if (medium->fs.status == PHO_FS_STATUS_IMPORTING &&
         !pho_request_is_read(reqc->req))
         LOG_RETURN(-EINVAL,
@@ -1978,24 +2024,23 @@ static int check_medium_permission_and_status(struct req_container *reqc,
 
     if (medium->fs.status != PHO_FS_STATUS_IMPORTING &&
         pho_request_is_read(reqc->req)) {
-        if (!medium->flags.get)
-            LOG_RETURN(-EPERM, "medium (family '%s', name '%s', library '%s') "
-                       "get flag is false",
-                       rsc_family2str(medium->rsc.id.family),
-                       medium->rsc.id.name, medium->rsc.id.library);
-        if (medium->fs.status == PHO_FS_STATUS_BLANK)
-            LOG_RETURN(-EINVAL,
-                       "Cannot do I/O on unformatted medium (family '%s', name "
-                       "'%s', library '%s')",
-                       rsc_family2str(medium->rsc.id.family),
-                       medium->rsc.id.name, medium->rsc.id.library);
-        if (medium->rsc.adm_status != PHO_RSC_ADM_ST_UNLOCKED)
-            LOG_RETURN(-EPERM,
-                       "Cannot read on medium (family '%s', name '%s', library "
-                       "'%s') with adm_status '%s'",
-                       rsc_family2str(medium->rsc.id.family),
-                       medium->rsc.id.name, medium->rsc.id.library,
-                       rsc_adm_status2str(medium->rsc.adm_status));
+        int rc;
+
+        if ((int)reqc->req->ralloc->operation ==
+            PHO_READ_TARGET_ALLOC_OP_READ) {
+            rc = _check_medium_on_read_alloc(reqc, medium);
+            if (rc)
+                return rc;
+        } else if ((int)reqc->req->ralloc->operation ==
+            PHO_READ_TARGET_ALLOC_OP_DELETE) {
+            rc = _check_medium_on_delete_alloc(reqc, medium);
+            if (rc)
+                return rc;
+        }
+
+        rc = _check_medium_status(reqc, medium);
+        if (rc)
+            return rc;
     } else if (pho_request_is_format(reqc->req) &&
                (medium->rsc.id.family != PHO_RSC_TAPE ||
                 !reqc->req->format->force)) {
