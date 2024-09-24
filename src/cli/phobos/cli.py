@@ -777,6 +777,9 @@ class MediaListOptHandler(ListOptHandler):
                             help=("attribute to sort the output in descending "
                                   "order, choose from {" + " ".join(attr) + "} "
                                  ))
+        parser.add_argument('--library',
+                            help="attribute to filter the output by library"
+                                 "name")
         parser.formatter_class = argparse.RawDescriptionHelpFormatter
         parser.epilog = """About file system status `fs.status`:
     blank: medium is not formatted
@@ -1800,6 +1803,9 @@ class MediaOptHandler(BaseResourceOptHandler):
         kwargs = {}
         if self.params.get('tags'):
             kwargs["tags"] = self.params.get('tags')
+
+        if self.params.get('library'):
+            kwargs["library"] = self.params.get('library')
 
         kwargs = handle_sort_option(self.params, MediaInfo(), self.logger,
                                     **kwargs)

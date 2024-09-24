@@ -24,6 +24,7 @@ test_dir=$(dirname $(readlink -e $0))
 . $test_dir/../../setup_db.sh
 . $test_dir/../../test_launch_daemon.sh
 . $test_dir/../../tape_drive.sh
+. $test_dir/../../utils_generation.sh
 
 set -xe
 
@@ -200,3 +201,42 @@ waive_lrs
 invoke_lrs
 # try to get
 $phobos get obj_to_get /tmp/gotten_obj && rm /tmp/gotten_obj
+
+################################################################################
+#                              TEST MEDIA LIST                                 #
+################################################################################
+
+function test_media_list_library() {
+    setup_test_dirs
+
+    $phobos dir add  $DIR_TEST_IN --library lib1
+    $phobos dir add  $DIR_TEST_OUT --library lib2
+
+    if [[ -w /dev/changer ]]; then
+        tapes=($(get_tapes L6 2 | nodeset -e))
+        $phobos tape add --type lto6 ${tapes[0]} --library lib1
+        $phobos tape add --type lto6 ${tapes[1]} --library lib2
+    fi
+
+    output=$($phobos dir list --library lib1)
+    echo "$output" | grep "$DIR_TEST_IN" && ! echo "$output" | grep \
+        "$DIR_TEST_OUT"
+
+    output=$($phobos dir list --library lib2)
+    echo "$output" | grep "$DIR_TEST_OUT" && ! echo "$output" | grep \
+        "$DIR_TEST_IN"
+
+    if [[ -w /dev/changer ]]; then
+        output=$($phobos tape list --library lib1)
+        echo "$output" | grep "${tapes[0]}" && ! echo "$output" | grep \
+            "${tapes[1]}"
+
+        output=$($phobos tape list --library lib2)
+        echo "$output" | grep "${tapes[1]}" && ! echo "$output" | grep \
+            "${tapes[0]}"
+    fi
+
+    cleanup_test_dirs
+}
+
+test_media_list_library
