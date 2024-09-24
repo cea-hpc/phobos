@@ -2095,6 +2095,8 @@ class DriveLoadOptHandler(BaseOptHandler):
                             help='Target drive (could be the path or the '
                                  'serial number)')
         parser.add_argument('tape_label', help='Tape label to load')
+        parser.add_argument('--library',
+                            help="Library containing the target drive and tape")
 
 class DriveUnloadOptHandler(BaseOptHandler):
     """Drive unload sub-parser"""
@@ -2119,6 +2121,8 @@ class DriveUnloadOptHandler(BaseOptHandler):
                             help='Tape label to unload (unload is done only if '
                                  'the drive contains this label, any tape is '
                                  'unloaded if this option is not set)')
+        parser.add_argument('--library',
+                            help="Library containing the target drive")
 
 class DriveOptHandler(DeviceOptHandler):
     """Tape Drive options and actions."""
@@ -2244,10 +2248,11 @@ class DriveOptHandler(DeviceOptHandler):
         """Load a tape into a drive"""
         res = self.params.get('res')
         tape_label = self.params.get('tape_label')
+        set_library(self)
 
         try:
             with AdminClient(lrs_required=False) as adm:
-                adm.load(res, tape_label)
+                adm.load(res, tape_label, self.library)
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))
@@ -2257,10 +2262,11 @@ class DriveOptHandler(DeviceOptHandler):
         """Unload a tape from a drive"""
         res = self.params.get('res')
         tape_label = self.params.get('tape_label')
+        set_library(self)
 
         try:
             with AdminClient(lrs_required=False) as adm:
-                adm.unload(res, tape_label)
+                adm.unload(res, tape_label, self.library)
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

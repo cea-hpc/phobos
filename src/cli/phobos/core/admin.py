@@ -411,34 +411,38 @@ class Client: # pylint: disable=too-many-public-methods
 
         return drive_info
 
-    def load(self, drive_serial_or_path, tape_label):
+    def load(self, drive_serial_or_path, tape_label, library):
         """Load a tape into a drive"""
         rc = LIBPHOBOS_ADMIN.phobos_admin_load(
             byref(self.handle),
             byref(Id(PHO_RSC_TAPE, name=drive_serial_or_path,
-                     library="legacy")),
-            byref(Id(PHO_RSC_TAPE, name=tape_label, library="legacy")))
+                     library=library)),
+            byref(Id(PHO_RSC_TAPE, name=tape_label, library=library)))
 
         if rc:
             raise EnvironmentError(rc, f"Failed to load {tape_label} into "
-                                       f"drive {drive_serial_or_path}")
+                                       f"drive {drive_serial_or_path} in "
+                                       f"library {library}")
 
-    def unload(self, drive_serial_or_path, tape_label):
+    def unload(self, drive_serial_or_path, tape_label, library):
         """Load a tape into a drive"""
         rc = LIBPHOBOS_ADMIN.phobos_admin_unload(
             byref(self.handle),
             byref(Id(PHO_RSC_TAPE, name=drive_serial_or_path,
-                     library="legacy")),
-            byref(Id(PHO_RSC_TAPE, name=tape_label, library="legacy"))
+                     library=library)),
+            byref(Id(PHO_RSC_TAPE, name=tape_label, library=library))
             if tape_label else None)
 
         if rc:
             if tape_label:
                 raise EnvironmentError(rc, f"Failed to unload {tape_label} "
-                                           f"from drive {drive_serial_or_path}")
+                                           f"from drive "
+                                           f"{drive_serial_or_path} "
+                                           f"in library {library}")
 
             raise EnvironmentError(rc, f"Failed to unload drive "
-                                       f"{drive_serial_or_path}")
+                                       f"{drive_serial_or_path} in library "
+                                       f"{library}")
 
     def repack(self, family, medium, tags):
         """Repack a tape"""

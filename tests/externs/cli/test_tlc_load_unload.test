@@ -38,6 +38,7 @@ function setup
 function cleanup
 {
     waive_tlc
+    waive_tlc_bis
     drop_tables
     drain_all_drives
 }
@@ -51,7 +52,9 @@ function cleanup_also_lrs
 function test_load
 {
     local tape="$(get_tapes L6 1)"
+    local tape_bis="$(get_tapes_bis L6 1)"
     local drive="$(get_lto_drives 6 1)"
+    local drive_bis="$(get_lto_drives_bis 6 1)"
 
     $phobos tape add -t lto6 ${tape}
 
@@ -125,6 +128,26 @@ EOF
     drive_lookup_out=$($phobos drive lookup ${drive} 2>&1)
     echo ${drive_lookup_out} | grep "State: full"
     echo ${drive_lookup_out} | grep "Loaded tape id: ${tape}"
+
+    # Unknown library
+    set +e
+    $valg_phobos drive load --library bad_library ${drive} ${tape}
+    rc=$?
+    set -e
+    if (( rc != ENXIO )); then
+        error "phobos drive load for bad library must failed with" \
+              "ENXIO ($ENXIO), instead we got ${rc}"
+    fi
+
+    # Load from library_bis
+    invoke_tlc_bis
+    $phobos tape add -t lto6 --library library_bis ${tape_bis}
+    $phobos drive add --unlock --library library_bis ${drive_bis}
+    $valg_phobos drive load --library library_bis ${drive_bis} ${tape_bis}
+    drive_lookup_out=$($phobos drive lookup --library library_bis \
+                           ${drive_bis} 2>&1)
+    echo ${drive_lookup_out} | grep "State: full"
+    echo ${drive_lookup_out} | grep "Loaded tape id: ${tape_bis}"
 }
 
 function test_load_drive_to_drive
@@ -154,7 +177,9 @@ function test_load_drive_to_drive
 function test_unload
 {
     local tape="$(get_tapes L6 1)"
+    local tape_bis="$(get_tapes_bis L6 1)"
     local drive="$(get_lto_drives 6 1)"
+    local drive_bis="$(get_lto_drives_bis 6 1)"
 
     $phobos tape add -t lto6 ${tape}
 
@@ -225,6 +250,26 @@ EOF
     # unload drive with a tape label
     $phobos drive unload --tape-label ${tape} ${drive}
     drive_lookup_out=$($phobos drive lookup ${drive} 2>&1)
+    echo ${drive_lookup_out} | grep "State: empty"
+
+    # unknown library
+    set +e
+    $phobos drive unload --library bad_library ${drive}
+    rc=$?
+    set -e
+    if (( rc != ENXIO )); then
+        error "phobos drive unload for bad library must failed with" \
+              "ENXIO ($ENXIO), instead we got ${rc}"
+    fi
+
+    # unload drive from library bis
+    invoke_tlc_bis
+    $phobos tape add -t lto6 --library library_bis ${tape_bis}
+    $phobos drive add --unlock --library library_bis ${drive_bis}
+    $phobos drive load --library library_bis ${drive_bis} ${tape_bis}
+    $valg_phobos drive unload --library library_bis ${drive_bis}
+    drive_lookup_out=$($phobos drive lookup --library library_bis \
+                           ${drive_bis} 2>&1)
     echo ${drive_lookup_out} | grep "State: empty"
 }
 
