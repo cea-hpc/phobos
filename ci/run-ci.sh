@@ -55,7 +55,7 @@ test_db="$(grep "dbname" "$phobos_conf" | awk -F 'dbname=' '{print $2}' | \
            cut -d ' ' -f1)"
 
 sudo -u postgres ./scripts/phobos_db_local drop_db -d "$test_db" || true
-sudo -u postgres ./scripts/phobos_db_local setup_db -s -d "$test_db" -p phobos
+sudo -u postgres ./scripts/phobos_db_local setup_db -d "$test_db" -p phobos
 export VERBOSE=1
 if [ "$1" = "check-valgrind" ]; then
     sudo -E make check-valgrind
