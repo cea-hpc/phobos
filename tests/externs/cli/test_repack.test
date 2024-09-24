@@ -32,16 +32,19 @@ test_dir=$(dirname $(readlink -e $0))
 function setup
 {
     setup_tables
-    invoke_lrs
     invoke_tlc
+    invoke_tlc_bis
+    invoke_lrs
 }
 
 function cleanup
 {
     waive_lrs
     waive_tlc
+    waive_tlc_bis
     drop_tables
     rm -f /tmp/oid-repack*
+    rm -f /tmp/oid_bis-repack*
 }
 
 function obj_setup
@@ -53,6 +56,15 @@ function obj_setup
 
     # Delete an object to let it be considered by the garbage collector
     $phobos del oid-repack-2
+}
+
+function obj_setup_bis
+{
+    $phobos put --library library_bis /etc/hosts oid_bis-repack-1
+    $phobos put --library library_bis /etc/hosts oid_bis-repack-2
+
+    # Delete an object to let it be considered by the garbage collector
+    $phobos del oid_bis-repack-2
 }
 
 function obj_check
@@ -75,12 +87,28 @@ function obj_check
         error "file oid-repack-4 is not correctly retrieved"
 }
 
+function obj_check_bis
+{
+    $phobos get oid_bis-repack-1 /tmp/oid_bis-repack-1 ||
+        error "get oid_bis-repack-1 should have succeed"
+
+    $phobos undel oid oid_bis-repack-2 &&
+        error "undel oid_bis-repack-2 should have failed"
+
+    diff /etc/hosts /tmp/oid_bis-repack-1 ||
+        error "file oid_bis-repack-1 is not correctly retrieved"
+}
+
 function tape_setup
 {
+    local bis=$1
+
     setup
 
     export drives="$(get_lto_drives 5 2)"
     export media="$(get_tapes L5 3 | nodeset -e)"
+    export tape_bis="$(get_tapes_bis L6 1)"
+    export drive_bis="$(get_lto_drives_bis 6 1)"
 
     export medium_origin="$(echo $media | cut -d' ' -f1)"
     export medium_alt="$(echo $media | cut -d' ' -f2)"
@@ -93,7 +121,15 @@ function tape_setup
 
     $phobos tape format --unlock $media
 
-    obj_setup
+    if [[ ${bis} = "bis" ]]; then
+        $phobos drive add --unlock --library library_bis $drive_bis
+        $phobos tape add -t lto6 --library library_bis $tape_bis
+        $phobos tape format --unlock --library library_bis $tape_bis
+
+        obj_setup_bis
+    else
+        obj_setup
+    fi
 }
 
 function tape_cleanup
@@ -304,6 +340,43 @@ function test_tagged_repack
     fi
 }
 
+function test_simple_repack_library_bis
+{
+    # Make 'origin' and 'alt' medium not empty to prevent selection for repack
+    $phobos put -T origin /etc/hosts oid5
+    $phobos put -T alt /etc/hosts oid6
+
+    $valg_phobos tape repack --library library_bis $tape_bis
+
+    nb=$($phobos extent list --name $medium_alt | wc -l)
+    if [ $nb -ne 1 ]; then
+        error "repack should not have selected a used medium"
+    fi
+
+    nb=$($phobos extent list --name $medium_other | wc -l)
+    if [ $nb -ne 1 ]; then
+        error "repack should have copied 1 extent to the empty medium"
+    fi
+
+    nb=$($phobos tape list -o stats.nb_obj $medium_other)
+    if [ $nb -ne 1 ]; then
+        error "tape stats should have said 1 extent were copied"
+    fi
+
+    nb=$($phobos object list --deprecated | wc -l)
+    if [ $nb -ne 0 ]; then
+        error "repack should have deleted deprecated objects"
+    fi
+
+    obj_check_bis
+
+    # TODO WAITING availaibility of library option in media list
+    #state=$($phobos $family list --library library_bis -o fs.status $tape_bis)
+    #if [ "$state" != "empty" ]; then
+    #    error "repack should format source medium in library bis"
+    #fi
+}
+
 if [[ ! -w /dev/changer ]]; then
     skip "Library required for this test"
 fi
@@ -315,4 +388,5 @@ TESTS+=("test_raid1_repack_setup;test_raid1_repack tape;tape_cleanup")
 TESTS+=("tape_setup;test_orphan_repack tape;tape_cleanup")
 TESTS+=("test_dedup_repack_setup;test_dedup_repack tape;tape_cleanup")
 TESTS+=("tape_setup;test_tagged_repack tape;tape_cleanup")
+TESTS+=("tape_setup bis;test_simple_repack_library_bis;tape_cleanup")
 

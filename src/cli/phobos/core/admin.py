@@ -444,16 +444,17 @@ class Client: # pylint: disable=too-many-public-methods
                                        f"{drive_serial_or_path} in library "
                                        f"{library}")
 
-    def repack(self, family, medium, tags):
+    def repack(self, family, medium, library, tags):
         """Repack a tape"""
         tags = Tags(tags)
         rc = LIBPHOBOS_ADMIN.phobos_admin_repack(
             byref(self.handle), byref(Id(family, name=medium,
-                                         library="legacy")),
+                                         library=library)),
             byref(tags))
 
         if rc:
-            raise EnvironmentError(rc, f"Failed to repack {medium}")
+            raise EnvironmentError(rc, f"Failed to repack {medium} from "
+                                       f"library {library}")
 
     @staticmethod
     def layout_list_free(layouts, n_layouts):
