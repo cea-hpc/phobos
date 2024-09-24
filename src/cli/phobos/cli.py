@@ -2072,6 +2072,8 @@ class DriveLookupOptHandler(BaseOptHandler):
         parser.add_argument('res',
                             help='Drive to lookup (could be '
                                  'the path or the serial number)')
+        parser.add_argument('--library',
+                            help="Library containing the drive to lookup")
 
 class DriveLoadOptHandler(BaseOptHandler):
     """Drive load sub-parser"""
@@ -2218,10 +2220,11 @@ class DriveOptHandler(DeviceOptHandler):
     def exec_lookup(self):
         """Lookup drive information from the library."""
         res = self.params.get('res')
+        set_library(self)
 
         try:
             with AdminClient(lrs_required=False) as adm:
-                drive_info = adm.drive_lookup(res)
+                drive_info = adm.drive_lookup(res, self.library)
 
         except EnvironmentError as err:
             self.logger.error(env_error_format(err))

@@ -38,6 +38,7 @@ function setup
 function cleanup
 {
     waive_tlc
+    waive_tlc_bis
     drop_tables
     drain_all_drives
 }
@@ -46,6 +47,7 @@ function test_lookup
 {
     local tape="$(get_tapes L6 1)"
     local drive="$(get_lto_drives 6 1)"
+    local drive_bis="$(get_lto_drives_bis 6 1)"
 
     # no TLC
     ENXIO=6
@@ -119,6 +121,22 @@ EOF
     drive_lookup_out=$($phobos drive lookup ${drive_serial} 2>&1)
     echo ${drive_lookup_out} | grep "State: full"
     echo ${drive_lookup_out} | grep "Loaded tape id: ${tape}"
+
+    # lookup with bad library
+    set +e
+    $valg_phobos drive lookup --library bad_library ${drive}
+    rc=$?
+    set -e
+    if (( rc != ENXIO )); then
+        error "phobos drive lookup with a bad library must failed with" \
+              "ENXIO ($ENXIO), instead we got ${rc}"
+    fi
+
+    # lookup an existing drive from an other library than the default one
+    invoke_tlc_bis
+    $phobos drive add --unlock --library library_bis ${drive_bis}
+    $valg_phobos drive lookup --library library_bis ${drive_bis} 2>&1 |
+        grep "State: empty"
 }
 
 if [[ ! -w /dev/changer ]]; then

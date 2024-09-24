@@ -398,13 +398,13 @@ class Client: # pylint: disable=too-many-public-methods
         if rc:
             raise EnvironmentError(rc, "Failed to notify media update")
 
-    def drive_lookup(self, res):
+    def drive_lookup(self, res, library):
         """Lookup a drive"""
         drive_info = LibDrvInfo()
 
         rc = LIBPHOBOS_ADMIN.phobos_admin_drive_lookup(
             byref(self.handle),
-            byref(Id(PHO_RSC_TAPE, name=res, library="legacy")),
+            byref(Id(PHO_RSC_TAPE, name=res, library=library)),
             byref(drive_info))
         if rc:
             raise EnvironmentError(rc, f"Failed to lookup the drive {res}")
