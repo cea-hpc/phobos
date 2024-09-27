@@ -750,6 +750,9 @@ class DriveListOptHandler(ListOptHandler):
                             help=("attribute to sort the output in descending "
                                   "order, choose from {" + " ".join(attr) + "} "
                                   ))
+        parser.add_argument('--library',
+                            help="attribute to filter the output by library"
+                                 "name")
 class MediaListOptHandler(ListOptHandler):
     """
     Specific version of the 'list' command for media, with a couple
@@ -2266,6 +2269,9 @@ class DriveOptHandler(DeviceOptHandler):
         kwargs = {}
         if self.params.get('model'):
             kwargs['model'] = self.params.get('model')
+
+        if self.params.get('library'):
+            kwargs['library'] = self.params.get('library')
 
         kwargs = handle_sort_option(self.params, DevInfo(), self.logger,
                                     **kwargs)

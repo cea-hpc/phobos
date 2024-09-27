@@ -1,0 +1,74 @@
+#!/bin/bash
+
+#
+#  All rights reserved (c) 2014-2024 CEA/DAM.
+#
+#  This file is part of Phobos.
+#
+#  Phobos is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU Lesser General Public License as published by
+#  the Free Software Foundation, either version 2.1 of the License, or
+#  (at your option) any later version.
+#
+#  Phobos is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Lesser General Public License for more details.
+#
+#  You should have received a copy of the GNU Lesser General Public License
+#  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#
+# Integration test for drive list feature
+#
+
+
+test_dir=$(dirname $(readlink -e $0))
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/tape_drive.sh
+
+################################################################################
+#                                    SETUP                                     #
+################################################################################
+
+function setup
+{
+    setup_tables
+    drain_all_drives
+}
+
+function cleanup
+{
+    drain_all_drives
+    drop_tables
+}
+
+################################################################################
+#                                    TESTS                                     #
+################################################################################
+
+function test_drive_list_library()
+{
+    drives=($(get_lto_drives 6 2))
+    $phobos drive add --unlock ${drives[0]} --library lib1
+    $phobos drive add --unlock ${drives[1]} --library lib2
+
+    output=$($phobos drive list --library lib1 -o path)
+    echo "$output" | grep "${drives[0]}" && ! echo "$output" | grep \
+        "${drives[1]}"
+    output=$($phobos drive list --library lib2 -o path)
+    echo "$output" | grep "${drives[1]}" && ! echo "$output" | grep \
+        "${drives[0]}"
+}
+
+
+if [[ ! -w /dev/changer ]]; then
+    skip "Drives required for this test"
+fi
+
+TEST_SETUP=setup
+TESTS=("test_drive_list_library")
+TEST_CLEANUP=cleanup
