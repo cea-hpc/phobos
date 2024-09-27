@@ -2246,13 +2246,12 @@ class DriveOptHandler(DeviceOptHandler):
 
         relativ_address = drive_info.ldi_addr.lia_addr - \
                           drive_info.ldi_first_addr
-        self.logger.info("Drive %d: address %s", relativ_address,
-                         hex(drive_info.ldi_addr.lia_addr))
-        self.logger.info("State: %s",
-                         "full" if drive_info.ldi_full else "empty")
+        print("Drive %d: address %s" % (relativ_address,
+              hex(drive_info.ldi_addr.lia_addr)))
+        print("State: %s" % ("full" if drive_info.ldi_full else "empty"))
+
         if drive_info.ldi_full:
-            self.logger.info("Loaded tape id: %s",
-                             drive_info.ldi_medium_id.name)
+            print("Loaded tape id: %s" % (drive_info.ldi_medium_id.name))
 
     def exec_load(self):
         """Load a tape into a drive"""
