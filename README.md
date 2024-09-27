@@ -38,7 +38,6 @@ yum install phobos
 ```
 
 ### Database setup (on RHEL7/CentOS7)
-
 Install postgresql version >= 9.4 (from EPEL or any version compatible with
 Postgres 9.4):
 ```
@@ -64,6 +63,41 @@ host    all             all             ::1/128                 md5
 Start the database server:
 ```
 systemctl start postgresql-9.4.service
+```
+
+Finally, create phobos database and tables as postgres user (the password for
+SQL phobos user will be prompted for unless provided with -p):
+```
+sudo -u postgres phobos_db setup_db -s
+```
+
+### Database setup (On RHEL8/CentOS8)
+Install postgresql version >=9.4. For this distribution, the name of the
+PostgreSQL packages are different, you must install the following:
+```
+yum install postgresql-server postgresql-contrib
+```
+
+Then, you must initialize the postgresql directories:
+```
+postgresql-setup --initdb --unit postgresql
+```
+
+Move the created configuration file to the PostgreSQL directory in `/var/lib`:
+```
+mv /tmp/pg_hba.conf /var/lib/pgsql/data/
+```
+
+Modify the library configuration of your system to include PostgreSQL:
+```
+echo "/usr/lib64" > /etc/ld.so.conf.d/postgresql-pgdg-libs.conf
+echo "LD_LIBRARY_PATH=/usr/lib64:$LD_LIBRARY_PATH" > /etc/profile
+ldconfig -v
+```
+
+Start the database server:
+```
+systemctl start postgresql
 ```
 
 Finally, create phobos database and tables as postgres user (the password for
