@@ -1703,6 +1703,21 @@ static void phobos_construct_medium(GString *medium_str, const char *medium)
                            medium);
 }
 
+static void phobos_construct_library(GString *library_str, const char *library)
+{
+    g_string_append_printf(library_str,
+                           "{\"DSS::EXT::medium_library\": \"%s\"}", library);
+}
+
+static void phobos_construct_library_medium(GString *lib_med_str,
+                                            const char *medium,
+                                            const char *library)
+{
+    g_string_append_printf(lib_med_str,
+                           "{\"$AND\": [{\"DSS::EXT::medium_id\": \"%s\"}, "
+                           "{\"DSS::EXT::medium_library\": \"%s\"}]}",
+                           medium, library);
+}
 /**
  * Construct the extent string for the extent list filter.
  *
@@ -1737,34 +1752,38 @@ static void phobos_construct_extent(GString *extent_str, const char **res,
 
 int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
                              int n_res, bool is_pattern, const char *medium,
-                             struct layout_info **layouts, int *n_layouts,
-                             struct dss_sort *sort)
+                             const char *library, struct layout_info **layouts,
+                             int *n_layouts, struct dss_sort *sort)
 {
+    struct dss_filter *lib_med_filter_ptr = NULL;
     struct dss_filter *ext_filter_ptr = NULL;
-    struct dss_filter *med_filter_ptr = NULL;
+    struct dss_filter lib_med_filter;
     struct dss_filter ext_filter;
-    struct dss_filter med_filter;
+    bool library_is_valid;
     bool medium_is_valid;
+    GString *lib_med_str;
     GString *extent_str;
-    GString *medium_str;
     int rc = 0;
 
+    lib_med_str = g_string_new(NULL);
     extent_str = g_string_new(NULL);
-    medium_str = g_string_new(NULL);
     medium_is_valid = (medium && strcmp(medium, ""));
+    library_is_valid = (library && strcmp(library, ""));
 
-    /**
-     * If a medium is specified, we construct its filter.
-     */
-    if (medium_is_valid) {
-        phobos_construct_medium(medium_str, medium);
-        rc = dss_filter_build(&med_filter, "%s", medium_str->str);
+    if (medium_is_valid && !library_is_valid)
+        phobos_construct_medium(lib_med_str, medium);
+    else if (library_is_valid && !medium_is_valid)
+        phobos_construct_library(lib_med_str, library);
+    else if (library_is_valid && medium_is_valid)
+        phobos_construct_library_medium(lib_med_str, medium, library);
+
+    if (lib_med_str->len > 0) {
+        rc = dss_filter_build(&lib_med_filter, "%s", lib_med_str->str);
         if (rc)
             goto release_extent;
 
-        med_filter_ptr = &med_filter;
+        lib_med_filter_ptr = &lib_med_filter;
     }
-
     /**
      * If there are at least one resource, we construct a string containing
      * each request.
@@ -1783,17 +1802,17 @@ int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
      * necessary, thus passing them as NULL to dss_full_layout_get ensures
      * the expected behaviour.
      */
-    rc = dss_full_layout_get(&adm->dss, ext_filter_ptr, med_filter_ptr, layouts,
-                             n_layouts, sort);
+    rc = dss_full_layout_get(&adm->dss, ext_filter_ptr, lib_med_filter_ptr,
+                             layouts, n_layouts, sort);
     if (rc)
         pho_error(rc, "Cannot fetch layouts");
 
 release_extent:
+    g_string_free(lib_med_str, TRUE);
     g_string_free(extent_str, TRUE);
-    g_string_free(medium_str, TRUE);
 
+    dss_filter_free(lib_med_filter_ptr);
     dss_filter_free(ext_filter_ptr);
-    dss_filter_free(med_filter_ptr);
 
     return rc;
 }

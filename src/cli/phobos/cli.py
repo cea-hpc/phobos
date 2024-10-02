@@ -799,8 +799,7 @@ class MediaListOptHandler(ListOptHandler):
                                   "order, choose from {" + " ".join(attr) + "} "
                                  ))
         parser.add_argument('--library',
-                            help="attribute to filter the output by library"
-                                 "name")
+                            help="filter the output by library name")
         parser.formatter_class = argparse.RawDescriptionHelpFormatter
         parser.epilog = """About file system status `fs.status`:
     blank: medium is not formatted
@@ -1113,12 +1112,14 @@ class ExtentListOptHandler(ListOptHandler):
         attr_sort = list(LayoutInfo().get_sort_fields().keys())
         attr_sort.sort()
         parser.add_argument('--sort',
-                            help=("attribute to sort the output with, "
-                                  "choose from {" + " ".join(attr_sort) + "} "))
+                            help=("sort the output with, choose from {"
+                                  + " ".join(attr_sort) + "} "))
         parser.add_argument('--rsort',
-                            help=("attribute to sort the output in descending "
+                            help=("sort the output in descending "
                                   "order, choose from {" + " ".join(attr_sort)
                                   + "} "))
+        parser.add_argument('--library',
+                            help="filter the output by library name")
 
 def uncase_fstype(choices):
     """Check if an uncase FS type is a valid choice."""
@@ -1349,6 +1350,7 @@ class BaseResourceOptHandler(DSSInteractHandler):
     label = None
     descr = None
     family = None
+    library = None
     verbs = []
 
 class ObjectOptHandler(BaseResourceOptHandler):
@@ -2632,6 +2634,9 @@ class ExtentOptHandler(BaseResourceOptHandler):
             sys.exit(os.EX_USAGE)
 
         kwargs = {}
+        if self.params.get('library'):
+            kwargs['library'] = self.params.get('library')
+
         kwargs = handle_sort_option(self.params, LayoutInfo(), self.logger,
                                     **kwargs)
 

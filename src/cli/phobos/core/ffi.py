@@ -802,6 +802,7 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
             'layout': None,
             'xxh128': None,
             'md5': None,
+            'library': None,
         }
 
     def get_sort_fields(self): # pylint: disable=no-self-use
@@ -824,6 +825,11 @@ class LayoutInfo(Structure, CLIManagedResourceMixin):
     def object_uuid(self):
         """Wrapper to get uuid"""
         return self._uuid.decode('utf-8') if self._uuid else None
+
+    @property
+    def library(self):
+        """Wrapper to get library"""
+        return [self.extents[i].media.library for i in range(self.ext_count)]
 
     @property
     def state(self):

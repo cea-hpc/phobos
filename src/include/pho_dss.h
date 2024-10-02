@@ -525,7 +525,8 @@ int dss_layout_delete(struct dss_handle *handle,
  * Retrieve layout + extents information from DSS
  * @param[in]  hdl           valid connection handle
  * @param[in]  object        assembled DSS filtering criteria on objects
- * @param[in]  media         assembled DSS filtering criteria on media
+ * @param[in]  med_lib       assembled DSS filtering criteria on media and
+ *                           library
  * @param[out] layouts       list of retrieved items to be freed with
  *                           dss_res_free()
  * @param[out] layout_count  number of items retrieved in the list
@@ -533,7 +534,7 @@ int dss_layout_delete(struct dss_handle *handle,
  * @return 0 on success, negated errno on failure
  */
 int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
-                        const struct dss_filter *media,
+                        const struct dss_filter *med_lib,
                         struct layout_info **layouts, int *layout_count,
                         struct dss_sort *sort);
 

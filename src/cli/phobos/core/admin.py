@@ -288,8 +288,10 @@ class Client: # pylint: disable=too-many-public-methods
         """List layouts."""
         n_layouts = c_int(0)
         layouts = pointer(LayoutInfo())
+        library_name = kwargs.get('library')
 
         enc_medium = medium.encode('utf-8') if medium else None
+        enc_library = library_name.encode('utf-8') if library_name else None
 
         enc_res = [elt.encode('utf-8') for elt in res]
         c_res_strlist = c_char_p * len(enc_res)
@@ -302,6 +304,7 @@ class Client: # pylint: disable=too-many-public-methods
                                                       len(enc_res),
                                                       is_pattern,
                                                       enc_medium,
+                                                      enc_library,
                                                       byref(layouts),
                                                       byref(n_layouts),
                                                       sref)
@@ -319,12 +322,13 @@ class Client: # pylint: disable=too-many-public-methods
                 for j in range(cnt):
                     if medium is None or \
                         medium in extents[j].media.name:
-                        lyt = type(layouts[i])()
-                        pointer(lyt)[0] = layouts[i]
-                        lyt.ext_count = 1
-                        lyt.extents = pointer(extents[j])
-
-                        list_lyts.append(lyt)
+                        if library_name is None or \
+                            library_name in extents[j].media.library:
+                            lyt = type(layouts[i])()
+                            pointer(lyt)[0] = layouts[i]
+                            lyt.ext_count = 1
+                            lyt.extents = pointer(extents[j])
+                            list_lyts.append(lyt)
 
         return list_lyts, layouts, n_layouts
 

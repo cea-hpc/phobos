@@ -544,13 +544,14 @@ int dss_layout_delete(struct dss_handle *handle,
  */
 
 int dss_full_layout_get(struct dss_handle *hdl, const struct dss_filter *object,
-                        const struct dss_filter *media,
+                        const struct dss_filter *med_lib,
                         struct layout_info **layouts, int *layout_count,
                         struct dss_sort *sort)
 {
     return dss_generic_get(hdl, DSS_FULL_LAYOUT,
-                           (const struct dss_filter*[]) {object, media}, 2,
-                           (void **)layouts, layout_count, sort);
+                           (const struct dss_filter*[])
+                           {object, med_lib}, 2, (void **)layouts,
+                           layout_count, sort);
 }
 
 /*

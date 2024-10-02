@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -23,11 +23,15 @@
 #
 
 test_dir=$(dirname $(readlink -e $0))
-. $test_dir/../../test_env.sh
-. $test_dir/../../setup_db.sh
-. $test_dir/../../test_launch_daemon.sh
+. $test_dir/test_env.sh
+. $test_dir/setup_db.sh
+. $test_dir/test_launch_daemon.sh
+. $test_dir/utils_generation.sh
+. $test_dir/tape_drive.sh
 
-set -xe
+################################################################################
+#                                    SETUP                                     #
+################################################################################
 
 function dir_setup
 {
@@ -42,16 +46,25 @@ function dir_setup
 function setup
 {
     setup_tables
-    invoke_lrs
-
+    if [[ -w /dev/changer ]]; then
+        invoke_daemons
+        drain_all_drives
+    else
+        invoke_lrs
+    fi
     dir_setup
 }
 
 function cleanup
 {
-    waive_lrs
     drop_tables
     rm -rf $dir1 $dir2
+    if [[ -w /dev/changer ]]; then
+        waive_daemons
+        drain_all_drives
+    else
+        waive_lrs
+    fi
 }
 
 function list_error
@@ -61,6 +74,10 @@ function list_error
     echo "Returned: $2"
     echo "Expected: $3"
 }
+
+################################################################################
+#                                    TESTS                                     #
+################################################################################
 
 function test_extent_list_degroup
 {
@@ -131,8 +148,69 @@ function test_extent_list_pattern
     return 0
 }
 
-trap cleanup EXIT
-setup
+function test_extent_list_tapes_lib() {
+    touch /tmp/extent3
+    touch /tmp/extent4
 
-test_extent_list_degroup
-test_extent_list_pattern
+    drives=($(get_lto_drives 6 2))
+    $phobos drive add --unlock ${drives[0]} --library lib3
+    $phobos drive add --unlock ${drives[1]} --library lib4
+
+    tapes=($(get_tapes L6 2 | nodeset -e))
+    $phobos tape add --type lto6 ${tapes[0]} --library lib3
+    $phobos tape add --type lto6 ${tapes[1]} --library lib4
+
+    $phobos tape format --unlock ${tapes[0]} --library lib3
+    $phobos tape format --unlock ${tapes[1]} --library lib4
+
+    $phobos put -l raid1 -p repl_count=2 /tmp/extent3 extent3
+    $phobos put -l raid1 -p repl_count=1 /tmp/extent4 extent4 --library lib4
+
+    output=$($phobos extent list --library lib3)
+    echo "$output" | grep "extent3" && ! echo "$output" | grep "extent4"
+
+    output=$($phobos extent list --library lib4)
+    echo "$output" | grep -E "extent3|extent4" | wc -l | grep -q "^2$" \
+        && ! echo "$output" | grep -vE "extent3|extent4"
+
+
+    cleanup_test_dirs
+    rm /tmp/extent3 /tmp/extent4
+}
+
+function test_extent_list_dirs_lib() {
+    setup_test_dirs
+
+    $phobos dir add --unlock $DIR_TEST_IN --library lib1
+    $phobos dir add --unlock $DIR_TEST_OUT --library lib2
+    $phobos dir format $DIR_TEST_IN --library lib1
+    $phobos dir format $DIR_TEST_OUT --library lib2
+
+    touch /tmp/extent1
+    touch /tmp/extent2
+
+    $phobos put -f dir /tmp/extent1 extent1
+    $phobos put -f dir /tmp/extent2 extent2
+
+    output=$($phobos extent list --library lib1)
+    echo "$output" | grep "extent1" && ! echo "$output" | grep "extent2"
+
+    output=$($phobos extent list --library lib2)
+    echo "$output" | grep "extent2" && ! echo "$output" | grep "extent1"
+
+    output=$($phobos extent list --library lib1 -n $DIR_TEST_IN)
+    echo "$output" | grep "extent1" && ! echo "$output" | grep "extent2"
+
+    cleanup_test_dirs
+    rm /tmp/extent1 /tmp/extent2
+}
+
+TEST_SETUP=setup
+TESTS=("test_extent_list_degroup"
+       "test_extent_list_pattern"
+       "test_extent_list_dirs_lib")
+
+if [[ -w /dev/changer ]]; then
+    TESTS+=("test_extent_list_tapes_lib")
+fi
+TEST_CLEANUP=cleanup

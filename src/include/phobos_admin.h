@@ -324,6 +324,7 @@ int phobos_admin_ping_tlc(const char *library, bool *library_is_up);
  * \param[in]       n_res           Number of resources requested.
  * \param[in]       is_pattern      True if search done using POSIX pattern.
  * \param[in]       medium          Single medium filter.
+ * \param[in]       library         Single library filter.
  * \param[out]      layouts         Retrieved layouts.
  * \param[out]      n_layouts       Number of retrieved items.
  *
@@ -334,8 +335,8 @@ int phobos_admin_ping_tlc(const char *library, bool *library_is_up);
  */
 int phobos_admin_layout_list(struct admin_handle *adm, const char **res,
                              int n_res, bool is_pattern, const char *medium,
-                             struct layout_info **layouts, int *n_layouts,
-                             struct dss_sort *sort);
+                             const char *library, struct layout_info **layouts,
+                             int *n_layouts, struct dss_sort *sort);
 
 /**
  * Release the list of layouts retrieved using phobos_admin_layout_list().
