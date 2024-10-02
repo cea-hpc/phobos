@@ -556,6 +556,84 @@ out_unlock:
     return rc;
 }
 
+static int object_hard_delete(struct dss_handle *dss, struct object_info *obj)
+{
+    struct layout_info *layouts;
+    struct dss_filter filter;
+    struct extent *extents;
+    GString *filter_str;
+    int count;
+    int i, j;
+    int rc;
+
+    rc = dss_filter_build(&filter,
+                          "{\"$AND\": ["
+                          "  {\"DSS::LYT::object_uuid\": \"%s\"},"
+                          "  {\"DSS::LYT::version\": %d}"
+                          "]}", obj->uuid, obj->version);
+    if (rc)
+        LOG_RETURN(rc, "Unable to build uuid filter in object hard delete");
+
+    rc = dss_layout_get(dss, &filter, &layouts, &count);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc, "Unable to retrieve layouts from object '%s:%d'",
+                   obj->uuid, obj->version);
+
+    filter_str = g_string_new(NULL);
+    for (i = 0; i < count; ++i) {
+        for (j = 0; j < layouts[i].ext_count; ++j) {
+            int end_of_string = i == count - 1 && j == layouts[i].ext_count - 1;
+
+            g_string_append_printf(filter_str,
+                                   "  {\"DSS::EXT::uuid\": \"%s\"}%s",
+                                   layouts[i].extents[j].uuid,
+                                   end_of_string ? "" : ",");
+        }
+    }
+
+    rc = dss_filter_build(&filter,
+                          "{\"$OR\": ["
+                          "  %s"
+                          "]}", filter_str->str);
+    g_string_free(filter_str, true);
+    if (rc) {
+        dss_res_free(layouts, count);
+        LOG_RETURN(rc,
+                   "Unable to build extents filter in object hard delete");
+    }
+
+    rc = dss_layout_delete(dss, layouts, count);
+    dss_res_free(layouts, count);
+    if (rc) {
+        dss_filter_free(&filter);
+        LOG_RETURN(rc, "Unable to delete layouts for object '%s:%d'",
+                   obj->uuid, obj->version);
+    }
+
+    rc = dss_extent_get(dss, &filter, &extents, &count);
+    dss_filter_free(&filter);
+    if (rc)
+        LOG_RETURN(rc, "Unable to retrieve extents from object '%s:%d'",
+                   obj->uuid, obj->version);
+
+    for (i = 0; i < count; ++i)
+        extents[i].state = PHO_EXT_ST_ORPHAN;
+
+    rc = dss_extent_update(dss, extents, count);
+    dss_res_free(extents, count);
+    if (rc)
+        LOG_RETURN(rc, "Unable to update object '%s:%d' extents state",
+                   obj->uuid, obj->version);
+
+    rc = dss_object_delete(dss, obj, 1);
+    if (rc)
+        pho_error(rc, "Unable to delete object '%s:%d'",
+                  obj->uuid, obj->version);
+
+    return rc;
+}
+
 /**
  * TODO: from object_delete to objects_delete, to delete many objects (all or
  * nothing) into the same command.
@@ -589,11 +667,19 @@ static int object_delete(struct dss_handle *dss, struct pho_xfer_desc *xfer)
                                "for oid: '%s'", obj.oid);
     }
 
-    /* move from object table to deprecated object table */
-    rc = dss_move_object_to_deprecated(dss, &obj, 1);
-    if (rc)
-        LOG_GOTO(out_free, rc, "Unable to move from object to deprecated in "
-                               "object delete, for oid: '%s'", obj.oid);
+    if (xfer->xd_flags & PHO_XFER_OBJ_HARD_DEL) {
+        rc = object_hard_delete(dss, objs);
+        if (rc)
+            LOG_GOTO(out_free, rc,
+                     "Unable to hard delete object '%s'", obj.oid);
+    } else {
+        /* move from object table to deprecated object table */
+        rc = dss_move_object_to_deprecated(dss, &obj, 1);
+        if (rc)
+            LOG_GOTO(out_free, rc,
+                     "Unable to move from object to deprecated in "
+                     "object delete, for oid: '%s'", obj.oid);
+    }
 
 out_free:
     dss_res_free(objs, obj_cnt);

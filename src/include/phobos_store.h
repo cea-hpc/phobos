@@ -44,6 +44,8 @@ enum pho_xfer_flags {
     PHO_XFER_OBJ_REPLACE    = (1 << 0),
     /* get: check the object's location before getting it */
     PHO_XFER_OBJ_BEST_HOST  = (1 << 1),
+    /* del: hard remove the object */
+    PHO_XFER_OBJ_HARD_DEL   = (1 << 2),
 };
 
 /**
@@ -248,7 +250,11 @@ int phobos_getmd(struct pho_xfer_desc *xfers, size_t n,
 /**
  * Delete an object from the object store
  *
- * This deletion is not a hard remove, and only deprecate the object.
+ * This deletion is not a hard remove, and only deprecates the object.
+ *
+ * If the flag PHO_XFER_OBJ_HARD_DEL is set, the object, and its past versions,
+ * will be removed from the database. The extents will still be present, to
+ * keep tracking usage stats of tapes.
  *
  * @param[in]   xfers       Objects to delete, only the oid field is used
  * @param[in]   num_xfers   Number of objects to delete
